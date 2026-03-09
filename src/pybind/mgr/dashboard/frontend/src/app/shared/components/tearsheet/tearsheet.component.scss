@@ -1,7 +1,7 @@
 // WIDE TEARSHEET
-// No css variable to apply css to modal div hence using css ngdeep
+// No css variable to apply css to modal div.
 // This is needed to set the width of tearsheet as per carbon standards.
-:host ::ng-deep .cds--modal-container.cds--modal-container--lg {
+.cds--modal-container.cds--modal-container--lg {
   position: fixed;
 
   // 88px from top
@@ -20,7 +20,16 @@
   flex-direction: column;
 }
 
-:host ::ng-deep .cds--modal-container.cds--modal-container--sm {
+// Global Carbon override sets .cds--modal-scroll-content to max-height: 70vh.
+// For tearsheets this causes content area to shrink and footer to float up.
+.cds--modal-container.cds--modal-container--lg .cds--modal-scroll-content {
+  max-height: none;
+  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.cds--modal-container.cds--modal-container--sm {
   inset-block-start: 88px;
   block-size: 50vh;
   max-block-size: 50vh;
@@ -115,6 +124,14 @@
   &--full {
     padding-left: 0;
   }
+}
+
+// In steps without right influencer (e.g. Subsystem details / Authentication),
+// make content fill the available modal height so footer stays pinned.
+.tearsheet-main > .tearsheet-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-block-size: none;
 }
 
 //FOOTER
