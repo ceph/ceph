@@ -1327,6 +1327,17 @@ PGBackend::cmp_xattr_ierrorator::future<> PGBackend::cmp_xattr(
             osd_op.rval = 1;
             return cmp_xattr_errorator::now();
           }
+        } else if (osd_op.op.xattr.cmp_mode == CEPH_OSD_CMPXATTR_MODE_U64) {
+          uint64_t lhs = 0;
+          try {
+            decode(lhs, bp);
+          } catch (ceph::buffer::error&) {
+            return crimson::ct_error::invarg::make();
+          }
+          if (lhs == 0) {
+            osd_op.rval = 1;
+            return cmp_xattr_errorator::now();
+          }
         }
       }
       logger().debug("cmpxattr: xattr does not exist, comparison failed");
