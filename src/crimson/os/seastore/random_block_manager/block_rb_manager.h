@@ -35,10 +35,10 @@ device_config_t get_rbm_ephemeral_device_config(
 class BlockRBManager final : public RandomBlockManager {
 public:
   /*
-   * Ondisk layout (TODO)
+   * Ondisk layout (TODO) RRR complete
    *
    * ---------------------------------------------------------------------------
-   * | rbm_superblock_t | metadatas |        ...      |    data blocks    |
+   * | device_superblock_t | metadatas |        ...      |    data blocks    |
    * ---------------------------------------------------------------------------
    */
 
