@@ -307,11 +307,11 @@ def _git_current_branch(ctx):
     return res.stdout.decode("utf8").strip()
 
 
-def _git_current_sha(ctx, short=True):
+def _git_current_sha(ctx, short=True, what="HEAD"):
     args = ["rev-parse"]
     if short:
         args.append("--short")
-    args.append("HEAD")
+    args.append(what)
     cmd = _git_command(ctx, args)
     res = _run(cmd, check=True, capture_output=True)
     return res.stdout.decode("utf8").strip()
@@ -366,6 +366,7 @@ class Steps(StrEnum):
     RPM = "rpm"
     DEBS = "debs"
     PACKAGES = "packages"
+    LOCAL_CONTAINER = "local-container"
     INTERACTIVE = "interactive"
 
 
@@ -408,6 +409,7 @@ class Context:
         self._engine = None
         self.distro_cache_name = ""
         self.current_srpm = None
+        self.current_srpm_version = None
 
     @property
     def container_engine(self):
@@ -1000,6 +1002,7 @@ def bc_find_srpm(ctx):
         ctx.current_srpm = _find_srpm_by_rpm_query(ctx)
     if ctx.current_srpm:
         log.info("Found SRPM: %s", ctx.current_srpm)
+        ctx.current_srpm_version = re.sub(r"^ceph-(.*)\.[^.]*\.src\.rpm$", r"\1", ctx.current_srpm)
 
 
 @Builder.set(Steps.RPM)
@@ -1079,6 +1082,63 @@ def bc_make_packages(ctx):
         ctx.build.wants(Steps.RPM, ctx)
     else:
         ctx.build.wants(Steps.DEBS, ctx)
+
+
+@Builder.set(Steps.LOCAL_CONTAINER)
+def bc_make_local_container(ctx):
+    """Build a container image from local RPMs"""
+    if ctx.cli.distro not in DistroKind.uses_rpmbuild():
+        raise RuntimeError("Non-RPM container build is not supported")
+
+    # TODO: find out of Docker supports "RUN --mount=type=bind" well enough
+    if ctx.container_engine != "podman":
+         raise RuntimeError("Only podman is supported for building containers, as it has the --volume option")
+
+    ctx.build.wants(Steps.RPM, ctx)
+
+    # The container version should follow the SRPM, not the currently checked
+    # out git commit. This is necessary so that we can build older branches
+    # and then make containers out of them.
+    # TODO: test if it works.
+    ctx.build.wants(Steps.FIND_SRPM, ctx, force=True)
+
+    cwd = pathlib.Path(".").absolute()
+
+    # What matters is the git revision of the SRPM
+    revision_match = re.match(r"^.*\.g([0-9a-f]*)$", ctx.current_srpm_version)
+    if revision_match:
+        ceph_sha = revision_match.group(1)
+    elif "-" not in version_string:
+        # This is likely an exact tag
+        try:
+            # TODO: test by creating a fake release tag
+            ceph_sha = _git_current_sha(ctx, what="v" + ctx.current_srpm_version)
+        except subprocess.CalledProcessError:
+            ceph_sha = "UNKNOWN"
+    else:
+        ceph_sha = "UNKNOWN"
+
+    # TODO: support crimson
+    cmd = [
+        ctx.container_engine,
+        "build",
+        "--pull=newer",
+        "--squash",
+        "-t", f"ceph:{ctx.current_srpm_version}-local",
+        f"--build-arg=FROM_IMAGE={ctx.from_image}",
+        f"--build-arg=CEPH_SHA1={ceph_sha}",
+        f"--build-arg=CEPH_GIT_REPO=https://github.com/ceph/ceph.git",
+        f"--build-arg=CEPH_REF={ctx.base_branch()}",
+        f"--build-arg=OSD_FLAVOR=default",
+        f"--build-arg=CI_CONTAINER=false",
+        f"--build-arg=CUSTOM_CEPH_REPO_URL=file://{ctx.rpm_topdir}/ceph-local.repo",
+        f"--secret=id=prerelease_creds,src=/dev/null",  # XXX: make it optional in the Containerfile?
+        f"--label=org.opencontainers.image.authors=Unsupported Local Build",
+        f"--volume={cwd}:{ctx.cli.homedir}:Z",
+        "-f", "container/Containerfile",
+    ]
+    with ctx.user_command():
+        _run(cmd, check=True, ctx=ctx)
 
 
 @Builder.set(Steps.CUSTOM)
