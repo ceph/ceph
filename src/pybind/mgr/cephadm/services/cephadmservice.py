@@ -325,6 +325,18 @@ class CephadmService(metaclass=ABCMeta):
     ) -> List[str]:
         return []
 
+    @classmethod
+    def sorted_dependencies(
+        cls,
+        mgr: "CephadmOrchestrator",
+        spec: Optional[ServiceSpec] = None,
+        daemon_type: Optional[str] = None,
+    ) -> List[str]:
+        """A version of get_dependencies that guarantees that the returned
+        list is in sorted order.
+        """
+        return sorted(cls.get_dependencies(mgr, spec, daemon_type))
+
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
 
