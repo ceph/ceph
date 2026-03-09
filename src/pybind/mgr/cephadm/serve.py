@@ -1173,7 +1173,7 @@ class CephadmServe:
                     f'{dd.name()} daemon entrypoint args {dd.extra_entrypoint_args} -> {spec.extra_entrypoint_args}')
                 dd.extra_entrypoint_args = spec.extra_entrypoint_args
                 action = 'redeploy'
-            elif svc_obj.manages_own_next_action:
+            else:
                 # method uses new action enum type
                 _scheduled_action = utils.Action.create(scheduled_action)
                 _action = svc_obj.choose_next_action(
@@ -1197,10 +1197,6 @@ class CephadmServe:
                     )
                     # convert back to legacy str type
                     action = str(_action)
-            elif last_deps != deps:
-                sym_diff = set(deps).symmetric_difference(last_deps)
-                self.log.info(f'Reconfiguring {dd.name()} deps {last_deps} -> {deps} (diff {sym_diff})')
-                action = 'reconfig'
             action = _ceph_service_next_action(
                 action, dd.daemon_type, dd.name(), self.mgr, last_config
             )
