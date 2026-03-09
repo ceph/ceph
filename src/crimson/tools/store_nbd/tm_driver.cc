@@ -76,10 +76,7 @@ TMDriver::read_extents_ret TMDriver::read_extents(
 	  pins.begin(),
 	  pins.end(),
 	  [this, &t, &ret](auto &&pin) {
-	    logger().debug(
-	      "read_extents: get_extent {}~{}",
-	      pin.get_val(),
-	      pin.get_length());
+	    logger().debug("read_extents: get_extent {}", pin);
 	    return tm->read_pin<TestBlock>(
 	      t,
 	      std::move(pin)

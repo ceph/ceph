@@ -23,6 +23,7 @@ struct cache_test_t;
 
 namespace crimson::os::seastore {
 
+class ExtentCommitter;
 class Transaction;
 class CachedExtent;
 using CachedExtentRef = boost::intrusive_ptr<CachedExtent>;
@@ -272,6 +273,44 @@ enum class extent_2q_state_t : uint8_t {
   Max
 };
 
+class ExtentCommitter : public boost::intrusive_ref_counter<
+  ExtentCommitter, boost::thread_unsafe_counter> {
+public:
+  ExtentCommitter(CachedExtent &extent, Transaction &t)
+    : extent(extent), t(t) {}
+
+  void block_trans(Transaction &);
+  void unblock_trans(Transaction &);
+  // commit all extent states to the prior instance,
+  // except poffset and extent content
+  void commit_state();
+
+  void commit_data();
+
+  // synchronize last_committed_crc among mutation pending extents
+  void sync_checksum();
+
+  void sync_dirty_from();
+
+  void sync_version();
+
+  void commit_and_share_paddr();
+
+private:
+  // the rewritten extent
+  CachedExtent &extent;
+  Transaction &t;
+
+  void _share_prior_data_to_mutations();
+  void _share_prior_data_to_pending_versions();
+
+  template <typename T>
+  void _set_invalidaters(Transaction &t);
+
+  friend class Cache;
+};
+using ExtentCommitterRef = boost::intrusive_ptr<ExtentCommitter>;
+
 class ExtentIndex;
 class CachedExtent
   : public boost::intrusive_ref_counter<
@@ -362,7 +401,7 @@ public:
    * Called prior to committing the transaction in which this extent
    * is living.
    */
-  virtual void prepare_commit() {}
+  virtual void prepare_commit(Transaction &) {}
 
   /**
    * on_initial_write
@@ -413,7 +452,7 @@ public:
    * with the states of Cache and can't wait till transaction
    * completes.
    */
-  virtual void on_replace_prior() {}
+  virtual void on_replace_prior(Transaction &) {}
 
   /**
    * on_invalidated
@@ -430,6 +469,13 @@ public:
    * Returns concrete type.
    */
   virtual extent_types_t get_type() const = 0;
+
+  /**
+   * clear_delta
+   *
+   * clear the mutation delta buffer of the cached extent.
+   */
+  virtual void clear_delta() {}
 
   virtual bool is_logical() const {
     assert(!is_logical_type(get_type()));
@@ -609,7 +655,7 @@ public:
 
   /// Returns true iff extent is stable and not io-pending
   bool is_stable_ready() const {
-    return is_stable() && !is_pending_io();
+    return is_stable() && (!is_pending_io() || io_wait->rewriting);
   }
 
   /// Returns true if extent can not be mutated,
@@ -867,6 +913,7 @@ private:
   using index = boost::intrusive::set<CachedExtent, index_member_options>;
   friend class ExtentIndex;
   friend class Transaction;
+  friend class ExtentCommitter;
 
   bool is_linked_to_index() {
     return extent_index_hook.is_linked();
@@ -918,12 +965,13 @@ private:
   struct io_wait_t {
     seastar::shared_promise<> pr;
     extent_state_t from_state;
+    bool rewriting = false;
   };
   std::optional<io_wait_t> io_wait;
 
-  void set_io_wait(extent_state_t new_state) {
+  void set_io_wait(extent_state_t new_state, bool rewriting) {
     ceph_assert(!io_wait);
-    io_wait.emplace(seastar::shared_promise<>(), state);
+    io_wait.emplace(seastar::shared_promise<>(), state, rewriting);
     state = new_state;
     assert(is_data_stable());
   }
@@ -958,6 +1006,10 @@ private:
 
   // This field is unused when the ExtentPinboard use LRU algorithm
   extent_2q_state_t cache_state = extent_2q_state_t::Fresh;
+
+  ExtentCommitterRef committer;
+
+  void new_committer(Transaction &t);
 
 protected:
   trans_view_set_t mutation_pending_extents;
@@ -1063,6 +1115,36 @@ protected:
     return new T();
   }
 
+  /**
+   * on_state_commit
+   *
+   * Called when the current extent's common states
+   * are copied to its prior instance, this should
+   * only be used in the context of rewriting transactions,
+   * e.g. TRIM_DIRTY and CLEANER
+   */
+  virtual void on_state_commit() {}
+
+  /**
+   * on_data_commit
+   *
+   * Called when the current extent's ptr is shared with
+   * its prior instance, this should only be used when
+   * commit extent rewriting transactions, e.g. TRIM_DIRTY
+   * and CLEANER
+   */
+  virtual void on_data_commit() {}
+
+  /**
+   * reapply_delta
+   *
+   * Called when there's need to reapply the current extent's
+   * deltas, this happens when the rewritting transaction
+   * overwrite the data of mutation pending extents, which erase
+   * all modifications and make the deltas needed to be reapplied
+   */
+  virtual void reapply_delta() {}
+
   void reset_prior_instance() {
     prior_instance.reset();
   }
@@ -1094,6 +1176,9 @@ protected:
 
   /// set bufferptr
   void set_bptr(ceph::bufferptr &&nptr) {
+    ptr = nptr;
+  }
+  void set_bptr(ceph::bufferptr &nptr) {
     ptr = nptr;
   }
 
@@ -1310,13 +1395,17 @@ public:
   }
 
   void erase(CachedExtent &extent) {
+    auto it = extent_index.s_iterator_to(extent);
+    erase(it);
+  }
+
+  void erase(CachedExtent::index::iterator &it) {
+    auto &extent = *it;
     assert(extent.parent_index);
     assert(extent.is_linked_to_index());
-    [[maybe_unused]] auto erased = extent_index.erase(
-      extent_index.s_iterator_to(extent));
-    extent.parent_index = nullptr;
-
+    [[maybe_unused]] auto erased = extent_index.erase(it);
     assert(erased);
+    extent.parent_index = nullptr;
     bytes -= extent.get_length();
   }
 
@@ -1465,6 +1554,14 @@ protected:
   void on_delta_write(paddr_t record_block_offset) final {
     logical_on_delta_write();
   }
+
+  void on_state_commit() final {
+    auto &prior = static_cast<LogicalCachedExtent&>(*get_prior_instance());
+    prior.laddr = laddr;
+    do_on_state_commit();
+  }
+
+  virtual void do_on_state_commit() {}
 
 private:
   // the logical address of the extent, and if shared,

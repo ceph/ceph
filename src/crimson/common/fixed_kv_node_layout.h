@@ -296,7 +296,6 @@ public:
     void copy_out(char *out, size_t len) {
       assert(len == get_bytes());
       ::memcpy(out, reinterpret_cast<const void *>(buffer.data()), get_bytes());
-      buffer.clear();
     }
     void copy_in(const char *out, size_t len) {
       assert(empty());
@@ -307,6 +306,15 @@ public:
     }
     bool operator==(const delta_buffer_t &rhs) const {
       return buffer == rhs.buffer;
+    }
+    void clear() {
+      buffer.clear();
+    }
+    template <typename Func>
+    void for_each(Func &&f) {
+      for (auto &i : buffer) {
+        std::invoke(std::forward<Func>(f), i);
+      }
     }
   };
 
@@ -365,7 +373,6 @@ public:
   virtual ~FixedKVNodeLayout() = default;
 
   void set_layout_buf(char *_buf) {
-    assert(buf == nullptr);
     assert(_buf != nullptr);
     buf = _buf;
   }
