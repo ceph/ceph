@@ -721,12 +721,13 @@ int CephContext::_do_command(
             "ENABLE_LOCKSTAT=true?");
       } else {
         if (!lockstat_detail::LockStat::is_lockstat_enabled()) {
-          lockstat_detail::lockstat_clock::duration threshold{0};
+          lockstat_detail::lockstat_clock::duration threshold{tsc_rep{0}};
           std::string threshold_str;
 
           if (cmd_getval(cmdmap, "threshold", threshold_str)) {
-            threshold = std::chrono::duration_cast<lockstat_detail::lockstat_clock::duration>(
-                std::chrono::microseconds(std::stoi(threshold_str)));
+            threshold = lockstat_detail::lockstat_clock::duration{
+                tsc_rep{tsc_tick::from_duration(
+                    std::chrono::microseconds(std::stoi(threshold_str)))}};
           }
           lockstat_detail::LockStatEntry::start(threshold);
           f->dump_format("status", "lockstat is started with threshold %lld(us)",

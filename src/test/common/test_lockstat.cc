@@ -86,21 +86,21 @@ TEST(LockStat, LockStats)
   }
 
   // Simulate some wait time
-  mono_clock::duration d(100);
+  lockstat_clock::duration d{tsc_rep{100}};
   stats.m_wait_duration[static_cast<int>(LockMode::WRITE)] += d;
   stats.m_wait_count[static_cast<int>(LockMode::WRITE)]++;
 
   ASSERT_EQ(stats.m_wait_count[static_cast<int>(LockMode::WRITE)], 1u);
-  ASSERT_EQ(stats.m_wait_duration[static_cast<int>(LockMode::WRITE)].count(), 100);
+  ASSERT_EQ(stats.m_wait_duration[static_cast<int>(LockMode::WRITE)].count().ticks, 100);
 
   LockStatEntry::LockStats stats2;
   stats2.reset();
-  stats2.m_wait_duration[static_cast<int>(LockMode::WRITE)] += mono_clock::duration(50);
+  stats2.m_wait_duration[static_cast<int>(LockMode::WRITE)] += lockstat_clock::duration{tsc_rep{50}};
   stats2.m_wait_count[static_cast<int>(LockMode::WRITE)]++;
 
   stats += stats2;
   ASSERT_EQ(stats.m_wait_count[static_cast<int>(LockMode::WRITE)], 2u);
-  ASSERT_EQ(stats.m_wait_duration[static_cast<int>(LockMode::WRITE)].count(), 150);
+  ASSERT_EQ(stats.m_wait_duration[static_cast<int>(LockMode::WRITE)].count().ticks, 150);
 }
 
 TEST(LockStat, LockStatEntry)
@@ -109,7 +109,7 @@ TEST(LockStat, LockStatEntry)
   entry.reset();
 
   // Testing start/stop
-  entry.start(mono_clock::duration(0));
+  entry.start(lockstat_clock::duration{tsc_rep{0}});
   entry.stop();
 
   auto sum = entry.get_stats_sum();
@@ -118,7 +118,7 @@ TEST(LockStat, LockStatEntry)
 
 TEST(LockStat, DumpFormatted)
 {
-  LockStatEntry::start(mono_clock::duration(0));
+  LockStatEntry::start(lockstat_clock::duration{tsc_rep{0}});
 
   // Record some data
   const char* name = "dump_lock";
@@ -129,8 +129,8 @@ TEST(LockStat, DumpFormatted)
 
   if (traits) {
     LockStat ls(LockStatTraits::LockStatType::MUTEX, traits);
-    ls.record_wait_time(std::chrono::nanoseconds(100), LockMode::WRITE);
-    ls.record_wait_time(std::chrono::nanoseconds(200), LockMode::WRITE);
+    ls.record_wait_time(lockstat_clock::duration{tsc_rep{tsc_tick::from_duration(std::chrono::nanoseconds(100))}}, LockMode::WRITE);
+    ls.record_wait_time(lockstat_clock::duration{tsc_rep{tsc_tick::from_duration(std::chrono::nanoseconds(200))}}, LockMode::WRITE);
   }
 
   std::unique_ptr<ceph::Formatter> f{
@@ -164,7 +164,7 @@ TEST(LockStat, LockStatObject)
     LockStat ls(LockStatTraits::LockStatType::MUTEX, nullptr);
     ASSERT_EQ(ls.get_traits(), nullptr);
     // Should not crash when traits is null
-    ls.record_wait_time(mono_clock::duration(100), LockMode::WRITE);
+    ls.record_wait_time(lockstat_clock::duration{tsc_rep{100}}, LockMode::WRITE);
   }
 
   // With actual traits
@@ -179,7 +179,7 @@ TEST(LockStat, LockStatObject)
   if (traits) {
     LockStat ls(LockStatTraits::LockStatType::MUTEX, traits);
     ASSERT_EQ(ls.get_traits(), traits);
-    ls.record_wait_time(mono_clock::duration(200), LockMode::WRITE);
+    ls.record_wait_time(lockstat_clock::duration{tsc_rep{200}}, LockMode::WRITE);
   }
 
   // Test the macro
@@ -189,7 +189,7 @@ TEST(LockStat, LockStatObject)
 
 TEST(LockStat, TimeCalculation)
 {
-  LockStatEntry::start(std::chrono::nanoseconds(0));
+  LockStatEntry::start(lockstat_clock::duration{tsc_rep{0}});
 
   const char* name = "time_calc_lock";
   uint64_t h = hash(name, "test_lockstat.cc", 1, "TEST");
