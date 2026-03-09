@@ -1976,6 +1976,20 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
         }
       }
     }
+
+    if (osdmap.require_osd_release < ceph_release_t::umbrella &&
+          tmp.require_osd_release >= ceph_release_t::umbrella) {
+      dout(10) << __func__ << " first umbrella+ epoch" << dendl;
+      for (auto& [id, pool] : tmp.pools) {
+        if (pool.allows_ecoptimizations() &&
+            !pool.has_flag(pg_pool_t::FLAG_CLIENT_SPLIT_READS)) {
+          if (pending_inc.new_pools.count(id) == 0) {
+            pending_inc.new_pools[id] = pool;
+          }
+          enable_pool_ec_direct_reads(pending_inc.new_pools[id]);
+        }
+      }
+    }
   }
 
   // tell me about it
@@ -8516,20 +8530,11 @@ void OSDMonitor::enable_pool_ec_direct_reads(pg_pool_t &p) {
   stringstream tmp;
   int err = get_erasure_code(p.erasure_code_profile, &erasure_code, &tmp);
 
-  // Once this feature is finished, we will replace this with upgrade code.
-  // The upgrade code will enable the split read flag once all OSDs are at
-  // Umbrella. For now, if the plugin does not support direct reads, we just
-  // disable it.  All plugins and techniques should be capable of supporting
-  // direct reads, but we put in place this capability to reduce the test
-  // matrix for less important plugins/techniques.
-  //
-  // To enable direct reads in development, set the osd_pool_default_flags to
-  // 1<<20 = 0x100000 = 1048576
-  if (err != 0 || !p.allows_ecoptimizations() ||
-        (erasure_code->get_supported_optimizations() &
-          ErasureCodeInterface::FLAG_EC_PLUGIN_DIRECT_READS) == 0) {
-    p.flags &= ~pg_pool_t::FLAG_CLIENT_SPLIT_READS;
-    return;
+  if (err == 0 && p.allows_ecoptimizations() &&
+      osdmap.require_osd_release >= ceph_release_t::umbrella &&
+      (erasure_code->get_supported_optimizations() &
+          ErasureCodeInterface::FLAG_EC_PLUGIN_DIRECT_READS) != 0) {
+    p.flags |= pg_pool_t::FLAG_CLIENT_SPLIT_READS;
   }
 
   auto mapping = erasure_code->get_chunk_mapping();
