@@ -408,10 +408,12 @@ class CephadmUpgrade:
         if daemon_types is not None:
             dtypes = daemon_types
             if hosts is not None:
-                dtypes = [_latest_type(dtypes)]
+                same_host_daemons = [
+                    d for d in daemons if d.hostname is not None and d.hostname in hosts]
                 other_host_daemons = [
                     d for d in daemons if d.hostname is not None and d.hostname not in hosts]
-                daemons = _get_earlier_daemons(dtypes, other_host_daemons)
+                daemons = (_get_earlier_daemons([_latest_type(dtypes)], other_host_daemons)
+                           + _get_earlier_daemons(dtypes, same_host_daemons))
             else:
                 daemons = _get_earlier_daemons(dtypes, daemons)
             err_msg_base += 'Daemons with types earlier in upgrade order than given types need upgrading.\n'
@@ -429,9 +431,12 @@ class CephadmUpgrade:
                 dtypes += orchestrator.service_to_daemon_types(stype)
             dtypes = list(set(dtypes))
             if hosts is not None:
+                same_host_daemons = [
+                    d for d in daemons if d.hostname is not None and d.hostname in hosts]
                 other_host_daemons = [
                     d for d in daemons if d.hostname is not None and d.hostname not in hosts]
-                daemons = _get_earlier_daemons(dtypes, other_host_daemons)
+                daemons = (_get_earlier_daemons([_latest_type(dtypes)], other_host_daemons)
+                           + _get_earlier_daemons(dtypes, same_host_daemons))
             else:
                 daemons = _get_earlier_daemons(dtypes, daemons)
             err_msg_base += 'Daemons with types earlier in upgrade order than daemons from given services need upgrading.\n'
