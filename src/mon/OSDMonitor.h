@@ -751,7 +751,7 @@ public:
                                    std::stringstream *ss,
                                    bool enable,
                                    bool yes_i_really_mean_it);
-  void enable_pool_ec_direct_reads(pg_pool_t &p);
+  void maybe_enable_pool_split_ops(pg_pool_t &p);
   int prepare_command_pool_set(const cmdmap_t& cmdmap,
                                std::stringstream& ss);
 
