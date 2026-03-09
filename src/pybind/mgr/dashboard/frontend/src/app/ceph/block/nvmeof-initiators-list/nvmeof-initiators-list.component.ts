@@ -150,7 +150,8 @@ export class NvmeofInitiatorsListComponent implements OnInit {
   listInitiators() {
     this.nvmeofService
       .getInitiators(this.subsystemNQN, this.group)
-      .subscribe((initiators: NvmeofSubsystemInitiator[]) => {
+      .subscribe((response: NvmeofSubsystemInitiator[] | { hosts: NvmeofSubsystemInitiator[] }) => {
+        const initiators = Array.isArray(response) ? response : response?.hosts || [];
         this.initiators = initiators;
         this.updateAuthStatus();
       });

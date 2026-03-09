@@ -1,5 +1,5 @@
 import { Component, Input, OnInit } from '@angular/core';
-import { FormArray, UntypedFormControl, Validators } from '@angular/forms';
+import { FormArray, UntypedFormControl } from '@angular/forms';
 
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
@@ -26,7 +26,8 @@ export class NvmeofSubsystemsStepThreeComponent implements OnInit, TearsheetStep
   action: string;
   pageURL: string;
   INVALID_TEXTS = {
-    required: $localize`This field is required`
+    required: $localize`This field is required`,
+    invalidBase64: $localize`Invalid key format. Use Base64 or DHHC-1:XX:base64:`
   };
   AUTHENTICATION = AUTHENTICATION;
 
@@ -58,6 +59,7 @@ export class NvmeofSubsystemsStepThreeComponent implements OnInit, TearsheetStep
     this.formGroup = new CdFormGroup({
       authType: new UntypedFormControl(AUTHENTICATION.Unidirectional),
       subsystemDchapKey: new UntypedFormControl(null, [
+        CdValidators.base64(),
         CdValidators.requiredIf({
           authType: AUTHENTICATION.Bidirectional
         })
@@ -66,14 +68,30 @@ export class NvmeofSubsystemsStepThreeComponent implements OnInit, TearsheetStep
     });
 
     this.syncHostList();
+    this.formGroup.get('authType')?.valueChanges.subscribe(() => {
+      this.refreshHostKeyValidation();
+    });
   }
 
   private createHostDhchapKeyFormGroup(hostNQN: string = '', key: string | null = null) {
     return new CdFormGroup({
       dhchap_key: new UntypedFormControl(key, {
-        validators: [Validators.required]
+        validators: [
+          CdValidators.base64(),
+          CdValidators.custom(
+            'required',
+            (value: string) =>
+              this.formGroup?.get('authType')?.value === AUTHENTICATION.Bidirectional && !value
+          )
+        ]
       }),
       host_nqn: new UntypedFormControl(hostNQN)
+    });
+  }
+
+  private refreshHostKeyValidation() {
+    this.hostDchapKeyList.controls.forEach((control) => {
+      control.get('dhchap_key')?.updateValueAndValidity({ emitEvent: false });
     });
   }
 

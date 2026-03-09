@@ -1,11 +1,24 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ViewChild } from '@angular/core';
 import { Step } from 'carbon-components-angular';
 import { NvmeofService, SubsystemInitiatorRequest } from '~/app/shared/api/nvmeof.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
-import { HOST_TYPE, NvmeofSubsystemInitiator } from '~/app/shared/models/nvmeof';
+import {
+  AuthStepType,
+  HOST_TYPE,
+  HostStepType,
+  NvmeofSubsystemInitiator
+} from '~/app/shared/models/nvmeof';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { ActivatedRoute, Router } from '@angular/router';
-import { SubsystemPayload } from '../nvmeof-subsystems-form/nvmeof-subsystems-form.component';
+import { TearsheetComponent } from '~/app/shared/components/tearsheet/tearsheet.component';
+
+type InitiatorsFormPayload = Pick<HostStepType, 'hostType' | 'addedHosts'> &
+  Partial<Pick<AuthStepType, 'hostDchapKeyList'>>;
+
+const STEP_LABELS = {
+  HOSTS: $localize`Host access control`,
+  AUTH: $localize`Authentication (optional)`
+} as const;
 
 @Component({
   selector: 'cd-nvmeof-initiators-form',
@@ -17,13 +30,12 @@ export class NvmeofInitiatorsFormComponent implements OnInit {
   subsystemNQN!: string;
   isSubmitLoading = false;
   existingHosts: string[] = [];
+  showAuthStep = true;
+  stepTwoValue: HostStepType = null;
 
-  steps: Step[] = [
-    {
-      label: $localize`Host access control`,
-      invalid: false
-    }
-  ];
+  @ViewChild(TearsheetComponent) tearsheet!: TearsheetComponent;
+
+  steps: Step[] = [];
 
   title = $localize`Add Initiator`;
   description = $localize`Allow specific hosts to run NVMe/TCP commands to the NVMe subsystem.`;
@@ -51,6 +63,38 @@ export class NvmeofInitiatorsFormComponent implements OnInit {
       }
       this.fetchExistingHosts();
     });
+    this.rebuildSteps();
+  }
+
+  rebuildSteps() {
+    const steps: Step[] = [{ label: STEP_LABELS.HOSTS, invalid: false }];
+
+    if (this.showAuthStep) {
+      steps.push({ label: STEP_LABELS.AUTH, invalid: false });
+    }
+
+    this.steps = steps;
+
+    if (this.tearsheet?.currentStep >= steps.length) {
+      this.tearsheet.currentStep = steps.length - 1;
+    }
+  }
+
+  onStepChanged() {
+    if (!this.tearsheet) return;
+
+    const hostStep = this.tearsheet.getStepValueByLabel<HostStepType>(STEP_LABELS.HOSTS);
+
+    if (hostStep) {
+      this.stepTwoValue = hostStep;
+    }
+
+    const nextShowAuth = (hostStep?.hostType ?? HOST_TYPE.SPECIFIC) === HOST_TYPE.SPECIFIC;
+
+    if (nextShowAuth !== this.showAuthStep) {
+      this.showAuthStep = nextShowAuth;
+      this.rebuildSteps();
+    }
   }
 
   fetchExistingHosts() {
@@ -63,13 +107,21 @@ export class NvmeofInitiatorsFormComponent implements OnInit {
       });
   }
 
-  onSubmit(payload: SubsystemPayload) {
+  onSubmit(payload: InitiatorsFormPayload) {
     this.isSubmitLoading = true;
     const taskUrl = `nvmeof/initiator/add`;
+    const hostKeyList = payload.hostDchapKeyList || [];
+    const addedHosts = payload.addedHosts || [];
+    const hosts =
+      payload.hostType === HOST_TYPE.SPECIFIC
+        ? hostKeyList.length
+          ? hostKeyList
+          : addedHosts.map((host_nqn: string) => ({ host_nqn, dhchap_key: '' }))
+        : [];
 
     const request: SubsystemInitiatorRequest = {
       allow_all: payload.hostType === HOST_TYPE.ALL,
-      hosts: payload.hostType === HOST_TYPE.SPECIFIC ? payload.hostDchapKeyList : [],
+      hosts,
       gw_group: this.group
     };
     this.taskWrapperService

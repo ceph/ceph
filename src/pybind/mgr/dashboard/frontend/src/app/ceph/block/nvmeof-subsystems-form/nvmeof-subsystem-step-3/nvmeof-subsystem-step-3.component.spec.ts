@@ -62,6 +62,34 @@ describe('NvmeofSubsystemsStepThreeComponent', () => {
         expect(form.get('authType')?.value).toBe(AUTHENTICATION.Unidirectional);
         expect(form.get('subsystemDchapKey')?.value).toBe(null);
       });
+
+      it('should keep host key optional in unidirectional mode', () => {
+        const hostKeyCtrl = (form.get('hostDchapKeyList') as any).at(0).get('dhchap_key');
+        hostKeyCtrl.setValue('');
+        hostKeyCtrl.markAsTouched();
+        hostKeyCtrl.updateValueAndValidity();
+
+        expect(hostKeyCtrl.hasError('required')).toBeFalsy();
+      });
+
+      it('should require host key in bidirectional mode', () => {
+        form.get('authType')?.setValue(AUTHENTICATION.Bidirectional);
+        const hostKeyCtrl = (form.get('hostDchapKeyList') as any).at(0).get('dhchap_key');
+        hostKeyCtrl.setValue('');
+        hostKeyCtrl.markAsTouched();
+        hostKeyCtrl.updateValueAndValidity();
+
+        expect(hostKeyCtrl.hasError('required')).toBeTruthy();
+      });
+
+      it('should validate host key base64 format when provided', () => {
+        const hostKeyCtrl = (form.get('hostDchapKeyList') as any).at(0).get('dhchap_key');
+        hostKeyCtrl.setValue('not-valid-key');
+        hostKeyCtrl.markAsTouched();
+        hostKeyCtrl.updateValueAndValidity();
+
+        expect(hostKeyCtrl.hasError('invalidBase64')).toBeTruthy();
+      });
     });
   });
 });
