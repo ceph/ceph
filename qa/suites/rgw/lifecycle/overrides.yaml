@@ -13,8 +13,8 @@ overrides:
         rgw lc debug interval: 10
   rgw:
     storage classes:
-      LUKEWARM:
-      FROZEN:
+      LUKEWARM: [--compression, zstd]
+      FROZEN: [--compression, zlib]
   s3tests:
     accounts:
       iam root: RGW88888888888888888
