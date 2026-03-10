@@ -886,11 +886,6 @@ class CephadmService(metaclass=ABCMeta):
     def has_placement_changed(self, deps: List[str], spec: ServiceSpec) -> bool:
         return False
 
-    # manages_own_next_action allows the CephadmService subclasses
-    # to incrementally support using choose_next_action instead of
-    # "hard coded" blocks in the _check_daemons function.
-    manages_own_next_action = False
-
     def choose_next_action(
         self,
         scheduled_action: utils.Action,
@@ -1789,8 +1784,6 @@ class CephExporterService(CephService):
         daemon_spec.deps = self.get_dependencies(self.mgr)
 
         return daemon_spec
-
-    manages_own_next_action = True
 
     def choose_next_action(
         self,

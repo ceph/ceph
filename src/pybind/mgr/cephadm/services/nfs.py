@@ -436,8 +436,6 @@ class NFSService(CephService):
                 logger.debug(f"No IP address found in the network {spec.monitoring_networks} on host {host}.")
         return monitoring_addr, monitoring_port
 
-    manages_own_next_action = True
-
     def choose_next_action(
         self,
         scheduled_action: utils.Action,

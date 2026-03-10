@@ -477,8 +477,6 @@ class AlertmanagerService(CephadmService):
             return HandleCommandResult(-errno.EBUSY, '', warn_message)
         return HandleCommandResult(0, warn_message, '')
 
-    manages_own_next_action = True
-
     def choose_next_action(
         self,
         scheduled_action: utils.Action,
@@ -780,8 +778,6 @@ class PrometheusService(CephadmService):
                 return '/federate'
         return '/prometheus/federate'
 
-    manages_own_next_action = True
-
     def choose_next_action(
         self,
         scheduled_action: utils.Action,
@@ -848,8 +844,6 @@ class NodeExporterService(CephadmService):
         names = [f'{self.TYPE}.{d_id}' for d_id in daemon_ids]
         out = f'It is presumed safe to stop {names}'
         return HandleCommandResult(0, out, '')
-
-    manages_own_next_action = True
 
     def choose_next_action(
         self,
