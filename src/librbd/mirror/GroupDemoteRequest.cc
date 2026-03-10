@@ -81,7 +81,7 @@ void GroupDemoteRequest<I>::prepare_group_images() {
 
   auto req = snapshot::GroupPrepareImagesRequest<I>::create(m_group_ioctx,
     m_group_id, m_image_ctxs, m_images, &m_mirror_images, &m_mirror_peer_uuids,
-    snapshot::GroupPrepareImagesRequest<I>::OP_DEMOTE, false, ctx);
+    "", snapshot::GroupPrepareImagesRequest<I>::OP_DEMOTE, false, ctx);
   req->send();
 }
 
