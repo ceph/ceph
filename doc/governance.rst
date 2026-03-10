@@ -164,8 +164,9 @@ For more information, see :ref:`foundation`.
 Escalation and Dispute Resolution
 =================================
 
-The Ceph project strives to operate on consensus. However, when consensus cannot be reached on major technical decisions or there is a perceived lack of action, the Ceph Executive Council (CEC) serves as the final arbiter through the following procedure:
+The Ceph project operates on a consensus-driven model, with primary decision-making authority vested in the Ceph Steering Committee (CSC). If the CSC cannot reach consensus on a major technical decision, or if there is a perceived lack of action, the Ceph Executive Council (CEC) will facilitate a formal escalation procedure. This process normally concludes within two weeks.
 
-* Escalation: If any member of the Ceph Steering Committee (CSC) feels that a technical matter of significant interest to the project is deadlocked or not being addressed adequately, they should bring the matter to the CEC.
-* Mediation: The CEC will first attempt to mediate the dispute and help all parties find a mutually satisfactory solution.
-* Resolution: In cases where mediation fails, the CEC will break the deadlock by either taking a direct position (if the decision is clear) or organizing a small review committee to meet and recommend a final decision.
+ * Escalation: Any member of the CSC who feels a technical matter of significant interest to the project is deadlocked or inadequately addressed may formally escalate the issue to the CEC.
+ * Mediation: The CEC will first attempt to mediate the dispute, working with all involved parties to find a mutually satisfactory solution.
+ * Recommendation: If mediation fails, the CEC will formulate a proposed resolution by either issuing a direct recommendation or convening a small review committee to evaluate the issue and recommend a course of action.
+ * Decision: The recommendation is presented to the CSC for a formal vote. The CEC only casts a binding, deciding vote if the CSC remains deadlocked and cannot reach consensus on the recommendation.
