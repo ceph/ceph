@@ -18,9 +18,11 @@ RGWSI_BILog_RADOS::RGWSI_BILog_RADOS(CephContext *cct) : RGWServiceInstance(cct)
 {
 }
 
-void RGWSI_BILog_RADOS::init(RGWSI_BucketIndex_RADOS *bi_rados_svc)
+void RGWSI_BILog_RADOS::init(RGWSI_BucketIndex_RADOS *bi_rados_svc,
+                             neorados::RADOS rados_neo_)
 {
   svc.bi = bi_rados_svc;
+  rados_neo.emplace(std::move(rados_neo_));
 }
 
 struct TrimWriter : rgwrados::shard_io::RadosWriter {

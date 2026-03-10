@@ -6,7 +6,10 @@
 #include <span>
 #include <string>
 
+#include "common/async/blocked_completion.h"
 #include "common/dout.h"
+#include "rgw_asio_thread.h"
+#include "services/svc_bi_rados.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -78,4 +81,134 @@ std::string_view RGWBILogFIFO::max_marker()
 {
   static const std::string s = fifo::FIFO::max_marker();
   return std::string_view(s);
+}
+
+
+RGWBILogUpdateBatch::RGWBILogUpdateBatch(const DoutPrefixProvider* dpp,
+                                         neorados::RADOS r,
+                                         neorados::IOContext loc,
+                                         std::span<const std::string> shard_oids)
+  : dpp(dpp),
+    rados_(r),
+    fifos(shard_oids.size(),
+          [&r, &loc, &shard_oids](std::size_t i, auto emplacer) {
+            emplacer.emplace(r, bilog_fifo_oid(shard_oids[i]), loc);
+          }),
+    num_shards(static_cast<int>(shard_oids.size()))
+{}
+
+int RGWBILogUpdateBatch::shard_of(const cls_rgw_obj_key& key) const
+{
+  if (num_shards <= 1) {
+    return 0;
+  }
+  return RGWSI_BucketIndex_RADOS::bucket_shard_index(key, num_shards);
+}
+
+void RGWBILogUpdateBatch::stage(int shard, rgw_bi_log_entry entry)
+{
+  pending.push_back(Pending{shard, std::move(entry)});
+}
+
+void RGWBILogUpdateBatch::add_maybe_flush(uint64_t olh_epoch,
+                                          ceph::real_time mtime,
+                                          const cls_rgw_bi_log_related_op& op_info)
+{
+  ldpp_dout(dpp, 20) << __func__ << ": key=" << op_info.key
+                     << " op=" << (int)op_info.op << dendl;
+  rgw_bi_log_entry entry;
+  entry.object = op_info.key.name;
+  entry.instance = op_info.key.instance;
+  entry.timestamp = mtime;
+  entry.op = op_info.op;
+  entry.state = CLS_RGW_STATE_COMPLETE;
+  entry.tag = op_info.op_tag;
+  entry.bilog_flags = op_info.bilog_flags;
+  entry.zones_trace = op_info.zones_trace;
+  entry.ver.epoch = olh_epoch;
+  stage(shard_of(op_info.key), std::move(entry));
+}
+
+void RGWBILogUpdateBatch::add_maybe_flush(uint64_t olh_epoch,
+                                          const cls_rgw_obj_key& key,
+                                          const std::string& op_tag,
+                                          bool delete_marker,
+                                          ceph::real_time mtime,
+                                          const rgw_zone_set& zones_trace)
+{
+  ldpp_dout(dpp, 20) << __func__ << ": key=" << key
+                     << " delete_marker=" << delete_marker << dendl;
+  rgw_bi_log_entry entry;
+  entry.object = key.name;
+  entry.instance = key.instance;
+  entry.timestamp = mtime;
+  entry.op = delete_marker ? CLS_RGW_OP_LINK_OLH_DM : CLS_RGW_OP_LINK_OLH;
+  entry.state = CLS_RGW_STATE_COMPLETE;
+  entry.tag = op_tag;
+  entry.bilog_flags = RGW_BILOG_FLAG_VERSIONED_OP;
+  entry.zones_trace = zones_trace;
+  entry.ver.epoch = olh_epoch;
+  stage(shard_of(key), std::move(entry));
+}
+
+void RGWBILogUpdateBatch::add_maybe_flush(RGWModifyOp op,
+                                          const rgw_bucket_dir_entry& list_state,
+                                          rgw_zone_set zones_trace)
+{
+  ldpp_dout(dpp, 20) << __func__ << ": key=" << list_state.key
+                     << " op=" << (int)op << dendl;
+  rgw_bi_log_entry entry;
+  entry.object = list_state.key.name;
+  entry.instance = list_state.key.instance;
+  entry.timestamp = list_state.meta.mtime;
+  entry.op = op;
+  entry.state = CLS_RGW_STATE_COMPLETE;
+  entry.tag = list_state.tag;
+  entry.zones_trace = std::move(zones_trace);
+  stage(shard_of(list_state.key), std::move(entry));
+}
+
+void RGWBILogUpdateBatch::do_flush(asio::yield_context y)
+{
+  for (auto& [shard, entry] : pending) {
+    ceph::buffer::list bl;
+    encode(entry, bl);
+    fifos[shard].push(dpp, std::move(bl), y);
+  }
+  pending.clear();
+}
+
+void RGWBILogUpdateBatch::do_flush()
+{
+  maybe_warn_about_blocking(dpp);
+  asio::spawn(rados_.get_executor(),
+              [this](asio::yield_context y) { do_flush(y); },
+              ceph::async::use_blocked);
+}
+
+void RGWBILogUpdateBatch::flush(asio::yield_context y)
+{
+  if (!pending.empty()) {
+    do_flush(y);
+  }
+}
+
+void RGWBILogUpdateBatch::flush()
+{
+  if (!pending.empty()) {
+    do_flush();
+  }
+}
+
+RGWBILogUpdateBatch::~RGWBILogUpdateBatch()
+{
+  if (!pending.empty()) {
+    try {
+      do_flush();
+    } catch (const std::exception& e) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__
+                        << ": failed to flush pending bilog entries: "
+                        << e.what() << dendl;
+    }
+  }
 }
