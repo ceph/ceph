@@ -50,8 +50,6 @@ class JaegerAgentService(CephadmService):
         daemon_spec.deps = self.get_dependencies(self.mgr)
         return daemon_spec
 
-    manages_own_next_action = True
-
     def choose_next_action(
         self,
         scheduled_action: utils.Action,
