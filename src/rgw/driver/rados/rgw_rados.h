@@ -5,6 +5,7 @@
 
 #include <iostream>
 #include <functional>
+#include <type_traits>
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
 
@@ -29,6 +30,7 @@
 #include "rgw_obj_manifest.h"
 #include "rgw_sync_module.h"
 #include "rgw_trim_bilog.h"
+#include "rgw_bilog.h"
 #include "rgw_service.h"
 #include "rgw_sal_store.h"
 #include "rgw_aio.h"
@@ -319,6 +321,25 @@ class lru_map;
 using tombstone_cache_t = lru_map<rgw_obj, tombstone_entry>;
 
 class RGWIndexCompletionManager;
+
+// no-op bilog handler
+// used when bilog recording is disabled or handled in-index (InIndex layout).
+struct BILogNopHandler {
+  void add_maybe_flush(uint64_t /*olh_epoch*/,
+                       ceph::real_time /*mtime*/,
+                       const cls_rgw_bi_log_related_op& /*op_info*/) {}
+  void add_maybe_flush(uint64_t /*olh_epoch*/,
+                       const cls_rgw_obj_key& /*key*/,
+                       const std::string& /*op_tag*/,
+                       bool /*delete_marker*/,
+                       ceph::real_time /*mtime*/,
+                       const rgw_zone_set& /*zones_trace*/) {}
+  void add_maybe_flush(RGWModifyOp /*op*/,
+                       const rgw_bucket_dir_entry& /*list_state*/,
+                       rgw_zone_set /*zones_trace*/) {}
+  void flush(asio::yield_context /*y*/) {}
+  void flush() {}
+};
 
 class RGWRados
 {
@@ -1547,6 +1568,75 @@ public:
   int cls_obj_complete_cancel(BucketShard& bs, std::string& tag, rgw_obj& obj,
                               std::list<rgw_obj_index_key> *remove_objs,
                               uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr, bool log_op = true);
+
+  /// create a FIFO bilog batch writer for the active log generation of
+  /// bucket_info.  The shard OIDs are derived from the current FIFO log
+  /// layout stored in bucket_info.layout.logs.
+  RGWBILogUpdateBatch get_or_create_fifo_bilog_batch(
+      const DoutPrefixProvider* dpp,
+      const RGWBucketInfo& bucket_info);
+
+  /// dispatch bilog recording + optional bucket-index op for a single request.
+  ///
+  /// CLSRGWBucketModifyOpT == void:
+  ///   is called as func(bilog_handler)
+  ///   — used when only a bilog entry needs to be written without a CLS op
+  ///     (e.g. apply_olh_log replay, check_disk_state reconciliation).
+  ///
+  /// CLSRGWBucketModifyOpT != void:
+  ///   is called as func(op_issuer, bilog_handler)
+  ///   — used for normal bucket-index write operations; args are forwarded
+  ///     to the OpIssuer constructor.
+  ///
+  /// backend selection:
+  ///   InIndex log (or no log) + log_data=true  → OpIssuer(log_data=true)  + BILogNopHandler
+  ///   FIFO log               + log_data=true  → OpIssuer(log_data=false) + RGWBILogUpdateBatch
+  ///   any                    + log_data=false → OpIssuer(log_data=false) + BILogNopHandler
+  template <class CLSRGWBucketModifyOpT, class F, class... Args>
+  int with_bilog(const DoutPrefixProvider* dpp,
+                 F&& func,
+                 const RGWBucketInfo& bucket_info,
+                 Args&&... args)
+  {
+    ldpp_dout(dpp, 20) << __func__
+                       << ": zone.log_data="
+                       << svc.zone->get_zone().log_data << dendl;
+
+    const bool log_data = svc.zone->get_zone().log_data;
+    const bool is_inindex =
+      bucket_info.layout.logs.empty() ||
+      bucket_info.layout.logs.back().layout.type != rgw::BucketLogType::FIFO;
+
+    if constexpr (std::is_same_v<CLSRGWBucketModifyOpT, void>) {
+      // bilog-only variant: lambda receives only a bilog handler.
+      if (log_data && !is_inindex) {
+        auto batch = get_or_create_fifo_bilog_batch(dpp, bucket_info);
+        return std::forward<F>(func)(batch);
+      } else {
+        BILogNopHandler nop;
+        return std::forward<F>(func)(nop);
+      }
+    } else {
+      // full variant: lambda receives (op_issuer, bilog_handler).
+      if (is_inindex) {
+        // InIndex or no-log: OpIssuer writes its own bilog; FIFO is NOP.
+        return std::forward<F>(func)(
+            CLSRGWBucketModifyOpT{log_data, std::forward<Args>(args)...},
+            BILogNopHandler{});
+      } else if (log_data) {
+        // FIFO log: OpIssuer must not write in-index bilog; FIFO batch does it.
+        auto batch = get_or_create_fifo_bilog_batch(dpp, bucket_info);
+        return std::forward<F>(func)(
+            CLSRGWBucketModifyOpT{false, std::forward<Args>(args)...},
+            batch);
+      } else {
+        // logging disabled entirely.
+        return std::forward<F>(func)(
+            CLSRGWBucketModifyOpT{false, std::forward<Args>(args)...},
+            BILogNopHandler{});
+      }
+    }
+  }
 
   using ent_map_t =
     boost::container::flat_map<std::string, rgw_bucket_dir_entry>;

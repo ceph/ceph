@@ -96,6 +96,7 @@
 #include "services/svc_sys_obj_cache.h"
 #include "services/svc_bucket.h"
 #include "services/svc_mdlog.h"
+#include "services/svc_bilog_rados.h"
 
 #include "compressor/Compressor.h"
 
@@ -10526,6 +10527,48 @@ int RGWRados::cls_obj_prepare_op(const DoutPrefixProvider *dpp, BucketShard& bs,
   int ret = bs.bucket_obj.operate(dpp, std::move(o), y);
   ldout_bitx(bitx, dpp, 10) << "EXITING " << __func__ << ": ret=" << ret << dendl_bitx;
   return ret;
+}
+
+// bilog batch factory
+RGWBILogUpdateBatch RGWRados::get_or_create_fifo_bilog_batch(
+    const DoutPrefixProvider* dpp,
+    const RGWBucketInfo& bucket_info)
+{
+  ceph_assert(!bucket_info.layout.logs.empty());
+  const auto& log_layout = bucket_info.layout.logs.back();
+  ceph_assert(log_layout.layout.type == rgw::BucketLogType::FIFO);
+
+  const auto& index_layout = rgw::log_to_index_layout(log_layout);
+
+  librados::IoCtx index_pool;
+  std::map<int, std::string> bucket_objs;
+  int r = svc.bi_rados->open_bucket_index(
+      dpp, bucket_info, std::nullopt, index_layout,
+      &index_pool, &bucket_objs, nullptr);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__
+                      << ": open_bucket_index failed for "
+                      << bucket_info.bucket << ": " << cpp_strerror(r) << dendl;
+    // TODO: The proper fix is to change
+    // with_bilog<> to check for failure before invoking the lambda, but that
+    // requires reworking the template signature.  For now, return a zero-shard
+    // batch: callers can call add_maybe_flush/flush safely (pending stays
+    // empty), but any bilog entries for this operation will be silently
+    // dropped.  The ERROR log above ensures this is always visible.
+    return RGWBILogUpdateBatch(dpp, svc.bilog_rados->rados_neo,
+                               neorados::IOContext{}, {});
+  }
+
+  // conversion to ordered vector.
+  std::vector<std::string> shard_oids;
+  shard_oids.reserve(bucket_objs.size());
+  for (auto& [/*shard_id*/_, oid] : bucket_objs) {
+    shard_oids.push_back(oid);
+  }
+
+  neorados::IOContext neo_loc(index_pool.get_id());
+  return RGWBILogUpdateBatch(dpp, svc.bilog_rados->rados_neo,
+                             std::move(neo_loc), shard_oids);
 }
 
 int RGWRados::cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, RGWModifyOp op, string& tag,
