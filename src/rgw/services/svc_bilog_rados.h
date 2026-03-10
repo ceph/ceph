@@ -16,6 +16,9 @@
 
 #pragma once
 
+#include <optional>
+
+#include "include/neorados/RADOS.hpp"
 #include "driver/rados/rgw_service.h"
 
 class RGWSI_BILog_RADOS : public RGWServiceInstance
@@ -25,9 +28,13 @@ public:
     RGWSI_BucketIndex_RADOS *bi{nullptr};
   } svc;
 
+  // neorados::RADOS handle used by FIFO bilog batch writers.
+  // set during init()
+  std::optional<neorados::RADOS> rados_neo;
+
   RGWSI_BILog_RADOS(CephContext *cct);
 
-  void init(RGWSI_BucketIndex_RADOS *bi_rados_svc);
+  void init(RGWSI_BucketIndex_RADOS *bi_rados_svc, neorados::RADOS rados_neo);
 
   int log_start(const DoutPrefixProvider *dpp, optional_yield y,
                 const RGWBucketInfo& bucket_info,
