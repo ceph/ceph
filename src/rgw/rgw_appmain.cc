@@ -635,12 +635,13 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
   }
 #endif
 
-  env.kms_cache.reset();
-
   for (auto& fe : fes) {
     fe->stop();
   }
 
+  if (env.kms_cache) {
+    env.kms_cache->stop_ttl_reaper();
+  }
   ldh.reset(nullptr); // deletes ldap helper if it was created
   rgw_log_usage_finalize();
 
