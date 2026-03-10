@@ -1161,6 +1161,18 @@ class CephadmServe:
                 self.log.info('Reconfiguring %s (unknown last config time)...' % (
                     dd.name()))
                 action = 'reconfig'
+            elif spec is not None and hasattr(spec, 'extra_container_args') and dd.extra_container_args != spec.extra_container_args:
+                self.log.debug(
+                    f'{dd.name()} container cli args {dd.extra_container_args} -> {spec.extra_container_args}')
+                self.log.info(f'Redeploying {dd.name()}, (container cli args changed) . . .')
+                dd.extra_container_args = spec.extra_container_args
+                action = 'redeploy'
+            elif spec is not None and hasattr(spec, 'extra_entrypoint_args') and dd.extra_entrypoint_args != spec.extra_entrypoint_args:
+                self.log.info(f'Redeploying {dd.name()}, (entrypoint args changed) . . .')
+                self.log.debug(
+                    f'{dd.name()} daemon entrypoint args {dd.extra_entrypoint_args} -> {spec.extra_entrypoint_args}')
+                dd.extra_entrypoint_args = spec.extra_entrypoint_args
+                action = 'redeploy'
             elif last_deps != deps:
                 sym_diff = set(deps).symmetric_difference(last_deps)
                 self.log.info(f'Reconfiguring {dd.name()} deps {last_deps} -> {deps} (diff {sym_diff})')
@@ -1190,18 +1202,6 @@ class CephadmServe:
                         if svc.has_placement_changed(last_deps, spec):
                             self.log.debug(f'Redeploy {spec.service_name()} as placement has changed')
                             action = 'redeploy'
-            elif spec is not None and hasattr(spec, 'extra_container_args') and dd.extra_container_args != spec.extra_container_args:
-                self.log.debug(
-                    f'{dd.name()} container cli args {dd.extra_container_args} -> {spec.extra_container_args}')
-                self.log.info(f'Redeploying {dd.name()}, (container cli args changed) . . .')
-                dd.extra_container_args = spec.extra_container_args
-                action = 'redeploy'
-            elif spec is not None and hasattr(spec, 'extra_entrypoint_args') and dd.extra_entrypoint_args != spec.extra_entrypoint_args:
-                self.log.info(f'Redeploying {dd.name()}, (entrypoint args changed) . . .')
-                self.log.debug(
-                    f'{dd.name()} daemon entrypoint args {dd.extra_entrypoint_args} -> {spec.extra_entrypoint_args}')
-                dd.extra_entrypoint_args = spec.extra_entrypoint_args
-                action = 'redeploy'
             elif self.mgr.last_monmap and \
                     self.mgr.last_monmap > last_config and \
                     dd.daemon_type in CEPH_TYPES:
