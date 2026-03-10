@@ -252,8 +252,11 @@ class CephadmServe:
         @forall_hosts
         def refresh(host: str) -> None:
 
-            # skip hosts that are in maintenance - they could be powered off
-            if self.mgr.inventory._inventory[host].get("status", "").lower() == "maintenance":
+            # skip hosts that were removed or are in maintenance - they could be powered off
+            host_info = self.mgr.inventory._inventory.get(host)
+            if host_info is None:
+                return
+            if host_info.get("status", "").lower() == "maintenance":
                 return
 
             if self.mgr.use_agent:
@@ -862,8 +865,13 @@ class CephadmServe:
 
         try:
             all_slots, slots_to_add, daemons_to_remove = ha.place()
-            daemons_to_remove = [d for d in daemons_to_remove if (d.hostname and self.mgr.inventory._inventory[d.hostname].get(
-                'status', '').lower() not in ['maintenance', 'offline'] and d.hostname not in self.mgr.offline_hosts)]
+            daemons_to_remove = [
+                d for d in daemons_to_remove if (
+                    d.hostname
+                    and d.hostname in self.mgr.inventory._inventory
+                    and self.mgr.inventory._inventory.get(d.hostname, {}).get(
+                        'status', '').lower() not in ['maintenance', 'offline']
+                    and d.hostname not in self.mgr.offline_hosts)]
             self.log.debug('Add %s, remove %s' % (slots_to_add, daemons_to_remove))
         except OrchestratorError as e:
             msg = f'Failed to apply {spec.service_name()} spec {spec}: {str(e)}'
