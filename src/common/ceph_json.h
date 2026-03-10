@@ -197,6 +197,7 @@ protected:
    parser, which is slightly more complicated but more flexible; we also try to reinterpret
    certain kinds of failures as strings to match established behavior: */
    static bool parse_json(std::string_view input, boost::json::value& data_out)
+try
    {
     boost::json::stream_parser p;
     boost::system::error_code ec;
@@ -218,17 +219,20 @@ fmt::println("JFW: JSON error -- bytes_written = {}, input.size() = {}. Input:\n
    // non-delimited JSON like that around and the expectation was that it would be parsed as a string; the other common situation
    // is that of having an extra NULL character at the end of the string, which once again is rightly rejected as junk input:
    if (boost::json::error::syntax == ec && 0 == bytes_written) {
-fmt::println(" JFW: from syntax, trying again...");
+fmt::println("JFW: syntax error, trying again; original input ({}):{}", input.size(), input);
     // This feels very uncomforable, but it's what the old library basically always did as far as I can tell!
     // In this case, we don't try to parse a JSON value out of it as it would simply fail (there are still no
     // delimiters):
-    data_out = input;
+
+std::string JFW_rewritten = fmt::format("\"{}\"", input);
+fmt::println("JFW: syntax error: rewritten: {}", input);
+    data_out = boost::json::value_from(input);
 
     return true; 
    }
 
    if(boost::json::error::extra_data == ec) {
-fmt::println("JFW: from extra data, trying again...");
+fmt::println("JFW: extra data, trying again; input ({}):\n{}", input.size(), input);
       // Try again, less any NULL characters (if that's the issue):
       std::string_view sv(input);
       while(sv.ends_with('\x00'))
@@ -239,6 +243,10 @@ fmt::println("JFW: from extra data, trying again...");
       ec = {};
 
       bytes_written = p.write_some(sv, ec);
+
+if(sv.size() != bytes_written) {
+fmt::println("JFW: wrote {}, but size {}", bytes_written, sv.size());
+}
 
       if (!ec) {
         p.finish(ec);
@@ -253,6 +261,9 @@ fmt::println("JFW: from extra data, trying again...");
 
   return false;
  }
+catch(const std::exception& e) {
+ throw std::runtime_error(fmt::format("JFW: JSON error \"{}\", input:{}\n", e.what(), input));
+}
 
 public:
   JSONObj() = default;
