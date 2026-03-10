@@ -1556,18 +1556,32 @@ public:
 
   int cls_obj_prepare_op(const DoutPrefixProvider *dpp, BucketShard& bs, RGWModifyOp op, std::string& tag, rgw_obj& obj,
                          optional_yield y);
-  int cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, RGWModifyOp op, std::string& tag, int64_t pool, uint64_t epoch,
-                          rgw_bucket_dir_entry& ent, RGWObjCategory category, std::list<rgw_obj_index_key> *remove_objs,
-                          uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr, bool log_op = true);
-  int cls_obj_complete_add(BucketShard& bs, const rgw_obj& obj, std::string& tag, int64_t pool, uint64_t epoch, rgw_bucket_dir_entry& ent,
-                           RGWObjCategory category, std::list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags,
-                           rgw_zone_set *zones_trace = nullptr, bool log_op = true);
-  int cls_obj_complete_del(BucketShard& bs, std::string& tag, int64_t pool, uint64_t epoch, rgw_obj& obj,
-                           ceph::real_time& removed_mtime, std::list<rgw_obj_index_key> *remove_objs,
-                           uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr, bool log_op = true);
-  int cls_obj_complete_cancel(BucketShard& bs, std::string& tag, rgw_obj& obj,
-                              std::list<rgw_obj_index_key> *remove_objs,
-                              uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr, bool log_op = true);
+  template <class CLSRGWBucketModifyOpT>
+  int cls_obj_complete_op(const DoutPrefixProvider* dpp, const RGWBucketInfo& bucket_info,
+                          BucketShard& bs, const rgw_obj& obj, std::string& tag,
+                          int64_t pool, uint64_t epoch,
+                          rgw_bucket_dir_entry& ent, RGWObjCategory category,
+                          std::list<rgw_obj_index_key>* remove_objs,
+                          uint16_t bilog_flags,
+                          rgw_zone_set* zones_trace = nullptr, bool log_op = true);
+  int cls_obj_complete_add(const DoutPrefixProvider* dpp, const RGWBucketInfo& bucket_info,
+                           BucketShard& bs, const rgw_obj& obj, std::string& tag,
+                           int64_t pool, uint64_t epoch, rgw_bucket_dir_entry& ent,
+                           RGWObjCategory category, std::list<rgw_obj_index_key>* remove_objs,
+                           uint16_t bilog_flags,
+                           rgw_zone_set* zones_trace = nullptr, bool log_op = true);
+  int cls_obj_complete_del(const DoutPrefixProvider* dpp, const RGWBucketInfo& bucket_info,
+                           BucketShard& bs, std::string& tag,
+                           int64_t pool, uint64_t epoch, rgw_obj& obj,
+                           ceph::real_time& removed_mtime,
+                           std::list<rgw_obj_index_key>* remove_objs,
+                           uint16_t bilog_flags,
+                           rgw_zone_set* zones_trace = nullptr, bool log_op = true);
+  int cls_obj_complete_cancel(const DoutPrefixProvider* dpp, const RGWBucketInfo& bucket_info,
+                              BucketShard& bs, std::string& tag, rgw_obj& obj,
+                              std::list<rgw_obj_index_key>* remove_objs,
+                              uint16_t bilog_flags,
+                              rgw_zone_set* zones_trace = nullptr, bool log_op = true);
 
   /// create a FIFO bilog batch writer for the active log generation of
   /// bucket_info.  The shard OIDs are derived from the current FIFO log
@@ -1596,13 +1610,15 @@ public:
   int with_bilog(const DoutPrefixProvider* dpp,
                  F&& func,
                  const RGWBucketInfo& bucket_info,
+                 bool log_op,
                  Args&&... args)
   {
     ldpp_dout(dpp, 20) << __func__
-                       << ": zone.log_data="
-                       << svc.zone->get_zone().log_data << dendl;
+                       << ": log_op=" << log_op
+                       << " need_to_log_data=" << svc.zone->need_to_log_data()
+                       << dendl;
 
-    const bool log_data = svc.zone->get_zone().log_data;
+    const bool log_data = log_op && svc.zone->need_to_log_data();
     const bool is_inindex =
       bucket_info.layout.logs.empty() ||
       bucket_info.layout.logs.back().layout.type != rgw::BucketLogType::FIFO;
@@ -1619,21 +1635,20 @@ public:
     } else {
       // full variant: lambda receives (op_issuer, bilog_handler).
       if (is_inindex) {
-        // InIndex or no-log: OpIssuer writes its own bilog; FIFO is NOP.
-        return std::forward<F>(func)(
-            CLSRGWBucketModifyOpT{log_data, std::forward<Args>(args)...},
-            BILogNopHandler{});
+        // InIndex or no-log: OpIssuer writes its own bilog. FIFO is NOP.
+        CLSRGWBucketModifyOpT op_issuer{log_data, std::forward<Args>(args)...};
+        BILogNopHandler nop;
+        return std::forward<F>(func)(op_issuer, nop);
       } else if (log_data) {
-        // FIFO log: OpIssuer must not write in-index bilog; FIFO batch does it.
+        // FIFO log: OpIssuer must not write in-index bilog. FIFO batch does it.
+        CLSRGWBucketModifyOpT op_issuer{false, std::forward<Args>(args)...};
         auto batch = get_or_create_fifo_bilog_batch(dpp, bucket_info);
-        return std::forward<F>(func)(
-            CLSRGWBucketModifyOpT{false, std::forward<Args>(args)...},
-            batch);
+        return std::forward<F>(func)(op_issuer, batch);
       } else {
         // logging disabled entirely.
-        return std::forward<F>(func)(
-            CLSRGWBucketModifyOpT{false, std::forward<Args>(args)...},
-            BILogNopHandler{});
+        CLSRGWBucketModifyOpT op_issuer{false, std::forward<Args>(args)...};
+        BILogNopHandler nop;
+        return std::forward<F>(func)(op_issuer, nop);
       }
     }
   }
