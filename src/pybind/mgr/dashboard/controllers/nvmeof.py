@@ -1407,8 +1407,6 @@ else:
             "List all allowed hosts for an NVMeoF subsystem",
             parameters={
                 "nqn": Param(str, "NVMeoF subsystem NQN"),
-                "clear_alerts": Param(bool, "Clear any host alert signal after getting its value",
-                                      True, False),
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
                 "server_address": Param(str, "NVMeoF gateway address", True, None),
             },
@@ -1416,14 +1414,14 @@ else:
         @convert_to_model(model.HostsInfo, finalize=_update_hosts)
         @handle_nvmeof_error
         def list(
-            self, nqn: str, clear_alerts: Optional[bool] = None,
+            self, nqn: str,
             gw_group: Optional[str] = None, server_address: Optional[str] = None
         ):
             return NVMeoFClient(
                 gw_group=gw_group,
                 server_address=server_address
             ).stub.list_hosts(
-                NVMeoFClient.pb2.list_hosts_req(subsystem=nqn, clear_alerts=clear_alerts)
+                NVMeoFClient.pb2.list_hosts_req(subsystem=nqn, clear_alerts=False)
             )
 
         @empty_response
