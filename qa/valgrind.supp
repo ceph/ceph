@@ -961,3 +961,14 @@
    ...
    fun:exit
 }
+{
+   rocky10 still reachable rocksdb leak
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:_Znam
+   fun:UnknownInlinedFun
+   fun:_GLOBAL__sub_I_error_handler.cc.lto_priv.0
+   fun:_sub_I_65535_0.0
+   fun:__libc_start_main@@GLIBC_2.34
+   fun:(below main)
+}
