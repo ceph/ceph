@@ -248,9 +248,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
           return /^[^@/]+$/.test(value) ? null : { rbdImageName: true };
         })
       ]),
-      namespace_size: new UntypedFormControl(null, {
-        validators: [CdValidators.blockSizeMultiple()]
-      }), // UI only - not sent to backend
+      namespace_size: new UntypedFormControl(null), // UI only - not sent to backend
       host_access: new UntypedFormControl('all'), // UI only - determines visibility
       initiators: new UntypedFormControl([]) // UI only - selected hosts
     });
@@ -338,11 +336,6 @@ export class NvmeofNamespacesFormComponent implements OnInit {
         create_image: isGatewayProvisioned,
         no_auto_visible: noAutoVisible
       };
-
-      const blockSize = this.nsForm.getValue('namespace_size');
-      if (blockSize) {
-        request.block_size = blockSize;
-      }
 
       if (isGatewayProvisioned) {
         const rbdImageName = this.nsForm.getValue('rbd_image_name');
