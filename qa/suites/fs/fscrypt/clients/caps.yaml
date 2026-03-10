@@ -1,0 +1,5 @@
+overrides:
+  ceph:
+    caps:
+      client.0:
+        mds: 'allow rwe'
