@@ -5540,6 +5540,17 @@ std::tuple<rgw::lua::LuaCodeType, int> RadosLuaManager::get_script_or_bytecode(c
   return std::make_tuple(script, 0);
 }
 
+int RadosLuaManager::save_scripts_to_disk(const DoutPrefixProvider* dpp, optional_yield y, const std::vector<std::string>& scripts, const std::string& key) {
+  // create a list of scripts
+  std::string script_list_string;
+  for (size_t i = 0; i < scripts.size(); i++) {
+    if (i > 0) script_list_string += "\n";
+    script_list_string += scripts[i];
+  }
+  // save the list to the metadata file
+  return _put_script(dpp, y, script_list_metadata_oid(key), script_list_string, "");
+}
+
 int RadosLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y,
                                 const std::string& key, const std::string& script, const std::string& name)
 {
@@ -5563,15 +5574,7 @@ int RadosLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y,
     // insert script in lexicopgrahical order
     auto i = std::lower_bound(scripts.begin(), scripts.end(), script_name);
     scripts.insert(i, script_name);
-
-    // create a list of scripts
-    std::string script_list_string;
-    for (size_t i = 0; i < scripts.size(); i++) {
-      if (i > 0) script_list_string += "\n";
-      script_list_string += scripts[i];
-    }
-    // save the list to the metadata file
-    _put_script(dpp, y, script_list_metadata_oid(key), script_list_string, "");
+    return save_scripts_to_disk(dpp, y, scripts, key);
   }
   return 0;
 }
@@ -5601,6 +5604,34 @@ int RadosLuaManager::_put_script(const DoutPrefixProvider* dpp, optional_yield y
 
 
 int RadosLuaManager::del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& name)
+{
+  if (pool.empty()) {
+    ldpp_dout(dpp, 10) << "WARNING: missing pool when deleting Lua script " << dendl;
+    return 0;
+  }
+
+  std::vector<std::string> scripts;
+  int r = list_scripts(dpp, y, key, scripts);
+  if (r < 0) {
+    return r;
+  }
+
+  std::string script_name = name.empty() ? "default" : name;
+  r = _del_script(dpp, y, key, script_name);
+  if (r < 0) {
+    ldpp_dout(dpp, 10) << "WARNING: failed to delete Lua script " << script_name << dendl;
+    return r;
+  }
+  // remove the deleted script from the script list
+  auto it = std::find(scripts.begin(), scripts.end(), script_name);
+  if (it != scripts.end()) {
+    scripts.erase(it);
+    return save_scripts_to_disk(dpp, y, scripts, key);
+  }
+  return 0;
+}
+
+int RadosLuaManager::_del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& name)
 {
   if (pool.empty()) {
     ldpp_dout(dpp, 10) << "WARNING: missing pool when deleting Lua script " << dendl;
