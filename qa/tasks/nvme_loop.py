@@ -24,6 +24,9 @@ def task(ctx, config):
         devs = teuthology.get_scratch_devices(remote)
         devs_by_remote[remote] = devs
         base = '/sys/kernel/config/nvmet'
+        if remote.os.name in ('ubuntu', 'debian'):
+            remote.sh('sudo apt install -y linux-modules-extra-$(uname -r)')
+            remote.sh('sudo apt install -y nvme-cli')
         remote.run(
             args=[
                 'grep', '^nvme_loop', '/proc/modules', run.Raw('||'),
