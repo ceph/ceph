@@ -290,7 +290,7 @@ class CephFSMountBase(object):
 
         # Setup the ceph-brx and always use the last valid IP
         if not brx:
-            log.info("Setuping the 'ceph-brx' with {0}/{1}".format(ip, mask))
+            log.info("Setting up the 'ceph-brx' with {0}/{1}".format(ip, mask))
 
             self.run_shell_payload(f"""
                 set -e
@@ -403,7 +403,7 @@ class CephFSMountBase(object):
         mask = self.ceph_brx_net.split('/')[1]
         brd = net.broadcast_address
 
-        log.info("Setuping the netns '{0}' with {1}/{2}".format(self.netns_name, ip, mask))
+        log.info("Setting up the netns '{0}' with {1}/{2}".format(self.netns_name, ip, mask))
 
         # Setup the veth interfaces
         brxip = bridge_ip
