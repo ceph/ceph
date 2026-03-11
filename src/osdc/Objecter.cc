@@ -957,11 +957,11 @@ void Objecter::_linger_submit(LingerOp *info,
 struct CB_DoWatchNotify {
   Objecter *objecter;
   boost::intrusive_ptr<Objecter::LingerOp> info;
-  boost::intrusive_ptr<MWatchNotify> msg;
+  cref_t<MWatchNotify> msg;
   CB_DoWatchNotify(Objecter *o,
                    boost::intrusive_ptr<Objecter::LingerOp> i,
-                   MWatchNotify *m)
-    : objecter(o), info(std::move(i)), msg(m) {
+                   cref_t<MWatchNotify> m)
+    : objecter(o), info(std::move(i)), msg(std::move(m)) {
     info->_queued_async();
   }
   void operator()() {
@@ -969,7 +969,7 @@ struct CB_DoWatchNotify {
   }
 };
 
-void Objecter::handle_watch_notify(MWatchNotify *m)
+void Objecter::handle_watch_notify(cref_t<MWatchNotify> m)
 {
   shared_lock l(rwlock);
   if (!initialized) {
@@ -1002,18 +1002,18 @@ void Objecter::handle_watch_notify(MWatchNotify *m)
       asio::defer(service.get_executor(),
 		  asio::append(std::move(info->on_notify_finish),
 			       osdcode(m->return_code),
-			       std::move(m->get_data())));
+			       bufferlist(m->get_data())));
       // if we race with reconnect we might get a second notify; only
       // notify the caller once!
       info->on_notify_finish = nullptr;
     }
   } else {
-    asio::defer(finish_strand, CB_DoWatchNotify(this, std::move(info), m));
+    asio::defer(finish_strand, CB_DoWatchNotify(this, std::move(info), std::move(m)));
   }
 }
 
 void Objecter::_do_watch_notify(boost::intrusive_ptr<LingerOp> info,
-                                boost::intrusive_ptr<MWatchNotify> m)
+                                cref_t<MWatchNotify> m)
 {
   ldout(cct, 10) << __func__ << " " << *m << dendl;
 
@@ -1034,7 +1034,7 @@ void Objecter::_do_watch_notify(boost::intrusive_ptr<LingerOp> info,
 
   switch (m->opcode) {
   case CEPH_WATCH_EVENT_NOTIFY:
-    info->handle({}, m->notify_id, m->cookie, m->notifier_gid, std::move(m->bl));
+    info->handle({}, m->notify_id, m->cookie, m->notifier_gid, bufferlist{m->bl});
     break;
   }
 
@@ -1046,26 +1046,60 @@ Dispatcher::dispatch_result_t Objecter::ms_dispatch2(const MessageRef &m)
 {
   ldout(cct, 10) << __func__ << " " << cct << " " << *m << dendl;
   switch (m->get_type()) {
-    // these we exlusively handle
-  case CEPH_MSG_OSD_OPREPLY:
-    m->get(); /* ref to be consumed */
-    handle_osd_op_reply(ref_cast<MOSDOpReply>(m).get());
+  case CEPH_MSG_OSD_OPREPLY: {
+    cref_t<MOSDOpReply> msg = ref_cast<MOSDOpReply>(m);
+    auto priv = msg->get_connection()->get_priv();
+    auto s = static_cast<OSDSession*>(priv.get());
+    if (s) {
+      boost::asio::dispatch(s->strand, [this, msg = std::move(msg)]() {
+        handle_osd_op_reply(std::move(msg));
+      });
+    } else {
+      handle_osd_op_reply(std::move(msg));
+    }
     return Dispatcher::HANDLED();
+  }
 
-  case CEPH_MSG_OSD_BACKOFF:
-    m->get(); /* ref to be consumed */
-    handle_osd_backoff(ref_cast<MOSDBackoff>(m).get());
+  case CEPH_MSG_OSD_BACKOFF: {
+    cref_t<MOSDBackoff> msg = ref_cast<MOSDBackoff>(m);
+    auto priv = msg->get_connection()->get_priv();
+    auto s = static_cast<OSDSession*>(priv.get());
+    if (s) {
+      boost::asio::dispatch(s->strand, [this, msg = std::move(msg)]() {
+        handle_osd_backoff(std::move(msg));
+      });
+    } else {
+      handle_osd_backoff(std::move(msg));
+    }
     return Dispatcher::HANDLED();
+  }
 
-  case CEPH_MSG_WATCH_NOTIFY:
-    /* ref not consumed! */
-    handle_watch_notify(ref_cast<MWatchNotify>(m).get());
+  case CEPH_MSG_WATCH_NOTIFY: {
+    cref_t<MWatchNotify> msg = ref_cast<MWatchNotify>(m);
+    auto priv = msg->get_connection()->get_priv();
+    auto s = static_cast<OSDSession*>(priv.get());
+    if (s) {
+      boost::asio::dispatch(s->strand, [this, msg = std::move(msg)]() {
+        handle_watch_notify(std::move(msg));
+      });
+    } else {
+      handle_watch_notify(std::move(msg));
+    }
     return Dispatcher::HANDLED();
+  }
 
   case MSG_COMMAND_REPLY:
     if (m->get_source().type() == CEPH_ENTITY_TYPE_OSD) {
-      m->get(); /* ref to be consumed */
-      handle_command_reply(ref_cast<MCommandReply>(m).get());
+      cref_t<MCommandReply> msg = ref_cast<MCommandReply>(m);
+      auto priv = msg->get_connection()->get_priv();
+      auto s = static_cast<OSDSession*>(priv.get());
+      if (s) {
+       boost::asio::dispatch(s->strand, [this, msg = std::move(msg)]() {
+          handle_command_reply(std::move(msg));
+        });
+      } else {
+        handle_command_reply(std::move(msg));
+      }
       return Dispatcher::HANDLED();
     } else {
       return Dispatcher::UNHANDLED();
@@ -1942,7 +1976,7 @@ int Objecter::_get_session(int osd, OSDSession **session,
   if (!sul.owns_lock()) {
     return -EAGAIN;
   }
-  auto s = new OSDSession(cct, osd);
+  auto s = new OSDSession(cct, osd, service.get_executor());
   osd_sessions[osd] = s;
   s->con = messenger->connect_to_osd(osdmap->get_addrs(osd));
   s->con->set_priv(RefCountedPtr{s});
@@ -3717,8 +3751,7 @@ int Objecter::take_linger_budget(LingerOp *info)
   return 1;
 }
 
-bs::error_code Objecter::process_op_reply_handlers(Op *op, vector<OSDOp> &out_ops) {
-
+bs::error_code Objecter::process_op_reply_handlers(Op *op, const vector<OSDOp>& out_ops) {
   ceph_assert(op->ops.size() == op->out_bl.size());
   ceph_assert(op->ops.size() == op->out_rval.size());
   ceph_assert(op->ops.size() == op->out_ec.size());
@@ -3793,8 +3826,7 @@ bs::error_code Objecter::process_op_reply_handlers(Op *op, vector<OSDOp> &out_op
 }
 
 
-/* This function DOES put the passed message before returning */
-void Objecter::handle_osd_op_reply(MOSDOpReply *m)
+void Objecter::handle_osd_op_reply(cref_t<MOSDOpReply> m)
 {
   ldout(cct, 10) << "in handle_osd_op_reply" << dendl;
 
@@ -3803,7 +3835,6 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
   shunique_lock sul(rwlock, ceph::acquire_shared);
   if (!initialized) {
-    m->put();
     return;
   }
 
@@ -3812,7 +3843,6 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   auto s = static_cast<OSDSession*>(priv.get());
   if (!s || s->con != con) {
     ldout(cct, 7) << __func__ << " no session on con " << con << dendl;
-    m->put();
     return;
   }
 
@@ -3825,7 +3855,6 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 						    " onnvram" : " ack"))
 		  << " ... stray" << dendl;
     sl.unlock();
-    m->put();
     return;
   }
 
@@ -3849,7 +3878,6 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     sl.unlock();
 
     _op_submit(op, sul, NULL);
-    m->put();
     return;
   }
 
@@ -3860,7 +3888,6 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 		    << " from " << m->get_source_inst()
 		    << "; last attempt " << (op->attempts - 1) << " sent to "
 		    << op->session->con->get_peer_addr() << dendl;
-      m->put();
       sl.unlock();
       return;
     }
@@ -3888,7 +3915,6 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 			 CEPH_OSD_FLAG_IGNORE_CACHE |
 			 CEPH_OSD_FLAG_IGNORE_OVERLAY);
     _op_submit(op, sul, NULL);
-    m->put();
     return;
   }
 
@@ -3917,7 +3943,6 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     op->target.flags &= ~CEPH_OSD_FLAG_FORCE_OSD;
     op->target.pgid = pg_t();
     _op_submit(op, sul, NULL);
-    m->put();
     return;
   }
 
@@ -3951,14 +3976,13 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
       bl.begin().copy(bl.length(), t.c_str());
       op->outbl->substr_of(t, 0, bl.length());
     } else {
-      m->claim_data(*op->outbl);
+      *op->outbl = m->get_data();
     }
     op->outbl = 0;
   }
 
   // per-op result demuxing
-  vector<OSDOp> out_ops;
-  m->claim_ops(out_ops);
+  auto& out_ops = m->get_ops();
 
   if (out_ops.size() != op->ops.size())
     ldout(cct, 0) << "WARNING: tid " << op->tid << " reply ops " << out_ops
@@ -3973,7 +3997,6 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
   // This function unlocks sl.
   complete_op_reply(op, handler_error, s, sl, rc);
-  m->put();
 }
 
 void Objecter::complete_op_reply(Op *op, bs::error_code handler_error, OSDSession *s, unique_lock<std::shared_mutex> &sl, int rc) {
@@ -4015,12 +4038,11 @@ void Objecter::complete_op_reply(Op *op, bs::error_code handler_error, OSDSessio
   }
 }
 
-void Objecter::handle_osd_backoff(MOSDBackoff *m)
+void Objecter::handle_osd_backoff(cref_t<MOSDBackoff> m)
 {
   ldout(cct, 10) << __func__ << " " << *m << dendl;
   shunique_lock sul(rwlock, ceph::acquire_shared);
   if (!initialized) {
-    m->put();
     return;
   }
 
@@ -4029,7 +4051,6 @@ void Objecter::handle_osd_backoff(MOSDBackoff *m)
   auto s = static_cast<OSDSession*>(priv.get());
   if (!s || s->con != con) {
     ldout(cct, 7) << __func__ << " no session on con " << con << dendl;
-    m->put();
     return;
   }
 
@@ -4110,7 +4131,6 @@ void Objecter::handle_osd_backoff(MOSDBackoff *m)
   sul.unlock();
   sl.unlock();
 
-  m->put();
   put_session(s);
 }
 
@@ -5203,11 +5223,10 @@ void Objecter::blocklist_self(bool set)
 
 // commands
 
-void Objecter::handle_command_reply(MCommandReply *m)
+void Objecter::handle_command_reply(cref_t<MCommandReply> m)
 {
   unique_lock wl(rwlock);
   if (!initialized) {
-    m->put();
     return;
   }
 
@@ -5216,7 +5235,6 @@ void Objecter::handle_command_reply(MCommandReply *m)
   auto s = static_cast<OSDSession*>(priv.get());
   if (!s || s->con != con) {
     ldout(cct, 7) << __func__ << " no session on con " << con << dendl;
-    m->put();
     return;
   }
 
@@ -5225,7 +5243,6 @@ void Objecter::handle_command_reply(MCommandReply *m)
   if (p == s->command_ops.end()) {
     ldout(cct, 10) << "handle_command_reply tid " << m->get_tid()
 		   << " not found" << dendl;
-    m->put();
     sl.unlock();
     return;
   }
@@ -5237,7 +5254,6 @@ void Objecter::handle_command_reply(MCommandReply *m)
 		   << " got reply from wrong connection "
 		   << m->get_connection() << " " << m->get_source_inst()
 		   << dendl;
-    m->put();
     sl.unlock();
     return;
   }
@@ -5249,7 +5265,6 @@ void Objecter::handle_command_reply(MCommandReply *m)
     // we get an updated osdmap and the PG is found to have moved.
     _maybe_request_map();
     _send_command(c);
-    m->put();
     sl.unlock();
     return;
   }
@@ -5258,11 +5273,9 @@ void Objecter::handle_command_reply(MCommandReply *m)
 
   unique_lock sul(s->lock);
   _finish_command(c, m->r < 0 ? bs::error_code(-m->r, osd_category()) :
-		  bs::error_code(), std::move(m->rs),
-		  std::move(m->get_data()));
+		  bs::error_code(), std::string(m->rs),
+		  bufferlist(m->get_data()));
   sul.unlock();
-
-  m->put();
 }
 
 Objecter::LingerOp::LingerOp(Objecter *o, uint64_t linger_id)
@@ -5459,7 +5472,9 @@ Objecter::OSDSession::~OSDSession()
 Objecter::Objecter(CephContext *cct,
 		   Messenger *m, MonClient *mc,
 		   asio::io_context& service) :
-  Dispatcher(cct), messenger(m), monc(mc), service(service)
+  Dispatcher(cct), messenger(m), monc(mc), service(service),
+  homeless_session(new OSDSession(cct, -1, service.get_executor())),
+  splitop_session(new OSDSession(cct, -2, service.get_executor())) // -2 to differentiate from homeless
 {
   mon_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
   osd_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_osd_op_timeout");
