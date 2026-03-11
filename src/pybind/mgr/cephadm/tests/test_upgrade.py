@@ -9,6 +9,7 @@ from cephadm.upgrade import CephadmUpgrade, UpgradeState
 from cephadm.ssh import HostConnectionError
 from cephadm.utils import ContainerInspectInfo
 from orchestrator import OrchestratorError, DaemonDescription
+from mgr_module import HandleCommandResult
 from .fixtures import _run_cephadm, wait, with_host, with_service, \
     receive_agent_metadata, async_side_effect
 
@@ -479,3 +480,133 @@ def test_staggered_upgrade_validation(
     else:
         cephadm_module.upgrade._validate_upgrade_filters(
             'new_image_name', daemon_types, hosts, services)
+
+
+def _osd_need_version_upgrade(hostname: str = 'host1', daemon_id: str = '0') -> DaemonDescription:
+    return DaemonDescription(
+        daemon_type='osd',
+        daemon_id=daemon_id,
+        hostname=hostname,
+        container_image_name='old_image',
+        container_image_digests=['old_image@olddigest'],
+        deployed_by=['old_image@olddigest'],
+    )
+
+
+@mock.patch('cephadm.upgrade.time.sleep')
+@mock.patch('cephadm.upgrade.get_crush_host_names_with_osds', return_value=['crush-host-a'])
+def test_wait_for_ok_to_upgrade_fills_known_ok_to_upgrade(
+        _sleep, _buckets, cephadm_module: CephadmOrchestrator,
+):
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image', 'progress', target_version='18.2.0',
+    )
+    osd_svc = mock.Mock()
+
+    def _ok_to_upgrade_osd(crush_bucket, ceph_version, max=None, known=None, all_osds_upgraded=None):
+        assert crush_bucket == 'crush-host-a'
+        assert ceph_version == '18.2.0'
+        assert known is not None
+        known.extend(['osd.7', 'osd.8'])
+        return HandleCommandResult(0, '', '')
+
+    osd_svc.ok_to_upgrade_osd = mock.Mock(side_effect=_ok_to_upgrade_osd)
+    reg = mock.Mock()
+    reg.get_service = mock.Mock(return_value=osd_svc)
+
+    known: List[str] = []
+    need = [(_osd_need_version_upgrade(daemon_id='7'), False)]
+
+    with mock.patch('cephadm.upgrade.service_registry', reg):
+        ok = cephadm_module.upgrade._wait_for_ok_to_upgrade(
+            need, '18.2.0', known, target_image='target_image',
+        )
+
+    assert ok is True
+    assert known == ['osd.7', 'osd.8']
+    osd_svc.ok_to_upgrade_osd.assert_called_once()
+
+
+@mock.patch('cephadm.upgrade.time.sleep')
+@mock.patch('cephadm.upgrade.get_crush_host_names_with_osds', return_value=['crush-host-a'])
+def test_wait_for_ok_to_upgrade_all_osds_at_target_empty_known_returns_true(
+        _sleep, _buckets, cephadm_module: CephadmOrchestrator,
+):
+    """Same Ceph version, different image: mon reports all_osds_upgraded; caller falls through to ok-to-stop."""
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image', 'progress', target_version='18.2.0',
+    )
+    osd_svc = mock.Mock()
+
+    def _ok_to_upgrade_osd(crush_bucket, ceph_version, max=None, known=None, all_osds_upgraded=None):
+        if all_osds_upgraded is not None:
+            all_osds_upgraded[0] = True
+        return HandleCommandResult(0, '', '')
+
+    osd_svc.ok_to_upgrade_osd = mock.Mock(side_effect=_ok_to_upgrade_osd)
+    reg = mock.Mock()
+    reg.get_service = mock.Mock(return_value=osd_svc)
+
+    known: List[str] = []
+    with mock.patch('cephadm.upgrade.service_registry', reg):
+        ok = cephadm_module.upgrade._wait_for_ok_to_upgrade(
+            [(_osd_need_version_upgrade(), False)], '18.2.0', known,
+        )
+
+    assert ok is True
+    assert known == []
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_to_upgrade_full_cluster_calls_wait_for_ok_to_upgrade(cephadm_module: CephadmOrchestrator):
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'new_image', 'pid', target_version='18.2.0',
+    )
+    need = [(_osd_need_version_upgrade(), False)]
+    with mock.patch.object(cephadm_module.upgrade, '_wait_for_ok_to_upgrade') as wfu:
+        wfu.return_value = False
+        cephadm_module.upgrade._to_upgrade(need, 'new_image')
+        wfu.assert_called_once()
+        call_kw = wfu.call_args
+        assert call_kw[0][1] == '18.2.0'  # target_version_short
+        assert call_kw[0][2] == []  # known_ok_to_upgrade starts empty list passed in
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_to_upgrade_hosts_scoped_skips_ok_to_upgrade_uses_ok_to_stop(
+        cephadm_module: CephadmOrchestrator,
+):
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'new_image', 'pid', target_version='18.2.0', hosts=['host1'],
+    )
+    need = [(_osd_need_version_upgrade(), False)]
+    with mock.patch.object(cephadm_module.upgrade, '_wait_for_ok_to_upgrade') as wfu:
+        with mock.patch.object(cephadm_module.upgrade, '_wait_for_ok_to_stop') as wts:
+            wts.return_value = True
+            done, to_upgrade = cephadm_module.upgrade._to_upgrade(need, 'new_image')
+            wfu.assert_not_called()
+            wts.assert_called_once()
+            assert done is True
+            assert len(to_upgrade) == 1
+            assert to_upgrade[0][0].daemon_type == 'osd'
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_to_upgrade_same_version_image_redeploy_calls_ok_to_stop(
+        cephadm_module: CephadmOrchestrator,
+):
+    """ok-to-upgrade returns no OSD ids (all at target version); _to_upgrade uses ok-to-stop for image redeploy."""
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'new_image', 'pid', target_version='18.2.0',
+    )
+    need = [(_osd_need_version_upgrade(), False)]
+    with mock.patch.object(cephadm_module.upgrade, '_wait_for_ok_to_upgrade') as wfu:
+        wfu.return_value = True
+        with mock.patch.object(cephadm_module.upgrade, '_wait_for_ok_to_stop') as wts:
+            wts.return_value = True
+            done, to_upgrade = cephadm_module.upgrade._to_upgrade(need, 'new_image')
+            wfu.assert_called_once()
+            wts.assert_called_once()
+            assert done is True
+            assert len(to_upgrade) == 1
+            assert to_upgrade[0][0].name() == 'osd.0'

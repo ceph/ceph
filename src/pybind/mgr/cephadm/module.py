@@ -73,6 +73,7 @@ from orchestrator._interface import GenericSpec
 from orchestrator._interface import daemon_type_to_service
 
 from . import utils
+from .utils import get_crush_bucket_from_hostname
 from . import ssh
 from .cli import CephadmCLICommand
 from .migrations import Migrations
@@ -2200,6 +2201,27 @@ Then run the following:
         if rc:
             raise OrchestratorError(msg, errno=rc)
 
+        self.log.info(msg)
+        return msg
+
+    @handle_orch_error
+    def host_ok_to_upgrade(self, hostname: str, ceph_version: str, max: Optional[int] = None) -> str:
+        """Check if OSDs on the specified host can be safely upgraded (quick debugging)."""
+        if hostname not in self.cache.get_hosts():
+            raise OrchestratorError(f'Cannot find host "{hostname}"', errno=errno.EINVAL)
+        crush_bucket = get_crush_bucket_from_hostname(hostname)
+        known: List[str] = []
+        r = self.osd_service.ok_to_upgrade_osd(
+            crush_bucket=crush_bucket,
+            ceph_version=ceph_version,
+            max=max,
+            known=known,
+        )
+        if r.retval:
+            raise OrchestratorError(r.stderr or r.stdout or 'ok-to-upgrade failed', errno=r.retval)
+        msg = r.stdout or f'OSDs on host {hostname} safe to upgrade to {ceph_version}'
+        if known:
+            msg += f': {", ".join(known)}'
         self.log.info(msg)
         return msg
 
