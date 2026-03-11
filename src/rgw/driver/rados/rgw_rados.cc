@@ -9348,6 +9348,7 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
   uint64_t link_epoch = 0;
   cls_rgw_obj_key key;
   bool delete_marker = false;
+  std::string link_op_tag;  // op_tag of the LINK_OLH entry
   list<cls_rgw_obj_key> remove_instances;
   bool need_to_remove = false;
 
@@ -9396,6 +9397,7 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
           need_to_remove = false;
           key = entry.key;
           delete_marker = entry.delete_marker;
+          link_op_tag = entry.op_tag;
         } else {
           ldpp_dout(dpp, 20) << "apply_olh skipping key=" << entry.key<< " epoch=" << iter->first << " delete_marker=" << entry.delete_marker
               << " before current=" << key << " epoch=" << link_epoch << " delete_marker=" << delete_marker << dendl;
@@ -9419,6 +9421,21 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
   int r = get_obj_head_ref(dpp, bucket_info, obj, &ref);
   if (r < 0) {
     return r;
+  }
+
+  // for FIFO-backed buckets write the OLH-link bilog entry before the
+  // OLH xattr update so a crash after the FIFO push but before the
+  // rados op produces a safe, re-replayable state.
+  if (need_to_link) {
+    rgw_zone_set zt;
+    if (zones_trace) {
+      zt = *zones_trace;
+    }
+    zt.insert(svc.zone->get_zone().id, obj.bucket.get_key());
+    with_bilog<void>(dpp, [&](auto& bilog_handler) {
+      bilog_handler.add_maybe_flush(link_epoch, key, link_op_tag,
+                                    delete_marker, state.mtime, zt);
+    }, bucket_info, log_op);
   }
 
   const rgw_bucket& bucket = obj.bucket;
@@ -11530,13 +11547,20 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
                                rgw_bucket_dir_entry& list_state,
                                rgw_bucket_dir_entry& object,
                                bufferlist& suggested_updates,
-                               optional_yield y)
+                               optional_yield y,
+                               bool log_op)
 {
   const bool bitx = cct->_conf->rgw_bucket_index_transaction_instrumentation;
   ldout_bitx(bitx, dpp, 10) << "ENTERING " << __func__ << ": bucket=" <<
     bucket_info.bucket << " dir_entry=" << list_state.key << dendl_bitx;
 
-  uint8_t suggest_flag = (svc.zone->need_to_log_data() ? CEPH_RGW_DIR_SUGGEST_LOG_OP : 0);
+  // for InIndex buckets, CLS writes the bilog entry when
+  // processing the suggestion (CEPH_RGW_DIR_SUGGEST_LOG_OP flag).
+  // for FIFO buckets we suppress that flag and write the entry ourselves.
+  const bool is_inindex =
+    bucket_info.layout.logs.empty() ||
+    bucket_info.layout.logs.back().layout.type != rgw::BucketLogType::FIFO;
+  uint8_t suggest_flag = (is_inindex && svc.zone->need_to_log_data() ? CEPH_RGW_DIR_SUGGEST_LOG_OP : 0);
 
   std::string loc;
 
@@ -11577,6 +11601,10 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
     list_state.ver = index_ver;
     ldout_bitx(bitx, dpp, 10) << "INFO: " << __func__ << ": encoding remove of " << list_state.key << " on suggested_updates" << dendl_bitx;
     cls_rgw_encode_suggestion(CEPH_RGW_REMOVE | suggest_flag, list_state, suggested_updates);
+    // FIFO: write the DEL bilog entry from the client side (CLS won't do it).
+    with_bilog<void>(dpp, [&](auto& bilog_handler) {
+      bilog_handler.add_maybe_flush(CLS_RGW_OP_DEL, list_state, rgw_zone_set{});
+    }, bucket_info, log_op);
     return -ENOENT;
   }
 
@@ -11673,6 +11701,10 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
   ldout_bitx(bitx, dpp, 10) << "INFO: " << __func__ <<
     ": encoding update of " << list_state.key << " on suggested_updates" << dendl_bitx;
   cls_rgw_encode_suggestion(CEPH_RGW_UPDATE | suggest_flag, list_state, suggested_updates);
+  // FIFO: write the ADD bilog entry from the client side (CLS won't do it).
+  with_bilog<void>(dpp, [&](auto& bilog_handler) {
+    bilog_handler.add_maybe_flush(CLS_RGW_OP_ADD, list_state, rgw_zone_set{});
+  }, bucket_info, log_op);
 
   ldout_bitx(bitx, dpp, 10) << "EXITING " << __func__ << dendl_bitx;
   return 0;
