@@ -8532,6 +8532,7 @@ void OSDMonitor::enable_pool_ec_direct_reads(pg_pool_t &p) {
 
   if (err == 0 && p.allows_ecoptimizations() &&
       osdmap.require_osd_release >= ceph_release_t::umbrella &&
+      !p.has_flag(pg_pool_t::FLAG_CRIMSON) &&
       (erasure_code->get_supported_optimizations() &
           ErasureCodeInterface::FLAG_EC_PLUGIN_DIRECT_READS) != 0) {
     p.flags |= pg_pool_t::FLAG_CLIENT_SPLIT_READS;
