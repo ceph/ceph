@@ -169,4 +169,4 @@ The Ceph project operates on a consensus-driven model, with primary decision-mak
  * Escalation: Any member of the CSC who feels a technical matter of significant interest to the project is deadlocked or inadequately addressed may formally escalate the issue to the CEC.
  * Mediation: The CEC will first attempt to mediate the dispute, working with all involved parties to find a mutually satisfactory solution.
  * Recommendation: If mediation fails, the CEC will formulate a proposed resolution by either issuing a direct recommendation or convening a small review committee to evaluate the issue and recommend a course of action.
- * Decision: The recommendation is presented to the CSC for a formal vote. The CEC only casts a binding, deciding vote if the CSC remains deadlocked and cannot reach consensus on the recommendation.
+ * Decision: The recommendation is presented to the CSC for a formal vote.
