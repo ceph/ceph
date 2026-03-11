@@ -322,7 +322,7 @@ Result non_futurized_call_with_interruption(
     // Clear the global "interrupt_cond" to prevent it from interfering other
     // continuation chains.
     interrupt_cond<InterruptCond>.reset();
-    std::throw_with_nested(std::runtime_error("failed to run interruptible continuation"));
+    throw;
   }
 }
 
@@ -452,9 +452,7 @@ public:
 	  e,
 	  (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
 	  typeid(InterruptCond).name());
-	std::throw_with_nested(
-	  std::runtime_error(
-	    "failed to run interruptible continuation"));
+        throw;
       }
     }
   }
@@ -1547,9 +1545,7 @@ public:
 	  e,
 	  (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
 	  typeid(InterruptCond).name());
-	std::throw_with_nested(
-	  std::runtime_error(
-	    "failed to run interruptible continuation"));
+        throw;
       }
     }
   }
@@ -1577,9 +1573,7 @@ public:
 	e,
 	(void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
 	typeid(InterruptCond).name());
-      std::throw_with_nested(
-	std::runtime_error(
-	  "failed to run interruptible continuation"));
+      throw;
     }
   }
 
@@ -1607,9 +1601,7 @@ public:
 	  e,
 	  (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
 	  typeid(InterruptCond).name());
-	std::throw_with_nested(
-	  std::runtime_error(
-	    "failed to run interruptible continuation"));
+        throw;
       }
     }
   }
