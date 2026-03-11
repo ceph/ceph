@@ -72,14 +72,18 @@ class OSDService(CephService):
             self.mgr.cache.save_host(host)
             return ret_msg
 
-        async def all_hosts() -> List[Optional[str]]:
+        async def all_hosts() -> List[str]:
             futures = [create_from_spec_one(h, ds)
                        for h, ds in self.prepare_drivegroup(drive_group)]
-            return await gather(*futures)
+            results = await gather(*futures, return_exceptions=True)
+            for result in results:
+                if isinstance(result, Exception):
+                    self.mgr.log.error(f'Failed to create OSD: {result}')
+            return [result for result in results if isinstance(result, str)]
 
         with self.mgr.async_timeout_handler('cephadm deploy (osd daemon)'):
             ret = self.mgr.wait_async(all_hosts())
-        return ", ".join(filter(None, ret))
+        return ", ".join(ret)
 
     async def create_single_host(self,
                                  drive_group: DriveGroupSpec,
