@@ -234,7 +234,6 @@ if(HAVE_INTEL)
   if(HAVE_NASM_X64)
     set(CMAKE_ASM_FLAGS "-i ${PROJECT_SOURCE_DIR}/src/isa-l/include/ ${CMAKE_ASM_FLAGS}")
     list(APPEND crc32_srcs
-      ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc32_iscsi_00.asm
       ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc32_iscsi_01.asm
       crc32c_intel_fast_zero_asm.s)
   endif(HAVE_NASM_X64)
