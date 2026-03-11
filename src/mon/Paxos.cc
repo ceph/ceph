@@ -524,7 +524,7 @@ void Paxos::handle_last(MonOpRequestRef op)
     }
     if (p->second < last_committed) {
       // share committed values
-      dout(10) << " sending commit to mon." << p->first << dendl;
+      dout(10) << " sending commit to mon." << p->first << " (mon." << mon.monmap->get_name(p->first) << ")" << dendl;
       MMonPaxos *commit = new MMonPaxos(mon.get_epoch(),
 					MMonPaxos::OP_COMMIT,
 					ceph_clock_now());
@@ -694,7 +694,7 @@ void Paxos::begin(bufferlist& v)
        ++p) {
     if (*p == mon.rank) continue;
     
-    dout(10) << " sending begin to mon." << *p << dendl;
+    dout(10) << " sending begin to mon." << *p << " (mon." << mon.monmap->get_name(*p) << ")" << dendl;
     MMonPaxos *begin = new MMonPaxos(mon.get_epoch(), MMonPaxos::OP_BEGIN,
 				     ceph_clock_now());
     begin->values[last_committed+1] = new_value;
@@ -920,7 +920,7 @@ void Paxos::commit_finish()
        ++p) {
     if (*p == mon.rank) continue;
 
-    dout(10) << " sending commit to mon." << *p << dendl;
+    dout(10) << " sending commit to mon." << *p << " (mon." << mon.monmap->get_name(*p) << ")" << dendl;
     MMonPaxos *commit = new MMonPaxos(mon.get_epoch(), MMonPaxos::OP_COMMIT,
 				      ceph_clock_now());
     commit->values[last_committed] = new_value;

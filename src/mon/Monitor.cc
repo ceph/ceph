@@ -2365,7 +2365,8 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
   quorum_con_features = features;
   quorum_mon_features = mon_features;
   quorum_min_mon_release = min_mon_release;
-  dout(10) << "lose_election, epoch " << epoch << " leader is mon" << leader
+  dout(10) << "lose_election, epoch " << epoch << " leader is mon." << leader
+	   << " (mon." << monmap->get_name(leader) << ")"
 	   << " quorum is " << quorum << " features are " << quorum_con_features
            << " mon_features are " << quorum_mon_features
 	   << " min_mon_release " << min_mon_release
@@ -4409,8 +4410,8 @@ void Monitor::resend_routed_requests()
       PaxosServiceMessage *req =
 	(PaxosServiceMessage *)decode_message(cct, 0, q);
       rr->op->mark_event("resend forwarded message to leader");
-      dout(10) << " resend to mon." << mon << " tid " << rr->tid << " " << *req
-	       << dendl;
+      dout(10) << " resend to mon." << mon << " (mon." << monmap->get_name(mon) << ")"
+	       << " tid " << rr->tid << " " << *req << dendl;
       MForward *forward = new MForward(rr->tid,
 				       req,
 				       rr->con_features,
@@ -5106,7 +5107,7 @@ void Monitor::timecheck_report()
       }
     }
     do_output = false;
-    dout(10) << __func__ << " send report to mon." << *q << dendl;
+    dout(10) << __func__ << " send report to mon." << *q << " (mon." << monmap->get_name(*q) << ")" << dendl;
     send_mon_message(m, *q);
   }
 }
@@ -5139,7 +5140,7 @@ void Monitor::timecheck()
     MTimeCheck2 *m = new MTimeCheck2(MTimeCheck2::OP_PING);
     m->epoch = get_epoch();
     m->round = timecheck_round;
-    dout(10) << __func__ << " send " << *m << " to mon." << *it << dendl;
+    dout(10) << __func__ << " send " << *m << " to mon." << *it << " (mon." << monmap->get_name(*it) << ")" << dendl;
     send_mon_message(m, *it);
   }
 }

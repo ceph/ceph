@@ -287,6 +287,8 @@ class Elector : public ElectionOwner, RankProvider {
   void message_victory(const std::set<int>& quorum);
   /* Check if rank is in mon->quorum */
   bool is_current_member(int rank) const;
+  /* Get monitor name for a given rank */
+  std::string get_rank_name(int rank) const;
   /*
    * @}
    */

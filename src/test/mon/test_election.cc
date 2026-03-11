@@ -308,6 +308,20 @@ struct Owner : public ElectionOwner, RankProvider {
     return prefix_str.c_str();
   }
   int timestep_count() const { return parent->timesteps_run; }
+  std::string get_rank_name(int rank) const {
+    // Note that actual monitor names are not simply "mon." + rank, 
+    // but this is sufficient for our testing purposes since we don't
+    // test any logic that depends on the actual names of the monitors yet.
+    // Cache common ranks to avoid repeated string allocations
+    static const std::string cached_names[] = {
+      "mon.0", "mon.1", "mon.2", "mon.3", "mon.4",
+      "mon.5", "mon.6", "mon.7", "mon.8", "mon.9"
+    };
+    if (rank >= 0 && rank < 10) {
+      return cached_names[rank];
+    }
+    return "mon." + std::to_string(rank);
+  }
 };
 
 Election::Election(int c, ElectionLogic::election_strategy es, int pingi,
