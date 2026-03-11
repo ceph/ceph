@@ -573,6 +573,7 @@ class RGWInitDataSyncStatusCoroutine : public RGWCoroutine {
     RGWDataSyncStatusManager::sync_status_oid(sc->source_zone) };
 
   map<int, RGWDataChangesLogInfo> shards_info;
+  int ret = 0;
 
 
 public:
@@ -599,7 +600,6 @@ public:
   }
 
   int operate(const DoutPrefixProvider *dpp) override {
-    int ret = 0;
     reenter(this) {
       if (!lease_cr->is_locked()) {
 	drain_all();
@@ -4874,6 +4874,7 @@ class RGWBucketShardIncrementalSyncCR : public RGWCoroutine {
 
   RGWSyncTraceNodeRef tn;
   RGWBucketIncSyncShardMarkerTrack marker_tracker;
+  int ret = 0;
 
 public:
   RGWBucketShardIncrementalSyncCR(RGWDataSyncCtx *_sc,
@@ -4918,7 +4919,6 @@ public:
 
 int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
 {
-  int ret = 0;
   reenter(this) {
     do {
       if (lease_cr && !lease_cr->is_locked()) {
@@ -5993,7 +5993,7 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
       if (bucket_status.state == BucketSyncState::Full) {
         yield call(new RGWBucketFullSyncCR(sc, sync_pipe, status_obj,
                                            bucket_lease_cr, bucket_status,
-                                           tn, objv, no_lease));
+                                           tn, objv));
         if (retcode < 0) {
           tn->log(20, SSTR("ERROR: full sync failed. error: " << retcode));
           RELEASE_LOCK(bucket_lease_cr);
