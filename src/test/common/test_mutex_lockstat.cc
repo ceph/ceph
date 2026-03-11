@@ -15,6 +15,7 @@
 
 #include <future>
 #include <mutex>
+#include <shared_mutex>
 #include <thread>
 
 #include "common/ceph_mutex_lockstat.h"
@@ -80,4 +81,118 @@ TEST(MutexRecursiveLockStat, Recursive)
 
   ASSERT_NO_THROW(m.unlock());
   ASSERT_TRUE(std::async(std::launch::async, ttl, &m).get());
+}
+
+TEST(MutexTimedLockStat, TryLockFor)
+{
+  using timed_mutex_lockstat = ceph::lockstat_detail::mutex_lockstat_impl<std::timed_mutex>;
+  timed_mutex_lockstat m(LOCKSTAT("m"));
+
+  m.lock();
+  auto f1 = std::async(std::launch::async, [&m]() {
+    return m.try_lock_for(std::chrono::milliseconds(10));
+  });
+  ASSERT_FALSE(f1.get());
+  m.unlock();
+
+  auto f2 = std::async(std::launch::async, [&m]() {
+    return m.try_lock_for(std::chrono::milliseconds(100));
+  });
+  ASSERT_TRUE(f2.get());
+  m.unlock();
+}
+
+TEST(MutexTimedLockStat, TryLockUntil)
+{
+  using timed_mutex_lockstat = ceph::lockstat_detail::mutex_lockstat_impl<std::timed_mutex>;
+  timed_mutex_lockstat m(LOCKSTAT("m"));
+
+  m.lock();
+  auto f1 = std::async(std::launch::async, [&m]() {
+    return m.try_lock_until(std::chrono::system_clock::now() + std::chrono::milliseconds(10));
+  });
+  ASSERT_FALSE(f1.get());
+  m.unlock();
+
+  auto f2 = std::async(std::launch::async, [&m]() {
+    return m.try_lock_until(std::chrono::system_clock::now() + std::chrono::milliseconds(100));
+  });
+  ASSERT_TRUE(f2.get());
+  m.unlock();
+}
+
+TEST(SharedMutexTimedLockStat, TryLockSharedFor)
+{
+  using shared_timed_mutex_lockstat = ceph::lockstat_detail::shared_mutex_lockstat_impl<std::shared_timed_mutex>;
+  shared_timed_mutex_lockstat m(LOCKSTAT("m"));
+
+  m.lock();
+  auto f1 = std::async(std::launch::async, [&m]() {
+    return m.try_lock_shared_for(std::chrono::milliseconds(10));
+  });
+  ASSERT_FALSE(f1.get());
+  m.unlock();
+
+  auto f2 = std::async(std::launch::async, [&m]() {
+    return m.try_lock_shared_for(std::chrono::milliseconds(100));
+  });
+  ASSERT_TRUE(f2.get());
+  m.unlock_shared();
+}
+
+TEST(SharedMutexTimedLockStat, TryLockSharedUntil)
+{
+  using shared_timed_mutex_lockstat = ceph::lockstat_detail::shared_mutex_lockstat_impl<std::shared_timed_mutex>;
+  shared_timed_mutex_lockstat m(LOCKSTAT("m"));
+
+  m.lock();
+  auto f1 = std::async(std::launch::async, [&m]() {
+    return m.try_lock_shared_until(std::chrono::system_clock::now() + std::chrono::milliseconds(10));
+  });
+  ASSERT_FALSE(f1.get());
+  m.unlock();
+
+  auto f2 = std::async(std::launch::async, [&m]() {
+    return m.try_lock_shared_until(std::chrono::system_clock::now() + std::chrono::milliseconds(100));
+  });
+  ASSERT_TRUE(f2.get());
+  m.unlock_shared();
+}
+
+TEST(SharedMutexTimedLockStat, TryLockFor)
+{
+  using shared_timed_mutex_lockstat = ceph::lockstat_detail::shared_mutex_lockstat_impl<std::shared_timed_mutex>;
+  shared_timed_mutex_lockstat m(LOCKSTAT("m"));
+
+  m.lock();
+  auto f1 = std::async(std::launch::async, [&m]() {
+    return m.try_lock_for(std::chrono::milliseconds(10));
+  });
+  ASSERT_FALSE(f1.get());
+  m.unlock();
+
+  auto f2 = std::async(std::launch::async, [&m]() {
+    return m.try_lock_for(std::chrono::milliseconds(100));
+  });
+  ASSERT_TRUE(f2.get());
+  m.unlock();
+}
+
+TEST(SharedMutexTimedLockStat, TryLockUntil)
+{
+  using shared_timed_mutex_lockstat = ceph::lockstat_detail::shared_mutex_lockstat_impl<std::shared_timed_mutex>;
+  shared_timed_mutex_lockstat m(LOCKSTAT("m"));
+
+  m.lock();
+  auto f1 = std::async(std::launch::async, [&m]() {
+    return m.try_lock_until(std::chrono::system_clock::now() + std::chrono::milliseconds(10));
+  });
+  ASSERT_FALSE(f1.get());
+  m.unlock();
+
+  auto f2 = std::async(std::launch::async, [&m]() {
+    return m.try_lock_until(std::chrono::system_clock::now() + std::chrono::milliseconds(100));
+  });
+  ASSERT_TRUE(f2.get());
+  m.unlock();
 }
