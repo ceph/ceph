@@ -12050,13 +12050,10 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
     // Release C_Read_Async_Finisher from managed pointer, we need to complete
     // immediately. The C_Read_Async_Finisher is safely handled and won't be
     // abandoned.
-    Context *crf = io_finish.release();
+    io_finish.reset();
 
-    logger->inc(l_c_aio_ops);
-    logger->inc(l_c_aio_in_flight);
-
-    // Complete the crf immediately with 0 bytes
-    crf->complete(0);
+    // Complete the onfinish immediately with 0 bytes
+    onfinish->complete(0);
 
     // Signal async completion
     return 0;
@@ -15801,159 +15798,159 @@ size_t Client::_vxattrcb_client_id(Inode *in, char *val, size_t size)
 #define CEPH_XATTR_NAME(_type, _name) "ceph." #_type "." #_name
 #define CEPH_XATTR_NAME2(_type, _name, _name2) "ceph." #_type "." #_name "." #_name2
 
-#define XATTR_NAME_CEPH(_type, _name, _flags)                 \
-{                                                              \
-  name: CEPH_XATTR_NAME(_type, _name),                         \
-  getxattr_cb: &Client::_vxattrcb_ ## _type ## _ ## _name,     \
-  readonly: true,                                              \
-  exists_cb: NULL,                                             \
-  flags: _flags,                                               \
-}
-#define XATTR_LAYOUT_FIELD(_type, _name, _field)		\
-{								\
-  name: CEPH_XATTR_NAME2(_type, _name, _field),			\
-  getxattr_cb: &Client::_vxattrcb_ ## _name ## _ ## _field,	\
-  readonly: false,						\
-  exists_cb: &Client::_vxattrcb_layout_exists,			\
-  flags: 0,                                                     \
-}
-#define XATTR_QUOTA_FIELD(_type, _name)		                \
-{								\
-  name: CEPH_XATTR_NAME(_type, _name),			        \
-  getxattr_cb: &Client::_vxattrcb_ ## _type ## _ ## _name,	\
-  readonly: false,						\
-  exists_cb: &Client::_vxattrcb_quota_exists,			\
-  flags: 0,                                                     \
-}
+#define XATTR_NAME_CEPH(_type, _name, _flags)              \
+  {                                                        \
+      .name = CEPH_XATTR_NAME(_type, _name),               \
+      .getxattr_cb = &Client::_vxattrcb_##_type##_##_name, \
+      .readonly = true,                                    \
+      .exists_cb = NULL,                                   \
+      .flags = _flags,                                     \
+  }
+#define XATTR_LAYOUT_FIELD(_type, _name, _field)            \
+  {                                                         \
+      .name = CEPH_XATTR_NAME2(_type, _name, _field),       \
+      .getxattr_cb = &Client::_vxattrcb_##_name##_##_field, \
+      .readonly = false,                                    \
+      .exists_cb = &Client::_vxattrcb_layout_exists,        \
+      .flags = 0,                                           \
+  }
+#define XATTR_QUOTA_FIELD(_type, _name)                    \
+  {                                                        \
+      .name = CEPH_XATTR_NAME(_type, _name),               \
+      .getxattr_cb = &Client::_vxattrcb_##_type##_##_name, \
+      .readonly = false,                                   \
+      .exists_cb = &Client::_vxattrcb_quota_exists,        \
+      .flags = 0,                                          \
+  }
 
 const Client::VXattr Client::_dir_vxattrs[] = {
-  {
-    name: "ceph.dir.layout",
-    getxattr_cb: &Client::_vxattrcb_layout,
-    readonly: false,
-    exists_cb: &Client::_vxattrcb_layout_exists,
-    flags: 0,
-  },
-  // FIXME
-  // Delete the following dir layout field definitions for release "S"
-  XATTR_LAYOUT_FIELD(dir, layout, stripe_unit),
-  XATTR_LAYOUT_FIELD(dir, layout, stripe_count),
-  XATTR_LAYOUT_FIELD(dir, layout, object_size),
-  XATTR_LAYOUT_FIELD(dir, layout, pool),
-  XATTR_LAYOUT_FIELD(dir, layout, pool_namespace),
-  XATTR_NAME_CEPH(dir, entries, VXATTR_DIRSTAT),
-  XATTR_NAME_CEPH(dir, files, VXATTR_DIRSTAT),
-  XATTR_NAME_CEPH(dir, subdirs, VXATTR_DIRSTAT),
-  XATTR_NAME_CEPH(dir, rentries, VXATTR_RSTAT),
-  XATTR_NAME_CEPH(dir, rfiles, VXATTR_RSTAT),
-  XATTR_NAME_CEPH(dir, rsubdirs, VXATTR_RSTAT),
-  XATTR_NAME_CEPH(dir, rsnaps, VXATTR_RSTAT),
-  XATTR_NAME_CEPH(dir, rbytes, VXATTR_RSTAT),
-  XATTR_NAME_CEPH(dir, rctime, VXATTR_RSTAT),
-  {
-    name: "ceph.quota",
-    getxattr_cb: &Client::_vxattrcb_quota,
-    readonly: false,
-    exists_cb: &Client::_vxattrcb_quota_exists,
-    flags: 0,
-  },
-  XATTR_QUOTA_FIELD(quota, max_bytes),
-  XATTR_QUOTA_FIELD(quota, max_files),
-  // FIXME
-  // Delete the following dir pin field definitions for release "S"
-  {
-    name: "ceph.dir.pin",
-    getxattr_cb: &Client::_vxattrcb_dir_pin,
-    readonly: false,
-    exists_cb: &Client::_vxattrcb_dir_pin_exists,
-    flags: 0,
-  },
-  {
-    name: "ceph.snap.btime",
-    getxattr_cb: &Client::_vxattrcb_snap_btime,
-    readonly: true,
-    exists_cb: &Client::_vxattrcb_snap_btime_exists,
-    flags: 0,
-  },
-  {
-    name: "ceph.mirror.info",
-    getxattr_cb: &Client::_vxattrcb_mirror_info,
-    readonly: false,
-    exists_cb: &Client::_vxattrcb_mirror_info_exists,
-    flags: 0,
-  },
-  {
-    name: "ceph.caps",
-    getxattr_cb: &Client::_vxattrcb_caps,
-    readonly: true,
-    exists_cb: NULL,
-    flags: 0,
-  },
-  { name: "" }     /* Required table terminator */
+    {
+        .name = "ceph.dir.layout",
+        .getxattr_cb = &Client::_vxattrcb_layout,
+        .readonly = false,
+        .exists_cb = &Client::_vxattrcb_layout_exists,
+        .flags = 0,
+    },
+    // FIXME
+    // Delete the following dir layout field definitions for release "S"
+    XATTR_LAYOUT_FIELD(dir, layout, stripe_unit),
+    XATTR_LAYOUT_FIELD(dir, layout, stripe_count),
+    XATTR_LAYOUT_FIELD(dir, layout, object_size),
+    XATTR_LAYOUT_FIELD(dir, layout, pool),
+    XATTR_LAYOUT_FIELD(dir, layout, pool_namespace),
+    XATTR_NAME_CEPH(dir, entries, VXATTR_DIRSTAT),
+    XATTR_NAME_CEPH(dir, files, VXATTR_DIRSTAT),
+    XATTR_NAME_CEPH(dir, subdirs, VXATTR_DIRSTAT),
+    XATTR_NAME_CEPH(dir, rentries, VXATTR_RSTAT),
+    XATTR_NAME_CEPH(dir, rfiles, VXATTR_RSTAT),
+    XATTR_NAME_CEPH(dir, rsubdirs, VXATTR_RSTAT),
+    XATTR_NAME_CEPH(dir, rsnaps, VXATTR_RSTAT),
+    XATTR_NAME_CEPH(dir, rbytes, VXATTR_RSTAT),
+    XATTR_NAME_CEPH(dir, rctime, VXATTR_RSTAT),
+    {
+        .name = "ceph.quota",
+        .getxattr_cb = &Client::_vxattrcb_quota,
+        .readonly = false,
+        .exists_cb = &Client::_vxattrcb_quota_exists,
+        .flags = 0,
+    },
+    XATTR_QUOTA_FIELD(quota, max_bytes),
+    XATTR_QUOTA_FIELD(quota, max_files),
+    // FIXME
+    // Delete the following dir pin field definitions for release "S"
+    {
+        .name = "ceph.dir.pin",
+        .getxattr_cb = &Client::_vxattrcb_dir_pin,
+        .readonly = false,
+        .exists_cb = &Client::_vxattrcb_dir_pin_exists,
+        .flags = 0,
+    },
+    {
+        .name = "ceph.snap.btime",
+        .getxattr_cb = &Client::_vxattrcb_snap_btime,
+        .readonly = true,
+        .exists_cb = &Client::_vxattrcb_snap_btime_exists,
+        .flags = 0,
+    },
+    {
+        .name = "ceph.mirror.info",
+        .getxattr_cb = &Client::_vxattrcb_mirror_info,
+        .readonly = false,
+        .exists_cb = &Client::_vxattrcb_mirror_info_exists,
+        .flags = 0,
+    },
+    {
+        .name = "ceph.caps",
+        .getxattr_cb = &Client::_vxattrcb_caps,
+        .readonly = true,
+        .exists_cb = NULL,
+        .flags = 0,
+    },
+    {.name = ""} /* Required table terminator */
 };
 
 const Client::VXattr Client::_file_vxattrs[] = {
-  {
-    name: "ceph.file.layout",
-    getxattr_cb: &Client::_vxattrcb_layout,
-    readonly: false,
-    exists_cb: &Client::_vxattrcb_layout_exists,
-    flags: 0,
-  },
-  XATTR_LAYOUT_FIELD(file, layout, stripe_unit),
-  XATTR_LAYOUT_FIELD(file, layout, stripe_count),
-  XATTR_LAYOUT_FIELD(file, layout, object_size),
-  XATTR_LAYOUT_FIELD(file, layout, pool),
-  XATTR_LAYOUT_FIELD(file, layout, pool_namespace),
-  {
-    name: "ceph.snap.btime",
-    getxattr_cb: &Client::_vxattrcb_snap_btime,
-    readonly: true,
-    exists_cb: &Client::_vxattrcb_snap_btime_exists,
-    flags: 0,
-  },
-  {
-    name: "ceph.caps",
-    getxattr_cb: &Client::_vxattrcb_caps,
-    readonly: true,
-    exists_cb: NULL,
-    flags: 0,
-  },
-  { name: "" }     /* Required table terminator */
+    {
+        .name = "ceph.file.layout",
+        .getxattr_cb = &Client::_vxattrcb_layout,
+        .readonly = false,
+        .exists_cb = &Client::_vxattrcb_layout_exists,
+        .flags = 0,
+    },
+    XATTR_LAYOUT_FIELD(file, layout, stripe_unit),
+    XATTR_LAYOUT_FIELD(file, layout, stripe_count),
+    XATTR_LAYOUT_FIELD(file, layout, object_size),
+    XATTR_LAYOUT_FIELD(file, layout, pool),
+    XATTR_LAYOUT_FIELD(file, layout, pool_namespace),
+    {
+        .name = "ceph.snap.btime",
+        .getxattr_cb = &Client::_vxattrcb_snap_btime,
+        .readonly = true,
+        .exists_cb = &Client::_vxattrcb_snap_btime_exists,
+        .flags = 0,
+    },
+    {
+        .name = "ceph.caps",
+        .getxattr_cb = &Client::_vxattrcb_caps,
+        .readonly = true,
+        .exists_cb = NULL,
+        .flags = 0,
+    },
+    {.name = ""} /* Required table terminator */
 };
 
 const Client::VXattr Client::_common_vxattrs[] = {
-  {
-    name: "ceph.cluster_fsid",
-    getxattr_cb: &Client::_vxattrcb_cluster_fsid,
-    readonly: true,
-    exists_cb: nullptr,
-    flags: 0,
-  },
-  {
-    name: "ceph.client_id",
-    getxattr_cb: &Client::_vxattrcb_client_id,
-    readonly: true,
-    exists_cb: nullptr,
-    flags: 0,
-  },
-  {
-    name: "ceph.fscrypt.auth",
-    getxattr_cb: &Client::_vxattrcb_fscrypt_auth,
-    setxattr_cb: &Client::_vxattrcb_fscrypt_auth_set,
-    readonly: false,
-    exists_cb: &Client::_vxattrcb_fscrypt_auth_exists,
-    flags: 0,
-  },
-  {
-    name: "ceph.fscrypt.file",
-    getxattr_cb: &Client::_vxattrcb_fscrypt_file,
-    setxattr_cb: &Client::_vxattrcb_fscrypt_file_set,
-    readonly: false,
-    exists_cb: &Client::_vxattrcb_fscrypt_file_exists,
-    flags: 0,
-  },
-  { name: "" }     /* Required table terminator */
+    {
+        .name = "ceph.cluster_fsid",
+        .getxattr_cb = &Client::_vxattrcb_cluster_fsid,
+        .readonly = true,
+        .exists_cb = nullptr,
+        .flags = 0,
+    },
+    {
+        .name = "ceph.client_id",
+        .getxattr_cb = &Client::_vxattrcb_client_id,
+        .readonly = true,
+        .exists_cb = nullptr,
+        .flags = 0,
+    },
+    {
+        .name = "ceph.fscrypt.auth",
+        .getxattr_cb = &Client::_vxattrcb_fscrypt_auth,
+        .setxattr_cb = &Client::_vxattrcb_fscrypt_auth_set,
+        .readonly = false,
+        .exists_cb = &Client::_vxattrcb_fscrypt_auth_exists,
+        .flags = 0,
+    },
+    {
+        .name = "ceph.fscrypt.file",
+        .getxattr_cb = &Client::_vxattrcb_fscrypt_file,
+        .setxattr_cb = &Client::_vxattrcb_fscrypt_file_set,
+        .readonly = false,
+        .exists_cb = &Client::_vxattrcb_fscrypt_file_exists,
+        .flags = 0,
+    },
+    {.name = ""} /* Required table terminator */
 };
 
 const Client::VXattr *Client::_get_vxattrs(Inode *in)
