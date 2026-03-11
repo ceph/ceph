@@ -1,4 +1,5 @@
-from unittest.mock import MagicMock, patch
+import contextlib
+from unittest.mock import MagicMock, patch, ANY
 
 from cephadm.services.service_registry import service_registry
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
@@ -476,3 +477,30 @@ class TestNFS:
                     '}\n'
                 )
                 assert expected_tls_block in ganesha_conf
+
+
+@patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+@patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+@patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+def test_nfs_choose_next_action(cephadm_module, mock_cephadm):
+    nfs_spec = NFSServiceSpec(
+        service_id="foo",
+        placement=PlacementSpec(hosts=['test']),
+        ssl=True,
+        ssl_cert=ceph_generated_cert,
+        ssl_key=ceph_generated_key,
+        ssl_ca_cert=cephadm_root_ca,
+        certificate_source='inline',
+    )
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(with_host(cephadm_module, "test"))
+        stack.enter_context(with_service(cephadm_module, nfs_spec))
+        nfs_spec.tls_ktls = True
+        cephadm_module.apply([nfs_spec])
+        # manually invoke _check_daemons to trigger a call to
+        # _daemon_action so we can check what action was chosen
+        mock_cephadm.serve(cephadm_module)._check_daemons()
+        mock_cephadm._daemon_action.assert_called_with(ANY, action="redeploy")
+        # NB: it appears that the code is designed to redeploy unless all
+        # dependencies are prefixed with 'kmip' but I can't find any code
+        # that would produce any dependencies prefixed with 'kmip'!
