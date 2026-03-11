@@ -37,6 +37,7 @@
 #include "rgw_d3n_cacherequest.h"
 
 #include "services/svc_bi_rados.h"
+#include "services/svc_zone.h"
 #include "common/Throttle.h"
 #include "common/ceph_mutex.h"
 #include "rgw_cache.h"
@@ -1627,11 +1628,12 @@ public:
       // bilog-only variant: lambda receives only a bilog handler.
       if (log_data && !is_inindex) {
         auto batch = get_or_create_fifo_bilog_batch(dpp, bucket_info);
-        return std::forward<F>(func)(batch);
+        std::forward<F>(func)(batch);
       } else {
         BILogNopHandler nop;
-        return std::forward<F>(func)(nop);
+        std::forward<F>(func)(nop);
       }
+      return 0;
     } else {
       // full variant: lambda receives (op_issuer, bilog_handler).
       if (is_inindex) {

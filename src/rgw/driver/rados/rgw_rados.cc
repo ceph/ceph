@@ -10614,7 +10614,7 @@ RGWBILogUpdateBatch RGWRados::get_or_create_fifo_bilog_batch(
     // batch: callers can call add_maybe_flush/flush safely (pending stays
     // empty), but any bilog entries for this operation will be silently
     // dropped.  The ERROR log above ensures this is always visible.
-    return RGWBILogUpdateBatch(dpp, *svc.bilog_rados->rados_neo,
+    return RGWBILogUpdateBatch(dpp, svc.bilog_rados->get_rados_neo(),
                                neorados::IOContext{}, {});
   }
 
@@ -10626,7 +10626,7 @@ RGWBILogUpdateBatch RGWRados::get_or_create_fifo_bilog_batch(
   }
 
   neorados::IOContext neo_loc(index_pool.get_id());
-  return RGWBILogUpdateBatch(dpp, *svc.bilog_rados->rados_neo,
+  return RGWBILogUpdateBatch(dpp, svc.bilog_rados->get_rados_neo(),
                              std::move(neo_loc), shard_oids);
 }
 
