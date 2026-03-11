@@ -1181,7 +1181,7 @@ class CephadmServe:
                     backend_spec = self.mgr.spec_store[spec.backend_service].spec
                     if backend_spec.service_type == 'nfs':
                         svc = service_registry.get_service('ingress')
-                        if svc.has_placement_changed(deps, spec):
+                        if svc.has_placement_changed(last_deps, spec):
                             self.log.debug(f'Redeploy {spec.service_name()} as placement has changed')
                             action = 'redeploy'
             elif spec is not None and hasattr(spec, 'extra_container_args') and dd.extra_container_args != spec.extra_container_args:
