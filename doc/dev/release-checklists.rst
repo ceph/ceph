@@ -41,7 +41,7 @@ Make sure X (and, ideally, X+1) is defined:
 Github Actions
 ~~~~~~~~~~~~~~
 
-- [ ] .github/workflows/redmine-upkeep.yml add release branch to pull_request_target trigger
+- [x] .github/workflows/redmine-upkeep.yml add release branch to pull_request_target trigger
 
 Scripts
 ~~~~~~~
