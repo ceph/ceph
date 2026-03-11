@@ -904,11 +904,27 @@ protected:
 };
 
 class MPRadosSerializer : public StoreMPSerializer {
+  const DoutPrefixProvider* dpp;
+  optional_yield y; // context of request coroutine/thread
   librados::IoCtx ioctx;
-  ::rados::cls::lock::Lock lock;
+  ::rados::cls::lock::Lock lock_state;
+
+  // lock renewal state
+  boost::asio::any_io_executor ex; // strand executor for renewal
+  using Timer = boost::asio::basic_waitable_timer<ceph::coarse_mono_clock>;
+  Timer timer;
+  boost::asio::cancellation_signal signal;
+  std::mutex mutex;
+  ceph::async::async_cond<> cond;
+  bool renew_started = false;
+  bool renew_canceled = false;
+  void start_renewal(ceph::timespan dur);
+  void stop_renewal();
 
 public:
-  MPRadosSerializer(const DoutPrefixProvider *dpp, RadosStore* store, RadosObject* obj, const std::string& lock_name);
+  MPRadosSerializer(const DoutPrefixProvider *dpp, optional_yield y,
+                    RadosStore* store, RadosObject* obj, const std::string& lock_name);
+  ~MPRadosSerializer() override;
 
   virtual int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) override;
   virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override;
