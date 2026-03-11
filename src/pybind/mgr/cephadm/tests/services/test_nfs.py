@@ -504,3 +504,52 @@ def test_nfs_choose_next_action(cephadm_module, mock_cephadm):
         # NB: it appears that the code is designed to redeploy unless all
         # dependencies are prefixed with 'kmip' but I can't find any code
         # that would produce any dependencies prefixed with 'kmip'!
+
+
+@patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+@patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+@patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+def test_ingress_for_nfs_choose_next_action(cephadm_module, mock_cephadm):
+    nfs_spec = NFSServiceSpec(
+        service_id="foo",
+        placement=PlacementSpec(hosts=['test']),
+    )
+    ingress_spec = IngressSpec(
+        service_id='bar',
+        backend_service='nfs.foo',
+        frontend_port=2468,
+        monitor_port=8642,
+        virtual_ip='1.2.3.0/24',
+        placement=PlacementSpec(hosts=['test']),
+    )
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(with_host(cephadm_module, "test"))
+        stack.enter_context(with_host(cephadm_module, "test2"))
+        cephadm_module.cache.update_host_networks(
+            'test',
+            {
+                '1.2.3.0/24': {
+                    'if0': [
+                        '1.2.3.4',  # simulate already assigned VIP
+                        '1.2.3.1',  # simulate interface IP
+                    ]
+                }
+            },
+        )
+        stack.enter_context(with_service(cephadm_module, nfs_spec))
+        # For whatever reason this mocked out version of the nfs deamon
+        # doesn't get assigned ports and ingress needs them. So we
+        # manually help it along here.
+        nfs_dds = cephadm_module.cache.get_daemons_by_service(
+            ingress_spec.backend_service
+        )
+        nfs_dd = nfs_dds[0]
+        nfs_dd.ports = [8765]
+        mock_cephadm.serve(cephadm_module)._check_daemons()
+        stack.enter_context(with_service(cephadm_module, ingress_spec))
+        ingress_spec.placement = PlacementSpec(hosts=['test', 'test2'])
+        cephadm_module.apply([ingress_spec])
+        # manually invoke _check_daemons to trigger a call to
+        # _daemon_action so we can check what action was chosen
+        mock_cephadm.serve(cephadm_module)._check_daemons()
+        mock_cephadm._daemon_action.assert_called_with(ANY, action="redeploy")
