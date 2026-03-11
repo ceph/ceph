@@ -300,38 +300,32 @@ class CephFSMountBase(object):
                 sudo ip addr add {ip}/{mask} brd {brd} dev ceph-brx
             """, timeout=(5*60), omit_sudo=False, cwd='/')
         
-        args = "echo 1 | sudo tee /proc/sys/net/ipv4/ip_forward"
-        self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
+            args = "echo 1 | sudo tee /proc/sys/net/ipv4/ip_forward"
+            self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
         
-        # Setup the NAT
-        gw = self._default_gateway()
+            # Setup the NAT
+            gw = self._default_gateway()
 
-        self.run_shell_payload(f"""
-            set -e
+            self.run_shell_payload(f"""
+                set -e
 
-            # Try iptables first. If it's missing or lacks MASQUERADE support (Rocky 10), it falls back to nft.
-            if command -v iptables >/dev/null 2>&1 && sudo iptables -t nat -A POSTROUTING -s {self.ceph_brx_net} -o {gw} -j MASQUERADE 2>/dev/null; then
-                sudo iptables -A FORWARD -o {gw} -i ceph-brx -j ACCEPT
-                sudo iptables -A FORWARD -i {gw} -o ceph-brx -j ACCEPT
-            else
-                # Ensure filter table exists. Ignore error if it already does.
-                sudo nft add table ip filter > /dev/null 2>&1 || true
-                sudo nft add chain ip filter forward {{ type filter hook forward priority 0 \; }} > /dev/null 2>&1 || true
+                if command -v iptables >/dev/null 2>&1 && sudo iptables -t nat -A POSTROUTING -s {self.ceph_brx_net} -o {gw} -j MASQUERADE 2>/dev/null; then
+                    sudo iptables -A FORWARD -o {gw} -i ceph-brx -j ACCEPT
+                    sudo iptables -A FORWARD -i {gw} -o ceph-brx -j ACCEPT
+                else
+                    sudo nft add table ip filter > /dev/null 2>&1 || true
+                    sudo nft add chain ip filter forward {{ type filter hook forward priority 0 \; }} > /dev/null 2>&1 || true
 
-                # Ensure nat table exists. Ignore error if it already does.
-                sudo nft add table ip nat > /dev/null 2>&1 || true
+                    sudo nft add table ip nat > /dev/null 2>&1 || true
 
-                # Ensure postrouting chain exists. Ignore error if it already does.
-                sudo nft add chain ip nat postrouting {{ type nat hook postrouting priority 100 \; }} > /dev/null 2>&1 || true
+                    sudo nft add chain ip nat postrouting {{ type nat hook postrouting priority 100 \; }} > /dev/null 2>&1 || true
 
-                # Add the forwarding rules (to filter table, forward chain)
-                sudo nft add rule ip filter forward iifname ceph-brx oifname {gw} accept
-                sudo nft add rule ip filter forward iifname {gw} oifname ceph-brx accept
+                    sudo nft add rule ip filter forward iifname ceph-brx oifname {gw} accept
+                    sudo nft add rule ip filter forward iifname {gw} oifname ceph-brx accept
 
-                # Add the NAT rule (Using the true network CIDR to prevent masking bugs)
-                sudo nft add rule ip nat postrouting ip saddr {self.ceph_brx_net} oifname {gw} masquerade
-            fi
-        """, timeout=(5*60), omit_sudo=False, cwd='/')
+                    sudo nft add rule ip nat postrouting ip saddr {self.ceph_brx_net} oifname {gw} masquerade
+                fi
+            """, timeout=(5*60), omit_sudo=False, cwd='/')
 
     def _setup_netns(self):
         p = self.client_remote.run(args=['ip', 'netns', 'list'],
