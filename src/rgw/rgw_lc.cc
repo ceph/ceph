@@ -1904,7 +1904,8 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec,
 			  rgw::sal::LCEntry& entry, int& result,
 			  LCWorker* worker)
 {
-  utime_t lock_duration(cct->_conf->rgw_lc_lock_max_time, 0);
+  const ceph::timespan lock_duration =
+      std::chrono::seconds(cct->_conf->rgw_lc_lock_max_time);
 
   std::unique_ptr<rgw::sal::LCSerializer> lock =
     sal_lc->get_serializer(lc_index_lock_name, obj_names[index], cookie);
@@ -2129,7 +2130,7 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
     return -EAGAIN;
   }
 
-  utime_t time(max_lock_secs, 0);
+  const ceph::timespan time = std::chrono::seconds(max_lock_secs);
   ret = serializer->try_lock(this, time, null_yield);
   if (ret == -EBUSY || ret == -EEXIST) {
     /* already locked by another lc processor */
@@ -2330,7 +2331,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
   std::unique_ptr<rgw::sal::LCSerializer> lock =
     sal_lc->get_serializer(lc_index_lock_name, lc_shard, worker->thr_name());
 
-  utime_t lock_for_s(max_lock_secs, 0);
+  const ceph::timespan lock_for_s = std::chrono::seconds(max_lock_secs);
   const auto& lock_lambda = [&]() {
     int ret = lock->try_lock(this, lock_for_s, null_yield);
     if (ret == 0) {
@@ -2670,7 +2671,7 @@ static int guard_lc_modify(const DoutPrefixProvider *dpp,
 
   std::unique_ptr<rgw::sal::LCSerializer> lock =
     sal_lc->get_serializer(lc_index_lock_name, oid, cookie);
-  utime_t time(max_lock_secs, 0);
+  const ceph::timespan time = std::chrono::seconds(max_lock_secs);
 
   int ret;
   uint16_t retries{0};

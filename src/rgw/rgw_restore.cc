@@ -353,7 +353,7 @@ int Restore::process(int index, int max_secs, optional_yield y)
     return -EAGAIN;
 
   end += max_secs;
-  utime_t time(max_secs, 0);
+  const ceph::timespan time = std::chrono::seconds(max_secs);
   int ret = serializer->try_lock(this, time, y);
   if (ret == -EBUSY || ret == -EEXIST) {
     /* already locked by another lc processor */

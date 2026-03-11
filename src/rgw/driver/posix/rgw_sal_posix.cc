@@ -3213,7 +3213,7 @@ std::unique_ptr<MPSerializer> POSIXObject::get_serializer(const DoutPrefixProvid
   return std::make_unique<MPPOSIXSerializer>(dpp, driver, this, lock_name);
 }
 
-int MPPOSIXSerializer::try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y)
+int MPPOSIXSerializer::try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y)
 {
   if (!obj->check_exists(dpp)) {
     return -ENOENT;
