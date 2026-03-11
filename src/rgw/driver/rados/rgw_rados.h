@@ -1816,7 +1816,8 @@ public:
                        rgw_bucket_dir_entry& list_state,
                        rgw_bucket_dir_entry& object,
                        bufferlist& suggested_updates,
-                       optional_yield y);
+                       optional_yield y,
+                       bool log_op = true);
 
   /**
    * Init pool iteration
