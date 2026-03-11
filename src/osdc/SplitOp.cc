@@ -145,6 +145,14 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
   auto &target = orig_op->target;
   const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.base_oloc.pool);
   ceph_assert(pi);
+
+  if (pi->has_flag(pg_pool_t::FLAG_CRIMSON)) {
+    ldout(cct, DBG_LVL) << __func__ <<" ABORT: Crimson doesn't support"
+                                      " direct reads" << dendl;
+    abort = true;
+    return;
+  }
+
   uint64_t offset = op.op.extent.offset;
   uint64_t length = op.op.extent.length;
   uint64_t data_chunk_count = pi->get_ec_data_shard_count();
@@ -274,6 +282,15 @@ void ReplicaSplitOp::assemble_buffer_read(bufferlist &bl_out, int ops_index) con
 void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
 
   auto &target = orig_op->target;
+  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.base_oloc.pool);
+  ceph_assert(pi);
+
+  if (pi->has_flag(pg_pool_t::FLAG_CRIMSON)) {
+    ldout(cct, DBG_LVL) << __func__ <<" ABORT: Crimson doesn't support"
+                                      " direct reads" << dendl;
+    abort = true;
+    return;
+  }
 
   std::set<int> osds;
   for (int direct_osd : target.acting) {
