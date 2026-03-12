@@ -221,4 +221,29 @@ TEST(LockStat, TimeCalculation)
   LockStatEntry::stop();
 }
 
+TEST(LockStat, GetTimeoutTripwire)
+{
+  struct timespec timeout1, timeout2;
+  const auto threshold = std::chrono::seconds(2);
+  LockStat::set_tripwire_threshold(
+      lockstat_clock::duration{tsc_rep{tsc_tick::from_duration(threshold)}});
+
+  clock_gettime(CLOCK_REALTIME, &timeout1);
+  // Re-load tripwire threshold to get timespec offset
+  LockStat::get_timeout_tripwire(&timeout2);
+
+  // Since we take the current time twice, there may be a small difference.
+  // timeout2 should be roughly timeout1 + threshold.
+  EXPECT_GE(timeout2.tv_sec, timeout1.tv_sec + 1);
+  EXPECT_LE(timeout2.tv_sec, timeout1.tv_sec + 3);
+
+  // Set threshold to something that causes nanosecond overflow
+  const auto threshold_ns = std::chrono::nanoseconds(1500000000); // 1.5 seconds
+  LockStat::set_tripwire_threshold(
+      lockstat_clock::duration{tsc_rep{tsc_tick::from_duration(threshold_ns)}});
+  LockStat::get_timeout_tripwire(&timeout2);
+
+  EXPECT_GE(timeout2.tv_sec, timeout1.tv_sec + 1);
+}
+
 #endif // CEPH_LOCKSTAT

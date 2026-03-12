@@ -157,8 +157,17 @@ public:
         unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
             ? lockstat_detail::lockstat_clock::now()
             : lockstat_detail::lockstat_clock::zero();
-#endif
+    int r = 0;
+    if (is_tripwire_enabled()) {
+      struct timespec timeout_tripwire;
+      get_timeout_tripwire(&timeout_tripwire);
+      r = pthread_mutex_timedlock(&m, &timeout_tripwire);
+    } else {
+      r = pthread_mutex_lock(&m);
+    }
+#else
     int r = pthread_mutex_lock(&m);
+#endif
     // Allowed error codes for Mutex concept
     if (unlikely(r == EPERM ||
 		 r == EDEADLK ||
