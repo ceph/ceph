@@ -60,12 +60,19 @@ TEST(MutexLockStatDeathTest, NotRecursive)
   ASSERT_DEATH(m.lock(), "FAILED ceph_assert(recursive || !is_locked_by_me())");
 }
 */
-TEST(MutexRecursiveLockStat, Lock)
+TEST(MutexRecursiveLockStat, Recursive)
 {
   test_lockstat<ceph::mutex_recursive_lockstat>();
 }
 
-TEST(MutexRecursiveLockStat, Recursive)
+TEST(MutexLockStat, StdMutex)
+{
+  using std_mutex_lockstat =
+      ceph::lockstat_detail::mutex_lockstat_impl<std::mutex>;
+  test_lockstat<std_mutex_lockstat>();
+}
+
+TEST(MutexRecursiveLockStat, RecursiveLock)
 {
   ceph::mutex_recursive_lockstat m(LOCKSTAT("m"));
   auto ttl = &test_try_lockstat<mutex_recursive_lockstat>;
@@ -119,6 +126,22 @@ TEST(MutexTimedLockStat, TryLockUntil)
   });
   ASSERT_TRUE(f2.get());
   m.unlock();
+}
+
+TEST(SharedMutexLockStat, StdSharedMutex)
+{
+  using shared_mutex_lockstat =
+      ceph::lockstat_detail::shared_mutex_lockstat_impl<std::shared_mutex>;
+  shared_mutex_lockstat m(LOCKSTAT("m"));
+
+  m.lock();
+  m.unlock();
+
+  m.lock_shared();
+  m.unlock_shared();
+
+  ASSERT_FALSE(m.try_lock_for(std::chrono::milliseconds(10)));
+  ASSERT_FALSE(m.try_lock_shared_for(std::chrono::milliseconds(10)));
 }
 
 TEST(SharedMutexTimedLockStat, TryLockSharedFor)
