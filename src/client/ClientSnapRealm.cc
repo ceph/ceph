@@ -27,8 +27,8 @@ void SnapRealm::build_snap_context()
   }
 
   // my snaps
-  for (unsigned i=0; i<my_snaps.size(); i++)
-    snaps.insert(my_snaps[i]);
+  for (auto& [snap_id, _] : my_snaps)
+    snaps.insert(snap_id);
 
   // ok!
   cached_snap_context.seq = max_seq;
@@ -51,9 +51,16 @@ void SnapRealm::dump(Formatter *f) const
   for (vector<snapid_t>::const_iterator p = prior_parent_snaps.begin(); p != prior_parent_snaps.end(); ++p)
     f->dump_stream("snapid") << *p;
   f->close_section();
-  f->open_array_section("my_snaps");
-  for (vector<snapid_t>::const_iterator p = my_snaps.begin(); p != my_snaps.end(); ++p)
-    f->dump_stream("snapid") << *p;
+
+  f->open_array_section("snaps");
+  for (auto& [snap_id, snap_md] : my_snaps) {
+    f->dump_stream("snapid") << snap_id;
+    f->open_array_section("snap_md");
+    for (auto& [k, v] : snap_md) {
+      f->dump_stream("") << k << ", " << v;
+    }
+    f->close_section();
+  }
   f->close_section();
 
   f->open_array_section("children");

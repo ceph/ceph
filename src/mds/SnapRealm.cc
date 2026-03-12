@@ -461,9 +461,10 @@ void SnapRealm::build_snap_trace() const
 
   if (global) {
     SnapRealmInfo info(inode->ino(), 0, cached_seq, 0);
-    info.my_snaps.reserve(cached_snaps.size());
-    for (auto p = cached_snaps.rbegin(); p != cached_snaps.rend(); ++p)
-      info.my_snaps.push_back(*p);
+    for (auto& snap_id : cached_snaps) {
+      // TODO: is empty map here ok?
+      info.my_snaps.emplace(snap_id, map<string, string>());
+    }
 
     SnapRealmInfoNew ninfo(info, srnode.last_modified,
                            srnode.change_attr, srnode.flags);
@@ -494,12 +495,9 @@ void SnapRealm::build_snap_trace() const
     }
   }
 
-  info.my_snaps.reserve(srnode.snaps.size());
-  for (auto p = srnode.snaps.rbegin();
-       p != srnode.snaps.rend();
-       ++p)
-    info.my_snaps.push_back(p->first);
-  dout(10) << "build_snap_trace my_snaps " << info.my_snaps << dendl;
+  for (auto& [snap_id, snap_info] : srnode.snaps) {
+    info.my_snaps.emplace(snap_id, snap_info.metadata);
+  }
 
   SnapRealmInfoNew ninfo(info, srnode.last_modified,
                          srnode.change_attr, srnode.flags);

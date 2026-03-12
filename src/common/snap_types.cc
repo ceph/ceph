@@ -5,6 +5,8 @@
 #include "common/Formatter.h"
 #include "include/types.h" // for the ceph_mds_snap_realm encoder
 
+using std::map, std::string;
+
 void SnapRealmInfo::encode(ceph::buffer::list& bl) const
 {
   h.num_snaps = my_snaps.size();
@@ -32,8 +34,14 @@ void SnapRealmInfo::dump(ceph::Formatter *f) const
   f->dump_unsigned("created", created());
 
   f->open_array_section("snaps");
-  for (auto p = my_snaps.begin(); p != my_snaps.end(); ++p)
-    f->dump_unsigned("snap", *p);
+  for (auto& [snap_id, snap_md] : my_snaps) {
+    f->dump_unsigned("snap_id", snap_id);
+    f->open_array_section("snap_md");
+    for (auto& [k, v] : snap_md) {
+      f->dump_stream("") << k << ", " << v;
+    }
+    f->close_section();
+  }
   f->close_section();
 
   f->open_array_section("prior_parent_snaps");
@@ -48,9 +56,10 @@ std::list<SnapRealmInfo> SnapRealmInfo::generate_test_instances()
   o.emplace_back();
   o.push_back(SnapRealmInfo(1, 10, 10, 0));
   o.push_back(SnapRealmInfo(1, 10, 10, 0));
-  o.back().my_snaps.push_back(10);
+  map<string, string> snap_md = {{"foo", "bar"}};
+  o.back().my_snaps.emplace(10, snap_md);
   o.push_back(SnapRealmInfo(1, 10, 10, 5));
-  o.back().my_snaps.push_back(10);
+  o.back().my_snaps.emplace(10, snap_md);
   o.back().prior_parent_snaps.push_back(3);
   o.back().prior_parent_snaps.push_back(5);
   return o;
@@ -96,9 +105,10 @@ std::list<SnapRealmInfoNew> SnapRealmInfoNew::generate_test_instances()
   o.emplace_back();
   o.push_back(SnapRealmInfoNew(SnapRealmInfo(1, 10, 10, 0), utime_t(), 0, 1));
   o.push_back(SnapRealmInfoNew(SnapRealmInfo(1, 10, 10, 0), utime_t(), 1, 1));
-  o.back().info.my_snaps.push_back(10);
+  map<string, string> snap_md = {{"foo", "bar"}};
+  o.back().info.my_snaps.emplace(10, snap_md);
   o.push_back(SnapRealmInfoNew(SnapRealmInfo(1, 10, 10, 5), utime_t(), 2, 1));
-  o.back().info.my_snaps.push_back(10);
+  o.back().info.my_snaps.emplace(10, snap_md);
   o.back().info.prior_parent_snaps.push_back(3);
   o.back().info.prior_parent_snaps.push_back(5);
   return o;
