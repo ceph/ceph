@@ -348,6 +348,11 @@ else:
                 "trsvcid": Param(int, "NVMeoF transport service port", True, 4420),
                 "adrfam": Param(int, "NVMeoF address family (0 - IPv4, 1 - IPv6)", True, 0),
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
+                "secure": Param(bool, "Use a secure channel", True, False),
+                "verify_host_name": Param(bool,
+                                          "Fail if the host name doesn't match the "
+                                          "gateway's host name",
+                                          True, False),
             },
         )
         @convert_to_model(model.RequestStatus)
@@ -359,7 +364,9 @@ else:
             traddr: str,
             trsvcid: int = 4420,
             adrfam: int = 0,  # IPv4,
-            gw_group: Optional[str] = None
+            gw_group: Optional[str] = None,
+            secure: Optional[bool] = False,
+            verify_host_name: Optional[bool] = False,
         ):
             return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.create_listener(
                 NVMeoFClient.pb2.create_listener_req(
@@ -368,6 +375,8 @@ else:
                     traddr=traddr,
                     trsvcid=int(trsvcid),
                     adrfam=int(adrfam),
+                    secure=str_to_bool(secure),
+                    verify_host_name=str_to_bool(verify_host_name),
                 )
             )
 
