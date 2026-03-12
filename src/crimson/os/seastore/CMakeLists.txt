@@ -11,6 +11,7 @@ set(crimson_seastore_srcs
   extent_pinboard.cc
   root_block.cc
   lba_manager.cc
+  lba_overlay_manager.cc
   async_cleaner.cc
   btree/btree_types.cc
   backref_manager.cc
