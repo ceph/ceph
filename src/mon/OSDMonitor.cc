@@ -8419,8 +8419,6 @@ int OSDMonitor::prepare_new_pool(string& name,
     enable_pool_ec_optimizations(*pi, nullptr, true, false);
   }
 
-  enable_pool_ec_direct_reads(*pi);
-
   pending_inc.new_pool_names[pool] = name;
   return 0;
 }
@@ -8511,6 +8509,8 @@ int OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p,
       }
     }
     p.flags |= pg_pool_t::FLAG_EC_OPTIMIZATIONS;
+
+    enable_pool_ec_direct_reads(p);
   } else {
     if ((p.flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) != 0) {
       if (ss) {
