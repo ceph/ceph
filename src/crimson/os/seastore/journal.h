@@ -112,10 +112,12 @@ using JournalRef = std::unique_ptr<Journal>;
 namespace journal {
 
 JournalRef make_segmented(
+  store_index_t store_index,
   SegmentProvider &provider,
   JournalTrimmer &trimmer);
 
 JournalRef make_circularbounded(
+  store_index_t store_index,
   JournalTrimmer &trimmer,
   crimson::os::seastore::random_block_device::RBMDevice* device,
   std::string path);
