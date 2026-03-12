@@ -7552,6 +7552,13 @@ void RGWCompleteMultipart::execute(optional_yield y)
     return;
   }
 
+  if (!serializer->is_locked()) {
+    // lock renewal failed, it's not safe to commit the head object
+    op_ret = -ERR_INTERNAL_ERROR;
+    s->err.message = "This multipart completion is already in progress";
+    return;
+  }
+
   op_ret =
     upload->complete(this, y, s->cct, parts->parts, remove_objs, accounted_size,
                      compressed, cs_info, ofs, s->req_id, s->owner, olh_epoch,
