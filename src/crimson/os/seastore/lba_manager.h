@@ -139,6 +139,8 @@ public:
     Transaction &t,
     LBACursorRef cursor,
     int delta) = 0;
+
+  [[deprecated("no users, use cursor overload instead")]]
   ref_iertr::future<> update_mapping_refcount(
     Transaction &t,
     laddr_t addr,
