@@ -41,6 +41,28 @@
 namespace ceph {
 namespace lockstat_detail {
 
+template <typename T, typename = void>
+struct has_try_lock_for : std::false_type {};
+
+template <typename T>
+struct has_try_lock_for<T, std::void_t<decltype(std::declval<T>().try_lock_for(
+                               std::declval<std::chrono::milliseconds>()))>>
+  : std::true_type {};
+
+template <typename T>
+inline constexpr bool has_try_lock_for_v = has_try_lock_for<T>::value;
+
+template <typename T, typename = void>
+struct has_try_lock_shared_for : std::false_type {};
+
+template <typename T>
+struct has_try_lock_shared_for<
+    T, std::void_t<decltype(std::declval<T>().try_lock_shared_for(
+           std::declval<std::chrono::milliseconds>()))>> : std::true_type {};
+
+template <typename T>
+inline constexpr bool has_try_lock_shared_for_v =
+    has_try_lock_shared_for<T>::value;
 
 template <typename mutex_base>
 class mutex_lockstat_impl : public LockStat, public mutex_base {
@@ -70,7 +92,18 @@ public:
         unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
             ? lockstat_clock::now()
             : lockstat_clock::zero();
-    mutex_base::lock();
+    if (is_tripwire_enabled()) {
+      if constexpr (has_try_lock_for_v<mutex_base>) {
+        if (!mutex_base::try_lock_for(
+                m_tripwire_threshold.load(std::memory_order_relaxed))) {
+          ceph_abort();
+        }
+      } else {
+        mutex_base::lock();
+      }
+    } else {
+      mutex_base::lock();
+    }
     if (unlikely(wait_start_clock != lockstat_clock::zero())) {
       record_wait_time(lockstat_clock::now() - wait_start_clock,
                        LockMode::WRITE);
@@ -100,16 +133,20 @@ public:
   template <typename Rep, typename Period>
   bool try_lock_for(const std::chrono::duration<Rep, Period>& awhile)
   {
-    const auto wait_start_clock =
-        unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
-            ? lockstat_clock::now()
-            : lockstat_clock::zero();
-    if (mutex_base::try_lock_for(awhile)) {
-      if (unlikely(wait_start_clock != lockstat_clock::zero())) {
-        record_wait_time(lockstat_clock::now() - wait_start_clock,
-                         LockMode::TRY_WRITE);
+    if constexpr (has_try_lock_for_v<mutex_base>) {
+      const auto wait_start_clock =
+          unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
+              ? lockstat_clock::now()
+              : lockstat_clock::zero();
+      if (mutex_base::try_lock_for(awhile)) {
+        if (unlikely(wait_start_clock != lockstat_clock::zero())) {
+          record_wait_time(lockstat_clock::now() - wait_start_clock,
+                           LockMode::TRY_WRITE);
+        }
+        return true;
+      } else {
+        return false;
       }
-      return true;
     } else {
       return false;
     }
@@ -118,16 +155,21 @@ public:
   template <typename Clock, typename Duration>
   bool try_lock_until(const std::chrono::time_point<Clock, Duration>& when)
   {
-    const auto wait_start_clock =
-        unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
-            ? lockstat_clock::now()
-            : lockstat_clock::zero();
-    if (mutex_base::try_lock_until(when)) {
-      if (unlikely(wait_start_clock != lockstat_clock::zero())) {
-        record_wait_time(lockstat_clock::now() - wait_start_clock,
-                         LockMode::TRY_WRITE);
+    if constexpr (
+        has_try_lock_for_v<mutex_base>) { // try_lock_for implies timed mutex
+      const auto wait_start_clock =
+          unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
+              ? lockstat_clock::now()
+              : lockstat_clock::zero();
+      if (mutex_base::try_lock_until(when)) {
+        if (unlikely(wait_start_clock != lockstat_clock::zero())) {
+          record_wait_time(lockstat_clock::now() - wait_start_clock,
+                           LockMode::TRY_WRITE);
+        }
+        return true;
+      } else {
+        return false;
       }
-      return true;
     } else {
       return false;
     }
@@ -154,7 +196,18 @@ public:
         unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
             ? lockstat_clock::now()
             : lockstat_clock::zero();
-    mutex_base::lock();
+    if (is_tripwire_enabled()) {
+      if constexpr (has_try_lock_for_v<mutex_base>) {
+        if (!mutex_base::try_lock_for(
+                m_tripwire_threshold.load(std::memory_order_relaxed))) {
+          ceph_abort();
+        }
+      } else {
+        mutex_base::lock();
+      }
+    } else {
+      mutex_base::lock();
+    }
     if (unlikely(wait_start_clock != lockstat_clock::zero())) {
       record_wait_time(lockstat_clock::now() - wait_start_clock,
                        LockMode::WRITE);
@@ -184,16 +237,20 @@ public:
   template <typename Rep, typename Period>
   bool try_lock_for(const std::chrono::duration<Rep, Period>& awhile)
   {
-    const auto wait_start_clock =
-        unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
-            ? lockstat_clock::now()
-            : lockstat_clock::zero();
-    if (mutex_base::try_lock_for(awhile)) {
-      if (unlikely(wait_start_clock != lockstat_clock::zero())) {
-        record_wait_time(lockstat_clock::now() - wait_start_clock,
-                         LockMode::TRY_WRITE);
+    if constexpr (has_try_lock_for_v<mutex_base>) {
+      const auto wait_start_clock =
+          unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
+              ? lockstat_clock::now()
+              : lockstat_clock::zero();
+      if (mutex_base::try_lock_for(awhile)) {
+        if (unlikely(wait_start_clock != lockstat_clock::zero())) {
+          record_wait_time(lockstat_clock::now() - wait_start_clock,
+                           LockMode::TRY_WRITE);
+        }
+        return true;
+      } else {
+        return false;
       }
-      return true;
     } else {
       return false;
     }
@@ -202,16 +259,20 @@ public:
   template <typename Clock, typename Duration>
   bool try_lock_until(const std::chrono::time_point<Clock, Duration>& when)
   {
-    const auto wait_start_clock =
-        unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
-            ? lockstat_clock::now()
-            : lockstat_clock::zero();
-    if (mutex_base::try_lock_until(when)) {
-      if (unlikely(wait_start_clock != lockstat_clock::zero())) {
-        record_wait_time(lockstat_clock::now() - wait_start_clock,
-                         LockMode::TRY_WRITE);
+    if constexpr (has_try_lock_for_v<mutex_base>) {
+      const auto wait_start_clock =
+          unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
+              ? lockstat_clock::now()
+              : lockstat_clock::zero();
+      if (mutex_base::try_lock_until(when)) {
+        if (unlikely(wait_start_clock != lockstat_clock::zero())) {
+          record_wait_time(lockstat_clock::now() - wait_start_clock,
+                           LockMode::TRY_WRITE);
+        }
+        return true;
+      } else {
+        return false;
       }
-      return true;
     } else {
       return false;
     }
@@ -224,7 +285,18 @@ public:
         unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
             ? lockstat_clock::now()
             : lockstat_clock::zero();
-    mutex_base::lock_shared();
+    if (is_tripwire_enabled()) {
+      if constexpr (has_try_lock_shared_for_v<mutex_base>) {
+        if (!mutex_base::try_lock_shared_for(
+                m_tripwire_threshold.load(std::memory_order_relaxed))) {
+          ceph_abort();
+        }
+      } else {
+        mutex_base::lock_shared();
+      }
+    } else {
+      mutex_base::lock_shared();
+    }
     if (unlikely(wait_start_clock != lockstat_clock::zero())) {
       record_wait_time(lockstat_clock::now() - wait_start_clock, LockMode::READ);
     }
@@ -253,16 +325,20 @@ public:
   template <typename Rep, typename Period>
   bool try_lock_shared_for(const std::chrono::duration<Rep, Period>& awhile)
   {
-    const auto wait_start_clock =
-        unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
-            ? lockstat_clock::now()
-            : lockstat_clock::zero();
-    if (mutex_base::try_lock_shared_for(awhile)) {
-      if (unlikely(wait_start_clock != lockstat_clock::zero())) {
-        record_wait_time(lockstat_clock::now() - wait_start_clock,
-                         LockMode::TRY_READ);
+    if constexpr (has_try_lock_shared_for_v<mutex_base>) {
+      const auto wait_start_clock =
+          unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
+              ? lockstat_clock::now()
+              : lockstat_clock::zero();
+      if (mutex_base::try_lock_shared_for(awhile)) {
+        if (unlikely(wait_start_clock != lockstat_clock::zero())) {
+          record_wait_time(lockstat_clock::now() - wait_start_clock,
+                           LockMode::TRY_READ);
+        }
+        return true;
+      } else {
+        return false;
       }
-      return true;
     } else {
       return false;
     }
@@ -272,34 +348,42 @@ public:
   bool try_lock_shared_until(
       const std::chrono::time_point<Clock, Duration>& when)
   {
-    const auto wait_start_clock =
-        unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
-            ? lockstat_clock::now()
-            : lockstat_clock::zero();
-    if (mutex_base::try_lock_shared_until(when)) {
-      if (unlikely(wait_start_clock != lockstat_clock::zero())) {
-        record_wait_time(lockstat_clock::now() - wait_start_clock,
-                         LockMode::TRY_READ);
+    if constexpr (
+        has_try_lock_shared_for_v<
+            mutex_base>) { // try_lock_shared_for implies timed shared mutex
+      const auto wait_start_clock =
+          unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
+              ? lockstat_clock::now()
+              : lockstat_clock::zero();
+      if (mutex_base::try_lock_shared_until(when)) {
+        if (unlikely(wait_start_clock != lockstat_clock::zero())) {
+          record_wait_time(lockstat_clock::now() - wait_start_clock,
+                           LockMode::TRY_READ);
+        }
+        return true;
+      } else {
+        return false;
       }
-      return true;
     } else {
       return false;
     }
   }
 };
 
-class condition_variable_lockstat {
-  using mutex_lockstat = lockstat_detail::mutex_lockstat_impl<std::mutex>;
+template <typename mutex_base>
+class condition_variable_lockstat_impl {
+  using mutex_lockstat = lockstat_detail::mutex_lockstat_impl<mutex_base>;
 
   pthread_cond_t cond;
   mutex_lockstat* waiter_mutex;
 
-  condition_variable_lockstat& operator=(
-      const condition_variable_lockstat&) = delete;
-  condition_variable_lockstat(const condition_variable_lockstat&) = delete;
+  condition_variable_lockstat_impl& operator=(
+      const condition_variable_lockstat_impl&) = delete;
+  condition_variable_lockstat_impl(
+      const condition_variable_lockstat_impl&) = delete;
 
 public:
-  condition_variable_lockstat() : waiter_mutex{nullptr}
+  condition_variable_lockstat_impl() : waiter_mutex{nullptr}
   {
     int r = pthread_cond_init(&cond, nullptr);
     if (r) {
@@ -307,7 +391,7 @@ public:
     }
   }
 
-  ~condition_variable_lockstat() { pthread_cond_destroy(&cond); }
+  ~condition_variable_lockstat_impl() { pthread_cond_destroy(&cond); }
 
   void wait(std::unique_lock<mutex_lockstat>& lock)
   {
@@ -407,11 +491,13 @@ private:
 
 } // namespace lockstat_detail
 
-using mutex_lockstat = lockstat_detail::mutex_lockstat_impl<std::mutex>;
+using mutex_lockstat = lockstat_detail::mutex_lockstat_impl<std::timed_mutex>;
 using mutex_recursive_lockstat =
-    lockstat_detail::mutex_lockstat_impl<std::recursive_mutex>;
+    lockstat_detail::mutex_lockstat_impl<std::recursive_timed_mutex>;
 using shared_mutex_lockstat =
-    lockstat_detail::shared_mutex_lockstat_impl<std::shared_mutex>;
+    lockstat_detail::shared_mutex_lockstat_impl<std::shared_timed_mutex>;
+using condition_variable_lockstat =
+    lockstat_detail::condition_variable_lockstat_impl<std::timed_mutex>;
 } // namespace ceph
 
 #endif // CEPH_COMMON_MUTEX_LOCKSTAT_H
