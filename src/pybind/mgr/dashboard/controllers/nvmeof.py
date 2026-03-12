@@ -234,6 +234,9 @@ else:
                 "dhchap_key": Param(int, "Subsystem DH-HMAC-CHAP key", True, None),
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
                 "traddr": Param(str, "NVMeoF gateway address", True, None),
+                "network_mask": Param([str],
+                                      "Network mask to automatically create listeners",
+                                      True, None),
             },
         )
         @convert_to_model(model.SubsystemStatus)
@@ -241,12 +244,14 @@ else:
         def create(self, nqn: str, enable_ha: Optional[bool] = True,
                    max_namespaces: Optional[int] = None, no_group_append: Optional[bool] = False,
                    serial_number: Optional[str] = None, dhchap_key: Optional[str] = None,
-                   gw_group: Optional[str] = None, traddr: Optional[str] = None):
+                   gw_group: Optional[str] = None, traddr: Optional[str] = None,
+                   network_mask: Optional[List[str]] = None):
             return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.create_subsystem(
                 NVMeoFClient.pb2.create_subsystem_req(
                     subsystem_nqn=nqn, serial_number=serial_number,
                     max_namespaces=max_namespaces, enable_ha=enable_ha,
-                    no_group_append=no_group_append, dhchap_key=dhchap_key
+                    no_group_append=no_group_append, dhchap_key=dhchap_key,
+                    network_mask=network_mask,
                 )
             )
 
@@ -307,6 +312,58 @@ else:
             return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.change_subsystem_key(
                 NVMeoFClient.pb2.change_subsystem_key_req(
                     subsystem_nqn=nqn, dhchap_key=None
+                )
+            )
+
+        @empty_response
+        @NvmeofCLICommand(
+            "nvmeof subsystem add_network", model.RequestStatus,
+        )
+        @EndpointDoc(
+            "Add subsystem network mask",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "network_mask": Param(str, "Network mask to add"),
+                "gw_group": Param(str, "NVMeoF gateway group", True, None),
+                "traddr": Param(str, "NVMeoF gateway address", True, None),
+            },
+        )
+        @convert_to_model(model.RequestStatus)
+        @handle_nvmeof_error
+        def add_network(self, nqn: str, network_mask: str, gw_group: Optional[str] = None,
+                        traddr: Optional[str] = None):
+            return NVMeoFClient(
+                gw_group=gw_group,
+                traddr=traddr
+            ).stub.add_subsystem_network(
+                NVMeoFClient.pb2.add_subsystem_network_req(
+                    subsystem_nqn=nqn, network_mask=network_mask
+                )
+            )
+
+        @empty_response
+        @NvmeofCLICommand(
+            "nvmeof subsystem del_network", model.RequestStatus,
+        )
+        @EndpointDoc(
+            "Delete subsystem network mask",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "network_mask": Param(str, "Network mask to remove"),
+                "gw_group": Param(str, "NVMeoF gateway group", True, None),
+                "traddr": Param(str, "NVMeoF gateway address", True, None),
+            },
+        )
+        @convert_to_model(model.RequestStatus)
+        @handle_nvmeof_error
+        def del_network(self, nqn: str, network_mask: str, gw_group: Optional[str] = None,
+                        traddr: Optional[str] = None):
+            return NVMeoFClient(
+                gw_group=gw_group,
+                traddr=traddr
+            ).stub.del_subsystem_network(
+                NVMeoFClient.pb2.del_subsystem_network_req(
+                    subsystem_nqn=nqn, network_mask=network_mask
                 )
             )
 
