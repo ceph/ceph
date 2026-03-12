@@ -4221,7 +4221,7 @@ options:
 - name: rgw_d4n_remote_delete_enabled
   type: bool
   level: advanced
-  desc: option to enable/diasble remote delete operations
+  desc: option to enable/disable remote delete operations
   default: true
   services:
   - rgw
@@ -4521,20 +4521,6 @@ options:
   default: true
   services:
   - rgw
-- name: rgw_d4n_address
-  type: str
-  level: advanced
-  desc: address for the D4N Redis connection
-  long_desc: The current D4N implementation supports one Redis node
-    which the D4N directory, policy, and overall filter communicate
-    with. This default value is also the address that a Redis server 
-    with no additional configuration will use.
-  default: 127.0.0.1:6379
-  services: 
-  - rgw
-  flags:
-  - startup
-  with_legacy: true
 - name: rgw_d4n_cache_cleaning_interval
   type: int
   level: advanced
