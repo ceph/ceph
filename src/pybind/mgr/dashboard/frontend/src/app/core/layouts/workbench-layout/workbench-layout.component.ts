@@ -1,4 +1,4 @@
-import { Component, HostBinding, OnDestroy, OnInit } from '@angular/core';
+import { Component, ElementRef, HostBinding, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { ActivatedRouteSnapshot, NavigationEnd, Router } from '@angular/router';
 
 import { Observable, Subscription } from 'rxjs';
@@ -32,6 +32,7 @@ export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
   pageHeaderTitle: string | null = null;
   pageHeaderDescription: string | null = null;
   enabledFeature$: Observable<FeatureTogglesMap>;
+  @ViewChild('workbenchContainer') workbenchContainer?: ElementRef<HTMLElement>;
 
   @HostBinding('class') get class(): string {
     return 'top-notification-' + this.notifications.length;
@@ -79,9 +80,10 @@ export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
 
     this.updatePageHeaderFromRoute();
     this.subs.add(
-      this.router.events
-        .pipe(filter((e) => e instanceof NavigationEnd))
-        .subscribe(() => this.updatePageHeaderFromRoute())
+      this.router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe(() => {
+        this.updatePageHeaderFromRoute();
+        this.workbenchContainer?.nativeElement.scrollTo({ top: 0 });
+      })
     );
   }
 

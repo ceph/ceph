@@ -1,6 +1,7 @@
 <block-ui name="global">
   <cd-navigation>
-    <div class="container-fluid h-100"
+    <div #workbenchContainer
+         class="container-fluid h-100"
          [ngClass]="{'overview': (router.url == '/overview' || router.url == '/dashboard_3' || router.url == '/multi-cluster/overview'), 'rgw-dashboard': (router.url == '/rgw/overview')}">
       <!-- ************************ -->
       <!-- ALERTS BANNER     -->

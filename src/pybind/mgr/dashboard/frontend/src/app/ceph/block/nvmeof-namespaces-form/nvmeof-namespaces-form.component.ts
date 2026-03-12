@@ -436,7 +436,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
       },
       complete: () => {
         this.router.navigate([this.pageURL], {
-          queryParams: { group: this.group }
+          queryParams: { group: this.group, tab: 'namespace' }
         });
       }
     });
