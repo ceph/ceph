@@ -488,6 +488,11 @@ public: // member variables
   /// @brief Type of lock for tracking
   ///
   LockStatTraits::LockStatType m_lock_type;
+
+  ///
+  /// @brief enable tripwire for this lock
+  ///
+  bool m_tripwire_enabled;
 };
 
 //----------------------------------------------------------------------------
@@ -509,6 +514,27 @@ class LockStat {
   friend class LockStatEntry;
 
 public: // Methods
+  ///
+  /// @brief Set the timespec timeout based on whether tripwire is set for thread
+  ///
+  static void
+  get_timeout_tripwire(struct timespec* timeout_tripwire)
+  {
+    const auto threshold = m_tripwire_threshold.load(std::memory_order_relaxed);
+    clock_gettime(CLOCK_REALTIME, timeout_tripwire);
+    const auto seconds =
+        std::chrono::duration_cast<std::chrono::seconds>(threshold);
+    const auto nanoseconds =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            threshold % std::chrono::seconds(1));
+    timeout_tripwire->tv_sec += seconds.count();
+    timeout_tripwire->tv_nsec += nanoseconds.count();
+    if (timeout_tripwire->tv_nsec >= TIME_sec_to_ns) {
+      timeout_tripwire->tv_nsec -= TIME_sec_to_ns;
+      ++timeout_tripwire->tv_sec;
+    }
+  }
+
   LockStat() = delete;
 
   LockStat(LockStatTraits::LockStatType lockType, const LockStatTraits* traits)
@@ -539,7 +565,10 @@ public: // Methods
     // record stats if wait threshold exceeded and if record_iopath_locks is set
     // only record stats for threads with thread_iopath_flag set
     if (unlikely(
-            wait_time >= g_threshold_cycles.load(std::memory_order_relaxed))) {
+            wait_time >= g_threshold_cycles.load(std::memory_order_relaxed)) &&
+        unlikely(
+            !m_record_iopath_locks.load(std::memory_order_relaxed) ||
+            m_thread_iopath_flag)) {
       LockStatTraits::record_wait_time(m_lockstat_traits, wait_time, mode);
     }
   }
@@ -555,6 +584,52 @@ public: // Methods
   }
 
   ///
+  /// @brief Set the per-thread flag to mark iopath threads
+  ///
+  static void set_thread_iopath(bool flag);
+
+  ///
+  /// @brief set the lock tripwire in microseconds
+  ///
+  static lockstat_clock::duration get_tripwire_threshold();
+
+  ///
+  /// @brief set the lock tripwire in microseconds
+  ///
+  static void set_tripwire_threshold(const lockstat_clock::duration& timeout);
+
+  ///
+  /// @brief enable tripwire on a lock
+  ///
+  static void enable_lock_tripwire(uint32_t lockid, bool enabled);
+
+  ///
+  /// @brief Get lock tripwire flag
+  ///
+  static bool get_lock_tripwire(uint32_t lockid);
+
+  ///
+  /// @brief Return tripwire flag for iopath threads
+  ///
+  static bool get_tripwire();
+
+  ///
+  /// @brief enable/disable tripwire checks for iopath threads
+  ///
+  static void set_tripwire(bool flag);
+
+  ///
+  /// @brief Return iopath record flag
+  ///
+  static bool get_iopath_record();
+
+  ///
+  /// @brief enable/disable recording wait time only for threads with
+  ///        tripwire flag set
+  ///
+  static void set_iopath_record(bool flag);
+
+  ///
   /// @brief Return the lock's traits
   ///
   [[nodiscard]] const LockStatTraits*
@@ -568,6 +643,18 @@ public: // Methods
   ///
   static void lockstat_stop();
 
+protected: // Methods
+  ///
+  /// @brief Helper function to test if tripwire is enabled for this lock
+  ///        running on this thread
+  ///
+  [[nodiscard]] bool
+  is_tripwire_enabled() const
+  {
+    return m_enable_tripwire.load(std::memory_order_relaxed) &&
+           m_thread_iopath_flag &&
+           get_traits()->get_lockstat_entry()->m_tripwire_enabled;
+  }
 
 protected: // Data
   ///
@@ -585,6 +672,26 @@ protected: // Data
   ///
   static std::atomic<lockstat_clock::duration> g_threshold_cycles;
   static std::atomic<lockstat_clock::duration> g_threshold_cycles_when;
+
+  ///
+  /// @brief Check if tripwire exceeded
+  ///
+  static std::atomic<bool> m_record_iopath_locks;
+
+  ///
+  /// @brief Check if tripwire exceeded
+  ///
+  static std::atomic<bool> m_enable_tripwire;
+
+  ///
+  /// @brief tripwire threshold for computing timespec seconds
+  ///
+  static std::atomic<lockstat_clock::duration> m_tripwire_threshold;
+
+  ///
+  /// @brief per-thread flag for checking if tripwire should be enforced
+  ///
+  static thread_local bool m_thread_iopath_flag;
 };
 
 // inline implementations
@@ -641,7 +748,6 @@ LockStatTraits::get_lock_type() const
 
 }; // namespace lockstat_detail
 
-#ifdef CEPH_LOCKSTAT
 // Look up a LockStatTraits object using details hashed from the lock's
 // file name, line number, function and name. Compute both the hash value and
 // table index using constexpr evaluations
@@ -654,10 +760,9 @@ LockStatTraits::get_lock_type() const
           name, __builtin_FILE(), __builtin_LINE(), __builtin_FUNCTION()) % \
           ceph::lockstat_detail::LockStatTraits::kHash_table_max_size,      \
       __builtin_FILE(), __builtin_LINE(), __builtin_FUNCTION()))
-#else
-#define LOCKSTAT(name) (name)
-#endif
 
 } // namespace ceph
+#else
+#define LOCKSTAT(name) (name)
 #endif // CEPH_LOCKSTAT
 #endif
