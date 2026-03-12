@@ -729,9 +729,16 @@ int CephContext::_do_command(
                 tsc_rep{tsc_tick::from_duration(
                     std::chrono::microseconds(std::stoi(threshold_str)))}};
           }
+          bool iopath = false;
+          cmd_getval(cmdmap, "iopath", iopath);
+          lockstat_detail::LockStat::set_iopath_record(iopath);
+
           lockstat_detail::LockStatEntry::start(threshold);
-          f->dump_format("status", "lockstat is started with threshold %lld(us)",
-            std::chrono::duration_cast<std::chrono::microseconds>(threshold).count());
+          f->dump_format(
+              "status", "lockstat is started with threshold %lld(us) iopath=%s",
+              std::chrono::duration_cast<std::chrono::microseconds>(threshold)
+                  .count(),
+              lockstat_detail::LockStat::get_iopath_record() ? "true" : "false");
         } else {
           f->dump_format("status", "Error: lockstat is already started");
         }
@@ -775,6 +782,56 @@ int CephContext::_do_command(
           std::string logger;
           cmd_getval(cmdmap, "logger", logger);
           lockstat_detail::LockStatEntry::dump_formatted(f);
+        } else {
+          f->dump_format("status", "Error: lockstat is not started");
+        }
+      }
+
+    } else if (command == "lockstat tripwire") {
+      if (!lockstat_detail::LockStatTraits::lockstat_global_enable()) {
+        f->dump_format(
+            "status",
+            "Error: lockstat is not enabled. Is environment variable "
+            "ENABLE_LOCKSTAT=true?");
+      } else {
+        if (lockstat_detail::LockStat::is_lockstat_enabled()) {
+          bool enable = false;
+          int64_t lockid = 0;
+          cmd_getval(cmdmap, "enable", enable);
+          if (cmd_getval(cmdmap, "lockid", lockid)) {
+            lockstat_detail::LockStat::enable_lock_tripwire(lockid, enable);
+          }
+          if (enable) {
+            int64_t threshold = 0;
+            if (cmd_getval(cmdmap, "threshold", threshold)) {
+              auto threshold_duration =
+                  lockstat_detail::lockstat_clock::duration{
+                      tsc_rep{tsc_tick::from_duration(
+                          std::chrono::microseconds(threshold))}};
+              lockstat_detail::LockStat::set_tripwire_threshold(
+                  threshold_duration);
+            }
+          }
+          lockstat_detail::LockStat::set_tripwire(enable);
+          std::string status_msg =
+              "tripwire " + std::string(enable ? "enabled" : "disabled") +
+              " (global=" +
+              (lockstat_detail::LockStat::get_tripwire() ? "true" : "false") +
+              ", threshold=" +
+              std::to_string(
+                  std::chrono::duration_cast<std::chrono::microseconds>(
+                      lockstat_detail::LockStat::get_tripwire_threshold())
+                      .count()) +
+              "(us))";
+          if (lockid) {
+            status_msg +=
+                " for lockid " + std::to_string(lockid) + "(is_enabled=" +
+                (lockstat_detail::LockStat::get_lock_tripwire(lockid) ? "true"
+                                                                     : "false") +
+                ")";
+          }
+          f->dump_string("status", status_msg);
+
         } else {
           f->dump_format("status", "Error: lockstat is not started");
         }
@@ -887,7 +944,9 @@ CephContext::CephContext(uint32_t module_type_,
 #endif
 #ifdef CEPH_LOCKSTAT
   _admin_socket->register_command(
-      "lockstat start name=threshold,type=CephString,req=false", _admin_hook,
+      "lockstat start name=threshold,type=CephString,req=false "
+      "name=iopath,type=CephBool,req=false ",
+      _admin_hook,
       "start lockstat profiling optional threshold in microseconds");
   _admin_socket->register_command(
       "lockstat stop", _admin_hook, "stop lockstat profiling");
@@ -897,6 +956,12 @@ CephContext::CephContext(uint32_t module_type_,
       "lockstat dump name=logger,type=CephString,req=false "
       "name=counter,type=CephString,req=false",
       _admin_hook, "dump lockstat profiling results");
+  _admin_socket->register_command(
+       "lockstat tripwire name=enable,type=CephBool "
+       "name=threshold,type=CephInt,req=false "
+      "name=lockid,type=CephInt,req=false"
+      ,
+      _admin_hook, "Set tripwire for a lock");
 #endif
   _crypto_none = CryptoHandler::create(CEPH_CRYPTO_NONE);
   _crypto_aes = CryptoHandler::create(CEPH_CRYPTO_AES);

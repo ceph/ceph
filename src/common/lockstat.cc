@@ -25,7 +25,6 @@
 #ifdef CEPH_LOCKSTAT
 
 namespace ceph::lockstat_detail {
-
 #ifdef NDEBUG
 const bool LockStatTraits::g_global_enable =
     getenv("ENABLE_LOCKSTAT") != nullptr &&
@@ -134,12 +133,75 @@ std::atomic<lockstat_clock::duration> LockStat::g_threshold_cycles =
     lockstat_clock::duration{};
 std::atomic<lockstat_clock::duration> LockStat::g_threshold_cycles_when =
     lockstat_clock::duration{};
+std::atomic<bool> LockStat::m_record_iopath_locks{false};
+std::atomic<bool> LockStat::m_enable_tripwire{false};
+std::atomic<lockstat_clock::duration> LockStat::m_tripwire_threshold =
+    lockstat_clock::duration{};
+thread_local bool LockStat::m_thread_iopath_flag;
+
+bool
+LockStat::get_tripwire()
+{
+  return m_enable_tripwire;
+}
+
+void
+LockStat::set_tripwire(bool flag)
+{
+  m_enable_tripwire = flag;
+}
+
+bool
+LockStat::get_iopath_record()
+{
+  return m_record_iopath_locks;
+}
+
+void
+LockStat::set_iopath_record(bool flag)
+{
+  m_record_iopath_locks = flag;
+}
+
+void
+LockStat::set_thread_iopath(bool flag)
+{
+  m_thread_iopath_flag = flag;
+}
+
+lockstat_clock::duration
+LockStat::get_tripwire_threshold()
+{
+  return m_tripwire_threshold;
+}
+
+void
+LockStat::set_tripwire_threshold(const lockstat_clock::duration& timeout)
+{
+  m_tripwire_threshold = timeout;
+}
+
+bool
+LockStat::get_lock_tripwire(uint32_t lockid)
+{
+  LockStatEntry& entry = LockStatEntry::get_lockstat_entry(lockid);
+  return entry.m_tripwire_enabled;
+}
+
+void
+LockStat::enable_lock_tripwire(uint32_t lockid, bool enabled)
+{
+  LockStatEntry& entry = LockStatEntry::get_lockstat_entry(lockid);
+  entry.m_tripwire_enabled = enabled;
+}
 
 void
 LockStat::lockstat_stop()
 {
+  m_enable_tripwire = false;
   g_threshold_cycles = lockstat_clock::duration{};
   g_start_cycles = lockstat_clock::zero();
+  m_tripwire_threshold = lockstat_clock::duration{};
 }
 
 template <typename T>
@@ -208,7 +270,9 @@ LockStatEntry::LockStatEntry() :
   m_lock_id(0),
   m_num_instances(0),
   m_max_wait{},
-  m_lock_type(LockStatTraits::LockStatType::UNKNOWN)
+  m_lock_type(LockStatTraits::LockStatType::UNKNOWN),
+  m_tripwire_enabled(false)
+
 {
   reset();
 }
@@ -218,7 +282,9 @@ LockStatEntry::LockStatEntry(const LockStatEntry& other) :
   m_lock_id(other.m_lock_id),
   m_num_instances(other.m_num_instances.load()),
   m_lock_name(other.m_lock_name),
-  m_lock_type(other.m_lock_type)
+  m_lock_type(other.m_lock_type),
+  m_tripwire_enabled(other.m_tripwire_enabled)
+
 {}
 
 ///
