@@ -16098,7 +16098,6 @@ int PrimaryLogPG::getattrs_maybe_cache(
 
 int PrimaryLogPG::get_internal_versions(const hobject_t& soid,
                                         std::map<shard_id_t, eversion_t>* out) {
-  const std::set<pg_shard_t>& acting_shards = get_acting_shards();
   ObjectContextRef obc = get_object_context(soid, false);
 
   if (!obc->obs.exists) {
@@ -16106,8 +16105,10 @@ int PrimaryLogPG::get_internal_versions(const hobject_t& soid,
   }
 
   if (is_primary()) {
-    for (const auto& shard : acting_shards) {
-      (*out)[shard.shard] = obc->obs.oi.version;
+    //FIXME: Lets make this a query into the backend. We can pass in the
+    // shard_versions and version.
+    for (unsigned int i = 0; i < pool.info.get_size(); ++i) {
+      (*out)[shard_id_t(i)] = obc->obs.oi.version;
     }
     for (const auto& [shard, version] : obc->obs.oi.shard_versions) {
       out->at(shard) = version;
