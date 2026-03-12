@@ -97,7 +97,7 @@ endif()
 if(HAVE_UADK)
   target_link_libraries(ceph_zlib uadk_compressor)
 endif()
-target_include_directories(ceph_zlib SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/isa-l/include")
+target_include_directories(ceph_zlib SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/isa-l/include" "${CMAKE_SOURCE_DIR}/src/isa-l")
 set_target_properties(ceph_zlib PROPERTIES
   VERSION 2.0.0
   SOVERSION 2
