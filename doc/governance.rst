@@ -122,6 +122,21 @@ Current Members
 
 .. _ctl:
 
+REMOVING A MEMBER
+----------
+A current member may resign at any time if they feel they will be unable to 
+continue fulfilling their project duties. Current members can also be removed
+after being inactive, failure to fulfill their 'responsibilities <https://docs.ceph.com/en/reef/governance/#responsibilities>', 
+violating the 'Code of Conduct <https://ceph.io/en/code-of-conduct/>', or for 
+other reasons. 
+
+Inactivity is defined as a period of very low or no activity in the project 
+for six months or more, without a specific schedule to resume full member 
+activity.
+
+A member may be removed by a “supermajority” 2/3 vote of voting members in an 
+election.
+
 Component Team Leads
 ====================
 
