@@ -64,7 +64,7 @@ class Environment : public ::testing::Environment {
 
       dpp = new DoutPrefix(cct->get(), dout_subsys, "D4N Object Directory Test: ");
 
-      redisHost = cct->_conf->rgw_d4n_address; 
+      redisHost = cct->_conf->rgw_d4n_l1_datacache_address; 
     }
 
     virtual void TearDown() {
