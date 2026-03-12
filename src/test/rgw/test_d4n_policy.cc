@@ -38,7 +38,7 @@ class Environment : public ::testing::Environment {
       dpp = new DoutPrefix(cct->get(), dout_subsys, "D4N Policy Test: ");
       common_init_finish(g_ceph_context);
       
-      redisHost = cct->_conf->rgw_d4n_address; 
+      redisHost = cct->_conf->rgw_d4n_l1_datacache_address; 
     }
 
     std::string redisHost;
