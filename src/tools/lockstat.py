@@ -134,6 +134,21 @@ def main():
     # start subcommand
     start_parser = subparsers.add_parser("start", help="Start lockstat profiling")
     start_parser.add_argument("--threshold", help="Optional threshold in microseconds")
+    start_parser.add_argument(
+        "--iopath", action="store_true", help="Enable iopath recording"
+    )
+
+    # tripwire subcommand
+    tripwire_parser = subparsers.add_parser(
+        "tripwire", help="Enable/disable tripwire on a specific lock"
+    )
+    tripwire_parser.add_argument(
+        "status", choices=["enable", "disable"], help="Enable or disable tripwire"
+    )
+    tripwire_parser.add_argument("--lockid", type=int, help="Optional lock ID")
+    tripwire_parser.add_argument(
+        "--threshold", type=int, help="Optional threshold in microseconds"
+    )
 
     # stop subcommand
     subparsers.add_parser("stop", help="Stop lockstat profiling")
@@ -151,6 +166,16 @@ def main():
         cmd = ["start"]
         if args.threshold:
             cmd.append(args.threshold)
+        if args.iopath:
+            cmd.append("--iopath=true")
+        print(call_ceph_daemon(args.daemon, cmd))
+    elif args.command == "tripwire":
+        cmd = ["tripwire"]
+        if args.lockid:
+            cmd.append(f"--lockid={args.lockid}")
+        cmd.append(f"--enable={'true' if args.status == 'enable' else 'false'}")
+        if args.threshold:
+            cmd.append(f"--threshold={args.threshold}")
         print(call_ceph_daemon(args.daemon, cmd))
     elif args.command == "stop":
         print(call_ceph_daemon(args.daemon, ["stop"]))
