@@ -187,11 +187,12 @@ class NamespaceIOStats(NamedTuple):
 class Listener(NamedTuple):
     host_name: Annotated[str, CliHeader("Host")]
     trtype: Annotated[str, CliHeader("Transport")]
-    traddr: Annotated[str, CliHeader("Target Address")]
+    adrfam: Annotated[int, CliHeader("Address Family")]  # 0: IPv4, 1: IPv6
+    traddr: Annotated[str, CliHeader("Address")]
+    trsvcid: Annotated[int, CliHeader("Port")]
     secure: Optional[bool]
     active: Optional[bool]
-    adrfam: Annotated[int, CliHeader("Address Family")] = 0  # 0: IPv4, 1: IPv6
-    trsvcid: Annotated[int, CliHeader("Target Port")] = 4420
+    manual: Optional[bool]
 
 
 class ListenerList(NamedTuple):

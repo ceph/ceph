@@ -13702,6 +13702,10 @@ paths:
                 host_name:
                   description: NVMeoF hostname
                   type: string
+                secure:
+                  default: false
+                  description: Use a secure channel
+                  type: boolean
                 server_address:
                   description: NVMeoF gateway address
                   type: string
@@ -13712,6 +13716,11 @@ paths:
                   default: 4420
                   description: NVMeoF transport service port
                   type: integer
+                verify_host_name:
+                  default: false
+                  description: Fail if the host name doesn't match the gateway's host
+                    name
+                  type: boolean
               required:
               - host_name
               - traddr
