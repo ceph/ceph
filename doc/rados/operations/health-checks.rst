@@ -199,6 +199,23 @@ To disable the grace period entirely (immediate reporting), set the value to 0:
 
    ceph config set mon mon_netsplit_grace_period 0
 
+MON_COLOCATED
+____________
+
+Two or more Monitors are located on the same node. This health check is 
+raised when multiple Monitors share the same IP address. This check is by 
+default disabled. 
+
+Colocation of Monitors can increase the risk that a host, rack, or network 
+failure prevents the Monitors from forming a Paxos quorum, which may 
+stall cluster operations.
+
+To enable the :confval:`mon_warn_on_colocated_monitors` warning, run the following command:
+
+.. prompt:: bash #
+
+   ceph config set mon mon_warn_on_colocated_monitors true
+
 AUTH_INSECURE_GLOBAL_ID_RECLAIM
 _______________________________
 
