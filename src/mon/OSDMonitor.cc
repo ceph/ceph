@@ -6723,10 +6723,14 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	      "\n";
 	    break;
           case EC_DATA_SHARD_COUNT:
-            ss << "ec_data_shard_count: " << p->ec_data_shard_count.value_or(0);
+            ss << "ec_data_shard_count: "
+               << static_cast<unsigned int>(p->ec_data_shard_count.value_or(0))
+               << "\n";
             break;
           case EC_CODING_SHARD_COUNT:
-            ss << "ec_coding_shard_count: " << p->ec_coding_shard_count.value_or(0);
+            ss << "ec_coding_shard_count: "
+               << static_cast<unsigned int>(p->ec_coding_shard_count.value_or(0))
+               << "\n";
             break;
 	}
 	rdata.append(ss.str());
