@@ -14,6 +14,8 @@ type ResiliencyState = typeof DATA_RESILIENCY_STATE[keyof typeof DATA_RESILIENCY
 
 type PG_STATES = typeof PG_STATES[number];
 
+type SCRUBBING_STATES = typeof SCRUBBING_STATES[number];
+
 export const HealthIconMap = {
   HEALTH_OK: 'success',
   HEALTH_WARN: 'warningAltFilled',
@@ -128,10 +130,14 @@ const PG_STATES = [
   'backfilling',
   'backfill_wait',
   'remapped',
+  'unknown',
   // PROGRESS
   'deep',
   'scrubbing'
 ] as const;
+
+// PROGRESS
+const SCRUBBING_STATES = ['deep', 'scrubbing'];
 
 const LABELS: Record<string, string> = {
   scrubbing: 'Scrub',
@@ -187,13 +193,13 @@ export const DATA_RESILIENCY: Record<ResiliencyState, ResileincyHealthType> = {
     severity: DATA_RESILIENCY_STATE.progress
   },
   [DATA_RESILIENCY_STATE.warn]: {
-    icon: 'warning',
+    icon: 'warningAltFilled',
     title: $localize`Restoring data redundancy`,
     description: $localize`Some data replicas are missing or not yet in their final location. Ceph is actively rebalancing data to return to a healthy state.`,
     severity: DATA_RESILIENCY_STATE.warn
   },
   [DATA_RESILIENCY_STATE.warnDataLoss]: {
-    icon: 'warning',
+    icon: 'warningAltFilled',
     title: $localize`Status unavailable for some data`,
     description: $localize`Ceph cannot reliably determine the current state of some data. Availability may be affected.`,
     severity: DATA_RESILIENCY_STATE.warnDataLoss
@@ -254,10 +260,7 @@ export function getResiliencyDisplay(
   }
 
   if (state === DATA_RESILIENCY_STATE.ok) {
-    const hasScrubbing = pgStates.some((s) => {
-      const n = s?.state_name ?? '';
-      return n.includes('scrubbing') || n.includes('deep');
-    });
+    const hasScrubbing = pgStates.some((s) => isScrubbing(s?.state_name ?? ''));
     if (hasScrubbing) state = DATA_RESILIENCY_STATE.progress;
   }
 
@@ -289,7 +292,7 @@ function isScrubbing(pgRow: string) {
 
 /**
  * If any PG state is active and not clean => Warn
- * If any PG state is not active -> Error
+ * If any PG state is not active and not clean -> Error
  *
  * In case above is true, the states contributing to that as per
  * PG_STATES priotity List will be added.
@@ -308,10 +311,11 @@ export function calcActiveCleanSeverityAndReasons(
     return { activeCleanPercent: 0, severity: DATA_RESILIENCY_STATE.ok, reasons: [] };
   }
 
-  const reasonCounts = new Map<PG_STATES, number>();
+  const errorWarnCounts = new Map<PG_STATES, number>();
+  const scrubbingCounts = new Map<SCRUBBING_STATES, number>();
+  let reasonsMap: Map<SCRUBBING_STATES, number> | Map<PG_STATES, number> = errorWarnCounts;
   let severity: ResiliencyState = DATA_RESILIENCY_STATE.ok;
   let activeCleanTotal = 0;
-  let hasProgress = false;
   let hasNotActiveNotClean = false;
   let hasActiveNotClean = false;
 
@@ -325,8 +329,10 @@ export function calcActiveCleanSeverityAndReasons(
     if (isActive && !isClean) hasActiveNotClean = true;
 
     // If all okay then only scrubbing state is shown
-    if (!hasProgress && isScrubbing(stateName)) {
-      hasProgress = true;
+    for (const state of SCRUBBING_STATES) {
+      if (stateName.includes(state)) {
+        scrubbingCounts.set(state, (scrubbingCounts.get(state) ?? 0) + stateCount);
+      }
     }
 
     // active+clean*: no reasons required hence continuing
@@ -335,10 +341,10 @@ export function calcActiveCleanSeverityAndReasons(
       continue;
     }
 
-    // Non active, non-clean or non-active+clean: reasons needed
+    // Any PG state that is not active+clean contributes to warning/error reasons
     for (const state of PG_STATES) {
       if (stateName.includes(state)) {
-        reasonCounts.set(state, (reasonCounts.get(state) ?? 0) + stateCount);
+        errorWarnCounts.set(state, (errorWarnCounts.get(state) ?? 0) + stateCount);
         break;
       }
     }
@@ -346,12 +352,15 @@ export function calcActiveCleanSeverityAndReasons(
 
   if (hasNotActiveNotClean) severity = DATA_RESILIENCY_STATE.error;
   else if (hasActiveNotClean) severity = DATA_RESILIENCY_STATE.warn;
-  else if (hasProgress) severity = DATA_RESILIENCY_STATE.progress;
+  else if (scrubbingCounts.size > 0) {
+    severity = DATA_RESILIENCY_STATE.progress;
+    reasonsMap = scrubbingCounts;
+  }
 
   const reasons =
-    reasonCounts.size === 0
+    reasonsMap?.size === 0
       ? []
-      : [...reasonCounts.entries()]
+      : [...reasonsMap.entries()]
           .sort((a, b) => b[1] - a[1])
           .map(([state, count]) => ({
             state: labelOf(state),
