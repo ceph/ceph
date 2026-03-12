@@ -54,7 +54,7 @@ The following options can be used with ``vstart.sh``.
     (as determined by `nproc`) will be assigned to the object store.
 
 ``--bluestore``
-    Use the alienized BlueStore as the object store backend. This is the default (see above section on the :ref:`Crimson's Object Store Backends <crimson-bakends>` for more details)
+    Use the alienized BlueStore as the object store backend. This is the default (see above section on the :ref:`Crimson's Object Store Backends <crimson-backends>` for more details)
 
 ``--cyanstore``
     Use CyanStore as the object store backend.
@@ -389,4 +389,5 @@ Code Walkthroughs
    The ClientRequest Pipeline <pipeline>
    Error Handling <error-handling>
    BackfillMachine <backfillmachine>
+   SeaStore <seastore>
    PoseidonStore <poseidonstore>

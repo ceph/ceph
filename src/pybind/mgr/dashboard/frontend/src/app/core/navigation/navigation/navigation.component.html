@@ -1,8 +1,10 @@
 <div class="cd-navbar-main">
   <!-- ************************ -->
-  <!-- NOTIFICATIONS     -->
+  <!-- NOTIFICATION PANEL     -->
   <!-- ************************ -->
-  <cd-notifications-sidebar></cd-notifications-sidebar>
+   @if(notificationService.panelState$ | async; as isNotifPanelOpen) {
+  <cd-notification-panel></cd-notification-panel>
+   }
   <!-- ************************ -->
   <!-- HEADER                   -->
   <!-- ************************ -->
@@ -28,13 +30,12 @@
         </ng-container>
       </cds-header-menu>
     </cds-header-navigation>
-
     <cds-header-global>
       <cds-header-navigation>
         <cd-language-selector class="d-flex"></cd-language-selector>
       </cds-header-navigation>
       <div class="cds--btn cds--btn--icon-only cds--header__action"
-           (click)="toggleSidebar()">
+           (click)="onNotificationSelected($event)">
         <cd-notifications></cd-notifications>
       </div>
       <div class="cds--btn cds--btn--icon-only cds--header__action">
@@ -54,7 +55,7 @@
   <!-- ***************************** -->
   <ng-template #brandTemplate>
     <a class="cds--header__name navbar-brand ms-3"
-       routerLink="/dashboard">
+       routerLink="/overview">
       <img src="assets/Ceph_Ceph_Logo_with_text_white.svg"
            alt="Ceph" />
     </a>
@@ -83,17 +84,17 @@
                    class="mt-5"
                    (click)="onMenuClick($event)"
                    #sidenavContainer>
-        <!-- Dashboard -->
-        <cds-sidenav-item route="/dashboard"
+        <!-- Overview -->
+        <cds-sidenav-item route="/overview"
                           [useRouter]="true"
-                          title="Dashboard"
+                          title="Overview"
                           i18n-title
-                          class="nav-item tc_menuitem_dashboard">
+                          class="nav-item tc_menuitem_overview">
           <svg cdsIcon="template"
                icon
                size="20"></svg>
           <span i18n>
-            Dashboard</span>
+            Overview</span>
         </cds-sidenav-item>
         <!-- Multi-cluster Dashboard -->
         <cds-sidenav-menu title="Multi-cluster"
@@ -270,6 +271,12 @@
                             i18n-title
                             *ngIf="permissions.cephfs.read && enabledFeature.cephfs"
                             class="tc_submenuitem tc_submenuitem_file_cephfs"><span i18n>File systems</span></cds-sidenav-item>
+          <cds-sidenav-item route="/cephfs/mirroring"
+                            [useRouter]="true"
+                            title="Mirroring"
+                            i18n-title
+                            *ngIf="permissions.cephfs.read && enabledFeature.cephfs"
+                            class="tc_submenuitem tc_submenuitem_file_cephfs"><span i18n>Mirroring</span></cds-sidenav-item>
           <cds-sidenav-item route="/cephfs/nfs"
                             [useRouter]="true"
                             title="NFS"

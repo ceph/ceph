@@ -14,7 +14,6 @@ else:
 from distutils.ccompiler import new_compiler
 from distutils.errors import CompileError, LinkError
 from itertools import filterfalse, takewhile
-from packaging import version
 import distutils.sysconfig
 
 
@@ -144,33 +143,23 @@ def check_sanity():
 if 'BUILD_DOC' in os.environ or 'READTHEDOCS' in os.environ:
     ext_args = {}
     cython_constants = dict(BUILD_DOC=True)
-    cythonize_args = dict(compile_time_env=cython_constants)
+    cythonize_args = dict()
 elif check_sanity():
     ext_args = get_python_flags(['rados', 'rbd'])
     cython_constants = dict(BUILD_DOC=False)
     include_path = [os.path.join(os.path.dirname(__file__), "..", "rados")]
-    cythonize_args = dict(compile_time_env=cython_constants,
-                          include_path=include_path)
+    cythonize_args = dict(include_path=include_path)
 else:
     sys.exit(1)
 
 cmdclass = {}
-compiler_directives={'language_level': sys.version_info.major}
 try:
     from Cython.Build import cythonize
     from Cython.Distutils import build_ext
-    from Cython import __version__ as cython_version
+    from Cython import Tempita
 
     cmdclass = {'build_ext': build_ext}
 
-    # Needed for building with Cython 0.x and Cython 3 from the same file,
-    # preserving the same behavior.
-    # When Cython 0.x builds go away, replace this compiler directive with
-    # noexcept on rbd_callback_t and librbd_progress_fn_t (or consider doing
-    # something similar to except? -9000 on rbd_diff_iterate2() callback for
-    # progress callbacks to propagate exceptions).
-    if version.parse(cython_version) >= version.parse('3'):
-        compiler_directives['legacy_implicit_noexcept'] = True
 except ImportError:
     print("WARNING: Cython is not installed.")
 
@@ -183,7 +172,25 @@ except ImportError:
 
         source = "rbd.c"
 else:
-    source = "rbd.pyx"
+    # Process Tempita template
+    source_pyx = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "rbd.pyx"
+    )
+
+    # Read the template from source
+    with open(source_pyx) as f:
+        template_content = f.read()
+
+    # Process the template with cython_constants
+    processed = Tempita.sub(template_content, **cython_constants)
+
+    # Write processed output to current working directory
+    # (which is the build directory when invoked by CMake)
+    source = "rbd_processed.pyx"
+
+    with open(source, 'w') as f:
+        f.write(processed)
 
 # Disable cythonification if we're not really building anything
 if (len(sys.argv) >= 2 and
@@ -215,7 +222,6 @@ setup(
                 **ext_args
             )
         ],
-        compiler_directives=compiler_directives,
         build_dir=os.environ.get("CYTHON_BUILD_DIR", None),
         **cythonize_args
     ),

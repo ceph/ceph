@@ -153,7 +153,7 @@ class DaemonWatchdog(Greenlet):
             for thrasher in self.thrashers:
                 if thrasher.exception is not None:
                     self.log("{name} failed".format(name=thrasher.name))
-                    bark_reason = f"Thrasher {name} threw exception {thrasher.exception}"
+                    bark_reason = f"Thrasher {thrasher.name} threw exception {thrasher.exception}"
                     bark = True
 
             for proc in self.watched_processes:

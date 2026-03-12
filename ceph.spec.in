@@ -35,7 +35,7 @@
 %bcond_with rbd_rwl_cache
 %endif
 %if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
-%if 0%{?rhel} < 9 || 0%{?openEuler}
+%if (0%{?rhel} && 0%{?rhel} < 9) || 0%{?openEuler}
 %bcond_with system_pmdk
 %else
 %ifarch s390x aarch64
@@ -150,7 +150,7 @@
 %{!?python3_pkgversion: %global python3_pkgversion 3}
 %{!?python3_version_nodots: %global python3_version_nodots 3}
 %{!?python3_version: %global python3_version 3}
-%if 0%{?rhel} < 10
+%if 0%{?rhel} && 0%{?rhel} < 10
 %{!?gts_version: %global gts_version 13}
 %endif
 
@@ -291,6 +291,8 @@ BuildRequires:	python%{python3_pkgversion}
 BuildRequires:	python%{python3_pkgversion}-devel
 BuildRequires:	python%{python3_pkgversion}-setuptools
 BuildRequires:	python%{python3_pkgversion}-Cython
+BuildRequires:	python%{python3_pkgversion}-pip
+BuildRequires:	python%{python3_pkgversion}-wheel
 BuildRequires:	snappy-devel
 BuildRequires:	sqlite-devel
 BuildRequires:	sudo
@@ -674,7 +676,7 @@ Requires:       python%{python3_pkgversion}-cherrypy
 Requires:       python%{python3_pkgversion}-routes
 %if 0%{?weak_deps}
 Recommends:     python%{python3_pkgversion}-saml
-%if 0%{?fedora} || 0%{?rhel} <= 8
+%if 0%{?fedora} || (0%{?rhel} && 0%{?rhel} <= 8)
 Recommends:     python%{python3_pkgversion}-grpcio
 Recommends:     python%{python3_pkgversion}-grpcio-tools
 %endif
@@ -729,7 +731,7 @@ Requires:       python%{python3_pkgversion}-PyYAML
 %endif
 # RHEL8 has python 3.6 and that lacks dataclasses in the stdlib, so pull in the
 # backport dataclasses module instead.
-%if 0%{?rhel} <= 8
+%if 0%{?rhel} && 0%{?rhel} <= 8
 Requires:       python%{python3_pkgversion}-dataclasses
 %endif
 %if 0%{?weak_deps}
@@ -1918,6 +1920,7 @@ fi
 %{_datadir}/ceph/mgr/mgr_module.*
 %{_datadir}/ceph/mgr/mgr_util.*
 %{_datadir}/ceph/mgr/object_format.*
+%{_datadir}/ceph/mgr/cherrypy_mgr.*
 %{_unitdir}/ceph-mgr@.service
 %{_unitdir}/ceph-mgr.target
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mgr
@@ -2013,6 +2016,7 @@ fi
 %{_datadir}/ceph/mgr/telemetry
 %{_datadir}/ceph/mgr/test_orchestrator
 %{_datadir}/ceph/mgr/volumes
+%{_datadir}/ceph/mgr/nvmeof
 
 %files mgr-rook
 %{_datadir}/ceph/mgr/rook
@@ -2458,7 +2462,7 @@ fi
 
 %files -n python%{python3_pkgversion}-rados
 %{python3_sitearch}/rados.cpython*.so
-%{python3_sitearch}/rados-*.egg-info
+%{python3_sitearch}/rados-*.dist-info
 
 %files -n libcephsqlite
 %{_libdir}/libcephsqlite.so
@@ -2530,11 +2534,11 @@ fi
 
 %files -n python%{python3_pkgversion}-rgw
 %{python3_sitearch}/rgw.cpython*.so
-%{python3_sitearch}/rgw-*.egg-info
+%{python3_sitearch}/rgw-*.dist-info
 
 %files -n python%{python3_pkgversion}-rbd
 %{python3_sitearch}/rbd.cpython*.so
-%{python3_sitearch}/rbd-*.egg-info
+%{python3_sitearch}/rbd-*.dist-info
 
 %files -n libcephfs2
 %{_libdir}/libcephfs.so.*
@@ -2570,7 +2574,7 @@ fi
 
 %files -n python%{python3_pkgversion}-cephfs
 %{python3_sitearch}/cephfs.cpython*.so
-%{python3_sitearch}/cephfs-*.egg-info
+%{python3_sitearch}/cephfs-*.dist-info
 
 %files -n python%{python3_pkgversion}-ceph-argparse
 %{python3_sitelib}/ceph_argparse.py

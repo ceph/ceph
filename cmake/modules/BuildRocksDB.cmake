@@ -14,7 +14,7 @@ function(build_rocksdb)
   list(APPEND rocksdb_CMAKE_ARGS -DWITH_LIBURING=${WITH_LIBURING})
   if(WITH_LIBURING)
     list(APPEND rocksdb_CMAKE_ARGS -During_INCLUDE_DIR=${URING_INCLUDE_DIR})
-    list(APPEND rocksdb_CMAKE_ARGS -During_LIBRARIES=${URING_LIBRARY_DIR})
+    list(APPEND rocksdb_CMAKE_ARGS -During_LIBRARIES=${URING_LIBRARY_DIR}/liburing.a)
     list(APPEND rocksdb_INTERFACE_LINK_LIBRARIES uring::uring)
   endif()
 

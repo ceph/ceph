@@ -146,7 +146,9 @@ enum class MDSPerformanceCounterType : uint8_t {
   SUBV_READ_THROUGHPUT_METRIC = 18,
   SUBV_WRITE_THROUGHPUT_METRIC = 19,
   SUBV_AVG_READ_LATENCY_METRIC = 20,
-  SUBV_AVG_WRITE_LATENCY_METRIC = 21
+  SUBV_AVG_WRITE_LATENCY_METRIC = 21,
+  SUBV_QUOTA_BYTES_METRIC = 22,
+  SUBV_USED_BYTES_METRIC = 23
 };
 
 struct MDSPerformanceCounterDescriptor {
@@ -176,6 +178,8 @@ struct MDSPerformanceCounterDescriptor {
     case MDSPerformanceCounterType::SUBV_WRITE_THROUGHPUT_METRIC:
     case MDSPerformanceCounterType::SUBV_AVG_READ_LATENCY_METRIC:
     case MDSPerformanceCounterType::SUBV_AVG_WRITE_LATENCY_METRIC:
+    case MDSPerformanceCounterType::SUBV_QUOTA_BYTES_METRIC:
+    case MDSPerformanceCounterType::SUBV_USED_BYTES_METRIC:
       return true;
     default:
       return false;
@@ -431,6 +435,8 @@ struct AggregatedSubvolumeMetric {
     uint64_t write_iops = 0;
     uint64_t read_tpBs = 0;
     uint64_t write_tBps = 0;
+    uint64_t quota_bytes = 0;
+    uint64_t used_bytes = 0;
 
     uint64_t min_read_latency = std::numeric_limits<uint64_t>::max();
     uint64_t max_read_latency = 0;
@@ -449,6 +455,8 @@ struct AggregatedSubvolumeMetric {
       f->dump_unsigned("write_iops", write_iops);
       f->dump_unsigned("read_tpBs", read_tpBs);
       f->dump_unsigned("write_tBps", write_tBps);
+      f->dump_unsigned("quota_bytes", quota_bytes);
+      f->dump_unsigned("used_bytes", used_bytes);
 
       f->dump_unsigned("min_read_latency_ns", min_read_latency);
       f->dump_unsigned("max_read_latency_ns", max_read_latency);

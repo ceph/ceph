@@ -6,12 +6,14 @@
 
 #include "include/buffer_fwd.h"
 
+#include <cstdarg>
+#include <cstdint>
 #include <functional>
 #include <list>
 #include <memory>
 #include <string>
 
-#include <stdarg.h>
+#include "common/fmt_common.h"
 
 namespace ceph {
 
@@ -242,6 +244,12 @@ namespace ceph {
       return nullptr;
     }
     virtual void write_bin_data(const char* buff, int buf_len);
+
+    template <typename... Args>
+    void dump_named_fmt(std::string_view name, fmt::format_string<Args...> fmtformat, Args&&... args)
+    {
+      dump_string(name, fmt::format(fmtformat, std::forward<Args>(args)...));
+    }
   };
 
   std::string fixed_to_string(int64_t num, int scale);

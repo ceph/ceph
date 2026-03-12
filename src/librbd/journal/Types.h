@@ -25,7 +25,7 @@ class Formatter;
 namespace librbd {
 namespace journal {
 
-enum EventType {
+enum EventType : uint32_t {
   EVENT_TYPE_AIO_DISCARD           = 0,
   EVENT_TYPE_AIO_WRITE             = 1,
   EVENT_TYPE_AIO_FLUSH             = 2,
@@ -464,7 +464,7 @@ private:
 
 // Journal Client data structures
 
-enum ClientMetaType {
+enum ClientMetaType : uint32_t {
   IMAGE_CLIENT_META_TYPE       = 0,
   MIRROR_PEER_CLIENT_META_TYPE = 1,
   CLI_CLIENT_META_TYPE         = 2

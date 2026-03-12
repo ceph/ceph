@@ -1,0 +1,17 @@
+@use '../../../../styles/vendor/variables' as vv;
+
+cd-page-header {
+  /* Extend to viewport edges so top border goes full width */
+  .border-top.padding-inline-0 {
+    margin-left: calc(-1 * vv.$grid-gutter-width);
+    margin-right: calc(-1 * vv.$grid-gutter-width);
+    width: calc(100% + 2 * vv.$grid-gutter-width);
+
+    /* Restore horizontal padding so content stays aligned with rest of page */
+    padding-inline: vv.$grid-gutter-width;
+  }
+
+  .border-top {
+    border-top: 1px solid var(--cds-border-subtle-01);
+  }
+}

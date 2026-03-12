@@ -80,6 +80,7 @@ class ConfigNS(_StrEnum):
     USERS_AND_GROUPS = 'users_and_groups'
     JOIN_AUTHS = 'join_auths'
     TLS_CREDENTIALS = 'tls_creds'
+    EXTERNAL_CEPH_CLUSTERS = 'ext_ceph_clusters'
 
 
 class LoginCategory(_StrEnum):
@@ -103,6 +104,13 @@ class LoginAccess(_StrEnum):
         if self is self.READ_WRITE_SHORT:
             return LoginAccess(self.READ_WRITE)
         return self
+
+
+class HostAccess(_StrEnum):
+    """Determines if a host should be allowed or denied access to a share."""
+
+    ALLOW = 'allow'
+    DENY = 'deny'
 
 
 class SMBClustering(_StrEnum):

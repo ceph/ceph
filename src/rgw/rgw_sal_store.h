@@ -519,6 +519,7 @@ class StoreZone : public Zone {
 class StoreLuaManager : public LuaManager {
 protected:
   std::string _luarocks_path;
+  rgw::lua::Background* lua_background;
 public:
   const std::string& luarocks_path() const override {
     return _luarocks_path;
@@ -526,6 +527,11 @@ public:
   void set_luarocks_path(const std::string& path) override {
     _luarocks_path = path;
   }
+
+  void set_lua_background(rgw::lua::Background* background) override {
+    lua_background = background;
+  }
+
   StoreLuaManager() = default;
   StoreLuaManager(const std::string& __luarocks_path) :
     _luarocks_path(__luarocks_path) {}

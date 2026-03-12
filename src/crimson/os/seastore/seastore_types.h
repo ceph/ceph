@@ -2262,6 +2262,12 @@ constexpr bool is_background_transaction(transaction_type_t type) {
           type < transaction_type_t::MAX);
 }
 
+constexpr bool is_rewrite_transaction(transaction_type_t type) {
+  return type == transaction_type_t::TRIM_DIRTY ||
+    type == transaction_type_t::CLEANER_MAIN ||
+    type == transaction_type_t::CLEANER_COLD;
+}
+
 constexpr bool is_trim_transaction(transaction_type_t type) {
   return (type == transaction_type_t::TRIM_DIRTY ||
       type == transaction_type_t::TRIM_ALLOC);
@@ -3136,6 +3142,7 @@ template <> struct fmt::formatter<crimson::os::seastore::device_id_printer_t> : 
 template <> struct fmt::formatter<crimson::os::seastore::dirty_io_stats_printer_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::extent_types_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::journal_seq_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::backend_type_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::journal_tail_delta_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::laddr_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::laddr_offset_t> : fmt::ostream_formatter {};

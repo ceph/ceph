@@ -3,7 +3,7 @@
 =================================
 
 Careful network infrastructure and configuration is critical for building a
-resilieht and high performance  :term:`Ceph Storage Cluster`. The Ceph Storage
+resilient and high performance  :term:`Ceph Storage Cluster`. The Ceph Storage
 Cluster does not perform  request routing or dispatching on behalf of
 the :term:`Ceph Client`. Instead, Ceph clients make requests directly to Ceph
 OSD Daemons. Ceph OSDs perform data replication on behalf of Ceph clients,

@@ -19,7 +19,7 @@ import { ComboBoxItem } from '~/app/shared/models/combo-box.model';
 
 const ALL_ZONES = $localize`All zones (*)`;
 const ALL_BUCKET_SELECTED_HELP_TEXT =
-  'If no value is provided, all the buckets in the zone group will be selected.';
+  'If no value is provided, all the buckets in the zonegroup will be selected.';
 
 interface PipeParams {
   source: { zones: string[]; bucket: string };

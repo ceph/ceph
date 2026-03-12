@@ -58,6 +58,7 @@ class Features(enum.Enum):
     CLUSTERED = 'clustered'
     CEPHFS_PROXY = 'cephfs-proxy'
     REMOTE_CONTROL = 'remote-control'
+    REMOTE_CONTROL_LOCAL = 'remote-control-local'
 
     @classmethod
     def valid(cls, value: str) -> bool:
@@ -136,6 +137,11 @@ class Ports(enum.Enum):
         return names[self]
 
 
+class ListenTo(str, enum.Enum):
+    TCP = 'tcp'
+    UNIX = 'unix'
+
+
 @dataclasses.dataclass(frozen=True)
 class TLSFiles:
     cert: str = ''
@@ -181,6 +187,42 @@ class TLSFiles:
 class RemoteControlConfig:
     port: int
     tls_files: TLSFiles
+    listen_to: Optional[List[ListenTo]] = None
+    unix_sock_path: str = '/run/remote-control.s'
+
+    @property
+    def listen_to_tcp(self) -> bool:
+        return bool(
+            self.port
+            and (not self.listen_to or ListenTo.TCP in self.listen_to)
+        )
+
+    @property
+    def listen_to_unix(self) -> bool:
+        return bool(
+            self.unix_sock_path
+            and (self.listen_to and ListenTo.UNIX in self.listen_to)
+        )
+
+    @classmethod
+    def configure(
+        cls,
+        features: List[str],
+        service_ports: Dict,
+        tls_files: Dict[str, str],
+    ) -> Optional['RemoteControlConfig']:
+        listen_to = []
+        if Features.REMOTE_CONTROL.value in features:
+            listen_to.append(ListenTo.TCP)
+        if Features.REMOTE_CONTROL_LOCAL.value in features:
+            listen_to.append(ListenTo.UNIX)
+        if not listen_to:
+            return None
+        return cls(
+            port=Ports.REMOTE_CONTROL.customized(service_ports),
+            tls_files=TLSFiles.match(tls_files, 'remote_control'),
+            listen_to=listen_to,
+        )
 
 
 @dataclasses.dataclass(frozen=True)
@@ -418,6 +460,16 @@ class RemoteControlContainer(SambaContainerCommon):
         assert self.cfg.remote_control, 'remote_control is not configured'
         args.append('serve')
         args.append('--grpc')
+        if self.cfg.remote_control.listen_to_tcp:
+            self._tcp_args(args)
+            if self.cfg.remote_control.listen_to_unix:
+                self._unix_extra_args(args)
+        elif self.cfg.remote_control.listen_to_unix:
+            self._unix_only_args(args)
+        return args
+
+    def _tcp_args(self, args: List[str]) -> None:
+        assert self.cfg.remote_control
         address = self.cfg.bind_to[0].address if self.cfg.bind_to else '*'
         port = self.cfg.remote_control.port
         args.append(f'--address={address}:{port}')
@@ -433,7 +485,17 @@ class RemoteControlContainer(SambaContainerCommon):
             args.append(f'--tls-key={key_path}')
             if ca_cert:
                 args.append(f'--tls-ca-cert={ca_cert}')
-        return args
+
+    def _unix_only_args(self, args: List[str]) -> None:
+        assert self.cfg.remote_control
+        sock_path = self.cfg.remote_control.unix_sock_path
+        args.append(f'--address=unix:{sock_path}')
+        args.append('--verification=rados-object')
+
+    def _unix_extra_args(self, args: List[str]) -> None:
+        assert self.cfg.remote_control
+        sock_path = self.cfg.remote_control.unix_sock_path
+        args.append(f'--extra-listener=unix:{sock_path};rados-object')
 
     def container_args(self) -> List[str]:
         return super().container_args() + [
@@ -614,6 +676,7 @@ class SMB(ContainerDaemonForm):
         cluster_lock_uri = configs.get('cluster_lock_uri', '')
         cluster_public_addrs = configs.get('cluster_public_addrs', [])
         bind_networks = configs.get('bind_networks', [])
+        tunables = configs.get('tunables', {})
 
         if not instance_id:
             raise Error('invalid instance (cluster) id')
@@ -647,13 +710,11 @@ class SMB(ContainerDaemonForm):
 
         self._organize_files(files)
 
-        if Features.REMOTE_CONTROL.value in instance_features:
-            remote_control_cfg = RemoteControlConfig(
-                port=Ports.REMOTE_CONTROL.customized(service_ports),
-                tls_files=TLSFiles.match(self._tls_files, 'remote_control'),
-            )
-        else:
-            remote_control_cfg = None
+        remote_control_cfg = RemoteControlConfig.configure(
+            instance_features,
+            service_ports,
+            self._tls_files,
+        )
 
         rank, rank_gen = self._rank_info
         self._instance_cfg = Config(
@@ -682,6 +743,7 @@ class SMB(ContainerDaemonForm):
             proxy_image=proxy_image,
             bind_to=self._network_mapper.bind_interfaces(bind_networks),
             remote_control=remote_control_cfg,
+            ctdb_log_level=tunables.get('log_level.ctdb', ''),
         )
         logger.debug('SMB Instance Config: %s', self._instance_cfg)
         logger.debug('Configured files: %s', self._files)
@@ -806,7 +868,7 @@ class SMB(ContainerDaemonForm):
             self.identity, smb_ctr.name()
         )
         img = smb_ctr.container_image() or ctx.image or self.default_image
-        return SidecarContainer(
+        sc = SidecarContainer(
             ctx,
             entrypoint='',
             image=img,
@@ -818,6 +880,8 @@ class SMB(ContainerDaemonForm):
             init=False,
             remove=True,
         )
+        deployment_utils.enhance_container(ctx, sc)
+        return sc
 
     def container(self, ctx: CephadmContext) -> CephContainer:
         ctr = daemon_to_container(ctx, self, host_network=self._cfg.clustered)
@@ -880,6 +944,9 @@ class SMB(ContainerDaemonForm):
         if self._tls_files:
             tls_dir = str(data_dir / 'tls')
             mounts[tls_dir] = f'{_ETC_SAMBA_TLS}:z'
+        for filename in self._files or []:
+            if filename.endswith(('.ceph.conf', '.ceph.keyring')):
+                mounts[str(data_dir / filename)] = f'/etc/ceph/{filename}:z'
         if self._cfg.clustered:
             ctdb_persistent = str(data_dir / 'ctdb/persistent')
             ctdb_run = str(data_dir / 'ctdb/run')  # TODO: tmpfs too!

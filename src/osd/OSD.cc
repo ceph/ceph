@@ -2781,6 +2781,7 @@ void OSD::asok_command(
       prefix == "list_unfound" ||
       prefix == "scrub" ||
       prefix == "deep-scrub" ||
+      prefix == "scrub-abort" ||
       prefix == "schedule-scrub" ||      ///< dev/tests only!
       prefix == "schedule-deep-scrub"    ///< dev/tests only!
     ) {
@@ -4545,6 +4546,12 @@ void OSD::final_init()
     asok_hook,
     "Trigger a deep scrub");
   ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "scrub-abort "
+    "name=pgid,type=CephPgid,req=false",
+    asok_hook,
+    "Abort an ongoing scrub. Cancel any operator-initiated scrub");
+  ceph_assert(r == 0);
   // debug/test commands (faking the timestamps)
   r = admin_socket->register_command(
     "schedule-scrub "
@@ -5054,7 +5061,7 @@ void OSD::clear_temp_objects()
     }
     if (!temps.empty()) {
       ObjectStore::Transaction t;
-      int removed = 0;
+      unsigned removed = 0;
       for (vector<ghobject_t>::iterator q = temps.begin(); q != temps.end(); ++q) {
 	dout(20) << "  removing " << *p << " object " << *q << dendl;
 	t.remove(*p, *q);
@@ -10353,49 +10360,39 @@ bool OSD::maybe_override_options_for_qos(const std::set<std::string> *changed)
         // Recovery options change was attempted without setting
         // the 'osd_mclock_override_recovery_settings' option.
         // Find the key to remove from the configuration db.
-        std::string key;
-        if (changed->count("osd_max_backfills")) {
-          key = "osd_max_backfills";
-        } else if (changed->count("osd_recovery_max_active")) {
-          key = "osd_recovery_max_active";
-        } else if (changed->count("osd_recovery_max_active_hdd")) {
-          key = "osd_recovery_max_active_hdd";
-        } else if (changed->count("osd_recovery_max_active_ssd")) {
-          key = "osd_recovery_max_active_ssd";
-        } else {
-          // No key that we are interested in. Return.
-          return true;
-        }
-
-        // Remove the current entry from the configuration if
-        // different from its default value.
-        auto val = recovery_qos_defaults.find(key);
-        if (val != recovery_qos_defaults.end() &&
+        static const std::vector<std::string> osds = {
+          "osd",
+          "osd." + std::to_string(whoami)
+        };
+        auto check_key = [&](const std::string& key) {
+          // Remove the current entry from the configuration if
+          // different from its default value.
+          auto val = recovery_qos_defaults.find(key);
+          if (val != recovery_qos_defaults.end() &&
             cct->_conf.get_val<uint64_t>(key) != val->second) {
-          static const std::vector<std::string> osds = {
-            "osd",
-            "osd." + std::to_string(whoami)
-          };
+            for (auto osd : osds) {
+              std::string cmd =
+                "{"
+                  "\"prefix\": \"config rm\", "
+                  "\"who\": \"" + osd + "\", "
+                  "\"name\": \"" + key + "\""
+                "}";
 
-          for (auto osd : osds) {
-            std::string cmd =
-              "{"
-                "\"prefix\": \"config rm\", "
-                "\"who\": \"" + osd + "\", "
-                "\"name\": \"" + key + "\""
-              "}";
+              dout(1) << __func__ << " Removing Key: " << key
+                      << " for " << osd << " from Mon db" << dendl;
+              monc->start_mon_command({std::move(cmd)}, {}, nullptr, nullptr, nullptr);
+            }
 
-            dout(1) << __func__ << " Removing Key: " << key
-                    << " for " << osd << " from Mon db" << dendl;
-            monc->start_mon_command({std::move(cmd)}, {}, nullptr, nullptr, nullptr);
+            // Raise a cluster warning indicating that the changes did not
+            // take effect and indicate the reason why.
+            clog->warn() << "Change to " << key << " on osd."
+                         << std::to_string(whoami) << " did not take effect."
+                         << " Enable osd_mclock_override_recovery_settings before"
+                         << " setting this option.";
           }
-
-          // Raise a cluster warning indicating that the changes did not
-          // take effect and indicate the reason why.
-          clog->warn() << "Change to " << key << " on osd."
-                       << std::to_string(whoami) << " did not take effect."
-                       << " Enable osd_mclock_override_recovery_settings before"
-                       << " setting this option.";
+        };
+        for(auto& k : *changed) {
+          check_key(k);
         }
       }
     } else { // if (changed != nullptr) (osd boot-up)

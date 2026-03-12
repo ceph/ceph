@@ -622,7 +622,7 @@ EOF
     qemu-img compare ${TEMPDIR}/large.raw rbd:rbd/${dest_image}
     rbd migration execute ${dest_image} &
     migration_execute_pid=$!
-    sleep $((5 + RANDOM % 35))
+    sleep $((5 + RANDOM % 5))
     kill_nbd_server
     expect_false wait $migration_execute_pid
     expect_false rbd status ${dest_image}
@@ -638,7 +638,7 @@ EOF
     qemu-img compare ${TEMPDIR}/large.raw rbd:rbd/${dest_image}
     rbd migration execute ${dest_image} &
     migration_execute_pid=$!
-    sleep $((5 + RANDOM % 35))
+    sleep $((5 + RANDOM % 5))
     kill_nbd_server
     expect_false wait $migration_execute_pid
     expect_false rbd status ${dest_image}

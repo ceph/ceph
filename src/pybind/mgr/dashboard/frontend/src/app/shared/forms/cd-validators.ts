@@ -273,6 +273,26 @@ export class CdValidators {
   }
 
   /**
+   * Validator for DH-HMAC-CHAP keys that must be Base64 encoded.
+   * Accepts plain Base64 or DHHC-1:XX:base64: format.
+   * Skips validation when value is empty (use with required validator if needed).
+   * @returns {ValidatorFn} Returns error map with `invalidBase64` if validation fails.
+   */
+  static base64(): ValidatorFn {
+    const plainBase64Regex = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+    const dhchapFormatRegex = /^DHHC-1:[0-9a-fA-F]{2}:[A-Za-z0-9+/]+:$/;
+    return (control: AbstractControl): { [key: string]: boolean } | null => {
+      if (isEmptyInputValue(control.value)) {
+        return null;
+      }
+      const value = control.value;
+      return plainBase64Regex.test(value) || dhchapFormatRegex.test(value)
+        ? null
+        : { invalidBase64: true };
+    };
+  }
+
+  /**
    * Validate form control if condition is true with validators.
    *
    * @param {AbstractControl} formControl
@@ -458,6 +478,22 @@ export class CdValidators {
       return {
         binaryMax: () => $localize`Size has to be at most ${value} or less`
       };
+    };
+  }
+
+  /**
+   * Validator function to ensure the entered value is a multiple of a typical block size (512 or 4096).
+   * It checks the numeric value directly against the modulo 512 calculation.
+   */
+  static blockSizeMultiple(): ValidatorFn {
+    return (control: AbstractControl): { [key: string]: boolean } | null => {
+      const value = control.value;
+      if (value !== null && value !== undefined && value !== '') {
+        if (Number(value) % 512 !== 0) {
+          return { blockSizeMultiple: true };
+        }
+      }
+      return null;
     };
   }
 
@@ -669,7 +705,8 @@ export class CdValidators {
   }
 
   static oauthAddressTest(): ValidatorFn {
-    const OAUTH2_HTTPS_ADDRESS_PATTERN = /^((\d{1,3}\.){3}\d{1,3}|([a-zA-Z0-9-_]+\.)*[a-zA-Z0-9-_]+)/;
+    // Pattern matches: IPv4 addresses or hostnames (with or without dots, like 'localhost')
+    const OAUTH2_HTTPS_ADDRESS_PATTERN = /^((\d{1,3}\.){3}\d{1,3}|([a-zA-Z0-9-_]+\.)*[a-zA-Z0-9-_]+)$/;
     return (control: AbstractControl): Record<string, boolean> | null => {
       if (!control.value) {
         return null;
@@ -681,7 +718,7 @@ export class CdValidators {
       const [address, port] = control.value.split(':');
       const addressTest = OAUTH2_HTTPS_ADDRESS_PATTERN.test(address);
       const portTest = Number(port) >= 0 && Number(port) <= 65535;
-      return { invalidAddress: !(addressTest && portTest) };
+      return addressTest && portTest ? null : { invalidAddress: true };
     };
   }
 

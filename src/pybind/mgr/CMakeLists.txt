@@ -27,6 +27,7 @@ set(mgr_modules
   devicehealth
   diskprediction_local
   # hello is an example for developers, not for user
+  nvmeof
   influx
   insights
   iostat
@@ -58,5 +59,5 @@ set(mgr_modules
 install(DIRECTORY ${mgr_modules}
   DESTINATION ${CEPH_INSTALL_DATADIR}/mgr
   ${mgr_module_install_excludes})
-install(FILES mgr_module.py mgr_util.py object_format.py
+install(FILES mgr_module.py mgr_util.py object_format.py cherrypy_mgr.py
   DESTINATION ${CEPH_INSTALL_DATADIR}/mgr)

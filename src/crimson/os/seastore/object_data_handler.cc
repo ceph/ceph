@@ -254,80 +254,84 @@ ObjectDataHandler::write_ret do_zero(
     assert(data.tailbl->length() < ctx.tm.get_block_size());
     data.tailbl->prepend_zero(
       ctx.tm.get_block_size() - data.tailbl->length());
-    fut = ctx.tm.alloc_data_extents<ObjectDataBlock>(
+    auto extents = co_await ctx.tm.alloc_data_extents<ObjectDataBlock>(
       ctx.t,
       (overwrite_range.aligned_end - ctx.tm.get_block_size()).checked_to_laddr(),
       ctx.tm.get_block_size(),
       std::move(zero_pos)
-    ).si_then([ctx, &data](auto extents) {
-      assert(extents.size() == 1);
-      auto &extent = extents.back();
-      auto iter = data.tailbl->cbegin();
-      iter.copy(extent->get_length(), extent->get_bptr().c_str());
-      return ctx.tm.get_pin(ctx.t, *extent);
-    }).si_then([](auto zero_pos) {
-      return std::make_optional<LBAMapping>(std::move(zero_pos));
-    }).handle_error_interruptible(
+    ).handle_error_interruptible(
       crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
       TransactionManager::get_pin_iertr::pass_further{}
+    ).handle_error_interruptible(
+      ObjectDataHandler::write_iertr::pass_further{},
+      crimson::ct_error::assert_all{"unexpected error"}
+    );
+    assert(extents.size() == 1);
+    auto &extent = extents.back();
+    auto iter = data.tailbl->cbegin();
+    iter.copy(extent->get_length(), extent->get_bptr().c_str());
+    zero_pos = co_await ctx.tm.get_pin(ctx.t, *extent
+    ).handle_error_interruptible(
+      crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+      TransactionManager::get_pin_iertr::pass_further{}
+    ).handle_error_interruptible(
+      ObjectDataHandler::write_iertr::pass_further{},
+      crimson::ct_error::assert_all{"unexpected error"}
     );
   }
-  fut = fut.si_then([ctx, &overwrite_range, zero_pos=std::move(zero_pos),
-		    &data](auto pin) mutable {
-    if (pin) {
-      zero_pos = std::move(*pin);
-    }
-    auto laddr =
-      (overwrite_range.aligned_begin +
-       (data.headbl ? ctx.tm.get_block_size() : 0)
-      ).checked_to_laddr();
-    auto end =
-      (overwrite_range.aligned_end -
-       (data.tailbl ? ctx.tm.get_block_size() : 0)
-      ).checked_to_laddr();
-    auto len = end.get_byte_distance<extent_len_t>(laddr);
-    return ctx.tm.reserve_region(ctx.t, std::move(zero_pos), laddr, len);
-  }).si_then([](auto zero_pos) {
-    return std::make_optional<LBAMapping>(std::move(zero_pos));
-  }).handle_error_interruptible(
-    crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
-    TransactionManager::get_pin_iertr::pass_further{}
-  );
+
+  auto laddr =
+    (overwrite_range.aligned_begin +
+     (data.headbl ? ctx.tm.get_block_size() : 0)
+    ).checked_to_laddr();
+  auto end =
+    (overwrite_range.aligned_end -
+     (data.tailbl ? ctx.tm.get_block_size() : 0)
+    ).checked_to_laddr();
+  auto len = end.get_byte_distance<extent_len_t>(laddr);
+  if (len != 0) {
+    zero_pos = co_await ctx.tm.reserve_region(ctx.t, std::move(zero_pos), laddr, len
+    ).handle_error_interruptible(
+      crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+      TransactionManager::get_pin_iertr::pass_further{}
+    ).handle_error_interruptible(
+      ObjectDataHandler::write_iertr::pass_further{},
+      crimson::ct_error::assert_all{"unexpected error"}
+    );
+  }
+
   if (data.headbl) {
     assert(data.headbl->length() < ctx.tm.get_block_size());
     data.headbl->append_zero(
       ctx.tm.get_block_size() - data.headbl->length());
-    fut = fut.si_then([ctx, &overwrite_range](auto zero_pos) {
-      return ctx.tm.alloc_data_extents<ObjectDataBlock>(
+    auto extents = co_await ctx.tm.alloc_data_extents<ObjectDataBlock>(
 	ctx.t,
 	overwrite_range.aligned_begin,
 	ctx.tm.get_block_size(),
-	std::move(*zero_pos));
-    }).si_then([&data](auto extents) {
-      assert(extents.size() == 1);
-      auto &extent = extents.back();
-      auto iter = data.headbl->cbegin();
-      iter.copy(extent->get_length(), extent->get_bptr().c_str());
-      return TransactionManager::get_pin_iertr::make_ready_future<
-	std::optional<LBAMapping>>();
-    }).handle_error_interruptible(
+	std::move(zero_pos)
+    ).handle_error_interruptible(
       crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
       TransactionManager::get_pin_iertr::pass_further{}
+    ).handle_error_interruptible(
+      ObjectDataHandler::write_iertr::pass_further{},
+      crimson::ct_error::assert_all{"unexpected error"}
     );
+    assert(extents.size() == 1);
+    auto &extent = extents.back();
+    auto iter = data.headbl->cbegin();
+    iter.copy(extent->get_length(), extent->get_bptr().c_str());
   }
-  return fut.discard_result().handle_error_interruptible(
-    ObjectDataHandler::write_iertr::pass_further{},
-    crimson::ct_error::assert_all{"unexpected error"}
-  );
+  co_return;
 }
 
 ObjectDataHandler::clone_ret do_clonerange(
   context_t ctx,
   LBAMapping write_pos,
-  const overwrite_range_t &overwrite_range,
+  overwrite_range_t &overwrite_range,
   data_t &data)
 {
   LOG_PREFIX(ObjectDataHandler::do_clonerange);
+  co_await overwrite_range.clonerange_info->refresh();
   DEBUGT("{} {} write_pos={}", ctx.t, overwrite_range, data, write_pos);
   ceph_assert(overwrite_range.clonerange_info.has_value());
   assert(write_pos.is_end() ||
@@ -362,6 +366,7 @@ ObjectDataHandler::clone_ret do_clonerange(
     );
   }
   // clone the src mappings
+  co_await overwrite_range.clonerange_info->refresh();
   auto src = overwrite_range.clonerange_info->first_src_mapping;
   auto offset = overwrite_range.clonerange_info->offset;
   auto len = overwrite_range.clonerange_info->len;
@@ -970,14 +975,19 @@ ObjectDataHandler::punch_multi_mapping_hole(
   LBAMapping left_mapping,
   op_type_t op_type)
 {
-  return punch_left_mapping(
-    ctx, overwrite_range, data, std::move(left_mapping), op_type
-  ).si_then([this, ctx, &overwrite_range](auto mapping) {
-    return punch_inner_mappings(ctx, overwrite_range, std::move(mapping));
-  }).si_then([this, ctx, &overwrite_range, &data, op_type](auto mapping) {
-    return punch_right_mapping(
+  auto mapping = co_await punch_left_mapping(
+    ctx, overwrite_range, data, std::move(left_mapping), op_type);
+  if (overwrite_range.clonerange_info.has_value()) {
+    co_await overwrite_range.clonerange_info->refresh();
+  }
+  mapping = co_await punch_inner_mappings(
+    ctx, overwrite_range, std::move(mapping));
+  if (overwrite_range.clonerange_info.has_value()) {
+    co_await overwrite_range.clonerange_info->refresh();
+  }
+  mapping = co_await punch_right_mapping(
       ctx, overwrite_range, data, std::move(mapping), op_type);
-  });
+  co_return mapping;
 }
 
 ObjectDataHandler::write_ret
@@ -1496,7 +1506,7 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
             extent_len_t read_len =
               l_current_end.get_byte_distance<extent_len_t>(l_current);
 
-            if (pin.get_val().is_zero()) {
+            if (pin.is_zero_reserved()) {
               DEBUGT("got {}~0x{:x} from zero-pin {}~0x{:x}",
                 ctx.t,
                 l_current,
@@ -1598,7 +1608,7 @@ ObjectDataHandler::fiemap_ret ObjectDataHandler::fiemap(
 	ceph_assert(pins.size() >= 1);
         ceph_assert(pins.front().get_key() <= l_start);
 	for (auto &&i: pins) {
-	  if (!(i.get_val().is_zero())) {
+	  if (!i.is_zero_reserved()) {
 	    laddr_offset_t ret_left = std::max(laddr_offset_t(i.get_key(), 0), l_start);
 	    laddr_offset_t ret_right = std::min(
 	      i.get_key() + i.get_length(),
@@ -1701,7 +1711,7 @@ ObjectDataHandler::do_clone(
   LBAMapping first_mapping,
   bool updateref)
 {
-  LOG_PREFIX("ObjectDataHandler::do_clone");
+  LOG_PREFIX(ObjectDataHandler::do_clone);
   assert(d_object_data.is_null());
   auto old_base = object_data.get_reserved_data_base();
   auto old_len = object_data.get_reserved_data_len();

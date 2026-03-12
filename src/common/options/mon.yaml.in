@@ -93,7 +93,7 @@ options:
   level: advanced
   desc: Period in seconds from last beacon to monitor marking a  NVMeoF gateway as
     failed
-  default: 10
+  default: 7
   services:
   - mon
 - name: mon_nvmeofgw_skip_failovers_interval
@@ -632,6 +632,14 @@ options:
   level: advanced
   desc: Issue a health warning if we are in degraded stretch mode
   default: true
+  services:
+  - mon
+- name: mon_warn_on_colocated_monitors
+  type: bool
+  level: advanced
+  desc: Issue MON_COLOCATED health warning if two or
+    more Monitors have the same IP address
+  default: false
   services:
   - mon
 - name: mon_stretch_cluster_recovery_ratio
@@ -1415,7 +1423,7 @@ options:
   type: secs
   level: advanced
   desc: Period in seconds of nvmeof gateway beacon messages to monitor
-  default: 2
+  default: 1
   services:
   - mon
 - name: enable_availability_tracking

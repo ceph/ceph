@@ -8,7 +8,9 @@ import threading
 from typing import Any, Dict, List, Optional, Set, Tuple, TYPE_CHECKING, Union
 import uuid
 from prettytable import PrettyTable
-from mgr_module import HealthChecksT, CLIReadCommand, CLIWriteCommand, CRUSHMap, MgrModule, Option, OSDMap
+from mgr_module import HealthChecksT, CRUSHMap, MgrModule, Option, OSDMap
+
+from .cli import PGAutoscalerCLICommand
 
 """
 Some terminology is made up for the purposes of this module:
@@ -113,6 +115,7 @@ class CrushSubtreeResourceStatus:
 
 
 class PgAutoscaler(MgrModule):
+    CLICommand = PGAutoscalerCLICommand
     """
     PG autoscaler.
     """
@@ -163,7 +166,7 @@ class PgAutoscaler(MgrModule):
             self.log.debug(' mgr option %s = %s',
                            opt['name'], getattr(self, opt['name']))
 
-    @CLIReadCommand('osd pool autoscale-status')
+    @PGAutoscalerCLICommand.Read('osd pool autoscale-status')
     def _command_autoscale_status(self, format: str = 'plain') -> Tuple[int, str, str]:
         """
         report on pool pg_num sizing recommendation and intent
@@ -236,7 +239,7 @@ class PgAutoscaler(MgrModule):
                 ])
             return 0, table.get_string(), ''
 
-    @CLIWriteCommand("osd pool set threshold")
+    @PGAutoscalerCLICommand.Write("osd pool set threshold")
     def set_scaling_threshold(self, num: float) -> Tuple[int, str, str]:
         """
         set the autoscaler threshold 
@@ -248,7 +251,7 @@ class PgAutoscaler(MgrModule):
         self.set_module_option("threshold", num)
         return 0, "threshold updated", ""
 
-    @CLIReadCommand("osd pool get threshold")
+    @PGAutoscalerCLICommand.Read("osd pool get threshold")
     def get_scaling_threshold(self) -> Tuple[int, str, str]:
         """
         return the autoscaler threshold value
@@ -277,7 +280,7 @@ class PgAutoscaler(MgrModule):
         else:
             return False
 
-    @CLIWriteCommand("osd pool get noautoscale")
+    @PGAutoscalerCLICommand.Write("osd pool get noautoscale")
     def get_noautoscale(self) -> Tuple[int, str, str]:
         """
         Get the noautoscale flag to see if all pools
@@ -289,7 +292,7 @@ class PgAutoscaler(MgrModule):
         else:
             return 0, "", "noautoscale is off"
 
-    @CLIWriteCommand("osd pool unset noautoscale")
+    @PGAutoscalerCLICommand.Write("osd pool unset noautoscale")
     def unset_noautoscale(self) -> Tuple[int, str, str]:
         """
         Unset the noautoscale flag so all pools will
@@ -311,7 +314,7 @@ class PgAutoscaler(MgrModule):
             })
             return 0, "", "noautoscale is unset, all pools now back to its previous mode"
 
-    @CLIWriteCommand("osd pool set noautoscale")
+    @PGAutoscalerCLICommand.Write("osd pool set noautoscale")
     def set_noautoscale(self) -> Tuple[int, str, str]:
         """
         set the noautoscale for all pools (including

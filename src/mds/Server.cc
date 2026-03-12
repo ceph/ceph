@@ -154,7 +154,7 @@ public:
       }
     }
     batch_reqs.clear();
-    server->reply_client_request(mdr, make_message<MClientReply>(*mdr->client_request, r));
+    server->reply_client_request(mdr, ceph::make_message<MClientReply>(*mdr->client_request, r));
   }
   void print(std::ostream& o) const override {
     o << "[batch front=" << *mdr << "]";
@@ -2167,7 +2167,7 @@ void Server::respond_to_request(const MDRequestRef& mdr, int r)
       dout(20) << __func__ << ": batch head " << *mdr << dendl;
       mdr->release_batch_op()->respond(r);
     } else {
-     reply_client_request(mdr, make_message<MClientReply>(*mdr->client_request, r));
+      reply_client_request(mdr, ceph::make_message<MClientReply>(*mdr->client_request, r));
     }
   } else if (mdr->internal_op > -1) {
     dout(10) << __func__ << ": completing with result " << cpp_strerror(r) << " on internal " << *mdr << dendl;
@@ -2315,7 +2315,7 @@ void Server::early_reply(const MDRequestRef& mdr, CInode *tracei, CDentry *trace
   }
 
 
-  auto reply = make_message<MClientReply>(*req, 0);
+  auto reply = ceph::make_message<MClientReply>(*req, 0);
   reply->set_unsafe();
 
   // mark xlocks "done", indicating that we are exposing uncommitted changes.
@@ -2657,7 +2657,7 @@ void Server::handle_client_request(const cref_t<MClientRequest> &req)
 	   req->get_op() != CEPH_MDS_OP_OPEN &&
 	   req->get_op() != CEPH_MDS_OP_CREATE)) {
 	dout(5) << "already completed " << req->get_reqid() << dendl;
-        auto reply = make_message<MClientReply>(*req, 0);
+        auto reply = ceph::make_message<MClientReply>(*req, 0);
 	if (created != inodeno_t()) {
 	  bufferlist extra;
 	  set_reply_extra_bl(req, created, extra);

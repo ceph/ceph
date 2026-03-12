@@ -1,13 +1,16 @@
 import base64
 import contextlib
 import pathlib
+import time
+
+import cephutil
 
 import smbclient
 from smbprotocol.header import NtStatus
 
 
-class SMBTestServer:
-    """Server configuration wrapper."""
+class SMBTestHost:
+    """Host configuration wrapper."""
 
     def __init__(self, data):
         self._server_data = data
@@ -20,9 +23,17 @@ class SMBTestServer:
     def name(self):
         return self._server_data.get('name', '')
 
+
+class SMBTestServer(SMBTestHost):
+    """Server configuration wrapper."""
+
     @property
     def port(self):
         return 445
+
+    @property
+    def ssh_user(self):
+        return self._server_data.get('user', '')
 
 
 class SMBTestConf:
@@ -53,6 +64,30 @@ class SMBTestConf:
     def server(self):
         nodes = self._data.get('smb_nodes', [])
         return SMBTestServer(nodes[0])
+
+    @property
+    def admin_node(self):
+        return SMBTestServer(self._data.get('admin_node', {}))
+
+    @property
+    def ssh_user(self):
+        uname = self.admin_node.ssh_user
+        assert uname, 'no ssh_user found'
+        return uname
+
+    @property
+    def ssh_admin_host(self):
+        return self.admin_node.ip_address
+
+    def clients(self):
+        clients = self._data.get('client_nodes') or []
+        return [SMBTestHost(node_info) for node_info in clients]
+
+    @property
+    def default_client(self):
+        # ideally we check that this is *our* ip or name, but we'll just wing
+        # it for now until we really need to check
+        return self.clients()[0]
 
 
 @contextlib.contextmanager
@@ -122,6 +157,57 @@ class PathWrapper:
         with self.open(mode='w') as fh:
             fh.write(txt)
 
+    def write_bytes(self, data):
+        """Open the file in binary mode, write bytes to it, and close the file."""
+        with self.open(mode='wb') as fh:
+            fh.write(data)
+
     def unlink(self):
         """Unlink (remove) a file."""
         smbclient.remove(str(self.share_path))
+
+
+def get_shares(smb_cfg):
+    """Get all SMB shares."""
+    jres = cephutil.cephadm_shell_cmd(
+        smb_cfg,
+        ["ceph", "smb", "show", "ceph.smb.share"],
+        load_json=True,
+    )
+    assert jres.obj
+    resources = jres.obj['resources']
+    assert len(resources) > 0
+    assert all(r['resource_type'] == 'ceph.smb.share' for r in resources)
+    return resources
+
+
+def get_share_by_id(smb_cfg, cluster_id, share_id):
+    """Get a specific share by cluster_id and share_id."""
+    shares = get_shares(smb_cfg)
+    for share in shares:
+        if share['cluster_id'] == cluster_id and share['share_id'] == share_id:
+            return share
+    return None
+
+
+def apply_share_config(smb_cfg, share):
+    """Apply share configuration via the apply command."""
+    jres = cephutil.cephadm_shell_cmd(
+        smb_cfg,
+        ['ceph', 'smb', 'apply', '-i-'],
+        input_json={'resources': [share]},
+        load_json=True,
+    )
+    assert jres.returncode == 0
+    assert jres.obj and jres.obj.get('success')
+    assert 'results' in jres.obj
+    _results = jres.obj['results']
+    assert len(_results) == 1, "more than one result found"
+    _result = _results[0]
+    assert 'resource' in _result
+    resources_ret = _result['resource']
+    assert resources_ret['resource_type'] == 'ceph.smb.share'
+    # sleep to ensure the settings got applied in smbd
+    # TODO: make this more dynamic somehow
+    time.sleep(60)
+    return resources_ret

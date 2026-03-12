@@ -10,21 +10,27 @@
             isNavigation="true"
             [cacheActive]="false">
   <cds-tab
-    heading="Gateway groups"
+    heading="Gateways"
     [tabContent]="gateways_content"
+
     i18n-heading
+    [active]="activeTab === Tabs.gateways"
     (selected)="onSelected(Tabs.gateways)">
   </cds-tab>
   <cds-tab
     heading="Subsystem"
     [tabContent]="subsystem_content"
+
     i18n-heading
+    [active]="activeTab === Tabs.subsystem"
     (selected)="onSelected(Tabs.subsystem)">
   </cds-tab>
   <cds-tab
     heading="Namespace"
     [tabContent]="namespace_content"
+
     i18n-heading
+    [active]="activeTab === Tabs.namespace"
     (selected)="onSelected(Tabs.namespace)">
   </cds-tab>
 </cds-tabs>
@@ -41,4 +47,5 @@
   <cd-nvmeof-namespaces-list></cd-nvmeof-namespaces-list>
 </ng-template>
 </section>
+<router-outlet name="modal"></router-outlet>
 

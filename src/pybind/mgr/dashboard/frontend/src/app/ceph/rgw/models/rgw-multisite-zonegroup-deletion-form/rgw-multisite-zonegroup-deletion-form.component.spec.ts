@@ -22,7 +22,7 @@ describe('RgwMultisiteZonegroupDeletionFormComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(RgwMultisiteZonegroupDeletionFormComponent);
     component = fixture.componentInstance;
-    component.zonegroup = new RgwZonegroup();
+    component.zonegroup = Object.assign(new RgwZonegroup(), { parent: '' });
     fixture.detectChanges();
   });
 

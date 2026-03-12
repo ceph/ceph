@@ -41,6 +41,9 @@ class TestModuleSelftest(MgrTestCase):
         self._selftest_plugin("prometheus")
 
     def test_influx(self):
+        #before we are enabling influx, set config options to avoid errors
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            "config", "set", "mgr", "mgr/influx/hostname", "testhost")
         self._selftest_plugin("influx")
 
     def test_diskprediction_local(self):
@@ -201,6 +204,10 @@ class TestModuleSelftest(MgrTestCase):
         Use the selftest module to exercise inter-module communication
         """
         self._load_module("selftest")
+        #before we are enabling influx, set config options to avoid errors
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            "config", "set", "mgr", "mgr/influx/hostname", "testhost")
+
         # The "self-test remote" operation just happens to call into
         # influx.
         self._load_module("influx")

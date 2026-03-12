@@ -111,18 +111,13 @@ static void get_new_date_str(string& date_str)
   date_str = rgw_to_asctime(ceph_clock_now());
 }
 
-static void get_gmt_date_str(string& date_str)
+static std::string get_gmt_date_str()
 {
   auto now_time = ceph::real_clock::now();
   time_t rawtime = ceph::real_clock::to_time_t(now_time);
 
-  char buffer[80];
-
-  struct tm timeInfo;
-  gmtime_r(&rawtime, &timeInfo);
-  strftime(buffer, sizeof(buffer), "%a, %d %b %Y %H:%M:%S %z", &timeInfo);  
-  
-  date_str = buffer;
+  // Fri, 21 Dec 2012 00:00:00 GMT
+  return fmt::format("{:%a, %d %b %Y %T %Z}", fmt::gmtime(rawtime));
 }
 
 int RGWHTTPSimpleRequest::send_data(void *ptr, size_t len, bool* pause)
@@ -594,9 +589,7 @@ void RGWRESTGenerateHTTPHeaders::init(const string& _method, const string& host,
 
   url = _url + resource + params_str;
 
-  string date_str;
-  get_gmt_date_str(date_str);
-
+  const std::string date_str = get_gmt_date_str();
   new_env->set("HTTP_DATE", date_str.c_str());
   new_env->set("HTTP_HOST", host);
 

@@ -69,6 +69,7 @@
 #include "rgw_bucket_sync.h"
 #include "rgw_bucket_logging.h"
 #include "rgw_restore.h"
+#include "rgw_restore_waiter.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_quota.h"
@@ -85,6 +86,10 @@
 #ifdef WITH_ARROW_FLIGHT
 #include "rgw_flight.h"
 #include "rgw_flight_frontend.h"
+#endif
+
+#ifdef WITH_RADOSGW_D4N
+#include "driver/d4n/rgw_sal_d4n.h"
 #endif
 
 #ifdef WITH_LTTNG
@@ -990,12 +995,111 @@ void handle_replication_status_header(
  *  `1`  :  restore is already in progress
  *  `2`  :  already restored
  */
+static int wait_for_restore_completion(req_state* s, const DoutPrefixProvider *dpp,
+                                        int64_t timeout_ms,
+                                        std::shared_ptr<rgw::restore::RestoreWaiter> waiter = nullptr,
+                                        std::shared_ptr<rgw::restore::RestoreWaiterRegistry> registry = nullptr,
+                                        optional_yield y = null_yield)
+{
+  if (timeout_ms <= 0 || (!waiter && !registry)) {
+    ldpp_dout(dpp, 5) << "restore is still in progress, please check restore status and retry" << dendl;
+    s->err.message = "restore is still in progress";
+    return -ERR_REQUEST_TIMEOUT;
+  }
+
+  // If waiter not provided, register one now (for RestoreAlreadyInProgress case)
+  std::unique_ptr<rgw::restore::WaiterGuard> guard;
+  if (!waiter) {
+    waiter = registry->register_waiter(
+      s->bucket->get_key(),
+      s->object->get_key()
+    );
+    if (!waiter) {
+      ldpp_dout(dpp, 5) << "restore waiter unavailable, returning timeout" << dendl;
+      s->err.message = "restore is still in progress";
+      return -ERR_REQUEST_TIMEOUT;
+    }
+    guard = std::make_unique<rgw::restore::WaiterGuard>(
+      registry,
+      waiter
+    );
+  }
+
+  const auto start_time = ceph::real_clock::now();
+  constexpr int64_t poll_interval_ms = 200;  // Poll RADOS every 200ms for cross-instance restores
+  int64_t remaining_ms = timeout_ms;
+
+  auto elapsed_ms = [start_time]() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+      ceph::real_clock::now() - start_time).count();
+  };
+
+  while (remaining_ms > 0) {
+    // Try waiting on condition variable for notification
+    const int64_t wait_time_ms = (poll_interval_ms < remaining_ms) ? poll_interval_ms : remaining_ms;
+
+    const bool notified = waiter->wait_for(std::chrono::milliseconds(wait_time_ms), y);
+
+    if (notified) {
+      // Got notification from restore processor
+      if (waiter->failed.load(std::memory_order_acquire)) {
+        const int result = waiter->result.load(std::memory_order_acquire);
+        ldpp_dout(dpp, 0) << "Restore failed after " << elapsed_ms() << "ms (notified)" << dendl;
+        s->err.message = "restore operation failed";
+        return result < 0 ? result : -EIO;
+      }
+      ldpp_dout(dpp, 10) << "Restore completed successfully in " << elapsed_ms() << "ms (notified)" << dendl;
+      return static_cast<int>(rgw::sal::RGWRestoreStatus::CloudRestored);
+    }
+
+    // No notification - poll RADOS to check status (for cross-instance restores)
+    // Invalidate cache to force fresh read from RADOS
+    s->object->invalidate();
+    int ret = s->object->get_obj_attrs(y, dpp);
+    if (ret < 0) {
+      ldpp_dout(dpp, 5) << "Failed to read object attrs during restore wait: " << ret << dendl;
+      // Continue waiting - transient error
+      remaining_ms = timeout_ms - elapsed_ms();
+      continue;
+    }
+
+    const rgw::sal::Attrs& attrs = s->object->get_attrs();
+    auto attr_iter = attrs.find(RGW_ATTR_RESTORE_STATUS);
+    if (attr_iter != attrs.end()) {
+      rgw::sal::RGWRestoreStatus restore_status;
+      auto iter = attr_iter->second.cbegin();
+      decode(restore_status, iter);
+
+      if (restore_status == rgw::sal::RGWRestoreStatus::CloudRestored) {
+        ldpp_dout(dpp, 10) << "Restore completed successfully in " << elapsed_ms() << "ms (polled)" << dendl;
+        return static_cast<int>(rgw::sal::RGWRestoreStatus::CloudRestored);
+      }
+      if (restore_status == rgw::sal::RGWRestoreStatus::RestoreFailed) {
+        ldpp_dout(dpp, 0) << "Restore failed after " << elapsed_ms() << "ms (polled)" << dendl;
+        s->err.message = "restore operation failed";
+        return -EIO;
+      }
+      // else RestoreAlreadyInProgress - continue waiting
+    }
+
+    // Update remaining time based on actual elapsed time
+    remaining_ms = timeout_ms - elapsed_ms();
+  }
+
+  // Timeout reached
+  ldpp_dout(dpp, 5) << "Restore timeout after " << elapsed_ms() << "ms, still in progress" << dendl;
+  s->err.message = "restore is still in progress";
+  return -ERR_REQUEST_TIMEOUT;
+}
+
 int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
                          rgw::sal::Attrs& attrs, bool sync_cloudtiered, std::optional<uint64_t> days,
                          bool read_through, optional_yield y)
 {
   int op_ret = 0;
   ldpp_dout(dpp, 20) << "reached handle cloud tier " << dendl;
+  rgw::restore::Restore* restore_handle = driver ? driver->get_rgwrestore() : nullptr;
+  auto waiter_registry = restore_handle ? restore_handle->get_waiter_registry() : nullptr;
   auto attr_iter = attrs.find(RGW_ATTR_MANIFEST);
   if (attr_iter == attrs.end()) {
     if (!read_through) {
@@ -1038,11 +1142,11 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
     }
     if (restore_status == rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress) {
       if (read_through) {
-        op_ret = -ERR_REQUEST_TIMEOUT;
-        ldpp_dout(dpp, 5) << "restore is still in progress, please check restore status and retry" << dendl;
-        s->err.message = "restore is still in progress";
-        return op_ret;
-      } else { 
+        // For glacier tier, fail immediately as restores can take hours/days
+        int64_t timeout_ms = (tier_config.tier_placement.tier_type == "cloud-s3-glacier")
+          ? 0 : s->cct->_conf.get_val<int64_t>("rgw_read_through_timeout_ms");
+        return wait_for_restore_completion(s, dpp, timeout_ms, nullptr, waiter_registry, y);
+      } else {
        	// for restore-op, corresponds to RESTORE_ALREADY_IN_PROGRESS
         return static_cast<int>(rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress);
       } 
@@ -1094,6 +1198,26 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
         }
       }
 
+      // For read-through, register waiter BEFORE initiating restore
+      std::shared_ptr<rgw::restore::RestoreWaiter> waiter;
+      std::unique_ptr<rgw::restore::WaiterGuard> guard;
+
+      if (read_through && waiter_registry) {
+        // For glacier tier, fail immediately as restores can take hours/days
+        int64_t timeout_ms = (tier->get_tier_type() == "cloud-s3-glacier")
+          ? 0 : s->cct->_conf.get_val<int64_t>("rgw_read_through_timeout_ms");
+        if (timeout_ms > 0) {
+          waiter = waiter_registry->register_waiter(
+            s->bucket->get_key(),
+            s->object->get_key()
+          );
+          guard = std::make_unique<rgw::restore::WaiterGuard>(
+            waiter_registry,
+            waiter
+          );
+        }
+      }
+
       op_ret = driver->get_rgwrestore()->restore_obj_from_cloud(s->bucket.get(),
 		      s->object.get(), tier.get(), days, dpp, y);
 
@@ -1104,13 +1228,12 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
       }
 
       ldpp_dout(dpp, 20) << "Restore of object " << s->object->get_key() << " initiated" << dendl;
-      /*  Even if restore is complete the first read through request will return
-       *  but actually downloaded object asyncronously.
-       */
-      if (read_through) { //read-through
-        op_ret = -ERR_REQUEST_TIMEOUT;
-        ldpp_dout(dpp, 5) << "restore is still in progress, please check restore status and retry" << dendl;
-        s->err.message = "restore is still in progress";
+
+      if (read_through) {
+        // For glacier tier, fail immediately as restores can take hours/days
+        int64_t timeout_ms = (tier->get_tier_type() == "cloud-s3-glacier")
+          ? 0 : s->cct->_conf.get_val<int64_t>("rgw_read_through_timeout_ms");
+        return wait_for_restore_completion(s, dpp, timeout_ms, waiter, waiter_registry, y);
       }
       return op_ret;
     }
@@ -2399,8 +2522,8 @@ int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 }
 
 int RGWGetObj::get_lua_filter(std::unique_ptr<RGWGetObj_Filter>* filter, RGWGetObj_Filter* cb) {
-  std::string script;
-  const auto rc = rgw::lua::read_script(s, s->penv.lua.manager.get(), s->bucket_tenant, s->yield, rgw::lua::context::getData, script);
+  const auto [script, rc] = rgw::lua::read_script_or_bytecode(s, s->penv.lua.manager.get(),
+                                                              s->bucket_tenant, s->yield, rgw::lua::context::getData);
   if (rc == -ENOENT) {
     // no script, nothing to do
     return 0;
@@ -2495,6 +2618,11 @@ void RGWGetObj::execute(optional_yield y)
   if (multipart_part_num) {
     read_op->params.part_num = &*multipart_part_num;
   }
+#ifdef WITH_RADOSGW_D4N
+  if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST") && (g_conf().get_val<std::string>("rgw_filter") == "d4n")) {
+    dynamic_cast<rgw::sal::D4NFilterObject*>(s->object.get())->set_cache_request();
+  }
+#endif
 
   op_ret = read_op->prepare(s->yield, this);
   version_id = s->object->get_instance();
@@ -2604,6 +2732,19 @@ void RGWGetObj::execute(optional_yield y)
       ldpp_dout(this, 4) << "Cannot get cloud tiered object: " << *s->object
                        <<". Failing with " << op_ret << dendl;
       goto done_err;
+    }
+    // If restore completed (via wait), invalidate cache and reload attrs
+    if (op_ret == static_cast<int>(rgw::sal::RGWRestoreStatus::CloudRestored)) {
+      // Invalidate cached state to force fresh read from RADOS with updated manifest
+      s->object->invalidate();
+
+      op_ret = s->object->get_obj_attrs(y, this);
+      if (op_ret < 0) {
+        ldpp_dout(this, 0) << "ERROR: failed to reload attrs after restore" << dendl;
+        goto done_err;
+      }
+      attrs = s->object->get_attrs();
+      s->obj_size = s->object->get_size();
     }
   }
 
@@ -3350,6 +3491,11 @@ void RGWListBucket::execute(optional_yield y)
   params.list_versions = list_versions;
   params.allow_unordered = allow_unordered;
   params.shard_id = shard_id;
+#ifdef WITH_RADOSGW_D4N
+  if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST") && (g_conf().get_val<std::string>("rgw_filter") == "d4n")) {
+    dynamic_cast<rgw::sal::D4NFilterBucket*>(s->bucket.get())->set_cache_request();
+  }
+#endif
 
   rgw::sal::Bucket::ListResults results;
 
@@ -4401,8 +4547,8 @@ auto RGWPutObj::get_torrent_filter(rgw::sal::DataProcessor* cb)
 }
 
 int RGWPutObj::get_lua_filter(std::unique_ptr<rgw::sal::DataProcessor>* filter, rgw::sal::DataProcessor* cb) {
-  std::string script;
-  const auto rc = rgw::lua::read_script(s, s->penv.lua.manager.get(), s->bucket_tenant, s->yield, rgw::lua::context::putData, script);
+  const auto [script, rc] = rgw::lua::read_script_or_bytecode(s, s->penv.lua.manager.get(),
+                                                              s->bucket_tenant, s->yield, rgw::lua::context::putData);
   if (rc == -ENOENT) {
     // no script, nothing to do
     return 0;
@@ -4566,6 +4712,11 @@ void RGWPutObj::execute(optional_yield y)
 					 s->owner,
 					 pdest_placement, olh_epoch, s->req_id);
   }
+#ifdef WITH_RADOSGW_D4N
+  if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST") && (g_conf().get_val<std::string>("rgw_filter") == "d4n")) {
+    dynamic_cast<rgw::sal::D4NFilterWriter*>(processor.get())->set_cache_request();
+  }
+#endif
 
   op_ret = processor->prepare(s->yield);
   if (op_ret < 0) {
@@ -5686,6 +5837,11 @@ void RGWDeleteObj::execute(optional_yield y)
       del_op->params.null_verid = null_verid;
       del_op->params.size_match = size_match;
       del_op->params.if_match = if_match;
+#ifdef WITH_RADOSGW_D4N
+      if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST") && (g_conf().get_val<std::string>("rgw_filter") == "d4n")) {
+		dynamic_cast<rgw::sal::D4NFilterObject*>(s->object.get())->set_cache_request();
+      }
+#endif
 
       op_ret = del_op->delete_obj(this, y, rgw::sal::FLAG_LOG_OP);
       if (op_ret >= 0) {

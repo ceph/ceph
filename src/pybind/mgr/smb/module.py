@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING, Any, List, Optional, cast
 
 import logging
+from dataclasses import replace
 
 import orchestrator
 from ceph.deployment.service_spec import PlacementSpec, SMBSpec
@@ -18,6 +19,7 @@ from . import (
     sqlite_store,
     utils,
 )
+from .cli import SMBCLICommand
 from .enums import (
     AuthMode,
     InputPasswordFilter,
@@ -36,6 +38,7 @@ log = logging.getLogger(__name__)
 
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
+    CLICommand = SMBCLICommand
     MODULE_OPTIONS: List[Option] = [
         Option(
             'update_orchestration',
@@ -169,7 +172,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             all_results = all_results.convert_results(out_op)
         return all_results
 
-    @cli.SMBCommand('apply', perm='rw')
+    @SMBCLICommand('apply', perm='rw')
     def apply_resources(
         self,
         inbuf: str,
@@ -192,12 +195,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 [results.InvalidResourceResult(err.resource_data, str(err))]
             )
 
-    @cli.SMBCommand('cluster ls', perm='r')
+    @SMBCLICommand('cluster ls', perm='r')
     def cluster_ls(self) -> List[str]:
         """List smb clusters by ID"""
         return [cid for cid in self._handler.cluster_ids()]
 
-    @cli.SMBCommand('cluster create', perm='rw')
+    @SMBCLICommand('cluster create', perm='rw')
     def cluster_create(
         self,
         cluster_id: str,
@@ -330,7 +333,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             password_filter_out=password_filter_out,
         ).squash(cluster)
 
-    @cli.SMBCommand('cluster rm', perm='rw')
+    @SMBCLICommand('cluster rm', perm='rw')
     def cluster_rm(
         self,
         cluster_id: str,
@@ -342,7 +345,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             [cluster], password_filter_out=password_filter
         ).one()
 
-    @cli.SMBCommand('share ls', perm='r')
+    @SMBCLICommand('share ls', perm='r')
     def share_ls(self, cluster_id: str) -> List[str]:
         """List smb shares in a cluster by ID"""
         return [
@@ -351,7 +354,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             if cid == cluster_id
         ]
 
-    @cli.SMBCommand('share create', perm='rw')
+    @SMBCLICommand('share create', perm='rw')
     def share_create(
         self,
         cluster_id: str,
@@ -378,7 +381,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         )
         return self._apply_res([share], create_only=True).one()
 
-    @cli.SMBCommand('share rm', perm='rw')
+    @SMBCLICommand('share rm', perm='rw')
     def share_rm(self, cluster_id: str, share_id: str) -> results.Result:
         """Remove an smb share"""
         share = resources.RemovedShare(
@@ -386,7 +389,46 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         )
         return self._apply_res([share]).one()
 
-    @cli.SMBCommand("show", perm="r")
+    @SMBCLICommand('share update cephfs qos', perm='rw')
+    def share_update_qos(
+        self,
+        cluster_id: str,
+        share_id: str,
+        read_iops_limit: Optional[int] = None,
+        write_iops_limit: Optional[int] = None,
+        read_bw_limit: Optional[str] = None,
+        write_bw_limit: Optional[str] = None,
+        read_burst_mult: Optional[int] = None,
+        write_burst_mult: Optional[int] = None,
+    ) -> results.Result:
+        """Update QoS settings for a CephFS share"""
+        try:
+            shares = self._handler.matching_resources(
+                [f'ceph.smb.share.{cluster_id}.{share_id}']
+            )
+            if not shares or not isinstance(shares[0], resources.Share):
+                raise ValueError(f"Share {cluster_id}/{share_id} not found")
+
+            share = shares[0]
+            if not share.cephfs:
+                raise ValueError("Share has no CephFS configuration")
+
+            updated_cephfs = share.cephfs.update_qos(
+                read_iops_limit=read_iops_limit,
+                write_iops_limit=write_iops_limit,
+                read_bw_limit=read_bw_limit,
+                write_bw_limit=write_bw_limit,
+                read_burst_mult=read_burst_mult,
+                write_burst_mult=write_burst_mult,
+            )
+
+            updated_share = replace(share, cephfs=updated_cephfs)
+            return self._apply_res([updated_share]).one()
+
+        except resources.InvalidResourceError as err:
+            return results.InvalidResourceResult(err.resource_data, str(err))
+
+    @SMBCLICommand("show", perm="r")
     def show(
         self,
         resource_names: Optional[List[str]] = None,

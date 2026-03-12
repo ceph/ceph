@@ -179,6 +179,7 @@
             [expandable]="model.isRowExpandable(i)"
             [expanded]="model.isRowExpanded(i)"
             [showSelectionColumn]="showSelectionColumn"
+            [enableSingleSelect]="enableSingleSelect"
             [skeleton]="loadingIndicator"
             (selectRow)="onSelect(i)"
             (deselectRow)="onDeselect(i)"
@@ -223,8 +224,24 @@
           class="no-data"
           cdstabledata
           [attr.colspan]="visibleColumns.length + 2">
-        <span class="d-flex justify-content-center align-items-center"
-              i18n>No data to display</span>
+        <div class="empty-state cds-ml-3"
+             cdsStack="vertical"
+             gap="11">
+          <div></div>
+          <div cdsStack="vertical"
+               gap="1">
+            <div>
+              <img src="{{ emptyStateImage }}"
+                   alt="No data available" />
+            </div>
+            <legend class="cds--type-body-compact-02">
+              <ng-container>{{ emptyStateTitle }}</ng-container>
+              <cd-help-text class="cds--type-label-01">
+                {{ emptyStateMessage }}
+              </cd-help-text>
+            </legend>
+          </div>
+        </div>
       </td>
     </tr>
   </tbody>
@@ -302,7 +319,7 @@
 
 <ng-template #checkIconTpl
              let-value="data.value">
-@if (value | boolean) {
+  @if (value | boolean) {
   <cd-icon type="check"></cd-icon>
 }
 </ng-template>
@@ -337,6 +354,7 @@
     </cds-tag>
   </span>
 </ng-template>
+
 <ng-template #tagTpl
              let-column="data.column"
              let-value="data.value">

@@ -1,3 +1,6 @@
+* ceph-volume: Raw BlueStore OSD preparation now pre-formats NVMe devices and
+  skips the slower BlueStore discard phase,reducing mkfs time on
+  very large namespaces.
 * RGW: Bucket Logging suppports creating log buckets in EC pools.
   Implicit logging object commits are now performed asynchronously.
 * RGW: OpenSSL engine support is deprecated in favor of provider support.
@@ -12,11 +15,48 @@
   adjusting FEATURE_TOGGLE_DASHBOARD.
 * DASHBOARD: RGW Service form updated to take input regarding QAT compression.
   - QAT compression is an optional field which can be set to 'Hardware' or 'Software' by selecting options from provided dropdwon. If 'None' is selected, compression is removed altogether.
+* Monitoring: Added new Prometheus alerts for certificate management:
+  - CephCertificateError: Fires when a Ceph certificate has expired (critical severity).
+  - CephCertificateWarning: Fires when a Ceph certificate is about to expire (warning severity).
 * CephFS: The `peer_add` command is deprecated in favor of the `peer_bootstrap` command.
 * RADOS: When objects are read during deep scrubs, the data is read in strides,
   and the scrubbing process is delayed between each read in order to avoid monopolizing
   the I/O capacity of the OSD.
   The default stride size (``osd_deep_scrub_stride``) was 512 KBytes, and is now 4 MBytes.
+
+* CephFS: The offline CephFS tools (cephfs-data-scan, cephfs-journal-tool,
+  and cephfs-table-tool) now include progress tracking with ETA (Estimated Time of
+  Arrival) for long-running operations. Progress updates are displayed automatically
+  at regular intervals, showing completion percentage, processed items, and time
+  estimates. This feature is enabled by default for relevant commands including
+  scan_extents, scan_inodes, and other state-changing operations.
+  Related Tracker: https://tracker.ceph.com/issues/63191
+* RBD: Fixed incorrect behavior of the "start-time" argument for mirror
+  snapshot and trash purge schedules, where it previously offset the schedule
+  anchor instead of defining it. The argument now requires an ISO 8601
+  date-time. The `schedule ls` output displays the start time in UTC, including
+  the date and time in the format "%Y-%m-%d %H:%M:00". The `schedule status`
+  output now displays the next schedule time in UTC.
+* CephFS Mirroring:  Now utilizes a multi-threaded architecture to improve synchronization
+  performance. The workload is split into two distinct thread pools: a crawler thread pool, which
+  manages snapshot crawl and a data synchronization thread pool, which handles concurrent file
+  transfers. Users can fine-tune these operations using configuration parameters:
+  cephfs_mirror_max_concurrent_directory_syncs (controlling the number of concurrent snapshots being crawled)
+  and cephfs_mirror_max_datasync_threads (controlling the total threads available for data sync).
+  For more information, see https://tracker.ceph.com/issues/73452
+* CephFS Mirroring: Improved incremental synchronization behavior in CephFS mirroring. Previously,
+  block-level delta synchronization was used for all files regardless of size. With this change,
+  blockdiff is applied only to files larger than a configurable threshold, while smaller files are
+  synchronized using full copy, as blockdiff is not efficient for small files. The threshold is
+  controlled by the new configuration option cephfs_mirror_blockdiff_min_file_size (default: 16_M).
+  For more information, see https://tracker.ceph.com/issues/73452
+* CephFS Mirroring: Improved mirror daemon status reporting. The command
+  ``ceph fs snapshot mirror daemon status`` now shows the remote cluster's
+  monitor addresses and cluster ID for each configured peer, making it easier
+  to verify peer connectivity and troubleshoot mirroring issues.
+* RBD: Mirror snapshot creation and trash purge schedules are now automatically
+  staggered when no explicit "start-time" is specified. This reduces scheduling
+  spikes and distributes work more evenly over time.
 
 >=20.0.0
 
@@ -229,6 +269,22 @@
   the co-existence of old and new usage log keys. This option is enabled by default
   to ensure compatibility during upgrades, but can be disabled once old usage logs
   are no longer present to avoid performance overhead.
+
+* NVMe-oF: A new Ceph Manager module, `nvmeof`, is now available. When enabled, it provisions the
+  dedicated `.nvmeof` RADOS Block Device (RBD) pool required for NVMe-oF integration,
+  simplifying initial setup and ensuring the pool is created consistently across deployments.
+  
+* MGR: A new command, `ceph osd ok-to-upgrade`, has been added that allows
+  users and orchestration tools to determine a safe set of OSDs within a CRUSH
+  bucket to upgrade simultaneously without impacting data availability. To help
+  converge to a safe set, a new config option
+  ``mgr_osd_upgrade_check_convergence_factor`` is introduced. This option can be
+  modified (if necessary) to help converge to an optimal set. Higher values
+  maximize the set of OSDs to upgrade at the cost of longer command response
+  times. Conversely, a lower value improves the command response time but
+  results in a non-optimal or smaller set of OSDs which impacts the overall time
+  to upgrade all OSDs in the cluster. For more details see tracker:
+  https://tracker.ceph.com/issues/73031.
 
 >=19.2.1
 

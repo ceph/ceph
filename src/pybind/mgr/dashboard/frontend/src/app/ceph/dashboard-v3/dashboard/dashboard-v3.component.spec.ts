@@ -81,7 +81,10 @@ describe('Dashbord Component', () => {
       num_pools: 14,
       bytes_used: 3236978688,
       bytes_total: 325343772672,
-      num_pgs: 497
+      num_pgs: 497,
+      write_bytes_sec: 0,
+      read_bytes_sec: 0,
+      recovering_bytes_per_sec: 0
     },
     mgrmap: {
       num_active: 1,
@@ -217,7 +220,7 @@ describe('Dashbord Component', () => {
   it('should render all cards', () => {
     fixture.detectChanges();
     const dashboardCards = fixture.debugElement.nativeElement.querySelectorAll('cd-card');
-    expect(dashboardCards.length).toBe(5);
+    expect(dashboardCards.length).toBe(4);
   });
 
   it('should get corresponding data into detailsCardData', () => {

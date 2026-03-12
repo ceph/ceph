@@ -6,7 +6,9 @@ import shutil
 import sys
 import yaml
 import sphinx.util
+import urllib.request
 
+logger = sphinx.util.logging.getLogger(__name__)
 
 top_level = \
     os.path.dirname(
@@ -38,10 +40,18 @@ def latest_stable_release():
 
 
 def is_release_eol(codename):
-    with open(os.path.join(top_level, 'doc/releases/releases.yml')) as input:
-        releases = yaml.safe_load(input)['releases']
-        return 'actual_eol' in releases.get(codename, {})
-
+    # Try fetching the latest status from the main branch first
+    try:
+        url = "https://raw.githubusercontent.com/ceph/ceph/main/doc/releases/releases.yml"
+        with urllib.request.urlopen(url, timeout=5) as response:
+            releases = yaml.safe_load(response)['releases']
+            return 'actual_eol' in releases.get(codename, {})
+    except Exception as e:
+        logger.warn(f"Failed to fetch releases.yml from main, falling back to local: {e}")
+        # Fallback to the local file if the network request fails
+        with open(os.path.join(top_level, 'doc/releases/releases.yml')) as input:
+            releases = yaml.safe_load(input)['releases']
+            return 'actual_eol' in releases.get(codename, {})
 
 # project information
 project = 'Ceph'
@@ -131,7 +141,6 @@ extensions = [
     'ceph_confval',
     'sphinxcontrib.mermaid',
     'sphinxcontrib.openapi',
-    'sphinxcontrib.seqdiag',
 ]
 
 ditaa = shutil.which("ditaa")
@@ -250,10 +259,6 @@ for c in pybinds:
 # openapi
 openapi_logger = sphinx.util.logging.getLogger('sphinxcontrib.openapi.openapi30')
 openapi_logger.setLevel(logging.WARNING)
-
-# seqdiag
-seqdiag_antialias = True
-seqdiag_html_image_format = 'SVG'
 
 # ceph_confval
 ceph_confval_imports = glob.glob(os.path.join(top_level,

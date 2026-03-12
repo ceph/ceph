@@ -124,6 +124,13 @@ void rgw_data_notify_entry::dump(Formatter *f) const
   encode_json("gen", gen, f);
 }
 
+boost::intrusive_ptr<RGWDataChangesBE> DataLogBackends::head() {
+  std::unique_lock l(m);
+  auto i = end();
+  --i;
+  return i->second;
+}
+
 void rgw_data_notify_entry::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("key", key, obj);
   JSONDecoder::decode_json("gen", gen, obj);
@@ -890,7 +897,7 @@ void RGWDataChangesLog::add_entry(const DoutPrefixProvider* dpp,
 				  const rgw::bucket_log_layout_generation& gen,
 				  int shard_id, asio::yield_context y)
 {
-  if (!log_data) {
+  if (!log_data || down_flag) {
     return;
   }
 

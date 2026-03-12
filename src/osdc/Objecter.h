@@ -2789,7 +2789,7 @@ private:
 	std::unique_lock l(rwlock);
 	if (osdmap->get_epoch()) {
 	  l.unlock();
-	  boost::asio::post(std::move(handler));
+	  boost::asio::post(service.get_executor(), std::move(handler));
 	} else {
 	  auto e = boost::asio::get_associated_executor(
 	    handler, service.get_executor());
@@ -2898,7 +2898,8 @@ public:
     return boost::asio::async_initiate<decltype(consigned), OpSignature>(
       [epoch, this](auto handler) {
 	if (osdmap->get_epoch() >= epoch) {
-	  boost::asio::post(boost::asio::append(
+          boost::asio::post(service.get_executor(),
+                            boost::asio::append(
 			      std::move(handler),
 			      boost::system::error_code{}));
 	} else {

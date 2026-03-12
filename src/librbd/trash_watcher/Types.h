@@ -17,7 +17,7 @@
 namespace librbd {
 namespace trash_watcher {
 
-enum NotifyOp {
+enum NotifyOp : uint32_t {
   NOTIFY_OP_IMAGE_ADDED = 0,
   NOTIFY_OP_IMAGE_REMOVED = 1
 };

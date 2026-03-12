@@ -10,14 +10,15 @@ from libc.stdint cimport *
 from libc.stdlib cimport malloc, realloc, free
 
 from types cimport *
-IF BUILD_DOC:
-    include "mock_cephfs.pxi"
-    cdef class Rados:
-        cdef:
-            rados_t cluster
-ELSE:
-    from c_cephfs cimport *
-    from rados cimport Rados
+{{if BUILD_DOC}}
+include "mock_cephfs.pxi"
+cdef class Rados:
+    cdef:
+        rados_t cluster
+{{else}}
+from c_cephfs cimport *
+from rados cimport Rados
+{{endif}}
 
 from collections import namedtuple, deque
 from datetime import datetime
@@ -120,7 +121,6 @@ cdef extern from "Python.h":
     PyObject *PyBytes_FromStringAndSize(char *v, Py_ssize_t len) except NULL
     char* PyBytes_AsString(PyObject *string) except NULL
     int _PyBytes_Resize(PyObject **string, Py_ssize_t newsize) except -1
-    void PyEval_InitThreads()
 
 cdef void completion_callback(int rc, const void* out, size_t outlen, const void* outs, size_t outslen, void* ud) nogil:
     # This GIL awkwardness is due to incompatible types with function pointers defined with mds_command2:
@@ -300,6 +300,8 @@ cdef class DirResult(object):
         return False
 
     def readdir(self):
+        cdef dirent *dirent
+
         self.lib.require_state("mounted")
 
         with nogil:
@@ -307,20 +309,12 @@ cdef class DirResult(object):
         if not dirent:
             return None
 
-        IF UNAME_SYSNAME == "FreeBSD" or UNAME_SYSNAME == "Darwin":
-            return DirEntry(d_ino=dirent.d_ino,
-                            d_off=0,
-                            d_reclen=dirent.d_reclen,
-                            d_type=dirent.d_type,
-                            d_name=dirent.d_name,
-                            d_snapid=CEPH_NOSNAP)
-        ELSE:
-            return DirEntry(d_ino=dirent.d_ino,
-                            d_off=dirent.d_off,
-                            d_reclen=dirent.d_reclen,
-                            d_type=dirent.d_type,
-                            d_name=dirent.d_name,
-                            d_snapid=CEPH_NOSNAP)
+        return DirEntry(d_ino=dirent.d_ino,
+                        d_off=DIRENT_D_OFF(dirent),
+                        d_reclen=dirent.d_reclen,
+                        d_type=dirent.d_type,
+                        d_name=dirent.d_name,
+                        d_snapid=CEPH_NOSNAP)
 
     def close(self):
         if self.handle:
@@ -383,20 +377,12 @@ cdef class SnapDiffHandle(object):
         if ret == 0:
             return None
 
-        IF UNAME_SYSNAME == "FreeBSD" or UNAME_SYSNAME == "Darwin":
-            return DirEntry(d_ino=difent.dir_entry.d_ino,
-                            d_off=0,
-                            d_reclen=difent.dir_entry.d_reclen,
-                            d_type=difent.dir_entry.d_type,
-                            d_name=difent.dir_entry.d_name,
-                            d_snapid=difent.snapid)
-        ELSE:
-            return DirEntry(d_ino=difent.dir_entry.d_ino,
-                            d_off=difent.dir_entry.d_off,
-                            d_reclen=difent.dir_entry.d_reclen,
-                            d_type=difent.dir_entry.d_type,
-                            d_name=difent.dir_entry.d_name,
-                            d_snapid=difent.snapid)
+        return DirEntry(d_ino=difent.dir_entry.d_ino,
+                        d_off=DIRENT_D_OFF(&difent.dir_entry),
+                        d_reclen=difent.dir_entry.d_reclen,
+                        d_type=difent.dir_entry.d_type,
+                        d_name=difent.dir_entry.d_name,
+                        d_snapid=difent.snapid)
 
     def close(self):
         if (not self.opened):
@@ -515,7 +501,6 @@ cdef class LibCephFS(object):
         :auth_id str opt: the id used to authenticate the client entity
         :rados_inst Rados opt: a rados.Rados instance
         """
-        PyEval_InitThreads()
         self.state = "uninitialized"
         if rados_inst is not None:
             if auth_id is not None or conffile is not None or conf is not None:
@@ -2041,6 +2026,7 @@ cdef class LibCephFS(object):
             char *_dpath = dpath
             mode_t _mode = mode
 
+        with nogil:
             ret = ceph_fcopyfile(self.cluster, _spath, _dpath, _mode)
 
         if ret < 0:

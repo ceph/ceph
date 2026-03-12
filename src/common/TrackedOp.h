@@ -33,6 +33,9 @@
 
 struct pow2_hist_t;
 class TrackedOp;
+// Declare intrusive_ptr functions in global namespace for boost ADL
+inline void intrusive_ptr_add_ref(TrackedOp *o);
+inline void intrusive_ptr_release(TrackedOp *o);
 class OpHistory;
 
 typedef boost::intrusive_ptr<TrackedOp> TrackedOpRef;
@@ -146,6 +149,7 @@ public:
   bool dump_historic_slow_ops(ceph::Formatter *f, std::set<std::string> filters = {""});
   bool register_inflight_op(TrackedOp *i);
   void unregister_inflight_op(TrackedOp *i);
+  uint64_t get_num_ops_in_flight();
   void record_history_op(TrackedOpRef&& i);
 
   void get_age_ms_histogram(pow2_hist_t *h);

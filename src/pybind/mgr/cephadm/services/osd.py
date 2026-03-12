@@ -404,6 +404,8 @@ class OSDService(CephService):
 
             if hasattr(svc_spec, 'objectstore') and svc_spec.objectstore:
                 config['objectstore'] = svc_spec.objectstore
+            if hasattr(svc_spec, 'osd_type') and svc_spec.osd_type:
+                config['osd_type'] = svc_spec.osd_type
         return config, parent_deps
 
 
@@ -837,6 +839,14 @@ class OSD:
 
     def __repr__(self) -> str:
         return f"osd.{self.osd_id}{' (draining)' if self.draining else ''}"
+
+    def __getstate__(self) -> Dict[str, Any]:
+        # the rm_util field of this class cannot be pickled
+        # and we should not need it in any case where this class
+        # has been serialized and deserialized. The from_json function also
+        # requires an instance of the class to explicitly be passed back in
+        self.__dict__.update({'remove_util': None})
+        return self.__dict__
 
 
 class OSDRemovalQueue(object):

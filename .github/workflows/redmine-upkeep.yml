@@ -23,6 +23,9 @@ on:
     types: [closed]
     branches:
       - main
+      - squid
+      - tentacle
+      - umbrella
 # TODO enable/setup after upkeep has caught up
 #  push:
 #    tags:

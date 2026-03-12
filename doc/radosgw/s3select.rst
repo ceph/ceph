@@ -428,9 +428,26 @@ trims leading/trailing(or both) characters from target string, the default is bl
 SQL Limit Operator
 ~~~~~~~~~~~~~~~~~~
 
-The SQL LIMIT operator is used to limit the number of rows processed by the query.
-Upon reaching the limit set by the user, the RGW stops fetching additional chunks.
-TODO : add examples, for aggregation and non-aggregation queries.
+The SQL LIMIT operator is used to limit the number of rows processed by the
+query. Upon reaching the limit set by the user, the RGW stops fetching
+additional chunks.
+
+**Non-aggregation example** (retrieve first 10 rows):
+
+.. code-block:: sql
+
+    SELECT _1, _2, _3 FROM s3object LIMIT 10
+
+This query returns the first 10 rows from the object without any aggregation.
+
+**Aggregation example** (count with limit on processing):
+
+.. code-block:: sql
+
+    SELECT COUNT(*), SUM(CAST(_1 AS INT)) FROM s3object LIMIT 100
+
+This query aggregates data but stops processing after 100 rows, returning the
+count and sum of column 1 for those rows.
 
 Alias
 ~~~~~

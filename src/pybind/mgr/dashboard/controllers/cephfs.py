@@ -16,8 +16,8 @@ from ..services.ceph_service import CephService
 from ..services.cephfs import CephFS as CephFS_
 from ..services.exception import handle_cephfs_error
 from ..tools import ViewCache, str_to_bool
-from . import APIDoc, APIRouter, DeletePermission, Endpoint, EndpointDoc, \
-    ReadPermission, RESTController, UIRouter, UpdatePermission, \
+from . import APIDoc, APIRouter, CreatePermission, DeletePermission, Endpoint, \
+    EndpointDoc, ReadPermission, RESTController, UIRouter, UpdatePermission, \
     allow_empty_body
 
 GET_QUOTAS_SCHEMA = {
@@ -37,6 +37,10 @@ LIST_PEERS_SCHEMA = [{
         'fs_name': (str, 'File system name'),
     }, 'Peer ID'),
 }]
+
+BOOTSTRAP_PEERS_SCHEMA = {
+    'token': (str, 'Bootstrap token'),
+}
 
 DAEMON_STATUS_SCHEMA = [{
     'daemon_id': (int, 'Daemon ID'),
@@ -882,6 +886,68 @@ class CephFSSubvolume(RESTController):
             return False
         return True
 
+    @RESTController.Resource('GET', path='/snapshot-visibility')
+    def snapshot_visibility(
+        self,
+        vol_name: str,
+        subvol_name: str,
+        group_name: str = ''
+    ):
+        params = {
+            'vol_name': vol_name,
+            'sub_name': subvol_name
+        }
+
+        if group_name:
+            params['group_name'] = group_name
+
+        error_code, out, err = mgr.remote(
+            'volumes',
+            '_cmd_fs_subvolume_snapshot_visibility_get',
+            None,
+            params
+        )
+
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to get snapshot visibility for subvolume '
+                f'{subvol_name}: {err}'
+            )
+
+        return out
+
+    @RESTController.Resource('PUT', path='/snapshot-visibility')
+    def set_snapshot_visibility(
+        self,
+        vol_name: str,
+        subvol_name: str,
+        value: str,
+        group_name: str = ''
+    ):
+        params = {
+            'vol_name': vol_name,
+            'sub_name': subvol_name,
+            'value': value
+        }
+
+        if group_name:
+            params['group_name'] = group_name
+
+        error_code, out, err = mgr.remote(
+            'volumes',
+            '_cmd_fs_subvolume_snapshot_visibility_set',
+            None,
+            params
+        )
+
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to set snapshot visibility for subvolume '
+                f'{subvol_name}: {err}'
+            )
+
+        return out
+
 
 @APIRouter('/cephfs/subvolume/group', Scope.CEPHFS)
 @APIDoc("Cephfs Subvolume Group Management API", "CephfsSubvolumeGroup")
@@ -1256,6 +1322,60 @@ class CephFSMirror(RESTController):
             )
         return json.loads(out)
 
+    @EndpointDoc("Create bootstrap token",
+                 parameters={
+                     'fs_name': (str, 'File system name'),
+                     'client_name': (str, 'Client entity\'s name'),
+                     'site_name': (str, 'Site name'),
+                 },
+                 responses={200: BOOTSTRAP_PEERS_SCHEMA})
+    @Endpoint('POST')
+    @CreatePermission
+    def token(self, fs_name: str, client_name: str, site_name: str):
+        error_code, out, err = mgr.remote(
+            'mirroring', 'snapshot_mirror_peer_bootstrap_create', fs_name, client_name, site_name)
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to create bootstrap token: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+        return json.loads(out)
+
+    @EndpointDoc("Create bootstrap peer",
+                 parameters={
+                     'fs_name': (str, 'File system name'),
+                     'token': (str, 'Bootstrap token'),
+                 },
+                 responses={200: {}})
+    @CreatePermission
+    def create(self, fs_name: str, token: str):
+        error_code, out, err = mgr.remote(
+            'mirroring', 'snapshot_mirror_peer_bootstrap_import', fs_name, token)
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to import the token to create bootstrap peer: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+        return json.loads(out)
+
+    @EndpointDoc("Delete peer",
+                 parameters={
+                     'fs_name': (str, 'File system name'),
+                     'peer_uuid': (str, 'Peer UUID'),
+                 })
+    @DeletePermission
+    def delete(self, fs_name: str, peer_uuid: str):
+        error_code, _, err = mgr.remote(
+            'mirroring', 'snapshot_mirror_peer_remove', fs_name, peer_uuid)
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to delete peer: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+
     @EndpointDoc("Get mirror daemon and peers information",
                  responses={200: DAEMON_STATUS_SCHEMA})
     @Endpoint('GET', path='/daemon-status')
@@ -1269,3 +1389,18 @@ class CephFSMirror(RESTController):
                 component='cephfs.mirror'
             )
         return json.loads(out)
+
+
+@UIRouter('/cephfs/mirror')
+class CephFSMirrorStatus(RESTController):
+    @ReadPermission
+    @EndpointDoc("Get Cephfs mirror status")
+    @Endpoint()
+    def status(self):
+        status: Dict[str, Any] = {'available': False, 'message': None}
+        try:
+            mgr.remote('mirroring', 'snapshot_mirror_daemon_status')
+            status['available'] = True
+        except (ImportError, RuntimeError):
+            status['message'] = 'Cephfs mirror module is not enabled'
+        return status

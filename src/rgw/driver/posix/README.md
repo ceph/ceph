@@ -14,14 +14,42 @@ Add below cmake option (enabled by default)
     ninja [vstart]
 
 
-## Running Test cluster
-Currently, POSIXDriver depends on DBStore for user storage.  This will change, eventually, but for now, it's run as a filter on top of DBStore.  Not that only users are stored in DBStore, the rest is in the POSIX filesystem.
-Edit ceph.conf to add below option
+## Running RGW Standalone
+
+### Running by hand
+
+To run RGW by hand, you need to create a config file, and some directories.
+
+The base config for a POSIXDriver run is as follows:
 
     [client]
-        rgw backend store = dbstore
+        rgw backend store = posix
         rgw config store = dbstore
-        rgw filter = posix
+
+This will use default locations for things in the filesystem (mostly in /var/lib/ceph), which may not be optimal.  A suggested test config for an unprivileged user would be something like this:
+
+    [global]
+        run dir = /BASE/out
+        crash dir = /BASE/out
+    [client]
+        rgw backend store = posix
+        rgw config store = dbstore
+        rgw posix base path = /BASE/root
+        rgw posix userdb path = /BASE/db
+        rgw posix database root = /BASE/db
+        dbstore config uri = file:///BASE/db/config.db
+
+replacing BASE with whatever path you want, and obviously add logging if you want that.  RGW needs it's directories created, so
+
+    mkdir -p /BASE/out /BASE/root /BASE/db
+
+Then, you can start RGW with the following command:
+
+    /path/to/radosgw -d -c /BASE/ceph.conf -n client.rgw.8000 '--rgw_frontends=beast port=8000'
+
+That's it.  RGW is listening, and you can use s3cmd or aws-cli, or whatever to access it.  The data is stored in /BASE/root if you want to look at it.  The user is the default `vstart` user `testid`
+
+### Running via vstart.sh
 
 To start the `vstart` cluster, run the following cmd:
 
@@ -29,9 +57,7 @@ To start the `vstart` cluster, run the following cmd:
 
 The above vstart command brings up RGW server on POSIXDriver. It creates default zonegroup, zone and few default users (e.g., testid) to be used for s3 operations.
 
+### Admin
+
 `radosgw-admin` command can be used to create and remove other users, zonegroups and zones.
-
-By default, the directory exported, *'rgw_posix_driver'*, is created in the `dev` subdirectory.   This can be changed with the `rgw_posix_base_path` option.
-
-The POSIXDriver keeps a LMDB based cache of directories, so that it can provide ordered listings.  This directory lives in `rgw_posix_database_root`, which by default is created in the `dev` subdirectory
 

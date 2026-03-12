@@ -20,8 +20,10 @@
   <cd-form-button-panel (submitActionEvent)="onSubmit(confirmationForm.value)"
                         [form]="confirmationForm"
                         [submitText]="buttonText"
+                        [cancelText]="cancelText"
                         [showCancel]="showCancel"
                         [showSubmit]="showSubmit"
+                        [submitBtnType]="submitBtnType"
                         [modalForm]="true"></cd-form-button-panel>
 
 </cds-modal>

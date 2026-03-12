@@ -64,6 +64,10 @@ public:
 
   void shut_down(Context *on_finish) {
     ldout(m_cct, 20) << "ImageUpdateWatchers::" << __func__ << dendl;
+    if (m_work_queue != nullptr) {
+      // ensure all pending flush() callbacks execute before completing
+      on_finish = create_async_context_callback(m_work_queue, on_finish);
+    }
     {
       std::lock_guard locker{m_lock};
       ceph_assert(m_on_shut_down_finish == nullptr);
@@ -73,8 +77,6 @@ public:
 	return;
       }
     }
-    ldout(m_cct, 20) << "ImageUpdateWatchers::" << __func__
-		     << ": completing shut down" << dendl;
     on_finish->complete(0);
   }
 
@@ -184,8 +186,6 @@ public:
     }
 
     if (on_shut_down_finish != nullptr) {
-      ldout(m_cct, 20) << "ImageUpdateWatchers::" << __func__
-		       << ": completing shut down" << dendl;
       on_shut_down_finish->complete(0);
     }
   }

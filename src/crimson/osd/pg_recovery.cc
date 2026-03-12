@@ -123,12 +123,12 @@ size_t PGRecovery::start_primary_recovery_ops(
   unsigned started = 0;
   int skipped = 0;
 
-  map<version_t, hobject_t>::const_iterator p =
-    missing.get_rmissing().lower_bound(pg->get_peering_state().get_pg_log().get_log().last_requested);
+  map<eversion_t, hobject_t>::const_iterator p =
+    missing.get_rmissing().lower_bound(eversion_t(0, pg->get_peering_state().get_pg_log().get_log().last_requested));
   while (started < max_to_start && p != missing.get_rmissing().end()) {
     // TODO: chain futures here to enable yielding to scheduler?
     hobject_t soid;
-    version_t v = p->first;
+    eversion_t v = p->first;
 
     auto it_objects = pg->get_peering_state().get_pg_log().get_log().objects.find(p->second);
     if (it_objects != pg->get_peering_state().get_pg_log().get_log().objects.end()) {
@@ -190,7 +190,7 @@ size_t PGRecovery::start_primary_recovery_ops(
     }
 
     if (!skipped)
-      pg->get_peering_state().set_last_requested(v);
+      pg->get_peering_state().set_last_requested(v.version);
   }
 
   DEBUGDPP("started {} skipped {}", pg->get_dpp(), started, skipped);

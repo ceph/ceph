@@ -1,7 +1,7 @@
 import { PageHelper } from '../page-helper.po';
 
 export class DashboardV3PageHelper extends PageHelper {
-  pages = { index: { url: '#/dashboard', id: 'cd-dashboard-v3' } };
+  pages = { index: { url: '#/overview', id: 'cd-dashboard-v3' } };
 
   cardTitle(index: number) {
     return cy.get('.card-title').its(index).text();

@@ -1,8 +1,39 @@
 import os
 
-from .container_types import CephContainer
+from .container_types import CephContainer, BasicContainer
 from .context import CephadmContext
 from cephadmlib.context_getters import fetch_custom_config_files
+
+
+def enhance_container(ctx: CephadmContext, ctr: BasicContainer) -> None:
+    """Given a context and a basic container object, update the container
+    object such that it's arguments, entrypoint arguments, and volume mounts
+    'inherit' global "extra" -container args, -entrypoint args, and config
+    files in a common manner.
+    """
+    if 'extra_container_args' in ctx and ctx.extra_container_args:
+        ctr.container_args.extend(ctx.extra_container_args)
+    if 'extra_entrypoint_args' in ctx and ctx.extra_entrypoint_args:
+        ctr.args.extend(ctx.extra_entrypoint_args)
+    ccfiles = fetch_custom_config_files(ctx)
+    assert ctr.identity
+    if parentfn := getattr(ctr.identity, 'parent_identity', None):
+        identity = parentfn()
+    else:
+        identity = ctr.identity
+    if ccfiles:
+        mandatory_keys = ['mount_path', 'content']
+        for conf in ccfiles:
+            if all(k in conf for k in mandatory_keys):
+                mount_path = conf['mount_path']
+                file_path = os.path.join(
+                    ctx.data_dir,
+                    identity.fsid,
+                    'custom_config_files',
+                    identity.daemon_name,
+                    os.path.basename(mount_path),
+                )
+                ctr.volume_mounts[file_path] = mount_path
 
 
 def to_deployment_container(
@@ -13,23 +44,5 @@ def to_deployment_container(
     custom configurations added.
     NOTE: The `ctr` object is mutated before being returned.
     """
-    if 'extra_container_args' in ctx and ctx.extra_container_args:
-        ctr.container_args.extend(ctx.extra_container_args)
-    if 'extra_entrypoint_args' in ctx and ctx.extra_entrypoint_args:
-        ctr.args.extend(ctx.extra_entrypoint_args)
-    ccfiles = fetch_custom_config_files(ctx)
-    if ccfiles:
-        mandatory_keys = ['mount_path', 'content']
-        for conf in ccfiles:
-            if all(k in conf for k in mandatory_keys):
-                mount_path = conf['mount_path']
-                assert ctr.identity
-                file_path = os.path.join(
-                    ctx.data_dir,
-                    ctr.identity.fsid,
-                    'custom_config_files',
-                    ctr.identity.daemon_name,
-                    os.path.basename(mount_path),
-                )
-                ctr.volume_mounts[file_path] = mount_path
+    enhance_container(ctx, ctr)
     return ctr

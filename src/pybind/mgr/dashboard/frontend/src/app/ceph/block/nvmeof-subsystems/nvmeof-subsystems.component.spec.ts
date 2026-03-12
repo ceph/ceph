@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpClientModule } from '@angular/common/http';
 import { of } from 'rxjs';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -6,7 +6,7 @@ import { SharedModule } from '~/app/shared/shared.module';
 
 import { NvmeofService } from '../../../shared/api/nvmeof.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { NvmeofSubsystemsComponent } from './nvmeof-subsystems.component';
 import { NvmeofSubsystemsDetailsComponent } from '../nvmeof-subsystems-details/nvmeof-subsystems-details.component';
@@ -63,6 +63,10 @@ class MockNvmeOfService {
     return of(mockSubsystems);
   }
 
+  getInitiators() {
+    return of([]);
+  }
+
   formatGwGroupsList(_data: CephServiceSpec[][]) {
     return mockformattedGwGroups;
   }
@@ -93,7 +97,7 @@ describe('NvmeofSubsystemsComponent', () => {
       providers: [
         { provide: NvmeofService, useClass: MockNvmeOfService },
         { provide: AuthStorageService, useClass: MockAuthStorageService },
-        { provide: ModalService, useClass: MockModalService },
+        { provide: ModalCdsService, useClass: MockModalService },
         { provide: TaskWrapperService, useClass: MockTaskWrapperService }
       ]
     }).compileComponents();
@@ -108,11 +112,19 @@ describe('NvmeofSubsystemsComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should retrieve subsystems', fakeAsync(() => {
+  it('should retrieve subsystems', (done) => {
+    const expected = mockSubsystems.map((s) => ({
+      ...s,
+      gw_group: component.group,
+      auth: 'No authentication',
+      initiator_count: 0
+    }));
+    component.subsystems$.subscribe((subsystems) => {
+      expect(subsystems).toEqual(expected);
+      done();
+    });
     component.getSubsystems();
-    tick();
-    expect(component.subsystems).toEqual(mockSubsystems);
-  }));
+  });
 
   it('should load gateway groups correctly', () => {
     expect(component.gwGroups.length).toBe(2);

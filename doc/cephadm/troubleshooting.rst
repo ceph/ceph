@@ -1,3 +1,4 @@
+===============
 Troubleshooting
 ===============
 
@@ -11,13 +12,14 @@ daemons that were installed by means of packages.
 Here are some tools and commands to help you troubleshoot your Ceph
 environment.
 
+
 .. _cephadm-pause:
 
-Pausing or Disabling cephadm
-----------------------------
+Pausing or Disabling Cephadm
+============================
 
 If something goes wrong and cephadm is behaving badly, pause most of the Ceph
-cluster's background activity by running the following command: 
+cluster's background activity by running the following command:
 
 .. prompt:: bash #
 
@@ -40,16 +42,17 @@ See :ref:`cephadm-spec-unmanaged` for more on disabling individual services.
 
 
 Per-service and Per-daemon Events
----------------------------------
+=================================
 
 To make it easier to debug failed daemons, cephadm stores events per service
 and per daemon. These events often contain information relevant to
-the troubleshooting of your Ceph cluster. 
+the troubleshooting of your Ceph cluster.
+
 
 Listing Service Events
-~~~~~~~~~~~~~~~~~~~~~~
+----------------------
 
-To see the events associated with a certain service, run a command of the 
+To see the events associated with a certain service, run a command of the
 following form:
 
 .. prompt:: bash #
@@ -74,8 +77,9 @@ This will return information in the following form:
   - '2021-02-01T12:09:25.264584 service:alertmanager [ERROR] "Failed to apply: Cannot
     place <AlertManagerSpec for service_name=alertmanager> on unknown_host: Unknown hosts"'
 
+
 Listing Daemon Events
-~~~~~~~~~~~~~~~~~~~~~
+---------------------
 
 To see the events associated with a certain daemon, run a command of the
 following form:
@@ -99,7 +103,7 @@ This will return something in the following form:
 
 
 Checking Cephadm Logs
----------------------
+=====================
 
 To learn how to monitor cephadm logs as they are generated, read
 :ref:`watching_cephadm_logs`.
@@ -108,8 +112,9 @@ If your Ceph cluster has been configured to log events to files, there will be
 a ``ceph.cephadm.log`` file on all monitor hosts. See :ref:`cephadm-logs` for a
 more complete explanation.
 
+
 Gathering Log Files
--------------------
+===================
 
 Use ``journalctl`` to gather the log files of all daemons:
 
@@ -119,7 +124,7 @@ Use ``journalctl`` to gather the log files of all daemons:
 To read the log file of one specific daemon, run a command of the following
 form:
 
-.. prompt:: bash
+.. prompt:: bash #
 
    cephadm logs --name <name-of-daemon>
 
@@ -127,7 +132,7 @@ form:
    To get the logs of a daemon that is running on a different host, add the
    ``--fsid`` option to the command, as in the following example:
 
-   .. prompt:: bash
+   .. prompt:: bash #
 
       cephadm logs --fsid <fsid> --name <name-of-daemon>
 
@@ -135,24 +140,30 @@ form:
    ``ceph status`` command.
 
 To fetch all log files of all daemons on a given host, run the following
-for-loop::
+shell script:
 
+.. code-block:: bash
+
+    fsid="$(cephadm shell ceph fsid)"
     for name in $(cephadm ls | jq -r '.[].name') ; do
-      cephadm logs --fsid <fsid> --name "$name" > $name;
+      cephadm logs --fsid "$fsid" --name "$name" > $name;
     done
 
+
 Collecting Systemd Status
--------------------------
+=========================
 
-To print the state of a systemd unit, run a command of the following form: 
+To print the state of a systemd unit, run a command of the following form:
 
-.. prompt:: bash
+.. prompt:: bash #
 
    systemctl status "ceph-$(cephadm shell ceph fsid)@<service name>.service";
 
 
 To fetch the state of all daemons of a given host, run the following shell
-script::
+script:
+
+.. code-block:: bash
 
    fsid="$(cephadm shell ceph fsid)"
    for name in $(cephadm ls | jq -r '.[].name') ; do
@@ -161,31 +172,39 @@ script::
 
 
 List all Downloaded Container Images
-------------------------------------
+====================================
 
 To list all container images that are downloaded on a host, run the following
 commands:
 
 .. prompt:: bash #
 
-   podman ps -a --format json | jq '.[].Image' "docker.io/library/centos:8" "registry.opensuse.org/opensuse/leap:15.2"
+   podman ps -a --format json | jq '.[].Image'
+
+.. code-block:: console
+
+   "docker.io/library/centos:8"
+   "registry.opensuse.org/opensuse/leap:15.2"
 
 .. note:: ``Image`` might also be called ``ImageID``.
 
 
 Manually Running Containers
----------------------------
+===========================
 
 Cephadm uses small wrappers when running containers. Refer to
 ``/var/lib/ceph/<cluster-fsid>/<service-name>/unit.run`` for the container
 execution command.
 
+
 .. _cephadm-ssh-errors:
 
 SSH Errors
-----------
+==========
 
-Error message::
+Error message:
+
+.. code-block:: console
 
   execnet.gateway_bootstrap.HostNotFound: -F /tmp/cephadm-conf-73z09u6g -i /tmp/cephadm-identity-ky7ahp_5 root@10.10.1.2
   ...
@@ -195,132 +214,187 @@ Error message::
   ...
 
 If you receive the above error message, try the following things to
-troubleshoot the SSH connection between ``cephadm`` and the monitor:
+troubleshoot the SSH connection between ``cephadm`` and the Monitor:
 
-1. Ensure that ``cephadm`` has an SSH identity key::
+#. Ensure that ``cephadm`` has an SSH identity key:
 
-     [root@mon1~]# cephadm shell -- ceph config-key get mgr/cephadm/ssh_identity_key > ~/cephadm_private_key
-     INFO:cephadm:Inferring fsid f8edc08a-7f17-11ea-8707-000c2915dd98
-     INFO:cephadm:Using recent ceph image docker.io/ceph/ceph:v15 obtained 'mgr/cephadm/ssh_identity_key'
-     [root@mon1 ~] # chmod 0600 ~/cephadm_private_key
+   .. prompt::
+      :language: bash
+      :prompts: [root@mon1 ~]#
+      :modifiers: auto
 
- If this fails, cephadm doesn't have a key. Fix this by running the following command::
+      [root@mon1 ~]# cephadm shell -- ceph config-key get mgr/cephadm/ssh_identity_key > ~/cephadm_private_key
+      INFO:cephadm:Inferring fsid f8edc08a-7f17-11ea-8707-000c2915dd98
+      INFO:cephadm:Using recent ceph image docker.io/ceph/ceph:v15 obtained 'mgr/cephadm/ssh_identity_key'
+      [root@mon1 ~]# chmod 0600 ~/cephadm_private_key
 
-     [root@mon1 ~]# cephadm shell -- ceph cephadm generate-ssh-key
+   If this fails, cephadm doesn't have a key. Fix this by running the following command:
 
- or::
+   .. prompt::
+      :language: bash
+      :prompts: [root@mon1 ~]#
+      :modifiers: auto
 
-     [root@mon1 ~]# cat ~/cephadm_private_key | cephadm shell -- ceph cephadm set-ssh-key -i -
+      [root@mon1 ~]# cephadm shell -- ceph cephadm generate-ssh-key
 
-2. Ensure that the SSH config is correct::
+   or:
 
-     [root@mon1 ~]# cephadm shell -- ceph cephadm get-ssh-config > config
+   .. prompt::
+      :language: bash
+      :prompts: [root@mon1 ~]#
+      :modifiers: auto
 
-3. Verify that it is possible to connect to the host::
+      [root@mon1 ~]# cat ~/cephadm_private_key | cephadm shell -- ceph cephadm set-ssh-key -i -
 
-     [root@mon1 ~]# ssh -F config -i ~/cephadm_private_key root@mon1
+#. Ensure that the SSH config is correct:
 
-Verifying that the Public Key is Listed in the authorized_keys file
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   .. prompt::
+      :language: bash
+      :prompts: [root@mon1 ~]#
+      :modifiers: auto
+
+      [root@mon1 ~]# cephadm shell -- ceph cephadm get-ssh-config > config
+
+#. Verify that it is possible to connect to the host:
+
+   .. prompt::
+      :language: bash
+      :prompts: [root@mon1 ~]#
+      :modifiers: auto
+
+      [root@mon1 ~]# ssh -F config -i ~/cephadm_private_key root@mon1
+
+
+Verifying that the Public Key is Listed in the ``authorized_keys`` file
+-----------------------------------------------------------------------
 
 To verify that the public key is in the ``authorized_keys`` file, run the
-following commands::
+following commands:
 
-     [root@mon1 ~]# cephadm shell -- ceph cephadm get-pub-key > ~/ceph.pub
-     [root@mon1 ~]# grep "`cat ~/ceph.pub`"  /root/.ssh/authorized_keys
+.. prompt::
+   :language: bash
+   :prompts: [root@mon1 ~]#
+   :modifiers: auto
 
-Failed to Infer CIDR network error
-----------------------------------
+   [root@mon1 ~]# cephadm shell -- ceph cephadm get-pub-key > ~/ceph.pub
+   [root@mon1 ~]# grep "`cat ~/ceph.pub`"  /root/.ssh/authorized_keys
 
-If you see this error::
+
+Failed to Infer CIDR Network Error
+==================================
+
+If you see this error:
+
+.. code-block:: console
 
    ERROR: Failed to infer CIDR network for mon ip ***; pass --skip-mon-network to configure it later
 
-Or this error::
+Or this error:
+
+.. code-block:: console
 
    Must set public_network config option or specify a CIDR network, ceph addrvec, or plain IP
 
-This means that you must run a command of this form:
+This means that you must run a command of the following form:
 
-.. prompt:: bash
+.. prompt:: bash #
 
    ceph config set mon public_network <mon_network>
 
 For more detail on operations of this kind, see
 :ref:`deploy_additional_monitors`.
 
+
 Accessing the Admin Socket
---------------------------
+==========================
 
 Each Ceph daemon provides an admin socket that allows runtime option setting and statistic reading. See
 :ref:`rados-monitoring-using-admin-socket`.
 
-#. To access the admin socket, enter the daemon container on the host::
+#. To access the admin socket, enter the daemon container on the host:
 
-   [root@mon1 ~]# cephadm enter --name <daemon-name>
+   .. prompt::
+      :language: bash
+      :prompts: [root@mon1 ~]#
+      :modifiers: auto
 
-#. Run a command of the following forms to see the admin socket's configuration and other available actions::
-  
-   [ceph: root@mon1 /]# ceph --admin-daemon /var/run/ceph/ceph-<daemon-name>.asok config show
-   [ceph: root@mon1 /]# ceph --admin-daemon /var/run/ceph/ceph-<daemon-name>.asok help
+      [root@mon1 ~]# cephadm enter --name <daemon-name>
+
+#. Run commands of the following forms to see the admin socket's configuration and other available actions:
+
+   .. prompt::
+      :language: bash
+      :prompts: [ceph: root@mon1 /]#
+      :modifiers: auto
+
+      [ceph: root@mon1 /]# ceph --admin-daemon /var/run/ceph/ceph-<daemon-name>.asok config show
+      [ceph: root@mon1 /]# ceph --admin-daemon /var/run/ceph/ceph-<daemon-name>.asok help
+
 
 Running Various Ceph Tools
---------------------------------
+==========================
 
-To run Ceph tools such as ``ceph-objectstore-tool`` or 
+To run Ceph tools such as ``ceph-objectstore-tool`` or
 ``ceph-monstore-tool``, invoke the cephadm CLI with
-``cephadm shell --name <daemon-name>``.  For example::
+``cephadm shell --name <daemon-name>``.  For example:
 
-    root@myhostname # cephadm unit --name mon.myhostname stop
-    root@myhostname # cephadm shell --name mon.myhostname
-    [ceph: root@myhostname /]# ceph-monstore-tool /var/lib/ceph/mon/ceph-myhostname get monmap > monmap         
-    [ceph: root@myhostname /]# monmaptool --print monmap
-    monmaptool: monmap file monmap
-    epoch 1
-    fsid 28596f44-3b56-11ec-9034-482ae35a5fbb
-    last_changed 2021-11-01T20:57:19.755111+0000
-    created 2021-11-01T20:57:19.755111+0000
-    min_mon_release 17 (quincy)
-    election_strategy: 1
-    0: [v2:127.0.0.1:3300/0,v1:127.0.0.1:6789/0] mon.myhostname
+.. prompt::
+   :language: bash
+   :prompts: root@myhostname #,[ceph: root@myhostname /]#
+   :modifiers: auto
+
+   root@myhostname # cephadm unit --name mon.myhostname stop
+   root@myhostname # cephadm shell --name mon.myhostname
+   [ceph: root@myhostname /]# ceph-monstore-tool /var/lib/ceph/mon/ceph-myhostname get monmap > monmap
+   [ceph: root@myhostname /]# monmaptool --print monmap
+   monmaptool: monmap file monmap
+   epoch 1
+   fsid 28596f44-3b56-11ec-9034-482ae35a5fbb
+   last_changed 2021-11-01T20:57:19.755111+0000
+   created 2021-11-01T20:57:19.755111+0000
+   min_mon_release 17 (quincy)
+   election_strategy: 1
+   0: [v2:127.0.0.1:3300/0,v1:127.0.0.1:6789/0] mon.myhostname
 
 The cephadm shell sets up the environment in a way that is suitable for
-extended daemon maintenance and for the interactive running of daemons. 
+extended daemon maintenance and for the interactive running of daemons.
+
 
 .. _cephadm-restore-quorum:
 
 Restoring the Monitor Quorum
-----------------------------
+============================
 
-If the Ceph Monitor daemons (mons) cannot form a quorum, ``cephadm`` will not
-be able to manage the cluster until quorum is restored.
+If the Ceph Monitor (``mon``) daemons cannot form a quorum, ``cephadm`` will
+not be able to manage the cluster until quorum is restored.
 
 In order to restore the quorum, remove unhealthy monitors
 form the monmap by following these steps:
 
-1. Stop all Monitors. Use ``ssh`` to connect to each Monitor's host, and then
+#. Stop all Monitors. Use ``ssh`` to connect to each Monitor's host, and then
    while connected to the Monitor's host use ``cephadm`` to stop the Monitor
    daemon:
 
-   .. prompt:: bash
+   .. prompt:: bash #
 
       ssh {mon-host}
       cephadm unit --name {mon.hostname} stop
 
+#. Identify a surviving Monitor and log in to its host:
 
-2. Identify a surviving Monitor and log in to its host:
-
-   .. prompt:: bash
+   .. prompt:: bash #
 
       ssh {mon-host}
       cephadm enter --name {mon.hostname}
 
-3. Follow the steps in :ref:`rados-mon-remove-from-unhealthy`.
+#. Follow the steps in :ref:`rados-mon-remove-from-unhealthy`.
+
 
 .. _cephadm-manually-deploy-mgr:
 
 Manually Deploying a Manager Daemon
------------------------------------
+===================================
+
 At least one Manager (``mgr``) daemon is required by cephadm in order to manage
 the cluster. If the last remaining Manager has been removed from the Ceph
 cluster, follow these steps in order to deploy a fresh Manager on an arbitrary
@@ -368,8 +442,9 @@ called ``mgr.hostname.smfvfd``.
 
       cephadm --image <container-image> deploy --fsid <fsid> --name mgr.hostname.smfvfd --config-json config-json.json
 
+
 Capturing Core Dumps
----------------------
+====================
 
 A Ceph cluster that uses ``cephadm`` can be configured to capture core dumps.
 The initial capture and processing of the coredump is performed by
@@ -394,11 +469,11 @@ Wait for the crash to happen again. To simulate the crash of a daemon, run for
 example ``killall -3 ceph-mon``.
 
 
-Running the Debugger with cephadm
-----------------------------------
+Running the Debugger with Cephadm
+=================================
 
-Running a single debugging session
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Running a Single Debugging Session
+----------------------------------
 
 Initiate a debugging session by using the ``cephadm shell`` command.
 From within the shell container we need to install the debugger and debuginfo
@@ -418,20 +493,20 @@ packages. To debug a core file captured by systemd, run the following:
       dnf install ceph-debuginfo gdb zstd
 
    .. prompt:: bash #
-      
-    unzstd /var/lib/systemd/coredump/core.ceph-*.zst
+
+      unzstd /var/lib/systemd/coredump/core.ceph-*.zst
 
    .. prompt:: bash #
 
-    gdb /usr/bin/ceph-mon /mnt/coredump/core.ceph-*.zst
+      gdb /usr/bin/ceph-mon /mnt/coredump/core.ceph-*.zst
 
 #. Run debugger commands at gdb's prompt:
 
    .. prompt:: bash (gdb)
 
       bt
-      
-   ::
+
+   .. code-block:: none
 
       #0  0x00007fa9117383fc in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libpthread.so.0
       #1  0x00007fa910d7f8f0 in std::condition_variable::wait(std::unique_lock<std::mutex>&) () from /lib64/libstdc++.so.6
@@ -439,8 +514,8 @@ packages. To debug a core file captured by systemd, run the following:
       #3  0x0000563085ca3d7e in main ()
 
 
-Running repeated debugging sessions
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Running Repeated Debugging Sessions
+-----------------------------------
 
 When using ``cephadm shell``, as in the example above, any changes made to the
 container that is spawned by the shell command are ephemeral. After the shell
@@ -450,8 +525,10 @@ is invoked, but to save time and resources you can create a new container image
 and use it for repeated debugging sessions.
 
 In the following example, we create a simple file that constructs the
-container image. The command below uses podman but it is expected to work
-correctly even if ``podman`` is replaced with ``docker``::
+container image. The command below uses Podman but it is expected to work
+correctly even if ``podman`` is replaced with ``docker``:
+
+.. code-block:: none
 
   cat >Containerfile <<EOF
   ARG BASE_IMG=quay.io/ceph/ceph:v18
@@ -479,8 +556,8 @@ previously described, run:
     cephadm --image ceph:debugging shell --mount /var/lib/system/coredump
 
 
-Debugging live processes
-~~~~~~~~~~~~~~~~~~~~~~~~
+Debugging Live Processes
+------------------------
 
 The gdb debugger can attach to running processes to debug them. This can be
 achieved with a containerized process by using the debug image and attaching it

@@ -296,7 +296,8 @@ class TestMkfs(object):
         stub_call(([], [], 1))
         o = objectstore(osd_id='1',
                          osd_fsid='asdf-1234',
-                         cephx_secret='keyring')
+                         cephx_secret='keyring',
+                         osd_type='classic')
         with pytest.raises(RuntimeError) as error:
             o.osd_mkfs()
         assert "Command failed with exit code 1" in str(error.value)
@@ -308,7 +309,8 @@ class TestMkfs(object):
         o = objectstore(osd_id='1',
                         objectstore='bluestore',
                         osd_fsid='asdf-1234',
-                        cephx_secret='keyring')
+                        cephx_secret='keyring',
+                        osd_type='classic')
         with pytest.raises(RuntimeError) as error:
             o.osd_mkfs()
         expected = ' '.join([

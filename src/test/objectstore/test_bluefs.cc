@@ -1253,10 +1253,30 @@ TEST_F(BlueFS_wal, wal_v2_simulate_crash)
   ConfSaver conf(g_ceph_context->_conf);
   conf.SetVal("bluefs_min_flush_size", "65536");
   conf.SetVal("bluefs_wal_envelope_mode", "true");
+  conf.SetVal("bluefs_check_volume_selector_on_mount", "true");
   conf.ApplyChanges();
 
-  Create(1048576 * 256, 1048576 * 128, 1048576 * 64);
+  uint64_t wal_size = 1048576 * 64;
+  uint64_t db_size = 1048576 * 128;
+  uint64_t slow_size = 1048576 * 256;
+  Create(slow_size, db_size, wal_size);
+
+  auto new_vselector = [&]() {
+    return
+      new RocksDBBlueFSVolumeSelector(
+        wal_size * 95 / 100,
+        db_size * 95 / 100,
+        slow_size * 95 / 100,
+        16777216 * 64, //rocks_opts.write_buffer_size * rocks_opts.max_write_buffer_number
+        1073741824,    //rocks_opts.max_bytes_for_level_base,
+        8,             //rocks_opts.max_bytes_for_level_multiplier,
+        true /*use some extra*/);
+    };
+
+  BlueFSVolumeSelector *vselector = new_vselector();
+  fs.set_volume_selector(vselector);
   ASSERT_EQ(0, fs.mount());
+
   std::string dir = "dir";
   std::string file = "wal.log";
   int r = fs.mkdir(dir);
@@ -1264,14 +1284,94 @@ TEST_F(BlueFS_wal, wal_v2_simulate_crash)
   BlueFS::FileWriter *writer;
   ASSERT_EQ(0, fs.open_for_write(dir, file, &writer, false));
   ASSERT_NE(nullptr, writer);
+
   bufferlist content;
   many_small_writes(writer, content, 100);
   delete writer; //close without orderly shutdown, simulate failure
+
   fs.umount();
+
+  vselector = new_vselector();
+  fs.set_volume_selector(vselector);
   fs.mount();
+
   bufferlist read_content;
   many_small_reads(dir, file, read_content, 100);
   ASSERT_EQ(content, read_content);
+
+  fs.umount();
+}
+
+TEST_F(BlueFS_wal, wal_v2_repro_74765)
+{
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_min_flush_size", "65536");
+  conf.SetVal("bluefs_wal_envelope_mode", "true");
+  conf.ApplyChanges();
+
+  uint64_t wal_size = 1048576 * 64;
+  uint64_t db_size = 1048576 * 128;
+  uint64_t slow_size = 1048576 * 256;
+  Create(slow_size, db_size, wal_size);
+
+  auto new_vselector = [&]() {
+    return
+      new RocksDBBlueFSVolumeSelector(
+        wal_size * 95 / 100,
+        db_size * 95 / 100,
+        slow_size * 95 / 100,
+        16777216 * 64, //rocks_opts.write_buffer_size * rocks_opts.max_write_buffer_number
+        1073741824,    //rocks_opts.max_bytes_for_level_base,
+        8,             //rocks_opts.max_bytes_for_level_multiplier,
+        true /*use some extra*/);
+    };
+
+  BlueFSVolumeSelector *vselector = new_vselector();
+  fs.set_volume_selector(vselector);
+  ASSERT_EQ(0, fs.mount());
+
+  std::string dir = "dir";
+  std::string file = "wal.log";
+  std::string file2 = "wal2.log";
+  int r = fs.mkdir(dir);
+  ASSERT_TRUE(r == 0 || r == -EEXIST);
+  BlueFS::FileWriter *writer;
+  ASSERT_EQ(0, fs.open_for_write(dir, file, &writer, false));
+  ASSERT_NE(nullptr, writer);
+
+  BlueFS::FileWriter* writer2;
+  ASSERT_EQ(0, fs.open_for_write(dir, file2, &writer2, false));
+  ASSERT_NE(nullptr, writer2);
+
+  bufferlist content;
+  many_small_writes(writer, content, 100);
+  delete writer; //close without orderly shutdown, simulate failure
+  bufferlist content2;
+  many_small_writes(writer2, content2, 100);
+  delete writer2; //close without orderly shutdown, simulate failure
+
+  fs.umount();
+
+  vselector = new_vselector();
+  fs.set_volume_selector(vselector);
+  fs.mount();
+
+  bufferlist read_content;
+  many_small_reads(dir, file, read_content, 100);
+  ASSERT_EQ(content, read_content);
+
+  bufferlist read_content2;
+  many_small_reads(dir, file2, read_content2, 100);
+  ASSERT_EQ(content2, read_content2);
+
+  ASSERT_EQ(0, fs.unlink(dir, file));
+
+  fs.umount();
+
+  vselector = new_vselector();
+  fs.set_volume_selector(vselector);
+  fs.mount();
+  ASSERT_EQ(0, fs.unlink(dir, file2));
   fs.umount();
 }
 

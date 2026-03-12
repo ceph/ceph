@@ -199,6 +199,23 @@ To disable the grace period entirely (immediate reporting), set the value to 0:
 
    ceph config set mon mon_netsplit_grace_period 0
 
+MON_COLOCATED
+____________
+
+Two or more Monitors are located on the same node. This health check is 
+raised when multiple Monitors share the same IP address. This check is by 
+default disabled. 
+
+Colocation of Monitors can increase the risk that a host, rack, or network 
+failure prevents the Monitors from forming a Paxos quorum, which may 
+stall cluster operations.
+
+To enable the :confval:`mon_warn_on_colocated_monitors` warning, run the following command:
+
+.. prompt:: bash #
+
+   ceph config set mon mon_warn_on_colocated_monitors true
+
 AUTH_INSECURE_GLOBAL_ID_RECLAIM
 _______________________________
 
@@ -1150,7 +1167,7 @@ or ``snaptrim_error`` flag set, which indicates that an earlier data scrub
 operation found a problem, or (2) have the *repair* flag set, which means that
 a repair for such an inconsistency is currently in progress.
 
-For more information, see :doc:`../troubleshooting/troubleshooting-pg`.
+For more information, see :ref:`rados_operations_monitoring_osd_pg`.
 
 OSD_SCRUB_ERRORS
 ________________
@@ -1158,7 +1175,7 @@ ________________
 Recent OSD scrubs have discovered inconsistencies. This alert is generally
 paired with *PG_DAMAGED* (see above).
 
-For more information, see :doc:`../troubleshooting/troubleshooting-pg`.
+For more information, see :ref:`rados_operations_monitoring_osd_pg`.
 
 OSD_TOO_MANY_REPAIRS
 ____________________

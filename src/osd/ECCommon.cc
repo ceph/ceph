@@ -1032,6 +1032,7 @@ void ECCommon::RMWPipeline::finish_rmw(OpRef const &op) {
       nop->pipeline = this;
 
       tid_to_op_map[tid] = nop;
+      waiting_commit.push_back(nop);
 
       /* The cache is idle (we checked above) and this IO never blocks for reads
        * so we can skip the extent cache and immediately call the completion.

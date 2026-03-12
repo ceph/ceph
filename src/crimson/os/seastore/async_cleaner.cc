@@ -8,6 +8,7 @@
 
 #include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/backref_manager.h"
+#include "crimson/os/seastore/lba_manager.h"
 #include "crimson/os/seastore/transaction_manager.h"
 
 SET_SUBSYS(seastore_cleaner);
@@ -413,8 +414,10 @@ JournalTrimmerImpl::JournalTrimmerImpl(
   config_t config,
   backend_type_t type,
   device_off_t roll_start,
-  device_off_t roll_size)
-  : backref_manager(backref_manager),
+  device_off_t roll_size,
+  bool tail_include_alloc)
+  : JournalTrimmer(tail_include_alloc),
+    backref_manager(backref_manager),
     config(config),
     backend_type(type),
     roll_start(roll_start),
@@ -487,7 +490,7 @@ void JournalTrimmerImpl::update_journal_tails(
     }
   }
 
-  if (alloc_tail != JOURNAL_SEQ_NULL) {
+  if (tail_include_alloc && alloc_tail != JOURNAL_SEQ_NULL) {
     ceph_assert(journal_head == JOURNAL_SEQ_NULL ||
                 journal_head >= alloc_tail);
     if (journal_alloc_tail != JOURNAL_SEQ_NULL &&
@@ -584,7 +587,8 @@ std::size_t JournalTrimmerImpl::get_dirty_journal_size() const
 
 std::size_t JournalTrimmerImpl::get_alloc_journal_size() const
 {
-  if (!background_callback->is_ready()) {
+  if (!background_callback->is_ready() ||
+      !tail_include_alloc) {
     return 0;
   }
   auto ret = journal_head.relative_to(
@@ -1146,14 +1150,22 @@ double SegmentCleaner::calc_gc_benefit_cost(
           (2 * age_factor - 2) * util + 1);
 }
 
-SegmentCleaner::do_reclaim_space_ret
-SegmentCleaner::do_reclaim_space(
+using do_reclaim_space_ertr = base_ertr;
+using do_reclaim_space_ret = do_reclaim_space_ertr::future<>;
+do_reclaim_space_ret do_reclaim_space(
     const std::vector<CachedExtentRef> &backref_extents,
-    const backref_mapping_list_t &pin_list,
+    backref_mapping_list_t &pin_list,
     std::size_t &reclaimed,
-    std::size_t &runs)
+    std::size_t &runs,
+    ExtentCallbackInterface &extent_callback,
+    bool is_cold,
+    BackrefManager &backref_manager,
+    sea_time_point modify_time,
+    paddr_t start_pos,
+    paddr_t end_pos,
+    rewrite_gen_t target_generation)
 {
-  auto& shard_stats = extent_callback->get_shard_stats();
+  auto& shard_stats = extent_callback.get_shard_stats();
   if (is_cold) {
     ++(shard_stats.cleaner_cold_num);
   } else {
@@ -1170,8 +1182,10 @@ SegmentCleaner::do_reclaim_space(
   // 	tree doesn't match the extent's paddr
   // 3. the extent is physical and doesn't exist in the
   // 	lba tree, backref tree or backref cache;
-  return repeat_eagain([this, &backref_extents, &shard_stats,
-                        &pin_list, &reclaimed, &runs] {
+  return repeat_eagain([&extent_callback, &backref_extents,
+			&shard_stats, &pin_list, &reclaimed,
+			&runs, is_cold, &backref_manager,
+			modify_time, start_pos, end_pos, target_generation] {
     reclaimed = 0;
     runs++;
     transaction_type_t src;
@@ -1182,23 +1196,26 @@ SegmentCleaner::do_reclaim_space(
       src = Transaction::src_t::CLEANER_MAIN;
       ++(shard_stats.repeat_cleaner_main_num);
     }
-    return extent_callback->with_transaction_intr(
+    return extent_callback.with_transaction_intr(
       src,
       "clean_reclaim_space",
       CACHE_HINT_NOCACHE,
-      [this, &backref_extents, &pin_list, &reclaimed](auto &t)
+      [&extent_callback, &backref_extents, &pin_list, modify_time,
+      &backref_manager, &reclaimed, start_pos, end_pos,
+      target_generation](auto &t)
     {
       return seastar::do_with(
         std::vector<CachedExtentRef>(backref_extents),
-        [this, &t, &reclaimed, &pin_list](auto &extents)
+        [&extent_callback, &t, &reclaimed, &pin_list, modify_time,
+	&backref_manager, start_pos, end_pos, target_generation](auto &extents)
       {
         LOG_PREFIX(SegmentCleaner::do_reclaim_space);
         // calculate live extents
         auto cached_backref_entries =
-          backref_manager.get_cached_backref_entries_in_range(
-            reclaim_state->start_pos, reclaim_state->end_pos);
+          backref_manager.get_cached_backref_entries_in_range(start_pos, end_pos);
         backref_entry_query_set_t backref_entries;
         for (auto &pin : pin_list) {
+	  pin.renew_cursor(t);
           backref_entries.emplace(
             pin.get_key(),
             pin.get_val(),
@@ -1219,10 +1236,10 @@ SegmentCleaner::do_reclaim_space(
                t, backref_entries.size(), extents.size());
 	return seastar::do_with(
 	  std::move(backref_entries),
-	  [this, &extents, &t](auto &backref_entries) {
+	  [&extent_callback, &extents, &t](auto &backref_entries) {
 	  return trans_intr::parallel_for_each(
 	    backref_entries,
-	    [this, &extents, &t](auto &ent)
+	    [&extent_callback, &extents, &t](auto &ent)
 	  {
 	    LOG_PREFIX(SegmentCleaner::do_reclaim_space);
 	    TRACET("getting extent of type {} at {}~0x{:x}",
@@ -1230,7 +1247,7 @@ SegmentCleaner::do_reclaim_space(
 	      ent.type,
 	      ent.paddr,
 	      ent.len);
-	    return extent_callback->get_extents_if_live(
+	    return extent_callback.get_extents_if_live(
 	      t, ent.type, ent.paddr, ent.laddr, ent.len
 	    ).si_then([FNAME, &extents, &ent, &t](auto list) {
 	      if (list.empty()) {
@@ -1242,21 +1259,22 @@ SegmentCleaner::do_reclaim_space(
 	      }
 	    });
 	  });
-	}).si_then([FNAME, &extents, this, &reclaimed, &t] {
+	}).si_then([FNAME, &extents, &extent_callback,
+		    &reclaimed, &t, modify_time, target_generation] {
           DEBUGT("reclaim {} extents", t, extents.size());
           // rewrite live extents
-          auto modify_time = segments[reclaim_state->get_segment_id()].modify_time;
           return trans_intr::do_for_each(
             extents,
-            [this, modify_time, &t, &reclaimed](auto ext)
+            [&extent_callback, modify_time, &t,
+	    &reclaimed, target_generation](auto ext)
           {
             reclaimed += ext->get_length();
-            return extent_callback->rewrite_extent(
-                t, ext, reclaim_state->target_generation, modify_time);
+            return extent_callback.rewrite_extent(
+                t, ext, target_generation, modify_time);
           });
         });
-      }).si_then([this, &t] {
-        return extent_callback->submit_transaction_direct(t);
+      }).si_then([&extent_callback, &t] {
+        return extent_callback.submit_transaction_direct(t);
       });
     });
   }).finally([&shard_stats] {
@@ -1348,7 +1366,14 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
           backref_extents,
           pin_list,
           reclaimed,
-          runs
+          runs,
+	  *extent_callback,
+	  is_cold,
+	  backref_manager,
+	  segments[reclaim_state->get_segment_id()].modify_time,
+	  reclaim_state->start_pos,
+	  reclaim_state->end_pos,
+	  reclaim_state->target_generation
       ).safe_then([this, FNAME, pavail_ratio, start, &reclaimed, &runs] {
         stats.reclaiming_bytes += reclaimed;
         auto d = seastar::lowres_system_clock::now() - start;
@@ -1567,7 +1592,7 @@ SegmentCleaner::scan_extents_ret SegmentCleaner::scan_no_tail_segment(
   });
 }
 
-bool SegmentCleaner::check_usage()
+bool SegmentCleaner::check_usage(bool)
 {
   SpaceTrackerIRef tracker(space_tracker->make_empty());
   extent_callback->with_transaction_weak(
@@ -1767,10 +1792,12 @@ void SegmentCleaner::print(std::ostream &os, bool is_detailed) const
 RBMCleaner::RBMCleaner(
   RBMDeviceGroupRef&& rb_group,
   BackrefManager &backref_manager,
+  LBAManager &lba_manager,
   bool detailed)
   : detailed(detailed),
     rb_group(std::move(rb_group)),
-    backref_manager(backref_manager)
+    backref_manager(backref_manager),
+    lba_manager(lba_manager)
 {}
 
 void RBMCleaner::print(std::ostream &os, bool is_detailed) const
@@ -1873,7 +1900,7 @@ RBMCleaner::mount_ret RBMCleaner::mount()
   });
 }
 
-bool RBMCleaner::check_usage()
+bool RBMCleaner::check_usage(bool has_cold_tier)
 {
   assert(detailed);
   const auto& rbms = rb_group->get_rb_managers();
@@ -1881,39 +1908,56 @@ bool RBMCleaner::check_usage()
   extent_callback->with_transaction_weak(
       "check_usage",
       CACHE_HINT_NOCACHE,
-      [this, &tracker, &rbms](auto &t) {
-    return backref_manager.scan_mapped_space(
-      t,
-      [&tracker, &rbms](
-        paddr_t paddr,
-	paddr_t backref_key,
-        extent_len_t len,
-        extent_types_t type,
-        laddr_t laddr)
-    {
-      for (auto rbm : rbms) {
-	if (rbm->get_device_id() == paddr.get_device_id()) {
-	  if (is_backref_node(type)) {
-	    assert(laddr == L_ADDR_NULL);
-	    assert(backref_key.is_absolute_random_block()
-	           || backref_key == P_ADDR_MIN);
-	    tracker.allocate(
-	      paddr,
-	      len);
-	  } else if (laddr == L_ADDR_NULL) {
-	    assert(backref_key == P_ADDR_NULL);
-	    tracker.release(
-	      paddr,
-	      len);
-	  } else {
-	    assert(backref_key == P_ADDR_NULL);
-	    tracker.allocate(
-	      paddr,
-	      len);
-	  }
-	}
-      }
-    });
+      [this, &tracker, &rbms, has_cold_tier](auto &t) {
+    if (has_cold_tier) {
+      return backref_manager.scan_mapped_space(
+        t,
+        [&tracker, &rbms](
+          paddr_t paddr,
+          paddr_t backref_key,
+          extent_len_t len,
+          extent_types_t type,
+          laddr_t laddr)
+      {
+        for (auto rbm : rbms) {
+          if (rbm->get_device_id() == paddr.get_device_id()) {
+            if (is_backref_node(type)) {
+              assert(laddr == L_ADDR_NULL);
+              assert(backref_key.is_absolute_random_block()
+                     || backref_key == P_ADDR_MIN);
+              tracker.allocate(
+                paddr,
+                len);
+            } else if (laddr == L_ADDR_NULL) {
+              assert(backref_key == P_ADDR_NULL);
+              tracker.release(
+                paddr,
+                len);
+            } else {
+              assert(backref_key == P_ADDR_NULL);
+              tracker.allocate(
+                paddr,
+                len);
+            }
+          }
+        }
+      });
+    } else {
+      return lba_manager.scan_mapped_space(
+        t,
+        [&tracker, &rbms](
+          paddr_t paddr,
+          extent_len_t len,
+          extent_types_t type,
+          laddr_t laddr)
+      {
+        for (auto rbm : rbms) {
+          if (rbm->get_device_id() == paddr.get_device_id()) {
+            tracker.allocate(paddr, len);
+          }
+        }
+      });
+    }
   }).unsafe_get();
   return equals(tracker);
 }

@@ -57,7 +57,7 @@ target_link_libraries(unittest_mon_montypes mon global)
 # ceph_test_mon_memory_target
 add_executable(ceph_test_mon_memory_target
   test_mon_memory_target.cc)
-target_link_libraries(ceph_test_mon_memory_target Boost::system Threads::Threads)
+target_link_libraries(ceph_test_mon_memory_target Boost::boost Threads::Threads)
 set_target_properties(ceph_test_mon_memory_target PROPERTIES
   SKIP_RPATH TRUE
   INSTALL_RPATH "")

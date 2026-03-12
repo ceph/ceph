@@ -421,8 +421,6 @@ Monitors
 .. confval:: mon_cluster_log_to_graylog_host
 .. confval:: mon_cluster_log_to_graylog_port
 .. confval:: mon_log_max
-.. confval:: mon_health_to_clog
-.. confval:: mon_health_to_clog_interval
 
 OSD
 ---

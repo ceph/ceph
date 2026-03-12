@@ -276,6 +276,27 @@ public:
       }
     }
 
+  ~BucketCache() {
+    /* Stop the inotify thread first to prevent it from accessing
+     * cache entries while we're draining them. This prevents
+     * heap-use-after-free errors. */
+    un.reset();
+
+    /* Clean up all cached bucket entries to prevent memory leaks.
+     * Drain the AVL cache and unref each entry to trigger deletion.
+     *
+     * Entries should have refcount=1 (sentinel state) after normal use
+     * because list_bucket() calls lru.unref() on all code paths. When
+     * we call unref here, the refcount goes to 0 and the entry is deleted.
+     *
+     * The drain() method safely removes all entries
+     * from the AVL cache partitions and calls the supplied lambda on each,
+     * allowing proper cleanup without accessing private members. */
+    cache.drain([this](BucketCacheEntry<D, B>* entry) {
+      lru.unref(entry, cohort::lru::FLAG_NONE);
+    }, cache.FLAG_LOCK);
+  }
+
   static constexpr uint32_t FLAG_NONE     = 0x0000;
   static constexpr uint32_t FLAG_CREATE   = 0x0001;
   static constexpr uint32_t FLAG_LOCK     = 0x0002;
@@ -446,6 +467,7 @@ public:
 	auto rc = cursor.lower_bound(k, key, data);
 	if (rc == MDB_NOTFOUND) {
 	  /* no key sorts after k/marker, so there is nothing to do */
+	  lru.unref(b, cohort::lru::FLAG_NONE);
 	  return 0;
 	}
 	proc_result();
@@ -454,6 +476,7 @@ public:
 	auto rc = cursor.get(key, data, MDB_FIRST);
 	if (rc == MDB_NOTFOUND) {
 	  /* no initial key */
+	  lru.unref(b, cohort::lru::FLAG_NONE);
 	  return 0;
 	}
 	if (rc == MDB_SUCCESS) {
@@ -462,6 +485,7 @@ public:
       }
       while(cursor.get(key, data, MDB_NEXT) == MDB_SUCCESS) {
 	if (!again) {
+	  lru.unref(b, cohort::lru::FLAG_NONE);
 	  return 0;
 	}
 	proc_result();

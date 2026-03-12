@@ -521,6 +521,7 @@ public:
 	ceph_assert(s == extent_2q_state_t::Hot);
 	hot.remove(extent);
       }
+      extent.set_2q_state(extent_2q_state_t::Fresh);
     } else {
       ceph_assert(s == extent_2q_state_t::Fresh);
     }

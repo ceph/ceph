@@ -18,7 +18,6 @@
 #include "crimson/os/seastore/transaction.h"
 #include "crimson/os/seastore/transaction_interruptor.h"
 #include "crimson/os/seastore/segment_seq_allocator.h"
-#include "crimson/os/seastore/backref_mapping.h"
 
 namespace crimson::os::seastore {
 
@@ -431,6 +430,8 @@ struct BackgroundListener {
  */
 class JournalTrimmer {
 public:
+  JournalTrimmer(bool tail_include_alloc)
+    : tail_include_alloc(tail_include_alloc) {}
   // get the committed journal head
   virtual journal_seq_t get_journal_head() const = 0;
 
@@ -465,7 +466,11 @@ public:
   virtual ~JournalTrimmer() {}
 
   journal_seq_t get_journal_tail() const {
-    return std::min(get_alloc_tail(), get_dirty_tail());
+    if (tail_include_alloc) {
+      return std::min(get_alloc_tail(), get_dirty_tail());
+    } else {
+      return get_dirty_tail();
+    }
   }
 
   virtual std::size_t get_trim_size_per_cycle() const = 0;
@@ -473,7 +478,8 @@ public:
   bool check_is_ready() const {
     return (get_journal_head() != JOURNAL_SEQ_NULL &&
             get_dirty_tail() != JOURNAL_SEQ_NULL &&
-            get_alloc_tail() != JOURNAL_SEQ_NULL);
+            (get_alloc_tail() != JOURNAL_SEQ_NULL ||
+             !tail_include_alloc));
   }
 
   std::size_t get_num_rolls() const {
@@ -487,9 +493,12 @@ public:
     return get_journal_head_sequence() + 1 -
            get_journal_tail().segment_seq;
   }
+protected:
+  bool tail_include_alloc = true;
 };
 
 class BackrefManager;
+class LBAManager;
 class JournalTrimmerImpl;
 using JournalTrimmerImplRef = std::unique_ptr<JournalTrimmerImpl>;
 
@@ -531,7 +540,8 @@ public:
     config_t config,
     backend_type_t type,
     device_off_t roll_start,
-    device_off_t roll_size);
+    device_off_t roll_size,
+    bool tail_include_alloc);
 
   ~JournalTrimmerImpl() = default;
 
@@ -618,9 +628,11 @@ public:
       config_t config,
       backend_type_t type,
       device_off_t roll_start,
-      device_off_t roll_size) {
+      device_off_t roll_size,
+      bool tail_include_alloc) {
     return std::make_unique<JournalTrimmerImpl>(
-        backref_manager, config, type, roll_start, roll_size);
+        backref_manager, config, type, roll_start,
+        roll_size, tail_include_alloc);
   }
 
   struct stat_printer_t {
@@ -638,7 +650,14 @@ private:
     return target <= journal_dirty_tail;
   }
 
+  bool can_drop_backref() const {
+    return get_backend_type() == backend_type_t::RANDOM_BLOCK;
+  }
+
   bool should_trim_alloc() const {
+    if (can_drop_backref()) {
+      return false;
+    }
     return get_alloc_tail_target() > journal_alloc_tail;
   }
 
@@ -1228,7 +1247,7 @@ public:
 #endif
 
   // test only
-  virtual bool check_usage() = 0;
+  virtual bool check_usage(bool has_cold_tier) = 0;
 
   struct stat_printer_t {
     const AsyncCleaner &cleaner;
@@ -1429,7 +1448,7 @@ public:
 
   // Testing interfaces
 
-  bool check_usage() final;
+  bool check_usage(bool has_cold_tier) final;
 
 private:
   /*
@@ -1515,14 +1534,6 @@ private:
     }
   };
   std::optional<reclaim_state_t> reclaim_state;
-
-  using do_reclaim_space_ertr = base_ertr;
-  using do_reclaim_space_ret = do_reclaim_space_ertr::future<>;
-  do_reclaim_space_ret do_reclaim_space(
-    const std::vector<CachedExtentRef> &backref_extents,
-    const backref_mapping_list_t &pin_list,
-    std::size_t &reclaimed,
-    std::size_t &runs);
 
   /*
    * Segments calculations
@@ -1692,14 +1703,16 @@ public:
   RBMCleaner(
     RBMDeviceGroupRef&& rb_group,
     BackrefManager &backref_manager,
+    LBAManager &lba_manager,
     bool detailed);
 
   static RBMCleanerRef create(
       RBMDeviceGroupRef&& rb_group,
       BackrefManager &backref_manager,
+      LBAManager &lba_manager,
       bool detailed) {
     return std::make_unique<RBMCleaner>(
-      std::move(rb_group), backref_manager, detailed);
+      std::move(rb_group), backref_manager, lba_manager, detailed);
   }
 
   RBMDeviceGroup* get_rb_group() {
@@ -1829,7 +1842,7 @@ public:
 
   // Testing interfaces
 
-  bool check_usage() final;
+  bool check_usage(bool has_cold_tier) final;
 
   bool check_usage_is_empty() const final {
     // TODO
@@ -1842,6 +1855,7 @@ private:
   const bool detailed;
   RBMDeviceGroupRef rb_group;
   BackrefManager &backref_manager;
+  LBAManager &lba_manager;
 
   struct {
     /**

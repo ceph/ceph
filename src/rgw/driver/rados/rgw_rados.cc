@@ -350,7 +350,7 @@ void RGWRadosThread::start()
 
 void RGWRadosThread::stop()
 {
-  down_flag = true;
+  set_down_flag();
   stop_process();
   if (worker) {
     worker->signal();
@@ -972,12 +972,14 @@ void RGWIndexCompletionManager::process()
       }
 
       if (c->log_op) {
-        // This null_yield can stay, for now, since we're in our own thread
-        r = add_datalog_entry(&dpp, store->svc.datalog_rados, bucket_info,
-			      bs.shard_id, null_yield);
-	ldpp_dout(&dpp, 0) << "ERROR: " << __func__ << "(): write to datalog failed, obj=" << c->obj << " r=" << r << dendl;
-
-        /* ignoring error, can't do anything about it */
+        /* this null_yield can stay for now since we're in our own
+         * thread */
+        std::ignore = add_datalog_entry(&dpp, store->svc.datalog_rados,
+                                        bucket_info, bs.shard_id,
+                                        null_yield);
+        /* if there is an error we can ignore it, as a) there's
+         * nothing we can do and b) it's already logged in
+         * add_datalog_entry */
       }
     }
   }
@@ -1068,6 +1070,19 @@ bool RGWIndexCompletionManager::handle_completion(completion_t cb, complete_op_d
 
 void RGWRados::finalize()
 {
+  if (run_sync_thread) {
+    std::lock_guard l{meta_sync_thread_lock};
+    meta_sync_processor_thread->set_down_flag();
+    std::lock_guard dl{data_sync_thread_lock};
+    for (auto iter : data_sync_processor_threads) {
+      RGWDataSyncProcessorThread *thread = iter.second;
+      thread->set_down_flag();
+    }
+    if (sync_log_trimmer) {
+      sync_log_trimmer->set_down_flag();
+    }
+  }
+
   /* Before joining any sync threads, drain outstanding requests &
    * mark the async_processor as going_down() */
   if (svc.async_processor) {
@@ -7974,6 +7989,12 @@ int RGWRados::Bucket::UpdateIndex::guard_reshard(const DoutPrefixProvider *dpp, 
     }
 
     r = call(bs);
+    if (r == -ENOENT) {
+      ldpp_dout(dpp, 10) << "ENOENT in guard_reshard(), likely bucket resharding, retrying" << dendl;
+      invalidate_bs();
+      continue;
+    }
+
     if (r != -ERR_BUSY_RESHARDING) {
       break;
     }
@@ -8678,6 +8699,10 @@ int RGWRados::guard_reshard(const DoutPrefixProvider *dpp,
     }
 
     r = call(bs);
+    if (r == -ENOENT) {
+      ldpp_dout(dpp, 10) << "ENOENT in guard_reshard(), likely bucket resharding, retrying" << dendl;
+      continue;
+    }
     if (r != -ERR_BUSY_RESHARDING) {
       break;
     }
@@ -11072,6 +11097,7 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
   uint32_t count = 0u;
   std::map<std::string, bufferlist> updates;
   rgw_obj_index_key last_added_entry;
+
   while (count <= num_entries &&
 	 ((shard_id >= 0 && current_shard == uint32_t(shard_id)) ||
 	  current_shard < num_shards)) {
@@ -11080,10 +11106,44 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
 
     librados::ObjectReadOperation op;
     const std::string empty_delimiter;
+
+    // Keep the previous marker to detect real progress
+    const auto prev_marker = marker;
+
     cls_rgw_bucket_list_op(op, marker, prefix, empty_delimiter,
 			   num_entries,
                            list_versions, &result);
     r = rgw_rados_operate(dpp, ioctx, oid, std::move(op), nullptr, y, 0, nullptr, &index_ver.epoch);
+    if (r == RGWBIAdvanceAndRetryError) {
+      // CLS could not return any visible entries in this round,
+      // but it advanced the marker; retry with the new marker.
+
+      // Copy marker from cls type into rgw index key (avoid type-mismatch assignment)
+      marker.name = result.marker.name;
+      marker.instance = result.marker.instance;
+
+      // AdvanceAndRetry expected the marker to advance; no progress observed. Return -EIO.
+      if (prev_marker == marker) {
+        ldpp_dout(dpp, 0)
+          << "ERROR: " << __func__
+          << ": RGW_UNORDERED_LIST_NO_MARKER_PROGRESS_ON_ADVANCE_AND_RETRY"
+          << " oid=" << oid
+          << " prev_marker=" << prev_marker
+          << " marker=" << marker
+          << dendl;
+        return -EIO;
+      }
+
+      ldpp_dout(dpp, 10)
+        << __func__
+        << ": RGWBIAdvanceAndRetryError"
+        << " on oid=" << oid
+        << "; prev_marker=" << prev_marker
+        << " -> marker=" << marker
+        << "; advancing marker and retrying"
+        << dendl;
+      continue;
+    }
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
 	": error in rgw_rados_operate (bucket list op), r=" << r << dendl;

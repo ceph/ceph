@@ -126,10 +126,46 @@ module class.
 The CLICommand approach
 ~~~~~~~~~~~~~~~~~~~~~~~
 
+This approach uses decorators to register commands with the manager framework.
+Each module creates its own command registry to avoid namespace collisions.
+
+Setting Up Command Registration
+++++++++++++++++++++++++++++++++
+
+First, create a ``cli.py`` file in your module directory to define the command
+registry:
+
 .. code:: python
 
-   @CLICommand('antigravity send to blackhole',
-               perm='rw')
+   # In antigravity/cli.py
+   from mgr_module import CLICommandBase
+
+   # Create a module-specific command registry
+   AntigravityCLICommand = CLICommandBase.make_registry_subtype("AntigravityCLICommand")
+
+Then, in your module's main file, import the registry and set it as a class
+attribute so the framework can discover and register your commands:
+
+.. code:: python
+
+   # In antigravity/module.py
+   from mgr_module import MgrModule
+   from .cli import AntigravityCLICommand
+
+   class Module(MgrModule):
+       # Framework uses this attribute for command registration and dispatch
+       CLICommand = AntigravityCLICommand
+
+Defining Commands
++++++++++++++++++
+
+Use the registry's decorator methods to define commands. The decorator must use
+the specific registry type name (``AntigravityCLICommand`` in this example),
+not the class attribute name ``CLICommand``:
+
+.. code:: python
+
+   @AntigravityCLICommand('antigravity send to blackhole')
    def send_to_blackhole(self, oid: str, blackhole: Optional[str] = None, inbuf: Optional[str] = None):
        '''
        Send the specified object to black hole
@@ -147,7 +183,7 @@ The CLICommand approach
        self.send_object_to(obj, location)
        return HandleCommandResult(stdout=f"the black hole swallowed '{oid}'")
 
-The first parameter passed to ``CLICommand`` is the "name" of the command.
+The first parameter passed to the decorator is the "name" of the command.
 Since there are lots of commands in Ceph, we tend to group related commands
 with a common prefix. In this case, "antigravity" is used for this purpose.
 As the author is probably designing a module which is also able to launch
@@ -174,9 +210,29 @@ like::
 
 as part of the output of ``ceph --help``.
 
-In addition to ``@CLICommand``, you could also use ``@CLIReadCommand`` or
-``@CLIWriteCommand`` if your command only requires read permissions or
-write permissions respectively.
+Read and Write Commands
+++++++++++++++++++++++++
+
+For commands that only require read or write permissions, use the ``.Read()``
+or ``.Write()`` methods on your module's command registry:
+
+.. code:: python
+
+   # Read-only command
+   @AntigravityCLICommand.Read('antigravity list objects')
+   def list_objects(self):
+       '''List all objects in the antigravity system'''
+       return HandleCommandResult(stdout=json.dumps(self.get_objects()))
+
+   # Write-only command
+   @AntigravityCLICommand.Write('antigravity delete object')
+   def delete_object(self, oid: str):
+       '''Delete an object from the antigravity system'''
+       self.remove_object(oid)
+       return HandleCommandResult(stdout=f"deleted '{oid}'")
+
+For commands that need both read and write permissions, use the base decorator
+without ``.Read()`` or ``.Write()``, as shown in the earlier example.
 
 
 The COMMANDS Approach
@@ -254,7 +310,7 @@ In most cases, net new code should use the ``Responder`` decorator. Example:
 
 .. code:: python
 
-   @CLICommand('antigravity list wormholes', perm='r')
+   @AntigravityCLICommand.Read('antigravity list wormholes')
    @Responder()
    def list_wormholes(self, oid: str, details: bool = False) -> List[Dict[str, Any]]:
        '''List wormholes associated with the supplied oid.
@@ -286,7 +342,7 @@ a simplified representation of the object made out of basic types.
            # returns a python object(s) made up from basic types
            return {"gravitons": 999, "tachyons": 404}
 
-   @CLICommand('antigravity list wormholes', perm='r')
+   @AntigravityCLICommand.Read('antigravity list wormholes')
    @Responder()
    def list_wormholes(self, oid: str, details: bool = False) -> MyCleverObject:
        '''List wormholes associated with the supplied oid.
@@ -316,7 +372,7 @@ Converting our previous example to use this exception handling approach:
 
 .. code:: python
 
-   @CLICommand('antigravity list wormholes', perm='r')
+   @AntigravityCLICommand.Read('antigravity list wormholes')
    @Responder()
    def list_wormholes(self, oid: str, details: bool = False) -> List[Dict[str, Any]]:
        '''List wormholes associated with the supplied oid.
@@ -356,7 +412,7 @@ to return raw data in the output. Example:
 
 .. code:: python
 
-   @CLICommand('antigravity dump config', perm='r')
+   @AntigravityCLICommand.Read('antigravity dump config')
    @ErrorResponseHandler()
    def dump_config(self, oid: str) -> Tuple[int, str, str]:
        '''Dump configuration
@@ -381,7 +437,7 @@ be automatically processed. Example:
 
 .. code:: python
 
-   @CLICommand('antigravity create wormhole', perm='rw')
+   @AntigravityCLICommand('antigravity create wormhole')
    @EmptyResponder()
    def create_wormhole(self, oid: str, name: str) -> None:
        '''Create a new wormhole.

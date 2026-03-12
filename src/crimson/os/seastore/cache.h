@@ -613,7 +613,6 @@ public:
       p_extent = extent->maybe_get_transactional_view(t);
       ceph_assert(p_extent);
       if (p_extent != extent.get()) {
-        assert(!extent->is_pending_io());
         assert(p_extent->is_pending_in_trans(t.get_trans_id()));
         assert(!p_extent->is_pending_io());
         ++access_stats.trans_pending;
@@ -666,7 +665,6 @@ public:
       ++stats.access.trans_pending;
       if (extent->is_mutable()) {
         assert(extent->is_fully_loaded());
-        assert(!extent->is_pending_io());
         return get_extent_iertr::make_ready_future<CachedExtentRef>(extent);
       } else {
         assert(extent->is_exist_clean());
@@ -741,6 +739,10 @@ public:
   CachedExtentRef test_query_cache(paddr_t offset) {
     assert(offset.is_absolute());
     return query_cache(offset);
+  }
+
+  bool can_drop_backref() const {
+    return epm.is_pure_rbm();
   }
 
 private:
@@ -1639,8 +1641,6 @@ private:
   RootBlockRef root;               ///< ref to current root
   ExtentIndex extents_index;             ///< set of live extents
 
-  journal_seq_t last_commit = JOURNAL_SEQ_MIN;
-
   // FIXME: This is specific to the segmented implementation
   std::vector<SegmentProvider*> segment_providers_by_device_id;
 
@@ -1912,10 +1912,11 @@ private:
     assert(is_aligned(offset, get_block_size()));
     assert(is_aligned(length, get_block_size()));
     assert(extent->get_paddr().is_absolute());
-    extent->set_io_wait(extent->state);
+    extent->set_io_wait(extent->state, false);
     auto old_length = extent->get_loaded_length();
     load_ranges_t to_read = extent->load_ranges(offset, length);
     auto new_length = extent->get_loaded_length();
+    bool extent_fully_loaded = extent->is_fully_loaded();
     assert(new_length > old_length);
     pinboard->increase_cached_size(*extent, new_length - old_length, p_src);
     return seastar::do_with(to_read.ranges, [extent, this, FNAME](auto &read_ranges) {
@@ -1931,12 +1932,13 @@ private:
           read_range.ptr);
       });
     }).safe_then(
-      [this, FNAME, extent=std::move(extent), offset, length, pin_crc]() mutable {
+      [this, FNAME, extent=std::move(extent), offset, length,
+      pin_crc, extent_fully_loaded]() mutable {
         ceph_assert(extent->state == CachedExtent::extent_state_t::EXIST_CLEAN
           || extent->state == CachedExtent::extent_state_t::CLEAN
           || !extent->is_valid());
         if (extent->is_valid()) {
-          if (extent->is_fully_loaded()) {
+          if (extent_fully_loaded) {
             // crc will be checked against LBA leaf entry for logical extents,
             // or check against in-extent crc for physical extents.
             if (epm.get_checksum_needed(extent->get_paddr())) {

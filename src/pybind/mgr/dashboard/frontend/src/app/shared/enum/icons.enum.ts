@@ -86,6 +86,10 @@ export enum Icons {
   idea = 'idea',
   userAccessLocked = 'user--access-locked', // User access locked
   chevronDown = 'chevron--down',
+  connect = 'connect',
+  checkmarkOutline = 'checkmark--outline',
+  circleDash = 'circle-dash',
+  datastore = 'datastore',
   /* Icons for special effect */
   size16 = '16',
   size20 = '20',
@@ -101,7 +105,27 @@ export enum Icons {
   spin = 'fa fa-spin', //  To get any icon to rotate
   inverse = 'fa fa-inverse', // To get an alternative icon color
   notification = 'notification',
-  error = 'error--filled'
+  error = 'error--filled',
+  notificationOff = 'notification--off',
+  notificationNew = 'notification--new',
+  emptySearch = 'search',
+  dataViewAlt = 'data--view--alt',
+  dataCenter = 'data--center',
+  upgrade = 'upgrade',
+  warningAltFilled = 'warning--alt--filled',
+  help = 'help',
+  incidentReporter = 'incident-reporter',
+  ibmStreamSets = 'ibm--streamsets',
+  dataEnrichment = 'data-enrichment',
+  network1 = 'network--1',
+  chip = 'chip',
+  plug = 'plug',
+  vmdkDisk = 'vmdk-disk',
+  checkMarkOutline = 'checkmark--outline',
+  warningAlt = 'warning--alt',
+  arrowUpRight = 'arrow--up-right',
+  inProgress = 'in-progress',
+  arrowDown = 'arrow--down'
 }
 
 export enum IconSize {
@@ -115,10 +139,37 @@ export const ICON_TYPE = {
   check: 'check',
   copy: 'copy',
   danger: 'danger',
+  deploy: 'deploy',
   edit: 'edit',
   error: 'error--filled',
   infoCircle: 'info-circle',
   notification: 'notification',
+  notificationOff: 'notification--off',
+  notificationNew: 'notification--new',
   success: 'success',
-  warning: 'warning'
+  warning: 'warning',
+  add: 'add',
+  emptySearch: 'emptySearch',
+  dataViewAlt: 'data--view--alt',
+  dataCenter: 'data--center',
+  upgrade: 'upgrade',
+  warningAltFilled: 'warning--alt--filled',
+  help: 'help',
+  incidentReporter: 'incident-reporter',
+  ibmStreamSets: 'ibm--streamsets',
+  dataEnrichment: 'data-enrichment',
+  network1: 'network--1',
+  chip: 'chip',
+  plug: 'plug',
+  vmdkDisk: 'vmdk-disk',
+  warningAlt: 'warning--alt',
+  checkMarkOutline: 'checkmark--outline',
+  arrowUpRight: ' arrow--up-right',
+  inProgress: 'in-progress',
+  arrowDown: 'arrow--down'
+} as const;
+
+export const EMPTY_STATE_IMAGE = {
+  default: 'assets/empty-state.png',
+  search: 'assets/empty-state-search.png'
 } as const;

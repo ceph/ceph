@@ -549,7 +549,7 @@ class FSSnapshotMirror:
         except Exception as e:
             return e.args[0], '', 'failed to disable mirroring'
 
-    def peer_list(self, filesystem):
+    def peer_list(self, filesystem, format='json'):
         try:
             with self.lock:
                 fspolicy = self.pool_policy.get(filesystem, None)
@@ -563,7 +563,10 @@ class FSSnapshotMirror:
                                            'site_name': remote['cluster_name'],
                                            'fs_name': remote['fs_name']
                                            }
-                return 0, json.dumps(peer_res), ''
+                if format == 'json-pretty':
+                    return 0, json.dumps(peer_res, indent=2), ''
+                else:
+                    return 0, json.dumps(peer_res), ''
         except MirrorException as me:
             return me.args[0], '', me.args[1]
         except Exception as e:
@@ -761,7 +764,7 @@ class FSSnapshotMirror:
         except MirrorException as me:
             return me.args[0], '', me.args[1]
 
-    def daemon_status(self):
+    def daemon_status(self, format='json'):
         try:
             with self.lock:
                 daemons = []
@@ -790,14 +793,31 @@ class FSSnapshotMirror:
                                 'peers'           : []
                             } # type: Dict[str, Any]
                             for peer_uuid, peer_desc in fs_desc['peers'].items():
+                                # Get basic peer info from daemon status (FSMap data)
+                                remote = peer_desc['remote'].copy()  # Don't modify original
+
+                                # Fetch mon_host and fsid from config database
+                                config_key = FSSnapshotMirror.peer_config_key(fs_desc['name'], peer_uuid)
+                                try:
+                                    remote_config = self.config_get(config_key)
+                                    if remote_config:
+                                        if 'mon_host' in remote_config:
+                                            remote['mon_host'] = remote_config['mon_host']
+                                        if 'fsid' in remote_config:
+                                            remote['fsid'] = remote_config['fsid']
+                                except Exception as e:
+                                    log.warning(f'failed to fetch config for fs={fs_desc["name"]}, peer={peer_uuid}: {e}')
                                 peer = {
                                     'uuid'   : peer_uuid,
-                                    'remote' : peer_desc['remote'],
+                                    'remote' : remote,
                                     'stats'  : peer_desc['stats']
                                 }
                                 fs['peers'].append(peer)
                             daemon['filesystems'].append(fs)
                         daemons.append(daemon)
-                return 0, json.dumps(daemons), ''
+                if format == 'json-pretty':
+                    return 0, json.dumps(daemons, indent=2), ''
+                else:
+                    return 0, json.dumps(daemons), ''
         except MirrorException as me:
             return me.args[0], '', me.args[1]

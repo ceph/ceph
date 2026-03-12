@@ -95,20 +95,6 @@ static inline std::string read_secret(const std::string& file_path)
   return s;
 }
 
-std::string CephCtxConfig::get_admin_token() const noexcept
-{
-  auto& atv = g_ceph_context->_conf->rgw_keystone_admin_token_path;
-  if (!atv.empty()) {
-    return read_secret(atv);
-  } else {
-    auto& atv = g_ceph_context->_conf->rgw_keystone_admin_token;
-    if (!atv.empty()) {
-      return atv;
-    }
-  }
-  return empty;
-}
-
 std::string CephCtxConfig::get_admin_password() const noexcept  {
   auto& apv = g_ceph_context->_conf->rgw_keystone_admin_password_path;
   if (!apv.empty()) {
@@ -129,14 +115,6 @@ int Service::get_admin_token(const DoutPrefixProvider *dpp,
                              std::string& token,
                              bool& token_cached)
 {
-  /* Let's check whether someone uses the deprecated "admin token" feature
-   * based on a shared secret from keystone.conf file. */
-  const auto& admin_token = config.get_admin_token();
-  if (! admin_token.empty()) {
-    token = std::string(admin_token.data(), admin_token.length());
-    return 0;
-  }
-
   TokenEnvelope t;
 
   /* Try cache first before calling Keystone for a new admin token. */
@@ -508,6 +486,13 @@ void rgw::keystone::TokenEnvelope::User::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("domain", domain, obj);
 }
 
+void rgw::keystone::TokenEnvelope::ApplicationCredential::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("id", id, obj, true);
+  JSONDecoder::decode_json("name", name, obj, true);
+  JSONDecoder::decode_json("restricted", restricted, obj, true);
+}
+
 void rgw::keystone::TokenEnvelope::decode(JSONObj* const root_obj)
 {
   std::string expires_iso8601;
@@ -516,6 +501,12 @@ void rgw::keystone::TokenEnvelope::decode(JSONObj* const root_obj)
   JSONDecoder::decode_json("expires_at", expires_iso8601, root_obj, true);
   JSONDecoder::decode_json("roles", roles, root_obj, true);
   JSONDecoder::decode_json("project", project, root_obj, true);
+
+  // Optional application_credential field (only present for app cred auth)
+  ApplicationCredential tmp_app_cred;
+  if (JSONDecoder::decode_json("application_credential", tmp_app_cred, root_obj, false)) {
+    app_cred = std::move(tmp_app_cred);
+  }
 
   struct tm t;
   if (parse_iso8601(expires_iso8601.c_str(), &t)) {

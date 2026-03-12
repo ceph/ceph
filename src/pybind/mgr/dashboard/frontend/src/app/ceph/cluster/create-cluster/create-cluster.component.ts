@@ -35,6 +35,7 @@ import { DriveGroup } from '../osd/osd-form/drive-group.model';
 import { Location } from '@angular/common';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { Step } from 'carbon-components-angular';
+import { Icons } from '~/app/shared/enum/icons.enum';
 
 @Component({
   selector: 'cd-create-cluster',
@@ -75,6 +76,7 @@ export class CreateClusterComponent implements OnInit, OnDestroy, AfterViewInit 
   selectedOption = {};
   simpleDeployment = true;
   stepsToSkip: { [steps: string]: boolean } = {};
+  icons = Icons;
 
   @Output()
   submitAction = new EventEmitter();
@@ -151,7 +153,7 @@ export class CreateClusterComponent implements OnInit, OnDestroy, AfterViewInit 
               NotificationType.info,
               $localize`Cluster expansion skipped by user`
             );
-            this.router.navigate(['/dashboard']);
+            this.router.navigate(['/overview']);
             this.modalService.dismissAll();
           }
         });
@@ -179,7 +181,7 @@ export class CreateClusterComponent implements OnInit, OnDestroy, AfterViewInit 
                   NotificationType.success,
                   $localize`Cluster expansion was successful`
                 );
-                this.router.navigate(['/dashboard']);
+                this.router.navigate(['/overview']);
               })
             )
           )

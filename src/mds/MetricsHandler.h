@@ -4,6 +4,7 @@
 #ifndef CEPH_MDS_METRICS_HANDLER_H
 #define CEPH_MDS_METRICS_HANDLER_H
 
+#include <chrono>
 #include <map>
 #include <mutex>
 #include <unordered_map>
@@ -13,7 +14,7 @@
 #include "msg/Dispatcher.h"
 #include "common/ceph_mutex.h"
 
-#include "MDSPerfMetricTypes.h"
+#include "mds/MDSPerfMetricTypes.h"
 #include "include/cephfs/metrics/Types.h"
 
 #include <boost/optional.hpp>
@@ -63,6 +64,11 @@ public:
 
   void notify_mdsmap(const MDSMap &mdsmap);
 
+  // Called from MDCache::broadcast_quota_to_client to update quota for subvolumes
+  // quota_bytes: only updated if > 0, unless force_zero is true (quota removed)
+  // used_bytes is fetched dynamically from inode rstat in aggregate_subvolume_metrics
+  void maybe_update_subvolume_quota(inodeno_t subvol_id, uint64_t quota_bytes, uint64_t used_bytes, bool force_zero = false);
+
 private:
   struct HandlePayloadVisitor : public boost::static_visitor<void> {
     MetricsHandler *metrics_handler;
@@ -105,7 +111,16 @@ private:
   std::map<entity_inst_t, std::pair<version_t, Metrics>> client_metrics_map;
   // maps subvolume path -> aggregated metrics from all clients reporting to this MDS instance
   std::unordered_map<std::string, std::vector<AggregatedIOMetrics>> subvolume_metrics_map;
-  uint64_t subv_metrics_tracker_window_time_sec = 300;
+  uint64_t subv_window_sec = 0;
+
+  // maps subvolume_id (inode number) -> quota info, updated when quota is broadcast to clients
+  // used_bytes is fetched dynamically from inode rstat, not cached here
+  struct SubvolumeQuotaInfo {
+    uint64_t quota_bytes = 0;
+    uint64_t used_bytes = 0;
+    std::chrono::steady_clock::time_point last_activity;
+  };
+  std::unordered_map<inodeno_t, SubvolumeQuotaInfo> subvolume_quota;
   // address of rank 0 mds, so that the message can be sent withoutå
   // acquiring mds_lock. misdirected messages to rank 0 are taken
   // care of by rank 0.
@@ -132,10 +147,37 @@ private:
   void handle_client_metrics(const cref_t<MClientMetrics> &m);
   void handle_mds_ping(const cref_t<MMDSPing> &m);
 
-  void update_rank0();
+  void update_rank0(std::unique_lock<ceph::mutex>& locker);
+
+  // RAII helper to temporarily unlock/relock a unique_lock
+  struct UnlockGuard {
+    std::unique_lock<ceph::mutex>& lk;
+    explicit UnlockGuard(std::unique_lock<ceph::mutex>& l) : lk(l) { lk.unlock(); }
+    ~UnlockGuard() noexcept {
+      if (!lk.owns_lock()) {
+        try { lk.lock(); } catch (...) {
+          // avoid throwing from destructor
+        }
+      }
+    }
+  };
 
   void aggregate_subvolume_metrics(const std::string& subvolume_path,
-                                   const std::vector<AggregatedIOMetrics>& metrics_list, SubvolumeMetric &res);
+                                   const std::vector<AggregatedIOMetrics>& metrics_list,
+                                   const std::unordered_map<inodeno_t, uint64_t>& subvol_used_bytes,
+                                   SubvolumeMetric &res);
+
+  void sample_cpu_usage();
+  void sample_open_requests();
+
+  PerfCounters *rank_perf_counters = nullptr;
+  long clk_tck = 0;
+  struct RankTelemetry {
+    RankPerfMetrics metrics;
+    bool cpu_sample_initialized = false;
+    uint64_t last_cpu_total_ticks = 0;
+    std::chrono::steady_clock::time_point last_cpu_sample_time{};
+  } rank_telemetry;
 };
 
 #endif // CEPH_MDS_METRICS_HANDLER_H

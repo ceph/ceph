@@ -552,6 +552,16 @@ public:
   void encode(uint64_t features, int crcflags, bool skip_header_crc = false);
 };
 
+inline void intrusive_ptr_add_ref(Message* m)
+{
+  m->get();
+}
+
+inline void intrusive_ptr_release(Message* m)
+{
+  m->put();
+}
+
 extern Message *decode_message(CephContext *cct,
                                int crcflags,
                                ceph_msg_header& header,

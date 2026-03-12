@@ -1,0 +1,320 @@
+@let data=(data$ | async);
+@let hwEnabled = (enabled$ | async);
+@let hwSections = (sections$ | async);
+
+@let colorClass="overview-health-card-status--" + vm?.clusterHealth?.icon;
+
+
+<cd-productive-card class="overview-health-card">
+  <!-- ----------------------HEALTH CARD HEADER ---------------->
+  @if(vm?.fsid) {
+  <ng-template #header>
+    <div class="overview-health-card-header">
+      <div class="cds-mb-4 cds-mr-3">
+        <cd-icon type="dataCenter"></cd-icon>
+      </div>
+      <h2 class="cds--type-heading-compact-02"
+          id="fsid">
+        <span class="cds-mr-2">{{vm?.fsid}}</span>
+      </h2>
+      <cd-copy-2-clipboard-button
+        size="sm"
+        title="Copy cluster fsid"
+        i18n-title
+        source="fsid">
+      </cd-copy-2-clipboard-button>
+    </div>
+    <cds-icon-button
+      type="button"
+      kind="ghost"
+      size="sm"
+      description="Check logs"
+      i18n-description
+      [routerLink]="['/logs']">
+      <cd-icon type="dataViewAlt"></cd-icon>
+    </cds-icon-button>
+  </ng-template>
+  } @else {
+  <cds-skeleton-text
+    [lines]="1"
+    [maxLineWidth]="400"
+    [minLineWidth]="400"></cds-skeleton-text>
+  }
+  <!------------------------- HEALTH CARD CLUSTER STATUS ------------------>
+  @if(vm?.clusterHealth){
+  <p class="cds--type-heading-05 cds-mb-0"
+     [ngClass]="colorClass">
+    {{vm?.clusterHealth?.title}}
+    <cd-icon [type]="vm?.clusterHealth?.icon"></cd-icon>
+  </p>
+  <p class="cds--type-label-01 overview-health-card-secondary-text">{{vm?.clusterHealth?.message}}</p>
+  } @else {
+  <cds-skeleton-placeholder></cds-skeleton-placeholder>
+  }
+
+  @if(data?.summary?.version) {
+  <!-- CEPH VERSION -->
+  <p class="cds--type-label-02">
+    <span i18n>Ceph version:&nbsp;</span>
+    <span class="cds--type-heading-compact-01">{{ data?.summary?.version | cephVersion  }}</span>&nbsp;
+    @if (data?.upgrade?.versions?.length) {
+    <a [routerLink]="['/upgrade']"
+       cdsLink
+       [inline]="true"
+       i18n>
+      Upgrade available
+      <cd-icon type="upgrade"></cd-icon>
+    </a>
+    }
+  </p>
+  } @else {
+  <cds-skeleton-text
+    [lines]="1"
+    [maxLineWidth]="250"></cds-skeleton-text>
+  }
+
+  <!-----------------------------------TABS -------------------------------------->
+
+  <div cdsStack="horizontal"
+       [gap]="4">
+  <!-- HEALTH CHECKS -->
+  @if(vm?.incidents > 0) {
+  <div>
+    <cd-icon
+      type="incidentReporter"
+      [ngClass]="colorClass"></cd-icon>
+    <cds-tooltip-definition
+      [highContrast]="true"
+      [openOnHover]="true"
+      [dropShadow]="true"
+      [caret]="true"
+      (click)="onViewIncidentsClick()"
+      description="Click to view health incidents"
+      i18n-description>
+      <span
+        class="cds--type-heading-compact-01"
+        [ngClass]="colorClass"
+        i18n>
+        {{vm?.incidents}} Health incidents
+      </span>
+    </cds-tooltip-definition>
+    <cds-tooltip
+      class="cds-ml-3"
+      [caret]="true"
+      description="Health incidents represent Ceph health check warnings that indicate abnormal conditions requiring intervention and persist until the condition is resolved."
+      i8n-description
+    >
+      <cd-icon type="help"></cd-icon>&nbsp;|
+    </cds-tooltip>
+  </div>
+  }
+  <!-- SYSTEM TAB -->
+  @if(vm?.overallSystemSev) {
+    <div class="overview-health-card-tab"
+         [class.overview-health-card-tab-selected]="activeSection === 'system'">
+      <div class="cds-mb-1"><cd-icon
+        [type]="vm?.overallSystemSev"></cd-icon></div>
+      <cds-tooltip-definition
+        [highContrast]="true"
+        [openOnHover]="true"
+        [dropShadow]="true"
+        class="cds-ml-2"
+        [caret]="true"
+        (click)="toggleSection('system')"
+        description=""
+        i18n-description>
+        <span
+          class="cds-mr-1"
+          [class.cds--type-heading-compact-01]="activeSection === 'system'"
+          i18n>
+          Systems
+        </span>
+      </cds-tooltip-definition>
+    </div>
+  } @else {
+  <cds-skeleton-text [lines]="1"></cds-skeleton-text>
+  }
+  <!-- HARDWARE TAB -->
+  @if(hwEnabled && hwSections) {
+    <div class="overview-health-card-tab"
+         [class.overview-health-card-tab-selected]="activeSection === 'hardware'">
+      <div class="cds-mb-1"><cd-icon
+        [type]="vm?.overallSystemSev"></cd-icon></div>
+      <cds-tooltip-definition
+        [highContrast]="true"
+        [openOnHover]="true"
+        [dropShadow]="true"
+        class="cds-ml-2"
+        [caret]="true"
+        (click)="toggleSection('hardware')"
+        description=""
+        i18n-description>
+        <span
+          class="cds-mr-1"
+          [class.cds--type-heading-compact-01]="activeSection === 'hardware'"
+          i18n>
+          Hardware
+        </span>
+      </cds-tooltip-definition>
+    </div>
+  }
+  <!-- RESILIENCY TAB -->
+   @if(vm?.overallSystemSev) {
+    <div class="overview-health-card-tab"
+         [class.overview-health-card-tab-selected]="activeSection === 'resiliency'">
+      <div class="cds-mb-1"><cd-icon
+        [type]="vm?.resiliencyHealth?.icon"></cd-icon></div>
+      <cds-tooltip-definition
+        [highContrast]="true"
+        [openOnHover]="true"
+        [dropShadow]="true"
+        class="cds-ml-2"
+        [caret]="true"
+        (click)="toggleSection('resiliency')"
+        description=""
+        i18n-description>
+        <span
+          class="cds-mr-1"
+          [class.cds--type-heading-compact-01]="activeSection === 'resiliency'"
+          i18n>
+          Data resiliency
+        </span>
+      </cds-tooltip-definition>
+    </div>
+  } @else {
+  <cds-skeleton-text [lines]="1"></cds-skeleton-text>
+  }
+  </div>
+
+  <!-- TAB CONTENT -->
+  <div  [ngSwitch]="activeSection">
+    <!-- SYSTEM TAB CONTENT -->
+    <ng-container *ngSwitchCase="'system'">
+      <div class="overview-health-card-tab-content">
+        <p class="overview-health-card-secondary-text cds--type-body-compact-01"
+           i18n>Some cluster components are degraded and may require attention.</p>
+        <div cdsStack="horizontal"
+             [gap]="8">
+          @for (item of healthItems; track item.key; let isLast = $last) {
+          <div class="cds-pr-8"
+               [class.overview-health-card-tab-content-item]="!isLast">
+            <span class="overview-health-card-icon-and-text">
+              <cd-icon [type]="vm?.[item.key]?.severity"></cd-icon>
+              <span class="cds--type-body-compact-01">
+                {{ item.label }}
+              </span>
+            </span>
+            <p class="cds--type-label-01 cds-mt-3 cds-mb-0 overview-health-card-secondary-text">
+              {{ vm?.[item.key]?.value }}
+            </p>
+          </div>
+          }
+        </div>
+      </div>
+    </ng-container>
+    <!-- HARDWARE TAB CONTENT -->
+    <ng-container *ngSwitchCase="'hardware'">
+      <div class="overview-health-card-tab-content">
+        <p class="overview-health-card-secondary-text cds--type-body-compact-01"
+           i18n>
+          Some cluster components are degraded and may require attention.
+        </p>
+
+        @if (hwEnabled && hwSections) {
+          <div class="overview-health-card-hardware-sections">
+          @for (section of sections; track $index) {
+            <div class="overview-health-card-hardware-section">
+            @for (row of section; track row.key) {
+            <div class="overview-health-card-hardware-row">
+              <span class="overview-health-card-icon-and-text">
+                <cd-icon [type]="row.key"></cd-icon>
+                <span class="cds--type-body-compact-01">
+                  {{ row.label }}
+                </span>
+              </span>
+
+              <span class="overview-health-card-hardware-status">
+              @if (row.error > 0) {
+              <cd-icon type="warningAlt"></cd-icon>
+              <span class="cds--type-body-compact-01">
+                {{ row.error }}
+              </span>
+              }
+              <cd-icon type="checkMarkOutline"></cd-icon>
+              <span class="cds--type-body-compact-01">
+                {{ row.ok }}
+              </span>
+              </span>
+            </div>
+            }
+            </div>
+          }
+          </div>
+        } @else {
+        <cds-skeleton-placeholder></cds-skeleton-placeholder>
+        }
+      </div>
+    </ng-container>
+    <!-- RESILIENCY TAB CONTENT -->
+    <ng-container *ngSwitchCase="'resiliency'">
+      <div class="overview-health-card-tab-content overview-health-card-tab-content-item-row">
+        <div>
+          <span class="overview-health-card-icon-and-text">
+            <cd-icon [type]="vm?.resiliencyHealth?.icon"></cd-icon>
+            <span class="cds--type-body-compact-01">
+              {{vm?.resiliencyHealth?.title}}
+            </span>
+          </span>
+          <p class="overview-health-card-secondary-text cds--type-label-01">
+            {{vm?.resiliencyHealth?.description}}</p>
+          <button
+            cdsButton="tertiary"
+            size="sm"
+            (click)="onViewPGStatesClick()">
+            <span
+              i18n
+              class="cds-ml-3">See all PGs states</span>
+            <cd-icon type="arrowUpRight"></cd-icon>
+          </button>
+        </div>
+        @if (vm?.pgs?.activeCleanChartData && vm?.pgs?.activeCleanChartOptions) {
+        <div class="overview-health-card-tab-content-item-row">
+          <ibm-gauge-chart
+            class="overview-health-card-resiliency-chart"
+            [options]="vm?.pgs?.activeCleanChartOptions"
+            [data]="vm?.pgs?.activeCleanChartData"></ibm-gauge-chart>
+          <div class="overview-health-card-resiliency-chart-text">
+            <p
+              i18n
+              class="cds--type-helper-text-01 overview-health-card-secondary-text"><em>Data resiliency</em> reflects data availability and replication (% of placement groups that are active and clean).
+            </p>
+            @if (vm?.pgs?.activeCleanChartReason?.length) {
+            <p
+              class="cds--type-helper-text-01 overview-health-card-secondary-text overview-health-card-bold cds-mb-2"
+              i18n>
+              {{vm?.resiliencyHealth?.severity === 'progress' ? 'Data cleanup in progress' : 'What is affecting resiliency?'}}
+            </p>
+            @for (item of vm?.pgs?.activeCleanChartReason; track item.state; let isLast =$last) {
+            @if(item.count) {
+            <p
+              [class.cds-mb-0]="isLast"
+              class="cds-mb-2">
+              <span class="cds--type-label-01 cds-mr-1">{{item?.state}}:</span>
+              <span class="cds--type-label-01 overview-health-card-bold">{{item.count}} %</span>
+              @if(!item?.state?.includes('Scrub') && item?.state !== 'Remapped') {
+              <cd-icon type="arrowDown"></cd-icon>
+              }
+            </p>
+            }
+            }
+            }
+          </div>
+        </div>
+        } @else {
+        <cds-skeleton-placeholder></cds-skeleton-placeholder>
+        }
+      </div>
+    </ng-container>
+    <ng-container *ngSwitchDefault></ng-container>
+  </div>
+</cd-productive-card>

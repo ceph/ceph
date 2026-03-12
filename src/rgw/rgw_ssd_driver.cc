@@ -1,3 +1,4 @@
+#include <boost/asio/system_executor.hpp>
 #include "common/async/completion.h"
 #include "common/errno.h"
 #include "common/async/blocked_completion.h"

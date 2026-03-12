@@ -35,7 +35,7 @@ struct Listener {
   virtual void handle_instances_removed(const InstanceIds& instance_ids) = 0;
 };
 
-enum NotifyOp {
+enum NotifyOp : uint32_t {
   NOTIFY_OP_HEARTBEAT        = 0,
   NOTIFY_OP_LOCK_ACQUIRED    = 1,
   NOTIFY_OP_LOCK_RELEASED    = 2,

@@ -36,10 +36,10 @@ class DefaultImages(Enum):
     ALERTMANAGER = _create_image(
         'quay.io/prometheus/alertmanager:v0.28.1', 'alertmanager'
     )
-    GRAFANA = _create_image('quay.io/ceph/grafana:12.2.0', 'grafana')
+    GRAFANA = _create_image('quay.io/ceph/grafana:12.3.1', 'grafana')
     HAPROXY = _create_image('quay.io/ceph/haproxy:2.3', 'haproxy')
     KEEPALIVED = _create_image('quay.io/ceph/keepalived:2.2.4', 'keepalived')
-    NVMEOF = _create_image('quay.io/ceph/nvmeof:1.5', 'nvmeof')
+    NVMEOF = _create_image('quay.io/ceph/nvmeof:1.7', 'nvmeof')
     SNMP_GATEWAY = _create_image(
         'docker.io/maxwo/snmp-notifier:v1.2.1', 'snmp_gateway'
     )

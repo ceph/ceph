@@ -22,8 +22,8 @@ we would need the following configuration file::
 				version = v1
 
 				[s3 main]
-				access_key = 1234567890
-				secret_key = pencil
+				access_key = 0987654321
+				secret_key = crayon
 
 Add boto3 extension to the standard client: https://github.com/ceph/ceph/tree/main/examples/rgw/boto3#introduction.
 
@@ -57,26 +57,35 @@ and::
 
 After running `vstart.sh`, Zookeeper, and Kafka services you're ready to run the Kafka tests::
 
-        BNTESTS_CONF=bntests.conf python -m nose -s /path/to/ceph/src/test/rgw/bucket_notification/test_bn.py -v -a 'kafka_test'
+        BNTESTS_CONF=bntests.conf python -m pytest -s /path/to/ceph/src/test/rgw/bucket_notification/test_bn.py -v -m 'kafka_test'
 
 --------------------
 Kafka Security Tests
 --------------------
 
-First, make sure that vstart was initiated with the following ``rgw_allow_notification_secrets_in_cleartext`` parameter set to ``true``::
-
-        MON=1 OSD=1 MDS=0 MGR=1 RGW=1 ../src/vstart.sh -n -d -o "rgw_allow_notification_secrets_in_cleartext=true"
-
-Then you should run the ``kafka-security.sh`` script inside the Kafka directory::
+1. First generate SSL certificates::
 
         cd /path/to/kafka/
-        /path/to/ceph/src/test/rgw/bucket_notification/kafka-security.sh
+        KAFKA_CERT_HOSTNAME=192.168.1.100 KAFKA_CERT_IP=192.168.1.100 bash /path/to/ceph/src/test/rgw/bucket_notification/kafka-security.sh
+   
+   Replace ``192.168.1.100`` with your actual Kafka broker's IP address or hostname.
 
-Then make sure the Kafka server properties file (``/path/to/kafka/config/server.properties``) has the following lines::
+2. Configure Kafka::
 
+   Then edit ``/path/to/kafka/config/server.properties`` with complete configuration::
 
-        # all listeners
+   **Important:** If you face any initialization failures, replace ``localhost`` in both ``listeners`` and ``advertised.listeners`` with your Kafka broker's actual hostname or IP address.
+   For example, if your Kafka broker runs on host ``kafka-server.example.com`` or IP ``192.168.1.100``, use::
+
+   listeners=PLAINTEXT://192.168.1.100:9092,SSL://192.168.1.100:9093,SASL_SSL://192.168.1.100:9094,SASL_PLAINTEXT://192.168.1.100:9095
+   advertised.listeners=PLAINTEXT://192.168.1.100:9092,SSL://192.168.1.100:9093,SASL_SSL://192.168.1.100:9094,SASL_PLAINTEXT://192.168.1.100:9095
+
+   If both ``listeners`` and ``advertised.listeners`` do not match, the broker cannot connect to itself, causing initialization failures.
+
+        # All listeners
         listeners=PLAINTEXT://localhost:9092,SSL://localhost:9093,SASL_SSL://localhost:9094,SASL_PLAINTEXT://localhost:9095
+        advertised.listeners=PLAINTEXT://localhost:9092,SSL://localhost:9093,SASL_SSL://localhost:9094,SASL_PLAINTEXT://localhost:9095
+        listener.security.protocol.map=PLAINTEXT:PLAINTEXT,SSL:SSL,SASL_SSL:SASL_SSL,SASL_PLAINTEXT:SASL_PLAINTEXT
 
         # SSL configuration matching the kafka-security.sh script
         ssl.keystore.location=./server.keystore.jks
@@ -86,41 +95,53 @@ Then make sure the Kafka server properties file (``/path/to/kafka/config/server.
         ssl.truststore.password=mypassword
 
         # SASL mechanisms
-        sasl.enabled.mechanisms=PLAIN,SCRAM-SHA-256
-
-        # SASL over SSL with SCRAM-SHA-256 mechanism
-        listener.name.sasl_ssl.scram-sha-256.sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required \
-          username="alice" \
-          password="alice-secret" \
-          user_alice="alice-secret";
+        sasl.enabled.mechanisms=PLAIN,SCRAM-SHA-256,SCRAM-SHA-512
+        sasl.mechanism.inter.broker.protocol=PLAIN
+        inter.broker.listener.name=PLAINTEXT
 
         # SASL over SSL with PLAIN mechanism
         listener.name.sasl_ssl.plain.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required \
-          username="alice" \
-          password="alice-secret" \
-          user_alice="alice-secret";
+        username="admin" \
+        password="admin-secret" \
+        user_alice="alice-secret";
 
-        # PLAINTEXT SASL with SCRAM-SHA-256 mechanism
-        listener.name.sasl_plaintext.scram-sha-256.sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required \
-          username="alice" \
-          password="alice-secret" \
-          user_alice="alice-secret";
+        # SASL over SSL with SCRAM-SHA-256 mechanism
+        listener.name.sasl_ssl.scram-sha-256.sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required \
+        username="admin" \
+        password="admin-secret";
+
+        # SASL over SSL with SCRAM-SHA-512 mechanism
+        listener.name.sasl_ssl.scram-sha-512.sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required \
+        username="admin" \
+        password="admin-secret";
 
         # PLAINTEXT SASL with PLAIN mechanism
         listener.name.sasl_plaintext.plain.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required \
-          username="alice" \
-          password="alice-secret" \
-          user_alice="alice-secret";
+        username="admin" \
+        password="admin-secret" \
+        user_alice="alice-secret";
 
+        # PLAINTEXT SASL with SCRAM-SHA-256 mechanism
+        listener.name.sasl_plaintext.scram-sha-256.sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required \
+        username="admin" \
+        password="admin-secret";
 
-And restart the Kafka server. Once both Zookeeper and Kafka are up, run the following command (for the SASL SCRAM test) from the Kafka directory::
+        # PLAINTEXT SASL with SCRAM-SHA-512 mechanism
+        listener.name.sasl_plaintext.scram-sha-512.sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required \
+        username="admin" \
+        password="admin-secret";
 
-        bin/kafka-configs.sh --zookeeper localhost:2181 --alter --add-config 'SCRAM-SHA-256=[iterations=8192,password=alice-secret],SCRAM-SHA-512=[password=alice-secret]' --entity-type users --entity-name alice
+3. Start Zookeeper and Kafka.
 
+4. Start RGW vstart cluster with cleartext parameter set to true::
 
-To run the Kafka security test, you also need to provide the test with the location of the Kafka directory::
+        cd /path/to/ceph/build
+        MON=1 OSD=1 MDS=0 MGR=0 RGW=1 ../src/vstart.sh -n -d -o "rgw_allow_notification_secrets_in_cleartext=true"
 
-        KAFKA_DIR=/path/to/kafka BNTESTS_CONF=bntests.conf python -m nose -s /path/to/ceph/src/test/rgw/bucket_notification/test_bn.py -v -a 'kafka_security_test'
+5. Run the tests::
+
+        cd /path/to/ceph
+        KAFKA_DIR=/path/to/kafka BNTESTS_CONF=/path/to/bntests.conf python -m pytest -s /path/to/ceph/src/test/rgw/bucket_notification/test_bn.py -v -m 'kafka_security_test'
 
 ==============
 RabbitMQ Tests
@@ -148,7 +169,7 @@ To confirm that the RabbitMQ server is running you can run the following command
 
 After running `vstart.sh` and RabbitMQ server you're ready to run the AMQP tests::
 
-        BNTESTS_CONF=bntests.conf python -m nose -s /path/to/ceph/src/test/rgw/bucket_notification/test_bn.py -v -a 'amqp_test'
+        BNTESTS_CONF=bntests.conf python -m pytest -s /path/to/ceph/src/test/rgw/bucket_notification/test_bn.py -v -m 'amqp_test'
 
 After running the tests you need to stop the vstart cluster (``/path/to/ceph/src/stop.sh``) and the RabbitMQ server by running the following command::
 
@@ -156,7 +177,7 @@ After running the tests you need to stop the vstart cluster (``/path/to/ceph/src
 
 To run the RabbitMQ SSL security tests use the following::
 
-        BNTESTS_CONF=bntests.conf python -m nose -s /path/to/ceph/src/test/rgw/bucket_notification/test_bn.py -v -a 'amqp_ssl_test'
+        BNTESTS_CONF=bntests.conf python -m pytest -s /path/to/ceph/src/test/rgw/bucket_notification/test_bn.py -v -m 'amqp_ssl_test'
 
 During these tests, the test script will restart the RabbitMQ server with the correct security configuration (``sudo`` privileges will be needed).
 For that reason it is not recommended to run the `amqp_ssl_test` tests, that assumes a manually configured rabbirmq server, in the same run as `amqp_test` tests, 

@@ -1,0 +1,16 @@
+// Stack title above description when notification is full-width (Carbon lays them
+// in a row by default).
+cds-inline-notification.full-width {
+  max-inline-size: 100%;
+
+  [class*='inline-notification__text-wrapper'] {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  [class*='inline-notification__title'],
+  [class*='inline-notification__subtitle'] {
+    display: block;
+  }
+}

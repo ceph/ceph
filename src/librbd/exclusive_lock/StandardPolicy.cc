@@ -20,6 +20,8 @@ int StandardPolicy<I>::lock_requested(bool force) {
   ldout(m_image_ctx->cct, 20) << this << " " << __func__ << ": force=" << force
 			      << dendl;
 
+  // refuse to release the lock (ignore forced requests) -- the peer
+  // will error out immediately
   return -EROFS;
 }
 

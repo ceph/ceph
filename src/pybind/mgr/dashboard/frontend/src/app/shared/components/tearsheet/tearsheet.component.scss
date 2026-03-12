@@ -1,0 +1,132 @@
+// WIDE TEARSHEET
+// No css variable to apply css to modal div hence using css ngdeep
+// This is needed to set the width of tearsheet as per carbon standards.
+:host ::ng-deep .cds--modal-container.cds--modal-container--lg {
+  position: fixed;
+
+  // 88px from top
+  inset-block-start: 88px;
+
+  // Fill remaining viewport height
+  block-size: calc(100vh - 88px);
+  max-block-size: calc(100vh - 88px);
+
+  // 64px margins left & right
+  inset-inline-start: 64px;
+  inset-inline-end: 64px;
+  inline-size: auto;
+  max-inline-size: none;
+  display: flex;
+  flex-direction: column;
+}
+
+:host ::ng-deep .cds--modal-container.cds--modal-container--sm {
+  inset-block-start: 88px;
+  block-size: 50vh;
+  max-block-size: 50vh;
+  inset-inline-start: 35%;
+  inset-inline-end: 35%;
+  inline-size: auto;
+  max-inline-size: none;
+}
+
+// FULL TEARSHEET
+.tearsheet--full {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.tearsheet-cols--full {
+  margin: 0;
+  padding: 0;
+}
+
+// HEADER
+.tearsheet-header {
+  fill: var(--cds-icon-primary);
+  background-color: var(--cds-background);
+  padding: var(--cds-spacing-06) var(--cds-spacing-07);
+  border-block-end: 1px solid var(--cds-border-subtle-01);
+
+  &-title {
+    color: var(--cds-text-primary);
+  }
+
+  &-description {
+    margin-top: var(--cds-spacing-04);
+    color: var(--cds-text-secondary);
+  }
+
+  &--full {
+    position: sticky;
+    padding: 0 0 var(--cds-spacing-05) var(--cds-spacing-07);
+  }
+}
+
+// BODY
+.tearsheet-body {
+  padding-block: 0;
+  padding-inline: 0;
+  padding: 0;
+  margin: 0;
+  height: 100%;
+}
+
+.tearsheet-left-influencer {
+  background-color: var(--cds-background);
+  padding: var(--cds-spacing-06) var(--cds-spacing-07);
+  overflow-block: auto;
+  overflow-y: auto;
+  border-inline-end: 1px solid var(--cds-border-subtle-01);
+  margin: 0;
+}
+
+.tearsheet-right-influencer {
+  background-color: var(--cds-background);
+  padding: var(--cds-spacing-05) var(--cds-spacing-05);
+}
+
+.tearsheet-main {
+  margin: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+
+  > div {
+    flex: 1;
+  }
+}
+
+.tearsheet-content {
+  max-block-size: 39.7rem;
+  background-color: var(--cds-layer-01);
+  margin: 0;
+  padding: var(--cds-spacing-06) var(--cds-spacing-07);
+  overflow-y: auto;
+
+  &--full {
+    padding-left: 0;
+  }
+}
+
+//FOOTER
+.tearsheet-footer {
+  border-top: 1px solid var(--cds-border-subtle);
+  background-color: var(--cds-layer-01);
+
+  &-submit {
+    display: flex;
+    justify-content: start;
+  }
+
+  &--full {
+    position: sticky;
+    bottom: 0;
+  }
+}
+
+cds-loading {
+  margin-right: var(--cds-spacing-05);
+}

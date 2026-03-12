@@ -134,9 +134,14 @@ class to_ceph_volume(object):
                     cmd += " --crush-device-class {}".format(d)
 
                 cmd += " --objectstore {}".format(self.spec.objectstore)
+
                 cmds.append(cmd)
 
         for i in range(len(cmds)):
+            if self.spec.osd_type:
+                osd_type_str = getattr(self.spec.osd_type, 'value', self.spec.osd_type)
+                cmds[i] += " --osd-type {}".format(osd_type_str)
+
             if self.spec.encrypted:
                 cmds[i] += " --dmcrypt"
 

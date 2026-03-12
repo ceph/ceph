@@ -445,7 +445,7 @@ Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
     // hmm?
     auto lister = rdir.experimental_list_directory();
     while (auto de = co_await lister()) {
-      auto& entry = de->get();
+      auto& entry = *de;
       DEBUG("found file: {}", entry.name);
       if (entry.name.find("block.") == 0 && entry.name.length() > 6 ) {
       // 6 for "block."
@@ -1493,11 +1493,22 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
 
       ctx.reset_preserve_handle(*transaction_manager);
       std::vector<OnodeRef> onodes(ctx.iter.objects.size());
+
+      // Get the total number of operations from the transaction
+      const size_t total_ops = ctx.ext_transaction.get_num_ops();
+      size_t current_op = 0;
+
       while (ctx.iter.have_op()) {
+        current_op++;
+
+        DEBUGT("processing op {} of {} for cid={}",
+               t, current_op, total_ops, ctx.ch->get_cid());
 	co_await _do_transaction_step(
 	  ctx, ctx.ch, onodes, ctx.iter);
       }
 
+      DEBUGT("completed all {} ops for cid={}",
+             t, total_ops, ctx.ch->get_cid());
       co_await transaction_manager->submit_transaction(*ctx.transaction);
     })
   ).handle_error(
@@ -2941,11 +2952,8 @@ SeaStore::Shard::omaptree_rm_keyrange(
     [&t, &onode, FNAME]
     (auto &omap_manager, auto &root, auto &first, auto &last)
   {
-    auto config = OMapManager::omap_list_config_t()
-      .with_inclusive(true, false)
-      .without_max();
     return omap_manager.omap_rm_key_range(
-      root, t, first, last, config
+      root, t, first, last
     ).si_then([&t, &root, &onode, FNAME] {
       if (root.must_update()) {
         omaptree_update_root(t, root, onode);

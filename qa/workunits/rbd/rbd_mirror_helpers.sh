@@ -442,10 +442,9 @@ stop_mirror()
 
     local pid
     pid=$(cat $(daemon_pid_file "${cluster}") 2>/dev/null) || :
-    if [ -n "${pid}" ]
-    then
+    if [ -n "${pid}" ]; then
         kill ${sig} ${pid}
-        for s in 1 2 4 8 16 32; do
+        for s in 0 1 2 4 8 16 32; do
             sleep $s
             ps auxww | awk -v pid=${pid} '$2 == pid {print; exit 1}' && break
         done
@@ -510,12 +509,16 @@ all_admin_daemons()
 
 status()
 {
-    local cluster daemon image_pool image_ns image
+    local cluster image_pool image_ns image
 
     for cluster in ${CLUSTER1} ${CLUSTER2}
     do
         echo "${cluster} status"
-        CEPH_ARGS='' ceph --cluster ${cluster} -s
+        # if "ceph -s" fails, assume that the cluster is broken or
+        # unavailable and skip gathering details for it
+        CEPH_ARGS='' ceph --cluster ${cluster} -s || continue
+
+        echo "${cluster} service status"
         CEPH_ARGS='' ceph --cluster ${cluster} service dump
         CEPH_ARGS='' ceph --cluster ${cluster} service status
         echo
@@ -581,7 +584,7 @@ status()
                 continue
             fi
 
-            echo "${daemon} rbd-mirror process in ps output:"
+            echo "${cluster} rbd-mirror process in ps output:"
             if ps auxww |
                 awk -v pid=${pid} 'NR == 1 {print} $2 == pid {print; exit 1}'
             then

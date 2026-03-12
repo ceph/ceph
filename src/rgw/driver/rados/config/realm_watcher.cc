@@ -85,23 +85,10 @@ int RadosRealmWatcher::watch_start(const DoutPrefixProvider* dpp,
                                    librados::Rados& rados,
                                    const RGWRealm& realm)
 {
-  // initialize a Rados client
-  int r = rados.init_with_context(cct);
-  if (r < 0) {
-    ldpp_dout(dpp, -1) << "Rados client initialization failed with "
-        << cpp_strerror(-r) << dendl;
-    return r;
-  }
-  r = rados.connect();
-  if (r < 0) {
-    ldpp_dout(dpp, -1) << "Rados client connection failed with "
-        << cpp_strerror(-r) << dendl;
-    return r;
-  }
-
+  // The Rados client should have been initialized by the ConfigStore
   // open an IoCtx for the realm's pool
   rgw_pool pool(realm.get_pool(cct));
-  r = rgw_init_ioctx(dpp, &rados, pool, pool_ctx);
+  int r = rgw_init_ioctx(dpp, &rados, pool, pool_ctx);
   if (r < 0) {
     ldpp_dout(dpp, -1) << "Failed to open pool " << pool
         << " with " << cpp_strerror(-r) << dendl;

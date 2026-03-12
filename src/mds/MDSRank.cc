@@ -17,6 +17,10 @@
 #include "osdc/Journaler.h"
 
 #include <typeinfo>
+#include <fstream>
+#include <iterator>
+#include <vector>
+#include <cstdlib>
 #include "common/DecayCounter.h"
 #include "common/debug.h"
 #include "common/errno.h"
@@ -506,6 +510,7 @@ MDSRank::MDSRank(
   purge_queue.update_op_limit(*mdsmap);
 
   objecter->unset_honor_pool_full();
+  objecter->set_balanced_budget();
 
   finisher = new Finisher(cct, "MDSRank", "mds-rank-fin");
 
@@ -4085,6 +4090,14 @@ std::string MDSRank::get_path(inodeno_t ino) {
   return res;
 }
 
+uint64_t MDSRank::get_inode_rbytes(inodeno_t ino) {
+  std::lock_guard locker(mds_lock);
+  CInode* inode = mdcache->get_inode(ino);
+  if (!inode) return 0;
+  const auto& pi = inode->get_projected_inode();
+  return pi->rstat.rbytes > 0 ? static_cast<uint64_t>(pi->rstat.rbytes) : 0;
+}
+
 std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     const noexcept
 {
@@ -4271,7 +4284,7 @@ void MDSRank::get_task_status(std::map<std::string, std::string> *status) {
   std::string_view scrub_summary = scrubstack->scrub_summary();
   if (!ScrubStack::is_idle(scrub_summary)) {
     send_status = true;
-    status->emplace(SCRUB_STATUS_KEY, std::move(scrub_summary));
+    status->emplace(SCRUB_STATUS_KEY, scrub_summary);
   }
 }
 

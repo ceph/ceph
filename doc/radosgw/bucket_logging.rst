@@ -54,6 +54,13 @@ them, regardless if enough time passed or if no more records are written to the
 object. Flushing will happen automatically when logging is disabled on a
 bucket, or its logging configuration is changed, or the bucket is deleted.
 
+To manually flush pending log objects to the log bucket, execute the following
+command:
+
+.. prompt:: bash #
+
+   radosgw-admin bucket logging flush --bucket <source bucket>
+
 The process of adding a new log object to the log bucket is asynchronous when
 triggered by a log record being written. Consequently, the operation that
 generated the log is completed immediately and does not wait for the log object
@@ -68,6 +75,17 @@ the log bucket, execute the following command:
 .. prompt:: bash #
 
    radosgw-admin bucket logging list --bucket <source bucket>
+
+To view the logging configuration of a source bucket, or to see which source
+buckets are logging to a specific log bucket, execute the following command:
+
+.. prompt:: bash #
+
+   radosgw-admin bucket logging info --bucket <bucket>
+
+When run on a source bucket, this displays the logging configuration (target
+bucket, prefix, etc.). When run on a log bucket, this displays which source
+buckets are sending logs to it.
 
 
 Standard

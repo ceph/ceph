@@ -1,19 +1,11 @@
-try:
-    import cherrypy
-    from cherrypy._cpserver import Server
-except ImportError:
-    # to avoid sphinx build crash
-    class Server:  # type: ignore
-        pass
-
+import cherrypy
 import json
-import logging
 import socket
 import ssl
 import threading
 import time
 
-from orchestrator import DaemonDescriptionStatus
+from orchestrator import DaemonDescriptionStatus, OrchestratorError
 from orchestrator._interface import daemon_type_to_service
 from ceph.utils import datetime_now, http_req
 from ceph.deployment.inventory import Devices
@@ -25,24 +17,13 @@ import tempfile
 from cephadm.services.service_registry import service_registry
 from cephadm.services.cephadmservice import CephadmAgent
 from cephadm.tlsobject_types import TLSCredentials
+from cephadm.utils import get_node_proxy_status_value
 
 from urllib.error import HTTPError, URLError
-from typing import Any, Dict, List, Set, TYPE_CHECKING, Optional, MutableMapping, IO
+from typing import Any, Dict, List, Set, TYPE_CHECKING, Optional, MutableMapping, IO, Tuple
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
-
-
-def cherrypy_filter(record: logging.LogRecord) -> bool:
-    blocked = [
-        'TLSV1_ALERT_DECRYPT_ERROR'
-    ]
-    msg = record.getMessage()
-    return not any([m for m in blocked if m in msg])
-
-
-logging.getLogger('cherrypy.error').addFilter(cherrypy_filter)
-cherrypy.log.access_log.propagate = False
 
 
 CEPHADM_AGENT_CERT_DURATION = (365 * 5)
@@ -57,13 +38,21 @@ class AgentEndpoint:
         self.key_file: IO[bytes]
         self.cert_file: IO[bytes]
 
-    def configure_routes(self) -> None:
-        conf = {'/': {'tools.trailing_slash.on': False}}
+    def get_cherrypy_config(self) -> Dict:
+        config = {
+            '/': {
+                'tools.trailing_slash.on': False
+            }
+        }
+        return config
 
-        cherrypy.tree.mount(self.host_data, '/data', config=conf)
-        cherrypy.tree.mount(self.node_proxy_endpoint, '/node-proxy', config=conf)
+    def configure_routes(self, config: Dict) -> List[tuple]:
+        return [
+            (self.host_data, '/data', config),
+            (self.node_proxy_endpoint, '/node-proxy', config),
+        ]
 
-    def configure_tls(self, server: Server) -> None:
+    def configure_tls(self) -> Dict[str, str]:
         self.mgr.cert_mgr.register_self_signed_cert_key_pair(CephadmAgent.TYPE)
         tls_pair = self._get_agent_certificates()
         self.cert_file = tempfile.NamedTemporaryFile()
@@ -75,7 +64,10 @@ class AgentEndpoint:
         self.key_file.flush()  # pkey_tmp must not be gc'ed
 
         verify_tls_files(self.cert_file.name, self.key_file.name)
-        server.ssl_certificate, server.ssl_private_key = self.cert_file.name, self.key_file.name
+        return {
+            'cert': self.cert_file.name,
+            'key': self.key_file.name,
+        }
 
     def _get_agent_certificates(self) -> TLSCredentials:
         host = self.mgr.get_hostname()
@@ -90,19 +82,20 @@ class AgentEndpoint:
         while self.server_port <= max_port:
             try:
                 test_port_allocation(self.server_addr, self.server_port)
-                self.host_data.socket_port = self.server_port
                 self.mgr.log.debug(f'Cephadm agent endpoint using {self.server_port}')
                 return
             except PortAlreadyInUse:
                 self.server_port += 1
         self.mgr.log.error(f'Cephadm agent could not find free port in range {max_port - 150}-{max_port} and failed to start')
 
-    def configure(self) -> None:
-        self.host_data = HostData(self.mgr, self.server_port, self.server_addr)
-        self.configure_tls(self.host_data)
+    def configure(self) -> Tuple[Dict, Dict, List[tuple], tuple]:
+        self.host_data = HostData(self.mgr)
+        ssl_info = self.configure_tls()
         self.node_proxy_endpoint = NodeProxyEndpoint(self.mgr)
-        self.configure_routes()
+        config = self.get_cherrypy_config()
+        mount_specs = self.configure_routes(config)
         self.find_free_port()
+        return config, ssl_info, mount_specs, (self.server_addr, self.server_port)
 
 
 class NodeProxyEndpoint:
@@ -186,6 +179,12 @@ class NodeProxyEndpoint:
         except AttributeError:
             raise cherrypy.HTTPError(400, 'Malformed data received.')
 
+    def _get_health_value(self, member_data: Any) -> str:
+        return get_node_proxy_status_value(member_data, 'health', lower=True)
+
+    def _get_state_value(self, member_data: Any) -> str:
+        return get_node_proxy_status_value(member_data, 'state')
+
     # TODO(guits): refactor this
     # TODO(guits): use self.node_proxy.get_critical_from_host() ?
     def get_nok_members(self,
@@ -206,16 +205,18 @@ class NodeProxyEndpoint:
 
         for sys_id in data.keys():
             for member in data[sys_id].keys():
-                _status = data[sys_id][member]['status']['health'].lower()
-                if _status.lower() != 'ok':
-                    state = data[sys_id][member]['status']['state']
-                    _member = dict(
-                        sys_id=sys_id,
-                        member=member,
-                        status=_status,
-                        state=state
-                    )
-                    nok_members.append(_member)
+                member_data = data[sys_id][member]
+                if member == 'firmwares':
+                    continue
+                _status = self._get_health_value(member_data)
+                if _status and _status != 'ok':
+                    state = self._get_state_value(member_data)
+                    nok_members.append({
+                        'sys_id': sys_id,
+                        'member': member,
+                        'status': _status,
+                        'state': state
+                    })
 
         return nok_members
 
@@ -409,7 +410,7 @@ class NodeProxyEndpoint:
         """
         try:
             results = self.mgr.node_proxy_cache.fullreport(**kw)
-        except KeyError:
+        except (KeyError, OrchestratorError):
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
 
@@ -433,7 +434,7 @@ class NodeProxyEndpoint:
         """
         try:
             results = self.mgr.node_proxy_cache.criticals(**kw)
-        except KeyError:
+        except (KeyError, OrchestratorError):
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
 
@@ -457,7 +458,7 @@ class NodeProxyEndpoint:
         """
         try:
             results = self.mgr.node_proxy_cache.summary(**kw)
-        except KeyError:
+        except (KeyError, OrchestratorError):
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
 
@@ -482,7 +483,7 @@ class NodeProxyEndpoint:
         """
         try:
             results = self.mgr.node_proxy_cache.common('memory', **kw)
-        except KeyError:
+        except (KeyError, OrchestratorError):
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
 
@@ -507,7 +508,7 @@ class NodeProxyEndpoint:
         """
         try:
             results = self.mgr.node_proxy_cache.common('network', **kw)
-        except KeyError:
+        except (KeyError, OrchestratorError):
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
 
@@ -532,7 +533,7 @@ class NodeProxyEndpoint:
         """
         try:
             results = self.mgr.node_proxy_cache.common('processors', **kw)
-        except KeyError:
+        except (KeyError, OrchestratorError):
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
 
@@ -557,7 +558,7 @@ class NodeProxyEndpoint:
         """
         try:
             results = self.mgr.node_proxy_cache.common('storage', **kw)
-        except KeyError:
+        except (KeyError, OrchestratorError):
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
 
@@ -582,7 +583,7 @@ class NodeProxyEndpoint:
         """
         try:
             results = self.mgr.node_proxy_cache.common('power', **kw)
-        except KeyError:
+        except (KeyError, OrchestratorError):
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
 
@@ -607,7 +608,7 @@ class NodeProxyEndpoint:
         """
         try:
             results = self.mgr.node_proxy_cache.common('fans', **kw)
-        except KeyError:
+        except (KeyError, OrchestratorError):
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
 
@@ -631,27 +632,16 @@ class NodeProxyEndpoint:
         """
         try:
             results = self.mgr.node_proxy_cache.firmwares(**kw)
-        except KeyError:
+        except (KeyError, OrchestratorError):
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
 
 
-class HostData(Server):
+class HostData:
     exposed = True
 
-    def __init__(self, mgr: "CephadmOrchestrator", port: int, host: str):
+    def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr = mgr
-        super().__init__()
-        self.socket_port = port
-        self.socket_host = host
-        self.subscribe()
-
-    def stop(self) -> None:
-        # we must call unsubscribe before stopping the server,
-        # otherwise the port is not released and we will get
-        # an exception when trying to restart it
-        self.unsubscribe()
-        super().stop()
 
     @cherrypy.tools.allow(methods=['POST'])
     @cherrypy.tools.json_in()

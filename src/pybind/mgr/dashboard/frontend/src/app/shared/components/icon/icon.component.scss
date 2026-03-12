@@ -31,10 +31,42 @@ Using `color` in css and seyting svg will fill="currentColor does not work.
   fill: theme.$support-caution-major !important;
 }
 
+.warningAltFilled-icon {
+  fill: theme.$support-caution-major !important;
+}
+
 .error-icon {
-  fill: theme.$support-error !important;
+  fill: var(--cds-text-error) !important;
 }
 
 .info-icon {
   fill: theme.$support-info !important;
+}
+
+.deploy-icon {
+  fill: theme.$layer-selected-disabled !important;
+}
+
+.notificationNew-icon circle {
+  fill: theme.$support-error !important;
+}
+
+.emptySearch-icon {
+  fill: theme.$layer-selected-disabled !important;
+}
+
+.warningAlt-icon {
+  fill: theme.$support-caution-major !important;
+}
+
+.checkMarkOutline-icon {
+  fill: theme.$support-success !important;
+}
+
+.inProgress-icon {
+  fill: theme.$support-info !important;
+}
+
+.arrowDown-icon {
+  fill: theme.$support-error !important;
 }

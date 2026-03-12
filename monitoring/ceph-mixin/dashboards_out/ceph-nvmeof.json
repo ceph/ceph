@@ -1426,7 +1426,7 @@
             "sortBy": [ ]
          },
          "pluginVersion": "9.1.3",
-         "styles": "",
+         "styles": [ ],
          "targets": [
             {
                "datasource": "$datasource",

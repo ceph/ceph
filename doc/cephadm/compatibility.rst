@@ -34,12 +34,12 @@ This table shows which version pairs are expected to work or not work together:
   all Ceph versions, there are no known issues with using Podman
   version 3.0 or greater with Ceph Quincy and later releases.
 
-.. warning:: 
+.. warning::
 
    To use Podman with Ceph Pacific, you must use **a version of Podman that
    is 2.0.0 or higher**. However, **Podman version 2.2.1 does not work with
    Ceph Pacific**.
-   
+
    "Kubic stable" is known to work with Ceph Pacific, but it must be run
    with a newer kernel.
 
@@ -57,7 +57,7 @@ Cephadm support remains under development for the following features:
 
 - ceph-exporter deployment
 - stretch mode integration
-- monitoring stack (moving towards prometheus service discover and providing TLS)
+- monitoring stack (moving towards Prometheus service discovery and providing TLS)
 - RGW multisite deployment support (requires lots of manual steps currently)
 - cephadm agent
 

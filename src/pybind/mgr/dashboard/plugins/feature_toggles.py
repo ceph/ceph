@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 
 from enum import Enum
-from typing import Dict, List, Optional, Set, no_type_check
+from typing import Dict, List, Optional, Set
 
 import cherrypy
-from mgr_module import CLICommand, Option
+from mgr_module import Option
 from mgr_util import CLIWarning
 
+from ..cli import DBCLICommand
 from ..controllers.cephfs import CephFS
 from ..controllers.iscsi import Iscsi, IscsiTarget
 from ..controllers.nfs import NFSGaneshaExports, NFSGaneshaUi
@@ -26,6 +27,7 @@ class Features(Enum):
     CEPHFS = 'cephfs'
     RGW = 'rgw'
     NFS = 'nfs'
+    DASHBOARD = 'dashboard'
 
     # if we want to add any custom warning message when enabling a feature
     # we can add it here as key-value pair in warn_msg.
@@ -81,7 +83,7 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
 
     @PM.add_hook
     def register_commands(self):
-        @CLICommand("dashboard feature")
+        @DBCLICommand("dashboard feature")
         def cmd(mgr,
                 action: Actions = Actions.STATUS,
                 features: Optional[List[Features]] = None):
@@ -114,7 +116,6 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
             return ret, '\n'.join(msg), ''
         return {'handle_command': cmd}
 
-    @no_type_check  # https://github.com/python/mypy/issues/7806
     def _get_feature_from_request(self, request):
         try:
             return self.Controller2Feature[
@@ -123,7 +124,6 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
             return None
 
     @ttl_cache(ttl=CACHE_TTL, maxsize=CACHE_MAX_SIZE)
-    @no_type_check  # https://github.com/python/mypy/issues/7806
     def _is_feature_enabled(self, feature):
         return self.mgr.get_module_option(self.OPTION_FMT.format(feature))
 
@@ -152,6 +152,7 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
             "cephfs": (bool, ''),
             "rgw": (bool, ''),
             "nfs": (bool, ''),
+            "dashboard": (bool, '')
         }
 
         @APIRouter('/feature_toggles')

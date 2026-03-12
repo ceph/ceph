@@ -421,7 +421,7 @@ of BlueStore include:
 The BlueStore on-disk format is expected to continue to evolve.  However, we
 will provide support in the OSD to migrate to the new format on upgrade.
 
-.. note: BlueStore is still marked "experimental" in Kraken.  We
+.. note:: BlueStore is still marked "experimental" in Kraken.  We
    recommend its use for proof-of-concept and test environments, or
    other cases where data loss can be tolerated.  Although it is
    stable in our testing environment, the code is new and bugs are

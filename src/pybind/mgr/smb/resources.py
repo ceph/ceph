@@ -4,6 +4,7 @@ import base64
 import dataclasses
 import errno
 import json
+from dataclasses import replace
 
 import yaml
 
@@ -13,12 +14,22 @@ from ceph.deployment.service_spec import (
     SMBClusterPublicIPSpec,
     SpecValidationError,
 )
+from ceph.smb.constants import (
+    BURST_MULT_MAX,
+    BURST_MULT_MIN,
+    BYTES_LIMIT_MAX,
+    IOPS_LIMIT_MAX,
+    REMOTE_CONTROL,
+    REMOTE_CONTROL_LOCAL,
+)
+from ceph.smb.network import to_network
 from object_format import ErrorResponseBase
 
 from . import resourcelib, validation
 from .enums import (
     AuthMode,
     CephFSStorageProvider,
+    HostAccess,
     Intent,
     JoinSourceType,
     LoginAccess,
@@ -132,6 +143,18 @@ class _RBase:
 
 
 @resourcelib.component()
+class QoSConfig(_RBase):
+    """Quality of Service configuration for CephFS shares."""
+
+    read_iops_limit: Optional[int] = None
+    write_iops_limit: Optional[int] = None
+    read_bw_limit: Optional[str] = None
+    write_bw_limit: Optional[str] = None
+    read_burst_mult: Optional[int] = 15
+    write_burst_mult: Optional[int] = 15
+
+
+@resourcelib.component()
 class CephFSStorage(_RBase):
     """Description of where in a CephFS file system a share is located."""
 
@@ -140,6 +163,7 @@ class CephFSStorage(_RBase):
     subvolumegroup: str = ''
     subvolume: str = ''
     provider: CephFSStorageProvider = CephFSStorageProvider.SAMBA_VFS
+    qos: Optional[QoSConfig] = None
 
     def __post_init__(self) -> None:
         # Allow a shortcut form of <subvolgroup>/<subvol> in the subvolume
@@ -173,7 +197,88 @@ class CephFSStorage(_RBase):
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
         rc.subvolumegroup.quiet = True
         rc.subvolume.quiet = True
+        rc.qos.quiet = True
         return rc
+
+    @staticmethod
+    def _apply_limit(
+        qos_updates: Dict[str, Union[int, str, None]],
+        key: str,
+        value: Union[int, str, None],
+        maximum: int,
+    ) -> None:
+        """Apply a QoS limit to the updates dict, handling disable (0) and capping at maximum."""
+        if value is None:
+            return
+        if value == 0 or value == "0":
+            qos_updates[key] = None
+            return
+        if isinstance(value, str):
+            if value.isdigit():
+                qos_updates[key] = str(min(int(value), maximum))
+            else:
+                qos_updates[key] = value
+        else:
+            qos_updates[key] = min(value, maximum)
+
+    def update_qos(
+        self,
+        *,
+        read_iops_limit: Optional[int] = None,
+        write_iops_limit: Optional[int] = None,
+        read_bw_limit: Optional[str] = None,
+        write_bw_limit: Optional[str] = None,
+        read_burst_mult: Optional[int] = None,
+        write_burst_mult: Optional[int] = None,
+    ) -> Self:
+        """Return a new CephFSStorage instance with updated QoS values."""
+        qos_updates: Dict[str, Union[int, str, None]] = {}
+        new_qos: Optional[QoSConfig] = None
+
+        self._apply_limit(
+            qos_updates, "read_iops_limit", read_iops_limit, IOPS_LIMIT_MAX
+        )
+        self._apply_limit(
+            qos_updates, "write_iops_limit", write_iops_limit, IOPS_LIMIT_MAX
+        )
+        self._apply_limit(
+            qos_updates, "read_bw_limit", read_bw_limit, BYTES_LIMIT_MAX
+        )
+        self._apply_limit(
+            qos_updates, "write_bw_limit", write_bw_limit, BYTES_LIMIT_MAX
+        )
+
+        if read_burst_mult is not None:
+            if read_burst_mult < BURST_MULT_MIN:
+                raise ValueError(
+                    f"read_burst_mult must be at least {BURST_MULT_MIN} (got {read_burst_mult})"
+                )
+            qos_updates["read_burst_mult"] = min(
+                read_burst_mult, BURST_MULT_MAX
+            )
+        if write_burst_mult is not None:
+            if write_burst_mult < BURST_MULT_MIN:
+                raise ValueError(
+                    f"write_burst_mult must be at least {BURST_MULT_MIN} (got {write_burst_mult})"
+                )
+            qos_updates["write_burst_mult"] = min(
+                write_burst_mult, BURST_MULT_MAX
+            )
+
+        if qos_updates:
+            new_qos = replace(self.qos or QoSConfig(), **qos_updates)  # type: ignore
+
+            if (
+                new_qos.read_iops_limit is None
+                and new_qos.write_iops_limit is None
+                and new_qos.read_bw_limit is None
+                and new_qos.write_bw_limit is None
+            ):
+                new_qos = None
+        else:
+            new_qos = self.qos
+
+        return replace(self, qos=new_qos)
 
 
 @resourcelib.component()
@@ -187,6 +292,30 @@ class LoginAccessEntry(_RBase):
 
     def validate(self) -> None:
         validation.check_access_name(self.name)
+
+
+@resourcelib.component()
+class HostAccessEntry(_RBase):
+    access: HostAccess
+    address: str = ''
+    network: str = ''
+
+    def validate(self) -> None:
+        # to_network raises ValueError if values are invalid
+        to_network(network=self.network, address=self.address)
+
+    @property
+    def normalized_value(self) -> str:
+        if self.address:
+            return self.address
+        # normalize network string
+        return str(to_network(network=self.network))
+
+    @resourcelib.customize
+    def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
+        rc.address.quiet = True
+        rc.network.quiet = True
+        return rc
 
 
 @resourcelib.resource('ceph.smb.share')
@@ -229,6 +358,7 @@ class Share(_RBase):
     custom_smb_share_options: Optional[Dict[str, str]] = None
     login_control: Optional[List[LoginAccessEntry]] = None
     restrict_access: bool = False
+    hosts_access: Optional[List[HostAccessEntry]] = None
 
     def __post_init__(self) -> None:
         # if name is not given explicitly, take it from the share_id
@@ -489,9 +619,33 @@ class TLSSource(_RBase):
 
 
 @resourcelib.component()
+class ExternalCephClusterSource(_RBase):
+    """References Ceph cluster configurations for clusters other than the
+    current cluster.
+    """
+
+    source_type: SourceReferenceType = SourceReferenceType.RESOURCE
+    ref: str = ''
+
+    def validate(self) -> None:
+        if not self.ref:
+            raise ValueError('reference value must be specified')
+        else:
+            validation.check_id(self.ref)
+
+    @resourcelib.customize
+    def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
+        rc.ref.quiet = True
+        return rc
+
+
+@resourcelib.component()
 class RemoteControl(_RBase):
     # enabled can be set to explicitly toggle the remote control server
     enabled: Optional[bool] = None
+    # locally_enabled can be set to explicitly toggle the remote control
+    # servers local unix socket mode
+    locally_enabled: Optional[bool] = None
     # cert specifies the ssl/tls certificate to use
     cert: Optional[TLSSource] = None
     # cert specifies the ssl/tls server key to use
@@ -505,9 +659,23 @@ class RemoteControl(_RBase):
 
     @property
     def is_enabled(self) -> bool:
+        return self._locally_enabled() or self._remotely_enabled()
+
+    def _locally_enabled(self) -> bool:
+        return bool(self.locally_enabled)
+
+    def _remotely_enabled(self) -> bool:
         if self.enabled is not None:
             return self.enabled
         return bool(self.cert and self.key)
+
+    def enabled_features(self) -> list[str]:
+        out = []
+        if self._locally_enabled():
+            out.append(REMOTE_CONTROL_LOCAL)
+        if self._remotely_enabled():
+            out.append(REMOTE_CONTROL)
+        return out
 
 
 @resourcelib.resource('ceph.smb.cluster')
@@ -532,6 +700,12 @@ class Cluster(_RBase):
     bind_addrs: Optional[List[ClusterBindIP]] = None
     # configure a remote control sidecar server.
     remote_control: Optional[RemoteControl] = None
+    # connect the smb cluster and all its shares to cephfs file systems
+    # hosted on an external ceph cluster
+    external_ceph_cluster: Optional[ExternalCephClusterSource] = None
+    # debug_level can be used to change the smb services
+    # default debugging levels
+    debug_level: Optional[dict[str, str]] = None
 
     def validate(self) -> None:
         if not self.cluster_id:
@@ -563,11 +737,13 @@ class Cluster(_RBase):
             raise ValueError(
                 'bind_addrs must have at least one value or not be set'
             )
+        validation.check_debug_level(self.debug_level)
 
     @resourcelib.customize
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
         rc.on_condition(_present)
         rc.on_construction_error(InvalidResourceError.wrap)
+        rc.debug_level.quiet = True
         return rc
 
     @property
@@ -724,6 +900,41 @@ class TLSCredential(_RBase):
         return self
 
 
+@resourcelib.component()
+class CephUserKey(_RBase):
+    """A Ceph User Key name and value pair."""
+
+    name: str
+    key: str
+
+
+@resourcelib.component()
+class ExternalCephClusterValues(_RBase):
+    """Contains values that can be used to connect to a Ceph cluster
+    other than the current cluster.
+    """
+
+    fsid: str
+    mon_host: str
+    cephfs_user: CephUserKey
+
+
+@resourcelib.resource('ceph.smb.ext.cluster')
+class ExternalCephCluster(_RBase):
+    """Resource used to configure an external Ceph cluster."""
+
+    external_ceph_cluster_id: str
+    intent: Intent = Intent.PRESENT
+    cluster: Optional[ExternalCephClusterValues] = None
+
+    def validate(self) -> None:
+        if not self.external_ceph_cluster_id:
+            raise ValueError('external_ceph_cluster_id requires a value')
+        validation.check_id(self.external_ceph_cluster_id)
+        if self.intent is Intent.PRESENT and not self.cluster:
+            raise ValueError('cluster parameter must be specified')
+
+
 # SMBResource is a union of all valid top-level smb resource types.
 SMBResource = Union[
     Cluster,
@@ -733,6 +944,7 @@ SMBResource = Union[
     Share,
     UsersAndGroups,
     TLSCredential,
+    ExternalCephCluster,
 ]
 
 

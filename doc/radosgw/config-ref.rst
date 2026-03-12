@@ -59,6 +59,7 @@ instances or all radosgw-admin options can be put into the ``[global]`` or the
 .. confval:: rgw_account_default_quota_max_size
 .. confval:: rgw_verify_ssl
 .. confval:: rgw_max_chunk_size
+.. confval:: rgw_multi_obj_del_max_aio
 
 Lifecycle Settings
 ==================
@@ -217,8 +218,6 @@ Keystone Settings
 .. confval:: rgw_keystone_url
 .. confval:: rgw_keystone_admin_domain
 .. confval:: rgw_keystone_admin_project
-.. confval:: rgw_keystone_admin_token
-.. confval:: rgw_keystone_admin_token_path
 .. confval:: rgw_keystone_admin_tenant
 .. confval:: rgw_keystone_admin_user
 .. confval:: rgw_keystone_admin_password

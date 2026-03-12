@@ -191,9 +191,10 @@ class ReleasesGantt(Directive):
 
 class CephTimeline(Directive):
     has_content = False
-    required_arguments = 4
+    required_arguments = 2
     optional_arguments = 0
     option_spec = {}
+    final_argument_whitespace = True
 
     def run(self):
         filename = self.arguments[0]
@@ -209,7 +210,7 @@ class CephTimeline(Directive):
                 "Failed to open Ceph releases file {}: {}".format(filename, e),
                 line=self.lineno)]
 
-        display_releases = self.arguments[1:]
+        display_releases = self.arguments[1].split()
 
         timeline = []
         for code_name, info in releases["releases"].items():

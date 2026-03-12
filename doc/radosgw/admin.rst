@@ -1,3 +1,5 @@
+.. _radosgw-admin-guide:
+
 =============
  Admin Guide
 =============
@@ -432,6 +434,8 @@ To remove the admin flag from an existing user:
 
    radosgw-admin user modify --uid={username} --admin=0
 
+.. _radosgw-quota-management:
+
 Quota Management
 ================
 
@@ -617,6 +621,8 @@ commands, as in the following examples:
    update --commit``. If no period is present, the RGW instances must
    be restarted for the changes to take effect.
 
+
+.. _radosgw-rate-limit-management:
 
 Rate Limit Management
 =====================

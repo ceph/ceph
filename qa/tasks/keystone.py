@@ -46,7 +46,7 @@ def run_in_keystone_venv(ctx, client, args, **kwargs):
 
 def get_keystone_venved_cmd(ctx, cmd, args, env=[]):
     kbindir = get_keystone_dir(ctx) + '/.tox/venv/bin/'
-    return env + [ kbindir + 'python', kbindir + cmd ] + args
+    return env + [ kbindir + cmd ] + args
 
 @contextlib.contextmanager
 def download(ctx, config):
@@ -163,7 +163,7 @@ def setup_database(ctx, config):
 
         # MariaDB on RHEL/CentOS needs service started after package install
         # while Ubuntu starts service by default.
-        if remote.os.name == 'rhel' or remote.os.name == 'centos':
+        if remote.os.name in ('rhel', 'centos', 'alma', 'rocky'):
             remote.run(args=['sudo', 'systemctl', 'restart', 'mariadb'])
 
         run_mysql_query(ctx, remote, "CREATE USER 'keystone'@'localhost' IDENTIFIED BY 'SECRET';")
@@ -196,9 +196,8 @@ def setup_venv(ctx, config):
 
         run_in_keystone_venv(ctx, client,
             [   'pip', 'install',
-                'python-openstackclient==5.2.1',
-                'osc-lib==2.0.0'
-             ])
+                'python-openstackclient', 'uwsgi',
+            ])
     try:
         yield
     finally:
@@ -277,8 +276,10 @@ def run_keystone(ctx, config):
         client_public_with_id = 'keystone.public' + '.' + client_id
 
         public_host, public_port = ctx.keystone.public_endpoints[client]
-        run_cmd = get_keystone_venved_cmd(ctx, 'keystone-wsgi-public',
-            [   '--host', public_host, '--port', str(public_port),
+        run_cmd = get_keystone_venved_cmd(ctx, 'uwsgi',
+            [
+                '--http-socket', f"{public_host}:{public_port}",
+                '--module', 'keystone.wsgi.api:application',
                 # Let's put the Keystone in background, wait for EOF
                 # and after receiving it, send SIGTERM to the daemon.
                 # This crazy hack is because Keystone, in contrast to

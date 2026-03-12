@@ -1055,6 +1055,7 @@ int Directory::get_ent(const DoutPrefixProvider *dpp, optional_yield y, const st
         decode_attr(attrs, RGW_POSIX_ATTR_OBJECT_TYPE, type);
       }
     }
+    ::close(tmpfd);
     switch (type.type) {
     case ObjectType::VERSIONED:
       nent = std::make_unique<VersionedDirectory>(name, this, instance, nstx, ctx);
@@ -1399,7 +1400,7 @@ int VersionedDirectory::open(const DoutPrefixProvider* dpp)
   }
   int ret = Directory::open(dpp);
   if (ret < 0) {
-    return 0;
+    return ret;
   }
 
   if (!instance_id.empty()) {
@@ -1920,6 +1921,12 @@ RGWBucketSyncPolicyHandlerRef POSIXZone::get_sync_policy_handler() {
 int POSIXLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script)
 {
   return -ENOENT;
+}
+
+std::tuple<rgw::lua::LuaCodeType, int> POSIXLuaManager::get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y,
+                                                                               const std::string& key)
+{
+  return std::make_tuple("", -ENOENT);
 }
 
 int POSIXLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script)

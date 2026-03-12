@@ -55,7 +55,7 @@ export class RgwDaemonListComponent extends ListWithDetails implements OnInit {
         flexGrow: 2
       },
       {
-        name: $localize`Zone Group`,
+        name: $localize`Zonegroup`,
         prop: 'zonegroup_name',
         flexGrow: 2
       },

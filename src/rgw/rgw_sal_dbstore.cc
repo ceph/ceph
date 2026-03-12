@@ -2134,6 +2134,12 @@ namespace rgw::sal {
     return -ENOENT;
   }
 
+  std::tuple<rgw::lua::LuaCodeType, int> DBLuaManager::get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y,
+                                                                    const std::string& key)
+  {
+    return std::make_tuple("", -ENOENT);
+  }
+
   int DBLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script)
   {
     return -ENOENT;
@@ -2163,7 +2169,7 @@ namespace rgw::sal {
   {
     return -ENOENT;
   }
-  
+
 } // namespace rgw::sal
 
 extern "C" {

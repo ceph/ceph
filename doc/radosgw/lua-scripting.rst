@@ -18,7 +18,7 @@ A request (pre or post) or data (get or put) context script may be constrained t
 The request context script can also access fields in the request and modify certain fields, as well as the `Global RGW Table`_.
 The data context script can access the content of the object as well as the request fields and the `Global RGW Table`_.
 All Lua language features can be used in all contexts.
-An execution of a script in a context can use up to 500K byte of memory. This include all libraries used by Lua, but not the memory which is managed by the RGW itself, and may be accessed from Lua.
+An execution of a script in a context can use up to 128K byte of memory. This include all libraries used by Lua, but not the memory which is managed by the RGW itself, and may be accessed from Lua.
 To change this default value, use the ``rgw_lua_max_memory_per_state`` configuration parameter. Note that the basic overhead of Lua with its standard libraries is ~32K bytes. To disable the limit, use zero.
 By default, the execution of a Lua script is limited to a maximum runtime of 1000 milliseconds. This limit can be changed using the ``rgw_lua_max_runtime_per_state`` configuration parameter. If a Lua script exceeds this runtime, it will be terminated. To disable the runtime limit, use zero.
 
@@ -334,6 +334,23 @@ Tracing functions can be used only in the ``postrequest`` context.
   The function accepts one or two arguments: A string containing the event ``name`` should be the first argument, followed by the event ``attributes``, which is optional for events without attributes.
   An event's attributes must be a table of strings.
 
+Request Blocking and Error Handling
+-----------------------------------
+Script Execution Errors
+~~~~~~~~~~~~~~~~~~~~~~~
+If the Lua script fails with a syntax or runtime error, RGW will log the error. The request that triggered the script will still go through.
+
+Request Blocking and Return Values
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+The script's return value determines how RGW proceeds with the request:
+- To block the request: The script must return the value ``RGW_ABORT_REQUEST``. RGW interprets this as ``-EPERM`` and will stop processing the request.
+- To continue the request: No return value, or any other return value or type will be treated as success.
+
+Return Value Context
+~~~~~~~~~~~~~~~~~~~~
+The Lua script’s return value is evaluated only during the prerequest context and is ignored in any other RGW request-processing context.
+The HTTP response status code is 403 (Forbidden) by default when a request is blocked by Lua. The response code can be changed using ``Request.Response.HTTPStatusCode`` and ``Request.Response.HTTPStatus``.
+If a request is aborted this way, the ``data`` and ``postrequest`` context will also be aborted.
 Background Context
 --------------------
 The ``background`` context may be used for purposes that include analytics, monitoring, caching data for other context executions.

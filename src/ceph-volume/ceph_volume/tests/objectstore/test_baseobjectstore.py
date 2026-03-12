@@ -88,6 +88,16 @@ class TestBaseObjectStore:
         bo.osd_id = '123'
         assert bo.get_osd_path() == '/var/lib/ceph/osd/ceph-123/'
 
+    def test_get_default_entrypoint_cmd_classic(self):
+        bo = BaseObjectStore([])
+        bo.osd_type = 'classic'
+        assert bo.get_default_entrypoint_cmd() == 'ceph-osd'
+
+    def test_get_default_entrypoint_cmd_crimson(self):
+        bo = BaseObjectStore([])
+        bo.osd_type = 'crimson'
+        assert bo.get_default_entrypoint_cmd() == 'ceph-osd-crimson'
+
     @patch('ceph_volume.conf.cluster', 'ceph')
     def test_build_osd_mkfs_cmd_base(self):
         bo = BaseObjectStore([])
@@ -96,6 +106,7 @@ class TestBaseObjectStore:
         bo.objectstore = 'my-fake-objectstore'
         bo.osd_id = '123'
         bo.monmap = '/etc/ceph/ceph.monmap'
+        bo.osd_type = 'classic'
         result = bo.build_osd_mkfs_cmd()
 
         assert result == ['ceph-osd',
@@ -106,6 +117,59 @@ class TestBaseObjectStore:
                           '--mkfs', '-i', '123',
                           '--monmap',
                           '/etc/ceph/ceph.monmap',
+                          '--keyfile', '-',
+                          '--osd-data',
+                          '/var/lib/ceph/osd/ceph-123/',
+                          '--osd-uuid', 'abcd-1234',
+                          '--setuser', 'ceph',
+                          '--setgroup', 'ceph']
+
+    @patch('ceph_volume.conf.cluster', 'ceph')
+    def test_build_osd_mkfs_cmd_crimson(self):
+        bo = BaseObjectStore([])
+        bo.osd_path = '/var/lib/ceph/osd/ceph-123/'
+        bo.osd_fsid = 'abcd-1234'
+        bo.objectstore = 'my-fake-objectstore'
+        bo.osd_id = '123'
+        bo.monmap = '/etc/ceph/ceph.monmap'
+        bo.osd_type = 'crimson'
+        result = bo.build_osd_mkfs_cmd()
+
+        assert result == ['ceph-osd-crimson',
+                          '--cluster',
+                          'ceph',
+                          '--osd-objectstore',
+                          'my-fake-objectstore',
+                          '--mkfs', '-i', '123',
+                          '--monmap',
+                          '/etc/ceph/ceph.monmap',
+                          '--keyfile', '-',
+                          '--osd-data',
+                          '/var/lib/ceph/osd/ceph-123/',
+                          '--osd-uuid', 'abcd-1234',
+                          '--setuser', 'ceph',
+                          '--setgroup', 'ceph']
+
+    @patch('ceph_volume.conf.cluster', 'ceph')
+    def test_build_osd_mkfs_cmd_disables_discard(self):
+        bo = BaseObjectStore([])
+        bo.osd_path = '/var/lib/ceph/osd/ceph-123/'
+        bo.osd_fsid = 'abcd-1234'
+        bo.objectstore = 'bluestore'
+        bo.osd_id = '123'
+        bo.monmap = '/etc/ceph/ceph.monmap'
+        bo.skip_mkfs_discard = True
+        result = bo.build_osd_mkfs_cmd()
+
+        assert result == ['ceph-osd',
+                          '--cluster',
+                          'ceph',
+                          '--osd-objectstore',
+                          'bluestore',
+                          '--mkfs', '-i', '123',
+                          '--monmap',
+                          '/etc/ceph/ceph.monmap',
+                          '--bdev-enable-discard', 'false',
                           '--keyfile', '-',
                           '--osd-data',
                           '/var/lib/ceph/osd/ceph-123/',
@@ -133,6 +197,32 @@ class TestBaseObjectStore:
                     'show_command': True}
                 }
             ]
+
+    def test_osd_mkfs_disables_discard_via_bdev_flag(self, monkeypatch, objectstore):
+        args = objectstore(dmcrypt=False)
+        bo = BaseObjectStore(args)
+        bo.objectstore = 'bluestore'
+        bo.skip_mkfs_discard = True
+        bo.osd_id = '123'
+        bo.osd_fsid = 'abcd-1234'
+        bo.get_osd_path = lambda: '/var/lib/ceph/osd/ceph-123/'
+        monkeypatch.setattr(system, 'chown', lambda path: 0)
+        captured = {}
+
+        def fake_call(cmd, **kwargs):
+            captured['cmd'] = cmd
+            captured['env'] = kwargs.get('env')
+            return ([], [], 0)
+
+        monkeypatch.setattr('ceph_volume.objectstore.baseobjectstore.process.call', fake_call)
+
+        bo.osd_mkfs()
+
+        assert captured.get('env') is None
+        cmd = captured.get('cmd', [])
+        assert '--bdev-enable-discard' in cmd
+        i = cmd.index('--bdev-enable-discard')
+        assert cmd[i + 1] == 'false'
 
     @patch('ceph_volume.process.call', Mock(return_value=([], [], 999)))
     def test_osd_mkfs_fails(self, monkeypatch):

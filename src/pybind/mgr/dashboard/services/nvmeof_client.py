@@ -6,6 +6,7 @@ from typing import Annotated, Any, Callable, Dict, Generator, List, \
     NamedTuple, Optional, Type, get_args, get_origin
 
 from ..exceptions import DashboardException
+from ..services.ceph_service import CephService
 from .nvmeof_conf import NvmeofGatewaysConfig, is_mtls_enabled
 
 logger = logging.getLogger("nvmeof_client")
@@ -33,7 +34,7 @@ else:
     class NVMeoFClient(object):
         pb2 = pb2
 
-        def __init__(self, gw_group: Optional[str] = None, traddr: Optional[str] = None):
+        def __init__(self, gw_group: Optional[str] = None, server_address: Optional[str] = None):
             logger.info("Initiating nvmeof gateway connection...")
             try:
                 if not gw_group:
@@ -41,27 +42,29 @@ else:
                 else:
                     res = NvmeofGatewaysConfig.get_service_info(gw_group)
                 if res is None:
-                    raise DashboardException("Gateway group does not exists")
+                    raise DashboardException("Gateway group does not exist")
                 service_name, self.gateway_addr = res
             except TypeError as e:
                 raise DashboardException(
                     f'Unable to retrieve the gateway info: {e}'
                 )
 
+            self.daemon_name = ''
             # While creating listener need to direct request to the gateway
             # address where listener is supposed to be added.
-            if traddr:
+            if server_address:
                 gateways_info = NvmeofGatewaysConfig.get_gateways_config()
                 matched_gateway = next(
                     (
                         gateway
                         for gateways in gateways_info['gateways'].values()
                         for gateway in gateways
-                        if traddr in gateway['service_url']
+                        if server_address in gateway['service_url']
                     ),
                     None
                 )
                 if matched_gateway:
+                    self.daemon_name = matched_gateway.get('daemon_name')
                     self.gateway_addr = matched_gateway.get('service_url')
                     logger.debug("Gateway address set to: %s", self.gateway_addr)
             enable_auth = is_mtls_enabled(service_name)
@@ -80,6 +83,7 @@ else:
                 logger.info("Insecurely connecting to: %s", self.gateway_addr)
                 self.channel = grpc.insecure_channel(self.gateway_addr)
             self.stub = pb2_grpc.GatewayStub(self.channel)
+            self.service_name = service_name
 
     Model = Dict[str, Any]
     Collection = List[Model]
@@ -111,11 +115,14 @@ else:
                     component="nvmeof",
                 )
 
-            if response.status != 0:
+            status = getattr(response, "status", None)
+            error_message = getattr(response, "error_message", None)
+
+            if status not in (None, 0):
                 raise DashboardException(
-                    msg=response.error_message,
-                    code=response.status,
-                    http_status_code=NVMeoFError2HTTP.get(response.status, 400),
+                    msg=error_message or "NVMeoF operation failed",
+                    code=status,
+                    http_status_code=NVMeoFError2HTTP.get(status, 400),  # type: ignore[arg-type]
                     component="nvmeof",
                 )
             return response
@@ -256,3 +263,67 @@ else:
                 return field_to_ret
             return wrapper
         return decorator
+
+
+def get_gateway_locations(pool: str, group: str, hosts: Optional[List[str]] = None):
+    """
+    Get locations for gateways in a service group using nvme-gw show command.
+
+    Args:
+        pool: The RBD pool name
+        group: The NVMeoF gateway group name
+        hosts: Optional list of hostnames to match locations to (in order)
+
+    Returns:
+        If hosts provided: List of location strings matching the order of hosts
+        If hosts not provided: List of unique location strings (sorted)
+    """
+    try:  # pylint: disable=too-many-nested-blocks
+        if not pool or not group:
+            logger.warning('Pool or group not provided for location lookup: pool=%s, group=%s',
+                           pool, group)
+            return []
+
+        result = CephService.send_command('mon', 'nvme-gw show',
+                                          pool=pool, group=group)
+
+        # Build a mapping of hostname to location
+        host_to_location = {}
+        if isinstance(result, dict):
+            gateways = result.get('Created Gateways:', [])
+
+            for gw in gateways:
+                if isinstance(gw, dict):
+                    gw_id = gw.get('gw-id', '')
+                    location = gw.get('location', '')
+
+                    # Extract hostname from gw-id (format: client.nvmeof.pool.group.hostname.xxx)
+                    if gw_id:
+                        parts = gw_id.split('.')
+                        if len(parts) >= 5:
+                            hostname = parts[4]
+                            if location:
+                                host_to_location[hostname] = location
+                        else:
+                            # If format is unexpected, log warning
+                            logger.warning('Unexpected gateway ID format: %s', gw_id)
+
+        # If hosts list provided, return locations in the same order
+        if hosts:
+            locations = []
+            for host in hosts:
+                # Get location for this host, empty string if not found
+                location = host_to_location.get(host, '')
+                if not location:
+                    logger.debug('No location found for host: %s', host)
+                locations.append(location)
+            return locations
+
+        # Otherwise return unique sorted locations
+        unique_locations = set(host_to_location.values())
+        return sorted(list(unique_locations))
+
+    except Exception as e:  # pylint: disable=broad-except
+        logger.error('Failed to get gateway locations for pool=%s, group=%s: %s',
+                     pool, group, e)
+        return []
