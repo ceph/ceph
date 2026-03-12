@@ -182,52 +182,8 @@ lua_state_guard::~lua_state_guard() {
   }
 }
 
-bool lua_state_guard::set_max_memory(std::size_t _max_memory) {
-  if (_max_memory == max_memory) {
-    return true;
-  }
-  ldpp_dout(dpp, 20) << "Lua is using: " << mem_in_use << " bytes ("
-                     << std::to_string(100.0 -
-                                       (100.0 * mem_in_use / max_memory))
-                     << "%)" << dendl;
-
-  if (mem_in_use > _max_memory && _max_memory > 0) {
-    max_memory = _max_memory;
-    ldpp_dout(dpp, 10) << "Lua memory limit is below current usage" << dendl;
-    ldpp_dout(dpp, 20) << "Lua memory limit set to: " << max_memory << " bytes"
-                       << dendl;
-    return false;
-  }
-
-  max_memory = _max_memory;
-  ldpp_dout(dpp, 20) << "Lua memory limit set to: "
-                     << (max_memory > 0 ? std::to_string(max_memory) : "N/A")
-                     << " bytes" << dendl;
-  return true;
-}
-
 void lua_state_guard::set_mem_in_use(std::size_t _mem_in_use) {
   mem_in_use = _mem_in_use;
-}
-
-void lua_state_guard::set_max_runtime(std::uint64_t _max_runtime) {
-  if (static_cast<uint64_t>(max_runtime.count()) != _max_runtime) {
-    if (_max_runtime > 0) {
-      auto omax_runtime = max_runtime.count();
-      max_runtime = std::chrono::milliseconds(_max_runtime);
-      if (omax_runtime == 0) {
-        set_runtime_hook();
-      }
-    } else {
-      max_runtime = std::chrono::milliseconds(0);
-      lua_sethook(state, nullptr, 0, 0);
-    }
-    ldpp_dout(dpp, 20) << "Lua runtime limit set to: "
-                       << (max_runtime.count() > 0
-                               ? std::to_string(max_runtime.count())
-                               : "N/A")
-                       << " milliseconds" << dendl;
-  }
 }
 
 void lua_state_guard::runtime_hook(lua_State* L, lua_Debug* ar) {
