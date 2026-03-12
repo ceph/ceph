@@ -193,6 +193,8 @@ Swift Settings
 .. confval:: rgw_swift_auth_entry
 .. confval:: rgw_swift_account_in_url
 .. confval:: rgw_swift_versioning_enabled
+.. confval:: rgw_swift_hide_sensitive_headers
+.. confval:: rgw_swift_sensitive_headers
 .. confval:: rgw_trust_forwarded_https
 
 Logging Settings

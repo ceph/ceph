@@ -2871,6 +2871,32 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_swift_hide_sensitive_headers
+  type: bool
+  level: advanced
+  desc: Hide sensitive Swift container headers from non-owners
+  long_desc: When enabled, sensitive Swift container headers (such as X-Container-Read,
+    X-Container-Write, and X-Container-Meta-* headers that may contain tempurl keys)
+    will only be exposed to the container owner and users with admin permissions.
+    This matches OpenStack Swift's behavior for protecting sensitive metadata.
+    It is recommended to enable this for security, but defaults to false for
+    backward compatibility.
+  default: false
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_swift_sensitive_headers
+  type: str
+  level: advanced
+  desc: Comma-separated list of Swift container header prefixes to hide from non-owners
+  long_desc: Specifies which Swift container headers should be hidden when
+    rgw_swift_hide_sensitive_headers is enabled. Headers matching these prefixes
+    will only be shown to container owners and admin users. Use comma-separated
+    values for multiple prefixes.
+  default: X-Container-Read,X-Container-Write,X-Container-Meta-
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_reshard_num_logs
   type: uint
   level: advanced

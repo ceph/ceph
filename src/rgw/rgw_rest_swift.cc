@@ -557,6 +557,53 @@ next:
   rgw_flush_formatter_and_reset(s, s->formatter);
 } // RGWListBucket_ObjStore_SWIFT::send_response
 
+/* Helper function to check if a header should be hidden from non-owners */
+static bool should_hide_header(req_state *s, std::string_view header_name)
+{
+  if (!s->cct->_conf->rgw_swift_hide_sensitive_headers) {
+    return false;
+  }
+
+  if (s->system_request) {
+    return false;
+  }
+
+  if (s->auth.identity && s->bucket &&
+      s->auth.identity->is_owner_of(s->bucket->get_info().owner)) {
+    return false;
+  }
+
+  /* Check if header matches any sensitive prefix */
+  std::string_view config(s->cct->_conf->rgw_swift_sensitive_headers);
+  size_t pos = 0;
+
+  while (pos < config.length()) {
+    size_t comma = config.find(',', pos);
+    if (comma == std::string_view::npos) {
+      comma = config.length();
+    }
+
+    std::string_view token = config.substr(pos, comma - pos);
+    /* Trim whitespace */
+    size_t start = token.find_first_not_of(" \t");
+    if (start != std::string_view::npos) {
+      token = token.substr(start);
+      size_t end = token.find_last_not_of(" \t");
+      if (end != std::string_view::npos) {
+        token = token.substr(0, end + 1);
+      }
+      if (boost::algorithm::starts_with(header_name, token)) {
+        return true;
+      }
+    }
+
+    pos = comma + 1;
+  }
+
+  return false;
+}
+
+
 static void dump_container_metadata(req_state *s,
                                     const std::optional<RGWStorageStats>& stats,
                                     const RGWQuotaInfo& quota,
@@ -575,10 +622,10 @@ static void dump_container_metadata(req_state *s,
     std::string read_acl, write_acl;
     rgw::swift::format_container_acls(s->bucket_acl, read_acl, write_acl);
 
-    if (read_acl.size()) {
+    if (!read_acl.empty() && !should_hide_header(s, "X-Container-Read")) {
       dump_header(s, "X-Container-Read", read_acl);
     }
-    if (write_acl.size()) {
+    if (!write_acl.empty() && !should_hide_header(s, "X-Container-Write")) {
       dump_header(s, "X-Container-Write", write_acl);
     }
     if (!s->bucket->get_placement_rule().name.empty()) {
@@ -598,9 +645,11 @@ static void dump_container_metadata(req_state *s,
       if (geniter != rgw_to_http_attrs.end()) {
         dump_header(s, geniter->second, iter->second);
       } else if (strncmp(name, RGW_ATTR_META_PREFIX, PREFIX_LEN) == 0) {
-        dump_header_prefixed(s, "X-Container-Meta-",
-                             camelcase_dash_http_attr(name + PREFIX_LEN, false),
-                             iter->second);
+        std::string header_name = std::string("X-Container-Meta-") +
+                                  camelcase_dash_http_attr(name + PREFIX_LEN, false);
+        if (!should_hide_header(s, header_name)) {
+          dump_header(s, header_name, iter->second);
+        }
       }
     }
   }
@@ -613,35 +662,28 @@ static void dump_container_metadata(req_state *s,
 
   /* Dump quota headers. */
   if (quota.enabled) {
-    if (quota.max_size >= 0) {
+    if (quota.max_size >= 0 && !should_hide_header(s, "X-Container-Meta-Quota-Bytes")) {
       dump_header(s, "X-Container-Meta-Quota-Bytes", quota.max_size);
     }
-
-    if (quota.max_objects >= 0) {
+    if (quota.max_objects >= 0 && !should_hide_header(s, "X-Container-Meta-Quota-Count")) {
       dump_header(s, "X-Container-Meta-Quota-Count", quota.max_objects);
     }
   }
 
   /* Dump Static Website headers. */
-  if (! ws_conf.index_doc_suffix.empty()) {
+  if (!ws_conf.index_doc_suffix.empty() && !should_hide_header(s, "X-Container-Meta-Web-Index")) {
     dump_header(s, "X-Container-Meta-Web-Index", ws_conf.index_doc_suffix);
   }
-
-  if (! ws_conf.error_doc.empty()) {
+  if (!ws_conf.error_doc.empty() && !should_hide_header(s, "X-Container-Meta-Web-Error")) {
     dump_header(s, "X-Container-Meta-Web-Error", ws_conf.error_doc);
   }
-
-  if (! ws_conf.subdir_marker.empty()) {
-    dump_header(s, "X-Container-Meta-Web-Directory-Type",
-                ws_conf.subdir_marker);
+  if (!ws_conf.subdir_marker.empty() && !should_hide_header(s, "X-Container-Meta-Web-Directory-Type")) {
+    dump_header(s, "X-Container-Meta-Web-Directory-Type", ws_conf.subdir_marker);
   }
-
-  if (! ws_conf.listing_css_doc.empty()) {
-    dump_header(s, "X-Container-Meta-Web-Listings-CSS",
-                ws_conf.listing_css_doc);
+  if (!ws_conf.listing_css_doc.empty() && !should_hide_header(s, "X-Container-Meta-Web-Listings-CSS")) {
+    dump_header(s, "X-Container-Meta-Web-Listings-CSS", ws_conf.listing_css_doc);
   }
-
-  if (ws_conf.listing_enabled) {
+  if (ws_conf.listing_enabled && !should_hide_header(s, "X-Container-Meta-Web-Listings")) {
     dump_header(s, "X-Container-Meta-Web-Listings", "true");
   }
 
