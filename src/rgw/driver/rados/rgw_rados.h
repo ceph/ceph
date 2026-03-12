@@ -408,7 +408,15 @@ class RGWRados
 
   ceph::mutex bucket_id_lock{ceph::make_mutex("rados_bucket_id")};
 
-  // This field represents the number of bucket index object shards
+  /// write-path FIFO bilog cache
+  /// shared_ptr<RGWBILogFIFO> is reused across all operations for the same
+  /// (bucket_id, gen) so that LazyFIFO::lazy_init()/FIFO::create() runs at
+  /// most once per shard per generation.
+  mutable ceph::shared_mutex fifo_bilog_cache_lock_ =
+      ceph::make_shared_mutex("RGWRados::fifo_bilog_cache");
+  std::map<std::pair<std::string, uint64_t>,
+           std::shared_ptr<RGWBILogFIFO>> fifo_bilog_cache_;
+
   uint32_t bucket_index_max_shards{0};
 
   std::string get_cluster_fsid(const DoutPrefixProvider *dpp, optional_yield y);
