@@ -193,6 +193,7 @@ public:
   base_iertr::future<LBAMapping> next();
 
 private:
+  friend class LBAManager;
   friend lba::BtreeLBAManager;
   friend class TransactionManager;
   friend class ::transaction_manager_test_t;
@@ -215,6 +216,13 @@ private:
       return *indirect_cursor;
     }
     return *direct_cursor;
+  }
+
+  LBACursorRef get_effective_cursor_ref() {
+    if (is_indirect()) {
+      return indirect_cursor;
+    }
+    return direct_cursor;
   }
 
   bool is_null() const {

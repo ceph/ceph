@@ -726,9 +726,9 @@ struct transaction_manager_test_t :
   }
 
   LBAMapping get_end(test_transaction_t &t) {
-    return with_trans_intr(*(t.t), [&](auto &trans) {
+    return LBAMapping::create_direct(with_trans_intr(*(t.t), [&](auto &trans) {
       return lba_manager->get_end_mapping(trans);
-    }).unsafe_get();
+    }).unsafe_get());
   }
 
   std::optional<LBAMapping> try_get_pin(

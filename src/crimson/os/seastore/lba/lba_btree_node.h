@@ -408,6 +408,10 @@ struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t, LBALeafNode> {
     assert(is_viewable());
     return !is_end() && iter.get_val().pladdr.is_laddr();
   }
+  bool is_direct() const {
+    assert(is_viewable());
+    return !is_end() && iter.get_val().pladdr.is_paddr();
+  }
   laddr_t get_laddr() const {
     return key;
   }
