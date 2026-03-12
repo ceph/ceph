@@ -74,10 +74,23 @@ void shared_mutex_debug::lock()
       unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
           ? lockstat_detail::lockstat_clock::now()
           : lockstat_detail::lockstat_clock::zero();
-#endif
+  int r = 0;
+  if (is_tripwire_enabled()) {
+    struct timespec timeout_tripwire;
+    lockstat_detail::LockStat::get_timeout_tripwire(&timeout_tripwire);
+    r = pthread_rwlock_timedwrlock(&rwlock, &timeout_tripwire);
+  } else {
+    r = pthread_rwlock_wrlock(&rwlock);
+  }
+  if (r != 0) {
+    throw std::system_error(r, std::generic_category());
+  }
+#else
   if (int r = pthread_rwlock_wrlock(&rwlock); r != 0) {
     throw std::system_error(r, std::generic_category());
   }
+#endif
+
 #ifdef CEPH_LOCKSTAT
   if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero())) {
     record_wait_time(
@@ -143,10 +156,23 @@ void shared_mutex_debug::lock_shared()
       unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
           ? lockstat_detail::lockstat_clock::now()
           : lockstat_detail::lockstat_clock::zero();
-#endif
+  int r = 0;
+  if (is_tripwire_enabled()) {
+    struct timespec timeout_tripwire;
+    lockstat_detail::LockStat::get_timeout_tripwire(&timeout_tripwire);
+    r = pthread_rwlock_timedrdlock(&rwlock, &timeout_tripwire);
+  } else {
+    r = pthread_rwlock_rdlock(&rwlock);
+  }
+  if (r != 0) {
+    throw std::system_error(r, std::generic_category());
+  }
+#else
   if (int r = pthread_rwlock_rdlock(&rwlock); r != 0) {
     throw std::system_error(r, std::generic_category());
   }
+#endif
+
 #ifdef CEPH_LOCKSTAT
   if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero())) {
     record_wait_time(

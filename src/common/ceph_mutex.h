@@ -156,8 +156,8 @@ namespace ceph {
 namespace ceph {
 typedef mutex_lockstat mutex;
 typedef mutex_recursive_lockstat recursive_mutex;
-typedef lockstat_detail::condition_variable_lockstat condition_variable;
-typedef lockstat_detail::shared_mutex_lockstat shared_mutex;
+typedef condition_variable_lockstat condition_variable;
+typedef shared_mutex_lockstat shared_mutex;
 } // namespace ceph
 
 #define make_mutex(name, ...) mutex_lockstat(LOCKSTAT(name))

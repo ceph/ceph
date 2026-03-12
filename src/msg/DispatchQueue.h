@@ -99,6 +99,9 @@ class DispatchQueue {
   public:
     explicit DispatchThread(DispatchQueue *dq) : dq(dq) {}
     void *entry() override {
+#ifdef CEPH_LOCKSTAT
+      lockstat_detail::LockStat::set_thread_iopath(true);
+#endif
       dq->entry();
       return 0;
     }
@@ -113,6 +116,9 @@ class DispatchQueue {
   public:
     explicit LocalDeliveryThread(DispatchQueue *dq) : dq(dq) {}
     void *entry() override {
+#ifdef CEPH_LOCKSTAT
+      lockstat_detail::LockStat::set_thread_iopath(true);
+#endif
       dq->run_local_delivery();
       return 0;
     }
