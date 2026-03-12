@@ -67,7 +67,7 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 							  "lfuda",
                                                           this->y);
 
-  std::string address = cct->_conf->rgw_d4n_address;
+  std::string address = cct->_conf->rgw_d4n_l1_datacache_address;
   config cfg;
   cfg.addr.host = address.substr(0, address.find(":"));
   cfg.addr.port = address.substr(address.find(":") + 1, address.length());
