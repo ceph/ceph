@@ -86,23 +86,19 @@ std::string_view RGWBILogFIFO::max_marker()
 
 RGWBILogUpdateBatch::RGWBILogUpdateBatch(const DoutPrefixProvider* dpp,
                                          neorados::RADOS r,
-                                         neorados::IOContext loc,
-                                         std::span<const std::string> shard_oids)
+                                         std::shared_ptr<RGWBILogFIFO> fifo)
   : dpp(dpp),
-    rados_(r),
-    fifos(shard_oids.size(),
-          [&r, &loc, &shard_oids](std::size_t i, auto emplacer) {
-            emplacer.emplace(r, bilog_fifo_oid(shard_oids[i]), loc);
-          }),
-    num_shards(static_cast<int>(shard_oids.size()))
+    rados_(std::move(r)),
+    fifo_(std::move(fifo))
 {}
 
 int RGWBILogUpdateBatch::shard_of(const cls_rgw_obj_key& key) const
 {
-  if (num_shards <= 1) {
+  const int n = fifo_ ? fifo_->num_shards() : 0;
+  if (n <= 1) {
     return 0;
   }
-  return RGWSI_BucketIndex_RADOS::bucket_shard_index(key, num_shards);
+  return RGWSI_BucketIndex_RADOS::bucket_shard_index(key, n);
 }
 
 void RGWBILogUpdateBatch::stage(int shard, rgw_bi_log_entry entry)
@@ -170,16 +166,24 @@ void RGWBILogUpdateBatch::add_maybe_flush(RGWModifyOp op,
 
 void RGWBILogUpdateBatch::do_flush(asio::yield_context y)
 {
+  if (!fifo_) {
+    pending.clear(); 
+    return;
+  }
   for (auto& [shard, entry] : pending) {
     ceph::buffer::list bl;
     encode(entry, bl);
-    fifos[shard].push(dpp, std::move(bl), y);
+    fifo_->push(dpp, shard, std::move(bl), y);
   }
   pending.clear();
 }
 
 void RGWBILogUpdateBatch::do_flush()
 {
+  if (!fifo_) {
+    pending.clear();
+    return;
+  }
   maybe_warn_about_blocking(dpp);
   asio::spawn(rados_.get_executor(),
               [this](asio::yield_context y) { do_flush(y); },
