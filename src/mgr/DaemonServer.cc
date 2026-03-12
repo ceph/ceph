@@ -524,6 +524,32 @@ void DaemonServer::fetch_missing_metadata(const DaemonKey& key,
   }
 }
 
+void DaemonServer::_override_osd_crush_hostname(
+  const DaemonKey& key,
+  std::map<std::string, std::string> &metadata)
+{
+  if (key.type != "osd") {
+    return;
+  }
+
+  try {
+    int osd_id = std::stoi(key.name);
+    cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+      if (osdmap.crush) {
+        auto loc = osdmap.crush->get_full_location(osd_id);
+        auto it = loc.find("host");
+        if (it != loc.end()) {
+          metadata["hostname"] = it->second;
+        }
+      }
+    });
+  } catch (const std::exception& e) {
+    dout(20) << "DaemonServer: cannot derive CRUSH hostname for "
+             << key.type << "." << key.name
+             << " from OSDMap: " << e.what() << dendl;
+  }
+}
+
 bool DaemonServer::handle_open(const ref_t<MMgrOpen>& m)
 {
   std::unique_lock l(lock);
@@ -566,24 +592,7 @@ bool DaemonServer::handle_open(const ref_t<MMgrOpen>& m)
       // update the metadata through the daemon state index to
       // ensure it's kept up-to-date
       auto metadata = m->daemon_metadata;
-      if (key.type == "osd") {
-        try {
-          int osd_id = std::stoi(key.name);
-          cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-            if (osdmap.crush) {
-              auto loc = osdmap.crush->get_full_location(osd_id);
-              auto it = loc.find("host");
-              if (it != loc.end()) {
-          metadata["hostname"] = it->second;
-              }
-            }
-          });
-        } catch (const std::exception& e) {
-            dout(20) << "DaemonServer: cannot derive CRUSH hostname for "
-                    << key.type << "." << key.name
-                    << " from OSDMap: " << e.what() << dendl;
-        }
-      }
+      _override_osd_crush_hostname(key, metadata);
       daemon_state.update_metadata(daemon, metadata);
     }
 
@@ -668,25 +677,8 @@ bool DaemonServer::handle_update(const ref_t<MMgrUpdate>& m)
       daemon = daemon_state.get(key);
       if (m->need_metadata_update &&
           !m->daemon_metadata.empty()) {
-	auto metadata = m->daemon_metadata;
-	if (key.type == "osd") {
-	  try {
-	    int osd_id = std::stoi(key.name);
-	    cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-	      if (osdmap.crush) {
-		auto loc = osdmap.crush->get_full_location(osd_id);
-		auto it = loc.find("host");
-		if (it != loc.end()) {
-		  metadata["hostname"] = it->second;
-		}
-	      }
-	    });
-	  } catch (const std::exception& e) {
-      dout(20) << "DaemonServer: cannot derive CRUSH hostname for "
-               << key.type << "." << key.name
-               << " from OSDMap: " << e.what() << dendl;
-	    }
-    }
+        auto metadata = m->daemon_metadata;
+        _override_osd_crush_hostname(key, metadata);
         daemon_state.update_metadata(daemon, metadata);
       }
     }

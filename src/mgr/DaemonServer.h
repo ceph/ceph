@@ -199,6 +199,10 @@ private:
 
   void _prune_pending_service_map();
 
+  void _override_osd_crush_hostname(
+    const DaemonKey& key,
+    std::map<std::string, std::string> &metadata);
+
   void _check_offlines_pgs(
     const ContainerType& osds,
     const OSDMap& osdmap,
