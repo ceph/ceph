@@ -430,7 +430,7 @@ public:
 
 class StoreMPSerializer : public MPSerializer {
 protected:
-  bool locked;
+  std::atomic<bool> locked;
   std::string oid;
 public:
   StoreMPSerializer() : locked(false) {}
