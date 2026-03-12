@@ -2553,6 +2553,7 @@ public:
   std::atomic<unsigned> num_homeless_ops{0};
 
   OSDSession* homeless_session = new OSDSession(cct, -1);
+  OSDSession* splitop_session = new OSDSession(cct, -2); // -2 to differentiate from homeless
 
 
   // ops waiting for an osdmap with a new pool or confirmation that
@@ -2843,6 +2844,7 @@ private:
   // low-level
   void _op_submit(Op *op, ceph::shunique_lock<ceph::shared_mutex>& lc,
 		  ceph_tid_t *ptid);
+  void add_op_to_splitop_session(Op *op);
   void _op_submit_with_budget(Op *op,
 			      ceph::shunique_lock<ceph::shared_mutex>& lc,
 			      ceph_tid_t *ptid,
