@@ -10597,8 +10597,18 @@ RGWBILogUpdateBatch RGWRados::get_or_create_fifo_bilog_batch(
   const auto& log_layout = bucket_info.layout.logs.back();
   ceph_assert(log_layout.layout.type == rgw::BucketLogType::FIFO);
 
-  const auto& index_layout = rgw::log_to_index_layout(log_layout);
+  auto neo = svc.bilog_rados->get_rados_neo();
+  const auto key = std::make_pair(bucket_info.bucket.bucket_id, log_layout.gen);
 
+  // cached path
+  {
+    std::shared_lock rl(fifo_bilog_cache_lock_);
+    if (auto it = fifo_bilog_cache_.find(key); it != fifo_bilog_cache_.end()) {
+      return RGWBILogUpdateBatch(dpp, neo, it->second);
+    }
+  }
+
+  const auto& index_layout = rgw::log_to_index_layout(log_layout);
   librados::IoCtx index_pool;
   std::map<int, std::string> bucket_objs;
   int r = svc.bi_rados->open_bucket_index(
@@ -10608,17 +10618,11 @@ RGWBILogUpdateBatch RGWRados::get_or_create_fifo_bilog_batch(
     ldpp_dout(dpp, 0) << "ERROR: " << __func__
                       << ": open_bucket_index failed for "
                       << bucket_info.bucket << ": " << cpp_strerror(r) << dendl;
-    // TODO: The proper fix is to change
-    // with_bilog<> to check for failure before invoking the lambda, but that
-    // requires reworking the template signature.  For now, return a zero-shard
-    // batch: callers can call add_maybe_flush/flush safely (pending stays
-    // empty), but any bilog entries for this operation will be silently
-    // dropped.  The ERROR log above ensures this is always visible.
-    return RGWBILogUpdateBatch(dpp, svc.bilog_rados->get_rados_neo(),
-                               neorados::IOContext{}, {});
+    // return a null fifo batch: callers can still call add_maybe_flush/flush safely
+    return RGWBILogUpdateBatch(dpp, neo, nullptr);
   }
 
-  // conversion to ordered vector.
+  // build ordered shard OID vector.
   std::vector<std::string> shard_oids;
   shard_oids.reserve(bucket_objs.size());
   for (auto& [/*shard_id*/_, oid] : bucket_objs) {
@@ -10626,8 +10630,17 @@ RGWBILogUpdateBatch RGWRados::get_or_create_fifo_bilog_batch(
   }
 
   neorados::IOContext neo_loc(index_pool.get_id());
-  return RGWBILogUpdateBatch(dpp, svc.bilog_rados->get_rados_neo(),
-                             std::move(neo_loc), shard_oids);
+  auto fifo = std::make_shared<RGWBILogFIFO>(neo, neo_loc, shard_oids);
+
+  {
+    std::unique_lock wl(fifo_bilog_cache_lock_);
+    auto [it, inserted] = fifo_bilog_cache_.emplace(key, fifo);
+    if (!inserted) { // check for racing insertion
+      fifo = it->second;
+    }
+  }
+
+  return RGWBILogUpdateBatch(dpp, neo, std::move(fifo));
 }
 
 template <class CLSRGWBucketModifyOpT>

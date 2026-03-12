@@ -99,13 +99,11 @@ public:
 
 /// per-shard FIFO bilog batch writer for FIFO-backed buckets.
 /// entries are staged internally and flushed to each shard's LazyFIFO either
-/// when the batch reaches max_batch_size or via an explicit flush() call.
-/// the destructor flushes any remaining staged entries.
+/// via an explicit flush() call or on destruction.
 class RGWBILogUpdateBatch {
   const DoutPrefixProvider* dpp;
   neorados::RADOS rados_;
-  tiny_vector<LazyFIFO> fifos;   // one per index shard
-  int num_shards;
+  std::shared_ptr<RGWBILogFIFO> fifo_;
   struct Pending {
     int shard;
     rgw_bi_log_entry entry;
@@ -121,11 +119,10 @@ class RGWBILogUpdateBatch {
   void do_flush();
 
 public:
-  /// shard_oids must be ordered by shard ID (as returned by open_bucket_index).
+  /// fifo may be null (error-path batch — silently drops all entries).
   RGWBILogUpdateBatch(const DoutPrefixProvider* dpp,
                       neorados::RADOS r,
-                      neorados::IOContext loc,
-                      std::span<const std::string> shard_oids);
+                      std::shared_ptr<RGWBILogFIFO> fifo);
 
   /// generic complete/cancel/add/del ops — built from an OpIssuer's base fields.
   void add_maybe_flush(uint64_t olh_epoch,
