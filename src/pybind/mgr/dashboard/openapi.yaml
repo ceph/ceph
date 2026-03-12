@@ -13066,6 +13066,9 @@ paths:
                 max_namespaces:
                   description: Maximum number of namespaces
                   type: integer
+                network_mask:
+                  description: Network mask to automatically create listeners
+                  type: array
                 no_group_append:
                   default: false
                   description: Do not append gateway group name to the NQN
