@@ -142,6 +142,7 @@ struct CacheObj {
   std::string user_id; // id of user, needed for list object versions
   std::string display_name; // display name of owner, needed for list object versions
   std::string acl;
+  rgw::sal::Attrs attrs; // attrs for a head block
 };
 
 struct CacheBlock {
@@ -222,6 +223,13 @@ class ObjectDirectory: public Directory {
     std::string build_index(CacheObj* object);
 };
 
+template<typename C>
+concept AssociativeContainer = requires(C c, typename C::key_type k) {
+    typename C::key_type;
+    { c.find(k) } -> std::convertible_to<typename C::iterator>;
+    { c.count(k) } -> std::convertible_to<std::size_t>;
+};
+
 class BlockDirectory: public Directory {
   public:
     BlockDirectory(std::shared_ptr<connection>& conn) : conn(conn) {}
@@ -252,7 +260,7 @@ class BlockDirectory: public Directory {
     std::shared_ptr<connection> conn;
     std::string build_index(CacheBlock* block);
 
-    template<SeqContainer Container>
+    template<AssociativeContainer Container>
     int set_values(const DoutPrefixProvider* dpp, CacheBlock& block, Container& redisValues, optional_yield y);
 };
 

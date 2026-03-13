@@ -21,9 +21,8 @@ constexpr char CACHE_DELIM = '#';
 
 namespace rgw { namespace cache {
 
-typedef std::function<void(const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, uint64_t size, 
-			    time_t creationTime, const rgw_user user, const std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
-			    const rgw_obj_key& obj_key, optional_yield y, std::string& restore_val)> ObjectDataCallback;
+typedef std::function<void(const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, const std::string& bucket_id,
+			    const rgw_obj_key& obj_key, const std::string& instance, optional_yield y, std::string& restore_val)> ObjectDataCallback;
 
 typedef std::function<void(const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version,
         bool dirty, optional_yield y, std::string& restore_val)> BlockDataCallback;
