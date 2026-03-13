@@ -1,6 +1,7 @@
 import logging
 import random
 import time
+import json
 from collections import defaultdict
 from datetime import datetime
 from textwrap import dedent
@@ -393,6 +394,7 @@ class NvmeofThrasher(Thrasher, Greenlet):
         """
         self.log('display and verify stats:')
         max_retry = 5
+        retry_delay = 30
         for retry in range(1, max_retry+1):
             try: 
                 random_gateway_host = None
@@ -404,7 +406,14 @@ class NvmeofThrasher(Thrasher, Greenlet):
                 random_gateway_host.run(args=['ceph', 'orch', 'ps', '--daemon-type', 'nvmeof'])
                 random_gateway_host.run(args=['ceph', 'health', 'detail'])
                 random_gateway_host.run(args=['ceph', '-s'])
-                random_gateway_host.run(args=['ceph', 'nvme-gw', 'show', 'mypool', 'mygroup0'])
+
+                gw_show = random_gateway_host.sh('ceph nvme-gw show mypool mygroup0')
+                gw_show_json = json.loads(gw_show)
+                if gw_show_json["num-namespaces"] > 30:
+                    retry_delay = int(gw_show_json["num-namespaces"]) / 3
+                if '"CREATED"' in gw_show:
+                    raise Exception("Some gateway is in CREATED state - in middle of restart")
+
                 initiator_host.run(args=['sudo', 'nvme', 'list'])
                 for dev in self.devices:
                     device_check_cmd = [
@@ -417,7 +426,7 @@ class NvmeofThrasher(Thrasher, Greenlet):
                 self.log(f"retry do_checks() for {retry} time")
                 if retry == max_retry:
                     raise
-                time.sleep(30) # blocking wait
+                time.sleep(retry_delay) # blocking wait
 
     def switch_task(self):
         """
