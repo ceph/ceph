@@ -4,6 +4,7 @@ import string
 import time
 import logging
 import errno
+import contextlib
 import dateutil.parser
 import re
 import datetime
@@ -33,6 +34,20 @@ class Config:
         # allow some time for realm reconfiguration after changing master zone
         self.reconfigure_delay = kwargs.get('reconfigure_delay', 5)
         self.tenant = kwargs.get('tenant', '')
+
+@contextlib.contextmanager
+def override_config(**kwargs):
+    """Temporarily override config values for a test."""
+    global config
+    old_values = {}
+    for key, value in kwargs.items():
+        old_values[key] = getattr(config, key)
+        setattr(config, key, value)
+    try:
+        yield
+    finally:
+        for key, value in old_values.items():
+            setattr(config, key, value)
 
 # rgw multisite tests, written against the interfaces provided in rgw_multi.
 # these tests must be initialized and run by another module that provides
