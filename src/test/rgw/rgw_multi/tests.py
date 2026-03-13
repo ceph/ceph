@@ -434,7 +434,9 @@ def zonegroup_bucket_checkpoint(zonegroup_conns, bucket_name):
 def get_oldest_incremental_change_not_applied_epoch(zone):
     cmd = ['sync', 'status'] + zone.zone_args()
     sync_status_output, retcode = zone.cluster.admin(cmd, check_retcode=False, read_only=True)
-    assert(retcode == 0)
+    if retcode != 0:
+        # sync status failed for some reason, return epoch 0 to signal no progress
+        return 0.0
 
     # extract the "data sync source:" section from the output
     data_sync_match = re.search(r"data sync source:.*", sync_status_output, re.DOTALL)
