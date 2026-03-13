@@ -2,7 +2,8 @@
 @use '@carbon/styles/scss/theme';
 
 .notification-footer {
-  position: sticky;
+  position: absolute;
+  width: 100%;
   z-index: 2;
   display: flex;
   align-items: center;
