@@ -220,11 +220,13 @@ template <typename I>
 void GroupEnableRequest<I>::create_primary_group_snapshot() {
   ldout(m_cct, 10) << dendl;
 
+  // generate_image_id is also used for group and group snapshot ids.
   m_group_snap.id = librbd::util::generate_image_id(m_group_ioctx);
 
-  auto snap_name = ".mirror.primary." + m_mirror_group.global_group_id
+  m_group_snap.name = ".mirror.primary." + m_mirror_group.global_group_id
                 + "." + m_group_snap.id;
-  m_group_snap.name = snap_name;
+
+  ldout(m_cct, 10) << "creating group snapshot " << m_group_snap.name << dendl;
 
   librados::Rados rados(m_group_ioctx);
   int8_t require_osd_release;
@@ -233,7 +235,7 @@ void GroupEnableRequest<I>::create_primary_group_snapshot() {
     lderr(m_cct) << "failed to retrieve min OSD release: " << cpp_strerror(r)
                  << dendl;
     m_ret_val = r;
-    disable_mirror_group();
+    close_images();
     return;
   }
 
@@ -270,7 +272,7 @@ void GroupEnableRequest<I>::handle_create_primary_group_snapshot(int r) {
                  << cpp_strerror(r) << dendl;
     m_ret_val = r;
 
-    disable_mirror_group();
+    close_images();
     return;
   }
 
@@ -323,7 +325,7 @@ void GroupEnableRequest<I>::handle_create_primary_image_snapshots(int r) {
       m_group_snap.snaps[i].snap_id = m_snap_ids[i];
     }
 
-    disable_mirror_group();
+    remove_primary_group_snapshot();
     return;
   }
 
@@ -362,7 +364,7 @@ void GroupEnableRequest<I>::handle_update_primary_group_snapshot(int r) {
                  << cpp_strerror(r) << dendl;
     m_ret_val = r;
 
-    disable_mirror_group();
+    remove_primary_group_snapshot();
     return;
   }
 
@@ -470,7 +472,6 @@ void GroupEnableRequest<I>::handle_notify_mirroring_watcher(int r) {
   if (r < 0) {
     lderr(m_cct) << "failed to notify mirror group update: " << cpp_strerror(r)
                  << dendl;
-    m_ret_val = r;
   }
 
   close_images();
@@ -618,7 +619,8 @@ void GroupEnableRequest<I>::disable_mirror_images() {
 
   auto gather_ctx = new C_Gather(m_cct, ctx);
   for (size_t i = 0; i < m_images.size(); i++) {
-    if (m_mirror_images[i].state != cls::rbd::MIRROR_IMAGE_STATE_DISABLED) {
+    if (m_mirror_images[i].state != cls::rbd::MIRROR_IMAGE_STATE_DISABLING &&
+        m_mirror_images[i].state != cls::rbd::MIRROR_IMAGE_STATE_DISABLED) {
       auto req = ImageStateUpdateRequest<I>::create(
         m_image_ctxs[i]->md_ctx, m_image_ctxs[i]->id,
         cls::rbd::MIRROR_IMAGE_STATE_DISABLING, m_mirror_images[i],
