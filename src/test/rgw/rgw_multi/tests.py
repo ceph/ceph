@@ -432,7 +432,7 @@ def zonegroup_bucket_checkpoint(zonegroup_conns, bucket_name):
             target_conn.check_bucket_eq(source_conn, bucket_name)
 
 def get_oldest_incremental_change_not_applied_epoch(zone):
-    cmd = ['sync', 'status']
+    cmd = ['sync', 'status'] + zone.zone_args()
     sync_status_output, retcode = zone.cluster.admin(cmd, check_retcode=False, read_only=True)
     assert(retcode == 0)
 
