@@ -3244,16 +3244,10 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
     spg_t spgid(actual_pgid);
     if (t->flags & CEPH_OSD_FLAG_FORCE_OSD) {
       // In some redrive scenarios, the acting set can change. If the forced
-      // OSD doesn't exist in the acting set (e.g., it disappeared from the
-      // upmap), we need to handle it appropriately.
-      bool osd_in_acting = false;
-      for (auto acting_osd : t->acting) {
-        if (acting_osd == t->osd) {
-          osd_in_acting = true;
-          break;
-        }
-      }
-      if (!osd_in_acting) {
+      // OSD doesn't exist in the right location, then fail the op.
+      int shard_id = t->actual_pgid.shard.id;
+      if (shard_id < 0 || std::cmp_greater_equal(shard_id, t->acting.size()) ||
+        t->acting[shard_id] != t->osd) {
         // If FAIL_ON_EAGAIN is set, we must not failover - the caller expects
         // -EAGAIN to be returned. Otherwise, clear the direct read flags and
         // redrive to the primary OSD (similar to what happens when we get -EAGAIN).
@@ -3284,10 +3278,12 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
       if (osdmap->has_pgtemp(actual_pgid)) {
 	pg_temp = osdmap->pgtemp_primaryfirst(*pi, t->acting);
       }
-      for (uint8_t i = 0; i < t->acting.size(); ++i) {
-        if (pg_temp[i] == acting_primary) {
-	  spgid.reset_shard(osdmap->pgtemp_undo_primaryfirst(*pi, actual_pgid, shard_id_t(i)));
-          break;
+      if ((t->flags & CEPH_OSD_FLAG_FORCE_OSD) == 0) {
+        for (uint8_t i = 0; i < t->acting.size(); ++i) {
+          if (pg_temp[i] == acting_primary) {
+            spgid.reset_shard(osdmap->pgtemp_undo_primaryfirst(*pi, actual_pgid, shard_id_t(i)));
+            break;
+          }
         }
       }
     }

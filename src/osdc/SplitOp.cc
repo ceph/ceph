@@ -27,7 +27,7 @@ inline boost::system::error_code osdcode(int r) {
 constexpr static uint64_t kReplicaMinShardReads = 2;
 
 #undef dout_prefix
-#define dout_prefix *_dout << " " << this->get_oid_prefix() << " ECSplitOp::"
+#define dout_prefix *_dout << " " << this->get_oid_prefix() << " tid=" << (orig_op ? orig_op->tid : 0) << " ECSplitOp::"
 
 /**
  * @brief Assemble sparse read results from EC shards into logical object view.
@@ -232,7 +232,7 @@ ECSplitOp::ECSplitOp(Objecter::Op *op, Objecter &objecter, CephContext *cct, int
   SplitOp(op, objecter, cct, count) {}
 
 #undef dout_prefix
-#define dout_prefix *_dout << " " << this->get_oid_prefix() << " ReplicaSplitOp::"
+#define dout_prefix *_dout << " " << this->get_oid_prefix() << " tid=" << (orig_op ? orig_op->tid : 0) << " ReplicaSplitOp::"
 
 /**
  * @brief Assemble sparse read results from replicas.
@@ -358,7 +358,7 @@ void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
 }
 
 #undef dout_prefix
-#define dout_prefix *_dout << " " << this->get_oid_prefix() << " SplitOp::"
+#define dout_prefix *_dout << " " << this->get_oid_prefix() << " tid=" << (orig_op ? orig_op->tid : 0) << " SplitOp::"
 
 /**
  * @brief Assemble the final return code from all sub-operations.
