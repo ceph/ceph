@@ -62,7 +62,11 @@
           helperText="A secret key for the subsystem to authenticate itself to hosts."
           i18n-helperText
           [invalid]="subDK.isInvalid"
-          [invalidText]="INVALID_TEXTS['required']">
+          [invalidText]="
+            formGroup.get('subsystemDchapKey')?.errors?.invalidBase64
+              ? INVALID_TEXTS['invalidBase64']
+              : INVALID_TEXTS['required']
+          ">
           Subsystem DH-HMAC-CHAP key
           <input cdsPassword
                  cdValidate
@@ -92,7 +96,11 @@
           <cds-text-label
             class="cds-mb-3"
             [invalid]="hostKey.isInvalid"
-            [invalidText]="INVALID_TEXTS['required']">
+            [invalidText]="
+              hostDhchapKeyCtrl(i)?.errors?.invalidBase64
+                ? INVALID_TEXTS['invalidBase64']
+                : INVALID_TEXTS['required']
+            ">
             <span
               class="cds-mb-3"
               i18n>DHCHAP Key | {{hostDchapKeyItem.get('host_nqn')?.value }}</span>
