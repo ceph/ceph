@@ -24,7 +24,7 @@ Architecture
 
 D3N improves the performance of big-data jobs by speeding up repeatedly accessed dataset reads from the data lake.
 Cache servers are located in the datacenter on the access side of potential network and storage bottlenecks.
-D3Ns two-layer logical cache forms a traditional caching hierarchy :sup:`*`
+D3N's two-layer logical cache forms a traditional caching hierarchy :sup:`*`
 where caches nearer the client have the lowest access latency and overhead,
 while caches in higher levels in the hierarchy are slower (requiring multiple hops to access).
 The layer 1 cache server nearest to the client handles object requests by breaking them into blocks,
@@ -108,13 +108,13 @@ to each RADOS Gateway without a balancer in order to avoid cached data duplicati
 
 Logs
 ----
-- D3N related log lines in ``radosgw.*.log`` contain the string ``d3n`` (case insensitive).
-- Low level D3N logs can be enabled by the ``debug_rgw_datacache`` subsystem (up to ``debug_rgw_datacache=30``).
+- D3N-related log lines in ``radosgw.*.log`` contain the string ``d3n`` (case insensitive).
+- Low-level D3N logs can be enabled by the ``debug_rgw_datacache`` subsystem (up to ``debug_rgw_datacache=30``).
 
 
 Config Reference
 ================
-The following D3N related settings can be added to the Ceph configuration file
+The following D3N-related settings can be added to the Ceph configuration file
 (i.e., usually ``ceph.conf``) under the ``[client.rgw.{instance-name}]`` section.
 
 .. confval:: rgw_d3n_l1_local_datacache_enabled

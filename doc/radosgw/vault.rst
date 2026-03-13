@@ -106,7 +106,7 @@ Vault agent, such as having the Vault agent listen only to localhost.
 Token Policies for the Object Gateway
 -------------------------------------
 
-All Vault tokens have powers as specified by the polices attached
+All Vault tokens have powers as specified by the policies attached
 to that token.  Multiple policies may be associated with one
 token.  You should only use the policies necessary for your
 configuration.

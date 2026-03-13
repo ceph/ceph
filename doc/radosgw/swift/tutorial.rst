@@ -3,7 +3,7 @@
 ==========
 
 The Swift-compatible API tutorials follow a simple container-based object 
-lifecycle. The first step requires you to setup a connection between your 
+lifecycle. The first step requires you to set up a connection between your
 client and the RADOS Gateway server. Then, you may follow a natural 
 container and object lifecycle, including adding and retrieving object 
 metadata. See example code for the following languages:

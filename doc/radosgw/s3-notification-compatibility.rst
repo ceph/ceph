@@ -29,7 +29,7 @@ Notification Configuration XML
 Following tags (and the tags inside them) are not supported:
 
 +-----------------------------------+----------------------------------------------+
-| Tag                               | Remaks                                       |
+| Tag                               | Remarks                                      |
 +===================================+==============================================+
 | ``<QueueConfiguration>``          | not needed, we treat all destinations as SNS |
 +-----------------------------------+----------------------------------------------+

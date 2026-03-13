@@ -5,15 +5,15 @@ Sync Modules
 .. versionadded:: Kraken
 
 The :ref:`multisite` functionality of RGW introduced in Jewel allowed the ability to
-create multiple zones and mirror data and metadata between them. ``Sync Modules``
-are built atop of the multisite framework that allows for forwarding data and
+create multiple zones and mirror data and metadata between them. *Sync Modules*
+are built on top of the multisite framework that allows for forwarding data and
 metadata to a different external tier. A sync module allows for a set of actions
 to be performed whenever a change in data occurs (metadata ops like bucket or
 user creation etc. are also regarded as changes in data). As the RGW multisite
 changes are eventually consistent at remote sites, changes are propagated
 asynchronously. This would allow for unlocking use cases such as backing up the
 object storage to an external cloud cluster or a custom backup solution using
-tape drives, indexing metadata in ElasticSearch etc.
+tape drives, indexing metadata in Elasticsearch etc.
 
 A sync module configuration is local to a zone. The sync module determines
 whether the zone exports data or can only consume data that was modified in
@@ -27,7 +27,7 @@ for configuring any sync plugin.
 .. toctree::
    :maxdepth: 1
 
-   ElasticSearch Sync Module <elastic-sync-module>
+   Elasticsearch Sync Module <elastic-sync-module>
    Cloud Sync Module <cloud-sync-module>
    Archive Sync Module <archive-sync-module>
 

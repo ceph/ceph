@@ -202,7 +202,7 @@ For example
                               "access_key": "",
                               "secret": "",
                               "host_style": "path",
-                              "location_constraint": "";
+                              "location_constraint": "",
                               "target_storage_class": "",
                               "target_path": "",
                               "acl_mappings": [],

@@ -12,7 +12,7 @@ When data is already cached, it need not be fetched from RGW. A permission check
 This feature is based on the Nginx modules ``ngx_http_auth_request_module`` and `nginx-aws-auth-module <https://github.com/kaltura/nginx-aws-auth-module>`_, and OpenResty for Lua capabilities.
 
 Currently this feature will cache only AWSv4 requests (only S3 requests), caching-in the output of the first GET request
-and caching-out on subsequent GET requests, passing through transparently PUT,POST,HEAD,DELETE and COPY requests.
+and caching-out on subsequent GET requests, passing through transparently PUT, POST, HEAD, DELETE and COPY requests.
 
 
 The feature introduces 2 new APIs: Auth and Cache.
@@ -25,7 +25,7 @@ New APIs
 There are 2 new APIs for this feature:
 
 - **Auth API:** The cache uses this to validate that a user can access the cached data.
-- **Cache API:** Adds the ability to override securely ``Range`` header so that Nginx can use its own `smart cache <https://www.nginx.com/blog/smart-efficient-byte-range-caching-nginx/>`_ on top of S3.
+- **Cache API:** Adds the ability to override the ``Range`` header securely so that Nginx can use its own `smart cache <https://www.nginx.com/blog/smart-efficient-byte-range-caching-nginx/>`_ on top of S3.
   Using this API gives the ability to read ahead objects when client is asking a specific range from the object.
   On subsequent accesses to the cached object, Nginx will satisfy requests for already-cached ranges from the cache. Uncached ranges will be read from RGW (and cached).
 

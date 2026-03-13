@@ -73,7 +73,7 @@ Response Entities
 +------------------------+-------------+-----------------------------------------------+
 | **LastModified**       | Date        |  The last modified date of the source object. |
 +------------------------+-------------+-----------------------------------------------+
-| **Etag**               | String      |  The ETag of the new object.                  |
+| **ETag**               | String      |  The ETag of the new object.                  |
 +------------------------+-------------+-----------------------------------------------+
 
 Remove Object

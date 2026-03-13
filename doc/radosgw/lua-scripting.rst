@@ -8,11 +8,11 @@ Lua Scripting
 
 This feature allows users to assign execution context to Lua scripts. The supported contexts are:
 
- - ``prerequest`` which will execute a script before each operation is performed
- - ``postrequest`` which will execute after each operation is performed
- - ``background`` which will execute within a specified time interval
- - ``getdata`` which will execute on objects' data when objects are downloaded
- - ``putdata`` which will execute on objects' data when objects are uploaded
+- ``prerequest`` which will execute a script before each operation is performed
+- ``postrequest`` which will execute after each operation is performed
+- ``background`` which will execute within a specified time interval
+- ``getdata`` which will execute on objects' data when objects are downloaded
+- ``putdata`` which will execute on objects' data when objects are uploaded
 
 A request (pre or post) or data (get or put) context script may be constrained to operations belonging to a specific tenant's users.
 The request context script can also access fields in the request and modify certain fields, as well as the `Global RGW Table`_.
@@ -28,13 +28,13 @@ By default, the execution of a Lua script is limited to a maximum runtime of 100
 
 By default, all Lua standard libraries are available in the script, however, in order to allow for additional Lua modules to be used in the script, we support adding packages to an allowlist:
 
-  - Make sure that the ``luarocks`` package manager is installed on the host.
-  - Adding a Lua package to the allowlist, or removing a packge from it does not install or remove it. For the changes to take affect a "reload" command should be called.
-  - In addition all packages in the allowlist are being re-installed using the luarocks package manager on radosgw restart.
-  - To add a package that contains C source code that needs to be compiled, use the ``--allow-compilation`` flag. In this case a C compiler needs to be available on the host
-  - Lua packages are installed in, and used from, a directory local to the radosgw. Meaning that Lua packages in the allowlist are separated from any Lua packages available on the host.
-    By default, this directory would be ``/tmp/luarocks/<entity name>``. Its prefix part (``/tmp/luarocks/``) could be set to a different location via the ``rgw_luarocks_location`` configuration parameter.
-    Note that this parameter should not be set to one of the default locations where luarocks install packages (e.g. ``$HOME/.luarocks``, ``/usr/lib64/lua``, ``/usr/share/lua``).
+- Make sure that the ``luarocks`` package manager is installed on the host.
+- Adding a Lua package to the allowlist, or removing a package from it does not install or remove it. For the changes to take effect a "reload" command should be called.
+- In addition all packages in the allowlist are being re-installed using the luarocks package manager on radosgw restart.
+- To add a package that contains C source code that needs to be compiled, use the ``--allow-compilation`` flag. In this case a C compiler needs to be available on the host
+- Lua packages are installed in, and used from, a directory local to the radosgw. Meaning that Lua packages in the allowlist are separated from any Lua packages available on the host.
+  By default, this directory would be ``/tmp/luarocks/<entity name>``. Its prefix part (``/tmp/luarocks/``) could be set to a different location via the ``rgw_luarocks_location`` configuration parameter.
+  Note that this parameter should not be set to one of the default locations where luarocks install packages (e.g. ``$HOME/.luarocks``, ``/usr/lib64/lua``, ``/usr/share/lua``).
 
 
 .. toctree::
@@ -130,6 +130,7 @@ To apply changes from the allowlist to all RGWs:
 
 Context Free Functions
 ----------------------
+
 Debug Log
 ~~~~~~~~~
 The ``RGWDebugLog()`` function accepts a string and prints it to the debug log with priority 20.
@@ -150,7 +151,7 @@ Request Fields
 
 
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| Field                                              | Type     | Description                                                  | Iterable | Writeable | Optional |
+| Field                                              | Type     | Description                                                  | Iterable | Writable  | Optional |
 +====================================================+==========+==============================================================+==========+===========+==========+
 | ``Request.RGWOp``                                  | string   | radosgw operation                                            | no       | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
@@ -176,7 +177,7 @@ Request Fields
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.Bucket.Tenant``                          | string   | tenant of the bucket                                         | no       | no        | yes      |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Request.Bucket.Name``                            | string   | bucket name (writeable only in ``prerequest`` context)       | no       | yes       | no       |
+| ``Request.Bucket.Name``                            | string   | bucket name (writable only in ``prerequest`` context)        | no       | yes       | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.Bucket.Marker``                          | string   | bucket marker (initial id)                                   | no       | no        | yes      |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
@@ -194,7 +195,7 @@ Request Fields
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.Bucket.Quota.MaxObjects``                | integer  | bucket quota max number of objects                           | no       | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Reques.Bucket.Quota.Enabled``                    | boolean  | bucket quota is enabled                                      | no       | no        | no       |
+| ``Request.Bucket.Quota.Enabled``                   | boolean  | bucket quota is enabled                                      | no       | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.Bucket.Quota.Rounded``                   | boolean  | bucket quota is rounded to 4K                                | no       | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
@@ -316,7 +317,8 @@ Request Fields
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 
 Request Functions
---------------------
+-----------------
+
 Operations Log
 ~~~~~~~~~~~~~~
 The ``Request.Log()`` function prints the requests into the operations log. This function has no parameters. It returns 0 for success and an error code if it fails.
@@ -336,6 +338,7 @@ Tracing functions can be used only in the ``postrequest`` context.
 
 Request Blocking and Error Handling
 -----------------------------------
+
 Script Execution Errors
 ~~~~~~~~~~~~~~~~~~~~~~~
 If the Lua script fails with a syntax or runtime error, RGW will log the error. The request that triggered the script will still go through.
@@ -351,14 +354,17 @@ Return Value Context
 The Lua script’s return value is evaluated only during the prerequest context and is ignored in any other RGW request-processing context.
 The HTTP response status code is 403 (Forbidden) by default when a request is blocked by Lua. The response code can be changed using ``Request.Response.HTTPStatusCode`` and ``Request.Response.HTTPStatus``.
 If a request is aborted this way, the ``data`` and ``postrequest`` context will also be aborted.
+
 Background Context
---------------------
+------------------
 The ``background`` context may be used for purposes that include analytics, monitoring, caching data for other context executions.
+
 - Background script execution default interval is 5 seconds.
 
 Data Context
---------------------
+------------
 Both ``getdata`` and ``putdata`` contexts have the following fields:
+
 - ``Data`` which is read-only and iterable (byte by byte). In case that an object is uploaded or retrieved in multiple chunks, the ``Data`` field will hold data of one chunk at a time.
 - ``Offset`` which is holding the offset of the chunk within the entire object.
 - The ``Request`` fields and the background ``RGW`` table are also available in these contexts.
@@ -366,7 +372,8 @@ Both ``getdata`` and ``putdata`` contexts have the following fields:
 Global RGW Table
 --------------------
 The ``RGW`` Lua table is accessible from all contexts and saves data written to it
-during execution so that it may be read and used later during other executions, from the same context of a different one.
+during execution so that it may be read and used later during other executions, from the same context or a different one.
+
 - Each RGW instance has its own private and ephemeral ``RGW`` Lua table that is lost when the daemon restarts. Note that ``background`` context scripts will run on every instance.
 - The maximum number of entries in the table is 100,000. Each entry has a string key a value with a combined length of no more than 1KB.
 A Lua script will abort with an error if the number of entries or entry size exceeds these limits.
@@ -558,9 +565,9 @@ in ``postrequest`` context, we can add attributes and events to the request's tr
   Request.Trace.AddEvent("second event", event_attrs)
 
 - The entropy value of an object could be used to detect whether the object is encrypted. 
-  The following script calculates the entropy and size of uploaded objects and print to debug log
+  The following script calculates the entropy and size of uploaded objects and prints to debug log.
 
-in the ``putdata`` context, add the following script
+Add the following script in the ``putdata`` context:
 
 .. code-block:: lua
 

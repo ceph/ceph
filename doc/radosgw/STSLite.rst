@@ -29,7 +29,7 @@ credentials will have the same permission as that of the AWS credentials.
 Parameters:
     **DurationSeconds** (Integer/ Optional): The duration in seconds for which the
     credentials should remain valid. Its default value is 3600. Its default max
-    value is 43200 which is can be configured using rgw sts max session duration.
+    value is 43200 which can be configured using rgw sts max session duration.
 
     **SerialNumber** (String/ Optional): The Id number of the MFA device associated 
     with the user making the GetSessionToken call.
@@ -73,7 +73,7 @@ configurable options will be::
   rgw keystone api version = {keystone api version}
   rgw keystone implicit tenants = {true for private tenant for each new user}
   rgw keystone admin password = {keystone service tenant user name}
-  rgw keystone admin user = keystone service tenant user password}
+  rgw keystone admin user = {keystone service tenant user password}
   rgw keystone accepted roles = {accepted user roles}
   rgw keystone token cache size = {number of tokens to cache}
   rgw s3 auth use keystone = true
@@ -95,7 +95,7 @@ The complete set of configurables to use STS Lite with LDAP are::
   rgw_ldap_dnattr = {attribute being used in the constructed search filter to match a username}
   rgw_ldap_searchfilter = {search filter}
 
-The details of the integrating ldap with Ceph Object Gateway can be found here:
+The details of integrating LDAP with Ceph Object Gateway can be found here:
 :doc:`ldap-auth`
 
 Note: By default, STS and S3 APIs co-exist in the same namespace, and both S3
@@ -126,7 +126,7 @@ Keystone.
   | user_id    | 40a7140e424f493d8165abc652dc731c                       |
   +------------+--------------------------------------------------------+
 
-2. Use the credentials created in the step 1. to get back a set of temporary
+2. Use the credentials created in step 1 to get back a set of temporary
    credentials using GetSessionToken API.
 
 .. code-block:: python
@@ -147,7 +147,7 @@ Keystone.
         DurationSeconds=43200
     )
 
-3. The temporary credentials obtained in step 2. can be used for making S3 calls:
+3. The temporary credentials obtained in step 2 can be used for making S3 calls:
 
 .. code-block:: python
 

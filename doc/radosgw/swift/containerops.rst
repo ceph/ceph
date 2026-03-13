@@ -30,7 +30,7 @@ Create a Container
 
 To create a new container, make a ``PUT`` request with the API version, account,
 and the name of the new container. The container name must be unique, must not
-contain a forward-slash (/) character, and should be less than 256 bytes. You 
+contain a forward slash (``/``) character, and should be less than 256 bytes. You
 may include access control headers and metadata headers in the request. The 
 operation is idempotent; that is, if you make a request to create a container
 that already exists, it will return with a HTTP 202 return code, but will not
@@ -67,7 +67,7 @@ Headers
 
 ``X-Container-Meta-{key}``
 
-:Description:  A user-defined meta data key that takes an arbitrary string value.
+:Description: A user-defined metadata key that takes an arbitrary string value.
 :Type: String
 :Required: No
 
@@ -261,7 +261,7 @@ Request Headers
 
 ``X-Container-Meta-{key}``
 
-:Description:  A user-defined meta data key that takes an arbitrary string value.
+:Description: A user-defined metadata key that takes an arbitrary string value.
 :Type: String
 :Required: No
 

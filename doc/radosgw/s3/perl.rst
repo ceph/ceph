@@ -77,7 +77,7 @@ Deleting a Bucket
 -----------------
 
 .. note::
-   The Bucket must be empty! Otherwise it won't work!
+   The bucket must be empty! Otherwise it won't work!
 
 .. code-block:: perl
 
@@ -89,7 +89,7 @@ Forced Delete for Non-empty Buckets
 
 .. attention::
 
-   not available in the `Amazon::S3`_ perl module
+   not available in the `Amazon::S3`_ Perl module
 
 
 Creating an Object
@@ -148,7 +148,7 @@ Generate Object Download URLs (signed and unsigned)
 ---------------------------------------------------
 This generates an unsigned download URL for ``hello.txt``. This works
 because we made ``hello.txt`` public by setting the ACL above.
-Then this generates a signed download URL for ``secret_plans.txt`` that
+It then generates a signed download URL for ``secret_plans.txt`` that
 will work for 1 hour. Signed download URLs will work for the time
 period even if the object is private (when the time period is up, the
 URL will stop working).
@@ -158,7 +158,7 @@ URL will stop working).
    URLs, so we are going to be using another module instead. Unfortunately,
    most modules for generating these URLs assume that you are using Amazon,
    so we have had to go with using a more obscure module, `Muck::FS::S3`_. This
-   should be the same as Amazon's sample S3 perl module, but this sample
+   should be the same as Amazon's sample S3 Perl module, but this sample
    module is not in CPAN. So, you can either use CPAN to install
    `Muck::FS::S3`_, or install Amazon's sample S3 module manually. If you go
    the manual route, you can remove ``Muck::FS::`` from the example below.

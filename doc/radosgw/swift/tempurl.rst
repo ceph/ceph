@@ -2,7 +2,7 @@
  Temp URL Operations
 ====================
 
-To allow temporary access (for eg for `GET` requests) to objects
+To allow temporary access (for example, for `GET` requests) to objects
 without the need to share credentials, temp url functionality is
 supported by swift endpoint of radosgw. For this functionality,
 initially the value of `X-Account-Meta-Temp-URL-Key` and optionally
@@ -69,7 +69,7 @@ Temporary URL uses a cryptographic HMAC-SHA1 signature, which includes
 the following elements:
 
 #. The value of the Request method, "GET" for instance
-#. The expiry time, in format of seconds since the epoch, ie Unix time
+#. The expiry time, in format of seconds since the epoch, i.e. Unix time
 #. The request path starting from "v1" onwards
 
 The above items are normalized with newlines appended between them,
