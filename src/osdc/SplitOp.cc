@@ -807,6 +807,7 @@ std::pair<bool, bool> validate(Objecter::Op *op, Objecter &objecter,
 void debug_op_summary(const std::string &str, Objecter::Op *op, CephContext *cct) {
   auto &target = op->target;
   ldout(cct, DBG_LVL) << str
+    << " tid=" << op->tid
     << " pool=" << target.base_oloc.pool
     << " pgid=" << target.actual_pgid
     << " osd=" << target.osd
