@@ -10,7 +10,7 @@
 #include "rgw_common.h"
 #include "rgw_sal_d4n.h"
 
-namespace rgw { namespace d4n {
+namespace rgw::d4n {
 
 namespace asio = boost::asio;
 namespace sys = boost::system;
@@ -21,10 +21,10 @@ inline std::string get_resource(std::string& bucket_name, std::string& oid) {
 
 struct RemoteGetCB : RGWHTTPStreamRWRequest::ReceiveCB {
 public:
-  bufferlist *in_bl;
-  RemoteGetCB(bufferlist* _bl): in_bl(_bl) {}
+  bufferlist& in_bl;
+  RemoteGetCB(bufferlist& bl) : in_bl(bl) {}
   int handle_data(bufferlist& bl, bool *pause) override {
-    in_bl->append(bl);
+    in_bl.append(bl);
     return 0;
   }
 };
@@ -33,7 +33,7 @@ class RemoteCacheOp {
   public:
     struct RemoteCacheOpData {
       std::string bucket_name;
-      std::string oid;
+      std::string object_name;
       uint64_t offset = 0;
       uint64_t len = 0;
       std::string version;
@@ -41,8 +41,9 @@ class RemoteCacheOp {
       rgw_user bucket_owner;
       std::string remote_addr;
       uint64_t obj_size = 0;
+      bool is_bucket_versioned{false};
     };
-    RemoteCacheOp(rgw::sal::Driver* driver, RemoteCacheOpData& op) : driver(driver), op(op) {}
+    RemoteCacheOp(rgw::sal::Driver* driver, RemoteCacheOpData& op) : driver(driver), op(op), cb(in_bl) {}
     virtual ~RemoteCacheOp() = default; 
 
     virtual int init(CephContext* cct, const DoutPrefixProvider* dpp);
@@ -55,7 +56,7 @@ class RemoteCacheOp {
     RemoteCacheOpData op;
     std::unique_ptr<RGWRESTStreamRWRequest> sender;
     bufferlist in_bl;
-    std::unique_ptr<RemoteGetCB> cb;
+    RemoteGetCB cb;
 };
 
 class RemoteCacheGetOp : public RemoteCacheOp {
@@ -151,4 +152,4 @@ public:
   size_t get_completed_count() const { return completed.size(); }
 };
 
-} } // namespace rgw::d4n
+} // namespace rgw::d4n
