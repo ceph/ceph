@@ -100,105 +100,292 @@ except ImportError:
     ftcache = lambda f: f
 
 
-class DistroKind(StrEnum):
-    CENTOS10 = "centos10"
-    CENTOS8 = "centos8"
-    CENTOS9 = "centos9"
-    FEDORA41 = "fedora41"
-    FEDORA42 = "fedora42"
-    FEDORA43 = "fedora43"
-    ROCKY9 = "rocky9"
-    ROCKY10 = "rocky10"
-    UBUNTU2004 = "ubuntu20.04"
-    UBUNTU2204 = "ubuntu22.04"
-    UBUNTU2404 = "ubuntu24.04"
-    DEBIAN12 = "debian12"
-    DEBIAN13 = "debian13"
+_UNSUPPORTED_DISTROS: set = set()
+_UNSUPPORTED_COMBINATIONS: dict = {}
 
-    @classmethod
-    def uses_dnf(cls):
-        return {
-            cls.CENTOS10,
-            cls.CENTOS8,
-            cls.CENTOS9,
-            cls.FEDORA41,
-            cls.ROCKY9,
-            cls.ROCKY10,
-        }
 
-    @classmethod
-    def uses_rpmbuild(cls):
-        # right now this is the same as uses_dnf, but perhaps not always
-        # let's be specific in our interface
-        return cls.uses_dnf()  # but lazy in the implementation
+def unsupported(cls=None, *, ceph_versions=()):
+    """Decorator to mark a distro (or distro + Ceph-version combination) as unsupported.
 
-    @classmethod
-    def aliases(cls):
-        return {
-            # EL distros
-            str(cls.CENTOS10): cls.CENTOS10,
-            "centos10stream": cls.CENTOS10,
-            str(cls.CENTOS8): cls.CENTOS8,
-            str(cls.CENTOS9): cls.CENTOS9,
-            "centos9stream": cls.CENTOS9,
-            str(cls.ROCKY9): cls.ROCKY9,
-            'rockylinux9': cls.ROCKY9,
-            str(cls.ROCKY10): cls.ROCKY10,
-            'rockylinux10': cls.ROCKY10,
-            # fedora
-            str(cls.FEDORA41): cls.FEDORA41,
-            "fc41": cls.FEDORA41,
-            str(cls.FEDORA42): cls.FEDORA42,
-            "fc42": cls.FEDORA42,
-            str(cls.FEDORA43): cls.FEDORA43,
-            "fc43": cls.FEDORA43,
-            # ubuntu
-            str(cls.UBUNTU2004): cls.UBUNTU2004,
-            "ubuntu-focal": cls.UBUNTU2004,
-            "focal": cls.UBUNTU2004,
-            str(cls.UBUNTU2204): cls.UBUNTU2204,
-            "ubuntu-jammy": cls.UBUNTU2204,
-            "jammy": cls.UBUNTU2204,
-            str(cls.UBUNTU2404): cls.UBUNTU2404,
-            "ubuntu-noble": cls.UBUNTU2404,
-            "noble": cls.UBUNTU2404,
-            # debian
-            str(cls.DEBIAN12): cls.DEBIAN12,
-            "debian-bookworm": cls.DEBIAN12,
-            "bookworm": cls.DEBIAN12,
-            str(cls.DEBIAN13): cls.DEBIAN13,
-            "debian-trixie": cls.DEBIAN13,
-            "trixie": cls.DEBIAN13,
-        }
+    Without arguments the distro is considered entirely unsupported::
 
-    @classmethod
-    def from_alias(cls, value):
+        @unsupported
+        class OldDistro(ELLinuxDistro, name="old8", ...): pass
+
+    With *ceph_versions* the distro is unsupported only for those releases::
+
+        @unsupported(ceph_versions=("reef", "squid"))
+        class SomeDistro(ELLinuxDistro, name="some9", ...): pass
+
+    Use ``LinuxDistro["name"].is_supported()`` to query support status.
+    """
+    def decorator(c):
+        if ceph_versions:
+            _UNSUPPORTED_COMBINATIONS.setdefault(c, set()).update(ceph_versions)
+        else:
+            _UNSUPPORTED_DISTROS.add(c)
+        return c
+
+    if cls is not None:
+        # called as @unsupported (no parentheses)
+        return decorator(cls)
+    # called as @unsupported(...) (with parentheses)
+    return decorator
+
+
+class LinuxDistro:
+    """Base class for Linux distro definitions used by the build system.
+
+    Each concrete distro version is defined as a subclass that passes
+    metadata through class parameters.  The subclass init hook automatically
+    registers every concrete distro (one that supplies a *name*) so that it
+    can be looked up later via the ``LinuxDistro["name"]`` syntax.
+
+    Intermediate/family classes (e.g. ``ELLinuxDistro``) are defined without
+    a *name* and are therefore **not** registered; they only propagate shared
+    attributes (such as *pkg_manager*) to their concrete descendants.
+
+    Example – adding a new distro::
+
+        class CentOS99(ELLinuxDistro,
+                       name="centos99",
+                       default_image="quay.io/centos/centos:stream99",
+                       aliases=("centos99stream",)):
+            pass
+
+    Lookup examples::
+
+        LinuxDistro["centos9"]           # -> CentOS9 class
+        LinuxDistro["centos9stream"]     # -> CentOS9 class (alias)
+        LinuxDistro["centos9"].default_image
+        LinuxDistro["centos9"].uses_dnf()
+    """
+
+    # Shared registry populated by __init_subclass__ for every concrete distro.
+    _registry: dict = {}
+    _concrete: set = set()
+
+    # Package-manager sentinel constants – use these instead of bare strings.
+    PKG_DNF = "dnf"
+    PKG_APT = "apt"
+    PKG_ZYPPER = "zypper"
+
+    # Class-level defaults; concrete distros override these via __init_subclass__.
+    name: str = ""
+    default_image: str = ""
+    pkg_manager: str = ""
+    python: str = "python3"
+    aliases: tuple = ()
+
+    def __init_subclass__(
+        cls,
+        name=None,
+        default_image=None,
+        aliases=(),
+        pkg_manager=None,
+        python=None,
+        **kwargs,
+    ):
+        super().__init_subclass__(**kwargs)
+        # Propagate family-level traits so intermediate classes can set them
+        # for all their descendants without requiring repetition.
+        if pkg_manager is not None:
+            cls.pkg_manager = pkg_manager
+        if python is not None:
+            cls.python = python
+        # Register only concrete distros (those that declare a canonical name).
+        if name is not None:
+            if not cls.pkg_manager:
+                raise TypeError(
+                    f"Concrete distro {cls.__name__!r} has no pkg_manager set."
+                    " Inherit from a family class (e.g. ELLinuxDistro) or"
+                    " pass pkg_manager= explicitly."
+                )
+            cls.name = name
+            if default_image is not None:
+                cls.default_image = default_image
+            cls.aliases = tuple(aliases)
+            for alias in (name,) + cls.aliases:
+                LinuxDistro._registry[alias] = cls
+            LinuxDistro._concrete.add(cls)
+
+    def __class_getitem__(cls, name):
+        """Look up a concrete distro class by canonical name or alias.
+
+        Raises ``KeyError`` for unknown names.
+        """
         try:
-            return cls.aliases()[value]
+            return LinuxDistro._registry[name]
         except KeyError:
-            valid = ", ".join(sorted(cls.aliases()))
+            valid = ", ".join(sorted(LinuxDistro._registry))
+            raise KeyError(
+                f"unknown distro: {name!r}. Known names/aliases: {valid}"
+            ) from None
+
+    @classmethod
+    def all_distros(cls):
+        """Return a frozenset of all registered concrete distro classes."""
+        return frozenset(LinuxDistro._concrete)
+
+    @classmethod
+    def all_aliases(cls):
+        """Return a dict mapping every alias/name to its distro class."""
+        return dict(LinuxDistro._registry)
+
+    @classmethod
+    def from_arg(cls, value):
+        """Resolve a raw alias string to its canonical distro name.
+
+        Intended for use as ``type=LinuxDistro.from_arg`` with argparse;
+        raises ``argparse.ArgumentTypeError`` for unknown aliases.
+        """
+        try:
+            return LinuxDistro._registry[value].name
+        except KeyError:
+            valid = ", ".join(sorted(LinuxDistro._registry))
             msg = f"unknown distro: {value!r} not in {valid}"
             raise argparse.ArgumentTypeError(msg)
 
+    @classmethod
+    def uses_dnf(cls):
+        """Return True if this distro uses DNF as its package manager."""
+        return cls.pkg_manager == cls.PKG_DNF
 
-class DefaultImage(StrEnum):
-    # EL distros
-    CENTOS10 = "quay.io/centos/centos:stream10"
-    CENTOS8 = "quay.io/centos/centos:stream8"
-    CENTOS9 = "quay.io/centos/centos:stream9"
-    ROCKY9 = "docker.io/rockylinux/rockylinux:9"
-    ROCKY10 = "docker.io/rockylinux/rockylinux:10"
-    # fedora
-    FEDORA41 = "registry.fedoraproject.org/fedora:41"
-    FEDORA42 = "registry.fedoraproject.org/fedora:42"
-    FEDORA43 = "registry.fedoraproject.org/fedora:43"
-    # ubuntu
-    UBUNTU2004 = "docker.io/ubuntu:20.04"
-    UBUNTU2204 = "docker.io/ubuntu:22.04"
-    UBUNTU2404 = "docker.io/ubuntu:24.04"
-    # debian
-    DEBIAN12 = "docker.io/debian:bookworm"
-    DEBIAN13 = "docker.io/debian:trixie"
+    @classmethod
+    def uses_rpmbuild(cls):
+        """Return True if this distro uses rpmbuild for package builds."""
+        return cls.uses_dnf()
+
+    @classmethod
+    def is_supported(cls, ceph_version=None):
+        """Return True if this distro is considered supported.
+
+        When *ceph_version* is provided the check also considers distros that
+        are only unsupported for specific Ceph release names.
+        """
+        if cls in _UNSUPPORTED_DISTROS:
+            return False
+        if ceph_version is not None:
+            blocked = _UNSUPPORTED_COMBINATIONS.get(cls, set())
+            if ceph_version in blocked:
+                return False
+        return True
+
+
+# --- Family (intermediate) classes ---
+
+class ELLinuxDistro(LinuxDistro, pkg_manager=LinuxDistro.PKG_DNF):
+    """Enterprise Linux distro family.
+
+    Uses DNF for package management and rpmbuild for building RPMs.
+    Add new EL-family distros by subclassing this and supplying *name*,
+    *default_image*, and optional *aliases*.
+    """
+
+
+class FedoraLinuxDistro(ELLinuxDistro):
+    """Fedora distro family (a specialisation of ELLinuxDistro)."""
+
+
+class DebianLinuxDistro(LinuxDistro, pkg_manager=LinuxDistro.PKG_APT):
+    """Debian/Ubuntu distro family.
+
+    Uses APT for package management and dpkg/debhelper for building packages.
+    Add new Debian-family distros by subclassing this.
+    """
+
+
+# --- Concrete distro classes ---
+# Each class registers itself in LinuxDistro._registry when it is defined.
+
+class CentOS8(ELLinuxDistro,
+              name="centos8",
+              default_image="quay.io/centos/centos:stream8"):
+    pass
+
+
+class CentOS9(ELLinuxDistro,
+              name="centos9",
+              default_image="quay.io/centos/centos:stream9",
+              aliases=("centos9stream",)):
+    pass
+
+
+class CentOS10(ELLinuxDistro,
+               name="centos10",
+               default_image="quay.io/centos/centos:stream10",
+               aliases=("centos10stream",)):
+    pass
+
+
+class Rocky9(ELLinuxDistro,
+             name="rocky9",
+             default_image="docker.io/rockylinux/rockylinux:9",
+             aliases=("rockylinux9",)):
+    pass
+
+
+class Rocky10(ELLinuxDistro,
+              name="rocky10",
+              default_image="docker.io/rockylinux/rockylinux:10",
+              aliases=("rockylinux10",)):
+    pass
+
+
+class Fedora41(FedoraLinuxDistro,
+               name="fedora41",
+               default_image="registry.fedoraproject.org/fedora:41",
+               aliases=("fc41",)):
+    pass
+
+
+class Fedora42(FedoraLinuxDistro,
+               name="fedora42",
+               default_image="registry.fedoraproject.org/fedora:42",
+               aliases=("fc42",)):
+    pass
+
+
+class Fedora43(FedoraLinuxDistro,
+               name="fedora43",
+               default_image="registry.fedoraproject.org/fedora:43",
+               aliases=("fc43",)):
+    pass
+
+
+class Ubuntu2004(DebianLinuxDistro,
+                 name="ubuntu20.04",
+                 default_image="docker.io/ubuntu:20.04",
+                 aliases=("ubuntu-focal", "focal")):
+    pass
+
+
+class Ubuntu2204(DebianLinuxDistro,
+                 name="ubuntu22.04",
+                 default_image="docker.io/ubuntu:22.04",
+                 aliases=("ubuntu-jammy", "jammy")):
+    pass
+
+
+class Ubuntu2404(DebianLinuxDistro,
+                 name="ubuntu24.04",
+                 default_image="docker.io/ubuntu:24.04",
+                 aliases=("ubuntu-noble", "noble")):
+    pass
+
+
+class Debian12(DebianLinuxDistro,
+               name="debian12",
+               default_image="docker.io/debian:bookworm",
+               aliases=("debian-bookworm", "bookworm")):
+    pass
+
+
+class Debian13(DebianLinuxDistro,
+               name="debian13",
+               default_image="docker.io/debian:trixie",
+               aliases=("debian-trixie", "trixie")):
+    pass
 
 
 class CommandFailed(Exception):
@@ -547,11 +734,7 @@ class Context:
     def from_image(self):
         if self.cli.base_image:
             return self.cli.base_image
-        distro_images = {
-            fld.value: getattr(DefaultImage, fld.name).value
-            for fld in DistroKind
-        }
-        return distro_images[self.cli.distro]
+        return LinuxDistro[self.cli.distro].default_image
 
     @property
     def dnf_cache_dir(self):
@@ -692,7 +875,7 @@ def prepare_env_once(ctx):
 @Builder.set(Steps.DNF_CACHE)
 def dnf_cache_dir(ctx):
     """Set up a DNF cache directory for reuse across container builds."""
-    if ctx.cli.distro not in DistroKind.uses_dnf():
+    if not LinuxDistro[ctx.cli.distro].uses_dnf():
         return
     if not ctx.cli.dnf_cache_path:
         return
@@ -1054,7 +1237,7 @@ def bc_make_debs(ctx):
 @Builder.set(Steps.PACKAGES)
 def bc_make_packages(ctx):
     """Build some sort of distro packages - chooses target based on distro."""
-    if ctx.cli.distro in DistroKind.uses_rpmbuild():
+    if LinuxDistro[ctx.cli.distro].uses_rpmbuild():
         ctx.build.wants(Steps.RPM, ctx)
     else:
         ctx.build.wants(Steps.DEBS, ctx)
@@ -1129,9 +1312,9 @@ def parse_cli(build_step_names):
     g_basic.add_argument(
         "--distro",
         "-d",
-        choices=DistroKind.aliases().keys(),
-        type=DistroKind.from_alias,
-        default=str(DistroKind.CENTOS9),
+        choices=LinuxDistro.all_aliases().keys(),
+        type=LinuxDistro.from_arg,
+        default=CentOS9.name,
         help="Specify a distro short name",
     )
     g_basic.add_argument(
