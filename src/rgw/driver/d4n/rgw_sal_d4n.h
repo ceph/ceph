@@ -46,9 +46,14 @@ namespace rgw::d4n {
 
 namespace rgw { namespace sal {
 
+inline std::string get_cache_block_prefix(const std::string& bucket_id, const std::string& object_name, const std::string& version)
+{
+  return fmt::format("{}{}{}{}{}", url_encode(bucket_id, true), CACHE_DELIM, url_encode(version, true), CACHE_DELIM, url_encode(object_name, true));
+}
+
 inline std::string get_cache_block_prefix(rgw::sal::Object* object, const std::string& version)
 {
-  return fmt::format("{}{}{}{}{}", url_encode(object->get_bucket()->get_bucket_id(), true), CACHE_DELIM, url_encode(version, true), CACHE_DELIM, url_encode(object->get_name(), true));
+  return get_cache_block_prefix(object->get_bucket()->get_bucket_id(), object->get_name(), version);
 }
 
 inline std::string get_key_in_cache(const std::string& prefix, const std::string& offset, const std::string& len)
@@ -532,7 +537,7 @@ class D4NFilterObject : public FilterObject {
     int get_obj_attrs_from_cache(const DoutPrefixProvider* dpp, optional_yield y);
     void set_attrs_from_obj_state(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs, bool dirty = false);
     int calculate_version(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, rgw::sal::Attrs& attrs);
-    int set_head_obj_dir_entry(const DoutPrefixProvider* dpp, optional_yield y, bool is_latest_version = true, bool dirty = false);
+    int set_head_block_dir_entry(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs, bool is_latest_version = true, bool dirty = false);
     int update_head_block_hostslist(const DoutPrefixProvider* dpp, optional_yield y);
     int set_data_block_dir_entries(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, bool dirty = false);
     int delete_data_block_cache_entries(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, bool dirty = false);
@@ -560,7 +565,6 @@ class D4NFilterObject : public FilterObject {
 	void set_remote_dirty_flag(bool flag) {remote_dirty = flag;}
     void set_remote_obj_size(uint64_t size) { obj_size = size; }
     uint64_t get_remote_obj_size() const { return obj_size; }
-    bool is_remote_head_block_request() const { return (remote_cache_request && (blk_offset == 0) && (blk_len == 0)); }
 };
 
 class D4NFilterDPP : public DoutPrefixProvider {
