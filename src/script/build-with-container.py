@@ -813,7 +813,11 @@ def get_container(ctx):
 
 @Builder.set(Steps.CONFIGURE)
 def bc_configure(ctx):
-    """Configure the build"""
+    """Configure the build.
+
+    Use the environment variable CONFIGURE_ARGS to pass custom arguments
+    for cmake configuration if needed.
+    """
     ctx.build.wants(Steps.CONTAINER, ctx)
     ctx.build.wants(Steps.NPM_CACHE, ctx)
     cmd = _container_cmd(
@@ -821,7 +825,7 @@ def bc_configure(ctx):
         [
             "bash",
             "-c",
-            f"cd {ctx.cli.homedir} && source ./src/script/run-make.sh && has_build_dir || configure",
+            f"cd {ctx.cli.homedir} && source ./src/script/run-make.sh && has_build_dir || configure ${{CONFIGURE_ARGS}}",
         ],
     )
     with ctx.user_command():
