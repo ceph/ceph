@@ -4680,10 +4680,20 @@ static void renewal(const DoutPrefixProvider* dpp,
       break;
     }
 
+    // for renewal testing, inject an error from lock renewal
+    ceph_assert(dpp->get_cct());
+    int ret = dpp->get_cct()->_conf.get_val<int64_t>("rgw_mp_lock_inject_renewal_error");
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "MPSerializer lock renewal on "
+          << oid << " failed with injected error " << ret << dendl;
+      serializer.clear_locked();
+      return;
+    }
+
     librados::ObjectWriteOperation op;
     op.assert_exists();
     lock.lock_exclusive(&op);
-    int ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), yield);
+    ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), yield);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: MPSerializer lock renewal on "
           << oid << " failed with " << ret << ". If this upload completes, "
@@ -4757,6 +4767,20 @@ int MPRadosSerializer::try_lock(const DoutPrefixProvider *dpp, ceph::timespan du
     locked = true;
 
     start_renewal(dur);
+
+    // for renewal testing, inject a delay after lock acquisition
+    ceph_assert(dpp->get_cct());
+    const auto inject_delay = dpp->get_cct()->_conf.get_val<int64_t>("rgw_mp_lock_inject_delay");
+    if (inject_delay) {
+      ldpp_dout(dpp, 10) << "MPSerializer injecting delay after lock..." << dendl;
+      auto timer = Timer{ex, std::chrono::seconds(inject_delay)};
+      if (y) {
+        timer.async_wait(y.get_yield_context());
+      } else {
+        timer.wait();
+      }
+      ldpp_dout(dpp, 10) << "MPSerializer waking up after injected delay" << dendl;
+    }
   }
   return ret;
 }
