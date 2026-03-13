@@ -90,8 +90,8 @@ file but will not trigger a restart of the daemon.
    ceph orch daemon reconfig <name>
 
 
-Rotating a Daemon's Authenticate Key
-------------------------------------
+Rotating a Daemon's Authentication Key
+--------------------------------------
 
 All Ceph and gateway daemons in the cluster have a secret key that is used to connect
 to and authenticate with the cluster.  This key can be rotated (i.e., replaced with a
@@ -355,7 +355,7 @@ means that those services cannot currently be managed by cephadm
 ``CEPHADM_STRAY_DAEMON``
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-One or more Ceph daemons are running but not are not managed by
+One or more Ceph daemons are running but are not managed by
 *cephadm*.  This may be because they were deployed using a different
 tool, or because they were started manually.  Those
 services cannot currently be managed by cephadm (e.g., restarted,
@@ -424,7 +424,7 @@ Cluster Configuration Checks
 ----------------------------
 
 Cephadm periodically scans each host in the cluster in order
-to understand the state of the OS, disks, network interfacess etc. This information can
+to understand the state of the OS, disks, network interfaces etc. This information can
 then be analyzed for consistency across the hosts in the cluster to
 identify any configuration anomalies.
 

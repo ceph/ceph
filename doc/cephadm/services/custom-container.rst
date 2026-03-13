@@ -79,8 +79,8 @@ where the properties of a service specification are:
     exist. Use the `dirs` property to create them if necessary.
 * ``init_containers``
     A list of "init container" definitions. An init container exists to
-    run prepratory steps before the primary container starts. Init containers
-    are optional. One or more container can be defined.
+    run preparatory steps before the primary container starts. Init containers
+    are optional. One or more containers can be defined.
     Each definition can contain the following fields:
 
     * ``image``
@@ -98,7 +98,7 @@ where the properties of a service specification are:
     * ``envs``
         A list of environment variables.
     * ``privileged``
-        A boolean indicate if the container should run with privileges or not. If
+        A boolean indicating whether the container should run with privileges or not. If
         left unspecified, the init container will inherit the primary container's
         value.
 
