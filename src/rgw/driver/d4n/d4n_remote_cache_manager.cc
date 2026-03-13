@@ -3,12 +3,11 @@
 #include "../../../common/async/yield_context.h"
 #include "common/async/blocked_completion.h"
 
-namespace rgw { namespace d4n {
+namespace rgw::d4n {
 
 int RemoteCacheGetOp::send_request(const DoutPrefixProvider* dpp, optional_yield& y, bufferlist* bl)
 {
   in_bl.clear();
-  cb = std::make_unique<RemoteGetCB>(&in_bl);
   RGWAccessKey accessKey;
   std::string findKey;
 
@@ -30,9 +29,13 @@ int RemoteCacheGetOp::send_request(const DoutPrefixProvider* dpp, optional_yield
   uint64_t end_offset = op.offset + op.len - 1;
   std::string range_val = "bytes=" + std::to_string(op.offset) + "-" + std::to_string(end_offset);
   extra_headers["RANGE"] = std::move(range_val);
+  param_vec_t params;
+  if (op.is_bucket_versioned) {
+    params.push_back(param_pair_t("versionId", op.version));
+  }
 
-  auto resource = get_resource(op.bucket_name, op.oid);
-  sender = std::make_unique<RGWRESTStreamRWRequest>(dpp->get_cct(), "GET", op.remote_addr, cb.get(), nullptr, nullptr, "", host_style);
+  auto resource = get_resource(op.bucket_name, op.object_name);
+  sender = std::make_unique<RGWRESTStreamRWRequest>(dpp->get_cct(), "GET", op.remote_addr, &cb, nullptr, &params, "", host_style);
 
   ret = sender->send_request(dpp, &accessKey, extra_headers, resource, nullptr, bl);
   if (ret < 0) {
@@ -45,7 +48,6 @@ int RemoteCacheGetOp::send_request(const DoutPrefixProvider* dpp, optional_yield
 rgw::AioResultList RemoteCacheGetOp::send_request(const DoutPrefixProvider* dpp, rgw::Aio* aio, uint64_t cost, uint64_t id, optional_yield& y)
 {
   in_bl.clear();
-  cb = std::make_unique<RemoteGetCB>(&in_bl);
   this->aio = aio;
 
   auto op_func = [this, dpp, y](Aio* aio, AioResult& r) mutable {
@@ -75,9 +77,12 @@ rgw::AioResultList RemoteCacheGetOp::send_request(const DoutPrefixProvider* dpp,
     uint64_t end_offset = op.offset + op.len - 1;
     std::string range_val = "bytes=" + std::to_string(op.offset) + "-" + std::to_string(end_offset);
     extra_headers["RANGE"] = std::move(range_val);
-
-    auto resource = get_resource(op.bucket_name, op.oid);
-    sender = std::make_unique<RGWRESTStreamRWRequest>(dpp->get_cct(), "GET", op.remote_addr, cb.get(), nullptr, nullptr, "", host_style);
+    param_vec_t params;
+    if (op.is_bucket_versioned) {
+      params.push_back(param_pair_t("versionId", op.version));
+    }
+    auto resource = get_resource(op.bucket_name, op.object_name);
+    sender = std::make_unique<RGWRESTStreamRWRequest>(dpp->get_cct(), "GET", op.remote_addr, &cb, nullptr, &params, "", host_style);
 
     ret = sender->send_request(dpp, &accessKey, extra_headers, resource, nullptr, nullptr);
     if (ret < 0) {
@@ -156,7 +161,6 @@ int RemoteCacheOp::send_and_complete_request(const DoutPrefixProvider* dpp, opti
 int RemoteCacheDeleteOp::send_request(const DoutPrefixProvider* dpp, optional_yield& y, bufferlist* bl)
 {
   in_bl.clear();
-  cb = std::make_unique<RemoteGetCB>(&in_bl);
 
   RGWAccessKey accessKey;
   std::string findKey;
@@ -182,8 +186,8 @@ int RemoteCacheDeleteOp::send_request(const DoutPrefixProvider* dpp, optional_yi
   extra_headers["x-rgw-cache-blk-len"] = std::to_string(op.len);
   extra_headers["x-rgw-cache-obj-size"] = std::to_string(op.obj_size);
 
-  auto resource = get_resource(op.bucket_name, op.oid);
-  sender = std::make_unique<RGWRESTStreamRWRequest>(dpp->get_cct(), "DELETE", op.remote_addr, cb.get(), nullptr, nullptr, "", host_style);
+  auto resource = get_resource(op.bucket_name, op.object_name);
+  sender = std::make_unique<RGWRESTStreamRWRequest>(dpp->get_cct(), "DELETE", op.remote_addr, &cb, nullptr, nullptr, "", host_style);
 
   ret = sender->send_request(dpp, &accessKey, extra_headers, resource, nullptr, bl);
   if (ret < 0) {
@@ -196,7 +200,6 @@ int RemoteCacheDeleteOp::send_request(const DoutPrefixProvider* dpp, optional_yi
 int RemoteCachePutOp::send_request(const DoutPrefixProvider* dpp, optional_yield& y, bufferlist* bl)
 {
   in_bl.clear();
-  cb = std::make_unique<RemoteGetCB>(&in_bl);
 
   RGWAccessKey accessKey;
   std::string findKey;
@@ -222,8 +225,8 @@ int RemoteCachePutOp::send_request(const DoutPrefixProvider* dpp, optional_yield
   extra_headers["x-rgw-cache-blk-len"] = std::to_string(op.len);
   extra_headers["x-rgw-cache-obj-size"] = std::to_string(op.obj_size);
 
-  auto resource = get_resource(op.bucket_name, op.oid);
-  sender = std::make_unique<RGWRESTStreamRWRequest>(dpp->get_cct(), "PUT", op.remote_addr, cb.get(), nullptr, nullptr, "", host_style);
+  auto resource = get_resource(op.bucket_name, op.object_name);
+  sender = std::make_unique<RGWRESTStreamRWRequest>(dpp->get_cct(), "PUT", op.remote_addr, &cb, nullptr, nullptr, "", host_style);
 
   return sender->send_request(dpp, &accessKey, extra_headers, resource, nullptr, bl);
 }
@@ -235,36 +238,33 @@ int RemoteCachePutBatch::send(const DoutPrefixProvider* dpp,
 {
   // Drain one if at capacity
   while (in_flight.size() >= max_in_flight) {
-    int ret = complete_next(dpp, y);
-    if (ret < 0) {
-      ldpp_dout(dpp, 5) << "RemoteCachePutOp request failed for oid=" << op.oid << " ret=" << ret << dendl;
+    if(int ret = complete_next(dpp, y); ret < 0) {
+      ldpp_dout(dpp, 5) << "RemoteCachePutOp request failed for object_name=" << op.object_name << " ret=" << ret << dendl;
     }
   }
 
   // Create and initialize the put operation
   auto put_op = std::make_unique<RemoteCachePutOp>(driver, op);
-  int ret = put_op->init(cct, dpp);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "Failed to init RemoteCachePutOp for oid=" << op.oid << " ret=" << ret << dendl;
+  if(int ret = put_op->init(cct, dpp); ret < 0) {
+    ldpp_dout(dpp, 0) << "Failed to init RemoteCachePutOp for object_name=" << op.object_name << " ret=" << ret << dendl;
     return ret;
   }
 
   // Send the request
-  ret = put_op->send_request(dpp, y, &bl);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "Failed to send RemoteCachePutOp for oid=" << op.oid << " ret=" << ret << dendl;
+  if(int ret = put_op->send_request(dpp, y, &bl); ret < 0) {
+    ldpp_dout(dpp, 0) << "Failed to send RemoteCachePutOp for object_name=" << op.object_name << " ret=" << ret << dendl;
     return ret;
   }
 
   // Track it
   PutResult result {
     .put_op = std::move(put_op),
-    .key = op.oid,
+    .key = op.object_name,
     .op_info = op
   };
   in_flight.push_back(std::move(result));
 
-  ldpp_dout(dpp, 20) << "RemoteCachePutOp queued: oid=" << op.oid << " offset=" << op.offset << " len=" << op.len << dendl;
+  ldpp_dout(dpp, 20) << "RemoteCachePutOp queued: object_name=" << op.object_name << " offset=" << op.offset << " len=" << op.len << dendl;
 
   return 0;
 }
@@ -282,9 +282,9 @@ int RemoteCachePutBatch::complete_next(const DoutPrefixProvider* dpp, optional_y
   result.status = result.put_op->complete_request(dpp, y);
 
   if (result.status < 0) {
-    ldpp_dout(dpp, 5) << "RemoteCachePut completed with error: oid=" << result.key << " ret=" << result.status << dendl;
+    ldpp_dout(dpp, 5) << "RemoteCachePut completed with error: object_name=" << result.key << " ret=" << result.status << dendl;
   } else {
-    ldpp_dout(dpp, 20) << "RemoteCachePut completed successfully: oid=" << result.key << dendl;
+    ldpp_dout(dpp, 20) << "RemoteCachePut completed successfully: object_name=" << result.key << dendl;
   }
 
   result.put_op.reset();
@@ -315,4 +315,4 @@ int RemoteCachePutBatch::finish_all(const DoutPrefixProvider* dpp, optional_yiel
   return first_error;
 }
 
-} } // namespace rgw::d4n
+} // namespace rgw::d4n
