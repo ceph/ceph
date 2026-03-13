@@ -121,13 +121,16 @@ int RGWSI_BILog_RADOS_InIndex::log_trim(
   const size_t max_aio = cct->_conf->rgw_bucket_index_max_aio;
   boost::system::error_code ec;
   if (y) {
+    // run on the coroutine's executor and suspend until completion
     auto yield = y.get_yield_context();
     auto ex = yield.get_executor();
     auto writer = TrimWriter{*dpp, ex, index_pool, start_marker_mgr, end_marker_mgr};
     rgwrados::shard_io::async_writes(writer, bucket_objs, max_aio, yield[ec]);
   } else {
+    // run a strand on the system executor and block on a condition variable
     auto ex = boost::asio::make_strand(boost::asio::system_executor{});
     auto writer = TrimWriter{*dpp, ex, index_pool, start_marker_mgr, end_marker_mgr};
+
     maybe_warn_about_blocking(dpp);
     rgwrados::shard_io::async_writes(writer, bucket_objs, max_aio,
                                      ceph::async::use_blocked[ec]);
@@ -153,13 +156,16 @@ int RGWSI_BILog_RADOS_InIndex::log_start(
   const size_t max_aio = cct->_conf->rgw_bucket_index_max_aio;
   boost::system::error_code ec;
   if (y) {
+    // run on the coroutine's executor and suspend until completion
     auto yield = y.get_yield_context();
     auto ex = yield.get_executor();
     auto writer = StartWriter{*dpp, ex, index_pool};
     rgwrados::shard_io::async_writes(writer, bucket_objs, max_aio, yield[ec]);
   } else {
+    // run a strand on the system executor and block on a condition variable
     auto ex = boost::asio::make_strand(boost::asio::system_executor{});
     auto writer = StartWriter{*dpp, ex, index_pool};
+
     maybe_warn_about_blocking(dpp);
     rgwrados::shard_io::async_writes(writer, bucket_objs, max_aio,
                                      ceph::async::use_blocked[ec]);
@@ -185,13 +191,16 @@ int RGWSI_BILog_RADOS_InIndex::log_stop(
   const size_t max_aio = cct->_conf->rgw_bucket_index_max_aio;
   boost::system::error_code ec;
   if (y) {
+    // run on the coroutine's executor and suspend until completion
     auto yield = y.get_yield_context();
     auto ex = yield.get_executor();
     auto writer = StopWriter{*dpp, ex, index_pool};
     rgwrados::shard_io::async_writes(writer, bucket_objs, max_aio, yield[ec]);
   } else {
+    // run a strand on the system executor and block on a condition variable
     auto ex = boost::asio::make_strand(boost::asio::system_executor{});
     auto writer = StopWriter{*dpp, ex, index_pool};
+
     maybe_warn_about_blocking(dpp);
     rgwrados::shard_io::async_writes(writer, bucket_objs, max_aio,
                                      ceph::async::use_blocked[ec]);
@@ -280,6 +289,10 @@ int RGWSI_BILog_RADOS_InIndex::log_list(
 
   BucketIndexShardsManager marker_mgr;
   const bool has_shards = (shard_id >= 0);
+  // If there are multiple shards for the bucket index object, the marker
+  // should have the pattern '{shard_id_1}#{shard_marker_1},{shard_id_2}#
+  // {shard_marker_2}...', if there is no sharding, the bi_log_list should
+  // only contain one record, and the key is the bucket instance id.
   int r = marker_mgr.from_string(marker, shard_id);
   if (r < 0) {
     return r;
@@ -297,11 +310,11 @@ int RGWSI_BILog_RADOS_InIndex::log_list(
   if (truncated) {
     *truncated = false;
   }
-  for (auto& [sid, ret] : bi_log_lists) {
-    vcurrents[sid] = ret.entries.begin();
-    vends[sid] = ret.entries.end();
+  for (auto& [sid, shard_result] : bi_log_lists) {
+    vcurrents[sid] = shard_result.entries.begin();
+    vends[sid] = shard_result.entries.end();
     if (truncated) {
-      *truncated = (*truncated || ret.truncated);
+      *truncated = (*truncated || shard_result.truncated);
     }
   }
 
@@ -342,6 +355,9 @@ int RGWSI_BILog_RADOS_InIndex::log_list(
     }
   }
 
+  // Refresh marker, if there are multiple shards, the output will look like
+  // '{shard_oid_1}#{shard_marker_1},{shard_oid_2}#{shard_marker_2}...',
+  // if there is no sharding, the simply marker (without oid) is returned
   if (has_shards) {
     marker_mgr.to_string(&marker);
   } else if (!result.empty()) {
