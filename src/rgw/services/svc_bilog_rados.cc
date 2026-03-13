@@ -408,18 +408,18 @@ void RGWSI_BILog_RADOS_FIFO::init(RGWSI_BucketIndex_RADOS *bi_rados_svc,
 
 int RGWSI_BILog_RADOS_FIFO::log_start(
     const DoutPrefixProvider *dpp, optional_yield y,
-    const RGWBucketInfo& /*bucket_info*/,
-    const rgw::bucket_log_layout_generation& /*log_layout*/,
-    int /*shard_id*/)
+    const RGWBucketInfo& bucket_info,
+    const rgw::bucket_log_layout_generation& log_layout,
+    int shard_id)
 {
   return 0; // FIFO has no pause/resume state
 }
 
 int RGWSI_BILog_RADOS_FIFO::log_stop(
     const DoutPrefixProvider *dpp, optional_yield y,
-    const RGWBucketInfo& /*bucket_info*/,
-    const rgw::bucket_log_layout_generation& /*log_layout*/,
-    int /*shard_id*/)
+    const RGWBucketInfo& bucket_info,
+    const rgw::bucket_log_layout_generation& log_layout,
+    int shard_id)
 {
   return 0; // FIFO has no explicit cleanup
 }
@@ -465,6 +465,7 @@ int RGWSI_BILog_RADOS_FIFO::log_trim(
     return r;
   }
 
+  int ret = 0;
   for (auto& [sid, oid] : shard_oids) {
     const std::string shard_end = end_marker_mgr.get(sid, "");
     if (shard_end.empty()) {
@@ -487,12 +488,15 @@ int RGWSI_BILog_RADOS_FIFO::log_trim(
             ceph::async::use_blocked);
       }
     } catch (const boost::system::system_error& e) {
+      // log and continue trimming remaining shards; trim is best-effort and
+      // the trim cycle will retry any skipped shards on its next iteration.
       ldpp_dout(dpp, 5) << __func__ << ": FIFO trim on " << fifo_oid
-                        << " failed: " << e.what() << dendl;
-      return ceph::from_error_code(e.code());
+                        << " shard=" << sid << " failed: " << e.what()
+                        << " (continuing)" << dendl;
+      ret = ceph::from_error_code(e.code());
     }
   }
-  return 0;
+  return ret;
 }
 
 int RGWSI_BILog_RADOS_FIFO::log_list(
