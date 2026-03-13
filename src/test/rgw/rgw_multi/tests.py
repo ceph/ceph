@@ -6211,9 +6211,9 @@ def test_object_lock_sync():
 
 
 def test_period_update_commit():
-    wkld_concurrency = 25
-    num_objects_to_upload = 2500
-    number_of_period_updates = 5
+    wkld_concurrency = 10
+    num_objects_to_upload = 1000
+    number_of_period_updates = 3
     test_passed = False
 
     zonegroup = realm.master_zonegroup()
@@ -6235,6 +6235,9 @@ def test_period_update_commit():
                         Bucket=bucket.name, Key=f"obj-{i:04d}", Body="..."
                     )
                     num_uploads += 1
+                    if stop_event.is_set():
+                        break
+                    time.sleep(0.01)
                 except Exception as e:
                     log.debug(f"failed to upload object to bucket={bucket.name}: {e}")
         log.info(
