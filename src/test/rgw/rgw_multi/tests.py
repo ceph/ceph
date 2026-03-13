@@ -6267,10 +6267,12 @@ def test_period_update_commit():
             log.info("issue period update commit")
             zonegroup.period.update(secondary_zone_cluster_conn, commit=True)
             log.info("verify data sync is making progress")
-            if not data_sync_making_progress(secondary_zone_cluster_conn):
-                break  # the issue of realm reload freezing reproduced
+            with override_config(checkpoint_retries=10, checkpoint_delay=60):
+                if not data_sync_making_progress(secondary_zone_cluster_conn):
+                    break  # the issue of realm reload freezing reproduced
         client_write_only_wkld_thread_stop.set()  # stop client wkld
-        zonegroup_data_checkpoint(zonegroup_conns)
+        with override_config(checkpoint_retries=10, checkpoint_delay=60):
+            zonegroup_data_checkpoint(zonegroup_conns)
         test_passed = True
     except Exception as e:
         log.error(f"test_period_update_commit failed: {e}")
