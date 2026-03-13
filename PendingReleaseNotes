@@ -24,6 +24,10 @@
   the I/O capacity of the OSD.
   The default stride size (``osd_deep_scrub_stride``) was 512 KBytes, and is now 4 MBytes.
 
+* RADOS: Stretch mode can now be entered even if the two dividing buckets differ
+  in weight by a small fraction (default 0.1). This is tunable via
+  `mon_stretch_max_bucket_weight_delta`.
+
 * CephFS: The offline CephFS tools (cephfs-data-scan, cephfs-journal-tool,
   and cephfs-table-tool) now include progress tracking with ETA (Estimated Time of
   Arrival) for long-running operations. Progress updates are displayed automatically
