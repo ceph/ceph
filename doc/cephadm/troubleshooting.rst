@@ -128,7 +128,7 @@ form:
 
    cephadm logs --name <name-of-daemon>
 
-.. Note:: This works only when run on the same host that is running the daemon.
+.. note:: This works only when run on the same host that is running the daemon.
    To get the logs of a daemon that is running on a different host, add the
    ``--fsid`` option to the command, as in the following example:
 
@@ -369,7 +369,7 @@ If the Ceph Monitor (``mon``) daemons cannot form a quorum, ``cephadm`` will
 not be able to manage the cluster until quorum is restored.
 
 In order to restore the quorum, remove unhealthy monitors
-form the monmap by following these steps:
+from the monmap by following these steps:
 
 #. Stop all Monitors. Use ``ssh`` to connect to each Monitor's host, and then
    while connected to the Monitor's host use ``cephadm`` to stop the Monitor
@@ -574,7 +574,7 @@ This creates a script that includes the container command that ``cephadm``
 would use to create a shell. Modify the script by removing the ``--init``
 argument and replace it with the argument that joins to the namespace used for
 a running running container. For example, assume we want to debug the Manager
-and have determnined that the Manager is running in a container named
+and have determined that the Manager is running in a container named
 ``ceph-bc615290-685b-11ee-84a6-525400220000-mgr-ceph0-sluwsk``. In this case,
 the argument
 ``--pid=container:ceph-bc615290-685b-11ee-84a6-525400220000-mgr-ceph0-sluwsk``

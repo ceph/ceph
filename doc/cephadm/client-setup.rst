@@ -34,7 +34,7 @@ Keyring Setup
 Most Ceph clusters run with authentication enabled. This means that
 the client needs keys in order to communicate with Ceph daemons.
 To generate a keyring file with credentials for ``client.fs``,
-log into an running cluster member and run the following command:
+log into a running cluster member and run the following command:
 
 .. prompt:: bash #
 

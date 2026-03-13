@@ -102,7 +102,7 @@ few minutes until all components are fully operational. The updated secure confi
 #. Prometheus: basic authentication is required to access the web portal and TLS is enabled for secure communication.
 #. Alertmanager: basic authentication is required to access the web portal and TLS is enabled for secure communication.
 #. Node Exporter: TLS is enabled for secure communication.
-#. Grafana: TLS is enabled and authentication is requiered to access the datasource information.
+#. Grafana: TLS is enabled and authentication is required to access the datasource information.
 #. Cephadm service discovery endpoint: basic authentication is required to access service discovery information, and TLS is enabled for secure communication.
 
 In this secure setup, users will need to setup authentication

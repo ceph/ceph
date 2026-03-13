@@ -56,7 +56,7 @@ Starting the Upgrade
    large-scale CephFS deployments because the cluster cannot quickly reduce active MDS(s)
    to `1` and a single active MDS cannot easily handle the load of all clients
    even for a short time. Therefore, to upgrade MDS(s) without reducing ``max_mds``,
-   the ``fail_fs`` option can to be set to ``true`` (default value is ``false``) prior
+   the ``fail_fs`` option can be set to ``true`` (default value is ``false``) prior
    to initiating the upgrade:
 
    .. prompt:: bash #

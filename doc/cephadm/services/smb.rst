@@ -8,7 +8,7 @@ SMB Service
 
     SMB support is under active development and many features may be
     missing or immature. A Ceph MGR module, named smb, is available to help
-    organize and manage SMB related featues. Unless the smb module
+    organize and manage SMB-related features. Unless the smb module
     has been determined to be unsuitable for your needs we recommend using that
     module over directly using the smb service spec.
 
@@ -171,7 +171,7 @@ cluster_public_addrs
    High-Availability or "transparent state migration") the feature flag
    ``clustered`` is needed. If this flag is not specified cephadm may deploy
    multiple smb servers but they will lack the coordination needed of an actual
-   Highly-Avaiable cluster. When the ``clustered`` flag is specified cephadm
+   Highly-Available cluster. When the ``clustered`` flag is specified cephadm
    will deploy additional containers that manage this coordination.
    Additionally, the cluster_meta_uri and cluster_lock_uri values must be
    specified. The former is used by cephadm to describe the smb cluster layout
@@ -196,7 +196,7 @@ of these configurations is out of scope for this document. You can refer to the
 `documentation for Samba <https://wiki.samba.org/index.php/Main_Page>`_ as
 well as the `samba server container
 <https://github.com/samba-in-kubernetes/samba-container/blob/master/docs/server.md>`_
-and the `configuation file
+and the `configuration file
 <https://github.com/samba-in-kubernetes/sambacc/blob/master/docs/configuration.md>`_
 it accepts.
 
