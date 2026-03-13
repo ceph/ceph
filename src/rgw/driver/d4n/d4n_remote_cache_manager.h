@@ -33,7 +33,7 @@ class RemoteCacheOp {
   public:
     struct RemoteCacheOpData {
       std::string bucket_name;
-      std::string oid;
+      std::string object_name;
       uint64_t offset = 0;
       uint64_t len = 0;
       std::string version;
@@ -41,6 +41,7 @@ class RemoteCacheOp {
       rgw_user bucket_owner;
       std::string remote_addr;
       uint64_t obj_size = 0;
+      bool is_bucket_versioned{false};
     };
     RemoteCacheOp(rgw::sal::Driver* driver, RemoteCacheOpData& op) : driver(driver), op(op) {}
     virtual ~RemoteCacheOp() = default; 

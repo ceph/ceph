@@ -46,9 +46,14 @@ namespace rgw::d4n {
 
 namespace rgw { namespace sal {
 
+inline std::string get_cache_block_prefix(const std::string& bucket_id, const std::string& object_name, const std::string& version)
+{
+  return fmt::format("{}{}{}{}{}", url_encode(bucket_id, true), CACHE_DELIM, url_encode(version, true), CACHE_DELIM, url_encode(object_name, true));
+}
+
 inline std::string get_cache_block_prefix(rgw::sal::Object* object, const std::string& version)
 {
-  return fmt::format("{}{}{}{}{}", url_encode(object->get_bucket()->get_bucket_id(), true), CACHE_DELIM, url_encode(version, true), CACHE_DELIM, url_encode(object->get_name(), true));
+  return get_cache_block_prefix(object->get_bucket()->get_bucket_id(), object->get_name(), version);
 }
 
 inline std::string get_key_in_cache(const std::string& prefix, const std::string& offset, const std::string& len)
@@ -432,9 +437,6 @@ class D4NFilterObject : public FilterObject {
 	}
 	virtual ~D4NFilterReadOp() = default;
 
-  int getRemote(const DoutPrefixProvider* dpp, long long start, long long end, std::string key, std::string remoteCacheAddress, bufferlist *bl, optional_yield y);
-  int remoteFlush(const DoutPrefixProvider* dpp, bufferlist bl, uint64_t ofs, uint64_t len, uint64_t read_ofs, std::string creationTime, optional_yield y);
-
 	virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
 	virtual int iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end,
 			     RGWGetDataCB* cb, optional_yield y) override;
@@ -532,7 +534,7 @@ class D4NFilterObject : public FilterObject {
     int get_obj_attrs_from_cache(const DoutPrefixProvider* dpp, optional_yield y);
     void set_attrs_from_obj_state(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs, bool dirty = false);
     int calculate_version(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, rgw::sal::Attrs& attrs);
-    int set_head_obj_dir_entry(const DoutPrefixProvider* dpp, optional_yield y, bool is_latest_version = true, bool dirty = false);
+    int set_head_block_dir_entry(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs, bool is_latest_version = true, bool dirty = false);
     int update_head_block_hostslist(const DoutPrefixProvider* dpp, optional_yield y);
     int set_data_block_dir_entries(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, bool dirty = false);
     int delete_data_block_cache_entries(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, bool dirty = false);
@@ -560,7 +562,6 @@ class D4NFilterObject : public FilterObject {
 	void set_remote_dirty_flag(bool flag) {remote_dirty = flag;}
     void set_remote_obj_size(uint64_t size) { obj_size = size; }
     uint64_t get_remote_obj_size() const { return obj_size; }
-    bool is_remote_head_block_request() const { return (remote_cache_request && (blk_offset == 0) && (blk_len == 0)); }
 };
 
 class D4NFilterDPP : public DoutPrefixProvider {
@@ -588,7 +589,7 @@ class D4NFilterWriter : public FilterWriter {
     std::string prev_oid_in_cache;
     std::vector<std::unique_ptr<rgw::d4n::RemoteCachePutOp>> requests;
 
-    static void write_to_remote_cache(const DoutPrefixProvider* dpp_o, const std::string& prefix, uint64_t size, const rgw_user& user, const std::string& remote_addr, const std::string& bucket_name, const std::string& oid, const std::string& version, bool dirty, D4NFilterDriver* driver, optional_yield y);
+    static void write_to_remote_cache(const DoutPrefixProvider* dpp_o, const std::string& prefix, uint64_t size, const rgw_user& user, const std::string& remote_addr, const std::string& bucket_name, const std::string& obj_name, const std::string& version, bool dirty, D4NFilterDriver* driver, optional_yield y);
 
   public:
     D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterDriver* _driver, Object* _obj, 
