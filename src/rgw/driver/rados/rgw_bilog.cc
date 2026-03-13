@@ -206,6 +206,30 @@ void RGWBILogUpdateBatch::flush(asio::yield_context y)
   }
 }
 
+asio::awaitable<void> RGWBILogUpdateBatch::co_flush()
+{
+  if (pending.empty()) {
+    co_return;
+  }
+  if (!fifo_) {
+    pending.clear();
+    co_return;
+  }
+  for (auto& [shard, entry] : pending) {
+    ceph::buffer::list bl;
+    encode(entry, bl);
+    try {
+      co_await fifo_->push(dpp, shard, std::move(bl));
+    } catch (const boost::system::system_error& e) {
+      ldpp_dout(dpp, 5) << __func__ << ": failed to push bilog entry for "
+                       << entry.object << "/" << entry.instance
+                       << " shard=" << shard
+                       << ": " << e.what() << dendl;
+    }
+  }
+  pending.clear();
+}
+
 void RGWBILogUpdateBatch::flush()
 {
   if (!pending.empty()) {
