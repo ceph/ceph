@@ -9021,6 +9021,11 @@ int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp, RGWBucketInfo
                       obj_instance.key.instance);
 
   auto do_op = [&](auto& op_issuer, auto& bilog) -> int {
+    // stage and flush the FIFO bilog entry before the cls op so that a
+    // crash after the FIFO push but before link_olh
+    bilog.add_maybe_flush(olh_epoch, key, op_tag, delete_marker,
+                          ceph::real_time{}, zones_trace);
+    bilog.flush(y);
     int ret = guard_reshard(dpp, &bs, obj_instance, bucket_info,
 	              [&](BucketShard *bs) -> int {
 	                auto& ref = bs->bucket_obj;
@@ -9037,8 +9042,6 @@ int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp, RGWBucketInfo
       ldpp_dout(dpp, 20) << "link_olh() returned r=" << ret << dendl;
       return ret;
     }
-    bilog.add_maybe_flush(olh_epoch, key, op_tag, delete_marker,
-                          ceph::real_time{}, zones_trace);
     return 0;
   };
 
@@ -9096,6 +9099,8 @@ int RGWRados::bucket_index_unlink_instance(const DoutPrefixProvider *dpp,
                         obj_instance.key.instance);
   r = with_bilog<CLSRGWUnlinkInstance>(dpp,
       [&](auto& op_issuer, auto& bilog) -> int {
+        bilog.add_maybe_flush(olh_epoch, ceph::real_time{}, op_issuer);
+        bilog.flush(y);
         int ret = guard_reshard(dpp, &bs, obj_instance, bucket_info,
               [&](BucketShard *bs) -> int {
                 auto& ref = bs->bucket_obj;
@@ -9110,7 +9115,6 @@ int RGWRados::bucket_index_unlink_instance(const DoutPrefixProvider *dpp,
           ldpp_dout(dpp, 20) << "unlink_instance() returned r=" << ret << dendl;
           return ret;
         }
-        bilog.add_maybe_flush(olh_epoch, ceph::real_time{}, op_issuer);
         return 0;
       },
       bucket_info,
