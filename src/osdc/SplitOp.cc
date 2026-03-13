@@ -867,6 +867,7 @@ void SplitOp::prepare_single_op(Objecter::Op *op, Objecter &objecter, CephContex
         op->target.flags |= CEPH_OSD_FLAG_FORCE_OSD;
         target.osd = target.acting[acting_index];
         target.actual_pgid.reset_shard(shard);
+        target.used_replica = (target.acting_primary != target.osd);
       }
       break;
     }
@@ -1018,6 +1019,8 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
       st.flags |= CEPH_OSD_FLAG_BALANCE_READS;
     }
     st.osd = st.acting[index];
+
+    target.used_replica = (st.acting_primary != st.osd);
 
     objecter._op_submit(sub_op, sul, &tids[i++]);
 
