@@ -6,6 +6,8 @@
 #include <span>
 #include <string>
 
+#include <boost/system/system_error.hpp>
+
 #include "common/async/blocked_completion.h"
 #include "common/dout.h"
 #include "rgw_asio_thread.h"
@@ -173,7 +175,14 @@ void RGWBILogUpdateBatch::do_flush(asio::yield_context y)
   for (auto& [shard, entry] : pending) {
     ceph::buffer::list bl;
     encode(entry, bl);
-    fifo_->push(dpp, shard, std::move(bl), y);
+    try {
+      fifo_->push(dpp, shard, std::move(bl), y);
+    } catch (const boost::system::system_error& e) {
+      ldpp_dout(dpp, 5) << __func__ << ": failed to push bilog entry for "
+                       << entry.object << "/" << entry.instance
+                       << " shard=" << shard
+                       << ": " << e.what() << dendl;
+    }
   }
   pending.clear();
 }
