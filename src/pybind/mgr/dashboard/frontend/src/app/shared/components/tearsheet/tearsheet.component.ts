@@ -83,7 +83,18 @@ export class TearsheetComponent implements OnInit, AfterViewChecked {
     }
   }
 
+  private _updateStepInvalid(index: number, invalid: boolean) {
+    this.steps = this.steps.map((step, i) => (i === index ? { ...step, invalid } : step));
+  }
+
   onNext() {
+    const currentForm = this.stepContents?.toArray()?.[this.currentStep]?.stepComponent?.formGroup;
+    currentForm?.markAllAsTouched();
+    currentForm?.updateValueAndValidity({ emitEvent: true });
+    if (currentForm) {
+      this._updateStepInvalid(this.currentStep, currentForm.invalid);
+    }
+
     if (this.currentStep !== this.lastStep && !this.steps[this.currentStep].invalid) {
       this.currentStep = this.currentStep + 1;
     }
