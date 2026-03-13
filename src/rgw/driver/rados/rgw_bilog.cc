@@ -199,10 +199,14 @@ void RGWBILogUpdateBatch::do_flush()
               ceph::async::use_blocked);
 }
 
-void RGWBILogUpdateBatch::flush(asio::yield_context y)
+void RGWBILogUpdateBatch::flush(optional_yield y)
 {
   if (!pending.empty()) {
-    do_flush(y);
+    if (y) {
+      do_flush(y.get_yield_context());
+    } else {
+      do_flush();
+    }
   }
 }
 
