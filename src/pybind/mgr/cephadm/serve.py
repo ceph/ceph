@@ -1725,6 +1725,9 @@ class CephadmServe:
         if not self.mgr.cgroups_split:
             final_args += ['--no-cgroups-split']
 
+        if getattr(self.mgr, 'allow_ipv6_lo_routes', False):
+            final_args += ['--allow-ipv6-lo-routes']
+
         if not timeout:
             # default global timeout if no timeout was passed
             timeout = self.mgr.default_cephadm_command_timeout

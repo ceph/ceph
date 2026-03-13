@@ -424,6 +424,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             desc='Pass --cgroups=split when cephadm creates containers (currently Podman only)'
         ),
         Option(
+            'allow_ipv6_lo_routes',
+            type='bool',
+            default=False,
+            desc='Pass --allow-ipv6-lo-routes to cephadm so IPv6 routes on loopback (lo) are included in network listings (e.g. for BGP/L3-to-the-Host setups)'
+        ),
+        Option(
             'log_refresh_metadata',
             type='bool',
             default=False,
