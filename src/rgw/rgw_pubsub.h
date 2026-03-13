@@ -266,7 +266,7 @@ struct rgw_pubsub_dest {
   uint32_t max_retries;
   uint32_t retry_sleep_duration;
   // naming convention of sharded queues in the 'notif' pool -> persistent_queue, persistent_queue.1, persistent_queue.(num_shards -1)...
-  uint64_t num_shards; //defaults to a single shard for now, for backward compatibility
+  uint64_t num_shards = 1; // Default to 1 shard for backward compatibility with pre-sharding persistent topics.
 
 
   void encode(bufferlist& bl) const {
@@ -304,9 +304,6 @@ struct rgw_pubsub_dest {
     if (struct_v >= 5) {
       decode(persistent, bl);
     }
-    else {
-      num_shards = persistent ? 1 : 0; //defaults to a single shard for backward compatibility
-    }
     if (struct_v >= 6) {
       decode(time_to_live, bl);
       decode(max_retries, bl);
@@ -320,7 +317,8 @@ struct rgw_pubsub_dest {
       // continue to use 'arn_topic' alone as the queue's rados object name
       persistent_queue = arn_topic;
     }
-    if (struct_v >= 8) { 
+    if (struct_v >= 8) {
+      // for struct_v < 8, num_shards defaults to 1 (single shard for pre-sharding persistent topics)
       decode(num_shards, bl);
     }
 
