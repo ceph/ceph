@@ -823,7 +823,18 @@ Options
 .. option:: --sync-stats
 
     Option for the 'user stats' command. When specified, it will update user stats with
-    the current stats reported by the user's buckets indexes.
+    the current stats reported by the user's buckets indexes. This option encompasses
+    the functionality of :option:`--reset-stats`. Note that you cannot specify both
+    --sync-stats and --reset-stats at the same time.
+
+.. option:: --reset-stats
+
+    Option for the 'user stats' command. When specified, it resets the user's
+    stats.
+
+    .. note::
+       This option is only applicable at the user level and cannot be used in
+       conjunction with the --bucket option.
 
 .. option:: --show-config
 
