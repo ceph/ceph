@@ -144,6 +144,8 @@ public:
 
   void flush(asio::yield_context y);
   void flush();
+  // awaitable variant — use from coroutine contexts (avoids use_blocked).
+  asio::awaitable<void> co_flush();
 
   ~RGWBILogUpdateBatch();
 };
