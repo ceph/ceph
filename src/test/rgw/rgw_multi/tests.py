@@ -6216,10 +6216,25 @@ def test_period_update_commit():
     number_of_period_updates = 3
     test_passed = False
 
+    # get client connection to generate s3 wkld
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
-    primary_zone_client_conn = zonegroup_conns.rw_zones[0]
-    secondary_zone_cluster_conn = zonegroup.zones[1]
+    primary_zone_client_conn = zonegroup_conns.master_zone
+
+    # get cluster connection to another zone in the group
+    # to issue period update commits and verify replication
+    secondary_zone_cluster_conn = None
+    for zg in realm.current_period.zonegroups:
+        if zonegroup != zg:
+            continue
+        for zone in zg.zones:
+            if zone != zonegroup.master_zone:
+                secondary_zone_cluster_conn = zone
+                break
+        if secondary_zone_cluster_conn is not None:
+            break
+    else:
+        raise SkipTest("test_period_update_commit is skipped.")
 
     bucket = primary_zone_client_conn.create_bucket(gen_bucket_name())
     log.info(f"created bucket={bucket.name}")
