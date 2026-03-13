@@ -8,8 +8,6 @@ on:
       - synchronize
       - edited
       - reopened
-    paths:
-      - 'src/common/options/**'
 permissions:
   issues: write
   contents: read

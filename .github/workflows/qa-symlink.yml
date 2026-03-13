@@ -7,8 +7,6 @@ on:
       - synchronize
       - edited
       - reopened
-    paths:
-      - 'qa/**'
 permissions:
   contents: read
 jobs:
