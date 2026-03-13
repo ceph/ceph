@@ -129,14 +129,14 @@
          ],
          "targets": [
             {
-               "expr": "rate(ceph_osd_op_r_latency_sum{ceph_daemon=~\"$osd\", cluster=~\"$cluster\", }[$__rate_interval]) /\n  on (ceph_daemon) rate(ceph_osd_op_r_latency_count{cluster=~\"$cluster\", }[$__rate_interval])\n",
+               "expr": "rate(ceph_osd_op_r_latency_sum{ceph_daemon=~\"$osd\", cluster=~\"$cluster|\", }[$__rate_interval]) /\n  on (ceph_daemon) rate(ceph_osd_op_r_latency_count{cluster=~\"$cluster|\", }[$__rate_interval])\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "read",
                "refId": "A"
             },
             {
-               "expr": "rate(ceph_osd_op_w_latency_sum{ceph_daemon=~\"$osd\", cluster=~\"$cluster\", }[$__rate_interval]) /\n  on (ceph_daemon) rate(ceph_osd_op_w_latency_count{cluster=~\"$cluster\", }[$__rate_interval])\n",
+               "expr": "rate(ceph_osd_op_w_latency_sum{ceph_daemon=~\"$osd\", cluster=~\"$cluster|\", }[$__rate_interval]) /\n  on (ceph_daemon) rate(ceph_osd_op_w_latency_count{cluster=~\"$cluster|\", }[$__rate_interval])\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "write",
@@ -219,14 +219,14 @@
          ],
          "targets": [
             {
-               "expr": "rate(ceph_osd_op_r{ceph_daemon=~\"$osd\", cluster=~\"$cluster\", }[$__rate_interval])",
+               "expr": "rate(ceph_osd_op_r{ceph_daemon=~\"$osd\", cluster=~\"$cluster|\", }[$__rate_interval])",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Reads",
                "refId": "A"
             },
             {
-               "expr": "rate(ceph_osd_op_w{ceph_daemon=~\"$osd\", cluster=~\"$cluster\", }[$__rate_interval])",
+               "expr": "rate(ceph_osd_op_w{ceph_daemon=~\"$osd\", cluster=~\"$cluster|\", }[$__rate_interval])",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Writes",
@@ -309,14 +309,14 @@
          ],
          "targets": [
             {
-               "expr": "rate(ceph_osd_op_r_out_bytes{ceph_daemon=~\"$osd\", cluster=~\"$cluster\", }[$__rate_interval])",
+               "expr": "rate(ceph_osd_op_r_out_bytes{ceph_daemon=~\"$osd\", cluster=~\"$cluster|\", }[$__rate_interval])",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Read Bytes",
                "refId": "A"
             },
             {
-               "expr": "rate(ceph_osd_op_w_in_bytes{ceph_daemon=~\"$osd\", cluster=~\"$cluster\", }[$__rate_interval])",
+               "expr": "rate(ceph_osd_op_w_in_bytes{ceph_daemon=~\"$osd\", cluster=~\"$cluster|\", }[$__rate_interval])",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Write Bytes",
@@ -418,14 +418,14 @@
          ],
          "targets": [
             {
-               "expr": "(\n  label_replace(\n    rate(node_disk_read_time_seconds_total[$__rate_interval]) /\n      rate(node_disk_reads_completed_total[$__rate_interval]),\n    \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n  ) and on (instance, device) label_replace(\n    label_replace(\n      ceph_disk_occupation_human{ceph_daemon=~\"$osd\", cluster=~\"$cluster\", },\n      \"device\", \"$1\", \"device\", \"/dev/(.*)\"\n    ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n  )\n)\n",
+               "expr": "(\n  label_replace(\n    rate(node_disk_read_time_seconds_total[$__rate_interval]) /\n      rate(node_disk_reads_completed_total[$__rate_interval]),\n    \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n  ) and on (instance, device) label_replace(\n    label_replace(\n      ceph_disk_occupation_human{ceph_daemon=~\"$osd\", cluster=~\"$cluster|\", },\n      \"device\", \"$1\", \"device\", \"/dev/(.*)\"\n    ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n  )\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{instance}}/{{device}} Reads",
                "refId": "A"
             },
             {
-               "expr": "(\n  label_replace(\n    rate(node_disk_write_time_seconds_total[$__rate_interval]) /\n      rate(node_disk_writes_completed_total[$__rate_interval]),\n    \"instance\", \"$1\", \"instance\", \"([^:.]*).*\") and on (instance, device)\n    label_replace(\n      label_replace(\n        ceph_disk_occupation_human{ceph_daemon=~\"$osd\", cluster=~\"$cluster\", }, \"device\", \"$1\", \"device\", \"/dev/(.*)\"\n      ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n    )\n)\n",
+               "expr": "(\n  label_replace(\n    rate(node_disk_write_time_seconds_total[$__rate_interval]) /\n      rate(node_disk_writes_completed_total[$__rate_interval]),\n    \"instance\", \"$1\", \"instance\", \"([^:.]*).*\") and on (instance, device)\n    label_replace(\n      label_replace(\n        ceph_disk_occupation_human{ceph_daemon=~\"$osd\", cluster=~\"$cluster|\", }, \"device\", \"$1\", \"device\", \"/dev/(.*)\"\n      ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n    )\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{instance}}/{{device}} Writes",
@@ -508,14 +508,14 @@
          ],
          "targets": [
             {
-               "expr": "label_replace(\n  rate(node_disk_writes_completed_total[$__rate_interval]),\n  \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n) and on (instance, device) label_replace(\n  label_replace(\n    ceph_disk_occupation_human{ceph_daemon=~\"$osd\", cluster=~\"$cluster\", },\n    \"device\", \"$1\", \"device\", \"/dev/(.*)\"\n  ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n)\n",
+               "expr": "label_replace(\n  rate(node_disk_writes_completed_total[$__rate_interval]),\n  \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n) and on (instance, device) label_replace(\n  label_replace(\n    ceph_disk_occupation_human{ceph_daemon=~\"$osd\", cluster=~\"$cluster|\", },\n    \"device\", \"$1\", \"device\", \"/dev/(.*)\"\n  ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{device}} on {{instance}} Writes",
                "refId": "A"
             },
             {
-               "expr": "label_replace(\n  rate(node_disk_reads_completed_total[$__rate_interval]),\n  \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n) and on (instance, device) label_replace(\n  label_replace(\n    ceph_disk_occupation_human{ceph_daemon=~\"$osd\", cluster=~\"$cluster\", },\n    \"device\", \"$1\", \"device\", \"/dev/(.*)\"\n  ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n)\n",
+               "expr": "label_replace(\n  rate(node_disk_reads_completed_total[$__rate_interval]),\n  \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n) and on (instance, device) label_replace(\n  label_replace(\n    ceph_disk_occupation_human{ceph_daemon=~\"$osd\", cluster=~\"$cluster|\", },\n    \"device\", \"$1\", \"device\", \"/dev/(.*)\"\n  ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{device}} on {{instance}} Reads",
@@ -598,14 +598,14 @@
          ],
          "targets": [
             {
-               "expr": "label_replace(\n  rate(node_disk_read_bytes_total[$__rate_interval]), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n) and on (instance, device) label_replace(\n  label_replace(\n    ceph_disk_occupation_human{ceph_daemon=~\"$osd\", cluster=~\"$cluster\", },\n    \"device\", \"$1\", \"device\", \"/dev/(.*)\"\n  ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n)\n",
+               "expr": "label_replace(\n  rate(node_disk_read_bytes_total[$__rate_interval]), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n) and on (instance, device) label_replace(\n  label_replace(\n    ceph_disk_occupation_human{ceph_daemon=~\"$osd\", cluster=~\"$cluster|\", },\n    \"device\", \"$1\", \"device\", \"/dev/(.*)\"\n  ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{instance}} {{device}} Reads",
                "refId": "A"
             },
             {
-               "expr": "label_replace(\n  rate(node_disk_written_bytes_total[$__rate_interval]), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n) and on (instance, device) label_replace(\n  label_replace(\n    ceph_disk_occupation_human{ceph_daemon=~\"$osd\", cluster=~\"$cluster\", },\n    \"device\", \"$1\", \"device\", \"/dev/(.*)\"\n  ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n)\n",
+               "expr": "label_replace(\n  rate(node_disk_written_bytes_total[$__rate_interval]), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n) and on (instance, device) label_replace(\n  label_replace(\n    ceph_disk_occupation_human{ceph_daemon=~\"$osd\", cluster=~\"$cluster|\", },\n    \"device\", \"$1\", \"device\", \"/dev/(.*)\"\n  ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{instance}} {{device}} Writes",
@@ -683,7 +683,7 @@
          "seriesOverrides": [ ],
          "targets": [
             {
-               "expr": "label_replace(\n  rate(node_disk_io_time_seconds_total[$__rate_interval]),\n  \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n) and on (instance, device) label_replace(\n  label_replace(\n    ceph_disk_occupation_human{ceph_daemon=~\"$osd\", cluster=~\"$cluster\", }, \"device\", \"$1\", \"device\", \"/dev/(.*)\"\n  ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n)\n",
+               "expr": "label_replace(\n  rate(node_disk_io_time_seconds_total[$__rate_interval]),\n  \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n) and on (instance, device) label_replace(\n  label_replace(\n    ceph_disk_occupation_human{ceph_daemon=~\"$osd\", cluster=~\"$cluster|\", }, \"device\", \"$1\", \"device\", \"/dev/(.*)\"\n  ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{device}} on {{instance}}",
@@ -747,7 +747,7 @@
             "multi": false,
             "name": "osd",
             "options": [ ],
-            "query": "label_values(ceph_osd_metadata{cluster=~\"$cluster\", }, ceph_daemon)",
+            "query": "label_values(ceph_osd_metadata{cluster=~\"$cluster|\", }, ceph_daemon)",
             "refresh": 1,
             "regex": "(.*)",
             "sort": 1,
