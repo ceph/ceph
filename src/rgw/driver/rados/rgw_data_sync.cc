@@ -3765,7 +3765,10 @@ public:
 	    no_zero = true;
 	  } else if (auto& log = source_info.layout.logs.front();
                      log.layout.type != rgw::BucketLogType::InIndex) {
-	    ldpp_dout(dpp, 20) << "unrecognized log layout type when checking compatibility " << log.layout.type << dendl;
+      // The InIndex backward-compatibility check only applies to InIndex logs.
+	    ldpp_dout(dpp, 20) << "log gen=0 backend is " << log.layout.type
+			    << "; skipping InIndex backward-compatibility check"
+			    << dendl;
 	    no_zero = true;
 	  }
 	  if (!no_zero) {
