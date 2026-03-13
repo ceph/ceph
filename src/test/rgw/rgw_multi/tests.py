@@ -457,11 +457,10 @@ def get_oldest_incremental_change_not_applied_epoch(zone):
     #    so the caller knows data sync is not making progress
     return 0.0
 
-def data_sync_making_progress(zone, time_window_sec=180, check_interval_sec=30):
-    deadline = time.time() + time_window_sec
+def data_sync_making_progress(zone):
     oldest_inc_change = None
     result = False
-    while time.time() < deadline:
+    for _ in range(config.checkpoint_retries):
         new_reading = get_oldest_incremental_change_not_applied_epoch(zone)
         if new_reading is not None:
             if oldest_inc_change is None:
@@ -470,7 +469,7 @@ def data_sync_making_progress(zone, time_window_sec=180, check_interval_sec=30):
                 result = True
                 oldest_inc_change = new_reading
                 break
-        time.sleep(check_interval_sec)
+        time.sleep(config.checkpoint_delay)
     return result or oldest_inc_change is None
 
 def set_master_zone(zone):
