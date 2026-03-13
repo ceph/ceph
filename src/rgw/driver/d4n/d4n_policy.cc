@@ -686,7 +686,9 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	  } else {
 	    ldpp_dout(dpp, 0) << "Failed to delete blocks for: " << e->key << ", ret=" << ret << dendl;
 	  }
-	}
+	} else {
+    erase_dirty_object(dpp, e->key, null_yield);
+  }
       } else {
 	rgw_user c_rgw_user = e->user; 
 	//writing data to the backend
