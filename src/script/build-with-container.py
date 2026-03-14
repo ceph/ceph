@@ -100,120 +100,97 @@ except ImportError:
     ftcache = lambda f: f
 
 
-_UNSUPPORTED_DISTROS: set = set()
-_UNSUPPORTED_COMBINATIONS: dict = {}
-
-
-def unsupported(cls=None, *, ceph_versions=()):
-    """Decorator to mark a distro (or distro + Ceph-version combination) as unsupported.
-
-    Without arguments the distro is considered entirely unsupported::
-
-        @unsupported
-        class OldDistro(ELLinuxDistro, name="old8", ...): pass
-
-    With *ceph_versions* the distro is unsupported only for those releases::
-
-        @unsupported(ceph_versions=("reef", "squid"))
-        class SomeDistro(ELLinuxDistro, name="some9", ...): pass
-
-    Use ``LinuxDistro["name"].is_supported()`` to query support status.
-    """
-    def decorator(c):
-        if ceph_versions:
-            _UNSUPPORTED_COMBINATIONS.setdefault(c, set()).update(ceph_versions)
-        else:
-            _UNSUPPORTED_DISTROS.add(c)
-        return c
-
-    if cls is not None:
-        # called as @unsupported (no parentheses)
-        return decorator(cls)
-    # called as @unsupported(...) (with parentheses)
-    return decorator
-
-
 class LinuxDistro:
-    """Base class for Linux distro definitions used by the build system.
+    class PackageManager(enum.Enum):
+        DNF = "dnf"
+        APT = "apt"
+        ZYPPER = "zypper"
 
-    Each concrete distro version is defined as a subclass that passes
-    metadata through class parameters.  The subclass init hook automatically
-    registers every concrete distro (one that supplies a *name*) so that it
-    can be looked up later via the ``LinuxDistro["name"]`` syntax.
+    class Release:
+        def __init__(self, major, minor=0, build=0):
+            self.major = major
+            self.minor = minor
+            self.build = build
 
-    Intermediate/family classes (e.g. ``ELLinuxDistro``) are defined without
-    a *name* and are therefore **not** registered; they only propagate shared
-    attributes (such as *pkg_manager*) to their concrete descendants.
+        def __str__(self):
+            if self.minor == 0 and self.build == 0:
+                return str(self.major)
+            if self.build == 0:
+                return f"{self.major}.{self.minor}"
+            return f"{self.major}.{self.minor}.{self.build}"
 
-    Example – adding a new distro::
+        def __repr__(self):
+            return f"Release({self.major}, {self.minor}, {self.build})"
 
-        class CentOS99(ELLinuxDistro,
-                       name="centos99",
-                       default_image="quay.io/centos/centos:stream99",
-                       aliases=("centos99stream",)):
-            pass
+        def _tuple(self):
+            return (self.major, self.minor, self.build)
 
-    Lookup examples::
+        def __eq__(self, other):
+            if not isinstance(other, LinuxDistro.Release):
+                return NotImplemented
+            return self._tuple() == other._tuple()
 
-        LinuxDistro["centos9"]           # -> CentOS9 class
-        LinuxDistro["centos9stream"]     # -> CentOS9 class (alias)
-        LinuxDistro["centos9"].default_image
-        LinuxDistro["centos9"].uses_dnf()
-    """
+        def __lt__(self, other):
+            if not isinstance(other, LinuxDistro.Release):
+                return NotImplemented
+            return self._tuple() < other._tuple()
 
-    # Shared registry populated by __init_subclass__ for every concrete distro.
+        def __le__(self, other):
+            if not isinstance(other, LinuxDistro.Release):
+                return NotImplemented
+            return self._tuple() <= other._tuple()
+
+        def __gt__(self, other):
+            if not isinstance(other, LinuxDistro.Release):
+                return NotImplemented
+            return self._tuple() > other._tuple()
+
+        def __ge__(self, other):
+            if not isinstance(other, LinuxDistro.Release):
+                return NotImplemented
+            return self._tuple() >= other._tuple()
+
+        def __hash__(self):
+            return hash(self._tuple())
+
     _registry: dict = {}
-    _concrete: set = set()
+    _all: set = set()
 
-    # Package-manager sentinel constants – use these instead of bare strings.
-    PKG_DNF = "dnf"
-    PKG_APT = "apt"
-    PKG_ZYPPER = "zypper"
-
-    # Class-level defaults; concrete distros override these via __init_subclass__.
-    name: str = ""
-    default_image: str = ""
-    pkg_manager: str = ""
+    pkg_manager = None
     python: str = "python3"
-    aliases: tuple = ()
 
-    def __init_subclass__(
-        cls,
-        name=None,
-        default_image=None,
-        aliases=(),
-        pkg_manager=None,
-        python=None,
-        **kwargs,
-    ):
+    def __init_subclass__(cls, pkg_manager=None, python=None, **kwargs):
         super().__init_subclass__(**kwargs)
-        # Propagate family-level traits so intermediate classes can set them
-        # for all their descendants without requiring repetition.
         if pkg_manager is not None:
             cls.pkg_manager = pkg_manager
         if python is not None:
             cls.python = python
-        # Register only concrete distros (those that declare a canonical name).
-        if name is not None:
-            if not cls.pkg_manager:
-                raise TypeError(
-                    f"Concrete distro {cls.__name__!r} has no pkg_manager set."
-                    " Inherit from a family class (e.g. ELLinuxDistro) or"
-                    " pass pkg_manager= explicitly."
-                )
-            cls.name = name
-            if default_image is not None:
-                cls.default_image = default_image
-            cls.aliases = tuple(aliases)
-            for alias in (name,) + cls.aliases:
-                LinuxDistro._registry[alias] = cls
-            LinuxDistro._concrete.add(cls)
+
+    def __init__(self, release, name=None, default_image=None, aliases=None):
+        if not self.pkg_manager:
+            raise TypeError(
+                f"{type(self).__name__!r} has no pkg_manager set."
+            )
+        if isinstance(release, tuple):
+            release = LinuxDistro.Release(*release)
+        self.release = release
+        self.name = name or self._make_name(release)
+        self.default_image = default_image or self._make_image(release)
+        self.aliases = tuple(aliases) if aliases is not None else self._make_aliases(release)
+        for alias in (self.name,) + self.aliases:
+            LinuxDistro._registry[alias] = self
+        LinuxDistro._all.add(self)
+
+    def _make_name(self, release):
+        raise NotImplementedError
+
+    def _make_image(self, release):
+        raise NotImplementedError
+
+    def _make_aliases(self, release):
+        return ()
 
     def __class_getitem__(cls, name):
-        """Look up a concrete distro class by canonical name or alias.
-
-        Raises ``KeyError`` for unknown names.
-        """
         try:
             return LinuxDistro._registry[name]
         except KeyError:
@@ -224,168 +201,136 @@ class LinuxDistro:
 
     @classmethod
     def all_distros(cls):
-        """Return a frozenset of all registered concrete distro classes."""
-        return frozenset(LinuxDistro._concrete)
+        return frozenset(LinuxDistro._all)
 
     @classmethod
     def all_aliases(cls):
-        """Return a dict mapping every alias/name to its distro class."""
         return dict(LinuxDistro._registry)
 
     @classmethod
     def from_arg(cls, value):
-        """Resolve a raw alias string to its canonical distro name.
-
-        Intended for use as ``type=LinuxDistro.from_arg`` with argparse;
-        raises ``argparse.ArgumentTypeError`` for unknown aliases.
-        """
         try:
             return LinuxDistro._registry[value].name
         except KeyError:
             valid = ", ".join(sorted(LinuxDistro._registry))
-            msg = f"unknown distro: {value!r} not in {valid}"
-            raise argparse.ArgumentTypeError(msg)
+            raise argparse.ArgumentTypeError(
+                f"unknown distro: {value!r} not in {valid}"
+            )
 
-    @classmethod
-    def uses_dnf(cls):
-        """Return True if this distro uses DNF as its package manager."""
-        return cls.pkg_manager == cls.PKG_DNF
+    def uses_dnf(self):
+        return self.pkg_manager == LinuxDistro.PackageManager.DNF
 
-    @classmethod
-    def uses_rpmbuild(cls):
-        """Return True if this distro uses rpmbuild for package builds."""
-        return cls.uses_dnf()
+    def uses_rpmbuild(self):
+        return self.uses_dnf()
 
-    @classmethod
-    def is_supported(cls, ceph_version=None):
-        """Return True if this distro is considered supported.
+    def __lt__(self, other):
+        if type(self) is not type(other):
+            return NotImplemented
+        return self.release < other.release
 
-        When *ceph_version* is provided the check also considers distros that
-        are only unsupported for specific Ceph release names.
-        """
-        if cls in _UNSUPPORTED_DISTROS:
-            return False
-        if ceph_version is not None:
-            blocked = _UNSUPPORTED_COMBINATIONS.get(cls, set())
-            if ceph_version in blocked:
-                return False
-        return True
+    def __eq__(self, other):
+        if type(self) is not type(other):
+            return NotImplemented
+        return self.release == other.release
+
+    def __le__(self, other):
+        if type(self) is not type(other):
+            return NotImplemented
+        return self.release <= other.release
+
+    def __gt__(self, other):
+        if type(self) is not type(other):
+            return NotImplemented
+        return self.release > other.release
+
+    def __ge__(self, other):
+        if type(self) is not type(other):
+            return NotImplemented
+        return self.release >= other.release
+
+    def __hash__(self):
+        return hash((type(self), self.release))
 
 
-# --- Family (intermediate) classes ---
+class ELLinuxDistro(LinuxDistro, pkg_manager=LinuxDistro.PackageManager.DNF):
+    pass
 
-class ELLinuxDistro(LinuxDistro, pkg_manager=LinuxDistro.PKG_DNF):
-    """Enterprise Linux distro family.
 
-    Uses DNF for package management and rpmbuild for building RPMs.
-    Add new EL-family distros by subclassing this and supplying *name*,
-    *default_image*, and optional *aliases*.
-    """
+class CentOSLinuxDistro(ELLinuxDistro):
+    def _make_name(self, release):
+        return f"centos{release.major}"
+
+    def _make_image(self, release):
+        return f"quay.io/centos/centos:stream{release.major}"
+
+    def _make_aliases(self, release):
+        return (f"centos{release.major}stream",)
+
+
+class RockyLinuxDistro(ELLinuxDistro):
+    def _make_name(self, release):
+        return f"rocky{release.major}"
+
+    def _make_image(self, release):
+        return f"docker.io/rockylinux/rockylinux:{release.major}"
+
+    def _make_aliases(self, release):
+        return (f"rockylinux{release.major}",)
 
 
 class FedoraLinuxDistro(ELLinuxDistro):
-    """Fedora distro family (a specialisation of ELLinuxDistro)."""
+    def _make_name(self, release):
+        return f"fedora{release.major}"
+
+    def _make_image(self, release):
+        return f"registry.fedoraproject.org/fedora:{release.major}"
+
+    def _make_aliases(self, release):
+        return (f"fc{release.major}",)
 
 
-class DebianLinuxDistro(LinuxDistro, pkg_manager=LinuxDistro.PKG_APT):
-    """Debian/Ubuntu distro family.
+class DebianLinuxDistro(LinuxDistro, pkg_manager=LinuxDistro.PackageManager.APT):
+    _codenames: dict = {12: "bookworm", 13: "trixie"}
 
-    Uses APT for package management and dpkg/debhelper for building packages.
-    Add new Debian-family distros by subclassing this.
-    """
+    def _make_name(self, release):
+        return f"debian{release.major}"
 
+    def _make_image(self, release):
+        codename = self._codenames.get(release.major, str(release.major))
+        return f"docker.io/debian:{codename}"
 
-# --- Concrete distro classes ---
-# Each class registers itself in LinuxDistro._registry when it is defined.
-
-class CentOS8(ELLinuxDistro,
-              name="centos8",
-              default_image="quay.io/centos/centos:stream8"):
-    pass
+    def _make_aliases(self, release):
+        codename = self._codenames.get(release.major, str(release.major))
+        return (f"debian-{codename}", codename)
 
 
-class CentOS9(ELLinuxDistro,
-              name="centos9",
-              default_image="quay.io/centos/centos:stream9",
-              aliases=("centos9stream",)):
-    pass
+class UbuntuLinuxDistro(DebianLinuxDistro):
+    _codenames = {(20, 4): "focal", (22, 4): "jammy", (24, 4): "noble"}
+
+    def _make_name(self, release):
+        return f"ubuntu{release.major}.{release.minor:02d}"
+
+    def _make_image(self, release):
+        return f"docker.io/ubuntu:{release.major}.{release.minor:02d}"
+
+    def _make_aliases(self, release):
+        codename = self._codenames.get((release.major, release.minor))
+        return (f"ubuntu-{codename}", codename) if codename else ()
 
 
-class CentOS10(ELLinuxDistro,
-               name="centos10",
-               default_image="quay.io/centos/centos:stream10",
-               aliases=("centos10stream",)):
-    pass
-
-
-class Rocky9(ELLinuxDistro,
-             name="rocky9",
-             default_image="docker.io/rockylinux/rockylinux:9",
-             aliases=("rockylinux9",)):
-    pass
-
-
-class Rocky10(ELLinuxDistro,
-              name="rocky10",
-              default_image="docker.io/rockylinux/rockylinux:10",
-              aliases=("rockylinux10",)):
-    pass
-
-
-class Fedora41(FedoraLinuxDistro,
-               name="fedora41",
-               default_image="registry.fedoraproject.org/fedora:41",
-               aliases=("fc41",)):
-    pass
-
-
-class Fedora42(FedoraLinuxDistro,
-               name="fedora42",
-               default_image="registry.fedoraproject.org/fedora:42",
-               aliases=("fc42",)):
-    pass
-
-
-class Fedora43(FedoraLinuxDistro,
-               name="fedora43",
-               default_image="registry.fedoraproject.org/fedora:43",
-               aliases=("fc43",)):
-    pass
-
-
-class Ubuntu2004(DebianLinuxDistro,
-                 name="ubuntu20.04",
-                 default_image="docker.io/ubuntu:20.04",
-                 aliases=("ubuntu-focal", "focal")):
-    pass
-
-
-class Ubuntu2204(DebianLinuxDistro,
-                 name="ubuntu22.04",
-                 default_image="docker.io/ubuntu:22.04",
-                 aliases=("ubuntu-jammy", "jammy")):
-    pass
-
-
-class Ubuntu2404(DebianLinuxDistro,
-                 name="ubuntu24.04",
-                 default_image="docker.io/ubuntu:24.04",
-                 aliases=("ubuntu-noble", "noble")):
-    pass
-
-
-class Debian12(DebianLinuxDistro,
-               name="debian12",
-               default_image="docker.io/debian:bookworm",
-               aliases=("debian-bookworm", "bookworm")):
-    pass
-
-
-class Debian13(DebianLinuxDistro,
-               name="debian13",
-               default_image="docker.io/debian:trixie",
-               aliases=("debian-trixie", "trixie")):
-    pass
+CentOSLinuxDistro(release=(8,))
+CentOSLinuxDistro(release=(9,))
+CentOSLinuxDistro(release=(10,))
+RockyLinuxDistro(release=(9,))
+RockyLinuxDistro(release=(10,))
+FedoraLinuxDistro(release=(41,))
+FedoraLinuxDistro(release=(42,))
+FedoraLinuxDistro(release=(43,))
+UbuntuLinuxDistro(release=(20, 4))
+UbuntuLinuxDistro(release=(22, 4))
+UbuntuLinuxDistro(release=(24, 4))
+DebianLinuxDistro(release=(12,))
+DebianLinuxDistro(release=(13,))
 
 
 class CommandFailed(Exception):
@@ -1314,7 +1259,7 @@ def parse_cli(build_step_names):
         "-d",
         choices=LinuxDistro.all_aliases().keys(),
         type=LinuxDistro.from_arg,
-        default=CentOS9.name,
+        default=LinuxDistro["centos9"].name,
         help="Specify a distro short name",
     )
     g_basic.add_argument(
