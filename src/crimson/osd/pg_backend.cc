@@ -1359,6 +1359,7 @@ maybe_get_omap_vals_by_keys(
     return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::omap_get_values>(
       store, coll, ghobject_t{oi.soid}, keys_to_get, 0);
   } else {
+    logger().error("{} on {}: backend has no OMAP support",__func__, oi.soid);
     return crimson::ct_error::enodata::make();
   }
 }
@@ -1380,6 +1381,7 @@ maybe_do_omap_iterate(
     return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::omap_iterate>(
       store, coll, ghobject_t{oi.soid}, start_from, callback, 0, nullptr);
   } else {
+    logger().error("{} on {}: backend has no OMAP support",__func__, oi.soid);
     return crimson::ct_error::enodata::make();
   }
 }
@@ -1420,6 +1422,7 @@ PGBackend::omap_get_header(
   } else {
     // no omap? return empty data but not ENOENT. This is imporant for
     // the case when the object is being creating due to to may_write().
+    logger().error("{} on {}: backend has no OMAP support",__func__, os.oi.soid);
     return seastar::now();
   }
 }
@@ -1550,6 +1553,7 @@ PGBackend::omap_cmp(
       return  do_omap_val_cmp(out, assertions);
     });
   } else {
+    logger().error("{} on {}: backend has no OMAP support", __func__, os.oi.soid);
     return crimson::ct_error::ecanceled::make();
   }
 }
