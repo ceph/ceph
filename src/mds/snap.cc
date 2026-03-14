@@ -15,9 +15,15 @@
 
 #include "snap.h"
 #include "common/Formatter.h"
+#include "common/debug.h"
 
 #include <ostream>
 #include <sstream>
+
+#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_mds
+#undef dout_prefix
+#define dout_prefix *_dout << "mds.server "
 
 using namespace std;
 /*
