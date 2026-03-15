@@ -42,7 +42,6 @@
   }
 
   &-tab-content-item {
-    border-right: 1px solid var(--cds-border-subtle);
     max-block-size: fit-content;
   }
 
@@ -87,12 +86,10 @@
     gap: var(--cds-spacing-03);
     min-width: 0;
     padding-inline-end: var(--cds-spacing-03);
-    border-right: 1px solid var(--cds-border-subtle);
     box-sizing: border-box;
   }
 
   &-hardware-section:last-child {
-    border-right: none;
     padding-inline-end: 0;
   }
 

@@ -35,7 +35,9 @@
       <span
         class="overview-alerts-card-badge"
         [class.overview-alerts-card-badge-with-border--right]="!last && compact"
-        [class.overview-alerts-card-badge-with-border--bottom]="!compact">
+        [class.overview-alerts-card-badge-with-border--bottom]="!compact"
+        [class.border-subtle-right]="!last && compact"
+        [class.border-subtle-bottom]="!compact">
         <a
           cdsLink
           [routerLink]="['/monitoring/active-alerts']"

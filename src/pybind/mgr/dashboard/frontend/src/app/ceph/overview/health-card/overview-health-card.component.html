@@ -197,7 +197,8 @@
              [gap]="8">
           @for (item of healthItems; track item.key; let isLast = $last) {
           <div class="cds-pr-8"
-               [class.overview-health-card-tab-content-item]="!isLast">
+               [class.overview-health-card-tab-content-item]="!isLast"
+               [class.border-subtle-right]="!isLast">
             <span class="overview-health-card-icon-and-text">
               <cd-icon [type]="vm?.[item.key]?.severity"></cd-icon>
               <span class="cds--type-body-compact-01">
@@ -222,8 +223,9 @@
 
         @if (hwEnabled && hwSections) {
           <div class="overview-health-card-hardware-sections">
-          @for (section of sections; track $index) {
-            <div class="overview-health-card-hardware-section">
+          @for (section of sections; track $index; let isLast = $last) {
+            <div class="overview-health-card-hardware-section"
+                 [class.border-subtle-right]="!isLast">
             @for (row of section; track row.key) {
             <div class="overview-health-card-hardware-row">
               <span class="overview-health-card-icon-and-text">
