@@ -2681,6 +2681,10 @@ class CephManager:
         out = self.raw_cluster_cmd('mgr', 'dump', '--format=json')
         return json.loads(out)
 
+    def get_mgr_stat(self):
+        out = self.raw_cluster_cmd('mgr', 'stat', '--format=json')
+        return json.loads(out)
+
     def get_stuck_pgs(self, type_, threshold):
         """
         :returns: stuck pg information from the cluster
