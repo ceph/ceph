@@ -5487,8 +5487,8 @@ int fixup_manifest_to_parts_len(const DoutPrefixProvider *dpp, rgw::sal::Attrs &
 /*
  * DataProcessorFactory for lifecycle transitions.
  *
- * Decompresses source data (if compressed) and recompresses with the
- * destination storage class's compression algorithm.  The caller must
+ * Composes RGWDecompressHelper (read-side) and RGWCompressHelper
+ * (write-side) for storage class transitions.  The caller must
  * not construct this for encrypted objects.
  */
 class RGWTransitionDPF : public rgw::sal::DataProcessorFactory {
@@ -5496,17 +5496,12 @@ class RGWTransitionDPF : public rgw::sal::DataProcessorFactory {
   RGWObjectCtx& obj_ctx;
   rgw_obj& obj;
   uint64_t orig_size;
-  const std::string& compression_type;
 
   DataProcessorFilter cb;
   RGWGetObj_Filter* filter{&cb};
 
-  bool need_decompress;
-  RGWCompressionInfo decompress_info;
-  std::optional<RGWGetObj_Decompress> decompress;
-
-  std::optional<RGWPutObj_Compress> compressor;
-  CompressorRef compressor_plugin;
+  std::optional<RGWDecompressHelper> decomp;
+  std::optional<RGWCompressHelper> comp;
 
 public:
   RGWTransitionDPF(CephContext* cct_,
@@ -5517,36 +5512,30 @@ public:
                    bool src_compressed,
                    std::optional<RGWCompressionInfo> src_cs_info)
     : cct(cct_), obj_ctx(obj_ctx_), obj(obj_),
-      orig_size(obj_size),
-      compression_type(compression_type_),
-      need_decompress(src_compressed),
-      decompress_info(src_cs_info ? std::move(*src_cs_info)
-                                  : RGWCompressionInfo{}) {}
+      orig_size(obj_size)
+  {
+    if (src_compressed) {
+      decomp.emplace(cct, obj_size, std::move(*src_cs_info));
+    }
+    if (compression_type_ != "none") {
+      comp.emplace(cct, compression_type_);
+    }
+  }
 
   int set_writer(rgw::sal::DataProcessor* writer,
                  rgw::sal::Attrs& attrs,
                  const DoutPrefixProvider* dpp,
                  optional_yield y) override
   {
-    if (need_decompress) {
-      orig_size = decompress_info.orig_size;
-      decompress.emplace(cct, &decompress_info,
-                         false /* partial_content */, filter);
-      filter = &*decompress;
+    if (decomp) {
+      decomp->setup_filter(filter);
+      orig_size = decomp->get_orig_size();
     }
 
-    // write side: compress if destination wants it
     rgw::sal::DataProcessor* processor = writer;
-
-    if (compression_type != "none") {
-      compressor_plugin = Compressor::create(cct, compression_type);
-      if (!compressor_plugin) {
-        ldpp_dout(dpp, 1) << "WARNING: failed to load compressor for type "
-            << compression_type << dendl;
-      } else {
-        compressor.emplace(cct, compressor_plugin, processor);
-        processor = &*compressor;
-        // tell the OSD this data is already compressed by RGW
+    if (comp) {
+      processor = comp->setup_writer(writer, dpp);
+      if (processor != writer) {
         obj_ctx.set_compressed(obj);
       }
     }
@@ -5554,11 +5543,10 @@ public:
     attrs.erase(RGW_ATTR_COMPRESSION);
     cb.set_processor(processor);
 
-    // initialize decompressor block iterators for full-object read
-    if (need_decompress && orig_size > 0) {
+    if (decomp) {
       off_t ofs = 0;
       off_t end = orig_size - 1;
-      filter->fixup_range(ofs, end);
+      decomp->fixup_range(ofs, end);
     }
 
     return 0;
@@ -5569,20 +5557,13 @@ public:
   RGWGetObj_Filter* get_filter() override { return filter; }
 
   void finalize_attrs(rgw::sal::Attrs& attrs) override {
-    if (compressor && compressor->is_compressed()) {
-      bufferlist tmp;
-      RGWCompressionInfo cs_info;
-      cs_info.compression_type = compressor_plugin->get_type_name();
-      cs_info.orig_size = orig_size;
-      cs_info.compressor_message = compressor->get_compressor_message();
-      cs_info.blocks = std::move(compressor->get_compression_blocks());
-      encode(cs_info, tmp);
-      attrs[RGW_ATTR_COMPRESSION] = tmp;
+    if (comp) {
+      comp->finalize_attrs(attrs, orig_size);
     }
   }
 
   uint64_t get_accounted_size(uint64_t default_size) override {
-    if (need_decompress)
+    if (decomp)
       return orig_size;
     return default_size;
   }
