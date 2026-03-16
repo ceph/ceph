@@ -10,11 +10,22 @@ describe('OverviewStorageCardComponent', () => {
 
   let mockFormatterService: {
     formatToBinary: jest.Mock;
+    convertToUnit: jest.Mock;
   };
 
   beforeEach(async () => {
     mockFormatterService = {
-      formatToBinary: jest.fn().mockReturnValue([10, 'GiB'])
+      formatToBinary: jest.fn((value: number) => {
+        if (value === 1024) return [20, 'TiB'];
+        if (value === 512) return [5, 'TiB'];
+        if (value === 256) return [5, 'MiB'];
+        return [10, 'GiB'];
+      }),
+      convertToUnit: jest.fn((value: number, fromUnit: string, toUnit: string) => {
+        if (value === 20 && fromUnit === 'TiB' && toUnit === 'TiB') return 20;
+        if (value === 20 && fromUnit === 'TiB' && toUnit === 'MiB') return 20;
+        return value;
+      })
     };
 
     await TestBed.configureTestingModule({
@@ -27,19 +38,18 @@ describe('OverviewStorageCardComponent', () => {
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
   });
 
   it('should create', () => {
-    fixture.detectChanges();
     expect(component).toBeTruthy();
   });
 
   it('should set totalCapacity when valid value is provided', () => {
     component.totalCapacity = 1024;
 
-    expect(component.totalRaw).toBe(10);
-    expect(component.totalRawUnit).toBe('GiB');
+    expect(component.totalRaw).toBe(20);
+    expect(component.totalRawUnit).toBe('TiB');
     expect(mockFormatterService.formatToBinary).toHaveBeenCalledWith(1024, true);
   });
 
@@ -53,25 +63,23 @@ describe('OverviewStorageCardComponent', () => {
   });
 
   it('should set usedCapacity when valid value is provided', () => {
-    component.usedCapacity = 2048;
+    component.usedCapacity = 512;
 
-    expect(component.usedRaw).toBe(10);
-    expect(component.usedRawUnit).toBe('GiB');
-    expect(mockFormatterService.formatToBinary).toHaveBeenCalledWith(2048, true);
+    expect(component.usedRaw).toBe(5);
+    expect(component.usedRawUnit).toBe('TiB');
+    expect(mockFormatterService.formatToBinary).toHaveBeenCalledWith(512, true);
   });
 
   it('should not set usedCapacity when formatter returns NaN', () => {
     mockFormatterService.formatToBinary.mockReturnValue([NaN, 'GiB']);
 
-    component.usedCapacity = 2048;
+    component.usedCapacity = 512;
 
     expect(component.usedRaw).toBeNull();
     expect(component.usedRawUnit).toBe('');
   });
 
   it('should not update chart options until both totalCapacity and usedCapacity are set', () => {
-    mockFormatterService.formatToBinary.mockReturnValue([20, 'TiB']);
-
     component.totalCapacity = 1024;
 
     expect(component.options.meter.proportional.total).toBeNull();
@@ -80,13 +88,10 @@ describe('OverviewStorageCardComponent', () => {
   });
 
   it('should update chart options when both totalCapacity and usedCapacity are set', () => {
-    mockFormatterService.formatToBinary
-      .mockReturnValueOnce([20, 'TiB'])
-      .mockReturnValueOnce([5, 'TiB']);
-
     component.totalCapacity = 1024;
     component.usedCapacity = 512;
 
+    expect(mockFormatterService.convertToUnit).toHaveBeenCalledWith(20, 'TiB', 'TiB', 1);
     expect(component.options.meter.proportional.total).toBe(20);
     expect(component.options.meter.proportional.unit).toBe('TiB');
     expect(component.options.tooltip).toBeDefined();
@@ -94,16 +99,20 @@ describe('OverviewStorageCardComponent', () => {
   });
 
   it('should use used unit in tooltip formatter', () => {
-    mockFormatterService.formatToBinary
-      .mockReturnValueOnce([20, 'TiB'])
-      .mockReturnValueOnce([5, 'TiB']);
+    mockFormatterService.formatToBinary.mockImplementation((value: number) => {
+      if (value === 1024) return [20, 'TiB'];
+      if (value === 512) return [5, 'MiB'];
+      return [10, 'GiB'];
+    });
 
     component.totalCapacity = 1024;
     component.usedCapacity = 512;
 
     const formatter = component.options.tooltip?.valueFormatter as (value: number) => string;
 
-    expect(formatter(12.3)).toBe('12.3 TiB');
+    expect(component.usedRawUnit).toBe('MiB');
+    expect(component.options.meter.proportional.unit).toBe('MiB');
+    expect(formatter(12.3)).toBe('12.3 MiB');
   });
 
   it('should keep default input values for presentational fields', () => {

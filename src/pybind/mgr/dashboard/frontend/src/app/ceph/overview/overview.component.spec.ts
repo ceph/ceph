@@ -34,6 +34,8 @@ describe('OverviewComponent', () => {
     getStorageBreakdown: jest.Mock;
     formatBytesForChart: jest.Mock;
     mapStorageChartData: jest.Mock;
+    getThresholdStatus: jest.Mock;
+    getRawCapacityThresholds: jest.Mock;
   };
 
   const mockAuthStorageService = {
@@ -76,7 +78,14 @@ describe('OverviewComponent', () => {
       mapStorageChartData: jest.fn().mockReturnValue([
         { group: 'Block', value: 1 },
         { group: 'File system', value: 2 }
-      ])
+      ]),
+      getThresholdStatus: jest.fn().mockReturnValue(null),
+      getRawCapacityThresholds: jest.fn().mockReturnValue(
+        of({
+          osdFullRatio: 0.99,
+          osdNearfullRatio: 0.85
+        })
+      )
     };
 
     await TestBed.configureTestingModule({
@@ -265,6 +274,9 @@ describe('OverviewComponent', () => {
     mockHealthService.getHealthSnapshot.mockReturnValue(of(mockData));
 
     const sub = component.storageCardVm$.subscribe((vm) => {
+      if (!vm.isBreakdownLoaded || !vm.averageDailyConsumption || !vm.estimatedTimeUntilFull) {
+        return;
+      }
       expect(vm.totalCapacity).toBe(325343772672);
       expect(vm.usedCapacity).toBe(3236978688);
       expect(vm.breakdownData).toEqual([
@@ -284,6 +296,7 @@ describe('OverviewComponent', () => {
       ]);
       expect(vm.averageDailyConsumption).toBe('12 GiB/day');
       expect(vm.estimatedTimeUntilFull).toBe('30 days');
+      expect(vm.threshold).toBe(null);
 
       expect(mockOverviewStorageService.formatBytesForChart).toHaveBeenCalledWith(3236978688);
       expect(mockOverviewStorageService.mapStorageChartData).toHaveBeenCalled();

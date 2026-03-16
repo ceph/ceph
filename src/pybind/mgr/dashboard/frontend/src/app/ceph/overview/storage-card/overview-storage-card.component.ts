@@ -6,19 +6,21 @@ import {
   Input,
   ViewEncapsulation
 } from '@angular/core';
-import { GridModule, TooltipModule, SkeletonModule, LayoutModule } from 'carbon-components-angular';
+import {
+  GridModule,
+  TooltipModule,
+  SkeletonModule,
+  LayoutModule,
+  TagModule
+} from 'carbon-components-angular';
 import { ProductiveCardComponent } from '~/app/shared/components/productive-card/productive-card.component';
 import { MeterChartComponent, MeterChartOptions } from '@carbon/charts-angular';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { AreaChartComponent } from '~/app/shared/components/area-chart/area-chart.component';
 import { ComponentsModule } from '~/app/shared/components/components.module';
+import { BreakdownChartData, CapacityThreshold, TrendPoint } from '~/app/shared/models/overview';
 
 const CHART_HEIGHT = '45px';
-
-type TrendPoint = {
-  timestamp: Date;
-  values: { Used: number };
-};
 
 @Component({
   selector: 'cd-overview-storage-card',
@@ -30,7 +32,8 @@ type TrendPoint = {
     SkeletonModule,
     LayoutModule,
     AreaChartComponent,
-    ComponentsModule
+    ComponentsModule,
+    TagModule
   ],
   standalone: true,
   templateUrl: './overview-storage-card.component.html',
@@ -63,8 +66,9 @@ export class OverviewStorageCardComponent {
   @Input() consumptionTrendData: TrendPoint[] = [];
   @Input() averageDailyConsumption = '';
   @Input() estimatedTimeUntilFull = '';
-  @Input() breakdownData: { group: string; value: number }[] = [];
+  @Input() breakdownData: BreakdownChartData[] = [];
   @Input() isBreakdownLoaded = false;
+  @Input() threshold: CapacityThreshold;
 
   totalRaw: number | null = null;
   usedRaw: number | null = null;
@@ -100,14 +104,21 @@ export class OverviewStorageCardComponent {
     ) {
       return;
     }
+
+    const totalInUsedUnit = this.formatterService.convertToUnit(
+      this.totalRaw,
+      this.totalRawUnit,
+      this.usedRawUnit,
+      1
+    );
     this.options = {
       ...this.options,
       meter: {
         ...this.options.meter,
         proportional: {
           ...this.options.meter.proportional,
-          total: this.totalRaw,
-          unit: this.totalRawUnit
+          total: totalInUsedUnit,
+          unit: this.usedRawUnit
         }
       },
       tooltip: {

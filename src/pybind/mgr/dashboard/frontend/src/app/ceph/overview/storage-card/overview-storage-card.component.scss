@@ -29,6 +29,11 @@
       display: none !important;
     }
   }
+
+  .cds--tag--gray {
+    background-color: #fddc69;
+    color: var(--cds-text-secondary);
+  }
 }
 
 .consumption-stats-wrapper {

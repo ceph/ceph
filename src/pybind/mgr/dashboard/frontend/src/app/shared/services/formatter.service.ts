@@ -210,7 +210,12 @@ export class FormatterService {
     return [value, unit];
   }
 
-  convertToUnit(value: string, fromUnit: string, toUnit: string, decimals: number = 1): number {
+  convertToUnit(
+    value: number | string,
+    fromUnit: string,
+    toUnit: string,
+    decimals: number = 1
+  ): number {
     if (!value) return 0;
     const convertedString = this.formatNumberFromTo(
       value,
