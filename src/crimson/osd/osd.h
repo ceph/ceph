@@ -106,8 +106,6 @@ class OSD final : public crimson::net::Dispatcher,
 
   // mgr::WithStats methods
   // pg statistics including osd ones
-  osd_stat_t osd_stat;
-  uint32_t osd_stat_seq = 0;
   epoch_t min_last_epoch_clean = 0;
   // which pgs were scanned for min_lec
   std::vector<pg_t> min_last_epoch_clean_pgs;
@@ -172,7 +170,7 @@ public:
   void print(std::ostream&) const;
 
   /// @return the seq id of the pg stats being sent
-  uint64_t send_pg_stats();
+  seastar::future<uint64_t> send_pg_stats();
 
   auto &get_shard_services() {
     return shard_services.local();
@@ -238,6 +236,10 @@ private:
   seastar::future<> handle_pg_pct(
     crimson::net::ConnectionRef conn,
     Ref<MOSDPGPCT> m);
+  template <class MessageRefT>
+  seastar::future<> handle_some_ec_messages(
+    crimson::net::ConnectionRef conn,
+    MessageRefT&& m);
 
   std::vector<DaemonHealthMetric> get_health_metrics();
 
