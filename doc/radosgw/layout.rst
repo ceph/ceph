@@ -118,7 +118,7 @@ causes no ambiguity. For the same reason, slashes are permitted in object
 names (keys).
 
 It is possible to create multiple data pools and make it so that
-different users\` buckets will be created in different RADOS pools by default,
+different users' buckets will be created in different RADOS pools by default,
 thus providing the necessary scaling. The layout and naming of these pools
 is controlled by a 'policy' setting.[3]
 
@@ -126,7 +126,7 @@ An RGW object may comprise multiple RADOS objects, the first of which
 is the ``HEAD`` that contains metadata including manifest, ACLs, content type,
 ETag, and user-defined metadata. The metadata is stored in xattrs.
 The ``HEAD`` object may also inline up to :confval:`rgw_max_chunk_size` of object data, for efficiency
-and atomicity.  This enables a convenenient tiering strategy:  index pools
+and atomicity.  This enables a convenient tiering strategy:  index pools
 are necessarily replicated (cannot be EC) and should be placed on fast SSD
 OSDs.  With a mix of small/hot RGW objects and larger, warm/cold RGW
 objects like video files, the larger objects will automatically be placed

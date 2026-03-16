@@ -4,7 +4,7 @@
  Ceph Object Gateway Config Reference
 ======================================
 
-The following settings may added to the Ceph configuration file (i.e., usually
+The following settings may be added to the Ceph configuration file (i.e., usually
 ``ceph.conf``) under the ``[client.radosgw.{instance-name}]`` section. The
 settings may contain default values. If you do not specify each setting in the
 Ceph configuration file, the default value will be set automatically.

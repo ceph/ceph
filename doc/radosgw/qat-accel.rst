@@ -33,7 +33,7 @@ QAT Environment Setup
    encryption and compression services. And QAT driver in kernel space have to
    be loaded to drive the hardware.
 
-The out-of-tree QAT driver package can be downloaded from `Intel Quickassist
+The out-of-tree QAT driver package can be downloaded from `Intel QuickAssist
 Technology`_.
 
 The QATlib can be downloaded from `qatlib`_, which is used for the in-tree QAT
@@ -43,7 +43,7 @@ driver.
       The out-of-tree QAT driver is gradually being migrated to an in-tree driver+QATlib.
 
 2. The implementation of QAT-based encryption is directly based on the QAT API,
-   which is included the driver package. However, QAT support for compression
+   which is included in the driver package. However, QAT support for compression
    depends on the QATzip project, which is a userspace library that builds on
    top of the QAT API. At the time of writing (July 2024), QATzip speeds up
    gzip compression and decompression.
@@ -56,7 +56,7 @@ Implementation
 
 `OpenSSL support for RGW encryption`_ has been merged into Ceph, and Intel also
 provides one `QAT Engine`_ for OpenSSL. Theoretically, QAT-based encryption in
-Ceph can be directly supported through the OpenSSl+QAT Engine.
+Ceph can be directly supported through the OpenSSL+QAT Engine.
 
 However, the QAT Engine for OpenSSL currently supports only chained operations,
 which means that Ceph will not be able to utilize QAT hardware features for
@@ -144,7 +144,7 @@ Configuration
       cd ceph
       ./do_cmake.sh -DWITH_QATDRV=ON
       cd build
-      ininja
+      ninja
 
    .. note:: The section name in QAT configuration files must be ``CEPH``,
       because the section name is set to ``CEPH`` in the Ceph crypto source code.

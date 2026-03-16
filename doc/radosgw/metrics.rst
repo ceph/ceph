@@ -4,7 +4,7 @@ Metrics
 
 The Ceph Object Gateway uses :ref:`Perf Counters` to track metrics. The counters can be labeled (:ref:`Labeled Perf Counters`). When counters are labeled, they are stored in the Ceph Object Gateway specific caches.
 
-These metrics can be sent to the time series database Prometheus to visualize a cluster wide view of usage data (ex: number of S3 put operations on a specific bucket) over time.
+These metrics can be sent to the time series database Prometheus to visualize a cluster-wide view of usage data (for example, number of S3 put operations on a specific bucket) over time.
 
 .. contents::
 
@@ -187,7 +187,7 @@ Cache sizing can depend on a number of factors. These factors include:
 #. Number of users in the cluster
 #. Number of buckets in the cluster
 #. Memory usage of the Ceph Object Gateway
-#. Disk and memory usage of Promtheus. 
+#. Disk and memory usage of Prometheus.
 
 To help calculate the Ceph Object Gateway's memory usage of a cache, it should be noted that each cache entry, encompassing all of the op metrics, is 1360 bytes. This is an estimate and subject to change if metrics are added or removed from the op metrics list.
 

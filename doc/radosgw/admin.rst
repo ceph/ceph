@@ -38,8 +38,8 @@ There are two types of user:
                            +-----+  Subuser  |
                                  +-----------+
 
-Users and subusers can be created, modified, viewed, suspended and removed.
-you may add a Display names and an email addresses can be added to user
+Users and subusers can be created, modified, viewed, suspended, and removed.
+Display names and email addresses can be added to user
 profiles. Keys and secrets can either be specified or generated automatically.
 When generating or specifying keys, remember that user IDs correspond to S3 key
 types and subuser IDs correspond to Swift key types. 

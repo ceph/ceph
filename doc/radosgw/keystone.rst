@@ -7,7 +7,7 @@
 It is possible to integrate the Ceph Object Gateway with Keystone, the OpenStack
 identity service. This sets up the gateway to accept Keystone as the users
 authority. A user that Keystone authorizes to access the gateway will also be
-automatically created on the Ceph Object Gateway (if didn't exist beforehand). A
+automatically created on the Ceph Object Gateway (if it didn't exist beforehand). A
 token that Keystone validates will be considered as valid by the gateway.
 
 The following configuration options are available for Keystone integration::
@@ -28,11 +28,11 @@ shared secret ``rgw keystone admin token`` in the configuration file, which is
 recommended to be disabled in production environments. The service tenant
 credentials should have admin privileges, for more details refer the `OpenStack
 Keystone documentation`_, which explains the process in detail. The requisite
-configuration options for are::
+configuration options are::
 
    rgw keystone admin user = {keystone service tenant user name}
    rgw keystone admin password = {keystone service tenant user password}
-   rgw keystone admin password = {keystone service tenant user password path} # preferred
+   rgw keystone admin password path = {keystone service tenant user password path} # preferred
    rgw keystone admin tenant = {keystone service tenant name}
 
 
@@ -131,18 +131,18 @@ object-storage endpoint:
 The Keystone URL is the Keystone admin RESTful API URL. The admin token is the
 token that is configured internally in Keystone for admin requests.
 
-OpenStack Keystone may be terminated with a self signed ssl certificate, in
+OpenStack Keystone may be terminated with a self-signed SSL certificate, in
 order for radosgw to interact with Keystone in such a case, you could either
-install Keystone's ssl certificate in the node running radosgw. Alternatively
-radosgw could be made to not verify the ssl certificate at all (similar to
+install Keystone's SSL certificate in the node running radosgw. Alternatively
+radosgw could be made to not verify the SSL certificate at all (similar to
 OpenStack clients with a ``--insecure`` switch) by setting the value of the
 configurable ``rgw keystone verify ssl`` to false.
 
 
 .. _OpenStack Keystone documentation: http://docs.openstack.org/developer/keystone/configuringservices.html#setting-up-projects-users-and-roles
 
-Cross Project(Tenant) Access
-----------------------------
+Cross-Project (Tenant) Access
+-----------------------------
 
 In order to let a project (earlier called a 'tenant') access buckets belonging to a different project, the following config option needs to be enabled::
 

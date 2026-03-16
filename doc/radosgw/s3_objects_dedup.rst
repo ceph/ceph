@@ -99,7 +99,7 @@ Next, we iterate through these dedup candidate objects, reading their complete
 information from the object metadata (a per-object RADOS operation). During
 this step, we filter out **compressed** and **user-encrypted** objects.
 
-Following this, we calculate a cryptograhically strong hash of the candidate
+Following this, we calculate a cryptographically strong hash of the candidate
 object data. This involves a full-object read which is a resource-intensive
 operation. The hash ensures that the dedup candidates are indeed perfect
 matches. If they are, we proceed with the deduplication:

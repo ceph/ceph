@@ -136,7 +136,7 @@ Bucket Related Operations
 +-----------------------+----------------------+----------------+
 |                       | s3:x-amz-acl         |                |
 |                       | s3:x-amz-grant-<perm>|                |
-|s3:createBucket        | where perm is one of |                |
+|s3:CreateBucket        | where perm is one of |                |
 |                       | read/write/read-acp  |                |
 |                       | write-acp/           |                |
 |                       | full-control         |                |
@@ -183,7 +183,7 @@ Object Related Operations
 |                             |s3:RequestObjectTag/<tag-key>                      |                   |
 |                             |                                                   |                   |
 +-----------------------------+---------------------------------------------------+-------------------+
-|s3:PutObjectAcl              |s3:x-amz-acl & s3-amz-grant-<perm>                 |                   |
+|s3:PutObjectAcl              |s3:x-amz-acl & s3:x-amz-grant-<perm>               |                   |
 |s3:PutObjectVersionAcl       |                                                   |                   |
 |                             +---------------------------------------------------+-------------------+
 |                             |s3:ExistingObjectTag/<tag-key>                     |                   |

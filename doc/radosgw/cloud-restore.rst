@@ -10,7 +10,7 @@ of those transitioned objects from the remote S3 endpoints into the local
 RGW deployment.
 
 This feature currently enables the restoration of objects transitioned to
-S3-compatible cloud services. In order to faciliate this,
+S3-compatible cloud services. In order to facilitate this,
 the ``retain_head_object`` option should be set to ``true``
 in the ``tier-config`` when configuring the storage class.
 
@@ -32,7 +32,7 @@ objects as well::
 
     {
       "access_key": <access>,
-      "secret": <secret>,`
+      "secret": <secret>,
       "endpoint": <endpoint>,
       "region": <region>,
       "host_style": <path | virtual>,
