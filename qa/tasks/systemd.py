@@ -20,7 +20,6 @@ def _remote_service_status(remote, service):
 def task(ctx, config):
     """
       - tasks:
-          ceph-deploy:
           systemd:
 
     Test ceph systemd services can start, stop and restart and
