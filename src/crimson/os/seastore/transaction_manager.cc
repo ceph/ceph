@@ -28,6 +28,7 @@ TransactionManager::TransactionManager(
   JournalRef _journal,
   CacheRef _cache,
   LBAManagerRef _lba_manager,
+  LBAOverlayManagerRef lba_overlay_manager,
   ExtentPlacementManagerRef &&_epm,
   BackrefManagerRef&& _backref_manager,
   shard_stats_t& _shard_stats)
@@ -228,6 +229,7 @@ TransactionManager::ref_ret TransactionManager::remove(
   auto length = cursor->get_length();
   assert(refcount > 0);
   --refcount;
+  //co_await lba_overlay_manager.update_mapping_refcount(*lba_manager, t, offset);
   co_await lba_manager->update_mapping_refcount(
     t, std::move(cursor), -1);
   if (refcount == 0) {
@@ -245,6 +247,7 @@ TransactionManager::ref_ret TransactionManager::remove(
 {
   LOG_PREFIX(TransactionManager::remove);
   DEBUGT("{} ...", t, offset);
+  //auto cursor = co_await lba_overlay_manager.get_cursor(*lba_manager, t, offset);
   auto cursor = co_await lba_manager->get_cursor(t, offset);
   auto refcount = cursor->get_refcount();
   ceph_assert(refcount > 0);
@@ -551,6 +554,9 @@ TransactionManager::do_submit_transaction(
     SUBTRACET(seastore_t, "trim backref_bufs to {}", tref, *trim_alloc_to);
     cache->trim_backref_bufs(*trim_alloc_to);
   }
+
+  // apply overlaid changes into lba_manager
+  lba_overlay_manager->commit_overlay(tref);
 
   auto record = cache->prepare_record(
     tref,
@@ -906,7 +912,8 @@ TransactionManagerRef make_transaction_manager(
   auto epm = std::make_unique<ExtentPlacementManager>(
     hot_tier_generations, cold_tier_generations);
   auto cache = std::make_unique<Cache>(*epm);
-  auto lba_manager = lba::create_lba_manager(*cache);
+  auto lba_manager = lba::create_lba_manager(*cache); // to be removed?
+  auto lba_overlay_manager = LBAOverlayManager::create_lba_overlay_manager(*cache);
   auto sms = std::make_unique<SegmentManagerGroup>();
   auto rbs = std::make_unique<RBMDeviceGroup>();
   auto backref_manager = create_backref_manager(*cache);
@@ -1047,7 +1054,8 @@ TransactionManagerRef make_transaction_manager(
   return std::make_unique<TransactionManager>(
     std::move(journal),
     std::move(cache),
-    std::move(lba_manager),
+    std::move(lba_manager), // to be removed?
+    std::move(lba_overlay_manager),
     std::move(epm),
     std::move(backref_manager),
     shard_stats);

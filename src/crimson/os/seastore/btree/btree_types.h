@@ -99,68 +99,6 @@ struct __attribute__((packed)) fixed_kv_node_meta_le_t {
   }
 };
 
-namespace lba {
-
-/**
- * lba_map_val_t
- *
- * struct representing a single lba mapping
- */
-struct lba_map_val_t {
-  extent_len_t len = 0;  ///< length of mapping
-  pladdr_t pladdr;         ///< direct addr of mapping or
-			   //	laddr of a direct lba mapping(see btree_lba_manager.h)
-  extent_ref_count_t refcount = 0; ///< refcount
-  checksum_t checksum = 0; ///< checksum of original block written at paddr (TODO)
-  extent_types_t type = extent_types_t::NONE;
-
-  lba_map_val_t() = default;
-  lba_map_val_t(
-    extent_len_t len,
-    pladdr_t pladdr,
-    extent_ref_count_t refcount,
-    checksum_t checksum,
-    extent_types_t type)
-    : len(len), pladdr(pladdr), refcount(refcount),
-      checksum(checksum), type(type) {}
-  bool operator==(const lba_map_val_t&) const = default;
-};
-
-std::ostream& operator<<(std::ostream& out, const lba_map_val_t&);
-
-/**
- * lba_map_val_le_t
- *
- * On disk layout for lba_map_val_t.
- */
-struct __attribute__((packed)) lba_map_val_le_t {
-  extent_len_le_t len = init_extent_len_le(0);
-  pladdr_le_t pladdr;
-  extent_ref_count_le_t refcount{0};
-  checksum_le_t checksum{0};
-  extent_types_le_t type = 0;
-
-  lba_map_val_le_t() = default;
-  lba_map_val_le_t(const lba_map_val_le_t &) = default;
-  explicit lba_map_val_le_t(const lba_map_val_t &val)
-    : len(init_extent_len_le(val.len)),
-      pladdr(pladdr_le_t(val.pladdr)),
-      refcount(val.refcount),
-      checksum(val.checksum),
-      type((extent_types_le_t)val.type) {}
-
-  operator lba_map_val_t() const {
-    return lba_map_val_t{
-      len,
-      pladdr,
-      refcount,
-      checksum,
-      (extent_types_t)type};
-  }
-};
-
-} // namespace lba
-
 namespace backref {
 
 struct backref_map_val_t {

@@ -28,6 +28,7 @@
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/root_meta.h"
 #include "crimson/os/seastore/lba_manager.h"
+#include "crimson/os/seastore/lba_overlay_manager.h"
 #include "crimson/os/seastore/backref_manager.h"
 #include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/extent_placement_manager.h"
@@ -71,6 +72,7 @@ public:
     JournalRef journal,
     CacheRef cache,
     LBAManagerRef lba_manager,
+    LBAOverlayManagerRef lba_overlay_manager,
     ExtentPlacementManagerRef &&epm,
     BackrefManagerRef&& backref_manager,
     shard_stats_t& shard_stats);
@@ -1129,6 +1131,7 @@ private:
 
   CacheRef cache;
   LBAManagerRef lba_manager;
+  LBAOverlayManagerRef lba_overlay_manager;
   JournalRef journal;
   ExtentPlacementManagerRef epm;
   BackrefManagerRef backref_manager;
