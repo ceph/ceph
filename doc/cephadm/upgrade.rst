@@ -214,7 +214,7 @@ following command:
 This alert (``UPGRADE_FAILED_PULL``) means that Ceph was unable to pull the
 container image for the target version. This can happen if you specify a
 version or container image that does not exist (e.g. "1.2.3"), or if the
-container registry can not be reached by one or more hosts in the cluster.
+container registry cannot be reached by one or more hosts in the cluster.
 
 To cancel the existing upgrade and to specify a different target version, run
 the following commands:

@@ -171,7 +171,7 @@ Host Labels
 ===========
 
 The orchestrator supports assigning labels to hosts. Labels
-are free-form and have no particular meaning by themsevels. Each host
+are free-form and have no particular meaning by themselves. Each host
 can have multiple labels. They can be used to specify the placement
 of daemons. For more information, see :ref:`orch-placement-by-labels`.
 

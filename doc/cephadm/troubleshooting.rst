@@ -573,7 +573,7 @@ generate a script that can debug a process in a running container.
 This creates a script that includes the container command that ``cephadm``
 would use to create a shell. Modify the script by removing the ``--init``
 argument and replace it with the argument that joins to the namespace used for
-a running running container. For example, assume we want to debug the Manager
+a running container. For example, assume we want to debug the Manager
 and have determined that the Manager is running in a container named
 ``ceph-bc615290-685b-11ee-84a6-525400220000-mgr-ceph0-sluwsk``. In this case,
 the argument

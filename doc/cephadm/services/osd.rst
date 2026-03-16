@@ -60,7 +60,7 @@ Example (Reef):
 .. warning::
     Although the ``libstoragemgmt`` library issues standard SCSI (SES) inquiry calls,
     there is no guarantee that your hardware and firmware properly implement these standards.
-    This can lead to erratic behaviour and even bus resets on some older
+    This can lead to erratic behavior and even bus resets on some older
     hardware. It is therefore recommended that, before enabling this feature,
     you first test your hardware's compatibility with ``libstoragemgmt`` to avoid
     unplanned interruptions to services.
