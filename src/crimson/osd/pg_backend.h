@@ -434,6 +434,7 @@ public:
   virtual void got_rep_op_reply(const MOSDRepOpReply&) {}
   virtual seastar::future<> stop() = 0;
   virtual void on_actingset_changed(bool same_primary) = 0;
+  virtual bool auto_repair_supported() const { return false; }
 protected:
   const shard_id_t shard;
   CollectionRef coll;

@@ -19,7 +19,15 @@ void PGScrubber::dump_detail(Formatter *f) const
   f->dump_stream("pgid") << pg.get_pgid();
 }
 
-PGScrubber::PGScrubber(PG &pg) : pg(pg), dpp(pg), machine(*this) {}
+PGScrubber::PGScrubber(PG &pg) : pg(pg), dpp(pg), machine(*this)
+{
+  m_scrub_job.emplace(pg.pgid, pg.pg_whoami.osd);
+}
+
+PGScrubber::~PGScrubber()
+{
+  m_scrub_job.reset();
+}
 
 void PGScrubber::on_primary_active_clean()
 {
@@ -54,6 +62,338 @@ void PGScrubber::on_log_update(eversion_t v)
     DEBUGDPP("waiting_for_update: {}, v: {}", pg, *waiting_for_update, v);
     handle_event(await_update_complete_t{});
     waiting_for_update = std::nullopt;
+  }
+}
+
+sched_conf_t PGScrubber::populate_config_params() const
+{
+  const pool_opts_t& pool_conf = pg.get_pgpool().info.opts;
+  sched_conf_t configs;
+  LOG_PREFIX(PGScrubber::populate_config_params);
+  // shallow scrubs interval
+  const auto shallow_pool =
+      pool_conf.value_or(pool_opts_t::SCRUB_MIN_INTERVAL, 0.0);
+  configs.shallow_interval =
+      shallow_pool > 0.0 ?
+        shallow_pool : crimson::common::local_conf().get_val<double>("osd_scrub_min_interval");
+
+  // deep scrubs optimal interval
+  const auto deep_pool =
+      pool_conf.value_or(pool_opts_t::DEEP_SCRUB_INTERVAL, 0.0);
+  configs.deep_interval =
+      deep_pool > 0.0 ?
+        deep_pool : crimson::common::local_conf().get_val<double>("osd_deep_scrub_interval");
+
+  configs.interval_randomize_ratio =
+    crimson::common::local_conf().get_val<double>("osd_scrub_interval_randomize_ratio");
+  configs.deep_randomize_ratio =
+      crimson::common::local_conf().get_val<double>("osd_deep_scrub_interval_cv");
+  configs.mandatory_on_invalid =
+    crimson::common::local_conf().get_val<bool>("osd_scrub_invalid_stats");
+  DEBUGDPP(
+    "inputs: intervals: sh:{}(pl:{}),dp:{}(pl:{})", pg,
+    configs.shallow_interval, shallow_pool,
+    configs.deep_interval, deep_pool);
+  return configs;
+}
+
+void PGScrubber::update_targets(utime_t scrub_clock_now)
+{
+  const auto applicable_conf = populate_config_params();
+  LOG_PREFIX(PGScrubber::update_targets);
+  DEBUGDPP("job on entry:{}{}", pg, *m_scrub_job,
+    pg.get_info().stats.stats_invalid ? " invalid-stats" : "");
+  if (pg.get_info().stats.stats_invalid && applicable_conf.mandatory_on_invalid) {
+    m_scrub_job->shallow_target.sched_info_ref().schedule.scheduled_at =
+	    scrub_clock_now;
+    m_scrub_job->shallow_target.up_urgency_to(urgency_t::must_scrub);
+  }
+
+  // the next periodic scrubs:
+  m_scrub_job->adjust_shallow_schedule(
+      pg.get_info().history.last_scrub_stamp, applicable_conf, scrub_clock_now);
+  m_scrub_job->adjust_deep_schedule(
+      pg.get_info().history.last_deep_scrub_stamp, applicable_conf,
+      scrub_clock_now);
+
+  DEBUGDPP("adjusted:{}", pg, *m_scrub_job);
+}
+
+void PGScrubber::schedule_scrub_with_osd()
+{
+  ceph_assert(pg.is_primary());
+  ceph_assert(m_scrub_job);
+
+  m_scrub_job->registered = true;
+  update_scrub_job();
+}
+
+void PGScrubber::update_scrub_job()
+{
+  LOG_PREFIX(PGScrubber::update_scrub_job);
+   DEBUGDPP("update job: {}", pg, *m_scrub_job);
+  if (!m_scrub_job->is_registered())
+    return;
+  if (m_scrub_job->is_queued()) {
+    pg.shard_services.get_scrub_scheduler().remove_from_osd_queue(pg.get_pgid());
+    m_scrub_job->clear_both_targets_queued();
+  }
+  update_targets(ceph_clock_now());
+  DEBUGDPP("scheduling scrub job with OSD {}", pg, *m_scrub_job);
+  pg.shard_services.get_scrub_scheduler().enqueue_scrub_job(*m_scrub_job);
+  m_scrub_job->set_both_targets_queued();
+  pg.publish_stats_to_osd();
+}
+
+void PGScrubber::rm_from_osd_scrubbing()
+{
+  LOG_PREFIX(PGScrubber::rm_from_osd_scrubbing);
+  if (m_scrub_job && m_scrub_job->is_registered()) {
+    DEBUGDPP("prev. state: {}", pg, registration_state());
+    pg.shard_services.get_scrub_scheduler().remove_from_osd_queue(pg.get_pgid());
+    m_scrub_job->clear_both_targets_queued();
+    m_scrub_job->registered = false;
+  }
+}
+
+void PGScrubber::requeue_penalized(
+    scrub_level_t s_or_d,
+    delay_both_targets_t delay_both,
+    delay_cause_t cause,
+    utime_t scrub_clock_now)
+{
+  LOG_PREFIX(PGScrubber::requeue_penalized);
+  if (!m_scrub_job->is_registered()) {
+    DEBUGDPP(
+      "PG not registered for scrubbing on this OSD. Won't requeue!", pg);
+    return;
+  }
+  auto& trgt = m_scrub_job->delay_on_failure(s_or_d, cause, scrub_clock_now);
+  ceph_assert(!trgt.queued);
+  DEBUGDPP("requeuing penalized scrub target: {}, delay_both_targets: {}, cause: {}",
+    pg, trgt, delay_both == delay_both_targets_t::yes, cause);
+  pg.shard_services.get_scrub_scheduler().enqueue_target(trgt);
+  trgt.queued = true;
+
+  if (delay_both == delay_both_targets_t::yes) {
+    const auto sister_level = (s_or_d == scrub_level_t::deep)
+				  ? scrub_level_t::shallow
+				  : scrub_level_t::deep;
+    auto& trgt2 = m_scrub_job->get_target(sister_level);
+    // do not delay if the other target has higher urgency
+    if (trgt2.urgency() > trgt.urgency()) {
+      DEBUGDPP(
+        "not delaying the other target (urgency: {})", pg,
+        trgt2.urgency());
+      return;
+    }
+    if (trgt2.queued) {
+      pg.shard_services.get_scrub_scheduler().dequeue_target(pg.pgid, sister_level);
+      trgt2.queued = false;
+    }
+    m_scrub_job->delay_on_failure(sister_level, cause, scrub_clock_now);
+    DEBUGDPP("also requeuing the other target: {}, delay_both_targets: {}, cause: {}",
+      pg, trgt2, delay_both == delay_both_targets_t::yes, cause);
+    pg.shard_services.get_scrub_scheduler().enqueue_target(trgt2);
+    trgt2.queued = true;
+  }
+}
+
+bool PGScrubber::reserve_local(const SchedTarget& trgt)
+{
+  LOG_PREFIX(PGScrubber::reserve_local);
+  const bool is_hp = !ScrubJob::observes_max_concurrency(trgt.urgency());
+
+  m_local_osd_resource = pg.shard_services.get_scrub_scheduler().inc_scrubs_local(is_hp);
+  if (m_local_osd_resource) {
+    DEBUGDPP("reserved local scrub resource", pg);
+    return true;
+  }
+
+  DEBUGDPP("failed to reserve local scrub resource", pg);
+  return false;
+}
+
+void PGScrubber::set_op_parameters(ScrubPGPreconds pg_cond)
+{
+  LOG_PREFIX(PGScrubber::set_op_parameters);
+  DEBUGDPP("setting op parameters for target: {}", pg, *m_active_target);
+
+  set_queued_or_active();  // we are fully committed now.
+
+  // write down the epoch of starting a new scrub. Will be used
+  // to discard stale messages from previous aborted scrubs.
+  m_epoch_start = pg.get_osdmap_epoch();
+
+  // set the session attributes, as coded in m_flags, m_is_deep and m_is_repair
+
+  m_flags.check_repair = m_active_target->urgency() == urgency_t::after_repair;
+  m_is_deep = m_active_target->sched_info.level == scrub_level_t::deep;
+
+  pg.state_set(PG_STATE_SCRUBBING);
+  if (m_is_deep) {
+    pg.state_set(PG_STATE_DEEP_SCRUB);
+  }
+
+  m_flags.auto_repair =
+      m_is_deep && pg_cond.can_autorepair &&
+      ScrubJob::is_autorepair_allowed(m_active_target->urgency());
+
+  // m_is_repair is set for all repair cases - for operator-requested
+  // repairs, for deep-scrubs initiated automatically after a shallow scrub
+  // that has ended with repairable error, and for 'repair-on-the-go' (i.e.
+  // deep-scrub with the auto_repair configuration flag set). m_is_repair value
+  // determines the scrubber behavior (especially the scrubber backend's).
+  //
+  // PG_STATE_REPAIR, on the other hand, is only used for status reports (inc.
+  // the PG status as appearing in the logs), and would not be turned on for
+  // 'on the go' - only after errors to be repair are found.
+  m_is_repair = m_flags.auto_repair ||
+		ScrubJob::is_repair_implied(m_active_target->urgency());
+  ceph_assert(!m_is_repair || m_is_deep);  // repair implies deep-scrub
+  if (ScrubJob::is_repair_implied(m_active_target->urgency())) {
+    pg.state_set(PG_STATE_REPAIR);
+  }
+
+
+  // 'deep-on-error' is set for periodic shallow scrubs, if allowed
+  // by the environment
+  if (!m_is_deep && pg_cond.can_autorepair &&
+      m_active_target->urgency() == urgency_t::periodic_regular) {
+    m_flags.deep_scrub_on_error = true;
+    DEBUGDPP(
+      "auto repair with scrubbing, rescrub if errors found", pg);
+  } else {
+    m_flags.deep_scrub_on_error = false;
+  }
+
+  m_flags.priority = pg.get_scrub_priority();
+
+  // The publishing here is required for tests synchronization.
+  // The PG state flags were modified.
+  pg.publish_stats_to_osd();
+}
+
+schedule_result_t PGScrubber::start_scrub(
+    scrub_level_t s_or_d,
+    OSDRestrictions osd_restrictions,
+    ScrubPGPreconds pg_cond)
+{
+  LOG_PREFIX(PGScrubber::start_scrub);
+  auto& trgt = m_scrub_job->get_target(s_or_d);
+  DEBUGDPP(
+    "starting scrubbing {}, {}+{} (env restrictions:{})", pg, trgt,
+    (pg.is_active() ? "<active>" : "<not-active>"),
+    (pg.is_clean() ? "<clean>" : "<not-clean>"), osd_restrictions);
+  // mark our target as not-in-queue. If any error is encountered - that
+  // target must be requeued!
+  trgt.queued = false;
+
+  if (is_queued_or_active()) {
+    DEBUGDPP("already queued or active", pg);
+    // no need to requeue
+    return schedule_result_t::target_specific_failure;
+  }
+
+  // a few checks. If failing - the 'not-before' is modified, and the target
+  // is requeued.
+  auto clock_now = ceph_clock_now();
+
+  if (!pg.is_primary() || !pg.is_active()) {
+    // the PG is not expected to be 'registered' in this state. And we should
+    // not attempt to queue it.
+    DEBUGDPP("{}: cannot scrub (not primary/active). Registered?{:c}", pg,
+      m_scrub_job->is_registered() ? 'Y' : 'n');
+    return schedule_result_t::target_specific_failure;
+  }
+
+  // for all other failures - we must reinstate our entry in the Scrub Queue.
+  // For some of the failures, we will also delay the 'other' target.
+  if (!pg.is_active_clean()) {
+    DEBUGDPP("{}: cannot scrub (not clean). Registered?{:c}", pg,
+      m_scrub_job->is_registered() ? 'Y' : 'n');
+    requeue_penalized(
+	    s_or_d, delay_both_targets_t::yes, delay_cause_t::pg_state, clock_now);
+    return schedule_result_t::target_specific_failure;
+  }
+
+  if (pg.state_test(PG_STATE_SNAPTRIM) || pg.state_test(PG_STATE_SNAPTRIM_WAIT)) {
+    // note that the trimmer checks scrub status when setting 'snaptrim_wait'
+    // (on the transition from NotTrimming to Trimming/WaitReservation),
+    // i.e. some time before setting 'snaptrim'.
+    DEBUGDPP("{}: cannot scrub (snap trimming)", pg);
+    requeue_penalized(
+	    s_or_d, delay_both_targets_t::yes, delay_cause_t::snap_trimming, clock_now);
+    return schedule_result_t::target_specific_failure;
+  }
+
+   // is there a 'no-scrub' flag set for the initiated scrub level? note:
+  // won't affect operator-initiated (and some other types of) scrubs.
+  if (ScrubJob::observes_noscrub_flags(trgt.urgency())) {
+    if (trgt.is_shallow()) {
+      if (!pg_cond.allow_shallow) {
+	      // can't scrub at all
+        DEBUGDPP("{}: shallow not allowed", pg);
+        requeue_penalized(
+	        s_or_d, delay_both_targets_t::no, delay_cause_t::flags, clock_now);
+	      return schedule_result_t::target_specific_failure;
+      }
+    } else if (!pg_cond.allow_deep) {
+      // can't scrub at all
+      DEBUGDPP("{}: deep not allowed", pg);
+      requeue_penalized(
+	      s_or_d, delay_both_targets_t::no, delay_cause_t::flags, clock_now);
+      return schedule_result_t::target_specific_failure;
+    }
+  }
+
+  // try to reserve the local OSD resources. If failing: no harm. We will
+  // be retried by the OSD later on.
+  if (!reserve_local(trgt)) {
+    DEBUGDPP("{}: failed to reserve locally", pg);
+    requeue_penalized(
+	    s_or_d, delay_both_targets_t::yes, delay_cause_t::local_resources,
+	    clock_now);
+    return schedule_result_t::osd_wide_failure;
+  }
+
+  // can commit now to the specific scrub details, as nothing will
+  // stop the scrub
+
+  // An interrupted recovery repair could leave this set.
+  pg.state_clear(PG_STATE_REPAIR);
+
+  m_active_target = trgt;
+  set_op_parameters(pg_cond);
+  // dequeue the PG's "other" target
+  pg.shard_services.get_scrub_scheduler().remove_from_osd_queue(pg.pgid);
+  m_scrub_job->clear_both_targets_queued();
+
+  // clear all special handling urgency/flags from the target that is
+  // executing now.
+  trgt.reset();
+
+  epoch_t epoch_queued = pg.get_osdmap_epoch();
+  DEBUGDPP("queued at epoch: {}", pg, epoch_queued);
+  if (epoch_queued >= pg.get_same_interval_since()) {
+    bool deep = pg.state_test(PG_STATE_DEEP_SCRUB);
+    DEBUGDPP("can scrub now, deep: {}", pg, deep);
+    Ref<PG> pgref = &pg;
+    std::ignore = PG::interruptor::with_interruption([this, pgref, deep] {
+      handle_scrub_requested(deep);
+      return PG::interruptor::now();
+    }, [FNAME, this](std::exception_ptr ep) {
+      DEBUGDPP("interrupted with {}", pg, ep);
+    }, pgref, pgref->get_osdmap_epoch());
+    return schedule_result_t::scrub_initiated;
+  } else {
+    DEBUGDPP("cannot scrub now, will be scheduled by OSD later. epoch_queued: {}, same_interval_since: {}",
+      pg, epoch_queued, pg.get_same_interval_since());
+    // the target is already marked as not in queue, but the job isn't
+    // registered yet. We need to register it, so it will be properly
+    // scheduled by the OSD.
+    schedule_scrub_with_osd();
+    return schedule_result_t::target_specific_failure;
   }
 }
 
@@ -129,9 +469,9 @@ void PGScrubber::notify_scrub_end(bool deep)
 {
   LOG_PREFIX(PGScrubber::notify_scrub_end);
   DEBUGDPP("deep: {}", pg, deep);
-  pg.peering_state.state_clear(PG_STATE_SCRUBBING);
+  pg.state_clear(PG_STATE_SCRUBBING);
   if (deep) {
-    pg.peering_state.state_clear(PG_STATE_DEEP_SCRUB);
+    pg.state_clear(PG_STATE_DEEP_SCRUB);
   }
   pg.publish_stats_to_osd();
 }
@@ -307,8 +647,46 @@ void PGScrubber::emit_scrub_result(
       if (deep) {
 	history.last_deep_scrub_stamp = now;
       }
+      cleanup_on_finish();
+      update_scrub_job();
+      m_active_target.reset();
       return false; // notify_scrub_end will flush stats to osd
     });
 }
 
+std::string_view PGScrubber::registration_state() const
+{
+  if (m_scrub_job) {
+    return m_scrub_job->state_desc();
+  }
+  return "(no sched job)";
+}
+
+void PGScrubber::cleanup_on_finish()
+{
+  clear_pgscrub_state();
+
+  // PG state flags changed:
+  pg.publish_stats_to_osd();
+}
+
+void PGScrubber::clear_pgscrub_state()
+{
+  pg.state_clear(PG_STATE_SCRUBBING);
+  pg.state_clear(PG_STATE_DEEP_SCRUB);
+
+  m_local_osd_resource.reset();
+  //requeue_waiting();  //implement later
+
+  reset_internal_state();
+  m_flags = scrub_flags_t{};
+
+  // type-specific state clear
+  //_scrub_clear_state();
+}
+
+void PGScrubber::reset_internal_state()
+{
+  clear_queued_or_active();
+}
 }

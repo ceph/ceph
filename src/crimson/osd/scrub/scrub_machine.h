@@ -105,6 +105,10 @@ struct ScrubContext {
     }
   }
 
+  virtual void schedule_scrub_with_osd() = 0;
+  virtual void update_scrub_job() = 0;
+  virtual void rm_from_osd_scrubbing() = 0;
+
   /// return struct defining chunk validation rules
   virtual chunk_validation_policy_t get_policy() const = 0;
 
@@ -374,8 +378,12 @@ struct Inactive : ScrubState<Inactive, ScrubMachine> {
 struct AwaitScrub;
 struct PrimaryActive : ScrubState<PrimaryActive, ScrubMachine, AwaitScrub> {
   static constexpr std::string_view state_name = "PrimaryActive";
-  explicit PrimaryActive(my_context ctx) : ScrubState(ctx) {}
-
+  explicit PrimaryActive(my_context ctx) : ScrubState(ctx) {
+    get_scrub_context().schedule_scrub_with_osd();
+  }
+  ~PrimaryActive() {
+    //get_scrub_context().rm_from_osd_scrubbing();
+  }
   bool local_reservation_held = false;
   std::set<pg_shard_t> remote_reservations_held;
 

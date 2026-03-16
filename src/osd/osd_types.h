@@ -7120,4 +7120,33 @@ std::string_view get_op_queue_type_name(const op_queue_type_t &q);
 std::optional<op_queue_type_t> get_op_queue_type_by_name(
   const std::string_view &s);
 
+#ifdef WITH_CRIMSON
+#include <fmt/format.h>
+
+namespace fmt {
+
+template <>
+struct formatter<scrub_level_t> {
+  constexpr auto parse(format_parse_context& ctx) {
+    return ctx.begin();
+  }
+
+  template <typename FormatContext>
+  auto format(scrub_level_t level,
+              FormatContext& ctx) const {
+    using T = scrub_level_t;
+
+    switch (level) {
+      case T::shallow:
+        return format_to(ctx.out(), "shallow");
+      case T::deep:
+        return format_to(ctx.out(), "deep");
+    }
+
+    return format_to(ctx.out(), "unknown");
+  }
+};
+
+} // namespace fmt
+#endif
 #endif

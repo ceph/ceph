@@ -286,3 +286,8 @@ options:
         internal checksum feature without using sever CPU then enable if available,
         set to true to disable unconditionally.
   default: true
+- name: scrub_reactor_load_threshold
+  type: float
+  level: advanced
+  default: 0.8
+  desc: inidicate how busy of reactor
