@@ -1650,6 +1650,8 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_unsigned("cache_min_flush_age", cache_min_flush_age);
   f->dump_unsigned("cache_min_evict_age", cache_min_evict_age);
   f->dump_string("erasure_code_profile", erasure_code_profile);
+  f->dump_unsigned("ec_data_shard_count", ec_data_shard_count.value_or(0));
+  f->dump_unsigned("ec_coding_shard_count", ec_coding_shard_count.value_or(0));
   f->open_object_section("hit_set_params");
   hit_set_params.dump(f);
   f->close_section(); // hit_set_params
@@ -1987,10 +1989,10 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     return;
   }
 
-  uint8_t v = 32;
+  uint8_t v = 34;
   // NOTE: any new encoding dependencies must be reflected by
   // SIGNIFICANT_FEATURES
-  if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_TENTACLE)) {
+  if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_UMBRELLA)) {
     if (!HAVE_SIGNIFICANT_FEATURE(features, NEW_OSDOP_ENCODING)) {
       // this was the first post-hammer thing we added; if it's missing, encode
       // like hammer.
@@ -2003,8 +2005,10 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
       v = 27;
     } else if (!is_stretch_pool()) {
       v = 29;
-    } else {
+    } else if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_TENTACLE)) {
       v = 30;
+    } else {
+      v = 33;
     }
   }
 
@@ -2024,11 +2028,17 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
   encode(snaps, bl, features);
   encode(removed_snaps, bl);
   encode(auid, bl);
-  if (v >= 27) {
+  if (v >= 34) {
     encode(flags, bl);
+  }
+  else if (v >= 27) {
+    auto tmp = flags;
+    tmp &= ~FLAG_CLIENT_SPLIT_READS;
+    encode(tmp, bl);
   } else {
     auto tmp = flags;
-    tmp &= ~(FLAG_SELFMANAGED_SNAPS | FLAG_POOL_SNAPS | FLAG_CREATING);
+    tmp &= ~(FLAG_SELFMANAGED_SNAPS | FLAG_POOL_SNAPS | FLAG_CREATING |
+             FLAG_CLIENT_SPLIT_READS);
     encode(tmp, bl);
   }
   encode((uint32_t)0, bl); // crash_replay_interval
@@ -2109,12 +2119,19 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
   if (v >= 32) {
     encode(nonprimary_shards, bl);
   }
+  if (v >= 33) {
+    encode(shard_mapping, bl);
+  }
+  if (v >= 34) {
+    encode(ec_data_shard_count, bl);
+    encode(ec_coding_shard_count, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(32, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(34, 5, 5, bl);
   decode(type, bl);
   decode(size, bl);
   decode(crush_rule, bl);
@@ -2310,6 +2327,19 @@ void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
   } else {
     nonprimary_shards.clear();
   }
+
+  if (struct_v >= 33) {
+    decode(shard_mapping, bl);
+  } else {
+    shard_mapping.clear();
+  }
+  if (struct_v >= 34) {
+    decode(ec_data_shard_count, bl);
+    decode(ec_coding_shard_count, bl);
+  } else {
+    ec_data_shard_count.reset();
+    ec_coding_shard_count.reset();
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
   calc_grade_table();
@@ -2432,6 +2462,8 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
   out << p.get_type_name();
   if (p.get_type_name() == "erasure") {
     out << " profile " << p.erasure_code_profile;
+    out << " ec_data_shard_count " << p.ec_data_shard_count.value_or(0);
+    out << " ec_coding_shard_count " << p.ec_coding_shard_count.value_or(0);
   }
   out << " size " << p.get_size()
       << " min_size " << p.get_min_size()

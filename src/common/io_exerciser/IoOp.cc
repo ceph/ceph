@@ -117,6 +117,15 @@ ceph::io_exerciser::ReadWriteOp<opType, numIOs>::ReadWriteOp(
   }
 }
 
+template <OpType opType, int numIOs>
+ceph::io_exerciser::ReadWriteOp<opType, numIOs>::ReadWriteOp(
+    std::array<uint64_t, numIOs>&& offset,
+    std::array<uint64_t, numIOs>&& length,
+    std::optional<bool> balanced_read)
+    : ReadWriteOp<opType, numIOs>(std::move(offset), std::move(length)) {
+      this->balanced_read = balanced_read;
+    }
+
 ConsistencyOp::ConsistencyOp() : TestOp<OpType::Consistency>() {}
 
 std::unique_ptr<ConsistencyOp> ConsistencyOp::generate() {
@@ -175,35 +184,57 @@ std::string ceph::io_exerciser::ReadWriteOp<opType, numIOs>::to_string(
   }
 }
 
-SingleReadOp::SingleReadOp(uint64_t offset, uint64_t length)
-    : ReadWriteOp<OpType::Read, 1>({offset}, {length}) {}
+SingleReadOp::SingleReadOp(uint64_t offset, uint64_t length, std::optional<bool> balanced_read)
+    : ReadWriteOp<OpType::Read, 1>({offset}, {length}, balanced_read) {}
 
 std::unique_ptr<SingleReadOp> SingleReadOp::generate(uint64_t offset,
                                                      uint64_t length) {
-  return std::make_unique<SingleReadOp>(offset, length);
+  return std::make_unique<SingleReadOp>(offset, length, std::nullopt);
+}
+
+std::unique_ptr<SingleReadOp> SingleReadOp::generate(uint64_t offset,
+                                  uint64_t length, bool balanced_read) {
+  return std::make_unique<SingleReadOp>(offset, length, balanced_read);
 }
 
 DoubleReadOp::DoubleReadOp(uint64_t offset1, uint64_t length1, uint64_t offset2,
-                           uint64_t length2)
-    : ReadWriteOp<OpType::Read2, 2>({offset1, offset2}, {length1, length2}) {}
+                           uint64_t length2, std::optional<bool> balanced_read)
+    : ReadWriteOp<OpType::Read2, 2>({offset1, offset2}, {length1, length2}, balanced_read) {}
 
 std::unique_ptr<DoubleReadOp> DoubleReadOp::generate(uint64_t offset1,
                                                      uint64_t length1,
                                                      uint64_t offset2,
                                                      uint64_t length2) {
-  return std::make_unique<DoubleReadOp>(offset1, length1, offset2, length2);
+  return std::make_unique<DoubleReadOp>(offset1, length1, offset2, length2, std::nullopt);
+}
+
+std::unique_ptr<DoubleReadOp> DoubleReadOp::generate(uint64_t offset1,
+                                                     uint64_t length1,
+                                                     uint64_t offset2,
+                                                     uint64_t length2,
+                                                     bool balanced_read) {
+  return std::make_unique<DoubleReadOp>(offset1, length1, offset2, length2, balanced_read);
 }
 
 TripleReadOp::TripleReadOp(uint64_t offset1, uint64_t length1, uint64_t offset2,
-                           uint64_t length2, uint64_t offset3, uint64_t length3)
+                           uint64_t length2, uint64_t offset3, uint64_t length3,
+                           std::optional<bool> balanced_read)
     : ReadWriteOp<OpType::Read3, 3>({offset1, offset2, offset3},
-                                    {length1, length2, length3}) {}
+                                    {length1, length2, length3},
+                                    balanced_read) {}
 
 std::unique_ptr<TripleReadOp> TripleReadOp::generate(
     uint64_t offset1, uint64_t length1, uint64_t offset2, uint64_t length2,
     uint64_t offset3, uint64_t length3) {
   return std::make_unique<TripleReadOp>(offset1, length1, offset2, length2,
-                                        offset3, length3);
+                                        offset3, length3, std::nullopt);
+}
+
+std::unique_ptr<TripleReadOp> TripleReadOp::generate(
+    uint64_t offset1, uint64_t length1, uint64_t offset2, uint64_t length2,
+    uint64_t offset3, uint64_t length3, bool balanced_read) {
+  return std::make_unique<TripleReadOp>(offset1, length1, offset2, length2,
+                                        offset3, length3, balanced_read);
 }
 
 SingleWriteOp::SingleWriteOp(uint64_t offset, uint64_t length)

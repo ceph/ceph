@@ -23,11 +23,28 @@
 #include <string>
 #include <unistd.h>
 
-std::string create_one_pool(const std::string &pool_name, rados_t *cluster,
-    uint32_t pg_num=0);
-std::string create_one_ec_pool(const std::string &pool_name, rados_t *cluster);
+std::string create_one_pool(const std::string &pool_name, rados_t *cluster);
+std::string create_pool(const std::string &pool_name, rados_t *cluster);
+std::string create_one_ec_pool(const std::string &pool_name, rados_t *cluster, bool fast_ec = false);
+std::string create_ec_pool(const std::string &pool_name, rados_t *cluster, bool fast_ec = false);
+std::string set_pool_flags(const std::string &pool_name, rados_t *cluster, int64_t flags, bool set_not_unset);
+std::string set_split_ops(const std::string &pool_name, rados_t *cluster, bool set_not_unset);
 std::string connect_cluster(rados_t *cluster);
 int destroy_one_pool(const std::string &pool_name, rados_t *cluster);
 int destroy_one_ec_pool(const std::string &pool_name, rados_t *cluster);
+int destroy_pool(const std::string &pool_name, rados_t *cluster);
+int destroy_ec_pool(const std::string &pool_name, rados_t *cluster);
+// The following are convenient macros for defining test combinations
+// with each of the gtest suites.
+#define INSTANTIATE_TEST_SUITE_P_EC(CLASS) \
+INSTANTIATE_TEST_SUITE_P( CLASS ## ParamCombination, CLASS, \
+::testing::Combine( \
+  ::testing::Bool(),   /* fast_ec */ \
+  ::testing::Bool()))  /* split_ops */
+
+#define INSTANTIATE_TEST_SUITE_P_REPLICA(CLASS) \
+INSTANTIATE_TEST_SUITE_P( CLASS ## ParamCombination, CLASS, \
+::testing::Bool()) /* split_ops */
+
 
 #endif

@@ -191,6 +191,8 @@ enum {
   l_osdc_replica_read_bounced,
   l_osdc_replica_read_completed,
 
+  l_osdc_split_op_reads,
+
   l_osdc_last,
 };
 
@@ -246,6 +248,10 @@ void Objecter::handle_conf_change(const ConfigProxy& conf,
   }
   if (changed.count("rados_osd_op_timeout")) {
     osd_timeout = conf.get_val<std::chrono::seconds>("rados_osd_op_timeout");
+  }
+  if (changed.count("osd_min_split_replica_read_size")) {
+    min_split_replica_read_size
+      = conf.get_val<uint64_t>("osd_min_split_replica_read_size");
   }
 
   auto read_policy = conf.get_val<std::string>("rados_replica_read_policy");
@@ -400,6 +406,8 @@ void Objecter::init()
 			"Operations bounced by replica to be resent to primary");
     pcb.add_u64_counter(l_osdc_replica_read_completed, "replica_read_completed",
 			"Operations completed by replica");
+    pcb.add_u64_counter(l_osdc_split_op_reads, "split_op_reads",
+                    "Client read ops split by SplitOp");
 
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
@@ -528,6 +536,18 @@ void Objecter::shutdown()
       _session_command_op_remove(homeless_session, cop);
     }
     cop->put();
+  }
+
+  // Split ops can only contain standard ops...
+  while(!splitop_session->ops.empty()) {
+    auto i = splitop_session->ops.begin();
+    ldout(cct, 10) << " op " << i->first << dendl;
+    auto op = i->second;
+    {
+      std::unique_lock swl(splitop_session->lock);
+      _session_op_remove(splitop_session, op);
+    }
+    op->put();
   }
 
   if (tick_event) {
@@ -1618,7 +1638,11 @@ void Objecter::_check_op_pool_dne(Op *op, std::unique_lock<std::shared_mutex> *s
 		     << " dne" << dendl;
       if (op->has_completion()) {
 	num_in_flight--;
-	op->complete(make_error_code(osdc_errc::pool_dne), -ENOENT, service.get_executor());
+        // If FORCE_OSD is set, the forced OSD doesn't exist in the current map.
+        // This may be transient (OSD temporarily down) or permanent (OSD removed).
+        // Return -EAGAIN instead of -ENOENT to allow caller to retry.
+        int rc = (op->target.flags & CEPH_OSD_FLAG_FORCE_OSD) ? -EAGAIN : -ENOENT;
+	op->complete(make_error_code(osdc_errc::pool_dne), rc, service.get_executor());
       }
 
       OSDSession *s = op->session;
@@ -2352,10 +2376,35 @@ void Objecter::resend_mon_ops()
 
 // read | write ---------------------------
 
+void Objecter::op_post_split_op_complete(Op* op, bs::error_code ec, int rc) {
+  ceph_assert(op->session == splitop_session);
 
-void Objecter::op_post_submit(Op* op) {
-  boost::asio::post(service, [this, op]() {
-    op_submit(op);
+  op->get();  // Keep alive during async operation
+
+  boost::asio::post(service, [this, op, ec, rc]() {
+    shunique_lock rl(rwlock, ceph::acquire_shared);
+
+    bool freed = op->get_nref() == 1;
+    op->put();
+
+    if (freed || op->session != splitop_session) {
+      ceph_assert(!initialized); // Should only happen during shutdown.
+      return;
+    }
+
+    unique_lock sl(op->session->lock);
+
+    if (rc != -EAGAIN) {
+      op->trace.event("post op complete");
+      // This removes from session and unlocks sl.
+      complete_op_reply(op, ec, op->session, sl, rc);
+    } else {
+      _session_op_remove(op->session, op);
+      sl.unlock();
+      op->split_op_tids.reset();
+      ceph_tid_t tid = 0;
+      _op_submit(op, rl, &tid);
+    }
   });
 }
 
@@ -2367,11 +2416,17 @@ void Objecter::op_submit(Op *op, ceph_tid_t *ptid, int *ctx_budget)
     ptid = &tid;
   op->trace.event("op submit");
 
-  bool was_split = SplitOp::create(op, *this, rl, ptid, ctx_budget, cct);
+  _op_submit_with_budget(op, rl, ptid, ctx_budget);
+}
 
-  if (!was_split) {
-    _op_submit_with_budget(op, rl, ptid, ctx_budget);
+void Objecter::add_op_to_splitop_session(Op *op) {
+  unique_lock sl(splitop_session->lock);
+  if (op->tid == 0) {
+    op->tid = ++last_tid;
   }
+  _session_op_assign(splitop_session, op);
+  inflight_ops++;
+  sl.unlock();
 }
 
 void Objecter::_op_submit_with_budget(Op *op,
@@ -2405,7 +2460,14 @@ void Objecter::_op_submit_with_budget(Op *op,
 				      op_cancel(tid, -ETIMEDOUT); });
   }
 
-  _op_submit(op, sul, ptid);
+
+  bool was_split = SplitOp::create(op, *this, sul, cct);
+
+  if (was_split) {
+    *ptid = op->tid;
+  } else {
+    _op_submit(op, sul, ptid);
+  }
 }
 
 void Objecter::_send_op_account(Op *op)
@@ -2506,22 +2568,31 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
 
   ldout(cct, 10) << __func__ << " op " << op << dendl;
 
+  if (op->target.flags & CEPH_OSD_FLAG_FORCE_OSD) {
+    logger->inc(l_osdc_split_op_reads);
+  }
+
   // pick target
   ceph_assert(op->session == NULL);
   OSDSession *s = NULL;
 
   bool check_for_latest_map = false;
-  int r = _calc_target(&op->target);
-  switch(r) {
-  case RECALC_OP_TARGET_POOL_DNE:
-    check_for_latest_map = true;
-    break;
-  case RECALC_OP_TARGET_POOL_EIO:
-    if (op->has_completion()) {
-      op->complete(make_error_code(osdc_errc::pool_eio), -EIO,
-		   service.get_executor());
+  int r = 0;
+  // Avoid duplicating _calc_target for direct reads, where _calc_target has
+  // already been called.
+  if ((op->target.flags & CEPH_OSD_FLAG_EC_DIRECT_READ) == 0) {
+    r = _calc_target(&op->target);
+    switch(r) {
+    case RECALC_OP_TARGET_POOL_DNE:
+      check_for_latest_map = true;
+      break;
+    case RECALC_OP_TARGET_POOL_EIO:
+      if (op->has_completion()) {
+        op->complete(make_error_code(osdc_errc::pool_eio), -EIO,
+                     service.get_executor());
+      }
+      return;
     }
-    return;
   }
 
   // Try to get a session, including a retry if we need to take write lock
@@ -2636,9 +2707,28 @@ int Objecter::op_cancel(OSDSession *s, ceph_tid_t tid, int r,
   }
 #endif
 
+  Op *op = p->second;
+  if (op->split_op_tids) {
+    auto tids = *op->split_op_tids; // intentional copy.
+    sl.unlock();
+
+    // An op with split ops is not actually active, but has child ops which
+    // need to be canceled.  This op should end up being canceled by the
+    // generated completions.
+    for (auto sub_tid : tids) {
+      ldout(cct, 10) << __func__ << " SplitOp:: cancel tid " << tid
+               << " sub_tid " << sub_tid
+               << " in session " << s->osd << dendl;
+      int ret = _op_cancel(sub_tid, r);
+      if (ret != 0) {
+        ldout(cct, 20) << __func__ << " unexpected error canceling sub_tid "
+                      << sub_tid << ": " << ret << dendl;
+      }
+    }
+    return 0;
+  }
   ldout(cct, 10) << __func__ << " tid " << tid << " in session " << s->osd
 		 << dendl;
-  Op *op = p->second;
   if (op->has_completion()) {
     num_in_flight--;
     op->complete(ec, r, service.get_executor());
@@ -2689,17 +2779,32 @@ start:
     }
   }
 
-  // Handle case where the op is in homeless session
-  shared_lock sl(homeless_session->lock);
-  while (auto tid = next_subsystem_op(homeless_session->ops)) {
-    sl.unlock();
-    auto ret = op_cancel(homeless_session, *tid, ceph::from_error_code(ec), ec);
-    if (ret == -ENOENT) {
-      /* oh no! raced, maybe tid moved to another session, restarting */
-      goto start;
+  {
+    // Handle case where the op is in homeless session
+    shared_lock sl(homeless_session->lock);
+    while (auto tid = next_subsystem_op(homeless_session->ops)) {
+      sl.unlock();
+      auto ret = op_cancel(homeless_session, *tid, ceph::from_error_code(ec), ec);
+      if (ret == -ENOENT) {
+        /* oh no! raced, maybe tid moved to another session, restarting */
+        goto start;
+      }
     }
+    sl.unlock();
   }
-  sl.unlock();
+  {
+    // Handle case where the op is in splitop session
+    shared_lock sl(splitop_session->lock);
+    while (auto tid = next_subsystem_op(splitop_session->ops)) {
+      sl.unlock();
+      auto ret = op_cancel(splitop_session, *tid, ceph::from_error_code(ec), ec);
+      if (ret == -ENOENT) {
+        /* oh no! raced, maybe tid moved to another session, restarting */
+        goto start;
+      }
+    }
+    sl.unlock();
+  }
 }
 
 int Objecter::op_cancel(ceph_tid_t tid, int r)
@@ -2749,19 +2854,36 @@ start:
   ldout(cct, 5) << __func__ << ": tid " << tid
 		<< " not found in live sessions" << dendl;
 
-  // Handle case where the op is in homeless session
-  shared_lock sl(homeless_session->lock);
-  if (homeless_session->ops.find(tid) != homeless_session->ops.end()) {
-    sl.unlock();
-    ret = op_cancel(homeless_session, tid, r, osdcode(r));
-    if (ret == -ENOENT) {
-      /* oh no! raced, maybe tid moved to another session, restarting */
-      goto start;
+  {
+    // Handle case where the op is in homeless session
+    shared_lock sl(homeless_session->lock);
+    if (homeless_session->ops.find(tid) != homeless_session->ops.end()) {
+      sl.unlock();
+      ret = op_cancel(homeless_session, tid, r, osdcode(r));
+      if (ret == -ENOENT) {
+        /* oh no! raced, maybe tid moved to another session, restarting */
+        goto start;
+      } else {
+        return ret;
+      }
     } else {
-      return ret;
+      sl.unlock();
     }
-  } else {
-    sl.unlock();
+  }
+  {
+    shared_lock sl(splitop_session->lock);
+    if (splitop_session->ops.find(tid) != splitop_session->ops.end()) {
+      sl.unlock();
+      ret = op_cancel(splitop_session, tid, r, osdcode(r));
+      if (ret == -ENOENT) {
+        /* oh no! raced, maybe tid moved to another session, restarting */
+        goto start;
+      } else {
+        return ret;
+      }
+    } else {
+      sl.unlock();
+    }
   }
 
   ldout(cct, 5) << __func__ << ": tid " << tid
@@ -3120,18 +3242,34 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
     t->pg_num_mask = pg_num_mask;
     t->pg_num_pending = pg_num_pending;
     spg_t spgid(actual_pgid);
-    if (t->force_shard) {
-      t->osd = t->acting[int(*t->force_shard)];
-      // In some redrive scenarios, the acting set can change. Fail the IO
-      // and retry.
-      if (!osdmap->exists(t->osd)) {
-        t->osd = -1;
-        return RECALC_OP_TARGET_POOL_DNE;
+    if (t->flags & CEPH_OSD_FLAG_FORCE_OSD) {
+      // In some redrive scenarios, the acting set can change. If the forced
+      // OSD doesn't exist in the right location, then fail the op.
+      int shard_id = t->actual_pgid.shard.id;
+      if (shard_id < 0 || std::cmp_greater_equal(shard_id, t->acting.size()) ||
+        t->acting[shard_id] != t->osd) {
+        // If FAIL_ON_EAGAIN is set, we must not failover - the caller expects
+        // -EAGAIN to be returned. Otherwise, clear the direct read flags and
+        // redrive to the primary OSD (similar to what happens when we get -EAGAIN).
+        if (t->flags & CEPH_OSD_FLAG_FAIL_ON_EAGAIN) {
+          ldout(cct, 10) << __func__ << " forced osd." << t->osd
+                         << " not in acting set " << t->acting
+                         << ", FAIL_ON_EAGAIN set, returning POOL_DNE to trigger -EAGAIN"
+                         << dendl;
+          t->osd = -1;
+          return RECALC_OP_TARGET_POOL_DNE;
+        } else {
+          ldout(cct, 10) << __func__ << " forced osd." << t->osd
+                         << " not in acting set " << t->acting
+                         << ", clearing direct read flags and redriving to primary"
+                         << dendl;
+          // Clear all direct read flags (EC_DIRECT_READ, BALANCE_READS, LOCALIZE_READS)
+          t->flags &= ~CEPH_OSD_FLAGS_DIRECT_READ;
+          t->flags &= ~CEPH_OSD_FLAG_FORCE_OSD;
+        }
       }
-      if (pi->is_erasure()) {
-        spgid.reset_shard(osdmap->pgtemp_undo_primaryfirst(*pi, actual_pgid, *t->force_shard));
-      }
-    } else if (pi->is_erasure()) {
+    }
+    if (pi->is_erasure()) {
       // Optimized EC pools need to be careful when calculating the shard
       // because an OSD may have multiple shards and the primary shard
       // might not be the first one in the acting set. The lookup
@@ -3140,10 +3278,12 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
       if (osdmap->has_pgtemp(actual_pgid)) {
 	pg_temp = osdmap->pgtemp_primaryfirst(*pi, t->acting);
       }
-      for (uint8_t i = 0; i < t->acting.size(); ++i) {
-        if (pg_temp[i] == acting_primary) {
-	  spgid.reset_shard(osdmap->pgtemp_undo_primaryfirst(*pi, actual_pgid, shard_id_t(i)));
-          break;
+      if ((t->flags & CEPH_OSD_FLAG_FORCE_OSD) == 0) {
+        for (uint8_t i = 0; i < t->acting.size(); ++i) {
+          if (pg_temp[i] == acting_primary) {
+            spgid.reset_shard(osdmap->pgtemp_undo_primaryfirst(*pi, actual_pgid, shard_id_t(i)));
+            break;
+          }
         }
       }
     }
@@ -3160,7 +3300,7 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
 		   << " acting " << t->acting
 		   << " primary " << acting_primary << dendl;
     t->used_replica = false;
-    if (!t->force_shard && (t->flags & (CEPH_OSD_FLAG_BALANCE_READS |
+    if (!(t->flags & CEPH_OSD_FLAG_FORCE_OSD) && (t->flags & (CEPH_OSD_FLAG_BALANCE_READS |
                      CEPH_OSD_FLAG_LOCALIZE_READS)) &&
         !is_write && pi->is_replicated() && t->acting.size() > 1) {
       int osd;
@@ -3197,7 +3337,7 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
 	osd = t->acting[best];
       }
       t->osd = osd;
-    } else if (!t->force_shard) {
+    } else if (!(t->flags & CEPH_OSD_FLAG_FORCE_OSD)) {
       t->osd = acting_primary;
     }
   }
@@ -3246,7 +3386,7 @@ void Objecter::_session_op_remove(OSDSession *from, Op *op)
     num_homeless_ops--;
   }
 
-  from->ops.erase(op->tid);
+  ceph_assert(from->ops.erase(op->tid));
   put_session(from);
   op->session = NULL;
 
@@ -3387,6 +3527,7 @@ void Objecter::_finish_op(Op *op, int r)
 
   ceph_assert(check_latest_map_ops.find(op->tid) == check_latest_map_ops.end());
 
+  ceph_assert(inflight_ops > 0);
   inflight_ops--;
 
   op->put();
@@ -3574,7 +3715,7 @@ int Objecter::take_linger_budget(LingerOp *info)
   return 1;
 }
 
-bs::error_code Objecter::handle_osd_op_reply2(Op *op, vector<OSDOp> &out_ops) {
+bs::error_code Objecter::process_op_reply_handlers(Op *op, vector<OSDOp> &out_ops) {
 
   ceph_assert(op->ops.size() == op->out_bl.size());
   ceph_assert(op->ops.size() == op->out_rval.size());
@@ -3727,8 +3868,6 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     // have, but that is better than doing callbacks out of order.
   }
 
-  decltype(op->onfinish) onfinish;
-
   int rc = m->get_result();
 
   if (m->is_redirect_reply()) {
@@ -3760,7 +3899,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     }
   }
 
-  if (rc == -EAGAIN && !op->target.force_shard) {
+  if (rc == -EAGAIN && (op->target.flags & CEPH_OSD_FLAG_FAIL_ON_EAGAIN) == 0) {
     ldout(cct, 7) << " got -EAGAIN, resubmitting" << dendl;
     if (op->has_completion())
       num_in_flight--;
@@ -3768,8 +3907,12 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     sl.unlock();
 
     op->tid = 0;
-    op->target.flags &= ~(CEPH_OSD_FLAG_BALANCE_READS |
-			  CEPH_OSD_FLAG_LOCALIZE_READS);
+    op->target.flags &= ~CEPH_OSD_FLAGS_DIRECT_READ;
+
+    // If IGNORE_EAGAIN is not set and FORCE_OSD is set, the implication is
+    // that it is safe to redrive the IO to the primary, without any balanced
+    // read flag.
+    op->target.flags &= ~CEPH_OSD_FLAG_FORCE_OSD;
     op->target.pgid = pg_t();
     _op_submit(op, sul, NULL);
     m->put();
@@ -3820,24 +3963,31 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 		  << " != request ops " << op->ops
 		  << " from " << m->get_source_inst() << dendl;
 
-  bs::error_code handler_error = handle_osd_op_reply2(op, out_ops);
+  bs::error_code handler_error = process_op_reply_handlers(op, out_ops);
+
+  logger->inc(l_osdc_op_reply);
+  logger->tinc(l_osdc_op_latency, ceph::coarse_mono_time::clock::now() - op->stamp);
+  logger->set(l_osdc_op_inflight, num_in_flight);
+
+  // This function unlocks sl.
+  complete_op_reply(op, handler_error, s, sl, rc);
+  m->put();
+}
+
+void Objecter::complete_op_reply(Op *op, bs::error_code handler_error, OSDSession *s, unique_lock<std::shared_mutex> &sl, int rc) {
 
   // NOTE: we assume that since we only request ONDISK ever we will
   // only ever get back one (type of) ack ever.
-
+  decltype(op->onfinish) onfinish;
   if (op->has_completion()) {
     num_in_flight--;
     onfinish = std::move(op->onfinish);
     op->onfinish = nullptr;
   }
-  logger->inc(l_osdc_op_reply);
-  logger->tinc(l_osdc_op_latency, ceph::coarse_mono_time::clock::now() - op->stamp);
-  logger->set(l_osdc_op_inflight, num_in_flight);
-
   /* get it before we call _finish_op() */
   auto completion_lock = s->get_lock(op->target.base_oid);
 
-  ldout(cct, 15) << "handle_osd_op_reply completed tid " << tid << dendl;
+  ldout(cct, 15) << "handle_osd_op_reply completed tid " << op->tid << dendl;
   _finish_op(op, 0);
 
   ldout(cct, 5) << num_in_flight << " in flight" << dendl;
@@ -3861,8 +4011,6 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   if (completion_lock.mutex()) {
     completion_lock.unlock();
   }
-
-  m->put();
 }
 
 void Objecter::handle_osd_backoff(MOSDBackoff *m)
@@ -4829,6 +4977,7 @@ void Objecter::_dump_active()
     sl.unlock();
   }
   _dump_active(homeless_session);
+  _dump_active(splitop_session);
 }
 
 void Objecter::dump_active()
@@ -4888,6 +5037,7 @@ void Objecter::dump_ops(Formatter *fmt)
     sl.unlock();
   }
   _dump_ops(homeless_session, fmt);
+  _dump_ops(splitop_session, fmt);
   fmt->close_section(); // ops array
 }
 
@@ -4916,6 +5066,7 @@ void Objecter::dump_linger_ops(Formatter *fmt)
     sl.unlock();
   }
   _dump_linger_ops(homeless_session, fmt);
+  // No linger ops in splitop_session
   fmt->close_section(); // linger_ops array
 }
 
@@ -4950,6 +5101,7 @@ void Objecter::dump_command_ops(Formatter *fmt)
     sl.unlock();
   }
   _dump_command_ops(homeless_session, fmt);
+  // No command_ops for splitops session.
   fmt->close_section(); // command_ops array
 }
 
@@ -5309,6 +5461,8 @@ Objecter::Objecter(CephContext *cct,
 {
   mon_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
   osd_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_osd_op_timeout");
+  min_split_replica_read_size
+    = cct->_conf.get_val<uint64_t>("osd_min_split_replica_read_size");
 
   auto read_policy = cct->_conf.get_val<std::string>("rados_replica_read_policy");
   if (read_policy == "localize") {
@@ -5323,8 +5477,10 @@ Objecter::Objecter(CephContext *cct,
 Objecter::~Objecter()
 {
   ceph_assert(homeless_session->get_nref() == 1);
+  ceph_assert(splitop_session->get_nref() == 1);
   ceph_assert(num_homeless_ops == 0);
   homeless_session->put();
+  splitop_session->put();
 
   ceph_assert(osd_sessions.empty());
   ceph_assert(poolstat_ops.empty());
