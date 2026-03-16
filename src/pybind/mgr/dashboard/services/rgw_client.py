@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+import tempfile
 import time
 import uuid
 import xml.etree.ElementTree as ET  # noqa: N814
@@ -30,6 +31,7 @@ from .. import mgr
 from ..awsauth import S3Auth
 from ..controllers.multi_cluster import MultiCluster
 from ..exceptions import DashboardException
+from ..model.certificate import CEPHADM_ROOT_CA_CERT
 from ..rest_client import RequestException, RestClient
 from ..settings import Settings
 from ..tools import dict_contains_path, dict_get, json_str_to_object, str_to_bool
@@ -77,6 +79,14 @@ class RgwDaemon:
     zonegroup_name: str
     zonegroup_id: str
     zone_name: str
+
+
+def _remove_tmp_file(path):
+    if path and os.path.isfile(path):
+        try:
+            os.remove(path)
+        except Exception:  # pylint: disable=broad-except
+            pass
 
 
 def _get_daemons() -> Dict[str, RgwDaemon]:
@@ -244,6 +254,9 @@ class RgwClient(RestClient):
     _config_instances = {}  # type: Dict[str, RgwClient]
     _rgw_settings_snapshot = None
     _daemons: Dict[str, RgwDaemon] = {}
+    _ssl_ca_bundle_path: Optional[str] = None
+    _ssl_ca_bundle_timestamp: float = 0.0
+    _SSL_CA_BUNDLE_TTL: float = 60.0
     daemon: RgwDaemon
     got_keys_from_config: bool
     userid: str
@@ -386,6 +399,45 @@ class RgwClient(RestClient):
         self.auth = S3Auth(keys['access_key'], keys['secret_key'],
                            service_url=self.service_url)
 
+    @staticmethod
+    def _get_ssl_ca_bundle(fallback):
+        """Fetch the cephadm root CA cert and write it to a temp file for SSL verification.
+
+        Falls back to the provided default if the cert store is unavailable or
+        the root CA certificate is not found.  The temp file is cached and
+        refreshed after _SSL_CA_BUNDLE_TTL seconds to pick up CA rotations.
+        """
+        if (RgwClient._ssl_ca_bundle_path
+                and os.path.isfile(RgwClient._ssl_ca_bundle_path)
+                and (time.time() - RgwClient._ssl_ca_bundle_timestamp)
+                < RgwClient._SSL_CA_BUNDLE_TTL):
+            return RgwClient._ssl_ca_bundle_path
+        try:
+            orch = OrchClient.instance()
+            if not orch.available():
+                logger.warning("Orchestrator is not available, "
+                               "cannot fetch root CA cert for RGW SSL verification")
+                return fallback
+            root_ca_cert = orch.cert_store.get_cert(CEPHADM_ROOT_CA_CERT)
+            if not root_ca_cert:
+                logger.warning("cephadm root CA cert not found in cert store, "
+                               "falling back to default SSL verification")
+                return fallback
+            _remove_tmp_file(RgwClient._ssl_ca_bundle_path)
+            ca_bundle = tempfile.NamedTemporaryFile(delete=False, suffix='.pem')
+            ca_bundle.write(root_ca_cert.encode('utf-8'))
+            ca_bundle.flush()
+            ca_bundle.close()
+            RgwClient._ssl_ca_bundle_path = ca_bundle.name
+            RgwClient._ssl_ca_bundle_timestamp = time.time()
+            logger.info("Using cephadm root CA cert for RGW SSL verification: %s",
+                        ca_bundle.name)
+            return ca_bundle.name
+        except Exception as ex:  # pylint: disable=broad-except
+            logger.warning("Could not fetch cephadm root CA cert: %s. "
+                           "Falling back to default SSL verification", ex)
+        return fallback
+
     def __init__(self,
                  access_key: str,
                  secret_key: str,
@@ -398,6 +450,8 @@ class RgwClient(RestClient):
                                      http_status_code=404,
                                      component='rgw')
         ssl_verify = Settings.RGW_API_SSL_VERIFY
+        if ssl_verify and daemon.ssl:
+            ssl_verify = RgwClient._get_ssl_ca_bundle(ssl_verify)
         self.admin_path = Settings.RGW_API_ADMIN_RESOURCE
         self.service_url = build_url(host=daemon.host, port=daemon.port)
 
@@ -422,7 +476,7 @@ class RgwClient(RestClient):
                                      component='rgw')
         self.daemon = daemon
 
-        logger.info("Created new connection: daemon=%s, host=%s, port=%s, ssl=%d, sslverify=%d",
+        logger.info("Created new connection: daemon=%s, host=%s, port=%s, ssl=%d, sslverify=%s",
                     daemon.name, daemon.host, daemon.port, daemon.ssl, ssl_verify)
 
     @RestClient.api_get('/', resp_structure='[0] > (ID & DisplayName)')

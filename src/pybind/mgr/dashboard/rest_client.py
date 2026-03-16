@@ -471,18 +471,28 @@ class RestClient(object):
         return resp
 
     def handle_connection_error(self, exception, method):
+        errno = "n/a"
+        strerror = "n/a"
         if exception.args:
             if isinstance(exception.args[0], SSLError):
                 errno = "n/a"
-                strerror = "SSL error. Probably trying to access a non " \
-                           "SSL connection."
-                logger.error("%s REST API failed %s, SSL error (url=%s).",
-                             self.client_name, method.upper(), exception.request.url)
+                strerror = str(exception.args[0]).strip() or (
+                    "SSL error. Probably trying to access a non SSL connection.")
+                logger.error("%s REST API failed %s, SSL error (url=%s): %s",
+                             self.client_name, method.upper(), exception.request.url,
+                             strerror)
             else:
                 try:
-                    match = re.match(r'.*: \[Errno (-?\d+)\] (.+)',
-                                     exception.args[0].reason.args[0])
-                except AttributeError:
+                    reason_str = exception.args[0].reason.args[0]
+                    if reason_str is not None:
+                        reason_str = str(reason_str)
+                    else:
+                        reason_str = ''
+                except (AttributeError, TypeError, IndexError):
+                    reason_str = str(exception.args[0]) if exception.args else ''
+                try:
+                    match = re.match(r'.*: \[Errno (-?\d+)\] (.+)', reason_str)
+                except TypeError:
                     match = None
                 if match:
                     errno = match.group(1)
@@ -509,6 +519,12 @@ class RestClient(object):
                 "Please check your configuration and that the API endpoint"
                 " is accessible"
                 .format(self.client_name, strerror, errno))
+        elif strerror != "n/a":
+            exception_msg = (
+                "{} REST API cannot be reached: {}. "
+                "Please check your configuration and that the API endpoint"
+                " is accessible"
+                .format(self.client_name, strerror))
         else:
             exception_msg = (
                 "{} REST API cannot be reached. Please check "
