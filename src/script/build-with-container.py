@@ -307,11 +307,11 @@ def _git_current_branch(ctx):
     return res.stdout.decode("utf8").strip()
 
 
-def _git_current_sha(ctx, short=True):
+def _git_current_sha(ctx, short=True, what="HEAD"):
     args = ["rev-parse"]
     if short:
         args.append("--short")
-    args.append("HEAD")
+    args.append(what)
     cmd = _git_command(ctx, args)
     res = _run(cmd, check=True, capture_output=True)
     return res.stdout.decode("utf8").strip()
@@ -366,6 +366,8 @@ class Steps(StrEnum):
     RPM = "rpm"
     DEBS = "debs"
     PACKAGES = "packages"
+    LOCAL_CONTAINER = "local-container"
+    LOCAL_OCI_IMAGE = "local-oci-image"
     INTERACTIVE = "interactive"
 
 
@@ -408,6 +410,7 @@ class Context:
         self._engine = None
         self.distro_cache_name = ""
         self.current_srpm = None
+        self.current_srpm_version = None
 
     @property
     def container_engine(self):
@@ -570,6 +573,13 @@ class Context:
             path = path.expanduser()
             return path.resolve()
         return None
+
+    @property
+    def rpm_topdir(self):
+        topdir = pathlib.Path(self.cli.homedir) / "rpmbuild"
+        if self.cli.build_dir:
+            topdir = pathlib.Path(ctx.cli.homedir) / ctx.cli.build_dir / "rpmbuild"
+        return topdir
 
     @property
     def map_user(self):
@@ -993,6 +1003,7 @@ def bc_find_srpm(ctx):
         ctx.current_srpm = _find_srpm_by_rpm_query(ctx)
     if ctx.current_srpm:
         log.info("Found SRPM: %s", ctx.current_srpm)
+        ctx.current_srpm_version = re.sub(r"^ceph-(.*)\.[^.]*\.src\.rpm$", r"\1", ctx.current_srpm)
 
 
 @Builder.set(Steps.RPM)
@@ -1006,23 +1017,37 @@ def bc_build_rpm(ctx):
         if not ctx.current_srpm:
             raise RuntimeError("unable to find source rpm(s)")
     srpm_path = pathlib.Path(ctx.cli.homedir) / ctx.current_srpm
-    topdir = pathlib.Path(ctx.cli.homedir) / "rpmbuild"
-    if ctx.cli.build_dir:
-        topdir = (
-            pathlib.Path(ctx.cli.homedir) / ctx.cli.build_dir / "rpmbuild"
-        )
+    topdir = ctx.rpm_topdir
     rpmbuild_args = [
         'rpmbuild',
         '--rebuild',
         f'-D_topdir {topdir}',
     ] + list(ctx.cli.rpmbuild_arg or []) + [str(srpm_path)]
     rpmbuild_cmd = ' '.join(shlex.quote(cmd) for cmd in rpmbuild_args)
+
+    # Match the official layout found on download.ceph.com, minus the signatures and SRPMS
+    createrepo_cmd = (
+        "cd " + shlex.quote(str(topdir)) + " && "
+        "RPM_ARCH=$(rpm --eval '%{_target_cpu}') && "
+        "createrepo_c RPMS/$RPM_ARCH && "
+        "createrepo_c RPMS/noarch && "
+        'printf "'
+            "[ceph-local%s]\\n"
+            "name=Local Ceph RPM Repository%s\\n"
+            "baseurl=file://%s/RPMS/%s\\n"
+            "enabled=1\\n"
+            "gpgcheck=0\\n\\n"
+        '" '
+        '"" "" "$PWD" "$RPM_ARCH" "-noarch" " (noarch)" "$PWD" "noarch" '
+        "> ceph-local.repo"
+    )
+
     cmd = _container_cmd(
         ctx,
         [
             "bash",
             "-c",
-            f"set -x; mkdir -p {topdir} && {rpmbuild_cmd}",
+            f"set -x; mkdir -p {topdir} && {rpmbuild_cmd} && {createrepo_cmd}",
         ],
     )
     with ctx.user_command():
@@ -1058,6 +1083,88 @@ def bc_make_packages(ctx):
         ctx.build.wants(Steps.RPM, ctx)
     else:
         ctx.build.wants(Steps.DEBS, ctx)
+
+
+@Builder.set(Steps.LOCAL_CONTAINER)
+def bc_make_local_container(ctx):
+    """Build a container image from local RPMs"""
+    if ctx.cli.distro not in DistroKind.uses_rpmbuild():
+        raise RuntimeError("Non-RPM container build is not supported")
+
+    # TODO: find out of Docker supports "RUN --mount=type=bind" well enough
+    if ctx.container_engine != "podman":
+         raise RuntimeError("Only podman is supported for building containers, as it has the --volume option")
+
+    ctx.build.wants(Steps.RPM, ctx)
+
+    # The container version should follow the SRPM, not the currently checked
+    # out git commit. This is necessary so that we can build older branches
+    # and then make containers out of them.
+    # TODO: test if it works.
+    ctx.build.wants(Steps.FIND_SRPM, ctx, force=True)
+
+    cwd = pathlib.Path(".").absolute()
+
+    # What matters is the git revision of the SRPM
+    revision_match = re.match(r"^.*\.g([0-9a-f]*)$", ctx.current_srpm_version)
+    if revision_match:
+        ceph_sha = revision_match.group(1)
+    elif "-" not in version_string:
+        # This is likely an exact tag
+        try:
+            # TODO: test by creating a fake release tag
+            ceph_sha = _git_current_sha(ctx, what="v" + ctx.current_srpm_version)
+        except subprocess.CalledProcessError:
+            ceph_sha = "UNKNOWN"
+    else:
+        ceph_sha = "UNKNOWN"
+
+    # TODO: support crimson
+    cmd = [
+        ctx.container_engine,
+        "build",
+        "--pull=newer",
+        "--squash",
+        "-t", f"ceph:{ctx.current_srpm_version}-local",
+        f"--build-arg=FROM_IMAGE={ctx.from_image}",
+        f"--build-arg=CEPH_SHA1={ceph_sha}",
+        f"--build-arg=CEPH_GIT_REPO=https://github.com/ceph/ceph.git",
+        f"--build-arg=CEPH_REF={ctx.base_branch()}",
+        f"--build-arg=OSD_FLAVOR=default",
+        f"--build-arg=CI_CONTAINER=false",
+        f"--build-arg=CUSTOM_CEPH_REPO_URL=file://{ctx.rpm_topdir}/ceph-local.repo",
+        f"--secret=id=prerelease_creds,src=/dev/null",  # XXX: make it optional in the Containerfile?
+        f"--label=org.opencontainers.image.authors=Unsupported Local Build",
+        f"--volume={cwd}:{ctx.cli.homedir}:Z",
+        "-f", "container/Containerfile",
+    ]
+    with ctx.user_command():
+        _run(cmd, check=True, ctx=ctx)
+
+
+@Builder.set(Steps.LOCAL_OCI_IMAGE)
+def bc_make_local_oci_image(ctx):
+    """Build an OCI-compliant tar container image export"""
+    if ctx.cli.distro not in DistroKind.uses_rpmbuild():
+        raise RuntimeError("Non-RPM container build is not supported")
+    if ctx.container_engine != "podman":
+         raise RuntimeError("Only podman is supported for building container images")
+
+    ctx.build.wants(Steps.LOCAL_CONTAINER, ctx)
+
+    # The container version follows the SRPM
+    ctx.build.wants(Steps.FIND_SRPM, ctx, force=True)
+
+    topdir_on_host = ctx.rpm_topdir.relative_to(ctx.cli.homedir)
+    cmd = [
+        ctx.container_engine,
+        "save",
+        f"ceph:{ctx.current_srpm_version}-local",
+        "--format=oci-archive",
+        "-o", f"{topdir_on_host}/ceph-container-{ctx.current_srpm_version}-local.oci.tar",
+    ]
+    with ctx.user_command():
+        _run(cmd, check=True, ctx=ctx)
 
 
 @Builder.set(Steps.CUSTOM)
