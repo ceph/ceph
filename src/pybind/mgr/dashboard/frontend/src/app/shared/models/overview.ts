@@ -87,6 +87,16 @@ export interface HealthCardVM {
   hosts: HealthCardSubStateVM;
 }
 
+export interface StorageCardVM {
+  totalCapacity: number | null;
+  usedCapacity: number | null;
+  breakdownData: { group: string; value: number }[];
+  isBreakdownLoaded: boolean;
+  consumptionTrendData: { timestamp: Date; values: { Used: number } }[];
+  averageDailyConsumption: string;
+  estimatedTimeUntilFull: string;
+}
+
 // Constants
 
 const WarnAndErrMessage = $localize`There are active alerts and unresolved health warnings.`;

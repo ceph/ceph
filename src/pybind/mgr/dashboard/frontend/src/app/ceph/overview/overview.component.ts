@@ -7,8 +7,8 @@ import {
   ViewEncapsulation
 } from '@angular/core';
 import { GridModule, LayoutModule, TilesModule } from 'carbon-components-angular';
-import { EMPTY, Observable } from 'rxjs';
-import { catchError, exhaustMap, map, shareReplay } from 'rxjs/operators';
+import { combineLatest, EMPTY, Observable } from 'rxjs';
+import { catchError, exhaustMap, map, shareReplay, startWith } from 'rxjs/operators';
 
 import { HealthService } from '~/app/shared/api/health.service';
 import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
@@ -27,7 +27,8 @@ import {
   SEVERITY,
   Severity,
   SEVERITY_TO_COLOR,
-  SeverityIconMap
+  SeverityIconMap,
+  StorageCardVM
 } from '~/app/shared/models/overview';
 
 import { OverviewStorageCardComponent } from './storage-card/overview-storage-card.component';
@@ -38,6 +39,11 @@ import { OverviewAlertsCardComponent } from './alerts-card/overview-alerts-card.
 import { PerformanceCardComponent } from '~/app/shared/components/performance-card/performance-card.component';
 import { DataTableModule } from '~/app/shared/datatable/datatable.module';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
+import { OverviewStorageService } from '~/app/shared/api/storage-overview.service';
+
+const SECONDS_PER_HOUR = 3600;
+const SECONDS_PER_DAY = 86400;
+const TREND_DAYS = 7;
 
 /**
  * Mapper: HealthSnapshotMap -> HealthCardVM
@@ -157,8 +163,10 @@ export class OverviewComponent {
 
   private readonly healthService = inject(HealthService);
   private readonly refreshIntervalService = inject(RefreshIntervalService);
+  private readonly overviewStorageService = inject(OverviewStorageService);
   private readonly destroyRef = inject(DestroyRef);
 
+  /* HEALTH CARD DATA */
   private readonly healthData$: Observable<HealthSnapshotMap> = this.refreshIntervalObs(() =>
     this.healthService.getHealthSnapshot()
   ).pipe(shareReplay({ bufferSize: 1, refCount: true }));
@@ -168,11 +176,79 @@ export class OverviewComponent {
     shareReplay({ bufferSize: 1, refCount: true })
   );
 
+  /* STORAGE CARD DATA */
+
   readonly storageVm$ = this.healthData$.pipe(
     map((data: HealthSnapshotMap) => ({
-      total: data.pgmap?.bytes_total ?? 0,
-      used: data.pgmap?.bytes_used ?? 0
+      total: data.pgmap?.bytes_total,
+      used: data.pgmap?.bytes_used
     })),
+    shareReplay({ bufferSize: 1, refCount: true })
+  );
+
+  readonly averageConsumption$ = this.refreshIntervalObs(() =>
+    this.overviewStorageService.getAverageConsumption()
+  ).pipe(shareReplay({ bufferSize: 1, refCount: true }));
+
+  readonly timeUntilFull$ = this.refreshIntervalObs(() =>
+    this.overviewStorageService.getTimeUntilFull()
+  ).pipe(shareReplay({ bufferSize: 1, refCount: true }));
+
+  readonly breakdownRawData$ = this.refreshIntervalObs(() =>
+    this.overviewStorageService.getStorageBreakdown()
+  ).pipe(shareReplay({ bufferSize: 1, refCount: true }));
+
+  // getTrendData() is already a polling stream through getRangeQueriesData()
+  // hence no refresh needed.
+  readonly trendData$ = this.overviewStorageService
+    .getTrendData(
+      Math.floor(Date.now() / 1000) - TREND_DAYS * SECONDS_PER_DAY,
+      Math.floor(Date.now() / 1000),
+      SECONDS_PER_HOUR
+    )
+    .pipe(
+      map((result) => {
+        const values = result?.TOTAL_RAW_USED ?? [];
+
+        return values.map(([ts, val]) => ({
+          timestamp: new Date(ts * 1000),
+          values: { Used: Number(val) }
+        }));
+      }),
+      shareReplay({ bufferSize: 1, refCount: true })
+    );
+
+  readonly storageCardVm$: Observable<StorageCardVM> = combineLatest([
+    this.storageVm$,
+    this.breakdownRawData$.pipe(startWith(null)),
+    this.trendData$.pipe(startWith([])),
+    this.averageConsumption$.pipe(startWith('')),
+    this.timeUntilFull$.pipe(startWith(''))
+  ]).pipe(
+    map(
+      ([
+        storage,
+        breakdownRawData,
+        consumptionTrendData,
+        averageDailyConsumption,
+        estimatedTimeUntilFull
+      ]) => {
+        const used = storage?.used ?? 0;
+        const [, unit] = this.overviewStorageService.formatBytesForChart(used);
+
+        return {
+          totalCapacity: storage?.total,
+          usedCapacity: storage?.used,
+          breakdownData: breakdownRawData
+            ? this.overviewStorageService.mapStorageChartData(breakdownRawData, unit)
+            : [],
+          isBreakdownLoaded: !!breakdownRawData,
+          consumptionTrendData,
+          averageDailyConsumption,
+          estimatedTimeUntilFull
+        };
+      }
+    ),
     shareReplay({ bufferSize: 1, refCount: true })
   );
 

@@ -3,24 +3,14 @@
   <ng-template #header>
     <h2 class="cds--type-heading-compact-02"
         i18n>Storage Overview</h2>
-    <cds-dropdown
-      label="Storage type"
-      class="overview-storage-card-dropdown"
-      i18n-label
-      size="sm"
-      [disabled]="!(displayData && usedRaw && totalRaw && usedRawUnit && totalRawUnit)"
-      [placeholder]="selectedStorageType"
-      (selected)="onStorageTypeSelect($event)">
-      <cds-dropdown-list [items]="dropdownItems"></cds-dropdown-list>
-    </cds-dropdown>
   </ng-template>
   <!-- CAPACITY USAGE TEXT -->
   <div class="overview-storage-card-usage-text">
-    @if( totalRaw && usedRawUnit && totalRawUnit) {
+    @if( usedRaw !== null && totalRaw !== null && usedRawUnit && totalRawUnit) {
     <h5>
       <span
         class="cds--type-heading-05"
-        i18n>{{displayUsedRaw}}&ngsp;</span>
+        i18n>{{usedRaw}}&nbsp;</span>
       <span
         class="cds--type-body-02"
         i18n>{{usedRawUnit}} of {{totalRaw}} {{totalRawUnit}} used</span>
@@ -28,7 +18,7 @@
         class="cds-ml-3"
         [caret]="true"
         description="Shows raw used vs. total raw capacity. Raw capacity includes all physical storage before replication or overhead."
-        i8n-description
+        i18n-description
       >
       <cd-icon type="help"></cd-icon>
     </cds-tooltip>
@@ -42,15 +32,21 @@
     </cds-skeleton-text>
     }
   </div>
-  <!-- CAPACITY CHART -->
-  @if(displayData) {
+  <!-- CAPACITY BREAKDOWN CHART -->
+  @if(isBreakdownLoaded) {
   <ibm-meter-chart
     [options]="options"
-    [data]="displayData"
+    [data]="breakdownData"
     class="overview-storage-card-chart"></ibm-meter-chart>
-  }
-  <!-- TREND CHARTS AND TOP POOLS -->
-  @if(selectedStorageType === 'All' && trendData) {
+  } @else {
+  <cds-skeleton-text
+    [lines]="1"
+    [minLineWidth]="1200"
+    [maxLineWidth]="1200">
+  </cds-skeleton-text>
+}
+  <!-- DATA CONSUMPTION TREND -->
+  @if(consumptionTrendData.length) {
   <div cdsRow
        class="align-items-center cds-ml-2 cds-mt-6">
     <div cdsCol
@@ -59,7 +55,7 @@
                      [chartKey]="'Consumption trend'"
                      [dataUnit]="'B'"
                      [legendEnabled]="false"
-                     [rawData]="trendData"
+                     [rawData]="consumptionTrendData"
                      [subHeading]="'Shows last 7 days of storage consumption trends based on recent usage'"
                      [height]="'200px'"
                      [chartType]="'area'">
@@ -71,7 +67,7 @@
            gap="4">
         <div cdsStack="vertical"
              gap="1">
-          <span class="cds--type-heading-03">{{ timeUntilFull }}</span>
+          <span class="cds--type-heading-03">{{ estimatedTimeUntilFull }}</span>
           <div class="consumption-stats-wrapper">
             <cds-tooltip-definition
               [autoAlign]="true"
@@ -88,7 +84,7 @@
         </div>
         <div cdsStack="vertical"
              gap="1">
-          <span class="cds--type-heading-03">{{ averageConsumption }}</span>
+          <span class="cds--type-heading-03">{{ averageDailyConsumption }}</span>
           <div class="consumption-stats-wrapper">
             <cds-tooltip-definition
               [autoAlign]="true"
@@ -106,48 +102,5 @@
       </div>
     </div>
   </div>
-  }
-  @if (selectedStorageType !== 'All' && topPoolsData) {
-  @if (topPoolsData) {
-  <div cdsRow
-       class="align-items-center">
-    <div cdsCol
-         [columnNumbers]="{ lg: 4, md: 8, sm: 16 }">
-      <div cdsStack="vertical"
-           gap="4"
-           class="cds-mb-3 cds-ml-3">
-        @for(metric of storageMetrics[selectedStorageType].metrics; track metric.label){
-        <div class="cds-mb-5 cds-ml-3">
-          <span class="cds--type-heading-05">{{metric.value}}</span>
-          <span class="cds--type-heading-03 cds-ml-3">{{metric.label}}</span>
-        </div>
-        }
-      </div>
-    </div>
-    <div cdsCol
-         [columnNumbers]="{ lg: 6, md: 8, sm: 16 }">
-      <cd-pie-chart
-        [chartData]="topPoolsData"
-        [data]="topPoolsData"
-        [title]="'Top 5 ' + selectedStorageType + ' pools'"
-        [legendPosition]="'right'"
-        [showPercentage]="true"
-        [height]="'250px'">
-      </cd-pie-chart>
-    </div>
-  </div>
-  }
-  @else {
-  <cds-skeleton-text
-    [lines]="1"
-    [minLineWidth]="1025"
-    [maxLineWidth]="1025">
-  </cds-skeleton-text>
-  <cds-skeleton-text
-    [lines]="1"
-    [minLineWidth]="200"
-    [maxLineWidth]="200">
-  </cds-skeleton-text>
-  }
   }
 </cd-productive-card>

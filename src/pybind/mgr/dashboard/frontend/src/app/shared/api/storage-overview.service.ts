@@ -1,8 +1,20 @@
 import { Injectable, inject } from '@angular/core';
-import { PrometheusService, PromqlGuageMetric } from '~/app/shared/api/prometheus.service';
+import {
+  PrometheusService,
+  PromethuesGaugeMetricResult,
+  PromqlGuageMetric
+} from '~/app/shared/api/prometheus.service';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { map } from 'rxjs/operators';
 import { forkJoin, Observable } from 'rxjs';
+
+const StorageType = {
+  BLOCK: $localize`Block`,
+  FILE: $localize`File system`,
+  OBJECT: $localize`Object`
+} as const;
+
+const CHART_GROUP_LABELS = new Set([StorageType.BLOCK, StorageType.FILE, StorageType.OBJECT]);
 
 @Injectable({ providedIn: 'root' })
 export class OverviewStorageService {
@@ -12,6 +24,8 @@ export class OverviewStorageService {
   private readonly TIME_UNTIL_FULL_QUERY = `(sum(ceph_osd_stat_bytes)) / (sum(rate(ceph_osd_stat_bytes_used[7d])) * 86400)`;
   private readonly TOTAL_RAW_USED_QUERY = 'sum(ceph_osd_stat_bytes_used)';
   private readonly OBJECT_POOLS_COUNT_QUERY = 'count(ceph_pool_metadata{application="Object"})';
+  private readonly RAW_USED_BY_STORAGE_TYPE_QUERY =
+    'sum by (application) (ceph_pool_bytes_used * on(pool_id) group_left(instance, name, application) ceph_pool_metadata{application=~"(.*Block.*)|(.*Filesystem.*)|(.*Object.*)|(..*)"})';
 
   getTrendData(start: number, end: number, stepSec: number) {
     const range = {
@@ -80,5 +94,34 @@ export class OverviewStorageService {
         pools
       }))
     );
+  }
+
+  convertBytesToUnit(value: string, unit: string): number {
+    return this.formatter.convertToUnit(value, 'B', unit, 1);
+  }
+
+  getStorageBreakdown(): Observable<PromqlGuageMetric> {
+    return this.prom.getPrometheusQueryData({ params: this.RAW_USED_BY_STORAGE_TYPE_QUERY });
+  }
+  formatBytesForChart(value: number): [number, string] {
+    return this.formatter.formatToBinary(value, true);
+  }
+
+  mapStorageChartData(data: PromqlGuageMetric, unit: string): { group: string; value: number }[] {
+    if (!unit) return [];
+
+    const result = data?.result ?? [];
+
+    return result
+      .map((r: PromethuesGaugeMetricResult) => {
+        const group = r?.metric?.application;
+        const value = r?.value?.[1];
+
+        return {
+          group: group === 'Filesystem' ? StorageType.FILE : group,
+          value: this.convertBytesToUnit(value, unit)
+        };
+      })
+      .filter((item) => CHART_GROUP_LABELS.has(item.group) && item.value > 0);
   }
 }

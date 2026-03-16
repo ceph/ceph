@@ -19,6 +19,7 @@ import { HardwareService } from '~/app/shared/api/hardware.service';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { OverviewStorageService } from '~/app/shared/api/storage-overview.service';
 
 describe('OverviewComponent', () => {
   let component: OverviewComponent;
@@ -26,6 +27,14 @@ describe('OverviewComponent', () => {
 
   let mockHealthService: { getHealthSnapshot: jest.Mock };
   let mockRefreshIntervalService: { intervalData$: Subject<void> };
+  let mockOverviewStorageService: {
+    getTrendData: jest.Mock;
+    getAverageConsumption: jest.Mock;
+    getTimeUntilFull: jest.Mock;
+    getStorageBreakdown: jest.Mock;
+    formatBytesForChart: jest.Mock;
+    mapStorageChartData: jest.Mock;
+  };
 
   const mockAuthStorageService = {
     getPermissions: jest.fn(() => ({ configOpt: { read: false } }))
@@ -44,6 +53,32 @@ describe('OverviewComponent', () => {
     mockHealthService = { getHealthSnapshot: jest.fn() };
     mockRefreshIntervalService = { intervalData$: new Subject<void>() };
 
+    mockOverviewStorageService = {
+      getTrendData: jest.fn().mockReturnValue(
+        of({
+          TOTAL_RAW_USED: [
+            [0, '512'],
+            [60, '1024']
+          ]
+        })
+      ),
+      getAverageConsumption: jest.fn().mockReturnValue(of('12 GiB/day')),
+      getTimeUntilFull: jest.fn().mockReturnValue(of('30 days')),
+      getStorageBreakdown: jest.fn().mockReturnValue(
+        of({
+          result: [
+            { metric: { application: 'Block' }, value: [0, '1024'] },
+            { metric: { application: 'Filesystem' }, value: [0, '2048'] }
+          ]
+        })
+      ),
+      formatBytesForChart: jest.fn().mockReturnValue([3, 'GiB']),
+      mapStorageChartData: jest.fn().mockReturnValue([
+        { group: 'Block', value: 1 },
+        { group: 'File system', value: 2 }
+      ])
+    };
+
     await TestBed.configureTestingModule({
       imports: [
         OverviewComponent,
@@ -61,10 +96,10 @@ describe('OverviewComponent', () => {
         provideRouter([]),
         { provide: HealthService, useValue: mockHealthService },
         { provide: RefreshIntervalService, useValue: mockRefreshIntervalService },
+        { provide: OverviewStorageService, useValue: mockOverviewStorageService },
         { provide: AuthStorageService, useValue: mockAuthStorageService },
         { provide: MgrModuleService, useValue: mockMgrModuleService },
-        { provide: HardwareService, useValue: mockHardwareService },
-        provideRouter([])
+        { provide: HardwareService, useValue: mockHardwareService }
       ]
     }).compileComponents();
 
@@ -79,10 +114,7 @@ describe('OverviewComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  // -----------------------------
-  // View model stream success
-  // -----------------------------
-  it('healthCardVm$ should emit HealthCardVM with new keys', (done) => {
+  it('healthCardVm$ should emit HealthCardVM correctly', (done) => {
     const mockData: HealthSnapshotMap = {
       fsid: 'fsid-123',
       health: {
@@ -92,14 +124,8 @@ describe('OverviewComponent', () => {
           b: { severity: 'HEALTH_ERR', summary: { message: 'B issue' } }
         }
       },
-      // data resileincy
       pgmap: {
-        pgs_by_state: [
-          {
-            state_name: 'active+clean',
-            count: 497
-          }
-        ],
+        pgs_by_state: [{ state_name: 'active+clean', count: 497 }],
         num_pools: 14,
         bytes_used: 3236978688,
         bytes_total: 325343772672,
@@ -108,7 +134,6 @@ describe('OverviewComponent', () => {
         read_bytes_sec: 0,
         recovering_bytes_per_sec: 0
       },
-      // subsystem inputs used by mapper
       monmap: { num_mons: 3, quorum: [0, 1, 2] } as any,
       mgrmap: { num_active: 1, num_standbys: 1 } as any,
       osdmap: { num_osds: 2, up: 2, in: 2 } as any,
@@ -171,16 +196,11 @@ describe('OverviewComponent', () => {
     const mockData: HealthSnapshotMap = {
       fsid: 'fsid-999',
       health: { status: 'HEALTH_OK', checks: {} },
-      monmap: { num_mons: 3, quorum: [0, 1, 2] } as any, // ok
-      mgrmap: { num_active: 0, num_standbys: 0 } as any, // err (active < 1)
-      osdmap: { num_osds: 2, up: 2, in: 2 } as any, // ok
+      monmap: { num_mons: 3, quorum: [0, 1, 2] } as any,
+      mgrmap: { num_active: 0, num_standbys: 0 } as any,
+      osdmap: { num_osds: 2, up: 2, in: 2 } as any,
       pgmap: {
-        pgs_by_state: [
-          {
-            state_name: 'active+clean',
-            count: 497
-          }
-        ],
+        pgs_by_state: [{ state_name: 'active+clean', count: 497 }],
         num_pools: 14,
         bytes_used: 3236978688,
         bytes_total: 325343772672,
@@ -190,14 +210,13 @@ describe('OverviewComponent', () => {
         recovering_bytes_per_sec: 0
       },
       num_hosts: 1,
-      num_hosts_down: 0 // ok
+      num_hosts_down: 0
     } as any;
 
     mockHealthService.getHealthSnapshot.mockReturnValue(of(mockData));
 
     const sub = component.healthCardVm$.subscribe((vm) => {
-      // mgr -> err, therefore overall should be err icon
-      expect(vm.overallSystemSev).toBe(SeverityIconMap[2]); // sev.err === 2
+      expect(vm.overallSystemSev).toBe(SeverityIconMap[2]);
       sub.unsubscribe();
       done();
     });
@@ -205,9 +224,6 @@ describe('OverviewComponent', () => {
     mockRefreshIntervalService.intervalData$.next();
   });
 
-  // -----------------------------
-  // View model stream error → EMPTY
-  // -----------------------------
   it('healthCardVm$ should not emit if healthService throws (EMPTY)', (done) => {
     mockHealthService.getHealthSnapshot.mockReturnValue(throwError(() => new Error('API Error')));
 
@@ -225,9 +241,97 @@ describe('OverviewComponent', () => {
     mockRefreshIntervalService.intervalData$.complete();
   });
 
-  // -----------------------------
-  // toggle health panel
-  // -----------------------------
+  it('storageCardVm$ should emit storage view model with mapped fields', (done) => {
+    const mockData: HealthSnapshotMap = {
+      fsid: 'fsid-storage',
+      health: { status: 'HEALTH_OK', checks: {} },
+      pgmap: {
+        pgs_by_state: [{ state_name: 'active+clean', count: 497 }],
+        num_pools: 14,
+        bytes_used: 3236978688,
+        bytes_total: 325343772672,
+        num_pgs: 497,
+        write_bytes_sec: 0,
+        read_bytes_sec: 0,
+        recovering_bytes_per_sec: 0
+      },
+      monmap: { num_mons: 3, quorum: [0, 1, 2] } as any,
+      mgrmap: { num_active: 1, num_standbys: 1 } as any,
+      osdmap: { num_osds: 2, up: 2, in: 2 } as any,
+      num_hosts: 5,
+      num_hosts_down: 0
+    } as any;
+
+    mockHealthService.getHealthSnapshot.mockReturnValue(of(mockData));
+
+    const sub = component.storageCardVm$.subscribe((vm) => {
+      expect(vm.totalCapacity).toBe(325343772672);
+      expect(vm.usedCapacity).toBe(3236978688);
+      expect(vm.breakdownData).toEqual([
+        { group: 'Block', value: 1 },
+        { group: 'File system', value: 2 }
+      ]);
+      expect(vm.isBreakdownLoaded).toBe(true);
+      expect(vm.consumptionTrendData).toEqual([
+        {
+          timestamp: new Date(0),
+          values: { Used: 512 }
+        },
+        {
+          timestamp: new Date(60000),
+          values: { Used: 1024 }
+        }
+      ]);
+      expect(vm.averageDailyConsumption).toBe('12 GiB/day');
+      expect(vm.estimatedTimeUntilFull).toBe('30 days');
+
+      expect(mockOverviewStorageService.formatBytesForChart).toHaveBeenCalledWith(3236978688);
+      expect(mockOverviewStorageService.mapStorageChartData).toHaveBeenCalled();
+
+      sub.unsubscribe();
+      done();
+    });
+
+    mockRefreshIntervalService.intervalData$.next();
+  });
+
+  it('storageCardVm$ should emit safe defaults before storage side streams resolve', (done) => {
+    const mockData: HealthSnapshotMap = {
+      fsid: 'fsid-storage',
+      health: { status: 'HEALTH_OK', checks: {} },
+      pgmap: {
+        pgs_by_state: [{ state_name: 'active+clean', count: 1 }],
+        num_pools: 1,
+        bytes_used: 100,
+        bytes_total: 1000,
+        num_pgs: 1,
+        write_bytes_sec: 0,
+        read_bytes_sec: 0,
+        recovering_bytes_per_sec: 0
+      },
+      monmap: { num_mons: 1, quorum: [0] } as any,
+      mgrmap: { num_active: 1, num_standbys: 1 } as any,
+      osdmap: { num_osds: 1, up: 1, in: 1 } as any,
+      num_hosts: 1,
+      num_hosts_down: 0
+    } as any;
+
+    mockHealthService.getHealthSnapshot.mockReturnValue(of(mockData));
+    mockOverviewStorageService.getStorageBreakdown.mockReturnValue(of(null));
+
+    const sub = component.storageCardVm$.subscribe((vm) => {
+      expect(vm.totalCapacity).toBe(1000);
+      expect(vm.usedCapacity).toBe(100);
+      expect(vm.breakdownData).toEqual([]);
+      expect(vm.isBreakdownLoaded).toBe(false);
+
+      sub.unsubscribe();
+      done();
+    });
+
+    mockRefreshIntervalService.intervalData$.next();
+  });
+
   it('should toggle panel open/close', () => {
     expect(component.isHealthPanelOpen).toBe(false);
     component.toggleHealthPanel();
@@ -236,9 +340,6 @@ describe('OverviewComponent', () => {
     expect(component.isHealthPanelOpen).toBe(false);
   });
 
-  // -----------------------------
-  // ngOnDestroy
-  // -----------------------------
   it('should complete destroy$', () => {
     expect(() => fixture.destroy()).not.toThrow();
   });
