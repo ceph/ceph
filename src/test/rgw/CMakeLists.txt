@@ -28,6 +28,7 @@ target_include_directories(ceph_test_rgw_d4n_filter
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/d4n")
 target_link_libraries(ceph_test_rgw_d4n_filter PRIVATE
   rgw_common
+  rgw_driver
   librados
   ceph-common
   ${rgw_libs}
@@ -43,6 +44,7 @@ target_include_directories(ceph_test_rgw_d4n_directory
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/d4n")
 target_link_libraries(ceph_test_rgw_d4n_directory PRIVATE
   rgw_common
+  rgw_driver
   librados
   ceph-common
   ${rgw_libs}
@@ -58,6 +60,7 @@ target_include_directories(ceph_test_rgw_d4n_policy
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/")
 target_link_libraries(ceph_test_rgw_d4n_policy PRIVATE
   rgw_common
+  rgw_driver
   librados
   ceph-common
   ${rgw_libs}
@@ -73,6 +76,7 @@ target_include_directories(ceph_test_rgw_redis_driver
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/")
 target_link_libraries(ceph_test_rgw_redis_driver PRIVATE
   rgw_common
+  rgw_driver
   librados
   ceph-common
   ${rgw_libs}
@@ -88,6 +92,7 @@ target_include_directories(ceph_test_rgw_ssd_driver
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/")
 target_link_libraries(ceph_test_rgw_ssd_driver PRIVATE
   rgw_common
+  rgw_driver
   librados
   ceph-common
   ${rgw_libs}
@@ -176,6 +181,7 @@ add_executable(ceph_test_rgw_obj
   ${test_rgw_obj_srcs}
   )
 target_link_libraries(ceph_test_rgw_obj
+  rgw_driver
   test_rgw_a
   cls_rgw_client
   cls_lock_client
@@ -291,7 +297,7 @@ add_ceph_unittest(unittest_rgw_lc)
 target_include_directories(unittest_rgw_lc
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
 target_link_libraries(unittest_rgw_lc
-  rgw_common ${rgw_libs} ${EXPAT_LIBRARIES})
+  rgw_common rgw_driver ${rgw_libs} ${EXPAT_LIBRARIES})
 
 # unittest_rgw_cksum
 add_executable(unittest_rgw_cksum test_rgw_cksum.cc)
@@ -299,7 +305,7 @@ add_ceph_unittest(unittest_rgw_cksum)
 target_include_directories(unittest_rgw_cksum
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
 target_link_libraries(unittest_rgw_cksum
-  rgw_common ${rgw_libs})
+  rgw_common rgw_driver ${rgw_libs})
 
 # unittest_rgw_arn
 add_executable(unittest_rgw_arn test_rgw_arn.cc)
@@ -333,7 +339,7 @@ if(WITH_RADOSGW_RADOS)
 add_executable(ceph_test_rgw_gc_log test_rgw_gc_log.cc $<TARGET_OBJECTS:unit-main>)
 target_include_directories(ceph_test_rgw_gc_log
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
-target_link_libraries(ceph_test_rgw_gc_log ${rgw_libs} radostest-cxx)
+target_link_libraries(ceph_test_rgw_gc_log ${rgw_libs} rgw radostest-cxx)
 install(TARGETS ceph_test_rgw_gc_log DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
@@ -378,7 +384,7 @@ endif()
 
 if(WITH_RADOSGW_RADOS)
 add_executable(radosgw-cr-test rgw_cr_test.cc)
-target_link_libraries(radosgw-cr-test ${rgw_libs} librados
+target_link_libraries(radosgw-cr-test ${rgw_libs} rgw_driver librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
@@ -436,7 +442,7 @@ endif()
 function(add_catch2_test_rgw test_name)
 add_catch2_test(${test_name}
  ${ARGV1}
- EXTRA_LIBS rgw_common ${rgw_libs}
+ EXTRA_LIBS rgw_common rgw_driver ${rgw_libs}
  EXTRA_INCS "SYSTEM PRIVATE ${CMAKE_SOURCE_DIR}/src/rgw")
 endfunction()
 

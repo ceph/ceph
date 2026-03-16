@@ -152,120 +152,11 @@ list(APPEND librgw_common_srcs
   driver/immutable_config/store.cc
   driver/json_config/store.cc)
 
-if(WITH_RADOSGW_RADOS)
-  list(APPEND librgw_common_srcs
-          services/svc_bi_rados.cc
-          services/svc_bilog_rados.cc
-          services/svc_bucket.cc
-          services/svc_bucket_sobj.cc
-          services/svc_bucket_sync_sobj.cc
-          services/svc_cls.cc
-          services/svc_config_key_rados.cc
-          services/svc_mdlog.cc
-          services/svc_notify.cc
-          services/svc_quota.cc
-          services/svc_sync_modules.cc
-          services/svc_sys_obj.cc
-          services/svc_sys_obj_cache.cc
-          services/svc_sys_obj_core.cc
-          services/svc_user.cc
-          services/svc_user_rados.cc
-          services/svc_zone.cc
-          services/svc_zone_utils.cc
-          driver/rados/account.cc
-          driver/rados/buckets.cc
-          driver/rados/group.cc
-          driver/rados/groups.cc
-          driver/rados/rgw_bucket.cc
-          driver/rados/rgw_bl_rados.cc
-          driver/rados/rgw_cr_rados.cc
-          driver/rados/rgw_cr_tools.cc
-          driver/rados/rgw_d3n_datacache.cc
-          driver/rados/rgw_datalog.cc
-          driver/rados/rgw_datalog_notify.cc
-          driver/rados/rgw_data_sync.cc
-          driver/rados/rgw_etag_verifier.cc
-          driver/rados/rgw_gc.cc
-          driver/rados/rgw_gc_log.cc
-          driver/rados/rgw_lc_tier.cc
-          driver/rados/rgw_log_backing.cc
-          driver/rados/rgw_metadata.cc
-          driver/rados/rgw_notify.cc
-          driver/rados/rgw_obj_manifest.cc
-          driver/rados/rgw_object_expirer_core.cc
-          driver/rados/rgw_otp.cc
-          driver/rados/rgw_pubsub_push.cc
-          driver/rados/rgw_putobj_processor.cc
-          driver/rados/rgw_rados.cc
-          driver/rados/rgw_reshard.cc
-          driver/rados/rgw_rest_bucket.cc
-          driver/rados/rgw_rest_log.cc
-          driver/rados/rgw_rest_realm.cc
-          driver/rados/rgw_rest_user.cc
-          driver/rados/rgw_sal_rados.cc
-          driver/rados/rgw_service.cc
-          driver/rados/rgw_sync.cc
-          driver/rados/rgw_sync_counters.cc
-          driver/rados/rgw_sync_error_repo.cc
-          driver/rados/rgw_sync_module.cc
-          driver/rados/rgw_sync_module_aws.cc
-          driver/rados/rgw_sync_module_es.cc
-          driver/rados/rgw_sync_module_es_rest.cc
-          driver/rados/rgw_sync_module_log.cc
-          driver/rados/rgw_sync_trace.cc
-          driver/rados/rgw_tools.cc
-          driver/rados/rgw_trim_bilog.cc
-          driver/rados/rgw_trim_datalog.cc
-          driver/rados/rgw_trim_mdlog.cc
-          driver/rados/rgw_user.cc
-          driver/rados/role.cc
-          driver/rados/roles.cc
-          driver/rados/sync_fairness.cc
-          driver/rados/topic.cc
-          driver/rados/topic_migration.cc
-          driver/rados/topics.cc
-          driver/rados/users.cc
-          driver/rados/config/impl.cc
-          driver/rados/config/period.cc
-          driver/rados/config/period_config.cc
-          driver/rados/config/realm.cc
-          driver/rados/config/realm_watcher.cc
-          driver/rados/config/store.cc
-          driver/rados/config/zone.cc
-          driver/rados/config/zonegroup.cc
-          driver/rados/rgw_dedup.cc
-          driver/rados/rgw_dedup_table.cc
-          driver/rados/rgw_dedup_store.cc
-          driver/rados/rgw_dedup_utils.cc
-          driver/rados/rgw_dedup_cluster.cc
-	  rgw_coroutine.cc
-	)
-endif()
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)
 endif()
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_kafka.cc)
-endif()
-if(WITH_RADOSGW_DBSTORE)
-  add_subdirectory(driver/dbstore)
-  list(APPEND librgw_common_srcs rgw_sal_dbstore.cc)
-endif()
-if(WITH_RADOSGW_MOTR)
-  list(APPEND librgw_common_srcs driver/motr/rgw_sal_motr.cc)
-endif()
-if(WITH_RADOSGW_DAOS)
-  list(APPEND librgw_common_srcs driver/motr/rgw_sal_daos.cc)
-endif()
-if(WITH_RADOSGW_POSIX)
-  #add_subdirectory(driver/posix)
-  find_package(LMDB REQUIRED)
-  add_compile_definitions(LMDB_SAFE_NO_CPP_UTILITIES)
-  list(APPEND librgw_common_srcs
-	      driver/posix/rgw_sal_posix.cc
-	      driver/posix/lmdb-safe.cc
-	      driver/posix/posixDB.cc
-	      driver/posix/notify.cpp)
 endif()
 if(WITH_JAEGER)
   list(APPEND librgw_common_srcs rgw_tracer.cc)
@@ -276,13 +167,166 @@ if(WITH_RADOSGW_ARROW_FLIGHT)
   list(APPEND librgw_common_srcs rgw_flight.cc rgw_flight_frontend.cc)
 endif(WITH_RADOSGW_ARROW_FLIGHT)
 
+list(APPEND librgw_rados_srcs
+  services/svc_bi_rados.cc
+  services/svc_bilog_rados.cc
+  services/svc_bucket.cc
+  services/svc_bucket_sobj.cc
+  services/svc_bucket_sync_sobj.cc
+  services/svc_cls.cc
+  services/svc_config_key_rados.cc
+  services/svc_mdlog.cc
+  services/svc_notify.cc
+  services/svc_quota.cc
+  services/svc_sync_modules.cc
+  services/svc_sys_obj.cc
+  services/svc_sys_obj_cache.cc
+  services/svc_sys_obj_core.cc
+  services/svc_user.cc
+  services/svc_user_rados.cc
+  services/svc_zone.cc
+  services/svc_zone_utils.cc
+  driver/rados/account.cc
+  driver/rados/buckets.cc
+  driver/rados/group.cc
+  driver/rados/groups.cc
+  driver/rados/rgw_bucket.cc
+  driver/rados/rgw_bl_rados.cc
+  driver/rados/rgw_cr_rados.cc
+  driver/rados/rgw_cr_tools.cc
+  driver/rados/rgw_d3n_datacache.cc
+  driver/rados/rgw_datalog.cc
+  driver/rados/rgw_datalog_notify.cc
+  driver/rados/rgw_data_sync.cc
+  driver/rados/rgw_etag_verifier.cc
+  driver/rados/rgw_gc.cc
+  driver/rados/rgw_gc_log.cc
+  driver/rados/rgw_lc_tier.cc
+  driver/rados/rgw_log_backing.cc
+  driver/rados/rgw_metadata.cc
+  driver/rados/rgw_notify.cc
+  driver/rados/rgw_obj_manifest.cc
+  driver/rados/rgw_object_expirer_core.cc
+  driver/rados/rgw_otp.cc
+  driver/rados/rgw_pubsub_push.cc
+  driver/rados/rgw_putobj_processor.cc
+  driver/rados/rgw_rados.cc
+  driver/rados/rgw_reshard.cc
+  driver/rados/rgw_rest_bucket.cc
+  driver/rados/rgw_rest_log.cc
+  driver/rados/rgw_rest_realm.cc
+  driver/rados/rgw_rest_user.cc
+  driver/rados/rgw_sal_rados.cc
+  driver/rados/rgw_service.cc
+  driver/rados/rgw_sync.cc
+  driver/rados/rgw_sync_counters.cc
+  driver/rados/rgw_sync_error_repo.cc
+  driver/rados/rgw_sync_module.cc
+  driver/rados/rgw_sync_module_aws.cc
+  driver/rados/rgw_sync_module_es.cc
+  driver/rados/rgw_sync_module_es_rest.cc
+  driver/rados/rgw_sync_module_log.cc
+  driver/rados/rgw_sync_trace.cc
+  driver/rados/rgw_tools.cc
+  driver/rados/rgw_trim_bilog.cc
+  driver/rados/rgw_trim_datalog.cc
+  driver/rados/rgw_trim_mdlog.cc
+  driver/rados/rgw_user.cc
+  driver/rados/role.cc
+  driver/rados/roles.cc
+  driver/rados/sync_fairness.cc
+  driver/rados/topic.cc
+  driver/rados/topic_migration.cc
+  driver/rados/topics.cc
+  driver/rados/users.cc
+  driver/rados/config/impl.cc
+  driver/rados/config/period.cc
+  driver/rados/config/period_config.cc
+  driver/rados/config/realm.cc
+  driver/rados/config/realm_watcher.cc
+  driver/rados/config/store.cc
+  driver/rados/config/zone.cc
+  driver/rados/config/zonegroup.cc
+  driver/rados/rgw_dedup.cc
+  driver/rados/rgw_dedup_table.cc
+  driver/rados/rgw_dedup_store.cc
+  driver/rados/rgw_dedup_utils.cc
+  driver/rados/rgw_dedup_cluster.cc
+  rgw_coroutine.cc
+)
+list(APPEND librgw_dbstore_srcs
+  rgw_sal_dbstore.cc
+)
+list(APPEND librgw_motr_srcs
+  driver/motr/rgw_sal_motr.cc
+)
+list(APPEND librgw_daos_srcs
+  driver/motr/rgw_sal_daos.cc
+)
+list(APPEND librgw_posix_srcs
+  driver/posix/rgw_sal_posix.cc
+  driver/posix/lmdb-safe.cc
+  driver/posix/posixDB.cc
+  driver/posix/notify.cpp
+)
+list(APPEND librgw_d4n_srcs
+  rgw_redis_driver.cc
+  rgw_ssd_driver.cc
+  driver/d4n/d4n_directory.cc
+  driver/d4n/d4n_policy.cc
+  driver/d4n/rgw_sal_d4n.cc)
+
+if(WITH_RADOSGW_RADOS)
+  list(APPEND librgw_driver_srcs ${librgw_rados_srcs})
+endif()
+if(WITH_RADOSGW_DBSTORE)
+  add_subdirectory(driver/dbstore)
+  list(APPEND librgw_driver_srcs ${librgw_dbstore_srcs})
+endif()
+if(WITH_RADOSGW_MOTR)
+  list(APPEND librgw_driver_srcs ${librgw_motr_srcs})
+endif()
+if(WITH_RADOSGW_DAOS)
+  list(APPEND librgw_driver_srcs ${librgw_daos_srcs})
+endif()
+if(WITH_RADOSGW_POSIX)
+  find_package(LMDB REQUIRED)
+  add_compile_definitions(LMDB_SAFE_NO_CPP_UTILITIES)
+  list(APPEND librgw_driver_srcs ${librgw_posix_srcs})
+endif()
 if(WITH_RADOSGW_D4N)
-  list(APPEND librgw_common_srcs
-        rgw_redis_driver.cc
-        rgw_ssd_driver.cc
-        driver/d4n/d4n_directory.cc
-        driver/d4n/d4n_policy.cc
-        driver/d4n/rgw_sal_d4n.cc)
+  list(APPEND librgw_driver_srcs ${librgw_d4n_srcs})
+endif()
+
+add_library(rgw_driver STATIC ${librgw_driver_srcs})
+
+target_link_libraries(rgw_driver
+  PRIVATE
+    rgw_common
+    cls_rgw_client
+    dmclock::dmclock)
+
+target_include_directories(rgw_driver
+  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
+  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/services"
+  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
+  PUBLIC "${LUA_INCLUDE_DIR}")
+
+if(WITH_RADOSGW_STANDALONE)
+  find_package(LMDB REQUIRED)
+  add_compile_definitions(LMDB_SAFE_NO_CPP_UTILITIES)
+  list(APPEND librgw_driver_standalone_srcs ${librgw_posix_srcs})
+  add_library(rgw_driver_standalone STATIC ${librgw_driver_standalone_srcs})
+
+  target_link_libraries(rgw_driver_standalone
+    PRIVATE
+    rgw_common
+    cls_rgw_client
+    dmclock::dmclock)
+
+  target_include_directories(rgw_driver_standalone
+    PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
+    PUBLIC "${LUA_INCLUDE_DIR}")
 endif()
 
 add_library(rgw_common STATIC ${librgw_common_srcs})
@@ -295,11 +339,12 @@ if(COMPILER_SUPPORTS_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION)
     HAVE_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION)
 endif()
 
+set_target_properties(rgw_common PROPERTIES LINK_INTERFACE_MULTIPLICITY 3)
+
 target_link_libraries(rgw_common
   PRIVATE
     legacy-option-headers
     global
-    cls_rgw_client
     rt
     ICU::uc
     OATH::OATH
@@ -310,6 +355,7 @@ target_link_libraries(rgw_common
     ${ARROW_FLIGHT_LIBRARIES}
     ${LMDB_LIBRARIES}
   PUBLIC
+    rgw_driver
     ${LUA_LIBRARIES}
     RapidJSON::RapidJSON
     Boost::context
@@ -381,10 +427,6 @@ if(WITH_RADOSGW_DBSTORE)
   target_link_libraries(rgw_common PRIVATE global dbstore)
 endif()
 
-if(WITH_RADOSGW_POSIX)
-  target_link_libraries(rgw_common PRIVATE global dbstore)
-endif()
-
 if(WITH_RADOSGW_MOTR)
   find_package(motr REQUIRED)
   target_link_libraries(rgw_common PRIVATE motr::motr)
@@ -396,6 +438,95 @@ if(WITH_RADOSGW_DAOS)
   target_link_libraries(rgw_common PRIVATE daos dfs ds3 uuid duns)
   target_include_directories(rgw_common PRIVATE ${PC_DAOS_INCLUDEDIR} )
   link_directories( ${PC_DAOS_LIBRARY_DIRS} )
+endif()
+
+if(WITH_RADOSGW_STANDALONE)
+  add_library(rgw_common_standalone STATIC ${librgw_common_srcs})
+
+  include(CheckCXXCompilerFlag)
+  check_cxx_compiler_flag("-Wimplicit-const-int-float-conversion"
+    COMPILER_SUPPORTS_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION)
+  if(COMPILER_SUPPORTS_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION)
+    target_compile_definitions(common-objs PRIVATE
+      HAVE_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION)
+  endif()
+
+  set_target_properties(rgw_common_standalone PROPERTIES LINK_INTERFACE_MULTIPLICITY 3)
+
+  target_link_libraries(rgw_common_standalone
+    PRIVATE
+    legacy-option-headers
+    global
+    rt
+    ICU::uc
+    OATH::OATH
+    dmclock::dmclock
+    ${CURL_LIBRARIES}
+    ${EXPAT_LIBRARIES}
+    ${ARROW_LIBRARIES}
+    ${ARROW_FLIGHT_LIBRARIES}
+    ${LMDB_LIBRARIES}
+    PUBLIC
+    rgw_driver
+    ${LUA_LIBRARIES}
+    RapidJSON::RapidJSON
+    Boost::context
+    ${FMT_LIB}
+    OpenSSL::SSL
+    BLAKE3::blake3)
+  target_include_directories(rgw_common_standalone
+    PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/services"
+    PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
+    PUBLIC "${LUA_INCLUDE_DIR}")
+
+  # work around https://github.com/Cyan4973/xxHash/issues/943 for debug builds
+  target_compile_definitions(rgw_common_standalone PUBLIC
+    $<$<CONFIG:Debug>:XXH_NO_INLINE_HINTS=1>
+    $<$<CONFIG:RelWithDebInfo>:XXH_NO_INLINE_HINTS=1>)
+
+  target_compile_definitions(rgw_common_standalone
+    PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
+
+  target_compile_OPTIONS(rgw_common_standalone
+    PUBLIC "-DWITH_RADOSGW_STANDALONE"
+    PUBLIC "-UWITH_RADOSGW_DBSTORE"
+    PUBLIC "-UWITH_RADOSGW_D4N"
+    PUBLIC "-UWITH_RADOSGW_RADOS"
+    PUBLIC "-UWITH_RADOSGW_MOTR"
+    PUBLIC "-UWITH_RADOSGW_DAOS")
+
+  if(WITH_RADOSGW_KAFKA_ENDPOINT)
+    # used by rgw_kafka.cc
+    target_link_libraries(rgw_common_standalone
+      PRIVATE
+      RDKafka::RDKafka)
+  endif()
+  if(WITH_RADOSGW_AMQP_ENDPOINT)
+    # used by rgw_amqp.cc
+    target_link_libraries(rgw_common_standalone
+      PRIVATE
+      RabbitMQ::RabbitMQ)
+  endif()
+  if(WITH_OPENLDAP)
+    target_link_libraries(rgw_common_standalone
+      PRIVATE
+      OpenLDAP::OpenLDAP)
+  endif()
+  if(WITH_RADOSGW_LUA_PACKAGES)
+    target_link_libraries(rgw_common_standalone
+      PRIVATE Boost::filesystem StdFilesystem::filesystem)
+  endif()
+
+  if(WITH_LTTNG)
+    # rgw/rgw_op.cc includes "tracing/rgw_op.h"
+    # rgw/rgw_rados.cc includes "tracing/rgw_rados.h"
+    add_dependencies(rgw_common_standalone rgw_op-tp rgw_rados-tp)
+  endif()
+
+  if(WITH_JAEGER)
+    add_dependencies(rgw_common_standalone jaeger_base)
+    target_link_libraries(rgw_common_standalone PUBLIC jaeger_base)
+  endif()
 endif()
 
 set(rgw_a_srcs
@@ -473,6 +604,7 @@ target_link_libraries(rgw_a
     OATH::OATH
   PUBLIC
     rgw_common
+    rgw_driver
     Boost::context)
 
 if(WITH_CURL_OPENSSL)
@@ -481,6 +613,46 @@ if(WITH_CURL_OPENSSL)
 endif()
 
 set(rgw_libs rgw_a)
+
+if(WITH_RADOSGW_STANDALONE)
+  add_library(rgw_a_standalone STATIC
+    ${rgw_a_srcs})
+
+  target_compile_definitions(rgw_a_standalone
+    PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
+
+  target_compile_OPTIONS(rgw_a_standalone
+    PUBLIC "-DWITH_RADOSGW_STANDALONE"
+    PUBLIC "-UWITH_RADOSGW_DBSTORE"
+    PUBLIC "-UWITH_RADOSGW_D4N"
+    PUBLIC "-UWITH_RADOSGW_RADOS"
+    PUBLIC "-UWITH_RADOSGW_MOTR"
+    PUBLIC "-UWITH_RADOSGW_DAOS")
+
+  target_include_directories(rgw_a_standalone
+    PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"
+    PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
+    PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
+    PRIVATE "${CMAKE_SOURCE_DIR}/src/libkmip")
+
+  target_link_libraries(rgw_a_standalone
+    PRIVATE
+    legacy-option-headers
+    common_utf8 global
+    ${CRYPTO_LIBS}
+    ${ARROW_LIBRARIES}
+    ${ARROW_FLIGHT_LIBRARIES}
+    OATH::OATH
+    PUBLIC
+    rgw_common_standalone
+    rgw_driver_standalone
+    Boost::context)
+
+  if(WITH_CURL_OPENSSL)
+    # used by rgw_http_client_curl.cc
+    target_link_libraries(rgw_a_standalone PRIVATE OpenSSL::Crypto)
+  endif()
+endif()
 
 set(rgw_schedulers_srcs
   rgw_dmclock_scheduler_ctx.cc
@@ -521,6 +693,38 @@ target_link_libraries(radosgw PRIVATE
   ${ALLOC_LIBS})
 
 install(TARGETS radosgw DESTINATION bin)
+
+if(WITH_RADOSGW_STANDALONE)
+  add_executable(rgw-standalone ${radosgw_srcs})
+
+  target_compile_definitions(rgw-standalone
+    PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
+
+  target_compile_OPTIONS(rgw_a_standalone
+    PUBLIC "-DWITH_RADOSGW_STANDALONE"
+    PUBLIC "-UWITH_RADOSGW_DBSTORE"
+    PUBLIC "-UWITH_RADOSGW_D4N"
+    PUBLIC "-UWITH_RADOSGW_RADOS"
+    PUBLIC "-UWITH_RADOSGW_MOTR"
+    PUBLIC "-UWITH_RADOSGW_DAOS")
+
+  target_include_directories(rgw-standalone
+    PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"
+    PRIVATE "${CMAKE_SOURCE_DIR}/src/libkmip"
+    PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
+    PRIVATE "${LUA_INCLUDE_DIR}")
+
+  target_include_directories(rgw-standalone SYSTEM PUBLIC "../rapidjson/include")
+
+  target_link_libraries(rgw-standalone PRIVATE
+    legacy-option-headers
+    rgw_a_standalone
+    rgw_schedulers
+    kmip
+    ${ALLOC_LIBS})
+
+  install(TARGETS rgw-standalone DESTINATION bin)
+endif()
 
 set(radosgw_admin_srcs
   radosgw-admin/radosgw-admin.cc
@@ -611,6 +815,8 @@ target_include_directories(rgw SYSTEM PUBLIC "../rapidjson/include")
 target_link_libraries(rgw
   PRIVATE
   ${rgw_libs}
+  rgw_common
+  rgw_driver
   rgw_schedulers
   kmip
   librados
@@ -637,6 +843,8 @@ endif()
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
   target_link_libraries(rgw PRIVATE RDKafka::RDKafka)
 endif()
+
+set_target_properties(rgw PROPERTIES LINK_INTERFACE_MULTIPLICITY 3)
 
 set_target_properties(rgw PROPERTIES OUTPUT_NAME rgw VERSION 2.0.0
   SOVERSION 2)

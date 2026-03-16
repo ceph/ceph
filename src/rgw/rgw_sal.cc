@@ -371,6 +371,14 @@ DriverManager::Config DriverManager::get_config(bool admin, CephContext* cct)
 {
   DriverManager::Config cfg;
 
+#ifdef WITH_RADOSGW_STANDALONE
+  {
+    /* Shortcut the whole thing, and only allow POSIXDriver for Standalone */
+    cfg.store_name = "posix";
+    return cfg;
+  }
+#endif /* WITH_RADOSGW_STANDALONE */
+
   // Get the store backend
   const auto& config_store = g_conf().get_val<std::string>("rgw_backend_store");
   if (config_store == "rados") {
@@ -432,6 +440,12 @@ auto DriverManager::create_config_store(const DoutPrefixProvider* dpp,
   -> std::unique_ptr<rgw::sal::ConfigStore>
 {
   try {
+#ifdef WITH_RADOSGW_STANDALONE
+    { /* For Standalone, only allow DBStore config */
+      const auto uri = g_conf().get_val<std::string>("dbstore_config_uri");
+      return rgw::dbstore::create_config_store(dpp, uri);
+    }
+#endif
 #ifdef WITH_RADOSGW_RADOS
     if (type == "rados") {
       return rgw::rados::create_config_store(dpp);
