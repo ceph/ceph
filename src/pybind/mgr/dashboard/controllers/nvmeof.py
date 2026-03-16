@@ -194,6 +194,30 @@ else:
             )
             return gw_listener_info
 
+        @UpdatePermission
+        @Endpoint('PUT', '/io_stats')
+        @NvmeofCLICommand(
+            "nvmeof gateway set_io_stats_mode", model.RequestStatus,
+            alias="nvmeof gw set_io_stats_mode",
+            success_message_template="Set gateway IO statistics mode to {enabled}: Successful")
+        @EndpointDoc(
+            "Enable or disable IO statistics collection",
+            parameters={
+                "enabled": Param(bool, "Enable IO statistics collection"),
+                "gw_group": Param(str, "NVMeoF gateway group", True, None),
+                "server_address": Param(str, "NVMeoF gateway address", True, None),
+            },
+        )
+        @convert_to_model(model.RequestStatus)
+        @handle_nvmeof_error
+        def set_io_stats_mode(self, enabled: bool, gw_group: Optional[str] = None,
+                              server_address: Optional[str] = None):
+            io_stats = NVMeoFClient(gw_group=gw_group,
+                                    server_address=server_address).stub.set_gateway_io_stats_mode(
+                NVMeoFClient.pb2.set_gateway_io_stats_mode_req(enabled=enabled)
+            )
+            return io_stats
+
     @APIRouter("/nvmeof/spdk", Scope.NVME_OF)
     @APIDoc("NVMe-oF SPDK Management API", "NVMe-oF SPDK")
     class NVMeoFSpdk(RESTController):
@@ -306,9 +330,8 @@ else:
             "Create a new NVMeoF subsystem",
             parameters={
                 "nqn": Param(str, "NVMeoF subsystem NQN"),
-                "enable_ha": Param(bool, "Enable high availability", True, None),
                 "max_namespaces": Param(int, "Maximum number of namespaces", True, None),
-                "no_group_append": Param(int, "Do not append gateway group name to the NQN",
+                "no_group_append": Param(bool, "Do not append gateway group name to the NQN",
                                          True, False),
                 "serial_number": Param(str, "Subsystem serial number", True, None),
                 "dhchap_key": Param(str, "Subsystem DH-HMAC-CHAP key", True, None),
@@ -318,7 +341,7 @@ else:
         )
         @convert_to_model(model.SubsystemStatus)
         @handle_nvmeof_error
-        def create(self, nqn: str, enable_ha: Optional[bool] = True,
+        def create(self, nqn: str,
                    max_namespaces: Optional[int] = None, no_group_append: Optional[bool] = False,
                    serial_number: Optional[str] = None, dhchap_key: Optional[str] = None,
                    gw_group: Optional[str] = None, server_address: Optional[str] = None):
@@ -328,7 +351,7 @@ else:
             ).stub.create_subsystem(
                 NVMeoFClient.pb2.create_subsystem_req(
                     subsystem_nqn=nqn, serial_number=serial_number,
-                    max_namespaces=max_namespaces, enable_ha=enable_ha,
+                    max_namespaces=max_namespaces, enable_ha=True,
                     no_group_append=no_group_append,
                     dhchap_key=dhchap_key
                 )
@@ -1675,6 +1698,72 @@ else:
                 server_address=server_address
             ).stub.list_connections(
                 NVMeoFClient.pb2.list_connections_req(subsystem=nqn)
+            )
+
+        @NvmeofCLICommand(
+            "nvmeof connection get_io_statistics",
+            model.ConnectionIOStatistics,
+            success_message_template="Please use JSON format to see the statistics"
+        )
+        @EndpointDoc(
+            "Get the IO statistics for a connection",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "host_nqn": Param(str, "NVMeoF host NQN"),
+                "gw_group": Param(str, "NVMeoF gateway group", True, None),
+                "server_address": Param(str, "NVMeoF gateway address", True, None),
+            },
+        )
+        @convert_to_model(model.ConnectionIOStatistics)
+        @handle_nvmeof_error
+        def get_io_stats(
+            self,
+            nqn: str,
+            host_nqn: str,
+            gw_group: Optional[str] = None,
+            server_address: Optional[str] = None
+        ):
+            return NVMeoFClient(
+                gw_group=gw_group,
+                server_address=server_address
+            ).stub.get_connection_io_statistics(
+                NVMeoFClient.pb2.get_connection_io_statistics_req(subsystem_nqn=nqn,
+                                                                  host_nqn=host_nqn,
+                                                                  reset=False)
+            )
+
+        @NvmeofCLICommand(
+            "nvmeof connection reset_io_statistics",
+            model.ConnectionIOStatistics,
+            success_message_template=(
+                "Resetting host's {host_nqn} in {nqn} IO statistics: Successful"
+            )
+        )
+        @EndpointDoc(
+            "Reset the IO statistics for a connection",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "host_nqn": Param(str, "NVMeoF host NQN"),
+                "gw_group": Param(str, "NVMeoF gateway group", True, None),
+                "server_address": Param(str, "NVMeoF gateway address", True, None),
+            },
+        )
+        @convert_to_model(model.ConnectionIOStatistics)
+        @handle_nvmeof_error
+        def reset_io_stats(
+            self,
+            nqn: str,
+            host_nqn: str,
+            gw_group: Optional[str] = None,
+            server_address: Optional[str] = None
+        ):
+            return NVMeoFClient(
+                gw_group=gw_group,
+                server_address=server_address
+            ).stub.get_connection_io_statistics(
+                NVMeoFClient.pb2.get_connection_io_statistics_req(subsystem_nqn=nqn,
+                                                                  host_nqn=host_nqn,
+                                                                  reset=True)
             )
 
     @UIRouter('/nvmeof', Scope.NVME_OF)

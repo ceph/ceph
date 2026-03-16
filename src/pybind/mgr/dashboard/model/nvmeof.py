@@ -41,6 +41,8 @@ class GatewayInfo(NamedTuple):
     max_namespaces: Annotated[int, CliFlags.DROP]
     max_namespaces_per_subsystem: Annotated[int, CliFlags.DROP]
     max_subsystems: Annotated[int, CliFlags.DROP]
+    gateway_initialization_over: Annotated[bool, CliFlags.DROP]
+    io_stats_enabled: Annotated[bool, CliFlags.DROP]
     spdk_version: Optional[str] = ""
 
 
@@ -117,6 +119,35 @@ class ConnectionList(NamedTuple):
     error_message: str
     subsystem_nqn: str
     connections: Annotated[List[Connection], CliFlags.EXCLUSIVE_LIST]
+
+
+class LatencyStats(NamedTuple):
+    min: int
+    max: int
+    mean: int
+
+
+class LatencyGroup(NamedTuple):
+    io_count: int
+    total: LatencyStats
+    bdev: LatencyStats
+    net: LatencyStats
+    qos: LatencyStats
+
+
+class BucketInfo(NamedTuple):
+    size: int
+    read: LatencyGroup
+    write: LatencyGroup
+
+
+class ConnectionIOStatistics(NamedTuple):
+    status: int
+    error_message: str
+    subsystem_nqn: str
+    host_nqn: str
+    total_num_ios: int
+    buckets: Annotated[List[BucketInfo], CliFlags.EXCLUSIVE_LIST]
 
 
 class NamespaceCreation(NamedTuple):
