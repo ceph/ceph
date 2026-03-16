@@ -1,3 +1,9 @@
+* librados/neorados: The C++ APIs for executing Ceph Class (CLS) methods
+  have undergone a breaking change to enforce compile-time type safety, replacing
+  legacy string-based parameters with strongly-typed ClsMethod structs. C++
+  developers must update their method calls to use these new structs, which ensure
+  read/write semantics are correctly applied.
+
 * ceph-volume: Raw BlueStore OSD preparation now pre-formats NVMe devices and
   skips the slower BlueStore discard phase,reducing mkfs time on
   very large namespaces.
