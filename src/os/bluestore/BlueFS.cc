@@ -951,8 +951,8 @@ void BlueFS::expand_device(unsigned devid, uint64_t new_size, uint64_t old_size)
   ceph_assert(total > total - free);
 
   dout(10) << __func__ << " dev " << devid
-           << " added free space: 0x" << std::hex << old_size
-           << "~0x" << (aligned_size - old_size) << std::dec << dendl;
+           << " added free space: 0x" << std::hex << aligned_old_size
+           << "~0x" << (aligned_size - aligned_old_size) << std::dec << dendl;
 }
 
 int BlueFS::_read_and_check(uint8_t ndev, uint64_t off, uint64_t len,
