@@ -4373,6 +4373,31 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: bluefs_spillover_cleaner
+  type: bool
+  level: advanced
+  desc: Enable Background BlueFS Spillover cleaner thread
+  long_desc: Enables a background cleaner thread in BlueFS that periodically scans files
+    that spilled over to the slow device and attempts to migrate them back to the
+    BlueFS DB device
+  default: false
+  see_also:
+  - bluefs_spillover_clean_interval
+  flags:
+  - runtime
+  with_legacy: true
+- name: bluefs_spillover_clean_interval
+  type: uint
+  level: advanced
+  desc: Interval in seconds between BlueFS spillover cleaner scans.
+  long_desc: Controls how often the BlueFS spillover cleaner thread wakes up to scan
+    for files that have spilled over to the slow device
+  default: 1200
+  see_also:
+  - bluefs_spillover_cleaner
+  flags:
+  - runtime
+  with_legacy: true
 - name: bluestore_bluefs
   type: bool
   level: dev
