@@ -1099,6 +1099,8 @@ class Bucket {
     virtual int remove_logging_object(const std::string& obj_name, const std::string& prefix, optional_yield y, const DoutPrefixProvider *dpp) = 0;
     /** Write a record to the pending bucket logging object */
     virtual int write_logging_object(const std::string& obj_name, const std::string& record, const std::string& prefix, optional_yield y, const DoutPrefixProvider *dpp, bool async_completion) = 0;
+    /** Mark this as a cache request */
+    virtual void set_cache_request() = 0;
 
     /* dang - This is temporary, until the API is completed */
     virtual rgw_bucket& get_key() = 0;
@@ -1467,6 +1469,8 @@ class Object {
     virtual bool have_instance(void) = 0;
     /** Clear the instance on this object */
     virtual void clear_instance() = 0;
+    /** Mark this as a cache request */
+    virtual void set_cache_request() = 0;
 
     /** Print the User to @a out */
     virtual void print(std::ostream& out) const = 0;
@@ -2066,10 +2070,5 @@ public:
       -> std::unique_ptr<rgw::sal::ConfigStore>;
 
 };
-
-#ifdef WITH_RADOSGW_RADOS
-std::optional<neorados::RADOS>
-make_neorados(CephContext* cct, boost::asio::io_context& io_context);
-#endif
 
 /** @} */

@@ -1177,6 +1177,19 @@ storage system.  This package provides a REST gateway to the
 object store that aims to implement a superset of Amazon's S3
 service as well as the OpenStack Object Storage ("Swift") API.
 
+%package rgw-standalone
+Summary:	Rados REST gateway for filesystems
+%if 0%{?suse_version}
+Group:		System/Filesystems
+%endif
+Conflicts:	ceph-common
+Conflicts:	radosgw
+%description rgw-standalone
+This package provides an Object REST gateway (S3 and Swift) on
+top of a filesystem that aims to implement a superset of Amazon's S3
+service as well as the OpenStack Object Storage ("Swift") API.
+It does not require or provide any of the rest of the Ceph services.
+
 %package -n cephfs-top
 Summary:    top(1) like utility for Ceph Filesystem
 BuildArch:  noarch
@@ -2671,6 +2684,19 @@ if [ $1 -ge 1 ] ; then
     /usr/bin/systemctl try-restart ceph-radosgw@\*.service > /dev/null 2>&1 || :
   fi
 fi
+
+%files rgw-standalone
+%dir %{_docdir}/ceph
+%doc %{_docdir}/ceph/sample.ceph.conf
+%dir %{_libdir}/ceph
+%{_libdir}/ceph/libceph-common.so.*
+%{_bindir}/rgw-standalone
+%{_bindir}/rgw-standalone-admin
+%dir %{_localstatedir}/lib/ceph/radosgw
+
+%post rgw-standalone -p /sbin/ldconfig
+
+%postun rgw-standalone -p /sbin/ldconfig
 
 %files osd
 %{_bindir}/ceph-clsinfo
