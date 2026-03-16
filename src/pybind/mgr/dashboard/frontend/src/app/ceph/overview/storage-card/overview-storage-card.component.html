@@ -16,7 +16,7 @@
   </ng-template>
   <!-- CAPACITY USAGE TEXT -->
   <div class="overview-storage-card-usage-text">
-    @if(displayUsedRaw && totalRaw && usedRawUnit && totalRawUnit) {
+    @if( totalRaw && usedRawUnit && totalRawUnit) {
     <h5>
       <span
         class="cds--type-heading-05"
@@ -24,6 +24,14 @@
       <span
         class="cds--type-body-02"
         i18n>{{usedRawUnit}} of {{totalRaw}} {{totalRawUnit}} used</span>
+      <cds-tooltip
+        class="cds-ml-3"
+        [caret]="true"
+        description="Shows raw used vs. total raw capacity. Raw capacity includes all physical storage before replication or overhead."
+        i8n-description
+      >
+      <cd-icon type="help"></cd-icon>
+    </cds-tooltip>
     </h5>
     }
     @else {

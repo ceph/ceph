@@ -31,6 +31,7 @@ import { OverviewStorageService } from '~/app/shared/api/storage-overview.servic
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { AreaChartComponent } from '~/app/shared/components/area-chart/area-chart.component';
 import { PieChartComponent } from '~/app/shared/components/pie-chart/pie-chart.component';
+import { ComponentsModule } from '~/app/shared/components/components.module';
 
 const CHART_HEIGHT = '45px';
 
@@ -103,7 +104,8 @@ const TopPoolsQueryMap = {
     SkeletonModule,
     LayoutModule,
     AreaChartComponent,
-    PieChartComponent
+    PieChartComponent,
+    ComponentsModule
   ],
   standalone: true,
   templateUrl: './overview-storage-card.component.html',
