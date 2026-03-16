@@ -5836,7 +5836,8 @@ std::vector<std::string> BlueStore::get_tracked_keys() const noexcept
     "bluestore_onode_segment_size"s,
     "bluestore_allocator_lookup_policy"s,
     "bluestore_volume_selection_reserved_factor"s,
-    "bluestore_volume_selection_reserved"s
+    "bluestore_volume_selection_reserved"s,
+    "bluefs_spillover_cleaner"s,
   };
 }
 
@@ -5919,6 +5920,11 @@ void BlueStore::handle_conf_change(const ConfigProxy& conf,
     changed.count("bluestore_volume_selection_reserved")) {
     if (bluefs)
       bluefs->update_volume_selector_from_config();
+  }
+  if (changed.count("bluefs_spillover_cleaner")) {
+    if (bluefs) {
+      bluefs->update_spillover_cleaner_from_config();
+    }
   }
 }
 
@@ -9570,6 +9576,10 @@ int BlueStore::_mount()
     }
   }
 
+  if (bluefs && cct->_conf.get_val<bool>("bluefs_spillover_cleaner")) {
+    bluefs->spillover_cleaner_start();
+  }
+
   mounted = true;
   return 0;
 }
@@ -9579,6 +9589,10 @@ int BlueStore::umount()
   dout(5) << __func__ << dendl;
   ceph_assert(_kv_only || mounted);
   _osr_drain_all();
+
+  if (bluefs) {
+    bluefs->spillover_cleaner_stop();
+  }
 
   mounted = false;
 
