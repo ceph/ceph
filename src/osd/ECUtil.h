@@ -728,6 +728,36 @@ public:
     return chunk_mapping_reverse.at(int(shard));
   }
 
+  shard_id_t get_shard_base(shard_id_t shard) const {
+    int k_plus_m = get_k_plus_m();
+    // Fast path for common case (id < k+m), also handles negative shards
+    if (std::cmp_less(shard.id, k_plus_m)) {
+      return shard;
+    }
+    // Modern compilers optimize % well on recent CPUs
+    return shard_id_t(shard.id % k_plus_m);
+  }
+
+  int get_shard_zone(shard_id_t shard) const {
+    int k_plus_m = get_k_plus_m();
+    // Fast path for common case (id < k+m)
+    if (std::cmp_less(shard.id, k_plus_m)) {
+      return 0;
+    }
+    // Modern compilers optimize / well on recent CPUs
+    return shard.id / k_plus_m;
+  }
+
+  std::pair<shard_id_t, int> get_shard_base_and_zone(shard_id_t shard) const {
+    int k_plus_m = get_k_plus_m();
+    // Fast path for common case (id < k+m), also handles negative shards
+    if (std::cmp_less(shard.id, k_plus_m)) {
+      return std::make_pair(shard, 0);
+    }
+    // Modern compilers optimize % and / well on recent CPUs
+    return std::make_pair(shard_id_t(shard.id % k_plus_m), shard.id / k_plus_m);
+  }
+
   /* Return a "span" - which can be iterated over */
   auto get_data_shards() const {
     return data_shards;

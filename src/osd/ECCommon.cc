@@ -18,6 +18,7 @@
 #include <iostream>
 #include <sstream>
 #include <ranges>
+#include <expected>
 #include <fmt/ostream.h>
 
 #include "ECInject.h"
@@ -150,21 +151,31 @@ void ECCommon::ReadPipeline::get_all_avail_shards(
     shard_id_set &have,
     shard_id_map<pg_shard_t> &shards,
     const bool for_recovery,
+    int local_zone,
+    int allow_remote_zone,
     const std::optional<set<pg_shard_t>> &error_shards) {
   for (auto &&pg_shard: get_parent()->get_acting_shards()) {
+    const auto [shard, zone] = sinfo.get_shard_base_and_zone(pg_shard.shard);
+    if (!allow_remote_zone & zone != local_zone) {
+      continue;
+    }
     dout(10) << __func__ << ": checking acting " << pg_shard << dendl;
     const pg_missing_t &missing = get_parent()->get_shard_missing(pg_shard);
     if (error_shards && error_shards->contains(pg_shard)) {
       continue;
     }
-    const shard_id_t &shard = pg_shard.shard;
     if (cct->_conf->bluestore_debug_inject_read_err &&
       ECInject::test_read_error1(ghobject_t(hoid, ghobject_t::NO_GEN, shard))) {
       dout(0) << __func__ << " Error inject - Missing shard " << shard << dendl;
       continue;
     }
     if (!missing.is_missing(hoid)) {
-      ceph_assert(!have.contains(shard));
+      if (have.contains(shard)) {
+        ceph_assert(allow_remote_zone);
+        // With zones, multiple pg_shards can map to the same base shard
+        // Skip if we already have this base shard
+        continue;
+      }
       have.insert(shard);
       ceph_assert(!shards.contains(shard));
       shards.insert(shard, pg_shard);
@@ -208,6 +219,45 @@ void ECCommon::ReadPipeline::get_all_avail_shards(
   }
 }
 
+std::expected<std::tuple<shard_id_set, shard_id_map<pg_shard_t>, shard_id_set>, int>
+ECCommon::ReadPipeline::select_shards_for_read(
+    const hobject_t &hoid,
+    const shard_id_set &want,
+    bool for_recovery,
+    bool allow_remote_zone,
+    const std::optional<set<pg_shard_t>> &error_shards)
+{
+  shard_id_set have;
+  shard_id_map<pg_shard_t> shards(sinfo.get_k_plus_m());
+  auto zone = sinfo.get_shard_zone(get_parent()->whoami_shard().shard);
+  get_all_avail_shards(hoid, have, shards, for_recovery, zone, allow_remote_zone, error_shards);
+
+  shard_id_set need_set;
+
+  int r = 0;
+  auto kth_iter = want.find_nth(sinfo.get_k());
+  if (kth_iter != want.end()) {
+    // If we support partial reads, we are making the assumption that only
+    // K shards need to be read to recover data.  We opt here for minimising
+    // the number of reads over minimising the amount of parity calculations
+    // that are needed.
+    shard_id_set want_for_plugin = want;
+    shard_id_t kth = *kth_iter;
+    want_for_plugin.erase_range(kth, sinfo.get_k_plus_m() - (int)kth);
+    r = ec_impl->minimum_to_decode(want_for_plugin, have, need_set, nullptr);
+  } else {
+    r = ec_impl->minimum_to_decode(want, have, need_set, nullptr);
+  }
+
+  if (r < 0) {
+    dout(20) << "minimum_to_decode_failed r: " << r << " want: " << want
+      << " have: " << have << " need: " << need_set << dendl;
+    return std::unexpected(r);
+  }
+
+  return std::make_tuple(std::move(have), std::move(shards), std::move(need_set));
+}
+
 int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
     const hobject_t &hoid,
     bool for_recovery,
@@ -221,54 +271,22 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
     dout(10) << __func__ << " empty read" << dendl;
     return 0;
   }
-
-  shard_id_set have;
-  shard_id_map<pg_shard_t> shards(sinfo.get_k_plus_m());
-
-  get_all_avail_shards(hoid, have, shards, for_recovery, error_shards);
-
-  std::unique_ptr<shard_id_map<vector<pair<int, int>>>> need_sub_chunks =
-      nullptr;
-  if (sinfo.supports_sub_chunks()) {
-    need_sub_chunks = std::make_unique<shard_id_map<vector<pair<int, int>>>>(
-      sinfo.get_k_plus_m());
-  }
-  shard_id_set need_set;
   shard_id_set want;
-
   read_request.shard_want_to_read.populate_shard_id_set(want);
 
-  int r = 0;
-  auto kth_iter = want.find_nth(sinfo.get_k());
-  if (kth_iter != want.end()) {
-    // If we support partial reads, we are making the assumption that only
-    // K shards need to be read to recover data.  We opt here for minimising
-    // the number of reads over minimising the amount of parity calculations
-    // that are needed.
-    shard_id_set want_for_plugin = want;
-    shard_id_t kth = *kth_iter;
-    want_for_plugin.erase_range(kth, sinfo.get_k_plus_m() - (int)kth);
-    r = ec_impl->minimum_to_decode(want_for_plugin, have, need_set,
-                                     need_sub_chunks.get());
-  } else {
-    r = ec_impl->minimum_to_decode(want, have, need_set,
-                                     need_sub_chunks.get());
+  // Try to get shards from local zone first, fall back to remote zone if needed
+  auto result = select_shards_for_read(hoid, want, for_recovery, false, error_shards);
+  if (!result && sinfo.get_num_zones() > 1) {
+    result = select_shards_for_read(hoid, want, for_recovery, true, error_shards);
+  }
+  if (!result) {
+    return result.error();
   }
 
-  if (r < 0) {
-    dout(20) << "minimum_to_decode_failed r: " << r << "want: " << want
-      << " have: " << have << " need: " << need_set << dendl;
-    return r;
-  }
+  // Extract the values from the expected result
+  auto& [have, shards, need_set] = result.value();
 
   if (do_redundant_reads) {
-    if (need_sub_chunks) {
-      vector<pair<int, int>> subchunks_list;
-      subchunks_list.push_back(make_pair(0, ec_impl->get_sub_chunk_count()));
-      for (auto &&i: have) {
-        (*need_sub_chunks)[i] = subchunks_list;
-      }
-    }
     need_set.insert(have);
   }
 
@@ -306,9 +324,6 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
     shard_id_t shard_id(shard);
     extent_set extents = extra_extents;
     shard_read_t shard_read;
-    if (need_sub_chunks) {
-      shard_read.subchunk = need_sub_chunks->at(shard_id);
-    }
     shard_read.pg_shard = shards[shard_id];
 
     if (read_request.shard_want_to_read.contains(shard)) {
@@ -416,7 +431,7 @@ int ECCommon::ReadPipeline::get_remaining_shards(
     // empty read!
     shard_id_set have;
     shard_id_map<pg_shard_t> pg_shards(sinfo.get_k_plus_m());
-    get_all_avail_shards(hoid, have, pg_shards, for_recovery, error_shards);
+    get_all_avail_shards(hoid, have, pg_shards, for_recovery, 0, 0, error_shards);
     for (auto shard : have) {
       if (!sinfo.is_nonprimary_shard(shard)) {
         shard_read_t shard_read;
