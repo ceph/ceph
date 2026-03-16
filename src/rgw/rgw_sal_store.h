@@ -272,6 +272,7 @@ class StoreBucket : public Bucket {
     int write_logging_object(const std::string& obj_name, const std::string& record, const std::string& prefix, optional_yield y, const DoutPrefixProvider *dpp, bool async_completion) override {
       return 0;
     }
+    virtual void set_cache_request() override {};
 
     friend class BucketList;
 };
@@ -392,6 +393,8 @@ class StoreObject : public Object {
     }
 
     virtual RGWObjVersionTracker& get_version_tracker() override { return state.objv_tracker; }
+
+    virtual void set_cache_request() override {};
 
     virtual void print(std::ostream& out) const override {
       if (bucket)

@@ -712,6 +712,8 @@ public:
   virtual rgw_bucket& get_key() override { return next->get_key(); }
   virtual RGWBucketInfo& get_info() override { return next->get_info(); }
 
+  virtual void set_cache_request() override {};
+
   virtual void print(std::ostream& out) const override { return next->print(out); }
 
   virtual bool operator==(const Bucket& b) const override { return next->operator==(b); }
@@ -917,8 +919,9 @@ public:
     return std::make_unique<FilterObject>(*this);
   }
 
-  virtual jspan_context& get_trace() { return next->get_trace(); }
-  virtual void set_trace (jspan_context&& _trace_ctx) { next->set_trace(std::move(_trace_ctx)); }
+  virtual jspan_context& get_trace() override { return next->get_trace(); }
+  virtual void set_trace (jspan_context&& _trace_ctx) override { next->set_trace(std::move(_trace_ctx)); }
+  virtual void set_cache_request() override {};
 
   virtual void print(std::ostream& out) const override { return next->print(out); }
 
@@ -938,7 +941,7 @@ public:
   virtual uint64_t get_size() override { return next->get_size(); }
   virtual const std::string& get_etag() override { return next->get_etag(); }
   virtual ceph::real_time& get_mtime() override { return next->get_mtime(); }
-  virtual const std::optional<rgw::cksum::Cksum>& get_cksum() {
+  virtual const std::optional<rgw::cksum::Cksum>& get_cksum() override {
     return next->get_cksum();
   }
 };

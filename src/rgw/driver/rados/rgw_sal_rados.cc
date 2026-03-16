@@ -6024,6 +6024,20 @@ int RadosRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
 
 } // namespace rgw::sal
 
+std::optional<neorados::RADOS>
+make_neorados(CephContext* cct, boost::asio::io_context& io_context) {
+  try {
+    auto neorados = neorados::RADOS::make_with_cct(boost::intrusive_ptr{cct},
+                                                   io_context,
+                                                   ceph::async::use_blocked);
+    return neorados;
+  } catch (const std::exception& e) {
+    ldout(cct, 0) << "Failed constructing neroados handle: " << e.what()
+		  << dendl;
+  }
+  return std::nullopt;
+}
+
 extern "C" {
 
 void* newRadosStore(void* io_context_, CephContext* cct)
