@@ -150,7 +150,14 @@ def build_prerelease(sysargs):
         f'{arch_specific_host}/{amd64_repo}',
         f'{arch_specific_host}/{arm64_repo}',
     )
-    tags = [get_latest_tag(p) for p in repopaths]
+    tags = list()
+    for p in repopaths:
+        latest = get_latest_tag(p, sysargs.version)
+        if latest is None:
+            print(f'no {sysargs.version} tag in {p}', file=sys.stderr)
+            return(1)
+        tags.append(latest)
+
     print(f'latest tags: amd64:{tags[0]} arm64:{tags[1]}')
 
     # check that version of latest tag matches
