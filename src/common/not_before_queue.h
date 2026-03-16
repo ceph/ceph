@@ -10,6 +10,9 @@
 #include <numeric> // for std::accumulate()
 #include <optional>
 
+#ifdef WITH_CRIMSON
+#include "crimson/common/log.h"
+#endif
 /**
  * not_before_queue_t
  *
@@ -165,9 +168,21 @@ public:
     removal_registry.insert(*item);
 
     if (project_not_before(item->v) > current_time) {
+  #ifdef WITH_CRIMSON
+    SET_SUBSYS(osd);
+    LOG_PREFIX(not_before_queue_t::enqueue);
+    DEBUG("enqueue item: {} to ineligible_queue, current_time {}, item not before {}",
+      item->v, current_time, project_not_before(item->v));
+  #endif
       item->status = status_t::INELIGIBLE;
       ineligible_queue.insert(*item);
     } else {
+  #ifdef WITH_CRIMSON
+    SET_SUBSYS(osd);
+    LOG_PREFIX(not_before_queue_t::enqueue);
+    DEBUG("enqueue item: {} to eligible_queue, current_time {}, item not before {}",
+      item->v, current_time, project_not_before(item->v));
+  #endif
       item->status = status_t::ELIGIBLE;
       eligible_queue.insert(*item);
     }
@@ -196,9 +211,21 @@ public:
   /// Dequeue 1st eligible item that satisfies pred, std::nullopt if none
   template <typename PRED>
   std::optional<V> dequeue_by_pred(const PRED& pred) {
+  #ifdef WITH_CRIMSON
+    SET_SUBSYS(osd);
+    LOG_PREFIX(not_before_queue_t::dequeue_by_pred);
+    DEBUG("eligible_queue size {}, ineligible_queue size {}", eligible_queue.size(), ineligible_queue.size());
+  #endif
     auto iter = std::find_if(
-	eligible_queue.begin(), eligible_queue.end(),
-	[&pred](const auto &i) { return pred(i.v); });
+      eligible_queue.begin(), eligible_queue.end(),
+      [&pred](const auto &i) {
+  #ifdef WITH_CRIMSON
+      SET_SUBSYS(osd);
+      LOG_PREFIX(not_before_queue_t::dequeue_by_pred);
+      DEBUG("checking item: {}, pred(item): {}", i.v, pred(i.v));
+  #endif
+      return pred(i.v);
+    });
 
     if (iter == eligible_queue.end()) {
       return std::nullopt;
@@ -230,6 +257,11 @@ public:
    *          had to ignore the update.
    */
   bool advance_time(T next_time) {
+  #ifdef WITH_CRIMSON
+    SET_SUBSYS(osd);
+    LOG_PREFIX(not_before_queue_t::advance_time);
+    DEBUG("current_time {}, next_time {}", current_time, next_time);
+  #endif
     if (next_time < current_time) {
       return false;
     }
@@ -244,9 +276,16 @@ public:
       assert(item.status == status_t::INELIGIBLE);
 
       if (project_not_before(item.v) > current_time) {
+  #ifdef WITH_CRIMSON
+    DEBUG("next item is still ineligible item: {} not before {} , current_time : {}",
+      item.v, project_not_before(item.v), current_time);
+  #endif
 	break;
       }
 
+  #ifdef WITH_CRIMSON
+    DEBUG("next item is eligible, item: {}", item.v);
+  #endif
       item.status = status_t::ELIGIBLE;
       ineligible_queue.erase(typename ineligible_queue_t::const_iterator(iter));
       eligible_queue.insert(item);
