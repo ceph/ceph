@@ -557,6 +557,19 @@ void OSDSingletonState::trim_maps(ceph::os::Transaction& t,
   ceph_assert(min <= osdmaps.cached_key_lower_bound());
 }
 
+seastar::future<> ShardServices::prepare_scrub()
+{
+  LOG_PREFIX(ShardServices::prepare_scrub);
+  DEBUG("scrub timer is expired. Checking if we can start scrub...");
+  if (!local_state.osd_state.is_active()) {
+    DEBUG("shard not active, skipping scrub preparation");
+    co_return;
+  }
+  auto active = co_await scrub_scheduler.is_recovery_active();
+  DEBUG("is recovery active? {}", active);
+  co_return scrub_scheduler.initiate_scrub(active);
+}
+
 seastar::future<Ref<PG>> ShardServices::make_pg(
   OSDMapService::cached_map_t create_map,
   spg_t pgid,

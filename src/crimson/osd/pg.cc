@@ -48,6 +48,7 @@
 #include "crimson/osd/pg_recovery.h"
 #include "crimson/osd/replicated_recovery_backend.h"
 #include "crimson/osd/watch.h"
+#include "osd/scrubber_common.h"
 
 using std::ostream;
 using std::set;
@@ -723,6 +724,31 @@ PG::interruptible_future<bool> PG::do_recover_missing(
     co_await PG::interruptor::make_interruptible(std::move(fut));
     co_return false;
   }
+}
+
+scrub::schedule_result_t PG::start_scrubbing(
+    const scrub::SchedEntry& candidate,
+    scrub::OSDRestrictions osd_restrictions)
+{
+  LOG_PREFIX(PG::start_scrubbing);
+  DEBUGDPP(
+    "starting scrubbing {}, {}+{} (env restrictions:{})", *this,
+    candidate, (is_active() ? "<active>" : "<not-active>"),
+    (is_clean() ? "<clean>" : "<not-clean>"), osd_restrictions);
+
+  scrub::ScrubPGPreconds pg_cond{};
+  pg_cond.allow_shallow =
+      !(get_osdmap()->test_flag(CEPH_OSDMAP_NOSCRUB) ||
+	      peering_state.get_pgpool().info.has_flag(pg_pool_t::FLAG_NOSCRUB));
+  pg_cond.allow_deep =
+      !(get_osdmap()->test_flag(CEPH_OSDMAP_NODEEP_SCRUB) ||
+	      peering_state.get_pgpool().info.has_flag(pg_pool_t::FLAG_NODEEP_SCRUB));
+  pg_cond.can_autorepair =
+      (crimson::common::local_conf().get_val<bool>("osd_scrub_auto_repair") &&
+       get_backend().auto_repair_supported());  //backend seems not support auto repair
+
+  return scrubber.start_scrub(
+      candidate.level, osd_restrictions, pg_cond);
 }
 
 void PG::scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type)
@@ -1791,4 +1817,11 @@ bool PG::check_in_progress_op(
       reqid, version, user_version, return_code, op_returns));
 }
 
+unsigned PG::get_scrub_priority()
+{
+  // a higher value -> a higher priority
+  int64_t pool_scrub_priority =
+    get_pgpool().info.opts.value_or(pool_opts_t::SCRUB_PRIORITY, (int64_t)0);
+  return pool_scrub_priority > 0 ? pool_scrub_priority :
+    crimson::common::local_conf().get_val<uint64_t>("osd_scrub_priority");}
 }

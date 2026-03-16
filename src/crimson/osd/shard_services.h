@@ -23,6 +23,7 @@
 #include "crimson/osd/object_context.h"
 #include "crimson/osd/pg_map.h"
 #include "crimson/osd/state.h"
+#include "crimson/osd/scrub/scrub_scheduler.h"
 #include "common/AsyncReserver.h"
 #include "crimson/net/Connection.h"
 #include "mgr/OSDPerfMetricTypes.h"
@@ -365,6 +366,8 @@ class ShardServices : public OSDMapService {
   PerShardState local_state;
   seastar::sharded<OSDSingletonState> &osd_singleton_state;
   PGShardMapping& pg_to_shard_mapping;
+  seastar::timer<seastar::lowres_clock> scrub_timer;
+  ScrubScheduler scrub_scheduler;
 
   template <typename F, typename... Args>
   auto with_singleton(F &&f, Args&&... args) {
@@ -374,6 +377,7 @@ class ShardServices : public OSDMapService {
       std::forward<Args>(args)...
     );
   }
+  seastar::future<> prepare_scrub();
 
 public:
   /**
@@ -478,8 +482,22 @@ public:
     PSSArgs&&... args)
     : local_state(std::forward<PSSArgs>(args)...),
       osd_singleton_state(osd_singleton_state),
-      pg_to_shard_mapping(pg_to_shard_mapping) {}
-
+      pg_to_shard_mapping(pg_to_shard_mapping),
+      scrub_timer{[this] {
+        std::ignore = prepare_scrub(
+        ).then([this] {
+          scrub_timer.arm(std::chrono::seconds(SCRUB_TICK_INTERVAL));
+        });
+      }},
+      scrub_scheduler(*this) {
+        scrub_timer.arm(std::chrono::seconds(SCRUB_TICK_INTERVAL));
+      }
+  ~ShardServices() {
+    scrub_timer.cancel();
+  }
+  ScrubScheduler &get_scrub_scheduler() {
+    return scrub_scheduler;
+  }
   FORWARD_TO_OSD_SINGLETON(send_to_osd)
 
   crimson::os::FuturizedStore::Shard &get_store() {
@@ -641,6 +659,15 @@ public:
     return local_state.throttler.available();
   }
 
+  auto is_recovery_active() {
+    LOG_PREFIX(ShardServices::is_recovery_active);
+    SUBDEBUG(osd, "sending to singleton");
+    return with_singleton(
+      [FNAME](auto &singleton) {
+      SUBDEBUG(osd, "on singleton");
+      return singleton.local_reserver.has_reservation() || singleton.remote_reserver.has_reservation();
+    });
+  }
   auto local_update_priority(
     singleton_orderer_t &orderer,
     spg_t pgid, unsigned newprio) {
@@ -776,8 +803,7 @@ public:
 #undef FORWARD_TO_LOCAL
 #undef FORWARD_TO_LOCAL_CONST
 };
-
-}
+} // namespace crimson::osd
 
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<crimson::osd::OSDSingletonState::pg_temp_t> : fmt::ostream_formatter {};

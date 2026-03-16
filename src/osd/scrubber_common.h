@@ -80,9 +80,12 @@ private:
 static inline bool random_bool_with_probability(double probability) {
   return (ceph::util::generate_random_number<double>(0.0, 1.0) < probability);
 }
-
+#ifdef WITH_CRIMSON
+namespace crimson::osd::scrub {
+#define Scrub crimson::osd::scrub
+#else
 namespace Scrub {
-
+#endif
 /// high/low OP priority
 enum class scrub_prio_t : bool { low_priority = false, high_priority = true };
 
@@ -201,8 +204,11 @@ struct formatter<Scrub::scrub_schedule_t> {
 };
 
 }  // namespace fmt
-
+#ifdef WITH_CRIMSON
+namespace crimson::osd::scrub {
+#else
 namespace Scrub {
+#endif
 
 /**
  * the result of the last attempt to schedule a scrub for a specific PG.

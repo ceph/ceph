@@ -3,8 +3,15 @@
 
 #pragma once
 
-#include "crimson/osd/pg_interval_interrupt_condition.h"
+#include <seastar/core/shared_future.hh>
+
+#include "crimson/common/operation.h"
+#include "msg/Message.h"
+#include "osd/scrubber_common.h"
 #include "scrub_machine.h"
+#include "osd/scrubber/scrub_job.h"
+#include "scrub_queue.h"
+#include "osd/scrubber/scrub_resources.h"
 
 namespace crimson::osd {
 class PG;
@@ -19,6 +26,30 @@ struct blocked_range_t {
   hobject_t begin;
   hobject_t end;
   seastar::shared_promise<> p;
+};
+
+/**
+ * the scrub operation flags. Primary only.
+ * Set at scrub start. Checked in multiple locations - mostly
+ * at finish.
+ */
+struct scrub_flags_t {
+
+  unsigned int priority{0};
+
+  /**
+   * set by set_op_parameters() for deep scrubs, if the hardware
+   * supports auto repairing and osd_scrub_auto_repair is enabled.
+   */
+  bool auto_repair{false};
+
+  /// this flag indicates that we are scrubbing post repair to verify everything
+  /// is fixed (otherwise - PG_STATE_FAILED_REPAIR will be asserted.)
+  /// Update (July 2024): now reflects an 'after-repair' urgency.
+  bool check_repair{false};
+
+  /// checked at the end of the scrub, to possibly initiate a deep-scrub
+  bool deep_scrub_on_error{false};
 };
 
 class PGScrubber : public crimson::BlockerT<PGScrubber>, ScrubContext {
@@ -44,6 +75,23 @@ class PGScrubber : public crimson::BlockerT<PGScrubber>, ScrubContext {
 
   std::optional<eversion_t> waiting_for_update;
 
+  /// the sub-object that manages this PG's scheduling parameters.
+  /// An Optional instead of a regular member, as we wish to directly
+  /// control the order of construction/destruction.
+  std::optional<ScrubJob> m_scrub_job;
+    /**
+   * once we acquire the local OSD resource, this is set to a wrapper that
+   * guarantees that the resource will be released when the scrub is done
+   */
+  std::unique_ptr<LocalResourceWrapper> m_local_osd_resource;
+  bool m_queued_or_active{false};
+  std::optional<SchedTarget> m_active_target;
+  epoch_t m_epoch_start{0};  ///< the actual epoch when scrubbing started
+  scrub_flags_t m_flags;
+  bool m_is_deep{false};
+  bool m_is_repair{false};
+  enum class delay_both_targets_t { no, yes };
+
   template <typename E>
   void handle_event(E &&e)
   {
@@ -68,7 +116,9 @@ public:
     return false;
   }
 
+  static utime_t scrub_must_stamp() { return utime_t(1, 1); }
   PGScrubber(PG &pg);
+  virtual ~PGScrubber();
 
   /// setup scrub machine state
   void initiate() { machine.initiate(); }
@@ -84,6 +134,11 @@ public:
 
   /// notify machine that PG has committed up to versino v
   void on_log_update(eversion_t v);
+
+  schedule_result_t start_scrub(
+    scrub_level_t s_or_d,
+    OSDRestrictions osd_restrictions,
+    ScrubPGPreconds pg_cond);
 
   /// handle scrub request
   void handle_scrub_requested(bool deep);
@@ -105,8 +160,19 @@ public:
 private:
   DoutPrefixProvider &get_dpp() final { return dpp; }
 
+  void schedule_scrub_with_osd() final;
+  void update_scrub_job() final;
+  void rm_from_osd_scrubbing() final;
+
   void notify_scrub_start(bool deep) final;
   void notify_scrub_end(bool deep) final;
+
+  void requeue_penalized(
+      scrub_level_t s_or_d,
+      delay_both_targets_t delay_both,
+      delay_cause_t cause,
+      utime_t scrub_clock_now);
+  bool reserve_local(const SchedTarget& trgt);
 
   const std::set<pg_shard_t> &get_ids_to_scrub() const final;
 
@@ -132,21 +198,48 @@ private:
   void emit_scrub_result(
     bool deep,
     object_stat_sum_t scrub_stats) final;
+
+  sched_conf_t populate_config_params() const;
+  void update_targets(utime_t scrub_clock_now);
+  bool is_queued_or_active() const  {
+    return m_queued_or_active;
+  };
+  void set_op_parameters(ScrubPGPreconds pg_cond);
+  void set_queued_or_active() {
+    m_queued_or_active = true;
+  }
+  void clear_queued_or_active()
+  {
+    if (m_queued_or_active) {
+      m_queued_or_active = false;
+    }
+  }
+  void cleanup_on_finish();
+  void clear_pgscrub_state();
+  void reset_internal_state();
+  std::string_view registration_state() const;
 };
 
-};
+} // namespace crimson::osd::scrub
+#include <fmt/format.h>
+
+namespace fmt {
 
 template <>
-struct fmt::formatter<crimson::osd::scrub::blocked_range_t> {
-  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+struct formatter<crimson::osd::scrub::blocked_range_t> {
+  constexpr auto parse(format_parse_context& ctx) {
+    return ctx.begin();
+  }
 
   template <typename FormatContext>
-  auto format(const auto &range, FormatContext& ctx) const
-  {
-    return fmt::format_to(
-      ctx.out(),
-      "{}~{}",
-      range.begin,
-      range.end);
+  auto format(const crimson::osd::scrub::blocked_range_t& r,
+              FormatContext& ctx) const {
+    return format_to(
+        ctx.out(),
+        "blocked_range[{} -> {}]",
+        r.begin,
+        r.end);
   }
 };
+
+} // namespace fmt
