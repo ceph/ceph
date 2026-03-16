@@ -22,16 +22,19 @@
 #include "gtest/gtest.h"
 #include "include/rados/librados.hpp"
 #include "test/librados/test_cxx.h"
+#include "test/librados/test_pool_types.h"
 
 using namespace librados;
+using ceph::test::PoolType;
+using ceph::test::pool_type_name;
+using ceph::test::create_pool_by_type;
+using ceph::test::destroy_pool_by_type;
 
-TEST(ClsNumOps, Add) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
+class TestClsNumOps : public ceph::test::ClsTestFixture {
+  // Inherits: rados, ioctx, pool_name, pool_type, SetUp(), TearDown()
+};
 
+TEST_P(TestClsNumOps, Add) {
   // exec numops add method with an empty bufferlist
 
   bufferlist in, out;
@@ -116,17 +119,9 @@ TEST(ClsNumOps, Add) {
   value_out.assign(bl.c_str(), bl.length());
 
   EXPECT_EQ(non_numeric_value, value_out);
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(ClsNumOps, Sub) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
-
+TEST_P(TestClsNumOps, Sub) {
   // subtract a number from a non-existing key
 
   std::string key = "my-key";
@@ -205,17 +200,9 @@ TEST(ClsNumOps, Sub) {
   value_out.assign(bl.c_str(), bl.length());
 
   EXPECT_EQ(non_numeric_value, value_out);
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(ClsNumOps, Mul) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
-
+TEST_P(TestClsNumOps, Mul) {
   // exec numops mul method with an empty bufferlist
 
   bufferlist in, out;
@@ -308,17 +295,9 @@ TEST(ClsNumOps, Mul) {
   value_out.assign(bl.c_str(), bl.length());
 
   EXPECT_EQ(non_numeric_value, value_out);
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(ClsNumOps, Div) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
-
+TEST_P(TestClsNumOps, Div) {
   // divide a non-existing key by a number
 
   std::string key = "my-key";
@@ -409,6 +388,11 @@ TEST(ClsNumOps, Div) {
   value_out.assign(bl.c_str(), bl.length());
 
   EXPECT_EQ(non_numeric_value, value_out);
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
+
+INSTANTIATE_TEST_SUITE_P(, TestClsNumOps,
+    ::testing::Values(PoolType::REPLICATED, PoolType::FAST_EC),
+    [](const ::testing::TestParamInfo<PoolType>& info) {
+      return pool_type_name(info.param);
+    }
+);

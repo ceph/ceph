@@ -281,6 +281,18 @@ int ReplicatedBackend::objects_read_sync(
   uint64_t off,
   uint64_t len,
   uint32_t op_flags,
+  bufferlist *bl,
+  uint64_t object_size,
+  std::optional<CoroHandles> coro)
+{
+  return store->read(ch, ghobject_t(hoid), off, len, *bl, op_flags);
+}
+
+int ReplicatedBackend::objects_read_local(
+  const hobject_t &hoid,
+  uint64_t off,
+  uint64_t len,
+  uint32_t op_flags,
   bufferlist *bl)
 {
   return store->read(ch, ghobject_t(hoid), off, len, *bl, op_flags);
@@ -444,15 +456,14 @@ void generate_transaction(
 	t->omap_setheader(coll, goid, *(op.omap_header));
 
       for (auto &&up: op.omap_updates) {
-	using UpdateType = PGTransaction::ObjectOperation::OmapUpdateType;
 	switch (up.first) {
-	case UpdateType::Remove:
+	case OmapUpdateType::Remove:
 	  t->omap_rmkeys(coll, goid, up.second);
 	  break;
-	case UpdateType::Insert:
+	case OmapUpdateType::Insert:
 	  t->omap_setkeys(coll, goid, up.second);
 	  break;
-	case UpdateType::RemoveRange:
+	case OmapUpdateType::RemoveRange:
 	  t->omap_rmkeyrange(coll, goid, up.second);
 	  break;
 	}

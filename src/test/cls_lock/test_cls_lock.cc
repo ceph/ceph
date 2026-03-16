@@ -22,6 +22,7 @@
 #include "include/rados/librados.hpp"
 
 #include "test/librados/test_cxx.h"
+#include "test/librados/test_pool_types.h"
 #include "gtest/gtest.h"
 
 #include "cls/lock/cls_lock_client.h"
@@ -30,6 +31,10 @@
 using namespace std;
 using namespace librados;
 using namespace rados::cls::lock;
+using ceph::test::PoolType;
+using ceph::test::pool_type_name;
+using ceph::test::create_pool_by_type;
+using ceph::test::destroy_pool_by_type;
 
 void lock_info(IoCtx *ioctx, string& oid, string& name, map<locker_id_t, locker_info_t>& lockers,
 	       ClsLockType *assert_type, string *assert_tag)
@@ -64,20 +69,18 @@ void lock_info(IoCtx *ioctx, string& oid, string& name, map<locker_id_t, locker_
   lock_info(ioctx, oid, name, lockers, NULL, NULL);
 }
 
-TEST(ClsLock, TestMultiLocking) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
+class TestClsLock : public ceph::test::ClsTestFixture {
+  // Inherits: rados, ioctx, pool_name, pool_type, SetUp(), TearDown()
+};
+
+TEST_P(TestClsLock, TestMultiLocking) {
   ClsLockType lock_type_shared = ClsLockType::SHARED;
   ClsLockType lock_type_exclusive = ClsLockType::EXCLUSIVE;
 
-
-  Rados cluster2;
+  Rados rados2;
   IoCtx ioctx2;
-  ASSERT_EQ("", connect_cluster_pp(cluster2));
-  cluster2.ioctx_create(pool_name.c_str(), ioctx2);
+  ASSERT_EQ("", connect_cluster_pp(rados2));
+  rados2.ioctx_create(pool_name.c_str(), ioctx2);
 
   string oid = "foo";
   bufferlist bl;
@@ -135,8 +138,8 @@ TEST(ClsLock, TestMultiLocking) {
   ASSERT_EQ(2, (int)lockers.size());
 
   /* test break locks */
-  entity_name_t name = entity_name_t::CLIENT(cluster.get_instance_id());
-  entity_name_t name2 = entity_name_t::CLIENT(cluster2.get_instance_id());
+  entity_name_t name = entity_name_t::CLIENT(rados.get_instance_id());
+  entity_name_t name2 = entity_name_t::CLIENT(rados2.get_instance_id());
 
   l2.break_lock(&ioctx2, oid, name);
   lock_info(&ioctx, oid, *iter, lockers);
@@ -155,22 +158,13 @@ TEST(ClsLock, TestMultiLocking) {
   string description = "new description";
   l.set_description(description);
   ASSERT_EQ(0, l.lock_shared(&ioctx, oid));
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(ClsLock, TestMeta) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
-
-
-  Rados cluster2;
+TEST_P(TestClsLock, TestMeta) {
+  Rados rados2;
   IoCtx ioctx2;
-  ASSERT_EQ("", connect_cluster_pp(cluster2));
-  cluster2.ioctx_create(pool_name.c_str(), ioctx2);
+  ASSERT_EQ("", connect_cluster_pp(rados2));
+  rados2.ioctx_create(pool_name.c_str(), ioctx2);
 
   string oid = "foo";
   bufferlist bl;
@@ -216,17 +210,9 @@ TEST(ClsLock, TestMeta) {
   ASSERT_EQ(-EBUSY, l.lock_exclusive(&ioctx, oid));
   l.set_tag(new_tag);
   ASSERT_EQ(0, l.lock_exclusive(&ioctx, oid));
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(ClsLock, TestCookie) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
-
+TEST_P(TestClsLock, TestCookie) {
   string oid = "foo";
   string lock_name = "mylock";
   Lock l(lock_name);
@@ -252,17 +238,9 @@ TEST(ClsLock, TestCookie) {
 
   lock_info(&ioctx, oid, lock_name, lockers);
   ASSERT_EQ(2, (int)lockers.size());
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(ClsLock, TestMultipleLocks) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
-
+TEST_P(TestClsLock, TestMultipleLocks) {
   string oid = "foo";
   Lock l("lock1");
   ASSERT_EQ(0, l.lock_exclusive(&ioctx, oid));
@@ -274,17 +252,9 @@ TEST(ClsLock, TestMultipleLocks) {
   ASSERT_EQ(0, list_locks(&ioctx, oid, &locks));
 
   ASSERT_EQ(2, (int)locks.size());
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(ClsLock, TestLockDuration) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
-
+TEST_P(TestClsLock, TestLockDuration) {
   string oid = "foo";
   Lock l("lock");
   utime_t dur(5, 0);
@@ -302,17 +272,9 @@ TEST(ClsLock, TestLockDuration) {
   // coverity[store_truncates_time_t:SUPPRESS]
   sleep(dur.sec());
   ASSERT_EQ(0, l.lock_exclusive(&ioctx, oid));
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(ClsLock, TestAssertLocked) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
-
+TEST_P(TestClsLock, TestAssertLocked) {
   string oid = "foo";
   Lock l("lock1");
   ASSERT_EQ(0, l.lock_exclusive(&ioctx, oid));
@@ -342,17 +304,9 @@ TEST(ClsLock, TestAssertLocked) {
   librados::ObjectWriteOperation op5;
   l.assert_locked_exclusive(&op5);
   ASSERT_EQ(-EBUSY, ioctx.operate(oid, &op5));
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(ClsLock, TestSetCookie) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
-
+TEST_P(TestClsLock, TestSetCookie) {
   string oid = "foo";
   string name = "name";
   string tag = "tag";
@@ -393,17 +347,9 @@ TEST(ClsLock, TestSetCookie) {
   librados::ObjectWriteOperation op9;
   set_cookie(&op9, name, ClsLockType::SHARED, cookie, tag, new_cookie);
   ASSERT_EQ(0, ioctx.operate(oid, &op9));
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(ClsLock, TestRenew) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
-
+TEST_P(TestClsLock, TestRenew) {
   bufferlist bl;
 
   string oid1 = "foo1";
@@ -459,17 +405,9 @@ TEST(ClsLock, TestRenew) {
 
   ASSERT_EQ(-ENOENT, l3.lock_exclusive(&ioctx, oid3)) <<
     "unable to create a lock with must_renew";
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(ClsLock, TestExclusiveEphemeralBasic) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
-
+TEST_P(TestClsLock, TestExclusiveEphemeralBasic) {
   bufferlist bl;
 
   string oid1 = "foo1";
@@ -500,18 +438,10 @@ TEST(ClsLock, TestExclusiveEphemeralBasic) {
   sleep(2);
   ASSERT_EQ(0, l2.unlock(&ioctx, oid2));
   ASSERT_EQ(0, ioctx.stat(oid2, &size, &mod_time));
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
 
-TEST(ClsLock, TestExclusiveEphemeralStealEphemeral) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
-
+TEST_P(TestClsLock, TestExclusiveEphemeralStealEphemeral) {
   bufferlist bl;
 
   string oid1 = "foo1";
@@ -532,18 +462,10 @@ TEST(ClsLock, TestExclusiveEphemeralStealEphemeral) {
 
   // l2 cannot unlock its expired lock
   ASSERT_EQ(-ENOENT, l1.unlock(&ioctx, oid1));
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
 
-TEST(ClsLock, TestExclusiveEphemeralStealExclusive) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
-
+TEST_P(TestClsLock, TestExclusiveEphemeralStealExclusive) {
   bufferlist bl;
 
   string oid1 = "foo1";
@@ -564,6 +486,13 @@ TEST(ClsLock, TestExclusiveEphemeralStealExclusive) {
 
   // l2 cannot unlock its expired lock
   ASSERT_EQ(-ENOENT, l1.unlock(&ioctx, oid1));
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
+
+INSTANTIATE_TEST_SUITE_P(
+    ,
+    TestClsLock,
+    ::testing::Values(PoolType::REPLICATED, PoolType::FAST_EC),
+    [](const ::testing::TestParamInfo<PoolType>& info) {
+      return pool_type_name(info.param);
+    }
+);

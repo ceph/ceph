@@ -16,75 +16,26 @@
 #include <iostream>
 #include <errno.h>
 #include <string>
+#include <thread>
 
 #include "include/rados/librados.hpp"
 #include "include/encoding.h"
 #include "test/librados/test_cxx.h"
+#include "test/librados/test_pool_types.h"
 #include "gtest/gtest.h"
 #include "json_spirit/json_spirit.h"
 
 using namespace librados;
+using ceph::test::PoolType;
+using ceph::test::pool_type_name;
+using ceph::test::create_pool_by_type;
+using ceph::test::destroy_pool_by_type;
 
-TEST(ClsHello, SayHello) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
-
-  bufferlist in, out;
-  ASSERT_EQ(-ENOENT, ioctx.exec("myobject", "hello", "say_hello", in, out));
-  ASSERT_EQ(0, ioctx.write_full("myobject", in));
-  ASSERT_EQ(0, ioctx.exec("myobject", "hello", "say_hello", in, out));
-  ASSERT_EQ(std::string("Hello, world!"), std::string(out.c_str(), out.length()));
-
-  out.clear();
-  in.append("Tester");
-  ASSERT_EQ(0, ioctx.exec("myobject", "hello", "say_hello", in, out));
-  ASSERT_EQ(std::string("Hello, Tester!"), std::string(out.c_str(), out.length()));
-
-  out.clear();
-  in.clear();
-  char buf[4096];
-  memset(buf, 1, sizeof(buf));
-  in.append(buf, sizeof(buf));
-  ASSERT_EQ(-EINVAL, ioctx.exec("myobject", "hello", "say_hello", in, out));
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
-}
-
-TEST(ClsHello, RecordHello) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
-
-  bufferlist in, out;
-  ASSERT_EQ(0, ioctx.exec("myobject", "hello", "record_hello", in, out));
-  ASSERT_EQ(-EEXIST, ioctx.exec("myobject", "hello", "record_hello", in, out));
-
-  in.append("Tester");
-  ASSERT_EQ(0, ioctx.exec("myobject2", "hello", "record_hello", in, out));
-  ASSERT_EQ(-EEXIST, ioctx.exec("myobject2", "hello", "record_hello", in, out));
-  ASSERT_EQ(0u, out.length());
-
-  in.clear();
-  out.clear();
-  ASSERT_EQ(0, ioctx.exec("myobject", "hello", "replay", in, out));
-  ASSERT_EQ(std::string("Hello, world!"), std::string(out.c_str(), out.length()));
-  out.clear();
-  ASSERT_EQ(0, ioctx.exec("myobject2", "hello", "replay", in, out));
-  ASSERT_EQ(std::string("Hello, Tester!"), std::string(out.c_str(), out.length()));
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
-}
-
-static std::string _get_required_osd_release(Rados& cluster)
+static std::string _get_required_osd_release(Rados& rados)
 {
   std::string cmd = std::string("{\"prefix\": \"osd dump\",\"format\":\"json\"}");
   bufferlist outbl;
-  int r = cluster.mon_command(std::move(cmd), {}, &outbl, NULL);
+  int r = rados.mon_command(std::move(cmd), {}, &outbl, NULL);
   ceph_assert(r >= 0);
   std::string outstr(outbl.c_str(), outbl.length());
   json_spirit::Value v;
@@ -105,15 +56,52 @@ static std::string _get_required_osd_release(Rados& cluster)
   return "";
 }
 
-TEST(ClsHello, WriteReturnData) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
+class TestClsHello : public ceph::test::ClsTestFixture {
+  // Inherits: rados, ioctx, pool_name, pool_type, SetUp(), TearDown()
+};
 
+TEST_P(TestClsHello, SayHello) {
+  bufferlist in, out;
+  ASSERT_EQ(-ENOENT, ioctx.exec("myobject", "hello", "say_hello", in, out));
+  ASSERT_EQ(0, ioctx.write_full("myobject", in));
+  ASSERT_EQ(0, ioctx.exec("myobject", "hello", "say_hello", in, out));
+  ASSERT_EQ(std::string("Hello, world!"), std::string(out.c_str(), out.length()));
+
+  out.clear();
+  in.append("Tester");
+  ASSERT_EQ(0, ioctx.exec("myobject", "hello", "say_hello", in, out));
+  ASSERT_EQ(std::string("Hello, Tester!"), std::string(out.c_str(), out.length()));
+
+  out.clear();
+  in.clear();
+  char buf[4096];
+  memset(buf, 1, sizeof(buf));
+  in.append(buf, sizeof(buf));
+  ASSERT_EQ(-EINVAL, ioctx.exec("myobject", "hello", "say_hello", in, out));
+}
+
+TEST_P(TestClsHello, RecordHello) {
+  bufferlist in, out;
+  ASSERT_EQ(0, ioctx.exec("myobject", "hello", "record_hello", in, out));
+  ASSERT_EQ(-EEXIST, ioctx.exec("myobject", "hello", "record_hello", in, out));
+
+  in.append("Tester");
+  ASSERT_EQ(0, ioctx.exec("myobject2", "hello", "record_hello", in, out));
+  ASSERT_EQ(-EEXIST, ioctx.exec("myobject2", "hello", "record_hello", in, out));
+  ASSERT_EQ(0u, out.length());
+
+  in.clear();
+  out.clear();
+  ASSERT_EQ(0, ioctx.exec("myobject", "hello", "replay", in, out));
+  ASSERT_EQ(std::string("Hello, world!"), std::string(out.c_str(), out.length()));
+  out.clear();
+  ASSERT_EQ(0, ioctx.exec("myobject2", "hello", "replay", in, out));
+  ASSERT_EQ(std::string("Hello, Tester!"), std::string(out.c_str(), out.length()));
+}
+
+TEST_P(TestClsHello, WriteReturnData) {
   // skip test if not yet mimic
-  if (_get_required_osd_release(cluster) < "octopus") {
+  if (_get_required_osd_release(rados) < "octopus") {
     std::cout << "cluster is not yet octopus, skipping test" << std::endl;
     return;
   }
@@ -136,7 +124,7 @@ TEST(ClsHello, WriteReturnData) {
     int rval;
     ObjectWriteOperation o;
     o.exec("hello", "write_return_data", in, &out, &rval);
-    librados::AioCompletion *completion = cluster.aio_create_completion();
+    librados::AioCompletion *completion = rados.aio_create_completion();
     ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &o,
 				   librados::OPERATION_RETURNVEC));
     completion->wait_for_complete();
@@ -154,7 +142,7 @@ TEST(ClsHello, WriteReturnData) {
     int rval;
     ObjectWriteOperation o;
     o.exec("hello", "write_return_data", in, &out, &rval);
-    librados::AioCompletion *completion = cluster.aio_create_completion();
+    librados::AioCompletion *completion = rados.aio_create_completion();
     ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &o,
 				 librados::OPERATION_RETURNVEC));
     completion->wait_for_complete();
@@ -184,7 +172,7 @@ TEST(ClsHello, WriteReturnData) {
     int rval;
     ObjectWriteOperation o;
     o.exec("hello", "write_too_much_return_data", in, &out, &rval);
-    librados::AioCompletion *completion = cluster.aio_create_completion();
+    librados::AioCompletion *completion = rados.aio_create_completion();
     ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &o,
 				   librados::OPERATION_RETURNVEC));
     completion->wait_for_complete();
@@ -192,17 +180,9 @@ TEST(ClsHello, WriteReturnData) {
     ASSERT_EQ(-EOVERFLOW, rval);
     ASSERT_EQ("", std::string(out.c_str(), out.length()));
   }
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(ClsHello, Loud) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
-
+TEST_P(TestClsHello, Loud) {
   bufferlist in, out;
   ASSERT_EQ(0, ioctx.exec("myobject", "hello", "record_hello", in, out));
   ASSERT_EQ(0, ioctx.exec("myobject", "hello", "replay", in, out));
@@ -211,33 +191,17 @@ TEST(ClsHello, Loud) {
   ASSERT_EQ(0, ioctx.exec("myobject", "hello", "turn_it_to_11", in, out));
   ASSERT_EQ(0, ioctx.exec("myobject", "hello", "replay", in, out));
   ASSERT_EQ(std::string("HELLO, WORLD!"), std::string(out.c_str(), out.length()));
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(ClsHello, BadMethods) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
-
+TEST_P(TestClsHello, BadMethods) {
   bufferlist in, out;
 
   ASSERT_EQ(0, ioctx.write_full("myobject", in));
   ASSERT_EQ(-EIO, ioctx.exec("myobject", "hello", "bad_reader", in, out));
   ASSERT_EQ(-EIO, ioctx.exec("myobject", "hello", "bad_writer", in, out));
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(ClsHello, Filter) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
-
+TEST_P(TestClsHello, Filter) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist obj_content;
@@ -277,7 +241,13 @@ TEST(ClsHello, Filter) {
     ++k;
   }
   ASSERT_TRUE(foundit);
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
+INSTANTIATE_TEST_SUITE_P(
+    ,
+    TestClsHello,
+    ::testing::Values(PoolType::REPLICATED, PoolType::FAST_EC),
+    [](const ::testing::TestParamInfo<PoolType>& info) {
+      return pool_type_name(info.param);
+    }
+);

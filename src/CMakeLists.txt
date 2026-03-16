@@ -588,6 +588,7 @@ set(ceph_common_deps
   common_utf8 extblkdev arch crc32
   ${LIB_RESOLV}
   Boost::thread
+  Boost::context
   Boost::random
   Boost::program_options
   Boost::date_time

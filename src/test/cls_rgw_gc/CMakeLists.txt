@@ -1,5 +1,6 @@
 add_executable(ceph_test_cls_rgw_gc
   test_cls_rgw_gc.cc
+  ../librados/test_pool_types.cc
   )
 target_link_libraries(ceph_test_cls_rgw_gc
   cls_rgw_gc_client

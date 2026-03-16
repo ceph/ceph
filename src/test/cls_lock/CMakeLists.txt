@@ -1,5 +1,6 @@
 add_executable(ceph_test_cls_lock
   test_cls_lock.cc
+  ../librados/test_pool_types.cc
   )
 target_link_libraries(ceph_test_cls_lock
   cls_lock_client
