@@ -345,6 +345,103 @@ TEST_P(TestBackendBasics, DirectRead) {
 }
 
 // ---------------------------------------------------------------------------
+// TestBackendBasics: MultiZoneWriteThenRead
+// ---------------------------------------------------------------------------
+
+/**
+ * MultiZoneWriteThenRead - test write then read with multiple zones.
+ *
+ * This test verifies that EC pools configured with multiple zones (num_zones > 0)
+ * can successfully write and read data. The test:
+ * 1. Skips non-EC backends and EC backends without zones
+ * 2. Writes data to an object
+ * 3. Reads the data back
+ * 4. Verifies data integrity
+ *
+ * With zones enabled, the pool size is num_zones * (k+m), so there are more
+ * shards distributed across multiple failure domains.
+ */
+TEST_P(TestBackendBasics, MultiZoneWriteThenRead) {
+  const auto& param = GetParam().write_read;
+  const auto& backend_config = GetParam().backend;
+
+  // Skip test for non-EC backends
+  if (backend_config.pool_type != EC) {
+    GTEST_SKIP() << "MultiZoneWriteThenRead test only applies to EC backends";
+  }
+
+  // Skip test if zones are not configured
+  if (backend_config.num_zones == 0) {
+    GTEST_SKIP() << "MultiZoneWriteThenRead test requires num_zones > 0";
+  }
+
+  std::string test_data(param.size, param.fill);
+  std::string obj_name = "test_multizone_" + backend_config.label + "_" + param.label;
+
+  // Execute create+write operation
+  int result = create_and_write(obj_name, test_data);
+  EXPECT_EQ(result, 0) << param.label << " multi-zone write should complete successfully";
+
+  // Verify messages were sent to shards across zones
+  auto* primary_listener = get_primary_listener();
+  ASSERT_TRUE(primary_listener != nullptr) << "Primary listener should exist";
+  ASSERT_GT(primary_listener->sent_messages.size(), 0u)
+    << "Should send messages to shards across zones";
+
+  // Verify EC write messages were sent
+  int write_messages_sent = 0;
+  for (auto msg : primary_listener->sent_messages) {
+    if (msg->get_type() == MSG_OSD_EC_WRITE) {
+      write_messages_sent++;
+    }
+  }
+  ASSERT_GT(write_messages_sent, 0) << "Should send EC write messages to multiple zones";
+
+  // With zones, we expect messages to be sent to num_zones * (k+m) shards
+  // However, the actual number of messages may vary based on the write pattern
+  // and optimization flags, so we just verify that messages were sent
+
+  // Clear sent messages before read to distinguish read messages
+  primary_listener->sent_messages.clear();
+  primary_listener->sent_messages_with_dest.clear();
+
+  // Perform the read operation
+  bufferlist read_data;
+  int read_result = read_object(
+    obj_name,
+    0,                  // offset
+    test_data.length(), // length
+    read_data,
+    test_data.length()  // object_size
+  );
+
+  EXPECT_GE(read_result, 0) << param.label << " multi-zone read should complete successfully";
+
+  // Verify data length
+  ASSERT_EQ(read_data.length(), test_data.length())
+    << param.label << " read data length should match written data length";
+
+  // Verify data content
+  std::string read_string(read_data.c_str(), read_data.length());
+  EXPECT_EQ(read_string, test_data)
+    << param.label << " read data should match written data across zones";
+
+  // Verify read messages were sent to shards across zones
+  primary_listener = get_primary_listener();
+  ASSERT_TRUE(primary_listener != nullptr) << "Primary listener should exist";
+  ASSERT_GT(primary_listener->sent_messages.size(), 0u)
+    << "Should send read messages to EC shards across zones";
+
+  // All events should be processed by now
+  ASSERT_FALSE(event_loop->has_events()) << "Event loop should be idle after read";
+
+  primary_listener = get_primary_listener();
+  if (primary_listener) {
+    primary_listener->sent_messages.clear();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Backend configurations and size parameters
 // ---------------------------------------------------------------------------
 
