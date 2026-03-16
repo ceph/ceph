@@ -388,6 +388,11 @@ class CephadmUpgrade:
             earlier_types = [t for t in earlier_types if t not in dtypes]
             return [d for d in candidates if d.daemon_type in earlier_types]
 
+        def _filter_by_hosts(daemons: List[DaemonDescription], hosts: List[str], on_hosts: bool) -> List[DaemonDescription]:
+            if on_hosts:
+                return [d for d in daemons if d.hostname is not None and d.hostname in hosts]
+            return [d for d in daemons if d.hostname is not None and d.hostname not in hosts]
+
         if self.upgrade_state:
             raise OrchestratorError(
                 'Cannot set values for --daemon-types, --services or --hosts when upgrade already in progress.')
@@ -408,12 +413,8 @@ class CephadmUpgrade:
         if daemon_types is not None:
             dtypes = daemon_types
             if hosts is not None:
-                same_host_daemons = [
-                    d for d in daemons if d.hostname is not None and d.hostname in hosts]
-                other_host_daemons = [
-                    d for d in daemons if d.hostname is not None and d.hostname not in hosts]
-                daemons = (_get_earlier_daemons([_latest_type(dtypes)], other_host_daemons)
-                           + _get_earlier_daemons(dtypes, same_host_daemons))
+                daemons = (_get_earlier_daemons([_latest_type(dtypes)], _filter_by_hosts(daemons, hosts, False))
+                           + _get_earlier_daemons(dtypes, _filter_by_hosts(daemons, hosts, True)))
             else:
                 daemons = _get_earlier_daemons(dtypes, daemons)
             err_msg_base += 'Daemons with types earlier in upgrade order than given types need upgrading.\n'
@@ -431,12 +432,8 @@ class CephadmUpgrade:
                 dtypes += orchestrator.service_to_daemon_types(stype)
             dtypes = list(set(dtypes))
             if hosts is not None:
-                same_host_daemons = [
-                    d for d in daemons if d.hostname is not None and d.hostname in hosts]
-                other_host_daemons = [
-                    d for d in daemons if d.hostname is not None and d.hostname not in hosts]
-                daemons = (_get_earlier_daemons([_latest_type(dtypes)], other_host_daemons)
-                           + _get_earlier_daemons(dtypes, same_host_daemons))
+                daemons = (_get_earlier_daemons([_latest_type(dtypes)], _filter_by_hosts(daemons, hosts, False))
+                           + _get_earlier_daemons(dtypes, _filter_by_hosts(daemons, hosts, True)))
             else:
                 daemons = _get_earlier_daemons(dtypes, daemons)
             err_msg_base += 'Daemons with types earlier in upgrade order than daemons from given services need upgrading.\n'
