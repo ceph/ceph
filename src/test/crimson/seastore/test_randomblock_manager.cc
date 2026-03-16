@@ -127,14 +127,14 @@ TEST_F(rbm_test_t, mkfs_test)
    auto super = read_rbm_superblock();
    ASSERT_TRUE(
        super.block_size == block_size &&
-       super.size == size
+       super.total_size == size
    );
    config.spec.id = DEVICE_ID_NULL;
    mkfs();
    super = read_rbm_superblock();
    ASSERT_TRUE(
        super.config.spec.id == DEVICE_ID_NULL &&
-       super.size == size 
+       super.total_size == size
    );
  });
 }
