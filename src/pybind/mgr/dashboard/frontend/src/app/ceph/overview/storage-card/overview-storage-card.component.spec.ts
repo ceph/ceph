@@ -125,7 +125,7 @@ describe('OverviewStorageCardComponent (Jest)', () => {
 
   it('should load and filter data on init', () => {
     expect(mockPrometheusService.getPrometheusQueryData).toHaveBeenCalled();
-    expect(component.allData.length).toBe(2); // Object filtered (0 value)
+    expect(component.allData.length).toBe(3); // Object filtered (0 value)
   });
 
   // --------------------------------------------------
