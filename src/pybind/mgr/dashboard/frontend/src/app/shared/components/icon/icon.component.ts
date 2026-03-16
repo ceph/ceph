@@ -10,6 +10,8 @@ export class IconComponent implements OnInit {
   @Input() type!: keyof typeof ICON_TYPE;
   @Input() size: IconSize = IconSize.size16;
   @Input() class: string = '';
+  // No CSS class will be applied.
+  @Input() useDefault: boolean = false;
 
   icon: string;
 

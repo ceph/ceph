@@ -1,8 +1,8 @@
-<cd-productive-card>
+<cd-productive-card class="overview-storage-card">
   <!-- STORAGE CARD HEADER -->
   <ng-template #header>
     <h2 class="cds--type-heading-compact-02"
-        i18n>Storage Overview</h2>
+        i18n>Storage overview</h2>
   </ng-template>
   <!-- CAPACITY USAGE TEXT -->
   <div class="overview-storage-card-usage-text">
@@ -15,13 +15,35 @@
         class="cds--type-body-02"
         i18n>{{usedRawUnit}} of {{totalRaw}} {{totalRawUnit}} used</span>
       <cds-tooltip
-        class="cds-ml-3"
+        class="cds-ml-3 cds-mr-3"
         [caret]="true"
-        description="Shows raw used vs. total raw capacity. Raw capacity includes all physical storage before replication or overhead."
+        description="Shows raw used and total capacity. Raw capacity includes all physical storage before replication or overhead."
         i18n-description
       >
       <cd-icon type="help"></cd-icon>
     </cds-tooltip>
+    @if(threshold === 'high') {
+    <cds-tag size="md">
+      <div cdsTagIcon>
+        <cd-icon
+          type="warningAltFilled"
+          useDefault="true"></cd-icon>
+      </div>
+      <span i18n>High storage usage</span>
+    </cds-tag>
+   }
+   @else if(threshold === 'critical') {
+    <cds-tag
+      type="red"
+      size="md">
+      <div cdsTagIcon>
+        <cd-icon
+          type="warningAltFilled"
+          useDefault="true"></cd-icon>
+      </div>
+      <span i18n>Capacity critically low</span>
+    </cds-tag>
+    }
     </h5>
     }
     @else {

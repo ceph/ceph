@@ -198,6 +198,10 @@ export class OverviewComponent {
     this.overviewStorageService.getStorageBreakdown()
   ).pipe(shareReplay({ bufferSize: 1, refCount: true }));
 
+  readonly capacityThresholds$ = this.refreshIntervalObs(() =>
+    this.overviewStorageService.getRawCapacityThresholds()
+  ).pipe(shareReplay({ bufferSize: 1, refCount: true }));
+
   // getTrendData() is already a polling stream through getRangeQueriesData()
   // hence no refresh needed.
   readonly trendData$ = this.overviewStorageService
@@ -223,7 +227,8 @@ export class OverviewComponent {
     this.breakdownRawData$.pipe(startWith(null)),
     this.trendData$.pipe(startWith([])),
     this.averageConsumption$.pipe(startWith('')),
-    this.timeUntilFull$.pipe(startWith(''))
+    this.timeUntilFull$.pipe(startWith('')),
+    this.capacityThresholds$.pipe(startWith({ osdFullRatio: null, osdNearfullRatio: null }))
   ]).pipe(
     map(
       ([
@@ -231,21 +236,29 @@ export class OverviewComponent {
         breakdownRawData,
         consumptionTrendData,
         averageDailyConsumption,
-        estimatedTimeUntilFull
+        estimatedTimeUntilFull,
+        capacityThresholds
       ]) => {
+        const total = storage?.total ?? 0;
         const used = storage?.used ?? 0;
         const [, unit] = this.overviewStorageService.formatBytesForChart(used);
 
         return {
-          totalCapacity: storage?.total,
-          usedCapacity: storage?.used,
+          totalCapacity: total,
+          usedCapacity: used,
           breakdownData: breakdownRawData
-            ? this.overviewStorageService.mapStorageChartData(breakdownRawData, unit)
+            ? this.overviewStorageService.mapStorageChartData(breakdownRawData, unit, used)
             : [],
           isBreakdownLoaded: !!breakdownRawData,
           consumptionTrendData,
           averageDailyConsumption,
-          estimatedTimeUntilFull
+          estimatedTimeUntilFull,
+          threshold: this.overviewStorageService.getThresholdStatus(
+            total,
+            storage?.used,
+            capacityThresholds.osdNearfullRatio,
+            capacityThresholds.osdFullRatio
+          )
         };
       }
     ),
