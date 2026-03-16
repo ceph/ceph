@@ -790,8 +790,8 @@ have :ref:`cephadm` enabled as your orchestrator with an active
 
 From the IDP of choice, Keycloak is the current recomendation and tested solution,
 configure the IDP's client used in the `oauth2-proxy` service configuration to validate the following redirect URLs
-for login_url: `https://<host_name>|<IP_address>/oauth2/callback` and
-the following logout_url: `https://<host_name>|<IP_address>/ /oauth2/sign_out`
+for login_url: `https://<host_name>|<ip_address>/auth/oauth2/callback` and
+the following logout_url: `https://<host_name>|<ip_address>/auth/oauth2/sign_out`
 
 Again, from the IDP, we will need a user with a valid role, this user will be the one to perform
 authorization against, we can create a role like: 'administator' to give admin level access to the user.
