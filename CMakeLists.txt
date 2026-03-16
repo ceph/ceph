@@ -588,13 +588,14 @@ option(WITH_RADOSGW_BEAST_OPENSSL "RADOS Gateway's Beast frontend uses OpenSSL" 
 option(WITH_RADOSGW_AMQP_ENDPOINT "RADOS Gateway's pubsub support for AMQP push endpoint" ON)
 option(WITH_RADOSGW_KAFKA_ENDPOINT "RADOS Gateway's pubsub support for Kafka push endpoint" ON)
 option(WITH_RADOSGW_LUA_PACKAGES "RADOS Gateway's support for dynamically adding lua packagess" ON)
+option(WITH_RADOSGW_FDB "FoundationDB support for RADOS Gateway (experimental)" OFF)
 option(WITH_RADOSGW_DBSTORE "DBStore backend for RADOS Gateway" ON)
 option(WITH_RADOSGW_MOTR "CORTX-Motr backend for RADOS Gateway" OFF)
 option(WITH_RADOSGW_DAOS "DAOS backend for RADOS Gateway" OFF)
 option(WITH_RADOSGW_D4N "D4N wrapper for RADOS Gateway" ON)
-option(WITH_RADOSGW_FDB "FoundationDB support for RADOS Gateway (experimental)" OFF)
 cmake_dependent_option(WITH_RADOSGW_POSIX "POSIX backend for RADOS Gateway" ON WITH_RADOSGW_DBSTORE OFF) # posix depends on dbstore
 cmake_dependent_option(WITH_RADOSGW_NSFS "NSFS backend for RADOS Gateway" ON WITH_RADOSGW_DBSTORE OFF)
+cmake_dependent_option(WITH_RADOSGW_STANDALONE "Standalone RADOS Gateway" ON WITH_RADOSGW_POSIX OFF)
 option(WITH_RADOSGW_RADOS "RADOS backend for Rados Gateway" ON)
 option(WITH_RADOSGW_SELECT_PARQUET "Support for s3 select on parquet objects" ON)
 option(WITH_RADOSGW_ARROW_FLIGHT "Build arrow flight when not using system-provided arrow" OFF)
@@ -602,9 +603,6 @@ option(WITH_RADOSGW_BACKTRACE_LOGGING "Enable backtraces in rgw logs" OFF)
 
 option(WITH_SYSTEM_ARROW "Use system-provided arrow" OFF)
 option(WITH_SYSTEM_UTF8PROC "Use system-provided utf8proc" OFF)
-
-# POSIX depends on DBStore:
-cmake_dependent_option(WITH_RADOSGW_POSIX "POSIX backend for RADOS Gateway" ON WITH_RADOSGW_DBSTORE OFF)
 
 if(WITH_RADOSGW)
   find_package(EXPAT REQUIRED)
