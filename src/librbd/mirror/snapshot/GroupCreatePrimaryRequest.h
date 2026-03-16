@@ -6,11 +6,7 @@
 
 #include "include/buffer.h"
 #include "include/rados/librados.hpp"
-#include "librbd/ImageWatcher.h"
 #include "cls/rbd/cls_rbd_types.h"
-#include "librbd/internal.h"
-#include "librbd/mirror/snapshot/Types.h"
-
 #include <string>
 #include <set>
 
@@ -34,7 +30,7 @@ public:
     return new GroupCreatePrimaryRequest(group_ioctx, group_name,
                                          snap_create_flags, snap_id, on_finish);
   }
-// TODO: Allow demoted flag?
+
   GroupCreatePrimaryRequest(librados::IoCtx& group_ioctx,
                      const std::string& group_name,
                      uint64_t snap_create_flags, std::string *snap_id,
@@ -48,7 +44,6 @@ public:
   void send();
 
 private:
-  // TODO: Complete the diagram
   /**
    * @verbatim
    *
@@ -58,40 +53,28 @@ private:
    * GET GROUP ID
    *    |
    *    v
-   * GET LAST MIRROR SNAPSHOT STATE
+   * GET_MIRROR_GROUP
    *    |
    *    v
-   * LIST_GROUP_IMAGES
+   * GET_LAST_MIRROR_SNAPSHOT_STATE
    *    |
    *    v
-   * OPEN_IMAGES
+   * PREPARE_GROUP_IMAGES
    *    |
    *    v
-   * SET_GROUP_INCOMPLETE_SNAP
+   * GENERATE_GROUP_SNAP (incomplete)
    *    |
-   *    v
-   * NOTIFY_QUIESCE (optional)
-   *    |
-   *    v
-   * ACQUIRE_IMAGE_EXCLUSIVE_LOCKS
-   *    |
-   *    v
-   * CREATE IMAGE SNAPS
-   *    |
-   *    v
-   * SET_GROUP_COMPLETE_SNAP
-   *    |
-   *    v
-   * RELEASE_IMAGE_EXCLUSIVE_LOCKS
-   *    |
-   *    v
-   * NOTIFY UNQUIESCE
-   *    |
-   *    v
-   * UNLINK PEER GROUP
-   *    |
-   *    v
-   * CLOSE IMAGES
+   *    v  (skip if group is empty)    (on error)
+   * CREATE_IMAGES_PRIMARY_SNAPSHOTS ---------------------\
+   *    |                                                 |
+   *    v                                     (on error)  |
+   * UPDATE_PRIMARY_GROUP_SNAPSHOT (complete) ----------->|
+   *    |                                                 |
+   *    v                                                 |
+   * UNLINK_PEER_GROUP                                    |
+   *    |                                                 |
+   *    v                                                 |
+   * CLOSE_IMAGES <--- REMOVE_PRIMARY_GROUP_SNAPSHOT <----/
    *    |
    *    v
    * <finish>
@@ -110,18 +93,15 @@ private:
   bufferlist m_outbl;
   std::string m_group_id;
   cls::rbd::MirrorGroup m_mirror_group;
+  std::vector<cls::rbd::MirrorImage> m_mirror_images;
+  std::vector<std::string> m_global_image_ids;
   std::vector<cls::rbd::GroupSnapshot> m_existing_group_snaps;
   cls::rbd::GroupSnapshot m_group_snap;
   std::vector<ImageCtx *> m_image_ctxs;
-  std::vector<uint64_t> m_quiesce_requests;
   std::vector<uint64_t> m_image_snap_ids;
   std::set<std::string> m_mirror_peer_uuids;
-  librados::IoCtx m_default_ns_ioctx;
   int m_ret_code=0;
-  cls::rbd::GroupImageSpec m_start_after;
   std::vector<cls::rbd::GroupImageStatus> m_images;
-  NoOpProgressContext m_prog_ctx;
-  bool m_release_locks = false;
 
   void get_group_id();
   void handle_get_group_id(int r);
@@ -132,13 +112,17 @@ private:
   void get_last_mirror_snapshot_state();
   void handle_get_last_mirror_snapshot_state(int r);
 
+  void prepare_group_images();
+  void handle_prepare_group_images(int r);
+
   void generate_group_snap();
+  void handle_generate_group_snap(int r);
 
-  void create_image_snaps();
-  void handle_create_image_snaps(int r);
+  void create_images_primary_snapshots();
+  void handle_create_images_primary_snapshots(int r);
 
-  void notify_unquiesce();
-  void handle_notify_unquiesce(int r);
+  void update_primary_group_snapshot();
+  void handle_update_primary_group_snapshot(int r);
 
   void unlink_peer_group();
   void handle_unlink_peer_group(int r);
@@ -146,34 +130,9 @@ private:
   void close_images();
   void handle_close_images(int r);
 
-  void get_mirror_peer_list();
-  void handle_get_mirror_peer_list(int r);
-
-  void list_group_images();
-  void handle_list_group_images(int r);
-
-  void open_group_images();
-  void handle_open_group_images(int r);
-
-  void set_snap_metadata();
-  void handle_set_snap_metadata(int r);
-
-  void notify_quiesce();
-  void handle_notify_quiesce(int r);
-
-  void acquire_image_exclusive_locks();
-  void handle_acquire_image_exclusive_locks(int r);
-
-  void release_image_exclusive_locks();
-  void handle_release_image_exclusive_locks(int r);
-
-
   // cleanup
-  void remove_incomplete_group_snap();
-  void handle_remove_incomplete_group_snap(int r);
-
-  void remove_snap_metadata();
-  void handle_remove_snap_metadata(int r);
+  void remove_primary_group_snapshot();
+  void handle_remove_primary_group_snapshot(int r);
 
   void finish(int r);
 
