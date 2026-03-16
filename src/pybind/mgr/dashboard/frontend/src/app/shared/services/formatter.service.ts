@@ -191,7 +191,7 @@ export class FormatterService {
     decimals: number = 1
   ): string | [number, string] {
     const convertedString = this.format_number(num, BINARY_FACTOR, BINARY_UNITS, decimals);
-    const FALLBACK: [number, string] = [0, BINARY_UNITS[0]]; // when convertedString is 'N/A', '-', or 'NaN', return [0, 'B']
+    const FALLBACK: [number, string] = [NaN, BINARY_UNITS[0]]; // when convertedString is 'N/A', '-', or 'NaN', return [NaN, 'B']
     if (!split) return convertedString;
 
     const parts = convertedString.trim().split(/\s+/);

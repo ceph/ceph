@@ -1,4 +1,4 @@
-@let storage = (storageVm$ | async);
+@let storageCard = (storageCardVm$ | async);
 @let health = (healthCardVm$ | async);
 <div cdsGrid
      [fullWidth]="true"
@@ -26,8 +26,13 @@
          class="cds-mb-5"
          [columnNumbers]="{lg: 16}">
       <cd-overview-storage-card
-        [total]="storage?.total"
-        [used]="storage?.used">
+        [totalCapacity]="storageCard?.totalCapacity"
+        [usedCapacity]="storageCard?.usedCapacity"
+        [consumptionTrendData]="storageCard?.consumptionTrendData ?? []"
+        [averageDailyConsumption]="storageCard?.averageDailyConsumption ?? ''"
+        [estimatedTimeUntilFull]="storageCard?.estimatedTimeUntilFull ?? ''"
+        [breakdownData]="storageCard?.breakdownData ?? []"
+        [isBreakdownLoaded]="storageCard?.isBreakdownLoaded ?? false">
       </cd-overview-storage-card>
     </div>
   </div>
