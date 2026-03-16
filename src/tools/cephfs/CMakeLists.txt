@@ -12,7 +12,7 @@ set(cephfs_journal_tool_srcs
 add_executable(cephfs-journal-tool ${cephfs_journal_tool_srcs})
 target_link_libraries(cephfs-journal-tool
   legacy-option-headers
-  ceph-common librados mds osdc global uring::uring
+  ceph-common librados mds osdc global Boost::boost
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} Boost::filesystem)
 
 set(cephfs-meta-injection_srcs
@@ -23,7 +23,7 @@ set(cephfs-meta-injection_srcs
 add_executable(cephfs-meta-injection ${cephfs-meta-injection_srcs})
 target_link_libraries(cephfs-meta-injection
   legacy-option-headers
-        ceph-common librados mds osdc global uring::uring
+  ceph-common librados mds osdc global
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 
 set(cephfs_table_tool_srcs
@@ -33,7 +33,7 @@ set(cephfs_table_tool_srcs
   RoleSelector.cc
   MDSUtility.cc)
 add_executable(cephfs-table-tool ${cephfs_table_tool_srcs})
-target_link_libraries(cephfs-table-tool ceph-common librados mds osdc global uring::uring
+target_link_libraries(cephfs-table-tool ceph-common librados mds osdc global Boost::boost
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} Boost::filesystem)
 
 set(cephfs_data_scan_srcs
@@ -44,7 +44,7 @@ set(cephfs_data_scan_srcs
   PgFiles.cc
   MDSUtility.cc)
 add_executable(cephfs-data-scan ${cephfs_data_scan_srcs})
-target_link_libraries(cephfs-data-scan ceph-common librados cephfs mds osdc global uring::uring
+target_link_libraries(cephfs-data-scan ceph-common librados cephfs mds osdc global Boost::boost
   cls_cephfs_client
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} Boost::filesystem)
 
