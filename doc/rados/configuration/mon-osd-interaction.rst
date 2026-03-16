@@ -26,7 +26,7 @@ OSDs Check Heartbeats
 
 Each Ceph OSD Daemon checks the heartbeat of other Ceph OSD Daemons at random
 intervals less than every 6 seconds.  If a neighboring Ceph OSD Daemon doesn't
-show a heartbeat within a 20 second grace period, the Ceph OSD Daemon may
+show a heartbeat within a 20-second grace period, the Ceph OSD Daemon may
 consider the neighboring Ceph OSD Daemon ``down`` and report it back to a Ceph
 Monitor, which will update the Ceph Cluster Map. You may change this grace
 period by adding an ``osd heartbeat grace`` setting under the ``[mon]``
@@ -74,7 +74,7 @@ OSDs Report Down OSDs
 
 By default, two Ceph OSD Daemons from different hosts must report to the Ceph
 Monitors that another Ceph OSD Daemon is ``down`` before the Ceph Monitors
-acknowledge that the reported Ceph OSD Daemon is ``down``. But there is chance
+acknowledge that the reported Ceph OSD Daemon is ``down``. But there is a chance
 that all the OSDs reporting the failure are hosted in a rack with a bad switch
 which has trouble connecting to another OSD. To avoid this sort of false alarm,
 we consider the peers reporting a failure a proxy for a potential "subcluster"
@@ -82,11 +82,11 @@ over the overall cluster that is similarly laggy. This is clearly not true in
 all cases, but will sometimes help us localize the grace correction to a subset
 of the system that is unhappy. ``mon osd reporter subtree level`` is used to
 group the peers into the "subcluster" by their common ancestor type in CRUSH
-map. By default, only two reports from different subtree are required to report
+map. By default, only two reports from different subtrees are required to report
 another Ceph OSD Daemon ``down``. You can change the number of reporters from
 unique subtrees and the common ancestor type required to report a Ceph OSD
 Daemon ``down`` to a Ceph Monitor by adding an ``mon osd min down reporters``
-and ``mon osd reporter subtree level`` settings  under the ``[mon]`` section of
+and ``mon osd reporter subtree level`` settings under the ``[mon]`` section of
 your Ceph configuration file, or by setting the value at runtime.
 
 
@@ -152,8 +152,8 @@ setting the value at runtime.
 OSDs Report Their Status
 ========================
 
-If an Ceph OSD Daemon doesn't report to a Ceph Monitor, the Ceph Monitor will
-consider the Ceph OSD Daemon ``down`` after the  ``mon osd report timeout``
+If a Ceph OSD Daemon doesn't report to a Ceph Monitor, the Ceph Monitor will
+consider the Ceph OSD Daemon ``down`` after the ``mon osd report timeout``
 elapses. A Ceph OSD Daemon sends a report to a Ceph Monitor when a reportable
 event such as a failure, a change in placement group stats, a change in
 ``up_thru`` or when it boots within 5 seconds. You can change the Ceph OSD

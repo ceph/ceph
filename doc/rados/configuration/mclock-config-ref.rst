@@ -96,7 +96,7 @@ balanced (*default*)
 The *balanced* profile is the default mClock profile. This profile allocates
 equal reservation/priority to client operations and background recovery
 operations. Background best-effort ops are given lower reservation and therefore
-take a longer time to complete when are are competing operations. This profile
+take a longer time to complete when there are competing operations. This profile
 helps meet the normal/steady-state requirements of the cluster. This is the
 case when external client performance requirement is not critical and there are
 other background operations that still need attention within the OSD.
@@ -120,7 +120,7 @@ high_client_ops
 This profile optimizes client performance over background activities by
 allocating more reservation and limit to client operations as compared to
 background operations in the OSD. This profile, for example, may be enabled
-to provide the needed performance for I/O intensive applications for a
+to provide the needed performance for I/O-intensive applications for a
 sustained period of time at the cost of slower recoveries. The table shows
 the resource control parameters set by the profile:
 
@@ -138,7 +138,7 @@ high_recovery_ops
 ^^^^^^^^^^^^^^^^^
 This profile optimizes background recovery performance as compared to external
 clients and other background operations within the OSD. This profile, for
-example, may be enabled by an administrator temporarily to speed-up background
+example, may be enabled by an administrator temporarily to speed up background
 recoveries during non-peak hours. The table shows the resource control
 parameters set by the profile:
 
@@ -228,7 +228,7 @@ in order to ensure mClock scheduler is able to provide predictable QoS.
 mClock Config Options
 ---------------------
 .. important:: These defaults cannot be changed using any of the config
-   subsytem commands like *config set* or via the *config daemon* or *config
+   subsystem commands like *config set* or via the *config daemon* or *config
    tell* interfaces. Although the above command(s) report success, the mclock
    QoS parameters are reverted to their respective built-in profile defaults.
 
@@ -614,7 +614,7 @@ custom benchmark using your preferred tool (e.g. Fio) on the drive and then
 override the ``osd_mclock_max_capacity_iops_[hdd, ssd]`` option as described
 in the `Set or Override Max IOPS Capacity of an OSD`_ section.
 
-This step is highly recommended until an alternate mechansim is worked upon.
+This step is highly recommended until an alternate mechanism is worked upon.
 
 Steps to Manually Benchmark an OSD (Optional)
 =============================================

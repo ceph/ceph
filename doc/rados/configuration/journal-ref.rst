@@ -10,7 +10,7 @@ This information is provided for pre-existing OSDs and for rare situations where
 Filestore is preferred for new deployments.
 
 - **Speed:** The journal enables the Ceph OSD Daemon to commit small writes 
-  quickly. Ceph writes small, random i/o to the journal sequentially, which 
+  quickly. Ceph writes small, random I/O to the journal sequentially, which 
   tends to speed up bursty workloads by allowing the backing file system more 
   time to coalesce writes. The Ceph OSD Daemon's journal, however, can lead 
   to spiky performance with short spurts of high-speed writes followed by 

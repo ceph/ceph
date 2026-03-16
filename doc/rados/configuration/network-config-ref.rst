@@ -3,8 +3,8 @@
 =================================
 
 Careful network infrastructure and configuration is critical for building a
-resilient and high performance  :term:`Ceph Storage Cluster`. The Ceph Storage
-Cluster does not perform  request routing or dispatching on behalf of
+resilient and high-performance :term:`Ceph Storage Cluster`. The Ceph Storage
+Cluster does not perform request routing or dispatching on behalf of
 the :term:`Ceph Client`. Instead, Ceph clients make requests directly to Ceph
 OSD Daemons. Ceph OSDs perform data replication on behalf of Ceph clients,
 which imposes additional load on Ceph networks.
@@ -27,9 +27,9 @@ sufficient throughput and/or implement a dedicated replication network.
 
 We recommend that for resilience and capacity network interfaces are bonded
 and connect to redundant switches.  Bonding should be active/active,
-or implement a layer 3 multipath strategy with FRR or similar technlogy. When
+or implement a layer 3 multipath strategy with FRR or similar technology. When
 using LACP bonding it is important to consult your organization's network team
-to determine the proper transmit hash policy Usually this is 2+3 or 3+4. The
+to determine the proper transmit hash policy. Usually this is 2+3 or 3+4. The
 wrong choice can result in imbalanced network link utilization with a fraction
 of the available throughput.  Network observability tools including ``bmon``
 and ``iftop`` and ``netstat`` are invaluable when ensuring that bond member
@@ -77,13 +77,13 @@ check the default ``iptables`` configuration.
    sudo iptables -L
 
 Some Linux distributions include rules that reject all inbound requests
-except SSH from all network interfaces. For example:: 
+except SSH from all network interfaces. For example::
 
 	REJECT all -- anywhere anywhere reject-with icmp-host-prohibited
 
 You will need to delete these rules on both your public and cluster networks
 initially, and replace them with appropriate rules when you are ready to 
-harden the ports on your Ceph Nodes.
+harden the ports on your Ceph nodes.
 
 .. note:: Docker and Podman containers may experience disruption when rules
 	  are adjusted or reloaded.  You may find it best to update rules on
@@ -100,7 +100,7 @@ default. Additionally, Ceph Monitors always operate on the public
 network. When you add the rule using the example below, make sure you
 replace ``{iface}`` with the public network interface (e.g., ``eth0``,
 ``eth1``, etc.), ``{ip-address}`` with the IP address of the public
-network and ``{netmask}`` with the netmask for the public network. :
+network and ``{netmask}`` with the netmask for the public network.
 
 .. prompt:: bash $
 
@@ -286,7 +286,7 @@ network.
 Public Network
 --------------
 
-The public network configuration allows you specifically define IP addresses
+The public network configuration allows you to specifically define IP addresses
 and subnets for the public network. You may specifically assign static IP 
 addresses or override ``public_network`` settings using the ``public_addr``
 setting for a specific daemon.
@@ -300,11 +300,11 @@ Cluster Network
 
 The cluster network configuration allows you to declare a cluster network, and
 specifically define IP addresses and subnets for the cluster network. You may
-specifically assign static IP  addresses or override ``cluster_network``
+specifically assign static IP addresses or override ``cluster_network``
 settings using the ``cluster_addr`` setting for specific OSD daemons.
 
 
-.. confval:: cluster_network_interface 
+.. confval:: cluster_network_interface
 .. confval:: cluster_network
 .. confval:: cluster_addr
 

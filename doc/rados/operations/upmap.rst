@@ -66,9 +66,9 @@ Upmap entries are updated with an offline optimizer that is built into the
 
    .. prompt:: bash $
 
-      osdmaptool om --upmap out.txt [--upmap-pool <pool>] \ 
-      [--upmap-max <max-optimizations>] \ 
-      [--upmap-deviation <max-deviation>] \ 
+      osdmaptool om --upmap out.txt [--upmap-pool <pool>] \
+      [--upmap-max <max-optimizations>] \
+      [--upmap-deviation <max-deviation>] \
       [--upmap-active]
 
    It is highly recommended that optimization be done for each pool
