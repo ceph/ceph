@@ -9060,11 +9060,8 @@ int BlueStore::expand_devices(ostream& out)
     // from the out-of-space state at DB/shared volume(s)
     // Opening in R/W mode might cause extra space allocation
     // which is effectively a show stopper for volume expansion.
-    r = _open_db_and_around(false);
-    if (r < 0) {
-      derr << __func__ << " failed to open db: " << cpp_strerror(r) << dendl;
-      return r;
-    }
+    r = _open_db_and_around(true);
+    ceph_assert(r == 0);
     need_to_close = true;
   }
 
