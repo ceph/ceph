@@ -6,7 +6,7 @@ MDS maintains a data structure known as **Purge Queue** which is responsible
 for managing and executing the parallel deletion of files.
 There is a purge queue for every MDS rank. Purge queues consist of purge items
 which contain nominal information from the inodes such as size and the layout
-(i.e. all other un-needed metadata information is discarded making it
+(i.e. all other unneeded metadata information is discarded making it
 independent of all metadata structures).
 
 Deletion process
@@ -26,8 +26,8 @@ When a client requests deletion of a directory (say ``rm -rf``):
           purge queue can process then the data pool usage might increase
           substantially over time. In extreme scenarios, the purge queue
           backlog can become so huge that it can slacken the capacity reclaim
-          and the linux ``du`` command for CephFS might report inconsistent
-          data compared to the CephFS Data pool.
+          and the Linux ``du`` command for CephFS might report inconsistent
+          data compared to the CephFS data pool.
 
 There are a few tunable configs that MDS uses internally to throttle purge
 queue processing:

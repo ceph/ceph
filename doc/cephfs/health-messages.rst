@@ -8,7 +8,7 @@ CephFS health messages
 Cluster health checks
 =====================
 
-The Ceph monitor daemons will generate health messages in response
+The Ceph Monitor daemons will generate health messages in response
 to certain states of the file system map structure (and the enclosed MDS maps).
 
 Message: mds rank(s) *ranks* have failed
@@ -29,16 +29,16 @@ state (e.g. ranks currently in *replay* state).
 
 Message: mds *names* are laggy
 Description: The named MDS daemons have failed to send beacon messages
-to the monitor for at least ``mds_beacon_grace`` (default 15s), while
+to the Monitor for at least ``mds_beacon_grace`` (default 15s), while
 they are supposed to send beacon messages every ``mds_beacon_interval``
-(default 4s).  The daemons may have crashed.  The Ceph monitor will
+(default 4s).  The daemons may have crashed.  The Ceph Monitor will
 automatically replace laggy daemons with standbys if any are available.
 
 Message: insufficient standby daemons available
 Description: One or more file systems are configured to have a certain number
 of standby daemons available (including daemons in standby-replay) but the
 cluster does not have enough standby daemons. The standby daemons not in replay
-count towards any file system (i.e. they may overlap). This warning can
+count towards any file system (i.e. they may overlap). This warning can be
 configured by setting ``ceph fs set <fs> standby_count_wanted <count>``.  Use
 zero for ``count`` to disable.
 
@@ -48,7 +48,7 @@ Daemon-reported health checks
 
 MDS daemons can identify a variety of unwanted conditions, and
 indicate these to the operator in the output of ``ceph status``.
-These conditions have human readable messages, and additionally
+These conditions have human-readable messages, and additionally
 a unique code starting with ``MDS_``.
 
 .. highlight:: console
@@ -273,7 +273,7 @@ other daemons, please see :ref:`health-checks`.
 ``MDS_ESTIMATED_REPLAY_TIME``
 -----------------------------
   Message
-    "HEALTH_WARN Replay: x% complete. Estimated time remaining *x* seconds
+    HEALTH_WARN Replay: x% complete. Estimated time remaining *x* seconds
 
   Description
     When an MDS journal replay takes more than 30 seconds, this message indicates the estimated time to completion.

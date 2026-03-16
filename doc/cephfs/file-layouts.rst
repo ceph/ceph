@@ -16,7 +16,7 @@ when dealing with directories.
 
 .. tip::
 
-    Your linux distribution may not ship with commands for manipulating xattrs by default,
+    Your Linux distribution may not ship with commands for manipulating xattrs by default,
     the required package is usually called ``attr``.
 
 Layout fields
@@ -118,12 +118,12 @@ next ancestor directory with an explicit layout will be used.
     # file: dir
     ceph.dir.layout="stripe_unit=4194304 stripe_count=2 object_size=4194304 pool=cephfs_data"
 
-Getting the layout in json format. If there's no specific layout set for the
+Getting the layout in JSON format. If there's no specific layout set for the
 particular inode, the system traverses the directory path backwards and finds
-the closest ancestor directory with a layout and returns it in json format.
-A file layout also can be retrieved in json format using ``ceph.file.layout.json`` vxattr.
+the closest ancestor directory with a layout and returns it in JSON format.
+A file layout also can be retrieved in JSON format using ``ceph.file.layout.json`` vxattr.
 
-A virtual field named ``inheritance`` is added to the json output to show the status of layout.
+A virtual field named ``inheritance`` is added to the JSON output to show the status of layout.
 The ``inheritance`` field can have the following values:
 
 ``@default`` implies the system default layout
@@ -172,9 +172,9 @@ Layout fields are modified using ``setfattr``:
     $ setfattr -n ceph.file.layout.stripe_count -v 4 file1
     setfattr: file1: Directory not empty
 
-File and Directory layouts can also be set using the json format.
+File and Directory layouts can also be set using the JSON format.
 The ``inheritance`` field is ignored when setting the layout.
-Also, if both, ``pool_name`` and ``pool_id`` fields are specified, then the
+Also, if both ``pool_name`` and ``pool_id`` fields are specified, then the
 ``pool_name`` is given preference for better disambiguation.
 
 .. code-block:: bash
@@ -241,7 +241,7 @@ changes to the parent directory's layout do not affect children.
     ceph.file.layout="stripe_unit=4194304 stripe_count=4 object_size=4194304 pool=cephfs_data"
 
 
-Files created as descendents of the directory also inherit the layout, if the intermediate
+Files created as descendants of the directory also inherit the layout if the intermediate
 directories do not have layouts set:
 
 .. code-block:: bash

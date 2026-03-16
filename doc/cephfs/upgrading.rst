@@ -79,7 +79,7 @@ the services, run the following command:
 
 This only needs to be run once, and it is not necessary to
 stop any other services while it runs.  The command may take some
-time to execute, as it iterates overall objects in your metadata
+time to execute, as it iterates over all objects in your metadata
 pool.  It is safe to continue using your file system as normal while
 it executes.  If the command aborts for any reason, it is safe
 to simply run it again.

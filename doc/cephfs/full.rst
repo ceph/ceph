@@ -12,7 +12,7 @@ The file system has some special handling of the full flag, explained below.
 Hammer and later
 ----------------
 
-Since the hammer release, a full file system will lead to ENOSPC
+Since the Hammer release, a full file system will lead to ENOSPC
 results from:
 
  * Data writes on the client
@@ -42,14 +42,14 @@ order to ensure that these cancelled operations do not interfere with
 subsequent access to the data objects by the MDS or other clients.  For
 more on the epoch barrier mechanism, see :ref:`background_blocklisting_and_osd_epoch_barrier`.
 
-Legacy (pre-hammer) behavior
+Legacy (pre-Hammer) behavior
 ----------------------------
 
-In versions of Ceph earlier than hammer, the MDS would ignore
+In versions of Ceph earlier than Hammer, the MDS would ignore
 the full status of the RADOS cluster, and any data writes from
 clients would stall until the cluster ceased to be full.
 
-There are two dangerous conditions to watch for with this behaviour:
+There are two dangerous conditions to watch for with this behavior:
 
 * If a client had pending writes to a file, then it was not possible
   for the client to release the file to the MDS for deletion: this could

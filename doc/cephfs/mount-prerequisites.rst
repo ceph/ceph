@@ -16,19 +16,19 @@ Which CephFS Client?
 
 The FUSE client is the most accessible and the easiest to upgrade to the
 version of Ceph used by the storage cluster, while the kernel client will
-always gives better performance.
+always give better performance.
 
 When encountering bugs or performance issues, it is often instructive to
 try using the other client, in order to find out whether the bug was
 client-specific or not (and then to let the developers know).
 
-General Pre-requisite for Mounting CephFS
+General Prerequisites for Mounting CephFS
 -----------------------------------------
 Before mounting CephFS, ensure that the client host (where CephFS has to be
 mounted and used) has a copy of the Ceph configuration file (i.e.
 ``ceph.conf``) and a keyring of the CephX user that has permission to access
 the MDS. Both of these files must already be present on the host where the
-Ceph MON resides.
+Ceph Monitor resides.
 
 #. Generate a minimal conf file for the client host and place it at a
    standard location::
@@ -49,13 +49,13 @@ Ceph MON resides.
 
     ssh {user}@{mon-host} "sudo ceph fs authorize cephfs client.foo / rw" | sudo tee /etc/ceph/ceph.client.foo.keyring
 
-   In above command, replace ``cephfs`` with the name of your CephFS, ``foo``
+   In the above command, replace ``cephfs`` with the name of your CephFS, ``foo``
    by the name you want for your CephX user and ``/`` by the path within your
    CephFS for which you want to allow access to the client host and ``rw``
    stands for both read and write permissions. Alternatively, you may copy the
-   Ceph keyring from the MON host to client host at ``/etc/ceph`` but creating
+   Ceph keyring from the Monitor host to client host at ``/etc/ceph`` but creating
    a keyring specific to the client host is better. While creating a CephX
-   keyring/client, using same client name across multiple machines is perfectly
+   keyring/client, using the same client name across multiple machines is perfectly
    fine.
 
    .. note:: If you get 2 prompts for password while running above any of 2
