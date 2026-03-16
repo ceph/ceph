@@ -342,7 +342,7 @@ void ECTransaction::Generate::zero_truncate_to_delete() {
   }
 }
 
-void ECTransaction::Generate::delete_first() {
+void ECTransaction::Generate::delete_first(ECOmapJournal &ec_omap_journal) {
   /* We also want to remove the std::nullopt entries since
    * the keys already won't exist */
   for (auto j = op.attr_updates.begin();
@@ -362,6 +362,7 @@ void ECTransaction::Generate::delete_first() {
   }
   if (entry) {
     entry->mod_desc.rmobject(entry->version.version);
+    ec_omap_journal.append_delete(plan.hoid, entry->version.version, entry->is_lost_delete());
     all_shards_written();
     for (auto &&[shard, t]: transactions) {
       t.collection_move_rename(
@@ -469,7 +470,8 @@ ECTransaction::Generate::Generate(PGTransaction &t,
     PGTransaction::ObjectOperation &op,
     WritePlanObj &plan,
     DoutPrefixProvider *dpp,
-    pg_log_entry_t *entry)
+    pg_log_entry_t *entry,
+    ECOmapJournal &ec_omap_journal)
   : t(t),
     ec_impl(ec_impl),
     pgid(pgid),
@@ -524,17 +526,15 @@ ECTransaction::Generate::Generate(PGTransaction &t,
   }
 
   if (op.delete_first) {
-    delete_first();
+    delete_first(ec_omap_journal);
   }
 
   if (op.is_fresh_object() && entry) {
     entry->mod_desc.create();
+    ec_omap_journal.append_create(plan.hoid);
   }
 
   process_init();
-
-  // omap not supported (except 0, handled above)
-  ceph_assert(!(op.clear_omap) && !(op.omap_header) && op.omap_updates.empty());
 
   if (op.alloc_hint) {
     all_shards_written();
@@ -573,16 +573,34 @@ ECTransaction::Generate::Generate(PGTransaction &t,
   // we want to update OI on all shards
   bool size_change = plan.orig_size != plan.projected_size;
   bool clear_whiteout = false;
+  bool create_whiteout = false;
 
-  // If we are updating the OI and we have a cache of the previous OI values
-  if (op.attr_updates.contains(OI_ATTR) && obc && obc->attr_cache.contains(OI_ATTR))
-  {
-    object_info_t oi_cache((obc->attr_cache[OI_ATTR]));
-    if (oi_cache.test_flag(object_info_t::FLAG_WHITEOUT))
-    {
-      object_info_t oi_updates(*(op.attr_updates[OI_ATTR]));
-      clear_whiteout = !oi_updates.test_flag(object_info_t::FLAG_WHITEOUT);
+  if (op.attr_updates.count(OI_ATTR)) {
+    // Decode the NEW Object Info to see if we are BECOMING a whiteout
+    // (Using standard decode pattern here)
+    bufferlist &bl = op.attr_updates.find(OI_ATTR)->second.value();
+    auto p = bl.cbegin();
+    object_info_t new_oi;
+    decode(new_oi, p);
+
+    if (new_oi.is_whiteout()) {
+      create_whiteout = true;
     }
+
+    // Existing logic for clear_whiteout (checking the OLD cached value)
+    if (obc && obc->attr_cache.contains(OI_ATTR)) {
+      object_info_t oi_cache((obc->attr_cache[OI_ATTR]));
+      if (oi_cache.test_flag(object_info_t::FLAG_WHITEOUT))
+      {
+        object_info_t oi_updates(*(op.attr_updates[OI_ATTR]));
+        clear_whiteout = !oi_updates.test_flag(object_info_t::FLAG_WHITEOUT);
+      }
+    }
+  }
+
+  if (create_whiteout) {
+    ldpp_dout(dpp, 10) << __func__ << " detecting whiteout creation for " << oid << dendl;
+    ec_omap_journal.append_whiteout(plan.hoid);
   }
 
   if (size_change || clear_whiteout) {
@@ -605,6 +623,16 @@ ECTransaction::Generate::Generate(PGTransaction &t,
 
   if (!xattr_rollback.empty()) {
     entry->mod_desc.setattrs(xattr_rollback);
+  }
+
+  if (!op.omap_updates.empty() || op.clear_omap || op.omap_header) {
+    ceph_assert(osdmap->get_pg_pool(pgid.pool())->supports_omap());
+    ECOmapJournalEntry new_entry(entry->version, op.clear_omap, op.omap_header, op.omap_updates);
+    entry->mod_desc.ec_omap(
+      op.clear_omap,
+      op.omap_header,
+      op.omap_updates);
+    ec_omap_journal.add_entry(plan.hoid, new_entry);
   }
 
   /* It is essential for rollback that every shard with a non-empty transaction
@@ -1008,7 +1036,8 @@ void ECTransaction::generate_transactions(
     set<hobject_t> *temp_added,
     set<hobject_t> *temp_removed,
     DoutPrefixProvider *dpp,
-    const OSDMapRef &osdmap) {
+    const OSDMapRef &osdmap,
+    ECOmapJournal &ec_omap_journal) {
   ceph_assert(written_map);
   ceph_assert(transactions);
   ceph_assert(temp_added);
@@ -1041,7 +1070,7 @@ void ECTransaction::generate_transactions(
       ceph_assert(plan.hoid == oid);
 
       Generate generate(t, ec_impl, pgid, sinfo, partial_extents, written_map,
-        *transactions, osdmap, oid, op, plan, dpp, entry);
+        *transactions, osdmap, oid, op, plan, dpp, entry, ec_omap_journal);
 
       plans.plans.pop_front();
   });
