@@ -1433,11 +1433,12 @@ private:
     bool iofinished;
     void finish_io(int r);
 
-    C_Read_Finisher(Client *clnt, Context *onfinish, Context *iofinish,
+    C_Read_Finisher(Client *clnt, std::unique_ptr<Context> onfinish,
+                    Context *iofinish,
                     bool is_read_async, int have_caps, bool movepos,
                     Fh *f, Inode *in, uint64_t fpos,
                     int64_t offset, uint64_t size)
-      : clnt(clnt), onfinish(onfinish), iofinish(iofinish),
+      : clnt(clnt), onfinish(std::move(onfinish)), iofinish(iofinish),
         is_read_async(is_read_async), have_caps(have_caps), f(f), in(in),
         start(mono_clock_now()), fpos(fpos), offset(offset), size(size), movepos(movepos) {
       iofinished = false;
@@ -1449,7 +1450,7 @@ private:
 
   private:
     Client *clnt;
-    Context *onfinish;
+    std::unique_ptr<Context> onfinish;
     Context *iofinish;
     bool is_read_async;
     int have_caps;
@@ -1485,10 +1486,12 @@ private:
   // complete.
   public:
     client_t const whoami;
-    C_Read_Sync_NonBlocking(Client *clnt, Context *onfinish, Fh *f, Inode *in,
+    C_Read_Sync_NonBlocking(Client *clnt, std::unique_ptr<Context> onfinish,
+                            Fh *f, Inode *in,
                             uint64_t fpos, uint64_t off, uint64_t len,
                             bufferlist *bl, Filer *filer, int have_caps)
-      : clnt(clnt), onfinish(onfinish), f(f), in(in), off(off), len(len), bl(bl),
+      : clnt(clnt), onfinish(std::move(onfinish)),
+        f(f), in(in), off(off), len(len), bl(bl),
         filer(filer), have_caps(have_caps), start_time(mono_clock_now())
     {
       left = len;
@@ -1504,7 +1507,7 @@ private:
 #endif
   private:
     Client *clnt;
-    Context *onfinish;
+    std::unique_ptr<Context> onfinish;
     Fh *f;
     Inode *in;
     uint64_t off;
@@ -1535,7 +1538,8 @@ private:
 
   class C_Read_Async_Finisher : public Context {
   public:
-    C_Read_Async_Finisher(Client *clnt, Context *onfinish, Fh *f, Inode *in,
+    C_Read_Async_Finisher(Client *clnt, std::unique_ptr<Context> onfinish,
+                          Fh *f, Inode *in,
                           bufferlist *bl,
                           uint64_t fpos, uint64_t off, uint64_t len,
 #if defined(__linux__)
@@ -1543,7 +1547,8 @@ private:
 #endif
      			  uint64_t read_start,
                           uint64_t read_len)
-      : clnt(clnt), onfinish(onfinish), f(f), in(in), bl(bl), off(off), len(len),
+      : clnt(clnt), onfinish(std::move(onfinish)),
+        f(f), in(in), bl(bl), off(off), len(len),
         start_time(mono_clock_now()), 
 #if defined(__linux__)
 	denc(denc), 
@@ -1552,7 +1557,7 @@ private:
 
   private:
     Client *clnt;
-    Context *onfinish;
+    std::unique_ptr<Context> onfinish;
     Fh *f;
     Inode *in;
     bufferlist *bl;
@@ -1851,13 +1856,14 @@ private:
     void finish_onuninline(int r);
     void finish_fsync(int r);
 
-    C_Write_Finisher(Client *clnt, Context *onfinish, bool dont_need_uninline,
+    C_Write_Finisher(Client *clnt, std::unique_ptr<Context> onfinish,
+                     bool dont_need_uninline,
                      bool is_file_write, Fh *f, Inode *in,
                      uint64_t fpos, int64_t req_ofs, uint64_t req_size,
                      int64_t offset, uint64_t size,
                      bool do_fsync, bool syncdataonly,
                      bool encrypted)
-      : clnt(clnt), onfinish(onfinish),
+      : clnt(clnt), onfinish(std::move(onfinish)),
         is_file_write(is_file_write), start(mono_clock_now()), f(f), in(in), fpos(fpos),
         req_ofs(req_ofs), req_size(req_size),
         offset(offset), size(size), syncdataonly(syncdataonly),
@@ -1881,7 +1887,7 @@ private:
 
   private:
     Client *clnt;
-    Context *onfinish;
+    std::unique_ptr<Context> onfinish;
     bool is_file_write;
     utime_t start;
     Fh *f;
@@ -1930,7 +1936,7 @@ private:
     // nonblocking_fsync parms
     Inode *in;
     bool syncdataonly;
-    Context *onfinish;
+    std::unique_ptr<Context> onfinish;
 
     // were local variables
     ceph_tid_t flush_tid;
@@ -1945,8 +1951,10 @@ private:
     int result;
     bool waitfor_safe;
 
-    C_nonblocking_fsync_state(Client *clnt, Inode *in, bool syncdataonly, Context *onfinish)
-      : clnt(clnt), in(in), syncdataonly(syncdataonly), onfinish(onfinish) {
+    C_nonblocking_fsync_state(Client *clnt, Inode *in, bool syncdataonly,
+                              std::unique_ptr<Context> onfinish)
+      : clnt(clnt), in(in), syncdataonly(syncdataonly),
+        onfinish(std::move(onfinish)) {
       flush_tid = 0;
       start = mono_clock_now();
       progress = 0;

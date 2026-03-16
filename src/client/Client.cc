@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <string>
 #include <string_view>
+#include <utility>
 
 using namespace std::literals::string_view_literals;
 
@@ -179,6 +180,15 @@ using namespace std::literals;
 
 namespace bs = boost::system;
 namespace ca = ceph::async;
+
+namespace {
+void complete_context(std::unique_ptr<Context>& ctx, int r)
+{
+  ceph_assert(ctx != nullptr);
+  Context *owned = ctx.release();
+  owned->complete(r);
+}
+}
 
 void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
 {
@@ -11423,7 +11433,7 @@ void Client::C_Read_Finisher::finish_io(int r)
     clnt->unlock_fh_pos(f);
   }
 
-  onfinish->complete(r);
+  complete_context(onfinish, r);
   delete this;
 }
 void Client::C_Read_Sync_NonBlocking::start()
@@ -11543,7 +11553,7 @@ success:
   }
 error:
 
-  onfinish->complete(r);
+  complete_context(onfinish, r);
   fini = true;
 
   clnt->client_lock.unlock();
@@ -11626,11 +11636,12 @@ retry:
   }
 
   if (onfinish) {
+     std::unique_ptr<Context> async_onfinish(onfinish);
      crf_iofinish = new CRF_iofinish();
      iofinish.reset(crf_iofinish);
 
      crf.reset(new
-       C_Read_Finisher(this, onfinish, iofinish.get(),
+       C_Read_Finisher(this, std::move(async_onfinish), iofinish.get(),
                        !conf->client_debug_force_sync_read &&
                          conf->client_oc &&
                          (have & (CEPH_CAP_FILE_CACHE |
@@ -11700,7 +11711,8 @@ retry:
     }
 
     C_Read_Sync_NonBlocking *crsa =
-      new C_Read_Sync_NonBlocking(this, iofinish.release(), f, in, f->pos,
+      new C_Read_Sync_NonBlocking(this, std::unique_ptr<Context>(iofinish.release()),
+                                  f, in, f->pos,
                                   offset, size, bl, filer.get(), have);
       crf.release();
 
@@ -11825,7 +11837,7 @@ void Client::C_Read_Async_Finisher::finish(int r)
   if (r != 0)
     clnt->do_readahead(f, in, off, len);
 
-  onfinish->complete(r);
+  complete_context(onfinish, r);
 }
 
 int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
@@ -11835,6 +11847,8 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
 
   const auto& conf = cct->_conf;
   Inode *in = f->inode.get();
+  const bool is_async = onfinish != nullptr;
+  std::unique_ptr<Context> async_onfinish(onfinish);
   std::unique_ptr<Context> io_finish = nullptr;
   C_SaferCond *io_finish_cond = nullptr;
 
@@ -11863,8 +11877,8 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
   // get Fc cap ref before commencing read
   get_cap_ref(in, CEPH_CAP_FILE_CACHE);
 
-  if (onfinish != nullptr) {
-    io_finish.reset(new C_Read_Async_Finisher(this, onfinish, f, in, bl,
+  if (is_async) {
+    io_finish.reset(new C_Read_Async_Finisher(this, std::move(async_onfinish), f, in, bl,
                                               f->pos, off, len,
 #if defined(__linux__)
                                               fscrypt_denc,
@@ -11879,7 +11893,7 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
     put_cap_ref(in, CEPH_CAP_FILE_CACHE);
 
     // If not async, immediate return of 0 bytes
-    if (onfinish == nullptr) {
+    if (!is_async) {
       return 0;
     }
 
@@ -11903,7 +11917,7 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
   // read (and possibly block)
   //
   int r = 0;
-  if (onfinish == nullptr) {
+  if (!is_async) {
     io_finish_cond = new C_SaferCond("Client::_read_async flock");
     io_finish.reset(io_finish_cond);
   }
@@ -11913,7 +11927,7 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
   std::vector<ObjectCacher::ObjHole> holes;
   r = objectcacher->file_read_ex(&in->oset, &in->layout, in->snapid,
                                  read_start, read_len, bl, 0, &holes, io_finish.get());
-  if (onfinish != nullptr) {
+  if (is_async) {
     // put the cap ref since we're releasing C_Read_Async_Finisher
     put_cap_ref(in, CEPH_CAP_FILE_CACHE);
     // Release C_Read_Async_Finisher from managed pointer, either
@@ -12346,10 +12360,11 @@ bool Client::C_Write_Finisher::try_complete()
   if (onuninlinefinished && iofinished && !fsync_finished && iofinished_r >= 0) {
     // Done with I/O AND uninline, but we want to do fsync
     CWF_fsync_finish *fsync_f = new CWF_fsync_finish(this);
-    C_nonblocking_fsync_state *state = new C_nonblocking_fsync_state(clnt, in, syncdataonly, fsync_f);
+    C_nonblocking_fsync_state *state = new C_nonblocking_fsync_state(
+      clnt, in, syncdataonly, std::unique_ptr<Context>(fsync_f));
 
     // Kick fsync off... and all will magically complete eventually...
-    ldout(clnt->cct, 19) << "kickoff fsync onfinish " << onfinish << dendl;
+    ldout(clnt->cct, 19) << "kickoff fsync onfinish " << onfinish.get() << dendl;
     state->advance();
   } else if (onuninlinefinished && iofinished) {
     // Now we are REALLY done...
@@ -12357,15 +12372,14 @@ bool Client::C_Write_Finisher::try_complete()
 
     if (fsync_r < 0) {
       ldout(clnt->cct, 19) << " complete with fsync_r " << fsync_r << dendl;
-      onfinish->complete(fsync_r);
+      complete_context(onfinish, fsync_r);
     } else if (onuninlinefinished_r < 0 && onuninlinefinished_r != -ECANCELED) {
       ldout(clnt->cct, 19) << " complete with onuninlinefinished_r " << onuninlinefinished_r << dendl;
-      onfinish->complete(onuninlinefinished_r);
+      complete_context(onfinish, onuninlinefinished_r);
     } else {
       ldout(clnt->cct, 19) << " complete with iofinished_r " << iofinished_r << dendl;
-      onfinish->complete(iofinished_r);
+      complete_context(onfinish, iofinished_r);
     }
-    onfinish = nullptr;
     return true;
   }
 
@@ -12814,11 +12828,12 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
   }
 
   if (onfinish) {
+     std::unique_ptr<Context> async_onfinish(onfinish);
      cwf_iofinish = new CWF_iofinish();
      iofinish.reset(cwf_iofinish);
 
      cwf.reset(new
-       C_Write_Finisher(this, onfinish, nullptr == onuninline,
+       C_Write_Finisher(this, std::move(async_onfinish), nullptr == onuninline,
                         cct->_conf->client_oc &&
                           (have & (CEPH_CAP_FILE_BUFFER |
                                  CEPH_CAP_FILE_LAZYIO)),
@@ -13069,7 +13084,7 @@ void Client::C_nonblocking_fsync_state::advance()
                        << " flush_completed " << flush_completed
                        << " result " << result
                        << " waitfor_safe " << waitfor_safe
-                       << " onfinish " << onfinish
+                       << " onfinish " << onfinish.get()
                        << dendl;
 
   ceph_assert(ceph_mutex_is_locked_by_me(clnt->client_lock));
@@ -13187,7 +13202,7 @@ void Client::C_nonblocking_fsync_state::advance()
                              << ccap_string(it->second) << " flush_tid " << flush_tid
                              << " last " << it->first << dendl;
         advancer = new C_nonblocking_fsync_state_advancer(clnt, this);
-        ldout(clnt->cct, 10) << "Adding onfinish " << onfinish
+        ldout(clnt->cct, 10) << "Adding onfinish " << onfinish.get()
                              << " for C_nonblocking_fsync_state " << this
                              << dendl;
         if (progress == 3)
@@ -13218,7 +13233,7 @@ void Client::C_nonblocking_fsync_state::advance()
   lat -= start;
   clnt->logger->tinc(l_c_fsync, lat);
 
-  onfinish->complete(result);
+  complete_context(onfinish, result);
 
   // we're done
   delete this;
@@ -13253,7 +13268,8 @@ void Client::C_nonblocking_fsync_state_advancer::finish(int r)
 
 int64_t Client::nonblocking_fsync(Inode *in, bool syncdataonly, Context *onfinish)
 {
-  C_nonblocking_fsync_state *state = new C_nonblocking_fsync_state(this, in, syncdataonly, onfinish);
+  C_nonblocking_fsync_state *state = new C_nonblocking_fsync_state(
+    this, in, syncdataonly, std::unique_ptr<Context>(onfinish));
 
   ldout(cct, 10) << __func__ << dendl;
 
@@ -17324,15 +17340,24 @@ int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,
                                   bool do_fsync, bool syncdataonly)
 {
     int64_t retval = -1;
+    auto complete_async = [&](std::unique_lock<ceph::mutex>& cl, int r) {
+      ceph_assert(onfinish != nullptr);
+
+      Context *ctx = std::exchange(onfinish, nullptr);
+      cl.unlock();
+      ctx->complete(r);
+      cl.lock();
+      /* async call should always return zero to caller and allow the
+       caller to wait on callback for the actual errno/retval. */
+      return int64_t{0};
+    };
 
     RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
     if (!mref_reader.is_state_satisfied()) {
       retval = -ENOTCONN;
       if (onfinish != nullptr) {
-        onfinish->complete(retval);
-        /* async call should always return zero to caller and allow the
-        caller to wait on callback for the actual errno. */
-        retval = 0;
+        std::unique_lock cl(client_lock);
+        retval = complete_async(cl, retval);
       }
       return retval;
     }
@@ -17347,10 +17372,7 @@ int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,
 
     if (retval != 0) {
       if (onfinish != nullptr) {
-        cl.unlock();
-        onfinish->complete(retval);
-        cl.lock();
-        retval = 0;
+        retval = complete_async(cl, retval);
       }
       return retval;
     }
@@ -17374,13 +17396,7 @@ int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,
 
     if (retval < 0) {
       if (onfinish != nullptr) {
-        //async io failed
-        cl.unlock();
-        onfinish->complete(retval);
-        cl.lock();
-        /* async call should always return zero to caller and allow the
-        caller to wait on callback for the actual errno/retval. */
-        retval = 0;
+        retval = complete_async(cl, retval);
       }
     }
     return retval;
