@@ -3,7 +3,7 @@
 import logging as log
 import json
 import botocore
-from common import exec_cmd, create_user, boto_connect, put_objects, create_unlinked_objects
+from common import exec_cmd, create_user, boto_connect, put_objects, create_unlinked_objects, create_orphaned_list_entries
 from botocore.config import Config
 
 """
@@ -197,6 +197,120 @@ def test_stats_with_unlinked(connection, bucket):
     assert json_out['usage']['rgw.main']['size_kb_utilized'] == 0
 
 
+def test_orphaned_list_entries(connection, bucket):
+    """
+    Test orphaned list entries (list entry WITHOUT instance entry).
+
+    This is the OPPOSITE of "unlinked" entries:
+    - Unlinked: instance entry exists, but list entry is missing
+    - Orphaned: list entry exists, but instance entry is missing
+
+    Bug scenario: LC fails with ENOENT when trying to delete a delete marker
+    that has a list entry but is missing its corresponding instance entry.
+
+    This test:
+    1. Creates orphaned list entries (simulating the corruption)
+    2. Verifies existing bucket check commands do NOT fix the issue
+    """
+    log.debug('TEST SUITE: Orphaned List Entries (list entry WITHOUT instance entry)')
+
+    # Clean up any existing objects first
+    bucket.object_versions.all().delete()
+
+    # Ensure versioning is enabled
+    connection.BucketVersioning(BUCKET_NAME).enable()
+
+    orphaned_keys = ['orphan1', 'orphan2']
+
+    # =========================================================================
+    # STEP 1: Create orphaned list entries
+    # =========================================================================
+    log.debug('TEST: orphaned list entries can be created\n')
+    orphaned_objs = create_orphaned_list_entries(connection, bucket, orphaned_keys)
+    assert len(orphaned_objs) == len(orphaned_keys), \
+        f'Expected {len(orphaned_keys)} orphaned entries, got {len(orphaned_objs)}'
+    log.info(f'Successfully created {len(orphaned_objs)} orphaned list entries')
+
+    # =========================================================================
+    # STEP 2: Verify the orphaned state
+    # =========================================================================
+    log.debug('TEST: orphaned list entries appear in bucket listing\n')
+    listed_versions = list(bucket.object_versions.all())
+    listed_keys = set(ov.key for ov in listed_versions)
+    for key in orphaned_keys:
+        assert key in listed_keys, f'orphaned key {key} should appear in bucket listing'
+    log.info(f'Orphaned keys visible in listing: {orphaned_keys}')
+
+    log.debug('TEST: bi list shows only PLAIN entry for orphaned objects\n')
+    for key, instance in orphaned_objs:
+        out = exec_cmd(f'radosgw-admin bi list --bucket {BUCKET_NAME} --object {key}')
+        entries = json.loads(out.replace(b'\x80', b'0x80'))
+        entry_types = [e['type'] for e in entries]
+        assert 'plain' in entry_types, f'orphaned entry {key} should have plain entry'
+        assert 'instance' not in entry_types, f'orphaned entry {key} should NOT have instance entry'
+        assert 'olh' not in entry_types, f'orphaned entry {key} should NOT have olh entry'
+        log.info(f'  {key}: entry types = {entry_types} (expected: only plain)')
+
+    # =========================================================================
+    # STEP 3: Verify existing bucket check commands do NOT fix the issue
+    # =========================================================================
+    log.debug('Verifying existing bucket check commands do NOT fix orphaned entries')
+
+    log.debug('TEST: bucket check --fix does not fix orphaned list entries\n')
+    exec_cmd(f'radosgw-admin bucket check --fix --bucket {BUCKET_NAME}')
+    # Verify orphaned entries still exist
+    for key, instance in orphaned_objs:
+        out = exec_cmd(f'radosgw-admin bi list --bucket {BUCKET_NAME} --object {key}')
+        entries = json.loads(out.replace(b'\x80', b'0x80'))
+        entry_types = [e['type'] for e in entries]
+        assert 'plain' in entry_types, f'orphaned entry {key} should still have plain entry after bucket check --fix'
+        assert 'instance' not in entry_types, f'orphaned entry {key} should still be missing instance entry'
+    log.info('  bucket check --fix: Did NOT fix orphaned entries (as expected)')
+
+    log.debug('TEST: bucket check --check-objects does not fix orphaned list entries\n')
+    out, ret = exec_cmd(f'radosgw-admin bucket check --check-objects --fix --bucket {BUCKET_NAME}', check_retcode=False)
+    # Verify orphaned entries still exist
+    for key, instance in orphaned_objs:
+        out = exec_cmd(f'radosgw-admin bi list --bucket {BUCKET_NAME} --object {key}')
+        entries = json.loads(out.replace(b'\x80', b'0x80'))
+        entry_types = [e['type'] for e in entries]
+        assert 'plain' in entry_types, f'orphaned entry {key} should still have plain entry after bucket check --check-objects'
+    log.info('  bucket check --check-objects --fix: Did NOT fix orphaned entries (as expected)')
+
+    log.debug('TEST: bucket check unlinked does not find orphaned list entries\n')
+    out = exec_cmd(f'radosgw-admin bucket check unlinked --bucket {BUCKET_NAME} --min-age-hours 0 --dump-keys')
+    json_out = json.loads(out)
+    assert len(json_out) == 0, \
+        'bucket check unlinked should not find orphaned list entries (it finds the OPPOSITE problem)'
+    log.info('  bucket check unlinked: Found 0 entries (expected - it finds opposite problem)')
+
+    log.debug('TEST: bucket check unlinked --fix does not fix orphaned list entries\n')
+    out = exec_cmd(f'radosgw-admin bucket check unlinked --bucket {BUCKET_NAME} --fix --min-age-hours 0 --dump-keys')
+    json_out = json.loads(out)
+    # Verify orphaned entries still exist
+    for key, instance in orphaned_objs:
+        out = exec_cmd(f'radosgw-admin bi list --bucket {BUCKET_NAME} --object {key}')
+        entries = json.loads(out.replace(b'\x80', b'0x80'))
+        entry_types = [e['type'] for e in entries]
+        assert 'plain' in entry_types, f'orphaned entry {key} should still exist after bucket check unlinked --fix'
+    log.info('  bucket check unlinked --fix: Did NOT fix orphaned entries (as expected)')
+
+    log.debug('TEST: bucket check olh does not find orphaned list entries\n')
+    out = exec_cmd(f'radosgw-admin bucket check olh --bucket {BUCKET_NAME} --dump-keys')
+    json_out = json.loads(out)
+    log.info(f'  bucket check olh: Found {len(json_out)} entries')
+
+    log.debug('TEST: bucket check olh --fix does not fix orphaned list entries\n')
+    out = exec_cmd(f'radosgw-admin bucket check olh --bucket {BUCKET_NAME} --fix --dump-keys')
+    # Verify orphaned entries still exist
+    for key, instance in orphaned_objs:
+        out = exec_cmd(f'radosgw-admin bi list --bucket {BUCKET_NAME} --object {key}')
+        entries = json.loads(out.replace(b'\x80', b'0x80'))
+        entry_types = [e['type'] for e in entries]
+        assert 'plain' in entry_types, f'orphaned entry {key} should still exist after bucket check olh --fix'
+    log.info('  bucket check olh --fix: Did NOT fix orphaned entries (as expected)')
+
+
 def main():
     """
     Execute bucket check command tests.
@@ -232,6 +346,9 @@ def main():
     test_null_versions_preserved(connection, bucket, null_version_keys, null_version_objs)
 
     test_stats_with_unlinked(connection, bucket)
+
+    # Test orphaned list entries (the opposite of unlinked entries)
+    test_orphaned_list_entries(connection, bucket)
 
     # Final cleanup - use bucket rm to force-delete even corrupted entries
     log.debug("Deleting bucket {}".format(BUCKET_NAME))
