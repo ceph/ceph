@@ -1417,6 +1417,10 @@ void DaemonServer::_maximize_ok_to_upgrade_set(
   std::vector<int> children;
 
   dout(20) << "Trying to add more children..." << dendl;
+  // lambda to help determine presence of an osd in a vector
+  auto contains = [](const std::vector<int>& v, int o) {
+    return std::find(v.begin(), v.end(), o) != v.end();
+  };
   while (true) {
     // identify the next parent
     int r = osdmap.crush->get_immediate_parent_id(parent, &parent);
@@ -1436,9 +1440,42 @@ void DaemonServer::_maximize_ok_to_upgrade_set(
     // determined above to maximize the upgrade set.
     int failed = 0;  // how many children we failed to add to our set
     for (auto o : children) {
-      auto it = std::find(osds.begin(), osds.end(), o);
-      bool can_add_osd = (it == osds.end());
-      if (o >= 0 && osdmap.is_up(o) && can_add_osd) {
+      if (o < 0 || !osdmap.is_up(o)) {
+        continue;
+      }
+      // skip if osd is already considered for upgrade
+      if (contains(osds, o)) {
+        continue;
+      }
+      // if osd is not upgraded, check if it can be considered
+      // to be added to the ok_to_upgrade set.
+      bool is_upgraded = contains(upgraded, o);
+      if (!is_upgraded) {
+        auto osd_id = "osd." + std::to_string(o);
+        auto ver = get_osd_metadata("ceph_version_short", osd_id);
+        // terminate if 'ceph_version_short' cannot be determined
+        if (!ver) {
+          derr << "couldn't determine 'ceph_version_short' for "
+               << osd_id << dendl;
+          if (!contains(version_unknown, o)) {
+            version_unknown.push_back(o);
+          }
+          _update_upgraded_osds(orig_osds, osds, upgraded,
+            version_unknown, &_osd_report);
+          *out_pg_report = _pg_report;
+          *out_osd_report = _osd_report;
+          return;
+        }
+        if (*ver == ceph_version_new) {
+          dout(20) << osd_id << " is already running the new version("
+                   << *ver << ")" << dendl;
+          upgraded.push_back(o);
+          is_upgraded = true;
+        }
+      }
+      // if osd is not upgraded, push it to the osds vector
+      // which is a shadow of the 'to_upgrade' vector.
+      if (!is_upgraded) {
         osds.push_back(o);
         _check_offlines_pgs(osds, osdmap, pgmap, &_pg_report);
         if (!_pg_report.ok_to_stop()) {
