@@ -74,6 +74,7 @@
 #endif
 #include "rgw_lua_background.h"
 #include "services/svc_zone.h"
+#include "rgw_s3vector_background.h"
 
 #ifdef HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
@@ -511,6 +512,7 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
     derr << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
     /* ignore error */
   }
+  s3vector::init(dpp, env.driver);
 
 #ifdef WITH_RADOSGW_RADOS
   if (env.driver->get_name() == "rados") {
@@ -636,6 +638,8 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
   if (lua_background) {
     lua_background->shutdown();
   }
+
+  s3vector::shutdown();
 
   env.driver->shutdown();
   // Do this before closing storage so requests don't try to call into
