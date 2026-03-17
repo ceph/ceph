@@ -3,7 +3,7 @@ os_version: "9.stream"
 
 tasks:
 - install:
-    branch: squid-nvmeof
+    branch: tentacle
     exclude_packages:
       - ceph-volume
       - ceph-osd-classic
@@ -13,8 +13,8 @@ tasks:
 - print: "**** done install task..."
 
 - cephadm:
-    image: quay.ceph.io/ceph-ci/ceph:squid-nvmeof
-    compiled_cephadm_branch: squid-nvmeof
+    image: quay.ceph.io/ceph-ci/ceph:tentacle
+    compiled_cephadm_branch: tentacle
 
 - nvmeof:
     installer: host.a

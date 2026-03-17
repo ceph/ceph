@@ -3,7 +3,7 @@ os_version: "9.stream"
 
 tasks:
 - install:
-    branch: squid-nvmeof
+    tag: v20.2.0
     exclude_packages:
       - ceph-volume
       - ceph-osd-classic
@@ -13,8 +13,7 @@ tasks:
 - print: "**** done install task..."
 
 - cephadm:
-    image: quay.ceph.io/ceph-ci/ceph:squid-nvmeof
-    compiled_cephadm_branch: squid-nvmeof
+    image: quay.io/ceph/ceph:v20.2.0
 
 - nvmeof:
     installer: host.a

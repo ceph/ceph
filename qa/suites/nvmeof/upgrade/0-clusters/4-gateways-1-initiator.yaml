@@ -26,7 +26,3 @@ roles:
   - client.4
   - ceph.nvmeof.nvmeof.d
 
-tasks:
-- install:
-    extra_packages:
-        - nvme-cli
