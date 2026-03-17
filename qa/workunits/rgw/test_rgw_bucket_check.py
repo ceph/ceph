@@ -23,6 +23,20 @@ ACCESS_KEY = 'OJODXSLNX4LUNHQG99PA'
 SECRET_KEY = '3l6ffld34qaymfomuh832j94738aie2x4p2o8h6n'
 BUCKET_NAME = 'check-bucket'
 
+def verify_orphaned_entries_exist(orphaned_objs, context_msg):
+    """
+    Verify that orphaned list entries still exist in the bucket index.
+    Used to confirm that various bucket check commands do NOT fix orphaned entries.
+    """
+    for key, instance in orphaned_objs:
+        out = exec_cmd(f'radosgw-admin bi list --bucket {BUCKET_NAME} --object {key}')
+        entries = json.loads(out.replace(b'\x80', b'0x80'))
+        entry_types = [e['type'] for e in entries]
+        assert 'plain' in entry_types, \
+            f'orphaned entry {key} should still have plain entry {context_msg}'
+        assert 'instance' not in entry_types, \
+            f'orphaned entry {key} should still be missing instance entry {context_msg}'
+
 
 def test_bucket_check_stats(connection, bucket):
     """Test that bucket check --fix correctly recalculates bucket stats."""
@@ -258,23 +272,12 @@ def test_orphaned_list_entries(connection, bucket):
 
     log.debug('TEST: bucket check --fix does not fix orphaned list entries\n')
     exec_cmd(f'radosgw-admin bucket check --fix --bucket {BUCKET_NAME}')
-    # Verify orphaned entries still exist
-    for key, instance in orphaned_objs:
-        out = exec_cmd(f'radosgw-admin bi list --bucket {BUCKET_NAME} --object {key}')
-        entries = json.loads(out.replace(b'\x80', b'0x80'))
-        entry_types = [e['type'] for e in entries]
-        assert 'plain' in entry_types, f'orphaned entry {key} should still have plain entry after bucket check --fix'
-        assert 'instance' not in entry_types, f'orphaned entry {key} should still be missing instance entry'
+    verify_orphaned_entries_exist(orphaned_objs, "after bucket check --fix")
     log.info('  bucket check --fix: Did NOT fix orphaned entries (as expected)')
 
     log.debug('TEST: bucket check --check-objects does not fix orphaned list entries\n')
     out, ret = exec_cmd(f'radosgw-admin bucket check --check-objects --fix --bucket {BUCKET_NAME}', check_retcode=False)
-    # Verify orphaned entries still exist
-    for key, instance in orphaned_objs:
-        out = exec_cmd(f'radosgw-admin bi list --bucket {BUCKET_NAME} --object {key}')
-        entries = json.loads(out.replace(b'\x80', b'0x80'))
-        entry_types = [e['type'] for e in entries]
-        assert 'plain' in entry_types, f'orphaned entry {key} should still have plain entry after bucket check --check-objects'
+    verify_orphaned_entries_exist(orphaned_objs, "after bucket check --check-objects --fix")
     log.info('  bucket check --check-objects --fix: Did NOT fix orphaned entries (as expected)')
 
     log.debug('TEST: bucket check unlinked does not find orphaned list entries\n')
@@ -287,12 +290,7 @@ def test_orphaned_list_entries(connection, bucket):
     log.debug('TEST: bucket check unlinked --fix does not fix orphaned list entries\n')
     out = exec_cmd(f'radosgw-admin bucket check unlinked --bucket {BUCKET_NAME} --fix --min-age-hours 0 --dump-keys')
     json_out = json.loads(out)
-    # Verify orphaned entries still exist
-    for key, instance in orphaned_objs:
-        out = exec_cmd(f'radosgw-admin bi list --bucket {BUCKET_NAME} --object {key}')
-        entries = json.loads(out.replace(b'\x80', b'0x80'))
-        entry_types = [e['type'] for e in entries]
-        assert 'plain' in entry_types, f'orphaned entry {key} should still exist after bucket check unlinked --fix'
+    verify_orphaned_entries_exist(orphaned_objs, "after bucket check unlinked --fix")
     log.info('  bucket check unlinked --fix: Did NOT fix orphaned entries (as expected)')
 
     log.debug('TEST: bucket check olh does not find orphaned list entries\n')
@@ -302,12 +300,7 @@ def test_orphaned_list_entries(connection, bucket):
 
     log.debug('TEST: bucket check olh --fix does not fix orphaned list entries\n')
     out = exec_cmd(f'radosgw-admin bucket check olh --bucket {BUCKET_NAME} --fix --dump-keys')
-    # Verify orphaned entries still exist
-    for key, instance in orphaned_objs:
-        out = exec_cmd(f'radosgw-admin bi list --bucket {BUCKET_NAME} --object {key}')
-        entries = json.loads(out.replace(b'\x80', b'0x80'))
-        entry_types = [e['type'] for e in entries]
-        assert 'plain' in entry_types, f'orphaned entry {key} should still exist after bucket check olh --fix'
+    verify_orphaned_entries_exist(orphaned_objs, "after bucket check olh --fix")
     log.info('  bucket check olh --fix: Did NOT fix orphaned entries (as expected)')
 
 
