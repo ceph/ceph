@@ -510,13 +510,16 @@ def generate_data(dimension, index=0):
   return {'float32': [random.gauss(float(index), 1.0) for _ in range(dimension)]}
 
 
-def generate_vectors(num_vectors, dimension):
+def generate_vectors(num_vectors, dimension, with_metadata=False):
     vectors = []
     for i in range(num_vectors):
-        vectors.append({
+        v = {
             'key': 'vec-' + str(i),
             'data': generate_data(dimension, i)
-            })
+        }
+        if with_metadata:
+            v['metadata'] = json.dumps({'genre': f'genre-{i}', 'year': 2000 + i})
+        vectors.append(v)
     return vectors
 
 
@@ -1000,6 +1003,161 @@ def test_query_vectors_with_distance():
         assert len(result['vectors']) == top_k
         assert result['distanceMetric'] == 'euclidean'
         log.info(result['vectors'])
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+@pytest.mark.vector_test
+def test_put_and_get_vectors_metadata():
+    """Test storing and retrieving a mix of vectors with and without metadata."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 8
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                               dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # create a mix: some vectors with metadata, some without
+    vectors_with_md = generate_vectors(3, dimension, with_metadata=True)
+    vectors_without_md = generate_vectors(3, dimension, with_metadata=False)
+    # rename keys to avoid collisions
+    for i, v in enumerate(vectors_without_md):
+        v['key'] = f'no-md-{i}'
+    all_vectors = vectors_with_md + vectors_without_md
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=all_vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    all_keys = [v['key'] for v in all_vectors]
+
+    # get all vectors with returnMetadata=True
+    result = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                             keys=all_keys, returnMetadata=True)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == len(all_vectors)
+    for vector in result['vectors']:
+        if vector['key'].startswith('vec-'):
+            assert 'metadata' in vector, f"vector {vector['key']} should have 'metadata' field"
+            md = json.loads(vector['metadata'])
+            assert 'genre' in md, f"metadata should have 'genre' key: {vector['metadata']}"
+            assert 'year' in md, f"metadata should have 'year' key: {vector['metadata']}"
+        else:
+            assert 'metadata' not in vector, \
+                f"vector {vector['key']} should not have metadata when none was stored"
+
+    # get all vectors with returnMetadata=False - no metadata should be returned
+    result = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                             keys=all_keys, returnMetadata=False)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    for vector in result['vectors']:
+        assert 'metadata' not in vector, \
+            f"vector {vector['key']} should not have 'metadata' field when returnMetadata=False"
+
+    # get with both returnData and returnMetadata
+    result = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                             keys=all_keys, returnData=True, returnMetadata=True)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    for vector in result['vectors']:
+        assert 'data' in vector, f"vector {vector['key']} should have 'data' field"
+        assert 'float32' in vector['data']
+        assert len(vector['data']['float32']) == dimension
+
+    log.info('test_put_and_get_vectors_metadata: verified metadata for %d vectors', len(all_vectors))
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+@pytest.mark.vector_test
+def test_list_vectors_with_metadata():
+    """Test that list_vectors returns metadata when returnMetadata=True."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 8
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                               dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    num_vectors = 5
+    vectors = generate_vectors(num_vectors, dimension, with_metadata=True)
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # list with returnMetadata=True
+    result = conn.list_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                               maxResults=100, returnMetadata=True)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == num_vectors
+    for vector in result['vectors']:
+        assert 'metadata' in vector, f"vector {vector['key']} should have 'metadata' field"
+        md = json.loads(vector['metadata'])
+        assert 'genre' in md, f"metadata should have 'genre' key: {vector['metadata']}"
+        assert 'year' in md, f"metadata should have 'year' key: {vector['metadata']}"
+
+    # list with returnMetadata=False
+    result = conn.list_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                               maxResults=100, returnMetadata=False)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    for vector in result['vectors']:
+        assert 'metadata' not in vector, \
+            f"vector {vector['key']} should not have 'metadata' field when returnMetadata=False"
+
+    log.info('test_list_vectors_with_metadata: verified metadata in list_vectors')
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+@pytest.mark.vector_test
+def test_query_vectors_with_metadata():
+    """Test that query_vectors returns metadata when returnMetadata=True."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 8
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                               dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    num_vectors = 20
+    vectors = generate_vectors(num_vectors, dimension, with_metadata=True)
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    top_k = 5
+    query_vector = generate_data(dimension, 7)
+
+    # query with returnMetadata=True
+    result = conn.query_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                queryVector=query_vector, topK=top_k, returnMetadata=True)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == top_k
+    for vector in result['vectors']:
+        assert 'metadata' in vector, f"vector {vector['key']} should have 'metadata' field"
+        md = json.loads(vector['metadata'])
+        assert 'genre' in md, f"metadata should have 'genre' key: {vector['metadata']}"
+        assert 'year' in md, f"metadata should have 'year' key: {vector['metadata']}"
+
+    # query with returnMetadata=False
+    result = conn.query_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                queryVector=query_vector, topK=top_k, returnMetadata=False)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    for vector in result['vectors']:
+        assert 'metadata' not in vector, \
+            f"vector {vector['key']} should not have 'metadata' field when returnMetadata=False"
+
+    log.info('test_query_vectors_with_metadata: verified metadata in query_vectors')
 
     # cleanup
     _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
