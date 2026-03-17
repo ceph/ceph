@@ -35,8 +35,10 @@ releases:
         released: 2024-09-26
 
   reef:
-    target_eol: 2025-08-01
+    target_eol: 2026-03-31
     releases:
+      - version: 18.2.8
+        released: 2026-03-31
       - version: 18.2.7
         released: 2025-05-08
       - version: 18.2.6
