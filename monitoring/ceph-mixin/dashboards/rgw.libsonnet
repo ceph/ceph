@@ -143,7 +143,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       .addTargets(
         [
           $.addTargetSchema(
-            expr='rate(ceph_rgw_sync_delta_sync_delta[$__rate_interval])',
+            expr='rate(ceph_rgw_sync_delta_sync_delta{instance_id=~"$rgw_servers", %(matchers)s}[$__rate_interval])',
             datasource='$datasource',
             instant=false,
             legendFormat='{{instance_id}} - {{shard_id}}',
