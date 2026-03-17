@@ -14,6 +14,19 @@ Release Date
 
 March 31, 2026
 
+Known Issues
+------------
+
+* During QA for v18.2.8, it was found that there was a bug for upgrades from
+  Pacific to Reef. Pacific OSDs (and other Ceph daemons) were still using a
+  deprecated connection feature bit that was adopted to indicate a Reef OSD.
+  This can cause a OSD_UPGRADE_FINISHED warning before all OSDs are actually
+  upgraded to Reef. There are no known issues associated with Pacific and Reef
+  OSDs interoperating where Pacific OSDs are "advertising" Reef compatibility;
+  however, out of an abundance of caution, we no longer recommend upgrading
+  from Pacific to Reef directly.
+
+
 Notable Changes
 ---------------
 
