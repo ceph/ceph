@@ -4851,6 +4851,20 @@ options:
   default: 11
   services: 
     - rgw
+- name: rgw_s3vector_topk_post_filter_factor
+  type: float
+  level: advanced
+  desc: Oversampling factor for topK when JSON metadata post-filtering is used
+  long_desc: When a vector query uses metadata filtering on non-column fields,
+    multiply topK by this factor to fetch more candidates from the index before
+    post-filtering. Higher values increase the chance of returning the full topK
+    results after filtering, at the cost of more work.
+  default: 1
+  services:
+  - rgw
+  min: 1
+  max: 10
+  with_legacy: true
 - name: rgw_usage_log_key_transition
   type: bool
   level: advanced
