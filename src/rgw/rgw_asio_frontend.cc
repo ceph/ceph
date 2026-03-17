@@ -1072,6 +1072,20 @@ int AsioFrontend::ssl_reload() {
     }
   }
 
+  std::optional<std::string> groups = conf->get_val("tls_groups");
+  if (groups) {
+    if (!cert) {
+      lderr(ctx()) << "no ssl_certificate configured for tls_groups" << dendl;
+      return -EINVAL;
+    }
+
+    int r = SSL_CTX_set1_groups_list(ssl_ctx->native_handle(), groups->c_str());
+    if (r == 0) {
+      lderr(ctx()) << "openssl rejected tls_groups: " << *groups << dendl;
+      return -EINVAL;
+    }
+  }
+
   bool key_is_cert = false;
   bool have_cert = false;
   if (cert) {

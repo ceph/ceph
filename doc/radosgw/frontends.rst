@@ -107,6 +107,17 @@ Options
 :Type: String
 :Default: None
 
+``tls_groups``
+
+:Description: Optional list of one or more `TLS Group`_ strings separated by colons.
+              The pseudo group name ``DEFAULT`` can be used to select the OpenSSL
+              built-in default list of groups. Other valid group names will depend on
+              OpenSSL version. As of OpenSSL 3.5, names can be listed with commands
+              ``openssl list -tls-groups`` and ``openssl list -all-tls-groups``.
+
+:Type: String
+:Default: None
+
 ``tcp_nodelay``
 
 :Description: If set the socket option will disable Nagle's algorithm on 
@@ -172,3 +183,5 @@ Some frontend options are generic and supported by all frontends:
 :Type: String
 :Default: None
 
+
+.. _TLS Group: https://openssl-library.org/post/2022-10-21-tls-groups-configuration/
