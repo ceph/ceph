@@ -7,6 +7,7 @@
 #include "rgw_s3vector.h"
 #include "rgw_process_env.h"
 #include "common/async/yield_context.h"
+#include "common/ceph_json.h"
 #include "rgw_arn.h"
 #include "rgw_s3vector_background.h"
 
@@ -18,6 +19,7 @@ namespace {
 class RGWS3VectorBase : public RGWDefaultResponseOp {
 protected:
   bufferlist in_data;
+  std::vector<rgw::s3vector::validation_error_t> validation_errors;
 public:
   explicit RGWS3VectorBase(bufferlist&& data) : in_data(std::move(data)) {}
 protected:
@@ -41,6 +43,33 @@ protected:
     }
 
     return 0;
+  }
+
+  void send_validation_error_response() {
+    s->err.http_ret = 400;
+    s->err.err_code = "ValidationException";
+    s->err.message = "The requested action isn't valid.";
+    set_req_state_err(s, op_ret);
+    dump_errno(s);
+
+    JSONFormatter f;
+    f.open_object_section("");
+    ::encode_json("code", std::string("ValidationException"), &f);
+    ::encode_json("message", std::string("The requested action isn't valid."), &f);
+    f.open_array_section("fieldList");
+    for (const auto& err : validation_errors) {
+      f.open_object_section("");
+      ::encode_json("path", err.path, &f);
+      ::encode_json("message", err.message, &f);
+      f.close_section();
+    }
+    f.close_section(); // fieldList
+    f.close_section(); // root
+    std::stringstream ss;
+    f.flush(ss);
+    const auto body = ss.str();
+    end_header(s, this, "application/json", body.size(), false, true);
+    dump_body(s, body);
   }
 };
 
@@ -78,10 +107,14 @@ private:
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::create_index(configuration, this, y);
+    op_ret = rgw::s3vector::create_index(configuration, this, y, validation_errors);
   }
 
   void send_response() override {
+    if (op_ret < 0 && !validation_errors.empty()) {
+      send_validation_error_response();
+      return;
+    }
     if (op_ret) {
       set_req_state_err(s, op_ret);
     }
@@ -415,7 +448,19 @@ private:
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::put_vectors(configuration, this, y);
+    op_ret = rgw::s3vector::put_vectors(configuration, this, y, validation_errors);
+  }
+
+  void send_response() override {
+    if (op_ret < 0 && !validation_errors.empty()) {
+      send_validation_error_response();
+      return;
+    }
+    if (op_ret) {
+      set_req_state_err(s, op_ret);
+    }
+    dump_errno(s);
+    end_header(s, this, "application/json");
   }
 };
 
@@ -934,6 +979,7 @@ private:
 class RGWS3VectorQueryVectors : public RGWS3VectorBase {
   rgw::s3vector::query_vectors_t configuration;
   rgw::s3vector::query_vectors_reply_t reply;
+  std::optional<JSONParser> filter_parser;
 public:
   explicit RGWS3VectorQueryVectors(bufferlist&& data) : RGWS3VectorBase(std::move(data)) {}
 private:
@@ -952,7 +998,18 @@ private:
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 
   int init_processing(optional_yield y) override {
-    return do_init_processing(configuration, y);
+    int ret = do_init_processing(configuration, y);
+    if (ret < 0) {
+      return ret;
+    }
+    if (!configuration.filter.empty()) {
+      filter_parser.emplace();
+      if (!filter_parser->parse(configuration.filter.c_str(), configuration.filter.size())) {
+        ldpp_dout(this, 1) << "ERROR: failed to parse filter JSON: " << configuration.filter << dendl;
+        return -EINVAL;
+      }
+    }
+    return 0;
   }
 
   void execute(optional_yield y) override {
@@ -966,10 +1023,14 @@ private:
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::query_vectors(configuration, this, y, reply);
+    op_ret = rgw::s3vector::query_vectors(configuration, filter_parser, this, y, reply, validation_errors);
   }
 
   void send_response() override {
+    if (op_ret < 0 && !validation_errors.empty()) {
+      send_validation_error_response();
+      return;
+    }
     if (op_ret) {
       set_req_state_err(s, op_ret);
     }

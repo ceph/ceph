@@ -151,6 +151,7 @@ set(librgw_common_srcs
   rgw_rest_restore.cc
   rgw_rest_s3vector.cc
   rgw_s3vector.cc
+  rgw_s3vector_filter.cc
   rgw_s3vector_background.cc)
 
 list(APPEND librgw_common_srcs
