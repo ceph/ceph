@@ -13940,8 +13940,10 @@ int Client::get_snap_info(const char *path, const UserPerm &perms, SnapInfo *sna
     return -EINVAL;
   }
 
-  snap_info->id = in->snapid;
-  snap_info->metadata = in->snap_metadata;
+  Inode *refreshed = nullptr;
+  lookup_ino(in->ino, perms, &refreshed);
+  snap_info->id = refreshed->snapid;
+  snap_info->metadata = refreshed->snap_metadata;
   return 0;
 }
 
