@@ -877,25 +877,23 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
     oid_to_version[op.hoid] = op.version;
   }
   for (auto &&pg_shard: get_parent()->get_acting_recovery_backfill_shards()) {
-    shard_id_t shard = pg_shard.shard;
     // Use shard % (k+m) to get the base transaction for zone duplication
-    unsigned int k_plus_m = sinfo.get_k_plus_m();
-    shard_id_t base_shard = shard_id_t(shard.id % k_plus_m);
+    shard_id_t base_shard = sinfo.get_shard_base(pg_shard.shard);
     
     // Skip if base transaction doesn't exist (base shard not in acting set)
     if (!trans.contains(base_shard)) {
-      dout(20) << __func__ << " Skipping shard " << shard
+      dout(20) << __func__ << " Skipping shard " << base_shard
                << " - base shard " << base_shard << " not in acting set" << dendl;
       continue;
     }
     
     ObjectStore::Transaction &transaction = trans.at(base_shard);
     if (transaction.empty()) {
-      dout(20) << __func__ << " Transaction for osd." << pg_shard.osd << " shard " << shard << " is empty" << dendl;
+      dout(20) << __func__ << " Transaction for osd." << pg_shard.osd << " shard " << base_shard << " is empty" << dendl;
     } else {
       // NOTE: All code between dout and dendl is executed conditionally on
       //       debug level.
-      dout(20) << __func__ << " Transaction for osd." << pg_shard.osd << " shard " << shard << " contents ";
+      dout(20) << __func__ << " Transaction for osd." << pg_shard.osd << " shard " << base_shard << " contents ";
       Formatter *f = Formatter::create("json");
       f->open_object_section("t");
       transaction.dump(f);
@@ -911,14 +909,14 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
      * As such we must never skip a transaction completely.  Note that if
      * should_send is false, then an empty transaction is sent.
      */
-    if (!next_write_all_shards && should_send && op.skip_transaction(pending_roll_forward, shard, transaction)) {
+    if (!next_write_all_shards && should_send && op.skip_transaction(pending_roll_forward, pg_shard.shard, transaction)) {
       // Must be an empty transaction
       ceph_assert(transaction.empty());
-      dout(20) << __func__ << " Skipping transaction for shard " << shard << dendl;
+      dout(20) << __func__ << " Skipping transaction for shard " << base_shard << dendl;
       continue;
     }
     if (!should_send || transaction.empty()) {
-      dout(20) << __func__ << " Sending empty transaction for shard " << shard << dendl;
+      dout(20) << __func__ << " Sending empty transaction for shard " << base_shard << dendl;
     }
     op.pending_commits++;
     const pg_stat_t &stats =
