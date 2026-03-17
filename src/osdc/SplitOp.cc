@@ -894,6 +894,12 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
 
   debug_op_summary("orig_op: ", op, cct);
 
+  // Reject if the operation is a snapshot operation
+  if (op->snapid != CEPH_NOSNAP || !op->snapc.empty()) {
+    ldout(cct, DBG_LVL) << __func__ <<" REJECT: snapshot operation" << dendl;
+    return false;
+  }
+
   // Reject if direct reads not supported by profile.
   if (!pi->has_flag(pg_pool_t::FLAG_CLIENT_SPLIT_READS)) {
     ldout(cct, DBG_LVL) << __func__ <<" REJECT: split reads off" << dendl;
