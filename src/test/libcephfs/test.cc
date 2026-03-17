@@ -582,7 +582,7 @@ TEST(LibCephFS, ManyNestedDirsCaseInsensitive) {
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
-  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+  ASSERT_EQ(do_ceph_mount(cmount, NULL), 0);
 
   static const char many_path[] = "/ManyNestedDirsCaseInsensitive/A/a/a/a/a/b/B/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/Aa";
   const filepath mfp = filepath(many_path);
