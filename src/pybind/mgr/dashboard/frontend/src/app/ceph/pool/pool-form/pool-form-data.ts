@@ -10,9 +10,9 @@ export class PoolFormData {
   applications: any;
 
   readonly APP_LABELS: Record<string, string> = {
-    cephfs: 'Filesystem',
-    rbd: 'Block',
-    rgw: 'Object'
+    cephfs: $localize`Filesystem (CephFS)`,
+    rbd: $localize`Block (RBD)`,
+    rgw: $localize`Object (RGW)`
   };
 
   constructor() {
