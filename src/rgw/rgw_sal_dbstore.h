@@ -589,6 +589,7 @@ protected:
         return std::unique_ptr<Object>(new DBObject(*this));
       }
       virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp,
+							   optional_yield y,
 							   const std::string& lock_name) override;
       virtual int transition(Bucket* bucket,
           const rgw_placement_rule& placement_rule,

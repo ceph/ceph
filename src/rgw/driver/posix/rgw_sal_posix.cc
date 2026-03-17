@@ -3208,7 +3208,7 @@ void POSIXObject::gen_rand_obj_instance_name()
   state.obj.key.set_instance(gen_rand_instance_name());
 }
 
-std::unique_ptr<MPSerializer> POSIXObject::get_serializer(const DoutPrefixProvider *dpp, const std::string& lock_name)
+std::unique_ptr<MPSerializer> POSIXObject::get_serializer(const DoutPrefixProvider *dpp, optional_yield y, const std::string& lock_name)
 {
   return std::make_unique<MPPOSIXSerializer>(dpp, driver, this, lock_name);
 }

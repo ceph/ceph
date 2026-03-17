@@ -623,7 +623,7 @@ class RadosObject : public StoreObject {
     virtual std::unique_ptr<Object> clone() override {
       return std::unique_ptr<Object>(new RadosObject(*this));
     }
-    virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp,
+    virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp, optional_yield y,
 							 const std::string& lock_name) override;
     virtual int transition(Bucket* bucket,
 			   const rgw_placement_rule& placement_rule,

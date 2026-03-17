@@ -3193,7 +3193,7 @@ int RadosObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_y
   return 0;
 }
 
-std::unique_ptr<MPSerializer> RadosObject::get_serializer(const DoutPrefixProvider *dpp, const std::string& lock_name)
+std::unique_ptr<MPSerializer> RadosObject::get_serializer(const DoutPrefixProvider *dpp, optional_yield y, const std::string& lock_name)
 {
   return std::make_unique<MPRadosSerializer>(dpp, store, this, lock_name);
 }

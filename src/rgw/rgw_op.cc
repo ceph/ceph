@@ -7434,7 +7434,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
     s->cct->_conf.get_val<int64_t>("rgw_mp_lock_max_time");
   const ceph::timespan dur = std::chrono::seconds(max_lock_secs_mp);
 
-  serializer = meta_obj->get_serializer(this, "RGWCompleteMultipart");
+  serializer = meta_obj->get_serializer(this, y, "RGWCompleteMultipart");
   op_ret = serializer->try_lock(this, dur, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "failed to acquire lock" << dendl;
@@ -7724,7 +7724,7 @@ void RGWAbortMultipart::execute(optional_yield y)
   int max_lock_secs_mp =
     s->cct->_conf.get_val<int64_t>("rgw_mp_lock_max_time");
   const ceph::timespan dur = std::chrono::seconds(max_lock_secs_mp);
-  auto serializer = meta_obj->get_serializer(this, "RGWCompleteMultipart");
+  auto serializer = meta_obj->get_serializer(this, y, "RGWCompleteMultipart");
   op_ret = serializer->try_lock(this, dur, y);
   if (op_ret < 0) {
     if (op_ret == -ENOENT) {

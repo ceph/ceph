@@ -612,6 +612,7 @@ namespace rgw::sal {
   }
 
   std::unique_ptr<MPSerializer> DBObject::get_serializer(const DoutPrefixProvider *dpp,
+							 optional_yield y,
 							 const std::string& lock_name)
   {
     return std::make_unique<MPDBSerializer>(dpp, store, this, lock_name);
