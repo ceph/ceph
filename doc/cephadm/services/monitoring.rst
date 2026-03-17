@@ -18,8 +18,8 @@ metrics on cluster utilization and performance.  Ceph users have three options:
 
 The monitoring stack consists of `Prometheus <https://prometheus.io/>`_,
 Prometheus exporters (:ref:`mgr-prometheus`, `Node exporter
-<https://prometheus.io/docs/guides/node-exporter/>`_), `Prometheus Alert
-Manager <https://prometheus.io/docs/alerting/alertmanager/>`_ and `Grafana
+<https://prometheus.io/docs/guides/node-exporter/>`_), `Prometheus
+Alertmanager <https://prometheus.io/docs/alerting/alertmanager/>`_ and `Grafana
 <https://grafana.com/>`_.
 
 .. note::
@@ -42,10 +42,10 @@ Deploying Monitoring with Cephadm
 ---------------------------------
 
 The default behavior of ``cephadm`` is to deploy a basic monitoring stack.  It
-is however possible that you have a Ceph cluster without a monitoring stack,
+is, however, possible that you have a Ceph cluster without a monitoring stack,
 and you would like to add a monitoring stack to it. (Here are some ways that
 you might have come to have a Ceph cluster without a monitoring stack: You
-might have passed the ``--skip-monitoring stack`` option to ``cephadm`` during
+might have passed the ``--skip-monitoring-stack`` option to ``cephadm`` during
 the installation of the cluster, or you might have converted an existing
 cluster (which had no monitoring stack) to cephadm management.)
 
@@ -96,7 +96,7 @@ measures, set this option to ``true`` with a command of the following form:
 
      ceph config set mgr mgr/cephadm/secure_monitoring_stack true
 
-This change will trigger a sequence of reconfigurations across all monitoring daemons, typically requiring
+This change will trigger a sequence of reconfigurations across all monitoring daemons, typically requiring a
 few minutes until all components are fully operational. The updated secure configuration includes the following modifications:
 
 #. Prometheus: basic authentication is required to access the web portal and TLS is enabled for secure communication.
@@ -105,10 +105,10 @@ few minutes until all components are fully operational. The updated secure confi
 #. Grafana: TLS is enabled and authentication is required to access the datasource information.
 #. Cephadm service discovery endpoint: basic authentication is required to access service discovery information, and TLS is enabled for secure communication.
 
-In this secure setup, users will need to setup authentication
+In this secure setup, users will need to set up authentication
 (username/password) for both Prometheus and Alertmanager. By default the
 username and password are set to ``admin``/``admin``. The user can change these
-value with the commands ``ceph orch prometheus set-credentials`` and ``ceph
+values with the commands ``ceph orch prometheus set-credentials`` and ``ceph
 orch alertmanager set-credentials`` respectively. These commands offer the
 flexibility to input the username/password either as parameters or via a JSON
 file, which enhances security. Additionally, Cephadm provides the commands
@@ -199,7 +199,7 @@ https://lists.ceph.io/hyperkitty/list/ceph-users@ceph.io/thread/QGC66QIFBKRTPZAQ
 ``var/lib/ceph/{FSID}/cephadm.{DIGEST}``, where ``{DIGEST}`` is an alphanumeric
 string representing the currently-running version of Ceph.
 
-To see the default container images, run below command:
+To see the default container images, run the below command:
 
 .. prompt:: bash #
 
@@ -442,14 +442,14 @@ Here's an example Prometheus job definition that uses the cephadm service discov
 
 .. code-block:: yaml
 
-     - job_name: 'ceph-exporter'  
-       http_sd_configs:  
+     - job_name: 'ceph-exporter'
+       http_sd_configs:
        - url: https://<mgr-ip>:8765/sd/prometheus/sd-config?service=ceph-exporter
-         basic_auth:  
-           username: '<username>'  
-           password: '<password>'  
-         tls_config:  
-           ca_file: '/path/to/ca.crt'  
+         basic_auth:
+           username: '<username>'
+           password: '<password>'
+         tls_config:
+           ca_file: '/path/to/ca.crt'
 
 * To enable the dashboard's Prometheus-based alerting, see :ref:`dashboard-alerting`.
 
@@ -516,7 +516,7 @@ Manually Setting the Grafana URL
 Cephadm automatically configures Prometheus, Grafana, and Alertmanager in
 all cases except one.
 
-In a some setups, the Dashboard user's browser might not be able to access the
+In some setups, the Dashboard user's browser might not be able to access the
 Grafana URL that is configured in Ceph Dashboard. This can happen when the
 cluster and the accessing user are in different DNS zones.
 
@@ -615,7 +615,7 @@ Turning off Anonymous Access
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 By default, cephadm allows anonymous users (users who have not provided any
-login information) limited, viewer only access to the Grafana dashboard. In
+login information) limited, viewer-only access to the Grafana dashboard. In
 order to set up Grafana to only allow viewing from logged in users, you can
 set ``anonymous_access: False`` in your Grafana spec.
 

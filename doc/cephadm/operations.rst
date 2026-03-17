@@ -258,7 +258,7 @@ Data Location
 =============
 
 Cephadm stores daemon data and logs in different locations than did
-older, pre-cephadm (pre Octopus) versions of Ceph:
+older, pre-cephadm (pre-Octopus) versions of Ceph:
 
 * ``/var/log/ceph/<cluster-fsid>`` contains all cluster logs. By
   default, cephadm logs via stderr and the container runtime. These

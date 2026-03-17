@@ -41,7 +41,7 @@ a secure and flexible authentication mechanism.
 
 
 High availability
-==============================
+=================
 In general, `oauth2-proxy` is used in conjunction with the `mgmt-gateway`. The `oauth2-proxy` service can be deployed as multiple
 stateless instances, with the `mgmt-gateway` (nginx reverse-proxy) handling load balancing across these instances using a round-robin strategy.
 Since oauth2-proxy integrates with an external identity provider (IDP), ensuring high availability for login is managed externally
@@ -59,7 +59,7 @@ seamlessly with the Ceph management stack.
 Service Specification
 =====================
 
-Before deploying `oauth2-proxy` service please remember to deploy the `mgmt-gateway` service by turning on the `--enable_auth` flag. i.e:
+Before deploying the `oauth2-proxy` service, please remember to deploy the `mgmt-gateway` service by turning on the ``--enable_auth`` flag, i.e.:
 
 .. prompt:: bash #
 
@@ -104,7 +104,7 @@ project documentation.
    :members:
 
 The specification can then be applied by running the below command. Once becomes available, cephadm will automatically redeploy
-the `mgmt-gateway` service while adapting its configuration to redirect the authentication to the newly deployed `oauth2-service`.
+the `mgmt-gateway` service while adapting its configuration to redirect the authentication to the newly deployed `oauth2-proxy` service.
 
 .. prompt:: bash #
 

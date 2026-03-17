@@ -11,7 +11,7 @@ commands; see :ref:`mgr-nfs`.  This document covers how to manage the
 cephadm services directly, which should only be necessary for unusual NFS
 configurations.
 
-Deploying NFS ganesha
+Deploying NFS Ganesha
 =====================
 
 Cephadm deploys NFS Ganesha daemon (or set of daemons).  The configuration for
@@ -172,7 +172,7 @@ High-availability NFS
 Deploying an *ingress* service for an existing *nfs* service will provide:
 
 * a stable, virtual IP that can be used to access the NFS server
-* fail-over between hosts if there is a host failure
+* failover between hosts if there is a host failure
 * load distribution across multiple NFS gateways (although this is rarely necessary)
 
 Ingress for NFS can be deployed for an existing NFS service
@@ -199,7 +199,7 @@ A few notes:
     property to match against IPs in other networks; see
     :ref:`ingress-virtual-ip` for more information.
   * The *monitor_port* is used to access the haproxy load status
-    page.  The user is ``admin`` by default, but can be modified by
+    page.  The user is ``admin`` by default, but can be modified
     via an *admin* property in the spec.  If a password is not
     specified via a *password* property in the spec, the auto-generated password
     can be found with:
@@ -222,7 +222,7 @@ NFS with virtual IP but no haproxy
 ----------------------------------
 
 Cephadm also supports deploying nfs with keepalived but not haproxy. This
-offers a virtual ip supported by keepalived that the nfs daemon can directly bind
+offers a virtual IP supported by keepalived that the nfs daemon can directly bind
 to instead of having traffic go through haproxy.
 
 In this setup, you'll either want to set up the service using the nfs module

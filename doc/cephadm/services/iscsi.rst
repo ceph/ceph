@@ -7,7 +7,7 @@ iSCSI Service
 Deploying iSCSI
 ===============
 
-To deploy an iSCSI gateway, create a yaml file containing a
+To deploy an iSCSI gateway, create a YAML file containing a
 service specification for iscsi:
 
 .. code-block:: yaml
