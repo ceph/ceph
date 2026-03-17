@@ -1,16 +1,11 @@
 import logging
-import json
-import tempfile
 import random
-import socket
 import time
 import threading
 import subprocess
 import os
-import stat
 import string
 from datetime import datetime, timedelta, timezone
-from datetime import datetime, timezone
 import pytest
 import boto3
 from botocore.config import Config
@@ -649,6 +644,49 @@ def test_put_vectors():
     vectors = generate_vectors(10, 128)
     result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+def update_vectors_thread(conn, bucket_name, thread_id):
+    index_name = 'test-index-'+str(thread_id)
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name, dataType='float32', dimension=128, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    dimension = 128
+    num_vectors = 10
+    vectors = generate_vectors(num_vectors, dimension)
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    time.sleep(0.5)
+    num_vectors = 20
+    vectors = generate_vectors(num_vectors, dimension)
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    time.sleep(5)
+    num_vectors = 30
+    vectors = generate_vectors(num_vectors, dimension)
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    # Get vectors with returnData=True
+    vector_ids = [f'vec-{i}' for i in range(num_vectors)]
+    returned_vectors = verify_get_vectors(conn, bucket_name, index_name, vector_ids, expected_dimension=dimension)
+
+
+@pytest.mark.vector_test
+def test_update_vectors():
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    num_indexes = 10
+    threads = []
+    for i in range(num_indexes):
+        t = threading.Thread(target=update_vectors_thread, args=(conn, bucket_name, i))
+        t.start()
+        threads.append(t)
+    for t in threads:
+        t.join()
+
     # cleanup
     _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
 
