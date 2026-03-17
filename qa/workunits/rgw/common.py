@@ -202,3 +202,81 @@ def create_orphaned_list_entries(conn, bucket, key_list):
             log.info(f'Successfully created orphaned list entry for {key}:{instance}')
 
     return orphaned_entries
+
+
+def create_orphaned_data_list_entries(conn, bucket, key_list):
+    """
+    Creates orphaned list entries that still reference object DATA (exists=true).
+
+    This is the data-carrying counterpart of create_orphaned_list_entries (which
+    orphans delete markers, exists=false). Here we leave a live (non-deleted)
+    versioned object's plain (list) entry behind after removing its instance and
+    OLH entries. Because these orphans still point at RADOS data, 'bucket check
+    orphan --fix' must SKIP them rather than remove them, to avoid orphaning that
+    data. Used to exercise the data-loss safeguard.
+
+    Returns list of (key, version_id) tuples representing orphaned data entries.
+    """
+    orphaned_entries = []
+    index_pool, bucket_id, num_shards = get_bucket_index_info(bucket.name)
+
+    for key in key_list:
+        # Create a live versioned object; do NOT delete, so the current version
+        # is a data object (exists=true) rather than a delete marker.
+        bucket.put_object(Key=key, Body=b"orphan_data")
+
+        # Find all instance entries for this key, and the data version's instance
+        out = exec_cmd(f'radosgw-admin bi list --bucket {bucket.name} --object {key}')
+        entries = json.loads(out.replace(b'\x80', b'0x80'))
+        all_instances = []
+        data_instance = None
+        for entry in entries:
+            if entry['type'] == 'instance':
+                ent = entry['entry']
+                instance_id = ent['instance']
+                all_instances.append(instance_id)
+                if ent.get('exists', False):
+                    data_instance = instance_id
+
+        if not data_instance:
+            log.error(f'Could not identify data instance for key={key}, skipping')
+            continue
+
+        orphaned_entries.append((key, data_instance))
+
+        # Remove instance and OLH entries, leaving only the plain (list) entry
+        olh_key_bytes = b'\x801001_' + key.encode()
+        for shard_num in range(num_shards):
+            shard_oid = f'.dir.{bucket_id}.{shard_num}'
+
+            for instance_id in all_instances:
+                instance_key_bytes = b'\x801000_' + key.encode() + b'\x00i' + instance_id.encode()
+                with tempfile.NamedTemporaryFile(delete=False) as f:
+                    f.write(instance_key_bytes)
+                    instance_key_file = f.name
+                try:
+                    exec_cmd(f"rados -p {index_pool} rmomapkey {shard_oid} --omap-key-file {instance_key_file}",
+                             check_retcode=False)
+                finally:
+                    os.unlink(instance_key_file)
+
+            with tempfile.NamedTemporaryFile(delete=False) as f:
+                f.write(olh_key_bytes)
+                olh_key_file = f.name
+            try:
+                exec_cmd(f"rados -p {index_pool} rmomapkey {shard_oid} --omap-key-file {olh_key_file}",
+                         check_retcode=False)
+            finally:
+                os.unlink(olh_key_file)
+
+    # Verify orphaned state - should only have plain entries now
+    for key, instance in orphaned_entries:
+        out = exec_cmd(f'radosgw-admin bi list --bucket {bucket.name} --object {key}')
+        entries = json.loads(out.replace(b'\x80', b'0x80'))
+        entry_types = [e['type'] for e in entries]
+        if 'instance' in entry_types or 'olh' in entry_types:
+            log.error(f'Key {key} still has instance/olh entries after removal attempt')
+        else:
+            log.info(f'Successfully created orphaned data list entry for {key}:{instance}')
+
+    return orphaned_entries
