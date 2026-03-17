@@ -11,6 +11,7 @@
 #include <arrow/api.h>
 #include <arrow/c/bridge.h>
 #include <charconv>
+#include "rgw_s3vector_background.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -1075,6 +1076,8 @@ namespace rgw::s3vector {
       return lancedb_error_to_errno(result);
     }
     lancedb_table_free(table);
+    // we are not failing the operation if we cannot notify the background process on index update
+    notify_index_update(dpp, configuration.vector_bucket_name, configuration.index_name);
     return 0;
   }
 
