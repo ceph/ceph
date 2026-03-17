@@ -200,15 +200,15 @@ void GroupPromoteRequest<I>::handle_prepare_group_images(int r) {
     return;
   }
 
-  if (m_force) {
-    check_rollback_needed();
-  } else {
-    prepare_group_promotion();
-  }
+  check_rollback_needed();
 }
 
 template <typename I>
 void GroupPromoteRequest<I>::check_rollback_needed() {
+  if (!m_force) {
+    prepare_group_promotion();
+    return;
+  }
   ldout(m_cct, 10) << dendl;
 
   std::vector<cls::rbd::GroupImageSpec> current_images;
@@ -487,7 +487,6 @@ void GroupPromoteRequest<I>::handle_drain_image_watchers(int r) {
 template <typename I>
 void GroupPromoteRequest<I>::acquire_exclusive_locks() {
   ldout(m_cct, 10) << dendl;
-  m_locks_acquired.resize(m_image_ctxs.size(), false);
 
   auto ctx = create_context_callback<GroupPromoteRequest<I>,
     &GroupPromoteRequest<I>::handle_acquire_exclusive_locks>(this);
@@ -496,12 +495,9 @@ void GroupPromoteRequest<I>::acquire_exclusive_locks() {
 
   for (size_t i = 0; i < m_image_ctxs.size(); ++i) {
     std::unique_lock locker{m_image_ctxs[i]->owner_lock};
-    if (m_image_ctxs[i]->exclusive_lock != nullptr &&
-        !m_image_ctxs[i]->exclusive_lock->is_lock_owner()) {
+    if (m_image_ctxs[i]->exclusive_lock != nullptr) {
       ldout(m_cct, 10) << "acquiring exclusive lock for image_id="
                        << m_images[i].spec.image_id << dendl;
-      // initiating lock acquisition
-      m_locks_acquired[i] = true;
       m_image_ctxs[i]->exclusive_lock->block_requests(0);
       m_image_ctxs[i]->exclusive_lock->acquire_lock(gather_ctx->new_sub());
     }
@@ -533,23 +529,20 @@ void GroupPromoteRequest<I>::handle_acquire_exclusive_locks(int r) {
       r = m_image_ctxs[i]->exclusive_lock->get_unlocked_op_error();
       m_ret_val = r;
       locker.unlock();
-      // release only the locks for which acquisition was initiated
       release_exclusive_locks();
       return;
     }
   }
 
-  // all required locks are owned
-  // m_locks_acquired only tracks locks that are initiated earlier
-  if (!m_need_rollback) {
-    create_primary_group_snapshot();
-  } else {
-    rollback();
-  }
+  rollback();
 }
 
 template <typename I>
 void GroupPromoteRequest<I>::rollback() {
+  if (!m_need_rollback) {
+    create_primary_group_snapshot();
+    return;
+  }
   ldout(m_cct, 10) << dendl;
 
   auto ctx = create_context_callback<
@@ -624,19 +617,19 @@ void GroupPromoteRequest<I>::handle_create_primary_group_snapshot(int r) {
     lderr(m_cct) << "failed to create group snapshot: "
                  << cpp_strerror(r) << dendl;
     m_ret_val = r;
-    remove_primary_group_snapshot();
+    release_exclusive_locks();
     return;
   }
 
-  if (m_images.empty()) {
-    update_primary_group_snapshot();
-  } else {
-    create_images_primary_snapshots();
-  }
+  create_images_primary_snapshots();
 }
 
 template <typename I>
 void GroupPromoteRequest<I>::create_images_primary_snapshots() {
+  if (m_images.empty()) {
+    update_primary_group_snapshot();
+    return;
+  }
   ldout(m_cct, 10) << dendl;
 
   auto ctx = create_context_callback<
@@ -799,12 +792,10 @@ void GroupPromoteRequest<I>::release_exclusive_locks() {
   auto gather_ctx = new C_Gather(m_cct, ctx);
 
   for (size_t i = 0; i < m_image_ctxs.size(); ++i) {
-    if (m_locks_acquired[i]) {
-      std::unique_lock locker{m_image_ctxs[i]->owner_lock};
-      if (m_image_ctxs[i]->exclusive_lock != nullptr) {
-        m_image_ctxs[i]->exclusive_lock->unblock_requests();
-        m_image_ctxs[i]->exclusive_lock->release_lock(gather_ctx->new_sub());
-      }
+    std::unique_lock locker{m_image_ctxs[i]->owner_lock};
+    if (m_image_ctxs[i]->exclusive_lock != nullptr) {
+      m_image_ctxs[i]->exclusive_lock->unblock_requests();
+      m_image_ctxs[i]->exclusive_lock->release_lock(gather_ctx->new_sub());
     }
   }
 
@@ -825,11 +816,6 @@ void GroupPromoteRequest<I>::handle_release_exclusive_locks(int r) {
 
 template <typename I>
 void GroupPromoteRequest<I>::close_images() {
-  if (m_image_ctxs.empty()) {
-    finish(m_ret_val);
-    return;
-  }
-
   ldout(m_cct, 10) << dendl;
 
   auto ctx = create_context_callback<

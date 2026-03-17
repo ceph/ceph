@@ -67,13 +67,13 @@ private:
    *    v          (regular group promote)
    * PREPARE_GROUP_PROMOTION--------------------------->|
    *    |                                               |
-   *    v (incomplete), (skip if not needed)            |
+   *    v (incomplete)                                  |
    * CREATE_GROUP_ORPHAN_SNAPSHOT                       |
    *    |                                               |
    *    v                                               |
    * CREATE_IMAGES_ORPHAN_SNAPSHOTS                     |
    *    |                                               |
-   *    v   (skip if not needed)                        |
+   *    v                                               |
    * MARK_GROUP_ORPHAN_SNAPSHOT_COMPLETE                |
    *    |                                               |
    *    v                                               |
@@ -88,20 +88,20 @@ private:
    *    v  (incomplete)                                 |
    * CREATE_PRIMARY_GROUP_SNAPSHOT <--------------------|
    *    |
-   *    v (skip if not needed)
-   * CREATE_IMAGES_PRIMARY_SNAPSHOTS
-   *    |
-   *    v
-   * DISABLE_NON_PRIMARY_FEATURES
-   *    |
-   *    v  (complete)
-   * UPDATE_PRIMARY_GROUP_SNAPSHOT
-   *    |
-   *    v
-   * GROUP_UNLINK_PEER
-   *    |
-   *    v   (skip if not needed)
-   * RELEASE_EXCLUSIVE_LOCKS
+   *    v  (skip if group is empty)    (on error)
+   * CREATE_IMAGES_PRIMARY_SNAPSHOTS -----------------------------\
+   *    |                                                         |
+   *    v  (skip if group is empty)    (on error)                 |
+   * DISABLE_NON_PRIMARY_FEATURES -----------------------\        |
+   *    |                                                |        |
+   *    v  (complete)                  (on error)        |        |
+   * UPDATE_PRIMARY_GROUP_SNAPSHOT ----------------------|        |
+   *    |                                                |        |
+   *    v                                                v        |
+   * GROUP_UNLINK_PEER               ENABLE_NON_PRIMARY_FEATURES  |
+   *    |                                                |        |
+   *    v  (skip if not needed)                          v        v
+   * RELEASE_EXCLUSIVE_LOCKS <-------------REMOVE_PRIMARY_GROUP_SNAPSHOT
    *    |
    *    v
    * CLOSE_IMAGES
@@ -126,7 +126,6 @@ private:
   std::vector<cls::rbd::GroupImageStatus> m_images;
   std::vector<ImageCtxT *> m_image_ctxs;
   ceph::bufferlist m_out_bl;
-  std::vector<bool> m_locks_acquired;
   bool m_excl_locks_acquire = false;
 
   int m_ret_val = 0;
