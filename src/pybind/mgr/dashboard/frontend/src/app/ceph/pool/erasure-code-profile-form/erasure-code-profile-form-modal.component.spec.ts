@@ -8,7 +8,7 @@ import { of } from 'rxjs';
 
 import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
 import { CrushNode } from '~/app/shared/models/crush-node';
-import { ErasureCodeProfile } from '~/app/shared/models/erasure-code-profile';
+import { CrushFailureDomains, ErasureCodeProfile } from '~/app/shared/models/erasure-code-profile';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { configureTestBed, FixtureHelper, FormHelper, Mocks } from '~/testing/unit-test-helper';
 import { PoolModule } from '../pool.module';
@@ -68,7 +68,20 @@ describe('ErasureCodeProfileFormModalComponent', () => {
        */
       nodes: [
         // Root node
-        Mocks.getCrushNode('default', -1, 'root', 11, [-2, -3]),
+        Mocks.getCrushNode('default', -1, 'root', 11, [
+          -2,
+          -3,
+          -6,
+          -7,
+          -8,
+          -9,
+          -10,
+          -11,
+          -12,
+          -13,
+          -14,
+          -15
+        ]),
         // SSD host
         Mocks.getCrushNode('ssd-host', -2, 'host', 1, [1, 0, 2]),
         Mocks.getCrushNode('osd.0', 0, 'osd', 0, undefined, 'ssd'),
@@ -76,6 +89,27 @@ describe('ErasureCodeProfileFormModalComponent', () => {
         Mocks.getCrushNode('osd.2', 2, 'osd', 0, undefined, 'ssd'),
         // SSD and HDD mixed devices host
         Mocks.getCrushNode('mix-host', -3, 'host', 1, [-4, -5]),
+        // Additional hosts to satisfy host default max validation (k+m+1 <= hosts)
+        Mocks.getCrushNode('host-3', -6, 'host', 1, [13]),
+        Mocks.getCrushNode('osd4.0', 13, 'osd', 0, undefined, 'ssd'),
+        Mocks.getCrushNode('host-4', -7, 'host', 1, [14]),
+        Mocks.getCrushNode('osd5.0', 14, 'osd', 0, undefined, 'hdd'),
+        Mocks.getCrushNode('host-5', -8, 'host', 1, [15]),
+        Mocks.getCrushNode('osd6.0', 15, 'osd', 0, undefined, 'ssd'),
+        Mocks.getCrushNode('host-6', -9, 'host', 1, [16]),
+        Mocks.getCrushNode('osd7.0', 16, 'osd', 0, undefined, 'hdd'),
+        Mocks.getCrushNode('host-7', -10, 'host', 1, [17]),
+        Mocks.getCrushNode('osd8.0', 17, 'osd', 0, undefined, 'ssd'),
+        Mocks.getCrushNode('host-8', -11, 'host', 1, [18]),
+        Mocks.getCrushNode('osd9.0', 18, 'osd', 0, undefined, 'hdd'),
+        Mocks.getCrushNode('host-9', -12, 'host', 1, [19]),
+        Mocks.getCrushNode('osd10.0', 19, 'osd', 0, undefined, 'ssd'),
+        Mocks.getCrushNode('host-10', -13, 'host', 1, [20]),
+        Mocks.getCrushNode('osd11.0', 20, 'osd', 0, undefined, 'hdd'),
+        Mocks.getCrushNode('host-11', -14, 'host', 1, [21]),
+        Mocks.getCrushNode('osd12.0', 21, 'osd', 0, undefined, 'ssd'),
+        Mocks.getCrushNode('host-12', -15, 'host', 1, [22]),
+        Mocks.getCrushNode('osd13.0', 22, 'osd', 0, undefined, 'hdd'),
         // HDD rack
         Mocks.getCrushNode('hdd-rack', -4, 'rack', 3, [3, 4, 5, 6, 7]),
         Mocks.getCrushNode('osd2.0', 3, 'osd-rack', 0, undefined, 'hdd'),
@@ -491,7 +525,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       ecp = new ErasureCodeProfile();
       submittedEcp = new ErasureCodeProfile();
       submittedEcp['crush-root'] = 'default';
-      submittedEcp['crush-failure-domain'] = 'osd-rack';
+      submittedEcp['crush-failure-domain'] = CrushFailureDomains.Host;
       submittedEcp['packetsize'] = 2048;
       submittedEcp['technique'] = 'reed_sol_van';
 
@@ -586,8 +620,13 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       it('should send profile with all required fields and crush root and locality', () => {
         ecpChange('l', '6');
         formHelper.setMultipleValues(ecp, true);
-        formHelper.setValue('crushRoot', component.buckets[2], true);
+        formHelper.setValue(
+          'crushRoot',
+          component.buckets.find((bucket) => bucket.name === 'mix-host'),
+          true
+        );
         submittedEcp['crush-root'] = 'mix-host';
+        submittedEcp['crush-failure-domain'] = 'osd-rack';
         formHelper.setValue('crushLocality', 'osd-rack', true);
         submittedEcp['crush-locality'] = 'osd-rack';
         testCreation();

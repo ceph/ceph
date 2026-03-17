@@ -491,20 +491,21 @@
           [helperText]="tooltips.crushFailureDomain"
           i18n
         >
-          @if (!failureDomains) {
+        @if (!failureDomains) {
           <option
             value=""
           >
             Loading...
           </option>
-          }
-          @for (domain of failureDomainKeys; track domain) {
+        }
+        @for (domain of failureDomainKeys; track domain) {
           <option
             [value]="domain"
+            [selected]="domain.toLowerCase() === CrushFailureDomains.Host"
           >
             {{ domain }} ( {{failureDomains[domain].length}} )
           </option>
-          }
+        }
         </cds-select>
       </div>
 
@@ -514,9 +515,11 @@
         class="form-item"
       >
         <cds-number
+          cdValidate
+          #crushNumFailureDomainsRef="cdValidate"
           label="Crush num failure domain"
           [helperText]="tooltips.crushNumFailureDomains"
-          [invalid]="form.controls.crushNumFailureDomains.invalid && form.controls.crushNumFailureDomains.dirty"
+          [invalid]="crushNumFailureDomainsRef.isInvalid"
           [invalidText]="crushNumFailureDomainsError"
           formControlName="crushNumFailureDomains"
           min="0"
@@ -526,14 +529,14 @@
         <ng-template
           #crushNumFailureDomainsError
         >
-          @if (form.showError('crushNumFailureDomains', formDir, 'required')) {
-          <span
-            class="invalid-feedback"
-            i18n
+          <ng-container
+            *ngTemplateOutlet="crushFailureDomainValidationErrors; context: {
+            control: form.get('crushNumFailureDomains'),
+            requiredText: 'This field is required when crush osds per failure domain is set!',
+            showMaxFailureDomains: true
+            }"
           >
-            This field is required when crush osds per failure domain is set!
-          </span>
-          }
+          </ng-container>
         </ng-template>
       </div>
 
@@ -543,9 +546,11 @@
         class="form-item"
       >
         <cds-number
+          cdValidate
+          #crushOsdsPerFailureDomainRef="cdValidate"
           label="Crush osds per failure domain"
           [helperText]="tooltips.crushOsdsPerFailureDomain"
-          [invalid]="form.controls.crushOsdsPerFailureDomain.invalid && form.controls.crushOsdsPerFailureDomain.dirty"
+          [invalid]="crushOsdsPerFailureDomainRef.isInvalid"
           [invalidText]="crushOsdsPerFailureDomainError"
           formControlName="crushOsdsPerFailureDomain"
           min="0"
@@ -555,16 +560,50 @@
         <ng-template
           #crushOsdsPerFailureDomainError
         >
-          @if (form.showError('crushOsdsPerFailureDomain', formDir, 'required')) {
-          <span
-            class="invalid-feedback"
-            i18n
+          <ng-container
+            *ngTemplateOutlet="crushFailureDomainValidationErrors; context: {
+            control: form.get('crushOsdsPerFailureDomain'),
+            requiredText: 'This field is required when crush num failure domain is set!',
+            showMaxFailureDomains: false
+            }"
           >
-            This field is required when crush num failure domain is set!
-          </span>
-          }
+          </ng-container>
         </ng-template>
       </div>
+
+      <ng-template
+        #crushFailureDomainValidationErrors
+        let-control="control"
+        let-requiredText="requiredText"
+        let-showMaxFailureDomains="showMaxFailureDomains"
+      >
+        @if (control?.errors) {
+        @if (control.hasError('required')) {
+        <span
+          class="invalid-feedback"
+          i18n
+        >
+          {{ requiredText }}
+        </span>
+        }
+        @if (showMaxFailureDomains && control.hasError('maxFailureDomains')) {
+        <span
+          class="invalid-feedback"
+          i18n
+        >
+          The number of failure domains ({{ form.controls.crushNumFailureDomains.value }}) cannot exceed the available count ({{ failureDomains[form.controls.crushFailureDomain.value]?.length || 0 }}) for the selected failure domain type ({{ form.controls.crushFailureDomain.value }}).
+        </span>
+        }
+        @if (control.hasError('pattern')) {
+        <span
+          class="invalid-feedback"
+          i18n
+        >
+          Enter a valid positive number
+        </span>
+        }
+        }
+      </ng-template>
 
       <!-- Crush locality -->
       @if (plugin === PLUGIN.LRC) {
