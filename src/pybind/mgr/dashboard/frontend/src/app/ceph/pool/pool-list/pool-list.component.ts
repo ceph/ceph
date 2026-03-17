@@ -265,6 +265,11 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
       'wr'
     ];
     const emptyStat: PoolStat = { latest: 0, rate: 0, rates: [] };
+    const applicationLabels: Record<string, string> = {
+      cephfs: $localize`filesystem`,
+      rbd: $localize`block`,
+      rgw: $localize`object`
+    };
 
     _.forEach(pools, (pool: Pool) => {
       pool['pg_status'] = this.transformPgStatus(pool['pg_status']);
@@ -294,6 +299,10 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
       if (pool['type'] === 'replicated') {
         pool['data_protection'] = `replica: ×${pool['size']}`;
       }
+
+      pool['application_metadata'] = (pool.application_metadata || []).map(
+        (application: string) => applicationLabels[application] || application
+      );
     });
 
     return pools;

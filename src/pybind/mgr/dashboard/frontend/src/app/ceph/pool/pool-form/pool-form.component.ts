@@ -367,7 +367,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
     const selectedApps = this.data.applications.selected || [];
     this.data.applications.available = _.uniq(apps.sort()).map((x: string) => {
       const option = new SelectOption(selectedApps.includes(x), x, this.data.APP_LABELS?.[x] || x);
-      (option as any).content = x;
+      (option as any).content = this.data.APP_LABELS?.[x] || x;
       return option;
     });
   }
