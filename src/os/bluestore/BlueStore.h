@@ -60,6 +60,9 @@
 #include "BlueFS.h"
 #include "common/EventTrace.h"
 #include "common/admin_socket.h"
+#ifdef WITH_CPUTRACE
+#include "common/cputrace.h"
+#endif
 
 #ifdef WITH_BLKIN
 #include "common/zipkin_trace.h"
@@ -71,7 +74,10 @@ class BlueStoreRepairer;
 class SimpleBitmap;
 //#define DEBUG_CACHE
 //#define DEBUG_DEFERRED
-
+#ifdef WITH_CPUTRACE
+//change to #define to enable
+#undef BLUESTORE_COMMON_CPUTRACE
+#endif
 // constants for Buffer::optimize()
 #define MAX_BUFFER_SLOP_RATIO_DEN  8  // so actually 1/N
 #define CEPH_BLUESTORE_TOOL_RESTORE_ALLOCATION
@@ -4149,6 +4155,13 @@ public:
                           const std::vector<std::string>& devs,
 			  std::vector<uint64_t>* valid_positions,
 			  bool force);
+
+#ifdef BLUESTORE_COMMON_CPUTRACE
+  static cpucounter_group cputrace_bluestore;
+#define BLUE_SCOPE(y) MEASURE_SCOPE(cputrace_bluestore, y)
+#else //BLUESTORE_COMMON_CPUTRACE
+#define BLUE_SCOPE(y)
+#endif //BLUESTORE_COMMON_CPUTRACE
 };
 
 inline std::ostream& operator<<(std::ostream& out, const BlueStore::volatile_statfs& s) {
