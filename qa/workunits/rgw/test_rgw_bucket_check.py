@@ -23,27 +23,10 @@ ACCESS_KEY = 'OJODXSLNX4LUNHQG99PA'
 SECRET_KEY = '3l6ffld34qaymfomuh832j94738aie2x4p2o8h6n'
 BUCKET_NAME = 'check-bucket'
 
-def main():
-    """
-    execute bucket check commands
-    """
-    create_user(USER, DISPLAY_NAME, ACCESS_KEY, SECRET_KEY)
 
-    connection = boto_connect(ACCESS_KEY, SECRET_KEY, Config(retries = {
-        'total_max_attempts': 1,
-    }))
-
-    # pre-test cleanup
-    try:
-        bucket = connection.Bucket(BUCKET_NAME)
-        bucket.objects.all().delete()
-        bucket.object_versions.all().delete()
-        bucket.delete()
-    except botocore.exceptions.ClientError as e:
-        if not e.response['Error']['Code'] == 'NoSuchBucket':
-            raise
-
-    bucket = connection.create_bucket(Bucket=BUCKET_NAME)
+def test_bucket_check_stats(connection, bucket):
+    """Test that bucket check --fix correctly recalculates bucket stats."""
+    log.debug('TEST: recalculated bucket check stats are correct\n')
 
     null_version_keys = ['a', 'z']
     null_version_objs = put_objects(bucket, null_version_keys)
@@ -51,17 +34,23 @@ def main():
     connection.BucketVersioning(BUCKET_NAME).enable()
 
     ok_keys = ['a', 'b', 'c', 'd']
-    unlinked_keys = ['c', 'd', 'e', 'f']
     ok_objs = put_objects(bucket, ok_keys)
-    
+
     # TESTCASE 'recalculated bucket check stats are correct'
-    log.debug('TEST: recalculated bucket check stats are correct\n')
     exec_cmd(f'radosgw-admin bucket check --fix --bucket {BUCKET_NAME}')
     out = exec_cmd(f'radosgw-admin bucket stats --bucket {BUCKET_NAME}')
     json_out = json.loads(out)
     log.debug(json_out['usage'])
     assert json_out['usage']['rgw.main']['num_objects'] == 6
-    
+
+    return null_version_keys, null_version_objs, ok_keys, ok_objs
+
+
+def test_bucket_check_unlinked(connection, bucket, ok_keys, ok_objs, null_version_keys, null_version_objs):
+    """Test bucket check unlinked - finds instance entries without list entries."""
+
+    unlinked_keys = ['c', 'd', 'e', 'f']
+
     # TESTCASE 'bucket check unlinked does not report normal entries'
     log.debug('TEST: bucket check unlinked does not report normal entries\n')
     out = exec_cmd(f'radosgw-admin bucket check unlinked --bucket {BUCKET_NAME} --min-age-hours 0 --dump-keys')
@@ -116,7 +105,13 @@ def main():
     out = exec_cmd(f'radosgw-admin bucket check unlinked --bucket {BUCKET_NAME} --min-age-hours 0 --dump-keys')
     json_out = json.loads(out)
     assert len(json_out) == 0
-    
+
+    return unlinked_keys, unlinked_objs
+
+
+def test_bucket_check_olh(connection, bucket, ok_keys, ok_objs, unlinked_keys):
+    """Test bucket check olh - finds leftover OLH entries."""
+
     # for this set of keys we can produce leftover OLH object/entries by
     # deleting the normal object instance since we should already have a leftover
     # pending xattr on the OLH object due to the errors associated with the 
@@ -155,6 +150,10 @@ def main():
     json_out = json.loads(out)
     assert len(json_out) == 0
 
+
+def test_null_versions_preserved(connection, bucket, null_version_keys, null_version_objs):
+    """Test that bucket check fixes do not affect null version objects."""
+
     # TESTCASE 'bucket check fixes do not affect null version objects'
     log.debug('TEST: verify that bucket check fixes do not affect null version objects\n')
     for o in null_version_objs:
@@ -164,10 +163,21 @@ def main():
     for key in null_version_keys:
         assert (key, 'null') in all_versions
 
+
+def test_stats_with_unlinked(connection, bucket):
+    """Test bucket check stats are correct in the presence of unlinked entries."""
+
+    null_version_keys = ['a', 'z']
+    ok_keys = ['a', 'b', 'c', 'd']
+    unlinked_keys = ['c', 'd', 'e', 'f']
+
     # TESTCASE 'bucket check stats are correct in the presence of unlinked entries'
     log.debug('TEST: bucket check stats are correct in the presence of unlinked entries\n')
     bucket.object_versions.all().delete()
     null_version_objs = put_objects(bucket, null_version_keys)
+
+    connection.BucketVersioning(BUCKET_NAME).enable()
+
     ok_objs = put_objects(bucket, ok_keys)
     unlinked_objs = create_unlinked_objects(connection, bucket, unlinked_keys)
     exec_cmd(f'radosgw-admin bucket check --fix --bucket {BUCKET_NAME}')
@@ -186,10 +196,47 @@ def main():
     assert json_out['usage']['rgw.main']['size_kb_actual'] == 0
     assert json_out['usage']['rgw.main']['size_kb_utilized'] == 0
 
-    # Clean up
+
+def main():
+    """
+    Execute bucket check command tests.
+    """
+    create_user(USER, DISPLAY_NAME, ACCESS_KEY, SECRET_KEY)
+
+    connection = boto_connect(ACCESS_KEY, SECRET_KEY, Config(retries = {
+        'total_max_attempts': 1,
+    }))
+
+    # pre-test cleanup
+    try:
+        bucket = connection.Bucket(BUCKET_NAME)
+        bucket.objects.all().delete()
+        bucket.object_versions.all().delete()
+        bucket.delete()
+    except botocore.exceptions.ClientError as e:
+        if not e.response['Error']['Code'] == 'NoSuchBucket':
+            raise
+
+    bucket = connection.create_bucket(Bucket=BUCKET_NAME)
+
+    #
+    # Run test suites
+    #
+    null_version_keys, null_version_objs, ok_keys, ok_objs = test_bucket_check_stats(connection, bucket)
+
+    unlinked_keys, unlinked_objs = test_bucket_check_unlinked(
+        connection, bucket, ok_keys, ok_objs, null_version_keys, null_version_objs)
+
+    test_bucket_check_olh(connection, bucket, ok_keys, ok_objs, unlinked_keys)
+
+    test_null_versions_preserved(connection, bucket, null_version_keys, null_version_objs)
+
+    test_stats_with_unlinked(connection, bucket)
+
+    # Final cleanup - use bucket rm to force-delete even corrupted entries
     log.debug("Deleting bucket {}".format(BUCKET_NAME))
-    bucket.object_versions.all().delete()
-    bucket.delete()
+    exec_cmd(f'radosgw-admin bucket rm --bucket {BUCKET_NAME} --purge-objects --yes-i-really-mean-it', check_retcode=False)
+
 
 main()
 log.info("Completed bucket check tests")
