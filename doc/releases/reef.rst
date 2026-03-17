@@ -26,9 +26,38 @@ Known Issues
   however, out of an abundance of caution, we no longer recommend upgrading
   from Pacific to Reef directly.
 
+Security Fixes
+--------------
+
+* CephFS Client: A fix was merged to prohibit unprivileged users from modifying
+  the sgid or suid bits on a file. Previously, unprivileged users were
+  inadvertently permitted to set these bits if they were the sole bits being
+  modified.
+
+* Mgr Alerts: The SMTP SSL context was enforced in the mgr/alerts module to
+  resolve a security vulnerability (GHSA-xj9f-7g59-m4jx).
+
 
 Notable Changes
 ---------------
+
+
+* RGW (RADOS Gateway):
+  - Fixed an issue where bucket rm --bypass-gc was mistakenly removing head objects instead of tail objects, potentially causing data inconsistencies.
+  - Fixed rgw-restore-bucket-index to handle objects with leading hyphens and to process versioned buckets correctly.
+  - Addressed an issue in the msg/async protocol that caused memory locks and hangs during connection shutdown.
+  - RGW STS: Made JWKS URL verification configurable for AWS compliance via the rgw_enable_jwks_url_verification configuration.
+
+* CephFS / MDS:
+  - Prevented the MDS from stalling (up to 5 seconds) during rename/stat workloads by forcing the log to nudge for unstable locks after early replies.
+  - Fixed cephfs-journal-tool so it no longer incorrectly resets the journal trim position during disaster recovery, which was causing stale journal objects to linger forever in the metadata pool.
+  - Fixed a bug where ll_walk incorrectly processed absolute paths as relative paths.
+  - Prevented the ceph fs volume create command from accidentally deleting user-created pools if the command aborted during cleanup.
+  - MDS Batched Operations: Added a new mds_allow_batched_ops configuration option (default: true) to control whether the MDS can batch lookup or getattr RPCs.
+  - CephFS Subvolumes: Added the ceph fs subvolume snapshot getpath command to allow users to retrieve the absolute path of a snapshot of a subvolume.
+
+* BlueStore:
+  - Fixed a bug where the bytes_written_slow performance counter incorrectly reported 0 when using aio_write.
 
 Changelog
 ---------
