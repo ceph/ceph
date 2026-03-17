@@ -55,9 +55,6 @@ private:
  *  REMOVE_GROUP_REF_FROM_IMAGE
  *      |
  *      v
- *  REMOVE_IMAGE_FROM_GROUP
- *      |
- *      v
  *  REMOVE_GLOBAL_MIRROR_IMAGE_ENTRY
  *      |
  *      v
@@ -92,9 +89,6 @@ private:
 
   void remove_group_ref_from_image();
   void handle_remove_group_ref_from_image(int r);
-
-  void remove_image_from_group();
-  void handle_remove_image_from_group(int r);
 
   void remove_global_mirror_image_entry();
   void handle_remove_global_mirror_image_entry(int r);

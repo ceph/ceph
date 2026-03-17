@@ -172,38 +172,6 @@ void GroupRemoveImageRequest<I>::handle_remove_group_ref_from_image(int r) {
     return;
   }
 
-  remove_image_from_group();
-}
-
-template <typename I>
-void GroupRemoveImageRequest<I>::remove_image_from_group() {
-  ldout(m_cct, 10) << dendl;
-
-  librados::ObjectWriteOperation op;
-  cls_client::group_image_remove(
-      &op, {m_image_ctx->id, m_image_ctx->md_ctx.get_id()});
-
-  auto comp = create_rados_callback<GroupRemoveImageRequest<I>,
-    &GroupRemoveImageRequest<I>::handle_remove_image_from_group>(this);
-
-  int r = m_group_io_ctx.aio_operate(
-      util::group_header_name(m_group_id), comp, &op);
-  ceph_assert(r == 0);
-
-  comp->release();
-}
-
-template <typename I>
-void GroupRemoveImageRequest<I>::handle_remove_image_from_group(int r) {
-  ldout(m_cct, 10) << "r=" << r << dendl;
-
-  if (r < 0 && r != -ENOENT) {
-    lderr(m_cct) << "failed to remove group image entry: "
-                 << cpp_strerror(r) << dendl;
-    finish(r);
-    return;
-  }
-
   remove_global_mirror_image_entry();
 }
 
