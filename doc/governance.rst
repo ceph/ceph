@@ -120,7 +120,7 @@ Current Members
  * Yuri Weinstein <yweinste@redhat.com>
  * Zac Dover <zac.dover@proton.me>
 
-.. _ctl:
+.. _removing_member:
 
 REMOVING A MEMBER
 ----------
@@ -136,6 +136,8 @@ activity.
 
 A member may be removed by a “supermajority” 2/3 vote of voting members in an 
 election.
+
+.. _ctl:
 
 Component Team Leads
 ====================
