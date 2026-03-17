@@ -511,7 +511,8 @@ class PgScrubber : public ScrubPgIF,
   std::chrono::milliseconds get_scrub_sleep_time() const final;
   void queue_for_scrub_resched(Scrub::scrub_prio_t prio) final;
 
-  void get_replicas_maps(bool replica_can_preempt) final;
+  void get_replicas_maps(bool replica_can_preempt,
+			 const jspan_context& parent_ctx) final;
 
   void on_digest_updates() final;
 
@@ -952,7 +953,8 @@ class PgScrubber : public ScrubPgIF,
 			  hobject_t start,
 			  hobject_t end,
 			  bool deep,
-			  bool allow_preemption);
+			  bool allow_preemption,
+			  const jspan_context& parent_ctx);
 
 
   Scrub::MapsCollectionStatus m_maps_status;

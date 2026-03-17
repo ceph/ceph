@@ -301,6 +301,7 @@ class ScrubMachine : public ScrubFsmIf, public sc::state_machine<ScrubMachine, N
   ScrubMachineListener* m_scrbr;
   jspan_ptr m_tracer;
   jspan_ptr m_parent_trace;
+  jspan_context m_replica_parent_ctx{false, false};  ///< trace context received from primary via MOSDRepScrub
   std::ostream& gen_prefix(std::ostream& out) const;
 
   void assert_not_in_session() const final;

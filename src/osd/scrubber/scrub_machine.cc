@@ -625,7 +625,9 @@ sc::result WaitLastUpdate::react(const InternalAllUpdates&)
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << "WaitLastUpdate::react(const InternalAllUpdates&)" << dendl;
 
-  scrbr->get_replicas_maps(scrbr->get_preemptor().is_preemptable());
+  auto& tracer = context<ScrubMachine>().m_tracer;
+  auto ctx = tracer ? tracer->GetContext() : jspan_context{false, false};
+  scrbr->get_replicas_maps(scrbr->get_preemptor().is_preemptable(), ctx);
   return transit<BuildMap>();
 }
 
@@ -1074,15 +1076,15 @@ ReplicaActiveOp::ReplicaActiveOp(my_context ctx)
   dout(10) << "-- state -->> ReplicaActive/ReplicaActiveOp" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   auto span_label = fmt::format("{}_replica_ReplicaActive/ReplicaActiveOp", pg_id.pgid);
-  if (context<ScrubMachine>().m_tracer && context<ScrubMachine>().m_tracer->IsRecording()){
-    auto text = "REPLICA TRACE SPAN " + span_label + " active";
-    dout(10) << text<< dendl;
+  // Use the trace context propagated from the primary via MOSDRepScrub so that
+  // replica spans are linked under the same trace as the primary.
+  auto& primary_ctx = context<ScrubMachine>().m_replica_parent_ctx;
+  auto span = tracing::scrubber::tracer.add_span(span_label, primary_ctx);
+  if (span && span->IsRecording()) {
+    dout(10) << "REPLICA TRACE SPAN " << span_label << " active" << dendl;
   } else {
-    auto text = "REPLICA TRACE SPAN " + span_label + " inactive";
-    dout(10) << text<< dendl;
+    dout(10) << "REPLICA TRACE SPAN " << span_label << " inactive (no primary context)" << dendl;
   }
-  
-  auto span = tracing::scrubber::tracer.add_span(span_label, context<ScrubMachine>().m_tracer);
   context<ScrubMachine>().m_parent_trace = context<ScrubMachine>().m_tracer;
   std::swap(span, context<ScrubMachine>().m_tracer);
   scrbr->on_replica_init();
