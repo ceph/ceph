@@ -11,6 +11,7 @@
 #include <boost/statechart/state.hpp>
 #include <boost/statechart/state_machine.hpp>
 
+#include "common/tracer.h"
 #include "osd/scrubber_common.h"
 
 namespace Scrub {
@@ -53,6 +54,8 @@ class ScrubFsmIf {
 
   /// "initiate" the state machine (an internal state_chart function)
   virtual void initiate() = 0;
+
+  virtual void set_replica_parent_ctx(const jspan_context& ctx) = 0;
 };
 
 }  // namespace Scrub

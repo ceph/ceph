@@ -1663,7 +1663,8 @@ void PgScrubber::replica_scrub_op(OpRequestRef op)
   replica_scrubmap = ScrubMap{};
   replica_scrubmap_pos = ScrubMapBuilder{};
 
-  m_fsm->m_replica_parent_ctx = msg->otel_trace;
+  // m_fsm->m_replica_parent_ctx = msg->otel_trace;
+  m_fsm->set_replica_parent_ctx(msg->otel_trace);
   m_replica_min_epoch = msg->min_epoch;
   m_start = msg->start;
   m_end = msg->end;

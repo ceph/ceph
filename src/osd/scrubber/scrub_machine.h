@@ -321,6 +321,10 @@ class ScrubMachine : public ScrubFsmIf, public sc::state_machine<ScrubMachine, N
     sc::state_machine<ScrubMachine, NotActive>::process_event(evt);
   }
 
+  void set_replica_parent_ctx(const jspan_context& ctx){
+    m_replica_parent_ctx = ctx;
+  }
+
   /// the time when the session was initiated
   std::optional<ScrubTimePoint> m_session_started_at;
 
