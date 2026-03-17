@@ -237,10 +237,63 @@ def test_orphaned_list_entries(connection, bucket):
     # Ensure versioning is enabled
     connection.BucketVersioning(BUCKET_NAME).enable()
 
+    # =========================================================================
+    # STEP 1: Verify normal objects are not affected by bucket check orphan
+    # =========================================================================
+    # Create a "sane" versioned object: upload twice, then delete.
+    # This creates a non-current data version + current delete marker.
+    # bucket check orphan should NOT report or touch these normal entries.
+    log.debug('TEST: bucket check orphan does not report normal versioned objects\n')
+    sane_key = 'sane-object'
+    # Upload twice to create non-current version
+    bucket.put_object(Key=sane_key, Body=b'version1')
+    bucket.put_object(Key=sane_key, Body=b'version2')
+    # Delete to create current delete marker
+    bucket.Object(sane_key).delete()
+
+    # Verify the object has proper index entries (plain + instance for each version)
+    out = exec_cmd(f'radosgw-admin bi list --bucket {BUCKET_NAME} --object {sane_key}')
+    sane_entries = json.loads(out.replace(b'\x80', b'0x80'))
+    sane_entry_types = [e['type'] for e in sane_entries]
+    assert 'plain' in sane_entry_types, 'sane object should have plain entries'
+    assert 'instance' in sane_entry_types, 'sane object should have instance entries'
+    log.info(f'  Created sane object {sane_key} with entry types: {sane_entry_types}')
+
+    # bucket check orphan should not report this sane object
+    out = exec_cmd(f'radosgw-admin bucket check orphan --bucket {BUCKET_NAME} --dump-keys')
+    json_out = json.loads(out)
+    sane_in_output = [e for e in json_out if e.get('name') == sane_key]
+    assert len(sane_in_output) == 0, \
+        f'bucket check orphan should not report sane object {sane_key}, but found: {sane_in_output}'
+    log.info(f'  bucket check orphan: Did not report sane object (as expected)')
+
+    # bucket check orphan --fix should not touch sane object
+    log.debug('TEST: bucket check orphan --fix does not touch normal versioned objects\n')
+    out = exec_cmd(f'radosgw-admin bucket check orphan --bucket {BUCKET_NAME} --fix --dump-keys')
+    json_out = json.loads(out)
+    sane_in_output = [e for e in json_out if e.get('name') == sane_key]
+    assert len(sane_in_output) == 0, \
+        f'bucket check orphan --fix should not report sane object {sane_key}, but found: {sane_in_output}'
+
+    # Verify index entries are still intact after --fix
+    out = exec_cmd(f'radosgw-admin bi list --bucket {BUCKET_NAME} --object {sane_key}')
+    sane_entries_after = json.loads(out.replace(b'\x80', b'0x80'))
+    assert len(sane_entries_after) == len(sane_entries), \
+        f'sane object index entries changed after --fix: before={len(sane_entries)}, after={len(sane_entries_after)}'
+    log.info(f'  bucket check orphan --fix: Did not touch sane object (as expected)')
+
+    # Clean up sane object
+    for e in sane_entries:
+        if e['type'] == 'plain':
+            continue  # Will be cleaned up with instance
+        instance = e.get('entry', {}).get('instance', '')
+        if instance:
+            connection.ObjectVersion(bucket.name, sane_key, instance).delete()
+
     orphaned_keys = ['orphan1', 'orphan2']
 
     # =========================================================================
-    # STEP 1: Create orphaned list entries
+    # STEP 2: Create orphaned list entries
     # =========================================================================
     log.debug('TEST: orphaned list entries can be created\n')
     orphaned_objs = create_orphaned_list_entries(connection, bucket, orphaned_keys)
@@ -249,7 +302,7 @@ def test_orphaned_list_entries(connection, bucket):
     log.info(f'Successfully created {len(orphaned_objs)} orphaned list entries')
 
     # =========================================================================
-    # STEP 2: Verify the orphaned state
+    # STEP 3: Verify the orphaned state
     # =========================================================================
     log.debug('TEST: orphaned list entries appear in bucket listing\n')
     listed_versions = list(bucket.object_versions.all())
@@ -269,7 +322,7 @@ def test_orphaned_list_entries(connection, bucket):
         log.info(f'  {key}: entry types = {entry_types} (expected: only plain)')
 
     # =========================================================================
-    # STEP 3: Verify existing bucket check commands do NOT fix the issue
+    # STEP 4: Verify existing bucket check commands do NOT fix the issue
     # =========================================================================
     log.debug('Verifying existing bucket check commands do NOT fix orphaned entries')
 
@@ -307,7 +360,7 @@ def test_orphaned_list_entries(connection, bucket):
     log.info('  bucket check olh --fix: Did NOT fix orphaned entries (as expected)')
 
     # =========================================================================
-    # STEP 4: Test bucket check orphan command
+    # STEP 5: Test bucket check orphan command with orphaned entries
     # =========================================================================
     log.debug('TEST: bucket check orphan finds orphaned list entries\n')
     out = exec_cmd(f'radosgw-admin bucket check orphan --bucket {BUCKET_NAME} --dump-keys')
