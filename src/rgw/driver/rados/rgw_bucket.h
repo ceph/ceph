@@ -355,6 +355,8 @@ public:
                       RGWFormatterFlusher& flusher);
   int check_index_unlinked(rgw::sal::RadosStore* rados_store, const DoutPrefixProvider *dpp, RGWBucketAdminOpState& op_state,
                            RGWFormatterFlusher& flusher);
+  int check_index_orphan(rgw::sal::RadosStore* rados_store, const DoutPrefixProvider *dpp, RGWBucketAdminOpState& op_state,
+                         RGWFormatterFlusher& flusher);
 
   int check_index(const DoutPrefixProvider *dpp, optional_yield y,
           RGWBucketAdminOpState& op_state,
@@ -395,6 +397,8 @@ public:
                              RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp);
   static int check_index_unlinked(rgw::sal::RadosStore* driver, RGWBucketAdminOpState& op_state,
                                   RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp);
+  static int check_index_orphan(rgw::sal::RadosStore* driver, RGWBucketAdminOpState& op_state,
+                                RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp);
 
   static int remove_bucket(rgw::sal::Driver* driver, const rgw::SiteConfig& site, RGWBucketAdminOpState& op_state, optional_yield y,
 			   const DoutPrefixProvider *dpp, bool bypass_gc = false, bool keep_index_consistent = true, bool forwarded_request = false);

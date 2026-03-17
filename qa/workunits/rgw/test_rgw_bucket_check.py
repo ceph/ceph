@@ -225,6 +225,9 @@ def test_orphaned_list_entries(connection, bucket):
     This test:
     1. Creates orphaned list entries (simulating the corruption)
     2. Verifies existing bucket check commands do NOT fix the issue
+    3. Then, verifies that the new bucket check orphan command finds and
+       fixes the orphaned delete marker entries, while skipping data objects
+       to avoid orphaning RADOS data.
     """
     log.debug('TEST SUITE: Orphaned List Entries (list entry WITHOUT instance entry)')
 
@@ -302,6 +305,59 @@ def test_orphaned_list_entries(connection, bucket):
     out = exec_cmd(f'radosgw-admin bucket check olh --bucket {BUCKET_NAME} --fix --dump-keys')
     verify_orphaned_entries_exist(orphaned_objs, "after bucket check olh --fix")
     log.info('  bucket check olh --fix: Did NOT fix orphaned entries (as expected)')
+
+    # =========================================================================
+    # STEP 4: Test bucket check orphan command
+    # =========================================================================
+    log.debug('TEST: bucket check orphan finds orphaned list entries\n')
+    out = exec_cmd(f'radosgw-admin bucket check orphan --bucket {BUCKET_NAME} --dump-keys')
+    json_out = json.loads(out)
+    # bucket check orphan reports delete markers (delete_marker=true) and skipped
+    # data objects (action=skipped). Only delete markers are fixed.
+    delete_markers = [e for e in json_out if e.get('delete_marker', False) and e.get('action') != 'skipped']
+    skipped_data_objs = [e for e in json_out if e.get('action') == 'skipped']
+    log.info(f'  bucket check orphan: Found {len(delete_markers)} delete markers, {len(skipped_data_objs)} skipped data objects')
+
+    assert len(delete_markers) == len(orphaned_keys), \
+        f'bucket check orphan should find {len(orphaned_keys)} delete marker orphans, found {len(delete_markers)}'
+
+    # Verify delete markers match our orphaned objects
+    found_keys = set((e['name'], e['instance']) for e in delete_markers)
+    for key, instance in orphaned_objs:
+        assert (key, instance) in found_keys, f'orphaned entry {key}:{instance} not found by bucket check orphan'
+
+    log.debug('TEST: bucket check orphan --fix removes orphaned delete markers\n')
+    out = exec_cmd(f'radosgw-admin bucket check orphan --bucket {BUCKET_NAME} --fix --dump-keys')
+    json_out = json.loads(out)
+    fixed_delete_markers = [e for e in json_out if e.get('delete_marker', False) and e.get('action') != 'skipped']
+    assert len(fixed_delete_markers) == len(orphaned_keys), \
+        f'bucket check orphan --fix should report {len(orphaned_keys)} fixed delete markers, reported {len(fixed_delete_markers)}'
+    log.info(f'  bucket check orphan --fix: Removed {len(fixed_delete_markers)} orphaned delete markers')
+
+    # Verify orphaned delete marker entries are removed after fix.
+    # Data objects (exists=true) are intentionally skipped to avoid orphaning RADOS data.
+    # OLH markers (flags=8, empty instance) may also remain.
+    log.debug('TEST: orphaned delete marker entries are removed after fix\n')
+    for key, instance in orphaned_objs:
+        out = exec_cmd(f'radosgw-admin bi list --bucket {BUCKET_NAME} --object {key}')
+        entries = json.loads(out.replace(b'\x80', b'0x80'))
+        # Filter to delete marker entries (exists=false, non-empty instance)
+        delete_marker_entries = [e for e in entries
+                                 if e.get('entry', {}).get('instance', '')
+                                 and not e.get('entry', {}).get('exists', True)]
+        assert len(delete_marker_entries) == 0, \
+            f'orphaned delete marker {key}:{instance} should be removed after bucket check orphan --fix'
+    log.info('  Verified: All orphaned delete marker entries removed')
+
+    # Verify bucket check orphan only finds skipped data objects (no delete markers)
+    log.debug('TEST: bucket check orphan finds no delete marker orphans after fix\n')
+    out = exec_cmd(f'radosgw-admin bucket check orphan --bucket {BUCKET_NAME} --dump-keys')
+    json_out = json.loads(out)
+    delete_markers_remaining = [e for e in json_out if e.get('delete_marker', False) and e.get('action') != 'skipped']
+    assert len(delete_markers_remaining) == 0, \
+        f'bucket check orphan should find 0 delete marker orphans after fix, found {len(delete_markers_remaining)}'
+    skipped_entries = [e for e in json_out if e.get('action') == 'skipped']
+    log.info(f'  bucket check orphan: Found 0 delete markers, {len(skipped_entries)} skipped data objects (expected)')
 
 
 def main():
