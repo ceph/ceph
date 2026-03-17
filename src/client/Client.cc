@@ -10817,8 +10817,8 @@ int Client::_lookup_vino(vinodeno_t vino, const UserPerm& perms, Inode **inode)
 int Client::lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode)
 {
   vinodeno_t vino(ino, CEPH_NOSNAP);
-  std::scoped_lock lock(client_lock);
-  return _lookup_vino(vino, perms, inode);
+    std::scoped_lock lock(client_lock);
+    return _lookup_vino(vino, perms, inode);
 }
 
 /**
@@ -13939,9 +13939,12 @@ int Client::get_snap_info(const char *path, const UserPerm &perms, SnapInfo *sna
   if (in->snapid == CEPH_NOSNAP) {
     return -EINVAL;
   }
+  
+  Inode *refreshed = nullptr;
+  lookup_ino(in->ino, perms, &refreshed);
 
-  snap_info->id = in->snapid;
-  snap_info->metadata = in->snap_metadata;
+  snap_info->id = refreshed->snapid;
+  snap_info->metadata = refreshed->snap_metadata;
   return 0;
 }
 
