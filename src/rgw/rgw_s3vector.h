@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 #include <vector>
 #include "include/encoding.h"
@@ -13,6 +14,7 @@ namespace ceph {
 class Formatter;
 }
 class JSONObj;
+class JSONParser;
 class DoutPrefixProvider;
 
 namespace rgw::sal {
@@ -25,6 +27,24 @@ enum class DistanceMetric {
   UNKNOWN,
   COSINE,
   EUCLIDEAN,
+};
+
+enum class FilterableMetadataType {
+  STRING,
+  NUMBER,
+  BOOLEAN,
+  STRING_LIST,
+  NUMBER_LIST,
+  BOOLEAN_LIST,
+};
+
+struct filterable_metadata_key_t {
+  std::string name;
+  FilterableMetadataType type = FilterableMetadataType::STRING;
+  bool must_exist = false;
+
+  void dump(ceph::Formatter* f) const;
+  void decode_json(JSONObj* obj);
 };
 
 /*
@@ -46,6 +66,7 @@ struct create_index_t {
   DistanceMetric distance_metric;
   std::string index_name;
   std::vector<std::string> non_filterable_metadata_keys;
+  std::vector<filterable_metadata_key_t> filterable_metadata_keys;
   boost::optional<rgw::ARN> vector_bucket_arn;
   std::string vector_bucket_name;
 
@@ -304,6 +325,7 @@ struct get_index_reply_t {
   std::string index_arn;
   std::string index_name;
   std::vector<std::string> non_filterable_metadata_keys;
+  std::vector<filterable_metadata_key_t> filterable_metadata_keys;
   std::string vector_bucket_name;
 
   void dump(ceph::Formatter* f) const;
@@ -426,10 +448,11 @@ struct delete_vectors_t {
     "returnDistance": boolean,
     "returnMetadata": boolean,
     "topK": number,
+    "postFiltering": boolean,
   }
 */
 struct query_vectors_t {
-  std::string filter; // JSON string
+  std::string filter;
   boost::optional<rgw::ARN> index_arn;
   std::string index_name;
   std::string vector_bucket_name;
@@ -437,6 +460,7 @@ struct query_vectors_t {
   bool return_distance = false;
   bool return_metadata = false;
   unsigned int top_k;
+  bool post_filtering = false;
 
   void dump(ceph::Formatter* f) const;
   void decode_json(JSONObj* obj);
@@ -474,12 +498,17 @@ inline rgw::ARN vector_bucket_arn(const std::string& zonegroup, const std::strin
     );
 }
 
-int create_index(const create_index_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
+struct validation_error_t {
+  std::string path;
+  std::string message;
+};
+
+int create_index(const create_index_t& configuration, DoutPrefixProvider* dpp, optional_yield y, std::vector<validation_error_t>& errors);
 int create_vector_bucket(const create_vector_bucket_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
 int delete_index(const delete_index_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
 int delete_vector_bucket(const delete_vector_bucket_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
 int delete_vector_bucket_policy(const delete_vector_bucket_policy_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
-int put_vectors(const put_vectors_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
+int put_vectors(const put_vectors_t& configuration, DoutPrefixProvider* dpp, optional_yield y, std::vector<validation_error_t>& errors);
 int get_vectors(const get_vectors_t& configuration, DoutPrefixProvider* dpp, optional_yield y, get_vectors_reply_t& reply);
 int list_vectors(const list_vectors_t& configuration, DoutPrefixProvider* dpp, optional_yield y, list_vectors_reply_t& reply);
 int get_index(const get_index_t& configuration, const std::string& region, const std::string& account, DoutPrefixProvider* dpp, optional_yield y, get_index_reply_t& reply);
@@ -487,7 +516,7 @@ int list_indexes(const list_indexes_t& configuration, DoutPrefixProvider* dpp, o
 int put_vector_bucket_policy(const put_vector_bucket_policy_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
 int get_vector_bucket_policy(const get_vector_bucket_policy_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
 int delete_vectors(const delete_vectors_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
-int query_vectors(const query_vectors_t& configuration, DoutPrefixProvider* dpp, optional_yield y, query_vectors_reply_t& reply);
+int query_vectors(const query_vectors_t& configuration, std::optional<JSONParser>& filter, DoutPrefixProvider* dpp, optional_yield y, query_vectors_reply_t& reply, std::vector<validation_error_t>& errors);
 
 }
 
