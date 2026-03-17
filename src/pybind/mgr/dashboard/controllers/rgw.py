@@ -1432,9 +1432,9 @@ class RgwZonegroup(RESTController):
 
     @Endpoint('DELETE', path='storage-class')
     @DeletePermission
-    def remove_storage_class(self, placement_id: str, storage_class: str):
+    def remove_storage_class(self, placement_id: str, storage_class: str, zone_name: str = ''):
         multisite_instance = RgwMultisite()
-        result = multisite_instance.delete_placement_targets(placement_id, storage_class)
+        result = multisite_instance.delete_placement_targets(placement_id, storage_class, zone_name)
         return result
 
     @Endpoint('POST', path='storage-class')
