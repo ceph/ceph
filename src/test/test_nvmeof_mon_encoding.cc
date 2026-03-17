@@ -76,7 +76,7 @@ void test_MNVMeofGwMap() {
   std::string pool = "pool1";
   std::string group = "grp1";
   std::string gw_id = "GW1";
-  NvmeGwClientState state(1, 32, gw_availability_t::GW_UNAVAILABLE, 0, false);
+  NvmeGwClientState state(1, 32, gw_availability_t::GW_UNAVAILABLE, 0, false, 0);
   std::string nqn = "nqn";
   ana_state_t ana_state;
   NqnState nqn_state(nqn, ana_state);

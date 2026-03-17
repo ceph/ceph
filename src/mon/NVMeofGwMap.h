@@ -44,7 +44,9 @@ public:
 
   // epoch is for Paxos synchronization  mechanizm
   epoch_t epoch = 0;
+  bool enabled_beacon_diff = true;
   bool delay_propose = false;
+  uint64_t last_published_features = 0;
 
   std::map<NvmeGroupKey, NvmeGwMonStates>  created_gws;
 
@@ -94,6 +96,7 @@ public:
           std::string &location, bool &propose_pending);
   int cfg_location_disaster_clear(const NvmeGroupKey& group_key,
           std::string &location, bool &propose_pending);
+  int cfg_enable_disable_beacon_diff(bool enable, bool &propose_pending);
   void process_gw_map_ka(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     epoch_t& last_osd_epoch,  bool &propose_pending);
@@ -209,7 +212,9 @@ public:
       encode(gw_epoch, bl);
     }
     if (version >=3) {
+      encode(enabled_beacon_diff, bl);
       encode(disaster_locations, bl);
+      encode(last_published_features,bl);
     }
     ENCODE_FINISH(bl);
   }
@@ -229,7 +234,11 @@ public:
       dout(20)  << "decode gw epoch "  << dendl;
     }
     if (struct_v >=3) {
+      decode(enabled_beacon_diff, bl);
       decode(disaster_locations, bl);
+      decode(last_published_features, bl);
+      dout(20) << " decoded features "
+                     << last_published_features << dendl;
       dout(20)  << "decode  disaster location "  << dendl;
     }
     DECODE_FINISH(bl);

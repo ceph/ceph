@@ -145,6 +145,7 @@ inline std::ostream& operator<<(
      << " availablilty " << value.availability
      << " sequence " << value.last_beacon_seq_number
      << " sequence-ooo " << value.last_beacon_seq_ooo
+     << " quorum features " << value.quorum_features
      << " GwSubsystems: [ ";
   for (const auto& sub: value.subsystems) {
     os << sub.second << " ";
@@ -356,6 +357,7 @@ inline void encode(const NvmeGwClientState& state,  ceph::bufferlist &bl, uint64
   if (version >= 2) {
     encode((uint64_t)state.last_beacon_seq_number, bl);
     encode(state.last_beacon_seq_ooo, bl);
+    encode((uint64_t)state.quorum_features, bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -374,6 +376,7 @@ inline  void decode(
     decode(last_beacon_seq_number, bl);
     state.last_beacon_seq_number = last_beacon_seq_number;
     decode(state.last_beacon_seq_ooo, bl);
+    decode(state.quorum_features, bl);
   }
   DECODE_FINISH(bl);
 }

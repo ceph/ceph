@@ -86,6 +86,7 @@ public:
   const epoch_t&           get_last_gwmap_epoch() const { return last_gwmap_epoch; }
   const BeaconSubsystems&  get_subsystems()     const   { return subsystems; };
   uint64_t get_sequence() const { return sequence; }
+  uint64_t get_features() const { return affected_features; }
 
 private:
   ~MNVMeofGwBeacon() final {}
