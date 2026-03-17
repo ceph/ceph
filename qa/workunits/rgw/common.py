@@ -7,6 +7,8 @@ import boto3
 import botocore.exceptions
 import random
 import json
+import os
+import tempfile
 from time import sleep
 
 log.basicConfig(format = '%(message)s', level=log.DEBUG)
@@ -101,3 +103,102 @@ def create_unlinked_objects(conn, bucket, key_list):
         exec_cmd('ceph config rm client rgw_debug_inject_olh_cancel_modification_err')
     return object_versions
 
+
+def get_bucket_index_info(bucket_name):
+    """Get the bucket index pool, bucket ID, and number of shards."""
+    out = exec_cmd(f'radosgw-admin bucket stats --bucket {bucket_name}')
+    stats = json.loads(out)
+    bucket_id = stats['id']
+    num_shards = stats.get('num_shards', 1)
+    index_pool = 'default.rgw.buckets.index'
+    return index_pool, bucket_id, num_shards
+
+
+def create_orphaned_list_entries(conn, bucket, key_list):
+    """
+    Creates orphaned list entries for each key in key_list.
+    An orphaned list entry is a plain (list) entry WITHOUT a corresponding
+    instance entry. This simulates the corruption scenario where LC fails
+    with ENOENT because bi_get_instance() cannot find the instance entry.
+
+    Steps:
+    1. Create a normal object (creates list + instance + olh entries)
+    2. Delete the object via S3 (creates delete marker)
+    3. Use rados to surgically remove the instance and olh entries directly
+
+    Returns list of (key, version_id) tuples representing orphaned entries.
+    """
+    orphaned_entries = []
+    index_pool, bucket_id, num_shards = get_bucket_index_info(bucket.name)
+
+    for key in key_list:
+        # Create object and then delete to create a delete marker
+        bucket.put_object(Key=key, Body=b"orphan_test_data")
+        bucket.Object(key).delete()
+
+        # Get the bi list to find the delete marker's instance entry
+        out = exec_cmd(f'radosgw-admin bi list --bucket {bucket.name} --object {key}')
+        entries = json.loads(out.replace(b'\x80', b'0x80'))
+
+        # Find ALL instance entries for this key
+        # We need to remove all of them to create orphaned list entry
+        FLAG_DELETE_MARKER = 0x4
+        all_instances = []
+        delete_marker_instance = None
+        for entry in entries:
+            if entry['type'] == 'instance':
+                ent = entry['entry']
+                instance_id = ent['instance']
+                all_instances.append(instance_id)
+                flags = ent.get('flags', 0)
+                if (flags & FLAG_DELETE_MARKER) != 0:
+                    delete_marker_instance = instance_id
+                    log.debug(f'Found delete marker: {ent["name"]}:{instance_id} flags={flags}')
+
+        if not delete_marker_instance:
+            log.error(f'Could not identify delete marker instance for key={key}, skipping')
+            continue
+
+        orphaned_entries.append((key, delete_marker_instance))
+
+        # Now, we need to remove these instance entries and the OLH entry
+        # to create an orphaned list entry state
+        olh_key_bytes = b'\x801001_' + key.encode()
+
+        # Try all shards; object could be in any shard
+        for shard_num in range(num_shards):
+            shard_oid = f'.dir.{bucket_id}.{shard_num}'
+
+            # Remove ALL instance entries for this key
+            for instance_id in all_instances:
+                instance_key_bytes = b'\x801000_' + key.encode() + b'\x00i' + instance_id.encode()
+                with tempfile.NamedTemporaryFile(delete=False) as f:
+                    f.write(instance_key_bytes)
+                    instance_key_file = f.name
+                try:
+                    exec_cmd(f"rados -p {index_pool} rmomapkey {shard_oid} --omap-key-file {instance_key_file}",
+                             check_retcode=False)
+                finally:
+                    os.unlink(instance_key_file)
+
+            # Remove OLH entry
+            with tempfile.NamedTemporaryFile(delete=False) as f:
+                f.write(olh_key_bytes)
+                olh_key_file = f.name
+            try:
+                exec_cmd(f"rados -p {index_pool} rmomapkey {shard_oid} --omap-key-file {olh_key_file}",
+                         check_retcode=False)
+            finally:
+                os.unlink(olh_key_file)
+
+    # Verify orphaned state - should only have plain entries now
+    for key, instance in orphaned_entries:
+        out = exec_cmd(f'radosgw-admin bi list --bucket {bucket.name} --object {key}')
+        entries = json.loads(out.replace(b'\x80', b'0x80'))
+        entry_types = [e['type'] for e in entries]
+        if 'instance' in entry_types or 'olh' in entry_types:
+            log.error(f'Key {key} still has instance/olh entries after removal attempt')
+        else:
+            log.info(f'Successfully created orphaned list entry for {key}:{instance}')
+
+    return orphaned_entries
