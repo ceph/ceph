@@ -612,6 +612,40 @@ def test_raw_ceph_volume_command_4(test_input7):
     assert cmds[2] == 'raw prepare --bluestore --data /dev/sdc --block.db /dev/sde --block.wal /dev/sdh --crush-device-class ssd --osd-type classic'
 
 
+def test_raw_ceph_volume_command_5():
+    spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
+                          service_id='foobar',
+                          data_devices=DeviceSelection(rotational=True),
+                          method='raw',
+                          osd_id_claims={'host1': ['0', '1']},
+                          )
+    spec.validate()
+    inventory = _mk_inventory(_mk_device(rotational=True) +
+                              _mk_device(rotational=True)
+                              )
+    sel = drive_selection.DriveSelection(spec, inventory)
+    cmds = translate.to_ceph_volume(sel, ['0', '1']).run()
+    assert cmds[0] == 'raw prepare --bluestore --data /dev/sda --osd-type classic --osd-id 0'
+    assert cmds[1] == 'raw prepare --bluestore --data /dev/sdb --osd-type classic --osd-id 1'
+
+
+def test_raw_ceph_volume_command_6():
+    spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
+                          service_id='foobar',
+                          data_devices=DeviceSelection(rotational=True),
+                          method='raw',
+                          osd_id_claims={'host1': ['0']},
+                          )
+    spec.validate()
+    inventory = _mk_inventory(_mk_device(rotational=True) +
+                              _mk_device(rotational=True)
+                              )
+    sel = drive_selection.DriveSelection(spec, inventory)
+    cmds = translate.to_ceph_volume(sel, ['0']).run()
+    assert cmds[0] == 'raw prepare --bluestore --data /dev/sda --osd-type classic --osd-id 0'
+    assert cmds[1] == 'raw prepare --bluestore --data /dev/sdb --osd-type classic'
+
+
 def test_ceph_volume_command_seastore():
     spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
                           service_id='foobar',
