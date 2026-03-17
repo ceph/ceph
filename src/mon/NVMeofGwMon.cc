@@ -157,6 +157,19 @@ void NVMeofGwMon::tick()
     pending_map.track_deleting_gws(group_key, *subsystems, propose);
     _propose_pending |= propose;
   }
+
+  // Periodically update the features of all created GWs
+  uint64_t features = mon.get_quorum_con_features();
+  for (auto &[group_key, gws_states]: pending_map.created_gws) {
+    for (auto& gw_state : gws_states) { // loop for GWs inside nqn group
+     if(gw_state.second.last_published_features != features) {
+       dout(4) << " Update the quorum features of the GW " << gw_state.first << " to "
+               << features << dendl;
+       gw_state.second.last_published_features = features;
+       _propose_pending = true;
+     }
+   }
+  }
   // Periodic: take care of not handled ANA groups
   pending_map.handle_abandoned_ana_groups(propose);
   _propose_pending |= propose;
@@ -859,6 +872,8 @@ void NVMeofGwMon::do_send_map_ack(MonOpRequestRef op,
       pending_gw_map : map.created_gws[group_key][gw_id];
     ack_map.created_gws[group_key][gw_id].beacon_sequence =
       pending_gw_map.beacon_sequence;
+    ack_map.created_gws[group_key][gw_id].last_published_features =
+      pending_gw_map.last_published_features;
     if (!is_correct_sequence) {
       dout(4) << " GW " << gw_id <<
       " sending ACK due to receiving beacon_sequence out of order" << dendl;
@@ -894,7 +909,7 @@ void NVMeofGwMon::do_send_map_ack(MonOpRequestRef op,
  * if descriptor is DELETED do the following
  * look for subs nqn in the gw.subs list and if found - delete
  */
-int NVMeofGwMon::apply_beacon(const NvmeGwId &gw_id, int gw_version,
+int NVMeofGwMon::apply_beacon(const NvmeGwId &gw_id, int affected_version,
         const NvmeGroupKey& group_key, void *msg,
         const BeaconSubsystems& sub, gw_availability_t &avail,
         bool &propose_pending)
@@ -905,8 +920,7 @@ int NVMeofGwMon::apply_beacon(const NvmeGwId &gw_id, int gw_version,
                      pending_map.created_gws[group_key][gw_id].subsystems;
   auto &state = pending_map.created_gws[group_key][gw_id];
 
-  if (!HAVE_FEATURE(mon.get_quorum_con_features(), NVMEOF_BEACON_DIFF) &&
-		  gw_version == 0) {
+  if (affected_version == BEACON_VERSION_LEGACY) {
     if (gw_subs != sub) {
       dout(10) << "BEACON_DIFF logic not applied."
           "subsystems of GW changed, propose pending " << gw_id << dendl;
@@ -995,8 +1009,10 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
   auto m = op->get_req<MNVMeofGwBeacon>();
   uint64_t sequence = m->get_sequence();
   int version = m->version;
+  uint16_t header_ver =  m->get_header().version;
   dout(10) << "availability " << m->get_availability()
-       << " sequence " << sequence << " version " << version
+           << " sequence " << sequence << " version " << version
+	   << " header version " << header_ver
 	   << " GW : " << m->get_gw_id()
 	   << " osdmap_epoch " << m->get_last_osd_epoch()
 	   << " subsystems " << m->get_subsystems().size() << dendl;
@@ -1037,7 +1053,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
       goto set_propose;
     } else {
       pending_map.created_gws[group_key][gw_id].subsystems.clear();
-      pending_map.set_gw_beacon_sequence_number(gw_id, version,
+      pending_map.set_gw_beacon_sequence_number(gw_id, header_ver,
             group_key, sequence);
       dout(4) << "GW beacon: Created state - full startup done " << gw_id
 	       << " GW state in monitor data-base : "
@@ -1068,7 +1084,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
     // if GW reports Avail/Unavail but in monitor's database it is Unavailable
     if (gw != group_gws.end()) {
       correct_sequence = pending_map.put_gw_beacon_sequence_number
-           (gw_id, version, group_key, sequence, stored_sequence);
+           (gw_id, header_ver, group_key, sequence, stored_sequence);
       // it means it did not perform "exit" after failover was set by
       // NVMeofGWMon
       if ((pending_map.created_gws[group_key][gw_id].availability ==
@@ -1123,7 +1139,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
     pending_map.set_addr_vect(gw_id, group_key, con->get_peer_addr());
     gw_propose = true;
   }
-  if (apply_beacon(gw_id, version, group_key, (void *)m, sub, avail, propose) !=0) {
+  if (apply_beacon(gw_id, header_ver, group_key, (void *)m, sub, avail, propose) !=0) {
     nonce_propose = true;
     dout(10) << "subsystem(subs/listener/nonce/NM) of GW changed, propose pending "
              << gw_id << " available " << avail <<  dendl;

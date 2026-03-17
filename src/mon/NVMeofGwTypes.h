@@ -153,6 +153,7 @@ struct NvmeGwMonState {
   uint64_t beacon_sequence = 0;// sequence number of last beacon copied to GW state
   bool beacon_sequence_ooo = false; // last beacon sequence was out of order;
   uint16_t beacon_index = 0; // used for filter acks sent to the client as response to beacon
+  uint64_t last_published_features = 0;
   /**
    * during redeploy action and maybe other emergency use-cases gw performs scenario
    * that we call fast-reboot. It quickly reboots(due to redeploy f.e) and sends the
@@ -259,14 +260,16 @@ struct NvmeGwClientState {
   gw_availability_t availability;
   uint64_t last_beacon_seq_number;
   bool last_beacon_seq_ooo; //out of order sequence
+  uint64_t quorum_features; // last quorum features
   NvmeGwClientState(NvmeAnaGrpId id, epoch_t epoch, gw_availability_t available,
-     uint64_t sequence, bool sequence_ooo)
+     uint64_t sequence, bool sequence_ooo, uint64_t last_published_features)
     : group_id(id), gw_map_epoch(epoch), availability(available),
-      last_beacon_seq_number(sequence), last_beacon_seq_ooo(sequence_ooo) {}
+      last_beacon_seq_number(sequence), last_beacon_seq_ooo(sequence_ooo),
+	  quorum_features(last_published_features) {}
 
   NvmeGwClientState()
     : NvmeGwClientState(
-      REDUNDANT_GW_ANA_GROUP_ID, 0, gw_availability_t::GW_UNAVAILABLE, 0, 0) {}
+      REDUNDANT_GW_ANA_GROUP_ID, 0, gw_availability_t::GW_UNAVAILABLE, 0, 0, 0) {}
 };
 
 struct Tmdata {

@@ -17,6 +17,7 @@
 #include "NVMeofGwMap.h"
 #include "OSDMonitor.h"
 #include "mon/health_check.h"
+#include "messages/MNVMeofGwBeacon.h"
 
 using std::list;
 using std::map;
@@ -48,7 +49,7 @@ void NVMeofGwMap::to_gmap(
 
       auto gw_state = NvmeGwClientState(
 	gw_created.ana_grp_id, epoch, availability, gw_created.beacon_sequence,
-	gw_created.beacon_sequence_ooo);
+	gw_created.beacon_sequence_ooo, gw_created.last_published_features);
       for (const auto& sub: gw_created.subsystems) {
 	gw_state.subsystems.insert({
 	    sub.nqn,
@@ -1568,9 +1569,7 @@ bool NVMeofGwMap::put_gw_beacon_sequence_number(const NvmeGwId &gw_id,
 {
   bool rc = true;
   NvmeGwMonState& gw_map = created_gws[group_key][gw_id];
-
-  if (HAVE_FEATURE(mon->get_quorum_con_features(), NVMEOF_BEACON_DIFF) ||
-		  (gw_version > 0) ) {
+  if (gw_version > BEACON_VERSION_LEGACY) {
     uint64_t seq_number = gw_map.beacon_sequence;
     if ((beacon_sequence != seq_number+1) &&
         !(beacon_sequence == 0 && seq_number == 0 )) {// new GW startup
@@ -1591,8 +1590,7 @@ bool NVMeofGwMap::set_gw_beacon_sequence_number(const NvmeGwId &gw_id,
 	 int gw_version, const NvmeGroupKey& group_key, uint64_t beacon_sequence)
 {
   NvmeGwMonState& gw_map = created_gws[group_key][gw_id];
-  if (HAVE_FEATURE(mon->get_quorum_con_features(), NVMEOF_BEACON_DIFF) ||
-		  (gw_version > 0)) {
+  if (gw_version > BEACON_VERSION_LEGACY) {
       gw_map.beacon_sequence = beacon_sequence;
       gw_map.beacon_sequence_ooo = false;
       dout(10) << gw_id << " set beacon_sequence " << beacon_sequence << dendl;
