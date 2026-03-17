@@ -59,6 +59,13 @@
   both --marker and --object-version options together (e.g., ``--marker=obj1 --object-version=abc123``).
   This enables proper pagination through versioned bucket listings without duplicates or
   infinite loops. For non-versioned buckets, use only --marker as before (backward compatible).
+* RGW: A new ``radosgw-admin bucket check orphan`` command identifies orphaned list
+  entries in versioned buckets: plain (listing) entries that have no corresponding
+  instance entry. Such entries appear in bucket listings but cannot be read, and can
+  cause lifecycle processing to fail with ENOENT. With the ``--fix`` flag, only orphaned
+  delete markers are removed; entries that still reference object data are reported and
+  skipped to avoid orphaning RADOS data. This is the inverse of ``bucket check unlinked``,
+  which finds instance entries that are missing their list entry.
 * RGW: OpenSSL engine support is deprecated in favor of provider support.
   - Removed the `openssl_engine_opts` configuration option. OpenSSL engine configuration in string format is no longer supported.
   - Added the `openssl_conf` configuration option for loading specified providers as default providers.
