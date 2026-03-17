@@ -482,14 +482,16 @@ class TestVolumesHelper(CephFSTestCase):
         """
         # get paths to validate old_inodes
         sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {self.volname} {subvolname} {group}')[1:].strip()
-        sv_path = Path(sv_path) #/volumes/<group>/<subvol>/<uuid>
-        sv_dir_path = sv_path.parent #/volumes/<group>/<subvol>
-        group_path = sv_path.parent.parent #/volumes/<group>
-        volumes_path = sv_path.parent.parent.parent #/volumes
-        root_path = sv_path.parent.parent.parent.parent #/
+        mnt_path = Path(sv_path) #/volumes/<group>/<subvol>/roots/<uuid>/mnt
+        uuid_path = mnt_path.parent #/volumes/<group>/<subvol>/roots/<uuid>
+        roots_path = uuid_path.parent #/volumes/<group>/<subvol>/roots
+        subvol_path = roots_path.parent #/volumes/<group>/<subvol>
+        group_path = subvol_path.parent #/volumes/<group>
+        volumes_path = group_path.parent #/volumes
+        root_path = volumes_path.parent #/
 
         # dump inodes to validate old_inodes
-        subvol_inode = self.mount_a.path_to_ino(sv_dir_path)
+        uuid_inode = self.mount_a.path_to_ino(uuid_path)
         group_inode = self.mount_a.path_to_ino(group_path)
         volumes_inode = self.mount_a.path_to_ino(volumes_path)
         root_inode = self.mount_a.path_to_ino(root_path)
@@ -504,7 +506,7 @@ class TestVolumesHelper(CephFSTestCase):
             self.fs.mds_asok(["flush", "journal"])
             self.fs.mds_asok(["flush", "journal"])
 
-        subvol_inode_dump = self.fs.mds_asok(['dump', 'inode', hex(subvol_inode)])
+        uuid_inode_dump = self.fs.mds_asok(['dump', 'inode', hex(uuid_inode)])
         group_inode_dump = self.fs.mds_asok(['dump', 'inode', hex(group_inode)])
         volumes_inode_dump = self.fs.mds_asok(['dump', 'inode', hex(volumes_inode)])
         root_inode_dump = self.fs.mds_asok(['dump', 'inode', hex(root_inode)])
@@ -529,27 +531,27 @@ class TestVolumesHelper(CephFSTestCase):
             # in that range. In conclusion, old_inode count depends if parent has snap or not at the time of directory creation
             # and as well on the propagation delay.
             if root_snapshot:
-                self.assertEqual(len(subvol_inode_dump["old_inodes"]), 2) # 1 + 1
+                self.assertEqual(len(uuid_inode_dump["old_inodes"]), 2) # 1 + 1
                 self.assertTrue(0 <= len(group_inode_dump["old_inodes"]) <= 2) # 0 + n
                 self.assertTrue(0 <= len(volumes_inode_dump["old_inodes"]) <= 2) # 0 + n
                 self.assertEqual(len(root_inode_dump["old_inodes"]), 2) # 2 + 0 (no parent snap for root)
             else:
-                self.assertEqual(len(subvol_inode_dump["old_inodes"]), 1) # 1 + 0
+                self.assertEqual(len(uuid_inode_dump["old_inodes"]), 1) # 1 + 0
                 self.assertEqual(len(group_inode_dump["old_inodes"]), 0) # 0 + 0
                 self.assertEqual(len(volumes_inode_dump["old_inodes"]), 0) # 0 + 0
                 self.assertEqual(len(root_inode_dump["old_inodes"]), 0) # 0 + 0
         elif mds_use_global_snaprealm_seq_for_subvol and not root_snapshot:
-            self.assertGreaterEqual(len(subvol_inode_dump["old_inodes"]), 1)
+            self.assertGreaterEqual(len(uuid_inode_dump["old_inodes"]), 1)
             self.assertGreaterEqual(len(group_inode_dump["old_inodes"]), 0)
             self.assertGreaterEqual(len(volumes_inode_dump["old_inodes"]), 0)
             self.assertGreaterEqual(len(root_inode_dump["old_inodes"]), 0)
         elif not mds_use_global_snaprealm_seq_for_subvol and not root_snapshot:
-            self.assertEqual(len(subvol_inode_dump["old_inodes"]), 1)
+            self.assertEqual(len(uuid_inode_dump["old_inodes"]), 1)
             self.assertEqual(len(group_inode_dump["old_inodes"]), 0)
             self.assertEqual(len(volumes_inode_dump["old_inodes"]), 0)
             self.assertEqual(len(root_inode_dump["old_inodes"]), 0)
         elif not mds_use_global_snaprealm_seq_for_subvol and root_snapshot:
-            self.assertGreaterEqual(len(subvol_inode_dump["old_inodes"]), 2)
+            self.assertGreaterEqual(len(uuid_inode_dump["old_inodes"]), 2)
             self.assertGreaterEqual(len(group_inode_dump["old_inodes"]), 0)
             self.assertGreaterEqual(len(volumes_inode_dump["old_inodes"]), 0)
             self.assertGreaterEqual(len(root_inode_dump["old_inodes"]), 2)
