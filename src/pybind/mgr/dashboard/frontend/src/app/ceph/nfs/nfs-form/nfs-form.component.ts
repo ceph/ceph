@@ -657,7 +657,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
       if (requestModel.rgw_export_type === 'bucket') {
         delete requestModel.fsal.user_id;
       } else {
-        requestModel.path = '';
+        requestModel.path = '/';
       }
     } else {
       delete requestModel.fsal.user_id;
