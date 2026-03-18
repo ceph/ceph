@@ -153,7 +153,7 @@ from cephadmlib.decorators import (
     executes_early,
     require_image
 )
-from cephadmlib.host_facts import HostFacts, list_networks
+from cephadmlib.host_facts import HostFacts, list_networks, list_rdma
 from cephadmlib.ssh import authorize_ssh_key, check_ssh_connectivity
 from cephadmlib.daemon_form import (
     DaemonForm,
@@ -3339,6 +3339,11 @@ def command_list_networks(ctx):
 
     print(json.dumps(r, indent=4, default=serialize_sets))
 
+
+def command_list_rdma(ctx: CephadmContext) -> None:
+    r = list_rdma(ctx)
+    print(json.dumps(r, indent=4))
+
 ##################################
 
 
@@ -4683,6 +4688,10 @@ def _get_parser():
     parser_list_networks = subparsers.add_parser(
         'list-networks', help='list IP networks')
     parser_list_networks.set_defaults(func=command_list_networks)
+
+    parser_list_rdma = subparsers.add_parser(
+        'list-rdma', help='list RDMA devices and their netdev interfaces')
+    parser_list_rdma.set_defaults(func=command_list_rdma)
 
     parser_adopt = subparsers.add_parser(
         'adopt', help='adopt daemon deployed with a different tool')

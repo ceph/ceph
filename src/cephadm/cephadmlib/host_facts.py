@@ -853,6 +853,49 @@ def list_networks(ctx):
     return res
 
 
+def list_rdma(ctx: CephadmContext) -> List[Dict[str, str]]:
+    """List RDMA devices by parsing 'rdma link show' output.
+    Returns a list of dicts with keys: link, state, physical_state, netdev.
+    Returns empty list if rdma tool is not installed or command fails.
+    """
+    execstr: Optional[str] = find_executable('rdma')
+    if not execstr:
+        logger.error("'rdma' command not found, no RDMA devices listed")
+        return []
+    try:
+        out, _, _ = call_throws(
+            ctx,
+            [execstr, 'link', 'show'],
+            verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+        )
+    except Exception as e:
+        logger.error('rdma link show failed: %s', e)
+        return []
+    # Format: link <name> state <state> physical_state <phys> netdev <netdev>
+    pattern = re.compile(
+        r'link\s+(\S+)\s+state\s+(\S+)\s+physical_state\s+(\S+)\s+netdev\s+'
+        r'(\S+)'
+    )
+    result: List[Dict[str, str]] = []
+    for line in out.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        m = pattern.search(line)
+        if m:
+            result.append(
+                {
+                    'link': m.group(1),
+                    'state': m.group(2),
+                    'physical_state': m.group(3),
+                    'netdev': m.group(4),
+                }
+            )
+        else:
+            logger.debug("Skipped RDMA device '%s', as pattern did not match", line)
+    return result
+
+
 def _list_ipv4_networks(
     ctx: CephadmContext,
 ) -> Dict[str, Dict[str, Set[str]]]:
