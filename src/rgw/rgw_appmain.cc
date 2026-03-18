@@ -511,32 +511,29 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
     /* ignore error */
   }
 
-#ifdef WITH_RADOSGW_RADOS
-  if (env.driver->get_name() == "rados") {
-    // add a watcher to respond to realm configuration changes
-    // if we're part of a realm, add a watcher to respond to configuration changes
-    if (const auto& realm = env.site->get_realm(); realm) {
-      realm_watcher = env.cfgstore->create_realm_watcher(dpp, null_yield, *realm);
-    }
-    if (realm_watcher) {
-      pusher = std::make_unique<RGWPeriodPusher>(dpp, env.driver, env.cfgstore, null_yield);
-      realm_watcher->add_watcher(RGWRealmNotify::ZonesNeedPeriod, *pusher);
+  // if we're part of a realm, add a watcher to respond to configuration changes
+  if (const auto& realm = env.site->get_realm(); realm) {
+    realm_watcher = env.cfgstore->create_realm_watcher(dpp, null_yield, *realm);
+  }
+  if (realm_watcher) {
+    pusher = std::make_unique<RGWPeriodPusher>(dpp, env.driver, env.cfgstore, null_yield);
+    realm_watcher->add_watcher(RGWRealmNotify::ZonesNeedPeriod, *pusher);
 
-      fe_pauser = std::make_unique<RGWFrontendPauser>(fes, pusher.get());
-      rgw_pauser = std::make_unique<RGWPauser>();
-      rgw_pauser->add_pauser(fe_pauser.get());
-      if (env.lua.background) {
-        rgw_pauser->add_pauser(env.lua.background);
-      }
+    fe_pauser = std::make_unique<RGWFrontendPauser>(fes, pusher.get());
+    rgw_pauser = std::make_unique<RGWPauser>();
+    rgw_pauser->add_pauser(fe_pauser.get());
+    if (env.lua.background) {
+      rgw_pauser->add_pauser(env.lua.background);
+    }
+#ifdef WITH_RADOSGW_RADOS
     if (dedup_background) {
       rgw_pauser->add_pauser(dedup_background.get());
     }
-      reloader = std::make_unique<RGWRealmReloader>(
-          env, *implicit_tenant_context, service_map_meta, rgw_pauser.get(), context_pool_holder.get());
-      realm_watcher->add_watcher(RGWRealmNotify::Reload, *reloader);
-    }
-  }
 #endif
+    reloader = std::make_unique<RGWRealmReloader>(
+        env, *implicit_tenant_context, service_map_meta, rgw_pauser.get(), context_pool_holder.get());
+    realm_watcher->add_watcher(RGWRealmNotify::Reload, *reloader);
+  }
 
   return r;
 } /* init_frontends2 */
