@@ -391,27 +391,36 @@ int process_request(const RGWProcessEnv& penv,
   {
     s->trace_enabled = tracing::rgw::tracer.is_enabled();
     if (!is_health_request) {
-      auto [lua_script, rc] = rgw::lua::read_script_or_bytecode(s, penv.lua.manager.get(),
-                                                  s->bucket_tenant, s->yield,
-                                                  rgw::lua::context::preRequest, "");
-      if (rc == -ENOENT) {
-        // no script, nothing to do
-      } else if (rc < 0) {
-        ldpp_dout(op, 5) <<
-          "WARNING: failed to execute pre request script. "
-          "error: " << rc << dendl;
-      } else {
-        int script_return_code = 0;
-        rc = rgw::lua::request::execute(rest, penv.olog.get(), s, op, lua_script, script_return_code);
+      std::vector<std::string> script_names;
+      const auto rc = rgw::lua::list_scripts(s, penv.lua.manager.get(), s->bucket_tenant, s->yield, rgw::lua::context::preRequest, script_names);
+      if (rc < 0) {
+        ldpp_dout(op, 5) << "WARNING: failed to list data scripts. error " << rc << dendl;
+        return rc;
+      }
 
-        if (rc < 0) {
+      for (const auto& name : script_names) {
+        auto [lua_script, rc] = rgw::lua::read_script_or_bytecode(s, penv.lua.manager.get(),
+                                                    s->bucket_tenant, s->yield,
+                                                    rgw::lua::context::preRequest, name);
+        if (rc == -ENOENT) {
+          // no script, nothing to do
+        } else if (rc < 0) {
           ldpp_dout(op, 5) <<
             "WARNING: failed to execute pre request script. "
             "error: " << rc << dendl;
-        }
-        if (script_return_code == -EPERM) {
-          abort_early(s, op, script_return_code, handler, yield);
-          goto done;
+        } else {
+          int script_return_code = 0;
+          rc = rgw::lua::request::execute(rest, penv.olog.get(), s, op, lua_script, script_return_code);
+
+          if (rc < 0) {
+            ldpp_dout(op, 5) <<
+              "WARNING: failed to execute pre request script. "
+              "error: " << rc << dendl;
+          }
+          if (script_return_code == -EPERM) {
+            abort_early(s, op, script_return_code, handler, yield);
+            goto done;
+          }
         }
       }
     }
@@ -446,21 +455,30 @@ done:
       }
     }
     if (!is_health_request) {
-      auto [lua_script, rc] = rgw::lua::read_script_or_bytecode(s, penv.lua.manager.get(),
-                                                  s->bucket_tenant, s->yield,
-                                                  rgw::lua::context::postRequest, "");
-      if (rc == -ENOENT) {
-        // no script, nothing to do
-      } else if (rc < 0) {
-        ldpp_dout(op, 5) <<
-          "WARNING: failed to read post request script. "
-          "error: " << rc << dendl;
-      } else {
-        rc = rgw::lua::request::execute(rest, penv.olog.get(), s, op, lua_script);
-        if (rc < 0) {
+      std::vector<std::string> script_names;
+      const auto rc = rgw::lua::list_scripts(s, penv.lua.manager.get(), s->bucket_tenant, s->yield, rgw::lua::context::postRequest, script_names);
+      if (rc < 0) {
+        ldpp_dout(op, 5) << "WARNING: failed to list data scripts. error " << rc << dendl;
+        return rc;
+      }
+
+      for (const auto& name : script_names) {
+        auto [lua_script, rc] = rgw::lua::read_script_or_bytecode(s, penv.lua.manager.get(),
+                                                    s->bucket_tenant, s->yield,
+                                                    rgw::lua::context::postRequest, name);
+        if (rc == -ENOENT) {
+          // no script, nothing to do
+        } else if (rc < 0) {
           ldpp_dout(op, 5) <<
-            "WARNING: failed to execute post request script. "
+            "WARNING: failed to read post request script. "
             "error: " << rc << dendl;
+        } else {
+          rc = rgw::lua::request::execute(rest, penv.olog.get(), s, op, lua_script);
+          if (rc < 0) {
+            ldpp_dout(op, 5) <<
+              "WARNING: failed to execute post request script. "
+              "error: " << rc << dendl;
+          }
         }
       }
     }

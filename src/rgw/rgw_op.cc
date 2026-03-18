@@ -2522,16 +2522,25 @@ int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 }
 
 int RGWGetObj::get_lua_filter(std::unique_ptr<RGWGetObj_Filter>* filter, RGWGetObj_Filter* cb) {
-  const auto [script, rc] = rgw::lua::read_script_or_bytecode(s, s->penv.lua.manager.get(),
-                                                              s->bucket_tenant, s->yield, rgw::lua::context::getData, "");
-  if (rc == -ENOENT) {
-    // no script, nothing to do
-    return 0;
-  } else if (rc < 0) {
-    ldpp_dout(this, 5) << "WARNING: failed to read data script. error: " << rc << dendl;
+  std::vector<std::string> script_names;
+  const auto rc = rgw::lua::list_scripts(s, s->penv.lua.manager.get(), s->bucket_tenant, s->yield, rgw::lua::context::getData, script_names);
+  if (rc < 0) {
+    ldpp_dout(this, 5) << "WARNING: failed to list data scripts. error " << rc << dendl;
     return rc;
   }
-  filter->reset(new rgw::lua::RGWGetObjFilter(s, script, cb));
+  for (const auto& name : script_names) {
+    const auto [script, rc] = rgw::lua::read_script_or_bytecode(s, s->penv.lua.manager.get(),
+                                                                s->bucket_tenant, s->yield, rgw::lua::context::getData, name);
+    if (rc == -ENOENT) {
+      // no script, nothing to do
+      continue;
+    } else if (rc < 0) {
+      ldpp_dout(this, 5) << "WARNING: failed to read data script '" << name << "'. error: " << rc << dendl;
+      return rc;
+    } else {
+      filter->reset(new rgw::lua::RGWGetObjFilter(s, script, cb));
+    }
+  }
   return 0;
 }
 
@@ -4547,16 +4556,25 @@ auto RGWPutObj::get_torrent_filter(rgw::sal::DataProcessor* cb)
 }
 
 int RGWPutObj::get_lua_filter(std::unique_ptr<rgw::sal::DataProcessor>* filter, rgw::sal::DataProcessor* cb) {
-  const auto [script, rc] = rgw::lua::read_script_or_bytecode(s, s->penv.lua.manager.get(),
-                                                              s->bucket_tenant, s->yield, rgw::lua::context::putData, "");
-  if (rc == -ENOENT) {
-    // no script, nothing to do
-    return 0;
-  } else if (rc < 0) {
-    ldpp_dout(this, 5) << "WARNING: failed to read data script. error: " << rc << dendl;
+  std::vector<std::string> script_names;
+  const auto rc = rgw::lua::list_scripts(s, s->penv.lua.manager.get(), s->bucket_tenant, s->yield, rgw::lua::context::putData, script_names);
+  if (rc < 0) {
+    ldpp_dout(this, 5) << "WARNING: failed to list data scripts. error " << rc << dendl;
     return rc;
   }
-  filter->reset(new rgw::lua::RGWPutObjFilter(s, script, cb));
+  for (const auto& name : script_names) {
+    const auto [script, rc] = rgw::lua::read_script_or_bytecode(s, s->penv.lua.manager.get(),
+                                                                s->bucket_tenant, s->yield, rgw::lua::context::putData, name);
+    if (rc == -ENOENT) {
+      // no script, nothing to do
+      continue;
+    } else if (rc < 0) {
+      ldpp_dout(this, 5) << "WARNING: failed to read data script '" << name << "'. error: " << rc << dendl;
+      return rc;
+    } else {
+      filter->reset(new rgw::lua::RGWPutObjFilter(s, script, cb));
+    }
+  }
   return 0;
 }
 
