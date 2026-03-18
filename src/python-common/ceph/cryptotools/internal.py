@@ -1,5 +1,4 @@
-"""Internal execution of cryptographic functions for the ceph mgr
-"""
+"""Internal execution of cryptographic functions for the ceph mgr"""
 
 from typing import Dict, Any, Tuple, Union
 
