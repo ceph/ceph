@@ -5436,7 +5436,9 @@ int RadosLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y,
   }
   bufferlist bl;
 
-  int r = rgw_get_system_obj(store->svc()->sysobj, pool, script_oid_with_name(key, name), bl, nullptr, nullptr, y, dpp);
+  // for backward compatibility the "default" lua script is retrieved from disk by reading the unnamed script_oid
+  std::string disk_script_name = name == "default" ? "" : name;
+  int r = rgw_get_system_obj(store->svc()->sysobj, pool, script_oid_with_name(key, disk_script_name), bl, nullptr, nullptr, y, dpp);
   if (r < 0) {
     return r;
   }
@@ -5472,7 +5474,7 @@ int RadosLuaManager::list_scripts(const DoutPrefixProvider* dpp, optional_yield 
       ldpp_dout(dpp, 10) << "WARNING: issue getting default lua script" << cpp_strerror(r) << dendl;
       return r;
     }
-    // default lua script file exists, so create a new list metadata file pointing to the default lua script
+    // default lua script file exists, so create a new list metadata file containing the default lua script
     int list_meta_r = _put_script(dpp, y, list_metadata_key, "default", "");
     if (list_meta_r < 0) {
       ldpp_dout(dpp, 10) << "WARNING: issue creating the lua script list metadata file" << cpp_strerror(r) << dendl;
@@ -5564,16 +5566,20 @@ int RadosLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y,
   if (r < 0) {
     return r;
   }
-  r = _put_script(dpp, y, key, script, name);
+
+  // for backward compatibility the "default" lua script is saved to disk as an unnamed script oid
+  std::string disk_script_name = name == "default" ? "" : name;
+  r = _put_script(dpp, y, key, script, disk_script_name);
   if (r < 0) {
     return r;
   }
-  // is name in the list of scripts
-  std::string script_name = name.empty() ? "default" : name;
-  if (std::find(scripts.begin(), scripts.end(), script_name) == scripts.end()) {
+  // if not already added, insert meta_script_name into the tracked list of scripts
+  // for multiple lua script support the unnamed script oid will be called "default" in "radosgw-admin script list"
+  std::string meta_script_name = name.empty() ? "default" : name;
+  if (std::find(scripts.begin(), scripts.end(), meta_script_name) == scripts.end()) {
     // insert script in lexicopgrahical order
-    auto i = std::lower_bound(scripts.begin(), scripts.end(), script_name);
-    scripts.insert(i, script_name);
+    auto i = std::lower_bound(scripts.begin(), scripts.end(), meta_script_name);
+    scripts.insert(i, meta_script_name);
     return save_scripts_to_disk(dpp, y, scripts, key);
   }
   return 0;
@@ -5588,15 +5594,15 @@ int RadosLuaManager::_put_script(const DoutPrefixProvider* dpp, optional_yield y
   }
   bufferlist bl;
   ceph::encode(script, bl);
-
-  int r = rgw_put_system_obj(dpp, store->svc()->sysobj, pool, script_oid_with_name(key, name), bl, false, nullptr, real_time(), y);
+  std::string oid = script_oid_with_name(key, name);
+  int r = rgw_put_system_obj(dpp, store->svc()->sysobj, pool, oid, bl, false, nullptr, real_time(), y);
   if (r < 0) {
     return r;
   }
 
-  r = notify_script_update(dpp, key, y);
+  r = notify_script_update(dpp, oid, y);
   if (r < 0) {
-    ldpp_dout(dpp, 10) << "WARNING: failed to send Lua script update notification :" << key << ", err:" << r << dendl;
+    ldpp_dout(dpp, 10) << "WARNING: failed to send Lua script update notification :" << oid << ", err:" << r << dendl;
     return r;
   }
   return 0;
@@ -5616,14 +5622,16 @@ int RadosLuaManager::del_script(const DoutPrefixProvider* dpp, optional_yield y,
     return r;
   }
 
-  std::string script_name = name.empty() ? "default" : name;
-  r = _del_script(dpp, y, key, script_name);
+  // for backward compatibility the "default" lua script is saved to disk as an unnamed script oid
+  std::string disk_script_name = name == "default" ? "" : name;
+  r = _del_script(dpp, y, key, disk_script_name);
   if (r < 0) {
-    ldpp_dout(dpp, 10) << "WARNING: failed to delete Lua script " << script_name << dendl;
+    ldpp_dout(dpp, 10) << "WARNING: failed to delete Lua script " << disk_script_name << dendl;
     return r;
   }
-  // remove the deleted script from the script list
-  auto it = std::find(scripts.begin(), scripts.end(), script_name);
+  // remove the deleted script from the "radosgw-admin script list"
+  std::string meta_script_name = name.empty() ? "default" : name;
+  auto it = std::find(scripts.begin(), scripts.end(), meta_script_name);
   if (it != scripts.end()) {
     scripts.erase(it);
     return save_scripts_to_disk(dpp, y, scripts, key);

@@ -3692,7 +3692,7 @@ int main(int argc, const char **argv)
   int check_objects = false;
   RGWBucketAdminOpState bucket_op;
   string infile;
-  string infile_name;
+  string infile_name = "default";
   string metadata_key;
   RGWObjVersionTracker objv_tracker;
   string marker;
@@ -12234,7 +12234,7 @@ next:
     std::string script;
     const auto rc = rgw::lua::read_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script, infile_name);
     if (rc == -ENOENT) {
-      std::cout << "no script exists for context: " << *str_script_ctx << 
+      std::cout << "'" << infile_name << "' script does not exist in context: " << *str_script_ctx << 
         (tenant.empty() ? "" : (" in tenant: " + tenant)) << std::endl;
     } else if (rc < 0) {
       cerr << "ERROR: failed to read script. error: " << rc << std::endl;
@@ -12257,12 +12257,12 @@ next:
     auto lua_manager = driver->get_lua_manager("");
     std::vector<std::string> scripts;
     const auto rc = rgw::lua::list_scripts(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, scripts);
-    if (rc == -ENOENT) {
-      std::cout << "no scripts exists for context: " << *str_script_ctx << 
-        (tenant.empty() ? "" : (" in tenant: " + tenant)) << std::endl;
-    } else if (rc < 0) {
-      cerr << "ERROR: failed to read script. error: " << rc << std::endl;
+    if (rc < 0) {
+      cerr << "ERROR: failed to list scripts. error: " << rc << std::endl;
       return -rc;
+    } else if (scripts.size() == 0) {
+      std::cout << "no scripts to list for context: " << *str_script_ctx << 
+        (tenant.empty() ? "" : (" in tenant: " + tenant)) << std::endl;
     } else {
       for (const auto& script : scripts) {
         std::cout << script << std::endl;

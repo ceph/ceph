@@ -106,13 +106,22 @@ void Background::resume(rgw::sal::Driver*) {
   cond.notify_all();
 }
 
-int Background::read_script() {
+int Background::list_scripts() {
   std::unique_lock cond_lock(pause_mutex);
   if (paused) {
     return -EAGAIN;
   }
   std::string tenant;
-  return rgw::lua::read_script(&dp, lua_manager, tenant, null_yield, rgw::lua::context::background, rgw_script, "");
+  return rgw::lua::list_scripts(&dp, lua_manager, tenant, null_yield, rgw::lua::context::background, rgw_script_names);
+}
+
+int Background::read_script(const std::string& script_name) {
+  std::unique_lock cond_lock(pause_mutex);
+  if (paused) {
+    return -EAGAIN;
+  }
+  std::string tenant;
+  return rgw::lua::read_script(&dp, lua_manager, tenant, null_yield, rgw::lua::context::background, rgw_script, script_name);
 }
 
 std::unique_ptr<lua_state_guard> Background::initialize_lguard_state() {
@@ -172,29 +181,43 @@ void Background::run() {
     if (!lguard) {
       return;
     }
-    const auto rc = read_script();
+    lguard->set_max_runtime(max_runtime);
+    lguard->reset_start_time();
+    std::cout << "listing scripts: " << std::endl;
+    const auto rc = list_scripts();
     if (rc == -ENOENT || rc == -EAGAIN) {
       // either no script or paused, nothing to do
     } else if (rc < 0) {
-      ldpp_dout(dpp, 1) << "WARNING: failed to read background script. error " << rc << dendl;
-    } else {
-      auto failed = false;
-      auto L = lguard->get();
-      try {
-        //execute the background lua script
-        if (luaL_dostring(L, rgw_script.c_str()) != LUA_OK) {
-          const std::string err(lua_tostring(L, -1));
-          ldpp_dout(dpp, 1) << "Lua ERROR: " << err << dendl;
+      ldpp_dout(dpp, 1) << "WARNING: failed to list background scripts. error " << rc << dendl;
+    }
+
+    for (const auto& script_name : rgw_script_names) {
+      std::cout << "- " << script_name << std::endl;
+      const auto rc = read_script(script_name);
+      if (rc == -ENOENT || rc == -EAGAIN) {
+        // either no script or paused, nothing to do
+      } else if (rc < 0) {
+        ldpp_dout(dpp, 1) << "WARNING: failed to read background script. error " << rc << dendl;
+      } else {
+        auto failed = false;
+        auto L = lguard->get();
+        try {
+          //execute the background lua script
+          if (luaL_dostring(L, rgw_script.c_str()) != LUA_OK) {
+            const std::string err(lua_tostring(L, -1));
+            ldpp_dout(dpp, 1) << "Lua ERROR: " << err << dendl;
+            failed = true;
+          }
+        } catch (const std::runtime_error& e) {
+          ldpp_dout(dpp, 1) << "Lua ERROR: " << e.what() << dendl;
           failed = true;
         }
-      } catch (const std::runtime_error& e) {
-        ldpp_dout(dpp, 1) << "Lua ERROR: " << e.what() << dendl;
-        failed = true;
-      }
-      if (perfcounter) {
-        perfcounter->inc((failed ? l_rgw_lua_script_fail : l_rgw_lua_script_ok), 1);
+        if (perfcounter) {
+          perfcounter->inc((failed ? l_rgw_lua_script_fail : l_rgw_lua_script_ok), 1);
+        }
       }
     }
+
     process_scripts();
     std::unique_lock cond_lock(cond_mutex);
     cond.wait_for(cond_lock, std::chrono::seconds(execute_interval), [this]{return stopped;}); 
