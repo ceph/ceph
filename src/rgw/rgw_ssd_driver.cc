@@ -298,9 +298,7 @@ int SSDDriver::restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataC
 					    obj_key.name = object_name;
 					    if (attrs.find(RGW_CACHE_ATTR_VERSION_ID) != attrs.end()) {
 						std::string instance = attrs[RGW_CACHE_ATTR_VERSION_ID].to_str();
-						if (instance != "null") {
-						    obj_key.instance = instance;
-						}
+                            obj_key.instance = instance;
 					    }
 					    if (attrs.find(RGW_CACHE_ATTR_OBJECT_NS) != attrs.end()) {
 						obj_key.ns = attrs[RGW_CACHE_ATTR_OBJECT_NS].to_str();

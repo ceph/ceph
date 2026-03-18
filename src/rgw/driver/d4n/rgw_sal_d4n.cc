@@ -1282,15 +1282,14 @@ int D4NFilterObject::calculate_version(const DoutPrefixProvider* dpp, optional_y
 int D4NFilterObject::create_delete_marker(const DoutPrefixProvider* dpp, optional_yield y)
 {
   this->delete_marker = true;
+  char buf[OBJ_INSTANCE_LEN + 1];
+  gen_rand_alphanumeric_no_underscore(dpp->get_cct(), buf, OBJ_INSTANCE_LEN);
+  this->version = buf;
+  ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << "(): generating delete marker: " << version << dendl;
   if (this->get_bucket()->versioned() && !this->get_bucket()->versioning_enabled()) { //if versioning is suspended
-    this->version = "null";
     this->set_instance("null");
   } else {
-    char buf[OBJ_INSTANCE_LEN + 1];
-    gen_rand_alphanumeric_no_underscore(dpp->get_cct(), buf, OBJ_INSTANCE_LEN);
-    this->version = buf; // using gen_rand_alphanumeric_no_underscore for the time being
     this->set_instance(version);
-    ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << "(): generating delete marker: " << version << dendl;
   }
 
   auto m_time = real_clock::now();
