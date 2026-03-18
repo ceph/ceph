@@ -115,8 +115,8 @@ class RGWBILogUpdateBatch {
   // append an entry to the pending list.
   void stage(int shard, rgw_bi_log_entry entry);
   // encode and push all pending entries to their respective FIFO shards.
-  void do_flush(asio::yield_context y);
-  void do_flush();
+  int do_flush(asio::yield_context y);
+  int do_flush();
 
 public:
   // fifo may be null (error-path batch — silently drops all entries).
@@ -142,10 +142,10 @@ public:
                        const rgw_bucket_dir_entry& list_state,
                        rgw_zone_set zones_trace);
 
-  void flush(optional_yield y);
-  void flush();
+  int flush(optional_yield y);
+  int flush();
   // awaitable variant — use from coroutine contexts (avoids use_blocked).
-  asio::awaitable<void> co_flush();
+  asio::awaitable<int> co_flush();
 
   ~RGWBILogUpdateBatch();
 };
