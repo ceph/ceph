@@ -1,29 +1,38 @@
 <ng-container *ngIf="allowQoS || allowIops">
-  <form name="rateLimitForm"
-        #formDir="ngForm"
-        [formGroup]="rateLimitForm"
-        novalidate>
+  <form
+    name="rateLimitForm"
+    #formDir="ngForm"
+    [formGroup]="rateLimitForm"
+    novalidate
+  >
     <!-- Cluster QOS Disabled Information -->
 
-    <cd-alert-panel type="info"
-                    class="me-1"
-                    spacingClass="mt-1"
-                    *ngIf="(clusterQosDisabled || clusterIopsDisabled)"
-                    i18n>Cluster-level IOPS or bandwidth control is disabled, so export-level settings for the disabled module won't apply, even if enabled.
+    <cd-alert-panel
+      type="info"
+      class="me-1"
+      spacingClass="mt-1"
+      *ngIf="clusterQosDisabled || clusterIopsDisabled"
+      i18n
+      >Cluster-level IOPS or bandwidth control is disabled, so export-level settings for the
+      disabled module won't apply, even if enabled.
     </cd-alert-panel>
 
-    <cd-alert-panel type="info"
-                    class="me-1"
-                    spacingClass="mt-1"
-                    *ngIf="showDisableWarning"
-                    i18n>Disable QOS will set QOS Bandwidth limit to Maximum.
+    <cd-alert-panel
+      type="info"
+      class="me-1"
+      spacingClass="mt-1"
+      *ngIf="showDisableWarning"
+      i18n
+      >Disable QOS will set QOS Bandwidth limit to Maximum.
     </cd-alert-panel>
 
-    <cd-alert-panel type="info"
-                    class="me-1"
-                    spacingClass="mt-1"
-                    *ngIf="showQostypeChangeNote"
-                    i18n>If changing from already set one then please make sure to update exports bandwidths according
+    <cd-alert-panel
+      type="info"
+      class="me-1"
+      spacingClass="mt-1"
+      *ngIf="showQostypeChangeNote"
+      i18n
+      >If changing from already set one then please make sure to update exports bandwidths according
       to qos type.
     </cd-alert-panel>
     <!-- qos_type is perclient, then can't enable export level qos -->
@@ -31,7 +40,9 @@
       class="form-item"
       *ngIf="
         type === nfsType?.cluster ||
-        (type === nfsType?.export && nfsClusterData?.qos_type !== qosTypeValue?.PerClient && allowQoS)
+        (type === nfsType?.export &&
+          nfsClusterData?.qos_type !== qosTypeValue?.PerClient &&
+          allowQoS)
       "
     >
       <cds-checkbox
@@ -40,14 +51,20 @@
         (checkedChange)="showMaxBwNote('bw')"
         formControlName="enable_qos"
         i18n
-        >Enable Bandwidth QOS</cds-checkbox>
+        >Enable Bandwidth QOS</cds-checkbox
+      >
     </div>
-    <span *ngIf="showMaxBw"
-          i18n>Disable QOS will set QOS Bandwidth limit to Maximum.</span>
+    <span
+      *ngIf="showMaxBw"
+      i18n
+      >Disable QOS will set QOS Bandwidth limit to Maximum.</span
+    >
 
     <!-- QoS Type Selection -->
-    <div class="form-item"
-         *ngIf="rateLimitForm.getValue('enable_qos') && type !== nfsType?.export">
+    <div
+      class="form-item"
+      *ngIf="rateLimitForm.getValue('enable_qos') && type !== nfsType?.export"
+    >
       <cds-select
         formControlName="qos_type"
         for="qos_type"
@@ -55,27 +72,36 @@
         id="qos_type"
         [helperText]="qosTypeHelper"
         (change)="registerQoSChange($event.target.value)"
-        [invalid]="
-            rateLimitForm.controls.qos_type.invalid &&
-            rateLimitForm.controls.qos_type.dirty
-          "
-          [invalidText]="qos_error"
+        [invalid]="rateLimitForm.controls.qos_type.invalid && rateLimitForm.controls.qos_type.dirty"
+        [invalidText]="qos_error"
       >
-        <option *ngIf="qosType === null"
-                value="">Loading...</option>
-        <option *ngIf="qosType !== null && qosType.length === 0"
-                i18n
-                value="">
+        <option
+          *ngIf="qosType === null"
+          value=""
+        >
+          Loading...
+        </option>
+        <option
+          *ngIf="qosType !== null && qosType.length === 0"
+          i18n
+          value=""
+        >
           -- No Bandwidth QOS type available --
         </option>
-        <option *ngIf="qosType.length > 0"
-                i18n
-                value="">
+        <option
+          *ngIf="qosType.length > 0"
+          i18n
+          value=""
+        >
           -- Select a Bandwidth QOS Type --
         </option>
-        <option *ngFor="let type of qosType"
-                i18n
-                [value]="type.value">{{ type.key }}</option>
+        <option
+          *ngFor="let type of qosType"
+          i18n
+          [value]="type.value"
+        >
+          {{ type.key }}
+        </option>
       </cds-select>
       <ng-template #qosTypeHelper>
         <span *ngIf="rateLimitForm.getValue('qos_type')">
@@ -84,11 +110,11 @@
       </ng-template>
       <ng-template #qos_error>
         <span
-        class="invalid-feedback"
-        *ngIf="rateLimitForm.showError('qos_type', formDir, 'qosTypeInvalid')"
-        i18n
-        >QOS type should be same for bandwidth and IOPS control.</span
-      >
+          class="invalid-feedback"
+          *ngIf="rateLimitForm.showError('qos_type', formDir, 'qosTypeInvalid')"
+          i18n
+          >QOS type should be same for bandwidth and IOPS control.</span
+        >
       </ng-template>
     </div>
 
@@ -111,7 +137,7 @@
             rateLimitForm.controls.max_export_read_bw.dirty
           "
           [invalidText]="Export_readbw_Error"
-          >Export Write Bandwidth
+          >Export Read Bandwidth
           <input
             cdsText
             type="text"
@@ -210,7 +236,8 @@
       *ngIf="
         rateLimitForm?.getValue('enable_qos') &&
         ((type === nfsType?.cluster &&
-          (qosTypeVal === qosTypeValue?.PerClient || qosTypeVal === qosTypeValue?.PerSharePerClient)) ||
+          (qosTypeVal === qosTypeValue?.PerClient ||
+            qosTypeVal === qosTypeValue?.PerSharePerClient)) ||
           (type === nfsType?.export &&
             qosTypeVal !== qosTypeValue?.PerClient &&
             qosTypeVal !== qosTypeValue?.PerShare))
@@ -287,8 +314,8 @@
             type="text"
             placeholder="Client write bandwidth..."
             i18n-placeholder
-            [id]="max_client_write_bw"
-            [name]="max_client_write_bw"
+            id="max_client_write_bw"
+            name="max_client_write_bw"
             formControlName="max_client_write_bw"
             [invalid]="
               rateLimitForm.controls.max_client_write_bw.invalid &&
@@ -329,7 +356,9 @@
       class="form-item"
       *ngIf="
         type === nfsType?.cluster ||
-        (type === nfsType?.export && nfsClusterData?.qos_type !== qosTypeValue?.PerClient && allowIops)
+        (type === nfsType?.export &&
+          nfsClusterData?.qos_type !== qosTypeValue?.PerClient &&
+          allowIops)
       "
     >
       <cds-checkbox
@@ -341,12 +370,17 @@
         >Enable IOPS QOS</cds-checkbox
       >
     </div>
-    <span *ngIf="showMaxBw"
-          i18n>Disable QOS will set QOS Bandwidth limit to Maximum.</span>
+    <span
+      *ngIf="showMaxBw"
+      i18n
+      >Disable QOS will set QOS Bandwidth limit to Maximum.</span
+    >
 
     <!-- IOPS Type Selection -->
-    <div class="form-item"
-         *ngIf="rateLimitForm.getValue('enable_ops') && type !== nfsType?.export">
+    <div
+      class="form-item"
+      *ngIf="rateLimitForm.getValue('enable_ops') && type !== nfsType?.export"
+    >
       <cds-select
         formControlName="qos_type_ops"
         for="qos_type_ops"
@@ -358,26 +392,37 @@
         [skeleton]="qosIopsType === null"
         (change)="registerQoSIOPSChange($event.target.value)"
         [invalid]="
-        rateLimitForm.controls.qos_type_ops.invalid &&
-        rateLimitForm.controls.qos_type_ops.dirty
-      "
-      [invalidText]="qos_ops_error"
+          rateLimitForm.controls.qos_type_ops.invalid && rateLimitForm.controls.qos_type_ops.dirty
+        "
+        [invalidText]="qos_ops_error"
       >
-        <option *ngIf="qosIopsType === null"
-                value="">Loading...</option>
-        <option *ngIf="qosIopsType !== null && qosIopsType.length === 0"
-                i18n
-                value="">
+        <option
+          *ngIf="qosIopsType === null"
+          value=""
+        >
+          Loading...
+        </option>
+        <option
+          *ngIf="qosIopsType !== null && qosIopsType.length === 0"
+          i18n
+          value=""
+        >
           -- No IOPS QOS type available --
         </option>
-        <option *ngIf="qosIopsType !== null && qosIopsType.length > 0"
-                i18n
-                value="">
+        <option
+          *ngIf="qosIopsType !== null && qosIopsType.length > 0"
+          i18n
+          value=""
+        >
           -- Select a IOPS QOS Type --
         </option>
-        <option *ngFor="let type of qosIopsType"
-                i18n
-                [value]="type.value">{{ type.key }}</option>
+        <option
+          *ngFor="let type of qosIopsType"
+          i18n
+          [value]="type.value"
+        >
+          {{ type.key }}
+        </option>
       </cds-select>
       <ng-template #qosiopsTypeHelper>
         <span *ngIf="rateLimitForm.getValue('qos_type_ops')">
@@ -386,11 +431,11 @@
       </ng-template>
       <ng-template #qos_ops_error>
         <span
-        class="invalid-feedback"
-        *ngIf="rateLimitForm.showError('qos_type_ops', formDir, 'qosTypeInvalid')"
-        i18n
-        >QOS type should be same for bandwidth and IOPS control.</span
-      >
+          class="invalid-feedback"
+          *ngIf="rateLimitForm.showError('qos_type_ops', formDir, 'qosTypeInvalid')"
+          i18n
+          >QOS type should be same for bandwidth and IOPS control.</span
+        >
       </ng-template>
     </div>
 
@@ -398,7 +443,8 @@
     <div
       *ngIf="
         rateLimitForm?.getValue('enable_ops') &&
-        (qosiopsTypeVal === qosTypeValue?.PerShare || qosiopsTypeVal === qosTypeValue?.PerSharePerClient)
+        (qosiopsTypeVal === qosTypeValue?.PerShare ||
+          qosiopsTypeVal === qosTypeValue?.PerSharePerClient)
       "
     >
       <div class="form-group row">
@@ -455,10 +501,11 @@
       *ngIf="
         rateLimitForm?.getValue('enable_ops') &&
         ((type === nfsType?.cluster &&
-          (qosiopsTypeVal === qosTypeValue?.PerClient || qosiopsTypeVal === qosTypeValue?.PerSharePerClient)) ||
+          (qosiopsTypeVal === qosTypeValue?.PerClient ||
+            qosiopsTypeVal === qosTypeValue?.PerSharePerClient)) ||
           (type === nfsType?.export &&
-          qosiopsTypeVal !== qosTypeValue?.PerClient &&
-          qosiopsTypeVal !== qosTypeValue?.PerShare))
+            qosiopsTypeVal !== qosTypeValue?.PerClient &&
+            qosiopsTypeVal !== qosTypeValue?.PerShare))
       "
     >
       <div class="form-group row">

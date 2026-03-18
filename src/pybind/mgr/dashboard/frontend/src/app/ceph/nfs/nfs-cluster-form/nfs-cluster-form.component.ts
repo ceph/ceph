@@ -53,11 +53,13 @@ export class NfsClusterFormComponent extends CdForm implements OnInit {
     if (this.router.url.startsWith(`/${getPathfromFsal(this.fsal)}/nfs/edit`)) {
       this.isEdit = true;
     }
+    if (this.id) {
+      this.nfsForm.get('cluster_id').setValue(this.id);
+    }
     if (this.isEdit) {
       this.action = this.actionLabels.EDIT;
       this.nfsService.getClusterBandwidthOpsConfig(this.id).subscribe((data: NFSBwIopConfig) => {
         this.nfsBwIopConfig = data;
-        this.nfsForm.get('cluster_id').setValue(this.id);
       });
       this.loadingReady();
     } else {
@@ -99,7 +101,7 @@ export class NfsClusterFormComponent extends CdForm implements OnInit {
     ratelimitOpsValue = {
       ...ratelimitOpsValue,
       ...clusterFormObj,
-      disable_Ops: !ratelimitOpsValue?.enable_ops
+      disable_ops: !ratelimitOpsValue?.enable_ops
     };
     delete ratelimitOpsValue.enable_ops;
 

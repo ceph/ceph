@@ -739,13 +739,14 @@
         </ng-template>
       </div>
       <!--Enable Disable Bandwidth -->
-        <cd-nfs-rate-limit-form [action]="action"
-                                [isEdit]="isEdit"
-                                [type]="'export'"
-                                (emitErrors)="childCompErrorHandler($event)"
-                                [clusterDataConfig]="clusterAllConfig"
-                                [exportDataConfig]="exportAllConfig"
-                                ></cd-nfs-rate-limit-form>
+      <cd-nfs-rate-limit-form
+        [action]="action"
+        [isEdit]="isEdit"
+        [type]="'export'"
+        (emitErrors)="childCompErrorHandler($event)"
+        [clusterDataConfig]="clusterAllConfig"
+        [exportDataConfig]="exportAllConfig"
+      ></cd-nfs-rate-limit-form>
       <!-- Clients -->
       <cd-nfs-form-client
         [form]="nfsForm"
