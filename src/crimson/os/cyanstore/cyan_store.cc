@@ -517,7 +517,8 @@ auto CyanStore::Shard::omap_iterate(
   const ghobject_t &oid,
   ObjectStore::omap_iter_seek_t start_from,
   omap_iterate_cb_t callback,
-  uint32_t op_flags)
+  uint32_t op_flags,
+  omap_iterate_conf_t on_conflict)
   -> CyanStore::Shard::read_errorator::future<ObjectStore::omap_iter_ret_t>
 {
   assert(store_active);
