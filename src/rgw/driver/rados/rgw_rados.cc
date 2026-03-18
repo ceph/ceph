@@ -9021,11 +9021,9 @@ int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp, RGWBucketInfo
                       obj_instance.key.instance);
 
   auto do_op = [&](auto& op_issuer, auto& bilog) -> int {
-    // stage and flush the FIFO bilog entry before the cls op so that a
-    // crash after the FIFO push but before link_olh
-    bilog.add_maybe_flush(olh_epoch, key, op_tag, delete_marker,
-                          ceph::real_time{}, zones_trace);
-    bilog.flush(y);
+    // issue the cls op first. only push to the FIFO on success so that a
+    // crash between the cls op and the FIFO push leaves the secondary behind
+    // rather than ahead with a diverged OLH pointer
     int ret = guard_reshard(dpp, &bs, obj_instance, bucket_info,
 	              [&](BucketShard *bs) -> int {
 	                auto& ref = bs->bucket_obj;
@@ -9042,6 +9040,9 @@ int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp, RGWBucketInfo
       ldpp_dout(dpp, 20) << "link_olh() returned r=" << ret << dendl;
       return ret;
     }
+    bilog.add_maybe_flush(olh_epoch, key, op_tag, delete_marker,
+                          ceph::real_time{}, zones_trace);
+    bilog.flush(y);
     return 0;
   };
 
@@ -9099,8 +9100,8 @@ int RGWRados::bucket_index_unlink_instance(const DoutPrefixProvider *dpp,
                         obj_instance.key.instance);
   r = with_bilog<CLSRGWUnlinkInstance>(dpp,
       [&](auto& op_issuer, auto& bilog) -> int {
-        bilog.add_maybe_flush(olh_epoch, ceph::real_time{}, op_issuer);
-        bilog.flush(y);
+        // cls op first, FIFO push on success only (same as
+        // bucket_index_link_olh to avoid secondary OLH pointer divergence).
         int ret = guard_reshard(dpp, &bs, obj_instance, bucket_info,
               [&](BucketShard *bs) -> int {
                 auto& ref = bs->bucket_obj;
@@ -9115,6 +9116,9 @@ int RGWRados::bucket_index_unlink_instance(const DoutPrefixProvider *dpp,
           ldpp_dout(dpp, 20) << "unlink_instance() returned r=" << ret << dendl;
           return ret;
         }
+
+        bilog.add_maybe_flush(olh_epoch, ceph::real_time{}, op_issuer);
+        bilog.flush(y);
         return 0;
       },
       bucket_info,
@@ -9427,21 +9431,6 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
     return r;
   }
 
-  // for FIFO-backed buckets write the OLH-link bilog entry before the
-  // OLH xattr update so a crash after the FIFO push but before the
-  // rados op produces a safe, re-replayable state.
-  if (need_to_link) {
-    rgw_zone_set zt;
-    if (zones_trace) {
-      zt = *zones_trace;
-    }
-    zt.insert(svc.zone->get_zone().id, obj.bucket.get_key());
-    with_bilog<void>(dpp, [&](auto& bilog_handler) {
-      bilog_handler.add_maybe_flush(link_epoch, key, link_op_tag,
-                                    delete_marker, state.mtime, zt);
-    }, bucket_info, log_op);
-  }
-
   const rgw_bucket& bucket = obj.bucket;
 
   if (need_to_link) {
@@ -9473,6 +9462,19 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": could not apply olh update to oid \"" << ref.obj.oid << "\", r=" << r << dendl;
     return r;
+  }
+
+  // OLH xattr update committed. now record the FIFO bilog entry.
+  if (need_to_link) {
+    rgw_zone_set zt;
+    if (zones_trace) {
+      zt = *zones_trace;
+    }
+    zt.insert(svc.zone->get_zone().id, obj.bucket.get_key());
+    with_bilog<void>(dpp, [&](auto& bilog_handler) {
+      bilog_handler.add_maybe_flush(link_epoch, key, link_op_tag,
+                                    delete_marker, state.mtime, zt);
+    }, bucket_info, log_op);
   }
 
   if (need_to_remove) {
