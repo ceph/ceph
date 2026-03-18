@@ -10,6 +10,7 @@ tasks:
       - ceph-mgr-diskprediction-local
       - ceph-mgr-rook
       - ceph-mgr-cephadm
+      - ceph-osd-classic
       - ceph-osd-crimson
       - cephadm
       - ceph-volume
