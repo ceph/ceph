@@ -69,6 +69,10 @@ SnapTrimEvent::start()
 
   /* TODO: add a way to expose progress via the optracker without misusing
    * pipeline stages. https://tracker.ceph.com/issues/66473 */
+
+  /* TODO: run this under sg_background but plain with_sg accepts
+   * seastar::future-returning callables and the body below returns
+   * an errorated interruptible future */
   ShardServices &shard_services = pg->get_shard_services();
   {
     co_await pg->background_process_lock.lock_with_op(*this);

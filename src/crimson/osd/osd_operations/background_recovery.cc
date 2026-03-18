@@ -71,19 +71,26 @@ seastar::future<> BackgroundRecoveryT<T>::start()
 
   LOG_PREFIX(BackgroundRecoveryT<T>::start);
   DEBUGDPPI("{}: start", *pg, *this);
+  auto sg = (scheduler_class == SchedulerClass::immediate)
+    ? pg->get_shard_services().get_sg_urgent_recovery()
+    : pg->get_shard_services().get_sg_recovery();
+
   auto maybe_delay = seastar::now();
   if (delay) {
     maybe_delay = seastar::sleep(
       std::chrono::milliseconds(std::lround(delay * 1000)));
   }
-  return maybe_delay.then([ref, this] {
-    return seastar::repeat([ref, this] {
-      return interruptor::with_interruption([this] {
-       return do_recovery();
-      }, [](std::exception_ptr) {
-       return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::yes);
-      }, pg, epoch_started);
-    });
+  return maybe_delay.then([ref, this, sg] {
+    return pg->get_shard_services().with_sg(sg,
+      [ref, this]() mutable -> seastar::future<> {
+        return seastar::repeat([ref, this] {
+          return interruptor::with_interruption([this] {
+            return do_recovery();
+          }, [](std::exception_ptr) {
+            return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::yes);
+          }, pg, epoch_started);
+        });
+      });
   });
 }
 

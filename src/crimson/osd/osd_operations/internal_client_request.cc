@@ -121,6 +121,9 @@ seastar::future<> InternalClientRequest::start()
   LOG_PREFIX(InternalClientRequest::start);
   DEBUGI("{}: in repeat", *this);
 
+  return pg->get_shard_services().with_sg(
+    pg->get_shard_services().get_sg_client(),
+    [this]() mutable {
   return interruptor::with_interruption([this]() mutable {
     return with_interruption();
   }, [](std::exception_ptr eptr) {
@@ -133,6 +136,7 @@ seastar::future<> InternalClientRequest::start()
   }).finally([this] {
     logger().debug("{}: exit", *this);
     return handle.complete();
+  });
   });
 }
 
