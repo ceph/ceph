@@ -253,7 +253,9 @@ int uprobe_send_op(struct pt_regs *ctx) {
     return 0;
   }
 
-  val->ops_size &= MAX_OPS;
+  if (val->ops_size > MAX_OPS) {
+    val->ops_size = MAX_OPS;
+  }
   val->offset = 0;
   val->length = 0;
 
