@@ -357,7 +357,7 @@ int RGWSI_BILog_RADOS_InIndex::log_list(
 
   // Refresh marker, if there are multiple shards, the output will look like
   // '{shard_oid_1}#{shard_marker_1},{shard_oid_2}#{shard_marker_2}...',
-  // if there is no sharding, the simply marker (without oid) is returned
+  // if there is no sharding, then simply marker (without oid) is returned
   if (has_shards) {
     marker_mgr.to_string(&marker);
   } else if (!result.empty()) {
@@ -627,11 +627,11 @@ int RGWSI_BILog_RADOS_FIFO::log_list(
     }
   }
 
-  if (shard_id >= 0) {
-    marker_mgr.to_string(&marker);
-  } else if (!result.empty()) {
-    marker = result.rbegin()->id;
-  }
+  // always encode per-shard positions using the marker format
+  // ("0#<xxx>,1#<xxx>,..."). using a raw FIFO marker (no shard prefix) here
+  // would cause from_string() to assign it to shard 0 only, causing all other
+  // shards to restart from the beginning on the next paginated call.
+  marker_mgr.to_string(&marker);
 
   return 0;
 }
