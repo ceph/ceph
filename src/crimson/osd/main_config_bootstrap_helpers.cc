@@ -97,7 +97,8 @@ const std::vector<SeastarOption> seastar_options = {
   {"--io-latency-goal-ms", "crimson_reactor_io_latency_goal_ms", Option::TYPE_FLOAT},
   {"--idle-poll-time-us", "crimson_reactor_idle_poll_time_us", Option::TYPE_UINT},
   {"--poll-mode", "crimson_poll_mode", Option::TYPE_BOOL},
-  {"--reactor-backend", "crimson_reactor_backend", Option::TYPE_STR}
+  {"--reactor-backend", "crimson_reactor_backend", Option::TYPE_STR},
+  {"--io-properties-file", "crimson_io_properties_file", Option::TYPE_STR}
 };
 
 // Function to get the option value as a string
