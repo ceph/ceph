@@ -148,15 +148,28 @@ class NFSService(CephService):
             logger.warning(f'Bind address in {daemon_type}.{daemon_id}\'s ganesha conf is defaulting to empty')
         else:
             logger.debug("using haproxy bind address: %r", bind_addr)
-            if spec.enable_rdma:
-                logger.warning(
-                    'NFS RDMA is enabled with Bind_Addr %s on host %s. '
-                    'Ensure the network interface for this address is RDMA-capable. '
-                    "On the host, run 'rdma link show' and confirm the netdev for the interface "
-                    'with this IP is listed.',
-                    bind_addr.split('/')[0] if bind_addr else bind_addr,
-                    host,
+
+        if spec.enable_rdma:
+            from cephadm.serve import CephadmServe
+            rdma_devices = self.mgr.wait_async(
+                CephadmServe(self.mgr).get_rdma_devices(host))
+            if not rdma_devices:
+                raise OrchestratorError(
+                    f'NFS RDMA is enabled but host {host} has no RDMA devices. '
+                    "Run 'cephadm list-rdma' on the host to verify RDMA is available."
                 )
+            if bind_addr:
+                bind_ip = bind_addr.split('/')[0]
+                iface = self.mgr.cache.get_interface_for_ip(host, bind_ip)
+                if iface:
+                    rdma_netdevs = {d.get('netdev', '') for d in rdma_devices}
+                    if iface not in rdma_netdevs:
+                        raise OrchestratorError(
+                            f'NFS RDMA is enabled with bind address {bind_addr} on host {host}, '
+                            f'but interface {iface} (for this IP) is not RDMA-capable. '
+                            f'RDMA netdevs on host: {sorted(rdma_netdevs)}. '
+                            "Use an IP on an RDMA-capable interface or run 'rdma link show' on the host."
+                        )
 
         if monitoring_ip:
             daemon_spec.port_ips.update({str(monitoring_port): monitoring_ip})
@@ -244,6 +257,7 @@ class NFSService(CephService):
                 'user': rgw_user,
                 'keyring': rgw_keyring,
             }
+            config['enable_rdma'] = spec.enable_rdma
             logger.debug('Generated cephadm config-json: %s' % config)
             return config
 

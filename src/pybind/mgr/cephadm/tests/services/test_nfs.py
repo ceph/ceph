@@ -486,14 +486,25 @@ class TestNFS:
                 )
                 assert expected_tls_block in ganesha_conf
 
+    @patch("cephadm.serve.CephadmServe._run_cephadm_json")
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
     @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
     @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
     @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
-    def test_nfs_config_rdma_enabled(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+    def test_nfs_config_rdma_enabled(self, _run_cephadm, _run_cephadm_json, cephadm_module: CephadmOrchestrator):
         """NFS with enable_rdma=True: ganesha.conf has RDMA protocols (nfsrdma, rpcrdma)."""
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        # Mock list-rdma only: return RDMA devices for list-rdma; [] for ls; {} for others (.get)
+
+        async def mock_list_rdma(host, entity, command, *args, **kwargs):
+            if command == 'list-rdma':
+                return [{'link': 'rdma0/1', 'state': 'ACTIVE',
+                         'physical_state': 'LINK_UP', 'netdev': 'eth0'}]
+            if command == 'ls':
+                return []
+            return {}
+        _run_cephadm_json.side_effect = mock_list_rdma
 
         with with_host(cephadm_module, 'host1', addr='1.2.3.7'):
             nfs_spec = NFSServiceSpec(
@@ -512,14 +523,25 @@ class TestNFS:
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 assert "Protocols = 3, 4, nfsrdma, rpcrdma" in ganesha_conf
 
+    @patch("cephadm.serve.CephadmServe._run_cephadm_json")
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
     @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
     @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
     @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
-    def test_nfs_config_rdma_custom_port(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+    def test_nfs_config_rdma_custom_port(self, _run_cephadm, _run_cephadm_json, cephadm_module: CephadmOrchestrator):
         """NFS with enable_rdma and rdma_port: ganesha.conf has NFS_RDMA_Port."""
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        # Mock list-rdma only: return RDMA devices for list-rdma; [] for ls; {} for others (.get)
+
+        async def mock_list_rdma(host, entity, command, *args, **kwargs):
+            if command == 'list-rdma':
+                return [{'link': 'rdma0/1', 'state': 'ACTIVE',
+                         'physical_state': 'LINK_UP', 'netdev': 'eth0'}]
+            if command == 'ls':
+                return []
+            return {}
+        _run_cephadm_json.side_effect = mock_list_rdma
 
         with with_host(cephadm_module, 'host1', addr='1.2.3.7'):
             nfs_spec = NFSServiceSpec(

@@ -950,6 +950,14 @@ class HostCache():
         self.networks[host] = nets
         self.last_network_update[host] = datetime_now()
 
+    def get_interface_for_ip(self, host: str, ip: str) -> Optional[str]:
+        """Return the network interface name that has the given IP on host, or None."""
+        for _subnet, ifaces in self.networks.get(host, {}).items():
+            for iface, ips in ifaces.items():
+                if ip in ips:
+                    return iface
+        return None
+
     def update_daemon_config_deps(self, host: str, name: str, deps: List[str], stamp: datetime.datetime) -> None:
         self.daemon_config_deps[host][name] = {
             'deps': deps,
