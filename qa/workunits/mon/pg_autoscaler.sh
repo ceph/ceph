@@ -30,7 +30,9 @@ function wait_for() {
     return 0
 }
 
-function power2() { echo "x=l($1)/l(2); scale=0; 2^((x+0.5)/1)" | bc -l;}
+function power2_floor() { echo "x=l($1)/l(2); scale=0; 2^(x/1)" | bc -l;}
+
+function power2_ceil() { echo "x=l($1)/l(2); scale=0; 2^((x+0.999)/1)" | bc -l; }
 
 function eval_actual_expected_val() {
     local actual_value=$1
@@ -93,13 +95,13 @@ POOL_SIZE_4=$(ceph osd pool get bulk2 size| grep -Eo '[0-9]{1,4}')
 # Since the Capacity ratio = 0 we first meta pool remains the same pg_num
 
 TARGET_PG_1=$(ceph osd pool get meta0 pg_num| grep -Eo '[0-9]{1,4}')
-PG_LEFT=$NUM_OSDS*100
+PG_LEFT=$(($NUM_OSDS*100 - $TARGET_PG_1 * $POOL_SIZE_1))
 NUM_POOLS_LEFT=$NUM_POOLS-1
 # Rest of the pool is bulk and even pools so pretty straight forward
 # calculations.
-TARGET_PG_2=$(power2 $((($PG_LEFT)/($NUM_POOLS_LEFT)/($POOL_SIZE_2))))
-TARGET_PG_3=$(power2 $((($PG_LEFT)/($NUM_POOLS_LEFT)/($POOL_SIZE_3))))
-TARGET_PG_4=$(power2 $((($PG_LEFT)/($NUM_POOLS_LEFT)/($POOL_SIZE_4))))
+TARGET_PG_2=$(power2_floor $((($PG_LEFT)/($NUM_POOLS_LEFT)/($POOL_SIZE_2))))
+TARGET_PG_3=$(power2_floor $((($PG_LEFT)/($NUM_POOLS_LEFT)/($POOL_SIZE_3))))
+TARGET_PG_4=$(power2_floor $((($PG_LEFT)/($NUM_POOLS_LEFT)/($POOL_SIZE_4))))
 
 # evaluate target_pg against pg num of each pools
 wait_for 300 "ceph osd pool get meta0 pg_num | grep $TARGET_PG_1"
@@ -109,7 +111,7 @@ wait_for 300 "ceph osd pool get bulk2 pg_num | grep $TARGET_PG_4"
 
 # target ratio
 ceph osd pool set meta0 target_size_ratio 5
-ceph osd pool set bulk0 target_size_ratio 1
+ceph osd pool set bulk0 target_size_ratio 2
 sleep 60
 APGS=$(ceph osd dump -f json-pretty | jq '.pools[0].pg_num_target')
 BPGS=$(ceph osd dump -f json-pretty | jq '.pools[1].pg_num_target')
@@ -151,6 +153,44 @@ ceph osd pool rm bulk1 bulk1 --yes-i-really-really-mean-it
 ceph osd pool rm bulk2 bulk2 --yes-i-really-really-mean-it
 ceph osd pool rm warn0 warn0 --yes-i-really-really-mean-it
 ceph osd pool rm warn1 warn1 --yes-i-really-really-mean-it
+
+# test pool starvation where PGs not distributed evenly
+ceph osd pool create data0
+ceph osd pool create data1
+ceph osd pool create data2
+ceph osd pool set data0 target_size_ratio 0.3333
+ceph osd pool set data1 target_size_ratio 0.3333
+ceph osd pool set data2  target_size_ratio 0.3333
+sleep 30
+
+TARGET_PG_1=$(ceph osd pool get data0 pg_num| grep -Eo '[0-9]{1,4}')
+wait_for 300 "ceph osd pool get data1 pg_num | grep $TARGET_PG_1"
+wait_for 300 "ceph osd pool get data2 pg_num | grep $TARGET_PG_1"
+
+ceph osd pool rm data0 data0 --yes-i-really-really-mean-it
+ceph osd pool rm data1 data1 --yes-i-really-really-mean-it
+ceph osd pool rm data2 data2 --yes-i-really-really-mean-it
+
+# test edge case for exact budget
+ceph config set global mon_target_pg_per_osd 128
+
+ceph osd pool create data0
+ceph osd pool create data1
+ceph osd pool set data0 target_size_ratio 0.5
+ceph osd pool set data1 target_size_ratio 0.5
+
+POOL_SIZE_1=$(ceph osd pool get data0 size| grep -Eo '[0-9]{1,4}')
+POOL_SIZE_2=$(ceph osd pool get data1 size| grep -Eo '[0-9]{1,4}')
+PG_LEFT=$(($NUM_OSDS * 128))
+NUM_POOLS=$(ceph osd pool ls | wc -l)
+TARGET_PG_1=$(power2_floor $((($PG_LEFT)/($NUM_POOLS)/($POOL_SIZE_1))))
+TARGET_PG_2=$(power2_floor $((($PG_LEFT)/($NUM_POOLS)/($POOL_SIZE_2))))
+
+wait_for 300 "ceph osd pool get data0 pg_num | grep $TARGET_PG_1"
+wait_for 300 "ceph osd pool get data1 pg_num | grep $TARGET_PG_2"
+
+ceph osd pool rm data0 data0 --yes-i-really-really-mean-it
+ceph osd pool rm data1 data1 --yes-i-really-really-mean-it
 
 echo OK
 
