@@ -111,7 +111,7 @@
             rateLimitForm.controls.max_export_read_bw.dirty
           "
           [invalidText]="Export_readbw_Error"
-          >Export Write Bandwidth
+          >Export Read Bandwidth
           <input
             cdsText
             type="text"
@@ -287,8 +287,8 @@
             type="text"
             placeholder="Client write bandwidth..."
             i18n-placeholder
-            [id]="max_client_write_bw"
-            [name]="max_client_write_bw"
+            id="max_client_write_bw"
+            name="max_client_write_bw"
             formControlName="max_client_write_bw"
             [invalid]="
               rateLimitForm.controls.max_client_write_bw.invalid &&

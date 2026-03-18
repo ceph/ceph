@@ -144,9 +144,9 @@ class NFSGaneshaCluster(RESTController):
                                      qos_type: str,
                                      max_export_iops: int = 0,
                                      max_client_iops: int = 0,
-                                     disable_Ops: bool = False):
+                                     disable_ops: bool = False):
 
-        if disable_Ops:
+        if disable_ops:
             cluster_obj = mgr.remote('nfs', 'fetch_nfs_cluster_obj')
             return cluster_obj.disable_cluster_qos_ops(cluster_id)
         obj = {}

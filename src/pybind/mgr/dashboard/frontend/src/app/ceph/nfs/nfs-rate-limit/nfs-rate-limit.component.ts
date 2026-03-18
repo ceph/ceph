@@ -5,7 +5,7 @@ import { NfsService } from '~/app/shared/api/nfs.service';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import {
-  bwTypeItem,
+  BwTypeItem,
   NFS_TYPE,
   NFSBwIopConfig,
   QOSType,
@@ -43,7 +43,7 @@ export class NfsRateLimitComponent implements OnInit {
   @Output()
   emitErrors = new EventEmitter();
   ngDataReady = new EventEmitter<any>();
-  bwTypeArr: bwTypeItem[] = [];
+  bwTypeArr: BwTypeItem[] = [];
   nfsClusterData: NFSBwIopConfig = {};
   qosTypeVal: string;
   rateLimitForm: CdFormGroup;
@@ -63,7 +63,7 @@ export class NfsRateLimitComponent implements OnInit {
   constructor(
     private nfsService: NfsService,
     private formatterService: FormatterService,
-    private chnageDetectorRef: ChangeDetectorRef
+    private changeDetectorRef: ChangeDetectorRef
   ) {
     this.bwTypeArr = this.nfsService.bwType;
   }
@@ -125,7 +125,7 @@ export class NfsRateLimitComponent implements OnInit {
       }
     }
 
-    this.chnageDetectorRef.detectChanges();
+    this.changeDetectorRef.detectChanges();
   }
 
   loadConditionCheck() {
@@ -244,7 +244,7 @@ export class NfsRateLimitComponent implements OnInit {
   }
 
   getbwTypeHelp(type: string) {
-    const bwTypeItem = this.bwTypeArr.find((item: bwTypeItem) => type === item.value);
+    const bwTypeItem = this.bwTypeArr.find((item: BwTypeItem) => type === item.value);
     return _.isObjectLike(bwTypeItem) ? bwTypeItem.help : '';
   }
 
@@ -369,16 +369,16 @@ export class NfsRateLimitComponent implements OnInit {
 
       switch (this.qosiopsTypeVal) {
         case QOSType.PerShare: {
-          result['max_export_iops'] = this.formatterService.toBytes(formValues.max_export_iops);
+          result['max_export_iops'] = formValues.max_export_iops;
           break;
         }
         case QOSType.PerClient: {
-          result['max_client_iops'] = this.formatterService.toBytes(formValues.max_client_iops);
+          result['max_client_iops'] = formValues.max_client_iops;
           break;
         }
         case QOSType.PerSharePerClient: {
-          result['max_export_iops'] = this.formatterService.toBytes(formValues.max_export_iops);
-          result['max_client_iops'] = this.formatterService.toBytes(formValues.max_client_iops);
+          result['max_export_iops'] = formValues.max_export_iops;
+          result['max_client_iops'] = formValues.max_client_iops;
           break;
         }
       }
@@ -395,7 +395,7 @@ export class NfsRateLimitComponent implements OnInit {
     }
     this.rateLimitForm?.get('qos_type').updateValueAndValidity();
     this.rateLimitForm?.get('qos_type_ops').updateValueAndValidity();
-    this.chnageDetectorRef.detectChanges();
+    this.changeDetectorRef.detectChanges();
   }
 
   qosTypeValidator(): ValidationErrors | null {
@@ -420,7 +420,7 @@ export class NfsRateLimitComponent implements OnInit {
     }
     this.rateLimitForm?.get('qos_type_ops').updateValueAndValidity();
     this.rateLimitForm?.get('qos_type').updateValueAndValidity();
-    this.chnageDetectorRef.detectChanges();
+    this.changeDetectorRef.detectChanges();
   }
 
   getQoSTypeHelper(qosType: string) {
