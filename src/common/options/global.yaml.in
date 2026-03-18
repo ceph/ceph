@@ -1887,7 +1887,7 @@ options:
   level: advanced
   desc: Defines the number of bytes allowed to be held in a single config-key entry
   fmt_desc: The maximum size of config-key entry (in bytes)
-  default: 64_K
+  default: 256_K
   services:
   - mon
   with_legacy: true
