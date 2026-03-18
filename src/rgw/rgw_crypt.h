@@ -16,11 +16,12 @@
 #include "common/async/yield_context.h"
 
 struct rgw_crypt_src_identity {
-  std::string_view bucket;
-  std::string_view object;
+  std::string bucket_id;
+  std::string bucket;
+  std::string object;
 
   bool valid() const {
-    return !bucket.empty() && !object.empty();
+    return !bucket_id.empty() && !bucket.empty() && !object.empty();
   }
 };
 
