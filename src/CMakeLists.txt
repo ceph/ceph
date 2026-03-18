@@ -233,6 +233,12 @@ if(HAVE_INTEL)
   endif()
 endif()
 
+# Set WITH_EC_ISA_PLUGIN early so it's available when processing common/options
+# This must be set before add_subdirectory(common) is called
+if(HAVE_NASM_X64_AVX2 OR HAVE_ARMV8_SIMD)
+  set(WITH_EC_ISA_PLUGIN TRUE CACHE BOOL "")
+endif()
+
 # require c++20
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_EXTENSIONS OFF)
