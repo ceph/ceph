@@ -28,6 +28,14 @@ options:
   min: 0
   max: 32
 
+- name: crimson_io_properties_file
+  type: str
+  level: advanced
+  desc: Path to Seastar IO properties YAML file used to override
+        auto detected disk performance characteristics.
+  flags:
+  - startup
+
 # Reactor options:
 
 - name: crimson_reactor_backend
