@@ -135,7 +135,16 @@ workload_tentacle:
 upgrade-sequence_tentacle:
    sequential:
    - print: "**** done branch: tentacle install.upgrade"
-   - ceph.restart: [mds.a]
+   - ceph.restart: [mgr.x]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.a]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.b]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.c]
    - sleep:
        duration: 60
    - ceph.restart: [osd.0]
@@ -156,16 +165,7 @@ upgrade-sequence_tentacle:
    - ceph.restart: [osd.5]
    - sleep:
        duration: 60
-   - ceph.restart: [mgr.x]
-   - sleep:
-       duration: 60
-   - ceph.restart: [mon.a]
-   - sleep:
-       duration: 60
-   - ceph.restart: [mon.b]
-   - sleep:
-       duration: 60
-   - ceph.restart: [mon.c]
+   - ceph.restart: [mds.a]
    - sleep:
        duration: 60
    - print: "**** done ceph.restart all tentacle branch mds/osd/mon"
