@@ -26,7 +26,7 @@ export interface NFSBwIopConfig {
   pseudo_path?: string;
   max_export_iops?: number;
   max_client_iops?: number;
-  disable_Ops?: boolean;
+  disable_ops?: boolean;
   enable_ops?: boolean;
   disable_qos_ops?: boolean;
   enable_iops_control?: boolean;
@@ -44,7 +44,7 @@ export interface QOSTypeItem {
   help: string;
 }
 
-export interface bwTypeItem {
+export interface BwTypeItem {
   value: string;
   help: string;
 }

@@ -11642,7 +11642,7 @@ paths:
               properties:
                 cluster_id:
                   type: string
-                disable_Ops:
+                disable_ops:
                   default: false
                   type: boolean
                 max_client_iops:

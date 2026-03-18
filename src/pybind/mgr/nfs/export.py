@@ -973,8 +973,6 @@ class ExportMgr:
         try:
             export_obj = self.get_export_obj(cluster_id, pseudo_path)
             status = False
-            if not export_obj:
-                raise NFSObjectNotFound(f"Export {pseudo_path} not found in NFS cluster {cluster_id}")
             if export_obj.qos_block:
                 status = export_obj.qos_block.get_enable_qos_val(disable_ops=True)
             self.update_export_qos(cluster_id, pseudo_path, export_obj, status, ops_obj=QOSOpsControl())
