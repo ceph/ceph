@@ -456,6 +456,46 @@ def test_get_index():
 
 
 @pytest.mark.index_test
+def test_non_filterable_metadata_keys():
+    """Test that nonFilterableMetadataKeys is stored on CreateIndex and returned on GetIndex."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    nonfilterable_keys = ['key1', 'key2', 'key3']
+    result = conn.create_index(
+        vectorBucketName=bucket_name, indexName=index_name,
+        dataType='float32', dimension=128, distanceMetric='euclidean',
+        metadataConfiguration={'nonFilterableMetadataKeys': nonfilterable_keys})
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    result = conn.get_index(vectorBucketName=bucket_name, indexName=index_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    returned_keys = result['index']['metadataConfiguration']['nonFilterableMetadataKeys']
+    assert set(returned_keys) == set(nonfilterable_keys), \
+        f"expected {nonfilterable_keys} but got {returned_keys}"
+
+    # create index without nonFilterableMetadataKeys
+    index_name2 = 'test-index2'
+    result = conn.create_index(
+        vectorBucketName=bucket_name, indexName=index_name2,
+        dataType='float32', dimension=64, distanceMetric='cosine')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    result = conn.get_index(vectorBucketName=bucket_name, indexName=index_name2)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    returned_keys = result['index']['metadataConfiguration']['nonFilterableMetadataKeys']
+    assert returned_keys == [], f"expected empty list but got {returned_keys}"
+
+    log.info('test_non_filterable_metadata_keys: verified nonFilterableMetadataKeys round-trip')
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+@pytest.mark.index_test
 def test_delete_index():
     conn = connection()
     bucket_name = gen_bucket_name()

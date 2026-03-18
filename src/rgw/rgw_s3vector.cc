@@ -221,7 +221,7 @@ namespace rgw::s3vector {
 
   // create index
 
-  const char* distance_metric_key = "distance_metric";
+  static constexpr const char* distance_metric_key[] = {"distance_metric"};
 
   const char* distance_metric_to_string(DistanceMetric metric) {
     switch (metric) {
@@ -242,10 +242,9 @@ namespace rgw::s3vector {
   }
 
   int set_table_distance_metric(const LanceDBTable* table, DistanceMetric metric, DoutPrefixProvider* dpp) {
-    const char* key = distance_metric_key;
     const char* value = distance_metric_to_string(metric);
     char* error_message = nullptr;
-    if (const auto result = lancedb_table_set_metadata(table, &key, &value, 1, &error_message); result != LANCEDB_SUCCESS) {
+    if (const auto result = lancedb_table_set_metadata(table, distance_metric_key, &value, 1, &error_message); result != LANCEDB_SUCCESS) {
       ldpp_dout(dpp, 1) << "ERROR: s3vector failed to set distance_metric metadata: " << (error_message ? error_message : "unknown") << dendl;
       lancedb_free_string(error_message);
       return lancedb_error_to_errno(result);
@@ -253,13 +252,60 @@ namespace rgw::s3vector {
     return 0;
   }
 
-  DistanceMetric get_table_distance_metric(const LanceDBTable* table, DoutPrefixProvider* dpp) {
-    const char* key = distance_metric_key;
+  static constexpr const char* nonfilterable_metadata_key[] = {"nonfilterable_metadata"};
+
+  int set_nonfilterable_metadata(const LanceDBTable* table, const std::vector<std::string>& keys, DoutPrefixProvider* dpp) {
+    if (keys.empty()) {
+      return 0;
+    }
+    // join keys with comma separator
+    std::string joined;
+    for (size_t i = 0; i < keys.size(); ++i) {
+      if (i > 0) joined += ',';
+      joined += keys[i];
+    }
+    const char* value = joined.c_str();
+    char* error_message = nullptr;
+    if (const auto result = lancedb_table_set_metadata(table, nonfilterable_metadata_key, &value, 1, &error_message); result != LANCEDB_SUCCESS) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector failed to set " << nonfilterable_metadata_key <<
+        " metadata: " << (error_message ? error_message : "unknown") << dendl;
+      lancedb_free_string(error_message);
+      return lancedb_error_to_errno(result);
+    }
+    return 0;
+  }
+
+  std::vector<std::string> get_nonfilterable_metadata(const LanceDBTable* table, DoutPrefixProvider* dpp) {
     char** keys_out = nullptr;
     char** values_out = nullptr;
     size_t count = 0;
     char* error_message = nullptr;
-    if (const auto result = lancedb_table_get_metadata(table, &key, 1, &keys_out, &values_out, &count, &error_message); result != LANCEDB_SUCCESS) {
+    if (const auto result = lancedb_table_get_metadata(table, nonfilterable_metadata_key, 1, &keys_out, &values_out, &count, &error_message); result != LANCEDB_SUCCESS) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector failed to get " << nonfilterable_metadata_key <<
+        "  metadata: " << (error_message ? error_message : "unknown") << dendl;
+      lancedb_free_string(error_message);
+      return {};
+    }
+    std::vector<std::string> result_keys;
+    if (count > 0 && values_out[0] != nullptr) {
+      std::string_view sv{values_out[0]};
+      while (!sv.empty()) {
+        auto pos = sv.find(',');
+        result_keys.emplace_back(sv.substr(0, pos));
+        if (pos == std::string_view::npos) break;
+        sv.remove_prefix(pos + 1);
+      }
+    }
+    lancedb_free_metadata(keys_out, values_out, count);
+    return result_keys;
+  }
+
+  DistanceMetric get_distance_metric(const LanceDBTable* table, DoutPrefixProvider* dpp) {
+    char** keys_out = nullptr;
+    char** values_out = nullptr;
+    size_t count = 0;
+    char* error_message = nullptr;
+    if (const auto result = lancedb_table_get_metadata(table, distance_metric_key, 1, &keys_out, &values_out, &count, &error_message); result != LANCEDB_SUCCESS) {
       ldpp_dout(dpp, 1) << "ERROR: s3vector failed to get distance_metric metadata: " << (error_message ? error_message : "unknown") << dendl;
       lancedb_free_string(error_message);
       return DistanceMetric::UNKNOWN;
@@ -359,7 +405,48 @@ namespace rgw::s3vector {
     return 0;
   }
 
-  int get_vector_dimension(const std::string& index_name, LanceDBTable* table, DoutPrefixProvider* dpp, unsigned int& dimension);
+  int get_vector_dimension(const std::string& index_name, LanceDBTable* table, DoutPrefixProvider* dpp, unsigned int& dimension) {
+    // Get the Arrow schema from the table
+    struct ArrowSchema* c_schema_ptr = nullptr;
+    char* error_message = nullptr;
+    if (const LanceDBError result = lancedb_table_arrow_schema(
+          table,
+          reinterpret_cast<FFI_ArrowSchema**>(&c_schema_ptr),
+          &error_message); result != LANCEDB_SUCCESS) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector failed to get schema for index: " << index_name
+                        << ". error: " << error_message << dendl;
+      lancedb_free_string(error_message);
+      return lancedb_error_to_errno(result);
+    }
+
+    // Import the schema to Arrow C++
+    const auto schema = arrow::ImportSchema(c_schema_ptr);
+    if (!schema.ok()) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector failed to import schema for index: " << index_name
+                        << ". error: " << schema.status().ToString() << dendl;
+      lancedb_free_arrow_schema(reinterpret_cast<FFI_ArrowSchema*>(c_schema_ptr));
+      return -EINVAL;
+    }
+
+    // Extract dimension from the "data" field
+    auto data_field = schema->get()->GetFieldByName(data_field_str);
+    if (!data_field) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector schema missing " << data_field_str << " field for index: " << index_name << dendl;
+      lancedb_free_arrow_schema(reinterpret_cast<FFI_ArrowSchema*>(c_schema_ptr));
+      return -EINVAL;
+    }
+
+    if (data_field->type()->id() != arrow::Type::FIXED_SIZE_LIST) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector " << data_field_str << "  field is not a FixedSizeList for index: " << index_name << dendl;
+      lancedb_free_arrow_schema(reinterpret_cast<FFI_ArrowSchema*>(c_schema_ptr));
+      return -EINVAL;
+    }
+
+    auto fixed_size_list_type = std::static_pointer_cast<arrow::FixedSizeListType>(data_field->type());
+    dimension = fixed_size_list_type->list_size();
+    lancedb_free_arrow_schema(reinterpret_cast<FFI_ArrowSchema*>(c_schema_ptr));
+    return 0;
+  }
 
   int create_index(const create_index_t& configuration, DoutPrefixProvider* dpp, optional_yield y) {
     log_configuration(dpp, "CreateIndex", configuration);
@@ -384,7 +471,7 @@ namespace rgw::s3vector {
         lancedb_connection_free(conn);
         return -EEXIST;
       }
-      const auto existing_metric = get_table_distance_metric(existing_table, dpp);
+      const auto existing_metric = get_distance_metric(existing_table, dpp);
       if (existing_metric != DistanceMetric::UNKNOWN && existing_metric != configuration.distance_metric) {
         ldpp_dout(dpp, 1) << "ERROR: s3vector index: " << configuration.index_name
             << " already exists with distance metric " << distance_metric_to_string(existing_metric)
@@ -429,6 +516,11 @@ namespace rgw::s3vector {
       return lancedb_error_to_errno(result);
     }
     if (int ret = set_table_distance_metric(table, configuration.distance_metric, dpp); ret < 0) {
+      lancedb_table_free(table);
+      lancedb_connection_free(conn);
+      return ret;
+    }
+    if (int ret = set_nonfilterable_metadata(table, configuration.non_filterable_metadata_keys, dpp); ret < 0) {
       lancedb_table_free(table);
       lancedb_connection_free(conn);
       return ret;
@@ -506,48 +598,6 @@ namespace rgw::s3vector {
     f->close_section();
   }
 
-  int get_vector_dimension(const std::string& index_name, LanceDBTable* table, DoutPrefixProvider* dpp, unsigned int& dimension) {
-    // Get the Arrow schema from the table
-    struct ArrowSchema* c_schema_ptr = nullptr;
-    char* error_message = nullptr;
-    if (const LanceDBError result = lancedb_table_arrow_schema(
-          table,
-          reinterpret_cast<FFI_ArrowSchema**>(&c_schema_ptr),
-          &error_message); result != LANCEDB_SUCCESS) {
-      ldpp_dout(dpp, 1) << "ERROR: s3vector failed to get schema for index: " << index_name
-                        << ". error: " << error_message << dendl;
-      lancedb_free_string(error_message);
-      return lancedb_error_to_errno(result);
-    }
-
-    // Import the schema to Arrow C++
-    const auto schema = arrow::ImportSchema(c_schema_ptr);
-    if (!schema.ok()) {
-      ldpp_dout(dpp, 1) << "ERROR: s3vector failed to import schema for index: " << index_name
-                        << ". error: " << schema.status().ToString() << dendl;
-      lancedb_free_arrow_schema(reinterpret_cast<FFI_ArrowSchema*>(c_schema_ptr));
-      return -EINVAL;
-    }
-
-    // Extract dimension from the "data" field
-    auto data_field = schema->get()->GetFieldByName(data_field_str);
-    if (!data_field) {
-      ldpp_dout(dpp, 1) << "ERROR: s3vector schema missing " << data_field_str << " field for index: " << index_name << dendl;
-      lancedb_free_arrow_schema(reinterpret_cast<FFI_ArrowSchema*>(c_schema_ptr));
-      return -EINVAL;
-    }
-
-    if (data_field->type()->id() != arrow::Type::FIXED_SIZE_LIST) {
-      ldpp_dout(dpp, 1) << "ERROR: s3vector " << data_field_str << "  field is not a FixedSizeList for index: " << index_name << dendl;
-      lancedb_free_arrow_schema(reinterpret_cast<FFI_ArrowSchema*>(c_schema_ptr));
-      return -EINVAL;
-    }
-
-    auto fixed_size_list_type = std::static_pointer_cast<arrow::FixedSizeListType>(data_field->type());
-    dimension = fixed_size_list_type->list_size();
-    lancedb_free_arrow_schema(reinterpret_cast<FFI_ArrowSchema*>(c_schema_ptr));
-    return 0;
-  }
 
   int get_index(const get_index_t& configuration, const std::string& region, const std::string& account, DoutPrefixProvider* dpp, optional_yield y, get_index_reply_t& reply) {
     log_configuration(dpp, "GetIndex", configuration);
@@ -561,14 +611,12 @@ namespace rgw::s3vector {
       return -ENOENT;
     }
 
-    if (int ret = get_vector_dimension(configuration.index_name, table, dpp, reply.dimension); ret < 0) {
-      lancedb_connection_free(conn);
-      lancedb_table_free(table);
-      return ret;
-    }
+    // in case of fialure we reply with dimension 0
+    reply.dimension = 0;
+    std::ignore = get_vector_dimension(configuration.index_name, table, dpp, reply.dimension);
 
     reply.data_type = "float32";
-    reply.distance_metric = get_table_distance_metric(table, dpp);
+    reply.distance_metric = get_distance_metric(table, dpp);
     reply.index_name = configuration.index_name;
     reply.vector_bucket_name = configuration.vector_bucket_name;
 
@@ -583,7 +631,7 @@ namespace rgw::s3vector {
     }
 
     reply.creation_time = get_table_creation_time(table, dpp);
-    // reply.non_filterable_metadata_keys - empty for now, TODO: store and retrieve from table metadata
+    reply.non_filterable_metadata_keys = get_nonfilterable_metadata(table, dpp);
     lancedb_table_free(table);
     lancedb_connection_free(conn);
     return 0;
@@ -1634,7 +1682,7 @@ namespace rgw::s3vector {
     }
 
     int ret = populate_vectors_from_query(dpp, query_result, reply.vectors, configuration.index_name, false, configuration.return_distance, true, configuration.return_metadata);
-    reply.distance_metric = get_table_distance_metric(table, dpp);
+    reply.distance_metric = get_distance_metric(table, dpp);
     lancedb_table_free(table);
     return ret;
   }
