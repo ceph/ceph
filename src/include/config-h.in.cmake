@@ -295,6 +295,12 @@
 /* Support ARMv8 CRC and CRYPTO intrinsics */
 #cmakedefine HAVE_ARMV8_CRC_CRYPTO_INTRINSICS
 
+/* Define if you have RISC-V Vector extension */
+#cmakedefine HAVE_RISCV_RVV 1
+
+/* Define if you have RISC-V ZVBC extension */
+#cmakedefine HAVE_RISCV_ZVBC 1
+
 /* Define if you have struct stat.st_mtimespec.tv_nsec */
 #cmakedefine HAVE_STAT_ST_MTIMESPEC_TV_NSEC
 
