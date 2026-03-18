@@ -10,12 +10,11 @@
  *
  */
 
-#include <errno.h>
+#include <cerrno>
 #include <getopt.h>
 #include <linux/types.h>
-#include <stdio.h>
+#include <cstdio>
 #include <sys/resource.h>
-#include <time.h>
 
 #include <cassert>
 #include <cstring>
@@ -28,15 +27,13 @@
 #include <queue>
 #include <fstream>
 
-extern "C" {
+#include <cstdlib>
 #include <dwarf.h>
 #include <elf.h>
 #include <elfutils/libdw.h>
 #include <elfutils/libdwfl.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <stdlib.h>
-}
 #include "bpf_ceph_types.h"
 #include "dwarf_parser.h"
 #include "utils.h"
@@ -47,19 +44,23 @@ bool DwarfParser::die_has_loclist(Dwarf_Die *begin_die) const {
   Dwarf_Die die;
   Dwarf_Attribute loc;
 
-  if (dwarf_child(begin_die, &die) != 0) return false;
+  if (dwarf_child(begin_die, &die) != 0) {
+    return false;
+  }
 
   do {
     switch (dwarf_tag(&die)) {
-      case DW_TAG_formal_parameter:
-      case DW_TAG_variable:
+    case DW_TAG_formal_parameter:
+    case DW_TAG_variable:
         if (dwarf_attr_integrate(&die, DW_AT_location, &loc) &&
             dwarf_whatform(&loc) == DW_FORM_sec_offset)
           return true;
         break;
-      default:
+    default:
         if (dwarf_haschildren(&die))
-          if (die_has_loclist(&die)) return true;
+          if (die_has_loclist(&die)) {
+            return true;
+          }
         break;
     }
   } while (dwarf_siblingof(&die, &die) == 0);
@@ -77,7 +78,9 @@ bool DwarfParser::func_entrypc(Dwarf_Die *func, Dwarf_Addr *addr) {
 
   *addr = 0;
 
-  if (dwarf_entrypc(func, addr) == 0 && *addr != 0) return true;
+  if (dwarf_entrypc(func, addr) == 0 && *addr != 0) {
+    return true;
+  }
 
   Dwarf_Addr start = 0, end;
   if (dwarf_ranges(func, 0, addr, &start, &end) >= 0) {
@@ -91,33 +94,33 @@ bool DwarfParser::func_entrypc(Dwarf_Die *func, Dwarf_Addr *addr) {
 
 Dwarf_Die *DwarfParser::resolve_typedecl(Dwarf_Die *type) {
   const char *name = dwarf_diename(type);
-  if (!name) return NULL;
+  if (!name) return nullptr;
 
   string type_name = cache_type_prefix(type) + string(name);
 
   for (auto &p : global_type_cache) {
     auto cus = p.second;
     for (auto i = cus.begin(); i != cus.end(); ++i) {
-      auto &v = (*i).second;
+      auto &v = i->second;
       if (v.find(type_name) != v.end()) return &(v[type_name]);
     }
   }
 
   cerr << "Couldn't resolve type " << type_name << endl; 
 
-  return NULL;
+  return nullptr;
 }
 
 const char *DwarfParser::cache_type_prefix(Dwarf_Die *type) const {
   switch (dwarf_tag(type)) {
-    case DW_TAG_enumeration_type:
-      return "enum ";
-    case DW_TAG_structure_type:
-    case DW_TAG_class_type:
-      // treating struct/class as equals
-      return "struct ";
-    case DW_TAG_union_type:
-      return "union ";
+  case DW_TAG_enumeration_type:
+    return "enum ";
+  case DW_TAG_structure_type:
+  case DW_TAG_class_type:
+    // treating struct/class as equals
+    return "struct ";
+  case DW_TAG_union_type:
+    return "union ";
   }
   return "";
 }
@@ -143,12 +146,12 @@ int DwarfParser::iterate_types_in_cu(mod_cu_type_cache_t & mcu, Dwarf_Die *cu_di
     /* We're only currently looking for named types,
      * although other types of declarations exist */
     switch (dwarf_tag(&die)) {
-      case DW_TAG_base_type:
-      case DW_TAG_enumeration_type:
-      case DW_TAG_structure_type:
-      case DW_TAG_class_type:
-      case DW_TAG_typedef:
-      case DW_TAG_union_type: {
+    case DW_TAG_base_type:
+    case DW_TAG_enumeration_type:
+    case DW_TAG_structure_type:
+    case DW_TAG_class_type:
+    case DW_TAG_typedef:
+    case DW_TAG_union_type: {
         const char *name = dwarf_diename(&die);
         if (!name || dwarf_hasattr(&die, DW_AT_declaration)
             /*TODO || has_only_decl_members(die)*/)
@@ -160,10 +163,10 @@ int DwarfParser::iterate_types_in_cu(mod_cu_type_cache_t & mcu, Dwarf_Die *cu_di
 
       break;
 
-      case DW_TAG_namespace:
-        break;
-      case DW_TAG_imported_unit:
-        break;
+    case DW_TAG_namespace:
+      break;
+    case DW_TAG_imported_unit:
+      break;
     }
   while (rc == DWARF_CB_OK && dwarf_siblingof(&die, &die) == 0);
 
@@ -178,13 +181,13 @@ void DwarfParser::traverse_module(Dwfl_Module *mod, Dwarf *dw, bool want_type) {
   Dwarf_Off noff;
 
   mod_cu_type_cache_t &mcu = global_type_cache[mod];
-  while (dwarf_nextcu(dw, off, &noff, &cuhl, NULL, NULL, NULL) == 0) {
+  while (dwarf_nextcu(dw, off, &noff, &cuhl, nullptr, nullptr, nullptr) == 0) {
     Dwarf_Die die_mem;
     Dwarf_Die *die;
     die = dwarf_offdie(dw, off + cuhl, &die_mem);
     /* Skip partial units. */
     if (dwarf_tag(die) == DW_TAG_compile_unit) {
-       	iterate_types_in_cu(mcu, die);
+      iterate_types_in_cu(mcu, die);
     }
     off = noff;
   }
@@ -195,8 +198,8 @@ void DwarfParser::traverse_module(Dwfl_Module *mod, Dwarf *dw, bool want_type) {
     size_t cuhl;
     Dwarf_Off noff;
     uint64_t type_signature;
-    while (dwarf_next_unit(dw, off, &noff, &cuhl, NULL, NULL, NULL, NULL,
-                           &type_signature, NULL) == 0) {
+    while (dwarf_next_unit(dw, off, &noff, &cuhl, nullptr, nullptr, nullptr, nullptr,
+                           &type_signature, nullptr) == 0) {
       Dwarf_Die die_mem;
       Dwarf_Die *die;
       die = dwarf_offdie_types(dw, off + cuhl, &die_mem);
@@ -209,7 +212,7 @@ void DwarfParser::traverse_module(Dwfl_Module *mod, Dwarf *dw, bool want_type) {
 Dwarf_Die DwarfParser::find_param(Dwarf_Die *func, string symbol) {
   Dwarf_Die vardie;
 
-  dwarf_getscopevar(func, 1, symbol.c_str(), 0, NULL, 0, 0, &vardie);
+  dwarf_getscopevar(func, 1, symbol.c_str(), 0, nullptr, 0, 0, &vardie);
 
   return vardie;
 }
@@ -218,7 +221,7 @@ Dwarf_Attribute *DwarfParser::find_func_frame_base(
     Dwarf_Die *func, Dwarf_Attribute *fb_attr_mem) {
   assert(dwarf_tag(func) == DW_TAG_subprogram);
 
-  Dwarf_Attribute *fb_attr = NULL;
+  Dwarf_Attribute *fb_attr = nullptr;
   fb_attr = dwarf_attr_integrate(func, DW_AT_frame_base, fb_attr_mem);
   return fb_attr;
 }
@@ -263,7 +266,7 @@ bool DwarfParser::find_prologue(Dwarf_Die *func, Dwarf_Addr &pc) {
     return true;
   }
 
-  Dwarf_Addr *bkpts = NULL;
+  Dwarf_Addr *bkpts = nullptr;
   int bcnt = dwarf_entry_breakpoints(func, &bkpts);
   if (bcnt <= 0) {
     cerr << "Couldn't find prologue for function " << funcname << endl;
@@ -283,9 +286,9 @@ void DwarfParser::dwarf_die_type(Dwarf_Die *die, Dwarf_Die *typedie_mem) const {
   Dwarf_Attribute attr_mem, *attr;
   attr = dwarf_attr_integrate(die, DW_AT_type, &attr_mem);
   Dwarf_Die *tmpdie = dwarf_formref_die(attr, typedie_mem);
-  if (tmpdie != NULL && dwarf_tag(tmpdie) == DW_TAG_unspecified_type) {
+  if (tmpdie != nullptr && dwarf_tag(tmpdie) == DW_TAG_unspecified_type) {
     debug_print("detects unspecified type\n");
-  } else if (tmpdie == NULL) {
+  } else if (tmpdie == nullptr) {
     debug_print("no type detected\n");
   }
 }
@@ -294,24 +297,24 @@ Dwarf_Die * DwarfParser::dwarf_attr_die(Dwarf_Die *die, unsigned int attr_flag, 
 {
   Dwarf_Attribute attr_mem, *attr;
   attr = dwarf_attr_integrate(die, attr_flag, &attr_mem);
-  if (dwarf_formref_die (attr, result) != NULL)
-    {
-      /* Get the actual DIE type*/
-      if (attr_flag == DW_AT_type)
-	{
-	  Dwarf_Attribute sigm;
-	  Dwarf_Attribute *sig = dwarf_attr (result, DW_AT_signature, &sigm);
-	  if (sig != NULL)
-	    result = dwarf_formref_die (sig, result);
+  if (dwarf_formref_die(attr, result) != nullptr) {
+    // Get the actual DIE type
+    if (attr_flag == DW_AT_type) {
+      Dwarf_Attribute sigm;
+      Dwarf_Attribute *sig = dwarf_attr(result, DW_AT_signature, &sigm);
+      if (sig != nullptr) {
+        result = dwarf_formref_die(sig, result);
+      }
 
-	  /* A DW_AT_signature might point to a type_unit, then
-	     the actual type DIE we want is the first child.  */
-	  if (result != NULL && dwarf_tag (result) == DW_TAG_type_unit)
-	    dwarf_child (result, result);
-	}
-      return result;
+      // A DW_AT_signature might point to a type_unit, then
+      // the actual type DIE we want is the first child.
+      if (result != nullptr && dwarf_tag(result) == DW_TAG_type_unit) {
+        dwarf_child(result, result);
+      }
     }
-  return NULL;
+    return result;
+  }
+  return nullptr;
 }
 
 void DwarfParser::find_class_member(Dwarf_Die *vardie, Dwarf_Die *typedie,
@@ -342,18 +345,19 @@ void DwarfParser::find_class_member(Dwarf_Die *vardie, Dwarf_Die *typedie,
           die_queue.push(inheritee);
       } else if (tag == DW_TAG_enumeration_type) {
         // TODO
-      } else if (name == NULL) {
+      } else if (name == nullptr) {
         // TODO
       } else if (name == member) {
         *vardie = die;
-	found = true;
-	break;
+        found = true;
+        break;
       }
 
     } while (dwarf_siblingof(&die, &die) == 0);
     die_queue.pop();
-    if (found) 
-	break;
+    if (found) {
+      break;
+    }
   }
 
   if (dwarf_hasattr_integrate(vardie, DW_AT_data_member_location)) {
@@ -373,20 +377,20 @@ void DwarfParser::translate_fields(Dwarf_Die *vardie, Dwarf_Die *typedie,
   }
   while (i < (int)fields.size()) {
     switch (dwarf_tag(typedie)) {
-      case DW_TAG_typedef:
-      case DW_TAG_const_type:
-      case DW_TAG_volatile_type:
-      case DW_TAG_restrict_type:
+    case DW_TAG_typedef:
+    case DW_TAG_const_type:
+    case DW_TAG_volatile_type:
+    case DW_TAG_restrict_type:
         /* Just iterate on the referent type.  */
         dwarf_die_type(typedie, typedie);
         break;
 
-      case DW_TAG_reference_type:
-      case DW_TAG_rvalue_reference_type:
+    case DW_TAG_reference_type:
+    case DW_TAG_rvalue_reference_type:
         res[i].pointer = true;
         dwarf_die_type(typedie, typedie);
         break;
-      case DW_TAG_pointer_type:
+    case DW_TAG_pointer_type:
         /* A pointer with no type is a void* -- can't dereference it. */
         if (!dwarf_hasattr_integrate(typedie, DW_AT_type)) {
           debug_print("invalid access pointer ", fields[i], "\n");
@@ -395,15 +399,15 @@ void DwarfParser::translate_fields(Dwarf_Die *vardie, Dwarf_Die *typedie,
         res[i].pointer = true;
         dwarf_die_type(typedie, typedie);
         break;
-      case DW_TAG_array_type:
+    case DW_TAG_array_type:
         // TODO
         break;
-      case DW_TAG_structure_type:
-      case DW_TAG_union_type:
-      case DW_TAG_class_type: {
+    case DW_TAG_structure_type:
+    case DW_TAG_union_type:
+    case DW_TAG_class_type: {
         if (dwarf_hasattr(typedie, DW_AT_declaration)) {
           Dwarf_Die *tmpdie = resolve_typedecl(typedie);
-          if (tmpdie == NULL) {
+          if (tmpdie == nullptr) {
             debug_print("couldn't resolve type at ", fields[i], "\n");
             return;
           }
@@ -419,17 +423,17 @@ void DwarfParser::translate_fields(Dwarf_Die *vardie, Dwarf_Die *typedie,
           return;
         }
         VarLocation varloc;
-        translate_expr(NULL, expr, pc, varloc);
+        translate_expr(nullptr, expr, pc, varloc);
         res[i].offset = varloc.offset;
 
         dwarf_die_type(vardie, typedie);
         ++i;
       } break;
-      case DW_TAG_enumeration_type:
-      case DW_TAG_base_type:
+    case DW_TAG_enumeration_type:
+    case DW_TAG_base_type:
         debug_print("invalid access enum or base type ", fields[i], "\n");
         break;
-      default:
+    default:
         debug_print("unexpected type ", fields[i], "\n");
         break;
     }
@@ -455,7 +459,7 @@ bool DwarfParser::filter_cu(string unitname) {
   return false;
 }
 
-std::string DwarfParser::special_inlined_function_scope(const char *funcname){
+std::string DwarfParser::special_inlined_function_scope(const char *funcname) {
   if (strcmp(funcname, "log_latency") == 0)
     return "BlueStore";
   if (strcmp(funcname, "log_latency_fn") == 0)
@@ -474,7 +478,7 @@ int handle_attr(Dwarf_Attribute *attr, void *data) {
 }
 
 int handle_function(Dwarf_Die *die, void *data) {
-  assert(data != NULL);
+  assert(data != nullptr);
   DwarfParser *dp = (DwarfParser *)data;
   const char *funcname = dwarf_diename(die);
   if (!dp->filter_func(funcname)) return 0;
@@ -515,14 +519,14 @@ int handle_function(Dwarf_Die *die, void *data) {
     return 0;
   }
 
-  //TODO Need to find all the instances of the inlined function, now we just filter those inline function
+  // TODO Need to find all the instances of the inlined function, now we just filter those inline function
   if (dwarf_func_inline(die) != 0) {
      // Refer to elfutils/tests: we can iterate all inlined instances via below function
-     // dwarf_func_inline_instances(die, &handle_instance, NULL);
+     // dwarf_func_inline_instances(die, &handle_instance, nullptr);
      return 0;
   } 
   
-  if (dwarf_getattrs(die, handle_attr, NULL, 0) != 1) {
+  if (dwarf_getattrs(die, handle_attr, nullptr, 0) != 1) {
     cerr << "dwarf_getattrs failed" << endl;
   }
 
@@ -561,52 +565,52 @@ void DwarfParser::translate_expr(Dwarf_Attribute *fb_attr, Dwarf_Op *expr,
   // TODO can put a debug message to print the atom's name in string
 
   switch (atom) {
-    case DW_OP_deref:
-    case DW_OP_dup:
-    case DW_OP_drop:
-    case DW_OP_over:
-    case DW_OP_swap:
-    case DW_OP_rot:
-    case DW_OP_xderef:
-    case DW_OP_abs:
-    case DW_OP_and:
-    case DW_OP_div:
-    case DW_OP_minus:
-    case DW_OP_mod:
-    case DW_OP_mul:
-    case DW_OP_neg:
-    case DW_OP_not:
-    case DW_OP_or:
-    case DW_OP_plus:
-    case DW_OP_shl:
-    case DW_OP_shr:
-    case DW_OP_shra:
-    case DW_OP_xor:
-    case DW_OP_eq:
-    case DW_OP_ge:
-    case DW_OP_gt:
-    case DW_OP_le:
-    case DW_OP_lt:
-    case DW_OP_ne:
-    case DW_OP_lit0 ... DW_OP_lit31:
-    case DW_OP_nop:
-    case DW_OP_stack_value:
-    case DW_OP_form_tls_address:
+  case DW_OP_deref:
+  case DW_OP_dup:
+  case DW_OP_drop:
+  case DW_OP_over:
+  case DW_OP_swap:
+  case DW_OP_rot:
+  case DW_OP_xderef:
+  case DW_OP_abs:
+  case DW_OP_and:
+  case DW_OP_div:
+  case DW_OP_minus:
+  case DW_OP_mod:
+  case DW_OP_mul:
+  case DW_OP_neg:
+  case DW_OP_not:
+  case DW_OP_or:
+  case DW_OP_plus:
+  case DW_OP_shl:
+  case DW_OP_shr:
+  case DW_OP_shra:
+  case DW_OP_xor:
+  case DW_OP_eq:
+  case DW_OP_ge:
+  case DW_OP_gt:
+  case DW_OP_le:
+  case DW_OP_lt:
+  case DW_OP_ne:
+  case DW_OP_lit0 ... DW_OP_lit31:
+  case DW_OP_nop:
+  case DW_OP_stack_value:
+  case DW_OP_form_tls_address:
       /* No arguments. */
       debug_print("atom ", atom, "\n");
       break;
 
-    case DW_OP_bregx:
+  case DW_OP_bregx:
       varloc.reg = expr->number;
       varloc.offset = expr->number2;
       break;
 
-    case DW_OP_breg0 ... DW_OP_breg31:
+  case DW_OP_breg0 ... DW_OP_breg31:
       varloc.reg = expr->atom - DW_OP_breg0;
       varloc.offset = expr->number;
       break;
 
-    case DW_OP_fbreg: {
+  case DW_OP_fbreg: {
       Dwarf_Op *fb_expr;
       size_t fb_exprlen;
       int res = dwarf_getlocation_addr(fb_attr, pc, &fb_expr, &fb_exprlen, 1);
@@ -619,12 +623,12 @@ void DwarfParser::translate_expr(Dwarf_Attribute *fb_attr, Dwarf_Op *expr,
       varloc.stack = true;
     } break;
 
-    case DW_OP_call_frame_cfa: {
-      Dwarf_Op *cfa_ops = NULL;
+  case DW_OP_call_frame_cfa: {
+      Dwarf_Op *cfa_ops = nullptr;
       size_t cfa_nops = 0;
       // Try .debug_frame first
-      Dwarf_Frame *frame = NULL;
-      if (cfi_debug != NULL) {
+      Dwarf_Frame *frame = nullptr;
+      if (cfi_debug != nullptr) {
         if (dwarf_cfi_addrframe(cfi_debug, pc, &frame) == 0) {
           dwarf_frame_cfa(frame, &cfa_ops, &cfa_nops);
         } else {
@@ -632,7 +636,7 @@ void DwarfParser::translate_expr(Dwarf_Attribute *fb_attr, Dwarf_Op *expr,
         }
       }
 
-      if (cfa_ops == NULL) {
+      if (cfa_ops == nullptr) {
         if (dwarf_cfi_addrframe(cfi_eh, pc, &frame) == 0) {
           dwarf_frame_cfa(frame, &cfa_ops, &cfa_nops);
         } else {
@@ -642,22 +646,22 @@ void DwarfParser::translate_expr(Dwarf_Attribute *fb_attr, Dwarf_Op *expr,
 
       translate_expr(fb_attr, cfa_ops, pc, varloc);
     } break;
-    case DW_OP_reg0 ... DW_OP_reg31:
+  case DW_OP_reg0 ... DW_OP_reg31:
       varloc.reg = expr->atom - DW_OP_reg0;
       break;
 
-    case DW_OP_plus_uconst:
+  case DW_OP_plus_uconst:
       varloc.offset = expr->number;
       break;
 
-    default:
-      break;
+  default:
+    break;
   }
 }
 
 Dwfl *DwarfParser::create_dwfl(int fd, const char *fname) {
   int dwfl_fd = dup(fd);
-  Dwfl *dwfl = NULL;
+  Dwfl *dwfl = nullptr;
   if (dwfl_fd < 0) {
     cerr << "create_dwfl dup failed" << endl;
     return 0;
@@ -671,12 +675,12 @@ Dwfl *DwarfParser::create_dwfl(int fd, const char *fname) {
 
   dwfl = dwfl_begin(&callbacks);
 
-  if (dwfl_report_offline(dwfl, fname, fname, dwfl_fd) == NULL) {
+  if (dwfl_report_offline(dwfl, fname, fname, dwfl_fd) == nullptr) {
     cerr << "dwfl_report_offline open dwfl failed" << endl;
     close(dwfl_fd);
-    dwfl = NULL;
+    dwfl = nullptr;
   } else
-    dwfl_report_end(dwfl, NULL, NULL);
+    dwfl_report_end(dwfl, nullptr, nullptr);
 
   return dwfl;
 }
@@ -689,10 +693,10 @@ int preprocess_module(Dwfl_Module *dwflmod, void **userdata,
   (void)base;
 
   DwarfParser *dp = (DwarfParser *)arg;
-  assert(dwflmod != NULL && dp != NULL);
+  assert(dwflmod != nullptr && dp != nullptr);
 
   dp->cur_mod = dwflmod;
-  const char* mod_path = dwfl_module_info(dwflmod, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+  const char* mod_path = dwfl_module_info(dwflmod, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
   dp->cur_mod_name = get_basename(mod_path);
   Dwarf_Addr modbias;
   Dwarf *dwarf = dwfl_module_getdwarf(dwflmod, &modbias);
@@ -715,10 +719,10 @@ int handle_module(Dwfl_Module *dwflmod, void **userdata,
   (void)base;
 
   DwarfParser *dp = (DwarfParser *)arg;
-  assert(dwflmod != NULL && dp != NULL);
+  assert(dwflmod != nullptr && dp != nullptr);
 
   dp->cur_mod = dwflmod;
-  const char* mod_path = dwfl_module_info(dwflmod, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+  const char* mod_path = dwfl_module_info(dwflmod, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
   dp->cur_mod_name = get_basename(mod_path);
   Dwarf_Addr modbias;
   Dwarf *dwarf = dwfl_module_getdwarf(dwflmod, &modbias);
@@ -740,7 +744,7 @@ int handle_module(Dwfl_Module *dwflmod, void **userdata,
     if (dwarf_offdie(dwarf, offset + header_size, &cu_die) != nullptr) {
       dp->cfi_debug = dwfl_module_dwarf_cfi(dwflmod, &dp->cfi_debug_bias);
       dp->cfi_eh = dwfl_module_eh_cfi(dwflmod, &dp->cfi_eh_bias);
-      assert(dp->cfi_debug == NULL || dp->cfi_debug_bias == 0);
+      assert(dp->cfi_debug == nullptr || dp->cfi_debug_bias == 0);
 
       string cu_name = dwarf_diename(&cu_die) ?: "<unknown>";
       if (dp->filter_cu(cu_name) || cu_name == "<artificial>") {
@@ -758,11 +762,10 @@ int handle_module(Dwfl_Module *dwflmod, void **userdata,
   return 0;
 }
 
-int DwarfParser::parse() {
-  if(getenv("DEBUGINFOD_URLS") == NULL) {
-    //If the DEBUGINFOD_URLS is not set, set it to https://debuginfod.ubuntu.com as default
-    char envs[] = "DEBUGINFOD_URLS=https://debuginfod.ubuntu.com";
-    putenv(envs);
+void DwarfParser::parse() {
+  if (getenv("DEBUGINFOD_URLS") == nullptr) {
+    // If the DEBUGINFOD_URLS is not set, set it to https://debuginfod.ubuntu.com as default
+    setenv("DEBUGINFOD_URLS", "https://debuginfod.ubuntu.com", 0);
   }
 
   for (auto dwfl: dwfls) {
@@ -771,7 +774,6 @@ int DwarfParser::parse() {
   for (auto dwfl: dwfls) {
     dwfl_getmodules(dwfl, handle_module, this, 0);
   }
-  return 0;
 }
 
 void DwarfParser::add_module(string path) {
@@ -788,30 +790,30 @@ void DwarfParser::add_module(string path) {
 DwarfParser::DwarfParser(probes_t ps, vector<string> pus)
     : probe_units(pus),
       probes(ps),
-      cur_mod(NULL),
-      cur_cu(NULL),
-      cfi_debug(NULL),
-      cfi_eh(NULL) {
+      cur_mod(nullptr),
+      cur_cu(nullptr),
+      cfi_debug(nullptr),
+      cfi_eh(nullptr) {
 }
 
 DwarfParser::~DwarfParser() {}
 
 const char* DwarfParser::dwarf_attr_string(unsigned int attrnum) {
   switch (attrnum) {
-    #define DWARF_ONE_KNOWN_DW_AT(NAME, CODE) case CODE: return  "DW_AT_"#NAME;
-    DWARF_ALL_KNOWN_DW_AT
-    #undef DWARF_ONE_KNOWN_DW_AT
-    default:
-      return "DW_AT_<unknown>";
+  #define DWARF_ONE_KNOWN_DW_AT(NAME, CODE) case CODE: return  "DW_AT_"#NAME;
+  DWARF_ALL_KNOWN_DW_AT
+  #undef DWARF_ONE_KNOWN_DW_AT
+  default:
+    return "DW_AT_<unknown>";
   }
 }
 
 const char* DwarfParser::dwarf_form_string(unsigned int form) {
   switch (form) {
-    #define DWARF_ONE_KNOWN_DW_FORM(NAME, CODE) case CODE: return "DW_FORM_"#NAME;
-    DWARF_ALL_KNOWN_DW_FORM
-    #undef DWARF_ONE_KNOWN_DW_FORM
-    default:
-      return "DW_FORM_<unknown>";
+  #define DWARF_ONE_KNOWN_DW_FORM(NAME, CODE) case CODE: return "DW_FORM_"#NAME;
+  DWARF_ALL_KNOWN_DW_FORM
+  #undef DWARF_ONE_KNOWN_DW_FORM
+  default:
+    return "DW_FORM_<unknown>";
   }
 }
