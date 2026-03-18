@@ -108,6 +108,42 @@ class PrometheusControllerTest(ControllerTestCase):
                                             json=None, params={}, verify=True, cert=None, auth=None)
 
     @patch("dashboard.controllers.prometheus.mgr.get_module_option_ex", lambda a, b, c=None: None)
+    def test_get_overview_storage(self):
+        with patch.object(Prometheus, 'prometheus_proxy') as mock_proxy:
+            mock_proxy.side_effect = [
+                [{'value': [0, '1073741824']}],
+                [{'value': [0, '30']}],
+                [{'metric': {'application': 'Block'}, 'value': [0, '123']}],
+                [
+                    {'metric': {'__name__': 'ceph_osd_full_ratio'}, 'value': [0, '0.95']},
+                    {'metric': {'__name__': 'ceph_osd_nearfull_ratio'}, 'value': [0, '0.85']}
+                ]
+            ]
+
+            self._get('/api/prometheus/overview/storage')
+
+            self.assertStatus(200)
+            self.assertJsonBody({
+                'average_consumption_per_day': '1073741824',
+                'time_until_full_days': '30',
+                'breakdown': [{'application': 'Block', 'value': '123'}],
+                'osd_full_ratio': '0.95',
+                'osd_nearfull_ratio': '0.85'
+            })
+
+    @patch("dashboard.controllers.prometheus.mgr.get_module_option_ex", lambda a, b, c=None: None)
+    def test_get_overview_storage_trend(self):
+        with patch.object(Prometheus, 'prometheus_proxy') as mock_proxy:
+            mock_proxy.return_value = [{'values': [[1, '10'], [2, '20']]}]
+
+            self._get('/api/prometheus/overview/storage/trend?start=1&end=2&step=3')
+
+            self.assertStatus(200)
+            self.assertJsonBody({
+                'total_raw_used': [[1, '10'], [2, '20']]
+            })
+
+    @patch("dashboard.controllers.prometheus.mgr.get_module_option_ex", lambda a, b, c=None: None)
     def test_add_silence(self):
         with patch('requests.request') as mock_request:
             self._post('/api/prometheus/silence', {'id': 'new-silence'})

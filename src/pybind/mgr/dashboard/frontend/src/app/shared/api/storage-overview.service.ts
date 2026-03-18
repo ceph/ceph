@@ -1,13 +1,8 @@
+import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import {
-  PrometheusService,
-  PromethuesGaugeMetricResult,
-  PromqlGuageMetric
-} from '~/app/shared/api/prometheus.service';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { map } from 'rxjs/operators';
 import { forkJoin, Observable } from 'rxjs';
-import { CapacityCardQueries } from '../enum/dashboard-promqls.enum';
 import { BreakdownChartData, CapacityThreshold } from '../models/overview';
 
 const StorageType = {
@@ -17,38 +12,50 @@ const StorageType = {
   SYSTEM_METADATA: $localize`System metadata`
 } as const;
 
+type StorageBreakdownMetric = {
+  application: string;
+  value: string;
+};
+
+type OverviewStorageInsights = {
+  average_consumption_per_day: string | null;
+  time_until_full_days: string | null;
+  breakdown: StorageBreakdownMetric[];
+  osd_full_ratio: string | null;
+  osd_nearfull_ratio: string | null;
+};
+
 @Injectable({ providedIn: 'root' })
 export class OverviewStorageService {
-  private readonly prom = inject(PrometheusService);
+  private readonly http = inject(HttpClient);
   private readonly formatter = inject(FormatterService);
-  private readonly AVG_CONSUMPTION_QUERY = 'sum(rate(ceph_osd_stat_bytes_used[7d])) * 86400';
-  private readonly TIME_UNTIL_FULL_QUERY = `(sum(ceph_osd_stat_bytes)) / (sum(rate(ceph_osd_stat_bytes_used[7d])) * 86400)`;
-  private readonly TOTAL_RAW_USED_QUERY = 'sum(ceph_osd_stat_bytes_used)';
-  private readonly OBJECT_POOLS_COUNT_QUERY = 'count(ceph_pool_metadata{application="Object"})';
-  private readonly RAW_USED_BY_STORAGE_TYPE_QUERY =
-    'sum by (application) (ceph_pool_bytes_used * on(pool_id) group_left(instance, name, application) ceph_pool_metadata{application=~"(.*Block.*)|(.*Filesystem.*)|(.*Object.*)|(..*)"})';
-  private readonly FULL_NEARFULL_QUERY = `{__name__=~"${CapacityCardQueries.OSD_FULL}|${CapacityCardQueries.OSD_NEARFULL}"}`;
+  private readonly baseUrl = 'api/prometheus/overview/storage';
+  private readonly objectPoolsCountUrl = 'api/prometheus/prometheus_query_data';
+  private readonly objectPoolsCountQuery = 'count(ceph_pool_metadata{application="Object"})';
 
   getTrendData(start: number, end: number, stepSec: number) {
-    const range = {
-      start,
-      end,
-      step: stepSec
-    };
-
-    return this.prom.getRangeQueriesData(
-      range,
-      {
-        TOTAL_RAW_USED: this.TOTAL_RAW_USED_QUERY
-      },
-      true
-    );
+    return this.http
+      .get<{ total_raw_used: [number, string][] }>(`${this.baseUrl}/trend`, {
+        params: {
+          start,
+          end,
+          step: stepSec
+        }
+      })
+      .pipe(
+        map((result) => ({
+          TOTAL_RAW_USED: (result?.total_raw_used ?? []).map((value) => [
+            value[0],
+            isNaN(parseFloat(value[1])) ? '0' : value[1]
+          ]) as [number, string][]
+        }))
+      );
   }
 
   getAverageConsumption(): Observable<string> {
-    return this.prom.getPrometheusQueryData({ params: this.AVG_CONSUMPTION_QUERY }).pipe(
+    return this.getStorageInsights().pipe(
       map((res) => {
-        const v = Number(res?.result?.[0]?.value?.[1] ?? 0);
+        const v = Number(res?.average_consumption_per_day ?? 0);
         const [val, unit] = this.formatter.formatToBinary(v, true);
         return `${val} ${unit}/day`;
       })
@@ -56,9 +63,9 @@ export class OverviewStorageService {
   }
 
   getTimeUntilFull(): Observable<string> {
-    return this.prom.getPrometheusQueryData({ params: this.TIME_UNTIL_FULL_QUERY }).pipe(
+    return this.getStorageInsights().pipe(
       map((res) => {
-        const days = Number(res?.result?.[0]?.value?.[1] ?? Infinity);
+        const days = Number(res?.time_until_full_days ?? Infinity);
         if (!isFinite(days) || days <= 0) return 'N/A';
 
         if (days < 1) return `${(days * 24).toFixed(1)} hours`;
@@ -70,26 +77,33 @@ export class OverviewStorageService {
   }
 
   getTopPools(query: string): Observable<{ group: string; value: number }[]> {
-    return this.prom.getPrometheusQueryData({ params: query }).pipe(
-      map((data: PromqlGuageMetric) => {
-        return (data?.result ?? []).map((r) => ({
-          group: r.metric?.name || r.metric?.pool || 'unknown',
-          value: Number(r.value?.[1]) * 100
-        }));
-      })
-    );
+    return this.http
+      .get<{ result: Array<{ metric?: Record<string, string>; value?: [number, string] }> }>(
+        this.objectPoolsCountUrl,
+        { params: { params: query } }
+      )
+      .pipe(
+        map((data) => {
+          return (data?.result ?? []).map((r) => ({
+            group: r.metric?.name || r.metric?.pool || 'unknown',
+            value: Number(r.value?.[1]) * 100
+          }));
+        })
+      );
   }
 
   getCount(query: string): Observable<number> {
-    return this.prom
-      .getPrometheusQueryData({ params: query })
+    return this.http
+      .get<{ result: Array<{ value?: [number, string] }> }>(this.objectPoolsCountUrl, {
+        params: { params: query }
+      })
       .pipe(map((res: any) => Number(res?.result?.[0]?.value?.[1]) || 0));
   }
 
   getObjectCounts(rgwBucketService: any) {
     return forkJoin({
       buckets: rgwBucketService.getTotalBucketsAndUsersLength(),
-      pools: this.getCount(this.OBJECT_POOLS_COUNT_QUERY)
+      pools: this.getCount(this.objectPoolsCountQuery)
     }).pipe(
       map(({ buckets, pools }: { buckets: { buckets_count: number }; pools: number }) => ({
         buckets: buckets?.buckets_count ?? 0,
@@ -102,26 +116,18 @@ export class OverviewStorageService {
     osdFullRatio: number | null;
     osdNearfullRatio: number | null;
   }> {
-    return this.prom.getGaugeQueryData(this.FULL_NEARFULL_QUERY).pipe(
-      map((data: PromqlGuageMetric) => {
-        const result = data?.result ?? [];
-
-        const osdFull = result.find((r) => r.metric?.__name__ === CapacityCardQueries.OSD_FULL)
-          ?.value?.[1];
-        const osdNearfull = result.find(
-          (r) => r.metric?.__name__ === CapacityCardQueries.OSD_NEARFULL
-        )?.value?.[1];
-
+    return this.getStorageInsights().pipe(
+      map((data) => {
         return {
-          osdFullRatio: this.prom.formatGuageMetric(osdFull),
-          osdNearfullRatio: this.prom.formatGuageMetric(osdNearfull)
+          osdFullRatio: this.formatGaugeMetric(data?.osd_full_ratio),
+          osdNearfullRatio: this.formatGaugeMetric(data?.osd_nearfull_ratio)
         };
       })
     );
   }
 
-  getStorageBreakdown(): Observable<PromqlGuageMetric> {
-    return this.prom.getPrometheusQueryData({ params: this.RAW_USED_BY_STORAGE_TYPE_QUERY });
+  getStorageBreakdown(): Observable<StorageBreakdownMetric[]> {
+    return this.getStorageInsights().pipe(map((data) => data?.breakdown ?? []));
   }
 
   getThresholdStatus(total, used, nearfull, full): CapacityThreshold {
@@ -157,7 +163,7 @@ export class OverviewStorageService {
   }
 
   mapStorageChartData(
-    data: PromqlGuageMetric,
+    data: StorageBreakdownMetric[],
     unit: string,
     totalUsedBytes: number
   ): BreakdownChartData[] {
@@ -165,12 +171,11 @@ export class OverviewStorageService {
 
     let assignedBytes = 0;
 
-    const result: PromethuesGaugeMetricResult[] = data.result ?? [];
-    const chartData = result.reduce<BreakdownChartData[]>((acc, r) => {
-      const rawBytes = Number(r?.value?.[1] ?? 0);
+    const chartData = data.reduce<BreakdownChartData[]>((acc, r) => {
+      const rawBytes = Number(r?.value ?? 0);
       if (!rawBytes) return acc;
 
-      const group = this.normalizeGroup(r?.metric?.application);
+      const group = this.normalizeGroup(r?.application);
       const value = this.convertBytesToUnit(rawBytes, unit);
 
       if (this.isAStorage(group) && value > 0) {
@@ -191,5 +196,14 @@ export class OverviewStorageService {
     }
 
     return chartData;
+  }
+
+  private getStorageInsights(): Observable<OverviewStorageInsights> {
+    return this.http.get<OverviewStorageInsights>(this.baseUrl);
+  }
+
+  private formatGaugeMetric(data: string | null): number | null {
+    const value = parseFloat(data ?? '');
+    return isFinite(value) ? value : null;
   }
 }

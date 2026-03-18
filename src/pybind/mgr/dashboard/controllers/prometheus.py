@@ -221,6 +221,26 @@ class PrometheusRESTController(RESTController):
 @APIRouter('/prometheus', Scope.PROMETHEUS)
 @APIDoc("Prometheus Management API", "Prometheus")
 class Prometheus(PrometheusRESTController):
+    AVG_CONSUMPTION_QUERY = 'sum(rate(ceph_osd_stat_bytes_used[7d])) * 86400'
+    TIME_UNTIL_FULL_QUERY = \
+        '(sum(ceph_osd_stat_bytes)) / (sum(rate(ceph_osd_stat_bytes_used[7d])) * 86400)'
+    TOTAL_RAW_USED_QUERY = 'sum(ceph_osd_stat_bytes_used)'
+    RAW_USED_BY_STORAGE_TYPE_QUERY = \
+        'sum by (application) (ceph_pool_bytes_used * on(pool_id) ' \
+        'group_left(instance, name, application) ' \
+        'ceph_pool_metadata{application=~"(.*Block.*)|(.*Filesystem.*)|(.*Object.*)|(..*)"})'
+    FULL_NEARFULL_QUERY = '{__name__=~"ceph_osd_full_ratio|ceph_osd_nearfull_ratio"}'
+
+    def _run_prometheus_query(self, query, query_path='/query', **params):
+        params['query'] = query
+        return self.prometheus_proxy('GET', query_path, params)
+
+    @staticmethod
+    def _first_prometheus_value(result):
+        if result and 'value' in result[0] and len(result[0]['value']) > 1:
+            return result[0]['value'][1]
+        return None
+
     def list(self, cluster_filter=False, **params):
         if cluster_filter:
             try:
@@ -265,6 +285,47 @@ class Prometheus(PrometheusRESTController):
     def get_prometeus_query_data(self, **params):
         params['query'] = params.pop('params')
         return self.prometheus_proxy('GET', '/query', params)
+
+    @RESTController.Collection(method='GET', path='/overview/storage')
+    def get_overview_storage(self):
+        average_consumption = self._run_prometheus_query(self.AVG_CONSUMPTION_QUERY)
+        time_until_full = self._run_prometheus_query(self.TIME_UNTIL_FULL_QUERY)
+        breakdown = self._run_prometheus_query(self.RAW_USED_BY_STORAGE_TYPE_QUERY)
+        thresholds = self._run_prometheus_query(self.FULL_NEARFULL_QUERY)
+
+        return {
+            'average_consumption_per_day': self._first_prometheus_value(average_consumption),
+            'time_until_full_days': self._first_prometheus_value(time_until_full),
+            'breakdown': [
+                {
+                    'application': item.get('metric', {}).get('application'),
+                    'value': item.get('value', [None, None])[1]
+                } for item in breakdown
+            ],
+            'osd_full_ratio': next(
+                (
+                    item.get('value', [None, None])[1] for item in thresholds
+                    if item.get('metric', {}).get('__name__') == 'ceph_osd_full_ratio'
+                ),
+                None
+            ),
+            'osd_nearfull_ratio': next(
+                (
+                    item.get('value', [None, None])[1] for item in thresholds
+                    if item.get('metric', {}).get('__name__') == 'ceph_osd_nearfull_ratio'
+                ),
+                None
+            )
+        }
+
+    @RESTController.Collection(method='GET', path='/overview/storage/trend')
+    def get_overview_storage_trend(self, start, end, step):
+        result = self._run_prometheus_query(self.TOTAL_RAW_USED_QUERY,
+                                            query_path='/query_range',
+                                            start=start, end=end, step=step)
+        return {
+            'total_raw_used': result[0].get('values', []) if result else []
+        }
 
 
 @APIRouter('/prometheus/notifications', Scope.PROMETHEUS)
