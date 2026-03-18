@@ -468,7 +468,7 @@ seastar::future<> OSD::start()
     ).then([this] {
       return osd_singleton_state.start_single(
         whoami, std::ref(*cluster_msgr), std::ref(*public_msgr),
-        std::ref(*monc), std::ref(*mgrc));
+        std::ref(*monc), std::ref(*mgrc), std::ref(shard_services));
     }).then([this] {
       return osd_states.start();
     }).then([this, store_shard_nums] {
@@ -483,6 +483,32 @@ seastar::future<> OSD::start()
         osd_singleton_state.local().recoverystate_perf,
         std::ref(store),
         std::ref(osd_states));
+    });
+  }).then([this] {
+    auto shares = [](const char* opt) {
+      return static_cast<float> (local_conf().get_val<double>(opt));
+    };
+    return seastar::when_all_succeed(
+      seastar::create_scheduling_group("client", shares("crimson_sg_client_shares")),
+      seastar::create_scheduling_group("peering", shares("crimson_sg_peering_shares")),
+      seastar::create_scheduling_group("ug_recovery", shares("crimson_sg_urgent_recovery_shares")),
+      seastar::create_scheduling_group("recovery", shares("crimson_sg_recovery_shares")),
+      seastar::create_scheduling_group("scrub", shares("crimson_sg_scrub_shares")),
+      seastar::create_scheduling_group("background", shares("crimson_sg_background_shares"))
+    ).then_unpack([this](auto client, auto peering, auto ug_recovery, auto recovery,
+		         auto scrub, auto background) {
+       const bool enabled = local_conf().get_val<bool>
+         ("crimson_enable_scheduling_groups");
+       return shard_services.invoke_on_all(
+         [=](ShardServices &ss) {
+           ss.sg_client = client;
+	   ss.sg_peering = peering;
+	   ss.sg_urgent_recovery = ug_recovery;
+	   ss.sg_recovery = recovery;
+	   ss.sg_scrub = scrub;
+	   ss.sg_background = background;
+	   ss.scheduling_groups_enabled = enabled;
+       });
     });
   }).then([this, FNAME] {
     heartbeat.reset(new Heartbeat{
