@@ -308,11 +308,14 @@ void InstanceReplayer<I>::release_group(const std::string &global_group_id,
   }
 
   auto group_replayer = it->second;
-  m_group_replayers.erase(it);
-
+  if (group_replayer->is_finished()) {
+    m_group_replayers.erase(it);
+  }
   on_finish = new LambdaContext(
     [group_replayer, on_finish] (int r) {
-      group_replayer->destroy();
+      if (group_replayer->is_finished()) {
+        group_replayer->destroy();
+      }
       on_finish->complete(0);
     });
   stop_group_replayer(group_replayer, on_finish);
