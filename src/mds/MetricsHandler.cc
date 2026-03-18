@@ -322,6 +322,44 @@ void MetricsHandler::handle_payload(Session *session, const WriteIoSizesPayload 
   metrics.write_io_sizes_metric.updated = true;
 }
 
+void MetricsHandler::handle_payload(Session* session,  const SubvolumeMetricsPayload& payload, std::unique_lock<ceph::mutex>& lk) {
+  dout(20) << ": type=" << payload.get_type() << ", session=" << session
+      << " , subv_metrics count=" << payload.subvolume_metrics.size() << dendl;
+
+  ceph_assert(lk.owns_lock()); // caller must hold the lock
+
+  std::vector<std::string> resolved_paths;
+  resolved_paths.reserve(payload.subvolume_metrics.size());
+
+  {
+    // Scoped unlock: resolve paths without holding the metrics lock
+    // to avoid contention with mds_lock inside get_path().
+    UnlockGuard unlock_guard{lk};
+    for (const auto& metric : payload.subvolume_metrics) {
+      std::string path = mds->get_path(metric.subvolume_id);
+      if (path.empty()) {
+        dout(10) << " path not found for " << metric.subvolume_id << dendl;
+      }
+      resolved_paths.emplace_back(std::move(path));
+    }
+  } // lock re-acquired here
+
+  const auto now_ms = static_cast<int64_t>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::steady_clock::now().time_since_epoch()).count());
+
+  for (size_t i = 0; i < resolved_paths.size(); ++i) {
+    const auto& path = resolved_paths[i];
+    if (path.empty()) continue;
+
+    auto& vec = subvolume_metrics_map[path];
+
+    dout(20) << " accumulating subv_metric " << payload.subvolume_metrics[i] << dendl;
+    vec.emplace_back(payload.subvolume_metrics[i]);
+    vec.back().time_stamp = now_ms;
+  }
+}
+
 void MetricsHandler::handle_payload(Session *session, const UnknownPayload &payload) {
   dout(5) << ": type=Unknown, session=" << session << ", ignoring unknown payload" << dendl;
 }
@@ -410,6 +448,55 @@ void MetricsHandler::update_rank0() {
     }
   }
 
+  // Resolve used_bytes for all subvolumes without holding the metrics lock
+  // (same unlock pattern used for path resolution in handle_payload).
+  // Step 1 (locked): collect unique subvolume ids
+  std::vector<inodeno_t> subvol_ids;
+  subvol_ids.reserve(subvolume_metrics_map.size());
+  for (const auto &[path, aggregated_metrics] : subvolume_metrics_map) {
+    if (!aggregated_metrics.empty()) {
+      subvol_ids.push_back(aggregated_metrics.front().subvolume_id);
+    }
+  }
+
+  // Step 2 (unlocked): fetch rbytes under mds_lock via helper
+  std::unordered_map<inodeno_t, uint64_t> subvol_used_bytes;
+  {
+    UnlockGuard unlock_guard{locker};
+    for (inodeno_t subvol_id : subvol_ids) {
+      if (subvol_used_bytes.count(subvol_id) == 0) {
+        uint64_t rbytes = mds->get_inode_rbytes(subvol_id);
+        subvol_used_bytes[subvol_id] = rbytes;
+        dout(20) << "resolved used_bytes for subvol " << subvol_id << " = " << rbytes << dendl;
+      }
+    }
+  } // lock re-acquired here
+
+  // Step 3 (locked): aggregate and clear subvolume metrics
+  metrics_message.subvolume_metrics.reserve(subvolume_metrics_map.size() * 100);
+  for (auto &[path, aggregated_metrics] : subvolume_metrics_map) {
+    metrics_message.subvolume_metrics.emplace_back();
+    aggregate_subvolume_metrics(path, aggregated_metrics, subvol_used_bytes,
+                                metrics_message.subvolume_metrics.back());
+  }
+  subvolume_metrics_map.clear();
+
+  // Evict stale subvolume quota entries
+  if (subv_window_sec > 0) {
+    auto now = std::chrono::steady_clock::now();
+    auto threshold = std::chrono::seconds(subv_window_sec) * 2;
+    for (auto it = subvolume_quota.begin(); it != subvolume_quota.end(); ) {
+      auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - it->second.last_activity);
+      if (elapsed > threshold) {
+        dout(15) << "evicting stale subvolume quota entry " << it->first
+                 << " (inactive for " << elapsed.count() << "s)" << dendl;
+        it = subvolume_quota.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
+
   // only start incrementing when its kicked via set_next_seq()
   if (next_seq != 0) {
     ++last_updated_seq;
@@ -419,5 +506,10 @@ void MetricsHandler::update_rank0() {
            << " clients to rank 0 (address: " << *addr_rank0 << ") with sequence number "
            << next_seq << ", last updated sequence number " << last_updated_seq << dendl;
 
-  mds->send_message_mds(make_message<MMDSMetrics>(std::move(metrics_message)), *addr_rank0);
+  // Step 4 (unlocked): send message without holding the metrics lock
+  // to avoid deadlock with mds_lock (see comment on lock member)
+  {
+    UnlockGuard unlock_guard{locker};
+    mds->send_message_mds(make_message<MMDSMetrics>(std::move(metrics_message)), *addr_rank0);
+  } // lock re-acquired here
 }
