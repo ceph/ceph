@@ -10,6 +10,7 @@
 #include "common/common_init.h"
 #include "common/ceph_argparse.h"
 #include "common/ceph_json.h"
+#include "include/stringify.h"
 
 #include <iostream>
 #include <cmath>
