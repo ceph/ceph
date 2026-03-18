@@ -382,24 +382,23 @@ void MetricsHandler::handle_payload(Session* session,  const SubvolumeMetricsPay
   std::vector<std::string> resolved_paths;
   resolved_paths.reserve(payload.subvolume_metrics.size());
 
-  // RAII guard: unlock on construction, re-lock on destruction (even on exceptions)
-  UnlockGuard unlock_guard{lk};
-
-  // unlocked: resolve paths, no contention with mds lock
-  for (const auto& metric : payload.subvolume_metrics) {
-    std::string path = mds->get_path(metric.subvolume_id);
-    if (path.empty()) {
-      dout(10) << " path not found for " << metric.subvolume_id << dendl;
+  {
+    // Scoped unlock: resolve paths without holding the metrics lock
+    // to avoid contention with mds_lock inside get_path().
+    UnlockGuard unlock_guard{lk};
+    for (const auto& metric : payload.subvolume_metrics) {
+      std::string path = mds->get_path(metric.subvolume_id);
+      if (path.empty()) {
+        dout(10) << " path not found for " << metric.subvolume_id << dendl;
+      }
+      resolved_paths.emplace_back(std::move(path));
     }
-    resolved_paths.emplace_back(std::move(path));
-  }
+  } // lock re-acquired here
 
-  // locked again (via UnlockGuard dtor): update metrics map
   const auto now_ms = static_cast<int64_t>(
-  std::chrono::duration_cast<std::chrono::milliseconds>(
-std::chrono::steady_clock::now().time_since_epoch()).count());
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::steady_clock::now().time_since_epoch()).count());
 
-  // Keep index pairing but avoid double map lookup
   for (size_t i = 0; i < resolved_paths.size(); ++i) {
     const auto& path = resolved_paths[i];
     if (path.empty()) continue;
@@ -407,8 +406,6 @@ std::chrono::steady_clock::now().time_since_epoch()).count());
     auto& vec = subvolume_metrics_map[path];
 
     dout(20) << " accumulating subv_metric " << payload.subvolume_metrics[i] << dendl;
-    // std::move of the const expression of the trivially-copyable type 'const value_type'
-    // (aka 'const AggregatedIOMetrics') has no effect; remove std::move()
     vec.emplace_back(payload.subvolume_metrics[i]);
     vec.back().time_stamp = now_ms;
   }
@@ -524,28 +521,26 @@ void MetricsHandler::update_rank0(std::unique_lock<ceph::mutex>& locker) {
     }
   }
 
-  // Step 2 (unlocked): fetch rbytes under mds_lock via helper, release metric log
-  // it allows to proceed another update in metrics handler
-  UnlockGuard unlock_guard{locker};
-
-  // here the metrics handler lock witll be retaken via the UnlockGuard dtor
+  // Step 2 (unlocked): fetch rbytes under mds_lock via helper
   std::unordered_map<inodeno_t, uint64_t> subvol_used_bytes;
-  for (inodeno_t subvol_id : subvol_ids) {
-    if (subvol_used_bytes.count(subvol_id) == 0) {
-      uint64_t rbytes = mds->get_inode_rbytes(subvol_id);
-      subvol_used_bytes[subvol_id] = rbytes;
-      dout(20) << "resolved used_bytes for subvol " << subvol_id << " = " << rbytes << dendl;
+  {
+    UnlockGuard unlock_guard{locker};
+    for (inodeno_t subvol_id : subvol_ids) {
+      if (subvol_used_bytes.count(subvol_id) == 0) {
+        uint64_t rbytes = mds->get_inode_rbytes(subvol_id);
+        subvol_used_bytes[subvol_id] = rbytes;
+        dout(20) << "resolved used_bytes for subvol " << subvol_id << " = " << rbytes << dendl;
+      }
     }
-  }
+  } // lock re-acquired here
 
-  // subvolume metrics, reserve 100 entries per subvolume ? good enough?
-  metrics_message.subvolume_metrics.reserve(subvolume_metrics_map.size()* 100);
+  // Step 3 (locked): aggregate and clear subvolume metrics
+  metrics_message.subvolume_metrics.reserve(subvolume_metrics_map.size() * 100);
   for (auto &[path, aggregated_metrics] : subvolume_metrics_map) {
     metrics_message.subvolume_metrics.emplace_back();
     aggregate_subvolume_metrics(path, aggregated_metrics, subvol_used_bytes,
                                 metrics_message.subvolume_metrics.back());
   }
-  // if we need to show local MDS metrics, we need to save a last copy...
   subvolume_metrics_map.clear();
 
   // Evict stale subvolume quota entries
@@ -572,7 +567,12 @@ void MetricsHandler::update_rank0(std::unique_lock<ceph::mutex>& locker) {
   dout(20) << ": sending " << metrics_message.subvolume_metrics.size() << " subv_metrics to aggregator"
 	   << dendl;
 
-  mds->send_message_mds(make_message<MMDSMetrics>(std::move(metrics_message)), *addr_rank0);
+  // Step 4 (unlocked): send message without holding the metrics lock
+  // to avoid deadlock with mds_lock (see comment on lock member)
+  {
+    UnlockGuard unlock_guard{locker};
+    mds->send_message_mds(make_message<MMDSMetrics>(std::move(metrics_message)), *addr_rank0);
+  } // lock re-acquired here
 }
 
 void MetricsHandler::aggregate_subvolume_metrics(const std::string& subvolume_path,
