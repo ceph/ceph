@@ -496,6 +496,112 @@ def test_non_filterable_metadata_keys():
 
 
 @pytest.mark.index_test
+def test_filterable_metadata_keys():
+    """Test filterableMetadataKeys: store on CreateIndex, retrieve on GetIndex,
+    and populate filterable columns via PutVectors."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    dimension = 8
+    filterable_keys = [
+        {'name': 'genre', 'type': 'String'},
+        {'name': 'year', 'type': 'Number'},
+        {'name': 'popular', 'type': 'Boolean'}
+    ]
+    result = conn.create_index(
+        vectorBucketName=bucket_name, indexName=index_name,
+        dataType='float32', dimension=dimension, distanceMetric='euclidean',
+        metadataConfiguration={
+            'filterableMetadataKeys': filterable_keys
+        })
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # verify filterableMetadataKeys are returned on GetIndex
+    result = conn.get_index(vectorBucketName=bucket_name, indexName=index_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    returned_filterable = result['index']['metadataConfiguration'].get('filterableMetadataKeys', [])
+    assert len(returned_filterable) == len(filterable_keys), \
+        f"expected {len(filterable_keys)} filterable keys but got {len(returned_filterable)}"
+    returned_names = {k['name'] for k in returned_filterable}
+    expected_names = {k['name'] for k in filterable_keys}
+    assert returned_names == expected_names, \
+        f"expected names {expected_names} but got {returned_names}"
+
+    # put vectors with metadata that includes filterable fields plus extra keys not in the list
+    vectors = []
+    genres = ['rock', 'jazz', 'pop', 'rock', 'jazz']
+    for i in range(5):
+        v = {
+            'key': f'vec-{i}',
+            'data': generate_data(dimension, i),
+            'metadata': json.dumps({
+                'genre': genres[i],
+                'year': 2000 + i,
+                'popular': i % 2 == 0,
+                'artist': f'artist-{i}',
+                'rating': 4.5 + i * 0.1
+            })
+        }
+        vectors.append(v)
+
+    # vectors with metadata containing only keys NOT in the filterable list
+    for i in range(5, 8):
+        v = {
+            'key': f'vec-{i}',
+            'data': generate_data(dimension, i),
+            'metadata': json.dumps({
+                'artist': f'artist-{i}',
+                'rating': 3.0 + i * 0.1
+            })
+        }
+        vectors.append(v)
+
+    # vectors with no metadata at all
+    for i in range(8, 10):
+        v = {
+            'key': f'vec-{i}',
+            'data': generate_data(dimension, i),
+        }
+        vectors.append(v)
+
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # verify all vectors can be retrieved with correct metadata
+    all_keys = [f'vec-{i}' for i in range(10)]
+    result = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                             keys=all_keys, returnMetadata=True)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == 10
+
+    for vector in result['vectors']:
+        key = vector['key']
+        idx = int(key.split('-')[1])
+        if idx < 5:
+            assert 'metadata' in vector, f"{key} should have metadata"
+            md = json.loads(vector['metadata'])
+            assert md['genre'] == genres[idx], f"{key} genre mismatch"
+            assert md['year'] == 2000 + idx, f"{key} year mismatch"
+            assert md['popular'] == (idx % 2 == 0), f"{key} popular mismatch"
+            assert md['artist'] == f'artist-{idx}', f"{key} artist mismatch"
+        elif idx < 8:
+            assert 'metadata' in vector, f"{key} should have metadata"
+            md = json.loads(vector['metadata'])
+            assert 'genre' not in md, f"{key} should not have genre"
+            assert md['artist'] == f'artist-{idx}', f"{key} artist mismatch"
+        else:
+            assert 'metadata' not in vector, f"{key} should not have metadata"
+
+    log.info('test_filterable_metadata_keys: verified filterable metadata round-trip')
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+@pytest.mark.index_test
 def test_delete_index():
     conn = connection()
     bucket_name = gen_bucket_name()
