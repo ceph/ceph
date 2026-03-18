@@ -540,9 +540,13 @@ class CertificateService:
         :param include_cephadm_signed: Whether to include cephadm-signed certs (default: True)
         :return: Dictionary of certificate data
         """
-        cert_ls_result = orch.cert_store.cert_ls(
-            filter_by=filter_by,
-            show_details=show_details,
-            include_cephadm_signed=include_cephadm_signed
-        )
-        return cert_ls_result or {}
+        try:
+            cert_ls_result = orch.cert_store.cert_ls(
+                filter_by=filter_by,
+                show_details=show_details,
+                include_cephadm_signed=include_cephadm_signed
+            )
+            return cert_ls_result or {}
+        except NotImplementedError:
+            # Orchestrator doesn't support certificate operations
+            return {}
