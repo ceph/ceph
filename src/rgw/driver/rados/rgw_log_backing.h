@@ -305,7 +305,6 @@ public:
   LazyFIFO(neorados::RADOS r,  std::string oid, neorados::IOContext loc)
     : r(r), oid(std::move(oid)), loc(std::move(loc)) {}
 
-  // push a batch of entries (awaitable)
   asio::awaitable<void> push(const DoutPrefixProvider *dpp,
 			     std::deque<ceph::buffer::list> entries) {
     co_await lazy_init(dpp);
@@ -340,7 +339,11 @@ public:
   list(const DoutPrefixProvider *dpp, std::string markstr,
        std::span<fifo::entry> entries) {
     co_await lazy_init(dpp);
-    co_return co_await fifo->list(dpp, markstr, entries, asio::use_awaitable);
+    auto [cur, next] = co_await fifo->list(dpp, markstr, entries,
+                                           asio::use_awaitable);
+    co_return std::tuple{cur, next.empty()
+                              ? std::nullopt
+                              : std::optional<std::string>{std::move(next)}};
   }
 
   // list entries (yield_context)
@@ -348,7 +351,10 @@ public:
   list(const DoutPrefixProvider *dpp, std::string markstr,
        std::span<fifo::entry> entries, asio::yield_context y) {
     lazy_init(dpp, y);
-    return fifo->list(dpp, markstr, entries, y);
+    auto [cur, next] = fifo->list(dpp, markstr, entries, y);
+    return {cur, next.empty()
+                 ? std::nullopt
+                 : std::optional<std::string>{std::move(next)}};
   }
 
   // trim up to markstr (awaitable)
