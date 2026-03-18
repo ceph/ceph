@@ -23,10 +23,6 @@ add_subdirectory(shec)
 add_subdirectory(clay)
 add_subdirectory(consistency)
 
-if(HAVE_NASM_X64_AVX2 OR HAVE_ARMV8_SIMD OR HAS_ALTIVEC)
-  set(WITH_EC_ISA_PLUGIN TRUE CACHE BOOL "")
-endif()
-
 if(WITH_EC_ISA_PLUGIN)
   add_subdirectory(isa)
   set(EC_ISA_LIB ec_isa)
