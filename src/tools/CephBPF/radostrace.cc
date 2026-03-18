@@ -57,7 +57,7 @@
 
 using namespace std;
 
-typedef map<string, int> func_id_t;
+using func_id_t = map<string, int>;
 
 vector<string> probe_units = {"Objecter.cc"};
 
@@ -78,7 +78,7 @@ map<string, int> func_progid = {
 DwarfParser::probes_t rados_probes = {
       {"Objecter::_send_op",
        {{"op", "tid"},
-	{"this", "monc", "global_id"},
+        {"this", "monc", "global_id"},
         {"op", "target", "osd"},
         {"op", "target", "base_oid", "name", "_M_string_length"},
         {"op", "target", "base_oid", "name", "_M_dataplus", "_M_p"},
@@ -87,24 +87,24 @@ DwarfParser::probes_t rados_probes = {
         {"op", "target", "actual_pgid", "pgid", "m_seed"},
         {"op", "target", "acting", "_M_impl", "_M_start"},
         {"op", "target", "acting", "_M_impl", "_M_finish"},
-	{"op", "ops", "m_holder", "m_start"},
-	{"op", "ops", "m_holder", "m_size"}}},
+        {"op", "ops", "m_holder", "m_start"},
+        {"op", "ops", "m_holder", "m_size"}}},
 
       {"Objecter::_finish_op", 
        {{"op", "tid"},
-	{"this", "monc", "global_id"},
-	{"op", "target", "osd"}}}
+        {"this", "monc", "global_id"},
+        {"op", "target", "osd"}}}
 };
 
 volatile sig_atomic_t timeout_occurred = 0;
 
-const char * ceph_osd_op_str(int opc) {
-    const char *op_str = NULL;
-#define GENERATE_CASE_ENTRY(op, opcode, str)	case CEPH_OSD_OP_##op: op_str=str; break;
-    switch (opc) {
-    __CEPH_FORALL_OSD_OPS(GENERATE_CASE_ENTRY)
-    }
-    return op_str;
+const char *ceph_osd_op_str(int opc) {
+  const char *op_str = "???";
+#define GENERATE_CASE_ENTRY(op, opcode, str) case CEPH_OSD_OP_##op: op_str = str; break;
+  switch (opc) {
+  __CEPH_FORALL_OSD_OPS(GENERATE_CASE_ENTRY)
+  }
+  return op_str;
 }
 
 void set_ceph_offsets(struct radostrace_bpf *skel) {
@@ -164,18 +164,18 @@ void fill_map_hprobes(string mod_path, DwarfParser &dwarfparser, struct bpf_map 
   }
 }
 
-void signal_handler(int signum){
+void signal_handler(int signum) {
   clog << "Caught signal " << signum << std::endl;
   if (signum == SIGINT) {
-      clog << "process killed" << std::endl;
+    clog << "process killed" << std::endl;
   }
   exit(signum);
 }
 
 void timeout_handler(int signum) {
-    if (signum == SIGALRM) {
-        timeout_occurred = 1;
-    }
+  if (signum == SIGALRM) {
+    timeout_occurred = 1;
+  }
 }
 
 // Library discovery functions
@@ -185,10 +185,10 @@ void timeout_handler(int signum) {
 // especially for vstart clusters or containerized environments where
 // libraries are loaded from non-standard paths.
 string find_library_path_from_maps(const string& lib_name, int pid) {
-    string maps_path = "/proc/" + to_string(pid) + "/maps";
+    string maps_path = fmt::format("/proc/{}/maps", pid);
     ifstream maps_file(maps_path);
 
-    if (!maps_file.is_open()) {
+    if (!maps_file) {
         debug_print("Failed to open ", maps_path, "\n");
         return "";
     }
@@ -197,7 +197,7 @@ string find_library_path_from_maps(const string& lib_name, int pid) {
     while (getline(maps_file, line)) {
         // Look for the library name in the mapped file path
         // /proc/pid/maps format: address perms offset dev inode pathname
-        if (line.find(lib_name) != string::npos && line.find("(deleted)") == string::npos) {
+        if (line.contains(lib_name) && !line.contains("(deleted)")) {
             // Find the path - it starts after the inode field
             // Example line:
             // 7f1234567000-7f1234568000 r-xp 00000000 08:01 12345 /path/to/lib.so
@@ -259,7 +259,7 @@ string find_library_path(const string& lib_name, int pid) {
     };
 
     vector<string> possible_names;
-    if (lib_name.find(".so") == string::npos) {
+    if (!lib_name.contains(".so")) {
         possible_names.push_back("lib" + lib_name + ".so");
         possible_names.push_back("lib" + lib_name + ".so.1");
         possible_names.push_back("lib" + lib_name + ".so.2");
@@ -281,10 +281,10 @@ string find_library_path(const string& lib_name, int pid) {
 }
 
 bool check_process_library_deleted(int pid, const string& lib_name) {
-    string maps_path = "/proc/" + to_string(pid) + "/maps";
+    string maps_path = fmt::format("/proc/{}/maps", pid);
     ifstream maps_file(maps_path);
 
-    if (!maps_file.is_open()) {
+    if (!maps_file) {
         return false;
     }
 
@@ -292,7 +292,7 @@ bool check_process_library_deleted(int pid, const string& lib_name) {
     bool found_deleted = false;
 
     while (getline(maps_file, line)) {
-        if (line.find(lib_name) != string::npos && line.find("(deleted)") != string::npos) {
+        if (line.contains(lib_name) && line.contains("(deleted)")) {
             found_deleted = true;
             break;
         }
@@ -316,7 +316,7 @@ bool check_library_deleted(int process_id, const string& lib_name) {
         while ((entry = readdir(proc_dir)) != NULL) {
             if (entry->d_type == DT_DIR && isdigit(entry->d_name[0])) {
                 int pid = stoi(entry->d_name);
-                string maps_path = "/proc/" + to_string(pid) + "/maps";
+                string maps_path = fmt::format("/proc/{}/maps", pid);
                 ifstream maps_file(maps_path);
 
                 if (maps_file.is_open()) {
@@ -324,7 +324,7 @@ bool check_library_deleted(int process_id, const string& lib_name) {
                     bool has_lib = false;
 
                     while (getline(maps_file, line)) {
-                        if (line.find(lib_name) != string::npos) {
+                        if (line.contains(lib_name)) {
                             has_lib = true;
                             break;
                         }
@@ -350,11 +350,11 @@ static int libbpf_print_fn(enum libbpf_print_level level, const char *format,
 }
 
 int attach_uprobe(struct radostrace_bpf *skel,
-	           DwarfParser &dp,
-	           string path,
-		   string funcname,
-		   int process_id = -1,
-		   int v = 0) {
+                  DwarfParser &dp,
+                  string path,
+                  string funcname,
+                  int process_id = -1,
+                  int v = 0) {
 
   string pid_path = path;
   if (process_id != -1) {
@@ -390,11 +390,11 @@ int attach_uprobe(struct radostrace_bpf *skel,
 }
 
 int attach_retuprobe(struct radostrace_bpf *skel,
-	           DwarfParser &dp,
-	           string path,
-		   string funcname,
-		   int process_id = -1,
-		   int v = 0) {
+                     DwarfParser &dp,
+                     string path,
+                     string funcname,
+                     int process_id = -1,
+                     int v = 0) {
 
   string pid_path = path;
   if (process_id != -1) {
@@ -608,7 +608,7 @@ int main(int argc, char **argv) {
   string librados_path = find_library_path("librados.so.2", process_id);
   string libceph_common_path = find_library_path("libceph-common.so.2", process_id);
 
-  if(librbd_path.empty() || librados_path.empty() || libceph_common_path.empty()) {
+  if (librbd_path.empty() || librados_path.empty() || libceph_common_path.empty()) {
     cerr << "Error: Could not find one or more required Ceph libraries:" << std::endl;
     if (librbd_path.empty()) cerr << "  - librbd.so.1 not found" << std::endl;
     if (librados_path.empty()) cerr << "  - librados.so.2 not found" << std::endl;
