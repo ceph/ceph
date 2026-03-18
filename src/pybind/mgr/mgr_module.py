@@ -36,7 +36,6 @@ import threading
 from collections import defaultdict
 from contextlib import contextmanager
 from enum import IntEnum, Enum
-import os
 import rados
 import re
 import socket
@@ -1272,16 +1271,16 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             db.execute('BEGIN;')
             self.create_skeleton_schema(db)
             if kv == 1:
-                os._exit(120)
+                return self._ceph_exit(120, hard=True)
             cur = db.execute(SQL)
             row = cur.fetchone()
             self.maybe_upgrade(db, int(row['value']))
             assert cur.fetchone() is None
             cur.close()
             if kv == 2:
-                os._exit(120)
+                return self._ceph_exit(120, hard=True)
         if kv == 3:
-            os._exit(120)
+            return self._ceph_exit(120, hard=True)
 
     def configure_db(self, db: sqlite3.Connection) -> None:
         db.execute('PRAGMA FOREIGN_KEYS = 1')
