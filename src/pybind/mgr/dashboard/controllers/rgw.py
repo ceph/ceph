@@ -517,8 +517,31 @@ class RgwBucket(RgwRESTController):
         return rgw_client.set_bucket_replication(bucket_name, replication)
 
     def _get_replication(self, bucket_name: str, owner, daemon_name):
+        multisite = RgwMultisite()
         rgw_client = RgwClient.instance(owner, daemon_name)
-        return rgw_client.get_bucket_replication(bucket_name)
+        replication_config = rgw_client.get_bucket_replication(bucket_name)
+
+        # Check if there's a valid S3 replication config with actual rules
+        if replication_config and replication_config.get('Rule'):
+            return replication_config
+        
+        # If no S3 replication config exists, check for sync policies
+        try:
+            sync_policy = multisite.get_sync_policy(bucket_name=bucket_name)
+            # Check if there are sync policy groups with 'enabled' status
+            if sync_policy and sync_policy.get('groups'):
+                for group in sync_policy['groups']:
+                    group_status = group.get('status', '').lower()
+                    if group_status == 'enabled':
+                        return {
+                            'Rule': {
+                                'Status': 'Enabled'
+                            }
+                        }
+        except Exception:
+            pass
+        
+        return {'Role': ''}
 
     @staticmethod
     def strip_tenant_from_bucket_name(bucket_name):
