@@ -23,38 +23,38 @@ class DwarfParser;
 // Forward declarations for callback functions
 int handle_function(Dwarf_Die *, void *);
 int handle_module(Dwfl_Module *, void **, const char *, Dwarf_Addr,
-                         void *);
+                  void *);
 int preprocess_module(Dwfl_Module *, void **, const char *, Dwarf_Addr,
-                         void *);
+                      void *);
 int handle_attr(Dwarf_Attribute *, void *);
 
 class DwarfParser {
- private:
+private:
   friend int handle_module(Dwfl_Module *, void **, const char *, Dwarf_Addr,
                            void *);
   friend int handle_function(Dwarf_Die *, void *);
   friend int preprocess_module(Dwfl_Module *, void **, const char *, Dwarf_Addr,
                            void *);
 
-  typedef std::unordered_map<std::string, Dwarf_Die> cu_type_cache_t;
-  typedef std::unordered_map<void *, cu_type_cache_t> mod_cu_type_cache_t;
-  typedef std::unordered_map<void *, mod_cu_type_cache_t> global_mod_cu_type_cache_t; 
+  using cu_type_cache_t = std::unordered_map<std::string, Dwarf_Die>;
+  using mod_cu_type_cache_t = std::unordered_map<void *, cu_type_cache_t>;
+  using global_mod_cu_type_cache_t = std::unordered_map<void *, mod_cu_type_cache_t>; 
   
 
-  typedef std::map<std::string, std::vector<VarField>> func2vf_t;
-  typedef std::map<std::string, Dwarf_Addr> func2pc_t;
-  typedef std::map<std::string, func2vf_t> mod_func2vf_t;
-  typedef std::map<std::string, func2pc_t> mod_func2pc_t;
+  using func2vf_t = std::map<std::string, std::vector<VarField>>;
+  using func2pc_t = std::map<std::string, Dwarf_Addr>;
+  using mod_func2vf_t = std::map<std::string, func2vf_t>;
+  using mod_func2pc_t = std::map<std::string, func2pc_t>;
 
- public:
-  typedef std::map<std::string, std::vector<std::vector<std::string>>> probes_t;
+public:
+  using probes_t = std::map<std::string, std::vector<std::vector<std::string>>>;
   mod_func2vf_t mod_func2vf;
   mod_func2pc_t mod_func2pc;
   global_mod_cu_type_cache_t global_type_cache;
   std::vector<std::string> probe_units;
   probes_t probes;
 
- private:
+private:
   std::vector<Dwfl *> dwfls;
   Dwfl_Module *cur_mod;
   std::string cur_mod_name;
@@ -64,8 +64,8 @@ class DwarfParser {
   Dwarf_Addr cfi_debug_bias;
   Dwarf_Addr cfi_eh_bias;
 
- public:
-  int parse();
+public:
+  void parse();
 
   DwarfParser(probes_t probes, std::vector<std::string> probe_units);
 
