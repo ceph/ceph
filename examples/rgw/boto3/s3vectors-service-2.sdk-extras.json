@@ -1,0 +1,44 @@
+{
+"version": 1.0,
+"merge": {
+    "shapes": {
+        "MetadataConfiguration":{
+            "required":[],
+            "members":{
+                "filterableMetadataKeys":{
+                    "shape":"FilterableMetadataKeys",
+                    "documentation":"<p>Filterable metadata keys allow you to create typed columns that can be used as query filters during vector search.</p>"
+                }
+            }
+        },
+        "FilterableMetadataKeys":{
+            "type":"list",
+            "member":{"shape":"FilterableMetadataKeyEntry"},
+            "max":10,
+            "min":0
+        },
+        "FilterableMetadataKeyEntry":{
+            "type":"structure",
+            "required":["name"],
+            "members":{
+                "name":{
+                    "shape":"MetadataKey",
+                    "documentation":"<p>The name of the filterable metadata key.</p>"
+                },
+                "type":{
+                    "shape":"FilterableMetadataType",
+                    "documentation":"<p>The type of the filterable metadata key. Defaults to String if not specified.</p>"
+                }
+            }
+        },
+        "FilterableMetadataType":{
+            "type":"string",
+            "enum":[
+                "String",
+                "Number",
+                "Boolean"
+            ]
+        }
+    }
+}
+}
