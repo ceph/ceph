@@ -27,6 +27,20 @@ enum class DistanceMetric {
   EUCLIDEAN,
 };
 
+enum class FilterableMetadataType {
+  STRING,
+  NUMBER,
+  BOOLEAN,
+};
+
+struct filterable_metadata_key_t {
+  std::string name;
+  FilterableMetadataType type = FilterableMetadataType::STRING;
+
+  void dump(ceph::Formatter* f) const;
+  void decode_json(JSONObj* obj);
+};
+
 /*
   {
     "dataType": "string",
@@ -46,6 +60,7 @@ struct create_index_t {
   DistanceMetric distance_metric;
   std::string index_name;
   std::vector<std::string> non_filterable_metadata_keys;
+  std::vector<filterable_metadata_key_t> filterable_metadata_keys;
   boost::optional<rgw::ARN> vector_bucket_arn;
   std::string vector_bucket_name;
 
@@ -304,6 +319,7 @@ struct get_index_reply_t {
   std::string index_arn;
   std::string index_name;
   std::vector<std::string> non_filterable_metadata_keys;
+  std::vector<filterable_metadata_key_t> filterable_metadata_keys;
   std::string vector_bucket_name;
 
   void dump(ceph::Formatter* f) const;
