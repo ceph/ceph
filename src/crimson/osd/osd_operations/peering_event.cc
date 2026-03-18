@@ -65,6 +65,9 @@ template <class T>
 seastar::future<> PeeringEvent<T>::with_pg(
   ShardServices &shard_services, Ref<PG> pg)
 {
+  return shard_services.with_sg(
+    shard_services.get_sg_peering(),
+    [this, &shard_services, pg=std::move(pg)]() mutable -> seastar::future<> {
   using interruptor = typename T::interruptor;
   LOG_PREFIX(PeeringEvent<T>::with_pg);
   if (!pg) {
@@ -116,6 +119,7 @@ seastar::future<> PeeringEvent<T>::with_pg(
     logger().debug("{}: exit", *this);
     that()->get_handle().exit();
   });
+    });
 }
 
 template <class T>

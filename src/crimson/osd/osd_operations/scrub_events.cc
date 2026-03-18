@@ -38,6 +38,9 @@ seastar::future<> RemoteScrubEventBaseT<T>::with_pg(
   ShardServices &shard_services, Ref<PG> pg)
 {
   LOG_PREFIX(RemoteEventBaseT::with_pg);
+   return shard_services.with_sg(
+    shard_services.get_sg_scrub(),
+    [FNAME, this, pg=std::move(pg)]() mutable -> seastar::future<> {
   return interruptor::with_interruption([FNAME, this, pg] {
     DEBUGDPP("{} pg present", *pg, *that());
     return this->template enter_stage<interruptor>(
@@ -58,6 +61,7 @@ seastar::future<> RemoteScrubEventBaseT<T>::with_pg(
   }, [FNAME, pg, this](std::exception_ptr ep) {
     DEBUGDPP("{} interrupted with {}", *pg, *that(), ep);
   }, pg, epoch);
+ });
 }
 
 ScrubRequested::ifut<> ScrubRequested::handle_event(PG &pg)
@@ -83,7 +87,14 @@ typename ScrubAsyncOpT<T>::template ifut<> ScrubAsyncOpT<T>::start()
 {
   LOG_PREFIX(ScrubAsyncOpT::start);
   DEBUGDPP("{} starting", *pg, *this);
-  return run(*pg);
+  return interruptor::make_interruptible(
+    pg->get_shard_services().with_sg(
+      pg->get_shard_services().get_sg_scrub(),
+      [] { return seastar::now(); }
+    )
+  ).then_interruptible([this] {
+    return run(*pg);
+  });
 }
 
 ScrubFindRange::ifut<> ScrubFindRange::run(PG &pg)

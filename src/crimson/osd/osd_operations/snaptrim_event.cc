@@ -70,6 +70,13 @@ SnapTrimEvent::start()
   /* TODO: add a way to expose progress via the optracker without misusing
    * pipeline stages. https://tracker.ceph.com/issues/66473 */
   ShardServices &shard_services = pg->get_shard_services();
+
+  co_await interruptor::make_interruptible(
+    shard_services.with_sg(
+      shard_services.get_sg_background(),
+      [] { return seastar::now(); }
+    )
+  );
   {
     co_await pg->background_process_lock.lock_with_op(*this);
     auto unlocker = seastar::defer([this] {
