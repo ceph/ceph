@@ -23,6 +23,7 @@ export class RgwBucketDetailsComponent implements OnChanges {
   lifecycleFormat: 'json' | 'xml' = 'json';
   aclPermissions: Record<string, string[]> = {};
   replicationStatus = $localize`Disabled`;
+  hasSyncPolicyOnly = false;
   bucketRateLimit: RgwRateLimitConfig;
 
   constructor(private rgwBucketService: RgwBucketService, private cd: ChangeDetectorRef) {}
@@ -78,8 +79,13 @@ export class RgwBucketDetailsComponent implements OnChanges {
 
   extraxtDetailsfromResponse() {
     this.aclPermissions = this.parseXmlAcl(this.selection.acl, this.selection.owner);
-    if (this.selection.replication?.['Rule']?.['Status']) {
+    this.hasSyncPolicyOnly = this.selection.replication?.['syncPolicyOnly'] === true;
+    if (this.hasSyncPolicyOnly) {
+      this.replicationStatus = $localize`Enabled`;
+    } else if (this.selection.replication?.['Rule']?.['Status']) {
       this.replicationStatus = this.selection.replication?.['Rule']?.['Status'];
+    } else {
+      this.replicationStatus = $localize`Disabled`;
     }
     this.rgwBucketService.getBucketRateLimit(this.selection.bid).subscribe((resp: any) => {
       if (resp && resp.bucket_ratelimit !== undefined) {

@@ -1114,7 +1114,7 @@ class RgwClient(RestClient):
         return retention_period_days, retention_period_years
 
     @RestClient.api_put('/{bucket_name}?replication')
-    def set_bucket_replication(self, bucket_name, replication: bool, request=None):
+    def set_bucket_replication(self, bucket_name, request=None):
         # pGenerate the minimum replication configuration
         # required for enabling the replication
         root = ET.Element('ReplicationConfiguration',
@@ -1127,7 +1127,7 @@ class RgwClient(RestClient):
         rule_id.text = _SYNC_PIPE_ID
 
         status = ET.SubElement(rule, 'Status')
-        status.text = 'Enabled' if replication else 'Disabled'
+        status.text = 'Enabled'
 
         filter_elem = ET.SubElement(rule, 'Filter')
         prefix = ET.SubElement(filter_elem, 'Prefix')
@@ -1157,6 +1157,18 @@ class RgwClient(RestClient):
                 if content.get('Code') == 'ReplicationConfigurationNotFoundError':
                     return None
             raise e
+
+    @RestClient.api_delete('/{bucket_name}?replication')
+    def delete_bucket_replication(self, bucket_name, request=None):
+        # pylint: disable=unused-argument
+        try:
+            request()
+        except RequestException as e:
+            if e.content:
+                content = json_str_to_object(e.content)
+                if content.get('Code') == 'ReplicationConfigurationNotFoundError':
+                    return None
+            raise DashboardException(msg=str(e), component='rgw')
 
     @RestClient.api_post('?Action=CreateTopic&Name={name}')
     def create_topic(self, request=None, name: str = '',
@@ -2996,6 +3008,31 @@ class RgwMultisite:
                               destination_bucket='*')
         # period update --commit
         self.update_period()
+
+    @staticmethod
+    def _is_not_found_sync_policy_error(error: DashboardException) -> bool:
+        message = str(error).lower()
+        not_found_markers = ['not found', 'no such', 'does not exist']
+        return any(marker in message for marker in not_found_markers)
+
+    def remove_dashboard_admin_sync_group(self, zonegroup_name: str = ''):
+        if not self.policy_group_exists(_SYNC_GROUP_ID, zonegroup_name):
+            return
+
+        try:
+            self.remove_sync_pipe(_SYNC_GROUP_ID, _SYNC_PIPE_ID)
+        except DashboardException as error:
+            if not self._is_not_found_sync_policy_error(error):
+                raise
+
+        try:
+            self.remove_sync_flow(_SYNC_GROUP_ID, _SYNC_FLOW_ID,
+                                  SyncFlowTypes.symmetrical.value)
+        except DashboardException as error:
+            if not self._is_not_found_sync_policy_error(error):
+                raise
+
+        self.remove_sync_policy_group(_SYNC_GROUP_ID, update_period=True)
 
     def policy_group_exists(self, group_name: str, zonegroup_name: str):
         try:
