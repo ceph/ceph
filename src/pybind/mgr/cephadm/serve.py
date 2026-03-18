@@ -444,6 +444,17 @@ class CephadmServe:
         self.mgr.cache.save_host(host)
         return None
 
+    async def get_rdma_devices(self, host: str) -> List[Dict[str, Any]]:
+        """Return list of RDMA devices on host from cephadm list-rdma, or [] on error."""
+        try:
+            out = await self._run_cephadm_json(
+                host, 'mon', 'list-rdma', [], no_fsid=True,
+                log_output=self.mgr.log_refresh_metadata)
+            return out if isinstance(out, list) else []
+        except OrchestratorError as e:
+            self.log.error('Failed to get RDMA devices for host %s: %s', host, e)
+            return []
+
     def _refresh_host_osdspec_previews(self, host: str) -> Optional[str]:
         self.update_osdspec_previews(host)
         self.mgr.cache.save_host(host)
