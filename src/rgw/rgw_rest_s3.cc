@@ -3033,7 +3033,7 @@ int RGWPutObj_ObjStore_S3::get_decrypt_filter(
     bufferlist* manifest_bl)
 {
   static constexpr bool copy_source = true;
-  rgw_crypt_src_identity src_identity{copy_source_bucket_name, copy_source_object_name};
+  rgw_crypt_src_identity src_identity{copy_source_bucket_info.bucket.bucket_id, copy_source_bucket_name, copy_source_object_name};
   // part_num=0 for copy source (full object read)
   return ::get_decrypt_filter(filter, cb, s, attrs, manifest_bl, nullptr, copy_source,
                               0, 0, &src_identity);

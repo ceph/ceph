@@ -29,7 +29,7 @@ std::unique_ptr<BlockCrypt> AES_256_CBC_create(const DoutPrefixProvider *dpp, Ce
 bool AES_256_GCM_derive_object_key(BlockCrypt* block_crypt,
                                     const uint8_t* user_key,
                                     size_t key_len,
-                                    const std::string& bucket,
+                                    const std::string& bucket_id,
                                     const std::string& object,
                                     uint32_t part_number,
                                     const std::string& domain = "SSE-C-GCM");
