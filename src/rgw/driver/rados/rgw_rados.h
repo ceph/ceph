@@ -338,8 +338,8 @@ struct BILogNopHandler {
   void add_maybe_flush(RGWModifyOp op,
                        const rgw_bucket_dir_entry& list_state,
                        rgw_zone_set zones_trace) {}
-  void flush(optional_yield) {}
-  void flush() {}
+  int flush(optional_yield) { return 0; }
+  int flush() { return 0; }
 };
 
 class RGWRados

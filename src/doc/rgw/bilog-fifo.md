@@ -116,9 +116,6 @@ Multi-generation markers use the format
 
 ## Remaining Work
 
-### Error propagation:
-Currently `do_flush(y)` and `co_flush()` log the error and continue and `flush(optional_yield y)` returns `void`. need to return error codes as appropriate.
-
 ### InIndex → FIFO migration
 Existing buckets created before `rgw_default_bucket_bilog_type = fifo` remain
 on InIndex indefinitely. Migration requires something similar to multi-generation
@@ -127,7 +124,8 @@ on InIndex indefinitely. Migration requires something similar to multi-generatio
 
 ### Write batching
 
-Currently one FIFO push per bucket operation, Batching multiple entries into a single `fifo_push` call could be beneficial at high write rates.
+Currently one FIFO push per bucket operation, Batching multiple entries into a single `fifo_push` call could be beneficial at high write rates. can it be
+made crash-consistent?
 
 ###  Functional testing
 
