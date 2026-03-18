@@ -779,7 +779,7 @@ public:
   bool derive_object_key(
       const uint8_t* user_key,
       size_t key_len,
-      const std::string& bucket,
+      const std::string& bucket_id,
       const std::string& object,
       uint32_t part_number,
       const std::string& domain = "SSE-C-GCM")
@@ -794,7 +794,7 @@ public:
       return false;
     }
 
-    // HMAC-SHA256(user_key, nonce || domain || bucket || object)
+    // HMAC-SHA256(user_key, nonce || domain || bucket_id || object)
     try {
       ceph::crypto::HMACSHA256 hmac(user_key, key_len);
 
@@ -820,9 +820,9 @@ public:
       // Domain separator (length-prefixed for consistency)
       hmac_update_with_length(domain);
 
-      // Include bucket/object with length prefixes
-      // Format: nonce || len(domain) || domain || len(bucket) || bucket || len(object) || object
-      hmac_update_with_length(bucket);
+      // Include bucket_id/object with length prefixes
+      // Format: nonce || len(domain) || domain || len(bucket_id) || bucket_id || len(object) || object
+      hmac_update_with_length(bucket_id);
       hmac_update_with_length(object);
 
       hmac.Final(this->key);
@@ -840,7 +840,7 @@ public:
     memcpy(this->base_key, this->key, AES_256_KEYSIZE);
     this->has_base_key = true;
 
-    ldpp_dout(dpp, 20) << "derive_object_key: derived key for bucket=" << bucket
+    ldpp_dout(dpp, 20) << "derive_object_key: derived key for bucket_id=" << bucket_id
                        << " object=" << object
                        << " part_number=" << part_number << dendl;
 
@@ -1395,7 +1395,7 @@ std::string AES_256_GCM_get_nonce(BlockCrypt* block_crypt)
 bool AES_256_GCM_derive_object_key(BlockCrypt* block_crypt,
                                     const uint8_t* user_key,
                                     size_t key_len,
-                                    const std::string& bucket,
+                                    const std::string& bucket_id,
                                     const std::string& object,
                                     uint32_t part_number,
                                     const std::string& domain)
@@ -1404,7 +1404,7 @@ bool AES_256_GCM_derive_object_key(BlockCrypt* block_crypt,
   if (!gcm) {
     return false;
   }
-  return gcm->derive_object_key(user_key, key_len, bucket, object,
+  return gcm->derive_object_key(user_key, key_len, bucket_id, object,
                                  part_number, domain);
 }
 
@@ -2180,11 +2180,11 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
           if (!gcm->derive_object_key(
                   reinterpret_cast<const uint8_t*>(key_bin.c_str()),
                   AES_256_KEYSIZE,
-                  s->bucket->get_name(),
+                  s->bucket->get_info().bucket.bucket_id,
                   s->object->get_name(),
                   part_number)) {
             ldpp_dout(s, 5) << "ERROR: SSE-C-AES256-GCM key derivation failed for "
-                             << s->bucket->get_name() << "/" << s->object->get_name() << dendl;
+                             << s->bucket->get_info().bucket.bucket_id << "/" << s->object->get_name() << dendl;
             s->err.message = "Failed to derive encryption key.";
             ::ceph::crypto::zeroize_for_security(key_bin.data(), key_bin.length());
             return -EIO;
@@ -2419,16 +2419,16 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
           }
 
           // Derive encryption key using HMAC-SHA256 with context binding
-          // Key = HMAC-SHA256(master_key, nonce || "RGW-AUTO-GCM" || bucket || object)
+          // Key = HMAC-SHA256(master_key, nonce || "RGW-AUTO-GCM" || bucket_id || object)
           if (!gcm->derive_object_key(
                   reinterpret_cast<const uint8_t*>(master_encryption_key.c_str()),
                   AES_256_KEYSIZE,
-                  s->bucket->get_name(),
+                  s->bucket->get_info().bucket.bucket_id,
                   s->object->get_name(),
                   part_number,
                   "RGW-AUTO-GCM")) {
             ldpp_dout(s, 5) << "ERROR: RGW-AUTO-GCM key derivation failed for "
-                             << s->bucket->get_name() << "/" << s->object->get_name() << dendl;
+                             << s->bucket->get_info().bucket.bucket_id << "/" << s->object->get_name() << dendl;
             return -EIO;
           }
           *block_crypt = std::move(gcm);
@@ -2465,22 +2465,22 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
 static void pick_gcm_identity(req_state* s,
                               bool copy_source,
                               const rgw_crypt_src_identity* src_identity,
-                              std::string& bucket_name,
+                              std::string& bucket_id,
                               std::string& object_name)
 {
   if (copy_source) {
     if (src_identity && src_identity->valid()) {
-      bucket_name = std::string(src_identity->bucket);
+      bucket_id = std::string(src_identity->bucket_id);
       object_name = std::string(src_identity->object);
       return;
     }
-    if (s->src_object) {
-      bucket_name = s->src_bucket_name;
+    if (s->src_object && s->src_object->get_bucket()) {
+      bucket_id = s->src_object->get_bucket()->get_info().bucket.bucket_id;
       object_name = s->src_object->get_name();
       return;
     }
   }
-  bucket_name = s->bucket->get_name();
+  bucket_id = s->bucket->get_info().bucket.bucket_id;
   object_name = s->object->get_name();
 }
 
@@ -2678,17 +2678,17 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
                    stored_nonce.size());
     // Re-derive encryption key from user key + object identity
     // For CopyObject, use the SOURCE object's identity (not destination)
-    std::string bucket_name;
+    std::string bucket_id;
     std::string object_name;
-    pick_gcm_identity(s, copy_source, src_identity, bucket_name, object_name);
+    pick_gcm_identity(s, copy_source, src_identity, bucket_id, object_name);
     if (!gcm->derive_object_key(
             reinterpret_cast<const uint8_t*>(key_bin.c_str()),
             AES_256_KEYSIZE,
-            bucket_name,
+            bucket_id,
             object_name,
             part_number)) {
       ldpp_dout(s, 5) << "ERROR: SSE-C-AES256-GCM key derivation failed for "
-                       << bucket_name << "/" << object_name << dendl;
+                       << bucket_id << "/" << object_name << dendl;
       s->err.message = "Failed to derive decryption key.";
       return -EIO;
     }
@@ -2849,19 +2849,19 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
 
     // Re-derive encryption key using HMAC-SHA256 with context binding
     // For CopyObject, use the SOURCE object's identity (not destination)
-    std::string bucket_name;
+    std::string bucket_id;
     std::string object_name;
-    pick_gcm_identity(s, copy_source, src_identity, bucket_name, object_name);
+    pick_gcm_identity(s, copy_source, src_identity, bucket_id, object_name);
 
     if (!gcm->derive_object_key(
             reinterpret_cast<const uint8_t*>(master_encryption_key.c_str()),
             AES_256_KEYSIZE,
-            bucket_name,
+            bucket_id,
             object_name,
             part_number,
             "RGW-AUTO-GCM")) {
       ldpp_dout(s, 5) << "ERROR: RGW-AUTO-GCM key derivation failed for "
-                       << bucket_name << "/" << object_name << dendl;
+                       << bucket_id << "/" << object_name << dendl;
       s->err.message = "Failed to derive decryption key.";
       return -EIO;
     }
