@@ -892,7 +892,9 @@ def list_rdma(ctx: CephadmContext) -> List[Dict[str, str]]:
                 }
             )
         else:
-            logger.debug("Skipped RDMA device '%s', as pattern did not match", line)
+            logger.debug(
+                "Skipped RDMA device '%s', as pattern did not match", line
+            )
     return result
 
 
