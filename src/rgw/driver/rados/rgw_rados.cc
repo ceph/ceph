@@ -9042,7 +9042,13 @@ int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp, RGWBucketInfo
     }
     bilog.add_maybe_flush(olh_epoch, key, op_tag, delete_marker,
                           ceph::real_time{}, zones_trace);
-    bilog.flush(y);
+    int r = bilog.flush(y);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__
+                        << ": failed to flush bilog entry for " << key
+                        << ": " << cpp_strerror(r) << dendl;
+      return r;
+    }
     return 0;
   };
 
@@ -9118,7 +9124,13 @@ int RGWRados::bucket_index_unlink_instance(const DoutPrefixProvider *dpp,
         }
 
         bilog.add_maybe_flush(olh_epoch, ceph::real_time{}, op_issuer);
-        bilog.flush(y);
+        int r = bilog.flush(y);
+        if (r < 0) {
+          ldpp_dout(dpp, 0) << "ERROR: " << __func__
+                            << ": failed to flush bilog entry for " << key
+                            << ": " << cpp_strerror(r) << dendl;
+          return r;
+        }
         return 0;
       },
       bucket_info,
@@ -9471,10 +9483,19 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
       zt = *zones_trace;
     }
     zt.insert(svc.zone->get_zone().id, obj.bucket.get_key());
+    int bilog_r = 0;
+    // with_bilog<void> always returns 0; capture the flush error via bilog_r.
     with_bilog<void>(dpp, [&](auto& bilog_handler) {
       bilog_handler.add_maybe_flush(link_epoch, key, link_op_tag,
                                     delete_marker, state.mtime, zt);
+      bilog_r = bilog_handler.flush(y);
     }, bucket_info, log_op);
+    if (bilog_r < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__
+                        << ": failed to flush bilog entry for " << key
+                        << ": " << cpp_strerror(bilog_r) << dendl;
+      return bilog_r;
+    }
   }
 
   if (need_to_remove) {
@@ -11623,6 +11644,13 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
     // FIFO: write the DEL bilog entry from the client side (CLS won't do it).
     with_bilog<void>(dpp, [&](auto& bilog_handler) {
       bilog_handler.add_maybe_flush(CLS_RGW_OP_DEL, list_state, rgw_zone_set{});
+      int r = bilog_handler.flush(y);
+      if (r < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: " << __func__
+                          << ": failed to flush DEL bilog entry for "
+                          << list_state.key << ": " << cpp_strerror(r) << dendl;
+        // continue: the index correction is more important than the bilog entry
+      }
     }, bucket_info, log_op);
     return -ENOENT;
   }
@@ -11723,6 +11751,13 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
   // FIFO: write the ADD bilog entry from the client side (CLS won't do it).
   with_bilog<void>(dpp, [&](auto& bilog_handler) {
     bilog_handler.add_maybe_flush(CLS_RGW_OP_ADD, list_state, rgw_zone_set{});
+    int r = bilog_handler.flush(y);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__
+                        << ": failed to flush ADD bilog entry for "
+                        << list_state.key << ": " << cpp_strerror(r) << dendl;
+      // continue: the index correction is more important than the bilog entry
+    }
   }, bucket_info, log_op);
 
   ldout_bitx(bitx, dpp, 10) << "EXITING " << __func__ << dendl_bitx;

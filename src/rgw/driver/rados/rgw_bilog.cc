@@ -10,6 +10,7 @@
 
 #include "common/async/blocked_completion.h"
 #include "common/dout.h"
+#include "common/errno.h"
 #include "rgw_asio_thread.h"
 #include "services/svc_bi_rados.h"
 
@@ -166,11 +167,11 @@ void RGWBILogUpdateBatch::add_maybe_flush(RGWModifyOp op,
   stage(shard_of(list_state.key), std::move(entry));
 }
 
-void RGWBILogUpdateBatch::do_flush(asio::yield_context y)
+int RGWBILogUpdateBatch::do_flush(asio::yield_context y)
 {
   if (!fifo_) {
-    pending.clear(); 
-    return;
+    pending.clear();
+    return 0;
   }
   for (auto& [shard, entry] : pending) {
     ceph::buffer::list bl;
@@ -178,46 +179,52 @@ void RGWBILogUpdateBatch::do_flush(asio::yield_context y)
     try {
       fifo_->push(dpp, shard, std::move(bl), y);
     } catch (const boost::system::system_error& e) {
-      ldpp_dout(dpp, 5) << __func__ << ": failed to push bilog entry for "
+      ldpp_dout(dpp, 1) << __func__ << ": failed to push bilog entry for "
                        << entry.object << "/" << entry.instance
                        << " shard=" << shard
                        << ": " << e.what() << dendl;
+      pending.clear();
+      return -e.code().value();
     }
   }
   pending.clear();
+  return 0;
 }
 
-void RGWBILogUpdateBatch::do_flush()
+int RGWBILogUpdateBatch::do_flush()
 {
   if (!fifo_) {
     pending.clear();
-    return;
+    return 0;
   }
   maybe_warn_about_blocking(dpp);
+  int ret = 0;
   asio::spawn(rados_.get_executor(),
-              [this](asio::yield_context y) { do_flush(y); },
+              [this, &ret](asio::yield_context y) { ret = do_flush(y); },
               ceph::async::use_blocked);
+  return ret;
 }
 
-void RGWBILogUpdateBatch::flush(optional_yield y)
+int RGWBILogUpdateBatch::flush(optional_yield y)
 {
   if (!pending.empty()) {
     if (y) {
-      do_flush(y.get_yield_context());
+      return do_flush(y.get_yield_context());
     } else {
-      do_flush();
+      return do_flush();
     }
   }
+  return 0;
 }
 
-asio::awaitable<void> RGWBILogUpdateBatch::co_flush()
+asio::awaitable<int> RGWBILogUpdateBatch::co_flush()
 {
   if (pending.empty()) {
-    co_return;
+    co_return 0;
   }
   if (!fifo_) {
     pending.clear();
-    co_return;
+    co_return 0;
   }
   for (auto& [shard, entry] : pending) {
     ceph::buffer::list bl;
@@ -225,31 +232,34 @@ asio::awaitable<void> RGWBILogUpdateBatch::co_flush()
     try {
       co_await fifo_->push(dpp, shard, std::move(bl));
     } catch (const boost::system::system_error& e) {
-      ldpp_dout(dpp, 5) << __func__ << ": failed to push bilog entry for "
+      ldpp_dout(dpp, 1) << __func__ << ": failed to push bilog entry for "
                        << entry.object << "/" << entry.instance
                        << " shard=" << shard
                        << ": " << e.what() << dendl;
+      pending.clear();
+      co_return -e.code().value();
     }
   }
   pending.clear();
+  co_return 0;
 }
 
-void RGWBILogUpdateBatch::flush()
+int RGWBILogUpdateBatch::flush()
 {
   if (!pending.empty()) {
-    do_flush();
+    return do_flush();
   }
+  return 0;
 }
 
 RGWBILogUpdateBatch::~RGWBILogUpdateBatch()
 {
   if (!pending.empty()) {
-    try {
-      do_flush();
-    } catch (const std::exception& e) {
+    int r = do_flush();
+    if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: " << __func__
                         << ": failed to flush pending bilog entries: "
-                        << e.what() << dendl;
+                        << cpp_strerror(r) << dendl;
     }
   }
 }
