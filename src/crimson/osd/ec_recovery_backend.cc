@@ -28,7 +28,7 @@ ECRecoveryBackend::ECRecoveryBackend(
   crimson::osd::ShardServices& shard_services,
   crimson::os::CollectionRef coll,
   ECBackend* backend)
-: ::crimson::osd::RecoveryBackend(pg, shard_services, coll, backend),
+: ::crimson::osd::RecoveryBackend(pg, shard_services, coll, pg.get_store_index(), backend),
   ::ECCommon::RecoveryBackend(
     shard_services.get_cct(),
     coll->get_cid(),
@@ -74,8 +74,10 @@ void ECRecoveryBackend::commit_txn_send_replies(
   ceph::os::Transaction&& txn,
   std::map<int, MOSDPGPushReply*> replies)
 {
-  std::ignore = shard_services.get_store().do_transaction(
-    crimson::osd::RecoveryBackend::coll, std::move(txn)
+  std::ignore = crimson::os::with_store_do_transaction(
+    shard_services.get_store(pg.get_store_index()),
+    crimson::osd::RecoveryBackend::coll,
+    std::move(txn)
   ).then([replies=std::move(replies), this]() mutable {
     if (auto msgit = replies.find(get_parent()->whoami_shard().osd);
         msgit != std::end(replies)) {

@@ -21,6 +21,14 @@ using std::string;
 
 namespace crimson::osd {
 
+ReplicatedRecoveryBackend::ReplicatedRecoveryBackend(
+  crimson::osd::PG& pg,
+  crimson::osd::ShardServices& shard_services,
+  crimson::os::CollectionRef coll,
+  PGBackend* backend)
+    : RecoveryBackend(pg, shard_services, coll, pg.get_store_index(), backend)
+{}
+
 RecoveryBackend::interruptible_future<>
 ReplicatedRecoveryBackend::recover_object(
   const hobject_t& soid,

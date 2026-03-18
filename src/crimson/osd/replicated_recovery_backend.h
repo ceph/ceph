@@ -22,9 +22,7 @@ public:
   ReplicatedRecoveryBackend(crimson::osd::PG& pg,
 			    crimson::osd::ShardServices& shard_services,
 			    crimson::os::CollectionRef coll,
-			    PGBackend* backend)
-    : RecoveryBackend(pg, shard_services, coll, pg.get_store_index(), backend)
-  {}
+			    PGBackend* backend);
   interruptible_future<> handle_recovery_op(
     Ref<MOSDFastDispatchOp> m,
     crimson::net::ConnectionXcoreRef conn) final;

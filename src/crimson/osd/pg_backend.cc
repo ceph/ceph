@@ -87,9 +87,8 @@ PGBackend::PGBackend(pg_shard_t whoami,
     coll{coll},
     shard_services{shard_services},
     dpp{dpp},
-    store{&shard_services.get_store(store_index)}
+    store{shard_services.get_store(store_index)}
 {
-  logger().info("initialized PGBackend::store with {}", (void*)this->store);
 }
 
 tl::expected<PGBackend::loaded_object_md_t::ref, std::error_code>
@@ -1120,7 +1119,7 @@ PGBackend::setxattr_ierrorator::future<> PGBackend::setxattr(
   }
   return crimson::os::with_store<
     &crimson::os::FuturizedStore::Shard::get_max_attr_name_length
-  >(store).then([this, &os, &osd_op, &txn, &delta_stats](unsigned store_max_name_len) {
+  >(store).then([this, &os, &osd_op, &txn, &delta_stats, &attr_cache](unsigned store_max_name_len) {
     const auto max_name_len = std::min<uint64_t>(
       store_max_name_len, local_conf()->osd_max_attr_name_len);
     if (osd_op.op.xattr.name_len > max_name_len) {
@@ -1190,7 +1189,8 @@ PGBackend::get_attr_ierrorator::future<> PGBackend::get_xattrs(
     [&] () {
     if (!is_erasure()) {
       logger().debug("getxattrx on obj={} goes into objstore", os.oi.soid);
-      return store->get_attrs(coll, ghobject_t{os.oi.soid});
+      return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::get_attrs>(
+        store, coll, ghobject_t{os.oi.soid}, 0);
     }
     return crimson::os::FuturizedStore::Shard::get_attrs_ertr::make_ready_future<
       crimson::os::FuturizedStore::Shard::attrs_t>(attr_cache);

@@ -392,7 +392,8 @@ ECBackend::handle_sub_write(
     pg.op_applied(op.at_version);
   }
   logger().debug("{}:{}", __func__, __LINE__);
-  return store->do_transaction(coll, std::move(txn)).then([FNAME] {
+  return crimson::os::with_store_do_transaction(
+      store, coll, std::move(txn)).then([FNAME] {
     DEBUG("transaction commited!");
     return write_iertr::now();
   });
@@ -494,7 +495,8 @@ ECBackend::maybe_chunked_read(
   DEBUG("obj {} off {} size {} flags {}", obj, off, size, flags);
   DEBUG("oid is: {}", ghobject_t{obj, ghobject_t::NO_GEN, get_shard()});
   if (is_single_chunk(obj, op)) {
-    return store->read(
+    return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::read>(
+      store,
       coll, ghobject_t{obj, ghobject_t::NO_GEN, get_shard()}, off, size, flags);
   } else {
     return seastar::do_with(ceph::bufferlist{}, [=, this] (auto&& result_bl) {
@@ -510,7 +512,8 @@ ECBackend::maybe_chunked_read(
             std::end(sub_spec),
             [&obj, off, flags, subchunk_size, m, &result_bl, this] (const auto& subchunk) {
               const auto [sub_off_count, sub_size_count] = subchunk;
-              return store->read(
+              return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::read>(
+                store,
                 coll,
                 ghobject_t{obj, ghobject_t::NO_GEN, get_shard()},
                 off + m*sinfo.get_chunk_size() + sub_off_count*subchunk_size,
@@ -598,8 +601,8 @@ ECBackend::handle_rep_read_op(ECSubRead& op)
 	if (reply.errors.count(obj_attr)) {
           return read_ertr::now();
 	}
-        return store->get_attrs(
-          coll, ghobject_t{obj_attr, ghobject_t::NO_GEN, get_shard()}
+        return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::get_attrs>(
+          store, coll, ghobject_t{obj_attr, ghobject_t::NO_GEN, get_shard()}, 0
 	).safe_then([&reply, obj_attr] (auto&& attrs) {
 	  reply.attrs_read[obj_attr] = std::move(attrs);
           return read_ertr::now();

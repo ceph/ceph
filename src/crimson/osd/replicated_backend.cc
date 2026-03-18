@@ -370,7 +370,8 @@ ReplicatedBackend::getxattr(
   std::string&& key) const
 {
   return seastar::do_with(key, [this, &soid](auto &key) {
-    return store->get_attr(coll, ghobject_t{soid}, key);
+    return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::get_attr>(
+      store, coll, ghobject_t{soid}, key, 0);
   });
 }
 
