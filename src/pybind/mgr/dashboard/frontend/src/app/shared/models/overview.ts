@@ -16,6 +16,15 @@ type PG_STATES = typeof PG_STATES[number];
 
 type SCRUBBING_STATES = typeof SCRUBBING_STATES[number];
 
+export type TrendPoint = {
+  timestamp: Date;
+  values: { Used: number };
+};
+
+export type BreakdownChartData = { group: string; value: number };
+
+export type CapacityThreshold = 'high' | 'critical' | null;
+
 export const HealthIconMap = {
   HEALTH_OK: 'success',
   HEALTH_WARN: 'warningAltFilled',
@@ -85,6 +94,17 @@ export interface HealthCardVM {
   mgr: HealthCardSubStateVM;
   osd: HealthCardSubStateVM;
   hosts: HealthCardSubStateVM;
+}
+
+export interface StorageCardVM {
+  totalCapacity: number | null;
+  usedCapacity: number | null;
+  breakdownData: BreakdownChartData[];
+  isBreakdownLoaded: boolean;
+  consumptionTrendData: TrendPoint[];
+  averageDailyConsumption: string;
+  estimatedTimeUntilFull: string;
+  threshold: CapacityThreshold;
 }
 
 // Constants
