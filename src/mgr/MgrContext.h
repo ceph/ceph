@@ -53,26 +53,5 @@ public:
   virtual ~Command() {}
 };
 
-class JSONCommand : public Command
-{
-public:
-  boost::json::value json_result;
-
-  void wait() override
-  {
-    Command::wait();
-
-    if (0 != r) {
-      return;
-    }
-
-    boost::system::error_code ec;
-    if (json_result = boost::json::parse(outbl.to_str(), ec); ec) {
-fmt::println("JFW: exception: JSON error in JSONCommand from:\n{}", outbl.to_str()); // JFW: temporary while I sort out the library
-	r = -EINVAL;
-    }
-  }
-};
-
 #endif
 
