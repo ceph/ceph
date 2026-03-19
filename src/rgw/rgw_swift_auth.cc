@@ -473,8 +473,7 @@ ExternalTokenEngine::authenticate(const DoutPrefixProvider* dpp,
   }
 
   auth_url.append("token");
-  char url_buf[auth_url.size() + 1 + token.length() + 1];
-  sprintf(url_buf, "%s/%s", auth_url.c_str(), token.c_str());
+  auto url_buf = fmt::format("{}/{}", auth_url, token);
 
   RGWHTTPHeadersCollector validator(cct, "GET", url_buf, { "X-Auth-Groups", "X-Auth-Ttl" });
 
