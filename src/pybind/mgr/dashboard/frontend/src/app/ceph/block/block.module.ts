@@ -40,7 +40,6 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
 import { NvmeofGatewayComponent } from './nvmeof-gateway/nvmeof-gateway.component';
 import { NvmeofSubsystemsComponent } from './nvmeof-subsystems/nvmeof-subsystems.component';
 import { NvmeofSubsystemsDetailsComponent } from './nvmeof-subsystems-details/nvmeof-subsystems-details.component';
-import { NvmeofTabsComponent } from './nvmeof-tabs/nvmeof-tabs.component';
 import { NvmeofSubsystemsFormComponent } from './nvmeof-subsystems-form/nvmeof-subsystems-form.component';
 import { NvmeofListenersFormComponent } from './nvmeof-listeners-form/nvmeof-listeners-form.component';
 import { NvmeofListenersListComponent } from './nvmeof-listeners-list/nvmeof-listeners-list.component';
@@ -71,9 +70,12 @@ import {
 // Icons
 import ChevronDown from '@carbon/icons/es/chevron--down/16';
 import Close from '@carbon/icons/es/close/32';
-import AddFilled from '@carbon/icons/es/add--filled/32';
+import AddFilled from '@carbon/icons/es/add--filled/20';
 import SubtractFilled from '@carbon/icons/es/subtract--filled/32';
 import Reset from '@carbon/icons/es/reset/32';
+import SubtractAlt from '@carbon/icons/es/subtract--alt/20';
+import ProgressBarRound from '@carbon/icons/es/progress-bar--round/32';
+import { NvmeofGatewayGroupComponent } from './nvmeof-gateway-group/nvmeof-gateway-group.component';
 
 @NgModule({
   imports: [
@@ -131,7 +133,7 @@ import Reset from '@carbon/icons/es/reset/32';
     NvmeofGatewayComponent,
     NvmeofSubsystemsComponent,
     NvmeofSubsystemsDetailsComponent,
-    NvmeofTabsComponent,
+    NvmeofGatewayGroupComponent,
     NvmeofSubsystemsFormComponent,
     NvmeofListenersFormComponent,
     NvmeofListenersListComponent,
@@ -144,7 +146,15 @@ import Reset from '@carbon/icons/es/reset/32';
 })
 export class BlockModule {
   constructor(private iconService: IconService) {
-    this.iconService.registerAll([ChevronDown, Close, AddFilled, SubtractFilled, Reset]);
+    this.iconService.registerAll([
+      ChevronDown,
+      Close,
+      AddFilled,
+      SubtractFilled,
+      Reset,
+      ProgressBarRound,
+      SubtractAlt
+    ]);
   }
 }
 
@@ -283,7 +293,8 @@ const routes: Routes = [
       }
     },
     children: [
-      { path: '', redirectTo: 'subsystems', pathMatch: 'full' },
+      { path: '', redirectTo: 'gateways', pathMatch: 'full' },
+      { path: '', component: NvmeofGatewayComponent, data: { breadcrumbs: 'Gateways' } },
       {
         path: 'subsystems',
         component: NvmeofSubsystemsComponent,
@@ -320,8 +331,7 @@ const routes: Routes = [
             outlet: 'modal'
           }
         ]
-      },
-      { path: 'gateways', component: NvmeofGatewayComponent, data: { breadcrumbs: 'Gateways' } }
+      }
     ]
   }
 ];
