@@ -227,7 +227,12 @@ Tooltip
 Carbon Popover
 ******************************************/
 .cds--popover-content {
-  background-color: theme.$layer-02;
+  background-color: theme.$background;
+  padding: layout.$spacing-05;
+}
+
+// inner container class for overflow
+.cds--popover-scroll-container {
   max-height: layout.$spacing-13;
   overflow: auto;
 }
