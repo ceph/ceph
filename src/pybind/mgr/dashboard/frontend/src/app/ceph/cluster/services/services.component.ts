@@ -1,6 +1,5 @@
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
-
 import { delay } from 'rxjs/operators';
 
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
@@ -18,7 +17,13 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { OrchestratorFeature } from '~/app/shared/models/orchestrator.enum';
 import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
 import { Permissions } from '~/app/shared/models/permissions';
-import { CephServiceSpec } from '~/app/shared/models/service.interface';
+import {
+  CephCertificateStatus,
+  CephServiceCertificate,
+  CephServiceSpec,
+  CERTIFICATE_STATUS_ICON_MAP
+} from '~/app/shared/models/service.interface';
+import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
 import { RelativeDatePipe } from '~/app/shared/pipes/relative-date.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -35,7 +40,10 @@ const BASE_URL = 'services';
   selector: 'cd-services',
   templateUrl: './services.component.html',
   styleUrls: ['./services.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
+  providers: [
+    CdDatePipe,
+    { provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }
+  ]
 })
 export class ServicesComponent extends ListWithDetails implements OnChanges, OnInit {
   @ViewChild(TableComponent, { static: true })
@@ -44,6 +52,8 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
   public runningTpl: TemplateRef<any>;
   @ViewChild('urlTpl', { static: true })
   public urlTpl: TemplateRef<any>;
+  @ViewChild('certificateStatusTpl', { static: true })
+  public certificateStatusTpl: TemplateRef<any>;
 
   @Input() hostname: string;
 
@@ -75,6 +85,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
   icons = Icons;
   serviceUrls = { grafana: '', prometheus: '', alertmanager: '' };
   isMgmtGateway: boolean = false;
+  statusIconMap = CERTIFICATE_STATUS_ICON_MAP;
 
   constructor(
     private actionLabels: ActionLabelsI18n,
@@ -85,7 +96,8 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
     private taskWrapperService: TaskWrapperService,
     private router: Router,
     private settingsService: SettingsService,
-    private cdsModalService: ModalCdsService
+    private cdsModalService: ModalCdsService,
+    private cdDatePipe: CdDatePipe
   ) {
     super();
     this.permissions = this.authStorageService.getPermissions();
@@ -115,18 +127,20 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
     ];
   }
 
-  openModal(edit = false) {
+  openModal(edit = false, payload?: { serviceName?: string; serviceType?: string } | string) {
+    const serviceNameFromPayload = typeof payload === 'string' ? payload : payload?.serviceName;
+    const serviceTypeFromPayload = typeof payload === 'string' ? undefined : payload?.serviceType;
+
+    const targetServiceName = serviceNameFromPayload ?? this.selection.first()?.service_name;
+    const targetServiceType = serviceTypeFromPayload ?? this.selection.first()?.service_type;
+
     if (this.routedModal) {
       edit
         ? this.router.navigate([
             BASE_URL,
             {
               outlets: {
-                modal: [
-                  URLVerbs.EDIT,
-                  this.selection.first().service_type,
-                  this.selection.first().service_name
-                ]
+                modal: [URLVerbs.EDIT, targetServiceType, targetServiceName]
               }
             }
           ])
@@ -135,8 +149,8 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
       let initialState = {};
       edit
         ? (initialState = {
-            serviceName: this.selection.first()?.service_name,
-            serviceType: this.selection?.first()?.service_type,
+            serviceName: targetServiceName,
+            serviceType: targetServiceType,
             hiddenServices: this.hiddenServices,
             editing: edit
           })
@@ -146,6 +160,9 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
           });
       let modalRef = this.cdsModalService.show(ServiceFormComponent);
       Object.assign(modalRef, initialState);
+      modalRef.serviceUpdated.subscribe(() => {
+        this.table?.reloadData();
+      });
     }
   }
 
@@ -184,6 +201,12 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
           undefined: '-',
           '': '-'
         }
+      },
+      {
+        name: $localize`Certificate Status`,
+        prop: 'certificate.status',
+        flexGrow: 2,
+        cellTemplate: this.certificateStatusTpl
       }
     ];
 
@@ -298,5 +321,31 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
     this.settingsService.ifSettingConfigured(url, (url) => {
       this.serviceUrls[serviceType] = url;
     });
+  }
+
+  formatCertificateStatus(cert: CephServiceCertificate): string {
+    if (!cert || !cert.requires_certificate || !cert.status) {
+      return '-';
+    }
+
+    const formattedDate = cert.expiry_date
+      ? this.cdDatePipe.transform(cert.expiry_date, 'DD MMM y')
+      : null;
+
+    switch (cert.status) {
+      case CephCertificateStatus.valid:
+        return formattedDate ? $localize`Valid - ${formattedDate}` : $localize`Valid`;
+      case CephCertificateStatus.expiring:
+      case CephCertificateStatus.expiringSoon:
+        return formattedDate
+          ? $localize`Expiring soon - ${formattedDate}`
+          : $localize`Expiring soon`;
+      case CephCertificateStatus.expired:
+        return formattedDate ? $localize`Expired - ${formattedDate}` : $localize`Expired`;
+      case CephCertificateStatus.notConfigured:
+        return '-';
+      default:
+        return formattedDate ? `${cert.status} - ${formattedDate}` : cert.status;
+    }
   }
 }

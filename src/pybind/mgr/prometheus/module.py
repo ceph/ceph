@@ -122,7 +122,7 @@ HEALTH_CHECKS = [
     alert_metric('SLOW_OPS', 'OSD or Monitor requests taking a long time to process'),
 ]
 
-HEALTHCHECK_DETAIL = ('name', 'severity')
+HEALTHCHECK_DETAIL = ('name', 'severity', 'message')
 
 
 class Severity(enum.Enum):
@@ -931,6 +931,30 @@ class Module(MgrModule, OrchestratorClientMixin):
         cherrypy.engine.start()
         self.log.info('Engine started.')
 
+    def _process_cert_health_detail(self, alert_id: str, health_data: dict) -> None:
+        """Process certificate health check details and set metrics."""
+        severity = health_data.get('severity', 'unknown')
+        detail_messages = health_data.get('detail', [])
+        if not detail_messages:
+            return
+
+        for detail_entry in detail_messages:
+            message = detail_entry.get('message', '')
+            if not message:
+                continue
+
+            try:
+                self.metrics['health_detail'].set(
+                    1,
+                    (
+                        alert_id,
+                        str(severity),
+                        str(message)
+                    )
+                )
+            except Exception as e:
+                self.log.error(f"Failed to process {alert_id} message '{message}': {e}")
+
     @profile_method()
     def get_health(self) -> None:
 
@@ -980,13 +1004,21 @@ class Module(MgrModule, OrchestratorClientMixin):
                     # health check is not active, so give it a default of 0
                     self.metrics[path].set(0)
 
+        for alert_id in ('CEPHADM_CERT_ERROR', 'CEPHADM_CERT_WARNING'):
+            if alert_id in active_names:
+                self._process_cert_health_detail(alert_id, active_healthchecks[alert_id])
+
         self.health_history.check(health)
         for name, info in self.health_history.healthcheck.items():
+            # Skip CEPHADM_CERT_ERROR and CEPHADM_CERT_WARNING as they're handled specially above with message details
+            if name in ('CEPHADM_CERT_ERROR', 'CEPHADM_CERT_WARNING'):
+                continue
             v = 1 if info.active else 0
             self.metrics['health_detail'].set(
                 v, (
                     name,
-                    str(info.severity))
+                    str(info.severity),
+                    '')
             )
 
     @profile_method()
