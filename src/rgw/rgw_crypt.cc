@@ -35,8 +35,8 @@
  * Ensure CryptoAccel GCM constants match RGW GCM constants.
  * Prevents silent IV/tag size mismatches between acceleration layer and RGW.
  */
-static_assert(CryptoAccel::AES_GCM_NONCE_SIZE == AES_256_GCM_NONCE_SIZE,
-              "CryptoAccel and RGW GCM nonce sizes must match");
+static_assert(CryptoAccel::AES_GCM_IV_SIZE == AES_256_GCM_IV_SIZE,
+              "CryptoAccel and RGW GCM IV sizes must match");
 static_assert(CryptoAccel::AES_GCM_TAGSIZE == AEAD_TAG_SIZE,
               "CryptoAccel and RGW GCM tag sizes must match");
 
@@ -677,8 +677,8 @@ private:
   uint8_t key[AES_256_KEYSIZE];
   uint8_t base_key[AES_256_KEYSIZE];  // For SSE-C: stores object key before part derivation
   bool has_base_key = false;          // True if base_key is valid (SSE-C with key derivation)
-  uint8_t base_nonce[AES_256_IVSIZE];
-  bool nonce_initialized = false;
+  uint8_t salt[AES_256_GCM_SALT_SIZE];
+  bool salt_initialized = false;
   uint32_t part_number_ = 0;  // For multipart: ensures unique IVs across parts
   std::once_flag gcm_accel_init_once;
   CryptoAccelRef gcm_accel;
@@ -686,13 +686,13 @@ private:
 public:
   explicit AES_256_GCM(const DoutPrefixProvider* dpp, CephContext* cct)
     : dpp(dpp), cct(cct) {
-    memset(base_nonce, 0, AES_256_IVSIZE);
+    memset(salt, 0, AES_256_GCM_SALT_SIZE);
   }
 
   ~AES_256_GCM() {
     ::ceph::crypto::zeroize_for_security(key, AES_256_KEYSIZE);
     ::ceph::crypto::zeroize_for_security(base_key, AES_256_KEYSIZE);
-    ::ceph::crypto::zeroize_for_security(base_nonce, AES_256_IVSIZE);
+    ::ceph::crypto::zeroize_for_security(salt, AES_256_GCM_SALT_SIZE);
   }
 
   bool set_key(const uint8_t* _key, size_t key_size) {
@@ -704,37 +704,37 @@ public:
   }
 
   /**
-   * Generate a random base nonce for this object.
-   * Called during encryption to create a unique nonce per object.
+   * Generate a random salt for HMAC-based key derivation.
+   * Called during encryption to create a unique salt per object.
    */
-  bool generate_nonce() {
-    cct->random()->get_bytes(reinterpret_cast<char*>(base_nonce), AES_256_IVSIZE);
-    nonce_initialized = true;
+  bool generate_salt() {
+    cct->random()->get_bytes(reinterpret_cast<char*>(salt), AES_256_GCM_SALT_SIZE);
+    salt_initialized = true;
     return true;
   }
 
   /**
-   * Set the base nonce from a stored value.
-   * Called during decryption to restore the object's nonce.
+   * Set the salt from a stored value.
+   * Called during decryption to restore the object's salt.
    */
-  bool set_nonce(const uint8_t* nonce, size_t len) {
-    if (len != AES_256_IVSIZE) {
+  bool set_salt(const uint8_t* _salt, size_t len) {
+    if (len != AES_256_GCM_SALT_SIZE) {
       return false;
     }
-    memcpy(base_nonce, nonce, AES_256_IVSIZE);
-    nonce_initialized = true;
+    memcpy(salt, _salt, AES_256_GCM_SALT_SIZE);
+    salt_initialized = true;
     return true;
   }
 
   /**
-   * Get the base nonce for storage in object attributes.
+   * Get the salt for storage in object attributes.
    */
-  std::string get_nonce() const {
-    return std::string(reinterpret_cast<const char*>(base_nonce), AES_256_IVSIZE);
+  std::string get_salt() const {
+    return std::string(reinterpret_cast<const char*>(salt), AES_256_GCM_SALT_SIZE);
   }
 
-  bool is_nonce_initialized() const {
-    return nonce_initialized;
+  bool is_salt_initialized() const {
+    return salt_initialized;
   }
 
   /**
@@ -766,7 +766,7 @@ public:
    * - If object is moved/renamed at RADOS level → wrong key → decrypt fails
    *
    * Key derivation formula:
-   *   ObjectKey = HMAC-SHA256(key, nonce || domain || bucket || object)
+   *   ObjectKey = HMAC-SHA256(key, salt || domain || bucket_id || object)
    *
    * @param user_key The user-provided encryption key (32 bytes)
    * @param key_len Length of user_key (must be 32)
@@ -789,12 +789,12 @@ public:
                         << key_len << ", expected " << AES_256_KEYSIZE << dendl;
       return false;
     }
-    if (!nonce_initialized) {
-      ldpp_dout(dpp, 0) << "ERROR: derive_object_key: nonce not initialized" << dendl;
+    if (!salt_initialized) {
+      ldpp_dout(dpp, 0) << "ERROR: derive_object_key: salt not initialized" << dendl;
       return false;
     }
 
-    // HMAC-SHA256(user_key, nonce || domain || bucket_id || object)
+    // HMAC-SHA256(user_key, salt || domain || bucket_id || object)
     try {
       ceph::crypto::HMACSHA256 hmac(user_key, key_len);
 
@@ -814,14 +814,14 @@ public:
         }
       };
 
-      // Include nonce in key derivation
-      hmac.Update(base_nonce, AES_256_IVSIZE);
+      // Include salt in key derivation
+      hmac.Update(salt, AES_256_GCM_SALT_SIZE);
 
       // Domain separator (length-prefixed for consistency)
       hmac_update_with_length(domain);
 
       // Include bucket_id/object with length prefixes
-      // Format: nonce || len(domain) || domain || len(bucket_id) || bucket_id || len(object) || object
+      // Format: salt || len(domain) || domain || len(bucket_id) || bucket_id || len(object) || object
       hmac_update_with_length(bucket_id);
       hmac_update_with_length(object);
 
@@ -1123,7 +1123,7 @@ public:
 
     size_t out_pos = 0;
 
-    // Initialize IV cursor: decode base_nonce once, then emit + increment per chunk
+    // Initialize IV cursor: zero IV base once, then emit + increment per chunk
     iv_cursor cursor;
     if (!init_iv_cursor(cursor, stream_offset)) {
       return false;
@@ -1226,7 +1226,7 @@ public:
 
     size_t out_pos = 0;
 
-    // Initialize IV cursor: decode base_nonce once, then emit + increment per chunk
+    // Initialize IV cursor: zero IV base once, then emit + increment per chunk
     iv_cursor cursor;
     if (!init_iv_cursor(cursor, stream_offset)) {
       return false;
@@ -1274,15 +1274,15 @@ public:
 
   /**
    * IV cursor for efficient sequential IV generation.
-   * Decodes base_nonce to host order once, then emits and increments per chunk.
+   * Emits zero-based IV and increments per chunk.
    *
    * Combined index layout (64 bits):
    *   - Upper 24 bits: part_number (supports up to 16M parts; S3 limit is 10K)
    *   - Lower 40 bits: chunk_index (supports up to 1T chunks per part)
    */
   struct iv_cursor {
-    uint64_t lo;           // host-order low 64 bits of current nonce
-    uint32_t hi;           // host-order high 32 bits of current nonce
+    uint64_t lo;           // host-order low 64 bits of current IV
+    uint32_t hi;           // host-order high 32 bits of current IV
     uint64_t chunk_index;  // current chunk index (for AAD)
 
     void emit(unsigned char (&iv)[AES_256_IVSIZE]) const {
@@ -1300,7 +1300,7 @@ public:
   };
 
   bool init_iv_cursor(iv_cursor& cursor, off_t stream_offset) {
-    ceph_assert(nonce_initialized);
+    ceph_assert(salt_initialized);
 
     uint64_t chunk_index = stream_offset / CHUNK_SIZE;
     if (chunk_index > MAX_CHUNK_INDEX) {
@@ -1314,16 +1314,12 @@ public:
     uint64_t combined_index =
         (static_cast<uint64_t>(part_number_) << CHUNK_INDEX_BITS) | chunk_index;
 
-    // Decode base_nonce from big-endian to host order (done once per request)
-    memcpy(&cursor.hi, base_nonce, sizeof(cursor.hi));
-    memcpy(&cursor.lo, base_nonce + 4, sizeof(cursor.lo));
-    boost::endian::big_to_native_inplace(cursor.lo);
-    boost::endian::big_to_native_inplace(cursor.hi);
-
-    uint64_t new_lo = cursor.lo + combined_index;
-    uint32_t carry = (new_lo < cursor.lo) ? 1 : 0;
-    cursor.hi += carry;
-    cursor.lo = new_lo;
+    /*
+     * Fixed zero IV base -- safe because derive_object_key() guarantees
+     * a unique key per object. IV uniqueness comes from the counter.
+     */
+    cursor.hi = 0;
+    cursor.lo = combined_index;
     return true;
   }
 };
@@ -1332,17 +1328,17 @@ public:
 /**
  * Create an AES-256-GCM BlockCrypt instance.
  *
- * For encryption: Pass nonce=nullptr to generate a random nonce.
- *                 After creation, call get_nonce() to retrieve it for storage.
+ * For encryption: Pass salt=nullptr to generate a random 32-byte salt.
+ *                 After creation, call AES_256_GCM_get_salt() to retrieve it for storage.
  *
- * For decryption: Pass the stored nonce from RGW_ATTR_CRYPT_NONCE.
+ * For decryption: Pass the stored salt from RGW_ATTR_CRYPT_SALT.
  */
 std::unique_ptr<BlockCrypt> AES_256_GCM_create(const DoutPrefixProvider* dpp,
                                                 CephContext* cct,
                                                 const uint8_t* key,
                                                 size_t key_len,
-                                                const uint8_t* nonce,
-                                                size_t nonce_len,
+                                                const uint8_t* salt,
+                                                size_t salt_len,
                                                 uint32_t part_number)
 {
   // Validate key_len to prevent OOB read if caller passes smaller buffer
@@ -1360,15 +1356,15 @@ std::unique_ptr<BlockCrypt> AES_256_GCM_create(const DoutPrefixProvider* dpp,
   // Set part_number for multipart IV derivation (ensures unique IVs across parts)
   gcm->set_part_number(part_number);
 
-  if (nonce != nullptr) {
-    // Decryption path: use the provided stored nonce
-    if (!gcm->set_nonce(nonce, nonce_len)) {
-      ldpp_dout(dpp, 5) << "AES_256_GCM_create: invalid nonce size " << nonce_len << dendl;
+  if (salt != nullptr) {
+    // Decryption path: use the provided stored salt
+    if (!gcm->set_salt(salt, salt_len)) {
+      ldpp_dout(dpp, 5) << "AES_256_GCM_create: invalid salt size " << salt_len << dendl;
       return nullptr;
     }
   } else {
-    // Encryption path: generate a random nonce
-    gcm->generate_nonce();
+    // Encryption path: generate a random salt
+    gcm->generate_salt();
   }
 
   return gcm;
@@ -1376,14 +1372,14 @@ std::unique_ptr<BlockCrypt> AES_256_GCM_create(const DoutPrefixProvider* dpp,
 
 
 /**
- * Retrieve the nonce from a BlockCrypt instance for storage.
+ * Retrieve the salt from a BlockCrypt instance for storage.
  * Returns empty string if the BlockCrypt is not an AES_256_GCM instance.
  */
-std::string AES_256_GCM_get_nonce(BlockCrypt* block_crypt)
+std::string AES_256_GCM_get_salt(BlockCrypt* block_crypt)
 {
   auto* gcm = dynamic_cast<AES_256_GCM*>(block_crypt);
-  if (gcm && gcm->is_nonce_initialized()) {
-    return gcm->get_nonce();
+  if (gcm && gcm->is_salt_initialized()) {
+    return gcm->get_salt();
   }
   return {};
 }
@@ -1941,16 +1937,16 @@ static int get_sse_s3_bucket_key(req_state *s, optional_yield y,
 
 
 /**
- * Generate random GCM nonce and store in attributes.
+ * Generate random salt for HMAC-based key derivation and store in attributes.
  */
-static std::string generate_gcm_nonce(
+static std::string generate_gcm_salt(
     req_state* s,
     std::map<std::string, ceph::bufferlist>& attrs)
 {
-  std::string nonce(AES_256_GCM_NONCE_SIZE, '\0');
-  s->cct->random()->get_bytes(nonce.data(), AES_256_GCM_NONCE_SIZE);
-  set_attr(attrs, RGW_ATTR_CRYPT_NONCE, nonce);
-  return nonce;
+  std::string salt(AES_256_GCM_SALT_SIZE, '\0');
+  s->cct->random()->get_bytes(salt.data(), AES_256_GCM_SALT_SIZE);
+  set_attr(attrs, RGW_ATTR_CRYPT_SALT, salt);
+  return salt;
 }
 
 /**
@@ -1972,30 +1968,30 @@ static void set_gcm_plaintext_size(
 }
 
 /**
- * Retrieve and validate stored GCM nonce for decryption.
+ * Retrieve and validate stored salt for HMAC-based key derivation.
  * Returns empty string on error (caller should return -EIO).
  */
-static std::string get_gcm_nonce(
+static std::string get_gcm_salt(
     const DoutPrefixProvider* dpp,
     req_state* s,
     const std::map<std::string, ceph::bufferlist>& attrs,
     std::string_view mode_name)
 {
-  std::string stored_nonce = get_str_attribute(attrs, RGW_ATTR_CRYPT_NONCE);
-  if (stored_nonce.empty()) {
+  std::string stored_salt = get_str_attribute(attrs, RGW_ATTR_CRYPT_SALT);
+  if (stored_salt.empty()) {
     ldpp_dout(dpp, 5) << "ERROR: " << mode_name << " decryption failed: "
-                      << "nonce attribute is missing" << dendl;
+                      << "salt attribute is missing" << dendl;
     s->err.message = "Object encryption metadata is corrupted.";
     return {};
   }
-  if (stored_nonce.size() != AES_256_GCM_NONCE_SIZE) {
+  if (stored_salt.size() != AES_256_GCM_SALT_SIZE) {
     ldpp_dout(dpp, 5) << "ERROR: " << mode_name << " decryption failed: "
-                      << "stored nonce has invalid size " << stored_nonce.size()
-                      << " (expected " << AES_256_GCM_NONCE_SIZE << ")" << dendl;
+                      << "stored salt has invalid size " << stored_salt.size()
+                      << " (expected " << AES_256_GCM_SALT_SIZE << ")" << dendl;
     s->err.message = "Object encryption metadata is corrupted.";
     return {};
   }
-  return stored_nonce;
+  return stored_salt;
 }
 
 bool rgw_get_aead_original_size(const DoutPrefixProvider* dpp,
@@ -2165,14 +2161,14 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
 
       if (use_gcm) {
         set_attr(attrs, RGW_ATTR_CRYPT_MODE, "SSE-C-AES256-GCM");
-        std::string nonce = generate_gcm_nonce(s, attrs);
+        std::string salt = generate_gcm_salt(s, attrs);
         set_gcm_plaintext_size(s, attrs, is_copy);
 
         if (block_crypt) {
           auto gcm = std::unique_ptr<AES_256_GCM>(new AES_256_GCM(s, s->cct));
-          if (!gcm->set_nonce(reinterpret_cast<const uint8_t*>(nonce.c_str()), nonce.size())) {
+          if (!gcm->set_salt(reinterpret_cast<const uint8_t*>(salt.c_str()), salt.size())) {
             ldpp_dout(s, 5) << "ERROR: SSE-C-AES256-GCM encryption failed: "
-                             << "could not initialize nonce" << dendl;
+                             << "could not initialize salt" << dendl;
             ::ceph::crypto::zeroize_for_security(key_bin.data(), key_bin.length());
             return -EIO;
           }
@@ -2184,7 +2180,7 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
                   s->object->get_name(),
                   part_number)) {
             ldpp_dout(s, 5) << "ERROR: SSE-C-AES256-GCM key derivation failed for "
-                             << s->bucket->get_info().bucket.bucket_id << "/" << s->object->get_name() << dendl;
+                             << s->bucket->get_name() << "/" << s->object->get_name() << dendl;
             s->err.message = "Failed to derive encryption key.";
             ::ceph::crypto::zeroize_for_security(key_bin.data(), key_bin.length());
             return -EIO;
@@ -2277,18 +2273,30 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
 
         if (use_gcm) {
           set_attr(attrs, RGW_ATTR_CRYPT_MODE, "SSE-KMS-GCM");
-          std::string nonce = generate_gcm_nonce(s, attrs);
+          std::string salt = generate_gcm_salt(s, attrs);
           set_gcm_plaintext_size(s, attrs, is_copy);
 
           if (block_crypt) {
             auto aes = AES_256_GCM_create(s, s->cct,
                                            reinterpret_cast<const uint8_t*>(actual_key.c_str()),
                                            AES_256_KEYSIZE,
-                                           reinterpret_cast<const uint8_t*>(nonce.c_str()),
-                                           nonce.size(),
+                                           reinterpret_cast<const uint8_t*>(salt.c_str()),
+                                           salt.size(),
                                            part_number);
             if (!aes) {
               ldpp_dout(s, 5) << "ERROR: Failed to create AES-256-GCM instance" << dendl;
+              ::ceph::crypto::zeroize_for_security(actual_key.data(), actual_key.length());
+              return -EIO;
+            }
+            auto* gcm = dynamic_cast<AES_256_GCM*>(aes.get());
+            if (!gcm || !gcm->derive_object_key(
+                    reinterpret_cast<const uint8_t*>(actual_key.c_str()),
+                    AES_256_KEYSIZE,
+                    s->bucket->get_info().bucket.bucket_id,
+                    s->object->get_name(),
+                    part_number,
+                    "SSE-KMS-GCM")) {
+              ldpp_dout(s, 5) << "ERROR: SSE-KMS-GCM key derivation failed" << dendl;
               ::ceph::crypto::zeroize_for_security(actual_key.data(), actual_key.length());
               return -EIO;
             }
@@ -2355,18 +2363,30 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
 
       if (use_gcm) {
         set_attr(attrs, RGW_ATTR_CRYPT_MODE, "AES256-GCM");
-        std::string nonce = generate_gcm_nonce(s, attrs);
+        std::string salt = generate_gcm_salt(s, attrs);
         set_gcm_plaintext_size(s, attrs, is_copy);
 
         if (block_crypt) {
           auto aes = AES_256_GCM_create(s, s->cct,
                                          reinterpret_cast<const uint8_t*>(actual_key.c_str()),
                                          AES_256_KEYSIZE,
-                                         reinterpret_cast<const uint8_t*>(nonce.c_str()),
-                                         nonce.size(),
+                                         reinterpret_cast<const uint8_t*>(salt.c_str()),
+                                         salt.size(),
                                          part_number);
           if (!aes) {
             ldpp_dout(s, 5) << "ERROR: Failed to create AES-256-GCM instance" << dendl;
+            ::ceph::crypto::zeroize_for_security(actual_key.data(), actual_key.length());
+            return -EIO;
+          }
+          auto* gcm = dynamic_cast<AES_256_GCM*>(aes.get());
+          if (!gcm || !gcm->derive_object_key(
+                  reinterpret_cast<const uint8_t*>(actual_key.c_str()),
+                  AES_256_KEYSIZE,
+                  s->bucket->get_info().bucket.bucket_id,
+                  s->object->get_name(),
+                  part_number,
+                  "AES256-GCM")) {
+            ldpp_dout(s, 5) << "ERROR: AES256-GCM key derivation failed" << dendl;
             ::ceph::crypto::zeroize_for_security(actual_key.data(), actual_key.length());
             return -EIO;
           }
@@ -2408,18 +2428,18 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
 
       if (use_gcm) {
         set_attr(attrs, RGW_ATTR_CRYPT_MODE, "RGW-AUTO-GCM");
-        std::string nonce = generate_gcm_nonce(s, attrs);
+        std::string salt = generate_gcm_salt(s, attrs);
         set_gcm_plaintext_size(s, attrs, is_copy);
 
         if (block_crypt) {
           auto gcm = std::unique_ptr<AES_256_GCM>(new AES_256_GCM(s, s->cct));
-          if (!gcm->set_nonce(reinterpret_cast<const uint8_t*>(nonce.c_str()), nonce.size())) {
-            ldpp_dout(s, 5) << "ERROR: RGW-AUTO-GCM: could not initialize nonce" << dendl;
+          if (!gcm->set_salt(reinterpret_cast<const uint8_t*>(salt.c_str()), salt.size())) {
+            ldpp_dout(s, 5) << "ERROR: RGW-AUTO-GCM: could not initialize salt" << dendl;
             return -EIO;
           }
 
           // Derive encryption key using HMAC-SHA256 with context binding
-          // Key = HMAC-SHA256(master_key, nonce || "RGW-AUTO-GCM" || bucket_id || object)
+          // Key = HMAC-SHA256(master_key, salt || "RGW-AUTO-GCM" || bucket_id || object)
           if (!gcm->derive_object_key(
                   reinterpret_cast<const uint8_t*>(master_encryption_key.c_str()),
                   AES_256_KEYSIZE,
@@ -2428,7 +2448,7 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
                   part_number,
                   "RGW-AUTO-GCM")) {
             ldpp_dout(s, 5) << "ERROR: RGW-AUTO-GCM key derivation failed for "
-                             << s->bucket->get_info().bucket.bucket_id << "/" << s->object->get_name() << dendl;
+                             << s->bucket->get_name() << "/" << s->object->get_name() << dendl;
             return -EIO;
           }
           *block_crypt = std::move(gcm);
@@ -2670,12 +2690,12 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
       return -EINVAL;
     }
 
-    std::string stored_nonce = get_gcm_nonce(s, s, attrs, "SSE-C-AES256-GCM");
-    if (stored_nonce.empty()) return -EIO;
+    std::string stored_salt = get_gcm_salt(s, s, attrs, "SSE-C-AES256-GCM");
+    if (stored_salt.empty()) return -EIO;
 
     auto gcm = std::make_unique<AES_256_GCM>(s, s->cct);
-    gcm->set_nonce(reinterpret_cast<const uint8_t*>(stored_nonce.c_str()),
-                   stored_nonce.size());
+    gcm->set_salt(reinterpret_cast<const uint8_t*>(stored_salt.c_str()),
+                   stored_salt.size());
     // Re-derive encryption key from user key + object identity
     // For CopyObject, use the SOURCE object's identity (not destination)
     std::string bucket_id;
@@ -2759,8 +2779,8 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
       return -EINVAL;
     }
 
-    std::string stored_nonce = get_gcm_nonce(s, s, attrs, "SSE-KMS-GCM");
-    if (stored_nonce.empty()) {
+    std::string stored_salt = get_gcm_salt(s, s, attrs, "SSE-KMS-GCM");
+    if (stored_salt.empty()) {
       ::ceph::crypto::zeroize_for_security(actual_key.data(), actual_key.length());
       return -EIO;
     }
@@ -2768,14 +2788,29 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
     auto aes = AES_256_GCM_create(s, s->cct,
                                    reinterpret_cast<const uint8_t*>(actual_key.c_str()),
                                    AES_256_KEYSIZE,
-                                   reinterpret_cast<const uint8_t*>(stored_nonce.c_str()),
-                                   stored_nonce.size(),
+                                   reinterpret_cast<const uint8_t*>(stored_salt.c_str()),
+                                   stored_salt.size(),
                                    part_number);
-    ::ceph::crypto::zeroize_for_security(actual_key.data(), actual_key.length());
     if (!aes) {
       ldpp_dout(s, 5) << "ERROR: Failed to create AES-256-GCM instance for decryption" << dendl;
+      ::ceph::crypto::zeroize_for_security(actual_key.data(), actual_key.length());
       return -EIO;
     }
+    std::string bucket_id, object_name;
+    pick_gcm_identity(s, copy_source, src_identity, bucket_id, object_name);
+    auto* gcm = dynamic_cast<AES_256_GCM*>(aes.get());
+    if (!gcm || !gcm->derive_object_key(
+            reinterpret_cast<const uint8_t*>(actual_key.c_str()),
+            AES_256_KEYSIZE,
+            bucket_id,
+            object_name,
+            part_number,
+            "SSE-KMS-GCM")) {
+      ldpp_dout(s, 5) << "ERROR: SSE-KMS-GCM key derivation failed" << dendl;
+      ::ceph::crypto::zeroize_for_security(actual_key.data(), actual_key.length());
+      return -EIO;
+    }
+    ::ceph::crypto::zeroize_for_security(actual_key.data(), actual_key.length());
     if (block_crypt) *block_crypt = std::move(aes);
 
     if (crypt_http_responses) {
@@ -2840,12 +2875,12 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
       return -EIO;
     }
 
-    std::string stored_nonce = get_gcm_nonce(s, s, attrs, "RGW-AUTO-GCM");
-    if (stored_nonce.empty()) return -EIO;
+    std::string stored_salt = get_gcm_salt(s, s, attrs, "RGW-AUTO-GCM");
+    if (stored_salt.empty()) return -EIO;
 
     auto gcm = std::make_unique<AES_256_GCM>(s, s->cct);
-    gcm->set_nonce(reinterpret_cast<const uint8_t*>(stored_nonce.c_str()),
-                   stored_nonce.size());
+    gcm->set_salt(reinterpret_cast<const uint8_t*>(stored_salt.c_str()),
+                   stored_salt.size());
 
     // Re-derive encryption key using HMAC-SHA256 with context binding
     // For CopyObject, use the SOURCE object's identity (not destination)
@@ -2918,8 +2953,8 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
       return -EINVAL;
     }
 
-    std::string stored_nonce = get_gcm_nonce(s, s, attrs, "AES256-GCM");
-    if (stored_nonce.empty()) {
+    std::string stored_salt = get_gcm_salt(s, s, attrs, "AES256-GCM");
+    if (stored_salt.empty()) {
       ::ceph::crypto::zeroize_for_security(actual_key.data(), actual_key.length());
       return -EIO;
     }
@@ -2927,14 +2962,29 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
     auto aes = AES_256_GCM_create(s, s->cct,
                                    reinterpret_cast<const uint8_t*>(actual_key.c_str()),
                                    AES_256_KEYSIZE,
-                                   reinterpret_cast<const uint8_t*>(stored_nonce.c_str()),
-                                   stored_nonce.size(),
+                                   reinterpret_cast<const uint8_t*>(stored_salt.c_str()),
+                                   stored_salt.size(),
                                    part_number);
-    ::ceph::crypto::zeroize_for_security(actual_key.data(), actual_key.length());
     if (!aes) {
       ldpp_dout(s, 5) << "ERROR: Failed to create AES-256-GCM instance for decryption" << dendl;
+      ::ceph::crypto::zeroize_for_security(actual_key.data(), actual_key.length());
       return -EIO;
     }
+    std::string bucket_id, object_name;
+    pick_gcm_identity(s, copy_source, src_identity, bucket_id, object_name);
+    auto* gcm = dynamic_cast<AES_256_GCM*>(aes.get());
+    if (!gcm || !gcm->derive_object_key(
+            reinterpret_cast<const uint8_t*>(actual_key.c_str()),
+            AES_256_KEYSIZE,
+            bucket_id,
+            object_name,
+            part_number,
+            "AES256-GCM")) {
+      ldpp_dout(s, 5) << "ERROR: AES256-GCM key derivation failed" << dendl;
+      ::ceph::crypto::zeroize_for_security(actual_key.data(), actual_key.length());
+      return -EIO;
+    }
+    ::ceph::crypto::zeroize_for_security(actual_key.data(), actual_key.length());
     if (block_crypt) *block_crypt = std::move(aes);
 
     if (crypt_http_responses) {

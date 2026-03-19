@@ -105,7 +105,7 @@ bool OpenSSLCryptoAccel::cbc_decrypt(unsigned char* out, const unsigned char* in
 }
 
 bool OpenSSLCryptoAccel::gcm_encrypt(unsigned char* out, const unsigned char* in, size_t size,
-                                      const unsigned char (&iv)[AES_GCM_NONCE_SIZE],
+                                      const unsigned char (&iv)[AES_GCM_IV_SIZE],
                                       const unsigned char (&key)[AES_256_KEYSIZE],
                                       const unsigned char* aad, size_t aad_len,
                                       unsigned char* tag,
@@ -126,7 +126,7 @@ bool OpenSSLCryptoAccel::gcm_encrypt(unsigned char* out, const unsigned char* in
     return false;
   }
 
-  if (EVP_CIPHER_CTX_ctrl(pctx.get(), EVP_CTRL_GCM_SET_IVLEN, AES_GCM_NONCE_SIZE, nullptr) != EVP_SUCCESS) {
+  if (EVP_CIPHER_CTX_ctrl(pctx.get(), EVP_CTRL_GCM_SET_IVLEN, AES_GCM_IV_SIZE, nullptr) != EVP_SUCCESS) {
     derr << "failed to set GCM IV length" << dendl;
     return false;
   }
@@ -166,7 +166,7 @@ bool OpenSSLCryptoAccel::gcm_encrypt(unsigned char* out, const unsigned char* in
 }
 
 bool OpenSSLCryptoAccel::gcm_decrypt(unsigned char* out, const unsigned char* in, size_t size,
-                                      const unsigned char (&iv)[AES_GCM_NONCE_SIZE],
+                                      const unsigned char (&iv)[AES_GCM_IV_SIZE],
                                       const unsigned char (&key)[AES_256_KEYSIZE],
                                       const unsigned char* aad, size_t aad_len,
                                       const unsigned char* tag,
@@ -187,7 +187,7 @@ bool OpenSSLCryptoAccel::gcm_decrypt(unsigned char* out, const unsigned char* in
     return false;
   }
 
-  if (EVP_CIPHER_CTX_ctrl(pctx.get(), EVP_CTRL_GCM_SET_IVLEN, AES_GCM_NONCE_SIZE, nullptr) != EVP_SUCCESS) {
+  if (EVP_CIPHER_CTX_ctrl(pctx.get(), EVP_CTRL_GCM_SET_IVLEN, AES_GCM_IV_SIZE, nullptr) != EVP_SUCCESS) {
     derr << "failed to set GCM IV length" << dendl;
     return false;
   }

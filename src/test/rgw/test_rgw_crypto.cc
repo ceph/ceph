@@ -1037,71 +1037,77 @@ TEST(TestRGWCrypto, verify_AES_256_GCM_tag_verification)
 }
 
 
-TEST(TestRGWCrypto, verify_AES_256_GCM_nonce_uniqueness)
+TEST(TestRGWCrypto, verify_AES_256_GCM_salt_key_isolation)
 {
   /**
-   * Verify per-object random nonce mechanism:
-   *   1. Each GCM instance gets a unique random nonce
-   *   2. Decryption with wrong nonce fails
-   *   3. Decryption with correct nonce succeeds
+   * Verify salt-based key derivation produces unique keys:
+   *   1. Two instances with same raw key but different salts
+   *   2. After derive_object_key(), they have different derived keys
+   *   3. Cross-decryption fails (GCM tag mismatch)
+   *   4. Self-decryption succeeds
    */
   const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
   uint8_t key[32];
-  for(size_t i=0;i<sizeof(key);i++)
-    key[i]=i*11;
+  for (size_t i = 0; i < sizeof(key); i++)
+    key[i] = i * 11;
 
   const size_t size = 4096;
   buffer::ptr buf(size);
   char* p = buf.c_str();
-  for(size_t i = 0; i < size; i++)
+  for (size_t i = 0; i < size; i++)
     p[i] = i & 0xFF;
 
   bufferlist input;
   input.append(buf);
 
-  // Create first instance - auto-generates random nonce
+  // Instance 1: auto-generated salt + derive
   auto aes1(AES_256_GCM_create(&no_dpp, g_ceph_context, &key[0], 32));
   ASSERT_NE(aes1.get(), nullptr);
+  ASSERT_TRUE(AES_256_GCM_derive_object_key(aes1.get(), key, 32,
+              "bucket-id-1", "object.txt", 0));
 
   bufferlist encrypted1;
   ASSERT_TRUE(aes1->encrypt(input, 0, size, encrypted1, 0, null_yield));
 
-  // Create second instance with different random nonce
+  // Instance 2: different auto-generated salt + derive with same identity
   auto aes2(AES_256_GCM_create(&no_dpp, g_ceph_context, &key[0], 32));
   ASSERT_NE(aes2.get(), nullptr);
+  ASSERT_TRUE(AES_256_GCM_derive_object_key(aes2.get(), key, 32,
+              "bucket-id-1", "object.txt", 0));
 
-  // Try to decrypt data from aes1 with aes2 - should FAIL
-  // (different nonces, even with same key)
+  // Cross-decrypt should FAIL (different salts -> different derived keys)
   bufferlist decrypted_wrong;
-  ASSERT_FALSE(aes2->decrypt(encrypted1, 0, encrypted1.length(), decrypted_wrong, 0, null_yield));
+  ASSERT_FALSE(aes2->decrypt(encrypted1, 0, encrypted1.length(),
+                             decrypted_wrong, 0, null_yield));
 
-  // Decrypt with original instance - should succeed
+  // Self-decrypt should succeed
   bufferlist decrypted_correct;
-  ASSERT_TRUE(aes1->decrypt(encrypted1, 0, encrypted1.length(), decrypted_correct, 0, null_yield));
+  ASSERT_TRUE(aes1->decrypt(encrypted1, 0, encrypted1.length(),
+                            decrypted_correct, 0, null_yield));
   ASSERT_EQ(decrypted_correct.length(), size);
   ASSERT_EQ(std::string_view(input.c_str(), size),
             std::string_view(decrypted_correct.c_str(), size));
 }
 
 
-TEST(TestRGWCrypto, verify_AES_256_GCM_nonce_restore)
+TEST(TestRGWCrypto, verify_AES_256_GCM_salt_restore)
 {
   /**
-   * Simulate the encrypt/decrypt flow with stored nonce:
-   *   1. Encrypt with auto-generated nonce
-   *   2. Extract nonce (would be stored in RGW_ATTR_CRYPT_NONCE)
-   *   3. Create new instance with restored nonce
+   * Simulate the full encrypt/decrypt flow with stored salt:
+   *   1. Encrypt with auto-generated salt + derive_object_key
+   *   2. Extract salt (would be stored in RGW_ATTR_CRYPT_SALT)
+   *   3. Create new instance with restored salt + derive_object_key
    *   4. Decrypt successfully
    */
   const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
   uint8_t key[32];
-  for(size_t i=0;i<sizeof(key);i++)
-    key[i]=i*13;
+  for (size_t i = 0; i < sizeof(key); i++)
+    key[i] = i * 13;
 
   const size_t size = 8192;
   buffer::ptr buf(size);
   char* p = buf.c_str();
-  for(size_t i = 0; i < size; i++)
+  for (size_t i = 0; i < size; i++)
     p[i] = (i * 7) & 0xFF;
 
   bufferlist input;
@@ -1110,22 +1116,26 @@ TEST(TestRGWCrypto, verify_AES_256_GCM_nonce_restore)
   // Simulate encryption path
   auto aes_encrypt(AES_256_GCM_create(&no_dpp, g_ceph_context, &key[0], 32));
   ASSERT_NE(aes_encrypt.get(), nullptr);
+  ASSERT_TRUE(AES_256_GCM_derive_object_key(aes_encrypt.get(), key, 32,
+              "my-bucket-id", "my-object", 0));
 
   bufferlist encrypted;
   ASSERT_TRUE(aes_encrypt->encrypt(input, 0, size, encrypted, 0, null_yield));
 
-  // Extract nonce (simulates storing to RGW_ATTR_CRYPT_NONCE)
-  std::string stored_nonce = AES_256_GCM_get_nonce(aes_encrypt.get());
-  ASSERT_EQ(stored_nonce.size(), AES_256_GCM_NONCE_SIZE);
+  // Extract salt (simulates storing to RGW_ATTR_CRYPT_SALT)
+  std::string stored_salt = AES_256_GCM_get_salt(aes_encrypt.get());
+  ASSERT_EQ(stored_salt.size(), AES_256_GCM_SALT_SIZE);
 
   // Release encryption instance (simulates different request)
   aes_encrypt.reset();
 
-  // Simulate decryption path with restored nonce
+  // Simulate decryption path with restored salt + same identity
   auto aes_decrypt(AES_256_GCM_create(&no_dpp, g_ceph_context, &key[0], 32,
-                                       reinterpret_cast<const uint8_t*>(stored_nonce.c_str()),
-                                       stored_nonce.size()));
+                                       reinterpret_cast<const uint8_t*>(stored_salt.c_str()),
+                                       stored_salt.size()));
   ASSERT_NE(aes_decrypt.get(), nullptr);
+  ASSERT_TRUE(AES_256_GCM_derive_object_key(aes_decrypt.get(), key, 32,
+              "my-bucket-id", "my-object", 0));
 
   bufferlist decrypted;
   ASSERT_TRUE(aes_decrypt->decrypt(encrypted, 0, encrypted.length(), decrypted, 0, null_yield));
@@ -1147,7 +1157,7 @@ TEST(TestRGWCrypto, verify_AES_256_GCM_key_derivation)
   {
     auto aes1(AES_256_GCM_create(&no_dpp, g_ceph_context, &user_key[0], 32));
     ASSERT_NE(aes1.get(), nullptr);
-    std::string nonce = AES_256_GCM_get_nonce(aes1.get());
+    std::string salt = AES_256_GCM_get_salt(aes1.get());
     ASSERT_TRUE(AES_256_GCM_derive_object_key(aes1.get(), user_key, 32,
                                                "mybucket", "myobject", 0));
 
@@ -1157,8 +1167,8 @@ TEST(TestRGWCrypto, verify_AES_256_GCM_key_derivation)
     ASSERT_TRUE(aes1->encrypt(input, 0, input.length(), encrypted, 0, null_yield));
 
     auto aes2(AES_256_GCM_create(&no_dpp, g_ceph_context, &user_key[0], 32,
-                                  reinterpret_cast<const uint8_t*>(nonce.c_str()),
-                                  nonce.size()));
+                                  reinterpret_cast<const uint8_t*>(salt.c_str()),
+                                  salt.size()));
     ASSERT_TRUE(AES_256_GCM_derive_object_key(aes2.get(), user_key, 32,
                                                "mybucket", "myobject", 0));
 
@@ -1173,11 +1183,11 @@ TEST(TestRGWCrypto, verify_AES_256_GCM_key_derivation)
     auto aes1(AES_256_GCM_create(&no_dpp, g_ceph_context, &user_key[0], 32));
     ASSERT_TRUE(AES_256_GCM_derive_object_key(aes1.get(), user_key, 32,
                                                "bucket1", "object1", 0));
-    std::string nonce = AES_256_GCM_get_nonce(aes1.get());
+    std::string salt = AES_256_GCM_get_salt(aes1.get());
 
     auto aes2(AES_256_GCM_create(&no_dpp, g_ceph_context, &user_key[0], 32,
-                                  reinterpret_cast<const uint8_t*>(nonce.c_str()),
-                                  nonce.size()));
+                                  reinterpret_cast<const uint8_t*>(salt.c_str()),
+                                  salt.size()));
     ASSERT_TRUE(AES_256_GCM_derive_object_key(aes2.get(), user_key, 32,
                                                "bucket2", "object2", 0));
 
@@ -1193,13 +1203,13 @@ TEST(TestRGWCrypto, verify_AES_256_GCM_key_derivation)
   // Test 3: Different part numbers produce different derived keys
   {
     auto aes1(AES_256_GCM_create(&no_dpp, g_ceph_context, &user_key[0], 32));
-    std::string nonce = AES_256_GCM_get_nonce(aes1.get());
+    std::string salt = AES_256_GCM_get_salt(aes1.get());
     ASSERT_TRUE(AES_256_GCM_derive_object_key(aes1.get(), user_key, 32,
                                                "bucket", "object", 1));
 
     auto aes2(AES_256_GCM_create(&no_dpp, g_ceph_context, &user_key[0], 32,
-                                  reinterpret_cast<const uint8_t*>(nonce.c_str()),
-                                  nonce.size()));
+                                  reinterpret_cast<const uint8_t*>(salt.c_str()),
+                                  salt.size()));
     ASSERT_TRUE(AES_256_GCM_derive_object_key(aes2.get(), user_key, 32,
                                                "bucket", "object", 2));
 
@@ -1215,7 +1225,7 @@ TEST(TestRGWCrypto, verify_AES_256_GCM_key_derivation)
   // Test 4: Wrong identity fails decryption (auth tag mismatch)
   {
     auto aes_enc(AES_256_GCM_create(&no_dpp, g_ceph_context, &user_key[0], 32));
-    std::string nonce = AES_256_GCM_get_nonce(aes_enc.get());
+    std::string salt = AES_256_GCM_get_salt(aes_enc.get());
     ASSERT_TRUE(AES_256_GCM_derive_object_key(aes_enc.get(), user_key, 32,
                                                "bucket1", "object1", 0));
 
@@ -1225,8 +1235,8 @@ TEST(TestRGWCrypto, verify_AES_256_GCM_key_derivation)
     ASSERT_TRUE(aes_enc->encrypt(input, 0, input.length(), encrypted, 0, null_yield));
 
     auto aes_dec(AES_256_GCM_create(&no_dpp, g_ceph_context, &user_key[0], 32,
-                                     reinterpret_cast<const uint8_t*>(nonce.c_str()),
-                                     nonce.size()));
+                                     reinterpret_cast<const uint8_t*>(salt.c_str()),
+                                     salt.size()));
     ASSERT_TRUE(AES_256_GCM_derive_object_key(aes_dec.get(), user_key, 32,
                                                "bucket2", "object2", 0));
 

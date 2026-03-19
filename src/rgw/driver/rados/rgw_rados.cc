@@ -5138,7 +5138,7 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
   src_attrs.erase(RGW_ATTR_CRYPT_KEYID);
   src_attrs.erase(RGW_ATTR_CRYPT_KEYMD5);
   src_attrs.erase(RGW_ATTR_CRYPT_DATAKEY);
-  src_attrs.erase(RGW_ATTR_CRYPT_NONCE);
+  src_attrs.erase(RGW_ATTR_CRYPT_SALT);
   src_attrs.erase(RGW_ATTR_CRYPT_PART_NUMS);
 
   set_copy_attrs(src_attrs, attrs, attrs_mod);
