@@ -1,3 +1,6 @@
+teuthology:
+  postmerge:
+    - if yaml.os_type == "rocky" then reject() end
 overrides:
   ceph:
     log-ignorelist:
