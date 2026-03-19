@@ -1890,7 +1890,7 @@ get_image_snapshot_with_group_snap_info() {
         _id="${img_snap_id}"
         return 0
     fi
-    fail "failed to find image snapshot associated with group snap ${group_snap_id}"; return 1;
+    return 1
 }
 
 stop_mirror_while_group_snapshot_incomplete() {
@@ -2722,7 +2722,7 @@ test_group_snap_present()
     local group_snap_id=$3
     local expected_snap_count=$4
 
-    run_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format" 
+    try_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format" || :
 
     test "${expected_snap_count}" = "$(xmlstarlet sel -t -v "count(//group_snaps/group_snap[id='${group_snap_id}'])" < "$CMD_STDOUT")" || { fail; return 1; }
 }

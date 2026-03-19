@@ -11,6 +11,8 @@
 #include "librbd/Utils.h"
 #include "librbd/mirror/snapshot/Utils.h"
 #include "librbd/group/ListSnapshotsRequest.h"
+#include "librbd/image/RemoveRequest.h"
+#include "librbd/mirror/GroupRemoveImageRequest.h"
 #include "librbd/mirror/snapshot/CreateNonPrimaryRequest.h"
 #include "librbd/mirror/snapshot/GroupUnlinkPeerRequest.h"
 #include "librbd/mirror/snapshot/GroupImageCreatePrimaryRequest.h"
@@ -27,6 +29,12 @@
 
 namespace librbd {
 namespace mirror {
+
+namespace {
+
+const uint32_t MAX_RETURN = 1024;
+
+} // anonymous namespace
 
 using util::create_context_callback;
 using util::create_rados_callback;
@@ -184,7 +192,7 @@ void GroupPromoteRequest<I>::prepare_group_images() {
 
   auto req = snapshot::GroupPrepareImagesRequest<I>::create(m_group_ioctx,
     m_group_id, m_image_ctxs, m_images, &m_mirror_images, &m_mirror_peer_uuids,
-    snapshot::GroupPrepareImagesRequest<I>::OP_PROMOTE, m_force, ctx);
+    "", snapshot::GroupPrepareImagesRequest<I>::OP_PROMOTE, m_force, ctx);
   req->send();
 }
 
@@ -193,7 +201,7 @@ void GroupPromoteRequest<I>::handle_prepare_group_images(int r) {
   ldout(m_cct, 10) << "r=" << r << dendl;
 
   if (r < 0) {
-    lderr(m_cct) << "failed to prepare group images" << cpp_strerror(r)
+    lderr(m_cct) << "failed to prepare group images: " << cpp_strerror(r)
                  << dendl;
     m_ret_val = r;
     close_images();
@@ -211,13 +219,6 @@ void GroupPromoteRequest<I>::check_rollback_needed() {
   }
   ldout(m_cct, 10) << dendl;
 
-  std::vector<cls::rbd::GroupImageSpec> current_images;
-  for (const auto& image : m_images) {
-    if (image.state == cls::rbd::GROUP_IMAGE_LINK_STATE_ATTACHED) {
-      current_images.push_back(image.spec);
-    }
-  }
-
   if (m_snaps.empty()) {
     lderr(m_cct) << "cannot rollback, no mirror group snapshot"
                  << " available on group: " << m_group_name << dendl;
@@ -225,14 +226,20 @@ void GroupPromoteRequest<I>::check_rollback_needed() {
     close_images();
     return;
   }
+  ldout(m_cct, 10) << dendl;
 
   m_need_rollback = false;
+  m_orphan_required = false;
   auto snap = m_snaps.rbegin();
   for (; snap != m_snaps.rend(); ++snap) {
     auto mirror_ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
         &snap->snapshot_namespace);
     if (mirror_ns == nullptr || mirror_ns->is_orphan()) {
       continue;
+    }
+
+    if (!m_orphan_required) {
+      m_orphan_required = !mirror_ns->is_demoted();
     }
 
     if (!is_mirror_group_snapshot_complete(snap->state, mirror_ns->complete)) {
@@ -249,32 +256,20 @@ void GroupPromoteRequest<I>::check_rollback_needed() {
     close_images();
     return;
   }
-
-  if (m_need_rollback) {
-    // Check for group membership match
-    std::vector<cls::rbd::GroupImageSpec> rollback_images;
-    for (auto& it : snap->snaps) {
-      rollback_images.emplace_back(it.image_id, it.pool);
-    }
-
-    if (rollback_images != current_images) {
-      lderr(m_cct) << "group membership does not match snapshot membership"
-                   << " with rollback_snap_id: " << snap->id << dendl;
-      m_ret_val = -EINVAL;
-      close_images();
-      return;
-    }
-    m_rollback_group_snap = *snap;
-  } else {
-    ldout(m_cct, 10) << "no rollback required" << dendl;
-  }
+  m_rollback_group_snap = *snap;
 
   prepare_group_promotion();
 }
 
 template <typename I>
 void GroupPromoteRequest<I>::prepare_group_promotion() {
-  ldout(m_cct, 10) <<  dendl;
+  ldout(m_cct, 10) << dendl;
+  ceph_assert(m_images.size() == m_image_ctxs.size());
+
+  if (m_orphan_required || m_need_rollback) {
+    create_group_orphan_snapshot();
+    return;
+  }
 
   bool can_skip_orphan = true;
   m_rollback_snap_ids.resize(m_images.size());
@@ -293,7 +288,7 @@ void GroupPromoteRequest<I>::prepare_group_promotion() {
       (m_rollback_snap_ids[i] == CEPH_NOSNAP && !requires_orphan);
   }
 
-  if (can_skip_orphan && !m_need_rollback) {
+  if (can_skip_orphan) {
     create_primary_group_snapshot();
   } else {
     create_group_orphan_snapshot();
@@ -534,15 +529,190 @@ void GroupPromoteRequest<I>::handle_acquire_exclusive_locks(int r) {
     }
   }
 
+  // all required locks are owned
+  if (!m_need_rollback) {
+    ldout(m_cct, 10) << "no rollback required" << dendl;
+    create_primary_group_snapshot();
+  } else {
+    // current membership
+    std::vector<cls::rbd::GroupImageSpec> current_membership;
+    for (const auto& image : m_images) {
+      current_membership.push_back(image.spec);
+    }
+
+    // rollback membership
+    auto* rollback_snap = &m_rollback_group_snap;
+    std::vector<cls::rbd::GroupImageSpec> rollback_membership;
+    for (auto& it : rollback_snap->snaps) {
+      rollback_membership.emplace_back(it.image_id, it.pool);
+    }
+
+    if (rollback_membership != current_membership) {
+      ldout(m_cct, 10) << "rollback group snapshot membership with snap id: "
+                       << rollback_snap->id
+                       << ", does not match current group membership"
+                       << dendl;
+      fix_group_membership(current_membership, rollback_membership);
+      return;
+    }
+    rollback();
+  }
+}
+
+template <typename I>
+void GroupPromoteRequest<I>::fix_group_membership(
+    std::vector<cls::rbd::GroupImageSpec>& current_membership,
+    std::vector<cls::rbd::GroupImageSpec>& rollback_membership) {
+  ldout(m_cct, 10) << dendl;
+
+  m_to_add.clear();
+  m_to_remove.clear();
+
+  std::set<std::pair<std::string, int64_t>> current_set;
+  std::set<std::pair<std::string, int64_t>> rollback_set;
+
+  for (auto& img : current_membership) {
+    current_set.insert({img.image_id, img.pool_id});
+  }
+
+  for (auto& img : rollback_membership) {
+    rollback_set.insert({img.image_id, img.pool_id});
+  }
+
+  for (auto& img : rollback_membership) {
+    if (!current_set.count({img.image_id, img.pool_id})) {
+      m_to_add.push_back(img);
+    }
+  }
+
+  for (auto& img : current_membership) {
+    if (!rollback_set.count({img.image_id, img.pool_id})) {
+      m_to_remove.push_back(img);
+    }
+  }
+
+  ldout(m_cct, 10) << "fixing group membership, "
+                   << "to_add=" << m_to_add.size()
+                   << ", to_remove=" << m_to_remove.size() << dendl;
+
+  if (!m_to_add.empty()) {
+    lderr(m_cct) << "rollback requires adding images to group, but dynamic "
+                 << "group removal is not supported today" << dendl;
+    m_ret_val = -EINVAL;
+    release_exclusive_locks();
+    return;
+  }
+
+  if (!m_to_remove.empty() && m_to_remove.size() > 1) {
+    lderr(m_cct) << "rollback requires more than one image to be removed from "
+                 << "the group, this is not supported today" << dendl;
+    m_ret_val = -EINVAL;
+    release_exclusive_locks();
+    return;
+  }
+
+  auto ctx = create_context_callback<
+      GroupPromoteRequest<I>,
+      &GroupPromoteRequest<I>::handle_fix_group_membership>(this);
+
+  auto gather = new C_Gather(m_cct, ctx);
+  // remove images and disable mirroring
+  for (auto& spec : m_to_remove) {
+    auto it = std::find_if(m_image_ctxs.begin(), m_image_ctxs.end(),
+      [&](auto* ictx) {
+        return spec.image_id == ictx->id &&
+               spec.pool_id == ictx->md_ctx.get_id();
+      });
+
+    if (it == m_image_ctxs.end()) {
+      continue;
+    }
+
+    auto* ictx = *it;
+    Context* subctx = gather->new_sub();
+    auto req = mirror::GroupRemoveImageRequest<I>::create(
+        ictx, m_group_id, m_group_ioctx, subctx);
+    req->send();
+  }
+
+  gather->activate();
+}
+
+template <typename I>
+void GroupPromoteRequest<I>::handle_fix_group_membership(int r) {
+  ldout(m_cct, 10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    m_ret_val = r;
+    release_exclusive_locks();
+    return;
+  }
+
+  // Safe erase of removed images
+  for (auto& spec : m_to_remove) {
+    auto it = std::find_if(
+        m_image_ctxs.begin(), m_image_ctxs.end(),
+        [&](I* ictx) { return ictx->id == spec.image_id; });
+
+    if (it != m_image_ctxs.end()) {
+      m_image_ctxs.erase(it);
+    }
+  }
+
+  m_images.clear();
+  list_group_images();
+}
+
+template <typename I>
+void GroupPromoteRequest<I>::list_group_images() {
+  ldout(m_cct, 10) << dendl;
+
+  librados::ObjectReadOperation op;
+  cls_client::group_image_list_start(&op, m_start_after, MAX_RETURN);
+
+  auto comp = create_rados_callback<
+    GroupPromoteRequest<I>,
+    &GroupPromoteRequest<I>::handle_list_group_images>(this);
+
+  m_out_bl.clear();
+  int r = m_group_ioctx.aio_operate(
+    librbd::util::group_header_name(m_group_id), comp, &op, &m_out_bl);
+  ceph_assert(r == 0);
+  comp->release();
+}
+
+template <typename I>
+void GroupPromoteRequest<I>::handle_list_group_images(int r) {
+  ldout(m_cct, 10) << "r=" << r << dendl;
+
+  std::vector<cls::rbd::GroupImageStatus> images;
+  if (r == 0) {
+    auto iter = m_out_bl.cbegin();
+    r = cls_client::group_image_list_finish(&iter, &images);
+  }
+
+  if (r < 0) {
+    lderr(m_cct) << "group_id=" << m_group_id
+                 << " error listing images in group: "
+                 << cpp_strerror(r) << dendl;
+    m_ret_val = r;
+    release_exclusive_locks();
+    return;
+  }
+
+  auto image_count = images.size();
+  m_images.insert(m_images.end(), images.begin(), images.end());
+  if (image_count == MAX_RETURN) {
+    m_start_after = images.rbegin()->spec;
+    list_group_images();
+    return;
+ }
+
   rollback();
 }
 
 template <typename I>
 void GroupPromoteRequest<I>::rollback() {
-  if (!m_need_rollback) {
-    create_primary_group_snapshot();
-    return;
-  }
   ldout(m_cct, 10) << dendl;
 
   auto ctx = create_context_callback<
@@ -775,6 +945,92 @@ void GroupPromoteRequest<I>::handle_group_unlink_peer(int r) {
                  << cpp_strerror(r) << dendl;
   }
 
+  if (r == 0 && !m_to_remove.empty()) {
+    // At this point, any non-primary and incomplete primary group snapshots
+    // should already have been pruned. We can now safely remove the images
+    // that are no longer members of the group.
+    remove_non_member_images();
+    return;
+  }
+
+  release_exclusive_locks();
+}
+
+template <typename I>
+void GroupPromoteRequest<I>::remove_non_member_images() {
+  ldout(m_cct, 10) << dendl;
+
+  Context *ctx = create_context_callback<GroupPromoteRequest<I>,
+    &GroupPromoteRequest<I>::handle_remove_non_member_images>(this);
+
+  auto gather = new C_Gather(m_cct, ctx);
+
+  // keep IoCtx objects alive until all RemoveRequests finish
+  m_remove_ioctxs.clear();
+
+  // Consider a scenario where a group snapshot is just created on the primary,
+  // but the GroupReplayer on the secondary has not yet processed it. During
+  // this window, an image may still appear in GROUP_IMAGE_LINK_STATE_INCOMPLETE
+  // state. At this point the image is not fully added to the group yet.
+  // If a force promote is triggered on the secondary in this state, there will
+  // be no incomplete group snapshot available, so rollback will not be
+  // triggered. However, the image in GROUP_IMAGE_LINK_STATE_INCOMPLETE may
+  // still remain in the group and therefore needs to be cleaned up after
+  // promotion.
+  for (const auto& image : m_images) {
+    if (image.state == cls::rbd::GROUP_IMAGE_LINK_STATE_INCOMPLETE) {
+      ldout(m_cct, 10) << "removing incomplete image: "
+                       << image.spec.image_id << dendl;
+      m_to_remove.push_back(image.spec);
+    }
+  }
+
+  for (auto &spec : m_to_remove) {
+    // allocate IoCtx in vector
+    m_remove_ioctxs.emplace_back();
+    librados::IoCtx &image_ioctx = m_remove_ioctxs.back();
+
+    int r = util::create_ioctx(m_group_ioctx, "", spec.pool_id, {}, &image_ioctx);
+    if (r < 0) {
+      lderr(m_cct) << "failed to create ioctx: " << cpp_strerror(r) << dendl;
+      continue;
+    }
+
+    if (spec.image_id.empty()) {
+      continue;
+    }
+
+    std::string image_name;
+    r = cls_client::dir_get_name(&image_ioctx, RBD_DIRECTORY,
+                                 spec.image_id, &image_name);
+    if (r < 0) {
+      lderr(m_cct) << "failed to resolve image name for id "
+                   << spec.image_id << ": " << cpp_strerror(r) << dendl;
+      continue;
+    }
+
+    ldout(m_cct, 10) << "removing image " << image_name
+                    << " (" << spec.image_id << ")" << dendl;
+
+    Context *subctx = gather->new_sub();
+    auto req = librbd::image::RemoveRequest<I>::create(image_ioctx, image_name,
+      spec.image_id, false, false, m_progress_ctx, nullptr, subctx);
+
+    req->send();
+  }
+
+  gather->activate();
+}
+
+template <typename I>
+void GroupPromoteRequest<I>::handle_remove_non_member_images(int r) {
+  ldout(m_cct, 10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(m_cct) << "failed removing non-member images: "
+                 << cpp_strerror(r) << dendl;
+  }
+
   release_exclusive_locks();
 }
 
@@ -816,6 +1072,10 @@ void GroupPromoteRequest<I>::handle_release_exclusive_locks(int r) {
 
 template <typename I>
 void GroupPromoteRequest<I>::close_images() {
+  if (m_image_ctxs.empty()) {
+    finish(m_ret_val);
+    return;
+  }
   ldout(m_cct, 10) << dendl;
 
   auto ctx = create_context_callback<

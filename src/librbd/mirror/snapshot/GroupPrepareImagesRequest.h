@@ -32,7 +32,8 @@ public:
     OP_DISABLE         = 1,
     OP_PROMOTE         = 2,
     OP_DEMOTE          = 3,
-    OP_CREATE_PRIMARY  = 4,
+    OP_ADD_IMAGE       = 4,
+    OP_CREATE_PRIMARY  = 5,
   };
   static GroupPrepareImagesRequest *create(
       librados::IoCtx& group_ioctx, const std::string& group_id,
@@ -40,10 +41,11 @@ public:
       std::vector<cls::rbd::GroupImageStatus>& images,
       std::vector<cls::rbd::MirrorImage>* mirror_images,
       std::set<std::string>* mirror_peer_uuids,
+      const std::string& image_id_to_add,
       Operation operation, bool force, Context *on_finish) {
     return new GroupPrepareImagesRequest(
       group_ioctx, group_id, image_ctxs, images, mirror_images,
-      mirror_peer_uuids, operation, force, on_finish);
+      mirror_peer_uuids, image_id_to_add, operation, force, on_finish);
   }
 
   GroupPrepareImagesRequest(
@@ -52,6 +54,7 @@ public:
     std::vector<cls::rbd::GroupImageStatus>& images,
     std::vector<cls::rbd::MirrorImage>* mirror_images,
     std::set<std::string>* mirror_peer_uuids,
+    const std::string& image_id_to_add,
     Operation operation, bool force, Context *on_finish);
 
   void send();
@@ -68,11 +71,11 @@ private:
    *       v                              |
    *   LIST_GROUP_IMAGES <----------------/
    *       |            \
-   *       |             \-----(enable)----->CHECK_MIRROR_IMAGES_DISABLED
-   *       |          ___________________________/
+   *       |             \-----(enable/add_image, r=0)----->CHECK_MIRROR_IMAGES_DISABLED
+   *       |          ________________________________________/
    *       |         |
    *       v         V
-   *   OPEN_GROUP_IMAGES ------------------(enable, r=0)-------------------->|
+   *   OPEN_GROUP_IMAGES ------------------(enable/add_image, r=0)---------->|
    *       |            \                                                    |
    *       |             \-------(disable)-------\                           |
    *       |                                     |                           |
@@ -101,6 +104,7 @@ private:
   std::vector<cls::rbd::GroupImageStatus>& m_images;
   std::vector<cls::rbd::MirrorImage>* m_mirror_images;
   std::set<std::string>* m_mirror_peer_uuids;
+  const std::string m_image_id_to_add;
   Operation m_operation;
   bool m_force;
   Context *m_on_finish;
