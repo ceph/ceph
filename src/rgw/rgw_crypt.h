@@ -108,7 +108,8 @@ public:
 };
 
 static const size_t AES_256_KEYSIZE = 256 / 8;
-static const size_t AES_256_GCM_NONCE_SIZE = 96 / 8;  // 12 bytes, GCM standard
+static const size_t AES_256_GCM_IV_SIZE = 96 / 8;  // 12 bytes, GCM standard
+static const size_t AES_256_GCM_SALT_SIZE = 32;  // 256-bit random salt for HMAC-based key derivation
 
 /**
  * AEAD chunk size constants used for size calculations across RGW.
@@ -196,24 +197,24 @@ bool AES_256_ECB_encrypt(const DoutPrefixProvider* dpp,
 /**
  * Create an AES-256-GCM BlockCrypt instance.
  *
- * For encryption: Pass nonce=nullptr to generate a random nonce.
- *                 After creation, call AES_256_GCM_get_nonce() to retrieve it for storage.
+ * For encryption: Pass salt=nullptr to generate a random 32-byte salt.
+ *                 After creation, call AES_256_GCM_get_salt() to retrieve it for storage.
  *
- * For decryption: Pass the stored nonce from RGW_ATTR_CRYPT_NONCE.
+ * For decryption: Pass the stored salt from RGW_ATTR_CRYPT_SALT.
  */
 std::unique_ptr<BlockCrypt> AES_256_GCM_create(const DoutPrefixProvider* dpp,
                                                 CephContext* cct,
                                                 const uint8_t* key,
                                                 size_t key_len,
-                                                const uint8_t* nonce = nullptr,
-                                                size_t nonce_len = 0,
+                                                const uint8_t* salt = nullptr,
+                                                size_t salt_len = 0,
                                                 uint32_t part_number = 0);
 
 /**
- * Retrieve the nonce from a BlockCrypt instance for storage in RGW_ATTR_CRYPT_NONCE.
+ * Retrieve the salt from a BlockCrypt instance for storage in RGW_ATTR_CRYPT_SALT.
  * Returns empty string if the BlockCrypt is not an AES_256_GCM instance.
  */
-std::string AES_256_GCM_get_nonce(BlockCrypt* block_crypt);
+std::string AES_256_GCM_get_salt(BlockCrypt* block_crypt);
 
 class RGWGetObj_BlockDecrypt : public RGWGetObj_Filter {
   friend class TestableBlockDecrypt;  // For unit testing private members
