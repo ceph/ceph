@@ -191,5 +191,17 @@ describe('NvmeofNamespacesFormComponent', () => {
         rbd_image_size: 2147483648
       });
     });
+
+    it('should not send block_size from namespace_size UI field', () => {
+      formHelper.setValue('pool', 'rbd');
+      formHelper.setValue('image_size', new FormatterService().toBytes('1GiB'));
+      formHelper.setValue('subsystem', MOCK_SUBSYSTEM);
+      formHelper.setValue('namespace_size', 10);
+
+      component.onSubmit();
+
+      const request = (nvmeofService.createNamespace as jasmine.Spy).calls.mostRecent().args[1];
+      expect(request.block_size).toBeUndefined();
+    });
   });
 });
