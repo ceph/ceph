@@ -4,8 +4,9 @@ import errno
 import json
 from typing import Optional
 
-from mgr_module import CLICheckNonemptyFileInput, CLIReadCommand, CLIWriteCommand
+from mgr_module import CLICheckNonemptyFileInput
 
+from ..cli import DBCLICommand
 from ..rest_client import RequestException
 from .iscsi_client import IscsiClient
 from .iscsi_config import InvalidServiceUrl, IscsiGatewayAlreadyExists, \
@@ -13,7 +14,7 @@ from .iscsi_config import InvalidServiceUrl, IscsiGatewayAlreadyExists, \
     ManagedByOrchestratorException
 
 
-@CLIReadCommand('dashboard iscsi-gateway-list')
+@DBCLICommand.Read('dashboard iscsi-gateway-list')
 def list_iscsi_gateways(_):
     '''
     List iSCSI gateways
@@ -21,7 +22,7 @@ def list_iscsi_gateways(_):
     return 0, json.dumps(IscsiGatewaysConfig.get_gateways_config()), ''
 
 
-@CLIWriteCommand('dashboard iscsi-gateway-add')
+@DBCLICommand.Write('dashboard iscsi-gateway-add')
 @CLICheckNonemptyFileInput(desc='iSCSI gateway configuration')
 def add_iscsi_gateway(_, inbuf, name: Optional[str] = None):
     '''
@@ -44,7 +45,7 @@ def add_iscsi_gateway(_, inbuf, name: Optional[str] = None):
         return -errno.EINVAL, '', str(ex)
 
 
-@CLIWriteCommand('dashboard iscsi-gateway-rm')
+@DBCLICommand.Write('dashboard iscsi-gateway-rm')
 def remove_iscsi_gateway(_, name: str):
     '''
     Remove iSCSI gateway configuration
