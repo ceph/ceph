@@ -15,6 +15,7 @@
 #include "crimson/osd/pg_backend.h"
 #include "crimson/osd/pg_recovery.h"
 
+#include "messages/MOSDPGRecoveryDelete.h"
 #include "osd/osd_types.h"
 #include "osd/PeeringState.h"
 
@@ -545,6 +546,13 @@ void PGRecovery::enqueue_push(
   }).then_interruptible([this, FNAME, obj] {
 
     DEBUGDPP("enqueue_push", pg->get_dpp());
+    // If the object is still recovering with pending pushes, recover_object
+    // aborted because the object was deleted. send_recovery_deletes will
+    // dispatch ObjectPushed when the MOSDPGRecoveryDeleteReply arrives.
+    if (pg->get_recovery_backend()->is_recovering(obj) &&
+        pg->get_recovery_backend()->get_recovering(obj).has_pushes()) {
+      return;
+    }
     using BackfillState = crimson::osd::BackfillState;
     if (backfill_state->is_triggered()) {
       backfill_state->post_event(
@@ -570,6 +578,53 @@ void PGRecovery::enqueue_drop(
       spg_t(pg->get_pgid().pgid, target.shard), pg->get_osdmap_epoch());
   }
   req->ls.emplace_back(obj, v);
+}
+
+void PGRecovery::send_recovery_deletes(
+  const hobject_t& obj,
+  const std::vector<pg_shard_t>& peers)
+{
+  LOG_PREFIX(PGRecovery::send_recovery_deletes);
+  DEBUGDPP("obj={}", pg->get_dpp(), obj);
+  if (!pg->get_recovery_backend()->is_recovering(obj)) {
+    return;
+  }
+  auto& peering_state = pg->get_peering_state();
+  epoch_t min_epoch = pg->get_last_peering_reset();
+  auto& recovering = pg->get_recovery_backend()->get_recovering(obj);
+  for (const auto& peer : peers) {
+    pg_missing_item item;
+    if (peering_state.get_peer_missing(peer).is_missing(obj, &item)) {
+      std::ignore = recovering.wait_for_pushes(peer);
+      spg_t target_pg(pg->get_pgid().pgid, peer.shard);
+      auto msg = crimson::make_message<MOSDPGRecoveryDelete>(
+        pg->get_pg_whoami(), target_pg, pg->get_osdmap_epoch(), min_epoch);
+      msg->objects.push_back(std::make_pair(obj, item.need));
+      std::ignore = pg->get_shard_services().send_to_osd(
+        peer.osd, std::move(msg), pg->get_osdmap_epoch());
+    }
+  }
+  // Wait for all replies, then clean up recovering entry and notify backfill.
+  // enqueue_push's continuation skips ObjectPushed when has_pushes() is true,
+  // so this chain is responsible for dispatching it once replies arrive.
+  if (recovering.has_pushes()) {
+    std::ignore = recovering.wait_for_all_pushes(
+    ).then([this, obj] {
+      object_stat_sum_t stat_diff;
+      stat_diff.num_objects_recovered = 1;
+      on_global_recover(obj, stat_diff, true);
+      using BackfillState = crimson::osd::BackfillState;
+      if (backfill_state->is_triggered()) {
+        backfill_state->post_event(
+          BackfillState::ObjectPushed(hobject_t(obj)).intrusive_from_this());
+      } else {
+        backfill_state->process_event(
+          BackfillState::ObjectPushed(hobject_t(obj)).intrusive_from_this());
+      }
+    }).handle_exception([](auto) {
+      // PG reset — promises broken, bail out
+    });
+  }
 }
 
 void PGRecovery::maybe_flush()

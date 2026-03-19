@@ -45,6 +45,7 @@ ReplicatedRecoveryBackend::recover_object(
 	  //
 	  //      Abort the recovery in this case, a "recover_delete" must have been
 	  //      added for this object by the client request that deleted it.
+	  DEBUGDPP("obj={}, v={} not found on primary, aborting backfill", pg, soid, need);
 	  return interruptor::now();
 	}
 	DEBUGDPP("loaded obc: {}", pg, obc->obs.oi.soid);
