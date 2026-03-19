@@ -43,8 +43,23 @@ ReplicatedRecoveryBackend::recover_object(
 	  //      object must have been deleted by some client request after the object
 	  //      is enqueued for push but before the lock is acquired by the recovery.
 	  //
-	  //      Abort the recovery in this case, a "recover_delete" must have been
-	  //      added for this object by the client request that deleted it.
+	  //      Abort the recovery in this case. A MOSDPGRecoveryDelete must have been
+	  //      sent, for this object to peers, by the client request that deleted it.
+	  DEBUGDPP("obj={}, v={} not found on primary, aborting backfill", pg, soid, need);
+	  
+	  // if client delete request sent MOSDPGRecoveryDelete, we need to wait 
+	  // for MOSDPGRecoveryDeleteReply from peers. 
+	  auto& recovery_waiter = get_recovering(soid);
+	  if (recovery_waiter.has_pushes()) {
+		DEBUGDPP("obj={}, v={} waiting for pushes", pg, soid, need);
+	    return interruptor::make_interruptible(
+	      recovery_waiter.wait_for_all_pushes()
+	    ).then_interruptible([this, soid] {
+	      object_stat_sum_t stat_diff;
+	      stat_diff.num_objects_recovered = 1;
+	      pg.get_recovery_handler()->on_global_recover(soid, stat_diff, true);
+	    });
+	  }
 	  return interruptor::now();
 	}
 	DEBUGDPP("loaded obc: {}", pg, obc->obs.oi.soid);

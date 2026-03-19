@@ -747,10 +747,19 @@ void BackfillState::enqueue_standalone_delete(
   const eversion_t &v,
   const std::vector<pg_shard_t> &peers)
 {
-  progress_tracker->enqueue_drop(obj);
-  for (auto bt : peers) {
-    backfill_machine.backfill_listener.enqueue_drop(bt, obj, v);
-  }
+  // When a client deletes an object during backfill, the object may already
+  // be in the recovering map (added by enqueue_push via prepare_backfill_for_missing).
+  // In that case, we must send MOSDPGRecoveryDelete instead of MOSDPGBackfillRemove
+  // so that the reply (MOSDPGRecoveryDeleteReply) triggers on_peer_recover and
+  // clears the peer_missing entries. MOSDPGBackfillRemove is fire-and-forget and
+  // would leave stale peer_missing entries, causing an assertion failure in
+  // Recovered::Recovered where needs_recovery() returns true.
+  //
+  // enqueue_standalone_delete is only called from the client delete path when
+  // is_missing_on_peer is true, which means prepare_backfill_for_missing has
+  // already been called (adding to both peer_missing and recovering).
+  // Therefore, the recovering entry must exist.
+  backfill_machine.backfill_listener.send_recovery_deletes(obj, peers);
 }
 
 std::ostream &operator<<(std::ostream &out, const BackfillState::PGFacade &pg) {
