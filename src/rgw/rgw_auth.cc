@@ -1052,6 +1052,9 @@ void rgw::auth::RemoteApplier::modify_request_state(const DoutPrefixProvider* dp
     s->env.emplace("keystone:role", std::move(role));
   }
 
+  if (!info.keystone_user_id.empty()) {
+    s->env.emplace("keystone:userid", info.keystone_user_id);
+  }
 }
 
 std::optional<rgw::ARN> rgw::auth::RemoteApplier::get_caller_identity() const 

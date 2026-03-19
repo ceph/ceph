@@ -1879,3 +1879,14 @@ TEST_F(ConditionTest, KeyStoneRolePolicyParsing)
   multi_env.emplace("keystone:role", "testrole");
   EXPECT_TRUE(p->statements[0].conditions[0].eval(multi_env));
 }
+
+TEST_F(ConditionTest, KeystoneUserIdStringEquals)
+{
+  const std::string key = "keystone:userid";
+  Condition cond{TokenID::StringEquals, key.data(), key.size(), false};
+  cond.vals.push_back("user-123");
+
+  EXPECT_FALSE(cond.eval({}));
+  EXPECT_TRUE(cond.eval({{key, "user-123"}}));
+  EXPECT_FALSE(cond.eval({{key, "user-456"}}));
+}
