@@ -3221,10 +3221,17 @@ int MPPOSIXSerializer::try_lock(const DoutPrefixProvider *dpp, ceph::timespan du
 
   POSIXBucket* b = static_cast<POSIXBucket*>(obj->get_bucket());
   if (b->get_dir()->get_type() == ObjectType::MULTIPART && b->get_dir_fd(dpp) > 0) {
+    locked = true;
     return 0;
   }
 
   return -ENOENT;
+}
+
+int MPPOSIXSerializer::unlock(const DoutPrefixProvider *dpp, optional_yield y)
+{
+  clear_locked();
+  return 0;
 }
 
 int POSIXObject::transition(Bucket* bucket,
