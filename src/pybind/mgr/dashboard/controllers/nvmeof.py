@@ -15,7 +15,7 @@ from ..services.orchestrator import OrchClient
 from ..tools import str_to_bool
 from . import APIDoc, APIRouter, BaseController, CreatePermission, \
     DeletePermission, Endpoint, EndpointDoc, Param, ReadPermission, \
-    RESTController, UIRouter
+    RESTController, UIRouter, UpdatePermission
 
 logger = logging.getLogger(__name__)
 
@@ -1125,9 +1125,19 @@ else:
                 )
             )
 
+    def _normalize_enum_key(val):
+        return val.replace("_", " ").title()
+
     def _update_hosts(hosts_info_resp):
         if hosts_info_resp.get('allow_any_host'):
             hosts_info_resp['hosts'].insert(0, {"nqn": "*"})
+        hosts = hosts_info_resp.get('hosts')
+        if not hosts:
+            hosts = []
+        for h in hosts:
+            orig = h.get("dhchap_controller_origin")
+            if orig:
+                h["dhchap_controller_origin"] = _normalize_enum_key(orig)
         return hosts_info_resp
 
     @APIRouter("/nvmeof/subsystem/{nqn}/host", Scope.NVME_OF)
@@ -1169,11 +1179,14 @@ else:
         @handle_nvmeof_error
         def create(
             self, nqn: str, host_nqn: str, dhchap_key: Optional[str] = None,
+            dhchap_controller_key: Optional[str] = None,
             psk: Optional[str] = None, gw_group: Optional[str] = None, traddr: Optional[str] = None
         ):
             return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.add_host(
                 NVMeoFClient.pb2.add_host_req(subsystem_nqn=nqn, host_nqn=host_nqn,
-                                              dhchap_key=dhchap_key, psk=psk)
+                                              dhchap_key=dhchap_key,
+                                              dhchap_ctrlr_key=dhchap_controller_key,
+                                              psk=psk)
             )
 
         @empty_response
@@ -1195,6 +1208,8 @@ else:
             )
 
         @empty_response
+        @Endpoint('PUT', '{host_nqn}/change_key')
+        @UpdatePermission
         @NvmeofCLICommand("nvmeof host change_key", model.RequestStatus)
         @EndpointDoc(
             "Change host DH-HMAC-CHAP key",
@@ -1214,10 +1229,39 @@ else:
             return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.change_host_key(
                 NVMeoFClient.pb2.change_host_key_req(subsystem_nqn=nqn,
                                                      host_nqn=host_nqn,
-                                                     dhchap_key=dhchap_key)
+                                                     dhchap_key=dhchap_key,
+                                                     dhchap_ctrlr_key="-")
             )
 
         @empty_response
+        @Endpoint('PUT', '{host_nqn}/change_controller_key')
+        @UpdatePermission
+        @NvmeofCLICommand("nvmeof host change_controller_key", model.RequestStatus)
+        @EndpointDoc(
+            "Change host DH-HMAC-CHAP controller key",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "host_nqn": Param(str, 'NVMeoF host NQN'),
+                "dhchap_controller_key": Param(str, 'Host DH-HMAC-CHAP controller key'),
+                "gw_group": Param(str, "NVMeoF gateway group", True, None),
+            },
+        )
+        @convert_to_model(model.RequestStatus)
+        @handle_nvmeof_error
+        def change_controller_key(
+            self, nqn: str, host_nqn: str, dhchap_controller_key: str,
+            gw_group: Optional[str] = None, traddr: Optional[str] = None
+        ):
+            return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.change_host_key(
+                NVMeoFClient.pb2.change_host_key_req(subsystem_nqn=nqn,
+                                                     host_nqn=host_nqn,
+                                                     dhchap_key="-",
+                                                     dhchap_ctrlr_key=dhchap_controller_key)
+            )
+
+        @empty_response
+        @Endpoint('PUT', '{host_nqn}/del_key')
+        @UpdatePermission
         @NvmeofCLICommand("nvmeof host del_key", model.RequestStatus)
         @EndpointDoc(
             "Delete host DH-HMAC-CHAP key",
@@ -1236,8 +1280,48 @@ else:
             return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.change_host_key(
                 NVMeoFClient.pb2.change_host_key_req(subsystem_nqn=nqn,
                                                      host_nqn=host_nqn,
-                                                     dhchap_key=None)
+                                                     dhchap_key=None,
+                                                     dhchap_ctrlr_key="-")
             )
+
+        @empty_response
+        @Endpoint('PUT', '{host_nqn}/del_controller_key')
+        @UpdatePermission
+        @NvmeofCLICommand("nvmeof host del_controller_key", model.RequestStatus)
+        @EndpointDoc(
+            "Delete host DH-HMAC-CHAP controller key",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "host_nqn": Param(str, 'NVMeoF host NQN.'),
+                "gw_group": Param(str, "NVMeoF gateway group", True, None),
+            },
+        )
+        @convert_to_model(model.RequestStatus)
+        @handle_nvmeof_error
+        def del_controller_key(
+            self, nqn: str, host_nqn: str, gw_group: Optional[str] = None,
+            traddr: Optional[str] = None
+        ):
+            return NVMeoFClient(
+                gw_group=gw_group,
+                traddr=traddr
+            ).stub.change_host_key(
+                NVMeoFClient.pb2.change_host_key_req(subsystem_nqn=nqn,
+                                                     host_nqn=host_nqn,
+                                                     dhchap_key="-",
+                                                     dhchap_ctrlr_key=None)
+            )
+
+    def _update_connections(connection_list_resp):
+        conns = connection_list_resp.get('connections')
+        if not conns:
+            conns = []
+        for con in conns:
+            orig = con.get("dhchap_controller_origin")
+            if orig:
+                con["dhchap_controller_origin"] = _normalize_enum_key(
+                    orig)
+        return connection_list_resp
 
     @APIRouter("/nvmeof/subsystem/{nqn}/connection", Scope.NVME_OF)
     @APIDoc("NVMe-oF Subsystem Connection Management API", "NVMe-oF Subsystem Connection")
@@ -1251,7 +1335,7 @@ else:
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
             },
         )
-        @convert_to_model(model.ConnectionList)
+        @convert_to_model(model.ConnectionList, finalize=_update_connections)
         @handle_nvmeof_error
         def list(self, nqn: Optional[str] = None,
                  gw_group: Optional[str] = None, traddr: Optional[str] = None):
