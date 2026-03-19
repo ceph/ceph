@@ -49,7 +49,7 @@ def _progress_event_to_dashboard_task_common(event, task):
         # we're prepending the "progress/" prefix to tag tasks that come
         # from the progress module
         'name': "progress/{}".format(event['message']),
-        'metadata': dict(event.get('refs', {})),
+        'metadata': event.get('refs', {}),
         'begin_time': datetime.fromtimestamp(
             event["started_at"], tz=timezone.utc).isoformat(),
     })
