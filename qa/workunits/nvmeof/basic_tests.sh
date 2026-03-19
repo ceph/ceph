@@ -1,17 +1,17 @@
 #!/bin/bash -x
 
-sudo modprobe nvme-fabrics
-sudo modprobe nvme-tcp
-# sudo dnf reinstall nvme-cli -y
+# https://tracker.ceph.com/issues/74922
+sudo systemctl stop udisks2 2>/dev/null || true
 
 # install nvme 2.13 (issue with latest nvme version 2.16 with centos9: https://tracker.ceph.com/issues/74615#note-5)
-curl -O https://mirror.stream.centos.org/9-stream/BaseOS/x86_64/os/Packages/nvme-cli-2.13-1.el9.x86_64.rpm
-curl -O https://mirror.stream.centos.org/9-stream/BaseOS/x86_64/os/Packages/libnvme-1.13-1.el9.x86_64.rpm
-ls -l nvme-cli-2.13-1.el9.x86_64.rpm libnvme-1.13-1.el9.x86_64.rpm
-sudo rpm -qp --qf "%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n" nvme-cli-2.13-1.el9.x86_64.rpm   # should print nvme-cli-2.13-1.el9.x86_64
-sudo dnf downgrade ./nvme-cli-2.13-1.el9.x86_64.rpm ./libnvme-1.13-1.el9.x86_64.rpm -y
-sudo lsmod | grep nvme
+sudo dnf install nvme-cli-2.13 libnvme-1.13 -y
+sleep 10 
+sudo modprobe nvme-fabrics
+sudo modprobe nvme-tcp
 nvme version
+sleep 20
+sudo lsmod | grep nvme
+
 
 source /etc/ceph/nvmeof.env
 SPDK_CONTROLLER="Ceph bdev Controller"
@@ -19,6 +19,7 @@ DISCOVERY_PORT="8009"
 
 discovery() {
     output=$(sudo nvme discover -t tcp -a $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS -s $DISCOVERY_PORT)
+    sleep 5
     expected_discovery_stdout="subtype: nvme subsystem"
     if ! echo "$output" | grep -q "$expected_discovery_stdout"; then
         return 1
