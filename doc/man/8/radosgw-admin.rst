@@ -449,7 +449,7 @@ as follows:
 :command:`role create`
   Create a new role for use with STS (Security Token Service).
 
-:command:`role rm`
+:command:`role delete`
   Remove a role.
 
 :command:`role get`
@@ -458,7 +458,7 @@ as follows:
 :command:`role list`
   List the roles with specified path prefix.
 
-:command:`role modify`
+:command:`role-trust-policy modify`
   Modify the assume role policy of an existing role.
 
 :command:`role-policy put`
@@ -470,7 +470,7 @@ as follows:
 :command:`role-policy get`
   Get the specified inline policy document embedded with the given role.
 
-:command:`role-policy rm`
+:command:`role-policy delete`
   Remove the policy attached to a role
 
 :command:`reshard add`
