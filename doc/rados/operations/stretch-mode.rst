@@ -96,6 +96,94 @@ configuration across the entire cluster. Conversely, opt for a stretch pool
 when you need only a particular pool to be replicated across more than two data centers,
 providing a more granular level of control.
 
+3 Zones Stretch Clusters
+========================
+
+<Insert description here>
+
+Automatic Resolution of Netsplits in 3-Zone Stretch Clusters
+------------------------------------------------------------
+
+``mon_netsplit_auto_resolve`` is a configuration option that is `true` by default.
+When enabled, this option allows the cluster to automatically resolve netsplits.
+This can be disabled by setting the option to `false`.
+
+.. prompt:: bash $
+
+   ceph config set mon mon_netsplit_auto_resolve false
+
+**Important:** Automatic netsplit resolution is only triggered when Ceph detects that at least
+one pool in the cluster is configured as a stretch pool. Without stretch pools, the cluster
+will not automatically resolve netsplits.
+
+Netsplit Zone Preferences
+-------------------------
+
+When a netsplit occurs in a 3-zone (or more) stretch cluster with ``mon_netsplit_auto_resolve``
+enabled, the cluster must decide which partition should remain operational. If there are
+multiple partitions of equal size (called "largest cliques"), the cluster uses zone preferences
+and heuristics to choose the winning partition.
+
+**Setting Zone Preferences**
+
+You can specify an ordered list of preferred zones/buckets that the cluster should favor during
+netsplit resolution. The first zone in the list has the highest priority.
+
+.. prompt:: bash $
+
+   ceph mon set netsplit_zone_preferences dc1 dc2 dc3
+
+**Example:** Consider a 3-zone cluster with zones ``dc1``, ``dc2``, and ``dc3``, where a network
+failure causes ``dc1`` and ``dc2`` to lose connectivity to each other, but both zones can
+still communicate with ``dc3``. This creates two equal-sized partitions (largest cliques):
+
+- Partition 1: ``dc1`` and ``dc3``
+- Partition 2: ``dc2`` and ``dc3``
+
+With the preferences set as shown above (``dc1`` highest priority, then ``dc2``, then ``dc3``),
+the cluster will choose Partition 1 (``dc1`` + ``dc3``) because ``dc1`` has higher priority
+than ``dc2``. The priority is calculated by summing the preference rankings: zones earlier
+in the list have higher priority values.
+
+To view current preferences (included in ``ceph mon dump``):
+
+.. prompt:: bash $
+
+   ceph mon dump
+
+To clear zone preferences:
+
+.. prompt:: bash $
+
+   ceph mon clear netsplit_zone_preferences
+
+**Important:** Zone names in the preference list must exist as bucket names in the CRUSH map.
+The cluster validates this when you set preferences and will reject invalid bucket names.
+
+Netsplit Resolution Heuristics
+------------------------------
+
+When zone preferences are not set, or when the preferences do not match any of the largest
+cliques, the cluster uses automatic heuristics to select the surviving partition:
+
+1. **OSD Weight Distribution**: The cluster calculates the total CRUSH weight of OSDs in each
+   partition. The partition with the higher total OSD weight is chosen, as it likely represents
+   more storage capacity and can continue serving more data.
+
+2. **Monitor Count**: If OSD weights are equal, the partition with more Monitors
+   is preferred, as it is more likely to maintain stronger quorum.
+
+3. **Connection Scores**: The cluster evaluates the connectivity between the partitions. 
+   The partition with better connectivity wins.
+
+4. **Lexicographical Order**: As a final tiebreaker, if all other metrics are equal, the
+   partition with the lexicographically smallest bucket name is chosen to ensure deterministic
+   behavior.
+
+These heuristics run automatically and do not require configuration. The cluster logs its
+decisions to the monitor log when resolving netsplits, indicating whether
+zone preferences or heuristics were used.
+
 Limitations
 -----------
 

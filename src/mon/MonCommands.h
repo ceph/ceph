@@ -546,6 +546,13 @@ COMMAND("mon rm disallowed_leader " \
 	"name=name,type=CephString", \
 	"allow the named mon to be a leader again", \
 	"mon", "rw")
+COMMAND("mon set netsplit_zone_preferences " \
+	"name=zones,type=CephString,n=N,goodchars=[A-Za-z0-9-_.]", \
+	"set ordered list of preferred CRUSH zones/buckets for netsplit resolution (highest priority first)", \
+	"mon", "rw")
+COMMAND("mon clear netsplit_zone_preferences", \
+	"clear netsplit zone preferences", \
+	"mon", "rw")
 COMMAND("mon set_location " \
 	"name=name,type=CephString "
 	"name=args,type=CephString,n=N,goodchars=[A-Za-z0-9-_.=]",

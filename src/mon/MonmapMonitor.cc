@@ -1024,6 +1024,58 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     }
     pending_map.disallowed_leaders.erase(name);
     pending_map.last_changed = ceph_clock_now();
+  } else if (prefix == "mon set netsplit_zone_preferences") {
+    vector<string> zones;
+    if (!cmd_getval(cmdmap, "zones", zones)) {
+      err = -EINVAL;
+      ss << "must specify zone names";
+      goto reply_no_propose;
+    }
+    
+    // Wait for OSDMonitor to be readable so we can validate against CRUSH map
+    if (!mon.osdmon()->is_readable()) {
+      dout(10) << __func__
+               << ": waiting for osdmon readable to validate zone preferences"
+               << dendl;
+      mon.osdmon()->wait_for_readable(op, new Monitor::C_RetryMessage(&mon, op));
+      return false;
+    }
+    
+    // Validate that all zones exist in the CRUSH map
+    const CrushWrapper& crush = *mon.osdmon()->osdmap.crush;
+    vector<string> invalid_zones;
+    for (const auto& zone : zones) {
+      if (!crush.name_exists(zone)) {
+        invalid_zones.push_back(zone);
+      }
+    }
+    
+    if (!invalid_zones.empty()) {
+      ss << "The following zones do not exist in the CRUSH map: ";
+      for (size_t i = 0; i < invalid_zones.size(); ++i) {
+        if (i > 0) ss << ", ";
+        ss << "'" << invalid_zones[i] << "'";
+      }
+      err = -ENOENT;
+      goto reply_no_propose;
+    }
+    
+    pending_map.netsplit_zone_preferences = zones;
+    pending_map.last_changed = ceph_clock_now();
+    ss << "set netsplit zone preferences to: ";
+    for (size_t i = 0; i < zones.size(); ++i) {
+      if (i > 0) ss << ", ";
+      ss << zones[i];
+    }
+  } else if (prefix == "mon clear netsplit_zone_preferences") {
+    if (pending_map.netsplit_zone_preferences.empty()) {
+      ss << "netsplit zone preferences are already empty";
+      err = 0;
+      goto reply_no_propose;
+    }
+    pending_map.netsplit_zone_preferences.clear();
+    pending_map.last_changed = ceph_clock_now();
+    ss << "cleared netsplit zone preferences";
   } else if (prefix == "mon set_location") {
     if (!mon.get_quorum_mon_features().contains_all(
 				        ceph::features::mon::FEATURE_PINGING)) {
