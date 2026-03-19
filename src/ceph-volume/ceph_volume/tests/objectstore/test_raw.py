@@ -93,6 +93,54 @@ class TestRaw:
         assert self.raw_bs.osd_mkfs.called
         assert self.raw_bs.prepare_dmcrypt.called
 
+    @patch('ceph_volume.objectstore.raw.nvme_utils.preformat', return_value=True)
+    @patch('ceph_volume.objectstore.raw.prepare_utils.create_id')
+    @patch('ceph_volume.objectstore.raw.system.generate_uuid')
+    def test_prepare_sets_discard_flag_after_nvme_format(self,
+                                                         m_generate_uuid,
+                                                         m_create_id,
+                                                         m_nvme,
+                                                         is_root,
+                                                         factory):
+        m_generate_uuid.return_value = 'fake-uuid'
+        m_create_id.return_value = MagicMock()
+        self.raw_bs.prepare_dmcrypt = MagicMock()
+        self.raw_bs.prepare_osd_req = MagicMock()
+        self.raw_bs.osd_mkfs = MagicMock()
+        args = factory(no_tmpfs=True, crush_device_class=None)
+        args.data = '/dev/nvme0n1'
+        self.raw_bs.args = args
+        self.raw_bs.block_device_path = args.data
+        self.raw_bs.secrets = dict()
+        self.raw_bs.encrypted = False
+        self.raw_bs.prepare()
+        assert self.raw_bs.skip_mkfs_discard is True
+        m_nvme.assert_called_once_with(args.data)
+
+    @patch('ceph_volume.objectstore.raw.nvme_utils.preformat', return_value=False)
+    @patch('ceph_volume.objectstore.raw.prepare_utils.create_id')
+    @patch('ceph_volume.objectstore.raw.system.generate_uuid')
+    def test_prepare_keeps_discard_when_no_nvme_format(self,
+                                                       m_generate_uuid,
+                                                       m_create_id,
+                                                       m_nvme,
+                                                       is_root,
+                                                       factory):
+        m_generate_uuid.return_value = 'fake-uuid'
+        m_create_id.return_value = MagicMock()
+        self.raw_bs.prepare_dmcrypt = MagicMock()
+        self.raw_bs.prepare_osd_req = MagicMock()
+        self.raw_bs.osd_mkfs = MagicMock()
+        args = factory(no_tmpfs=True, crush_device_class=None)
+        args.data = '/dev/nvme0n1'
+        self.raw_bs.args = args
+        self.raw_bs.block_device_path = args.data
+        self.raw_bs.secrets = dict()
+        self.raw_bs.encrypted = False
+        self.raw_bs.prepare()
+        assert self.raw_bs.skip_mkfs_discard is False
+        m_nvme.assert_called_once_with(args.data)
+
     @patch('ceph_volume.conf.cluster', 'ceph')
     @patch('ceph_volume.objectstore.raw.prepare_utils.link_wal')
     @patch('ceph_volume.objectstore.raw.prepare_utils.link_db')
