@@ -22,7 +22,7 @@ add_subdirectory(lrc)
 add_subdirectory(shec)
 add_subdirectory(clay)
 
-if(HAVE_NASM_X64_AVX2 OR HAVE_ARMV8_SIMD)
+if(HAVE_NASM_X64_AVX2 OR HAVE_ARMV8_SIMD OR HAS_ALTIVEC)
   set(WITH_EC_ISA_PLUGIN TRUE CACHE BOOL "")
 endif()
 
