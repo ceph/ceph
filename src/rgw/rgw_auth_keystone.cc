@@ -172,7 +172,8 @@ TokenEngine::get_creds_info(const TokenEngine::token_envelope_t& token
     token.get_user_name(),
     TYPE_KEYSTONE,
     std::move(keystone_scope),
-    std::move(role_names)
+    std::move(role_names),
+    token.get_user_id()
   };
 }
 
@@ -689,7 +690,8 @@ EC2Engine::get_creds_info(const EC2Engine::token_envelope_t& token,
     token.get_user_name(),
     TYPE_KEYSTONE,
     std::move(keystone_scope),
-    std::move(role_names)
+    std::move(role_names),
+    token.get_user_id()
   };
 }
 
