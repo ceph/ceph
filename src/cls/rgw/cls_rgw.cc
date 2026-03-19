@@ -2267,6 +2267,19 @@ static int rgw_bucket_read_olh_log(cls_method_context_t hctx, bufferlist *in, bu
     op_ret.is_truncated = (iter != log.end());
   }
 
+  // this is for backward compatibility
+  if (!op.get_stales) {
+    auto iter = op_ret.log.begin();
+    while (iter != op_ret.log.end()) {
+      std::erase_if(iter->second, [](const auto& e) { return e.op == CLS_RGW_OLH_OP_STALE; });
+      if (iter->second.empty()) {
+        iter = op_ret.log.erase(iter);
+      } else {
+        ++iter;
+      }
+    }
+  }
+
   encode(op_ret, *out);
 
   return 0;
