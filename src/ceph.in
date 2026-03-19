@@ -29,6 +29,7 @@ import stat
 import sys
 import time
 import platform
+import uuid
 
 from typing import Dict, List, Sequence, Tuple
 
@@ -593,6 +594,7 @@ def do_command(parsed_args, target, cmdargs, sigdict, inbuf, verbose):
     # Set extra options for polling commands only:
     if valid_dict.get('poll', False):
         valid_dict['width'] = Termsize().cols
+        valid_dict['session_id'] = str(uuid.uuid4())
     while True:
         try:
             # Only print the header for polling commands
