@@ -482,6 +482,29 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_lc_ordered_list_threshold
+  type: uint
+  level: dev
+  desc: Threshold for enabling ordered listing in lifecycle processing.
+  long_desc: When bucket shard count is below this threshold, lifecycle processing will
+    use ordered listing for better performance. Above this threshold, unordered listing
+    is used to avoid excessive OSD requests. A value of 0 disables ordered listing entirely.
+  default: 500
+  min: 0
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_lc_list_cnt
+  type: uint
+  level: dev
+  desc: The count of number of objects in per listing of lc processing from each bucket.
+  long_desc: Number of objects that will be requested when performing a listing request
+    of a bucket for lifecycle processing.
+  default: 1000
+  min: 100
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_restore_debug_interval
   type: int
   level: dev
