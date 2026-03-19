@@ -585,6 +585,114 @@ def test_filterable_metadata_keys():
 
 
 @pytest.mark.index_test
+def test_filterable_metadata_list_keys():
+    """Test filterableMetadataKeys with list types: StringList, NumberList, BooleanList."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-list-index'
+    dimension = 4
+    filterable_keys = [
+        {'name': 'genre', 'type': 'String'},
+        {'name': 'tags', 'type': 'StringList'},
+        {'name': 'scores', 'type': 'NumberList'},
+        {'name': 'flags', 'type': 'BooleanList'}
+    ]
+    result = conn.create_index(
+        vectorBucketName=bucket_name, indexName=index_name,
+        dataType='float32', dimension=dimension, distanceMetric='cosine',
+        metadataConfiguration={
+            'filterableMetadataKeys': filterable_keys
+        })
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # verify filterableMetadataKeys with list types are returned on GetIndex
+    result = conn.get_index(vectorBucketName=bucket_name, indexName=index_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    returned_filterable = result['index']['metadataConfiguration'].get('filterableMetadataKeys', [])
+    assert len(returned_filterable) == len(filterable_keys), \
+        f"expected {len(filterable_keys)} filterable keys but got {len(returned_filterable)}"
+    for rk in returned_filterable:
+        expected = next(fk for fk in filterable_keys if fk['name'] == rk['name'])
+        assert rk['type'] == expected['type'], \
+            f"expected type {expected['type']} for {rk['name']} but got {rk['type']}"
+
+    # put vectors with list-type metadata
+    vectors = [
+        {
+            'key': 'vec-0',
+            'data': generate_data(dimension, 0),
+            'metadata': json.dumps({
+                'tags': ['rock', 'pop'],
+                'scores': [1.5, 2.5, 3.5],
+                'flags': [True, False, True]
+            })
+        },
+        {
+            'key': 'vec-1',
+            'data': generate_data(dimension, 1),
+            'metadata': json.dumps({
+                'genre': 'jazz',
+                'tags': ['jazz'],
+                'flags': [False]
+            })
+        },
+        {
+            'key': 'vec-2',
+            'data': generate_data(dimension, 2),
+            'metadata': json.dumps({
+                'description': 'no list keys here'
+            })
+        },
+        {
+            'key': 'vec-3',
+            'data': generate_data(dimension, 3),
+        },
+    ]
+
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # verify vectors can be retrieved with correct metadata
+    all_keys = [f'vec-{i}' for i in range(4)]
+    result = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                             keys=all_keys, returnMetadata=True)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == 4
+
+    for vector in result['vectors']:
+        key = vector['key']
+        idx = int(key.split('-')[1])
+        if idx == 0:
+            md = json.loads(vector['metadata'])
+            assert md['tags'] == ['rock', 'pop'], f"{key} tags mismatch"
+            assert md['scores'] == [1.5, 2.5, 3.5], f"{key} scores mismatch"
+            assert md['flags'] == [True, False, True], f"{key} flags mismatch"
+        elif idx == 1:
+            md = json.loads(vector['metadata'])
+            assert md['genre'] == 'jazz', f"{key} genre mismatch"
+            assert md['tags'] == ['jazz'], f"{key} tags mismatch"
+            assert 'scores' not in md, f"{key} should not have scores"
+            assert md['flags'] == [False], f"{key} flags mismatch"
+        elif idx == 2:
+            md = json.loads(vector['metadata'])
+            assert 'genre' not in md, f"{key} should not have genre"
+            assert 'tags' not in md, f"{key} should not have tags"
+            assert 'scores' not in md, f"{key} should not have scores"
+            assert 'flags' not in md, f"{key} should not have flags"
+            assert md['description'] == 'no list keys here'
+        else:
+            assert 'metadata' not in vector, f"{key} should not have metadata"
+
+    log.info('test_filterable_metadata_list_keys: verified list-type filterable metadata round-trip')
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+@pytest.mark.index_test
 def test_delete_index():
     conn = connection()
     bucket_name = gen_bucket_name()
@@ -1282,8 +1390,6 @@ def test_list_vectors_with_metadata():
         assert 'metadata' not in vector, \
             f"vector {vector['key']} should not have 'metadata' field when returnMetadata=False"
 
-    log.info('test_list_vectors_with_metadata: verified metadata in list_vectors')
-
     # cleanup
     _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
 
@@ -1328,8 +1434,6 @@ def test_query_vectors_with_metadata():
     for vector in result['vectors']:
         assert 'metadata' not in vector, \
             f"vector {vector['key']} should not have 'metadata' field when returnMetadata=False"
-
-    log.info('test_query_vectors_with_metadata: verified metadata in query_vectors')
 
     # cleanup
     _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)

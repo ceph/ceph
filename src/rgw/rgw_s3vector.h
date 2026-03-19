@@ -31,6 +31,9 @@ enum class FilterableMetadataType {
   STRING,
   NUMBER,
   BOOLEAN,
+  STRING_LIST,
+  NUMBER_LIST,
+  BOOLEAN_LIST,
 };
 
 struct filterable_metadata_key_t {

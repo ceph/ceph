@@ -36,7 +36,10 @@
             "enum":[
                 "String",
                 "Number",
-                "Boolean"
+                "Boolean",
+                "StringList",
+                "NumberList",
+                "BooleanList"
             ]
         }
     }

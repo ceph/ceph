@@ -259,6 +259,9 @@ namespace rgw::s3vector {
       case FilterableMetadataType::STRING: ::encode_json("type", "String", f); break;
       case FilterableMetadataType::NUMBER: ::encode_json("type", "Number", f); break;
       case FilterableMetadataType::BOOLEAN: ::encode_json("type", "Boolean", f); break;
+      case FilterableMetadataType::STRING_LIST: ::encode_json("type", "StringList", f); break;
+      case FilterableMetadataType::NUMBER_LIST: ::encode_json("type", "NumberList", f); break;
+      case FilterableMetadataType::BOOLEAN_LIST: ::encode_json("type", "BooleanList", f); break;
     }
   }
 
@@ -272,8 +275,14 @@ namespace rgw::s3vector {
       type = FilterableMetadataType::NUMBER;
     } else if (type_str == "Boolean") {
       type = FilterableMetadataType::BOOLEAN;
+    } else if (type_str == "StringList") {
+      type = FilterableMetadataType::STRING_LIST;
+    } else if (type_str == "NumberList") {
+      type = FilterableMetadataType::NUMBER_LIST;
+    } else if (type_str == "BooleanList") {
+      type = FilterableMetadataType::BOOLEAN_LIST;
     } else {
-      throw JSONDecoder::err(fmt::format("invalid filterable metadata type: '{}'. Must be String, Number, or Boolean", type_str));
+      throw JSONDecoder::err(fmt::format("invalid filterable metadata type: '{}'. Must be String, Number, Boolean, StringList, NumberList, or BooleanList", type_str));
     }
   }
 
@@ -476,6 +485,9 @@ namespace rgw::s3vector {
       case FilterableMetadataType::STRING: return arrow::utf8();
       case FilterableMetadataType::NUMBER: return arrow::float64();
       case FilterableMetadataType::BOOLEAN: return arrow::boolean();
+      case FilterableMetadataType::STRING_LIST: return arrow::list(arrow::utf8());
+      case FilterableMetadataType::NUMBER_LIST: return arrow::list(arrow::float64());
+      case FilterableMetadataType::BOOLEAN_LIST: return arrow::list(arrow::boolean());
     }
     return arrow::utf8();
   }
@@ -1177,6 +1189,18 @@ namespace rgw::s3vector {
         case FilterableMetadataType::BOOLEAN:
           fb.builder = std::make_unique<arrow::BooleanBuilder>();
           break;
+        case FilterableMetadataType::STRING_LIST:
+          fb.builder = std::make_unique<arrow::ListBuilder>(
+              arrow::default_memory_pool(), std::make_unique<arrow::StringBuilder>());
+          break;
+        case FilterableMetadataType::NUMBER_LIST:
+          fb.builder = std::make_unique<arrow::ListBuilder>(
+              arrow::default_memory_pool(), std::make_unique<arrow::DoubleBuilder>());
+          break;
+        case FilterableMetadataType::BOOLEAN_LIST:
+          fb.builder = std::make_unique<arrow::ListBuilder>(
+              arrow::default_memory_pool(), std::make_unique<arrow::BooleanBuilder>());
+          break;
       }
       filterable_builders.push_back(std::move(fb));
     }
@@ -1213,46 +1237,96 @@ namespace rgw::s3vector {
       }
 
       // parse metadata JSON and populate filterable columns
+      bool all_null = true;
       if (!filterable_builders.empty() && !vector.metadata.empty()) {
         JSONParser parser;
         if (parser.parse(vector.metadata.c_str(), vector.metadata.size())) {
+          all_null = false;
           for (auto& fb : filterable_builders) {
+            bool is_list_type = false;
+            switch (fb.type) {
+              case FilterableMetadataType::STRING:
+              case FilterableMetadataType::NUMBER:
+              case FilterableMetadataType::BOOLEAN:
+                break;
+              case FilterableMetadataType::STRING_LIST:
+              case FilterableMetadataType::NUMBER_LIST:
+              case FilterableMetadataType::BOOLEAN_LIST:
+                is_list_type = true;
+                break;
+            }
+            std::vector<std::string> values;
             std::string value_str;
             try {
-              JSONDecoder::decode_json(fb.name.c_str(), value_str, &parser);
-            } catch (const JSONDecoder::err& e) {
-              ldpp_dout(dpp, 5) << "WARNING: s3vector failed to decode metadata field '" << fb.name << "' for key: " << vector.key << ". error: " << e.what() << dendl;
-            }
-            if (!value_str.empty()) {
-              switch (fb.type) {
-                case FilterableMetadataType::STRING:
-                  static_cast<arrow::StringBuilder*>(fb.builder.get())->Append(value_str).ok();
-                  break;
-                case FilterableMetadataType::NUMBER: {
-                  try {
-                    static_cast<arrow::DoubleBuilder*>(fb.builder.get())->Append(std::stod(value_str)).ok();
-                  } catch (...) {
-                    fb.builder->AppendNull().ok();
-                  }
-                  break;
-                }
-                case FilterableMetadataType::BOOLEAN: {
-                  bool bval = (value_str == "true" || value_str == "1");
-                  static_cast<arrow::BooleanBuilder*>(fb.builder.get())->Append(bval).ok();
-                  break;
-                }
+              if (is_list_type) {
+                JSONDecoder::decode_json(fb.name.c_str(), values, &parser);
+              } else {
+                JSONDecoder::decode_json(fb.name.c_str(), value_str, &parser);
               }
-            } else {
+            } catch (const JSONDecoder::err& e) {
+              ldpp_dout(dpp, 5) << "WARNING: s3vector failed to decode metadata field '" <<
+                fb.name << "' for key: " << vector.key << ". error: " << e.what() << dendl;
+            }
+            if (values.empty() && value_str.empty()) {
+              // either failed to decode or field doesn't exist, in both cases we append null
               fb.builder->AppendNull().ok();
+              continue;
+            }
+            switch (fb.type) {
+              case FilterableMetadataType::STRING:
+                static_cast<arrow::StringBuilder*>(fb.builder.get())->Append(value_str).ok();
+                break;
+              case FilterableMetadataType::NUMBER:
+                try {
+                  static_cast<arrow::DoubleBuilder*>(fb.builder.get())->Append(std::stod(value_str)).ok();
+                } catch (const std::logic_error&) {
+                  fb.builder->AppendNull().ok();
+                }
+                break;
+              case FilterableMetadataType::BOOLEAN: {
+                const bool bval = (value_str == "true" || value_str == "1");
+                static_cast<arrow::BooleanBuilder*>(fb.builder.get())->Append(bval).ok();
+                break;
+              }
+              case FilterableMetadataType::STRING_LIST: {
+                auto* list_builder = static_cast<arrow::ListBuilder*>(fb.builder.get());
+                auto* value_builder = static_cast<arrow::StringBuilder*>(list_builder->value_builder());
+                list_builder->Append().ok();
+                for (const auto& v : values) {
+                  value_builder->Append(v).ok();
+                }
+                break;
+              }
+              case FilterableMetadataType::NUMBER_LIST: {
+                auto* list_builder = static_cast<arrow::ListBuilder*>(fb.builder.get());
+                auto* value_builder = static_cast<arrow::DoubleBuilder*>(list_builder->value_builder());
+                list_builder->Append().ok();
+                for (const auto& v : values) {
+                  try {
+                    value_builder->Append(std::stod(v)).ok();
+                  } catch (const std::logic_error&) {
+                    value_builder->AppendNull().ok();
+                  }
+                }
+                break;
+              }
+              case FilterableMetadataType::BOOLEAN_LIST: {
+                auto* list_builder = static_cast<arrow::ListBuilder*>(fb.builder.get());
+                auto* value_builder = static_cast<arrow::BooleanBuilder*>(list_builder->value_builder());
+                list_builder->Append().ok();
+                for (const auto& v : values) {
+                  value_builder->Append(v == "true" || v == "1").ok();
+                }
+                break;
+              }
             }
           }
         } else {
           ldpp_dout(dpp, 5) << "WARNING: s3vector failed to parse metadata JSON for key: " << vector.key << dendl;
-          for (auto& fb : filterable_builders) {
-            fb.builder->AppendNull().ok();
-          }
         }
-      } else if (!filterable_builders.empty()) {
+      }
+
+      if (all_null) {
         for (auto& fb : filterable_builders) {
           fb.builder->AppendNull().ok();
         }
