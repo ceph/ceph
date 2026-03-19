@@ -38,6 +38,7 @@ $grid-breakpoints: (
 @import './src/styles/ceph-custom/icons';
 @import './src/styles/ceph-custom/navs';
 @import './src/styles/ceph-custom/toast';
+@import './src/styles/ceph-custom/spacings';
 
 /* If javascript is disabled. */
 .noscript {
@@ -210,4 +211,16 @@ input:-webkit-autofill:active {
   box-shadow: 0 0 0 0 $white inset;
   -webkit-text-fill-color: inherit;
   transition: background-color 5000s ease-in-out 0s;
+}
+
+.cds--progress-bar__track {
+  background-color: colors.$gray-30;
+}
+
+.cds--progress-bar__bar {
+  background-color: var(--cds-primary);
+}
+
+.border-subtle {
+  border: 1px solid var(--cds-border-subtle);
 }

@@ -20,6 +20,7 @@ import { MgrDashboardSummaryPipe } from './mgr-dashboard-summary.pipe';
 import { MonSummaryPipe } from './mon-summary.pipe';
 import { osdDashboardSummaryPipe } from './osd-dashboard-summary.pipe';
 import { InputModule, ModalModule, SelectModule, ToggletipModule } from 'carbon-components-angular';
+import { OverviewComponent } from '../overview/overview.component';
 
 @NgModule({
   imports: [
@@ -35,7 +36,8 @@ import { InputModule, ModalModule, SelectModule, ToggletipModule } from 'carbon-
     ToggletipModule,
     ModalModule,
     InputModule,
-    SelectModule
+    SelectModule,
+    OverviewComponent
   ],
   declarations: [
     HealthComponent,

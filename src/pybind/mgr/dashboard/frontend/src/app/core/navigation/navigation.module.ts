@@ -45,6 +45,20 @@ import AdminIcon from '@carbon/icons/es/network--admin-control/20';
 import LockedIcon from '@carbon/icons/es/locked/16';
 import LogoutIcon from '@carbon/icons/es/logout/16';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import CheckmarkFilledIcon from '@carbon/icons/es/checkmark--filled/16';
+import ErrorFilledIcon from '@carbon/icons/es/error--filled/16';
+import InformationFilledIcon from '@carbon/icons/es/information--filled/16';
+import WarningFilledIcon from '@carbon/icons/es/warning--filled/16';
+import NotificationFilledIcon from '@carbon/icons/es/notification--filled/16';
+import CircleDashIcon20 from '@carbon/icons/es/circle-dash/20';
+import CheckmarkOutlineIcon20 from '@carbon/icons/es/checkmark--outline/20';
+import ArrowRightIcon from '@carbon/icons/es/arrow--right/20';
+import IbmCloudBareMetalServerIcon from '@carbon/icons/es/ibm-cloud--bare-metal-server/20';
+import IbmCloudDedicatedHostIcon from '@carbon/icons/es/ibm-cloud--dedicated-host/20';
+import VmdkDiskIcon from '@carbon/icons/es/vmdk-disk/20';
+
+import CloseIcon from '@carbon/icons/es/close/16';
+
 
 @NgModule({
   imports: [
@@ -94,8 +108,20 @@ export class NavigationModule {
       FileIcon,
       ObservabilityIcon,
       AdminIcon,
+      IbmCloudBareMetalServerIcon,
+      IbmCloudDedicatedHostIcon,
       LockedIcon,
-      LogoutIcon
+      LogoutIcon,
+      CheckmarkFilledIcon,
+      ErrorFilledIcon,
+      InformationFilledIcon,
+      WarningFilledIcon,
+      NotificationFilledIcon,
+      CloseIcon,
+      CircleDashIcon20,
+      CheckmarkOutlineIcon20,
+      ArrowRightIcon,
+      VmdkDiskIcon
     ]);
   }
 }

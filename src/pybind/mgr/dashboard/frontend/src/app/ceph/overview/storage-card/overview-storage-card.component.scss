@@ -1,0 +1,47 @@
+.overview-storage-card {
+  &-dropdown {
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-end;
+
+    .cds--label {
+      padding-right: var(--cds-spacing-03);
+    }
+
+    .cds--dropdown {
+      flex: 0 0 40%;
+      min-width: 130px;
+    }
+  }
+
+  &-usage-text {
+    display: flex;
+    justify-content: space-between;
+  }
+
+  // Hiding the native chart title
+  &-chart {
+    .meter-title {
+      display: none !important;
+    }
+
+    .spacer {
+      display: none !important;
+    }
+  }
+
+  .cds--tag--gray {
+    background-color: #fddc69;
+    color: var(--cds-text-secondary);
+  }
+}
+
+.consumption-stats-wrapper {
+  display: inline-flex;
+  width: fit-content;
+}
+
+.consumption-stats-wrapper cds-tooltip-definition {
+  display: inline-block;
+  width: auto;
+}

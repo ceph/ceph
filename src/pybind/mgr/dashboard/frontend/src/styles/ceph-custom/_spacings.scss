@@ -8,8 +8,13 @@
   padding-top: layout.$spacing-03;
 }
 
-.cds-ml-3 {
-  margin-left: layout.$spacing-03;
+.cds-pr-8 {
+  padding-right: layout.$spacing-08;
+}
+
+// MARGINS
+.cds-m-0 {
+  margin: 0;
 }
 
 .cds-mr-3 {
@@ -24,10 +29,62 @@
   margin-bottom: layout.$spacing-03;
 }
 
+.cds-mb-4 {
+  margin-bottom: layout.$spacing-04;
+}
+
 .cds-mb-5 {
   margin-bottom: layout.$spacing-05;
 }
 
+.cds-mt-3 {
+  margin-top: layout.$spacing-03;
+}
+
+.cds-mt-1 {
+  margin-top: layout.$spacing-01;
+}
+
+.cds-mt-4 {
+  margin-top: layout.$spacing-04;
+}
+
 .cds-mt-5 {
   margin-top: layout.$spacing-05;
+}
+
+.cds-mt-6 {
+  margin-top: layout.$spacing-06;
+}
+
+.cds-ml-2 {
+  margin-left: layout.$spacing-02;
+}
+
+.cds-ml-3 {
+  margin-left: layout.$spacing-03;
+}
+
+.cds-ml-5 {
+  margin-left: layout.$spacing-05;
+}
+
+.cds-mr-1 {
+  margin-right: layout.$spacing-01;
+}
+
+.cds-mr-2 {
+  margin-right: layout.$spacing-02;
+}
+
+.cds-mr-3 {
+  margin-right: layout.$spacing-03;
+}
+
+.cds-mr-5 {
+  margin-right: layout.$spacing-05;
+}
+
+.cds-pt-6 {
+  padding-top: layout.$spacing-06;
 }

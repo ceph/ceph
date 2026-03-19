@@ -1,3 +1,5 @@
+@use '@carbon/layout';
+
 .container-fluid {
   align-items: flex-start;
   display: flex;
@@ -19,4 +21,12 @@ cd-osd-form {
   ::ng-deep .accordion {
     margin-left: -1.5rem;
   }
+}
+
+.storage-requirements-header {
+  border-bottom: 0;
+}
+
+.ceph-logo {
+  width: 7%;
 }
