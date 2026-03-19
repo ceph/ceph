@@ -571,14 +571,15 @@ static void dump_container_metadata(req_state *s,
     dump_header(s, "X-Container-Bytes-Used-Actual", stats->size_rounded);
   }
 
+  bool is_owner = s->system_request || (s->auth.identity && s->bucket && s->auth.identity->is_owner_of(s->bucket->get_info().owner));
   if (rgw::sal::Object::empty(s->object.get())) {
     std::string read_acl, write_acl;
     rgw::swift::format_container_acls(s->bucket_acl, read_acl, write_acl);
 
-    if (read_acl.size()) {
+    if (read_acl.size() && is_owner) {
       dump_header(s, "X-Container-Read", read_acl);
     }
-    if (write_acl.size()) {
+    if (write_acl.size() && is_owner) {
       dump_header(s, "X-Container-Write", write_acl);
     }
     if (!s->bucket->get_placement_rule().name.empty()) {
