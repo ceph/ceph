@@ -611,6 +611,18 @@ namespace rgw::sal {
     return 0;
   }
 
+  int MPDBSerializer::try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y)
+  {
+    locked = true;
+    return 0;
+  }
+
+  int MPDBSerializer::unlock(const DoutPrefixProvider* dpp, optional_yield y)
+  {
+    clear_locked();
+    return 0;
+  }
+
   std::unique_ptr<MPSerializer> DBObject::get_serializer(const DoutPrefixProvider *dpp,
 							 optional_yield y,
 							 const std::string& lock_name)

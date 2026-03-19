@@ -629,8 +629,8 @@ protected:
   public:
     MPDBSerializer(const DoutPrefixProvider *dpp, DBStore* store, DBObject* obj, const std::string& lock_name) {}
 
-    virtual int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) override {return 0; }
-    virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override { return 0;}
+    virtual int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) override;
+    virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override;
   };
 
   class DBAtomicWriter : public StoreWriter {
