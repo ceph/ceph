@@ -192,7 +192,7 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_CRYPT_DATAKEY  RGW_ATTR_CRYPT_PREFIX "datakey"
 #define RGW_ATTR_CRYPT_PARTS    RGW_ATTR_CRYPT_PREFIX "part-lengths"
 #define RGW_ATTR_CRYPT_PART_NUMS RGW_ATTR_CRYPT_PREFIX "part-numbers"
-#define RGW_ATTR_CRYPT_NONCE    RGW_ATTR_CRYPT_PREFIX "nonce"
+#define RGW_ATTR_CRYPT_SALT     RGW_ATTR_CRYPT_PREFIX "salt"
 #define RGW_ATTR_CRYPT_ORIGINAL_SIZE RGW_ATTR_CRYPT_PREFIX "original-size"
 
 /* SSE-S3 Encryption Attributes */

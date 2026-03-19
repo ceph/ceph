@@ -83,7 +83,7 @@ static inline const gcm_key_data* get_cached_gcm_key(const unsigned char* key)
 }
 
 bool ISALCryptoAccel::gcm_encrypt(unsigned char* out, const unsigned char* in, size_t size,
-                                   const unsigned char (&iv)[AES_GCM_NONCE_SIZE],
+                                   const unsigned char (&iv)[AES_GCM_IV_SIZE],
                                    const unsigned char (&key)[AES_256_KEYSIZE],
                                    const unsigned char* aad, size_t aad_len,
                                    unsigned char* tag,
@@ -109,7 +109,7 @@ bool ISALCryptoAccel::gcm_encrypt(unsigned char* out, const unsigned char* in, s
 }
 
 bool ISALCryptoAccel::gcm_decrypt(unsigned char* out, const unsigned char* in, size_t size,
-                                   const unsigned char (&iv)[AES_GCM_NONCE_SIZE],
+                                   const unsigned char (&iv)[AES_GCM_IV_SIZE],
                                    const unsigned char (&key)[AES_256_KEYSIZE],
                                    const unsigned char* aad, size_t aad_len,
                                    const unsigned char* tag,
