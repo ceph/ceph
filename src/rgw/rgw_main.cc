@@ -9,6 +9,7 @@
 #include "common/errno.h"
 #include "common/Timer.h"
 #include "common/TracepointProvider.h"
+#include "perfglue/heap_profiler.h"
 #include "rgw_main.h"
 #include "rgw_signal.h"
 #include "rgw_common.h"
@@ -103,6 +104,7 @@ int main(int argc, char *argv[])
 
   auto cct = rgw_global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
 			     CODE_ENVIRONMENT_DAEMON, flags);
+  ceph_heap_profiler_init();
 
   DoutPrefix dp(cct.get(), dout_subsys, "rgw main: ");
   rgw::AppMain main(&dp);
