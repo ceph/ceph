@@ -1,0 +1,27 @@
+meta:
+- desc: |
+   randomly kill and revive osd
+   small chance to increase the number of pgs
+overrides:
+  ceph:
+    log-ignorelist:
+    - but it is still running
+    - wrongly marked me down
+    - objects unfound and apparently lost
+    - log bound mismatch
+    ### ref: https://tracker.ceph.com/issues/40251
+    - failed to encode map
+tasks:
+- parallel:
+  - stress-tasks
+stress-tasks:
+- thrashosds:
+    timeout: 1200
+    chance_pgnum_grow: 1
+    chance_pgpnum_fix: 1
+    chance_thrash_cluster_full: 0
+    chance_thrash_pg_upmap: 0
+    chance_thrash_pg_upmap_items: 0
+    disable_objectstore_tool_tests: true
+    chance_force_recovery: 0
+- print: "**** done thrashosds 3-thrash"
