@@ -2415,6 +2415,11 @@ void ceph_free_snap_info_buffer(struct snap_info *snap_info);
 int ceph_get_perf_counters(struct ceph_mount_info *cmount, char **perf_dump);
 
 int ceph_fcopyfile(struct ceph_mount_info *cmount, const char *spath, const char *dpath, mode_t mode);
+
+#if __GNUC__ >= 4
+  #pragma GCC diagnostic pop
+#endif
+
 #ifdef __cplusplus
 }
 #endif
