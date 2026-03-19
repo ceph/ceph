@@ -38,3 +38,9 @@ target_link_libraries(crimson-objectstore-tool
   crimson
   crimson-os)
 install(TARGETS crimson-objectstore-tool DESTINATION bin)
+
+add_executable(crimson-header-tool
+  header_tool.cc)
+target_link_libraries(crimson-header-tool
+  crimson-seastore)
+install(TARGETS crimson-header-tool DESTINATION bin)
