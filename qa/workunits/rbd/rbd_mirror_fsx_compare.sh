@@ -6,6 +6,7 @@
 #
 
 set -ex
+set -o pipefail
 
 . $(dirname $0)/rbd_mirror_helpers.sh
 
@@ -14,11 +15,12 @@ trap 'cleanup $?' INT TERM EXIT
 setup_tempdir
 
 testlog "TEST: wait for all images"
-image_count=$(rbd --cluster ${CLUSTER1} --pool ${POOL} ls | wc -l)
+expected_image_count=$(rbd --cluster ${CLUSTER1} --pool ${POOL} ls | wc -l)
 retrying_seconds=0
 sleep_seconds=10
 while [ ${retrying_seconds} -le 7200 ]; do
-    [ $(rbd --cluster ${CLUSTER2} --pool ${POOL} ls | wc -l) -ge ${image_count} ] && break
+    actual_image_count=$(rbd --cluster ${CLUSTER2} --pool ${POOL} ls | wc -l)
+    [ ${actual_image_count} -ge ${expected_image_count} ] && break
     sleep ${sleep_seconds}
     retrying_seconds=$(($retrying_seconds+${sleep_seconds}))
 done
