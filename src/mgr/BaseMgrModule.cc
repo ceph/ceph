@@ -1480,7 +1480,39 @@ ceph_get_daemon_health_metrics(BaseMgrModule *self, PyObject *args)
   return self->py_modules->get_daemon_health_metrics();
 }
 
+static PyObject*
+ceph_exit(BaseMgrModule *self, PyObject *args, PyObject *kwargs)
+{
+  int status = 0;
+  int hard = 0;
+  static const char *keywords[] = { "status", "hard", nullptr };
+
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "i|p:ceph_exit",
+        const_cast<char**>(keywords), &status, &hard)) {
+    return nullptr;
+  }
+
+
+  if (hard) {
+    // Immediate OS-level termination via syscall exit_group or similar.
+    // XXX DO NOT RELEASE THE GIL
+    ::_exit(status);
+  } else {
+    // Standard C library exit (runs atexit handlers, flushes stdio)
+    // It is good practice to release the GIL before abruptly terminating the C process.
+    PyThreadState *tstate = PyEval_SaveThread();
+    std::exit(status);
+    PyEval_RestoreThread(tstate);
+  }
+  ceph_abort();
+
+  Py_RETURN_NONE;
+}
+
 PyMethodDef BaseMgrModule_methods[] = {
+  {"_ceph_exit", (PyCFunction)ceph_exit, METH_VARARGS | METH_KEYWORDS,
+   "Exit the ceph-mgr process directly, bypassing Python's sys/os modules."},
+
   {"_ceph_get", (PyCFunction)ceph_state_get, METH_VARARGS,
    "Get a cluster object"},
 
