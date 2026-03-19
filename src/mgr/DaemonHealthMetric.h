@@ -4,7 +4,9 @@
 #pragma once
 
 #include <cstdint>
+#include <list>
 #include <ostream>
+#include <string>
 #include "common/Formatter.h"
 #include "include/denc.h"
 #include "common/Formatter.h"
