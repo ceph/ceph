@@ -16,7 +16,7 @@ try:
 except ImportError:
     pass  # For typing only
 
-logger = logging.getLogger('ceph_service')
+logger = logging.getLogger(__name__)
 
 
 class SendCommandError(rados.Error):

@@ -20,7 +20,7 @@ from ..tools import configure_cors
 from . import APIDoc, APIRouter, CreatePermission, DeletePermission, Endpoint, \
     EndpointDoc, ReadPermission, RESTController, UIRouter, UpdatePermission
 
-logger = logging.getLogger('controllers.multi_cluster')
+logger = logging.getLogger(__name__)
 
 
 @APIRouter('/multi-cluster', Scope.CONFIG_OPT)
