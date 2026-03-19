@@ -436,6 +436,7 @@ void cls_rgw_get_olh_log(librados::ObjectReadOperation& op, const cls_rgw_obj_ke
   call.olh = olh;
   call.ver_marker = ver_marker;
   call.olh_tag = olh_tag;
+  call.get_stales = true;
   encode(call, in);
   op.exec(RGW_CLASS, RGW_BUCKET_READ_OLH_LOG, in, new ClsBucketIndexOpCtx<rgw_cls_read_olh_log_ret>(&log_ret, &op_ret));
 }

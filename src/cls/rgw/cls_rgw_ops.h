@@ -285,21 +285,26 @@ struct rgw_cls_read_olh_log_op
   cls_rgw_obj_key olh;
   uint64_t ver_marker;
   std::string olh_tag;
+  bool get_stales;
 
-  rgw_cls_read_olh_log_op() : ver_marker(0) {}
+  rgw_cls_read_olh_log_op() : ver_marker(0), get_stales(false) {}
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(olh, bl);
     encode(ver_marker, bl);
     encode(olh_tag, bl);
+    encode(get_stales, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(olh, bl);
     decode(ver_marker, bl);
     decode(olh_tag, bl);
+    if (struct_v >= 2) {
+      decode(get_stales, bl);
+    }
     DECODE_FINISH(bl);
   }
   static void generate_test_instances(std::list<rgw_cls_read_olh_log_op *>& o);
