@@ -85,6 +85,22 @@ inline std::ostream& operator<<(
   return os;
 }
 
+inline std::ostream& operator<<(
+  std::ostream& os, const  gw_admin_state_t value) {
+  switch (value) {
+
+  case gw_admin_state_t:: GW_ADMIN_ENABLED:
+    os << "ADMIN_ENABLED";
+    break;
+  case gw_admin_state_t:: GW_ADMIN_DISABLED:
+    os << "ADMIN_DISABLED";
+    break;
+  default:
+    os << "Invalid " << (int)value << " ";
+  }
+  return os;
+}
+
 inline std::ostream& operator<<(std::ostream& os, const SmState value) {
   os << "SM_STATE [ ";
   for (auto& state_itr: value ) {
@@ -188,7 +204,8 @@ inline std::ostream& print_gw_created_t(
     os << " " << state_itr.first <<": " << state_itr.second << ",";
   }
   os << "]\n"<< MODULE_PREFFIX << " entity-addr : " << value.addr_vect
-     << " availability " << value.availability
+     << " availability " << value.availability << " location " << value.location
+     << " admin state " << value.gw_admin_state
      << " full-startup " << value.performed_full_startup  << " ]";
 
   return os;
@@ -228,12 +245,27 @@ inline std::ostream& operator<<(std::ostream& os, const NvmeGwMonStates value) {
   return os;
 }
 
+inline std::ostream& operator<<(std::ostream& os, const LocationStates value) {
+  if(value.size()) os << "\n" << MODULE_PREFFIX;;
+
+  for (auto &locations : value) {
+    os  <<  "location " << locations.first  << " recovering state "
+        << locations.second.failbacks_in_process;
+    os  << "\n"<< MODULE_PREFFIX;
+  }
+  return os;
+}
+
 inline std::ostream& operator<<(std::ostream& os, const NVMeofGwMap value) {
   os <<  "\n" <<  MODULE_PREFFIX << "== NVMeofGwMap [ Created_gws: epoch "
      << value.epoch;
   for (auto& group_gws: value.gw_epoch) {
     os <<  "\n" <<  MODULE_PREFFIX  << "{ " << group_gws.first
        << " } -> GW epoch: " << group_gws.second << " }";
+  }
+  for (auto& group_gws: value.disaster_locations) {
+    os <<  "\n" <<  MODULE_PREFFIX  << "{ " << group_gws.first
+       << " } -> disaster-locations: " << group_gws.second << " }";
   }
   for (auto& group_gws: value.created_gws) {
    os <<  "\n" <<  MODULE_PREFFIX  << "{ " << group_gws.first
@@ -335,10 +367,12 @@ inline  void decode(
   decode(state.gw_map_epoch, bl);
   decode(state.subsystems, bl);
   uint32_t avail;
+  uint64_t last_beacon_seq_number;
   decode(avail, bl);
   state.availability = (gw_availability_t)avail;
   if (struct_v >= 2) {
-    decode(state.last_beacon_seq_number, bl);
+    decode(last_beacon_seq_number, bl);
+    state.last_beacon_seq_number = last_beacon_seq_number;
     decode(state.last_beacon_seq_ooo, bl);
   }
   DECODE_FINISH(bl);
@@ -474,6 +508,9 @@ inline void encode(const NvmeGwMonStates& gws,  ceph::bufferlist &bl,
   if (HAVE_FEATURE(features, NVMEOFHAMAP)) {
     version = 3;
   }
+  if (HAVE_FEATURE(features, NVMEOF_BEACON_DIFF)) {
+    version = 4;
+  }
   ENCODE_START(version, version, bl);
   dout(20) << "encode NvmeGwMonStates. struct_v: " << (int)version << dendl;
   encode ((uint32_t)gws.size(), bl); // number of gws in the group
@@ -526,6 +563,11 @@ inline void encode(const NvmeGwMonStates& gws,  ceph::bufferlist &bl,
       gw.second.addr_vect.encode(bl, features);
       encode(gw.second.beacon_index, bl);
     }
+    if (version >= 4) {
+      encode((int)gw.second.gw_admin_state, bl);
+      dout(10) << "encode location " << gw.second.location << dendl;
+      encode(gw.second.location, bl);
+    }
   }
   ENCODE_FINISH(bl);
 }
@@ -534,7 +576,7 @@ inline void decode(
   NvmeGwMonStates& gws, ceph::buffer::list::const_iterator &bl) {
   gws.clear();
   uint32_t num_created_gws;
-  DECODE_START(3, bl);
+  DECODE_START(4, bl);
   dout(20) << "decode NvmeGwMonStates. struct_v: " << struct_v << dendl;
   decode(num_created_gws, bl);
   dout(20) << "decode NvmeGwMonStates. num gws  " << num_created_gws << dendl;
@@ -613,6 +655,14 @@ inline void decode(
       decode(gw_created.beacon_index, bl);
       dout(20) << "decoded beacon_index " << gw_created.beacon_index << dendl;
     }
+    if (struct_v >= 4) {
+      dout(20) << "decode admin state and location" << dendl;
+      int admin_state;
+      decode(admin_state, bl);
+      gw_created.gw_admin_state = (gw_admin_state_t)admin_state;
+      decode(gw_created.location, bl);
+      dout(20) << "decoded location " << gw_created.location << dendl;
+    }
 
     gws[gw_name] = gw_created;
   }
@@ -659,6 +709,15 @@ inline void decode(std::map<NvmeGroupKey, epoch_t>& gw_epoch,
     gw_epoch[std::make_pair(pool, group)] = gepoch;
 }
   DECODE_FINISH(bl);
+}
+
+inline void encode(const LocationState &locationstate, ceph::bufferlist &bl) {
+  encode(locationstate.failbacks_in_process, bl);
+}
+
+inline void decode(LocationState &locationstate,
+                  ceph::buffer::list::const_iterator &bl) {
+  decode(locationstate.failbacks_in_process, bl);
 }
 
 inline void encode(
@@ -851,14 +910,6 @@ inline void encode(const BeaconSubsystem& sub,  ceph::bufferlist &bl, uint64_t f
   if (HAVE_FEATURE(features, NVMEOF_BEACON_DIFF)) {
     version = 2;
   }
-  // For legacy encoding, skip deleted subsystems to maintain compatibility
-  if (version == 1 &&
-      sub.change_descriptor != subsystem_change_t::SUBSYSTEM_ADDED) {
-    dout(4) << "encode BeaconSubsystem: skipping subsystem " << sub.nqn
-            << " with change_descriptor " << (int)sub.change_descriptor
-            << " in legacy mode" << dendl;
-    return; // Skip encoding this subsystem entirely
-  }
 
   ENCODE_START(version, version, bl);
   encode(sub.nqn, bl);
@@ -884,6 +935,7 @@ inline void decode(BeaconSubsystem& sub, ceph::buffer::list::const_iterator &bl)
   uint32_t s;
   sub.listeners.clear();
   decode(s, bl);
+  dout(20) << "decode Nlisteners " << s << dendl;
   for (uint32_t i = 0; i < s; i++) {
     BeaconListener ls;
     decode(ls, bl);
