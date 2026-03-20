@@ -143,14 +143,15 @@ static rgw_raw_obj get_owner_buckets_obj(RGWSI_User* svc_user,
 int RadosStore::list_buckets(const DoutPrefixProvider* dpp,
                              const rgw_owner& owner, const std::string& tenant,
                              const std::string& marker, const std::string& end_marker,
-                             uint64_t max, bool need_stats,
-                             BucketList& listing, optional_yield y)
+                             const std::string& prefix, uint64_t max,
+                             bool need_stats, BucketList& listing,
+                             optional_yield y)
 {
   librados::Rados& rados = *getRados()->get_rados_handle();
   const rgw_raw_obj& obj = get_owner_buckets_obj(svc()->user, svc()->zone, owner);
 
   int ret = rgwrados::buckets::list(dpp, y, rados, obj, tenant,
-                                    marker, end_marker, max, listing);
+                                    marker, end_marker, prefix, max, listing);
   if (ret < 0) {
     return ret;
   }

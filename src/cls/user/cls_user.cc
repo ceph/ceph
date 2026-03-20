@@ -311,7 +311,7 @@ static int cls_user_list_buckets(cls_method_context_t hctx, bufferlist *in, buff
   if (max_entries > MAX_ENTRIES)
     max_entries = MAX_ENTRIES;
 
-  string match_prefix;
+  const string& match_prefix = op.prefix;
   cls_user_list_buckets_ret ret;
 
   int rc = cls_cxx_map_get_vals(hctx, from_index, match_prefix, max_entries, &keys, &ret.truncated);

@@ -2943,7 +2943,8 @@ void RGWListBuckets::execute(optional_yield y)
     }
 
     op_ret = driver->list_buckets(this, s->owner.id, s->auth.identity->get_tenant(),
-                                  marker, end_marker, read_count, should_get_stats(), listing, y);
+                                  marker, end_marker, prefix, read_count,
+                                  should_get_stats(), listing, y);
 
     if (op_ret < 0) {
       /* hmm.. something wrong here.. the user was authenticated, so it
@@ -2951,6 +2952,12 @@ void RGWListBuckets::execute(optional_yield y)
       ldpp_dout(this, 10) << "WARNING: failed on list_buckets owner="
 			<< s->owner.id << dendl;
       break;
+    }
+
+    if (!prefix.empty()) {
+      std::erase_if(listing.buckets, [this](const auto& ent) {
+        return !boost::algorithm::starts_with(ent.bucket.name, prefix);
+      });
     }
 
     marker = listing.next_marker;

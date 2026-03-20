@@ -48,8 +48,9 @@ using ::ceph::encode;
 int DaosStore::list_buckets(const DoutPrefixProvider* dpp,
                             const rgw_owner& owner, const std::string& tenant,
                             const string& marker, const string& end_marker,
-                            uint64_t max, bool need_stats, BucketList& buckets,
-                            optional_yield y) {
+                            const string& prefix, uint64_t max, bool need_stats,
+                            BucketList& buckets, optional_yield y) {
+  (void)prefix;
   ldpp_dout(dpp, 20) << "DEBUG: list_user_buckets: marker=" << marker
                      << " end_marker=" << end_marker << " max=" << max << dendl;
   int ret = 0;
