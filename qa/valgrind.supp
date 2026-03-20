@@ -940,4 +940,24 @@
    fun:*ProtocolV2*
    ...
 }
-
+{
+   rocky10_gcc14_mismatch_delete_map_erase
+   Memcheck:Free
+   fun:_Zda*align_val_t*
+   ...
+   fun:*global_init_prefork*
+}
+{
+   rocky10_gcc14_mismatch_delete_map_erase
+   Memcheck:Free
+   fun:_Zda*align_val_t*
+   ...
+   fun:*ceph6common11CephContext*
+}
+{
+   rocky10_gcc14_mismatch_delete_map_erase
+   Memcheck:Free
+   fun:_Zda*align_val_t*
+   ...
+   fun:exit
+}
