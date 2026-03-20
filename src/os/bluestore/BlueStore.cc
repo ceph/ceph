@@ -6602,6 +6602,16 @@ void BlueStore::_init_logger()
     "Slow op count for read wait aio",
     "srwc",
     PerfCountersBuilder::PRIO_USEFUL);
+  b.add_u64_counter(l_bluestore_slow_op_normal_count,
+    "slow_op_normal_count",
+    "Slow Normal op count in BlueStore",
+    "snoc",
+    PerfCountersBuilder::PRIO_USEFUL);
+  b.add_u64_counter(l_bluestore_slow_op_scrub_count,
+    "slow_op_scrub_count",
+    "Slow Scrub op count in BlueStore",
+    "ssoc",
+    PerfCountersBuilder::PRIO_USEFUL);
 
   // Resulting size axis configuration for op histograms, values are in bytes
   PerfHistogramCommon::axis_config_d alloc_hist_x_axis_config{
@@ -18878,8 +18888,10 @@ std::pair<size_t, size_t> BlueStore::_trim_slow_op_event_queue(
         (slow_scrub_op_event_count > cct->_conf->bluestore_slow_scrub_ops_warn_threshold))) {
       if (!slow_op_event_queue.front().second) {
         slow_op_event_count--;
+        logger->dec(l_bluestore_slow_op_normal_count);
       } else {
         slow_scrub_op_event_count--;
+        logger->dec(l_bluestore_slow_op_scrub_count);
       }
       slow_op_event_queue.pop();
   }
@@ -18894,6 +18906,7 @@ void BlueStore::_add_slow_op_event() {
   auto cur_time = mono_clock::now();
   slow_op_event_queue.push({cur_time, false});
   slow_op_event_count++;
+  logger->inc(l_bluestore_slow_op_normal_count);
   _trim_slow_op_event_queue(cur_time);
 }
 
@@ -18905,6 +18918,7 @@ void BlueStore::_add_slow_scrub_op_event() {
   auto cur_time = mono_clock::now();
   slow_op_event_queue.push({cur_time, true});
   slow_scrub_op_event_count++;
+  logger->inc(l_bluestore_slow_op_scrub_count);
   _trim_slow_op_event_queue(cur_time);
 }
 

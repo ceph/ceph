@@ -241,6 +241,8 @@ enum {
   l_bluestore_slow_committed_kv_count,
   l_bluestore_slow_read_onode_meta_count,
   l_bluestore_slow_read_wait_aio_count,
+  l_bluestore_slow_op_normal_count,
+  l_bluestore_slow_op_scrub_count,
   //****************************************
   l_bluestore_last
 };
