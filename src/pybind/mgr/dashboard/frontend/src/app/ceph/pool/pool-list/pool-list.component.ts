@@ -267,9 +267,9 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
     ];
     const emptyStat: PoolStat = { latest: 0, rate: 0, rates: [] };
     const applicationLabels: Record<string, string> = {
-      cephfs: $localize`filesystem`,
-      rbd: $localize`block`,
-      rgw: $localize`object`
+      cephfs: $localize`File system`,
+      rbd: $localize`Block`,
+      rgw: $localize`Object`
     };
 
     _.forEach(pools, (pool: Pool) => {

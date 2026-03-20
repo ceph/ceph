@@ -10,7 +10,7 @@ export class PoolFormData {
   applications: any;
 
   readonly APP_LABELS: Record<string, string> = {
-    cephfs: $localize`Filesystem (CephFS)`,
+    cephfs: $localize`File system (CephFS)`,
     rbd: $localize`Block (RBD)`,
     rgw: $localize`Object (RGW)`
   };

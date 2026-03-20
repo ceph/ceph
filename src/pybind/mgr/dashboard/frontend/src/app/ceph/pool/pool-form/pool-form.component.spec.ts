@@ -274,10 +274,13 @@ describe('PoolFormComponent', () => {
       expect(form.valid).toBeTruthy();
     });
 
-    it('validates crushRule with multiple crush rules', () => {
+    it('auto-selects crushRule with multiple crush rules', () => {
       formHelper.expectValidChange('poolType', 'replicated');
       form.get('crushRule').updateValueAndValidity();
-      formHelper.expectError('crushRule', 'required'); // As multiple rules exist
+      expect(form.getValue('crushRule')).toEqual(
+        component.info.crush_rules_replicated[0].rule_name
+      );
+      formHelper.expectValid('crushRule');
     });
 
     it('validates crushRule with no crush rules', () => {
@@ -508,10 +511,22 @@ describe('PoolFormComponent', () => {
         expect(control.disabled).toBe(true);
       });
 
-      it('does not select the first rule if more than one exist', () => {
+      it('selects the first rule if replicated_rule does not exist', () => {
         formHelper.setValue('poolType', 'replicated');
         const control = form.get('crushRule');
-        expect(control.value).toEqual(null);
+        expect(control.value).toEqual(component.info.crush_rules_replicated[0].rule_name);
+        expect(control.disabled).toBe(false);
+      });
+
+      it('selects replicated_rule by default when available', () => {
+        component.info.crush_rules_replicated = [
+          Mocks.getCrushRule({ id: 0, name: 'rep1', type: 'replicated' }),
+          Mocks.getCrushRule({ id: 1, name: 'replicated_rule', type: 'replicated' }),
+          Mocks.getCrushRule({ id: 2, name: 'rep2', type: 'replicated' })
+        ];
+        formHelper.setValue('poolType', 'replicated');
+        const control = form.get('crushRule');
+        expect(control.value).toEqual('replicated_rule');
         expect(control.disabled).toBe(false);
       });
 
