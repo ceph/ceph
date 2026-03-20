@@ -1258,6 +1258,7 @@ void rgw_bucket_object_pre_exec(req_state *s)
 
 int RGWGetObj::verify_permission(optional_yield y)
 {
+  bool has_instance = s->object->have_instance();
   s->object->set_atomic(true);
 
   if (prefetch_data()) {
@@ -1267,6 +1268,10 @@ int RGWGetObj::verify_permission(optional_yield y)
   auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, s);
     if (has_s3_existing_tag || has_s3_resource_tag)
       rgw_iam_add_objtags(this, s, has_s3_existing_tag, has_s3_resource_tag);
+
+  if (!has_instance) {
+    s->object->clear_instance();
+  }
 
   // for system requests, assume replication context and validate replication permissions.
   // non-impersonated or standard system requests will be handled in rgw_process_authenticated().
