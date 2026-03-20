@@ -129,22 +129,48 @@ bool ActivePyModule::method_exists(const std::string &method) const
   }
 }
 
-PyObject *ActivePyModule::dispatch_remote(
+std::optional<std::vector<std::byte>> ActivePyModule::dispatch_remote(
     const std::string &method,
-    PyObject *args,
-    PyObject *kwargs,
+    std::span<std::byte const> pickled_args,
+    std::span<std::byte const> pickled_kwargs,
     std::string *err)
 {
   ceph_assert(err != nullptr);
 
-  // Rather than serializing arguments, pass the CPython objects.
-  // Works because we happen to know that the subinterpreter
-  // implementation shares a GIL, allocator, deallocator and GC state, so
-  // it's okay to pass the objects between subinterpreters.
-  // But in future this might involve serialization to support a CSP-aware
-  // future Python interpreter a la PEP554
+  // deserialize arguments.
 
   Gil gil(py_module->pMyThreadState, true);
+
+  auto pmodule = py_module->pPickleModule;
+  auto pickled_args_bytes = py_bytes_from_span(pickled_args);
+  auto args = PyObject_CallMethodObjArgs(
+    pmodule,
+    PyUnicode_FromString("loads"),
+    pickled_args_bytes,
+    nullptr);
+  Py_DECREF(pickled_args_bytes);
+  if (args == nullptr) {
+    std::string caller = "ActivePyModule::dispatch_remote "s + method;
+    *err = handle_pyerror(true, get_name(), caller);
+    derr << "Failed to deserialize (pickle.loads) args: " << *err << dendl;
+    return std::nullopt;
+  }
+
+  auto pickled_kwargs_bytes = py_bytes_from_span(pickled_kwargs);
+  auto kwargs = PyObject_CallMethodObjArgs(
+    pmodule,
+    PyUnicode_FromString("loads"),
+    pickled_kwargs_bytes,
+    nullptr);
+  Py_DECREF(pickled_kwargs_bytes);
+  if (kwargs == nullptr) {
+    std::string caller = "ActivePyModule::dispatch_remote "s + method;
+    *err = handle_pyerror(true, get_name(), caller);
+    derr << "Failed to deserialize (pickle.loads) kwargs: " << *err << dendl;
+
+    Py_DECREF(args);
+    return std::nullopt;
+  }
 
   // Fire the receiving method
   auto boundMethod = PyObject_GetAttrString(pClassInstance, method.c_str());
@@ -155,21 +181,37 @@ PyObject *ActivePyModule::dispatch_remote(
   dout(20) << "Calling " << py_module->get_name()
            << "." << method << "..." << dendl;
 
-  auto remoteResult = PyObject_Call(boundMethod,
+  auto ret = PyObject_Call(boundMethod,
       args, kwargs);
   Py_DECREF(boundMethod);
-
-  if (remoteResult == nullptr) {
+  Py_DECREF(kwargs);
+  Py_DECREF(args);
+  if (ret == nullptr) {
     // Because the caller is in a different context, we can't let this
     // exception bubble up, need to re-raise it from the caller's
     // context later.
     std::string caller = "ActivePyModule::dispatch_remote "s + method;
     *err = handle_pyerror(true, get_name(), caller);
-  } else {
-    dout(20) << "Success calling '" << method << "'" << dendl;
+    return std::nullopt;
+  }
+  dout(20) << "Success calling '" << method << "'" << dendl;
+
+  auto pickled_ret = PyObject_CallMethodObjArgs(
+    pmodule,
+    PyUnicode_FromString("dumps"),
+    ret,
+    nullptr);
+  Py_DECREF(ret);
+  if (pickled_ret == nullptr) {
+    std::string caller = "ActivePyModule::dispatch_remote "s + method;
+    *err = handle_pyerror(true, get_name(), caller);
+    derr << "Failed to serialize (pickle.dumps) ret: " << *err << dendl;
+    return std::nullopt;
   }
 
-  return remoteResult;
+  std::vector<std::byte> pickled_ret_str = py_bytes_as_vec(pickled_ret);
+  Py_DECREF(pickled_ret);
+  return pickled_ret_str;
 }
 
 void ActivePyModule::config_notify()

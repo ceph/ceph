@@ -145,6 +145,19 @@ options:
   - mgr_module_path
   flags:
   - startup
+- name: mgr_subinterpreter_modules
+  type: str
+  level: advanced
+  desc: List of manager modules to load in independent subinterpreters
+  long_desc: A comma delimited list of module names. This list is read by manager
+    when it starts. By default, manager loads each module into the main interpreter.
+    Modules in this list will instead be loaded into independent subinterpreters.
+    Specifying '*' will cause all modules to be run in independent subinterpreters.
+  default: @mgr_subinterpreter_modules@
+  services:
+  - mgr
+  flags:
+  - startup
 - name: mgr_initial_modules
   type: str
   level: basic
