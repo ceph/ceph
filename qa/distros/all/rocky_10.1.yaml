@@ -1,0 +1,6 @@
+os_type: rocky
+os_version: "10.1"
+overrides:
+  selinux:
+    allowlist:
+      - scontext=system_u:system_r:getty_t:s0
