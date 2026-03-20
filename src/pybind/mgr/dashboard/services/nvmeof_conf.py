@@ -9,7 +9,7 @@ from .. import mgr
 from ..exceptions import DashboardException
 from ..services.orchestrator import OrchClient
 
-logger = logging.getLogger('nvmeof_conf')
+logger = logging.getLogger(__name__)
 
 
 class NvmeofGatewayAlreadyExists(Exception):
