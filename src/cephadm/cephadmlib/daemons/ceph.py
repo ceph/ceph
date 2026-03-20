@@ -121,7 +121,7 @@ class Ceph(ContainerDaemonForm):
             'ceph',
             '--setgroup',
             'ceph',
-            '--default-log-to-file=false',
+            *(['--default-log-to-file=false'] if self.identity.daemon_type != 'mon' else []),
         ]
         log_to_journald = should_log_to_journald(self.ctx)
         if log_to_journald:
@@ -135,9 +135,11 @@ class Ceph(ContainerDaemonForm):
                 '--default-log-stderr-prefix=debug ',
             ]
         if self.identity.daemon_type == 'mon':
-            r += [
-                '--default-mon-cluster-log-to-file=false',
-            ]
+            if self.ctx.mon_cluster_log_to_file:
+                r += [
+                    '--default-mon-cluster-log-to-file=true',
+                    '--default-log-to-file=true',
+                ]
             if log_to_journald:
                 r += [
                     '--default-mon-cluster-log-to-journald=true',
