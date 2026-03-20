@@ -397,8 +397,7 @@ if __name__ == "__main__":
                         help="Include full PR message in addition to PR title, if available")
 
     args = parser.parse_args()
-    gh = github.GitHub(
-        access_token=args.token)
+    gh = github.GitHub(args.token)
 
     make_release_notes(
         gh,
