@@ -284,7 +284,7 @@ class HostAssignment(object):
                 raise OrchestratorValidationError(
                     f'Cannot place {self.spec.one_line_str()}: No matching hosts')
 
-        if self.spec.placement.label:
+        if self.spec.placement.label and not self.spec.allow_label_remove_service:
             label_hosts = self.hosts_by_label(self.spec.placement.label)
             if not label_hosts:
                 raise OrchestratorValidationError(

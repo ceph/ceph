@@ -1917,11 +1917,12 @@ Usage:
                    unmanaged: bool = False,
                    no_overwrite: bool = False,
                    continue_on_error: bool = False,
-                   inbuf: Optional[str] = None) -> HandleCommandResult:
+                   inbuf: Optional[str] = None,
+                   allow_label_remove_service: bool = False) -> HandleCommandResult:
         """Update the size or placement for a service or apply a large yaml spec"""
         usage = """Usage:
   ceph orch apply -i <yaml spec> [--dry-run]
-  ceph orch apply <service_type> [--placement=<placement_string>] [--unmanaged]
+  ceph orch apply <service_type> [--placement=<placement_string>] [--unmanaged] [--allow-label-remove-service]
         """
         errs: List[str] = []
         if inbuf:
@@ -1983,7 +1984,7 @@ Usage:
 
                 if dry_run and not isinstance(spec, HostSpec):
                     spec.preview_only = dry_run
-
+                    
                 if isinstance(spec, TracingSpec) and spec.service_type == 'jaeger-tracing':
                     specs.extend(spec.get_tracing_specs())
                     continue
@@ -1996,7 +1997,8 @@ Usage:
             if not service_type:
                 raise OrchestratorValidationError(usage)
             specs = [ServiceSpec(service_type.value, placement=placementspec,
-                                 unmanaged=unmanaged, preview_only=dry_run)]
+                                 unmanaged=unmanaged, preview_only=dry_run, 
+                                 allow_label_remove_service=allow_label_remove_service)]
         cmd_result = self._apply_misc(specs, dry_run, format, no_overwrite, continue_on_error)
         if errs:
             # HandleCommandResult is a named tuple, so use
