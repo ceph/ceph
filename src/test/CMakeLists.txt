@@ -322,6 +322,7 @@ install(TARGETS ceph_test_librgw_file DESTINATION ${CMAKE_INSTALL_BINDIR})
 add_dependencies(ceph_test_librgw_file
   ceph_test_librgw_file_cd
   ceph_test_librgw_file_gp
+  ceph_test_librgw_file_cpref
   ceph_test_librgw_file_rename
   ceph_test_librgw_file_nfsns
   ceph_test_librgw_file_aw
@@ -354,6 +355,20 @@ target_link_libraries(ceph_test_librgw_file_gp
   ${ALLOC_LIBS}
   )
 install(TARGETS ceph_test_librgw_file_gp DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+# ceph_test_librgw_file_cpref (a special case common-prefix enumeration test)
+add_executable(ceph_test_librgw_file_cpref
+  librgw_file_cpref.cc
+  )
+target_link_libraries(ceph_test_librgw_file_cpref
+  rgw
+  librados
+  ceph-common
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  ${ALLOC_LIBS}
+  )
+install(TARGETS ceph_test_librgw_file_cpref DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # ceph_test_librgw_file_nfsns (nfs namespace tests)
 add_executable(ceph_test_librgw_file_nfsns
