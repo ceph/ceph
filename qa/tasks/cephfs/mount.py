@@ -455,11 +455,6 @@ class CephFSMountBase(object):
             sudo ip link delete ceph-brx
         """, timeout=(5*60), omit_sudo=False, cwd='/')
 
-        # Drop the nftables NAT rules
-        net = ipaddress.ip_network(self.ceph_brx_net)
-        ip = net.broadcast_address - 1
-        mask = self.ceph_brx_net.split('/')[1]
-
         gw = self._default_gateway()
 
         self.run_shell_payload(f"""
