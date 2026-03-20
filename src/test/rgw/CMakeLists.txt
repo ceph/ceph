@@ -312,6 +312,13 @@ target_include_directories(unittest_rgw_url
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
 target_link_libraries(unittest_rgw_url ${rgw_libs})
 
+# unittest_rgw_sync_trace
+add_executable(unittest_rgw_sync_trace test_rgw_sync_trace.cc)
+add_ceph_unittest(unittest_rgw_sync_trace)
+target_include_directories(unittest_rgw_sync_trace
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_sync_trace)
+
 add_executable(ceph_test_rgw_gc_log test_rgw_gc_log.cc $<TARGET_OBJECTS:unit-main>)
 target_include_directories(ceph_test_rgw_gc_log
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
