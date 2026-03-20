@@ -6,7 +6,7 @@
 #include "common/ceph_argparse.h"
 #include "rgw_auth_registry.h"
 #include "rgw_aio_throttle.h"
-#include "rgw_redis_driver.h"
+#include "driver/redis/rgw_redis_driver.h"
 
 #define dout_subsys ceph_subsys_rgw
 

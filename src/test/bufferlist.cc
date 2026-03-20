@@ -3085,6 +3085,17 @@ TEST(BufferList, DanglingLastP) {
   EXPECT_EQ(0, ::memcmp("12C", bl.c_str(), 3));
 }
 
+TEST(BufferList, size) {
+ buffer::list bl;
+ EXPECT_EQ(bl.size(), bl.length());
+
+ bl.append("12345"); 
+ EXPECT_EQ(bl.size(), bl.length());
+
+ bl.clear();
+ EXPECT_EQ(bl.size(), bl.length());
+}
+
 TEST(BufferHash, all) {
   {
     bufferlist bl;
