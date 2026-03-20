@@ -79,10 +79,6 @@ OpsExecuter::call_ierrorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
 
   const auto flags = method->get_flags();
 
-  if (flags & CLS_METHOD_WR) {
-    check_init_op_params(modified_by::user);
-  }
-
   logger().debug("calling method {}.{}, num_read={}, num_write={}",
                  cname, mname, num_read, num_write);
   const auto prev_rd = num_read;
