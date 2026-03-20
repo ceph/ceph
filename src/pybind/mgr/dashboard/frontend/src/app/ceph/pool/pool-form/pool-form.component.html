@@ -269,28 +269,12 @@
             </cds-number>
             <ng-template #sizeError>
               @if (form.showError('size', formDir)) {
-              <span class="invalid-feedback">
-                <ul class="list-inline">
-                  <li
-                    i18n
-                  >
-                    Minimum: {{ getMinSize() }}
-                  </li>
-                  <li
-                    i18n
-                  >
-                    Maximum: {{ getMaxSize() }}
-                  </li>
-                </ul>
-              </span>
-              }
-              @if (form.showError('size', formDir)) {
               <span
                 class="invalid-feedback"
                 i18n
               >
-                The size specified is out of range. A value from {{ getMinSize() }} to
-                {{ getMaxSize() }} is usable.
+                Invalid input. Replicated size must be between {{ getMinSize() }} and
+                {{ getMaxSize() }}.
               </span>
               }
             </ng-template>
@@ -667,9 +651,6 @@
               [invalid]="crushRuleRef.isInvalid"
               [invalidText]="crushRuleError"
             >
-              <option [value]="null"
-                      i18n>-- Select a crush rule --
-              </option>
               @for (rule of current.rules; track rule.rule_name) {
               <option [value]="rule.rule_name">
                 {{ rule.rule_name }}

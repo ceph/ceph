@@ -35,7 +35,7 @@ import { FormatterService } from '~/app/shared/services/formatter.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CrushRuleFormModalComponent } from '../crush-rule-form-modal/crush-rule-form-modal.component';
 import { ErasureCodeProfileFormModalComponent } from '../erasure-code-profile-form/erasure-code-profile-form-modal.component';
-import { Pool } from '../pool';
+import { Pool, PoolType } from '../pool';
 import { PoolFormData } from './pool-form-data';
 import { PoolEditModeResponseModel } from '../../block/mirroring/pool-edit-mode-modal/pool-edit-mode-response.model';
 import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
@@ -63,6 +63,8 @@ interface MonitorResponse {
   styleUrls: ['./pool-form.component.scss']
 })
 export class PoolFormComponent extends CdForm implements OnInit {
+  private static readonly DEFAULT_RULE_NAME = 'replicated_rule';
+
   @ViewChild('crushInfoTabs') crushInfoTabs: NgbNav;
   @ViewChild('ecpInfoTabs') ecpInfoTabs: NgbNav;
   @ViewChild(FormGroupDirective)
@@ -185,7 +187,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
             })
           ]
         }),
-        poolType: new UntypedFormControl('replicated', {
+        poolType: new UntypedFormControl(PoolType.REPLICATED, {
           validators: [Validators.required]
         }),
         crushRule: new UntypedFormControl(null, {
@@ -236,7 +238,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
       }
       this.listenToChanges();
       this.setComplexValidators();
-      this.poolTypeChange('replicated');
+      this.poolTypeChange(PoolType.REPLICATED);
     });
     this.loadingReady();
   }
@@ -266,23 +268,45 @@ export class PoolFormComponent extends CdForm implements OnInit {
   private setListControlStatus(controlName: string, arr: any[]) {
     const control = this.form.get(controlName);
     const value = control.value;
-    if (arr.length === 1 && (!value || !_.isEqual(value, arr[0]))) {
-      if (controlName === 'erasureProfile') {
+
+    if (controlName === 'erasureProfile') {
+      if (arr.length === 1 && (!value || !_.isEqual(value, arr[0]))) {
         control.setValue(arr[0].name);
-      } else {
-        control.setValue(arr[0].rule_name);
+      } else if (arr.length === 0 && value) {
+        control.setValue(null);
+      }
+    } else {
+      const selectedRule = this.validateCrushRule(value, arr);
+      if (arr.length > 0 && selectedRule) {
+        control.setValue(selectedRule);
         this.replicatedRuleChange();
+      } else if (arr.length === 0 && value) {
+        control.setValue(null);
       }
-    } else if (arr.length === 0 && value) {
-      control.setValue(null);
     }
-    if (arr.length <= 1) {
-      if (control.enabled) {
-        control.disable();
-      }
-    } else if (control.disabled) {
-      control.enable();
+
+    arr.length <= 1 ? control.disable() : control.enable();
+  }
+
+  private validateCrushRule(
+    value: string | { rule_name?: string; name?: string } | null,
+    arr: CrushRule[]
+  ): string | undefined {
+    type CrushRuleWithOptionalName = CrushRule & { name?: string };
+    const selectedName = typeof value === 'string' ? value : value?.rule_name || value?.name;
+    const isSelected =
+      selectedName &&
+      arr.some(
+        (rule: CrushRuleWithOptionalName) =>
+          rule.rule_name === selectedName || rule.name === selectedName
+      );
+    if (isSelected) {
+      return undefined;
     }
+    const defaultRule =
+      arr.find((rule: CrushRule) => rule.rule_name === PoolFormComponent.DEFAULT_RULE_NAME) ||
+      arr[0];
+    return defaultRule?.rule_name;
   }
 
   private initEditMode() {
@@ -364,10 +388,15 @@ export class PoolFormComponent extends CdForm implements OnInit {
   }
 
   private setAvailableApps(apps: string[] = this.data.applications.default) {
+    type SelectOptionWithContent = SelectOption & { content?: string };
     const selectedApps = this.data.applications.selected || [];
     this.data.applications.available = _.uniq(apps.sort()).map((x: string) => {
-      const option = new SelectOption(selectedApps.includes(x), x, this.data.APP_LABELS?.[x] || x);
-      (option as any).content = this.data.APP_LABELS?.[x] || x;
+      const option: SelectOptionWithContent = new SelectOption(
+        selectedApps.includes(x),
+        x,
+        this.data.APP_LABELS?.[x] || x
+      );
+      option.content = this.data.APP_LABELS?.[x] || x;
       return option;
     });
   }
@@ -417,7 +446,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
       this.data.crushInfo = false;
 
       rule = (this.current.rules || []).find(
-        (r: CrushRule) => r.rule_name === rule || (r as any).name === rule
+        (r: CrushRule & { name?: string }) => r.rule_name === rule || r.name === rule
       );
       this.selectedCrushRule = rule;
       this.setCorrectMaxSize(rule);
@@ -458,9 +487,9 @@ export class PoolFormComponent extends CdForm implements OnInit {
   }
 
   private poolTypeChange(poolType: string) {
-    if (poolType === 'replicated') {
+    if (poolType === PoolType.REPLICATED) {
       this.setTypeBooleans(true, false);
-    } else if (poolType === 'erasure') {
+    } else if (poolType === PoolType.ERASURE) {
       this.setTypeBooleans(false, true);
     } else {
       this.setTypeBooleans(false, false);
@@ -536,11 +565,11 @@ export class PoolFormComponent extends CdForm implements OnInit {
   }
 
   getMaxSize(): number {
-    const rule = this.selectedCrushRule;
-    if (!this.info) {
+    if (!this.info || this.info.osd_count < 1) {
       return 0;
     }
     if (this.isStretchMode) return this.STRETCH_REPLICATED_MAX_SIZE;
+    const rule = this.selectedCrushRule;
     if (!rule) {
       return Math.min(this.info.osd_count, this.DEFAULT_REPLICATED_MAX_SIZE);
     }
@@ -816,7 +845,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
       getInfo: () => this.poolService.getInfo(),
       initInfo: (info) => {
         this.initInfo(info);
-        this.poolTypeChange('replicated');
+        this.poolTypeChange(PoolType.REPLICATED);
       },
       findNewItem: () =>
         this.info.crush_rules_replicated.find((rule) => rule.rule_name === ruleName),
