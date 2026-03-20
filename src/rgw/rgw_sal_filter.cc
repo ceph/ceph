@@ -869,9 +869,11 @@ int FilterBucket::check_bucket_shards(const DoutPrefixProvider* dpp,
   return next->check_bucket_shards(dpp, num_objs, y);
 }
 
-int FilterBucket::chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y)
-{
-  return next->chown(dpp, new_owner, y);
+int FilterBucket::chown(const DoutPrefixProvider* dpp,
+                        const rgw_owner& new_owner,
+                        const std::string& new_owner_name,
+                        optional_yield y) {
+  return next->chown(dpp, new_owner, new_owner_name, y);
 }
 
 int FilterBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive,
@@ -994,9 +996,11 @@ int FilterBucket::abort_multiparts(const DoutPrefixProvider* dpp, CephContext* c
 
 int FilterObject::delete_object(const DoutPrefixProvider* dpp,
 				optional_yield y,
-				uint32_t flags)
+				uint32_t flags,
+				std::list<rgw_obj_index_key>* remove_objs,
+				RGWObjVersionTracker* objv)
 {
-  return next->delete_object(dpp, y, flags);
+  return next->delete_object(dpp, y, flags, remove_objs, objv);
 }
 
 int FilterObject::copy_object(const ACLOwner& owner,
@@ -1051,9 +1055,9 @@ int FilterObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **pst
 }
 
 int FilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-				Attrs* delattrs, optional_yield y)
+				Attrs* delattrs, optional_yield y, uint32_t flags)
 {
-  return next->set_obj_attrs(dpp, setattrs, delattrs, y);
+  return next->set_obj_attrs(dpp, setattrs, delattrs, y, flags);
 }
 
 int FilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
@@ -1283,11 +1287,21 @@ int FilterMultipartUpload::complete(const DoutPrefixProvider *dpp,
 				    RGWCompressionInfo& cs_info, off_t& ofs,
 				    std::string& tag, ACLOwner& owner,
 				    uint64_t olh_epoch,
-				    rgw::sal::Object* target_obj)
+				    rgw::sal::Object* target_obj,
+				    prefix_map_t& processed_prefixes)
 {
   return next->complete(dpp, y, cct, part_etags, remove_objs, accounted_size,
 			compressed, cs_info, ofs, tag, owner, olh_epoch,
-			nextObject(target_obj));
+			nextObject(target_obj), processed_prefixes);
+}
+
+int FilterMultipartUpload::cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
+                                                  CephContext *cct, optional_yield y,
+                                                  const rgw_obj& obj,
+                                                  std::list<rgw_obj_index_key>& remove_objs,
+                                                  prefix_map_t& processed_prefixes)
+{
+  return next->cleanup_orphaned_parts(dpp, cct, y, obj, remove_objs, processed_prefixes);
 }
 
 int FilterMultipartUpload::get_info(const DoutPrefixProvider *dpp,

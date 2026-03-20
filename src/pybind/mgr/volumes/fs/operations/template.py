@@ -40,6 +40,7 @@ class SubvolumeOpType(Enum):
     CREATE                = 'create'
     REMOVE                = 'rm'
     REMOVE_FORCE          = 'rm-force'
+    CHARMAP               = 'charmap'
     PIN                   = 'pin'
     LIST                  = 'ls'
     GETPATH               = 'getpath'
@@ -48,6 +49,7 @@ class SubvolumeOpType(Enum):
     SNAP_CREATE           = 'snap-create'
     SNAP_REMOVE           = 'snap-rm'
     SNAP_LIST             = 'snap-ls'
+    SNAP_GETPATH          = 'snap-getpath'
     SNAP_INFO             = 'snap-info'
     SNAP_PROTECT          = 'snap-protect'
     SNAP_UNPROTECT        = 'snap-unprotect'
@@ -68,6 +70,9 @@ class SubvolumeOpType(Enum):
     SNAP_METADATA_GET     = 'snap-metadata-get'
     SNAP_METADATA_LIST    = 'snap-metadata-ls'
     SNAP_METADATA_REMOVE  = 'snap-metadata-rm'
+    EARMARK_GET           = 'earmark-get'
+    EARMARK_SET           = 'earmark-set'
+    EARMARK_CLEAR          = 'earmark-clear'
 
 class SubvolumeTemplate(object):
     VERSION = None # type: int

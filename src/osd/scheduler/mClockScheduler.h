@@ -30,6 +30,16 @@
 #include "osd/scheduler/OpSchedulerItem.h"
 
 
+enum {
+  l_mclock_first = 15000,
+  l_mclock_immediate_queue_len,
+  l_mclock_client_queue_len,
+  l_mclock_recovery_queue_len,
+  l_mclock_best_effort_queue_len,
+  l_mclock_all_type_queue_len,
+  l_mclock_last,
+};
+
 namespace ceph::osd::scheduler {
 
 constexpr double default_min = 0.0;
@@ -98,6 +108,7 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
   const bool is_rotational;
   const unsigned cutoff_priority;
   MonClient *monc;
+  PerfCounters *logger;
 
   /**
    * osd_bandwidth_cost_per_io
@@ -217,9 +228,53 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
   void set_config_defaults_from_profile();
 
 public: 
-  mClockScheduler(CephContext *cct, int whoami, uint32_t num_shards,
+  template<typename Rep, typename Per>
+  mClockScheduler(
+    CephContext *cct, int whoami, uint32_t num_shards,
     int shard_id, bool is_rotational, unsigned cutoff_priority,
-    MonClient *monc);
+    std::chrono::duration<Rep,Per> idle_age,
+    std::chrono::duration<Rep,Per> erase_age,
+    std::chrono::duration<Rep,Per> check_time,
+    MonClient *monc,
+    bool init_perfcounter=true)
+    : cct(cct),
+      whoami(whoami),
+      num_shards(num_shards),
+      shard_id(shard_id),
+      is_rotational(is_rotational),
+      cutoff_priority(cutoff_priority),
+      monc(monc),
+      logger(nullptr),
+      scheduler(
+	std::bind(&mClockScheduler::ClientRegistry::get_info,
+		  &client_registry,
+		  std::placeholders::_1),
+	idle_age, erase_age, check_time,
+	crimson::dmclock::AtLimit::Wait,
+	cct->_conf.get_val<double>("osd_mclock_scheduler_anticipation_timeout"))
+  {
+    cct->_conf.add_observer(this);
+    ceph_assert(num_shards > 0);
+    set_osd_capacity_params_from_config();
+    set_config_defaults_from_profile();
+    client_registry.update_from_config(
+      cct->_conf, osd_bandwidth_capacity_per_shard);
+
+    if (init_perfcounter) {
+      _init_logger();
+    }
+  }
+  mClockScheduler(
+    CephContext *cct, int whoami, uint32_t num_shards,
+    int shard_id, bool is_rotational, unsigned cutoff_priority,
+    MonClient *monc,
+    bool init_perfcounter=true) :
+    mClockScheduler(
+      cct, whoami, num_shards, shard_id, is_rotational, cutoff_priority,
+      crimson::dmclock::standard_idle_age,
+      crimson::dmclock::standard_erase_age,
+      crimson::dmclock::standard_check_time,
+      monc, init_perfcounter) {}
   ~mClockScheduler() override;
 
   /// Calculate scaled cost per item
@@ -268,6 +323,9 @@ public:
 private:
   // Enqueue the op to the high priority queue
   void enqueue_high(unsigned prio, OpSchedulerItem &&item, bool front = false);
+  void _init_logger();
+  void _get_mclock_counter(scheduler_id_t id);
+  void _put_mclock_counter(scheduler_id_t id);
 };
 
 }

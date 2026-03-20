@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges } from '@angular/core';
+import { ChangeDetectorRef, Component, Input, OnChanges } from '@angular/core';
 
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 
@@ -17,7 +17,7 @@ export class RgwBucketDetailsComponent implements OnChanges {
   aclPermissions: Record<string, string[]> = {};
   replicationStatus = $localize`Disabled`;
 
-  constructor(private rgwBucketService: RgwBucketService) {}
+  constructor(private rgwBucketService: RgwBucketService, private cd: ChangeDetectorRef) {}
 
   ngOnChanges() {
     if (this.selection) {
@@ -68,5 +68,10 @@ export class RgwBucketDetailsComponent implements OnChanges {
       }
     });
     return data;
+  }
+
+  updateLifecycleFormatTo(format: 'json' | 'xml'): void {
+    this.lifecycleFormat = format;
+    this.cd.detectChanges();
   }
 }

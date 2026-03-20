@@ -586,16 +586,6 @@ options:
   min: 1
   services:
   - mds
-- name: mds_log_major_segment_event_ratio
-  type: uint
-  level: advanced
-  desc: multiple of mds_log_events_per_segment between major segments
-  default: 12
-  services:
-  - mds
-  min: 1
-  see_also:
-  - mds_log_events_per_segment
 # segment size for mds log, default to default file_layout_t
 - name: mds_log_segment_size
   type: size
@@ -790,6 +780,21 @@ options:
   services:
   - mds
   with_legacy: true
+- name: mds_allow_batched_ops
+  type: bool
+  level: advanced
+  desc: allow MDS to batch lookup/getattr RPCs
+  long_desc: >
+    The MDS will batch a lookup or getattr RPC on the same inode when
+    possible to avoid repetitive locks on metadata and to bypass other
+    requests acquiring write locks. Generally, this should only
+    improve performance but this switch exists to provide a means to
+    turn this behavior off for comparison.
+  default: true
+  services:
+  - mds
+  flags:
+  - runtime
 # multiple of size_max that triggers immediate split
 - name: mds_bal_fragment_fast_factor
   type: float
@@ -972,6 +977,14 @@ options:
   services:
   - mds
   fmt_desc: Ceph will randomly fragment or merge directories.
+  with_legacy: true
+- name: mds_allow_async_dirops
+  type: bool
+  level: advanced
+  default: true
+  services:
+  - mds
+  fmt_desc: MDS will enable/disable the async dirop feature.
   with_legacy: true
 - name: mds_dump_cache_on_map
   type: bool
@@ -1679,3 +1692,21 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_log_minor_segments_per_major_segment
+  type: uint
+  level: advanced
+  desc: number of minor segments per major segment.
+  long_desc: The number of minor mds log segments since last major segment after which a major segment is started/logged.
+  default: 16
+  services:
+  - mds
+  min: 8
+- name: mds_file_blockdiff_max_concurrent_object_scans
+  type: uint
+  level: advanced
+  desc: maximum number of concurrent object scans
+  long_desc: Maximum number of concurrent listsnaps operations sent to RADOS.
+  default: 16
+  services:
+  - mds
+  min: 1

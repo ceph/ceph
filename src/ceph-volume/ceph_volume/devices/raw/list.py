@@ -5,12 +5,14 @@ import logging
 from textwrap import dedent
 from ceph_volume import decorators, process
 from ceph_volume.util import disk
-from typing import Any, Dict, List as _List
+from ceph_volume.util.device import Device
+from typing import Any, Dict, Optional, List as _List
+from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
 
 
-def direct_report(devices):
+def direct_report(devices: Optional[_List[str]] = None) -> Dict[str, Any]:
     """
     Other non-cli consumers of listing information will want to consume the
     report without the need to parse arguments or other flags. This helper
@@ -20,27 +22,29 @@ def direct_report(devices):
     _list = List([])
     return _list.generate(devices)
 
-def _get_bluestore_info(dev: str) -> Dict[str, Any]:
+def _get_bluestore_info(devices: _List[str]) -> Dict[str, Any]:
     result: Dict[str, Any] = {}
-    out, err, rc = process.call([
-        'ceph-bluestore-tool', 'show-label',
-        '--dev', dev], verbose_on_failure=False)
+    command: _List[str] = ['ceph-bluestore-tool',
+                           'show-label', '--bdev_aio_poll_ms=1']
+    for device in devices:
+        command.extend(['--dev', device])
+    out, err, rc = process.call(command, verbose_on_failure=False)
     if rc:
-        # ceph-bluestore-tool returns an error (below) if device is not bluestore OSD
-        #   > unable to read label for <device>: (2) No such file or directory
-        # but it's possible the error could be for a different reason (like if the disk fails)
-        logger.debug(f'assuming device {dev} is not BlueStore; ceph-bluestore-tool failed to get info from device: {out}\n{err}')
+        logger.debug(f"ceph-bluestore-tool couldn't detect any BlueStore device.\n{out}\n{err}")
     else:
         oj = json.loads(''.join(out))
-        if dev not in oj:
-            # should be impossible, so warn
-            logger.warning(f'skipping device {dev} because it is not reported in ceph-bluestore-tool output: {out}')
-        try:
-            result = disk.bluestore_info(dev, oj)
-        except KeyError as e:
-            # this will appear for devices that have a bluestore header but aren't valid OSDs
-            # for example, due to incomplete rollback of OSDs: https://tracker.ceph.com/issues/51869
-            logger.error(f'device {dev} does not have all BlueStore data needed to be a valid OSD: {out}\n{e}')
+        for device in devices:
+            if device not in oj:
+                # should be impossible, so warn
+                logger.warning(f'skipping device {device} because it is not reported in ceph-bluestore-tool output: {out}')
+            if oj.get(device):
+                try:
+                    osd_uuid = oj[device]['osd_uuid']
+                    result[osd_uuid] = disk.bluestore_info(device, oj)
+                except KeyError as e:
+                    # this will appear for devices that have a bluestore header but aren't valid OSDs
+                    # for example, due to incomplete rollback of OSDs: https://tracker.ceph.com/issues/51869
+                    logger.error(f'device {device} does not have all BlueStore data needed to be a valid OSD: {out}\n{e}')
     return result
 
 
@@ -50,68 +54,67 @@ class List(object):
 
     def __init__(self, argv: _List[str]) -> None:
         self.argv = argv
+        self.info_devices: _List[Dict[str, str]] = []
+        self.devices_to_scan: _List[str] = []
 
-    def is_atari_partitions(self, _lsblk: Dict[str, Any]) -> bool:
-        dev = _lsblk['NAME']
-        if _lsblk.get('PKNAME'):
-            parent = _lsblk['PKNAME']
-            try:
-                if disk.has_bluestore_label(parent):
-                    logger.warning(('ignoring child device {} whose parent {} is a BlueStore OSD.'.format(dev, parent),
-                                    'device is likely a phantom Atari partition. device info: {}'.format(_lsblk)))
-                    return True
-            except OSError as e:
-                logger.error(('ignoring child device {} to avoid reporting invalid BlueStore data from phantom Atari partitions.'.format(dev),
-                            'failed to determine if parent device {} is BlueStore. err: {}'.format(parent, e)))
-                return True
-        return False
+    def exclude_atari_partitions(self) -> None:
+        result: _List[str] = []
+        for info_device in self.info_devices:
+            path = info_device['NAME']
+            parent_device = info_device.get('PKNAME')
+            if parent_device:
+                try:
+                    if disk.has_bluestore_label(parent_device):
+                        logger.warning(('ignoring child device {} whose parent {} is a BlueStore OSD.'.format(path, parent_device),
+                                        'device is likely a phantom Atari partition. device info: {}'.format(info_device)))
+                        continue
+                except OSError as e:
+                    logger.error(('ignoring child device {} to avoid reporting invalid BlueStore data from phantom Atari partitions.'.format(path),
+                                'failed to determine if parent device {} is BlueStore. err: {}'.format(parent_device, e)))
+                    continue
+            result.append(path)
+        self.devices_to_scan = result
 
-    def exclude_atari_partitions(self, _lsblk_all: Dict[str, Any]) -> _List[Dict[str, Any]]:
-        return [_lsblk for _lsblk in _lsblk_all if not self.is_atari_partitions(_lsblk)]
+    def exclude_lvm_osd_devices(self) -> None:
+        with ThreadPoolExecutor() as pool:
+            filtered_devices_to_scan = pool.map(self.filter_lvm_osd_devices, self.devices_to_scan)
+            self.devices_to_scan = [device for device in filtered_devices_to_scan if device is not None]
 
-    def generate(self, devs=None):
+    def filter_lvm_osd_devices(self, device: str) -> Optional[str]:
+        d = Device(device)
+        return d.path if not d.ceph_device_lvm else None
+
+    def generate(self, devices: Optional[_List[str]] = None) -> Dict[str, Any]:
         logger.debug('Listing block devices via lsblk...')
-        info_devices = []
-        if not devs or not any(devs):
+        if not devices or not any(devices):
             # If no devs are given initially, we want to list ALL devices including children and
             # parents. Parent disks with child partitions may be the appropriate device to return if
             # the parent disk has a bluestore header, but children may be the most appropriate
             # devices to return if the parent disk does not have a bluestore header.
-            info_devices = disk.lsblk_all(abspath=True)
-            devs = [device['NAME'] for device in info_devices if device.get('NAME',)]
+            self.info_devices = disk.lsblk_all(abspath=True)
+            # Linux kernels built with CONFIG_ATARI_PARTITION enabled can falsely interpret
+            # bluestore's on-disk format as an Atari partition table. These false Atari partitions
+            # can be interpreted as real OSDs if a bluestore OSD was previously created on the false
+            # partition. See https://tracker.ceph.com/issues/52060 for more info. If a device has a
+            # parent, it is a child. If the parent is a valid bluestore OSD, the child will only
+            # exist if it is a phantom Atari partition, and the child should be ignored. If the
+            # parent isn't bluestore, then the child could be a valid bluestore OSD. If we fail to
+            # determine whether a parent is bluestore, we should err on the side of not reporting
+            # the child so as not to give a false negative.
+            self.exclude_atari_partitions()
+            self.exclude_lvm_osd_devices()
+
         else:
-            for dev in devs:
-                info_devices.append(disk.lsblk(dev, abspath=True))
+            self.devices_to_scan = devices
 
-        # Linux kernels built with CONFIG_ATARI_PARTITION enabled can falsely interpret
-        # bluestore's on-disk format as an Atari partition table. These false Atari partitions
-        # can be interpreted as real OSDs if a bluestore OSD was previously created on the false
-        # partition. See https://tracker.ceph.com/issues/52060 for more info. If a device has a
-        # parent, it is a child. If the parent is a valid bluestore OSD, the child will only
-        # exist if it is a phantom Atari partition, and the child should be ignored. If the
-        # parent isn't bluestore, then the child could be a valid bluestore OSD. If we fail to
-        # determine whether a parent is bluestore, we should err on the side of not reporting
-        # the child so as not to give a false negative.
-        info_devices = self.exclude_atari_partitions(info_devices)
-
-        result = {}
-        logger.debug('inspecting devices: {}'.format(devs))
-        for info_device in info_devices:
-            bs_info = _get_bluestore_info(info_device['NAME'])
-            if not bs_info:
-                # None is also returned in the rare event that there is an issue reading info from
-                # a BlueStore disk, so be sure to log our assumption that it isn't bluestore
-                logger.info('device {} does not have BlueStore information'.format(info_device['NAME']))
-                continue
-            uuid = bs_info['osd_uuid']
-            if uuid not in result:
-                result[uuid] = {}
-            result[uuid].update(bs_info)
+        result: Dict[str, Any] = {}
+        logger.debug('inspecting devices: {}'.format(self.devices_to_scan))
+        result = _get_bluestore_info(self.devices_to_scan)
 
         return result
 
     @decorators.needs_root
-    def list(self, args):
+    def list(self, args: argparse.Namespace) -> None:
         report = self.generate(args.device)
         if args.format == 'json':
             print(json.dumps(report, indent=4, sort_keys=True))
@@ -120,7 +123,7 @@ class List(object):
                 raise SystemExit('No valid Ceph devices found')
             raise RuntimeError('not implemented yet')
 
-    def main(self):
+    def main(self) -> None:
         sub_command_help = dedent("""
         List OSDs on raw devices with raw device labels (usually the first
         block of the device).

@@ -45,6 +45,10 @@ public:
   void read(io::Extents&& byte_extents, bufferlist* data,
             Context* on_finish) override;
 
+  void list_sparse_extents(io::Extents&& byte_extents,
+                           io::SparseExtents* sparse_extents,
+                           Context* on_finish) override;
+
 private:
   using HttpResponse = boost::beast::http::response<
     boost::beast::http::string_body>;

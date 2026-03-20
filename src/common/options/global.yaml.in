@@ -250,6 +250,29 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: tmp_dir
+  type: str
+  level: advanced
+  desc: path for the 'tmp' directory
+  default: /tmp
+  services:
+  - common
+  see_also:
+  - admin_socket
+  flags:
+  - runtime
+- name: tmp_file_template
+  type: str
+  level: advanced
+  desc: Template for temporary files created by daemons for ceph tell commands
+  long_desc: The template file name prefix for temporary files. For example, temporary files may be created by `ceph tell` commands using the --daemon-output-file switch.
+  daemon_default: $tmp_dir/$cluster-$name.XXXXXX
+  services:
+  - osd
+  - mds
+  - mon
+  flags:
+  - runtime
 - name: admin_socket
   type: str
   level: advanced
@@ -1750,7 +1773,7 @@ options:
 - name: mon_warn_pg_not_scrubbed_ratio
   type: float
   level: advanced
-  desc: Percentage of the scrub max interval past the scrub max interval to warn
+  desc: Raise a health warning when shallow scrubs are delayed by this percentage of the shallow scrub interval. Note that this must be set at mgr or with global scope. Set this configurable with the command "ceph config set mgr mon_warn_pg_not_scrubbed_ratio <ratio_value>".
   default: 0.5
   see_also:
   - osd_scrub_max_interval
@@ -1759,7 +1782,7 @@ options:
 - name: mon_warn_pg_not_deep_scrubbed_ratio
   type: float
   level: advanced
-  desc: Percentage of the deep scrub interval past the deep scrub interval to warn
+  desc: Percentage of the deep scrub interval past the deep scrub interval to warn - Set this configurable with the command "ceph config set mgr mon_warn_pg_not_deep_scrubbed_ratio <ratio_value>"
   default: 0.75
   see_also:
   - osd_deep_scrub_interval
@@ -3638,7 +3661,7 @@ options:
 - name: osd_requested_scrub_priority
   type: uint
   level: advanced
-  default: 120
+  default: 5
   fmt_desc: The priority set for user requested scrub on the work queue.  If
     this value were to be smaller than ``osd_client_op_priority`` it
     can be boosted to the value of ``osd_client_op_priority`` when
@@ -4015,15 +4038,59 @@ options:
   default: false
   with_legacy: true
 - name: bdev_enable_discard
+  desc: send discards to the block device
   type: bool
   level: advanced
   default: false
   with_legacy: true
+  flags:
+  - runtime
+  see_also:
+  - bdev_async_discard_threads
+- name: bdev_async_discard_threads
+  desc: number of discard threads used to issue discards to the device
+  type: uint
+  level: advanced
+  default: 0
+  min: 0
+  with_legacy: false
+  flags:
+  - runtime
+  see_also:
+  - bdev_enable_discard
+  - bdev_async_discard_max_pending
+- name: bdev_async_discard_max_pending
+  desc: maximum number of pending discards
+  long_desc: The maximum number of pending async discards that can be queued and not claimed by an
+    async discard thread. Discards will not be issued once the queue is full and blocks will be
+    freed back to the allocator immediately instead. This is useful if you have a device with slow
+    discard performance that can't keep up to a consistently high write workload. 0 means
+    'unlimited'.
+  type: uint
+  level: advanced
+  default: 1000000
+  min: 0
+  with_legacy: true
+  flags:
+  - runtime
+  see_also:
+  - bdev_async_discard_threads
 - name: bdev_async_discard
+  long_desc: When set this works like an alias for 'bdev_async_discard_threads = 1"
+    mode to avoid implicit async discard mode disablement after upgrade.
+    Ignored if 'dev_asunc_discard_threads' is greater than zero.
+    This parameter is DEPRECATED and provided for backward compatibility for
+    Squid minor releases only.
+    PLEASE SWITCH TO 'bdev_async_discard_threads' USE.
   type: bool
   level: advanced
   default: false
-  with_legacy: true
+  with_legacy: false
+  flags:
+  - runtime
+  see_also:
+  - bdev_enable_discard
+  - bdev_async_discard_threads
 - name: bdev_flock_retry_interval
   type: float
   level: advanced
@@ -4131,7 +4198,9 @@ options:
   - bitmap
   - stupid
   - avl
+  - btree
   - hybrid
+  - hybrid_btree2
   with_legacy: true
 - name: bluefs_log_replay_check_allocations
   type: bool
@@ -4955,7 +5024,9 @@ options:
   - bitmap
   - stupid
   - avl
+  - btree
   - hybrid
+  - hybrid_btree2
   with_legacy: true
 - name: bluestore_freelist_blocks_per_key
   type: size
@@ -5037,6 +5108,13 @@ options:
     This setting is used only when OSD is doing ``--mkfs``.
     Next runs of OSD retrieve sharding from disk.
   default: m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L=min_write_buffer_number_to_merge=32 P=min_write_buffer_number_to_merge=32
+- name: bluestore_async_db_compaction
+  type: bool
+  level: dev
+  desc: Perform DB compaction requests asynchronously
+  long_desc: 'How to perform DB compactions triggered either through async socket or
+    by OSD initialization procedure on start.'
+  default: true
 - name: bluestore_qfsck_on_mount
   type: bool
   level: dev
@@ -5343,18 +5421,47 @@ options:
   desc: Enable health indication when spurious read errors are observed by OSD
   default: true
   with_legacy: true
+- name: bluestore_warn_on_free_fragmentation
+  type: float
+  level: basic
+  desc: Level at which disk free fragmentation causes health warning. Set "1" to disable.
+    This is same value as admin command "bluestore allocator score block".
+  default: 0.8
+  with_legacy: false
+  flags:
+  - runtime
+  see_also:
+  - bluestore_fragmentation_check_period
+- name: bluestore_fragmentation_check_period
+  type: uint
+  level: basic
+  desc: The period to perform bluestore free fragmentation check.
+    Checking fragmentation is usually almost immediate. For highly fragmented storage,
+    it can take several miliseconds. It can cause a stall to a write operation.
+  default: 3600
+  with_legacy: false
+  flags:
+  - runtime
+  see_also:
+  - bluestore_warn_on_free_fragmentation
 - name: bluestore_slow_ops_warn_lifetime
   type: uint
   level: advanced
-  desc: A configurable duration for slow ops warning to be appeared if number of occurence pass `bluestore_slow_ops_warn_threshold` in `bluestore_slow_ops_warn_lifetime` seconds
+  desc: Set the time period during which a BlueStore slow ops warning will be raised when the `bluestore_slow_ops_warn_threshold` is exceeded.  This is not the same as `osd_op_complaint_time`, which is about RADOS ops at the OSD level.
   default: 86400
   with_legacy: true
+  see_also:
+  - bluestore_slow_ops_warn_threshold
+  - osd_op_complaint_time
 - name: bluestore_slow_ops_warn_threshold
   type: uint
   level: advanced
-  desc: A configurable number for slow ops warning to be appeared if number of occurence pass `bluestore_slow_ops_warn_threshold` in `bluestore_slow_ops_warn_lifetime` seconds
+  desc: Set the minimum number of BlueStore slow ops before raising a health warning state
   default: 1
   with_legacy: true
+  see_also:
+  - bluestore_slow_ops_warn_lifetime
+  - osd_op_complaint_time
 - name: bluestore_fsck_error_on_no_per_pool_omap
   type: bool
   level: advanced
@@ -5427,7 +5534,7 @@ options:
   level: dev
   desc: Sets threshold at which shrinking max free chunk size triggers enabling best-fit
     mode.
-  long_desc: 'AVL allocator works in two modes: near-fit and best-fit. By default,
+  long_desc: 'The AVL allocator works in two modes: near-fit and best-fit. By default,
     it uses very fast near-fit mode, in which it tries to fit a new block near the
     last allocated block of similar size. The second mode is much slower best-fit
     mode, in which it tries to find an exact match for the requested allocation. This
@@ -5447,7 +5554,7 @@ options:
     last allocated block of similar size. The second mode is much slower best-fit
     mode, in which it tries to find an exact match for the requested allocation. This
     mode is used when either the device gets fragmented or when it is low on free
-    space. When free space is smaller than ''bluestore_avl_alloc_bf_free_pct'', best-fit
+    space. When free space is smaller than `bluestore_avl_alloc_bf_free_pct`, best-fit
     mode is used.'
   default: 4
   see_also:
@@ -5457,6 +5564,11 @@ options:
   level: dev
   desc: Maximum RAM hybrid allocator should use before enabling bitmap supplement
   default: 64_M
+- name: bluestore_btree2_alloc_weight_factor
+  type: float
+  level: dev
+  desc: Large continuous extents weight factor
+  default: 2
 - name: bluestore_volume_selection_policy
   type: str
   level: dev
@@ -6486,3 +6598,20 @@ options:
   desc: Enables exception throwing instead of process abort on transaction submission error.
   default: false
   with_legacy: false
+- name: service_unique_id
+  type: str
+  level: advanced
+  desc: Unique string to be returned in PerfCounters
+  fmt_desc: A unique id to be created by orchestration software or the
+    administrator upon initial setup of a service. Enforcing uniqueness
+    is entirely the responsibility of the process used to create and
+    manage the cluster. A unique id will be unique within the scope of
+    the entire cluster across all services if they are chosen to be so.
+  note: If this is empty no uniquifier is provided.
+  tags:
+  - service
+  services:
+  - common
+  flags:
+  - no_mon_update
+  - startup

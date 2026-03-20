@@ -77,14 +77,14 @@ allow it. The account root user can add identity policies to its users in
 several ways.
 
 * Add policy directly to the user with the ``iam:PutUserPolicy`` and
-  ``iam:AttachUserPoliicy`` actions.
+  ``iam:AttachUserPolicy`` actions.
 
 * Create an IAM group and add group policy with the ``iam:PutGroupPolicy`` and
-  ``iam:AttachGroupPoliicy`` actions. Users added to that group with the
+  ``iam:AttachGroupPolicy`` actions. Users added to that group with the
   ``iam:AddUserToGroup`` action will inherit all of the group's policy.
 
 * Create an IAM role and add role policy with the ``iam:PutRolePolicy`` and
-  ``iam:AttachRolePoliicy`` actions. Users that assume this role with the
+  ``iam:AttachRolePolicy`` actions. Users that assume this role with the
   ``sts:AssumeRole`` and ``sts:AssumeRoleWithWebIdentity`` actions will inherit
   all of the role's policy.
 
@@ -173,6 +173,11 @@ An existing user can be adopted into an account with ``user modify``::
 
 .. note:: Account membership is permanent. Once added, users cannot be
    removed from their account.
+
+.. note:: The IAM User API imposes additional requirements on the format
+   of ``UserName``, which is enforced when migrating users into an account.
+   If migration fails with "UserName contains invalid characters", the
+   ``--display-name`` should be modified to match ``[\w+=,.@-]+``.
 
 .. warning:: Ownership of the user's notification topics will not be
    transferred to the account. Notifications will continue to work, but

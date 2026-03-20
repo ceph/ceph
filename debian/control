@@ -54,6 +54,7 @@ Build-Depends: automake,
                liblttng-ust-dev,
                liblua5.3-dev,
                liblz4-dev (>= 0.0~r131),
+               libnbd-dev,
                libncurses-dev,
                libnss3-dev,
                liboath-dev,
@@ -99,10 +100,12 @@ Build-Depends: automake,
                python3-coverage <pkg.ceph.check>,
                python3-dateutil <pkg.ceph.check>,
                python3-grpcio <pkg.ceph.check>,
+               python3-xmltodict <pkg.ceph.check>,
                python3-openssl <pkg.ceph.check>,
                python3-prettytable <pkg.ceph.check>,
                python3-requests <pkg.ceph.check>,
                python3-scipy <pkg.ceph.check>,
+               python3-onelogin-saml2 <pkg.ceph.check>,
                python3-setuptools,
                python3-sphinx,
                python3-venv,
@@ -354,6 +357,30 @@ Description: debugging symbols for ceph-mgr
  block and file system storage.
  .
  This package contains the debugging symbols for ceph-mgr.
+
+Package: ceph-exporter
+Architecture: linux-any
+Depends: ceph-base (= ${binary:Version}),
+Description: metrics exporter for the ceph distributed storage system
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the metrics exporter daemon, which is used to expose
+ the performance metrics.
+
+Package: ceph-exporter-dbg
+Architecture: linux-any
+Section: debug
+Priority: extra
+Depends: ceph-exporter (= ${binary:Version}),
+         ${misc:Depends},
+Description: debugging symbols for ceph-exporter
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the debugging symbols for ceph-exporter.
 
 Package: ceph-mon
 Architecture: linux-any
@@ -966,7 +993,7 @@ Package: radosgw
 Architecture: linux-any
 Depends: ceph-common (= ${binary:Version}),
          librgw2 (= ${binary:Version}),
-         mime-support,
+         media-types | mime-support,
          ${misc:Depends},
          ${shlibs:Depends},
 Suggests: gawk,

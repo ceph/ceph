@@ -164,6 +164,60 @@ parameters. This profile should be used with caution and is meant for advanced
 users, who understand mclock and Ceph related configuration options.
 
 
+.. index:: mclock; shard config for HDD clusters
+
+.. _mclock-hdd-cfg:
+
+OSD Shard Configuration For HDD Based Clusters With mClock
+==========================================================
+Each OSD is configured with one or more shards to perform tasks. Each shard
+comprises a unique queue to handle various types of OSD specific operations
+like client I/O, recovery, scrub and so on. The scheduling of these operations
+in the queue is performed by a scheduler - in this case the mClock scheduler.
+
+For HDD based OSDs, the number of shards is controlled by configuration
+:confval:`osd_op_num_shards_hdd`. Items are queued and dequeued by one or
+more worker threads and this is controlled by configuration
+:confval:`osd_op_num_threads_per_shard_hdd`.
+
+As described in :ref:`dmclock-qos-caveats`, the number of OSD shards employed
+determines the impact of mClock queue. In general, a lower number of shards
+increases the impact of mClock queues with respect to scheduling accuracy.
+This is providing there are enough number of worker threads per shard
+to help process the items in the mClock queue.
+
+Based on tests performed at scale with small objects in the range
+[1 KiB - 256 KiB] on a HDD based cluster (192 OSDs, 8 nodes,
+150 Million objects), it was found that scheduling with mClock was not optimal
+with multiple OSD shards. For example, in this cluster with multiple OSD node
+failures, the client throughput was found to be inconsistent across test runs
+coupled with multiple reported slow requests. For more details
+see https://tracker.ceph.com/issues/66289. With multiple shards, the situation
+was exacerbated when MAX limit was allocated to both client and background
+recovery class of operations. During the OSD failure phase, since both client
+and recovery ops were in direct competition to utilize the full bandwidth of
+OSDs, there was no predictability with respect to the throughput of either
+class of services.
+
+However, the same test with a single OSD shard and with multiple worker threads
+yielded significantly better results in terms of consistency of client and
+recovery throughput across multiple test runs. Please refer to the tracker
+above for more details. For sanity, the same test executed using this shard
+configuration with large objects in the range [1 MiB - 256 MiB] yielded similar
+results.
+
+Therefore, as an interim measure until the issue with multiple OSD shards
+(or multiple mClock queues per OSD) is investigated and fixed, the following
+change to the default HDD OSD shard configuration is made:
+
++---------------------------------------------+------------------+----------------+
+|  Config Option                              | Old Default      | New Default    |
++=============================================+==================+================+
+| :confval:`osd_op_num_shards_hdd`            | 5                | 1              |
++---------------------------------------------+------------------+----------------+
+| :confval:`osd_op_num_threads_per_shard_hdd` | 1                | 5              |
++---------------------------------------------+------------------+----------------+
+
 .. index:: mclock; built-in profiles
 
 mClock Built-in Profiles -  Locked Config Options
@@ -238,6 +292,10 @@ sleep options are disabled (set to 0),
 - :confval:`osd_recovery_sleep_hdd`
 - :confval:`osd_recovery_sleep_ssd`
 - :confval:`osd_recovery_sleep_hybrid`
+- :confval:`osd_recovery_sleep_degraded`
+- :confval:`osd_recovery_sleep_degraded_hdd`
+- :confval:`osd_recovery_sleep_degraded_ssd`
+- :confval:`osd_recovery_sleep_degraded_hybrid`
 - :confval:`osd_scrub_sleep`
 - :confval:`osd_delete_sleep`
 - :confval:`osd_delete_sleep_hdd`
@@ -656,28 +714,97 @@ general for HDDs, the bluestore throttle values are expected to be higher when
 compared to SSDs.
 
 
-Specifying  Max OSD Capacity
-----------------------------
+Set or Override Max IOPS Capacity of an OSD
+-------------------------------------------
 
-The steps in this section may be performed only if you want to override the
-max osd capacity automatically set during OSD initialization. The option
-``osd_mclock_max_capacity_iops_[hdd, ssd]`` for an OSD can be set by running the
-following command:
+The steps in this section may be performed to set or override the max IOPS
+capacity of an OSD. The ``osd_mclock_max_capacity_iops_[hdd, ssd]`` option for
+an OSD can be overridden by running a command of the following form:
 
-  .. prompt:: bash #
+.. prompt:: bash #
 
-     ceph config set osd.N osd_mclock_max_capacity_iops_[hdd,ssd] <value>
+  ceph config set osd.N osd_mclock_max_capacity_iops_[hdd,ssd] <value>
 
 For example, the following command sets the max capacity for a specific OSD
 (say "osd.0") whose underlying device type is HDD to 350 IOPS:
 
-  .. prompt:: bash #
+.. prompt:: bash #
 
-    ceph config set osd.0 osd_mclock_max_capacity_iops_hdd 350
+  ceph config set osd.0 osd_mclock_max_capacity_iops_hdd 350
 
 Alternatively, you may specify the max capacity for OSDs within the Ceph
 configuration file under the respective [osd.N] section. See
 :ref:`ceph-conf-settings` for more details.
+
+Global Override of Max IOPS Capacity for multiple OSDs
+------------------------------------------------------
+
+The max IOPS capacity of multiple OSDs may be overridden by a global config
+specification. This section shows the steps to globally override the
+individually scoped values in the mon store.
+
+    .. note:: The examples use :confval:`osd_mclock_max_capacity_iops_hdd` and
+              the steps are also applicable for SSD based OSDs in which case
+              the option to use is :confval:`osd_mclock_max_capacity_iops_ssd`.
+
+Below are steps to override the IOPS capacities of individual OSDs. Note that
+the individual value is taken by the OSD after it runs the usual startup
+benchmark.
+
+#. Run the following command to verify the individual values set for the OSDs in
+   the central config database:
+
+    .. prompt:: bash #
+
+      ceph config dump | grep osd_mclock_max_capacity_iops
+
+    ::
+
+      WHO     MASK  LEVEL  OPTION                            VALUE       RO
+      osd.0         basic  osd_mclock_max_capacity_iops_hdd  379.197568    
+      osd.1         basic  osd_mclock_max_capacity_iops_hdd  400.903575    
+      osd.2         basic  osd_mclock_max_capacity_iops_hdd  398.303428    
+      osd.3         basic  osd_mclock_max_capacity_iops_hdd  419.035854    
+
+#. If there are no individual values reported, skip to the next step. Otherwise,
+   remove all the individual values reported in the previous step with a command
+   of the following form (where 'x' is the OSD id):
+
+    .. prompt:: bash #
+
+      ceph config rm osd.x osd_mclock_max_capacity_iops_hdd
+
+#. Confirm that the `ceph config dump` command from step 1 does not show any
+   individual values.
+
+#. Set the global value of `osd_mclock_max_capacity_iops_hdd` with a command of
+   the following form:
+
+    .. prompt:: bash #
+
+      ceph config set global osd_mclock_max_capacity_iops_hdd 111
+
+#. Confirm that the global option is set by running:
+
+    .. prompt:: bash #
+
+      ceph config dump | grep osd_mclock_max_capacity_iops
+
+    ::
+
+      global        basic  osd_mclock_max_capacity_iops_hdd  111.000000    
+
+
+#. Confirm that the global setting is now in effect for any OSD that no longer
+   has a specific per-OSD central config setting:
+
+    .. prompt:: bash #
+
+      ceph config show osd.0 | grep osd_mclock_max_capacity_iops_hdd
+
+    ::
+
+      osd_mclock_max_capacity_iops_hdd                 111.000000                               mon
 
 
 .. index:: mclock; config settings
@@ -694,6 +821,8 @@ mClock Config Options
 .. confval:: osd_mclock_skip_benchmark
 .. confval:: osd_mclock_override_recovery_settings
 .. confval:: osd_mclock_iops_capacity_threshold_hdd
+.. confval:: osd_mclock_iops_capacity_low_threshold_hdd
 .. confval:: osd_mclock_iops_capacity_threshold_ssd
+.. confval:: osd_mclock_iops_capacity_low_threshold_ssd
 
 .. _the dmClock algorithm: https://www.usenix.org/legacy/event/osdi10/tech/full_papers/Gulati.pdf

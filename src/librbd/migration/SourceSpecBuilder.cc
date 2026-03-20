@@ -7,6 +7,9 @@
 #include "librbd/migration/FileStream.h"
 #include "librbd/migration/HttpStream.h"
 #include "librbd/migration/S3Stream.h"
+#if defined(HAVE_LIBNBD)
+#include "librbd/migration/NBDStream.h"
+#endif
 #include "librbd/migration/NativeFormat.h"
 #include "librbd/migration/QCOWFormat.h"
 #include "librbd/migration/RawFormat.h"
@@ -30,12 +33,9 @@ const std::string TYPE_KEY{"type"};
 template <typename I>
 int SourceSpecBuilder<I>::parse_source_spec(
     const std::string& source_spec,
-    json_spirit::mObject* source_spec_object) const {
-  auto cct = m_image_ctx->cct;
-  ldout(cct, 10) << dendl;
-
+    json_spirit::mObject* source_spec_object) {
   json_spirit::mValue json_root;
-  if(json_spirit::read(source_spec, json_root)) {
+  if (json_spirit::read(source_spec, json_root)) {
     try {
       *source_spec_object = json_root.get_obj();
       return 0;
@@ -43,13 +43,12 @@ int SourceSpecBuilder<I>::parse_source_spec(
     }
   }
 
-  lderr(cct) << "invalid source-spec JSON" << dendl;
   return -EBADMSG;
 }
 
 template <typename I>
 int SourceSpecBuilder<I>::build_format(
-    const json_spirit::mObject& source_spec_object, bool import_only,
+    const json_spirit::mObject& source_spec_object,
     std::unique_ptr<FormatInterface>* format) const {
   auto cct = m_image_ctx->cct;
   ldout(cct, 10) << dendl;
@@ -62,10 +61,7 @@ int SourceSpecBuilder<I>::build_format(
   }
 
   auto& type = type_value_it->second.get_str();
-  if (type == "native") {
-    format->reset(NativeFormat<I>::create(m_image_ctx, source_spec_object,
-                                          import_only));
-  } else if (type == "qcow") {
+  if (type == "qcow") {
     format->reset(QCOWFormat<I>::create(m_image_ctx, source_spec_object, this));
   } else if (type == "raw") {
     format->reset(RawFormat<I>::create(m_image_ctx, source_spec_object, this));
@@ -96,7 +92,7 @@ int SourceSpecBuilder<I>::build_snapshot(
     snapshot->reset(RawSnapshot<I>::create(m_image_ctx, source_spec_object,
                                            this, index));
   } else {
-    lderr(cct) << "unknown or unsupported format type '" << type << "'"
+    lderr(cct) << "unknown or unsupported snapshot type '" << type << "'"
                << dendl;
     return -ENOSYS;
   }
@@ -132,6 +128,10 @@ int SourceSpecBuilder<I>::build_stream(
     stream->reset(HttpStream<I>::create(m_image_ctx, stream_obj));
   } else if (type == "s3") {
     stream->reset(S3Stream<I>::create(m_image_ctx, stream_obj));
+#if defined(HAVE_LIBNBD)
+  } else if (type == "nbd") {
+    stream->reset(NBDStream<I>::create(m_image_ctx, stream_obj));
+#endif
   } else {
     lderr(cct) << "unknown or unsupported stream type '" << type << "'"
                << dendl;

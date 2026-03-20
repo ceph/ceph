@@ -75,12 +75,12 @@ struct Handler {
   librados::IoCtx ctx;
   AioResult& r;
   // write callback
-  void operator()(boost::system::error_code ec) const {
+  void operator()(boost::system::error_code ec, version_t) const {
     r.result = -ec.value();
     throttle->put(r);
   }
   // read callback
-  void operator()(boost::system::error_code ec, bufferlist bl) const {
+  void operator()(boost::system::error_code ec, version_t, bufferlist bl) const {
     r.result = -ec.value();
     r.data = std::move(bl);
     throttle->put(r);
@@ -89,17 +89,15 @@ struct Handler {
 
 template <typename Op>
 Aio::OpFunc aio_abstract(librados::IoCtx ctx, Op&& op,
-                         boost::asio::io_context& context,
-                         spawn::yield_context yield, jspan_context* trace_ctx = nullptr) {
-  return [ctx = std::move(ctx), op = std::move(op), &context, yield, trace_ctx] (Aio* aio, AioResult& r) mutable {
+                         boost::asio::yield_context yield,
+                         jspan_context* trace_ctx) {
+  return [ctx = std::move(ctx), op = std::move(op), yield, trace_ctx] (Aio* aio, AioResult& r) mutable {
       // arrange for the completion Handler to run on the yield_context's strand
       // executor so it can safely call back into Aio without locking
-      using namespace boost::asio;
-      async_completion<spawn::yield_context, void()> init(yield);
-      auto ex = get_associated_executor(init.completion_handler);
+      auto ex = yield.get_executor();
 
-      librados::async_operate(context, ctx, r.obj.oid, &op, 0,
-                              bind_executor(ex, Handler{aio, ctx, r}), trace_ctx);
+      librados::async_operate(yield, ctx, r.obj.oid, &op, 0, trace_ctx,
+                              bind_executor(ex, Handler{aio, ctx, r}));
     };
 }
 
@@ -110,7 +108,7 @@ Aio::OpFunc d3n_cache_aio_abstract(const DoutPrefixProvider *dpp, optional_yield
     ceph_assert(y);
     auto c = std::make_unique<D3nL1CacheRequest>();
     lsubdout(g_ceph_context, rgw_datacache, 20) << "D3nDataCache: d3n_cache_aio_abstract(): libaio Read From Cache, oid=" << r.obj.oid << dendl;
-    c->file_aio_read_abstract(dpp, y.get_io_context(), y.get_yield_context(), cache_location, read_ofs, read_len, aio, r);
+    c->file_aio_read_abstract(dpp, y.get_yield_context(), cache_location, read_ofs, read_len, aio, r);
   };
 }
 
@@ -122,7 +120,7 @@ Aio::OpFunc aio_abstract(librados::IoCtx ctx, Op&& op, optional_yield y, jspan_c
   static_assert(!std::is_const_v<Op>);
   if (y) {
     return aio_abstract(std::move(ctx), std::forward<Op>(op),
-                        y.get_io_context(), y.get_yield_context(), trace_ctx);
+                        y.get_yield_context(), trace_ctx);
   }
   return aio_abstract(std::move(ctx), std::forward<Op>(op), trace_ctx);
 }

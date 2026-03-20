@@ -293,6 +293,7 @@ public:
    * updates across the entire cluster.
    */
   void try_engage_stretch_mode();
+  void try_disable_stretch_mode();
   void maybe_go_degraded_stretch_mode();
   void trigger_degraded_stretch_mode(const std::set<std::string>& dead_mons,
 				     const std::set<int>& dead_buckets);
@@ -957,7 +958,7 @@ public:
   MonCap mon_caps;
   bool get_authorizer(int dest_type, AuthAuthorizer **authorizer);
 public: // for AuthMonitor msgr1:
-  int ms_handle_fast_authentication(Connection *con) override;
+  bool ms_handle_fast_authentication(Connection *con) override;
 private:
   void ms_handle_accept(Connection *con) override;
   bool ms_handle_reset(Connection *con) override;

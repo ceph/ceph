@@ -16,10 +16,10 @@ export interface ListenerRequest {
 export interface NamespaceCreateRequest {
   rbd_image_name: string;
   rbd_pool: string;
-  size: number;
+  rbd_image_size?: number;
 }
 
-export interface NamespaceEditRequest {
+export interface NamespaceUpdateRequest {
   rbd_image_size: number;
 }
 
@@ -104,7 +104,8 @@ export class NvmeofService {
       {
         observe: 'response',
         params: {
-          trsvcid
+          trsvcid,
+          force: 'true'
         }
       }
     );
@@ -125,7 +126,7 @@ export class NvmeofService {
     });
   }
 
-  updateNamespace(subsystemNQN: string, nsid: string, request: NamespaceEditRequest) {
+  updateNamespace(subsystemNQN: string, nsid: string, request: NamespaceUpdateRequest) {
     return this.http.patch(`${API_PATH}/subsystem/${subsystemNQN}/namespace/${nsid}`, request, {
       observe: 'response'
     });

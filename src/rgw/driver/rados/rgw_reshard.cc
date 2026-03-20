@@ -1153,10 +1153,9 @@ int RGWReshardWait::wait(optional_yield y)
   }
 
   if (y) {
-    auto& context = y.get_io_context();
     auto& yield = y.get_yield_context();
 
-    Waiter waiter(context);
+    Waiter waiter(yield.get_executor());
     waiters.push_back(waiter);
     lock.unlock();
 

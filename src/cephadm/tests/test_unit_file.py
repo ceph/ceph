@@ -27,11 +27,11 @@ def _get_unit_file(ctx, fsid):
     return str(systemd_unit._get_unit_file(ctx, fsid))
 
 
-def test_docker_engine_requires_docker():
+def test_docker_engine_wants_docker():
     ctx = context.CephadmContext()
     ctx.container_engine = mock_docker()
     r = _get_unit_file(ctx, '9b9d7609-f4d5-4aba-94c8-effa764d96c9')
-    assert 'Requires=docker.service' in r
+    assert 'Wants=docker.service' in r
 
 
 def test_podman_engine_does_not_req_docker():
@@ -80,7 +80,7 @@ def test_new_docker():
         '# configuration.',
         'After=network-online.target local-fs.target time-sync.target docker.service',
         'Wants=network-online.target local-fs.target time-sync.target',
-        'Requires=docker.service',
+        'Wants=docker.service',
         'PartOf=ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9.target',
         'Before=ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9.target',
         '[Service]',

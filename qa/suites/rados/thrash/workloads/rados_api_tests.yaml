@@ -1,3 +1,8 @@
+teuthology:
+  postmerge:
+    - |
+      -- Don't run this test on tiny clusters
+      if py_len(yaml.roles) < 4 then reject() end
 overrides:
   ceph:
     log-ignorelist:
@@ -16,6 +21,7 @@ overrides:
       osd:
         osd class load list: "*"
         osd class default list: "*"
+        osd client watch timeout: 240
 tasks:
 - workunit:
     clients:

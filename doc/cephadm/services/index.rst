@@ -355,6 +355,8 @@ Or in YAML:
 
 * See :ref:`orchestrator-host-labels`
 
+.. _cephadm-services-placement-by-pattern-matching:
+
 Placement by pattern matching
 -----------------------------
 

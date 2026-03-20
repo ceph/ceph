@@ -47,10 +47,6 @@ except ImportError:
 
 from .services.sso import load_sso_db
 
-if cherrypy is not None:
-    from .cherrypy_backports import patch_cherrypy
-    patch_cherrypy(cherrypy.__version__)
-
 # pylint: disable=wrong-import-position
 from .plugins import PLUGIN_MANAGER, debug, feature_toggles, motd  # isort:skip # noqa E501 # pylint: disable=unused-import
 

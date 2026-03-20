@@ -57,6 +57,7 @@
 #include "rgw_lua_data_filter.h"
 #include "rgw_lua.h"
 #include "rgw_iam_managed_policy.h"
+#include "rgw_bucket_sync.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_quota.h"
@@ -141,7 +142,7 @@ int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
 
   // use the master zone's endpoints
   auto conn = RGWRESTConn{dpp->get_cct(), z->second.id, z->second.endpoints,
-                          creds, zg->second.id, zg->second.api_name};
+                          creds, site.get_zonegroup().id, zg->second.api_name};
   bufferlist outdata;
   constexpr size_t max_response_size = 128 * 1024; // we expect a very small response
   int ret = conn.forward(dpp, effective_owner, req, nullptr,
@@ -635,7 +636,7 @@ int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
     return -ERR_NO_SUCH_BUCKET;
   }
 
-  s->object->set_atomic();
+  s->object->set_atomic(true);
   if (prefetch_data) {
     s->object->set_prefetch_data();
   }
@@ -646,7 +647,7 @@ int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
 }
 
 static int rgw_iam_remove_objtags(const DoutPrefixProvider *dpp, req_state* s, rgw::sal::Object* object, bool has_existing_obj_tag, bool has_resource_tag) {
-  object->set_atomic();
+  object->set_atomic(true);
   int op_ret = object->get_obj_attrs(s->yield, dpp);
   if (op_ret < 0)
     return op_ret;
@@ -722,7 +723,7 @@ static int rgw_iam_add_tags_from_bl(req_state* s, bufferlist& bl, bool has_exist
 }
 
 static int rgw_iam_add_objtags(const DoutPrefixProvider *dpp, req_state* s, rgw::sal::Object* object, bool has_existing_obj_tag, bool has_resource_tag) {
-  object->set_atomic();
+  object->set_atomic(true);
   int op_ret = object->get_obj_attrs(s->yield, dpp);
   if (op_ret < 0)
     return op_ret;
@@ -906,6 +907,28 @@ void rgw_build_iam_environment(rgw::sal::Driver* driver,
   }
 }
 
+void handle_replication_status_header(
+    const DoutPrefixProvider *dpp,
+    rgw::sal::Attrs& attrs,
+    req_state* s,
+    const ceph::real_time &obj_mtime) {
+  auto attr_iter = attrs.find(RGW_ATTR_OBJ_REPLICATION_STATUS);
+  if (attr_iter != attrs.end() && attr_iter->second.to_str() == "PENDING") {
+    if (s->object->is_sync_completed(dpp, obj_mtime)) {
+        s->object->set_atomic(true);
+        rgw::sal::Attrs setattrs, rmattrs;
+        bufferlist bl;
+        bl.append("COMPLETED");
+        setattrs[RGW_ATTR_OBJ_REPLICATION_STATUS] = bl;
+	int ret = s->object->set_obj_attrs(dpp, &setattrs, &rmattrs, s->yield, 0);
+        s->object->set_atomic(false);
+	if (ret == 0) {
+	  ldpp_dout(dpp, 20) << *s->object << " has amz-replication-status header set to COMPLETED" << dendl;
+	}
+    }
+  }
+}
+
 /*
  * GET on CloudTiered objects is processed only when sent from the sync client.
  * In all other cases, fail with `ERR_INVALID_OBJECT_STATE`.
@@ -951,7 +974,7 @@ void rgw_bucket_object_pre_exec(req_state *s)
 
 int RGWGetObj::verify_permission(optional_yield y)
 {
-  s->object->set_atomic();
+  s->object->set_atomic(true);
 
   if (prefetch_data()) {
     s->object->set_prefetch_data();
@@ -1033,7 +1056,7 @@ void RGWGetObjTags::execute(optional_yield y)
 {
   rgw::sal::Attrs attrs;
 
-  s->object->set_atomic();
+  s->object->set_atomic(true);
 
   op_ret = s->object->get_obj_attrs(y, this);
 
@@ -1076,7 +1099,7 @@ void RGWPutObjTags::execute(optional_yield y)
     return;
   }
 
-  s->object->set_atomic();
+  s->object->set_atomic(true);
   op_ret = s->object->modify_obj_attrs(RGW_ATTR_TAGS, tags_bl, y, this);
   if (op_ret == -ECANCELED){
     op_ret = -ERR_TAG_CONFLICT;
@@ -1205,9 +1228,9 @@ void RGWDeleteBucketTags::execute(optional_yield y)
   }
 
   op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y] {
-    rgw::sal::Attrs attrs = s->bucket->get_attrs();
+    rgw::sal::Attrs& attrs = s->bucket->get_attrs();
     attrs.erase(RGW_ATTR_TAGS);
-    op_ret = s->bucket->merge_and_store_attrs(this, attrs, y);
+    op_ret = s->bucket->put_info(this, false, real_time(), y);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "RGWDeleteBucketTags() failed to remove RGW_ATTR_TAGS on bucket="
 			 << s->bucket->get_name()
@@ -1620,7 +1643,7 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
   ldpp_dout(this, 20) << "reading obj=" << part << " ofs=" << cur_ofs
       << " end=" << cur_end << dendl;
 
-  part->set_atomic();
+  part->set_atomic(true);
   part->set_prefetch_data();
 
   std::unique_ptr<rgw::sal::Object::ReadOp> read_op = part->get_read_op();
@@ -2294,6 +2317,7 @@ void RGWGetObj::execute(optional_yield y)
   }
 #endif
 
+
   op_ret = rgw_compression_info_from_attrset(attrs, need_decompress, cs_info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to decode compression info, cannot decompress" << dendl;
@@ -2312,6 +2336,8 @@ void RGWGetObj::execute(optional_yield y)
     filter = &*decompress;
   }
 
+  handle_replication_status_header(this, attrs, s, lastmod);
+
   attr_iter = attrs.find(RGW_ATTR_OBJ_REPLICATION_TRACE);
   if (attr_iter != attrs.end()) {
     try {
@@ -2328,6 +2354,7 @@ void RGWGetObj::execute(optional_yield y)
       }
     } catch (const buffer::error&) {}
   }
+
 
   if (get_type() == RGW_OP_GET_OBJ && get_data) {
     op_ret = handle_cloudtier_obj(attrs, sync_cloudtiered);
@@ -3435,54 +3462,62 @@ void RGWCreateBucket::execute(optional_yield y)
   const rgw::SiteConfig& site = *s->penv.site;
   const std::optional<RGWPeriod>& period = site.get_period();
   const RGWZoneGroup& my_zonegroup = site.get_zonegroup();
-
-  if (s->system_request) {
-    // allow system requests to override the target zonegroup. for forwarded
-    // requests, we'll create the bucket for the originating zonegroup
-    createparams.zonegroup_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "zonegroup");
-  }
-
+  const std::string rgwx_zonegroup = s->info.args.get(RGW_SYS_PARAM_PREFIX "zonegroup");
   const RGWZoneGroup* bucket_zonegroup = &my_zonegroup;
-  if (createparams.zonegroup_id.empty()) {
-    // default to the local zonegroup
-    createparams.zonegroup_id = my_zonegroup.id;
-  } else if (period) {
-    auto z = period->period_map.zonegroups.find(createparams.zonegroup_id);
-    if (z == period->period_map.zonegroups.end()) {
-      ldpp_dout(this, 0) << "could not find zonegroup "
-          << createparams.zonegroup_id << " in current period" << dendl;
-      op_ret = -ENOENT;
-      return;
-    }
-    bucket_zonegroup = &z->second;
-  } else if (createparams.zonegroup_id != my_zonegroup.id) {
-    ldpp_dout(this, 0) << "zonegroup does not match current zonegroup "
-        << createparams.zonegroup_id << dendl;
-    op_ret = -ENOENT;
-    return;
-  }
 
-  // validate the LocationConstraint
+  // Validate LocationConstraint if it's provided and enforcement is strict
   if (!location_constraint.empty() && !relaxed_region_enforcement) {
-    // on the master zonegroup, allow any valid api_name. otherwise it has to
-    // match the bucket's zonegroup
-    if (period && my_zonegroup.is_master) {
-      if (!period->period_map.zonegroups_by_api.count(location_constraint)) {
+    if (period) {
+      auto location_iter = period->period_map.zonegroups_by_api.find(location_constraint);
+      if (location_iter == period->period_map.zonegroups_by_api.end()) {
         ldpp_dout(this, 0) << "location constraint (" << location_constraint
             << ") can't be found." << dendl;
         op_ret = -ERR_INVALID_LOCATION_CONSTRAINT;
-        s->err.message = "The specified location-constraint is not valid";
+        s->err.message = fmt::format("The {} location constraint is not valid.",
+                                     location_constraint);
         return;
       }
-    } else if (bucket_zonegroup->api_name != location_constraint) {
+      bucket_zonegroup = &location_iter->second;
+    } else if (location_constraint != my_zonegroup.api_name) { // if we don't have a period, we can only use the current zonegroup - so check if the location matches by api name here
       ldpp_dout(this, 0) << "location constraint (" << location_constraint
-          << ") doesn't match zonegroup (" << bucket_zonegroup->api_name
-          << ')' << dendl;
-      op_ret = -ERR_INVALID_LOCATION_CONSTRAINT;
-      s->err.message = "The specified location-constraint is not valid";
+          << ") doesn't match zonegroup (" << my_zonegroup.api_name << ")" << dendl;
+      op_ret = -ERR_ILLEGAL_LOCATION_CONSTRAINT_EXCEPTION;
+      s->err.message = fmt::format("The {} location constraint is incompatible "
+                                   "for the region specific endpoint this request was sent to.",
+                                   location_constraint);
       return;
     }
   }
+  // If it's a system request, use the provided zonegroup if available
+  else if (s->system_request && !rgwx_zonegroup.empty()) {
+    if (period) {
+      auto zonegroup_iter = period->period_map.zonegroups.find(rgwx_zonegroup);
+      if (zonegroup_iter == period->period_map.zonegroups.end()) {
+        ldpp_dout(this, 0) << "could not find zonegroup " << rgwx_zonegroup
+            << " in current period" << dendl;
+        op_ret = -ENOENT;
+        return;
+      }
+      bucket_zonegroup = &zonegroup_iter->second;
+    }
+  }
+
+  const bool enforce_location_match =
+    !period ||               // No period: no multisite, so no need to enforce location match.
+    !s->system_request ||    // All user requests are enforced to match zonegroup's location.
+    !my_zonegroup.is_master; // but if it's a system request (forwarded) only allow remote creation on master zonegroup.
+  if (enforce_location_match && !my_zonegroup.equals(bucket_zonegroup->get_id())) {
+    ldpp_dout(this, 0) << "location constraint (" << bucket_zonegroup->api_name
+        << ") doesn't match zonegroup (" << my_zonegroup.api_name << ")" << dendl;
+    op_ret = -ERR_ILLEGAL_LOCATION_CONSTRAINT_EXCEPTION;
+    s->err.message = fmt::format("The {} location constraint is incompatible "
+                                 "for the region specific endpoint this request was sent to.",
+                                 bucket_zonegroup->api_name);
+    return;
+  }
+
+  // Set the final zonegroup ID
+  createparams.zonegroup_id = bucket_zonegroup->id;
 
   // select and validate the placement target
   op_ret = select_bucket_placement(this, *bucket_zonegroup, s->user->get_info(),
@@ -3491,7 +3526,7 @@ void RGWCreateBucket::execute(optional_yield y)
     return;
   }
 
-  if (bucket_zonegroup == &my_zonegroup) {
+  if (my_zonegroup.equals(bucket_zonegroup->get_id())) {
     // look up the zone placement pool
     createparams.zone_placement = rgw::find_zone_placement(
         this, site.get_zone_params(), createparams.placement_rule);
@@ -3580,7 +3615,6 @@ void RGWCreateBucket::execute(optional_yield y)
 
   if (!driver->is_meta_master()) {
     // apply bucket creation on the master zone first
-    bufferlist in_data;
     JSONParser jp;
     op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
                                            &in_data, &jp, s->info, y);
@@ -3657,7 +3691,10 @@ void RGWCreateBucket::execute(optional_yield y)
       s->bucket->get_info().has_website = !s->bucket->get_info().website_conf.is_empty();
 
       /* This will also set the quota on the bucket. */
-      op_ret = s->bucket->merge_and_store_attrs(this, createparams.attrs, y);
+      s->bucket->set_attrs(std::move(createparams.attrs));
+      constexpr bool exclusive = false; // overwrite
+      constexpr ceph::real_time no_set_mtime{};
+      op_ret = s->bucket->put_info(this, exclusive, no_set_mtime, y);
     } while (op_ret == -ECANCELED && tries++ < 20);
 
     /* Restore the proper return code. */
@@ -3717,14 +3754,19 @@ void RGWDeleteBucket::execute(optional_yield y)
     }
   }
 
-  op_ret = s->bucket->sync_owner_stats(this, y, nullptr);
-  if ( op_ret < 0) {
-     ldpp_dout(this, 1) << "WARNING: failed to sync user stats before bucket delete: op_ret= " << op_ret << dendl;
-  }
+  const bool own_bucket = s->penv.site->get_zonegroup().get_id() == s->bucket->get_info().zonegroup;
 
-  op_ret = s->bucket->check_empty(this, y);
-  if (op_ret < 0) {
-    return;
+  if (own_bucket) {
+    // only if we own the bucket
+    op_ret = s->bucket->sync_owner_stats(this, y, nullptr);
+    if (op_ret < 0) {
+      ldpp_dout(this, 1) << "WARNING: failed to sync user stats before bucket delete: op_ret= " << op_ret << dendl;
+    }
+
+    op_ret = s->bucket->check_empty(this, y);
+    if (op_ret < 0) {
+      return;
+    }
   }
 
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
@@ -3738,9 +3780,11 @@ void RGWDeleteBucket::execute(optional_yield y)
     return;
   }
 
-  op_ret = rgw_remove_sse_s3_bucket_key(s, y);
-  if (op_ret != 0) {
-      // do nothing; it will already have been logged
+  if (own_bucket) {
+    op_ret = rgw_remove_sse_s3_bucket_key(s, y);
+    if (op_ret != 0) {
+        // do nothing; it will already have been logged
+    }
   }
 
   op_ret = s->bucket->remove(this, false, y);
@@ -3780,13 +3824,17 @@ int RGWPutObj::init_processing(optional_yield y) {
     copy_source_bucket_name = copy_source_bucket_name.substr(0, pos);
 #define VERSION_ID_STR "?versionId="
     pos = copy_source_object_name.find(VERSION_ID_STR);
-    if (pos == std::string::npos) {
-      copy_source_object_name = url_decode(copy_source_object_name);
-    } else {
+    if (pos != std::string::npos) {
       copy_source_version_id =
         copy_source_object_name.substr(pos + sizeof(VERSION_ID_STR) - 1);
       copy_source_object_name =
-        url_decode(copy_source_object_name.substr(0, pos));
+        copy_source_object_name.substr(0, pos);
+    }
+    if (copy_source_object_name.empty()) {
+      //means copy_source_object_name is empty string so the url is formatted badly
+      ret = -EINVAL;
+      ldpp_dout(this, 5) << "x-amz-copy-source bad format" << dendl;
+      return ret;
     }
     pos = copy_source_bucket_name.find(":");
     if (pos == std::string::npos) {
@@ -3813,6 +3861,7 @@ int RGWPutObj::init_processing(optional_yield y) {
       return ret;
     }
     copy_source_bucket_info = bucket->get_info();
+    copy_source_bucket_attrs = bucket->get_attrs();
 
     /* handle x-amz-copy-source-range */
     if (copy_source_range) {
@@ -3872,15 +3921,14 @@ int RGWPutObj::verify_permission(optional_yield y)
 
     RGWAccessControlPolicy cs_acl;
     boost::optional<Policy> policy;
-    map<string, bufferlist> cs_attrs;
     auto cs_bucket = driver->get_bucket(copy_source_bucket_info);
     auto cs_object = cs_bucket->get_object(rgw_obj_key(copy_source_object_name,
                                                        copy_source_version_id));
-    cs_object->set_atomic();
+    cs_object->set_atomic(true);
     cs_object->set_prefetch_data();
 
     /* check source object permissions */
-    int ret = read_obj_policy(this, driver, s, copy_source_bucket_info, cs_attrs, cs_acl, nullptr,
+    int ret = read_obj_policy(this, driver, s, copy_source_bucket_info, copy_source_bucket_attrs, cs_acl, nullptr,
                               policy, cs_bucket.get(), cs_object.get(), y, true);
     if (ret < 0) {
       return ret;
@@ -3889,7 +3937,7 @@ int RGWPutObj::verify_permission(optional_yield y)
     RGWAccessControlPolicy cs_bucket_acl;
     ret = rgw_op_get_bucket_policy_from_attr(this, s->cct, driver,
                                              copy_source_bucket_info.owner,
-                                             cs_attrs, cs_bucket_acl, y);
+                                             copy_source_bucket_attrs, cs_bucket_acl, y);
     if (ret < 0) {
       return ret;
     }
@@ -3917,11 +3965,8 @@ int RGWPutObj::verify_permission(optional_yield y)
 
   rgw_add_to_iam_environment(s->env, "s3:x-amz-acl", s->canned_acl);
 
-  if (obj_tags != nullptr && obj_tags->count() > 0){
-    auto tags = obj_tags->get_tags();
-    for (const auto& kv: tags){
-      rgw_add_to_iam_environment(s->env, "s3:RequestObjectTag/"+kv.first, kv.second);
-    }
+  for (const auto& kv: obj_tags.get_tags()) {
+    rgw_add_to_iam_environment(s->env, "s3:RequestObjectTag/"+kv.first, kv.second);
   }
 
   // add server-side encryption headers
@@ -4181,7 +4226,7 @@ void RGWPutObj::execute(optional_yield y)
 		       s->object.get(), s->src_object.get(), s,
 		       rgw::notify::ObjectCreatedPut, y);
   if(!multipart) {
-    op_ret = res->publish_reserve(this, obj_tags.get());
+    op_ret = res->publish_reserve(this, &obj_tags);
     if (op_ret < 0) {
       return;
     }
@@ -4449,6 +4494,19 @@ void RGWPutObj::execute(optional_yield y)
     }
   }
 
+  RGWBucketSyncPolicyHandlerRef policy_handler;
+  op_ret = driver->get_sync_policy_handler(this, std::nullopt, s->bucket->get_key(), &policy_handler, s->yield);
+
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "failed to read sync policy for bucket: " << s->bucket << dendl;
+    return;
+  }
+  if (policy_handler && policy_handler->bucket_exports_object(s->object->get_name(), obj_tags)) {
+    bufferlist repl_bl;
+    repl_bl.append("PENDING");
+    emplace_attr(RGW_ATTR_OBJ_REPLICATION_STATUS, std::move(repl_bl));
+  }
+
   if (slo_info) {
     bufferlist manifest_bl;
     encode(*slo_info, manifest_bl);
@@ -4468,7 +4526,7 @@ void RGWPutObj::execute(optional_yield y)
     return;
   }
   encode_delete_at_attr(delete_at, attrs);
-  encode_obj_tags_attr(obj_tags.get(), attrs);
+  encode_obj_tags_attr(obj_tags, attrs);
   rgw_cond_decode_objtags(s, attrs);
 
   /* Add a custom metadata to expose the information whether an object
@@ -4943,7 +5001,10 @@ void RGWPutMetadataBucket::execute(optional_yield y)
       /* Setting attributes also stores the provided bucket info. Due
        * to this fact, the new quota settings can be serialized with
        * the same call. */
-      op_ret = s->bucket->merge_and_store_attrs(this, attrs, s->yield);
+      s->bucket->set_attrs(attrs);
+      constexpr bool exclusive = false; // overwrite
+      constexpr ceph::real_time no_set_mtime{};
+      op_ret = s->bucket->put_info(this, exclusive, no_set_mtime, s->yield);
       return op_ret;
     }, y);
 }
@@ -4968,7 +5029,7 @@ void RGWPutMetadataObject::execute(optional_yield y)
 {
   rgw::sal::Attrs attrs, rmattrs;
 
-  s->object->set_atomic();
+  s->object->set_atomic(true);
 
   op_ret = get_params(y);
   if (op_ret < 0) {
@@ -5006,7 +5067,7 @@ void RGWPutMetadataObject::execute(optional_yield y)
     }
   }
 
-  op_ret = s->object->set_obj_attrs(this, &attrs, &rmattrs, s->yield);
+  op_ret = s->object->set_obj_attrs(this, &attrs, &rmattrs, s->yield, rgw::sal::FLAG_LOG_OP);
 }
 
 int RGWDeleteObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
@@ -5117,9 +5178,12 @@ void RGWDeleteObj::execute(optional_yield y)
   if (!rgw::sal::Object::empty(s->object.get())) {
     uint64_t obj_size = 0;
     std::string etag;
+    bool null_verid;
     {
       RGWObjState* astate = nullptr;
       bool check_obj_lock = s->object->have_instance() && s->bucket->get_info().obj_lock_enabled();
+      null_verid = (s->object->get_instance() == "null");
+
       op_ret = s->object->get_obj_state(this, &astate, s->yield, true);
       if (op_ret < 0) {
         if (need_object_expiration() || multipart_delete) {
@@ -5189,7 +5253,7 @@ void RGWDeleteObj::execute(optional_yield y)
       return;
     }
 
-    s->object->set_atomic();
+    s->object->set_atomic(true);
     
     bool ver_restored = false;
     op_ret = s->object->swift_versioning_restore(s->owner, s->user->get_id(),
@@ -5217,6 +5281,7 @@ void RGWDeleteObj::execute(optional_yield y)
       del_op->params.high_precision_time = s->system_request;
       del_op->params.olh_epoch = epoch;
       del_op->params.marker_version_id = version_id;
+      del_op->params.null_verid = null_verid;
 
       op_ret = del_op->delete_obj(this, y, rgw::sal::FLAG_LOG_OP);
       if (op_ret >= 0) {
@@ -5341,7 +5406,7 @@ int RGWCopyObj::verify_permission(optional_yield y)
 
   /* get buckets info (source and dest) */
   if (s->local_source &&  source_zone.empty()) {
-    s->src_object->set_atomic();
+    s->src_object->set_atomic(true);
     s->src_object->set_prefetch_data();
 
     rgw_placement_rule src_placement;
@@ -5393,7 +5458,7 @@ int RGWCopyObj::verify_permission(optional_yield y)
 
   RGWAccessControlPolicy dest_bucket_policy;
 
-  s->object->set_atomic();
+  s->object->set_atomic(true);
 
   /* check dest bucket permissions */
   op_ret = read_bucket_policy(this, driver, s, s->bucket->get_info(),
@@ -5506,8 +5571,8 @@ void RGWCopyObj::execute(optional_yield y)
     s->object->gen_rand_obj_instance_name();
   }
 
-  s->src_object->set_atomic();
-  s->object->set_atomic();
+  s->src_object->set_atomic(true);
+  s->object->set_atomic(true);
 
   encode_delete_at_attr(delete_at, attrs);
 
@@ -5844,7 +5909,7 @@ void RGWPutACLs::execute(optional_yield y)
   map<string, bufferlist> attrs;
 
   if (!rgw::sal::Object::empty(s->object.get())) {
-    s->object->set_atomic();
+    s->object->set_atomic(true);
     //if instance is empty, we should modify the latest object
     op_ret = s->object->modify_obj_attrs(RGW_ATTR_ACL, bl, s->yield, this);
   } else {
@@ -5963,7 +6028,10 @@ void RGWDeleteLC::execute(optional_yield y)
     return;
   }
 
-  op_ret = driver->get_rgwlc()->remove_bucket_config(s->bucket.get(), s->bucket_attrs);
+  // remove RGW_ATTR_LC and remove the bucket from the 'lc list'
+  constexpr bool update_attrs = true;
+  op_ret = driver->get_rgwlc()->remove_bucket_config(this, y, s->bucket.get(),
+                                                     update_attrs);
   if (op_ret < 0) {
     return;
   }
@@ -6065,9 +6133,9 @@ void RGWDeleteCORS::execute(optional_yield y)
 	return op_ret;
       }
 
-      rgw::sal::Attrs attrs(s->bucket_attrs);
+      rgw::sal::Attrs& attrs = s->bucket->get_attrs();
       attrs.erase(RGW_ATTR_CORS);
-      op_ret = s->bucket->merge_and_store_attrs(this, attrs, s->yield);
+      op_ret = s->bucket->put_info(this, false, real_time(), s->yield);
       if (op_ret < 0) {
 	ldpp_dout(this, 0) << "RGWLC::RGWDeleteCORS() failed to set attrs on bucket=" << s->bucket->get_name()
 			 << " returned err=" << op_ret << dendl;
@@ -6204,7 +6272,8 @@ int RGWInitMultipart::verify_permission(optional_yield y)
   // add server-side encryption headers
   rgw_iam_add_crypt_attrs(s->env, s->info.crypt_attribute_map);
 
-  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutObject)) {
+  if (!verify_bucket_permission(this, s, ARN(s->object->get_obj()),
+                                rgw::IAM::s3PutObject)) {
     return -EACCES;
   }
 
@@ -6397,10 +6466,59 @@ void RGWCompleteMultipart::execute(optional_yield y)
     return;
   }
 
-  op_ret = upload->complete(this, y, s->cct, parts->parts, remove_objs, accounted_size, compressed, cs_info, ofs, s->req_id, s->owner, olh_epoch, s->object.get());
+  RGWObjVersionTracker& objv_tracker = meta_obj->get_version_tracker();
+
+  using prefix_map_t = rgw::sal::MultipartUpload::prefix_map_t;
+  prefix_map_t processed_prefixes;
+
+  op_ret =
+    upload->complete(this, y, s->cct, parts->parts, remove_objs, accounted_size,
+                     compressed, cs_info, ofs, s->req_id, s->owner, olh_epoch,
+                     s->object.get(), processed_prefixes);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: upload complete failed ret=" << op_ret << dendl;
     return;
+  }
+
+  remove_objs.clear();
+
+  // use cls_version_check() when deleting the meta object to detect part uploads that raced
+  // with upload->complete(). any parts that finish after that won't be part of the final
+  // upload, so they need to be gc'd and removed from the bucket index before retrying
+  // deletion of the multipart meta object
+  static constexpr auto MAX_DELETE_RETRIES = 15u;
+  for (auto i = 0u; i < MAX_DELETE_RETRIES; i++) {
+    // remove the upload meta object ; the meta object is not versioned
+    // when the bucket is, as that would add an unneeded delete marker
+    int ret = meta_obj->delete_object(this, y, rgw::sal::FLAG_PREVENT_VERSIONING, &remove_objs, &objv_tracker);
+    if (ret != -ECANCELED || i == MAX_DELETE_RETRIES - 1) {
+      if (ret >= 0) {
+        /* serializer's exclusive lock is released */
+        serializer->clear_locked();
+      } else {
+        ldpp_dout(this, 1) << "ERROR: failed to remove object " << meta_obj << ", ret: " << ret << dendl;
+      }
+      break;
+    }
+
+    ldpp_dout(this, 20) << "deleting meta_obj is cancelled due to mismatch cls_version: " << objv_tracker << dendl;
+    objv_tracker.clear();
+
+    ret = meta_obj->get_obj_attrs(s->yield, this);
+    if (ret < 0) {
+      ldpp_dout(this, 1) << "ERROR: failed to get obj attrs, obj=" << meta_obj
+			 << " ret=" << ret << dendl;
+
+      if (ret != -ENOENT) {
+	ldpp_dout(this, 0) << "ERROR: failed to remove object " << meta_obj << dendl;
+      }
+      break;
+    }
+
+    ret = upload->cleanup_orphaned_parts(this, s->cct, y, meta_obj->get_obj(), remove_objs, processed_prefixes);
+    if (ret < 0) {
+      ldpp_dout(this, 0) << "ERROR: failed to clenup orphaned parts. ret=" << ret << dendl;
+    }
   }
 
   const ceph::real_time upload_time = upload->get_mtime();
@@ -6412,17 +6530,6 @@ void RGWCompleteMultipart::execute(optional_yield y)
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
   }
-
-  // remove the upload meta object ; the meta object is not versioned
-  // when the bucket is, as that would add an unneeded delete marker
-  ret = meta_obj->delete_object(this, y, rgw::sal::FLAG_PREVENT_VERSIONING);
-  if (ret >= 0) {
-    /* serializer's exclusive lock is released */
-    serializer->clear_locked();
-  } else {
-    ldpp_dout(this, 4) << "WARNING: failed to remove object " << meta_obj << ", ret: " << ret << dendl;
-  }
-
 } // RGWCompleteMultipart::execute
 
 bool RGWCompleteMultipart::check_previously_completed(const RGWMultiCompleteUpload* parts)
@@ -6508,17 +6615,30 @@ void RGWAbortMultipart::execute(optional_yield y)
     return;
 
   upload = s->bucket->get_multipart_upload(s->object->get_name(), upload_id);
+  meta_obj = upload->get_meta_obj();
+  meta_obj->set_in_extra_data(true);
+  meta_obj->get_obj_attrs(s->yield, this);
+
   jspan_context trace_ctx(false, false);
   if (tracing::rgw::tracer.is_enabled()) {
     // read meta object attributes for trace info
-    meta_obj = upload->get_meta_obj();
-    meta_obj->set_in_extra_data(true);
-    meta_obj->get_obj_attrs(s->yield, this);
     extract_span_context(meta_obj->get_attrs(), trace_ctx);
   }
   multipart_trace = tracing::rgw::tracer.add_span(name(), trace_ctx);
 
+  int max_lock_secs_mp =
+    s->cct->_conf.get_val<int64_t>("rgw_mp_lock_max_time");
+  utime_t dur(max_lock_secs_mp, 0);
+  auto serializer = meta_obj->get_serializer(this, "RGWCompleteMultipart");
+  op_ret = serializer->try_lock(this, dur, y);
+  if (op_ret < 0) {
+    if (op_ret == -ENOENT) {
+      op_ret = -ERR_NO_SUCH_UPLOAD;
+    }
+    return;
+  }
   op_ret = upload->abort(this, s->cct, y);
+  serializer->unlock();
 }
 
 int RGWListMultipart::verify_permission(optional_yield y)
@@ -6753,7 +6873,7 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
     return;
   }
 
-  obj->set_atomic();
+  obj->set_atomic(true);
 
   std::string version_id; // empty
   std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
@@ -6788,7 +6908,8 @@ void RGWDeleteMultiObj::execute(optional_yield y)
   char* buf;
   std::optional<boost::asio::deadline_timer> formatter_flush_cond;
   if (y) {
-    formatter_flush_cond = std::make_optional<boost::asio::deadline_timer>(y.get_io_context());  
+    auto ex = y.get_yield_context().get_executor();
+    formatter_flush_cond = std::make_optional<boost::asio::deadline_timer>(ex);
   }
 
   buf = data.c_str();
@@ -6856,9 +6977,11 @@ void RGWDeleteMultiObj::execute(optional_yield y)
         return aio_count < max_aio;
       });
       aio_count++;
-      spawn::spawn(y.get_yield_context(), [this, &y, &aio_count, obj_key, &formatter_flush_cond] (spawn::yield_context yield) {
-        handle_individual_object(obj_key, optional_yield { y.get_io_context(), yield }, &*formatter_flush_cond); 
+      boost::asio::spawn(y.get_yield_context(), [this, &aio_count, obj_key, &formatter_flush_cond] (boost::asio::yield_context yield) {
+        handle_individual_object(obj_key, yield, &*formatter_flush_cond);
         aio_count--;
+      }, [] (std::exception_ptr eptr) {
+        if (eptr) std::rethrow_exception(eptr);
       }); 
     } else {
       handle_individual_object(obj_key, y, nullptr);
@@ -6929,7 +7052,7 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
 
     bucket_owner.id = bucket->get_info().owner;
     std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(path.obj_key);
-    obj->set_atomic();
+    obj->set_atomic(true);
 
     std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
     del_op->params.versioning_status = obj->get_bucket()->get_info().versioning_status();
@@ -7538,7 +7661,7 @@ ssize_t RGWBulkUploadOp::AlignedStreamGetter::get_exactly(const size_t want,
 
 int RGWGetAttrs::verify_permission(optional_yield y)
 {
-  s->object->set_atomic();
+  s->object->set_atomic(true);
 
   auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, s);
     if (has_s3_existing_tag || has_s3_resource_tag)
@@ -7566,7 +7689,7 @@ void RGWGetAttrs::execute(optional_yield y)
   if (op_ret < 0)
     return;
 
-  s->object->set_atomic();
+  s->object->set_atomic(true);
 
   op_ret = s->object->get_obj_attrs(s->yield, this);
   if (op_ret < 0) {
@@ -7622,9 +7745,9 @@ void RGWRMAttrs::execute(optional_yield y)
   if (op_ret < 0)
     return;
 
-  s->object->set_atomic();
+  s->object->set_atomic(true);
 
-  op_ret = s->object->set_obj_attrs(this, nullptr, &attrs, y);
+  op_ret = s->object->set_obj_attrs(this, nullptr, &attrs, y, rgw::sal::FLAG_LOG_OP);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to delete obj attrs, obj=" << s->object
 		       << " ret=" << op_ret << dendl;
@@ -7661,7 +7784,7 @@ void RGWSetAttrs::execute(optional_yield y)
 
   if (!rgw::sal::Object::empty(s->object.get())) {
     rgw::sal::Attrs a(attrs);
-    op_ret = s->object->set_obj_attrs(this, &a, nullptr, y);
+    op_ret = s->object->set_obj_attrs(this, &a, nullptr, y, rgw::sal::FLAG_LOG_OP);
   } else {
     op_ret = s->bucket->merge_and_store_attrs(this, attrs, y);
   }
@@ -7948,6 +8071,10 @@ void RGWGetBucketPolicy::execute(optional_yield y)
 
 void RGWDeleteBucketPolicy::send_response()
 {
+  if (!op_ret) {
+    /* A successful Delete Bucket Policy should return a 204 on success */
+    op_ret = STATUS_NO_CONTENT;
+  }
   if (op_ret) {
     set_req_state_err(s, op_ret);
   }
@@ -7978,9 +8105,9 @@ void RGWDeleteBucketPolicy::execute(optional_yield y)
   }
 
   op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this] {
-      rgw::sal::Attrs attrs(s->bucket_attrs);
+      rgw::sal::Attrs& attrs = s->bucket->get_attrs();
       attrs.erase(RGW_ATTR_IAM_POLICY);
-      op_ret = s->bucket->merge_and_store_attrs(this, attrs, s->yield);
+      op_ret = s->bucket->put_info(this, false, real_time(), s->yield);
       return op_ret;
     }, y);
 }
@@ -8005,8 +8132,9 @@ int RGWPutBucketObjectLock::verify_permission(optional_yield y)
 
 void RGWPutBucketObjectLock::execute(optional_yield y)
 {
-  if (!s->bucket->get_info().obj_lock_enabled()) {
-    s->err.message = "object lock configuration can't be set if bucket object lock not enabled";
+  if (!s->bucket->get_info().versioning_enabled()) {
+    s->err.message = "Object lock cannot be enabled unless the "
+        "bucket has versioning enabled";
     ldpp_dout(this, 4) << "ERROR: " << s->err.message << dendl;
     op_ret = -ERR_INVALID_BUCKET_STATE;
     return;
@@ -8049,6 +8177,17 @@ void RGWPutBucketObjectLock::execute(optional_yield y)
   }
 
   op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y] {
+    if (!s->bucket->get_info().obj_lock_enabled()) {
+      // automatically enable object lock if the bucket is versioning-enabled
+      if (!s->bucket->get_info().versioning_enabled()) {
+        s->err.message = "Object lock cannot be enabled unless the "
+            "bucket has versioning enabled";
+        ldpp_dout(this, 4) << "ERROR: " << s->err.message << dendl;
+        return -ERR_INVALID_BUCKET_STATE;
+      }
+      s->bucket->get_info().flags |= BUCKET_OBJ_LOCK_ENABLED;
+    }
+
     s->bucket->get_info().obj_lock = obj_lock;
     op_ret = s->bucket->put_info(this, false, real_time(), y);
     return op_ret;
@@ -8498,9 +8637,9 @@ void RGWDeleteBucketPublicAccessBlock::execute(optional_yield y)
   }
 
   op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this] {
-      rgw::sal::Attrs attrs(s->bucket_attrs);
+      rgw::sal::Attrs& attrs = s->bucket->get_attrs();
       attrs.erase(RGW_ATTR_PUBLIC_ACCESS);
-      op_ret = s->bucket->merge_and_store_attrs(this, attrs, s->yield);
+      op_ret = s->bucket->put_info(this, false, real_time(), s->yield);
       return op_ret;
     }, y);
 }
@@ -8609,10 +8748,10 @@ void RGWDeleteBucketEncryption::execute(optional_yield y)
   }
 
   op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y] {
-    rgw::sal::Attrs attrs = s->bucket->get_attrs();
+    rgw::sal::Attrs& attrs = s->bucket->get_attrs();
     attrs.erase(RGW_ATTR_BUCKET_ENCRYPTION_POLICY);
     attrs.erase(RGW_ATTR_BUCKET_ENCRYPTION_KEY_ID);
-    op_ret = s->bucket->merge_and_store_attrs(this, attrs, y);
+    op_ret = s->bucket->put_info(this, false, real_time(), y);
     return op_ret;
   }, y);
 }
@@ -8623,4 +8762,3 @@ void rgw_slo_entry::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("etag", etag, obj);
   JSONDecoder::decode_json("size_bytes", size_bytes, obj);
 };
-

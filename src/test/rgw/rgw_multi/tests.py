@@ -15,6 +15,7 @@ import boto
 import boto.s3.connection
 from boto.s3.website import WebsiteConfiguration
 from boto.s3.cors import CORSConfiguration
+from botocore.exceptions import ClientError
 
 from nose.tools import eq_ as eq
 from nose.tools import assert_not_equal, assert_equal, assert_true, assert_false
@@ -517,8 +518,7 @@ def get_topics(zone):
     """
     cmd = ['topic', 'list'] + zone.zone_args()
     topics_json, _ = zone.cluster.admin(cmd, read_only=True)
-    topics = json.loads(topics_json)
-    return topics['topics']
+    return json.loads(topics_json)
 
 
 def create_topic_per_zone(zonegroup_conns, topics_per_zone=1):
@@ -573,6 +573,7 @@ def create_bucket_per_zone_in_realm():
         b, z = create_bucket_per_zone(zg_conn)
         buckets.extend(b)
         zone_bucket.extend(z)
+    realm_meta_checkpoint(realm)
     return buckets, zone_bucket
 
 def test_bucket_create():
@@ -583,6 +584,50 @@ def test_bucket_create():
 
     for zone in zonegroup_conns.zones:
         assert check_all_buckets_exist(zone, buckets)
+
+def test_bucket_create_with_tenant():
+
+    ''' create a bucket from secondary zone under tenant namespace. check if it successfully syncs
+        under the same namespace'''
+
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+
+    access_key = 'abcd'
+    secret_key = 'efgh'
+    tenant = 'testx'
+    uid = 'test'
+
+    tenant_secondary_conn = boto.s3.connection.S3Connection(aws_access_key_id=access_key,
+                                aws_secret_access_key=secret_key,
+                                is_secure=False,
+                                port=secondary.zone.gateways[0].port,
+                                host=secondary.zone.gateways[0].host,
+                                calling_format='boto.s3.connection.OrdinaryCallingFormat')
+
+    tenant_primary_conn = boto.s3.connection.S3Connection(aws_access_key_id=access_key,
+                                aws_secret_access_key=secret_key,
+                                is_secure=False,
+                                port=primary.zone.gateways[0].port,
+                                host=primary.zone.gateways[0].host,
+                                calling_format='boto.s3.connection.OrdinaryCallingFormat')
+
+    cmd = ['user', 'create', '--tenant', tenant, '--uid', uid, '--access-key', access_key, '--secret-key', secret_key, '--display-name', 'tenanted-user']
+    primary.zone.cluster.admin(cmd)
+    zonegroup_meta_checkpoint(zonegroup)
+    try:
+        bucket = tenant_secondary_conn.create_bucket('tenanted-bucket')
+        zonegroup_meta_checkpoint(zonegroup)
+        assert tenant_primary_conn.get_bucket(bucket.name)
+        log.info("bucket exists in tenant namespace")
+        e = assert_raises(boto.exception.S3ResponseError, primary.get_bucket, bucket.name)
+        assert e.error_code == 'NoSuchBucket'
+        log.info("bucket does not exist in default user namespace")
+    finally:
+        cmd = ['user', 'rm', '--tenant', tenant, '--uid', uid, '--purge-data']
+        primary.zone.cluster.admin(cmd)
 
 def test_bucket_recreate():
     zonegroup = realm.master_zonegroup()
@@ -608,21 +653,21 @@ def test_bucket_recreate():
         assert check_all_buckets_exist(zone, buckets)
 
 def test_bucket_remove():
-    zonegroup = realm.master_zonegroup()
-    zonegroup_conns = ZonegroupConns(zonegroup)
-    buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns)
-    zonegroup_meta_checkpoint(zonegroup)
+    for zonegroup in realm.current_period.zonegroups:
+        zonegroup_conns = ZonegroupConns(zonegroup)
+        buckets, zone_buckets = create_bucket_per_zone(zonegroup_conns)
+        zonegroup_meta_checkpoint(zonegroup)
 
-    for zone in zonegroup_conns.zones:
-        assert check_all_buckets_exist(zone, buckets)
+        for zone in zonegroup_conns.zones:
+            assert check_all_buckets_exist(zone, buckets)
 
-    for zone, bucket_name in zone_bucket:
-        zone.conn.delete_bucket(bucket_name)
+        for zone, bucket_name in zone_buckets:
+            zone.conn.delete_bucket(bucket_name)
 
-    zonegroup_meta_checkpoint(zonegroup)
+        zonegroup_meta_checkpoint(zonegroup)
 
-    for zone in zonegroup_conns.zones:
-        assert check_all_buckets_dont_exist(zone, buckets)
+        for zone in zonegroup_conns.zones:
+            assert check_all_buckets_dont_exist(zone, buckets)
 
 def get_bucket(zone, bucket_name):
     return zone.conn.get_bucket(bucket_name)
@@ -919,6 +964,40 @@ def test_versioned_object_incremental_sync():
     for _, bucket in zone_bucket:
         zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
+def test_null_version_id_delete():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    zone = zonegroup_conns.rw_zones[0]
+
+    # create a non-versioned bucket
+    bucket = zone.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+    obj = 'obj'
+
+    # upload an initial object
+    key1 = new_key(zone, bucket, obj)
+    key1.set_contents_from_string('')
+    log.debug('created initial version id=%s', key1.version_id)
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # enable versioning
+    bucket.configure_versioning(True)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # re-upload the object as a new version
+    key2 = new_key(zone, bucket, obj)
+    key2.set_contents_from_string('')
+    log.debug('created new version id=%s', key2.version_id)
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    bucket.delete_key(obj, version_id='null')
+
+    bucket.delete_key(obj, version_id=key2.version_id)
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
 def test_concurrent_versioned_object_incremental_sync():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
@@ -1002,6 +1081,8 @@ def test_delete_marker_full_sync():
         # create a delete marker
         key2 = new_key(zone, bucket, 'obj')
         key2.delete()
+        key2.delete()
+        key2.delete()
 
     # wait for full sync
     for _, bucket in zone_bucket:
@@ -1026,10 +1107,39 @@ def test_suspended_delete_marker_full_sync():
         # create a delete marker
         key2 = new_key(zone, bucket, 'obj')
         key2.delete()
+        key2.delete()
+        key2.delete()
 
     # wait for full sync
     for _, bucket in zone_bucket:
         zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+def test_concurrent_delete_markers_incremental_sync():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    zone = zonegroup_conns.rw_zones[0]
+
+    # create a versioned bucket
+    bucket = zone.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+    bucket.configure_versioning(True)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    obj = 'obj'
+
+    # upload a dummy object and wait for sync. this forces each zone to finish
+    # a full sync and switch to incremental
+    new_key(zone, bucket, obj).set_contents_from_string('')
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # create several concurrent delete markers on each zone and let them race to sync
+    for i in range(2):
+        for zone_conn in zonegroup_conns.rw_zones:
+            key = new_key(zone_conn, bucket, obj)
+            key.delete()
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
 def test_bucket_versioning():
     buckets, zone_bucket = create_bucket_per_zone_in_realm()
@@ -1177,6 +1287,9 @@ def test_datalog_autotrim():
 
     # wait for metadata and data sync to catch up
     zonegroup_meta_checkpoint(zonegroup)
+    zonegroup_data_checkpoint(zonegroup_conns)
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+    time.sleep(config.checkpoint_delay)
     zonegroup_data_checkpoint(zonegroup_conns)
 
     # trim each datalog
@@ -1928,36 +2041,68 @@ def test_role_delete_sync():
                       zone.iam_conn.get_role, RoleName=role_name)
         log.info(f'success, zone: {zone.name} does not have role: {role_name}')
 
-def test_object_acl():
+def test_replication_status():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
-    primary = zonegroup_conns.rw_zones[0]
-    secondary = zonegroup_conns.rw_zones[1]
+    zone = zonegroup_conns.rw_zones[0]
 
-    bucket = primary.create_bucket(gen_bucket_name())
-    log.debug('created bucket=%s', bucket.name)
-
-    # upload a dummy object and wait for sync.
-    k = new_key(primary, bucket, 'dummy')
+    bucket = zone.conn.create_bucket(gen_bucket_name())
+    obj_name = "a"
+    k = new_key(zone, bucket.name, obj_name)
     k.set_contents_from_string('foo')
     zonegroup_meta_checkpoint(zonegroup)
-    zonegroup_data_checkpoint(zonegroup_conns)
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
-    #check object on secondary before setacl
-    bucket2 = get_bucket(secondary, bucket.name)
-    before_set_acl = bucket2.get_acl(k)
-    assert(len(before_set_acl.acl.grants) == 1)
+    head_res = zone.head_object(bucket.name, obj_name)
+    log.info("checking if object has PENDING ReplicationStatus")
+    assert(head_res["ReplicationStatus"] == "PENDING")
 
-    #set object acl on primary and wait for sync.
-    bucket.set_canned_acl('public-read', key_name=k)
-    log.debug('set acl=%s', bucket.name)
+    bilog_autotrim(zone.zone)
     zonegroup_data_checkpoint(zonegroup_conns)
     zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
-    #check object secondary after setacl
-    bucket2 = get_bucket(secondary, bucket.name)
-    after_set_acl = bucket2.get_acl(k)
-    assert(len(after_set_acl.acl.grants) == 2) # read grant added on AllUsers
+    head_res = zone.head_object(bucket.name, obj_name)
+    log.info("checking if object has COMPLETED ReplicationStatus")
+    assert(head_res["ReplicationStatus"] == "COMPLETED")
+
+    log.info("checking that ReplicationStatus update did not write a bilog")
+    bilog = bilog_list(zone.zone, bucket.name)
+    assert(len(bilog) == 0)
+
+def test_assume_role_after_sync():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    access_key = 'abcd'
+    secret_key = 'efgh'
+    tenant = 'testx'
+    uid = 'test'
+    cmd = ['user', 'create', '--tenant', tenant, '--uid', uid, '--access-key', access_key, '--secret-key', secret_key, '--display-name', 'tenanted-user']
+    zonegroup_conns.master_zone.zone.cluster.admin(cmd)
+    credentials = Credentials(access_key, secret_key)
+
+    role_name = gen_role_name()
+    log.info('create role zone=%s name=%s', zonegroup_conns.master_zone.name, role_name)
+    policy_document = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"arn:aws:iam::testx:user/test\"]},\"Action\":[\"sts:AssumeRole\"]}]}"
+    role = zonegroup_conns.master_zone.create_role("/", role_name, policy_document, "")
+    policy_document = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Resource\":\"*\",\"Action\":\"s3:*\"}]}"
+    zonegroup_conns.master_zone.put_role_policy(role_name, "Policy1", policy_document)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    for zone in zonegroup_conns.zones:
+        log.info(f'checking if zone: {zone.name} has role: {role_name}')
+        assert(zone.has_role(role_name))
+        log.info(f'success, zone: {zone.name} has role: {role_name}')
+    
+    for zone in zonegroup_conns.zones:
+        if zone == zonegroup_conns.master_zone:
+            log.info(f'creating bucket in primary zone')
+            bucket = "bucket1"
+            zone.assume_role_create_bucket(bucket, role['Role']['Arn'], "primary", credentials)
+        if zone != zonegroup_conns.master_zone:
+            log.info(f'creating bucket in secondary zone')
+            bucket = "bucket2"
+            zone.assume_role_create_bucket(bucket, role['Role']['Arn'], "secondary", credentials)
 
 @attr('fails_with_rgw')
 @attr('data_sync_init')
@@ -3570,4 +3715,23 @@ def test_copy_object_different_bucket():
         CopySource = source_bucket.name + '/' + objname)
     
     zonegroup_bucket_checkpoint(zonegroup_conns, dest_bucket.name)
-    
+
+def test_bucket_create_location_constraint():
+    for zonegroup in realm.current_period.zonegroups:
+        zonegroup_conns = ZonegroupConns(zonegroup)
+        for zg in realm.current_period.zonegroups:
+            z = zonegroup_conns.rw_zones[0]
+            bucket_name = gen_bucket_name()
+            if zg.name == zonegroup.name:
+                # my zonegroup should pass
+                z.s3_client.create_bucket(Bucket=bucket_name, CreateBucketConfiguration={'LocationConstraint': zg.name})
+                # check bucket location
+                response = z.s3_client.get_bucket_location(Bucket=bucket_name)
+                assert_equal(response['LocationConstraint'], zg.name)
+            else:
+                # other zonegroup should fail with 400
+                e = assert_raises(ClientError,
+                                  z.s3_client.create_bucket,
+                                    Bucket=bucket_name,
+                                    CreateBucketConfiguration={'LocationConstraint': zg.name})
+                assert e.response['ResponseMetadata']['HTTPStatusCode'] == 400

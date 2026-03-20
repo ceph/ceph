@@ -239,6 +239,7 @@ class ActiveRateLimiter : public DoutPrefix  {
   std::atomic_uint8_t current_active = 0;
   std::shared_ptr<RateLimiter> ratelimit[2];
   void replace_active() {
+    ceph_pthread_setname("ratelimit_gc");
     using namespace std::chrono_literals;
     std::unique_lock<std::mutex> lk(cv_m);
     while (!stopped) {
@@ -286,8 +287,5 @@ class ActiveRateLimiter : public DoutPrefix  {
     void start() {
       ldpp_dout(this, 20) << "starting ratelimit_gc thread" << dendl;
       runner = std::thread(&ActiveRateLimiter::replace_active, this);
-      if (const auto rc = ceph_pthread_setname(runner.native_handle(), "ratelimit_gc"); rc != 0) {
-        ldpp_dout(this, 1) << "ERROR: failed to set ratelimit_gc thread name. error: " << rc << dendl;
-      }
     }
 };

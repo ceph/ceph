@@ -121,14 +121,11 @@ If you do not have sufficient permissions to modify any field of the tracker
 issue, just add a comment describing what changes you would like to make.
 Someone with permissions will make the necessary modifications on your behalf.
 
-For straightforward backports, that's all that you (as the developer of the fix)
-need to do. Volunteers from the `Stable Releases and Backports team`_ will
-proceed to create Backport issues to track the necessary backports and stage the
-backports by opening GitHub PRs with the cherry-picks. If you don't want to
-wait, and provided you have sufficient permissions at https://tracker.ceph.com,
-you can `create Backport tracker issues` and `stage backports`_ yourself. In
-that case, read on.
-
+Authors of pull requests are responsible for creating associated backport pull
+requests. As long as you have sufficient permissions at
+https://tracker.ceph.com, you can `create Backport tracker issues` and `stage
+backports`_ yourself. Read these linked sections to learn how to create
+backport tracker issues and how to stage backports: 
 
 .. _`create backport tracker issues`:
 .. _`backport tracker issue`:
@@ -146,10 +143,7 @@ issues can be created in the backport tracker issue for tracking the backporting
 
 Under ordinary circumstances, the developer who merges the ``main`` PR will flag
 the ``main`` branch tracker issue for backport by changing the Status to "Pending
-Backport", and volunteers from the `Stable Releases and Backports team`_
-periodically create backport tracker issues by running the
-``backport-create-issue`` script. They also do the actual backporting. But that
-does take time and you may not want to wait.
+Backport". 
 
 You might be tempted to forge ahead and create the backport issues yourself.
 Please don't do that - it is difficult (bordering on impossible) to get all the
@@ -360,19 +354,10 @@ Once the backport PR is open, the first order of business is to set the
 Milestone tag to the stable release the backport PR is targeting. For example,
 if the PR is targeting "nautilus", set the Milestone tag to "nautilus".
 
-If you don't have sufficient GitHub permissions to set the Milestone, don't
-worry. Members of the `Stable Releases and Backports team`_ periodically run
-a script (``ceph-backport.sh --milestones``) which scans all PRs targetting stable
-branches and automatically adds the correct Milestone tag if it is missing.
-
 Next, check which component label was applied to the ``main`` PR corresponding to
 this backport, and double-check that that label is applied to the backport PR as
 well. For example, if the ``main`` PR carries the component label "core", the
 backport PR should also get that label.
-
-In general, it is the responsibility of the `Stable Releases and Backports
-team`_ to ensure that backport PRs are properly labelled. If in doubt, just
-leave the labelling to them.
 
 .. _`backport PR reviewing`:
 .. _`backport PR testing`:
@@ -381,9 +366,8 @@ leave the labelling to them.
 Reviewing, testing, and merging of backport PRs
 -----------------------------------------------
 
-Once your backport PR is open and the Milestone is set properly, the
-`Stable Releases and Backports team` will take care of getting the PR
-reviewed and tested. Once the PR is reviewed and tested, it will be merged.
+Once your backport PR is open, it will be reviewed and tested. When the PR has
+been reviewed and tested, it will be merged.
 
 If you would like to facilitate this process, you can solicit reviews and run
 integration tests on the PR. In this case, add comments to the PR describing the
@@ -394,22 +378,3 @@ it will be merged. Even if you have sufficient GitHub permissions to merge the
 PR, please do *not* merge it yourself. (Uncontrolled merging to stable branches
 unnecessarily complicates the release preparation process, which is done by
 volunteers.)
-
-
-Stable Releases and Backports team
-----------------------------------
-
-Ceph has a `Stable Releases and Backports`_ team, staffed by volunteers,
-which is charged with maintaining the stable releases and backporting bugfixes
-from the ``main`` branch to them. (That team maintains a wiki, accessible by
-clicking the `Stable Releases and Backports`_ link, which describes various
-workflows in the backporting lifecycle.)
-
-.. _`Stable Releases and Backports`: http://tracker.ceph.com/projects/ceph-releases/wiki
-
-Ordinarily, it is enough to fill out the "Backport" field in the bug (tracker
-issue). The volunteers from the Stable Releases and Backports team will
-backport the fix, run regression tests on it, and include it in one or more
-future point releases.
-
-

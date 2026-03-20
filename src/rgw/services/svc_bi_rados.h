@@ -99,15 +99,15 @@ public:
     return rgw_shard_id(key, max_shards);
   }
 
-  static uint32_t bucket_shard_index(const std::string& key,
-                                     int num_shards) {
+  static int32_t bucket_shard_index(const std::string& key,
+				    int num_shards) {
     uint32_t sid = ceph_str_hash_linux(key.c_str(), key.size());
     uint32_t sid2 = sid ^ ((sid & 0xFF) << 24);
     return rgw_shards_mod(sid2, num_shards);
   }
 
-  static uint32_t bucket_shard_index(const rgw_obj_key& obj_key,
-				     int num_shards)
+  static int32_t bucket_shard_index(const rgw_obj_key& obj_key,
+				    int num_shards)
   {
     std::string sharding_key;
     if (obj_key.ns == RGW_OBJ_NS_MULTIPART) {

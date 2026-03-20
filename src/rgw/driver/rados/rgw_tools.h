@@ -45,10 +45,13 @@ inline int rgw_shards_max()
 // only called by rgw_shard_id and rgw_bucket_shard_index
 static inline int rgw_shards_mod(unsigned hval, int max_shards)
 {
-  if (max_shards <= RGW_SHARDS_PRIME_0) {
+  if (max_shards <= 0) {
+    return -1;
+  } else if (max_shards <= RGW_SHARDS_PRIME_0) {
     return hval % RGW_SHARDS_PRIME_0 % max_shards;
+  } else {
+    return hval % RGW_SHARDS_PRIME_1 % max_shards;
   }
-  return hval % RGW_SHARDS_PRIME_1 % max_shards;
 }
 
 // used for logging and tagging
@@ -97,10 +100,12 @@ extern thread_local bool is_asio_thread;
 /// perform the rados operation, using the yield context when given
 int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectReadOperation *op, bufferlist* pbl,
-                      optional_yield y, int flags = 0, const jspan_context* trace_info = nullptr);
+                      optional_yield y, int flags = 0, const jspan_context* trace_info = nullptr,
+                      version_t* pver = nullptr);
 int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectWriteOperation *op, optional_yield y,
-		      int flags = 0, const jspan_context* trace_info = nullptr);
+		      int flags = 0, const jspan_context* trace_info = nullptr,
+                      version_t* pver = nullptr);
 int rgw_rados_notify(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
                      bufferlist& bl, uint64_t timeout_ms, bufferlist* pbl,
                      optional_yield y);

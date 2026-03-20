@@ -10,3 +10,4 @@ tasks:
       osd:
         debug monc: 20
     flavor: crimson
+- ssh_keys:

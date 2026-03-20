@@ -216,6 +216,36 @@ struct bluefs_shared_alloc_context_t {
   }
 };
 
+/*
+  Class debug_point is a helper intended for inserting debug tracepoints
+  in a least intrusive way.
+  The intention is to minimize both visual and code footprints.
+
+  In code, it should look like:
+  debug_async_compact(1);
+
+  Which should translate to:
+  if (debug_async_compact) debug_async_compact(1);
+
+  And in release builds be eliminated completely.
+*/
+template <class T>
+class debug_point_t {
+public:
+  debug_point_t() : m_func(nullptr) {};
+  debug_point_t(T&& func)
+  : m_func(func) {}
+  template<typename... Arg>
+  void operator()(Arg... arg) { if (m_func) m_func(std::forward<Arg...>(arg...)); }
+  void operator()() { if (m_func) m_func(); }
+  void operator=(T&& func) { m_func = std::move(func);}
+  void operator=(T& func) { m_func = func;}
+private:
+  T m_func;
+};
+
+
+
 class BlueFS {
 public:
   CephContext* cct;
@@ -491,9 +521,14 @@ private:
    */
   std::vector<BlockDevice*> bdev;                  ///< block devices we can use
   std::vector<IOContext*> ioc;                     ///< IOContexts for bdevs
-  std::vector<uint64_t> block_reserved;            ///< starting reserve extent per device
   std::vector<Allocator*> alloc;                   ///< allocators for bdevs
   std::vector<uint64_t> alloc_size;                ///< alloc size for each device
+  std::vector<bluefs_locked_extents_t> locked_alloc;  ///< candidate extents
+                                                      ///< at both dev's head and tail
+                                                      ///< locked for allocations,
+                                                      ///< no alloc/release reqs matching
+                                                      ///< these space to be issued to allocator.
+
 
   //std::vector<interval_set<uint64_t>> block_unused_too_granular;
 
@@ -524,11 +559,11 @@ private:
   void _pad_bl(ceph::buffer::list& bl, uint64_t pad_size = 0);
 
   uint64_t _get_used(unsigned id) const;
-  uint64_t _get_total(unsigned id) const;
-
+  uint64_t _get_block_device_size(unsigned id) const;
+  uint64_t _get_minimal_reserved(unsigned id) const;
 
   FileRef _get_file(uint64_t ino);
-  void _drop_link_D(FileRef f);
+  void _drop_link_DF(FileRef f);
 
   unsigned _get_slow_device_id() {
     return bdev[BDEV_SLOW] ? BDEV_SLOW : BDEV_DB;
@@ -658,6 +693,7 @@ public:
   int prepare_new_device(int id, const bluefs_layout_t& layout);
   
   int log_dump();
+  int super_dump();
 
   void collect_metadata(std::map<std::string,std::string> *pm, unsigned skip_bdev_id);
   void get_devices(std::set<std::string> *ls);
@@ -678,9 +714,10 @@ public:
     const bluefs_layout_t& layout);
 
   uint64_t get_used();
-  uint64_t get_total(unsigned id);
+  uint64_t get_block_device_size(unsigned id);
   uint64_t get_free(unsigned id);
   uint64_t get_used(unsigned id);
+  uint64_t get_full_reserved(unsigned id);
   void dump_perf_counters(ceph::Formatter *f);
 
   void dump_block_extents(std::ostream& out);
@@ -740,9 +777,8 @@ public:
   }
 
   int add_block_device(unsigned bdev, const std::string& path, bool trim,
-		       bluefs_shared_alloc_context_t* _shared_alloc = nullptr);
+                       bluefs_shared_alloc_context_t* _shared_alloc = nullptr);
   bool bdev_support_label(unsigned id);
-  uint64_t get_block_device_size(unsigned bdev) const;
   BlockDevice* get_block_device(unsigned bdev) const;
 
   // handler for discard event
@@ -779,6 +815,7 @@ public:
   }
   uint64_t debug_get_dirty_seq(FileWriter *h);
   bool debug_get_is_dev_dirty(FileWriter *h, uint8_t dev);
+  debug_point_t<std::function<void()>> unittest_inject_delay;
 
 private:
   // Wrappers for BlockDevice::read(...) and BlockDevice::read_random(...)

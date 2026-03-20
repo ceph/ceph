@@ -229,6 +229,12 @@ add_executable(unittest_xmlformatter
 add_ceph_unittest(unittest_xmlformatter)
 target_link_libraries(unittest_xmlformatter ceph-common)
 
+add_executable(unittest_htmlformatter
+    test_htmlformatter.cc
+    )
+add_ceph_unittest(unittest_htmlformatter)
+target_link_libraries(unittest_htmlformatter ceph-common)
+
 # unittest_bit_vector
 add_executable(unittest_bit_vector
   test_bit_vector.cc
@@ -361,6 +367,10 @@ add_executable(unittest_async_shared_mutex test_async_shared_mutex.cc)
 add_ceph_unittest(unittest_async_shared_mutex)
 target_link_libraries(unittest_async_shared_mutex ceph-common Boost::system)
 
+add_executable(unittest_async_yield_waiter test_async_yield_waiter.cc)
+add_ceph_unittest(unittest_async_yield_waiter)
+target_link_libraries(unittest_async_yield_waiter ceph-common Boost::system Boost::context)
+
 add_executable(unittest_cdc test_cdc.cc
   $<TARGET_OBJECTS:unit-main>)
 target_link_libraries(unittest_cdc global ceph-common)
@@ -374,9 +384,8 @@ add_executable(unittest_option test_option.cc)
 target_link_libraries(unittest_option ceph-common GTest::Main)
 add_ceph_unittest(unittest_option)
 
-add_executable(unittest_fault_injector test_fault_injector.cc
-  $<TARGET_OBJECTS:unit-main>)
-target_link_libraries(unittest_fault_injector global)
+add_executable(unittest_fault_injector test_fault_injector.cc)
+target_link_libraries(unittest_fault_injector global GTest::Main)
 add_ceph_unittest(unittest_fault_injector)
 
 add_executable(unittest_blocked_completion test_blocked_completion.cc)

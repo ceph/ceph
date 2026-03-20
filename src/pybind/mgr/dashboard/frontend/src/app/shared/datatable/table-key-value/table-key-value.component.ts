@@ -5,6 +5,7 @@ import {
   OnChanges,
   OnInit,
   Output,
+  TemplateRef,
   ViewChild
 } from '@angular/core';
 
@@ -36,6 +37,8 @@ interface KeyValueItem {
 export class TableKeyValueComponent implements OnInit, OnChanges {
   @ViewChild(TableComponent, { static: true })
   table: TableComponent;
+  @ViewChild('valueCellTpl', { static: true })
+  valueCellTpl: TemplateRef<any>;
 
   @Input()
   data: any;
@@ -50,6 +53,10 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
   hideEmpty = false;
   @Input()
   hideKeys: string[] = []; // Keys of pairs not to be displayed
+  @Input()
+  showMultiLineText = false; // If true, the value field will use a template that supports multi line text
+  @Input()
+  multilineTextKeys: string[]; // If set, the value field will use a template that supports multi line text for this key
 
   // If set, the classAddingTpl is used to enable different css for different values
   @Input()
@@ -80,6 +87,9 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
     ];
     if (this.customCss) {
       this.columns[1].cellTransformation = CellTemplate.classAdding;
+    }
+    if (this.showMultiLineText) {
+      this.columns[1].cellTemplate = this.valueCellTpl;
     }
     // We need to subscribe the 'fetchData' event here and not in the
     // HTML template, otherwise the data table will display the loading

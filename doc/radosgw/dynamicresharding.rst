@@ -23,7 +23,7 @@ are blocked (but reads are not) briefly during resharding process.
 
 By default dynamic bucket index resharding can only increase the
 number of bucket index shards to 1999, although this upper-bound is a
-configuration parameter (see Configuration below). When
+configuration parameter (see `Configuration`_ below). When
 possible, the process chooses a prime number of shards in order to
 spread the number of entries across the bucket index
 shards more evenly.
@@ -37,9 +37,9 @@ resharding tasks, one at a time and in order.
 Multisite
 =========
 
-With Ceph releases Prior to Reef, the Ceph Object Gateway (RGW) does not support
+With Ceph releases prior to Reef, the Ceph Object Gateway (RGW) does not support
 dynamic resharding in a
-multisite environment. For information on dynamic resharding, see
+multisite deployment. For information on dynamic resharding, see
 :ref:`Resharding <feature_resharding>` in the RGW multisite documentation.
 
 Configuration
@@ -52,98 +52,106 @@ Configuration
 .. confval:: rgw_reshard_thread_interval
 .. confval:: rgw_reshard_num_logs
 
-Admin commands
+Admin Commands
 ==============
 
-Add a bucket to the resharding queue
+Add a Bucket to the Resharding Queue
 ------------------------------------
 
-::
+.. prompt:: bash #
 
-   # radosgw-admin reshard add --bucket <bucket_name> --num-shards <new number of shards>
+   radosgw-admin reshard add --bucket <bucket_name> --num-shards <new number of shards>
 
-List resharding queue
+List Resharding Queue
 ---------------------
 
-::
+.. prompt:: bash #
 
-   # radosgw-admin reshard list
+   radosgw-admin reshard list
 
-Process tasks on the resharding queue
+Process Tasks on the Resharding Queue
 -------------------------------------
 
-::
+.. prompt:: bash #
 
-   # radosgw-admin reshard process
+   radosgw-admin reshard process
 
-Bucket resharding status
+Bucket Resharding Status
 ------------------------
 
-::
+.. prompt:: bash #
 
-   # radosgw-admin reshard status --bucket <bucket_name>
+   radosgw-admin reshard status --bucket <bucket_name>
 
-The output is a JSON array of 3 objects (reshard_status, new_bucket_instance_id, num_shards) per shard.
+The output is a JSON array of 3 properties (``reshard_status``, ``new_bucket_instance_id``, ``num_shards``) per shard.
 
 For example, the output at each dynamic resharding stage is shown below:
 
-``1. Before resharding occurred:``
-::
+#. Before resharding occurred:
 
-  [
-    {
-        "reshard_status": "not-resharding",
-        "new_bucket_instance_id": "",
-        "num_shards": -1
-    }
-  ]
+   ::
 
-``2. During resharding:``
-::
+     [
+         {
+             "reshard_status": "not-resharding",
+             "new_bucket_instance_id": "",
+             "num_shards": -1
+         }
+     ]
 
-  [
-    {
-        "reshard_status": "in-progress",
-        "new_bucket_instance_id": "1179f470-2ebf-4630-8ec3-c9922da887fd.8652.1",
-        "num_shards": 2
-    },
-    {
-        "reshard_status": "in-progress",
-        "new_bucket_instance_id": "1179f470-2ebf-4630-8ec3-c9922da887fd.8652.1",
-        "num_shards": 2
-    }
-  ]
+#. During resharding:
 
-``3. After resharding completed:``
-::
+   ::
 
-  [
-    {
-        "reshard_status": "not-resharding",
-        "new_bucket_instance_id": "",
-        "num_shards": -1
-    },
-    {
-        "reshard_status": "not-resharding",
-        "new_bucket_instance_id": "",
-        "num_shards": -1
-    }
-  ]
+     [
+         {
+             "reshard_status": "in-progress",
+             "new_bucket_instance_id": "1179f470-2ebf-4630-8ec3-c9922da887fd.8652.1",
+             "num_shards": 2
+         },
+         {
+             "reshard_status": "in-progress",
+             "new_bucket_instance_id": "1179f470-2ebf-4630-8ec3-c9922da887fd.8652.1",
+             "num_shards": 2
+         }
+     ]
+
+#. After resharding completed:
+
+   ::
+
+     [
+         {
+             "reshard_status": "not-resharding",
+             "new_bucket_instance_id": "",
+             "num_shards": -1
+         },
+         {
+             "reshard_status": "not-resharding",
+             "new_bucket_instance_id": "",
+             "num_shards": -1
+         }
+     ]
 
 
-Cancel pending bucket resharding
+Cancel Pending Bucket Resharding
 --------------------------------
 
-Note: Bucket resharding operations cannot be cancelled while executing. ::
+.. note::
 
-   # radosgw-admin reshard cancel --bucket <bucket_name>
+  Bucket resharding tasks cannot be canceled once they transition to
+  the ``in-progress`` state from the initial ``not-resharding`` state.
 
-Manual immediate bucket resharding
+.. prompt:: bash #
+
+   radosgw-admin reshard cancel --bucket <bucket_name>
+
+Manual Immediate Bucket Resharding
 ----------------------------------
 
-::
+.. prompt:: bash #
 
-   # radosgw-admin bucket reshard --bucket <bucket_name> --num-shards <new number of shards>
+   radosgw-admin bucket reshard --bucket <bucket_name> --num-shards <new number of shards>
 
 When choosing a number of shards, the administrator must anticipate each
 bucket's peak number of objects. Ideally one should aim for no
@@ -156,32 +164,47 @@ since the former is prime. A variety of web sites have lists of prime
 numbers; search for "list of prime numbers" with your favorite
 search engine to locate some web sites.
 
+Setting a Bucket's Minimum Number of Shards
+-------------------------------------------
+
+.. prompt:: bash #
+
+   radosgw-admin bucket set-min-shards --bucket <bucket_name> --num-shards <min number of shards>
+
+Since dynamic resharding can now reduce the number of shards,
+administrators may want to prevent the number of shards from becoming
+too low, for example if the expect the number of objects to increase
+in the future. This command allows administrators to set a per-bucket
+minimum. This does not, however, prevent administrators from manually
+resharding to a lower number of shards.
+
 Troubleshooting
 ===============
 
 Clusters prior to Luminous 12.2.11 and Mimic 13.2.5 left behind stale bucket
 instance entries, which were not automatically cleaned up. This issue also affected
-LifeCycle policies, which were no longer applied to resharded buckets. Both of
-these issues could be worked around by running ``radosgw-admin`` commands.
+lifecycle policies, which were no longer applied to resharded buckets. Both of
+these issues can be remediated by running ``radosgw-admin`` commands.
 
-Stale instance management
+Stale Instance Management
 -------------------------
 
-List the stale instances in a cluster that are ready to be cleaned up.
+List the stale instances in a cluster that may be cleaned up:
 
-::
+.. prompt:: bash #
 
-   # radosgw-admin reshard stale-instances list
+   radosgw-admin reshard stale-instances list
 
-Clean up the stale instances in a cluster. Note: cleanup of these
-instances should only be done on a single-site cluster.
+Clean up the stale instances in a cluster:
 
-::
+.. prompt:: bash #
 
-   # radosgw-admin reshard stale-instances rm
+   radosgw-admin reshard stale-instances delete
+
+.. note:: Cleanup of stale instances should not be done in a multisite deployment.
 
 
-Lifecycle fixes
+Lifecycle Fixes
 ---------------
 
 For clusters with resharded instances, it is highly likely that the old
@@ -193,15 +216,15 @@ resharding must be fixed manually.
 
 The command to do so is:
 
-::
+.. prompt:: bash #
 
-   # radosgw-admin lc reshard fix --bucket {bucketname}
+   radosgw-admin lc reshard fix --bucket {bucketname}
 
 
 If the ``--bucket`` argument is not provided, this
 command will try to fix lifecycle policies for all the buckets in the cluster.
 
-Object Expirer fixes
+Object Expirer Fixes
 --------------------
 
 Objects subject to Swift object expiration on older clusters may have
@@ -213,17 +236,16 @@ objects, ``radosgw-admin`` provides two subcommands.
 
 Listing:
 
-::
+.. prompt:: bash #
 
-   # radosgw-admin objects expire-stale list --bucket {bucketname}
+   radosgw-admin objects expire-stale list --bucket {bucketname}
 
 Displays a list of object names and expiration times in JSON format.
 
 Deleting:
 
-::
+.. prompt:: bash #
 
-   # radosgw-admin objects expire-stale rm --bucket {bucketname}
-
+   radosgw-admin objects expire-stale rm --bucket {bucketname}
 
 Initiates deletion of such objects, displaying a list of object names, expiration times, and deletion status in JSON format.

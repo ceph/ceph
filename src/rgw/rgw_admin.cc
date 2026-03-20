@@ -182,7 +182,7 @@ void usage()
   cout << "  bi put                           store bucket index object entries\n";
   cout << "  bi list                          list raw bucket index entries\n";
   cout << "  bi purge                         purge bucket index entries\n";
-  cout << "  object rm                        remove object\n";
+  cout << "  object rm                        remove object; include --yes-i-really-mean-it to force removal from bucket index\n";
   cout << "  object put                       put object\n";
   cout << "  object stat                      stat an object for its metadata\n";
   cout << "  object unlink                    unlink object from bucket index\n";
@@ -3355,7 +3355,12 @@ int main(int argc, const char **argv)
     exit(0);
   }
 
-  auto cct = rgw_global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+  // alternative defaults for radosgw-admin
+  map<std::string,std::string> defaults = {
+    { "rgw_thread_pool_size", "8" },
+  };
+
+  auto cct = rgw_global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
 			     CODE_ENVIRONMENT_UTILITY, 0);
   ceph::async::io_context_pool context_pool(cct->_conf->rgw_thread_pool_size);
 
@@ -6473,7 +6478,6 @@ int main(int argc, const char **argv)
                                         OPT::USER_SUSPEND, OPT::SUBUSER_CREATE,
                                         OPT::SUBUSER_MODIFY, OPT::SUBUSER_RM,
                                         OPT::BUCKET_LINK, OPT::BUCKET_UNLINK,
-                                        OPT::BUCKET_RM,
                                         OPT::BUCKET_CHOWN, OPT::METADATA_PUT,
                                         OPT::METADATA_RM, OPT::MFA_CREATE,
                                         OPT::MFA_REMOVE, OPT::MFA_RESYNC,
@@ -7275,6 +7279,10 @@ int main(int argc, const char **argv)
         }
       }
       bucket_op.marker = marker;
+      if (max_entries_specified)
+        bucket_op.max_entries = max_entries;
+      else
+        bucket_op.max_entries = 0; /* for backward compatibility */
       RGWBucketAdminOp::info(driver, bucket_op, stream_flusher, null_yield, dpp());
     } else {
       int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
@@ -7392,6 +7400,10 @@ int main(int argc, const char **argv)
       bucket_op.set_bucket_name(bucket.name);
     }
     bucket_op.set_fetch_stats(true);
+    if (max_entries_specified)
+      bucket_op.max_entries = max_entries;
+    else
+      bucket_op.max_entries = 0; /* for backward compatibility */
 
     int r = RGWBucketAdminOp::info(driver, bucket_op, stream_flusher, null_yield, dpp());
     if (r < 0) {
@@ -7469,8 +7481,13 @@ int main(int argc, const char **argv)
       cerr << "ERROR: num-shards and object must be specified."
 	   << std::endl;
       return EINVAL;
+    } else if (num_shards <= 0) {
+      cerr << "ERROR: non-positive value supplied for num-shards: " <<
+	num_shards << std::endl;
+      return EINVAL;
     }
-    auto shard = RGWSI_BucketIndex_RADOS::bucket_shard_index(object, num_shards);
+    auto shard =
+      RGWSI_BucketIndex_RADOS::bucket_shard_index(object, num_shards);
     formatter->open_object_section("obj_shard");
     encode_json("shard", shard, formatter.get());
     formatter->close_section();
@@ -8044,9 +8061,10 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    rgw_obj_key key(object, object_version);
-    ret = rgw_remove_object(dpp(), driver, bucket.get(), key, null_yield);
 
+    rgw_obj_key key(object, object_version);
+
+    ret = rgw_remove_object(dpp(), driver, bucket.get(), key, null_yield, yes_i_really_mean_it);
     if (ret < 0) {
       cerr << "ERROR: object remove returned: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -8749,14 +8767,14 @@ next:
 
   if (opt_cmd == OPT::BUCKET_RM) {
     if (!inconsistent_index) {
-      RGWBucketAdminOp::remove_bucket(driver, bucket_op, null_yield, dpp(), bypass_gc, true);
+      RGWBucketAdminOp::remove_bucket(driver, *site, bucket_op, null_yield, dpp(), bypass_gc, true, false);
     } else {
       if (!yes_i_really_mean_it) {
 	cerr << "using --inconsistent_index can corrupt the bucket index " << std::endl
 	<< "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
 	return 1;
       }
-      RGWBucketAdminOp::remove_bucket(driver, bucket_op, null_yield, dpp(), bypass_gc, false);
+      RGWBucketAdminOp::remove_bucket(driver, *site, bucket_op, null_yield, dpp(), bypass_gc, false, false);
     }
   }
 
@@ -9019,7 +9037,8 @@ next:
   }
 
   if (opt_cmd == OPT::USER_CHECK) {
-    check_bad_owner_bucket_mapping(driver, user->get_id(), user->get_tenant(),
+    check_bad_owner_bucket_mapping(driver, user->get_id(),
+                                   user->get_display_name(), user->get_tenant(),
                                    fix, null_yield, dpp());
   }
 
@@ -10316,7 +10335,8 @@ next:
 
     if (!rgw::sal::User::empty(user)) {
       pipe->params.user = user->get_id();
-    } else if (pipe->params.mode == rgw_sync_pipe_params::MODE_USER) {
+    } else if (pipe->params.mode == rgw_sync_pipe_params::MODE_USER &&
+               pipe->params.user.empty()) {
       cerr << "ERROR: missing --uid for --mode=user" << std::endl;
       return EINVAL;
     }
@@ -11081,23 +11101,22 @@ next:
       owner = rgw_account_id{account_id};
     }
 
-    formatter->open_object_section("result");
-    formatter->open_array_section("topics");
-    do {
-      rgw_pubsub_topics result;
-      int ret = ps.get_topics(dpp(), next_token, max_entries,
-                              result, next_token, null_yield);
-      if (ret < 0 && ret != -ENOENT) {
-        cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-      for (const auto& [_, topic] : result.topics) {
-        if (owner && *owner != topic.owner) {
-          continue;
+    rgw_pubsub_topics result;
+    if (rgw::all_zonegroups_support(*site, rgw::zone_features::notification_v2) &&
+        driver->stat_topics_v1(tenant, null_yield, dpp()) == -ENOENT) {
+      formatter->open_array_section("topics");
+      do {
+        int ret = ps.get_topics_v2(dpp(), next_token, max_entries,
+                                   result, next_token, null_yield);
+        if (ret < 0 && ret != -ENOENT) {
+          cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
+          return -ret;
         }
-        std::set<std::string> subscribed_buckets;
-        if (rgw::all_zonegroups_support(*site, rgw::zone_features::notification_v2) &&
-            driver->stat_topics_v1(tenant, null_yield, dpp()) == -ENOENT) {
+        for (const auto& [_, topic] : result.topics) {
+          if (owner && *owner != topic.owner) {
+            continue;
+          }
+          std::set<std::string> subscribed_buckets;
           ret = driver->get_bucket_topic_mapping(topic, subscribed_buckets,
                                                  null_yield, dpp());
           if (ret < 0) {
@@ -11105,22 +11124,27 @@ next:
                  << topic.name << ", ret=" << ret << std::endl;
           }
           show_topics_info_v2(topic, subscribed_buckets, formatter.get());
-        } else {
-          encode_json("result", result, formatter.get());
+          if (max_entries_specified) {
+            --max_entries;
+          }
         }
-        if (max_entries_specified) {
-          --max_entries;
-        }
+        result.topics.clear();
+      } while (!next_token.empty() && max_entries > 0);
+      formatter->close_section(); // topics
+    } else { // v1, list all topics
+      int ret = ps.get_topics_v1(dpp(), result, null_yield);
+      if (ret < 0 && ret != -ENOENT) {
+        cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
       }
-    } while (!next_token.empty() && max_entries > 0);
-    formatter->close_section(); // topics
+      encode_json("result", result, formatter.get());
+    }
     if (max_entries_specified) {
       encode_json("truncated", !next_token.empty(), formatter.get());
       if (!next_token.empty()) {
         encode_json("marker", next_token, formatter.get());
       }
     }
-    formatter->close_section(); // result
     formatter->flush(cout);
   }
 
@@ -11517,6 +11541,7 @@ next:
       .max_groups = max_groups,
       .max_access_keys = max_access_keys,
       .max_buckets = max_buckets,
+      .purge_data = static_cast<bool>(purge_data),
     };
 
     std::string err_msg;

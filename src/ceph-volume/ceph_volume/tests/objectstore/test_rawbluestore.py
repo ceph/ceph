@@ -1,5 +1,5 @@
 import pytest
-from mock import patch, Mock, MagicMock, call
+from unittest.mock import patch, Mock, MagicMock, call
 from ceph_volume.objectstore.rawbluestore import RawBlueStore
 from ceph_volume.util import system
 
@@ -60,7 +60,7 @@ class TestRawBlueStore:
         self.raw_bs.osd_id = self.raw_bs.args.osd_id
         with pytest.raises(Exception):
             self.raw_bs.safe_prepare()
-        assert m_rollback_osd.mock_calls == [call(self.raw_bs.args, '1')]
+        assert m_rollback_osd.mock_calls == [call('1')]
 
     @patch('ceph_volume.objectstore.rawbluestore.RawBlueStore.prepare', MagicMock())
     def test_safe_prepare(self,
@@ -159,6 +159,7 @@ class TestRawBlueStore:
 
     @patch('ceph_volume.objectstore.rawbluestore.encryption_utils.rename_mapper', Mock(return_value=MagicMock()))
     @patch('ceph_volume.util.disk.get_bluestore_header')
+    @patch('ceph_volume.objectstore.rawbluestore.encryption_utils.luks_close', Mock(return_value=MagicMock()))
     @patch('ceph_volume.objectstore.rawbluestore.encryption_utils.luks_open', Mock(return_value=MagicMock()))
     def test_activate_dmcrypt_tpm(self, m_bs_header, rawbluestore, fake_lsblk_all, mock_raw_direct_report, is_root) -> None:
         m_bs_header.return_value = {

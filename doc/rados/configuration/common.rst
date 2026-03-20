@@ -44,6 +44,27 @@ For more about configuring a network for use with Ceph, see the `Network
 Configuration Reference`_ .
 
 
+Temporary Directory
+===================
+
+Some operations will cause a daemon to write to a temporary file. These files
+are located according to the ``tmp_dir`` config.
+
+.. confval:: tmp_dir
+
+The ``$TMPDIR`` environment variable is used to initialize the config, if
+present, but may be overriden on the command-line. A default may also
+be set for the cluster using the usual ``ceph config`` API.
+
+The template for the temporary files created by daemons is controlled
+by the ``tmp_file_template`` config.
+
+.. confval:: tmp_file_template
+
+One example where temporary files are created by daemons is the use of the
+``--daemon-output-file=:tmp:`` argument to the ``ceph tell`` command.
+
+
 Monitors
 ========
 
@@ -166,6 +187,16 @@ Logging`_.
 
 Example ceph.conf
 =================
+
+Note that since the Mimic release the Monitors maintain a database of option
+settings: the *central config*.  Node-local ``ceph.conf`` files are still
+supported, but in most cases need only contain the first three lines shown
+below.  Maintaining full ``ceph.conf`` files across cluster nodes can be
+tedious and prone to omission and error, especially when daemons are containerized.
+The below file is provided as a reference example. Clusters running recent
+releases are best managed primary by central config, with a minimal ``ceph.conf``
+file that defines only how to reach the Monitors and thus rarely requires
+modification.
 
 .. literalinclude:: demo-ceph.conf
    :language: ini

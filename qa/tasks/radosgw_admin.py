@@ -16,6 +16,7 @@ import logging
 import time
 import datetime
 import sys
+import errno
 
 from io import StringIO
 from queue import Queue
@@ -59,7 +60,8 @@ def usage_acc_findsum2(summaries, user, add=True):
         return None
     e = {'user': user, 'categories': [],
         'total': {'bytes_received': 0,
-            'bytes_sent': 0, 'ops': 0, 'successful_ops': 0 }}
+            'bytes_sent': 0, 'ops': 0, 'successful_ops': 0,
+            'bytes_processed': 0, 'bytes_returned': 0}}
     summaries.append(e)
     return e
 def usage_acc_update2(x, out, b_in, err):
@@ -71,6 +73,17 @@ def usage_acc_update2(x, out, b_in, err):
 def usage_acc_validate_fields(r, x, x2, what):
     q=[]
     for field in ['bytes_sent', 'bytes_received', 'ops', 'successful_ops']:
+        try:
+            if x2[field] < x[field]:
+                q.append("field %s: %d < %d" % (field, x2[field], x[field]))
+        except Exception as ex:
+            r.append( "missing/bad field " + field + " in " + what + " " + str(ex))
+            return
+    if len(q) > 0:
+        r.append("incomplete counts in " + what + ": " + ", ".join(q))
+def usage_acc_validate_s3select_fields(r, x, x2, what):
+    q=[]
+    for field in ['bytes_processed', 'bytes_returned']:
         try:
             if x2[field] < x[field]:
                 q.append("field %s: %d < %d" % (field, x2[field], x[field]))
@@ -92,7 +105,9 @@ class usage_acc:
                 return b
         if not add:
                 return None
-        b = {'bucket': bucket, 'categories': []}
+        b = {'bucket': bucket, 'categories': [], 's3select': {
+            'bytes_processed': 0, 'bytes_returned': 0,
+        }}
         e['buckets'].append(b)
         return b
     def c2x(self, c, cat, add=True):
@@ -146,60 +161,69 @@ class usage_acc:
                 try:
                     b2 = self.e2b(e2, b['bucket'], False)
                     if b2 != None:
-                            c2 = b2['categories']
+                        c2 = b2['categories']
                 except Exception as ex:
                     r.append("malformed entry looking for bucket "
-			+ b['bucket'] + " in user " + e['user'] + " " + str(ex))
+                        + b['bucket'] + " in user " + e['user'] + " " + str(ex))
                     break
                 if b2 == None:
                     r.append("can't find bucket " + b['bucket']
-			+ " in user " + e['user'])
+                        + " in user " + e['user'])
                     continue
                 for x in c:
                     try:
                         x2 = self.c2x(c2, x['category'], False)
                     except Exception as ex:
                         r.append("malformed entry looking for "
-			    + x['category'] + " in bucket " + b['bucket']
-			    + " user " + e['user'] + " " + str(ex))
+                            + x['category'] + " in bucket " + b['bucket']
+                            + " user " + e['user'] + " " + str(ex))
                         break
                     usage_acc_validate_fields(r, x, x2, "entry: category "
-			+ x['category'] + " bucket " + b['bucket']
-			+ " in user " + e['user'])
+                        + x['category'] + " bucket " + b['bucket']
+                        + " in user " + e['user'])
+
+                if 's3select' not in b2:
+                    r.append("missing s3select in bucket "
+                        + b['bucket'] + " in user " + e['user'])
+                    continue
+                usage_acc_validate_s3select_fields(r,
+                    b['s3select'], b2['s3select'],
+                    "entry: s3select in bucket " + b['bucket'] + " in user " + e['user'])
         for s in self.results['summary']:
             c = s['categories']
             try:
                 s2 = usage_acc_findsum2(results['summary'], s['user'], False)
             except Exception as ex:
-                r.append("malformed summary looking for user " + e['user']
-		    + " " + str(ex))
+                r.append("malformed summary looking for user " + s['user']
+                    + " " + str(ex))
                 break
-                if s2 == None:
-                    r.append("missing summary for user " + e['user'] + " " + str(ex))
-                    continue
+            if s2 == None:
+                r.append("missing summary for user " + s['user'])
+                continue
             try:
                 c2 = s2['categories']
             except Exception as ex:
                 r.append("malformed summary missing categories for user "
-		    + e['user'] + " " + str(ex))
+                    + s['user'] + " " + str(ex))
                 break
             for x in c:
                 try:
                     x2 = self.c2x(c2, x['category'], False)
                 except Exception as ex:
                     r.append("malformed summary looking for "
-			+ x['category'] + " user " + e['user'] + " " + str(ex))
+                        + x['category'] + " user " + s['user'] + " " + str(ex))
                     break
                 usage_acc_validate_fields(r, x, x2, "summary: category "
-		    + x['category'] + " in user " + e['user'])
+                    + x['category'] + " in user " + s['user'])
             x = s['total']
             try:
                 x2 = s2['total']
             except Exception as ex:
                 r.append("malformed summary looking for totals for user "
-                         + e['user'] + " " + str(ex))
+                    + s['user'] + " " + str(ex))
                 break
-            usage_acc_validate_fields(r, x, x2, "summary: totals for user" + e['user'])
+            usage_acc_validate_fields(r, x, x2, "summary: totals for user" + s['user'])
+            usage_acc_validate_s3select_fields(r, x, x2, "summary: s3select totals for user" + s['user'])
         return r
 
 def ignore_this_entry(cat, bucket, user, out, b_in, err):
@@ -303,7 +327,6 @@ def task(ctx, config):
     """
     Test radosgw-admin functionality against a running rgw instance.
     """
-    global log
 
     assert ctx.rgw.config, \
         "radosgw_admin task needs a config passed from the rgw task"
@@ -700,6 +723,40 @@ def task(ctx, config):
         check_status=True)
 
     (err, out) = rgwadmin(ctx, client, ['user', 'rm', '--tenant', tenant_name, '--uid', 'tenanteduser'],
+        check_status=True)
+
+    account_id = 'RGW12312312312312312'
+    account_name = 'testacct'
+    rgwadmin(ctx, client, [
+            'account', 'create',
+            '--account-id', account_id,
+            '--account-name', account_name,
+            ], check_status=True)
+    rgwadmin(ctx, client, [
+            'user', 'create',
+            '--account-id', account_id,
+            '--uid', 'testacctuser',
+            '--display-name', 'accountuser',
+            '--gen-access-key',
+            '--gen-secret',
+            ], check_status=True)
+
+    # TESTCASE 'bucket link', 'bucket', 'account user', 'fails'
+    (err, out) = rgwadmin(ctx, client, ['bucket', 'link', '--bucket', bucket_name, '--uid', 'testacctuser'])
+    assert err == errno.EINVAL
+
+    rgwadmin(ctx, client, ['user', 'rm', '--uid', 'testacctuser'], check_status=True)
+
+    # TESTCASE 'bucket link', 'bucket', 'account', 'succeeds'
+    rgwadmin(ctx, client,
+        ['bucket', 'link', '--bucket', bucket_name, '--account-id', account_id],
+        check_status=True)
+
+    # relink the bucket to the first user and delete the account
+    rgwadmin(ctx, client,
+        ['bucket', 'link', '--bucket', bucket_name, '--uid', user1],
+        check_status=True)
+    rgwadmin(ctx, client, ['account', 'rm', '--account-id', account_id],
         check_status=True)
 
     # TESTCASE 'object-rm', 'object', 'rm', 'remove object', 'succeeds, object is removed'

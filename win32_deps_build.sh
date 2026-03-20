@@ -22,6 +22,7 @@ boostSrcDir="${depsSrcDir}/boost_1_82_0"
 boostDir="${depsToolsetDir}/boost"
 zlibDir="${depsToolsetDir}/zlib"
 zlibSrcDir="${depsSrcDir}/zlib"
+zlibTag="v1.3.1"
 backtraceDir="${depsToolsetDir}/libbacktrace"
 backtraceSrcDir="${depsSrcDir}/libbacktrace"
 snappySrcDir="${depsSrcDir}/snappy"
@@ -39,6 +40,11 @@ dokanUrl="https://github.com/dokan-dev/dokany"
 dokanTag="v2.0.5.1000"
 dokanSrcDir="${depsSrcDir}/dokany"
 dokanLibDir="${depsToolsetDir}/dokany/lib"
+
+libicuUrl="https://github.com/unicode-org/icu"
+libicuTag="release-76-1"
+libicuSrcDir="${depsSrcDir}/icu"
+libicuLibDir="${depsToolsetDir}/libicu"
 
 mingwLlvmUrl="https://github.com/mstorsjo/llvm-mingw/releases/download/20230320/llvm-mingw-20230320-ucrt-ubuntu-18.04-x86_64.tar.xz"
 mingwLlvmSha256Sum="bc367753dea829d219be32e2e64e2d15d03158ce8e700ae5210ca3d78e6a07ea"
@@ -120,7 +126,7 @@ source "$SCRIPT_DIR/mingw_conf.sh"
 echo "Building zlib."
 cd $depsSrcDir
 if [[ ! -d $zlibSrcDir ]]; then
-    git clone --depth 1 https://github.com/madler/zlib
+    git clone --branch $zlibTag --depth 1 https://github.com/madler/zlib
 fi
 cd $zlibSrcDir
 # Apparently the configure script is broken...
@@ -376,6 +382,28 @@ $MINGW_DLLTOOL -d $dokanSrcDir/dokan/dokan.def \
 # dokan.h is defined in both ./dokan and ./sys while both are using
 # sys/public.h without the "sys" prefix.
 cp $dokanSrcDir/sys/public.h $dokanSrcDir/dokan
+
+echo "Building libicu."
+cd $depsSrcDir
+if [[ ! -d $libicuSrcDir ]]; then
+    git clone --branch $libicuTag --depth 1 $libicuUrl
+    cd $libicuSrcDir
+fi
+mkdir -p $libicuSrcDir/build-windows
+mkdir -p $libicuSrcDir/build-linux
+
+cd $libicuSrcDir/build-linux
+../icu4c/source/configure
+_make
+
+cd $libicuSrcDir/build-windows
+../icu4c/source/configure \
+    --enable-static \
+    --host=${MINGW_BASE} \
+    --with-cross-build=$PWD/../build-linux \
+    --prefix=$libicuLibDir
+_make
+_make install
 
 echo "Finished building Ceph dependencies."
 touch $depsToolsetDir/completed

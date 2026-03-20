@@ -29,6 +29,7 @@
 
 #include <errno.h>
 #include <sys/stat.h>
+#include <functional>
 #include <map>
 #include <memory>
 #include <vector>
@@ -269,6 +270,12 @@ public:
   virtual bool test_mount_in_use() = 0;
   virtual int mount() = 0;
   virtual int umount() = 0;
+  virtual int mount_readonly() {
+    return -EOPNOTSUPP;
+  }
+  virtual int umount_readonly() {
+    return -EOPNOTSUPP;
+  }
   virtual int fsck(bool deep) {
     return -EOPNOTSUPP;
   }
@@ -731,15 +738,6 @@ public:
     std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
     ) = 0;
 
-#ifdef WITH_SEASTAR
-  virtual int omap_get_values(
-    CollectionHandle &c,         ///< [in] Collection containing oid
-    const ghobject_t &oid,       ///< [in] Object containing omap
-    const std::optional<std::string> &start_after,     ///< [in] Keys to get
-    std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
-    ) = 0;
-#endif
-
   /// Filters keys into out which are defined on oid
   virtual int omap_check_keys(
     CollectionHandle &c,     ///< [in] Collection containing oid
@@ -761,6 +759,48 @@ public:
     CollectionHandle &c,   ///< [in] collection
     const ghobject_t &oid  ///< [in] object
     ) = 0;
+
+  struct omap_iter_seek_t {
+    std::string seek_position;
+    enum {
+      // start with provided key (seek_position), if it exists
+      LOWER_BOUND,
+      // skip provided key (seek_position) even if it exists
+      UPPER_BOUND
+    } seek_type = LOWER_BOUND;
+    static omap_iter_seek_t min_lower_bound() { return {}; }
+  };
+  enum class omap_iter_ret_t {
+    STOP,
+    NEXT
+  };
+  /**
+   * Iterate over object map with user-provided callable
+   *
+   * Warning!  The callable is executed under lock on bluestore
+   * operations in c.  Do not use bluestore methods on c while
+   * iterating. (Filling in a transaction is no problem).
+   *
+   * @param c collection
+   * @param oid object
+   * @param start_from where the iterator should point to at
+   *                   the beginning
+   * @param visitor callable that takes OMAP key and corresponding
+   *                value as string_views and controls iteration
+   *                by the return. It is executed for every object's
+   *                OMAP entry from `start_from` till end of the
+   *                object's OMAP or till the iteration is stopped
+   *                by `STOP`. Please note that if there is no such
+   *                entry, `visitor` will be called 0 times.
+   * @return error code, zero on success
+   */
+  virtual int omap_iterate(
+    CollectionHandle &c,
+    const ghobject_t &oid,
+    omap_iter_seek_t start_from,
+    std::function<omap_iter_ret_t(std::string_view,
+                                  std::string_view)> visitor
+  ) = 0;
 
   virtual int flush_journal() { return -EOPNOTSUPP; }
 
@@ -785,7 +825,7 @@ public:
   virtual void inject_data_error(const ghobject_t &oid) {}
   virtual void inject_mdata_error(const ghobject_t &oid) {}
 
-  virtual void compact() {}
+  virtual int compact() { return -ENOTSUP; }
   virtual bool has_builtin_csum() const {
     return false;
   }

@@ -20,16 +20,7 @@ MetricsHandler::MetricsHandler(CephContext *cct, MDSRank *mds)
     mds(mds) {
 }
 
-bool MetricsHandler::ms_can_fast_dispatch2(const cref_t<Message> &m) const {
-  return m->get_type() == CEPH_MSG_CLIENT_METRICS || m->get_type() == MSG_MDS_PING;
-}
-
-void MetricsHandler::ms_fast_dispatch2(const ref_t<Message> &m) {
-  bool handled = ms_dispatch2(m);
-  ceph_assert(handled);
-}
-
-bool MetricsHandler::ms_dispatch2(const ref_t<Message> &m) {
+Dispatcher::dispatch_result_t MetricsHandler::ms_dispatch2(const ref_t<Message> &m) {
   if (m->get_type() == CEPH_MSG_CLIENT_METRICS &&
       m->get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_CLIENT) {
     handle_client_metrics(ref_cast<MClientMetrics>(m));
@@ -51,6 +42,7 @@ void MetricsHandler::init() {
   dout(10) << dendl;
 
   updater = std::thread([this]() {
+      ceph_pthread_setname("mds-metrics");
       std::unique_lock locker(lock);
       while (!stopping) {
         double after = g_conf().get_val<std::chrono::seconds>("mds_metrics_update_interval").count();
@@ -331,6 +323,11 @@ void MetricsHandler::handle_payload(Session *session, const UnknownPayload &payl
 }
 
 void MetricsHandler::handle_client_metrics(const cref_t<MClientMetrics> &m) {
+  if (!mds->is_active_lockless()) {
+    dout(20) << ": dropping metrics message during recovery" << dendl;
+    return;
+  }
+
   std::scoped_lock locker(lock);
 
   Session *session = mds->get_session(m);

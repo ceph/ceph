@@ -518,6 +518,15 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def replace_device(self,
+                       hostname: str,
+                       device: str,
+                       clear: bool = False,
+                       yes_i_really_mean_it: bool = False) -> OrchResult:
+        """Perform all required operations in order to replace a device.
+        """
+        raise NotImplementedError()
+
     def get_inventory(self, host_filter: Optional['InventoryFilter'] = None, refresh: bool = False) -> OrchResult[List['InventoryHost']]:
         """
         Returns something that was created by `ceph-volume inventory`.
@@ -567,7 +576,8 @@ class Orchestrator(object):
         self,
         entity: str,
         service_name: Optional[str] = None,
-        hostname: Optional[str] = None
+        hostname: Optional[str] = None,
+        no_exception_when_missing: bool = False
     ) -> OrchResult[str]:
         raise NotImplementedError()
 
@@ -575,12 +585,18 @@ class Orchestrator(object):
         self,
         entity: str,
         service_name: Optional[str] = None,
-        hostname: Optional[str] = None
+        hostname: Optional[str] = None,
+        no_exception_when_missing: bool = False
     ) -> OrchResult[str]:
         raise NotImplementedError()
 
     @handle_orch_error
-    def apply(self, specs: Sequence["GenericSpec"], no_overwrite: bool = False) -> List[str]:
+    def apply(
+        self,
+        specs: Sequence["GenericSpec"],
+        no_overwrite: bool = False,
+        continue_on_error: bool = False
+    ) -> List[str]:
         """
         Applies any spec
         """
@@ -701,12 +717,18 @@ class Orchestrator(object):
 
     def remove_osds(self, osd_ids: List[str],
                     replace: bool = False,
+                    replace_block: bool = False,
+                    replace_db: bool = False,
+                    replace_wal: bool = False,
                     force: bool = False,
                     zap: bool = False,
                     no_destroy: bool = False) -> OrchResult[str]:
         """
         :param osd_ids: list of OSD IDs
         :param replace: marks the OSD as being destroyed. See :ref:`orchestrator-osd-replace`
+        :param replace_block: marks the corresponding block device as being replaced.
+        :param replace_db: marks the corresponding db device as being replaced.
+        :param replace_wal: marks the corresponding wal device as being replaced.
         :param force: Forces the OSD removal process without waiting for the data to be drained first.
         :param zap: Zap/Erase all devices associated with the OSDs (DESTROYS DATA)
         :param no_destroy: Do not destroy associated VGs/LVs with the OSD.
@@ -1088,6 +1110,7 @@ class DaemonDescription(object):
                  ports: Optional[List[int]] = None,
                  ip: Optional[str] = None,
                  deployed_by: Optional[List[str]] = None,
+                 systemd_unit: Optional[str] = None,
                  rank: Optional[int] = None,
                  rank_generation: Optional[int] = None,
                  extra_container_args: Optional[GeneralArgList] = None,
@@ -1153,6 +1176,8 @@ class DaemonDescription(object):
         self.ip: Optional[str] = ip
 
         self.deployed_by = deployed_by
+
+        self.systemd_unit = systemd_unit
 
         self.is_active = is_active
 
@@ -1317,6 +1342,7 @@ class DaemonDescription(object):
         out['ip'] = self.ip
         out['rank'] = self.rank
         out['rank_generation'] = self.rank_generation
+        out['systemd_unit'] = self.systemd_unit
 
         for k in ['last_refresh', 'created', 'started', 'last_deployed',
                   'last_configured']:
@@ -1353,6 +1379,7 @@ class DaemonDescription(object):
         out['is_active'] = self.is_active
         out['ports'] = self.ports
         out['ip'] = self.ip
+        out['systemd_unit'] = self.systemd_unit
 
         for k in ['last_refresh', 'created', 'started', 'last_deployed',
                   'last_configured']:

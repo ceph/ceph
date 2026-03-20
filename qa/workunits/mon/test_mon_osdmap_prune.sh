@@ -33,7 +33,9 @@ function wait_for_trim() {
 
   for ((i=0; i < ${#delays[*]}; ++i)); do
     fc=$(ceph report | jq '.osdmap_first_committed')
-    if [[ $fc -eq $epoch ]]; then
+    manifest="$(ceph report | jq '.osdmap_manifest')"
+    first_pinned_map=$(ceph report | jq '.osdmap_manifest.first_pinned')
+    if [[ $first_pinned_map -eq $epoch ]]; then
       return 0
     fi
     sleep ${delays[$i]}

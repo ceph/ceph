@@ -5,6 +5,7 @@
 #define CEPH_LIBRBD_IMAGE_REFRESH_PARENT_REQUEST_H
 
 #include "include/int_types.h"
+#include "include/rados/librados_fwd.hpp"
 #include "librbd/Types.h"
 
 class Context;
@@ -67,8 +68,8 @@ private:
   MigrationInfo m_migration_info;
   Context *m_on_finish;
 
-  ImageCtxT *m_parent_image_ctx;
-  uint64_t m_parent_snap_id;
+  ImageCtxT *m_parent_image_ctx = nullptr;
+  librados::Rados *m_parent_rados = nullptr;
 
   int m_error_result;
 

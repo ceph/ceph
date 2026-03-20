@@ -54,6 +54,7 @@ protected:
   const std::string notify_oid = "foo"s;
   sys::error_code notify_err;
   ceph::timespan notify_sleep = 0s;
+  bool should_reconnet = true;
 
   asio::awaitable<void> handle_notify(uint64_t notify_id, uint64_t cookie,
                                       uint64_t notifier_gid, buffer::list&& bl) {
@@ -73,6 +74,9 @@ protected:
     std::cout << __func__ << " cookie " << cookie
               << " err " << ec.message() << std::endl;
     ceph_assert(cookie > 1000);
+    if (!should_reconnet) {
+      co_return;
+    }
     co_await rados().unwatch(cookie, pool(), asio::use_awaitable);
     notify_cookies.erase(cookie);
     notify_err = ec;
@@ -154,6 +158,7 @@ CORO_TEST_F(NeoRadosWatchNotify, WatchNotifyTimeout, NeoRadosWatchNotifyTest) {
 			     sys::errc::timed_out);
   std::cout << "Timed out." << std::endl;
 
+  should_reconnet = false; // Don't reconnect, we know we will timeout
   EXPECT_TRUE(rados().check_watch(handle));
   co_await rados().unwatch(handle, pool(), asio::use_awaitable);
 

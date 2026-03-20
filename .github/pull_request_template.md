@@ -49,20 +49,17 @@
 <details>
 <summary>Show available Jenkins commands</summary>
 
-- `jenkins retest this please`
-- `jenkins test classic perf`
-- `jenkins test crimson perf`
-- `jenkins test signed`
-- `jenkins test make check`
-- `jenkins test make check arm64`
-- `jenkins test submodules`
-- `jenkins test dashboard`
-- `jenkins test dashboard cephadm`
-- `jenkins test api`
-- `jenkins test docs`
-- `jenkins render docs`
-- `jenkins test ceph-volume all`
-- `jenkins test ceph-volume tox`
-- `jenkins test windows`
-- `jenkins test rook e2e`
+- `jenkins test classic perf` [Jenkins Job](https://jenkins.ceph.com/view/all/job/ceph-perf-classic/) | [Jenkins Job Definition](https://github.com/ceph/ceph-build/blob/main/ceph-perf-pull-requests/config/definitions/ceph-perf-pull-requests.yml)
+- `jenkins test crimson perf` [Jenkins Job](https://jenkins.ceph.com/view/all/job/ceph-perf-crimson/) | [Jenkins Job Definition](https://github.com/ceph/ceph-build/blob/main/ceph-perf-pull-requests/config/definitions/ceph-perf-pull-requests.yml)
+- `jenkins test signed` [Jenkins Job](https://jenkins.ceph.com/job/ceph-pr-commits/) | [Jenkins Job Definition](https://github.com/ceph/ceph-build/blob/main/ceph-pr-commits/config/definitions/ceph-pr-commits.yml)
+- `jenkins test make check` [Jenkins Job](https://jenkins.ceph.com/job/ceph-pull-requests/) | [Jenkins Job Definition](https://github.com/ceph/ceph-build/blob/main/ceph-pull-requests/config/definitions/ceph-pull-requests.yml)
+- `jenkins test make check arm64` [Jenkins Job](https://jenkins.ceph.com/job/ceph-pull-requests-arm64/) | [Jenkins Job Definition](https://github.com/ceph/ceph-build/blob/main/ceph-pull-requests-arm64/config/definitions/ceph-pull-requests-arm64.yml)
+- `jenkins test submodules` [Jenkins Job](https://jenkins.ceph.com/view/all/job/ceph-pr-submodules/) | [Jenkins Job Definition](https://github.com/ceph/ceph-build/blob/main/ceph-pr-submodules/config/definitions/ceph-pr-commits.yml)
+- `jenkins test dashboard` [Jenkins Job](https://jenkins.ceph.com/view/all/job/ceph-dashboard-pull-requests/) | [Jenkins Job Definition](https://github.com/ceph/ceph-build/blob/main/ceph-dashboard-pull-requests/config/definitions/ceph-dashboard-pull-requests.yml)
+- `jenkins test dashboard cephadm` [Jenkins Job](https://jenkins.ceph.com/view/all/job/ceph-dashboard-cephadm-e2e/) | [Jenkins Job Definition](https://github.com/ceph/ceph-build/blob/main/ceph-dashboard-cephadm-e2e/config/definitions/ceph-dashboard-cephadm-e2e.yml)
+- `jenkins test api` [Jenkins Job](https://jenkins.ceph.com/view/all/job/ceph-api/) | [Jenkins Job Definition](https://github.com/ceph/ceph-build/blob/main/ceph-pr-api/config/definitions/ceph-pr-api.yml)
+- `jenkins test docs` [ReadTheDocs](https://readthedocs.org/projects/ceph/) | [Github Workflow Definition](https://github.com/ceph/ceph/blob/main/.readthedocs.yml)
+- `jenkins test ceph-volume all` [Jenkins Jobs](https://jenkins.ceph.com/view/ceph-volume%20PR/) | [Jenkins Jobs Definition](https://github.com/ceph/ceph-build/blob/main/ceph-volume-cephadm-prs/config/definitions/ceph-volume-pr.yml)
+- `jenkins test windows` [Jenkins Job](https://jenkins.ceph.com/job/ceph-windows-pull-requests/) | [Jenkins Job Definition](https://github.com/ceph/ceph-build/blob/main/ceph-windows-pull-requests/config/definitions/ceph-windows-pull-requests.yml)
+- `jenkins test rook e2e` [Jenkins Job](https://jenkins.ceph.com/view/all/job/ceph-orchestrator-rook-e2e/) | [Jenkins Job Definition](https://github.com/ceph/ceph-build/blob/main/ceph-rook-e2e/config/definitions/ceph-orchestrator-rook-e2e.yml)
 </details>

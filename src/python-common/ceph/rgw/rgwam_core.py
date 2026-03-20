@@ -236,7 +236,7 @@ class ZonegroupOp:
             return []
 
     def get(self, zonegroup: EntityKey = None):
-        ze = ZoneEnv(self.env)
+        ze = ZoneEnv(self.env, zg=zonegroup)
         params = ['zonegroup', 'get']
         return RGWAdminJSONCmd(ze).run(params)
 
@@ -323,30 +323,33 @@ class PeriodOp:
         self.env = env
 
     def update(self, realm: EntityKey, zonegroup: EntityKey, zone: EntityKey, commit=True):
-        master_zone_info = self.get_master_zone(realm, zonegroup)
-        master_zone = EntityName(master_zone_info['name']) if master_zone_info else zone
-        master_zonegroup_info = self.get_master_zonegroup(realm)
-        master_zonegroup = EntityName(master_zonegroup_info['name']) \
-            if master_zonegroup_info else zonegroup
-        ze = ZoneEnv(self.env, realm=realm,  zg=master_zonegroup, zone=master_zone)
+        ze = ZoneEnv(self.env, realm=realm,  zg=zonegroup, zone=zone)
         params = ['period', 'update']
         opt_arg_bool(params, '--commit', commit)
         return RGWAdminJSONCmd(ze).run(params)
 
-    def get_master_zone(self, realm, zonegroup=None):
+    def get_master_zone(self, realm, zonegroup):
         try:
-            ze = ZoneEnv(self.env, realm=realm, zg=zonegroup)
-            params = ['zone', 'get']
-            return RGWAdminJSONCmd(ze).run(params)
-        except RGWAMCmdRunException:
+            # Fetch the realm period
+            realm_period = self.get(realm)
+            zonegroups = realm_period['period_map']['zonegroups']
+
+            # Find the master zone in the realm period data
+            for zonegroup_inf in zonegroups:
+                if zonegroup_inf['name'] == zonegroup.name:
+                    for zone in zonegroup_inf.get('zones', []):
+                        if zone['id'] == zonegroup_inf['master_zone']:
+                            return zone
             return None
 
-    def get_master_zone_ep(self, realm, zonegroup=None):
+        except RGWAMCmdRunException as e:
+            log.error(f"Failed to fetch master zone: {e}")
+            return None
+
+    def get_master_zone_ep(self, realm):
         try:
-            ze = ZoneEnv(self.env, realm=realm, zg=zonegroup)
-            params = ['period', 'get']
-            output = RGWAdminJSONCmd(ze).run(params)
-            for zg in output['period_map']['zonegroups']:
+            realm_period = self.get(realm)
+            for zg in realm_period['period_map']['zonegroups']:
                 if not bool(zg['is_master']):
                     continue
                 for zone in zg['zones']:
@@ -358,10 +361,19 @@ class PeriodOp:
 
     def get_master_zonegroup(self, realm):
         try:
-            ze = ZoneEnv(self.env, realm=realm)
-            params = ['zonegroup', 'get']
-            return RGWAdminJSONCmd(ze).run(params)
-        except RGWAMCmdRunException:
+            # Fetch the realm period
+            realm_period = self.get(realm)
+            master_zonegroup_id = realm_period['master_zonegroup']
+            zonegroups = realm_period['period_map']['zonegroups']
+
+            # Find the master zonegroup in the realm period data
+            for zonegroup in zonegroups:
+                if zonegroup['id'] == master_zonegroup_id:
+                    return zonegroup
+            return None
+
+        except RGWAMCmdRunException as e:
+            log.error(f"Failed to fetch master zonegroup: {e}")
             return None
 
     def get(self, realm=None):
@@ -539,7 +551,7 @@ class RGWAM:
         realm = self.create_realm(realm_name)
         zonegroup = self.create_zonegroup(realm, zonegroup_name, zonegroup_is_master=True)
         zone = self.create_zone(realm, zonegroup, zone_name, zone_is_master=True)
-        self.update_period(realm, zonegroup)
+        self.update_period(realm, zonegroup, zone)
 
         # Create system user, normal user and update the master zone
         sys_user = self.create_system_user(realm, zonegroup, zone)
@@ -548,7 +560,7 @@ class RGWAM:
         secret = rgw_acces_key.secret_key if rgw_acces_key else ''
         self.zone_op().modify(zone, zonegroup, None,
                               access_key, secret, endpoints=rgw_spec.zone_endpoints)
-        self.update_period(realm, zonegroup)
+        self.update_period(realm, zonegroup, zone)
 
         if start_radosgw and rgw_spec.zone_endpoints is None:
             # Instruct the orchestrator to start RGW daemons, asynchronically, this will
@@ -770,21 +782,42 @@ class RGWAM:
         realms_info = []
         for realm_name in self.realm_op().list():
             realm = self.get_realm(realm_name)
-            master_zone_inf = self.period_op().get_master_zone(realm)
-            zone_ep = self.period_op().get_master_zone_ep(realm)
-            if master_zone_inf and 'system_key' in master_zone_inf:
-                access_key = master_zone_inf['system_key']['access_key']
-                secret = master_zone_inf['system_key']['secret_key']
-            else:
-                access_key = ''
-                secret = ''
-            realms_info.append({"realm_name": realm_name,
-                                "realm_id": realm.id,
-                                "master_zone_id": master_zone_inf['id'] if master_zone_inf else '',
-                                "endpoint": zone_ep[0] if zone_ep else None,
-                                "access_key": access_key,
-                                "secret": secret})
+            realm_period = self.period_op().get(realm)
+            master_zone_id = realm_period['master_zone']
+            master_zone_name = self.get_master_zone_name(realm_period, master_zone_id)
+            local_zone_list = self.zone_op().list()
+
+            # Only consider the realm if master_zone_name is in the local zone list
+            if master_zone_name in local_zone_list:
+                master_zone_inf = self.zone_op().get(EntityID(master_zone_id))
+                zone_ep = self.period_op().get_master_zone_ep(realm)
+
+                if master_zone_inf and 'system_key' in master_zone_inf:
+                    access_key = master_zone_inf['system_key']['access_key']
+                    secret = master_zone_inf['system_key']['secret_key']
+                else:
+                    access_key = ''
+                    secret = ''
+
+                realms_info.append({
+                    "realm_name": realm_name,
+                    "realm_id": realm.id,
+                    "master_zone_id": master_zone_inf['id'] if master_zone_inf else '',
+                    "endpoint": zone_ep[0] if zone_ep else None,
+                    "access_key": access_key,
+                    "secret": secret
+                })
+
         return realms_info
+
+    def get_master_zone_name(self, realm_data, master_zone_id):
+        # Find the zonegroups in the period_map
+        zonegroups = realm_data.get('period_map', {}).get('zonegroups', [])
+        for zonegroup in zonegroups:
+            for zone in zonegroup.get('zones', []):
+                if zone.get('id') == master_zone_id:
+                    return zone.get('name')
+        return None
 
     def zone_create(self, rgw_spec, start_radosgw, secondary_zone_period_retry_limit=5):
 
@@ -811,7 +844,7 @@ class RGWAM:
         realm_name = realm_info['name']
         realm_id = realm_info['id']
 
-        realm = EntityID(realm_id)
+        realm = EntityKey(realm_name, realm_id)
         period_info = self.period_op().get(realm)
         period = RGWPeriod(period_info)
         logging.info('Period: ' + period.id)

@@ -200,21 +200,23 @@ static void log_usage(req_state *s, const string& op_name)
   if (!usage_logger)
     return;
 
-  std::string user;
+  std::string user = to_string(s->owner.id);
   std::string payer;
-  string bucket_name;
-
-  bucket_name = s->bucket_name;
+  string bucket_name = s->bucket_name;
 
   if (!bucket_name.empty()) {
-    bucket_name = s->bucket_name;
     user = to_string(s->bucket_owner.id);
+
+    // As per https://docs.aws.amazon.com/AmazonS3/latest/userguide/RequesterPaysBuckets.html#ChargeDetails
+    // If the bucket has requester pays enabled,
+    // and the requerster includes x-amz-request-payer in the header (this is checked by verify_requester_payer_permission and results in 403 if not present),
+    // and the status code isn't 403,
+    // then the requester is the payer.
     if (!rgw::sal::Bucket::empty(s->bucket.get()) &&
-	s->bucket->get_info().requester_pays) {
+        s->bucket->get_info().requester_pays &&
+        s->err.http_ret != 403) {
       payer = s->user->get_id().to_str();
     }
-  } else {
-    user = to_string(s->owner.id);
   }
 
   bool error = s->err.is_err();
@@ -236,9 +238,12 @@ static void log_usage(req_state *s, const string& op_name)
   ldpp_dout(s, 30) << "log_usage: bucket_name=" << bucket_name
 	<< " tenant=" << s->bucket_tenant
 	<< ", bytes_sent=" << bytes_sent << ", bytes_received="
-	<< bytes_received << ", success=" << data.successful_ops << dendl;
+	<< bytes_received << ", success=" << data.successful_ops
+	<< ", bytes_processed=" << s->s3select_usage.bytes_processed
+	<< ", bytes_returned=" << s->s3select_usage.bytes_returned << dendl;
 
-  entry.add(op_name, data);
+  entry.add_usage(op_name, data);
+  entry.s3select_usage = s->s3select_usage;
 
   utime_t ts = ceph_clock_now();
 

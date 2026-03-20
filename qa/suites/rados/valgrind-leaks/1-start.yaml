@@ -12,6 +12,7 @@ overrides:
       - overall HEALTH_
       - \(PG_
       - \(POOL_APP_NOT_ENABLED\)
+      - OSD bench result
     conf:
       global:
         osd heartbeat grace: 40

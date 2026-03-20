@@ -31,6 +31,7 @@ import { NfsFormClientComponent } from '../nfs-form-client/nfs-form-client.compo
 import { getFsalFromRoute, getPathfromFsal } from '../utils';
 import { CephfsSubvolumeService } from '~/app/shared/api/cephfs-subvolume.service';
 import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-group.service';
+import { DEFAULT_SUBVOLUME_GROUP } from '~/app/shared/constants/cephfs.constant';
 
 @Component({
   selector: 'cd-nfs-form',
@@ -71,7 +72,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
   selectedFsName: string = '';
   selectedSubvolGroup: string = '';
   selectedSubvol: string = '';
-  defaultSubVolGroup = '_nogroup';
+  defaultSubVolGroup = DEFAULT_SUBVOLUME_GROUP;
 
   pathDataSource = (text$: Observable<string>) => {
     return text$.pipe(
@@ -160,9 +161,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
   }
 
   volumeChangeHandler() {
-    this.pathChangeHandler();
-    const fs_name = this.nfsForm.getValue('fsal').fs_name;
-    this.getSubVolGrp(fs_name);
+    this.isDefaultSubvolumeGroup();
   }
 
   async getSubVol() {
@@ -176,6 +175,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
     ).subscribe((data: any) => {
       this.allsubvols = data;
     });
+    this.setUpVolumeValidation();
   }
 
   getSubVolGrp(fs_name: string) {
@@ -185,16 +185,15 @@ export class NfsFormComponent extends CdForm implements OnInit {
   }
 
   setSubVolGrpPath(): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      const subvolGroup = this.nfsForm.getValue('subvolume_group');
-      const fs_name = this.nfsForm.getValue('fsal').fs_name;
+    const fsName = this.nfsForm.getValue('fsal').fs_name;
+    const subvolGroup = this.nfsForm.getValue('subvolume_group');
 
-      if (subvolGroup === this.defaultSubVolGroup) {
+    return new Promise<void>((resolve, reject) => {
+      if (subvolGroup == this.defaultSubVolGroup) {
         this.updatePath('/volumes/' + this.defaultSubVolGroup);
-        resolve();
-      } else {
+      } else if (subvolGroup != '') {
         this.subvolgrpService
-          .info(fs_name, subvolGroup)
+          .info(fsName, subvolGroup)
           .pipe(map((data) => data['path']))
           .subscribe(
             (path) => {
@@ -203,8 +202,21 @@ export class NfsFormComponent extends CdForm implements OnInit {
             },
             (error) => reject(error)
           );
+      } else {
+        this.updatePath('');
+        this.setUpVolumeValidation();
       }
+      resolve();
     });
+  }
+
+  // Checking if subVolGroup is "_nogroup" and updating path to default as "/volumes/_nogroup else blank."
+  isDefaultSubvolumeGroup() {
+    const fsName = this.nfsForm.getValue('fsal').fs_name;
+    this.getSubVolGrp(fsName);
+    this.getSubVol();
+    this.updatePath('/volumes/' + this.defaultSubVolGroup);
+    this.setUpVolumeValidation();
   }
 
   setSubVolPath(): Promise<void> {
@@ -226,9 +238,21 @@ export class NfsFormComponent extends CdForm implements OnInit {
     });
   }
 
+  setUpVolumeValidation() {
+    const subvolumeGroup = this.nfsForm.get('subvolume_group').value;
+    const subVolumeControl = this.nfsForm.get('subvolume');
+
+    // SubVolume is required if SubVolume Group is "_nogroup".
+    if (subvolumeGroup == this.defaultSubVolGroup) {
+      subVolumeControl?.setValidators([Validators.required]);
+    } else {
+      subVolumeControl?.clearValidators();
+    }
+    subVolumeControl?.updateValueAndValidity();
+  }
+
   updatePath(path: string) {
     this.nfsForm.patchValue({ path: path });
-    this.pathChangeHandler();
   }
 
   createForm() {
@@ -248,10 +272,13 @@ export class NfsFormComponent extends CdForm implements OnInit {
           ]
         })
       }),
-      subvolume_group: new UntypedFormControl(''),
+      subvolume_group: new UntypedFormControl(this.defaultSubVolGroup),
       subvolume: new UntypedFormControl(''),
-      path: new UntypedFormControl('/', {
-        validators: [Validators.required]
+      path: new UntypedFormControl('', {
+        validators: [
+          Validators.required,
+          CdValidators.custom('isIsolatedSlash', this.isolatedSlashCondition) // Path can never be single "/".
+        ]
       }),
       protocolNfsv3: new UntypedFormControl(true, {
         validators: [
@@ -365,7 +392,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
           fs_name: this.selectedFsName
         }
       });
-      this.volumeChangeHandler();
+      this.getSubVolGrp(this.selectedFsName);
     }
     if (!_.isEmpty(this.selectedSubvolGroup)) {
       this.nfsForm.patchValue({
@@ -416,6 +443,10 @@ export class NfsFormComponent extends CdForm implements OnInit {
     this.defaultAccessType[name] = accessType;
   }
 
+  isolatedSlashCondition(value: string): boolean {
+    return value === '/';
+  }
+
   setPathValidation() {
     const path = this.nfsForm.get('path');
     if (this.storageBackend === SUPPORTED_FSAL.RGW) {
@@ -462,14 +493,6 @@ export class NfsFormComponent extends CdForm implements OnInit {
     );
   }
 
-  pathChangeHandler() {
-    if (!this.isEdit) {
-      this.nfsForm.patchValue({
-        pseudo: this.generatePseudo()
-      });
-    }
-  }
-
   private getBucketTypeahead(path: string): Observable<any> {
     if (_.isString(path) && path !== '/' && path !== '') {
       return this.rgwBucketService.list().pipe(
@@ -483,20 +506,6 @@ export class NfsFormComponent extends CdForm implements OnInit {
     } else {
       return of([]);
     }
-  }
-
-  private generatePseudo() {
-    let newPseudo = this.nfsForm.getValue('pseudo');
-    if (this.nfsForm.get('pseudo') && !this.nfsForm.get('pseudo').dirty) {
-      newPseudo = undefined;
-      if (this.storageBackend === 'CEPH') {
-        newPseudo = '/cephfs';
-        if (_.isString(this.nfsForm.getValue('path'))) {
-          newPseudo += this.nfsForm.getValue('path');
-        }
-      }
-    }
-    return newPseudo;
   }
 
   submitAction() {

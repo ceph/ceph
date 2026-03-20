@@ -24,6 +24,10 @@ struct StreamInterface {
 
   virtual void read(io::Extents&& byte_extents, bufferlist* data,
                     Context* on_finish) = 0;
+
+  virtual void list_sparse_extents(io::Extents&& byte_extents,
+                                   io::SparseExtents* sparse_extents,
+                                   Context* on_finish) = 0;
 };
 
 } // namespace migration

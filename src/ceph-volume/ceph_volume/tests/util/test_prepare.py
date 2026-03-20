@@ -6,7 +6,7 @@ from ceph_volume.util.prepare import system
 from ceph_volume import conf
 from ceph_volume.tests.conftest import Factory
 from ceph_volume import objectstore
-from mock.mock import patch
+from unittest.mock import patch
 
 
 class TestOSDIDAvailable(object):

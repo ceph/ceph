@@ -326,6 +326,7 @@ inline constexpr const char* RGW_REST_STS_XMLNS =
 #define ERR_PRESIGNED_URL_EXPIRED			 2223
 #define ERR_PRESIGNED_URL_DISABLED     2224
 #define ERR_AUTHORIZATION        2225 // SNS 403 AuthorizationError
+#define ERR_ILLEGAL_LOCATION_CONSTRAINT_EXCEPTION 2226
 
 #define ERR_BUSY_RESHARDING      2300
 #define ERR_NO_SUCH_ENTITY       2301
@@ -1260,6 +1261,7 @@ struct req_state : DoutPrefixProvider {
   uint64_t obj_size{0};
   bool enable_ops_log;
   bool enable_usage_log;
+  rgw_s3select_usage_data s3select_usage;
   uint8_t defer_to_bucket_acls;
   uint32_t perm_mask{0};
 
@@ -1411,6 +1413,7 @@ struct RGWBucketEnt {
   size_t size;
   size_t size_rounded;
   ceph::real_time creation_time;
+  ceph::real_time modification_time;
   uint64_t count;
 
   /* The placement_rule is necessary to calculate per-storage-policy statics
@@ -1934,9 +1937,7 @@ extern std::string calc_hash_sha256_restart_stream(ceph::crypto::SHA256** phash)
 extern int rgw_parse_op_type_list(const std::string& str, uint32_t *perm);
 
 static constexpr uint32_t MATCH_POLICY_ACTION = 0x01;
-static constexpr uint32_t MATCH_POLICY_RESOURCE = 0x02;
-static constexpr uint32_t MATCH_POLICY_ARN = 0x04;
-static constexpr uint32_t MATCH_POLICY_STRING = 0x08;
+static constexpr uint32_t MATCH_POLICY_ARN = 0x02;
 
 extern bool match_policy(const std::string& pattern, const std::string& input,
                          uint32_t flag);

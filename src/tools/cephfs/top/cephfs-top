@@ -45,6 +45,7 @@ FS_TOP_SUPPORTED_VER = 2
 ITEMS_PAD_LEN = 3
 ITEMS_PAD = " " * ITEMS_PAD_LEN
 DEFAULT_REFRESH_INTERVAL = 1
+DEFAULT_PAD_WIDTH = 300  # for medium size windows
 
 # metadata provided by mgr/stats
 FS_TOP_MAIN_WINDOW_COL_CLIENT_ID = "client_id"
@@ -147,7 +148,7 @@ def wrap(s, sl):
     """return a '+' suffixed wrapped string"""
     if len(s) < sl:
         return s
-    return f'{s[0:sl-1]}+'
+    return f'{s[0:sl - 1]}+'
 
 
 class FSTopBase(object):
@@ -290,7 +291,7 @@ class FSTop(FSTopBase):
         self.conffile = args.conffile
         self.refresh_interval_secs = args.delay
         self.PAD_HEIGHT = 10000  # height of the fstop_pad
-        self.PAD_WIDTH = 300  # width of the fstop_pad
+        self.PAD_WIDTH = DEFAULT_PAD_WIDTH  # width of the fstop_pad
         self.exit_ev = threading.Event()
 
     def handle_signal(self, signum, _):
@@ -340,7 +341,6 @@ class FSTop(FSTopBase):
         except Exception as e:
             raise FSTopException(f'Error in fs ls: {e}')
         fs_map = json.loads(buf.decode('utf-8'))
-        global fs_list
         fs_list.clear()
         for filesystem in fs_map:
             fs = filesystem['name']
@@ -358,7 +358,7 @@ class FSTop(FSTopBase):
             # If the terminal do not support the visibility
             # requested it will raise an exception
             pass
-        self.fstop_pad = curses.newpad(self.PAD_HEIGHT, self.PAD_WIDTH)
+
         self.run_all_display()
 
     def display_fs_menu(self, stdscr, selected_row_idx):
@@ -462,7 +462,7 @@ class FSTop(FSTopBase):
         key = 0
         endwhile = False
         while not endwhile:
-            global current_states, fs_list
+            global fs_list
             fs_list = self.get_fs_names()
 
             if key == curses.KEY_UP and curr_row1 > 0:
@@ -868,7 +868,6 @@ class FSTop(FSTopBase):
                 xp += len(self.items(item)) + ITEMS_PAD_LEN
 
     def create_clients(self, stats_json, fs_name):
-        global metrics_dict, current_states
         counters = [m.upper() for m in stats_json[GLOBAL_COUNTERS_KEY]]
         self.tablehead_y += 2
         res = stats_json[GLOBAL_METRICS_KEY].get(fs_name, {})
@@ -907,7 +906,6 @@ class FSTop(FSTopBase):
         if not stats_json['version'] == FS_TOP_SUPPORTED_VER:
             self.header.addstr(0, 0, 'perf stats version mismatch!', curses.A_BOLD)
             return False
-        global fs_list
         for fs_name in fs_list:
             client_metadata = stats_json[CLIENT_METADATA_KEY].get(fs_name, {})
             client_cnt = len(client_metadata)
@@ -934,6 +932,15 @@ class FSTop(FSTopBase):
         self.header.addstr(5, 0, help, curses.A_DIM)
         return True
 
+    def handle_header(self, stats_json, help, screen_title, color_id=0):
+        try:
+            return self.create_header(stats_json, help, screen_title, color_id)
+        except curses.error:
+            curses.endwin()
+            sys.stderr.write("Error creating header. Please increase the window width to use "
+                             "cephfs-top.\n")
+            exit()
+
     def run_display(self):
         # clear the pads to have a smooth refresh
         self.header.erase()
@@ -948,8 +955,13 @@ class FSTop(FSTopBase):
         top, left = 0, 0  # where to place pad
         vscrollOffset, hscrollOffset = 0, 0  # scroll offsets
 
-        # calculate the initial viewport height and width
+        # Check the window size before creating the pad. For large windows, PAD_WIDTH=window width.
         windowsize = self.stdscr.getmaxyx()
+        if (windowsize[1] > DEFAULT_PAD_WIDTH):
+            self.PAD_WIDTH = windowsize[1]
+        self.fstop_pad = curses.newpad(self.PAD_HEIGHT, self.PAD_WIDTH)
+
+        # calculate the initial viewport height and width
         self.viewportHeight, self.viewportWidth = windowsize[0] - 1, windowsize[1] - 1
 
         # create header subpad
@@ -963,7 +975,7 @@ class FSTop(FSTopBase):
 
         curses.halfdelay(1)
         cmd = self.stdscr.getch()
-        global fs_list, current_states
+        global fs_list
         while not self.exit_ev.is_set():
             fs_list = self.get_fs_names()
             fs = current_states["last_fs"]
@@ -983,7 +995,7 @@ class FSTop(FSTopBase):
                     current_states["limit"] = None
                 self.header.erase()  # erase previous text
                 self.fsstats.erase()
-                self.create_header(stats_json, help, screen_title, 3)
+                self.handle_header(stats_json, help, screen_title, 3)
             else:
                 self.tablehead_y = 0
                 help = "COMMANDS: " + help_commands
@@ -996,7 +1008,7 @@ class FSTop(FSTopBase):
                 else:
                     num_client = len(client_metadata)
                 vscrollEnd += num_client
-                if self.create_header(stats_json, help, screen_title, 3):
+                if self.handle_header(stats_json, help, screen_title, 3):
                     self.create_table_header()
                     self.create_clients(stats_json, fs)
 
@@ -1030,7 +1042,10 @@ class FSTop(FSTopBase):
             elif cmd == curses.KEY_END:
                 hscrollOffset = self.PAD_WIDTH - self.viewportWidth - 1
             elif cmd == curses.KEY_RESIZE:
-                # terminal resize event. Update the viewport dimensions
+                # terminal resize event.
+                # Update the pad dimensions
+                self.PAD_WIDTH = DEFAULT_PAD_WIDTH
+                # Update the viewport dimensions
                 windowsize = self.stdscr.getmaxyx()
                 self.viewportHeight, self.viewportWidth = windowsize[0] - 1, windowsize[1] - 1
 
@@ -1079,8 +1094,13 @@ class FSTop(FSTopBase):
         top, left = 0, 0  # where to place pad
         vscrollOffset, hscrollOffset = 0, 0  # scroll offsets
 
-        # calculate the initial viewport height and width
+        # Check the window size before creating the pad. For large windows, PAD_WIDTH=window width.
         windowsize = self.stdscr.getmaxyx()
+        if (windowsize[1] > DEFAULT_PAD_WIDTH):
+            self.PAD_WIDTH = windowsize[1]
+        self.fstop_pad = curses.newpad(self.PAD_HEIGHT, self.PAD_WIDTH)
+
+        # calculate the initial viewport height and width
         self.viewportHeight, self.viewportWidth = windowsize[0] - 1, windowsize[1] - 1
 
         # create header subpad
@@ -1100,7 +1120,7 @@ class FSTop(FSTopBase):
                     self.exit_ev.set()
 
             # header display
-            global fs_list, current_states
+            global fs_list
             fs_list = self.get_fs_names()
             current_states["last_fs"] = fs_list
             stats_json = self.perf_stats_query()
@@ -1112,7 +1132,7 @@ class FSTop(FSTopBase):
                 current_states["limit"] = None
                 self.header.erase()  # erase previous text
                 self.fsstats.erase()
-                self.create_header(stats_json, help, screen_title, 2)
+                self.handle_header(stats_json, help, screen_title, 2)
             else:
                 self.tablehead_y = 0
                 num_client = 0
@@ -1128,7 +1148,7 @@ class FSTop(FSTopBase):
                     else:
                         num_client = len(client_metadata)
                     vscrollEnd += num_client
-                    if self.create_header(stats_json, help, screen_title, 2):
+                    if self.handle_header(stats_json, help, screen_title, 2):
                         if not index:  # do it only for the first fs
                             self.create_table_header()
                         self.create_clients(stats_json, fs)
@@ -1163,7 +1183,10 @@ class FSTop(FSTopBase):
             elif cmd == curses.KEY_END:
                 hscrollOffset = self.PAD_WIDTH - self.viewportWidth - 1
             elif cmd == curses.KEY_RESIZE:
-                # terminal resize event. Update the viewport dimensions
+                # terminal resize event.
+                # Update the pad dimensions
+                self.PAD_WIDTH = DEFAULT_PAD_WIDTH
+                # Update the viewport dimensions
                 windowsize = self.stdscr.getmaxyx()
                 self.viewportHeight, self.viewportWidth = windowsize[0] - 1, windowsize[1] - 1
             if cmd:

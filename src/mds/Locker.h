@@ -49,7 +49,7 @@ public:
 
   void tick();
 
-  void nudge_log(SimpleLock *lock);
+  bool nudge_log(SimpleLock *lock);
 
   bool acquire_locks(const MDRequestRef& mdr,
 		     MutationImpl::LockOpVec& lov,
@@ -65,7 +65,7 @@ public:
   void drop_locks(MutationImpl *mut, std::set<CInode*> *pneed_issue=0);
   void set_xlocks_done(MutationImpl *mut, bool skip_dentry=false);
   void drop_non_rdlocks(MutationImpl *mut, std::set<CInode*> *pneed_issue=0);
-  void drop_rdlocks_for_early_reply(MutationImpl *mut);
+  void handle_locks_for_early_reply(MutationImpl *mut);
   void drop_lock(MutationImpl* mut, SimpleLock* what);
   void drop_locks_for_fragment_unfreeze(MutationImpl *mut);
 
@@ -194,7 +194,7 @@ public:
 
   void issue_client_lease(CDentry *dn, CInode *in, const MDRequestRef &mdr, utime_t now, bufferlist &bl);
   void revoke_client_leases(SimpleLock *lock);
-  static void encode_lease(bufferlist& bl, const session_info_t& info, const LeaseStat& ls);
+  void encode_lease(bufferlist& bl, const session_info_t& info, const LeaseStat& ls);
 
 protected:
   void send_lock_message(SimpleLock *lock, int msg);

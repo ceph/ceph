@@ -361,13 +361,10 @@ class CephTestCase(unittest.TestCase, RunCephCmd):
         while True:
             if condition():
                 success_time_elapsed = 0
-                while success_time_elapsed < success_hold_time:
-                    if condition():
-                        success_time_elapsed += 1
-                        time.sleep(1)
-                        elapsed += 1
-                    else:
-                        break
+                while success_time_elapsed < success_hold_time and condition():
+                    success_time_elapsed += 1
+                    time.sleep(1)
+                    elapsed += 1
                 if success_time_elapsed == success_hold_time:
                    log.debug("wait_until_true_and_hold: success for {0}s".format(success_hold_time))
                    return

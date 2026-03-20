@@ -926,9 +926,9 @@ int RGWOrphanSearch::finish()
 
 int RGWRadosList::handle_stat_result(const DoutPrefixProvider *dpp,
 				     RGWRados::Object::Stat::Result& result,
-				     std::string& bucket_name,
-				     rgw_obj_key& obj_key,
-                                     std::set<string>& obj_oids)
+				     const std::string& bucket_name,
+				     const rgw_obj_key& obj_key,
+				     std::set<string>& obj_oids)
 {
   obj_oids.clear();
 
@@ -951,9 +951,6 @@ int RGWRadosList::handle_stat_result(const DoutPrefixProvider *dpp,
       oid << "\"" << dendl;
     return 0;
   }
-
-  bucket_name = bucket.name;
-  obj_key = result.obj.key;
 
   if (!result.manifest) {
     /* a very very old object, or part of a multipart upload during upload */
@@ -988,7 +985,7 @@ int RGWRadosList::handle_stat_result(const DoutPrefixProvider *dpp,
     ldpp_dout(dpp, 25) << "radoslist DLO oid=\"" << oid <<
       "\" added bucket=\"" << bucket_name << "\" prefix=\"" <<
       prefix << "\" to process list" << dendl;
-  } else if ((attr_it = result.attrs.find(RGW_ATTR_USER_MANIFEST)) !=
+  } else if ((attr_it = result.attrs.find(RGW_ATTR_SLO_MANIFEST)) !=
 	     result.attrs.end()) {
     // *** handle SLO object ***
 
@@ -1056,24 +1053,35 @@ int RGWRadosList::pop_and_handle_stat_op(
   RGWObjectCtx& obj_ctx,
   std::deque<RGWRados::Object::Stat>& ops)
 {
-  std::string bucket_name;
-  rgw_obj_key obj_key;
   std::set<std::string> obj_oids;
   RGWRados::Object::Stat& front_op = ops.front();
 
   int ret = front_op.wait(dpp);
-  if (ret < 0) {
-    if (ret != -ENOENT) {
-      ldpp_dout(dpp, -1) << "ERROR: stat_async() returned error: " <<
+  // note: even if we get an error, front_op.result.obj will still be
+  // populated with correct data
+  const std::string bucket_name = front_op.result.obj.bucket.name;
+  const rgw_obj_key obj_key = front_op.result.obj.key;
+
+  if (ret == -ENOENT) {
+    const auto& result = front_op.result;
+    const rgw_bucket& bucket = result.obj.bucket;
+    const std::string oid = bucket.marker + "_" + result.obj.get_oid();
+    obj_oids.insert(oid);
+
+    ldpp_dout(dpp, -1) << "ERROR: " << __func__ <<
+      ": stat of head object resulted in ENOENT; oid=" << oid << dendl;
+  } else if (ret < 0) {
+    ldpp_dout(dpp, -1) << "ERROR: " << __func__ <<
+      ": stat_async() returned error: " <<
+      cpp_strerror(-ret) << dendl;
+    goto done;
+  } else {
+    ret = handle_stat_result(dpp, front_op.result, bucket_name, obj_key, obj_oids);
+    if (ret < 0) {
+      ldpp_dout(dpp, -1) << "ERROR: " << __func__ <<
+	": handle_stat_result() returned error: " <<
 	cpp_strerror(-ret) << dendl;
     }
-    goto done;
-  }
-
-  ret = handle_stat_result(dpp, front_op.result, bucket_name, obj_key, obj_oids);
-  if (ret < 0) {
-    ldpp_dout(dpp, -1) << "ERROR: handle_stat_result() returned error: " <<
-      cpp_strerror(-ret) << dendl;
   }
 
   // output results
@@ -1095,6 +1103,7 @@ done:
   obj_ctx.invalidate(front_op.result.obj);
 
   ops.pop_front();
+
   return ret;
 }
 

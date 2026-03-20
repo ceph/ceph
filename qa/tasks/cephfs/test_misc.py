@@ -522,6 +522,11 @@ class TestMisc(CephFSTestCase):
     def test_client_ls(self):
         self._session_client_ls(['client', 'ls'])
 
+    def test_ceph_tell_for_unknown_cephname_type(self):
+        with self.assertRaises(CommandFailedError) as ce:
+            self.run_ceph_cmd('tell', 'cephfs.c', 'something')
+        self.assertEqual(ce.exception.exitstatus, 1)
+
 
 @classhook('_add_session_client_evictions')
 class TestSessionClientEvict(CephFSTestCase):
@@ -553,16 +558,18 @@ class TestSessionClientEvict(CephFSTestCase):
         self.assertEqual(ce.exception.exitstatus, errno.EINVAL)
 
     def _evict_with_invalid_id(self, cmd):
+        info_initial = self.fs.rank_asok(cmd + ['ls'])
         # with invalid id
-        with self.assertRaises(CommandFailedError) as ce:
-            self.fs.rank_tell(cmd + ['evict', 'id=1'])
-        self.assertEqual(ce.exception.exitstatus, errno.ESRCH)
+        self.fs.rank_tell(cmd + ['evict', 'id=1'])
+        info = self.fs.rank_asok(cmd + ['ls'])
+        self.assertEqual(len(info), len(info_initial)) # session list is status-quo
 
     def _evict_with_negative_id(self, cmd):
+        info_initial = self.fs.rank_asok(cmd + ['ls'])
         # with negative id
-        with self.assertRaises(CommandFailedError) as ce:
-            self.fs.rank_tell(cmd + ['evict', 'id=-9'])
-        self.assertEqual(ce.exception.exitstatus, errno.ESRCH)
+        self.fs.rank_tell(cmd + ['evict', 'id=-9'])
+        info = self.fs.rank_asok(cmd + ['ls'])
+        self.assertEqual(len(info), len(info_initial)) # session list is status-quo
 
     def _evict_with_valid_id(self, cmd):
         info_initial = self.fs.rank_asok(cmd + ['ls'])
@@ -599,7 +606,7 @@ class TestSessionClientEvict(CephFSTestCase):
             setattr(cls, 'test_session' + t, create_test(t, ['session']))
             setattr(cls, 'test_client' + t, create_test(t, ['client']))
 
-        
+
 class TestCacheDrop(CephFSTestCase):
     CLIENTS_REQUIRED = 1
 

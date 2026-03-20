@@ -290,6 +290,7 @@ const char *ceph_mds_op_name(int op)
 	case CEPH_MDS_OP_LOOKUPNAME:  return "lookupname";
 	case CEPH_MDS_OP_GETATTR:  return "getattr";
 	case CEPH_MDS_OP_DUMMY:  return "dummy";
+	case CEPH_MDS_OP_GETVXATTR:  return "getvxattr";
 	case CEPH_MDS_OP_SETXATTR: return "setxattr";
 	case CEPH_MDS_OP_SETATTR: return "setattr";
 	case CEPH_MDS_OP_RMXATTR: return "rmxattr";
@@ -321,6 +322,7 @@ const char *ceph_mds_op_name(int op)
 	case CEPH_MDS_OP_REPAIR_INODESTATS: return "repair_inodestats";
 	case CEPH_MDS_OP_QUIESCE_PATH: return "quiesce_path";
 	case CEPH_MDS_OP_QUIESCE_INODE: return "quiesce_inode";
+        case CEPH_MDS_OP_FILE_BLOCKDIFF: return "blockdiff";
 	}
 	return "???";
 }

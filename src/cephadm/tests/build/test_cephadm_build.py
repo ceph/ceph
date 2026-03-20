@@ -34,12 +34,12 @@ CONTAINERS = {
     },
     'ubuntu-20.04': {
         'name': 'cephadm-build-test:ubuntu-20-04-py3',
-        'base_image': 'docker.io/library/ubuntu:20.04',
+        'base_image': 'quay.io/library/ubuntu:20.04',
         'script': 'apt update && apt install -y python3-venv',
     },
     'ubuntu-22.04': {
         'name': 'cephadm-build-test:ubuntu-22-04-py3',
-        'base_image': 'docker.io/library/ubuntu:22.04',
+        'base_image': 'quay.io/library/ubuntu:22.04',
         'script': 'apt update && apt install -y python3-venv',
     },
 }

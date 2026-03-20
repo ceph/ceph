@@ -115,10 +115,10 @@ private:
    * LOAD_LOCAL_IMAGE_META <----------------------------\
    *    |                                               |
    *    v (skip if not needed)                          |
-   * REFRESH_LOCAL_IMAGE                                |
+   * REFRESH_REMOTE_IMAGE                               |
    *    |                                               |
    *    v (skip if not needed)                          |
-   * REFRESH_REMOTE_IMAGE                               |
+   * REFRESH_LOCAL_IMAGE                                |
    *    |                                               |
    *    | (unused non-primary snapshot)                 |
    *    |\--------------> PRUNE_NON_PRIMARY_SNAPSHOT---/|
@@ -256,6 +256,8 @@ private:
   bool m_sync_in_progress = false;
 
   PerfCounters *m_perf_counters = nullptr;
+
+  bool is_remote_primary();
 
   void load_local_image_meta();
   void handle_load_local_image_meta(int r);

@@ -94,7 +94,7 @@ public:
   }
 
   void dump(Formatter *f) const;
-  friend std::ostream &operator<<(std::ostream &oss, const Dentry &Dentry);
+  void print(std::ostream&) const;
 
   Dir	   *dir;
   const std::string name;
@@ -105,7 +105,7 @@ public:
   utime_t lease_ttl;
   uint64_t lease_gen = 0;
   ceph_seq_t lease_seq = 0;
-  int cap_shared_gen = 0;
+  int cap_shared_gen = -1;
   std::string alternate_name;
   bool is_renaming = false;
 

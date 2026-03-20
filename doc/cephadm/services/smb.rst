@@ -26,7 +26,7 @@ Samba Containers with the following command:
 
 .. prompt:: bash #
 
-    orch apply smb <cluster_id> <config_uri> [--features ...] [--placement ...] ...
+    ceph orch apply smb <cluster_id> <config_uri> [--features ...] [--placement ...] ...
 
 There are a number of additional parameters that the command accepts. See
 the Service Specification for a description of these options.

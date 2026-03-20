@@ -25,7 +25,7 @@ class BlueStore(BaseObjectStore):
         self.block_device_path: str = ''
         self.wal_device_path: str = ''
         self.db_device_path: str = ''
-        self.block_lv: Volume
+        self.block_lv: Optional[Volume] = None
 
     def add_objectstore_opts(self) -> None:
         """
@@ -101,6 +101,9 @@ class BlueStore(BaseObjectStore):
                 if self.method == 'raw':
                     path = self.args.__dict__.get(dev_type, None)
                 else:
-                    path = self.block_lv.tags.get(dev_type, None)
+                    if self.block_lv is not None:
+                        path = self.block_lv.tags.get(dev_type, None)
+                    else:
+                        raise RuntimeError('Unexpected error while running bluestore mkfs.')
                 if path is not None:
                     CephLuks2(path).config_luks2({'subsystem': f'ceph_fsid={self.osd_fsid}'})

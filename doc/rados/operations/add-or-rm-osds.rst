@@ -17,8 +17,8 @@ It's a good idea to check the capacity of your cluster so that you know when it
 approaches its capacity limits. If your cluster has reached its ``near full``
 ratio, then you should add OSDs to expand your cluster's capacity.
 
-.. warning:: Do not add an OSD after your cluster has reached its ``full
-   ratio``. OSD failures that occur after the cluster reaches its ``near full
+.. warning:: Do not let your cluster reach its ``full ratio`` before adding an
+   OSD. OSD failures that occur after the cluster reaches its ``near full
    ratio`` might cause the cluster to exceed its ``full ratio``.
 
 

@@ -129,10 +129,17 @@ class CephFS(RESTController):
         return self.fs_status(fs_id)
 
     @RESTController.Resource('GET')
-    def clients(self, fs_id):
+    def clients(self, fs_id, **kwargs):
+        flag = kwargs.pop('suppress_client_ls_errors', 'True')
+        if flag not in ('True', 'False'):
+            raise DashboardException(msg='suppress_client_ls_errors value '
+                                         'needs to be either True or False '
+                                         f'but provided "{flag}"',
+                                     component='cephfs')
+
         fs_id = self.fs_id_to_int(fs_id)
 
-        return self._clients(fs_id)
+        return self._clients(fs_id, suppress_client_ls_errors=flag)
 
     @RESTController.Resource('DELETE', path='/client/{client_id}')
     def evict(self, fs_id, client_id):
@@ -375,17 +382,23 @@ class CephFS(RESTController):
             "versions": mds_versions
         }
 
-    def _clients(self, fs_id):
+    def _clients(self, fs_id, **kwargs):
+        suppress_get_errors = kwargs.pop('suppress_client_ls_errors', 'True')
         cephfs_clients = self.cephfs_clients.get(fs_id, None)
         if cephfs_clients is None:
             cephfs_clients = CephFSClients(mgr, fs_id)
             self.cephfs_clients[fs_id] = cephfs_clients
 
         try:
-            status, clients = cephfs_clients.get()
+            status, clients = cephfs_clients.get(suppress_get_errors)
         except AttributeError:
             raise cherrypy.HTTPError(404,
                                      "No cephfs with id {0}".format(fs_id))
+        except RuntimeError:
+            raise cherrypy.HTTPError(500,
+                                     f"Could not fetch client(s), maybe there "
+                                     f"is no active MDS on CephFS {fs_id} or "
+                                     "the FS is in failed state.")
 
         if clients is None:
             raise cherrypy.HTTPError(404,
@@ -626,6 +639,17 @@ class CephFS(RESTController):
         cfs = self._cephfs_instance(fs_id)
         cfs.rm_snapshot(path, name)
 
+    @RESTController.Resource('PUT', path='/rename-path')
+    def rename_path(self, fs_id, src_path, dst_path) -> None:
+        """
+        Rename a file or directory.
+        :param fs_id: The filesystem identifier.
+        :param src_path: The path to the existing file or directory.
+        :param dst_path: The new name of the file or directory.
+        """
+        cfs = self._cephfs_instance(fs_id)
+        cfs.rename_path(src_path, dst_path)
+
 
 class CephFSClients(object):
     def __init__(self, module_inst, fscid):
@@ -633,11 +657,14 @@ class CephFSClients(object):
         self.fscid = fscid
 
     @ViewCache()
-    def get(self):
+    def get(self, suppress_errors='True'):
         try:
             ret = CephService.send_command('mds', 'session ls', srv_spec='{0}:0'.format(self.fscid))
         except RuntimeError:
-            ret = []
+            if suppress_errors == 'True':
+                ret = []
+            else:
+                raise
         return ret
 
 

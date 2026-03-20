@@ -8,6 +8,9 @@ Ceph is a clustered and distributed storage manager. If that's too cryptic,
 then just think of Ceph as a computer program that stores data and uses a
 network to make sure that there is a backup copy of the data.
 
+Components of Ceph
+==================
+
 Storage Interfaces
 ------------------
 
@@ -93,6 +96,89 @@ MDS
 ---
 A metadata server (MDS) is necessary for the proper functioning of CephFS.
 See :ref:`orchestrator-cli-cephfs` and :ref:`arch-cephfs`.
+
+Vstart Cluster Installation and Configuration Procedure
+=======================================================
+
+#. Clone the ``ceph/ceph`` repository:
+
+   .. prompt:: bash #
+
+      git clone git@github.com:ceph/ceph
+
+#. Update the submodules in the ``ceph/ceph`` repository:
+
+   .. prompt:: bash #
+    
+      git submodule update --init --recursive --progress
+
+#. Run ``install-deps.sh`` from within the directory into which you cloned the
+   ``ceph/ceph`` repository:
+
+   .. prompt:: bash #
+
+      ./install-deps.sh
+
+#. Install the ``python3-routes`` package:
+
+   .. prompt:: bash #
+
+      apt install python3-routes
+
+#. Move into the ``ceph`` directory. You will know that you are in the correct
+   directory if it contains the file ``do_cmake.sh``:
+
+   .. prompt:: bash #
+
+      cd ceph
+
+#. Run the ``do_cmake.sh`` script:
+
+   .. prompt:: bash #
+
+      ./do_cmake.sh
+
+#. The ``do_cmake.sh`` script creates a ``build/`` directory. Move into the
+   ``build/`` directory:
+
+   .. prompt:: bash #
+
+      cd build
+
+#. Use ``ninja`` to build the development environment:
+
+   .. prompt:: bash #
+
+      ninja -j3
+
+   .. note:: This step takes a long time to run. The ``ninja -j3`` command
+      kicks off a process consisting of 2289 steps. This step took over three
+      hours when I ran it on an Intel NUC with an i7 in September of 2024.
+
+#. Install the Ceph development environment:
+
+   .. prompt:: bash #
+
+      ninja install
+
+   This step does not take as long as the previous step.
+
+#. Build the vstart cluster:
+
+   .. prompt:: bash #
+
+      ninja vstart
+
+#. Start the vstart cluster:
+
+   .. prompt:: bash #
+      
+      ../src/vstart.sh --debug --new -x --localhost --bluestore
+
+   .. note:: Run this command from within the ``ceph/build`` directory.
+
+
+
 
 LINKS
 -----

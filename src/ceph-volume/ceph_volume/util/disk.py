@@ -7,7 +7,7 @@ import json
 from ceph_volume import process, allow_loop_devices
 from ceph_volume.api import lvm
 from ceph_volume.util.system import get_file_contents
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Union, Optional
 
 
 logger = logging.getLogger(__name__)
@@ -141,13 +141,14 @@ def remove_partition(device):
     # in the output of `udevadm info --query=property`.
     # Probably not ideal and not the best fix but this allows to get around that issue.
     # The idea is to make it retry multiple times before actually failing.
-    for i in range(10):
-        udev_info = udevadm_property(device.path)
-        partition_number = udev_info.get('ID_PART_ENTRY_NUMBER')
+    partition_number = None
+    for _ in range(10):
+        udev_data = UdevData(device.path)
+        partition_number = udev_data.environment.get("ID_PART_ENTRY_NUMBER", None)
         if partition_number:
             break
         time.sleep(0.2)
-    if not partition_number:
+    if partition_number is None:
         raise RuntimeError('Unable to detect the partition number for device: %s' % device.path)
 
     process.run(
@@ -198,47 +199,6 @@ def device_family(device):
     return devices
 
 
-def udevadm_property(device, properties=[]):
-    """
-    Query udevadm for information about device properties.
-    Optionally pass a list of properties to return. A requested property might
-    not be returned if not present.
-
-    Expected output format::
-        # udevadm info --query=property --name=/dev/sda                                  :(
-        DEVNAME=/dev/sda
-        DEVTYPE=disk
-        ID_ATA=1
-        ID_BUS=ata
-        ID_MODEL=SK_hynix_SC311_SATA_512GB
-        ID_PART_TABLE_TYPE=gpt
-        ID_PART_TABLE_UUID=c8f91d57-b26c-4de1-8884-0c9541da288c
-        ID_PATH=pci-0000:00:17.0-ata-3
-        ID_PATH_TAG=pci-0000_00_17_0-ata-3
-        ID_REVISION=70000P10
-        ID_SERIAL=SK_hynix_SC311_SATA_512GB_MS83N71801150416A
-        TAGS=:systemd:
-        USEC_INITIALIZED=16117769
-        ...
-    """
-    out = _udevadm_info(device)
-    ret = {}
-    for line in out:
-        p, v = line.split('=', 1)
-        if not properties or p in properties:
-            ret[p] = v
-    return ret
-
-
-def _udevadm_info(device):
-    """
-    Call udevadm and return the output
-    """
-    cmd = ['udevadm', 'info', '--query=property', device]
-    out, _err, _rc = process.call(cmd)
-    return out
-
-
 def lsblk(device, columns=None, abspath=False):
     result = []
     if not os.path.isdir(device):
@@ -251,7 +211,9 @@ def lsblk(device, columns=None, abspath=False):
 
     return result[0]
 
-def lsblk_all(device='', columns=None, abspath=False):
+def lsblk_all(device: str = '',
+              columns: Optional[List[str]] = None,
+              abspath: bool = False) -> List[Dict[str, str]]:
     """
     Create a dictionary of identifying values for a device using ``lsblk``.
     Each supported column is a key, in its *raw* format (all uppercase
@@ -332,7 +294,6 @@ def lsblk_all(device='', columns=None, abspath=False):
     if device:
         base_command.append('--nodeps')
         base_command.append(device)
-
     out, err, rc = process.call(base_command)
 
     if rc != 0:
@@ -346,12 +307,21 @@ def lsblk_all(device='', columns=None, abspath=False):
     return result
 
 
-def is_device(dev):
+def is_device(dev: str) -> bool:
     """
-    Boolean to determine if a given device is a block device (**not**
-    a partition!)
+    Determines whether the given path corresponds to a block device (not a partition).
 
-    For example: /dev/sda would return True, but not /dev/sdc1
+    This function checks whether the provided device path represents a valid block device,
+    such as a physical disk (/dev/sda) or an allowed loop device, but excludes partitions
+    (/dev/sdc1). It performs several validation steps, including file existence, path format,
+    device type, and additional checks for loop devices if allowed.
+
+    Args:
+        dev (str): The path to the device (e.g., "/dev/sda").
+
+    Returns:
+        bool: True if the path corresponds to a valid block device (not a partition),
+              otherwise False.
     """
     if not os.path.exists(dev):
         return False
@@ -363,7 +333,7 @@ def is_device(dev):
 
     TYPE = lsblk(dev).get('TYPE')
     if TYPE:
-        return TYPE in ['disk', 'mpath']
+        return TYPE in ['disk', 'mpath', 'loop']
 
     # fallback to stat
     return _stat_is_device(os.lstat(dev).st_mode) and not is_partition(dev)
@@ -771,9 +741,20 @@ def get_block_devs_sysfs(_sys_block_path: str = '/sys/block', _sys_dev_block_pat
         result.append([name, kname, "part", partitions[partition]])
     return sorted(result, key=lambda x: x[0])
 
-def get_partitions(_sys_dev_block_path ='/sys/dev/block') -> List[str]:
+def get_partitions(_sys_dev_block_path: str ='/sys/dev/block') -> Dict[str, str]:
+    """
+    Retrieves a dictionary mapping partition system names to their parent device names.
+
+    Args:
+        _sys_dev_block_path (str, optional): The path to the system's block device directory.
+                                             Defaults to '/sys/dev/block'.
+
+    Returns:
+        Dict[str, str]: A dictionary where the keys are partition system names, and the values are
+                        the corresponding parent device names.
+    """
     devices: List[str] = os.listdir(_sys_dev_block_path)
-    result: Dict[str, str] = dict()
+    result: Dict[str, str] = {}
     for device in devices:
         device_path: str = os.path.join(_sys_dev_block_path, device)
         is_partition: bool = int(get_file_contents(os.path.join(device_path, 'partition'), '0')) > 0
@@ -807,7 +788,7 @@ def get_devices(_sys_block_path='/sys/block', device=''):
     for block in block_devs:
         metadata: Dict[str, Any] = {}
         if block[2] == 'lvm':
-            block[1] = lvm.get_lv_path_from_mapper(block[1])
+            block[1] = UdevData(block[1]).slashed_path
         devname = os.path.basename(block[0])
         diskname = block[1]
         if block[2] not in block_types:
@@ -846,13 +827,14 @@ def get_devices(_sys_block_path='/sys/block', device=''):
             device_slaves = os.listdir(os.path.join(sysdir, 'slaves'))
             metadata['partitions'] = get_partitions_facts(sysdir)
 
+        metadata['device_nodes'] = []
         if device_slaves:
-            metadata['device_nodes'] = ','.join(device_slaves)
+            metadata['device_nodes'].extend(device_slaves)
         else:
             if block[2] == 'part':
-                metadata['device_nodes'] = block[3]
+                metadata['device_nodes'].append(block[3])
             else:
-                metadata['device_nodes'] = devname
+                metadata['device_nodes'].append(devname)
 
         metadata['actuators'] = None
         if os.path.isdir(sysdir + "/queue/independent_access_ranges/"):
@@ -885,8 +867,8 @@ def get_devices(_sys_block_path='/sys/block', device=''):
         metadata['parent'] = block[3]
 
         # some facts from udevadm
-        p = udevadm_property(sysdir)
-        metadata['id_bus'] = p.get('ID_BUS', '')
+        udev_data = UdevData(sysdir)
+        metadata['id_bus'] = udev_data.environment.get("ID_BUS", "")
 
         device_facts[diskname] = metadata
     return device_facts
@@ -968,7 +950,7 @@ def _dd_read(device: str, count: int, skip: int = 0) -> str:
 
     return result
 
-def _dd_write(device: str, data: str, skip: int = 0) -> None:
+def _dd_write(device: str, data: Union[str, bytes], skip: int = 0) -> None:
     """Write bytes to a device
 
     Args:
@@ -980,10 +962,14 @@ def _dd_write(device: str, data: str, skip: int = 0) -> None:
         OSError: If there is an error opening or writing to the device.
         Exception: If any other error occurs during the write operation.
     """
+
+    if isinstance(data, str):
+        data = data.encode('utf-8')
+
     try:
         with open(device, 'r+b') as b:
             b.seek(skip)
-            b.write(data.encode('utf-8'))
+            b.write(data)
     except OSError:
         logger.warning(f"Can't write to {device}")
         raise
@@ -1120,10 +1106,8 @@ def get_parent_device_from_mapper(mapper: str, abspath: bool = True) -> str:
             pass
     return result
 
-
 def get_lvm_mapper_path_from_dm(path: str, sys_block: str = '/sys/block') -> str:
-    """_summary_
-    Retrieve the logical volume path for a given device.
+    """Retrieve the logical volume path for a given device.
 
     This function takes the path of a device and returns the corresponding
     logical volume path by reading the 'dm/name' file within the sysfs
@@ -1134,7 +1118,7 @@ def get_lvm_mapper_path_from_dm(path: str, sys_block: str = '/sys/block') -> str
         sys_block (str, optional): The base sysfs block directory. Defaults to '/sys/block'.
 
     Returns:
-        str: The device mapper path in the form of '/dev/dm-X'.
+        str: The device mapper path in the 'dashed form' of '/dev/mapper/vg-lv'.
     """
     result: str = ''
     dev: str = os.path.basename(path)
@@ -1163,8 +1147,56 @@ class BlockSysFs:
         """
         self.path: str = path
         self.name: str = os.path.basename(os.path.realpath(self.path))
-        self.sys_dev_block: str = sys_dev_block
+        self.sys_dev_block_dir: str = sys_dev_block
         self.sys_block: str = sys_block
+
+    def _get_sysfs_file_content(self, path: str) -> str:
+        """
+        Reads the content of a sysfs file.
+
+        Args:
+            path (str): The relative path to the sysfs file.
+
+        Returns:
+            str: The content of the file as a string, stripped of leading/trailing whitespace.
+        """
+        content: str = ''
+        _path: str = os.path.join(self.sys_dev_block_path, path)
+        with open(_path, 'r') as f:
+            content = f.read().strip()
+        return content
+
+    @property
+    def blocks(self) -> int:
+        """
+        Retrieves the number of blocks of the block device.
+
+        Returns:
+            int: The total number of blocks.
+        """
+        result: str = self._get_sysfs_file_content('size')
+        return int(result)
+
+    @property
+    def logical_block_size(self) -> int:
+        """
+        Retrieves the logical block size of the block device.
+
+        Returns:
+            int: The logical block size in bytes.
+        """
+        result: str = self._get_sysfs_file_content('queue/logical_block_size')
+        return int(result)
+
+    @property
+    def size(self) -> int:
+        """
+        Calculates the total size of the block device in bytes.
+
+        Returns:
+            int: The total size of the block device in bytes.
+        """
+        return self.blocks * self.logical_block_size
 
     @property
     def is_partition(self) -> bool:
@@ -1174,7 +1206,7 @@ class BlockSysFs:
         Returns:
             bool: True if it is a partition, False otherwise.
         """
-        path: str = os.path.join(self.get_sys_dev_block_path, 'partition')
+        path: str = os.path.join(self.sys_dev_block_path, 'partition')
         return os.path.exists(path)
 
     @property
@@ -1186,13 +1218,13 @@ class BlockSysFs:
             List[str]: A list of holders (other devices) associated with this block device.
         """
         result: List[str] = []
-        path: str = os.path.join(self.get_sys_dev_block_path, 'holders')
+        path: str = os.path.join(self.sys_dev_block_path, 'holders')
         if os.path.exists(path):
             result = os.listdir(path)
         return result
 
     @property
-    def get_sys_dev_block_path(self) -> str:
+    def sys_dev_block_path(self) -> str:
         """
         Gets the sysfs path for the current block device.
 
@@ -1200,9 +1232,9 @@ class BlockSysFs:
             str: The sysfs path corresponding to this block device.
         """
         sys_dev_block_path: str = ''
-        devices: List[str] = os.listdir(self.sys_dev_block)
+        devices: List[str] = os.listdir(self.sys_dev_block_dir)
         for device in devices:
-            path = os.path.join(self.sys_dev_block, device)
+            path = os.path.join(self.sys_dev_block_dir, device)
             if os.path.realpath(path).split('/')[-1:][0] == self.name:
                 sys_dev_block_path = path
         return sys_dev_block_path
@@ -1252,4 +1284,140 @@ class BlockSysFs:
                         result[holder]['dmcrypt_mapping'] = content_split[3]
                     if mapper_type == 'LVM':
                         result[holder]['uuid'] = content_split[1]
+        return result
+
+
+class UdevData:
+    """
+    Class representing udev data for a specific device.
+    This class extracts and stores relevant information about the device from udev files.
+
+    Attributes:
+    -----------
+    path : str
+        The initial device path (e.g., /dev/sda).
+    realpath : str
+        The resolved real path of the device.
+    stats : os.stat_result
+        The result of the os.stat() call to retrieve device metadata.
+    major : int
+        The device's major number.
+    minor : int
+        The device's minor number.
+    udev_data_path : str
+        The path to the udev metadata for the device (e.g., /run/udev/data/b<major>:<minor>).
+    symlinks : List[str]
+        A list of symbolic links pointing to the device.
+    id : str
+        A unique identifier for the device.
+    environment : Dict[str, str]
+        A dictionary containing environment variables extracted from the udev data.
+    group : str
+        The group associated with the device.
+    queue : str
+        The queue associated with the device.
+    version : str
+        The version of the device or its metadata.
+    """
+    def __init__(self, path: str) -> None:
+        """Initialize an instance of the UdevData class and load udev information.
+
+        Args:
+            path (str): The path to the device to be analyzed (e.g., /dev/sda).
+
+        Raises:
+            RuntimeError: Raised if no udev data file is found for the specified device.
+        """
+        if not os.path.exists(path):
+            raise RuntimeError(f'{path} not found.')
+        self.path: str = path
+        self.realpath: str = os.path.realpath(self.path)
+
+        if path.startswith("/sys/block/") and os.path.isdir(path):
+            dev_file = os.path.join(path, "dev")
+            if not os.path.exists(dev_file):
+                raise RuntimeError(f"{dev_file} not found.")
+            with open(dev_file) as f:
+                self.major, self.minor = map(int, f.read().strip().split(":"))
+        else:
+            self.stats: os.stat_result = os.stat(self.realpath)
+            self.major: int = os.major(self.stats.st_rdev)
+            self.minor: int = os.minor(self.stats.st_rdev)
+
+        self.udev_data_path: str = f'/run/udev/data/b{self.major}:{self.minor}'
+        self.symlinks: List[str] = []
+        self.id: str = ''
+        self.environment: Dict[str, str] = {}
+        self.group: str = ''
+        self.queue: str = ''
+        self.version: str = ''
+
+        if not os.path.exists(self.udev_data_path):
+            raise RuntimeError(f'No udev data could be retrieved for {self.path}')
+
+        with open(self.udev_data_path, 'r') as f:
+            content: str = f.read().strip()
+            self.raw_data: List[str] = content.split('\n')
+
+        for line in self.raw_data:
+            data_type, data = line.split(':', 1)
+            if data_type == 'S':
+                self.symlinks.append(data)
+            if data_type == 'I':
+                self.id = data
+            if data_type == 'E':
+                key, value = data.split('=', maxsplit=1)
+                self.environment[key] = value
+            if data_type == 'G':
+                self.group = data
+            if data_type == 'Q':
+                self.queue = data
+            if data_type == 'V':
+                self.version = data
+
+    @property
+    def is_dm(self) -> bool:
+        """Check if the device is a device mapper (DM).
+
+        Returns:
+            bool: True if the device is a device mapper, otherwise False.
+        """
+        return 'DM_UUID' in self.environment.keys()
+
+    @property
+    def is_lvm(self) -> bool:
+        """Check if the device is a Logical Volume Manager (LVM) volume.
+
+        Returns:
+            bool: True if the device is an LVM volume, otherwise False.
+        """
+        return self.environment.get('DM_UUID', '').startswith('LVM')
+
+    @property
+    def slashed_path(self) -> str:
+        """Get the LVM path structured with slashes.
+
+        Returns:
+            str: A path using slashes if the device is an LVM volume (e.g., /dev/vgname/lvname),
+                 otherwise the original path.
+        """
+        result: str = self.path
+        if self.is_lvm:
+            vg: str = self.environment.get('DM_VG_NAME', '')
+            lv: str = self.environment.get('DM_LV_NAME', '')
+            result = f'/dev/{vg}/{lv}'
+        return result
+
+    @property
+    def dashed_path(self) -> str:
+        """Get the LVM path structured with dashes.
+
+        Returns:
+            str: A path using dashes if the device is an LVM volume (e.g., /dev/mapper/vgname-lvname),
+            otherwise the original path.
+        """
+        result: str = self.path
+        if self.is_lvm:
+            name: str = self.environment.get('DM_NAME', '')
+            result = f'/dev/mapper/{name}'
         return result

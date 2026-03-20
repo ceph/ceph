@@ -13,6 +13,7 @@
  */
 
 #include <filesystem>
+#include <memory>
 #include "common/async/context_pool.h"
 #include "common/ceph_argparse.h"
 #include "common/code_environment.h"
@@ -268,10 +269,14 @@ global_init(const std::map<std::string,std::string> *defaults,
     if (g_conf()->setgroup.length() > 0) {
       gid = atoi(g_conf()->setgroup.c_str());
       if (!gid) {
-	char buf[4096];
+	// There's no actual well-defined max that I could find in
+	// library documentation. If we're allocating on the heap,
+	// 64KiB seems at least reasonable.
+	static constexpr std::size_t size = 64 * 1024;
+	auto buf = std::make_unique_for_overwrite<char[]>(size);
 	struct group gr;
 	struct group *g = 0;
-	getgrnam_r(g_conf()->setgroup.c_str(), &gr, buf, sizeof(buf), &g);
+	getgrnam_r(g_conf()->setgroup.c_str(), &gr, buf.get(), size, &g);
 	if (!g) {
 	  cerr << "unable to look up group '" << g_conf()->setgroup << "'"
 	       << ": " << cpp_strerror(errno) << std::endl;

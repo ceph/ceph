@@ -153,6 +153,11 @@ if(LINUX AND HAVE_LIBCRYPTSETUP)
           crypto/luks/test_mock_LoadRequest.cc)
 endif()
 
+if(HAVE_LIBNBD)
+  list(APPEND unittest_librbd_srcs
+          migration/test_mock_NBDStream.cc)
+endif()
+
 # On Windows, we'll skip librbd unit tests for the time being, running just the
 # functional tests. The reason is that the unit tests require libcls*, which in
 # turn requires libos and libosd, however those libraries haven't been ported to

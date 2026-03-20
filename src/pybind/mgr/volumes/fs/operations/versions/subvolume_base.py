@@ -9,6 +9,7 @@ from pathlib import Path
 
 import cephfs
 
+from ..charmap_util import charmap_get, charmap_set, charmap_rm
 from ..pin_util import pin
 from .subvolume_attrs import SubvolumeTypes
 from .metadata_manager import MetadataManager
@@ -17,6 +18,8 @@ from ...fs_util import get_ancestor_xattr
 from ...exception import MetadataMgrException, VolumeException
 from .auth_metadata import AuthMetadataManager
 from .subvolume_attrs import SubvolumeStates
+
+from ceph.fs.earmarking import CephFSVolumeEarmarking, EarmarkException  # type: ignore
 
 log = logging.getLogger(__name__)
 
@@ -90,7 +93,7 @@ class SubvolumeBase(object):
 
     @property
     def namespace(self):
-        return "{0}{1}".format(self.vol_spec.fs_namespace, self.subvolname)
+        return f'{self.vol_spec.fs_namespace}_{self.group.groupname}_{self.subvolname}'
 
     @property
     def group_name(self):
@@ -192,6 +195,14 @@ class SubvolumeBase(object):
         except cephfs.NoData:
             attrs["quota"] = None
 
+        try:
+            fs_earmark = CephFSVolumeEarmarking(self.fs, pathname)
+            attrs["earmark"] = fs_earmark.get_earmark()
+        except cephfs.NoData:
+            attrs["earmark"] = ''
+        except EarmarkException:
+            attrs["earmark"] = ''
+
         return attrs
 
     def set_attrs(self, path, attrs):
@@ -277,6 +288,12 @@ class SubvolumeBase(object):
         if mode is not None:
             self.fs.lchmod(path, mode)
 
+        # set earmark
+        earmark = attrs.get("earmark")
+        if earmark is not None:
+            fs_earmark = CephFSVolumeEarmarking(self.fs, path)
+            fs_earmark.set_earmark(earmark)
+
     def _resize(self, path, newsize, noshrink):
         try:
             newsize = int(newsize)
@@ -325,6 +342,15 @@ class SubvolumeBase(object):
 
     def pin(self, pin_type, pin_setting):
         return pin(self.fs, self.base_path, pin_type, pin_setting)
+
+    def charmap_set(self, setting, value):
+        return charmap_set(self.fs, self.path, setting, value)
+
+    def charmap_rm(self):
+        return charmap_rm(self.fs, self.path)
+
+    def charmap_get(self, setting):
+        return charmap_get(self.fs, self.path, setting)
 
     def init_config(self, version, subvolume_type,
                     subvolume_path, subvolume_state):
@@ -389,6 +415,34 @@ class SubvolumeBase(object):
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
+    def _get_clone_source(self):
+        try:
+            clone_source = {
+                'volume'   : self.metadata_mgr.get_option("source", "volume"),
+                'subvolume': self.metadata_mgr.get_option("source", "subvolume"),
+                'snapshot' : self.metadata_mgr.get_option("source", "snapshot"),
+            }
+
+            try:
+                clone_source["group"] = self.metadata_mgr.get_option("source", "group")
+            except MetadataMgrException as me:
+                if me.errno == -errno.ENOENT:
+                    pass
+                else:
+                    raise
+        except MetadataMgrException as e:
+                if e.errno == -errno.ENOENT:
+                    clone_source = {}
+                else:
+                    raise VolumeException(-errno.EINVAL,
+                                          "error fetching subvolume metadata")
+        return clone_source
+
+    def get_clone_source(self):
+        src = self._get_clone_source()
+        return (src['volume'], src.get('group', None), src['subvolume'],
+                src['snapshot'])
+
     def info(self):
         subvolpath = (self.metadata_mgr.get_global_option(
                       MetadataManager.GLOBAL_META_KEY_PATH))
@@ -418,7 +472,16 @@ class SubvolumeBase(object):
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
-        return {'path': subvolpath,
+        try:
+            fs_earmark = CephFSVolumeEarmarking(self.fs, subvolpath)
+            earmark = fs_earmark.get_earmark()
+        except cephfs.NoData:
+            earmark = ''
+        except EarmarkException:
+            earmark = ''
+
+        subvol_info = {
+                'path': subvolpath,
                 'type': etype.value,
                 'uid': int(st["uid"]),
                 'gid': int(st["gid"]),
@@ -434,7 +497,29 @@ class SubvolumeBase(object):
                 if nsize == 0
                 else '{0:.2f}'.format((float(usedbytes) / nsize) * 100.0),
                 'pool_namespace': pool_namespace,
-                'features': self.features, 'state': self.state.value}
+                'features': self.features,
+                'state': self.state.value,
+                'earmark': earmark}
+
+        subvol_src_info = self._get_clone_source()
+        if subvol_src_info:
+            if subvol_src_info.get('group', None) == None:
+                # group name won't be saved in .meta file in case it's
+                # default group
+                subvol_src_info['group'] = '_nogroup'
+            subvol_info['source'] = subvol_src_info
+        else:
+            # it could be that the clone was created in previous release of Ceph
+            # where its source info used to be deleted after cloning finishes.
+            # print "N/A" for such cases.
+            if self.subvol_type == SubvolumeTypes.TYPE_CLONE:
+                subvol_info['source'] = 'N/A'
+            else:
+                # only clones can have a source subvol, therefore don't even
+                # print "N/A" for source info if subvolume is not a clone.
+                pass
+
+        return subvol_info
 
     def set_user_metadata(self, keyname, value):
         try:

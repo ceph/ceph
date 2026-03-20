@@ -89,6 +89,47 @@ describe('RgwMultisiteSyncPipeModalComponent', () => {
     component.submit();
     expect(spy).toHaveBeenCalled();
     expect(putDataSpy).toHaveBeenCalled();
-    expect(putDataSpy).toHaveBeenCalledWith(component.pipeForm.getRawValue());
+    expect(putDataSpy).toHaveBeenCalledWith({
+      ...component.pipeForm.getRawValue(),
+      mode: '',
+      user: ''
+    });
+  });
+
+  it('should pass "user" and "mode" while creating/editing pipe', () => {
+    component.editing = true;
+    component.pipeForm.patchValue({
+      pipe_id: 'pipe1',
+      group_id: 's3-bucket-replication:enabled',
+      source_bucket: '',
+      source_zones: { added: ['zone1-zg1-realm1'], removed: [] },
+      destination_bucket: '',
+      destination_zones: { added: ['zone2-zg1-realm1'], removed: [] }
+    });
+    component.pipeSelectedRow = {
+      dest: { bucket: '*', zones: ['zone2-zg1-realm1'] },
+      id: 'pipi1',
+      params: {
+        dest: {},
+        mode: 'user',
+        priority: 0,
+        source: { filter: { tags: [] } },
+        user: 'dashboard'
+      },
+      source: { bucket: '*', zones: ['zone1-zg1-realm1'] }
+    };
+
+    component.sourceZones.data.selected = ['zone1-zg1-realm1'];
+    component.destZones.data.selected = ['zone2-zg1-realm1'];
+    const spy = jest.spyOn(component, 'submit');
+    const putDataSpy = jest.spyOn(multisiteServiceMock, 'createEditSyncPipe');
+    component.submit();
+    expect(spy).toHaveBeenCalled();
+    expect(putDataSpy).toHaveBeenCalled();
+    expect(putDataSpy).toHaveBeenCalledWith({
+      ...component.pipeForm.getRawValue(),
+      mode: 'user',
+      user: 'dashboard'
+    });
   });
 });

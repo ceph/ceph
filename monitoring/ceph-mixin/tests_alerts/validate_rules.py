@@ -84,7 +84,14 @@ class HTMLCache:
         if url in self.cache:
             return self.cache[url]
 
-        req = urllib.request.Request(url)
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (X11; Linux x86_64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/139.0.0.0 Safari/537.36"
+            ),
+        }
+        req = urllib.request.Request(url, headers=headers)
         try:
             r = urllib.request.urlopen(req)
         except urllib.error.HTTPError as e:

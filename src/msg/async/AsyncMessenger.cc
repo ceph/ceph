@@ -207,22 +207,22 @@ void Processor::accept()
 	} else if (r == -EAGAIN) {
 	  break;
 	} else if (r == -EMFILE || r == -ENFILE) {
-	  lderr(msgr->cct) << __func__ << " open file descriptions limit reached sd = " << listen_socket.fd()
+	  lderr(msgr->cct) << __func__ << " open file descriptors limit reached fd = " << listen_socket.fd()
 			   << " errno " << r << " " << cpp_strerror(r) << dendl;
 	  if (++accept_error_num > msgr->cct->_conf->ms_max_accept_failures) {
-	    lderr(msgr->cct) << "Proccessor accept has encountered enough error numbers, just do ceph_abort()." << dendl;
+	    lderr(msgr->cct) << "Proccessor accept has encountered too many errors, just do ceph_abort()." << dendl;
 	    ceph_abort();
 	  }
 	  continue;
 	} else if (r == -ECONNABORTED) {
-	  ldout(msgr->cct, 0) << __func__ << " it was closed because of rst arrived sd = " << listen_socket.fd()
+	  ldout(msgr->cct, 0) << __func__ << " closed because of rst arrival fd = " << listen_socket.fd()
 			      << " errno " << r << " " << cpp_strerror(r) << dendl;
 	  continue;
 	} else {
 	  lderr(msgr->cct) << __func__ << " no incoming connection?"
 			   << " errno " << r << " " << cpp_strerror(r) << dendl;
 	  if (++accept_error_num > msgr->cct->_conf->ms_max_accept_failures) {
-	    lderr(msgr->cct) << "Proccessor accept has encountered enough error numbers, just do ceph_abort()." << dendl;
+	    lderr(msgr->cct) << "Proccessor accept has encountered too many errors, just do ceph_abort()." << dendl;
 	    ceph_abort();
 	  }
 	  continue;
@@ -341,6 +341,7 @@ int AsyncMessenger::shutdown()
 {
   ldout(cct,10) << __func__ << " " << get_myaddrs() << dendl;
 
+  stack->drain();
   // done!  clean up.
   for (auto &&p : processors)
     p->stop();
@@ -353,7 +354,7 @@ int AsyncMessenger::shutdown()
   stop_cond.notify_all();
   stopped = true;
   lock.unlock();
-  stack->drain();
+
   return 0;
 }
 
@@ -611,6 +612,7 @@ void AsyncMessenger::add_accept(Worker *w, ConnectedSocket cli_socket,
 						listen_addr.is_msgr2(), false);
   conn->accept(std::move(cli_socket), listen_addr, peer_addr);
   accepting_conns.insert(conn);
+  w->get_perf_counter()->inc(l_msgr_active_connections);
 }
 
 AsyncConnectionRef AsyncMessenger::create_connect(
@@ -865,7 +867,6 @@ int AsyncMessenger::accept_conn(const AsyncConnectionRef& conn)
       conn->policy.lossy &&
       !conn->policy.register_lossy_clients) {
     anon_conns.insert(conn);
-    conn->get_perf_counter()->inc(l_msgr_active_connections);
     return 0;
   }
   auto it = conns.find(*conn->peer_addrs);
@@ -884,7 +885,6 @@ int AsyncMessenger::accept_conn(const AsyncConnectionRef& conn)
   }
   ldout(cct, 10) << __func__ << " " << conn << " " << *conn->peer_addrs << dendl;
   conns[*conn->peer_addrs] = conn;
-  conn->get_perf_counter()->inc(l_msgr_active_connections);
   accepting_conns.erase(conn);
   return 0;
 }

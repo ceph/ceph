@@ -520,28 +520,28 @@ Commands
   Show RBD mirroring status for an image.
 
 :command:`mirror pool demote` [*pool-name*]
-  Demote all primary images within a pool to non-primary.
-  Every mirror-enabled image in the pool will be demoted.
+  Demote all primary images within a pool or namespace to non-primary.
+  Every mirror-enabled image in the pool or namespace will be demoted.
 
 :command:`mirror pool disable` [*pool-name*]
-  Disable RBD mirroring by default within a pool. When mirroring
-  is disabled on a pool in this way, mirroring will also be
-  disabled on any images (within the pool) for which mirroring
-  was enabled explicitly.
+  Disable RBD mirroring within a pool or namespace. When mirroring
+  is disabled on a pool or namespace in this way, mirroring will also be
+  disabled on all images (within the pool or namespace) for which mirroring
+  was enabled, whether by default or explicitly.
 
 :command:`mirror pool enable` [*pool-name*] *mode*
-  Enable RBD mirroring by default within a pool.
+  Enable RBD mirroring within a pool or namespace.
   The mirroring mode can either be ``pool`` or ``image``.
-  If configured in ``pool`` mode, all images in the pool
+  If configured in ``pool`` mode, all images in the pool or namespace
   with the journaling feature enabled are mirrored.
   If configured in ``image`` mode, mirroring needs to be
   explicitly enabled (by ``mirror image enable`` command)
   on each image.
 
 :command:`mirror pool info` [*pool-name*]
-  Show information about the pool mirroring configuration.
-  It includes mirroring mode, peer UUID, remote cluster name,
-  and remote client name.
+  Show information about the pool or namespace mirroring configuration.
+  For a pool, it includes mirroring mode, peer UUID, remote cluster name,
+  and remote client name. For a namespace, it includes only mirroring mode.
 
 :command:`mirror pool peer add` [*pool-name*] *remote-cluster-spec*
   Add a mirroring peer to a pool.
@@ -561,13 +561,13 @@ Commands
   is corresponding to remote client name or remote cluster name.
 
 :command:`mirror pool promote` [--force] [*pool-name*]
-  Promote all non-primary images within a pool to primary.
-  Every mirror-enabled image in the pool will be promoted.
+  Promote all non-primary images within a pool or namespace to primary.
+  Every mirror-enabled image in the pool or namespace will be promoted.
 
 :command:`mirror pool status` [--verbose] [*pool-name*]
-  Show status for all mirrored images in the pool.
+  Show status for all mirrored images in the pool or namespace.
   With ``--verbose``, show additional output status
-  details for every mirror-enabled image in the pool.
+  details for every mirror-enabled image in the pool or namespace.
 
 :command:`mirror snapshot schedule add` [-p | --pool *pool*] [--namespace *namespace*] [--image *image*] *interval* [*start-time*]
   Add mirror snapshot schedule.

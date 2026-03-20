@@ -1,5 +1,6 @@
 import json
 import logging
+import socket
 
 from unittest import SkipTest
 
@@ -35,6 +36,17 @@ class MgrClusterBase(CephClusterBase):
         else:
             self.mon_manager.raw_cluster_cmd("mgr", "fail", mgr_id)
 
+    def set_down(self, yes='true'):
+        self.mon_manager.raw_cluster_cmd('mgr', 'set', 'down', str(yes))
+
+    def mgr_tell(self, *args, mgr_id=None, mgr_map=None):
+        if mgr_id is None:
+            if mgr_map is None:
+                mgr_map = self.get_mgr_map()
+            mgr_id = self.get_active_id(mgr_map=mgr_map)
+        J = self.mon_manager.raw_cluster_cmd("tell", f"mgr.{mgr_id}", *args)
+        return json.loads(J)
+
     def mgr_restart(self, mgr_id):
         self.mgr_daemons[mgr_id].restart()
 
@@ -50,11 +62,20 @@ class MgrClusterBase(CephClusterBase):
                 return c['addrvec']
         return None
 
-    def get_active_id(self):
-        return self.get_mgr_map()["active_name"]
+    def get_active_gid(self, mgr_map = None):
+        if mgr_map is None:
+            mgr_map = self.get_mgr_map()
+        return mgr_map["active_gid"]
 
-    def get_standby_ids(self):
-        return [s['name'] for s in self.get_mgr_map()["standbys"]]
+    def get_active_id(self, mgr_map = None):
+        if mgr_map is None:
+            mgr_map = self.get_mgr_map()
+        return mgr_map["active_name"]
+
+    def get_standby_ids(self, mgr_map = None):
+        if mgr_map is None:
+            mgr_map = self.get_mgr_map()
+        return [s['name'] for s in mgr_map["standbys"]]
 
     def set_module_conf(self, module, key, val):
         self.mon_manager.raw_cluster_cmd("config", "set", "mgr",
@@ -209,15 +230,22 @@ class MgrTestCase(CephTestCase):
         """
         # Start handing out ports well above Ceph's range.
         assign_port = min_port
+        ip_addr = cls.mgr_cluster.get_mgr_map()['active_addr'].split(':')[0]
 
         for mgr_id in cls.mgr_cluster.mgr_ids:
             cls.mgr_cluster.mgr_stop(mgr_id)
             cls.mgr_cluster.mgr_fail(mgr_id)
 
+
         for mgr_id in cls.mgr_cluster.mgr_ids:
-            log.debug("Using port {0} for {1} on mgr.{2}".format(
-                assign_port, module_name, mgr_id
-            ))
+            # Find a port that isn't in use
+            while True:
+                if not cls.is_port_in_use(ip_addr, assign_port):
+                    break
+                log.debug(f"Port {assign_port} in use, trying next")
+                assign_port += 1
+
+            log.debug(f"Using port {assign_port} for {module_name} on mgr.{mgr_id}")
             cls.mgr_cluster.set_module_localized_conf(module_name, mgr_id,
                                                       config_name,
                                                       str(assign_port),
@@ -235,3 +263,8 @@ class MgrTestCase(CephTestCase):
                     mgr_map['active_name'], mgr_map['active_gid']))
             return done
         cls.wait_until_true(is_available, timeout=30)
+
+    @classmethod
+    def is_port_in_use(cls, ip_addr: str, port: int) -> bool:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            return s.connect_ex((ip_addr, port)) == 0

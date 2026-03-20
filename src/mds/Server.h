@@ -84,6 +84,7 @@ enum {
   l_mdss_cap_revoke_eviction,
   l_mdss_cap_acquisition_throttle,
   l_mdss_req_getvxattr_latency,
+  l_mdss_req_file_blockdiff_latency,
   l_mdss_last,
 };
 
@@ -196,6 +197,8 @@ public:
   void _try_open_ino(const MDRequestRef& mdr, int r, inodeno_t ino);
   CInode* rdlock_path_pin_ref(const MDRequestRef& mdr, bool want_auth,
 			      bool no_want_auth=false);
+  CInode* rdlock_path_pin_ref(const MDRequestRef& mdr, const filepath& refpath, bool want_auth,
+			      bool no_want_auth=false);
   CDentry* rdlock_path_xlock_dentry(const MDRequestRef& mdr, bool create,
 				    bool okexist=false, bool authexist=false,
 				    bool want_layout=false);
@@ -215,7 +218,8 @@ public:
   void handle_client_file_readlock(const MDRequestRef& mdr);
 
   bool xlock_policylock(const MDRequestRef& mdr, CInode *in,
-			bool want_layout=false, bool xlock_snaplock=false);
+			bool want_layout=false, bool xlock_snaplock=false,
+                        MutationImpl::LockOpVec lov={});
   CInode* try_get_auth_inode(const MDRequestRef& mdr, inodeno_t ino);
   void handle_client_setattr(const MDRequestRef& mdr);
   void handle_client_setlayout(const MDRequestRef& mdr);
@@ -233,8 +237,7 @@ public:
                           std::string name,
                           std::string value,
                           file_layout_t *layout);
-  void handle_set_vxattr(const MDRequestRef& mdr, CInode *cur);
-  void handle_remove_vxattr(const MDRequestRef& mdr, CInode *cur);
+  void handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur);
   void handle_client_getvxattr(const MDRequestRef& mdr);
   void handle_client_setxattr(const MDRequestRef& mdr);
   void handle_client_removexattr(const MDRequestRef& mdr);
@@ -243,6 +246,8 @@ public:
   
   // check layout
   bool is_valid_layout(file_layout_t *layout);
+
+  bool can_handle_charmap(const MDRequestRef& mdr, CDentry* dn);
 
   // open
   void handle_client_open(const MDRequestRef& mdr);
@@ -277,6 +282,7 @@ public:
   void handle_client_unlink(const MDRequestRef& mdr);
   bool _dir_is_nonempty_unlocked(const MDRequestRef& mdr, CInode *rmdiri);
   bool _dir_is_nonempty(const MDRequestRef& mdr, CInode *rmdiri);
+  bool _dir_has_snaps(const MDRequestRef& mdr, CInode *diri);
   void _unlink_local(const MDRequestRef& mdr, CDentry *dn, CDentry *straydn);
   void _unlink_local_finish(const MDRequestRef& mdr,
 			    CDentry *dn, CDentry *straydn,
@@ -302,6 +308,9 @@ public:
   void handle_client_renamesnap(const MDRequestRef& mdr);
   void _renamesnap_finish(const MDRequestRef& mdr, CInode *diri, snapid_t snapid);
   void handle_client_readdir_snapdiff(const MDRequestRef& mdr);
+  void handle_client_file_blockdiff(const MDRequestRef& mdr);
+  void handle_file_blockdiff_finish(const MDRequestRef& mdr, CInode *in, const BlockDiff &block_diff,
+				    int r);
 
   // helpers
   bool _rename_prepare_witness(const MDRequestRef& mdr, mds_rank_t who, std::set<mds_rank_t> &witnesse,
@@ -448,11 +457,15 @@ private:
            xattr_name == "ceph.dir.subvolume" ||
            xattr_name == "ceph.dir.pin" ||
            xattr_name == "ceph.dir.pin.random" ||
-           xattr_name == "ceph.dir.pin.distributed";
+           xattr_name == "ceph.dir.pin.distributed" ||
+           xattr_name == "ceph.dir.charmap"sv ||
+           xattr_name == "ceph.dir.normalization"sv ||
+           xattr_name == "ceph.dir.encoding"sv ||
+           xattr_name == "ceph.dir.casesensitive"sv;
   }
 
   static bool is_ceph_dir_vxattr(std::string_view xattr_name) {
-    return (xattr_name == "ceph.dir.layout" ||
+    return xattr_name == "ceph.dir.layout" ||
 	    xattr_name == "ceph.dir.layout.json" ||
 	    xattr_name == "ceph.dir.layout.object_size" ||
 	    xattr_name == "ceph.dir.layout.stripe_unit" ||
@@ -463,7 +476,11 @@ private:
 	    xattr_name == "ceph.dir.layout.pool_namespace" ||
 	    xattr_name == "ceph.dir.pin" ||
 	    xattr_name == "ceph.dir.pin.random" ||
-	    xattr_name == "ceph.dir.pin.distributed");
+	    xattr_name == "ceph.dir.pin.distributed" ||
+            xattr_name == "ceph.dir.charmap"sv ||
+            xattr_name == "ceph.dir.normalization"sv ||
+            xattr_name == "ceph.dir.encoding"sv ||
+            xattr_name == "ceph.dir.casesensitive"sv;
   }
 
   static bool is_ceph_file_vxattr(std::string_view xattr_name) {
@@ -527,7 +544,7 @@ private:
   MDLog *mdlog;
   PerfCounters *logger = nullptr;
 
-  // OSDMap full status, used to generate CEPHFS_ENOSPC on some operations
+  // OSDMap full status, used to generate ENOSPC on some operations
   bool is_full = false;
 
   // State for while in reconnect
@@ -544,6 +561,7 @@ private:
   feature_bitset_t supported_metric_spec;
   feature_bitset_t required_client_features;
 
+  bool mds_allow_async_dirops = true;
   bool forward_all_requests_to_auth = false;
   bool replay_unsafe_with_closed_session = false;
   double cap_revoke_eviction_timeout = 0;
@@ -553,6 +571,7 @@ private:
   unsigned delegate_inos_pct = 0;
   uint64_t dir_max_entries = 0;
   int64_t bal_fragment_size_max = 0;
+  bool allow_batched_ops = true;
 
   double inject_rename_corrupt_dentry_first = 0.0;
 

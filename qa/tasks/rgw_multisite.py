@@ -139,7 +139,10 @@ class RGWMultisite(Task):
 
                 if cluster != cluster1: # already created on master cluster
                     log.info('pulling realm configuration to %s', cluster.name)
-                    realm.pull(cluster, master_zone.gateways[0], creds)
+
+                    is_default = self.config['realm'].get('is_default', False)
+                    args = ['--default'] if is_default else []
+                    realm.pull(cluster, master_zone.gateways[0], creds, args)
 
                 # use the first zone's cluster to create the zonegroup
                 if not zonegroup:
@@ -358,6 +361,8 @@ def create_zonegroup(cluster, gateways, period, config):
     if endpoints:
         # replace client names with their gateway endpoints
         config['endpoints'] = extract_gateway_endpoints(gateways, endpoints)
+    if not config.get('api_name'): # otherwise it will be set to an empty string
+        config['api_name'] = config['name']
     zonegroup = multisite.ZoneGroup(config['name'], period)
     # `zonegroup set` needs --default on command line, and 'is_master' in json
     args = is_default_arg(config)

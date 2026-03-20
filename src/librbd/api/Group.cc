@@ -885,8 +885,6 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
   if (r < 0) {
     return r;
   }
-  internal_flags &= ~(SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE |
-                      SNAP_CREATE_FLAG_IGNORE_NOTIFY_QUIESCE_ERROR);
 
   r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY, group_name,
                              &group_id);
@@ -975,10 +973,11 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
     goto remove_record;
   }
 
-  if ((flags & RBD_SNAP_CREATE_SKIP_QUIESCE) == 0) {
+  if ((internal_flags & SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE) == 0) {
     ldout(cct, 20) << "Sending quiesce notification" << dendl;
     ret_code = notify_quiesce(ictxs, prog_ctx, &quiesce_requests);
-    if (ret_code != 0 && (flags & RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR) == 0) {
+    if (ret_code != 0 &&
+        (internal_flags & SNAP_CREATE_FLAG_IGNORE_NOTIFY_QUIESCE_ERROR) == 0) {
       goto remove_record;
     }
   }

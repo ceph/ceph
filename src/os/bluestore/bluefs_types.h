@@ -35,6 +35,37 @@ WRITE_CLASS_DENC(bluefs_extent_t)
 
 std::ostream& operator<<(std::ostream& out, const bluefs_extent_t& e);
 
+struct bluefs_locked_extents_t {
+  uint64_t head_offset = 0;
+  uint32_t head_length = 0;
+
+  uint64_t gray_tail_offset = 0;
+  uint32_t gray_tail_length = 0;
+
+  uint64_t tail_offset = 0;
+  uint32_t tail_length = 0;
+
+  bluefs_locked_extents_t() {}
+  bluefs_locked_extents_t(uint64_t head_reserved, uint64_t full_size, uint64_t alloc_size);
+
+  void reset() {
+    *this = bluefs_locked_extents_t();
+  }
+  uint64_t head_end() const { return head_offset + head_length; }
+  uint64_t gray_tail_end() const { return gray_tail_offset + gray_tail_length; }
+  uint64_t tail_end() const { return tail_offset + tail_length; }
+
+  void reset_intersected(const bluefs_extent_t& e);
+
+  // returns extents in a form where tails are merged
+  bluefs_locked_extents_t get_merged() const;
+
+  // returns final locked extents where head/tail are present only
+  bluefs_locked_extents_t finalize() const;
+};
+
+std::ostream& operator<<(std::ostream& out, const bluefs_locked_extents_t& e);
+
 struct bluefs_fnode_delta_t {
   uint64_t ino;
   uint64_t size;
@@ -89,6 +120,7 @@ struct bluefs_fnode_t {
   void recalc_allocated() {
     allocated = 0;
     extents_index.reserve(extents.size());
+    extents_index.clear();
     for (auto& p : extents) {
       extents_index.emplace_back(allocated);
       allocated += p.length;
@@ -212,16 +244,14 @@ WRITE_CLASS_ENCODER(bluefs_layout_t)
 struct bluefs_super_t {
   uuid_d uuid;      ///< unique to this bluefs instance
   uuid_d osd_uuid;  ///< matches the osd that owns us
-  uint64_t version;
+  uint64_t seq;     ///< sequence counter
   uint32_t block_size;
 
   bluefs_fnode_t log_fnode;
 
   std::optional<bluefs_layout_t> memorized_layout;
 
-  bluefs_super_t()
-    : version(0),
-      block_size(4096) { }
+  bluefs_super_t();
 
   uint64_t block_mask() const {
     return ~((uint64_t)block_size - 1);

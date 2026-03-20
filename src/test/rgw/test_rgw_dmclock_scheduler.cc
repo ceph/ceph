@@ -18,7 +18,7 @@
 #include "rgw_dmclock_async_scheduler.h"
 
 #include <optional>
-#include <spawn/spawn.hpp>
+#include <boost/asio/spawn.hpp>
 #include <gtest/gtest.h>
 #include "acconfig.h"
 #include "global/global_context.h"
@@ -400,7 +400,7 @@ TEST(Queue, SpawnAsyncRequest)
 {
   boost::asio::io_context context;
 
-  spawn::spawn(context, [&] (spawn::yield_context yield) {
+  boost::asio::spawn(context, [&] (boost::asio::yield_context yield) {
     ClientCounters counters(g_ceph_context);
     AsyncScheduler queue(g_ceph_context, context, std::ref(counters), nullptr,
                     [] (client_id client) -> ClientInfo* {
@@ -419,6 +419,8 @@ TEST(Queue, SpawnAsyncRequest)
     auto p2 = queue.async_request(client_id::auth, {}, get_time(), 1, yield[ec2]);
     EXPECT_EQ(boost::system::errc::success, ec2);
     EXPECT_EQ(PhaseType::priority, p2);
+  }, [] (std::exception_ptr eptr) {
+    if (eptr) std::rethrow_exception(eptr);
   });
 
   context.run_for(std::chrono::milliseconds(50));

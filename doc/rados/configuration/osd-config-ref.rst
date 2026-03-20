@@ -189,6 +189,9 @@ Operations
 .. confval:: osd_op_num_shards
 .. confval:: osd_op_num_shards_hdd
 .. confval:: osd_op_num_shards_ssd
+.. confval:: osd_op_num_threads_per_shard
+.. confval:: osd_op_num_threads_per_shard_hdd
+.. confval:: osd_op_num_threads_per_shard_ssd
 .. confval:: osd_op_queue
 .. confval:: osd_op_queue_cut_off
 .. confval:: osd_client_op_priority
@@ -292,6 +295,9 @@ of the current time. The ultimate lesson is that values for weight
 should not be too large. They should be under the number of requests
 one expects to be serviced each second.
 
+
+.. _dmclock-qos-caveats:
+
 Caveats
 ```````
 
@@ -303,6 +309,11 @@ number of shards can be controlled with the configuration options
 :confval:`osd_op_num_shards`, :confval:`osd_op_num_shards_hdd`, and
 :confval:`osd_op_num_shards_ssd`. A lower number of shards will increase the
 impact of the mClock queues, but may have other deleterious effects.
+This is especially the case if there are insufficient shard worker
+threads. The number of shard worker threads can be controlled with the
+configuration options :confval:`osd_op_num_threads_per_shard`,
+:confval:`osd_op_num_threads_per_shard_hdd` and
+:confval:`osd_op_num_threads_per_shard_ssd`.
 
 Second, requests are transferred from the operation queue to the
 operation sequencer, in which they go through the phases of
@@ -362,6 +373,8 @@ considerably. To maintain operational performance, Ceph performs this migration
 with 'backfilling', which allows Ceph to set backfill operations to a lower
 priority than requests to read or write data.
 
+.. note:: Some of these settings are automatically reset if the `mClock`_
+ 		    scheduler is active, see `mClock backfill`_.
 
 .. confval:: osd_max_backfills
 .. confval:: osd_backfill_scan_min
@@ -404,6 +417,9 @@ To maintain operational performance, Ceph performs recovery with limitations on
 the number recovery requests, threads and object chunk sizes which allows Ceph
 perform well in a degraded state.
 
+.. note:: Some of these settings are automatically reset if the `mClock`_
+          scheduler is active, see `mClock backfill`_.
+
 .. confval:: osd_recovery_delay_start
 .. confval:: osd_recovery_max_active
 .. confval:: osd_recovery_max_active_hdd
@@ -415,6 +431,10 @@ perform well in a degraded state.
 .. confval:: osd_recovery_sleep_hdd
 .. confval:: osd_recovery_sleep_ssd
 .. confval:: osd_recovery_sleep_hybrid
+.. confval:: osd_recovery_sleep_degraded
+.. confval:: osd_recovery_sleep_degraded_hdd
+.. confval:: osd_recovery_sleep_degraded_ssd
+.. confval:: osd_recovery_sleep_degraded_hybrid
 .. confval:: osd_recovery_priority
 
 Tiering
@@ -441,6 +461,8 @@ Miscellaneous
 .. _pool: ../../operations/pools
 .. _Configuring Monitor/OSD Interaction: ../mon-osd-interaction
 .. _Monitoring OSDs and PGs: ../../operations/monitoring-osd-pg#peering
+.. _mClock: ../mclock-config-ref
+.. _mClock backfill: ../mclock-config-ref#recovery-backfill-options
 .. _Pool & PG Config Reference: ../pool-pg-config-ref
 .. _Journal Config Reference: ../journal-ref
 .. _cache target dirty high ratio: ../../operations/pools#cache-target-dirty-high-ratio

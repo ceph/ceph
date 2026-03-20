@@ -311,7 +311,9 @@ class DaosBucket : public StoreBucket {
   virtual int sync_owner_stats(const DoutPrefixProvider* dpp,
                                optional_yield y) override;
   virtual int check_bucket_shards(const DoutPrefixProvider* dpp) override;
-  virtual int chown(const DoutPrefixProvider* dpp, const rgw_owner& new_user,
+  virtual int chown(const DoutPrefixProvider* dpp,
+                    const rgw_owner& new_user,
+                    const std::string& new_owner_name,
                     optional_yield y) override;
   virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive,
                        ceph::real_time mtime) override;
@@ -484,7 +486,6 @@ class DaosZone : public StoreZone {
   virtual const std::string& get_name() const override;
   virtual bool is_writeable() override;
   virtual bool get_redirect_endpoint(std::string* endpoint) override;
-  virtual bool has_zonegroup_api(const std::string& api) const override;
   virtual const std::string& get_current_period_id() override;
   virtual const RGWAccessKey& get_system_key() {
     return zone_params->system_key;
@@ -596,7 +597,8 @@ class DaosObject : public StoreObject {
   virtual ~DaosObject();
 
   virtual int delete_object(const DoutPrefixProvider* dpp, optional_yield y,
-                            uint32_t flags) override;
+                            uint32_t flags, std::list<rgw_obj_index_key>* remove_objs,
+                            RGWObjVersionTracker* objv) override;
   virtual int copy_object(
       const ACLOwner& owner, const rgw_user& remote_user,
       req_info* info, const rgw_zone_id& source_zone,
@@ -620,7 +622,7 @@ class DaosObject : public StoreObject {
   virtual int get_obj_state(const DoutPrefixProvider* dpp, RGWObjState** state,
                             optional_yield y, bool follow_olh = true) override;
   virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-                            Attrs* delattrs, optional_yield y) override;
+                            Attrs* delattrs, optional_yield y, uint32_t flags) override;
   virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
                             rgw_obj* target_obj = NULL) override;
   virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
@@ -855,7 +857,13 @@ class DaosMultipartUpload : public StoreMultipartUpload {
                        uint64_t& accounted_size, bool& compressed,
                        RGWCompressionInfo& cs_info, off_t& off,
                        std::string& tag, ACLOwner& owner, uint64_t olh_epoch,
-                       rgw::sal::Object* target_obj) override;
+                       rgw::sal::Object* target_obj,
+                       prefix_map_t& processed_prefixes) override;
+  virtual int cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
+      CephContext *cct, optional_yield y,
+      const rgw_obj& obj,
+      std::list<rgw_obj_index_key>& remove_objs,
+      prefix_map_t& processed_prefixes) override;
   virtual int get_info(const DoutPrefixProvider* dpp, optional_yield y,
                        rgw_placement_rule** rule,
                        rgw::sal::Attrs* attrs = nullptr) override;

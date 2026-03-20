@@ -30,7 +30,7 @@ class QuiesceAgent {
         : quiesce_control(quiesce_control)
         , stop_agent_thread(false)
         , agent_thread(this) {
-      agent_thread.create("quiesce.agt");
+      agent_thread.create("mds-q-agt");
     };
 
     virtual ~QuiesceAgent() {

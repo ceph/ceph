@@ -8,7 +8,10 @@ overrides:
   ceph:
     conf:
       global:
-        osd heartbeat grace: 80
+        # see https://tracker.ceph.com/issues/65768
+        osd heartbeat grace: 160
+        # see https://tracker.ceph.com/issues/62992
+        osd op thread timeout: 150
       mon:
         mon osd crush smoke test: false
       osd:
@@ -23,9 +26,11 @@ overrides:
       - \(MON_DOWN\)
       - \(SLOW_OPS\)
       - slow request
+      - OSD bench result
     valgrind:
       mon: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
       osd: [--tool=memcheck]
       mds: [--tool=memcheck]
+    stop-daemons-timeout: 1200
 # https://tracker.ceph.com/issues/38621
 #      mgr: [--tool=memcheck]

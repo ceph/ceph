@@ -11,7 +11,7 @@ import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { OsdService } from '~/app/shared/api/osd.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { FormModalComponent } from '~/app/shared/components/form-modal/form-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
@@ -38,6 +38,9 @@ import { OsdPgScrubModalComponent } from '../osd-pg-scrub-modal/osd-pg-scrub-mod
 import { OsdRecvSpeedModalComponent } from '../osd-recv-speed-modal/osd-recv-speed-modal.component';
 import { OsdReweightModalComponent } from '../osd-reweight-modal/osd-reweight-modal.component';
 import { OsdScrubModalComponent } from '../osd-scrub-modal/osd-scrub-modal.component';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
+import { Osd } from '~/app/shared/models/osd.model';
+import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 
 const BASE_URL = 'osd';
 
@@ -70,6 +73,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   clusterWideActions: CdTableAction[];
   icons = Icons;
   osdSettings = new OsdSettings();
+  count = 0;
 
   selection = new CdTableSelection();
   osds: any[] = [];
@@ -424,10 +428,13 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
     }
   }
 
-  getOsdList() {
-    const observables = [this.osdService.getList(), this.osdService.getFlags()];
-    observableForkJoin(observables).subscribe((resp: [any[], string[]]) => {
-      this.osds = resp[0].map((osd) => {
+  getOsdList(context?: CdTableFetchDataContext) {
+    if (!context) context = new CdTableFetchDataContext();
+    const pagination_obs = this.osdService.getList(context.toParams());
+    const observables = [pagination_obs.observable, this.osdService.getFlags()];
+    observableForkJoin(observables).subscribe((resp: any) => {
+      this.osds = resp[0].map((osd: Osd) => {
+        this.count = pagination_obs.count;
         osd.collectedStates = OsdListComponent.collectStates(osd);
         osd.stats_history.out_bytes = osd.stats_history.op_out_bytes.map((i: string) => i[1]);
         osd.stats_history.in_bytes = osd.stats_history.op_in_bytes.map((i: string) => i[1]);
@@ -573,7 +580,10 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
     childFormGroupTemplate?: TemplateRef<any>
   ): void {
     check(this.getSelectedOsdIds()).subscribe((result) => {
-      const modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+      const osdIds = this.getSelectedOsdIds();
+      const modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
+        impact: DeletionImpact.high,
+        itemNames: osdIds,
         actionDescription: actionDescription,
         itemDescription: itemDescription,
         bodyTemplate: this.criticalConfirmationTpl,
@@ -584,7 +594,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
           missingStats: result.missing_stats,
           storedPgs: result.stored_pgs,
           actionDescription: templateItemDescription,
-          osdIds: this.getSelectedOsdIds()
+          osdIds
         },
         childFormGroup: childFormGroup,
         childFormGroupTemplate: childFormGroupTemplate,

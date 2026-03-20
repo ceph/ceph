@@ -1372,58 +1372,11 @@ int PgScrubber::build_scrub_map_chunk(ScrubMap& map,
   }
 
   // finish
-  dout(20) << __func__ << " finishing" << dendl;
   ceph_assert(pos.done());
-  repair_oinfo_oid(map);
-
-  dout(20) << __func__ << " done, got " << map.objects.size() << " items"
-	   << dendl;
+  dout(20) << fmt::format("{}: done. {} objects in scrub-map", __func__,
+                          map.objects.size())
+           << dendl;
   return 0;
-}
-
-/// \todo consider moving repair_oinfo_oid() back to the backend
-void PgScrubber::repair_oinfo_oid(ScrubMap& smap)
-{
-  for (auto i = smap.objects.rbegin(); i != smap.objects.rend(); ++i) {
-
-    const hobject_t& hoid = i->first;
-    ScrubMap::object& o = i->second;
-
-    if (o.attrs.find(OI_ATTR) == o.attrs.end()) {
-      continue;
-    }
-    object_info_t oi;
-    try {
-      oi.decode(o.attrs[OI_ATTR]);
-    } catch (...) {
-      continue;
-    }
-
-    if (oi.soid != hoid) {
-      ObjectStore::Transaction t;
-      OSDriver::OSTransaction _t(m_pg->osdriver.get_transaction(&t));
-
-      m_osds->clog->error()
-        << "osd." << m_pg_whoami << " found object info error on pg " << m_pg_id
-        << " oid " << hoid << " oid in object info: " << oi.soid
-        << "...repaired";
-      // Fix object info
-      oi.soid = hoid;
-      bufferlist bl;
-      encode(oi,
-             bl,
-             m_pg->get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
-
-      o.attrs[OI_ATTR] = std::move(bl);
-
-      t.setattr(m_pg->coll, ghobject_t(hoid), OI_ATTR, bl);
-      int r = m_pg->osd->store->queue_transaction(m_pg->ch, std::move(t));
-      if (r != 0) {
-        derr << __func__ << ": queue_transaction got " << cpp_strerror(r)
-             << dendl;
-      }
-    }
-  }
 }
 
 
@@ -1836,13 +1789,18 @@ void PgScrubber::scrub_finish()
 
   m_planned_scrub = requested_scrub_t{};
 
-  // if the repair request comes from auto-repair and large number of errors,
-  // we would like to cancel auto-repair
-  if (m_is_repair && m_flags.auto_repair &&
+  // if the repair request comes from auto-repair and there is a large
+  // number of objects known to be damaged, we cancel the auto-repair
+  if (m_is_repair && m_flags.auto_repair && !m_flags.required &&
       m_be->authoritative_peers_count() >
 	static_cast<int>(m_pg->cct->_conf->osd_scrub_auto_repair_num_errors)) {
 
-    dout(10) << __func__ << " undoing the repair" << dendl;
+    dout(5) << fmt::format(
+               "{}: undoing the repair. Damaged objects count ({}) is "
+               "above configured limit ({})",
+               __func__, m_be->authoritative_peers_count(),
+               m_pg->cct->_conf->osd_scrub_auto_repair_num_errors)
+      << dendl;
     state_clear(PG_STATE_REPAIR);  // not expected to be set, anyway
     m_is_repair = false;
     update_op_mode_text();
@@ -1850,8 +1808,8 @@ void PgScrubber::scrub_finish()
 
   m_be->update_repair_status(m_is_repair);
 
-  // if a regular scrub had errors within the limit, do a deep scrub to auto
-  // repair
+  // if the count of damaged objects found in shallow-scrubbing is not
+  // too high - do a deep scrub to auto repair
   bool do_auto_scrub = false;
   if (m_flags.deep_scrub_on_error && m_be->authoritative_peers_count() &&
       m_be->authoritative_peers_count() <=
@@ -2170,7 +2128,7 @@ pg_scrubbing_status_t PgScrubber::get_schedule() const
 
     } else {
       int32_t dur_seconds =
-	  duration_cast<seconds>(m_fsm->get_time_scrubbing()).count();
+	  ceil<seconds>(m_fsm->get_time_scrubbing()).count();
       return pg_scrubbing_status_t{
 	  utime_t{},
 	  dur_seconds,

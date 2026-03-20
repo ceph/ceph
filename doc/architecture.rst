@@ -3,13 +3,12 @@
 ==============
 
 :term:`Ceph` uniquely delivers **object, block, and file storage** in one
-unified system. Ceph is highly reliable, easy to manage, and free. The power of
-Ceph can transform your company's IT infrastructure and your ability to manage
-vast amounts of data. Ceph delivers extraordinary scalability–thousands of
-clients accessing petabytes to exabytes of data. A :term:`Ceph Node` leverages
-commodity hardware and intelligent daemons, and a :term:`Ceph Storage Cluster`
-accommodates large numbers of nodes, which communicate with each other to
-replicate and redistribute data dynamically.
+unified system. Ceph is highly reliable, easy to manage, and free. Ceph
+delivers extraordinary scalability–thousands of clients accessing petabytes to
+exabytes of data. A :term:`Ceph Node` leverages commodity hardware and
+intelligent daemons, and a :term:`Ceph Storage Cluster` accommodates large
+numbers of nodes, which communicate with each other to replicate and
+redistribute data dynamically.
 
 .. image:: images/stack.png
 
@@ -437,7 +436,7 @@ the greater cluster provides several benefits:
    bad sectors on drives that are not detectable with light scrubs. See `Data
    Scrubbing`_ for details on configuring scrubbing.
 
-#. **Replication:** Data replication involves a collaboration between Ceph
+#. **Replication:** Data replication involves collaboration between Ceph
    Clients and Ceph OSD Daemons. Ceph OSD Daemons use the CRUSH algorithm to
    determine the storage location of object replicas. Ceph clients use the
    CRUSH algorithm to determine the storage location of an object, then the
@@ -446,11 +445,11 @@ the greater cluster provides several benefits:
 
    After identifying the target placement group, the client writes the object
    to the identified placement group's primary OSD. The primary OSD then
-   consults its own copy of the CRUSH map to identify secondary and tertiary
-   OSDS, replicates the object to the placement groups in those secondary and
-   tertiary OSDs, confirms that the object was stored successfully in the
-   secondary and tertiary OSDs, and reports to the client that the object
-   was stored successfully.
+   consults its own copy of the CRUSH map to identify secondary
+   OSDS, replicates the object to the placement groups in those secondary
+   OSDs, confirms that the object was stored successfully in the
+   secondary OSDs, and reports to the client that the object
+   was stored successfully.  We call these replication operations ``subops``.
 
 .. ditaa::
 
@@ -472,13 +471,13 @@ the greater cluster provides several benefits:
        |  +------+   +------+  |
        |  | Ack (4)  Ack (5)|  |
        v  *                 *  v
- +---------------+   +---------------+
- | Secondary OSD |   | Tertiary OSD  |
- |               |   |               |
- +---------------+   +---------------+
+ +---------------+   +----------------+
+ | Secondary OSD |   | Secondary OSD  |
+ |               |   |                |
+ +---------------+   +----------------+
 
-By performing this act of data replication, Ceph OSD Daemons relieve Ceph
-clients of the burden of replicating data.
+By performing this data replication, Ceph OSD Daemons relieve Ceph
+clients and their network interfaces of the burden of replicating data.
 
 Dynamic Cluster Management
 --------------------------
@@ -1215,7 +1214,7 @@ exemplary implementations.
 Summary
 -------
 
-Ceph Storage Clusters are dynamic--like a living organism. Whereas, many storage
+Ceph Storage Clusters are dynamic--like a living organism. Although many storage
 appliances do not fully utilize the CPU and RAM of a typical commodity server,
 Ceph does. From heartbeats, to  peering, to rebalancing the cluster or
 recovering from faults,  Ceph offloads work from clients (and from a centralized

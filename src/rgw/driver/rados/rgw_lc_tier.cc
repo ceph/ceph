@@ -76,8 +76,9 @@ WRITE_CLASS_ENCODER(rgw_lc_multipart_upload_info)
 
 static inline string get_key_instance(const rgw_obj_key& key)
 {
-  if (!key.instance.empty() &&
-      !key.have_null_instance()) {
+  // if non-current entry, add versionID to the
+  // transitioned object name including "null".
+  if (!key.instance.empty()) {
     return "-" + key.instance;
   }
   return "";
@@ -257,10 +258,6 @@ static int cloud_tier_get_object(RGWLCCloudTierCtx& tier_ctx, bool head,
 
   /* init input connection */
   req_params.get_op = !head;
-  req_params.prepend_metadata = true;
-  req_params.rgwx_stat = true;
-  req_params.sync_manifest = true;
-  req_params.skip_decrypt = true;
 
   ret = tier_ctx.conn.get_obj(tier_ctx.dpp, dest_obj, req_params, true /* send */, &in_req);
   if (ret < 0) {
@@ -775,7 +772,7 @@ static int cloud_tier_plain_transfer(RGWLCCloudTierCtx& tier_ctx) {
 
   rgw_obj dest_obj(dest_bucket, rgw_obj_key(target_obj_name));
 
-  tier_ctx.obj->set_atomic();
+  tier_ctx.obj->set_atomic(true);
 
   /* Prepare Read from source */
   /* TODO: Define readf, writef as stack variables. For some reason,
@@ -819,7 +816,7 @@ static int cloud_tier_send_multipart_part(RGWLCCloudTierCtx& tier_ctx,
 
   rgw_obj dest_obj(dest_bucket, rgw_obj_key(target_obj_name));
 
-  tier_ctx.obj->set_atomic();
+  tier_ctx.obj->set_atomic(true);
 
   /* TODO: Define readf, writef as stack variables. For some reason,
    * when used as stack variables (esp., readf), the transition seems to

@@ -5,12 +5,13 @@ from __future__ import absolute_import
 import json
 
 from .helper import (DashboardTestCase, JAny, JLeaf, JList, JObj, JTuple,
-                     devices_schema)
+                     devices_schema, log, retry)
 
 
 class OsdTest(DashboardTestCase):
 
     AUTH_ROLES = ['cluster-manager']
+    _VERSION = '1.1'
 
     @classmethod
     def setUpClass(cls):
@@ -24,7 +25,7 @@ class OsdTest(DashboardTestCase):
 
     @DashboardTestCase.RunAs('test', 'test', ['block-manager'])
     def test_access_permissions(self):
-        self._get('/api/osd')
+        self._get('/api/osd', version=self._VERSION)
         self.assertStatus(403)
         self._get('/api/osd/0')
         self.assertStatus(403)
@@ -33,7 +34,7 @@ class OsdTest(DashboardTestCase):
         self.assertSchema(data, JObj({p: JAny(none=False) for p in properties}, allow_unknown=True))
 
     def test_list(self):
-        data = self._get('/api/osd')
+        data = self._get('/api/osd', version=self._VERSION)
         self.assertStatus(200)
 
         self.assertGreaterEqual(len(data), 1)
@@ -283,13 +284,18 @@ class OsdFlagsTest(DashboardTestCase):
                     if osd['osd'] == osd_initial['osd']:
                         self.assertGreater(len(osd['flags']), len(osd_initial['flags']))
 
-        self._ceph_cmd(['osd', 'unset-group', 'noout,noin', 'osd.0', 'osd.1', 'osd.2'])
-        flags_removed = self._get('/api/osd/flags/individual')
-        self.assertStatus(200)
-        for osd in flags_removed:
-            if osd['osd'] in [0, 1, 2]:
-                self.assertNotIn('noout', osd['flags'])
-                self.assertNotIn('noin', osd['flags'])
+        ret = self._ceph_cmd_result(['osd', 'unset-group', 'noout,noin', 'osd.0', 'osd.1', 'osd.2'])
+        self.assertEqual(ret, 0)
+
+        @retry(on_exception=AssertionError, tries=2, delay=0.5, logger=log)
+        def check_osd_flags():
+            flags_removed = self._get('/api/osd/flags/individual')
+            self.assertStatus(200)
+            for osd in flags_removed:
+                if osd['osd'] in [0, 1, 2]:
+                    self.assertNotIn('noout', osd['flags'])
+                    self.assertNotIn('noin', osd['flags'])
+        check_osd_flags()
 
     def test_add_indiv_flag(self):
         flags_update = {'noup': None, 'nodown': None, 'noin': None, 'noout': True}

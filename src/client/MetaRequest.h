@@ -9,20 +9,20 @@
 #include "include/xlist.h"
 #include "include/filepath.h"
 #include "mds/mdstypes.h"
+#include "DentryRef.h"
 #include "InodeRef.h"
 #include "UserPerm.h"
 
 #include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
 
-class Dentry;
 class dir_result_t;
 
 struct MetaRequest {
 private:
   InodeRef _inode, _old_inode, _other_inode;
-  Dentry *_dentry = NULL;     //associated with path
-  Dentry *_old_dentry = NULL; //associated with path2
+  DentryRef _dentry;     //associated with path
+  DentryRef _old_dentry; //associated with path2
   int abort_rc = 0;
 public:
   ceph::coarse_mono_time created = ceph::coarse_mono_clock::zero();
@@ -83,7 +83,7 @@ public:
     head.owner_uid = -1;
     head.owner_gid = -1;
   }
-  ~MetaRequest();
+  ~MetaRequest() = default;
 
   /**
    * Prematurely terminate the request, such that callers
@@ -115,14 +115,17 @@ public:
   void set_inode(Inode *in) {
     _inode = in;
   }
+  void set_inode(InodeRef in) {
+    _inode = std::move(in);
+  }
   Inode *inode() {
     return _inode.get();
   }
   void take_inode(InodeRef *out) {
     out->swap(_inode);
   }
-  void set_old_inode(Inode *in) {
-    _old_inode = in;
+  void set_old_inode(InodeRef in) {
+    _old_inode = std::move(in);
   }
   Inode *old_inode() {
     return _old_inode.get();
@@ -130,8 +133,8 @@ public:
   void take_old_inode(InodeRef *out) {
     out->swap(_old_inode);
   }
-  void set_other_inode(Inode *in) {
-    _other_inode = in;
+  void set_other_inode(InodeRef in) {
+    _other_inode = std::move(in);
   }
   Inode *other_inode() {
     return _other_inode.get();
@@ -139,9 +142,9 @@ public:
   void take_other_inode(InodeRef *out) {
     out->swap(_other_inode);
   }
-  void set_dentry(Dentry *d);
+  void set_dentry(DentryRef d);
   Dentry *dentry();
-  void set_old_dentry(Dentry *d);
+  void set_old_dentry(DentryRef d);
   Dentry *old_dentry();
 
   MetaRequest* get() {

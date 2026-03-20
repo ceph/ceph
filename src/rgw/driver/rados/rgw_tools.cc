@@ -94,6 +94,8 @@ int rgw_init_ioctx(const DoutPrefixProvider *dpp,
   if (!pool.ns.empty()) {
     ioctx.set_namespace(pool.ns);
   }
+  // at pool quota, never block waiting for space - we want to error immediately
+  ioctx.set_pool_full_try();
   return 0;
 }
 
@@ -198,18 +200,21 @@ int rgw_delete_system_obj(const DoutPrefixProvider *dpp,
 
 int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectReadOperation *op, bufferlist* pbl,
-                      optional_yield y, int flags, const jspan_context* trace_info)
+                      optional_yield y, int flags, const jspan_context* trace_info,
+                      version_t* pver)
 {
   // given a yield_context, call async_operate() to yield the coroutine instead
   // of blocking
   if (y) {
-    auto& context = y.get_io_context();
     auto& yield = y.get_yield_context();
     boost::system::error_code ec;
-    auto bl = librados::async_operate(
-      context, ioctx, oid, op, flags, yield[ec]);
+    auto [ver, bl] = librados::async_operate(
+      yield, ioctx, oid, op, flags, trace_info, yield[ec]);
     if (pbl) {
       *pbl = std::move(bl);
+    }
+    if (pver) {
+      *pver = ver;
     }
     return -ec.value();
   }
@@ -220,18 +225,25 @@ int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, con
     ldpp_dout(dpp, 20) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl;
 #endif
   }
-  return ioctx.operate(oid, op, nullptr, flags);
+  int r = ioctx.operate(oid, op, nullptr, flags);
+  if (pver) {
+    *pver = ioctx.get_last_version();
+  }
+  return r;
 }
 
 int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectWriteOperation *op, optional_yield y,
-		      int flags, const jspan_context* trace_info)
+		      int flags, const jspan_context* trace_info, version_t* pver)
 {
   if (y) {
-    auto& context = y.get_io_context();
     auto& yield = y.get_yield_context();
     boost::system::error_code ec;
-    librados::async_operate(context, ioctx, oid, op, flags, yield[ec], trace_info);
+    version_t ver = librados::async_operate(yield, ioctx, oid, op, flags,
+                                            trace_info, yield[ec]);
+    if (pver) {
+      *pver = ver;
+    }
     return -ec.value();
   }
   if (is_asio_thread) {
@@ -240,7 +252,11 @@ int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, con
     ldpp_dout(dpp, 20) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl;
 #endif
   }
-  return ioctx.operate(oid, op, flags, trace_info);
+  int r = ioctx.operate(oid, op, flags, trace_info);
+  if (pver) {
+    *pver = ioctx.get_last_version();
+  }
+  return r;
 }
 
 int rgw_rados_notify(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
@@ -248,11 +264,10 @@ int rgw_rados_notify(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, cons
                      optional_yield y)
 {
   if (y) {
-    auto& context = y.get_io_context();
     auto& yield = y.get_yield_context();
     boost::system::error_code ec;
-    auto reply = librados::async_notify(context, ioctx, oid,
-                                        bl, timeout_ms, yield[ec]);
+    auto [ver, reply] = librados::async_notify(yield, ioctx, oid,
+                                               bl, timeout_ms, yield[ec]);
     if (pbl) {
       *pbl = std::move(reply);
     }
@@ -341,21 +356,35 @@ int rgw_list_pool(const DoutPrefixProvider *dpp,
     ldpp_dout(dpp, 10) << "failed to parse cursor: " << marker << dendl;
     return -EINVAL;
   }
-
-  auto iter = ioctx.nobjects_begin(oc);
+  librados::NObjectIterator iter;
+  try {
+    iter = ioctx.nobjects_begin(oc);
+  } catch (const std::system_error& e) {
+    ldpp_dout(dpp, 1) << "rgw_list_pool: Failed to begin iteration of pool "
+		      << ioctx.get_pool_name() << " with error "
+		      << e.what() << dendl;
+    return ceph::from_error_code(e.code());
+  }
   /// Pool_iterate
   if (iter == ioctx.nobjects_end())
     return -ENOENT;
 
-  for (; oids->size() < max && iter != ioctx.nobjects_end(); ++iter) {
-    string oid = iter->get_oid();
-    ldpp_dout(dpp, 20) << "RGWRados::pool_iterate: got " << oid << dendl;
+  try {
+    for (; oids->size() < max && iter != ioctx.nobjects_end(); ++iter) {
+      string oid = iter->get_oid();
+      ldpp_dout(dpp, 20) << "RGWRados::pool_iterate: got " << oid << dendl;
 
-    // fill it in with initial values; we may correct later
-    if (filter && !filter(oid, oid))
-      continue;
+      // fill it in with initial values; we may correct later
+      if (filter && !filter(oid, oid))
+	continue;
 
-    oids->push_back(oid);
+      oids->push_back(oid);
+    }
+  } catch (const std::system_error& e) {
+    ldpp_dout(dpp, 1) << "rgw_list_pool: Failed iterating pool "
+		      << ioctx.get_pool_name() << " with error "
+		      << e.what() << dendl;
+    return ceph::from_error_code(e.code());
   }
 
   marker = iter.get_cursor().to_str();

@@ -354,6 +354,10 @@ protected:
   virtual ~ImageRequestBase() {
   }
 
+  virtual bool open_read_only() const {
+    return false;
+  }
+
   virtual bool skip_get_info() const {
     return false;
   }
@@ -428,8 +432,13 @@ private:
     librbd::RBD rbd;
     auto aio_completion = utils::create_aio_completion<
       ImageRequestBase, &ImageRequestBase::handle_open_image>(this);
-    rbd.aio_open(m_io_ctx, m_image, m_image_name.c_str(), nullptr,
-                 aio_completion);
+    if (open_read_only()) {
+      rbd.aio_open_read_only(m_io_ctx, m_image, m_image_name.c_str(), nullptr,
+                             aio_completion);
+    } else {
+      rbd.aio_open(m_io_ctx, m_image, m_image_name.c_str(), nullptr,
+                   aio_completion);
+    }
   }
 
   void handle_open_image(int r) {
@@ -603,6 +612,10 @@ public:
   }
 
 protected:
+  bool open_read_only() const override {
+    return true;
+  }
+
   bool skip_get_info() const override {
     return true;
   }
@@ -1582,11 +1595,8 @@ int execute_status(const po::variables_map &vm,
     }
 
     // dump per-image status
-    librados::IoCtx default_ns_io_ctx;
-    default_ns_io_ctx.dup(io_ctx);
-    default_ns_io_ctx.set_namespace("");
     std::vector<librbd::mirror_peer_site_t> mirror_peers;
-    utils::get_mirror_peer_sites(default_ns_io_ctx, &mirror_peers);
+    utils::get_mirror_peer_sites(io_ctx, &mirror_peers);
 
     std::map<std::string, std::string> peer_mirror_uuids_to_name;
     utils::get_mirror_peer_mirror_uuids_to_names(mirror_peers,

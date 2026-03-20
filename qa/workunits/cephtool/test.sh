@@ -609,6 +609,26 @@ function test_auth()
   ceph auth del client.xx
   expect_false ceph auth get client.xx
 
+  # test rotation
+  ceph auth get-or-create client.admin2 mon 'allow *'
+  ceph auth get client.admin2 >> keyring1
+  env CEPH_KEYRING=keyring1 ceph -n client.admin2 auth get client.admin2 >> keyring2
+  # they are the same:
+  expect_true diff -au keyring1 keyring2
+  # rotate itself
+  env CEPH_KEYRING=keyring1 ceph -n client.admin2 auth rotate client.admin2 >> keyring3
+  # only the key has changed:
+  diff -au keyring1 keyring3 | grep -E '^[-+][^-+]' | expect_false grep -v key
+  # the key in keyring1 no longer works:
+  expect_false env CEPH_KEYRING=keyring1 ceph -n client.admin2 auth get client.admin2
+  # the key in keyring3 should work:
+  expect_true env CEPH_KEYRING=keyring3 ceph -n client.admin2 auth get client.admin2
+  # now verify the key from `auth get` matches what rotate produced:
+  expect_true ceph auth get client.admin2 >> keyring4
+  expect_true diff -au keyring3 keyring4
+  expect_true ceph auth rm client.admin2
+  rm keyring[1234]
+
   # (almost) interactive mode
   echo -e 'auth add client.xx mon "allow *" osd "allow *"\n' | ceph
   ceph auth get client.xx
@@ -855,6 +875,47 @@ function without_test_dup_command()
   fi
 }
 
+function test_tell_output_file()
+{
+  name="$1"
+  shift
+
+  # Test --daemon-output-file
+  # N.B.: note this only works if $name is on the same node as this script!
+  J=$(ceph tell --format=json --daemon-output-file=/tmp/foo "$name" version)
+  expect_true jq -e '.path == "/tmp/foo"' <<<"$J"
+  expect_true test -e /tmp/foo
+  # only one line of json
+  expect_true sed '2q1' < /tmp/foo > /dev/null
+  expect_true jq -e '.version | length > 0' < /tmp/foo
+  rm -f /tmp/foo
+
+  J=$(ceph tell --format=json-pretty --daemon-output-file=/tmp/foo "$name" version)
+  expect_true jq -e '.path == "/tmp/foo"' <<<"$J"
+  expect_true test -e /tmp/foo
+  # more than one line of json
+  expect_false sed '2q1' < /tmp/foo > /dev/null
+  expect_true jq -e '.version | length > 0' < /tmp/foo
+  rm -f /tmp/foo
+
+  # Test --daemon-output-file=:tmp:
+  J=$(ceph tell --format=json --daemon-output-file=":tmp:" "$name" version)
+  path=$(jq -r .path <<<"$J")
+  expect_true test -e "$path"
+  # only one line of json
+  expect_true sed '2q1' < "$path" > /dev/null
+  expect_true jq -e '.version | length > 0' < "$path"
+  rm -f "$path"
+
+  J=$(ceph tell --format=json-pretty --daemon-output-file=":tmp:" "$name" version)
+  path=$(jq -r .path <<<"$J")
+  expect_true test -e "$path"
+  # only one line of json
+  expect_false sed '2q1' < "$path" > /dev/null
+  expect_true jq -e '.version | length > 0' < "$path"
+  rm -f "$path"
+}
+
 function test_mds_tell()
 {
   local FS_NAME=cephfs
@@ -896,6 +957,8 @@ function test_mds_tell()
   done
   echo New GIDs: $new_mds_gids
 
+  test_tell_output_file mds."$FS_NAME":0
+
   remove_all_fs
   ceph osd pool delete fs_data fs_data --yes-i-really-really-mean-it
   ceph osd pool delete fs_metadata fs_metadata --yes-i-really-really-mean-it
@@ -912,6 +975,11 @@ function test_mon_mds()
 
   ceph fs set $FS_NAME cluster_down true
   ceph fs set $FS_NAME cluster_down false
+
+  ceph fs set $FS_NAME max_mds 2
+  ceph fs get $FS_NAME | expect_true grep -P -q 'max_mds\t2'
+  ceph fs set $FS_NAME down false
+  ceph fs get $FS_NAME | expect_true grep -P -q 'max_mds\t2'
 
   ceph mds compat rm_incompat 4
   ceph mds compat rm_incompat 4
@@ -2628,6 +2696,8 @@ function test_mon_tell()
     ceph_watch_wait "${m} \[DBG\] from.*cmd='sessions' args=\[\]: dispatch"
   done
   expect_false ceph tell mon.foo version
+
+  test_tell_output_file mon.0
 }
 
 function test_mon_ping()

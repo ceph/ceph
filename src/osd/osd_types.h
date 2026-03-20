@@ -4747,6 +4747,8 @@ struct pg_missing_item {
     set_delete(is_delete);
     if (old_style)
       clean_regions.mark_fully_dirty();
+    if (have == eversion_t())
+      clean_regions.mark_object_new();
   }
 
   void encode(ceph::buffer::list& bl, uint64_t features) const {

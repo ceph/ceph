@@ -21,20 +21,19 @@
 class MMDSQuiesceDbListing final : public MMDSOp {
 protected:
   MMDSQuiesceDbListing() : MMDSOp{MSG_MDS_QUIESCE_DB_LISTING} {}
+  MMDSQuiesceDbListing(auto&& _pl)
+    : MMDSOp{MSG_MDS_QUIESCE_DB_LISTING}
+    , peer_listing(std::forward<decltype(_pl)>(_pl))
+    {}
   ~MMDSQuiesceDbListing() final {}
 
 public:
   std::string_view get_type_name() const override { return "mds_quiesce_db_listing"; }
   void print(std::ostream& o) const override {
-
+    o << get_type_name();
   }
 
   void encode_payload(uint64_t features) override { 
-    // noop to prevent unnecessary overheads
-  }
-
-  void encode_payload_from(QuiesceDbPeerListing const& peer_listing)
-  {
     ::encode(peer_listing, payload);
   }
 
@@ -42,10 +41,10 @@ public:
     // noop to prevent unnecessary overheads
   }
 
-  void decode_payload_into(QuiesceDbPeerListing &peer_listing) const
+  void decode_payload_into(QuiesceDbPeerListing &pl) const
   {
     auto p = payload.cbegin();
-    ::decode(peer_listing, p);
+    ::decode(pl, p);
   }
 
 private:
@@ -53,4 +52,6 @@ private:
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
   template<class T, typename... Args>
   friend MURef<T> crimson::make_message(Args&&... args);
+
+  QuiesceDbPeerListing peer_listing;
 };

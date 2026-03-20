@@ -12,9 +12,15 @@ public:
   DummyAuthClientServer() {}
 
   // client
-  std::pair<std::vector<uint32_t>, std::vector<uint32_t>>
+  std::vector<uint32_t>
   get_supported_auth_methods(int peer_type) final {
-    return {{CEPH_AUTH_NONE}, {CEPH_AUTH_NONE}};
+    return {CEPH_AUTH_NONE};
+  }
+
+  std::vector<uint32_t>
+  get_supported_con_modes(int peer_type,
+			  uint32_t auth_method) final {
+    return {CEPH_CON_MODE_CRC};
   }
 
   uint32_t pick_con_mode(int peer_type,

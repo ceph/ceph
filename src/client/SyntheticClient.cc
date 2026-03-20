@@ -290,6 +290,7 @@ SyntheticClient::SyntheticClient(StandaloneClient *client, int w)
 
 void *synthetic_client_thread_entry(void *ptr)
 {
+  ceph_pthread_setname("client");
   SyntheticClient *sc = static_cast<SyntheticClient*>(ptr);
   //int r = 
   sc->run();
@@ -945,7 +946,6 @@ int SyntheticClient::start_thread()
 
   pthread_create(&thread_id, NULL, synthetic_client_thread_entry, this);
   ceph_assert(thread_id);
-  ceph_pthread_setname(thread_id, "client");
   return 0;
 }
 
@@ -1218,8 +1218,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       const char *a = t.get_string(buf, p);
       // Client users should remember their path, but since this
       // is just a synthetic client we ignore it.
-      std::string ignore;
-      client->chdir(a, ignore, perms);
+      client->chdir(a, perms);
     } else if (strcmp(op, "statfs") == 0) {
       struct statvfs stbuf;
       client->statfs("/", &stbuf, perms);

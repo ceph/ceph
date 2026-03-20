@@ -44,8 +44,7 @@ namespace ceph {
     g_assert_line = line;
     g_assert_func = func;
     g_assert_thread = (unsigned long long)pthread_self();
-    ceph_pthread_getname(pthread_self(), g_assert_thread_name,
-		       sizeof(g_assert_thread_name));
+    ceph_pthread_getname(g_assert_thread_name, sizeof(g_assert_thread_name));
 
     ostringstream tss;
     tss << ceph_clock_now();
@@ -122,8 +121,7 @@ namespace ceph {
     g_assert_line = line;
     g_assert_func = func;
     g_assert_thread = (unsigned long long)pthread_self();
-    ceph_pthread_getname(pthread_self(), g_assert_thread_name,
-		       sizeof(g_assert_thread_name));
+    ceph_pthread_getname(g_assert_thread_name, sizeof(g_assert_thread_name));
 
     BufAppender ba(g_assert_msg, sizeof(g_assert_msg));
     BackTrace *bt = new ClibBackTrace(1);
@@ -168,8 +166,7 @@ namespace ceph {
     g_assert_line = line;
     g_assert_func = func;
     g_assert_thread = (unsigned long long)pthread_self();
-    ceph_pthread_getname(pthread_self(), g_assert_thread_name,
-		       sizeof(g_assert_thread_name));
+    ceph_pthread_getname(g_assert_thread_name, sizeof(g_assert_thread_name));
 
     BackTrace *bt = new ClibBackTrace(1);
     snprintf(g_assert_msg, sizeof(g_assert_msg),
@@ -210,8 +207,7 @@ namespace ceph {
     g_assert_line = line;
     g_assert_func = func;
     g_assert_thread = (unsigned long long)pthread_self();
-    ceph_pthread_getname(pthread_self(), g_assert_thread_name,
-		       sizeof(g_assert_thread_name));
+    ceph_pthread_getname(g_assert_thread_name, sizeof(g_assert_thread_name));
 
     BufAppender ba(g_assert_msg, sizeof(g_assert_msg));
     BackTrace *bt = new ClibBackTrace(1);

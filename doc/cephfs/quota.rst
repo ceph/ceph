@@ -29,6 +29,12 @@ value::
 .. note:: Values will be strictly cast to IEC units even when SI units
    are input, e.g. 1K to 1024 bytes.
 
+.. note:: To enable a client to set a quota by modifying the corresponding
+   extended attribute, in the client's authentication capabilities the ``p``
+   flag needs to be set in addition to ``rw``. See :ref:`CephFS Client
+   Capabilities - Layout and Quota restriction (the 'p'
+   flag)<cephfs-layout-and-quota-restriction>` for more details.
+
 To view quota limit::
 
   $ getfattr -n ceph.quota.max_bytes /some/dir
@@ -45,15 +51,28 @@ To view quota limit::
    system call. Instead, a specific CephFS extended attribute can be viewed by
    running ``getfattr /some/dir -n ceph.<some-xattr>``.
 
-To remove a quota, set the value of extended attribute to ``0``::
+To remove or disable a quota, remove the respective extended attribute or set
+the value to ``0``.
+
+Utilizing remove::
+
+  $ setfattr -x ceph.quota.max_bytes /some/dir
+  $ getfattr /some/dir -n ceph.quota.max_bytes
+  /some/dir/: ceph.quota.max_bytes: No such attribute
+  $
+  $ setfattr -x ceph.quota.max_files /some/dir
+  $ getfattr /some/dir/ -n ceph.quota.max_files
+  /some/dir/: ceph.quota.max_files: No such attribute
+
+Remove by setting value to zero::
 
   $ setfattr -n ceph.quota.max_bytes -v 0 /some/dir
   $ getfattr /some/dir -n ceph.quota.max_bytes
-  dir1/: ceph.quota.max_bytes: No such attribute
+  /some/dir/: ceph.quota.max_bytes: No such attribute
   $
   $ setfattr -n ceph.quota.max_files -v 0 /some/dir
-  $ getfattr dir1/ -n ceph.quota.max_files
-  dir1/: ceph.quota.max_files: No such attribute
+  $ getfattr /some/dir/ -n ceph.quota.max_files
+  /some/dir/: ceph.quota.max_files: No such attribute
 
 Space Usage Reporting and CephFS Quotas
 ---------------------------------------

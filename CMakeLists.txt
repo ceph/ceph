@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 project(ceph
-  VERSION 19.2.0
+  VERSION 19.2.3
   LANGUAGES CXX C ASM)
 
 foreach(policy CMP0127 CMP0135)
@@ -229,6 +229,12 @@ endif()
 if(WITH_RBD AND LINUX)
   find_package(libcryptsetup 2.0.5 REQUIRED)
   set(HAVE_LIBCRYPTSETUP ${LIBCRYPTSETUP_FOUND})
+endif()
+
+# libnbd
+if(WITH_RBD AND NOT WIN32)
+  find_package(libnbd 1.0 REQUIRED)
+  set(HAVE_LIBNBD ${LIBNBD_FOUND})
 endif()
 
 include(CMakeDependentOption)
@@ -679,6 +685,11 @@ endif()
 
 if(WITH_RADOSGW AND WITH_RADOSGW_LUA_PACKAGES)
   list(APPEND BOOST_COMPONENTS filesystem)
+endif()
+
+if(WITH_LIBCEPHFS OR WITH_FUSE)
+  find_package(ICU REQUIRED COMPONENTS uc i18n)
+  list(APPEND BOOST_COMPONENTS locale)
 endif()
 
 set(Boost_USE_MULTITHREADED ON)

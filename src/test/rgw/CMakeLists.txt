@@ -35,7 +35,6 @@ target_link_libraries(ceph_test_rgw_d4n_directory PRIVATE
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
   )
-  target_link_libraries(ceph_test_rgw_d4n_directory PRIVATE spawn)
 install(TARGETS ceph_test_rgw_d4n_directory DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
   
@@ -54,7 +53,7 @@ target_link_libraries(ceph_test_rgw_d4n_filter PRIVATE
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
   )
-  target_link_libraries(ceph_test_rgw_d4n_filter PRIVATE spawn)
+  target_link_libraries(ceph_test_rgw_d4n_filter PRIVATE Boost::context)
 install(TARGETS ceph_test_rgw_d4n_filter DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 

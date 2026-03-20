@@ -128,12 +128,14 @@ Packages take hours to build. Use those hours to create the Release Notes and An
 
 See `the Ceph Tracker wiki page that explains how to write the release notes <https://tracker.ceph.com/projects/ceph-releases/wiki/HOWTO_write_the_release_notes>`_.
 
+.. _Signing and Publishing the Build:
+
 4. Signing and Publishing the Build
 ===================================
 
 #. Obtain the sha1 of the version commit from the `build job <https://jenkins.ceph.com/view/all/job/ceph>`_ or the ``sha1`` file created by the `ceph-setup <https://jenkins.ceph.com/job/ceph-setup/>`_ job.
 
-#. Download the packages from chacra.ceph.com to the signing virtual machine. These packages get downloaded to ``/opt/repos`` where the `Sepia Lab Long Running (Ceph) Cluster <https://wiki.sepia.ceph.com/doku.php?id=services:longrunningcluster>`_ is mounted.
+#. Download the packages from chacra.ceph.com to the signing virtual machine. These packages get downloaded to ``/opt/repos`` where the `Sepia Lab Long Running (Ceph) Cluster <https://wiki.sepia.ceph.com/doku.php?id=services:longrunningcluster>`_ is mounted.  Note: this step will also run a command to transfer the source tarballs from chacra.ceph.com to download.ceph.com directly, by ssh'ing to download.ceph.com and running /home/signer/bin/get-tarballs.sh.
 
    .. prompt:: bash $
 
@@ -201,25 +203,54 @@ See `the Ceph Tracker wiki page that explains how to write the release notes <ht
 
       etc...
 
-5. Publish the packages to download.ceph.com:
+#. Publish the packages to download.ceph.com:
 
    .. prompt:: bash $
 
       sync-push ceph octopus
 
-This leaves the packages in a password-protected prerelease area
-at https://download.ceph.com/prerelease/ceph.  Verify them from there.
-When done and ready for release, mv the directories to the release
-directory (that is, "mv <whatever you're promoting> ../..".
+This leaves the packages, and the tarball, in a password-protected
+prerelease area at https://download.ceph.com/prerelease/ceph.  Verify them
+from there.  When done and ready for release, log into download.ceph.com and
+mv the directories and the tarballs from the prerelease home
+(/data/download.ceph.com/www/prerelease/ceph) to the release directory
+(/data/download.ceph.com/www).
 
 
 5. Build Containers
 ===================
 
-Start the following two jobs:
+Unlike CI builds, which have access to packages in the correct form for
+the container, release builds do not, because the build does not 
+sign the packages.  Thus, release builds do not build the containers.
+This must be done after :ref:`Signing and Publishing the Build`.
 
-#. https://2.jenkins.ceph.com/job/ceph-container-build-ceph-base-push-imgs/
-#. https://2.jenkins.ceph.com/job/ceph-container-build-ceph-base-push-imgs-arm64/
+A Jenkins job named ceph-release-containers exists so that we can
+test the images before release.  The job exists both for convenience and
+because it requires access to both x86_64 and arm64 builders.  Start the
+job manually on the Jenkins server.  This job:
+
+* builds the architecture-specific container imagess and pushes them to
+  quay.ceph.io/ceph/prerelease-amd64 and
+  quay.ceph.io/ceph/prerelease-arm64
+
+* fuses the architecture-specific images together into a 'manifest-list'
+  or 'fat' container image and pushes it to quay.ceph.io/ceph/prerelease
+
+Finally, when all appropriate testing and verification is done on the
+container images, run ``make-manifest-list.py --promote`` from the ceph
+source tree (at ``container/make-manifest-list.py``) to promote them to
+their final release location on ``quay.io/ceph/ceph`` (you must ensure
+you're logged into ``quay.io/ceph`` with appropriate permissions):
+
+    .. prompt:: bash
+
+       cd <ceph-checkout>/src/container
+       ./make-manifest-list.py --promote
+
+The --promote step should only be performed as the final step in releasing
+containers, when the container images have been tested to be good.
+
 
 6. Announce the Release
 =======================

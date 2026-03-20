@@ -495,6 +495,14 @@ struct lc_op_ctx {
       octx(env.driver), dpp(dpp), wq(wq)
     {
       obj = bucket->get_object(o.key);
+      /* once bucket versioning is enabled, the non-current entries with
+       * instance empty should have instance set to "null" to be able
+       * to correctly read its olh version entry.
+       */
+      if (o.key.instance.empty() && bucket->versioned() && !o.is_current()) {
+        rgw_obj_key& obj_key = obj->get_key();
+        obj_key.instance = "null";
+      }
     }
 
   bool next_has_same_name(const std::string& key_name) {
@@ -1118,22 +1126,17 @@ public:
       return false;
     }
     if (o.is_delete_marker()) {
-      if (oc.next_key_name) {
-	std::string nkn = *oc.next_key_name;
-	if (oc.next_has_same_name(o.key.name)) {
-	  ldpp_dout(dpp, 7) << __func__ << "(): dm-check SAME: key=" << o.key
-			   << " next_key_name: %%" << nkn << "%% "
-			   << oc.wq->thr_name() << dendl;
-	  return false;
-	} else {
-	  ldpp_dout(dpp, 7) << __func__ << "(): dm-check DELE: key=" << o.key
-			   << " next_key_name: %%" << nkn << "%% "
-			   << oc.wq->thr_name() << dendl;
-        *exp_time = real_clock::now();
-        return true;
-	}
+      if (oc.next_has_same_name(o.key.name)) {
+        ldpp_dout(dpp, 7) << __func__ << "(): dm-check SAME: key=" << o.key
+                          << " next_key_name: %%" << *oc.next_key_name << "%% "
+                          << oc.wq->thr_name() << dendl;
+        return false;
       }
-      return false;
+
+      ldpp_dout(dpp, 7) << __func__ << "(): dm-check DELE: key=" << o.key
+                        << " " << oc.wq->thr_name() << dendl;
+      *exp_time = real_clock::now();
+      return true;
     }
 
     auto& mtime = o.meta.mtime;
@@ -1183,7 +1186,7 @@ public:
 		       << " " << oc.wq->thr_name() << dendl;
     } else {
       /* ! o.is_delete_marker() */
-      r = remove_expired_obj(oc.dpp, oc, !oc.bucket->versioned(),
+      r = remove_expired_obj(oc.dpp, oc, !oc.bucket->versioning_enabled(),
                              {rgw::notify::ObjectExpirationCurrent,
                               rgw::notify::LifecycleExpirationDelete});
       if (r < 0) {
@@ -1363,9 +1366,9 @@ public:
   int delete_tier_obj(lc_op_ctx& oc) {
     int ret = 0;
 
-    /* If bucket is versioned, create delete_marker for current version
+    /* If bucket has versioning enabled, create delete_marker for current version
      */
-    if (! oc.bucket->versioned()) {
+    if (! oc.bucket->versioning_enabled()) {
       ret =
           remove_expired_obj(oc.dpp, oc, true, {rgw::notify::ObjectTransition});
       ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key
@@ -1395,9 +1398,10 @@ public:
 
   int transition_obj_to_cloud(lc_op_ctx& oc) {
     int ret{0};
-    /* If CurrentVersion object, remove it & create delete marker */
+    /* If CurrentVersion object & bucket has versioning enabled, remove it &
+     * create delete marker */
     bool delete_object = (!oc.tier->retain_head_object() ||
-                     (oc.o.is_current() && oc.bucket->versioned()));
+                     (oc.o.is_current() && oc.bucket->versioning_enabled()));
 
     /* notifications */
     auto& bucket = oc.bucket;
@@ -2467,7 +2471,7 @@ void RGWLC::start_processor()
   for (int ix = 0; ix < maxw; ++ix) {
     auto worker  =
       std::make_unique<RGWLC::LCWorker>(this /* dpp */, cct, this, ix);
-    worker->create((string{"lifecycle_thr_"} + to_string(ix)).c_str());
+    worker->create((string{"rgw_lc_"} + to_string(ix)).c_str());
     workers.emplace_back(std::move(worker));
   }
 }
@@ -2661,18 +2665,17 @@ int RGWLC::set_bucket_config(rgw::sal::Bucket* bucket,
   return ret;
 }
 
-int RGWLC::remove_bucket_config(rgw::sal::Bucket* bucket,
-                                const rgw::sal::Attrs& bucket_attrs,
-				bool merge_attrs)
+int RGWLC::remove_bucket_config(const DoutPrefixProvider* dpp, optional_yield y,
+                                rgw::sal::Bucket* bucket, bool update_attrs)
 {
-  rgw::sal::Attrs attrs = bucket_attrs;
   rgw_bucket& b = bucket->get_key();
   int ret{0};
 
-  if (merge_attrs) {
-    attrs.erase(RGW_ATTR_LC);
-    ret = bucket->merge_and_store_attrs(this, attrs, null_yield);
-
+  // remove the lifecycle attr if present. if not, try to remove from
+  // the 'lc list' anyway
+  rgw::sal::Attrs& attrs = bucket->get_attrs();
+  if (update_attrs && attrs.erase(RGW_ATTR_LC)) {
+    ret = bucket->put_info(dpp, false, real_time(), y);
     if (ret < 0) {
       ldpp_dout(this, 0) << "RGWLC::RGWDeleteLC() failed to set attrs on bucket="
 			 << b.name << " returned err=" << ret << dendl;

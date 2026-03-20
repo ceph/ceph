@@ -572,9 +572,8 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
     }
   };
 
-  std::unique_lock image_locker{ictx->image_lock};
-  std::map<librados::snap_t, SnapInfo> snap_info = ictx->snap_info;
-  for (auto &info : snap_info) {
+  std::shared_lock image_locker{ictx->image_lock};
+  for (const auto& info : ictx->snap_info) {
     cls::rbd::ParentImageSpec parent_spec{ictx->md_ctx.get_id(),
                                           ictx->md_ctx.get_namespace(),
                                           ictx->id, info.first};
@@ -1945,8 +1944,11 @@ int Mirror<I>::image_status_summary(librados::IoCtx& io_ctx,
                                     MirrorImageStatusStates *states) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
 
+  librados::IoCtx default_ns_io_ctx;
+  default_ns_io_ctx.dup(io_ctx);
+  default_ns_io_ctx.set_namespace("");
   std::vector<cls::rbd::MirrorPeer> mirror_peers;
-  int r = cls_client::mirror_peer_list(&io_ctx, &mirror_peers);
+  int r = cls_client::mirror_peer_list(&default_ns_io_ctx, &mirror_peers);
   if (r < 0 && r != -ENOENT) {
     lderr(cct) << "failed to list mirror peers: " << cpp_strerror(r) << dendl;
     return r;

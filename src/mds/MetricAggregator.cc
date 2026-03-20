@@ -73,6 +73,7 @@ int MetricAggregator::init() {
   m_cct->get_perfcounters_collection()->add(m_perf_counters);
 
   pinger = std::thread([this]() {
+      ceph_pthread_setname("mds-ping");
       std::unique_lock locker(lock);
       while (!stopping) {
         ping_all_active_ranks();
@@ -126,7 +127,7 @@ void MetricAggregator::shutdown() {
   }
 }
 
-bool MetricAggregator::ms_dispatch2(const ref_t<Message> &m) {
+Dispatcher::dispatch_result_t MetricAggregator::ms_dispatch2(const ref_t<Message> &m) {
   dout(25) << " processing " << m << dendl;
   if (m->get_type() == MSG_MDS_METRICS &&
       m->get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_MDS) {

@@ -267,6 +267,14 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
           }
           this.bucketForm.setValue(value);
           if (this.editing) {
+            // temporary fix until the s3 account management is implemented in
+            // the frontend. Disable changing the owner of the bucket in case
+            // its owned by the account.
+            // @TODO: Introduce account selection for a bucket.
+            if (!this.owners.includes(value['owner'])) {
+              this.owners.push(value['owner']);
+              this.bucketForm.get('owner').disable();
+            }
             this.isVersioningAlreadyEnabled = this.isVersioningEnabled;
             this.isMfaDeleteAlreadyEnabled = this.isMfaDeleteEnabled;
             this.setMfaDeleteValidators();
@@ -325,11 +333,15 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
       // Edit
       const versioning = this.getVersioningStatus();
       const mfaDelete = this.getMfaDeleteStatus();
+      // make the owner empty if the field is disabled.
+      // this ensures the bucket doesn't gets updated with owner when
+      // the bucket is owned by the account.
+      const owner = this.bucketForm.get('owner').disabled === true ? '' : values['owner'];
       this.rgwBucketService
         .update(
           values['bid'],
           values['id'],
-          values['owner'],
+          owner,
           versioning,
           values['encryption_enabled'],
           values['encryption_type'],

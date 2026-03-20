@@ -15,6 +15,12 @@
 
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/slist.hpp>
+#include <cstdint>
+#include <atomic>
+#include <mutex>
+#include <algorithm>
+#include <functional>
+#include <vector>
 
 #ifdef __CEPH__
 # include "include/ceph_assert.h"

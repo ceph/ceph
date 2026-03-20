@@ -7,6 +7,10 @@ Bucket Notifications
 .. versionchanged:: Squid
    A new "v2" format for Topic and Notification metadata can be enabled with
    the :ref:`feature_notification_v2` zone feature.
+   Enabling this feature after an upgrade from an older version will trigger
+   migration of the existing Topic and Notification metadata. 
+   In a greenfield deployment, the new format will be used.
+   The new format allows for the data to be synced between zones in the zonegroup.
 
 .. contents::
 
@@ -24,8 +28,9 @@ of event types or for all "Removed" and "Created" event types (which is the defa
 notification may also filter out events based on matches of the prefixes and
 suffixes of (1) the keys, (2) the metadata attributes attached to the object,
 or (3) the object tags. Regular-expression matching can also be used on these
-to create filters. There can be multiple notifications for any specific topic,
-and the same topic can used for multiple notifications.
+to create filters. Notifications and topics have a many-to-many relationship.
+A topic can receive multiple notifications and a notification could be delivered
+to multiple topics.
 
 REST API has been defined so as to provide configuration and control interfaces
 for the bucket notification mechanism.
@@ -104,21 +109,37 @@ Remove a topic by running the following command:
 
    radosgw-admin topic rm --topic={topic-name} [--tenant={tenant}]
 
+Fetch persistent topic stats (i.e. reservations, entries and size) by running the following command: 
+
+.. prompt:: bash #
+
+   radosgw-admin topic stats --topic={topic-name} [--tenant={tenant}]
+
+Dump (in JSON format) all pending bucket notifications of a persistent topic by running the following command: 
+
+.. prompt:: bash #
+
+   radosgw-admin topic dump --topic={topic-name} [--tenant={tenant}] [--max-entries={max-entries}]
+
 
 Notification Performance Statistics
 -----------------------------------
 
-- ``pubsub_event_triggered``: a running counter of events that have at least one topic associated with them
-- ``pubsub_event_lost``: a running counter of events that had topics associated with them, but that were not pushed to any of the endpoints
+- ``persistent_topic_size``: queue size in bytes. 
+- ``persistent_topic_len``: shows how many notifications are currently waiting
+  in the queue
 - ``pubsub_push_ok``: a running counter, for all notifications, of events successfully pushed to their endpoints
 - ``pubsub_push_fail``: a running counter, for all notifications, of events that failed to be pushed to their endpoints
-- ``pubsub_push_pending``: the gauge value of events pushed to an endpoint but not acked or nacked yet
+- ``pubsub_push_pending``: the gauge value of events pushed to an endpoint but
+  not acked or nacked yet. This does not include the notifications waiting in
+  the persistent queue. Only the notifications that are in flight in both
+  persistent and non-persistent cases are counted.
 
 .. note::
 
-    ``pubsub_event_triggered`` and ``pubsub_event_lost`` are incremented per
-    event on each notification, but ``pubsub_push_ok`` and ``pubsub_push_fail``
-    are incremented per push action on each notification.
+    ``pubsub_event_lost`` is incremented per event on each notification, but
+    ``pubsub_push_ok`` and ``pubsub_push_fail`` are incremented per push action
+    on each notification.
 
 Bucket Notification REST API
 ----------------------------
@@ -170,6 +191,9 @@ updating, use the name of an existing topic and different endpoint values).
    [&Attributes.entry.13.key=max_retries&Attributes.entry.13.value=<retries number>]
    [&Attributes.entry.14.key=retry_sleep_duration&Attributes.entry.14.value=<sleep seconds>]
    [&Attributes.entry.15.key=Policy&Attributes.entry.15.value=<policy-JSON-string>]
+   [&Attributes.entry.16.key=user-name&Attributes.entry.16.value=<user-name-string>]
+   [&Attributes.entry.17.key=password&Attributes.entry.17.value=<password-string>]
+   [&Attributes.entry.18.key=kafka-brokers&Attributes.entry.18.value=<kafka-broker-list>]
 
 Request parameters:
 
@@ -258,6 +282,10 @@ Request parameters:
  - user/password: This should be provided over HTTPS. If not, the config parameter `rgw_allow_notification_secrets_in_cleartext` must be `true` in order to create topics.
  - user/password: This should be provided together with ``use-ssl``. If not, the broker credentials will be sent over insecure transport.
  - mechanism: may be provided together with user/password (default: ``PLAIN``). The supported SASL mechanisms are:
+ - ``user-name``: User name to use when connecting to the Kafka broker. If both this parameter and URI user are provided then this parameter overrides the URI user.
+    The same security considerations are in place for this parameter as are for user/password.
+ - ``password``: Password to use when connecting to the Kafka broker. If both this parameter and URI password are provided then this parameter overrides the URI password.
+    The same security considerations are in place for this parameter as are for user/password.
 
   - PLAIN
   - SCRAM-SHA-256
@@ -273,6 +301,8 @@ Request parameters:
   - "none": Messages are considered "delivered" if sent to the broker.
   - "broker": Messages are considered "delivered" if acked by the broker. (This
     is the default.)
+
+ - kafka-brokers: A command-separated list of host:port of kafka brokers. These brokers (may contain a broker which is defined in kafka uri) will be added to kafka uri to support sending notifcations to a kafka cluster.
 
 .. note::
 
@@ -549,6 +579,7 @@ Valid AttributeName that can be passed:
   - mechanism: may be provided together with user/password (default: ``PLAIN``).
   - kafka-ack-level: No end2end acknowledgement is required. Messages may persist in the
     broker before being delivered to their final destinations. 
+  - kafka-brokers: Set endpoint with broker(s) as a comma-separated list of host or host:port (default port 9092).
 
 Notifications
 ~~~~~~~~~~~~~

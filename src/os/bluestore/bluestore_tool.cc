@@ -214,6 +214,25 @@ void log_dump(
   delete fs;
 }
 
+void super_dump(
+  CephContext *cct,
+  const string& path,
+  const vector<string>& devs)
+{
+  validate_path(cct, path, true);
+  BlueFS *fs = new BlueFS(cct);
+
+  add_devices(fs, cct, devs);
+  int r = fs->super_dump();
+  if (r < 0) {
+    cerr << "super_dump failed" << ": "
+         << cpp_strerror(r) << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
+  delete fs;
+}
+
 void inferring_bluefs_devices(vector<string>& devs, std::string& path)
 {
   cout << "inferring bluefs devices from bluestore path" << std::endl;
@@ -242,7 +261,7 @@ static void bluefs_import(
   }
   BlueStore bluestore(cct, path);
   KeyValueDB *db_ptr;
-  r = bluestore.open_db_environment(&db_ptr, false);
+  r = bluestore.open_db_environment(&db_ptr, false, false);
   if (r < 0) {
     cerr << "error preparing db environment: " << cpp_strerror(r) << std::endl;
     exit(EXIT_FAILURE);
@@ -278,8 +297,8 @@ int main(int argc, char **argv)
   vector<string> devs;
   vector<string> devs_source;
   string dev_target;
-  string path;
-  string action;
+  string path, path_aux;
+  string action, action_aux;
   string log_file;
   string input_file;
   string dest_file;
@@ -290,11 +309,14 @@ int main(int argc, char **argv)
   string resharding_ctrl;
   int log_level = 30;
   bool fsck_deep = false;
+  uint64_t disk_offset;
   po::options_description po_options("Options");
   po_options.add_options()
     ("help,h", "produce help message")
     (",i", po::value<string>(&osd_instance), "OSD instance. Requires access to monitor/ceph.conf")
     ("path", po::value<string>(&path), "bluestore path")
+    ("data-path", po::value<string>(&path_aux),
+      "--path alias, ignored if the latter is present")
     ("out-dir", po::value<string>(&out_dir), "output directory")
     ("input-file", po::value<string>(&input_file), "import file")
     ("dest-file", po::value<string>(&dest_file), "destination file")
@@ -310,6 +332,9 @@ int main(int argc, char **argv)
     ("yes-i-really-really-mean-it", "additional confirmation for dangerous commands")
     ("sharding", po::value<string>(&new_sharding), "new sharding to apply")
     ("resharding-ctrl", po::value<string>(&resharding_ctrl), "gives control over resharding procedure details")
+    ("op", po::value<string>(&action_aux),
+      "--command alias, ignored if the latter is present")
+    ("offset", po::value<uint64_t>(&disk_offset), "disk location")
     ;
   po::options_description po_positional("Positional options");
   po_positional.add_options()
@@ -328,9 +353,11 @@ int main(int argc, char **argv)
         "bluefs-bdev-new-wal, "
         "bluefs-bdev-migrate, "
         "show-label, "
+        "show-label-at, "
         "set-label-key, "
         "rm-label-key, "
         "prime-osd-dir, "
+        "bluefs-super-dump, "
         "bluefs-log-dump, "
         "free-dump, "
         "free-score, "
@@ -361,6 +388,26 @@ int main(int argc, char **argv)
     std::cerr << e.what() << std::endl;
     exit(EXIT_FAILURE);
   }
+  if (action != action_aux && !action.empty() && !action_aux.empty()) {
+    std::cerr
+      << " Ambiguous --op and --command options, please provide a single one."
+      << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  if (action.empty()) {
+    action.swap(action_aux);
+  }
+  if (!path_aux.empty()) {
+    if (path.empty()) {
+      path.swap(path_aux);
+    } else if (path != path_aux) {
+      std::cerr
+	<< " Ambiguous --data-path and --path options, please provide a single one."
+	<< std::endl;
+      exit(EXIT_FAILURE);
+    }
+  };
+
   // normalize path (remove ending '/' if any)
   if (path.size() > 1 && *(path.end() - 1) == '/') {
     path.resize(path.size() - 1);
@@ -475,8 +522,15 @@ int main(int argc, char **argv)
     if (devs.empty())
       inferring_bluefs_devices(devs, path);
   }
+  if (action == "show-label-at") {
+    if (devs.empty()) {
+      cerr << "must specify bluestore raw device" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+  }
   if (action == "bluefs-export" || 
       action == "bluefs-import" || 
+      action == "bluefs-super-dump" ||
       action == "bluefs-log-dump") {
     if (path.empty()) {
       cerr << "must specify bluestore path" << std::endl;
@@ -696,18 +750,58 @@ int main(int argc, char **argv)
   else if (action == "show-label") {
     JSONFormatter jf(true);
     jf.open_object_section("devices");
+    bool any_success = false;
     for (auto& i : devs) {
-      bluestore_bdev_label_t label;
-      int r = BlueStore::read_bdev_label(cct.get(), i, &label);
-      if (r < 0) {
-	cerr << "unable to read label for " << i << ": "
-	     << cpp_strerror(r) << std::endl;
-	exit(EXIT_FAILURE);
-      }
       jf.open_object_section(i.c_str());
-      label.dump(&jf);
+      bluestore_bdev_label_t label;
+      std::vector<uint64_t> valid_positions;
+      int r = BlueStore::read_bdev_label(cct.get(), i, &label, &valid_positions);
+      if (r < 0) {
+        cerr << "unable to read label for " << i << ": "
+             << cpp_strerror(r) << std::endl;
+      } else {
+        any_success = true;
+        label.dump(&jf);
+        jf.open_array_section("locations");
+        for (int64_t pos : valid_positions) {
+          jf.dump_format("", "0x%llx", pos);
+        }
+        jf.close_section();
+      }
       jf.close_section();
     }
+    jf.close_section();
+    jf.flush(cout);
+    if (!any_success) {
+      exit(EXIT_FAILURE);
+    }
+  }
+  else if (action == "show-label-at") {
+    JSONFormatter jf(true);
+    bluestore_bdev_label_t label;
+    bool valid_offset = false;
+    for (auto o : bdev_label_positions) {
+      if (disk_offset == o) {
+        valid_offset = true;
+        break;
+      }
+    }
+    if (!valid_offset) {
+      cerr << "Suspicious offset: " << disk_offset
+           << ", expected locations: " << bdev_label_positions
+           << std::endl;
+    }
+    int r = BlueStore::read_bdev_label_at_pos(cct.get(), devs[0], disk_offset, &label);
+    if (r < 0) {
+      cerr << "unable to read label for " << devs[0] << ": "
+           << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    jf.open_object_section(devs[0].c_str());
+    label.dump(&jf);
+    jf.open_array_section("locations");
+    jf.dump_format("", "0x%llx", disk_offset);
+    jf.close_section();
     jf.close_section();
     jf.flush(cout);
   }
@@ -902,6 +996,8 @@ int main(int argc, char **argv)
     delete fs;
   } else if (action == "bluefs-log-dump") {
     log_dump(cct.get(), path, devs);
+  } else if (action == "bluefs-super-dump") {
+    super_dump(cct.get(), path, devs);
   } else if (action == "bluefs-bdev-new-db" || action == "bluefs-bdev-new-wal") {
     map<string, int> cur_devs_map;
     bool need_db = action == "bluefs-bdev-new-db";
@@ -1081,7 +1177,7 @@ int main(int argc, char **argv)
       }
       return r;
     }
-  } else  if (action == "free-dump" || action == "free-score" || action == "fragmentation") {
+  } else  if (action == "free-dump" || action == "free-score" || action == "free-fragmentation") {
     AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
     ceph_assert(admin_socket);
     std::string action_name = action == "free-dump" ? "dump" :
@@ -1168,7 +1264,7 @@ int main(int argc, char **argv)
 	exit(EXIT_FAILURE);
       }
     }
-    int r = bluestore.open_db_environment(&db_ptr, true);
+    int r = bluestore.open_db_environment(&db_ptr, false, true);
     if (r < 0) {
       cerr << "error preparing db environment: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
@@ -1186,7 +1282,7 @@ int main(int argc, char **argv)
   } else if (action == "show-sharding") {
     BlueStore bluestore(cct.get(), path);
     KeyValueDB *db_ptr;
-    int r = bluestore.open_db_environment(&db_ptr, false);
+    int r = bluestore.open_db_environment(&db_ptr, false, false);
     if (r < 0) {
       cerr << "error preparing db environment: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);

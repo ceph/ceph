@@ -36,37 +36,37 @@ void RGWOp_Account_Create::execute(optional_yield y)
   RESTArgs::get_string(s, "name", "", &op_state.account_name);
   RESTArgs::get_string(s, "email", "", &op_state.email);
 
-  uint32_t max_users = 0;
+  int32_t max_users = 0;
   bool has_max_users = false;
-  RESTArgs::get_uint32(s, "max-users", 0, &max_users, &has_max_users);
+  RESTArgs::get_int32(s, "max-users", 0, &max_users, &has_max_users);
   if (has_max_users) {
     op_state.max_users = max_users;
   }
 
-  uint32_t max_roles = 0;
+  int32_t max_roles = 0;
   bool has_max_roles = false;
-  RESTArgs::get_uint32(s, "max-roles", 0, &max_roles, &has_max_roles);
+  RESTArgs::get_int32(s, "max-roles", 0, &max_roles, &has_max_roles);
   if (has_max_roles) {
     op_state.max_roles = max_roles;
   }
 
-  uint32_t max_groups = 0;
+  int32_t max_groups = 0;
   bool has_max_groups = false;
-  RESTArgs::get_uint32(s, "max-groups", 0, &max_groups, &has_max_groups);
+  RESTArgs::get_int32(s, "max-groups", 0, &max_groups, &has_max_groups);
   if (has_max_groups) {
     op_state.max_groups = max_groups;
   }
 
-  uint32_t max_access_keys = 0;
+  int32_t max_access_keys = 0;
   bool has_max_access_keys = false;
-  RESTArgs::get_uint32(s, "max-access-keys", 0, &max_access_keys, &has_max_access_keys);
+  RESTArgs::get_int32(s, "max-access-keys", 0, &max_access_keys, &has_max_access_keys);
   if (has_max_access_keys) {
     op_state.max_access_keys = max_access_keys;
   }
 
-  uint32_t max_buckets = 0;
+  int32_t max_buckets = 0;
   bool has_max_buckets = false;
-  RESTArgs::get_uint32(s, "max-buckets", 0, &max_buckets, &has_max_buckets);
+  RESTArgs::get_int32(s, "max-buckets", 0, &max_buckets, &has_max_buckets);
   if (has_max_buckets) {
     op_state.max_buckets = max_buckets;
   }
@@ -128,37 +128,37 @@ void RGWOp_Account_Modify::execute(optional_yield y)
   RESTArgs::get_string(s, "name", "", &op_state.account_name);
   RESTArgs::get_string(s, "email", "", &op_state.email);
 
-  uint32_t max_users = 0;
+  int32_t max_users = 0;
   bool has_max_users = false;
-  RESTArgs::get_uint32(s, "max-users", 0, &max_users, &has_max_users);
+  RESTArgs::get_int32(s, "max-users", 0, &max_users, &has_max_users);
   if (has_max_users) {
     op_state.max_users = max_users;
   }
 
-  uint32_t max_roles = 0;
+  int32_t max_roles = 0;
   bool has_max_roles = false;
-  RESTArgs::get_uint32(s, "max-roles", 0, &max_roles, &has_max_roles);
+  RESTArgs::get_int32(s, "max-roles", 0, &max_roles, &has_max_roles);
   if (has_max_roles) {
     op_state.max_roles = max_roles;
   }
 
-  uint32_t max_groups = 0;
+  int32_t max_groups = 0;
   bool has_max_groups = false;
-  RESTArgs::get_uint32(s, "max-groups", 0, &max_groups, &has_max_groups);
+  RESTArgs::get_int32(s, "max-groups", 0, &max_groups, &has_max_groups);
   if (has_max_groups) {
     op_state.max_groups = max_groups;
   }
 
-  uint32_t max_access_keys = 0;
+  int32_t max_access_keys = 0;
   bool has_max_access_keys = false;
-  RESTArgs::get_uint32(s, "max-access-keys", 0, &max_access_keys, &has_max_access_keys);
+  RESTArgs::get_int32(s, "max-access-keys", 0, &max_access_keys, &has_max_access_keys);
   if (has_max_access_keys) {
     op_state.max_access_keys = max_access_keys;
   }
 
-  uint32_t max_buckets = 0;
+  int32_t max_buckets = 0;
   bool has_max_buckets = false;
-  RESTArgs::get_uint32(s, "max-buckets", 0, &max_buckets, &has_max_buckets);
+  RESTArgs::get_int32(s, "max-buckets", 0, &max_buckets, &has_max_buckets);
   if (has_max_buckets) {
     op_state.max_buckets = max_buckets;
   }

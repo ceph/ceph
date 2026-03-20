@@ -23,9 +23,7 @@ fi
 DIR=/tmp/install-deps.$$
 trap "rm -fr $DIR" EXIT
 mkdir -p $DIR
-if test $(id -u) != 0 ; then
-    SUDO=sudo
-fi
+wrap_sudo
 # enable UTF-8 encoding for programs like pip that expect to
 # print more than just ascii chars
 export LC_ALL=C.UTF-8
@@ -191,11 +189,6 @@ function install_boost_on_ubuntu {
                               grep -e 'libboost[0-9].[0-9]\+-dev' |
                               cut -d' ' -f2 |
                               cut -d'.' -f1,2)
-    if test -n "$installed_ver"; then
-        if echo "$installed_ver" | grep -q "^$boost_ver"; then
-            return
-        fi
-    fi
     local codename=$1
     local project=libboost
     local sha1=2804368f5b807ba8334b0ccfeb8af191edeb996f
@@ -212,6 +205,7 @@ function install_boost_on_ubuntu {
         ceph-libboost-date-time${boost_ver}-dev \
         ceph-libboost-filesystem${boost_ver}-dev \
         ceph-libboost-iostreams${boost_ver}-dev \
+        ceph-libboost-locale${boost_ver}-dev \
         ceph-libboost-program-options${boost_ver}-dev \
         ceph-libboost-python${boost_ver}-dev \
         ceph-libboost-random${boost_ver}-dev \
@@ -283,6 +277,20 @@ EOF
     fi
 }
 
+function setup_lab_extras_repo() {
+    # NOTE This repo should be temporary while we work to get the
+    # needed deps into EPEL, etc.
+    local baseurlprefix="http://apt-mirror.front.sepia.ceph.com/lab-extras"
+    local path="/etc/yum.repos.d/ceph-lab-extras.repo"
+    $SUDO tee "${path}" <<EOF
+[ceph-lab-extras]
+name=ceph-lab-extras-\$releasever
+baseurl=${baseurlprefix}/\$releasever
+enabled=1
+gpgcheck=0
+EOF
+}
+
 function populate_wheelhouse() {
     ci_debug "Running populate_wheelhouse() in install-deps.sh"
     local install=$1
@@ -342,13 +350,22 @@ function preload_wheels_for_tox() {
 }
 
 for_make_check=false
-if tty -s; then
+if [ "$FOR_MAKE_CHECK" ]; then
+    case "$FOR_MAKE_CHECK" in
+        true|1|yes)
+            for_make_check=true
+        ;;
+        false|0|no)
+            for_make_check=false
+        ;;
+        *)
+            echo "error: unexpected FOR_MAKE_CHECK value: ${FOR_MAKE_CHECK}"
+            exit 2
+        ;;
+    esac
+elif tty -s; then
     # interactive
     for_make_check=true
-elif [ $FOR_MAKE_CHECK ]; then
-    for_make_check=true
-else
-    for_make_check=false
 fi
 
 if [ x$(uname)x = xFreeBSDx ]; then
@@ -529,8 +546,11 @@ else
                     $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
                     $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
                     $SUDO dnf -y module enable javapackages-tools
-                elif test $ID = centos -a $MAJOR_VERSION = 9 ; then
+                elif { [ "$ID" = centos ] || [ "$ID" = rocky ]; } && [ "$MAJOR_VERSION" -ge 9 ]; then
                     $SUDO dnf config-manager --set-enabled crb
+                    if [ "$MAJOR_VERSION" -eq 10 ]; then
+                        setup_lab_extras_repo
+                    fi
                 elif test $ID = rhel -a $MAJOR_VERSION = 8 ; then
                     dts_ver=11
                     $SUDO dnf config-manager --set-enabled "codeready-builder-for-rhel-8-${ARCH}-rpms"

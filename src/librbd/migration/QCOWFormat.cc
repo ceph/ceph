@@ -8,7 +8,6 @@
 #include "include/intarith.h"
 #include "librbd/AsioEngine.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/ImageState.h"
 #include "librbd/Utils.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ReadResult.h"
@@ -637,16 +636,18 @@ private:
         [this, cct=qcow_format->m_image_ctx->cct,
          image_offset=cluster_extent.image_offset,
          image_length=cluster_extent.cluster_length, ctx=read_ctx](int r) {
-          handle_read_cluster(cct, r, image_offset, image_length, ctx);
+          handle_read_clusters(cct, r, image_offset, image_length, ctx);
         });
 
       if (cluster_extent.cluster_offset == 0) {
         // QCOW header is at offset 0, implies cluster DNE
-        log_ctx->complete(-ENOENT);
+        boost::asio::post(*qcow_format->m_image_ctx->asio_engine,
+                          [log_ctx] { log_ctx->complete(-ENOENT); });
       } else if (cluster_extent.cluster_offset == QCOW_OFLAG_ZERO) {
         // explicitly zeroed section
         read_ctx->bl.append_zero(cluster_extent.cluster_length);
-        log_ctx->complete(0);
+        boost::asio::post(*qcow_format->m_image_ctx->asio_engine,
+                          [log_ctx] { log_ctx->complete(0); });
       } else {
         // request the (sub)cluster from the cluster cache
         qcow_format->m_cluster_cache->get_cluster(
@@ -658,8 +659,8 @@ private:
     delete this;
   }
 
-  void handle_read_cluster(CephContext* cct, int r, uint64_t image_offset,
-                           uint64_t image_length, Context* on_finish) const {
+  void handle_read_clusters(CephContext* cct, int r, uint64_t image_offset,
+                            uint64_t image_length, Context* on_finish) const {
     // NOTE: treat as static function, expect object has been deleted
 
     ldout(cct, 20) << "r=" << r << ", "
@@ -844,8 +845,8 @@ void QCOWFormat<I>::open(Context* on_finish) {
 
   int r = m_source_spec_builder->build_stream(m_json_object, &m_stream);
   if (r < 0) {
-    lderr(cct) << "failed to build migration stream handler" << cpp_strerror(r)
-               << dendl;
+    lderr(cct) << "failed to build migration stream handler: "
+               << cpp_strerror(r) << dendl;
     on_finish->complete(r);
     return;
   }
@@ -1438,7 +1439,7 @@ void QCOWFormat<I>::get_image_size(uint64_t snap_id, uint64_t* size,
 }
 
 template <typename I>
-bool QCOWFormat<I>::read(
+void QCOWFormat<I>::read(
     io::AioCompletion* aio_comp, uint64_t snap_id, io::Extents&& image_extents,
     io::ReadResult&& read_result, int op_flags, int read_flags,
     const ZTracer::Trace &parent_trace) {
@@ -1453,7 +1454,7 @@ bool QCOWFormat<I>::read(
     auto snapshot_it = m_snapshots.find(snap_id);
     if (snapshot_it == m_snapshots.end()) {
       aio_comp->fail(-ENOENT);
-      return true;
+      return;
     }
 
     auto& snapshot = snapshot_it->second;
@@ -1466,8 +1467,6 @@ bool QCOWFormat<I>::read(
   auto read_request = new ReadRequest(this, aio_comp, l1_table,
                                       std::move(image_extents));
   read_request->send();
-
-  return true;
 }
 
 template <typename I>

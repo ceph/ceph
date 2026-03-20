@@ -233,6 +233,9 @@ int do_bench(librbd::Image& image, io_type_t io_type,
     return r;
   }
 
+  // seed rand() before constructing rbd_bencher
+  srand(time(NULL) % (unsigned long) -1);
+
   rbd_bencher b(&image, io_type, io_size);
 
   std::cout << "bench "
@@ -260,8 +263,6 @@ int do_bench(librbd::Image& image, io_type_t io_type,
     break;
   }
   std::cout << std::endl;
-
-  srand(time(NULL) % (unsigned long) -1);
 
   coarse_mono_time start = coarse_mono_clock::now();
   std::chrono::duration<double> last = std::chrono::duration<double>::zero();

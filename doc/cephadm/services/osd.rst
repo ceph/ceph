@@ -6,9 +6,10 @@ OSD Service
 List Devices
 ============
 
-``ceph-volume`` scans each host in the cluster from time to time in order
-to determine which devices are present and whether they are eligible to be
-used as OSDs.
+``ceph-volume`` scans each host in the cluster periodically in order
+to determine the devices that are present and responsive. It is also
+determined whether each is eligible to be used for new OSDs in a block,
+DB, or WAL role.
 
 To print a list of devices discovered by ``cephadm``, run this command:
 
@@ -31,10 +32,7 @@ Example::
   srv-03    /dev/sdc  hdd   15R0A0P7FRD6         300G  Unknown  N/A    N/A    No
   srv-03    /dev/sdd  hdd   15R0A0O7FRD6         300G  Unknown  N/A    N/A    No
 
-Using the ``--wide`` option provides all details relating to the device,
-including any reasons that the device might not be eligible for use as an OSD.
-
-In the above example you can see fields named "Health", "Ident", and "Fault".
+In the above examples you can see fields named ``Health``, ``Ident``, and ``Fault``.
 This information is provided by integration with `libstoragemgmt`_. By default,
 this integration is disabled (because `libstoragemgmt`_ may not be 100%
 compatible with your hardware).  To make ``cephadm`` include these fields,
@@ -44,9 +42,20 @@ enable cephadm's "enhanced device scan" option as follows;
 
   ceph config set mgr mgr/cephadm/device_enhanced_scan true
 
+Note that the columns reported by ``ceph orch device ls`` may vary from release to
+release.
+
+The ``--wide`` option shows device details,
+including any reasons that the device might not be eligible for use as an OSD.
+Example (Reef)::
+
+  HOST               PATH          TYPE  DEVICE ID                                      SIZE  AVAILABLE  REFRESHED  REJECT REASONS
+  davidsthubbins    /dev/sdc       hdd   SEAGATE_ST20000NM002D_ZVTBJNGC17010W339UW25    18.1T  No         22m ago    Has a FileSystem, Insufficient space (<10 extents) on vgs, LVM detected
+  nigeltufnel       /dev/sdd       hdd   SEAGATE_ST20000NM002D_ZVTBJNGC17010C3442787    18.1T  No         22m ago    Has a FileSystem, Insufficient space (<10 extents) on vgs, LVM detected
+
 .. warning::
-    Although the libstoragemgmt library performs standard SCSI inquiry calls,
-    there is no guarantee that your firmware fully implements these standards.
+    Although the ``libstoragemgmt`` library issues standard SCSI (SES) inquiry calls,
+    there is no guarantee that your hardware and firmware properly implement these standards.
     This can lead to erratic behaviour and even bus resets on some older
     hardware. It is therefore recommended that, before enabling this feature,
     you test your hardware's compatibility with libstoragemgmt first to avoid
@@ -110,7 +119,7 @@ general form of the command above:
 
    "3.64 TB"
 
-This means that the exact device size is 3.64 * 1000, or 3640GB.
+This means that the exact device size is 3.64 TB, or 3640GB.
 
 This procedure was developed by Frédéric Nass. See `this thread on the
 [ceph-users] mailing list
@@ -144,7 +153,7 @@ conditions are met:
 * The device must not contain a Ceph BlueStore OSD.
 * The device must be larger than 5 GB.
 
-Ceph will not provision an OSD on a device that is not available.
+Ceph will not provision an OSD on a device that is not *available*.
 
 Creating New OSDs
 -----------------
@@ -238,7 +247,7 @@ After running the above command:
 
 * If you add new disks to the cluster, they will automatically be used to
   create new OSDs.
-* If you remove an OSD and clean the LVM physical volume, a new OSD will be
+* When you remove an OSD and clean the LVM physical volume, a new OSD will be
   created automatically.
 
 If you want to avoid this behavior (disable automatic creation of OSD on available devices), use the ``unmanaged`` parameter:
@@ -266,26 +275,29 @@ Remove an OSD
 
 Removing an OSD from a cluster involves two steps:
 
-#. evacuating all placement groups (PGs) from the OSD
-#. removing the PG-free OSD from the cluster
+#. Evacuating all placement groups (PGs) from the OSD
+#. Removing the PG-free OSD from the cluster
 
 The following command performs these two steps:
 
 .. prompt:: bash #
 
-  ceph orch osd rm <osd_id(s)> [--replace] [--force]
+  ceph orch osd rm <osd_id(s)> [--replace] [--force] [--zap]
 
 Example:
 
 .. prompt:: bash #
 
   ceph orch osd rm 0
+  ceph orch osd rm 1138 --zap
 
 Expected output::
 
   Scheduled OSD(s) for removal
 
-OSDs that are not safe to destroy will be rejected.
+OSDs that are not safe to destroy will be rejected.  Adding the ``--zap`` flag
+directs the orchestrator to remove all LVM and partition information from the
+OSD's drives, leaving it a blank slate for redeployment or other reuse.
 
 .. note::
     After removing OSDs, if the drives the OSDs were deployed on once again
@@ -299,10 +311,11 @@ OSDs that are not safe to destroy will be rejected.
     specs see :ref:`drivegroups`. For more info on the declarative nature of
     cephadm in reference to deploying OSDs, see :ref:`cephadm-osd-declarative`
 
-Monitoring OSD State
---------------------
+Monitoring OSD State During OSD Removal
+---------------------------------------
 
-You can query the state of OSD operation with the following command:
+You can query the state of OSD operations during the process of removing OSDS
+by running the following command:
 
 .. prompt:: bash #
 
@@ -422,11 +435,11 @@ Example command:
   ceph orch device zap my_hostname /dev/sdx
 
 .. note::
-    If the unmanaged flag is unset, cephadm automatically deploys drives that
-    match the OSDSpec.  For example, if you use the
-    ``all-available-devices`` option when creating OSDs, when you ``zap`` a
-    device the cephadm orchestrator automatically creates a new OSD in the
-    device.  To disable this behavior, see :ref:`cephadm-osd-declarative`.
+    If the ``unmanaged`` flag is not set, ``cephadm`` automatically deploys
+   drives that match the OSDSpec.  For example, if you specify the
+   ``all-available-devices`` option when creating OSDs, when you ``zap`` a
+   device the cephadm orchestrator automatically creates a new OSD in the
+   device.  To disable this behavior, see :ref:`cephadm-osd-declarative`.
 
 
 .. _osd_autotune:
@@ -478,22 +491,27 @@ for that OSD and also set a specific memory target.  For example,
 Advanced OSD Service Specifications
 ===================================
 
-:ref:`orchestrator-cli-service-spec`\s of type ``osd`` are a way to describe a
-cluster layout, using the properties of disks. Service specifications give the
-user an abstract way to tell Ceph which disks should turn into OSDs with which
-configurations, without knowing the specifics of device names and paths.
+:ref:`orchestrator-cli-service-spec`\s of type ``osd`` provide a way to use the
+properties of disks to describe a Ceph cluster's layout. Service specifications
+are an abstraction used to tell Ceph which disks it should transform into OSDs
+and which configurations to apply to those OSDs.
+:ref:`orchestrator-cli-service-spec`\s make it possible to target these disks
+for transformation into OSDs even when the Ceph cluster operator does not know
+the specific device names and paths associated with those disks.
 
-Service specifications make it possible to define a yaml or json file that can
-be used to reduce the amount of manual work involved in creating OSDs.
+:ref:`orchestrator-cli-service-spec`\s make it possible to define a ``.yaml``
+or ``.json`` file that can be used to reduce the amount of manual work involved
+in creating OSDs.
 
 .. note::
-    It is recommended that advanced OSD specs include the ``service_id`` field
-    set. The plain ``osd`` service with no service id is where OSDs created
-    using ``ceph orch daemon add`` or ``ceph orch apply osd --all-available-devices``
-    are placed. Not including a ``service_id`` in your OSD spec would mix
-    the OSDs from your spec with those OSDs and potentially overwrite services
-    specs created by cephadm to track them. Newer versions of cephadm will even
-    block creation of advanced OSD specs without the service_id present
+   We recommend that advanced OSD specs include the ``service_id`` field set.
+   OSDs created using ``ceph orch daemon add`` or ``ceph orch apply osd
+   --all-available-devices`` are placed in the plain ``osd`` service. Failing
+   to include a ``service_id`` in your OSD spec causes the Ceph cluster to mix
+   the OSDs from your spec with those OSDs, which can potentially result in the
+   overwriting of service specs created by ``cephadm`` to track them. Newer
+   versions of ``cephadm`` will even block creation of advanced OSD specs that
+   do not include the ``service_id``. 
 
 For example, instead of running the following command:
 
@@ -501,8 +519,8 @@ For example, instead of running the following command:
 
   ceph orch daemon add osd *<host>*:*<path-to-device>*
 
-for each device and each host, we can define a yaml or json file that allows us
-to describe the layout. Here's the most basic example.
+for each device and each host, we can define a ``.yaml`` or ``.json`` file that
+allows us to describe the layout. Here is the most basic example:
 
 Create a file called (for example) ``osd_spec.yml``:
 
@@ -520,17 +538,18 @@ This means :
 
 #. Turn any available device (ceph-volume decides what 'available' is) into an
    OSD on all hosts that match the glob pattern '*'. (The glob pattern matches
-   against the registered hosts from `host ls`) A more detailed section on
-   host_pattern is available below.
+   against the registered hosts from `ceph orch host ls`) See
+   :ref:`cephadm-services-placement-by-pattern-matching` for more on using
+   ``host_pattern``-matching to turn devices into OSDs.
 
-#. Then pass it to `osd create` like this:
+#. Pass ``osd_spec.yml`` to ``osd create`` by using the following command:
 
    .. prompt:: bash [monitor.1]#
 
      ceph orch apply -i /path/to/osd_spec.yml
 
-   This instruction will be issued to all the matching hosts, and will deploy
-   these OSDs.
+   This instruction is issued to all the matching hosts, and will deploy these
+   OSDs.
 
    Setups more complex than the one specified by the ``all`` filter are
    possible. See :ref:`osd_filters` for details.
@@ -621,7 +640,7 @@ To include disks that are less than or equal to 10G in size:
 
     size: ':10G'
 
-To include disks equal to or greater than 40G in size:
+To include drives equal to or greater than 666 GB in size:
 
 .. code-block:: yaml
 
@@ -686,7 +705,11 @@ Additional Options
 There are multiple optional settings you can use to change the way OSDs are deployed.
 You can add these options to the base level of an OSD spec for it to take effect.
 
-This example would deploy all OSDs with encryption enabled.
+This example deploys encrypted OSDs on all unused drives.  Note that if Linux
+MD mirroring is used for the boot, ``/var/log``, or other volumes this spec *may*
+grab replacement or added drives before you can employ them for non-OSD purposes.
+The ``unmanaged`` attribute may be set to pause automatic deployment until you
+are ready.
 
 .. code-block:: yaml
 
@@ -773,7 +796,9 @@ However, we can improve it by reducing the filters on core properties of the dri
 
 Now, we enforce all rotating devices to be declared as 'data devices' and all non-rotating devices will be used as shared_devices (wal, db)
 
-If you know that drives with more than 2TB will always be the slower data devices, you can also filter by size:
+If you know that drives larger than 2 TB should always be used as data devices,
+and drives smaller than 2 TB should always be used as WAL/DB devices, you can
+filter by size:
 
 .. code-block:: yaml
 
@@ -828,18 +853,21 @@ This can be described with two layouts.
       data_devices:
         rotational: 1
       db_devices:
-        model: MC-55-44-XZ
-        limit: 2 # db_slots is actually to be favoured here, but it's not implemented yet
+        model: MC-55-44-XZ      # Select only this model for WAL+DB offload
+        limit: 2                # Select at most two for this purpose
+      db_slots: 5               # Chop the DB device into this many slices and
+                                #  use one for each of this many HDD OSDs
     ---
     service_type: osd
     service_id: osd_spec_ssd
     placement:
       host_pattern: '*'
-    spec:
+    spec:                       # This scenario is uncommon
       data_devices:
-        model: MC-55-44-XZ
-      db_devices:
-        vendor: VendorC
+        model: MC-55-44-XZ      # Select drives of this model for OSD data
+      db_devices:               # Select drives of this brand for WAL+DB. Since the
+        vendor: VendorC         #   data devices are SAS/SATA SSDs this would make sense for NVMe SSDs
+      db_slots: 2               # Back two slower SAS/SATA SSD data devices with each NVMe slice
 
 This would create the desired layout by using all HDDs as data_devices with two SSD assigned as dedicated db/wal devices.
 The remaining SSDs(10) will be data_devices that have the 'VendorC' NVMEs assigned as dedicated db/wal devices.
@@ -895,7 +923,7 @@ You can use the 'placement' key in the layout to target certain nodes.
       data_devices:
         rotational: 1
       db_devices:
-        rotational: 0
+        rotational: 0           # All drives identified as SSDs
     ---
     service_type: osd
     service_id: disk_layout_b
@@ -982,9 +1010,8 @@ It is also possible to specify directly device paths in specific hosts like the 
 
 This can easily be done with other filters, like `size` or `vendor` as well.
 
-It's possible to specify the `crush_device_class` parameter within the
-DriveGroup spec, and it's applied to all the devices defined by the `paths`
-keyword:
+It is possible to specify a ``crush_device_class`` parameter
+to be applied to OSDs created on devices matched by the ``paths`` filter:
 
 .. code-block:: yaml
 
@@ -1038,15 +1065,108 @@ using the `paths` keyword with the following syntax:
 Activate existing OSDs
 ======================
 
-In case the OS of a host was reinstalled, existing OSDs need to be activated
-again. For this use case, cephadm provides a wrapper for :ref:`ceph-volume-lvm-activate` that
-activates all existing OSDs on a host.
+If the operating system of a host has been reinstalled, the existing OSDs
+associated with it must be activated again. ``cephadm`` provides a wrapper for
+:ref:`ceph-volume-lvm-activate` that activates all existing OSDs on a host.
 
-.. prompt:: bash #
+The following procedure explains how to use ``cephadm`` to activate OSDs on a
+host that has recently had its operating system reinstalled.
 
-  ceph cephadm osd activate <host>...
 
-This will scan all existing disks for OSDs and deploy corresponding daemons.
+This procedure assumes the existence of two hosts: ``ceph01`` and ``ceph04``.
+
+- ``ceph01`` is a host equipped with an admin keyring. 
+- ``ceph04`` is the host with the recently reinstalled operating system.
+
+#. Install ``cephadm`` and ``podman`` on the host. The command for installing
+   these utilities will depend upon the operating system of the host.
+
+#. Retrieve the public key.
+
+   .. prompt:: bash ceph01#
+      
+      ceph cephadm get-pub-key > ceph.pub
+
+#. Copy the key (from ``ceph01``) to the freshly reinstalled host (``ceph04``):
+
+   .. prompt:: bash ceph01#
+
+      ssh-copy-id -f -i ceph.pub root@<hostname>
+
+#. Retrieve the private key in order to test the connection:
+
+   .. prompt:: bash ceph01#
+
+      ceph config-key get mgr/cephadm/ssh_identity_key > ceph-private.key
+
+#. From ``ceph01``, Modify the permissions of ``ceph-private.key``:
+
+   .. prompt:: bash ceph01#
+
+      chmod 400 ceph-private.key
+
+#. Log in to ``ceph04`` from ``ceph01`` to test the connection and
+   configuration:
+
+   .. prompt:: bash ceph01#
+
+      ssh -i ceph-private.key ceph04
+
+#. While logged into ``ceph01``, remove ``ceph.pub`` and ``ceph-private.key``:
+
+   .. prompt:: bash ceph01#
+
+      rm ceph.pub ceph-private.key
+
+#. If you run your own container registry, instruct the orchestrator to log in
+   to each host in it: 
+
+   .. prompt:: bash #
+
+      ceph cephadm registry-login my-registry.domain <user> <password>
+
+   When the orchestrator performs the registry login, it will attempt to deploy
+   any missing daemons to the host. This includes ``crash``, ``node-exporter``,
+   and any other daemons that the host ran before its operating system was
+   reinstalled.
+
+   To be a bit clearer, ``cephadm`` attempts to deploy missing daemons to all
+   hosts that have been put under management by cephadm when ``cephadm``
+   determines that the hosts are online. In this context, "online" means
+   "present in the output of the ``ceph orch host ls`` command and possessing a
+   status that is not ``offline`` or ``maintenance``. If it is necessary to log
+   in to the registry in order to pull the images for the missing daemons, then
+   the deployment of the missing daemons will fail until the process of logging
+   in to the registry has been completed.
+
+   .. note:: This step is not necessary if you do not run your own container
+             registry. If your host is still in the "host list", which can be
+             retrieved by running the command ``ceph orch host ls``, you do not
+             need to run this command.
+
+#. Activate the OSDs on the host that has recently had its operating system
+   reinstalled:
+
+   .. prompt:: bash #
+
+      ceph cephadm osd activate ceph04
+
+   This command causes ``cephadm`` to scan all existing disks for OSDs. This
+   command will make ``cephadm`` deploy any missing daemons to the host
+   specified. 
+  
+
+
+*This procedure was developed by Eugen Block in Feburary of 2025, and a blog
+post pertinent to its development can be seen here:*
+`Eugen Block's "Cephadm: Activate existing OSDs" blog post <https://heiterbiswolkig.blogs.nde.ag/2025/02/06/cephadm-activate-existing-osds/>`_.
+
+.. note::
+    It is usually not safe to run ``ceph orch restart osd.myosdservice`` on a
+    running cluster, as attention is not paid to CRUSH failure domains, and
+    parallel OSD restarts may lead to temporary data unavailability or in rare
+    cases even data loss.
+
 
 Further Reading
 ===============

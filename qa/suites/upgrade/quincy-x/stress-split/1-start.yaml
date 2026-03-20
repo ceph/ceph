@@ -1,3 +1,25 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - do not have an application enabled
+      - application not enabled
+      - or freeform for custom applications
+      - POOL_APP_NOT_ENABLED
+      - is down
+      - OSD_DOWN
+      - mons down
+      - mon down
+      - MON_DOWN
+      - out of quorum
+      - PG_AVAILABILITY
+      - PG_DEGRADED
+      - Reduced data availability
+      - Degraded data redundancy
+      - pg .* is stuck inactive
+      - pg .* is .*degraded
+      - FS_DEGRADED
+      - OSDMAP_FLAGS
+      - OSD_UPGRADE_FINISHED
 tasks:
 - install:
     branch: quincy
@@ -58,28 +80,28 @@ first-half-sequence:
       - ceph orch ps
 
       - echo wait for minority of mons to upgrade
-      - while ! ceph mon versions | grep $sha1 ; do sleep 2 ; done
+      - while ! ceph mon versions | grep $sha1 && ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error; do sleep 2 ; done
       - ceph orch ps
       - ceph orch upgrade pause
       - sleep 60
       - ceph orch upgrade resume
 
       - echo wait for majority of mons to upgrade
-      - "while ! ceph mon versions | grep $sha1 | egrep ': [23]' ; do sleep 2 ; done"
+      - "while ! ceph mon versions | grep $sha1 | egrep ': [23]' && ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error; do sleep 2 ; done"
       - ceph orch ps
       - ceph orch upgrade pause
       - sleep 60
       - ceph orch upgrade resume
 
       - echo wait for all mons to upgrade
-      - "while ! ceph mon versions | grep $sha1 | grep ': 3' ; do sleep 2 ; done"
+      - "while ! ceph mon versions | grep $sha1 | grep ': 3' && ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error; do sleep 2 ; done"
       - ceph orch ps
       - ceph orch upgrade pause
       - sleep 60
       - ceph orch upgrade resume
 
       - echo wait for half of osds to upgrade
-      - "while ! ceph osd versions | grep $sha1 | egrep ': [45678]'; do sleep 2 ; done"
+      - "while ! ceph osd versions | grep $sha1 | egrep ': [45678]' && ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error; do sleep 2 ; done"
       - ceph orch upgrade pause
       - ceph orch ps
 

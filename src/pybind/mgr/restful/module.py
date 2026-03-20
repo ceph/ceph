@@ -12,6 +12,7 @@ import threading
 import traceback
 import socket
 import fcntl
+from typing import cast
 
 from . import common
 from . import context
@@ -23,7 +24,7 @@ from pecan.rest import RestController
 from werkzeug.serving import make_server, make_ssl_devcert
 
 from .hooks import ErrorHook
-from mgr_module import MgrModule, CommandResult, NotifyType
+from mgr_module import MgrModule, CommandResult, NotifyType, Option
 from mgr_util import build_url
 
 
@@ -193,10 +194,18 @@ class CommandsRequest(object):
 
 class Module(MgrModule):
     MODULE_OPTIONS = [
-        {'name': 'server_addr'},
-        {'name': 'server_port'},
-        {'name': 'key_file'},
-        {'name': 'enable_auth', 'type': 'bool', 'default': True},
+        Option(name='server_addr'),
+        Option(name='server_port'),
+        Option(name='key_file'),
+        Option(name='enable_auth',
+               type='bool',
+               default=True),
+        Option(name='max_requests',
+               type='int',
+               default=500,
+               desc='Maximum number of requests to keep in memory. '
+                    'When new request comes in, the oldest request will be removed if the number of requests exceeds the max request number. '
+                    'if un-finished request is removed, error message will be logged in the ceph-mgr log.'),
     ]
 
     COMMANDS = [
@@ -243,6 +252,7 @@ class Module(MgrModule):
 
         self.stop_server = False
         self.serve_event = threading.Event()
+        self.max_requests = cast(int, self.get_localized_module_option('max_requests', 500))
 
 
     def serve(self):
@@ -599,6 +609,16 @@ class Module(MgrModule):
         with self.requests_lock:
             request = CommandsRequest(_request)
             self.requests.append(request)
+            if len(self.requests) > self.max_requests:
+                req_to_trim = 0
+                for i, req in enumerate(self.requests):
+                    if req.is_finished():
+                        self.log.error("Trimmed one finished request due to exceeded maximum requests limit")
+                        req_to_trim = i
+                        break
+                    else:
+                        self.log.error("Trimmed the oldest unfinished request due to exceeded maximum requests limit")
+                self.requests.pop(req_to_trim)
         if kwargs.get('wait', 0):
             while not request.is_finished():
                 time.sleep(0.001)

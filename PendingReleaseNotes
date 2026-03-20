@@ -1,10 +1,119 @@
+>=20.0.0
+
+* RGW: Lua scripts will not run against health checks.
+* RGW: Adding missing quotes to the ETag values returned by S3 CopyPart,
+  PostObject and CompleteMultipartUpload responses.
+* RGW: IAM policy evaluation now supports conditions ArnEquals and ArnLike, along
+  with their Not and IfExists variants.
+
+* RBD: All Python APIs that produce timestamps now return "aware" `datetime`
+  objects instead of "naive" ones (i.e. those including time zone information
+  instead of those not including it).  All timestamps remain to be in UTC but
+  including `timezone.utc` makes it explicit and avoids the potential of the
+  returned timestamp getting misinterpreted -- in Python 3, many `datetime`
+  methods treat "naive" `datetime` objects as local times.
+* RBD: `rbd group info` and `rbd group snap info` commands are introduced to
+  show information about a group and a group snapshot respectively.
+* RBD: `rbd group snap ls` output now includes the group snap IDs. The header
+  of the column showing the state of a group snapshot in the unformatted CLI
+  output is changed from 'STATUS' to 'STATE'. The state of a group snapshot
+  that was shown as 'ok' is now shown as 'complete', which is more descriptive.
+* Based on tests performed at scale on a HDD based Ceph cluster, it was found
+* CephFS: Directories may now be configured with case-insensitive or
+  normalized directory entry names. This is an inheritable configuration making
+  it apply to an entire directory tree. For more information, see
+  https://docs.ceph.com/en/latest/cephfs/charmap/
+* Based on tests performed at scale on an HDD based Ceph cluster, it was found
+  that scheduling with mClock was not optimal with multiple OSD shards. For
+  example, in the test cluster with multiple OSD node failures, the client
+  throughput was found to be inconsistent across test runs coupled with multiple
+  reported slow requests. However, the same test with a single OSD shard and
+  with multiple worker threads yielded significantly better results in terms of
+  consistency of client and recovery throughput across multiple test runs.
+  Therefore, as an interim measure until the issue with multiple OSD shards
+  (or multiple mClock queues per OSD) is investigated and fixed, the following
+  change to the default HDD OSD shard configuration is made:
+   - osd_op_num_shards_hdd = 1 (was 5)
+   - osd_op_num_threads_per_shard_hdd = 5 (was 1)
+  For more details see https://tracker.ceph.com/issues/66289.
+* MGR: MGR's always-on modulues/plugins can now be force-disabled. This can be
+  necessary in cases where MGR(s) needs to be prevented from being flooded by
+  the module commands when coresponding Ceph service is down/degraded.
+
+* CephFS: Modifying the FS setting variable "max_mds" when a cluster is
+  unhealthy now requires users to pass the confirmation flag
+  (--yes-i-really-mean-it). This has been added as a precaution to tell the
+  users that modifying "max_mds" may not help with troubleshooting or recovery
+  effort. Instead, it might further destabilize the cluster.
+
+* mgr/restful, mgr/zabbix: both modules, already deprecated since 2020, have been
+  finally removed. They have not been actively maintenance in the last years,
+  and started suffering from vulnerabilities in their dependency chain (e.g.:
+  CVE-2023-46136).  As alternatives, for the `restful` module, the `dashboard` module
+  provides a richer and better maintained RESTful API. Regarding the `zabbix` module,
+  there are alternative monitoring solutions, like `prometheus`, which is the most
+  widely adopted among the Ceph user community.
+
+* CephFS: EOPNOTSUPP (Operation not supported ) is now returned by the CephFS
+  fuse client for `fallocate` for the default case (i.e. mode == 0) since
+  CephFS does not support disk space reservation. The only flags supported are
+  `FALLOC_FL_KEEP_SIZE` and `FALLOC_FL_PUNCH_HOLE`.
+
+>=19.2.2
+
+* RGW: PutObjectLockConfiguration can now be used to enable S3 Object Lock on an
+  existing versioning-enabled bucket that was not created with Object Lock enabled.
+
+* RADOS: A new command, `ceph osd rm-pg-upmap-primary-all`, has been added that allows
+  users to clear all pg-upmap-primary mappings in the osdmap when desired.
+  Related trackers:
+   - https://tracker.ceph.com/issues/67179
+   - https://tracker.ceph.com/issues/66867
+
+* CephFS: Format of name of pool namespace for CephFS volumes has been changed
+  from `fsvolumens__<subvol-name>` to `fsvolumens__<subvol-grp-name>_<subvol-name>`
+  to avoid namespace collision when two subvolumes located in different
+  subvolume groups have the same name. Even with namespace collision, there were
+  no security issues since the MDS auth cap is restricted to the subvolume path.
+  Now, with this change, the namespaces are completely isolated.
+
+* RBD: Moving an image that is a member of a group to trash is no longer
+  allowed.  `rbd trash mv` command now behaves the same way as `rbd rm` in this
+  scenario.
+
+>= 19.2.2
+* CephFS: If the subvolume name passed to the command `ceph fs subvolume info`
+  is a clone, the output now will also contain a "source" field that tells user
+  the name of source snapshot along with the name of volume, subvolume group and
+  subvolume in which the source snapshot is located. For clones created with
+  Tentacle or earlier release, the value of this field will be 'N/A'. Regular
+  subvolumes don't have a source subvolume and therefore the output for them
+  won't contain a "source" field regardless of the release.
+
+* MGR: MGR's always-on modulues/plugins can now be force-disabled. This can be
+  necessary in cases where MGR(s) needs to be prevented from being flooded by
+  the module commands when coresponding Ceph service is down/degraded.
+
+* CephFS: The ``ceph fs subvolume snapshot getpath`` command now allows users
+  to get the path of a snapshot of a subvolume. If the snapshot is not present
+  ``ENOENT`` is returned.
+
 >=19.0.0
 
+* ceph: a new --daemon-output-file switch is available for `ceph tell` commands
+  to dump output to a file local to the daemon. For commands which produce
+  large amounts of output, this avoids a potential spike in memory usage on the
+  daemon, allows for faster streaming writes to a file local to the daemon, and
+  reduces time holding any locks required to execute the command. For analysis,
+  it is necessary to retrieve the file from the host running the daemon
+  manually. Currently, only --format=json|json-pretty are supported.
 * RGW: GetObject and HeadObject requests now return a x-rgw-replicated-at
   header for replicated objects. This timestamp can be compared against the
   Last-Modified header to determine how long the object took to replicate.
 * The cephfs-shell utility is now packaged for RHEL 9 / CentOS 9 as required
   python dependencies are now available in EPEL9.
+* cephx: key rotation is now possible using `ceph auth rotate`. Previously,
+  this was only possible by deleting and then recreating the key.
 * RGW: S3 multipart uploads using Server-Side Encryption now replicate correctly in
   multi-site. Previously, the replicas of such objects were corrupted on decryption.
   A new tool, ``radosgw-admin bucket resync encrypted multipart``, can be used to
@@ -104,6 +213,10 @@
   of POOL_APP_NOT_ENABLED health warning for that pool.
   The user might temporarily mute this warning using
   ``ceph health mute POOL_APP_NOT_ENABLED``.
+* The `mon_cluster_log_file_level` and `mon_cluster_log_to_syslog_level` options
+  have been removed. Henceforth, users should use the new generic option
+  `mon_cluster_log_level` to control the cluster log level verbosity for the cluster
+  log file as well as for all external entities.
 CephFS: Disallow delegating preallocated inode ranges to clients. Config
   `mds_client_delegate_inos_pct` defaults to 0 which disables async dirops
   in the kclient.
@@ -173,6 +286,11 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
   default json format produces a rather massive output in large clusters and
   isn't scalable. So we have removed the 'network_ping_times' section from
   the output. Details in the tracker: https://tracker.ceph.com/issues/57460
+* mgr/REST: The REST manager module will trim requests based on the 'max_requests' option.
+  Without this feature, and in the absence of manual deletion of old requests,
+  the accumulation of requests in the array can lead to Out Of Memory (OOM) issues, 
+  resulting in the Manager crashing.
+
 * CephFS: The `subvolume snapshot clone` command now depends on the config option
   `snapshot_clone_no_wait` which is used to reject the clone operation when
   all the cloner threads are busy. This config option is enabled by default which means 
@@ -193,6 +311,10 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
   without this feature will trigger the MDS to raise a HEALTH_ERR on the
   cluster, MDS_CLIENTS_BROKEN_ROOTSQUASH. See the documentation on this warning
   and the new feature bit for more information.
+* CephFS: Expanded removexattr support for cephfs virtual extended attributes.
+  Previously one had to use setxattr to restore the default in order to "remove".
+  You may now properly use removexattr to remove. You can also now remove layout
+  on root inode, which then will restore layout to default layout.
 
 * cls_cxx_gather is marked as deprecated.
 * CephFS: cephfs-journal-tool is guarded against running on an online file system.
@@ -231,6 +353,23 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
   confirmation flag when some MDSs exhibit health warning MDS_TRIM or
   MDS_CACHE_OVERSIZED. This is to prevent accidental MDS failover causing
   further delays in recovery.
+* Based on tests performed at scale on a HDD based Ceph cluster, it was found
+  that scheduling with mClock was not optimal with multiple OSD shards. For
+  example, in the test cluster with multiple OSD node failures, the client
+  throughput was found to be inconsistent across test runs coupled with multiple
+  reported slow requests. However, the same test with a single OSD shard and
+  with multiple worker threads yielded significantly better results in terms of
+  consistency of client and recovery throughput across multiple test runs.
+  Therefore, as an interim measure until the issue with multiple OSD shards
+  (or multiple mClock queues per OSD) is investigated and fixed, the following
+  change to the default HDD OSD shard configuration is made:
+   - osd_op_num_shards_hdd = 1 (was 5)
+   - osd_op_num_threads_per_shard_hdd = 5 (was 1)
+  For more details see https://tracker.ceph.com/issues/66289.
+* NFS: The export create/apply of CephFS based exports will now have a additional parameter `cmount_path` under FSAL block,
+* NFS: The export create/apply of CephFS based exports will now have a additional parameter `cmount_path` under the FSAL block,
+  which specifies the path within the CephFS to mount this export on. If this and the other
+  `EXPORT { FSAL {} }` options are the same between multiple exports, those exports will share a single CephFS client. If not specified, the default is `/`.
 
 >=18.0.0
 
@@ -488,3 +627,9 @@ Relevant tracker: https://tracker.ceph.com/issues/57090
 set using the `fs set` command. This flag prevents using a standby for another
 file system (join_fs = X) when standby for the current filesystem is not available.
 Relevant tracker: https://tracker.ceph.com/issues/61599
+
+* MDS now uses host errors, as defined in errno.cc, for current platform.
+errorcode32_t is converting, internally, the error code from host to ceph, when encoding, and vice versa,
+when decoding, resulting having LINUX codes on the wire, and HOST code on the receiver.
+All CEPHFS_E* defines have been removed across Ceph (including the python binding).
+Relevant tracker: https://tracker.ceph.com/issues/64611

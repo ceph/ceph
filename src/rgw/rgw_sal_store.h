@@ -200,12 +200,14 @@ class StoreObject : public Object {
 
     virtual ~StoreObject() = default;
 
-    virtual void set_atomic() override { state.is_atomic = true; }
+    virtual void set_atomic(bool atomic) override { state.is_atomic = atomic; }
     virtual bool is_atomic() override { return state.is_atomic; }
     virtual void set_prefetch_data() override { state.prefetch_data = true; }
     virtual bool is_prefetch_data() override { return state.prefetch_data; }
     virtual void set_compressed() override { state.compressed = true; }
     virtual bool is_compressed() override { return state.compressed; }
+    virtual bool is_sync_completed(const DoutPrefixProvider* dpp,
+      const ceph::real_time& obj_mtime) override { return false; }
     virtual void invalidate() override {
       rgw_obj obj = state.obj;
       bool is_atomic = state.is_atomic;
@@ -272,6 +274,8 @@ class StoreObject : public Object {
       }
       return -ENOENT;
     }
+
+    virtual RGWObjVersionTracker& get_version_tracker() override { return state.objv_tracker; }
 
     virtual void print(std::ostream& out) const override {
       if (bucket)

@@ -4,7 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import {
   NamespaceCreateRequest,
-  NamespaceEditRequest,
+  NamespaceUpdateRequest,
   NvmeofService
 } from '~/app/shared/api/nvmeof.service';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
@@ -116,22 +116,39 @@ export class NvmeofNamespacesFormComponent implements OnInit {
     });
   }
 
-  buildRequest(): NamespaceCreateRequest | NamespaceEditRequest {
-    const image_size = this.nsForm.getValue('image_size');
-    const image_size_unit = this.nsForm.getValue('unit');
-    const request = {} as NamespaceCreateRequest | NamespaceEditRequest;
-    if (image_size) {
-      const key: string = this.edit ? 'rbd_image_size' : 'size';
-      const value: number = this.formatterService.toBytes(image_size + image_size_unit);
-      request[key] = value;
-    }
-    if (!this.edit) {
-      const image = this.nsForm.getValue('image');
-      const pool = this.nsForm.getValue('pool');
-      request['rbd_image_name'] = image;
-      request['rbd_pool'] = pool;
+  updateRequest(rbdImageSize: number): NamespaceUpdateRequest {
+    const request: NamespaceUpdateRequest = {
+      rbd_image_size: rbdImageSize
+    };
+    return request;
+  }
+
+  createRequest(rbdImageSize: number): NamespaceCreateRequest {
+    const image = this.nsForm.getValue('image');
+    const pool = this.nsForm.getValue('pool');
+    const request: NamespaceCreateRequest = {
+      rbd_image_name: image,
+      rbd_pool: pool
+    };
+    if (rbdImageSize) {
+      request['rbd_image_size'] = rbdImageSize;
     }
     return request;
+  }
+
+  buildRequest() {
+    const image_size = this.nsForm.getValue('image_size');
+    let rbdImageSize: number = null;
+    if (image_size) {
+      const image_size_unit = this.nsForm.getValue('unit');
+      const value: number = this.formatterService.toBytes(image_size + image_size_unit);
+      rbdImageSize = value;
+    }
+    if (this.edit) {
+      return this.updateRequest(rbdImageSize);
+    } else {
+      return this.createRequest(rbdImageSize);
+    }
   }
 
   validateSize() {
@@ -152,7 +169,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
       this.invalidSizeError = false;
       const component = this;
       const taskUrl: string = `nvmeof/namespace/${this.edit ? URLVerbs.EDIT : URLVerbs.CREATE}`;
-      const request = this.buildRequest();
+      const request: NamespaceCreateRequest | NamespaceUpdateRequest = this.buildRequest();
       let action: Observable<any>;
 
       if (this.edit) {
@@ -164,7 +181,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
           call: this.nvmeofService.updateNamespace(
             this.subsystemNQN,
             this.nsid,
-            request as NamespaceEditRequest
+            request as NamespaceUpdateRequest
           )
         });
       } else {

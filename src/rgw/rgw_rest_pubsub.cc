@@ -37,7 +37,7 @@ bool verify_transport_security(CephContext *cct, const RGWEnv& env) {
 // make sure that if user/password are passed inside URL, it is over secure connection
 // update rgw_pubsub_dest to indicate that a password is stored in the URL
 bool validate_and_update_endpoint_secret(rgw_pubsub_dest& dest, CephContext *cct,
-                                         const RGWEnv& env, std::string& message)
+                                         const req_info& ri, std::string& message)
 {
   if (dest.push_endpoint.empty()) {
     return true;
@@ -48,11 +48,31 @@ bool validate_and_update_endpoint_secret(rgw_pubsub_dest& dest, CephContext *cct
     message = "Malformed URL for push-endpoint";
     return false;
   }
+
+  const auto& args=ri.args;
+  auto topic_user_name=args.get_optional("user-name");
+  auto topic_password=args.get_optional("password");
+
+  // check if username/password was already supplied via topic attributes
+  // and if also provided as part of the endpoint URL issue a warning
+  if (topic_user_name.has_value()) {
+    if (!user.empty()) {
+      message = "Username provided via both topic attributes and endpoint URL: using topic attributes";
+    }
+    user = topic_user_name.get();
+  }
+  if (topic_password.has_value()) {
+    if (!password.empty()) {
+      message = "Password provided via both topic attributes and endpoint URL: using topic attributes";
+    }
+    password = topic_password.get();
+  }
+
   // this should be verified inside parse_url()
   ceph_assert(user.empty() == password.empty());
   if (!user.empty()) {
     dest.stored_secret = true;
-    if (!verify_transport_security(cct, env)) {
+    if (!verify_transport_security(cct, *ri.env)) {
       message = "Topic contains secrets that must be transmitted over a secure transport";
       return false;
     }
@@ -214,7 +234,13 @@ bool verify_topic_permission(const DoutPrefixProvider* dpp, req_state* s,
   return verify_topic_permission(dpp, s, topic.owner, arn, policy, op);
 }
 
-// command (AWS compliant): 
+bool should_forward_request_to_master(req_state* s, rgw::sal::Driver* driver) {
+  return (!driver->is_meta_master() &&
+          rgw::all_zonegroups_support(*s->penv.site,
+                                      rgw::zone_features::notification_v2));
+}
+
+// command (AWS compliant):
 // POST
 // Action=CreateTopic&Name=<topic-name>[&OpaqueData=data][&push-endpoint=<endpoint>[&persistent][&<arg1>=<value1>]]
 class RGWPSCreateTopicOp : public RGWOp {
@@ -241,7 +267,7 @@ class RGWPSCreateTopicOp : public RGWOp {
     s->info.args.get_int("max_retries", reinterpret_cast<int *>(&dest.max_retries), rgw::notify::DEFAULT_GLOBAL_VALUE);
     s->info.args.get_int("retry_sleep_duration", reinterpret_cast<int *>(&dest.retry_sleep_duration), rgw::notify::DEFAULT_GLOBAL_VALUE);
 
-    if (!validate_and_update_endpoint_secret(dest, s->cct, *s->info.env, s->err.message)) {
+    if (!validate_and_update_endpoint_secret(dest, s->cct, s->info, s->err.message)) {
       return -EINVAL;
     }
     // Store topic Policy.
@@ -253,7 +279,7 @@ class RGWPSCreateTopicOp : public RGWOp {
     // Remove the args that are parsed, so the push_endpoint_args only contains
     // necessary one's which is parsed after this if. but only if master zone,
     // else we do not remove as request is forwarded to master.
-    if (driver->is_meta_master()) {
+    if (!should_forward_request_to_master(s, driver)) {
       s->info.args.remove("OpaqueData");
       s->info.args.remove("push-endpoint");
       s->info.args.remove("persistent");
@@ -376,7 +402,7 @@ class RGWPSCreateTopicOp : public RGWOp {
 
 void RGWPSCreateTopicOp::execute(optional_yield y) {
   // master request will replicate the topic creation.
-  if (!driver->is_meta_master()) {
+  if (should_forward_request_to_master(s, driver)) {
     op_ret = rgw_forward_request_to_master(
         this, *s->penv.site, s->owner.id, &bl_post_body, nullptr, s->info, y);
     if (op_ret < 0) {
@@ -473,8 +499,13 @@ void RGWPSListTopicsOp::execute(optional_yield y) {
   const std::string start_token = s->info.args.get("NextToken");
 
   const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
-  constexpr int max_items = 100;
-  op_ret = ps.get_topics(this, start_token, max_items, result, next_token, y);
+  if (rgw::all_zonegroups_support(*s->penv.site, rgw::zone_features::notification_v2) &&
+      driver->stat_topics_v1(get_account_or_tenant(s->owner.id), null_yield, this) == -ENOENT) {
+    constexpr int max_items = 100;
+    op_ret = ps.get_topics_v2(this, start_token, max_items, result, next_token, y);
+  } else {
+    op_ret = ps.get_topics_v1(this, result, y);
+  }
   // if there are no topics it is not considered an error
   op_ret = op_ret == -ENOENT ? 0 : op_ret;
   if (op_ret < 0) {
@@ -731,7 +762,7 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
                            rgw::notify::DEFAULT_GLOBAL_VALUE);
     } else if (attribute_name == "push-endpoint") {
       dest.push_endpoint = s->info.args.get("AttributeValue");
-      if (!validate_and_update_endpoint_secret(dest, s->cct, *s->info.env, s->err.message)) {
+      if (!validate_and_update_endpoint_secret(dest, s->cct, s->info, s->err.message)) {
         return -EINVAL;
       }
     } else if (attribute_name == "Policy") {
@@ -757,7 +788,8 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
       };
       static constexpr std::initializer_list<const char*> args = {
           "verify-ssl",    "use-ssl",         "ca-location", "amqp-ack-level",
-          "amqp-exchange", "kafka-ack-level", "mechanism",   "cloudevents"};
+          "amqp-exchange", "kafka-ack-level", "mechanism",   "cloudevents",
+          "user-name",     "password"};
       if (std::find(args.begin(), args.end(), attribute_name) != args.end()) {
         replace_str(attribute_name, s->info.args.get("AttributeValue"));
         return 0;
@@ -837,7 +869,7 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
 };
 
 void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
-  if (!driver->is_meta_master()) {
+  if (should_forward_request_to_master(s, driver)) {
     op_ret = rgw_forward_request_to_master(
         this, *s->penv.site, s->owner.id, &bl_post_body, nullptr, s->info, y);
     if (op_ret < 0) {
@@ -982,9 +1014,10 @@ class RGWPSDeleteTopicOp : public RGWOp {
 };
 
 void RGWPSDeleteTopicOp::execute(optional_yield y) {
-  if (!driver->is_meta_master()) {
+  if (should_forward_request_to_master(s, driver)) {
     op_ret = rgw_forward_request_to_master(
         this, *s->penv.site, s->owner.id, &bl_post_body, nullptr, s->info, y);
+
     if (op_ret < 0) {
       ldpp_dout(this, 1)
           << "DeleteTopic forward_request_to_master returned ret = " << op_ret
@@ -1234,7 +1267,7 @@ int RGWPSCreateNotifOp::verify_permission(optional_yield y) {
 }
 
 void RGWPSCreateNotifOp::execute(optional_yield y) {
-  if (!driver->is_meta_master()) {
+  if (should_forward_request_to_master(s, driver)) {
     op_ret = rgw_forward_request_to_master(
         this, *s->penv.site, s->owner.id, &data, nullptr, s->info, y);
     if (op_ret < 0) {
@@ -1436,7 +1469,7 @@ int RGWPSDeleteNotifOp::verify_permission(optional_yield y) {
 }
 
 void RGWPSDeleteNotifOp::execute(optional_yield y) {
-  if (!driver->is_meta_master()) {
+  if (should_forward_request_to_master(s, driver)) {
     bufferlist indata;
     op_ret = rgw_forward_request_to_master(
         this, *s->penv.site, s->owner.id, &indata, nullptr, s->info, y);

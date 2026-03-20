@@ -180,6 +180,7 @@ public:
     int next() override;
     std::string key() override;
     ceph::buffer::list value() override;
+    std::string_view value_as_sv() override;
     int status() override {
       return 0;
     }
@@ -553,6 +554,13 @@ public:
     const ghobject_t &oid  ///< [in] object
     ) override;
 
+  int omap_iterate(
+    CollectionHandle &c,   ///< [in] collection
+    const ghobject_t &oid, ///< [in] object
+    omap_iter_seek_t start_from, ///< [in] where the iterator should point to at the beginning
+    std::function<omap_iter_ret_t(std::string_view, std::string_view)> f
+  ) override;
+
   void set_fsid(uuid_d u) override {
     fsid = u;
   }
@@ -580,9 +588,10 @@ public:
     TrackedOpRef op = TrackedOpRef(),
     ThreadPool::TPHandle *handle = NULL) override;
 
-  void compact () override {
+  int compact () override {
     ceph_assert(db);
     db->compact();
+    return 0;
   }
   
 private:

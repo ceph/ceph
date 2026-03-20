@@ -114,8 +114,10 @@ wnbdSrcDir="${depsSrcDir}/wnbd"
 wnbdLibDir="${depsToolsetDir}/wnbd/lib"
 dokanSrcDir="${depsSrcDir}/dokany"
 dokanLibDir="${depsToolsetDir}/dokany/lib"
+libicuSrcDir="${depsSrcDir}/icu"
+libicuLibDir="${depsToolsetDir}/libicu"
 
-depsDirs="$lz4Dir;$sslDir;$boostDir;$zlibDir;$backtraceDir;$snappyDir"
+depsDirs="$lz4Dir;$sslDir;$boostDir;$zlibDir;$backtraceDir;$snappyDir;$libicuLibDir"
 depsDirs+=";$winLibDir"
 
 # Cmake recommends using CMAKE_PREFIX_PATH instead of link_directories.

@@ -1133,8 +1133,18 @@ def cluster(ctx, config):
             args.extend([
                 run.Raw('|'), 'head', '-n', '1',
             ])
-            stdout = mon0_remote.sh(args)
-            return stdout or None
+            r = mon0_remote.run(
+                stdout=BytesIO(),
+                args=args,
+                stderr=StringIO(),
+            )
+            stdout = r.stdout.getvalue().decode()
+            if stdout:
+                return stdout
+            stderr = r.stderr.getvalue()
+            if stderr:
+                return stderr
+            return None
 
         if first_in_ceph_log('\[ERR\]|\[WRN\]|\[SEC\]',
                              config['log_ignorelist']) is not None:

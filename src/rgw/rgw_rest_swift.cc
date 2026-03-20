@@ -361,6 +361,7 @@ void RGWListBuckets_ObjStore_SWIFT::dump_bucket_entry(const RGWBucketEnt& ent)
   if (need_stats) {
     s->formatter->dump_int("count", ent.count);
     s->formatter->dump_int("bytes", ent.size);
+    dump_time(s, "last_modified", ent.modification_time);
   }
 
   s->formatter->close_section();
@@ -977,7 +978,7 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
   std::unique_ptr<rgw::sal::Object> slo_seg = bucket->get_object(rgw_obj_key(obj_name));
 
   /* no prefetch */
-  slo_seg->set_atomic();
+  slo_seg->set_atomic(true);
 
   bool compressed;
   RGWCompressionInfo cs_info;
@@ -2708,7 +2709,7 @@ bool RGWSwiftWebsiteHandler::is_web_dir() const
   std::unique_ptr<rgw::sal::Object> obj = s->bucket->get_object(rgw_obj_key(std::move(subdir_name)));
 
   /* First, get attrset of the object we'll try to retrieve. */
-  obj->set_atomic();
+  obj->set_atomic(true);
   obj->set_prefetch_data();
 
   RGWObjState* state = nullptr;
@@ -2737,7 +2738,7 @@ bool RGWSwiftWebsiteHandler::is_index_present(const std::string& index) const
 {
   std::unique_ptr<rgw::sal::Object> obj = s->bucket->get_object(rgw_obj_key(index));
 
-  obj->set_atomic();
+  obj->set_atomic(true);
   obj->set_prefetch_data();
 
   RGWObjState* state = nullptr;
@@ -2950,7 +2951,10 @@ int RGWHandler_REST_SWIFT::postauth_init(optional_yield y)
       && s->user->get_id().id == RGW_USER_ANON_ID) {
     s->bucket_tenant = s->account_name;
   } else {
-    s->bucket_tenant = s->auth.identity->get_tenant();
+    /* tenant must be taken from request. Can't use auth.identity->get_tenant(),
+       because there are cases when users from different tenant may be granted
+       access via ACL to this bucket */
+    s->bucket_tenant = s->user->get_tenant();
   }
   s->bucket_name = t->url_bucket;
 

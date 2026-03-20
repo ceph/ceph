@@ -175,7 +175,8 @@ private:
   static block_device_t device_type_from_name(const std::string& blk_dev_name);
   static BlockDevice *create_with_type(block_device_t device_type,
     CephContext* cct, const std::string& path, aio_callback_t cb,
-    void *cbpriv, aio_callback_t d_cb, void *d_cbpriv);
+    void *cbpriv, aio_callback_t d_cb, void *d_cbpriv, const char* dev_name);
+
 protected:
   uint64_t size = 0;
   uint64_t block_size = 0;
@@ -206,7 +207,8 @@ public:
   virtual ~BlockDevice() = default;
 
   static BlockDevice *create(
-    CephContext* cct, const std::string& path, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv);
+    CephContext* cct, const std::string& path, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb,
+    void *d_cbpriv, const char* dev_name = "");
   virtual bool supported_bdev_label() { return true; }
   virtual bool is_rotational() { return rotational; }
 
@@ -293,7 +295,7 @@ public:
   virtual int flush() = 0;
   virtual bool try_discard(interval_set<uint64_t> &to_release, bool async=true) { return false; }
   virtual void discard_drain() { return; }
-
+  virtual void swap_discard_queued(interval_set<uint64_t>& other)  { other.clear(); }
   // for managing buffered readers/writers
   virtual int invalidate_cache(uint64_t off, uint64_t len) = 0;
   virtual int open(const std::string& path) = 0;

@@ -4,10 +4,12 @@ import logging
 import mgr_util
 import inspect
 import functools
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional, Tuple
 from urllib.parse import urlsplit, urlunsplit
 
 import cephfs
+
+from ceph.fs.earmarking import CephFSVolumeEarmarking, EarmarkException  # type: ignore
 
 from mgr_util import CephfsClient
 
@@ -19,7 +21,7 @@ from .operations.volume import create_volume, delete_volume, rename_volume, \
     list_volumes, open_volume, get_pool_names, get_pool_ids, \
     get_pending_subvol_deletions_count, get_all_pending_clones_count
 from .operations.subvolume import open_subvol, create_subvol, remove_subvol, \
-    create_clone
+    create_clone, open_subvol_in_vol
 
 from .vol_spec import VolSpec
 from .exception import VolumeException, ClusterError, ClusterTimeout, \
@@ -223,11 +225,13 @@ class VolumeClient(CephfsClient["Module"]):
         gid        = kwargs['gid']
         mode       = kwargs['mode']
         isolate_nspace = kwargs['namespace_isolated']
+        earmark    = kwargs['earmark'] or ''  # if not set, default to empty string --> no earmark
 
         oct_mode = octal_str_to_decimal_int(mode)
+
         try:
             create_subvol(
-                self.mgr, fs_handle, self.volspec, group, subvolname, size, isolate_nspace, pool, oct_mode, uid, gid)
+                self.mgr, fs_handle, self.volspec, group, subvolname, size, isolate_nspace, pool, oct_mode, uid, gid, earmark)
         except VolumeException as ve:
             # kick the purge threads for async removal -- note that this
             # assumes that the subvolume is moved to trashcan for cleanup on error.
@@ -245,6 +249,7 @@ class VolumeClient(CephfsClient["Module"]):
         gid        = kwargs['gid']
         mode       = kwargs['mode']
         isolate_nspace = kwargs['namespace_isolated']
+        earmark    = kwargs['earmark'] or ''  # if not set, default to empty string --> no earmark
 
         try:
             with open_volume(self, volname) as fs_handle:
@@ -258,7 +263,8 @@ class VolumeClient(CephfsClient["Module"]):
                                 'mode': octal_str_to_decimal_int(mode),
                                 'data_pool': pool,
                                 'pool_namespace': subvolume.namespace if isolate_nspace else None,
-                                'quota': size
+                                'quota': size,
+                                'earmark': earmark
                             }
                             subvolume.set_attrs(subvolume.path, attrs)
                     except VolumeException as ve:
@@ -407,6 +413,58 @@ class VolumeClient(CephfsClient["Module"]):
                     with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.PIN) as subvolume:
                         subvolume.pin(pin_type, pin_setting)
                         ret = 0, json.dumps({}), ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def subvolume_charmap_set(self, **kwargs):
+        ret         = 0, "", ""
+        volname     = kwargs['vol_name']
+        subvolname  = kwargs['sub_name']
+        setting     = kwargs['setting']
+        value       = kwargs['value']
+        groupname   = kwargs['group_name']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.CHARMAP) as subvolume:
+                        v = subvolume.charmap_set(setting, value)
+                        ret = 0, v, ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def subvolume_charmap_rm(self, **kwargs):
+        ret         = 0, "", ""
+        volname     = kwargs['vol_name']
+        subvolname  = kwargs['sub_name']
+        groupname   = kwargs['group_name']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.CHARMAP) as subvolume:
+                        subvolume.charmap_rm()
+                        ret = 0, json.dumps({}), ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+
+    def subvolume_charmap_get(self, **kwargs):
+        ret         = 0, "", ""
+        volname     = kwargs['vol_name']
+        subvolname  = kwargs['sub_name']
+        setting     = kwargs['setting']
+        groupname   = kwargs['group_name']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.CHARMAP) as subvolume:
+                        v = subvolume.charmap_get(setting)
+                        ret = 0, v, ""
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret
@@ -600,6 +658,68 @@ class VolumeClient(CephfsClient["Module"]):
                 ret = self.volume_exception_to_retval(ve)
         return ret
 
+    def get_earmark(self, **kwargs) -> Tuple[int, Optional[str], str]:
+        ret: Tuple[int, Optional[str], str] = 0, "", ""
+        volname    = kwargs['vol_name']
+        subvolname = kwargs['sub_name']
+        groupname  = kwargs['group_name']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.EARMARK_GET) as subvolume:
+                        log.info("Getting earmark for subvolume %s", subvolume.path)
+                        fs_earmark = CephFSVolumeEarmarking(fs_handle, subvolume.path)
+                        earmark = fs_earmark.get_earmark()
+                        ret = 0, earmark, ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        except EarmarkException as ee:
+            log.error(f"Earmark error occurred: {ee}")
+            ret = ee.to_tuple()
+        return ret
+
+    def set_earmark(self, **kwargs):  # type: ignore
+        ret       = 0, "", ""
+        volname   = kwargs['vol_name']
+        subvolname = kwargs['sub_name']
+        groupname = kwargs['group_name']
+        earmark   = kwargs['earmark']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.EARMARK_SET) as subvolume:
+                        log.info("Setting earmark %s for subvolume %s", earmark, subvolume.path)
+                        fs_earmark = CephFSVolumeEarmarking(fs_handle, subvolume.path)
+                        fs_earmark.set_earmark(earmark)
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        except EarmarkException as ee:
+            log.error(f"Earmark error occurred: {ee}")
+            ret = ee.to_tuple()  # type: ignore
+        return ret
+
+    def clear_earmark(self, **kwargs):  # type: ignore
+        ret       = 0, "", ""
+        volname   = kwargs['vol_name']
+        subvolname = kwargs['sub_name']
+        groupname = kwargs['group_name']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.EARMARK_CLEAR) as subvolume:
+                        log.info("Removing earmark for subvolume %s", subvolume.path)
+                        fs_earmark = CephFSVolumeEarmarking(fs_handle, subvolume.path)
+                        fs_earmark.clear_earmark()
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        except EarmarkException as ee:
+            log.error(f"Earmark error occurred: {ee}")
+            ret = ee.to_tuple()  # type: ignore
+        return ret
+
     ### subvolume snapshot
 
     def create_subvolume_snapshot(self, **kwargs):
@@ -655,6 +775,23 @@ class VolumeClient(CephfsClient["Module"]):
                         ret = 0, json.dumps(snap_info_dict, indent=4, sort_keys=True), ""
         except VolumeException as ve:
                 ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def subvolume_snapshot_getpath(self, **kwargs):
+        ret        = 0, "", ""
+        volname    = kwargs['vol_name']
+        subvolname = kwargs['sub_name']
+        snapname   = kwargs['snap_name']
+        groupname  = kwargs['group_name']
+
+        try:
+            with open_subvol_in_vol(self, self.volspec, volname, groupname, subvolname,
+                                    SubvolumeOpType.SNAP_GETPATH) \
+                                    as (vol, group, subvol):
+                snap_path = subvol.snapshot_data_path(snapname)
+                ret = 0, snap_path.decode("utf-8"), ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
         return ret
 
     def set_subvolume_snapshot_metadata(self, **kwargs):
@@ -998,6 +1135,51 @@ class VolumeClient(CephfsClient["Module"]):
                 with open_group(fs_handle, self.volspec, groupname) as group:
                     group.pin(pin_type, pin_setting)
                     ret = 0, json.dumps({}), ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def subvolume_group_charmap_set(self, **kwargs):
+        ret           = 0, "", ""
+        volname       = kwargs['vol_name']
+        groupname     = kwargs['group_name']
+        setting       = kwargs['setting']
+        value         = kwargs['value']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    v = group.charmap_set(setting, value)
+                    ret = 0, v, ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def subvolume_group_charmap_rm(self, **kwargs):
+        ret           = 0, "", ""
+        volname       = kwargs['vol_name']
+        groupname     = kwargs['group_name']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    group.charmap_rm()
+                    ret = 0, json.dumps({}), ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def subvolume_group_charmap_get(self, **kwargs):
+        ret           = 0, "", ""
+        volname       = kwargs['vol_name']
+        groupname     = kwargs['group_name']
+        setting       = kwargs['setting']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    v = group.charmap_get(setting)
+                    ret = 0, v, ""
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret

@@ -1,5 +1,5 @@
 import { fakeAsync, tick } from '@angular/core/testing';
-import { FormControl, Validators } from '@angular/forms';
+import { FormControl, UntypedFormControl, Validators } from '@angular/forms';
 
 import _ from 'lodash';
 import { of as observableOf } from 'rxjs';
@@ -901,6 +901,53 @@ describe('CdValidators', () => {
         mockBucketExists = observableOf(true);
         testValidator('testName', true);
       }));
+    });
+
+    describe('url', () => {
+      it('should return null for a valid URL with port', () => {
+        const control = new UntypedFormControl('https://example.com:8080');
+        expect(CdValidators.url(control)).toBeNull();
+      });
+
+      it('should return null for multiple valid URLs with ports', () => {
+        const control = new UntypedFormControl('https://example.com:8080,http://localhost:3000');
+        expect(CdValidators.url(control)).toBeNull();
+      });
+
+      it('should return null for a URL without a port', () => {
+        const control = new UntypedFormControl('https://example.com');
+        expect(CdValidators.url(control)).toBeNull();
+      });
+
+      it('should return an error object for multiple invalid URLs', () => {
+        const control = new UntypedFormControl('https://example.com,http://192.1666.33.00:099999');
+        expect(CdValidators.url(control)).toEqual({ invalidURL: true });
+      });
+
+      it('should return an error object for a non-URL string', () => {
+        const control = new UntypedFormControl('randomstring');
+        expect(CdValidators.url(control)).toEqual({ invalidURL: true });
+      });
+
+      it('should return null for a valid IP address with port', () => {
+        const control = new UntypedFormControl('https://192.168.1.1:9090');
+        expect(CdValidators.url(control)).toBeNull();
+      });
+
+      it('should return null for an IP address without a port', () => {
+        const control = new UntypedFormControl('https://192.168.1.1');
+        expect(CdValidators.url(control)).toBeNull();
+      });
+
+      it('should return null for an empty value', () => {
+        const control = new UntypedFormControl(null);
+        expect(CdValidators.url(control)).toBeNull();
+      });
+
+      it('should return null for an empty string', () => {
+        const control = new UntypedFormControl('');
+        expect(CdValidators.url(control)).toBeNull();
+      });
     });
   });
 });

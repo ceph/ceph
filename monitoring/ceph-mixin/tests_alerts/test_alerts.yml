@@ -543,90 +543,80 @@ tests:
  # MTU Mismatch
  - interval: 1m
    input_series:
-    - series: 'node_network_mtu_bytes{device="eth0",instance="node-exporter",
-      job="node-exporter"}'
+    - series: 'node_network_mtu_bytes{device="eth0",instance="node1",job="node-exporter",cluster="mycluster"}'
       values: '1500 1500 1500 1500 1500'
-    - series: 'node_network_mtu_bytes{device="eth1",instance="node-exporter",
-      job="node-exporter"}'
+    - series: 'node_network_mtu_bytes{device="eth1",instance="node1",job="node-exporter",cluster="mycluster"}'
       values: '1500 1500 1500 1500 1500'
-    - series: 'node_network_mtu_bytes{device="eth2",instance="node-exporter",
-      job="node-exporter"}'
+    - series: 'node_network_mtu_bytes{device="eth2",instance="node1",job="node-exporter",cluster="mycluster"}'
       values: '1500 1500 1500 1500 1500'
-    - series: 'node_network_mtu_bytes{device="eth3",instance="node-exporter",
-      job="node-exporter"}'
+    - series: 'node_network_mtu_bytes{device="eth3",instance="node1",job="node-exporter",cluster="mycluster"}'
       values: '1500 1500 1500 1500 1500'
-    - series: 'node_network_mtu_bytes{device="eth4",instance="node-exporter",
-      job="node-exporter"}'
+
+    - series: 'node_network_mtu_bytes{device="eth4",instance="node1",job="node-exporter",cluster="mycluster"}'
+      values: '1500 1500 1500 1500 1500'
+    - series: 'node_network_mtu_bytes{device="eth4",instance="node2",job="node-exporter",cluster="mycluster"}'
       values: '9000 9000 9000 9000 9000'
-    - series: 'node_network_mtu_bytes{device="eth4",instance="hostname1",
-      job="node-exporter"}'
-      values: '2200 2200 2200 2200 2200'
-    - series: 'node_network_mtu_bytes{device="eth4",instance="hostname2",
-      job="node-exporter"}'
-      values: '2400 2400 2400 2400 2400'
-    - series: 'node_network_up{device="eth0",instance="node-exporter",
-      job="node-exporter"}'
-      values: '0 0 0 0 0'
-    - series: 'node_network_up{device="eth1",instance="node-exporter",
-      job="node-exporter"}'
-      values: '0 0 0 0 0'
-    - series: 'node_network_up{device="eth2",instance="node-exporter",
-      job="node-exporter"}'
+    - series: 'node_network_mtu_bytes{device="eth4",instance="node3",job="node-exporter",cluster="mycluster"}'
+      values: '9000 9000 9000 9000 9000'
+
+    - series: 'node_network_up{device="eth0",instance="node1",job="node-exporter",cluster="mycluster"}'
       values: '1 1 1 1 1'
-    - series: 'node_network_up{device="eth3",instance="node-exporter",
-      job="node-exporter"}'
+    - series: 'node_network_up{device="eth1",instance="node1",job="node-exporter",cluster="mycluster"}'
       values: '1 1 1 1 1'
-    - series: 'node_network_up{device="eth4",instance="node-exporter",
-      job="node-exporter"}'
+    - series: 'node_network_up{device="eth2",instance="node1",job="node-exporter",cluster="mycluster"}'
       values: '1 1 1 1 1'
-    - series: 'node_network_up{device="eth4",instance="hostname1",
-      job="node-exporter"}'
+    - series: 'node_network_up{device="eth3",instance="node1",job="node-exporter",cluster="mycluster"}'
       values: '1 1 1 1 1'
-    - series: 'node_network_up{device="eth4",instance="hostname2",
-      job="node-exporter"}'
-      values: '0 0 0 0 0'
+    - series: 'node_network_up{device="eth4",instance="node1",job="node-exporter",cluster="mycluster"}'
+      values: '1 1 1 1 1'
+    - series: 'node_network_up{device="eth4",instance="node2",job="node-exporter",cluster="mycluster"}'
+      values: '1 1 1 1 1'
+    - series: 'node_network_up{device="eth4",instance="node3",job="node-exporter",cluster="mycluster"}'
+      values: '1 1 1 1 1'
    promql_expr_test:
      - expr: |
-          node_network_mtu_bytes * (node_network_up{device!="lo"} > 0) ==
-            scalar(
-              max by (device) (node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)) !=
-                quantile by (device) (.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0))
-            )
-          or
-          node_network_mtu_bytes * (node_network_up{device!="lo"} > 0) ==
-            scalar(
-              min by (device) (node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)) !=
-                quantile by (device) (.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0))
-            )
+         node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)
+         != on (cluster, device) group_left
+          quantile by (cluster, device) (
+            0.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)
+          )
        eval_time: 1m
        exp_samples:
-         - labels: '{device="eth4", instance="node-exporter", job="node-exporter"}'
-           value: 9000
-         - labels: '{device="eth4", instance="hostname1", job="node-exporter"}'
-           value: 2200
+         - labels: '{device="eth4",instance="node1",job="node-exporter",cluster="mycluster"}'
+           value: 1500
    alert_rule_test:
      - eval_time: 1m
        alertname: CephNodeInconsistentMTU
        exp_alerts:
        - exp_labels:
            device: eth4
-           instance: hostname1
+           instance: node1
            job: node-exporter
            severity: warning
            type: ceph_default
+           cluster: "mycluster"
          exp_annotations:
-           summary: MTU settings across Ceph hosts are inconsistent
-           description: "Node hostname1 has a different MTU size (2200) than the median of devices named eth4."
-       - exp_labels:
-           device: eth4
-           instance: node-exporter
-           job: node-exporter
-           severity: warning
-           type: ceph_default
-         exp_annotations:
-           summary: MTU settings across Ceph hosts are inconsistent
-           description: "Node node-exporter has a different MTU size (9000) than the median of devices named eth4."
+           summary: "Node node1 has inconsistent MTU settings in cluster mycluster"
+           description: "Network interface eth4 on node node1 has MTU 1500 which differs from the cluster median."
+           impact: |
+             - May cause packet fragmentation or packet drops
+             - Risk of degraded cluster communication and performance
+             - Potential instability in services relying on consistent networking (e.g., Ceph, Kubernetes)
+           fix: |
+             - Check the MTU of interface `eth4` on node `node1`:
+               ip link show eth4
 
+             - Find the median MTU value across the cluster by running this PromQL query in Prometheus:
+               quantile by (cluster, device) (0.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0))
+
+             - Standardize MTU across all nodes to match the median (commonly 1500 or 9000):
+               ip link set dev eth4 mtu <median-value>
+
+             - Make MTU setting persistent:
+               - RHEL/CentOS: edit `/etc/sysconfig/network-scripts/ifcfg-<device>`
+               - Debian/Ubuntu: edit `/etc/netplan/*.yaml` and apply with `netplan apply`
+
+             - Restart the affected interface or node if required.
  # pool full, data series has 6 but using topk(5) so to ensure the
  # results are working as expected
  - interval: 1m

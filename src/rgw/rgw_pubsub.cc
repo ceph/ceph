@@ -85,6 +85,7 @@ void rgw_s3_key_filter::dump(Formatter *f) const {
     ::encode_json("Value", regex_rule, f);
     f->close_section();
   }
+  f->close_section();
 }
 
 bool rgw_s3_key_filter::decode_xml(XMLObj* obj) {
@@ -151,6 +152,7 @@ void rgw_s3_key_value_filter::dump(Formatter *f) const {
     ::encode_json("Value", key_value.second, f);
     f->close_section();
   }
+  f->close_section();
 }
 
 bool rgw_s3_key_value_filter::decode_xml(XMLObj* obj) {
@@ -568,21 +570,15 @@ RGWPubSub::RGWPubSub(rgw::sal::Driver* _driver,
 {
 }
 
-int RGWPubSub::get_topics(const DoutPrefixProvider* dpp,
-                          const std::string& start_marker, int max_items,
-                          rgw_pubsub_topics& result, std::string& next_marker,
-                          optional_yield y) const
+int RGWPubSub::get_topics_v2(const DoutPrefixProvider* dpp,
+                             const std::string& start_marker, int max_items,
+                             rgw_pubsub_topics& result, std::string& next_marker,
+                             optional_yield y) const
 {
   if (rgw::account::validate_id(tenant)) {
     // if our tenant is an account, return the account listing
     return list_account_topics(dpp, start_marker, max_items,
                                result, next_marker, y);
-  }
-
-  if (!use_notification_v2 || driver->stat_topics_v1(tenant, y, dpp) != -ENOENT) {
-    // in case of v1 or during migration we use v1 topics
-    // v1 returns all topics, ignoring marker/max_items
-    return read_topics_v1(dpp, result, nullptr, y);
   }
  
   // TODO: prefix filter on 'tenant:'
@@ -625,6 +621,13 @@ int RGWPubSub::get_topics(const DoutPrefixProvider* dpp,
     next_marker.clear();
   }
   return ret;
+}
+
+int RGWPubSub::get_topics_v1(const DoutPrefixProvider* dpp,
+                             rgw_pubsub_topics& result,
+                             optional_yield y) const
+{
+  return read_topics_v1(dpp, result, nullptr, y);
 }
 
 int RGWPubSub::list_account_topics(const DoutPrefixProvider* dpp,

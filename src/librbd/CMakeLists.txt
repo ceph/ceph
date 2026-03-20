@@ -219,6 +219,11 @@ if(LINUX AND HAVE_LIBCRYPTSETUP)
           crypto/luks/Magic.cc)
 endif()
 
+if(HAVE_LIBNBD)
+  list(APPEND librbd_internal_srcs
+          migration/NBDStream.cc)
+endif()
+
 add_library(rbd_api STATIC librbd.cc)
 add_library(rbd_internal STATIC
   ${librbd_internal_srcs}
@@ -239,6 +244,10 @@ target_include_directories(rbd_internal PRIVATE ${OPENSSL_INCLUDE_DIR})
 if(LINUX AND HAVE_LIBCRYPTSETUP)
   target_include_directories(rbd_internal PRIVATE ${LIBCRYPTSETUP_INCLUDE_DIR})
   target_link_libraries(rbd_internal PRIVATE ${LIBCRYPTSETUP_LIBRARIES})
+endif()
+if(HAVE_LIBNBD)
+  target_include_directories(rbd_internal PRIVATE ${LIBNBD_INCLUDE_DIR})
+  target_link_libraries(rbd_internal PRIVATE ${LIBNBD_LIBRARIES})
 endif()
 
 add_custom_target(librbd_plugins)

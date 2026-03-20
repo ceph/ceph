@@ -2,22 +2,19 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/migration/NativeFormat.h"
-#include "include/neorados/RADOS.hpp"
+#include "common/ceph_argparse.h"
+#include "common/common_init.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "include/scope_guard.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/ImageState.h"
-#include "librbd/Utils.h"
-#include "librbd/asio/ContextWQ.h"
-#include "librbd/io/ImageDispatchSpec.h"
 #include "json_spirit/json_spirit.h"
 #include "boost/lexical_cast.hpp"
-#include <sstream>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::migration::NativeFormat: " << this \
-                           << " " << __func__ << ": "
+#define dout_prefix *_dout << "librbd::migration::NativeFormat: " << __func__ \
+                           << ": "
 
 namespace librbd {
 namespace migration {
@@ -25,6 +22,8 @@ namespace migration {
 namespace {
 
 const std::string TYPE_KEY{"type"};
+const std::string CLUSTER_NAME_KEY{"cluster_name"};
+const std::string CLIENT_NAME_KEY{"client_name"};
 const std::string POOL_ID_KEY{"pool_id"};
 const std::string POOL_NAME_KEY{"pool_name"};
 const std::string POOL_NAMESPACE_KEY{"pool_namespace"};
@@ -51,256 +50,243 @@ std::string NativeFormat<I>::build_source_spec(
 }
 
 template <typename I>
-NativeFormat<I>::NativeFormat(
-    I* image_ctx, const json_spirit::mObject& json_object, bool import_only)
-  : m_image_ctx(image_ctx), m_json_object(json_object),
-    m_import_only(import_only) {
+bool NativeFormat<I>::is_source_spec(
+    const json_spirit::mObject& source_spec_object) {
+  auto it = source_spec_object.find(TYPE_KEY);
+  return it != source_spec_object.end() &&
+         it->second.type() == json_spirit::str_type &&
+         it->second.get_str() == "native";
 }
 
 template <typename I>
-void NativeFormat<I>::open(Context* on_finish) {
-  auto cct = m_image_ctx->cct;
-  ldout(cct, 10) << dendl;
+int NativeFormat<I>::create_image_ctx(
+    librados::IoCtx& dst_io_ctx,
+    const json_spirit::mObject& source_spec_object,
+    bool import_only, uint64_t src_snap_id, I** src_image_ctx,
+    librados::Rados** src_rados) {
+  auto cct = reinterpret_cast<CephContext*>(dst_io_ctx.cct());
+  std::string cluster_name;
+  std::string client_name;
+  std::string pool_name;
+  int64_t pool_id = -1;
+  std::string pool_namespace;
+  std::string image_name;
+  std::string image_id;
+  std::string snap_name;
+  uint64_t snap_id = CEPH_NOSNAP;
+  int r;
 
-  auto& pool_name_val = m_json_object[POOL_NAME_KEY];
-  if (pool_name_val.type() == json_spirit::str_type) {
-    librados::Rados rados(m_image_ctx->md_ctx);
-    librados::IoCtx io_ctx;
-    int r = rados.ioctx_create(pool_name_val.get_str().c_str(), io_ctx);
-    if (r < 0 ) {
+  if (auto it = source_spec_object.find(CLUSTER_NAME_KEY);
+      it != source_spec_object.end()) {
+    if (it->second.type() == json_spirit::str_type) {
+      cluster_name = it->second.get_str();
+    } else {
+      lderr(cct) << "invalid cluster name" << dendl;
+      return -EINVAL;
+    }
+  }
+
+  if (auto it = source_spec_object.find(CLIENT_NAME_KEY);
+      it != source_spec_object.end()) {
+    if (cluster_name.empty()) {
+      lderr(cct) << "cannot specify client name without cluster name" << dendl;
+      return -EINVAL;
+    }
+    if (it->second.type() == json_spirit::str_type) {
+      client_name = it->second.get_str();
+    } else {
+      lderr(cct) << "invalid client name" << dendl;
+      return -EINVAL;
+    }
+  }
+
+  if (auto it = source_spec_object.find(POOL_NAME_KEY);
+      it != source_spec_object.end()) {
+    if (it->second.type() == json_spirit::str_type) {
+      pool_name = it->second.get_str();
+    } else {
       lderr(cct) << "invalid pool name" << dendl;
-      on_finish->complete(r);
-      return;
-    }
-
-    m_pool_id = io_ctx.get_id();
-  } else if (pool_name_val.type() != json_spirit::null_type) {
-    lderr(cct) << "invalid pool name" << dendl;
-    on_finish->complete(-EINVAL);
-    return;
-  }
-
-  auto& pool_id_val = m_json_object[POOL_ID_KEY];
-  if (m_pool_id != -1 && pool_id_val.type() != json_spirit::null_type) {
-    lderr(cct) << "cannot specify both pool name and pool id" << dendl;
-    on_finish->complete(-EINVAL);
-    return;
-  } else if (pool_id_val.type() == json_spirit::int_type) {
-    m_pool_id = pool_id_val.get_int64();
-  } else if (pool_id_val.type() == json_spirit::str_type) {
-    try {
-      m_pool_id = boost::lexical_cast<int64_t>(pool_id_val.get_str());
-    } catch (boost::bad_lexical_cast &) {
+      return -EINVAL;
     }
   }
 
-  if (m_pool_id == -1) {
-    lderr(cct) << "missing or invalid pool id" << dendl;
-    on_finish->complete(-EINVAL);
-    return;
-  }
-
-  auto& pool_namespace_val = m_json_object[POOL_NAMESPACE_KEY];
-  if (pool_namespace_val.type() == json_spirit::str_type) {
-    m_pool_namespace = pool_namespace_val.get_str();
-  } else if (pool_namespace_val.type() != json_spirit::null_type) {
-    lderr(cct) << "invalid pool namespace" << dendl;
-    on_finish->complete(-EINVAL);
-    return;
-  }
-
-  auto& image_name_val = m_json_object[IMAGE_NAME_KEY];
-  if (image_name_val.type() != json_spirit::str_type) {
-    lderr(cct) << "missing or invalid image name" << dendl;
-    on_finish->complete(-EINVAL);
-    return;
-  }
-  m_image_name = image_name_val.get_str();
-
-  auto& image_id_val = m_json_object[IMAGE_ID_KEY];
-  if (image_id_val.type() == json_spirit::str_type) {
-    m_image_id = image_id_val.get_str();
-  } else if (image_id_val.type() != json_spirit::null_type) {
-    lderr(cct) << "invalid image id" << dendl;
-    on_finish->complete(-EINVAL);
-    return;
-  }
-
-  auto& snap_name_val = m_json_object[SNAP_NAME_KEY];
-  if (snap_name_val.type() == json_spirit::str_type) {
-    m_snap_name = snap_name_val.get_str();
-  } else if (snap_name_val.type() != json_spirit::null_type) {
-    lderr(cct) << "invalid snap name" << dendl;
-    on_finish->complete(-EINVAL);
-    return;
-  }
-
-  auto& snap_id_val = m_json_object[SNAP_ID_KEY];
-  if (!m_snap_name.empty() && snap_id_val.type() != json_spirit::null_type) {
-    lderr(cct) << "cannot specify both snap name and snap id" << dendl;
-    on_finish->complete(-EINVAL);
-    return;
-  } else if (snap_id_val.type() == json_spirit::str_type) {
-    try {
-      m_snap_id = boost::lexical_cast<uint64_t>(snap_id_val.get_str());
-    } catch (boost::bad_lexical_cast &) {
+  if (auto it = source_spec_object.find(POOL_ID_KEY);
+      it != source_spec_object.end()) {
+    if (!pool_name.empty()) {
+      lderr(cct) << "cannot specify both pool name and pool id" << dendl;
+      return -EINVAL;
     }
-  } else if (snap_id_val.type() == json_spirit::int_type) {
-    m_snap_id = snap_id_val.get_uint64();
+    if (it->second.type() == json_spirit::int_type) {
+      pool_id = it->second.get_int64();
+    } else if (it->second.type() == json_spirit::str_type) {
+      try {
+        pool_id = boost::lexical_cast<int64_t>(it->second.get_str());
+      } catch (boost::bad_lexical_cast&) {
+      }
+    }
+    if (pool_id == -1) {
+      lderr(cct) << "invalid pool id" << dendl;
+      return -EINVAL;
+    }
   }
 
-  if (snap_id_val.type() != json_spirit::null_type &&
-      m_snap_id == CEPH_NOSNAP) {
-    lderr(cct) << "invalid snap id" << dendl;
-    on_finish->complete(-EINVAL);
-    return;
+  if (pool_name.empty() && pool_id == -1) {
+    lderr(cct) << "missing pool name or pool id" << dendl;
+    return -EINVAL;
+  }
+
+  if (auto it = source_spec_object.find(POOL_NAMESPACE_KEY);
+      it != source_spec_object.end()) {
+    if (it->second.type() == json_spirit::str_type) {
+      pool_namespace = it->second.get_str();
+    } else {
+      lderr(cct) << "invalid pool namespace" << dendl;
+      return -EINVAL;
+    }
+  }
+
+  if (auto it = source_spec_object.find(IMAGE_NAME_KEY);
+      it != source_spec_object.end()) {
+    if (it->second.type() == json_spirit::str_type) {
+      image_name = it->second.get_str();
+    } else {
+      lderr(cct) << "invalid image name" << dendl;
+      return -EINVAL;
+    }
+  } else {
+    lderr(cct) << "missing image name" << dendl;
+    return -EINVAL;
+  }
+
+  if (auto it = source_spec_object.find(IMAGE_ID_KEY);
+      it != source_spec_object.end()) {
+    if (it->second.type() == json_spirit::str_type) {
+      image_id = it->second.get_str();
+    } else {
+      lderr(cct) << "invalid image id" << dendl;
+      return -EINVAL;
+    }
+  }
+
+  if (auto it = source_spec_object.find(SNAP_NAME_KEY);
+      it != source_spec_object.end()) {
+    if (it->second.type() == json_spirit::str_type) {
+      snap_name = it->second.get_str();
+    } else {
+      lderr(cct) << "invalid snap name" << dendl;
+      return -EINVAL;
+    }
+  }
+
+  if (auto it = source_spec_object.find(SNAP_ID_KEY);
+      it != source_spec_object.end()) {
+    if (!snap_name.empty()) {
+      lderr(cct) << "cannot specify both snap name and snap id" << dendl;
+      return -EINVAL;
+    }
+    if (it->second.type() == json_spirit::int_type) {
+      snap_id = it->second.get_uint64();
+    } else if (it->second.type() == json_spirit::str_type) {
+      try {
+        snap_id = boost::lexical_cast<uint64_t>(it->second.get_str());
+      } catch (boost::bad_lexical_cast&) {
+      }
+    }
+    if (snap_id == CEPH_NOSNAP) {
+      lderr(cct) << "invalid snap id" << dendl;
+      return -EINVAL;
+    }
   }
 
   // snapshot is required for import to keep source read-only
-  if (m_import_only && m_snap_name.empty() && m_snap_id == CEPH_NOSNAP) {
-    lderr(cct) << "snapshot required for import" << dendl;
-    on_finish->complete(-EINVAL);
-    return;
+  if (import_only && snap_name.empty() && snap_id == CEPH_NOSNAP) {
+    lderr(cct) << "snap name or snap id required for import" << dendl;
+    return -EINVAL;
   }
 
-  // TODO add support for external clusters
-  librados::IoCtx io_ctx;
-  int r = util::create_ioctx(m_image_ctx->md_ctx, "source image",
-                             m_pool_id, m_pool_namespace, &io_ctx);
-  if (r < 0) {
-    on_finish->complete(r);
-    return;
+  // import snapshot is used only for destination image HEAD
+  // otherwise, src_snap_id corresponds to destination image "opened at"
+  // snap_id
+  if (src_snap_id != CEPH_NOSNAP) {
+    snap_id = src_snap_id;
   }
 
-  m_image_ctx->md_ctx.dup(io_ctx);
-  m_image_ctx->data_ctx.dup(io_ctx);
-  m_image_ctx->name = m_image_name;
-
-  uint64_t flags = 0;
-  if (m_image_id.empty() && !m_import_only) {
-    flags |= OPEN_FLAG_OLD_FORMAT;
-  } else {
-    m_image_ctx->id = m_image_id;
-  }
-
-  if (m_image_ctx->child != nullptr) {
-    // set rados flags for reading the parent image
-    if (m_image_ctx->child->config.template get_val<bool>("rbd_balance_parent_reads")) {
-      m_image_ctx->set_read_flag(librados::OPERATION_BALANCE_READS);
-    } else if (m_image_ctx->child->config.template get_val<bool>("rbd_localize_parent_reads")) {
-      m_image_ctx->set_read_flag(librados::OPERATION_LOCALIZE_READS);
+  std::unique_ptr<librados::Rados> rados_ptr;
+  if (!cluster_name.empty()) {
+    // manually bootstrap a CephContext, skipping reading environment
+    // variables for now -- since we don't have access to command line
+    // arguments here, the least confusing option is to limit initial
+    // remote cluster config to a file in the default location
+    // TODO: support specifying mon_host and key via source spec
+    // TODO: support merging in effective local cluster config to get
+    // overrides for log levels, etc
+    CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
+    if (!client_name.empty() && !iparams.name.from_str(client_name)) {
+      lderr(cct) << "failed to set remote client name" << dendl;
+      return -EINVAL;
     }
+
+    auto remote_cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
+    auto put_remote_cct = make_scope_guard([remote_cct] { remote_cct->put(); });
+
+    remote_cct->_conf->cluster = cluster_name;
+
+    // pass CEPH_CONF_FILE_DEFAULT instead of nullptr to prevent
+    // CEPH_CONF environment variable from being picked up
+    r = remote_cct->_conf.parse_config_files(CEPH_CONF_FILE_DEFAULT, nullptr,
+                                             0);
+    if (r < 0) {
+      remote_cct->_conf.complain_about_parse_error(cct);
+      lderr(cct) << "failed to read ceph conf for remote cluster: "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    remote_cct->_conf.apply_changes(nullptr);
+
+    rados_ptr.reset(new librados::Rados());
+    r = rados_ptr->init_with_context(remote_cct);
+    ceph_assert(r == 0);
+
+    r = rados_ptr->connect();
+    if (r < 0) {
+      lderr(cct) << "failed to connect to remote cluster: " << cpp_strerror(r)
+                 << dendl;
+      return r;
+    }
+  } else {
+    rados_ptr.reset(new librados::Rados(dst_io_ctx));
   }
 
-  // open the source RBD image
-  on_finish = new LambdaContext([this, on_finish](int r) {
-    handle_open(r, on_finish); });
-  m_image_ctx->state->open(flags, on_finish);
-}
-
-template <typename I>
-void NativeFormat<I>::handle_open(int r, Context* on_finish) {
-  auto cct = m_image_ctx->cct;
-  ldout(cct, 10) << "r=" << r << dendl;
-
+  librados::IoCtx src_io_ctx;
+  if (!pool_name.empty()) {
+    r = rados_ptr->ioctx_create(pool_name.c_str(), src_io_ctx);
+  } else {
+    r = rados_ptr->ioctx_create2(pool_id, src_io_ctx);
+  }
   if (r < 0) {
-    lderr(cct) << "failed to open image: " << cpp_strerror(r) << dendl;
-    on_finish->complete(r);
-    return;
+    lderr(cct) << "failed to open source image pool: " << cpp_strerror(r)
+               << dendl;
+    return r;
   }
 
-  if (m_snap_id == CEPH_NOSNAP && m_snap_name.empty()) {
-    on_finish->complete(0);
-    return;
+  src_io_ctx.set_namespace(pool_namespace);
+
+  if (!snap_name.empty() && snap_id == CEPH_NOSNAP) {
+    *src_image_ctx = I::create(image_name, image_id, snap_name.c_str(),
+                               src_io_ctx, true);
+  } else {
+    *src_image_ctx = I::create(image_name, image_id, snap_id, src_io_ctx,
+                               true);
   }
 
-  if (!m_snap_name.empty()) {
-    std::shared_lock image_locker{m_image_ctx->image_lock};
-    m_snap_id = m_image_ctx->get_snap_id(cls::rbd::UserSnapshotNamespace{},
-                                         m_snap_name);
+  if (!cluster_name.empty()) {
+    *src_rados = rados_ptr.release();
+  } else {
+    *src_rados = nullptr;
   }
 
-  if (m_snap_id == CEPH_NOSNAP) {
-    lderr(cct) << "failed to locate snapshot " << m_snap_name << dendl;
-    on_finish = new LambdaContext([on_finish](int) {
-      on_finish->complete(-ENOENT); });
-    m_image_ctx->state->close(on_finish);
-    return;
-  }
-
-  on_finish = new LambdaContext([this, on_finish](int r) {
-    handle_snap_set(r, on_finish); });
-  m_image_ctx->state->snap_set(m_snap_id, on_finish);
-}
-
-template <typename I>
-void NativeFormat<I>::handle_snap_set(int r, Context* on_finish) {
-  auto cct = m_image_ctx->cct;
-  ldout(cct, 10) << "r=" << r << dendl;
-
-  if (r < 0) {
-    lderr(cct) << "failed to set snapshot " << m_snap_id << ": "
-               << cpp_strerror(r) << dendl;
-    on_finish = new LambdaContext([r, on_finish](int) {
-      on_finish->complete(r); });
-    m_image_ctx->state->close(on_finish);
-    return;
-  }
-
-  on_finish->complete(0);
-}
-
-template <typename I>
-void NativeFormat<I>::close(Context* on_finish) {
-  auto cct = m_image_ctx->cct;
-  ldout(cct, 10) << dendl;
-
-  // the native librbd::image::CloseRequest handles all cleanup
-  on_finish->complete(0);
-}
-
-template <typename I>
-void NativeFormat<I>::get_snapshots(SnapInfos* snap_infos, Context* on_finish) {
-  auto cct = m_image_ctx->cct;
-  ldout(cct, 10) << dendl;
-
-  m_image_ctx->image_lock.lock_shared();
-  *snap_infos = m_image_ctx->snap_info;
-  m_image_ctx->image_lock.unlock_shared();
-
-  on_finish->complete(0);
-}
-
-template <typename I>
-void NativeFormat<I>::get_image_size(uint64_t snap_id, uint64_t* size,
-                                     Context* on_finish) {
-  auto cct = m_image_ctx->cct;
-  ldout(cct, 10) << dendl;
-
-  m_image_ctx->image_lock.lock_shared();
-  *size = m_image_ctx->get_image_size(snap_id);
-  m_image_ctx->image_lock.unlock_shared();
-
-
-  on_finish->complete(0);
-}
-
-template <typename I>
-void NativeFormat<I>::list_snaps(io::Extents&& image_extents,
-                                 io::SnapIds&& snap_ids, int list_snaps_flags,
-                                 io::SnapshotDelta* snapshot_delta,
-                                 const ZTracer::Trace &parent_trace,
-                                 Context* on_finish) {
-  auto cct = m_image_ctx->cct;
-  ldout(cct, 20) << "image_extents=" << image_extents << dendl;
-
-  auto aio_comp = io::AioCompletion::create_and_start(
-    on_finish, util::get_image_ctx(m_image_ctx), io::AIO_TYPE_GENERIC);
-  auto req = io::ImageDispatchSpec::create_list_snaps(
-    *m_image_ctx, io::IMAGE_DISPATCH_LAYER_MIGRATION, aio_comp,
-    std::move(image_extents), io::ImageArea::DATA, std::move(snap_ids),
-    list_snaps_flags, snapshot_delta, {});
-  req->send();
+  return 0;
 }
 
 } // namespace migration

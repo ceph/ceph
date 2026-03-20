@@ -55,7 +55,7 @@ using ceph::decode;
 using ceph::encode;
 using ceph::Formatter;
 
-static const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config,/etc/ceph/$cluster.conf,$home/.ceph/$cluster.conf,$cluster.conf"
+const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config,/etc/ceph/$cluster.conf,$home/.ceph/$cluster.conf,$cluster.conf"
 #if defined(__FreeBSD__)
     ",/usr/local/etc/ceph/$cluster.conf"
 #elif defined(_WIN32)
@@ -493,6 +493,11 @@ void md_config_t::parse_env(unsigned entity_type,
     }
   }
 
+  if (auto s = getenv("TMPDIR"); s) {
+    string err;
+    _set_val(values, tracker, s, *find_option("tmp_dir"), CONF_ENV, &err);
+  }
+
   // Apply pod memory limits:
   //
   // There are two types of resource requests: `limits` and `requests`.
@@ -708,6 +713,9 @@ int md_config_t::parse_argv(ConfigValues& values,
     }
     else if (ceph_argparse_witharg(args, i, &val, "--client_mountpoint", "-r", (char*)NULL)) {
       set_val_or_die(values, tracker, "client_mountpoint", val.c_str());
+    }
+    else if (ceph_argparse_witharg(args, i, &val, "--service_unique_id", (char*)NULL)) {
+      set_val_or_die(values, tracker, "service_unique_id", val.c_str());
     }
     else {
       int r = parse_option(values, tracker, args, i, NULL, level);

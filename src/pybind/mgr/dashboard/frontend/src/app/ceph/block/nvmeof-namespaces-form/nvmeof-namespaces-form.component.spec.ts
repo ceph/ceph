@@ -63,7 +63,7 @@ describe('NvmeofNamespacesFormComponent', () => {
       expect(nvmeofService.createNamespace).toHaveBeenCalledWith(mockSubsystemNQN, {
         rbd_image_name: image,
         rbd_pool: null,
-        size: 1073741824
+        rbd_image_size: 1073741824
       });
     });
 

@@ -9,8 +9,14 @@ import logging
 import os
 import re
 import xml.etree.ElementTree as ET  # noqa: N814
+from collections import defaultdict
 from enum import Enum
 from subprocess import SubprocessError
+
+try:
+    import xmltodict
+except ModuleNotFoundError:
+    logging.error("Module 'xmltodict' is not installed.")
 
 from mgr_util import build_url, name_to_config_section
 
@@ -32,6 +38,8 @@ logger = logging.getLogger('rgw_client')
 _SYNC_GROUP_ID = 'dashboard_admin_group'
 _SYNC_FLOW_ID = 'dashboard_admin_flow'
 _SYNC_PIPE_ID = 'dashboard_admin_pipe'
+
+_RGW_USER = 'dashboard'
 
 
 class NoRgwDaemonsException(Exception):
@@ -256,7 +264,6 @@ def _get_user_keys(user: str, realm: Optional[str] = None) -> Tuple[str, str]:
 
 def configure_rgw_credentials():
     logger.info('Configuring dashboard RGW credentials')
-    user = 'dashboard'
     realms = []
     access_key = ''
     secret_key = ''
@@ -270,7 +277,7 @@ def configure_rgw_credentials():
             realm_access_keys = {}
             realm_secret_keys = {}
             for realm in realms:
-                realm_access_key, realm_secret_key = _get_user_keys(user, realm)
+                realm_access_key, realm_secret_key = _get_user_keys(_RGW_USER, realm)
                 if realm_access_key:
                     realm_access_keys[realm] = realm_access_key
                     realm_secret_keys[realm] = realm_secret_key
@@ -278,7 +285,7 @@ def configure_rgw_credentials():
                 access_key = json.dumps(realm_access_keys)
                 secret_key = json.dumps(realm_secret_keys)
         else:
-            access_key, secret_key = _get_user_keys(user)
+            access_key, secret_key = _get_user_keys(_RGW_USER)
 
         assert access_key and secret_key
         Settings.RGW_API_ACCESS_KEY = access_key
@@ -308,18 +315,25 @@ class RgwClient(RestClient):
 
     @staticmethod
     def _get_daemon_connection_info(daemon_name: str) -> dict:
+        access_key = None
+        secret_key = None
+
         try:
+            # Try to fetch realm-specific credentials first
             realm_name = RgwClient._daemons[daemon_name].realm_name
             access_key = Settings.RGW_API_ACCESS_KEY[realm_name]
             secret_key = Settings.RGW_API_SECRET_KEY[realm_name]
         except TypeError:
-            # Legacy string values.
+            # Handle legacy case where credentials are simple strings, not per-realm
             access_key = Settings.RGW_API_ACCESS_KEY
             secret_key = Settings.RGW_API_SECRET_KEY
         except KeyError as error:
-            raise DashboardException(msg='Credentials not found for RGW Daemon: {}'.format(error),
-                                     http_status_code=404,
-                                     component='rgw')
+            # If the realm-specific credentials are not found, try fetching dashboard user keys
+            access_key, secret_key = _get_user_keys('dashboard')
+            if not access_key:
+                raise DashboardException(msg='Credentials not found for RGW Daemon: {}'.format(error),  # noqa E501  # pylint: disable=line-too-long
+                                         http_status_code=404,
+                                         component='rgw')
 
         return {'access_key': access_key, 'secret_key': secret_key}
 
@@ -352,21 +366,22 @@ class RgwClient(RestClient):
 
         daemon_keys = RgwClient._daemons.keys()
         if not daemon_name:
-            if len(daemon_keys) > 1:
-                try:
-                    multiiste = RgwMultisite()
-                    default_zonegroup = multiiste.get_all_zonegroups_info()['default_zonegroup']
-
-                    # Iterate through _daemons.values() to find the daemon with the
-                    # matching zonegroup_id
-                    for daemon in RgwClient._daemons.values():
-                        if daemon.zonegroup_id == default_zonegroup:
-                            daemon_name = daemon.name
-                            break
-                except Exception:  # pylint: disable=broad-except
-                    daemon_name = next(iter(daemon_keys))
-            else:
-                # Handle the case where there is only one or no key in _daemons
+            try:
+                if len(daemon_keys) > 1:
+                    default_zonegroup = (
+                        RgwMultisite()
+                        .get_all_zonegroups_info()['default_zonegroup']
+                    )
+                    if default_zonegroup:
+                        daemon_name = next(
+                            (daemon.name
+                             for daemon in RgwClient._daemons.values()
+                             if daemon.zonegroup_id == default_zonegroup),
+                            None
+                        )
+                daemon_name = daemon_name or next(iter(daemon_keys))
+            except Exception as e:  # pylint: disable=broad-except
+                logger.exception('Failed to determine default RGW daemon: %s', str(e))
                 daemon_name = next(iter(daemon_keys))
 
         # Discard all cached instances if any rgw setting has changed
@@ -764,20 +779,43 @@ class RgwClient(RestClient):
             raise DashboardException(msg=str(e), component='rgw')
         return result
 
+    @staticmethod
+    def _handle_rules(pairs):
+        result = defaultdict(list)
+        for key, value in pairs:
+            if key == 'Rule':
+                result['Rules'].append(value)
+            else:
+                result[key] = value
+        return result
+
     @RestClient.api_get('/{bucket_name}?lifecycle')
     def get_lifecycle(self, bucket_name, request=None):
         # pylint: disable=unused-argument
+
+        # xmltodict parser will prepend namespace to json keys as {ns0:key}
+        def remove_namespace(xml: str):
+            """Remove namespace in given xml string."""
+            root = ET.fromstring(xml)
+            for elem in root.iter():
+                tag_elements = elem.tag.split("}")  # tag: {ns}tagname
+                # Removing namespaces and attributes
+                elem.tag = tag_elements[1]
+                elem.attrib.clear()
+
+            return ET.tostring(root)
+
         try:
-            result = request()  # type: ignore
-            result = {'LifecycleConfiguration': result}
+            result = request(
+                raw_content=True, headers={'Accept': 'text/xml'}).decode()  # type: ignore
+            return xmltodict.parse(remove_namespace(result), process_namespaces=False)
         except RequestException as e:
             if e.content:
-                content = json_str_to_object(e.content)
-                if content.get(
-                        'Code') == 'NoSuchLifecycleConfiguration':
+                root = ET.fromstring(e.content)
+                code = root.find('Code')
+                if code is not None and code.text == 'NoSuchLifecycleConfiguration':
                     return None
             raise DashboardException(msg=str(e), component='rgw')
-        return result
 
     @staticmethod
     def dict_to_xml(data):
@@ -821,15 +859,15 @@ class RgwClient(RestClient):
             lifecycle = RgwClient.dict_to_xml(lifecycle)
         try:
             if lifecycle and '<LifecycleConfiguration>' not in str(lifecycle):
-                lifecycle = f'<LifecycleConfiguration>{lifecycle}</LifecycleConfiguration>'
+                lifecycle = f'<LifecycleConfiguration>\n{lifecycle}\n</LifecycleConfiguration>'
             result = request(data=lifecycle)  # type: ignore
         except RequestException as e:
+            msg = ''
             if e.content:
                 content = json_str_to_object(e.content)
                 if content.get("Code") == "MalformedXML":
                     msg = "Invalid Lifecycle document"
-                    raise DashboardException(msg=msg, component='rgw')
-            raise DashboardException(msg=str(e), component='rgw')
+            raise DashboardException(msg=msg or str(e), component='rgw')
         return result
 
     @RestClient.api_delete('/{bucket_name}?lifecycle')
@@ -1631,60 +1669,61 @@ class RgwMultisite:
             raise DashboardException(error, http_status_code=500, component='rgw')
         self.update_period()
 
-    def add_placement_targets_zone(self, zone_name: str, placement_target: str, data_pool: str,
-                                   index_pool: str, data_extra_pool: str):
+    def add_placement_targets_storage_class_zone(self, zone_name: str, placement_target: str,
+                                                 data_pool: str, index_pool: str,
+                                                 data_extra_pool: str, storage_class: str,
+                                                 data_pool_class: str, compression: str):
         rgw_zone_add_placement_cmd = ['zone', 'placement', 'add', '--rgw-zone', zone_name,
-                                      '--placement-id', placement_target, '--data-pool', data_pool,
+                                      '--placement-id', placement_target,
+                                      '--data-pool', data_pool,
                                       '--index-pool', index_pool,
-                                      '--data-extra-pool', data_extra_pool]
+                                      '--data-extra-pool', data_extra_pool,
+                                      '--storage-class', storage_class,
+                                      '--data-pool', data_pool_class]
+
+        if compression:
+            rgw_zone_add_placement_cmd.extend(['--compression', compression])
+
         try:
             exit_code, _, err = mgr.send_rgwadmin_command(rgw_zone_add_placement_cmd)
             if exit_code > 0:
-                raise DashboardException(e=err, msg='Unable to add placement target {} to zone {}'.format(placement_target, zone_name),  # noqa E501 #pylint: disable=line-too-long
-                                         http_status_code=500, component='rgw')
+                raise DashboardException(
+                    e=err,
+                    msg='Unable to add placement target {} to \
+                        zone {}'.format(placement_target, zone_name),
+                    http_status_code=500,
+                    component='rgw'
+                )
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
         self.update_period()
 
-    def add_storage_class_zone(self, zone_name: str, placement_target: str, storage_class: str,
-                               data_pool: str, compression: str):
-        rgw_zone_add_storage_class_cmd = ['zone', 'placement', 'add', '--rgw-zone', zone_name,
-                                          '--placement-id', placement_target,
-                                          '--storage-class', storage_class,
-                                          '--data-pool', data_pool]
-        if compression:
-            rgw_zone_add_storage_class_cmd.extend(['--compression', compression])
-        try:
-            exit_code, _, err = mgr.send_rgwadmin_command(rgw_zone_add_storage_class_cmd)
-            if exit_code > 0:
-                raise DashboardException(e=err, msg='Unable to add storage class {} to zone {}'.format(storage_class, zone_name),  # noqa E501 #pylint: disable=line-too-long
-                                         http_status_code=500, component='rgw')
-        except SubprocessError as error:
-            raise DashboardException(error, http_status_code=500, component='rgw')
-        self.update_period()
-
-    def edit_zone(self, zone_name: str, new_zone_name: str, zonegroup_name: str, default: str = '',
-                  master: str = '', endpoints: str = '', access_key: str = '', secret_key: str = '',
-                  placement_target: str = '', data_pool: str = '', index_pool: str = '',
-                  data_extra_pool: str = '', storage_class: str = '', data_pool_class: str = '',
-                  compression: str = ''):
+    def edit_zone(self, zone_name: str, new_zone_name: str, zonegroup_name: str,
+                  default: str = '', master: str = '', endpoints: str = '',
+                  access_key: str = '', secret_key: str = '', placement_target: str = '',
+                  data_pool: str = '', index_pool: str = '', data_extra_pool: str = '',
+                  storage_class: str = '', data_pool_class: str = '', compression: str = ''):
         if new_zone_name != zone_name:
             rgw_zone_rename_cmd = ['zone', 'rename', '--rgw-zone',
                                    zone_name, '--zone-new-name', new_zone_name]
             try:
                 exit_code, _, err = mgr.send_rgwadmin_command(rgw_zone_rename_cmd, False)
                 if exit_code > 0:
-                    raise DashboardException(e=err, msg='Unable to rename zone to {}'.format(new_zone_name),  # noqa E501 #pylint: disable=line-too-long
-                                             http_status_code=500, component='rgw')
+                    raise DashboardException(
+                        e=err, msg='Unable to rename zone to {}'.format(new_zone_name),
+                        http_status_code=500, component='rgw')
             except SubprocessError as error:
                 raise DashboardException(error, http_status_code=500, component='rgw')
             self.update_period()
         self.modify_zone(new_zone_name, zonegroup_name, default, master, endpoints, access_key,
                          secret_key)
-        self.add_placement_targets_zone(new_zone_name, placement_target,
-                                        data_pool, index_pool, data_extra_pool)
-        self.add_storage_class_zone(new_zone_name, placement_target, storage_class,
-                                    data_pool_class, compression)
+
+        if placement_target:
+            self.add_placement_targets_storage_class_zone(
+                new_zone_name, placement_target,
+                data_pool, index_pool,
+                data_extra_pool, storage_class,
+                data_pool_class, compression)
 
     def list_zones(self):
         rgw_zone_list = {}
@@ -1808,8 +1847,16 @@ class RgwMultisite:
             is_multisite_configured = False
         return is_multisite_configured
 
-    def get_multisite_sync_status(self):
+    def get_multisite_sync_status(self, daemon_name: str):
         rgw_multisite_sync_status_cmd = ['sync', 'status']
+        daemons = _get_daemons()
+        try:
+            realm_name = daemons[daemon_name].realm_name
+        except (KeyError, AttributeError):
+            raise DashboardException('Unable to get realm name from daemon',
+                                     http_status_code=500, component='rgw')
+        if realm_name:
+            rgw_multisite_sync_status_cmd.extend(['--rgw-realm', realm_name])
         try:
             exit_code, out, _ = mgr.send_rgwadmin_command(rgw_multisite_sync_status_cmd, False)
             if exit_code > 0:
@@ -2063,7 +2110,8 @@ class RgwMultisite:
                          source_bucket: str = '',
                          destination_bucket: str = '',
                          bucket_name: str = '',
-                         update_period=False):
+                         update_period=False,
+                         user: str = '', mode: str = ''):
 
         if source_zones['added'] or destination_zones['added']:
             rgw_sync_policy_cmd = ['sync', 'group', 'pipe', 'create',
@@ -2072,17 +2120,21 @@ class RgwMultisite:
             if bucket_name:
                 rgw_sync_policy_cmd += ['--bucket', bucket_name]
 
-            if source_bucket:
-                rgw_sync_policy_cmd += ['--source-bucket', source_bucket]
+            rgw_sync_policy_cmd += ['--source-bucket', source_bucket]
 
-            if destination_bucket:
-                rgw_sync_policy_cmd += ['--dest-bucket', destination_bucket]
+            rgw_sync_policy_cmd += ['--dest-bucket', destination_bucket]
 
             if source_zones['added']:
                 rgw_sync_policy_cmd += ['--source-zones', ','.join(source_zones['added'])]
 
             if destination_zones['added']:
                 rgw_sync_policy_cmd += ['--dest-zones', ','.join(destination_zones['added'])]
+
+            if user:
+                rgw_sync_policy_cmd += ['--uid', user]
+
+            if mode:
+                rgw_sync_policy_cmd += ['--mode', mode]
 
             logger.info("Creating sync pipe!")
             try:
@@ -2098,13 +2150,13 @@ class RgwMultisite:
         if ((source_zones['removed'] and '*' not in source_zones['added'])
                 or (destination_zones['removed'] and '*' not in destination_zones['added'])):
             self.remove_sync_pipe(group_id, pipe_id, source_zones['removed'],
-                                  destination_zones['removed'], destination_bucket,
-                                  bucket_name)
+                                  destination_zones['removed'],
+                                  bucket_name, True)
 
     def remove_sync_pipe(self, group_id: str, pipe_id: str,
                          source_zones: Optional[List[str]] = None,
                          destination_zones: Optional[List[str]] = None,
-                         destination_bucket: str = '', bucket_name: str = '',
+                         bucket_name: str = '',
                          update_period=False):
         rgw_sync_policy_cmd = ['sync', 'group', 'pipe', 'remove',
                                '--group-id', group_id, '--pipe-id', pipe_id]
@@ -2117,9 +2169,6 @@ class RgwMultisite:
 
         if destination_zones:
             rgw_sync_policy_cmd += ['--dest-zones', ','.join(destination_zones)]
-
-        if destination_bucket:
-            rgw_sync_policy_cmd += ['--dest-bucket', destination_bucket]
 
         logger.info("Removing sync pipe! %s", rgw_sync_policy_cmd)
         try:

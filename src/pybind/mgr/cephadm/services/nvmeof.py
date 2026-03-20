@@ -84,11 +84,10 @@ class NvmeofService(CephService):
             gateways = json.loads(out)['gateways']
             cmd_dicts = []
 
-            spec = cast(NvmeofServiceSpec,
-                        self.mgr.spec_store.all_specs.get(daemon_descrs[0].service_name(), None))
-
             for dd in daemon_descrs:
                 assert dd.hostname is not None
+                spec = cast(NvmeofServiceSpec,
+                            self.mgr.spec_store.all_specs.get(dd.service_name(), None))
                 service_name = dd.service_name()
 
                 if not spec:
@@ -106,7 +105,7 @@ class NvmeofService(CephService):
                         'prefix': 'dashboard nvmeof-gateway-add',
                         'inbuf': service_url,
                         'name': service_name,
-                        'group': spec.group,
+                        'group': spec.group if spec.group else '',
                         'daemon_name': dd.name()
                     })
             return cmd_dicts
@@ -144,14 +143,16 @@ class NvmeofService(CephService):
         # to clean the keyring up
         super().post_remove(daemon, is_failed_deploy=is_failed_deploy)
         service_name = daemon.service_name()
+        daemon_name = daemon.name()
 
         # remove config for dashboard nvmeof gateways if any
-        ret, out, err = self.mgr.mon_command({
+        ret, _, err = self.mgr.mon_command({
             'prefix': 'dashboard nvmeof-gateway-rm',
             'name': service_name,
+            'daemon_name': daemon_name
         })
         if not ret:
-            logger.info(f'{daemon.hostname} removed from nvmeof gateways dashboard config')
+            logger.info(f'{daemon_name} removed from nvmeof gateways dashboard config')
 
         # and any certificates being used for mTLS
 

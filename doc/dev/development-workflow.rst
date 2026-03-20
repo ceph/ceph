@@ -108,12 +108,12 @@ status of an open issue can be:
 * ``Pending Backport``: the fix needs to be backported to the stable
   releases listed in the backport field
 
-For each ``Pending Backport`` issue, there exists at least one issue
-in the ``Backport`` tracker to record the work done to cherry pick the
-necessary commits from the master branch to the target stable branch.
-See `the backporter manual
-<http://tracker.ceph.com/projects/ceph-releases/wiki/HOWTO>`_ for more
-information.
+For each ``Pending Backport`` issue, there exists at least one issue in the
+``Backport`` tracker to record the work done to cherry pick the necessary
+commits from the master branch to the target stable branch. See `the backporter
+manual
+<https://github.com/ceph/ceph/blob/main/SubmittingPatches-backports.rst>`_ for
+more information.
 
 Running and interpreting teuthology integration tests
 =====================================================
@@ -243,6 +243,10 @@ differences:
 * All commits are cherry-picked with ``git cherry-pick -x`` to
   reference the original commit
 
+.. note: If a backport is appropriate, the submitter is responsible for
+   determining appropriate target stable branches to which backports must be
+   made.
+
 See `the backporter manual
-<http://tracker.ceph.com/projects/ceph-releases/wiki/HOWTO>`_ for more
-information.
+<https://github.com/ceph/ceph/blob/main/SubmittingPatches-backports.rst>`_ for
+more information.

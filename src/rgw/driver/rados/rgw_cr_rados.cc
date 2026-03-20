@@ -437,7 +437,7 @@ RGWRadosRemoveCR::RGWRadosRemoveCR(rgw::sal::RadosStore* store, const rgw_raw_ob
 int RGWRadosRemoveCR::send_request(const DoutPrefixProvider *dpp)
 {
   auto rados = store->getRados()->get_rados_handle();
-  int r = rados->ioctx_create(obj.pool.name.c_str(), ioctx);
+  int r = rgw_init_ioctx(dpp, rados, obj.pool, ioctx);
   if (r < 0) {
     lderr(cct) << "ERROR: failed to open pool (" << obj.pool.name << ") ret=" << r << dendl;
     return r;
@@ -898,7 +898,7 @@ int RGWAsyncRemoveObj::_send_request(const DoutPrefixProvider *dpp)
 {
   ldpp_dout(dpp, 0) << __func__ << "(): deleting obj=" << obj << dendl;
 
-  obj->set_atomic();
+  obj->set_atomic(true);
 
   RGWObjState *state;
 
@@ -938,6 +938,7 @@ int RGWAsyncRemoveObj::_send_request(const DoutPrefixProvider *dpp)
   if (versioned) {
     del_op->params.versioning_status = BUCKET_VERSIONED;
   }
+
   del_op->params.olh_epoch = versioned_epoch;
   del_op->params.marker_version_id = marker_version_id;
   del_op->params.obj_owner.id = rgw_user(owner);
@@ -945,6 +946,7 @@ int RGWAsyncRemoveObj::_send_request(const DoutPrefixProvider *dpp)
   del_op->params.mtime = timestamp;
   del_op->params.high_precision_time = true;
   del_op->params.zones_trace = &zones_trace;
+  del_op->params.null_verid = false;
 
   ret = del_op->delete_obj(dpp, null_yield, true);
   if (ret < 0) {

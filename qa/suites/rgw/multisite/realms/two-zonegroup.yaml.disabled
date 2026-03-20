@@ -2,7 +2,7 @@ overrides:
   rgw-multisite:
     realm:
       name: test-realm
-      is default: true
+      is_default: true
     zonegroups:
       - name: a
         is_master: true

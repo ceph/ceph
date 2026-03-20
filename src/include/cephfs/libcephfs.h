@@ -319,6 +319,17 @@ int ceph_mount(struct ceph_mount_info *cmount, const char *root);
  */
 int64_t ceph_get_fs_cid(struct ceph_mount_info *cmount);
 
+typedef void (*libcephfs_c_completion_t)(int rc, const void* out, size_t outlen, const void* outs, size_t outslen, void* ud);
+
+int ceph_mds_command2(struct ceph_mount_info *cmount,
+    const char *mds_spec,
+    const char **cmd,
+    size_t cmdlen,
+    const char *inbuf, size_t inbuflen,
+    int one_shot,
+    libcephfs_c_completion_t c,
+    void* ud);
+
 /**
  * Execute a management command remotely on an MDS.
  *
@@ -637,6 +648,71 @@ struct ceph_snapdiff_info
                                    // doesn't exist in the second snapshot
 };
 
+struct ceph_file_blockdiff_result;
+
+// blockdiff stream handle
+struct ceph_file_blockdiff_info
+{
+  struct ceph_mount_info* cmount;
+  struct ceph_file_blockdiff_result* blockp;
+};
+
+// set of file block diff's
+struct cblock
+{
+  uint64_t offset;
+  uint64_t len;
+};
+struct ceph_file_blockdiff_changedblocks
+{
+  uint64_t num_blocks;
+  struct cblock *b;
+};
+
+/**
+ * Initialize blockdiff stream to get file block deltas.
+ *
+ * @param cmount the ceph mount handle to use for snapdiff retrieval.
+ * @param root_path  root path for snapshots-in-question
+ * @param rel_path subpath under the root to build delta for
+ * @param snap1 the first snapshot name
+ * @param snap2 the second snapshot name
+ * @param out_info resulting blockdiff stream handle to be used for blokdiff results
+                   retrieval via ceph_file_blockdiff().
+ * @returns 0 on success and negative error code otherwise
+ */
+int ceph_file_blockdiff_init(struct ceph_mount_info* cmount,
+                             const char* root_path,
+                             const char* rel_path,
+                             const char* snap1,
+                             const char* snap2,
+                             struct ceph_file_blockdiff_info* out_info);
+
+/**
+ * Get a set of file blockdiff's
+ *
+ * @param info blockdiff stream handle
+ * @param blocks next set of file blockdiff's (offset, length)
+ * @returns 0 or 1 on success and negative error code otherwise
+ */
+int ceph_file_blockdiff(struct ceph_file_blockdiff_info* info,
+                        struct ceph_file_blockdiff_changedblocks* blocks);
+/**
+ * Free blockdiff buffer
+ *
+ * @param blocks file block diff's from ceph_file_blockdiff()
+ * @returns None
+ */
+void ceph_free_file_blockdiff_buffer(struct ceph_file_blockdiff_changedblocks* blocks);
+
+/**
+ * Close blockdiff stream
+ *
+ * @param info blockdiff stream handle
+ * @returns 0 on success and negative error code otherwise
+ */
+int ceph_file_blockdiff_finish(struct ceph_file_blockdiff_info* info);
+
 /**
  * Opens snapdiff stream to get snapshots delta (aka snapdiff).
  *
@@ -937,7 +1013,7 @@ int ceph_fstatx(struct ceph_mount_info *cmount, int fd, struct ceph_statx *stx,
  * @param relpath to the file/directory to get statistics of
  * @param stx the ceph_statx struct that will be filled in with the file's statistics.
  * @param want bitfield of CEPH_STATX_* flags showing designed attributes
- * @param flags bitfield that can be used to set AT_* modifier flags (AT_STATX_SYNC_AS_STAT, AT_STATX_FORCE_SYNC, AT_STATX_DONT_SYNC and AT_SYMLINK_NOFOLLOW)
+ * @param flags bitfield that can be used to set AT_* modifier flags (AT_STATX_DONT_SYNC, AT_SYMLINK_NOFOLLOW and AT_EMPTY_PATH)
  * @returns 0 on success or negative error code on failure.
  */
 int ceph_statxat(struct ceph_mount_info *cmount, int dirfd, const char *relpath,
@@ -1104,7 +1180,7 @@ int ceph_lchown(struct ceph_mount_info *cmount, const char *path, int uid, int g
  * @param relpath the relpath of the file/directory to change the ownership of.
  * @param uid the user id to set on the file/directory.
  * @param gid the group id to set on the file/directory.
- * @param flags bitfield that can be used to set AT_* modifier flags (AT_SYMLINK_NOFOLLOW)
+ * @param flags bitfield that can be used to set AT_* modifier flags (AT_SYMLINK_NOFOLLOW and AT_EMPTY_PATH)
  * @returns 0 on success or negative error code on failure.
  */
 int ceph_chownat(struct ceph_mount_info *cmount, int dirfd, const char *relpath,

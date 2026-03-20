@@ -10,9 +10,16 @@ roles:
   - client.0
 - - host.b
   - client.1
+overrides:
+  ceph:
+    log-ignorelist:
+      - \(PG_DEGRADED\)
 tasks:
 - install:
 - cephadm:
+- ceph:
+    log-ignorelist:
+      - \(OSD_DOWN\)
 - workunit:
     clients:
       client.1:

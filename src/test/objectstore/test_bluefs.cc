@@ -107,8 +107,8 @@ TEST(BlueFS, mkfs_mount) {
   ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
   ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
-  ASSERT_EQ(fs.get_total(BlueFS::BDEV_DB), size - SUPER_RESERVED);
-  ASSERT_LT(fs.get_free(BlueFS::BDEV_DB), size - SUPER_RESERVED);
+  ASSERT_EQ(fs.get_block_device_size(BlueFS::BDEV_DB), size);
+  ASSERT_LT(fs.get_free(BlueFS::BDEV_DB), size);
   fs.umount();
 }
 
@@ -1401,6 +1401,87 @@ TEST(BlueFS, test_concurrent_dir_link_and_compact_log_56210) {
   }
 }
 
+TEST(BlueFS, truncate_drops_allocations) {
+  constexpr uint64_t K = 1024;
+  constexpr uint64_t M = 1024 * K;
+  uuid_d fsid;
+  const char* DIR_NAME="dir";
+  const char* FILE_NAME="file1";
+  struct {
+    uint64_t preallocated_size;
+    uint64_t write_size;
+    uint64_t truncate_to;
+    uint64_t allocated_after_truncate;
+    uint64_t slow_size = 0;
+    uint64_t slow_alloc_size = 64*K;
+    uint64_t db_size = 128*M;
+    uint64_t db_alloc_size = 1*M;
+  } scenarios [] = {
+    // on DB(which is SLOW) : 1 => 1, 64K remains
+    { 1*M, 1, 1, 64*K },
+    // on DB(which is SLOW), alloc 4K : 1 => 1, 4K remains
+    { 1*M, 1, 1, 4*K, 0, 4*K },
+    // on DB(which is SLOW), truncation on AU boundary : 128K => 128K, 128K remains
+    { 1*M, 128*K, 128*K, 128*K },
+    // on DB(which is SLOW), no prealloc, truncation to 0 : 1666K => 0, 0 remains
+    { 0, 1666*K, 0, 0 },
+    // on DB, truncate to 123K, expect 1M occupied
+    { 1234*K, 123*K, 123*K, 1*M, 128*M, 64*K, 10*M, 1*M },
+    // on DB, truncate to 0, expect 0 occupied
+    { 1234*K, 345*K, 0, 0, 128*M, 64*K, 10*M, 1*M },
+    // on DB, truncate to AU boundary, expect exactly 1M occupied
+    { 1234*K, 1123*K, 1*M, 1*M, 128*M, 64*K, 10*M, 1*M },
+    // on DB and SLOW, truncate only data on SLOW
+    { 0, 10*M+1, 10*M+1, 10*M+64*K, 128*M, 64*K, 10*M, 1*M },
+    // on DB and SLOW, preallocate and truncate only data on SLOW
+    { 6*M, 12*M, 10*M+1, 10*M+64*K, 128*M, 64*K, 10*M, 1*M },
+    // on DB and SLOW, preallocate and truncate all in SLOW and some on DB
+    // note! prealloc 6M is important, one allocation for 12M will fallback to SLOW
+    // in 6M + 6M we can be sure that 6M is on DB and 6M is on SLOW
+    { 6*M, 12*M, 3*M+1, 4*M, 128*M, 64*K, 11*M, 1*M },
+  };
+  for (auto& s : scenarios) {
+    ConfSaver conf(g_ceph_context->_conf);
+    conf.SetVal("bluefs_shared_alloc_size", stringify(s.slow_alloc_size).c_str());
+    conf.SetVal("bluefs_alloc_size", stringify(s.db_alloc_size).c_str());
+
+    g_ceph_context->_conf.set_val("bluefs_shared_alloc_size", stringify(s.slow_alloc_size));
+    g_ceph_context->_conf.set_val("bluefs_alloc_size", stringify(s.db_alloc_size));
+    TempBdev bdev_db{s.db_size};
+    TempBdev bdev_slow{s.slow_size};
+
+    BlueFS fs(g_ceph_context);
+    if (s.db_size != 0) {
+      ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev_db.path, false, 0));
+    }
+    if (s.slow_size != 0) {
+      ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_SLOW, bdev_slow.path, false, 0));
+    }
+
+    ASSERT_EQ(0, fs.mkfs(fsid, {BlueFS::BDEV_DB, false, false}));
+    ASSERT_EQ(0, fs.mount());
+    ASSERT_EQ(0, fs.maybe_verify_layout({BlueFS::BDEV_DB, false, false}));
+    BlueFS::FileWriter *h;
+    ASSERT_EQ(0, fs.mkdir("dir"));
+    ASSERT_EQ(0, fs.open_for_write(DIR_NAME, FILE_NAME, &h, false));
+    uint64_t pre = fs.get_used();
+    ASSERT_EQ(0, fs.preallocate(h->file, 0, s.preallocated_size));
+    const std::string content(s.write_size, 'x');
+    h->append(content.c_str(), content.length());
+    fs.fsync(h);
+    ASSERT_EQ(0, fs.truncate(h, s.truncate_to));
+    fs.fsync(h);
+    uint64_t post = fs.get_used();
+    fs.close_writer(h);
+    EXPECT_EQ(pre, post - s.allocated_after_truncate);
+
+    fs.umount();
+  }
+}
+
+
+
+
 TEST(BlueFS, test_log_runway) {
   uint64_t max_log_runway = 65536;
   ConfSaver conf(g_ceph_context->_conf);
@@ -1581,6 +1662,382 @@ TEST(BlueFS, test_log_runway_advance_seq) {
   std::string longdir(max_log_runway*2, 'A');
   ASSERT_EQ(fs.mkdir(longdir), 0);
   fs.compact_log();
+}
+
+TEST(BlueFS, test_69481_truncate_corrupts_log) {
+  uint64_t size = 1048576 * 128;
+  TempBdev bdev{size};
+  BlueFS fs(g_ceph_context);
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
+  uuid_d fsid;
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
+  ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
+
+  BlueFS::FileWriter *f = nullptr;
+  BlueFS::FileWriter *a = nullptr;
+  ASSERT_EQ(0, fs.mkdir("dir"));
+  ASSERT_EQ(0, fs.open_for_write("dir", "test-file", &f, false));
+  ASSERT_EQ(0, fs.open_for_write("dir", "just-allocate", &a, false));
+
+  // create 4 distinct extents in file f
+  // a is here only to prevent f from merging extents together
+  fs.preallocate(f->file, 0, 0x10000);
+  fs.preallocate(a->file, 0, 0x10000);
+  fs.preallocate(f->file, 0, 0x20000);
+  fs.preallocate(a->file, 0, 0x20000);
+  fs.preallocate(f->file, 0, 0x30000);
+  fs.preallocate(a->file, 0, 0x30000);
+  fs.preallocate(f->file, 0, 0x40000);
+  fs.preallocate(a->file, 0, 0x40000);
+  fs.close_writer(a);
+
+  fs.truncate(f, 0);
+  fs.fsync(f);
+
+  bufferlist bl;
+  bl.append(std::string(0x15678, ' '));
+  f->append(bl);
+  fs.truncate(f, 0x15678);
+  fs.fsync(f);
+  fs.close_writer(f);
+
+  fs.umount();
+  // remount to verify
+  ASSERT_EQ(0, fs.mount());
+  fs.umount();
+}
+
+TEST(BlueFS, test_69481_truncate_asserts) {
+  uint64_t size = 1048576 * 128;
+  TempBdev bdev{size};
+  BlueFS fs(g_ceph_context);
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
+  uuid_d fsid;
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
+  ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
+
+  BlueFS::FileWriter *f = nullptr;
+  BlueFS::FileWriter *a = nullptr;
+  ASSERT_EQ(0, fs.mkdir("dir"));
+  ASSERT_EQ(0, fs.open_for_write("dir", "test-file", &f, false));
+  ASSERT_EQ(0, fs.open_for_write("dir", "just-allocate", &a, false));
+
+  // create 4 distinct extents in file f
+  // a is here only to prevent f from merging extents together
+  fs.preallocate(f->file, 0, 0x10000);
+  fs.preallocate(a->file, 0, 0x10000);
+  fs.preallocate(f->file, 0, 0x20000);
+  fs.preallocate(a->file, 0, 0x20000);
+  fs.preallocate(f->file, 0, 0x30000);
+  fs.preallocate(a->file, 0, 0x30000);
+  fs.preallocate(f->file, 0, 0x40000);
+  fs.preallocate(a->file, 0, 0x40000);
+  fs.close_writer(a);
+
+  fs.truncate(f, 0);
+  fs.fsync(f);
+
+  bufferlist bl;
+  bl.append(std::string(0x35678, ' '));
+  f->append(bl);
+  fs.truncate(f, 0x35678);
+  fs.fsync(f);
+  fs.close_writer(f);
+
+  fs.umount();
+}
+
+TEST(bluefs_locked_extents_t, basics) {
+  const uint64_t M = 1 << 20;
+  {
+    uint64_t reserved = 0x2000;
+    uint64_t au = 1*M;
+    uint64_t fullsize = 128*M;
+    bluefs_locked_extents_t lcke(reserved, fullsize, au);
+    ASSERT_EQ(lcke.head_offset, reserved);
+    ASSERT_EQ(lcke.head_length, au - reserved);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - au + reserved);
+    ASSERT_EQ(lcke.gray_tail_length, au - reserved);
+    ASSERT_EQ(lcke.tail_offset, 0);
+    ASSERT_EQ(lcke.tail_length, 0);
+
+    // no ops
+    lcke.reset_intersected(bluefs_extent_t(0, 1*M, 1*M));
+    lcke.reset_intersected(bluefs_extent_t(0, 10*M, 1*M));
+    lcke.reset_intersected(bluefs_extent_t(0, 127*M, reserved));
+    ASSERT_EQ(lcke.head_offset, reserved);
+    ASSERT_EQ(lcke.head_length, au - reserved);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - au + reserved);
+    ASSERT_EQ(lcke.gray_tail_length, au - reserved);
+    ASSERT_EQ(lcke.tail_offset, 0);
+    ASSERT_EQ(lcke.tail_length, 0);
+
+    // get_merged verification
+    auto e1 = lcke.get_merged();
+    ASSERT_EQ(e1.head_offset, lcke.head_offset);
+    ASSERT_EQ(e1.head_length, lcke.head_length);
+    ASSERT_EQ(e1.gray_tail_offset, 0);
+    ASSERT_EQ(e1.gray_tail_length, 0);
+    ASSERT_EQ(e1.tail_offset, lcke.gray_tail_offset);
+    ASSERT_EQ(e1.tail_length, lcke.gray_tail_length);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, lcke.head_offset);
+    ASSERT_EQ(e1.head_length, lcke.head_length);
+    ASSERT_EQ(e1.gray_tail_offset, 0);
+    ASSERT_EQ(e1.gray_tail_length, 0);
+    ASSERT_EQ(e1.tail_offset, lcke.tail_offset);
+    ASSERT_EQ(e1.tail_length, lcke.tail_length);
+
+    // head has intersection
+    lcke.reset_intersected(bluefs_extent_t(0, reserved, au));
+    ASSERT_EQ(lcke.head_offset, 0);
+    ASSERT_EQ(lcke.head_length, 0);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - au + reserved);
+    ASSERT_EQ(lcke.gray_tail_length, au - reserved);
+    ASSERT_EQ(lcke.tail_offset, 0);
+    ASSERT_EQ(lcke.tail_length, 0);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, 0);
+    ASSERT_EQ(e1.head_length, 0);
+    ASSERT_EQ(e1.tail_offset, lcke.gray_tail_offset);
+    ASSERT_EQ(e1.tail_length, lcke.gray_tail_length);
+
+    // gray_tail has intersections
+    lcke.reset_intersected(bluefs_extent_t(0, 127*M + reserved, 0x1000));
+    lcke.reset_intersected(bluefs_extent_t(0, 128*M - 0x1000, 0x1000));
+    ASSERT_EQ(lcke.head_offset, 0);
+    ASSERT_EQ(lcke.head_length, 0);
+    ASSERT_EQ(lcke.gray_tail_offset, 0);
+    ASSERT_EQ(lcke.gray_tail_length, 0);
+    ASSERT_EQ(lcke.tail_offset, 0);
+    ASSERT_EQ(lcke.tail_length, 0);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, 0);
+    ASSERT_EQ(e1.head_length, 0);
+    ASSERT_EQ(e1.tail_offset, 0);
+    ASSERT_EQ(e1.tail_length, 0);
+  }
+  {
+    uint64_t reserved = 0x1000;
+    uint64_t au = 1*M;
+    uint64_t extra_tail = 0x10000;
+    uint64_t fullsize = 128*M + extra_tail;
+    bluefs_locked_extents_t lcke(reserved, fullsize, au);
+    ASSERT_EQ(lcke.head_offset, reserved);
+    ASSERT_EQ(lcke.head_length, au - reserved);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - extra_tail + reserved);
+    ASSERT_EQ(lcke.gray_tail_length, extra_tail - reserved);
+    ASSERT_EQ(lcke.tail_offset, fullsize - extra_tail);
+    ASSERT_EQ(lcke.tail_length, extra_tail);
+
+    // no ops
+    lcke.reset_intersected(bluefs_extent_t(0, 1*M, 1*M));
+    lcke.reset_intersected(bluefs_extent_t(0, 10*M, 1*M));
+    lcke.reset_intersected(bluefs_extent_t(0, 127*M, reserved));
+    ASSERT_EQ(lcke.head_offset, reserved);
+    ASSERT_EQ(lcke.head_length, au - reserved);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - extra_tail + reserved);
+    ASSERT_EQ(lcke.gray_tail_length, extra_tail - reserved);
+    ASSERT_EQ(lcke.tail_offset, fullsize - extra_tail);
+    ASSERT_EQ(lcke.tail_length, extra_tail);
+
+    // get_merged verification
+    auto e1 = lcke.get_merged();
+    ASSERT_EQ(e1.head_offset, lcke.head_offset);
+    ASSERT_EQ(e1.head_length, lcke.head_length);
+    ASSERT_EQ(e1.gray_tail_offset, 0);
+    ASSERT_EQ(e1.gray_tail_length, 0);
+    ASSERT_EQ(e1.tail_offset, std::min(lcke.gray_tail_offset, lcke.tail_offset));
+    ASSERT_EQ(e1.tail_length, fullsize - e1.tail_offset);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, lcke.head_offset);
+    ASSERT_EQ(e1.head_length, lcke.head_length);
+    ASSERT_EQ(e1.tail_offset, lcke.tail_offset);
+    ASSERT_EQ(e1.tail_length, lcke.tail_length);
+
+    // head has intersection
+    lcke.reset_intersected(bluefs_extent_t(0, reserved, au));
+    ASSERT_EQ(lcke.head_offset, 0);
+    ASSERT_EQ(lcke.head_length, 0);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - extra_tail + reserved);
+    ASSERT_EQ(lcke.gray_tail_length, extra_tail - reserved);
+    ASSERT_EQ(lcke.tail_offset, fullsize - extra_tail);
+    ASSERT_EQ(lcke.tail_length, extra_tail);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, 0);
+    ASSERT_EQ(e1.head_length, 0);
+    ASSERT_EQ(e1.tail_offset, lcke.gray_tail_offset);
+    ASSERT_EQ(e1.tail_length, lcke.gray_tail_length);
+
+    // tail has intersections
+    lcke.reset_intersected(bluefs_extent_t(0, 128*M, 0x1000));
+    ASSERT_EQ(lcke.head_offset, 0);
+    ASSERT_EQ(lcke.head_length, 0);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - extra_tail + reserved);
+    ASSERT_EQ(lcke.gray_tail_length, extra_tail - reserved);
+    ASSERT_EQ(lcke.tail_offset, 0);
+    ASSERT_EQ(lcke.tail_length, 0);
+
+    // gray_tail has intersections
+    lcke.reset_intersected(bluefs_extent_t(0, 128*M + reserved, 0x1000));
+    ASSERT_EQ(lcke.head_offset, 0);
+    ASSERT_EQ(lcke.head_length, 0);
+    ASSERT_EQ(lcke.gray_tail_offset, 0);
+    ASSERT_EQ(lcke.gray_tail_length, 0);
+    ASSERT_EQ(lcke.tail_offset, 0);
+    ASSERT_EQ(lcke.tail_length, 0);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, 0);
+    ASSERT_EQ(e1.head_length, 0);
+    ASSERT_EQ(e1.tail_offset, 0);
+    ASSERT_EQ(e1.tail_length, 0);
+  }
+  {
+    uint64_t reserved = 0x2000;
+    uint64_t au = 1*M;
+    uint64_t extra_tail = 0x1000;
+    uint64_t fullsize = 128*M + extra_tail;
+    bluefs_locked_extents_t lcke(reserved, fullsize, au);
+    ASSERT_EQ(lcke.head_offset, reserved);
+    ASSERT_EQ(lcke.head_length, au - reserved);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - au + reserved - extra_tail);
+    ASSERT_EQ(lcke.gray_tail_length, au - reserved + extra_tail);
+    ASSERT_EQ(lcke.tail_offset, fullsize - extra_tail);
+    ASSERT_EQ(lcke.tail_length, extra_tail);
+
+    // no ops
+    lcke.reset_intersected(bluefs_extent_t(0, 1*M, 1*M));
+    lcke.reset_intersected(bluefs_extent_t(0, 10*M, 1*M));
+    lcke.reset_intersected(bluefs_extent_t(0, 127*M, reserved));
+    ASSERT_EQ(lcke.head_offset, reserved);
+    ASSERT_EQ(lcke.head_length, au - reserved);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - au + reserved - extra_tail);
+    ASSERT_EQ(lcke.gray_tail_length, au - reserved + extra_tail);
+    ASSERT_EQ(lcke.tail_offset, fullsize - extra_tail);
+    ASSERT_EQ(lcke.tail_length, extra_tail);
+
+    // get_merged verification
+    auto e1 = lcke.get_merged();
+    ASSERT_EQ(e1.head_offset, lcke.head_offset);
+    ASSERT_EQ(e1.head_length, lcke.head_length);
+    ASSERT_EQ(e1.gray_tail_offset, 0);
+    ASSERT_EQ(e1.gray_tail_length, 0);
+    ASSERT_EQ(e1.tail_offset, std::min(lcke.gray_tail_offset, lcke.tail_offset));
+    ASSERT_EQ(e1.tail_length, fullsize - e1.tail_offset);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, lcke.head_offset);
+    ASSERT_EQ(e1.head_length, lcke.head_length);
+    ASSERT_EQ(e1.tail_offset, lcke.tail_offset);
+    ASSERT_EQ(e1.tail_length, lcke.tail_length);
+
+    // head has intersection, hopefully partial
+    lcke.reset_intersected(bluefs_extent_t(reserved - 0x1000, reserved, au));
+    ASSERT_EQ(lcke.head_offset, 0);
+    ASSERT_EQ(lcke.head_length, 0);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - au + reserved - extra_tail);
+    ASSERT_EQ(lcke.gray_tail_length, au - reserved + extra_tail);
+    ASSERT_EQ(lcke.tail_offset, fullsize - extra_tail);
+    ASSERT_EQ(lcke.tail_length, extra_tail);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, 0);
+    ASSERT_EQ(e1.head_length, 0);
+    ASSERT_EQ(e1.tail_offset, lcke.gray_tail_offset);
+    ASSERT_EQ(e1.tail_length, lcke.gray_tail_length);
+
+    // tail&gray_tail have intersections
+    lcke.reset_intersected(bluefs_extent_t(0, 128*M, 0x1000));
+    ASSERT_EQ(lcke.head_offset, 0);
+    ASSERT_EQ(lcke.head_length, 0);
+    ASSERT_EQ(lcke.gray_tail_offset, 0);
+    ASSERT_EQ(lcke.gray_tail_length, 0);
+    ASSERT_EQ(lcke.tail_offset, 0);
+    ASSERT_EQ(lcke.tail_length, 0);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, 0);
+    ASSERT_EQ(e1.head_length, 0);
+    ASSERT_EQ(e1.tail_offset, 0);
+    ASSERT_EQ(e1.tail_length, 0);
+  }
+  {
+    uint64_t reserved = 0x2000;
+    uint64_t au = 1*M;
+    uint64_t extra_tail = 0x2000;
+    uint64_t fullsize = 128*M + extra_tail;
+    bluefs_locked_extents_t lcke(reserved, fullsize, au);
+    ASSERT_EQ(lcke.head_offset, reserved);
+    ASSERT_EQ(lcke.head_length, au - reserved);
+    ASSERT_EQ(lcke.gray_tail_offset, 0);
+    ASSERT_EQ(lcke.gray_tail_length, 0);
+    ASSERT_EQ(lcke.tail_offset, fullsize - extra_tail);
+    ASSERT_EQ(lcke.tail_length, extra_tail);
+
+    // no ops
+    lcke.reset_intersected(bluefs_extent_t(0, 1*M, 1*M));
+    lcke.reset_intersected(bluefs_extent_t(0, 10*M, 1*M));
+    lcke.reset_intersected(bluefs_extent_t(0, 127*M, reserved));
+    ASSERT_EQ(lcke.head_offset, reserved);
+    ASSERT_EQ(lcke.head_length, au - reserved);
+    ASSERT_EQ(lcke.gray_tail_offset, 0);
+    ASSERT_EQ(lcke.gray_tail_length, 0);
+    ASSERT_EQ(lcke.tail_offset, fullsize - extra_tail);
+    ASSERT_EQ(lcke.tail_length, extra_tail);
+
+    // get_merged verification
+    auto e1 = lcke.get_merged();
+    ASSERT_EQ(e1.head_offset, lcke.head_offset);
+    ASSERT_EQ(e1.head_length, lcke.head_length);
+    ASSERT_EQ(e1.gray_tail_offset, 0);
+    ASSERT_EQ(e1.gray_tail_length, 0);
+    ASSERT_EQ(e1.tail_offset, lcke.tail_offset);
+    ASSERT_EQ(e1.tail_length, fullsize - e1.tail_offset);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, lcke.head_offset);
+    ASSERT_EQ(e1.head_length, lcke.head_length);
+    ASSERT_EQ(e1.tail_offset, lcke.tail_offset);
+    ASSERT_EQ(e1.tail_length, lcke.tail_length);
+
+    // head has intersection, hopefully partial
+    lcke.reset_intersected(bluefs_extent_t(reserved - 0x1000, reserved, au));
+    ASSERT_EQ(lcke.head_offset, 0);
+    ASSERT_EQ(lcke.head_length, 0);
+    ASSERT_EQ(lcke.gray_tail_offset, 0);
+    ASSERT_EQ(lcke.gray_tail_length, 0);
+    ASSERT_EQ(lcke.tail_offset, fullsize - extra_tail);
+    ASSERT_EQ(lcke.tail_length, extra_tail);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, 0);
+    ASSERT_EQ(e1.head_length, 0);
+    ASSERT_EQ(e1.tail_offset, 0);
+    ASSERT_EQ(e1.tail_length, 0);
+
+    // tail have intersections
+    lcke.reset_intersected(bluefs_extent_t(0, 128*M, 0x1000));
+    ASSERT_EQ(lcke.head_offset, 0);
+    ASSERT_EQ(lcke.head_length, 0);
+    ASSERT_EQ(lcke.gray_tail_offset, 0);
+    ASSERT_EQ(lcke.gray_tail_length, 0);
+    ASSERT_EQ(lcke.tail_offset, 0);
+    ASSERT_EQ(lcke.tail_length, 0);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, 0);
+    ASSERT_EQ(e1.head_length, 0);
+    ASSERT_EQ(e1.tail_offset, 0);
+    ASSERT_EQ(e1.tail_length, 0);
+  }
 }
 
 int main(int argc, char **argv) {

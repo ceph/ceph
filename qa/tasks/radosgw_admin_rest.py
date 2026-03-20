@@ -858,6 +858,11 @@ def task(ctx, config):
     (ret, out) = rgwadmin_rest(admin_conn, ['bucket', 'rm'], {'bucket' : bucket_name, 'purge-objects' : True})
     assert ret == 200
 
+    # TESTCASE 'rm-bucket', 'bucket', 'rm', 'non-existent bucket', 'correct error'
+    (ret, out) = rgwadmin_rest(admin_conn, ['bucket', 'rm'], {'bucket' : bucket_name})
+    assert ret == 404
+    assert out['Code'] == 'NoSuchBucket'
+
     # TESTCASE 'caps-add', 'caps', 'add', 'add user cap', 'succeeds'
     caps = 'usage=read'
     (ret, out) = rgwadmin_rest(admin_conn, ['caps', 'add'], {'uid' :  user1, 'user-caps' : caps})

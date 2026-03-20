@@ -207,21 +207,11 @@ ceph_send_command(BaseMgrModule *self, PyObject *args, PyObject *kwargs)
 	  f->queue(command_c);
 	});
   } else if (std::string(type) == "mds") {
-    int r = self->py_modules->get_client().mds_command(
-        name,
-        {cmd_json},
-        inbuf,
-        &command_c->outbl,
-        &command_c->outs,
-        new C_OnFinisher(command_c, &self->py_modules->cmd_finisher),
-        one_shot);
-    if (r != 0) {
-      string msg("failed to send command to mds: ");
-      msg.append(cpp_strerror(r));
-      PyEval_RestoreThread(tstate);
-      PyErr_SetString(PyExc_RuntimeError, msg.c_str());
-      return nullptr;
-    }
+    string msg("cannot send command to mds via this interface: ");
+    msg.append(cpp_strerror(-ENOSYS));
+    PyEval_RestoreThread(tstate);
+    PyErr_SetString(PyExc_RuntimeError, msg.c_str());
+    return nullptr;
   } else if (std::string(type) == "pg") {
     pg_t pgid;
     if (!pgid.parse(name)) {
@@ -372,6 +362,20 @@ ceph_set_health_checks(BaseMgrModule *self, PyObject *args)
   Py_RETURN_NONE;
 }
 
+static PyObject*
+ceph_notify_all(BaseMgrModule *self, PyObject *args)
+{
+  char *type = nullptr;
+  char *id = nullptr;
+  if (!PyArg_ParseTuple(args, "ss:ceph_notify_all", &type, &id)) {
+    return nullptr;
+  }
+
+  without_gil([&] {
+    self->py_modules->notify_all(type, id);
+  });
+  return nullptr;
+}
 
 static PyObject*
 ceph_state_get(BaseMgrModule *self, PyObject *args)
@@ -1431,6 +1435,9 @@ ceph_get_daemon_health_metrics(BaseMgrModule *self, PyObject *args)
 PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_get", (PyCFunction)ceph_state_get, METH_VARARGS,
    "Get a cluster object"},
+
+  {"_ceph_notify_all", (PyCFunction)ceph_notify_all, METH_VARARGS,
+   "notify all modules"},
 
   {"_ceph_get_server", (PyCFunction)ceph_get_server, METH_VARARGS,
    "Get a server object"},

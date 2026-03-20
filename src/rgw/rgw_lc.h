@@ -469,7 +469,7 @@ struct transition_action
   int days;
   boost::optional<ceph::real_time> date;
   std::string storage_class;
-  transition_action() : days(0) {}
+  transition_action() : days(-1) {}
   void dump(Formatter *f) const {
     if (!date) {
       f->dump_int("days", days);
@@ -656,9 +656,10 @@ public:
   int set_bucket_config(rgw::sal::Bucket* bucket,
                         const rgw::sal::Attrs& bucket_attrs,
                         RGWLifecycleConfiguration *config);
-  int remove_bucket_config(rgw::sal::Bucket* bucket,
-                           const rgw::sal::Attrs& bucket_attrs,
-			   bool merge_attrs = true);
+  // remove a bucket from the lc list, and optionally update the bucket
+  // instance metadata to remove RGW_ATTR_LC
+  int remove_bucket_config(const DoutPrefixProvider* dpp, optional_yield y,
+                           rgw::sal::Bucket* bucket, bool update_attrs);
 
   CephContext *get_cct() const override { return cct; }
   rgw::sal::Lifecycle* get_lc() const { return sal_lc.get(); }

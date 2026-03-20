@@ -133,11 +133,12 @@ public:
   void kick_submitter();
   void shutdown();
 
-  void submit_entry(LogEvent *e, MDSLogContextBase* c = 0) {
+  LogSegment::seq_t submit_entry(LogEvent *e, MDSLogContextBase* c = 0) {
     std::lock_guard l(submit_mutex);
-    _submit_entry(e, c);
+    auto seq = _submit_entry(e, c);
     _segment_upkeep();
     submit_cond.notify_all();
+    return seq;
   }
 
   void wait_for_safe(Context* c);
@@ -164,6 +165,9 @@ public:
   MDSRank *mds;
   // replay state
   std::map<inodeno_t, std::set<inodeno_t>> pending_exports;
+
+  // beacon needs me too
+  bool is_trim_slow() const;
 
 protected:
   struct PendingEvent {
@@ -280,7 +284,7 @@ private:
   void try_to_commit_open_file_table(uint64_t last_seq);
   LogSegment* _start_new_segment(SegmentBoundary* sb);
   void _segment_upkeep();
-  void _submit_entry(LogEvent* e, MDSLogContextBase* c);
+  LogSegment::seq_t _submit_entry(LogEvent* e, MDSLogContextBase* c);
 
   void try_expire(LogSegment *ls, int op_prio);
   void _maybe_expired(LogSegment *ls, int op_prio);
@@ -294,9 +298,9 @@ private:
   bool debug_subtrees;
   std::atomic_uint64_t event_large_threshold; // accessed by submit thread
   uint64_t events_per_segment;
-  uint64_t major_segment_event_ratio;
   int64_t max_events;
   uint64_t max_segments;
+  uint64_t minor_segments_per_major_segment;
   bool pause;
   bool skip_corrupt_events;
   bool skip_unbounded_events;
@@ -304,7 +308,8 @@ private:
   std::set<uint64_t> major_segments;
   std::set<LogSegment*> expired_segments;
   std::set<LogSegment*> expiring_segments;
-  uint64_t events_since_last_major_segment = 0;
+  uint64_t minor_segments_since_last_major_segment = 0;
+  double log_warn_factor;
 
   // log trimming decay counter
   DecayCounter log_trim_counter;

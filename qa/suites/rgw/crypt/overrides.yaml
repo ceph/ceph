@@ -1,0 +1,5 @@
+overrides:
+  s3tests:
+    accounts:
+      iam root: RGW88888888888888888
+      iam alt root: RGW99999999999999999

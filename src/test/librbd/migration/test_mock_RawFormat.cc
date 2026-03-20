@@ -125,13 +125,6 @@ public:
         })));
   }
 
-  void expect_close(MockTestImageCtx &mock_image_ctx, int r) {
-    EXPECT_CALL(*mock_image_ctx.state, close(_))
-      .WillOnce(Invoke([r](Context* ctx) {
-                  ctx->complete(r);
-                }));
-  }
-
   json_spirit::mObject json_object;
 };
 
@@ -174,7 +167,6 @@ TEST_F(TestMockMigrationRawFormat, OpenError) {
   expect_snapshot_open(*mock_snapshot_interface, -ENOENT);
 
   expect_snapshot_close(*mock_snapshot_interface, 0);
-  expect_close(mock_image_ctx, 0);
 
   MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
                                 &mock_source_spec_builder);
@@ -203,7 +195,6 @@ TEST_F(TestMockMigrationRawFormat, OpenSnapshotError) {
 
   expect_snapshot_close(*mock_snapshot_interface_1, 0);
   expect_snapshot_close(*mock_snapshot_interface_head, 0);
-  expect_close(mock_image_ctx, 0);
 
   json_spirit::mArray snapshots;
   snapshots.push_back(json_spirit::mObject{});
@@ -345,8 +336,8 @@ TEST_F(TestMockMigrationRawFormat, Read) {
     &ctx2, m_image_ctx, io::AIO_TYPE_READ);
   bufferlist bl;
   io::ReadResult read_result{&bl};
-  ASSERT_TRUE(mock_raw_format.read(aio_comp, CEPH_NOSNAP, {{123, 123}},
-                                   std::move(read_result), 0, 0, {}));
+  mock_raw_format.read(aio_comp, CEPH_NOSNAP, {{123, 123}},
+                       std::move(read_result), 0, 0, {});
   ASSERT_EQ(123, ctx2.wait());
   ASSERT_EQ(expect_bl, bl);
 
@@ -475,7 +466,7 @@ TEST_F(TestMockMigrationRawFormat, ListSnapsMerge) {
   expect_snapshot_get_info(*mock_snapshot_interface_2, snap_info_2);
   io::SparseExtents sparse_extents_2;
   sparse_extents_2.insert(0, 32, {io::SPARSE_EXTENT_STATE_DATA, 32});
-  expect_snapshot_list_snap(*mock_snapshot_interface_2, {{0, 123}},
+  expect_snapshot_list_snap(*mock_snapshot_interface_2, {{0, 64}},
                             sparse_extents_2, 0);
 
   expect_snapshot_get_info(*mock_snapshot_interface_head, snap_info_head);

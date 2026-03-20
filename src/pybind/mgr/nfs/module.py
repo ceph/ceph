@@ -38,6 +38,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             client_addr: Optional[List[str]] = None,
             squash: str = 'none',
             sectype: Optional[List[str]] = None,
+            cmount_path: Optional[str] = "/"
     ) -> Dict[str, Any]:
         """Create a CephFS export"""
         return self.export_mgr.create_export(
@@ -50,6 +51,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             squash=squash,
             addr=client_addr,
             sectype=sectype,
+            cmount_path=cmount_path
         )
 
     @CLICommand('nfs export create rgw', perm='rw')

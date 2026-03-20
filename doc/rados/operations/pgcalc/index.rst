@@ -57,7 +57,7 @@ PG Calc
                         </ol>
                         <b>Objective</b>
                         <ul><li>The objective of this calculation and the target ranges noted in the &quot;Key&quot; section above are to ensure that there are sufficient Placement Groups for even data distribution throughout the cluster, while not going high enough on the PG per OSD ratio to cause problems during Recovery and/or Backfill operations.</li></ul>
-                        <b>Effects of enpty or non-active pools:</b>
+                        <b>Effects of empty or non-active pools:</b>
                         <ul>
                                 <li>Empty or otherwise non-active pools should not be considered helpful toward even data distribution throughout the cluster.</li>
                                 <li>However, the PGs associated with these empty / non-active pools still consume memory and CPU overhead.</li>

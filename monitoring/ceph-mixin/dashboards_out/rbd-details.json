@@ -417,7 +417,7 @@
             "multi": false,
             "name": "image",
             "options": [ ],
-            "query": "label_values(ceph_rbd_read_ops{cluster=~\"$cluster\", , pool=\"$pool\"}, image)",
+            "query": "label_values(ceph_rbd_read_ops{cluster=~\"$cluster\",  pool=\"$pool\"}, image)",
             "refresh": 1,
             "regex": "",
             "sort": 0,

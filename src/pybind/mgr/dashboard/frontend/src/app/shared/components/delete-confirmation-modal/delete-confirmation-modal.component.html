@@ -1,0 +1,78 @@
+<cd-modal #modal
+          [modalRef]="activeModal">
+  <ng-container class="modal-title">
+    <ng-container *ngTemplateOutlet="deletionHeading"></ng-container>
+  </ng-container>
+
+  <ng-container class="modal-content">
+    <form name="deletionForm"
+          #formDir="ngForm"
+          [formGroup]="deletionForm"
+          novalidate>
+      <div class="modal-body">
+        <ng-container *ngTemplateOutlet="bodyTemplate; context: bodyContext"></ng-container>
+        <div class="question">
+          <span *ngIf="itemNames; else noNames">
+            <p *ngIf="itemNames.length === 1; else manyNames"
+               i18n>Are you sure that you want to {{ actionDescription | lowercase }} <strong>{{ itemNames[0] }}</strong>?</p>
+            <ng-template #manyNames>
+              <p i18n>Are you sure that you want to {{ actionDescription | lowercase }} the selected items?</p>
+              <ul>
+                <li *ngFor="let itemName of itemNames"><strong>{{ itemName }}</strong></li>
+              </ul>
+            </ng-template >
+          </span>
+          <ng-template #noNames>
+            <p i18n>Are you sure that you want to {{ actionDescription | lowercase }} the selected {{ itemDescription }}?</p>
+          </ng-template>
+          <ng-container *ngTemplateOutlet="childFormGroupTemplate; context:{form:deletionForm}"></ng-container>
+          <div class="form-group">
+            <ng-container *ngIf="impact == impactEnum.medium; else highImpactDeletion">
+              <div class="custom-control custom-checkbox">
+                <input type="checkbox"
+                       class="custom-control-input"
+                       name="confirmation"
+                       id="confirmation"
+                       formControlName="confirmation"
+                       autofocus>
+                <label class="custom-control-label"
+                       for="confirmation"
+                       i18n>Yes, I am sure.</label>
+              </div>
+            </ng-container>
+            <ng-template #highImpactDeletion>
+              <label i18n
+                     for="name">Resource Name</label>
+              <div class="cd-col-form-input">
+                <input class="form-control"
+                       type="text"
+                       placeholder="Enter resource name to delete"
+                       id="resource_name"
+                       name="resource_name"
+                       formControlName="confirmInput">
+                <span *ngIf="deletionForm.showError('confirmInput', formDir, 'required')"
+                      class="invalid-feedback">
+                  <ng-container i18n>This field is required.</ng-container>
+                </span>
+                <span *ngIf="deletionForm.showError('confirmInput', formDir, 'matchResource')"
+                      class="invalid-feedback">
+                  <ng-container i18n>Enter the correct resource name.</ng-container>
+                </span>
+              </div>
+            </ng-template>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <cd-form-button-panel (submitActionEvent)="callSubmitAction()"
+                              (backActionEvent)="backAction ? callBackAction() : hideModal()"
+                              [form]="deletionForm"
+                              [submitText]="(actionDescription | titlecase) + ' ' + itemDescription"></cd-form-button-panel>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>
+
+<ng-template #deletionHeading>
+  {{ actionDescription | titlecase }} {{ itemDescription }}
+</ng-template>

@@ -9,6 +9,8 @@
 #include "common/Formatter.h"
 #include "common/iso_8601.h"
 #include "common/async/completion.h"
+#include "common/async/yield_waiter.h"
+#include "common/async/waiter.h"
 #include "rgw_common.h"
 #include "rgw_data_sync.h"
 #include "rgw_pubsub.h"
@@ -19,7 +21,7 @@
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
 #include "rgw_kafka.h"
 #endif
-#include <boost/asio/yield.hpp>
+//#include <boost/asio/yield.hpp>
 #include <boost/algorithm/string.hpp>
 #include <functional>
 #include "rgw_perf_counters.h"
@@ -129,55 +131,6 @@ public:
   }
 };
 
-namespace {
-// this allows waiting untill "finish()" is called from a different thread
-// waiting could be blocking the waiting thread or yielding, depending
-// with compilation flag support and whether the optional_yield is set
-class Waiter {
-  using Signature = void(boost::system::error_code);
-  using Completion = ceph::async::Completion<Signature>;
-  using CompletionInit = boost::asio::async_completion<spawn::yield_context, Signature>;
-  std::unique_ptr<Completion> completion = nullptr;
-  int ret;
-
-  bool done = false;
-  mutable std::mutex lock;
-  mutable std::condition_variable cond;
-
-public:
-  int wait(optional_yield y) {
-    std::unique_lock l{lock};
-    if (done) {
-      return ret;
-    }
-    if (y) {
-      boost::system::error_code ec;
-      auto&& token = y.get_yield_context()[ec];
-      CompletionInit init(token);
-      completion = Completion::create(y.get_io_context().get_executor(),
-          std::move(init.completion_handler));
-      l.unlock();
-      init.result.get();
-      return -ec.value();
-    }
-    cond.wait(l, [this]{return (done==true);});
-    return ret;
-  }
-
-  void finish(int r) {
-    std::unique_lock l{lock};
-    ret = r;
-    done = true;
-    if (completion) {
-      boost::system::error_code ec(-ret, boost::system::system_category());
-      Completion::post(std::move(completion), ec);
-    } else {
-      cond.notify_all();
-    }
-  }
-};
-} // namespace
-
 #ifdef WITH_RADOSGW_AMQP_ENDPOINT
 class RGWPubSubAMQPEndpoint : public RGWPubSubEndpoint {
 private:
@@ -252,17 +205,29 @@ public:
       return amqp::publish(conn_id, topic, json_format_pubsub_event(event));
     } else {
       // TODO: currently broker and routable are the same - this will require different flags but the same mechanism
-      auto w = std::make_unique<Waiter>();
-      const auto rc = amqp::publish_with_confirm(conn_id, 
-        topic,
-        json_format_pubsub_event(event),
-        [wp = w.get()](int r) { wp->finish(r);}
-      );
+      if (y) {
+        auto& yield = y.get_yield_context();
+        ceph::async::yield_waiter<int> w;
+        boost::asio::defer(yield.get_executor(),[&w, &event, this]() {
+          const auto rc = amqp::publish_with_confirm(
+              conn_id, topic, json_format_pubsub_event(event),
+              [&w](int r) {w.complete(boost::system::error_code{}, r);});
+          if (rc < 0) {
+            // failed to publish, does not wait for reply
+            w.complete(boost::system::error_code{}, rc);
+          }
+        });
+        return w.async_wait(yield);
+      }
+      ceph::async::waiter<int> w;
+      const auto rc = amqp::publish_with_confirm(
+            conn_id, topic, json_format_pubsub_event(event),
+            [&w](int r) {w(r);});
       if (rc < 0) {
         // failed to publish, does not wait for reply
         return rc;
       }
-      return w->wait(y);
+      return w.wait();
     }
   }
 
@@ -289,8 +254,7 @@ private:
   };
   const std::string topic;
   const ack_level_t ack_level;
-  std::string conn_name;
-
+  kafka::connection_id_t conn_id;
 
   ack_level_t get_ack_level(const RGWHTTPArgs& args) {
     bool exists;
@@ -311,33 +275,49 @@ public:
       const RGWHTTPArgs& args) : 
         topic(_topic),
         ack_level(get_ack_level(args)) {
-    if (!kafka::connect(conn_name, _endpoint, get_bool(args, "use-ssl", false), get_bool(args, "verify-ssl", true), 
-          args.get_optional("ca-location"), args.get_optional("mechanism"))) {
-      throw configuration_error("Kafka: failed to create connection to: " + _endpoint);
-    }
-  }
+   if (!kafka::connect(
+           conn_id, _endpoint, get_bool(args, "use-ssl", false),
+           get_bool(args, "verify-ssl", true), args.get_optional("ca-location"),
+           args.get_optional("mechanism"), args.get_optional("user-name"),
+           args.get_optional("password"), args.get_optional("kafka-brokers"))) {
+     throw configuration_error("Kafka: failed to create connection to: " +
+                               _endpoint);
+   }
+ }
 
   int send(const rgw_pubsub_s3_event& event, optional_yield y) override {
     if (ack_level == ack_level_t::None) {
-      return kafka::publish(conn_name, topic, json_format_pubsub_event(event));
+      return kafka::publish(conn_id, topic, json_format_pubsub_event(event));
     } else {
-      auto w = std::make_unique<Waiter>();
-      const auto rc = kafka::publish_with_confirm(conn_name, 
-        topic,
-        json_format_pubsub_event(event),
-        [wp = w.get()](int r) { wp->finish(r); }
-      );
+      if (y) {
+        auto& yield = y.get_yield_context();
+        ceph::async::yield_waiter<int> w;
+        boost::asio::defer(yield.get_executor(),[&w, &event, this]() {
+          const auto rc = kafka::publish_with_confirm(
+              conn_id, topic, json_format_pubsub_event(event),
+              [&w](int r) {w.complete(boost::system::error_code{}, r);});
+          if (rc < 0) {
+            // failed to publish, does not wait for reply
+            w.complete(boost::system::error_code{}, rc);
+          }
+        });
+        return w.async_wait(yield);
+      }
+      ceph::async::waiter<int> w;
+      const auto rc = kafka::publish_with_confirm(
+            conn_id, topic, json_format_pubsub_event(event),
+            [&w](int r) {w(r);});
       if (rc < 0) {
         // failed to publish, does not wait for reply
         return rc;
       }
-      return w->wait(y);
+      return w.wait();
     }
   }
 
   std::string to_str() const override {
     std::string str("Kafka Endpoint");
-    str += "\nBroker: " + conn_name;
+    str += "\nBroker: " + to_string(conn_id);
     str += "\nTopic: " + topic;
     return str;
   }

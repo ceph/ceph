@@ -19,6 +19,7 @@
 
 #include "include/types.h"
 #include "include/interval_set.h"
+#include "common/config_obs.h"
 #include "common/Thread.h"
 #include "include/utime.h"
 
@@ -28,7 +29,15 @@
 
 #define RW_IO_MAX (INT_MAX & CEPH_PAGE_MASK)
 
-class KernelDevice : public BlockDevice {
+enum {
+  l_blk_kernel_device_first = 1000,
+  l_blk_kernel_device_discard_op,
+  l_blk_kernel_discard_threads,
+  l_blk_kernel_device_last,
+};
+
+class KernelDevice : public BlockDevice,
+                     public md_config_obs_t {
 protected:
   std::string path;
 private:
@@ -50,14 +59,13 @@ private:
   aio_callback_t discard_callback;
   void *discard_callback_priv;
   bool aio_stop;
-  bool discard_started;
-  bool discard_stop;
+  bool need_notify = false;
+  std::unique_ptr<PerfCounters> logger;
 
   ceph::mutex discard_lock = ceph::make_mutex("KernelDevice::discard_lock");
   ceph::condition_variable discard_cond;
-  bool discard_running = false;
+  int discard_running = 0;
   interval_set<uint64_t> discard_queued;
-  interval_set<uint64_t> discard_finishing;
 
   struct AioCompletionThread : public Thread {
     KernelDevice *bdev;
@@ -70,12 +78,15 @@ private:
 
   struct DiscardThread : public Thread {
     KernelDevice *bdev;
-    explicit DiscardThread(KernelDevice *b) : bdev(b) {}
+    bool stop = false;
+    explicit DiscardThread(KernelDevice *b) : bdev(b) {
+    }
     void *entry() override {
-      bdev->_discard_thread();
+      bdev->_discard_thread(this);
       return NULL;
     }
-  } discard_thread;
+  };
+  std::vector<DiscardThread*> discard_threads;
 
   std::atomic_int injecting_crash;
 
@@ -83,15 +94,16 @@ private:
   virtual void  _pre_close() { }  // hook for child implementations
 
   void _aio_thread();
-  void _discard_thread();
-  int _queue_discard(interval_set<uint64_t> &to_release);
+  void _discard_thread(DiscardThread* thr);
+  bool _queue_discard(interval_set<uint64_t> &to_release);
   bool try_discard(interval_set<uint64_t> &to_release, bool async = true) override;
 
   int _aio_start();
   void _aio_stop();
 
-  void _discard_start();
+  void _discard_update_threads(bool discard_stop = false);
   void _discard_stop();
+  bool _discard_started();
 
   void _aio_log_start(IOContext *ioc, uint64_t offset, uint64_t length);
   void _aio_log_finish(IOContext *ioc, uint64_t offset, uint64_t length);
@@ -115,11 +127,13 @@ private:
   ceph::unique_leakable_ptr<buffer::raw> create_custom_aligned(size_t len, IOContext* ioc) const;
 
 public:
-  KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv);
+  KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb,
+    void *d_cbpriv, const char* dev_name = "");
+  ~KernelDevice();
 
   void aio_submit(IOContext *ioc) override;
   void discard_drain() override;
-
+  void swap_discard_queued(interval_set<uint64_t>& other) override;
   int collect_metadata(const std::string& prefix, std::map<std::string,std::string> *pm) const override;
   int get_devname(std::string *s) const override {
     if (devname.empty()) {
@@ -151,6 +165,11 @@ public:
   int invalidate_cache(uint64_t off, uint64_t len) override;
   int open(const std::string& path) override;
   void close() override;
+
+  // config observer bits
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const ConfigProxy& conf,
+                          const std::set <std::string> &changed) override;
 };
 
 #endif
