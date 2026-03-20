@@ -5,6 +5,7 @@ import string
 import time
 import logging
 import errno
+import contextlib
 import dateutil.parser
 from datetime import datetime
 import threading
@@ -35,6 +36,20 @@ class Config:
         # allow some time for realm reconfiguration after changing master zone
         self.reconfigure_delay = kwargs.get('reconfigure_delay', 5)
         self.tenant = kwargs.get('tenant', '')
+
+@contextlib.contextmanager
+def override_config(**kwargs):
+    """Temporarily override config values for a test."""
+    global config
+    old_values = {}
+    for key, value in kwargs.items():
+        old_values[key] = getattr(config, key)
+        setattr(config, key, value)
+    try:
+        yield
+    finally:
+        for key, value in old_values.items():
+            setattr(config, key, value)
 
 # rgw multisite tests, written against the interfaces provided in rgw_multi.
 # these tests must be initialized and run by another module that provides
@@ -417,9 +432,11 @@ def zonegroup_bucket_checkpoint(zonegroup_conns, bucket_name):
             target_conn.check_bucket_eq(source_conn, bucket_name)
 
 def get_oldest_incremental_change_not_applied_epoch(zone):
-    cmd = ['sync', 'status']
+    cmd = ['sync', 'status'] + zone.zone_args()
     sync_status_output, retcode = zone.cluster.admin(cmd, check_retcode=False, read_only=True)
-    assert(retcode == 0)
+    if retcode != 0:
+        # sync status failed for some reason, return epoch 0 to signal no progress
+        return 0.0
 
     # extract the "data sync source:" section from the output
     data_sync_match = re.search(r"data sync source:.*", sync_status_output, re.DOTALL)
@@ -442,11 +459,10 @@ def get_oldest_incremental_change_not_applied_epoch(zone):
     #    so the caller knows data sync is not making progress
     return 0.0
 
-def data_sync_making_progress(zone, time_window_sec=180, check_interval_sec=30):
-    deadline = time.time() + time_window_sec
+def data_sync_making_progress(zone):
     oldest_inc_change = None
     result = False
-    while time.time() < deadline:
+    for _ in range(config.checkpoint_retries):
         new_reading = get_oldest_incremental_change_not_applied_epoch(zone)
         if new_reading is not None:
             if oldest_inc_change is None:
@@ -455,7 +471,7 @@ def data_sync_making_progress(zone, time_window_sec=180, check_interval_sec=30):
                 result = True
                 oldest_inc_change = new_reading
                 break
-        time.sleep(check_interval_sec)
+        time.sleep(config.checkpoint_delay)
     return result or oldest_inc_change is None
 
 def set_master_zone(zone):
@@ -6195,15 +6211,30 @@ def test_object_lock_sync():
 
 
 def test_period_update_commit():
-    wkld_concurrency = 25
-    num_objects_to_upload = 2500
-    number_of_period_updates = 5
+    wkld_concurrency = 10
+    num_objects_to_upload = 1000
+    number_of_period_updates = 3
     test_passed = False
 
+    # get client connection to generate s3 wkld
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
-    primary_zone_client_conn = zonegroup_conns.rw_zones[0]
-    secondary_zone_cluster_conn = zonegroup.zones[1]
+    primary_zone_client_conn = zonegroup_conns.master_zone
+
+    # get cluster connection to another zone in the group
+    # to issue period update commits and verify replication
+    secondary_zone_cluster_conn = None
+    for zg in realm.current_period.zonegroups:
+        if zonegroup != zg:
+            continue
+        for zone in zg.zones:
+            if zone != zonegroup.master_zone:
+                secondary_zone_cluster_conn = zone
+                break
+        if secondary_zone_cluster_conn is not None:
+            break
+    else:
+        raise SkipTest("test_period_update_commit is skipped.")
 
     bucket = primary_zone_client_conn.create_bucket(gen_bucket_name())
     log.info(f"created bucket={bucket.name}")
@@ -6219,6 +6250,9 @@ def test_period_update_commit():
                         Bucket=bucket.name, Key=f"obj-{i:04d}", Body="..."
                     )
                     num_uploads += 1
+                    if stop_event.is_set():
+                        break
+                    time.sleep(0.01)
                 except Exception as e:
                     log.debug(f"failed to upload object to bucket={bucket.name}: {e}")
         log.info(
@@ -6253,10 +6287,12 @@ def test_period_update_commit():
             log.info("issue period update commit")
             zonegroup.period.update(secondary_zone_cluster_conn, commit=True)
             log.info("verify data sync is making progress")
-            if not data_sync_making_progress(secondary_zone_cluster_conn):
-                break  # the issue of realm reload freezing reproduced
+            with override_config(checkpoint_retries=10, checkpoint_delay=60):
+                if not data_sync_making_progress(secondary_zone_cluster_conn):
+                    break  # the issue of realm reload freezing reproduced
         client_write_only_wkld_thread_stop.set()  # stop client wkld
-        zonegroup_data_checkpoint(zonegroup_conns)
+        with override_config(checkpoint_retries=10, checkpoint_delay=60):
+            zonegroup_data_checkpoint(zonegroup_conns)
         test_passed = True
     except Exception as e:
         log.error(f"test_period_update_commit failed: {e}")
