@@ -23,6 +23,7 @@ from typing import List, Union, Dict, Any, Optional, Tuple
 import json
 import logging
 import subprocess
+import sys
 
 from .caller import CryptoCaller, CryptoCallError
 
@@ -62,7 +63,7 @@ class ProcessCryptoCaller(CryptoCaller):
             _input = None
         else:
             _input = input_data.encode()
-        cmd = ['python3', '-m', _ctmodule] + list(args)
+        cmd = [sys.executable, '-m', _ctmodule] + list(args)
         logger.warning('CryptoCaller will run: %r', cmd)
         try:
             return subprocess.run(
