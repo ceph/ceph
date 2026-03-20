@@ -1,6 +1,7 @@
 #include "crc64nvme.h"
+#include "acconfig.h"
 
-#if defined(__i386__) || defined(__x86_64__)
+#ifdef CEPH_LITTLE_ENDIAN
 
 uint64_t crc64nvme_bit(uint64_t crc, void const *mem, size_t len) {
     uint8_t const *data = mem;
@@ -642,7 +643,7 @@ uint64_t crc64nvme_comb(uint64_t crc1, uint64_t crc2,
     return multmodp(x8nmodp(len2), crc1) ^ crc2;
 }
 
-#elif defined(__s390__)
+#elifdef CEPH_BIG_ENDIAN
 
 uint64_t crc64nvme_bit(uint64_t crc, void const *mem, size_t len) {
     uint8_t const *data = mem;

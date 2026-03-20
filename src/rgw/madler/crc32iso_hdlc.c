@@ -1,6 +1,7 @@
 #include "crc32iso_hdlc.h"
+#include "acconfig.h"
 
-#if defined(__i386__) || defined(__x86_64__)
+#ifdef CEPH_LITTLE_ENDIAN
 
 uint32_t crc32iso_hdlc_bit(uint32_t crc, void const *mem, size_t len) {
     uint8_t const *data = mem;
@@ -464,7 +465,7 @@ uint32_t crc32iso_hdlc_comb(uint32_t crc1, uint32_t crc2,
     return multmodp(x8nmodp(len2), crc1) ^ crc2;
 }
 
-#elif defined(__s390__)
+#elifdef CEPH_BIG_ENDIAN
 
 uint32_t crc32iso_hdlc_bit(uint32_t crc, void const *mem, size_t len) {
     uint8_t const *data = mem;
