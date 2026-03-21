@@ -493,6 +493,11 @@ void md_config_t::parse_env(unsigned entity_type,
     }
   }
 
+  if (auto s = getenv("TMPDIR"); s) {
+    string err;
+    _set_val(values, tracker, s, *find_option("tmp_dir"), CONF_ENV, &err);
+  }
+
   // Apply pod memory limits:
   //
   // There are two types of resource requests: `limits` and `requests`.
