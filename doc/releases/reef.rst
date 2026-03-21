@@ -12,7 +12,7 @@ This is the eighth, and expected to be last, backport release in the Reef series
 Release Date
 ------------
 
-March 31, 2026
+March 20, 2026
 
 Known Issues
 ------------
