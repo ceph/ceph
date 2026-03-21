@@ -2211,9 +2211,14 @@ class TestCephVolume(object):
 
 class TestIscsi:
     def test_unit_run(self, cephadm_fs, funkypatch):
+        # Same uid/gid as cephadm_fs fixture's cephadm.extract_uid_gid so
+        # 0o700 daemon dirs remain writable under pyfakefs.
         funkypatch.patch(
             'cephadmlib.daemons.iscsi.extract_uid_gid'
-        ).return_value = (123, 123)
+        ).return_value = (os.getuid(), os.getgid())
+        funkypatch.patch(
+            'cephadmlib.exe_utils.find_program'
+        ).return_value = '/usr/bin/python3'
 
         fsid = '9b9d7609-f4d5-4aba-94c8-effa764d96c9'
         config_json = {
@@ -2235,6 +2240,7 @@ class TestIscsi:
             with open('/var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/unit.run') as f:
                 contents = f.read()
                 assert contents == """set -e
+if ! [ -e /sys/module/target_core_user ]; then modinfo target_core_user && modprobe target_core_user; fi
 if ! grep -qs /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs /proc/mounts; then mount -t configfs none /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs; fi
 # iscsi.daemon_id
 ! /usr/bin/docker rm -f ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi.daemon_id 2> /dev/null
@@ -2252,6 +2258,9 @@ if [ "$1" = stop ] || [ "$1" = poststop ]; then
     ! /usr/bin/docker inspect ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id-tcmu &>/dev/null
     exit $?
 fi
+if ! [ -e /sys/module/target_core_user ]; then modinfo target_core_user && modprobe target_core_user; fi
+if ! grep -qs /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs /proc/mounts; then mount -t configfs none /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs; fi
+
 
 ! /usr/bin/docker rm -f ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id-tcmu 2> /dev/null
 

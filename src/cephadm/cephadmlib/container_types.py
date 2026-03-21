@@ -499,6 +499,10 @@ class InitContainer(BasicContainer):
 
 
 class SidecarContainer(BasicContainer):
+    """Sidecar systemd script may inject optional host shell before container run."""
+
+    pre_start_shell: str = ''
+
     @classmethod
     def from_primary_and_values(
         cls,
@@ -510,6 +514,7 @@ class SidecarContainer(BasicContainer):
         entrypoint: str = '',
         args: Optional[List[str]] = None,
         init: Optional[bool] = None,
+        pre_start_shell: str = '',
     ) -> 'SidecarContainer':
         assert primary.identity
         identity = DaemonSubIdentity.from_parent(
@@ -527,6 +532,7 @@ class SidecarContainer(BasicContainer):
             ctr.args = args
         if init is not None:
             ctr.init = init
+        ctr.pre_start_shell = pre_start_shell
         return ctr
 
     def build_engine_run_args(self) -> List[str]:
