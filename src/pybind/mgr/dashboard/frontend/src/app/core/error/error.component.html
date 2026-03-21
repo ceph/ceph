@@ -18,15 +18,14 @@
           </h4>
         </div>
       </div>
-
       <div class="mt-4">
         <div class="text-center"
              *ngIf="(buttonName && buttonRoute) || uiConfig; else dashboardButton">
-          <button class="btn btn-primary ms-1"
+          <button cdsButton="primary"
                   [routerLink]="buttonRoute"
                   *ngIf="!uiConfig; else configureButtonTpl"
                   i18n>{{ buttonName }}</button>
-          <button class="btn btn-light ms-1"
+          <button cdsButton="secondary"
                   [routerLink]="secondaryButtonRoute"
                   *ngIf="secondaryButtonName && secondaryButtonRoute"
                   i18n>{{ secondaryButtonName }}</button>
@@ -35,41 +34,34 @@
     </div>
   </div>
 </div>
-
 <ng-template #configureButtonTpl>
-  <button class="btn btn-primary"
+  <button cdsButton="primary"
           (click)="doConfigure()"
           [attr.title]="buttonTitle"
           *ngIf="uiConfig"
           i18n>{{ buttonName }}</button>
 </ng-template>
-
-
 <ng-template #elseBlock>
-  <i class="fa fa-exclamation-triangle mx-auto d-block text-danger"></i>
-
+  <svg cdsIcon="warning" class="cds-danger-color cds-icon--size-10"></svg>
   <div class="mt-4 text-center">
     <h3 i18n><b>Page not Found</b></h3>
-
     <h4 class="mt-4"
-        i18n>Sorry, we couldn’t find what you were looking for.
+        i18n>Sorry, we couldn't find what you were looking for.
              The page you requested may have been changed or moved.</h4>
   </div>
 </ng-template>
-
 <ng-template #dashboardButton>
   <div class="mt-4 text-center"
        *ngIf="!module_name; else enableButton">
-    <button class="btn btn-primary"
+    <button cdsButton="primary"
             [routerLink]="'/overview'"
             i18n>Go To Overview</button>
   </div>
 </ng-template>
-
 <ng-template #enableButton>
   <div class="mt-4 text-center"
        *ngIf="module_name && !(buttonName && buttonRoute)">
-    <button class="btn btn-primary"
+    <button cdsButton="primary"
             (click)="enableModule()"
             i18n>Enable {{ module_name | upperFirst }} module</button>
   </div>
