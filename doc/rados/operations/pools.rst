@@ -773,14 +773,14 @@ Here are the break downs of the arguments:
 
 .. describe:: {pool-name}
 
-   The name of the pool. It must be an existing pool: this command doesn't create a new pool.
+   The name of the pool. It must be an existing pool, this command doesn't create a new pool.
 
    :Type: String
    :Required: Yes.
 
 .. describe:: {peering_crush_bucket_count}
 
-   This value is used along with ``peering_crush_bucket_barrier`` to determined whether the set of
+   The value is used along with peering_crush_bucket_barrier to determined whether the set of
    OSDs in the chosen acting set can peer with each other, based on the number of distinct
    buckets there are in the acting set.
 
@@ -789,47 +789,45 @@ Here are the break downs of the arguments:
 
 .. describe:: {peering_crush_bucket_target}
    
-   This value is used along with ``peering_crush_bucket_barrier`` and ``size`` to calculate
-   the value ``bucket_max`` which limits the number of OSDs in the same bucket chosen
-   to be in the acting set of a PG.
+   This value is used along with peering_crush_bucket_barrier and size to calculate
+   the value bucket_max which limits the number of OSDs in the same bucket from getting chose to be in the acting set of a PG.
    
    :Type: Integer
    :Required: Yes.
 
 .. describe:: {peering_crush_bucket_barrier}
       
-   The type of CRUSH bucket the pool's PGs are spread among, e.g., ``rack``, ``row``, or ``datacenter``.
+   The type of bucket a pool is stretched across, e.g., rack, row, or datacenter.
 
    :Type: String
    :Required: Yes.
 
 .. describe:: {crush_rule}
       
-   The CRUSH rule to use for the pool. The type of pool must match the type of the CRUSH rule
-   (``replicated`` or ``erasure``).
+   The crush rule to use for the stretch pool. The type of pool must match the type of crush_rule
+   (replicated or erasure).
 
    :Type: String
    :Required: Yes.
 
 .. describe:: {size}
          
-   The number of replicas for RADOS objects (and thus PGs) in the pool.
+   The number of replicas for objects in the stretch pool.
    
    :Type: Integer
    :Required: Yes.
 
 .. describe:: {min_size}
             
-   The minimum number of replicas that must be active for IO operations to be
-   serviced.
+   The minimum number of replicas required for I/O in the stretch pool.
 
    :Type: Integer
    :Required: Yes.
 
 .. describe:: {--yes-i-really-mean-it}
    
-      This flag is required to confirm that you really want to bypass
-      safety checks and set the values for a pool, e.g,
+      This flag is required to confirm that you really want to by-pass
+      the safety checks and set the values for a stretch pool, e.g,
       when you are trying to set ``peering_crush_bucket_count`` or 
       ``peering_crush_bucket_target`` to be more than the number of buckets in the crush map.
    
@@ -846,7 +844,7 @@ To move the pool back to non-stretch, run a command of the following form:
 
    ceph osd pool stretch unset {pool-name}
 
-Here are the breakdowns of the arguments:
+Here are the break downs of the argument:
 
 .. describe:: {pool-name}
 
