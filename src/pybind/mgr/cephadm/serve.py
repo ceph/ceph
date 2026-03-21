@@ -34,6 +34,7 @@ from mgr_util import format_bytes, verify_tls, get_cert_issuer_info, ServerConfi
 
 from . import utils
 from . import exchange
+from . import ssh
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -1609,7 +1610,11 @@ class CephadmServe:
             cmd = ['which', 'python3']
             python = await self.mgr.ssh._check_execute_command(host, cmd, addr=addr)
             cmd = [python, self.mgr.cephadm_binary_path] + final_args
-
+            try:
+                # when connection was broken/closed, retrying resets the connection
+                python = await self.mgr.ssh._check_execute_command(host, cmd, addr=addr)
+            except ssh.HostConnectionError:
+                python = await self.mgr.ssh._check_execute_command(host, cmd, addr=addr)
             try:
                 out, err, code = await self.mgr.ssh._execute_command(
                     host, cmd, stdin=stdin, addr=addr)
