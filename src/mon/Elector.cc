@@ -131,7 +131,7 @@ bool Elector::ever_participated() const
   return mon->has_ever_joined;
 }
 
-unsigned Elector::paxos_size() const
+int Elector::paxos_size() const
 {
   return mon->monmap->size();
 }
