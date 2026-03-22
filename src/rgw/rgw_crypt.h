@@ -357,6 +357,32 @@ public:
   int process(bufferlist&& data, uint64_t logical_offset) override;
 }; /* RGWPutObj_BlockEncrypt */
 
+/*
+ * Build a decrypt crypt from stored attrs (LC: no req_state).
+ * bucket_id/object_name are used only for AEAD key derivation.
+ * Returns -ENOTSUP for SSE-C; 0 + nullptr for unencrypted.
+ */
+int rgw_prepare_decrypt_object(const DoutPrefixProvider* dpp,
+                               CephContext* cct,
+                               const rgw::sal::Attrs& attrs,
+                               const std::string& bucket_id,
+                               const std::string& object_name,
+                               optional_yield y,
+                               std::unique_ptr<BlockCrypt>* block_crypt);
+
+/*
+ * Build an encrypt crypt for LC in-place re-encryption. For AEAD,
+ * regenerates dest_attrs[CRYPT_SALT] so the re-derived per-object
+ * key differs from the source key (avoids GCM nonce reuse).
+ */
+int rgw_prepare_reencrypt_object(const DoutPrefixProvider* dpp,
+                                 CephContext* cct,
+                                 rgw::sal::Attrs& dest_attrs,
+                                 const std::string& bucket_id,
+                                 const std::string& object_name,
+                                 optional_yield y,
+                                 std::unique_ptr<BlockCrypt>* block_crypt);
+
 
 int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
                            std::map<std::string, ceph::bufferlist>& attrs,
