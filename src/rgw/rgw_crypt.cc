@@ -3041,3 +3041,257 @@ int rgw_remove_sse_s3_bucket_key(req_state *s, optional_yield y)
 *	Removing those comments makes that work harder.
 *				February 25, 2021
 *********************************************************************/
+
+/*
+ * Build an AES_256_GCM decrypt crypt from the salt in attrs and the
+ * caller-supplied user key. Zeroizes user_key on every path.
+ */
+static int build_aead_decrypt_crypt(
+    const DoutPrefixProvider* dpp, CephContext* cct,
+    const rgw::sal::Attrs& attrs,
+    std::string& user_key,
+    const std::string& bucket_id,
+    const std::string& object_name,
+    const std::string& domain,
+    std::unique_ptr<BlockCrypt>* block_crypt)
+{
+  auto cleanup = [&]() {
+    ::ceph::crypto::zeroize_for_security(user_key.data(), user_key.length());
+  };
+  if (user_key.size() != AES_256_KEYSIZE) {
+    cleanup();
+    ldpp_dout(dpp, 0) << "ERROR: " << domain << " key not 256 bits" << dendl;
+    return -EINVAL;
+  }
+  std::string salt = get_str_attribute(attrs, RGW_ATTR_CRYPT_SALT);
+  if (salt.size() != AES_256_GCM_SALT_SIZE) {
+    cleanup();
+    ldpp_dout(dpp, 0) << "ERROR: " << domain
+        << " missing/invalid " RGW_ATTR_CRYPT_SALT << dendl;
+    return -EIO;
+  }
+  auto aes = AES_256_GCM_create(dpp, cct,
+      reinterpret_cast<const uint8_t*>(user_key.c_str()), AES_256_KEYSIZE,
+      reinterpret_cast<const uint8_t*>(salt.c_str()), salt.size(), 0);
+  auto* gcm = dynamic_cast<AES_256_GCM*>(aes.get());
+  if (!gcm || !gcm->derive_object_key(
+          reinterpret_cast<const uint8_t*>(user_key.c_str()), AES_256_KEYSIZE,
+          bucket_id, object_name, 0, domain)) {
+    cleanup();
+    ldpp_dout(dpp, 0) << "ERROR: " << domain << " key derivation failed" << dendl;
+    return -EIO;
+  }
+  cleanup();
+  *block_crypt = std::move(aes);
+  return 0;
+}
+
+int rgw_prepare_decrypt_object(const DoutPrefixProvider* dpp,
+                               CephContext* cct,
+                               const rgw::sal::Attrs& attrs,
+                               const std::string& bucket_id,
+                               const std::string& object_name,
+                               optional_yield y,
+                               std::unique_ptr<BlockCrypt>* block_crypt)
+{
+  *block_crypt = nullptr;
+
+  auto mode_iter = attrs.find(RGW_ATTR_CRYPT_MODE);
+  if (mode_iter == attrs.end()) {
+    return 0;
+  }
+  std::string mode = mode_iter->second.to_str();
+
+  if (mode == "SSE-C-AES256" || mode == "SSE-C-AES256-GCM") {
+    return -ENOTSUP;
+  }
+
+  if (mode == "SSE-KMS") {
+    std::string actual_key;
+    auto mutable_attrs = attrs;
+    int r = reconstitute_actual_key_from_kms(dpp, mutable_attrs, nullptr, y, actual_key);
+    if (r != 0) {
+      ldpp_dout(dpp, 10) << "ERROR: failed to retrieve KMS key" << dendl;
+      return r;
+    }
+    if (actual_key.size() != AES_256_KEYSIZE) {
+      ldpp_dout(dpp, 0) << "ERROR: KMS key is not 256 bits" << dendl;
+      actual_key.replace(0, actual_key.length(), actual_key.length(), '\000');
+      return -EINVAL;
+    }
+    auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(dpp, cct));
+    aes->set_key(reinterpret_cast<const uint8_t*>(actual_key.c_str()),
+                 AES_256_KEYSIZE);
+    actual_key.replace(0, actual_key.length(), actual_key.length(), '\000');
+    *block_crypt = std::move(aes);
+    return 0;
+  }
+
+  if (mode == "RGW-AUTO") {
+    std::string master_encryption_key;
+    auto wipe_master = [&]() {
+      ::ceph::crypto::zeroize_for_security(
+          master_encryption_key.data(), master_encryption_key.length());
+    };
+    try {
+      master_encryption_key = from_base64(
+          std::string(cct->_conf->rgw_crypt_default_encryption_key));
+    } catch (...) {
+      wipe_master();
+      ldpp_dout(dpp, 5) << "ERROR: invalid default encryption key" << dendl;
+      return -EINVAL;
+    }
+    if (master_encryption_key.size() != 256 / 8) {
+      wipe_master();
+      ldpp_dout(dpp, 0) << "ERROR: default encryption key not 256 bits"
+          << dendl;
+      return -EINVAL;
+    }
+    std::string attr_key_selector =
+        get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYSEL);
+    if (attr_key_selector.size() != AES_256_CBC::AES_256_KEYSIZE) {
+      wipe_master();
+      ldpp_dout(dpp, 0) << "ERROR: missing or invalid "
+          RGW_ATTR_CRYPT_KEYSEL << dendl;
+      return -EIO;
+    }
+    uint8_t actual_key[AES_256_KEYSIZE];
+    if (!AES_256_ECB_encrypt(dpp, cct,
+            reinterpret_cast<const uint8_t*>(
+                master_encryption_key.c_str()),
+            AES_256_KEYSIZE,
+            reinterpret_cast<const uint8_t*>(
+                attr_key_selector.c_str()),
+            actual_key, AES_256_KEYSIZE)) {
+      ::ceph::crypto::zeroize_for_security(actual_key, sizeof(actual_key));
+      wipe_master();
+      return -EIO;
+    }
+    auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(dpp, cct));
+    aes->set_key(actual_key, AES_256_KEYSIZE);
+    ::ceph::crypto::zeroize_for_security(actual_key, sizeof(actual_key));
+    wipe_master();
+    *block_crypt = std::move(aes);
+    return 0;
+  }
+
+  if (mode == "AES256") {
+    std::string actual_key;
+    auto mutable_attrs = attrs;
+    int r = reconstitute_actual_key_from_sse_s3(dpp, mutable_attrs, y, actual_key);
+    if (r != 0) {
+      ldpp_dout(dpp, 10) << "ERROR: failed to retrieve SSE-S3 key" << dendl;
+      return r;
+    }
+    if (actual_key.size() != AES_256_KEYSIZE) {
+      ldpp_dout(dpp, 0) << "ERROR: SSE-S3 key is not 256 bits" << dendl;
+      actual_key.replace(0, actual_key.length(), actual_key.length(), '\000');
+      return -EINVAL;
+    }
+    auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(dpp, cct));
+    aes->set_key(reinterpret_cast<const uint8_t*>(actual_key.c_str()),
+                 AES_256_KEYSIZE);
+    actual_key.replace(0, actual_key.length(), actual_key.length(), '\000');
+    *block_crypt = std::move(aes);
+    return 0;
+  }
+
+  if (mode == "SSE-KMS-GCM") {
+    std::string actual_key;
+    auto mutable_attrs = attrs;
+    int r = reconstitute_actual_key_from_kms(dpp, mutable_attrs, nullptr, y, actual_key);
+    if (r != 0) {
+      ldpp_dout(dpp, 10) << "ERROR: failed to retrieve KMS key" << dendl;
+      return r;
+    }
+    return build_aead_decrypt_crypt(dpp, cct, attrs, actual_key,
+                                    bucket_id, object_name,
+                                    "SSE-KMS-GCM", block_crypt);
+  }
+
+  if (mode == "AES256-GCM") {
+    std::string actual_key;
+    auto mutable_attrs = attrs;
+    int r = reconstitute_actual_key_from_sse_s3(dpp, mutable_attrs, y, actual_key);
+    if (r != 0) {
+      ldpp_dout(dpp, 10) << "ERROR: failed to retrieve SSE-S3 key" << dendl;
+      return r;
+    }
+    return build_aead_decrypt_crypt(dpp, cct, attrs, actual_key,
+                                    bucket_id, object_name,
+                                    "AES256-GCM", block_crypt);
+  }
+
+  if (mode == "RGW-AUTO-GCM") {
+    std::string master_encryption_key;
+    try {
+      master_encryption_key = from_base64(
+          std::string(cct->_conf->rgw_crypt_default_encryption_key));
+    } catch (...) {
+      ::ceph::crypto::zeroize_for_security(
+          master_encryption_key.data(), master_encryption_key.length());
+      ldpp_dout(dpp, 5) << "ERROR: invalid default encryption key" << dendl;
+      return -EINVAL;
+    }
+    return build_aead_decrypt_crypt(dpp, cct, attrs, master_encryption_key,
+                                    bucket_id, object_name,
+                                    "RGW-AUTO-GCM", block_crypt);
+  }
+
+  return -ENOTSUP;
+}
+
+int rgw_prepare_reencrypt_object(const DoutPrefixProvider* dpp,
+                                 CephContext* cct,
+                                 rgw::sal::Attrs& dest_attrs,
+                                 const std::string& bucket_id,
+                                 const std::string& object_name,
+                                 optional_yield y,
+                                 std::unique_ptr<BlockCrypt>* block_crypt)
+{
+  *block_crypt = nullptr;
+
+  const std::string mode = get_str_attribute(dest_attrs, RGW_ATTR_CRYPT_MODE);
+  if (mode.empty()) {
+    return 0;
+  }
+
+  if (!is_aead_mode(mode)) {
+    return rgw_prepare_decrypt_object(dpp, cct, dest_attrs,
+                                      bucket_id, object_name,
+                                      y, block_crypt);
+  }
+
+  /*
+   * For AEAD, stage a fresh salt so that key derivation produces a
+   * different per-object key on each re-encrypt. Without this, the
+   * same key+salt would reuse GCM IVs across distinct plaintexts
+   * (e.g., after recompression). Roll back on failure so dest_attrs
+   * stays consistent with the on-disk state.
+   */
+  auto saved_iter = dest_attrs.find(RGW_ATTR_CRYPT_SALT);
+  const bool had_salt = (saved_iter != dest_attrs.end());
+  bufferlist saved_bl;
+  if (had_salt) {
+    saved_bl = saved_iter->second;
+  }
+
+  std::string salt(AES_256_GCM_SALT_SIZE, '\0');
+  cct->random()->get_bytes(salt.data(), AES_256_GCM_SALT_SIZE);
+  bufferlist new_salt_bl;
+  new_salt_bl.append(salt);
+  dest_attrs[RGW_ATTR_CRYPT_SALT] = std::move(new_salt_bl);
+
+  int r = rgw_prepare_decrypt_object(dpp, cct, dest_attrs,
+                                     bucket_id, object_name,
+                                     y, block_crypt);
+  if (r < 0) {
+    if (had_salt) {
+      dest_attrs[RGW_ATTR_CRYPT_SALT] = std::move(saved_bl);
+    } else {
+      dest_attrs.erase(RGW_ATTR_CRYPT_SALT);
+    }
+  }
+  return r;
+}
+

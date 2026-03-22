@@ -1,0 +1,12 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        rgw crypt sse algorithm: aes-256-gcm
+  rgw:
+    enable features: [compress-encrypted]
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - rgw/run-lc-encrypt-recompress.sh
