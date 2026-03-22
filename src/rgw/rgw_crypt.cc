@@ -710,6 +710,13 @@ int RGWGetObj_BlockDecrypt::read_manifest_parts(const DoutPrefixProvider *dpp,
 }
 
 int RGWGetObj_BlockDecrypt::fixup_range(off_t& bl_ofs, off_t& bl_end) {
+  /*
+   * Cascade to the next filter first so it sees the original
+   * plaintext range before we block-align for decryption.
+   */
+  if (next)
+    next->fixup_range(bl_ofs, bl_end);
+
   off_t inp_ofs = bl_ofs;
   off_t inp_end = bl_end;
   if (parts_len.size() > 0) {
@@ -750,9 +757,6 @@ int RGWGetObj_BlockDecrypt::fixup_range(off_t& bl_ofs, off_t& bl_end) {
   }
   ldpp_dout(this->dpp, 20) << "fixup_range [" << inp_ofs << "," << inp_end
       << "] => [" << bl_ofs << "," << bl_end << "]" << dendl;
-
-  if (next)
-    return next->fixup_range(bl_ofs, bl_end);
 
   return 0;
 }
