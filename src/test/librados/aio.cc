@@ -1099,6 +1099,7 @@ public:
 };
 
 TEST(LibRadosAioEC, SimpleWrite) {
+  SKIP_IF_CRIMSON();
   AioTestDataEC test_data;
   rados_completion_t my_completion;
   ASSERT_EQ("", test_data.init());
@@ -1130,6 +1131,7 @@ TEST(LibRadosAioEC, SimpleWrite) {
 }
 
 TEST(LibRadosAioEC, WaitForComplete) {
+  SKIP_IF_CRIMSON();
   AioTestDataEC test_data;
   rados_completion_t my_completion;
   ASSERT_EQ("", test_data.init());
@@ -1146,6 +1148,7 @@ TEST(LibRadosAioEC, WaitForComplete) {
 }
 
 TEST(LibRadosAioEC, RoundTrip) {
+  SKIP_IF_CRIMSON();
   AioTestDataEC test_data;
   rados_completion_t my_completion;
   ASSERT_EQ("", test_data.init());
@@ -1178,6 +1181,7 @@ TEST(LibRadosAioEC, RoundTrip) {
 }
 
 TEST(LibRadosAioEC, RoundTrip2) {
+  SKIP_IF_CRIMSON();
   AioTestDataEC test_data;
   rados_completion_t my_completion;
   ASSERT_EQ("", test_data.init());
@@ -1210,6 +1214,7 @@ TEST(LibRadosAioEC, RoundTrip2) {
 }
 
 TEST(LibRadosAioEC, RoundTripAppend) {
+  SKIP_IF_CRIMSON();
   AioTestDataEC test_data;
   rados_completion_t my_completion, my_completion2, my_completion3, my_completion4;
   ASSERT_EQ("", test_data.init());
@@ -1280,6 +1285,7 @@ TEST(LibRadosAioEC, RoundTripAppend) {
 }
 
 TEST(LibRadosAioEC, IsComplete) {
+  SKIP_IF_CRIMSON();
   AioTestDataEC test_data;
   rados_completion_t my_completion;
   ASSERT_EQ("", test_data.init());
@@ -1319,6 +1325,7 @@ TEST(LibRadosAioEC, IsComplete) {
 }
 
 TEST(LibRadosAioEC, IsSafe) {
+  SKIP_IF_CRIMSON();
   AioTestDataEC test_data;
   rados_completion_t my_completion;
   ASSERT_EQ("", test_data.init());
@@ -1358,6 +1365,7 @@ TEST(LibRadosAioEC, IsSafe) {
 }
 
 TEST(LibRadosAioEC, ReturnValue) {
+  SKIP_IF_CRIMSON();
   AioTestDataEC test_data;
   rados_completion_t my_completion;
   ASSERT_EQ("", test_data.init());
@@ -1376,6 +1384,7 @@ TEST(LibRadosAioEC, ReturnValue) {
 }
 
 TEST(LibRadosAioEC, Flush) {
+  SKIP_IF_CRIMSON();
   AioTestDataEC test_data;
   rados_completion_t my_completion;
   ASSERT_EQ("", test_data.init());
@@ -1405,6 +1414,7 @@ TEST(LibRadosAioEC, Flush) {
 }
 
 TEST(LibRadosAioEC, FlushAsync) {
+  SKIP_IF_CRIMSON();
   AioTestDataEC test_data;
   rados_completion_t my_completion;
   ASSERT_EQ("", test_data.init());
@@ -1443,6 +1453,7 @@ TEST(LibRadosAioEC, FlushAsync) {
 }
 
 TEST(LibRadosAioEC, RoundTripWriteFull) {
+  SKIP_IF_CRIMSON();
   AioTestDataEC test_data;
   rados_completion_t my_completion, my_completion2, my_completion3;
   ASSERT_EQ("", test_data.init());
@@ -1486,6 +1497,7 @@ TEST(LibRadosAioEC, RoundTripWriteFull) {
 }
 
 TEST(LibRadosAioEC, SimpleStat) {
+  SKIP_IF_CRIMSON();
   AioTestDataEC test_data;
   rados_completion_t my_completion;
   ASSERT_EQ("", test_data.init());
@@ -1519,6 +1531,7 @@ TEST(LibRadosAioEC, SimpleStat) {
 
 
 TEST(LibRadosAioEC, SimpleStatNS) {
+  SKIP_IF_CRIMSON();
   AioTestDataEC test_data;
   rados_completion_t my_completion;
   ASSERT_EQ("", test_data.init());
@@ -1579,6 +1592,7 @@ TEST(LibRadosAioEC, SimpleStatNS) {
 }
 
 TEST(LibRadosAioEC, StatRemove) {
+  SKIP_IF_CRIMSON();
   AioTestDataEC test_data;
   rados_completion_t my_completion;
   ASSERT_EQ("", test_data.init());
@@ -1634,6 +1648,7 @@ TEST(LibRadosAioEC, StatRemove) {
 }
 
 TEST(LibRadosAioEC, ExecuteClass) {
+  SKIP_IF_CRIMSON();
   AioTestDataEC test_data;
   rados_completion_t my_completion;
   ASSERT_EQ("", test_data.init());
@@ -1665,6 +1680,7 @@ TEST(LibRadosAioEC, ExecuteClass) {
 }
 
 TEST(LibRadosAioEC, MultiWrite) {
+  SKIP_IF_CRIMSON();
   AioTestDataEC test_data;
   rados_completion_t my_completion, my_completion2, my_completion3;
   ASSERT_EQ("", test_data.init());
