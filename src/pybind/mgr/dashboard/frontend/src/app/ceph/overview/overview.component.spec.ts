@@ -25,7 +25,7 @@ describe('OverviewComponent', () => {
   let component: OverviewComponent;
   let fixture: ComponentFixture<OverviewComponent>;
 
-  let mockHealthService: { getHealthSnapshot: jest.Mock };
+  let mockHealthService: { getHealthSnapshot: jest.Mock; getTelemetryStatus: jest.Mock };
   let mockRefreshIntervalService: { intervalData$: Subject<void> };
   let mockOverviewStorageService: {
     getTrendData: jest.Mock;
@@ -52,7 +52,10 @@ describe('OverviewComponent', () => {
   };
 
   beforeEach(async () => {
-    mockHealthService = { getHealthSnapshot: jest.fn() };
+    mockHealthService = {
+      getHealthSnapshot: jest.fn(),
+      getTelemetryStatus: jest.fn().mockReturnValue(of(false))
+    };
     mockRefreshIntervalService = { intervalData$: new Subject<void>() };
 
     mockOverviewStorageService = {

@@ -124,6 +124,7 @@ import CheckMarkOutline16 from '@carbon/icons/es/checkmark--outline/16';
 import ArrowUpRight16 from '@carbon/icons/es/arrow--up-right/16';
 import InProgress16 from '@carbon/icons/es/in-progress/16';
 import ArrowDown16 from '@carbon/icons/es/arrow--down/16';
+import CloudMonitoring16 from '@carbon/icons/es/cloud--monitoring/16';
 
 import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.component';
 import { PageHeaderComponent } from './page-header/page-header.component';
@@ -309,7 +310,8 @@ export class ComponentsModule {
       CheckMarkOutline16,
       ArrowUpRight16,
       InProgress16,
-      ArrowDown16
+      ArrowDown16,
+      CloudMonitoring16
     ]);
   }
 }
