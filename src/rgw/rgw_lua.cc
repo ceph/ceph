@@ -89,13 +89,13 @@ std::string script_oid(context ctx, const std::string& tenant, const std::string
 
 int read_script(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, std::string& script, const std::string& name)
 {
-  return manager ? manager->get_script(dpp, y, script_oid(ctx, tenant, name), script) : -ENOENT;
+  return manager ? manager->get_script(dpp, y, nullptr, script_oid(ctx, tenant, name), script) : -ENOENT;
 }
 
 int list_scripts(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, std::vector<std::string>& scripts)
 {
 
-  return manager ? manager->list_scripts(dpp, y, script_oid(ctx, tenant, ""), scripts) : -ENOENT;
+  return manager ? manager->list_scripts(dpp, y, nullptr, script_oid(ctx, tenant, ""), scripts) : -ENOENT;
 }
 
 std::tuple<LuaCodeType, int> read_script_or_bytecode(const DoutPrefixProvider *dpp, sal::LuaManager* manager,

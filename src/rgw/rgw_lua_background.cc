@@ -262,7 +262,7 @@ void Background::process_scripts() {
   }
   std::string script;
   for (const auto& key: updated_scripts) {
-    int r = lua_manager->get_script(&dp, null_yield, key, script);
+    int r = lua_manager->get_script(&dp, null_yield, nullptr, key, script);
     if (r < 0 && r != -ENOENT) {
       ldpp_dout(&dp, 10) << "ERROR: Failed to get script : " << key
                          << ". r = " << r << dendl;

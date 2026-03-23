@@ -2129,12 +2129,12 @@ namespace rgw::sal {
     return ret;
   }
 
-  int DBLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script)
+  int DBLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y, RGWObjVersionTracker* objv, const std::string& key, std::string& script)
   {
     return -ENOENT;
   }
 
-  int DBLuaManager::list_scripts(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::vector<std::string>& scripts)
+  int DBLuaManager::list_scripts(const DoutPrefixProvider* dpp, optional_yield y, RGWObjVersionTracker* objv, const std::string& key, std::vector<std::string>& scripts)
   {
     return -ENOENT;
   }
