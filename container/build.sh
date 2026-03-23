@@ -173,12 +173,20 @@ if [[ ${CI_CONTAINER} == "true" ]] ; then
         branch_repo_tag=${repopath}:${BRANCH}
         sha1_repo_tag=${repopath}:${CEPH_SHA1}
     fi
-    # while we have more than just centos9 containers:
-    # anything that's not gets suffixed with its fromtag
-    # for the branch and sha1 tags (for example, <branch>-rocky-10).
-    # The default can change when it needs to.
+    # The container build tooling is capable of using CentOS 9 and Rocky 10
+    # as the FROM_IMAGE base container images.
+    # In Tentacle, the default/preferred FROM_IMAGE changed to rockylinux-10.
+    # So we want `podman pull quay.ceph.io/ceph-ci/ceph:tentacle` to get the
+    # FROM_IMAGE=rockylinux-10 container, NOT the CentOS 9 one.
+    # And vice versa for ceph:squid.
 
-    if [[ "${fromtag}" != "centos-stream9" ]] ; then
+    if [[ "$BRANCH" == "reef" || "$BRANCH" == "squid" ]]; then
+        default_fromtag="centos-stream9"
+    else
+        default_fromtag="rockylinux-10"
+    fi
+    # We set fromtag above by extracting FROM_IMAGE from `podman inspect`
+    if [[ "${fromtag}" != "${default_fromtag}" ]] ; then
         branch_repo_tag=${repopath}:${BRANCH}-${fromtag}
         sha1_repo_tag=${repopath}:${CEPH_SHA1}-${fromtag}
     fi
