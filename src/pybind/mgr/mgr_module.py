@@ -677,14 +677,15 @@ class CPlusPlusHandler(logging.Handler):
         if record.levelno >= self.level:
             self._module._ceph_log(self.format(record))
 
+
 class MgrRootHandler(CPlusPlusHandler):
-    def __init__(self, module_inst):
+    def __init__(self, module_inst: 'MgrModuleLoggingMixin') -> None:
         super().__init__(module_inst)
         self.setFormatter(logging.Formatter(
             "[mgr %(levelname)-4s %(name)s] %(message)s"
         ))
 
-    def emit(self, record):
+    def emit(self, record: logging.LogRecord) -> None:
         record.name = "mgr"
         super().emit(record)
 
@@ -723,6 +724,8 @@ class FileHandler(logging.FileHandler):
 
 
 class MgrModuleLoggingMixin(object):
+    module_name: str
+
     def _configure_logging(self,
                            mgr_level: str,
                            module_level: str,
@@ -846,10 +849,13 @@ class MgrModuleLoggingMixin(object):
             log_level = "INFO"
         return log_level
 
-    def getLogger(self, name=None):
+    def getLogger(self, name: Optional[str] = None) -> logging.Logger:
+        logger = getattr(self, '_module_logger', None) \
+            or logging.getLogger(self.module_name)
         if name is None:
-            return self._module_logger
-        return self._module_logger.getChild(name)
+            return logger
+        return logger.getChild(name)
+
 
 class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
     """
