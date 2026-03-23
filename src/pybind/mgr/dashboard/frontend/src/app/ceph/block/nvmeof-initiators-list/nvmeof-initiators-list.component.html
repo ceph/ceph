@@ -35,9 +35,10 @@
     </cd-table-actions>
   </div>
 </cd-table>
-<ng-template #dhchapTpl>
+<ng-template #dhchapTpl
+             let-row="data.row">
   <div cdsStack="horizontal"
        gap="4">
-    {{ authStatus !== authType.NO_AUTH ? 'Yes' : 'No' }}
+    {{ isDhchapEnabledForHost(row) ? 'Yes' : 'No' }}
   </div>
 </ng-template>

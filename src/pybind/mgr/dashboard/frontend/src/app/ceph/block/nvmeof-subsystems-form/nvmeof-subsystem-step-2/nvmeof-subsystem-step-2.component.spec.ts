@@ -10,7 +10,13 @@ import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SharedModule } from '~/app/shared/shared.module';
 import { NvmeofSubsystemsStepTwoComponent } from './nvmeof-subsystem-step-2.component';
-import { GridModule, InputModule, RadioModule, TagModule } from 'carbon-components-angular';
+import {
+  FileUploaderModule,
+  GridModule,
+  InputModule,
+  RadioModule,
+  TagModule
+} from 'carbon-components-angular';
 
 describe('NvmeofSubsystemsStepTwoComponent', () => {
   let component: NvmeofSubsystemsStepTwoComponent;
@@ -28,6 +34,7 @@ describe('NvmeofSubsystemsStepTwoComponent', () => {
         ReactiveFormsModule,
         RouterTestingModule,
         SharedModule,
+        FileUploaderModule,
         InputModule,
         GridModule,
         RadioModule,
@@ -112,6 +119,82 @@ describe('NvmeofSubsystemsStepTwoComponent', () => {
 
       expect(form.get('addedHosts')?.value).toEqual([]);
       expect(component.addedHostsLength).toBe(0);
+    });
+  });
+
+  describe('processCsvContent', () => {
+    it('should import valid host NQNs from CSV', () => {
+      const csvContent = `
+host_nqn
+nqn.2023-01.com.example:host1
+nqn.2023-01.com.example:host2
+`;
+
+      component.processCsvContent(csvContent);
+
+      expect(form.get('addedHosts')?.value).toEqual([
+        'nqn.2023-01.com.example:host1',
+        'nqn.2023-01.com.example:host2'
+      ]);
+      expect(component.addedHostsLength).toBe(2);
+      expect(component.csvUploadError).toBe('');
+    });
+
+    it('should skip duplicates and invalid values from CSV', () => {
+      form.get('addedHosts')?.setValue(['nqn.2023-01.com.example:existing']);
+      component.existingHosts = ['nqn.2023-01.com.example:already-there'];
+
+      const csvContent = `
+host_nqn
+nqn.2023-01.com.example:existing
+nqn.2023-01.com.example:new-host
+invalid-host
+nqn.2023-01.com.example:already-there
+nqn.2023-01.com.example:new-host
+`;
+
+      component.processCsvContent(csvContent);
+
+      expect(form.get('addedHosts')?.value).toEqual([
+        'nqn.2023-01.com.example:existing',
+        'nqn.2023-01.com.example:new-host'
+      ]);
+      expect(component.addedHostsLength).toBe(2);
+      expect(component.csvUploadError).toBe('');
+    });
+
+    it('should show error when csv has no valid hosts', () => {
+      const csvContent = `
+host_nqn
+invalid-host
+another-invalid-host
+`;
+
+      component.processCsvContent(csvContent);
+
+      expect(form.get('addedHosts')?.value).toEqual([]);
+      expect(component.csvUploadError).toBe('No valid hosts found in the CSV file.');
+    });
+
+    it('should not show invalid-csv error when all uploaded hosts are duplicates', () => {
+      form
+        .get('addedHosts')
+        ?.setValue(['nqn.2023-01.com.example:host1', 'nqn.2023-01.com.example:host2']);
+      component.addedHostsLength = 2;
+
+      const csvContent = `
+host_nqn
+nqn.2023-01.com.example:host1
+nqn.2023-01.com.example:host2
+`;
+
+      component.processCsvContent(csvContent);
+
+      expect(form.get('addedHosts')?.value).toEqual([
+        'nqn.2023-01.com.example:host1',
+        'nqn.2023-01.com.example:host2'
+      ]);
+      expect(component.csvUploadError).toBe('');
     });
   });
 });

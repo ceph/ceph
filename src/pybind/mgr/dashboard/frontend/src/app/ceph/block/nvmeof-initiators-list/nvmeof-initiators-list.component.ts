@@ -171,6 +171,13 @@ export class NvmeofInitiatorsListComponent implements OnInit {
     }
   }
 
+  isDhchapEnabledForHost(initiator: NvmeofSubsystemInitiator): boolean {
+    if (!initiator || initiator.nqn === '*') {
+      return false;
+    }
+    return !!(initiator.use_dhchap || (initiator as any).dhchap_key);
+  }
+
   getSelectedNQNs() {
     return this.selection.selected.map((selected) => selected.nqn);
   }
