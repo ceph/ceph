@@ -140,6 +140,8 @@ force_tls = False
 # This is a development flag, do not change it
 max_message_length_in_mb = 4
 io_stats_enabled = True
+default_listener_port = 4420
+default_secure_listener_port = 4421
 
 [gateway-logs]
 log_level = INFO
