@@ -1,6 +1,7 @@
 @let data=(data$ | async);
 @let hwEnabled = (enabled$ | async);
 @let hwSections = (sections$ | async);
+@let telemetryEnabled = (telemetryEnabled$ | async);
 
 @let colorClass="overview-health-card-status--" + vm?.clusterHealth?.icon;
 
@@ -24,15 +25,42 @@
         source="fsid">
       </cd-copy-2-clipboard-button>
     </div>
-    <cds-icon-button
-      type="button"
-      kind="ghost"
-      size="sm"
-      description="Check logs"
-      i18n-description
-      [routerLink]="['/logs']">
-      <cd-icon type="dataViewAlt"></cd-icon>
-    </cds-icon-button>
+    <ng-template #telemetryDescription>
+      <div class="cds--type-heading-compact-01 cds-mb-2"
+           i18n>Support & diagnostics</div>
+      <div cdsStack="horizontal"
+           [gap]="10">
+        <span i18n>Telemetry</span>
+        <span>
+          @if (telemetryEnabled) {
+          <cd-icon type="success"></cd-icon>&nbsp;
+          <span i18n>on</span>
+          } @else {
+          <cd-icon type="infoCircle"></cd-icon>&nbsp;
+          <span i18n>off</span>
+          }
+        </span>
+      </div>
+    </ng-template>
+    <div cdsStack="horizontal"
+         [gap]="2">
+      <cds-icon-button
+        type="button"
+        kind="ghost"
+        size="sm"
+        [description]="telemetryDescription">
+        <cd-icon type="cloudMonitoring"></cd-icon>
+      </cds-icon-button>
+      <cds-icon-button
+        type="button"
+        kind="ghost"
+        size="sm"
+        description="Check logs"
+        i18n-description
+        [routerLink]="['/logs']">
+        <cd-icon type="dataViewAlt"></cd-icon>
+      </cds-icon-button>
+    </div>
   </ng-template>
   } @else {
   <cds-skeleton-text
