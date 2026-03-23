@@ -293,3 +293,9 @@ timeout = 1.0\n"""
                       'group name \'right.group\' and service id \'pool4.wrong.group\''
             ):
                 cephadm_module._apply_service_spec(mismatch_nvmeof_spec_group_service_id_with_dot)
+
+    def test_nvmeof_service_spec_defaults_pool_to_metadata_pool(self):
+        spec = NvmeofServiceSpec(service_id='pool4.bla.group',
+            group='group')
+
+        assert spec.pool == ".nvmeof"
