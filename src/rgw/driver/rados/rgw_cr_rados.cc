@@ -224,58 +224,6 @@ RGWOmapAppend::RGWOmapAppend(RGWAsyncRadosProcessor *_async_rados, rgw::sal::Rad
 {
 }
 
-int RGWAsyncLockSystemObj::_send_request(const DoutPrefixProvider *dpp)
-{
-  rgw_rados_ref ref;
-  int r = store->getRados()->get_raw_obj_ref(dpp, obj, &ref);
-  if (r < 0) {
-    ldpp_dout(dpp, -1) << "ERROR: failed to get ref for (" << obj << ") ret=" << r << dendl;
-    return r;
-  }
-
-  rados::cls::lock::Lock l(lock_name);
-  utime_t duration(duration_secs, 0);
-  l.set_duration(duration);
-  l.set_cookie(cookie);
-  l.set_may_renew(true);
-
-  return l.lock_exclusive(&ref.ioctx, ref.obj.oid);
-}
-
-RGWAsyncLockSystemObj::RGWAsyncLockSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RadosStore* _store,
-                      RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
-                       const string& _name, const string& _cookie, uint32_t _duration_secs) : RGWAsyncRadosRequest(caller, cn), store(_store),
-				 obj(_obj),
-				 lock_name(_name),
-				 cookie(_cookie),
-				 duration_secs(_duration_secs)
-{
-}
-
-int RGWAsyncUnlockSystemObj::_send_request(const DoutPrefixProvider *dpp)
-{
-  rgw_rados_ref ref;
-  int r = store->getRados()->get_raw_obj_ref(dpp, obj, &ref);
-  if (r < 0) {
-    ldpp_dout(dpp, -1) << "ERROR: failed to get ref for (" << obj << ") ret=" << r << dendl;
-    return r;
-  }
-
-  rados::cls::lock::Lock l(lock_name);
-
-  l.set_cookie(cookie);
-
-  return l.unlock(&ref.ioctx, ref.obj.oid);
-}
-
-RGWAsyncUnlockSystemObj::RGWAsyncUnlockSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RadosStore* _store,
-                                                 RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
-                                                 const string& _name, const string& _cookie) : RGWAsyncRadosRequest(caller, cn), store(_store),
-  obj(_obj),
-  lock_name(_name), cookie(_cookie)
-{
-}
-
 RGWRadosSetOmapKeysCR::RGWRadosSetOmapKeysCR(rgw::sal::RadosStore* _store,
                       const rgw_raw_obj& _obj,
                       map<string, bufferlist>& _entries) : RGWSimpleCoroutine(_store->ctx()),

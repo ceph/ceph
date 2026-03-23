@@ -386,35 +386,6 @@ public:
   RGWObjVersionTracker objv_tracker;
 };
 
-class RGWAsyncLockSystemObj : public RGWAsyncRadosRequest {
-  rgw::sal::RadosStore* store;
-  rgw_raw_obj obj;
-  std::string lock_name;
-  std::string cookie;
-  uint32_t duration_secs;
-
-protected:
-  int _send_request(const DoutPrefixProvider *dpp) override;
-public:
-  RGWAsyncLockSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RadosStore* _store,
-                        RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
-		        const std::string& _name, const std::string& _cookie, uint32_t _duration_secs);
-};
-
-class RGWAsyncUnlockSystemObj : public RGWAsyncRadosRequest {
-  rgw::sal::RadosStore* store;
-  rgw_raw_obj obj;
-  std::string lock_name;
-  std::string cookie;
-
-protected:
-  int _send_request(const DoutPrefixProvider *dpp) override;
-public:
-  RGWAsyncUnlockSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RadosStore* _store,
-                        RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
-		        const std::string& _name, const std::string& _cookie);
-};
-
 template <class T>
 class RGWSimpleRadosReadCR : public RGWSimpleCoroutine {
   const DoutPrefixProvider* dpp;
