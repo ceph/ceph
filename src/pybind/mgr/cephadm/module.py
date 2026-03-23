@@ -3040,6 +3040,23 @@ Then run the following:
         """
         return [self._apply(spec) for spec in specs]
 
+    @staticmethod
+    def device_selection_from_explicit_paths(sel: Optional[DeviceSelection]) -> Optional[DeviceSelection]:
+        """
+        Build a new DeviceSelection from explicit paths, preserving 'per path'
+        crush_device_class. Used when persisting osd.default so all device roles
+        are stored consistently (no shared references with the incoming spec).
+        """
+        if sel is None or not sel.paths:
+            return None
+        path_specs: List[Dict[str, Any]] = []
+        for d in sel.paths:
+            spec: Dict[str, Any] = {"path": d.path}
+            if d.crush_device_class:
+                spec["crush_device_class"] = d.crush_device_class
+            path_specs.append(spec)
+        return DeviceSelection(paths=path_specs)
+
     def create_osd_default_spec(self, drive_group: DriveGroupSpec) -> None:
         # Create the default osd and attach a valid spec to it.
 
@@ -3047,13 +3064,17 @@ Then run the following:
 
         host_pattern_obj = drive_group.placement.host_pattern
         host = str(host_pattern_obj.pattern)
+        data_devices = self.device_selection_from_explicit_paths(drive_group.data_devices)
+        assert data_devices is not None
         device_list = [d.path for d in drive_group.data_devices.paths] if drive_group.data_devices else []
-        devices = [{"path": d} for d in device_list]
 
         osd_default_spec = DriveGroupSpec(
             service_id="default",
             placement=PlacementSpec(host_pattern=host),
-            data_devices=DeviceSelection(paths=devices),
+            data_devices=data_devices,
+            db_devices=self.device_selection_from_explicit_paths(drive_group.db_devices),
+            wal_devices=self.device_selection_from_explicit_paths(drive_group.wal_devices),
+            journal_devices=self.device_selection_from_explicit_paths(drive_group.journal_devices),
             unmanaged=False,
             method=drive_group.method,
             objectstore=drive_group.objectstore,
@@ -3063,6 +3084,44 @@ Then run the following:
         self.log.info(f"Creating OSDs with service ID: {drive_group.service_id} on {host}:{device_list}")
         self.spec_store.save(osd_default_spec)
         self.apply([osd_default_spec])
+
+    @staticmethod
+    def is_path_lists_only(drive_group: DriveGroupSpec) -> bool:
+        """
+        Return True if every non null data/db/wal/journal device selection is only
+        non empty paths (no 'all').
+        """
+
+        def path_list_only(sel: Optional[DeviceSelection]) -> bool:
+            if sel is None:
+                return True
+            if sel.all:
+                return False
+            return bool(sel.paths)
+
+        dd = drive_group.data_devices
+        if dd is None or dd.all or not dd.paths:
+            return False
+        for name in ('db_devices', 'wal_devices', 'journal_devices'):
+            if not path_list_only(getattr(drive_group, name, None)):
+                return False
+        return True
+
+    @staticmethod
+    def validate_no_empty_device_paths(drive_group: DriveGroupSpec) -> str:
+        """Reject empty device paths before cache checks (avoids silent ceph-volume failures)."""
+        for selection in (
+                drive_group.data_devices,
+                drive_group.db_devices,
+                drive_group.wal_devices,
+                drive_group.journal_devices,
+        ):
+            if not selection or not selection.paths:
+                continue
+            for device in selection.paths:
+                if device.path is None or not str(device.path).strip():
+                    return "Error: Device path is empty."
+        return ""
 
     def validate_device(self, host_name: str, drive_group: DriveGroupSpec) -> str:
         """
@@ -3078,23 +3137,43 @@ Then run the following:
             if self.cache.is_host_unreachable(host_name):
                 return f"Host {host_name} is not reachable (it may be offline or in maintenance mode)."
 
+            explicit_paths_only = self.is_path_lists_only(drive_group)
+
+            path_fmt_err = self.validate_no_empty_device_paths(drive_group)
+            if path_fmt_err:
+                return path_fmt_err
+
             host_cache = self.cache.devices.get(host_name, [])
             if not host_cache:
+                if explicit_paths_only:
+                    return ""
                 return (f"Error: No devices found for host {host_name}. "
                         "You can check known devices with 'ceph orch device ls'. "
                         "If no devices appear, wait for an automatic refresh.")
 
-            available_devices = {
-                dev.path: dev for dev in host_cache if dev.available
-            }
-            self.log.debug(f"Host {host_name} has {len(available_devices)} available devices.")
+            devices_by_path = {dev.path: dev for dev in host_cache}
+            available_count = sum(1 for dev in host_cache if dev.available)
+            self.log.debug(f"Host {host_name} has {available_count} available devices.")
 
-            for device in drive_group.data_devices.paths:
-                matching_device = next((dev for dev in host_cache if dev.path == device.path), None)
-                if not matching_device:
-                    return f"Error: Device {device.path} is not found on host {host_name}"
-                if not matching_device.available:
-                    return (f"Error: Device {device.path} is present but unavailable for OSD creation. "
+            for selection in (
+                drive_group.data_devices,
+                drive_group.db_devices,
+                drive_group.wal_devices,
+                drive_group.journal_devices,
+            ):
+                if not selection or not selection.paths:
+                    continue
+
+                for device in selection.paths:
+                    matching_device = devices_by_path.get(device.path)
+                    if matching_device is None:
+                        if not explicit_paths_only:
+                            return f"Error: Device {device.path} is not found on host {host_name}"
+                        continue
+
+                    if not matching_device.available:
+                        return (
+                            f"Error: Device {device.path} is present but unavailable for OSD creation. "
                             f"Reason: {', '.join(matching_device.rejected_reasons) if matching_device.rejected_reasons else 'Unknown'}")
 
             return ""
@@ -3111,19 +3190,26 @@ Then run the following:
         if not drive_group.service_id:
             drive_group.service_id = "default"
 
-        if drive_group.service_id not in self.spec_store.all_specs:
-            self.log.info("osd.default does not exist. Creating it now.")
-            self.create_osd_default_spec(drive_group)
-        else:
-            self.log.info("osd.default already exists.")
         host_name = filtered_hosts[0]
         if not skip_validation:
-            self.log.warning("Skipping the validation of device paths for osd daemon add command. Please make sure that the osd path is valid")
             err_msg = self.validate_device(host_name, drive_group)
             if err_msg:
                 return err_msg
 
-        return self.osd_service.create_from_spec(drive_group)
+        # Only save/apply osd.default after validation passes. Otherwise the serve loop
+        # would still apply the spec and create an OSD while the CLI returns an error.
+        # Spec store keys are full service names (example: "osd.default"), not service_id alone.
+        if drive_group.service_name() not in self.spec_store.all_specs:
+            self.log.info("osd.default does not exist. Creating it now.")
+            self.create_osd_default_spec(drive_group)
+        else:
+            self.log.info(
+                "Service osd.default is already registered; continuing with this "
+                "daemon add (one-shot ceph-volume apply, not a full spec re-apply).")
+
+        # 'ceph orch daemon add osd' must always run ceph-volume for this request.
+        # osdspec_needs_apply() only compares timestamps and would skip when inventory did not change.
+        return self.osd_service.create_from_spec(drive_group, force_apply=True)
 
     def _preview_osdspecs(self,
                           osdspecs: Optional[List[DriveGroupSpec]] = None

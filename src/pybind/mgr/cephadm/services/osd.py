@@ -31,7 +31,12 @@ logger = logging.getLogger(__name__)
 class OSDService(CephService):
     TYPE = 'osd'
 
-    def create_from_spec(self, drive_group: DriveGroupSpec) -> str:
+    def create_from_spec(self, drive_group: DriveGroupSpec, force_apply: bool = False) -> str:
+        """
+        :param force_apply: If True, do not check osdspec_needs_apply(). Used by
+            'ceph orch daemon add osd' where the requested devices are not reflected
+            in inventory timestamps (and the check only compares timestamps, not spec content).
+        """
         logger.debug(f"Processing DriveGroup {drive_group}")
         osd_id_claims = OsdIdClaims(self.mgr)
         if osd_id_claims.get():
@@ -40,7 +45,7 @@ class OSDService(CephService):
 
         async def create_from_spec_one(host: str, drive_selection: DriveSelection) -> Optional[str]:
             # skip this host if there has been no change in inventory
-            if not self.mgr.cache.osdspec_needs_apply(host, drive_group):
+            if not force_apply and not self.mgr.cache.osdspec_needs_apply(host, drive_group):
                 self.mgr.log.debug("skipping apply of %s on %s (no change)" % (
                     host, drive_group))
                 return None
