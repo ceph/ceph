@@ -1139,6 +1139,23 @@ def ceph_osds(ctx, config):
             cur += 1
 
         if cur == 0:
+            if raw:
+                for remote, devs in devs_by_remote.items():
+                    for dev in devs:
+                        log.info(f'Zapping device {dev} on {remote.shortname} before raw OSD deployment')
+                        remote.run(
+                            args=[
+                                'sudo', 'ceph-bluestore-tool', 'zap-device',
+                                '--dev', dev,
+                                '--yes-i-really-really-mean-it',
+                            ],
+                            check_status=False,
+                        )
+                        remote.run(args=['sudo', 'wipefs', '--all', dev], check_status=False)
+                        remote.run(
+                            args=['sudo', 'dd', 'if=/dev/zero', f'of={dev}', 'bs=1M', 'count=10', 'conv=fsync'],
+                            check_status=False,
+                        )
             osd_cmd = ['ceph', 'orch', 'apply', 'osd', '--all-available-devices']
             if raw:
                 osd_cmd.extend(['--method', 'raw'])
