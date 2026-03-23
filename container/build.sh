@@ -16,6 +16,7 @@ usage() {
 $0 [containerfile] (defaults to 'Containerfile')
 For a CI build (from ceph-ci.git, built and pushed to shaman):
 CI_CONTAINER: must be 'true'
+FROM_IMAGE: defaults to quay.io/centos/centos9:stream
 FLAVOR (OSD flavor, default or crimson)
 BRANCH (of Ceph. <remote>/<ref>)
 CEPH_SHA1 (of Ceph)
@@ -120,8 +121,9 @@ podman build --pull=newer --squash -f $CFILE -t build.sh.output \
     --build-arg CEPH_REF=${BRANCH:-main} \
     --build-arg OSD_FLAVOR=${FLAVOR:-default} \
     --build-arg CI_CONTAINER=${CI_CONTAINER:-default} \
+    --build-arg CUSTOM_CEPH_REPO_URL="${CUSTOM_CEPH_REPO_URL}" \
     --secret=id=prerelease_creds,src=./prerelease.secret.txt \
-    2>&1 
+    2>&1
 
 rm ./prerelease.secret.txt
 
@@ -161,9 +163,33 @@ repopath=${CONTAINER_REPO_HOSTNAME}/${CONTAINER_REPO_ORGANIZATION}/${CONTAINER_R
 if [[ ${CI_CONTAINER} == "true" ]] ; then
     # ceph-ci conventions for remote tags:
     # requires ARCH, BRANCH, CEPH_SHA1, FLAVOR
-    full_repo_tag=${repopath}:${BRANCH}-${fromtag}-${ARCH}-devel
-    branch_repo_tag=${repopath}:${BRANCH}
-    sha1_repo_tag=${repopath}:${CEPH_SHA1}
+    if [[ ${FLAVOR} == "debug" ]]; then
+        # add -debug suffix to flavor debug builds
+        full_repo_tag=${repopath}:${BRANCH}-${fromtag}-${ARCH}-devel-${FLAVOR}
+        branch_repo_tag=${repopath}:${BRANCH}-${FLAVOR}
+        sha1_repo_tag=${repopath}:${CEPH_SHA1}-${FLAVOR}
+    else
+        full_repo_tag=${repopath}:${BRANCH}-${fromtag}-${ARCH}-devel
+        branch_repo_tag=${repopath}:${BRANCH}
+        sha1_repo_tag=${repopath}:${CEPH_SHA1}
+    fi
+    # The container build tooling is capable of using CentOS 9 and Rocky 10
+    # as the FROM_IMAGE base container images.
+    # In Tentacle, the default/preferred FROM_IMAGE changed to rockylinux-10.
+    # So we want `podman pull quay.ceph.io/ceph-ci/ceph:tentacle` to get the
+    # FROM_IMAGE=rockylinux-10 container, NOT the CentOS 9 one.
+    # And vice versa for ceph:squid.
+
+    if [[ "$BRANCH" == "reef" || "$BRANCH" == "squid" ]]; then
+        default_fromtag="centos-stream9"
+    else
+        default_fromtag="rockylinux-10"
+    fi
+    # We set fromtag above by extracting FROM_IMAGE from `podman inspect`
+    if [[ "${fromtag}" != "${default_fromtag}" ]] ; then
+        branch_repo_tag=${repopath}:${BRANCH}-${fromtag}
+        sha1_repo_tag=${repopath}:${CEPH_SHA1}-${fromtag}
+    fi
 
     if [[ "${ARCH}" == "arm64" ]] ; then
         branch_repo_tag=${branch_repo_tag}-arm64
@@ -173,18 +199,6 @@ if [[ ${CI_CONTAINER} == "true" ]] ; then
     podman tag ${image_id} ${full_repo_tag}
     podman tag ${image_id} ${branch_repo_tag}
     podman tag ${image_id} ${sha1_repo_tag}
-
-    if [[ (${FLAVOR} == "crimson-debug" || ${FLAVOR} == "crimson-release") && ${ARCH} == "x86_64" ]] ; then
-        sha1_flavor_repo_tag=${sha1_repo_tag}-${FLAVOR}
-        podman tag ${image_id} ${sha1_flavor_repo_tag}
-        if [[ -z "${NO_PUSH}" ]] ; then
-            podman push ${sha1_flavor_repo_tag}
-            if [[ ${REMOVE_LOCAL_IMAGES} == "true" ]] ; then
-                podman rmi -f ${sha1_flavor_repo_tag}
-            fi
-        fi
-        exit
-    fi
 
     if [[ -z "${NO_PUSH}" ]] ; then
         podman push ${full_repo_tag}
