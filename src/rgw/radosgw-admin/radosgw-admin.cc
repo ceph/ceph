@@ -475,7 +475,7 @@ void usage()
   cout << "   --skip-zero-entries               log show only dumps entries that don't have zero value\n";
   cout << "                                     in one of the numeric field\n";
   cout << "   --infile=<file>                   file to read in when setting data\n";
-  cout << "   --infile-name=<file-name>         name of file when setting data\n";
+  cout << "   --name=<script-name>              name of the lua script\n";
   cout << "   --categories=<list>               comma separated list of categories, used in usage show\n";
   cout << "   --caps=<caps>                     list of caps (e.g., \"usage=read, write; user=read\")\n";
   cout << "   --op-mask=<op-mask>               permission of user's operations (e.g., \"read, write, delete, *\")\n";
@@ -3595,9 +3595,34 @@ int main(int argc, const char **argv)
     { "rgw_thread_pool_size", "8" },
   };
 
+  // temporarily remove --name <name> args
+  const char* name_key = nullptr;
+  const char* name_value = "default";
+  auto it = std::find_if(args.begin(), args.end(), [](const char* arg) {
+    return std::strcmp(arg, "--name") == 0;
+  });
+  if (it != args.end()) {
+    // if <name> exists, delete it first
+    auto next_it = std::next(it);
+    if (next_it != args.end()) {
+      name_value = *next_it;
+      args.erase(next_it);
+    }
+    name_key = *it;
+    args.erase(it);
+  }
+
   auto cct = rgw_global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
 			     CODE_ENVIRONMENT_UTILITY, 0);
   ceph::async::io_context_pool context_pool(cct->_conf->rgw_thread_pool_size);
+
+  // add back the --name <name> args
+  if (name_key != nullptr) {
+    args.push_back(name_key);
+    if (name_value != nullptr) {
+      args.push_back(name_value);
+    }
+  }
 
   // for region -> zonegroup conversion (must happen before common_init_finish())
   if (!g_conf()->rgw_region.empty() && g_conf()->rgw_zonegroup.empty()) {
@@ -3692,7 +3717,7 @@ int main(int argc, const char **argv)
   int check_objects = false;
   RGWBucketAdminOpState bucket_op;
   string infile;
-  string infile_name = "default";
+  string script_name = "default";
   string metadata_key;
   RGWObjVersionTracker objv_tracker;
   string marker;
@@ -4214,8 +4239,8 @@ int main(int argc, const char **argv)
       caps = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--infile", (char*)NULL)) {
       infile = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--infile-name", (char*)NULL)) {
-      infile_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--name", (char*)NULL)) {
+      script_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--metadata-key", (char*)NULL)) {
       metadata_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--marker", (char*)NULL)) {
@@ -12213,7 +12238,7 @@ next:
       return EINVAL;
     }
     auto lua_manager = driver->get_lua_manager("");
-    rc = rgw::lua::write_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script, infile_name);
+    rc = rgw::lua::write_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script, script_name);
     if (rc < 0) {
       cerr << "ERROR: failed to put script. error: " << rc << std::endl;
       return -rc;
@@ -12232,9 +12257,9 @@ next:
     }
     auto lua_manager = driver->get_lua_manager("");
     std::string script;
-    const auto rc = rgw::lua::read_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script, infile_name);
+    const auto rc = rgw::lua::read_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script, script_name);
     if (rc == -ENOENT) {
-      std::cout << "'" << infile_name << "' script does not exist in context: " << *str_script_ctx << 
+      std::cout << "'" << script_name << "' script does not exist in context: " << *str_script_ctx << 
         (tenant.empty() ? "" : (" in tenant: " + tenant)) << std::endl;
     } else if (rc < 0) {
       cerr << "ERROR: failed to read script. error: " << rc << std::endl;
@@ -12281,7 +12306,7 @@ next:
       return EINVAL;
     }
     auto lua_manager = driver->get_lua_manager("");
-    const auto rc = rgw::lua::delete_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, infile_name);
+    const auto rc = rgw::lua::delete_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script_name);
     if (rc < 0) {
       cerr << "ERROR: failed to remove script. error: " << rc << std::endl;
       return -rc;
