@@ -819,7 +819,7 @@ public:
 			       optional_yield y) override;
   virtual bool is_expired() override;
   virtual void gen_rand_obj_instance_name() override;
-  virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp,
+  virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp, optional_yield y,
 						       const std::string& lock_name) override;
   virtual int transition(Bucket* bucket,
 			 const rgw_placement_rule& placement_rule,
@@ -1010,7 +1010,7 @@ public:
   FilterMPSerializer(std::unique_ptr<MPSerializer> _next) : next(std::move(_next)) {}
   virtual ~FilterMPSerializer() = default;
 
-  virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) override;
+  virtual int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) override;
   virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual void clear_locked() override { next->clear_locked(); }
   virtual bool is_locked() override { return next->is_locked(); }
@@ -1025,7 +1025,7 @@ public:
   FilterLCSerializer(std::unique_ptr<LCSerializer> _next) : next(std::move(_next)) {}
   virtual ~FilterLCSerializer() = default;
 
-  virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) override;
+  virtual int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) override;
   virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual void print(std::ostream& out) const override { return next->print(out); }
 };
@@ -1070,7 +1070,7 @@ protected:
 public:
   FilterRestoreSerializer(std::unique_ptr<RestoreSerializer> _next) : next(std::move(_next)) {}
   virtual ~FilterRestoreSerializer() = default;
-  virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) override;
+  virtual int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) override;
   virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override
  	{ return next->unlock(dpp, y); }
   virtual void print(std::ostream& out) const override { return next->print(out); }

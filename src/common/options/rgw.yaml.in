@@ -578,6 +578,21 @@ options:
     is done to prevent concurrent completions on the same object with the same upload
     id.
   default: 10_min
+  min: 2_min
+  services:
+  - rgw
+- name: rgw_mp_lock_inject_delay
+  type: int
+  level: dev
+  desc: Injected delay after acquiring the multipart lock for renewal testing
+  default: 0
+  services:
+  - rgw
+- name: rgw_mp_lock_inject_renewal_error
+  type: int
+  level: dev
+  desc: Injected error code for multipart lock renewal testing
+  default: 0
   services:
   - rgw
 - name: rgw_script_uri

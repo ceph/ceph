@@ -1291,7 +1291,7 @@ class Object {
     /** Create a randomized instance ID for this object */
     virtual void gen_rand_obj_instance_name() = 0;
     /** Get a multipart serializer for this object */
-    virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp,
+    virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp, optional_yield y,
 							 const std::string& lock_name) = 0;
     /** Move the data of an object to new placement storage */
     virtual int transition(Bucket* bucket,
@@ -1612,7 +1612,7 @@ public:
   virtual ~Serializer() = default;
 
   /** Try to take the lock for the given amount of time. */
-  virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) = 0;
+  virtual int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) = 0;
   /** Unlock the lock */
   virtual int unlock(const DoutPrefixProvider *dpp, optional_yield y)  = 0;
 

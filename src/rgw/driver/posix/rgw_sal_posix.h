@@ -1061,7 +1061,7 @@ public:
 			       optional_yield y) override;
   virtual bool is_expired() override;
   virtual void gen_rand_obj_instance_name() override;
-  virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp,
+  virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp, optional_yield y,
 						       const std::string& lock_name) override;
   virtual int transition(Bucket* bucket,
 			 const rgw_placement_rule& placement_rule,
@@ -1402,8 +1402,8 @@ class MPPOSIXSerializer : public StoreMPSerializer {
 public:
   MPPOSIXSerializer(const DoutPrefixProvider *dpp, POSIXDriver* driver, POSIXObject* _obj, const std::string& lock_name) : obj(_obj) {}
 
-  virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) override;
-  virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override { return 0; }
+  virtual int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) override;
+  virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override;
 };
 
 } } // namespace rgw::sal

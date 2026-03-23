@@ -3208,12 +3208,12 @@ void POSIXObject::gen_rand_obj_instance_name()
   state.obj.key.set_instance(gen_rand_instance_name());
 }
 
-std::unique_ptr<MPSerializer> POSIXObject::get_serializer(const DoutPrefixProvider *dpp, const std::string& lock_name)
+std::unique_ptr<MPSerializer> POSIXObject::get_serializer(const DoutPrefixProvider *dpp, optional_yield y, const std::string& lock_name)
 {
   return std::make_unique<MPPOSIXSerializer>(dpp, driver, this, lock_name);
 }
 
-int MPPOSIXSerializer::try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y)
+int MPPOSIXSerializer::try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y)
 {
   if (!obj->check_exists(dpp)) {
     return -ENOENT;
@@ -3221,10 +3221,17 @@ int MPPOSIXSerializer::try_lock(const DoutPrefixProvider *dpp, utime_t dur, opti
 
   POSIXBucket* b = static_cast<POSIXBucket*>(obj->get_bucket());
   if (b->get_dir()->get_type() == ObjectType::MULTIPART && b->get_dir_fd(dpp) > 0) {
+    locked = true;
     return 0;
   }
 
   return -ENOENT;
+}
+
+int MPPOSIXSerializer::unlock(const DoutPrefixProvider *dpp, optional_yield y)
+{
+  clear_locked();
+  return 0;
 }
 
 int POSIXObject::transition(Bucket* bucket,
