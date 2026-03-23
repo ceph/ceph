@@ -1,16 +1,31 @@
-<ul class="nav nav-tabs">
-  <li class="nav-item">
-    <a class="nav-link"
-       routerLink="/block/nvmeof/subsystems"
-       routerLinkActive="active"
-       ariaCurrentWhenActive="page"
-       i18n>Subsystems</a>
-  </li>
-  <li class="nav-item">
-    <a class="nav-link"
-       routerLink="/block/nvmeof/gateways"
-       routerLinkActive="active"
-       ariaCurrentWhenActive="page"
-       i18n>Gateways</a>
-  </li>
-</ul>
+<fieldset>
+  <legend>
+    <h1 class="cds--type-heading-03">NVMe over Fabrics (TCP)</h1>
+  <cd-help-text>Monitor and manage NVMe-over-TCP resources for high-performance block storage.</cd-help-text>
+  </legend>
+</fieldset>
+<section>
+  <cds-tabs type="contained"
+            followFocus="true"
+            isNavigation="true"
+            [cacheActive]="false">
+  <cds-tab
+    heading="Gateways"
+    i18n-heading
+    [active]="activeTab === Tabs.gateways"
+    (selected)="onSelected(Tabs.gateways)">
+  </cds-tab>
+  <cds-tab
+    heading="Subsystems"
+    i18n-heading
+    [active]="activeTab === Tabs.subsystems"
+    (selected)="onSelected(Tabs.subsystems)">
+  </cds-tab>
+  <cds-tab
+    heading="Namespaces"
+    i18n-heading
+    [active]="activeTab === Tabs.namespaces"
+    (selected)="onSelected(Tabs.namespaces)">
+  </cds-tab>
+</cds-tabs>
+</section>
