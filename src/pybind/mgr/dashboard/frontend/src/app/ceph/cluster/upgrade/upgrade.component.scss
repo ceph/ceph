@@ -12,3 +12,16 @@
   background-color: vv.$gray-200;
   border-color: vv.$gray-400;
 }
+
+.cds-card {
+  padding-left: 1rem;
+  padding-right: 1rem;
+  display: flex;
+}
+
+.cds-card .cds-card-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
