@@ -14692,7 +14692,7 @@ void MDCache::file_blockdiff(CInode *in1, CInode *in2, BlockDiff *block_diff, ui
   }
 
   C_ListSnapsAggregator *on_finish = new C_ListSnapsAggregator(mds, in1, in2, block_diff, ctx);
-  MDSGatherBuilder gather_ctx(g_ceph_context, on_finish);
+  MDSGatherBuilder gather_ctx(g_ceph_context);
 
   while (scans > 0) {
     ObjectOperation op;
@@ -14708,7 +14708,19 @@ void MDCache::file_blockdiff(CInode *in1, CInode *in2, BlockDiff *block_diff, ui
     --scans;
   }
 
-  gather_ctx.activate();
+  if (gather_ctx.num_subs_remaining() == 0) {
+    // All objecter reads completed synchronously while issuing them.  Call
+    // finish() directly since we already hold mds_lock; going through gather
+    // activate() would call MDSIOContext::complete() and deadlock.
+    // See https://tracker.ceph.com/issues/75676
+    on_finish->finish(0);
+    delete on_finish;
+    gather_ctx.set_finisher(new C_MDSInternalNoop);
+    gather_ctx.activate();
+  } else {
+    gather_ctx.set_finisher(on_finish);
+    gather_ctx.activate();
+  }
 }
 
 void MDCache::aggregate_snap_sets(const std::vector<std::unique_ptr<SnapSetContext>> &snap_set_ctx,
