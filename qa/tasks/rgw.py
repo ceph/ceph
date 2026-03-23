@@ -427,6 +427,21 @@ def configure_storage_classes(ctx, clients, storage_classes):
     yield
 
 @contextlib.contextmanager
+def configure_features(ctx, clients, enable, disable):
+    features = []
+    for f in enable:
+        features.extend(['--enable-feature', f])
+    for f in disable:
+        features.extend(['--disable-feature', f])
+
+    for client in clients:
+        cmd = ['zone', 'modify', '--rgw-zone', ctx.rgw.zone] + features
+        rgwadmin(ctx, client, cmd, check_status=True)
+        cmd = ['zonegroup', 'modify', '--rgw-zonegroup', ctx.rgw.zonegroup] + features
+        rgwadmin(ctx, client, cmd, check_status=True)
+    yield
+
+@contextlib.contextmanager
 def task(ctx, config):
     """
     For example, to run rgw on all clients::
@@ -505,6 +520,8 @@ def task(ctx, config):
     ctx.rgw.realm = config.pop('realm', None)
     ctx.rgw.zonegroup = config.pop('zonegroup', 'default')
     ctx.rgw.zone = config.pop('zone', 'default')
+    enable_features = config.pop('enable features', [])
+    disable_features = config.pop('disable features', [])
     ctx.rgw.config = config
 
     log.debug("config is {}".format(config))
@@ -541,6 +558,10 @@ def task(ctx, config):
         subtasks.extend([
             lambda: configure_storage_classes(ctx=ctx, clients=clients,
                                               storage_classes=storage_classes),
+        ])
+    if enable_features or disable_features:
+        subtasks.extend([
+            lambda: configure_features(ctx, clients, enable_features, disable_features)
         ])
     subtasks.extend([
         lambda: start_rgw(ctx=ctx, config=config, clients=clients),
