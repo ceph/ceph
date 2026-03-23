@@ -144,17 +144,12 @@
              let-form="form">
   <ng-container [formGroup]="form">
     <ng-container formGroupName="child">
-      <div class="form-group">
-        <div class="custom-control custom-checkbox">
-          <input type="checkbox"
-                 class="custom-control-input"
-                 name="preserve"
-                 id="preserve"
-                 formControlName="preserve">
-          <label class="custom-control-label"
-                 for="preserve"
-                 i18n>Preserve OSD ID(s) for replacement.</label>
-        </div>
+      <div class="form-item cds-pt-3">
+        <cds-checkbox id="preserve"
+                      formControlName="preserve"
+                      modal-primary-focus
+                      ariaLabel="preserve"
+                      i18n>Preserve OSD ID(s) for replacement.</cds-checkbox>
       </div>
     </ng-container>
   </ng-container>
