@@ -5454,27 +5454,7 @@ int RadosLuaManager::list_scripts(const DoutPrefixProvider* dpp, optional_yield 
   std::string list_meta;
   std::string list_metadata_key = script_list_metadata_oid(key);
   int r = get_script(dpp, y, list_metadata_key, list_meta);
-  // if the list metadata file does not exist, check whether an existing script already exists
-  if (r == -ENOENT) {
-    std::string default_file;
-    r = get_script(dpp, y, key, default_file);
-    if (r == -ENOENT) {
-      // default lua script file does not exist
-      return 0;
-    } else if (r < 0) {
-      ldpp_dout(dpp, 10) << "WARNING: issue getting default lua script" << cpp_strerror(r) << dendl;
-      return r;
-    }
-    // default lua script file exists, so create a new list metadata file containing the default lua script
-    int list_meta_r = _put_script(dpp, y, list_metadata_key, "default");
-    if (list_meta_r < 0) {
-      ldpp_dout(dpp, 10) << "WARNING: issue creating the lua script list metadata file" << cpp_strerror(r) << dendl;
-      return list_meta_r;
-    } 
-    scripts.push_back("default"); // default is a reserved script name to refer to the legacy file written to put_script() before multiple lua scripts support
-    return 0;
-  } else if (r < 0) {
-    ldpp_dout(dpp, 10) << "MESSAGE: list metadata return code is " << r << dendl;
+  if (r < 0) {
     return r;
   }
   
