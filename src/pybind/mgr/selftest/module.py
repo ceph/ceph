@@ -558,11 +558,11 @@ class Module(MgrModule):
         captured_root = []
 
         class ModCaptureHandler(logging.Handler):
-            def emit(self, record):
+            def emit(self, record: logging.LogRecord) -> None:
                 captured_mod.append(record)
 
         class RootCaptureHandler(logging.Handler):
-            def emit(self, record):
+            def emit(self, record: logging.LogRecord) -> None:
                 captured_root.append(record)
 
         mod_capture = ModCaptureHandler()
