@@ -1231,7 +1231,7 @@ int FilterObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_
   return next->chown(new_user, dpp, y);
 }
 
-int FilterObject::FilterReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
+int FilterObject::FilterReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp, bool set_instance)
 {
   /* Copy params into next */
   next->params = params;

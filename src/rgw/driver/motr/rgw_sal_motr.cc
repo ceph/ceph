@@ -1323,7 +1323,7 @@ MotrObject::MotrReadOp::MotrReadOp(MotrObject *_source) :
   source(_source)
 { }
 
-int MotrObject::MotrReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
+int MotrObject::MotrReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp, bool set_instance)
 {
   int rc;
   ldpp_dout(dpp, 20) <<__func__<< ": bucket=" << source->get_bucket()->get_name() << dendl;
@@ -1342,6 +1342,9 @@ int MotrObject::MotrReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
   source->get_attrs().emplace(std::move(RGW_ATTR_ETAG), std::move(etag_bl));
 
   source->set_key(ent.key);
+  if(!set_instance) {
+    source->get_key().instance.clear();
+  }
   source->set_obj_size(ent.meta.size);
   source->category = ent.meta.category;
   *params.lastmod = ent.meta.mtime;

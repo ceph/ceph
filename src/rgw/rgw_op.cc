@@ -347,11 +347,12 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
 
   std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op();
 
-  ret = rop->prepare(y, dpp);
+  ldpp_dout(dpp, 0) << "get_obj_policy_from_attr: object oid: " << obj->get_oid() << dendl;
+  ret = rop->prepare(y, dpp, false);
   if (ret < 0) {
     return ret;
   }
-
+  ldpp_dout(dpp, 0) << "after prepare get_obj_policy_from_attr: object oid: " << obj->get_oid() << dendl;
   ret = rop->get_attr(dpp, RGW_ATTR_ACL, bl, y);
   if (ret >= 0) {
     ret = decode_policy(dpp, cct, bl, policy);
@@ -373,7 +374,7 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
       storage_class->clear();
     }
   }
-
+  ldpp_dout(dpp, 0) << "End of get_obj_policy_from_attr: " << obj->get_oid() << dendl;
   return ret;
 }
 
@@ -1258,7 +1259,6 @@ void rgw_bucket_object_pre_exec(req_state *s)
 
 int RGWGetObj::verify_permission(optional_yield y)
 {
-  bool has_instance = s->object->have_instance();
   s->object->set_atomic(true);
 
   if (prefetch_data()) {
@@ -1268,10 +1268,6 @@ int RGWGetObj::verify_permission(optional_yield y)
   auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, s);
     if (has_s3_existing_tag || has_s3_resource_tag)
       rgw_iam_add_objtags(this, s, has_s3_existing_tag, has_s3_resource_tag);
-
-  if (!has_instance) {
-    s->object->clear_instance();
-  }
 
   // for system requests, assume replication context and validate replication permissions.
   // non-impersonated or standard system requests will be handled in rgw_process_authenticated().
@@ -1330,6 +1326,7 @@ int RGWGetObj::verify_permission(optional_yield y)
     action = s->object->get_instance().empty() ? rgw::IAM::s3GetObject : rgw::IAM::s3GetObjectVersion;
   }
 
+  ldpp_dout(this, 4) << "INFO: Action=" << action << dendl;
   if (!verify_object_permission(this, s, action)) {
     s->err.message = fmt::format("missing {} permission", rgw::IAM::action_bit_string(action));
 

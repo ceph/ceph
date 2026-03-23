@@ -201,7 +201,7 @@ class D4NFilterObject : public FilterObject {
 	}
 	virtual ~D4NFilterReadOp() = default;
 
-	virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
+	virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp, bool set_instance=true) override;
 	virtual int iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end,
 			     RGWGetDataCB* cb, optional_yield y) override;
 	virtual int get_attr(const DoutPrefixProvider* dpp, const char* name,

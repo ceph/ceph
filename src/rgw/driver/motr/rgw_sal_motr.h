@@ -622,7 +622,7 @@ class MotrObject : public StoreObject {
       public:
         MotrReadOp(MotrObject *_source);
 
-        virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
+        virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp, bool set_instance=true) override;
 
         /*
          * Both `read` and `iterate` read up through index `end`
