@@ -846,9 +846,9 @@ Options
 
     Specify a file to read when setting data.
 
-.. option:: --infile-name
+.. option:: --name
 
-    Specify a file name when setting data (default 'default').
+    Specify a lua script name (default 'default').
 
 .. option:: --categories=<list>
 
