@@ -784,8 +784,8 @@ class RGWSimpleRadosLockCR : public RGWSimpleCoroutine {
     uint32_t duration;
 
     rgw_raw_obj obj;
-
-    RGWAsyncLockSystemObj *req;
+    rgw_rados_ref ref;
+    boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
 
 public:
   RGWSimpleRadosLockCR(RGWAsyncRadosProcessor *_async_rados, rgw::sal::RadosStore* _store,
@@ -816,8 +816,8 @@ class RGWSimpleRadosUnlockCR : public RGWSimpleCoroutine {
   std::string cookie;
 
   rgw_raw_obj obj;
-
-  RGWAsyncUnlockSystemObj *req;
+  rgw_rados_ref ref;
+  boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
 
 public:
   RGWSimpleRadosUnlockCR(RGWAsyncRadosProcessor *_async_rados, rgw::sal::RadosStore* _store,
