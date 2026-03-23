@@ -38,6 +38,7 @@ import { Pool } from '../pool';
 import { PoolFormData } from './pool-form-data';
 import { PoolEditModeResponseModel } from '../../block/mirroring/pool-edit-mode-modal/pool-edit-mode-response.model';
 import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
+import { MonitorService } from '~/app/shared/api/monitor.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 interface FormFieldDescription {
@@ -95,6 +96,12 @@ export class PoolFormComponent extends CdForm implements OnInit {
   DEFAULT_RATIO = 0.875;
   isApplicationsSelected = true;
   msrCrush: boolean = false;
+  isStretchMode: boolean = false;
+
+  readonly REPLICATED_MIN_SIZE = 1;
+  readonly REPLICATED_MAX_SIZE = 3;
+  readonly STRETCH_REPLICATED_MIN_SIZE = 2;
+  readonly STRETCH_REPLICATED_MAX_SIZE = 4;
 
   private modalSubscription: Subscription;
 
@@ -111,6 +118,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
     private crushRuleService: CrushRuleService,
     public actionLabels: ActionLabelsI18n,
     private rbdMirroringService: RbdMirroringService,
+    private monitorService: MonitorService,
     private cdr: ChangeDetectorRef
   ) {
     super();
@@ -205,6 +213,9 @@ export class PoolFormComponent extends CdForm implements OnInit {
   }
 
   ngOnInit() {
+    this.monitorService.getMonitor().subscribe((data: any) => {
+      this.isStretchMode = data?.mon_status?.stretch_mode || false;
+    });
     this.poolService.getInfo().subscribe((info: PoolFormInfo) => {
       this.initInfo(info);
       if (this.editing) {
@@ -471,7 +482,9 @@ export class PoolFormComponent extends CdForm implements OnInit {
       return;
     }
     const control = this.form.get('size');
-    let size = this.form.getValue('size') || 3;
+    let size =
+      this.form.getValue('size') ||
+      (this.isStretchMode ? this.STRETCH_REPLICATED_MAX_SIZE : this.REPLICATED_MAX_SIZE);
     const min = this.getMinSize();
     const max = this.getMaxSize();
     if (size < min) {
@@ -488,7 +501,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
     if (!this.info || this.info.osd_count < 1) {
       return 0;
     }
-    return 1;
+    return this.isStretchMode ? this.STRETCH_REPLICATED_MIN_SIZE : this.REPLICATED_MIN_SIZE;
   }
 
   getMaxSize(): number {
@@ -496,10 +509,9 @@ export class PoolFormComponent extends CdForm implements OnInit {
     if (!this.info) {
       return 0;
     }
+    if (this.isStretchMode) return this.STRETCH_REPLICATED_MAX_SIZE;
     if (!rule) {
-      const osds = this.info.osd_count;
-      const defaultSize = 3;
-      return Math.min(osds, defaultSize);
+      return Math.min(this.info.osd_count, this.REPLICATED_MAX_SIZE);
     }
     return rule.usable_size;
   }
