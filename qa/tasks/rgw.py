@@ -338,6 +338,14 @@ def create_realm(ctx, clients):
     yield
 
 @contextlib.contextmanager
+def init_default_zone(ctx, clients):
+    for client in clients:
+        # XXX: the 'default' zone and zonegroup aren't created until we run RGWRados::init_complete().
+        # issue a 'radosgw-admin user list' command to trigger this
+        rgwadmin(ctx, client, cmd=['user', 'list'])
+    yield
+
+@contextlib.contextmanager
 def create_pools(ctx, clients):
     """Create replicated or erasure coded data pools for rgw."""
 
@@ -368,11 +376,6 @@ def configure_compression(ctx, clients, compression):
     """ set a compression type in the default zone placement """
     log.info('Configuring compression type = %s', compression)
     for client in clients:
-        if not ctx.rgw.realm:
-            # XXX: the 'default' zone and zonegroup aren't created until we run RGWRados::init_complete().
-            # issue a 'radosgw-admin user list' command to trigger this
-            rgwadmin(ctx, client, cmd=['user', 'list'], check_status=True)
-
         rgwadmin(ctx, client,
                 cmd=['zone', 'placement', 'modify', '--rgw-zone', ctx.rgw.zone,
                      '--placement-id', 'default-placement',
@@ -383,11 +386,6 @@ def configure_compression(ctx, clients, compression):
 @contextlib.contextmanager
 def disable_inline_data(ctx, clients):
     for client in clients:
-        if not ctx.rgw.realm:
-            # XXX: the 'default' zone and zonegroup aren't created until we run RGWRados::init_complete().
-            # issue a 'radosgw-admin user list' command to trigger this
-            rgwadmin(ctx, client, cmd=['user', 'list'], check_status=True)
-
         rgwadmin(ctx, client,
                 cmd=['zone', 'placement', 'modify', '--rgw-zone', ctx.rgw.zone,
                      '--placement-id', 'default-placement',
@@ -411,11 +409,6 @@ def configure_datacache(ctx, clients, datacache_path):
 def configure_storage_classes(ctx, clients, storage_classes):
     """ create additional storage classes in the default zone placement """
     for client in clients:
-        if not ctx.rgw.realm:
-            # XXX: the 'default' zone and zonegroup aren't created until we run RGWRados::init_complete().
-            # issue a 'radosgw-admin user list' command to trigger this
-            rgwadmin(ctx, client, cmd=['user', 'list'], check_status=True)
-
         for name, args in storage_classes.items():
             log.info('Configuring storage class = %s', name)
             rgwadmin(ctx, client,
@@ -525,6 +518,10 @@ def task(ctx, config):
     if ctx.rgw.realm:
         subtasks.extend([
             lambda: create_realm(ctx=ctx, clients=clients),
+        ])
+    else:
+        subtasks.extend([
+            lambda: init_default_zone(ctx=ctx, clients=clients)
         ])
     if ctx.rgw.compression_type:
         subtasks.extend([
