@@ -346,6 +346,26 @@ class VolumeClient(CephfsClient["Module"]):
                 ret = self.volume_exception_to_retval(ve)
         return ret
 
+    def bulk_canceled_clones_rm(self, **kwargs):
+        ret = 0, "", ""
+        volname     = kwargs['vol_name']
+
+        MAX_CLONES = 15 # for parallel execution, not high value to avoid stress
+
+        try:
+             with open_volume_lockless(self, volname) as fs_handle:
+                with open_clone_index(fs_handle, self.volspec) as clone_index:
+                    jobs = self._fetch_entries(fs_handle, volname, clone_index, SubvolumeStates.STATE_CANCELED)
+                    if not jobs:
+                        return 0, "No Cancelled clones", ""
+                    with concurrent.futures.ThreadPoolExecutor(max_workers = MAX_CLONES) as exc:
+                        res = [exc.submit(remove_subvolume, volname, subvol, group, '--force')
+                                for volname, subvol, group in jobs]
+        except VolumeException as ve:
+            return self.volume_exception_to_retval(ve)
+        return ret
+
+
     def authorize_subvolume(self, **kwargs):
         ret = 0, "", ""
         volname     = kwargs['vol_name']
