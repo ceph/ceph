@@ -2300,7 +2300,28 @@ class RgwMultisite:
                         if tier_type in CLOUD_S3_TIER_TYPES:
                             self.ensure_realm_and_sync_period()
 
-    def delete_placement_targets(self, placement_id: str, storage_class: str):
+    def delete_placement_targets(self, placement_id: str, storage_class: str,
+                                 zone_name: str = ''):
+        # Delete from zone first if zone_name is provided
+        if zone_name:
+            rgw_zone_delete_cmd = ['zone', 'placement', 'rm', '--rgw-zone', zone_name,
+                                   '--placement-id', placement_id,
+                                   '--storage-class', storage_class]
+
+            try:
+                exit_code, _, err = mgr.send_rgwadmin_command(rgw_zone_delete_cmd)
+                if exit_code > 0:
+                    raise DashboardException(
+                        e=err,
+                        msg=(f'Unable to delete placement {placement_id} '
+                             f'with storage-class {storage_class} from zone {zone_name}'),
+                        http_status_code=500,
+                        component='rgw'
+                    )
+            except SubprocessError as error:
+                raise DashboardException(error, http_status_code=500, component='rgw')
+
+        # Delete from zonegroup
         rgw_zonegroup_delete_cmd = ['zonegroup', 'placement', 'rm',
                                     '--placement-id', placement_id,
                                     '--storage-class', storage_class]
