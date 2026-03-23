@@ -79,36 +79,39 @@ bool verify(const std::string& script, std::string& err_msg)
   return true;
 }
 
-std::string script_oid(context ctx, const std::string& tenant) {
+std::string script_oid(context ctx, const std::string& tenant, const std::string& name) {
   static const std::string SCRIPT_OID_PREFIX("script.");
+  if (!name.empty()) {
+    return SCRIPT_OID_PREFIX + to_string(ctx) + "." + tenant + "." + name;
+  }
   return SCRIPT_OID_PREFIX + to_string(ctx) + "." + tenant;
 }
 
 int read_script(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, std::string& script, const std::string& name)
 {
-  return manager ? manager->get_script(dpp, y, script_oid(ctx, tenant), script, name) : -ENOENT;
+  return manager ? manager->get_script(dpp, y, script_oid(ctx, tenant, name), script) : -ENOENT;
 }
 
 int list_scripts(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, std::vector<std::string>& scripts)
 {
 
-  return manager ? manager->list_scripts(dpp, y, script_oid(ctx, tenant), scripts) : -ENOENT;
+  return manager ? manager->list_scripts(dpp, y, script_oid(ctx, tenant, ""), scripts) : -ENOENT;
 }
 
 std::tuple<LuaCodeType, int> read_script_or_bytecode(const DoutPrefixProvider *dpp, sal::LuaManager* manager,
                                                      const std::string& tenant, optional_yield y, context ctx, const std::string& name)
 {
-  return manager ? manager->get_script_or_bytecode(dpp, y, script_oid(ctx, tenant), name) : std::make_tuple("", -ENOENT);
+  return manager ? manager->get_script_or_bytecode(dpp, y, script_oid(ctx, tenant, name)) : std::make_tuple("", -ENOENT);
 }
 
 int write_script(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, const std::string& script, const std::string& name)
 {
-  return manager ? manager->put_script(dpp, y, script_oid(ctx, tenant), script, name) : -ENOENT;
+  return manager ? manager->put_script(dpp, y, script_oid(ctx, tenant, name), script) : -ENOENT;
 }
 
 int delete_script(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, const std::string& name)
 {
-  return manager ? manager->del_script(dpp, y, script_oid(ctx, tenant), name) : -ENOENT;
+  return manager ? manager->del_script(dpp, y, script_oid(ctx, tenant, name)) : -ENOENT;
 }
 
 #ifdef WITH_RADOSGW_LUA_PACKAGES

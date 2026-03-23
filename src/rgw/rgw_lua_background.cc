@@ -115,13 +115,13 @@ int Background::list_scripts() {
   return rgw::lua::list_scripts(&dp, lua_manager, tenant, null_yield, rgw::lua::context::background, rgw_script_names);
 }
 
-int Background::read_script(const std::string& script_name) {
+int Background::read_script(const std::string& name) {
   std::unique_lock cond_lock(pause_mutex);
   if (paused) {
     return -EAGAIN;
   }
   std::string tenant;
-  return rgw::lua::read_script(&dp, lua_manager, tenant, null_yield, rgw::lua::context::background, rgw_script, script_name);
+  return rgw::lua::read_script(&dp, lua_manager, tenant, null_yield, rgw::lua::context::background, rgw_script, name);
 }
 
 std::unique_ptr<lua_state_guard> Background::initialize_lguard_state() {
@@ -183,7 +183,7 @@ void Background::run() {
     }
     lguard->set_max_runtime(max_runtime);
     lguard->reset_start_time();
-    std::cout << "listing scripts: " << std::endl;
+    
     const auto rc = list_scripts();
     if (rc == -ENOENT || rc == -EAGAIN) {
       // either no script or paused, nothing to do
@@ -191,9 +191,8 @@ void Background::run() {
       ldpp_dout(dpp, 1) << "WARNING: failed to list background scripts. error " << rc << dendl;
     }
 
-    for (const auto& script_name : rgw_script_names) {
-      std::cout << "- " << script_name << std::endl;
-      const auto rc = read_script(script_name);
+    for (const auto& name : rgw_script_names) {
+      const auto rc = read_script(name);
       if (rc == -ENOENT || rc == -EAGAIN) {
         // either no script or paused, nothing to do
       } else if (rc < 0) {

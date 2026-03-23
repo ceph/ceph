@@ -329,16 +329,16 @@ protected:
     virtual ~DBLuaManager() = default;
 
     /** Get a script named with the given key from the backing store */
-    virtual int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script, const std::string& name) override;
+    virtual int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override;
     /** List all scripts named with the given key from the backing store */
     virtual int list_scripts(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::vector<std::string>& scripts) override;
     /** Get a ref to the Lua bytecode if it exists, else the script named with the given key from the backing store */
     virtual std::tuple<rgw::lua::LuaCodeType, int> get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y,
-                                                                          const std::string& key, const std::string& name) override;
+                                                                          const std::string& key) override;
     /** Put a script named with the given key to the backing store */
-    virtual int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script, const std::string& name) override;
+    virtual int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override;
     /** Delete a script named with the given key from the backing store */
-    virtual int del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& name) override;
+    virtual int del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override;
     /** Add a lua package */
     virtual int add_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) override;
     /** Remove a lua package */
