@@ -122,8 +122,17 @@ import CheckMarkOutline16 from '@carbon/icons/es/checkmark--outline/16';
 import ArrowUpRight16 from '@carbon/icons/es/arrow--up-right/16';
 import InProgress16 from '@carbon/icons/es/in-progress/16';
 import ArrowDown16 from '@carbon/icons/es/arrow--down/16';
-import Warning16 from '@carbon/icons/es/warning/16';
-import Deploy16 from '@carbon/icons/es/deploy/16';
+import Launch16 from '@carbon/icons/es/launch/16';
+import Cube16 from '@carbon/icons/es/cube/16';
+import ChevronLeft16 from '@carbon/icons/es/chevron--left/16';
+import ChevronRight16 from '@carbon/icons/es/chevron--right/16';
+import CaretLeft16 from '@carbon/icons/es/caret--left/16';
+import CaretRight16 from '@carbon/icons/es/caret--right/16';
+import Locked16 from '@carbon/icons/es/locked/16';
+import WebServicesCluster20 from '@carbon/icons/es/web-services--cluster/20';
+import WebServicesCluster32 from '@carbon/icons/es/web-services--cluster/32';
+import CloudMonitoring16 from '@carbon/icons/es/cloud--monitoring/16';
+import { PageHeaderComponent } from './page-header/page-header.component';
 import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.component';
 
 @NgModule({
@@ -297,8 +306,16 @@ export class ComponentsModule {
       ArrowUpRight16,
       InProgress16,
       ArrowDown16,
-      Deploy16,
-      Warning16
+      Launch16,
+      Cube16,
+      ChevronLeft16,
+      ChevronRight16,
+      CaretLeft16,
+      CaretRight16,
+      Locked16,
+      WebServicesCluster20,
+      WebServicesCluster32,
+      CloudMonitoring16
     ]);
   }
 }

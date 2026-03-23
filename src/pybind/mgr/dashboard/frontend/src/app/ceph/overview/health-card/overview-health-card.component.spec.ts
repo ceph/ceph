@@ -11,6 +11,7 @@ import { ComponentsModule } from '~/app/shared/components/components.module';
 import { ProductiveCardComponent } from '~/app/shared/components/productive-card/productive-card.component';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { HardwareService } from '~/app/shared/api/hardware.service';
+import { HealthService } from '~/app/shared/api/health.service';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 
@@ -41,6 +42,10 @@ describe('OverviewStorageCardComponent (Jest)', () => {
     getSummary: jest.fn(() => of(null))
   };
 
+  const mockHealthService = {
+    getTelemetryStatus: jest.fn(() => of(false))
+  };
+
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [
@@ -60,6 +65,7 @@ describe('OverviewStorageCardComponent (Jest)', () => {
         { provide: AuthStorageService, useValue: mockAuthStorageService },
         { provide: MgrModuleService, useValue: mockMgrModuleService },
         { provide: HardwareService, useValue: mockHardwareService },
+        { provide: HealthService, useValue: mockHealthService },
         provideRouter([])
       ]
     }).compileComponents();
