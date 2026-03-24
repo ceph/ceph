@@ -28,7 +28,6 @@
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
 
-#include "common/dout_fmt.h"
 #include "include/neorados/RADOS.hpp"
 
 #include "common/ceph_crypto.h"
@@ -55,7 +54,6 @@
 #include "include/rados/librados.hpp"
 #include "rgw_public_access.h"
 #include "rgw_sal_fwd.h"
-#include "rgw_hex.h"
 
 namespace ceph {
   class Formatter;

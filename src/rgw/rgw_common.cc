@@ -7,7 +7,6 @@
 #include <string>
 #include <boost/tokenizer.hpp>
 
-#include "json_spirit/json_spirit.h"
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
 #include "common/versioned_variant.h"
@@ -22,8 +21,6 @@
 #include "global/global_init.h"
 #include "common/ceph_crypto.h"
 #include "common/openssl_opts_handler.h"
-#include "common/armor.h"
-#include "common/errno.h"
 #include "common/Clock.h"
 #include "common/convenience.h"
 #include "common/strtol.h"
