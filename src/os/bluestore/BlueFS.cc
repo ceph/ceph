@@ -2078,7 +2078,7 @@ int BlueFS::device_migrate_to_existing(
 	to_release.emplace_back(old_ext.offset, old_ext.length);
 	alloc[old_ext.bdev]->release(to_release);
         if (is_shared_alloc(old_ext.bdev)) {
-          shared_alloc->bluefs_used -= to_release.size();
+          shared_alloc->bluefs_used -= old_ext.length;
         }
       }
 
@@ -2218,7 +2218,7 @@ int BlueFS::device_migrate_to_new(
 	to_release.emplace_back(old_ext.offset, old_ext.length);
 	alloc[old_ext.bdev]->release(to_release);
         if (is_shared_alloc(old_ext.bdev)) {
-          shared_alloc->bluefs_used -= to_release.size();
+          shared_alloc->bluefs_used -= old_ext.length;
         }
       }
 
