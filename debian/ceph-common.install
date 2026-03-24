@@ -23,6 +23,8 @@ usr/bin/rgw-gap-list-comparator
 usr/bin/rgw-orphan-list
 usr/bin/rgw-policy-check
 usr/bin/rgw-restore-bucket-index
+usr/bin/rgw-export-bucket-usage
+usr/bin/rgw-format-bucket-usage
 usr/bin/rbd
 usr/bin/rbdmap
 usr/bin/rbd-replay*
