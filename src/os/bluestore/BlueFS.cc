@@ -5286,7 +5286,7 @@ void BlueFS::_check_vselector_LNF() {
   // Checking vselector is under log, nodes and file(s) locks,
   // so any modification of vselector must be under at least one of those locks.
   for (auto& f : nodes.file_map) {
-    f.second->lock.lock();
+    f.second->lock.lock(true);
     vs->add_usage(f.second->vselector_hint, f.second->fnode);
   }
   bool res = vselector->compare(vs);
@@ -5300,7 +5300,7 @@ void BlueFS::_check_vselector_LNF() {
   }
   ceph_assert(res);
   for (auto& f : nodes.file_map) {
-    f.second->lock.unlock();
+    f.second->lock.unlock(true);
   }
   delete vs;
 }
