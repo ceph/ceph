@@ -71,6 +71,15 @@ service Gateway {
 	// Delete a subsystem network
 	rpc del_subsystem_network(del_subsystem_network_req) returns(req_status) {}
 
+	// Add KMIP server endpoints
+	rpc add_kmip_server_endpoints(add_kmip_server_endpoints_req) returns(req_status) {}
+
+	// Delete KMIP server endpoints
+	rpc del_kmip_server_endpoints(del_kmip_server_endpoints_req) returns(req_status) {}
+
+	// List KMIP server endpoints
+	rpc list_kmip_server_endpoints(list_kmip_server_endpoints_req) returns(kmip_server_endpoints_info) {}
+
 	// List namespaces
 	rpc list_namespaces(list_namespaces_req) returns(namespaces_info) {}
 
@@ -293,6 +302,7 @@ message create_subsystem_req {
 	optional bool key_encrypted = 7;
 	repeated string network_mask = 8;
 	optional bool secure_listeners = 9;
+	optional uint32 port = 10;
 }
 
 message delete_subsystem_req {
@@ -314,6 +324,41 @@ message add_subsystem_network_req {
 message del_subsystem_network_req {
 	string subsystem_nqn = 1;
 	string network_mask = 2;
+}
+
+message kmip_server_endpoint {
+	string address = 1;
+	optional uint32 port = 2;
+}
+
+message kmip_server_endpoint_cli {
+	string subsystem_nqn = 1;
+	string server_name = 2;
+	string address = 3;
+	uint32 port = 4;
+}
+
+message add_kmip_server_endpoints_req {
+	string subsystem_nqn = 1;
+	string server_name = 2;
+	repeated kmip_server_endpoint endpoints = 3;
+}
+
+message del_kmip_server_endpoints_req {
+	string subsystem_nqn = 1;
+	string server_name = 2;
+	repeated kmip_server_endpoint endpoints = 3;
+}
+
+message list_kmip_server_endpoints_req {
+	optional string subsystem_nqn = 1;
+	optional string server_name = 2;
+}
+
+message kmip_server_endpoints_info {
+	int32 status = 1;
+	string error_message = 2;
+	repeated kmip_server_endpoint_cli endpoints = 3;
 }
 
 message list_namespaces_req {
@@ -370,6 +415,7 @@ message create_listener_req {
 	optional uint32 trsvcid = 6;
 	optional bool secure = 7;
 	optional bool verify_host_name = 8;
+	optional bool force = 9;
 }
 
 message delete_listener_req {
@@ -565,6 +611,7 @@ message gateway_info {
 	optional uint32 max_hosts = 17;
 	optional bool gateway_initialization_over = 18;
 	optional bool io_stats_enabled = 19;
+	optional string location = 20;
 }
 
 message cli_version {
