@@ -7,8 +7,10 @@ from mgr_module import (
     MgrModule,
     CLICommandBase,
     HandleCommandResult,
+    Option
 )
 from .secret_mgr import SecretMgr
+from .secret_backend import SecretStorageBackend
 from ceph_secrets_types import CephSecretException, SecretScope, parse_secret_path
 
 
@@ -49,11 +51,23 @@ class Module(MgrModule):
     """
     CLICommand = CephSecretsCLICommand
 
-    MODULE_OPTIONS: list = []
+    MODULE_OPTIONS = [
+        Option(
+            'secrets_backend',
+            type='str',
+            default='mon',
+            desc='Secrets storage backend. Currently only "mon" (Mon KV store) is supported.',
+        ),
+    ]
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.secret_mgr = SecretMgr(self)
+        backend_name: str = str(self.get_module_option('secrets_backend'))
+        try:
+            backend_cls = SecretStorageBackend._registry[backend_name]
+            self.secret_mgr = SecretMgr(backend_cls(self))
+        except KeyError as e:
+            raise RuntimeError(f'ceph_secrets: {e}') from e
 
     # ------------------------------------------------------------------ epoch
 

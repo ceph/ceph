@@ -3,7 +3,7 @@ import logging
 import re
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from .secret_store import SecretRecord, BadSecretRecord, SecretStoreMon
+from .secret_store import SecretRecord, BadSecretRecord
 from ceph_secrets_types import (CephSecretException,
                                 SecretURI,
                                 SecretRef,
@@ -30,9 +30,8 @@ class SecretMgr:
             must reject/require ?key=...).
     """
 
-    def __init__(self, mgr: Any):
-        self.mgr = mgr
-        self.store = SecretStoreMon(mgr)
+    def __init__(self, store: Any):
+        self.store = store
 
     def make_ref(
         self,

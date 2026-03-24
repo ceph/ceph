@@ -96,7 +96,7 @@ class SecretRecord:
         return SecretRecord(namespace, scope, target, name, version, secret_type, data, user_made, editable, created, updated)
 
 
-class SecretStoreMon(SecretStorageBackend):
+class SecretStoreMon(SecretStorageBackend, backend_name='mon'):
     """
     Mon KV-store backed secret store.
 
