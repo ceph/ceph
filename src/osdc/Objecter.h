@@ -1802,7 +1802,10 @@ private:
       it++;
     }
   }
-
+  // Cache of pool migration watermarks for each pool. Cleared on each epoch
+  // and updated by the OSD providing the current watermark when redirecting
+  // a request to the target pool. Use rwlock for thread safety when accessing.
+  std::map<int64_t, hobject_t> pool_migration_watermarks;
 public:
   void maybe_request_map();
 
@@ -1874,6 +1877,7 @@ public:
     bool sort_bitwise = false; ///< whether the hobject_t sort order is bitwise
     bool recovery_deletes = false; ///< whether the deletes are performed during recovery instead of peering
     bool allows_ecoptimizations = false; ///< whether EC plugin optimizations are enabled.
+    std::set<pg_t> migrating_pgs; ///< PGs migrating for pool migration
     uint32_t peering_crush_bucket_count = 0;
     uint32_t peering_crush_bucket_target = 0;
     uint32_t peering_crush_bucket_barrier = 0;
@@ -2227,6 +2231,25 @@ public:
     std::string nspace;
 
     ceph::buffer::list bl;   // raw data read to here
+
+    // Pool Migration specific attributes
+  	std::list<librados::ListObjectImpl> tgt_list;
+  	std::list<librados::ListObjectImpl> src_list;
+  	std::list<librados::ListObjectImpl> intermediate_list;
+
+  	collection_list_handle_t end_of_tgt;
+
+	uint64_t src_pool_id = -1;
+	uint64_t tgt_pool_id = -1;
+
+  	collection_list_handle_t src_pos;
+  	collection_list_handle_t tgt_pos;
+
+  	enum stage {TGT_READ, SRC_READ, TGT_SECOND_READ};
+  	stage current_stage = TGT_READ;
+  	bool end_of_tripple_read = false;
+  	// End of Pool Migration attributes
+
     std::list<librados::ListObjectImpl> list;
 
     ceph::buffer::list filter;
@@ -2659,6 +2682,10 @@ private:
 
   void _nlist_reply(NListContext *list_context, int r, Context *final_finish,
 		   epoch_t reply_epoch);
+
+  void combine_result_lists(NListContext *list_context);
+
+  static uint32_t reverse_bits_32(uint32_t n);
 
   void resend_mon_ops();
 

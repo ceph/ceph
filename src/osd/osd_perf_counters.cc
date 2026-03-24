@@ -537,6 +537,11 @@ PerfCounters *build_recoverystate_perf(CephContext *cct) {
   rs_perf.add_time_avg(rs_waitupthru_latency, "waitupthru_latency", "Waitupthru recovery state latency");
   rs_perf.add_time_avg(rs_notrecovering_latency, "notrecovering_latency", "Notrecovering recovery state latency");
   rs_perf.add_u64_counter(rs_stats_invalidated, "stats_invalidated", "Number of times pg stats received invalidations");
+  rs_perf.add_time_avg(rs_waitlocalpoolmigrationreserved_latency, "waitlocalpoolmigrationreserved_latency", "Wait local pool migration reserved recovery state latency");
+  rs_perf.add_time_avg(rs_waitremotepoolmigrationreserved_latency, "waitremotepoolmigrationreserved_latency", "Wait remote pool migration reserved recovery state latency");
+  rs_perf.add_time_avg(rs_notmigrating_latency, "notmigrating_latency", "Notmigrating recovery state latency");
+  rs_perf.add_time_avg(rs_repwaitmigrationreserved_latency, "repwaitmigrationreserved_latency", "Rep wait migration reserved recovery state latency");
+  rs_perf.add_time_avg(rs_migratingsource_latency, "migratingsource_latency", "Migrating source recovery state latency");
 
   return rs_perf.create_perf_counters();
 }

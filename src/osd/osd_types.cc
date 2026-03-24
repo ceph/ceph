@@ -317,23 +317,27 @@ list<object_locator_t> object_locator_t::generate_test_instances()
 // -- request_redirect_t --
 void request_redirect_t::encode(ceph::buffer::list& bl) const
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   encode(redirect_locator, bl);
   encode(redirect_object, bl);
   // legacy of the removed osd_instructions member
   encode((uint32_t)0, bl);
+  encode(redirect_migration_watermark, bl);
   ENCODE_FINISH(bl);
 }
 
 void request_redirect_t::decode(ceph::buffer::list::const_iterator& bl)
 {
-  DECODE_START(1, bl);
+  DECODE_START(2, bl);
   uint32_t legacy_osd_instructions_len;
   decode(redirect_locator, bl);
   decode(redirect_object, bl);
   decode(legacy_osd_instructions_len, bl);
   if (legacy_osd_instructions_len) {
     bl += legacy_osd_instructions_len;
+  }
+  if (struct_v >= 2) {
+    decode(redirect_migration_watermark, bl);
   }
   DECODE_FINISH(bl);
 }
@@ -354,6 +358,8 @@ list<request_redirect_t> request_redirect_t::generate_test_instances()
   o.push_back(request_redirect_t(loc, 0));
   o.push_back(request_redirect_t(loc, "redir_obj"));
   o.push_back(request_redirect_t(loc));
+  o.push_back(request_redirect_t(loc, 0,
+      hobject_t(object_t("objname"), "key", 123, 456, -1, "")));
   return o;
 }
 
@@ -1212,6 +1218,14 @@ std::string pg_state_string(uint64_t state)
     *css << "laggy+";
   if (state & PG_STATE_WAIT)
     *css << "wait+";
+  if (state & PG_STATE_MIGRATION_WAIT)
+    *css << "migration_wait+";
+  if (state & PG_STATE_MIGRATING)
+    *css << "migrating+";
+  if (state & PG_STATE_MIGRATION_TOOFULL)
+    *css << "migration_toofull+";
+  if (state & PG_STATE_MIGRATION_UNFOUND)
+    *css << "migration_unfound+";
   auto ret = css->str();
   if (ret.length() > 0)
     ret.resize(ret.length() - 1);
@@ -1289,6 +1303,14 @@ std::optional<uint64_t> pg_string_state(const std::string& state)
     type = PG_STATE_LAGGY;
   else if (state == "wait")
     type = PG_STATE_WAIT;
+  else if (state == "migration_wait")
+    type = PG_STATE_MIGRATION_WAIT;
+  else if (state == "migrating")
+    type = PG_STATE_MIGRATING;
+  else if (state == "migration_toofull")
+    type = PG_STATE_MIGRATION_TOOFULL;
+  else if (state == "migration_unfound")
+    type = PG_STATE_MIGRATION_UNFOUND;
   else if (state == "unknown")
     type = 0;
   else
@@ -1668,6 +1690,11 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_unsigned("expected_num_objects", expected_num_objects);
   f->dump_bool("fast_read", fast_read);
   f->dump_stream("nonprimary_shards") << nonprimary_shards;
+  if (migration_src.has_value())
+    f->dump_int("migration_src", *migration_src);
+  if (migration_target.has_value())
+    f->dump_int("migration_target", *migration_target);
+  f->dump_stream("migrating_pgs") << migrating_pgs;
   f->open_object_section("options");
   opts.dump(f);
   f->close_section(); // options
@@ -1987,24 +2014,28 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     return;
   }
 
-  uint8_t v = 32;
+  uint8_t v = 33;
   // NOTE: any new encoding dependencies must be reflected by
   // SIGNIFICANT_FEATURES
-  if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_TENTACLE)) {
-    if (!HAVE_SIGNIFICANT_FEATURE(features, NEW_OSDOP_ENCODING)) {
-      // this was the first post-hammer thing we added; if it's missing, encode
-      // like hammer.
-      v = 21;
-    } else if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_LUMINOUS)) {
-      v = 24;
-    } else if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_MIMIC)) {
-      v = 26;
-    } else if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_NAUTILUS)) {
-      v = 27;
-    } else if (!is_stretch_pool()) {
-      v = 29;
+  if (!HAVE_SIGNIFICANT_FEATURE(features, POOL_MIGRATION)) {
+    if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_TENTACLE)) {
+      if (!HAVE_SIGNIFICANT_FEATURE(features, NEW_OSDOP_ENCODING)) {
+	// this was the first post-hammer thing we added; if it's missing, encode
+	// like hammer.
+	v = 21;
+      } else if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_LUMINOUS)) {
+	v = 24;
+      } else if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_MIMIC)) {
+	v = 26;
+      } else if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_NAUTILUS)) {
+	v = 27;
+      } else if (!is_stretch_pool()) {
+	v = 29;
+      } else {
+	v = 30;
+      }
     } else {
-      v = 30;
+      v = 32;
     }
   }
 
@@ -2109,12 +2140,18 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
   if (v >= 32) {
     encode(nonprimary_shards, bl);
   }
+  if (v >= 33) {
+    encode(migration_src, bl);
+    encode(migration_target, bl);
+    encode(migrating_pgs, bl);
+    encode(lowest_migrated_pg, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(32, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(33, 5, 5, bl);
   decode(type, bl);
   decode(size, bl);
   decode(crush_rule, bl);
@@ -2310,6 +2347,12 @@ void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
   } else {
     nonprimary_shards.clear();
   }
+  if (struct_v >= 33) {
+    decode(migration_src, bl);
+    decode(migration_target, bl);
+    decode(migrating_pgs, bl);
+    decode(lowest_migrated_pg, bl);
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
   calc_grade_table();
@@ -2414,6 +2457,11 @@ list<pg_pool_t> pg_pool_t::generate_test_instances()
   a.expected_num_objects = 123456;
   a.fast_read = false;
   a.nonprimary_shards.clear();
+  a.migration_src = 4;
+  a.migration_target = 5;
+  a.migrating_pgs = { pg_t(1,2), pg_t(3,4) };
+  a.lowest_migrated_pg = 5;
+
   a.application_metadata = {{"rbd", {{"key", "value"}}}};
   o.push_back(pg_pool_t(a));
 
@@ -4280,6 +4328,8 @@ bool PastIntervals::is_new_interval(
   int32_t new_crush_member,
   bool old_allow_ec_optimizations,
   bool new_allow_ec_optimizations,
+  const std::set<pg_t> old_migrating_pgs,
+  const std::set<pg_t> new_migrating_pgs,
   pg_t pgid) {
   return old_acting_primary != new_acting_primary ||
     new_acting != old_acting ||
@@ -4304,7 +4354,10 @@ bool PastIntervals::is_new_interval(
     old_crush_target != new_crush_target ||
     old_crush_barrier != new_crush_barrier ||
     old_crush_member != new_crush_member ||
-    old_allow_ec_optimizations != new_allow_ec_optimizations;
+    old_allow_ec_optimizations != new_allow_ec_optimizations ||
+    // PG started/finished or pool started/finished migration
+    old_migrating_pgs.contains(pgid) != new_migrating_pgs.contains(pgid) ||
+    old_migrating_pgs.empty() != new_migrating_pgs.empty();
 }
 
 bool PastIntervals::is_new_interval(
@@ -4354,6 +4407,7 @@ bool PastIntervals::is_new_interval(
 		    plast->peering_crush_bucket_barrier, pi->peering_crush_bucket_barrier,
 		    plast->peering_crush_mandatory_member, pi->peering_crush_mandatory_member,
 		    plast->allows_ecoptimizations(), pi->allows_ecoptimizations(),
+		    plast->migrating_pgs, pi->migrating_pgs,
 		    pgid);
 }
 

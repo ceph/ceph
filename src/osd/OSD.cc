@@ -90,6 +90,7 @@
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDPGTemp.h"
 #include "messages/MOSDPGReadyToMerge.h"
+#include "messages/MOSDPGMigratedPool.h"
 
 #include "messages/MOSDMap.h"
 #include "messages/MMonGetOSDMap.h"
@@ -2075,6 +2076,18 @@ void OSDService::prune_sent_ready_to_merge(const OSDMapRef& osdmap)
       ++i;
     }
   }
+}
+
+// ---
+
+void OSDService::send_pg_migrated_pool(std::optional<int64_t> migration_target, pg_t pgid)
+{
+  dout(20) << __func__
+	   << " send_pg_migrated_pool " << pgid << dendl;
+  ceph_assert(migration_target.has_value());
+  monc->send_mon_message(new MOSDPGMigratedPool(osdmap->get_epoch(),
+						*migration_target,
+						pgid));
 }
 
 // ---
@@ -7693,6 +7706,7 @@ void OSD::ms_fast_dispatch(Message *m)
   case MSG_OSD_PG_INFO2:
   case MSG_OSD_BACKFILL_RESERVE:
   case MSG_OSD_RECOVERY_RESERVE:
+  case MSG_OSD_POOLMIGRATION_RESERVE:
   case MSG_OSD_PG_LEASE:
   case MSG_OSD_PG_LEASE_ACK:
     {
@@ -9987,17 +10001,20 @@ void OSD::dequeue_peering_evt(
       derr << __func__ << " unrecognized pg-less event " << evt->get_desc() << dendl;
       ceph_abort();
     }
-  } else if (PeeringCtx rctx;
-	     advance_pg(curmap->get_epoch(), pg, handle, rctx)) {
-    pg->do_peering_event(evt, rctx);
-    if (pg->is_deleted()) {
+  } else {
+    PeeringCtx rctx;
+    rctx.handle = &handle;
+    if (advance_pg(curmap->get_epoch(), pg, handle, rctx)) {
+      pg->do_peering_event(evt, rctx);
+      if (pg->is_deleted()) {
+	pg->unlock();
+	return;
+      }
+      dispatch_context(rctx, pg, curmap, &handle);
+      need_up_thru = pg->get_need_up_thru();
+      same_interval_since = pg->get_same_interval_since();
       pg->unlock();
-      return;
     }
-    dispatch_context(rctx, pg, curmap, &handle);
-    need_up_thru = pg->get_need_up_thru();
-    same_interval_since = pg->get_same_interval_since();
-    pg->unlock();
   }
 
   if (need_up_thru) {

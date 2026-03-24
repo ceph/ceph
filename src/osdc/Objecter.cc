@@ -1229,7 +1229,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
   for (auto it = osdmap->get_pools().begin();
        it != osdmap->get_pools().end(); ++it)
     pool_full_map[it->first] = _osdmap_pool_full(it->second);
-
+  pool_migration_watermarks.clear();
 
   list<LingerOp*> need_resend_linger;
   map<ceph_tid_t, Op*> need_resend;
@@ -3007,7 +3007,34 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
       return RECALC_OP_TARGET_POOL_DNE;
     }
   }
-
+  // pool migration
+  if (pi->is_migration_src()) {
+    const pg_pool_t *tpi = osdmap->get_pg_pool(*pi->migration_target);
+    bool migrated = false;
+    if (!tpi->is_migration_target()) {
+      // migration has finished
+      migrated = true;
+    } else {
+      const auto& iter = pool_migration_watermarks.find(t->target_oloc.pool);
+      if (iter != pool_migration_watermarks.end()) {
+	if (t->get_hobj() < iter->second) {
+	  // object has been migrated
+	  migrated = true;
+	}
+      }
+    }
+    if (migrated) {
+      t->target_oloc.pool = *pi->migration_target;
+      pi = tpi;
+      if (!pi) {
+	t->osd = -1;
+	return RECALC_OP_TARGET_POOL_DNE;
+      }
+      if (pi->has_flag(pg_pool_t::FLAG_EIO)) {
+	return RECALC_OP_TARGET_POOL_EIO;
+      }
+    }
+  }
   pg_t pgid;
   if (t->precalc_pgid) {
     ceph_assert(t->flags & CEPH_OSD_FLAG_IGNORE_OVERLAY);
@@ -3080,6 +3107,8 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
 	pi->peering_crush_mandatory_member,
 	t->allows_ecoptimizations,
 	pi->allows_ecoptimizations(),
+	t->migrating_pgs,
+	pi->migrating_pgs,
 	prev_pgid)) {
     force_resend = true;
   }
@@ -3155,6 +3184,7 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
     t->peering_crush_bucket_barrier = pi->peering_crush_bucket_barrier;
     t->peering_crush_mandatory_member = pi->peering_crush_mandatory_member;
     t->allows_ecoptimizations = pi->allows_ecoptimizations();
+    t->migrating_pgs = pi->migrating_pgs;
     ldout(cct, 10) << __func__ << " "
 		   << " raw pgid " << pgid << " -> actual " << t->actual_pgid
 		   << " acting " << t->acting
@@ -3741,11 +3771,23 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     // FIXME: two redirects could race and reorder
 
     op->tid = 0;
-    m->get_redirect().combine_with_locator(op->target.target_oloc,
-					   op->target.target_oid.name);
-    op->target.flags |= (CEPH_OSD_FLAG_REDIRECTED |
-			 CEPH_OSD_FLAG_IGNORE_CACHE |
-			 CEPH_OSD_FLAG_IGNORE_OVERLAY);
+    const request_redirect_t& r = m->get_redirect();
+    if (r.is_pool_migration()) {
+      //Pool migration is redirecting request to the
+      //target pool because the object has been migrated
+
+      //Upgrade to unique lock to update watermark
+      sul.unlock();
+      sul.lock();
+      r.update_migration_watermark(
+	  pool_migration_watermarks[op->target.target_oloc.pool]);
+    } else {
+      r.combine_with_locator(op->target.target_oloc,
+			     op->target.target_oid.name);
+      op->target.flags |= (CEPH_OSD_FLAG_REDIRECTED |
+			   CEPH_OSD_FLAG_IGNORE_CACHE |
+			   CEPH_OSD_FLAG_IGNORE_OVERLAY);
+    }
     _op_submit(op, sul, NULL);
     m->put();
     return;
@@ -4023,6 +4065,36 @@ void Objecter::list_nobjects(NListContext *list_context, Context *onfinish)
     onfinish->complete(-ENOENT);
     return;
   }
+
+  if (pool->is_migrating()) {
+    switch (list_context->current_stage) {
+      case NListContext::TGT_READ: //case 0  when you set up for a pool migration read, then start with loading the state of the tgt pool
+        if (pool->is_migration_src()) {
+          list_context->src_pool_id = list_context->pool_id;
+          list_context->tgt_pool_id = *pool->migration_target;
+        }
+        if (pool->is_migration_target()) {
+          list_context->src_pool_id = *pool->migration_src;
+          list_context->tgt_pool_id = list_context->pool_id;
+        }
+        pool = osdmap->get_pg_pool(list_context->tgt_pool_id); //set the pool to the tgt pool
+        list_context->pool_id = list_context->tgt_pool_id;
+        break;
+
+      case NListContext::SRC_READ://Next load the state of src pool
+        pool = osdmap->get_pg_pool(list_context->src_pool_id); //Change the pool to the src pool
+        list_context->pool_id = list_context->src_pool_id;
+        break;
+
+      case NListContext::TGT_SECOND_READ: //finaly load the tgt pool again to catch any objects that have moved during the read
+        pool = osdmap->get_pg_pool(list_context->tgt_pool_id); //set the pool to the tgt pool
+        list_context->pool_id = list_context->tgt_pool_id;
+        break;
+    }
+  }
+
+  ldout(cct, 10) << "Starting to read pool: " << list_context->pool_id << " at pos: " << list_context->pos << dendl;
+
   int pg_num = pool->get_pg_num();
   bool sort_bitwise = osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
 
@@ -4047,18 +4119,20 @@ void Objecter::list_nobjects(NListContext *list_context, Context *onfinish)
     }
     list_context->starting_pg_num = pg_num;
   }
-
-  if (list_context->pos.is_max()) {
-    ldout(cct, 20) << __func__ << " end of pool, list "
-		   << list_context->list << dendl;
-    if (list_context->list.empty()) {
-      list_context->at_end_of_pool = true;
+  // If the pool isn't in a migration then exit as normal
+  if (!pool->is_migrating() || list_context->end_of_tripple_read == true) {
+    if (list_context->pos.is_max()) {
+      ldout(cct, 20) << __func__ << " end of pool, list "
+         << list_context->list << dendl;
+      if (list_context->list.empty()) {
+        list_context->at_end_of_pool = true;
+      }
+      // release the listing context's budget once all
+      // OPs (in the session) are finished
+      put_nlist_context_budget(list_context);
+      onfinish->complete(0);
+      return;
     }
-    // release the listing context's budget once all
-    // OPs (in the session) are finished
-    put_nlist_context_budget(list_context);
-    onfinish->complete(0);
-    return;
   }
 
   ObjectOperation op;
@@ -4082,6 +4156,8 @@ void Objecter::_nlist_reply(NListContext *list_context, int r,
 {
   ldout(cct, 10) << __func__ << " " << list_context << dendl;
 
+  const pg_pool_t *pool = osdmap->get_pg_pool(list_context->pool_id);
+
   auto iter = list_context->bl.cbegin();
   pg_nls_response_t response;
   decode(response, iter);
@@ -4099,6 +4175,9 @@ void Objecter::_nlist_reply(NListContext *list_context, int r,
     ++list_context->current_pg;
     if (list_context->current_pg == list_context->starting_pg_num) {
       // end of pool
+      if (list_context->current_stage == NListContext::TGT_READ) { //since the src may have to be read again we need to save the pos of the last object in the pool
+        list_context->tgt_pos = list_context->pos;
+      }
       list_context->pos = hobject_t::get_max();
     } else {
       // next pg
@@ -4107,6 +4186,9 @@ void Objecter::_nlist_reply(NListContext *list_context, int r,
 				    list_context->pool_id, string());
     }
   } else {
+    if (list_context->current_stage == NListContext::TGT_READ && response.handle.is_max()) {
+      list_context->tgt_pos = list_context->pos; //if the handle is maxed meaning that we have reached the end of the pool then we want to save the last object of the tgt pool so we can come back to it in the second tgt read
+    }
     list_context->pos = response.handle;
   }
 
@@ -4121,18 +4203,134 @@ void Objecter::_nlist_reply(NListContext *list_context, int r,
     response.entries.clear();
   }
 
-  if (list_context->list.size() >= list_context->max_entries) {
-    ldout(cct, 20) << " hit max, returning results so far, "
-		   << list_context->list << dendl;
-    // release the listing context's budget once all
-    // OPs (in the session) are finished
-    put_nlist_context_budget(list_context);
-    final_finish->complete(0);
-    return;
+  //should only be able to early exit in this stage. This is also the default stage for a non migrating pool
+  if (list_context->current_stage == NListContext::TGT_READ) {
+    if (list_context->list.size() >= list_context->max_entries) {
+      ldout(cct, 20) << " hit max, returning results so far, "
+         << list_context->list << dendl;
+      // release the listing context's budget once all
+      // OPs (in the session) are finished
+      put_nlist_context_budget(list_context);
+      final_finish->complete(0);
+      return;
+    }
   }
 
+  //handling a pool currently in a pool-migration
+  if (pool->is_migrating()) {
+    ldout(cct,10) << "TOM DEBUG: "
+  << "\nStage: " << list_context->current_stage
+  << "\nSrc pool for migration: " << list_context->src_pool_id
+  << "\ntgt pool for migration: " << list_context->tgt_pool_id
+  << "\ncurrent active pool: " << list_context->pool_id
+  << "\ntgt pos: " << list_context->tgt_pos
+  << "\nsrc pos: " << list_context->src_pos
+  <<"\nCurrent pos: " << list_context->pos
+  << "\nContext budget: " << list_context->ctx_budget
+  << "\nList: " << list_context->list << dendl;
+
+    switch (list_context->current_stage) {
+      case NListContext::TGT_READ:
+        ldout(cct,10) << "Checking the tgt reading stage" << dendl;
+        // Only swap state when end of pool and not all usr objects
+        if (list_context->pos.is_max()) {
+          std::move(list_context->list.begin(), list_context->list.end(),
+              std::back_inserter(list_context->tgt_list));
+          list_context->list.clear();
+          list_context->current_stage = NListContext::SRC_READ;
+          list_context->pos = list_context->src_pos;
+        }
+        break;
+      case NListContext::SRC_READ:
+        ldout(cct,10) << "Checking the src reading stage" << dendl;
+        if (list_context->pos.is_max()) { // Only change to the next state when the pool is finished reading
+          std::move(list_context->list.begin(), list_context->list.end(),
+              std::back_inserter(list_context->src_list));
+          list_context->list.clear();
+          list_context->current_stage = NListContext::TGT_SECOND_READ;
+          list_context->src_pos = list_context->pos;
+          list_context->pos = list_context->tgt_pos;
+        }
+        break;
+      case NListContext::TGT_SECOND_READ:
+        ldout(cct,10) << "Checking the intermediate reading stage" << dendl;
+        if (list_context->pos.is_max()) {
+          std::move(list_context->list.begin(), list_context->list.end(),
+              std::back_inserter(list_context->intermediate_list));
+          list_context->list.clear();
+
+          combine_result_lists(list_context);
+
+          list_context->tgt_list.clear();
+          list_context->src_list.clear();
+          list_context->intermediate_list.clear();
+
+          list_context->end_of_tripple_read = true;
+        }
+        break;
+    }
+  }
   // continue!
   list_nobjects(list_context, final_finish);
+}
+
+// Helper function for Nlist_reply when running with a migrating pool
+// Combines the 3 lists of objects collected from the 3 stages of reads
+// The lists parameter will always follow the order tgt_list, src_list, intermediate_list
+void Objecter::combine_result_lists(NListContext *list_context) {
+  //create a pair of objects and there hash values
+  using HashObjectPair = std::pair<uint64_t, librados::ListObjectImpl>;
+  std::vector<HashObjectPair> sortingPair;
+
+  //add all the objects from the tgt pool read
+  for (const auto& obj : list_context->tgt_list) {
+    uint32_t hash = get_object_hash_position(list_context->tgt_pool_id, obj.get_oid(), obj.get_nspace());
+    hash = reverse_bits_32(hash);
+    sortingPair.emplace_back(hash,obj);
+  }
+  //add all the objects from the src pool read
+  for (const auto& obj : list_context->src_list) {
+    uint32_t hash = get_object_hash_position(list_context->src_pool_id, obj.get_oid(), obj.get_nspace());
+    hash = reverse_bits_32(hash);
+    sortingPair.emplace_back(hash,obj);
+  }
+  //add all the objects from the second tgt pool read
+  for (const auto& obj : list_context->intermediate_list) {
+    uint32_t hash = get_object_hash_position(list_context->tgt_pool_id, obj.get_oid(), obj.get_nspace());
+    hash = reverse_bits_32(hash);
+    sortingPair.emplace_back(hash,obj);
+  }
+
+  // Sort the combined list of objects
+  std::sort(sortingPair.begin(),sortingPair.end(),
+    [](const HashObjectPair& a, const HashObjectPair& b) {
+      if (a.first != b.first) {
+        return a.first < b.first;
+      }
+      return a.second.oid < b.second.oid;
+    });
+
+  //deduplicate the objects in the mega list
+  auto unique = std::unique(sortingPair.begin(), sortingPair.end(),
+  [](const HashObjectPair& a, HashObjectPair& b) {
+    //object is a duplicate if the ouid and the namespace are the same.
+    return a.second.oid == b.second.oid && a.second.nspace == b.second.nspace;
+  });
+  sortingPair.erase(unique, sortingPair.end());
+
+  //extract the ListObjectImpl from the pair vector
+  for (const auto& object : sortingPair) {
+    list_context->list.push_back(std::move(object.second));
+  }
+}
+
+// Helper function to reverse the 32 bits of a hash.
+uint32_t Objecter::reverse_bits_32(uint32_t n) {
+  n = ((n >> 1)  & 0x55555555) | ((n & 0x55555555) << 1);
+  n = ((n >> 2)  & 0x33333333) | ((n & 0x33333333) << 2);
+  n = ((n >> 4)  & 0x0F0F0F0F) | ((n & 0x0F0F0F0F) << 4);
+  n = ((n >> 8)  & 0x00FF00FF) | ((n & 0x00FF00FF) << 8);
+  return (n >> 16) | (n << 16);
 }
 
 void Objecter::put_nlist_context_budget(NListContext *list_context)

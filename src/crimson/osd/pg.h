@@ -146,6 +146,10 @@ public:
     return peering_state.get_info();
   }
 
+  const auto& get_pgpool() const {
+    return peering_state.get_pgpool();
+  }
+
   // DoutPrefixProvider
   std::ostream& gen_prefix(std::ostream& out) const final {
     return out << *this;
@@ -368,6 +372,15 @@ public:
     SUBDEBUGDPP(osd, "", *this);
     shard_services.remove_want_pg_temp(orderer, pgid.pgid);
   }
+  void send_pg_migrated_pool() final {
+    LOG_PREFIX(PG::send_pg_migrated_pool);
+    SUBDEBUGDPP(osd, "", *this);
+    std::optional<int64_t> migration_target = get_pgpool().info.migration_target;
+    ceph_assert(migration_target.has_value());
+    shard_services.send_pg_migrated_pool(orderer,
+                                         *migration_target,
+                                         pgid.pgid);
+  }
   void check_recovery_sources(const OSDMapRef& newmap) final {
     LOG_PREFIX(PG::check_recovery_sources);
     recovery_backend->for_each_recovery_waiter(
@@ -404,12 +417,12 @@ public:
   void on_change(ceph::os::Transaction &t) final;
   void on_activate(interval_set<snapid_t> to_trim) final;
   void on_replica_activate() final;
-  void on_activate_complete() final;
+  void on_activate_complete(HBHandle *handle) final;
   void on_new_interval() final {
     recovery_finisher = nullptr;
   }
   Context *on_clean() final;
-  void on_activate_committed() final {
+  void on_activate_committed(HBHandle *handle) final {
     if (!is_primary()) {
       wait_for_active_blocker.unblock();
     }
@@ -446,6 +459,19 @@ public:
     recovery_handler->backfill_suspended();
   }
 
+  void on_pool_migration_source_reserved() final {
+    recovery_handler->on_pool_migration_source_reserved();
+  }
+  void on_pool_migration_source_suspended() final {
+    recovery_handler->on_pool_migration_source_suspended();
+  }
+  void on_pool_migration_target_reserved() final {
+    recovery_handler->on_pool_migration_target_reserved();
+  }
+  void on_pool_migration_target_suspended(bool toofull) final {
+    recovery_handler->on_pool_migration_target_suspended(toofull);
+  }
+
   void on_recovery_cancelled() final {
     cancel_pglog_based_recovery_op();
   }
@@ -456,7 +482,7 @@ public:
 
 
   bool try_reserve_recovery_space(
-    int64_t primary_num_bytes, int64_t local_num_bytes) final {
+    int64_t primary_num_bytes, int64_t local_num_bytes, int64_t num_objects) final {
     // TODO
     return true;
   }
@@ -569,9 +595,6 @@ public:
     return get_info().history.same_interval_since;
   }
 
-  const auto& get_pgpool() const {
-    return peering_state.get_pgpool();
-  }
   pg_shard_t get_primary() const {
     return peering_state.get_primary();
   }

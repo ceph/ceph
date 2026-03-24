@@ -85,6 +85,9 @@
 /// min recovery priority for MBackfillReserve
 #define OSD_RECOVERY_PRIORITY_MIN 0
 
+// base pool-migration priority
+#define OSD_POOL_MIGRATION_PRIORITY_BASE 60
+
 /// base backfill priority for MBackfillReserve
 #define OSD_BACKFILL_PRIORITY_BASE 100
 
@@ -327,6 +330,7 @@ struct request_redirect_t {
 private:
   object_locator_t redirect_locator; ///< this is authoritative
   std::string redirect_object; ///< If non-empty, the request goes to this object name
+  std::optional<hobject_t> redirect_migration_watermark; ///< Migration watermark for pool migration
 
   friend std::ostream& operator<<(std::ostream& out, const request_redirect_t& redir);
 public:
@@ -334,6 +338,11 @@ public:
   request_redirect_t() {}
   explicit request_redirect_t(const object_locator_t& orig, int64_t rpool) :
       redirect_locator(orig) { redirect_locator.pool = rpool; }
+  explicit request_redirect_t(const object_locator_t& orig, int64_t rpool, hobject_t migration_watermark) :
+      redirect_locator(orig) {
+    redirect_locator.pool = rpool;
+    redirect_migration_watermark = migration_watermark;
+  }
   explicit request_redirect_t(const object_locator_t& rloc) :
       redirect_locator(rloc) {}
   explicit request_redirect_t(const object_locator_t& orig,
@@ -348,7 +357,13 @@ public:
     if (!redirect_object.empty())
       obj = redirect_object;
   }
-
+  bool is_pool_migration() const {
+    return redirect_migration_watermark.has_value();
+  }
+  void update_migration_watermark(hobject_t & obj) const {
+    ceph_assert(is_pool_migration());
+    obj = *redirect_migration_watermark;
+  }
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
@@ -1062,6 +1077,10 @@ WRITE_CLASS_ENCODER_FEATURES(objectstore_perf_stat_t)
 #define PG_STATE_FAILED_REPAIR      (1ULL << 32) // A repair failed to fix all errors
 #define PG_STATE_LAGGY              (1ULL << 33) // PG is laggy/unreabable due to slow/delayed pings
 #define PG_STATE_WAIT               (1ULL << 34) // PG is waiting for prior intervals' readable period to expire
+#define PG_STATE_MIGRATION_WAIT     (1ULL << 35) // PG is waiting to start migration to a new pool
+#define PG_STATE_MIGRATING          (1ULL << 36) // PG is migrating
+#define PG_STATE_MIGRATION_TOOFULL  (1ULL << 37) // PG migration can't proceed: too full
+#define PG_STATE_MIGRATION_UNFOUND  (1ULL << 38) // PG migration can't proceed: unreadable object
 
 std::string pg_state_string(uint64_t state);
 std::string pg_vector_string(const std::vector<int32_t> &a);
@@ -1652,6 +1671,24 @@ public:
                                      ///< user does not specify any expected value
   bool fast_read = false;            ///< whether turn on fast read on the pool or not
   shard_id_set nonprimary_shards; ///< EC partial writes: shards that cannot become a primary
+
+  // Pool migration
+  std::optional<int64_t> migration_src; ///< pool we are migrating from
+  std::optional<int64_t> migration_target; ///< pool we are migrating to
+  std::set<pg_t> migrating_pgs; ///< PGs currently migrating. Any higher value PGs have completed migration
+  uint32_t lowest_migrated_pg; ///< PG with the lowest ID that has completed migration
+
+  void clear_migrating_pgs() { migrating_pgs.clear(); }
+
+  bool is_migrating() const { return migration_src.has_value() || migration_target.has_value(); }
+  bool is_migration_src() const { return migration_target.has_value(); }
+  bool is_migration_target() const { return migration_src.has_value(); }
+  bool is_pg_migrating(pg_t pgid) const { return migrating_pgs.contains(pgid); }
+  bool has_pg_migrated(pg_t pgid) const {
+    return is_migration_src() &&
+      (pgid.ps() >= lowest_migrated_pg) &&
+      !is_pg_migrating(pgid);
+  }
   pool_opts_t opts; ///< options
 
   typedef enum {
@@ -1829,6 +1866,10 @@ public:
     return has_flag(FLAG_CRIMSON);
   }
 
+  bool is_bulk() const {
+    return has_flag(FLAG_BULK);
+  }
+
   bool can_shift_osds() const {
     switch (get_type()) {
     case TYPE_REPLICATED:
@@ -1853,6 +1894,30 @@ public:
   // return, for a given pg, the fraction (denominator) of the total
   // pool size that it represents.
   unsigned get_pg_num_divisor(pg_t pgid) const;
+
+  int64_t get_pg_num_min() const {
+    int64_t pg_num_min = 0;
+    opts.get(pool_opts_t::PG_NUM_MIN, &pg_num_min);
+    return pg_num_min;
+  }
+
+  int64_t get_pg_num_max() const {
+    int64_t pg_num_max = 0;
+    opts.get(pool_opts_t::PG_NUM_MAX, &pg_num_max);
+    return pg_num_max;
+  }
+
+  int64_t get_target_size_bytes() const {
+    int64_t target_size_bytes = 0;
+    opts.get(pool_opts_t::TARGET_SIZE_BYTES, &target_size_bytes);
+    return target_size_bytes;
+  }
+
+  double get_target_size_ratio() const {
+    double target_size_ratio = 0.0;
+    opts.get(pool_opts_t::TARGET_SIZE_RATIO, &target_size_ratio);
+    return target_size_ratio;
+  }
 
   bool is_pending_merge(pg_t pgid, bool *target) const;
 
@@ -3528,6 +3593,8 @@ public:
     int32_t new_crush_member,
     bool old_allow_ec_optimizations,
     bool new_allow_ec_optimizations,
+    const std::set<pg_t> old_migrating_pgs,
+    const std::set<pg_t> new_migrating_pgs,
     pg_t pgid
     );
 

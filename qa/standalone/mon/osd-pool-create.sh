@@ -299,6 +299,81 @@ function TEST_pool_both_prio_no_pos() {
    check_pool_priority $dir 20 "2 - 36" "-10 -9 -8 -8 -7 -7 -6 -6 -5 -5 -4 -3 -3 -2 -2 -1 -1 0 0 2 4" || return 1
 }
 
+function TEST_osd_pool_create_migrate_from() {
+  local dir=$1
+
+  setup $dir || return 1
+  run_mon $dir a || return 1
+  run_mgr $dir x || return 1
+  for id in $(seq 0 2); do
+    run_osd $dir $id || return 1
+  done
+  create_rbd_pool || return 1
+  wait_for_clean || return 1
+
+  SRC_POOL_NAME="ecpool"
+  REPPOOL_NAME="metadatapool"
+  TGT_POOL_NAME="newecpool"
+
+  #setup the cluster 
+  #create an erasure code profile
+  ceph osd erasure-code-profile set ec-prof plugin=isa k=2 m=1 crush-failure-domain=osd
+
+  #create an erasure coded pool
+  ceph osd pool create $SRC_POOL_NAME erasure ec-prof || return 1
+  ceph osd pool set $SRC_POOL_NAME allow_ec_overwrites true || return 1
+  #rbd pool init $SRC_POOL_NAME || return 1
+  ceph osd pool application enable $SRC_POOL_NAME rbd || return 1
+
+  #create a replicated pool
+  ceph osd pool create $REPPOOL_NAME replicated || return 1
+  rbd pool init $REPPOOL_NAME || return 1
+
+  #create an rbd image with data pool set to the erasure coded pool
+  rbd create -s 10G --data-pool $SRC_POOL_NAME $REPPOOL_NAME/vol0 || return 1
+
+  #write some data to the image
+  rbd bench -p $REPPOOL_NAME --image vol0 --io-size 1K --io-threads 1 --io-total 10000K --io-pattern rand --io-type write || return 1
+
+  #set min compat client to tentacle
+  ceph osd set-require-min-compat-client tentacle || return 1
+
+  #disable autoscaling
+  ceph osd pool set noautoscale || return 1
+
+  #resize the ec pool to have small number of pgs
+  ceph osd pool set $SRC_POOL_NAME pg_num 2 || return 1
+
+  #Wait some of the PGs to be merged
+  sleep 10  
+
+  #migrate the pool
+  ceph osd pool create $TGT_POOL_NAME --migrate-from-pool $SRC_POOL_NAME || return 1
+   
+  #reenable autoscaling
+  ceph osd pool unset noautoscale || return 1
+
+  #check that changing the pg_num on either pool is blocked
+  ceph osd pool set $SRC_POOL_NAME pg_num 10
+  ceph osd pool set $TGT_POOL_NAME pg_num 10
+
+  #Let the message reach the logs
+  sleep 2
+  
+  grep "pool pg_num change is disabled; you must unset nopgchange flag for the pool first" $dir/mon.a.log || return 1
+
+  #check that the daemonServer was blocked from changing the pg_num on the two
+  #pools involved in the migration
+  SRC_POOL_ID=$(ceph osd dump | grep " '$SRC_POOL_NAME' " | awk '{print $2}')
+  TGT_POOL_ID=$(ceph osd dump | grep " '$TGT_POOL_NAME' " | awk '{print $2}')
+  echo "Source pool id: $SRC_POOL_ID"
+  echo "Target pool id: $TGT_POOL_ID"
+  
+  grep "Pool $SRC_POOL_ID has the flag NOPGCHANGE so will be skipped" $dir/mgr.x.log || return 1
+  grep "Pool $TGT_POOL_ID has the flag NOPGCHANGE so will be skipped" $dir/mgr.x.log || return 1
+
+  teardown $dir || return 1
+}
 
 main osd-pool-create "$@"
 

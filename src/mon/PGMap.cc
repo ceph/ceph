@@ -23,6 +23,7 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/range/adaptor/reversed.hpp>
 
+#include <cls/sem_set/ops.h>
 #include <iomanip> // for std::setw()
 #include <sstream>
 
@@ -2722,6 +2723,56 @@ void PGMap::get_health_checks(
       check->detail.push_back(j.second);
     }
   }
+
+  //Output the status of a pool migration
+  int64_t total_migrated_objects = 0;
+  int64_t total_migrating_objects = 0;
+  int64_t total_migrating_pools = 0;
+  int64_t total_migrating_pgs = 0;
+
+  //For each pg check if its pool is a migration src or targets and then increment the totals above.
+  for (auto &&[pg_id, pg] : pg_stat) {
+    if (osdmap.get_pg_pool(pg_id.pool())->is_migration_src()) {
+      total_migrating_objects += pg.stats.sum.num_objects;
+    }else if (osdmap.get_pg_pool(pg_id.pool())->is_migration_target()) {
+      total_migrated_objects += pg.stats.sum.num_objects;
+      total_migrating_objects += pg.stats.sum.num_objects;
+    }
+  }
+  //for each of the pools if its in a migration then increment the pools and pgs defined above counter above.
+  for (auto &&[pool_id, pool] : pools) {
+    if (pool.is_migration_target()) {
+      total_migrating_pools ++;
+      total_migrating_pgs += pool.get_pg_num();
+    }
+  }
+
+  if (total_migrating_objects != 0) {
+    double percent_migrated = (double)total_migrated_objects /
+      (double)total_migrating_objects * (double)100.0;
+    char pm[20];
+    snprintf(pm, sizeof(pm), "%.3lf", percent_migrated);
+    ostringstream ss;
+    ss << "Pool migration: " << total_migrated_objects << "/"
+    << total_migrating_objects << " objects migrated (" << pm << "%), "
+    << total_migrating_pools << (total_migrating_pools > 1 ? " pools " : " pool ")
+    << "migrating, "
+    << total_migrating_pgs << (total_migrating_pgs > 1 ? " pgs " : " pg ")
+    << "migrating";
+
+    checks->add(
+        "POOL MIGRATION",
+        HEALTH_WARN,
+        ss.str(),
+        total_migrating_pools);
+  } else {
+    //If there are no migrating pgs then output the totals to help with debugging
+    dout(20) << "number of migrated objects: " << total_migrated_objects << dendl;
+    dout(20) << "number of object in the migration " << total_migrating_objects << dendl;
+    dout(20) << "number of migrating pools: " << total_migrating_pools << dendl;
+    dout(20) << "number of migrating pgs: " << total_migrating_pgs << dendl;
+  }
+
 
   // OSD_SCRUB_ERRORS
   if (pg_sum.stats.sum.num_scrub_errors) {

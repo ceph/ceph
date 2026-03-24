@@ -1188,6 +1188,38 @@ protected:
   hobject_t last_backfill_started;
   bool new_backfill;
 
+  /// current watermark tracking pool migration progress
+  hobject_t pool_migration_watermark;
+  /// currently migrating objects
+  std::set<hobject_t> pool_migrations_in_flight;
+  /// last pool migration operation started
+  hobject_t last_pool_migration_started;
+  /// set for 1st object migration after activate
+  bool new_pool_migration_interval;
+  /// set while migrating 1st object after activate
+  bool new_pool_migration_interval_in_flight;
+
+  /// current migration target pg
+  std::optional<pg_t> pool_migration_target_pg;
+  /// set when we get GRANT from all target PGs and can start copy_from
+  bool pool_migration_reservations_established;
+  /// waiting for GRANT from target PGs
+  /// objects waiting for lock retry to delete source after successful copy_from
+  std::list<hobject_t> pool_migration_source_delete_pending_lock;
+  /// set when target PG has reservations and can accept pool migration copy_from
+  bool pool_migration_target_has_reservations = false;
+  bool pool_migration_waiting_for_reservations;
+  hobject_t next_pool_migration(std::optional<hobject_t> start);
+  hobject_t earliest_pool_migration()
+  {
+    return next_pool_migration(std::nullopt);
+  }
+  void update_migration_watermark(const hobject_t &watermark) override
+  {
+    pool_migration_watermark = watermark;
+  }
+  std::optional<hobject_t> consider_updating_migration_watermark(std::set<hobject_t> &deleted) override;
+
   int prep_object_replica_pushes(const hobject_t& soid, eversion_t v,
 				 PGBackend::RecoveryHandle *h,
 				 bool *work_started);
@@ -1349,10 +1381,20 @@ protected:
     const std::set<pg_shard_t> &backfill_targets
     );
 
+  void scan_range_migration(
+    int min, int max, PoolMigrationInterval *pmi,
+    HBHandle *handle
+    );
+
   /// Update a hash range to reflect changes since the last scan
   void update_range(
     PrimaryBackfillInterval *bi, ///< [in,out] interval to update
     ThreadPool::TPHandle &handle ///< [in] tp handle
+    );
+
+  void update_range(
+    PoolMigrationInterval *pmi,
+    HBHandle *handle
     );
 
   int prep_backfill_object_push(
@@ -1370,6 +1412,25 @@ protected:
   void _applied_recovered_object_replica();
   void _committed_pushed_object(epoch_t epoch, eversion_t lc);
   void recover_got(hobject_t oid, eversion_t v);
+
+  /**
+   * Schedule pool migration work
+   * @param work_started will be std::set to true if recover_migration got anywhere
+   * @returns the number of operations started
+   */
+  uint64_t recover_pool_migration(uint64_t max, ThreadPool::TPHandle &handle,
+			          bool *work_started);
+  pg_t get_target_pg_from_hash(const hobject_t &hobj);
+  uint16_t count_remaining_target_pgs(const hobject_t &hobj);
+  bool send_request_remote_reservation_message(const pg_t &target_pg, const hobject_t &hobj);
+
+  void start_target_pool_migration(int64_t num_bytes, int64_t num_objects);
+  void stop_target_pool_migration();
+  void stop_pool_migration_unfound();
+  void stop_pool_migration_toofull();
+  void stop_pool_migration_revoked();
+  void on_pool_migration_target_reserved() override;
+  void on_pool_migration_target_suspended(bool toofull) override;
 
   // -- copyfrom --
   std::map<hobject_t, CopyOpRef> copy_ops;
@@ -1537,6 +1598,7 @@ protected:
   friend struct C_SetDedupChunks;
   friend struct C_SetManifestRefCountDone;
   friend struct SetManifestFinisher;
+  friend struct C_Migrate;
 
 public:
   PrimaryLogPG(OSDService *o, OSDMapRef curmap,
@@ -1590,6 +1652,9 @@ public:
   void do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn);
   int start_cls_gather(OpContext *ctx, std::map<std::string, bufferlist> *src_objs, const std::string& pool,
 		       const char *cls, const char *method, bufferlist& inbl);
+
+  void handle_pool_migration_copy_failure(hobject_t oid, int r);
+  bool pool_migration_source_delete(hobject_t oid);
 
 private:
   int do_scrub_ls(const MOSDOp *op, OSDOp *osd_op);
@@ -1960,7 +2025,9 @@ public:
   void plpg_on_pool_change() override;
   void clear_async_reads();
   void on_change(ObjectStore::Transaction &t) override;
-  void on_activate_complete() override;
+  void _on_activate_committed(HBHandle *handle);
+  void on_activate_committed(HBHandle *handle) override;
+  void on_activate_complete(HBHandle *handle) override;
   void on_flushed() override;
   void on_removal(ObjectStore::Transaction &t) override;
   void on_shutdown() override;
