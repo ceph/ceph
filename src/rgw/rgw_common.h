@@ -2143,52 +2143,71 @@ uppercase_dash_transform(
 void rgw_setup_saved_curl_handles();
 void rgw_release_all_curl_handles();
 
-static inline void rgw_escape_str(const std::string& s, char esc_char,
-				  char special_char, std::string *dest)
+/// Escape one character with another
+///
+/// \note This function appends, it does not clear its output.
+///
+/// \param[in] in Input string
+/// \param[in] esc_char Character with which to escape
+/// \param[in] special_char Character to be escaped
+/// \param[in] out Output iterator to append
+///
+/// \return New output iterator
+inline auto
+rgw_escape_str(
+    std::ranges::input_range auto&& in,
+    char esc_char,
+    char special_char,
+    std::output_iterator<char> auto out)
 {
-  const char *src = s.c_str();
-  char dest_buf[s.size() * 2 + 1];
-  char *destp = dest_buf;
-
-  for (size_t i = 0; i < s.size(); i++) {
-    char c = src[i];
+  for (const auto c : std::forward<decltype(in)>(in)) {
     if (c == esc_char || c == special_char) {
-      *destp++ = esc_char;
+      *out++ = esc_char;
     }
-    *destp++ = c;
+    *out++ = c;
   }
-  *destp++ = '\0';
-  *dest = dest_buf;
+  return out;
 }
 
-static inline ssize_t rgw_unescape_str(const std::string& s, ssize_t ofs,
-				       char esc_char, char special_char,
-				       std::string *dest)
+/// Unescapes an escaped character
+///
+/// \note This function appends, it does not clear its output.
+///
+/// \param[in] in Input string
+/// \param[in] esc_char Character with which we escaped
+/// \param[in] special_char Character which was to be escaped
+/// \param[in] out Output iterator to append
+///
+/// \return If we encounter `special_char` not preceded by `esc_char`,
+///         return a subrange beginning with the next character,
+///         otherwise an empty subrange.
+template <std::ranges::input_range In>
+  requires std::ranges::borrowed_range<In> || std::is_lvalue_reference_v<In&&>
+inline auto
+rgw_unescape_str(
+    In&& in,
+    char esc_char,
+    char special_char,
+    std::output_iterator<char> auto out)
 {
-  const char *src = s.c_str();
-  char dest_buf[s.size() + 1];
-  char *destp = dest_buf;
   bool esc = false;
 
-  dest_buf[0] = '\0';
-
-  for (size_t i = ofs; i < s.size(); i++) {
-    char c = src[i];
+  auto it = std::ranges::begin(in);
+  auto end = std::ranges::end(in);
+  while (it != end) {
+    const char c = *it;
+    ++it;
     if (!esc && c == esc_char) {
       esc = true;
       continue;
     }
     if (!esc && c == special_char) {
-      *destp = '\0';
-      *dest = dest_buf;
-      return (ssize_t)i + 1;
+      break;
     }
-    *destp++ = c;
+    *out++ = c;
     esc = false;
   }
-  *destp = '\0';
-  *dest = dest_buf;
-  return std::string::npos;
+  return std::ranges::subrange{it, end};
 }
 
 /// Return a string copy of the given bufferlist with trailing nulls removed

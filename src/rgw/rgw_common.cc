@@ -2178,10 +2178,12 @@ bool RGWUserCaps::is_valid_cap_type(const string& tp)
 
 void rgw_pool::from_str(const string& s)
 {
-  size_t pos = rgw_unescape_str(s, 0, '\\', ':', &name);
-  if (pos != string::npos) {
-    pos = rgw_unescape_str(s, pos, '\\', ':', &ns);
-    /* ignore return; if pos != string::npos it means that we had a colon
+  name.clear();
+  auto sr = rgw_unescape_str(s, '\\', ':', std::back_inserter(name));
+  if (sr) {
+    ns.clear();
+    rgw_unescape_str(sr, '\\', ':', std::back_inserter(ns));
+    /* ignore return; if nonempty, it means that we had a colon
      * in the middle of ns that wasn't escaped, we're going to stop there
      */
   }
@@ -2190,12 +2192,12 @@ void rgw_pool::from_str(const string& s)
 string rgw_pool::to_str() const
 {
   string esc_name;
-  rgw_escape_str(name, '\\', ':', &esc_name);
+  rgw_escape_str(name, '\\', ':', std::back_inserter(esc_name));
   if (ns.empty()) {
     return esc_name;
   }
   string esc_ns;
-  rgw_escape_str(ns, '\\', ':', &esc_ns);
+  rgw_escape_str(ns, '\\', ':', std::back_inserter(esc_ns));
   return esc_name + ":" + esc_ns;
 }
 
