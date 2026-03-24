@@ -963,9 +963,11 @@ void PG::enqueue_delete_for_backfill(
   const eversion_t &v,
   const std::vector<pg_shard_t> &peers)
 {
+  LOG_PREFIX(PG::enqueue_delete_for_backfill);
   assert(recovery_handler);
   assert(recovery_handler->backfill_state);
   auto backfill_state = recovery_handler->backfill_state.get();
+  DEBUGDPP("enqueue standalone delete {} v {} for peers {}", *this, obj, v, peers);
   backfill_state->enqueue_standalone_delete(obj, v, peers);
 }
 

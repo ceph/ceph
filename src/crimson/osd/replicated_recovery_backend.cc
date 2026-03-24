@@ -39,12 +39,22 @@ ReplicatedRecoveryBackend::recover_object(
       soid,
       [FNAME, this, soid, need](auto head, auto obc) {
 	if (!obc->obs.exists) {
-	  // XXX: this recovery must be triggered by backfills and the corresponding
-	  //      object must have been deleted by some client request after the object
-	  //      is enqueued for push but before the lock is acquired by the recovery.
-	  //
-	  //      Abort the recovery in this case, a "recover_delete" must have been
-	  //      added for this object by the client request that deleted it.
+	  // This recovery was triggered by backfill and the object was deleted by
+	  // a client request after it was enqueued for push but before recovery
+	  // acquired the OBC lock. Clear stale peer_missing entries that were added
+	  // by prepare_backfill_for_missing() so that needs_recovery() does not
+	  // fail the assertion in Recovered::Recovered.
+	  DEBUGDPP("object does not exist, clearing peer_missing: {}", pg, soid);
+	  for (const auto& peer : pg.get_acting_recovery_backfill()) {
+	    if (peer == pg.get_pg_whoami())
+	      continue;
+	    pg_missing_item item;
+	    if (pg.get_peering_state().get_peer_missing(peer).is_missing(soid, &item)) {
+	      DEBUGDPP("clear stale peer_missing entry {} v {} for peer {}",
+		       pg, soid, item.need, peer);
+	      pg.get_peering_state().on_peer_recover(peer, soid, item.need);
+	    }
+	  }
 	  return interruptor::now();
 	}
 	DEBUGDPP("loaded obc: {}", pg, obc->obs.oi.soid);
