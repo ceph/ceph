@@ -7,7 +7,9 @@ import {
   OnInit,
   Output,
   QueryList,
-  AfterViewChecked
+  AfterViewChecked,
+  ChangeDetectionStrategy,
+  ViewEncapsulation
 } from '@angular/core';
 import { FormBuilder } from '@angular/forms';
 import { Step } from 'carbon-components-angular';
@@ -20,7 +22,9 @@ import { ConfirmationModalComponent } from '../confirmation-modal/confirmation-m
 @Component({
   selector: 'cd-tearsheet',
   templateUrl: './tearsheet.component.html',
-  styleUrls: ['./tearsheet.component.scss']
+  styleUrls: ['./tearsheet.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  encapsulation: ViewEncapsulation.None
 })
 export class TearsheetComponent implements OnInit, AfterViewChecked {
   @Input() title!: string;
