@@ -95,16 +95,15 @@ list<RGWCORSRule> RGWCORSRule::generate_test_instances()
  *
  * @todo When UTF-8 is allowed in HTTP headers, this function will need to change
  */
-string lowercase_http_attr(const string& orig)
+std::string
+lowercase_http_attr(const std::string& orig)
 {
-  const char *s = orig.c_str();
-  char buf[orig.size() + 1];
-  buf[orig.size()] = '\0';
-
-  for (size_t i = 0; i < orig.size(); ++i, ++s) {
-	buf[i] = tolower(*s);
-  }
-  return string(buf);
+  std::string s;
+  s.reserve(orig.size());
+  std::ranges::transform(orig, std::back_inserter(s), [](char c) -> char {
+    return tolower(static_cast<unsigned char>(c));
+  });
+  return s;
 }
 
 
