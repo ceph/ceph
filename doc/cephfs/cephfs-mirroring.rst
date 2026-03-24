@@ -12,7 +12,7 @@ the source snapshot.
 Requirements
 ------------
 
-The primary (local) and secondary (remote) Ceph clusters version should be Pacific or later.
+The primary (local) and secondary (remote) Ceph cluster versions should be Pacific or later.
 
 .. _cephfs_mirroring_creating_users:
 
@@ -164,11 +164,11 @@ the remote filesystem as a peer to the primary filesystem ``primary_fs``:
 
 To avoid having to maintain the remote cluster configuration file and remote
 ceph user keyring in the primary cluster, users can bootstrap a peer (which
-stores the relevant remote cluster details in the monitor config store on the
+stores the relevant remote cluster details in the Monitor config store on the
 primary cluster). See the :ref:`Bootstrap
 Peers<cephfs_mirroring_bootstrap_peers>` section.
 
-The ``peer_add`` command supports passing the remote cluster monitor address
+The ``peer_add`` command supports passing the remote cluster Monitor address
 and the user key. However, bootstrapping a peer is the recommended way to add a
 peer.
 
@@ -238,7 +238,7 @@ Bootstrap Peers
 ---------------
 
 Adding a peer via the ``peer_add`` subcommand requires the peer cluster configuration and
-user keyring to be available in the primary cluster (manager host and hosts running the
+user keyring to be available in the primary cluster (Manager host and hosts running the
 mirror daemon). This can be avoided by bootstrapping and importing a peer token. Peer
 bootstrap involves creating a bootstrap token on the peer cluster via::
 
@@ -307,7 +307,7 @@ CephFS mirroring module provides ``mirror daemon status`` interface to check mir
 
 An entry per mirror daemon instance is displayed along with information such as configured
 peers and basic stats. The peer information includes the remote file system name (``fs_name``),
-cluster's monitor addresses (``mon_host``) and cluster FSID (``fsid``). For more detailed
+cluster's Monitor addresses (``mon_host``) and cluster FSID (``fsid``). For more detailed
 stats, use the admin socket interface as detailed below.
 
 CephFS mirror daemons provide admin socket commands for querying mirror status. To check
@@ -478,7 +478,7 @@ In the remote filesystem::
 When the snapshot or the directory is removed from the remote filesystem, the mirror daemon will
 clear the failed state upon successful synchronization of the pending snapshots, if any.
 
-.. note:: Setting snap-schedule on the remote flle system for directories that are being mirrored will
+.. note:: Setting snap-schedule on the remote file system for directories that are being mirrored will
           cause the mirror daemon to report errors like ``invalid metadata``.
 
 .. note:: Treat the remote filesystem as read-only. Nothing is inherently enforced by CephFS.

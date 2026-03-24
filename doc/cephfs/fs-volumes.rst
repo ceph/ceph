@@ -126,7 +126,7 @@ The output format is JSON and contains fields as follows:
         * ``used``: The amount of storage consumed in bytes
         * ``name``: Name of the pool
 
-* ``mon_addrs``: List of Ceph monitor addresses
+* ``mon_addrs``: List of Ceph Monitor addresses
 * ``used_size``: Current used size of the CephFS volume in bytes
 * ``pending_subvolume_deletions``: Number of subvolumes pending deletion
 
@@ -180,7 +180,7 @@ a quota on it (see :doc:`/cephfs/quota`). By default, the subvolume group
 is created with octal file mode ``755``, UID ``0``, GID ``0`` and the data pool
 layout of its parent directory.
 
-You can also specify an Unicode normalization form using the ``--normalization``
+You can also specify a Unicode normalization form using the ``--normalization``
 option. This will be used to internally mangle file names so that Unicode
 characters that can be represented by different Unicode code point sequences
 are all mapped to the same representation, which means that they will all
@@ -196,7 +196,7 @@ The valid values for the Unicode normalization form are:
 
 To learn more about Unicode normalization forms see https://unicode.org/reports/tr15
 
-It's also possible to configure a subvolume group for case insensitive access
+It's also possible to configure a subvolume group for case-insensitive access
 when the ``--casesensitive=0`` option is used. When this option is added, file
 names that only differ in the case of its characters will be mapped to the same
 file. The case of the file name used when the file was created is preserved.
@@ -249,7 +249,7 @@ The output format is JSON and contains fields as follows:
 * ``uid``: UID of the subvolume group path
 * ``gid``: GID of the subvolume group path
 * ``mode``: mode of the subvolume group path
-* ``mon_addrs``: list of monitor addresses
+* ``mon_addrs``: list of Monitor addresses
 * ``bytes_pcent``: quota used in percentage if quota is set, else displays "undefined"
 * ``bytes_quota``: quota size in bytes if quota is set, else displays "infinite"
 * ``bytes_used``: current used size of the subvolume group in bytes
@@ -356,7 +356,7 @@ Valid Earmarks
    be aware that user permissions and ACLs associated with the previous scope might still apply. Ensure that
    any necessary permissions are updated as needed to maintain proper access control.
 
-When creating a subvolume you can also specify an Unicode normalization form by
+When creating a subvolume you can also specify a Unicode normalization form by
 using the ``--normalization`` option. This will be used to internally mangle
 file names so that Unicode characters that can be represented by different
 Unicode code point sequences are all mapped to the representation, which means
@@ -372,7 +372,7 @@ The valid values for the Unicode normalization form are:
 
 To learn more about Unicode normalization forms see https://unicode.org/reports/tr15
 
-It's also possible to configure a subvolume for case insensitive access when
+It's also possible to configure a subvolume for case-insensitive access when
 the ``--casesensitive=0`` option is used. When this option is added, file
 names that only differ in the case of its characters will be mapped to the same
 file. The case of the file name used when the file was created is preserved.
@@ -503,7 +503,7 @@ The output format is JSON and contains the following fields.
 * ``uid``: UID of the subvolume path
 * ``gid``: GID of the subvolume path
 * ``mode``: mode of the subvolume path
-* ``mon_addrs``: list of monitor addresses
+* ``mon_addrs``: list of Monitor addresses
 * ``bytes_pcent``: quota used in percentage if quota is set; else displays
   ``undefined``
 * ``bytes_quota``: quota size in bytes if quota is set; else displays
@@ -718,7 +718,7 @@ a subvolume:
 Listing the Snapshots of a Subvolume
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Use a command of the following from to list the snapshots of a subvolume:
+Use a command of the following form to list the snapshots of a subvolume:
 
 .. prompt:: bash #
 
@@ -820,7 +820,7 @@ the snapshot using the metadata key:
 Listing Custom Metadata That Has Been Set on a Snapshot
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Use a command of the following from to list custom metadata (key-value pairs)
+Use a command of the following form to list custom metadata (key-value pairs)
 set on the snapshot:
 
 .. prompt:: bash #
@@ -945,7 +945,7 @@ Here is an example of an ``in-progress`` clone:
 A progress report is also printed in the output when clone is ``in-progress``.
 Here the progress is reported only for the specific clone. For collective
 progress made by all ongoing clones, a progress bar is printed at the bottom
-in ouput of ``ceph status`` command::
+in output of ``ceph status`` command::
 
   progress:
     3 ongoing clones - average progress is 47.569% (10s)
@@ -1053,7 +1053,7 @@ state:
         }
     }
 
-.. note:: Delete the canceled cloned by supplying the ``--force`` option to the
+.. note:: Delete the canceled clone by supplying the ``--force`` option to the
    ``fs subvolume rm`` command.
 
 Configurables
@@ -1164,12 +1164,12 @@ across all the clients, issue the command without specifying an ``id``:
 
    ceph config set client client_respect_subvolume_snapshot_visibility <true|false>
 
-.. note:: The MGR daemon operates as a privileged CephFS client and therefore
+.. note:: The Manager daemon operates as a privileged CephFS client and therefore
           bypasses snapshot visibility restrictions. This behavior is required
           to ensure the reliable execution of operations such as snap-schedule
           and snapshot cloning. As a result, modifying the
           ``client_respect_subvolume_snapshot_visibility`` configuration option
-          has no effect on the CephFS instance running within the MGR daemon.
+          has no effect on the CephFS instance running within the Manager daemon.
 
 How to Disable Snapshot Visibility on a Subvolume?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1244,7 +1244,7 @@ pinned to one of the available ranks on the file system.
 Normalization and Case Sensitivity
 ----------------------------------
 
-The subvolumegroup and subvolume interefaces have a porcelain layer API to
+The subvolumegroup and subvolume interfaces have a porcelain layer API to
 manipulate the ``ceph.dir.charmap`` configurations (see also :ref:`charmap`).
 
 
@@ -1261,7 +1261,7 @@ Or for a subvolume:
 
 .. prompt:: bash #
 
-    ceph fs subvolume charmap set <vol_name> <subvol> <--group_name=name> <setting> <value>
+    ceph fs subvolume charmap set <vol_name> <subvol> --group_name=<name> <setting> <value>
 
 For example:
 
@@ -1289,7 +1289,7 @@ Or for a subvolume:
 
 .. prompt:: bash #
 
-    ceph fs subvolume charmap get <vol_name> <subvol> <--group_name=name> <setting>
+    ceph fs subvolume charmap get <vol_name> <subvol> --group_name=<name> <setting>
 
 For example:
 
@@ -1311,7 +1311,7 @@ Or for a subvolume:
 
 .. prompt:: bash #
 
-    ceph fs subvolume charmap get <vol_name> <subvol> <--group_name=name>
+    ceph fs subvolume charmap get <vol_name> <subvol> --group_name=<name>
 
 For example:
 
@@ -1333,13 +1333,13 @@ To remove the ``charmap`` configuration, for a subvolumegroup:
 
 .. prompt:: bash #
 
-    ceph fs subvolumegroup charmap rm <vol_name> <group_name
+    ceph fs subvolumegroup charmap rm <vol_name> <group_name>
 
 Or for a subvolume:
 
 .. prompt:: bash #
 
-    ceph fs subvolume charmap rm <vol_name> <subvol> <--group_name=name>
+    ceph fs subvolume charmap rm <vol_name> <subvol> --group_name=<name>
 
 For example:
 
@@ -1405,9 +1405,9 @@ A quiesce set can be manipulated in the following ways:
 * **cancel all** active sets in case an immediate resume of IO is required.
 
 The operations listed above are non-blocking: they attempt the intended modification
-and return with an up to date version of the target set, whether the operation was successful or not.
+and return with an up-to-date version of the target set, whether the operation was successful or not.
 The set may change states as a result of the modification, and the version that's returned in the response
-is guaranteed to be in a state consistent with this and potentialy other successful operations from
+is guaranteed to be in a state consistent with this and potentially other successful operations from
 the same control loop batch.
 
 Some set states are `awaitable`. We will discuss those below, but for now it's important to mention that
@@ -1591,7 +1591,7 @@ along with other arguments to let the system know our intention.
 
 There are two types of await: `quiesce await` and `release await`. The former is the default,
 and the latter can only be achieved with ``--release`` present in the argument list.
-To avoid confision, it is not permitted to issue a `quiesce await` when the set is not `QUIESCING`.
+To avoid confusion, it is not permitted to issue a `quiesce await` when the set is not `QUIESCING`.
 Trying to ``--release`` a set that is not `QUIESCED` is an ``EPERM`` error as well, regardless
 of whether await is requested alongside. However, it's not an error to `release await`
 an already released set, or to `quiesce await` a `QUIESCED` one - those are successful no-ops.
@@ -1617,7 +1617,7 @@ may mask a successful result with its own error. A good example is trying to can
   }
   Error EPERM: 
 
-Although ``--cancel`` will succeed syncrhonously for a set in an active state, awaiting a canceled
+Although ``--cancel`` will succeed synchronously for a set in an active state, awaiting a canceled
 set is not permitted, hence this call will result in an ``EPERM``. This is deliberately different from
 returning a ``EINVAL`` error, denoting an error on the user's side, to simplify the system's behavior
 when ``--await`` is requested. As a result, it's also a simpler model for the user to work with.
@@ -1773,12 +1773,12 @@ Disabling Volumes Plugin
 ------------------------
 By default the volumes plugin is enabled and set to ``always on``. However, in
 certain cases it might be appropriate to disable it. For example, when a CephFS
-is in a degraded state, the volumes plugin commands may accumulate in MGR
+is in a degraded state, the volumes plugin commands may accumulate in the Manager
 instead of getting served. Which eventually causes policy throttles to kick in
-and the MGR becomes unresponsive.
+and the Manager becomes unresponsive.
 
 In this event, the volumes plugin can be disabled even though it is an
-``always on`` module in MGR. To do so, run ``ceph mgr module disable volumes
+``always on`` module in the Manager. To do so, run ``ceph mgr module disable volumes
 --yes-i-really-mean-it``. Do note that this command will disable operations
 and remove commands of the volumes plugin since it will disable all CephFS
 services on the Ceph cluster accessed through this plugin.

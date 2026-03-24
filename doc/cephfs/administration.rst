@@ -67,7 +67,7 @@ Change a setting on a file system. These settings are specific to the named
 file system and do not affect other file systems. Confirmation flag is only
 needed for changing ``max_mds`` when cluster is unhealthy.
 
-.. note:: It is mandatory to pass confirmation flag (--yes--i-really-mean-it)
+.. note:: It is mandatory to pass confirmation flag (--yes-i-really-mean-it)
    for modifying FS setting variable ``max_mds`` when cluster is unhealthy.
    It has been added a precaution to tell users that modifying ``max_mds``
    during troubleshooting or recovery might not help. Instead, it might
@@ -96,14 +96,14 @@ system) cannot be removed.
 Rename a Ceph file system. This also changes the application tags on the data
 pools and metadata pool of the file system to the new file system name.
 The CephX IDs authorized to the old file system name need to be reauthorized
-to the new name. Any on-going operations of the clients using these IDs may be
+to the new name. Any ongoing operations of the clients using these IDs may be
 disrupted. Mirroring is expected to be disabled on the file system.
 
 ::
 
     fs swap <fs1-name> <fs1_id> <fs2-name> <fs2_id> [--swap-fscids=yes|no] [--yes-i-really-mean-it]
 
-Swaps names of two Ceph file sytems and updates the application tags on all
+Swaps names of two Ceph file systems and updates the application tags on all
 pools of both FSs accordingly. Certain tools that track FSCIDs of the file
 systems, besides the FS names, might get confused due to this operation. For
 this reason, mandatory option ``--swap-fscids`` has been provided that must be
@@ -113,7 +113,7 @@ used to indicate whether or not FSCIDs must be swapped.
 
 Before the swap, mirroring should be disabled on both the CephFSs
 (because the cephfs-mirror daemon uses the fscid internally and changing it
-while the daemon is running could result in undefined behaviour), both the
+while the daemon is running could result in undefined behavior), both the
 CephFSs should be offline and the file system flag ``refuse_client_sessions``
 must be set for both the CephFS.
 
@@ -128,7 +128,7 @@ file system as soon as it is seen to not exist.
 
 After the swap, CephX credentials may need to be reauthorized if the existing
 mounts should "follow" the old file system to its new name. Generally, for
-disaster recovery, its desirable for the existing mounts to continue using
+disaster recovery, it is desirable for the existing mounts to continue using
 the same file system name. Any active file system mounts for either CephFSs
 must remount. Existing unflushed operations will be lost. When it is judged
 that one of the swapped file systems is ready for clients, run::
@@ -478,6 +478,6 @@ pools. Non-zero ranks are saved in the stopped set.
 
 This command creates a file system with a specific **fscid** (file system cluster ID).
 You may want to do this when an application expects the file system's ID to be
-stable after it has been recovered, e.g., after monitor databases are lost and
+stable after it has been recovered, e.g., after Monitor databases are lost and
 rebuilt. Consequently, file system IDs don't always keep increasing with newer
 file systems.
