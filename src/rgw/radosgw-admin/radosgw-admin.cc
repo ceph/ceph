@@ -3888,10 +3888,6 @@ int main(int argc, const char **argv)
 #ifdef WITH_RADOSGW_RADOS
   bool have_max_bucket_index_ops = false;
   bool have_max_metadata_ops = false;
-  std::string allow_bucket_list_file;
-  std::string deny_bucket_list_file;
-  std::string allow_storage_class_list_file;
-  std::string deny_storage_class_list_file;
 #endif
   int include_all = false;
   int allow_unordered = false;
@@ -4248,14 +4244,6 @@ int main(int argc, const char **argv)
       }
 #ifdef WITH_RADOSGW_RADOS
       have_max_metadata_ops = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--allow-bucket-list", (char*)NULL)) {
-      allow_bucket_list_file = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--deny-bucket-list", (char*)NULL)) {
-      deny_bucket_list_file = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--allow-storage-class-list", (char*)NULL)) {
-      allow_storage_class_list_file = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--deny-storage-class-list", (char*)NULL)) {
-      deny_storage_class_list_file = val;
 #endif
     } else if (ceph_argparse_witharg(args, i, &val, "--date", "--time", (char*)NULL)) {
       date = val;
