@@ -56,7 +56,6 @@ private:
   mutable std::shared_mutex counters_mutex;
   
   // Track raw pointers for proper cleanup
-  std::unordered_map<std::string, PerfCounters*> user_perf_counters;
   std::unordered_map<std::string, PerfCounters*> bucket_perf_counters;
   
   PerfCounters* global_counters;
@@ -71,7 +70,6 @@ private:
   std::chrono::seconds refresh_interval{1200};
   
   void create_global_counters();
-  PerfCounters* create_user_counters(const std::string& user_id);
   PerfCounters* create_bucket_counters(const std::string& bucket_name,
                                        const std::string& tenant,
                                        const std::string& owner);

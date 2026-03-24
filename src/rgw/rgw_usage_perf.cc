@@ -73,34 +73,6 @@ void UsagePerfCounters::create_global_counters() {
   cct->get_perfcounters_collection()->add(global_counters);
 }
 
-PerfCounters* UsagePerfCounters::create_user_counters(const std::string& user_id) {
-
-  std::string name = ceph::perf_counters::key_create("rgw_user_usage", {
-      {"owner", user_id},
-  });
-
-  // Create a separate enum range for user-specific counters
-  enum {
-    l_rgw_user_first = 930000,  // Different range from main counters
-    l_rgw_user_bytes,
-    l_rgw_user_objects,
-    l_rgw_user_last
-  };
-
-  PerfCountersBuilder b(cct, name, l_rgw_user_first, l_rgw_user_last);
-  b.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
-
-  b.add_u64(l_rgw_user_bytes, "used_bytes",
-           "Bytes used by user", nullptr, 0, unit_t(UNIT_BYTES));
-  b.add_u64(l_rgw_user_objects, "num_objects",
-           "Number of objects owned by user", nullptr, 0, unit_t(0));
-
-  PerfCounters* counters = b.create_perf_counters();
-  cct->get_perfcounters_collection()->add(counters);
-
-  return counters;
-}
-
 PerfCounters* UsagePerfCounters::create_bucket_counters(const std::string& bucket_name,
                                                         const std::string& tenant,
                                                         const std::string& owner) {
@@ -121,9 +93,9 @@ PerfCounters* UsagePerfCounters::create_bucket_counters(const std::string& bucke
 
   PerfCountersBuilder b(cct, name, l_rgw_bucket_first, l_rgw_bucket_last);
   b.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
-  b.add_u64(l_rgw_bucket_bytes, "used_bytes",
+  b.add_u64(l_rgw_bucket_bytes, "bytes",
            "Bytes used in bucket", nullptr, 0, unit_t(UNIT_BYTES));
-  b.add_u64(l_rgw_bucket_objects, "num_objects",
+  b.add_u64(l_rgw_bucket_objects, "objects",
            "Number of objects in bucket", nullptr, 0, unit_t(0));
 
   PerfCounters* counters = b.create_perf_counters();
@@ -160,29 +132,6 @@ void UsagePerfCounters::start() {
       cache_was_empty = true;
     }
     for (const auto& [user_id, stats] : all_users) {
-      // Create perf counter if needed
-      {
-        std::unique_lock lock(counters_mutex);
-        auto it = user_perf_counters.find(user_id);
-        if (it == user_perf_counters.end()) {
-          PerfCounters* counters = create_user_counters(user_id);
-          if (counters) {
-            user_perf_counters[user_id] = counters;
-            it = user_perf_counters.find(user_id);
-            ldout(cct, 15) << "Created perf counter for user " << user_id << dendl;
-          }
-        }
-        
-        // Set values directly on perf counter
-        if (it != user_perf_counters.end() && it->second) {
-          it->second->set(930001, stats.bytes_used);   // l_rgw_user_bytes
-          it->second->set(930002, stats.num_objects);  // l_rgw_user_objects
-          ldout(cct, 15) << "Set perf counter for user " << user_id 
-                         << " bytes=" << stats.bytes_used 
-                         << " objects=" << stats.num_objects << dendl;
-        }
-      }
-      
       // Mark as active for refresh worker
       mark_user_active(user_id);
     }
@@ -407,13 +356,6 @@ void UsagePerfCounters::shutdown() {
     
     auto* collection = cct->get_perfcounters_collection();
     
-    // Remove and delete user counters
-    for (auto& [_, counters] : user_perf_counters) {
-      collection->remove(counters);
-      delete counters;
-    }
-    user_perf_counters.clear();
-    
     // Remove and delete bucket counters
     for (auto& [_, counters] : bucket_perf_counters) {
       collection->remove(counters);
@@ -470,9 +412,17 @@ void UsagePerfCounters::update_bucket_stats(const std::string& bucket_name,
   {
     std::unique_lock lock(counters_mutex);
     
+    std::string tenant_label;
+    std::string owner_label = user_id;
+    auto dollar_pos = user_id.find('$');
+    if (dollar_pos != std::string::npos) {
+      tenant_label = user_id.substr(0, dollar_pos);
+      owner_label  = user_id.substr(dollar_pos + 1);
+    }
+
     auto it = bucket_perf_counters.find(bucket_name);
     if (it == bucket_perf_counters.end()) {
-      PerfCounters* counters = create_bucket_counters(bucket_name, "", user_id);
+      PerfCounters* counters = create_bucket_counters(bucket_name, tenant_label, owner_label);
       if (counters) {
         bucket_perf_counters[bucket_name] = counters;
         it = bucket_perf_counters.find(bucket_name);
@@ -511,37 +461,6 @@ void UsagePerfCounters::update_user_stats(const std::string& user_id,
       ldout(cct, 5) << "Failed to update user cache: " << cpp_strerror(-ret) << dendl;
     }
   }
-  
-  // Define local enum
-  enum {
-    l_rgw_user_first = 930000,
-    l_rgw_user_bytes,
-    l_rgw_user_objects,
-    l_rgw_user_last
-  };
-  
-  // Update perf counters
-  {
-    std::unique_lock lock(counters_mutex);
-    
-    auto it = user_perf_counters.find(user_id);
-    if (it == user_perf_counters.end()) {
-      PerfCounters* counters = create_user_counters(user_id);
-      if (counters) {
-        user_perf_counters[user_id] = counters;
-        it = user_perf_counters.find(user_id);
-        ldout(cct, 15) << "Created perf counter for user " << user_id << dendl;
-      }
-    }
-    
-    if (it != user_perf_counters.end() && it->second) {
-      it->second->set(l_rgw_user_bytes, bytes_used);
-      it->second->set(l_rgw_user_objects, num_objects);
-      ldout(cct, 15) << "Set perf counter for user " << user_id 
-                     << " bytes=" << bytes_used 
-                     << " objects=" << num_objects << dendl;
-    }
-  }
 }
 
 void UsagePerfCounters::mark_bucket_active(const std::string& bucket_name,
@@ -562,7 +481,7 @@ void UsagePerfCounters::mark_bucket_active(const std::string& bucket_name,
     if (bucket_perf_counters.find(key) == bucket_perf_counters.end()) {
       PerfCounters* pc = create_bucket_counters(bucket_name, tenant , "");
       if (pc) {
-        bucket_perf_counters[key] = pc;
+        bucket_perf_counters[bucket_name] = pc;
       }
     }
   }
@@ -592,17 +511,6 @@ void UsagePerfCounters::mark_user_active(const std::string& user_id) {
   {
     std::lock_guard<std::mutex> lock(activity_mutex);
     active_users.insert(user_id);
-  }
-  
-  // Ensure perf counter exists
-  {
-    std::unique_lock lock(counters_mutex);
-    if (user_perf_counters.find(user_id) == user_perf_counters.end()) {
-      PerfCounters* pc = create_user_counters(user_id);
-      if (pc) {
-        user_perf_counters[user_id] = pc;
-      }
-    }
   }
   
   // Immediately update from cache
