@@ -1,0 +1,62 @@
+<cds-tile *ngIf="subsystem">
+  <h4 class="cds--type-heading-03 tile-title"
+      i18n>Subsystem details</h4>
+
+  <div class="details-grid">
+    <div class="detail-item">
+      <span class="cds--type-label-01"
+            i18n>Serial number</span>
+      <span class="cds--type-body-compact-01">{{ subsystem.serial_number }}</span>
+    </div>
+    <div class="detail-item">
+      <span class="cds--type-label-01"
+            i18n>Model Number</span>
+      <span class="cds--type-body-compact-01">{{ subsystem.model_number }}</span>
+    </div>
+    <div class="detail-item">
+      <span class="cds--type-label-01"
+            i18n>Gateway group</span>
+      <span class="cds--type-body-compact-01">{{ subsystem.gw_group || groupName }}</span>
+    </div>
+
+    <div class="detail-item">
+      <span class="cds--type-label-01"
+            i18n>Subsystem Type</span>
+      <span class="cds--type-body-compact-01">{{ subsystem.subtype }}</span>
+    </div>
+    <div class="detail-item">
+      <span class="cds--type-label-01"
+            i18n>HA Enabled</span>
+      <span class="cds--type-body-compact-01">{{ subsystem.enable_ha ? 'Yes' : 'No' }}</span>
+    </div>
+    <div class="detail-item">
+      <span class="cds--type-label-01"
+            i18n>Hosts allowed</span>
+      <span class="cds--type-body-compact-01">{{ subsystem.allow_any_host ? 'Any host' : 'Restricted' }}</span>
+    </div>
+
+    <div class="detail-item">
+      <span class="cds--type-label-01"
+            i18n>Maximum Controller Identifier</span>
+      <span class="cds--type-body-compact-01">{{ subsystem.max_cntlid }}</span>
+    </div>
+    <div class="detail-item">
+      <span class="cds--type-label-01"
+            i18n>Minimum Controller Identifier</span>
+      <span class="cds--type-body-compact-01">{{ subsystem.min_cntlid }}</span>
+    </div>
+    <div class="detail-item"></div>
+
+    <div class="detail-item">
+      <span class="cds--type-label-01"
+            i18n>Namespaces</span>
+      <span class="cds--type-body-compact-01">{{ subsystem.namespace_count }}</span>
+    </div>
+    <div class="detail-item">
+      <span class="cds--type-label-01"
+            i18n>Maximum allowed namespaces</span>
+      <span class="cds--type-body-compact-01">{{ subsystem.max_namespaces }}</span>
+    </div>
+    <div class="detail-item"></div>
+  </div>
+</cds-tile>

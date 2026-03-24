@@ -87,6 +87,10 @@ export enum Icons {
   nfsExport = 'fa fa-server', // NFS export
   userAccessLocked = 'user--access-locked', // User access locked
   chevronDown = 'chevron--down',
+  connect = 'connect',
+  checkmarkOutline = 'checkmark--outline',
+  circleDash = 'circle-dash',
+  datastore = 'datastore',
   /* Icons for special effect */
   large = 'fa fa-lg', // icon becomes 33% larger
   large2x = 'fa fa-2x', // icon becomes 50% larger
@@ -96,7 +100,7 @@ export enum Icons {
   stack2x = 'fa fa-stack-2x', // To stack regularly sized icon
   pulse = 'fa fa-pulse', // To have spinner rotate with 8 steps
   spin = 'fa fa-spin', //  To get any icon to rotate
-  inverse = 'fa fa-inverse' // To get an alternative icon color
+  inverse = 'fa fa-inverse', // To get an alternative icon color
 }
 
 export enum IconSize {
@@ -111,9 +115,19 @@ export const ICON_TYPE = {
   danger: 'warning--filled',
   infoCircle: 'information--filled',
   success: 'checkmark--filled',
-  warning: 'warning--alt--filled',
+  warning: 'warning',
+  warningAltFilled: 'warning--alt--filled',
   deploy: 'deploy',
   edit: 'edit',
   error: 'error--filled',
-  notification: 'notification'
+  notification: 'notification',
+  notificationOff: 'notification--off',
+  notificationNew: 'notification--new',
+  add: 'add',
+  emptySearch: 'emptySearch'
+} as const;
+
+export const EMPTY_STATE_IMAGE = {
+  default: 'assets/empty-state.png',
+  search: 'assets/empty-state-search.png'
 } as const;
