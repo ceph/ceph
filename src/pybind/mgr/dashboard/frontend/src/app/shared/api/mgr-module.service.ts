@@ -2,6 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import { Observable } from 'rxjs';
+import { MgrModuleInfo } from '../models/mgr-modules.interface';
 
 @Injectable({
   providedIn: 'root'
@@ -15,8 +16,8 @@ export class MgrModuleService {
    * Get the list of Ceph Mgr modules and their state (enabled/disabled).
    * @return {Observable<Object[]>}
    */
-  list(): Observable<Object[]> {
-    return this.http.get<Object[]>(`${this.url}`);
+  list(): Observable<MgrModuleInfo[]> {
+    return this.http.get<MgrModuleInfo[]>(`${this.url}`);
   }
 
   /**
