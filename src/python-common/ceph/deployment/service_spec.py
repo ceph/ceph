@@ -936,7 +936,7 @@ class ServiceSpec(object):
         sub_cls: Any = cls._cls(service_type)
         return object.__new__(sub_cls)
 
-    def __getnewargs__(self):
+    def __getnewargs__(self) -> tuple[str]:
         """
         Pickle will pass the return of this function to __new__ upon
         unpickle.  We need to ensure it gets service_type in order
