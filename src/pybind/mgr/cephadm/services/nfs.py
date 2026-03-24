@@ -147,6 +147,20 @@ class NFSService(CephService):
         if monitoring_ip:
             daemon_spec.port_ips.update({str(monitoring_port): monitoring_ip})
 
+        # expose optional NLM and MNT ports
+        if spec.nlm_port:
+            if daemon_spec.ports is None:
+                daemon_spec.ports = []
+            daemon_spec.ports.append(spec.nlm_port)
+            if bind_addr:
+                daemon_spec.port_ips[str(spec.nlm_port)] = bind_addr
+        if spec.mnt_port:
+            if daemon_spec.ports is None:
+                daemon_spec.ports = []
+            daemon_spec.ports.append(spec.mnt_port)
+            if bind_addr:
+                daemon_spec.port_ips[str(spec.mnt_port)] = bind_addr
+
         # generate the ganesha config
         def get_ganesha_conf() -> str:
             context: Dict[str, Any] = {
@@ -163,6 +177,8 @@ class NFSService(CephService):
                 "bind_addr": bind_addr,
                 "haproxy_hosts": [],
                 "nfs_idmap_conf": nfs_idmap_conf,
+                "nlm_port": spec.nlm_port,
+                "mnt_port": spec.mnt_port,
                 "enable_nlm": str(spec.enable_nlm).lower(),
                 "cluster_id": self.mgr._cluster_fsid,
                 "tls_add": spec.ssl,

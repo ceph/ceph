@@ -1342,6 +1342,8 @@ class NFSServiceSpec(ServiceSpec):
                  monitoring_ip_addrs: Optional[Dict[str, str]] = None,
                  monitoring_port: Optional[int] = None,
                  virtual_ip: Optional[str] = None,
+                 nlm_port: Optional[int] = None,
+                 mnt_port: Optional[int] = None,
                  enable_nlm: bool = False,
                  enable_haproxy_protocol: bool = False,
                  extra_container_args: Optional[GeneralArgList] = None,
@@ -1382,6 +1384,8 @@ class NFSServiceSpec(ServiceSpec):
         self.enable_haproxy_protocol = enable_haproxy_protocol
         self.idmap_conf = idmap_conf
         self.enable_nlm = enable_nlm
+        self.nlm_port = nlm_port
+        self.mnt_port = mnt_port
 
         # TLS fields
         self.tls_ciphers = tls_ciphers
