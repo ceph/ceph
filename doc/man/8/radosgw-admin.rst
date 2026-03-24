@@ -846,7 +846,7 @@ Options
 
     Specify a file to read when setting data.
 
-.. option:: --name
+.. option:: --script-name
 
     Specify a lua script name (default 'default').
 
