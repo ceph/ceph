@@ -104,6 +104,8 @@ std::shared_ptr<class DBOp> DB::getDBOp(const DoutPrefixProvider *dpp, std::stri
     return dbops.RemoveUser;
   if (!Op.compare("GetUser"))
     return dbops.GetUser;
+  if (!Op.compare("ListUsers"))
+    return dbops.ListUsers;
   if (!Op.compare("InsertBucket"))
     return dbops.InsertBucket;
   if (!Op.compare("UpdateBucket"))
@@ -425,6 +427,33 @@ int DB::remove_user(const DoutPrefixProvider *dpp,
   if (ret) {
     ldpp_dout(dpp, 0)<<"remove_user failed with err:(" <<ret<<") " << dendl;
     goto out;
+  }
+
+out:
+  return ret;
+}
+
+int DB::list_users(const DoutPrefixProvider *dpp,
+        const std::string& marker,
+        uint64_t max,
+        std::list<std::string>& keys,
+        bool *is_truncated)
+{
+  int ret = 0;
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+
+  params.op.user.uinfo.user_id = marker;
+  params.op.list_max_count = max;
+
+  ret = ProcessOp(dpp, "ListUsers", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0) << "list_users failed with err:(" << ret <<") " << dendl;
+    goto out;
+  }
+  for (auto& entry : params.op.user.list_entries) {
+    keys.push_back(entry.user_id.to_str());
   }
 
 out:

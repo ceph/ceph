@@ -17,6 +17,7 @@
 
 #include "rgw_sal_filter.h"
 #include "rgw_sal_store.h"
+#include "rgw_quota.h"
 #include <cstdint>
 #include <memory>
 #include "common/dout.h"
@@ -482,6 +483,7 @@ protected:
   std::unique_ptr<Directory> root_dir;
   int root_fd;
   RGWSyncModuleInstanceRef sync_module;
+  RGWQuotaHandler* quota_handler{nullptr};
 
 public:
   POSIXDriver(CephContext *_cct) : StoreDriver(), cct(_cct), zone(this)
@@ -708,9 +710,9 @@ public:
 			     std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) override { return 0; }
   virtual int trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y) override { return 0; }
   virtual int get_config_key_val(std::string name, bufferlist* bl) override { return -ENOTSUP; }
-  virtual int meta_list_keys_init(const DoutPrefixProvider *dpp, const std::string& section, const std::string& marker, void** phandle) override { return 0; }
-  virtual int meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, std::list<std::string>& keys, bool* truncated) override { return 0; }
-  virtual void meta_list_keys_complete(void* handle) override { return; }
+  virtual int meta_list_keys_init(const DoutPrefixProvider *dpp, const std::string& section, const std::string& marker, void** phandle) override;
+  virtual int meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, std::list<std::string>& keys, bool* truncated) override;
+  virtual void meta_list_keys_complete(void* handle) override;
   virtual std::string meta_get_marker(void* handle) override { return ""; }
   virtual int meta_remove(const DoutPrefixProvider* dpp, std::string& metadata_key, optional_yield y) override { return 0; }
   virtual const RGWSyncModuleInstanceRef& get_sync_module() override { return sync_module; }
@@ -771,7 +773,7 @@ public:
   virtual const std::string& get_compression_type(const rgw_placement_rule& rule) override;
   virtual bool valid_placement(const rgw_placement_rule& rule) override { return true; } 
 
-  virtual void finalize(void) override {}
+  virtual void finalize(void) override;
 
   virtual CephContext* ctx(void) override { return userDB->ctx(); }
 
@@ -788,6 +790,8 @@ public:
    * by inotify or similar */
   int mint_listing_entry(
     const std::string& bucket, rgw_bucket_dir_entry& bde /* OUT */);
+
+  RGWQuotaHandler* get_quota_handler() {return quota_handler;}
 };
 
 class POSIXNotification : public StoreNotification {

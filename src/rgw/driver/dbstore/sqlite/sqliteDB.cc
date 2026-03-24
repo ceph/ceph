@@ -436,6 +436,7 @@ static int list_user(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *
   op.user.user_version.ver = sqlite3_column_int(stmt, UserVersion);
   op.user.user_version.tag = (const char*)sqlite3_column_text(stmt, UserVersionTag);
 
+  op.user.list_entries.push_back(op.user.uinfo);
   return 0;
 }
 
@@ -630,6 +631,7 @@ int SQLiteDB::InitializeDBOps(const DoutPrefixProvider *dpp)
   dbops.InsertUser = make_shared<SQLInsertUser>(&this->db, this->getDBname(), cct);
   dbops.RemoveUser = make_shared<SQLRemoveUser>(&this->db, this->getDBname(), cct);
   dbops.GetUser = make_shared<SQLGetUser>(&this->db, this->getDBname(), cct);
+  dbops.ListUsers = make_shared<SQLListUsers>(&this->db, this->getDBname(), cct);
   dbops.InsertBucket = make_shared<SQLInsertBucket>(&this->db, this->getDBname(), cct);
   dbops.UpdateBucket = make_shared<SQLUpdateBucket>(&this->db, this->getDBname(), cct);
   dbops.RemoveBucket = make_shared<SQLRemoveBucket>(&this->db, this->getDBname(), cct);
@@ -1550,6 +1552,48 @@ int SQLGetUser::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params
   } else { // by default by userid
     SQL_EXECUTE(dpp, params, stmt, list_user);
   }
+
+out:
+  return ret;
+}
+
+int SQLListUsers::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (!*sdb) {
+    ldpp_dout(dpp, 0)<<"In SQLListUsers - no db" << dendl;
+    goto out;
+  }
+
+  InitPrepareParams(dpp, p_params, params);
+
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareListUsers");
+out:
+  return ret;
+}
+
+int SQLListUsers::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_id, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.list_max_count, sdb);
+  SQL_BIND_INT(dpp, stmt, index, params->op.list_max_count, sdb);
+out:
+  return rc;
+}
+
+int SQLListUsers::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  SQL_EXECUTE(dpp, params, stmt, list_user);
 
 out:
   return ret;
