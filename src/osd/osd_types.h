@@ -1142,6 +1142,7 @@ public:
      * completion if there are no other in progress writes.
      */
     PCT_UPDATE_DELAY,
+    NUM_ZONES,  // number of zones for the pool
   };
 
   enum type_t {

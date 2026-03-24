@@ -708,6 +708,18 @@ public:
     return k + m;
   }
 
+  unsigned int get_pool_size() const {
+    ceph_assert(pool);
+    return pool->size;
+  }
+
+  unsigned int get_num_zones() const {
+    ceph_assert(pool);
+    int64_t num_zones = 0;
+    pool->opts.get(pool_opts_t::NUM_ZONES, &num_zones);
+    return num_zones > 0 ? num_zones : 0;
+  }
+
   const shard_id_t get_shard(const raw_shard_id_t raw_shard) const {
     return chunk_mapping[int(raw_shard)];
   }
@@ -716,9 +728,52 @@ public:
     return chunk_mapping_reverse.at(int(shard));
   }
 
+  shard_id_t get_shard_base(shard_id_t shard) const {
+    int k_plus_m = get_k_plus_m();
+    // Fast path for common case (id < k+m), also handles negative shards
+    if (std::cmp_less(shard.id, k_plus_m)) {
+      return shard;
+    }
+    // Modern compilers optimize % well on recent CPUs
+    return shard_id_t(shard.id % k_plus_m);
+  }
+
+  int get_shard_zone(shard_id_t shard) const {
+    int k_plus_m = get_k_plus_m();
+    // Fast path for common case (id < k+m)
+    if (std::cmp_less(shard.id, k_plus_m)) {
+      return 0;
+    }
+    // Modern compilers optimize / well on recent CPUs
+    return shard.id / k_plus_m;
+  }
+
+  std::pair<shard_id_t, int> get_shard_base_and_zone(shard_id_t shard) const {
+    int k_plus_m = get_k_plus_m();
+    // Fast path for common case (id < k+m), also handles negative shards
+    if (std::cmp_less(shard.id, k_plus_m)) {
+      return std::make_pair(shard, 0);
+    }
+    // Modern compilers optimize % and / well on recent CPUs
+    return std::make_pair(shard_id_t(shard.id % k_plus_m), shard.id / k_plus_m);
+  }
+
   /* Return a "span" - which can be iterated over */
   auto get_data_shards() const {
     return data_shards;
+  }
+
+  /* Return data shards repeated across all zones */
+  shard_id_set get_data_shards_all_zones() const {
+    shard_id_set result = data_shards;
+    
+    // Repeat data_shards every k+m shards across all zones
+    for (unsigned int zone = 1; zone < get_num_zones(); ++zone) {
+      result <<= get_k_plus_m();
+      result.insert(data_shards);
+    }
+    
+    return result;
   }
 
   auto get_parity_shards() const {

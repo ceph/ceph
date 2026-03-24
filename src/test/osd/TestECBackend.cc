@@ -23,279 +23,9 @@
 #include "osd/osd_types.h"
 #include "common/ceph_argparse.h"
 #include "erasure-code/ErasureCode.h"
+#include "test/osd/MockErasureCode.h"
 
 using namespace std;
-
-TEST(ECUtil, stripe_info_t)
-{
-  const uint64_t swidth = 4096;
-  const unsigned int k = 4;
-  const unsigned int m = 2;
-
-  ECUtil::stripe_info_t s(k, m, swidth);
-  ASSERT_EQ(s.get_stripe_width(), swidth);
-
-  ASSERT_EQ(s.ro_offset_to_next_chunk_offset(0), 0u);
-  ASSERT_EQ(s.ro_offset_to_next_chunk_offset(1), s.get_chunk_size());
-  ASSERT_EQ(s.ro_offset_to_next_chunk_offset(swidth - 1),
-	    s.get_chunk_size());
-
-  ASSERT_EQ(s.ro_offset_to_prev_chunk_offset(0), 0u);
-  ASSERT_EQ(s.ro_offset_to_prev_chunk_offset(swidth), s.get_chunk_size());
-  ASSERT_EQ(s.ro_offset_to_prev_chunk_offset((swidth * 2) - 1),
-	    s.get_chunk_size());
-
-  ASSERT_EQ(s.ro_offset_to_next_stripe_ro_offset(0), 0u);
-  ASSERT_EQ(s.ro_offset_to_next_stripe_ro_offset(swidth - 1),
-	    s.get_stripe_width());
-
-  ASSERT_EQ(s.ro_offset_to_prev_stripe_ro_offset(swidth), s.get_stripe_width());
-  ASSERT_EQ(s.ro_offset_to_prev_stripe_ro_offset(swidth), s.get_stripe_width());
-  ASSERT_EQ(s.ro_offset_to_prev_stripe_ro_offset((swidth * 2) - 1),
-	    s.get_stripe_width());
-
-  ASSERT_EQ(s.aligned_ro_offset_to_chunk_offset(2*swidth),
-	    2*s.get_chunk_size());
-  ASSERT_EQ(s.shard_offset_to_ro_offset(shard_id_t(0), 2*s.get_chunk_size()),
-	    2*s.get_stripe_width());
-
-  // Stripe 1 + 1 chunk for 10 stripes needs to read 11 stripes starting
-  // from 1 because there is a partial stripe at the start and end
-  ASSERT_EQ(s.chunk_aligned_ro_range_to_shard_ro_range(swidth+s.get_chunk_size(), 10*swidth),
-	    make_pair(s.get_chunk_size(), 11*s.get_chunk_size()));
-
-  // Stripe 1 + 0 chunks for 10 stripes needs to read 10 stripes starting
-  // from 1 because there are no partial stripes
-  ASSERT_EQ(s.chunk_aligned_ro_range_to_shard_ro_range(swidth, 10*swidth),
-	    make_pair(s.get_chunk_size(), 10*s.get_chunk_size()));
-
-  // Stripe 0 + 1 chunk for 10 stripes needs to read 11 stripes starting
-  // from 0 because there is a partial stripe at the start and end
-  ASSERT_EQ(s.chunk_aligned_ro_range_to_shard_ro_range(s.get_chunk_size(), 10*swidth),
-	    make_pair<uint64_t>(0, 11*s.get_chunk_size()));
-
-  // Stripe 0 + 1 chunk for (10 stripes + 1 chunk) needs to read 11 stripes
-  // starting from 0 because there is a partial stripe at the start and end
-  ASSERT_EQ(s.chunk_aligned_ro_range_to_shard_ro_range(s.get_chunk_size(),
-							  10*swidth + s.get_chunk_size()),
-	    make_pair<uint64_t>(0, 11*s.get_chunk_size()));
-
-  // Stripe 0 + 2 chunks for (10 stripes + 2 chunks) needs to read 11 stripes
-  // starting from 0 because there is a partial stripe at the start
-  ASSERT_EQ(s.chunk_aligned_ro_range_to_shard_ro_range(2*s.get_chunk_size(),
-    10*swidth + 2*s.get_chunk_size()),
-    make_pair<uint64_t>(0, 11*s.get_chunk_size()));
-
-  ASSERT_EQ(s.ro_offset_len_to_stripe_ro_offset_len(swidth-10, (uint64_t)20),
-            make_pair((uint64_t)0, 2*swidth));
-}
-
-class ErasureCodeDummyImpl : public ErasureCodeInterface {
-public:
-
-  uint64_t get_supported_optimizations() const override {
-    return FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
-          FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION |
-          FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION |
-          FLAG_EC_PLUGIN_ZERO_PADDING_OPTIMIZATION |
-          FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION;
-  }
-
-  ErasureCodeProfile _profile;
-  const std::vector<shard_id_t> chunk_mapping = {}; // no remapping
-  std::vector<std::pair<int, int>> default_sub_chunk = {std::pair(0,1)};
-  int data_chunk_count = 4;
-  int chunk_count = 6;
-
-  int init(ErasureCodeProfile &profile, std::ostream *ss) override {
-    return 0;
-  }
-
-  const ErasureCodeProfile &get_profile() const override {
-    return _profile;
-  }
-
-  int create_rule(const string &name, CrushWrapper &crush, std::ostream *ss) const override {
-    return 0;
-  }
-
-  unsigned int get_chunk_count() const override {
-    return chunk_count;
-  }
-
-  unsigned int get_data_chunk_count() const override {
-    return data_chunk_count;
-  }
-
-  unsigned int get_coding_chunk_count() const override {
-    return 0;
-  }
-
-  int get_sub_chunk_count() override {
-    return 1;
-  }
-
-  unsigned int get_chunk_size(unsigned int stripe_width) const override {
-    return 0;
-  }
-
-  int minimum_to_decode(const shard_id_set &want_to_read, const shard_id_set &available,
-                        shard_id_set &minimum_set,
-			shard_id_map<std::vector<std::pair<int, int>>> *minimum_sub_chunks) override {
-    bool recover = false;
-    for (shard_id_t shard : want_to_read) {
-      if (available.contains(shard)) {
-        minimum_set.insert(shard);
-      } else {
-        recover = true;
-        break;
-      }
-    }
-
-    if (recover) {
-      minimum_set.clear();
-
-      // Shard is missing.  Recover with every other shard and one parity
-      // for each missing shard.
-      for (auto a : available) {
-        minimum_set.insert(a);
-        if (std::cmp_equal(minimum_set.size(), data_chunk_count)) {
-          break;
-        }
-      }
-
-      if (std::cmp_not_equal(minimum_set.size(), data_chunk_count)) {
-        minimum_set.clear();
-        return -EIO; // Cannot recover.
-      }
-    }
-
-    for (auto &&shard : minimum_set) {
-      minimum_sub_chunks->emplace(shard, default_sub_chunk);
-    }
-    return 0;
-  }
-  [[deprecated]]
-  int minimum_to_decode(const std::set<int> &want_to_read,
-    const std::set<int> &available,
-    std::map<int, std::vector<std::pair<int, int>>> *minimum) override
-  {
-    ADD_FAILURE();
-    return 0;
-  }
-
-  [[deprecated]]
-  int minimum_to_decode_with_cost(const std::set<int> &want_to_read,
-      const std::map<int, int> &available, std::set<int> *minimum) override {
-    ADD_FAILURE();
-    return 0;
-  }
-
-  int minimum_to_decode_with_cost(const shard_id_set &want_to_read, const shard_id_map<int> &available,
-                                shard_id_set *minimum) override {
-    return 0;
-  }
-
-  int encode(const shard_id_set &want_to_encode, const bufferlist &in, shard_id_map<bufferlist> *encoded) override {
-    return 0;
-  }
-
-  [[deprecated]]
-  int encode(const std::set<int> &want_to_encode, const bufferlist &in
-    , std::map<int, bufferlist> *encoded) override
-  {
-    ADD_FAILURE();
-    return 0;
-  }
-
-  [[deprecated]]
-  int encode_chunks(const std::set<int> &want_to_encode,
-                    std::map<int, bufferlist> *encoded) override
-  {
-    ADD_FAILURE();
-    return 0;
-  }
-
-  int encode_chunks(const shard_id_map<bufferptr> &in, shard_id_map<bufferptr> &out) override {
-    return 0;
-  }
-
-  int decode(const shard_id_set &want_to_read, const shard_id_map<bufferlist> &chunks, shard_id_map<bufferlist> *decoded,
-	     int chunk_size) override {
-    return 0;
-  }
-
-  [[deprecated]]
-  int decode(const std::set<int> &want_to_read, const std::map<int, bufferlist> &chunks,
-    std::map<int, bufferlist> *decoded, int chunk_size) override
-  {
-    ADD_FAILURE();
-    return 0;
-  }
-
-  [[deprecated]]
-  int decode_chunks(const std::set<int> &want_to_read,
-                    const std::map<int, bufferlist> &chunks,
-                    std::map<int, bufferlist> *decoded) override {
-    ADD_FAILURE();
-    return 0;
-  }
-
-  int decode_chunks(const shard_id_set &want_to_read,
-                    shard_id_map<bufferptr> &in, shard_id_map<bufferptr> &out) override
-  {
-    if (std::cmp_less(in.size(), data_chunk_count)) {
-      ADD_FAILURE();
-    }
-    uint64_t len = 0;
-    for (auto &&[shard, bp] : in) {
-      if (len == 0) {
-        len = bp.length();
-      } else if (len != bp.length()) {
-        ADD_FAILURE();
-      }
-    }
-    if (len == 0) {
-      ADD_FAILURE();
-    }
-    if (out.size() == 0) {
-      ADD_FAILURE();
-    }
-    for (auto &&[shard, bp] : out) {
-      if (len != bp.length()) {
-        ADD_FAILURE();
-      }
-      if (bp.is_zero_fast()) {
-        ADD_FAILURE();
-      }
-    }
-    return 0;
-  }
-
-  const vector<shard_id_t> &get_chunk_mapping() const override {
-    return chunk_mapping;
-  }
-
-  [[deprecated]]
-  int decode_concat(const std::set<int> &want_to_read,
-                    const std::map<int, bufferlist> &chunks, bufferlist *decoded) override {
-    ADD_FAILURE();
-    return 0;
-  }
-
-  [[deprecated]]
-  int decode_concat(const std::map<int, bufferlist> &chunks,
-                    bufferlist *decoded) override {
-    ADD_FAILURE();
-    return 0;
-  }
-
-  size_t get_minimum_granularity() override { return 0; }
-  void encode_delta(const bufferptr &old_data, const bufferptr &new_data
-    , bufferptr *delta) override {}
-  void apply_delta(const shard_id_map<bufferptr> &in
-    , shard_id_map<bufferptr> &out) override {}
-};
 
 class ECListenerStub : public ECListener {
 
@@ -547,7 +277,7 @@ TEST(ECCommon, get_min_want_to_read_shards)
   ASSERT_EQ(s.get_chunk_size(), csize);
 
   const std::vector<int> chunk_mapping = {}; // no remapping
-  ErasureCodeInterfaceRef ec_impl(new ErasureCodeDummyImpl);
+  ErasureCodeInterfaceRef ec_impl(new MockErasureCode);
   ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
 
   ECUtil::shard_extent_set_t empty_extent_set_map(s.get_k_plus_m());
@@ -797,7 +527,7 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
   ASSERT_EQ(s.get_chunk_size(), swidth / k);
 
   const std::vector<int> chunk_mapping = {}; // no remapping
-  ErasureCodeDummyImpl *ecode = new ErasureCodeDummyImpl();
+  MockErasureCode *ecode = new MockErasureCode();
   ErasureCodeInterfaceRef ec_impl(ecode);
   ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
 
@@ -833,7 +563,6 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     ECCommon::read_request_t ref(to_read_list, false, object_size);
     for (shard_id_t shard_id; shard_id < k; ++shard_id) {
       ref.shard_reads[shard_id].extents = to_read_list[shard_id];
-      ref.shard_reads[shard_id].subchunk = ecode->default_sub_chunk;
       ref.shard_reads[shard_id].pg_shard = pg_shard_t(int(shard_id));
       ref.shard_reads[shard_id].pg_shard = pg_shard_t(int(shard_id), shard_id);
     }
@@ -857,7 +586,6 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     for (shard_id_t i; i<k; ++i) {
       shard_id_t shard_id(i);
       ref.shard_reads[shard_id].extents = to_read_list[i];
-      ref.shard_reads[shard_id].subchunk = ecode->default_sub_chunk;
       ref.shard_reads[shard_id].pg_shard = pg_shard_t(int(i), shard_id);
     }
 
@@ -878,7 +606,6 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     for (int i=0; i < (int)k; i++) {
       shard_id_t shard_id(i);
       ECCommon::shard_read_t &ref_shard_read = ref.shard_reads[shard_id];
-      ref_shard_read.subchunk = ecode->default_sub_chunk;
       ref_shard_read.extents.insert(i*2*align_size, align_size);
       ref_shard_read.pg_shard = pg_shard_t(i, shard_id_t(i));
     }
@@ -908,15 +635,13 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     for (shard_id_t i; i<k; ++i) {
       if (i != missing_shard) {
         shard_id_t shard_id(i);
-	to_read_list[i].union_of(to_read_list[missing_shard]);
-        ref.shard_reads[shard_id].subchunk = ecode->default_sub_chunk;
-	ref.shard_reads[shard_id].extents = to_read_list[i];
+        to_read_list[i].union_of(to_read_list[missing_shard]);
+        ref.shard_reads[shard_id].extents = to_read_list[i];
         ref.shard_reads[shard_id].pg_shard = pg_shard_t(int(i), shard_id);
       } else {
-	ECCommon::shard_read_t parity_shard_read;
-	parity_shard_read.subchunk = ecode->default_sub_chunk;
-	parity_shard_read.extents.union_of(to_read_list[i]);
-	ref.shard_reads[shard_id_t(parity_shard)] = parity_shard_read;
+        ECCommon::shard_read_t parity_shard_read;
+        parity_shard_read.extents.union_of(to_read_list[i]);
+        ref.shard_reads[shard_id_t(parity_shard)] = parity_shard_read;
         ref.shard_reads[shard_id_t(parity_shard)].pg_shard = pg_shard_t(parity_shard, shard_id_t(parity_shard));
       }
     }
@@ -950,12 +675,6 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     ref.shard_reads[shard_id_t(2)].pg_shard = pg_shard_t(2, shard_id_t(2));
     ref.shard_reads[shard_id_t(3)].pg_shard = pg_shard_t(3, shard_id_t(3));
     ref.shard_reads[shard_id_t(4)].pg_shard = pg_shard_t(4, shard_id_t(4));
-    for (unsigned int i=0; i<k+1; i++) {
-      if (i==missing_shard) {
-	continue;
-      }
-      ref.shard_reads[shard_id_t(i)].subchunk = ecode->default_sub_chunk;
-    }
 
     listenerStub.acting_shards.erase(pg_shard_t(missing_shard, shard_id_t(missing_shard)));
 
@@ -983,7 +702,6 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     ECCommon::read_request_t ref(to_read_list, false, object_size);
     for (unsigned int i=0; i<k+2; i++) {
       ECCommon::shard_read_t shard_read;
-      shard_read.subchunk = ecode->default_sub_chunk;
       shard_read.extents = extents_to_read;
       shard_read.pg_shard = pg_shard_t(i, shard_id_t(i));
       ref.shard_reads[shard_id_t(i)] = shard_read;
@@ -1014,14 +732,12 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     std::vector<ECCommon::shard_read_t> want_to_read(empty_shard_vector);
     for (shard_id_t i; i<k; ++i) {
       if (i != missing_shard) {
-        want_to_read[int(i)].subchunk = ecode->default_sub_chunk;
         want_to_read[int(i)].extents.union_of(to_read_list[missing_shard]);
         want_to_read[int(i)].extents.union_of(to_read_list[i]);
         want_to_read[int(i)].pg_shard = pg_shard_t(int(i), shard_id_t(i));
         ref.shard_reads[shard_id_t(i)] = want_to_read[int(i)];
       } else {
         ECCommon::shard_read_t parity_shard_read;
-        parity_shard_read.subchunk = ecode->default_sub_chunk;
         parity_shard_read.extents.union_of(to_read_list[missing_shard]);
         parity_shard_read.pg_shard = pg_shard_t(parity_shard, shard_id_t(parity_shard));
         ref.shard_reads[shard_id_t(parity_shard)] = parity_shard_read;
@@ -1050,7 +766,7 @@ TEST(ECCommon, shard_read_combo_tests)
   ASSERT_EQ(s.get_chunk_size(), swidth/k);
 
   const std::vector<int> chunk_mapping = {}; // no remapping
-  ErasureCodeDummyImpl *ecode = new ErasureCodeDummyImpl();
+  MockErasureCode *ecode = new MockErasureCode();
   ErasureCodeInterfaceRef ec_impl(ecode);
   ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
 
@@ -1070,14 +786,12 @@ TEST(ECCommon, shard_read_combo_tests)
     ECCommon::read_request_t ref(want_to_read, false, object_size);
     {
       ECCommon::shard_read_t shard_read;
-      shard_read.subchunk = ecode->default_sub_chunk;
       shard_read.extents.insert(20*1024, 4*1024);
       shard_read.pg_shard = pg_shard_t(0, shard_id_t(0));
       ref.shard_reads[shard_id_t(0)] = shard_read;
     }
     {
       ECCommon::shard_read_t shard_read;
-      shard_read.subchunk = ecode->default_sub_chunk;
       shard_read.extents.insert(16*1024, 8*1024);
       shard_read.pg_shard = pg_shard_t(1, shard_id_t(1));
       ref.shard_reads[shard_id_t(1)] = shard_read;
@@ -1097,14 +811,12 @@ TEST(ECCommon, shard_read_combo_tests)
     ECCommon::read_request_t ref(want_to_read, false, object_size);
     {
       ECCommon::shard_read_t shard_read;
-      shard_read.subchunk = ecode->default_sub_chunk;
       shard_read.extents.insert(8*1024, 4*1024);
       shard_read.pg_shard = pg_shard_t(0, shard_id_t(0));
       ref.shard_reads[shard_id_t(0)] = shard_read;
     }
     {
       ECCommon::shard_read_t shard_read;
-      shard_read.subchunk = ecode->default_sub_chunk;
       shard_read.extents.insert(4*1024, 8*1024);
       shard_read.pg_shard = pg_shard_t(1, shard_id_t(1));
       ref.shard_reads[shard_id_t(1)] = shard_read;
@@ -1130,7 +842,7 @@ TEST(ECCommon, get_min_want_to_read_shards_bug67087)
   ASSERT_EQ(s.get_chunk_size(), csize);
 
   const std::vector<int> chunk_mapping = {}; // no remapping
-  ErasureCodeInterfaceRef ec_impl(new ErasureCodeDummyImpl);
+  ErasureCodeInterfaceRef ec_impl(new MockErasureCode);
   ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
 
   ECUtil::shard_extent_set_t want_to_read(s.get_k_plus_m());
@@ -1171,7 +883,7 @@ TEST(ECCommon, get_remaining_shards)
   ASSERT_EQ(s.get_chunk_size(), swidth/k);
 
   const std::vector<int> chunk_mapping = {}; // no remapping
-  ErasureCodeDummyImpl *ecode = new ErasureCodeDummyImpl();
+  MockErasureCode *ecode = new MockErasureCode();
   ErasureCodeInterfaceRef ec_impl(ecode);
   ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
 
@@ -1204,7 +916,6 @@ TEST(ECCommon, get_remaining_shards)
     int parity_shard = 4;
     for (unsigned int i=0; i<k; i++) {
       ECCommon::shard_read_t shard_read;
-      shard_read.subchunk = ecode->default_sub_chunk;
       shard_read.extents.insert(0,4096);
       unsigned int shard_id = std::cmp_equal(i, missing_shard) ? parity_shard : i;
       shard_read.pg_shard = pg_shard_t(shard_id, shard_id_t(shard_id));
@@ -1239,7 +950,6 @@ TEST(ECCommon, get_remaining_shards)
     int parity_shard = 4;
     for (unsigned int i=0; i<k; i++) {
       ECCommon::shard_read_t shard_read;
-      shard_read.subchunk = ecode->default_sub_chunk;
       unsigned int shard_id = i==missing_shard?parity_shard:i;
       ref.shard_reads[shard_id_t(shard_id)] = shard_read;
     }
@@ -1268,7 +978,7 @@ TEST(ECCommon, encode)
   ASSERT_EQ(s.get_chunk_size(), swidth/k);
 
   const std::vector<int> chunk_mapping = {}; // no remapping
-  ErasureCodeDummyImpl *ecode = new ErasureCodeDummyImpl();
+  MockErasureCode *ecode = new MockErasureCode();
   ErasureCodeInterfaceRef ec_impl(ecode);
   ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
 
@@ -1313,9 +1023,7 @@ void test_decode(unsigned int k, unsigned int m, uint64_t chunk_size, uint64_t o
   ASSERT_EQ(s.get_chunk_size(), swidth/k);
 
   const std::vector<int> chunk_mapping = {}; // no remapping
-  ErasureCodeDummyImpl *ecode = new ErasureCodeDummyImpl();
-  ecode->data_chunk_count = k;
-  ecode->chunk_count = k + m;
+  MockErasureCode *ecode = new MockErasureCode(k, k + m);
   ErasureCodeInterfaceRef ec_impl(ecode);
   ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
 
@@ -1508,4 +1216,406 @@ TEST(ECCommon, decode8) {
   acting_set.insert_range(shard_id_t(2), 2);
 
   test_decode(k, m, chunk_size, object_size, want, acting_set);
+}
+
+// Zone support tests for get_min_avail_to_read_shards
+TEST(ECCommon, get_min_avail_to_read_shards_zones_local_zone_available) {
+  // Test that when all shards are available in local zone, they are preferred
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const int nshards = 6;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12; // 2 zones with k+m shards each
+  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+  
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Set up shards in both zones (0-5 in zone 0, 6-11 in zone 1)
+  for (int i = 0; i < 12; i++) {
+    listenerStub.acting_shards.insert(pg_shard_t(i, shard_id_t(i)));
+  }
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+  
+  // Request reads from data shards in zone 0
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  ECCommon::read_request_t read_request(to_read_list, false, object_size);
+  int r = pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
+  
+  ASSERT_EQ(r, 0);
+  
+  // Verify that only local zone shards (0-5) are used
+  for (auto &[shard_id, shard_read] : read_request.shard_reads) {
+    ASSERT_LT(int(shard_id), nshards) << "Should only use local zone shards";
+    ASSERT_EQ(shard_read.pg_shard.shard, shard_id);
+  }
+}
+
+TEST(ECCommon, get_min_avail_to_read_shards_zones_fallback_to_remote) {
+  // Test that when local zone shards are missing, remote zone shards are used
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12; // 2 zones
+  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+  
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Only add shards from remote zone (6-11) and one from local zone
+  listenerStub.acting_shards.insert(pg_shard_t(0, shard_id_t(0))); // Local zone
+  for (int i = 6; i < 12; i++) {
+    listenerStub.acting_shards.insert(pg_shard_t(i, shard_id_t(i))); // Remote zone
+  }
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+  
+  // Request reads from all data shards
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  ECCommon::read_request_t read_request(to_read_list, false, object_size);
+  int r = pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
+  
+  ASSERT_EQ(r, 0);
+  
+  // Verify that remote zone shards are used (should have shards >= 6)
+  bool has_remote_shard = false;
+  for (auto &[shard_id, shard_read] : read_request.shard_reads) {
+    if (int(shard_read.pg_shard.shard) >= 6) {
+      has_remote_shard = true;
+      break;
+    }
+  }
+  ASSERT_TRUE(has_remote_shard) << "Should use remote zone shards when local unavailable";
+}
+
+TEST(ECCommon, get_min_avail_to_read_shards_zones_missing_shard_local) {
+  // Test handling of missing shard in local zone with zones enabled
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12;
+  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+  
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Add all local zone shards except shard 1
+  for (int i = 0; i < 6; i++) {
+    if (i != 1) {
+      listenerStub.acting_shards.insert(pg_shard_t(i, shard_id_t(i)));
+    }
+  }
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+  
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  ECCommon::read_request_t read_request(to_read_list, false, object_size);
+  int r = pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
+  
+  ASSERT_EQ(r, 0);
+  
+  // Should use parity shard to recover missing data shard
+  bool has_parity = false;
+  for (auto &[shard_id, shard_read] : read_request.shard_reads) {
+    if (std::cmp_greater_equal(int(shard_id), k)) {
+      has_parity = true;
+    }
+  }
+  ASSERT_TRUE(has_parity) << "Should use parity shard when data shard missing";
+}
+
+TEST(ECCommon, get_min_avail_to_read_shards_zones_error_shards) {
+  // Test that error_shards parameter works correctly with zones
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12;
+  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+  
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Add all shards from both zones
+  for (int i = 0; i < 12; i++) {
+    listenerStub.acting_shards.insert(pg_shard_t(i, shard_id_t(i)));
+  }
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+  
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  // Mark shard 1 as having an error
+  std::set<pg_shard_t> error_shards;
+  error_shards.emplace(1, shard_id_t(1));
+
+  ECCommon::read_request_t read_request(to_read_list, false, object_size);
+  int r = pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request, error_shards);
+  
+  ASSERT_EQ(r, 0);
+  
+  // Verify shard 1 is not in the read request
+  ASSERT_EQ(read_request.shard_reads.count(shard_id_t(1)), 0u) 
+    << "Error shard should not be in read request";
+}
+
+TEST(ECCommon, get_min_avail_to_read_shards_zones_three_zones) {
+  // Test with 3 zones
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 18; // 3 zones
+  pool.opts.set(pool_opts_t::NUM_ZONES, 3);
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+  
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Add shards from all three zones
+  for (int i = 0; i < 18; i++) {
+    listenerStub.acting_shards.insert(pg_shard_t(i, shard_id_t(i)));
+  }
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+  
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  ECCommon::read_request_t read_request(to_read_list, false, object_size);
+  int r = pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
+  
+  ASSERT_EQ(r, 0);
+  
+  // Should prefer local zone (0-5)
+  for (auto &[shard_id, shard_read] : read_request.shard_reads) {
+    ASSERT_LT(int(shard_id), 6) << "Should prefer local zone shards";
+  }
+}
+
+TEST(ECCommon, get_min_avail_to_read_shards_zones_insufficient_shards) {
+  // Test error case when not enough shards available even with zones
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12;
+  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+  
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Only add 2 shards - not enough to decode
+  listenerStub.acting_shards.insert(pg_shard_t(0, shard_id_t(0)));
+  listenerStub.acting_shards.insert(pg_shard_t(1, shard_id_t(1)));
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+  
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  ECCommon::read_request_t read_request(to_read_list, false, object_size);
+  int r = pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
+  
+  ASSERT_NE(r, 0) << "Should fail when insufficient shards available";
+}
+
+TEST(ECCommon, get_min_avail_to_read_shards_zones_redundant_reads) {
+  // Test redundant reads with zones enabled
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12;
+  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+  
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Add all local zone shards
+  for (int i = 0; i < 6; i++) {
+    listenerStub.acting_shards.insert(pg_shard_t(i, shard_id_t(i)));
+  }
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+  
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  ECCommon::read_request_t read_request(to_read_list, false, object_size);
+  // Enable redundant reads
+  int r = pipeline.get_min_avail_to_read_shards(hoid, false, true, read_request);
+  
+  ASSERT_EQ(r, 0);
+  
+  // With redundant reads, should read from all available shards
+  ASSERT_EQ(read_request.shard_reads.size(), 6u) 
+    << "Redundant reads should use all available shards";
+}
+
+TEST(ECCommon, get_min_avail_to_read_shards_zones_recovery_mode) {
+  // Test recovery mode with zones
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12;
+  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+  
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Add shards from both zones
+  for (int i = 0; i < 12; i++) {
+    listenerStub.acting_shards.insert(pg_shard_t(i, shard_id_t(i)));
+  }
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+  
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  ECCommon::read_request_t read_request(to_read_list, false, object_size);
+  // Enable recovery mode (for_recovery = true)
+  int r = pipeline.get_min_avail_to_read_shards(hoid, true, false, read_request);
+  
+  ASSERT_EQ(r, 0);
+  
+  // In recovery mode, should still prefer local zone
+  for (auto &[shard_id, shard_read] : read_request.shard_reads) {
+    ASSERT_LT(int(shard_id), 6) << "Recovery should prefer local zone";
+  }
+}
+
+TEST(ECCommon, get_min_avail_to_read_shards_zones_mixed_availability) {
+  // Test with mixed shard availability across zones
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12;
+  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+  
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Add some shards from local zone (0, 2, 4) and some from remote (7, 9, 11)
+  listenerStub.acting_shards.insert(pg_shard_t(0, shard_id_t(0)));
+  listenerStub.acting_shards.insert(pg_shard_t(2, shard_id_t(2)));
+  listenerStub.acting_shards.insert(pg_shard_t(4, shard_id_t(4)));
+  listenerStub.acting_shards.insert(pg_shard_t(7, shard_id_t(7)));
+  listenerStub.acting_shards.insert(pg_shard_t(9, shard_id_t(9)));
+  listenerStub.acting_shards.insert(pg_shard_t(11, shard_id_t(11)));
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+  
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  ECCommon::read_request_t read_request(to_read_list, false, object_size);
+  int r = pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
+  
+  ASSERT_EQ(r, 0);
+  
+  // Should use a mix, but prefer local when possible
+  int remote_count = 0;
+  for (auto &[shard_id, shard_read] : read_request.shard_reads) {
+    if (int(shard_read.pg_shard.shard) >= 6) {
+      remote_count++;
+    }
+  }
+  
+  // Should have used some remote shards since local doesn't have enough
+  ASSERT_GT(remote_count, 0) << "Should use remote shards when local insufficient";
 }
