@@ -17,6 +17,7 @@
 
 #include "rgw_sal_filter.h"
 #include "rgw_sal_store.h"
+#include "rgw_quota.h"
 #include <cstdint>
 #include <memory>
 #include "common/dout.h"
@@ -479,6 +480,7 @@ protected:
   std::unique_ptr<Directory> root_dir;
   int root_fd;
   RGWSyncModuleInstanceRef sync_module;
+  RGWQuotaHandler* quota_handler{nullptr};
 
 public:
   POSIXDriver(CephContext *_cct) : StoreDriver(), cct(_cct), zone(this)
@@ -765,7 +767,7 @@ public:
   virtual const std::string& get_compression_type(const rgw_placement_rule& rule) override;
   virtual bool valid_placement(const rgw_placement_rule& rule) override { return true; } 
 
-  virtual void finalize(void) override {}
+  virtual void finalize(void) override;
 
   virtual CephContext* ctx(void) override { return userDB->ctx(); }
 
@@ -782,6 +784,8 @@ public:
    * by inotify or similar */
   int mint_listing_entry(
     const std::string& bucket, rgw_bucket_dir_entry& bde /* OUT */);
+
+  RGWQuotaHandler* get_quota_handler() {return quota_handler;}
 };
 
 class POSIXNotification : public StoreNotification {
