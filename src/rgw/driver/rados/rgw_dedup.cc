@@ -2546,12 +2546,12 @@ namespace rgw::dedup {
     storage_class_idx_t sc_idx = remapper.remap(RGW_STORAGE_CLASS_STANDARD, dpp,
                                                 &p_stats->failed_map_overflow);
     ceph_assert(sc_idx != remapper_t::NULL_IDX);
-    uint32_t slab_count_arr[num_work_shards];
+    std::vector<uint32_t> slab_count_arr(num_work_shards);
     // first load all etags to hashtable to find dedups
     // the entries come from bucket-index and got minimal info (etag, size)
     for (work_shard_t worker_id = 0; worker_id < num_work_shards; worker_id++) {
       process_all_slabs(p_table, STEP_BUILD_TABLE, md5_shard, worker_id,
-                        slab_count_arr+worker_id, p_stats, nullptr, &remapper);
+                        slab_count_arr.data()+worker_id, p_stats, nullptr, &remapper);
       if (unlikely(d_ctl.should_stop())) {
         ldpp_dout(dpp, 5) << __func__ << "::STEP_BUILD_TABLE::STOPPED\n" << dendl;
         return -ECANCELED;
@@ -2583,7 +2583,7 @@ namespace rgw::dedup {
       disk_block_seq_t disk_block_seq(dpp, arr, num_work_shards, md5_shard, &wstat);
       for (work_shard_t worker_id = 0; worker_id < num_work_shards; worker_id++) {
         process_all_slabs(p_table, STEP_READ_ATTRIBUTES, md5_shard, worker_id,
-                          slab_count_arr+worker_id, p_stats, &disk_block_seq, &remapper);
+                          slab_count_arr.data()+worker_id, p_stats, &disk_block_seq, &remapper);
         if (unlikely(d_ctl.should_stop())) {
           ldpp_dout(dpp, 5) << __func__ << "::STEP_READ_ATTRIBUTES::STOPPED\n" << dendl;
           return -ECANCELED;

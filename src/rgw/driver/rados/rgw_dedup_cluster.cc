@@ -1030,10 +1030,10 @@ namespace rgw::dedup {
     {
       std::map<std::string, member_time_t> owner_map;
       bool show_time = true;
-      bufferlist bl_arr[num_work_shards];
-      shard_progress_t sp_arr[num_work_shards];
+      std::vector<bufferlist> bl_arr(num_work_shards);
+      std::vector<shard_progress_t> sp_arr(num_work_shards);
       int cnt = collect_shard_stats(store, dpp, epoch.time, num_work_shards,
-                                    WORKER_SHARD_PREFIX, bl_arr, sp_arr);
+                                    WORKER_SHARD_PREFIX, bl_arr.data(), sp_arr.data());
       if (cnt != num_work_shards && 0) {
         std::cerr << ">>>Partial work shard stats recived " << cnt << " / "
                   << num_work_shards << "\n" << std::endl;
@@ -1055,11 +1055,11 @@ namespace rgw::dedup {
           std::cerr << __func__ << "::(2)failed worker_stats_t decode #" << shard << std::endl;
           continue;
         }
-        collect_single_shard_stats(dpp, owner_map, sp_arr, shard, &show_time, "WORKER");
+        collect_single_shard_stats(dpp, owner_map, sp_arr.data(), shard, &show_time, "WORKER");
       }
       Formatter::ObjectSection worker_stats(*fmt, "worker_stats");
       wrk_stats_sum.dump(fmt);
-      show_incomplete_shards_fmt(has_incomplete_shards, num_work_shards, sp_arr, fmt);
+      show_incomplete_shards_fmt(has_incomplete_shards, num_work_shards, sp_arr.data(), fmt);
       md5_start_time = show_time_func_fmt(epoch.time, show_time, owner_map, fmt);
     }
 
@@ -1067,10 +1067,10 @@ namespace rgw::dedup {
       std::map<std::string, member_time_t> owner_map;
       bool show_time = true;
       md5_stats_t md5_stats_sum;
-      bufferlist bl_arr[num_md5_shards];
-      shard_progress_t sp_arr[num_md5_shards];
+      std::vector<bufferlist> bl_arr(num_md5_shards);
+      std::vector<shard_progress_t> sp_arr(num_md5_shards);
       int cnt = collect_shard_stats(store, dpp, epoch.time, num_md5_shards,
-                                    MD5_SHARD_PREFIX, bl_arr, sp_arr);
+                                    MD5_SHARD_PREFIX, bl_arr.data(), sp_arr.data());
       if (cnt != num_md5_shards && 0) {
         std::cerr << ">>>Partial MD5_SHARD stats recived " << cnt << " / "
                   << num_md5_shards << "\n" << std::endl;
@@ -1092,12 +1092,12 @@ namespace rgw::dedup {
           std::cerr << __func__ << "::failed md5_stats_t decode #" << shard << std::endl;
           continue;
         }
-        collect_single_shard_stats(dpp, owner_map, sp_arr, shard, &show_time, "MD5");
+        collect_single_shard_stats(dpp, owner_map, sp_arr.data(), shard, &show_time, "MD5");
       }
       {
         Formatter::ObjectSection outer(*fmt, "md5_stats");
         md5_stats_sum.dump(fmt);
-        show_incomplete_shards_fmt(has_incomplete_shards, num_md5_shards, sp_arr, fmt);
+        show_incomplete_shards_fmt(has_incomplete_shards, num_md5_shards, sp_arr.data(), fmt);
         show_time_func_fmt(md5_start_time, show_time, owner_map, fmt);
       }
       show_dedup_ratio_estimate_fmt(wrk_stats_sum, md5_stats_sum, fmt);
