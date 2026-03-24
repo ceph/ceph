@@ -1,6 +1,6 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ReactiveFormsModule } from '@angular/forms';
+import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -131,6 +131,31 @@ describe('OsdListComponent', () => {
   it('should create', () => {
     fixture.detectChanges();
     expect(component).toBeTruthy();
+  });
+
+  it('renders the preserve option in the delete modal with carbon checkbox markup', () => {
+    fixture.detectChanges();
+
+    const form = new FormGroup({
+      child: new FormGroup({
+        preserve: new FormControl(false)
+      })
+    });
+    const view = component.deleteOsdExtraTpl.createEmbeddedView({ form });
+    const host = document.createElement('div');
+
+    view.detectChanges();
+    view.rootNodes.forEach((node) => {
+      if (node instanceof Node) {
+        host.appendChild(node);
+      }
+    });
+
+    expect(host.querySelector('cds-checkbox#preserve')).not.toBeNull();
+    expect(host.textContent).toContain('Preserve OSD ID(s) for replacement.');
+    expect(host.querySelector('.custom-control')).toBeNull();
+
+    view.destroy();
   });
 
   it('should have columns that are sortable', () => {
