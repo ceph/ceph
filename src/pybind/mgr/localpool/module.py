@@ -3,8 +3,11 @@ import json
 import threading
 from typing import cast, Any
 
+from .cli import LocalpoolCLICommand
+
 
 class Module(MgrModule):
+    CLICommand = LocalpoolCLICommand
 
     MODULE_OPTIONS = [
         Option(

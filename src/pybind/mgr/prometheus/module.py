@@ -7,12 +7,17 @@ import os
 import re
 import threading
 import time
+import errno
 import enum
 from collections import namedtuple
 from tempfile import NamedTemporaryFile
+from cherrypy_mgr import CherryPyMgr
+from cherrypy import _cptree
 
-from mgr_module import CLIReadCommand, MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT, HandleCommandResult, CLIWriteCommand
-from mgr_util import get_default_addr, profile_method, build_url
+from .cli import PrometheusCLICommand
+
+from mgr_module import MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT, HandleCommandResult
+from mgr_util import get_default_addr, profile_method, build_url, test_port_allocation, PortAlreadyInUse
 from orchestrator import OrchestratorClientMixin, raise_if_exception, OrchestratorError
 from rbd import RBD
 
@@ -39,9 +44,37 @@ os._exit = os_exit_noop   # type: ignore
 # it's a dict, the writer doesn't need to declare 'global' for access
 
 _global_instance = None  # type: Optional[Module]
-cherrypy.config.update({
-    'response.headers.server': 'Ceph-Prometheus'
-})
+# Configuration for port availability waiting
+PORT_WAIT_MAX_TIME = 10.0  # Maximum time to wait for port to become available
+PORT_WAIT_INTERVAL = 0.5   # Polling interval
+
+
+def _wait_for_port_available(
+    log: Any,
+    server_addr: str,
+    server_port: int,
+    max_wait_time: float = PORT_WAIT_MAX_TIME
+) -> bool:
+    """
+    Wait for a port to become available using test_port_allocation.
+
+    Returns:
+        True if port became available, False if timeout reached.
+    """
+    elapsed = 0.0
+    while elapsed < max_wait_time:
+        try:
+            test_port_allocation(server_addr, server_port)
+            return True  # Port is available
+        except PortAlreadyInUse:
+            log.debug(f'Port {server_port} still in use, waiting...')
+            time.sleep(PORT_WAIT_INTERVAL)
+            elapsed += PORT_WAIT_INTERVAL
+        except Exception as e:
+            # For other errors (e.g., invalid address), just return and let CherryPy handle it
+            log.debug(f'Port check failed with: {e}')
+            return True
+    return False
 
 
 def health_status_to_number(status: str) -> int:
@@ -552,6 +585,7 @@ class MetricCollectionThread(threading.Thread):
 
 
 class Module(MgrModule, OrchestratorClientMixin):
+    CLICommand = PrometheusCLICommand
     MODULE_OPTIONS = [
         Option(
             'server_addr',
@@ -622,6 +656,7 @@ class Module(MgrModule, OrchestratorClientMixin):
         self.cert_file: IO[bytes]
         self.metrics = self._setup_static_metrics()
         self.shutdown_event = threading.Event()
+        self.config_change_event = threading.Event()
         self.collect_lock = threading.Lock()
         self.collect_time = 0.0
         self.scrape_interval: float = 15.0
@@ -918,18 +953,10 @@ class Module(MgrModule, OrchestratorClientMixin):
     def config_notify(self) -> None:
         """
         This method is called whenever one of our config options is changed.
+        Signal the serve loop to restart the engine with the new configuration.
         """
-        # https://stackoverflow.com/questions/7254845/change-cherrypy-port-and-restart-web-server
-        # if we omit the line: cherrypy.server.httpserver = None
-        # then the cherrypy server is not restarted correctly
-        self.log.info('Restarting engine...')
-        cherrypy.engine.stop()
-        cherrypy.server.httpserver = None
-        server_addr = cast(str, self.get_localized_module_option('server_addr', get_default_addr()))
-        server_port = cast(int, self.get_localized_module_option('server_port', DEFAULT_PORT))
-        self.configure(server_addr, server_port)
-        cherrypy.engine.start()
-        self.log.info('Engine started.')
+        self.log.info('Config changed, signaling serve loop to restart engine')
+        self.config_change_event.set()
 
     @profile_method()
     def get_health(self) -> None:
@@ -1887,7 +1914,7 @@ class Module(MgrModule, OrchestratorClientMixin):
 
         return ''.join(_metrics) + '\n'
 
-    @CLIReadCommand('prometheus file_sd_config')
+    @PrometheusCLICommand.Read('prometheus file_sd_config')
     def get_file_sd_config(self) -> Tuple[int, str, str]:
         '''
         Return file_sd compatible prometheus config for mgr cluster
@@ -1914,7 +1941,7 @@ class Module(MgrModule, OrchestratorClientMixin):
         self.collect()
         self.get_file_sd_config()
 
-    def configure(self, server_addr: str, server_port: int) -> None:
+    def configure(self) -> Tuple[Dict[str, Dict[str, Any]], Optional[Dict[str, str]], str]:
         cmd = {'prefix': 'orch get-security-config'}
         ret, out, _ = self.mon_command(cmd)
 
@@ -1922,8 +1949,7 @@ class Module(MgrModule, OrchestratorClientMixin):
             try:
                 security_config = json.loads(out)
                 if security_config.get('security_enabled', False):
-                    self.setup_tls_config(server_addr, server_port)
-                    return
+                    return self.setup_tls_config()
             except Exception as e:
                 self.log.exception(
                     'Failed to setup cephadm based secure monitoring stack: %s\n'
@@ -1932,22 +1958,27 @@ class Module(MgrModule, OrchestratorClientMixin):
                 )
 
         # In any error fallback to plain http mode
-        self.setup_default_config(server_addr, server_port)
+        return self.setup_default_config()
 
-    def setup_default_config(self, server_addr: str, server_port: int) -> None:
-        cherrypy.config.update({
-            'server.socket_host': server_addr,
-            'server.socket_port': server_port,
-            'engine.autoreload.on': False,
-            'server.ssl_module': None,
-            'server.ssl_certificate': None,
-            'server.ssl_private_key': None,
-        })
-        # Publish the URI that others may use to access the service we're about to start serving
-        self.set_uri(build_url(scheme='http', host=self.get_server_addr(),
-                     port=server_port, path='/'))
+    def get_cherrypy_config(self) -> Dict[str, Dict[str, Any]]:
+        config = {
+            '/': {
+                'response.headers.server': 'Ceph-Prometheus',
+                'tools.gzip.on': True,
+                'tools.gzip.mime_types': [
+                    'text/plain',
+                    'text/html',
+                    'application/json',
+                ],
+                'tools.gzip.compress_level': 6,
+            }
+        }
+        return config
 
-    def setup_tls_config(self, server_addr: str, server_port: int) -> None:
+    def setup_default_config(self) -> Tuple[Dict[str, Dict[str, Any]], None, str]:
+        return self.get_cherrypy_config(), None, 'http'
+
+    def setup_tls_config(self) -> Tuple[Dict[str, Dict[str, Any]], Optional[Dict[str, Any]], str]:
         # Temporarily disabling the verify function due to issues.
         # Please check verify_tls_files below to more information.
         # from mgr_util import verify_tls_files
@@ -1957,10 +1988,10 @@ class Module(MgrModule, OrchestratorClientMixin):
         ret, out, err = self.mon_command(cmd)
         if ret != 0:
             self.log.error(f'mon command to generate-certificates failed: {err}')
-            return
-        elif out is None:
+            return self.setup_default_config()
+        elif not out or not out.strip():
             self.log.error('mon command to generate-certificates failed to generate certificates')
-            return
+            return self.setup_default_config()
 
         cert_key = json.loads(out)
         self.cert_file = NamedTemporaryFile()
@@ -1975,18 +2006,12 @@ class Module(MgrModule, OrchestratorClientMixin):
         # Re-enable once the issue is resolved.
         # verify_tls_files(self.cert_file.name, self.key_file.name)
         cert_file_path, key_file_path = self.cert_file.name, self.key_file.name
+        ssl_info = {
+            'cert': cert_file_path,
+            'key': key_file_path
+        }
 
-        cherrypy.config.update({
-            'server.socket_host': server_addr,
-            'server.socket_port': server_port,
-            'engine.autoreload.on': False,
-            'server.ssl_module': 'builtin',
-            'server.ssl_certificate': cert_file_path,
-            'server.ssl_private_key': key_file_path,
-        })
-        # Publish the URI that others may use to access the service we're about to start serving
-        self.set_uri(build_url(scheme='https', host=self.get_server_addr(),
-                     port=server_port, path='/'))
+        return self.get_cherrypy_config(), ssl_info, 'https'
 
     def serve(self) -> None:
 
@@ -2068,13 +2093,6 @@ class Module(MgrModule, OrchestratorClientMixin):
                                              self.STALE_CACHE_RETURN]:
             self.stale_cache_strategy = self.STALE_CACHE_FAIL
 
-        server_addr = cast(str, self.get_localized_module_option('server_addr', get_default_addr()))
-        server_port = cast(int, self.get_localized_module_option('server_port', DEFAULT_PORT))
-        self.log.info(
-            "server_addr: %s server_port: %s" %
-            (server_addr, server_port)
-        )
-
         self.cache = cast(bool, self.get_localized_module_option('cache', True))
         if self.cache:
             self.log.info('Cache enabled')
@@ -2082,20 +2100,76 @@ class Module(MgrModule, OrchestratorClientMixin):
         else:
             self.log.info('Cache disabled')
 
-        self.configure(server_addr, server_port)
+        def start_server() -> cherrypy.process.servers.ServerAdapter:
+            server_addr = cast(str, self.get_localized_module_option('server_addr', get_default_addr()))
+            server_port = cast(int, self.get_localized_module_option('server_port', DEFAULT_PORT))
 
-        cherrypy.tree.mount(Root(), "/")
-        self.log.info('Starting engine...')
-        cherrypy.engine.start()
-        self.log.info('Engine started.')
+            config, ssl_info, scheme = self.configure()
+            tree = _cptree.Tree()
+            tree.mount(Root(), "/", config=config)
 
-        # wait for the shutdown event
-        self.shutdown_event.wait()
+            # Wait for port to be available before starting (handles standby->active transition)
+            if not _wait_for_port_available(self.log, server_addr, server_port):
+                self.log.warning(f'Port {server_port} still in use after waiting, attempting to start anyway')
+
+            self.log.info(f'Starting prometheus server on {server_addr}:{server_port}')
+            adapter, _ = CherryPyMgr.mount(
+                tree,
+                'prometheus',
+                (server_addr, int(server_port)),
+                ssl_info=ssl_info
+            )
+            self.set_uri(build_url(scheme=scheme, host=self.get_server_addr(), port=server_port, path='/'))
+            return adapter
+
+        try:
+            self.server_adapter = start_server()
+        except Exception as e:
+            self.log.error(f'Failed to start Prometheus: {e}')
+            return
+        # Main event loop: handle both shutdown and config change events
+        while True:
+            # Wait for either shutdown or config change event (check every 0.5s)
+            while not self.shutdown_event.is_set() and not self.config_change_event.is_set():
+                self.shutdown_event.wait(timeout=0.5)
+
+            if self.shutdown_event.is_set():
+                # Clean shutdown requested
+                break
+
+            if self.config_change_event.is_set():
+                # Config changed, restart engine with new configuration
+                self.config_change_event.clear()
+                self.log.info('Restarting engine due to config change...')
+                self.stop_adapter()
+
+                retries = 10
+                for attempt in range(retries):
+                    try:
+                        self.server_adapter = start_server()
+                        self.log.debug('Prometheus restarted successfully.')
+                        break
+                    except OSError as e:
+                        if e.errno == errno.EADDRINUSE:
+                            self.log.warning(f'Port still in use after config change (attempt {attempt + 1}/{retries}), retrying...')
+                            time.sleep(1)
+                        else:
+                            self.log.error(f'Failed to restart Prometheus (attempt {attempt + 1}/{retries}): {e}')
+                            self.stop_adapter()
+                            break
+                    except Exception as e:
+                        self.log.error(f'Failed to restart Prometheus (attempt {attempt + 1}/{retries}): {e}')
+                        self.stop_adapter()
+                        break
+                else:
+                    self.log.error('Failed to restart Prometheus after multiple attempts.')
+                    continue
+
+        # Cleanup on shutdown
         self.shutdown_event.clear()
         # tell metrics collection thread to stop collecting new metrics
         self.metrics_thread.stop()
-        cherrypy.engine.stop()
-        cherrypy.server.httpserver = None
+        self.stop_adapter()
         self.log.info('Engine stopped.')
         self.shutdown_rbd_stats()
         # wait for the metrics collection thread to stop
@@ -2105,7 +2179,14 @@ class Module(MgrModule, OrchestratorClientMixin):
         self.log.info('Stopping engine...')
         self.shutdown_event.set()
 
-    @CLIReadCommand('healthcheck history ls')
+    def stop_adapter(self) -> None:
+        if hasattr(self, 'server_adapter'):
+            self.server_adapter.stop()
+            self.server_adapter.unsubscribe()
+            CherryPyMgr.unregister('prometheus')
+            self.log.info('Server adapter stopped.')
+
+    @PrometheusCLICommand.Read('healthcheck history ls')
     def _list_healthchecks(self, format: Format = Format.plain) -> HandleCommandResult:
         """List all the healthchecks being tracked
 
@@ -2130,7 +2211,7 @@ class Module(MgrModule, OrchestratorClientMixin):
 
         return HandleCommandResult(retval=0, stdout=out)
 
-    @CLIWriteCommand('healthcheck history clear')
+    @PrometheusCLICommand.Write('healthcheck history clear')
     def _clear_healthchecks(self) -> HandleCommandResult:
         """Clear the healthcheck history"""
         self.health_history.reset()
@@ -2146,18 +2227,12 @@ class StandbyModule(MgrStandbyModule):
         self.shutdown_event = threading.Event()
 
     def serve(self) -> None:
-        server_addr = self.get_localized_module_option(
-            'server_addr', get_default_addr())
-        server_port = self.get_localized_module_option(
-            'server_port', DEFAULT_PORT)
+        server_addr = cast(str, self.get_localized_module_option(
+            'server_addr', get_default_addr()))
+        server_port = cast(int, self.get_localized_module_option(
+            'server_port', DEFAULT_PORT))
         self.log.info("server_addr: %s server_port: %s" %
                       (server_addr, server_port))
-        cherrypy.config.update({
-            'server.socket_host': server_addr,
-            'server.socket_port': server_port,
-            'engine.autoreload.on': False,
-            'request.show_tracebacks': False
-        })
 
         module = self
 
@@ -2184,18 +2259,40 @@ class StandbyModule(MgrStandbyModule):
                 cherrypy.response.headers['Content-Type'] = 'text/plain'
                 return ''
 
-        cherrypy.tree.mount(Root(), '/', {})
+        config = {
+            '/': {
+                'response.headers.server': 'Ceph-Prometheus',
+                'engine.autoreload.on': False,
+            }
+        }
+        tree = _cptree.Tree()
+        tree.mount(Root(), '/', config=config)
+
+        # Wait for port to be available before starting
+        if not _wait_for_port_available(self.log, server_addr, server_port):
+            self.log.warning(f'Port {server_port} still in use after waiting, attempting to start anyway')
         self.log.info('Starting engine...')
-        cherrypy.engine.start()
+        self.server_adapter, _ = CherryPyMgr.mount(
+            tree,
+            'prometheus-standby',
+            (server_addr, int(server_port))
+        )
         self.log.info('Engine started.')
+
         # Wait for shutdown event
         self.shutdown_event.wait()
         self.shutdown_event.clear()
-        cherrypy.engine.stop()
-        cherrypy.server.httpserver = None
+        self.stop_adapter()
         self.log.info('Engine stopped.')
 
     def shutdown(self) -> None:
         self.log.info("Stopping engine...")
         self.shutdown_event.set()
         self.log.info("Stopped engine")
+
+    def stop_adapter(self) -> None:
+        if hasattr(self, 'server_adapter'):
+            self.server_adapter.stop()
+            self.server_adapter.unsubscribe()
+            CherryPyMgr.unregister('prometheus-standby')
+            self.log.info('Server adapter stopped.')
