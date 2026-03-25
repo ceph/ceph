@@ -43,7 +43,7 @@ int write_script(const DoutPrefixProvider *dpp, rgw::sal::LuaManager* manager, c
 int read_script(const DoutPrefixProvider *dpp, rgw::sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, std::string& script, const std::string& name);
 
 // list the stored lua scripts from a context
-int list_scripts(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, std::vector<std::string>& scripts);
+int list_scripts(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, std::vector<std::shared_ptr<std::string>>& scripts);
 
 std::tuple<LuaCodeType, int> read_script_or_bytecode(const DoutPrefixProvider *dpp, rgw::sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, const std::string& name);
 

@@ -1542,7 +1542,7 @@ int FilterLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y
 }
 
 int FilterLuaManager::list_scripts(const DoutPrefixProvider* dpp, optional_yield y, RGWObjVersionTracker* objv,
-				const std::string& key, std::vector<std::string>& scripts)
+				const std::string& key, std::vector<std::shared_ptr<std::string>>& scripts)
 {
   return next->list_scripts(dpp, y, objv, key, scripts);
 }

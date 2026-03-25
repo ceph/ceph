@@ -161,10 +161,9 @@ private:
 
   void run();
 
-  std::vector<std::string> rgw_script_names;
   std::string rgw_script;
   int read_script(const std::string& script_name);
-  int list_scripts();
+  int list_scripts(std::vector<std::shared_ptr<std::string>>& rgw_script_names);
   std::unique_ptr<lua_state_guard> initialize_lguard_state();
 
   void process_scripts();

@@ -92,7 +92,7 @@ int read_script(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const s
   return manager ? manager->get_script(dpp, y, nullptr, script_oid(ctx, tenant, name), script) : -ENOENT;
 }
 
-int list_scripts(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, std::vector<std::string>& scripts)
+int list_scripts(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, std::vector<std::shared_ptr<std::string>>& scripts)
 {
 
   return manager ? manager->list_scripts(dpp, y, nullptr, script_oid(ctx, tenant, ""), scripts) : -ENOENT;

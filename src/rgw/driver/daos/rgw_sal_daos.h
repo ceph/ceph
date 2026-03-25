@@ -514,7 +514,7 @@ class DaosLuaManager : public StoreLuaManager {
   };
 
   virtual int list_scripts(const DoutPrefixProvider* dpp, optional_yield y,
-                           const std::string& key, std::vector<std::string>& scripts) override {
+                           const std::string& key, std::vector<std::shared_ptr<std::string>>& scripts) override {
     DAOS_NOT_IMPLEMENTED_LOG(dpp);
     return -ENOENT;
   }
