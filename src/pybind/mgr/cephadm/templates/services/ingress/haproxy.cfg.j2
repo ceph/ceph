@@ -96,7 +96,11 @@ backend backend
     mode        tcp
     balance     roundrobin
     {% if backend_spec.service_type == 'nfs' %}
-    stick-table type ip size 1m expire 2h store server_id peers haproxy_peers
+    {% if ipv6 %}
+    stick-table type ipv6 size 1m store server_id peers haproxy_peers
+    {% else %}
+    stick-table type ip size 1m store server_id peers haproxy_peers
+    {% endif %}
     stick match src
     stick store-request src
     option tcp-check
