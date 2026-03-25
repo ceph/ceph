@@ -245,7 +245,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         return 'done'
 
     @handle_orch_error
-    def daemon_action(self, action, daemon_name, image=None):
+    def daemon_action(self, action, daemon_name, image=None, force=False):
         return 'done'
 
     @handle_orch_error
