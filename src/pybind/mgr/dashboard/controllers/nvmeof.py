@@ -1779,10 +1779,8 @@ else:
                 orch = OrchClient.instance()
                 orch_status = orch.status()
                 if not orch_status['available']:
-                    return status
-                if not orch.services.list_daemons(daemon_type='nvmeof'):
                     status["available"] = False
-                    status["message"] = 'An NVMe/TCP service must be created.'
+                    status["message"] = 'Orchestrator is not available'
             return status
         # UI API for adding one or more than one hosts to subsystem
 
