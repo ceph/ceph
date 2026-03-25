@@ -2129,6 +2129,7 @@ static int commit_period(rgw::sal::ConfigStore* cfgstore,
     // already have this epoch (or a more recent one)
     cerr << "already have epoch >= " << period.get_epoch()
         << " for period " << period.get_id() << std::endl;
+    return 0;
   }
   if (ret < 0) {
     cerr << "Error updating latest epoch for period " << period.get_id() << ": " << cpp_strerror(ret) << std::endl;

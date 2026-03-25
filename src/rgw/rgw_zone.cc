@@ -1070,10 +1070,10 @@ int create_realm(const DoutPrefixProvider* dpp, optional_yield y,
 
     r = cfgstore->update_latest_epoch(dpp, y, period->id, period->epoch);
     if (r == -EEXIST) {
-    // already have this epoch (or a more recent one)
-    ldpp_dout(dpp, -1) << "already have epoch >= " << period->get_epoch()
-        << " for period " << period->get_id() << dendl;
-    return 0;
+      // already have this epoch (or a more recent one)
+      ldpp_dout(dpp, -1) << "already have epoch >= " << period->get_epoch()
+          << " for period " << period->get_id() << dendl;
+      return 0;
     }
     if (r < 0) {
       ldpp_dout(dpp, -1) << "Error updating latest epoch for period " << period->get_id() <<
@@ -1150,28 +1150,29 @@ int reflect_period(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   for (auto& [zonegroup_id, zonegroup] : info.period_map.zonegroups) {
-    // read the existing zonegroup
+    // read the existing zonegroup to detect renames
     RGWZoneGroup existing_zg;
     std::unique_ptr<sal::ZoneGroupWriter> writer;
     r = cfgstore->read_zonegroup_by_id(dpp, y, zonegroup_id, existing_zg, &writer);
-    if (r == 0) {
+    if (r == 0 && existing_zg.name != zonegroup.name) {
       // if the name changed, call rename() instead of create
-      if (existing_zg.name != zonegroup.name) {
-        RGWZoneGroup new_zg = zonegroup; // copy because zonegroup is const
-        std::string new_name = std::move(new_zg.name);
-        new_zg.name = std::move(existing_zg.name); // rename() expects old name
-        r = writer->rename(dpp, y, new_zg, new_name);
-        if (r < 0) {
-          ldpp_dout(dpp, -1) << __func__ << " failed to remove old zonegroup name "
-              << existing_zg.name << " with " << cpp_strerror(r) << dendl;
-        }
+      RGWZoneGroup new_zg = zonegroup; // copy because zonegroup is const
+      std::string new_name = std::move(new_zg.name);
+      new_zg.name = std::move(existing_zg.name); // rename() expects current name in info
+      r = writer->rename(dpp, y, new_zg, new_name);
+      if (r < 0) {
+        ldpp_dout(dpp, -1) << __func__ << " failed to rename zonegroup from "
+            << existing_zg.name << " to " << new_name
+            << ": " << cpp_strerror(r) << dendl;
+        return r;
       }
-    }
-    r = cfgstore->create_zonegroup(dpp, y, exclusive, zonegroup, nullptr);
-    if (r < 0) {
-      ldpp_dout(dpp, -1) << __func__ << " failed to store zonegroup id="
-          << zonegroup_id << " with " << cpp_strerror(r) << dendl;
-      return r;
+    } else {
+      r = cfgstore->create_zonegroup(dpp, y, exclusive, zonegroup, nullptr);
+      if (r < 0) {
+        ldpp_dout(dpp, -1) << __func__ << " failed to store zonegroup id="
+            << zonegroup_id << " with " << cpp_strerror(r) << dendl;
+        return r;
+      }
     }
     if (zonegroup.is_master) {
       // set master as default if no default exists
@@ -1326,10 +1327,10 @@ int commit_period(const DoutPrefixProvider* dpp, optional_yield y,
     }
     r = cfgstore->update_latest_epoch(dpp, y, info.id, info.epoch);
     if (r == -EEXIST) {
-    // already have this epoch (or a more recent one)
-    ldpp_dout(dpp, 0) << "already have epoch >= " << info.get_epoch()
-        << " for period " << info.get_id() << dendl;
-    return 0;
+      // already have this epoch (or a more recent one)
+      ldpp_dout(dpp, 0) << "already have epoch >= " << info.get_epoch()
+          << " for period " << info.get_id() << dendl;
+      return 0;
     }
     if (r < 0) {
       ldpp_dout(dpp, 0) << "Error updating latest epoch for period " << info.get_id() <<
@@ -1370,9 +1371,10 @@ int commit_period(const DoutPrefixProvider* dpp, optional_yield y,
   }
   r = cfgstore->update_latest_epoch(dpp, y, info.id, info.epoch);
   if (r == -EEXIST) {
-  // already have this epoch (or a more recent one)
-  ldpp_dout(dpp, 0) << "already have epoch >= " << info.get_epoch()
-      << " for period " << info.get_id() << dendl;
+    // already have this epoch (or a more recent one)
+    ldpp_dout(dpp, 0) << "already have epoch >= " << info.get_epoch()
+        << " for period " << info.get_id() << dendl;
+    return 0;
   }
   if (r < 0) {
     ldpp_dout(dpp, 0) << "Error updating latest epoch for period " << info.get_id() <<
