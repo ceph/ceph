@@ -47,6 +47,7 @@ See :ref:`pg-autoscaler`.
    :language: ini
 
 .. confval:: mon_max_pool_pg_num
+.. confval:: mon_min_pool_pg_num
 .. confval:: mon_pg_stuck_threshold
 .. confval:: mon_pg_warn_min_per_osd
 .. confval:: mon_pg_warn_min_objects
