@@ -477,6 +477,13 @@ int KernelDevice::get_ebd_state(ExtBlkDevState &state) const
   return -ENOENT;
 }
 
+int KernelDevice::get_ebd_id(std::string& id) const {
+  if (ebd_impl) {
+    return ebd_impl->get_plugin_id(id);
+  }
+  return -ENOENT;
+}
+
 int KernelDevice::choose_fd(bool buffered, int write_hint) const
 {
 #if defined(F_SET_FILE_RW_HINT)
