@@ -12,8 +12,14 @@ import {
   DialogModule,
   GridModule,
   BreadcrumbModule,
-  ModalModule,
-  TagModule
+  ToggleModule,
+  ButtonModule,
+  PlaceholderModule,
+  TagModule,
+  ProgressBarModule,
+  StructuredListModule,
+  SearchModule,
+  ModalModule
 } from 'carbon-components-angular';
 
 import { AppRoutingModule } from '~/app/app-routing.module';
@@ -62,8 +68,14 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
     DialogModule,
     GridModule,
     BreadcrumbModule,
-    ModalModule,
-    TagModule
+    ToggleModule,
+    ButtonModule,
+    PlaceholderModule,
+    TagModule,
+    ProgressBarModule,
+    StructuredListModule,
+    SearchModule,
+    ModalModule
   ],
   declarations: [
     AboutComponent,
