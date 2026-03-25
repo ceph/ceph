@@ -5,6 +5,7 @@ import stat
 import time
 import json
 from ceph_volume import process, allow_loop_devices
+from ceph_volume.util import nvme_sysfs
 from ceph_volume.util.system import get_file_contents
 from typing import Dict, List, Any, Union, Optional
 
@@ -820,7 +821,8 @@ def get_devices(_sys_block_path='/sys/block', device=''):
                  ('nr_requests', 'queue/nr_requests'),
                 ]
         for key, file_ in facts:
-            metadata[key] = get_file_contents(os.path.join(sysdir, file_))
+            rel = nvme_sysfs.block_device_fact_sysfs_rel_path(sysdir, file_)
+            metadata[key] = get_file_contents(os.path.join(sysdir, rel))
 
         device_slaves = []
         if block[2] != 'part':
