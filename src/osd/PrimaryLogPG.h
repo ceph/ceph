@@ -1199,6 +1199,8 @@ protected:
   hobject_t pool_migration_watermark;
   /// currently migrating objects
   std::set<hobject_t> pool_migrations_in_flight;
+  /// count of snaps being migrated per head object
+  std::map<hobject_t,int> pool_migration_clones_in_flight;
   /// last pool migration operation started
   hobject_t last_pool_migration_started;
   /// set for 1st object migration after activate
@@ -1675,6 +1677,8 @@ public:
 		       const char *cls, const char *method, bufferlist& inbl);
 
   void handle_pool_migration_copy_failure(hobject_t oid, int r);
+  void pool_migration_source_start_delete_head(hobject_t oid);
+  void pool_migration_source_start_delete(hobject_t oid);
   bool pool_migration_source_delete(hobject_t oid);
   void pool_migration_target_delete(const pg_t& source_pg, const hobject_t& watermark);
 

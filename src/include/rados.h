@@ -534,17 +534,21 @@ enum {
 						     * cloneid */
 	CEPH_OSD_COPY_FROM_FLAG_RWORDERED = 16, /* order with write */
 	CEPH_OSD_COPY_FROM_FLAG_TRUNCATE_SEQ = 32, /* use provided truncate_{seq,size} (copy-from2 only) */
-	CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION = 64, /* used to track pool migration */
+	CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION = 64, /* pool migration copy */
+	CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION_HAS_RES = 128, /* pool migration copy which must have reservations */
+	CEPH_OSD_COPY_FROM_FLAG2_POOL_MIGRATION_HAS_CLONES = 256, /* pool migration copy head object and update snapset */
 };
 
-#define CEPH_OSD_COPY_FROM_FLAGS			\
-	(CEPH_OSD_COPY_FROM_FLAG_FLUSH |		\
-	 CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY |	\
-	 CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE |		\
-	 CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE |	\
-	 CEPH_OSD_COPY_FROM_FLAG_RWORDERED |		\
-	 CEPH_OSD_COPY_FROM_FLAG_TRUNCATE_SEQ | \
-	 CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION)
+#define CEPH_OSD_COPY_FROM_FLAGS                            \
+	(CEPH_OSD_COPY_FROM_FLAG_FLUSH |                    \
+	 CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY |           \
+	 CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE |             \
+	 CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE |           \
+	 CEPH_OSD_COPY_FROM_FLAG_RWORDERED |                \
+	 CEPH_OSD_COPY_FROM_FLAG_TRUNCATE_SEQ |             \
+	 CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION |           \
+	 CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION_HAS_RES |   \
+	 CEPH_OSD_COPY_FROM_FLAG2_POOL_MIGRATION_HAS_CLONES)
 
 enum {
 	CEPH_OSD_TMAP2OMAP_NULLOK = 1,
@@ -655,6 +659,7 @@ struct ceph_osd_op {
 			 * ceph_osd_op::flags.
 			 */
 			__le32 src_fadvise_flags;
+			__le32 flags2; /* CEPH_OSD_COPY_FROM_FLAG2_* */
 		} __attribute__ ((packed)) copy_from;
 		struct {
 			struct ceph_timespec stamp;
