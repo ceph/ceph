@@ -1952,9 +1952,15 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
     }
   }
   ldpp_dout(dpp, 20) << "root_fd: " << root_dir->get_fd() << dendl;
+  quota_handler = RGWQuotaHandler::generate_handler(dpp, this, false);
 
   ldpp_dout(dpp, 20) << "SUCCESS" << dendl;
   return 0;
+}
+
+void POSIXDriver::finalize()
+{
+  RGWQuotaHandler::free_handler(quota_handler);
 }
 
 std::unique_ptr<User> POSIXDriver::get_user(const rgw_user &u)
@@ -2732,7 +2738,9 @@ int POSIXBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
 int POSIXBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size,
 				optional_yield y, bool check_size_only)
 {
-    return 0;
+  return driver->get_quota_handler()->check_quota(dpp, info.owner, get_key(),
+                                                  quota, (check_size_only ? 0 : 1),
+                                                  obj_size, y);
 }
 
 int POSIXBucket::try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y)
@@ -2919,6 +2927,8 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
     key.instance.clear();
     driver->get_bucket_cache()->remove_entry(dpp, b->get_name(), key);
   }
+  driver->get_quota_handler()->update_stats(b->get_owner(), b->get_key(),
+                                            -1, 0, state.accounted_size);
   return 0;
 }
 
@@ -4300,11 +4310,16 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        uint32_t flags)
 {
   int ret;
+  uint64_t orig_size = 0;
+  auto exists = obj->check_exists(dpp);
+  if (exists) {
+    orig_size = obj->get_size();
+  }
 
   if (if_match) {
     if (strcmp(if_match, "*") == 0) {
       // test the object is existing
-      if (!obj->check_exists(dpp)) {
+      if (!exists) {
 	return -ERR_PRECONDITION_FAILED;
       }
     } else {
@@ -4320,7 +4335,7 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   if (if_nomatch) {
     if (strcmp(if_nomatch, "*") == 0) {
       // test the object is not existing
-      if (obj->check_exists(dpp)) {
+      if (!exists) {
 	return -ERR_PRECONDITION_FAILED;
       }
     } else {
@@ -4369,6 +4384,15 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
     ldpp_dout(rctx.dpp, 20) << "ERROR: POSIXAtomicWriter failed closing file" << dendl;
     return ret;
   }
+
+  // Update the quota stats
+  POSIXBucket *b = static_cast<POSIXBucket*>(obj->get_bucket());
+  if (!b) {
+      ldpp_dout(dpp, 0) << "ERROR: could not get bucket for " << obj->get_name() << dendl;
+      return -EINVAL;
+  }
+  driver->get_quota_handler()->update_stats(b->get_owner(), b->get_key(),
+                                            (exists ? 0 : 1), orig_size, accounted_size);
 
   return 0;
 }
