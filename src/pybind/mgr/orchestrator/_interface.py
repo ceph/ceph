@@ -48,10 +48,10 @@ from ceph.deployment.service_spec import (
     TunedProfileSpec,
 )
 from ceph.deployment.drive_group import DriveGroupSpec
-from ceph.deployment.hostspec import HostSpec, SpecValidationError
+from ceph.deployment.hostspec import HostSpec
 from ceph.utils import datetime_to_str, str_to_datetime
 
-from mgr_module import MgrModule, CLICommand, HandleCommandResult
+from mgr_module import MgrModule, HandleCommandResult
 
 
 logger = logging.getLogger(__name__)
@@ -104,30 +104,6 @@ def set_exception_subject(kind: str, subject: str, overwrite: bool = False) -> I
         raise
 
 
-def handle_exception(prefix: str, perm: str, func: FuncT) -> FuncT:
-    @wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
-        try:
-            return func(*args, **kwargs)
-        except (OrchestratorError, SpecValidationError) as e:
-            # Do not print Traceback for expected errors.
-            return HandleCommandResult(retval=e.errno, stderr=str(e))
-        except ImportError as e:
-            return HandleCommandResult(retval=-errno.ENOENT, stderr=str(e))
-        except NotImplementedError:
-            msg = 'This Orchestrator does not support `{}`'.format(prefix)
-            return HandleCommandResult(retval=-errno.ENOENT, stderr=msg)
-
-    # misuse lambda to copy `wrapper`
-    wrapper_copy = lambda *l_args, **l_kwargs: wrapper(*l_args, **l_kwargs)  # noqa: E731
-    wrapper_copy._prefix = prefix  # type: ignore
-    wrapper_copy._cli_command = CLICommand(prefix, perm)  # type: ignore
-    wrapper_copy._cli_command.store_func_metadata(func)  # type: ignore
-    wrapper_copy._cli_command.func = wrapper_copy  # type: ignore
-
-    return cast(FuncT, wrapper_copy)
-
-
 def handle_orch_error(f: Callable[..., T]) -> Callable[..., 'OrchResult[T]']:
     """
     Decorator to make Orchestrator methods return
@@ -146,47 +122,6 @@ def handle_orch_error(f: Callable[..., T]) -> Callable[..., 'OrchResult[T]']:
             return OrchResult(None, exception=e)
 
     return cast(Callable[..., OrchResult[T]], wrapper)
-
-
-class InnerCliCommandCallable(Protocol):
-    def __call__(self, prefix: str) -> Callable[[FuncT], FuncT]:
-        ...
-
-
-def _cli_command(perm: str) -> InnerCliCommandCallable:
-    def inner_cli_command(prefix: str) -> Callable[[FuncT], FuncT]:
-        return lambda func: handle_exception(prefix, perm, func)
-    return inner_cli_command
-
-
-_cli_read_command = _cli_command('r')
-_cli_write_command = _cli_command('rw')
-
-
-class CLICommandMeta(type):
-    """
-    This is a workaround for the use of a global variable CLICommand.COMMANDS which
-    prevents modules from importing any other module.
-
-    We make use of CLICommand, except for the use of the global variable.
-    """
-    def __init__(cls, name: str, bases: Any, dct: Any) -> None:
-        super(CLICommandMeta, cls).__init__(name, bases, dct)
-        dispatch: Dict[str, CLICommand] = {}
-        for v in dct.values():
-            try:
-                dispatch[v._prefix] = v._cli_command
-            except AttributeError:
-                pass
-
-        def handle_command(self: Any, inbuf: Optional[str], cmd: dict) -> Any:
-            if cmd['prefix'] not in dispatch:
-                return self.handle_command(inbuf, cmd)
-
-            return dispatch[cmd['prefix']].call(self, cmd, inbuf)
-
-        cls.COMMANDS = [cmd.dump_cmd() for cmd in dispatch.values()]
-        cls.handle_command = handle_command
 
 
 class OrchResult(Generic[T]):

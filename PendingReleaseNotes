@@ -216,6 +216,26 @@
   `ceph dashboard unset-rgw-hostname <daemon>`. 
   With this dashboard no longer relies on `rgw_dns_name`.
 * Dashboard: Added support for QAT compression in RGW service form. Users can select 'Hardware' or 'Software' for QAT compression . If 'None' is selected, compression is removed altogether.
+* RGW: Introduce the `rgw_usage_log_key_transition` configuration option to handle
+  the co-existence of old and new usage log keys. This option is enabled by default
+  to ensure compatibility during upgrades, but can be disabled once old usage logs
+  are no longer present to avoid performance overhead.
+
+* NVMe-oF: A new Ceph Manager module, `nvmeof`, is now available. When enabled, it provisions the
+  dedicated `.nvmeof` RADOS Block Device (RBD) pool required for NVMe-oF integration,
+  simplifying initial setup and ensuring the pool is created consistently across deployments.
+  
+* MGR: A new command, `ceph osd ok-to-upgrade`, has been added that allows
+  users and orchestration tools to determine a safe set of OSDs within a CRUSH
+  bucket to upgrade simultaneously without impacting data availability. To help
+  converge to a safe set, a new config option
+  ``mgr_osd_upgrade_check_convergence_factor`` is introduced. This option can be
+  modified (if necessary) to help converge to an optimal set. Higher values
+  maximize the set of OSDs to upgrade at the cost of longer command response
+  times. Conversely, a lower value improves the command response time but
+  results in a non-optimal or smaller set of OSDs which impacts the overall time
+  to upgrade all OSDs in the cluster. For more details see tracker:
+  https://tracker.ceph.com/issues/73031.
 
 >=19.2.1
 
