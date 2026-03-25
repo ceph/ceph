@@ -1265,7 +1265,7 @@ namespace rgw::s3vector {
     std::ostringstream oss;
     const auto keys_size = configuration.keys.size();
     for (size_t i = 0; i < keys_size; ++i) {
-      oss << "key = \"" << configuration.keys[i] << "\"";
+      oss << "`key` = \"" << configuration.keys[i] << "\"";
       if (i < keys_size - 1) {
         oss << " OR ";
       }
@@ -1472,7 +1472,7 @@ namespace rgw::s3vector {
     std::ostringstream oss;
     const auto keys_size = configuration.keys.size();
     for (size_t i = 0; i < keys_size; ++i) {
-      oss << "key = \"" << configuration.keys[i] << "\"";
+      oss << "`key` = \"" << configuration.keys[i] << "\"";
       if (i < keys_size - 1) {
         oss << " OR ";
       }
