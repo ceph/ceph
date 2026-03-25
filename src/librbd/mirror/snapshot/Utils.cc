@@ -81,6 +81,13 @@ bool can_create_primary_snapshot(I *image_ctx, bool demoted, bool force,
     }
     ldout(cct, 20) << "previous snapshot snap_id=" << it->first << " "
                    << *mirror_ns << dendl;
+    if (mirror_ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED &&
+        demoted) {
+      // allow creation of a primary demote snapshot
+      // when previous snapshot is primary demoted
+      return true;
+    }
+
     if (mirror_ns->is_demoted() && !force) {
       lderr(cct) << "trying to create primary snapshot without force "
                  << "when previous primary snapshot is demoted"
