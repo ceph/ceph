@@ -1814,3 +1814,73 @@ def test_apply_share_with_qos(thandler):
     assert share_dict['cephfs']['qos']['write_bw_limit'] == "2097152"
     assert share_dict['cephfs']['qos']['read_burst_mult'] == 20
     assert share_dict['cephfs']['qos']['write_burst_mult'] == 15
+
+
+def test_generate_config_with_qos_cluster_mode_true(thandler):
+    """Test that cluster_mode=True generates 'yes' in config."""
+    thandler.internal_store.overwrite(
+        {
+            'clusters.foo': {
+                'resource_type': 'ceph.smb.cluster',
+                'cluster_id': 'foo',
+                'auth_mode': 'user',
+                'intent': 'present',
+                'user_group_settings': [{'source_type': 'empty'}],
+            },
+            'shares.foo.s1': {
+                'resource_type': 'ceph.smb.share',
+                'cluster_id': 'foo',
+                'share_id': 's1',
+                'name': 'Ess One',
+                'cephfs': {
+                    'volume': 'cephfs',
+                    'path': '/',
+                    'provider': 'samba-vfs',
+                    'qos': {
+                        'read_iops_limit': 100,
+                        'cluster_mode': True,
+                    },
+                },
+            },
+        }
+    )
+
+    thandler._sync_clusters(['foo'])
+    cfg = thandler.public_store['foo', 'config.smb'].get()
+    shopts = cfg['shares']['Ess One']['options']
+    assert shopts['aio_ratelimit:cluster_mode'] == 'yes'
+
+
+def test_generate_config_with_qos_cluster_mode_false(thandler):
+    """Test that cluster_mode=False generates 'no' in config."""
+    thandler.internal_store.overwrite(
+        {
+            'clusters.foo': {
+                'resource_type': 'ceph.smb.cluster',
+                'cluster_id': 'foo',
+                'auth_mode': 'user',
+                'intent': 'present',
+                'user_group_settings': [{'source_type': 'empty'}],
+            },
+            'shares.foo.s1': {
+                'resource_type': 'ceph.smb.share',
+                'cluster_id': 'foo',
+                'share_id': 's1',
+                'name': 'Ess One',
+                'cephfs': {
+                    'volume': 'cephfs',
+                    'path': '/',
+                    'provider': 'samba-vfs',
+                    'qos': {
+                        'read_iops_limit': 100,
+                        'cluster_mode': False,
+                    },
+                },
+            },
+        }
+    )
+
+    thandler._sync_clusters(['foo'])
+    cfg = thandler.public_store['foo', 'config.smb'].get()
+    shopts = cfg['shares']['Ess One']['options']
+    assert shopts['aio_ratelimit:cluster_mode'] == 'no'

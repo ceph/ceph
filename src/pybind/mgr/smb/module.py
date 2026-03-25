@@ -400,6 +400,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         write_bw_limit: Optional[str] = None,
         read_burst_mult: Optional[int] = None,
         write_burst_mult: Optional[int] = None,
+        cluster_mode: Optional[str] = None,
     ) -> results.Result:
         """Update QoS settings for a CephFS share"""
         try:
@@ -413,6 +414,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             if not share.cephfs:
                 raise ValueError("Share has no CephFS configuration")
 
+            cluster_mode_bool = None
+            if cluster_mode is not None:
+                if cluster_mode.lower() == 'true':
+                    cluster_mode_bool = True
+                else:
+                    cluster_mode_bool = False
+
             updated_cephfs = share.cephfs.update_qos(
                 read_iops_limit=read_iops_limit,
                 write_iops_limit=write_iops_limit,
@@ -420,6 +428,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 write_bw_limit=write_bw_limit,
                 read_burst_mult=read_burst_mult,
                 write_burst_mult=write_burst_mult,
+                cluster_mode=cluster_mode_bool,
             )
 
             updated_share = replace(share, cephfs=updated_cephfs)

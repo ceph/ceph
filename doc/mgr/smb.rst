@@ -267,7 +267,7 @@ Update Share QoS
 
 .. prompt:: bash #
 
-   ceph smb share update cephfs qos <cluster_id> <share_id> [--read-iops-limit=<int>] [--write-iops-limit=<int>] [--read-bw-limit=<str>] [--write-bw-limit=<str>] [--read-burst-mult=<int>] [--write-burst-mult=<int>]
+   ceph smb share update cephfs qos <cluster_id> <share_id> [--read-iops-limit=<int>] [--write-iops-limit=<int>] [--read-bw-limit=<str>] [--write-bw-limit=<str>] [--read-burst-mult=<int>] [--write-burst-mult=<int>] [--cluster-mode=<bool>]
 
 Update Quality of Service (QoS) settings for a CephFS-backed share. This allows administrators to apply per-share rate limits on SMB input/output (I/O) operations, specifically limits on IOPS (Input/Output Operations per Second) and bandwidth (in bytes per second) for both read and write operations. Additionally, burst multipliers can be configured to allow temporary bursts above the configured limits.
 
@@ -299,6 +299,11 @@ write_burst_mult
     Optional integer. Burst multiplier for write operations (value ÷ 10 = multiplier),
     allowing temporary bursts above the configured limit. Example: ``20`` = 2* the configured limit.
     Range: 10-100 (1* to 10*), default: 15 (1.5*).
+cluster_mode
+    Optional boolean. Controls whether rate limiting is enforced cluster-wide or per-node
+    when using Samba clustering (CTDB). When set to ``true``, limits are enforced across all
+    nodes in the cluster. When set to ``false``, each node enforces limits independently.
+    If not specified, Samba defaults to cluster-wide enforcement when clustering is active.
 
 Behavior:
 
@@ -308,6 +313,7 @@ Behavior:
 - Burst multipliers only apply when their corresponding limit is enabled (non-zero)
 - Bandwidth limits can be specified with human-readable units (e.g., ``"10M"``, ``"5G"``)
 - Burst multipliers are expressed in tenths (e.g., ``15`` = 1.5*, ``20`` = 2*, ``30`` = 3*)
+- ``cluster_mode`` only affects behavior when Samba clustering (CTDB) is enabled
 
 
 Burst Behavior
@@ -339,10 +345,21 @@ Set QoS limits with burst multipliers for a share:
      --write-bw-limit="20M" \
      --read-burst-mult=20 \
      --write-burst-mult=15
+     --cluster-mode=true
 
 In this example:
 - Read burst multiplier of 20 means 2* the read IOPS limit (allowing bursts up to 200 read IOPS)
 - Write burst multiplier of 15 means 1.5* the write IOPS limit (allowing bursts up to 300 write IOPS)
+- Cluster-wide enforcement is enabled, so limits are aggregated across all nodes
+
+Set per-node rate limiting (disable cluster-wide enforcement):
+
+.. prompt:: bash #
+
+   ceph smb share update cephfs qos foo bar \
+     --read-iops-limit=100 \
+     --write-iops-limit=200 \
+     --cluster-mode=false
 
 Disable QoS for a share:
 
@@ -938,6 +955,11 @@ cephfs
             Optional integer. Burst multiplier for write operations (value ÷ 10 = multiplier),
             allowing temporary bursts above the configured limit. Example: ``20`` = 2* the configured limit.
             Default: 15 (1.5*).
+        cluster_mode
+            Optional boolean. Controls whether rate limiting is enforced cluster-wide or per-node
+            when using Samba clustering (CTDB). When set to ``true``, limits are enforced across all
+            nodes in the cluster. When set to ``false``, each node enforces limits independently.
+            If not specified, Samba defaults to cluster-wide enforcement when clustering is active.
 restrict_access
     Optional boolean, defaulting to false. If true the share will only permit
     access by users explicitly listed in ``login_control``.
@@ -1006,6 +1028,7 @@ multipliers and human-readable bandwidth limits:
         write_bw_limit: "5M"
         read_burst_mult: 20
         write_burst_mult: 15
+        cluster_mode: true
 
 Another example with plain byte values:
 

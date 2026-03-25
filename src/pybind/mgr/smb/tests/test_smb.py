@@ -1028,3 +1028,55 @@ def test_cmd_share_update_qos(tmodule):
     assert updated_share.cephfs.qos.write_bw_limit == "524288"
     assert updated_share.cephfs.qos.read_burst_mult == 15  # Default
     assert updated_share.cephfs.qos.write_burst_mult == 15  # Default
+
+
+def test_cmd_share_update_qos_with_cluster_mode(tmodule):
+    """Test updating QoS with cluster_mode via CLI."""
+    cluster = _cluster(
+        cluster_id='qoscluster',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+    share = smb.resources.Share(
+        cluster_id='qoscluster',
+        share_id='qostest',
+        cephfs=smb.resources.CephFSStorage(volume='cephfs', path='/'),
+    )
+    rg = tmodule._handler.apply([cluster, share])
+    assert rg.success
+
+    # Test setting cluster_mode=True - pass as string "true"
+    res, body, status = tmodule.share_update_qos.command(
+        cluster_id='qoscluster',
+        share_id='qostest',
+        read_iops_limit=100,
+        cluster_mode="true",  # Changed from True to "true"
+    )
+    assert res == 0
+    bdata = json.loads(body)
+    assert bdata['success']
+
+    updated = tmodule._handler.matching_resources(
+        ['ceph.smb.share.qoscluster.qostest']
+    )[0]
+    assert updated.cephfs.qos.cluster_mode is True
+
+    # Test setting cluster_mode=False - pass as string "false"
+    res, body, status = tmodule.share_update_qos.command(
+        cluster_id='qoscluster',
+        share_id='qostest',
+        cluster_mode="false",  # Changed from False to "false"
+    )
+    assert res == 0
+    bdata = json.loads(body)
+    assert bdata['success']
+
+    # Verify
+    updated = tmodule._handler.matching_resources(
+        ['ceph.smb.share.qoscluster.qostest']
+    )[0]
+    assert updated.cephfs.qos.cluster_mode is False

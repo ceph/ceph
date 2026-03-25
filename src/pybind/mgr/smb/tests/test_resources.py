@@ -1200,3 +1200,26 @@ def test_share_qos_remove_individual_limit():
     assert updated_cephfs.qos.write_iops_limit == 200  # Preserved
     assert updated_cephfs.qos.read_bw_limit == "10M"  # Preserved
     assert updated_cephfs.qos.write_bw_limit == "20M"  # Preserved
+
+
+def test_share_update_qos_with_cluster_mode():
+    """Test share with QoS including cluster_mode."""
+    share = smb.resources.Share(
+        cluster_id='qoscluster',
+        share_id='qostest',
+        name='QoS Test Share',
+        cephfs=smb.resources.CephFSStorage(
+            volume='myvol',
+            path='/qos',
+            qos=smb.resources.QoSConfig(
+                read_iops_limit=100,
+                cluster_mode=True,
+            ),
+        ),
+    )
+
+    assert share.cephfs.qos.cluster_mode is True
+
+    # Update to disable cluster_mode
+    updated_cephfs = share.cephfs.update_qos(cluster_mode=False)
+    assert updated_cephfs.qos.cluster_mode is False
