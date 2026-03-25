@@ -2,7 +2,7 @@ import logging
 import os
 
 from ceph_volume import process, terminal
-from ceph_volume.util import disk
+from ceph_volume.util import disk, nvme_sysfs
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ def is_namespace(resolved_device: str) -> bool:
     We only format whole NVMe devices (e.g. /dev/nvme0n1). Partitions like
     /dev/nvme0n1p1 and non-block-device paths are intentionally skipped.
     """
-    if not resolved_device.startswith('/dev/nvme'):
+    if not nvme_sysfs.is_whole_nvme_namespace_name(os.path.basename(resolved_device)):
         return False
     if not disk.is_device(resolved_device):
         # disk.is_device() already excludes partitions
