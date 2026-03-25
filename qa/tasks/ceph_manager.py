@@ -1345,7 +1345,7 @@ class OSDThrasher(Thrasher):
         if self.chance_trim_stale_osdmaps > 0:
             actions.append((self.trim_stale_osdmaps, self.chance_trim_stale_osdmaps))
 
-        for key in ['heartbeat_inject_failure', 'filestore_inject_stall']:
+        for key in ['heartbeat_inject_failure']:
             for scenario in [
                 (lambda:
                  self.inject_pause(key,

@@ -29,7 +29,6 @@ overrides:
       - or freeform for custom applications
     conf:
       osd:
-        filestore debug inject read err: true
         bluestore debug inject read err: true
 tasks:
 - repair_test:

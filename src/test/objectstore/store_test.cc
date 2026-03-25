@@ -506,12 +506,6 @@ public:
 TEST_P(StoreTest, collect_metadata) {
   map<string,string> pm;
   store->collect_metadata(&pm);
-  if (GetParam() == string("filestore")) {
-    ASSERT_NE(pm.count("filestore_backend"), 0u);
-    ASSERT_NE(pm.count("filestore_f_type"), 0u);
-    ASSERT_NE(pm.count("backend_filestore_partition_path"), 0u);
-    ASSERT_NE(pm.count("backend_filestore_dev_node"), 0u);
-  }
 }
 
 TEST_P(StoreTest, Trivial) {
@@ -845,52 +839,6 @@ TEST_P(StoreTest, SimplePGColTest) {
     t.remove_collection(cid);
     cerr << "remove collection" << std::endl;
     auto ch = store->open_collection(cid);
-    r = queue_transaction(store, ch, std::move(t));
-    ASSERT_EQ(r, 0);
-  }
-}
-
-TEST_P(StoreTest, SimpleColPreHashTest) {
-  // Firstly we will need to revert the value making sure
-  // collection hint actually works
-  int merge_threshold = g_ceph_context->_conf->filestore_merge_threshold;
-  std::ostringstream oss;
-  if (merge_threshold > 0) {
-    oss << "-" << merge_threshold;
-    SetVal(g_conf(), "filestore_merge_threshold", oss.str().c_str());
-  }
-
-  uint32_t pg_num = 128;
-
-  boost::uniform_int<> pg_id_range(0, pg_num);
-  gen_type rng(TEST_RANDOM_SEED);
-  int pg_id = pg_id_range(rng);
-
-  int objs_per_folder = abs(merge_threshold) * 16 * g_ceph_context->_conf->filestore_split_multiple;
-  boost::uniform_int<> folders_range(5, 256);
-  uint64_t expected_num_objs = (uint64_t)objs_per_folder * (uint64_t)folders_range(rng);
-
-  coll_t cid(spg_t(pg_t(pg_id, 15), shard_id_t::NO_SHARD));
-  int r;
-  auto ch = store->create_new_collection(cid);
-  {
-    // Create a collection along with a hint
-    ObjectStore::Transaction t;
-    t.create_collection(cid, 5);
-    cerr << "create collection" << std::endl;
-    bufferlist hint;
-    encode(pg_num, hint);
-    encode(expected_num_objs, hint);
-    t.collection_hint(cid, ObjectStore::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS, hint);
-    cerr << "collection hint" << std::endl;
-    r = queue_transaction(store, ch, std::move(t));
-    ASSERT_EQ(r, 0);
-  }
-  {
-    // Remove the collection
-    ObjectStore::Transaction t;
-    t.remove_collection(cid);
-    cerr << "remove collection" << std::endl;
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
@@ -6669,36 +6617,6 @@ void test_merge_skewed(ObjectStore *store,
   }
 }
 
-TEST_P(StoreTest, MergeSkewed) {
-  if (string(GetParam()) != "filestore")
-    return;
-
-  // this is sufficient to exercise merges with different hashing levels
-  test_merge_skewed(store.get(), 0xf, 4, 10, 10000);
-  test_merge_skewed(store.get(), 0xf, 4, 10000, 10);
-
-  /*
-  // this covers a zillion variations that all boil down to the same thing
-  for (unsigned base = 3; base < 0x1000; base *= 5) {
-    unsigned bits;
-    unsigned t = base;
-    for (bits = 0; t; t >>= 1) {
-      ++bits;
-    }
-    for (unsigned b = bits; b < bits + 10; b += 3) {
-      for (auto anum : { 10, 1000, 10000 }) {
-	for (auto bnum : { 10, 1000, 10000 }) {
-	  if (anum == bnum) {
-	    continue;
-	  }
-	  test_merge_skewed(store.get(), base, b, anum, bnum);
-	}
-      }
-    }
-  }
-  */
-}
-
 
 /**
  * This test tests adding two different groups
@@ -12132,10 +12050,6 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf._clear_safe_to_start_threads();
 
   g_ceph_context->_conf.set_val_or_die("osd_journal_size", "400");
-  g_ceph_context->_conf.set_val_or_die("filestore_index_retry_probability", "0.5");
-  g_ceph_context->_conf.set_val_or_die("filestore_op_thread_timeout", "1000");
-  g_ceph_context->_conf.set_val_or_die("filestore_op_thread_suicide_timeout", "10000");
-  //g_ceph_context->_conf.set_val_or_die("filestore_fiemap", "true");
   g_ceph_context->_conf.set_val_or_die("bluestore_fsck_on_mkfs", "false");
   g_ceph_context->_conf.set_val_or_die("bluestore_fsck_on_mount", "false");
   g_ceph_context->_conf.set_val_or_die("bluestore_fsck_on_umount", "false");
@@ -12176,7 +12090,7 @@ int main(int argc, char **argv) {
  * Local Variables:
  * compile-command: "cd ../.. ; make ceph_test_objectstore && 
  *    ./ceph_test_objectstore \
- *        --gtest_filter=*.collect_metadata* --log-to-stderr=true --debug-filestore=20
+ *        --gtest_filter=*.collect_metadata* --log-to-stderr=true --debug-bluestore=20
  *  "
  * End:
  */
