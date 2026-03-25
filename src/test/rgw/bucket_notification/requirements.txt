@@ -3,5 +3,5 @@ boto3 >=1.0.0
 configparser >=5.0.0
 kafka-python >=2.0.0
 pika
-cloudevents
+cloudevents>=1.12.1,<2
 xmltodict
