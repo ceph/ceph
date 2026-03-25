@@ -123,6 +123,11 @@ void GroupPromoteRequest<I>::handle_check_group_primary_state(int r) {
       continue;
     }
 
+    if (ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY &&
+        !is_mirror_group_snapshot_complete(it->state, ns->complete)) {
+      continue;
+    }
+
     // XXXMG: check primary_mirror_uuid matches?
     group_snap_state = it->state;
     state = ns->state;
