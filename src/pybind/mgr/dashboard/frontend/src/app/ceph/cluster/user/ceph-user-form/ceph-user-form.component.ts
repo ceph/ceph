@@ -46,11 +46,11 @@ export class CephUserFormComponent {
 
     const payload = {
       user: `client.${formValue.username.trim()}`,
-      caps: formValue.caps.map((c: { entity: string; permission: string }) =>
-        `${c.entity} ${c.permission}`
+      caps: formValue.caps.map(
+        (c: { entity: string; permission: string }) => `${c.entity} ${c.permission}`
       )
     };
-    console.debug(payload)
+    console.debug(payload);
     // TODO: integrate with API service
   }
 }

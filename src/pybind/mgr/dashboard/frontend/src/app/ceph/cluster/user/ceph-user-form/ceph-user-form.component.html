@@ -1,12 +1,22 @@
 <div class="cd-form">
   <h2 class="cd-heading-04">Create User</h2>
-  <form [formGroup]="form" (ngSubmit)="onSubmit()">
 
+  <form
+    [formGroup]="form"
+    (ngSubmit)="onSubmit()"
+  >
     <!-- USER ENTITY -->
     <div class="cd-form-section">
-      <label class="cd-label" for="username">User entity *</label>
+      <label
+        class="cd-label"
+        for="username"
+      >
+        User entity *
+      </label>
+
       <div class="user-entity-group">
         <span class="prefix">client.</span>
+
         <input
           id="username"
           cdsTextInput
@@ -19,38 +29,43 @@
     <!-- CAPABILITIES -->
     <div class="cd-form-section">
       <h3 class="cd-heading-03">Capabilities</h3>
-      <div class="cap-header">
-        <span>Entity *</span>
-        <span>Entity Capabilities *</span>
-      </div>
+
       <div formArrayName="caps">
         <div
-          class="cap-row"
           *ngFor="let cap of caps.controls; let i = index"
           [formGroupName]="i"
+          class="cap-row"
         >
           <select
             cdsSelect
             formControlName="entity"
           >
-            <option value="" disabled>Select entity</option>
+            <option value="" disabled>
+              Select entity
+            </option>
             <option value="mon">mon</option>
             <option value="osd">osd</option>
             <option value="mgr">mgr</option>
             <option value="mds">mds</option>
             <option value="rgw">rgw</option>
           </select>
+
           <select
             cdsSelect
             formControlName="permission"
           >
-            <option value="" disabled>Select permission</option>
+            <option value="" disabled>
+              Select permission
+            </option>
             <option value="allow r">allow r</option>
             <option value="allow rw">allow rw</option>
             <option value="allow rwx">allow rwx</option>
           </select>
+
+          <!-- REMOVE -->
           <button
-            class="remove-btn"
+            cdsButton="ghost"
+            size="sm"
             type="button"
             (click)="removeCap(i)"
           >
@@ -58,6 +73,7 @@
           </button>
         </div>
       </div>
+
       <button
         cdsButton="secondary"
         size="sm"
@@ -70,9 +86,13 @@
 
     <!-- ACTIONS -->
     <div class="cd-actions">
-      <button cdsButton="secondary" type="button">
+      <button
+        cdsButton="secondary"
+        type="button"
+      >
         Cancel
       </button>
+
       <button
         cdsButton="primary"
         type="submit"

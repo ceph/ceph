@@ -3,30 +3,13 @@
 @use '@carbon/styles/scss/spacing' as *;
 @use '@carbon/type';
 
-/* MAIN CONTAINER */
+/* CONTAINER (light styling only) */
 .cd-form {
   max-width: 700px;
   margin: 0 auto;
-  background-color: $layer-01;
-  padding: $spacing-06;
-  border: 1px solid $border-subtle-01;
-  border-radius: 4px;
 }
 
-/* HEADINGS */
-.cd-heading-04 {
-  @include type.type-style('heading-04');
-  margin-bottom: $spacing-06;
-  color: $text-primary;
-}
-
-.cd-heading-03 {
-  @include type.type-style('heading-03');
-  margin-bottom: $spacing-05;
-  color: $text-primary;
-}
-
-/* FORM SECTIONS */
+/* SECTIONS */
 .cd-form-section {
   margin-bottom: $spacing-07;
 }
@@ -34,15 +17,31 @@
 /* LABEL */
 .cd-label {
   @include type.type-style('label-02');
+
   display: block;
   margin-bottom: $spacing-03;
+  color: $text-primary;
+}
+
+/* HEADINGS */
+.cd-heading-04 {
+  @include type.type-style('heading-04');
+
+  margin-bottom: $spacing-06;
+  color: $text-primary;
+}
+
+.cd-heading-03 {
+  @include type.type-style('heading-03');
+
+  margin-bottom: $spacing-05;
   color: $text-primary;
 }
 
 /* USER ENTITY INPUT */
 .user-entity-group {
   display: flex;
-  max-width: 600px; // reduced width for better UI
+  max-width: 600px;
 
   .prefix {
     background-color: $layer-accent-01;
@@ -59,56 +58,14 @@
   }
 }
 
-/* CAPABILITIES HEADER */
-.cap-header {
-  display: grid;
-  grid-template-columns: 1fr 1fr 30px; // equal width
-  max-width: 600px;
-  margin-bottom: $spacing-03;
-
-  span {
-    @include type.type-style('label-02');
-    color: $text-secondary;
-  }
-}
-
 /* CAPABILITIES ROW */
 .cap-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 30px; // equal fields + button
+  grid-template-columns: 1fr 1fr auto;
   gap: $spacing-03;
   margin-bottom: $spacing-03;
   align-items: center;
   max-width: 600px;
-
-  input,
-  select {
-    width: 100%;
-  }
-
-  button {
-    min-width: auto;
-  }
-}
-
-/* REMOVE BUTTON (FIXED UI) */
-.remove-btn {
-  height: 28px;
-  width: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid $border-subtle-01;
-  border-radius: 4px;
-  font-size: 16px;
-  font-weight: 500;
-  color: $text-secondary;
-  cursor: pointer;
-  user-select: none;
-
-  &:hover {
-    background-color: $layer-hover;
-  }
 }
 
 /* ACTION BUTTONS */
