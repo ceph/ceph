@@ -1671,8 +1671,6 @@ void PgScrubber::replica_scrub_op(OpRequestRef op)
   preemption_data.reset();
   preemption_data.force_preemptability(msg->allow_preemption);
 
-  replica_scrubmap_pos.reset();	 // needed? RRR
-
   set_queued_or_active();
   advance_token();
   const auto& conf = m_pg->get_cct()->_conf;
@@ -2288,7 +2286,7 @@ void PgScrubber::requeue_penalized(
 	     << dendl;
     return;
   }
-  /// \todo fix the 5s' to use a cause-specific delay parameter
+
   auto& trgt = m_scrub_job->delay_on_failure(s_or_d, cause, scrub_clock_now);
   ceph_assert(!trgt.queued);
   m_osds->get_scrub_services().enqueue_target(trgt);
@@ -2802,9 +2800,9 @@ bool PgScrubber::is_token_current(Scrub::act_token_t received_token)
   if (received_token == 0 || received_token == m_current_token) {
     return true;
   }
-  dout(5) << __func__ << " obsolete token (" << received_token << " vs current "
-	  << m_current_token << dendl;
-
+  dout(5) << fmt::format("{}: obsolete token {} does not match current ({})",
+                  __func__, received_token, m_current_token)
+           << dendl;
   return false;
 }
 
