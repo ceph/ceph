@@ -548,6 +548,7 @@ private:
 		       std::string pg_autoscale_mode,
 		       bool bulk,
 		       bool crimson,
+           bool force_create,
 		       std::ostream *ss);
   int prepare_new_pool(MonOpRequestRef op);
 

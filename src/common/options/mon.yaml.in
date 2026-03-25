@@ -46,6 +46,11 @@ options:
   level: advanced
   default: 64_K
   fmt_desc: The maximum number of placement groups per pool.
+- name: mon_min_pool_pg_num
+  type: uint
+  level: advanced
+  default: 32
+  fmt_desc: Default minimum number of placement groups per pool during autoscaling
 - name: mon_mgr_digest_period
   type: int
   level: dev
