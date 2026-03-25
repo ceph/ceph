@@ -124,7 +124,18 @@ export class NvmeofNamespacesFormComponent implements OnInit {
         Validators.required,
         Validators.max(this.MAX_NAMESPACE_CREATE),
         Validators.min(this.MIN_NAMESPACE_CREATE)
-      ])
+      ]),
+      rbd_image_creation: new UntypedFormControl('gateway_provisioned'),
+
+      rbd_image_name: new UntypedFormControl(null, [
+        CdValidators.custom('rbdImageName', (value: any) => {
+          if (!value) return null;
+          return /^[^@/]+$/.test(value) ? null : { rbdImageName: true };
+        })
+      ]),
+      namespace_size: new UntypedFormControl(512), // Block size in bytes; default 512
+      host_access: new UntypedFormControl('all'), // UI only - determines visibility
+      initiators: new UntypedFormControl([]) // UI only - selected hosts
     });
   }
 

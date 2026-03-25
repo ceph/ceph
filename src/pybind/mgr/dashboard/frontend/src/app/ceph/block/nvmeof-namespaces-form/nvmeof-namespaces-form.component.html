@@ -102,6 +102,22 @@
             </div>
           </div>
         </div>
+        <!-- Namespace Block Size (bytes) -->
+        <div *ngIf="!edit"
+             class="form-group row">
+          <label class="cd-col-form-label"
+                 for="namespace_size">
+            <span i18n>Namespace Block Size (bytes)</span>
+          </label>
+          <div class="cd-col-form-input">
+            <cds-number
+              formControlName="namespace_size"
+              helperText="Specify the block size to expose to the hosts. Leave blank for the default block size of 512 bytes."
+              i18n-helperText
+              [min]="0"
+              size="sm"></cds-number>
+          </div>
+        </div>
       </div>
       <div class="modal-footer">
         <div class="text-right">
