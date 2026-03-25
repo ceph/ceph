@@ -135,50 +135,6 @@ map<string, string> rgw_to_http_attrs;
 static map<string, string> generic_attrs_map;
 map<int, const char *> http_status_names;
 
-/*
- * make attrs look_like_this
- * converts dashes to underscores
- */
-string lowercase_underscore_http_attr(const string& orig)
-{
-  const char *s = orig.c_str();
-  char buf[orig.size() + 1];
-  buf[orig.size()] = '\0';
-
-  for (size_t i = 0; i < orig.size(); ++i, ++s) {
-    switch (*s) {
-      case '-':
-        buf[i] = '_';
-        break;
-      default:
-        buf[i] = tolower(*s);
-    }
-  }
-  return string(buf);
-}
-
-/*
- * make attrs LOOK_LIKE_THIS
- * converts dashes to underscores
- */
-string uppercase_underscore_http_attr(const string& orig)
-{
-  const char *s = orig.c_str();
-  char buf[orig.size() + 1];
-  buf[orig.size()] = '\0';
-
-  for (size_t i = 0; i < orig.size(); ++i, ++s) {
-    switch (*s) {
-      case '-':
-        buf[i] = '_';
-        break;
-      default:
-        buf[i] = toupper(*s);
-    }
-  }
-  return string(buf);
-}
-
 /* avoid duplicate hostnames in hostnames lists */
 static set<string> hostnames_set;
 static set<string> hostnames_s3website_set;
@@ -199,12 +155,13 @@ void rgw_rest_init(CephContext *cct, const rgw::sal::ZoneGroup& zone_group)
   list<string>::iterator iter;
   for (iter = extended_http_attrs.begin(); iter != extended_http_attrs.end(); ++iter) {
     string rgw_attr = RGW_ATTR_PREFIX;
-    rgw_attr.append(lowercase_underscore_http_attr(*iter));
+    // bidirectional mimics the '-' -> '_' behavior
+    lowercase_dash_transform(*iter, std::back_inserter(rgw_attr), true);
 
     rgw_to_http_attrs[rgw_attr] = camelcase_dash_http_attr(*iter);
 
     string http_header = "HTTP_";
-    http_header.append(uppercase_underscore_http_attr(*iter));
+    uppercase_dash_transform(*iter, std::back_inserter(http_header));
 
     generic_attrs_map[http_header] = rgw_attr;
   }
