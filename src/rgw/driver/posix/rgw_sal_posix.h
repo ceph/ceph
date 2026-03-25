@@ -872,7 +872,7 @@ public:
     acls(_b.acls),
     ns(_b.ns)
     {
-      dir.reset(static_cast<Directory*>(_b.dir->clone().get()));
+      dir = _b.dir->clone_dir();
     }
 
   virtual ~POSIXBucket() { }
