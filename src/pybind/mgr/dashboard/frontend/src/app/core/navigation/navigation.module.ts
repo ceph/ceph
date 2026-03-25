@@ -18,7 +18,8 @@ import {
   TagModule,
   ProgressBarModule,
   StructuredListModule,
-  SearchModule
+  SearchModule,
+  ModalModule
 } from 'carbon-components-angular';
 
 import { AppRoutingModule } from '~/app/app-routing.module';
@@ -94,7 +95,8 @@ import { NotificationFooterComponent } from './notification-panel/notification-f
     TagModule,
     ProgressBarModule,
     StructuredListModule,
-    SearchModule
+    SearchModule,
+    ModalModule
   ],
   declarations: [
     AboutComponent,
