@@ -64,7 +64,7 @@ Stable (LTS) <../../releases>`_.  See `Understanding the release cycle
 Merging bug fixes or features
 =============================
 
-The development branch is ``master`` and the workflow followed by all
+The development branch is ``main`` and the workflow followed by all
 developers can be summarized as follows:
 
 * The developer prepares a series of commits
@@ -110,7 +110,7 @@ status of an open issue can be:
 
 For each ``Pending Backport`` issue, there exists at least one issue in the
 ``Backport`` tracker to record the work done to cherry pick the necessary
-commits from the master branch to the target stable branch. See `the backporter
+commits from the ``main`` branch to the target stable branch. See `the backporter
 manual
 <https://github.com/ceph/ceph/blob/main/SubmittingPatches-backports.rst>`_ for
 more information.
@@ -134,15 +134,15 @@ results are posted on `pulpito <http://pulpito.ceph.com/>`_ and the
 The ``quality engineer`` is either a developer or a member of the QE
 team. There is at least one integration test suite per project:
 
-* `rgw <https://github.com/ceph/ceph/tree/master/qa/suites/rgw>`_ suite
-* `CephFS <https://github.com/ceph/ceph/tree/master/qa/suites/fs>`_ suite
-* `rados <https://github.com/ceph/ceph/tree/master/qa/suites/rados>`_ suite
-* `rbd <https://github.com/ceph/ceph/tree/master/qa/suites/rbd>`_ suite
+* `rgw <https://github.com/ceph/ceph/tree/main/qa/suites/rgw>`_ suite
+* `CephFS <https://github.com/ceph/ceph/tree/main/qa/suites/fs>`_ suite
+* `rados <https://github.com/ceph/ceph/tree/main/qa/suites/rados>`_ suite
+* `rbd <https://github.com/ceph/ceph/tree/main/qa/suites/rbd>`_ suite
 
 and many others such as
 
-* `upgrade <https://github.com/ceph/ceph/tree/master/qa/suites/upgrade>`_ suites
-* `power-cyle <https://github.com/ceph/ceph/tree/master/qa/suites/powercycle>`_ suite
+* `upgrade <https://github.com/ceph/ceph/tree/main/qa/suites/upgrade>`_ suites
+* `power-cyle <https://github.com/ceph/ceph/tree/main/qa/suites/powercycle>`_ suite
 * ...
 
 Preparing a new release
