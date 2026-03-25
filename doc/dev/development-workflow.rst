@@ -110,7 +110,7 @@ status of an open issue can be:
 
 For each ``Pending Backport`` issue, there exists at least one issue in the
 ``Backport`` tracker to record the work done to cherry pick the necessary
-commits from the main branch to the target stable branch. See `the backporter
+commits from the ``main`` branch to the target stable branch. See `the backporter
 manual
 <https://github.com/ceph/ceph/blob/main/SubmittingPatches-backports.rst>`_ for
 more information.
