@@ -244,18 +244,29 @@ void PGMapDigest::print_summary(ceph::Formatter *f, ostream *out) const
     f->dump_unsigned("num_pools", pg_pool_sum.size());
     f->dump_unsigned("num_objects", pg_sum.stats.sum.num_objects);
     f->dump_unsigned("data_bytes", pg_sum.stats.sum.num_bytes);
-    f->dump_unsigned("bytes_used", osd_sum.statfs.get_used_raw());
+    f->dump_unsigned("bytes_used", osd_sum.statfs.get_used());
     f->dump_unsigned("bytes_avail", osd_sum.statfs.available);
     f->dump_unsigned("bytes_total", osd_sum.statfs.total);
+    f->dump_unsigned("bytes_used_raw", osd_sum.statfs.get_used_raw());
+    f->dump_unsigned("bytes_avail_raw", osd_sum.statfs.avail_raw);
+    f->dump_unsigned("bytes_total_raw", osd_sum.statfs.total_raw);
   } else {
     *out << "    pools:   " << pg_pool_sum.size() << " pools, "
          << num_pg << " pgs\n";
     *out << "    objects: " << si_u_t(pg_sum.stats.sum.num_objects) << " objects, "
          << byte_u_t(pg_sum.stats.sum.num_bytes) << "\n";
     *out << "    usage:   "
-         << byte_u_t(osd_sum.statfs.get_used_raw()) << " used, "
+         << byte_u_t(osd_sum.statfs.get_used()) << " used, "
          << byte_u_t(osd_sum.statfs.available) << " / "
          << byte_u_t(osd_sum.statfs.total) << " avail\n";
+    if (osd_sum.statfs.get_used() != osd_sum.statfs.get_used_raw() ||
+        osd_sum.statfs.available != osd_sum.statfs.avail_raw ||
+        osd_sum.statfs.total != osd_sum.statfs.total_raw) {
+      *out << "    raw:     "
+           << byte_u_t(osd_sum.statfs.get_used_raw()) << " used, "
+           << byte_u_t(osd_sum.statfs.avail_raw) << " / "
+           << byte_u_t(osd_sum.statfs.total_raw) << " avail\n";
+    }
     *out << "    pgs:     ";
   }
 
@@ -368,13 +379,22 @@ void PGMapDigest::print_oneline_summary(ceph::Formatter *f, ostream *out) const
     f->close_section();
 
   string states = ss.str();
-  if (out)
+  if (out) {
     *out << num_pg << " pgs: "
          << states << "; "
          << byte_u_t(pg_sum.stats.sum.num_bytes) << " data, "
          << byte_u_t(osd_sum.statfs.get_used()) << " used, "
          << byte_u_t(osd_sum.statfs.available) << " / "
          << byte_u_t(osd_sum.statfs.total) << " avail";
+    if (osd_sum.statfs.get_used() != osd_sum.statfs.get_used_raw() ||
+        osd_sum.statfs.available != osd_sum.statfs.avail_raw ||
+        osd_sum.statfs.total != osd_sum.statfs.total_raw) {
+      *out << ", "
+         << byte_u_t(osd_sum.statfs.get_used_raw()) << " used raw, "
+         << byte_u_t(osd_sum.statfs.avail_raw) << " / "
+         << byte_u_t(osd_sum.statfs.total_raw) << " avail raw";
+    }
+  }
   if (f) {
     f->dump_unsigned("num_pgs", num_pg);
     f->dump_unsigned("num_bytes", pg_sum.stats.sum.num_bytes);
@@ -382,6 +402,7 @@ void PGMapDigest::print_oneline_summary(ceph::Formatter *f, ostream *out) const
     f->dump_int("total_avail_bytes", osd_sum.statfs.available);
     f->dump_int("total_used_bytes", osd_sum.statfs.get_used());
     f->dump_int("total_used_raw_bytes", osd_sum.statfs.get_used_raw());
+    f->dump_int("total_avail_raw_bytes", osd_sum.statfs.get_avail_raw());
   }
 
   // make non-negative; we can get negative values if osds send
@@ -851,6 +872,8 @@ void PGMapDigest::dump_cluster_stats(stringstream *ss,
     f->dump_int("total_bytes", osd_sum.statfs.total);
     f->dump_int("total_avail_bytes", osd_sum.statfs.available);
     f->dump_int("total_used_bytes", osd_sum.statfs.get_used());
+    f->dump_int("total_raw_bytes", osd_sum.statfs.total_raw);
+    f->dump_int("total_avail_raw_bytes", osd_sum.statfs.get_avail_raw());
     f->dump_int("total_used_raw_bytes", osd_sum.statfs.get_used_raw());
     f->dump_float("total_used_raw_ratio", osd_sum.statfs.get_used_raw_ratio());
     f->dump_unsigned("num_osds", osd_sum.num_osds);
@@ -863,6 +886,8 @@ void PGMapDigest::dump_cluster_stats(stringstream *ss,
       f->dump_int("total_bytes", i.second.statfs.total);
       f->dump_int("total_avail_bytes", i.second.statfs.available);
       f->dump_int("total_used_bytes", i.second.statfs.get_used());
+      f->dump_int("total_raw_bytes", i.second.statfs.total_raw);
+      f->dump_int("total_avail_raw_bytes", i.second.statfs.get_avail_raw());
       f->dump_int("total_used_raw_bytes", i.second.statfs.get_used_raw());
       f->dump_float("total_used_raw_ratio",
 		    i.second.statfs.get_used_raw_ratio());
@@ -876,6 +901,7 @@ void PGMapDigest::dump_cluster_stats(stringstream *ss,
     tbl.define_column("SIZE", TextTable::RIGHT, TextTable::RIGHT);
     tbl.define_column("AVAIL", TextTable::RIGHT, TextTable::RIGHT);
     tbl.define_column("USED", TextTable::RIGHT, TextTable::RIGHT);
+    tbl.define_column("RAW AVAIL", TextTable::RIGHT, TextTable::RIGHT);
     tbl.define_column("RAW USED", TextTable::RIGHT, TextTable::RIGHT);
     tbl.define_column("%RAW USED", TextTable::RIGHT, TextTable::RIGHT);
 
@@ -885,6 +911,7 @@ void PGMapDigest::dump_cluster_stats(stringstream *ss,
       tbl << stringify(byte_u_t(i.second.statfs.total))
 	  << stringify(byte_u_t(i.second.statfs.available))
 	  << stringify(byte_u_t(i.second.statfs.get_used()))
+	  << stringify(byte_u_t(i.second.statfs.get_avail_raw()))
 	  << stringify(byte_u_t(i.second.statfs.get_used_raw()))
 	  << percentify(i.second.statfs.get_used_raw_ratio()*100.0)
 	  << TextTable::endrow;
@@ -893,11 +920,12 @@ void PGMapDigest::dump_cluster_stats(stringstream *ss,
     tbl << stringify(byte_u_t(osd_sum.statfs.total))
         << stringify(byte_u_t(osd_sum.statfs.available))
         << stringify(byte_u_t(osd_sum.statfs.get_used()))
+        << stringify(byte_u_t(osd_sum.statfs.get_avail_raw()))
         << stringify(byte_u_t(osd_sum.statfs.get_used_raw()))
 	<< percentify(osd_sum.statfs.get_used_raw_ratio()*100.0)
 	<< TextTable::endrow;
 
-    *ss << "--- RAW STORAGE ---\n";
+    *ss << "--- STORAGE ---\n";
     *ss << tbl;
   }
 }
@@ -1044,9 +1072,9 @@ int64_t PGMap::get_rule_avail(const OSDMap& osdmap, int ruleno) const
 	// calculate proj below.
 	continue;
       }
-      double unusable = (double)osd_info->second.statfs.kb() *
+      double unusable = (double)osd_info->second.statfs.kb_total_raw() *
 	(1.0 - fratio);
-      double avail = std::max(0.0, (double)osd_info->second.statfs.kb_avail() - unusable);
+      double avail = std::max(0.0, (double)osd_info->second.statfs.kb_avail_raw() - unusable);
       avail *= 1024.0;
       int64_t proj = (int64_t)(avail / (double)p->second);
       if (min < 0 || proj < min) {
@@ -1938,6 +1966,7 @@ void PGMap::dump_osd_stats(ostream& ss) const
   tab.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("AVAIL", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("USED_RAW", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("AVAIL_RAW", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("TOTAL", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("HB_PEERS", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("PG_SUM", TextTable::LEFT, TextTable::RIGHT);
@@ -1950,6 +1979,7 @@ void PGMap::dump_osd_stats(ostream& ss) const
         << byte_u_t(p->second.statfs.get_used())
         << byte_u_t(p->second.statfs.available)
         << byte_u_t(p->second.statfs.get_used_raw())
+        << byte_u_t(p->second.statfs.get_avail_raw())
         << byte_u_t(p->second.statfs.total)
         << p->second.hb_peers
         << get_num_pg_by_osd(p->first)
@@ -1961,6 +1991,7 @@ void PGMap::dump_osd_stats(ostream& ss) const
       << byte_u_t(osd_sum.statfs.get_used())
       << byte_u_t(osd_sum.statfs.available)
       << byte_u_t(osd_sum.statfs.get_used_raw())
+      << byte_u_t(osd_sum.statfs.get_avail_raw())
       << byte_u_t(osd_sum.statfs.total)
       << TextTable::endrow;
 
@@ -1975,12 +2006,14 @@ void PGMap::dump_osd_sum_stats(ostream& ss) const
   tab.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("AVAIL", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("USED_RAW", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("AVAIL_RAW", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("TOTAL", TextTable::LEFT, TextTable::RIGHT);
 
   tab << "sum"
       << byte_u_t(osd_sum.statfs.get_used())
       << byte_u_t(osd_sum.statfs.available)
       << byte_u_t(osd_sum.statfs.get_used_raw())
+      << byte_u_t(osd_sum.statfs.get_avail_raw())
       << byte_u_t(osd_sum.statfs.total)
       << TextTable::endrow;
 
@@ -4047,9 +4080,9 @@ int reweight::by_utilization(
   } else {
     // by osd utilization
     int num_osd = std::max<size_t>(1, pgm.osd_stat.size());
-    if ((uint64_t)pgm.osd_sum.statfs.total / num_osd
+    if ((uint64_t)pgm.osd_sum.statfs.total_raw / num_osd
 	< g_conf()->mon_reweight_min_bytes_per_osd) {
-      *ss << "Refusing to reweight: we only have " << pgm.osd_sum.statfs.kb()
+      *ss << "Refusing to reweight: we only have " << pgm.osd_sum.statfs.kb_total_raw()
 	  << " kb across all osds!\n";
       return -EDOM;
     }
@@ -4062,7 +4095,7 @@ int reweight::by_utilization(
     }
 
     average_util = (double)pgm.osd_sum.statfs.get_used_raw() /
-      (double)pgm.osd_sum.statfs.total;
+      (double)pgm.osd_sum.statfs.total_raw;
   }
 
   // adjust down only if we are above the threshold
@@ -4113,7 +4146,7 @@ int reweight::by_utilization(
 	pgs_by_osd[p.first] / osdmap.crush->get_item_weightf(p.first);
     } else {
       osd_util.second =
-	(double)p.second.statfs.get_used_raw() / (double)p.second.statfs.total;
+	(double)p.second.statfs.get_used_raw() / (double)p.second.statfs.total_raw;
     }
     util_by_osd.push_back(osd_util);
   }
