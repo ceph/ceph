@@ -755,6 +755,11 @@ class PgScrubber : public ScrubPgIF,
    */
   virtual void _scrub_finish() {}
 
+  /**
+   *  update the PG's state and stats
+   */
+  void emit_scrub_result();
+
   // common code used by build_primary_map_chunk() and
   // build_replica_map_chunk():
   int build_scrub_map_chunk(ScrubMap& map,  // primary or replica?
