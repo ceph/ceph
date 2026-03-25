@@ -971,21 +971,13 @@ int RGWHTTPStreamRWRequest::complete_request(const DoutPrefixProvider* dpp,
   for (auto iter = out_headers.begin(); pattrs && iter != out_headers.end(); ++iter) {
     const string& attr_name = iter->first;
     if (attr_name.compare(0, sizeof(RGW_HTTP_RGWX_ATTR_PREFIX) - 1, RGW_HTTP_RGWX_ATTR_PREFIX) == 0) {
-      string name = attr_name.substr(sizeof(RGW_HTTP_RGWX_ATTR_PREFIX) - 1);
-      const char *src = name.c_str();
-      char buf[name.size() + 1];
-      char *dest = buf;
-      for (; *src; ++src, ++dest) {
-        switch(*src) {
-          case '_':
-            *dest = '-';
-            break;
-          default:
-            *dest = tolower(*src);
-        }
-      }
-      *dest = '\0';
-      (*pattrs)[buf] = iter->second;
+      std::string name;
+      name.reserve(attr_name.size() - (sizeof(RGW_HTTP_RGWX_ATTR_PREFIX) - 1));
+      lowercase_dash_transform(
+          std::string_view{attr_name}.substr(
+              sizeof(RGW_HTTP_RGWX_ATTR_PREFIX) - 1),
+          std::back_inserter(name));
+      (*pattrs)[std::move(name)] = iter->second;
     }
   }
 
