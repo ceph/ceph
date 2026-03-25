@@ -296,20 +296,19 @@ SchedTarget& ScrubJob::delay_on_failure(
     delay_cause_t delay_cause,
     utime_t scrub_clock_now)
 {
-  seconds delay = seconds(cct->_conf.get_val<int64_t>("osd_scrub_retry_delay"));
+  const char* delay_param = "osd_scrub_retry_delay";
   switch (delay_cause) {
     case delay_cause_t::flags:
-      delay =
-	  seconds(cct->_conf.get_val<int64_t>("osd_scrub_retry_after_noscrub"));
+      delay_param = "osd_scrub_retry_after_noscrub";
       break;
     case delay_cause_t::pg_state:
-      delay = seconds(cct->_conf.get_val<int64_t>("osd_scrub_retry_pg_state"));
+      delay_param = "osd_scrub_retry_pg_state";
       break;
     case delay_cause_t::snap_trimming:
-      delay = seconds(cct->_conf.get_val<int64_t>("osd_scrub_retry_trimming"));
+      delay_param = "osd_scrub_retry_trimming";
       break;
     case delay_cause_t::interval:
-      delay = seconds(cct->_conf.get_val<int64_t>("osd_scrub_retry_new_interval"));
+      delay_param = "osd_scrub_retry_new_interval";
       break;
     case delay_cause_t::local_resources:
     case delay_cause_t::aborted:
@@ -317,6 +316,7 @@ SchedTarget& ScrubJob::delay_on_failure(
       // for all other possible delay causes: use the default delay
       break;
   }
+  const seconds delay = seconds(cct->_conf.get_val<int64_t>(delay_param));
 
   auto& delayed_target =
       (level == scrub_level_t::deep) ? deep_target : shallow_target;
