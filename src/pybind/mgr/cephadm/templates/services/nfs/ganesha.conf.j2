@@ -41,6 +41,18 @@ RADOS_URLS {
         watch_url = "{{ url }}";
 }
 
+CEPH {
+        Ceph_Conf = "/etc/ceph/ceph.conf";
+        umask = 0000;
+        client_oc = false;
+        async = false;
+        zerocopy = false;
+        use_old_uuid = false;
+
+        register_service = true;
+        nodeid = "{{ nodeid }}";
+}
+
 RGW {
         cluster = "ceph";
         name = "client.{{ rgw_user }}";
