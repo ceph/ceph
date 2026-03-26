@@ -19115,9 +19115,8 @@ int Client::fcopyfile(const char *spath, const char *dpath, UserPerm& perms, mod
       ldout(cct, 10) << "fcopyfile could not create dest dir=" << dpath << " r=" << r << dendl;
       return r;
     }
-  } else if(srcin->is_file()) {
-    int r = 0;
-    size_t size = srcin->size;
+  } else if (srcin->is_file()) {
+    const size_t size = srcin->size;
 
     int dest = do_openat(CEPHFS_AT_FDCWD, dpath, O_CREAT | O_TRUNC | O_WRONLY, perms, mode, 0,0,0, NULL, alt_name, foptions);
     if (dest < 0) {
@@ -19125,60 +19124,104 @@ int Client::fcopyfile(const char *spath, const char *dpath, UserPerm& perms, mod
       return dest;
     }
 
-    bool need_read = true;
-    if (size == 0)
-      need_read = false;
-
-    int src;
-    if (need_read) {
-      src = open(spath, O_RDONLY, perms, mode);
-      if (src < 0) {
-        ldout(cct, 10) << "fcopyfile could not open source file=" << spath << " ret=" << src << dendl;
-        close(dest);
-        return src;
-      }
-
-      char in_buf[1048576];
-      size_t off = 0;
-      size_t len = sizeof(in_buf) / sizeof(in_buf[0]);
-
-      len = std::min(size, len);
-
-      while (true) {
-        // include fstat here to reverify size (statx)
-        r = read(src, in_buf, len, off);
-        if (r < 0) {
-          ldout(cct, 10) << "fcopyfile: error reading copy data, r=" << r << dendl;
-          goto out;
-        } else {
-	  len = r;
-	}
-
-        r = write(dest, in_buf, len, off);
-        if (r < 0) {
-          ldout(cct, 10) << "fcopyfile: error writing copy data, r=" << r << dendl;
-          goto out;
-        }
-        off = off + len;
-
-        if (off == size) {
-          break;
-	} else if (off > size) {
-	  ldout(cct, 0) << __FILE__ << ",  " << __func__ << "() at " << __LINE__
-		        << " internal error: \"off\" is greater than \"size\"; "
-			" off = " << off << " size = " << size << dendl;
-	  r = -1;
-	  goto out;
-	}
-      }
-    }
-    out:
+    int src = open(spath, O_RDONLY, perms, mode);
+    if (src < 0) {
+      ldout(cct, 10) << "fcopyfile could not open source file=" << spath << " ret=" << src << dendl;
       close(dest);
-      if (need_read)
-        close(src);
-      return r;
+      return src;
+    }
+
+    int copied = fcopyfilex(src, 0, dest, 0, size, 0);
+    close(dest);
+    close(src);
+
+    if (copied < 0) {
+      ldout(cct, 10) << "fcopyfile: fcopyfilex failed, r=" << copied << dendl;
+      return copied;
+    }
+    if (static_cast<size_t>(copied) != size) {
+      ldout(cct, 10) << "fcopyfile: short copy, copied=" << copied << " expected=" << size << dendl;
+      return -EIO;
+    }
   }
   return 0;
+}
+
+int Client::fcopyfilex(int source_fd, off_t source_start, int dest_fd, off_t dest_start, size_t size, unsigned flags)
+{
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied())
+    return -ENOTCONN;
+
+  ldout(cct, 10) << "fcopyfilex source_fd=" << source_fd << " source_start=" << source_start
+                 << " dest_fd=" << dest_fd << " dest_start=" << dest_start
+                 << " size=" << size << " flags=" << flags << dendl;
+
+  if (size == 0)
+    return 0;
+
+  // For now, ignore flags - could be used for future extensions
+
+  Fh *src_fh = nullptr;
+  Fh *dest_fh = nullptr;
+  uint64_t max_read_size = INT_MAX;
+  {
+    std::scoped_lock lock(client_lock);
+    src_fh = get_filehandle(source_fd);
+    if (!src_fh)
+      return -EBADF;
+    dest_fh = get_filehandle(dest_fd);
+    if (!dest_fh)
+      return -EBADF;
+#if defined(__linux__) && defined(O_PATH)
+    if (src_fh->flags & O_PATH || dest_fh->flags & O_PATH)
+      return -EBADF;
+#endif
+#if defined(__linux__)
+    Inode *src_in = src_fh->inode.get();
+    if (src_in->is_fscrypt_enabled()) {
+      max_read_size = FSCRYPT_MAXIO_SIZE;
+    }
+#endif
+  }
+
+  size_t remaining = size;
+  off_t src_offset = source_start;
+  off_t dest_offset = dest_start;
+  const size_t chunk_size = 1048576; // 1MB chunks
+  while (remaining > 0) {
+    bufferlist bl;
+    size_t to_read = std::min(remaining, chunk_size);
+    uint64_t rd_size = std::min<uint64_t>(to_read, max_read_size);
+
+    int r = 0;
+    int w = 0;
+    {
+      std::scoped_lock lock(client_lock);
+      r = _read(src_fh, src_offset, rd_size, &bl);
+      if (r < 0) {
+        ldout(cct, 10) << "fcopyfilex: error reading from source_fd=" << source_fd
+                       << " at offset=" << src_offset << " size=" << to_read << " r=" << r << dendl;
+        return r;
+      }
+      if (r == 0) {
+        // EOF reached
+        break;
+      }
+      w = _write(dest_fh, dest_offset, r, std::move(bl));
+      if (w < 0) {
+        ldout(cct, 10) << "fcopyfilex: error writing to dest_fd=" << dest_fd
+                       << " at offset=" << dest_offset << " size=" << r << " w=" << w << dendl;
+        return w;
+      }
+    }
+
+    src_offset += r;
+    dest_offset += r;
+    remaining -= r;
+  }
+
+  return size - remaining; // Return number of bytes copied
 }
 
 StandaloneClient::StandaloneClient(Messenger *m, MonClient *mc,

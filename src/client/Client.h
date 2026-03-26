@@ -395,6 +395,7 @@ public:
   int is_encrypted(int fd, UserPerm& perms, char* enctag);
 #endif
   int fcopyfile(const char *sname, const char *dname, UserPerm& perms, mode_t mode);
+  int fcopyfilex(int source_fd, off_t source_start, int dest_fd, off_t dest_start, size_t size, unsigned flags);
 
   int mds_command(
     const std::string &mds_spec,

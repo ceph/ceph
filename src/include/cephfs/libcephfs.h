@@ -2415,6 +2415,7 @@ void ceph_free_snap_info_buffer(struct snap_info *snap_info);
 int ceph_get_perf_counters(struct ceph_mount_info *cmount, char **perf_dump);
 
 int ceph_fcopyfile(struct ceph_mount_info *cmount, const char *spath, const char *dpath, mode_t mode);
+int ceph_fcopyfilex(struct ceph_mount_info *cmount, int source_fd, off_t source_start, int dest_fd, off_t dest_start, size_t size, unsigned flags);
 #ifdef __cplusplus
 }
 #endif
