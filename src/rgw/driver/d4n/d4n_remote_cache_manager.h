@@ -88,10 +88,12 @@ class RemoteCacheDeleteOp : public RemoteCacheOp {
 };
 
 class RemoteCachePutOp : public RemoteCacheOp {
+  bool block_only = false; // bypasses head object upload
+
   public:
     struct RemoteCachePutOpData : RemoteCacheOpData {};
 
-    RemoteCachePutOp(rgw::sal::Driver* driver, RemoteCachePutOpData& op) : RemoteCacheOp(driver, op) {}
+    RemoteCachePutOp(rgw::sal::Driver* driver, RemoteCachePutOpData& op, bool block_only = false) : RemoteCacheOp(driver, op), block_only(block_only) {}
     virtual ~RemoteCachePutOp() = default;
  
 	virtual int send_request(const DoutPrefixProvider* dpp, optional_yield& y, bufferlist* bl = nullptr) override;

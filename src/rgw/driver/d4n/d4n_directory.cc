@@ -1579,8 +1579,13 @@ int BlockDirectory::remove_host(const DoutPrefixProvider* dpp, CacheBlock* block
 	result.erase(result.length() - 1, 1);
       }
 
-      if (result.length() == 0) /* Last host, delete entirely */
-	return del(dpp, block, y); 
+      if (result.length() == 0) { /* Last host, delete entirely */
+        int ret = del(dpp, block, y); 
+        if (ret < 0) {
+		  ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): Failed to delete entire block, ret=" << ret << dendl;
+        }
+		return ret;
+      }
 
   value = result;
     }
