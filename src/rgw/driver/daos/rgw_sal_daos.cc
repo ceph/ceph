@@ -1831,11 +1831,11 @@ int DaosMultipartUpload::complete(
 
   append_bl(etag_bl, CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16, [&](auto iter) {
     auto start = iter;
-    iter = buf_to_hex(final_etag, sizeof(final_etag), iter);
+    iter = buf_to_hex(final_etag, iter);
     iter = fmt::format_to(iter, "-{}", part_etags.size());
     ldpp_dout(dpp, 10) << "calculated etag: " << std::string_view{start, iter} << dendl;
     return iter;
-  }
+  });
   attrs[RGW_ATTR_ETAG] = etag_bl;
 
   if (compressed) {
