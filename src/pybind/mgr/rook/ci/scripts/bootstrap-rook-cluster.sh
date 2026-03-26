@@ -52,6 +52,12 @@ setup_minikube_env() {
 
     source /tmp/minikube-env.sh
     rm -f /tmp/minikube-env.sh
+
+    # Pin Docker API version to what minikube's daemon supports,
+    # in case the host docker client is newer
+    if [[ "$CONTAINER_RUNTIME" == "docker" ]]; then
+        export DOCKER_API_VERSION=$(docker version --format '{{.Server.APIVersion}}' 2>/dev/null || echo "1.43")
+    fi
 }
 
 build_ceph_image() {
