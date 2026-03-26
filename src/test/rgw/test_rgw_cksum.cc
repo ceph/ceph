@@ -367,7 +367,7 @@ TEST(RGWCksum, DigestBL)
 TEST(RGWCksum, CRC64NVME1)
 {
   /* from SPDK crc64_ut.c */
-  unsigned int buf_size = 4096;
+  static constexpr unsigned int buf_size = 4096;
   char buf[buf_size];
   uint64_t crc;
   unsigned int i, j;
