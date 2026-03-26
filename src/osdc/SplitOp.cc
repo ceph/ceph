@@ -442,23 +442,29 @@ bool ECSplitOp::version_mismatch() const {
 bool ReplicaSplitOp::version_mismatch() const {
   std::optional<eversion_t> ref_version;
 
-  // OSD does not understand shards, so fills in invalid entry.
-  shard_id_t shard(-1);
-
   for (auto & [acting_index, sub_read] : sub_reads) {
     ceph_assert(sub_read.internal_version.has_value());
     std::map<shard_id_t, eversion_t> shard_vers;
     decode(shard_vers, sub_read.internal_version->bl);
 
+    shard_id_t shard(acting_index);
     if (!shard_vers.contains(shard)) {
-      ldout(cct, DBG_LVL) << __func__ << ": "
-         << "Shard version missing, failing split op." << dendl;
-      return true;
+      if (shard_vers.contains(shard_id_t(-1))) {
+        shard = shard_id_t(-1);
+      } else {
+        ldout(cct, DBG_LVL) << __func__ << ": "
+          << "Replica version missing, failing split op." << dendl;
+        return true;
+      }
     }
 
     if (!ref_version) {
       ref_version = shard_vers.at(shard);
-    } else if (shard_vers.at(shard) != *ref_version) {
+    } else if (*ref_version != shard_vers.at(shard)) {
+      ldout(cct, DBG_LVL) << __func__ << ": "
+        << "Primary version (" << *ref_version << ") != "
+        << "replica version (" << shard_vers.at(shard) << ") "
+        << "for replica " << shard << dendl;
       return true;
     }
   }
