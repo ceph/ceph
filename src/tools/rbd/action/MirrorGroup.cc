@@ -59,25 +59,33 @@ void add_group_spec_options(po::options_description *pos,
 
 namespace {
 
-int validate_mirroring_enabled(librados::IoCtx io_ctx,
-                               const std::string group_name) {
+int validate_mirroring_enabled(librados::IoCtx& io_ctx,
+                               const std::string& group_name) {
   librbd::RBD rbd;
   librbd::mirror_group_info_t info;
   int r = rbd.mirror_group_get_info(io_ctx, group_name.c_str(), &info,
                                     sizeof(info));
   if (r < 0) {
-    std::cerr << "rbd: failed to get mirror info for group: "
-              << cpp_strerror(r) << std::endl;
+    std::cerr << "rbd: failed to get mirror info for group '" << group_name
+              << "': " << cpp_strerror(r) << std::endl;
     return r;
   }
 
-  if (info.state != RBD_MIRROR_GROUP_ENABLED) {
-    std::cerr << "rbd: mirroring not enabled on the group" << std::endl;
+  if (info.state == RBD_MIRROR_GROUP_DISABLED) {
+    std::cerr << "rbd: mirroring disabled on group '" << group_name
+              << "'" << std::endl;
+    return -EINVAL;
+  } else if (info.state != RBD_MIRROR_GROUP_ENABLED) {
+    std::cerr << "rbd: mirroring not enabled on group '" << group_name
+              << "' (state: " << utils::mirror_group_state(info.state) << ")"
+              << std::endl;
     return -EINVAL;
   }
 
   if (info.mirror_image_mode != RBD_MIRROR_IMAGE_MODE_SNAPSHOT) {
-    std::cerr << "rbd: snapshot based mirroring not enabled on the group"
+    std::cerr << "rbd: snapshot based mirroring not enabled on group '"
+              << group_name << "' (mirroring mode: "
+              << utils::mirror_image_mode(info.mirror_image_mode) << ")"
               << std::endl;
     return -EINVAL;
   }
