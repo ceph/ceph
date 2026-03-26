@@ -1791,11 +1791,12 @@ Usage:
     @OrchestratorCLICommand.Write('orch daemon redeploy')
     def _daemon_action_redeploy(self,
                                 name: str,
-                                image: Optional[str] = None) -> HandleCommandResult:
+                                image: Optional[str] = None,
+                                force: bool = False) -> HandleCommandResult:
         """Redeploy a daemon (with a specific image)"""
         if '.' not in name:
             raise OrchestratorError('%s is not a valid daemon name' % name)
-        completion = self.daemon_action("redeploy", name, image=image)
+        completion = self.daemon_action("redeploy", name, image=image, force=force)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
@@ -2697,7 +2698,7 @@ Usage:
         """
         Set the force flag for a scheduled daemon action
         """
-        completion = self.force_daemon_action(daemon_name, True)
+        completion = self.force_daemon_action(daemon_name, force = True)
         result = raise_if_exception(completion)
         if not result:
             return HandleCommandResult(stderr=f"No scheduled action found for daemon {daemon_name}")
@@ -2708,7 +2709,7 @@ Usage:
         """
         Unset the force flag for a scheduled daemon action
         """
-        completion = self.force_daemon_action(daemon_name, False)
+        completion = self.force_daemon_action(daemon_name, force = False)
         result = raise_if_exception(completion)
         if not result:
             return HandleCommandResult(stderr=f"No scheduled action found for daemon {daemon_name}")
