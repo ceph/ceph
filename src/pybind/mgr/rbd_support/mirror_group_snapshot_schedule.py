@@ -1,10 +1,11 @@
 import errno
 import json
 import rados
+import random
 import rbd
 import traceback
 
-from datetime import datetime
+from datetime import datetime, timezone
 from threading import Condition, Lock, Thread
 from typing import Any, Dict, List, NamedTuple, Optional, Set, Tuple, Union
 
@@ -265,7 +266,7 @@ class MirrorGroupSnapshotScheduleHandler:
         self.condition = Condition(self.lock)
         self.module = module
         self.log = module.log
-        self.last_refresh_groups = datetime(1970, 1, 1)
+        self.last_refresh_groups = datetime(1970, 1, 1, tzinfo=timezone.utc)
         self.create_snapshot_requests = GroupCreateSnapshotRequests(self)
 
         self.stop_thread = False
@@ -297,7 +298,7 @@ class MirrorGroupSnapshotScheduleHandler:
                 pool_id, namespace, group_id = group_spec
                 self.create_snapshot_requests.add(pool_id, namespace, group_id)
                 with self.lock:
-                    self.enqueue(datetime.now(), pool_id, namespace, group_id)
+                    self.enqueue(datetime.now(timezone.utc), pool_id, namespace, group_id)
 
         except (rados.ConnectionShutdown, rbd.ConnectionShutdown):
             self.log.exception("MirrorGroupSnapshotScheduleHandler: client blocklisted")
@@ -308,7 +309,7 @@ class MirrorGroupSnapshotScheduleHandler:
 
     def init_schedule_queue(self) -> None:
         # schedule_time => group_spec
-        self.queue: Dict[str, List[GroupSpec]] = {}
+        self.queue: Dict[datetime, List[GroupSpec]] = {}
         # pool_id => {namespace => {group_id => group_name}}
         self.groups: Dict[str, Dict[str, Dict[str, str]]] = {}
         self.schedules = Schedules(self)
@@ -320,7 +321,7 @@ class MirrorGroupSnapshotScheduleHandler:
         self.schedules.load(namespace_validator, group_validator=group_validator)
 
     def refresh_groups(self) -> float:
-        elapsed = (datetime.now() - self.last_refresh_groups).total_seconds()
+        elapsed = (datetime.now(timezone.utc) - self.last_refresh_groups).total_seconds()
         if elapsed < self.REFRESH_DELAY_SECONDS:
             return self.REFRESH_DELAY_SECONDS - elapsed
 
@@ -332,7 +333,7 @@ class MirrorGroupSnapshotScheduleHandler:
                 self.log.debug("MirrorGroupSnapshotScheduleHandler: no schedules")
                 self.groups = {}
                 self.queue = {}
-                self.last_refresh_groups = datetime.now()
+                self.last_refresh_groups = datetime.now(timezone.utc)
                 return self.REFRESH_DELAY_SECONDS
 
         groups: Dict[str, Dict[str, Dict[str, str]]] = {}
@@ -348,7 +349,7 @@ class MirrorGroupSnapshotScheduleHandler:
             self.refresh_queue(groups)
             self.groups = groups
 
-        self.last_refresh_groups = datetime.now()
+        self.last_refresh_groups = datetime.now(timezone.utc)
         return self.REFRESH_DELAY_SECONDS
 
     def load_pool_groups(self,
@@ -400,13 +401,10 @@ class MirrorGroupSnapshotScheduleHandler:
                     pool_name, e))
 
     def rebuild_queue(self) -> None:
-        now = datetime.now()
-
         # don't remove from queue "due" groups
-        now_string = datetime.strftime(now, "%Y-%m-%d %H:%M:00")
-
+        now = datetime.now(timezone.utc)
         for schedule_time in list(self.queue):
-            if schedule_time > now_string:
+            if schedule_time > now:
                 del self.queue[schedule_time]
 
         if not self.schedules:
@@ -421,7 +419,7 @@ class MirrorGroupSnapshotScheduleHandler:
 
     def refresh_queue(self,
                       current_groups: Dict[str, Dict[str, Dict[str, str]]]) -> None:
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
 
         for pool_id in self.groups:
             for namespace in self.groups[pool_id]:
@@ -449,7 +447,8 @@ class MirrorGroupSnapshotScheduleHandler:
                     pool_id, namespace, group_id))
             return
 
-        schedule_time = schedule.next_run(now)
+        schedule_time = schedule.next_run(
+            now, "{}/{}/{}".format(pool_id, namespace, group_id))
         if schedule_time not in self.queue:
             self.queue[schedule_time] = []
         self.log.debug(
@@ -463,16 +462,15 @@ class MirrorGroupSnapshotScheduleHandler:
         if not self.queue:
             return None, 1000.0
 
-        now = datetime.now()
-        schedule_time = sorted(self.queue)[0]
+        now = datetime.now(timezone.utc)
+        schedule_time = min(self.queue)
 
-        if datetime.strftime(now, "%Y-%m-%d %H:%M:%S") < schedule_time:
-            wait_time = (datetime.strptime(schedule_time,
-                                           "%Y-%m-%d %H:%M:%S") - now)
-            return None, wait_time.total_seconds()
+        if now < schedule_time:
+            return None, (schedule_time - now).total_seconds()
 
         groups = self.queue[schedule_time]
-        group = groups.pop(0)
+        rng = random.Random(schedule_time.timestamp())
+        group = groups.pop(rng.randrange(len(groups)))
         if not groups:
             del self.queue[schedule_time]
         return group, 0.0
@@ -543,7 +541,7 @@ class MirrorGroupSnapshotScheduleHandler:
                         continue
                     group_name = self.groups[pool_id][namespace][group_id]
                     scheduled_groups.append({
-                        'schedule_time': schedule_time,
+                        'schedule_time': schedule_time.strftime("%Y-%m-%d %H:%M:00"),
                         'group': group_name
                     })
         return 0, json.dumps({'scheduled_groups': scheduled_groups},
