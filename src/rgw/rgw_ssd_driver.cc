@@ -1,5 +1,4 @@
 #include <boost/asio/system_executor.hpp>
-
 #include <boost/container/small_vector.hpp>
 
 #include "common/async/completion.h"
@@ -11,14 +10,30 @@
 #include <sys/xattr.h>
 #endif
 
-#include <filesystem>
 #include <errno.h>
 namespace efs = std::filesystem;
 
 namespace rgw { namespace cache {
 
+constexpr auto CHECK_INTERVAL = std::chrono::minutes(10);  // Check every 10 minutes
+
 static std::atomic<uint64_t> index{0};
 static std::atomic<uint64_t> dir_index{0};
+
+constexpr auto calculate_free_space(std::unsigned_integral auto available_space, std::unsigned_integral auto reserve_space)
+{
+    return available_space < reserve_space ? 0 : available_space - reserve_space;
+}
+
+constexpr auto adjust_free_space(std::unsigned_integral auto free_space, std::unsigned_integral auto size)
+{
+    return free_space < size ? 0 : free_space - size;
+}
+
+constexpr auto adjust_reserved_space(std::unsigned_integral auto reserved_space, std::unsigned_integral auto size)
+{
+    return reserved_space < size ? 0 : reserved_space - size;
+}
 
 static std::vector<std::string> tokenize_key(std::string_view key)
 {
@@ -114,6 +129,28 @@ static std::string create_dirs_get_filepath_from_key(const DoutPrefixProvider* d
 
 }
 
+/* This coroutine operates in a background thread to sync the free_space variable with efs::space.
+ * The efs::space call is expensive (especially under a lock) so this sync occurs every 10 minutes. */
+void SSDDriver::background_free_space_sync_worker(const DoutPrefixProvider* dpp, optional_yield y)
+{
+  ldpp_dout(dpp, 10) << "Background free_space co-routine started" << dendl;
+  while (!quit) {
+    free_space_timer->expires_after(CHECK_INTERVAL);
+    boost::system::error_code ec;
+    free_space_timer->async_wait(y.get_yield_context()[ec]);
+
+    if (ec == boost::asio::error::operation_aborted || quit.load()) {
+      break;
+    }
+
+    std::unique_lock<std::shared_mutex> l(cache_lock);
+    efs::space_info space = efs::space(partition_info.location);
+    free_space = calculate_free_space(space.available, partition_info.reserve_size);
+
+    ldpp_dout(dpp, 20) << "SSDDriver:: " << __func__ << "(): free_space: " << free_space << dendl;
+  }
+}
+
 int SSDDriver::initialize(const DoutPrefixProvider* dpp)
 {
     if(partition_info.location.back() != '/') {
@@ -173,7 +210,7 @@ int SSDDriver::initialize(const DoutPrefixProvider* dpp)
       } catch (const efs::filesystem_error& e) {
 	  ldpp_dout(dpp, 0) << "initialize::: ERROR initializing the cache storage directory '" << partition_info.location <<
 				  "' : " << e.what() << dendl;
-	  //return -EINVAL; Should return error from here?
+      return -EINVAL;
       }
     }
 
@@ -186,212 +223,313 @@ int SSDDriver::initialize(const DoutPrefixProvider* dpp)
     aio_init(&ainit);
     #endif
 
+    /* The free_space variable is to be set using efs::space only upon initialization in the main thread. Afterwards, it will 
+     * be updated during cache ops that handle data (not attributes) by adding/subtracting the size of the data itself.
+     * Recalibration of free_space occurs in a background thread every 10 minutes with additional efs::space calls to improve 
+     * cache performance while maintaining partition correctedness. */
     efs::space_info space = efs::space(partition_info.location);
-    //currently partition_info.size is unused
-    this->free_space = space.available;
+    free_space = calculate_free_space(space.available, partition_info.reserve_size);
+    reserved_space = 0;
+    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): reserved_space=" << reserved_space << dendl;
 
+    free_space_timer.emplace(io_context);
+    boost::asio::spawn(
+        io_context,
+        [this, dpp](boost::asio::yield_context yield) {
+          optional_yield y{yield};
+          background_free_space_sync_worker(dpp, y);
+        },
+        [this, dpp](std::exception_ptr e) {
+          if (e) {
+            free_space_done_promise.set_exception(e);
+          } else {
+            free_space_done_promise.set_value();
+          }
+          ldpp_dout(dpp, 10) << "Background free_space co-routine stopped" << dendl;
+      }
+    );
     return 0;
 }
 
+//Helper method to parse the filename in the cache, sample format is version#offset#block_len
+static std::vector<std::string> parse_cache_filename(const DoutPrefixProvider* dpp, const std::filesystem::path& filename)
+{
+    std::vector<std::string> parts;
+    std::string file_str = filename.string();
+    std::string part;
+    std::stringstream ss(file_str);
+
+    while (std::getline(ss, part, CACHE_DELIM)) {
+        parts.push_back(part);
+    }
+
+    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): parts.size(): " << parts.size() << dendl;
+    return parts;
+}
+
+//Helper method to build cache key which is used in d4n filter driver and policy methods
+static std::string build_cache_key(const std::string& bucket_id,
+                            const std::string& version,
+                            const std::string& object_name)
+{
+    return url_encode(bucket_id, true) + CACHE_DELIM +
+           url_encode(version, true) + CACHE_DELIM +
+           url_encode(object_name, true);
+}
+
+//Helper method to extract an attr and convert to a sting
+std::string SSDDriver::extract_attr_string(const DoutPrefixProvider* dpp,
+                                           const rgw::sal::Attrs& attrs,
+                                           const std::string& attr_name)
+{
+    if (attrs.contains(attr_name)) {
+        return attrs.at(attr_name).to_str();
+    }
+    ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): Failed to get attr: " << attr_name << dendl;
+    return {};
+}
+
+//Helper method to build rgw_obj_key from instance and ns
+rgw_obj_key SSDDriver::build_obj_key(const std::string& object_name,
+                                     const rgw::sal::Attrs& attrs)
+{
+    rgw_obj_key obj_key;
+    obj_key.name = object_name;
+
+    if (attrs.contains(RGW_CACHE_ATTR_VERSION_ID)) {
+        std::string instance = attrs.at(RGW_CACHE_ATTR_VERSION_ID).to_str();
+        if (instance != "null") {
+            obj_key.instance = instance;
+        }
+    }
+
+    if (attrs.contains(RGW_CACHE_ATTR_OBJECT_NS)) {
+        obj_key.ns = attrs.at(RGW_CACHE_ATTR_OBJECT_NS).to_str();
+    }
+
+    return obj_key;
+}
+
+//Helper method to decode ACL and extract user name from it
+rgw_user SSDDriver::extract_user_from_attrs(const DoutPrefixProvider* dpp,
+                                            const rgw::sal::Attrs& attrs)
+{
+    rgw_user user;
+
+    if (attrs.contains(RGW_ATTR_ACL)) {
+        try {
+            bufferlist bl_acl = attrs.at(RGW_ATTR_ACL);
+            RGWAccessControlPolicy policy;
+            auto iter = bl_acl.cbegin();
+            policy.decode(iter);
+            user = std::get<rgw_user>(policy.get_owner().id);
+            ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): rgw_user: " << user.to_str() << dendl;
+        } catch (buffer::error& err) {
+            ldpp_dout(dpp, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
+        }
+    }
+
+    return user;
+}
+
+//Helper method to check if the block is a delete marker
+bool SSDDriver::extract_delete_marker(const DoutPrefixProvider* dpp,
+                                      const rgw::sal::Attrs& attrs)
+{
+    if (attrs.contains(RGW_CACHE_ATTR_DELETE_MARKER)) {
+        std::string deleteMarkerStr = attrs.at(RGW_CACHE_ATTR_DELETE_MARKER).to_str();
+        return (deleteMarkerStr == "1");
+    }
+    return false;
+}
+
+//Helper method to process data blocks, of the format version#offset#len
+void SSDDriver::process_data_block(const DoutPrefixProvider* dpp,
+                                   const std::filesystem::path& file_path,
+                                   const std::string& base_key,
+                                   const std::string& version,
+                                   const std::string& bucket_id,
+                                   const std::string& object_name,
+                                   const std::vector<std::string>& parts,
+                                   bool dirty,
+                                   const rgw::sal::Attrs& attrs,
+                                   ObjectDataCallback obj_func,
+                                   BlockDataCallback block_func)
+{
+    uint64_t offset = std::stoull(parts[1]);
+    uint64_t len = std::stoull(parts[2]);
+
+    std::string key = base_key + CACHE_DELIM + std::to_string(offset) + CACHE_DELIM + std::to_string(len);
+
+    rgw_obj_key obj_key = build_obj_key(object_name, attrs);
+    std::string instance = extract_attr_string(dpp, attrs, RGW_CACHE_ATTR_VERSION_ID);
+    std::string invalidStr = extract_attr_string(dpp, attrs, RGW_CACHE_ATTR_INVALID);
+    std::string localWeightStr = extract_attr_string(dpp, attrs, RGW_CACHE_ATTR_LOCAL_WEIGHT);
+    rgw_user user = extract_user_from_attrs(dpp, attrs);
+    std::string bucket_name = extract_attr_string(dpp, attrs, RGW_CACHE_ATTR_BUCKET_NAME);
+
+    // Mark invalid blocks as clean for eviction
+    if (invalidStr == "1") {
+        dirty = false;
+    }
+
+    block_func(dpp, key, offset, len, version, dirty, user, bucket_name, null_yield, localWeightStr);
+    if (dirty) {
+        obj_func(dpp, key, version, false, bucket_id, obj_key, instance, null_yield, invalidStr);
+    }
+}
+
+//TODO - check if this can be removed
+void SSDDriver::process_clean_head_block(const DoutPrefixProvider* dpp,
+                                         const std::filesystem::path& file_path,
+                                         const std::string& key,
+                                         const std::string& version,
+                                         const rgw::sal::Attrs& attrs,
+                                         ObjectDataCallback obj_func,
+                                         BlockDataCallback block_func)
+{
+    std::string localWeightStr = extract_attr_string(dpp, attrs, RGW_CACHE_ATTR_LOCAL_WEIGHT);
+    rgw_user user = extract_user_from_attrs(dpp, attrs);
+    std::string bucket_name = extract_attr_string(dpp, attrs, RGW_CACHE_ATTR_BUCKET_NAME);
+
+    uint64_t offset = 0, len = 0;
+    block_func(dpp, key, offset, len, version, false, user, bucket_name, null_yield, localWeightStr);
+}
+
+/* Helper method to process a dirty head block, cached only for delete markers since they do not
+ * have data, format: version (there is no offset and len attached as it is a 0 sized block)
+ */
+void SSDDriver::process_dirty_head_block(const DoutPrefixProvider* dpp,
+                                         const std::filesystem::path& file_path,
+                                         const std::string& key,
+                                         const std::string& version,
+                                         const std::string& bucket_id,
+                                         const std::string& object_name,
+                                         const rgw::sal::Attrs& attrs,
+                                         ObjectDataCallback obj_func,
+                                         BlockDataCallback block_func)
+{
+    rgw_obj_key obj_key = build_obj_key(object_name, attrs);
+    std::string instance = extract_attr_string(dpp, attrs, RGW_CACHE_ATTR_VERSION_ID);
+    bool deleteMarker = extract_delete_marker(dpp, attrs);
+    std::string invalidStr = extract_attr_string(dpp, attrs, RGW_CACHE_ATTR_INVALID);
+    std::string localWeightStr = extract_attr_string(dpp, attrs, RGW_CACHE_ATTR_LOCAL_WEIGHT);
+    rgw_user user = extract_user_from_attrs(dpp, attrs);
+
+    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): calling func for: " << key << dendl;
+    obj_func(dpp, key, version, deleteMarker, bucket_id, obj_key, instance, null_yield, invalidStr);
+
+    uint64_t offset = 0, len = 0;
+    std::string bucket_name;
+    block_func(dpp, key, offset, len, version, true, user, bucket_name, null_yield, localWeightStr);
+}
+
+//Helper method to check if a block is dirty
+bool SSDDriver::get_dirty_flag(const DoutPrefixProvider* dpp, const std::filesystem::path& file_path)
+{
+    std::string dirtyStr;
+    auto ret = get_attr(dpp, file_path, RGW_CACHE_ATTR_DIRTY, dirtyStr, null_yield);
+
+    if (ret == 0 && dirtyStr == "1") {
+        ldpp_dout(dpp, 10) << "SSDCache: " << __func__ << "(): Dirty xattr retrieved" << dendl;
+        return true;
+    } else if (ret < 0) {
+        ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): Failed to get attr: "
+                         << RGW_CACHE_ATTR_DIRTY << ", ret=" << ret << dendl;
+    }
+    return false;
+}
+
+//Helper method to process cache files, could be a head block(for a delete marker only) or a data block
+void SSDDriver::process_cache_file(const DoutPrefixProvider* dpp,
+                                   const std::filesystem::path& file_path,
+                                   const std::string& bucket_id,
+                                   const std::string& object_name,
+                                   ObjectDataCallback obj_func,
+                                   BlockDataCallback block_func)
+{
+    std::vector<std::string> parts = parse_cache_filename(dpp, file_path.filename());
+
+    if (parts.size() != 1 && parts.size() != 3) {
+        ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): Unable to parse: "
+                          << file_path.filename() << dendl;
+        return;
+    }
+
+    rgw::sal::Attrs attrs;
+    get_attrs(dpp, file_path, attrs, null_yield);
+
+    std::string version = url_decode(parts[0]);
+    std::string key = build_cache_key(bucket_id, version, object_name);
+    bool dirty = get_dirty_flag(dpp, file_path);
+
+    if (parts.size() == 1) {
+        if (dirty) {
+            process_dirty_head_block(dpp, file_path, key, version, bucket_id, object_name, attrs, obj_func, block_func);
+        } else {
+            process_clean_head_block(dpp, file_path, key, version, attrs, obj_func, block_func);
+        }
+    } else {
+        process_data_block(dpp, file_path, key, version, bucket_id, object_name, parts, dirty, attrs, obj_func, block_func);
+    }
+}
+
+//Helper method to iterate through object subdirectories
+void SSDDriver::restore_object_files(const DoutPrefixProvider* dpp,
+                                     const std::filesystem::path& object_path,
+                                     const std::string& bucket_id,
+                                     const std::string& object_name,
+                                     ObjectDataCallback obj_func,
+                                     BlockDataCallback block_func)
+{
+    for (auto const& file_entry : efs::directory_iterator{object_path}) {
+        if (!file_entry.is_regular_file()) continue;
+        try {
+            process_cache_file(dpp, file_entry.path(), bucket_id, object_name, obj_func, block_func);
+        } catch (...) {
+            ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): Exception parsing: "
+                              << file_entry.path() << dendl;
+        }
+    }
+}
+
+/* Helper method to iterate through bucket directories.
+ * format of a file is cache_location/bucket-id/object-name/cache-file,
+ * where cache-file can be a head/data block. Head blocks are only for
+ * delete markers
+ */
+void SSDDriver::restore_bucket_objects(const DoutPrefixProvider* dpp,
+                                       const std::filesystem::path& bucket_path,
+                                       const std::string& bucket_id,
+                                       ObjectDataCallback obj_func,
+                                       BlockDataCallback block_func)
+{
+    for (auto const& object_dir : efs::directory_iterator{bucket_path}) {
+        if (!object_dir.is_directory()) continue;
+        std::string object_name = object_dir.path().filename();
+        restore_object_files(dpp, object_dir.path(), bucket_id, object_name, obj_func, block_func);
+    }
+}
+
+/* Method to restore blocks and objects from cache data upon rgw restart
+ * and is called from LFUDAPolicy::init() method
+ */
 int SSDDriver::restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataCallback obj_func, BlockDataCallback block_func)
 {
     if (dpp->get_cct()->_conf->rgw_d4n_l1_evict_cache_on_start) {
-        return 0; //don't do anything as the cache directory must have been evicted during start-up
+        return 0;
     }
+
     std::string cache_location = partition_info.location;
     if (cache_location.back() == '/') {
-        ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): cache_location: " << cache_location << dendl;
         cache_location.pop_back();
     }
-    for (auto const& dir_entry : efs::directory_iterator{partition_info.location}) {
-        std::string bucket_id, object_name;
-        if (dir_entry.is_directory()) {
-            ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): Is directory, path: " << dir_entry.path() << dendl;
-            ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): File Name: " << dir_entry.path().filename() << dendl;
-            bucket_id = dir_entry.path().filename();
-            for (auto const& sub_dir_entry : efs::directory_iterator{dir_entry.path()}) {
-                if (sub_dir_entry.is_directory()) {
-                    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): Is directory, path: " << sub_dir_entry.path() << dendl;
-                    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): File Name: " << sub_dir_entry.path().filename() << dendl;
-                    object_name = sub_dir_entry.path().filename();
-                    for (auto const& file_entry : efs::directory_iterator{sub_dir_entry.path()}) {
-                        try {
-                            if (file_entry.is_regular_file()) {
-                                ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): filename: " << file_entry.path().filename() << dendl;
-                                std::string file_name = file_entry.path().filename();
-                                bool parsed = false;
-                                std::vector<std::string> parts;
-                                std::string part;
-                                std::stringstream ss(file_name);
-                                while (std::getline(ss, part, CACHE_DELIM)) {
-                                    parts.push_back(part);
-                                }
-                                ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): parts.size(): " << parts.size() << dendl;
-  
-				std::string dirtyStr;
-				bool dirty;
-				auto ret = get_attr(dpp, file_entry.path(), RGW_CACHE_ATTR_DIRTY, dirtyStr, null_yield);
-				if (ret == 0 && dirtyStr == "1") {
-				    ldpp_dout(dpp, 10) << "SSDCache: " << __func__ << "(): Dirty xattr retrieved" << dendl;
-                                    dirty = true;
-                                } else if (ret < 0) {
-				    ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): Failed to get attr: " << RGW_CACHE_ATTR_DIRTY << ", ret=" << ret << dendl;
-                                    dirty = false;
-				} else {
-                                    dirty = false;
-                                }
 
-                                if (parts.size() == 1 || parts.size() == 3) {
-				    std::string version = url_decode(parts[0]);
-				    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): version: " << version << dendl;
-
-				    std::string key = url_encode(bucket_id, true) + CACHE_DELIM + url_encode(version, true) + CACHE_DELIM + url_encode(object_name, true);
-				    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): key: " << key << dendl;
-
-				    uint64_t len = 0, offset = 0;
-				    rgw_user user;
-				    rgw::sal::Attrs attrs;
-				    if (parts.size() == 1) {
-					get_attrs(dpp, file_entry.path(), attrs, null_yield);
-					if (dirtyStr == "0") {
-					    //non-dirty or clean blocks - version in head block and offset, len in data blocks
-					    std::string localWeightStr;
-					    if (attrs.find(RGW_CACHE_ATTR_LOCAL_WEIGHT) != attrs.end()) {
-                                                localWeightStr = attrs[RGW_CACHE_ATTR_LOCAL_WEIGHT].to_str();
-						ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): localWeightStr: " << localWeightStr << dendl;
-					    } else {
-						ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): Failed to get attr: " << RGW_CACHE_ATTR_LOCAL_WEIGHT << dendl;
-                                            }
-					    if (attrs.find(RGW_ATTR_ACL) != attrs.end()) {
-						bufferlist bl_acl = attrs[RGW_ATTR_ACL];
-						RGWAccessControlPolicy policy;
-						auto iter = bl_acl.cbegin();
-						try {
-						    policy.decode(iter);
-						} catch (buffer::error& err) {
-						    ldpp_dout(dpp, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
-						    continue;
-						}
-						user = std::get<rgw_user>(policy.get_owner().id);
-						ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): rgw_user: " << user.to_str() << dendl;
-					    }
-					    block_func(dpp, key, offset, len, version, false, user, null_yield, localWeightStr);
-					    parsed = true;
-				        } else if (dirtyStr == "1") {
-                            //we still have parsing for a head block because we maintain a head block only for delete markers
-                            // as there are no data blocks associated with it.
-					    std::string localWeightStr;
-					    std::string invalidStr;
-					    rgw::sal::Attrs attrs;
-					    get_attrs(dpp, file_entry.path(), attrs, null_yield);
-					    rgw_obj_key obj_key;
-					    bool deleteMarker = false;
-					    obj_key.name = object_name;
-                        std::string instance;
-					    if (attrs.find(RGW_CACHE_ATTR_VERSION_ID) != attrs.end()) {
-						instance = attrs[RGW_CACHE_ATTR_VERSION_ID].to_str();
-						obj_key.instance = instance;
-					    }
-					    if (attrs.find(RGW_CACHE_ATTR_OBJECT_NS) != attrs.end()) {
-						obj_key.ns = attrs[RGW_CACHE_ATTR_OBJECT_NS].to_str();
-					    }
-					    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): rgw_obj_key: " << obj_key.get_oid() << dendl;
-
-					    if (attrs.find(RGW_CACHE_ATTR_LOCAL_WEIGHT) != attrs.end()) {
-						localWeightStr = attrs[RGW_CACHE_ATTR_LOCAL_WEIGHT].to_str();
-						ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): localWeightStr: " << localWeightStr << dendl;
-					    }
-
-					    if (attrs.find(RGW_CACHE_ATTR_DELETE_MARKER) != attrs.end()) {
-						std::string deleteMarkerStr = attrs[RGW_CACHE_ATTR_LOCAL_WEIGHT].to_str();
-						deleteMarker = (deleteMarkerStr == "1") ? true : false;
-						ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): deleteMarker: " << deleteMarker << dendl;
-					    }
-
-					    if (attrs.find(RGW_CACHE_ATTR_INVALID) != attrs.end()) {
-						invalidStr = attrs[RGW_CACHE_ATTR_INVALID].to_str();
-						ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): invalidStr: " << invalidStr << dendl;
-					    }
-					    if (attrs.find(RGW_ATTR_ACL) != attrs.end()) {
-						bufferlist bl_acl = attrs[RGW_ATTR_ACL];
-						RGWAccessControlPolicy policy;
-						auto iter = bl_acl.cbegin();
-						try {
-						    policy.decode(iter);
-						} catch (buffer::error& err) {
-						    ldpp_dout(dpp, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
-						    continue;
-						}
-						user = std::get<rgw_user>(policy.get_owner().id);
-						ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): rgw_user: " << user.to_str() << dendl;
-					    }
-					    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): calling func for: " << key << dendl;
-					    obj_func(dpp, key, version, deleteMarker, bucket_id, obj_key, instance, null_yield, invalidStr);
-					    block_func(dpp, key, offset, len, version, dirty, user, null_yield, localWeightStr);
-					    parsed = true;
-                                        } // end-if dirtyStr == "1"
-				    } else if (parts.size() == 3) { //end-if parts.size() == 1
-                        std::string invalidStr;
-                        std::string etag, bucket_name;
-					    uint64_t size = 0;
-					    time_t creationTime = time_t(nullptr);
-					    rgw_user user;
-                        rgw::sal::Attrs attrs;
-                        get_attrs(dpp, file_entry.path(), attrs, null_yield);
-                        rgw_obj_key obj_key;
-                        obj_key.name = object_name;
-                        std::string instance;
-					    if (attrs.find(RGW_CACHE_ATTR_VERSION_ID) != attrs.end()) {
-						instance = attrs[RGW_CACHE_ATTR_VERSION_ID].to_str();
-						if (instance != "null") {
-						    obj_key.instance = instance;
-						}
-					    }
-					    if (attrs.find(RGW_CACHE_ATTR_OBJECT_NS) != attrs.end()) {
-						obj_key.ns = attrs[RGW_CACHE_ATTR_OBJECT_NS].to_str();
-					    }
-					    bool deleteMarker = false;
-					offset = std::stoull(parts[1]);
-					ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): offset: " << offset << dendl;
-
-					len = std::stoull(parts[2]);
-					ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): len: " << len << dendl;
-
-					key = key + CACHE_DELIM + std::to_string(offset) + CACHE_DELIM + std::to_string(len);
-					ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): key: " << key << dendl;
-
-					std::string localWeightStr;
-					 if (attrs.find(RGW_CACHE_ATTR_LOCAL_WEIGHT) != attrs.end()) {
-                        localWeightStr = attrs[RGW_CACHE_ATTR_LOCAL_WEIGHT].to_str();
-                        ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): localWeightStr: " << localWeightStr << dendl;
-                    }
-                    if (attrs.find(RGW_CACHE_ATTR_INVALID) != attrs.end()) {
-                        invalidStr = attrs[RGW_CACHE_ATTR_INVALID].to_str();
-                        ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): invalidStr: " << invalidStr << dendl;
-                        //mark invalid data blocks as clean so that they are up for eviction.
-                        if (invalidStr == "1") {
-                            dirty = false;
-                        }
-                    }
-                    obj_func(dpp, key, version, deleteMarker, bucket_id, obj_key, instance, null_yield, invalidStr);
-					block_func(dpp, key, offset, len, version, dirty, user, null_yield, localWeightStr);
-					parsed = true;
-				    } 
-				    if (!parsed) {
-					ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): Unable to parse file_name: " << file_name << dendl;
-					continue;
-				    }
-			        }
-                            }
-                        }//end - try
-                        catch(...) {
-                            ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): Exception while parsing entry: " << file_entry.path() << dendl;
-                            continue;
-                        }
-                    }
-                }
-            }
-        }
+    for (auto const& bucket_dir : efs::directory_iterator{cache_location}) {
+        if (!bucket_dir.is_directory()) continue;
+        
+        std::string bucket_id = bucket_dir.path().filename();
+        restore_bucket_objects(dpp, bucket_dir.path(), bucket_id, obj_func, block_func);
     }
 
     return 0;
@@ -399,14 +537,37 @@ int SSDDriver::restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataC
 
 uint64_t SSDDriver::get_free_space(const DoutPrefixProvider* dpp, optional_yield y)
 {
-    efs::space_info space = efs::space(partition_info.location);
-    return (space.available < partition_info.reserve_size) ? 0 : (space.available - partition_info.reserve_size);
+	std::shared_lock<std::shared_mutex> l(cache_lock);
+    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): free_space=" << free_space << dendl;
+    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): reserved_space=" << reserved_space << dendl;
+	return (free_space < reserved_space) ? 0 : (free_space - reserved_space);
 }
 
-void SSDDriver::set_free_space(const DoutPrefixProvider* dpp, uint64_t free_space)
+int SSDDriver::reserve_space(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) 
 {
-    std::lock_guard l(cache_lock);
-    this->free_space = free_space;
+    std::unique_lock<std::shared_mutex> l(cache_lock);
+	reserved_space += size;
+	return 0;
+}
+
+int SSDDriver::check_and_reserve_space(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) 
+{
+    std::unique_lock<std::shared_mutex> l(cache_lock);
+    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): free_space=" << free_space << dendl;
+    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): reserved_space=" << reserved_space << dendl;
+	uint64_t visible = (free_space < reserved_space) ? 0 : (free_space - reserved_space);
+	if (visible < size) {
+		return -ENOSPC;
+	}
+	reserved_space += size;
+	return 0;
+}
+
+int SSDDriver::release_reservation(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) 
+{
+    std::unique_lock<std::shared_mutex> l(cache_lock);
+	reserved_space = adjust_reserved_space(reserved_space, size);
+	return 0;
 }
 
 int SSDDriver::put(const DoutPrefixProvider* dpp, const std::string& key, const bufferlist& bl, uint64_t len, const rgw::sal::Attrs& attrs, optional_yield y)
@@ -425,7 +586,15 @@ int SSDDriver::put(const DoutPrefixProvider* dpp, const std::string& key, const 
     if (ec) {
         return ec.value();
     }
-    return 0;
+
+    uint64_t size = len;
+    if (attrs.size()) {
+      size += XATTR_OVERHEAD_ESTIMATE;
+    } 
+	std::unique_lock<std::shared_mutex> l(cache_lock);
+    free_space = adjust_free_space(free_space, size);
+    reserved_space = adjust_reserved_space(reserved_space, size);
+	return 0;
 }
 
 int SSDDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, const bufferlist& bl_data, optional_yield y)
@@ -455,11 +624,10 @@ int SSDDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& ke
         ldpp_dout(dpp, 0) << "ERROR: append_data::fclose file has return error, errno=" << errno << dendl;
         return -errno;
     }
-    std::lock_guard l(cache_lock);
-    efs::space_info space = efs::space(partition_info.location);
-    this->free_space = space.available;
-
-    return 0;
+	std::unique_lock<std::shared_mutex> l(cache_lock);
+    free_space = adjust_free_space(free_space, bl_data.length());
+    reserved_space = adjust_reserved_space(reserved_space, bl_data.length());
+	return 0;
 }
 
 template <typename Executor1, typename CompletionHandler>
@@ -651,6 +819,11 @@ int SSDDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& ke
     std::string location = get_file_path(dpp, dir_path, file_name);
     ldpp_dout(dpp, 20) << "INFO: delete_data::file to remove: " << location << dendl;
     std::error_code ec;
+	uint64_t size = 0;
+
+	if (efs::is_regular_file(location)) {
+		size = efs::file_size(location);
+	}
 
     //Remove file
     if (!efs::remove(location, ec)) {
@@ -679,11 +852,9 @@ int SSDDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& ke
             }
         }
     }
-
-    efs::space_info space = efs::space(partition_info.location);
-    this->free_space = space.available;
-
-    return 0;
+	std::unique_lock<std::shared_mutex> l(cache_lock);
+    free_space += size;
+	return 0;
 }
 
 int SSDDriver::rename(const DoutPrefixProvider* dpp, const::std::string& oldKey, const::std::string& newKey, optional_yield y)
@@ -769,10 +940,6 @@ void SSDDriver::AsyncWriteRequest::libaio_write_cb(sigval sigval) {
         }
     }
 
-    Partition partition_info = op.priv_data->get_current_partition_info(op.dpp);
-    efs::space_info space = efs::space(partition_info.location);
-    op.priv_data->set_free_space(op.dpp, space.available);
-
     ldpp_dout(op.dpp, 20) << "INFO: AsyncWriteRequest::libaio_write_yield_cb: new_path: " << op.file_path << dendl;
     ldpp_dout(op.dpp, 20) << "INFO: AsyncWriteRequest::libaio_write_yield_cb: old_path: " << op.temp_file_path << dendl;
 
@@ -845,8 +1012,6 @@ int SSDDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& ke
         }
     }
 
-    efs::space_info space = efs::space(partition_info.location);
-    this->free_space = space.available;
     return 0;
 }
 
@@ -862,9 +1027,6 @@ int SSDDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& ke
             return ret;
         }
     }
-
-    efs::space_info space = efs::space(partition_info.location);
-    this->free_space = space.available;
 
     return 0;
 }
@@ -907,6 +1069,7 @@ int SSDDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key, 
         bl_value.append(attr_value);
         attrs.emplace(std::move(attr_name), std::move(bl_value));
     }
+
     return 0;
 }
 
@@ -932,9 +1095,6 @@ int SSDDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key, 
             }
         }
     }
-
-    efs::space_info space = efs::space(partition_info.location);
-    this->free_space = space.available;
 
     return 0;
 }
@@ -1034,9 +1194,6 @@ int SSDDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, c
         return ret;
     }
 
-    efs::space_info space = efs::space(partition_info.location);
-    this->free_space = space.available;
-
     return 0;
 }
 
@@ -1050,9 +1207,6 @@ int SSDDriver::delete_attr(const DoutPrefixProvider* dpp, const std::string& key
         ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): could not remove attr value for attr name: " << attr_name << " key: " << key << cpp_strerror(errno) << dendl;
         return ret;
     }
-
-    efs::space_info space = efs::space(partition_info.location);
-    this->free_space = space.available;
 
     return 0;
 }
