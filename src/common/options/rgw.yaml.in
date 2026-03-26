@@ -396,6 +396,14 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_override_return_storage_class
+  type: str
+  level: advanced
+  desc: Override the storage class reported on read responses (HEAD/GET headers and ListObjects responses)
+  default:
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_relaxed_region_enforcement
   type: bool
   level: advanced

@@ -371,6 +371,19 @@ inline bool str_has_cntrl(const char* s) {
   return str_has_cntrl(_s);
 }
 
+static std::string get_override_return_storage_class(
+    req_state* s,
+    const std::string& storage_class)
+{
+  const auto& configured_storage_class = s->cct->_conf->rgw_override_return_storage_class;
+  if (!configured_storage_class.empty()) {
+    ldpp_dout(s, 20) << "overriding storage class: " << storage_class
+                     << " -> " << configured_storage_class << dendl;
+    return configured_storage_class;
+  }
+  return storage_class;
+}
+
 // remove any aws-chunked entries from the comma-separated list
 static std::string content_encoding_without_aws_chunked(std::string_view value)
 {
@@ -745,6 +758,12 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
   }
 
 done:
+  {
+    const auto storage_class_iter = response_attrs.find("X-Amz-Storage-Class");
+    if (storage_class_iter != response_attrs.end()) {
+      storage_class_iter->second = get_override_return_storage_class(s, storage_class_iter->second);
+    }
+  }
   for (riter = response_attrs.begin(); riter != response_attrs.end();
        ++riter) {
     dump_header(s, riter->first, riter->second);
@@ -1998,7 +2017,8 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
         s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
         s->formatter->dump_int("Size", iter->meta.accounted_size);
         auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
-        s->formatter->dump_string("StorageClass", storage_class.c_str());
+        auto effective_storage_class = get_override_return_storage_class(s, storage_class);
+        s->formatter->dump_string("StorageClass", effective_storage_class.c_str());
       }
       dump_owner(s, iter->meta.owner, iter->meta.owner_display_name);
       if (iter->meta.appendable) {
@@ -2090,7 +2110,8 @@ void RGWListBucket_ObjStore_S3::send_response()
       s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
       s->formatter->dump_int("Size", iter->meta.accounted_size);
       auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
-      s->formatter->dump_string("StorageClass", storage_class.c_str());
+      auto effective_storage_class = get_override_return_storage_class(s, storage_class);
+      s->formatter->dump_string("StorageClass", effective_storage_class.c_str());
       dump_owner(s, iter->meta.owner, iter->meta.owner_display_name);
       if (s->system_request) {
 	s->formatter->dump_string("RgwxTag", iter->tag);
@@ -2165,7 +2186,8 @@ void RGWListBucket_ObjStore_S3v2::send_versioned_response()
         s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
         s->formatter->dump_int("Size", iter->meta.accounted_size);
         auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
-        s->formatter->dump_string("StorageClass", storage_class.c_str());
+        auto effective_storage_class = get_override_return_storage_class(s, storage_class);
+        s->formatter->dump_string("StorageClass", effective_storage_class.c_str());
       }
       if (fetchOwner == true) {
         dump_owner(s, iter->meta.owner, iter->meta.owner_display_name);
@@ -2234,7 +2256,8 @@ void RGWListBucket_ObjStore_S3v2::send_response()
       s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
       s->formatter->dump_int("Size", iter->meta.accounted_size);
       auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
-      s->formatter->dump_string("StorageClass", storage_class.c_str());
+      auto effective_storage_class = get_override_return_storage_class(s, storage_class);
+      s->formatter->dump_string("StorageClass", effective_storage_class.c_str());
       if (fetchOwner == true) {
         dump_owner(s, iter->meta.owner, iter->meta.owner_display_name);
       }
@@ -4181,11 +4204,8 @@ void RGWGetObjAttrs_ObjStore_S3::send_response()
 
     if (requested_attributes & as_flag(ReqAttributes::StorageClass)) {
       auto iter = attrs.find(RGW_ATTR_STORAGE_CLASS);
-      if (iter != attrs.end()) {
-	s->formatter->dump_string("StorageClass", iter->second.to_str());
-      } else {
-	s->formatter->dump_string("StorageClass", "STANDARD");
-      }
+      std::string storage_class = (iter != attrs.end()) ? iter->second.to_str() : "STANDARD";
+      s->formatter->dump_string("StorageClass", get_override_return_storage_class(s, storage_class).c_str());
     }
     s->formatter->close_section();
   } /* op_ret == 0 */
@@ -4803,7 +4823,7 @@ void RGWListMultipart_ObjStore_S3::send_response()
     s->formatter->dump_string("Bucket", s->bucket_name);
     s->formatter->dump_string("Key", s->object->get_name());
     s->formatter->dump_string("UploadId", upload_id);
-    s->formatter->dump_string("StorageClass", placement->get_storage_class());
+    s->formatter->dump_string("StorageClass", get_override_return_storage_class(s, placement->get_storage_class()).c_str());
     s->formatter->dump_int("PartNumberMarker", marker);
     s->formatter->dump_int("NextPartNumberMarker", cur_max);
     s->formatter->dump_int("MaxParts", max_parts);
@@ -4882,7 +4902,7 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
       const ACLOwner& owner = upload->get_owner();
       dump_owner(s, owner.id, owner.display_name, "Initiator");
       dump_owner(s, owner.id, owner.display_name); // Owner
-      s->formatter->dump_string("StorageClass", "STANDARD");
+      s->formatter->dump_string("StorageClass", get_override_return_storage_class(s, "STANDARD").c_str());
       dump_time(s, "Initiated", upload->get_mtime());
       s->formatter->close_section();
     }
