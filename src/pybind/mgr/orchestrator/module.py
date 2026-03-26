@@ -2635,7 +2635,7 @@ Usage:
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
-    @OrchestratorCLICommand.Write('orch action ls')
+    @OrchestratorCLICommand.Read('orch action ls')
     def _list_actions(self, format: Format = Format.plain) -> HandleCommandResult:
         """
         List scheduled daemon actions
