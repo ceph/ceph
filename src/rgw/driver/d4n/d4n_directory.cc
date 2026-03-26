@@ -992,10 +992,10 @@ int BlockDirectory::set(const DoutPrefixProvider* dpp, CacheBlock* block, option
     response<ignore_t> resp;
     if (pipeline && pipeline->is_pipeline()) {
       request& req = pipeline->get_request();
-      req.push_range("HSET", key, std::cbegin(redisValues), std::cend(redisValues));
+      req.push_range("HSET", key, redisValues);
     } else {
       request req;
-      req.push_range("HSET", key, std::cbegin(redisValues), std::cend(redisValues));
+      req.push_range("HSET", key, redisValues);
 
       redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
       if (ec) {
@@ -1023,7 +1023,7 @@ int BlockDirectory::set(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& 
     if (ret < 0) {
       return ret;
     }
-    req.push_range("HSET", key, std::cbegin(redisValues), std::cend(redisValues));
+    req.push_range("HSET", key, redisValues);
   }
 
   try {
@@ -1580,8 +1580,13 @@ int BlockDirectory::remove_host(const DoutPrefixProvider* dpp, CacheBlock* block
 	result.erase(result.length() - 1, 1);
       }
 
-      if (result.length() == 0) /* Last host, delete entirely */
-	return del(dpp, block, y); 
+      if (result.length() == 0) { /* Last host, delete entirely */
+        int ret = del(dpp, block, y); 
+        if (ret < 0) {
+		  ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): Failed to delete entire block, ret=" << ret << dendl;
+        }
+		return ret;
+      }
 
   value = result;
     }
