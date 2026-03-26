@@ -1147,7 +1147,8 @@ public:
     }
   }
 
-  uint64_t get_available_extra() const {
+  uint64_t get_effective_extra();
+  uint64_t get_max_extra() const {
     return db_avail4slow;
   }
   uint64_t get_extra_level() const {
