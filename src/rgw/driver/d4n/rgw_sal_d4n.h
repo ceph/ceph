@@ -19,6 +19,7 @@
 #include "rgw_sal.h"
 #include "rgw_role.h"
 #include "common/dout.h" 
+#include "common/split.h"
 #include "rgw_aio_throttle.h"
 #include "rgw_ssd_driver.h"
 #include "rgw_redis_driver.h"
@@ -59,6 +60,30 @@ inline std::string get_cache_block_prefix(rgw::sal::Object* object, const std::s
 inline std::string get_key_in_cache(const std::string& prefix, const std::string& offset, const std::string& len)
 {
   return fmt::format("{}{}{}{}{}", prefix, CACHE_DELIM, offset, CACHE_DELIM, len);
+}
+
+inline std::optional<rgw::d4n::CacheBlock> parse_block_from_cache(const std::string& key)
+{
+  rgw::d4n::CacheBlock block;
+  auto parts = split(key, "#");
+  std::vector<std::string> block_info;
+  block_info.assign(parts.begin(), parts.end());
+
+  if (block_info.size() != 5) {
+	return std::nullopt;
+  }
+
+  block.cacheObj.bucketName = block_info[0]; 
+  block.version = block_info[1];
+  block.cacheObj.objName = block_info[2]; 
+  try {
+	block.blockID = std::stoull(block_info[3]);
+	block.size = std::stoull(block_info[4]);
+  } catch (std::exception &e) {
+	return std::nullopt;
+  }
+
+  return block; 
 }
 
 using boost::redis::connection;
@@ -388,6 +413,7 @@ class D4NFilterObject : public FilterObject {
     uint64_t blk_offset;
     uint64_t blk_len;
     uint64_t obj_size; //sent by remote rgw
+    bool block_only = false; // sent by remote rgw; used in PUT op for an evicted block
 
   public:
     struct D4NFilterReadOp : FilterReadOp {
@@ -451,14 +477,9 @@ class D4NFilterObject : public FilterObject {
         rgw::AioResultList completed; // completed read results, sorted by offset
         std::map<uint64_t, std::unique_ptr<rgw::AioResultEntry>> completed_map;
 	std::unordered_map<uint64_t, BlockMeta> blocks_info;
-	std::map<off_t, std::tuple<off_t, bool, bufferlist>> read_data;
-	bool last_part_done = false;
-	uint64_t last_adjusted_ofs = -1;
-	bool first_block = true; //is it first_block
   std::mutex data_mutex;
   std::vector<std::shared_ptr<RemoteTaskResult>> remote_task_results;
 
-	void set_first_block(bool val) {first_block = val;}
 	int flush(const DoutPrefixProvider* dpp, rgw::AioResultList&& results, optional_yield y);
 	void cancel();
   int process_remote_results(const DoutPrefixProvider* dpp, std::shared_ptr<TaskGroup> group, optional_yield y);
@@ -565,8 +586,13 @@ class D4NFilterObject : public FilterObject {
     uint64_t get_remote_block_len() { return blk_len; }
 	const bool get_remote_dirty_flag() {return remote_dirty;}
 	void set_remote_dirty_flag(bool flag) {remote_dirty = flag;}
+    bool get_remote_block_only() const { return block_only; }
     void set_remote_obj_size(uint64_t size) { obj_size = size; }
+    void set_remote_block_only(bool flag) { block_only = flag; }
     uint64_t get_remote_obj_size() const { return obj_size; }
+	int write_if_space_available(const DoutPrefixProvider* dpp, const std::string& key, const bufferlist& bl, uint64_t len, const Attrs& attrs,
+								  uint64_t offset, const std::string& version, const bool& dirty, const rgw_user user, const std::string& bucketName,
+								  uint8_t op, optional_yield y);
 };
 
 class D4NFilterDPP : public DoutPrefixProvider {

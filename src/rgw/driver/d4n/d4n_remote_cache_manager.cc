@@ -229,6 +229,10 @@ int RemoteCachePutOp::send_request(const DoutPrefixProvider* dpp, optional_yield
   extra_headers["x-rgw-cache-blk-len"] = std::to_string(op.len);
   extra_headers["x-rgw-cache-obj-size"] = std::to_string(op.obj_size);
 
+  if (block_only) {
+    extra_headers["x-rgw-cache-block-only"] = "true";
+  }
+
   auto resource = get_resource(op.bucket_name, op.object_name);
   sender = std::make_unique<RGWRESTStreamRWRequest>(dpp->get_cct(), "PUT", op.remote_addr, cb.get(), nullptr, nullptr, "", host_style);
 

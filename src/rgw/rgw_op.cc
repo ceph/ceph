@@ -4883,6 +4883,11 @@ void RGWPutObj::execute(optional_yield y)
       if (auto obj_size = s->info.env->get_optional("HTTP_X_RGW_CACHE_OBJ_SIZE"); obj_size) {
         d4n_obj->set_remote_obj_size(std::stoull(obj_size.get()));
       }
+      if (auto block_only = s->info.env->get_optional("HTTP_X_RGW_CACHE_BLOCK_ONLY"); block_only) {
+        if (block_only.get() == "true") {
+	      d4n_obj->set_remote_block_only(true);
+        }
+      }
     }
   }
 #endif
