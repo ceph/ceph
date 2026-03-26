@@ -19,6 +19,9 @@ def install_rabbitmq(ctx, config):
     assert isinstance(config, dict)
     log.info('Installing RabbitMQ...')
 
+    os_version = teuthology.get_distro_version(ctx)
+    os_major_version = int(os_version.split('.')[0])
+
     for (client, _) in config.items():
         (remote,) = ctx.cluster.only(client).remotes.keys()
 
@@ -26,20 +29,56 @@ def install_rabbitmq(ctx, config):
              'sudo', 'dnf', '-y', 'install', 'epel-release'
         ])
 
-        link1 = 'https://packagecloud.io/install/repositories/rabbitmq/erlang/script.rpm.sh'
+        if os_major_version >= 10:
+            # packagecloud repos don't support EL10, use RabbitMQ yum
+            # repos with el/9 packages which are compatible with EL10
+            repo_el_version = '9'
+            erlang_repo = (
+                '[rabbitmq-erlang]\n'
+                'name=rabbitmq-erlang\n'
+                'baseurl=https://yum1.rabbitmq.com/erlang/el/{v}/$basearch\n'
+                '        https://yum2.rabbitmq.com/erlang/el/{v}/$basearch\n'
+                'repo_gpgcheck=0\n'
+                'enabled=1\n'
+                'gpgcheck=0\n'
+                'sslverify=1\n'
+                'sslcacert=/etc/pki/tls/certs/ca-bundle.crt\n'
+            ).format(v=repo_el_version)
+            ctx.cluster.only(client).run(args=[
+                'sudo', 'bash', '-c',
+                'echo -e \'{repo}\' > /etc/yum.repos.d/rabbitmq-erlang.repo'.format(
+                    repo=erlang_repo),
+            ])
 
-        ctx.cluster.only(client).run(args=[
-             'curl', '-s', link1, run.Raw('|'), 'sudo', 'bash'
-        ])
+            rabbitmq_repo = (
+                '[rabbitmq-server]\n'
+                'name=rabbitmq-server\n'
+                'baseurl=https://yum2.rabbitmq.com/rabbitmq/el/{v}/noarch\n'
+                '        https://yum1.rabbitmq.com/rabbitmq/el/{v}/noarch\n'
+                'repo_gpgcheck=0\n'
+                'enabled=1\n'
+                'gpgcheck=0\n'
+                'sslverify=1\n'
+                'sslcacert=/etc/pki/tls/certs/ca-bundle.crt\n'
+            ).format(v=repo_el_version)
+            ctx.cluster.only(client).run(args=[
+                'sudo', 'bash', '-c',
+                'echo -e \'{repo}\' > /etc/yum.repos.d/rabbitmq-server.repo'.format(
+                    repo=rabbitmq_repo),
+            ])
+        else:
+            link1 = 'https://packagecloud.io/install/repositories/rabbitmq/erlang/script.rpm.sh'
+            ctx.cluster.only(client).run(args=[
+                 'curl', '-s', link1, run.Raw('|'), 'sudo', 'bash'
+            ])
+
+            link2 = 'https://packagecloud.io/install/repositories/rabbitmq/rabbitmq-server/script.rpm.sh'
+            ctx.cluster.only(client).run(args=[
+                 'curl', '-s', link2, run.Raw('|'), 'sudo', 'bash'
+            ])
 
         ctx.cluster.only(client).run(args=[
              'sudo', 'dnf', '-y', 'install', 'erlang'
-        ])
-
-        link2 = 'https://packagecloud.io/install/repositories/rabbitmq/rabbitmq-server/script.rpm.sh'
-
-        ctx.cluster.only(client).run(args=[
-             'curl', '-s', link2, run.Raw('|'), 'sudo', 'bash'
         ])
 
         ctx.cluster.only(client).run(args=[
