@@ -241,13 +241,13 @@ export class NotificationService {
     const lowContrast = notification.options?.lowContrast || false;
 
     const sanitizedTitle =
-      this.sanitizer.sanitize(1, notification.title) || '';
+      this.sanitizer.sanitize(1, notification.title) || notification.title;
 
     const sanitizedSubtitle =
-      this.sanitizer.sanitize(1, notification.message || '') || '';
+      this.sanitizer.sanitize(1, notification.message || '') || notification.message || '';
 
     const sanitizedCaption =
-      this.sanitizer.sanitize(1, this._renderTimeAndApplicationHtml(notification)) || '';
+      this.sanitizer.sanitize(1, this._renderTimeAndApplicationHtml(notification)) || this._renderTimeAndApplicationHtml(notification);
 
     const toast: ToastContent = {
       title: sanitizedTitle,
