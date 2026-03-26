@@ -68,6 +68,8 @@ build_ceph_image() {
     cp ./../../orchestrator/*.py tmp_build/orchestrator
     cp ../*.py tmp_build/rook
     cp -r ../../../../../src/python-common/ceph/ tmp_build/
+    # Copy all mgr Python modules from source tree to override stale versions in base image
+    cp ${CEPH_DEV_FOLDER}/src/pybind/mgr/*.py tmp_build/
 
     $CONTAINER_RUNTIME build --tag ${LOCAL_CEPH_IMG} .
     $CONTAINER_RUNTIME tag ${LOCAL_CEPH_IMG} ${CURR_CEPH_IMG}
