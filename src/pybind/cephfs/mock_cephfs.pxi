@@ -174,6 +174,8 @@ cdef nogil:
         pass
     int ceph_fcopyfile(ceph_mount_info *cmount, const char *spath, const char *dpath, mode_t mode):
         pass
+    int ceph_fcopyfilex(ceph_mount_info *cmount, int source_fd, int64_t source_start, int dest_fd, int64_t dest_start, size_t size, unsigned flags):
+        pass
     int ceph_write(ceph_mount_info *cmount, int fd, const char *buf, int64_t size, int64_t offset):
         pass
     int ceph_pwritev(ceph_mount_info *cmount, int fd, iovec *iov, int iovcnt, int64_t offset):

@@ -2674,3 +2674,10 @@ extern "C" int ceph_fcopyfile(struct ceph_mount_info *cmount, const char *spath,
     return -ENOTCONN;
   return cmount->get_client()->fcopyfile(spath, dpath, cmount->default_perms, mode);
 }
+
+extern "C" int ceph_fcopyfilex(struct ceph_mount_info *cmount, int source_fd, off_t source_start, int dest_fd, off_t dest_start, size_t size, unsigned flags)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->fcopyfilex(source_fd, source_start, dest_fd, dest_start, size, flags);
+}
