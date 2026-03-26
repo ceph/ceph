@@ -182,31 +182,6 @@ Breadcrumbs
 }
 
 /******************************************
-Modals
-******************************************/
-.cds--modal-container {
-  background-color: colors.$gray-10;
-
-  .cds--modal-close {
-    background-color: transparent;
-
-    &:hover {
-      background-color: colors.$gray-10-hover;
-    }
-
-    &:focus,
-    &:active {
-      background-color: transparent;
-    }
-  }
-
-  .cds--modal-scroll-content {
-    max-height: 70vh;
-    overflow-y: auto;
-  }
-}
-
-/******************************************
 Dashboard page
 ******************************************/
 // keeping this on 12px for now until we have responsive design
