@@ -82,6 +82,59 @@ compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
 compare_image_meta ${CLUSTER1} ${POOL} ${image} "key1" "value1"
 compare_image_meta ${CLUSTER1} ${POOL} ${image} "key2" "value2"
 
+testlog "TEST: mirror image snapshot removal"
+start_mirrors ${CLUSTER2}
+start_mirrors ${CLUSTER1}
+if [ "${RBD_MIRROR_MODE}" = "snapshot" ]; then
+  snap_id=''
+  demote_snap_id=''
+  promote_snap_id=''
+  cluster1_uuid=''
+  cluster2_uuid=''
+  promote_snap_id_new=''
+  get_peer_uuid ${CLUSTER2} ${POOL} cluster1_uuid
+  get_peer_uuid ${CLUSTER1} ${POOL} cluster2_uuid
+  testlog " - snapshot removal during demoting and promoting on same cluster"
+  mirror_image_snapshot ${CLUSTER2} ${POOL} ${image}
+  get_newest_mirror_snapshot_id_on_primary ${CLUSTER2} ${POOL}/${image} snap_id
+  wait_for_non_primary_snap_present ${CLUSTER1} ${POOL} ${image} ${snap_id}
+  demote_image ${CLUSTER2} ${POOL} ${image}
+  wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+unknown'
+  wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+unknown'
+  get_newest_mirror_snapshot_id_on_primary ${CLUSTER2} ${POOL}/${image} demote_snap_id
+  wait_for_non_primary_snap_present ${CLUSTER1} ${POOL} ${image} ${demote_snap_id}
+  wait_for_snap_id_not_present ${CLUSTER1} ${POOL}/${image} ${snap_id}
+  promote_image ${CLUSTER2} ${POOL} ${image}
+  wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
+  wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying'
+  get_newest_mirror_snapshot_id_on_primary ${CLUSTER2} ${POOL}/${image} promote_snap_id
+  wait_for_non_primary_snap_present ${CLUSTER1} ${POOL} ${image} ${promote_snap_id}
+  #wait_for_snap_id_not_present ${CLUSTER1} ${POOL}/${image} ${demote_snap_id} # happening for group not for images
+  wait_for_image_snap_peer_uuid_not_present ${CLUSTER2} ${POOL} ${image} ${demote_snap_id} ${CLUSTER1_UUID}
+
+  testlog " - snapshot removal during failover/failback"
+  stop_mirrors ${CLUSTER1} -KILL
+  promote_image ${CLUSTER1} ${POOL} ${image} '--force'
+  start_mirrors ${CLUSTER1}
+  wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+stopped'
+  wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
+  wait_for_snap_id_not_present ${CLUSTER1} ${POOL}/${image} ${promote_snap_id}
+  get_newest_mirror_snapshot_id_on_primary ${CLUSTER1} ${POOL}/${image} promote_snap_id_new
+  demote_image ${CLUSTER1} ${POOL} ${image}
+  wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+error' 'split-brain'
+  get_newest_mirror_snapshot_id_on_primary ${CLUSTER1} ${POOL}/${image} demote_snap_id
+  request_resync_image ${CLUSTER1} ${POOL} ${image} image_id
+  wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted' ${image_id}
+  wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
+  wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+  wait_for_replaying_status_in_pool_dir ${CLUSTER1} ${POOL} ${image}
+  wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying'
+  wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
+  wait_for_snap_id_not_present ${CLUSTER1} ${POOL}/${image} ${demote_snap_id}
+  wait_for_snap_id_not_present ${CLUSTER1} ${POOL}/${image} ${promote_snap_id_new}
+  wait_for_snap_id_present ${CLUSTER1} ${POOL}/${image} ${promote_snap_id}
+fi
+
 testlog "TEST: stop mirror, add image, start mirror and test replay"
 stop_mirrors ${CLUSTER1}
 image1=test1
