@@ -4378,8 +4378,8 @@ Then run the following:
         """
         Cancel a scheduled daemon action
         """
-        for host, daemons, _ in self.cache.get_all_scheduled_actions():
-            if daemon_name in daemons:
+        for host, scheduled_daemon, _ in self.cache.get_all_scheduled_actions():
+            if daemon_name == scheduled_daemon:
                 self.cache.rm_scheduled_daemon_action(host, daemon_name)
                 self.cache.clear_force_action(host, daemon_name)
                 self.cache.save_host(host)
