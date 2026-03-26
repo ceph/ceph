@@ -561,6 +561,13 @@ class CLICommandBase(object):
         })
 
 
+# Backward-compatible alias: the mgr daemon binary imports CLICommand by name
+CLICommand = CLICommandBase
+# Backward-compatible aliases for built-in modules that import these names
+CLIReadCommand = CLICommandBase.Read
+CLIWriteCommand = CLICommandBase.Write
+
+
 def CLICheckNonemptyFileInput(desc: str) -> Callable[[HandlerFuncType], HandlerFuncType]:
     def CheckFileInput(func: HandlerFuncType) -> HandlerFuncType:
         @functools.wraps(func)
