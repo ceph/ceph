@@ -5149,7 +5149,7 @@ int main(int argc, const char **argv)
           encode_json("user quota", period_config.quota.user_quota, formatter.get());
         } else {
           cerr << "ERROR: invalid quota scope specification. Please specify "
-              "either --quota-scope=bucket, or --quota-scope=user" << std::endl;
+              "either --quota-scope=bucket or --quota-scope=user" << std::endl;
           return EINVAL;
         }
         formatter->close_section();
@@ -6372,7 +6372,7 @@ int main(int argc, const char **argv)
 	}
 
 	if (!zone_name.empty() && !zone.get_name().empty() && zone.get_name() != zone_name) {
-	  cerr << "Error: zone name " << zone_name << " is different than the zone name " << zone.get_name() << " in the provided json " << std::endl;
+	  cerr << "ERROR: zone name " << zone_name << " is different than the zone name " << zone.get_name() << " in the provided json " << std::endl;
 	  return EINVAL;
 	}
 
@@ -7640,8 +7640,8 @@ int main(int argc, const char **argv)
           return -ret;
         }
 	ldpp_dout(dpp(), 20) << "INFO: " << __func__ <<
-	  ": list() returned without error; results.objs.sizie()=" <<
-	  results.objs.size() << "results.is_truncated=" << results.is_truncated << ", marker=" <<
+	  ": list() returned without error; results.objs.size()=" <<
+	  results.objs.size() << ", results.is_truncated=" << results.is_truncated << ", marker=" <<
 	  params.marker << dendl;
 
         count += results.objs.size();
