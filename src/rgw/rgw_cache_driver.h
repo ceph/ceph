@@ -25,7 +25,7 @@ typedef std::function<void(const DoutPrefixProvider* dpp, const std::string& key
 			    const rgw_obj_key& obj_key, const std::string& instance, optional_yield y, std::string& restore_val)> ObjectDataCallback;
 
 typedef std::function<void(const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version,
-        bool dirty, const rgw_user user, optional_yield y, std::string& restore_val)> BlockDataCallback;
+        bool dirty, const rgw_user user, const std::string& bucketName, optional_yield y, std::string& restore_val)> BlockDataCallback;
 
 struct Partition {
   std::string name;
@@ -57,6 +57,9 @@ class CacheDriver {
     /* Partition */
     virtual Partition get_current_partition_info(const DoutPrefixProvider* dpp) = 0;
     virtual uint64_t get_free_space(const DoutPrefixProvider* dpp, optional_yield y) = 0;
+    virtual int reserve_space(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) = 0;
+    virtual int check_and_reserve_space(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) = 0;
+    virtual int release_reservation(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) = 0;
 
     /* Data Recovery from Cache */
     virtual int restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataCallback obj_func, BlockDataCallback block_func) = 0;
