@@ -133,6 +133,7 @@ class NotifyType(str, Enum):
     osd_map = 'osd_map'
     fs_map = 'fs_map'
     command = 'command'
+    audit = 'audit'
 
     # these are disabled because there are no users.
     #  see Mgr.cc:
@@ -2701,6 +2702,13 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         :param int query_id: query ID
         """
         return self._ceph_get_mds_perf_counters(query_id)
+
+    def audit_log_subscribe(self, sequence: int) -> None:
+        """
+        Subscribe to cluster audit logs starting from a chosen sequence
+        number.
+        """
+        return self._audit_log_subscribe(sequence)
 
     def get_daemon_health_metrics(self) -> Dict[str, List[Dict[str, Any]]]:
         """

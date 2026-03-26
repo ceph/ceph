@@ -20,6 +20,7 @@
 #include "ActivePyModule.h"
 #include "MgrSession.h"
 
+#include <boost/python.hpp>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -33,6 +34,8 @@ int ActivePyModule::load(ActivePyModules *py_modules)
 {
   ceph_assert(py_modules);
   Gil gil(py_module->pMyThreadState, true);
+
+  PyModule::export_log_entry();
 
   // We tell the module how we name it, so that it can be consistent
   // with us in logging etc.
@@ -83,10 +86,11 @@ void ActivePyModule::notify(const std::string &notify_type, const std::string &n
   }
 }
 
-void ActivePyModule::notify_clog(const LogEntry &log_entry)
+void ActivePyModule::notify_log_channel(const LogEntry &log_entry,
+                                        const std::string& channel)
 {
   if (is_dead()) {
-    dout(5) << "cancelling notify_clog" << dendl;
+    dout(5) << __func__ << ": cancelling" << dendl;
     return;
   }
 
@@ -94,19 +98,34 @@ void ActivePyModule::notify_clog(const LogEntry &log_entry)
 
   Gil gil(py_module->pMyThreadState, true);
 
-  // Construct python-ized LogEntry
-  PyFormatter f;
-  log_entry.dump(&f);
-  auto py_log_entry = f.get();
+  bool err = true;
+  if (channel == "audit") {
+    boost::python::object py_log_entry(log_entry);
 
-  // Execute
-  auto pValue = PyObject_CallMethod(pClassInstance,
-       const_cast<char*>("notify"), const_cast<char*>("(sN)"),
-       "clog", py_log_entry);
-
-  if (pValue != NULL) {
-    Py_DECREF(pValue);
+    auto pValue = PyObject_CallMethod(pClassInstance,
+                                      const_cast<char*>("notify"), const_cast<char*>("sO"),
+                                      "audit", py_log_entry.ptr());
+    if (pValue != NULL) {
+      Py_DECREF(pValue);
+      err = false;
+    }
   } else {
+    // Construct python-ized LogEntry
+    PyFormatter f;
+    log_entry.dump(&f);
+    auto py_log_entry = f.get();
+
+    // Execute
+    auto pValue = PyObject_CallMethod(pClassInstance,
+                                      const_cast<char*>("notify"), const_cast<char*>("(sN)"),
+                                      "clog", py_log_entry);
+    if (pValue != NULL) {
+      Py_DECREF(pValue);
+      err = false;
+    }
+  }
+
+  if (err) {
     derr << get_name() << ".notify_clog:" << dendl;
     derr << handle_pyerror(true, get_name(), "ActivePyModule::notify_clog") << dendl;
     // FIXME: callers can't be expected to handle a python module
