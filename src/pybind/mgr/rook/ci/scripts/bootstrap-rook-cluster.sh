@@ -152,9 +152,12 @@ configure_libvirt(){
 
 recreate_default_network(){
 
-    # destroy any existing kvm default network
-    if sudo virsh net-destroy default; then
-	sudo virsh net-undefine default
+    # destroy and undefine any existing default network, active or not
+    if sudo virsh net-destroy default 2>/dev/null; then
+        sudo virsh net-undefine default
+    elif sudo virsh net-info default &>/dev/null; then
+        # network exists but is already inactive, just undefine it
+        sudo virsh net-undefine default
     fi
 
     # let's create a new kvm default network
