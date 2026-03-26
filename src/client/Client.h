@@ -395,6 +395,8 @@ public:
   int is_encrypted(int fd, UserPerm& perms, char* enctag);
 #endif
   int fcopyfile(const char *sname, const char *dname, UserPerm& perms, mode_t mode);
+  int fcopyfilex(int source_fd, off_t src_offset, int dest_fd, off_t dest_offset,
+                 size_t size, unsigned flags);
 
   int mds_command(
     const std::string &mds_spec,
@@ -2144,6 +2146,8 @@ private:
   loff_t _lseek(Fh *fh, loff_t offset, int whence);
   int64_t _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl,
   		Context *onfinish = nullptr, bool read_for_write = false);
+  int64_t _copyfile(int source_fd, off_t src_offset, int dest_fd,
+                    off_t dest_offset, size_t size);
   void do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len);
   int64_t _write_success(Fh *fh, utime_t start, uint64_t fpos,
                          int64_t request_offset, uint64_t request_size,

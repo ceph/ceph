@@ -2433,6 +2433,24 @@ void ceph_free_snap_info_buffer(struct snap_info *snap_info);
 int ceph_get_perf_counters(struct ceph_mount_info *cmount, char **perf_dump);
 
 int ceph_fcopyfile(struct ceph_mount_info *cmount, const char *spath, const char *dpath, mode_t mode);
+
+/**
+ * Copy a range of bytes from one open file to another.
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param source_fd the file descriptor of the source file.
+ * @param src_offset the offset in the source file to copy from.
+ * @param dest_fd the file descriptor of the destination file.
+ * @param dest_offset the offset in the destination file to copy to.
+ * @param size the number of bytes to copy.
+ * @param flags reserved for future extensions; must be 0.  Following the
+ *              same convention as copy_file_range(2), this parameter is
+ *              present so that future copy behaviors can be added without
+ *              changing the function signature.  Non-zero values return -EINVAL.
+ * @returns the number of bytes copied on success, or a negative error code on failure.
+ */
+int ceph_fcopyfilex(struct ceph_mount_info *cmount, int source_fd, off_t src_offset,
+                    int dest_fd, off_t dest_offset, size_t size, unsigned flags);
 #ifdef __cplusplus
 }
 #endif
