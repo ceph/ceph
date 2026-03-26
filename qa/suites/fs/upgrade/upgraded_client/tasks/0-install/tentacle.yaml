@@ -1,9 +1,9 @@
 meta:
 - desc: |
-   install ceph/reef latest
+   install ceph/tentacle latest
 tasks:
 - install:
-    branch: reef
+    branch: tentacle
     exclude_packages:
       - cephadm
       - ceph-mgr-cephadm
@@ -13,8 +13,6 @@ tasks:
       - python3-rbd
       - python3-cephfs
       - ceph-volume
-      - ceph-osd-classic
-      - ceph-osd-crimson
     extra_packages:
       - python-rados
       - python-rgw
@@ -29,7 +27,7 @@ tasks:
       - NetworkManager
       - iproute
       - util-linux
-- print: "**** done installing reef"
+- print: "**** done installing tentacle"
 - ceph:
     log-ignorelist:
       - overall HEALTH_
@@ -51,5 +49,5 @@ tasks:
         ms bind msgr2: false
 - exec:
     osd.0:
-      - ceph osd set-require-min-compat-client reef
+      - ceph osd set-require-min-compat-client tentacle
 - print: "**** done ceph"

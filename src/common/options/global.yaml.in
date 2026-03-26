@@ -2037,19 +2037,19 @@ options:
   see_also:
   - mon_debug_dump_transactions
   with_legacy: true
-- name: mon_debug_no_require_squid
+- name: mon_debug_no_require_tentacle
   type: bool
   level: dev
-  desc: Do not require the Squid feature for new Monitor clusters
+  desc: Do not require the Tentacle feature for new Monitor clusters
   default: false
   services:
   - mon
   flags:
   - cluster_create
-- name: mon_debug_no_require_tentacle
+- name: mon_debug_no_require_umbrella
   type: bool
   level: dev
-  desc: Do not require the Tentacle feature for new Monitor clusters
+  desc: Do not require the Umbrella feature for new Monitor clusters
   default: false
   services:
   - mon
