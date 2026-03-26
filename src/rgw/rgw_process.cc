@@ -391,8 +391,8 @@ int process_request(const RGWProcessEnv& penv,
   {
     s->trace_enabled = tracing::rgw::tracer.is_enabled();
     if (!is_health_request) {
-      std::vector<std::shared_ptr<std::string>> script_names;
-      const auto rc = rgw::lua::list_scripts(s, penv.lua.manager.get(), s->bucket_tenant, s->yield, rgw::lua::context::preRequest, script_names);
+      std::vector<std::string> script_names;
+      const auto rc = rgw::lua::list_scripts(s, penv.lua.manager.get(), s->yield, s->bucket_tenant, rgw::lua::context::preRequest, script_names);
       if (rc < 0) {
         ldpp_dout(op, 5) << "WARNING: failed to list data scripts. error " << rc << dendl;
         return rc;
@@ -400,8 +400,8 @@ int process_request(const RGWProcessEnv& penv,
 
       for (const auto& name : script_names) {
         auto [lua_script, rc] = rgw::lua::read_script_or_bytecode(s, penv.lua.manager.get(),
-                                                    s->bucket_tenant, s->yield,
-                                                    rgw::lua::context::preRequest, *name);
+                                                    s->yield, s->bucket_tenant,
+                                                    rgw::lua::context::preRequest, name);
         if (rc == -ENOENT) {
           // no script, nothing to do
           continue;
@@ -459,8 +459,8 @@ done:
       }
     }
     if (!is_health_request) {
-      std::vector<std::shared_ptr<std::string>> script_names;
-      const auto rc = rgw::lua::list_scripts(s, penv.lua.manager.get(), s->bucket_tenant, s->yield, rgw::lua::context::postRequest, script_names);
+      std::vector<std::string> script_names;
+      const auto rc = rgw::lua::list_scripts(s, penv.lua.manager.get(), s->yield, s->bucket_tenant, rgw::lua::context::postRequest, script_names);
       if (rc < 0) {
         ldpp_dout(op, 5) << "WARNING: failed to list data scripts. error " << rc << dendl;
         return rc;
@@ -468,8 +468,8 @@ done:
 
       for (const auto& name : script_names) {
         auto [lua_script, rc] = rgw::lua::read_script_or_bytecode(s, penv.lua.manager.get(),
-                                                    s->bucket_tenant, s->yield,
-                                                    rgw::lua::context::postRequest, *name);
+                                                    s->yield, s->bucket_tenant,
+                                                    rgw::lua::context::postRequest, name);
         if (rc == -ENOENT) {
           // no script, nothing to do
           continue;

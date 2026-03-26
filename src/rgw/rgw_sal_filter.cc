@@ -1541,10 +1541,10 @@ int FilterLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y
   return next->get_script(dpp, y, objv, key, script);
 }
 
-int FilterLuaManager::list_scripts(const DoutPrefixProvider* dpp, optional_yield y, RGWObjVersionTracker* objv,
-				const std::string& key, std::vector<std::shared_ptr<std::string>>& scripts)
+int FilterLuaManager::list_scripts(const DoutPrefixProvider* dpp, optional_yield y, const std::string& tenant, rgw::lua::context ctx, 
+        RGWObjVersionTracker* objv, std::vector<std::string>& scripts)
 {
-  return next->list_scripts(dpp, y, objv, key, scripts);
+  return next->list_scripts(dpp, y, tenant, ctx, objv, scripts);
 }
 
 std::tuple<rgw::lua::LuaCodeType, int> FilterLuaManager::get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y,

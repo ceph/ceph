@@ -1927,7 +1927,7 @@ public:
   /** Get a script named with the given key from the backing store */
   virtual int get_script(const DoutPrefixProvider* dpp, optional_yield y, RGWObjVersionTracker* objv, const std::string& key, std::string& script) = 0;
   /** List all scripts named with the given key from the backing store */
-  virtual int list_scripts(const DoutPrefixProvider* dpp, optional_yield y, RGWObjVersionTracker* objv, const std::string& key, std::vector<std::shared_ptr<std::string>>& scripts) = 0;
+  virtual int list_scripts(const DoutPrefixProvider* dpp, optional_yield y, const std::string& tenant, rgw::lua::context ctx, RGWObjVersionTracker* objv, std::vector<std::string>& scripts) = 0;
   /** Get a copy of the lua bytecode if it exists, else the script named with the given key from the backing store */
   virtual std::tuple<rgw::lua::LuaCodeType, int> get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) = 0;
   /** Put a script named with the given key to the backing store */

@@ -169,7 +169,7 @@ class TestLuaManager : public rgw::sal::StoreLuaManager {
       script = lua_script;
       return 0;
     }
-    int list_scripts(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::vector<std::string>& scripts) override {
+    int list_scripts(const DoutPrefixProvider* dpp, optional_yield y, const std::string& tenant, context ctx, RGWObjVersionTracker* objv, std::vector<std::string>& scripts) override {
       return 0;
     }
     std::tuple<rgw::lua::LuaCodeType, int> get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& name) override {

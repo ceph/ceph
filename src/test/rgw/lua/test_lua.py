@@ -116,15 +116,20 @@ def another_user(tenant=None):
     return client
 
 
-def put_script(script, context, tenant=None):
+def put_script(script, context, tenant=None, script_name=None):
     fp = tempfile.NamedTemporaryFile(mode='w+')
     fp.write(script)
     fp.flush()
+    
+    args = ['script', 'put', '--infile', fp.name, '--context', context]
     if tenant:
-        result = admin(['script', 'put', '--infile', fp.name, '--context', context, '--tenant', tenant])
-    else:
-        result = admin(['script', 'put', '--infile', fp.name, '--context', context])
+        args.append('--tenant')
+        args.append(tenant)
+    if script_name:
+        args.append('--script-name')
+        args.append(script_name)
 
+    result = admin(args)
     fp.close()
     return result
 
@@ -227,6 +232,35 @@ def test_script_management():
         assert result[1] == 0
         assert result[0].strip() == 'no script exists for context: ' + context
 
+@pytest.mark.basic_test
+def test_multi_script_management():
+    contexts = ['prerequest', 'postrequest', 'background', 'getdata', 'putdata']
+    script_names = ["c", "b", "a"]
+    scripts = {}
+    for context in contexts:
+        for script_name in script_names:
+            script = 'print("hello from ' + context + ':' + script_name + ' script")'
+            result = put_script(script, context, None, script_name)
+            assert result[1] == 0
+            scripts.setdefault(context, {})[script_name] = script
+    for context in contexts:
+        for script_name in script_names:
+            result = admin(['script', 'get', '--context', context, '--script-name', script_name])
+            assert result[1] ==  0
+            assert result[0].strip() == scripts[context][script_name]
+    for context in contexts:
+         result = admin(['script', 'list', '--context', context])
+         assert result[1] == 0
+         assert result[0].strip() == "a\nb\nc"
+    for context in contexts:
+        for script_name in script_names:
+            result = admin(['script', 'rm', '--context', context, '--script-name', script_name])
+            assert result[1] == 0
+    for context in contexts:
+        for script_name in script_names:
+            result = admin(['script', 'get', '--context', context, '--script-name', script_name])
+            assert result[1] == 0
+            assert result[0].strip() == 'no script exists for context: ' + context
 
 @pytest.mark.basic_test
 def test_script_management_with_tenant():

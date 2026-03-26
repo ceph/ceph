@@ -12213,7 +12213,7 @@ next:
       return EINVAL;
     }
     auto lua_manager = driver->get_lua_manager("");
-    rc = rgw::lua::write_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script, script_name);
+    rc = rgw::lua::write_script(dpp(), lua_manager.get(), null_yield, tenant, script_ctx, script, script_name);
     if (rc < 0) {
       cerr << "ERROR: failed to put script. error: " << rc << std::endl;
       return -rc;
@@ -12232,7 +12232,7 @@ next:
     }
     auto lua_manager = driver->get_lua_manager("");
     std::string script;
-    const auto rc = rgw::lua::read_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script, script_name);
+    const auto rc = rgw::lua::read_script(dpp(), lua_manager.get(), null_yield, tenant, script_ctx, script, script_name);
     if (rc == -ENOENT) {
       std::cout << "'" << script_name << "' script does not exist in context: " << *str_script_ctx << 
         (tenant.empty() ? "" : (" in tenant: " + tenant)) << std::endl;
@@ -12255,8 +12255,8 @@ next:
       return EINVAL;
     }
     auto lua_manager = driver->get_lua_manager("");
-    std::vector<std::shared_ptr<std::string>> scripts;
-    const auto rc = rgw::lua::list_scripts(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, scripts);
+    std::vector<std::string> scripts;
+    const auto rc = rgw::lua::list_scripts(dpp(), lua_manager.get(), null_yield, tenant, script_ctx, scripts);
     if (rc < 0) {
       cerr << "ERROR: failed to list scripts. error: " << rc << std::endl;
       return -rc;
@@ -12281,7 +12281,7 @@ next:
       return EINVAL;
     }
     auto lua_manager = driver->get_lua_manager("");
-    const auto rc = rgw::lua::delete_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script_name);
+    const auto rc = rgw::lua::delete_script(dpp(), lua_manager.get(), null_yield, tenant, script_ctx, script_name);
     if (rc < 0) {
       cerr << "ERROR: failed to remove script. error: " << rc << std::endl;
       return -rc;
