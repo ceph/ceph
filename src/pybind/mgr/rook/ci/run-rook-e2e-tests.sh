@@ -8,5 +8,5 @@ export PATH=$PATH:~/.local/bin # behave is installed on this directory
 : ${CEPH_DEV_FOLDER:=${PWD}}
 ${CEPH_DEV_FOLDER}/src/pybind/mgr/rook/ci/scripts/bootstrap-rook-cluster.sh
 cd ${CEPH_DEV_FOLDER}/src/pybind/mgr/rook/ci/tests
-pip install --upgrade --force-reinstall -r ../requirements.txt
+pip install --upgrade --force-reinstall $(pip install --help | grep -q break-system-packages && echo --break-system-packages) -r ../requirements.txt
 behave
