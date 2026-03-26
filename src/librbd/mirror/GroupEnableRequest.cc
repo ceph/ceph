@@ -235,7 +235,7 @@ void GroupEnableRequest<I>::create_primary_group_snapshot() {
     lderr(m_cct) << "failed to retrieve min OSD release: " << cpp_strerror(r)
                  << dendl;
     m_ret_val = r;
-    close_images();
+    disable_mirror_group();
     return;
   }
 
@@ -272,7 +272,7 @@ void GroupEnableRequest<I>::handle_create_primary_group_snapshot(int r) {
                  << cpp_strerror(r) << dendl;
     m_ret_val = r;
 
-    close_images();
+    disable_mirror_group();
     return;
   }
 
