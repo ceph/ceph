@@ -36,6 +36,7 @@ import { DevicesSelectionClearEvent } from '../osd-devices-selection-groups/devi
 import { OsdDevicesSelectionGroupsComponent } from '../osd-devices-selection-groups/osd-devices-selection-groups.component';
 import { DriveGroup } from './drive-group.model';
 import { OsdFeature } from './osd-feature.interface';
+import { Step } from 'carbon-components-angular';
 
 @Component({
   selector: 'cd-osd-form',
@@ -94,6 +95,12 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
 
   deploymentOptions: DeploymentOptions;
   optionNames = Object.values(OsdDeploymentOptions);
+
+steps: Array<Step> = [
+    { label: 'Deployment Options', invalid: false },
+    { label: 'Advanced Mode', invalid: false },
+    { label: 'Features', invalid: false }
+  ];
 
   constructor(
     public actionLabels: ActionLabelsI18n,
