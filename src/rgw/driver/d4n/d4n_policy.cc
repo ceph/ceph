@@ -686,7 +686,9 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	  } else {
 	    ldpp_dout(dpp, 0) << "Failed to delete blocks for: " << e->key << ", ret=" << ret << dendl;
 	  }
-	}
+	} else {
+    erase_dirty_object(dpp, e->key, null_yield);
+  }
       } else {
 	rgw_user c_rgw_user = e->user; 
 	//writing data to the backend
@@ -720,17 +722,14 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	ldpp_dout(dpp, 10) << __func__ << "(): e->key=" << e->key << dendl;
 	int op_ret;
 	if (e->delete_marker) {
-	  bool null_delete_marker = (c_obj->get_instance() == "null");
-	  if (null_delete_marker) {
-	    //clear the instance for backend store
-	    c_obj->clear_instance();
-	  }
 	  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = c_obj->get_delete_op();
 	  del_op->params.obj_owner = owner;
 	  del_op->params.bucket_owner = c_bucket->get_owner();
 	  del_op->params.versioning_status = c_bucket->get_info().versioning_status();
 	  //populate marker_version_id only when delete marker is not null
-	  del_op->params.marker_version_id = e->version;
+    if (!null_instance) {
+	    del_op->params.marker_version_id = e->version;
+    }
 	  op_ret = del_op->delete_obj(dpp, null_yield, rgw::sal::FLAG_LOG_OP);
 	  if (op_ret >= 0) {
 	    bool delete_marker = del_op->result.delete_marker;
@@ -741,10 +740,6 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	    ldpp_dout(dpp, 20) << __func__ << "delete_obj returned ret=" << op_ret << dendl;
 	    erase_dirty_object(dpp, e->key, null_yield);
 	    continue;
-	  }
-	  if (null_delete_marker) {
-	    //restore instance for directory data processing in later steps
-	    c_obj->set_instance("null");
 	  }
 	} else { //end-if delete_marker
 
