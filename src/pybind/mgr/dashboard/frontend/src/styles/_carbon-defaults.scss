@@ -177,15 +177,6 @@ Breadcrumbs
 }
 
 /******************************************
-Dashboard page
-******************************************/
-// keeping this on 12px for now until we have responsive design
-// based on carbon
-cd-dashboard {
-  font-size: 12px;
-}
-
-/******************************************
 Code snippet
 ******************************************/
 .cds--snippet {
@@ -229,4 +220,8 @@ Tabs
 
 .cds-mb-4 {
   margin-bottom: layout.$spacing-02;
+}
+
+.cds--text-truncate--end {
+  @include textTruncate.text-truncate-end;
 }
