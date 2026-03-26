@@ -171,6 +171,9 @@ server_cert = /server.cert
 client_cert = /client.cert
 root_ca_cert = /root.ca.cert
 
+[kmip]
+cert_dir = ./certs/kmip/{{server_name}}
+
 [spdk]
 tgt_path = /usr/local/bin/nvmf_tgt
 rpc_socket_dir = /var/tmp/
