@@ -608,6 +608,19 @@ void Replayer<I>::handle_load_local_group_snapshots(int r) {
     m_retry_validate_snap = true;
   }
 
+  if (!is_group_primary(m_local_group_snaps)) {
+    // last snapshot is not primary
+    for (auto it = m_local_group_snaps.begin(); it != m_local_group_snaps.end(); ++it) {
+      auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
+          &it->snapshot_namespace);
+      if (ns && ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY &&
+          !is_mirror_group_snapshot_complete(it->state, ns->complete)) {
+        dout(10) << "found incomplete primary group snapshot: " << it->id << dendl;
+        handle_replay_complete(&locker, 0, "incomplete primary snapshot found");
+        return;
+      }
+    }
+  }
   load_remote_group_snapshots();
 }
 
