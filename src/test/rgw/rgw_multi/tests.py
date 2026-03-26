@@ -1576,6 +1576,50 @@ def test_zg_master_zone_delete():
     rm_zg.delete(master_cluster)
     master_zg.period.update(master_zone, commit=True)
 
+def test_zonegroup_rename():
+    master_zg = realm.master_zonegroup()
+    master_zone = master_zg.master_zone
+    master_cluster = master_zone.cluster
+
+    old_name = 'rename_test_zg'
+    new_name = 'rename_test_zg_renamed'
+
+    # create a temporary zonegroup with a zone and commit the period
+    test_zg = ZoneGroup(old_name, master_zg.period)
+    test_zg.create(master_cluster)
+    test_zone = Zone('rename_test_zone', test_zg, master_cluster)
+    test_zone.create(master_cluster)
+    master_zg.period.update(master_zone, commit=True)
+
+    realm_meta_checkpoint(realm)
+
+    # rename the zonegroup on the master and commit the updated period
+    r = test_zg.rename(master_cluster, new_name)
+    assert r == 0, "zonegroup rename failed with %d" % r
+    master_zg.period.update(master_zone, commit=True)
+
+    realm_meta_checkpoint(realm)
+
+    time.sleep(config.reconfigure_delay)
+
+    # verify on each zone:
+    new_zg = ZoneGroup(new_name, master_zg.period)
+    old_zg = ZoneGroup(old_name, master_zg.period)
+    for zone in master_zg.zones:
+        _, r = new_zg.get(zone.cluster, check_retcode=False)
+        assert r == 0, \
+            "new zonegroup name '%s' not found on zone %s" % (new_name, zone.name)
+
+        _, r = old_zg.get(zone.cluster, check_retcode=False)
+        assert r == errno.ENOENT, \
+            "old zonegroup name '%s' still present on zone %s (r=%d)" % (old_name, zone.name, r)
+
+    # clean up
+    test_zone.delete(master_cluster)
+    test_zg.delete(master_cluster)
+    master_zg.period.update(master_zone, commit=True)
+    time.sleep(config.reconfigure_delay)
+
 def test_set_bucket_website():
     buckets, zone_bucket = create_bucket_per_zone_in_realm()
     for zone, bucket in zone_bucket:
