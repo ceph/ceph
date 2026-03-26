@@ -4307,7 +4307,6 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
   if (!session->flushing_caps_tids.empty())
     m->set_oldest_flush_tid(*session->flushing_caps_tids.begin());
 
-  inc_caps_release();
   session->con->send_message2(std::move(m));
 }
 
@@ -4496,6 +4495,7 @@ void Client::check_caps(const InodeRef& in, unsigned flags)
     in->delay_cap_item.remove_myself();
     send_cap(in.get(), session.get(), &cap, msg_flags, cap_used, wanted, retain,
 	     flushing, flush_tid);
+    inc_caps_release();
   }
 }
 
@@ -5422,6 +5422,7 @@ void Client::kick_flushing_caps(Inode *in, MetaSession *session)
       int msg_flags = p.first < last_snap_flush ? MClientCaps::FLAG_PENDING_CAPSNAP : 0;
       send_cap(in, session, cap, msg_flags, used, wanted, (cap->issued | cap->implemented),
 	       p.second, p.first);
+      inc_caps_release();
     } else {
       ceph_assert(it != in->cap_snaps.end());
       ceph_assert(it->second.flush_tid == p.first);
