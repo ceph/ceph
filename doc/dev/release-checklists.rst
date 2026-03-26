@@ -18,7 +18,7 @@ Versions and tags
 - [x] Update CMakeLists.txt VERSION (right at the top to X.0.0)
 - [x] Update src/librbd/CMakeLists.txt VERSION (librbd target at the bottom to 1.X.0)
 - [x] Update src/ceph_release with the new release name, number, and type ('dev')
-- [ ] Initial tag vX.0.0 so that we can distinguish from (and sort after) the backported (X-1).2.Z versions.
+- [x] Initial tag vX.0.0 so that we can distinguish from (and sort after) the backported (X-1).2.Z versions.
 
 .. note::
 
