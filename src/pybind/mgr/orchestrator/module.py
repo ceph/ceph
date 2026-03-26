@@ -2698,7 +2698,7 @@ Usage:
         """
         Set the force flag for a scheduled daemon action
         """
-        completion = self.force_daemon_action(daemon_name, force = True)
+        completion = self.force_daemon_action(daemon_name, force=True)
         result = raise_if_exception(completion)
         if not result:
             return HandleCommandResult(stderr=f"No scheduled action found for daemon {daemon_name}")
@@ -2709,7 +2709,7 @@ Usage:
         """
         Unset the force flag for a scheduled daemon action
         """
-        completion = self.force_daemon_action(daemon_name, force = False)
+        completion = self.force_daemon_action(daemon_name, force=False)
         result = raise_if_exception(completion)
         if not result:
             return HandleCommandResult(stderr=f"No scheduled action found for daemon {daemon_name}")
