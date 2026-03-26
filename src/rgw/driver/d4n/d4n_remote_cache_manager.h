@@ -37,7 +37,7 @@ class RemoteCacheOp {
       uint64_t offset = 0;
       uint64_t len = 0;
       std::string version;
-	  bool dirty;
+	  bool dirty{false};
       rgw_user bucket_owner;
       std::string remote_addr;
       uint64_t obj_size = 0;
@@ -89,10 +89,12 @@ class RemoteCacheDeleteOp : public RemoteCacheOp {
 };
 
 class RemoteCachePutOp : public RemoteCacheOp {
+  bool block_only = false; // bypasses head object upload
+
   public:
     struct RemoteCachePutOpData : RemoteCacheOpData {};
 
-    RemoteCachePutOp(rgw::sal::Driver* driver, RemoteCachePutOpData& op) : RemoteCacheOp(driver, op) {}
+    RemoteCachePutOp(rgw::sal::Driver* driver, RemoteCachePutOpData& op, bool block_only = false) : RemoteCacheOp(driver, op), block_only(block_only) {}
     virtual ~RemoteCachePutOp() = default;
  
 	virtual int send_request(const DoutPrefixProvider* dpp, optional_yield& y, bufferlist* bl = nullptr) override;
