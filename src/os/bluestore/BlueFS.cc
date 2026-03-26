@@ -119,6 +119,8 @@ public:
               "name=mode,type=CephChoices,strings=slow|db|normal,req=true"
               , hook,
               "Set volume selector mode");
+      r = admin_socket->register_command("bluefs spillover stats", hook,
+              "Show spillover cleaner thread stats");
       ceph_assert(r == 0);
     }
     return hook;
@@ -215,6 +217,19 @@ private:
       cmd_getval(cmdmap, "mode", mode);
       auto sel = bluefs->vselector.get();
       sel->set_mode(mode);
+    } else if (command == "bluefs spillover stats") {
+      std::lock_guard l(bluefs->spillover_cleaner_lock);
+      auto& stats = bluefs->spillover_cleaner_thread.migration_stats;
+      f->open_array_section("spillover_migration_stats");
+      for (auto& s : stats) {
+        f->open_object_section("file");
+        f->dump_int("ino", s.first);
+        std::stringstream ss;
+        ss << "0x" << std::hex << s.second;
+        f->dump_string("migrated_bytes", ss.str());
+        f->close_section();
+      }
+      f->close_section();
     } else {
       errss << "Invalid command" << std::endl;
       return -ENOSYS;
@@ -2148,7 +2163,8 @@ int BlueFS::migrate_file(
   CephContext* cct,
   FileRef file_ref,
   int from_bdev,
-  int to_bdev)
+  int to_bdev,
+  std::function<void(uint64_t)> bt)
 {
   vector<byte> buf;
   bool buffered = cct->_conf->bluefs_buffered_io;
@@ -2209,6 +2225,9 @@ int BlueFS::migrate_file(
        << " to bdev " << (int)to_bdev << dendl;
     off += cur_len;
     vselector->add_usage(file_ref->vselector_hint, i);
+    if (bt) {
+      bt(cur_len);
+    }
   }
 
   {
@@ -4957,7 +4976,14 @@ void BlueFS::_spillover_cleaner_thread()
              << " because it is being written to" << dendl;
         continue;
       }
-      int r = migrate_file(cct, file_ref, BDEV_SLOW, BDEV_DB);
+      int r = migrate_file(cct,
+                file_ref,
+                BDEV_SLOW,
+                BDEV_DB,
+                [&](uint64_t b) {
+                  std::lock_guard l(spillover_cleaner_lock);
+                  spillover_cleaner_thread.migration_stats[file_ref->fnode.ino] += b;
+                });
       if (r < 0) {
         derr << __func__ << " failed to migrate file ino " << file_ref->fnode.ino
             << " from bdev " << BDEV_SLOW

@@ -554,6 +554,7 @@ public:
 
   struct SpilloverCleanerThread : public Thread {
     BlueFS* bluefs;
+    std::unordered_map<uint64_t, uint64_t> migration_stats;
     explicit SpilloverCleanerThread(BlueFS* f) : bluefs(f) {}
     void* entry() override {
       bluefs->_spillover_cleaner_thread();
@@ -842,7 +843,8 @@ public:
     CephContext *cct,
     FileRef file_ref,
     int from_bdev,
-    int to_bdev
+    int to_bdev,
+    std::function<void(uint64_t)> bt = nullptr
   );
   int revert_wal_to_plain();
 
