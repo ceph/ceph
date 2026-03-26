@@ -686,6 +686,7 @@ class Orchestrator(object):
         :param action: one of "start", "stop", "restart", "redeploy", "reconfig"
         :param service_name: service_type + '.' + service_id
                             (e.g. "mon", "mgr", "mds.mycephfs", "rgw.realm.zone", ...)
+        :param force: checks for ok-to-stop when doing action on each individual daemon
         :rtype: OrchResult
         """
         # assert action in ["start", "stop", "reload, "restart", "redeploy"]
@@ -698,6 +699,7 @@ class Orchestrator(object):
         :param action: one of "start", "stop", "restart", "redeploy", "reconfig"
         :param daemon_name: name of daemon
         :param image: Container image when redeploying that daemon
+        :param force: checks for ok-to-stop when doing action on daemon
         :rtype: OrchResult
         """
         # assert action in ["start", "stop", "reload, "restart", "redeploy"]

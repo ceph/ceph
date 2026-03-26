@@ -2603,7 +2603,7 @@ Then run the following:
         if not dds:
             raise OrchestratorError(f'No daemons exist under service name "{service_name}".'
                                     + ' View currently running services using "ceph orch ls"')
-        self.log.info('%s service %s' % (action.capitalize(), service_name))
+        self.log.info('%s service %s force=%s' % (action.capitalize(), service_name, force))
         return [
             self._schedule_daemon_action(dd.name(), action, force=force)
             for dd in dds
