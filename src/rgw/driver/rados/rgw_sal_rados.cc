@@ -4325,9 +4325,6 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
            const char *if_nomatch)
 {
   char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
-  std::string etag;
-  bufferlist etag_bl;
   MD5 hash;
   // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
   hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
@@ -4461,16 +4458,16 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   } while (truncated);
   hash.Final((unsigned char *)final_etag);
 
-  buf_to_hex((unsigned char *)final_etag, sizeof(final_etag), final_etag_str);
-  snprintf(&final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2],
-	   sizeof(final_etag_str) - CEPH_CRYPTO_MD5_DIGESTSIZE * 2,
-           "-%lld", (long long)part_etags.size());
-  etag = final_etag_str;
-  ldpp_dout(dpp, 10) << "calculated etag: " << etag << dendl;
-
-  etag_bl.append(etag);
-
-  attrs[RGW_ATTR_ETAG] = etag_bl;
+  bufferlist etag_bl;
+  append_bl(etag_bl, CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16, [&](auto iter) {
+    auto start = iter;
+    iter = buf_to_hex(final_etag, iter);
+    iter = fmt::format_to(iter, "-{}", part_etags.size());
+    ldpp_dout(dpp, 10) << "calculated etag: " << std::string_view{start, iter}
+                       << dendl;
+    return iter;
+  });
+  attrs[RGW_ATTR_ETAG] = std::move(etag_bl);
 
   rgw_placement_rule* ru;
   ru = &placement;

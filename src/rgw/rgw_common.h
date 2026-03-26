@@ -2287,3 +2287,36 @@ static inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, std::string& o
     locator.clear();
   }
 }
+
+/// Truncate a bufferlist to a given length
+///
+/// \param[inout] bl The bufferlist to truncate
+/// \param[in] len The new size
+inline void
+truncate_bl(buffer::list& bl, std::size_t len)
+{
+  if (len < bl.length()) {
+    bl.splice(len, bl.length() - len);
+  }
+}
+
+/// Reserve a size and append to a bufferlist
+///
+/// \param[inout] bl The list to which we append
+/// \param[in] reserve The maximum that we will append
+/// \param[in] appender A function taking an iterator that it increments
+///                     and returns. The function *must not* append more
+///                     than was reserved.
+inline void
+append_bl(
+    buffer::list& bl,
+    std::size_t reserve,
+    std::invocable<char*> auto&& appender)
+requires std::is_same_v<std::invoke_result_t<decltype(appender), char*>, char*>
+{
+  auto orig_size = bl.length();
+  auto iter = bl.append_hole(reserve).c_str();
+  const auto start = iter;
+  iter = std::forward<decltype(appender)>(appender)(iter);
+  truncate_bl(bl, orig_size + (iter - start));
+}

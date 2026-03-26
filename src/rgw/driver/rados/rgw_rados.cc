@@ -6882,7 +6882,6 @@ static void generate_fake_tag(const DoutPrefixProvider *dpp, RGWRados* store, ma
   }
 
   unsigned char md5[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  char md5_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   MD5 hash;
   // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
   hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
@@ -6895,8 +6894,7 @@ static void generate_fake_tag(const DoutPrefixProvider *dpp, RGWRados* store, ma
   }
 
   hash.Final(md5);
-  buf_to_hex(md5, CEPH_CRYPTO_MD5_DIGESTSIZE, md5_str);
-  tag.append(md5_str);
+  buf_to_hex(md5, std::back_inserter(tag));
 
   ldpp_dout(dpp, 10) << "generate_fake_tag new tag=" << tag << dendl;
 

@@ -91,23 +91,22 @@ int ETagVerifier_Atomic::process(bufferlist&& in, uint64_t logical_offset)
 void ETagVerifier_Atomic::calculate_etag()
 {
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
 
   /* Return early if ETag has already been calculated */
   if (!calculated_etag.empty())
     return;
 
   hash.Final(m);
-  buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
-  calculated_etag = calc_md5;
+  calculated_etag.clear();
+  calculated_etag.reserve(CEPH_CRYPTO_MD5_DIGESTSIZE * 2);
+  buf_to_hex(m, std::back_inserter(calculated_etag));
   ldout(cct, 20) << "Single part object: " << " etag:" << calculated_etag
-          << dendl;
+                 << dendl;
 }
 
 void ETagVerifier_MPU::process_end_of_MPU_part()
 {
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  char calc_md5_part[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   std::string calculated_etag_part;
 
   hash.Final(m);
@@ -115,8 +114,10 @@ void ETagVerifier_MPU::process_end_of_MPU_part()
   hash.Restart();
 
   if (cct->_conf->subsys.should_gather(dout_subsys, 20)) {
-    buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5_part);
-    calculated_etag_part = calc_md5_part;
+    calculated_etag_part.clear();
+    calculated_etag_part.reserve(CEPH_CRYPTO_MD5_DIGESTSIZE * 2);
+
+    buf_to_hex(m, std::back_inserter(calculated_etag_part));
     ldout(cct, 20) << "Part etag: " << calculated_etag_part << dendl;
   }
 
@@ -168,23 +169,21 @@ void ETagVerifier_MPU::calculate_etag()
   constexpr auto extra = 2 + digits10; // add "-%u\0" at the end
 
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE], mpu_m[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + extra];
 
   /* Return early if ETag has already been calculated */
   if (!calculated_etag.empty())
     return;
+
+  calculated_etag.reserve(CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + extra);
 
   hash.Final(m);
   mpu_etag_hash.Update((const unsigned char *)m, sizeof(m));
 
   /* Refer RGWCompleteMultipart::execute() for ETag calculation for MPU object */
   mpu_etag_hash.Final(mpu_m);
-  buf_to_hex(mpu_m, CEPH_CRYPTO_MD5_DIGESTSIZE, final_etag_str);
-  snprintf(&final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2],
-           sizeof(final_etag_str) - CEPH_CRYPTO_MD5_DIGESTSIZE * 2,
-           "-%u", parts);
+  buf_to_hex(mpu_m, std::back_inserter(calculated_etag));
+  fmt::format_to(std::back_inserter(calculated_etag), "-{}", parts);
 
-  calculated_etag = final_etag_str;
   ldout(cct, 20) << "MPU calculated ETag:" << calculated_etag << dendl;
 }
 

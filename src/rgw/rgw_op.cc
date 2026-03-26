@@ -1,14 +1,15 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
-#include <errno.h>
+#include <cerrno>
 #include <optional>
-#include <stdlib.h>
+#include <cstdlib>
 #include <system_error>
-#include <unistd.h>
-
+#include <span>
 #include <sstream>
 #include <string_view>
+
+#include <unistd.h>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/optional.hpp>
@@ -4563,8 +4564,10 @@ int RGWPutObj::get_lua_filter(std::unique_ptr<rgw::sal::DataProcessor>* filter, 
 void RGWPutObj::execute(optional_yield y)
 {
   char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
-  char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
-  char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+  std::string supplied_md5;
+  supplied_md5.reserve(CEPH_CRYPTO_MD5_DIGESTSIZE * 2);
+  std::string calc_md5;
+  calc_md5.reserve(CEPH_CRYPTO_MD5_DIGESTSIZE * 2);
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
   MD5 hash;
   // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
@@ -4614,7 +4617,7 @@ void RGWPutObj::execute(optional_yield y)
       return;
     }
 
-    buf_to_hex((const unsigned char *)supplied_md5_bin, CEPH_CRYPTO_MD5_DIGESTSIZE, supplied_md5);
+    buf_to_hex(std::span{supplied_md5_bin, CEPH_CRYPTO_MD5_DIGESTSIZE}, std::back_inserter(supplied_md5));
     ldpp_dout(this, 15) << "supplied_md5=" << supplied_md5 << dendl;
   }
 
@@ -4628,8 +4631,7 @@ void RGWPutObj::execute(optional_yield y)
   }
 
   if (supplied_etag) {
-    strncpy(supplied_md5, supplied_etag, sizeof(supplied_md5) - 1);
-    supplied_md5[sizeof(supplied_md5) - 1] = '\0';
+    supplied_md5 = supplied_etag;
   }
 
   const bool multipart = !multipart_upload_id.empty();
@@ -4925,11 +4927,11 @@ void RGWPutObj::execute(optional_yield y)
     }
   }
 
-  buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
+  buf_to_hex(m, std::back_inserter(calc_md5));
 
   etag = calc_md5;
 
-  if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
+  if (supplied_md5_b64 && (calc_md5 != supplied_md5)) {
     op_ret = -ERR_BAD_DIGEST;
     return;
   }
@@ -5123,7 +5125,8 @@ void RGWPostObj::execute(optional_yield y)
 {
   boost::optional<RGWPutObj_Compress> compressor;
   CompressorRef plugin;
-  char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+  std::string supplied_md5;
+  supplied_md5.reserve(CEPH_CRYPTO_MD5_DIGESTSIZE * 2);
 
   // make reservation for notification if needed
   std::unique_ptr<rgw::sal::Notification> res
@@ -5137,7 +5140,6 @@ void RGWPostObj::execute(optional_yield y)
   /* Start iteration over data fields. It's necessary as Swift's FormPost
    * is capable to handle multiple files in single form. */
   do {
-    char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
     unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
     MD5 hash;
     // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
@@ -5160,7 +5162,8 @@ void RGWPostObj::execute(optional_yield y)
         return;
       }
 
-      buf_to_hex((const unsigned char *)supplied_md5_bin, CEPH_CRYPTO_MD5_DIGESTSIZE, supplied_md5);
+      supplied_md5.clear();
+      buf_to_hex(std::span{supplied_md5_bin, CEPH_CRYPTO_MD5_DIGESTSIZE}, std::back_inserter(supplied_md5));
       ldpp_dout(this, 15) << "supplied_md5=" << supplied_md5 << dendl;
     }
 
@@ -5273,11 +5276,11 @@ void RGWPostObj::execute(optional_yield y)
     }
 
     hash.Final(m);
-    buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
+    etag.clear();
+    etag.reserve(CEPH_CRYPTO_MD5_DIGESTSIZE * 2);
+    buf_to_hex(m, std::back_inserter(etag));
 
-    etag = calc_md5;
-    
-    if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
+    if (supplied_md5_b64 && etag != supplied_md5) {
       op_ret = -ERR_BAD_DIGEST;
       return;
     }
@@ -7651,11 +7654,11 @@ bool RGWCompleteMultipart::check_previously_completed(const RGWMultiCompleteUplo
   }
 
   unsigned char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
+  std::string final_etag_str;
+  final_etag_str.reserve(CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16);
   hash.Final(final_etag);
-  buf_to_hex(final_etag, CEPH_CRYPTO_MD5_DIGESTSIZE, final_etag_str);
-  snprintf(&final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2], sizeof(final_etag_str) - CEPH_CRYPTO_MD5_DIGESTSIZE * 2,
-           "-%lld", (long long)parts->parts.size());
+  buf_to_hex(final_etag, std::back_inserter(final_etag_str));
+  fmt::format_to(std::back_inserter(final_etag_str), "-{}", parts->parts.size());
 
   if (oetag.compare(final_etag_str) != 0) {
     ldpp_dout(this, 1) << __func__ << "() NOTICE: etag mismatch: object etag:"
@@ -8666,17 +8669,18 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
     return op_ret;
   }
 
-  char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
   hash.Final(m);
-  buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
+  ceph::bufferlist etag_bl;
+  append_bl(etag_bl, CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1, [&](auto iter) {
+    iter = buf_to_hex(m, iter);
+    *iter++ = '\0';
+    return iter;
+  });
 
   /* Create metadata: ETAG. */
   std::map<std::string, ceph::bufferlist> attrs;
-  std::string etag = calc_md5;
-  ceph::bufferlist etag_bl;
-  etag_bl.append(etag.c_str(), etag.size() + 1);
-  attrs.emplace(RGW_ATTR_ETAG, std::move(etag_bl));
+  attrs.emplace(RGW_ATTR_ETAG, etag_bl);
 
   /* Create metadata: ACLs. */
   RGWAccessControlPolicy policy;
@@ -8704,7 +8708,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
 
   /* Complete the transaction. */
   const req_context rctx{this, s->yield, s->trace.get()};
-  op_ret = processor->complete(size, etag, nullptr, ceph::real_time(),
+  op_ret = processor->complete(size, etag_bl.c_str(), nullptr, ceph::real_time(),
 			       attrs, rgw::cksum::no_cksum,
 			       ceph::real_time() /* delete_at */,
 			       nullptr, nullptr, nullptr, nullptr, nullptr,

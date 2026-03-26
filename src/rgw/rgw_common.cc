@@ -820,17 +820,18 @@ string calc_hash_sha256_close_stream(SHA256 **phash)
   if (!hash) {
     hash = calc_hash_sha256_open_stream();
   }
-  char hash_sha256[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
+  char hash_sha256[CEPH_CRYPTO_SHA256_DIGESTSIZE];
 
   hash->Final((unsigned char *)hash_sha256);
 
-  char hex_str[(CEPH_CRYPTO_SHA256_DIGESTSIZE * 2) + 1];
-  buf_to_hex((unsigned char *)hash_sha256, CEPH_CRYPTO_SHA256_DIGESTSIZE, hex_str);
+  std::string hex_str;
+  hex_str.reserve(CEPH_CRYPTO_SHA256_DIGESTSIZE * 2);
+  buf_to_hex(hash_sha256, std::back_inserter(hex_str));
 
   delete hash;
   *phash = NULL;
   
-  return std::string(hex_str);
+  return hex_str;
 }
 
 std::string calc_hash_sha256_restart_stream(SHA256 **phash)
