@@ -26,7 +26,6 @@
 #include "mon/MonClient.h"
 #include "include/ceph_features.h"
 #include "common/config.h"
-#include "extblkdev/ExtBlkDevPlugin.h"
 
 #include "mon/MonMap.h"
 
@@ -488,14 +487,6 @@ flushjournal_out:
       forker.exit(1);
     }
     forker.exit(0);
-  }
-  
-  {
-    int r = extblkdev::preload(g_ceph_context);
-    if (r < 0) {
-      derr << "Failed preloading extblkdev plugins, error code: " << r << dendl;
-      forker.exit(1);
-    }
   }
 
   string magic;
