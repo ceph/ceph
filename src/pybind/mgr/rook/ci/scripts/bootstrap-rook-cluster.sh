@@ -13,46 +13,59 @@ export ROOK_CLUSTER_NS="${ROOK_CLUSTER_NS:=$DEFAULT_NS}" ## CephCluster namespac
 # running inside the minikube to start the different ceph pods
 LOCAL_CEPH_IMG="local/ceph"
 
+detect_container_runtime() {
+    if command -v docker &> /dev/null; then
+        CONTAINER_RUNTIME="docker"
+        echo "Using Docker as container runtime"
+    elif command -v podman &> /dev/null; then
+        CONTAINER_RUNTIME="podman"
+        echo "Using Podman as container runtime"
+    else
+        echo "Error: neither Docker nor Podman found. Exiting."
+        exit 1
+    fi
+}
+
 on_error() {
     echo "on error"
     minikube delete
 }
 
 setup_minikube_env() {
-
-    # Check if Minikube is running
     if minikube status > /dev/null 2>&1; then
-	echo "Minikube is running"
-	minikube stop
-	minikube delete
+        echo "Minikube is running"
+        minikube stop
+        minikube delete
     else
-	echo "Minikube is not running"
+        echo "Minikube is not running"
     fi
 
     rm -rf ~/.minikube
-    minikube start --memory="6144" --disk-size=20g --extra-disks=4 --driver kvm2
-    # point Docker env to use docker daemon running on minikube
-    eval $(minikube docker-env -p minikube)
+
+    if [[ "$CONTAINER_RUNTIME" == "podman" ]]; then
+        sg libvirt -c "minikube start --memory=6144 --disk-size=20g --extra-disks=4 --driver=kvm2 --container-runtime=cri-o"
+        sg libvirt -c "minikube podman-env -p minikube" > /tmp/minikube-env.sh
+    else
+        sg libvirt -c "minikube start --memory=6144 --disk-size=20g --extra-disks=4 --driver=kvm2"
+        sg libvirt -c "minikube docker-env -p minikube" > /tmp/minikube-env.sh
+    fi
+
+    source /tmp/minikube-env.sh
+    rm -f /tmp/minikube-env.sh
 }
 
 build_ceph_image() {
-
     CURR_CEPH_IMG=$(grep -E '^\s*image:\s+' $CLUSTER_SPEC | sed 's/.*image: *\([^ ]*\)/\1/')
 
     cd ${CEPH_DEV_FOLDER}/src/pybind/mgr/rook/ci
-    mkdir -p tmp_build/rook
-    mkdir -p tmp_build/orchestrator
+    mkdir -p tmp_build/rook tmp_build/orchestrator
     cp ./../../orchestrator/*.py tmp_build/orchestrator
     cp ../*.py tmp_build/rook
     cp -r ../../../../../src/python-common/ceph/ tmp_build/
 
-    # we use the following tag to trick the Docker
-    # running inside minikube so it uses this image instead
-    # of pulling it from the registry
-    docker build --tag ${LOCAL_CEPH_IMG} .
-    docker tag ${LOCAL_CEPH_IMG} ${CURR_CEPH_IMG}
+    $CONTAINER_RUNTIME build --tag ${LOCAL_CEPH_IMG} .
+    $CONTAINER_RUNTIME tag ${LOCAL_CEPH_IMG} ${CURR_CEPH_IMG}
 
-    # cleanup
     rm -rf tmp_build
     cd ${CEPH_DEV_FOLDER}
 }
@@ -178,6 +191,7 @@ enable_monitoring() {
 
 trap 'on_error $? $LINENO' ERR
 
+detect_container_runtime
 configure_libvirt
 recreate_default_network
 setup_minikube_env
