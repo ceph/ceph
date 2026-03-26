@@ -408,6 +408,8 @@ def _extract_target_func(
 
 
 class CLICommandBase(object):
+    COMMANDS: Dict[str, 'CLICommandBase'] = {}
+
     def __init__(self,
                  prefix: str,
                  perm: str = 'rw',
