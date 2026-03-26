@@ -81,6 +81,7 @@ class CephNvmeof(ContainerDaemonForm):
         mounts[log_dir] = '/var/log/ceph:z'
         if mtls_dir:
             mounts[mtls_dir] = '/src/mtls:z'
+        mounts['/etc/kmip'] = '/src/certs/kmip:z'
         return mounts
 
     def _get_huge_pages_mounts(self, files: Dict[str, str]) -> Dict[str, str]:
