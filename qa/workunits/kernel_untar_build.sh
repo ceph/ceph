@@ -2,7 +2,7 @@
 
 set -ex
 
-wget -O linux.tar.xz http://download.ceph.com/qa/linux-6.5.11.tar.xz
+wget -O linux.tar.xz https://download.ceph.com/qa/linux-6.19.6.tar.xz
 
 mkdir t
 cd t
