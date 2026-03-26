@@ -161,15 +161,17 @@ void NVMeofGwMon::tick()
     _propose_pending |= propose;
   }
 
-  // Periodically: update the features of all created GWs
-  uint64_t features = pending_map.enabled_beacon_diff ?
-     mon.get_quorum_con_features() & CEPH_FEATUREMASK_NVMEOF_BEACON_DIFF : 0;
-  if (pending_map.last_published_features != features) {
-    dout(4) << " Update all GWs with quorum features "
-            << features << dendl;
-    pending_map.last_published_features = features;
-    _propose_pending = true;
+  if (mon.get_quorum_mon_features().contains_all(ceph::features::mon::FEATURE_NVMEOF_BEACON_DIFF)) {
+    /* only automatically upgrade once: */
+    if ((pending_map.ever_enabled_features & NVMeofGwMap::FLAG_BEACONDIFF) == 0) {
+      pending_map.ever_enabled_features |= NVMeofGwMap::FLAG_BEACONDIFF;
+      pending_map.published_features |= NVMeofGwMap::FLAG_BEACONDIFF;
+      dout(4) << " Updating map to enable beacon-diff, features "
+              << pending_map.published_features << dendl;
+      _propose_pending = true;
+    }
   }
+
   // Periodically: take care of not handled ANA groups
   pending_map.handle_abandoned_ana_groups(propose);
   _propose_pending |= propose;
@@ -357,7 +359,7 @@ void NVMeofGwMon::check_sub(Subscription *sub)
           = map.created_gws[group_key][gw_id];
       // respond with a map slice correspondent to the same GW
       unicast_map.epoch =  map.gw_epoch[group_key];//map.epoch;
-      unicast_map.last_published_features =  map.last_published_features;
+      unicast_map.published_features =  map.published_features;
       sub->session->con->send_message2(make_message<MNVMeofGwMap>(unicast_map));
       if (sub->onetime) {
         mon.session_map.remove_sub(sub);
@@ -473,7 +475,7 @@ bool NVMeofGwMon::preprocess_command(MonOpRequestRef op)
     f->dump_unsigned("epoch", map.epoch);
     f->dump_string("pool", pool);
     f->dump_string("group", group);
-    f->dump_bool("beacon_diff_enabled", map.enabled_beacon_diff);
+    f->dump_unsigned("beacon_diff_enabled", map.published_features);
     if (HAVE_FEATURE(mon.get_quorum_con_features(), NVMEOFHA)) {
       f->dump_string("features", "LB");
       if (map.created_gws[group_key].size()) {
@@ -763,14 +765,15 @@ bool NVMeofGwMon::prepare_command(MonOpRequestRef op)
              <<" location "<< location << dendl;
     rc = pending_map.cfg_location_disaster_set(group_key,
                      location, propose);
-    if (rc == -EINVAL || rc == -EEXIST) {
+    if (rc == -EINVAL || rc == -EEXIST || rc == -EPERM) {
       err = rc;
       sstrm.str("");
       if (rc == -EEXIST) {
         sstrm.str("command already set please wait until completed");
-      }
-      if (rc == -EINVAL) {
+      } else if (rc == -EINVAL) {
         sstrm.str("command cannot be executed");
+      } else if (rc == -EPERM) {
+        sstrm.str("command not permitted");
       }
     }
     if (rc == 0 && propose == true) {
@@ -787,34 +790,48 @@ bool NVMeofGwMon::prepare_command(MonOpRequestRef op)
                <<" location "<< location << dendl;
       rc = pending_map.cfg_location_disaster_clear(group_key,
                        location, propose);
-      if (rc == -EINVAL || rc == -EEXIST) {
+      if (rc == -EINVAL || rc == -EEXIST || rc == -EPERM) {
         err = rc;
         sstrm.str("");
         if (rc == -EEXIST) {
           sstrm.str("command already set please wait until completed");
-        }
-        if (rc == -EINVAL) {
+        } else if (rc == -EINVAL) {
           sstrm.str("command cannot be executed");
+        } else if (rc == -EPERM) {
+          sstrm.str("command not permitted");
         }
       }
       if (rc == 0 && propose == true) {
         response = true;
       }
-    } else if ( (prefix == "nvme-gw beacon-diff-enable") ||
-                (prefix == "nvme-gw beacon-diff-disable")) {
-      bool propose = false;
-      dout(10) << "Command "<< prefix << dendl;
-      bool command = (prefix == "nvme-gw beacon-diff-enable") ? true: false;
-      rc = pending_map.cfg_enable_disable_beacon_diff(command, propose);
-      if (rc == -EEXIST) {
-        err = rc;
-        sstrm.str("");
-        if (rc == -EEXIST) {
-          sstrm.str("command already set");
+    } else if (prefix == "nvme-gw set") {
+      std::string choice, value;
+      cmd_getval(cmdmap, "var", choice);
+      cmd_getval(cmdmap, "val", value);
+      if (choice == "beacon-diff") {
+        bool propose = false;
+        dout(10) << "Command "<< prefix << " " << choice
+                 << " " << value << dendl;
+        if (value != "enable" && value != "disable") {
+          rc = -EPERM;
+          sstrm.str("command not permitted - illegal value");
+        } else {
+          bool command = (value == "enable") ? true: false;
+          rc = pending_map.cfg_enable_disable_beacon_diff(command, propose);
+          if (rc == -EPERM) {
+            err = rc;
+            sstrm.str("");
+            if (rc == -EPERM) {
+              sstrm.str("command not permitted");
+            }
+          }
+          if (rc == 0 && propose == true) {
+            response = true;
+          }
         }
-      }
-      if (rc == 0 && propose == true) {
-        response = true;
+      } else {
+         rc = -EPERM;
+         sstrm.str("command not permitted - illegal choice");
       }
     }
   getline(sstrm, rs);
@@ -891,7 +908,7 @@ void NVMeofGwMon::do_send_map_ack(MonOpRequestRef op,
       pending_gw_map : map.created_gws[group_key][gw_id];
     ack_map.created_gws[group_key][gw_id].beacon_sequence =
       pending_gw_map.beacon_sequence;
-    ack_map.last_published_features = pending_map.last_published_features;
+    ack_map.published_features = pending_map.published_features;
     if (!is_correct_sequence) {
       dout(4) << " GW " << gw_id <<
       " sending ACK due to receiving beacon_sequence out of order" << dendl;
@@ -908,7 +925,7 @@ void NVMeofGwMon::do_send_map_ack(MonOpRequestRef op,
   if (!gw_created)
     dout(10) << "gw not created, ack map "
              << ack_map << " epoch " << ack_map.epoch << dendl;
-  dout(20) << "ack_map " << ack_map <<dendl;
+  dout(20) << "ack_map, features " << ack_map.published_features << " " << ack_map <<dendl;
   auto msg = make_message<MNVMeofGwMap>(ack_map);
   mon.send_reply(op, msg.detach());
 }

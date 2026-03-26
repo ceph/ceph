@@ -51,7 +51,7 @@ void NVMeofGwMap::to_gmap(
 
       auto gw_state = NvmeGwClientState(
 	gw_created.ana_grp_id, epoch, availability, gw_created.beacon_sequence,
-	gw_created.beacon_sequence_ooo, last_published_features);
+	gw_created.beacon_sequence_ooo, published_features);
       for (const auto& sub: gw_created.subsystems) {
 	gw_state.subsystems.insert({
 	    sub.nqn,
@@ -307,7 +307,7 @@ int NVMeofGwMap::cfg_set_location(const NvmeGwId &gw_id,
     const NvmeGroupKey& group_key,
     std::string &location, bool &propose_pending) {
 
-  if (!HAVE_FEATURE(mon->get_quorum_con_features(), NVMEOF_BEACON_DIFF)) {
+  if (!mon->get_quorum_mon_features().contains_all(ceph::features::mon::FEATURE_NVMEOF_BEACON_DIFF)) {
     dout(4) << "Command is not allowed - feature is not installed"
     << group_key << " " << gw_id << dendl;
     return -EINVAL;
@@ -416,10 +416,10 @@ int NVMeofGwMap::cfg_location_disaster_set(
          const NvmeGroupKey& group_key,
          std::string &location, bool &propose_pending) {
 
-  if (!HAVE_FEATURE(mon->get_quorum_con_features(), NVMEOF_BEACON_DIFF)) {
+  if (!mon->get_quorum_mon_features().contains_all(ceph::features::mon::FEATURE_NVMEOF_BEACON_DIFF)) {
     dout(4) << "Command is not allowed - feature is not installed"
             << group_key << dendl;
-    return -EINVAL;
+    return -EPERM;
   }
   bool cleanup_in_process = false;
   bool location_exists = false;
@@ -458,10 +458,10 @@ int NVMeofGwMap::cfg_location_disaster_clear(
          const NvmeGroupKey& group_key,
          std::string &location, bool &propose_pending) {
 
-  if (!HAVE_FEATURE(mon->get_quorum_con_features(), NVMEOF_BEACON_DIFF)) {
+  if (!mon->get_quorum_mon_features().contains_all(ceph::features::mon::FEATURE_NVMEOF_BEACON_DIFF)) {
     dout(4) << "Command is not allowed - feature is not installed"
             << group_key << dendl;
-       return -EINVAL;
+       return -EPERM;
   }
   auto& gws_states = created_gws[group_key];
   bool accept = false;
@@ -507,15 +507,22 @@ int NVMeofGwMap::cfg_enable_disable_beacon_diff(bool enable,
       bool &propose_pending)
 {
   int rc = 0;
-  if (enabled_beacon_diff != enable) {
-    enabled_beacon_diff = enable;
-    dout (10) << "command acepted,  enabled_beacon_diff  set to "
-              << enabled_beacon_diff << dendl;
+  if (enable && ((published_features & FLAG_BEACONDIFF) == 0)) {
+    if (!mon->get_quorum_mon_features().contains_all(ceph::features::mon::FEATURE_NVMEOF_BEACON_DIFF)) {
+      dout(1) << "beacon-diff not supported by a quorum of monitors" << dendl;
+      rc = -EPERM;
+    } else {
+      published_features ^= FLAG_BEACONDIFF;
+      dout (10) << "enabled beacon-diff" << dendl;
+      propose_pending = true;
+    }
+  } else if (!enable && (published_features & FLAG_BEACONDIFF)) {
+    published_features ^= FLAG_BEACONDIFF;
+    dout (10) << "disabled beacon-diff" << dendl;
     propose_pending = true;
   } else {
-    dout (10) << "command not acepted, enabled_beacon_diff already set to "
-              << enable << dendl;
-    rc = -EEXIST;
+    dout (10) << "no change" << dendl;
+    /* allow idempotency */
   }
   return rc;
 }
@@ -800,7 +807,7 @@ void NVMeofGwMap::check_relocate_ana_groups(const NvmeGroupKey& group_key,
    * for ana-grp in list make relocation.
    * if all ana-grps in location active remove location from the map disaster_locations.group
   */
-  if (!HAVE_FEATURE(mon->get_quorum_con_features(), NVMEOF_BEACON_DIFF)) {
+  if (!mon->get_quorum_mon_features().contains_all(ceph::features::mon::FEATURE_NVMEOF_BEACON_DIFF)) {
     dout(4) << "relocate is not allowed - feature is not installed"
             << group_key << dendl;
        return ;

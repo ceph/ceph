@@ -414,9 +414,9 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
   ceph_assert(got_new_gw_state || !got_old_gw_state);
 
   uint64_t old_cluster_beacon_diff_included = cluster_beacon_diff_included;
-  cluster_beacon_diff_included =  HAVE_FEATURE(new_gw_state.quorum_features, NVMEOF_BEACON_DIFF);
+  cluster_beacon_diff_included = (new_gw_state.quorum_features & NVMeofGwMap::FLAG_BEACONDIFF) != 0;
   if (old_cluster_beacon_diff_included != cluster_beacon_diff_included) {
-    dout(4) << fmt::format("Updated cluster features: 0x{:x}", cluster_beacon_diff_included)
+    dout(0) << fmt::format("Updated cluster features: 0x{:x}", cluster_beacon_diff_included)
             << dendl;
   }
 

@@ -2640,7 +2640,6 @@ void Monitor::apply_monmap_to_compatset_features()
     ceph_assert(ceph::features::mon::get_persistent().contains_all(
            ceph::features::mon::FEATURE_NVMEOF_BEACON_DIFF));
     // this feature should only ever be set if the quorum supports it.
-    ceph_assert(HAVE_FEATURE(quorum_con_features, NVMEOF_BEACON_DIFF));
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_NVMEOF_BEACON_DIFF);
   }
 

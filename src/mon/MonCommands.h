@@ -1495,12 +1495,10 @@ COMMAND("nvme-gw disaster-clear"
     " set location to clear Disaster state - failbacks allowed for recovered location",
     "mgr", "rw")
 
-COMMAND("nvme-gw beacon-diff-enable",
+COMMAND("nvme-gw set"
+    " name=var,type=CephChoices,strings=beacon-diff"
+    " name=val,type=CephString ",
     "enable beacon-diff feature",
-    "mgr", "rw")
-
-COMMAND("nvme-gw beacon-diff-disable",
-    "disable beacon-diff feature",
     "mgr", "rw")
 
 // these are tell commands that were implemented as CLI commands in
