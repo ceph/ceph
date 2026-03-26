@@ -71,11 +71,13 @@ build_ceph_image() {
 }
 
 create_rook_cluster() {
-    $KUBECTL create -f https://raw.githubusercontent.com/rook/rook/master/deploy/examples/crds.yaml
-    $KUBECTL create -f https://raw.githubusercontent.com/rook/rook/master/deploy/examples/common.yaml
-    $KUBECTL create -f https://raw.githubusercontent.com/rook/rook/master/deploy/examples/operator.yaml
+    local base="https://raw.githubusercontent.com/rook/rook/master/deploy/examples"
+    $KUBECTL create -f ${base}/crds.yaml
+    $KUBECTL create -f ${base}/common.yaml
+    $KUBECTL create -f ${base}/csi-operator.yaml
+    $KUBECTL create -f ${base}/operator.yaml
     $KUBECTL create -f $CLUSTER_SPEC
-    $KUBECTL create -f https://raw.githubusercontent.com/rook/rook/master/deploy/examples/toolbox.yaml
+    $KUBECTL create -f ${base}/toolbox.yaml
 }
 
 is_operator_ready() {
