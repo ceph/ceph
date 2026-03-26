@@ -754,6 +754,19 @@ int File::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, std::s
     return -ret;
   }
 
+  /* note that open() and stat() return already sign-reversed result codes */
+  ret = open(dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 20) << "ERROR: POSIXAtomicWriter failed opening file" << dendl;
+    return ret;
+  }
+
+  ret = stat(dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 20) << "ERROR: POSIXAtomicWriter failed closing file" << dendl;
+    return ret;
+  }
+
   return 0;
 }
 
@@ -4355,18 +4368,6 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   ret = obj->link_temp_file(rctx.dpp, rctx.y);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << "ERROR: POSIXAtomicWriter failed writing temp file" << dendl;
-    return ret;
-  }
-
-  ret = obj->open(dpp);
-  if (ret < 0) {
-    ldpp_dout(rctx.dpp, 20) << "ERROR: POSIXAtomicWriter failed opening file" << dendl;
-    return ret;
-  }
-
-  ret = obj->stat(dpp);
-  if (ret < 0) {
-    ldpp_dout(rctx.dpp, 20) << "ERROR: POSIXAtomicWriter failed closing file" << dendl;
     return ret;
   }
 
