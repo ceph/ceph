@@ -224,35 +224,6 @@ Code snippet
 }
 
 /******************************************
-Tooltip
-******************************************/
-.cds--tooltip-content {
-  background-color: theme.$layer-02;
-}
-
-/******************************************
-Carbon Popover
-******************************************/
-.cds--popover {
-  .cds--popover-caret {
-    background-color: theme.$background;
-  }
-}
-
-.cds--popover-content {
-  background-color: theme.$background;
-  padding: layout.$spacing-05;
-}
-
-// inner container class for overflow
-.cds--popover-scroll-container {
-  max-height: layout.$spacing-13;
-  overflow-y: auto;
-  margin-right: -1rem;
-  padding-right: 1rem;
-}
-
-/******************************************
 Tabs
 ******************************************/
 .cds--tab-content {
