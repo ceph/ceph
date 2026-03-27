@@ -346,6 +346,8 @@ public:
       unsigned priority) = 0;
     /// Cancel pending local background reservation request
     virtual void cancel_local_background_io_reservation() = 0;
+    /// Send a reservation request from source PG to target PG for pool migration
+    virtual void pool_migration_request_target_reservation() = 0;
 
     /**
      * request_remote_background_io_reservation

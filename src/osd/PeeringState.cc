@@ -6027,6 +6027,7 @@ boost::statechart::result
 PeeringState::MigratingSource::react(const PoolMigrationDone &c)
 {
   DECLARE_LOCALS;
+  ps->state_clear(PG_STATE_MIGRATING);
   migration_release_reservations();
   // Notify monitor that PG has completed migration
   pl->send_pg_migrated_pool();
@@ -6370,6 +6371,7 @@ PeeringState::WaitLocalPoolMigrationReserved::WaitLocalPoolMigrationReserved(my_
       ps->get_osdmap_epoch(),
       ps->get_osdmap_epoch(),
       DeferPoolMigration(0.0)));
+  pl->pool_migration_request_target_reservation();
   pl->publish_stats_to_osd();
 }
 
