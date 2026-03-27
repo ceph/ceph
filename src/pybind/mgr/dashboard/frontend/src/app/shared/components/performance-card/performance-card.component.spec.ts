@@ -5,7 +5,7 @@ import { of } from 'rxjs';
 import { PrometheusService } from '../../api/prometheus.service';
 import { PerformanceCardService } from '../../api/performance-card.service';
 import { MgrModuleService } from '../../api/mgr-module.service';
-import { StorageType, PerformanceData } from '../../models/performance-data';
+import { PerformanceData } from '../../models/performance-data';
 import { DatePipe } from '@angular/common';
 import { NumberFormatterService } from '../../services/number-formatter.service';
 
@@ -104,10 +104,7 @@ describe('PerformanceCardComponent', () => {
     component.loadCharts(time);
 
     expect(component.time).toEqual(time);
-    expect(performanceCardService.getChartData).toHaveBeenCalledWith(
-      time,
-      component.selectedStorageType
-    );
+    expect(performanceCardService.getChartData).toHaveBeenCalledWith(time);
 
     tick();
     expect(component.chartDataSignal()).toEqual(mockChartData);
@@ -172,16 +169,6 @@ describe('PerformanceCardComponent', () => {
     tick();
     expect(component.emptyStateKey()).toBe('prometheusNotAvailable');
   }));
-
-  it('should update selectedStorageType and reload charts on storage type selection', () => {
-    const loadChartsSpy = jest.spyOn(component, 'loadCharts');
-    const event = { item: { value: StorageType.Filesystem } };
-
-    component.onStorageTypeSelection(event);
-
-    expect(component.selectedStorageType).toBe(StorageType.Filesystem);
-    expect(loadChartsSpy).toHaveBeenCalledWith(component.time);
-  });
 
   it('should cleanup subscriptions on ngOnDestroy', () => {
     const destroyNextSpy = jest.spyOn(component['destroy$'], 'next');

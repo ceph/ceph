@@ -186,12 +186,7 @@ export class NvmeofService {
     return this.http.get(`${API_PATH}/subsystem/${subsystemNQN}?gw_group=${group}`);
   }
 
-  createSubsystem(request: {
-    nqn: string;
-    enable_ha: boolean;
-    gw_group: string;
-    dhchap_key: string;
-  }) {
+  createSubsystem(request: { nqn: string; gw_group: string; dhchap_key: string }) {
     return this.http.post(`${API_PATH}/subsystem`, request, { observe: 'response' });
   }
 

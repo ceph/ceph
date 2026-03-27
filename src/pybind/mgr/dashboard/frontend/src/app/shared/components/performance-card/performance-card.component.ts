@@ -82,8 +82,6 @@ export class PerformanceCardComponent implements OnInit, OnDestroy {
     }
   ];
 
-  selectedStorageType = StorageType.All;
-
   private prometheusService = inject(PrometheusService);
   private performanceCardService = inject(PerformanceCardService);
   private mgrModuleService = inject(MgrModuleService);
@@ -103,7 +101,7 @@ export class PerformanceCardComponent implements OnInit, OnDestroy {
     this.chartSub?.unsubscribe();
 
     this.chartSub = this.performanceCardService
-      .getChartData(time, this.selectedStorageType)
+      .getChartData(time)
       .pipe(takeUntil(this.destroy$))
       .subscribe((data) => {
         this.chartDataSignal.set(data);
@@ -124,11 +122,6 @@ export class PerformanceCardComponent implements OnInit, OnDestroy {
           }
         );
       });
-  }
-
-  onStorageTypeSelection(event: any) {
-    this.selectedStorageType = event.item.value;
-    this.loadCharts(this.time);
   }
 
   ngOnDestroy(): void {
