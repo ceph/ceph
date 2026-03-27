@@ -187,7 +187,11 @@ Code snippet
 Tabs
 ******************************************/
 .cds--tab-content {
-  background: var(--cds-layer-01);
+  padding: 0;
+}
+
+.cds--data-table-container {
+  padding: 0;
 }
 
 .cds-danger-color {

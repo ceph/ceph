@@ -1,7 +1,6 @@
 @use './src/styles/vendor/variables' as vv;
 
 .overview {
-  background-color: var(--cds-background);
   margin: 0;
   padding: 0;
 }
@@ -10,6 +9,7 @@
   overflow: auto;
   padding-bottom: var(--cds-spacing-09);
   padding-top: var(--cds-spacing-09);
+  background-color: var(--cds-background);
 
   &:has(.tearsheet--full) {
     overflow: hidden;
@@ -20,10 +20,6 @@
       padding-left: var(--cds-spacing-07);
     }
   }
-}
-
-.rgw-dashboard {
-  background-color: var(--cds-background);
 }
 
 .cd-alert-container {
