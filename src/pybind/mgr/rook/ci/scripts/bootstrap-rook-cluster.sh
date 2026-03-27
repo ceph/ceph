@@ -202,6 +202,41 @@ enable_monitoring() {
     $KUBECTL apply -f https://raw.githubusercontent.com/rook/rook/master/deploy/examples/monitoring/exporter-service-monitor.yaml
     $KUBECTL apply -f https://raw.githubusercontent.com/rook/rook/master/deploy/examples/monitoring/prometheus.yaml
     $KUBECTL apply -f https://raw.githubusercontent.com/rook/rook/master/deploy/examples/monitoring/prometheus-service.yaml
+
+    # Wait for the prometheus pod itself to be ready before checking metrics
+    $KUBECTL wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus \
+        -n rook-ceph --timeout=120s
+
+    # Verify ceph mgr prometheus module is actually serving on port 9283
+    local mgr_pod
+    mgr_pod=$($KUBECTL -n rook-ceph get pods -l app=rook-ceph-mgr \
+        -o jsonpath='{.items[0].metadata.name}')
+    local attempts=0
+    until $KUBECTL -n rook-ceph exec "$mgr_pod" -- \
+        curl -sf http://localhost:9283/metrics | grep -q 'ceph_health_status'; do
+        echo "Waiting for ceph mgr prometheus module on port 9283..."
+        sleep 10
+        attempts=$((attempts + 1))
+        if [ $attempts -ge 18 ]; then
+            echo "ceph mgr prometheus module not available after max attempts"
+            exit 1
+        fi
+    done
+    echo "ceph mgr prometheus module is serving metrics"
+
+    # Wait for prometheus to scrape ceph metrics
+    attempts=0
+    until $KUBECTL -n rook-ceph exec deploy/rook-ceph-tools -- \
+        curl -s 'http://rook-prometheus.rook-ceph:9090/api/v1/query?query=ceph_osd_in' \
+        | grep -q '"result":\[{'; do
+        echo "Waiting for prometheus to scrape ceph metrics..."
+        sleep 20
+        attempts=$((attempts + 1))
+        if [ $attempts -ge 10 ]; then
+            echo "Prometheus metrics not available after max attempts"
+            exit 1
+        fi
+    done
 }
 
 ####################################################################
@@ -219,7 +254,6 @@ wait_for_rook_operator
 wait_for_ceph_cluster
 enable_rook_orchestrator
 enable_monitoring
-sleep 30 # wait for the metrics cache warmup
 
 ####################################################################
 ####################################################################
