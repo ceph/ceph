@@ -137,9 +137,11 @@ void GroupPromoteRequest<I>::handle_check_group_primary_state(int r) {
   }
 
   if (state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY) {
-    lderr(m_cct) << "group " << m_group_name << " is already primary" << dendl;
-    finish(-EINVAL);
-    return;
+    if (is_mirror_group_snapshot_complete(group_snap_state, sync)) {
+      lderr(m_cct) << "group " << m_group_name << " is already primary" << dendl;
+      finish(-EINVAL);
+      return;
+    }
   } else if (!m_force && (state == cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY
       || !is_mirror_group_snapshot_complete(group_snap_state, sync))) {
     lderr(m_cct) << "group " << m_group_name
