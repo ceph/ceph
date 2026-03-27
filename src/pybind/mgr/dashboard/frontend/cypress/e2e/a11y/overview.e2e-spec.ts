@@ -1,14 +1,14 @@
-import { DashboardPageHelper } from '../ui/dashboard.po';
+import { OvevriewPagehelper } from '../ui/dashboard-v3.po';
 
-describe('Dashboard Main Page', { retries: 0 }, () => {
-  const overview = new DashboardPageHelper();
+describe('Overview Page', { retries: 0 }, () => {
+  const overview = new OvevriewPagehelper();
 
   beforeEach(() => {
     cy.login();
     overview.navigateTo();
   });
 
-  describe('Dashboard accessibility', () => {
+  describe('Overview accessibility', () => {
     it('should have no accessibility violations', () => {
       cy.injectAxe();
       cy.checkAccessibility(

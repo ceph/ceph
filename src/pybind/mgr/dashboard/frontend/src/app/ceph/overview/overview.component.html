@@ -8,12 +8,11 @@
 
 @let storageCard = (storageCardVm$ | async);
 @let health = (healthCardVm$ | async);
-<div cdsGrid
-     [fullWidth]="true"
-     [narrow]="true"
-     class="cds-mt-6 cds-mb-6 overview">
-  <div cdsRow
-       class="cds-mb-5">
+<main cdsGrid
+      [fullWidth]="true"
+      [narrow]="true"
+      class="cds-mt-5 cds-mb-5 overview">
+  <div cdsRow>
     <div cdsCol
          [columnNumbers]="{lg: 11}">
       <cd-overview-health-card
@@ -53,7 +52,7 @@
       <cd-performance-card></cd-performance-card>
     </div>
   </div>
-</div>
+</main>
 @if (isHealthPanelOpen && health?.incidents > 0) {
   <cd-side-panel
     [headerText]="'Health incidents ('+ health?.incidents +')'"
