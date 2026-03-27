@@ -213,6 +213,7 @@
     topic dump                       dump (in JSON format) all pending bucket notifications of a persistent topic
     script put                       upload a Lua script to a context
     script get                       get the Lua script of a context
+    script list                      list the Lua scripts of a context
     script rm                        remove the Lua scripts of a context
     script-package add               add a Lua package to the scripts allowlist
     script-package rm                remove a Lua package from the scripts allowlist
