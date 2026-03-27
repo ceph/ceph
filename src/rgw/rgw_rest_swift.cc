@@ -2510,10 +2510,11 @@ int RGWSwiftWebsiteHandler::serve_errordoc(const int http_ret,
   /* This is okay.  It's an error, so nothing will run after this, and it can be
    * called by abort_early(), which can be called before s->object or s->bucket
    * are set up. */
+  s->object_key = std::to_string(http_ret) + error_doc;
   if (!rgw::sal::Bucket::empty(s->bucket.get())) {
-    s->object = s->bucket->get_object(rgw_obj_key(std::to_string(http_ret) + error_doc));
+    s->object = s->bucket->get_object(s->object_key);
   } else {
-    s->object = driver->get_object(rgw_obj_key(std::to_string(http_ret) + error_doc));
+    s->object = driver->get_object(s->object_key);
   }
 
   RGWOp* newop = &get_errpage_op;
@@ -3166,8 +3167,9 @@ int RGWHandler_REST_SWIFT::init_from_header(rgw::sal::Driver* driver,
   s->init_state.url_bucket = first;
 
   if (req.size()) {
-    s->object = driver->get_object(
-      rgw_obj_key(req, s->info.env->get("HTTP_X_OBJECT_VERSION_ID", ""))); /* rgw swift extension */
+    s->object_key.name = req;
+    s->object_key.instance = s->info.env->get("HTTP_X_OBJECT_VERSION_ID", ""); /* rgw swift extension */
+    s->object = driver->get_object(s->object_key);
     s->info.effective_uri.append("/" + s->object->get_name());
   }
 
@@ -3187,6 +3189,7 @@ int RGWHandler_REST_SWIFT::init(rgw::sal::Driver* driver, req_state* s,
     bool result = RGWCopyObj::parse_copy_location(copy_source, t->src_bucket, key, s);
     if (!result)
       return -ERR_BAD_URL;
+    s->src_object_key = key;
     s->src_object = driver->get_object(key);
     if (!s->src_object)
       return -ERR_BAD_URL;
@@ -3209,8 +3212,10 @@ int RGWHandler_REST_SWIFT::init(rgw::sal::Driver* driver, req_state* s,
 
     /* convert COPY operation into PUT */
     t->src_bucket = t->url_bucket;
+    s->src_object_key = s->object_key;
     s->src_object = s->object->clone();
     t->url_bucket = dest_bucket_name;
+    s->object_key.name = dest_object_name;
     s->object->set_name(dest_object_name);
     s->op = OP_PUT;
   }

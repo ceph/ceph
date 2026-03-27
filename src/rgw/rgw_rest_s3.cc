@@ -3186,7 +3186,8 @@ int RGWPostObj_ObjStore_S3::get_params(optional_yield y)
     return -EINVAL;
   }
 
-  s->object = s->bucket->get_object(rgw_obj_key(object_str));
+  s->object_key = object_str;
+  s->object = s->bucket->get_object(s->object_key);
 
   rebuild_key(s->object.get());
 
@@ -5627,20 +5628,26 @@ int RGWHandler_REST_S3::init_from_header(rgw::sal::Driver* driver,
       encoded_obj_str = req.substr(pos+1);
     }
 
+    s->object_key.name = encoded_obj_str;
+    s->object_key.instance = s->info.args.get("versionId");
+
     /* dang: s->bucket is never set here, since it's created with permissions.
      * These calls will always create an object with no bucket. */
     if (!encoded_obj_str.empty()) {
       if (s->bucket) {
-	s->object = s->bucket->get_object(rgw_obj_key(encoded_obj_str, s->info.args.get("versionId")));
+	s->object = s->bucket->get_object(s->object_key);
       } else {
-	s->object = driver->get_object(rgw_obj_key(encoded_obj_str, s->info.args.get("versionId")));
+	s->object = driver->get_object(s->object_key);
       }
     }
   } else {
+    s->object_key.name = req_name;
+    s->object_key.instance = s->info.args.get("versionId");
+
     if (s->bucket) {
-      s->object = s->bucket->get_object(rgw_obj_key(req_name, s->info.args.get("versionId")));
+      s->object = s->bucket->get_object(s->object_key);
     } else {
-      s->object = driver->get_object(rgw_obj_key(req_name, s->info.args.get("versionId")));
+      s->object = driver->get_object(s->object_key);
     }
   }
   return 0;
@@ -5725,6 +5732,7 @@ int RGWHandler_REST_S3::init(rgw::sal::Driver* driver, req_state *s,
       ldpp_dout(s, 0) << "failed to parse copy location" << dendl;
       return -EINVAL; // XXX why not -ERR_INVALID_BUCKET_NAME or -ERR_BAD_URL?
     }
+    s->src_object_key = key;
     s->src_object = driver->get_object(key);
   }
 
@@ -6096,6 +6104,7 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op, optional_yiel
    * dang: This could be problematic, since we're not actually replacing op, but
    * we are replacing s->object.  Something might have a pointer to it.
    */
+  s->object_key = new_obj;
   s->object = s->bucket->get_object(new_obj);
 
   return 0;
@@ -6128,6 +6137,7 @@ int RGWHandler_REST_S3Website::serve_errordoc(const DoutPrefixProvider *dpp, int
   /* This is okay.  It's an error, so nothing will run after this, and it can be
    * called by abort_early(), which can be called before s->object or s->bucket
    * are set up. Note, it won't have bucket. */
+  s->object_key = errordoc_key;
   s->object = driver->get_object(errordoc_key);
 
   ret = init_permissions(getop.get(), y);
