@@ -371,7 +371,9 @@ extern const char *ceph_osd_state_name(int s);
 	f(PG_HITSET_GET, __CEPH_OSD_OP(RD, PG, 4),	"pg-hitset-get")    \
 	f(PGNLS,	__CEPH_OSD_OP(RD, PG, 5),	"pgnls")	    \
 	f(PGNLS_FILTER,	__CEPH_OSD_OP(RD, PG, 6),	"pgnls-filter")     \
-	f(SCRUBLS, __CEPH_OSD_OP(RD, PG, 7), "scrubls")
+	f(SCRUBLS,      __CEPH_OSD_OP(RD, PG, 7),       "scrubls")          \
+	f(PG_POOL_MIGRATION_RESERVE, __CEPH_OSD_OP(WR, PG, 8), "pg-pool-migration-reserve") \
+	f(PG_POOL_MIGRATION_RELEASE, __CEPH_OSD_OP(WR, PG, 9), "pg-pool-migration-release") \
 
 enum {
 #define GENERATE_ENUM_ENTRY(op, opcode, str)	CEPH_OSD_OP_##op = (opcode),
@@ -676,6 +678,10 @@ struct ceph_osd_op {
 			__le32 chunk_size;
 			__u8 type;              /* CEPH_OSD_CHECKSUM_OP_TYPE_* */
 		} __attribute__ ((packed)) checksum;
+		struct {
+		        __le64 num_bytes;
+		        __le64 num_objects;
+		} __attribute__ ((packed)) pool_migration_reserve;
 	} __attribute__ ((packed));
 	__le32 payload_len;
 } __attribute__ ((packed));

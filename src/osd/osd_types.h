@@ -5758,6 +5758,24 @@ public:
 WRITE_CLASS_ENCODER_FEATURES(object_copy_data_t)
 
 /**
+ * pg_pool_migration_reservation_response_t
+ *
+ * Response structure for PG_POOL_MIGRATION_RESERVE operations
+ */
+struct pg_pool_migration_reservation_response_t {
+  int32_t result;  /// 0 for success, negative error code for failure
+
+  pg_pool_migration_reservation_response_t() : result(0) {}
+  pg_pool_migration_reservation_response_t(int32_t r) : result(r) {}
+
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& p);
+  void dump(ceph::Formatter *f) const;
+  static std::list<pg_pool_migration_reservation_response_t> generate_test_instances();
+};
+WRITE_CLASS_ENCODER(pg_pool_migration_reservation_response_t)
+
+/**
  * pg creation info
  */
 struct pg_create_t {

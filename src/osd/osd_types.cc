@@ -5820,6 +5820,37 @@ void object_copy_data_t::dump(Formatter *f) const
   f->close_section();
 }
 
+// -- pg_pool_migration_reservation_response_t --
+
+void pg_pool_migration_reservation_response_t::encode(ceph::buffer::list& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  encode(result, bl);
+  ENCODE_FINISH(bl);
+}
+
+void pg_pool_migration_reservation_response_t::decode(ceph::buffer::list::const_iterator& p)
+{
+  DECODE_START(1, p);
+  decode(result, p);
+  DECODE_FINISH(p);
+}
+
+void pg_pool_migration_reservation_response_t::dump(ceph::Formatter *f) const
+{
+  f->dump_int("result", result);
+}
+
+std::list<pg_pool_migration_reservation_response_t>
+pg_pool_migration_reservation_response_t::generate_test_instances()
+{
+  std::list<pg_pool_migration_reservation_response_t> o;
+  o.push_back(pg_pool_migration_reservation_response_t());
+  o.push_back(pg_pool_migration_reservation_response_t(0));
+  o.push_back(pg_pool_migration_reservation_response_t(-ENOSPC));
+  return o;
+}
+
 // -- pg_create_t --
 
 void pg_create_t::encode(ceph::buffer::list &bl) const
@@ -7556,6 +7587,10 @@ ostream& operator<<(ostream& out, const OSDOp& op)
       out << " " << utime_t(op.op.hit_set_get.stamp);
       break;
     case CEPH_OSD_OP_SCRUBLS:
+      break;
+    case CEPH_OSD_OP_PG_POOL_MIGRATION_RESERVE:
+      break;
+    case CEPH_OSD_OP_PG_POOL_MIGRATION_RELEASE:
       break;
     }
   }
