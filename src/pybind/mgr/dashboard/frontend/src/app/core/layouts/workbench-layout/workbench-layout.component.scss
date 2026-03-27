@@ -1,7 +1,7 @@
 @use './src/styles/vendor/variables' as vv;
 
 .overview {
-  background-color: vv.$body-bg-alt;
+  background-color: var(--cds-background);
   margin: 0;
   padding: 0;
   padding-bottom: 48px;
@@ -23,7 +23,7 @@
 }
 
 .rgw-dashboard {
-  background-color: vv.$body-bg-alt;
+  background-color: var(--cds-background);
 }
 
 .cd-alert-container {
