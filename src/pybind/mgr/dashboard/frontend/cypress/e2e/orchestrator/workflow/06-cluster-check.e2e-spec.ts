@@ -1,11 +1,11 @@
 /* tslint:disable*/
-import { CreateClusterWizardHelper } from '../../cluster/create-cluster.po';
+import { OnboardingHelper } from '../../cluster/create-cluster.po';
 import { HostsPageHelper } from '../../cluster/hosts.po';
 import { ServicesPageHelper } from '../../cluster/services.po';
 /* tslint:enable*/
 
 describe('when cluster creation is completed', () => {
-  const createCluster = new CreateClusterWizardHelper();
+  const onboarding = new OnboardingHelper();
   const services = new ServicesPageHelper();
   const hosts = new HostsPageHelper();
 
@@ -15,9 +15,9 @@ describe('when cluster creation is completed', () => {
     cy.login();
   });
 
-  it('should redirect to dashboard landing page after cluster creation', () => {
-    createCluster.navigateTo();
-    createCluster.createCluster();
+  it('should redirect to overview landing page after adding storage', () => {
+    onboarding.navigateTo();
+    onboarding.onboarding();
 
     // Explicitly skip OSD Creation Step so that it prevents from
     // deploying OSDs to the hosts automatically.
@@ -30,7 +30,7 @@ describe('when cluster creation is completed', () => {
       cy.get('button').contains('Review').click();
     });
     cy.get('button[aria-label="Next"]').click();
-    cy.get('cd-dashboard').should('exist');
+    cy.get('cd-overview').should('exist');
   });
 
   describe('Hosts page', () => {

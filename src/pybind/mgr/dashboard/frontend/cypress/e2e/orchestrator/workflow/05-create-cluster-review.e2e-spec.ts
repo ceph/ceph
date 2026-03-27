@@ -1,18 +1,15 @@
 /* tslint:disable*/
-import {
-  CreateClusterHostPageHelper,
-  CreateClusterWizardHelper
-} from '../../cluster/create-cluster.po';
+import { CreateClusterHostPageHelper, OnboardingHelper } from '../../cluster/create-cluster.po';
 /* tslint:enable*/
 
 describe('Create Cluster Review page', () => {
-  const createCluster = new CreateClusterWizardHelper();
+  const onboarding = new OnboardingHelper();
   const createClusterHostPage = new CreateClusterHostPageHelper();
 
   beforeEach(() => {
     cy.login();
-    createCluster.navigateTo();
-    createCluster.createCluster();
+    onboarding.navigateTo();
+    onboarding.onboarding();
 
     cy.get('cd-wizard').within(() => {
       cy.get('button').contains('Review').click();
@@ -22,37 +19,37 @@ describe('Create Cluster Review page', () => {
   describe('fields check', () => {
     it('should check cluster resources table is present', () => {
       // check for table header 'Cluster Resources'
-      createCluster.getLegends().its(0).should('have.text', 'Cluster Resources');
+      onboarding.getLegends().its(0).should('have.text', 'Cluster Resources');
 
       // check for fields in table
-      createCluster.getStatusTables().should('contain.text', 'Hosts');
-      createCluster.getStatusTables().should('contain.text', 'Storage Capacity');
-      createCluster.getStatusTables().should('contain.text', 'CPUs');
-      createCluster.getStatusTables().should('contain.text', 'Memory');
+      onboarding.getStatusTables().should('contain.text', 'Hosts');
+      onboarding.getStatusTables().should('contain.text', 'Storage Capacity');
+      onboarding.getStatusTables().should('contain.text', 'CPUs');
+      onboarding.getStatusTables().should('contain.text', 'Memory');
     });
 
     it('should check Host Details table is present', () => {
       // check for there to be two tables
-      createCluster.getDataTables().should('have.length', 1);
+      onboarding.getDataTables().should('have.length', 1);
 
       // verify correct columns on Host Details table
-      createCluster.getDataTableHeaders().contains('Hostname');
+      onboarding.getDataTableHeaders().contains('Hostname');
 
-      createCluster.getDataTableHeaders().contains('Labels');
+      onboarding.getDataTableHeaders().contains('Labels');
 
-      createCluster.getDataTableHeaders().contains('CPUs');
+      onboarding.getDataTableHeaders().contains('CPUs');
 
-      createCluster.getDataTableHeaders().contains('Cores');
+      onboarding.getDataTableHeaders().contains('Cores');
 
-      createCluster.getDataTableHeaders().contains('Total Memory');
+      onboarding.getDataTableHeaders().contains('Total Memory');
 
-      createCluster.getDataTableHeaders().contains('Raw Capacity');
+      onboarding.getDataTableHeaders().contains('Raw Capacity');
 
-      createCluster.getDataTableHeaders().contains('HDDs');
+      onboarding.getDataTableHeaders().contains('HDDs');
 
-      createCluster.getDataTableHeaders().contains('Flash');
+      onboarding.getDataTableHeaders().contains('Flash');
 
-      createCluster.getDataTableHeaders().contains('NICs');
+      onboarding.getDataTableHeaders().contains('NICs');
     });
 
     it('should check default host name is present', () => {
