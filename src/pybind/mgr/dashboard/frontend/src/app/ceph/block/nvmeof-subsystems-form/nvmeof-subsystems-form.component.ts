@@ -163,7 +163,6 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
       .createSubsystem({
         nqn: payload.nqn,
         gw_group: this.group,
-        enable_ha: true,
         dhchap_key: payload.subsystemDchapKey
       })
       .subscribe({
