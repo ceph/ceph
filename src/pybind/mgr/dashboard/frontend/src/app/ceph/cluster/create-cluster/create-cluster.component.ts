@@ -199,7 +199,7 @@ export class CreateClusterComponent implements OnInit, OnDestroy, AfterViewInit 
       }
 
       if (this.simpleDeployment) {
-        const title = this.deploymentOption?.options[this.selectedOption['option']].title;
+        const title = this.deploymentOption?.options[this.selectedOption['option']]?.title;
         const trackingId = $localize`${title} deployment`;
         this.taskWrapper
           .wrapTaskAroundCall({
