@@ -1146,7 +1146,9 @@ public:
 
   D3nDataCache* d3n_data_cache{nullptr};
 
-  int rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj, const DoutPrefixProvider *dpp, optional_yield y);
+  int rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj,
+                  const std::string& dest_storage_class,
+                  const DoutPrefixProvider *dpp, optional_yield y);
   int reindex_obj(rgw::sal::Driver* driver,
 		  RGWBucketInfo& dest_bucket_info,
 		  const rgw_obj& obj,
