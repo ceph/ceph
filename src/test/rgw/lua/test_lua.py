@@ -239,7 +239,7 @@ def test_multi_script_management():
     scripts = {}
     for context in contexts:
         for script_name in script_names:
-            script = 'print("hello from ' + context + ':' + script_name + ' script")'
+            script = 'print("hello from ' + '{} ({})'.format(context, script_name) + ' script")'
             result = put_script(script, context, None, script_name)
             assert result[1] == 0
             scripts.setdefault(context, {})[script_name] = script
@@ -292,6 +292,38 @@ def test_script_management_with_tenant():
         assert result[1] == 0
         assert result[0].strip(), 'no script exists for context: ' + context + ' in tenant: ' + tenant
 
+@pytest.mark.basic_test
+def test_multi_script_management_with_tenant():
+    tenant = 'mytenant'
+    conn2 = another_user(tenant)
+    contexts = ['prerequest', 'postrequest', 'getdata', 'putdata']
+    script_names = ["c", "b", "a"]
+    scripts = {}
+    for context in contexts:
+        for t in ['', tenant]:
+            for script_name in script_names:
+                script = 'print("hello from ' + '{} ({})'.format(context, script_name) + ' and ' + tenant + '")'
+                result = put_script(script, context, t, script_name)
+                assert result[1] ==  0
+                scripts.setdefault(context+t, {})[script_name] = script
+    for context in contexts:
+        for script_name in script_names:
+            result = admin(['script', 'get', '--context', context, '--script-name', script_name])
+            assert result[1] == 0
+            assert result[0].strip(), scripts[context][script_name]
+            result = admin(['script', 'rm', '--context', context, '--script-name', script_name])
+            assert result[1] == 0
+            result = admin(['script', 'get', '--context', context, '--script-name', script_name])
+            assert result[1] == 0
+            assert result[0].strip(), "'{}' script does not exist in context: ".format(script_name) + context
+            result = admin(['script', 'get', '--context', context, '--tenant', tenant, '--script-name', script_name])
+            assert result[1] == 0
+            assert result[0].strip(), scripts[context+tenant][script_name]
+            result = admin(['script', 'rm', '--context', context, '--tenant', tenant, '--script-name', script_name])
+            assert result[1] == 0
+            result = admin(['script', 'get', '--context', context, '--tenant', tenant, '--script-name', script_name])
+            assert result[1] == 0
+            assert result[0].strip(), "'{}' script does not exist in context: ".format(script_name) + context + ' in tenant: ' + tenant
 
 @pytest.mark.request_test
 def test_put_obj():
