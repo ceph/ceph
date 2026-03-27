@@ -64,12 +64,17 @@ build_ceph_image() {
     CURR_CEPH_IMG=$(grep -E '^\s*image:\s+' $CLUSTER_SPEC | sed 's/.*image: *\([^ ]*\)/\1/')
 
     cd ${CEPH_DEV_FOLDER}/src/pybind/mgr/rook/ci
-    mkdir -p tmp_build/rook tmp_build/orchestrator
+    mkdir -p tmp_build/rook tmp_build/orchestrator tmp_build/dashboard tmp_build/dashboard_plugins
     cp ./../../orchestrator/*.py tmp_build/orchestrator
     cp ../*.py tmp_build/rook
     cp -r ../../../../../src/python-common/ceph/ tmp_build/
+
     # Copy all mgr Python modules from source tree to override stale versions in base image
     cp ${CEPH_DEV_FOLDER}/src/pybind/mgr/*.py tmp_build/
+
+    # Copy updated dashboard cli to match new mgr_module API
+    cp ${CEPH_DEV_FOLDER}/src/pybind/mgr/dashboard/cli.py tmp_build/dashboard/
+    cp ${CEPH_DEV_FOLDER}/src/pybind/mgr/dashboard/plugins/plugin.py tmp_build/dashboard_plugins/
 
     $CONTAINER_RUNTIME build --tag ${LOCAL_CEPH_IMG} .
     $CONTAINER_RUNTIME tag ${LOCAL_CEPH_IMG} ${CURR_CEPH_IMG}
