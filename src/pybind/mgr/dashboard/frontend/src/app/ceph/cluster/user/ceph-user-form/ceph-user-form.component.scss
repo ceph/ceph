@@ -1,77 +1,56 @@
 @use './src/styles/defaults' as *;
 @use '@carbon/styles/scss/theme' as *;
 @use '@carbon/styles/scss/spacing' as *;
-@use '@carbon/type';
 
-/* CONTAINER (light styling only) */
-.cd-form {
-  max-width: 700px;
-  margin: 0 auto;
-}
-
-/* SECTIONS */
-.cd-form-section {
-  margin-bottom: $spacing-07;
-}
-
-/* LABEL */
-.cd-label {
-  @include type.type-style('label-02');
-
+/* Container (Card-like layout) */
+:host {
   display: block;
-  margin-bottom: $spacing-03;
-  color: $text-primary;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: var(--cds-spacing-04);
+  border: 1px solid var(--cds-border-subtle-01);
+  border-radius: 8px;
+  background-color: var(--cds-layer);
 }
 
-/* HEADINGS */
-.cd-heading-04 {
-  @include type.type-style('heading-04');
-
-  margin-bottom: $spacing-06;
-  color: $text-primary;
-}
-
-.cd-heading-03 {
-  @include type.type-style('heading-03');
-
-  margin-bottom: $spacing-05;
-  color: $text-primary;
-}
-
-/* USER ENTITY INPUT */
-.user-entity-group {
+/* Prefix styling */
+.cds--text-input__prefix {
+  background-color: var(--cds-layer-accent-01);
+  border: 1px solid var(--cds-border-subtle-01);
+  border-right: none;
+  padding: var(--cds-spacing-03) var(--cds-spacing-04);
   display: flex;
-  max-width: 600px;
-
-  .prefix {
-    background-color: $layer-accent-01;
-    border: 1px solid $border-subtle-01;
-    border-right: none;
-    padding: $spacing-03 $spacing-04;
-    display: flex;
-    align-items: center;
-    color: $text-secondary;
-  }
-
-  input {
-    flex: 1;
-  }
-}
-
-/* CAPABILITIES ROW */
-.cap-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr auto;
-  gap: $spacing-03;
-  margin-bottom: $spacing-03;
   align-items: center;
-  max-width: 600px;
+  color: var(--cds-text-secondary);
 }
 
-/* ACTION BUTTONS */
-.cd-actions {
+/* Label row spacing */
+.cap-label-row {
+  margin-bottom: var(--cds-spacing-03);
+}
+
+/* Input row alignment */
+.cap-input-row {
+  align-items: center;
+  margin-bottom: var(--cds-spacing-03);
+}
+
+/* Remove button alignment */
+.remove-col {
   display: flex;
-  justify-content: flex-end;
-  gap: $spacing-04;
-  margin-top: $spacing-06;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Ghost button alignment fix */
+:host ::ng-deep button[cdsButton='ghost'] {
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Capability button alignment */
+.add-btn-col {
+  padding-left: var(--cds-spacing-05);
 }
