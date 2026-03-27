@@ -937,10 +937,12 @@ class OSDRemovalQueue(object):
                 logger.info(f"Successfully purged {osd} on {osd.hostname}")
 
             if osd.zap:
-                # throws an exception if the zap fails
-                logger.info(f"Zapping devices for {osd} on {osd.hostname}")
-                osd.do_zap()
-                logger.info(f"Successfully zapped devices for {osd} on {osd.hostname}")
+                try:
+                    logger.info(f"Zapping devices for {osd} on {osd.hostname}")
+                    osd.do_zap()
+                    logger.info(f"Successfully zapped devices for {osd} on {osd.hostname}")
+                except Exception:
+                    logger.exception(f"Failed to zap devices for {osd} on {osd.hostname}")
             self.mgr.cache.invalidate_host_devices(osd.hostname)
             logger.debug(f"Removing {osd} from the queue.")
 
