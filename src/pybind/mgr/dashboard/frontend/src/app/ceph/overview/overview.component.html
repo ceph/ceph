@@ -1,10 +1,10 @@
 @let storageCard = (storageCardVm$ | async);
 @let health = (healthCardVm$ | async);
 <cd-telemetry-notification></cd-telemetry-notification>
-<div cdsGrid
-     [fullWidth]="true"
-     [narrow]="true"
-     class="cds-mt-5 cds-mb-5 overview">
+<main cdsGrid
+      [fullWidth]="true"
+      [narrow]="true"
+      class="cds-mt-5 cds-mb-5 overview">
   <div cdsRow>
     <div cdsCol
          class="cds-mb-5"
@@ -45,7 +45,7 @@
       <cd-performance-card></cd-performance-card>
     </div>
   </div>
-</div>
+</main>
 @if (isHealthPanelOpen && health?.incidents > 0) {
   <cd-side-panel
     [headerText]="'Health incidents ('+ health?.incidents +')'"

@@ -1,7 +1,7 @@
-import { DashboardV3PageHelper } from './dashboard-v3.po';
+import { OvevriewPagehelper } from './dashboard-v3.po';
 
 describe('Dashboard-v3 Main Page', () => {
-  const overview = new DashboardV3PageHelper();
+  const overview = new OvevriewPagehelper();
 
   before(() => {
     cy.login();
