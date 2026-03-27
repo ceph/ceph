@@ -19,6 +19,8 @@
 #include "include/ceph_assert.h"
 #include "include/object.h"
 #include "include/stringify.h"
+#include "include/utime.h"
+#include "common/Clock.h"
 #include "common/ceph_context.h"
 #include "common/config_proxy.h"
 #include "common/JSONFormatter.h"
@@ -46,8 +48,9 @@ class TestMount {
   const uint64_t BLOCK_SIZE_FACTOR = 1*1024*1024;
   const uint64_t BLOCK_SIZE=4*BLOCK_SIZE_FACTOR;
 
+  unsigned diff_mask = 0;
 public:
-  TestMount( const char* root_dir_name = "dir0") {
+  TestMount( const char* root_dir_name = "dir0", unsigned mask = 0) : diff_mask(mask) {
     ceph_create(&cmount, NULL);
     ceph_conf_read_file(cmount, NULL);
     ceph_conf_parse_env(cmount, NULL);
@@ -64,7 +67,9 @@ public:
     ceph_rmdir(cmount, dir_path);
     ceph_shutdown(cmount);
   }
-
+  void set_diff_mask(unsigned mask) {
+    diff_mask = mask;
+  }
   int conf_get(const char *option, char *buf, size_t len) {
     return ceph_conf_get(cmount, option, buf, len);
   }
@@ -240,6 +245,26 @@ public:
     auto target_path = make_file_path(target);
     return ceph_symlink(cmount, target_path.c_str(), src_path.c_str());
   }
+  int chmod(const char* relpath, int mode)
+  {
+    auto file_path = make_file_path(relpath);
+    return ceph_chmod(cmount, file_path.c_str(), mode);
+  }
+  int utimes(const char* relpath, struct timeval times[2])
+  {
+    auto file_path = make_file_path(relpath);
+    return ceph_utimes(cmount, file_path.c_str(), times);
+  }
+
+  int statx(const char* relpath, struct ceph_statx *stx, unsigned int want, unsigned int flags)
+  {
+    auto file_path = make_file_path(relpath);
+    return ceph_statx(cmount, file_path.c_str(), stx, want, flags);
+  }
+  int sync()
+  {
+    return ceph_sync_fs(cmount);
+  }
 
   int test_open(const char* relpath)
   {
@@ -333,6 +358,7 @@ public:
                                relpath,
                                s1.c_str(),
                                s2.c_str(),
+                               diff_mask,
                                &info);
     if (r != 0) {
       std::cerr << " Failed to open snapdiff, ret:" << r << std::endl;
@@ -2190,6 +2216,74 @@ TEST(LibCephFS, SnapDiffDeletionRecreation) {
     }
   }
   test_mount.verify_snap_diff(expected, "bulk", "snap1", "snap2");
+
+  test_mount.rmsnap("snap1");
+  test_mount.rmsnap("snap2");
+}
+
+TEST(LibCephFS, SnapDiffStatDelta) {
+  TestMount test_mount("");
+
+  ASSERT_EQ(0, test_mount.mkdir("diffstat_delta"));
+  string path1("diffstat_delta/1");
+  test_mount.write_full(path1.c_str(), path1.c_str());
+
+  string path2("diffstat_delta/2");
+  test_mount.write_full(path2.c_str(), path2.c_str());
+
+  ASSERT_EQ(0, test_mount.mksnap("snap1"));
+  // creation of snap1 done
+
+  {
+    //update path1 ctime/mtime
+    sleep(2);
+    struct timeval times[2];
+    utime_t _now = ceph_clock_now();
+    _now.copy_to_timeval(&times[0]);
+    _now.copy_to_timeval(&times[1]);
+    ASSERT_EQ(0, test_mount.utimes(path1.c_str(), times));
+  }
+  test_mount.chmod(path2.c_str(), 0600);
+  test_mount.sync();
+
+  ASSERT_EQ(0, test_mount.mksnap("snap2"));
+
+  uint64_t snapid1;
+  uint64_t snapid2;
+
+  // learn snapshot ids and do basic verification
+  ASSERT_EQ(0, test_mount.get_snapid("snap1", &snapid1));
+  ASSERT_EQ(0, test_mount.get_snapid("snap2", &snapid2));
+  {
+    vector <pair <string, uint64_t>> expected;
+    expected.push_back({"1", snapid2});
+    test_mount.verify_snap_diff(expected, "diffstat_delta", "snap1", "snap2");
+  }
+  {
+    test_mount.set_diff_mask(CEPH_SNAPDIFF_MODE);
+    vector <pair <string, uint64_t>> expected;
+    expected.push_back({"2", snapid2});
+    test_mount.verify_snap_diff(expected, "diffstat_delta", "snap1", "snap2");
+  }
+  {
+    test_mount.set_diff_mask(CEPH_SNAPDIFF_MODE | CEPH_SNAPDIFF_CTIME);
+    vector <pair <string, uint64_t>> expected;
+    expected.push_back({ "1", snapid2 });
+    expected.push_back({ "2", snapid2 });
+    test_mount.verify_snap_diff(expected, "diffstat_delta", "snap1", "snap2");
+  }
+  {
+    test_mount.set_diff_mask(CEPH_SNAPDIFF_CTIME);
+    vector <pair <string, uint64_t>> expected;
+    expected.push_back({"1", snapid2});
+    expected.push_back({"2", snapid2 });
+    test_mount.verify_snap_diff(expected, "diffstat_delta", "snap1", "snap2");
+  }
+  {
+    test_mount.set_diff_mask(CEPH_SNAPDIFF_UID | CEPH_SNAPDIFF_GID);
+    vector <pair <string, uint64_t>> expected;
+    test_mount.verify_snap_diff(expected, "diffstat_delta", "snap1", "snap2");
+  }
 
   test_mount.rmsnap("snap1");
   test_mount.rmsnap("snap2");

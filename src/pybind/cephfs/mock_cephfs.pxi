@@ -222,7 +222,7 @@ cdef nogil:
         pass
     dirent * ceph_readdir(ceph_mount_info *cmount, ceph_dir_result *dirp):
         pass
-    int ceph_open_snapdiff(ceph_mount_info *cmount, const char *root_path, const char *rel_path, const char *snap1path, const char *snap2root, ceph_snapdiff_info *out):
+    int ceph_open_snapdiff(ceph_mount_info *cmount, const char *root_path, const char *rel_path, const char *snap1path, const char *snap2root, unsigned mask, ceph_snapdiff_info *out):
         pass
     int ceph_readdir_snapdiff(ceph_snapdiff_info *snapdiff, ceph_snapdiff_entry_t *out):
         pass

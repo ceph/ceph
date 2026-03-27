@@ -69,6 +69,16 @@ CEPH_SETATTR_SIZE  = 0x20
 CEPH_SETATTR_CTIME = 0x40
 CEPH_SETATTR_BTIME = 0x200
 
+CEPH_SNAPDIFF_MODE = 0x1
+CEPH_SNAPDIFF_UID = 0x2
+CEPH_SNAPDIFF_GID = 0x4
+CEPH_SNAPDIFF_SIZE = 0x8
+CEPH_SNAPDIFF_NLINK = 0x10
+CEPH_SNAPDIFF_MTIME = 0x20
+CEPH_SNAPDIFF_ATIME = 0x40
+CEPH_SNAPDIFF_CTIME = 0x80
+CEPH_SNAPDIFF_BTIME = 0x100
+
 CEPH_NOSNAP = -2
 
 # XXX: errno definitions, hard-coded numbers here are errnos defined by Linux
@@ -1063,7 +1073,7 @@ cdef class LibCephFS(object):
 
         return handle.close()
 
-    def opensnapdiff(self, root_path, rel_path, snap1name, snap2name) -> SnapDiffHandle:
+    def opensnapdiff(self, root_path, rel_path, snap1name, snap2name, diff_mask) -> SnapDiffHandle:
         """
         Open the given directory.
 
@@ -1083,8 +1093,9 @@ cdef class LibCephFS(object):
             char* _relp = relp
             char* _snap1 = snap1
             char* _snap2 = snap2
+            unsigned _diff_mask = diff_mask
         with nogil:
-            ret = ceph_open_snapdiff(self.cluster, _root, _relp, _snap1, _snap2, &h.handle);
+            ret = ceph_open_snapdiff(self.cluster, _root, _relp, _snap1, _snap2, _diff_mask, &h.handle);
         if ret < 0:
             raise make_ex(ret, "open_snapdiff failed for {} vs. {}"
                 .format(snap1.decode('utf-8'), snap2.decode('utf-8')))

@@ -812,7 +812,8 @@ def test_snapdiff(testdir):
     cephfs.mksnap("/snapdiff_test", "snap2", 0o755)
     snap1id = cephfs.snap_info(b"/snapdiff_test/.snap/snap1")['id']
     snap2id = cephfs.snap_info(b"/snapdiff_test/.snap/snap2")['id']
-    diff = cephfs.opensnapdiff(b"/snapdiff_test", b"/", b"snap2", b"snap1")
+    diff = cephfs.opensnapdiff(b"/snapdiff_test", b"/", b"snap2", b"snap1",
+     libcephfs.CEPH_SNAPDIFF_CTIME | libcephfs.CEPH_SNAPDIFF_MTIME)
     cnt = 0
     e = diff.readdir()
     while e is not None:

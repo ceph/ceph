@@ -10462,6 +10462,7 @@ int Client::file_blockdiff(struct scan_state_t *state, const UserPerm &perms,
 }
 
 int Client::readdir_snapdiff(dir_result_t* d1, snapid_t snap2,
+                             unsigned diff_mask,
                              struct dirent* out_de,
                              snapid_t* out_snap)
 {
@@ -10499,6 +10500,7 @@ int Client::readdir_snapdiff(dir_result_t* d1, snapid_t snap2,
       } else if (dirp->hash_order()) {
 	req->head.args.snapdiff.offset_hash = dirp->offset_high();
       }
+      req->head.args.snapdiff.mask = diff_mask;
       req->dirp = dirp;
   };
 
