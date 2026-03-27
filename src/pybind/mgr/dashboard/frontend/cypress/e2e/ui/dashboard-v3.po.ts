@@ -1,6 +1,6 @@
 import { PageHelper } from '../page-helper.po';
 
-export class DashboardV3PageHelper extends PageHelper {
+export class OvevriewPagehelper extends PageHelper {
   pages = { index: { url: '#/overview', id: 'cd-overview' } };
 
   cardTitle(index: number) {
