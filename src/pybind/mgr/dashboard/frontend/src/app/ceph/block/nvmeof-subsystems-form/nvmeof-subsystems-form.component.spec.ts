@@ -103,7 +103,6 @@ describe('NvmeofSubsystemsFormComponent', () => {
       expect(nvmeofService.createSubsystem).toHaveBeenCalledWith({
         nqn: expectedNqn,
         gw_group: mockGroupName,
-        enable_ha: true,
         dhchap_key: 'Q2VwaE52bWVvRkNoYXBTeW50aGV0aWNLZXkxMjM0NTY='
       });
     });
