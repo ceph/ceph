@@ -443,6 +443,7 @@ public:
    *
    */
   int readdir_snapdiff(dir_result_t* dir1, snapid_t snap2,
+    unsigned diff_mask,
     struct dirent* out_de, snapid_t* out_snap);
 
   int getdir(const char *relpath, std::list<std::string>& names,

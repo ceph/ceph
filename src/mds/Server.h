@@ -574,6 +574,7 @@ private:
     const std::string& offset_str,
     uint32_t offset_hash,
     unsigned req_flags,
+    unsigned diff_mask,
     bufferlist& dirbl);
   bool build_snap_diff(
     const MDRequestRef& mdr,
@@ -582,6 +583,7 @@ private:
     dentry_key_t* skip_key,
     snapid_t snapid_before,
     snapid_t snapid,
+    unsigned diff_mask,
     const bufferlist& dnbl,
     std::function<bool(CDentry*, CInode*, bool)> add_result_cb);
 
