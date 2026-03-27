@@ -10,19 +10,6 @@
           i18n>Performance</h2>
       <div cdsStack="horizontal"
            gap="2">
-        <cds-dropdown
-          [placeholder]="selectedStorageType"
-          (selected)="onStorageTypeSelection($event)"
-          [label]="'Storage Type'"
-          class="overview-storage-card-dropdown"
-          [inline]="true"
-          size="sm"
-          i18n>
-          <cds-dropdown-list
-            [items]="storageTypes"
-            size="sm"></cds-dropdown-list>
-        </cds-dropdown>
-
         <cd-time-picker
           [dropdwonSize]="'sm'"
           [label]="'Time Span'"

@@ -1,6 +1,6 @@
 import { inject, Injectable } from '@angular/core';
 import { PrometheusService } from './prometheus.service';
-import { PerformanceData, StorageType } from '../models/performance-data';
+import { PerformanceData } from '../models/performance-data';
 import { AllStoragetypesQueries } from '../enum/dashboard-promqls.enum';
 import { map } from 'rxjs/operators';
 import { Observable } from 'rxjs';
@@ -11,13 +11,8 @@ import { Observable } from 'rxjs';
 export class PerformanceCardService {
   private prometheusService = inject(PrometheusService);
 
-  getChartData(
-    time: { start: number; end: number; step: number },
-    selectedStorageType: StorageType
-  ): Observable<PerformanceData> {
-    const queries = this.buildQueriesForStorageType(selectedStorageType);
-
-    return this.prometheusService.getRangeQueriesData(time, queries, true).pipe(
+  getChartData(time: { start: number; end: number; step: number }): Observable<PerformanceData> {
+    return this.prometheusService.getRangeQueriesData(time, AllStoragetypesQueries, true).pipe(
       map((raw) => {
         const chartData = this.convertPerformanceData(raw);
 
@@ -36,19 +31,6 @@ export class PerformanceCardService {
         };
       })
     );
-  }
-
-  private buildQueriesForStorageType(storageType: StorageType) {
-    const queries: any = {};
-
-    const applicationFilter =
-      storageType === StorageType.All ? '' : `{application="${storageType}"}`;
-
-    Object.entries(AllStoragetypesQueries).forEach(([key, query]) => {
-      queries[key] = query.replace('{{applicationFilter}}', applicationFilter);
-    });
-
-    return queries;
   }
 
   convertPerformanceData(raw: any): PerformanceData {
