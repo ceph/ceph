@@ -435,7 +435,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     dump_header(s, "Rgwx-Perm-Checked", "true");
 
     // check for GetObject(Version)Tagging permission to include tags in response
-    auto action = s->object->get_instance().empty() ? rgw::IAM::s3GetObjectTagging : rgw::IAM::s3GetObjectVersionTagging;
+    auto action = s->object_key.instance.empty() ? rgw::IAM::s3GetObjectTagging : rgw::IAM::s3GetObjectVersionTagging;
     // since we are already under s->system_request, if the request is not impersonating,
     // it can be assumed that it is not a user-mode replication.
     bool keep_tags = s->auth.identity->is_admin() || verify_object_permission(this, s, action);
@@ -3880,7 +3880,7 @@ int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
       (s->bucket->get_tenant() == s->src_tenant_name) &&
       (s->bucket->get_name() == s->src_bucket_name) &&
       (s->object->get_name() == s->src_object->get_name()) &&
-      s->src_object->get_instance().empty() &&
+      s->src_object_key.instance.empty() &&
       (attrs_mod != rgw::sal::ATTRSMOD_REPLACE)) {
     need_to_check_storage_class = true;
   }
