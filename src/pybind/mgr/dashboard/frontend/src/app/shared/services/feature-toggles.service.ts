@@ -12,7 +12,6 @@ export class FeatureTogglesMap {
   cephfs = true;
   rgw = true;
   nfs = true;
-  dashboard = true;
 }
 export type Features = keyof FeatureTogglesMap;
 export type FeatureTogglesMap$ = Observable<FeatureTogglesMap>;

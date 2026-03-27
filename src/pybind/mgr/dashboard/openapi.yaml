@@ -7011,9 +7011,6 @@ paths:
                   cephfs:
                     description: ''
                     type: boolean
-                  dashboard:
-                    description: ''
-                    type: boolean
                   iscsi:
                     description: ''
                     type: boolean
@@ -7036,15 +7033,11 @@ paths:
                 - cephfs
                 - rgw
                 - nfs
-                - dashboard
                 type: object
             application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   cephfs:
-                    description: ''
-                    type: boolean
-                  dashboard:
                     description: ''
                     type: boolean
                   iscsi:

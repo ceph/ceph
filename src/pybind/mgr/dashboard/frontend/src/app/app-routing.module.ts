@@ -24,7 +24,6 @@ import { SilenceListComponent } from './ceph/cluster/prometheus/silence-list/sil
 import { ServiceFormComponent } from './ceph/cluster/services/service-form/service-form.component';
 import { ServicesComponent } from './ceph/cluster/services/services.component';
 import { TelemetryComponent } from './ceph/cluster/telemetry/telemetry.component';
-import { DashboardComponent } from './ceph/dashboard/dashboard/dashboard.component';
 import { NfsFormComponent } from './ceph/nfs/nfs-form/nfs-form.component';
 import { PerformanceCounterComponent } from './ceph/performance-counter/performance-counter/performance-counter.component';
 import { LoginPasswordFormComponent } from './core/auth/login-password-form/login-password-form.component';
@@ -67,6 +66,7 @@ import { CephfsMirroringListComponent } from './ceph/cephfs/cephfs-mirroring-lis
 import { NotificationsPageComponent } from './core/navigation/notification-panel/notifications-page/notifications-page.component';
 import { CephfsMirroringWizardComponent } from './ceph/cephfs/cephfs-mirroring-wizard/cephfs-mirroring-wizard.component';
 import { CephfsMirroringErrorComponent } from './ceph/cephfs/cephfs-mirroring-error/cephfs-mirroring-error.component';
+import { OverviewComponent } from './ceph/overview/overview.component';
 
 @Injectable()
 export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
@@ -110,7 +110,7 @@ const routes: Routes = [
     canActivate: [AuthGuardService, ChangePasswordGuardService],
     canActivateChild: [AuthGuardService, ChangePasswordGuardService],
     children: [
-      { path: 'overview', component: DashboardComponent },
+      { path: 'overview', component: OverviewComponent },
       { path: 'error', component: ErrorComponent },
       {
         path: 'cephfs/mirroring/error',
