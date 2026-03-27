@@ -44,6 +44,7 @@ int NetHandler::create_socket(int domain, bool reuse_addr)
   int r = 0;
   int protocol = IPPROTO_TCP;
 
+#if defined(__linux__)
   if (this->try_smc) {
     /* check if socket is eligible for AF_SMC */
     if (domain == AF_INET || domain == AF_INET6) {
@@ -54,6 +55,7 @@ int NetHandler::create_socket(int domain, bool reuse_addr)
       domain = AF_SMC;
     }
   }
+#endif
 
   if ((s = socket_cloexec(domain, SOCK_STREAM, protocol)) == -1) {
     r = ceph_sock_errno();
