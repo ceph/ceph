@@ -40,7 +40,8 @@ bool verify(const std::string& script, std::string& err_msg);
 std::string get_script_name(const std::string& key);
 std::string get_script_tenant(const std::string& key);
 context get_script_context(const std::string& key);
-std::string script_list_metadata_key(const std::string& key);
+std::string script_list_metadata_key(context ctx, const std::string& tenant);
+std::string script_oid(context ctx, const std::string& tenant, const std::string& name);
 
 // driver a lua script in a context
 int write_script(const DoutPrefixProvider *dpp, rgw::sal::LuaManager* manager, optional_yield y, const std::string& tenant, context ctx, const std::string& script, const std::string& name);

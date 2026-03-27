@@ -87,7 +87,7 @@ size_t find_script_separator(const std::string& key) {
   for (int i = 0; i < 3; i++) {
     index = key.find('.', index);
     if (index == std::string::npos) {
-      break;
+      return index;
     }
     index++;
   }
@@ -133,14 +133,14 @@ context get_script_context(const std::string& key) {
   size_t l = prefix.find('.');
   size_t r = prefix.rfind('.');
   if (l == std::string::npos || r == std::string::npos || l+1 == r) {
-    return "";
+    return context::none;
   }
   return to_context(prefix.substr(l+1, r-l-1));
 }
 
-std::string script_list_metadata_key(const std::string& key) {
+std::string script_list_metadata_key(context ctx, const std::string& tenant) {
   static const std::string SCRIPT_LIST_METADATA_PREFIX("metadata.");
-  return SCRIPT_LIST_METADATA_PREFIX + "." + get_script_prefix(key);
+  return SCRIPT_LIST_METADATA_PREFIX + script_oid(ctx, tenant, "");
 }
 
 std::string script_oid(context ctx, const std::string& tenant, const std::string& name) {

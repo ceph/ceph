@@ -106,7 +106,7 @@ void Background::resume(rgw::sal::Driver*) {
   cond.notify_all();
 }
 
-int Background::list_scripts(std::vector<std::shared_ptr<std::string>>& rgw_script_names) {
+int Background::list_scripts(std::vector<std::string>& rgw_script_names) {
   std::unique_lock cond_lock(pause_mutex);
   if (paused) {
     return -EAGAIN;
@@ -184,7 +184,7 @@ void Background::run() {
     lguard->set_max_runtime(max_runtime);
     lguard->reset_start_time();
     
-    std::vector<std::shared_ptr<std::string>> rgw_script_names;
+    std::vector<std::string> rgw_script_names;
     const auto rc = list_scripts(rgw_script_names);
     if (rc == -ENOENT || rc == -EAGAIN) {
       // either no script or paused, nothing to do
@@ -193,7 +193,7 @@ void Background::run() {
     }
 
     for (const auto& name : rgw_script_names) {
-      const auto rc = read_script(*name);
+      const auto rc = read_script(name);
       if (rc == -ENOENT || rc == -EAGAIN) {
         // either no script or paused, nothing to do
         continue;

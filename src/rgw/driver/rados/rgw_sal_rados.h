@@ -1254,7 +1254,7 @@ class RadosLuaManager : public StoreLuaManager {
   int notify_script_update(const DoutPrefixProvider *dpp, const std::string& script_oid, optional_yield y);
   uint64_t get_watch_handle_for_script(const std::string& script_oid);
   std::string get_script_for_watch_handle(uint64_t handle);
-  int save_scripts(const DoutPrefixProvider* dpp, optional_yield y, RGWObjVersionTracker* objv, const std::vector<std::string>& scripts, const std::string& key);
+  int save_scripts(const DoutPrefixProvider* dpp, optional_yield y, const std::string& tenant, rgw::lua::context ctx, RGWObjVersionTracker* objv, const std::vector<std::string>& scripts);
 
   uint64_t watch_handle = 0;
   std::map<std::string, uint64_t> script_watches;

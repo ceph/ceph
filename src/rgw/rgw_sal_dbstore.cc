@@ -2134,7 +2134,7 @@ namespace rgw::sal {
     return -ENOENT;
   }
 
-  int DBLuaManager::list_scripts(const DoutPrefixProvider* dpp, optional_yield y, RGWObjVersionTracker* objv, const std::string& key, std::vector<std::shared_ptr<std::string>>& scripts)
+  int DBLuaManager::list_scripts(const DoutPrefixProvider* dpp, optional_yield y, const std::string& tenant, rgw::lua::context ctx, RGWObjVersionTracker* objv, std::vector<std::string>& scripts)
   {
     return -ENOENT;
   }

@@ -12234,8 +12234,12 @@ next:
     std::string script;
     const auto rc = rgw::lua::read_script(dpp(), lua_manager.get(), null_yield, tenant, script_ctx, script, script_name);
     if (rc == -ENOENT) {
-      std::cout << "'" << script_name << "' script does not exist in context: " << *str_script_ctx << 
+      if (script_name.empty() || script_name == "default") {
+        std::cout << "no script exists for context: " << *str_script_ctx << (tenant.empty() ? "" : (" in tenant: " + tenant)) << std::endl;
+      } else {
+        std::cout << "'" << script_name << "' script does not exist in context: " << *str_script_ctx << 
         (tenant.empty() ? "" : (" in tenant: " + tenant)) << std::endl;
+      }
     } else if (rc < 0) {
       cerr << "ERROR: failed to read script. error: " << rc << std::endl;
       return -rc;
@@ -12265,7 +12269,7 @@ next:
         (tenant.empty() ? "" : (" in tenant: " + tenant)) << std::endl;
     } else {
       for (const auto& script : scripts) {
-        std::cout << *script << std::endl;
+        std::cout << script << std::endl;
       }
     }
   }

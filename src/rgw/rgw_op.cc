@@ -2535,7 +2535,6 @@ int RGWGetObj::get_lua_filter(std::unique_ptr<RGWGetObj_Filter>* filter, RGWGetO
       // no script, nothing to do
       continue;
     } 
-    
     if (rc < 0) {
       ldpp_dout(this, 5) << "WARNING: failed to read data script '" << name << "'. error: " << rc << dendl;
       return rc;

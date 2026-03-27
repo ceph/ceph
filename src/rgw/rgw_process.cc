@@ -406,7 +406,6 @@ int process_request(const RGWProcessEnv& penv,
           // no script, nothing to do
           continue;
         }
-        
         if (rc < 0) {
           ldpp_dout(op, 5) <<
             "WARNING: failed to execute pre request script. "
@@ -473,7 +472,8 @@ done:
         if (rc == -ENOENT) {
           // no script, nothing to do
           continue;
-        } else if (rc < 0) {
+        }
+        if (rc < 0) {
           ldpp_dout(op, 5) <<
             "WARNING: failed to read post request script. "
             "error: " << rc << dendl;

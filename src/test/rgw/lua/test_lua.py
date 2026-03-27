@@ -260,7 +260,7 @@ def test_multi_script_management():
         for script_name in script_names:
             result = admin(['script', 'get', '--context', context, '--script-name', script_name])
             assert result[1] == 0
-            assert result[0].strip() == 'no script exists for context: ' + context
+            assert result[0].strip() == "'{}' script does not exist in context: ".format(script_name) + context
 
 @pytest.mark.basic_test
 def test_script_management_with_tenant():
