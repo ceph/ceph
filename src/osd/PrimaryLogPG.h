@@ -1199,16 +1199,23 @@ protected:
   /// set while migrating 1st object after activate
   bool new_pool_migration_interval_in_flight;
 
-  /// current migration target pg
-  std::optional<pg_t> pool_migration_target_pg;
-  /// set when we get GRANT from all target PGs and can start copy_from
-  bool pool_migration_reservations_established;
-  /// waiting for GRANT from target PGs
   /// objects waiting for lock retry to delete source after successful copy_from
   std::list<hobject_t> pool_migration_source_delete_pending_lock;
-  /// set when target PG has reservations and can accept pool migration copy_from
-  bool pool_migration_target_has_reservations = false;
-  bool pool_migration_waiting_for_reservations;
+  /// target PG in pool migration has taken reservations and replied
+  bool pool_migration_reservations_granted = false;
+  /// current migration target pg
+  std::optional<pg_t> pool_migration_target_pg;
+  /// list of all target pgs a particular source pg will migrate to
+  std::vector<pg_t> pool_migration_target_pgs;
+  /// index of current target pg in pool_migration_target_pgs
+  size_t pool_migration_current_target_index = 0;
+  /// source PG has sent reservation request and is waiting for target to reply
+  bool pool_migration_waiting_for_reservations = false;
+  /// pending reservation request for target to reply to
+  OpRequestRef pending_pool_migration_reservation_op;
+  std::vector<OSDOp> pending_pool_migration_reservation_ops;
+
+  void initialize_pool_migration_target_pg_list();
   hobject_t next_pool_migration(std::optional<hobject_t> start);
   hobject_t earliest_pool_migration()
   {
@@ -1422,13 +1429,15 @@ protected:
 			          bool *work_started);
   pg_t get_target_pg_from_hash(const hobject_t &hobj);
   uint16_t count_remaining_target_pgs(const hobject_t &hobj);
-  bool send_request_remote_reservation_message(const pg_t &target_pg, const hobject_t &hobj);
+  void pool_migration_request_target_reservation() override;
+  void pool_migration_release_target_reservation();
 
   void start_target_pool_migration(int64_t num_bytes, int64_t num_objects);
   void stop_target_pool_migration();
   void stop_pool_migration_unfound();
   void stop_pool_migration_toofull();
   void stop_pool_migration_revoked();
+  void on_pool_migration_source_reserved() override;
   void on_pool_migration_target_reserved() override;
   void on_pool_migration_target_suspended(bool toofull) override;
 
@@ -1599,6 +1608,7 @@ protected:
   friend struct C_SetManifestRefCountDone;
   friend struct SetManifestFinisher;
   friend struct C_Migrate;
+  friend struct C_PoolMigrationReservationCallback;
 
 public:
   PrimaryLogPG(OSDService *o, OSDMapRef curmap,

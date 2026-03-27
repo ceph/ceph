@@ -1577,7 +1577,6 @@ void PG::on_recovery_reserved()
 
 void PG::on_pool_migration_source_reserved()
 {
-  //BILL:FIXME: Wait for reply from Jamies message before doing this
   state_set(PG_STATE_MIGRATING);
   state_clear(PG_STATE_MIGRATION_TOOFULL);
   state_clear(PG_STATE_MIGRATION_WAIT);
