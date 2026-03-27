@@ -53,7 +53,7 @@ def step_get_prometheus_server_ip(context):
 @given('the prometheus server is serving metrics')
 def step_given_server_running(context):
     try:
-        params = {'match[]': '{__name__!=""}'}
+        params = {'match[]': '{__name__=~".+"}'}
         response = requests.get(f"{PROMETHEUS_SERVER_URL}/federate", params)
         # Check if the response status code is successful (2xx)
         response.raise_for_status()
@@ -66,7 +66,7 @@ def step_given_server_running(context):
 
 @when('I query the Prometheus metrics endpoint')
 def step_when_query_metrics_endpoint(context):
-    params = {'match[]': '{__name__!=""}'}
+    params = {'match[]': '{__name__=~".+"}'}
     context.response = requests.get(f"{PROMETHEUS_SERVER_URL}/federate", params)
     context.response.raise_for_status()
 
