@@ -207,10 +207,18 @@ enable_monitoring() {
     $KUBECTL wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus \
         -n rook-ceph --timeout=120s
 
-    # Verify ceph mgr prometheus module is actually serving on port 9283
+    # If the ceph mgr prometheus module is not yet serving on port 9283, enable
+    # it explicitly. We check first to avoid restarting an already-running
+    # instance, which would trigger a port 9283 conflict.
     local mgr_pod
     mgr_pod=$($KUBECTL -n rook-ceph get pods -l app=rook-ceph-mgr \
         -o jsonpath='{.items[0].metadata.name}')
+    if ! $KUBECTL -n rook-ceph exec "$mgr_pod" -- \
+            curl -sf http://localhost:9283/metrics 2>/dev/null | grep -q 'ceph_health_status'; then
+        echo "ceph mgr prometheus module not yet serving, enabling it..."
+        $KUBECTL -n rook-ceph exec deploy/rook-ceph-tools -- ceph mgr module enable prometheus
+    fi
+
     local attempts=0
     until $KUBECTL -n rook-ceph exec "$mgr_pod" -- \
         curl -sf http://localhost:9283/metrics | grep -q 'ceph_health_status'; do
