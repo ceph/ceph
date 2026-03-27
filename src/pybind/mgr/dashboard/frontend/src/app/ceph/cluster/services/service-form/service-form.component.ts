@@ -924,6 +924,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
                 this.serviceForm.get('ssl_cert').setValue(response[0].spec?.ssl_cert);
                 this.serviceForm.get('ssl_key').setValue(response[0].spec?.ssl_key);
               }
+              break;
+            default:
+              this.serviceForm.get('service_id').setValue(this.serviceName);
           }
         });
     }

@@ -181,14 +181,17 @@
         <div class="cds-input-group">
           <div class="fit-content">
             <cds-text-label cdRequiredField="Service name"
+                            [disabled]="editing"
                             i18n>
               <input cdsText
                      type="text"
                      [value]="serviceForm.controls.service_type.value + '.'"
+                     [disabled]="editing"
                      readonly="true">
             </cds-text-label>
           </div>
           <cds-text-label [invalid]="serviceForm.controls.service_id.invalid && serviceForm.controls.service_id.dirty"
+                          [disabled]="editing"
                           [invalidText]="serviceIdError">
             <!-- Invisible character to set input fields on same line -->
             &#8203;
@@ -201,6 +204,7 @@
         </div>
         } @else {
         <cds-text-label [invalid]="serviceForm.controls.service_id.invalid && serviceForm.controls.service_id.dirty"
+                        [disabled]="editing"
                         [invalidText]="serviceIdError">
           Service name
           <input cdsText
