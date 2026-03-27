@@ -68,6 +68,7 @@ import { OsdDevicesSelectionModalComponent } from './osd/osd-devices-selection-m
 import { OsdFlagsIndivModalComponent } from './osd/osd-flags-indiv-modal/osd-flags-indiv-modal.component';
 import { OsdFlagsModalComponent } from './osd/osd-flags-modal/osd-flags-modal.component';
 import { OsdFormComponent } from './osd/osd-form/osd-form.component';
+import { OsdFormPageComponent } from './osd/osd-form/osd-form-page.component';
 import { OsdListComponent } from './osd/osd-list/osd-list.component';
 import { OsdPgScrubModalComponent } from './osd/osd-pg-scrub-modal/osd-pg-scrub-modal.component';
 import { OsdRecvSpeedModalComponent } from './osd/osd-recv-speed-modal/osd-recv-speed-modal.component';
@@ -162,6 +163,7 @@ import { TextLabelListComponent } from '~/app/shared/components/text-label-list/
     InventoryComponent,
     HostFormComponent,
     OsdFormComponent,
+    OsdFormPageComponent,
     OsdDevicesSelectionModalComponent,
     InventoryDevicesComponent,
     OsdDevicesSelectionGroupsComponent,

@@ -1,5 +1,334 @@
 <cd-orchestrator-doc-panel *ngIf="!hasOrchestrator"></cd-orchestrator-doc-panel>
 
+@if (useCarbonPageLayout) {
+<div
+  class="osd-form-carbon"
+  *cdFormLoading="loading">
+  <form
+    name="form"
+    #formDir="ngForm"
+    [formGroup]="form"
+    class="cds--form"
+    novalidate>
+    <div
+      cdsGrid
+      class="osd-form-carbon__shell"
+      [condensed]="true"
+      [useCssGrid]="true"
+      [fullWidth]="true">
+      <div
+        cdsCol
+        [columnNumbers]="{ lg: 4, md: 4, sm: 4 }">
+        <cds-tile class="osd-form-carbon__rail">
+          <div
+            [cdsStack]="'vertical'"
+            gap="5">
+            <div
+              [cdsStack]="'vertical'"
+              gap="2">
+              <span class="cds--type-heading-compact-02">Form outline</span>
+              <span class="cds--type-body-compact-01">A guided OSD creation flow with a switch between presets and manual device mapping.</span>
+            </div>
+
+            <div
+              [cdsStack]="'vertical'"
+              gap="3">
+              <div class="osd-form-carbon__rail-item osd-form-carbon__rail-item--active">
+                <span class="osd-form-carbon__rail-index">01</span>
+                <div>
+                  <div class="cds--type-body-compact-02">Deployment mode</div>
+                  <div class="cds--type-helper-text-01">Choose guided or manual setup.</div>
+                </div>
+              </div>
+
+              <div class="osd-form-carbon__rail-item">
+                <span class="osd-form-carbon__rail-index">02</span>
+                <div>
+                  <div class="cds--type-body-compact-02">
+                    {{ simpleDeployment ? 'Deployment options' : 'Device mapping' }}
+                  </div>
+                  <div class="cds--type-helper-text-01">
+                    {{ simpleDeployment ? 'Pick an orchestrator preset.' : 'Assign primary, DB, and WAL devices.' }}
+                  </div>
+                </div>
+              </div>
+
+              <div class="osd-form-carbon__rail-item">
+                <span class="osd-form-carbon__rail-index">03</span>
+                <div>
+                  <div class="cds--type-body-compact-02">Features</div>
+                  <div class="cds--type-helper-text-01">Enable optional OSD capabilities.</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="osd-form-carbon__rail-summary">
+              <span class="cds--type-body-compact-02">Current action</span>
+              <div class="cds--type-heading-compact-01">
+                {{ simpleDeployment ? 'Create OSDs directly' : 'Preview generated drive group' }}
+              </div>
+            </div>
+          </div>
+        </cds-tile>
+      </div>
+
+      <div
+        cdsCol
+        [columnNumbers]="{ lg: 12, md: 12, sm: 4 }">
+        <div
+          [cdsStack]="'vertical'"
+          gap="5">
+          <cds-tile
+            id="deployment-mode-section"
+            class="osd-form-carbon__section osd-form-carbon__mode-section">
+            <div
+              [cdsStack]="'vertical'"
+              gap="4">
+              <div
+                [cdsStack]="'vertical'"
+                gap="2">
+                <span class="cds--type-heading-compact-02">Deployment mode</span>
+                <span class="cds--type-body-compact-01">
+                  Start with the recommended orchestrator preset or switch to explicit device mapping for DB and WAL tuning.
+                </span>
+              </div>
+
+              <div
+                cdsGrid
+                class="osd-form-carbon__mode-grid"
+                [condensed]="true"
+                [useCssGrid]="true"
+                [fullWidth]="true">
+                <div
+                  cdsCol
+                  [columnNumbers]="{ lg: 8, md: 8, sm: 4 }">
+                  <button
+                    type="button"
+                    id="deployment-mode-simple"
+                    class="osd-form-carbon__mode-card"
+                    [class.osd-form-carbon__mode-card--selected]="simpleDeployment"
+                    (click)="setDeploymentMode(true)">
+                    <div class="osd-form-carbon__mode-card-head">
+                      <span class="cds--type-heading-compact-01">Recommended deployment</span>
+                      <span
+                        *ngIf="simpleDeployment"
+                        class="osd-form-carbon__mode-badge">Selected</span>
+                    </div>
+                    <p class="cds--type-body-compact-01 osd-form-carbon__mode-copy">
+                      Use orchestrator-provided deployment presets for a faster setup with sane defaults for common hardware layouts.
+                    </p>
+                    <div class="osd-form-carbon__mode-meta">Best when you want to create OSDs quickly.</div>
+                  </button>
+                </div>
+
+                <div
+                  cdsCol
+                  [columnNumbers]="{ lg: 8, md: 8, sm: 4 }">
+                  <button
+                    type="button"
+                    id="deployment-mode-advanced"
+                    class="osd-form-carbon__mode-card"
+                    [class.osd-form-carbon__mode-card--selected]="!simpleDeployment"
+                    (click)="setDeploymentMode(false)">
+                    <div class="osd-form-carbon__mode-card-head">
+                      <span class="cds--type-heading-compact-01">Advanced device selection</span>
+                      <span
+                        *ngIf="!simpleDeployment"
+                        class="osd-form-carbon__mode-badge">Selected</span>
+                    </div>
+                    <p class="cds--type-body-compact-01 osd-form-carbon__mode-copy">
+                      Choose primary, DB, and WAL devices explicitly before previewing the generated drive group.
+                    </p>
+                    <div class="osd-form-carbon__mode-meta">Best when you need manual control over device roles.</div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </cds-tile>
+
+          <cd-alert-panel
+            *ngIf="availDevices?.length === 0"
+            type="warning"
+            class="d-block"
+            i18n>
+            <div
+              cdsStack="vertical"
+              [gap]="2">
+              <span class="cds--type-heading-compact-01">No eligible devices found for OSD creation.</span>
+              <span class="cds--type-body-compact-01">Physical disks may be present, but none meet the requirements (unused, unformatted, and not already configured by Ceph).</span>
+            </div>
+          </cd-alert-panel>
+
+          @if (simpleDeployment) {
+          <cds-tile
+            id="deployment-options-section"
+            class="osd-form-carbon__section">
+            <div
+              [cdsStack]="'vertical'"
+              gap="4">
+              <div
+                [cdsStack]="'vertical'"
+                gap="2">
+                  <span class="cds--type-heading-compact-02">Deployment options</span>
+                  <span class="cds--type-body-compact-01">
+                    Pick the orchestrator deployment preset that best fits your hardware mix.
+                  </span>
+                </div>
+
+                <p
+                  *ngIf="availDevices?.length === 0"
+                  class="cds--type-helper-text-01 osd-form-carbon__empty-state-copy">
+                  Deployment presets stay unavailable until the orchestrator reports at least one eligible device.
+                </p>
+
+                <cds-radio-group
+                  class="osd-form-carbon__option-group"
+                  formControlName="deploymentOption"
+                  (change)="emitDeploymentSelection()">
+                  <cds-radio
+                    *ngFor="let optionName of optionNames; let isLast = last"
+                    [value]="optionName"
+                    [class.mb-4]="!isLast"
+                    class="osd-form-carbon__option-radio"
+                    [id]="optionName"
+                    [disabled]="!deploymentOptions?.options[optionName].available ? true : null">
+                    <span class="osd-form-carbon__option-title">
+                      {{ deploymentOptions?.options[optionName].title }}
+                      {{ deploymentOptions?.recommended_option === optionName ? "(Recommended)" : "" }}
+                    </span>
+                    <div class="cds--type-helper-text-01 mt-1">
+                      {{ deploymentOptions?.options[optionName].desc }}
+                    </div>
+                  </cds-radio>
+                </cds-radio-group>
+              </div>
+          </cds-tile>
+          } @else {
+          <cds-tile
+            id="advanced-selection-section"
+            class="osd-form-carbon__section">
+            <div
+              [cdsStack]="'vertical'"
+              gap="4">
+              <div
+                [cdsStack]="'vertical'"
+                gap="2">
+                <span class="cds--type-heading-compact-02">Primary devices</span>
+                <span class="cds--type-body-compact-01">
+                  Select the data devices that will host the OSDs for this drive group.
+                </span>
+              </div>
+
+              <cd-osd-devices-selection-groups
+                #dataDeviceSelectionGroups
+                name="Primary"
+                type="data"
+                [availDevices]="availDevices"
+                [canSelect]="availDevices.length !== 0"
+                (selected)="onDevicesSelected($event)"
+                (cleared)="onDevicesCleared($event)">
+              </cd-osd-devices-selection-groups>
+            </div>
+          </cds-tile>
+
+          <cds-tile
+            id="shared-devices-section"
+            class="osd-form-carbon__section">
+            <div
+              [cdsStack]="'vertical'"
+              gap="5">
+              <div
+                [cdsStack]="'vertical'"
+                gap="2">
+                <span class="cds--type-heading-compact-02">Shared devices</span>
+                <span class="cds--type-body-compact-01">
+                  Optionally assign WAL and DB devices to tune the generated drive group.
+                </span>
+              </div>
+
+              <div
+                [cdsStack]="'vertical'"
+                gap="4">
+                <cd-osd-devices-selection-groups
+                  #walDeviceSelectionGroups
+                  name="WAL"
+                  type="wal"
+                  [availDevices]="availDevices"
+                  [canSelect]="dataDeviceSelectionGroups.devices.length !== 0"
+                  (selected)="onDevicesSelected($event)"
+                  (cleared)="onDevicesCleared($event)"
+                  [hostname]="hostname">
+                </cd-osd-devices-selection-groups>
+
+                <cds-number
+                  *ngIf="walDeviceSelectionGroups.devices.length !== 0"
+                  label="WAL slots"
+                  helperText="How many OSDs per WAL device. Specify 0 to let the orchestrator backend decide."
+                  id="walSlots"
+                  formControlName="walSlots"
+                  min="0"
+                  [invalid]="form.showError('walSlots', formDir, 'min')"
+                  [invalidText]="nonNegativeSlotsInvalidText">
+                </cds-number>
+
+                <cd-osd-devices-selection-groups
+                  #dbDeviceSelectionGroups
+                  name="DB"
+                  type="db"
+                  [availDevices]="availDevices"
+                  [canSelect]="dataDeviceSelectionGroups.devices.length !== 0"
+                  (selected)="onDevicesSelected($event)"
+                  (cleared)="onDevicesCleared($event)"
+                  [hostname]="hostname">
+                </cd-osd-devices-selection-groups>
+
+                <cds-number
+                  *ngIf="dbDeviceSelectionGroups.devices.length !== 0"
+                  label="DB slots"
+                  helperText="How many OSDs per DB device. Specify 0 to let the orchestrator backend decide."
+                  id="dbSlots"
+                  formControlName="dbSlots"
+                  min="0"
+                  [invalid]="form.showError('dbSlots', formDir, 'min')"
+                  [invalidText]="nonNegativeSlotsInvalidText">
+                </cds-number>
+              </div>
+            </div>
+          </cds-tile>
+          }
+
+          <cds-tile
+            id="features-section"
+            class="osd-form-carbon__section">
+            <div
+              [cdsStack]="'vertical'"
+              gap="4"
+              formGroupName="features">
+              <div
+                [cdsStack]="'vertical'"
+                gap="2">
+                <span class="cds--type-heading-compact-02">Features</span>
+                <span class="cds--type-body-compact-01">
+                  Enable optional OSD capabilities that should be applied to the generated specification.
+                </span>
+              </div>
+
+              <cds-checkbox
+                *ngFor="let feature of featureList"
+                [id]="feature.key"
+                [name]="feature.key"
+                formControlName="{{ feature.key }}"
+                (checkedChange)="emitDeploymentSelection()">
+                {{ feature.desc }}
+              </cds-checkbox>
+            </div>
+          </cds-tile>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>
+} @else {
 <div class="card"
      *cdFormLoading="loading">
   <div i18n="form title|Example: Create Pool@@formTitle"
@@ -57,18 +386,6 @@
                 </label>
               </div>
             </div>
-            <!-- @TODO: Visualize the storage used on a chart -->
-            <!-- <div class="pie-chart">
-              <h4 class="text-center">Selected Capacity</h4>
-              <h5 class="margin text-center">10 Hosts | 30 NVMes </h5>
-              <div class="char-i-contain">
-                <cd-health-pie [data]="data"
-                               [config]="rawCapacityChartConfig"
-                               [isBytesData]="true"
-                               (prepareFn)="prepareRawUsage($event[0], $event[1])">
-                </cd-health-pie>
-              </div>
-            </div> -->
           </div>
         </div>
         <div class="accordion-item">
@@ -96,11 +413,9 @@
                 </cd-osd-devices-selection-groups>
               </fieldset>
 
-              <!-- Shared devices -->
               <fieldset>
                 <legend i18n>Shared devices</legend>
 
-                <!-- WAL devices button and table -->
                 <cd-osd-devices-selection-groups #walDeviceSelectionGroups
                                                  name="WAL"
                                                  type="wal"
@@ -111,7 +426,6 @@
                                                  [hostname]="hostname">
                 </cd-osd-devices-selection-groups>
 
-                <!-- WAL slots -->
                 <div class="form-group row"
                      *ngIf="walDeviceSelectionGroups.devices.length !== 0">
                   <label class="cd-col-form-label"
@@ -136,7 +450,6 @@
                   </div>
                 </div>
 
-                <!-- DB devices button and table -->
                 <cd-osd-devices-selection-groups #dbDeviceSelectionGroups
                                                  name="DB"
                                                  type="db"
@@ -147,7 +460,6 @@
                                                  [hostname]="hostname">
                 </cd-osd-devices-selection-groups>
 
-                <!-- DB slots -->
                 <div class="form-group row"
                      *ngIf="dbDeviceSelectionGroups.devices.length !== 0">
                   <label class="cd-col-form-label"
@@ -176,7 +488,6 @@
           </div>
         </div>
 
-        <!-- Features -->
         <div class="accordion-item">
           <h2 class="accordion-header">
             <button class="accordion-button"
@@ -214,8 +525,9 @@
     <cd-form-button-panel #previewButtonPanel
                           (submitActionEvent)="submit()"
                           [form]="form"
-                          [disabled]="dataDeviceSelectionGroups.devices.length === 0 && !simpleDeployment"
-                          [submitText]="simpleDeployment ? 'Create OSDs' : actionLabels.PREVIEW"
+                          [disabled]="isSubmitDisabled"
+                          [submitText]="submitLabel"
                           wrappingClass="text-right"></cd-form-button-panel>
   </div>
 </div>
+}

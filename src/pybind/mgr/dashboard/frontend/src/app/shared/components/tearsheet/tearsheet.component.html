@@ -23,6 +23,7 @@
              [useCssGrid]="true"
              [fullWidth]="true">
       <!-- Tearsheet Influencer-->
+      @if (steps.length > 1) {
       <div cdsCol
            [columnNumbers]="{'lg': 3, 'md': 3, 'sm': 3}"
            class="tearsheet-left-influencer">
@@ -34,8 +35,9 @@
           (stepSelected)="onStepSelect($event)">
         </cds-progress-indicator>
       </div>
+      }
       <div cdsCol
-           [columnNumbers]="{'lg': 13, 'md': 13, 'sm': 13}"
+           [columnNumbers]="steps.length > 1 ? {'lg': 13, 'md': 13, 'sm': 13} : {'lg': 16, 'md': 16, 'sm': 16}"
            class="tearsheet-main">
         <!-- Tearsheet Content Area -->
         <div class="tearsheet-content tearsheet-content--full">
@@ -60,7 +62,8 @@
           @if (currentStep === lastStep) {
           <button cdsButton="primary"
                   size="xl"
-                  (click)="onSubmit()"
+                  [disabled]="isSubmitLoading || isSubmitDisabled"
+                  (click)="handleSubmit()"
                   i18n>{{submitButtonLabel}}</button>
           }
           @else {
@@ -158,7 +161,7 @@
         <button cdsButton="primary"
                 size="xl"
                 class="tearsheet-footer-submit"
-                [disabled]="isSubmitLoading"
+                [disabled]="isSubmitLoading || isSubmitDisabled"
                 (click)="handleSubmit()"
                 i18n>
           @if (isSubmitLoading) {

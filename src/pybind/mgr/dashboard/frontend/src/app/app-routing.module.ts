@@ -15,7 +15,7 @@ import { LogsComponent } from './ceph/cluster/logs/logs.component';
 import { MgrModuleFormComponent } from './ceph/cluster/mgr-modules/mgr-module-form/mgr-module-form.component';
 import { MgrModuleListComponent } from './ceph/cluster/mgr-modules/mgr-module-list/mgr-module-list.component';
 import { MonitorComponent } from './ceph/cluster/monitor/monitor.component';
-import { OsdFormComponent } from './ceph/cluster/osd/osd-form/osd-form.component';
+import { OsdFormPageComponent } from './ceph/cluster/osd/osd-form/osd-form-page.component';
 import { OsdListComponent } from './ceph/cluster/osd/osd-list/osd-list.component';
 import { ActiveAlertListComponent } from './ceph/cluster/prometheus/active-alert-list/active-alert-list.component';
 import { RulesListComponent } from './ceph/cluster/prometheus/rules-list/rules-list.component';
@@ -276,7 +276,7 @@ const routes: Routes = [
           { path: '', component: OsdListComponent },
           {
             path: URLVerbs.CREATE,
-            component: OsdFormComponent,
+            component: OsdFormPageComponent,
             data: { breadcrumbs: ActionLabels.CREATE }
           }
         ]

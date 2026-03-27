@@ -1,0 +1,17 @@
+<cd-tearsheet
+  [steps]="steps"
+  [title]="title"
+  [description]="description"
+  [isSubmitLoading]="false"
+  [isSubmitDisabled]="osdForm?.isSubmitDisabled ?? false"
+  [submitButtonLabel]="osdForm?.submitLabel ?? 'Create OSDs'"
+  type="full"
+  (submitRequested)="onSubmitRequested()">
+  <cd-tearsheet-step>
+    <cd-osd-form
+      #tearsheetStep
+      [hideTitle]="true"
+      [hideSubmitBtn]="true"
+      [useCarbonPageLayout]="true"></cd-osd-form>
+  </cd-tearsheet-step>
+</cd-tearsheet>

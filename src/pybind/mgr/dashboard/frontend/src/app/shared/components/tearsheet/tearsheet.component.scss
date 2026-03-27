@@ -141,6 +141,20 @@
   &--full {
     position: sticky;
     bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--cds-spacing-03);
+  }
+
+  &--full button {
+    flex: 0 0 auto;
+    inline-size: auto;
+    min-inline-size: 10rem;
+  }
+
+  &--full .tearsheet-footer-cancel {
+    margin-inline-end: auto;
   }
 }
 

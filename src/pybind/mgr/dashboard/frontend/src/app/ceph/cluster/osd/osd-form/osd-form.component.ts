@@ -27,6 +27,7 @@ import {
   DeploymentOptions,
   OsdDeploymentOptions
 } from '~/app/shared/models/osd-deployment-options';
+import { TearsheetStep } from '~/app/shared/models/tearsheet-step';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -43,7 +44,7 @@ import { OsdFeature } from './osd-feature.interface';
   styleUrls: ['./osd-form.component.scss'],
   standalone: false
 })
-export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
+export class OsdFormComponent extends CdForm implements OnInit, OnDestroy, TearsheetStep {
   @ViewChild('dataDeviceSelectionGroups')
   dataDeviceSelectionGroups: OsdDevicesSelectionGroupsComponent;
 
@@ -61,6 +62,9 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
 
   @Input()
   hideSubmitBtn = false;
+
+  @Input()
+  useCarbonPageLayout = false;
 
   @Output() emitDriveGroup: EventEmitter<DriveGroup> = new EventEmitter();
 
@@ -94,6 +98,19 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
 
   deploymentOptions: DeploymentOptions;
   optionNames = Object.values(OsdDeploymentOptions);
+  readonly nonNegativeSlotsInvalidText = $localize`Value should be greater than or equal to 0`;
+
+  get formGroup(): CdFormGroup {
+    return this.form;
+  }
+
+  get isSubmitDisabled(): boolean {
+    return !this.simpleDeployment && this.dataDeviceSelectionGroups?.devices?.length === 0;
+  }
+
+  get submitLabel(): string {
+    return this.simpleDeployment ? $localize`Create OSDs` : this.actionLabels.PREVIEW;
+  }
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -262,8 +279,12 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
   }
 
   emitDeploymentMode() {
-    this.simpleDeployment = !this.simpleDeployment;
-    if (!this.simpleDeployment && this.dataDeviceSelectionGroups.devices.length === 0) {
+    this.setDeploymentMode(!this.simpleDeployment);
+  }
+
+  setDeploymentMode(isSimple: boolean) {
+    this.simpleDeployment = isSimple;
+    if (!this.simpleDeployment && this.dataDeviceSelectionGroups?.devices?.length === 0) {
       this.disableFeatures();
     } else {
       this.enableFeatures();

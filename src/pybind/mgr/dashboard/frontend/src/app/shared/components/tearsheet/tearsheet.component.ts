@@ -67,6 +67,7 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   @Input() submitButtonLabel: string = $localize`Create`;
   @Input() submitButtonLoadingLabel: string = $localize`Creating`;
   @Input() isSubmitLoading: boolean = true;
+  @Input() isSubmitDisabled: boolean = false;
 
   @Output() submitRequested = new EventEmitter<void>();
   @Output() closeRequested = new EventEmitter<void>();

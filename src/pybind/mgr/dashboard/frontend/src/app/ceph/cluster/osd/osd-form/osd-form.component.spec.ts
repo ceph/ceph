@@ -4,6 +4,14 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import {
+  CheckboxModule,
+  GridModule,
+  LayerModule,
+  NumberModule,
+  RadioModule,
+  TilesModule
+} from 'carbon-components-angular';
 import { ToastrModule } from 'ngx-toastr';
 import { BehaviorSubject, of } from 'rxjs';
 
@@ -143,6 +151,12 @@ describe('OsdFormComponent', () => {
       SharedModule,
       RouterTestingModule,
       ReactiveFormsModule,
+      CheckboxModule,
+      GridModule,
+      LayerModule,
+      NumberModule,
+      RadioModule,
+      TilesModule,
       ToastrModule.forRoot(),
       DashboardModule
     ],
@@ -195,6 +209,48 @@ describe('OsdFormComponent', () => {
 
     it('should display the accordion', () => {
       fixtureHelper.expectElementVisible('.card-body .accordion', true);
+    });
+
+    it('should render the carbon page layout when enabled for the routed create page', () => {
+      component.useCarbonPageLayout = true;
+      fixture.detectChanges();
+
+      fixtureHelper.expectElementVisible('#deployment-mode-section', true);
+      fixtureHelper.expectElementVisible('#features-section', true);
+      fixtureHelper.expectElementVisible('.card-body .accordion', false);
+    });
+
+    it('should switch between recommended and advanced sections in the carbon page layout', () => {
+      component.useCarbonPageLayout = true;
+      component.setDeploymentMode(true);
+      fixture.detectChanges();
+
+      fixtureHelper.expectElementVisible('#deployment-options-section', true);
+      fixtureHelper.expectElementVisible('#advanced-selection-section', false);
+
+      component.setDeploymentMode(false);
+      fixture.detectChanges();
+
+      fixtureHelper.expectElementVisible('#deployment-options-section', false);
+      fixtureHelper.expectElementVisible('#advanced-selection-section', true);
+      fixtureHelper.expectElementVisible('#shared-devices-section', true);
+    });
+
+    it('should allow switching back and forth through the carbon mode cards', () => {
+      component.useCarbonPageLayout = true;
+      fixture.detectChanges();
+
+      fixtureHelper.getElementByCss('#deployment-mode-advanced').nativeElement.click();
+      fixture.detectChanges();
+
+      expect(component.simpleDeployment).toBe(false);
+      fixtureHelper.expectElementVisible('#advanced-selection-section', true);
+
+      fixtureHelper.getElementByCss('#deployment-mode-simple').nativeElement.click();
+      fixture.detectChanges();
+
+      expect(component.simpleDeployment).toBe(true);
+      fixtureHelper.expectElementVisible('#deployment-options-section', true);
     });
 
     it('should display the three deployment scenarios', () => {
