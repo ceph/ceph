@@ -3797,6 +3797,7 @@ int BlueFS::_flush_and_sync_log_jump_D(uint64_t jump_to)
 
   dout(10) << __func__ << " jumping log offset from 0x" << std::hex
 	   << log.writer->pos << " -> 0x" << jump_to << std::dec << dendl;
+  assert(log.writer->pos >= jump_to);
   log.writer->pos = jump_to;
   vselector->sub_usage(log.writer->file->vselector_hint, log.writer->file->fnode.size);
   log.writer->file->fnode.size = jump_to;
