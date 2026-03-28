@@ -525,7 +525,7 @@ If successful, the response contains the following account information.
 
 ``quota``
 
-:Description: A container for the account quota information.
+:Description: The container for the account quota information.
 :Type: Container
 :Parent: ``account``
 
@@ -537,7 +537,7 @@ If successful, the response contains the following account information.
 
 ``check_on_raw``
 
-:Description: Whether quota should be checked on raw usage instead of the 4 KiB rounded one.
+:Description: Whether quota should be checked on rounded value instead of the 4 KiB.
 :Type: Bool
 :Parent: ``quota``
 
@@ -698,7 +698,7 @@ If successful, the response contains the following account information.
 
 ``tenant``
 
-:Description: The Tenant under which the account exists.
+:Description: The tenant under which the account exists.
 :Type: String
 :Parent: ``account``
 
@@ -794,7 +794,7 @@ If successful, the response contains the following account information.
 
 ``check_on_raw``
 
-:Description: Whether bucket quota for the account should be checked on raw usage instead of the 4 KiB rounded one.
+:Description: If it is true then it will check bucket quota for the account against actual usage else rounded value.
 :Type: Bool
 :Parent: ``bucket_quota``
 
