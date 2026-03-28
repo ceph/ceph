@@ -18,6 +18,7 @@
 
 #include "acconfig.h"
 
+#include <algorithm>
 #include <cctype>
 #include <fstream>
 #include <iomanip>
@@ -11739,7 +11740,9 @@ void OSDBenchTest::perform_write_test()
     std::string nm;
     unsigned offset = 0;
     bufferptr bp(bsize);
-    memset(bp.c_str(), random_gen() & 0xff, bp.length());
+    std::generate_n(bp.c_str(), bp.length(), [&random_gen]() {
+        return static_cast<char>(random_gen() & 0xff);
+    });
     bl.push_back(std::move(bp));
     bl.rebuild_page_aligned();
     if (onum && osize) {

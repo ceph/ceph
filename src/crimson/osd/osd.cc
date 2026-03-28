@@ -1674,17 +1674,15 @@ seastar::future<double> OSD::run_bench(int64_t count, int64_t bsize, int64_t osi
     }
 
     co_await seastar::when_all_succeed(futures.begin(), futures.end());
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<> dis(0, 255);
+    std::mt19937 gen(std::random_device{}());
     std::vector<seastar::future<>> futures_bench;
     auto start = std::chrono::steady_clock::now();
 
     for (int i = 0; i < count / bsize; ++i) {
       ceph::os::Transaction t;
       ceph::buffer::ptr bp(bsize);
-      std::generate_n(bp.c_str(), bp.length(), [&dis, &gen]() {
-          return static_cast<char>(dis(gen));
+      std::generate_n(bp.c_str(), bp.length(), [&gen]() {
+          return static_cast<char>(gen() & 0xff);
       });
       ceph::buffer::list bl(bsize);
       bl.push_back(std::move(bp));
@@ -1693,8 +1691,8 @@ seastar::future<double> OSD::run_bench(int64_t count, int64_t bsize, int64_t osi
       std::string oid_str;
       uint64_t offset = 0;
       if (onum && osize) {
-        oid_str = fmt::format("disk_bw_test_{}", dis(gen) % onum);
-        offset = (dis(gen) % (osize / bsize)) * bsize;
+        oid_str = fmt::format("disk_bw_test_{}", (int)(gen() % onum));
+        offset = gen() % (osize / bsize) * bsize;
       } else {
         oid_str = fmt::format("disk_bw_test_{}", i * bsize);
       }
