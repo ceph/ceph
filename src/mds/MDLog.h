@@ -52,7 +52,6 @@ enum {
 
 #include "LogSegment.h"
 #include "SegmentBoundary.h"
-#include "mdstypes.h"
 #include "LogSegmentRef.h"
 
 #include <atomic>
@@ -62,6 +61,7 @@ enum {
 #include <string>
 #include <vector>
 
+struct EstimatedReplayTime;
 class Journaler;
 class JournalPointer;
 class LogEvent;

@@ -5,7 +5,7 @@
 
 #include "common/ceph_time.h" // for ceph::coarse_real_time
 #include "common/Formatter.h"
-#include "include/encoding.h"
+#include "include/encoding_unordered_map.h"
 #include "include/types.h"
 
 #include <unordered_map>

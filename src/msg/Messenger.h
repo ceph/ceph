@@ -18,39 +18,32 @@
 #ifndef CEPH_MESSENGER_H
 #define CEPH_MESSENGER_H
 
-#include <map>
 #include <optional>
 #include <vector>
-
-#include <errno.h>
-#include <sstream>
-#include <memory>
 
 #include "Message.h"
 #include "Dispatcher.h"
 #include "Policy.h"
-#include "common/Formatter.h"
 #include "common/Throttle.h"
 #include "include/Context.h"
 #include "include/types.h"
 #include "include/ceph_features.h"
-#include "auth/Crypto.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/item_history.h"
 #include "auth/AuthRegistry.h"
 #include "compressor_registry.h"
 #include "include/ceph_assert.h"
 
-#include <errno.h>
-#include <sstream>
 #include <signal.h>
 
 #define SOCKET_PRIORITY_MIN_DELAY 6
 
+class Throttle;
 class Timer;
 
 class AuthClient;
 class AuthServer;
+namespace ceph { class Formatter; }
 
 #ifdef UNIT_TESTS_BUILT
 

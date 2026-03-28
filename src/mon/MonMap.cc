@@ -19,9 +19,13 @@
 #include "common/Formatter.h"
 
 #include "include/ceph_features.h"
+#include "include/container_ios.h"
 #include "include/addr_parsing.h"
+#include "include/encoding_set.h"
+#include "include/encoding_vector.h"
 #include "common/ceph_argparse.h"
 #include "common/ceph_json.h"
+#include "common/ceph_time_fmt.h"
 #include "common/dns_resolve.h"
 #include "common/errno.h"
 #include "common/dout.h"

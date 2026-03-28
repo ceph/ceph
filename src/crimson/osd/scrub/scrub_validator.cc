@@ -5,6 +5,7 @@
 
 #include "osd/osd_types_fmt.h"
 
+#include "common/hobject_fmt.h"
 #include "crimson/common/log.h"
 #include "crimson/osd/scrub/scrub_validator.h"
 #include "osd/ECUtil.h"

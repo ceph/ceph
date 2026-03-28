@@ -4,6 +4,8 @@
 #include "./ScrubStore.h"
 #include "osd/osd_types.h"
 #include "common/debug.h"
+#include "common/hobject_fmt.h"
+#include "common/scrub_fmt.h"
 #include "common/scrub_types.h"
 #include "include/rados/rados_types.hpp"
 

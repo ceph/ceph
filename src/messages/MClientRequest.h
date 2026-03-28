@@ -42,9 +42,13 @@
 #include <vector>
 
 #include "include/filepath.h"
-#include "mds/mdstypes.h"
+#include "mds/metareqid_t.h"
 #include "common/Formatter.h"
 #include "include/ceph_features.h"
+#include "include/ceph_fs_encoder.h"
+#include "include/encoding_map.h"
+#include "include/encoding_string.h"
+#include "include/encoding_vector.h"
 #include "mds/cephfs_features.h"
 #include "messages/MMDSOp.h"
 
@@ -108,12 +112,12 @@ public:
       using ceph::encode;
       item.dname_len = dname.length();
       encode(item, bl);
-      ceph::encode_nohead(dname, bl);
+      encode_nohead(dname, bl);
     }
     void decode(ceph::buffer::list::const_iterator& bl) {
       using ceph::decode;
       decode(item, bl);
-      ceph::decode_nohead(item.dname_len, dname, bl);
+      decode_nohead(item.dname_len, dname, bl);
     }
 
     void dump(ceph::Formatter *f) const {
@@ -295,7 +299,7 @@ public:
 
     decode(path, p);
     decode(path2, p);
-    ceph::decode_nohead(head.num_releases, releases, p);
+    decode_nohead(head.num_releases, releases, p);
     if (header.version >= 2)
       decode(stamp, p);
     if (header.version >= 4) // epoch 3 was for a ceph_mds_request_args change
@@ -336,7 +340,7 @@ public:
 
     encode(path, payload);
     encode(path2, payload);
-    ceph::encode_nohead(releases, payload);
+    encode_nohead(releases, payload);
     encode(stamp, payload);
     encode(gid_list, payload);
     encode(alternate_name, payload);

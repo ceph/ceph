@@ -46,6 +46,20 @@
 
 using namespace std;
 
+Session::Session(ConnectionRef con) :
+  item_session_list(this),
+  requests(member_offset(MDRequestImpl, item_session_request)),
+  recall_caps(g_conf().get_val<double>("mds_recall_warning_decay_rate")),
+  release_caps(g_conf().get_val<double>("mds_recall_warning_decay_rate")),
+  recall_caps_throttle(g_conf().get_val<double>("mds_recall_max_decay_rate")),
+  recall_caps_throttle2o(0.5),
+  session_cache_liveness(g_conf().get_val<double>("mds_session_cache_liveness_decay_rate")),
+  cap_acquisition(g_conf().get_val<double>("mds_session_cap_acquisition_decay_rate")),
+  birth_time(clock::now())
+{
+  set_connection(std::move(con));
+}
+
 void Session::touch_cap(Capability *cap) {
   session_cache_liveness.hit(1.0);
   caps.push_front(&cap->item_session_caps);

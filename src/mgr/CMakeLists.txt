@@ -12,8 +12,10 @@ if(WITH_MGR)
     BaseMgrModule.cc
     BaseMgrStandbyModule.cc
     ClusterState.cc
+    DaemonHealthMetric.cc
     DaemonHealthMetricCollector.cc
     DaemonKey.cc
+    DaemonPerfCounters.cc
     DaemonServer.cc
     DaemonState.cc
     Gil.cc
@@ -21,10 +23,9 @@ if(WITH_MGR)
     mgr_perf_counters.cc
     MgrStandby.cc
     MetricCollector.cc
-    OSDPerfMetricTypes.cc
     OSDPerfMetricCollector.cc
-    MDSPerfMetricTypes.cc
     MDSPerfMetricCollector.cc
+    PerfCounterInstance.cc
     PyFormatter.cc
     PyUtil.cc
     PyModule.cc

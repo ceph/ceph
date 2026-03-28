@@ -23,6 +23,10 @@
 
 #include "include/buffer.h"
 #include "include/encoding.h"
+#include "include/encoding_deque.h"
+#include "include/encoding_optional.h"
+#include "include/encoding_string.h"
+#include "include/encoding_vector.h"
 #include "include/types.h"
 
 #include "cls/fifo/cls_fifo_types.h"

@@ -525,6 +525,9 @@ set(libcommon_files
   include/filepath.cc
   include/invoke_date.cc
   include/object.cc
+  include/client_t.cc
+  include/errorcode32.cc
+  include/shard_id.cc
   include/types.cc
   include/utime.cc
   include/uuid.cc
@@ -541,6 +544,8 @@ set(libcommon_files
   mon/MgrMap.cc
   mon/PGMap.cc
   mgr/ServiceMap.cc
+  mgr/OSDPerfMetricTypes.cc
+  mgr/MDSPerfMetricTypes.cc
   osd/ECMsgTypes.cc
   osd/HitSet.cc
   osd/OSDMap.cc
@@ -551,6 +556,7 @@ set(libcommon_files
   osd/OpRequest.cc
   osd/ClassHandler.cc
   osd/osd_op_util.cc
+  osd/osd_types.cc
   osdc/Striper.cc
   osdc/Objecter.cc
   osdc/error_code.cc

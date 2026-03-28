@@ -16,17 +16,11 @@
 #ifndef CEPH_PG_H
 #define CEPH_PG_H
 
-#include <boost/scoped_ptr.hpp>
-#include <boost/container/flat_set.hpp>
-#include "include/mempool.h"
-
-// re-include our assert to clobber boost's
 #include "common/admin_finisher.h" // for asok_finisher
 #include "include/ceph_assert.h" 
 #include "include/common_fwd.h"
 
 #include "include/types.h"
-#include "include/stringify.h"
 #include "osd_types.h"
 #include "include/xlist.h"
 #include "SnapMapper.h"

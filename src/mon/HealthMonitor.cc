@@ -20,6 +20,7 @@
 #include <time.h>
 #include <iterator>
 
+#include "include/byte_u_t.h"
 #include "include/ceph_assert.h"
 #include "include/common_fwd.h"
 #include "include/stringify.h"

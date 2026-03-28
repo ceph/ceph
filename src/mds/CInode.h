@@ -36,7 +36,7 @@
 #include "include/compact_set.h"
 
 #include "MDSCacheObject.h"
-#include "mdstypes.h" // for old_inode_t
+#include "old_inode.h" // for old_inode_t
 #include "flock.h"
 #include "inode_backtrace.h" // for inode_backtrace_t
 

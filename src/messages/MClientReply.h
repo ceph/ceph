@@ -17,7 +17,10 @@
 #ifndef CEPH_MCLIENTREPLY_H
 #define CEPH_MCLIENTREPLY_H
 
-#include "include/types.h"
+#include "include/cephfs/encoding.h"
+#include "include/encoding_set.h"
+#include "include/encoding_vector.h"
+#include "include/errorcode32.h"
 #include "include/fs_types.h"
 #include "include/mempool.h"
 #include "MClientRequest.h"

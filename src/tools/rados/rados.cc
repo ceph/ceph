@@ -13,7 +13,7 @@
  *
  */
 
-#include "include/types.h"
+#include "include/byte_u_t.h"
 
 #include "include/rados/buffer.h"
 #include "include/rados/librados.hpp"

@@ -29,6 +29,7 @@
 #include "KernelDevice.h"
 #include "log/Log.h"
 #include "include/buffer_raw.h"
+#include "include/byte_u_t.h"
 #include "include/intarith.h"
 #include "include/types.h"
 #include "include/compat.h"

@@ -8,6 +8,7 @@
 
 #include "include/buffer.h"
 #include "include/encoding.h"
+#include "include/encoding_string.h"
 #include "include/types.h"
 
 #include "common/ceph_json.h"
@@ -71,6 +72,8 @@ struct entry {
   }
 
   static std::list<cls::log::entry> generate_test_instances() {
+    using ceph::encode;
+
     std::list<cls::log::entry> l;
     l.emplace_back();
     l.emplace_back();
@@ -79,7 +82,7 @@ struct entry {
     l.back().name = "test_name";
     l.back().timestamp = ceph::real_time{};
     ceph::buffer::list bl;
-    ceph::encode(std::string("Test"), bl, 0);
+    encode(std::string("Test"), bl, 0);
     l.back().data = bl;
     return l;
   }

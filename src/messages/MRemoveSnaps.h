@@ -17,6 +17,8 @@
 #define CEPH_MREMOVESNAPS_H
 
 #include "messages/PaxosServiceMessage.h"
+#include "include/encoding_map.h"
+#include "include/encoding_vector.h"
 
 class MRemoveSnaps final : public PaxosServiceMessage {
 public:

@@ -9,6 +9,7 @@
 #include <string_view>
 
 #include "include/buffer_fwd.h"
+#include "include/cephfs/encoding.h"
 #include "msg/Message.h"
 
 namespace ceph {

@@ -2,11 +2,17 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "mdstypes.h"
+#include "metareqid_t.h"
 #include "include/cephfs/types.h"
 #include "MDSContext.h"
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
 #include "common/StackStringStream.h"
+#include "include/ceph_fs_encoder.h"
+#include "include/cephfs/gid.h" // for mds_gid_t
+#include "include/encoding_set.h"
+#include "include/encoding_string.h"
+#include "include/encoding_vector.h"
 
 #include <iomanip>
 #include <iostream>
@@ -760,6 +766,13 @@ void dentry_key_t::print(std::ostream& out) const {
   out << "(" << name << "," << snapid << ")";
 }
 
+void dentry_key_t::encode(ceph::buffer::list& bl) const {
+  std::string key;
+  encode(key);
+  using ceph::encode;
+  encode(key, bl);
+}
+
 void dentry_key_t::encode(std::string& key) const {
   char b[20];
   if (snapid != CEPH_NOSNAP) {
@@ -771,6 +784,30 @@ void dentry_key_t::encode(std::string& key) const {
   CachedStackStringStream css;
   *css << name << "_" << b;
   key = css->strv();
+}
+
+void dentry_key_t::decode_helper(ceph::buffer::list::const_iterator& bl, std::string& nm,
+				 snapid_t& sn) {
+  std::string key;
+  using ceph::decode;
+  decode(key, bl);
+  decode_helper(key, nm, sn);
+}
+
+void dentry_key_t::decode_helper(std::string_view key, std::string& nm, snapid_t& sn) {
+  size_t i = key.find_last_of('_');
+  ceph_assert(i != std::string::npos);
+  if (key.compare(i+1, std::string_view::npos, "head") == 0) {
+    // name_head
+    sn = CEPH_NOSNAP;
+  } else {
+    // name_%x
+    long long unsigned x = 0;
+    std::string x_str(key.substr(i+1));
+    sscanf(x_str.c_str(), "%llx", &x);
+    sn = x;
+  }
+  nm = key.substr(0, i);
 }
 
 /*
@@ -914,6 +951,18 @@ std::list<mds_table_pending_t> mds_table_pending_t::generate_test_instances()
   return ls;
 }
 
+void metareqid_t::encode(ceph::buffer::list& bl) const {
+  using ceph::encode;
+  encode(name, bl);
+  encode(tid, bl);
+}
+
+void metareqid_t::decode(ceph::buffer::list::const_iterator &p) {
+  using ceph::decode;
+  decode(name, p);
+  decode(tid, p);
+}
+
 void metareqid_t::dump(ceph::Formatter* f) const {
   f->dump_object("entity", name);
   f->dump_unsigned("tid", tid);
@@ -930,6 +979,18 @@ std::list<metareqid_t> metareqid_t::generate_test_instances() {
   return ls;
 }
 
+void old_cap_reconnect_t::encode(ceph::buffer::list& bl) const {
+  using ceph::encode;
+  encode(path, bl);
+  encode(capinfo, bl);
+}
+
+void old_cap_reconnect_t::decode(ceph::buffer::list::const_iterator& bl) {
+  using ceph::decode;
+  decode(path, bl);
+  decode(capinfo, bl);
+}
+
 /*
  * dirfrag_t
  */
@@ -938,6 +999,18 @@ void dirfrag_t::print(std::ostream& out) const {
   if (!frag.is_root()) {
     out << "." << frag;
   }
+}
+
+void dirfrag_t::encode(ceph::buffer::list& bl) const {
+  using ceph::encode;
+  encode(ino, bl);
+  encode(frag, bl);
+}
+
+void dirfrag_t::decode(ceph::buffer::list::const_iterator& bl) {
+  using ceph::decode;
+  decode(ino, bl);
+  decode(frag, bl);
 }
 
 void dirfrag_t::dump(ceph::Formatter *f) const {
@@ -996,6 +1069,23 @@ std::list<inode_load_vec_t> inode_load_vec_t::generate_test_instances()
 /*
  * dirfrag_load_vec_t
  */
+
+void dirfrag_load_vec_t::encode(ceph::buffer::list &bl) const {
+  ENCODE_START(2, 2, bl);
+  for (const auto &i : vec) {
+    encode(i, bl);
+  }
+  ENCODE_FINISH(bl);
+}
+
+void dirfrag_load_vec_t::decode(ceph::buffer::list::const_iterator &p) {
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, p);
+  for (auto &i : vec) {
+    decode(i, p);
+  }
+  DECODE_FINISH(p);
+}
+
 void dirfrag_load_vec_t::dump(Formatter *f) const
 {
   f->open_array_section("Decay Counters");

@@ -5,6 +5,7 @@
 #include "rgw_bucket_sync.h"
 #include "rgw_zone.h"
 
+#include "include/container_ios.h"
 #include "services/svc_zone.h"
 #include "services/svc_bucket_sync.h"
 

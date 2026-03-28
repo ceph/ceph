@@ -19,6 +19,7 @@
 
 #include <string_view>
 
+#include "include/encoding_string.h"
 #include "msg/Message.h"
 
 class MClientLease final : public SafeMessage {

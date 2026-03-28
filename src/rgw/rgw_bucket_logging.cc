@@ -4,6 +4,7 @@
 #include <time.h>
 #include <random>
 #include "common/ceph_time.h"
+#include "include/encoding_set.h" // for encode(source_buckets)
 #include "rgw_bucket_logging.h"
 #include "rgw_xml.h"
 #include "rgw_sal.h"
@@ -768,6 +769,7 @@ int update_bucket_logging_sources(const DoutPrefixProvider* dpp, rgw::sal::Drive
 
 int update_bucket_logging_sources(const DoutPrefixProvider* dpp, std::unique_ptr<rgw::sal::Bucket>& bucket, const rgw_bucket& src_bucket_id, bool add, optional_yield y) {
   return retry_raced_bucket_write(dpp, bucket.get(), [dpp, &bucket, &src_bucket_id, add, y] {
+    using ceph::encode;
     auto& attrs = bucket->get_attrs();
     auto iter = attrs.find(RGW_ATTR_BUCKET_LOGGING_SOURCES);
     if (iter == attrs.end()) {
@@ -778,7 +780,7 @@ int update_bucket_logging_sources(const DoutPrefixProvider* dpp, std::unique_ptr
       }
       source_buckets sources{src_bucket_id};
       bufferlist bl;
-      ceph::encode(sources, bl);
+      encode(sources, bl);
       attrs.insert(std::make_pair(RGW_ATTR_BUCKET_LOGGING_SOURCES, std::move(bl)));
       return bucket->merge_and_store_attrs(dpp, attrs, y);
     }
@@ -788,7 +790,7 @@ int update_bucket_logging_sources(const DoutPrefixProvider* dpp, std::unique_ptr
       if ((add && sources.insert(src_bucket_id).second) ||
           (!add && sources.erase(src_bucket_id) > 0)) {
         bufferlist bl;
-        ceph::encode(sources, bl);
+        encode(sources, bl);
         iter->second = std::move(bl);
         return bucket->merge_and_store_attrs(dpp, attrs, y);
       }

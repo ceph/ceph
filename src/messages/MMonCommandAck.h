@@ -16,7 +16,9 @@
 #ifndef CEPH_MMONCOMMANDACK_H
 #define CEPH_MMONCOMMANDACK_H
 
+#include "include/errorcode32.h"
 #include "messages/PaxosServiceMessage.h"
+#include "include/encoding_vector.h"
 
 #include <sstream>
 #include <string>
