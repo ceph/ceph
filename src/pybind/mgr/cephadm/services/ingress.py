@@ -8,7 +8,7 @@ from ceph.deployment.service_spec import ServiceSpec, IngressSpec, MonitorCertSo
 from mgr_util import build_url
 from cephadm import utils
 from orchestrator import OrchestratorError, DaemonDescription
-from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService, CephadmService
 from .service_registry import register_cephadm_service
 from cephadm.tlsobject_types import TLSCredentials
 from cephadm.schedule import get_placement_hosts
@@ -126,7 +126,9 @@ class IngressService(CephService):
         if backend_spec.service_type == 'nfs':
             hosts = get_placement_hosts(spec, mgr.cache.get_schedulable_hosts(), mgr.cache.get_draining_hosts())
             deps.append(f'placement_hosts:{",".join(sorted(h.hostname for h in hosts))}')
-        return sorted(deps)
+
+        parent_deps = CephadmService.get_dependencies(mgr, spec)
+        return parent_deps + sorted(deps)
 
     def haproxy_generate_config(
             self,
@@ -337,7 +339,9 @@ class IngressService(CephService):
         if not spec:
             return []
         daemons = mgr.cache.get_daemons_by_service(spec.service_name())
-        return sorted([d.name() for d in daemons if d.daemon_type == 'haproxy'])
+        deps = sorted([d.name() for d in daemons if d.daemon_type == 'haproxy'])
+        parent_deps = CephadmService.get_dependencies(mgr, spec)
+        return parent_deps + deps
 
     def keepalived_generate_config(
             self,

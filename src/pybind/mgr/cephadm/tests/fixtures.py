@@ -3,6 +3,7 @@ import asyncio
 import sys
 from tempfile import NamedTemporaryFile
 from contextlib import contextmanager
+import json
 
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from ceph.utils import datetime_to_str, datetime_now
@@ -49,6 +50,72 @@ def match_glob(val, pat):
         assert pat in val
 
 
+class FakeCephSecretsClient:
+    """
+    In-memory fake for ceph_secrets mgr-module client.
+    Enough behavior to keep cephadm UTs deterministic.
+    """
+    def __init__(self, mgr):
+        self.mgr = mgr
+        self._db = {}  # (namespace, scope, target, name) -> {"data":..., "version": int}
+        self._epoch = 1
+
+    # --- stuff cephadm calls during init ---
+    def import_raw_kv(self, entries=None, overwrite=False):
+        return None
+
+    # --- used by _check_secrets_refs / spec validation ---
+    def scan_unresolved_refs(self, obj=None, namespace=None):
+        return []  # <-- key point: never fail UTs on missing secrets
+
+    # --- used by config generation paths (must be identity!) ---
+    def resolve_object(self, obj=None, namespace=None):
+        return obj  # <-- key point: do NOT return [] / None
+
+    # --- secret CRUD (basic) ---
+    def secret_set_record(self, namespace, scope, target, name, data,
+                          secret_type="Opaque", user_made=True, editable=True):
+        key = (namespace, str(getattr(scope, "value", scope)), target or "", name)
+        rec = self._db.get(key, {"version": 0})
+        rec = {"data": data, "version": rec["version"] + 1}
+        self._db[key] = rec
+        self._epoch += 1
+
+        # Compatibility shim: some older code paths/tests still read legacy KV
+        if name == "registry_credentials":
+            # store as JSON string like legacy behavior
+            try:
+                if hasattr(self.mgr, "_ceph_set_store"):
+                    self.mgr._ceph_set_store("registry_credentials", json.dumps(data))
+                elif hasattr(self.mgr, "set_store"):
+                    self.mgr.set_store("registry_credentials", json.dumps(data))
+            except Exception:
+                pass
+
+        # Return shape doesn't matter much; make it “record-like”
+        return {"namespace": namespace, "scope": str(getattr(scope, "value", scope)),
+                "target": target or "", "name": name, "data": data, "version": rec["version"]}
+
+    def secret_get_data(self, namespace, scope, target, name):
+        key = (namespace, str(getattr(scope, "value", scope)), target or "", name)
+        return self._db[key]["data"]
+
+    def secret_get_version(self, namespace, scope, target, name):
+        key = (namespace, str(getattr(scope, "value", scope)), target or "", name)
+        return self._db.get(key, {}).get("version")
+
+    def secret_rm(self, namespace, scope, target, name):
+        key = (namespace, str(getattr(scope, "value", scope)), target or "", name)
+        return self._db.pop(key, None) is not None
+
+    # --- optional helpers used by deps caching ---
+    def secret_get_epoch(self):
+        return self._epoch
+
+    def scan_refs(self, obj=None, namespace=None):
+        return []
+
+
 class MockEventLoopThread:
     def get_result(self, coro, timeout):
         if sys.version_info >= (3, 7):
@@ -91,6 +158,7 @@ def with_cephadm_module(module_options=None, store=None):
     :param store: Set the store before module.__init__ is called
     """
     with mock.patch("cephadm.module.CephadmOrchestrator.get_ceph_option", get_ceph_option), \
+            mock.patch("cephadm.cephadm_secrets.CephSecretsClient", FakeCephSecretsClient), \
             mock.patch("cephadm.services.osd.RemoveUtil._run_mon_cmd"), \
             mock.patch('cephadm.module.CephadmOrchestrator.get_module_option_ex', get_module_option_ex), \
             mock.patch("cephadm.module.CephadmOrchestrator.get_osdmap"), \
