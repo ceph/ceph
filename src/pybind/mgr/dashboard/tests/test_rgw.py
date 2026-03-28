@@ -19,7 +19,7 @@ class RgwControllerTestCase(ControllerTestCase):
 
     @patch.object(RgwClient, '_get_user_id', Mock(return_value='fake-user'))
     @patch.object(RgwClient, 'is_service_online', Mock(return_value=True))
-    @patch.object(RgwClient, '_is_system_user', Mock(return_value=True))
+    @patch.object(RgwClient, '_is_admin_user', Mock(return_value=True))
     @patch('dashboard.services.ceph_service.CephService.send_command')
     def test_status_available(self, send_command):
         send_command.return_value = ''
@@ -50,7 +50,7 @@ class RgwControllerTestCase(ControllerTestCase):
 
     @patch.object(RgwClient, '_get_user_id', Mock(return_value='fake-user'))
     @patch.object(RgwClient, 'is_service_online', Mock(return_value=True))
-    @patch.object(RgwClient, '_is_system_user', Mock(return_value=False))
+    @patch.object(RgwClient, '_is_admin_user', Mock(return_value=False))
     @patch('dashboard.services.ceph_service.CephService.send_command')
     def test_status_not_system_user(self, send_command):
         send_command.return_value = ''
