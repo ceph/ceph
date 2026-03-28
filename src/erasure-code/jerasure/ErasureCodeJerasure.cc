@@ -42,6 +42,10 @@ using std::set;
 using ceph::bufferlist;
 using ceph::ErasureCodeProfile;
 
+ceph::mutex ErasureCodeJerasure::jerasure_init_mutex =
+  ceph::make_mutex("ErasureCodeJerasure::jerasure_init_mutex");
+
+
 static ostream& _prefix(std::ostream* _dout)
 {
   return *_dout << "ErasureCodeJerasure: ";
@@ -426,6 +430,7 @@ int ErasureCodeJerasureReedSolomonVandermonde::parse(ErasureCodeProfile &profile
 
 void ErasureCodeJerasureReedSolomonVandermonde::prepare()
 {
+  std::lock_guard lock(jerasure_init_mutex);
   matrix = reed_sol_vandermonde_coding_matrix(k, m, w);
 }
 
@@ -484,6 +489,7 @@ int ErasureCodeJerasureReedSolomonRAID6::parse(ErasureCodeProfile &profile,
 
 void ErasureCodeJerasureReedSolomonRAID6::prepare()
 {
+  std::lock_guard lock(jerasure_init_mutex);
   matrix = reed_sol_r6_coding_matrix(k, w);
 }
 
@@ -561,6 +567,7 @@ ErasureCodeJerasureCauchy::~ErasureCodeJerasureCauchy()
 //
 void ErasureCodeJerasureCauchyOrig::prepare()
 {
+  std::lock_guard lock(jerasure_init_mutex);
   int *matrix = cauchy_original_coding_matrix(k, m, w);
   prepare_schedule(matrix);
   free(matrix);
@@ -571,6 +578,7 @@ void ErasureCodeJerasureCauchyOrig::prepare()
 //
 void ErasureCodeJerasureCauchyGood::prepare()
 {
+  std::lock_guard lock(jerasure_init_mutex);
   int *matrix = cauchy_good_general_coding_matrix(k, m, w);
   prepare_schedule(matrix);
   free(matrix);
@@ -698,6 +706,7 @@ int ErasureCodeJerasureLiberation::parse(ErasureCodeProfile &profile,
 
 void ErasureCodeJerasureLiberation::prepare()
 {
+  std::lock_guard lock(jerasure_init_mutex);
   bitmatrix = liberation_coding_bitmatrix(k, w);
   schedule = jerasure_smart_bitmatrix_to_schedule(k, m, w, bitmatrix);
   simple_schedule = jerasure_dumb_bitmatrix_to_schedule(k, m, w, bitmatrix);
@@ -723,6 +732,7 @@ bool ErasureCodeJerasureBlaumRoth::check_w(ostream *ss) const
 
 void ErasureCodeJerasureBlaumRoth::prepare()
 {
+  std::lock_guard lock(jerasure_init_mutex);
   bitmatrix = blaum_roth_coding_bitmatrix(k, w);
   schedule = jerasure_smart_bitmatrix_to_schedule(k, m, w, bitmatrix);
   simple_schedule = jerasure_dumb_bitmatrix_to_schedule(k, m, w, bitmatrix);
@@ -761,6 +771,7 @@ int ErasureCodeJerasureLiber8tion::parse(ErasureCodeProfile &profile,
 
 void ErasureCodeJerasureLiber8tion::prepare()
 {
+  std::lock_guard lock(jerasure_init_mutex);
   bitmatrix = liber8tion_coding_bitmatrix(k);
   schedule = jerasure_smart_bitmatrix_to_schedule(k, m, w, bitmatrix);
   simple_schedule = jerasure_dumb_bitmatrix_to_schedule(k, m, w, bitmatrix);
