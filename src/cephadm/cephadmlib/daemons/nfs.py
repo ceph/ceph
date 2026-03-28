@@ -61,6 +61,7 @@ class NFSGanesha(ContainerDaemonForm):
         self.extra_args = dict_get(config_json, 'extra_args', [])
         self.files = dict_get(config_json, 'files', {})
         self.rgw = dict_get(config_json, 'rgw', {})
+        self.enable_rdma = dict_get(config_json, 'enable_rdma', False)
 
         # validate the supplied args
         self.validate()
@@ -238,6 +239,17 @@ class NFSGanesha(ContainerDaemonForm):
         self, ctx: CephadmContext, args: List[str]
     ) -> None:
         args.append(ctx.container_engine.unlimited_pids_option)
+        if self.enable_rdma:
+            # Container args when NFS RDMA is enabled
+            rdma_args: List[str] = [
+                '-v',
+                '/dev/infiniband:/dev/infiniband',
+                '--cap-add=IPC_LOCK',
+                '--ulimit',
+                'memlock=-1:-1',
+                '--privileged',
+            ]
+            args.extend(rdma_args)
 
     def default_entrypoint(self) -> str:
         return self.entrypoint

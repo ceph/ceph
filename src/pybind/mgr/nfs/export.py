@@ -38,7 +38,9 @@ from .utils import (
     conf_obj_name,
     available_clusters,
     check_fs,
-    restart_nfs_service, cephfs_path_is_dir)
+    get_nfs_spec_for_cluster,
+    restart_nfs_service,
+    cephfs_path_is_dir)
 
 if TYPE_CHECKING:
     from nfs.module import Module
@@ -722,6 +724,11 @@ class ExportMgr:
 
         ex_dict["fsal"] = fsal
         ex_dict["cluster_id"] = cluster_id
+        # When RDMA is enabled at cluster level, default export transports to tcp, RDMA
+        if "transports" not in ex_dict:
+            nfs_spec = get_nfs_spec_for_cluster(self.mgr, cluster_id)
+            if nfs_spec and getattr(nfs_spec, "enable_rdma", False):
+                ex_dict["transports"] = ["TCP", "RDMA"]
         export = Export.from_dict(ex_id, ex_dict)
         if export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[0]:
             self._ensure_cephfs_export_user(export)
@@ -741,6 +748,7 @@ class ExportMgr:
                              clients: list = [],
                              sectype: Optional[List[str]] = None,
                              cmount_path: Optional[str] = "/",
+                             transports: Optional[List[str]] = None,
                              earmark_resolver: Optional[CephFSEarmarkResolver] = None
                              ) -> Dict[str, Any]:
 
@@ -750,23 +758,26 @@ class ExportMgr:
 
         pseudo_path = normalize_path(pseudo_path)
 
+        export_dict = {
+            "pseudo": pseudo_path,
+            "path": path,
+            "access_type": access_type,
+            "squash": squash,
+            "fsal": {
+                "name": NFS_GANESHA_SUPPORTED_FSALS[0],
+                "cmount_path": cmount_path,
+                "fs_name": fs_name,
+            },
+            "clients": clients,
+            "sectype": sectype,
+        }
+        if transports is not None:
+            export_dict["transports"] = transports
         if not self._fetch_export(cluster_id, pseudo_path):
             export = self.create_export_from_dict(
                 cluster_id,
                 self._gen_export_id(cluster_id),
-                {
-                    "pseudo": pseudo_path,
-                    "path": path,
-                    "access_type": access_type,
-                    "squash": squash,
-                    "fsal": {
-                        "name": NFS_GANESHA_SUPPORTED_FSALS[0],
-                        "cmount_path": cmount_path,
-                        "fs_name": fs_name,
-                    },
-                    "clients": clients,
-                    "sectype": sectype,
-                },
+                export_dict,
                 earmark_resolver
             )
             log.debug("creating cephfs export %s", export)
@@ -791,28 +802,32 @@ class ExportMgr:
                           bucket: Optional[str] = None,
                           user_id: Optional[str] = None,
                           clients: list = [],
-                          sectype: Optional[List[str]] = None) -> Dict[str, Any]:
+                          sectype: Optional[List[str]] = None,
+                          transports: Optional[List[str]] = None) -> Dict[str, Any]:
         pseudo_path = normalize_path(pseudo_path)
 
         if not bucket and not user_id:
             raise ErrorResponse("Must specify either bucket or user_id")
 
+        export_dict = {
+            "pseudo": pseudo_path,
+            "path": bucket or '/',
+            "access_type": access_type,
+            "squash": squash,
+            "fsal": {
+                "name": NFS_GANESHA_SUPPORTED_FSALS[1],
+                "user_id": user_id,
+            },
+            "clients": clients,
+            "sectype": sectype,
+        }
+        if transports is not None:
+            export_dict["transports"] = transports
         if not self._fetch_export(cluster_id, pseudo_path):
             export = self.create_export_from_dict(
                 cluster_id,
                 self._gen_export_id(cluster_id),
-                {
-                    "pseudo": pseudo_path,
-                    "path": bucket or '/',
-                    "access_type": access_type,
-                    "squash": squash,
-                    "fsal": {
-                        "name": NFS_GANESHA_SUPPORTED_FSALS[1],
-                        "user_id": user_id,
-                    },
-                    "clients": clients,
-                    "sectype": sectype,
-                }
+                export_dict
             )
             log.debug("creating rgw export %s", export)
             self._create_rgw_export_user(export)

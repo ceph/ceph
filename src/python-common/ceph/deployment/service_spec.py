@@ -1328,6 +1328,9 @@ yaml.add_representer(ServiceSpec, ServiceSpec.yaml_representer)
 
 
 class NFSServiceSpec(ServiceSpec):
+    COLOCATION_PORT_FIELDS = ['data_port', 'monitoring_port']
+    COLOCATION_PORT_FIELDS_WITH_RDMA = ['data_port', 'monitoring_port', 'rdma_port']
+
     def __init__(self,
                  service_type: str = 'nfs',
                  service_id: Optional[str] = None,
@@ -1344,6 +1347,8 @@ class NFSServiceSpec(ServiceSpec):
                  virtual_ip: Optional[str] = None,
                  enable_nlm: bool = False,
                  enable_haproxy_protocol: bool = False,
+                 enable_rdma: bool = False,
+                 rdma_port: Optional[int] = None,
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  idmap_conf: Optional[Dict[str, Dict[str, str]]] = None,
@@ -1358,6 +1363,7 @@ class NFSServiceSpec(ServiceSpec):
                  tls_debug: bool = False,
                  tls_min_version: Optional[str] = None,
                  tls_ciphers: Optional[str] = None,
+                 colocation_ports: Optional[List[Dict[str, int]]] = None,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -1382,6 +1388,13 @@ class NFSServiceSpec(ServiceSpec):
         self.enable_haproxy_protocol = enable_haproxy_protocol
         self.idmap_conf = idmap_conf
         self.enable_nlm = enable_nlm
+        self.enable_rdma = enable_rdma
+        self.rdma_port = rdma_port
+
+        # colocation_ports is a list of port dicts for ADDITIONAL colocated daemons
+        # The first daemon always uses port and monitoring_port from the spec
+        # Format: [{'data_port': 1234, 'monitoring_port': 5678}, ...]
+        self.colocation_ports = colocation_ports
 
         # TLS fields
         self.tls_ciphers = tls_ciphers
@@ -1389,14 +1402,72 @@ class NFSServiceSpec(ServiceSpec):
         self.tls_debug = tls_debug
         self.tls_min_version = tls_min_version
 
+    def get_colocation_port_fields(self) -> List[str]:
+        """Return port fields for colocation; include rdma_port when RDMA is enabled."""
+        if self.enable_rdma:
+            return self.COLOCATION_PORT_FIELDS_WITH_RDMA
+        return self.COLOCATION_PORT_FIELDS
+
     def get_port_start(self) -> List[int]:
-        if self.port:
-            return [self.port]
-        return []
+        ports = [self.port or 2049, self.monitoring_port or 9587]
+        if self.enable_rdma:
+            ports.append(self.rdma_port or 20049)
+        return ports
+
+    def get_colocation_ports_list(self) -> List[List[int]]:
+        """
+        Convert the colocation_ports dictionary into a list of port lists
+        so the scheduler can handle port assignment in a generic way
+        """
+        if not self.colocation_ports:
+            return []
+        fields = self.get_colocation_port_fields()
+        return [[port_dict[field] for field in fields]
+                for port_dict in self.colocation_ports]
 
     def rados_config_name(self):
         # type: () -> str
         return 'conf-' + self.service_name()
+
+    def validate_colocation_ports(self) -> None:
+        """Validate colocation_ports configuration."""
+        if not self.colocation_ports:
+            return
+        # Validate entry count matches placement requirements
+        if self.placement:
+            actual = len(self.colocation_ports)
+            if self.placement.count_per_host:
+                expected = self.placement.count_per_host - 1
+                if actual < expected:
+                    raise SpecValidationError(
+                        f"colocation_ports requires {expected} entries for "
+                        f"count_per_host={self.placement.count_per_host} (got {actual}). First "
+                        "daemon uses base ports, remaining need custom ports."
+                    )
+            elif self.placement.count:
+                expected = self.placement.count - 1
+                if actual < expected:
+                    raise SpecValidationError(
+                        f"colocation_ports requires {expected} entries for "
+                        f"count={self.placement.count} (got {actual}). First daemon uses base "
+                        "ports, remaining need custom ports."
+                    )
+        # Validate that each entry has the required port fields
+        fields = self.get_colocation_port_fields()
+        for idx, port_dict in enumerate(self.colocation_ports):
+            if not isinstance(port_dict, dict):
+                raise SpecValidationError(
+                    f"colocation_ports[{idx}] must be a dict with "
+                    f"fields: {', '.join(fields)}"
+                )
+            missing = [f for f in fields if f not in port_dict]
+            if missing:
+                missing_str = ', '.join(missing)
+                format_str = ', '.join(f'{f!r}: <port>' for f in fields)
+                raise SpecValidationError(
+                    f"Invalid NFS spec: colocation_ports[{idx}] missing required "
+                    f"fields: {missing_str}. Expected format: {{{format_str}}}"
+                )
 
     def validate(self) -> None:
         super(NFSServiceSpec, self).validate()
@@ -1404,6 +1475,9 @@ class NFSServiceSpec(ServiceSpec):
         if self.virtual_ip and (self.ip_addrs or self.networks):
             raise SpecValidationError("Invalid NFS spec: Cannot set virtual_ip and "
                                       f"{'ip_addrs' if self.ip_addrs else 'networks'} fields")
+
+        # Validate colocation_ports
+        self.validate_colocation_ports()
 
         # TLS certificate validation
         if self.ssl and not self.certificate_source:

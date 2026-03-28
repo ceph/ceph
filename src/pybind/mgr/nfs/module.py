@@ -43,7 +43,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             client_addr: Optional[List[str]] = None,
             squash: str = 'none',
             sectype: Optional[List[str]] = None,
-            cmount_path: Optional[str] = "/"
+            cmount_path: Optional[str] = "/",
+            transports: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """Create a CephFS export"""
         earmark_resolver = CephFSEarmarkResolver(self)
@@ -58,6 +59,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             addr=client_addr,
             sectype=sectype,
             cmount_path=cmount_path,
+            transports=transports,
             earmark_resolver=earmark_resolver
         )
 
@@ -73,6 +75,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             client_addr: Optional[List[str]] = None,
             squash: str = 'none',
             sectype: Optional[List[str]] = None,
+            transports: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """Create an RGW export"""
         return self.export_mgr.create_export(
@@ -85,6 +88,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             squash=squash,
             addr=client_addr,
             sectype=sectype,
+            transports=transports,
         )
 
     @NFSCLICommand('nfs export rm', perm='rw')
@@ -135,6 +139,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                 virtual_ip: Optional[str] = None,
                                 ingress_mode: Optional[IngressType] = None,
                                 port: Optional[int] = None,
+                                enable_rdma: bool = False,
+                                rdma_port: Optional[int] = None,
                                 inbuf: Optional[str] = None) -> None:
         """Create an NFS Cluster"""
         ssl_cert = ssl_key = ssl_ca_cert = tls_min_version = tls_ciphers = None
@@ -160,7 +166,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                            tls_ktls=tls_ktls,
                                            tls_debug=tls_debug,
                                            tls_min_version=tls_min_version,
-                                           tls_ciphers=tls_ciphers)
+                                           tls_ciphers=tls_ciphers,
+                                           enable_rdma=enable_rdma,
+                                           rdma_port=rdma_port)
 
     @NFSCLICommand('nfs cluster rm', perm='rw')
     @object_format.EmptyResponder()

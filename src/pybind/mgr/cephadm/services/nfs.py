@@ -28,6 +28,9 @@ class NFSService(CephService):
     TYPE = 'nfs'
     DEFAULT_EXPORTER_PORT = 9587
 
+    def allow_colo(self) -> bool:
+        return True
+
     @property
     def needs_monitoring(self) -> bool:
         return True
@@ -92,6 +95,8 @@ class NFSService(CephService):
         deps.append(f'tls_debug: {nfs_spec.tls_debug}')
         deps.append(f'tls_min_version: {nfs_spec.tls_min_version}')
         deps.append(f'tls_ciphers: {nfs_spec.tls_ciphers}')
+        deps.append(f'enable_rdma: {nfs_spec.enable_rdma}')
+        deps.append(f'rdma_port: {nfs_spec.rdma_port}')
         return sorted(deps)
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
@@ -124,7 +129,7 @@ class NFSService(CephService):
         self.create_rados_config_obj(spec)
 
         port = daemon_spec.ports[0] if daemon_spec.ports else 2049
-        monitoring_ip, monitoring_port = self.get_monitoring_details(daemon_spec.service_name, host)
+        monitoring_ip, monitoring_port = self.get_monitoring_details(daemon_spec.service_name, host, daemon_spec)
 
         # create the RGW keyring
         rgw_user = f'{rados_user}-rgw'
@@ -144,10 +149,37 @@ class NFSService(CephService):
         else:
             logger.debug("using haproxy bind address: %r", bind_addr)
 
+        if spec.enable_rdma:
+            from cephadm.serve import CephadmServe
+            rdma_devices = self.mgr.wait_async(
+                CephadmServe(self.mgr).get_rdma_devices(host))
+            if not rdma_devices:
+                raise OrchestratorError(
+                    f'NFS RDMA is enabled but host {host} has no RDMA devices. '
+                    "Run 'cephadm list-rdma' on the host to verify RDMA is available."
+                )
+            if bind_addr:
+                bind_ip = bind_addr.split('/')[0]
+                iface = self.mgr.cache.get_interface_for_ip(host, bind_ip)
+                rdma_netdevs = {d.get('netdev', '') for d in rdma_devices}
+                if iface not in rdma_netdevs:
+                    raise OrchestratorError(
+                        f'NFS RDMA is enabled with bind address {bind_addr} on host {host}, '
+                        f'but interface {iface} (for this IP) is not RDMA-capable. '
+                        f'RDMA netdevs on host: {sorted(rdma_netdevs)}. '
+                        "Use an IP on an RDMA-capable interface or run 'rdma link show' on the host."
+                    )
+
         if monitoring_ip:
             daemon_spec.port_ips.update({str(monitoring_port): monitoring_ip})
 
         # generate the ganesha config
+        rdma_port = None
+        if spec.enable_rdma and daemon_spec.ports and len(daemon_spec.ports) > 2:
+            rdma_port = daemon_spec.ports[2]
+        elif spec.enable_rdma:
+            rdma_port = spec.rdma_port
+
         def get_ganesha_conf() -> str:
             context: Dict[str, Any] = {
                 "user": rados_user,
@@ -164,6 +196,8 @@ class NFSService(CephService):
                 "haproxy_hosts": [],
                 "nfs_idmap_conf": nfs_idmap_conf,
                 "enable_nlm": str(spec.enable_nlm).lower(),
+                "enable_rdma": spec.enable_rdma,
+                "rdma_port": rdma_port,
                 "cluster_id": self.mgr._cluster_fsid,
                 "tls_add": spec.ssl,
                 "tls_ciphers": spec.tls_ciphers,
@@ -222,6 +256,7 @@ class NFSService(CephService):
                 'user': rgw_user,
                 'keyring': rgw_keyring,
             }
+            config['enable_rdma'] = spec.enable_rdma
             logger.debug('Generated cephadm config-json: %s' % config)
             return config
 
@@ -421,9 +456,20 @@ class NFSService(CephService):
                     cluster_ips.append(addrs[0])
         return cluster_ips
 
-    def get_monitoring_details(self, service_name: str, host: str) -> Tuple[Optional[str], Optional[int]]:
+    def get_monitoring_details(
+        self,
+        service_name: str,
+        host: str,
+        daemon_spec: Optional['CephadmDaemonDeploySpec'] = None
+    ) -> Tuple[Optional[str], Optional[int]]:
         spec = cast(NFSServiceSpec, self.mgr.spec_store[service_name].spec)
-        monitoring_port = spec.monitoring_port if spec.monitoring_port else 9587
+
+        # For colocation, use the incremented monitoring port from daemon_spec.ports[1] if available
+        # Otherwise fall back to the spec's monitoring_port
+        if daemon_spec and daemon_spec.ports and len(daemon_spec.ports) > 1:
+            monitoring_port = daemon_spec.ports[1]
+        else:
+            monitoring_port = spec.monitoring_port if spec.monitoring_port else 9587
 
         # check if monitor needs to be bind on specific ip
         monitoring_addr = spec.monitoring_ip_addrs.get(host) if spec.monitoring_ip_addrs else None
