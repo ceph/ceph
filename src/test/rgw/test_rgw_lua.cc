@@ -164,7 +164,7 @@ class TestLuaManager : public rgw::sal::StoreLuaManager {
     TestLuaManager() {
       rgw_perf_start(g_ceph_context);
     }
-    int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script, const std::string& name, std::string& script) override {
+    int get_script(const DoutPrefixProvider* dpp, optional_yield y, RGWObjVersionTracker* objv, const std::string& key, std::string& script) override {
       std::this_thread::sleep_for(std::chrono::seconds(read_time));
       script = lua_script;
       return 0;
