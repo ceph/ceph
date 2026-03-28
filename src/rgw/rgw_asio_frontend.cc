@@ -1198,7 +1198,7 @@ void AsioFrontend::on_accept(Listener& l, tcp::socket stream)
         auto c = connections.add(*conn);
         // wrap the tcp stream in an ssl stream
         boost::asio::ssl::stream<tcp::socket&> stream{conn->socket, *ssl_ctx};
-        auto timeout = timeout_timer{context.get_executor(), request_timeout, conn};
+        auto timeout = timeout_timer{yield.get_executor(), request_timeout, conn};
         // do ssl handshake
         boost::system::error_code ec;
         timeout.start();
@@ -1231,7 +1231,7 @@ void AsioFrontend::on_accept(Listener& l, tcp::socket stream)
       [this, s=std::move(stream)] (boost::asio::yield_context yield) mutable {
         auto conn = boost::intrusive_ptr{new Connection(std::move(s))};
         auto c = connections.add(*conn);
-        auto timeout = timeout_timer{context.get_executor(), request_timeout, conn};
+        auto timeout = timeout_timer{yield.get_executor(), request_timeout, conn};
         boost::system::error_code ec;
         handle_connection(context, env, conn->socket, timeout, header_limit,
                           conn->buffer, false, pause_mutex, scheduler.get(),
