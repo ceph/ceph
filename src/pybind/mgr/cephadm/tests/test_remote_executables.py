@@ -114,7 +114,7 @@ def _names(node):
         or isinstance(node, ast.Pow)
         or isinstance(node, ast.LShift)
         or isinstance(node, ast.RShift)
-        or isinstance(node, ast.ButOr)
+        or isinstance(node, ast.BitOr)
         or isinstance(node, ast.BitXor)
         or isinstance(node, ast.BitAnd)
         or isinstance(node, ast.MatMult)
