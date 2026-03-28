@@ -18,10 +18,10 @@ The requirements of one Ceph cluster are not the same as the requirements of
 another, but below are some general guidelines.
 
 .. important:: Note that as of December 2025, ARM architecture containers
-               provide a limited set of daemons. SMB service, for example, is not
-               yet supported.
+               provide a limited set of daemons. SMB service, for example, is
+               not yet supported.
 
-.. tip:: check out the `ceph blog`_ too.
+.. tip:: Check out the `Ceph blog`_ too.
 
 CPU
 ===
@@ -34,7 +34,7 @@ processing power to run the RADOS service, to calculate data placement with
 CRUSH, to replicate data, and to maintain their own copies of the cluster map.
 
 With earlier releases of Ceph, we would make hardware recommendations based on
-the number of cores per OSD, but this cores-per-osd metric is no longer as
+the number of cores per OSD, but this cores-per-OSD metric is no longer as
 useful a metric as the number of cycles per IOP and the number of IOPS per OSD.
 For example, with NVMe OSD drives, Ceph can easily utilize five or six cores on real
 clusters and up to about fourteen cores on single OSDs in isolation. So cores
@@ -42,34 +42,34 @@ per OSD are no longer as pressing a concern as they were. When selecting
 hardware, select for IOPS per core.
 
 .. tip:: When we speak of CPU *cores*, we mean *threads* when hyperthreading
-	 is enabled.  Hyperthreading is usually beneficial for Ceph servers.
+     is enabled.  Hyperthreading is usually beneficial for Ceph servers.
 
 Monitor nodes and Manager nodes do not have heavy CPU demands and require only
-modest processors. if your hosts will run CPU-intensive processes in
+modest processors. If your hosts will run CPU-intensive processes in
 addition to Ceph daemons, make sure that you have enough processing power to
 run both the CPU-intensive processes and the Ceph daemons. (OpenStack Nova is
 one example of a CPU-intensive process.) We recommend that you run
 non-Ceph CPU-intensive processes on separate hosts (that is, on hosts that are
 not your Monitor and Manager nodes) in order to avoid resource contention.
-If your cluster deployes the Ceph Object Gateway, RGW daemons may co-reside
-with your Mon and Manager services if the nodes have sufficient resources.
+If your cluster deploys the Ceph Object Gateway, RGW daemons may co-reside
+with your Monitor and Manager services if the nodes have sufficient resources.
 
 RAM
 ===
 
 Generally, more RAM is better.  Monitor / Manager nodes for a modest cluster
-might do fine with 64GB; for a larger cluster with hundreds of OSDs 128GB
+might do fine with 64 GB; for a larger cluster with hundreds of OSDs 128 GB
 is advised.
 
-.. tip:: when we speak of RAM and storage requirements, we often describe
-	 the needs of a single daemon of a given type.  A given server as
-	 a whole will thus need at least the sum of the needs of the
-	 daemons that it hosts as well as resources for logs and other operating
-	 system components.  Keep in mind that a server's need for RAM
-	 and storage will be greater at startup and when components
-	 fail or are added and the cluster rebalances.  In other words,
-	 allow headroom past what you might see used during a calm period
-	 on a small initial cluster footprint.
+.. tip:: When we speak of RAM and storage requirements, we often describe
+     the needs of a single daemon of a given type.  A given server as
+     a whole will thus need at least the sum of the needs of the
+     daemons that it hosts as well as resources for logs and other operating
+     system components.  Keep in mind that a server's need for RAM
+     and storage will be greater at startup and when components
+     fail or are added and the cluster rebalances.  In other words,
+     allow headroom past what you might see used during a calm period
+     on a small initial cluster footprint.
 
 There is an :confval:`osd_memory_target` setting for BlueStore OSDs that
 defaults to 4 GiB. Factor in a prudent margin for the operating system and
@@ -90,8 +90,8 @@ Monitor and Manager memory usage scales with the size of the
 cluster.  Note that at boot-time and during topology changes and recovery these
 daemons will need more RAM than they do during steady-state operation, so plan
 for peak usage. For very small clusters, 32 GB suffices. For clusters of up to,
-say, 300 OSDs go with 64GB. For clusters built with (or which will grow to)
-even more OSDs you should provision 128GB. You may also want to consider
+say, 300 OSDs go with 64 GB. For clusters built with (or which will grow to)
+even more OSDs you should provision 128 GB. You may also want to consider
 tuning the following settings:
 
 * :confval:`mon_osd_cache_size`
@@ -110,24 +110,24 @@ Memory
 ======
 
 BlueStore uses its own memory to cache data rather than relying on the
-operating system's page cache. When using the BlueStore OSD back end you can adjust the amount of memory
-that the OSD attempts to consume by changing the :confval:`osd_memory_target`
-configuration option.
+operating system's page cache. When using the BlueStore OSD back end you can
+adjust the amount of memory that the OSD attempts to consume by changing
+the :confval:`osd_memory_target` configuration option.
 
-- Setting the :confval:`osd_memory_target` below 2GB is not
-  recommended. Ceph may fail to keep the memory consumption under 2GB and
+- Setting the :confval:`osd_memory_target` below 2 GB is not
+  recommended. Ceph may fail to keep the memory consumption under 2 GB and
   extremely slow performance is likely.
 
-- Setting the memory target between 2GB and 4GB typically works but may result
-  in degraded performance: metadata may need to be read from disk during IO
-  unless the active data set is relatively small.
+- Setting the memory target between 2 GB and 4 GB typically works but may
+  result in degraded performance: metadata may need to be read from disk
+  during IO unless the active data set is relatively small.
 
-- 4GB is the current default value for :confval:`osd_memory_target` This default
-  was chosen for typical use cases, and is intended to balance RAM cost and
-  OSD performance.
+- 4 GB is the current default value for :confval:`osd_memory_target`. This
+  default was chosen for typical use cases, and is intended to balance RAM
+  cost and OSD performance.
 
-- Setting the :confval:`osd_memory_target` higher than 4GB can improve
-  performance when there many (small) objects or when large (256GB/OSD
+- Setting the :confval:`osd_memory_target` higher than 4 GB can improve
+  performance when there are many (small) objects or when large (256 GB/OSD
   or more) data sets are processed.  This is especially true with fast
   NVMe OSDs.
 
@@ -146,9 +146,9 @@ configuration option.
    needed, depending on the exact configuration of the system.
 
 .. tip:: Configuring the operating system with swap to provide additional
-	 virtual memory for daemons is not advised for modern systems.  Doing
-	 so may result in lower performance, and your Ceph cluster may well be
-	 happier with a daemon that crashes vs one that slows to a crawl.
+     virtual memory for daemons is not advised for modern systems.  Doing
+     so may result in lower performance, and your Ceph cluster may well be
+     happier with a daemon that crashes vs one that slows to a crawl.
 
 When using the legacy Filestore back end, the OS page cache was used for caching
 data, so tuning was not normally needed. OSD memory consumption is related
@@ -170,12 +170,12 @@ minimum OSD size of 1 tebibyte (TiB). OSD drives much smaller than this
 use a significant fraction of their capacity for metadata, and drives smaller
 than 100 GiB will not be effective at all.
 
-It is *strongly* suggested that (enterprise-class) SSDs are provisioned for, at a
-minimum, hosts that run or may run Ceph Monitor and Ceph Manager daemons.
-CephFS Metadata Server metadata pools and Ceph Object Gateway (RGW) index and log pools
-also require SSDs to be effective at enterprise scale, even if HDDs are to
-be provisioned for bulk OSD data. RGW deployments notably, if using HDDs for
-bulk object bucket data, should provision all other pools on SSDs.
+It is *strongly* suggested that (enterprise-class) SSDs are provisioned for, at
+a minimum, hosts that run or may run Ceph Monitor and Ceph Manager daemons.
+CephFS Metadata Server metadata pools and Ceph Object Gateway (RGW) index and
+log pools also require SSDs to be effective at enterprise scale, even if HDDs
+are to be provisioned for bulk OSD data. RGW deployments notably, if using HDDs
+for bulk object bucket data, should provision all other pools on SSDs.
 
 To get the best performance out of Ceph, provision the following on separate
 drives:
@@ -208,18 +208,18 @@ of larger HDDs, and the concomitant limitations of IOPS per TB.
    with SAS / SATA ports connect multiple drives via a backplane, which
    itself can be a bottleneck. This is especially true with dense chassis,
    where 24, 36, or even 100 drives may contend for resources. Chassis that
-   can house more than 8 SAS / SATA drives typically do so by means of _expanders_.
-   In the past these were conventional AIC cards with a bunch of cables; today
-   expanders are embedded into the drive backplanes and are less visible. Notably
-   these expanders can be performance bottlenecks.
+   can house more than 8 SAS / SATA drives typically do so by means
+   of _expanders_. In the past these were conventional AIC cards with a bunch
+   of cables; today expanders are embedded into the drive backplanes and are
+   less visible. Notably these expanders can be performance bottlenecks.
 
 .. tip:: Another factor when considering HDDs for your cluster is to plan ahead.
    SAS and SATA SSDs are disappearing from manufacturer's product roadmaps, and
-   adding SSDs to today's SAS/SATA chassis will become increasingly difficult in
-   the years to come. One can purchase "universal" chassis that will accept all
-   three, but these are more expensive and often require an expensive and fussy
-   tri-mode HBA. Moreover, a chassis built for LFF (3.5") drives is rather
-   space-inefficient when SFF (2.5") drives are emplaced via adapters.
+   adding SSDs to today's SAS/SATA chassis will become increasingly difficult
+   in the years to come. One can purchase "universal" chassis that will accept
+   all three, but these are more expensive and often require an expensive and
+   fussy tri-mode HBA. Moreover, a chassis built for LFF (3.5") drives is
+   rather space-inefficient when SFF (2.5") drives are emplaced via adapters.
 
    See also the `Storage Networking
    Industry Association's Total Cost of Ownership calculator`_.
@@ -233,10 +233,10 @@ one drive for each Ceph OSD Daemon you run on the host.
 Many "slow OSD" issues (when they are not attributable to hardware failure)
 arise from running an operating system and multiple OSDs on the same drive.
 Also be aware that today's 32 TB HDD uses the same SATA interface that was
-already a bottleneck for a 3 TB HDD from 2014: more than ten times the data to squeeze
-through the same interface. An analogy is to consider a three story building
-with one elevator, then a thirty-two story building with the same single
-elevator.
+already a bottleneck for a 3 TB HDD from 2014: more than ten times the data to
+squeeze through the same interface. An analogy is to consider a three story
+building with one elevator, then a thirty-two story building with the same
+single elevator.
 
 For this reason, when using HDDs for
 OSDs, drives larger than 8 TB may be best suited for storage of large
@@ -261,7 +261,8 @@ than with HDDs.  SSDs do not suffer rotational or seek latency and in addition
 to improved client performance, they substantially improve the speed and
 client impact of cluster changes including rebalancing when OSDs or Monitors
 are added, removed, or fail. More subtly, the very slow recovery of an
-HDD cluster can result in a lengthy period of enhanced risk when a component fails.
+HDD cluster can result in a lengthy period of enhanced risk when a
+component fails.
 
 SSDs do not have moving mechanical parts, so they are not subject
 to many of the limitations of HDDs.  SSDs do have significant
@@ -275,34 +276,35 @@ performance of sequential and random reads and writes.
 
 Relatively inexpensive SSDs may appeal to your sense of economy. Use caution.
 Acceptable IOPS is not the only factor to consider when selecting SSDs for
-use with Ceph. Bargain client-class or off-brand SSDs are a false economy: they may experience
-"cliffing", which means that after an initial burst, sustained performance
-once a limited cache is filled declines considerably.  Consider also durability:
-a drive rated for 0.3 Drive Writes Per Day (DWPD or equivalent) may be fine for
-OSDs dedicated to certain types of sequentially-written read-mostly data, but
-are not a good choice for an RBD pool serving hundreds of VMs.  Enterprise-class SSDs are best
-for Ceph:  they feature power loss protection (PLP) and do
-not suffer the dramatic cliffing that client (desktop) models may experience.
+use with Ceph. Bargain client-class or off-brand SSDs are a false economy: they
+may experience "cliffing", which means that after an initial burst, sustained
+performance once a limited cache is filled declines considerably.  Consider
+also durability: a drive rated for 0.3 Drive Writes Per Day (DWPD or
+equivalent) may be fine for OSDs dedicated to certain types of
+sequentially-written read-mostly data, but are not a good choice for an RBD
+pool serving hundreds of VMs.  Enterprise-class SSDs are best for Ceph:
+they feature power loss protection (PLP) and do not suffer the dramatic
+cliffing that client (desktop) models may experience.
 
-When provisioning a single (or mirrored pair) SSD for both operating system boot
-and Ceph Monitor / Manager purposes, a minimum capacity of 256 GB is advised
-and at least 960 GB is recommended. A drive model rated at 1+ DWPD or the
-equivalent in TBW (TeraBytes Written) is suggested.  However, for a given write
-workload, a larger SSD than technically required will provide more endurance
-because it effectively has greater overprovisioning. We stress that
+When provisioning a single (or mirrored pair) SSD for both operating system
+boot and Ceph Monitor / Manager purposes, a minimum capacity of 256 GB is
+advised and at least 960 GB is recommended. A drive model rated at 1+ DWPD or
+the equivalent in TBW (TeraBytes Written) is suggested.  However, for a given
+write workload, a larger SSD than technically required will provide more
+endurance because it effectively has greater overprovisioning. We stress that
 enterprise-class drives are best for production use, as they feature power
 loss protection and increased durability compared to client (desktop) SKUs
 that are intended for much lighter and intermittent duty cycles. And we cannot
-stress enough that Monitor databases, CephFS metadata pools, and RGW log/index pools
-all but require SSDs for acceptable performance and stability.
+stress enough that Monitor databases, CephFS metadata pools, and RGW log/index
+pools all but require SSDs for acceptable performance and stability.
 
-SSDs have historically been considered cost prohibitive for object storage, but
-QLC SSDs are closing the gap, offering greater density with lower power
+SSDs have historically been considered cost prohibitive for object storage,
+but QLC SSDs are closing the gap, offering greater density with lower power
 consumption and less power spent on cooling. Moreover, HDD OSDs may see a
 significant write latency improvement by offloading WAL+DB onto an SSD.
 Most Ceph OSD deployments do not require an SSD with greater endurance than
 1 DWPD (aka "read-optimized").  "Mixed-use" SSDs in the 3 DWPD class are
-often overkill for this purpose and cost signficantly more.
+often overkill for this purpose and cost significantly more.
 
 To get a better sense of the factors that determine the total cost of storage,
 you might use the `Storage Networking Industry Association's Total Cost of
@@ -311,11 +313,11 @@ Ownership calculator`_
 Partition Alignment
 ~~~~~~~~~~~~~~~~~~~
 
-When using SSDs with Ceph, make sure that your partitions (if any) are properly aligned.
-Improperly aligned partitions can result in reduced performance and endurance.
-For more information about proper partition
-alignment and example commands that show how to align partitions properly, see
-`Werner Fischer's blog post on partition alignment`_.
+When using SSDs with Ceph, make sure that your partitions (if any) are properly
+aligned. Improperly aligned partitions can result in reduced performance and
+endurance. For more information about proper partition alignment and example
+commands that show how to align partitions properly,
+see `Werner Fischer's blog post on partition alignment`_.
 
 CephFS Metadata Segregation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -323,8 +325,9 @@ CephFS Metadata Segregation
 One way that Ceph accelerates CephFS file system performance is by separating
 the storage of CephFS metadata from the storage of the CephFS file contents.
 Ceph provides a default ``metadata`` pool for CephFS metadata. You will never
-have to manually create a pool for CephFS metadata, but you should create a CRUSH map
-hierarchy for your CephFS metadata pool that includes only SSD storage media.
+have to manually create a pool for CephFS metadata, but you should create a
+CRUSH map hierarchy for your CephFS metadata pool that includes only SSD
+storage media.
 See :ref:`CRUSH Device Class<crush-map-device-class>` for details.
 
 
@@ -346,9 +349,9 @@ media cost.  Moreover, when using NVMe SSDs, you do not need *any* HBA.  This
 additionally reduces the HDD vs SSD cost gap when the system as a whole is
 considered. The initial cost of a fancy RAID HBA plus onboard cache plus
 battery backup (BBU or supercapacitor) can easily exceed more than 1000 US
-dollars even after discounts, a sum that goes a long way toward SSD cost parity.
-An HBA-free system may also cost hundreds of US dollars less every year if one
-purchases an annual maintenance contract or extended warranty.
+dollars even after discounts, a sum that goes a long way toward SSD cost
+parity. An HBA-free system may also cost hundreds of US dollars less every year
+if one purchases an annual maintenance contract or extended warranty.
 
 .. tip:: The `Ceph blog`_ is often an excellent source of information on Ceph
    performance issues. See `Ceph Write Throughput 1`_ and `Ceph Write
@@ -360,8 +363,8 @@ Benchmarking
 
 BlueStore opens storage devices with ``O_DIRECT`` and issues ``fsync()``
 frequently to ensure that data is safely persisted to media. You can evaluate a
-drive's low-level write performance using ``fio``. For example, 4 KiB random write
-performance is measured as follows:
+drive's low-level write performance using ``fio``. For example, 4 KiB random
+write performance is measured as follows:
 
 .. code-block:: console
 
@@ -380,9 +383,9 @@ These two modes are selected by either "enabling" or "disabling" the write
 (volatile) cache.  When the volatile cache is enabled, Linux uses a device in
 "write back" mode, and when disabled, it uses "write through".
 
-The default configuration for HDDs (usually: caching is enabled) may not be optimal, and
-OSD performance may be dramatically increased in terms of increased IOPS and
-decreased commit latency by disabling this write cache.
+The default configuration for HDDs (usually: caching is enabled) may not be
+optimal, and OSD performance may be dramatically increased in terms of
+increased IOPS and decreased commit latency by disabling this write cache.
 
 Users are therefore encouraged to benchmark their devices with ``fio`` as
 described earlier and persist the optimal cache configuration for their
@@ -445,16 +448,16 @@ until the next reboot as some drives require this to be repeated at every boot):
   /dev/sda:
    write-caching =  0 (off)
 
-.. tip:: This udev rule (tested on CentOS 8) will set all SATA/SAS device cache_types to "write
-  through":
+.. tip:: This udev rule (tested on CentOS 8) will set all SATA/SAS device
+  cache_types to "write through":
 
   .. code-block:: console
 
     # cat /etc/udev/rules.d/99-ceph-write-through.rules
     ACTION=="add", SUBSYSTEM=="scsi_disk", ATTR{cache_type}:="write through"
 
-.. tip:: This udev rule (tested on CentOS 7) will set all SATA/SAS device cache_types to "write
-  through":
+.. tip:: This udev rule (tested on CentOS 7) will set all SATA/SAS device
+  cache_types to "write through":
 
   .. code-block:: console
 
@@ -487,12 +490,12 @@ and more, smaller nodes offer both a lower blast radius / failure domain and
 less likelihood of overwhelming network interfaces.
 Consider each host's percentage of the cluster's overall
 capacity. If the percentage supplied by a particular host is large and the host
-fails, the cluster often experiences problems such as recovery causing OSDs to exceed the
-``full ratio``, which in turn causes Ceph to halt operations to prevent data
-loss.
+fails, the cluster often experiences problems such as recovery causing OSDs to
+exceed the ``full ratio``, which in turn causes Ceph to halt operations to
+prevent data loss.
 
 When you run multiple OSDs per host, you also need to ensure that the kernel
-is up to date. See `OS Recommendations`_ for notes on ``glibc`` and
+is up to date. See :ref:`os-recommendations` for notes on ``glibc`` and
 ``syncfs(2)`` to ensure that your hardware performs as expected when running
 multiple OSDs per host.
 
@@ -514,12 +517,12 @@ Speed
 -----
 
 It takes three hours to replicate 1 TiB of data across a 1 Gb/s network and it
-takes thirty hours to replicate 10 TiB across a 1 Gb/s network. But it takes only
-twenty minutes to replicate 1 TiB across a 10 Gb/s network, and only
+takes thirty hours to replicate 10 TiB across a 1 Gb/s network. But it takes
+only twenty minutes to replicate 1 TiB across a 10 Gb/s network, and only
 three hours to replicate 10 TiB across a 10 Gb/s network.
 
 Note that a 40 Gb/s network link is effectively four 10 Gb/s channels in
-parallel, and that a 100Gb/s network link is effectively four 25 Gb/s channels
+parallel, and that a 100 Gb/s network link is effectively four 25 Gb/s channels
 in parallel.  Thus, and perhaps somewhat counterintuitively, an individual
 packet on a 25 Gb/s network has slightly lower latency compared to a 40 Gb/s
 network.
@@ -541,8 +544,9 @@ manageable. VLANs that use the 802.1q protocol require VLAN-capable NICs and
 switches. The added expense of this hardware may be offset by the operational
 cost savings on network setup and maintenance. When using VLANs to handle VM
 traffic between the cluster and compute stacks (e.g., OpenStack, CloudStack,
-etc.), there is additional value in using 10 Gb/s Ethernet or better; 40 Gb/s or
-increasingly 25/50/100 Gb/s networking as of 2022 is common for production clusters.
+etc.), there is additional value in using 10 Gb/s Ethernet or better; 40 Gb/s
+or increasingly 25/50/100 Gb/s networking as of 2022 is common for
+production clusters.
 
 Top-of-rack (TOR) switches also need fast and redundant uplinks to
 core / spine network switches or routers, often at least 40 Gb/s.
@@ -555,27 +559,29 @@ Your server chassis likely has a Baseboard Management Controller (BMC).
 Well-known examples are iDRAC (Dell), CIMC (Cisco UCS), and iLO (HPE).
 Administration and deployment tools may also use BMCs extensively, especially
 via IPMI or Redfish, so consider the cost/benefit tradeoff of an out-of-band
-network for security and administration. Hypervisor SSH access, VM image uploads,
-OS image installs, management sockets, etc. can impose significant loads on a network.
-Running multiple networks may seem like overkill, but each traffic path represents
-a potential capacity, throughput and/or performance bottleneck that you should
-carefully consider before deploying a large scale data cluster.
+network for security and administration. Hypervisor SSH access, VM image
+uploads, OS image installs, management sockets, etc. can impose significant
+loads on a network. Running multiple networks may seem like overkill, but each
+traffic path represents a potential capacity, throughput and/or performance
+bottleneck that you should carefully consider before deploying a large scale
+data cluster.
 
-Additionally, BMCs as of 2025 rarely offer network connections faster than 1 Gb/s,
-so dedicated and inexpensive 1 Gb/s switches for BMC administrative traffic
-may reduce costs by wasting fewer expensive ports on faster host switches.
+Additionally, BMCs as of 2025 rarely offer network connections faster than
+1 Gb/s, so dedicated and inexpensive 1 Gb/s switches for BMC administrative
+traffic may reduce costs by wasting fewer expensive ports on faster
+host switches.
 
 
 Failure Domains
 ===============
 
-A failure domain can be thought of as any component loss that prevents access to
-one or more OSDs or other Ceph daemons. These could be a stopped daemon on a host;
-a storage drive failure, an OS crash, a malfunctioning NIC, a failed power supply,
-a network outage, a power outage, and so forth. When planning your hardware
-deployment, you must balance the risk of reducing costs by placing too many
-responsibilities into too few failure domains against the added costs of
-isolating every potential failure domain.
+A failure domain can be thought of as any component loss that prevents access
+to one or more OSDs or other Ceph daemons. These could be a stopped daemon on a
+host; a storage drive failure, an OS crash, a malfunctioning NIC, a failed
+power supply, a network outage, a power outage, and so forth. When planning
+your hardware deployment, you must balance the risk of reducing costs by
+placing too many responsibilities into too few failure domains against the
+added costs of isolating every potential failure domain.
 
 
 Minimum Hardware Recommendations
@@ -590,9 +596,9 @@ provides two logical CPU threads; other CPU architectures may vary.
 
 There are many factors that influence resource choices.  The
 minimum resources that suffice for one purpose will not necessarily suffice for
-another.  A sandbox cluster with one OSD built on a laptop with VirtualBox or on
-a trio of Raspberry PIs will get by with fewer resources than a production
-deployment with a thousand OSDs serving five thousand of RBD clients.  The
+another.  A sandbox cluster with one OSD built on a laptop with VirtualBox or
+on a trio of Raspberry Pis will get by with fewer resources than a production
+deployment with a thousand OSDs serving five thousand RBD clients.  The
 classic Fisher Price PXL 2000 captures video, as does an IMAX or RED camera.
 One would not expect the former to do the job of the latter.  We especially
 cannot stress enough the criticality of using enterprise-quality storage
@@ -601,57 +607,57 @@ media for production workloads.
 Additional insights into resource planning for production clusters are
 found above and elsewhere within this documentation.
 
-+--------------+----------------+-----------------------------------------+
-|  Process     | Criteria       | Bare Minimum and Recommended            |
-+==============+================+=========================================+
-| ``ceph-osd`` | Processor      | - 1 min, 3 recommended threads per HDD  |
-|              |                |   OSD. 4, 6 respectively for NVMe SSD   |
-|              |                |   OSDs.                                 |
-|              |                |                                         |
-|              |                | * Results are before replication.       |
-|              |                | * Results may vary across CPU and drive |
-|              |                |   models and Ceph configuration:        |
-|              |                |   (erasure coding, compression, etc)    |
-|              |                | * ARM processors specifically may       |
-|              |                |   require more cores for performance.   |
-|              |                | * SSD OSDs, especially NVMe, will       |
-|              |                |   benefit from additional cores per OSD.|
-|              |                | * Actual performance depends on many    |
-|              |                |   factors including drives, net, and    |
-|              |                |   client throughput and latency.        |
-|              |                |   Benchmarking is highly recommended.   |
-|              +----------------+-----------------------------------------+
-|              | RAM            | - 4GB+ per daemon (more is better)      |
-|              |                | - 2-4GB may function but will be slow   |
-|              |                | - Less than 2GB is not recommended      |
-|              +----------------+-----------------------------------------+
-|              | Storage Drives | 1x storage drive per OSD in most cases. |
-|              |                | PCIe Gen 4+ SSDs larger than 30 TB may  |
-|              |                | benefit from being split into two or    |
-|              |                | more OSDs.                              |
-|              +----------------+-----------------------------------------+
-|              | DB/WAL offload |  1x SSD partition per HDD OSD           |
-|              | (optional)     |  4-5x HDD OSDs per DB/WAL SATA SSD      |
-|              |                |  <= 15 HDD OSDs per DB/WAL NVMe SSD     |
-|              +----------------+-----------------------------------------+
-|              | Network        |  1x 1Gb/s (bonded 25+ Gb/s recommended) |
-+--------------+----------------+-----------------------------------------+
-| ``ceph-mon`` | Processor      | - 2 cores minimum                       |
-|              +----------------+-----------------------------------------+
-|              | RAM            |  5GB+ per daemon (large / production    |
-|              |                |  clusters need more)                    |
-|              +----------------+-----------------------------------------+
-|              | Storage        |  100 GB per daemon, SSD strongly urged  |
-|              +----------------+-----------------------------------------+
-|              | Network        |  1x 1Gb/s (10+ Gb/s recommended)        |
-+--------------+----------------+-----------------------------------------+
-| ``ceph-mds`` | Processor      | - 2 cores minimum, higher freq is       |
-|              |                |   better than more cores                |
-|              +----------------+-----------------------------------------+
-|              | RAM            |  8+ GiB per daemon                      |
-|              +----------------+-----------------------------------------+
-|              | Network        |  1x 1Gb/s (10+ Gb/s recommended)        |
-+--------------+----------------+-----------------------------------------+
++--------------+----------------+------------------------------------------+
+|  Process     | Criteria       | Bare Minimum and Recommended             |
++==============+================+==========================================+
+| ``ceph-osd`` | Processor      | - 1 min, 3 recommended threads per HDD   |
+|              |                |   OSD. 4, 6 respectively for NVMe SSD    |
+|              |                |   OSDs.                                  |
+|              |                |                                          |
+|              |                | * Results are before replication.        |
+|              |                | * Results may vary across CPU and drive  |
+|              |                |   models and Ceph configuration:         |
+|              |                |   (erasure coding, compression, etc)     |
+|              |                | * ARM processors specifically may        |
+|              |                |   require more cores for performance.    |
+|              |                | * SSD OSDs, especially NVMe, will        |
+|              |                |   benefit from additional cores per OSD. |
+|              |                | * Actual performance depends on many     |
+|              |                |   factors including drives, net, and     |
+|              |                |   client throughput and latency.         |
+|              |                |   Benchmarking is highly recommended.    |
+|              +----------------+------------------------------------------+
+|              | RAM            | - >= 4 GB per daemon (more is better)    |
+|              |                | - 2-4 GB may function but will be slow   |
+|              |                | - Less than 2 GB is not recommended      |
+|              +----------------+------------------------------------------+
+|              | Storage Drives | 1x storage drive per OSD in most cases.  |
+|              |                | PCIe Gen 4+ SSDs larger than 30 TB may   |
+|              |                | benefit from being split into two or     |
+|              |                | more OSDs.                               |
+|              +----------------+------------------------------------------+
+|              | DB/WAL offload |  1x SSD partition per HDD OSD            |
+|              | (optional)     |  4-5x HDD OSDs per DB/WAL SATA SSD       |
+|              |                |  <= 15 HDD OSDs per DB/WAL NVMe SSD      |
+|              +----------------+------------------------------------------+
+|              | Network        |  1x 1 Gb/s (bonded 25+ Gb/s recommended) |
++--------------+----------------+------------------------------------------+
+| ``ceph-mon`` | Processor      | - 2 cores minimum                        |
+|              +----------------+------------------------------------------+
+|              | RAM            |  >= 5 GB per daemon (large / production  |
+|              |                |  clusters need more)                     |
+|              +----------------+------------------------------------------+
+|              | Storage        |  100 GB per daemon, SSD strongly urged   |
+|              +----------------+------------------------------------------+
+|              | Network        |  1x 1 Gb/s (10+ Gb/s recommended)        |
++--------------+----------------+------------------------------------------+
+| ``ceph-mds`` | Processor      | - 2 cores minimum, higher freq is        |
+|              |                |   better than more cores                 |
+|              +----------------+------------------------------------------+
+|              | RAM            |  >= 8 GiB per daemon                     |
+|              +----------------+------------------------------------------+
+|              | Network        |  1x 1 Gb/s (10+ Gb/s recommended)        |
++--------------+----------------+------------------------------------------+
 
 .. tip:: When running an OSD node with a single storage drive, create a
    partition for your OSD that is separate from the partition
@@ -663,7 +669,5 @@ found above and elsewhere within this documentation.
 .. _Ceph blog: https://ceph.io/en/news/blog/
 .. _Ceph Write Throughput 1: https://ceph.io/en/news/blog/2013/ceph-performance-part-1-disk-controller-write-throughput/
 .. _Ceph Write Throughput 2: https://ceph.io/en/news/blog/2013/ceph-performance-part-2-write-throughput-without-ssd-journals/
-.. _Mapping Pools to Different Types of OSDs: ../../rados/operations/crush-map#placing-different-pools-on-different-osds
-.. _OS Recommendations: ../os-recommendations
 .. _Storage Networking Industry Association's Total Cost of Ownership calculator: https://www.snia.org/forums/cmsi/programs/TCOcalc
 .. _Werner Fischer's blog post on partition alignment: https://www.thomas-krenn.com/en/wiki/Partition_Alignment_detailed_explanation
