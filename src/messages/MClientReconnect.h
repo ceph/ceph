@@ -78,13 +78,13 @@ public:
   void mark_more() { more = true; }
   bool has_more() const { return more; }
 
-  void add_cap(inodeno_t ino, uint64_t cap_id, inodeno_t pathbase, const std::string& path,
+  void add_cap(inodeno_t ino, uint64_t cap_id, inodeno_t pathbase, std::string_view path,
 	       int wanted, int issued, inodeno_t sr, snapid_t sf, ceph::buffer::list& lb)
   {
     caps[ino] = cap_reconnect_t(cap_id, pathbase, path, wanted, issued, sr, sf, lb);
     if (!cap_size)
       calc_item_size();
-    approx_size += cap_size + path.length() + lb.length();
+    approx_size += cap_size + path.size() + lb.length();
   }
   void add_snaprealm(inodeno_t ino, snapid_t seq, inodeno_t parent) {
     snaprealm_reconnect_t r;
