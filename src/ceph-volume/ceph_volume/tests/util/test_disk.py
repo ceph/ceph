@@ -367,6 +367,27 @@ class TestGetDevices(object):
         assert result[lv_path]['human_readable_size'] == '100.00 MB'
 
 
+class TestGetBlockDevsSysfs(object):
+    def test_optical_device_is_skipped(self, fake_filesystem):
+        # sr0 is a CDROM (IPMI/BMC virtual media),not a usable disk.
+        fake_filesystem.create_file('/dev/sr0')
+        fake_filesystem.create_dir('/sys/dev/block')
+        fake_filesystem.create_dir('/sys/block/sr0/holders')
+        fake_filesystem.create_dir('/sys/block/sr0/device')
+        fake_filesystem.create_file('/sys/block/sr0/device/type', contents='5\n')
+
+        assert disk.get_block_devs_sysfs(device='sr0') == []
+
+    def test_regular_device_is_not_skipped(self, fake_filesystem):
+        # normal disk should still be reported.
+        fake_filesystem.create_file('/dev/sda')
+        fake_filesystem.create_dir('/sys/dev/block')
+        fake_filesystem.create_dir('/sys/block/sda/holders')
+
+        result = disk.get_block_devs_sysfs(device='sda')
+        assert result == [['/dev/sda', '/dev/sda', 'disk', '/dev/sda']]
+
+
 class TestSizeCalculations(object):
 
     @pytest.mark.parametrize('aliases', [
