@@ -30,7 +30,7 @@ class NVMeoF(MgrModule):
             self.create_pool(pool_name)
             logger.info(f"Pool '{pool_name}' created.")
         except Exception:
-            logger.error(f"Error creating pool '{pool_name}", exc_info=True)
+            logger.error(f"Error creating pool '{pool_name}'", exc_info=True)
             raise
 
     def _enable_rbd_application(self, pool_name: str) -> None:
@@ -56,5 +56,5 @@ class NVMeoF(MgrModule):
     def create_pool_if_not_exists(self) -> None:
         if not self._pool_exists(POOL_NAME):
             self._create_pool(POOL_NAME)
-        self._enable_rbd_application(POOL_NAME)
-        self._rbd_pool_init(POOL_NAME)
+            self._enable_rbd_application(POOL_NAME)
+            self._rbd_pool_init(POOL_NAME)
