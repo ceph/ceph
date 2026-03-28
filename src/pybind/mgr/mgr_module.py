@@ -427,7 +427,7 @@ class CLICommandBase(object):
         desc = (inspect.getdoc(f) or '').replace('\n', ' ')
         full_argspec = inspect.getfullargspec(f)
         arg_spec = full_argspec.annotations
-        first_default = len(arg_spec)
+        first_default = len(full_argspec.args)
         if full_argspec.defaults:
             first_default -= len(full_argspec.defaults)
         args = []
@@ -442,6 +442,9 @@ class CLICommandBase(object):
             if arg == '_end_positional_':
                 positional = False
                 continue
+            assert arg in arg_spec, \
+                f"'{arg}' is not annotated for {f}: {full_argspec}"
+            has_default = index >= first_default
             if (
                 arg == 'format'
                 or arg_spec[arg] is Optional[bool]
@@ -450,9 +453,7 @@ class CLICommandBase(object):
                 # implicit switch to non-positional on any
                 # Optional[bool] or the --format option
                 positional = False
-            assert arg in arg_spec, \
-                f"'{arg}' is not annotated for {f}: {full_argspec}"
-            has_default = index >= first_default
+                has_default = True
             args.append(CephArgtype.to_argdesc(arg_spec[arg],
                                                dict(name=arg),
                                                has_default,
