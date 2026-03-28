@@ -875,7 +875,8 @@ bool Condition::eval(const Environment& env) const {
   std::vector<std::string> runtime_vals;
   auto i = env.find(key);
   if (op == TokenID::Null) {
-    return i == env.end() ? true : false;
+    const std::string value = (i == env.end() ? "true" : "false");
+    return typed_any(std::equal_to<bool>{}, as_bool, value, vals);
   }
 
   if (i == env.end()) {
