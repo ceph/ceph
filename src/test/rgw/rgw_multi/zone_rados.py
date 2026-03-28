@@ -3,9 +3,6 @@ import boto3
 from botocore.exceptions import ClientError
 
 from itertools import zip_longest  # type: ignore
-
-from nose.tools import eq_ as eq
-
 from .multisite import *
 
 from .conn import get_gateway_sts_connection
@@ -13,45 +10,45 @@ from .conn import get_gateway_sts_connection
 log = logging.getLogger(__name__)
 
 def check_object_eq(k1, k2, check_extra = True):
-    assert k1
-    assert k2
+    assert k1 is not None, "Expected key is missing"
+    assert k2 is not None, "Result key is missing"
     log.debug('comparing key name=%s', k1.key)
-    eq(k1.key, k2.key)
+    assert k1.key == k2.key
     if hasattr(k1, 'version_id'):
-        eq(k1.version_id, k2.version_id)
+        assert k1.version_id == k2.version_id
     if hasattr(k1, 'is_latest'):
-        eq(k1.is_latest, k2.is_latest)
+        assert k1.is_latest == k2.is_latest
     if hasattr(k1, 'last_modified'):
-        eq(k1.last_modified, k2.last_modified)
+        assert k1.last_modified == k2.last_modified
 
     response1 = k1.get()
     response2 = k2.get()
     
     body1 = response1['Body'].read()
     body2 = response2['Body'].read()
-    eq(body1, body2)
+    assert body1 == body2
 
-    eq(response1.get('Metadata', {}), response2.get('Metadata', {}))
-    eq(response1.get('CacheControl'), response2.get('CacheControl'))
-    eq(response1.get('ContentType'), response2.get('ContentType'))
-    eq(response1.get('ContentEncoding'), response2.get('ContentEncoding'))
-    eq(response1.get('ContentDisposition'), response2.get('ContentDisposition'))
-    eq(response1.get('ContentLanguage'), response2.get('ContentLanguage'))
-    eq(response1.get('ETag'), response2.get('ETag'))
+    assert response1.get('Metadata', {}) == response2.get('Metadata', {})
+    assert response1.get('CacheControl') == response2.get('CacheControl')
+    assert response1.get('ContentType') == response2.get('ContentType')
+    assert response1.get('ContentEncoding') == response2.get('ContentEncoding')
+    assert response1.get('ContentDisposition') == response2.get('ContentDisposition')
+    assert response1.get('ContentLanguage') == response2.get('ContentLanguage')
+    assert response1.get('ETag') == response2.get('ETag')
 
     if check_extra and hasattr(k1, 'owner') and hasattr(k2, 'owner'):
-        eq(k1.owner.get('ID'), k2.owner.get('ID'))
+        assert k1.owner.get('ID') == k2.owner.get('ID')
         if 'DisplayName' in k1.owner and 'DisplayName' in k2.owner:
-            eq(k1.owner['DisplayName'], k2.owner['DisplayName'])
+            assert k1.owner['DisplayName'] == k2.owner['DisplayName']
 
     if hasattr(k1, 'storage_class'):
-        eq(k1.storage_class, k2.storage_class)
+        assert k1.storage_class == k2.storage_class
     if hasattr(k1, 'size'):
-        eq(k1.size, k2.size)
+        assert k1.size == k2.size
 
     encrypted1 = response1.get('ServerSideEncryption') is not None
     encrypted2 = response2.get('ServerSideEncryption') is not None
-    eq(encrypted1, encrypted2)
+    assert encrypted1 == encrypted2
 
 class RadosZone(Zone):
     def __init__(self, name, zonegroup = None, cluster = None, data = None, zone_id = None, gateways = None):
@@ -119,10 +116,10 @@ class RadosZone(Zone):
                     # both must be delete markers
                     assert is_delete_marker_k1 and is_delete_marker_k2, \
                         f"delete marker mismatch: k1={is_delete_marker_k1}, k2={is_delete_marker_k2}"
-                    eq(k1.key, k2.key)
-                    eq(k1.version_id, k2.version_id)
+                    assert k1.key == k2.key
+                    assert k1.version_id == k2.version_id
                     if hasattr(k1, 'is_latest'):
-                        eq(k1.is_latest, k2.is_latest)
+                        assert k1.is_latest == k2.is_latest
                     log.debug('both are delete markers, skipping content comparison')
                     continue
 
@@ -142,8 +139,8 @@ class RadosZone(Zone):
                     try:
                         k1_olh.load()
                         k2_olh.load()
-                        eq(k1_olh.e_tag, k2_olh.e_tag)
-                        eq(k1_olh.content_length, k2_olh.content_length)
+                        assert k1_olh.e_tag == k2_olh.e_tag
+                        assert k1_olh.content_length == k2_olh.content_length
                     except ClientError:
                         pass  # current version is a delete marker
 
@@ -158,15 +155,15 @@ class RadosZone(Zone):
             r1 = self.get_role(role_name)
             r2 = zone_conn.get_role(role_name)
 
-            assert r1
-            assert r2
+            assert r1 is not None, "Expected role is missing"
+            assert r2 is not None, "Result role is missing"
             log.debug('comparing role name=%s', r1['get_role_response']['get_role_result']['role']['role_name'])
-            eq(r1['get_role_response']['get_role_result']['role']['role_name'], r2['get_role_response']['get_role_result']['role']['role_name'])
-            eq(r1['get_role_response']['get_role_result']['role']['role_id'], r2['get_role_response']['get_role_result']['role']['role_id'])
-            eq(r1['get_role_response']['get_role_result']['role']['path'], r2['get_role_response']['get_role_result']['role']['path'])
-            eq(r1['get_role_response']['get_role_result']['role']['arn'], r2['get_role_response']['get_role_result']['role']['arn'])
-            eq(r1['get_role_response']['get_role_result']['role']['max_session_duration'], r2['get_role_response']['get_role_result']['role']['max_session_duration'])
-            eq(r1['get_role_response']['get_role_result']['role']['assume_role_policy_document'], r2['get_role_response']['get_role_result']['role']['assume_role_policy_document'])
+            assert r1['get_role_response']['get_role_result']['role']['role_name'] == r2['get_role_response']['get_role_result']['role']['role_name']
+            assert r1['get_role_response']['get_role_result']['role']['role_id'] == r2['get_role_response']['get_role_result']['role']['role_id']
+            assert r1['get_role_response']['get_role_result']['role']['path'] == r2['get_role_response']['get_role_result']['role']['path']
+            assert r1['get_role_response']['get_role_result']['role']['arn'] == r2['get_role_response']['get_role_result']['role']['arn']
+            assert r1['get_role_response']['get_role_result']['role']['max_session_duration'] == r2['get_role_response']['get_role_result']['role']['max_session_duration']
+            assert r1['get_role_response']['get_role_result']['role']['assume_role_policy_document'] == r2['get_role_response']['get_role_result']['role']['assume_role_policy_document']
 
             log.info('success, role identical: role=%s zones={%s, %s}', role_name, self.name, zone_conn.name)
 

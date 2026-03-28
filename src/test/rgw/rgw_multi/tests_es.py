@@ -8,8 +8,7 @@ import dateutil
 
 from itertools import zip_longest  # type: ignore
 
-from nose.tools import eq_ as eq
-
+import pytest
 from .multisite import *
 from .tests import *
 from .zone_es import *
@@ -23,7 +22,7 @@ def check_es_configured():
 
     es_zones = zonegroup.zones_by_type.get("elasticsearch")
     if not es_zones:
-        raise SkipTest("Requires at least one ES zone")
+        skip("Requires at least one ES zone")
 
 def is_es_zone(zone_conn):
     if not zone_conn:
@@ -45,8 +44,8 @@ def verify_search(bucket_name, src_keys, result_keys, f):
     log.debug('result keys:' + json.dumps(result_keys, indent=4))
 
     for k1, k2 in zip_longest(check_keys, result_keys):
-        assert k1
-        assert k2
+        assert k1 is not None, "Expected key is missing"
+        assert k2 is not None, "Result key is missing"
         check_object_eq(k1, k2)
 
 def do_check_mdsearch(conn, bucket, src_keys, req_str, src_filter):
@@ -261,15 +260,15 @@ def test_es_bucket_conf():
             for entry in conf:
               d[entry['Key']] = entry['Type']
 
-            eq(len(d), 3)
-            eq(d['x-amz-meta-foo-str'], 'str')
-            eq(d['x-amz-meta-foo-int'], 'int')
-            eq(d['x-amz-meta-foo-date'], 'date')
+            assert len(d) == 3
+            assert d['x-amz-meta-foo-str'] == 'str'
+            assert d['x-amz-meta-foo-int'] == 'int'
+            assert d['x-amz-meta-foo-date'] == 'date'
 
             req.del_config()
 
             conf = req.get_config()
 
-            eq(len(conf), 0)
+            assert len(conf) == 0
 
         break # no need to iterate over all zones
