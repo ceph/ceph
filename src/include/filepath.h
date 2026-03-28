@@ -39,6 +39,9 @@
 class filepath {
   inodeno_t ino = 0;   // base inode.  ino=0 implies pure relative path.
   std::string path;     // relative path.
+  // tells get_path() whether it should prefix path with "..." to indicate that
+  // it was shortened.
+  bool trimmed = false;
 
   /** bits - path segments
    * this is ['a', 'b', 'c'] for both the aboslute and relative case.
@@ -92,6 +95,29 @@ class filepath {
    */
   filepath(std::string_view s) { set_path(s); }
   filepath(const char* s) { set_path(s); }
+
+  void set_trimmed() {
+    if (trimmed)
+      return;
+    // indicates that the path has been shortened.
+    path += "...";
+    trimmed = true;
+  }
+
+  /* Trim given path to final 10 components and return it by prefixing it with
+   * "..."  to indicate that the path has been trimmed. */
+  std::string get_trimmed_path() const
+  {
+    std::size_t n = 0;
+    for (int i = 1; i <= 10; ++i) {
+      n = path.rfind("/", n - 1);
+      if (n == std::string::npos) {
+	return std::string(path);
+      }
+    }
+
+    return std::string("..." + path.substr(n, -1));
+  }
 
   void set_path(std::string_view s, inodeno_t b) {
     path = s;
