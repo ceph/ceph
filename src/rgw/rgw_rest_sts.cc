@@ -823,53 +823,6 @@ WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
 
 } // namespace rgw::auth::sts
 
-int RGWREST_STS::verify_permission(optional_yield y)
-{
-  STS::STSService _sts(s->cct, driver, s->user->get_id(), s->auth.identity.get());
-  sts = std::move(_sts);
-
-  string rArn = s->info.args.get("RoleArn");
-  const auto& [ret, role] = sts.getRoleInfo(s, rArn, y);
-  if (ret < 0) {
-    ldpp_dout(this, 0) << "failed to get role info using role arn: " << rArn << dendl;
-    return ret;
-  }
-  string policy = role->get_assume_role_policy();
-
-  //Parse the policy
-  //TODO - This step should be part of Role Creation
-  try {
-    // resource policy is not restricted to the current tenant
-    const std::string* policy_tenant = nullptr;
-
-    const rgw::IAM::Policy p(s->cct, policy_tenant, policy, false);
-    if (!s->principal_tags.empty()) {
-      auto res = p.eval(s->env, *s->auth.identity, rgw::IAM::stsTagSession, boost::none);
-      if (res != rgw::IAM::Effect::Allow) {
-        ldout(s->cct, 0) << "evaluating policy for stsTagSession returned deny/pass" << dendl;
-        return -EPERM;
-      }
-    }
-    uint64_t op;
-    if (get_type() == RGW_STS_ASSUME_ROLE_WEB_IDENTITY) {
-      op = rgw::IAM::stsAssumeRoleWithWebIdentity;
-    } else {
-      op = rgw::IAM::stsAssumeRole;
-    }
-
-    auto res = p.eval(s->env, *s->auth.identity, op, boost::none);
-    if (res != rgw::IAM::Effect::Allow) {
-      ldout(s->cct, 0) << "evaluating policy for op: " << op << " returned deny/pass" << dendl;
-      return -EPERM;
-    }
-  } catch (rgw::IAM::PolicyParseException& e) {
-    ldpp_dout(this, 0) << "failed to parse policy: " << e.what() << dendl;
-    return -EPERM;
-  }
-
-  return 0;
-}
-
 void RGWREST_STS::send_response()
 {
   if (op_ret) {
@@ -973,6 +926,47 @@ int RGWSTSAssumeRoleWithWebIdentity::get_params()
   return 0;
 }
 
+int RGWSTSAssumeRoleWithWebIdentity::verify_permission(optional_yield y)
+{
+  STS::STSService _sts(s->cct, driver, s->user->get_id(), s->auth.identity.get());
+  sts = std::move(_sts);
+
+  string rArn = s->info.args.get("RoleArn");
+  const auto& [ret, role] = sts.getRoleInfo(s, rArn, y);
+  if (ret < 0) {
+    ldpp_dout(this, 0) << "failed to get role info using role arn: " << rArn << dendl;
+    return ret;
+  }
+  string policy = role->get_assume_role_policy();
+
+  //Parse the policy
+  //TODO - This step should be part of Role Creation
+  try {
+    // resource policy is not restricted to the current tenant
+    const std::string* policy_tenant = nullptr;
+
+    const rgw::IAM::Policy p(s->cct, policy_tenant, policy, false);
+    if (!s->principal_tags.empty()) {
+      auto res = p.eval(s->env, *s->auth.identity, rgw::IAM::stsTagSession, boost::none);
+      if (res != rgw::IAM::Effect::Allow) {
+        ldout(s->cct, 0) << "evaluating policy for stsTagSession returned deny/pass" << dendl;
+        return -EPERM;
+      }
+    }
+    constexpr uint64_t op = rgw::IAM::stsAssumeRoleWithWebIdentity;
+    auto res = p.eval(s->env, *s->auth.identity, op, boost::none);
+    if (res != rgw::IAM::Effect::Allow) {
+      ldout(s->cct, 0) << "evaluating policy for op: " << op << " returned deny/pass" << dendl;
+      return -EPERM;
+    }
+  } catch (rgw::IAM::PolicyParseException& e) {
+    ldpp_dout(this, 0) << "failed to parse policy: " << e.what() << dendl;
+    return -EPERM;
+  }
+
+  return 0;
+}
+
 void RGWSTSAssumeRoleWithWebIdentity::execute(optional_yield y)
 {
   if (op_ret = get_params(); op_ret < 0) {
@@ -1029,6 +1023,63 @@ int RGWSTSAssumeRole::get_params()
       s->err.message = e.what();
       return -ERR_MALFORMED_DOC;
     }
+  }
+
+  return 0;
+}
+
+int RGWSTSAssumeRole::verify_permission(optional_yield y)
+{
+  STS::STSService _sts(s->cct, driver, s->user->get_id(), s->auth.identity.get());
+  sts = std::move(_sts);
+
+  string rArn = s->info.args.get("RoleArn");
+  const auto& [ret, role] = sts.getRoleInfo(s, rArn, y);
+  if (ret < 0) {
+    ldpp_dout(this, 0) << "failed to get role info using role arn: " << rArn << dendl;
+    return ret;
+  }
+  auto arn = rgw::ARN::parse(rArn);
+  if (!arn) {
+    ldpp_dout(this, 0) << "failed to parse role arn: " << rArn << dendl;
+    return -EINVAL;
+  }
+  string policy = role->get_assume_role_policy();
+
+  // tenanted roles will have an empty account id, resulting in an empty
+  // rgw_owner. this means that account users will always use cross-account
+  // rules for policy evaluation
+  const rgw_owner owner = role->get_account_id();
+
+  //Parse the policy
+  //TODO - This step should be part of Role Creation
+  try {
+    // resource policy is not restricted to the current tenant
+    const std::string* policy_tenant = nullptr;
+
+    const rgw::IAM::Policy p(s->cct, policy_tenant, policy, false);
+    if (!s->principal_tags.empty()) {
+      // require sts:TagSession permission
+      constexpr uint64_t op = rgw::IAM::stsTagSession;
+      if (!verify_resource_permission(this, s->env, *s->auth.identity,
+                                      op, *arn, boost::none, owner, p,
+                                      s->iam_identity_policies,
+                                      s->session_policies)) {
+        ldout(s->cct, 0) << "evaluating policy for stsTagSession returned deny/pass" << dendl;
+        return -EPERM;
+      }
+    }
+    constexpr uint64_t op = rgw::IAM::stsAssumeRole;
+    if (!verify_resource_permission(this, s->env, *s->auth.identity,
+                                    op, *arn, boost::none, owner, p,
+                                    s->iam_identity_policies,
+                                    s->session_policies)) {
+      ldout(s->cct, 0) << "evaluating policy for op: " << op << " returned deny/pass" << dendl;
+      return -EPERM;
+    }
+  } catch (rgw::IAM::PolicyParseException& e) {
+    ldpp_dout(this, 0) << "failed to parse policy: " << e.what() << dendl;
+    return -EPERM;
   }
 
   return 0;
