@@ -632,6 +632,13 @@ class NotFoundError(Exception):
 
 class OSD:
 
+    # fields we may add when converting to json so the orchestrator module
+    # can display them, but should not be passed back into the init function
+    display_only_fields = [
+        'pg_count',
+        'drain_status'
+    ]
+
     def __init__(self,
                  osd_id: int,
                  remove_util: RemoveUtil,
@@ -791,6 +798,21 @@ class OSD:
     def pg_count_str(self) -> str:
         return 'n/a' if self.get_pg_count() < 0 else str(self.get_pg_count())
 
+    def _get_display_only_fields(self) -> Dict[str, Any]:
+        _display_only_fields = {
+            'pg_count': self.pg_count_str(),
+            'drain_status': self.drain_status_human(),
+        }
+        # verify we're setting the expected set of fields here. This should cause
+        # failures in some of our teuthology tests if what we set here and what we have
+        # explicitly listed as being a display only field in the class attr differ
+        if sorted(list(_display_only_fields.keys())) != sorted(self.display_only_fields):
+            raise OrchestratorError(
+                f'Expected display specific fields {self.display_only_fields} '
+                f'to be set but instead got {list(_display_only_fields.keys())}'
+            )
+        return _display_only_fields
+
     def to_json(self) -> dict:
         out: Dict[str, Any] = dict()
         out['osd_id'] = self.osd_id
@@ -805,6 +827,7 @@ class OSD:
         out['zap'] = self.zap
         out['hostname'] = self.hostname  # type: ignore
         out['original_weight'] = self.original_weight
+        out.update(self._get_display_only_fields())
 
         for k in ['drain_started_at', 'drain_stopped_at', 'drain_done_at', 'process_started_at']:
             if getattr(self, k):
@@ -821,6 +844,11 @@ class OSD:
             if inp.get(date_field):
                 inp.update({date_field: str_to_datetime(inp.get(date_field, ''))})
         inp.update({'remove_util': rm_util})
+
+        if getattr(cls, 'display_only_fields', None):
+            for attr in cls.display_only_fields:
+                inp.pop(attr)
+
         if 'nodename' in inp:
             hostname = inp.pop('nodename')
             inp['hostname'] = hostname
@@ -843,14 +871,6 @@ class OSD:
 
     def __repr__(self) -> str:
         return f"osd.{self.osd_id}{' (draining)' if self.draining else ''}"
-
-    def __getstate__(self) -> Dict[str, Any]:
-        # the rm_util field of this class cannot be pickled
-        # and we should not need it in any case where this class
-        # has been serialized and deserialized. The from_json function also
-        # requires an instance of the class to explicitly be passed back in
-        self.__dict__.update({'remove_util': None})
-        return self.__dict__
 
 
 class OSDRemovalQueue(object):
@@ -1011,6 +1031,10 @@ class OSDRemovalQueue(object):
     def all_osds(self) -> List["OSD"]:
         with self.lock:
             return [osd for osd in self.osds]
+
+    def all_osds_status_json(self) -> List[Dict[str, Any]]:
+        with self.lock:
+            return [osd.to_json() for osd in self.osds]
 
     def _not_in_cluster(self) -> List["OSD"]:
         return [osd for osd in self.osds if not osd.exists]
