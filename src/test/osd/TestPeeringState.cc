@@ -1076,6 +1076,10 @@ class MockPeeringListener : public PeeringState::PeeringListener {
     return 1;
   }
 
+  epoch_t cluster_oldest_map() override {
+    return 1;
+  }
+
   void on_backfill_suspended() override {
     backfill_suspended = true;
   }

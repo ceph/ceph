@@ -538,6 +538,9 @@ seastar::future<> OSD::start()
     if (!superblock.cluster_osdmap_trim_lower_bound) {
       superblock.cluster_osdmap_trim_lower_bound = superblock.get_oldest_map();
     }
+    if (!superblock.cluster_oldest_map) {
+      superblock.cluster_oldest_map = superblock.get_oldest_map();
+    }
     return pg_shard_manager.set_superblock(superblock);
   }).then([this] {
     return pg_shard_manager.get_local_map(superblock.current_epoch);
@@ -908,6 +911,7 @@ void OSD::dump_status(Formatter* f) const
   f->dump_stream("newest_map") << superblock.get_newest_map();
   f->dump_unsigned("cluster_osdmap_trim_lower_bound",
                    superblock.cluster_osdmap_trim_lower_bound);
+  f->dump_unsigned("cluster_oldest_map", superblock.cluster_oldest_map);
   f->dump_unsigned("num_pgs", pg_shard_manager.get_num_pgs());
 }
 
@@ -916,6 +920,7 @@ void OSD::print(std::ostream& out) const
   out << "{osd." << superblock.whoami << " "
       << superblock.osd_fsid << " maps " << superblock.get_maps()
       << " tlb:" << superblock.cluster_osdmap_trim_lower_bound
+      << " cluster_oldest_map:" << superblock.cluster_oldest_map
       << " pgs:" << pg_shard_manager.get_num_pgs()
       << "}";
 }
@@ -1126,12 +1131,15 @@ seastar::future<MessageURef> OSD::get_stats()
     return pg_shard_manager.get_pg_stats();
   }).then([this, m=std::move(m)](auto &&stats) mutable {
     min_last_epoch_clean = osdmap->get_epoch();
-    min_last_epoch_clean_pgs.clear();
+    min_last_epoch_started = osdmap->get_epoch();
+    pgs_for_beacon.clear();
     std::set<int64_t> pool_set;
     for (auto [pgid, stat] : stats) {
       min_last_epoch_clean = std::min(min_last_epoch_clean,
                                       stat.get_effective_last_epoch_clean());
-      min_last_epoch_clean_pgs.push_back(pgid);
+      min_last_epoch_started = std::min(min_last_epoch_started,
+                                        stat.get_effective_last_epoch_started());
+      pgs_for_beacon.push_back(pgid);
       int64_t pool_id = pgid.pool();
       pool_set.emplace(pool_id);
     }
@@ -1203,9 +1211,10 @@ seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
 
   const auto first = m->get_first();
   const auto last = m->get_last();
-  INFO(" epochs [{}..{}], i have {}, src has [{}..{}]",
+  INFO(" epochs [{}..{}], i have {}, src has [{}..{}], trim_lower_bound {}",
        first, last, superblock.get_newest_map(),
-       m->cluster_osdmap_trim_lower_bound, m->newest_map);
+       m->oldest_map, m->newest_map,
+       m->cluster_osdmap_trim_lower_bound);
 
   if (superblock.cluster_osdmap_trim_lower_bound <
       m->cluster_osdmap_trim_lower_bound) {
@@ -1226,16 +1235,16 @@ seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
   if (first > start) {
     INFO("message skips epochs {}..{}",
 	 start, first - 1);
-    if (m->cluster_osdmap_trim_lower_bound <= start) {
+    if (m->oldest_map <= start) {
       co_return co_await get_shard_services().osdmap_subscribe(start, false);
     }
     // always try to get the full range of maps--as many as we can.  this
     //  1- is good to have
     //  2- is at present the only way to ensure that we get a *full* map as
     //     the first map!
-    if (m->cluster_osdmap_trim_lower_bound < first) {
+    if (m->oldest_map < first) {
       co_return co_await get_shard_services().osdmap_subscribe(
-        m->cluster_osdmap_trim_lower_bound - 1, true);
+        m->oldest_map - 1, true);
     }
   }
 
@@ -1251,6 +1260,7 @@ seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
 
   superblock.insert_osdmap_epochs(first, last);
   superblock.current_epoch = last;
+  superblock.cluster_oldest_map = m->oldest_map;
 
   // note in the superblock that we were clean thru the prior epoch
   if (boot_epoch && boot_epoch >= superblock.mounted) {
@@ -1635,9 +1645,10 @@ seastar::future<> OSD::send_beacon()
   }
   auto beacon = crimson::make_message<MOSDBeacon>(osdmap->get_epoch(),
                                     min_last_epoch_clean,
+                                    min_last_epoch_started,
                                     superblock.last_purged_snaps_scrub,
                                     local_conf()->osd_beacon_report_interval);
-  beacon->pgs = min_last_epoch_clean_pgs;
+  beacon->pgs = pgs_for_beacon;
   DEBUG("{}", *beacon);
   return monc->send_message(std::move(beacon));
 }

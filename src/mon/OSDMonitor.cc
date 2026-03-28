@@ -361,53 +361,82 @@ bool is_unmanaged_snap_op_permitted(CephContext* cct,
 
 } // anonymous namespace
 
-void LastEpochClean::Lec::report(unsigned pg_num, ps_t ps,
-				 epoch_t last_epoch_clean)
+void LastEpochCleanStarted::Lecs::report(
+  unsigned pg_num, ps_t ps,
+  epoch_t last_epoch_clean,
+  epoch_t last_epoch_started)
 {
   if (ps >= pg_num) {
     // removed PG
     return;
   }
-  epoch_by_pg.resize(pg_num, 0);
-  const auto old_lec = epoch_by_pg[ps];
-  if (old_lec >= last_epoch_clean) {
-    // stale lec
-    return;
+  epoch_by_pg.resize(pg_num, {0, 0});
+  const auto old_lecs = epoch_by_pg[ps];
+  if (old_lecs.last_epoch_clean < last_epoch_clean) {
+    epoch_by_pg[ps].last_epoch_clean = last_epoch_clean;
+    if (last_epoch_clean < clean_floor) {
+      clean_floor = last_epoch_clean;
+    } else if (last_epoch_clean > clean_floor) {
+      if (old_lecs.last_epoch_clean == clean_floor) {
+        // probably should increase floor?
+        auto new_floor = std::min_element(
+          std::begin(epoch_by_pg),
+          std::end(epoch_by_pg),
+          [](const auto &l, const auto &r) {
+            return l.last_epoch_clean < r.last_epoch_clean;
+          });
+        clean_floor = new_floor->last_epoch_clean;
+      }
+    }
   }
-  epoch_by_pg[ps] = last_epoch_clean;
-  if (last_epoch_clean < floor) {
-    floor = last_epoch_clean;
-  } else if (last_epoch_clean > floor) {
-    if (old_lec == floor) {
-      // probably should increase floor?
-      auto new_floor = std::min_element(std::begin(epoch_by_pg),
-					std::end(epoch_by_pg));
-      floor = *new_floor;
+  if (old_lecs.last_epoch_started < last_epoch_started) {
+    epoch_by_pg[ps].last_epoch_started = last_epoch_started;
+    if (last_epoch_started < started_floor) {
+      started_floor = last_epoch_started;
+    } else if (last_epoch_started > started_floor) {
+      if (old_lecs.last_epoch_started == started_floor) {
+        // probably should increase floor?
+        auto new_floor = std::min_element(
+          std::begin(epoch_by_pg),
+          std::end(epoch_by_pg),
+          [](const auto &l, const auto &r) {
+            return l.last_epoch_started < r.last_epoch_started;
+          });
+        started_floor = new_floor->last_epoch_started;
+      }
     }
   }
   if (ps != next_missing) {
     return;
   }
   for (; next_missing < epoch_by_pg.size(); next_missing++) {
-    if (epoch_by_pg[next_missing] == 0) {
+    if (epoch_by_pg[next_missing].last_epoch_clean == 0 ||
+        epoch_by_pg[next_missing].last_epoch_started == 0) {
       break;
     }
   }
 }
 
-void LastEpochClean::remove_pool(uint64_t pool)
+void LastEpochCleanStarted::remove_pool(uint64_t pool)
 {
   report_by_pool.erase(pool);
 }
 
-void LastEpochClean::report(unsigned pg_num, const pg_t& pg,
-			    epoch_t last_epoch_clean)
+void LastEpochCleanStarted::report(
+  unsigned pg_num,
+  const pg_t& pg,
+  epoch_t last_epoch_clean,
+  epoch_t last_epoch_started)
 {
   auto& lec = report_by_pool[pg.pool()];
-  return lec.report(pg_num, pg.ps(), last_epoch_clean);
+  return lec.report(
+    pg_num, pg.ps(),
+    last_epoch_clean,
+    last_epoch_started);
 }
 
-epoch_t LastEpochClean::get_lower_bound_by_pool(const OSDMap& latest) const
+epoch_t LastEpochCleanStarted::get_started_lower_bound_by_pool(
+  const OSDMap& latest) const
 {
   auto floor = latest.get_epoch();
   for (auto& pool : latest.get_pools()) {
@@ -418,21 +447,41 @@ epoch_t LastEpochClean::get_lower_bound_by_pool(const OSDMap& latest) const
     if (reported->second.next_missing < pool.second.get_pg_num()) {
       return 0;
     }
-    if (reported->second.floor < floor) {
-      floor = reported->second.floor;
+    if (reported->second.started_floor < floor) {
+      floor = reported->second.started_floor;
     }
   }
   return floor;
 }
 
-void LastEpochClean::dump(Formatter *f) const
+epoch_t LastEpochCleanStarted::get_clean_lower_bound_by_pool(
+  const OSDMap& latest) const
+{
+  auto floor = latest.get_epoch();
+  for (auto& pool : latest.get_pools()) {
+    auto reported = report_by_pool.find(pool.first);
+    if (reported == report_by_pool.end()) {
+      return 0;
+    }
+    if (reported->second.next_missing < pool.second.get_pg_num()) {
+      return 0;
+    }
+    if (reported->second.clean_floor < floor) {
+      floor = reported->second.clean_floor;
+    }
+  }
+  return floor;
+}
+
+void LastEpochCleanStarted::dump(Formatter *f) const
 {
   f->open_array_section("per_pool");
 
   for (auto& [pool, lec] : report_by_pool) {
     f->open_object_section("pool");
     f->dump_unsigned("poolid", pool);
-    f->dump_unsigned("floor", lec.floor);
+    f->dump_unsigned("clean_floor", lec.clean_floor);
+    f->dump_unsigned("started_floor", lec.started_floor);
     f->close_section();
   }
 
@@ -997,6 +1046,9 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   } else {
     mon.try_disable_stretch_mode();
   }
+  auto tlb = mon.store->get(get_service_name(), cluster_osdmap_tlb_name);
+  ceph_assert(tlb >= cluster_osdmap_trim_lower_bound);
+  cluster_osdmap_trim_lower_bound = tlb;
 }
 
 int OSDMonitor::register_cache_with_pcm()
@@ -1231,7 +1283,7 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc,
       dout(10) << __func__ << " " << removed
                << " pg removed because containing pool deleted: "
                << deleted_pool << dendl;
-      last_epoch_clean.remove_pool(deleted_pool);
+      last_epoch_clean_started.remove_pool(deleted_pool);
     }
     // pgmon updates its creating_pgs in check_osd_map() which is called by
     // on_active() and check_osd_map() could be delayed if lease expires, so its
@@ -2291,18 +2343,44 @@ version_t OSDMonitor::get_trim_to() const
   return 0;
 }
 
+epoch_t OSDMonitor::get_cluster_trim_lower_bound() const {
+  epoch_t floor = get_min_last_epoch_started();
+  unsigned min = g_conf()->mon_min_osdmap_epochs;
+  if (floor + min > get_last_committed()) {
+    if (min < get_last_committed())
+      floor = get_last_committed() - min;
+    else
+      floor = 0;
+  }
+  dout(10) << __func__ << " cluster_trim_lower_bound = " << floor << dendl;
+  return floor;
+}
+
 /* There are two constraints on trimming:
  * 1. we must not trim past the last_epoch_clean for any pg
  * 2. we must not trim past the last reported epoch for any up
  *    osds.
  *
- * LastEpochClean::get_lower_bound_by_pool gives a value <= constraint 1.
- * For constraint 2, we take the min over osd_epochs, which is populated with
- * MOSDBeacon::version, see OSDMonitor::prepare_beacon
+ * LastEpochCleanStarted::get_clean_lower_bound_by_pool gives
+ * a value <= constraint 1. For constraint 2, we take the min
+ * over osd_epochs, which is populated with MOSDBeacon::version,
+ * see OSDMonitor::prepare_beacon
  */
 epoch_t OSDMonitor::get_min_last_epoch_clean() const
 {
-  auto floor = last_epoch_clean.get_lower_bound_by_pool(osdmap);
+  auto floor = last_epoch_clean_started.get_clean_lower_bound_by_pool(osdmap);
+  for (auto [osd, epoch] : osd_epochs) {
+    if (epoch < floor) {
+      ceph_assert(osdmap.is_up(osd));
+      floor = epoch;
+    }
+  }
+  return floor;
+}
+
+epoch_t OSDMonitor::get_min_last_epoch_started() const
+{
+  auto floor = last_epoch_clean_started.get_started_lower_bound_by_pool(osdmap);
   for (auto [osd, epoch] : osd_epochs) {
     if (epoch < floor) {
       ceph_assert(osdmap.is_up(osd));
@@ -2852,8 +2930,9 @@ bool OSDMonitor::preprocess_get_osdmap(MonOpRequestRef op)
     ceph_assert(r >= 0);
     max_bytes -= bl.length();
   }
-  reply->cluster_osdmap_trim_lower_bound = first;
+  reply->cluster_osdmap_trim_lower_bound = cluster_osdmap_trim_lower_bound;
   reply->newest_map = last;
+  reply->oldest_map = first;
   mon.send_reply(op, reply);
   return true;
 }
@@ -4430,7 +4509,10 @@ bool OSDMonitor::prepare_beacon(MonOpRequestRef op)
   for (const auto& pg : beacon->pgs) {
     if (auto* pool = osdmap.get_pg_pool(pg.pool()); pool != nullptr) {
       unsigned pg_num = pool->get_pg_num();
-      last_epoch_clean.report(pg_num, pg, beacon->min_last_epoch_clean);
+      last_epoch_clean_started.report(
+        pg_num, pg,
+        beacon->min_last_epoch_clean,
+        beacon->min_last_epoch_started);
     }
   }
 
@@ -4466,8 +4548,9 @@ MOSDMap *OSDMonitor::build_latest_full(uint64_t features)
 {
   MOSDMap *r = new MOSDMap(mon.monmap->fsid, features);
   get_version_full(osdmap.get_epoch(), features, r->maps[osdmap.get_epoch()]);
-  r->cluster_osdmap_trim_lower_bound = get_first_committed();
+  r->cluster_osdmap_trim_lower_bound = cluster_osdmap_trim_lower_bound;
   r->newest_map = osdmap.get_epoch();
+  r->oldest_map = get_first_committed();
   return r;
 }
 
@@ -4476,8 +4559,9 @@ MOSDMap *OSDMonitor::build_incremental(epoch_t from, epoch_t to, uint64_t featur
   dout(10) << "build_incremental [" << from << ".." << to << "] with features "
 	   << std::hex << features << std::dec << dendl;
   MOSDMap *m = new MOSDMap(mon.monmap->fsid, features);
-  m->cluster_osdmap_trim_lower_bound = get_first_committed();
+  m->cluster_osdmap_trim_lower_bound = cluster_osdmap_trim_lower_bound;
   m->newest_map = osdmap.get_epoch();
+  m->oldest_map = get_first_committed();
 
   for (epoch_t e = to; e >= from && e > 0; e--) {
     bufferlist bl;
@@ -4554,8 +4638,9 @@ void OSDMonitor::send_incremental(epoch_t first,
 
   if (first < get_first_committed()) {
     MOSDMap *m = new MOSDMap(osdmap.get_fsid(), features);
-    m->cluster_osdmap_trim_lower_bound = get_first_committed();
+    m->cluster_osdmap_trim_lower_bound = cluster_osdmap_trim_lower_bound;
     m->newest_map = osdmap.get_epoch();
+    m->oldest_map = get_first_committed();
 
     first = get_first_committed();
     bufferlist bl;
@@ -5139,6 +5224,12 @@ void OSDMonitor::tick()
 
   if (!mon.is_leader()) return;
 
+  if (auto tlb = get_cluster_trim_lower_bound();
+      tlb > cluster_osdmap_trim_lower_bound) {
+    auto t = paxos.get_pending_transaction();
+    put_cluster_osdmap_trim_lower_bound(t, tlb);
+  }
+
   bool do_propose = false;
   utime_t now = ceph_clock_now();
 
@@ -5382,9 +5473,10 @@ void OSDMonitor::dump_info(Formatter *f)
 
   f->open_object_section("osdmap_clean_epochs");
   f->dump_unsigned("min_last_epoch_clean", get_min_last_epoch_clean());
+  f->dump_unsigned("min_last_epoch_started", get_min_last_epoch_clean());
 
-  f->open_object_section("last_epoch_clean");
-  last_epoch_clean.dump(f);
+  f->open_object_section("last_epoch_clean_started");
+  last_epoch_clean_started.dump(f);
   f->close_section();
 
   f->open_array_section("osd_epochs");
