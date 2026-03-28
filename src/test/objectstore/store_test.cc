@@ -1130,6 +1130,74 @@ TEST_P(StoreTest, BufferCacheReadTest) {
   }
 }
 
+TEST_P(StoreTest, WriteMustExistSuccess) {
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t("test_obj", "", CEPH_NOSNAP, 0, 0, ""));
+  // Create object
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    t.touch(cid, hoid);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  // Write with MUST_EXIST should succeed
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    bl.append("test_data");
+    t.write(cid, hoid, 0, bl.length(), bl, CEPH_OSD_OP_FLAG_MUST_EXIST);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTest, WriteMustExistFailure) {
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t("nonexistent_obj", "", CEPH_NOSNAP, 0, 0, ""));
+  // Create collection but not the object
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  // Write with MUST_EXIST should fail as no object is write
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    bl.append("test_data");
+    t.write(cid, hoid, 0, bl.length(), bl, CEPH_OSD_OP_FLAG_MUST_EXIST);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, -ENOENT);
+  }
+}
+
+TEST_P(StoreTest, WriteMustExistWithFadvise) {
+  // Test CEPH_OSD_OP_FLAG_MUST_EXIST combined with FADVISE flags
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t("test_obj", "", CEPH_NOSNAP, 0, 0, ""));
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    t.touch(cid, hoid);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    bl.append("test_data");
+    uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_MUST_EXIST | CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
+    t.write(cid, hoid, 0, bl.length(), bl, fadvise_flags);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
 void StoreTest::doCompressionTest()
 {
   int r;

@@ -15994,9 +15994,18 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     bool create = false;
     if (op->op == Transaction::OP_TOUCH ||
 	op->op == Transaction::OP_CREATE ||
-	op->op == Transaction::OP_WRITE ||
 	op->op == Transaction::OP_ZERO) {
       create = true;
+    }
+
+    if (op->op == Transaction::OP_WRITE) {
+      uint32_t fadvise_flags = i.get_fadvise_flags();
+      if (fadvise_flags & CEPH_OSD_OP_FLAG_MUST_EXIST) {
+          // Object must exist, don't allow implicit creation
+          create = false;
+      } else {
+          create = true;
+      }
     }
 
     // object operations
@@ -16023,9 +16032,9 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       {
         uint64_t off = op->off;
         uint64_t len = op->len;
-	uint32_t fadvise_flags = i.get_fadvise_flags();
         bufferlist bl;
         i.decode_bl(bl);
+        uint32_t fadvise_flags = i.get_fadvise_flags();
 	r = _write(txc, c, o, off, len, bl, fadvise_flags);
       }
       break;
@@ -16217,6 +16226,9 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 			     op->op == Transaction::OP_CLONE ||
 			     op->op == Transaction::OP_CLONERANGE2))
 	  msg = "ENOENT on clone suggests osd bug";
+
+  if (r == -ENOENT && op->op == Transaction::OP_WRITE && (fadvise_flags & CEPH_OSD_OP_FLAG_MUST_EXIST))
+      msg = "ENOENT on write with CEPH_OSD_OP_FLAG_MUST_EXIST flag suggests osd bug (likely EC object removal)";
 
 	if (r == -ENOSPC)
 	  // For now, if we hit _any_ ENOSPC, crash, before we do any damage

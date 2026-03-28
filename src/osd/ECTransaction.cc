@@ -742,6 +742,9 @@ void ECTransaction::Generate::overlay_writes() {
     sinfo.ro_range_to_shard_extent_map(off, len, bl, to_write);
     debug(oid, "overlay_buffer", to_write, dpp);
   }
+  if (!op.is_fresh_object()) {
+    fadvise_flags |= CEPH_OSD_OP_FLAG_EXPECT_EXISTS;
+  }
 }
 
 void ECTransaction::Generate::appends_and_clone_ranges() {

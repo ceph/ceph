@@ -503,6 +503,7 @@ enum {
 									 * and handle them separately from normal ops,
 									 * apply scrub-specific behavior (e.g. bypassing clean cache)
 									 */
+	CEPH_OSD_OP_FLAG_MUST_EXIST = 0x200, /* object must exist, panic if missing */
 };
 
 #define EOLDSNAPC    85  /* ORDERSNAP flag set; writer has old snapc*/
