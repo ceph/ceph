@@ -5061,6 +5061,81 @@ void BlueStore::Onode::finish_write(TransContext* txc, uint32_t offset, uint32_t
   ldout(c->store->cct, 10) << __func__ << " done " << txc << dendl;
 }
 
+struct FragMetric {
+  // Computes fragmentation as the number of disjoint segments
+  // produced by a stream of mapped ranges.
+  // frag_score == current disjoint segment count.
+
+  std::unordered_set<uint64_t> endpoints;
+  uint64_t frag_score = 0;
+
+  FragMetric() {}
+
+  inline void note(uint64_t offset, uint64_t length) {
+    bool merge_left = endpoints.count(offset);
+    bool merge_right = endpoints.count(offset + length);
+    if (merge_left && merge_right) {
+      endpoints.erase(offset);
+      endpoints.erase(offset + length);
+      frag_score--;
+    } else if (merge_left) {
+      endpoints.erase(offset);
+      endpoints.insert(offset + length);
+    } else if (merge_right) {
+      endpoints.erase(offset + length);
+      endpoints.insert(offset);
+    } else {
+      endpoints.insert(offset);
+      endpoints.insert(offset + length);
+      frag_score++;
+    }
+  }
+};
+
+int BlueStore::Onode::get_fragmentation_score()
+{
+  FragMetric frag;
+
+  for (const auto& e : extent_map.extent_map) {
+    if (e.blob->get_blob().is_compressed()) {
+      if (e.blob->last_encoded_id != 1) {
+        e.blob->last_encoded_id = 1;
+        e.blob->get_blob().map(
+          0, e.blob->get_blob().get_ondisk_length(),
+          [&](uint64_t offset, uint64_t length) {
+            frag.note(offset, length);
+            return 0;
+          }
+        );
+      }
+      continue;
+    }
+
+    const auto& pev = e.blob->get_blob().get_extents();
+
+    uint64_t skip = e.blob_offset;
+    uint64_t remaining = e.length;
+
+    for (const auto& pe : pev) {
+      if (skip >= pe.length) {
+        skip -= pe.length;
+        continue;
+      }
+
+      uint64_t avail = pe.length - skip;
+      uint64_t used = std::min(avail, remaining);
+      uint64_t s = pe.offset + skip;
+
+      frag.note(s, used);
+
+      remaining -= used;
+      skip = 0;
+      if (!remaining) break;
+    }
+  }
+  return frag.frag_score;
+}
+
 // =======================================================
 // WriteContext
  
@@ -6627,6 +6702,19 @@ void BlueStore::_init_logger()
   b.add_time_avg(l_bluestore_allocator_lat, "allocator_lat",
     "Average bluestore allocator latency",
     "bsal",
+    PerfCountersBuilder::PRIO_USEFUL);
+
+  // Fragmentation Tracking counters
+  //****************************************
+  b.add_time_avg(l_bluestore_runtime_frag_lat,
+    "runtime_frag_lat",
+    "Latency of runtime fragmentation measurement",
+    "rfl",
+    PerfCountersBuilder::PRIO_USEFUL);
+  b.add_time_avg(l_bluestore_static_frag_lat,
+    "static_frag_lat",
+    "Latency of static fragmentation measurement during scrub",
+    "sfl",
     PerfCountersBuilder::PRIO_USEFUL);
 
   logger = b.create_perf_counters();
@@ -12968,6 +13056,50 @@ int BlueStore::_generate_read_result_bl(
   return 0;
 }
 
+void BlueStore::_measure_runtime_frag(
+  Collection *c,
+  const blobs2read_t& blobs2read)
+{
+  auto start = mono_clock::now();
+  FragMetric frag;
+  for (auto& p : blobs2read) {
+    const BlobRef& bptr = p.first;
+    const regions2read_t& r2r = p.second;
+    for (auto req : r2r) {
+      bptr->get_blob().map(
+        req.r_off, req.r_len,
+        [&](uint64_t offset, uint64_t length) {
+          frag.note(offset, length);
+          return 0;
+        });
+    }
+  }
+  if (frag.frag_score > 0) {
+    c->runtime_read_samples.fetch_add(1, std::memory_order_relaxed);
+    c->runtime_frag_count.fetch_add(frag.frag_score, std::memory_order_relaxed);
+  }
+  auto finish = mono_clock::now();
+  logger->tinc_with_max(l_bluestore_runtime_frag_lat, finish - start);
+}
+
+void BlueStore::_measure_static_frag(
+  Collection *c,
+  const OnodeRef& o)
+{
+  auto start = mono_clock::now();
+  auto read_samples = c->object_read_samples.load(std::memory_order_relaxed);
+  auto frag_score = o->get_fragmentation_score();
+  if (read_samples == 0) {
+    c->static_frag_score.store(frag_score, std::memory_order_relaxed);
+    c->object_read_samples.store(1, std::memory_order_relaxed);
+  } else {
+    c->static_frag_score.fetch_add(frag_score, std::memory_order_relaxed);
+    c->object_read_samples.fetch_add(1, std::memory_order_relaxed);
+  }
+  auto finish = mono_clock::now();
+  logger->tinc_with_max(l_bluestore_static_frag_lat, finish - start);
+}
+
 int BlueStore::_do_read(
   Collection *c,
   OnodeRef& o,
@@ -13059,6 +13191,21 @@ int BlueStore::_do_read(
     [&](auto lat) { return ", num_ios = " + stringify(num_ios); },
     l_bluestore_slow_read_wait_aio_count
   );
+
+  if (cct->_conf->bluestore_frag_runtime) {
+    _measure_runtime_frag(c, blobs2read);
+  }
+
+  if ((op_flags & CEPH_OSD_OP_FLAG_SCRUB) && cct->_conf->bluestore_frag_static) {
+    if (!o->extent_map.extent_map.empty()) {
+      o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
+      auto it = o->extent_map.extent_map.begin();
+      uint64_t first_extent_offset = it->logical_offset;
+      if (offset <= first_extent_offset && first_extent_offset < offset + length) {
+        _measure_static_frag(c, o);
+      }
+    }
+  }
 
   bool csum_error = false;
   r = _generate_read_result_bl(o, offset, length, ready_regions,
@@ -13416,6 +13563,9 @@ int BlueStore::_do_readv(
     // we always issue aio for reading, so errors other than EIO are not allowed
     if (r < 0)
       return r;
+    if (cct->_conf->bluestore_frag_runtime) {
+      _measure_runtime_frag(c, std::get<2>(raw_results[i]));
+    }
   }
 
   auto num_ios = m.size();
@@ -13437,6 +13587,24 @@ int BlueStore::_do_readv(
     [&](auto lat) { return ", num_ios = " + stringify(num_ios); },
     l_bluestore_slow_read_wait_aio_count
   );
+
+  if ((op_flags & CEPH_OSD_OP_FLAG_SCRUB) && cct->_conf->bluestore_frag_static) {
+    if (!o->extent_map.extent_map.empty()) {
+      o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
+      auto it = o->extent_map.extent_map.begin();
+      uint64_t first_extent_offset = it->logical_offset;
+      for (auto& p : m) {
+        uint64_t off = p.first;
+        uint64_t len = p.second;
+
+        if (off <= first_extent_offset &&
+            first_extent_offset < off + len) {
+          _measure_static_frag(c, o);
+          break;
+        }
+      }
+    }
+  }
 
   ceph_assert(raw_results.size() == (size_t)m.num_intervals());
   i = 0;
