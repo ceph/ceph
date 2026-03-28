@@ -104,10 +104,6 @@ int RGWCreateOIDCProvider::init_processing(optional_yield y)
     }
   }
 
-  if (info.thumbprints.empty()) {
-    s->err.message = "Missing required element ThumbprintList";
-    return -EINVAL;
-  }
   if (info.thumbprints.size() > MAX_OIDC_NUM_THUMBPRINTS) {
     s->err.message = "ThumbprintList cannot exceed the maximum size of "
         + std::to_string(MAX_OIDC_NUM_THUMBPRINTS);
