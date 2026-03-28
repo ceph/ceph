@@ -31,6 +31,7 @@
 #include "SessionMap.h"
 #include "PurgeQueue.h"
 #include "MetricsHandler.h"
+#include "MDSTracer.h"
 
 // Full .h import instead of forward declaration for PerfCounter, for the
 // benefit of those including this header and using MDSRank::logger
@@ -432,6 +433,7 @@ class MDSRank {
     SessionMap sessionmap;
 
     PerfCounters *logger = nullptr, *mlogger = nullptr;
+    MDSTracer tracer;
     OpTracker op_tracker;
 
     std::map<ceph_tid_t, std::unique_ptr<MDSMetaRequest>> internal_client_requests;
