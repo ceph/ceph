@@ -597,6 +597,26 @@ inline namespace v14_2_0 {
       int *prval);
 
     /**
+     * omap_get_vals_rev: keys and values from the object omap in
+     * reverse order
+     *
+     * Get up to max_return keys and values in reverse order beginning
+     * before start_before
+     *
+     * @param start_before [in] list no keys larger than start_before;
+     *        empty string to start at end
+     * @param max_return [in] list no more than max_return key/value pairs
+     * @param out_vals [out] place returned values in out_vals on completion
+     * @param prval [out] place error code in prval upon completion
+     */
+    void omap_get_vals_rev(
+      const std::string &start_before,
+      uint64_t max_return,
+      std::map<std::string, bufferlist> *out_vals,
+      bool *pmore,
+      int *prval);
+
+    /**
      * omap_get_vals: keys and values from the object omap
      *
      * Get up to max_return keys and values beginning after start_after
@@ -634,6 +654,28 @@ inline namespace v14_2_0 {
       bool *pmore,
       int *prval);
 
+    /**
+     * omap_get_vals_rev: keys and values from the object omap in
+     * reverse order
+     *
+     * Get up to max_return keys and values beginning before
+     * start_before in reverse order
+     *
+     * @param start_before [in] list keys starting before start_before;
+     *        empty string to start at end
+     * @param filter_prefix [in] list only keys beginning with filter_prefix
+     * @param max_return [in] list no more than max_return key/value pairs
+     * @param out_vals [out] place returned values in out_vals on completion
+     * @param pmore [out] pointer to bool indicating whether there are more keys
+     * @param prval [out] place error code in prval upon completion
+     */
+    void omap_get_vals_rev(
+      const std::string &start_before,
+      const std::string &filter_prefix,
+      uint64_t max_return,
+      std::map<std::string, bufferlist> *out_vals,
+      bool *pmore,
+      int *prval);
 
     /**
      * omap_get_keys: keys from the object omap
@@ -666,6 +708,25 @@ inline namespace v14_2_0 {
 			std::set<std::string> *out_keys,
 			bool *pmore,
 			int *prval);
+
+    /**
+     * omap_get_keys_rev: keys from the object omap in reverse order
+     *
+     * Get up to max_return keys in reverse order beginning before
+     * start_before
+     *
+     * @param start_after [in] list keys starting before start_before;
+     *        empty string to start at end
+     * @param max_return [in] list no more than max_return keys
+     * @param out_keys [out] place returned values in out_keys on completion
+     * @param pmore [out] pointer to bool indicating whether there are more keys
+     * @param prval [out] place error code in prval upon completion
+     */
+    void omap_get_keys_rev(const std::string &start_before,
+                           uint64_t max_return,
+                           std::set<std::string> *out_keys,
+                           bool *pmore,
+                           int *prval);
 
     /**
      * omap_get_header: get header from object omap

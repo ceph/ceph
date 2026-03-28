@@ -64,9 +64,7 @@ protected:
     compare_omap_vals(keys, vals, lens, len, iter_vals_by_key);
   }
 
-  void compare_omap_vals(char const* const* keys,
-			 char const* const* vals,
-			 const size_t *lens,
+  void compare_omap_keys(char const* const* keys,
 			 size_t len,
 			 rados_omap_iter_t iter)
   {
@@ -74,17 +72,15 @@ protected:
     char *key = NULL;
     char *val = NULL;
     size_t val_len = 0;
+
     ASSERT_EQ(len, rados_omap_iter_size(iter));
     while (i < len) {
       ASSERT_EQ(0, rados_omap_get_next(iter, &key, &val, &val_len));
-      if (val_len == 0 && key == NULL && val == NULL)
-	break;
-      if (key)
+      if (key) {
 	EXPECT_EQ(std::string(keys[i]), std::string(key));
-      else
+      } else {
 	EXPECT_EQ(keys[i], key);
-      ASSERT_EQ(0, memcmp(vals[i], val, val_len));
-      ASSERT_EQ(lens[i], val_len);
+      }
       ++i;
     }
     ASSERT_EQ(i, len);
@@ -92,6 +88,40 @@ protected:
     ASSERT_EQ((char*)NULL, key);
     ASSERT_EQ((char*)NULL, val);
     ASSERT_EQ(0u, val_len);
+    rados_omap_get_end(iter);
+  }
+
+  void compare_omap_vals(char const* const* keys,
+			 char const* const* vals,
+			 const size_t *lens,
+			 size_t len,
+			 rados_omap_iter_t iter,
+                         const std::string message = "")
+  {
+    size_t i = 0;
+    char *key = NULL;
+    char *val = NULL;
+    size_t val_len = 0;
+    ASSERT_EQ(len, rados_omap_iter_size(iter)) << message;
+    while (i < len) {
+      ASSERT_EQ(0, rados_omap_get_next(iter, &key, &val, &val_len)) << message;
+      if (val_len == 0 && key == NULL && val == NULL) {
+	break;
+      }
+      if (key) {
+	EXPECT_EQ(std::string(keys[i]), std::string(key)) << message;
+      } else {
+	EXPECT_EQ(keys[i], key) << message;
+      }
+      ASSERT_EQ(0, memcmp(vals[i], val, val_len)) << message;
+      ASSERT_EQ(lens[i], val_len) << message;
+      ++i;
+    }
+    ASSERT_EQ(i, len) << message;
+    ASSERT_EQ(0, rados_omap_get_next(iter, &key, &val, &val_len)) << message;
+    ASSERT_EQ((char*)NULL, key) << message;
+    ASSERT_EQ((char*)NULL, val) << message;
+    ASSERT_EQ(0u, val_len) << message;
     rados_omap_get_end(iter);
   }
 
@@ -734,6 +764,250 @@ TEST_F(CReadOpsTest, Omap) {
   rados_release_write_op(op);
 
   fetch_and_verify_omap_vals(&keys[2], &vals[2], &lens[2], 2);
+
+  // clear the rest and check there are none left
+  op = rados_create_write_op();
+  rados_write_op_omap_clear(op);
+  EXPECT_EQ(0, rados_write_op_operate(op, ioctx, obj, NULL, 0));
+  rados_release_write_op(op);
+
+  fetch_and_verify_omap_vals(NULL, NULL, NULL, 0);
+
+  remove_object();
+}
+
+TEST_F(CReadOpsTest, OmapGetRange) {
+  char *keys[] = {(char*)"ab",
+		  (char*)"bc",
+		  (char*)"cd",
+		  (char*)"de",
+		  (char*)"ef",
+		  (char*)"fg",
+		  (char*)"gh",
+		  (char*)"gh1",
+		  (char*)"gh2",
+                  // note gap here with gh3
+		  (char*)"gh4",
+		  (char*)"gh5",
+		  (char*)"gh6",
+		  (char*)"hi",
+		  (char*)"ij",
+		  (char*)"jk",
+		  (char*)"kl",
+		  (char*)"lm",
+		  (char*)"mn"};
+  char *vals[] = {(char*)"11",
+		  (char*)"12",
+		  (char*)"13",
+		  (char*)"14",
+		  (char*)"15",
+		  (char*)"16",
+		  (char*)"17",
+		  (char*)"18",
+		  (char*)"19",
+		  (char*)"20",
+		  (char*)"21",
+		  (char*)"22",
+		  (char*)"23",
+		  (char*)"24",
+		  (char*)"25",
+		  (char*)"26",
+		  (char*)"27",
+		  (char*)"28"};
+  size_t lens[] = {2, 2, 2, 2, 2, 2, 2, 2, 2,
+                   2, 2, 2, 2, 2, 2, 2, 2, 2};
+
+  write_object();
+
+  // write and check for the k/v pairs
+  rados_write_op_t op = rados_create_write_op();
+  rados_write_op_omap_set(op, keys, vals, lens, 18);
+  ASSERT_EQ(0, rados_write_op_operate(op, ioctx, obj, NULL, 0));
+  rados_release_write_op(op);
+
+  fetch_and_verify_omap_vals(keys, vals, lens, 18);
+
+  rados_omap_iter_t iter_vals;
+  rados_read_op_t rop = rados_create_read_op();
+
+  rados_omap_iter_t iter_keys;
+  int r_vals = -1, r_keys = -1;
+  unsigned char more_vals = false, more_keys = false;
+
+  rop = rados_create_read_op();
+  rados_read_op_omap_get_keys2(rop, "gh3", 12, &iter_keys, &more_keys, &r_keys);
+  rados_read_op_omap_get_vals2(rop, "gh3", "", 12, &iter_vals, &more_vals, &r_vals);
+  ASSERT_EQ(0, rados_read_op_operate(rop, ioctx, obj, 0));
+  rados_release_read_op(rop);
+
+  EXPECT_EQ(0, r_keys);
+  EXPECT_EQ(0, more_keys) <<
+    "reading thru end of data forwards means there is no more";
+  EXPECT_EQ(9u, rados_omap_iter_size(iter_keys));
+
+  compare_omap_keys(&keys[9], 9, iter_keys);
+
+  EXPECT_EQ(0, r_vals);
+  EXPECT_EQ(0, more_vals) <<
+    "reading thru end of data forwards means there is no more";
+  EXPECT_EQ(9u, rados_omap_iter_size(iter_vals));
+
+  compare_omap_vals(&keys[9], &vals[9], &lens[9], 9, iter_vals,
+                    "expecting gh4 through mn as forward from gh3");
+
+  // reverse midway
+  rop = rados_create_read_op();
+  rados_read_op_omap_get_keys_rev(rop, "gh3", 12, &iter_keys, &more_keys, &r_keys);
+  rados_read_op_omap_get_vals_rev(rop, "gh3", "", 12, &iter_vals, &more_vals, &r_vals);
+  ASSERT_EQ(0, rados_read_op_operate(rop, ioctx, obj, 0));
+  rados_release_read_op(rop);
+
+  EXPECT_EQ(0, r_keys);
+  EXPECT_EQ(0, more_keys) <<
+    "reading thru end of data reversed means there is no more";
+  EXPECT_EQ(9u, rados_omap_iter_size(iter_keys));
+
+  compare_omap_keys(&keys[0], 9, iter_keys);
+
+  EXPECT_EQ(0, r_vals);
+  EXPECT_EQ(0, more_vals) <<
+    "reading thru end of data in reverse means there is no more";
+  EXPECT_EQ(9u, rados_omap_iter_size(iter_vals));
+
+  compare_omap_vals(&keys[0], &vals[0], &lens[0], 9, iter_vals,
+                    "expecting ab through gh2 as reverse from gh3");
+
+  // reverse from end, tests starting after "" in reverse means very end
+  rop = rados_create_read_op();
+  rados_read_op_omap_get_keys_rev(rop, "", 12, &iter_keys, &more_keys, &r_keys);
+  rados_read_op_omap_get_vals_rev(rop, "", "", 12, &iter_vals, &more_vals, &r_vals);
+  ASSERT_EQ(0, rados_read_op_operate(rop, ioctx, obj, 0));
+  rados_release_read_op(rop);
+
+  EXPECT_EQ(0, r_keys);
+  EXPECT_EQ(1, more_keys) <<
+    "reading not to end of data in reverse means there is more";
+  EXPECT_EQ(12u, rados_omap_iter_size(iter_keys));
+
+  compare_omap_keys(&keys[6], 12, iter_keys);
+
+  EXPECT_EQ(0, r_vals);
+  EXPECT_EQ(1, more_vals) <<
+    "reading not to end of data in reverse means there is more";
+  EXPECT_EQ(12u, rados_omap_iter_size(iter_vals));
+
+  compare_omap_vals(&keys[6], &vals[6], &lens[6], 12, iter_vals,
+                    "expecting gh1 through mn as pulling 12 in reverse from end");
+
+  // filter prefix forward from extreme
+  rop = rados_create_read_op();
+  rados_read_op_omap_get_vals2(rop, "", "gh", 12, &iter_vals, &more_vals, &r_vals);
+  ASSERT_EQ(0, rados_read_op_operate(rop, ioctx, obj, 0));
+  rados_release_read_op(rop);
+
+  EXPECT_EQ(0, r_vals);
+  EXPECT_EQ(0, more_vals) <<
+    "reading all of filtered data forward means there is no more";
+  EXPECT_EQ(6u, rados_omap_iter_size(iter_vals));
+
+  compare_omap_vals(&keys[6], &vals[6], &lens[6], 6, iter_vals,
+                    "expecting gh1 through gh6 forward from start filtering gh prefix");
+
+  // filter prefix reverse from extreme
+  rop = rados_create_read_op();
+  rados_read_op_omap_get_vals_rev(rop, "", "gh", 12, &iter_vals, &more_vals, &r_vals);
+  ASSERT_EQ(0, rados_read_op_operate(rop, ioctx, obj, 0));
+  rados_release_read_op(rop);
+
+  EXPECT_EQ(0, r_vals);
+  EXPECT_EQ(0, more_vals) <<
+    "reading all of filtered data in reverse means there is no more";
+  EXPECT_EQ(6u, rados_omap_iter_size(iter_vals));
+
+  compare_omap_vals(&keys[6], &vals[6], &lens[6], 6, iter_vals,
+                    "expecting gh1 through gh6 reverse from end filtering gh prefix");
+
+  // filter prefix forward from extreme partial
+  rop = rados_create_read_op();
+  rados_read_op_omap_get_vals2(rop, "", "gh", 4, &iter_vals, &more_vals, &r_vals);
+  ASSERT_EQ(0, rados_read_op_operate(rop, ioctx, obj, 0));
+  rados_release_read_op(rop);
+
+  EXPECT_EQ(0, r_vals);
+  EXPECT_EQ(1, more_vals) <<
+    "reading part of filtered data forward means there is more";
+  EXPECT_EQ(4u, rados_omap_iter_size(iter_vals));
+
+  compare_omap_vals(&keys[6], &vals[6], &lens[6], 4, iter_vals,
+                    "expecting gh through gh4 forward from start filtering gh "
+                    "prefix asking for just 4");
+
+  // filter prefix reverse from extreme partial
+  rop = rados_create_read_op();
+  rados_read_op_omap_get_vals_rev(rop, "", "gh", 4, &iter_vals, &more_vals, &r_vals);
+  ASSERT_EQ(0, rados_read_op_operate(rop, ioctx, obj, 0));
+  rados_release_read_op(rop);
+
+  EXPECT_EQ(0, r_vals);
+  EXPECT_EQ(1, more_vals) <<
+    "reading part of filtered data in reverse means there is more";
+  EXPECT_EQ(4u, rados_omap_iter_size(iter_vals));
+
+  compare_omap_vals(&keys[8], &vals[8], &lens[8], 4, iter_vals,
+                    "expexting gh2 through gh6 reverse from end filtering gh "
+                    "prefix asking for just 4");
+
+  // filter prefix forward from midway
+  rop = rados_create_read_op();
+  rados_read_op_omap_get_vals2(rop, "gh3", "gh", 12, &iter_vals, &more_vals, &r_vals);
+  ASSERT_EQ(0, rados_read_op_operate(rop, ioctx, obj, 0));
+  rados_release_read_op(rop);
+
+  EXPECT_EQ(0, r_vals);
+  EXPECT_EQ(0, more_vals) <<
+    "reading through end of filtered data forward means there is no more";
+  EXPECT_EQ(3u, rados_omap_iter_size(iter_vals));
+
+  compare_omap_vals(&keys[9], &vals[9], &lens[9], 3, iter_vals,
+                    "expecting gh4 through gh6 starting at gh3 forward, filtering "
+                    "gh prefix, and asking for 12");
+
+  // filter prefix reverse from midway
+  rop = rados_create_read_op();
+  rados_read_op_omap_get_vals_rev(rop, "gh3", "gh", 12, &iter_vals, &more_vals, &r_vals);
+  ASSERT_EQ(0, rados_read_op_operate(rop, ioctx, obj, 0));
+  rados_release_read_op(rop);
+
+  EXPECT_EQ(0, r_vals);
+  EXPECT_EQ(0, more_vals) <<
+    "reading through end of filtered data in reverse means there is no more";
+  EXPECT_EQ(3u, rados_omap_iter_size(iter_vals));
+
+  compare_omap_vals(&keys[6], &vals[6], &lens[6], 3, iter_vals,
+                    "expecting gh through gh4 starting at gh3 backward, filtering "
+                    "gh prefix, and asking for 12");
+
+  // filtered prefix with no matches forward
+  rop = rados_create_read_op();
+  rados_read_op_omap_get_vals2(rop, "", "gh3", 12, &iter_vals, &more_vals, &r_vals);
+  ASSERT_EQ(0, rados_read_op_operate(rop, ioctx, obj, 0));
+  rados_release_read_op(rop);
+
+  EXPECT_EQ(0, r_vals);
+  EXPECT_EQ(0, more_vals) <<
+    "reading through unmatched filtered data forward means there is no more";
+  EXPECT_EQ(0u, rados_omap_iter_size(iter_vals));
+
+  // filtered prefix with no matches reverse
+  rop = rados_create_read_op();
+  rados_read_op_omap_get_vals_rev(rop, "", "gh3", 12, &iter_vals, &more_vals, &r_vals);
+  ASSERT_EQ(0, rados_read_op_operate(rop, ioctx, obj, 0));
+  rados_release_read_op(rop);
+
+  EXPECT_EQ(0, r_vals);
+  EXPECT_EQ(0, more_vals) <<
+    "reading through unmatched filtered data in reverse means there is no more";
+  EXPECT_EQ(0u, rados_omap_iter_size(iter_vals));
 
   // clear the rest and check there are none left
   op = rados_create_write_op();

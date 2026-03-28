@@ -269,6 +269,20 @@ void librados::ObjectReadOperation::omap_get_vals2(
 		   prval);
 }
 
+void librados::ObjectReadOperation::omap_get_vals_rev(
+  const std::string &start_before,
+  const std::string &filter_prefix,
+  uint64_t max_return,
+  std::map<std::string, bufferlist> *out_vals,
+  bool *pmore,
+  int *prval)
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  o->omap_get_vals(start_before, filter_prefix, max_return, out_vals, pmore,
+		   prval);
+}
+
 void librados::ObjectReadOperation::omap_get_vals(
   const std::string &start_after,
   uint64_t max_return,
@@ -292,6 +306,18 @@ void librados::ObjectReadOperation::omap_get_vals2(
   o->omap_get_vals(start_after, "", max_return, out_vals, pmore, prval);
 }
 
+void librados::ObjectReadOperation::omap_get_vals_rev(
+  const std::string &start_before,
+  uint64_t max_return,
+  std::map<std::string, bufferlist> *out_vals,
+  bool *pmore,
+  int *prval)
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  o->omap_get_vals_rev(start_before, "", max_return, out_vals, pmore, prval);
+}
+
 void librados::ObjectReadOperation::omap_get_keys(
   const std::string &start_after,
   uint64_t max_return,
@@ -313,6 +339,18 @@ void librados::ObjectReadOperation::omap_get_keys2(
   ceph_assert(impl);
   ::ObjectOperation *o = &impl->o;
   o->omap_get_keys(start_after, max_return, out_keys, pmore, prval);
+}
+
+void librados::ObjectReadOperation::omap_get_keys_rev(
+  const std::string &start_before,
+  uint64_t max_return,
+  std::set<std::string> *out_keys,
+  bool *pmore,
+  int *prval)
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  o->omap_get_keys_rev(start_before, max_return, out_keys, pmore, prval);
 }
 
 void librados::ObjectReadOperation::omap_get_header(bufferlist *bl, int *prval)
