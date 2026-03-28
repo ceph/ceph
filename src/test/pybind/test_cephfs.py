@@ -831,6 +831,31 @@ def test_snapdiff(testdir):
     # remove directory
     purge_dir(b"/snapdiff_test");
 
+def test_blockdiff(testdir):
+    """
+    Tests the incremental sync syncs only the changed portions of a huge file.
+    """
+    cephfs.mkdir("/blockdiff_testdir", 0o755)
+    fd = cephfs.open('/blockdiff_testdir/file-1', 'w', 0o755)
+    cephfs.write(fd, b"1234", 0)
+    cephfs.close(fd)
+    # take a snapshot
+    cephfs.mksnap("/blockdiff_testdir", "snap1", 0o755)
+    # make modifications to the file
+    fd = cephfs.open('/blockdiff_testdir/file-1', 'w', 0o755)
+    cephfs.write(fd, b"5678", 4)
+    cephfs.close(fd)
+    # take a snapshot
+    cephfs.mksnap("/blockdiff_testdir", "snap2", 0o755)
+    diff = cephfs.openblockdiff(b"/blockdiff_testdir", b"file-1", b"snap1", b"snap2")
+    num_blocks, offset, length = diff.readblock()
+    assert_equal(1, num_blocks)
+    assert_equal(0, offset)
+    assert_equal(8, length)
+    diff.closeblockdiff()
+    # remove directory
+    purge_dir(b"/blockdiff_testdir")
+
 def test_single_target_command():
     command = {'prefix': u'session ls', 'format': 'json'}
     mds_spec  = "a"
