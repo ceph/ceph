@@ -41,7 +41,7 @@ import { DataTableModule } from '~/app/shared/datatable/datatable.module';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { OverviewStorageService } from '~/app/shared/api/storage-overview.service';
 
-const SECONDS_PER_HOUR = 3600;
+const STEP_SECONDS = 900;
 const SECONDS_PER_DAY = 86400;
 const TREND_DAYS = 7;
 
@@ -204,15 +204,40 @@ export class OverviewComponent {
 
   // getTrendData() is already a polling stream through getRangeQueriesData()
   // hence no refresh needed.
+  /*
+   * Creates an additional data point with zero usage one second before the first recorded timestamp.
+   * This ensures the trend chart displays a visible line from zero to the actual data point when all values are identical.
+   * The synthetic point uses a timestamp of (firstTs - 1) * 1000 milliseconds with a Used value of 0.
+   */
   readonly trendData$ = this.overviewStorageService
     .getTrendData(
       Math.floor(Date.now() / 1000) - TREND_DAYS * SECONDS_PER_DAY,
       Math.floor(Date.now() / 1000),
-      SECONDS_PER_HOUR
+      STEP_SECONDS
     )
     .pipe(
       map((result) => {
         const values = result?.TOTAL_RAW_USED ?? [];
+
+        if (!values.length) return [];
+
+        const nums = values.map(([, v]) => Number(v));
+        const isFlat = nums.every((v) => v === nums[0]);
+
+        if (isFlat) {
+          const firstTs = values[0][0];
+
+          return [
+            {
+              timestamp: new Date((firstTs - STEP_SECONDS) * 1000),
+              values: { Used: 0 }
+            },
+            ...values.map(([ts, val]) => ({
+              timestamp: new Date(ts * 1000),
+              values: { Used: Number(val) }
+            }))
+          ];
+        }
 
         return values.map(([ts, val]) => ({
           timestamp: new Date(ts * 1000),
