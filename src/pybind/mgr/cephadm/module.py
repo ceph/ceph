@@ -412,6 +412,15 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             desc='Maximum number of OSD daemons upgraded in parallel.'
         ),
         Option(
+            'pg_autoscale_during_upgrade',
+            type='bool',
+            default=False,
+            desc='Opt-in to keep PG autoscaling enabled during OSD upgrades. '
+            'When False (default), cephadm disables pool autoscaling (sets noautoscale) '
+            'before OSD upgrades and restores it on completion/stop/failure. '
+            'Set to true to keep autoscaling on during upgrade.'
+        ),
+        Option(
             'service_discovery_port',
             type='int',
             default=8765,
@@ -578,6 +587,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.default_registry = ''
             self.autotune_memory_target_ratio = 0.0
             self.autotune_interval = 0
+            self.pg_autoscale_during_upgrade = False
             self.ssh_user: Optional[str] = None
             self._ssh_options: Optional[str] = None
             self.tkey = NamedTemporaryFile()

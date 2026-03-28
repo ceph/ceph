@@ -71,7 +71,10 @@ class UpgradeState:
                  services: Optional[List[str]] = None,
                  total_count: Optional[int] = None,
                  remaining_count: Optional[int] = None,
+                 noautoscale_set: Optional[bool] = False,
+                 prior_autoscale: Optional[bool] = True,
                  ):
+
         self._target_name: str = target_name  # Use CephadmUpgrade.target_image instead.
         self.progress_id: str = progress_id
         self.target_id: Optional[str] = target_id
@@ -88,6 +91,8 @@ class UpgradeState:
         self.services = services
         self.total_count = total_count
         self.remaining_count = remaining_count
+        self.noautoscale_set = noautoscale_set
+        self.prior_autoscale = prior_autoscale
 
     def to_json(self) -> dict:
         return {
@@ -106,6 +111,8 @@ class UpgradeState:
             'services': self.services,
             'total_count': self.total_count,
             'remaining_count': self.remaining_count,
+            'noautoscale_set': self.noautoscale_set,
+            'prior_autoscale': self.prior_autoscale,
         }
 
     @classmethod
@@ -310,6 +317,37 @@ class CephadmUpgrade:
             r["tags"] = sorted(ls)
         return r
 
+    def _hosts_include_osds(self, hosts: List[str]) -> bool:
+        """Return True if any OSD daemon is on one of the given hosts."""
+        osds = self.mgr.cache.get_daemons_by_type('osd')
+        hosts_set = set(hosts)
+        for d in osds:
+            if d.hostname in hosts_set:
+                return True
+        return False
+
+    def _services_include_osds(self, services: List[str]) -> bool:
+        for s in services:
+            if s in self.mgr.spec_store:
+                spec = self.mgr.spec_store[s].spec
+                if (spec is not None
+                        and 'osd' in orchestrator.service_to_daemon_types(spec.service_type)):
+                    return True
+        return False
+
+    def _upgrade_includes_osds(self, daemon_types: Optional[List[str]],
+                               hosts: Optional[List[str]],
+                               services: Optional[List[str]]) -> bool:
+        """Return True if this upgrade will include OSD daemons."""
+        if daemon_types is not None:
+            return 'osd' in daemon_types
+        if services is not None:
+            return self._services_include_osds(services)
+        if hosts is not None:
+            return self._hosts_include_osds(hosts)
+        # No filter = full upgrade, includes OSDs
+        return True
+
     def upgrade_start(self, image: str, version: str, daemon_types: Optional[List[str]] = None,
                       hosts: Optional[List[str]] = None, services: Optional[List[str]] = None, limit: Optional[int] = None) -> str:
         fail_fs_value = cast(bool, self.mgr.get_module_option_ex(
@@ -358,6 +396,25 @@ class CephadmUpgrade:
             total_count=limit,
             remaining_count=limit,
         )
+        # One-time PG autoscaling decision when upgrade includes OSDs
+        if self._upgrade_includes_osds(daemon_types, hosts, services):
+            # prior_autoscale: current OSD noautoscale status from osd_map flags (before we touch it)
+            prior_autoscale = self._is_upgrade_autoscaling_allowed()
+            opt_in = bool(self.mgr.pg_autoscale_during_upgrade)
+            # Only opt-in keeps autoscaling on during upgrade; otherwise turn off and restore after
+            autoscale_during_upgrade = opt_in
+            logger.info(
+                'Upgrade: PG autoscaling prior=%s, mgr/cephadm/pg_autoscale_during_upgrade=%s, '
+                'autoscaling during upgrade=%s',
+                prior_autoscale, opt_in, autoscale_during_upgrade
+            )
+            if not autoscale_during_upgrade:
+                # If not opted-in disable the autoscale during upgrade and
+                # restore the state after upgrade complete/stops
+                if self._set_noautoscale():
+                    self.upgrade_state.noautoscale_set = True
+                    # Store prior state from current OSD noautoscale status for restore
+                    self.upgrade_state.prior_autoscale = prior_autoscale
         self._update_upgrade_progress(0.0)
         self._save_upgrade_state()
         self._clear_upgrade_health_checks()
@@ -484,6 +541,8 @@ class CephadmUpgrade:
     def upgrade_stop(self) -> str:
         if not self.upgrade_state:
             return 'No upgrade in progress'
+        if getattr(self.upgrade_state, 'noautoscale_set', False):
+            self._unset_noautoscale()
         if self.upgrade_state.progress_id:
             self.mgr.remote('progress', 'complete',
                             self.upgrade_state.progress_id)
@@ -563,6 +622,80 @@ class CephadmUpgrade:
             tries -= 1
         return False
 
+    def _is_upgrade_autoscaling_allowed(self) -> bool:
+        """Return True if PG autoscaling is allowed based on current OSD noautoscale status.
+        Reads osd_map flags; True when noautoscale is not set, False when it is set.
+        """
+        osdmap = self.mgr.get("osd_map")
+        flags_str = (osdmap.get('flags') or '') if osdmap else ''
+        return 'noautoscale' not in flags_str
+
+    def _set_noautoscale(self) -> bool:
+        """Set noautoscale (disable PG autoscaling) before OSD upgrade. Returns True on success."""
+        try:
+            self.mgr.check_mon_command({
+                'prefix': 'config set',
+                'who': 'global',
+                'name': 'osd_pool_default_pg_autoscale_mode',
+                'value': 'off',
+            })
+            try:
+                self.mgr.check_mon_command({
+                    'prefix': 'osd set',
+                    'key': 'noautoscale',
+                })
+            except Exception as e:
+                logger.warning('Upgrade: Failed to set noautoscale: %s', e)
+                logger.warning(
+                    'Upgrade: Partial state: osd_pool_default_pg_autoscale_mode set to off '
+                    'but osd noautoscale flag not set. Check cluster config.'
+                )
+                return False
+            logger.info('Upgrade: Set noautoscale (disable PG autoscaling) for OSD upgrade')
+            return True
+        except Exception as e:
+            logger.warning('Upgrade: Failed to set noautoscale: %s', e)
+            return False
+
+    def _unset_noautoscale(self) -> None:
+        """Restore PG autoscaling to prior state on upgrade completion/stop/failure.
+        Retries on failure to improve resilience against transient mon command failures.
+        """
+        prior_autoscale = getattr(self.upgrade_state, 'prior_autoscale', True)
+        restore_on = prior_autoscale
+        retry_delays = [2, 5, 10]
+        for i, sleep_secs in enumerate(retry_delays):
+            try:
+                self.mgr.check_mon_command({
+                    'prefix': 'config set',
+                    'who': 'global',
+                    'name': 'osd_pool_default_pg_autoscale_mode',
+                    'value': 'on' if restore_on else 'off',
+                })
+                if restore_on:
+                    self.mgr.check_mon_command({
+                        'prefix': 'osd unset',
+                        'key': 'noautoscale',
+                    })
+                else:
+                    self.mgr.check_mon_command({
+                        'prefix': 'osd set',
+                        'key': 'noautoscale',
+                    })
+                logger.info(
+                    'Upgrade: Restored PG autoscaling to %s',
+                    'on' if restore_on else 'off'
+                )
+                return
+            except Exception as e:
+                logger.warning(
+                    'Upgrade: Failed to restore noautoscale (retry in %ds): %s',
+                    sleep_secs, e
+                )
+                if i < len(retry_delays) - 1:
+                    time.sleep(sleep_secs)
+        logger.warning('Upgrade: Failed to restore noautoscale after retries')
+
     def _clear_upgrade_health_checks(self) -> None:
         for k in self.UPGRADE_ERRORS:
             if k in self.mgr.health_checks:
@@ -580,6 +713,9 @@ class CephadmUpgrade:
                                                         alert['summary']))
         self.upgrade_state.error = alert_id + ': ' + alert['summary']
         self.upgrade_state.paused = True
+        # Do not restore PG autoscaling here: upgrade is only paused. Restore
+        # only on upgrade_stop or _mark_upgrade_complete so that resume
+        # continues with autoscaling still disabled for OSD upgrades.
         self._save_upgrade_state()
         self.mgr.health_checks[alert_id] = alert
         self.mgr.set_health_checks(self.mgr.health_checks)
@@ -1086,6 +1222,9 @@ class CephadmUpgrade:
         if not self.upgrade_state:
             logger.debug('_mark_upgrade_complete upgrade already marked complete, exiting')
             return
+        if getattr(self.upgrade_state, 'noautoscale_set', False):
+            self._unset_noautoscale()
+            self.upgrade_state.noautoscale_set = False
         logger.info('Upgrade: Complete!')
         if self.upgrade_state.progress_id:
             self.mgr.remote('progress', 'complete',
