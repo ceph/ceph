@@ -35,7 +35,7 @@ terms of the LGPL2.1 or LGPL3.0. For full details, see the file
 `COPYING`_ in the top-level directory of the source-code tree.
 
 .. _`COPYING`:
-  https://github.com/ceph/ceph/blob/master/COPYING
+  https://github.com/ceph/ceph/blob/main/COPYING
 
 Source code repositories
 ------------------------

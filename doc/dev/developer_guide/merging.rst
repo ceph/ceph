@@ -111,7 +111,7 @@ What ?
 ^^^^^^
 
 * Bug fixes
-* Features are sometime accepted
+* Features are sometimes accepted
 * Commits should be cherry-picked from *main* when possible
 * Commits that are not cherry-picked from *main* must pertain to a bug unique to
   the stable release

@@ -188,7 +188,7 @@ To run a workunit (e.g ``mon/osd.sh``) do the following::
 
     $ ./qa/workunits/mon/osd.sh
 
-.. _test_reconnect_timeout: https://github.com/ceph/ceph/blob/master/qa/tasks/cephfs/test_client_recovery.py#L133
-.. _TestClientRecovery: https://github.com/ceph/ceph/blob/master/qa/tasks/cephfs/test_client_recovery.py#L86
+.. _test_reconnect_timeout: https://github.com/ceph/ceph/blob/main/qa/tasks/cephfs/test_client_recovery.py#L133
+.. _TestClientRecovery: https://github.com/ceph/ceph/blob/main/qa/tasks/cephfs/test_client_recovery.py#L86
 .. _teuthology: https://github.com/ceph/teuthology
-.. _vstart_runner.py: https://github.com/ceph/ceph/blob/master/qa/tasks/vstart_runner.py
+.. _vstart_runner.py: https://github.com/ceph/ceph/blob/main/qa/tasks/vstart_runner.py
