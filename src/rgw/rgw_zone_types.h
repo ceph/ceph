@@ -499,6 +499,8 @@ struct RGWZoneGroupPlacementTierS3 {
 
   /* Should below be bucket/zone specific?? */
   std::string target_path;
+  bool target_by_bucket{false};
+  std::string target_by_bucket_prefix;
   std::map<std::string, RGWTierACLMapping> acl_mappings;
 
   uint64_t multipart_sync_threshold{DEFAULT_MULTIPART_SYNC_PART_SIZE};
@@ -506,9 +508,14 @@ struct RGWZoneGroupPlacementTierS3 {
 
   int update_params(const JSONFormattable& config);
   int clear_params(const JSONFormattable& config);
+  std::string make_target_bucket_name(const std::string& zonegroup_name,
+                                      const std::string& storage_class,
+                                      const std::string& bucket_name,
+                                      const std::string& tenant,
+                                      const std::string& owner = {}) const;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(endpoint, bl);
     encode(key, bl);
     encode(region, bl);
@@ -519,11 +526,13 @@ struct RGWZoneGroupPlacementTierS3 {
     encode(multipart_sync_threshold, bl);
     encode(multipart_min_part_size, bl);
     encode(location_constraint, bl);
+    encode(target_by_bucket, bl);
+    encode(target_by_bucket_prefix, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     decode(endpoint, bl);
     decode(key, bl);
     decode(region, bl);
@@ -540,6 +549,10 @@ struct RGWZoneGroupPlacementTierS3 {
 
     if (struct_v >= 2) {
       decode(location_constraint, bl);
+    }
+    if (struct_v >= 3) {
+      decode(target_by_bucket, bl);
+      decode(target_by_bucket_prefix, bl);
     }
 
     DECODE_FINISH(bl);
