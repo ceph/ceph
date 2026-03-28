@@ -4,6 +4,7 @@ import logging
 import os
 import subprocess
 import tempfile
+from threading import Lock
 from typing import Dict, Tuple, Any, List, cast, Optional, TYPE_CHECKING
 from configparser import ConfigParser
 from io import StringIO
@@ -28,12 +29,45 @@ class NFSService(CephService):
     TYPE = 'nfs'
     DEFAULT_EXPORTER_PORT = 9587
 
+    def __init__(self, mgr: "CephadmOrchestrator"):
+        super().__init__(mgr)
+        self._fencing_store_lock = Lock()
+
     @property
     def needs_monitoring(self) -> bool:
         return True
 
     def ranked(self, spec: ServiceSpec) -> bool:
         return True
+
+    def _update_failed_fencing_services(
+        self,
+        service_name: str,
+        add_if_failed: bool,
+        remove_if_success: bool
+    ) -> None:
+        with self._fencing_store_lock:
+            failed_services = self.mgr.get_store('nfs_fencing_failed_services')
+            services = failed_services.split(',') if failed_services else []
+            if add_if_failed:
+                if service_name not in services:
+                    services.append(service_name)
+            elif remove_if_success:
+                if service_name in services:
+                    services.remove(service_name)
+            val = ','.join(services) if services else None
+            if failed_services or services:
+                self.mgr.set_store('nfs_fencing_failed_services', val)
+
+    def update_failed_fencing_services_remove_missing(self, services_to_remove: List[str]) -> None:
+        if not services_to_remove:
+            return
+        with self._fencing_store_lock:
+            failed_services = self.mgr.get_store('nfs_fencing_failed_services')
+            services = failed_services.split(',') if failed_services else []
+            updated = [s for s in services if s not in services_to_remove]
+            val = ','.join(updated) if updated else None
+            self.mgr.set_store('nfs_fencing_failed_services', val)
 
     def fence(self, daemon_id: str) -> None:
         logger.info(f'Fencing old nfs.{daemon_id}')
@@ -48,16 +82,25 @@ class NFSService(CephService):
                         spec: ServiceSpec,
                         rank_map: Dict[int, Dict[int, Optional[str]]],
                         num_ranks: int) -> None:
+        service_name = spec.service_name()
+        fence_failed = False
         for rank, m in list(rank_map.items()):
             if rank >= num_ranks:
                 for daemon_id in m.values():
                     if daemon_id is not None:
                         self.fence(daemon_id)
-                del rank_map[rank]
                 nodeid = f'{rank}'
-                self.mgr.log.info(f'Removing {nodeid} from the ganesha grace table')
-                self.run_grace_tool(cast(NFSServiceSpec, spec), 'remove', nodeid)
-                self.mgr.spec_store.save_rank_map(spec.service_name(), rank_map)
+                self.mgr.log.info(
+                    "Removing %s from the ganesha grace table for service %s", nodeid, service_name
+                )
+                try:
+                    self.run_grace_tool(cast(NFSServiceSpec, spec), 'remove', nodeid)
+                    # Only delete from rank_map if grace tool succeeds
+                    del rank_map[rank]
+                    self.mgr.spec_store.save_rank_map(service_name, rank_map)
+                except RuntimeError:
+                    self.mgr.log.exception('Got exception while removing node id from grace table')
+                    fence_failed = True
             else:
                 max_gen = max(m.keys())
                 for gen, daemon_id in list(m.items()):
@@ -65,7 +108,8 @@ class NFSService(CephService):
                         if daemon_id is not None:
                             self.fence(daemon_id)
                         del rank_map[rank][gen]
-                        self.mgr.spec_store.save_rank_map(spec.service_name(), rank_map)
+                        self.mgr.spec_store.save_rank_map(service_name, rank_map)
+        self._update_failed_fencing_services(service_name, fence_failed, not fence_failed)
 
     def config(self, spec: NFSServiceSpec) -> None:  # type: ignore
         from nfs.cluster import create_ganesha_pool
@@ -117,7 +161,9 @@ class NFSService(CephService):
         rados_keyring = self.create_keyring(daemon_spec)
 
         # ensure rank is known to ganesha
-        self.mgr.log.info(f'Ensuring {nodeid} is in the ganesha grace table')
+        self.mgr.log.info(
+            'Ensuring %s is in the ganesha grace table for service %s', nodeid, daemon_spec.service_name
+        )
         self.run_grace_tool(spec, 'add', nodeid)
 
         # create the rados config object
@@ -316,10 +362,19 @@ class NFSService(CephService):
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                     timeout=10)
             if result.returncode:
+                stderr = result.stderr.decode("utf-8")
                 self.mgr.log.warning(
-                    f'ganesha-rados-grace tool failed: {result.stderr.decode("utf-8")}'
+                    'ganesha-rados-grace tool failed for service %s, err: %s rc: %s',
+                    spec.service_name(), stderr, result.returncode
                 )
-                raise RuntimeError(f'grace tool failed: {result.stderr.decode("utf-8")}')
+                if action == 'remove' and 'Failure: -126' in stderr:
+                    self.mgr.log.info(
+                        'Ignore ganesha-rados-grace tool remove failure as %s does not exists for %s service',
+                        nodeid, spec.service_name()
+                    )
+                    return
+
+                raise RuntimeError(f'grace tool failed for service {spec.service_name()}: {stderr}')
 
         finally:
             self.mgr.check_mon_command({
