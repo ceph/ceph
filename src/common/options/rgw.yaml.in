@@ -3241,6 +3241,25 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_crypt_sse_algorithm
+  type: str
+  level: advanced
+  desc: Default encryption algorithm for server-side encryption
+  long_desc: Specifies the default AES encryption algorithm to use for new objects
+    encrypted with SSE-C, SSE-KMS, SSE-S3, or RGW-AUTO modes. Valid values are
+    aes-256-cbc (legacy, compatible with older RGW versions) and aes-256-gcm
+    (recommended, provides authenticated encryption). Existing encrypted objects
+    are always decrypted using the algorithm specified in their metadata,
+    regardless of this setting.
+  default: aes-256-cbc
+  services:
+  - rgw
+  see_also:
+  - rgw_crypt_require_ssl
+  enum_values:
+  - aes-256-cbc
+  - aes-256-gcm
+  with_legacy: true
 - name: rgw_crypt_sse_s3_backend
   type: str
   level: advanced

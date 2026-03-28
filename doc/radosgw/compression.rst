@@ -110,8 +110,16 @@ for a given bucket:
   }
 
 Other commands and APIs will report object and bucket sizes based on their
-uncompressed data. 
+uncompressed data.
 
-The ``size_utilized`` and ``size_kb_utilized`` fields represent the total
-size of compressed data, in bytes and kilobytes respectively.
+The ``size_utilized`` and ``size_kb_utilized`` fields represent the actual
+bytes stored on disk, in bytes and kilobytes respectively. This value reflects
+the effects of both compression and encryption:
+
+* With compression only: size after compression
+* With AEAD encryption only (e.g., AES-256-GCM): size after encryption
+  (includes authentication tag overhead)
+* With both compression and encryption: size after compression then encryption
+
+See :ref:`radosgw-encryption` for details on encryption algorithms.
 

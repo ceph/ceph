@@ -795,7 +795,12 @@ int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> 
   }
 
   static constexpr bool copy_source = false;
-  return ::get_decrypt_filter(filter, cb, s, attrs, manifest_bl, &crypt_http_responses, copy_source);
+  // Only use part_num for actual multipart objects (parts_count is set)
+  uint32_t part_num = (multipart_part_num && multipart_parts_count)
+                        ? static_cast<uint32_t>(*multipart_part_num)
+                        : 0;
+  return ::get_decrypt_filter(filter, cb, s, attrs, manifest_bl, &crypt_http_responses, copy_source,
+                              part_num, encrypted_obj_size);
 }
 
 int RGWGetObj_ObjStore_S3::verify_requester(const rgw::auth::StrategyRegistry& auth_registry, optional_yield y) 
@@ -3028,7 +3033,10 @@ int RGWPutObj_ObjStore_S3::get_decrypt_filter(
     bufferlist* manifest_bl)
 {
   static constexpr bool copy_source = true;
-  return ::get_decrypt_filter(filter, cb, s, attrs, manifest_bl, nullptr, copy_source);
+  rgw_crypt_src_identity src_identity{copy_source_bucket_info.bucket.bucket_id, copy_source_bucket_name, copy_source_object_name};
+  // part_num=0 for copy source (full object read)
+  return ::get_decrypt_filter(filter, cb, s, attrs, manifest_bl, nullptr, copy_source,
+                              0, 0, &src_identity);
 }
 
 int RGWPutObj_ObjStore_S3::get_encrypt_filter(
@@ -3048,8 +3056,10 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
       /* We are adding to existing object.
        * We use crypto mode that configured as if we were decrypting. */
       static constexpr bool copy_source = false;
+      // Pass part_number for AEAD IV derivation - ensures unique IVs across parts
       res = rgw_s3_prepare_decrypt(s, s->yield, obj->get_attrs(),
-                                   &block_crypt, &crypt_http_responses, copy_source);
+                                   &block_crypt, &crypt_http_responses, copy_source,
+                                   multipart_part_num);
       if (res == 0 && block_crypt != nullptr)
         filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt), s->yield));
     }
@@ -3058,8 +3068,9 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
   else
   {
     std::unique_ptr<BlockCrypt> block_crypt;
+    // Pass part_number for AEAD IV derivation - ensures unique IVs across parts
     res = rgw_s3_prepare_encrypt(s, s->yield, attrs, &block_crypt,
-                                 crypt_http_responses);
+                                 crypt_http_responses, multipart_part_num);
     if (res == 0 && block_crypt != nullptr) {
       filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt), s->yield));
     }
