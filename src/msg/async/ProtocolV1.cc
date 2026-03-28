@@ -987,7 +987,7 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
     message->put();
     if (connection->has_feature(CEPH_FEATURE_RECONNECT_SEQ) &&
         cct->_conf->ms_die_on_old_message) {
-      ceph_assert(0 == "old msgs despite reconnect_seq feature");
+      ceph_abort_msg("old msgs despite reconnect_seq feature");
     }
     return nullptr;
   }
@@ -995,7 +995,7 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
     ldout(cct, 0) << __func__ << " missed message?  skipped from seq "
                   << cur_seq << " to " << message->get_seq() << dendl;
     if (cct->_conf->ms_die_on_skipped_message) {
-      ceph_assert(0 == "skipped incoming seq");
+      ceph_abort_msg("skipped incoming seq");
     }
   }
 

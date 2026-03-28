@@ -272,7 +272,7 @@ public:
 	eligible_queue.erase(
 	  eligible_queue_t::s_iterator_to(std::as_const(*iter)));
       } else {
-	assert(0 == "impossible status");
+        ceph_abort_msg("invalid iter status for class removal");
       }
       iter->status = status_t::INVALID;
       removal_registry.erase_and_dispose(
@@ -312,7 +312,7 @@ public:
 	eligible_queue.erase(
 	    eligible_queue_t::s_iterator_to(std::as_const(*iter)));
       } else {
-	assert(0 == "impossible status");
+        ceph_abort_msg("invalid iter status for class removal");
       }
       iter->status = not_before_queue_t::status_t::INVALID;
       removal_registry.erase_and_dispose(

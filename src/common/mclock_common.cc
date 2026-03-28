@@ -133,7 +133,7 @@ const dmc::ClientInfo *ClientRegistry::get_info(
   const scheduler_id_t &id) const {
   switch (id.class_id) {
   case SchedulerClass::immediate:
-    ceph_assert(0 == "Cannot schedule immediate");
+    ceph_abort_msg("Cannot schedule immediate");
     return (dmc::ClientInfo*)nullptr;
   case SchedulerClass::client:
     return get_external_client(id.client_profile_id);

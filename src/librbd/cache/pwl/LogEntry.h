@@ -41,7 +41,7 @@ public:
     return false;
   }
   virtual void set_flushed(bool flushed) {
-    ceph_assert(false);
+    ceph_abort();
   }
   virtual unsigned int write_bytes() const {
     return 0;
@@ -54,11 +54,11 @@ public:
   }
   virtual void writeback(librbd::cache::ImageWritebackInterface &image_writeback,
                          Context *ctx) {
-    ceph_assert(false);
+    ceph_abort();
   };
   virtual void writeback_bl(librbd::cache::ImageWritebackInterface &image_writeback,
                  Context *ctx, ceph::bufferlist &&bl) {
-    ceph_assert(false);
+    ceph_abort();
   }
   virtual bool is_write_entry() const {
     return false;
@@ -261,7 +261,7 @@ public:
     return this->completed;
   }
   void copy_cache_bl(bufferlist *out_bl) override {
-    ceph_assert(false);
+    ceph_abort();
   }
   void writeback(librbd::cache::ImageWritebackInterface &image_writeback,
                  Context *ctx) override;

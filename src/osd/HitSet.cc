@@ -43,7 +43,7 @@ HitSet::HitSet(const HitSet::Params& params)
     break;
 
   default:
-    assert (0 == "unknown HitSet type");
+    ceph_abort_msg("unknown HitSet type");
   }
 }
 

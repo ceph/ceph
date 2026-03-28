@@ -47,7 +47,7 @@ struct EstimateResult {
       sha512_digest_t sha512_val = crypto::digest<crypto::SHA512>(chunk);
       fp = sha512_val.to_str();
     } else {
-      ceph_assert(0 == "no support fingerperint algorithm");
+      ceph_abort_msg("unsupported fingerprint algorithm");
     }
 
     std::lock_guard l(lock);
@@ -951,7 +951,7 @@ int make_dedup_object(const po::variables_map &opts)
       } else if (fp_algo == "sha512") {
         return ceph::crypto::digest<ceph::crypto::SHA512>(bl).to_str();
       } else {
-        assert(0 == "unrecognized fingerprint type");
+        ceph_abort_msg("unrecognized fingerprint type");
         return {};
       }
     }();

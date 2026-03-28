@@ -586,7 +586,7 @@ namespace json_spirit
 
         if( !info.hit )
         {
-            ceph_assert( false ); // in theory exception should already have been thrown
+            ceph_abort(); // in theory exception should already have been thrown
             throw_error( info.stop, "error" );
         }
 

@@ -100,7 +100,7 @@ void HybridAllocatorBase<T>::init_rm_free(uint64_t offset, uint64_t length)
             << "Uexpected extent: "
             << " 0x" << o << "~" << l
             << std::dec << dendl;
-          ceph_assert(false);
+          ceph_abort();
         }
       }
     });

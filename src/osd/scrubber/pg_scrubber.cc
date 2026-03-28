@@ -1026,9 +1026,9 @@ std::optional<uint64_t> PgScrubber::select_range()
       candidate_end = back;
       objects.pop_back();
       if (objects.empty()) {
-	ceph_assert(0 ==
-		    "Somehow we got more than 2 objects which"
-		    "have the same head but are not clones");
+        ceph_abort_msg(
+            "There are more than 2 objects which have the same head but are "
+            "not clones");
       }
       back = objects.back();
     }

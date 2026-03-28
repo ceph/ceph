@@ -426,7 +426,7 @@ int KvStoreBench::test_teuthology_aio(next_gen_t distr,
       break;
     default:
       // shouldn't happen here
-      assert(false);
+      ceph_abort();
     }
 
   }

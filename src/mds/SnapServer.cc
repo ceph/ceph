@@ -209,7 +209,7 @@ void SnapServer::_get_reply_buffer(version_t tid, bufferlist *pbl) const
       encode(last_snap, *pbl);
     return;
   }
-  assert (0 == "tid not found");
+  ceph_abort_msg("tid not found");
 }
 
 void SnapServer::_commit(version_t tid, cref_t<MMDSTableRequest> req)

@@ -395,7 +395,7 @@ bool Locker::acquire_locks(const MDRequestRef& mdr,
 	mustpin.insert(object);
       }
     } else {
-      ceph_assert(0 == "locker unknown lock operation");
+      ceph_abort_msg("locker unknown lock operation");
     }
   }
 
@@ -1207,7 +1207,7 @@ void Locker::create_lock_cache(const MDRequestRef& mdr, CInode *diri, file_layou
     } else if (CDentry *dn = dynamic_cast<CDentry*>(p.first)) {
 	dfv.push_back(dn->get_dir());
     } else {
-      ceph_assert(0 == "unknown type of lock parent");
+      ceph_abort_msg("unknown type of lock parent");
     }
   }
   lock_cache->attach_dirfrags(std::move(dfv));

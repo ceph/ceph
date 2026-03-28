@@ -239,7 +239,7 @@ class MissingLoc {
 	  lgeneric_dout(cct, 0) << this << " " << pgid << " unexpected need for "
 				<< i->first << " have " << j->second
 				<< " tried to add " << i->second << dendl;
-	  ceph_assert(0 == "unexpected need for missing item");
+          ceph_abort_msg("unexpected need for missing item");
 	}
       }
     }
