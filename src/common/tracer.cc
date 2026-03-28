@@ -8,7 +8,7 @@
 #ifdef HAVE_JAEGER
 #include "opentelemetry/sdk/trace/batch_span_processor.h"
 #include "opentelemetry/sdk/trace/tracer_provider.h"
-#include "opentelemetry/exporters/jaeger/jaeger_exporter.h"
+#include "opentelemetry/exporters/otlp/otlp_grpc_exporter.h"
 
 #define dout_subsys ceph_subsys_trace
 #undef dout_prefix
@@ -26,13 +26,16 @@ void Tracer::init(CephContext* _cct, opentelemetry::nostd::string_view service_n
   cct = _cct;
   if (!tracer) {
     ldout(cct, 3) << "tracer was not loaded, initializing tracing" << dendl;
-    opentelemetry::exporter::jaeger::JaegerExporterOptions exporter_options;
-    exporter_options.server_port = cct->_conf.get_val<int64_t>("jaeger_agent_port");
+    opentelemetry::exporter::otlp::OtlpGrpcExporterOptions exporter_options;
+    int64_t otlp_port = cct->_conf.get_val<int64_t>("jaeger_agent_port");
+    exporter_options.endpoint = "localhost:" + std::to_string(otlp_port);
     const opentelemetry::sdk::trace::BatchSpanProcessorOptions processor_options;
-    const auto jaeger_resource = opentelemetry::sdk::resource::Resource::Create(std::move(opentelemetry::sdk::resource::ResourceAttributes{{"service.name", service_name}}));
-    auto jaeger_exporter = std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(new opentelemetry::exporter::jaeger::JaegerExporter(exporter_options));
-    auto processor = std::unique_ptr<opentelemetry::sdk::trace::SpanProcessor>(new opentelemetry::sdk::trace::BatchSpanProcessor(std::move(jaeger_exporter), processor_options));
-    const auto provider = opentelemetry::nostd::shared_ptr<opentelemetry::trace::TracerProvider>(new opentelemetry::sdk::trace::TracerProvider(std::move(processor), jaeger_resource));
+    const auto resource = opentelemetry::sdk::resource::Resource::Create(std::move(opentelemetry::sdk::resource::ResourceAttributes{{"service.name", service_name}}));
+    auto otlp_exporter = std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(new opentelemetry::exporter::otlp::OtlpGrpcExporter(exporter_options));
+    // Create a processor that batches spans before exporting - improves performance by reducing network calls
+    auto processor = std::unique_ptr<opentelemetry::sdk::trace::SpanProcessor>(new opentelemetry::sdk::trace::BatchSpanProcessor(std::move(otlp_exporter), processor_options));
+    // Create the provider (associated with the resource which includes the passed in service name)
+    const auto provider = opentelemetry::nostd::shared_ptr<opentelemetry::trace::TracerProvider>(new opentelemetry::sdk::trace::TracerProvider(std::move(processor), resource));
     opentelemetry::trace::Provider::SetTracerProvider(provider);
     tracer = provider->GetTracer(service_name, OPENTELEMETRY_SDK_VERSION);
   }
