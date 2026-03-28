@@ -1335,15 +1335,24 @@ class RgwService(CephService):
             san_list = spec.zonegroup_hostnames or []
             hostnames = san_list + [f"*.{h}" for h in san_list] if spec.wildcard_enabled else san_list
 
-            zg_update_cmd = {
-                'prefix': 'rgw zonegroup modify',
-                'realm_name': spec.rgw_realm,
-                'zonegroup_name': spec.rgw_zonegroup,
-                'zone_name': spec.rgw_zone,
-                'hostnames': hostnames,
-            }
-            logger.debug(f'rgw cmd: {zg_update_cmd}')
-            ret, out, err = self.mgr.check_mon_command(zg_update_cmd)
+            # zonegroup modify requires explicit realm/zonegroup/zone identifiers.
+            # on single-site deployments, these values may be unset, avoid calling.
+            if not (spec.rgw_realm and spec.rgw_zonegroup and spec.rgw_zone):
+                logger.warning(
+                    f"Skipping 'rgw zonegroup modify' for {spec.service_name()}: "
+                    "zonegroup_hostnames is set but rgw_realm/rgw_zonegroup/rgw_zone "
+                    "were not provided in the spec."
+                )
+            else:
+                zg_update_cmd = {
+                    'prefix': 'rgw zonegroup modify',
+                    'realm_name': spec.rgw_realm,
+                    'zonegroup_name': spec.rgw_zonegroup,
+                    'zone_name': spec.rgw_zone,
+                    'hostnames': hostnames,
+                }
+                logger.debug(f'rgw cmd: {zg_update_cmd}')
+                ret, out, err = self.mgr.check_mon_command(zg_update_cmd)
 
         # TODO: fail, if we don't have a spec
         logger.info('Saving service %s spec with placement %s' % (
