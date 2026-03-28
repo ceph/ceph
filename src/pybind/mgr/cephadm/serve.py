@@ -1,3 +1,4 @@
+import datetime
 import ipaddress
 import hashlib
 import json
@@ -180,6 +181,7 @@ class CephadmServe:
                 self.mgr.facts_cache_timeout,
                 self.mgr.daemon_cache_timeout,
                 self.mgr.device_cache_timeout,
+                self.mgr.stray_daemon_check_interval,
             )
         )
         self.log.debug('Sleeping for %d seconds', sleep_interval)
@@ -473,6 +475,9 @@ class CephadmServe:
             (self.mgr.scheduled_async_actions.pop(0))()
 
     def _check_for_strays(self) -> None:
+        cutoff = datetime_now() - datetime.timedelta(seconds=self.mgr.stray_daemon_check_interval)
+        if self.mgr.last_stray_daemon_check is not None and self.mgr.last_stray_daemon_check >= cutoff:
+            return
         self.log.debug('_check_for_strays')
         for k in ['CEPHADM_STRAY_HOST',
                   'CEPHADM_STRAY_DAEMON']:
@@ -541,6 +546,7 @@ class CephadmServe:
             if self.mgr.warn_on_stray_daemons and daemon_detail:
                 self.mgr.set_health_warning(
                     'CEPHADM_STRAY_DAEMON', f'{len(daemon_detail)} stray daemon(s) not managed by cephadm', len(daemon_detail), daemon_detail)
+            self.mgr.last_stray_daemon_check = datetime_now()
 
     def _check_for_moved_osds(self) -> None:
         self.log.debug('_check_for_moved_osds')
