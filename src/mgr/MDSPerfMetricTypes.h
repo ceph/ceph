@@ -5,6 +5,7 @@
 #define CEPH_MGR_MDS_PERF_METRIC_TYPES_H
 
 #include <regex>
+#include <shared_mutex>
 #include <vector>
 #include <iosfwd>
 
@@ -14,7 +15,6 @@
 #include "include/utime.h"
 #include "common/Formatter.h"
 
-#include "mds/mdstypes.h"
 #include "mgr/Types.h"
 
 typedef std::vector<std::string> MDSPerfMetricSubKey; // array of regex match
