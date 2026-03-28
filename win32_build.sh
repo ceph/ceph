@@ -221,7 +221,7 @@ if [[ -z $SKIP_BUILD ]]; then
     # TODO: do we actually need the ceph compression libs?
     ninja_targets+=" compressor ceph_lz4 ceph_snappy ceph_zlib ceph_zstd"
     if [[ -z $SKIP_TESTS ]]; then
-      ninja_targets+=" tests ceph_radosacl ceph_scratchtool "
+      ninja_targets+=" tests ceph_scratchtool "
       ninja_targets+=`ninja -t targets | grep ceph_test | cut -d ":" -f 1 | grep -v exe`
     fi
 

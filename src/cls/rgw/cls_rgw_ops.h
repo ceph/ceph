@@ -1789,3 +1789,80 @@ struct cls_rgw_get_bucket_resharding_ret  {
   void dump(ceph::Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(cls_rgw_get_bucket_resharding_ret)
+
+namespace cls::rgw {
+struct ClassId {
+  static constexpr auto name = "rgw";
+};
+namespace method {
+// Bucket Index
+constexpr auto bucket_init_index = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_INIT_INDEX);
+constexpr auto bucket_init_index2 = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_INIT_INDEX2);
+constexpr auto bucket_set_tag_timeout = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_SET_TAG_TIMEOUT);
+constexpr auto bucket_list = ClsMethod<RdTag, ClassId>(RGW_BUCKET_LIST);
+constexpr auto bucket_check_index = ClsMethod<RdTag, ClassId>(RGW_BUCKET_CHECK_INDEX);
+constexpr auto bucket_rebuild_index = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_REBUILD_INDEX);
+constexpr auto bucket_update_stats = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_UPDATE_STATS);
+constexpr auto bucket_prepare_op = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_PREPARE_OP);
+constexpr auto bucket_complete_op = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_COMPLETE_OP);
+constexpr auto bucket_link_olh = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_LINK_OLH);
+constexpr auto bucket_unlink_instance = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_UNLINK_INSTANCE);
+constexpr auto bucket_read_olh_log = ClsMethod<RdTag, ClassId>(RGW_BUCKET_READ_OLH_LOG);
+constexpr auto bucket_trim_olh_log = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_TRIM_OLH_LOG);
+constexpr auto bucket_clear_olh = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_CLEAR_OLH);
+
+// Object
+constexpr auto obj_remove = ClsMethod<RdWrTag, ClassId>(RGW_OBJ_REMOVE);
+constexpr auto obj_store_pg_ver = ClsMethod<WrTag, ClassId>(RGW_OBJ_STORE_PG_VER);
+constexpr auto obj_check_attrs_prefix = ClsMethod<RdTag, ClassId>(RGW_OBJ_CHECK_ATTRS_PREFIX);
+constexpr auto obj_check_mtime = ClsMethod<RdTag, ClassId>(RGW_OBJ_CHECK_MTIME);
+
+// Bucket Index (BI) / Resharding
+constexpr auto bi_get = ClsMethod<RdTag, ClassId>(RGW_BI_GET);
+constexpr auto bi_put = ClsMethod<RdWrTag, ClassId>(RGW_BI_PUT);
+constexpr auto bi_put_entries = ClsMethod<RdWrTag, ClassId>(RGW_BI_PUT_ENTRIES);
+constexpr auto bi_list = ClsMethod<RdTag, ClassId>(RGW_BI_LIST);
+constexpr auto reshard_log_trim = ClsMethod<RdWrTag, ClassId>(RGW_RESHARD_LOG_TRIM);
+constexpr auto bi_log_list = ClsMethod<RdTag, ClassId>(RGW_BI_LOG_LIST);
+constexpr auto bi_log_trim = ClsMethod<RdWrTag, ClassId>(RGW_BI_LOG_TRIM);
+constexpr auto dir_suggest_changes = ClsMethod<RdWrTag, ClassId>(RGW_DIR_SUGGEST_CHANGES);
+constexpr auto bi_log_resync = ClsMethod<RdWrTag, ClassId>(RGW_BI_LOG_RESYNC);
+constexpr auto bi_log_stop = ClsMethod<RdWrTag, ClassId>(RGW_BI_LOG_STOP);
+
+// Usage Logging
+constexpr auto user_usage_log_add = ClsMethod<RdWrTag, ClassId>(RGW_USER_USAGE_LOG_ADD);
+constexpr auto user_usage_log_read = ClsMethod<RdTag, ClassId>(RGW_USER_USAGE_LOG_READ);
+constexpr auto user_usage_log_trim = ClsMethod<RdWrTag, ClassId>(RGW_USER_USAGE_LOG_TRIM);
+constexpr auto usage_log_clear = ClsMethod<WrTag, ClassId>(RGW_USAGE_LOG_CLEAR);
+
+// Garbage Collection
+constexpr auto gc_set_entry = ClsMethod<RdWrTag, ClassId>(RGW_GC_SET_ENTRY);
+constexpr auto gc_defer_entry = ClsMethod<RdWrTag, ClassId>(RGW_GC_DEFER_ENTRY);
+constexpr auto gc_list = ClsMethod<RdTag, ClassId>(RGW_GC_LIST);
+constexpr auto gc_remove = ClsMethod<RdWrTag, ClassId>(RGW_GC_REMOVE);
+
+// Lifecycle Bucket List
+constexpr auto lc_get_entry = ClsMethod<RdTag, ClassId>(RGW_LC_GET_ENTRY);
+constexpr auto lc_set_entry = ClsMethod<RdWrTag, ClassId>(RGW_LC_SET_ENTRY);
+constexpr auto lc_rm_entry = ClsMethod<RdWrTag, ClassId>(RGW_LC_RM_ENTRY);
+constexpr auto lc_get_next_entry = ClsMethod<RdTag, ClassId>(RGW_LC_GET_NEXT_ENTRY);
+constexpr auto lc_put_head = ClsMethod<RdWrTag, ClassId>(RGW_LC_PUT_HEAD);
+constexpr auto lc_get_head = ClsMethod<RdTag, ClassId>(RGW_LC_GET_HEAD);
+constexpr auto lc_list_entries = ClsMethod<RdTag, ClassId>(RGW_LC_LIST_ENTRIES);
+
+// Multipart
+constexpr auto mp_upload_part_info_update = ClsMethod<RdWrTag, ClassId>(RGW_MP_UPLOAD_PART_INFO_UPDATE);
+
+// Resharding
+constexpr auto reshard_add = ClsMethod<RdWrTag, ClassId>(RGW_RESHARD_ADD);
+constexpr auto reshard_list = ClsMethod<RdTag, ClassId>(RGW_RESHARD_LIST);
+constexpr auto reshard_get = ClsMethod<RdTag, ClassId>(RGW_RESHARD_GET);
+constexpr auto reshard_remove = ClsMethod<RdWrTag, ClassId>(RGW_RESHARD_REMOVE);
+
+// Resharding Attribute
+constexpr auto set_bucket_resharding = ClsMethod<RdWrTag, ClassId>(RGW_SET_BUCKET_RESHARDING);
+constexpr auto clear_bucket_resharding = ClsMethod<RdWrTag, ClassId>(RGW_CLEAR_BUCKET_RESHARDING);
+constexpr auto guard_bucket_resharding = ClsMethod<RdTag, ClassId>(RGW_GUARD_BUCKET_RESHARDING);
+constexpr auto get_bucket_resharding = ClsMethod<RdTag, ClassId>(RGW_GET_BUCKET_RESHARDING);
+}
+}

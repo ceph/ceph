@@ -279,22 +279,14 @@ CLS_INIT(sem_set)
   cls_method_handle_t h_decrement;
   cls_method_handle_t h_list;
 
-  cls_register(ss::CLASS, &h_class);
-  cls_register_cxx_method(h_class, ss::INCREMENT,
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          &increment, &h_increment);
+  using namespace cls::sem_set;
+  cls_register(ClassId::name, &h_class);
+  ClassRegistrar<ClassId> cls(h_class);
 
-  cls_register_cxx_method(h_class, ss::DECREMENT,
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          &decrement, &h_decrement);
-
-  cls_register_cxx_method(h_class, ss::RESET,
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          &reset, &h_decrement);
-
-  cls_register_cxx_method(h_class, ss::LIST,
-                          CLS_METHOD_RD,
-                          &list, &h_list);
+  cls.register_cxx_method(method::increment, &::increment, &h_increment);
+  cls.register_cxx_method(method::decrement, &::decrement, &h_decrement);
+  cls.register_cxx_method(method::reset,     &::reset,     &h_decrement);
+  cls.register_cxx_method(method::list,      &::list,      &h_list);
 
   return;
 }

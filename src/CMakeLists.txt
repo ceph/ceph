@@ -1156,10 +1156,6 @@ if(WITH_RBD)
 endif(WITH_RBD)
 
 # RadosGW
-if(WITH_KVS)
-  add_subdirectory(key_value_store)
-endif(WITH_KVS)
-
 if(WITH_RADOSGW)
   if(WITH_RADOSGW_SELECT_PARQUET OR WITH_RADOSGW_ARROW_FLIGHT)
     if(WITH_SYSTEM_ARROW)
@@ -1291,7 +1287,6 @@ if(DOXYGEN_FOUND)
     include
     journal
     json_spirit
-    key_value_store
     kv
     librados
     libradosstriper

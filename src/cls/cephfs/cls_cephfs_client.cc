@@ -23,6 +23,8 @@
 using ceph::bufferlist;
 using ceph::decode;
 
+using namespace cls::cephfs;
+
 #define XATTR_CEILING "scan_ceiling"
 #define XATTR_MAX_MTIME "scan_max_mtime"
 #define XATTR_MAX_SIZE "scan_max_size"
@@ -51,7 +53,7 @@ int ClsCephFSClient::accumulate_inode_metadata(
   librados::ObjectWriteOperation op;
   bufferlist inbl;
   args.encode(inbl);
-  op.exec("cephfs", "accumulate_inode_metadata", inbl);
+  op.exec(method::accumulate_inode_metadata, inbl);
 
   if (obj_pool_id != -1) {
     bufferlist bl;

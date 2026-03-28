@@ -8,6 +8,7 @@
 #include "common/errno.h"
 #include "objclass/objclass.h"
 #include "cls/journal/cls_journal_types.h"
+#include "cls/journal/cls_journal_ops.h"
 #include <errno.h>
 #include <iomanip>
 #include <map>
@@ -1235,82 +1236,29 @@ CLS_INIT(journal)
   cls_method_handle_t h_journal_object_guard_append;
   cls_method_handle_t h_journal_object_append;
 
-  cls_register("journal", &h_class);
+  using namespace cls::journal;
+  cls_register(ClassId::name, &h_class);
+  ClassRegistrar<ClassId> cls(h_class);
 
-  /// methods for journal.$journal_id objects
-  cls_register_cxx_method(h_class, "create",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          journal_create, &h_journal_create);
-  cls_register_cxx_method(h_class, "get_order",
-                          CLS_METHOD_RD,
-                          journal_get_order, &h_journal_get_order);
-  cls_register_cxx_method(h_class, "get_splay_width",
-                          CLS_METHOD_RD,
-                          journal_get_splay_width, &h_journal_get_splay_width);
-  cls_register_cxx_method(h_class, "get_pool_id",
-                          CLS_METHOD_RD,
-                          journal_get_pool_id, &h_journal_get_pool_id);
-  cls_register_cxx_method(h_class, "get_minimum_set",
-                          CLS_METHOD_RD,
-                          journal_get_minimum_set,
-                          &h_journal_get_minimum_set);
-  cls_register_cxx_method(h_class, "set_minimum_set",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          journal_set_minimum_set,
-                          &h_journal_set_minimum_set);
-  cls_register_cxx_method(h_class, "get_active_set",
-                          CLS_METHOD_RD,
-                          journal_get_active_set,
-                          &h_journal_get_active_set);
-  cls_register_cxx_method(h_class, "set_active_set",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          journal_set_active_set,
-                          &h_journal_set_active_set);
-
-  cls_register_cxx_method(h_class, "get_client",
-                          CLS_METHOD_RD,
-                          journal_get_client, &h_journal_get_client);
-  cls_register_cxx_method(h_class, "client_register",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          journal_client_register, &h_journal_client_register);
-  cls_register_cxx_method(h_class, "client_update_data",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          journal_client_update_data,
-                          &h_journal_client_update_data);
-  cls_register_cxx_method(h_class, "client_update_state",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          journal_client_update_state,
-                          &h_journal_client_update_state);
-  cls_register_cxx_method(h_class, "client_unregister",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          journal_client_unregister,
-                          &h_journal_client_unregister);
-  cls_register_cxx_method(h_class, "client_commit",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          journal_client_commit, &h_journal_client_commit);
-  cls_register_cxx_method(h_class, "client_list",
-                          CLS_METHOD_RD,
-                          journal_client_list, &h_journal_client_list);
-
-  cls_register_cxx_method(h_class, "get_next_tag_tid",
-                          CLS_METHOD_RD,
-                          journal_get_next_tag_tid,
-                          &h_journal_get_next_tag_tid);
-  cls_register_cxx_method(h_class, "get_tag",
-                          CLS_METHOD_RD,
-                          journal_get_tag, &h_journal_get_tag);
-  cls_register_cxx_method(h_class, "tag_create",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          journal_tag_create, &h_journal_tag_create);
-  cls_register_cxx_method(h_class, "tag_list",
-                          CLS_METHOD_RD,
-                          journal_tag_list, &h_journal_tag_list);
-
-  /// methods for journal_data.$journal_id.$object_id objects
-  cls_register_cxx_method(h_class, "guard_append",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          journal_object_guard_append,
-                          &h_journal_object_guard_append);
-  cls_register_cxx_method(h_class, "append", CLS_METHOD_RD | CLS_METHOD_WR,
-                          journal_object_append, &h_journal_object_append);
+  cls.register_cxx_method(method::create,              journal_create,              &h_journal_create);
+  cls.register_cxx_method(method::get_order,           journal_get_order,           &h_journal_get_order);
+  cls.register_cxx_method(method::get_splay_width,     journal_get_splay_width,     &h_journal_get_splay_width);
+  cls.register_cxx_method(method::get_pool_id,         journal_get_pool_id,         &h_journal_get_pool_id);
+  cls.register_cxx_method(method::get_minimum_set,     journal_get_minimum_set,     &h_journal_get_minimum_set);
+  cls.register_cxx_method(method::set_minimum_set,     journal_set_minimum_set,     &h_journal_set_minimum_set);
+  cls.register_cxx_method(method::get_active_set,      journal_get_active_set,      &h_journal_get_active_set);
+  cls.register_cxx_method(method::set_active_set,      journal_set_active_set,      &h_journal_set_active_set);
+  cls.register_cxx_method(method::get_client,          journal_get_client,          &h_journal_get_client);
+  cls.register_cxx_method(method::client_register,     journal_client_register,     &h_journal_client_register);
+  cls.register_cxx_method(method::client_update_data,  journal_client_update_data,  &h_journal_client_update_data);
+  cls.register_cxx_method(method::client_update_state, journal_client_update_state, &h_journal_client_update_state);
+  cls.register_cxx_method(method::client_unregister,   journal_client_unregister,   &h_journal_client_unregister);
+  cls.register_cxx_method(method::client_commit,       journal_client_commit,       &h_journal_client_commit);
+  cls.register_cxx_method(method::client_list,         journal_client_list,         &h_journal_client_list);
+  cls.register_cxx_method(method::get_next_tag_tid,    journal_get_next_tag_tid,    &h_journal_get_next_tag_tid);
+  cls.register_cxx_method(method::get_tag,             journal_get_tag,             &h_journal_get_tag);
+  cls.register_cxx_method(method::tag_create,          journal_tag_create,          &h_journal_tag_create);
+  cls.register_cxx_method(method::tag_list,            journal_tag_list,            &h_journal_tag_list);
+  cls.register_cxx_method(method::guard_append,        journal_object_guard_append, &h_journal_object_guard_append);
+  cls.register_cxx_method(method::append,              journal_object_append,       &h_journal_object_append);
 }

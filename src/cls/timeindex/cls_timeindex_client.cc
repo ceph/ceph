@@ -7,6 +7,8 @@
 #include "cls/timeindex/cls_timeindex_client.h"
 #include "include/compat.h"
 
+using namespace cls::timeindex;
+
 void cls_timeindex_add(
   librados::ObjectWriteOperation& op,
   std::list<cls_timeindex_entry>& entries)
@@ -16,7 +18,7 @@ void cls_timeindex_add(
   call.entries = entries;
 
   encode(call, in);
-  op.exec("timeindex", "add", in);
+  op.exec(method::add, in);
 }
 
 void cls_timeindex_add(
@@ -28,7 +30,7 @@ void cls_timeindex_add(
   call.entries.push_back(entry);
 
   encode(call, in);
-  op.exec("timeindex", "add", in);
+  op.exec(method::add, in);
 }
 
 void cls_timeindex_add_prepare_entry(
@@ -69,7 +71,7 @@ void cls_timeindex_trim(
 
   encode(call, in);
 
-  op.exec("timeindex", "trim", in);
+  op.exec(method::trim, in);
 }
 
 int cls_timeindex_trim(
@@ -115,6 +117,6 @@ void cls_timeindex_list(
 
   encode(call, in);
 
-  op.exec("timeindex", "list", in,
+  op.exec(method::list, in,
           new TimeindexListCtx(&entries, out_marker, truncated));
 }

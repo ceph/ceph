@@ -10,6 +10,7 @@
 #include "include/compat.h"
 #include "osd/osd_types.h"
 
+
 using ceph::bufferlist;
 using ceph::decode;
 
@@ -216,23 +217,15 @@ CLS_INIT(cas)
   cls_method_handle_t h_chunk_put_ref;
   cls_method_handle_t h_references_chunk;
 
-  cls_register("cas", &h_class);
+  using namespace cls::cas;
+  cls_register(ClassId::name, &h_class);
 
-  cls_register_cxx_method(h_class, "chunk_create_or_get_ref",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  chunk_create_or_get_ref,
-			  &h_chunk_create_or_get_ref);
-  cls_register_cxx_method(h_class, "chunk_get_ref",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  chunk_get_ref,
-			  &h_chunk_get_ref);
-  cls_register_cxx_method(h_class, "chunk_put_ref",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  chunk_put_ref,
-			  &h_chunk_put_ref);
-  cls_register_cxx_method(h_class, "references_chunk", CLS_METHOD_RD,
-			  references_chunk,
-			  &h_references_chunk);
+  ClassRegistrar<ClassId> cls(h_class);
+
+  cls.register_cxx_method(method::chunk_create_or_get_ref, chunk_create_or_get_ref, &h_chunk_create_or_get_ref);
+  cls.register_cxx_method(method::chunk_get_ref, chunk_get_ref, &h_chunk_get_ref);
+  cls.register_cxx_method(method::chunk_put_ref, chunk_put_ref, &h_chunk_put_ref);
+  cls.register_cxx_method(method::references_chunk, references_chunk, &h_references_chunk);
 
   return;
 }

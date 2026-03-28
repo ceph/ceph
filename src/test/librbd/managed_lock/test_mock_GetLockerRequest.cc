@@ -51,7 +51,7 @@ public:
                             const std::string &lock_tag,
                             ClsLockType lock_type) {
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(mock_image_ctx.header_oid, _, StrEq("lock"),
+                               exec_internal(mock_image_ctx.header_oid, _, StrEq("lock"),
                                StrEq("get_info"), _, _, _, _));
     if (r < 0 && r != -ENOENT) {
       expect.WillOnce(Return(r));

@@ -49,7 +49,7 @@ public:
 
   void expect_set_protection_status(MockImageCtx &mock_image_ctx, int r) {
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                               exec_internal(mock_image_ctx.header_oid, _, StrEq("rbd"),
                                     StrEq("set_protection_status"), _, _, _,
                                     _));
     if (r < 0) {

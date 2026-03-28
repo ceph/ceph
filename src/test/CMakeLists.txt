@@ -193,17 +193,6 @@ target_link_libraries(ceph_omapbench
   ceph-common
   Boost::program_options)
 
-if(WITH_KVS)
-  # ceph_kvstorebench
-  set(kvstorebench_srcs
-    kv_store_bench.cc
-    ${CMAKE_SOURCE_DIR}/src/key_value_store/kv_flat_btree_async.cc
-    )
-  add_executable(ceph_kvstorebench ${kvstorebench_srcs})
-  target_link_libraries(ceph_kvstorebench librados global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
-  install(TARGETS ceph_kvstorebench DESTINATION bin)
-endif(WITH_KVS)
-
 if(NOT WIN32)
   # ceph_objectstore_bench
   add_executable(ceph_objectstore_bench objectstore_bench.cc)

@@ -14,6 +14,8 @@ install(FILES
   page.h
   crc32c.h
   rados/objclass.h
+  rados/cls_flags.hpp
+  rados/cls_traits.hpp
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/rados)
 if(WITH_LIBRADOSSTRIPER)
   install(FILES

@@ -33,6 +33,8 @@
 
 #include "gtest/gtest.h"
 
+#include "cls/hello/cls_hello_ops.h"
+
 namespace sys = boost::system;
 
 using namespace std::literals;
@@ -129,8 +131,7 @@ CORO_TEST_F(NeoRadosWriteOps, Write, NeoRadosTest) {
 
 CORO_TEST_F(NeoRadosWriteOps, Exec, NeoRadosTest) {
   co_await execute(oid, WriteOp{}
-		   .exec("hello"sv, "record_hello"sv,
-			 to_buffer_list("test")));
+		   .exec(::cls::hello::method::record_hello, to_buffer_list("test")));
   const auto bl = co_await read(oid);
   EXPECT_EQ(to_buffer_list("Hello, test!"), bl);
   co_return;
