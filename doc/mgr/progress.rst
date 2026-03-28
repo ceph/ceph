@@ -46,6 +46,21 @@ Clear all ongoing and completed events:
 
    ceph progress clear
 
+Configuration
+-------------
+
+The progress module may be configured via the central config options below.
+
+- ``mgr/progress/max_completed_events``: number of completed events to retain
+   in memory (default: 50).
+- ``mgr/progress/max_completed_events_show``: number of completed events to
+   show in ``ceph progress`` output (default: 20, 0 = unlimited).
+
+.. prompt:: bash #
+
+    ceph config set mgr mgr/progress/max_completed_events 100
+    ceph config set mgr mgr/progress/max_completed_events_show 20
+
 PG Recovery Event
 -----------------
 

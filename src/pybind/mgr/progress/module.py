@@ -446,6 +446,13 @@ class Module(MgrModule):
             runtime=True
         ),
         Option(
+            'max_completed_events_show',
+            default=20,
+            type='int',
+            desc='number of completed events to show (0 = unlimited)',
+            runtime=True
+        ),
+        Option(
             'sleep_interval',
             default=5,
             type='secs',
@@ -487,6 +494,7 @@ class Module(MgrModule):
         # only for mypy
         if TYPE_CHECKING:
             self.max_completed_events = 0
+            self.max_completed_events_show = 0
             self.sleep_interval = 0
             self.enabled = True
             self.allow_pg_recovery_event = False
@@ -826,9 +834,13 @@ class Module(MgrModule):
                 out += "\n"
 
             if len(self._completed_events):
-                # TODO: limit number of completed events to show
                 out += "\n"
-                for ghost_ev in self._completed_events:
+                completed_events = self._completed_events
+                max_show = self.max_completed_events_show
+                if max_show > 0 and len(completed_events) > max_show:
+                    completed_events = completed_events[-max_show:]
+                    out += "Showing last {0} completed events.\n".format(max_show)
+                for ghost_ev in completed_events:
                     out += "[{0}]: {1}\n".format("Complete" if not ghost_ev.failed else "Failed",
                                                  ghost_ev.twoline_progress())
 
