@@ -2774,6 +2774,12 @@ options:
   - runtime
   see_also:
   - rgw_inject_delay_sec
+- name: rgw_data_sync_single_entry_inject_err_probability
+  type: float
+  level: dev
+  default: 0
+  services:
+  - rgw
   with_legacy: true
 - name: rgw_sync_trace_history_size
   type: size
