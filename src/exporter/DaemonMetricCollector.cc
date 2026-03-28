@@ -295,8 +295,8 @@ void DaemonMetricCollector::dump_asok_metrics(bool sort_metrics, int64_t counter
           boost_string_to_std(pid_file_json["pid_file"].as_string());
       std::string pid_str = read_file_to_string(pid_path);
       if (!pid_path.size()) {
-        dout(1) << "pid path is empty; process metrics won't be fetched for: "
-                << daemon_name << dendl;
+        dout(10) << "pid path is empty; process metrics won't be fetched for: "
+                 << daemon_name << dendl;
       }
       if (!pid_str.empty()) {
         daemon_pids.push_back({daemon_name, std::stoi(pid_str)});
