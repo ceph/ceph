@@ -4120,16 +4120,30 @@ def _rm_cluster(ctx: CephadmContext, keep_logs: bool, zap_osds: bool) -> None:
 
     # clean up config, keyring, and pub key files
     files = [CEPH_DEFAULT_CONF, CEPH_DEFAULT_PUBKEY, CEPH_DEFAULT_KEYRING]
-    if os.path.exists(files[0]):
-        valid_fsid = False
-        with open(files[0]) as f:
-            if ctx.fsid in f.read():
-                valid_fsid = True
-        if valid_fsid:
-            # rm configuration files on /etc/ceph
-            for n in range(0, len(files)):
-                if os.path.exists(files[n]):
-                    os.remove(files[n])
+    if not os.path.exists(files[0]):
+        return
+
+    if os.path.isdir(files[0]) and not os.listdir(files[0]):
+        # If ceph.conf is an empty directory, it's a leftover bind mount
+        # point from a container. Remove it and return - there's no config
+        # file to validate and no other files to clean up.
+        Path(files[0]).rmdir()
+        return
+
+    if not os.path.isfile(files[0]):
+        return
+
+    # Validate fsid from ceph.conf
+    with open(files[0]) as f:
+        if ctx.fsid not in f.read():
+            logger.warning('Cluster fsid %s does not match %s, '
+                           'leaving config files untouched',
+                           ctx.fsid, files[0])
+            return
+
+    # rm configuration files on /etc/ceph
+    for f in files:
+        Path(f).unlink(missing_ok=True)
 
 ##################################
 
