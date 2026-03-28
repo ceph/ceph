@@ -9099,23 +9099,47 @@ string BlueStore::get_device_path(unsigned id)
   return res;
 }
 
+bool BlueStore::get_db_sharding(std::string& res_sharding)
+{
+  bool ret = false;
+  RocksDBStore* rdb = dynamic_cast<RocksDBStore*>(db);
+  if (db) {
+    ret = rdb->get_sharding(res_sharding);
+  }
+  return ret;
+}
+
 int BlueStore::expand_devices(ostream& out)
 {
-  // let's open in read-only mode first to be able to recover
-  // from the out-of-space state at DB/shared volume(s)
-  // Opening in R/W mode might cause extra space allocation
-  // which is effectively a show stopper for volume expansion.
-  int r = _open_db_and_around(true);
-  ceph_assert(r == 0);
+  bool need_to_close = false;
+  int r = 0;
+
+  if (!mounted) {
+    // let's open in read-only mode first to be able to recover
+    // from the out-of-space state at DB/shared volume(s)
+    // Opening in R/W mode might cause extra space allocation
+    // which is effectively a show stopper for volume expansion.
+    r = _open_db_and_around(true);
+    ceph_assert(r == 0);
+    need_to_close = true;
+  }
+
   bluefs->dump_block_extents(out);
   out << "Expanding DB/WAL..." << std::endl;
+
   // updating dedicated devices first
   for (auto devid : { BlueFS::BDEV_WAL, BlueFS::BDEV_DB}) {
     if (devid == bluefs_layout.shared_bdev) {
       continue;
     }
+
     auto my_bdev = bluefs->get_block_device(devid);
+    if (!my_bdev) {
+      continue;
+    }
+    my_bdev->refresh_size();
     uint64_t size = my_bdev ? my_bdev->get_size() : 0;
+
     if (size == 0) {
       // no bdev
       continue;
@@ -9123,7 +9147,7 @@ int BlueStore::expand_devices(ostream& out)
     if (my_bdev->supported_bdev_label()) {
       string my_path = get_device_path(devid);
       bluestore_bdev_label_t my_label;
-      int r = _read_bdev_label(cct, my_bdev, my_path, &my_label);
+      r = _read_bdev_label(cct, my_bdev, my_path, &my_label);
       if (r < 0) {
         derr << "unable to read label for " << my_path << ": "
               << cpp_strerror(r) << dendl;
@@ -9142,6 +9166,7 @@ int BlueStore::expand_devices(ostream& out)
 	      << std::endl;
           continue;
         } else {
+          int64_t old_size = my_label.size;
           my_label.size = size;
           out << devid
 	      << " : Expanding to 0x" << std::hex << size
@@ -9157,15 +9182,22 @@ int BlueStore::expand_devices(ostream& out)
                 << std::dec << "(" << byte_u_t(size) << ")"
                 << std::endl;
           }
+          ceph_assert(mounted);
+          bluefs->expand_device(devid, size, old_size);
         }
       }
     }
   }
-  // now proceed with a shared device
+  auto devid = bluefs_layout.shared_bdev;
+  // bluestore and bluefs hold separate instances so we need to
+  // refresh both to figure out if there is a new size
+  bluefs->get_block_device(devid)->refresh_size();
+  bdev->refresh_size();
+
   uint64_t size0 = fm->get_size();
   uint64_t size = bdev->get_size();
-  auto devid = bluefs_layout.shared_bdev;
   auto aligned_size = p2align(size, min_alloc_size);
+  r = 0;
   if (aligned_size == size0) {
     // no need to expand
     out << devid
@@ -9181,7 +9213,7 @@ int BlueStore::expand_devices(ostream& out)
     out << devid
 	<<" : Expanding to 0x" << std::hex << size
 	<< std::dec << "(" << byte_u_t(size) << ")"
-	<< std::endl;  
+	<< std::endl;
     r = _write_out_fm_meta(size);
     if (r != 0) {
       derr << "unable to write out fm meta for " << my_path << ": "
@@ -9209,33 +9241,29 @@ int BlueStore::expand_devices(ostream& out)
           << " : size updated to 0x" << std::hex << size
           << std::dec << "(" << byte_u_t(size) << ")"
           << std::endl;
-      _close_db_and_around();
 
-       //
-      // Mount in read/write to sync expansion changes
-      // and make sure everything is all right.
-      //
-      before_expansion_bdev_size = size0; // preserve orignal size to permit
-                                          // following _db_open_and_around()
-                                          // do some post-init stuff on opened
-                                          // allocator.
+      fm->expand(aligned_size, db);
+      alloc->expand(aligned_size);
+      uint64_t aligned_size0 = p2roundup(size0, min_alloc_size);
+      alloc->init_add_free(aligned_size0, aligned_size - aligned_size0);
 
-      r = _open_db_and_around(false);
-      ceph_assert(r == 0);
+      dout(1) << __func__
+              << " : size updated to 0x" << std::hex << size
+              << std::dec << "(" << byte_u_t(size) << ")"
+              << ", allocator type " << alloc->get_type()
+              << ", capacity 0x" << std::hex << alloc->get_capacity()
+              << ", block size 0x" << alloc->get_block_size()
+              << ", free 0x" << alloc->get_free()
+              << std::dec
+              << ", fragmentation " << alloc->get_fragmentation()
+              << dendl;
     }
   }
-  _close_db_and_around();
-  return r;
-}
 
-bool BlueStore::get_db_sharding(std::string& res_sharding)
-{
-  bool ret = false;
-  RocksDBStore* rdb = dynamic_cast<RocksDBStore*>(db);
-  if (db) {
-    ret = rdb->get_sharding(res_sharding);
+  if (need_to_close) {
+    _close_db_and_around();
   }
-  return ret;
+  return r;
 }
 
 int BlueStore::dump_bluefs_sizes(ostream& out)

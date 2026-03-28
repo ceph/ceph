@@ -16,6 +16,7 @@
 #include "Allocator.h"
 #include "include/buffer_fwd.h"
 #include "include/ceph_assert.h"
+#include "include/intarith.h"
 #include "include/stringify.h"
 #include "common/admin_socket.h"
 #include "os/bluestore/bluefs_types.h"
@@ -923,6 +924,35 @@ void BlueFS::_stop_alloc()
       alloc[i] = nullptr;
     }
   }
+}
+
+void BlueFS::expand_device(unsigned devid, uint64_t new_size, uint64_t old_size)
+{
+  dout(10) << __func__ << " dev " << devid
+           << " from 0x" << std::hex << old_size
+           << " to 0x" << new_size << std::dec << dendl;
+
+  ceph_assert(devid < alloc.size());
+  ceph_assert(alloc[devid]);
+  ceph_assert(new_size > old_size);
+
+  alloc[devid]->expand(new_size);
+  auto aligned_size = p2align(new_size, alloc_size[devid]);
+  auto aligned_old_size = p2roundup(old_size, alloc_size[devid]);
+  alloc[devid]->init_add_free(aligned_old_size, aligned_size - aligned_old_size);
+
+  if (vselector) {
+    vselector->expand_device(devid, aligned_size);
+    vselector->update_from_config(cct);
+  }
+
+  uint64_t total = get_block_device_size(devid);
+  uint64_t free = get_free(devid);
+  ceph_assert(total > total - free);
+
+  dout(10) << __func__ << " dev " << devid
+           << " added free space: 0x" << std::hex << aligned_old_size
+           << "~0x" << (aligned_size - aligned_old_size) << std::dec << dendl;
 }
 
 int BlueFS::_read_and_check(uint8_t ndev, uint64_t off, uint64_t len,

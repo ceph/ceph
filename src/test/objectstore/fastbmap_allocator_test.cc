@@ -31,6 +31,10 @@ public:
   {
     _init(capacity, alloc_unit);
   }
+  void expand(uint64_t new_capacity, uint64_t old_capacity)
+  {
+    AllocatorLevel02::expand(new_capacity, old_capacity);
+  }
   void allocate_l2(uint64_t length, uint64_t min_length,
     uint64_t* allocated0,
     interval_vector_t* res)
@@ -1142,4 +1146,107 @@ TEST(TestAllocatorLevel01, test_claim_free_l2)
     al2.get_available());
   ASSERT_EQ(0x15000,
     al2.debug_get_free());
+}
+
+TEST(TestAllocatorLevel02, test_expand_simple)
+{
+  TestAllocatorLevel02 al2;
+  uint64_t capacity = 64 * 1024 * 1024; // 64MiB
+  uint64_t block_size = 0x1000;         // 4KB
+
+  al2.init(capacity, block_size);
+  ASSERT_EQ(capacity, al2.debug_get_free());
+  ASSERT_EQ(capacity, al2.get_available());
+  interval_vector_t r1;
+  uint64_t allocated = 0;
+  uint64_t alloc_size = 60 * 1024 * 1024;
+  al2.allocate_l2(alloc_size, block_size, &allocated, &r1);
+  ASSERT_EQ(allocated, alloc_size);
+
+  uint64_t free_before = al2.debug_get_free();
+  uint64_t available_before = al2.get_available();
+  std::cout << "Before expand: free=" << free_before
+            << " available=" << available_before << std::endl;
+
+  uint64_t new_capacity = 128 * 1024 * 1024;
+  al2.expand(new_capacity, capacity);
+  al2.mark_free(capacity, new_capacity - capacity);
+  uint64_t free_after = al2.debug_get_free();
+  uint64_t available_after = al2.get_available();
+  uint64_t expected_increase = new_capacity - capacity;
+
+  std::cout << "After expand: free=" << free_after 
+            << " available=" << available_after << std::endl;
+  std::cout << "Expected increase: " << expected_increase << std::endl;
+  std::cout << "Actual increase: " << (free_after - free_before) << std::endl;
+
+  ASSERT_EQ(free_after, free_before + expected_increase);
+  ASSERT_EQ(available_after, available_before + expected_increase);
+
+  // allocate more than the original capacity would allow
+  // this must use the expanded region since total = 110MB > 64MB original
+  interval_vector_t r2;
+  allocated = 0;
+  uint64_t second_alloc = 50 * 1024 * 1024; // 50MiB
+  al2.allocate_l2(second_alloc, block_size, &allocated, &r2);
+  ASSERT_EQ(allocated, second_alloc);
+
+  std::cout << "Allocated " << (second_alloc / 1024 / 1024) << "MB in "
+            << r2.size() << " intervals:" << std::endl;
+
+  // verify at least some allocation came from expanded region
+  bool uses_expanded = false;
+  for (const auto& interval : r2) {
+    std::cout << "  offset=0x" << std::hex << interval.offset
+              << " length=0x" << interval.length << std::dec << std::endl;
+    // check if allocation starts in or extends into expanded region
+    // either starts in expanded region or spans into it
+    if (interval.offset >= capacity || interval.offset + interval.length > capacity) {
+      uses_expanded = true;
+      if (interval.offset >= capacity) {
+        std::cout << "    ^ Allocation starts in expanded region" << std::endl;
+      } else {
+        std::cout << "    ^ Allocation spans into expanded region" << std::endl;
+      }
+    }
+  }
+
+  ASSERT_TRUE(uses_expanded);
+
+  // should have ~18MiB free (128MiB - 60MiB - 50MiB)
+  uint64_t free_final = al2.debug_get_free();
+  uint64_t expected_free = new_capacity - alloc_size - second_alloc;
+  std::cout << "Final free: " << free_final 
+            << " expected: " << expected_free << std::endl;
+  ASSERT_EQ(free_final, expected_free);
+}
+
+TEST(TestAllocatorLevel02, test_expand_multiple_times)
+{
+  TestAllocatorLevel02 al2;
+  uint64_t capacity = 32 * 1024 * 1024;
+  uint64_t block_size = 0x1000;
+
+  al2.init(capacity, block_size);
+  ASSERT_EQ(capacity, al2.debug_get_free());
+
+  uint64_t capacity2 = 64 * 1024 * 1024;
+  al2.expand(capacity2, capacity);
+  al2.mark_free(capacity, capacity2 - capacity);
+  ASSERT_EQ(capacity2, al2.debug_get_free());
+  ASSERT_EQ(capacity2, al2.get_available());
+
+  uint64_t capacity3 = 128 * 1024 * 1024;
+  al2.expand(capacity3, capacity2);
+  al2.mark_free(capacity2, capacity3 - capacity2);
+  ASSERT_EQ(capacity3, al2.debug_get_free());
+  ASSERT_EQ(capacity3, al2.get_available());
+
+  interval_vector_t r;
+  uint64_t allocated = 0;
+  al2.allocate_l2(100 * 1024 * 1024, block_size, &allocated, &r);
+  ASSERT_EQ(allocated, 100 * 1024 * 1024);
+
+  uint64_t free_final = al2.debug_get_free();
+  ASSERT_EQ(free_final, 28 * 1024 * 1024); // 128MiB - 100MiB
 }
