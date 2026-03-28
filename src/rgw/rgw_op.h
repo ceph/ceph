@@ -457,6 +457,9 @@ protected:
   std::optional<int> multipart_part_num;
   // PartsCount response when partNumber is specified
   std::optional<int> multipart_parts_count;
+  // Content-Range response when partNumber is specified
+  std::optional<uint64_t> multipart_part_ofs;
+  std::optional<uint64_t> full_obj_size;
 
   int init_common();
 public:
