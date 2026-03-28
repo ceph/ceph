@@ -1,0 +1,91 @@
+#!/bin/bash
+
+# Dump radosgw bucket usage as labeled prometheus metrics.
+#
+# dependencies:
+#   radosgw-admin, jq
+
+cat <<EOF
+# TYPE ceph_rgw_bucket_usage_objects gauge
+# HELP ceph_rgw_bucket_usage_objects Total number of objects stored in the bucket
+# TYPE ceph_rgw_bucket_usage_bytes gauge
+# HELP ceph_rgw_bucket_usage_bytes Total size in bytes of logical object data stored in the bucket
+# TYPE ceph_rgw_bucket_usage_bytes_utilized gauge
+# HELP ceph_rgw_bucket_usage_bytes_utilized Total size in bytes of compressed object data stored in the bucket
+# TYPE ceph_rgw_bucket_quota_objects gauge
+# HELP ceph_rgw_bucket_quota_objects Maximum number of objects per bucket quota
+# TYPE ceph_rgw_bucket_quota_bytes gauge
+# HELP ceph_rgw_bucket_quota_bytes Maximum size in bytes of object data per bucket quota
+# TYPE ceph_rgw_owner_quota_objects gauge
+# HELP ceph_rgw_owner_quota_objects Maximum number of objects per user/account quota
+# TYPE ceph_rgw_owner_quota_bytes gauge
+# HELP ceph_rgw_owner_quota_bytes Maximum size in bytes of object data per user/account quota
+EOF
+# export the usage for each local zone, labeled by realm- and zone-id
+radosgw-admin zone list | jq -cr '.zones[]' | while read name; do
+	info=`radosgw-admin zone get --rgw-zone "${name}"` || continue
+	zone=`echo $info | jq -r '.id'`
+	realm=`echo $info | jq -r '.realm_id'`
+
+	# export bucket_usage and bucket_quota metrics for each bucket
+	radosgw-admin bucket stats --realm-id "$realm" --zone-id "$zone" | jq -c '.[]' | while read entry; do
+		tenant=`echo $entry | jq -r '.tenant'`
+		bucket=`echo $entry | jq -r '.bucket'`
+		owner=`echo $entry | jq -r '.owner'`
+		objects=`echo $entry | jq '.usage."rgw.main".num_objects // 0'`
+		bytes=`echo $entry | jq '.usage."rgw.main".size // 0'`
+		bytes_utilized=`echo $entry | jq '.usage."rgw.main".size_utilized // 0'`
+		quota_enabled=`echo $entry | jq '.bucket_quota.enabled'`
+		quota_objects=`echo $entry | jq '.bucket_quota.max_objects'`
+		quota_bytes=`echo $entry | jq '.bucket_quota.max_size'`
+		cat <<EOF
+ceph_rgw_bucket_usage_objects{zone="$zone",tenant="$tenant",owner="$owner",bucket="$bucket"} $objects
+ceph_rgw_bucket_usage_bytes{zone="$zone",tenant="$tenant",owner="$owner",bucket="$bucket"} $bytes
+ceph_rgw_bucket_usage_bytes_utilized{zone="$zone",tenant="$tenant",owner="$owner",bucket="$bucket"} $bytes_utilized
+EOF
+		[[ $quota_enabled == false ]] && continue
+		[[ $quota_objects -ge 0 ]] && cat <<EOF
+ceph_rgw_bucket_quota_objects{zone="$zone",tenant="$tenant",owner="$owner",bucket="$bucket"} $quota_objects
+EOF
+		[[ $quota_bytes -ge 0 ]] && cat <<EOF
+ceph_rgw_bucket_quota_bytes{zone="$zone",tenant="$tenant",owner="$owner",bucket="$bucket"} $quota_bytes
+EOF
+	done
+
+	# export owner_quota metrics for each user and account
+	radosgw-admin user list --realm-id "$realm" --zone-id "$zone" | jq -cr '.[]' | while read user; do
+		tenant=
+		uid=$user
+		# try to parse out tenant$
+		pattern='(.+)\$(.+)'
+		if [[ $user =~ $pattern ]]; then
+			tenant=${BASH_REMATCH[1]}
+			uid=${BASH_REMATCH[2]}
+		fi
+		entry=`radosgw-admin user info --realm-id "$realm" --zone-id "$zone" --tenant "$tenant" --uid "$uid"` || continue
+		quota_enabled=`echo $entry | jq '.user_quota.enabled'`
+		quota_objects=`echo $entry | jq '.user_quota.max_objects'`
+		quota_bytes=`echo $entry | jq '.user_quota.max_size'`
+		[[ $quota_enabled == false ]] && continue
+		[[ $quota_objects -ge 0 ]] && cat <<EOF
+ceph_rgw_owner_quota_objects{zone="$zone",tenant="$tenant",owner="$user"} $quota_objects
+EOF
+		[[ $quota_bytes -ge 0 ]] && cat <<EOF
+ceph_rgw_owner_quota_bytes{zone="$zone",tenant="$tenant",owner="$user"} $quota_bytes
+EOF
+	done
+	radosgw-admin account list --realm-id "$realm" --zone-id "$zone" | jq -cr '.[]' | while read account; do
+		entry=`radosgw-admin account get --realm-id "$realm" --zone-id "$zone" --account-id "$account"` || continue
+		tenant=`echo $entry | jq -r '.tenant'`
+		quota_enabled=`echo $entry | jq '.quota.enabled'`
+		quota_objects=`echo $entry | jq '.quota.max_objects'`
+		quota_bytes=`echo $entry | jq '.quota.max_size'`
+		[[ $quota_enabled == false ]] && continue
+		[[ $quota_objects -ge 0 ]] && cat <<EOF
+ceph_rgw_owner_quota_objects{zone="$zone",tenant="$tenant",owner="$account"} $quota_objects
+EOF
+		[[ $quota_bytes -ge 0 ]] && cat <<EOF
+ceph_rgw_owner_quota_bytes{zone="$zone",tenant="$tenant",owner="$account"} $quota_bytes
+EOF
+	done
+done
