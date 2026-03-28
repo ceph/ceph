@@ -8019,68 +8019,33 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   send_partial_response(o, del_op->result.delete_marker, del_op->result.version_id, op_ret);
 }
 
-void RGWDeleteMultiObj::handle_versioned_objects(const std::vector<RGWMultiDelObject>& objects,
-                                                 uint32_t max_aio,
-                                                 boost::asio::yield_context yield)
-{
-  auto group = ceph::async::spawn_throttle{yield, max_aio};
-  std::map<std::string, std::vector<RGWMultiDelObject>> grouped_objects;
-
-  // group objects by their keys
-  for (const auto& object : objects) {
-    const std::string& key = object.get_key();
-    grouped_objects[key].push_back(object);
-  }
-
-  // for each group of objects, handle all but the last object and skip update_olh
-  for (const auto& [_, objects] : grouped_objects) {
-    for (size_t i = 0; i + 1 < objects.size(); ++i) { // skip the last element
-      group.spawn([this, &objects, i] (boost::asio::yield_context yield) {
-        handle_individual_object(objects[i], yield, true /* skip_olh_obj_update */);
-      });
-
-      rgw_flush_formatter(s, s->formatter);
-    }
-  }
-  group.wait();
-
-  // Now handle the last object of each group with update_olh
-  for (const auto& [_, objects] : grouped_objects) {
-    const auto& object = objects.back();
-    group.spawn([this, &object] (boost::asio::yield_context yield) {
-      handle_individual_object(object, yield);
-    });
-
-    rgw_flush_formatter(s, s->formatter);
-  }
-  group.wait();
-}
-
-void RGWDeleteMultiObj::handle_non_versioned_objects(const std::vector<RGWMultiDelObject>& objects,
-                                                     uint32_t max_aio,
-                                                     boost::asio::yield_context yield)
-{
-  auto group = ceph::async::spawn_throttle{yield, max_aio};
-
-  for (const auto& object : objects) {
-    group.spawn([this, &object] (boost::asio::yield_context yield) {
-                  handle_individual_object(object, yield);
-                });
-
-    rgw_flush_formatter(s, s->formatter);
-  }
-  group.wait();
-}
-
 void RGWDeleteMultiObj::handle_objects(const std::vector<RGWMultiDelObject>& objects,
                                        uint32_t max_aio,
                                        boost::asio::yield_context yield)
 {
-  if (bucket->versioned()) {
-    handle_versioned_objects(objects, max_aio, yield);
-  } else {
-    handle_non_versioned_objects(objects, max_aio, yield);
+  std::vector<rgw::multi_delete::Item> items;
+  items.reserve(objects.size());
+
+  for (size_t i = 0; i < objects.size(); ++i) {
+    items.push_back(rgw::multi_delete::Item{
+      rgw_obj_key(objects[i].get_key(), objects[i].get_version_id()),
+      i,
+    });
   }
+
+  rgw::multi_delete::dispatch(
+      items,
+      bucket->versioned(),
+      max_aio,
+      yield,
+      [this, &objects] (const rgw::multi_delete::Item& item,
+                        bool skip_update_olh,
+                        boost::asio::yield_context y) {
+        handle_individual_object(objects[item.index], y, skip_update_olh);
+      },
+      [this] {
+        rgw_flush_formatter(s, s->formatter);
+      });
 }
 
 void RGWDeleteMultiObj::execute(optional_yield y)
