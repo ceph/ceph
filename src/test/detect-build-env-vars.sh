@@ -16,4 +16,8 @@ else
   exit 1
 fi
 
-
+# Export sanitizer options if they're set by the test framework.
+# These are set via CMake's set_property(TEST ... PROPERTY ENVIRONMENT ...)
+# but need to be explicitly exported to be inherited by child processes
+# (e.g., ceph CLI tools, ceph-osd, ceph-mon, etc.)
+export ASAN_OPTIONS LSAN_OPTIONS UBSAN_OPTIONS TSAN_OPTIONS
