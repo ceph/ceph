@@ -787,7 +787,7 @@ def get_devices(_sys_block_path='/sys/block', device=''):
     for block in block_devs:
         metadata: Dict[str, Any] = {}
         if block[2] == 'lvm':
-            block[1] = UdevData(block[1]).slashed_path
+            block[1] = UdevData(block[1]).preferred_block_path
         devname = os.path.basename(block[0])
         diskname = block[1]
         if block[2] not in block_types:
@@ -1430,3 +1430,33 @@ class UdevData:
             name: str = self.environment.get('DM_NAME', '')
             result = f'/dev/mapper/{name}'
         return result
+
+    @staticmethod
+    def _path_is_block_device(path: str) -> bool:
+        """True if ``path`` exists and is a block device (follows symlinks)."""
+        try:
+            return _stat_is_device(os.stat(path).st_mode)
+        except OSError:
+            return False
+
+    @property
+    def preferred_block_path(self) -> str:
+        """Return a device path that exists for typical open(2) / blkid usage.
+
+        `slashed_path` (/dev/vg/lv) is only present when udev/LVM created those
+        nodes; many environments (e.g. containers) only provide
+        `dashed_path` (/dev/mapper/name).
+
+        Returns:
+            str: For non-LVM, `path`. For LVM, `slashed_path` if it is a block
+                 device, else `dashed_path` if it is a block device, else `path`.
+        """
+        if not self.is_lvm:
+            return self.path
+        slashed: str = self.slashed_path
+        if self._path_is_block_device(slashed):
+            return slashed
+        dashed: str = self.dashed_path
+        if self._path_is_block_device(dashed):
+            return dashed
+        return self.path
