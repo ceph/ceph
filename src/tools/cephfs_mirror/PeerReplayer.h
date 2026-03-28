@@ -394,6 +394,11 @@ private:
     bool crawl_finished = false; // crawl_state - in-progress/completed
     clock::time_point crawl_start_time; // to show current crawl duration if crawl is in progress
     double crawl_duration = 0.0; // time taken to complete the crawl, includes a few entry operation like mkdir as well
+    // actual io accounting
+    uint64_t bytes_read = 0; //actual bytes read counter, independently for each directory sync.
+    uint64_t bytes_written = 0; //actual bytes written counter, independently for each directory sync.
+    double read_time_sec = 0.0; //actual read time in seconds counter, independently for each directroy sync.
+    double write_time_sec = 0.0; //actual write time in seconds counter, independently for each directroy sync.
   };
 
   void _inc_failed_count(const std::string &dir_root) {
@@ -433,6 +438,10 @@ private:
     sync_stat.crawl_finished = false;
     sync_stat.crawl_start_time = clock::now();
     sync_stat.crawl_duration = 0.0;
+    sync_stat.bytes_read = 0;
+    sync_stat.bytes_written = 0;
+    sync_stat.read_time_sec = 0.0;
+    sync_stat.write_time_sec = 0.0;
   }
   void _set_last_synced_snap(const std::string &dir_root, uint64_t snap_id,
                             const std::string &snap_name) {
@@ -489,6 +498,15 @@ private:
     auto &sync_stat = m_snap_sync_stats.at(dir_root);
     sync_stat.crawl_finished = state;
     sync_stat.crawl_duration = seconds;
+  }
+  void add_io(const std::string &dir_root, const uint64_t& br, const uint64_t bw,
+              const double rt, const double wt) {
+    std::scoped_lock locker(m_lock);
+    auto &sync_stat = m_snap_sync_stats.at(dir_root);
+    sync_stat.bytes_read += br;
+    sync_stat.bytes_written += bw;
+    sync_stat.read_time_sec += rt;
+    sync_stat.write_time_sec += wt;
   }
   void inc_sync_bytes(const std::string &dir_root, const uint64_t& b) {
     std::scoped_lock locker(m_lock);
