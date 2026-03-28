@@ -223,3 +223,23 @@ input:-webkit-autofill:active {
 .border-subtle {
   border: 1px solid var(--cds-border-subtle);
 }
+
+.border-subtle-bottom {
+  border-bottom: 1px solid var(--cds-border-subtle);
+}
+
+.border-subtle-top {
+  border-top: 1px solid var(--cds-border-subtle);
+}
+
+.border-subtle-block-end-01 {
+  border-block-end: 1px solid var(--cds-border-subtle-01);
+}
+
+.border-subtle-inline-end-01 {
+  border-inline-end: 1px solid var(--cds-border-subtle-01);
+}
+
+.border-subtle-right {
+  border-right: 1px solid var(--cds-border-subtle);
+}

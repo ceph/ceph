@@ -17,8 +17,17 @@
   padding-top: layout.$spacing-03;
 }
 
+.cds-pr-4 {
+  padding-right: layout.$spacing-04;
+}
+
 .cds-pr-8 {
   padding-right: layout.$spacing-08;
+}
+
+.cds-py-3 {
+  padding-top: layout.$spacing-03;
+  padding-bottom: layout.$spacing-03;
 }
 
 // MARGINS
@@ -96,6 +105,10 @@
 
 .cds-mr-3 {
   margin-right: layout.$spacing-03;
+}
+
+.cds-mr-4 {
+  margin-right: layout.$spacing-04;
 }
 
 .cds-mr-5 {

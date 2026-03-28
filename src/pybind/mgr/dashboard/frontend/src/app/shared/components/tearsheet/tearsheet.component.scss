@@ -57,7 +57,6 @@
   fill: var(--cds-icon-primary);
   background-color: var(--cds-background);
   padding: var(--cds-spacing-06) var(--cds-spacing-07);
-  border-block-end: 1px solid var(--cds-border-subtle-01);
 
   &-title {
     color: var(--cds-text-primary);
@@ -88,7 +87,6 @@
   padding: var(--cds-spacing-06) var(--cds-spacing-07);
   overflow-block: auto;
   overflow-y: auto;
-  border-inline-end: 1px solid var(--cds-border-subtle-01);
   margin: 0;
 }
 
@@ -130,7 +128,6 @@
 
 //FOOTER
 .tearsheet-footer {
-  border-top: 1px solid var(--cds-border-subtle);
   background-color: var(--cds-layer-01);
 
   &-submit {
