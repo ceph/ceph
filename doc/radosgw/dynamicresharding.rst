@@ -188,6 +188,29 @@ in the future. This command allows administrators to set a per-bucket
 minimum. This does not, however, prevent administrators from manually
 resharding to a lower number of shards.
 
+Runtime Toggle
+---------------
+
+To temporarily disable dynamic resharding (without restart):
+
+.. code-block:: bash
+
+   # Capture current settings for later restoration
+   ORIGINAL_MAX_SHARDS=$(ceph config get client.rgw rgw_max_dynamic_shards)
+   ORIGINAL_MAY_REDUCE=$(ceph config get client.rgw rgw_dynamic_resharding_may_reduce)
+   
+   # Disable dynamic resharding
+   ceph config set client.rgw rgw_dynamic_resharding_may_reduce false
+   ceph config set client.rgw rgw_max_dynamic_shards 1
+
+To re-enable dynamic resharding with original settings:
+
+.. code-block:: bash
+
+   # Restore original settings
+   ceph config set client.rgw rgw_max_dynamic_shards "$ORIGINAL_MAX_SHARDS"
+   ceph config set client.rgw rgw_dynamic_resharding_may_reduce "$ORIGINAL_MAY_REDUCE"
+
 Troubleshooting
 ===============
 
