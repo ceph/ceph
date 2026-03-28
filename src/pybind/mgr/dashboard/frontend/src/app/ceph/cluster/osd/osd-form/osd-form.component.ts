@@ -92,6 +92,7 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
   hasOrchestrator = true;
 
   simpleDeployment = true;
+  createOsdsLabel = $localize`Create OSDs`;
 
   deploymentOptions: DeploymentOptions;
   optionNames = Object.values(OsdDeploymentOptions);
