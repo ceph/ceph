@@ -6,6 +6,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <fstream>
@@ -312,6 +313,8 @@ int main(int argc, char **argv)
   int log_level = 30;
   bool fsck_deep = false;
   uint64_t disk_offset;
+  string size_str;
+  uint64_t size_val = 0;
   po::options_description po_options("Options");
   po_options.add_options()
     ("help,h", "produce help message")
@@ -336,6 +339,7 @@ int main(int argc, char **argv)
     ("sharding", po::value<string>(&new_sharding), "new sharding to apply")
     ("resharding-ctrl", po::value<string>(&resharding_ctrl), "gives control over resharding procedure details")
     ("offset", po::value<uint64_t>(&disk_offset), "disk location")
+    ("size", po::value<string>(&size_str), "size, 1M 20K allowed")
     ("op", po::value<string>(&action_aux),
       "--command alias, ignored if the latter is present")
     ;
@@ -358,7 +362,7 @@ int main(int argc, char **argv)
         "show-label, "
         "show-label-at, "
         "set-label-key, "
-	"create-bdev-labels, "
+        "create-bdev-labels, "
         "rm-label-key, "
         "prime-osd-dir, "
         "bluefs-super-dump, "
@@ -372,6 +376,8 @@ int main(int argc, char **argv)
         "trim, "
         "zap-device, "
         "revert-wal-to-plain"
+        ", vault-add"
+        ", vault-release"
     );
   po::options_description po_all("All options");
   po_all.add(po_options).add(po_positional);
@@ -413,6 +419,14 @@ int main(int argc, char **argv)
     }
   };
 
+  if (!size_str.empty()) {
+    string err;
+    size_val = strict_iecstrtoll(size_str, &err);
+    if (!err.empty()) {
+      std::cerr << "Invalid 'size':" << err << std::endl;
+      exit(EXIT_FAILURE);
+    }
+  }
   // normalize path (remove ending '/' if any)
   if (path.size() > 1 && *(path.end() - 1) == '/') {
     path.resize(path.size() - 1);
@@ -491,7 +505,10 @@ int main(int argc, char **argv)
   if (action == "fsck" || action == "repair" ||
       action == "quick-fix" || action == "allocmap" ||
       action == "qfsck" || action == "restore_cfb" ||
-      action == "revert-wal-to-plain") {
+      action == "revert-wal-to-plain"
+      || action == "vault-add"
+      || action == "vault-release"
+    ) {
     if (path.empty()) {
       cerr << "must specify bluestore path" << std::endl;
       exit(EXIT_FAILURE);
@@ -1411,7 +1428,40 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
       }
     }
-  } else {
+  }
+  else if (action == "vault-add")
+  {
+    BlueStore bluestore(cct.get(), path);
+    int r = bluestore.cold_open();
+    if (r < 0) {
+      cerr << "Cannot access BlueStore: " << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    BlueFS* bluefs = bluestore.get_bluefs();
+    size_t before = bluefs->vault_getsize();
+    bluefs->vault_add(size_val);
+    size_t after = bluefs->vault_getsize();
+    cout << "Added 0x" << std::hex << size_val << "; vault: 0x"
+         << before << "->0x" << after << std::dec << std::endl;
+    bluestore.cold_close();
+  }
+  else if (action == "vault-release")
+  {
+    BlueStore bluestore(cct.get(), path);
+    int r = bluestore.cold_open();
+    if (r < 0) {
+      cerr << "Cannot access BlueStore: " << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    BlueFS* bluefs = bluestore.get_bluefs();
+    size_t before = bluefs->vault_getsize();
+    bluefs->vault_release(size_val, false);
+    size_t after = bluefs->vault_getsize();
+    cout << "Released 0x" << std::hex << size_val << "; vault: 0x"
+         << before << "->0x" << after << std::dec << std::endl;
+    bluestore.cold_close();
+  }
+  else {
     cerr << "unrecognized action " << action << std::endl;
     return 1;
   }

@@ -6882,6 +6882,35 @@ options:
   flags:
   - startup
   with_legacy: false
+- name: bluestore_vault_mode
+  type: str
+  level: basic
+  desc: Selects method of filling reserved disk space.
+  long_desc: Value "0" selects disk reserve filled with 0s. "random" selects disk reserve filled with random values (useful for compressing h/w)
+    "reserve" selects to just allocate; do not touch the area.
+  default: 'random'
+  enum_values:
+  - '0'
+  - 'random'
+  - 'reserve'
+  see_also:
+  - bluestore_vault_size
+  flags:
+  - runtime
+  with_legacy: false
+- name: bluestore_vault_size
+  type: size
+  level: basic
+  desc: The size of disk space vault
+  long_desc: Some deployments have difficulty to recover from ENOSPC error.
+    Saving some extra disk space and release it before manual recovery significantly
+    increases chances of successful recover.
+  default: 0
+  see_also:
+  - bluestore_vault_mode
+  flags:
+  - create
+  with_legacy: false
 - name: jaeger_tracing_enable
   type: bool
   level: advanced

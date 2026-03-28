@@ -8795,6 +8795,13 @@ int BlueStore::mkfs()
   if (r < 0)
     goto out_close_fm;
 
+  {
+    size_t vault_size = cct->_conf.get_val<Option::size_t>("bluestore_vault_size");
+    if (vault_size > 0 && get_bluefs()) {
+      get_bluefs()->vault_add(vault_size);
+    }
+  }
+
   if (fsid != old_fsid) {
     r = _write_fsid();
     if (r < 0) {
@@ -19350,8 +19357,7 @@ void BlueStore::_record_onode(OnodeRef& o, KeyValueDB::Transaction &txn)
 void BlueStore::_log_alerts(osd_alert_list_t& alerts)
 {
   std::lock_guard l(qlock);
-  size_t used = bluefs && bluefs_layout.shared_bdev == BlueFS::BDEV_SLOW ?
-    bluefs->get_used(BlueFS::BDEV_SLOW) : 0;
+  size_t used = bluefs ? bluefs->get_spillover_size() : 0;
   if (used > 0) {
       auto db_used = bluefs->get_used(BlueFS::BDEV_DB);
       auto db_total = bluefs->get_block_device_size(BlueFS::BDEV_DB);
