@@ -18,6 +18,7 @@
 #include <sys/stat.h>
 #include <sys/xattr.h>
 #include <unistd.h>
+#include <cstdint>
 #include "rgw_multi.h"
 #include "include/scope_guard.h"
 #include "common/Clock.h" // for ceph_clock_now()
@@ -145,7 +146,7 @@ static bool decode_attr(Attrs &attrs, const char *name, F &f) {
 
 static inline rgw_obj_key decode_obj_key(const char* fname)
 {
-  std::string dname, oname, ns;
+  std::string dname, oname, ns; // XXX ns is unused?
   dname = url_decode(fname);
   rgw_obj_key key;
   rgw_obj_key::parse_raw_oid(dname, &key);
@@ -433,7 +434,7 @@ int FSEnt::read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& at
   return get_x_attrs(y, dpp, get_fd(), attrs, get_name());
 }
 
-int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cache_cb_t& cb)
+int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags)
 {
   rgw_bucket_dir_entry bde{};
 
@@ -449,7 +450,7 @@ int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cach
     case ObjectType::VERSIONED:
       bde.flags = rgw_bucket_dir_entry::FLAG_VER;
       bde.exists = true;
-      if (!key.have_instance()) {
+      if (flags & FSEnt::FLAG_CURRENT) {
 	  bde.flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
       }
       break;
@@ -1081,7 +1082,7 @@ int Directory::get_ent(const DoutPrefixProvider *dpp, optional_yield y, const st
 }
 
 int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
-                          fill_cache_cb_t &cb)
+                          fill_cache_cb_t &cb, uint32_t flags)
 {
   int ret = for_each(dpp, [this, &cb, &dpp, &y](const char *name) {
     std::unique_ptr<FSEnt> ent;
@@ -1097,7 +1098,7 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
 
     ent->stat(dpp); // Stat the object to get the type
 
-    ret = ent->fill_cache(dpp, y, cb);
+    ret = ent->fill_cache(dpp, y, cb, FSEnt::FLAG_NONE);
     if (ret < 0)
       return ret;
     return 0;
@@ -1180,54 +1181,6 @@ int Symlink::stat(const DoutPrefixProvider* dpp, bool force)
 
   exist = true;
   return fill_target(dpp, parent, get_name(), std::string(), target, ctx);
-}
-
-int Symlink::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cache_cb_t& cb)
-{
-  rgw_bucket_dir_entry bde{};
-  int ret;
-
-  rgw_obj_key key = decode_obj_key(get_name());
-  key.get_index_key(&bde.key);
-  bde.ver.pool = 1;
-  bde.ver.epoch = 1;
-
-  bde.flags = rgw_bucket_dir_entry::FLAG_VER;
-  bde.exists = true;
-  bde.flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
-
-  if (!target) {
-    ret = stat(dpp, /*force=*/false);
-    if (ret < 0)
-      return ret;
-  }
-
-  Attrs attrs;
-  ret = target->read_attrs(dpp, y, attrs);
-  if (ret < 0)
-    return ret;
-
-  POSIXOwner o;
-  ret = decode_owner(attrs, o);
-  if (ret < 0) {
-    bde.meta.owner = "unknown";
-    bde.meta.owner_display_name = "unknown";
-  } else {
-    bde.meta.owner = o.user.to_str();
-    bde.meta.owner_display_name = o.display_name;
-  }
-  bde.meta.category = RGWObjCategory::Main;
-  bde.meta.size = stx.stx_size;
-  bde.meta.accounted_size = stx.stx_size;
-  bde.meta.mtime = from_statx_timestamp(stx.stx_mtime);
-  bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
-  bde.meta.appendable = true;
-  bufferlist etag_bl;
-  if (rgw::sal::get_attr(attrs, RGW_ATTR_ETAG, etag_bl)) {
-    bde.meta.etag = etag_bl.to_str();
-  }
-
-  return cb(dpp, bde);
 }
 
 int Symlink::read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs)
@@ -1384,13 +1337,13 @@ std::unique_ptr<File> MPDirectory::get_part_file(int partnum)
 }
 
 int MPDirectory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
-                          fill_cache_cb_t &cb)
+                            fill_cache_cb_t &cb, uint32_t flags)
 {
-  int ret = FSEnt::fill_cache(dpp, y, cb);
+  int ret = FSEnt::fill_cache(dpp, y, cb, FSEnt::FLAG_NONE);
   if (ret < 0)
     return ret;
 
-  return Directory::fill_cache(dpp, y, cb);
+  return Directory::fill_cache(dpp, y, cb, FSEnt::FLAG_NONE);
 }
 
 int VersionedDirectory::open(const DoutPrefixProvider* dpp)
@@ -1796,8 +1749,11 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y, 
 }
 
 int VersionedDirectory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
-                          fill_cache_cb_t &cb)
+                                   fill_cache_cb_t &cb, uint32_t flags)
 {
+  /* Fill cur_version */
+  stat(dpp, /*force=*/false);
+
   int ret = for_each(dpp, [this, &cb, &dpp, &y](const char *name) {
     std::unique_ptr<FSEnt> ent;
 
@@ -1812,9 +1768,17 @@ int VersionedDirectory::fill_cache(const DoutPrefixProvider *dpp, optional_yield
 
     ent->stat(dpp); // Stat the object to get the type
 
-    ret = ent->fill_cache(dpp, y, cb);
-    if (ret < 0)
-      return ret;
+    if (ent->get_type() != ObjectType::SYMLINK) {
+      uint32_t fill_flags =
+          (cur_version &&
+           (ent->get_name() == cur_version->get_name())) ?
+        FSEnt::FLAG_CURRENT :
+        FSEnt::FLAG_NONE;
+
+      ret = ent->fill_cache(dpp, y, cb, fill_flags);
+      if (ret < 0)
+        return ret;
+    }
     return 0;
   });
 
@@ -2347,7 +2311,7 @@ std::unique_ptr<Object> POSIXBucket::get_object(const rgw_obj_key& k)
 
 int POSIXObject::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cache_cb_t& cb)
 {
-  return ent->fill_cache(dpp, y, cb);
+  return ent->fill_cache(dpp, y, cb, FSEnt::FLAG_NONE);
 }
 
 int POSIXDriver::mint_listing_entry(const std::string &bname,
@@ -2414,9 +2378,9 @@ std::unique_ptr<RGWRole> POSIXDriver::get_role(const RGWRoleInfo& info)
 }
 
 int POSIXBucket::fill_cache(const DoutPrefixProvider* dpp, optional_yield y,
-			  fill_cache_cb_t& cb)
+                            fill_cache_cb_t& cb)
 {
-return dir->fill_cache(dpp, y, cb);
+  return dir->fill_cache(dpp, y, cb, FSEnt::FLAG_NONE);
 }
 
 int POSIXBucket::list(const DoutPrefixProvider* dpp, ListParams& params,
