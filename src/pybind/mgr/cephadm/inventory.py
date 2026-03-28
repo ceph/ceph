@@ -802,6 +802,7 @@ class HostCache():
         self.registry_login_queue: Set[str] = set()
 
         self.scheduled_daemon_actions: Dict[str, Dict[str, str]] = {}
+        self.force_actions: Dict[str, Dict[str, bool]] = {}
 
         self.metadata_up_to_date = {}  # type: Dict[str, bool]
 
@@ -858,6 +859,7 @@ class HostCache():
                         j['last_tuned_profile_update'])
                 self.registry_login_queue.add(host)
                 self.scheduled_daemon_actions[host] = j.get('scheduled_daemon_actions', {})
+                self.force_actions[host] = j.get('force_actions', {})
                 self.metadata_up_to_date[host] = j.get('metadata_up_to_date', False)
 
                 self.mgr.log.debug(
@@ -1077,6 +1079,8 @@ class HostCache():
             j['last_client_files'] = self.last_client_files[host]
         if host in self.scheduled_daemon_actions:
             j['scheduled_daemon_actions'] = self.scheduled_daemon_actions[host]
+        if host in self.force_actions:
+            j['force_actions'] = self.force_actions[host]
         if host in self.metadata_up_to_date:
             j['metadata_up_to_date'] = self.metadata_up_to_date[host]
         if host in self.devices:
@@ -1180,6 +1184,8 @@ class HostCache():
             del self.scheduled_daemon_actions[host]
         if host in self.last_client_files:
             del self.last_client_files[host]
+        if host in self.force_actions:
+            del self.force_actions[host]
         self.mgr.set_store(HOST_CACHE_PREFIX + host, None)
 
     def get_hosts(self):
@@ -1569,7 +1575,7 @@ class HostCache():
         return all((self.host_had_daemon_refresh(h) or h in self.mgr.offline_hosts)
                    for h in self.get_hosts())
 
-    def schedule_daemon_action(self, host: str, daemon_name: str, action: str) -> None:
+    def schedule_daemon_action(self, host: str, daemon_name: str, action: str, force: bool = False) -> None:
         assert not daemon_name.startswith('ha-rgw.')
 
         priorities = {
@@ -1588,22 +1594,54 @@ class HostCache():
 
         if host not in self.scheduled_daemon_actions:
             self.scheduled_daemon_actions[host] = {}
+        if host not in self.force_actions:
+            self.force_actions[host] = {}
         self.scheduled_daemon_actions[host][daemon_name] = action
+        self.force_actions[host][daemon_name] = force
 
     def rm_scheduled_daemon_action(self, host: str, daemon_name: str) -> bool:
-        found = False
-        if host in self.scheduled_daemon_actions:
-            if daemon_name in self.scheduled_daemon_actions[host]:
-                del self.scheduled_daemon_actions[host][daemon_name]
-                found = True
+        if host in self.scheduled_daemon_actions and daemon_name in self.scheduled_daemon_actions[host]:
+            del self.scheduled_daemon_actions[host][daemon_name]
             if not self.scheduled_daemon_actions[host]:
                 del self.scheduled_daemon_actions[host]
-        return found
+            return True
+        return False
 
     def get_scheduled_daemon_action(self, host: str, daemon: str) -> Optional[str]:
         assert not daemon.startswith('ha-rgw.')
 
         return self.scheduled_daemon_actions.get(host, {}).get(daemon)
+
+    def get_all_scheduled_actions(self) -> List[Tuple[str, str, str]]:
+        """Get all scheduled actions as a list of (host, daemon_name, action)"""
+        result = []
+        for host, actions in self.scheduled_daemon_actions.items():
+            for daemon_name, action in actions.items():
+                result.append((host, daemon_name, action))
+        return result
+
+    def set_force_action(self, host: str, daemon_name: str, force: bool = True) -> None:
+        """
+        This is used to track when an action has been explicitly forced by the user
+        """
+        assert not daemon_name.startswith('ha-rgw.')
+
+        if host not in self.force_actions:
+            self.force_actions[host] = {}
+        self.force_actions[host][daemon_name] = force
+
+    def is_force_action(self, host: str, daemon_name: str) -> bool:
+        assert not daemon_name.startswith('ha-rgw.')
+
+        return self.force_actions.get(host, {}).get(daemon_name, False)
+
+    def clear_force_action(self, host: str, daemon_name: str) -> bool:
+        if host in self.force_actions and daemon_name in self.force_actions[host]:
+            del self.force_actions[host][daemon_name]
+            if not self.force_actions[host]:
+                del self.force_actions[host]
+            return True
+        return False
 
     def get_host_network_ips(self, host: str) -> List[str]:
         return [
