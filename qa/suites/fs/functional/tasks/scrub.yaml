@@ -8,6 +8,7 @@ overrides:
       - bad backtrace on inode
       - overall HEALTH_
       - \(MDS_TRIM\)
+      - object missing on disk
     conf:
       mds:
         mds log max segments: 1
