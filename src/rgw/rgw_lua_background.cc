@@ -183,14 +183,19 @@ void Background::run() {
     }
 
     std::vector<std::string> rgw_script_names;
-    const auto rc = list_scripts(rgw_script_names);
-    if (rc == -ENOENT || rc == -EAGAIN) {
-      // either no script or paused, nothing to do
-    } else if (rc < 0) {
+    const auto rc = list_scripts(rgw_script_names); // load all scripts
+    rgw_script_names.push_back(""); // for backward compatibility, consider the "default" script as well
+    if (rc < 0 && rc != -ENOENT && rc != -EAGAIN) {
       ldpp_dout(dpp, 1) << "WARNING: failed to list background scripts. error " << rc << dendl;
     }
     
     for (const auto& name : rgw_script_names) {
+      if (name == "default") {
+        // skip the "default" script to prevent duplicates runs as we are already considering it
+        // when appending "" to rgw_script_names above
+        // this also works because the script put --script-name "" command maps the script name to "default"
+        continue;
+      }
       const auto rc = read_script(name);
       if (rc == -ENOENT || rc == -EAGAIN) {
         // either no script or paused, nothing to do

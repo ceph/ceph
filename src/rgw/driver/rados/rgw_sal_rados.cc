@@ -5451,7 +5451,6 @@ int RadosLuaManager::list_scripts(const DoutPrefixProvider* dpp, optional_yield 
   bufferlist bl;
   int r = rgw_get_system_obj(store->svc()->sysobj, pool, list_metadata_key, bl, objv, nullptr, y, dpp);
   if (r < 0) {
-    if (r == -ENOENT) return 0;
     return r;
   }
 
@@ -5555,7 +5554,7 @@ int RadosLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y,
   std::string script_tenant = rgw::lua::get_script_tenant(key);
   rgw::lua::context script_context = rgw::lua::get_script_context(key);
   int r = list_scripts(dpp, y, script_tenant, script_context, &objv, scripts);
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
     return r;
   }
 
@@ -5597,7 +5596,7 @@ int RadosLuaManager::del_script(const DoutPrefixProvider* dpp, optional_yield y,
   std::string script_tenant = rgw::lua::get_script_tenant(key);
   rgw::lua::context script_context = rgw::lua::get_script_context(key);
   int r = list_scripts(dpp, y, script_tenant, script_context, &objv, scripts);
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
     return r;
   }
 
