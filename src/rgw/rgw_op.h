@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <limits.h>
 
 #include <array>
@@ -34,6 +35,7 @@
 #include "common/ceph_json.h"
 #include "common/ceph_time.h"
 
+#include "rgw_cksum.h"
 #include "rgw_common.h"
 #include "rgw_dmclock.h"
 #include "rgw_sal.h"
@@ -1243,6 +1245,8 @@ protected:
   std::string multipart_upload_id;
   std::string multipart_part_str;
   int multipart_part_num = 0;
+  rgw::cksum::Type multipart_cksum_type{rgw::cksum::Type::none};
+  uint16_t multipart_cksum_flags{rgw::cksum::Cksum::FLAG_CKSUM_NONE};
   jspan_ptr multipart_trace;
 
   boost::optional<ceph::real_time> delete_at;
@@ -1254,6 +1258,8 @@ protected:
   //object lock
   RGWObjectRetention *obj_retention;
   RGWObjectLegalHold *obj_legal_hold;
+
+  std::optional<rgw::cksum::Cksum> cksum;
 
 public:
   RGWPutObj() : ofs(0),
@@ -1334,6 +1340,7 @@ protected:
   RGWAccessControlPolicy policy;
   std::map<std::string, bufferlist> attrs;
   boost::optional<ceph::real_time> delete_at;
+  std::optional<rgw::cksum::Cksum> cksum;
 
   /* Must be called after get_data() or the result is undefined. */
   virtual std::string get_current_filename() const = 0;
@@ -1628,6 +1635,50 @@ public:
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
 
+class RGWGetObjAttrs : public RGWGetObj {
+protected:
+  std::string version_id;
+  std::string expected_bucket_owner;
+  std::optional<int> marker;
+  std::optional<int> max_parts;
+  uint16_t requested_attributes{0};
+#if 0
+  /* used to decrypt attributes for objects stored with SSE-C */
+  x-amz-server-side-encryption-customer-algorithm
+  x-amz-server-side-encryption-customer-key
+  x-amz-server-side-encryption-customer-key-MD5
+#endif
+public:
+
+  enum class ReqAttributes : uint16_t {
+    None = 0,
+    Etag,
+    Checksum,
+    ObjectParts,
+    StorageClass,
+    ObjectSize
+  };
+
+  static uint16_t as_flag(ReqAttributes attr) {
+    return 1 << (uint16_t(attr) ? uint16_t(attr) - 1 : 0);
+  }
+
+  static uint16_t recognize_attrs(const std::string& hdr, uint16_t deflt = 0);
+
+  RGWGetObjAttrs() : RGWGetObj()
+  {
+    RGWGetObj::get_data = false; // it's extra false
+  }
+
+  int verify_permission(optional_yield y) override;
+  void pre_exec() override;
+  void execute(optional_yield y) override;
+  void send_response() override = 0;
+  const char* name() const override { return "get_obj_attrs"; }
+  RGWOpType get_type() override { return RGW_OP_GET_OBJ_ATTRS; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+}; /* RGWGetObjAttrs */
+
 class RGWGetLC : public RGWOp {
 protected:
 
@@ -1848,6 +1899,9 @@ protected:
   //object lock
   std::optional<RGWObjectRetention> obj_retention = std::nullopt;
   std::optional<RGWObjectLegalHold> obj_legal_hold = std::nullopt;
+  rgw::sal::Attrs attrs;
+  rgw::cksum::Type cksum_algo{rgw::cksum::Type::none};
+  uint16_t cksum_flags{rgw::cksum::Cksum::FLAG_CKSUM_NONE};
 
 public:
   RGWInitMultipart() {}
@@ -1874,6 +1928,10 @@ protected:
   jspan_ptr multipart_trace;
   ceph::real_time upload_time;
   std::unique_ptr<rgw::sal::Notification> res;
+  std::unique_ptr<rgw::sal::Object> meta_obj;
+  std::optional<rgw::cksum::Cksum> cksum;
+  std::optional<std::string> armored_cksum;
+  off_t ofs = 0;
 
 public:
   RGWCompleteMultipart() {}
@@ -1917,6 +1975,7 @@ protected:
   RGWAccessControlPolicy policy;
   bool truncated;
   rgw_placement_rule* placement;
+  std::optional<rgw::cksum::Cksum> cksum;
 
 public:
   RGWListMultipart() {
@@ -2177,7 +2236,12 @@ inline int rgw_get_request_metadata(const DoutPrefixProvider *dpp,
       "x-amz-server-side-encryption-customer-algorithm",
       "x-amz-server-side-encryption-customer-key",
       "x-amz-server-side-encryption-customer-key-md5",
-      "x-amz-storage-class"
+      /* XXX agreed w/cbodley that probably a cleanup is needed here--we probably
+       * don't want to store these, esp. under user.rgw */
+      "x-amz-storage-class",
+      "x-amz-content-sha256",
+      "x-amz-checksum-algorithm",
+      "x-amz-date"
   };
 
   size_t valid_meta_count = 0;

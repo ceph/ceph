@@ -522,8 +522,7 @@ static bool pass_size_limit_checks(const DoutPrefixProvider *dpp, lc_op_ctx& oc)
     auto& o = oc.o;
     std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(o.key);
 
-    RGWObjState *obj_state{nullptr};
-    ret = obj->get_obj_state(dpp, &obj_state, null_yield, true);
+    ret = obj->load_obj_state(dpp, null_yield, true);
     if (ret < 0) {
       return false;
     }
@@ -532,10 +531,10 @@ static bool pass_size_limit_checks(const DoutPrefixProvider *dpp, lc_op_ctx& oc)
     bool lt_p{true};
 
     if (op.size_gt) {
-      gt_p = (obj_state->size > op.size_gt.get());
+      gt_p = (obj->get_obj_size() > op.size_gt.get());
     }
     if (op.size_lt) {
-      lt_p = (obj_state->size < op.size_lt.get());
+      lt_p = (obj->get_obj_size() < op.size_lt.get());
     }
 
     return gt_p && lt_p;
@@ -621,15 +620,14 @@ static int remove_expired_obj(const DoutPrefixProvider* dpp,
   }
   auto obj = oc.bucket->get_object(obj_key);
 
-  RGWObjState* obj_state{nullptr};
   string etag;
-  ret = obj->get_obj_state(dpp, &obj_state, null_yield, true);
+  ret = obj->load_obj_state(dpp, null_yield, true);
   if (ret < 0) {
     return ret;
   }
-  auto iter = obj_state->attrset.find(RGW_ATTR_ETAG);
-  if (iter != obj_state->attrset.end()) {
-    etag = rgw_bl_str(iter->second);
+  bufferlist bl;
+  if (obj->get_attr(RGW_ATTR_ETAG, bl)) {
+    etag = rgw_bl_str(bl);
   }
   auto size = obj->get_obj_size();
 
@@ -909,15 +907,14 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
       auto mpu = target->get_multipart_upload(key.name);
       auto sal_obj = target->get_object(key);
 
-      RGWObjState* obj_state{nullptr};
       string etag;
-      ret = sal_obj->get_obj_state(this, &obj_state, null_yield, true);
+      ret = sal_obj->load_obj_state(this, null_yield, true);
       if (ret < 0) {
 	return ret;
       }
-      auto iter = obj_state->attrset.find(RGW_ATTR_ETAG);
-      if (iter != obj_state->attrset.end()) {
-        etag = rgw_bl_str(iter->second);
+      bufferlist bl;
+      if (sal_obj->get_attr(RGW_ATTR_ETAG, bl)) {
+        etag = rgw_bl_str(bl);
       }
       auto size = sal_obj->get_obj_size();
 
@@ -1407,15 +1404,14 @@ public:
     auto& bucket = oc.bucket;
     auto& obj = oc.obj;
 
-    RGWObjState* obj_state{nullptr};
     string etag;
-    ret = obj->get_obj_state(oc.dpp, &obj_state, null_yield, true);
+    ret = obj->load_obj_state(oc.dpp, null_yield, true);
     if (ret < 0) {
       return ret;
     }
-    auto iter = obj_state->attrset.find(RGW_ATTR_ETAG);
-    if (iter != obj_state->attrset.end()) {
-      etag = rgw_bl_str(iter->second);
+    bufferlist bl;
+    if (obj->get_attr(RGW_ATTR_ETAG, bl)) {
+      etag = rgw_bl_str(bl);
     }
 
     rgw::notify::EventTypeList event_types;

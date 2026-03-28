@@ -36,17 +36,6 @@ const std::string mp_ns = "multipart";
 const std::string MP_OBJ_PART_PFX = "part-";
 const std::string MP_OBJ_HEAD_NAME = MP_OBJ_PART_PFX + "00000";
 
-static inline bool get_attr(Attrs& attrs, const char* name, bufferlist& bl)
-{
-  auto iter = attrs.find(name);
-  if (iter == attrs.end()) {
-    return false;
-  }
-
-  bl = iter->second;
-  return true;
-}
-
 static inline rgw_obj_key decode_obj_key(const char* fname)
 {
   std::string dname, oname, ns;
@@ -621,7 +610,7 @@ int POSIXObject::fill_bde(const DoutPrefixProvider *dpp, optional_yield y, rgw_b
     bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
     bde.meta.appendable = true;
     bufferlist etag_bl;
-    if (rgw::sal::get_attr(get_attrs(), RGW_ATTR_ETAG, etag_bl)) {
+    if (get_attr(RGW_ATTR_ETAG, etag_bl)) {
       bde.meta.etag = etag_bl.to_str();
     }
 
@@ -643,7 +632,7 @@ int POSIXDriver::mint_listing_entry(const std::string &bname,
     obj = b->get_object(decode_obj_key(bde.key.name.c_str()));
     pobj = static_cast<POSIXObject *>(obj.get());
 
-    if (!pobj->exists(nullptr)) {
+    if (!pobj->check_exists(nullptr)) {
       ret = errno;
       return -ret;
     }
@@ -674,7 +663,7 @@ int POSIXBucket::fill_cache(const DoutPrefixProvider* dpp, optional_yield y,
     obj = get_object(decode_obj_key(name));
     pobj = static_cast<POSIXObject*>(obj.get());
 
-    if (!pobj->exists(dpp)) {
+    if (!pobj->check_exists(dpp)) {
       ret = errno;
       ldpp_dout(dpp, 0) << "ERROR: could not stat object " << name << ": "
 	<< cpp_strerror(ret) << dendl;
@@ -892,11 +881,11 @@ int POSIXBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
   }
   get_x_attrs(y, dpp, dir_fd, attrs, get_name());
 
-  bufferlist bl;
-  if (get_attr(attrs, RGW_POSIX_ATTR_BUCKET_INFO, bl)) {
+  auto iter = attrs.find(RGW_POSIX_ATTR_BUCKET_INFO);
+  if (iter != attrs.end()) {
     // Proper bucket with saved info
     try {
-      auto bufit = bl.cbegin();
+      auto bufit = iter->second.cbegin();
       decode(info, bufit);
     } catch (buffer::error &err) {
       ldout(driver->ctx(), 0) << "ERROR: " << __func__ << ": failed to decode " RGW_POSIX_ATTR_BUCKET_INFO " attr" << dendl;
@@ -1285,7 +1274,7 @@ int POSIXBucket::rename(const DoutPrefixProvider* dpp, optional_yield y, Object*
   std::string dst_fname = to->get_fname();
   int flags = 0;
 
-  if (to->exists(dpp)) {
+  if (to->check_exists(dpp)) {
     flags = RENAME_EXCHANGE;
   }
   // swap
@@ -1406,7 +1395,7 @@ int POSIXBucket::copy(const DoutPrefixProvider *dpp, optional_yield y,
 
     sobj = this->get_object(decode_obj_key(name));
     sop = static_cast<POSIXObject*>(sobj.get());
-    if (!sop->exists(dpp)) {
+    if (!sop->check_exists(dpp)) {
       ret = errno;
       ldpp_dout(dpp, 0) << "ERROR: could not stat object " << name << ": "
 	<< cpp_strerror(ret) << dendl;
@@ -1533,7 +1522,7 @@ int POSIXObject::copy_object(const ACLOwner& owner,
   }
 
   // Source must exist, and we need to know if it's a shadow obj
-  if (!exists(dpp)) {
+  if (!check_exists(dpp)) {
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not stat object " << get_name() << ": "
                       << cpp_strerror(ret) << dendl;
@@ -1547,13 +1536,20 @@ int POSIXObject::copy_object(const ACLOwner& owner,
   }
 }
 
-int POSIXObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **pstate, optional_yield y, bool follow_olh)
+int POSIXObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
+			    int max_parts, int marker, int* next_marker,
+			    bool* truncated, list_parts_each_t each_func,
+			    optional_yield y)
+{
+  return -EOPNOTSUPP;
+}
+
+int POSIXObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh)
 {
   int ret = stat(dpp);
   if (ret < 0) {
     return ret;
   }
-  *pstate = &state;
 
   return 0;
 }
@@ -1622,7 +1618,7 @@ int POSIXObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* att
 bool POSIXObject::is_expired()
 {
   bufferlist bl;
-  if (get_attr(state.attrset, RGW_ATTR_DELETE_AT, bl)) {
+  if (get_attr(RGW_ATTR_DELETE_AT, bl)) {
     utime_t delete_at;
     try {
       auto bufit = bl.cbegin();
@@ -1656,7 +1652,7 @@ std::unique_ptr<MPSerializer> POSIXObject::get_serializer(const DoutPrefixProvid
 
 int MPPOSIXSerializer::try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y)
 {
-  if (!obj->exists(dpp)) {
+  if (!obj->check_exists(dpp)) {
     return -ENOENT;
   }
 
@@ -1826,7 +1822,7 @@ int POSIXObject::get_owner(const DoutPrefixProvider *dpp, optional_yield y, std:
 {
   bufferlist bl;
   rgw_user u;
-  if (!rgw::sal::get_attr(get_attrs(), RGW_POSIX_ATTR_OWNER, bl)) {
+  if (!get_attr(RGW_POSIX_ATTR_OWNER, bl)) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__
         << ": No " RGW_POSIX_ATTR_OWNER " attr" << dendl;
     return -EINVAL;
@@ -2090,7 +2086,7 @@ int POSIXObject::POSIXReadOp::prepare(optional_yield y, const DoutPrefixProvider
     return ret;
 
   bufferlist etag_bl;
-  if (!rgw::sal::get_attr(source->get_attrs(), RGW_ATTR_ETAG, etag_bl)) {
+  if (!source->get_attr(RGW_ATTR_ETAG, etag_bl)) {
     /* Sideloaded file.  Generate necessary attributes. Only done once. */
     int ret = source->generate_attrs(dpp, y);
     if (ret < 0) {
@@ -2099,7 +2095,7 @@ int POSIXObject::POSIXReadOp::prepare(optional_yield y, const DoutPrefixProvider
     }
   }
 
-  if (!rgw::sal::get_attr(source->get_attrs(), RGW_ATTR_ETAG, etag_bl)) {
+  if (!source->get_attr(RGW_ATTR_ETAG, etag_bl)) {
     return -EINVAL;
   }
 
@@ -2226,13 +2222,13 @@ int POSIXObject::generate_mp_etag(const DoutPrefixProvider* dpp, optional_yield 
 	return ret;
       }
       bufferlist etag_bl;
-      if (!get_attr(shadow_obj->get_attrs(), RGW_ATTR_ETAG, etag_bl)) {
+      if (!shadow_obj->get_attr(RGW_ATTR_ETAG, etag_bl)) {
 	// Generate part's etag
 	ret = shadow_obj->generate_etag(dpp, y);
 	if (ret < 0)
 	  return ret;
       }
-      if (!get_attr(shadow_obj->get_attrs(), RGW_ATTR_ETAG, etag_bl)) {
+      if (!shadow_obj->get_attr(RGW_ATTR_ETAG, etag_bl)) {
 	// Can't get etag.
 	return -EINVAL;
       }
@@ -2363,13 +2359,13 @@ int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
 
 int POSIXObject::POSIXReadOp::get_attr(const DoutPrefixProvider* dpp, const char* name, bufferlist& dest, optional_yield y)
 {
-  if (!source->exists(dpp)) {
+  if (!source->check_exists(dpp)) {
     return -ENOENT;
   }
   if (source->get_obj_attrs(y, dpp) < 0) {
     return -ENODATA;
   }
-  if (!rgw::sal::get_attr(source->get_attrs(), name, dest)) {
+  if (!source->get_attr(name, dest)) {
     return -ENODATA;
   }
 
@@ -2455,9 +2451,8 @@ int POSIXMultipartPart::load(const DoutPrefixProvider* dpp, optional_yield y,
 
   shadow = std::make_unique<POSIXObject>(driver, key, upload->get_shadow());
 
-  RGWObjState* pstate;
   // Stat the shadow object to get things like size
-  int ret = shadow->get_obj_state(dpp, &pstate, y);
+  int ret = shadow->load_obj_state(dpp, y);
   if (ret < 0) {
     return ret;
   }
@@ -2526,6 +2521,7 @@ int POSIXMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
 
   meta_obj = get_meta_obj();
 
+  mp_obj.upload_info.cksum_type = cksum_type;
   mp_obj.upload_info.dest_placement = dest_placement;
 
   bufferlist bl;
@@ -2781,7 +2777,7 @@ int POSIXMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
 	}
       }
       bufferlist bl;
-      if (!get_attr(meta_obj->get_attrs(), RGW_POSIX_ATTR_MPUPLOAD, bl)) {
+      if (!meta_obj->get_attr(RGW_POSIX_ATTR_MPUPLOAD, bl)) {
 	ldpp_dout(dpp, 0) << " ERROR: could not get meta object attrs for mp upload "
 	  << get_key() << dendl;
 	return ret;
@@ -2823,9 +2819,12 @@ int POSIXMultipartWriter::process(bufferlist&& data, uint64_t offset)
   return obj->write(offset, data, dpp, null_yield);
 }
 
-int POSIXMultipartWriter::complete(size_t accounted_size, const std::string& etag,
+int POSIXMultipartWriter::complete(
+		       size_t accounted_size,
+		       const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
@@ -2839,12 +2838,12 @@ int POSIXMultipartWriter::complete(size_t accounted_size, const std::string& eta
   if (if_match) {
     if (strcmp(if_match, "*") == 0) {
       // test the object is existing
-      if (!obj->exists(dpp)) {
+      if (!obj->check_exists(dpp)) {
         return -ERR_PRECONDITION_FAILED;
       }
     } else {
       bufferlist bl;
-      if (!get_attr(obj->get_attrs(), RGW_ATTR_ETAG, bl)) {
+      if (!obj->get_attr(RGW_ATTR_ETAG, bl)) {
         return -ERR_PRECONDITION_FAILED;
       }
       if (strncmp(if_match, bl.c_str(), bl.length()) != 0) {
@@ -2855,6 +2854,7 @@ int POSIXMultipartWriter::complete(size_t accounted_size, const std::string& eta
 
   info.num = part_num;
   info.etag = etag;
+  info.cksum = cksum;
   info.mtime = set_mtime;
 
   bufferlist bl;
@@ -2894,6 +2894,7 @@ int POSIXAtomicWriter::process(bufferlist&& data, uint64_t offset)
 int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
@@ -2906,12 +2907,12 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   if (if_match) {
     if (strcmp(if_match, "*") == 0) {
       // test the object is existing
-      if (!obj.exists(dpp)) {
+      if (!obj.check_exists(dpp)) {
 	return -ERR_PRECONDITION_FAILED;
       }
     } else {
       bufferlist bl;
-      if (!get_attr(obj.get_attrs(), RGW_ATTR_ETAG, bl)) {
+      if (!obj.get_attr(RGW_ATTR_ETAG, bl)) {
         return -ERR_PRECONDITION_FAILED;
       }
       if (strncmp(if_match, bl.c_str(), bl.length()) != 0) {
@@ -2922,12 +2923,12 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   if (if_nomatch) {
     if (strcmp(if_nomatch, "*") == 0) {
       // test the object is not existing
-      if (obj.exists(dpp)) {
+      if (obj.check_exists(dpp)) {
 	return -ERR_PRECONDITION_FAILED;
       }
     } else {
       bufferlist bl;
-      if (!get_attr(obj.get_attrs(), RGW_ATTR_ETAG, bl)) {
+      if (!obj.get_attr(RGW_ATTR_ETAG, bl)) {
         return -ERR_PRECONDITION_FAILED;
       }
       if (strncmp(if_nomatch, bl.c_str(), bl.length()) == 0) {
