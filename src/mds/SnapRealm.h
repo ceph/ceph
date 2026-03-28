@@ -42,6 +42,10 @@ public:
     return false;
   }
 
+  int will_md_op_succeed(const snapid_t snap_id, const std::string& md_key,
+                         const std::string& md_val,
+                         const unsigned int op_flag) const;
+
   void prune_past_parent_snaps();
   bool has_past_parent_snaps() const {
     return !srnode.past_parent_snaps.empty();

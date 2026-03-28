@@ -14238,6 +14238,54 @@ int Client::rmsnap(const char *relpath, const char *name, const UserPerm& perms,
   return _rmdir(snapdir.get(), name, perms, check_perms);
 }
 
+int Client::do_snap_md_op(const char* path, const string& md_key,
+  const string& md_val, unsigned int op_flag, const UserPerm &perms)
+{
+  if (op_flag != CEPH_SNAP_MD_OP_CREATE && op_flag != CEPH_SNAP_MD_OP_UPDATE &&
+      op_flag != CEPH_SNAP_MD_OP_REMOVE) {
+    return -EINVAL;
+  }
+
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied())
+    return -ENOTCONN;
+
+  std::scoped_lock l(client_lock);
+
+  walk_dentry_result wdr;
+  if (int rc = path_walk(cwd, filepath(path), &wdr, perms, {}); rc < 0) {
+    return rc;
+  }
+
+  if (wdr.target->snapid == CEPH_NOSNAP) {
+    return -EINVAL;
+  }
+
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SNAP_MD);
+  req->set_filepath(wdr.getpath());
+  req->set_inode(wdr.diri);
+  req->set_dentry(wdr.dn);
+  req->dentry_drop = CEPH_CAP_FILE_SHARED;
+  req->dentry_unless = CEPH_CAP_FILE_EXCL;
+
+  bufferlist bl;
+  encode(md_key, bl);
+  encode(md_val, bl);
+  encode(op_flag, bl);
+  req->set_data(bl);
+
+  ldout(cct, 10) << __func__ << ": making request" << dendl;
+  int res = make_request(req, perms, &wdr.target);
+  ldout(cct, 10) << __func__ << ": result is " << res << dendl;
+
+  trim_cache();
+
+  ldout(cct, 8) << __func__ << "(" << wdr.getpath() << ", " << perms
+                << ") = " << res << dendl;
+
+  return res;
+}
+
 // =============================
 // expose caps
 

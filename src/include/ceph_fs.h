@@ -1,3 +1,4 @@
+// vim: ts=8 sw=2 sts=2 expandtab
 /*
  * ceph_fs.h - Ceph constants and data types to share between kernel and
  * user space.
@@ -429,6 +430,7 @@ enum {
 	CEPH_MDS_OP_RENAMESNAP = 0x01403,
 	CEPH_MDS_OP_READDIR_SNAPDIFF   = 0x01404,
 	CEPH_MDS_OP_FILE_BLOCKDIFF = 0x01405,
+	CEPH_MDS_OP_SNAP_MD = 0x1406,
 
 	// internal op
 	CEPH_MDS_OP_FRAGMENTDIR= 0x01500,
@@ -1024,6 +1026,15 @@ enum {
 	CEPH_SNAP_OP_CREATE,
 	CEPH_SNAP_OP_DESTROY,
 	CEPH_SNAP_OP_SPLIT,
+};
+
+/*
+ * snapshot metadata operations
+ */
+enum {
+	CEPH_SNAP_MD_OP_CREATE,
+	CEPH_SNAP_MD_OP_UPDATE,
+	CEPH_SNAP_MD_OP_REMOVE,
 };
 
 extern const char *ceph_snap_op_name(int o);

@@ -16,7 +16,7 @@ class Formatter;
 
 struct SnapRealmInfo {
   mutable ceph_mds_snap_realm h;
-  std::vector<snapid_t> my_snaps;
+  std::map<snapid_t, std::map<std::string, std::string>> my_snaps;
   std::vector<snapid_t> prior_parent_snaps;  // before parent_since
 
   SnapRealmInfo() {

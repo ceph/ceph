@@ -7,6 +7,8 @@
 #include <iostream>
 #include <set>
 #include <vector>
+#include <string>
+#include <map>
 
 #include "include/types.h"
 #include "common/snap_types.h"
@@ -23,7 +25,7 @@ struct SnapRealm {
   inodeno_t parent;
   snapid_t parent_since;
   std::vector<snapid_t> prior_parent_snaps;  // snaps prior to parent_since
-  std::vector<snapid_t> my_snaps;
+  std::map<snapid_t, std::map<std::string, std::string>> my_snaps;
 
   SnapRealm *pparent;
   std::set<SnapRealm*> pchildren;
