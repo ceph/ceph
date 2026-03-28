@@ -168,6 +168,7 @@ class MonMap {
   std::string tiebreaker_mon;
   std::set<std::string> stretch_marked_down_mons; // can't be leader or taken proposal in CONNECTIVITY 
                                                   // seriously until fully recovered
+  std::vector<std::string> netsplit_zone_preferences; // ordered list of preferred zones for netsplit resolution (index 0 = highest priority)
 
 public:
   void calc_legacy_ranks();
@@ -415,6 +416,11 @@ public:
     auto it = mon_info.find(n);
     ceph_assert(it != mon_info.end());
     it->second.weight = v;
+  }
+  std::map<std::string,std::string> get_crush_location_by_name(const std::string& n) const {
+    auto it = mon_info.find(n);
+    ceph_assert(it != mon_info.end());
+    return it->second.crush_loc;
   }
 
   void encode(ceph::buffer::list& blist, uint64_t con_features) const;
