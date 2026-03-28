@@ -39,11 +39,16 @@ using namespace rgw;
 #define MINCHUNKSIZE 4096
 class ZeroPoolAllocator {
 private:
+    static constexpr size_t kAlign = alignof(std::max_align_t);
     struct element {
 	struct element *next;
 	int size;
-	char data[4];
-    } *b;
+	char data[];
+    }* b;
+
+    // Pad the allocated element size to alignment requirements
+    static constexpr size_t kElementSize = (sizeof(*b) + (kAlign - 1)) &
+                                           ~(kAlign - 1);
     size_t left;
 public:
     static const bool kNeedFree { false };
@@ -59,42 +64,89 @@ public:
 	    free(p);
 	}
     }
-    void * Malloc(size_t size) {
-	void *r;
-	if (!size) return 0;
-	size = (size + sizeof(ALIGNTYPE)-1)&(-sizeof(ALIGNTYPE));
-	if (size > left) {
-		size_t ns { size };
-		if (ns < MINCHUNKSIZE) ns = MINCHUNKSIZE;
-		element *nw { (element *) malloc(sizeof *b + ns) };
-		if (!nw) {
-// std::cerr << "out of memory" << std::endl;
-			return 0;
-		}
-		left = ns - sizeof *b;
-		nw->size = ns;
-		nw->next = b;
-		b = nw;
+
+    void*
+    Malloc(const size_t size)
+    {
+      if (!size) {
+	return nullptr;
+      }
+
+      // Always reserve space for a trailing '\0' for RapidJSON strings.
+      // This also fixes -Wstringop-overflow emitted from SetStringRaw().
+      static constexpr size_t extra = 1;
+
+      // Prevent overflow in addition.
+      if (size > std::numeric_limits<size_t>::max() - extra) {
+	return nullptr;
+      }
+
+      // Bump request size to account for trailing NULL
+      size_t request = size + extra;
+
+      // Meet alignment requirements
+      request = (request + (kAlign - 1)) & ~(kAlign - 1);
+
+      if (request > left) {
+	size_t request_size = request;
+	if (request_size < MINCHUNKSIZE) {
+	  request_size = MINCHUNKSIZE;
 	}
-	left -= size;
-	r = static_cast<void*>(b->data + left);
-	return r;
+
+	// Allocate a chunk of memory padded by the size of the header
+	void* new_block = malloc(kElementSize + request_size);
+	if (!new_block) {
+	  // std::cerr << "out of memory" << std::endl;
+	  return nullptr;
+	}
+
+	auto* new_element = static_cast<element*>(new_block);
+	new_element->size = request_size;
+	new_element->next = b;
+	left = new_element->size;
+	b = new_element;
+      }
+
+      // Carve out the requested size from space remaining at end of chunk
+      left -= request;
+
+      // Create a pointer to the block, accounting for the header size
+      void* r = static_cast<void*>(reinterpret_cast<char*>(b) + kElementSize +
+                                   left);
+      return r;
     }
-    void* Realloc(void* p, size_t old, size_t nw) {
-        if (!nw) return 0;
-        void *r = Malloc(nw);
-	if (nw > old) nw = old;
-	if (r && old) memcpy(r, p, nw);
-	return r;
+
+    void*
+    Realloc(const void* p, const size_t old, const size_t nw)
+    {
+      if (!nw) {
+	return nullptr;
+      }
+
+      // If ptr is null, behave like Malloc(nw).
+      if (!p) {
+	return Malloc(nw);
+      }
+
+      void* r = Malloc(nw);
+      if (!r) {
+	return nullptr;
+      }
+
+      // Copy min(old, nw) payload bytes.
+      const size_t to_copy = old < nw ? old : nw;
+      std::memcpy(r, p, to_copy);
+
+      return r;
     }
     static void Free(void *p) {
 	ceph_assert(0 == "Free should not be called");
     }
 private:
     //! Copy constructor is not permitted.
-    ZeroPoolAllocator(const ZeroPoolAllocator& rhs) /* = delete */;
+    ZeroPoolAllocator(const ZeroPoolAllocator& rhs) = delete;
     //! Copy assignment operator is not permitted.
-    ZeroPoolAllocator& operator=(const ZeroPoolAllocator& rhs) /* = delete */;
+    ZeroPoolAllocator& operator=(const ZeroPoolAllocator& rhs) = delete;
 };
 
 typedef rapidjson::GenericDocument<rapidjson::UTF8<>,
