@@ -118,7 +118,7 @@ describe('RbdSnapshotListComponent', () => {
       const actionLabelsI18n = TestBed.inject(ActionLabelsI18n);
       called = false;
       rbdService = new RbdService(null, null);
-      notificationService = new NotificationService(null, null, null);
+      notificationService = new NotificationService(null, null, null, null);
       authStorageService = new AuthStorageService();
       authStorageService.set(USER, { 'rbd-image': ['create', 'read', 'update', 'delete'] });
       component = new RbdSnapshotListComponent(

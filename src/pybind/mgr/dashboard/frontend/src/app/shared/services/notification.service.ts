@@ -1,4 +1,5 @@
 import { Injectable, NgZone } from '@angular/core';
+import { DomSanitizer } from '@angular/platform-browser';
 
 import _ from 'lodash';
 import { BehaviorSubject } from 'rxjs';
@@ -49,7 +50,8 @@ export class NotificationService {
   constructor(
     private taskMessageService: TaskMessageService,
     private cdDatePipe: CdDatePipe,
-    private ngZone: NgZone
+    private ngZone: NgZone,
+    private sanitizer: DomSanitizer
   ) {
     this._loadStoredNotifications();
     this._loadMutedState();
@@ -238,10 +240,19 @@ export class NotificationService {
     const carbonType = this.NOTIFICATION_TYPE_MAP[notification.type] || 'info';
     const lowContrast = notification.options?.lowContrast || false;
 
+    const sanitizedTitle =
+      this.sanitizer.sanitize(1, notification.title) || notification.title;
+
+    const sanitizedSubtitle =
+      this.sanitizer.sanitize(1, notification.message || '') || notification.message || '';
+
+    const sanitizedCaption =
+      this.sanitizer.sanitize(1, this._renderTimeAndApplicationHtml(notification)) || this._renderTimeAndApplicationHtml(notification);
+
     const toast: ToastContent = {
-      title: notification.title,
-      subtitle: notification.message || '',
-      caption: this._renderTimeAndApplicationHtml(notification),
+      title: sanitizedTitle,
+      subtitle: sanitizedSubtitle,
+      caption: sanitizedCaption,
       type: carbonType,
       lowContrast: lowContrast,
       showClose: true,
