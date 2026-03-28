@@ -187,9 +187,9 @@ following conditions are true:
 - a fatal signal has been raised or
 - an assertion within Ceph code has been triggered or
 - sending in-memory logs to the output log has been manually triggered.
-  Consult `the portion of the "Ceph Administration Tool documentation
+  Consult :ref:`the portion of the "Ceph Administration Tool" documentation
   that provides an example of how to submit admin socket commands
-  <http://docs.ceph.com/en/latest/man/8/ceph/#daemon>`_ for more detail.
+  <man-ceph-daemon>` for more detail.
 
 Log levels and memory levels can be set either together or separately. If a
 subsystem is assigned a single value, then that value determines both the log
