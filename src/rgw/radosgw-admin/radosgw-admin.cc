@@ -7597,7 +7597,7 @@ int main(int argc, const char **argv)
         bucket_op.max_entries = max_entries;
       else
         bucket_op.max_entries = 0; /* for backward compatibility */
-      RGWBucketAdminOp::info(driver, bucket_op, stream_flusher, null_yield, dpp());
+      RGWBucketAdminOp::info(driver, *site, bucket_op, stream_flusher, null_yield, dpp());
     } else {
       int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
       if (ret < 0) {
@@ -7720,7 +7720,7 @@ int main(int argc, const char **argv)
       bucket_op.max_entries = 0; /* for backward compatibility */
     bucket_op.set_restore_stats(bool(show_restore_stats));
 
-    int r = RGWBucketAdminOp::info(driver, bucket_op, stream_flusher, null_yield, dpp());
+    int r = RGWBucketAdminOp::info(driver, *site, bucket_op, stream_flusher, null_yield, dpp());
     if (r < 0) {
       cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
       return posix_errortrans(-r);

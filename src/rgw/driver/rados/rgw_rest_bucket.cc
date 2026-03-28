@@ -61,7 +61,7 @@ void RGWOp_Bucket_Info::execute(optional_yield y)
   op_state.set_fetch_stats(fetch_stats);
   op_state.set_restore_stats(fetch_restore_stats);
 
-  op_ret = RGWBucketAdminOp::info(driver, op_state, flusher, y, this);
+  op_ret = RGWBucketAdminOp::info(driver, *s->penv.site, op_state, flusher, y, this);
 }
 
 class RGWOp_Get_Policy : public RGWRESTOp {
