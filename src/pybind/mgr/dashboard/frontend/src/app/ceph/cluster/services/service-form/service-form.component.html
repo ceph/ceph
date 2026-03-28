@@ -60,10 +60,16 @@
                   [ngValue]="null">
             -- Select a service type --
           </option>
-          @for (serviceType of serviceTypes; track serviceType) {
-          <option [value]="serviceType">
-            {{ serviceType }}
-          </option>
+          @for (group of serviceTypeOptionGroups; track serviceTypeOptionGroups) {
+            <optgroup [label]="group.label">
+          @for (opt of group.options; track opt) {
+            <option
+              [value]="opt.value"
+              [disabled]="isTypeDisabled(opt.value)">
+              {{ opt.label }}
+            </option>
+          }
+            </optgroup>
           }
         </cds-select>
 
