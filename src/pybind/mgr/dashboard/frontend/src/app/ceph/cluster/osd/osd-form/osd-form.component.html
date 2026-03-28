@@ -2,58 +2,71 @@
   <cd-orchestrator-doc-panel></cd-orchestrator-doc-panel>
 }
 
-<cd-tearsheet 
-  [steps]="steps" 
+<cd-tearsheet
+  [steps]="steps"
   [title]="!hideTitle ? (action | titlecase) + ' ' + (resource | upperFirst) : ''"
-  (submitRequested)="submit()" 
+  (submitRequested)="submit()"
   [isSubmitLoading]="loading"
-  [submitButtonLabel]="simpleDeployment ? 'Create OSDs' : actionLabels.PREVIEW" 
+  [submitButtonLabel]="simpleDeployment ? 'Create OSDs' : actionLabels.PREVIEW"
   type="full">
 
   <cd-tearsheet-step>
     <div class="osd-tearsheet-content">
-      <form [formGroup]="form" class="cds--form" cdsStack="vertical" [gap]="6">
+      <form
+        [formGroup]="form"
+        class="cds--form"
+        cdsStack="vertical"
+        [gap]="6">
 
-        @if (availDevices?.length === 0) {
-          <cd-alert-panel type="warning" class="osd-alert-block" i18n>
-            <div cdsStack="vertical" [gap]="2">
-              <span class="cds--type-heading-compact-01">No eligible devices found for OSD creation.</span>
-              <span class="cds--type-body-compact-01">Physical disks may be present, but none meet the requirements
-                (unused, unformatted, and not already configured by Ceph).</span>
-            </div>
-          </cd-alert-panel>
-        }
+      @if (availDevices?.length === 0) {
+        <cd-alert-panel
+          type="warning"
+          class="osd-alert-block"
+          i18n>
+          <div
+            cdsStack="vertical"
+            [gap]="2">
+            <span class="cds--type-heading-compact-01">
+              No eligible devices found for OSD creation.
+            </span>
+            <span class="cds--type-body-compact-01">
+              Physical disks may be present, but none meet the requirements
+              (unused, unformatted, and not already configured by Ceph).
+            </span>
+          </div>
+        </cd-alert-panel>
+      }
 
         <div>
-          <cds-text-label class="cds--type-heading-compact-02 osd-legend-spacing">Deployment Options</cds-text-label>
+          <cds-text-label class="cds--type-heading-compact-02 osd-legend-spacing">
+            Deployment Options
+          </cds-text-label>
 
-          <cds-radio-group 
-            formControlName="deploymentOption" 
+          <cds-radio-group
+            formControlName="deploymentOption"
             (change)="emitDeploymentSelection()"
             orientation="vertical">
 
-            @for (optionName of optionNames; track optionName; let isLast = $last) {
-              <cds-radio 
-                [value]="optionName"
-                class="osd-radio-spacing"
-                [disabled]="!deploymentOptions?.options[optionName].available ? true : null">
-                
-                <div class="osd-radio-label-wrapper">
-                  <span class="cds--type-body-short-01">
-                    {{ deploymentOptions?.options[optionName].title }}
-                    @if (deploymentOptions?.recommended_option === optionName) {
-                      <strong>(Recommended)</strong>
-                    }
-                  </span>
+          @for (optionName of optionNames; track optionName; let isLast = $last) {
+            <cds-radio
+              [value]="optionName"
+              class="osd-radio-spacing"
+              [disabled]="!deploymentOptions?.options[optionName].available ? true : null">
 
-                  <div class="cds--type-helper-text-01 osd-radio-helper-text">
-                    {{ deploymentOptions?.options[optionName].desc }}
-                  </div>
+              <div class="osd-radio-label-wrapper">
+                <span class="cds--type-body-short-01">
+                  {{ deploymentOptions?.options[optionName].title }}
+                  @if (deploymentOptions?.recommended_option === optionName) {
+                  <strong>(Recommended)</strong>
+                  }
+                </span>
+
+                <div class="cds--type-helper-text-01 osd-radio-helper-text">
+                  {{ deploymentOptions?.options[optionName].desc }}
                 </div>
-
-              </cds-radio>
-            }
-
+              </div>
+            </cds-radio>
+          }
           </cds-radio-group>
         </div>
 
@@ -63,67 +76,107 @@
 
   <cd-tearsheet-step>
     <div class="osd-tearsheet-content">
-      <form [formGroup]="form" class="cds--form">
+      <form
+        [formGroup]="form"
+        class="cds--form">
 
         <div formGroupName="features">
-          <cds-text-label class="cds--type-heading-compact-02 osd-legend-spacing">Features</cds-text-label>
-          
-          @for (feature of featureList; track feature.key) {
-            <cds-checkbox [name]="feature.key" formControlName="{{ feature.key }}"
-              (checkedChange)="emitDeploymentSelection()">
+          <cds-text-label class="cds--type-heading-compact-02 osd-legend-spacing">
+            Features
+          </cds-text-label>
+
+        @for (feature of featureList; track feature.key) {
+          <cds-checkbox
+            [name]="feature.key"
+            formControlName="{{ feature.key }}"
+            (checkedChange)="emitDeploymentSelection()">
               {{ feature.desc }}
-            </cds-checkbox>
-          }
+          </cds-checkbox>
+        }
         </div>
 
       </form>
     </div>
   </cd-tearsheet-step>
 
-
   <cd-tearsheet-step>
-    <div class="osd-tearsheet-content"> 
-      <form [formGroup]="form" class="cds--form" cdsStack="vertical" [gap]="7">
+    <div class="osd-tearsheet-content">
+      <form
+        [formGroup]="form"
+        class="cds--form"
+        cdsStack="vertical"
+        [gap]="7">
 
         <div>
-          <cds-text-label class="cds--type-heading-compact-02 osd-legend-spacing">Primary devices</cds-text-label>
-          <cd-osd-devices-selection-groups #dataDeviceSelectionGroups name="Primary" type="data"
-            [availDevices]="availDevices" [canSelect]="availDevices.length !== 0" (selected)="onDevicesSelected($event)"
+          <cds-text-label class="cds--type-heading-compact-02 osd-legend-spacing">
+            Primary devices
+          </cds-text-label>
+          <cd-osd-devices-selection-groups
+            #dataDeviceSelectionGroups
+            name="Primary"
+            type="data"
+            [availDevices]="availDevices"
+            [canSelect]="availDevices.length !== 0"
+            (selected)="onDevicesSelected($event)"
             (cleared)="onDevicesCleared($event)">
           </cd-osd-devices-selection-groups>
         </div>
 
         <div>
-          <cds-text-label class="cds--type-heading-compact-02 osd-legend-spacing" i18n>Shared devices</cds-text-label>
+          <cds-text-label
+            class="cds--type-heading-compact-02 osd-legend-spacing"
+            i18n>
+            Shared devices
+          </cds-text-label>
 
-          <div cdsStack="vertical" [gap]="6">
-            <cd-osd-devices-selection-groups #walDeviceSelectionGroups name="WAL" type="wal" [availDevices]="availDevices"
-              [canSelect]="dataDeviceSelectionGroups.devices.length !== 0" (selected)="onDevicesSelected($event)"
-              (cleared)="onDevicesCleared($event)" [hostname]="hostname">
+          <div
+            cdsStack="vertical"
+            [gap]="6">
+            <cd-osd-devices-selection-groups
+              #walDeviceSelectionGroups
+              name="WAL"
+              type="wal"
+              [availDevices]="availDevices"
+              [canSelect]="dataDeviceSelectionGroups.devices.length !== 0"
+              (selected)="onDevicesSelected($event)"
+              (cleared)="onDevicesCleared($event)"
+              [hostname]="hostname">
             </cd-osd-devices-selection-groups>
 
             @if (walDeviceSelectionGroups.devices.length !== 0) {
               <div>
-                <cds-number label="WAL slots"
-                  helperText="How many OSDs per WAL device. Specify 0 to let Orchestrator backend decide it." id="walSlots"
-                  formControlName="walSlots" min="0">
+                <cds-number
+                  label="WAL slots"
+                  helperText="How many OSDs per WAL device. Specify 0 to let Orchestrator backend decide it."
+                  id="walSlots"
+                  formControlName="walSlots"
+                  min="0">
                 </cds-number>
               </div>
             }
 
-            <cd-osd-devices-selection-groups #dbDeviceSelectionGroups name="DB" type="db" [availDevices]="availDevices"
-              [canSelect]="dataDeviceSelectionGroups.devices.length !== 0" (selected)="onDevicesSelected($event)"
-              (cleared)="onDevicesCleared($event)" [hostname]="hostname">
+            <cd-osd-devices-selection-groups
+              #dbDeviceSelectionGroups
+              name="DB"
+              type="db"
+              [availDevices]="availDevices"
+              [canSelect]="dataDeviceSelectionGroups.devices.length !== 0"
+              (selected)="onDevicesSelected($event)"
+              (cleared)="onDevicesCleared($event)"
+              [hostname]="hostname">
             </cd-osd-devices-selection-groups>
 
-            @if (dbDeviceSelectionGroups.devices.length !== 0) {
-              <div>
-                <cds-number label="DB slots"
-                  helperText="How many OSDs per DB device. Specify 0 to let Orchestrator backend decide it." id="dbSlots"
-                  formControlName="dbSlots" min="0">
-                </cds-number>
-              </div>
-            }
+          @if (dbDeviceSelectionGroups.devices.length !== 0) {
+            <div>
+              <cds-number
+                label="DB slots"
+                helperText="How many OSDs per DB device. Specify 0 to let Orchestrator backend decide it."
+                id="dbSlots"
+                formControlName="dbSlots"
+                min="0">
+              </cds-number>
+            </div>
+          }
           </div>
         </div>
 

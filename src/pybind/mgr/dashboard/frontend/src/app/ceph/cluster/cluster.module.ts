@@ -26,7 +26,7 @@ import {
   RadioModule,
   TilesModule,
   LayerModule,
-     AccordionModule
+  AccordionModule
 } from 'carbon-components-angular';
 import Analytics from '@carbon/icons/es/analytics/16';
 import CloseFilled from '@carbon/icons/es/close--filled/16';

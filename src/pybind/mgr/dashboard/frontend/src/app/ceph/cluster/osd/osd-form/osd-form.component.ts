@@ -97,7 +97,7 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
   deploymentOptions: DeploymentOptions;
   optionNames = Object.values(OsdDeploymentOptions);
 
-steps: Array<Step> = [
+  steps: Array<Step> = [
     { label: 'Deployment Options', invalid: false },
     { label: 'Features', invalid: false },
     { label: 'Advanced Mode', invalid: false }
