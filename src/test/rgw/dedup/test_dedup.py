@@ -9,6 +9,8 @@ import hashlib
 from multiprocessing import Process
 import filecmp
 import os
+import shlex
+import signal
 import string
 import shutil
 import pytest
@@ -16,6 +18,7 @@ import json
 from collections import namedtuple
 import boto3
 from boto3.s3.transfer import TransferConfig
+from typing import List, Tuple
 from dataclasses import dataclass
 
 from . import(
@@ -51,10 +54,6 @@ class Dedup_Stats:
     duplicate_obj : int = 0
     deduped_obj_bytes : int = 0
     non_default_storage_class_objs_bytes : int = 0
-    potential_singleton_obj : int = 0
-    potential_unique_obj : int = 0
-    potential_duplicate_obj : int = 0
-    potential_dedup_space : int = 0
 
 @dataclass
 class Dedup_Ratio:
@@ -75,6 +74,87 @@ run_prefix=''.join(random.choice(string.ascii_lowercase) for _ in range(16))
 test_path = os.path.normpath(os.path.dirname(os.path.realpath(__file__))) + '/../'
 
 #-----------------------------------------------
+def _read_proc_cmdline(pid: int) -> List[str]:
+    # /proc/<pid>/cmdline is NUL-separated argv
+    with open(f"/proc/{pid}/cmdline", "rb") as f:
+        raw = f.read()
+    return [p.decode("utf-8", "replace") for p in raw.split(b"\0") if p]
+
+#-----------------------------------------------
+def _is_radosgw_argv(argv: List[str]) -> bool:
+    return bool(argv) and os.path.basename(argv[0]) == "radosgw"
+
+#-----------------------------------------------
+def find_all_radosgw() -> List[Tuple[int, List[str]]]:
+    """
+    Return [(pid, argv), ...] for all radosgw processes.
+    PID discovery via ps, argv via /proc/<pid>/cmdline to avoid truncation.
+    """
+    out = subprocess.check_output(["ps", "-eo", "pid="], text=True)
+    procs: List[Tuple[int, List[str]]] = []
+
+    for line in out.splitlines():
+        line = line.strip()
+        if not line or not line.isdigit():
+            continue
+        pid = int(line)
+
+        try:
+            argv = _read_proc_cmdline(pid)
+        except FileNotFoundError:
+            continue  # process exited
+        except PermissionError:
+            continue
+
+        if _is_radosgw_argv(argv):
+            procs.append((pid, argv))
+
+    procs.sort(key=lambda x: x[0])
+    return procs
+
+#-----------------------------------------------
+def kill_pid(pid: int, timeout_s: float = 10.0) -> None:
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        try:
+            os.kill(pid, 0)
+            time.sleep(0.2)
+        except ProcessLookupError:
+            return
+
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+
+#-----------------------------------------------
+def restart_all_radosgw() -> None:
+    procs = find_all_radosgw()
+    if not procs:
+        log.info("No radosgw processes found; skipping kill/restart.")
+        return
+
+    log.info("Found %d radosgw process(es)", len(procs))
+    for pid, argv in procs:
+        log.info("  pid=%s argv=%s", pid, " ".join(shlex.quote(a) for a in argv))
+
+    # Kill all first (avoid port conflicts / partial restarts)
+    for pid, _ in procs:
+        kill_pid(pid)
+
+    time.sleep(1)
+    # Restart all with the same argv
+    for _, argv in procs:
+        p = subprocess.Popen(argv, start_new_session=True)
+        log.info("Restarted radosgw new_pid=%s argv0=%s", p.pid, argv[0])
+
+
+#-----------------------------------------------
 def bash(cmd, **kwargs):
     #log.debug('running command: %s', ' '.join(cmd))
     kwargs['stdout'] = subprocess.PIPE
@@ -92,6 +172,12 @@ def admin(args, **kwargs):
 def rados(args, **kwargs):
     """ rados command """
     cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_rados', 'noname'] + args
+    return bash(cmd, **kwargs)
+
+#-----------------------------------------------
+def ceph(args, **kwargs):
+    """ rados command """
+    cmd = [test_path + 'test-rgw-call.sh', 'call_ceph', 'noname'] + args
     return bash(cmd, **kwargs)
 
 #-----------------------------------------------
@@ -280,7 +366,6 @@ def create_buckets(conn, max_copies_count):
 OUT_DIR="/tmp/dedup/"
 KB=(1024)
 MB=(1024*KB)
-POTENTIAL_OBJ_SIZE=(64*KB)
 DEDUP_MIN_OBJ_SIZE=(64*KB)
 SPLIT_HEAD_SIZE=(4*MB)
 RADOS_OBJ_SIZE=(4*MB)
@@ -317,7 +402,7 @@ def write_random(files, size, min_copies_count=1, max_copies_count=4):
     copies_count=random.randint(min_copies_count, max_copies_count)
     files.append((filename, size, copies_count))
     write_file(filename, size)
-
+    return copies_count
 
 #-------------------------------------------------------------------------------
 def gen_files_fixed_copies(files, count, size, copies_count):
@@ -354,6 +439,7 @@ def gen_files_in_range(files, count, min_size, max_size, alignment=RADOS_OBJ_SIZ
 
     size_range = max_size - min_size
     size=0
+    num_files_with_dups=0
     for i in range(0, count):
         size = min_size + random.randint(1, size_range-1)
         if size == 0:
@@ -370,8 +456,12 @@ def gen_files_in_range(files, count, min_size, max_size, alignment=RADOS_OBJ_SIZ
         assert(size_aligned)
         # force dedup by setting min_copies_count to 2
         write_random(files, size_aligned, 2, 3)
-        write_random(files, size, 1, 3)
+        num_files_with_dups += 1
+        copies_count=write_random(files, size, 1, 3)
+        if copies_count > 1:
+            num_files_with_dups += 1
 
+    return num_files_with_dups
 
 #-------------------------------------------------------------------------------
 def gen_files(files, start_size, factor, max_copies_count=4):
@@ -680,15 +770,6 @@ def calc_expected_stats(dedup_stats, obj_size, num_copies, config):
     if on_disk_byte_size < DEDUP_MIN_OBJ_SIZE and threshold > DEDUP_MIN_OBJ_SIZE:
         dedup_stats.skip_too_small += num_copies
         dedup_stats.skip_too_small_bytes += (on_disk_byte_size * num_copies)
-
-        if on_disk_byte_size >= POTENTIAL_OBJ_SIZE:
-            if num_copies == 1:
-                dedup_stats.potential_singleton_obj += 1
-            else:
-                dedup_stats.potential_unique_obj += 1
-                dedup_stats.potential_duplicate_obj += dups_count
-                dedup_stats.potential_dedup_space += (on_disk_byte_size * dups_count)
-
         return
 
     dedup_stats.total_processed_objects += num_copies
@@ -1399,12 +1480,6 @@ def read_dedup_stats(dry_run):
         dedup_stats.duplicate_obj = main['Duplicate Obj']
         dedup_stats.dedup_bytes_estimate = main['Dedup Bytes Estimate']
 
-        potential = md5_stats['Potential Dedup']
-        dedup_stats.potential_singleton_obj = potential['Singleton Obj (64KB-4MB)']
-        dedup_stats.potential_unique_obj = potential['Unique Obj (64KB-4MB)']
-        dedup_stats.potential_duplicate_obj = potential['Duplicate Obj (64KB-4MB)']
-        dedup_stats.potential_dedup_space = potential['Dedup Bytes Estimate (64KB-4MB)']
-
     dedup_work_was_completed=jstats['completed']
     if dedup_work_was_completed:
         dedup_ratio_estimate=read_dedup_ratio(jstats, 'dedup_ratio_estimate')
@@ -1420,7 +1495,6 @@ def set_bucket_index_throttling(limit):
     cmd = ['dedup', 'throttle', '--max-bucket-index-ops', str(limit)]
     result = admin(cmd)
     assert result[1] == 0
-    log.debug(result[0])
 
 #-------------------------------------------------------------------------------
 def exec_dedup_internal(expected_dedup_stats, dry_run, max_dedup_time):
@@ -1486,11 +1560,6 @@ def exec_dedup(expected_dedup_stats, dry_run, verify_stats=True, post_dedup_size
     if verify_stats == False:
         return ret
 
-    if dedup_stats.potential_unique_obj or expected_dedup_stats.potential_unique_obj:
-        log.debug("potential_unique_obj= %d / %d ", dedup_stats.potential_unique_obj,
-                  expected_dedup_stats.potential_unique_obj)
-
-
     #dedup_stats.set_hash = dedup_stats.invalid_hash
     if dedup_stats != expected_dedup_stats:
         log.debug("==================================================")
@@ -1512,14 +1581,6 @@ def prepare_test():
         assert(0)
 
     os.mkdir(OUT_DIR)
-
-#-------------------------------------------------------------------------------
-def copy_potential_stats(new_dedup_stats, dedup_stats):
-    new_dedup_stats.potential_singleton_obj = dedup_stats.potential_singleton_obj
-    new_dedup_stats.potential_unique_obj    = dedup_stats.potential_unique_obj
-    new_dedup_stats.potential_duplicate_obj = dedup_stats.potential_duplicate_obj
-    new_dedup_stats.potential_dedup_space   = dedup_stats.potential_dedup_space
-
 
 #-------------------------------------------------------------------------------
 def small_single_part_objs_dedup(conn, bucket_name, dry_run):
@@ -1548,7 +1609,7 @@ def small_single_part_objs_dedup(conn, bucket_name, dry_run):
         # expected stats for small objects - all zeros except for skip_too_small
         small_objs_dedup_stats = Dedup_Stats()
         #small_objs_dedup_stats.loaded_objects=dedup_stats.loaded_objects
-        copy_potential_stats(small_objs_dedup_stats, dedup_stats)
+
         small_objs_dedup_stats.size_before_dedup = dedup_stats.size_before_dedup
         small_objs_dedup_stats.skip_too_small_bytes=dedup_stats.size_before_dedup
         small_objs_dedup_stats.skip_too_small = s3_objects_total
@@ -2047,12 +2108,14 @@ def test_dedup_etag_corruption():
         key=gen_object_name(filename, 0)
 
         for corruption in CORRUPTIONS:
+            log.debug("corruption=%s", corruption)
             if corruption != "no corruption":
                 corrupted=corrupt_etag(key, corruption, expected_dedup_stats)
                 # no dedup will happen because of the inserted corruption
                 expected_dedup_stats.deduped_obj=0
                 expected_dedup_stats.deduped_obj_bytes=0
                 expected_dedup_stats.set_shared_manifest_src=0
+                expected_dedup_stats.skip_src_record=0
 
             dry_run=False
             ret=exec_dedup(expected_dedup_stats, dry_run)
@@ -2416,7 +2479,7 @@ def test_dedup_small_with_tenants():
         # expected stats for small objects - all zeros except for skip_too_small
         small_objs_dedup_stats = Dedup_Stats()
         #small_objs_dedup_stats.loaded_objects=dedup_stats.loaded_objects
-        copy_potential_stats(small_objs_dedup_stats, dedup_stats)
+
         small_objs_dedup_stats.size_before_dedup=dedup_stats.size_before_dedup
         small_objs_dedup_stats.skip_too_small_bytes=dedup_stats.size_before_dedup
         small_objs_dedup_stats.skip_too_small=s3_objects_total
@@ -2463,7 +2526,8 @@ def test_dedup_inc_0_with_tenants():
 
         dedup_stats2 = dedup_stats
         dedup_stats2.skip_shared_manifest=dedup_stats.deduped_obj
-        dedup_stats2.skip_src_record=dedup_stats.set_shared_manifest_src
+        #dedup_stats2.skip_src_record=dedup_stats.set_shared_manifest_src
+        dedup_stats2.skip_src_record=0
         dedup_stats2.set_shared_manifest_src=0
         dedup_stats2.deduped_obj=0
         dedup_stats2.deduped_obj_bytes=0
@@ -2512,7 +2576,7 @@ def test_dedup_inc_0():
 
         dedup_stats2 = dedup_stats
         dedup_stats2.skip_shared_manifest=dedup_stats.deduped_obj
-        dedup_stats2.skip_src_record=dedup_stats.set_shared_manifest_src
+        dedup_stats2.skip_src_record=0
         dedup_stats2.set_shared_manifest_src=0
         dedup_stats2.deduped_obj=0
         dedup_stats2.deduped_obj_bytes=0
@@ -2561,6 +2625,7 @@ def test_dedup_inc_1_with_tenants():
         # upload more copies of the same objects
         indices=[]
         files_combined=[]
+        num_obj_with_new_dups=0
         for f in files:
             filename=f[0]
             obj_size=f[1]
@@ -2568,6 +2633,9 @@ def test_dedup_inc_1_with_tenants():
             # indices holds the start index of the new copies
             indices.append(num_copies_base)
             num_copies_to_add=random.randint(0, 2)
+            if num_copies_to_add:
+                num_obj_with_new_dups += 1
+
             num_copies_combined=num_copies_to_add+num_copies_base
             files_combined.append((filename, obj_size, num_copies_combined))
 
@@ -2576,8 +2644,7 @@ def test_dedup_inc_1_with_tenants():
         stats_combined=ret[1]
 
         stats_combined.skip_shared_manifest = stats_base.deduped_obj
-        stats_combined.skip_src_record     -= stats_base.skip_src_record
-        stats_combined.skip_src_record     += stats_base.set_shared_manifest_src
+        stats_combined.skip_src_record     = num_obj_with_new_dups
 
         stats_combined.set_shared_manifest_src -= stats_base.set_shared_manifest_src
         stats_combined.deduped_obj         -= stats_base.deduped_obj
@@ -2625,6 +2692,7 @@ def test_dedup_inc_1():
         # upload more copies of the same objects
         indices=[]
         files_combined=[]
+        num_obj_with_new_dups=0
         for f in files:
             filename=f[0]
             obj_size=f[1]
@@ -2632,6 +2700,9 @@ def test_dedup_inc_1():
             # indices holds the start index of the new copies
             indices.append(num_copies_base)
             num_copies_to_add=random.randint(0, 2)
+            if num_copies_to_add:
+                num_obj_with_new_dups += 1
+
             num_copies_combined=num_copies_to_add+num_copies_base
             files_combined.append((filename, obj_size, num_copies_combined))
 
@@ -2640,8 +2711,7 @@ def test_dedup_inc_1():
         expected_results = ret[0]
         stats_combined = ret[1]
         stats_combined.skip_shared_manifest = stats_base.deduped_obj
-        stats_combined.skip_src_record     -= stats_base.skip_src_record
-        stats_combined.skip_src_record     += stats_base.set_shared_manifest_src
+        stats_combined.skip_src_record     = num_obj_with_new_dups
 
         stats_combined.set_shared_manifest_src -= stats_base.set_shared_manifest_src
         stats_combined.deduped_obj         -= stats_base.deduped_obj
@@ -2693,6 +2763,7 @@ def test_dedup_inc_2_with_tenants():
         # upload more copies of the same files
         indices=[]
         files_combined=[]
+        num_obj_with_new_dups=0
         for f in files:
             filename=f[0]
             obj_size=f[1]
@@ -2700,12 +2771,16 @@ def test_dedup_inc_2_with_tenants():
             # indices holds the start index of the new copies
             indices.append(num_copies_base)
             num_copies_inc=random.randint(0, 2)
+            if num_copies_inc:
+                num_obj_with_new_dups += 1
+
             num_copies_combined=num_copies_inc+num_copies_base
             files_combined.append((filename, obj_size, num_copies_combined))
 
         # add new files
         num_files_new = 13
-        gen_files_in_range(files_combined, num_files_new, 2*MB, 32*MB)
+        num_files_with_dups = gen_files_in_range(files_combined, num_files_new, 2*MB, 32*MB)
+        num_obj_with_new_dups += num_files_with_dups
         pad_count = len(files_combined) - len(files)
         for i in range(0, pad_count):
             indices.append(0)
@@ -2715,8 +2790,7 @@ def test_dedup_inc_2_with_tenants():
         expected_results = ret[0]
         stats_combined = ret[1]
         stats_combined.skip_shared_manifest = stats_base.deduped_obj
-        stats_combined.skip_src_record     -= stats_base.skip_src_record
-        stats_combined.skip_src_record     += stats_base.set_shared_manifest_src
+        stats_combined.skip_src_record      = num_obj_with_new_dups
 
         stats_combined.set_shared_manifest_src -= stats_base.set_shared_manifest_src
         stats_combined.deduped_obj         -= stats_base.deduped_obj
@@ -2765,18 +2839,23 @@ def test_dedup_inc_2():
         # upload more copies of the same files
         indices=[]
         files_combined=[]
+        num_obj_with_new_dups=0
         for f in files:
             filename=f[0]
             obj_size=f[1]
             num_copies_base=f[2]
             indices.append(num_copies_base)
             num_copies_inc=random.randint(0, 2)
+            if num_copies_inc:
+                num_obj_with_new_dups += 1
+
             num_copies_combined=num_copies_inc+num_copies_base
             files_combined.append((filename, obj_size, num_copies_combined))
 
         # add new files
         num_files_new = 13
-        gen_files_in_range(files_combined, num_files_new, 2*MB, 32*MB)
+        num_files_with_dups = gen_files_in_range(files_combined, num_files_new, 2*MB, 32*MB)
+        num_obj_with_new_dups += num_files_with_dups
         pad_count = len(files_combined) - len(files)
         for i in range(0, pad_count):
             indices.append(0)
@@ -2787,8 +2866,7 @@ def test_dedup_inc_2():
         expected_results = ret[0]
         stats_combined = ret[1]
         stats_combined.skip_shared_manifest = stats_base.deduped_obj
-        stats_combined.skip_src_record     -= stats_base.skip_src_record
-        stats_combined.skip_src_record     += stats_base.set_shared_manifest_src
+        stats_combined.skip_src_record      = num_obj_with_new_dups
 
         stats_combined.set_shared_manifest_src -= stats_base.set_shared_manifest_src
         stats_combined.deduped_obj         -= stats_base.deduped_obj
@@ -2892,7 +2970,7 @@ def test_dedup_inc_with_remove_multi_tenants():
         dedup_stats.deduped_obj=0
         dedup_stats.deduped_obj_bytes=0
 
-        dedup_stats.skip_src_record=src_record
+        dedup_stats.skip_src_record=0
         dedup_stats.skip_shared_manifest=shared_manifest
         dedup_stats.valid_hash=valid_hash
         dedup_stats.invalid_hash=0
@@ -2993,7 +3071,7 @@ def test_dedup_inc_with_remove():
         dedup_stats.set_shared_manifest_src=0
         dedup_stats.deduped_obj=0
         dedup_stats.deduped_obj_bytes=0
-        dedup_stats.skip_src_record=src_record
+        dedup_stats.skip_src_record=0
         dedup_stats.skip_shared_manifest=shared_manifest
         dedup_stats.valid_hash=valid_hash
         dedup_stats.invalid_hash=0
@@ -3149,29 +3227,11 @@ def test_dedup_large_scale_with_tenants():
     prepare_test()
     max_copies_count=3
     num_threads=16
-    num_files=8*1024
+    num_files=10*1024
     size=1*KB
     files=[]
     config=TransferConfig(multipart_threshold=size, multipart_chunksize=1*MB)
     log.debug("test_dedup_large_scale_with_tenants: connect to AWS ...")
-    gen_files_fixed_size(files, num_files, size, max_copies_count)
-    threads_dedup_basic_with_tenants_common(files, num_threads, config, False)
-
-
-#-------------------------------------------------------------------------------
-@pytest.mark.basic_test
-def test_dedup_large_scale():
-    if full_dedup_is_disabled():
-        return
-
-    prepare_test()
-    max_copies_count=3
-    num_threads=16
-    num_files=8*1024
-    size=1*KB
-    files=[]
-    config=TransferConfig(multipart_threshold=size, multipart_chunksize=1*MB)
-    log.debug("test_dedup_dry_large_scale_with_tenants: connect to AWS ...")
     gen_files_fixed_size(files, num_files, size, max_copies_count)
     threads_dedup_basic_with_tenants_common(files, num_threads, config, False)
 
@@ -3205,6 +3265,7 @@ def inc_step_with_tenants(stats_base, files, conns, bucket_names, config):
     # upload more copies of the same files
     indices=[]
     files_combined=[]
+    num_obj_with_new_dups=0
     for f in files:
         filename=f[0]
         obj_size=f[1]
@@ -3212,12 +3273,16 @@ def inc_step_with_tenants(stats_base, files, conns, bucket_names, config):
         # indices holds the start index of the new copies
         indices.append(num_copies_base)
         num_copies_inc=random.randint(0, 2)
+        if num_copies_inc:
+            num_obj_with_new_dups += 1
+
         num_copies_combined=num_copies_inc+num_copies_base
         files_combined.append((filename, obj_size, num_copies_combined))
 
     # add new files
     num_files_new = 11
-    gen_files_in_range(files_combined, num_files_new, 1*MB, 32*MB)
+    num_files_with_dups = gen_files_in_range(files_combined, num_files_new, 1*MB, 32*MB)
+    num_obj_with_new_dups += num_files_with_dups
     pad_count = len(files_combined) - len(files)
     for i in range(0, pad_count):
         indices.append(0)
@@ -3236,7 +3301,7 @@ def inc_step_with_tenants(stats_base, files, conns, bucket_names, config):
             src_record += 1
 
     stats_combined.skip_shared_manifest = stats_base.deduped_obj
-    stats_combined.skip_src_record      = src_record
+    stats_combined.skip_src_record      = num_obj_with_new_dups
     stats_combined.set_shared_manifest_src -= stats_base.set_shared_manifest_src
     stats_combined.deduped_obj         -= stats_base.deduped_obj
     stats_combined.deduped_obj_bytes   -= stats_base.deduped_obj_bytes
@@ -3320,7 +3385,7 @@ def test_dedup_dry_small_with_tenants():
 
         # expected stats for small objects - all zeros except for skip_too_small
         small_objs_dedup_stats = Dedup_Stats()
-        copy_potential_stats(small_objs_dedup_stats, dedup_stats)
+
         small_objs_dedup_stats.size_before_dedup=dedup_stats.size_before_dedup
         small_objs_dedup_stats.skip_too_small_bytes=dedup_stats.size_before_dedup
         small_objs_dedup_stats.skip_too_small=s3_objects_total
@@ -3693,3 +3758,131 @@ def test_dedup_identical_copies_multipart_small():
     force_clean=True
     log.info("test_dedup_identical_copies_multipart:full test")
     __test_dedup_identical_copies(files, config, dry_run, verify, force_clean)
+
+
+#-------------------------------------------------------------------------------
+def add_new_placement(zone_map: str, new_placement: str, new_pool: str) -> str:
+    """
+    Parse the JSON in zone_map, clone the placement_pools entry whose key is
+    'default-placement', change its STANDARD.data_pool to new_pool, set its key to
+    'new_placement', append it right after default-placement, and return JSON text.
+    """
+    doc = json.loads(zone_map)
+
+    pp = doc.get("placement_pools")
+    if not isinstance(pp, list):
+        raise ValueError("Expected top-level 'placement_pools' to be a list")
+
+    # find default-placement
+    idx = None
+    for i, entry in enumerate(pp):
+        if isinstance(entry, dict) and entry.get("key") == "default-placement":
+            idx = i
+            default_entry = entry
+            break
+    if idx is None:
+        raise ValueError("Couldn't find placement_pools entry with key 'default-placement'")
+
+    # deep clone via JSON round-trip (keeps only JSON-serializable types)
+    new_entry = json.loads(json.dumps(default_entry))
+
+    # edit key + pool
+    new_entry["key"] = new_placement
+    try:
+        new_entry["val"]["storage_classes"]["STANDARD"]["data_pool"] = new_pool
+    except Exception as e:
+        raise ValueError("Unexpected structure under val.storage_classes.STANDARD.data_pool") from e
+
+    # insert immediately after default-placement
+    pp.insert(idx + 1, new_entry)
+
+    # dump back to text (2-space indent; adjust if you need different formatting)
+    return json.dumps(doc, indent=2, sort_keys=False)
+
+#-------------------------------------------------------------------------------
+def check_result(cmd, result):
+    if result[1] != 0:
+        log.warning("%s failed with error: %s", cmd, result[0])
+        assert result[1] == 0
+
+
+#-------------------------------------------------------------------------------
+def add_placement(new_placement, pool_name):
+    result = ceph(['osd', 'pool', 'create', pool_name, "32"])
+    assert result[1] == 0
+
+    result = ceph(['osd', 'pool', 'application', 'enable', pool_name, 'rgw'])
+    assert result[1] == 0
+
+    cmd = ['zone', 'get']
+    result = admin(cmd, cluster_id)
+    check_result(cmd, result)
+
+    zone_map = add_new_placement(result[0], new_placement, pool_name)
+    log.debug("zone=%s", zone_map)
+
+    filename = "/tmp/new_zone_map"
+    fout = open(filename, "w")
+    fout.write(zone_map)
+    fout.close()
+
+    cmd = ['zone', 'set', '--infile', filename]
+    result = admin(cmd, cluster_id)
+    os.remove(filename)
+    check_result(cmd, result)
+
+    cmd = ['zonegroup', 'placement add', '--placement-id', new_placement]
+    result = admin(cmd, cluster_id)
+    check_result(cmd, result)
+
+    #radosgw-admin period update --commit
+    cmd = ['period', 'update', '--commit']
+    result = admin(cmd, cluster_id)
+    check_result(cmd, result)
+
+    #restart_all_radosgw()
+
+    #uid = "testid"
+    uid = "zone.user"
+    cmd = ['user', 'modify', '--uid', uid, '--placement-id', new_placement]
+    result = admin(cmd, cluster_id)
+    check_result(cmd, result)
+
+
+#-------------------------------------------------------------------------------
+def test_storage_class():
+    log.info("cluster_id=%s", cluster_id)
+    if full_dedup_is_disabled():
+        return
+
+    prepare_test()
+    bucket_name = gen_bucket_name()
+    config=default_config
+    files=[]
+    max_copies_count=4
+    num_files=11 # [16KB-32MB]
+    base_size = 16*KB
+    log.info("generate files: base size=%d KiB, max_size=%d KiB",
+             base_size/KB, (pow(2, num_files) * base_size)/KB)
+    try:
+        gen_files(files, base_size, num_files, max_copies_count)
+        indices=[0] * len(files)
+
+        conn=get_single_connection()
+        conn.create_bucket(Bucket=bucket_name)
+        log.info("bucket %s was created", bucket_name)
+        check_obj_count=True
+        ret=upload_objects(bucket_name, files, indices, conn, config, check_obj_count)
+        expected_results = ret[0]
+        dedup_stats = ret[1]
+
+        # add a new-placement and set uid to use it
+        new_placement = "new-placement"
+        pool_name = "rgw.pool1"
+        add_placement(new_placement, pool_name)
+
+        dry_run=False
+        exec_dedup(dedup_stats, dry_run, True)
+        verify_objects(bucket_name, files, conn, expected_results, config, True)
+    finally:
+        cleanup(bucket_name, conn)

@@ -382,8 +382,6 @@ namespace rgw::dedup {
     this->ingress_corrupted_etag += other.ingress_corrupted_etag;
     this->ingress_skip_too_small_bytes += other.ingress_skip_too_small_bytes;
     this->ingress_skip_too_small += other.ingress_skip_too_small;
-    this->ingress_skip_too_small_64KB_bytes += other.ingress_skip_too_small_64KB_bytes;
-    this->ingress_skip_too_small_64KB += other.ingress_skip_too_small_64KB;
 
     return *this;
   }
@@ -440,13 +438,6 @@ namespace rgw::dedup {
                          this->ingress_skip_too_small);
         f->dump_unsigned("Ingress skip: too small bytes",
                          this->ingress_skip_too_small_bytes);
-
-        if(this->ingress_skip_too_small_64KB) {
-          f->dump_unsigned("Ingress skip: 64KB<=size<=4MB Obj",
-                           this->ingress_skip_too_small_64KB);
-          f->dump_unsigned("Ingress skip: 64KB<=size<=4MB Bytes",
-                           this->ingress_skip_too_small_64KB_bytes);
-        }
       }
     }
 
@@ -499,9 +490,6 @@ namespace rgw::dedup {
     encode(w.ingress_skip_too_small_bytes, bl);
     encode(w.ingress_skip_too_small, bl);
 
-    encode(w.ingress_skip_too_small_64KB_bytes, bl);
-    encode(w.ingress_skip_too_small_64KB, bl);
-
     encode(w.duration, bl);
     ENCODE_FINISH(bl);
   }
@@ -528,8 +516,6 @@ namespace rgw::dedup {
     decode(w.ingress_corrupted_etag, bl);
     decode(w.ingress_skip_too_small_bytes, bl);
     decode(w.ingress_skip_too_small, bl);
-    decode(w.ingress_skip_too_small_64KB_bytes, bl);
-    decode(w.ingress_skip_too_small_64KB, bl);
 
     decode(w.duration, bl);
     DECODE_FINISH(bl);
@@ -538,7 +524,6 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   md5_stats_t& md5_stats_t::operator+=(const md5_stats_t& other)
   {
-    this->small_objs_stat               += other.small_objs_stat;
     this->big_objs_stat                 += other.big_objs_stat;
     this->ingress_slabs                 += other.ingress_slabs;
     this->ingress_failed_load_bucket    += other.ingress_failed_load_bucket;
@@ -566,7 +551,7 @@ namespace rgw::dedup {
     this->failed_rec_load         += other.failed_rec_load;
     this->failed_block_load       += other.failed_block_load;
 
-    this->different_storage_class       += other.different_storage_class;
+    this->non_default_placement         += other.non_default_placement;
     this->invalid_hash_no_split_head    += other.invalid_hash_no_split_head;
     this->invalid_storage_class_mapping += other.invalid_storage_class_mapping;
     this->singleton_after_purge         += other.singleton_after_purge;
@@ -640,15 +625,9 @@ namespace rgw::dedup {
     }
 
     // Potential Dedup Section:
-    // What could be gained by allowing dedup for smaller objects (64KB-4MB)
     // Space wasted because of duplicated head-object (4MB)
     {
       Formatter::ObjectSection potential(*f, "Potential Dedup");
-      const dedup_stats_t &ds = this->small_objs_stat;
-      f->dump_unsigned("Singleton Obj (64KB-4MB)", ds.singleton_count);
-      f->dump_unsigned("Unique Obj (64KB-4MB)", ds.unique_count);
-      f->dump_unsigned("Duplicate Obj (64KB-4MB)", ds.duplicate_count);
-      f->dump_unsigned("Dedup Bytes Estimate (64KB-4MB)", ds.dedup_bytes_estimate);
       f->dump_unsigned("Duplicated Head Bytes Estimate",
                        this->dup_head_bytes_estimate);
       f->dump_unsigned("Duplicated Head Bytes", this->dup_head_bytes);
@@ -667,6 +646,11 @@ namespace rgw::dedup {
       }
       if (this->failed_map_overflow) {
         f->dump_unsigned("Failed Remap Overflow", this->failed_map_overflow);
+      }
+
+      if (this->non_default_placement) {
+        f->dump_unsigned("non_default_placement",
+                         this->non_default_placement);
       }
 
       f->dump_unsigned("Valid HASH attrs", this->valid_hash_attrs);
@@ -782,10 +766,6 @@ namespace rgw::dedup {
       if (this->size_mismatch) {
         f->dump_unsigned("Size mismatch SRC/TGT", this->size_mismatch);
       }
-      if (this->different_storage_class) {
-        f->dump_unsigned("different_storage_class",
-                         this->different_storage_class);
-      }
       if (this->invalid_hash_no_split_head) {
         f->dump_unsigned("Failed rec has invalid hash w/o split-head ",
                          this->invalid_hash_no_split_head);
@@ -814,7 +794,6 @@ namespace rgw::dedup {
   {
     ENCODE_START(1, 1, bl);
 
-    encode(m.small_objs_stat, bl);
     encode(m.big_objs_stat, bl);
     encode(m.ingress_slabs, bl);
     encode(m.ingress_failed_load_bucket, bl);
@@ -842,7 +821,7 @@ namespace rgw::dedup {
     encode(m.failed_rec_load, bl);
     encode(m.failed_block_load, bl);
 
-    encode(m.different_storage_class, bl);
+    encode(m.non_default_placement, bl);
     encode(m.invalid_hash_no_split_head, bl);
     encode(m.invalid_storage_class_mapping, bl);
     encode(m.singleton_after_purge, bl);
@@ -885,7 +864,6 @@ namespace rgw::dedup {
   void decode(md5_stats_t& m, ceph::bufferlist::const_iterator& bl)
   {
     DECODE_START(1, bl);
-    decode(m.small_objs_stat, bl);
     decode(m.big_objs_stat, bl);
     decode(m.ingress_slabs, bl);
     decode(m.ingress_failed_load_bucket, bl);
@@ -913,7 +891,7 @@ namespace rgw::dedup {
     decode(m.failed_rec_load, bl);
     decode(m.failed_block_load, bl);
 
-    decode(m.different_storage_class, bl);
+    decode(m.non_default_placement, bl);
     decode(m.invalid_hash_no_split_head, bl);
     decode(m.invalid_storage_class_mapping, bl);
     decode(m.singleton_after_purge, bl);

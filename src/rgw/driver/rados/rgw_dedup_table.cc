@@ -16,6 +16,7 @@
 #include "include/ceph_assert.h"
 #include <cstring>
 #include <iostream>
+#include <algorithm>
 
 namespace rgw::dedup {
 
@@ -38,68 +39,108 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  void dedup_table_t::remove_singletons_and_redistribute_keys()
+  void dedup_table_t::reset_counters()
   {
     for (uint32_t tab_idx = 0; tab_idx < entries_count; tab_idx++) {
-      if (!hash_tab[tab_idx].val.is_occupied()) {
+      auto &val = hash_tab[tab_idx].val;
+      if (val.is_occupied()) {
+        // we no longer need the counter, reuse it to count actual dedup
+        val.reset_count();
+      }
+    }
+  }
+
+  //---------------------------------------------------------------------------
+  void dedup_table_t::remove_singletons_and_redistribute_keys(const char* step,
+                                                              bool reset_count)
+  {
+    // stat counters
+    uint64_t redistributed_search_total = 0;
+    uint64_t redistributed_search_max = 0;
+    uint64_t redistributed_loopback = 0;
+    uint64_t redistributed_perfect = 0;
+    uint64_t redistributed_clear = 0, clear = 0;
+    uint64_t redistributed_not_needed = 0;
+
+    auto remove_entry = [this](uint32_t tab_idx) {
+      hash_tab[tab_idx].val.clear_flags();
+      occupied_count--;
+    };
+
+    for (uint32_t tab_idx = 0; tab_idx < entries_count; tab_idx++) {
+      auto &val = hash_tab[tab_idx].val;
+      if (!val.is_occupied()) {
         continue;
       }
 
-      if (hash_tab[tab_idx].val.is_singleton()) {
-        hash_tab[tab_idx].val.clear_flags();
-        redistributed_clear++;
+      if (val.not_enough_copies()) {
+        remove_entry(tab_idx);
+        clear++;
         continue;
       }
 
       const key_t &key = hash_tab[tab_idx].key;
-      // This is an approximation only since size is stored in 4KB resolution
-      uint64_t byte_size_approx = disk_blocks_to_byte_size(key.size_4k_units);
-      if (!dedupable_object(key.multipart_object(), min_obj_size_for_dedup, byte_size_approx)) {
-        hash_tab[tab_idx].val.clear_flags();
-        redistributed_clear++;
-        continue;
-      }
-
       uint32_t key_idx = key.hash() % entries_count;
+      // redistribute if key is not in direct hashing location
       if (key_idx != tab_idx) {
         uint64_t count = 1;
-        redistributed_count++;
         uint32_t idx = key_idx;
-        while (hash_tab[idx].val.is_occupied()   &&
-               !hash_tab[idx].val.is_singleton() &&
+        while (hash_tab[idx].val.is_occupied()        &&
+               !hash_tab[idx].val.not_enough_copies() &&
                (hash_tab[idx].key != key)) {
           count++;
           idx = (idx + 1) % entries_count;
         }
 
         if (idx != tab_idx) {
-          if (hash_tab[idx].val.is_occupied() && hash_tab[idx].val.is_singleton() ) {
-            redistributed_clear++;
-          }
           if (idx == key_idx) {
             redistributed_perfect++;
           }
+
+          if (hash_tab[idx].val.is_occupied()) {
+            ceph_assert(hash_tab[idx].key != key);
+            ceph_assert(hash_tab[idx].val.not_enough_copies());
+            remove_entry(idx);
+            redistributed_clear++;
+          }
+
           hash_tab[idx] = hash_tab[tab_idx];
+          // mark the old location as free
           hash_tab[tab_idx].val.clear_flags();
         }
         else {
+          // we are back where we started, there is no free entry between the
+          // perfect hashing and the allocated entry
           redistributed_loopback++;
         }
 
-        // we no longer need the counter, reuse it to count actual dedup
-        hash_tab[idx].val.reset_count();
         redistributed_search_max = std::max(redistributed_search_max, count);
         redistributed_search_total += count;
       }
       else {
-        // we no longer need the counter, reuse it to count actual dedup
-        hash_tab[tab_idx].val.reset_count();
         redistributed_not_needed++;
       }
     }
+
+    if (reset_count) {
+      reset_counters();
+    }
+    ldpp_dout(dpp, 10) << __func__ << "::" << step
+                       << "::redistributed_search_max=" << redistributed_search_max
+                       << "::redistributed_search_total=" << redistributed_search_total
+                       << (clear ? "::clear=" : "::") << clear
+                       << (redistributed_clear ? "::redistributed_clear=" : "::") << redistributed_clear
+                       << (redistributed_perfect ? "::redistributed_perfect=" : "::") << redistributed_perfect
+                       << (redistributed_not_needed ? "::redistributed_not_needed=" : "::") << redistributed_not_needed
+                       << (redistributed_loopback ? "::redistributed_loopback=" : "::") << redistributed_loopback
+                       << dendl;
   }
 
   //---------------------------------------------------------------------------
+  // find_entry() assumes that entries are not removed during operation
+  // remove_entry() is only called from remove_singletons_and_redistribute_keys()
+  //       doing a linear pass over the array.
+
   uint32_t dedup_table_t::find_entry(const key_t *p_key) const
   {
     uint32_t idx = p_key->hash() % entries_count;
@@ -113,34 +154,27 @@ namespace rgw::dedup {
 
   //---------------------------------------------------------------------------
   void dedup_table_t::inc_counters(const key_t *p_key,
-                                   dedup_stats_t *p_small_objs,
-                                   dedup_stats_t *p_big_objs,
+                                   dedup_stats_t *p_objs_stats,
                                    uint64_t *p_duplicate_head_bytes)
   {
     // This is an approximation only since size is stored in 4KB resolution
     uint64_t byte_size_approx = disk_blocks_to_byte_size(p_key->size_4k_units);
 
-    // skip small single part objects which we can't dedup
-    if (!dedupable_object(p_key->multipart_object(), min_obj_size_for_dedup, byte_size_approx)) {
-      p_small_objs->duplicate_count ++;
-      p_small_objs->dedup_bytes_estimate += byte_size_approx;
-      return;
-    }
-    else {
-      uint64_t dup_bytes_approx = calc_deduped_bytes(head_object_size,
-                                                     min_obj_size_for_dedup,
-                                                     max_obj_size_for_split,
-                                                     p_key->num_parts,
-                                                     byte_size_approx);
-      p_big_objs->duplicate_count ++;
-      p_big_objs->dedup_bytes_estimate += dup_bytes_approx;
+    uint64_t dup_bytes_approx = calc_deduped_bytes(head_object_size,
+                                                   min_obj_size_for_dedup,
+                                                   max_obj_size_for_split,
+                                                   p_key->num_parts,
+                                                   byte_size_approx);
+    p_objs_stats->duplicate_count ++;
+    p_objs_stats->dedup_bytes_estimate += dup_bytes_approx;
 
-      // object smaller than max_obj_size_for_split will split their head
-      // and won't dup it
-      if (!p_key->multipart_object() && byte_size_approx > max_obj_size_for_split) {
-        // single part objects duplicate the head object when dedup is used
-        *p_duplicate_head_bytes += head_object_size;
-      }
+    // object smaller than max_obj_size_for_split will split their head
+    // and won't dup it
+    if (!p_key->multipart_object() &&
+        (byte_size_approx > max_obj_size_for_split) &&
+        p_duplicate_head_bytes ) {
+      // single part objects duplicate the head object when dedup is used
+      *p_duplicate_head_bytes += head_object_size;
     }
   }
 
@@ -149,53 +183,57 @@ namespace rgw::dedup {
                                disk_block_id_t block_id,
                                record_id_t rec_id,
                                bool shared_manifest,
-                               dedup_stats_t *p_small_objs,
-                               dedup_stats_t *p_big_objs,
+                               dedup_stats_t *p_objs_stats,
                                uint64_t *p_duplicate_head_bytes)
   {
+    if (occupied_count >= entries_count) {
+      return -EOVERFLOW;
+    }
+
     value_t new_val(block_id, rec_id, shared_manifest);
     uint32_t idx = find_entry(p_key);
     value_t &val = hash_tab[idx].val;
     if (!val.is_occupied()) {
-      if (occupied_count < entries_count) {
-        occupied_count++;
-      }
-      else {
-        return -EOVERFLOW;
-      }
+      occupied_count++;
+      ceph_assert(occupied_count <= entries_count);
 
       hash_tab[idx].key = *p_key;
       hash_tab[idx].val = new_val;
-      ldpp_dout(dpp, 20) << __func__ << "::add new entry" << dendl;
+      ldpp_dout(dpp, 20) << __func__ << "::new entry, idx=" << idx << dendl;
       ceph_assert(val.count == 1);
     }
     else {
       ceph_assert(hash_tab[idx].key == *p_key);
+
       if (val.count <= MAX_COPIES_PER_OBJ) {
-        inc_counters(p_key, p_small_objs, p_big_objs, p_duplicate_head_bytes);
-      }
-      if (val.count < std::numeric_limits<std::uint16_t>::max()) {
         val.count ++;
+        if(p_objs_stats) {
+          ldpp_dout(dpp, 20) << __func__ << "::entry exists, idx=" << idx
+                             << "::count=" << val.count << dendl;
+          inc_counters(p_key, p_objs_stats, p_duplicate_head_bytes);
+        }
       }
+
       if (!val.has_shared_manifest() && shared_manifest) {
         // replace value!
         ldpp_dout(dpp, 20) << __func__ << "::Replace with shared_manifest::["
                            << val.block_idx << "/" << (int)val.rec_id << "] -> ["
                            << block_id << "/" << (int)rec_id << "]" << dendl;
         new_val.count = val.count;
-        hash_tab[idx].val = new_val;
+        val = new_val;
       }
       ceph_assert(val.count > 1);
     }
-    ldpp_dout(dpp, 20) << __func__ << "::COUNT="<< val.count << dendl;
+    ldpp_dout(dpp, 20) << __func__ << "::IDX=" << idx << "::COUNT="<< val.count << dendl;
     return 0;
   }
 
   //---------------------------------------------------------------------------
-  void dedup_table_t::update_entry(key_t *p_key,
-                                   disk_block_id_t block_id,
-                                   record_id_t rec_id,
-                                   bool shared_manifest)
+  uint32_t dedup_table_t::update_entry(key_t *p_key,
+                                       disk_block_id_t block_id,
+                                       record_id_t rec_id,
+                                       bool shared_manifest,
+                                       bool inc_counters)
   {
     uint32_t idx = find_entry(p_key);
     ceph_assert(hash_tab[idx].key == *p_key);
@@ -216,6 +254,15 @@ namespace rgw::dedup {
 
       val = new_val;
     }
+    // caller already checks for MAX_COPIES_PER_OBJ, but better safe...
+    if (inc_counters && (val.count <= MAX_COPIES_PER_OBJ)) {
+      val.count ++;
+    }
+    ldpp_dout(dpp, 20) << __func__ << "::count=" << val.get_count()
+                       << "::shared_manifest=" << val.has_shared_manifest()
+                       << "::block_id=" << val.get_src_block_id() << dendl;
+
+    return val.count;
   }
 
   //---------------------------------------------------------------------------
@@ -243,34 +290,12 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int dedup_table_t::inc_count(const key_t *p_key,
-                               disk_block_id_t block_id,
-                               record_id_t rec_id)
-  {
-    uint32_t idx = find_entry(p_key);
-    value_t &val = hash_tab[idx].val;
-    if (val.is_occupied()) {
-      if (val.block_idx == block_id && val.rec_id == rec_id) {
-        val.inc_count();
-        return 0;
-      }
-      else {
-        ldpp_dout(dpp, 5) << __func__ << "::ERR Failed Ncopies bloc/rec" << dendl;
-      }
-    }
-    else {
-      ldpp_dout(dpp, 5) << __func__ << "::ERR Failed Ncopies key" << dendl;
-    }
-
-    return -ENOENT;
-  }
-
-  //---------------------------------------------------------------------------
   int dedup_table_t::get_val(const key_t *p_key, struct value_t *p_val /*OUT*/)
   {
     uint32_t idx = find_entry(p_key);
     const value_t &val = hash_tab[idx].val;
     if (val.is_occupied()) {
+      ldpp_dout(dpp, 20) << __func__ << "::count=" << val.get_count() << dendl;
       *p_val = val;
       return 0;
     }
@@ -280,35 +305,19 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  void dedup_table_t::count_duplicates(dedup_stats_t *p_small_objs,
-                                       dedup_stats_t *p_big_objs)
+  void dedup_table_t::count_duplicates(dedup_stats_t *p_objs_stats)
   {
     for (uint32_t tab_idx = 0; tab_idx < entries_count; tab_idx++) {
       if (!hash_tab[tab_idx].val.is_occupied()) {
         continue;
       }
 
-      const key_t &key = hash_tab[tab_idx].key;
-      // This is an approximation only since size is stored in 4KB resolution
-      uint64_t byte_size_approx = disk_blocks_to_byte_size(key.size_4k_units);
-
-      // skip small single part objects which we can't dedup
-      if (!dedupable_object(key.multipart_object(), min_obj_size_for_dedup, byte_size_approx)) {
-        if (hash_tab[tab_idx].val.is_singleton()) {
-          p_small_objs->singleton_count++;
-        }
-        else {
-          p_small_objs->unique_count ++;
-        }
+      if (hash_tab[tab_idx].val.is_singleton()) {
+        p_objs_stats->singleton_count++;
       }
       else {
-        if (hash_tab[tab_idx].val.is_singleton()) {
-          p_big_objs->singleton_count++;
-        }
-        else {
-          ceph_assert(hash_tab[tab_idx].val.count > 1);
-          p_big_objs->unique_count ++;
-        }
+        ceph_assert(hash_tab[tab_idx].val.count > 1);
+        p_objs_stats->unique_count ++;
       }
     }
   }
