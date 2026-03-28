@@ -3147,6 +3147,12 @@ mds_rank_t CDir::get_export_pin(bool inherit) const
   return export_pin;
 }
 
+std::string CDir::get_rank_mask(bool inherit) const
+{
+  CInode *in = inode->get_rank_mask_inode(inherit);
+  return in->get_bal_rank_mask_from_xattrs();
+}
+
 bool CDir::is_exportable(mds_rank_t dest) const
 {
   mds_rank_t export_pin = get_export_pin();

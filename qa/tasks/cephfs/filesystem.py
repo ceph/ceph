@@ -671,6 +671,9 @@ class FilesystemBase(MDSClusterBase):
     def set_bal_rank_mask(self, bal_rank_mask):
         self.set_var("bal_rank_mask", bal_rank_mask)
 
+    def set_balance_automate(self, yes):
+        self.set_var("balance_automate", yes)
+
     def set_refuse_client_session(self, yes):
         self.set_var("refuse_client_session", yes)
 

@@ -199,6 +199,7 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   export_ephemeral_distributed_config =  g_conf().get_val<bool>("mds_export_ephemeral_distributed");
   export_ephemeral_random_config =  g_conf().get_val<bool>("mds_export_ephemeral_random");
   export_ephemeral_random_max = g_conf().get_val<double>("mds_export_ephemeral_random_max");
+  bal_export_pin = g_conf().get_val<bool>("mds_bal_export_pin");
 
   symlink_recovery = g_conf().get_val<bool>("mds_symlink_recovery");
   kill_dirfrag_at = static_cast<enum dirfrag_killpoint>(g_conf().get_val<int64_t>("mds_kill_dirfrag_at"));
@@ -254,6 +255,9 @@ void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDS
   }
   if (changed.count("mds_export_ephemeral_random_max")) {
     export_ephemeral_random_max = g_conf().get_val<double>("mds_export_ephemeral_random_max");
+  }
+  if (changed.count("mds_bal_export_pin")) {
+    bal_export_pin = g_conf().get_val<bool>("mds_bal_export_pin");
   }
 
   if (changed.count("mds_kill_dirfrag_at")) {
@@ -1052,12 +1056,23 @@ void MDCache::try_subtree_merge(CDir *dir)
   auto oldbounds = subtrees.at(dir);
 
   set<CInode*> to_eval;
-  // try merge at my root
-  try_subtree_merge_at(dir, &to_eval);
+
+  max_mds_bitset_t rank_mask_bitset;
+  int r = mds->balancer->get_rank_mask_bitset(dir, rank_mask_bitset, false);
+  if (r != 0) {
+    // try merge at my root
+    try_subtree_merge_at(dir, &to_eval);
+  }
 
   // try merge at my old bounds
-  for (auto bound : oldbounds)
+  for (auto bound : oldbounds) {
+    rank_mask_bitset.reset();
+    int r = mds->balancer->get_rank_mask_bitset(bound, rank_mask_bitset, false);
+    if (r == 0 && rank_mask_bitset.count()) {
+      continue;
+    }
     try_subtree_merge_at(bound, &to_eval);
+  }
 
   if (!(mds->is_any_replay() || mds->is_resolve())) {
     for(auto in : to_eval)
@@ -1082,8 +1097,15 @@ void MDCache::try_subtree_merge_at(CDir *dir, set<CInode*> *to_eval, bool adjust
   if (!dir->inode->is_base())
     parent = get_subtree_root(dir->get_parent_dir());
   
+  max_mds_bitset_t rank_mask_bitset;
+  int r = mds->balancer->get_rank_mask_bitset(dir, rank_mask_bitset, false);
+  bool has_mask = false;
+  if (r == 0 && rank_mask_bitset.count()) {
+    has_mask = true;
+  }
+
   if (parent != dir &&				// we have a parent,
-      parent->dir_auth == dir->dir_auth) {	// auth matches,
+      parent->dir_auth == dir->dir_auth && has_mask == false) {	// auth matches,
     // merge with parent.
     dout(10) << "  subtree merge at " << *dir << dendl;
     dir->set_dir_auth(CDIR_AUTH_DEFAULT);
