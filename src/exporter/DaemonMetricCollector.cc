@@ -47,6 +47,7 @@ void DaemonMetricCollector::request_loop() {
     std::string schema_response;
     dump_asok_metrics(sort_metrics, prio_limit, true, dump_response, schema_response, true);
     auto stats_period = g_conf().get_val<int64_t>("exporter_stats_period");
+
     // time to wait before sending requests again
     timer.expires_after(std::chrono::seconds(stats_period));
     request_loop();
@@ -280,26 +281,28 @@ void DaemonMetricCollector::dump_asok_metrics(bool sort_metrics, int64_t counter
       continue;
     }
 
+    bool enable_process_metrics = g_conf().get_val<bool>("exporter_enable_process_metrics");
     try {
       parse_asok_metrics(counter_dump_response, counter_schema_response,
                          prio_limit, daemon_name);
-
-      std::string config_show = !config_show_response ? "" :
-        asok_request(sock_client, "config show", daemon_name);
-      if (config_show.size() == 0) {
-        failures++;
-        continue;
-      }
-      json_object pid_file_json = boost::json::parse(config_show).as_object();
-      std::string pid_path =
-          boost_string_to_std(pid_file_json["pid_file"].as_string());
-      std::string pid_str = read_file_to_string(pid_path);
-      if (!pid_path.size()) {
-        dout(1) << "pid path is empty; process metrics won't be fetched for: "
-                << daemon_name << dendl;
-      }
-      if (!pid_str.empty()) {
-        daemon_pids.push_back({daemon_name, std::stoi(pid_str)});
+      if (enable_process_metrics) {
+        std::string config_show = !config_show_response ? "" :
+          asok_request(sock_client, "config show", daemon_name);
+        if (config_show.size() == 0) {
+          failures++;
+          continue;
+        }
+        json_object pid_file_json = boost::json::parse(config_show).as_object();
+        std::string pid_path =
+            boost_string_to_std(pid_file_json["pid_file"].as_string());
+        std::string pid_str = read_file_to_string(pid_path);
+        if (!pid_path.size()) {
+          dout(1) << "pid path is empty; process metrics won't be fetched for: "
+                  << daemon_name << dendl;
+        }
+        if (!pid_str.empty()) {
+          daemon_pids.push_back({daemon_name, std::stoi(pid_str)});
+        }
       }
     } catch (const std::invalid_argument &e) {
       failures++;
