@@ -926,6 +926,118 @@ class ExportMgr:
                 exports_count += 1
         return exports_count
 
+    def update_export_qos(self,
+                          cluster_id: str,
+                          pseudo_path: str,
+                          export_obj: Export,
+                          enable_qos: bool,
+                          bw_obj: Optional[QOSBandwidthControl] = None,
+                          ops_obj: Optional[QOSOpsControl] = None) -> None:
+        """Update Export QoS block"""
+        # if qos_block does not exists in export create one else update existing block
+        if not export_obj.qos_block:
+            log.debug(f"Creating new QoS block for export {pseudo_path} of cluster {cluster_id}")
+            export_obj.qos_block = QOS(enable_qos=enable_qos, bw_obj=bw_obj, ops_obj=ops_obj)
+        else:
+            log.debug(f"Updating existing QoS block of export {pseudo_path} of cluster {cluster_id}")
+            export_obj.qos_block.enable_qos = enable_qos
+            if bw_obj:
+                export_obj.qos_block.bw_obj = bw_obj
+            if ops_obj:
+                export_obj.qos_block.ops_obj = ops_obj
+
+        self.exports[cluster_id].remove(export_obj)
+        self._update_export(cluster_id, export_obj, False)
+        log.debug(f"Successfully updated QoS control config for export {pseudo_path} of cluster {cluster_id}")
+
+    def get_export_obj(self, cluster_id: str, pseudo_path: str) -> Export:
+        self._validate_cluster_id(cluster_id)
+        export = self._fetch_export(cluster_id, pseudo_path)
+        if not export:
+            raise NFSObjectNotFound(f"Export {pseudo_path} not found in NFS cluster {cluster_id}")
+        return export
+
+    def enable_export_qos_bw(self,
+                             cluster_id: str,
+                             pseudo_path: str,
+                             bw_obj: QOSBandwidthControl
+                             ) -> None:
+        """
+        There are 2 cases to consider, based on QOS type set on cluster level
+        1. If combined bandwith control is disabled
+            a. If qos_type is pershare, then export_writebw and export_readbw parameters are compulsory
+            b. If qos_type is perclient, then can't enable export level qos
+            c. If qos_type is pershare_perclient then export_writebw, export_readbw, client_writebw and
+               client_readbw are compulsory parameters
+        2. If combined bandwidth control is enabled
+            a. If qos_type is pershare, then export_rw_bw parameter is compulsory
+            b. If qos_type is perclient, then can't enable export level qos
+            c. If qos_type is pershare_perclient, then export_rw_bw and client_rw_bw parameters are compulsory
+        """
+        try:
+            export_obj = self.get_export_obj(cluster_id, pseudo_path)
+            export_qos_bw_checks(cluster_id, self.mgr, bw_obj=bw_obj)
+            self.update_export_qos(cluster_id, pseudo_path, export_obj, True, bw_obj=bw_obj)
+            log.debug(f"Successfully enabled QoS bandwidth control for export {pseudo_path} of cluster {cluster_id}")
+        except Exception as e:
+            log.exception(f"Setting NFS-Ganesha QoS bandwidth control failed for {pseudo_path} of {cluster_id}")
+            raise ErrorResponse.wrap(e)
+
+    def get_export_qos(self, cluster_id: str, pseudo_path: str, ret_bw_in_bytes: bool = False) -> Dict[str, int]:
+        try:
+            clust_qos_obj = get_cluster_qos_config(cluster_id, self.mgr)
+            clust_qos_conf = {}
+            if clust_qos_obj:
+                clust_qos_conf[f'global_{QOSParams.enable_qos.value}'] = clust_qos_obj.enable_qos
+                if clust_qos_obj.bw_obj:
+                    clust_qos_conf[f'global_{QOSParams.enable_bw_ctrl.value}'] = clust_qos_obj.bw_obj.enable_bw_ctrl
+                if clust_qos_obj.ops_obj:
+                    clust_qos_conf[f'global_{QOSParams.enable_iops_ctrl.value}'] = clust_qos_obj.ops_obj.enable_iops_ctrl
+
+            export_obj = self.get_export_obj(cluster_id, pseudo_path)
+            if export_obj.qos_block:
+                qos_block = export_obj.qos_block.to_dict(ret_bw_in_bytes)
+                qos_block.update(clust_qos_conf)
+                return qos_block
+            return {}
+        except Exception as e:
+            log.exception(f"Failed to get QoS configuration for {pseudo_path} of {cluster_id}")
+            raise ErrorResponse.wrap(e)
+
+    def disable_export_qos_bw(self, cluster_id: str, pseudo_path: str) -> None:
+        try:
+            export_obj = self.get_export_obj(cluster_id, pseudo_path)
+            status = False
+            if export_obj.qos_block:
+                status = export_obj.qos_block.get_enable_qos_val(disable_bw=True)
+            self.update_export_qos(cluster_id, pseudo_path, export_obj, status, bw_obj=QOSBandwidthControl())
+            log.debug(f"Successfully disabled QoS bandwidth control for export {pseudo_path} of cluster {cluster_id}")
+        except Exception as e:
+            log.exception(f"Setting NFS-Ganesha QoS bandwidth control failed for {pseudo_path} of {cluster_id}")
+            raise ErrorResponse.wrap(e)
+
+    def enable_export_qos_ops(self, cluster_id: str, pseudo_path: str, ops_obj: QOSOpsControl) -> None:
+        try:
+            export_obj = self.get_export_obj(cluster_id, pseudo_path)
+            export_qos_ops_checks(cluster_id, self.mgr, ops_obj=ops_obj)
+            self.update_export_qos(cluster_id, pseudo_path, export_obj, True, ops_obj=ops_obj)
+            log.debug(f"Successfully enabled QoS IOPS control for export {pseudo_path} of cluster {cluster_id}")
+        except Exception as e:
+            log.exception(f"Setting NFS-Ganesha QoS IOPS control failed for {pseudo_path} of {cluster_id}")
+            raise ErrorResponse.wrap(e)
+
+    def disable_export_qos_ops(self, cluster_id: str, pseudo_path: str) -> None:
+        try:
+            export_obj = self.get_export_obj(cluster_id, pseudo_path)
+            status = False
+            if export_obj.qos_block:
+                status = export_obj.qos_block.get_enable_qos_val(disable_ops=True)
+            self.update_export_qos(cluster_id, pseudo_path, export_obj, status, ops_obj=QOSOpsControl())
+            log.debug(f"Successfully updated QoS IOPS control for export {pseudo_path} of cluster {cluster_id}")
+        except Exception as e:
+            log.exception(f"Setting NFS-Ganesha QoS IOPS control failed for {pseudo_path} of {cluster_id}")
+            raise ErrorResponse.wrap(e)
+
 
 def get_user_id(cluster_id: str, fs_name: str, cmount_path: str) -> str:
     """
