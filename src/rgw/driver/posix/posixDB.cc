@@ -70,21 +70,40 @@ int POSIXUserDB::Initialize(string logfile, int loglevel)
   dbops = SQLiteDB::dbops;
   DBOpParams params = {};
   RGWAccessKey key("0555b35654ad1656d804", "h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q==");
+  rgw_user uid("testid");
 
   params.user_table = user_table;
   params.bucket_table = bucket_table;
   params.quota_table = quota_table;
   params.lc_entry_table = lc_entry_table;
   params.lc_head_table = lc_head_table;
-  params.op.user.uinfo.display_name = "tester";
-  params.op.user.uinfo.user_id.id = "test";
-  params.op.user.uinfo.access_keys["default"] = key;
+  params.op.query_str = "username";
+  //params.op.user.uinfo.display_name = "tester";
+  params.op.user.uinfo.user_id = uid;
+  //params.op.user.uinfo.access_keys["default"] = key;
 
   shared_ptr<class DBOp> db_op;
   db_op = dbops.GetUser;
   ret = db_op->Execute(dpp, &params);
 
-  if (ret == -ENOENT) {
+  if (params.op.user.uinfo.access_keys.empty()) {
+    ldpp_dout(dpp, 0) << "dang creating user" << dendl;
+    RGWObjVersionTracker objv_tracker = {};
+    obj_version& obj_ver = objv_tracker.read_version;
+    RGWUserInfo user_info;
+    user_info.user_id = uid;
+    user_info.display_name = "M. Tester";
+    user_info.type = TYPE_RGW;
+    user_info.user_email = "tester@ceph.com";
+    user_info.max_buckets =
+      cct->_conf.get_val<int64_t>("rgw_user_max_buckets");
+    user_info.path = "/";
+    user_info.access_keys.emplace(key.id, key);
+    obj_ver.ver = 1;
+    obj_ver.tag = "UserTAG";
+
+    params.op.user.user_version = obj_ver;
+    params.op.user.uinfo = user_info;
     db_op = dbops.InsertUser;
     ret = db_op->Execute(dpp, &params);
 
