@@ -17,9 +17,19 @@ function(build_isal)
   # because it messes with the internal install paths of arrow's bundled deps
   set(NO_DESTDIR_COMMAND ${CMAKE_COMMAND} -E env --unset=DESTDIR)
 
+  set(arm_cflags "")
   if(CMAKE_C_COMPILER_ID MATCHES "Clang" AND HAVE_ARMV8_SIMD)
-    list(APPEND configure_cmd CFLAGS=-no-integrated-as)
+    list(APPEND arm_cflags "-no-integrated-as")
   endif()
+  # isa-l 2.32.0 requires SVE assembly support
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64")
+    list(APPEND arm_cflags "-Wa,-march=armv8-a+sve")
+  endif()
+  if(arm_cflags)
+    string(REPLACE ";" " " arm_cflags_str "${arm_cflags}")
+    list(APPEND configure_cmd "CFLAGS=${arm_cflags_string}")
+  endif()
+  
 
   include(ExternalProject)
   ExternalProject_Add(isal_ext
