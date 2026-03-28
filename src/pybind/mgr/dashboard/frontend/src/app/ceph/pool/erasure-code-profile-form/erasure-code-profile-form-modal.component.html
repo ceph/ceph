@@ -94,6 +94,7 @@
           @for (plugin of plugins; track plugin) {
           <option
             [value]="plugin"
+            [selected]="plugin === PLUGIN.ISA"
           >
             {{ plugin }}
           </option>

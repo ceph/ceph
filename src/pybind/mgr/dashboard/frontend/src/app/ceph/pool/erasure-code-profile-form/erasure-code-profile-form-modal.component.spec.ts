@@ -108,6 +108,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
   describe('form validation', () => {
     it(`isn't valid if name is not set`, () => {
       expect(component.form.invalid).toBeTruthy();
+      formHelper.setValue('plugin', 'jerasure');
       formHelper.setValue('name', 'someProfileName');
       expect(component.form.valid).toBeTruthy();
     });
@@ -142,6 +143,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
     });
 
     it('should change technique to default if not available in other plugin', () => {
+      formHelper.setValue('plugin', 'jerasure');
       expectTechnique('reed_sol_van');
       formHelper.setValue('technique', 'blaum_roth');
       expectTechnique('blaum_roth');
@@ -153,6 +155,10 @@ describe('ErasureCodeProfileFormModalComponent', () => {
     });
 
     describe(`for 'jerasure' plugin (default)`, () => {
+      beforeEach(() => {
+        formHelper.setValue('plugin', 'jerasure');
+      });
+
       it(`requires 'm' and 'k'`, () => {
         expectRequiredControls(['k', 'm']);
       });
@@ -502,6 +508,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
 
     describe(`'jerasure' usage`, () => {
       beforeEach(() => {
+        ecpChange('plugin', 'jerasure');
         submittedEcp['plugin'] = 'jerasure';
         ecpChange('name', 'jerasureProfile');
         submittedEcp.k = 4;
