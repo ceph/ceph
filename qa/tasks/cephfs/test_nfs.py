@@ -613,6 +613,56 @@ class TestNFS(MgrTestCase):
             # restart ganesha daemon for the changes to take effect
             self._orch_cmd("restart", f"nfs.{cluster_name}")
 
+    def set_subvolume_snapshot_visibility_client_config(self, flag):
+        client_visibility_conf = 'client_respect_subvolume_snapshot_visibility'
+        self._cmd('config', 'set', 'client', client_visibility_conf, flag)
+
+    def get_subvolume_snapshot_visibility_client_config(self, flag):
+        client_visibility_conf = 'client_respect_subvolume_snapshot_visibility'
+        client_respects_visibility = self._cmd('config', 'get', 'client',
+                                               client_visibility_conf).strip()
+        self.assertEqual(client_respects_visibility, flag)
+
+    def set_subvolume_snapshot_visibility(self, volume, subvolume, flag):
+        self._cmd('fs', 'subvolume', 'snapshot_visibility', 'set', volume,
+                  subvolume, flag)
+
+    def ensure_subvolume_snapshot_visibility(self, volume, subvolume, flag):
+        snapshots_visible = self._cmd('fs', 'subvolume', 'snapshot_visibility',
+                                      'get', volume, subvolume).strip()
+        self.assertEqual(snapshots_visible, flag)
+
+    def lookup_snapshot(self, snapshot_ls_cmd, snapshot, negative_lookup=False):
+        with contextutil.safe_while(sleep=1, tries=15) as proceed:
+            while proceed():
+                try:
+                    snapshot_ls = self.ctx.cluster.run(args=snapshot_ls_cmd,
+                                                       stdout=StringIO(),
+                                                       stderr=StringIO())
+                    snapshot_ls = snapshot_ls[0].stdout.getvalue().strip()
+                    # not an expected behaviour, something's wrong with cluster
+                    if len(snapshot_ls) < 1:
+                        raise Exception(f'{snapshot_ls_cmd} returned empty')
+                    if negative_lookup:
+                        self.assertNotIn(snapshot, snapshot_ls)
+                    else:
+                        self.assertIn(snapshot, snapshot_ls)
+                    break
+                except AssertionError:
+                    if negative_lookup:
+                        log.info(f'snapshot {snapshot} still visible, '
+                                 'retrying')
+                    else:
+                        log.warning(f'snapshot {snapshot} is not visible, '
+                                    f'something went wrong, retrying')
+                except CommandFailedError:
+                    if negative_lookup:
+                        # snapshots are not visible i.e. negative lookup passed
+                        break
+                    else:
+                        log.info(f'snapshot {snapshot} still not visible, '
+                                 'retrying')
+
     def test_create_and_delete_cluster(self):
         '''
         Test successful creation and deletion of the nfs cluster.
@@ -1486,3 +1536,74 @@ class TestNFS(MgrTestCase):
 
         # Deleting export 23 should delete the user_id since it's only export with that user_id
         self._delete_export(pseudo_path_3, False, nfs_output_3['fsal']['user_id'])
+
+    def test_subvolume_snapshot_visibility_with_nfs_mount(self):
+        """
+        Test that nfs client mounted subvolume respects snapshot visibility
+        """
+        subvol = 'sv1'
+        snapshot = 'snap1'
+        snapshot_ls_cmd = ['sudo', 'ls', '/mnt/.snap']
+        # enable client config to respect subvolume snapshot visibility
+        self.set_subvolume_snapshot_visibility_client_config('true')
+        self.get_subvolume_snapshot_visibility_client_config('true')
+        # create nfs-ganesha cluster and cephfs volume
+        self._create_cluster_with_fs(self.fs_name)
+        self._check_nfs_cluster_status('running', 'NFS Ganesha cluster '
+                                                  'restart failed')
+        # create a subvolume and export it via nfs
+        self._cmd('fs', 'subvolume', 'create', self.fs_name, subvol)
+        subvol_path = self._cmd('fs', 'subvolume', 'getpath', self.fs_name,
+                                subvol).strip()
+        self._create_export(export_id='1', create_fs=False,
+                            extra_cmd=['--pseudo-path', self.pseudo_path,
+                                       '--path', subvol_path])
+        # mount the subvolume export via a nfs client
+        port, ip = self._get_port_ip_info()
+        self._mnt_nfs(self.pseudo_path, port, ip)
+        # ensure snapshot visibility
+        self.ensure_subvolume_snapshot_visibility(self.fs_name, subvol, "1")
+        # create a snapshot
+        self._cmd('fs', 'subvolume', 'snapshot', 'create', self.fs_name,
+                  subvol, snapshot)
+        snapshot_ls = self._cmd('fs', 'subvolume', 'snapshot', 'ls',
+                                self.fs_name, subvol)
+        self.assertIn(snapshot, snapshot_ls)
+        # snapshot should be visible since the visibility is enabled
+        self.lookup_snapshot(snapshot_ls_cmd, snapshot)
+        # disable snapshot visibility
+        self.set_subvolume_snapshot_visibility(self.fs_name, subvol, 'false')
+        self.ensure_subvolume_snapshot_visibility(self.fs_name, subvol, "0")
+        # should fail since the visibility is disabled
+        self.lookup_snapshot(snapshot_ls_cmd, snapshot, negative_lookup=True)
+        # enable snapshot visibility
+        self.set_subvolume_snapshot_visibility(self.fs_name, subvol, 'true')
+        self.ensure_subvolume_snapshot_visibility(self.fs_name, subvol, "1")
+        # snapshot should be visible since the visibility is enabled
+        self.lookup_snapshot(snapshot_ls_cmd, snapshot)
+        # disable snapshot visibility
+        self.set_subvolume_snapshot_visibility(self.fs_name, subvol, 'false')
+        self.ensure_subvolume_snapshot_visibility(self.fs_name, subvol, "0")
+        # should fail since the visibility is disabled
+        self.lookup_snapshot(snapshot_ls_cmd, snapshot, negative_lookup=True)
+        # disable client config
+        self.set_subvolume_snapshot_visibility_client_config('false')
+        self.get_subvolume_snapshot_visibility_client_config('false')
+        # since the config is disabled, the subvolume flag is bypassed
+        self.lookup_snapshot(snapshot_ls_cmd, snapshot)
+        # enable client config
+        self.set_subvolume_snapshot_visibility_client_config('true')
+        self.get_subvolume_snapshot_visibility_client_config('true')
+        # should fail since the visibility is disabled and client is respecting
+        # subvolume flag
+        self.lookup_snapshot(snapshot_ls_cmd, snapshot, negative_lookup=True)
+        # reset the subvolume flag
+        self.set_subvolume_snapshot_visibility(self.fs_name, subvol, 'true')
+        self.ensure_subvolume_snapshot_visibility(self.fs_name, subvol, "1")
+        # check snapshot
+        self.lookup_snapshot(snapshot_ls_cmd, snapshot)
+        # delete the snapshot
+        self._cmd('fs', 'subvolume', 'snapshot', 'rm', self.fs_name, subvol,
+                  snapshot, '--force')
+        # delete the subvolume
+        self._cmd('fs', 'subvolume', 'rm', self.fs_name, subvol, '--force')
