@@ -778,7 +778,62 @@
   Memcheck:Leak
   match-leak-kinds: all
   ...
-  fun:Py*
+  fun:*Py*
+  ...
+}
+{
+  Memcheck:Leak
+  match-leak-kinds: all
+  ...
+  fun:UnknownInlinedFun
+  ...
+}
+{
+  Python marshal unicode allocations - direct
+  Memcheck:Leak
+  match-leak-kinds: all
+  fun:malloc
+  ...
+  fun:_PyUnicode_FromUCS1.part.0
+  ...
+}
+
+{
+  Python marshal unicode allocations - via r_object
+  Memcheck:Leak
+  match-leak-kinds: all
+  fun:malloc
+  ...
+  fun:r_object
+  ...
+}
+
+{
+  Python marshal loads
+  Memcheck:Leak
+  match-leak-kinds: all
+  fun:malloc
+  ...
+  fun:marshal_loads
+  ...
+}
+
+{
+  Python obmalloc allocations
+  Memcheck:Leak
+  match-leak-kinds: all
+  fun:malloc
+  obj:*/libpython*.so*
+  ...
+}
+
+{
+  Python eval frame
+  Memcheck:Leak
+  match-leak-kinds: all
+  fun:malloc
+  ...
+  fun:_PyEval_EvalFrameDefault
   ...
 }
 
