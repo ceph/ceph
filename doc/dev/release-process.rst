@@ -247,22 +247,25 @@ mv the directories and the tarballs from the prerelease home
 ===================
 
 Unlike CI builds, which have access to packages in the correct form for
-the container, release builds do not, because the build does not 
+the container, release builds do not, because the build does not
 sign the packages.  Thus, release builds do not build the containers.
 This must be done after :ref:`Signing and Publishing the Build`.
 
 A Jenkins job named ``ceph-release-containers`` exists so that we can test the
 images before release. The job exists both for convenience and because it
 requires access to both x86_64 and arm64 builders. Start the job as Build with Parameters on
-the Jenkins server, set ``BRANCH``, ``SHA1`` and ``VERSION`` fields and leave other fields as defaults. 
+the Jenkins server, set ``BRANCH``, ``SHA1`` and ``VERSION`` fields and leave other fields as defaults.
 This job:
 
-* builds the architecture-specific container imagess and pushes them to
+* builds the architecture-specific container images and pushes them to
   ``quay.ceph.io/ceph/prerelease-amd64`` and
   ``quay.ceph.io/ceph/prerelease-arm64``
 
 * fuses the architecture-specific images together into a "manifest-list"
   or "fat" container image and pushes it to ``quay.ceph.io/ceph/prerelease``
+
+> [!CAUTION]
+> **<span style="color:red">NOTE:</span> All old tags must be removed from the architecture-specific container images before running the job.**
 
 Finally, when all appropriate testing and verification is done on the
 container images, run ``make-manifest-list.py --promote --version <ver>`` from the Ceph
