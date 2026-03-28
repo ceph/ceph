@@ -19,7 +19,7 @@
 #include <map>
 #include <utility>
 #include <type_traits>
-#include "common/ceph_atomic.h"
+#include <atomic>
 #include "include/buffer.h"
 #include "include/mempool.h"
 #include "include/spinlock.h"
@@ -38,7 +38,7 @@ inline namespace v15_2_0 {
     char *data;
     unsigned len;
   public:
-    ceph::atomic<unsigned> nref { 0 };
+    static std::atomic<unsigned> nref { 0 };
     int mempool;
 
     std::pair<size_t, size_t> last_crc_offset {std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max()};
