@@ -744,7 +744,7 @@ class RadosBucket : public StoreBucket {
                                  const bucket_index_layout_generation& idx_layout,
                                  int shard_id, boost::intrusive_ptr<ReadStatsCB> ctx) override;
     int sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
-                         RGWBucketEnt* ent) override;
+						 bool reset, RGWBucketEnt* ent) override;
     int check_bucket_shards(const DoutPrefixProvider* dpp, uint64_t num_objs,
                             optional_yield y) override;
     virtual int chown(const DoutPrefixProvider* dpp,

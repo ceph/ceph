@@ -1239,6 +1239,7 @@ struct RGWStorageStats
   uint64_t num_objects;
   uint64_t size_utilized{0}; //< size after compression, encryption
   bool dump_utilized;        // whether dump should include utilized values
+  std::map<std::string, RGWStorageStats> storage_class_stats;
 
   RGWStorageStats(bool _dump_utilized=true)
     : category(RGWObjCategory::None),
@@ -1486,6 +1487,7 @@ struct RGWBucketEnt {
    * of the Swift API. Although the info available in RGWBucketInfo, we need
    * to duplicate it here to not affect the performance of buckets listing. */
   rgw_placement_rule placement_rule;
+  std::map<std::string, RGWBucketEnt> storage_class_ents;
 
   RGWBucketEnt()
     : size(0),
@@ -1513,7 +1515,7 @@ struct RGWBucketEnt {
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(7, 5, bl);
+    ENCODE_START(8, 5, bl);
     uint64_t s = size;
     // issue tracked here: https://tracker.ceph.com/issues/61160
     // coverity[store_truncates_time_t:SUPPRESS]
@@ -1528,10 +1530,11 @@ struct RGWBucketEnt {
     encode(s, bl);
     encode(creation_time, bl);
     encode(placement_rule, bl);
+    encode(storage_class_ents, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(7, 5, 5, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(8, 5, 5, bl);
     __u32 mt;
     uint64_t s;
     std::string empty_str;  // backward compatibility
@@ -1553,6 +1556,8 @@ struct RGWBucketEnt {
       decode(creation_time, bl);
     if (struct_v >= 7)
       decode(placement_rule, bl);
+    if (struct_v >= 8)
+      decode(storage_class_ents, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
