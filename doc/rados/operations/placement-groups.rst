@@ -94,10 +94,10 @@ PG count, run the following command:
 
 The output will resemble the following::
 
-   POOL    SIZE  TARGET SIZE  RATE  RAW CAPACITY   RATIO  TARGET RATIO  EFFECTIVE RATIO BIAS PG_NUM  NEW PG_NUM  AUTOSCALE BULK
-   a     12900M                3.0        82431M  0.4695                                          8         128  warn      True
-   c         0                 3.0        82431M  0.0000        0.2000           0.9884  1.0      1          64  warn      True
-   b         0        953.6M   3.0        82431M  0.0347                                          8              warn      False
+   POOL    SIZE  TARGET SIZE  RATE  RAW CAPACITY   RATIO  FINAL RATIO  TARGET RATIO  EFFECTIVE RATIO BIAS PG_NUM  NEW PG_NUM  AUTOSCALE BULK
+   a     12900M                3.0        82431M  0.4695       0.2560                                          8         128  warn      True
+   c         0                 3.0        82431M  0.0000       0.1280        0.2000           0.9884  1.0      1          64  warn      True
+   b         0        953.6M   3.0        82431M  0.0347       0.0640                                          8              warn      False
 
 - **POOL** is the name of the pool. 
 
@@ -118,6 +118,11 @@ The output will resemble the following::
 - **RATIO** is the ratio of (1) the storage consumed by the pool to (2) the
   total raw storage capacity. In other words, RATIO is defined as 
   (SIZE * RATE) / RAW CAPACITY and may be thought of as a fullness percentage.
+
+- **FINAL RATIO** is the ratio of (1) the expected number of PGs allocated to the
+  pool to (2) the total target PG budget. FINAL RATIO is defined as
+  (FINAL_POOL_PG_TARGET * RATE) / TOTAL PG BUDGET where FINAL_POOL_PG_TARGET = NEW PG_NUM (if present)
+  or PG_NUM otherwise. FINAL RATIO may be thought of as the target utilization percentage.
 
 - **TARGET RATIO** (if present) is the ratio of the expected storage of this
   pool relative to the expected storage of all other pools
@@ -245,6 +250,56 @@ process. We recommend constraining each pool so that it belongs to only one
 root (that is, one device OSD class) to silence the warning and ensure successful
 scaling.
 
+.. _allocation_algorithm:
+
+Allocation Algorithm
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The autoscaler sets each pool's ``final_pool_pg_target`` to be rounded to the
+nearest power of two while keeping the total sum of pgs less than the pg_target
+of the overall cluster. Pools with the same configuration values
+(``pg_target``, replication size, bias, is bulk, is autoscale enabled) are
+treated as a group and rounded in the same direction, even if a subset of them
+could be rounded up for better utilization. This is to prefer fairness over
+greedy utilization. The allocation algorithm performs four passess
+
+First pass (Non-autoscale pools): Non-autoscale pools
+are not rounded to a power of two but their ``pg_num_target`` is subtracted
+from the budget.
+
+Second pass (Non-bulk pools):  Non-bulk pools have target PGs calculated
+from their ``capacity_ratio = max(acutal data, or target size)``.
+
+Third pass (Bulk Pools): For all bulk pools with ``capacity_ratio > even_ratio``
+where ``even_ratio = pg_left / # bulk pools``, calculate target PGs from the ``capacity ratio``
+
+Fourth pass (Leftover Bulk Pools): Distribute remaining PGs to even pools
+where final_ratio = 1 / (# pools remaining)
+
+
+For example:
+
+.. prompt:: bash #
+
+   ceph config set global mon_target_pg_per_osd 250
+
+   ceph osd pool create data1
+   ceph osd pool create data2
+   ceph osd pool create data3
+
+   ceph osd pool set data1 target_size_ratio 0.4
+   ceph osd pool set data2 target_size_ratio 0.3
+   ceph osd pool set data3 target_size_ratio 0.3
+
+4 OSDs with replication size 3. There are a total of 1000 PGs. 0.4 * 1000 = 400. 400 / 3 = 133.33.
+Rounded to the nearest power of two, this becomes 128. Pool data1 ``final_pool_pg_target = 128``.
+1000 - (128 * 3) =  616. Since data2 and data3 both have ``pg_target = 0.3 * 1000 = 300`` and
+the same (``pg_target``, replication size, bias, is bulk, is autoscale enabled), they are
+treated as a group. 616 / 2 / 3 = 102.677. They must both be rounded down to 64 since rounding up
+to 128 would exceed the budget. This algorithm prefers fairness over greedy since if it were greedy,
+one pool could be allocated 128 PGs and the other 64 PGs, which would still meet the budget  (64 * 3 + 128 * 3 = 576 < 616)
+
+
 .. _managing_bulk_flagged_pools:
 
 Managing pools that are flagged with ``bulk``
@@ -258,7 +313,6 @@ only if there is more usage in the pool. This flag should be used with care,
 as it may not have the results one would think.
 
 To create a pool that will be flagged ``bulk``, run the following command:
-
 .. prompt:: bash #
 
    ceph osd pool create <pool-name> --bulk

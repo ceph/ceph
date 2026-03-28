@@ -2,10 +2,11 @@
 Automatically scale pg_num based on how much data is stored in each pool.
 """
 
+from collections import defaultdict
 import json
 import mgr_util
 import threading
-from typing import Any, Dict, List, Optional, Set, Tuple, TYPE_CHECKING, Union
+from typing import Any, Dict, NamedTuple, List, Optional, Set, Tuple, TYPE_CHECKING, Union
 import uuid
 from prettytable import PrettyTable
 from mgr_module import HealthChecksT, CRUSHMap, MgrModule, Option, OSDMap
@@ -33,11 +34,22 @@ if TYPE_CHECKING:
     else:
         from typing_extensions import Literal
 
-    PassT = Literal['first', 'second', 'third']
+    PassT = Literal['first', 'second', 'third', 'fourth']
 
+def is_power_of_two(v: int) -> bool:
+    return v >= 0 and (v & (v - 1)) == 0
 
-def nearest_power_of_two(n: int) -> int:
+def nearest_power_of_two(n: int, direction: str = "nearest") -> int:
+    """
+    Direction is up, down, or nearest.
+    If n is a power of two and down is specified, round to the power of two below n,
+    else return n
+    """
     v = int(n)
+    if is_power_of_two(v):
+        if direction == "down":
+            return v >> 1 if v >= 1 else 0
+        return v
 
     v -= 1
     v |= v >> 1
@@ -52,6 +64,10 @@ def nearest_power_of_two(n: int) -> int:
     # Low bound power of tow
     x = v >> 1
 
+    if direction == "up":
+        return v
+    elif direction == "down":
+        return x
     return x if (v - n) > (n - x) else v
 
 
@@ -113,6 +129,61 @@ class CrushSubtreeResourceStatus:
         self.total_target_ratio = 0.0
         self.total_target_bytes = 0  # including replication / EC overhead
 
+
+class BacktrackNode(NamedTuple):
+    current_pg_sum: int # cummulative pgs added at current node
+    total_cost: int #cummulative cost at current node
+    prev_pg_sum: int #cummulative PGs added at previous node
+
+class GroupKey(NamedTuple):
+    pg_target: int
+    size: int
+    bias: int
+    bulk: bool
+    autoscale: bool
+
+class PoolGroup:
+    # Treat similar pools as a group to prefer fairness over greedy. All pools
+    # with the same GroupKey get the same PGs, even if a subset of them
+    # could be rounded up to have more
+    def __init__(self, pg_target: int, size: int, bias: float, autoscale: bool) -> None:
+        self.pools: Dict[str, Dict[str, Any]] = {} #Group together pools with the same
+        # (pg_target, replication size, bias, bulk, autoscale) so they can be rounded the same direction
+        self.pg_target_total = 0
+        self.rd_down_total = 0
+        self.rd_up_total = 0
+        self.deviation_cost_down_total = 0
+        self.deviation_cost_up_total = 0
+        self.update(pg_target, size, bias, autoscale)
+
+    def update(self, pg_target: int, size: int, bias: float, autoscale: bool) -> None:
+        self.pg_target = pg_target * bias
+        pg_target_per_replica = self.pg_target / size
+        self.rd_down_val = nearest_power_of_two(pg_target_per_replica, "down") * size
+        self.rd_up_val = nearest_power_of_two(pg_target_per_replica, "up") * size
+        self.cost_down_val = abs(self.rd_down_val - pg_target)
+        self.cost_up_val = abs(self.rd_up_val - pg_target)
+        if not autoscale: # If autoscaler is not enabled then use current value without rounding
+            self.rd_down_val = self.pg_target
+            self.rd_up_val = self.pg_target
+            self.cost_down_val = 0
+            self.cost_up_val = 0
+
+        self.refresh_totals()
+
+    def refresh_totals(self) -> None:
+        self.pg_target_total = self.pg_target * self.size()
+        self.rd_down_total = self.rd_down_val * self.size()
+        self.rd_up_total = self.rd_up_val * self.size()
+        self.deviation_cost_down_total = self.cost_down_val * self.size()
+        self.deviation_cost_up_total = self.cost_up_val * self.size()
+
+    def add(self, pool_name: str, p: Dict[str, Any]) -> None:
+        self.pools[pool_name] = p
+        self.refresh_totals()
+
+    def size(self) -> int:
+        return len(self.pools)
 
 class PgAutoscaler(MgrModule):
     CLICommand = PGAutoscalerCLICommand
@@ -180,7 +251,7 @@ class PgAutoscaler(MgrModule):
         else:
             table = PrettyTable(['POOL', 'SIZE', 'TARGET SIZE',
                                  'RATE', 'RAW CAPACITY',
-                                 'RATIO', 'TARGET RATIO',
+                                 'RATIO', 'FINAL RATIO', 'TARGET RATIO',
                                  'EFFECTIVE RATIO',
                                  'BIAS',
                                  'PG_NUM',
@@ -196,6 +267,7 @@ class PgAutoscaler(MgrModule):
             table.align['RATE'] = 'r'
             table.align['RAW CAPACITY'] = 'r'
             table.align['RATIO'] = 'r'
+            table.align['FINAL RATIO'] = 'r'
             table.align['TARGET RATIO'] = 'r'
             table.align['EFFECTIVE RATIO'] = 'r'
             table.align['BIAS'] = 'r'
@@ -228,6 +300,7 @@ class PgAutoscaler(MgrModule):
                     p['raw_used_rate'],
                     mgr_util.format_bytes(p['subtree_capacity'], 6),
                     '%.4f' % p['capacity_ratio'],
+                    '%.4f' % p['final_ratio'],
                     tr,
                     etr,
                     p['bias'],
@@ -242,7 +315,7 @@ class PgAutoscaler(MgrModule):
     @PGAutoscalerCLICommand.Write("osd pool set threshold")
     def set_scaling_threshold(self, num: float) -> Tuple[int, str, str]:
         """
-        set the autoscaler threshold 
+        set the autoscaler threshold
         A.K.A. the factor by which the new pg_num must vary
         from the existing pg_num before action is taken
         """
@@ -447,88 +520,205 @@ class PgAutoscaler(MgrModule):
 
         return result, overlapped_roots
 
-    def _calc_final_pg_target(
+    def _append_result (
             self,
-            p: Dict[str, Any],
-            pool_name: str,
+            pool_groups: List[PoolGroup],
+            backtrack: List[BacktrackNode],
+            final_ratios: List[int],
+            pool_pg_targets: List[int],
+            final_pool_pg_targets: List[int],
+            pools: List[Dict[str, Any]],
+            pg_total: int
+    ) -> None:
+        """
+        Calculate the final_pool_pg_target based on the backtracked optimal allocation
+        """
+        for i, group in enumerate(pool_groups):
+            for pool_name, p in group.pools.items():
+                min_pg = p.get('options', {}).get('pg_num_min', PG_NUM_MIN)
+                max_pg = p.get('options', {}).get('pg_num_max')
+                pool_pg_target = int(group.pg_target_total / group.size())
+                final_pool_pg_target_total = backtrack[i].current_pg_sum - backtrack[i].prev_pg_sum + group.rd_down_total
+                final_pool_pg_target = final_pool_pg_target_total / group.size()
+                final_pool_pg_target_per_replica = int(final_pool_pg_target / p['size'])
+                if min_pg > final_pool_pg_target_per_replica:
+                    final_pool_pg_target_per_replica = min_pg
+                    final_pool_pg_target = min_pg * p['size']
+                if max_pg and max_pg < final_pool_pg_target:
+                    final_pool_pg_target_per_replica = max_pg
+                    final_pool_pg_target = max_pg * p['size']
+                self.log.info("{} final_pool_pg_target_per_replica {}".format(p['pool_name'], final_pool_pg_target_per_replica))
+
+                final_ratio = final_pool_pg_target / pg_total
+                final_ratios.append(final_ratio)
+                pool_pg_targets.append(pool_pg_target)
+                final_pool_pg_targets.append(final_pool_pg_target_per_replica)
+                pools.append(p)
+                self.log.info("Pool '{0}' using {1} of space, pg target {2} quantized to {3}".format(
+                    pool_name,
+                    final_ratio,
+                    pool_pg_target,
+                    final_pool_pg_target,
+                ))
+                if group.size() > 0:
+                    self.log.info("{} pools share the same target_ratio and pg_target. Rounding them in the same direction".format(group.size()))
+                if p['pg_autoscale_mode'] == 'on':
+                    assert is_power_of_two(final_pool_pg_target_per_replica)
+
+    def _find_optimal_pg_distribution (
+            self,
             root_map: Dict[int, CrushSubtreeResourceStatus],
             root_id: int,
-            capacity_ratio: float,
-            bias: float,
-            even_pools: Dict[str, Dict[str, Any]],
-            bulk_pools: Dict[str, Dict[str, Any]],
-            func_pass: 'PassT',
-            bulk: bool,
-    ) -> Union[Tuple[float, int, int], Tuple[None, None, None]]:
+            base: int,
+            cost: int,
+            pool_groups: List[PoolGroup],
+            backtrack: List[BacktrackNode]
+    ) -> None:
         """
-        `profile` determines behaviour of the autoscaler.
-        `first_pass` flag used to determine if this is the first
-        pass where the caller tries to calculate/adjust pools that has
-        used_ratio > even_ratio else this is the second pass,
-        we calculate final_ratio by giving it 1 / pool_count
-        of the root we are currently looking at.
+        Determine which pools to round up per root_id using knapsack problem dynamic programming.
+        The cost associated with a rounding decision is the absolute difference
+        between the target PG value and the rounded PG value: cost = abs(pg_target - rounded_pg).
+        If multiple solutions have the same total cost, the solution with the higher cumulative PG count is selected.
+        The time complexity of this problem is O(nlog2(budget)) where n = number of pools and budget = target_pg_num
+        of the cluster.
         """
-        if func_pass == 'first':
-            # first pass to deal with small pools (no bulk flag)
-            # calculating final_pg_target based on capacity ratio
-            # we also keep track of bulk_pools to be used in second pass
-            if not bulk:
-                final_ratio = capacity_ratio
-                pg_left = root_map[root_id].pg_left
-                assert pg_left is not None
-                used_pg = final_ratio * pg_left
-                root_map[root_id].pg_left -= int(used_pg)
-                root_map[root_id].pool_used += 1
-                pool_pg_target = used_pg / p['size'] * bias
-            else:
-                bulk_pools[pool_name] = p
-                return None, None, None
+        pg_left = root_map[root_id].pg_left
+        budget =  pg_left - base
+        assert pg_left is not None
 
+        rd_up_cost_dict: List[Tuple[int, int]] = [] # list of (rd_up_cost, pool_index)
+        for i in range(len(pool_groups)):
+            rd_up_cost = pool_groups[i].rd_up_total - pool_groups[i].rd_down_total
+            rd_up_cost_dict.append((rd_up_cost, i))
+        # parent lets us reconstruct which pools were upgraded:
+        # parent[new pg total] = (cummulative cost, current pg total)
+        parent: List[Dict[int, Tuple[int, int]]] = [defaultdict(lambda: (0, 0)) for _ in range(len(pool_groups)+1)]
+        parent[0][0] = (cost, 0)
+        for (rd_up_cost, pool_index) in rd_up_cost_dict:
+            parent[pool_index+1] = {k: (v[0], k) for k, v in parent[pool_index].items()}
+            for current_pg_sum, (cost, prev_pg_sum) in parent[pool_index].items():
+                next_rd_up_cost = current_pg_sum + rd_up_cost
+                next_rd_up_weight = cost - pool_groups[pool_index].deviation_cost_down_total + pool_groups[pool_index].deviation_cost_up_total
+                if base + next_rd_up_cost <= budget:
+                    if next_rd_up_cost not in parent[pool_index+1] or next_rd_up_weight < parent[pool_index+1][next_rd_up_cost][0]:
+                        parent[pool_index+1][next_rd_up_cost] = (next_rd_up_weight, current_pg_sum)
+        # Select solution with the smallest cost. With tiebreaker, choose solution that allocates the most total pgs
+        opt = None
+        for current_pg_sum, (cost, prev_pg_sum) in parent[-1].items():
+            if opt is None or cost < opt[1] or (cost == opt[1] and current_pg_sum > opt[0]):
+                opt = BacktrackNode(current_pg_sum, cost, prev_pg_sum)
+        assert opt != None
+        backtrack.append(opt)
+        for i in range(len(parent)-2, 0, -1):
+            (current_pg_sum, cost, prev_pg_sum) = backtrack[-1]
+            backtrack.append(BacktrackNode(prev_pg_sum, parent[i][prev_pg_sum][0], parent[i][prev_pg_sum][1]))
+        backtrack.reverse()
+
+    def _calculate_final_pool_pg_target(
+            self,
+            root_map: Dict[int, CrushSubtreeResourceStatus],
+            root_id: int,
+            func_pass: 'PassT',
+            pool_group: Dict[GroupKey, PoolGroup],
+    ) -> Tuple[List[float], List[int], List[int], List[Dict[str, Any]]]:
+        """
+        Finds the optimal distribution of PGs among all pools for the current root_id.
+        First pass (Non-autoscale pools): Subtract num_pg_target from the budget without rounding to a power of two
+        for non-autoscale pools.
+        Second pass (Non-bulk pools): Calculate the target PG for non-bulk pools based off
+        capacity_ratio = max(acutal data, or target size).
+        Third pass (Bulk pools): Calculate the target PG for pools with capacity_ratio > even_ratio where
+        even_ratio = pg_left / # bulk pools
+        Fourth pass (Remaining bulk pools): Distribute remaining PGs to even pools where final_ratio = 1 / (# pools remaining)
+        """
+        backtrack: List[BacktrackNode] = []
+        # (cummulative pgs added at pool i, cummulative cost at pool i,  cummulative pgs added at pool i-1)
+
+        final_ratios = []
+        pool_pg_targets = []
+        final_pool_pg_targets = []
+        pools = []
+
+        base = 0
+        cost = 0
+        pg_left = root_map[root_id].pg_left
+        victims = [] # GroupKey to remove
+
+        self.log.debug("root {} starting {} pass. {} PG budget remaining".format(root_id, func_pass, pg_left))
+        if not pool_group:
+            return final_ratios, pool_pg_targets, final_pool_pg_targets, pools
+        if func_pass == 'first':
+            non_autoscale_groups = []
+            # first pass to deal with pools without autoscale enabled
+            # subtracting the current pg_num_target regardless of
+            # if it is a power of two
+            for group_key, group in pool_group.items():
+                (pg_target, size, bias, bulk, autoscale) = group_key
+                if not autoscale:
+                    for pool_name, p in group.pools.items():
+                        group.update(p['pg_num_target'] * size, size, bias, autoscale)
+                    self.log.debug("updating group with target {} size {} bias {} bulk {} autoscale {}".format(p['pg_num_target'] * size, size, bias, bulk, autoscale))
+                    base += group.rd_down_total
+                    cost += group.deviation_cost_down_total
+                    root_map[root_id].pool_used += group.size()
+                    non_autoscale_groups.append(group)
+                    victims.append(group_key)
+            self._find_optimal_pg_distribution(root_map, root_id, base, cost, non_autoscale_groups, backtrack)
+            self._append_result(non_autoscale_groups, backtrack, final_ratios, pool_pg_targets, final_pool_pg_targets, pools, root_map[root_id].pg_target)
         elif func_pass == 'second':
-            # second pass we calculate the final_pg_target
+            # second pass to deal with small pools (no bulk flag)
+            # calculating final_pool_pg_target based on capacity ratio
+            # we also keep track of bulk_pools to be used in second pass
+            non_bulk_groups = []
+            for group_key, group in pool_group.items():
+                (pg_target, size, bias, bulk, autoscale) = group_key
+                if not bulk:
+                    base += group.rd_down_total
+                    cost += group.deviation_cost_down_total
+                    root_map[root_id].pool_used += group.size()
+                    non_bulk_groups.append(group)
+                    victims.append(group_key)
+            self._find_optimal_pg_distribution(root_map, root_id, base, cost, non_bulk_groups, backtrack)
+            self._append_result(non_bulk_groups, backtrack, final_ratios, pool_pg_targets, final_pool_pg_targets, pools, root_map[root_id].pg_target)
+        elif func_pass == 'third':
+            # third pass we calculate the final_pool_pg_target
             # for pools that have used_ratio > even_ratio
             # and we keep track of even pools to be used in third pass
             pool_count = root_map[root_id].pool_count
             assert pool_count is not None
             even_ratio = 1 / (pool_count - root_map[root_id].pool_used)
-            used_ratio = capacity_ratio
-
-            if used_ratio > even_ratio:
-                root_map[root_id].pool_used += 1
-            else:
-                even_pools[pool_name] = p
-                return None, None, None
-
-            final_ratio = max(used_ratio, even_ratio)
-            pg_left = root_map[root_id].pg_left
+            non_even_groups = []
             assert pg_left is not None
-            used_pg = final_ratio * pg_left
-            root_map[root_id].pg_left -= int(used_pg)
-            pool_pg_target = used_pg / p['size'] * bias
-
+            for group_key, group in pool_group.items():
+                (pg_target, size, bias, bulk, autoscale) = group_key
+                used_ratio = group.pg_target_total / group.size() / pg_left
+                if used_ratio > even_ratio and bulk:
+                    base += group.rd_down_total
+                    cost +=group.deviation_cost_down_total
+                    root_map[root_id].pool_used += group.size()
+                    non_even_groups.append(group)
+                    victims.append(group_key)
+            self._find_optimal_pg_distribution(root_map, root_id, base, cost, non_even_groups, backtrack)
+            self._append_result(non_even_groups, backtrack, final_ratios, pool_pg_targets, final_pool_pg_targets, pools, root_map[root_id].pg_target)
         else:
-            # third pass we just split the pg_left to all even_pools
+            # fourth pass all pools are even and are assigned the same final_pool_pg_target
             pool_count = root_map[root_id].pool_count
             assert pool_count is not None
             final_ratio = 1 / (pool_count - root_map[root_id].pool_used)
-            pool_pg_target = (final_ratio * root_map[root_id].pg_left) / p['size'] * bias
+            for (pg_target, size, bias, bulk, autoscale), group in pool_group.items():
+                pg_target = final_ratio * root_map[root_id].pg_left
+                self.log.debug("updating group with target {} size {} bias {} bulk {} autoscale {}".format(pg_target, size, bias, bulk, autoscale))
+                group.update(pg_target, size, bias, autoscale)
+                base += group.rd_down_total
+                cost += group.deviation_cost_down_total
+                root_map[root_id].pool_used += group.size()
+            remainder_groups = list(pool_group.values())
+            self._find_optimal_pg_distribution(root_map, root_id, base, cost, remainder_groups, backtrack)
+            self._append_result(remainder_groups, backtrack, final_ratios, pool_pg_targets, final_pool_pg_targets, pools, root_map[root_id].pg_target)
 
-        min_pg = p.get('options', {}).get('pg_num_min', PG_NUM_MIN)
-        max_pg = p.get('options', {}).get('pg_num_max')
-        final_pg_target = max(min_pg, nearest_power_of_two(pool_pg_target))
-        if max_pg and max_pg < final_pg_target:
-            final_pg_target = max_pg
-        self.log.info("Pool '{0}' root_id {1} using {2} of space, bias {3}, "
-                      "pg target {4} quantized to {5} (current {6})".format(
-                      p['pool_name'],
-                      root_id,
-                      capacity_ratio,
-                      bias,
-                      pool_pg_target,
-                      final_pg_target,
-                      p['pg_num_target']
-        ))
-        return final_ratio, pool_pg_target, final_pg_target
+        for key in victims:
+            del pool_group[key]
+        return final_ratios, pool_pg_targets, final_pool_pg_targets, pools
 
     def get_dynamic_threshold(
             self,
@@ -541,33 +731,167 @@ class PgAutoscaler(MgrModule):
             return 2.0
         return default_threshold
 
-    def _get_pool_pg_targets(
+    def _calculate_pool_metrics(
             self,
             osdmap: OSDMap,
-            pools: Dict[str, Dict[str, Any]],
-            crush_map: CRUSHMap,
             root_map: Dict[int, CrushSubtreeResourceStatus],
+            root_id: int,
+            pool_id: int,
             pool_stats: Dict[int, Dict[str, int]],
+            capacity: float,
+            bulk: bool,
+            p: Dict[str, Any],
+            pool_metrics: Dict[str, Dict[str, Any]],
+    ) -> None:
+        raw_used_rate = osdmap.pool_raw_used_rate(pool_id)
+        target_bytes = 0
+        # ratio takes precedence if both are set
+        if p['options'].get('target_size_ratio', 0.0) == 0.0:
+            target_bytes = p['options'].get('target_size_bytes', 0)
+
+        # What proportion of space are we using?
+        actual_raw_used = pool_stats[pool_id]['bytes_used']
+        actual_capacity_ratio = float(actual_raw_used) / capacity
+        pool_raw_used = max(actual_raw_used, target_bytes * raw_used_rate)
+        capacity_ratio = float(pool_raw_used) / capacity
+
+        self.log.info("effective_target_ratio {0} {1} {2} {3}".format(
+            p['options'].get('target_size_ratio', 0.0),
+            root_map[root_id].total_target_ratio,
+            root_map[root_id].total_target_bytes,
+            capacity))
+
+        target_ratio = effective_target_ratio(p['options'].get('target_size_ratio', 0.0),
+                                            root_map[root_id].total_target_ratio,
+                                            root_map[root_id].total_target_bytes,
+                                            capacity)
+        pool_id = p['pool']
+        pool_metrics[pool_id] = {
+            'target_bytes': target_bytes,
+            'raw_used_rate': raw_used_rate,
+            'actual_raw_used': actual_raw_used,
+            'actual_capacity_ratio': actual_capacity_ratio,
+            'pool_raw_used': pool_raw_used,
+            'capacity_ratio': capacity_ratio,
+            'target_ratio': target_ratio,
+            'bulk': bulk,
+        }
+
+    def _get_pool_pg_targets(
+            self,
+            root_map: Dict[int, CrushSubtreeResourceStatus],
             ret: List[Dict[str, Any]],
             threshold: float,
             func_pass: 'PassT',
-            overlapped_roots: Set[int],
-    ) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]] , Dict[str, Dict[str, Any]]]:
+            pool_groups_by_root: Dict[int, Dict[GroupKey, PoolGroup]],
+            pool_metrics: Dict[str, Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
         """
-        Calculates final_pg_target of each pools and determine if it needs
-        scaling, this depends on the profile of the autoscaler. For scale-down,
-        we start out with a full complement of pgs and only descrease it when other
-        pools needs more pgs due to increased usage. For scale-up, we start out with
-        the minimal amount of pgs and only scale when there is increase in usage.
+        Calculate final_pool_pg_target for each CRUSH root and return
+        the autoscaler output along with pool metrics.
+
+        For each root, this method:
+        - calculates final PG targets for pools in that root,
+        - determines whether each pool would be adjusted in the current pass,
+        - records the derived metrics used by the autoscaler output.
+
+        Pools grouped together for rounding are handled by _calculate_final_pool_pg_target().
+
+        If a root runs out of PG budget during a pass, scaling decisions for pools in
+        that pass may be suppressed.
+
+        All final scaling decisions get checked against dynamic_threshold
         """
-        even_pools: Dict[str, Dict[str, Any]] = {}
-        bulk_pools: Dict[str, Dict[str, Any]] = {}
+        ret_copy = []
+        for root_id in pool_groups_by_root:
+            pgs_used_total = 0
+            final_ratios, pool_pg_targets, final_pool_pg_targets, pools = self._calculate_final_pool_pg_target(
+            root_map, root_id, func_pass, pool_groups_by_root[root_id])
+
+            fail_all = False
+            for final_ratio, pool_pg_target, final_pool_pg_target, p in zip(final_ratios, pool_pg_targets, final_pool_pg_targets, pools):
+                if final_ratio is None:
+                    continue
+                pgs_used = final_pool_pg_target * p['size']
+                root_map[root_id].pg_left -= pgs_used
+                adjust = False
+
+                if root_map[root_id].pg_left <= 0:
+                    fail_all = True
+                # Dynamic threshold only applies to scaling UP, otherwise use the default threshold.
+                if final_pool_pg_target is not None and \
+                   final_pool_pg_target > p['pg_num_target']:
+                    dynamic_threshold = self.get_dynamic_threshold(final_pool_pg_target, threshold)
+                    adjust = final_pool_pg_target > p['pg_num_target'] * dynamic_threshold
+                else:
+                    adjust = final_pool_pg_target < p['pg_num_target'] / threshold
+
+                if adjust and \
+                   final_ratio >= 0.0 and \
+                   final_ratio <= 1.0 and \
+                   p['pg_autoscale_mode'] == 'on':
+                    adjust = True
+                else:
+                    if final_pool_pg_target != p['pg_num_target']:
+                        self.log.warning("pool %s won't scale because recommended PG_NUM target"
+                                         " value %d varies from current PG_NUM value %d by"
+                                         " more than '%f' scaling threshold",
+                                         p['pool_name'], p['pg_num_target'], final_pool_pg_target,
+                                         dynamic_threshold if final_pool_pg_target > p['pg_num_target'] else threshold)
+                pool_id = p['pool']
+                capacity = root_map[root_id].capacity
+                metrics = pool_metrics[pool_id]
+                assert pool_pg_target is not None
+                ret_copy.append({
+                    'pool_id': pool_id,
+                    'pool_name': p['pool_name'],
+                    'crush_root_id': root_id,
+                    'pg_autoscale_mode': p['pg_autoscale_mode'],
+                    'pg_num_target': p['pg_num_target'],
+                    'logical_used': float(metrics['actual_raw_used'])/metrics['raw_used_rate'],
+                    'target_bytes': metrics['target_bytes'],
+                    'raw_used_rate': metrics['raw_used_rate'],
+                    'subtree_capacity': capacity,
+                    'actual_raw_used': metrics['actual_raw_used'],
+                    'raw_used': metrics['pool_raw_used'],
+                    'actual_capacity_ratio': metrics['actual_capacity_ratio'],
+                    'capacity_ratio': metrics['capacity_ratio'],
+                    'final_ratio': final_ratio,
+                    'target_ratio': p['options'].get('target_size_ratio', 0.0),
+                    'effective_target_ratio': metrics['target_ratio'],
+                    # 'pg_num_ideal': int(pool_pg_target),
+                    'pg_num_final': final_pool_pg_target,
+                    'would_adjust': adjust,
+                    'bias': p.get('options', {}).get('pg_autoscale_bias', 1.0),
+                    'bulk': metrics['bulk'],
+                })
+
+            for copy in ret_copy:
+                if fail_all:
+                    copy['would_adjust'] = False
+                ret.append(copy)
+        return ret
+
+    def _compute_pool_group_metrics(
+        self,
+        osdmap: OSDMap,
+        pools: Dict[str, Dict[str, Any]],
+        crush_map: CRUSHMap,
+        root_map: Dict[int, CrushSubtreeResourceStatus],
+        pool_stats: Dict[int, Dict[str, int]],
+        overlapped_roots: Set[int],
+        pool_groups_by_root: Dict[int, Dict[GroupKey, PoolGroup]],
+        pool_metrics: Dict[str, Dict[str, Any]],
+    ) -> None:
+        """
+        Add pools to PoolGroups where all pools with the same GroupKey are
+        allocated the same number of PGs
+        """
         for pool_name, p in pools.items():
             pool_id = p['pool']
             if pool_id not in pool_stats:
                 # race with pool deletion; skip
                 continue
-
             # FIXME: we assume there is only one take per pool, but that
             # may not be true.
             crush_rule = crush_map.get_rule_by_id(p['crush_rule'])
@@ -587,97 +911,31 @@ class PgAutoscaler(MgrModule):
                 self.log.debug("skipping empty subtree {0}".format(cr_name))
                 continue
 
-            raw_used_rate = osdmap.pool_raw_used_rate(pool_id)
-
             bias = p['options'].get('pg_autoscale_bias', 1.0)
-            target_bytes = 0
-            # ratio takes precedence if both are set
-            if p['options'].get('target_size_ratio', 0.0) == 0.0:
-                target_bytes = p['options'].get('target_size_bytes', 0)
-
-            # What proportion of space are we using?
-            actual_raw_used = pool_stats[pool_id]['bytes_used']
-            actual_capacity_ratio = float(actual_raw_used) / capacity
-
-            pool_raw_used = max(actual_raw_used, target_bytes * raw_used_rate)
-            capacity_ratio = float(pool_raw_used) / capacity
-
-            self.log.info("effective_target_ratio {0} {1} {2} {3}".format(
-                p['options'].get('target_size_ratio', 0.0),
-                root_map[root_id].total_target_ratio,
-                root_map[root_id].total_target_bytes,
-                capacity))
-
-            target_ratio = effective_target_ratio(p['options'].get('target_size_ratio', 0.0),
-                                                  root_map[root_id].total_target_ratio,
-                                                  root_map[root_id].total_target_bytes,
-                                                  capacity)
-
             # determine if the pool is a bulk
             bulk = False
             flags = p['flags_names'].split(",")
             if "bulk" in flags:
                 bulk = True
+            self._calculate_pool_metrics(osdmap, root_map, root_id, pool_id, pool_stats, capacity, bulk, p, pool_metrics)
+            metrics = pool_metrics[pool_id]
+            pg_left = root_map[root_id].pg_left
+            self.log.debug("{} metrics: {}".format(p['pool_name'], metrics))
 
-            capacity_ratio = max(capacity_ratio, target_ratio)
-            final_ratio, pool_pg_target, final_pg_target = self._calc_final_pg_target(
-                p, pool_name, root_map, root_id,
-                capacity_ratio, bias, even_pools,
-                bulk_pools, func_pass, bulk)
+            capacity_ratio = max(metrics['capacity_ratio'], metrics['target_ratio'])
+            pg_target = int(capacity_ratio * pg_left)
+            autoscale = p['pg_autoscale_mode'] != 'off'
+            self.log.debug("pool {} capacity ratio: {} target ratio {} pg_num_target {}".format(pool_name, metrics['capacity_ratio'], metrics['target_ratio'], p['pg_num_target']))
 
-            if final_ratio is None:
-                continue
+            #group similar pools so they are all rounded the same direction
+            group_key = GroupKey(pg_target, p['size'], bias, bulk, autoscale)
+            if group_key not in pool_groups_by_root[root_id]:
+                pool_groups_by_root[root_id][group_key] = PoolGroup(pg_target, p['size'], bias, autoscale)
+            pool_groups_by_root[root_id][group_key].add(pool_name, p)
 
-            adjust = False
+            self.log.debug("adding pool {} with target {} size {} bias {} bulk {} autoscale {}".format(pool_name, pg_target, p['size'], bias, bulk, autoscale))
 
-            # Dynamic threshold only applies to scaling UP, otherwise use the default threshold.
-            if final_pg_target is not None and \
-               final_pg_target > p['pg_num_target']:
-                dynamic_threshold = self.get_dynamic_threshold(final_pg_target, threshold)
-                adjust = final_pg_target > p['pg_num_target'] * dynamic_threshold
-            else:
-                adjust = final_pg_target < p['pg_num_target'] / threshold
-
-            if adjust and \
-               final_ratio >= 0.0 and \
-               final_ratio <= 1.0 and \
-               p['pg_autoscale_mode'] == 'on':
-                    adjust = True
-            else:
-                if final_pg_target != p['pg_num_target']:
-                    self.log.warning("pool %s won't scale because recommended PG_NUM target"
-                                     " value varies from current PG_NUM value by"
-                                     " more than '%f' scaling threshold",
-                                     pool_name,
-                                     dynamic_threshold if final_pg_target > p['pg_num_target'] else threshold)
-
-            assert pool_pg_target is not None
-            ret.append({
-                'pool_id': pool_id,
-                'pool_name': p['pool_name'],
-                'crush_root_id': root_id,
-                'pg_autoscale_mode': p['pg_autoscale_mode'],
-                'pg_num_target': p['pg_num_target'],
-                'logical_used': float(actual_raw_used)/raw_used_rate,
-                'target_bytes': target_bytes,
-                'raw_used_rate': raw_used_rate,
-                'subtree_capacity': capacity,
-                'actual_raw_used': actual_raw_used,
-                'raw_used': pool_raw_used,
-                'actual_capacity_ratio': actual_capacity_ratio,
-                'capacity_ratio': capacity_ratio,
-                'target_ratio': p['options'].get('target_size_ratio', 0.0),
-                'effective_target_ratio': target_ratio,
-                'pg_num_ideal': int(pool_pg_target),
-                'pg_num_final': final_pg_target,
-                'would_adjust': adjust,
-                'bias': p.get('options', {}).get('pg_autoscale_bias', 1.0),
-                'bulk': bulk,
-            })
-
-        return ret, bulk_pools, even_pools
-
-    def _get_pool_status(
+    def  _get_pool_status(
             self,
             osdmap: OSDMap,
             pools: Dict[str, Dict[str, Any]],
@@ -694,20 +952,34 @@ class PgAutoscaler(MgrModule):
         ret: List[Dict[str, Any]] = []
 
         # Iterate over all pools to determine how they should be sized.
-        # First call of _get_pool_pg_targets() is to find/adjust pools that uses more capacaity than
+        # First call _get_pool_pg_targets() is to remove the PG num of non-autsocale pools from the budget
+        # Second call of get_pool_pg_targets() is to adjust non-bulk pools.
+        # Third call of get_pool_pg_targets() is to find/adjust bulk pools that use more capacity than
         # the even_ratio of other pools and we adjust those first.
-        # Second call make use of the even_pools we keep track of in the first call.
-        # All we need to do is iterate over those and give them 1/pool_count of the
+        # Fourth call, make use of the even_pools and iterate over those and give them 1/pool_count of the
         # total pgs.
 
-        ret, bulk_pools, _  = self._get_pool_pg_targets(osdmap, pools, crush_map, root_map,
-                                                  pool_stats, ret, threshold, 'first', overlapped_roots)
+        pool_groups_by_root: Dict[int, Dict[GroupKey, PoolGroup]] = defaultdict(dict)
+        # { root_id: { GroupKey(pg_target, replication size, bias, bulk): PoolGroup }}
 
-        ret, _, even_pools = self._get_pool_pg_targets(osdmap, bulk_pools, crush_map, root_map,
-                                                  pool_stats, ret, threshold, 'second', overlapped_roots)
+        pool_metrics: Dict[str, Dict[str, Any]] = defaultdict(dict)
+        # {
+        #     'target_bytes': int
+        #     'raw_used_rate': float
+        #     'actual_raw_used': int
+        #     'actual_capacity_ratio': float
+        #     'pool_raw_used': float
+        #     'capacity_ratio': float
+        #     'target_ratio': float
+        #     'bulk': bool
+        # }
+        self._compute_pool_group_metrics(osdmap, pools, crush_map, root_map, pool_stats, overlapped_roots, pool_groups_by_root, pool_metrics)
 
-        ret, _, _ = self._get_pool_pg_targets(osdmap, even_pools, crush_map, root_map,
-                                         pool_stats, ret, threshold, 'third', overlapped_roots)
+        ret = self._get_pool_pg_targets(root_map, ret, threshold, 'first', pool_groups_by_root, pool_metrics)
+        ret = self._get_pool_pg_targets(root_map, ret, threshold, 'second', pool_groups_by_root, pool_metrics)
+        ret = self._get_pool_pg_targets(root_map, ret, threshold, 'third', pool_groups_by_root, pool_metrics)
+        ret = self._get_pool_pg_targets(root_map, ret, threshold, 'fourth', pool_groups_by_root, pool_metrics)
+
 
         # If noautoscale flag is set, we set pg_autoscale_mode to off
         if self.has_noautoscale_flag():
@@ -887,3 +1159,4 @@ class PgAutoscaler(MgrModule):
             }
 
         self.set_health_checks(health_checks)
+
