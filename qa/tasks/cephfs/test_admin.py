@@ -1643,6 +1643,120 @@ class TestFsAuthorize(CephFSTestCase):
         self.captester.conduct_neg_test_for_chown_caps()
         self.captester.conduct_neg_test_for_truncate_caps()
 
+    def test_multifs_single_client_cross_access_rw_caps_end(self):
+        """
+        test_multifs_single_client_cross_access_rw_caps_end -
+        A client having 'r' access on a fs (fs1) and 'rw' access on another fs (fs2) :
+          1. It shouldn't have 'rw' access on fs1
+          2. It should have 'rw' access on fs2
+
+        The fs name wasn't considered while validating mds auth caps. As a result,
+        incorrect permissions were granted to a user having access to multiple
+        filesystems. The order too matters as the last mds auth cap in the sequence
+        is considered while validating. This tests the auth caps having 'rw' caps
+        at the end.
+        """
+
+        self.fs1 = self.fs
+        self.fs2 = self.mds_cluster.newfs('testcephfs2')
+        self.mount_b.remount(cephfs_name=self.fs2.name)
+
+        FS1_AUTH_CAPS = (('/', 'r'),)
+        captester_fs1_r = CapTester(self.mount_a, '/')
+        FS2_AUTH_CAPS = (('/', 'rw'),)
+        captester_fs2_rw = CapTester(self.mount_b, '/')
+
+        self.mount_a.umount_wait()
+        self.mount_b.umount_wait()
+
+        # Authorize client to fs1 with 'rw'
+        self.fs1.authorize(self.client_id, FS1_AUTH_CAPS)
+        # Authorize client to fs2 with only 'r'
+        keyring = self.fs2.authorize(self.client_id, FS2_AUTH_CAPS)
+
+        # Mount fs1
+        keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
+        self.mount_a.remount(client_id=self.client_id, client_keyring_path=keyring_path, cephfs_name=self.fs1.name)
+
+        # Mount fs2
+        keyring_path = self.mount_b.client_remote.mktemp(data=keyring)
+        self.mount_b.remount(client_id=self.client_id, client_keyring_path=keyring_path, cephfs_name=self.fs2.name)
+
+        # Client on fs1 should not have 'rw' access
+        captester_fs1_r.conduct_pos_test_for_read_caps()
+        captester_fs1_r.conduct_neg_test_for_write_caps()
+        captester_fs1_r.conduct_neg_test_for_new_file_creation()
+
+        # Client on fs2 - validate 'rw' access
+        captester_fs2_rw.conduct_pos_test_for_read_caps()
+        captester_fs2_rw.conduct_pos_test_for_write_caps()
+        captester_fs2_rw.conduct_pos_test_for_new_file_creation()
+
+    def test_multifs_single_client_cross_access_r_caps_end(self):
+        """
+        test_multifs_single_client_cross_access_r_caps_end -
+        A client having 'rw' access on a fs (fs1) and 'r' access on another fs (fs2) :
+          1. It should have 'rw' access on fs1
+          1. It shouldn't have 'rw' access on fs2
+
+        The fs name wasn't considered while validating mds auth caps. As a result,
+        incorrect permissions were granted to a user having access to multiple
+        filesystems. The order too matters as the last mds auth cap in the sequence
+        is considered while validating. This tests the auth caps having 'r' caps
+        at the end.
+        """
+
+        self.fs1 = self.fs
+        self.fs2 = self.mds_cluster.newfs('testcephfs2')
+        self.mount_b.remount(cephfs_name=self.fs2.name)
+
+        FS1_AUTH_CAPS = (('/', 'rw'),)
+        captester_fs1_rw = CapTester(self.mount_a, '/')
+        FS2_AUTH_CAPS = (('/', 'r'),)
+        captester_fs2_r = CapTester(self.mount_b, '/')
+
+        self.mount_a.umount_wait()
+        self.mount_b.umount_wait()
+
+        # Authorize client to fs1 with 'rw'
+        self.fs1.authorize(self.client_id, FS1_AUTH_CAPS)
+        # Authorize client to fs2 with only 'r'
+        keyring = self.fs2.authorize(self.client_id, FS2_AUTH_CAPS)
+
+        # Mount fs1
+        keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
+        self.mount_a.remount(client_id=self.client_id, client_keyring_path=keyring_path, cephfs_name=self.fs1.name)
+
+        # Mount fs2
+        keyring_path = self.mount_b.client_remote.mktemp(data=keyring)
+        self.mount_b.remount(client_id=self.client_id, client_keyring_path=keyring_path, cephfs_name=self.fs2.name)
+
+        # Client on fs2 should not have 'rw' access
+        captester_fs2_r.conduct_pos_test_for_read_caps()
+        captester_fs2_r.conduct_neg_test_for_write_caps()
+        captester_fs2_r.conduct_neg_test_for_new_file_creation()
+
+        # Client on fs1 - validate 'rw' access
+        ceph_client_version = None
+        tasks = self.ctx.config.get('tasks', [])
+        for task in tasks:
+            if task.get("install", None):
+                ceph_client_version = task.get("install").get("tag", None)
+                break
+
+        log.info(f"dumping ceph_client_version - {ceph_client_version}")
+        captester_fs1_rw.conduct_pos_test_for_read_caps()
+        # The multifs auth caps bug has a fix both in client and mds
+        # If it's old client (19.2.2) and not patched, we expect that the fs
+        # with 'rw' would end up having 'r' caps with the multifs for
+        # auth caps used as in this test above.
+        if ceph_client_version != "v19.2.2":
+            # The following condition should be removed once the fix lands in kernel
+            if isinstance(self.mount_a, FuseMount):
+                captester_fs1_rw.conduct_pos_test_for_write_caps()
+                captester_fs1_rw.conduct_pos_test_for_new_file_creation()
+
+
     def test_multifs_rootsquash_nofeature(self):
         """
         That having root_squash on one fs doesn't prevent access to others.
@@ -1788,6 +1902,28 @@ class TestFsAuthorize(CephFSTestCase):
 
         self._remount(keyring)
         self.captester.run_mds_cap_tests(PERM)
+
+    def test_fs_read_and_single_path_rw(self):
+        """
+        Tests the file creation using 'touch' cmd on a specific path
+        which has 'rw' caps and 'r' caps on the rest of the fs.
+
+        The mds auth caps with 'rw' caps on a specific path and 'r' caps
+        on the rest of the fs has an issue. The file creation using 'touch'
+        cmd on the fuse client used to fail while doing setattr.
+        Please see https://tracker.ceph.com/issues/67212
+
+        The new file creation test using 'touch' cmd is added to
+        'MdsCapTester.run_mds_cap_tests' which eventually gets
+        called by '_remount_and_run_tests'
+        """
+        FS_AUTH_CAPS = (('/', 'r'), ('/dir2', 'rw'))
+        self.mount_a.run_shell('mkdir -p ./dir2')
+        self.captesters = (CapTester(self.mount_a, '/'),
+                           CapTester(self.mount_a, '/dir2'))
+        keyring = self.fs.authorize(self.client_id, FS_AUTH_CAPS)
+
+        self._remount_and_run_tests(FS_AUTH_CAPS, keyring)
 
     def test_multiple_path_r(self):
         PERM = 'r'
