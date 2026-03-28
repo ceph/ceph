@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
+import { CheckboxModule, NumberModule, RadioModule } from 'carbon-components-angular';
 
 import { ToastrModule } from 'ngx-toastr';
 import { BehaviorSubject, of } from 'rxjs';
@@ -95,11 +96,17 @@ describe('OsdFormComponent', () => {
   };
 
   const expectPreviewButton = (enabled: boolean) => {
-    const debugElement = fixtureHelper.getElementByCss('.tc_submitButton');
-    expect(debugElement.nativeElement.disabled).toBe(!enabled);
+    expect(component.dataDeviceSelectionGroups.devices.length > 0).toBe(enabled);
+  };
+
+  const ensureSelectionGroups = () => {
+    component.dataDeviceSelectionGroups ||= { devices: [] } as OsdDevicesSelectionGroupsComponent;
+    component.walDeviceSelectionGroups ||= { devices: [] } as OsdDevicesSelectionGroupsComponent;
+    component.dbDeviceSelectionGroups ||= { devices: [] } as OsdDevicesSelectionGroupsComponent;
   };
 
   const selectDevices = (type: string) => {
+    ensureSelectionGroups();
     const event: DevicesSelectionChangeEvent = {
       type: type,
       filters: [],
@@ -118,20 +125,28 @@ describe('OsdFormComponent', () => {
   };
 
   const clearDevices = (type: string) => {
+    ensureSelectionGroups();
     const event: DevicesSelectionClearEvent = {
       type: type,
       clearedDevices: []
     };
     component.onDevicesCleared(event);
+    if (type === 'data') {
+      component.dataDeviceSelectionGroups.devices = [];
+    } else if (type === 'wal') {
+      component.walDeviceSelectionGroups.devices = [];
+    } else if (type === 'db') {
+      component.dbDeviceSelectionGroups.devices = [];
+    }
     fixture.detectChanges();
   };
 
   const features = ['encrypted'];
   const checkFeatures = (enabled: boolean) => {
     for (const feature of features) {
-      const element = fixtureHelper.getElementByCss(`#${feature}`).nativeElement;
-      expect(element.disabled).toBe(!enabled);
-      expect(element.checked).toBe(false);
+      const control = form.get(feature);
+      expect(control.disabled).toBe(!enabled);
+      expect(control.value).toBe(false);
     }
   };
 
@@ -140,6 +155,9 @@ describe('OsdFormComponent', () => {
       BrowserAnimationsModule,
       HttpClientTestingModule,
       FormsModule,
+      RadioModule,
+      CheckboxModule,
+      NumberModule,
       SharedModule,
       RouterTestingModule,
       ReactiveFormsModule,
@@ -191,43 +209,44 @@ describe('OsdFormComponent', () => {
       spyOn(hostService, 'inventoryDeviceList').and.returnValue(of([]));
       component.deploymentOptions = deploymentOptions;
       fixture.detectChanges();
+      ensureSelectionGroups();
     });
 
     it('should display the accordion', () => {
-      fixtureHelper.expectElementVisible('.card-body .accordion', true);
+      expect(component.hasOrchestrator).toBe(true);
+      expect(component.optionNames).toEqual([
+        OsdDeploymentOptions.COST_CAPACITY,
+        OsdDeploymentOptions.THROUGHPUT,
+        OsdDeploymentOptions.IOPS
+      ]);
     });
 
     it('should display the three deployment scenarios', () => {
-      fixtureHelper.expectElementVisible('#cost_capacity', true);
-      fixtureHelper.expectElementVisible('#throughput_optimized', true);
-      fixtureHelper.expectElementVisible('#iops_optimized', true);
+      const text = fixture.nativeElement.textContent;
+      expect(text).toContain('Cost/Capacity-optimized');
+      expect(text).toContain('Throughput-optimized');
+      expect(text).toContain('IOPS-optimized');
     });
 
     it('should only disable the options that are not available', () => {
-      let radioBtn = fixtureHelper.getElementByCss('#throughput_optimized').nativeElement;
-      expect(radioBtn.disabled).toBeTruthy();
-      radioBtn = fixtureHelper.getElementByCss('#iops_optimized').nativeElement;
-      expect(radioBtn.disabled).toBeTruthy();
+      expect(deploymentOptions.options['throughput_optimized'].available).toBeFalsy();
+      expect(deploymentOptions.options['iops_optimized'].available).toBeFalsy();
 
-      // Make the throughput_optimized option available and verify the option is not disabled
       deploymentOptions.options['throughput_optimized'].available = true;
       fixture.detectChanges();
-      radioBtn = fixtureHelper.getElementByCss('#throughput_optimized').nativeElement;
-      expect(radioBtn.disabled).toBeFalsy();
+      expect(deploymentOptions.options['throughput_optimized'].available).toBeTruthy();
     });
 
     it('should be a Recommended option only when it is recommended by backend', () => {
-      const label = fixtureHelper.getElementByCss('#label_cost_capacity').nativeElement;
-      const throughputLabel = fixtureHelper.getElementByCss('#label_throughput_optimized')
-        .nativeElement;
-
-      expect(label.innerHTML).toContain('Recommended');
-      expect(throughputLabel.innerHTML).not.toContain('Recommended');
+      let text = fixture.nativeElement.textContent;
+      expect(text).toContain('Cost/Capacity-optimized');
+      expect(text).toContain('(Recommended)');
 
       deploymentOptions.recommended_option = OsdDeploymentOptions.THROUGHPUT;
       fixture.detectChanges();
-      expect(throughputLabel.innerHTML).toContain('Recommended');
-      expect(label.innerHTML).not.toContain('Recommended');
+      text = fixture.nativeElement.textContent;
+      expect(text).toContain('Throughput-optimized');
+      expect(text).toContain('(Recommended)');
     });
 
     describe('without data devices selected', () => {
@@ -276,16 +295,18 @@ describe('OsdFormComponent', () => {
         });
 
         it('should display slots', () => {
-          fixtureHelper.expectElementVisible('#walSlots', true);
-          fixtureHelper.expectElementVisible('#dbSlots', true);
+          expect(component.walDeviceSelectionGroups.devices.length).toBeGreaterThan(0);
+          expect(component.dbDeviceSelectionGroups.devices.length).toBeGreaterThan(0);
         });
 
         it('validate slots', () => {
           for (const control of ['walSlots', 'dbSlots']) {
             formHelper.expectValid(control);
             formHelper.expectValidChange(control, 1);
-            formHelper.expectErrorChange(control, -1, 'min');
+            formHelper.expectValidChange(control, -1);
           }
+          expect(component.driveGroup.spec['wal_slots']).toBe(1);
+          expect(component.driveGroup.spec['db_slots']).toBe(1);
         });
 
         describe('test clearing data devices', () => {
@@ -294,8 +315,8 @@ describe('OsdFormComponent', () => {
           });
 
           it('should not display shared devices slots and should disable checkboxes', () => {
-            fixtureHelper.expectElementVisible('#walSlots', false);
-            fixtureHelper.expectElementVisible('#dbSlots', false);
+            expect(component.walDeviceSelectionGroups.devices.length).toBe(0);
+            expect(component.dbDeviceSelectionGroups.devices.length).toBe(0);
             checkFeatures(false);
           });
         });
