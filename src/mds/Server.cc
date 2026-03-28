@@ -6110,6 +6110,58 @@ int Server::parse_layout_vxattr(string name, string value, const OSDMap& osdmap,
   return 0;
 }
 
+int64_t Server::make_quota_max_byte_parseable(string val)
+{
+  string before_decimal;
+  string after_decimal;
+  int64_t dec_len;
+  int64_t q;
+  string cast_err;
+  string unit;
+  
+  size_t dec_index = val.find_first_of(".");
+  size_t unit_index = val.find_first_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+
+  if (dec_index != std::string::npos) {
+    if (unit_index == std::string::npos) {
+    dout(10) << __func__ << ":  failed to parse quota.max_bytes: "
+    << "Invalid Byte value" << dendl;
+    return -EINVAL;
+    }
+    unit = val.substr(unit_index, val.length() - unit_index);
+    if (unit == "B") {
+      dout(10) << __func__ << ":  failed to parse quota.max_bytes: "
+    << "Invalid Byte value" << dendl;
+    return -EINVAL;
+    }
+  }
+
+  dec_len = unit_index - dec_index - 1;
+  if ((dec_len == 0) || (dec_index == val.length() - 1) ||
+       (dec_index != val.find_last_of("."))) {
+    dout(10) << __func__ << ":  failed to parse quota.max_bytes: "
+    << "Invalid Float value" << dendl;
+    return -EINVAL;
+  }    
+  
+  if (dec_index != std::string::npos) {
+    before_decimal = val.substr(0, dec_index);
+    after_decimal = val.substr(dec_index + 1, val.length() - dec_index - 1);
+    before_decimal.append(after_decimal);
+    q = strict_iec_cast<int64_t>(before_decimal, &cast_err);
+    q = q / (std::pow(10, dec_len));
+  }
+  else {
+    q = strict_iec_cast<int64_t>(val, &cast_err);
+  }
+  if(!cast_err.empty()) {
+    dout(10) << __func__ << ":  failed to parse quota.max_bytes: "
+    << cast_err << dendl;
+    q = -EINVAL;
+  }
+  return q;
+}
+
 int Server::parse_quota_vxattr(string name, string value, quota_info_t *quota)
 {
   dout(20) << "parse_quota_vxattr name " << name << " value '" << value << "'" << dendl;
@@ -6136,14 +6188,17 @@ int Server::parse_quota_vxattr(string name, string value, quota_info_t *quota)
           return r;
       }
     } else if (name == "quota.max_bytes") {
-      string cast_err;
-      int64_t q = strict_iec_cast<int64_t>(value, &cast_err);
-      if(!cast_err.empty()) {
-        dout(10) << __func__ << ":  failed to parse quota.max_bytes: "
-        << cast_err << dendl;
-        return -EINVAL;
+      std::string *err;
+      int64_t res = make_quota_max_byte_parseable(value);
+      if(res == -EINVAL) {
+        ostringstream oss;
+        oss << "Invalid Input/Suffix '";
+        *err = oss.str();
+        //respond_to_request(mdr, "Invalid input/suffix");
+        //derr << __func__ << "Invalid input" << value << dendl;
+        return 0;
       }
-      quota->max_bytes = q;
+      quota->max_bytes = res;
     } else if (name == "quota.max_files") {
       int64_t q = boost::lexical_cast<int64_t>(value);
       if (q < 0)
