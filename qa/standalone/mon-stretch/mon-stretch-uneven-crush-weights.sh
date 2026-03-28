@@ -23,7 +23,7 @@ function run() {
         teardown $dir || return 1
     done
 }
-TEST_stretched_cluster_uneven_weight() {
+TEST_stretch_cluster_uneven_crush_weights() {
     local dir=$1
     local OSDS=4
     local weight=0.09000
@@ -130,16 +130,20 @@ EOF
     ceph osd crush rm sham # clear the health warn
     wait_for_health_gone "INCORRECT_NUM_BUCKETS_STRETCH_MODE" || return 1
 
-    # Next, we test for uneven weights across buckets
+    # Next, we test for STRETCH_BUCKET_WEIGHT_IMBALANCE
 
-    ceph osd crush reweight osd.0 0.07000
+    ceph osd crush reweight osd.0 0.08999 # make weights uneven below threshold
+    sleep 5 # sleep to allow monitor to process the weight change or health check
+    wait_for_health_ok || return 1 # we should not see any health warning
 
-    wait_for_health "UNEVEN_WEIGHTS_STRETCH_MODE" || return 1
+    ceph osd crush reweight osd.0 0.00000 # now make the weights uneven above threshold
+    ceph osd crush reweight osd.1 0.00000 # now make the weights uneven above threshold
+    wait_for_health "STRETCH_MODE_BUCKET_WEIGHT_IMBALANCE" || return 1 # we should see the health warning
 
-    ceph osd crush reweight osd.0 $weight # clear the health warn
+    ceph osd crush reweight osd.0 $weight # make weights even again
+    ceph osd crush reweight osd.1 $weight # make weights even again
 
-    wait_for_health_gone "UNEVEN_WEIGHTS_STRETCH_MODE" || return 1
-
+    wait_for_health_gone "STRETCH_MODE_BUCKET_WEIGHT_IMBALANCE" || return 1 # health warning should be cleared
     teardown $dir || return 1
 }
-main mon-stretched-cluster-uneven-weight "$@"
+main mon-stretch-cluster-uneven-crush-weights "$@"
