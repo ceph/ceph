@@ -846,6 +846,8 @@ seastar::future<> OSD::start_asok_admin()
       make_asok_hook<DumpReactorBackendHook>());
     asok->register_command(
       make_asok_hook<StoreShardNumsHook>(get_shard_services()));
+    asok->register_command(
+      make_asok_hook<DumpObjectstoreHook>());
   });
 }
 
