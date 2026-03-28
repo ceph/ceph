@@ -51,6 +51,11 @@ def export_obj_name(export_id: int) -> str:
     return f"{EXPORT_PREFIX}{export_id}"
 
 
+def export_default_obj_name(cluster_id: str) -> str:
+    """Return a rados object name for the export default block."""
+    return f"export-default-{cluster_id}"
+
+
 def conf_obj_name(cluster_id: str) -> str:
     """Return a rados object name for the config."""
     return f"{CONF_PREFIX}{cluster_id}"

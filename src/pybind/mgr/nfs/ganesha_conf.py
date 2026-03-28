@@ -326,19 +326,27 @@ class Client:
     def __init__(self,
                  addresses: List[str],
                  access_type: str,
-                 squash: str):
+                 squash: str,
+                 delegation: Optional[str] = None):
         self.addresses = addresses
         self.access_type = access_type
         self.squash = squash
+        self.delegation = delegation
 
     @classmethod
     def from_client_block(cls, client_block: RawBlock) -> 'Client':
         addresses = client_block.values.get('clients', [])
         if isinstance(addresses, str):
             addresses = [addresses]
+
+        # Get delegation value (try both 'Delegations' and 'delegations')
+        delegation = (client_block.values.get('Delegations')
+                      or client_block.values.get('delegations') or None)
+
         return cls(addresses,
                    client_block.values.get('access_type', None),
-                   client_block.values.get('squash', None))
+                   client_block.values.get('squash', None),
+                   delegation)
 
     def to_client_block(self) -> RawBlock:
         result = RawBlock('CLIENT', values={'clients': self.addresses})
@@ -346,19 +354,24 @@ class Client:
             result.values['access_type'] = self.access_type
         if self.squash:
             result.values['squash'] = self.squash
+        if self.delegation:
+            result.values['Delegations'] = self.delegation
         return result
 
     @classmethod
     def from_dict(cls, client_dict: Dict[str, Any]) -> 'Client':
         return cls(client_dict['addresses'], client_dict['access_type'],
-                   client_dict['squash'])
+                   client_dict['squash'], client_dict.get('delegations'))
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        result = {
             'addresses': self.addresses,
             'access_type': self.access_type,
             'squash': self.squash
         }
+        if self.delegation:
+            result['delegations'] = self.delegation
+        return result
 
 
 class Export:
@@ -375,7 +388,8 @@ class Export:
             transports: List[str],
             fsal: FSAL,
             clients: Optional[List[Client]] = None,
-            sectype: Optional[List[str]] = None) -> None:
+            sectype: Optional[List[str]] = None,
+            delegation: Optional[str] = None) -> None:
         self.export_id = export_id
         self.path = path
         self.fsal = fsal
@@ -389,6 +403,7 @@ class Export:
         self.transports = transports
         self.clients: List[Client] = clients or []
         self.sectype = sectype
+        self.delegation = delegation
 
     @classmethod
     def from_export_block(cls, export_block: RawBlock, cluster_id: str) -> 'Export':
@@ -418,6 +433,11 @@ class Export:
         # https://github.com/ceph/go-ceph/issues/1097
         if sectype is not None and not isinstance(sectype, list):
             sectype = [sectype]
+
+        # Get delegation value (try both 'Delegations' and 'delegations')
+        delegation = (export_block.values.get("Delegations")
+                      or export_block.values.get("delegations") or None)
+
         return cls(export_block.values['export_id'],
                    export_block.values['path'],
                    cluster_id,
@@ -430,7 +450,8 @@ class Export:
                    FSAL.from_fsal_block(fsal_blocks[0]),
                    [Client.from_client_block(client)
                     for client in client_blocks],
-                   sectype=sectype)
+                   sectype=sectype,
+                   delegation=delegation)
 
     def to_export_block(self) -> RawBlock:
         values = {
@@ -446,6 +467,8 @@ class Export:
         }
         if self.sectype:
             values['SecType'] = self.sectype
+        if self.delegation:
+            values['Delegations'] = self.delegation
         result = RawBlock("EXPORT", values=values)
         result.blocks = [
             self.fsal.to_fsal_block()
@@ -468,7 +491,8 @@ class Export:
                    ex_dict.get('transports', ['TCP']),
                    FSAL.from_dict(ex_dict.get('fsal', {})),
                    [Client.from_dict(client) for client in ex_dict.get('clients', [])],
-                   sectype=ex_dict.get("sectype"))
+                   sectype=ex_dict.get("sectype"),
+                   delegation=ex_dict.get('delegations'))
 
     def to_dict(self) -> Dict[str, Any]:
         values = {
@@ -486,6 +510,8 @@ class Export:
         }
         if self.sectype:
             values['sectype'] = self.sectype
+        if self.delegation:
+            values['delegations'] = self.delegation
         return values
 
     def validate(self, mgr: 'Module') -> None:
@@ -533,6 +559,80 @@ class Export:
         if not isinstance(other, Export):
             return False
         return self.to_dict() == other.to_dict()
+
+
+class ExportDefault:
+    """Represents the EXPORT DEFAULT block for global export configuration.
+
+    This class encapsulates the EXPORT DEFAULT block which provides
+    fallback configuration values for all exports in a cluster.
+    Currently supports delegations configuration.
+    """
+
+    def __init__(self, delegations: Optional[str] = None) -> None:
+        """Initialize ExportDefault with optional delegations.
+
+        Args:
+            delegations: Delegations type (Read, Write, or None)
+        """
+        self.delegations = delegations
+
+    @classmethod
+    def from_export_default_block(cls, block: RawBlock) -> 'ExportDefault':
+        """Create ExportDefault from a parsed RawBlock.
+
+        Args:
+            block: RawBlock with block_name "EXPORT DEFAULT"
+
+        Returns:
+            ExportDefault instance
+        """
+        # Get delegations value (try both 'Delegations' and 'delegations')
+        delegations = (block.values.get('Delegations')
+                       or block.values.get('delegations') or None)
+        return cls(delegations)
+
+    def to_export_default_block(self) -> RawBlock:
+        """Convert ExportDefault to RawBlock for config generation.
+
+        Returns:
+            RawBlock with block_name "EXPORT DEFAULT"
+        """
+        values = {}
+        if self.delegations:
+            values['Delegations'] = self.delegations
+        return RawBlock('EXPORT DEFAULT', values=values)
+
+    @classmethod
+    def from_dict(cls, export_default_dict: Dict[str, Any]) -> 'ExportDefault':
+        """Create ExportDefault from dictionary.
+
+        Args:
+            export_default_dict: Dictionary with 'delegations' key
+
+        Returns:
+            ExportDefault instance
+        """
+        return cls(export_default_dict.get('delegations'))
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert ExportDefault to dictionary.
+
+        Returns:
+            Dictionary with 'delegations' key if set
+        """
+        result = {}
+        if self.delegations:
+            result['delegations'] = self.delegations
+        return result
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, ExportDefault):
+            return False
+        return self.delegations == other.delegations
+
+    def __repr__(self) -> str:
+        return f'ExportDefault(delegations={self.delegations!r})'
 
 
 def _format_block_body(block: RawBlock, depth: int = 0) -> str:

@@ -20,7 +20,8 @@ NFS_CORE_PARAM {
 }
 
 NFSv4 {
-        Delegations = false;
+        Delegations = true;
+        Deleg_Recall_Retry_Delay = 1;
         RecoveryBackend = "rados_cluster";
         Minor_Versions = 1, 2;
         Server_Scope = "{{ cluster_id }}-{{ namespace }}";
