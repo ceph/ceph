@@ -1,12 +1,13 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
+#include <algorithm>
 #include <errno.h>
 #include <optional>
 #include <stdlib.h>
 #include <system_error>
 #include <unistd.h>
-
+#include "rgw_usage_perf.h"
 #include <sstream>
 #include <string_view>
 
@@ -62,6 +63,8 @@
 #include "rgw_sal_rados.h"
 #endif
 #include "rgw_torrent.h"
+#include "rgw_usage_perf.h"
+#include "rgw_user.h"
 #include "rgw_cksum_pipe.h"
 #include "rgw_lua_data_filter.h"
 #include "rgw_lua.h"
@@ -4144,6 +4147,7 @@ void RGWCreateBucket::execute(optional_yield y)
   /* continue if EEXIST and create_bucket will fail below.  this way we can
    * recover from a partial create by retrying it. */
   ldpp_dout(this, 20) << "Bucket::create() returned ret=" << op_ret << " bucket=" << s->bucket << dendl;
+  
 } /* RGWCreateBucket::execute() */
 
 int RGWDeleteBucket::verify_permission(optional_yield y)
@@ -5081,6 +5085,19 @@ void RGWPutObj::execute(optional_yield y)
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
   }
+  
+  // Mark user/bucket as active for background sync (NO cache updates in I/O path)
+  if (op_ret == 0 && s->bucket && s->obj_size > 0) {
+    auto usage_counters = rgw::get_usage_perf_counters();
+    if (usage_counters && s->user) {
+      // Just mark as active - background thread will sync from RADOS
+      usage_counters->mark_bucket_active(s->bucket->get_name(),
+                                         s->bucket->get_tenant());
+      usage_counters->mark_user_active(s->user->get_id().to_str());
+      
+      ldpp_dout(this, 20) << "PUT completed: marked user/bucket active for background sync" << dendl;
+    }
+  }
 } /* RGWPutObj::execute() */
 
 int RGWPostObj::init_processing(optional_yield y)
@@ -5889,6 +5906,18 @@ void RGWDeleteObj::execute(optional_yield y)
   } else {
     op_ret = -EINVAL;
   }
+
+  // Mark user/bucket as active for background sync after successful delete
+  if (op_ret >= 0 && s->bucket && s->user) {
+    auto usage_counters = rgw::get_usage_perf_counters();
+    if (usage_counters) {
+      usage_counters->mark_bucket_active(s->bucket->get_name(),
+                                         s->bucket->get_tenant());
+      usage_counters->mark_user_active(s->user->get_id().to_str());
+      ldpp_dout(this, 20) << "DELETE completed: marked user/bucket active for background sync" << dendl;
+    }
+  }
+  
 }
 
 class RGWCopyObjDPF : public rgw::sal::DataProcessorFactory {

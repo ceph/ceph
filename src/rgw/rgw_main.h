@@ -33,6 +33,7 @@
 #endif
 #include "rgw_dmclock_scheduler_ctx.h"
 #include "rgw_ratelimit.h"
+#include "rgw_usage_perf.h"
 
 
 class RGWPauser : public RGWRealmReloader::Pauser {
@@ -84,6 +85,7 @@ class AppMain {
   std::map<std::string, std::string> service_map_meta;
   // wow, realm reloader has a lot of parts
   std::unique_ptr<RGWRealmReloader> reloader;
+  std::unique_ptr<rgw::UsagePerfCounters> usage_perf_counters;
 #ifdef WITH_RADOSGW_RADOS
   std::unique_ptr<RGWPeriodPusher> pusher;
 #endif
