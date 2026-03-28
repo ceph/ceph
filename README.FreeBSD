@@ -149,8 +149,6 @@ Task to do:
 
  -	Improve the FreeBSD /etc/rc.d initscripts in the Ceph stack. Both 
 	for testing, but mainly for running Ceph on production machines.
-	Work on ceph-disk and ceph-deploy to make it more FreeBSD and ZFS 
-	compatible. 
 
  -	Build test-cluster and start running some of the teuthology integration 
 	tests on these.
