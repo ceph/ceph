@@ -1434,6 +1434,12 @@ inline namespace v14_2_0 {
     config_t cct();
     int connect();
     void shutdown();
+
+    /// Set the name suffix for the objecter admin socket command.
+    /// Call before connect(). If non-empty, the command will be
+    /// registered as "objecter_requests.<name>" instead of "objecter_requests".
+    void set_objecter_admin_socket_name(std::string name);
+
     int watch_flush();
     int aio_watch_flush(AioCompletion*);
     int conf_read_file(const char * const path) const;

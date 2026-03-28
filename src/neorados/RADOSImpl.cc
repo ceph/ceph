@@ -46,7 +46,8 @@ RADOS::RADOS(boost::asio::io_context& ioctx,
   objecter->set_balanced_budget();
   monclient.set_messenger(messenger.get());
   mgrclient.set_messenger(messenger.get());
-  objecter->init();
+  // Use a distinct admin socket command name for the neorados client.
+  objecter->init("NeoRados");
   messenger->add_dispatcher_head(&mgrclient);
   messenger->add_dispatcher_tail(objecter.get());
   messenger->start();
