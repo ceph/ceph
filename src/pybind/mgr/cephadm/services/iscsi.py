@@ -9,6 +9,7 @@ from mgr_module import HandleCommandResult
 from ceph.deployment.service_spec import IscsiServiceSpec, ServiceSpec
 
 from orchestrator import DaemonDescription, DaemonDescriptionStatus
+from pybind.mgr.orchestrator._interface import OrchestratorError
 from .cephadmservice import CephadmDaemonDeploySpec, CephService
 from .service_registry import register_cephadm_service
 from .. import utils
@@ -97,6 +98,11 @@ class IscsiService(CephService):
             gateways = json.loads(out)['gateways']
             cmd_dicts = []
             # TODO: fail, if we don't have a spec
+            if spec is None:
+                raise OrchestratorError(
+                    "iSCSI service requires a service spec, but none was provided"
+                )
+
             spec = cast(IscsiServiceSpec,
                         self.mgr.spec_store.all_specs.get(daemon_descrs[0].service_name(), None))
             if spec.api_secure and spec.ssl_cert and spec.ssl_key:
