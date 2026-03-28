@@ -433,6 +433,30 @@ def test_upgrade_ls(current_version, use_tags, show_all_versions, tags, result, 
             None,
             False
         ),
+        (  # invalid, can't upgrade crash on a while mon on a is not upgraded
+            [('mgr', 'a', 'a.x')],
+            [('mon', 'a', 'a'), ('crash', 'a', 'a')],
+            ['crash'],
+            ['a'],
+            None,
+            True
+        ),
+        (  # invalid, can't upgrade crash on a while mgr on a is not upgraded
+            [('mon', 'a', 'a')],
+            [('mgr', 'a', 'a.x'), ('crash', 'a', 'a')],
+            ['crash'],
+            ['a'],
+            None,
+            True
+        ),
+        (  # invalid, can't upgrade crash service on a while mon on a is not upgraded
+            [('mgr', 'a', 'a.x')],
+            [('mon', 'a', 'a'), ('crash', 'a', 'a')],
+            None,
+            ['a'],
+            ['crash'],
+            True
+        ),
     ]
 )
 @mock.patch("cephadm.module.HostCache.get_daemons")
@@ -443,14 +467,14 @@ def test_staggered_upgrade_validation(
         get_image_info,
         get_daemons,
         upgraded: List[Tuple[str, str, str]],
-        not_upgraded: List[Tuple[str, str, str, str]],
+        not_upgraded: List[Tuple[str, str, str]],
         daemon_types: Optional[str],
         hosts: Optional[str],
         services: Optional[str],
         should_block: bool,
         cephadm_module: CephadmOrchestrator,
 ):
-    def to_dds(ts: List[Tuple[str, str]], upgraded: bool) -> List[DaemonDescription]:
+    def to_dds(ts: List[Tuple[str, str, str]], upgraded: bool) -> List[DaemonDescription]:
         dds = []
         digest = 'new_image@repo_digest' if upgraded else 'old_image@repo_digest'
         for t in ts:
