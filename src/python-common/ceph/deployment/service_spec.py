@@ -46,6 +46,11 @@ ServiceSpecT = TypeVar('ServiceSpecT', bound='ServiceSpec')
 FuncT = TypeVar('FuncT', bound=Callable)
 
 
+def validate_non_empty_string(value: Optional[str], field_name: str) -> None:
+    if not isinstance(value, str) or not value.strip():
+        raise SpecValidationError(f"Invalid {field_name}: Must be a non-empty string.")
+
+
 class TLSBlock(TypedDict, total=False):
     ssl: bool
     certificate_source: str
@@ -2585,19 +2590,15 @@ class OAuth2ProxySpec(ServiceSpec):
 
     def validate(self) -> None:
         super(OAuth2ProxySpec, self).validate()
-        self._validate_non_empty_string(self.provider_display_name, "provider_display_name")
-        self._validate_non_empty_string(self.client_id, "client_id")
-        self._validate_non_empty_string(self.client_secret, "client_secret")
+        validate_non_empty_string(self.provider_display_name, "provider_display_name")
+        validate_non_empty_string(self.client_id, "client_id")
+        validate_non_empty_string(self.client_secret, "client_secret")
         self._validate_cookie_secret(self.cookie_secret)
         self._validate_url(self.oidc_issuer_url, "oidc_issuer_url")
         if self.redirect_url is not None:
             self._validate_url(self.redirect_url, "redirect_url")
         if self.https_address is not None:
             self._validate_https_address(self.https_address)
-
-    def _validate_non_empty_string(self, value: Optional[str], field_name: str) -> None:
-        if not value or not isinstance(value, str) or not value.strip():
-            raise SpecValidationError(f"Invalid {field_name}: Must be a non-empty string.")
 
     def _validate_url(self, url: Optional[str], field_name: str) -> None:
         from urllib.parse import urlparse
@@ -3392,8 +3393,7 @@ class TunedProfileSpec():
         if 'profile_name' not in spec:
             raise SpecValidationError('Tuned profile spec must include "profile_name" field')
         data['profile_name'] = spec['profile_name']
-        if not isinstance(data['profile_name'], str):
-            raise SpecValidationError('"profile_name" field must be a string')
+        validate_non_empty_string(data['profile_name'], "profile_name")
         if 'placement' in spec:
             data['placement'] = PlacementSpec.from_json(spec['placement'])
         if 'settings' in spec:
