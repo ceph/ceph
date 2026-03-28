@@ -100,105 +100,237 @@ except ImportError:
     ftcache = lambda f: f
 
 
-class DistroKind(StrEnum):
-    CENTOS10 = "centos10"
-    CENTOS8 = "centos8"
-    CENTOS9 = "centos9"
-    FEDORA41 = "fedora41"
-    FEDORA42 = "fedora42"
-    FEDORA43 = "fedora43"
-    ROCKY9 = "rocky9"
-    ROCKY10 = "rocky10"
-    UBUNTU2004 = "ubuntu20.04"
-    UBUNTU2204 = "ubuntu22.04"
-    UBUNTU2404 = "ubuntu24.04"
-    DEBIAN12 = "debian12"
-    DEBIAN13 = "debian13"
+class LinuxDistro:
+    class PackageManager(enum.Enum):
+        DNF = "dnf"
+        APT = "apt"
+        ZYPPER = "zypper"
 
-    @classmethod
-    def uses_dnf(cls):
-        return {
-            cls.CENTOS10,
-            cls.CENTOS8,
-            cls.CENTOS9,
-            cls.FEDORA41,
-            cls.ROCKY9,
-            cls.ROCKY10,
-        }
+    class Release:
+        def __init__(self, major, minor=0, build=0):
+            self.major = major
+            self.minor = minor
+            self.build = build
 
-    @classmethod
-    def uses_rpmbuild(cls):
-        # right now this is the same as uses_dnf, but perhaps not always
-        # let's be specific in our interface
-        return cls.uses_dnf()  # but lazy in the implementation
+        def __str__(self):
+            if self.minor == 0 and self.build == 0:
+                return str(self.major)
+            if self.build == 0:
+                return f"{self.major}.{self.minor}"
+            return f"{self.major}.{self.minor}.{self.build}"
 
-    @classmethod
-    def aliases(cls):
-        return {
-            # EL distros
-            str(cls.CENTOS10): cls.CENTOS10,
-            "centos10stream": cls.CENTOS10,
-            str(cls.CENTOS8): cls.CENTOS8,
-            str(cls.CENTOS9): cls.CENTOS9,
-            "centos9stream": cls.CENTOS9,
-            str(cls.ROCKY9): cls.ROCKY9,
-            'rockylinux9': cls.ROCKY9,
-            str(cls.ROCKY10): cls.ROCKY10,
-            'rockylinux10': cls.ROCKY10,
-            # fedora
-            str(cls.FEDORA41): cls.FEDORA41,
-            "fc41": cls.FEDORA41,
-            str(cls.FEDORA42): cls.FEDORA42,
-            "fc42": cls.FEDORA42,
-            str(cls.FEDORA43): cls.FEDORA43,
-            "fc43": cls.FEDORA43,
-            # ubuntu
-            str(cls.UBUNTU2004): cls.UBUNTU2004,
-            "ubuntu-focal": cls.UBUNTU2004,
-            "focal": cls.UBUNTU2004,
-            str(cls.UBUNTU2204): cls.UBUNTU2204,
-            "ubuntu-jammy": cls.UBUNTU2204,
-            "jammy": cls.UBUNTU2204,
-            str(cls.UBUNTU2404): cls.UBUNTU2404,
-            "ubuntu-noble": cls.UBUNTU2404,
-            "noble": cls.UBUNTU2404,
-            # debian
-            str(cls.DEBIAN12): cls.DEBIAN12,
-            "debian-bookworm": cls.DEBIAN12,
-            "bookworm": cls.DEBIAN12,
-            str(cls.DEBIAN13): cls.DEBIAN13,
-            "debian-trixie": cls.DEBIAN13,
-            "trixie": cls.DEBIAN13,
-        }
+        def __repr__(self):
+            return f"Release({self.major}, {self.minor}, {self.build})"
 
-    @classmethod
-    def from_alias(cls, value):
+        def _tuple(self):
+            return (self.major, self.minor, self.build)
+
+        def __eq__(self, other):
+            if not isinstance(other, LinuxDistro.Release):
+                return NotImplemented
+            return self._tuple() == other._tuple()
+
+        def __lt__(self, other):
+            if not isinstance(other, LinuxDistro.Release):
+                return NotImplemented
+            return self._tuple() < other._tuple()
+
+        def __le__(self, other):
+            if not isinstance(other, LinuxDistro.Release):
+                return NotImplemented
+            return self._tuple() <= other._tuple()
+
+        def __gt__(self, other):
+            if not isinstance(other, LinuxDistro.Release):
+                return NotImplemented
+            return self._tuple() > other._tuple()
+
+        def __ge__(self, other):
+            if not isinstance(other, LinuxDistro.Release):
+                return NotImplemented
+            return self._tuple() >= other._tuple()
+
+        def __hash__(self):
+            return hash(self._tuple())
+
+    _registry: dict = {}
+    _all: set = set()
+
+    pkg_manager = None
+    python: str = "python3"
+
+    def __init_subclass__(cls, pkg_manager=None, python=None, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if pkg_manager is not None:
+            cls.pkg_manager = pkg_manager
+        if python is not None:
+            cls.python = python
+
+    def __init__(self, release, name=None, default_image=None, aliases=None):
+        if not self.pkg_manager:
+            raise TypeError(
+                f"{type(self).__name__!r} has no pkg_manager set."
+            )
+        if isinstance(release, tuple):
+            release = LinuxDistro.Release(*release)
+        self.release = release
+        self.name = name or self._make_name(release)
+        self.default_image = default_image or self._make_image(release)
+        self.aliases = tuple(aliases) if aliases is not None else self._make_aliases(release)
+        for alias in (self.name,) + self.aliases:
+            LinuxDistro._registry[alias] = self
+        LinuxDistro._all.add(self)
+
+    def _make_name(self, release):
+        raise NotImplementedError
+
+    def _make_image(self, release):
+        raise NotImplementedError
+
+    def _make_aliases(self, release):
+        return ()
+
+    def __class_getitem__(cls, name):
         try:
-            return cls.aliases()[value]
+            return LinuxDistro._registry[name]
         except KeyError:
-            valid = ", ".join(sorted(cls.aliases()))
-            msg = f"unknown distro: {value!r} not in {valid}"
-            raise argparse.ArgumentTypeError(msg)
+            valid = ", ".join(sorted(LinuxDistro._registry))
+            raise KeyError(
+                f"unknown distro: {name!r}. Known names/aliases: {valid}"
+            ) from None
+
+    @classmethod
+    def all_distros(cls):
+        return frozenset(LinuxDistro._all)
+
+    @classmethod
+    def all_aliases(cls):
+        return dict(LinuxDistro._registry)
+
+    @classmethod
+    def from_arg(cls, value):
+        try:
+            return LinuxDistro._registry[value].name
+        except KeyError:
+            valid = ", ".join(sorted(LinuxDistro._registry))
+            raise argparse.ArgumentTypeError(
+                f"unknown distro: {value!r} not in {valid}"
+            )
+
+    def uses_dnf(self):
+        return self.pkg_manager == LinuxDistro.PackageManager.DNF
+
+    def uses_rpmbuild(self):
+        return self.uses_dnf()
+
+    def __lt__(self, other):
+        if type(self) is not type(other):
+            return NotImplemented
+        return self.release < other.release
+
+    def __eq__(self, other):
+        if type(self) is not type(other):
+            return NotImplemented
+        return self.release == other.release
+
+    def __le__(self, other):
+        if type(self) is not type(other):
+            return NotImplemented
+        return self.release <= other.release
+
+    def __gt__(self, other):
+        if type(self) is not type(other):
+            return NotImplemented
+        return self.release > other.release
+
+    def __ge__(self, other):
+        if type(self) is not type(other):
+            return NotImplemented
+        return self.release >= other.release
+
+    def __hash__(self):
+        return hash((type(self), self.release))
 
 
-class DefaultImage(StrEnum):
-    # EL distros
-    CENTOS10 = "quay.io/centos/centos:stream10"
-    CENTOS8 = "quay.io/centos/centos:stream8"
-    CENTOS9 = "quay.io/centos/centos:stream9"
-    ROCKY9 = "docker.io/rockylinux/rockylinux:9"
-    ROCKY10 = "docker.io/rockylinux/rockylinux:10"
-    # fedora
-    FEDORA41 = "registry.fedoraproject.org/fedora:41"
-    FEDORA42 = "registry.fedoraproject.org/fedora:42"
-    FEDORA43 = "registry.fedoraproject.org/fedora:43"
-    # ubuntu
-    UBUNTU2004 = "docker.io/ubuntu:20.04"
-    UBUNTU2204 = "docker.io/ubuntu:22.04"
-    UBUNTU2404 = "docker.io/ubuntu:24.04"
-    # debian
-    DEBIAN12 = "docker.io/debian:bookworm"
-    DEBIAN13 = "docker.io/debian:trixie"
+class ELLinuxDistro(LinuxDistro, pkg_manager=LinuxDistro.PackageManager.DNF):
+    pass
+
+
+class CentOSLinuxDistro(ELLinuxDistro):
+    def _make_name(self, release):
+        return f"centos{release.major}"
+
+    def _make_image(self, release):
+        return f"quay.io/centos/centos:stream{release.major}"
+
+    def _make_aliases(self, release):
+        return (f"centos{release.major}stream",)
+
+
+class RockyLinuxDistro(ELLinuxDistro):
+    def _make_name(self, release):
+        return f"rocky{release.major}"
+
+    def _make_image(self, release):
+        return f"docker.io/rockylinux/rockylinux:{release.major}"
+
+    def _make_aliases(self, release):
+        return (f"rockylinux{release.major}",)
+
+
+class FedoraLinuxDistro(ELLinuxDistro):
+    def _make_name(self, release):
+        return f"fedora{release.major}"
+
+    def _make_image(self, release):
+        return f"registry.fedoraproject.org/fedora:{release.major}"
+
+    def _make_aliases(self, release):
+        return (f"fc{release.major}",)
+
+
+class DebianLinuxDistro(LinuxDistro, pkg_manager=LinuxDistro.PackageManager.APT):
+    _codenames: dict = {12: "bookworm", 13: "trixie"}
+
+    def _make_name(self, release):
+        return f"debian{release.major}"
+
+    def _make_image(self, release):
+        codename = self._codenames.get(release.major, str(release.major))
+        return f"docker.io/debian:{codename}"
+
+    def _make_aliases(self, release):
+        codename = self._codenames.get(release.major, str(release.major))
+        return (f"debian-{codename}", codename)
+
+
+class UbuntuLinuxDistro(DebianLinuxDistro):
+    _codenames = {(20, 4): "focal", (22, 4): "jammy", (24, 4): "noble"}
+
+    def _make_name(self, release):
+        return f"ubuntu{release.major}.{release.minor:02d}"
+
+    def _make_image(self, release):
+        return f"docker.io/ubuntu:{release.major}.{release.minor:02d}"
+
+    def _make_aliases(self, release):
+        codename = self._codenames.get((release.major, release.minor))
+        return (f"ubuntu-{codename}", codename) if codename else ()
+
+
+CentOSLinuxDistro(release=(8,))
+CentOSLinuxDistro(release=(9,))
+CentOSLinuxDistro(release=(10,))
+RockyLinuxDistro(release=(9,))
+RockyLinuxDistro(release=(10,))
+FedoraLinuxDistro(release=(41,))
+FedoraLinuxDistro(release=(42,))
+FedoraLinuxDistro(release=(43,))
+UbuntuLinuxDistro(release=(20, 4))
+UbuntuLinuxDistro(release=(22, 4))
+UbuntuLinuxDistro(release=(24, 4))
+DebianLinuxDistro(release=(12,))
+DebianLinuxDistro(release=(13,))
 
 
 class CommandFailed(Exception):
@@ -547,11 +679,7 @@ class Context:
     def from_image(self):
         if self.cli.base_image:
             return self.cli.base_image
-        distro_images = {
-            fld.value: getattr(DefaultImage, fld.name).value
-            for fld in DistroKind
-        }
-        return distro_images[self.cli.distro]
+        return LinuxDistro[self.cli.distro].default_image
 
     @property
     def dnf_cache_dir(self):
@@ -692,7 +820,7 @@ def prepare_env_once(ctx):
 @Builder.set(Steps.DNF_CACHE)
 def dnf_cache_dir(ctx):
     """Set up a DNF cache directory for reuse across container builds."""
-    if ctx.cli.distro not in DistroKind.uses_dnf():
+    if not LinuxDistro[ctx.cli.distro].uses_dnf():
         return
     if not ctx.cli.dnf_cache_path:
         return
@@ -1058,7 +1186,7 @@ def bc_make_debs(ctx):
 @Builder.set(Steps.PACKAGES)
 def bc_make_packages(ctx):
     """Build some sort of distro packages - chooses target based on distro."""
-    if ctx.cli.distro in DistroKind.uses_rpmbuild():
+    if LinuxDistro[ctx.cli.distro].uses_rpmbuild():
         ctx.build.wants(Steps.RPM, ctx)
     else:
         ctx.build.wants(Steps.DEBS, ctx)
@@ -1133,9 +1261,9 @@ def parse_cli(build_step_names):
     g_basic.add_argument(
         "--distro",
         "-d",
-        choices=DistroKind.aliases().keys(),
-        type=DistroKind.from_alias,
-        default=str(DistroKind.CENTOS9),
+        choices=LinuxDistro.all_aliases().keys(),
+        type=LinuxDistro.from_arg,
+        default=LinuxDistro["centos9"].name,
         help="Specify a distro short name",
     )
     g_basic.add_argument(
