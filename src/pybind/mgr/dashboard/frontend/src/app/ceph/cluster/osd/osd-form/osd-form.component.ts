@@ -98,8 +98,8 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
 
 steps: Array<Step> = [
     { label: 'Deployment Options', invalid: false },
-    { label: 'Advanced Mode', invalid: false },
-    { label: 'Features', invalid: false }
+    { label: 'Features', invalid: false },
+    { label: 'Advanced Mode', invalid: false }
   ];
 
   constructor(

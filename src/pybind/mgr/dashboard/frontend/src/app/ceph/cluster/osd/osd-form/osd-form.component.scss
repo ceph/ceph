@@ -1,0 +1,29 @@
+.osd-tearsheet-content {
+  padding: var(--cds-spacing-05) var(--cds-spacing-06);
+  max-height: calc(100vh - 300px);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.osd-alert-block {
+  display: block;
+}
+
+.osd-legend-spacing {
+  margin-bottom: var(--cds-spacing-05);
+}
+
+.osd-radio-spacing:not(:last-child) {
+  margin-bottom: var(--cds-spacing-05);
+}
+
+.osd-radio-label-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+.osd-radio-helper-text {
+  margin-top: var(--cds-spacing-02);
+  max-width: 400px;
+  white-space: normal;
+}

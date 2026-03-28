@@ -5,33 +5,48 @@
   [title]="!hideTitle ? (action | titlecase) + ' ' + (resource | upperFirst) : ''"
   (submitRequested)="submit()" 
   [isSubmitLoading]="loading"
-  [submitButtonLabel]="simpleDeployment ? 'Create OSDs' : actionLabels.PREVIEW"
+  [submitButtonLabel]="simpleDeployment ? 'Create OSDs' : actionLabels.PREVIEW" 
   type="full">
 
   <cd-tearsheet-step>
-    <div class="px-4 py-3" style="max-height: 65vh; overflow-y: auto; overflow-x: hidden;">
-      <form [formGroup]="form" class="cds--form">
-        
-        <cd-alert-panel *ngIf="availDevices?.length === 0" type="warning" class="mb-4 d-block" i18n>
+    <div class="osd-tearsheet-content">
+      <form [formGroup]="form" class="cds--form" cdsStack="vertical" [gap]="6">
+
+        <cd-alert-panel *ngIf="availDevices?.length === 0" type="warning" class="osd-alert-block" i18n>
           <div cdsStack="vertical" [gap]="2">
             <span class="cds--type-heading-compact-01">No eligible devices found for OSD creation.</span>
-            <span class="cds--type-body-compact-01">Physical disks may be present, but none meet the requirements (unused, unformatted, and not already configured by Ceph).</span>
+            <span class="cds--type-body-compact-01">Physical disks may be present, but none meet the requirements
+              (unused, unformatted, and not already configured by Ceph).</span>
           </div>
         </cd-alert-panel>
 
-        <fieldset class="mb-4">
-          <legend class="cds--type-heading-compact-02 mb-3">Deployment Options</legend>
-          <cds-radio-group formControlName="deploymentOption" (change)="emitDeploymentSelection()">
-            <cds-radio *ngFor="let optionName of optionNames; let isLast = last" 
-                       [value]="optionName"
-                       [class.mb-4]="!isLast" 
-                       [disabled]="!deploymentOptions?.options[optionName].available ? true : null">
-              {{ deploymentOptions?.options[optionName].title }}
-              {{ deploymentOptions?.recommended_option === optionName ? "(Recommended)" : "" }}
-              <div class="cds--type-helper-text-01 mt-1">
-                {{ deploymentOptions?.options[optionName].desc }}
+        <fieldset>
+          <legend class="cds--type-heading-compact-02 osd-legend-spacing">Deployment Options</legend>
+
+          <cds-radio-group 
+            formControlName="deploymentOption" 
+            (change)="emitDeploymentSelection()"
+            orientation="vertical">
+
+            <cds-radio 
+              *ngFor="let optionName of optionNames" 
+              [value]="optionName"
+              class="osd-radio-spacing"
+              [disabled]="!deploymentOptions?.options[optionName].available ? true : null">
+              
+              <div class="osd-radio-label-wrapper">
+                <span class="cds--type-body-short-01">
+                  {{ deploymentOptions?.options[optionName].title }}
+                  <strong *ngIf="deploymentOptions?.recommended_option === optionName">(Recommended)</strong>
+                </span>
+
+                <div class="cds--type-helper-text-01 osd-radio-helper-text">
+                  {{ deploymentOptions?.options[optionName].desc }}
+                </div>
               </div>
+
             </cds-radio>
+
           </cds-radio-group>
         </fieldset>
 
@@ -39,64 +54,62 @@
     </div>
   </cd-tearsheet-step>
 
-
   <cd-tearsheet-step>
-    <div class="px-4 py-3" style="max-height: 65vh; overflow-y: auto; overflow-x: hidden;">
+    <div class="osd-tearsheet-content">
       <form [formGroup]="form" class="cds--form">
-        
-        <fieldset class="mb-5">
-          <legend class="cds--type-heading-compact-02 mb-3">Primary devices</legend>
-          <cd-osd-devices-selection-groups #dataDeviceSelectionGroups name="Primary" type="data"
-            [availDevices]="availDevices" [canSelect]="availDevices.length !== 0"
-            (selected)="onDevicesSelected($event)" (cleared)="onDevicesCleared($event)">
-          </cd-osd-devices-selection-groups>
-        </fieldset>
 
-        <fieldset>
-          <legend class="cds--type-heading-compact-02 mb-4" i18n>Shared devices</legend>
-
-          <cd-osd-devices-selection-groups #walDeviceSelectionGroups name="WAL" type="wal"
-            [availDevices]="availDevices" [canSelect]="dataDeviceSelectionGroups.devices.length !== 0"
-            (selected)="onDevicesSelected($event)" (cleared)="onDevicesCleared($event)" [hostname]="hostname">
-          </cd-osd-devices-selection-groups>
-
-          <div class="mt-4 mb-5" *ngIf="walDeviceSelectionGroups.devices.length !== 0">
-            <cds-number label="WAL slots"
-              helperText="How many OSDs per WAL device. Specify 0 to let Orchestrator backend decide it."
-              id="walSlots" formControlName="walSlots" min="0">
-            </cds-number>
-          </div>
-
-          <cd-osd-devices-selection-groups #dbDeviceSelectionGroups name="DB" type="db"
-            [availDevices]="availDevices" [canSelect]="dataDeviceSelectionGroups.devices.length !== 0"
-            (selected)="onDevicesSelected($event)" (cleared)="onDevicesCleared($event)" [hostname]="hostname">
-          </cd-osd-devices-selection-groups>
-
-          <div class="mt-4" *ngIf="dbDeviceSelectionGroups.devices.length !== 0">
-            <cds-number label="DB slots"
-              helperText="How many OSDs per DB device. Specify 0 to let Orchestrator backend decide it."
-               id="dbSlots" formControlName="dbSlots" min="0">
-            </cds-number>
-          </div>
+        <fieldset formGroupName="features">
+          <legend class="cds--type-heading-compact-02 osd-legend-spacing">Features</legend>
+          <cds-checkbox *ngFor="let feature of featureList" [name]="feature.key" formControlName="{{ feature.key }}"
+            (checkedChange)="emitDeploymentSelection()">
+            {{ feature.desc }}
+          </cds-checkbox>
         </fieldset>
 
       </form>
     </div>
   </cd-tearsheet-step>
 
-
   <cd-tearsheet-step>
-    <div class="px-4 py-3" style="max-height: 65vh; overflow-y: auto; overflow-x: hidden;">
-      <form [formGroup]="form" class="cds--form">
-        
-        <fieldset formGroupName="features">
-          <legend class="cds--type-heading-compact-02 mb-3">Features</legend>
-          <cds-checkbox *ngFor="let feature of featureList" 
-                        [name]="feature.key" 
-                        formControlName="{{ feature.key }}"
-                        (checkedChange)="emitDeploymentSelection()">
-            {{ feature.desc }}
-          </cds-checkbox>
+    <div class="osd-tearsheet-content"> 
+      <form [formGroup]="form" class="cds--form" cdsStack="vertical" [gap]="7">
+
+        <fieldset>
+          <legend class="cds--type-heading-compact-02 osd-legend-spacing">Primary devices</legend>
+          <cd-osd-devices-selection-groups #dataDeviceSelectionGroups name="Primary" type="data"
+            [availDevices]="availDevices" [canSelect]="availDevices.length !== 0" (selected)="onDevicesSelected($event)"
+            (cleared)="onDevicesCleared($event)">
+          </cd-osd-devices-selection-groups>
+        </fieldset>
+
+        <fieldset>
+          <legend class="cds--type-heading-compact-02 osd-legend-spacing" i18n>Shared devices</legend>
+
+          <div cdsStack="vertical" [gap]="6">
+            <cd-osd-devices-selection-groups #walDeviceSelectionGroups name="WAL" type="wal" [availDevices]="availDevices"
+              [canSelect]="dataDeviceSelectionGroups.devices.length !== 0" (selected)="onDevicesSelected($event)"
+              (cleared)="onDevicesCleared($event)" [hostname]="hostname">
+            </cd-osd-devices-selection-groups>
+
+            <div *ngIf="walDeviceSelectionGroups.devices.length !== 0">
+              <cds-number label="WAL slots"
+                helperText="How many OSDs per WAL device. Specify 0 to let Orchestrator backend decide it." id="walSlots"
+                formControlName="walSlots" min="0">
+              </cds-number>
+            </div>
+
+            <cd-osd-devices-selection-groups #dbDeviceSelectionGroups name="DB" type="db" [availDevices]="availDevices"
+              [canSelect]="dataDeviceSelectionGroups.devices.length !== 0" (selected)="onDevicesSelected($event)"
+              (cleared)="onDevicesCleared($event)" [hostname]="hostname">
+            </cd-osd-devices-selection-groups>
+
+            <div *ngIf="dbDeviceSelectionGroups.devices.length !== 0">
+              <cds-number label="DB slots"
+                helperText="How many OSDs per DB device. Specify 0 to let Orchestrator backend decide it." id="dbSlots"
+                formControlName="dbSlots" min="0">
+              </cds-number>
+            </div>
+          </div>
         </fieldset>
 
       </form>
