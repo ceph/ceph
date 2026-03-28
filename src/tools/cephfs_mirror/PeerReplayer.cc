@@ -1406,6 +1406,15 @@ bool PeerReplayer::SyncMechanism::has_pending_work() const {
   if (m_datasync_error || job_done)
     return false;
 
+  // Distribute threads fairly if enabled
+  if (m_peer_replayer.get_distribute_datasync_threads()) {
+    int total_threads = m_peer_replayer.m_data_replayers.size();
+    int snapshots_queued = m_peer_replayer.get_num_queued_snapshots_unlocked();
+    //Cieling division to avoid unused remainder threads and zero allocation
+    int fair_share = (total_threads + snapshots_queued - 1) / snapshots_queued;
+    if (m_in_flight >= fair_share)
+      return false;
+  }
   return true;
 }
 
@@ -1694,7 +1703,7 @@ int PeerReplayer::SnapDiffSync::get_changed_blocks(const std::string &epath,
   dout(20) << ": dir_root=" << m_dir_root << ", epath=" << epath
            << ", sync_check=" << sync_check << dendl;
 
-  if (!sync_check || stx.stx_size <= m_peer_replayer.blockdiff_min_file_size) {
+  if (!sync_check || stx.stx_size <= m_peer_replayer.get_blockdiff_min_file_size()) {
     return SyncMechanism::get_changed_blocks(epath, stx, sync_check, callback);
   }
 
@@ -2081,6 +2090,35 @@ int PeerReplayer::synchronize(const std::string &dir_root, const Snapshot &curre
   return r;
 }
 
+void PeerReplayer::set_changed_mirroring_configurations() {
+  // Get configs
+  uint64_t blockdiff_min_file_size_conf = g_ceph_context->_conf.get_val<Option::size_t>(
+                                          "cephfs_mirror_blockdiff_min_file_size");
+  bool distribute_datasync_threads_conf = g_ceph_context->_conf.get_val<bool>(
+                                          "cephfs_mirror_distribute_datasync_threads");
+  uint64_t datasync_files_per_batch_conf = g_ceph_context->_conf.get_val<uint64_t>(
+                                          "cephfs_mirror_datasync_files_per_batch");
+
+  // Compare and set configs
+  uint64_t blockdiff_min_file_size = set_blockdiff_min_file_size(blockdiff_min_file_size_conf);
+  if (blockdiff_min_file_size != blockdiff_min_file_size_conf) {
+    dout(10) << ":  blockdiff_min_file_size changed" << " old=" << blockdiff_min_file_size
+             << " new=" << blockdiff_min_file_size_conf << dendl;
+  }
+  bool distribute_datasync_threads = set_distribute_datasync_threads(distribute_datasync_threads_conf);
+  if (distribute_datasync_threads != distribute_datasync_threads_conf) {
+    dout(10) << ": cephfs_mirror_distribute_datasync_threads changed"
+            << " old=" << distribute_datasync_threads
+            << " new=" << distribute_datasync_threads_conf << dendl;
+  }
+  uint64_t datasync_files_per_batch = set_datasync_files_per_batch(datasync_files_per_batch_conf);
+  if (datasync_files_per_batch != datasync_files_per_batch_conf) {
+    dout(10) << ":  cephfs_mirror_datasync_files_per_batch changed"
+             << " old=" << datasync_files_per_batch
+             << " new=" << datasync_files_per_batch_conf << dendl;
+  }
+}
+
 int PeerReplayer::do_sync_snaps(const std::string &dir_root) {
   dout(20) << ": dir_root=" << dir_root << dendl;
 
@@ -2148,7 +2186,6 @@ int PeerReplayer::do_sync_snaps(const std::string &dir_root) {
   double start = 0;
   double end = 0;
   double duration = 0;
-  uint64_t blockdiff_min_file_size_conf = 0;
   for (; it != local_snap_map.end(); ++it) {
     if (m_perf_counters) {
       start = std::chrono::duration_cast<std::chrono::seconds>(clock::now().time_since_epoch()).count();
@@ -2157,17 +2194,8 @@ int PeerReplayer::do_sync_snaps(const std::string &dir_root) {
       m_perf_counters->tset(l_cephfs_mirror_peer_replayer_last_synced_start, t);
     }
     set_current_syncing_snap(dir_root, it->first, it->second);
-    // Check for blockdiff_min_file_size config change at the beginning of snapshot sync
-    blockdiff_min_file_size_conf = g_ceph_context->_conf.get_val<Option::size_t>(
-                                     "cephfs_mirror_blockdiff_min_file_size");
-    {
-      std::scoped_lock locker(m_lock);
-      if (blockdiff_min_file_size != blockdiff_min_file_size_conf) {
-        dout(10) << ":  blockdiff_min_file_size changed" << " old=" << blockdiff_min_file_size
-                 << " new=" << blockdiff_min_file_size_conf << dendl;
-        blockdiff_min_file_size = blockdiff_min_file_size_conf;
-      }
-    }
+    // Check for changed mirroring configurations
+    set_changed_mirroring_configurations();
     boost::optional<Snapshot> prev = boost::none;
     if (last_snap_id != 0) {
       prev = std::make_pair(last_snap_name, last_snap_id);
@@ -2415,8 +2443,10 @@ void PeerReplayer::run_datasync(SnapshotDataSyncThread *data_replayer) {
     }
 
     // Wait on data sync queue for entries to process
+    uint64_t batch = get_datasync_files_per_batch();
     SyncEntry entry;
-    while (syncm->pop_dataq_entry(entry)) {
+    //Only batch if distribute datasync threads config is enabled
+    while ((!distribute_datasync_threads || batch--) && syncm->pop_dataq_entry(entry)) {
       bool need_data_sync = true;
       bool need_attr_sync = true;
       if (entry.sync_check) {
@@ -2470,7 +2500,7 @@ void PeerReplayer::run_datasync(SnapshotDataSyncThread *data_replayer) {
       const bool sync_error =
         syncm->get_datasync_error_unlocked() ||
         syncm->get_crawl_error_unlocked();
-      if (!syncm_q.empty() && last_in_flight_syncm && (crawl_finished || sync_error)) {
+      if (!syncm_q.empty() && last_in_flight_syncm && ((crawl_finished && syncm->is_dataq_empty_unlocked()) || sync_error)) {
         if (sync_error && !is_syncm_active(syncm)){
           dout(20) << ": syncm object=" << syncm << " already dequeued" << dendl;
         } else {

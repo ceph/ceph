@@ -556,6 +556,8 @@ Configuration Options
 
 .. confval:: cephfs_mirror_max_concurrent_directory_syncs
 .. confval:: cephfs_mirror_max_datasync_threads
+.. confval:: cephfs_mirror_distribute_datasync_threads
+.. confval:: cephfs_mirror_datasync_files_per_batch
 .. confval:: cephfs_mirror_action_update_interval
 .. confval:: cephfs_mirror_restart_mirror_on_blocklist_interval
 .. confval:: cephfs_mirror_max_snapshot_sync_per_cycle
