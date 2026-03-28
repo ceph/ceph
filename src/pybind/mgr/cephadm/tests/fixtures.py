@@ -1,5 +1,6 @@
 import fnmatch
 import asyncio
+import json
 import sys
 from tempfile import NamedTemporaryFile
 from contextlib import contextmanager
@@ -123,6 +124,24 @@ def with_cephadm_module(module_options=None, store=None):
                     'prometheus': 'http://[::1]:8081'
                 },
                 'modules': ['dashboard', 'prometheus'],
+            })
+        if '_ceph_get/osd_map' not in store:
+            m.mock_store_set('_ceph_get', 'osd_map', {
+                'flags': '',
+                'osds': [],
+                'pools': [],
+            })
+        if '_ceph_get/health' not in store:
+            m.mock_store_set('_ceph_get', 'health', {
+                'json': json.dumps({
+                    'status': 'HEALTH_OK',
+                    'checks': {},
+                })
+            })
+        if '_ceph_get/pg_dump' not in store:
+            m.mock_store_set('_ceph_get', 'pg_dump', {
+                'pg_stats': [],
+                'pool_stats': [],
             })
         for k, v in store.items():
             m._ceph_set_store(k, v)
