@@ -159,8 +159,9 @@ To configure the prediction mode, run a command of the following form:
 
 Under normal conditions, failure prediction runs periodically in the
 background.  For this reason, life expectancy values might be populated only
-after a significant amount of time has passed.  The life expectancy of all
-devices is displayed in the output of the following command:
+after a significant amount of time has passed (six days as of the Tentacle
+release).  The life expectancy of all compatible devices is displayed in the
+output of the following command:
 
 .. prompt:: bash $
 
