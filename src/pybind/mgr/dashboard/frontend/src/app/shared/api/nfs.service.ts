@@ -114,4 +114,10 @@ export class NfsService extends ApiClient {
       params: { info: true }
     });
   }
+
+  createCluster(requestModel: any) {
+    return this.http.post(`${this.apiPath}/cluster`, requestModel, {
+      headers: { Accept: this.getVersionHeaderValue(1, 0) }
+    });
+  }
 }

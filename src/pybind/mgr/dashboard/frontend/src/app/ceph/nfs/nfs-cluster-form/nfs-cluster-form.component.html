@@ -1,0 +1,105 @@
+<div class="cd-form">
+  <form novalidate>
+    <div *ngIf="formError" class="cds-alert cds-alert--danger" role="alert">
+      <div class="cds-alert__content">{{ formError }}</div>
+    </div>
+    <div class="form-header">
+      <h2 i18n>Create NFS Cluster</h2>
+    </div>
+
+      <!-- Cluster ID -->
+      <div class="form-item">
+        <cds-text-label labelInputID="cluster_id" i18n cdRequiredField="Cluster Name">
+          Cluster Name
+          <input cdsText id="cluster_id" type="text" [value]="clusterId.value" (input)="clusterId.setValue($event.target.value)" [disabled]="false" />
+        </cds-text-label>
+        <small class="cds-helper">Unique identifier for the NFS cluster (e.g. "nfs01"). This will be used as the service id.</small>
+        <div *ngIf="clusterId.touched && clusterId.invalid" class="invalid-feedback">Cluster Name is required.</div>
+      </div>
+
+  <cd-form-advanced-fieldset title="Service specifications">
+        <!-- Placement select and multi selectors -->
+        <div class="form-item">
+          <cds-select id="placement" label="Placement" [invalid]="false" helperText="Where the NFS daemons should run" (change)="placement.setValue($event.target.value)">
+            <option value="hosts" i18n>Hosts</option>
+            <option value="label" i18n>Labels</option>
+          </cds-select>
+          <!-- keep the cds-select value in sync -->
+          <input type="hidden" [value]="placement.value" (change)="placement.setValue($event.target.value)" />
+        </div>
+
+        <ng-container *ngIf="hostsAndLabels$ | async as data">
+          <div *ngIf="placement.value === 'hosts'" class="form-item">
+            <div class="form-item">
+              <cds-number [id]="'count'" [label]="'Count'" [min]="1" [value]="count.value" (valueChange)="count.setValue($event)"></cds-number>
+            </div>
+            <div *ngIf="count.touched && count.invalid" class="invalid-feedback">Count must be at least 1.</div>
+            <cds-combo-box
+              type="multi"
+              selectionFeedback="top-after-reopen"
+              label="Hosts"
+              id="hosts"
+              placeholder="Select hosts..."
+              [appendInline]="true"
+              [items]="data.hosts"
+              (selected)="multiSelector($event, 'hosts')"
+            >
+              <cds-dropdown-list></cds-dropdown-list>
+            </cds-combo-box>
+          </div>
+
+          <div *ngIf="placement.value === 'label'" class="form-item">
+            <cds-combo-box
+              type="multi"
+              selectionFeedback="top-after-reopen"
+              label="Label"
+              id="label"
+              placeholder="Select labels..."
+              [appendInline]="true"
+              [items]="data.labels"
+              (selected)="multiSelector($event, 'label')"
+            >
+              <cds-dropdown-list></cds-dropdown-list>
+            </cds-combo-box>
+          </div>
+        </ng-container>
+
+      </cd-form-advanced-fieldset>
+
+      <!-- Ingress and networking -->
+      <cd-form-advanced-fieldset title="Ingress / Networking">
+        <div class="form-item">
+          <cds-checkbox i18n-label id="ingress" [checked]="ingress.value" (checkedChange)="ingress.setValue($event)">
+            Enable ingress
+            <cd-help-text i18n>If enabled, an Ingress service will be created and a virtual IP is required.</cd-help-text>
+          </cds-checkbox>
+        </div>
+
+        <div *ngIf="ingress.value">
+          <div class="form-item">
+            <cds-text-label labelInputID="virtual_ip" i18n helperText="Virtual IP for ingress">
+              Virtual IP
+              <input cdsText id="virtual_ip" type="text" [value]="virtual_ip.value" (input)="virtual_ip.setValue($event.target.value)" placeholder="192.0.2.10/24 or 2001:db8::1/64" />
+            </cds-text-label>
+            <div *ngIf="virtual_ip.touched && virtual_ip.invalid" class="invalid-feedback">
+              <span *ngIf="virtual_ip.hasError('required')">Virtual IP is required when ingress is enabled.</span>
+            </div>
+          </div>
+
+          <div class="form-item">
+            <cds-select id="ingress_mode" label="Ingress mode" (change)="ingress_mode.setValue($event.target.value)">
+              <option *ngFor="let m of ingressModes" [value]="m.value">{{ m.label }}</option>
+            </cds-select>
+          </div>
+        </div>
+          <div class="form-item">
+            <cds-number [id]="'port'" [label]="'Port'" [min]="1" [value]="port.value" placeholder="2049" (valueChange)="port.setValue($event)"></cds-number>
+          <div *ngIf="port.touched && port.invalid" class="invalid-feedback">Port must be a number greater than 0.</div>
+          </div>
+      </cd-form-advanced-fieldset>
+
+      <div class="form-actions">
+        <button cdsButton="primary" type="button" (click)="submit()" i18n>Create Cluster</button>
+      </div>
+    </form>
+</div>
