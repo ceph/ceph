@@ -93,6 +93,9 @@
 * MGR: MGR's always-on modulues/plugins can now be force-disabled. This can be
   necessary in cases where MGR(s) needs to be prevented from being flooded by
   the module commands when coresponding Ceph service is down/degraded.
+* CephFS: The ``ceph fs volume create`` command now allows users to pass
+  metadata and data pool names to be used for creating the volume. If either
+  is not passed or if either is a non-empty pool, the command will abort.
 
 * CephFS: The ``ceph fs subvolume snapshot getpath`` command now allows users
   to get the path of a snapshot of a subvolume. If the snapshot is not present
