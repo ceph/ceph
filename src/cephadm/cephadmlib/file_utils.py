@@ -9,7 +9,17 @@ import json
 
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, Any, Union, Tuple, Optional, Generator, IO, List
+from typing import (
+    Dict,
+    Any,
+    Union,
+    Tuple,
+    Optional,
+    Generator,
+    IO,
+    List,
+    Protocol,
+)
 
 from .constants import DEFAULT_MODE, DATEFMT
 from .data_utils import dict_get_join
@@ -73,13 +83,56 @@ def touch(
         os.chown(file_path, uid, gid)
 
 
-def write_tmp(s: str, uid: int, gid: int) -> IO[str]:
-    tmp_f = tempfile.NamedTemporaryFile(mode='w', prefix='ceph-tmp')
-    os.fchown(tmp_f.fileno(), uid, gid)
-    tmp_f.write(s)
-    tmp_f.flush()
+class TempFileLike(Protocol):
+    name: str
 
-    return tmp_f
+    def fileno(self) -> int:  # pragma: no cover - typing-only
+        ...
+
+    def close(self) -> None:  # pragma: no cover - typing-only
+        ...
+
+
+class _TempFileRef:
+    def __init__(self, fd: int, path: str):
+        self._fd = fd
+        self.name = path
+
+    def fileno(self) -> int:
+        return self._fd
+
+    def close(self) -> None:
+        if self._fd is not None and self._fd >= 0:
+            try:
+                os.close(self._fd)
+            except Exception:
+                pass
+            self._fd = -1
+
+
+def write_tmp(s: str, uid: int, gid: int) -> TempFileLike:
+    fd, path = tempfile.mkstemp(prefix='ceph-tmp')
+    try:
+        # set ownership on the FD before writing
+        os.fchown(fd, uid, gid)
+        # write bytes directly to the FD to avoid creating a Python file
+        # object that may interact poorly with pyfakefs destructors.
+        data = s.encode('utf-8') if isinstance(s, str) else s
+        os.write(fd, data)
+        os.fsync(fd)
+        # keep the fd open and return a lightweight wrapper exposing
+        # .fileno() and .name so callers behave like NamedTemporaryFile.
+        return _TempFileRef(fd, path)
+    except Exception:
+        try:
+            os.close(fd)
+        except OSError as e:
+            logger.debug(f"Failed to close fd {fd}: {e}")
+        try:
+            os.unlink(path)
+        except OSError as e:
+            logger.debug(f"Failed to unlink {path}: {e}")
+        raise
 
 
 def makedirs(dest: Union[Path, str], uid: int, gid: int, mode: int) -> None:
