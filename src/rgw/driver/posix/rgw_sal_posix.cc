@@ -22,6 +22,8 @@
 #include "include/scope_guard.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/errno.h"
+#include <fmt/format.h>
+#include <iostream>
 
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
@@ -922,10 +924,24 @@ int Directory::rename(const DoutPrefixProvider* dpp, optional_yield y, Directory
   }
   // swap
   ret = renameat2(parent_fd, src_name.c_str(), dst_dir->get_fd(), dst_name.c_str(), flags);
+  if (ret < 0 && errno == EINVAL && flags == RENAME_EXCHANGE) {
+    ldpp_dout(dpp, 1) << "WARNING: RENAME_EXCHANGE not supported, using fallback" << dendl;
+    struct statx stx;
+    if (statx(dst_dir->get_fd(), dst_name.c_str(), AT_SYMLINK_NOFOLLOW, STATX_ALL, &stx) == 0) {
+      if (S_ISREG(stx.stx_mode)) {
+	unlinkat(dst_dir->get_fd(), dst_name.c_str(), 0);
+      } else if (S_ISDIR(stx.stx_mode)) {
+	delete_directory(dst_dir->get_fd(), dst_name.c_str(), true, dpp);
+      }
+    }
+    ret = renameat2(parent_fd, src_name.c_str(), dst_dir->get_fd(), dst_name.c_str(), 0);
+  }
   if(ret < 0) {
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: renameat2 for shadow object could not finish: "
 	<< cpp_strerror(ret) << dendl;
+    std::cerr << fmt::format("ERROR: renameat2 for shadow object could not finish: {}",
+	cpp_strerror(ret)) << std::endl;
     return -ret;
   }
 
@@ -3483,6 +3499,14 @@ int POSIXObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y)
     return -EINVAL;
   }
 
+  // Force stat to get fresh metadata after file was renamed
+  ret = ent->stat(dpp, true);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: could not stat " << get_name()
+                      << ": " << cpp_strerror(ret) << dendl;
+    return ret;
+  }
+
   fill_cache( nullptr, null_yield,
       [&](const DoutPrefixProvider *dpp, rgw_bucket_dir_entry &bde) -> int {
 	driver->get_bucket_cache()->add_entry(dpp, b->get_name(), bde);
@@ -3802,11 +3826,19 @@ int POSIXMultipartUpload::load(const DoutPrefixProvider *dpp, bool create)
 
     std::unique_ptr<Directory> mpdir = std::make_unique<MPDirectory>(bucket_fname(get_meta(), ns), pb->get_dir(), driver->ctx());
 
-    shadow = std::make_unique<POSIXBucket>(driver, std::move(mpdir), rgw_bucket(std::string(), get_meta()), mp_ns);
+    auto tmp_shadow = std::make_unique<POSIXBucket>(driver, std::move(mpdir), rgw_bucket(std::string(), get_meta()), mp_ns);
 
-    ret = shadow->load_bucket(dpp, null_yield);
+    ret = tmp_shadow->load_bucket(dpp, null_yield);
     if (ret == -ENOENT && create) {
-      ret = shadow->create(dpp, null_yield, nullptr);
+      ret = tmp_shadow->create(dpp, null_yield, nullptr);
+    }
+    if (ret >= 0) {
+      shadow = std::move(tmp_shadow);
+    } else {
+      ldpp_dout(dpp, 0) << "ERROR: multipart upload load failed for "
+	<< get_meta() << ": " << cpp_strerror(-ret) << dendl;
+      std::cerr << fmt::format("ERROR: multipart upload load failed for {}: {}",
+	  get_meta(), cpp_strerror(-ret)) << std::endl;
     }
   }
 
@@ -4074,11 +4106,42 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to rename to final name " << target_obj->get_name()
 		      << ": " << cpp_strerror(ret) << dendl;
+    std::cerr << fmt::format("ERROR: failed to rename to final name {}: {}",
+	target_obj->get_name(), cpp_strerror(ret)) << std::endl;
     return ret;
   }
 
   POSIXObject *to = static_cast<POSIXObject*>(target_obj);
   POSIXBucket *sb = static_cast<POSIXBucket*>(target_obj->get_bucket());
+
+  // Open the target object to initialize its ent after the rename
+  ret = to->open(dpp, false, false);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: could not open completed multipart object "
+                      << to->get_name() << ": " << cpp_strerror(ret) << dendl;
+    std::cerr << fmt::format("ERROR: could not open completed multipart object {}: {}",
+	to->get_name(), cpp_strerror(ret)) << std::endl;
+    return ret;
+  }
+
+  // Force stat to get fresh metadata after multipart completion
+  ret = to->stat(dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: could not stat completed multipart object "
+                      << to->get_name() << ": " << cpp_strerror(ret) << dendl;
+    std::cerr << fmt::format("ERROR: could not stat completed multipart object {}: {}",
+	to->get_name(), cpp_strerror(ret)) << std::endl;
+    return ret;
+  }
+
+  // Add the completed multipart object to the bucket cache
+  // (following the pattern from POSIXObject::link_temp_file)
+  to->fill_cache(dpp, y,
+      [this, sb](const DoutPrefixProvider *dpp, rgw_bucket_dir_entry &bde) -> int {
+          driver->get_bucket_cache()->add_entry(dpp, sb->get_name(), bde);
+          return 0;
+      });
+
   if (sb->versioned()) {
     ret = to->set_cur_version(dpp);
     if (ret < 0) {
@@ -4107,9 +4170,15 @@ int POSIXMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
     return 0;
   }
 
+  // Ensure shadow is loaded with valid dpp for proper error logging
+  ret = load(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
   if (attrs) {
       meta_obj = get_meta_obj();
-      int ret = meta_obj->get_obj_attrs(y, dpp);
+      ret = meta_obj->get_obj_attrs(y, dpp);
       if (ret < 0) {
 	ldpp_dout(dpp, 0) << " ERROR: could not get meta object for mp upload "
 	  << get_key() << dendl;

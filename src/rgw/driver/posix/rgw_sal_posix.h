@@ -17,6 +17,7 @@
 
 #include "rgw_sal_filter.h"
 #include "rgw_sal_store.h"
+#include "rgw_multi.h"
 #include <memory>
 #include "common/dout.h"
 #include "bucket_cache.h"
@@ -1166,6 +1167,10 @@ struct POSIXMPObj {
       return false;
     oid = meta.substr(0, mid_pos);
     upload_id = meta.substr(mid_pos + 1, end_pos - mid_pos - 1);
+    // Validate upload_id has correct prefix to avoid parsing file extensions
+    if (!is_v2_upload_id(upload_id)) {
+      return false;
+    }
     init(oid, upload_id, _owner);
     return true;
   }

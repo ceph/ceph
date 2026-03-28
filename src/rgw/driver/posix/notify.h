@@ -110,7 +110,8 @@ namespace file::listing {
     using wd_callback_map_t = ankerl::unordered_dense::map<int, WatchRecord>;
     using wd_remove_map_t = ankerl::unordered_dense::map<std::string, int>;
 
-    int wfd, efd;
+    int wfd{-1};
+    int efd{-1};
     std::thread thrd;
     std::mutex map_mutex;  // protects wd_callback_map and wd_remove_map
     wd_callback_map_t wd_callback_map;
@@ -211,14 +212,14 @@ namespace file::listing {
 
     Inotify(Notifiable* n, const std::string& bucket_root)
       : Notify(n, bucket_root),
+	wfd(inotify_init1(IN_NONBLOCK)),
+	efd(eventfd(0, EFD_NONBLOCK)),
 	thrd(&Inotify::ev_loop, this)
       {
-	wfd = inotify_init1(IN_NONBLOCK);
 	if (wfd == -1) {
-	  std::cerr << fmt::format("{} inotify_init1 failed with {}", __func__, wfd) << std::endl;
+	  std::cerr << fmt::format("{} inotify_init1 failed", __func__) << std::endl;
 	  exit(1);
 	}
-	efd = eventfd(0, EFD_NONBLOCK);
       }
 
     void signal_shutdown() {
@@ -232,7 +233,9 @@ namespace file::listing {
       sf::path wp{rp / dname};
       int wd = inotify_add_watch(wfd, wp.c_str(), aw_mask);
       if (wd == -1) {
-	std::cerr << fmt::format("{} inotify_add_watch {} failed with {}", __func__, dname, wd) << std::endl;
+	int err = errno;
+	std::cerr << fmt::format("{} inotify_add_watch {} failed (errno={}: {})",
+	    __func__, dname, err, strerror(err)) << std::endl;
       } else {
 	std::lock_guard lock(map_mutex);
 	wd_callback_map.insert(wd_callback_map_t::value_type(wd, WatchRecord(wd, dname, opaque)));
