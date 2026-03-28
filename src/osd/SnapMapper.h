@@ -17,6 +17,7 @@
 #define SNAPMAPPER_H
 
 #include <cstring>
+#include <expected>
 #include <map>
 #include <set>
 #include <string>
@@ -285,7 +286,7 @@ private:
     );
 
   /// Get snaps (as an 'object_snaps' object) for oid
-  tl::expected<object_snaps, SnapMapReaderI::result_t> get_snaps_common(
+  std::expected<object_snaps, SnapMapReaderI::result_t> get_snaps_common(
     const hobject_t &hoid) const;
 
   /// \returns vector with the first objects with @snap as a snap
@@ -380,7 +381,7 @@ private:
     MapCacher::Transaction<std::string, ceph::buffer::list> *t);
 
   /// Get snaps for oid - alternative interface
-  tl::expected<std::set<snapid_t>, SnapMapReaderI::result_t> get_snaps(
+  std::expected<std::set<snapid_t>, SnapMapReaderI::result_t> get_snaps(
     const hobject_t &hoid) const final;
 
   /**
@@ -389,7 +390,7 @@ private:
    * Returns snaps for hoid as in get_snaps(), but additionally validates the
    * snap->hobject_t mappings ('SNA_' entries).
    */
-  tl::expected<std::set<snapid_t>, SnapMapReaderI::result_t>
+  std::expected<std::set<snapid_t>, SnapMapReaderI::result_t>
   get_snaps_check_consistency(const hobject_t &hoid) const final;
 };
 WRITE_CLASS_ENCODER(SnapMapper::object_snaps)
