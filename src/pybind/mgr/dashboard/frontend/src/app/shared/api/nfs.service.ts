@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpResponse } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import { Observable, throwError } from 'rxjs';
@@ -112,6 +112,13 @@ export class NfsService extends ApiClient {
     return this.http.get<NFSCluster[]>(`${this.apiPath}/cluster`, {
       headers: { Accept: this.getVersionHeaderValue(0, 1) },
       params: { info: true }
+    });
+  }
+
+  createCluster(requestModel: any): Observable<HttpResponse<any>> {
+    return this.http.post<any>(`${this.apiPath}/cluster`, requestModel, {
+      headers: { Accept: this.getVersionHeaderValue(1, 0) },
+      observe: 'response'
     });
   }
 }

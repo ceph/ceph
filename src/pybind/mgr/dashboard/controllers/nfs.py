@@ -3,20 +3,21 @@
 import json
 import logging
 import os
-from functools import partial
-from typing import Any, Dict, List, Optional
+from functools import partial, wraps
+from typing import Any, Dict, List, Optional, Union
 
 import cephfs
 from mgr_module import NFS_GANESHA_SUPPORTED_FSALS
+from orchestrator.module import IngressType
 
 from .. import mgr
 from ..security import Scope
 from ..services.cephfs import CephFS
-from ..services.exception import DashboardException, handle_cephfs_error, \
-    serialize_dashboard_exception
+from ..services.exception import (DashboardException, handle_cephfs_error,
+                                  serialize_dashboard_exception)
 from ..tools import str_to_bool
-from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, \
-    ReadPermission, RESTController, Task, UIRouter
+from . import (APIDoc, APIRouter, BaseController, CreatePermission, Endpoint,
+               EndpointDoc, ReadPermission, RESTController, Task, UIRouter)
 from ._version import APIVersion
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,53 @@ logger = logging.getLogger(__name__)
 class NFSException(DashboardException):
     def __init__(self, msg):
         super(NFSException, self).__init__(component="nfs", msg=msg)
+
+
+def raise_on_failure(func):
+    """Decorator to raise NFSException if the remote call fails."""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        result = func(*args, **kwargs)
+        if isinstance(result, dict) and result.get('success') is False:
+            msg = result.get('msg', 'Operation failed')
+            raise NFSException(msg)
+        return result
+    return wrapper
+
+
+def normalize_placement(placement: Optional[Union[str, Dict]]) -> Optional[str]:
+    if placement is None or isinstance(placement, str):
+        return placement
+
+    if not isinstance(placement, dict):
+        return str(placement)
+
+    hosts = placement.get('hosts', [])
+    label = placement.get('label', '')
+    count = int(placement.get('count', 1) or 1)
+
+    if hosts:
+        host_list = [str(h) for h in hosts]
+        return f"{count} " + " ".join(host_list)
+    elif label:
+        return f"{count} label:{label}"
+    elif count:
+        return str(count)
+
+    return '1'
+
+
+def parse_ingress_mode(mode: Optional[str]) -> Optional[IngressType]:
+    if mode is None:
+        return None
+
+    if isinstance(mode, IngressType):
+        return mode
+
+    try:
+        return IngressType[mode]
+    except (KeyError, TypeError):
+        raise NFSException(f"Invalid ingress_mode: {mode}")
 
 
 # documentation helpers
@@ -94,6 +142,39 @@ class NFSGaneshaCluster(RESTController):
                 {"name": key, **value} for key, value in mgr.remote('nfs', 'cluster_info').items()
             ]
         return mgr.remote('nfs', 'cluster_ls')
+
+    @raise_on_failure
+    @CreatePermission
+    @NfsTask('create', {'cluster_id': '{cluster_id}'}, 2.0)
+    @EndpointDoc("Create an NFS cluster",
+                 parameters={
+                     'cluster_id': (str, 'Cluster identifier'),
+                     'placement': (str, 'Placement spec', {'optional': True}),
+                     'ingress': (bool, 'Enable ingress', {'optional': True}),
+                     'virtual_ip': (str, 'Virtual IP for ingress', {'optional': True}),
+                     'ingress_mode': (str, 'Ingress mode', {'optional': True}),
+                     'port': (int, 'Port to use', {'optional': True})
+                 })
+    @RESTController.MethodMap(version=APIVersion(1, 0))
+    def create(self, cluster_id: str, placement: Optional[Union[str, Dict]] = None,
+               ingress: Optional[bool] = None, virtual_ip: Optional[str] = None,
+               ingress_mode: Optional[str] = None, port: Optional[int] = None) -> Any:
+        """Create an NFS-Ganesha cluster."""
+        logger.debug(
+            "Creating NFS cluster: cluster_id=%s, placement=%s, ingress=%s",
+            cluster_id, placement, ingress
+        )
+
+        return mgr.remote(
+            'nfs',
+            '_cmd_nfs_cluster_create',
+            cluster_id=str(cluster_id),
+            placement=normalize_placement(placement),
+            ingress=ingress,
+            virtual_ip=virtual_ip,
+            ingress_mode=parse_ingress_mode(ingress_mode),
+            port=port
+        )
 
 
 @APIRouter('/nfs-ganesha/export', Scope.NFS_GANESHA)
