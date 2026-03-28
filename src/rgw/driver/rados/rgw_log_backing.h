@@ -311,29 +311,76 @@ public:
     co_return co_await fifo->push(dpp, std::move(entries), asio::use_awaitable);
   }
 
+  // push a single entry (awaitable)
+  asio::awaitable<void> push(const DoutPrefixProvider *dpp,
+			     ceph::buffer::list entry) {
+    co_await lazy_init(dpp);
+    co_return co_await fifo->push(dpp, std::move(entry), asio::use_awaitable);
+  }
+
+  // push a single entry (yield_context)
   void push(const DoutPrefixProvider *dpp,
-			     ceph::buffer::list entry,
-			     asio::yield_context y) {
+	    ceph::buffer::list entry,
+	    asio::yield_context y) {
     lazy_init(dpp, y);
     fifo->push(dpp, std::move(entry), y);
   }
 
+  // push a batch of entries (yield_context)
+  void push(const DoutPrefixProvider *dpp,
+	    std::deque<ceph::buffer::list> entries,
+	    asio::yield_context y) {
+    lazy_init(dpp, y);
+    fifo->push(dpp, std::move(entries), y);
+  }
+
+  // list entries (awaitable)
   asio::awaitable<std::tuple<std::span<fifo::entry>, std::optional<std::string>>>
   list(const DoutPrefixProvider *dpp, std::string markstr,
        std::span<fifo::entry> entries) {
     co_await lazy_init(dpp);
-    co_return co_await fifo->list(dpp, markstr, entries, asio::use_awaitable);
+    auto [cur, next] = co_await fifo->list(dpp, markstr, entries,
+                                           asio::use_awaitable);
+    co_return std::tuple{cur, next.empty()
+                              ? std::nullopt
+                              : std::optional<std::string>{std::move(next)}};
   }
 
+  // list entries (yield_context)
+  std::tuple<std::span<fifo::entry>, std::optional<std::string>>
+  list(const DoutPrefixProvider *dpp, std::string markstr,
+       std::span<fifo::entry> entries, asio::yield_context y) {
+    lazy_init(dpp, y);
+    auto [cur, next] = fifo->list(dpp, markstr, entries, y);
+    return {cur, next.empty()
+                 ? std::nullopt
+                 : std::optional<std::string>{std::move(next)}};
+  }
+
+  // trim up to markstr (awaitable)
   asio::awaitable<void> trim(const DoutPrefixProvider *dpp,
 			     std::string markstr, bool exclusive) {
     co_await lazy_init(dpp);
     co_return co_await fifo->trim(dpp, markstr, exclusive, asio::use_awaitable);
   }
 
+  // trim up to markstr (yield_context)
+  void trim(const DoutPrefixProvider *dpp,
+	    std::string markstr, bool exclusive,
+	    asio::yield_context y) {
+    lazy_init(dpp, y);
+    fifo->trim(dpp, markstr, exclusive, y);
+  }
+
   asio::awaitable<std::tuple<std::string, ceph::real_time>>
   last_entry_info(const DoutPrefixProvider *dpp) {
     co_await lazy_init(dpp);
     co_return co_await fifo->last_entry_info(dpp, asio::use_awaitable);
+  }
+
+  std::tuple<std::string, ceph::real_time>
+  last_entry_info(const DoutPrefixProvider *dpp, asio::yield_context y) {
+    lazy_init(dpp, y);
+    return fifo->last_entry_info(dpp, y);
   }
 };

@@ -180,6 +180,7 @@ if(WITH_RADOSGW_RADOS)
           driver/rados/rgw_bl_rados.cc
           driver/rados/rgw_cr_rados.cc
           driver/rados/rgw_cr_tools.cc
+          driver/rados/rgw_bilog.cc
           driver/rados/rgw_d3n_datacache.cc
           driver/rados/rgw_datalog.cc
           driver/rados/rgw_datalog_notify.cc

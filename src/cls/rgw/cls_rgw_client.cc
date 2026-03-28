@@ -111,7 +111,7 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, const s
   bufferlist in;
   rgw_cls_obj_complete_op call;
   call.op = op;
-  call.tag = tag;
+  call.op_tag = tag;
   call.key = key;
   call.ver = ver;
   call.locator = obj_locator;
@@ -125,6 +125,35 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, const s
   }
   encode(call, in);
   o.exec(RGW_CLASS, RGW_BUCKET_COMPLETE_OP, in);
+}
+
+void CLSRGWCompleteModifyOpBase::complete_op(librados::ObjectWriteOperation& o,
+                                             const rgw_bucket_entry_ver& ver,
+                                             const rgw_bucket_dir_entry_meta& dir_meta,
+                                             const std::list<cls_rgw_obj_key>* remove_objs,
+                                             const std::string& locator) const {
+  cls_rgw_bucket_complete_op(o, op, op_tag, ver, key, dir_meta,
+                             remove_objs, log_op, bilog_flags,
+                             &zones_trace, locator);
+}
+
+void CLSRGWLinkOLHBase::link_olh(librados::ObjectWriteOperation& o,
+                                  const ceph::bufferlist& olh_tag,
+                                  bool delete_marker,
+                                  const rgw_bucket_dir_entry_meta* meta,
+                                  uint64_t olh_epoch,
+                                  ceph::real_time unmod_since,
+                                  bool high_precision_time) const {
+  cls_rgw_bucket_link_olh(o, key, olh_tag, delete_marker, op_tag, meta,
+                          olh_epoch, unmod_since, high_precision_time,
+                          log_op, zones_trace);
+}
+
+void CLSRGWUnlinkInstance::unlink_instance(librados::ObjectWriteOperation& o,
+                                           const std::string& olh_tag,
+                                           uint64_t olh_epoch) const {
+  cls_rgw_bucket_unlink_instance(o, key, op_tag, olh_tag, olh_epoch,
+                                 log_op, bilog_flags, zones_trace);
 }
 
 void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,

@@ -3878,6 +3878,19 @@ options:
   enum_values:
   - fifo
   - omap
+- name: rgw_default_bucket_bilog_type
+  type: str
+  level: advanced
+  desc: Default bilog backend for newly created buckets
+  long_desc: Whether new buckets use the InIndex (omap-based, stored in bucket index
+    objects) or FIFO bilog backend. Set to 'fifo' to have new buckets start on FIFO
+    directly. Existing buckets are unaffected until migrated.
+  default: inindex
+  services:
+  - rgw
+  enum_values:
+  - inindex
+  - fifo
 - name: rgw_d3n_l1_local_datacache_enabled
   type: bool
   level: advanced

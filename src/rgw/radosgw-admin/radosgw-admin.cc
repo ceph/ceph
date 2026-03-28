@@ -10592,11 +10592,8 @@ next:
 
       count += entries.size();
 
-      for (list<rgw_bi_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
-        rgw_bi_log_entry& entry = *iter;
+      for (auto& entry : entries) {
         encode_json("entry", entry, formatter.get());
-
-        marker = entry.id;
       }
       formatter->flush(cout);
     } while (truncated && count < max_entries);
