@@ -1032,6 +1032,22 @@
           }
         </ng-template>
       </div>
+      <!-- Scope -->
+      <div class="form-item">
+        <cd-text-label-list formControlName="scope"
+                            label="Scope"
+                            helperText="OAuth scope specification."
+                            placeholder="openid profile email">
+        </cd-text-label-list>
+      </div>
+      <!-- Email_domains -->
+      <div class="form-item">
+        <cd-text-label-list formControlName="email_domains"
+                            label="Email domains"
+                            helperText="Email domains to be allowed."
+                            placeholder="*">
+        </cd-text-label-list>
+      </div>
       <!-- Allowlist_domains -->
       <div class="form-item">
         <cd-text-label-list formControlName="allowlist_domains"

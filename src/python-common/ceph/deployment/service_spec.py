@@ -2525,12 +2525,14 @@ class OAuth2ProxySpec(ServiceSpec):
                  client_secret: Optional[str] = None,
                  oidc_issuer_url: Optional[str] = None,
                  redirect_url: Optional[str] = None,
+                 scope: Optional[str] = None,
                  cookie_secret: Optional[str] = None,
                  ssl_cert: Optional[str] = None,
                  ssl_key: Optional[str] = None,
                  ssl: Optional[bool] = True,
                  certificate_source: Optional[str] = None,
                  custom_sans: Optional[List[str]] = None,
+                 email_domains: Optional[List[str]] = None,
                  allowlist_domains: Optional[List[str]] = None,
                  unmanaged: bool = False,
                  extra_container_args: Optional[GeneralArgList] = None,
@@ -2565,9 +2567,14 @@ class OAuth2ProxySpec(ServiceSpec):
         #: The URL oauth2-proxy will redirect to after a successful login. If not provided
         # cephadm will calculate automatically the value of this url.
         self.redirect_url = redirect_url
+        #: OAuth scope specification. 
+        # Default list of scopes will be used in case no scope is configured.
+        self.scope = scope
         #: The secret key used for signing cookies. Its length must be 16,
         # 24, or 32 bytes to create an AES cipher.
         self.cookie_secret = cookie_secret or self.generate_random_secret()
+        #: List of allowed email domains.
+        self.email_domains = email_domains
         #: List of allowed domains for safe redirection after login or logout,
         # preventing unauthorized redirects.
         self.allowlist_domains = allowlist_domains
@@ -2592,6 +2599,10 @@ class OAuth2ProxySpec(ServiceSpec):
         self._validate_url(self.oidc_issuer_url, "oidc_issuer_url")
         if self.redirect_url is not None:
             self._validate_url(self.redirect_url, "redirect_url")
+        if self.scope is not None:
+            self._validate_non_empty_string(self.scope, "scope")
+        if self.email_domains is not None:
+            self._validate_domain_name(self.email_domains, "email_domains")
         if self.https_address is not None:
             self._validate_https_address(self.https_address)
 
@@ -2608,6 +2619,19 @@ class OAuth2ProxySpec(ServiceSpec):
         else:
             if not all([result.scheme, result.netloc]):
                 raise SpecValidationError(f"Error parsing {field_name} field: Must be a valid URL.")
+            
+    def _validate_domain_name(self, domain: Optional[str], field_name: str) -> None:
+        from urllib.parse import urlparse
+        try:
+            result = urlparse(f"http://{domain}")
+        except Exception as e:
+            raise SpecValidationError(f"Invalid {field_name}: {e}. Must be a valid domain name.")
+        else:
+            if result.netloc != domain:
+                raise SpecValidationError(
+                    f"Invalid {field_name}: '{domain}' is not a valid domain name. "
+                    f"Must be a valid domain (e.g., 'domain.test')."
+                )
 
     def _validate_https_address(self, https_address: Optional[str]) -> None:
         from urllib.parse import urlparse

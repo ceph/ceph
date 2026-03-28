@@ -657,6 +657,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       ],
       https_address: [null, [CdValidators.oauthAddressTest()]],
       redirect_url: [null],
+      scope: [null],
+      email_domains: [null],
       allowlist_domains: [null]
     });
   }
@@ -915,6 +917,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
                 'client_secret',
                 'oidc_issuer_url',
                 'redirect_url',
+                'scope',
+                'email_domains',
                 'allowlist_domains'
               ];
               oauth2SpecKeys.forEach((key) => {
@@ -1433,6 +1437,14 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           serviceSpec['oidc_issuer_url'] = values['oidc_issuer_url']?.trim();
           serviceSpec['https_address'] = values['https_address']?.trim();
           serviceSpec['redirect_url'] = values['redirect_url']?.trim();
+          serviceSpec['scope'] = values['scope']?.trim();
+          if (values['email_domains']) {
+            serviceSpec['email_domains'] = values['email_domains']?.map(
+              (emailDomain: string) => {
+                return emailDomain.trim();
+              }
+            );
+          }
           if (values['allowlist_domains']) {
             serviceSpec['allowlist_domains'] = values['allowlist_domains']?.map(
               (allowlistDomain: string) => {
