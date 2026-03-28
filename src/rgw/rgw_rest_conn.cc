@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
+#include <expected>
+
 #include "rgw_zone.h"
 #include "rgw_rest_conn.h"
 #include "rgw_http_errors.h"
@@ -156,14 +158,14 @@ void RGWRESTConn::populate_params(param_vec_t& params, const rgw_owner* uid, con
 auto RGWRESTConn::forward(const DoutPrefixProvider *dpp, const rgw_owner& uid,
                           const req_info& info, size_t max_response,
                           bufferlist *inbl, bufferlist *outbl, optional_yield y)
-  -> tl::expected<int, int>
+  -> std::expected<int, int>
 {
   static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
   for (int tries = 0; tries < NUM_ENPOINT_IOERROR_RETRIES; tries++) {
     string url;
     int ret = get_url(url);
     if (ret < 0) {
-      return tl::unexpected(ret);
+      return std::unexpected(ret);
     }
     param_vec_t params;
     populate_params(params, &uid, self_zone_group);
@@ -179,20 +181,20 @@ auto RGWRESTConn::forward(const DoutPrefixProvider *dpp, const rgw_owner& uid,
       ldpp_dout(dpp, 20) << __func__  << "(): failed to forward request. retries=" << tries << dendl;
     }
   }
-  return tl::unexpected(-EIO);
+  return std::unexpected(-EIO);
 }
 
 auto RGWRESTConn::forward_iam(const DoutPrefixProvider *dpp, const req_info& info,
                               size_t max_response, bufferlist *inbl,
                               bufferlist *outbl, optional_yield y)
-  -> tl::expected<int, int>
+  -> std::expected<int, int>
 {
   static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
   for (int tries = 0; tries < NUM_ENPOINT_IOERROR_RETRIES; tries++) {
     string url;
     int ret = get_url(url);
     if (ret < 0) {
-      return tl::unexpected(ret);
+      return std::unexpected(ret);
     }
     param_vec_t params;
     std::string service = "iam";
@@ -209,7 +211,7 @@ auto RGWRESTConn::forward_iam(const DoutPrefixProvider *dpp, const req_info& inf
       ldpp_dout(dpp, 20) << __func__  << "(): failed to forward request. retries=" << tries << dendl;
     }
   }
-  return tl::unexpected(-EIO);
+  return std::unexpected(-EIO);
 }
 
 int RGWRESTConn::put_obj_send_init(const rgw_obj& obj, const rgw_http_param_pair *extra_params, RGWRESTStreamS3PutObj **req)
