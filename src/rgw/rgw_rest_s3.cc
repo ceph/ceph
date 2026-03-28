@@ -74,6 +74,7 @@
 #include "rgw_sts.h"
 #ifdef WITH_RADOSGW_RADOS
 #include "rgw_sal_rados.h"
+#include "driver/rados/rgw_tools.h"
 #endif
 #include "rgw_cksum_pipe.h"
 #include "rgw_s3select.h"
@@ -2712,7 +2713,7 @@ int RGWCreateBucket_ObjStore_S3::get_params(optional_yield y)
           s->err.message = "NumShards must be greater than 0";
           return -EINVAL;
         }
-        const auto limit = s->cct->_conf.get_val<uint64_t>("rgw_max_dynamic_shards");
+        const uint32_t limit = static_cast<uint32_t>(rgw_shards_max());
         if (*val > limit) {
           s->err.message = fmt::format("NumShards cannot exceed {}", limit);
           return -EINVAL;
