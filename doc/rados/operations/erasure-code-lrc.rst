@@ -22,7 +22,7 @@ Reduce recovery bandwidth between hosts
 
 Although it is probably not an interesting use case when all hosts are
 connected to the same switch, reduced bandwidth usage can actually be
-observed.:
+observed:
 
 .. prompt:: bash $
 
@@ -37,7 +37,7 @@ Reduce recovery bandwidth between racks
 ---------------------------------------
 
 In Firefly the bandwidth reduction will only be observed if the primary
-OSD is in the same rack as the lost chunk.:
+OSD is in the same rack as the lost chunk:
 
 .. prompt:: bash $
 
@@ -196,7 +196,7 @@ Minimal testing
 
 It is strictly equivalent to using a *K=2* *M=1* erasure code profile. The *DD*
 implies *K=2*, the *c* implies *M=1* and the *isa* plugin is used
-by default.:
+by default:
 
 .. prompt:: bash $
    
@@ -258,7 +258,7 @@ specify the EC backend/algorithm on a per layer basis using the low
 level configuration. The second argument in layers='[ [ "DDc", "" ] ]'
 is actually an erasure code profile to be used for this level. The
 example below specifies the Jerasure backend with the cauchy technique to
-be used in the lrcpool.:
+be used in the lrcpool:
 
 .. prompt:: bash $
 

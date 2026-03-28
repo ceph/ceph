@@ -28,7 +28,7 @@ To enable automatic read balancing, you must turn on the *balancer module*
    ceph balancer on
    ceph balancer mode <read|upmap-read>
 
-Both ``read`` and ``upmap-read`` mode make use of ``pg-upmap-primary``. In order
+Both the ``read`` and ``upmap-read`` modes make use of ``pg-upmap-primary``. In order
 to use ``pg-upmap-primary``, the cluster cannot have any pre-Reef clients.
 
 If you want to use a different balancer or if you want to make your
@@ -97,7 +97,7 @@ Primaries are updated with an offline optimizer that is built into the
    If you are working in a vstart cluster, you may pass the ``--vstart`` parameter
    as shown above so the CLI commands are formatted with the `./bin/` prefix.
 
-   Note that any time the number of pgs changes (for instance, if the pg autoscaler [:ref:`pg-autoscaler`]
+   Note that any time the number of pgs changes (for instance, if the PG autoscaler [:ref:`pg-autoscaler`]
    kicks in), you should consider rechecking the scores and rerunning the balancer if needed.
 
 To see some details about what the tool is doing, you can pass

@@ -5,7 +5,7 @@
 Ceph stores, replicates, and rebalances data objects across a RADOS cluster
 dynamically. Because different users store objects in different pools for
 different purposes on many OSDs, Ceph operations require a certain amount of
-data- placement planning. The main data-placement planning concepts in Ceph
+data-placement planning. The main data-placement planning concepts in Ceph
 include:
 
 - **Pools:** Ceph stores data within pools, which are logical groups used for

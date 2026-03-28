@@ -477,7 +477,7 @@ from the old ones.
 Factors Relevant To Specifying pg_num
 =====================================
 
-Performance and and even data distribution across
+Performance and even data distribution across
 OSDs weigh in favor of a higher number of PGs. Conserving CPU resources and
 minimizing memory usage weigh in favor of a lower number of PGs.
 The latter was more of a concern before Filestore OSDs were deprecated, so

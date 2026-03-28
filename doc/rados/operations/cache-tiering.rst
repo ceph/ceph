@@ -11,7 +11,7 @@
    tiers. The upstream Ceph community also recommends migrating from legacy
    deployments.
 
-A cache tier provides Ceph Clients with better I/O performance for a subset of
+A cache tier provides Ceph clients with better I/O performance for a subset of
 the data stored in a backing storage tier. Cache tiering involves creating a
 pool of relatively fast/expensive storage devices (e.g., solid state drives)
 configured to act as a cache tier, and a backing pool of either erasure-coded
@@ -366,7 +366,7 @@ For example, to flush or evict at 1M objects, execute the following:
    agent will begin flushing or evicting when either threshold is triggered.
 
 .. note:: All client requests will be blocked only when  ``target_max_bytes`` or
-   ``target_max_objects`` reached
+   ``target_max_objects`` is reached.
 
 Relative Sizing
 ~~~~~~~~~~~~~~~
@@ -396,7 +396,7 @@ objects with a higher speed. To set the ``cache_target_dirty_high_ratio``:
    ceph osd pool set {cachepool} cache_target_dirty_high_ratio {0.0..1.0}
 
 For example, setting the value to ``0.6`` will begin aggressively flush dirty
-objects when they reach 60% of the cache pool's capacity. obviously, we'd
+objects when they reach 60% of the cache pool's capacity. Obviously, we'd
 better set the value between dirty_ratio and full_ratio:
 
 .. prompt:: bash $
@@ -441,7 +441,7 @@ cache tier:
 
 .. prompt:: bash $
 
-   ceph osd pool {cache-tier} cache_min_evict_age {#seconds}
+   ceph osd pool set {cache-tier} cache_min_evict_age {#seconds}
 
 For example, to evict objects after 30 minutes, execute the following:
 

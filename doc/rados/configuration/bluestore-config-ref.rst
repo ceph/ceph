@@ -60,7 +60,7 @@ To specify a WAL device or DB device, run the following command:
 
    ceph-volume lvm prepare --bluestore --data <device> --block.wal <wal-device> --block.db <db-device>
 
-.. note:: The option ``--data`` can take as its argument any of the the
+.. note:: The option ``--data`` can take as its argument any of the
    following devices: logical volumes specified using *vg/lv* notation,
    existing logical volumes, and GPT partitions.
 
@@ -88,7 +88,7 @@ sense to specify the block device only and to leave ``block.db`` and
    ceph-volume lvm create --bluestore --data /dev/sda
 
 If the devices to be used for a BlueStore OSD are pre-created logical volumes,
-then the :ref:`ceph-volume-lvm` call for an logical volume named
+then the :ref:`ceph-volume-lvm` call for a logical volume named
 ``ceph-vg/block-lv`` is as follows:
 
 .. prompt:: bash $
@@ -104,7 +104,7 @@ If you have a mix of fast and slow devices (for example, SSD or HDD), then we
 recommend placing ``block.db`` on the faster device while ``block`` (that is,
 the data) is stored on the slower device (that is, the rotational drive).
 
-You must create these volume groups and these logical volumes manually. as The
+You must create these volume groups and these logical volumes manually. The
 ``ceph-volume`` tool is currently unable to do so [create them?] automatically.
 
 The following procedure illustrates the manual creation of volume groups and
@@ -193,7 +193,7 @@ BlueStore can be configured to automatically resize its caches, provided that
 certain conditions are met: TCMalloc must be configured as the memory allocator
 and the ``bluestore_cache_autotune`` configuration option must be enabled (note
 that it is currently enabled by default). When automatic cache sizing is in
-effect, BlueStore attempts to keep OSD heap-memory usage under a certain target
+effect, BlueStore attempts to keep OSD heap memory usage under a certain target
 size (as determined by ``osd_memory_target``). This approach makes use of a
 best-effort algorithm and caches do not shrink smaller than the size defined by
 the value of ``osd_memory_cache_min``. Cache ratios are selected in accordance
@@ -298,7 +298,7 @@ The compression modes are as follows:
 For more information about the *compressible* and *incompressible* I/O hints,
 see :c:func:`rados_set_alloc_hint`.
 
-Note that data in Bluestore will be compressed only if the data chunk will be
+Note that data in BlueStore will be compressed only if the data chunk will be
 sufficiently reduced in size (as determined by the ``bluestore compression
 required ratio`` setting). No matter which compression modes have been used, if
 the data chunk is too big, then it will be discarded and the original
@@ -440,16 +440,16 @@ its value from the value of either :confval:`bluestore_min_alloc_size_hdd` or
 :confval:`bluestore_min_alloc_size_ssd`, depending on the OSD's ``rotational``
 attribute. Thus if an OSD is created on an HDD, BlueStore is initialized with
 the current value of :confval:`bluestore_min_alloc_size_hdd`; but with SSD OSDs
-(including NVMe devices), Bluestore is initialized with the current value of
+(including NVMe devices), BlueStore is initialized with the current value of
 :confval:`bluestore_min_alloc_size_ssd`.
 
 In Mimic and earlier releases, the default values were 64KB for rotational
 media (HDD) and 16KB for non-rotational media (SSD). The Octopus release
-changed the the default value for non-rotational media (SSD) to 4KB, and the
+changed the default value for non-rotational media (SSD) to 4KB, and the
 Pacific release changed the default value for rotational media (HDD) to 4KB.
 
 These changes were driven by space amplification that was experienced by Ceph
-RADOS GateWay (RGW) deployments that hosted large numbers of small files
+RADOS Gateway (RGW) deployments that hosted large numbers of small files
 (S3/Swift objects).
 
 For example, when an RGW client stores a 1 KB S3 object, that object is written
