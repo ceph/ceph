@@ -31,7 +31,7 @@ class BaseConfig:
         self.memory_request: Optional[int] = None
         self.memory_limit: Optional[int] = None
         self.log_to_journald: Optional[bool] = None
-
+        self.mon_cluster_log_to_file: Optional[bool] = True
         self.container_init: bool = CONTAINER_INIT
         # FIXME(refactor) : should be Optional[ContainerEngine]
         self.container_engine: Any = None
