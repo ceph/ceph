@@ -234,6 +234,7 @@ Request Entities
 | ``Permission``            | String      | The permission given to the ``Grantee`` object.                                              |
 +---------------------------+-------------+----------------------------------------------------------------------------------------------+
 
+.. note:: For accounts users, the ``Owner`` and ``ID`` in ``AccessControlPolicy`` may be set to either the legacy user ID or the new account ID. Both are accepted for backward compatibility.
 
 
 Initiate Multi-part Upload
