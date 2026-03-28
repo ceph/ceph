@@ -29,6 +29,9 @@
 #include "scrub_machine_lstnr.h"
 #include "scrub_reservations.h"
 
+#include "common/tracer.h"
+
+
 /// a wrapper that sets the FSM state description used by the
 /// PgScrubber
 /// \todo consider using the full NamedState as in Peering
@@ -291,11 +294,14 @@ class ScrubMachine : public ScrubFsmIf, public sc::state_machine<ScrubMachine, N
  public:
   friend class PgScrubber;
 
-  explicit ScrubMachine(PG* pg, ScrubMachineListener* pg_scrub);
+  explicit ScrubMachine(PG* pg, ScrubMachineListener* pg_scrub, jspan_ptr tracer);
   virtual ~ScrubMachine();
 
   spg_t m_pg_id;
   ScrubMachineListener* m_scrbr;
+  jspan_ptr m_tracer;
+  jspan_ptr m_parent_trace;
+  jspan_context m_replica_parent_ctx{false, false};  ///< trace context received from primary via MOSDRepScrub
   std::ostream& gen_prefix(std::ostream& out) const;
 
   void assert_not_in_session() const final;
@@ -313,6 +319,10 @@ class ScrubMachine : public ScrubFsmIf, public sc::state_machine<ScrubMachine, N
 
   void process_event(const boost::statechart::event_base& evt) final {
     sc::state_machine<ScrubMachine, NotActive>::process_event(evt);
+  }
+
+  void set_replica_parent_ctx(const jspan_context& ctx){
+    m_replica_parent_ctx = ctx;
   }
 
   /// the time when the session was initiated
