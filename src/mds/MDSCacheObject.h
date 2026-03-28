@@ -114,10 +114,11 @@ class MDSCacheObject {
   int get_num_ref(int by = -1) const {
 #ifdef MDS_REF_SET
     if (by >= 0) {
-      if (ref_map.find(by) == ref_map.end()) {
+      auto it = ref_map.find(by);
+      if (it == ref_map.end()) {
 	return 0;
       } else {
-        return ref_map.find(by)->second;
+        return it->second;
       }
     }
 #endif
@@ -137,7 +138,8 @@ class MDSCacheObject {
   virtual void _put() {}
   void put(int by) {
 #ifdef MDS_REF_SET
-    if (ref == 0 || ref_map[by] == 0) {
+    auto& ref_by = ref_map[by];
+    if (ref == 0 || ref_by == 0) {
 #else
     if (ref == 0) {
 #endif
@@ -145,7 +147,7 @@ class MDSCacheObject {
     } else {
       ref--;
 #ifdef MDS_REF_SET
-      ref_map[by]--;
+      ref_by--;
 #endif
       if (ref == 0)
 	last_put();
@@ -166,9 +168,10 @@ class MDSCacheObject {
       first_get();
     ref++;
 #ifdef MDS_REF_SET
-    if (ref_map.find(by) == ref_map.end())
-      ref_map[by] = 0;
-    ref_map[by]++;
+    auto [it, inserted] = ref_map.emplace(by, (int)1);
+    if (!inserted) {
+      it->second++;
+    }
 #endif
   }
 
