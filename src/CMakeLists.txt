@@ -815,11 +815,15 @@ install(TARGETS ceph-mon DESTINATION bin)
 
 # OSD/ObjectStore
 
-include(TestBigEndian)
-test_big_endian(CEPH_BIG_ENDIAN)
-if(NOT CEPH_BIG_ENDIAN)
-  set(CEPH_LITTLE_ENDIAN 1)
-endif()
+if(CMAKE_CXX_BYTE_ORDER STREQUAL "BIG_ENDIAN")                                                                                                                                                                      
+  message(STATUS "CEPH_BIG_ENDIAN")                                                                                                                                                                                 
+  set(CEPH_BIG_ENDIAN ON)                                                                                                                                                                                           
+elseif(CMAKE_CXX_BYTE_ORDER STREQUAL "LITTLE_ENDIAN")                                                                                                                                                               
+  message(STATUS "CEPH_BIG_ENDIAN")                                                                                                                                                                                 
+  set(CEPH_LITTLE_ENDIAN ON)                                                                                                                                                                                        
+else()                                                                                                                                                                                                              
+  message(WARNING "Endianness could not be determined.")                                                                                                                                                            
+endif()                                                                                                                                                                                                             
 
 add_subdirectory(kv)
 add_subdirectory(os)

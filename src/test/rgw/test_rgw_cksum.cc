@@ -429,9 +429,10 @@ TEST(RGWCksum, CRC64NVME_UNDIGEST)
   digest1->Update((const unsigned char *)lacrimae.c_str(), lacrimae.length());
 
   auto cksum1 = rgw::cksum::finalize_digest(digest1, t);
-
-  uint64_t crc1 = rgw::digest::byteswap(std::get<uint64_t>(*cksum1.get_crc()));
-
+  uint64_t crc1 = std::get<uint64_t>(*cksum1.get_crc());
+  if constexpr (std::endian::native != std::endian::big) {
+    crc1 = rgw::digest::byteswap(crc1);
+  }
   uint64_t crc2 = spdk_crc64_nvme((const unsigned char *)lacrimae.c_str(),
 				  lacrimae.length(), 0ULL);
   ASSERT_EQ(crc1, crc2);
@@ -529,39 +530,42 @@ TEST(RGWCksum, CRC64NVME_COMBINE3)
 
   uint64_t spdk_crc1 = spdk_crc64_nvme((const unsigned char *)dolor.c_str(),
 				       dolor.length(), 0ULL);
-  auto cksum_crc1 =
-    rgw::digest::byteswap(std::get<uint64_t>(*cksum1.get_crc()));
-
+  uint64_t cksum_crc1 = std::get<uint64_t>(*cksum1.get_crc());
+  if constexpr (std::endian::native != std::endian::big) {
+    cksum_crc1 = rgw::digest::byteswap(cksum_crc1);
+  }
   ASSERT_EQ(cksum_crc1, spdk_crc1);
 
   /* lorem */
   digest2->Update((const unsigned char *)lorem.c_str(), lorem.length());
   auto cksum2 = rgw::cksum::finalize_digest(digest2, t);
-
   uint64_t spdk_crc2 = spdk_crc64_nvme((const unsigned char *)lorem.c_str(),
 				       lorem.length(), 0ULL);
-  auto cksum_crc2 =
-    rgw::digest::byteswap(std::get<uint64_t>(*cksum2.get_crc()));
-
+  uint64_t cksum_crc2 = std::get<uint64_t>(*cksum2.get_crc());
+  if constexpr (std::endian::native != std::endian::big) {
+    cksum_crc2 = rgw::digest::byteswap(cksum_crc2);
+  }
   ASSERT_EQ(cksum_crc2, spdk_crc2);
 
   /* dolorem */
   digest3->Update((const unsigned char *)dolorem.c_str(), dolorem.length());
   auto cksum3 = rgw::cksum::finalize_digest(digest3, t);
-
   uint64_t spdk_crc3 = spdk_crc64_nvme((const unsigned char *)dolorem.c_str(),
 				       dolorem.length(), 0ULL);
-  auto cksum_crc3 =
-    rgw::digest::byteswap(std::get<uint64_t>(*cksum3.get_crc()));
-
+  uint64_t cksum_crc3 = std::get<uint64_t>(*cksum3.get_crc());
+  if constexpr (std::endian::native != std::endian::big) {
+    cksum_crc3 = rgw::digest::byteswap(cksum_crc3);
+  }
   ASSERT_EQ(cksum_crc3, spdk_crc3);
 
   /* API combine check */
   auto cksum4 = rgw::cksum::combine_crc_cksum(cksum1, cksum2, lorem.length());
   ASSERT_TRUE(cksum4);
 
-  auto cksum_crc4 =
-    rgw::digest::byteswap(std::get<uint64_t>(*cksum4->get_crc()));
+  uint64_t cksum_crc4 = std::get<uint64_t>(*cksum4->get_crc());
+  if constexpr (std::endian::native != std::endian::big) {
+    cksum_crc4 = rgw::digest::byteswap(cksum_crc4);
+  }
 
   auto armor3 = cksum3.to_armor();
   auto armor4 = cksum4->to_armor();
@@ -606,10 +610,10 @@ TEST(RGWCksum, CRC32_COMBINE3)
   uint32_t madler_crc1 =
     crc32iso_hdlc_word(0U, (const unsigned char *)dolor.c_str(),
 		       dolor.length());
-
-  auto cksum_crc1 =
-    rgw::digest::byteswap(std::get<uint32_t>(*cksum1.get_crc()));
-
+  auto cksum_crc1 = std::get<uint32_t>(*cksum1.get_crc());
+  if constexpr (std::endian::native != std::endian::big) {
+    cksum_crc1 = rgw::digest::byteswap(cksum_crc1);
+  }
   ASSERT_EQ(cksum_crc1, madler_crc1);
 
   /* lorem */
@@ -619,9 +623,10 @@ TEST(RGWCksum, CRC32_COMBINE3)
   uint32_t madler_crc2 =
     crc32iso_hdlc_word(0U, (const unsigned char *)lorem.c_str(),
 		       lorem.length());
-  auto cksum_crc2 =
-    rgw::digest::byteswap(std::get<uint32_t>(*cksum2.get_crc()));
-
+  auto cksum_crc2 = std::get<uint32_t>(*cksum2.get_crc());
+  if constexpr (std::endian::native != std::endian::big) {
+    cksum_crc2 = rgw::digest::byteswap(cksum_crc2);
+  }
   ASSERT_EQ(cksum_crc2, madler_crc2);
 
   /* dolorem */
@@ -631,17 +636,20 @@ TEST(RGWCksum, CRC32_COMBINE3)
   uint32_t madler_crc3 =
     crc32iso_hdlc_word(0U, (const unsigned char *)dolorem.c_str(),
 		       dolorem.length());
-  auto cksum_crc3 =
-    rgw::digest::byteswap(std::get<uint32_t>(*cksum3.get_crc()));
-
+  auto cksum_crc3 = std::get<uint32_t>(*cksum3.get_crc());
+  if constexpr (std::endian::native != std::endian::big) {
+    cksum_crc3 = rgw::digest::byteswap(cksum_crc3);
+  }
   ASSERT_EQ(cksum_crc3, madler_crc3);
 
   /* API combine check */
   auto cksum4 = rgw::cksum::combine_crc_cksum(cksum1, cksum2, lorem.length());
   ASSERT_TRUE(cksum4);
 
-  auto cksum_crc4 =
-    rgw::digest::byteswap(std::get<uint32_t>(*cksum4->get_crc()));
+  auto cksum_crc4 = std::get<uint32_t>(*cksum4->get_crc());
+  if constexpr (std::endian::native != std::endian::big) {
+    cksum_crc4 = rgw::digest::byteswap(cksum_crc4);
+  }
 
   if (verbose) {
     std::cout << "\ncrc1/dolor spdk: " << madler_crc1
@@ -681,9 +689,10 @@ TEST(RGWCksum, CRC32C_COMBINE3)
   uint32_t madler_crc1 = crc32iscsi_word(0U, (const unsigned char *)dolor.c_str(),
 				       dolor.length());
 
-  auto cksum_crc1 =
-    rgw::digest::byteswap(std::get<uint32_t>(*cksum1.get_crc()));
-
+  auto cksum_crc1 = std::get<uint32_t>(*cksum1.get_crc());
+  if constexpr (std::endian::native != std::endian::big) {
+    cksum_crc1 = rgw::digest::byteswap(cksum_crc1);
+  }
   ASSERT_EQ(cksum_crc1, madler_crc1);
 
   /* lorem */
@@ -692,9 +701,10 @@ TEST(RGWCksum, CRC32C_COMBINE3)
 
   uint32_t madler_crc2 = crc32iscsi_word(0U, (const unsigned char *)lorem.c_str(),
 					 lorem.length());
-  auto cksum_crc2 =
-    rgw::digest::byteswap(std::get<uint32_t>(*cksum2.get_crc()));
-
+  auto cksum_crc2 = std::get<uint32_t>(*cksum2.get_crc());
+  if constexpr (std::endian::native != std::endian::big) {
+    cksum_crc2 = rgw::digest::byteswap(cksum_crc2);
+  }
   ASSERT_EQ(cksum_crc2, madler_crc2);
 
   /* dolorem */
@@ -703,17 +713,20 @@ TEST(RGWCksum, CRC32C_COMBINE3)
 
   uint32_t madler_crc3 = crc32iscsi_word(0U, (const unsigned char *)dolorem.c_str(),
 					 dolorem.length());
-  auto cksum_crc3 =
-    rgw::digest::byteswap(std::get<uint32_t>(*cksum3.get_crc()));
-
+  auto cksum_crc3 = std::get<uint32_t>(*cksum3.get_crc());
+  if constexpr (std::endian::native != std::endian::big) {
+    cksum_crc3 = rgw::digest::byteswap(cksum_crc3);
+  }
   ASSERT_EQ(cksum_crc3, madler_crc3);
 
   /* API combine check */
   auto cksum4 = rgw::cksum::combine_crc_cksum(cksum1, cksum2, lorem.length());
   ASSERT_TRUE(cksum4);
 
-  auto cksum_crc4 =
-    rgw::digest::byteswap(std::get<uint32_t>(*cksum4->get_crc()));
+  auto cksum_crc4 = std::get<uint32_t>(*cksum4->get_crc());
+  if constexpr (std::endian::native != std::endian::big) {
+    cksum_crc4 = rgw::digest::byteswap(cksum_crc4);
+  }
 
   if (verbose) {
     std::cout << "\ncrc1/dolor spdk: " << madler_crc1
