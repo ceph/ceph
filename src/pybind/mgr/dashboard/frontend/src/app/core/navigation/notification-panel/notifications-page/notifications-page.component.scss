@@ -42,7 +42,6 @@
     line-height: var(--cds-label-01-line-height);
   }
 }
-
 .notification-date {
   color: var(--cds-text-secondary);
   font-size: var(--cds-label-01-font-size);
@@ -51,14 +50,17 @@
 
 // Empty state
 .empty-state {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--cds-spacing-03);
   color: var(--cds-text-secondary);
   margin-top: var(--cds-spacing-05);
+  margin-bottom: var(--cds-spacing-05);
+  margin-left: var(--cds-spacing-03);
 
   p {
-    margin: var(--cds-spacing-03) 0 0 0;
-    font-size: var(--cds-body-01-font-size);
-    line-height: var(--cds-body-01-line-height);
+    margin: 0;
   }
 }
 
@@ -132,7 +134,8 @@
 .empty-icon,
 .no-selection-icon {
   fill: var(--cds-icon-secondary);
-  margin-bottom: var(--cds-spacing-05);
+  margin-bottom: var(--cds-spacing-08);
+  margin-left: var(--cds-spacing-8);
 }
 
 // Text utilities
