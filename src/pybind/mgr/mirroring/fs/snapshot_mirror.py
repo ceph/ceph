@@ -179,7 +179,9 @@ class FSPolicy:
     def process_updates(self):
         def acquire_message(dir_path):
             return json.dumps({'dir_path': dir_path,
-                               'mode': 'acquire'
+                               'mode': 'acquire',
+                               'sync_latest_snapshot': self.sync_latest_snapshot,
+                               'sync_from_snapshot': self.sync_from_snapshot
                                })
         def release_message(dir_path):
             return json.dumps({'dir_path': dir_path,
@@ -202,8 +204,10 @@ class FSPolicy:
                     # take care to not overwrite purge status
                     update_map[dir_path] = {'version': 1,
                                             'instance_id': lookup_info['instance_id'],
-                                            'last_shuffled': lookup_info['mapped_time']
-                    }
+                                            'last_shuffled': lookup_info['mapped_time'],
+                                            'sync_latest_snapshot': lookup_info['sync_latest_snapshot'] if 'sync_latest_snapshot' in lookup_info else False,
+                                            'sync_from_snapshot': lookup_info['sync_from_snapshot'] if 'sync_from_snapshot' in lookup_info else None
+                                            }
                     if lookup_info['purging']:
                         update_map[dir_path]['purging'] = 1
                 elif action_type == ActionType.MAP_REMOVE:
@@ -219,7 +223,7 @@ class FSPolicy:
                 self.notifier.notify(dir_path, message, self.handle_peer_ack)
             self.dir_paths.clear()
 
-    def add_dir(self, dir_path):
+    def add_dir(self, dir_path, sync_latest_snapshot, sync_from_snapshot):
         with self.lock:
             lookup_info = self.policy.lookup(dir_path)
             if lookup_info:
@@ -230,8 +234,13 @@ class FSPolicy:
             schedule = self.policy.add_dir(dir_path)
             if not schedule:
                 return
-            update_map = {dir_path: {'version': 1, 'instance_id': '', 'last_shuffled': 0.0}}
+            update_map = {dir_path: {'version': 1, 'instance_id': '', 'last_shuffled': 0.0,
+                                     'sync_latest_snapshot': sync_latest_snapshot,
+                                     'sync_from_snapshot': sync_from_snapshot}}
+
             updated = False
+            self.sync_latest_snapshot = sync_latest_snapshot
+            self.sync_from_snapshot = sync_from_snapshot
             def update_safe(updates, removals, r):
                 nonlocal updated
                 updated = True
@@ -692,7 +701,7 @@ class FSSnapshotMirror:
             raise MirrorException(-errno.EINVAL, f'{dir_path} should be an absolute path')
         return os.path.normpath(dir_path)
 
-    def add_dir(self, filesystem, dir_path):
+    def add_dir(self, filesystem, dir_path, sync_latest_snapshot, sync_from_snapshot):
         try:
             with self.lock:
                 if not self.filesystem_exist(filesystem):
@@ -702,7 +711,7 @@ class FSSnapshotMirror:
                     raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
                 dir_path = FSSnapshotMirror.norm_path(dir_path)
                 log.debug(f'path normalized to {dir_path}')
-                fspolicy.add_dir(dir_path)
+                fspolicy.add_dir(dir_path, sync_latest_snapshot, sync_from_snapshot)
                 return 0, json.dumps({}), ''
         except MirrorException as me:
             return me.args[0], '', me.args[1]

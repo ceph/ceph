@@ -26,7 +26,9 @@ public:
     virtual ~Listener() {
     }
 
-    virtual void acquire_directory(std::string_view dir_path) = 0;
+    virtual void acquire_directory(std::string_view dir_path,
+                                   bool sync_latest_snapshot = false,
+                                   std::string_view sync_from_snapshot = "") = 0;
     virtual void release_directory(std::string_view dir_path) = 0;
   };
 

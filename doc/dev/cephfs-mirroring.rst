@@ -192,7 +192,7 @@ To configure a directory for mirroring, run a command of the following form:
 
 .. prompt:: bash $
 
-   ceph fs snapshot mirror add <fs_name> <path>
+   ceph fs snapshot mirror add <fs_name> <path> [--sync_from_snapshot <snap_name>] [<--sync-latest-snapshot>]
 
 To stop a directory from mirroring snapshots, run a command of the following
 form:
@@ -235,6 +235,17 @@ directories are not allowed to be added for mirroring:
 
 Commands for checking directory mapping (to mirror daemons) and directory
 distribution are detailed in the `Mirror Daemon Status` section.
+
+Adding a directory starts mirroring of the already existing snapshots of a directory,
+starting from the first snapshot (by default) and follows the order of snapshot creation.
+``--sync_from_snapshot`` option is used to start mirroring from a specified snapshot.
+
+``--sync-latest-snapshot`` option picks only the latest snapshots for syncing.
+When numerous snapshots are created at once, it picks only the last snapshot for syncing.
+This option is useful when each snapshot mirroring would take several hours to finish and the user
+has taken snapshots in the mean time, which are unimportant. So when the current snapshot sync is
+finished, the mirror daemon picks the then latest snapshot for syncing. Thus only the latest snapshots
+are being mirrored.
 
 Bootstrap Peers
 ---------------
