@@ -241,6 +241,10 @@ class IngressService(CephService):
         if ip != '[::]' and frontend_port:
             daemon_spec.port_ips = {str(frontend_port): ip}
 
+        ipv6 = False
+        if isinstance(ip, str) and type(ipaddress.ip_address(ip)) is ipaddress.IPv6Address:
+            ipv6 = True
+
         monitor_ip, monitor_port = self.get_monitoring_details(daemon_spec.service_name, daemon_spec.host)
         if monitor_ip:
             monitor_ips = [monitor_ip]
@@ -275,6 +279,7 @@ class IngressService(CephService):
                 'v4v6_flag': v4v6_flag,
                 'monitor_ssl_file': monitor_ssl_file,
                 'peer_hosts': peer_hosts,
+                'ipv6': ipv6,
             }
         )
         config_files = {
