@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include "rgw_common.h"
 #include "rgw_sal.h"
 
 /**
@@ -48,7 +49,7 @@ struct RGWObjState {
 
   RGWObjVersionTracker objv_tracker;
 
-  std::map<std::string, ceph::buffer::list> attrset;
+  rgw::sal::Attrs attrset;
 
   RGWObjState() {};
   RGWObjState(const RGWObjState &rhs) : obj(rhs.obj) {

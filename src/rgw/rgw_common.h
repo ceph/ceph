@@ -60,7 +60,59 @@ namespace ceph {
 }
 
 namespace rgw::sal {
-  using Attrs = std::map<std::string, ceph::buffer::list>;
+    class Attrs {
+      public:
+        
+        using iterator = std::map<std::string, ceph::bufferlist>::iterator;
+        using const_iterator = std::map<std::string, ceph::bufferlist>::const_iterator;
+
+        // Constructors
+        Attrs() = default;
+        Attrs(const std::map<std::string, ceph::bufferlist>& attrs);
+        Attrs(std::map<std::string, ceph::bufferlist>&& attrs);
+
+        // Map-like interface
+        ceph::bufferlist& operator[](const std::string& key);
+        const ceph::bufferlist& at(const std::string& key) const;
+        iterator begin();
+        const_iterator begin() const;
+        iterator end();
+        const_iterator end() const;
+        bool empty() const;
+        size_t size() const;
+        void clear();
+        iterator find(const std::string& key);
+        const_iterator find(const std::string& key) const;
+        size_t count(const std::string& key) const;
+        void erase(iterator pos);
+        size_t erase(const std::string& key);
+
+        // Conversion operators
+        explicit operator std::map<std::string, ceph::bufferlist>&();
+        explicit operator const std::map<std::string, ceph::bufferlist>&() const;
+
+
+        void encode(ceph::bufferlist& bl) const {
+          ::ceph::encode(attrs_, bl);
+        }
+
+        void decode(ceph::bufferlist::const_iterator& bl) {
+          ::ceph::decode(attrs_, bl);
+      }
+
+
+      private:
+        std::map<std::string, ceph::bufferlist> attrs_;
+      };
+}
+
+inline void encode(const rgw::sal::Attrs &p, ceph::bufferlist &bl) {
+    p.encode(bl);
+}
+
+inline void decode(rgw::sal::Attrs &o, const ceph::bufferlist &bl) {
+    auto p = bl.begin();
+    o.decode(p);
 }
 
 namespace rgw::lua {
