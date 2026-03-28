@@ -707,6 +707,9 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
   uint64_t bytes_written = 0;
   sec_duration read_time{0};
   sec_duration write_time{0};
+  uint64_t discovered_delta = 0;
+
+  inc_files_started(dir_root);
   int r = ceph_openat(m_local_mount, fh.c_fd, epath.c_str(), O_RDONLY | O_NOFOLLOW, 0);
   if (r < 0) {
     derr << ": failed to open local file path=" << epath << ": "
@@ -734,6 +737,8 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
   while (num_blocks > 0) {
     auto offset = b->offset;
     auto len = b->len;
+    discovered_delta += b->len;
+    inc_delta_bytes(dir_root, discovered_delta);
 
     dout(10) << ": dir_root=" << dir_root << ", epath=" << epath << ", block: ["
              << offset << "~" << len << "]" << dendl;
@@ -802,6 +807,7 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
         break;
       }
       bytes_written += r;
+      inc_actual_sync_bytes(dir_root, r);
 
       offset += r;
     }
@@ -1725,8 +1731,20 @@ int PeerReplayer::SnapDiffSync::get_changed_blocks(const std::string &epath,
   dout(20) << ": dir_root=" << m_dir_root << ", epath=" << epath
            << ", sync_check=" << sync_check << dendl;
 
+  using clock = std::chrono::steady_clock;
+  using seconds = std::chrono::duration<double>;
+  seconds blockdiff_time{0};
+  uint64_t bd_synced_bytes = 0;
+
   if (!sync_check || stx.stx_size <= m_peer_replayer.get_blockdiff_min_file_size()) {
-    return SyncMechanism::get_changed_blocks(epath, stx, sync_check, callback);
+    auto bd_s = clock::now();
+    int r = SyncMechanism::get_changed_blocks(epath, stx, sync_check, callback);
+    auto bd_e = clock::now();
+    blockdiff_time = seconds(bd_e - bd_s);
+    bd_synced_bytes = stx.stx_size;
+    if ( r == 0 )
+      m_peer_replayer.set_blockdiff_metrics(m_dir_root, bd_synced_bytes, blockdiff_time.count());
+    return r;
   }
 
   ceph_file_blockdiff_info info;
@@ -1739,10 +1757,18 @@ int PeerReplayer::SnapDiffSync::get_changed_blocks(const std::string &epath,
 
   if (r < 0) {
     dout(20) << ": new file epath=" << epath << dendl;
-    return SyncMechanism::get_changed_blocks(epath, stx, sync_check, callback);
+    auto bd_s = clock::now();
+    int r = SyncMechanism::get_changed_blocks(epath, stx, sync_check, callback);
+    auto bd_e = clock::now();
+    blockdiff_time = seconds(bd_e - bd_s);
+    bd_synced_bytes = stx.stx_size;
+    if ( r == 0 )
+      m_peer_replayer.set_blockdiff_metrics(m_dir_root, bd_synced_bytes, blockdiff_time.count());
+    return r;
   }
 
   r = 1;
+  auto bd_s = clock::now();
   while (true) {
     ceph_file_blockdiff_changedblocks blocks;
     r = ceph_file_blockdiff(&info, &blocks);
@@ -1753,11 +1779,18 @@ int PeerReplayer::SnapDiffSync::get_changed_blocks(const std::string &epath,
 
     int rr = r;
     if (blocks.num_blocks) {
+      auto bd_num_blocks = blocks.num_blocks;
+      auto bd_cblock = blocks.b;
       r = callback(blocks.num_blocks, blocks.b);
       ceph_free_file_blockdiff_buffer(&blocks);
       if (r < 0) {
         derr << ": blockdiff callback returned error: r=" << r << dendl;
         break;
+      }
+      while(bd_num_blocks > 0) {
+        bd_synced_bytes += bd_cblock->len;
+	    --bd_num_blocks;
+	    bd_cblock++;
       }
     }
 
@@ -1766,6 +1799,11 @@ int PeerReplayer::SnapDiffSync::get_changed_blocks(const std::string &epath,
     }
     // else fetch next changed blocks
   }
+  // blockdiff throughput
+  auto bd_e = clock::now();
+  blockdiff_time = seconds(bd_e - bd_s);
+  if ( r == 0 )
+    m_peer_replayer.set_blockdiff_metrics(m_dir_root, bd_synced_bytes, blockdiff_time.count());
 
   ceph_file_blockdiff_finish(&info);
   return r;
@@ -2610,6 +2648,83 @@ std::string PeerReplayer::format_bytes(double bytes) {
   return out.str();
 };
 
+std::string format_throughput(double bps) {
+  const double KiB = 1024.0;
+  const double MiB = 1024.0 * 1024.0;
+  const double GiB = 1024.0 * 1024.0 * 1024.0;
+
+  std::ostringstream out;
+  out << std::fixed << std::setprecision(2);
+
+  if (bps >=GiB) {
+    out << (bps / GiB) << " GiB/s";
+  } else if (bps >= MiB) {
+    out << (bps / MiB) << " MiB/s";
+  } else {
+    out << (bps / KiB) << " KiB/s";
+  }
+
+  return out.str();
+};
+
+double PeerReplayer::compute_eta(PeerReplayer::SnapSyncStat& sync_stat) {
+  // mlock is held by the caller
+
+  static constexpr uint64_t MIN_FILES_SAMPLE = 25;
+  static constexpr uint64_t MIN_BYTES_SAMPLE = 1ULL * 16 * 1024 * 1024; // 16MiB
+
+  double read_time = sync_stat.read_time_sec;
+  double write_time = sync_stat.write_time_sec;
+  double bytes_read = sync_stat.bytes_read;
+  double bytes_written = sync_stat.bytes_written;
+  uint64_t files_started = sync_stat.files_started;
+  uint64_t files_synced = sync_stat.sync_files;
+  double read_bps = read_time > 0 ?  bytes_read / read_time : 0;
+  double write_bps = write_time > 0 ?  bytes_written / write_time : 0;
+  uint64_t discovered_delta_bytes = sync_stat.discovered_delta_bytes;
+  uint64_t synced_bytes = sync_stat.actual_sync_bytes;
+  uint64_t file_synced_bytes = sync_stat.sync_bytes;
+  uint64_t total_files = sync_stat.total_files;
+
+  if (read_time == 0 || write_time == 0)
+    return -1.0; //Calculating
+  if (files_synced < MIN_FILES_SAMPLE || file_synced_bytes < MIN_BYTES_SAMPLE)
+    return -1.0; //Calculating
+
+
+  if (sync_stat.snapdiff) {
+    /* blockdiff :
+     *   - total number of files with delta to be synced is known
+     *   - delta of each file is unknown, the avg delta per file is estimated
+     *   - effective bandwidth should accommodate blockdiff time
+     *   - effective bandwidth is based cumulative synced bytes and time taken, so
+     *     it considers total average past performance and hence it is mostly pessimistic
+     */
+    double avg_delta_per_file = (double)discovered_delta_bytes / (double)files_started;
+    double estimated_total_delta = avg_delta_per_file * total_files;
+    double effective_bw = (double) sync_stat.bd_sync_bytes / sync_stat.blockdiff_time_sec;
+
+    uint64_t remaining =
+        estimated_total_delta > synced_bytes
+        ? static_cast<uint64_t>(estimated_total_delta - synced_bytes)
+        : 0;
+
+    if (effective_bw <= 0)
+      return -1.0;
+    return remaining / effective_bw;
+  } else {
+    /* full sync :
+     *   -  effective bandwidth is mostly dependant on read and write, again
+     *      it's cumulative, so prediction is based on average past performace.
+     */
+    uint64_t remaining = sync_stat.total_bytes - synced_bytes;
+    double effective_bw = std::min(read_bps, write_bps);
+    if (effective_bw <= 0)
+      return -1.0; //Calculating
+    return remaining / effective_bw;
+  }
+}
+
 void PeerReplayer::peer_status(Formatter *f) {
   std::scoped_lock locker(m_lock);
   f->open_object_section("stats");
@@ -2672,6 +2787,7 @@ void PeerReplayer::peer_status(Formatter *f) {
         f->dump_string("sync_percent", os.str());
       }
       f->close_section(); //files
+      f->dump_string("eta", format_time(compute_eta(sync_stat)));
       f->close_section(); //current_syncing_snap
     }
     if (sync_stat.last_synced_snap) {

@@ -399,6 +399,13 @@ private:
     uint64_t bytes_written = 0; //actual bytes written counter, independently for each directory sync.
     double read_time_sec = 0.0; //actual read time in seconds counter, independently for each directroy sync.
     double write_time_sec = 0.0; //actual write time in seconds counter, independently for each directroy sync.
+    // eta related
+    // files_started will be ahead of sync_files as it's incremented just after delta discovery
+    uint64_t files_started = 0; //files picked up for sync counter, independently for each directory sync.
+    uint64_t actual_sync_bytes = 0; //actual bytes synced using delta, counter, independently for each directory sync.
+    uint64_t discovered_delta_bytes = 0; //discovered delta bytes counter, independently for each directory sync.
+    uint64_t bd_sync_bytes = 0; //actual bytes synced using SnapDiff/blockdiff counter
+    double blockdiff_time_sec = 0.0; //actual sync time using SnapDiff/blockdiff counter
   };
 
   void _inc_failed_count(const std::string &dir_root) {
@@ -442,6 +449,11 @@ private:
     sync_stat.bytes_written = 0;
     sync_stat.read_time_sec = 0.0;
     sync_stat.write_time_sec = 0.0;
+    sync_stat.files_started = 0;
+    sync_stat.actual_sync_bytes = 0;
+    sync_stat.discovered_delta_bytes = 0;
+    sync_stat.bd_sync_bytes = 0;
+    sync_stat.blockdiff_time_sec = 0.0;
   }
   void _set_last_synced_snap(const std::string &dir_root, uint64_t snap_id,
                             const std::string &snap_name) {
@@ -499,6 +511,12 @@ private:
     sync_stat.crawl_finished = state;
     sync_stat.crawl_duration = seconds;
   }
+  void set_blockdiff_metrics(const std::string &dir_root, const uint64_t bd_syncbytes, const double bd_time) {
+    std::scoped_lock locker(m_lock);
+    auto &sync_stat = m_snap_sync_stats.at(dir_root);
+    sync_stat.bd_sync_bytes += bd_syncbytes;
+    sync_stat.blockdiff_time_sec += bd_time;
+  }
   void add_io(const std::string &dir_root, const uint64_t& br, const uint64_t bw,
               const double rt, const double wt) {
     std::scoped_lock locker(m_lock);
@@ -508,10 +526,25 @@ private:
     sync_stat.read_time_sec += rt;
     sync_stat.write_time_sec += wt;
   }
+  void inc_delta_bytes(const std::string &dir_root, const uint64_t& b) {
+    std::scoped_lock locker(m_lock);
+    auto &sync_stat = m_snap_sync_stats.at(dir_root);
+    sync_stat.discovered_delta_bytes += b;
+  }
   void inc_sync_bytes(const std::string &dir_root, const uint64_t& b) {
     std::scoped_lock locker(m_lock);
     auto &sync_stat = m_snap_sync_stats.at(dir_root);
     sync_stat.sync_bytes += b;
+  }
+  void inc_actual_sync_bytes(const std::string &dir_root, const uint64_t& b) {
+    std::scoped_lock locker(m_lock);
+    auto &sync_stat = m_snap_sync_stats.at(dir_root);
+    sync_stat.actual_sync_bytes += b;
+  }
+  void inc_files_started(const std::string &dir_root) {
+    std::scoped_lock locker(m_lock);
+    auto &sync_stat = m_snap_sync_stats.at(dir_root);
+    sync_stat.files_started++;
   }
   void inc_sync_files(const std::string &dir_root) {
     std::scoped_lock locker(m_lock);
@@ -677,6 +710,7 @@ private:
   // format routines for peer_status
   static std::string format_bytes(double bytes);
   static std::string format_time(double total_seconds);
+  static double compute_eta(SnapSyncStat& sync_stat);
 };
 
 } // namespace mirror
