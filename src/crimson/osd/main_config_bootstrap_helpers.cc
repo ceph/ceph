@@ -173,7 +173,10 @@ _get_early_config(int argc, const char *argv[])
 	auto stop_perf_coll = seastar::deferred_stop(sharded_perf_coll());
 
 	local_conf().parse_env().get();
-	local_conf().parse_argv(early_args).get();
+	{
+	  std::vector<std::string> args_copy(early_args.begin(), early_args.end());
+	  local_conf().parse_argv(std::move(args_copy)).get();
+	}
 	local_conf().parse_config_files(ret.conf_file_list).get();
 
 	if (local_conf()->no_mon_config) {
