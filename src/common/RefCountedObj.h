@@ -16,7 +16,10 @@
 #ifndef CEPH_REFCOUNTEDOBJ_H
 #define CEPH_REFCOUNTEDOBJ_H
  
+#ifndef WITH_CRIMSON
 #include "common/ceph_mutex.h"
+#endif
+
 #include "common/ref.h"
 #include "include/common_fwd.h"
 

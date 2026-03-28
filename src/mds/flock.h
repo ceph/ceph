@@ -5,7 +5,7 @@
 #define CEPH_MDS_FLOCK_H
 
 #include "include/ceph_fs.h" // for ceph_filelock
-#include "include/types.h" // for client_t
+#include "include/client_t.h"
 
 #include <cstdint>
 #include <iosfwd>

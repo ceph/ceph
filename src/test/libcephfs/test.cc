@@ -46,6 +46,11 @@
 #include <random>
 #include <regex>
 
+#if __GNUC__ >= 4
+/* we test deprecated functions */
+  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
 using namespace std;
 
 static std::string generate_random_string(int length = 20) {

@@ -27,6 +27,7 @@
 #include "common/PriorityCache.h"
 #include "common/strtol.h"
 #include "include/common_fwd.h"
+#include "include/container_ios.h"
 #include "include/scope_guard.h"
 #include "include/str_list.h"
 #include "include/stringify.h"

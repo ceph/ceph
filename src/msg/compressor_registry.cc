@@ -4,7 +4,7 @@
 #include "compressor_registry.h"
 #include "common/ceph_context.h"
 #include "common/dout.h"
-#include "include/types.h" // for operator<<(std::vector)
+#include "include/container_ios.h"
 
 using namespace std::literals;
 

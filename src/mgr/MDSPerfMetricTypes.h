@@ -9,7 +9,9 @@
 #include <iosfwd>
 
 #include "include/cephfs/types.h" // for mds_rank_t
+#include "include/container_ios.h"
 #include "include/denc.h"
+#include "include/ceph_fs_encoder.h"
 #include "include/stringify.h"
 #include "include/utime.h"
 #include "common/Formatter.h"
