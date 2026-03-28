@@ -4642,3 +4642,27 @@ options:
   see_also:
   - rgw_enable_usage_log
   with_legacy: true
+- name: rgw_gcors_allow_origins
+  type: str
+  level: advanced
+  desc: When not empty, this value is returned as a response header Access-Control-Allow-Origins.
+  services:
+  - rgw
+- name: rgw_gcors_allow_headers
+  type: str
+  level: advanced
+  desc: When not empty, this value is returned as a response header Access-Control-Allow-Headers to preflight requests.
+  services:
+  - rgw
+- name: rgw_gcors_allow_methods
+  type: str
+  level: advanced
+  desc: When not empty, this value is returned as a response header Access-Control-Allow-Methods.
+  services:
+  - rgw
+- name: rgw_gcors_expose_headers
+  type: str
+  level: advanced
+  desc: When not empty, this value is returned as a response header Access-Control-Expose-Headers.
+  services:
+  - rgw

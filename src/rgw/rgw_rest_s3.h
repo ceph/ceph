@@ -710,6 +710,7 @@ protected:
     return s->info.args.exists("usage");
   }
   RGWOp *op_get() override;
+  RGWOp *op_options() override;
   RGWOp *op_head() override;
 public:
    RGWHandler_REST_Service_S3(const rgw::auth::StrategyRegistry& auth_registry) :

@@ -214,6 +214,7 @@ protected:
   req_state *s;
   RGWHandler *dialect_handler;
   rgw::sal::Driver* driver;
+  std::optional<RGWCORSRule> optional_global_cors;
   RGWCORSConfiguration bucket_cors;
   bool cors_exist;
   RGWQuota quota;
@@ -278,6 +279,7 @@ public:
     this->dialect_handler = dialect_handler;
   }
   int read_bucket_cors();
+  int read_global_cors();
   bool generate_cors_headers(std::string& origin, std::string& method, std::string& headers, std::string& exp_headers, unsigned *max_age);
 
   virtual int verify_params() { return 0; }
@@ -1929,6 +1931,7 @@ public:
 
   int verify_permission(optional_yield y) override {return 0;}
   int validate_cors_request(RGWCORSConfiguration *cc);
+  int validate_global_cors_request(RGWCORSRule *cc);
   void execute(optional_yield y) override;
   void get_response_params(std::string& allowed_hdrs, std::string& exp_hdrs, unsigned *max_age);
   void send_response() override = 0;
