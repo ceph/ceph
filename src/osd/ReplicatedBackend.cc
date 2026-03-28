@@ -481,7 +481,8 @@ void generate_transaction(
 	      extent.get_off(),
 	      extent.get_len(),
 	      op.buffer,
-	      op.fadvise_flags);
+	      op.fadvise_flags,
+	      op.write_hint); 
 	  },
 	  [&](const BufferUpdate::Zero &op) {
 	    t->zero(
@@ -1193,6 +1194,7 @@ Message * ReplicatedBackend::generate_subop(
   wr->new_temp_oid = new_temp_oid;
   wr->discard_temp_oid = discard_temp_oid;
   wr->updated_hit_set_history = hset_hist;
+  wr->write_hint = op_t.get_write_hint();
   return wr;
 }
 
@@ -1309,6 +1311,7 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
   p = const_cast<bufferlist&>(m->logbl).begin();
   decode(log, p);
   rm->opt.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+  rm->opt.set_write_hint(m->get_write_hint());
 
   bool update_snaps = false;
   if (!rm->opt.empty()) {

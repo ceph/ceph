@@ -79,6 +79,8 @@ public:
    * removed in main after U is released.
    */
   eversion_t pg_committed_to;
+  
+  int32_t write_hint;
 
   hobject_t new_temp_oid;      ///< new temp object that we must now start tracking
   hobject_t discard_temp_oid;  ///< previously used temp object that we can now stop tracking
@@ -100,6 +102,10 @@ public:
 
   int get_cost() const override {
     return data.length();
+  }
+  
+  int get_write_hint() const {
+    return write_hint;
   }
 
   void set_txn_payload(bufferlist bl)
@@ -143,6 +149,8 @@ public:
 
     ceph_assert(header.version >= 3);
     decode(pg_committed_to, p);
+
+	decode(write_hint, p);
     final_decode_needed = false;
   }
 
@@ -167,6 +175,7 @@ public:
     encode(from, payload);
     encode(updated_hit_set_history, payload);
     encode(pg_committed_to, payload);
+	encode(write_hint, payload);
     bufferlist middle(txn_payload);
     set_middle(middle);
   }

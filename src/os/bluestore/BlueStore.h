@@ -3765,7 +3765,8 @@ private:
     OnodeRef& o,
     uint64_t offset, uint64_t length,
     ceph::buffer::list::iterator& blp,
-    WriteContext *wctx);
+    WriteContext *wctx,
+    int write_hint = WRITE_LIFE_NOT_SET); 
   void _do_write_big_apply_deferred(
     TransContext* txc,
     CollectionRef& c,
@@ -3784,7 +3785,8 @@ private:
     TransContext *txc,
     CollectionRef c,
     OnodeRef& o,
-    WriteContext *wctx);
+    WriteContext *wctx,
+    int write_hint = WRITE_LIFE_NOT_SET); 
   void _wctx_finish(
     TransContext *txc,
     CollectionRef& c,
@@ -3797,7 +3799,8 @@ private:
 	     OnodeRef& o,
 	     uint64_t offset, size_t len,
 	     ceph::buffer::list& bl,
-	     uint32_t fadvise_flags);
+	     uint32_t fadvise_flags,
+	     int write_hint = WRITE_LIFE_NOT_SET); 
   void _pad_zeros(ceph::buffer::list *bl, uint64_t *offset,
 		  uint64_t chunk_size);
 
@@ -3818,14 +3821,16 @@ private:
 		OnodeRef& o,
 		uint64_t offset, uint64_t length,
 		ceph::buffer::list& bl,
-		uint32_t fadvise_flags);
+		uint32_t fadvise_flags,
+		int write_hint = WRITE_LIFE_NOT_SET); 
   void _do_write_data(TransContext *txc,
                       CollectionRef& c,
                       OnodeRef& o,
                       uint64_t offset,
                       uint64_t length,
                       ceph::buffer::list& bl,
-                      WriteContext *wctx);
+                      WriteContext *wctx,
+                      int write_hint = WRITE_LIFE_NOT_SET); 
   int _do_write_v2(
     TransContext *txc,
     CollectionRef &c,
