@@ -64,12 +64,13 @@ PerfCounters *build_osd_logger(CephContext *cct) {
     "Count of ops delayed due to target object being degraded");
 
   osd_plb.add_u64_counter(
-    l_osd_op_r, "op_r", "Client read operations");
+    l_osd_op_r, "op_r", "Client read operations", nullptr, PerfCountersBuilder::PRIO_CRITICAL);
   osd_plb.add_u64_counter(
-    l_osd_op_r_outb, "op_r_out_bytes", "Client data read", NULL, PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
+    l_osd_op_r_outb, "op_r_out_bytes", "Client data read", NULL, PerfCountersBuilder::PRIO_CRITICAL, unit_t(UNIT_BYTES));
   osd_plb.add_time_avg(
     l_osd_op_r_lat, "op_r_latency",
-    "Latency of read operation (including queue time)");
+    "Latency of read operation (including queue time)",
+    nullptr, PerfCountersBuilder::PRIO_CRITICAL);
   osd_plb.add_u64_counter_histogram(
     l_osd_op_r_lat_outb_hist, "op_r_latency_out_bytes_histogram",
     op_hist_x_axis_config, op_hist_y_axis_config,
@@ -81,12 +82,15 @@ PerfCounters *build_osd_logger(CephContext *cct) {
     l_osd_op_r_prepare_lat, "op_r_prepare_latency",
     "Latency of read operations (excluding queue time and wait for finished)");
   osd_plb.add_u64_counter(
-    l_osd_op_w, "op_w", "Client write operations");
+    l_osd_op_w, "op_w", "Client write operations",
+    nullptr, PerfCountersBuilder::PRIO_CRITICAL);
   osd_plb.add_u64_counter(
-    l_osd_op_w_inb, "op_w_in_bytes", "Client data written");
+    l_osd_op_w_inb, "op_w_in_bytes", "Client data written",
+    nullptr, PerfCountersBuilder::PRIO_CRITICAL, unit_t(UNIT_BYTES));
   osd_plb.add_time_avg(
     l_osd_op_w_lat,  "op_w_latency",
-    "Latency of write operation (including queue time)");
+    "Latency of write operation (including queue time)",
+    nullptr, PerfCountersBuilder::PRIO_CRITICAL);
   osd_plb.add_u64_counter_histogram(
     l_osd_op_w_lat_inb_hist, "op_w_latency_in_bytes_histogram",
     op_hist_x_axis_config, op_hist_y_axis_config,
@@ -178,7 +182,7 @@ PerfCounters *build_osd_logger(CephContext *cct) {
   osd_plb.add_u64_counter(
     l_osd_rop, "recovery_ops",
     "Started recovery operations",
-    "rop", PerfCountersBuilder::PRIO_INTERESTING);
+    "rop", PerfCountersBuilder::PRIO_CRITICAL);
 
   osd_plb.add_u64_counter(
    l_osd_rbytes, "recovery_bytes",
@@ -229,7 +233,7 @@ PerfCounters *build_osd_logger(CephContext *cct) {
     "Total number of crc cache misses");
 
   osd_plb.add_u64(l_osd_pg, "numpg", "Placement groups",
-		  "pgs", PerfCountersBuilder::PRIO_USEFUL);
+          "pgs", PerfCountersBuilder::PRIO_CRITICAL);
   osd_plb.add_u64(
     l_osd_pg_primary, "numpg_primary",
     "Placement groups for which this osd is primary");
@@ -278,10 +282,10 @@ PerfCounters *build_osd_logger(CephContext *cct) {
 
   osd_plb.add_u64(
     l_osd_stat_bytes, "stat_bytes", "OSD size", "size",
-    PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
+    PerfCountersBuilder::PRIO_CRITICAL, unit_t(UNIT_BYTES));
   osd_plb.add_u64(
     l_osd_stat_bytes_used, "stat_bytes_used", "Used space", "used",
-    PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
+    PerfCountersBuilder::PRIO_CRITICAL, unit_t(UNIT_BYTES));
   osd_plb.add_u64(l_osd_stat_bytes_avail, "stat_bytes_avail", "Available space", NULL, 0, unit_t(UNIT_BYTES));
 
   osd_plb.add_u64_counter(
