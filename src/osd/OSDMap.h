@@ -438,6 +438,8 @@ public:
     float new_backfillfull_ratio = -1;
     float new_full_ratio = -1;
 
+    float new_osd_crush_scaling_factor = -1.0;
+
     ceph_release_t new_require_min_compat_client{0xff};
 
     utime_t new_last_up_change, new_last_in_change;
@@ -651,6 +653,7 @@ private:
   bool new_blocklist_entries;
 
   float full_ratio = 0, backfillfull_ratio = 0, nearfull_ratio = 0;
+  float osd_crush_scaling_factor = 1.0;
 
   /// min compat client we want to support
   ceph_release_t require_min_compat_client{ceph_release_t::unknown};
@@ -776,6 +779,11 @@ public:
   float get_nearfull_ratio() const {
     return nearfull_ratio;
   }
+
+  float get_osd_crush_scaling_factor() const {
+    return osd_crush_scaling_factor;
+  }
+
   void get_full_pools(CephContext *cct,
                       std::set<int64_t> *full,
                       std::set<int64_t> *backfillfull,
