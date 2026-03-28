@@ -840,7 +840,7 @@ public:
       n++;
       error_count++;
       JSONParser p;
-      if (!p.parse(bl.c_str(), bl.length())) {
+      if (!p.parse(bl)) {
 	std::cerr << "rbd: error parsing input (entry " << n << ")"
 		  << std::endl;
 	r = -EINVAL;
