@@ -191,6 +191,24 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
           sm::description(desc),
           {label, sm::label_instance("shard_store_index", std::to_string(store_index))}
         ),
+        sm::make_gauge(
+          "op_lat_avg", [this, op_type=op_type] {
+            auto &h = get_latency(op_type);
+            return h.sample_count ?
+              (h.sample_sum / h.sample_count): 0.0;
+          },
+          sm::description("avg latency"),
+          {label}
+        ),
+        sm::make_gauge(
+          "op_lat_max", [this, op_type=op_type] {
+            return stats.op_lat_max[
+              static_cast<size_t>(op_type)
+            ];
+          },
+          sm::description("max latency"),
+          {label}
+       ),
       }
     );
   }
