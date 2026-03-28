@@ -1056,6 +1056,18 @@ state:
 .. note:: Delete the canceled clone by supplying the ``--force`` option to the
    ``fs subvolume rm`` command.
 
+To cancel all the pending clones in one shot use the below command:
+
+.. prompt:: bash #
+
+   ceph fs clone bulk cancel <vol_name>
+
+To delete all the canceled clones in one shot use the below command:
+
+.. prompt:: bash #
+
+   ceph fs bulk canceled clones rm <vol_name>
+
 Configurables
 ~~~~~~~~~~~~~
 
