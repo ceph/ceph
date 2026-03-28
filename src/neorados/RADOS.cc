@@ -1412,9 +1412,16 @@ class Notifier : public async::service_list_base_hook {
     if (neoref) {
       neoref = nullptr;
     }
-    linger_op.reset();
-    std::unique_lock l(m);
-    handlers.clear();
+    // Clear handlers before resetting linger_op. The Notifier and
+    // LingerOp have circular references (Notifier holds intrusive_ptr
+    // to LingerOp, LingerOp holds shared_ptr to Notifier in
+    // user_data). Resetting linger_op may break this cycle and
+    // destroy 'this', so we must not access any members after.
+    {
+      std::unique_lock l(m);
+      handlers.clear();
+    }
+    linger_op.reset(); // may destroy 'this' via circular ref - must be last
   }
 
 public:

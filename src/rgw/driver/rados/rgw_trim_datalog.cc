@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
+#include <algorithm>
+#include <map>
 #include <vector>
 #include <string>
 
@@ -68,6 +70,52 @@ class DatalogTrimImplCR : public RGWSimpleCoroutine {
   }
 };
 
+/// Per-zone variant: trims a specific zone's datalog shards
+class DatalogZoneTrimImplCR : public RGWSimpleCoroutine {
+  const DoutPrefixProvider *dpp;
+  rgw::sal::RadosStore* store;
+  boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
+  rgw_zone_id zone_id;
+  int shard;
+  std::string marker;
+  std::string* last_trim_marker;
+
+ public:
+  DatalogZoneTrimImplCR(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store,
+                       const rgw_zone_id& zone_id, int shard,
+                       const std::string& marker, std::string* last_trim_marker)
+  : RGWSimpleCoroutine(store->ctx()), dpp(dpp), store(store),
+    zone_id(zone_id), shard(shard),
+    marker(marker), last_trim_marker(last_trim_marker) {
+    set_description() << "Datalog zone trim zone=" << zone_id
+                     << " shard=" << shard << " marker=" << marker;
+  }
+
+  int send_request(const DoutPrefixProvider *dpp) override {
+    set_status() << "sending request";
+    cn = stack->create_completion_notifier();
+    store->svc()->datalog_rados->trim_entries(dpp, zone_id, shard, marker,
+                                             cn->completion());
+    return 0;
+  }
+  int request_complete() override {
+    int r = cn->completion()->get_return_value();
+    ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << "(): trim of zone=" << zone_id
+                 << " shard=" << shard
+                 << " marker=" << marker << " returned r=" << r << dendl;
+
+    set_status() << "request complete; ret=" << r;
+    if (r != -ENODATA) {
+      return r;
+    }
+    if (*last_trim_marker < marker &&
+       marker != store->svc()->datalog_rados->max_marker()) {
+      *last_trim_marker = marker;
+    }
+    return 0;
+  }
+};
+
 /// return the marker that it's safe to trim up to
 const std::string& get_stable_marker(const rgw_data_sync_marker& m)
 {
@@ -98,6 +146,7 @@ void take_min_markers(IterIn first, IterIn last, IterOut dest)
 
 class DataLogTrimCR : public RGWCoroutine {
   using TrimCR = DatalogTrimImplCR;
+  using ZoneTrimCR = DatalogZoneTrimImplCR;
   const DoutPrefixProvider *dpp;
   rgw::sal::RadosStore* store;
   RGWHTTPManager *http;
@@ -106,19 +155,32 @@ class DataLogTrimCR : public RGWCoroutine {
   std::vector<rgw_data_sync_status> peer_status; //< sync status for each peer
   std::vector<std::string> min_shard_markers; //< min marker per shard
   std::vector<std::string>& last_trim; //< last trimmed marker per shard
+  // Per-zone trim tracking: zone_id -> last_trim markers per shard
+  std::map<rgw_zone_id, std::vector<std::string>>& zone_last_trim;
+  // Peer zone IDs in order matching peer_status
+  std::vector<rgw_zone_id> peer_zone_ids;
+  // Zones that have active per-zone backends locally
+  std::vector<rgw_zone_id> active_zone_ids;
   int ret{0};
 
  public:
   DataLogTrimCR(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, RGWHTTPManager *http,
-                   int num_shards, std::vector<std::string>& last_trim)
+                   int num_shards, std::vector<std::string>& last_trim,
+                  std::map<rgw_zone_id, std::vector<std::string>>& zone_last_trim)
     : RGWCoroutine(store->ctx()), dpp(dpp), store(store), http(http),
       num_shards(num_shards),
       zone_id(store->svc()->zone->get_zone().id),
       peer_status(store->svc()->zone->get_zone_data_notify_to_map().size()),
       min_shard_markers(num_shards,
 			std::string(store->svc()->datalog_rados->max_marker())),
-      last_trim(last_trim)
-  {}
+      last_trim(last_trim),
+      zone_last_trim(zone_last_trim),
+      active_zone_ids(store->svc()->datalog_rados->get_zone_ids())
+  {
+    for (auto& c : store->svc()->zone->get_zone_data_notify_to_map()) {
+      peer_zone_ids.push_back(rgw_zone_id(c.first));
+    }
+  }
 
   int operate(const DoutPrefixProvider *dpp) override;
 };
@@ -163,10 +225,11 @@ int DataLogTrimCR::operate(const DoutPrefixProvider *dpp)
     ldpp_dout(dpp, 10) << "trimming log shards" << dendl;
     set_status("trimming log shards");
     yield {
-      // determine the minimum marker for each shard
+      // determine the minimum marker for each shard across all peers (legacy)
       take_min_markers(peer_status.begin(), peer_status.end(),
                        min_shard_markers.begin());
 
+      // Trim legacy datalog shards
       for (int i = 0; i < num_shards; i++) {
         const auto& m = min_shard_markers[i];
         if (m <= last_trim[i]) {
@@ -177,6 +240,39 @@ int DataLogTrimCR::operate(const DoutPrefixProvider *dpp)
             << " last_trim=" << last_trim[i] << dendl;
         spawn(new TrimCR(dpp, store, i, m, &last_trim[i]),
               true);
+      }
+
+      // Trim per-zone datalog shards: each zone's datalog is trimmed based
+      // on that specific zone's sync progress (not the min across all peers).
+      // Only trim zones that have active per-zone backends locally.
+      if (!active_zone_ids.empty()) {
+       for (size_t pi = 0; pi < peer_zone_ids.size(); ++pi) {
+         const auto& peer_zid = peer_zone_ids[pi];
+         // Only trim if this zone has an active per-zone backend
+         if (std::find(active_zone_ids.begin(), active_zone_ids.end(),
+                       peer_zid) == active_zone_ids.end()) {
+           continue;
+         }
+         const auto& status = peer_status[pi];
+         auto& zt = zone_last_trim[peer_zid];
+         if (zt.empty()) {
+           zt.resize(num_shards);
+         }
+         for (auto& shard : status.sync_markers) {
+           int shard_id = shard.first;
+           if (shard_id >= num_shards) continue;
+           const auto& m = get_stable_marker(shard.second);
+           if (m <= zt[shard_id]) {
+             continue;
+           }
+           ldpp_dout(dpp, 10) << "trimming per-zone log shard zone="
+               << peer_zid << " shard=" << shard_id
+               << " at marker=" << m
+               << " last_trim=" << zt[shard_id] << dendl;
+           spawn(new ZoneTrimCR(dpp, store, peer_zid, shard_id, m,
+                                &zt[shard_id]), true);
+         }
+       }
       }
     }
     return set_cr_done();
@@ -189,7 +285,8 @@ RGWCoroutine* create_admin_data_log_trim_cr(const DoutPrefixProvider *dpp, rgw::
                                             int num_shards,
                                             std::vector<std::string>& markers)
 {
-  return new DataLogTrimCR(dpp, store, http, num_shards, markers);
+  std::map<rgw_zone_id, std::vector<std::string>> zone_markers;
+  return new DataLogTrimCR(dpp, store, http, num_shards, markers, zone_markers);
 }
 
 class DataLogTrimPollCR : public RGWCoroutine {
@@ -201,6 +298,7 @@ class DataLogTrimPollCR : public RGWCoroutine {
   const std::string lock_oid; //< use first data log shard for lock
   const std::string lock_cookie;
   std::vector<std::string> last_trim; //< last trimmed marker per shard
+  std::map<rgw_zone_id, std::vector<std::string>> zone_last_trim;
 
  public:
   DataLogTrimPollCR(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, RGWHTTPManager *http,
@@ -240,7 +338,8 @@ int DataLogTrimPollCR::operate(const DoutPrefixProvider *dpp)
       }
 
       set_status("trimming");
-      yield call(new DataLogTrimCR(dpp, store, http, num_shards, last_trim));
+      yield call(new DataLogTrimCR(dpp, store, http, num_shards, last_trim,
+                                  zone_last_trim));
 
       // note that the lock is not released. this is intentional, as it avoids
       // duplicating this work in other gateways

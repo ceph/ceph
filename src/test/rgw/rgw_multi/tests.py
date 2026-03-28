@@ -1472,6 +1472,164 @@ def test_datalog_autotrim():
             after_trim = dateutil.parser.isoparse(entries[0]['timestamp'])
             assert before_trim < after_trim, "any datalog entries must be newer than trim"
 
+# --- Per-zone datalog helpers ---
+
+def datalog_list_zone(zone, zone_name, args=None):
+    """List datalog entries for a specific target zone's per-zone datalog."""
+    cmd = ['datalog', 'list', '--log-zone', zone_name]
+    if args:
+        cmd += args
+    (result_json, _) = zone.cluster.admin(cmd, read_only=True)
+    return json.loads(result_json)
+
+def datalog_status_zone(zone, zone_name):
+    """Get datalog status for a specific target zone's per-zone datalog."""
+    cmd = ['datalog', 'status', '--log-zone', zone_name]
+    (result_json, _) = zone.cluster.admin(cmd, read_only=True)
+    return json.loads(result_json)
+
+def datalog_trim_zone(zone, zone_name, shard_id, marker):
+    """Trim datalog entries for a specific target zone's per-zone datalog."""
+    cmd = ['datalog', 'trim', '--log-zone', zone_name,
+           '--shard-id', str(shard_id), '--marker', marker]
+    zone.cluster.admin(cmd)
+
+def test_per_zone_datalog_entries():
+    """Verify that per-zone datalogs are populated and that sync works
+    correctly through per-zone logs (both full and incremental)."""
+    zonegroup = realm.master_zonegroup()
+    if len(zonegroup.rw_zones) < 2:
+        raise SkipTest("test_per_zone_datalog_entries skipped. Requires 2 or more RW zones.")
+
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    # create a bucket and upload an object on zone 0
+    source_conn = zonegroup_conns.rw_zones[0]
+    bucket_name = gen_bucket_name()
+    log.info('create bucket zone=%s name=%s', source_conn.name, bucket_name)
+    source_conn.create_bucket(bucket_name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    key1 = 'perzone-key-1'
+    source_conn.s3_client.put_object(
+        Bucket=bucket_name, Key=key1, Body='perzone-body-1')
+
+    # before sync completes, per-zone datalogs on the source should
+    # already have entries for every peer zone
+    for target_conn in zonegroup_conns.rw_zones:
+        if target_conn.zone.id == source_conn.zone.id:
+            continue
+        entries = datalog_list_zone(source_conn.zone, target_conn.zone.name)
+        assert len(entries) > 0, \
+            "Per-zone datalog on %s for target %s should have entries" % \
+            (source_conn.zone.name, target_conn.zone.name)
+
+    # wait for full sync and verify data arrived
+    zonegroup_data_checkpoint(zonegroup_conns)
+    for target_conn in zonegroup_conns.rw_zones:
+        if target_conn.zone.id == source_conn.zone.id:
+            continue
+        zone_bucket_checkpoint(target_conn.zone, source_conn.zone, bucket_name)
+        resp = target_conn.s3_client.get_object(Bucket=bucket_name, Key=key1)
+        assert resp['Body'].read() == b'perzone-body-1', \
+            "Zone %s has wrong data for %s" % (target_conn.zone.name, key1)
+
+    # incremental sync: upload another object
+    key2 = 'perzone-key-2'
+    source_conn.s3_client.put_object(
+        Bucket=bucket_name, Key=key2, Body='perzone-body-2')
+
+    zonegroup_data_checkpoint(zonegroup_conns)
+    for target_conn in zonegroup_conns.rw_zones:
+        if target_conn.zone.id == source_conn.zone.id:
+            continue
+        zone_bucket_checkpoint(target_conn.zone, source_conn.zone, bucket_name)
+        resp = target_conn.s3_client.get_object(Bucket=bucket_name, Key=key2)
+        assert resp['Body'].read() == b'perzone-body-2', \
+            "Zone %s has wrong data for %s after incremental sync" % \
+            (target_conn.zone.name, key2)
+
+def test_per_zone_datalog_trim_independence():
+    """Verify that trimming a caught-up zone's datalog preserves entries
+    for a zone that is still behind.
+
+    Stop zone C so it falls behind, write data on zone A, wait for zone B
+    to pull and sync, then trim zone B's per-zone datalog on zone A.
+    Zone C's per-zone datalog on zone A must still contain the entries so
+    zone C can catch up once it comes back.
+    """
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    if len(zonegroup_conns.rw_zones) < 3:
+        raise SkipTest("Requires 3 or more RW zones.")
+
+    zone_a_conn = zonegroup_conns.rw_zones[0]  # source — writes data
+    zone_b_conn = zonegroup_conns.rw_zones[1]  # consumer — stays up, pulls
+    zone_c_conn = zonegroup_conns.rw_zones[2]  # consumer — stopped, falls behind
+    zone_a = zone_a_conn.zone
+    zone_b = zone_b_conn.zone
+    zone_c = zone_c_conn.zone
+
+    # make sure everything is in sync before we start
+    zonegroup_meta_checkpoint(zonegroup)
+    zonegroup_data_checkpoint(zonegroup_conns)
+
+    # --- stop zone C so it falls behind ---
+    zone_c.stop()
+
+    # write an object on zone A (the source)
+    bucket_name = gen_bucket_name()
+    log.info('create bucket zone=%s name=%s', zone_a.name, bucket_name)
+    zone_a_conn.create_bucket(bucket_name)
+    # only checkpoint zones that are up (zone C is stopped)
+    zone_meta_checkpoint(zone_b)
+    zone_a_conn.s3_client.put_object(
+        Bucket=bucket_name, Key='trim-ind-key', Body='trim-ind-body')
+
+    # wait for zone B to pull from zone A (zone C is down, skip it)
+    zone_bucket_checkpoint(zone_b, zone_a, bucket_name)
+
+    # zone C's per-zone datalog on zone A should have entries (it hasn't
+    # pulled yet)
+    entries_c = datalog_list_zone(zone_a, zone_c.name)
+    assert len(entries_c) > 0, \
+        "Zone C per-zone datalog should have entries (zone C hasn't synced)"
+
+    # trim zone B's per-zone datalog on zone A (zone B already synced)
+    status_b = datalog_status_zone(zone_a, zone_b.name)
+    for shard_id, shard_status in enumerate(status_b):
+        marker = shard_status.get('marker', '')
+        if marker:
+            datalog_trim_zone(zone_a, zone_b.name, shard_id, marker)
+
+    # zone B's entries should be gone after the trim
+    entries_b_after = datalog_list_zone(zone_a, zone_b.name)
+    assert len(entries_b_after) == 0, \
+        "Zone B entries should be trimmed"
+
+    # zone C's entries must still be there after zone B's trim
+    entries_c_after = datalog_list_zone(zone_a, zone_c.name)
+    assert len(entries_c_after) > 0, \
+        "Zone C entries must survive zone B's trim"
+
+    # --- bring zone C back and verify it catches up ---
+    zone_c.start()
+    # zone C missed the metadata for the bucket while it was down
+    zone_meta_checkpoint(zone_c)
+    zone_bucket_checkpoint(zone_c, zone_a, bucket_name)
+
+    # now that zone C has synced, trim its datalog and verify entries are gone
+    status_c = datalog_status_zone(zone_a, zone_c.name)
+    for shard_id, shard_status in enumerate(status_c):
+        marker = shard_status.get('marker', '')
+        if marker:
+            datalog_trim_zone(zone_a, zone_c.name, shard_id, marker)
+
+    entries_c_final = datalog_list_zone(zone_a, zone_c.name)
+    assert len(entries_c_final) == 0, \
+        "Zone C entries should be trimmed after sync and trim"
+
 def test_multi_zone_redirect():
     zonegroup = realm.master_zonegroup()
     if len(zonegroup.rw_zones) < 2:

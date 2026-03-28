@@ -47,8 +47,11 @@
 #include "rgw_sync_policy.h"
 #include "rgw_trim_bilog.h"
 #include "rgw_zone.h"
+#include "rgw_zone_features.h"
 
 #include "common/async/spawn_group.h"
+
+class RGWRESTConn;
 
 namespace asio = boost::asio;
 namespace bc = boost::container;
@@ -207,15 +210,18 @@ class DataLogBackends final
 
   std::mutex m;
   RGWDataChangesLog& datalog;
+  std::optional<rgw_zone_id> zone_id; // nullopt for legacy backends
 
   DataLogBackends(neorados::RADOS rados,
 		  const neorados::Object oid,
 		  const neorados::IOContext& loc,
 		  fu2::unique_function<std::string(
 		    uint64_t, int) const>&& get_oid,
-		  int shards, RGWDataChangesLog& datalog) noexcept
+                 int shards, RGWDataChangesLog& datalog,
+                 std::optional<rgw_zone_id> zone_id = std::nullopt) noexcept
     : logback_generations(rados, oid, loc, std::move(get_oid),
-			  shards), datalog(datalog) {}
+                         shards), datalog(datalog),
+      zone_id(std::move(zone_id)) {}
 public:
 
   boost::intrusive_ptr<RGWDataChangesBE> head();
@@ -347,6 +353,12 @@ struct hash<BucketGen> {
 };
 }
 
+struct ZoneLog {
+  rgw_zone_id zone_id;
+  std::unique_ptr<DataLogBackends> bes;
+  std::vector<bc::flat_set<std::string>> semaphores;
+};
+
 class RGWDataChangesLog {
   friend class DataLogTestBase;
   friend DataLogBackends;
@@ -355,7 +367,10 @@ class RGWDataChangesLog {
   neorados::IOContext loc;
   rgw::BucketChangeObserver *observer = nullptr;
   bool log_data = false;
-  std::unique_ptr<DataLogBackends> bes;
+  std::unique_ptr<DataLogBackends> bes; // legacy backend
+  std::map<rgw_zone_id, ZoneLog> zone_logs; // per-zone backends
+  std::vector<rgw_zone_id> target_zone_ids_; // zones to create per-zone logs for
+  bool legacy_writes_disabled_ = false; // when per_zone_datalog feature enabled everywhere
 
   using executor_t = asio::io_context::executor_type;
   executor_t executor;
@@ -374,14 +389,23 @@ class RGWDataChangesLog {
 
   const int num_shards;
   std::string get_prefix() { return "data_log"; }
+  std::string get_prefix(const rgw_zone_id& zone) {
+    return fmt::format("data_log.{}", zone.id);
+  }
   std::string metadata_log_oid() {
     return get_prefix() + "generations_metadata";
+  }
+  std::string metadata_log_oid(const rgw_zone_id& zone) {
+    return get_prefix(zone) + "generations_metadata";
   }
   std::string prefix;
 
   std::mutex lock;
   std::shared_mutex modified_lock;
   bc::flat_map<int, bc::flat_set<rgw_data_notify_entry>> modified_shards;
+  // Per-zone modified shards for zone-specific notifications
+  std::map<rgw_zone_id, bc::flat_map<int, bc::flat_set<rgw_data_notify_entry>>>
+    zone_modified_shards;
 
   std::atomic<bool> down_flag = { true };
   bool ran_background = false;
@@ -442,9 +466,24 @@ public:
 			      // they're either all on (radosgw) or
 			      // all off (radosgw-admin)
 			      bool recovery, bool watch, bool renew);
-
+  // Start background tasks (renew, watch, recovery) after all
+  // backends (including per-zone) are fully initialized.
+  asio::awaitable<void> start_background(const DoutPrefixProvider* dpp,
+                                        bool recovery, bool watch,
+                                        bool renew);
+  // Non-coroutine per-zone backend initialization. Uses individual
+  // co_spawn calls per zone to avoid GCC coroutine frame corruption.
+  void init_zone_backends(const DoutPrefixProvider* dpp,
+                         log_type defbacking);
   int start(const DoutPrefixProvider *dpp, const RGWZone* _zone,
-	    const RGWZoneParams& zoneparams, bool background_tasks) noexcept;
+           const RGWZoneParams& zoneparams,
+           const std::map<rgw_zone_id, RGWRESTConn*>& notify_zones,
+           bool legacy_writes_disabled,
+           bool background_tasks) noexcept;
+  // Original signature for testing - bypasses per-zone setup
+  int start(const DoutPrefixProvider *dpp, const RGWZone* _zone,
+           const RGWZoneParams& zoneparams,
+           bool background_tasks) noexcept;
   asio::awaitable<bool> establish_watch(const DoutPrefixProvider* dpp,
 					std::string_view oid);
   asio::awaitable<void> process_notification(const DoutPrefixProvider* dpp,
@@ -492,6 +531,14 @@ public:
     modified_shards.clear();
     return modified;
   }
+  // Per-zone: returns a map of zone_id -> modified_shards for zone-specific notifications
+  auto read_clear_zone_modified() {
+    std::unique_lock wl{modified_lock};
+    decltype(zone_modified_shards) modified;
+    modified.swap(zone_modified_shards);
+    zone_modified_shards.clear();
+    return modified;
+  }
 
   void set_observer(rgw::BucketChangeObserver *observer) {
     this->observer = observer;
@@ -503,7 +550,37 @@ public:
   // a marker that compares greater than any other
   std::string max_marker() const;
   std::string get_oid(uint64_t gen_id, int shard_id) const;
+  std::string get_oid(const rgw_zone_id& zone, uint64_t gen_id,
+                     int shard_id) const;
   std::string get_sem_set_oid(int shard_id) const;
+  std::string get_sem_set_oid(const rgw_zone_id& zone, int shard_id) const;
+
+  // Per-zone API overloads
+  asio::awaitable<std::tuple<std::vector<rgw_data_change_log_entry>,
+                            std::string, bool>>
+  list_entries(const DoutPrefixProvider* dpp, const rgw_zone_id& zone,
+              int shard, int max_entries, std::string marker);
+  asio::awaitable<std::tuple<std::vector<rgw_data_change_log_entry>,
+                            RGWDataChangesLogMarker, bool>>
+  list_entries(const DoutPrefixProvider* dpp, const rgw_zone_id& zone,
+              int max_entries, RGWDataChangesLogMarker marker);
+  asio::awaitable<RGWDataChangesLogInfo>
+  get_info(const DoutPrefixProvider* dpp, const rgw_zone_id& zone,
+          int shard_id);
+  asio::awaitable<void>
+  trim_entries(const DoutPrefixProvider* dpp, const rgw_zone_id& zone,
+              int shard_id, std::string_view marker);
+  void trim_entries(const DoutPrefixProvider* dpp, const rgw_zone_id& zone,
+                   int shard_id, std::string_view marker,
+                   librados::AioCompletion* c);
+  asio::awaitable<void>
+  trim_generations(const DoutPrefixProvider* dpp, const rgw_zone_id& zone,
+                  std::optional<uint64_t>& through);
+  asio::awaitable<void>
+  change_format(const DoutPrefixProvider* dpp, const rgw_zone_id& zone,
+               log_type type);
+
+  std::vector<rgw_zone_id> get_zone_ids() const;
 
 
   asio::awaitable<std::pair<bc::flat_map<std::string, uint64_t>,
@@ -521,6 +598,20 @@ public:
 		 ceph::mono_time fetch_time,
 		 bc::flat_map<std::string, uint64_t>&& semcount);
   asio::awaitable<void> recover_shard(const DoutPrefixProvider* dpp, int index);
+  // Per-zone recovery methods
+  asio::awaitable<std::pair<bc::flat_map<std::string, uint64_t>,
+                           std::string>>
+  read_sems(const rgw_zone_id& zone, int index, std::string cursor);
+  asio::awaitable<bool>
+  synthesize_entries(const DoutPrefixProvider* dpp, const rgw_zone_id& zone,
+                    int index,
+                    const bc::flat_map<std::string, uint64_t>& semcount);
+  asio::awaitable<void>
+  decrement_sems(const rgw_zone_id& zone, int index,
+                ceph::mono_time fetch_time,
+                bc::flat_map<std::string, uint64_t>&& semcount);
+  asio::awaitable<void> recover_zone_shard(const DoutPrefixProvider* dpp,
+                                          const rgw_zone_id& zone, int index);
   asio::awaitable<void> recover(const DoutPrefixProvider* dpp);
   asio::awaitable<void> async_shutdown();
   void blocking_shutdown();
@@ -539,12 +630,11 @@ protected:
   neorados::RADOS r;
   neorados::IOContext loc;
   RGWDataChangesLog& datalog;
+  std::optional<rgw_zone_id> zone_id; // nullopt for legacy backends
 
   CephContext* cct{r.cct()};
 
-  std::string get_oid(int shard_id) {
-    return datalog.get_oid(gen_id, shard_id);
-  }
+  std::string get_oid(int shard_id);
 public:
   using entries = std::variant<std::vector<cls::log::entry>,
 			       std::deque<ceph::buffer::list>>;
@@ -554,8 +644,10 @@ public:
   RGWDataChangesBE(neorados::RADOS r,
 		   neorados::IOContext loc,
 		   RGWDataChangesLog& datalog,
-		   uint64_t gen_id)
-    : r(r), loc(std::move(loc)), datalog(datalog), gen_id(gen_id) {}
+                  uint64_t gen_id,
+                  std::optional<rgw_zone_id> zone_id = std::nullopt)
+    : r(r), loc(std::move(loc)), datalog(datalog),
+      zone_id(std::move(zone_id)), gen_id(gen_id) {}
   virtual ~RGWDataChangesBE() = default;
 
   virtual void prepare(ceph::real_time now, const std::string& key,

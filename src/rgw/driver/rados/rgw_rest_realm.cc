@@ -162,23 +162,11 @@ void RGWOp_Period_Post::execute(optional_yield y)
     return;
   }
 
-  // write the period to rados
+  // write the period to rados. create_period() also updates
+  // the latest epoch internally, so no separate update is needed.
   op_ret = s->penv.cfgstore->create_period(this, y, false, period);
   if (op_ret < 0) {
     ldpp_dout(this, -1) << "failed to store period " << period.get_id() << dendl;
-    return;
-  }
-  // set as latest epoch
-  op_ret = s->penv.cfgstore->update_latest_epoch(this, y, period.get_id(), period.get_epoch());
-  if (op_ret == -EEXIST) {
-    // already have this epoch (or a more recent one)
-    ldpp_dout(this, 4) << "already have epoch >= " << period.get_epoch()
-        << " for period " << period.get_id() << dendl;
-    op_ret = 0;
-    return;
-  }
-  if (op_ret < 0) {
-    ldpp_dout(this, -1) << "failed to set latest epoch" << dendl;
     return;
   }
 

@@ -433,6 +433,7 @@ void usage()
   cout << "   --rgw-zone=<name>                 name of zone in which radosgw is running\n";
   cout << "   --zone-id=<id>                    zone id\n";
   cout << "   --zone-new-name=<name>            zone new name\n";
+  cout << "   --log-zone=<name>                 target zone for per-zone datalog operations\n";
   cout << "   --source-zone                     specify the source zone (for data sync)\n";
   cout << "   --default                         set entity (realm, zonegroup, zone) as default\n";
   cout << "   --read-only                       set zone as read-only (when adding to zonegroup)\n";
@@ -3842,6 +3843,9 @@ int main(int argc, const char **argv)
   std::optional<string> opt_effective_zone_name;
   std::optional<rgw_zone_id> opt_effective_zone_id;
 
+  std::optional<string> opt_log_zone_name;
+  std::optional<rgw_zone_id> opt_log_zone_id;
+
   std::optional<string> opt_prefix;
   std::optional<string> opt_prefix_rm;
 
@@ -4420,6 +4424,8 @@ int main(int argc, const char **argv)
       opt_effective_zone_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--effective-zone-id", (char*)NULL)) {
       opt_effective_zone_id = rgw_zone_id(val);
+    } else if (ceph_argparse_witharg(args, i, &val, "--log-zone", (char*)NULL)) {
+      opt_log_zone_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--prefix", (char*)NULL)) {
       opt_prefix = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--prefix-rm", (char*)NULL)) {
@@ -6773,6 +6779,7 @@ int main(int argc, const char **argv)
   resolve_zone_id_opt(opt_effective_zone_name, opt_effective_zone_id);
   resolve_zone_id_opt(opt_source_zone_name, opt_source_zone_id);
   resolve_zone_id_opt(opt_dest_zone_name, opt_dest_zone_id);
+  resolve_zone_id_opt(opt_log_zone_name, opt_log_zone_id);
   resolve_zone_ids_opt(opt_zone_names, opt_zone_ids);
   resolve_zone_ids_opt(opt_source_zone_names, opt_source_zone_ids);
   resolve_zone_ids_opt(opt_dest_zone_names, opt_dest_zone_ids);
@@ -11217,7 +11224,23 @@ next:
     std::string errstr;
     do {
       std::vector<rgw_data_change_log_entry> entries;
-      if (specified_shard_id) {
+      if (opt_log_zone_id && specified_shard_id) {
+       ret = run_coro(
+         dpp(),
+         context_pool,
+         datalog_svc->list_entries(dpp(), *opt_log_zone_id, shard_id,
+                                   max_entries - count, marker),
+         std::tie(entries, marker, truncated),
+         &errstr);
+      } else if (opt_log_zone_id) {
+       ret = run_coro(
+         dpp(),
+         context_pool,
+         datalog_svc->list_entries(dpp(), *opt_log_zone_id,
+                                   max_entries - count, log_marker),
+         std::tie(entries, log_marker, truncated),
+         &errstr);
+      } else if (specified_shard_id) {
 	ret = run_coro(
 	  dpp(),
 	  context_pool,
@@ -11257,6 +11280,7 @@ next:
 
   if (opt_cmd == OPT::DATALOG_STATUS) {
     int i = (specified_shard_id ? shard_id : 0);
+    auto datalog = static_cast<rgw::sal::RadosStore*>(driver)->svc()->datalog_rados;
 
     formatter->open_array_section("entries");
     for (; i < g_ceph_context->_conf->rgw_data_log_num_shards; i++) {
@@ -11265,10 +11289,16 @@ next:
       std::string errstr;
       RGWDataChangesLogInfo info;
 
-      int r = run_coro(dpp(), context_pool,
-		       static_cast<rgw::sal::RadosStore*>(driver)->svc()->
-		       datalog_rados->get_info(dpp(), i),
-		       info, &errstr);
+      int r;
+      if (opt_log_zone_id) {
+       r = run_coro(dpp(), context_pool,
+                    datalog->get_info(dpp(), *opt_log_zone_id, i),
+                    info, &errstr);
+      } else {
+       r = run_coro(dpp(), context_pool,
+                    datalog->get_info(dpp(), i),
+                    info, &errstr);
+      }
 
       if (r < 0) {
 	std::cerr << "datalog status: " << errstr << std::endl;
@@ -11337,9 +11367,16 @@ next:
 
     std::string errstr;
     auto datalog = static_cast<rgw::sal::RadosStore*>(driver)->svc()->datalog_rados;
-    ret = run_coro(dpp(), context_pool,
-		   datalog->trim_entries(dpp(), shard_id, marker),
-		   &errstr);
+    if (opt_log_zone_id) {
+      ret = run_coro(dpp(), context_pool,
+                    datalog->trim_entries(dpp(), *opt_log_zone_id,
+                                         shard_id, marker),
+                    &errstr);
+    } else {
+      ret = run_coro(dpp(), context_pool,
+                    datalog->trim_entries(dpp(), shard_id, marker),
+                    &errstr);
+    }
 
     if (ret < 0 && ret != -ENODATA) {
       cerr << "ERROR: trim_entries(): " << errstr << std::endl;
@@ -11354,9 +11391,16 @@ next:
     }
     auto datalog = static_cast<rgw::sal::RadosStore*>(driver)->svc()->datalog_rados;
     std::string errstr;
-    ret = run_coro(dpp(), context_pool,
-		   datalog->change_format(dpp(), *opt_log_type),
-		   &errstr);
+    if (opt_log_zone_id) {
+      ret = run_coro(dpp(), context_pool,
+                    datalog->change_format(dpp(), *opt_log_zone_id,
+                                           *opt_log_type),
+                    &errstr);
+    } else {
+      ret = run_coro(dpp(), context_pool,
+                    datalog->change_format(dpp(), *opt_log_type),
+                    &errstr);
+    }
     if (ret < 0) {
       cerr << "ERROR: change_format(): " << errstr << std::endl;
       return -ret;
@@ -11367,9 +11411,16 @@ next:
     auto datalog = static_cast<rgw::sal::RadosStore*>(driver)->svc()->datalog_rados;
     std::optional<uint64_t> through;
     std::string errstr;
-    ret = run_coro(dpp(), context_pool,
-		   datalog->trim_generations(dpp(), through),
-		   &errstr);
+    if (opt_log_zone_id) {
+      ret = run_coro(dpp(), context_pool,
+                    datalog->trim_generations(dpp(), *opt_log_zone_id,
+                                              through),
+                    &errstr);
+    } else {
+      ret = run_coro(dpp(), context_pool,
+                    datalog->trim_generations(dpp(), through),
+                    &errstr);
+    }
 
     if (ret < 0) {
       cerr << "ERROR: trim_generations(): " << errstr << std::endl;
