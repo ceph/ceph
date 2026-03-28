@@ -3,6 +3,7 @@ overrides:
     log-ignorelist:
       - overall HEALTH_
       - \(MON_DOWN\)
+      - DISPATCH_QUEUE_THROTTLE
 tasks:
 - mon_thrash:
     check_mds_failover: True

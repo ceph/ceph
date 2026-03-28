@@ -33,7 +33,7 @@ class Throttle final : public ThrottleInterface {
   CephContext *cct;
   const std::string name;
   PerfCountersRef logger;
-  std::atomic<int64_t> count = { 0 }, max = { 0 };
+  std::atomic<int64_t> count = { 0 }, max = { 0 }, failed = { 0 };
   std::mutex lock;
   std::list<std::condition_variable> conds;
   const bool use_perf;
@@ -116,6 +116,15 @@ public:
    * @returns number of requests being hold after this
    */
   int64_t put(int64_t c = 1) override;
+
+  /**
+   * gets the number of (current) slot request failures.
+   * @returns the number of slot request failures
+   */
+  int64_t get_failed() const {
+    return failed.load();
+  }
+
    /**
    * reset the zero to the stock
    */

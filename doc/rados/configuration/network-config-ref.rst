@@ -341,6 +341,7 @@ General Settings
 .. confval:: ms_max_backoff
 .. confval:: ms_die_on_bad_msg
 .. confval:: ms_dispatch_throttle_bytes
+.. confval:: ms_dispatch_throttle_log_interval
 .. confval:: ms_inject_socket_failures
 
 

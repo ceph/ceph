@@ -58,6 +58,8 @@ Messenger::Messenger(CephContext *cct_, entity_name_t w)
 {
   auth_registry.refresh_config();
   comp_registry.refresh_config();
+  dispatch_throttle_bytes.store(cct->_conf.get_val<Option::size_t>("ms_dispatch_throttle_bytes"));
+  dispatch_throttle_log_interval.store(cct->_conf.get_val<std::chrono::seconds>("ms_dispatch_throttle_log_interval"));
 }
 
 void Messenger::set_endpoint_addr(const entity_addr_t& a,

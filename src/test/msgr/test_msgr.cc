@@ -1834,6 +1834,15 @@ class SyntheticDispatcher : public Dispatcher {
     return true;
   }
 
+  bool ms_handle_throttle(ms_throttle_t ttype, const ThrottleInfo& tinfo) override {
+    switch(ttype) {
+    case ms_throttle_t::DISPATCH_QUEUE:
+      return true;
+    default:
+      return false;
+    }
+  }
+
   void reply_message(const Message *m, Payload& pl) {
     pl.who = Payload::PONG;
     bufferlist bl;
@@ -2372,6 +2381,26 @@ TEST_P(MessengerTest, SyntheticInjectTest5) {
   test_msg.wait_for_done();
 }
 
+TEST_P(MessengerTest, SyntheticInjectTest6) {
+  g_ceph_context->_conf.set_val("ms_dispatch_throttle_bytes", "10");
+  g_ceph_context->_conf.set_val("ms_dispatch_throttle_log_interval", "1");
+  SyntheticWorkload test_msg(1, 8, GetParam(), 100,
+                             Messenger::Policy::stateful_server(0),
+                             Messenger::Policy::lossless_client(0));
+  for (int i = 0; i < 1; ++i) {
+    test_msg.generate_connection();
+  }
+  for (int i = 0; i < 1000; ++i) {
+    if (!(i % 10)) {
+      ldout(g_ceph_context, 0) << "Op " << i << ": " << dendl;
+      test_msg.print_internal_state();
+    }
+    test_msg.send_message();
+  }
+  test_msg.wait_for_done();
+  g_ceph_context->_conf.set_val("ms_dispatch_throttle_bytes", "104857600");
+  g_ceph_context->_conf.set_val("ms_dispatch_throttle_log_interval", "30");
+}
 
 class MarkdownDispatcher : public Dispatcher {
   ceph::mutex lock = ceph::make_mutex("MarkdownDispatcher::lock");
