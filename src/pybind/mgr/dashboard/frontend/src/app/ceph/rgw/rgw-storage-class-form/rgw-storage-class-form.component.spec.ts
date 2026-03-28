@@ -126,6 +126,22 @@ describe('RgwStorageClassFormComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('should mark duplicate storage class names as invalid', () => {
+    component.existingStorageClasses = [
+      {
+        storage_class: 'storageClass1',
+        placement_target: 'placement1',
+        zonegroup_name: 'zonegroup1'
+      }
+    ];
+
+    const control = component.storageClassForm.get('storage_class');
+    control.setValue('storageClass1');
+    control.updateValueAndValidity();
+
+    expect(control.hasError('uniqueName')).toBe(true);
+  });
+
   it('should set required validators for CLOUD_TIER fields', () => {
     (component as any).updateValidatorsBasedOnStorageClass(TIER_TYPE_DISPLAY.CLOUD_TIER);
     const requiredFields = ['region', 'target_endpoint', 'access_key', 'secret_key', 'target_path'];
