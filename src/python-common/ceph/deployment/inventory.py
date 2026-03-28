@@ -44,7 +44,7 @@ class Devices(object):
 
 class Device(object):
     report_fields = [
-        'ceph_device',
+        'ceph_device_lvm',
         'rejected_reasons',
         'available',
         'path',
@@ -67,7 +67,7 @@ class Device(object):
                  device_id=None,  # type: Optional[str]
                  lsm_data=None,  # type: Optional[Dict[str, Dict[str, str]]]
                  created=None,  # type: Optional[datetime.datetime]
-                 ceph_device=None,  # type: Optional[bool]
+                 ceph_device_lvm=None,  # type: Optional[bool]
                  crush_device_class=None,  # type: Optional[str]
                  being_replaced=None,  # type: Optional[bool]
                  ):
@@ -80,7 +80,7 @@ class Device(object):
         self.device_id = device_id
         self.lsm_data = lsm_data if lsm_data is not None else {}  # type: Dict[str, Dict[str, str]]
         self.created = created if created is not None else datetime_now()
-        self.ceph_device = ceph_device
+        self.ceph_device_lvm = ceph_device_lvm
         self.crush_device_class = crush_device_class
         self.being_replaced = being_replaced
 
@@ -131,7 +131,7 @@ class Device(object):
             'path': self.path if self.path is not None else 'unknown',
             'lvs': self.lvs if self.lvs else 'None',
             'available': str(self.available),
-            'ceph_device': str(self.ceph_device),
+            'ceph_device_lvm': str(self.ceph_device_lvm),
             'crush_device_class': str(self.crush_device_class),
             'being_replaced': str(self.being_replaced)
         }

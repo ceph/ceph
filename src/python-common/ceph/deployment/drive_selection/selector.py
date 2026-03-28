@@ -78,7 +78,7 @@ class DriveSelection(object):
         # If that is the case, we don't want to count the device
         # towards the limit as it will already be counted through the
         # existing daemons
-        non_ceph_devices = [d for d in devices if not d.ceph_device]
+        non_ceph_devices = [d for d in devices if not d.ceph_device_lvm]
 
         if limit > 0 and (len(non_ceph_devices) + self.existing_daemons >= limit):
             logger.debug("Refuse to add {} due to limit policy of <{}>".format(
@@ -135,14 +135,14 @@ class DriveSelection(object):
                 logger.debug('Ignoring disk {} as it is being replaced.'.format(disk.path))
                 continue
 
-            if not disk.available and not disk.ceph_device:
+            if not disk.available and not disk.ceph_device_lvm:
                 logger.debug(
                     ("Ignoring disk {}. "
                      "Disk is unavailable due to {}".format(disk.path, disk.rejected_reasons))
                 )
                 continue
 
-            if not disk.available and disk.ceph_device and disk.lvs:
+            if not disk.available and disk.ceph_device_lvm and disk.lvs:
                 other_osdspec_affinity = ''
                 for lv in disk.lvs:
                     if 'osdspec_affinity' in lv.keys():
