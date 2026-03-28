@@ -1412,3 +1412,15 @@ Description: prometheus alerts for the ceph dashboard
  .
  This package contains alerts used for prometheus to interact with the
  Ceph Dashboard.
+
+Package: ceph-uca
+Build-Profiles: <pkg.ceph.uca>
+Architecture: linux-any
+Recommends: podman (>= 2.0.2) | docker.io | docker-ce
+Depends: python3,
+	 ${python3:Depends},
+Description: Tool to manage one or more Ceph clusters from a user workstation.
+ Based on cephadm technology this tool uses Ceph containers to
+ run ceph management and administrative tools from a workstation
+ as long as that workstation can connect to said clusters over
+ SSH and RADOS.
