@@ -703,6 +703,10 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
   void *ptr;
   struct iovec iov[NR_IOVECS];
 
+  uint64_t bytes_read = 0;
+  uint64_t bytes_written = 0;
+  sec_duration read_time{0};
+  sec_duration write_time{0};
   int r = ceph_openat(m_local_mount, fh.c_fd, epath.c_str(), O_RDONLY | O_NOFOLLOW, 0);
   if (r < 0) {
     derr << ": failed to open local file path=" << epath << ": "
@@ -765,12 +769,16 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
         }
       }
 
+      auto rs = clock::now();
       r = ceph_preadv(m_local_mount, l_fd, iov, num_buffers, offset);
+      auto re = clock::now();
+      read_time += sec_duration(re - rs);
       if (r < 0) {
         derr << ": failed to read local file path=" << epath << ": "
              << cpp_strerror(r) << dendl;
         break;
       }
+      bytes_read += r;
       dout(10) << ": read: " << r << " bytes" << dendl;
       if (r == 0) {
         break;
@@ -784,12 +792,16 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
       }
 
       dout(10) << ": writing to offset: " << offset << dendl;
+      auto ws = clock::now();
       r = ceph_pwritev(m_remote_mount, r_fd, iov, iovs, offset);
+      auto we = clock::now();
+      write_time += sec_duration(we - ws);
       if (r < 0) {
         derr << ": failed to write remote file path=" << epath << ": "
              << cpp_strerror(r) << dendl;
         break;
       }
+      bytes_written += r;
 
       offset += r;
     }
@@ -797,6 +809,9 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
     --num_blocks;
     ++b;
   }
+
+  //io accounting for metrics
+  add_io(dir_root, bytes_read, bytes_written, read_time.count(), write_time.count());
 
   if (num_blocks == 0 && r >= 0) { // handle blocklist case
     dout(20) << ": truncating epath=" << epath << " to " << stx.stx_size << " bytes"
@@ -2616,6 +2631,15 @@ void PeerReplayer::peer_status(Formatter *f) {
         f->dump_string("sync-mode", "delta");
       else
         f->dump_string("sync-mode", "full");
+
+      //avg read/write throughput
+      double read_bps = sync_stat.read_time_sec > 0 ?
+          sync_stat.bytes_read / sync_stat.read_time_sec : 0;
+      double write_bps = sync_stat.write_time_sec > 0 ?
+          sync_stat.bytes_written / sync_stat.write_time_sec : 0;
+      f->dump_string("avg_read_throughput_bytes", format_bytes(read_bps) + "/s");
+      f->dump_string("avg_write_throughput_bytes", format_bytes(write_bps) + "/s");
+
       f->open_object_section("crawl");
       if (sync_stat.crawl_finished) {
         f->dump_string("state", "completed");
