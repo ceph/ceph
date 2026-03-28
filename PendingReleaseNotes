@@ -1,3 +1,4 @@
+
 >=20.0.0
 
 * RGW: Lua scripts will not run against health checks.
@@ -58,6 +59,12 @@
   fuse client for `fallocate` for the default case (i.e. mode == 0) since
   CephFS does not support disk space reservation. The only flags supported are
   `FALLOC_FL_KEEP_SIZE` and `FALLOC_FL_PUNCH_HOLE`.
+
+>=19.2.4
+
+* RGW: For `radosgw-admin account rm`, the `--purge-data` option previously applied only
+  to buckets and objects, but now deletes account users, roles, groups, and oidc-providers
+  too instead of failing with ENOTEMPTY.
 
 >=19.2.2
 
