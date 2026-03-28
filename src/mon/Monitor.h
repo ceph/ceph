@@ -53,6 +53,7 @@
 #include <boost/smart_ptr/shared_ptr.hpp>
 
 #include "mon/MonOpRequest.h"
+#include "common/config_cacher.h"
 #include "common/WorkQueue.h"
 
 struct health_check_map_t;
@@ -739,6 +740,7 @@ public:
     std::forward<Func>(func)(session_map);
   }
   void send_latest_monmap(Connection *con);
+  void check_quorum_subs_and_send_updates();
 
   // messages
   void handle_get_version(MonOpRequestRef op);
@@ -998,7 +1000,7 @@ private:
   void write_features(MonitorDBStore::TransactionRef t);
 
   OpTracker op_tracker;
-
+  md_config_cacher_t<double> ms_inject_drop_mon_forward_msgs;
  public:
   Monitor(CephContext *cct_, std::string nm, MonitorDBStore *s,
 	  Messenger *m, Messenger *mgr_m, MonMap *map);
