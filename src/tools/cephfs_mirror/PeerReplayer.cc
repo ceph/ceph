@@ -910,6 +910,7 @@ int PeerReplayer::remote_file_op(std::shared_ptr<SyncMechanism>& syncm, const st
     }
   }
 
+  inc_sync_files(dir_root);
   return 0;
 }
 
@@ -1330,7 +1331,7 @@ PeerReplayer::SyncMechanism::~SyncMechanism() {
 void PeerReplayer::SyncMechanism::push_dataq_entry(SyncEntry e) {
   dout(10) << ": snapshot data replayer dataq pushed" << " syncm=" << this
 	   << " epath=" << e.epath << dendl;
-  m_peer_replayer.inc_total_bytes(std::string(m_dir_root), e.stx.stx_size);
+  m_peer_replayer.inc_total_bytes_files(std::string(m_dir_root), e.stx.stx_size);
   std::unique_lock lock(sdq_lock);
   m_sync_dataq.push(std::move(e));
   sdq_cv.notify_all();
@@ -2575,6 +2576,16 @@ void PeerReplayer::peer_status(Formatter *f) {
         f->dump_string("sync_percent", os.str());
       }
       f->close_section(); //bytes
+      f->open_object_section("files");
+      f->dump_unsigned("sync_files", sync_stat.sync_files);
+      f->dump_unsigned("total_files", sync_stat.total_files);
+      if (sync_stat.total_files > 0) {
+        double sync_file_pct = (static_cast<double>(sync_stat.sync_files) * 100.0) / sync_stat.total_files;
+        std::ostringstream os;
+        os << std::fixed << std::setprecision(2) << sync_file_pct << "%";
+        f->dump_string("sync_percent", os.str());
+      }
+      f->close_section(); //files
       f->close_section(); //current_syncing_snap
     }
     if (sync_stat.last_synced_snap) {
@@ -2587,6 +2598,9 @@ void PeerReplayer::peer_status(Formatter *f) {
       }
       if (sync_stat.last_sync_bytes) {
 	    f->dump_string("sync_bytes", format_bytes(*sync_stat.last_sync_bytes));
+      }
+      if (sync_stat.last_sync_files) {
+	f->dump_unsigned("sync_files", *sync_stat.last_sync_files);
       }
       f->close_section();
     }

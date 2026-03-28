@@ -385,8 +385,11 @@ private:
     monotime last_synced = clock::zero();
     boost::optional<double> last_sync_duration;
     boost::optional<uint64_t> last_sync_bytes; //last sync bytes for display in status
+    boost::optional<uint64_t> last_sync_files; //last num of sync files for display in status
     uint64_t sync_bytes = 0; //sync bytes counter, independently for each directory sync.
     uint64_t total_bytes = 0; //total bytes counter, independently for each directory sync.
+    uint64_t sync_files = 0; //sync files counter, independently for each directory sync.
+    uint64_t total_files = 0; //total files counter, independently for each directory sync.
   };
 
   void _inc_failed_count(const std::string &dir_root) {
@@ -420,6 +423,8 @@ private:
     auto &sync_stat = m_snap_sync_stats.at(dir_root);
     sync_stat.sync_bytes = 0;
     sync_stat.total_bytes = 0;
+    sync_stat.sync_files = 0;
+    sync_stat.total_files = 0;
   }
   void _set_last_synced_snap(const std::string &dir_root, uint64_t snap_id,
                             const std::string &snap_name) {
@@ -431,8 +436,6 @@ private:
                             const std::string &snap_name) {
     std::scoped_lock locker(m_lock);
     _set_last_synced_snap(dir_root, snap_id, snap_name);
-    auto &sync_stat = m_snap_sync_stats.at(dir_root);
-    sync_stat.sync_bytes = 0;
   }
   void set_current_syncing_snap(const std::string &dir_root, uint64_t snap_id,
                                 const std::string &snap_name) {
@@ -464,17 +467,25 @@ private:
     sync_stat.last_synced = clock::now();
     sync_stat.last_sync_duration = duration;
     sync_stat.last_sync_bytes = sync_stat.sync_bytes;
+    sync_stat.last_sync_files = sync_stat.sync_files;
     ++sync_stat.synced_snap_count;
+    _reset_sync_stat(dir_root);
   }
   void inc_sync_bytes(const std::string &dir_root, const uint64_t& b) {
     std::scoped_lock locker(m_lock);
     auto &sync_stat = m_snap_sync_stats.at(dir_root);
     sync_stat.sync_bytes += b;
   }
-  void inc_total_bytes(const std::string &dir_root, const uint64_t& b) {
+  void inc_sync_files(const std::string &dir_root) {
+    std::scoped_lock locker(m_lock);
+    auto &sync_stat = m_snap_sync_stats.at(dir_root);
+    sync_stat.sync_files++;
+  }
+  void inc_total_bytes_files(const std::string &dir_root, const uint64_t& b) {
     std::scoped_lock locker(m_lock);
     auto &sync_stat = m_snap_sync_stats.at(dir_root);
     sync_stat.total_bytes += b;
+    sync_stat.total_files++;
   }
   bool should_backoff(const std::string &dir_root, int *retval) {
     if (m_fs_mirror->is_blocklisted()) {
