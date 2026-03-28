@@ -2012,6 +2012,41 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_rest_conn_connect_to_resolved_ips
+  type: bool
+  level: advanced
+  long_desc: When an RGW endpoint hostname resolves to multiple A or AAAA
+    records, libcurl normally connects to only the first address returned by
+    DNS. Enabling this option causes RGW to resolve each configured endpoint
+    into all of its addresses and distribute outgoing requests across them
+    using round-robin, with per-IP health tracking. This applies to any RGW
+    component that uses RGWHTTPClient for outbound connections, including
+    multisite replication, and other HTTP-based services. For example, in a
+    multisite deployment where zone endpoints such as "https://zone-a.example.com"
+    map to several backend RGW nodes, this allows inter-zone traffic to be spread
+    across all peers without requiring an external load balancer.
+  default: false
+  services:
+  - rgw
+  see_also:
+  - rgw_rest_conn_ip_fail_timeout_secs
+  with_legacy: true
+- name: rgw_rest_conn_ip_fail_timeout_secs
+  desc: IP failure tracking timeout (requires rgw_rest_conn_connect_to_resolved_ips=true)
+  type: uint
+  level: advanced
+  long_desc: When rgw_rest_conn_connect_to_resolved_ips is enabled, RGW tracks
+    per-IP connection failures by remembering the timestamp of the most recent
+    failure. This option controls how long (in seconds) an IP address remains
+    marked as "failed" before RGW considers it eligible for retry.
+    After this timeout expires, the IP will be tried again in the normal
+    round-robin rotation.
+  default: 2
+  services:
+  - rgw
+  see_also:
+  - rgw_rest_conn_connect_to_resolved_ips
+  with_legacy: true
 - name: rgw_obj_stripe_size
   type: size
   level: advanced

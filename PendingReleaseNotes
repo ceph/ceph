@@ -64,6 +64,10 @@
 * RBD: Mirror snapshot creation and trash purge schedules are now automatically
   staggered when no explicit "start-time" is specified. This reduces scheduling
   spikes and distributes work more evenly over time.
+* RGW: HTTP endpoints for RGW services such as multisite can now be resolved to
+  all IP addresses with round-robin distribution and per-IP health tracking via
+  `rgw_rest_conn_connect_to_resolved_ips`, enabling DNS service discovery where
+  external load balancers are not used.
 
 >=20.0.0
 

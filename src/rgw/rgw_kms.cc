@@ -283,7 +283,7 @@ protected:
     concat_url(secret_url, std::string(infix));
     concat_url(secret_url, std::string(key_id));
 
-    RGWHTTPTransceiver secret_req(cct, method, secret_url, &secret_bl);
+    RGWHTTPTransceiver secret_req(cct, method, RGWEndpoint{secret_url}, &secret_bl);
 
     if (postdata.length()) {
       secret_req.set_post_data(postdata);
@@ -946,7 +946,7 @@ static int request_key_from_barbican(const DoutPrefixProvider *dpp,
   concat_url(secret_url, "/payload");
 
   bufferlist secret_bl;
-  RGWHTTPTransceiver secret_req(cct, "GET", secret_url, &secret_bl);
+  RGWHTTPTransceiver secret_req(cct, "GET", RGWEndpoint{secret_url}, &secret_bl);
   secret_req.append_header("Accept", "application/octet-stream");
   secret_req.append_header("X-Auth-Token", barbican_token);
 

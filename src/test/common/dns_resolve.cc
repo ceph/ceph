@@ -20,8 +20,12 @@
 #include "common/debug.h"
 #include "gmock/gmock.h"
 
-
 #include <sstream>
+#include <set>
+
+#ifndef T_AAAA
+#define T_AAAA ns_t_aaaa
+#endif
 
 #define TEST_DEBUG 20
 
@@ -262,3 +266,223 @@ TEST_F(DNSResolverTest, resolve_srv_hosts_fail) {
   ASSERT_TRUE(records.empty());
 }
 
+TEST_F(DNSResolverTest, resolve_all_addrs_ipv4_only) {
+  MockResolvHWrapper *resolvH = new MockResolvHWrapper();
+
+  int lena = sizeof(ns_query_msg_mon_a_payload);
+
+#ifdef HAVE_RES_NQUERY
+  EXPECT_CALL(*resolvH, res_nquery(_, StrEq("mon.a.ceph.com"), C_IN, T_A, _, _))
+      .WillOnce(DoAll(SetArrayArgument<4>(ns_query_msg_mon_a_payload,
+          ns_query_msg_mon_a_payload + lena), Return(lena)));
+
+  EXPECT_CALL(*resolvH, res_nquery(_, StrEq("mon.a.ceph.com"), C_IN, T_AAAA, _, _))
+      .WillOnce(Return(-1));
+#else
+  EXPECT_CALL(*resolvH, res_query(StrEq("mon.a.ceph.com"), C_IN, T_A, _, _))
+      .WillOnce(DoAll(SetArrayArgument<3>(ns_query_msg_mon_a_payload,
+          ns_query_msg_mon_a_payload + lena), Return(lena)));
+
+  EXPECT_CALL(*resolvH, res_query(StrEq("mon.a.ceph.com"), C_IN, T_AAAA, _, _))
+      .WillOnce(Return(-1));
+#endif
+
+  std::vector<entity_addr_t> addrs;
+  int ret = DNSResolver::get_instance(resolvH)->resolve_all_addrs(
+      g_ceph_context, "mon.a.ceph.com", &addrs);
+
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(addrs.size(), 1u);
+  std::ostringstream os;
+  os << addrs[0];
+  ASSERT_EQ(os.str(), "v2:192.168.1.11:0/0");
+}
+
+TEST_F(DNSResolverTest, resolve_all_addrs_ipv6_only) {
+  MockResolvHWrapper *resolvH = new MockResolvHWrapper();
+
+  int len_aaaa = sizeof(ns_query_msg_mon_a_aaaa_payload);
+
+#ifdef HAVE_RES_NQUERY
+  EXPECT_CALL(*resolvH, res_nquery(_, StrEq("mon.a.ceph.com"), C_IN, T_A, _, _))
+      .WillOnce(Return(-1));
+
+  EXPECT_CALL(*resolvH, res_nquery(_, StrEq("mon.a.ceph.com"), C_IN, T_AAAA, _, _))
+      .WillOnce(DoAll(SetArrayArgument<4>(ns_query_msg_mon_a_aaaa_payload,
+          ns_query_msg_mon_a_aaaa_payload + len_aaaa), Return(len_aaaa)));
+#else
+  EXPECT_CALL(*resolvH, res_query(StrEq("mon.a.ceph.com"), C_IN, T_A, _, _))
+      .WillOnce(Return(-1));
+
+  EXPECT_CALL(*resolvH, res_query(StrEq("mon.a.ceph.com"), C_IN, T_AAAA, _, _))
+      .WillOnce(DoAll(SetArrayArgument<3>(ns_query_msg_mon_a_aaaa_payload,
+          ns_query_msg_mon_a_aaaa_payload + len_aaaa), Return(len_aaaa)));
+#endif
+
+  std::vector<entity_addr_t> addrs;
+  int ret = DNSResolver::get_instance(resolvH)->resolve_all_addrs(
+      g_ceph_context, "mon.a.ceph.com", &addrs);
+
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(addrs.size(), 1u);
+  std::ostringstream os;
+  os << addrs[0];
+  ASSERT_EQ(os.str(), "v2:[2001:db8::1]:0/0");
+}
+
+TEST_F(DNSResolverTest, resolve_all_addrs_no_results) {
+  MockResolvHWrapper *resolvH = new MockResolvHWrapper();
+
+#ifdef HAVE_RES_NQUERY
+  EXPECT_CALL(*resolvH, res_nquery(_, StrEq("nonexistent.ceph.com"), C_IN, T_A, _, _))
+      .WillOnce(Return(-1));
+
+  EXPECT_CALL(*resolvH, res_nquery(_, StrEq("nonexistent.ceph.com"), C_IN, T_AAAA, _, _))
+      .WillOnce(Return(-1));
+#else
+  EXPECT_CALL(*resolvH, res_query(StrEq("nonexistent.ceph.com"), C_IN, T_A, _, _))
+      .WillOnce(Return(-1));
+
+  EXPECT_CALL(*resolvH, res_query(StrEq("nonexistent.ceph.com"), C_IN, T_AAAA, _, _))
+      .WillOnce(Return(-1));
+#endif
+
+  std::vector<entity_addr_t> addrs;
+  int ret = DNSResolver::get_instance(resolvH)->resolve_all_addrs(
+      g_ceph_context, "nonexistent.ceph.com", &addrs);
+
+  ASSERT_LT(ret, 0);
+  ASSERT_TRUE(addrs.empty());
+}
+
+TEST_F(DNSResolverTest, resolve_all_addrs_multiple_ipv4) {
+  MockResolvHWrapper *resolvH = new MockResolvHWrapper();
+
+  int len_multi_a = sizeof(ns_query_msg_multi_a_payload);
+
+#ifdef HAVE_RES_NQUERY
+  EXPECT_CALL(*resolvH, res_nquery(_, StrEq("multi.ceph.com"), C_IN, T_A, _, _))
+      .WillOnce(DoAll(SetArrayArgument<4>(ns_query_msg_multi_a_payload,
+          ns_query_msg_multi_a_payload + len_multi_a), Return(len_multi_a)));
+
+  EXPECT_CALL(*resolvH, res_nquery(_, StrEq("multi.ceph.com"), C_IN, T_AAAA, _, _))
+      .WillOnce(Return(-1));
+#else
+  EXPECT_CALL(*resolvH, res_query(StrEq("multi.ceph.com"), C_IN, T_A, _, _))
+      .WillOnce(DoAll(SetArrayArgument<3>(ns_query_msg_multi_a_payload,
+          ns_query_msg_multi_a_payload + len_multi_a), Return(len_multi_a)));
+
+  EXPECT_CALL(*resolvH, res_query(StrEq("multi.ceph.com"), C_IN, T_AAAA, _, _))
+      .WillOnce(Return(-1));
+#endif
+
+  std::vector<entity_addr_t> addrs;
+  int ret = DNSResolver::get_instance(resolvH)->resolve_all_addrs(
+      g_ceph_context, "multi.ceph.com", &addrs);
+
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(addrs.size(), 3u);
+
+  std::set<std::string> expected = {
+    "v2:192.168.1.100:0/0",
+    "v2:192.168.1.101:0/0",
+    "v2:192.168.1.102:0/0"
+  };
+  std::set<std::string> actual;
+  for (const auto& addr : addrs) {
+    std::ostringstream os;
+    os << addr;
+    actual.insert(os.str());
+  }
+  ASSERT_EQ(actual, expected);
+}
+
+TEST_F(DNSResolverTest, resolve_all_addrs_multiple_ipv6) {
+  MockResolvHWrapper *resolvH = new MockResolvHWrapper();
+
+  int len_multi_aaaa = sizeof(ns_query_msg_multi_aaaa_payload);
+
+#ifdef HAVE_RES_NQUERY
+  EXPECT_CALL(*resolvH, res_nquery(_, StrEq("multi.ceph.com"), C_IN, T_A, _, _))
+      .WillOnce(Return(-1));
+
+  EXPECT_CALL(*resolvH, res_nquery(_, StrEq("multi.ceph.com"), C_IN, T_AAAA, _, _))
+      .WillOnce(DoAll(SetArrayArgument<4>(ns_query_msg_multi_aaaa_payload,
+          ns_query_msg_multi_aaaa_payload + len_multi_aaaa), Return(len_multi_aaaa)));
+#else
+  EXPECT_CALL(*resolvH, res_query(StrEq("multi.ceph.com"), C_IN, T_A, _, _))
+      .WillOnce(Return(-1));
+
+  EXPECT_CALL(*resolvH, res_query(StrEq("multi.ceph.com"), C_IN, T_AAAA, _, _))
+      .WillOnce(DoAll(SetArrayArgument<3>(ns_query_msg_multi_aaaa_payload,
+          ns_query_msg_multi_aaaa_payload + len_multi_aaaa), Return(len_multi_aaaa)));
+#endif
+
+  std::vector<entity_addr_t> addrs;
+  int ret = DNSResolver::get_instance(resolvH)->resolve_all_addrs(
+      g_ceph_context, "multi.ceph.com", &addrs);
+
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(addrs.size(), 2u);
+
+  std::set<std::string> expected = {
+    "v2:[2001:db8::1]:0/0",
+    "v2:[2001:db8::2]:0/0"
+  };
+  std::set<std::string> actual;
+  for (const auto& addr : addrs) {
+    std::ostringstream os;
+    os << addr;
+    actual.insert(os.str());
+  }
+  ASSERT_EQ(actual, expected);
+}
+
+TEST_F(DNSResolverTest, resolve_all_addrs_both_families) {
+  MockResolvHWrapper *resolvH = new MockResolvHWrapper();
+
+  int lena = sizeof(ns_query_msg_mon_a_payload);
+  int len_aaaa = sizeof(ns_query_msg_mon_a_aaaa_payload);
+
+#ifdef HAVE_RES_NQUERY
+  EXPECT_CALL(*resolvH, res_nquery(_, StrEq("mon.a.ceph.com"), C_IN, T_A, _, _))
+      .WillOnce(DoAll(SetArrayArgument<4>(ns_query_msg_mon_a_payload,
+          ns_query_msg_mon_a_payload + lena), Return(lena)));
+
+  EXPECT_CALL(*resolvH, res_nquery(_, StrEq("mon.a.ceph.com"), C_IN, T_AAAA, _, _))
+      .WillOnce(DoAll(SetArrayArgument<4>(ns_query_msg_mon_a_aaaa_payload,
+          ns_query_msg_mon_a_aaaa_payload + len_aaaa), Return(len_aaaa)));
+#else
+  EXPECT_CALL(*resolvH, res_query(StrEq("mon.a.ceph.com"), C_IN, T_A, _, _))
+      .WillOnce(DoAll(SetArrayArgument<3>(ns_query_msg_mon_a_payload,
+          ns_query_msg_mon_a_payload + lena), Return(lena)));
+
+  EXPECT_CALL(*resolvH, res_query(StrEq("mon.a.ceph.com"), C_IN, T_AAAA, _, _))
+      .WillOnce(DoAll(SetArrayArgument<3>(ns_query_msg_mon_a_aaaa_payload,
+          ns_query_msg_mon_a_aaaa_payload + len_aaaa), Return(len_aaaa)));
+#endif
+
+  std::vector<entity_addr_t> addrs;
+  int ret = DNSResolver::get_instance(resolvH)->resolve_all_addrs(
+      g_ceph_context, "mon.a.ceph.com", &addrs);
+
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(addrs.size(), 2u);
+
+  // Check we got both IPv4 and IPv6
+  bool found_ipv4 = false;
+  bool found_ipv6 = false;
+  for (const auto& addr : addrs) {
+    std::ostringstream os;
+    os << addr;
+    if (os.str().find('[') != std::string::npos) {
+      found_ipv6 = true;
+      ASSERT_EQ(os.str(), "v2:[2001:db8::1]:0/0");
+    } else {
+      found_ipv4 = true;
+      ASSERT_EQ(os.str(), "v2:192.168.1.11:0/0");
+    }
+  }
+  ASSERT_TRUE(found_ipv4);
+  ASSERT_TRUE(found_ipv6);
+}

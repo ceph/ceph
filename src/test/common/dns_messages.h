@@ -78,6 +78,138 @@ u_char ns_query_msg_mon_a_payload[] = {
   0x00, 0x01, 0x00, 0x09, 0x3A, 0x80, 0x00, 0x04, 0xC0, 0xA8, 0x01, 0xFE
 };
 
+/*
+ * A record query with multiple answers for multi.ceph.com
+ *
+ * multi.ceph.com		300	IN	A	192.168.1.100
+ * multi.ceph.com		300	IN	A	192.168.1.101
+ * multi.ceph.com		300	IN	A	192.168.1.102
+ */
+const u_char ns_query_msg_multi_a_payload[] = {
+  // Header section
+  0x00, 0x01,  // ID
+  0x81, 0x80,  // Flags: response, recursion desired, recursion available
+  0x00, 0x01,  // QDCOUNT: 1 question
+  0x00, 0x03,  // ANCOUNT: 3 answers
+  0x00, 0x00,  // NSCOUNT: 0
+  0x00, 0x00,  // ARCOUNT: 0
+
+  // Question section
+  // multi.ceph.com
+  0x05, 'm', 'u', 'l', 't', 'i',
+  0x04, 'c', 'e', 'p', 'h',
+  0x03, 'c', 'o', 'm',
+  0x00,        // End of name
+  0x00, 0x01,  // Type: A (1)
+  0x00, 0x01,  // Class: IN
+
+  // Answer 1: 192.168.1.100
+  0xc0, 0x0c,  // Name pointer to offset 12 (multi.ceph.com)
+  0x00, 0x01,  // Type: A (1)
+  0x00, 0x01,  // Class: IN
+  0x00, 0x00, 0x01, 0x2c,   // TTL: 300
+  0x00, 0x04,               // RDLENGTH: 4 bytes (IPv4 address)
+  0xc0, 0xa8, 0x01, 0x64,   // RDATA: 192.168.1.100
+
+  // Answer 2: 192.168.1.101
+  0xc0, 0x0c,  // Name pointer
+  0x00, 0x01,  // Type: A
+  0x00, 0x01,  // Class: IN
+  0x00, 0x00, 0x01, 0x2c, // TTL: 300
+  0x00, 0x04,             // RDLENGTH: 4
+  0xc0, 0xa8, 0x01, 0x65, // RDATA: 192.168.1.101
+
+  // Answer 3: 192.168.1.102
+  0xc0, 0x0c,  // Name pointer
+  0x00, 0x01,  // Type: A
+  0x00, 0x01,  // Class: IN
+  0x00, 0x00, 0x01, 0x2c, // TTL: 300
+  0x00, 0x04,             // RDLENGTH: 4
+  0xc0, 0xa8, 0x01, 0x66  // RDATA: 192.168.1.102
+};
+
+/*
+ * AAAA record query for mon.a.ceph.com
+ */
+const u_char ns_query_msg_mon_a_aaaa_payload[] = {
+  // Header section
+  0x00, 0x01,  // ID
+  0x81, 0x80,  // Flags: response, recursion desired, recursion available
+  0x00, 0x01,  // QDCOUNT: 1 question
+  0x00, 0x01,  // ANCOUNT: 1 answer
+  0x00, 0x00,  // NSCOUNT: 0
+  0x00, 0x00,  // ARCOUNT: 0
+
+  // Question section
+  // mon.a.ceph.com
+  0x03, 'm', 'o', 'n',
+  0x01, 'a',
+  0x04, 'c', 'e', 'p', 'h',
+  0x03, 'c', 'o', 'm',
+  0x00,        // End of name
+  0x00, 0x1c,  // Type: AAAA (28)
+  0x00, 0x01,  // Class: IN
+
+  // Answer section
+  0xc0, 0x0c,  // Name pointer to offset 12 (mon.a.ceph.com)
+  0x00, 0x1c,  // Type: AAAA (28)
+  0x00, 0x01,  // Class: IN
+  0x00, 0x00, 0x01, 0x2c,  // TTL: 300
+  0x00, 0x10,  // RDLENGTH: 16 bytes (IPv6 address)
+  // RDATA: 2001:db8::1
+  0x20, 0x01, 0x0d, 0xb8,
+  0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x01
+};
+
+/*
+ * AAAA record query with multiple answers for multi.ceph.com
+ * ;; ANSWER SECTION:
+ * multi.ceph.com.		300	IN	AAAA	2001:db8::1
+ * multi.ceph.com.		300	IN	AAAA	2001:db8::2
+ */
+const u_char ns_query_msg_multi_aaaa_payload[] = {
+  // Header section
+  0x00, 0x01,  // ID
+  0x81, 0x80,  // Flags: response, recursion desired, recursion available
+  0x00, 0x01,  // QDCOUNT: 1 question
+  0x00, 0x02,  // ANCOUNT: 2 answers
+  0x00, 0x00,  // NSCOUNT: 0
+  0x00, 0x00,  // ARCOUNT: 0
+
+  // Question section
+  // multi.ceph.com
+  0x05, 'm', 'u', 'l', 't', 'i',
+  0x04, 'c', 'e', 'p', 'h',
+  0x03, 'c', 'o', 'm',
+  0x00,        // End of name
+  0x00, 0x1c,  // Type: AAAA (28)
+  0x00, 0x01,  // Class: IN
+
+  // Answer 1: 2001:db8::1
+  0xc0, 0x0c,  // Name pointer to offset 12 (multi.ceph.com)
+  0x00, 0x1c,  // Type: AAAA (28)
+  0x00, 0x01,  // Class: IN
+  0x00, 0x00, 0x01, 0x2c,  // TTL: 300
+  0x00, 0x10,  // RDLENGTH: 16 bytes (IPv6 address)
+  0x20, 0x01, 0x0d, 0xb8,
+  0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x01,  // RDATA: 2001:db8::1
+
+  // Answer 2: 2001:db8::2
+  0xc0, 0x0c,  // Name pointer
+  0x00, 0x1c,  // Type: AAAA (28)
+  0x00, 0x01,  // Class: IN
+  0x00, 0x00, 0x01, 0x2c,  // TTL: 300
+  0x00, 0x10,  // RDLENGTH: 16
+  0x20, 0x01, 0x0d, 0xb8,
+  0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x02   // RDATA: 2001:db8::2
+};
+
 class MockResolvHWrapper : public ResolvHWrapper {
 
 public:
