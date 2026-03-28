@@ -1167,6 +1167,12 @@ PyObject* ActivePyModules::get_perf_schema_python(
   if (!daemons.empty()) {
     for (auto &[key, state] : daemons) {
       std::lock_guard l(state->lock);
+      // Skip daemons with no perf counter instances (e.g., destroyed OSDs)
+      // to avoid closing sections that were never opened
+      // Fixes: https://tracker.ceph.com/issues/74693
+      if (state->perf_counters.instances.empty()) {
+        continue;
+      }
       with_gil(no_gil, [&, key = ceph::to_string(key), state = state] {
 	std::string_view key_name, prev_key_name;
 	perf_counter_label_pairs prev_key_labels;
