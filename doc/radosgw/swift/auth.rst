@@ -10,9 +10,7 @@ To obtain a token from RADOS Gateway, you must create a user. For example::
     sudo radosgw-admin user create --subuser="{username}:{subusername}" --uid="{username}" 
     --display-name="{Display Name}" --key-type=swift --secret="{password}" --access=full
 
-For details on RADOS Gateway administration, see `radosgw-admin`_. 
-
-.. _radosgw-admin: ../../../man/8/radosgw-admin/ 
+For details on RADOS Gateway administration, see :ref:`man-radosgw-admin`. 
 
 .. note::
   For those used to the Swift API this is implementing the Swift auth v1.0 API, as such
