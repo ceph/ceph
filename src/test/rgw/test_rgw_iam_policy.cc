@@ -1763,3 +1763,130 @@ TEST_F(ConditionTest, StringNotLikeLogic)
     EXPECT_TRUE(stringNotLike.eval({{key, "public/document.pdf"}}));
   }
 }
+
+TEST_F(ConditionTest, KeyStoneRoleStringEquals)
+{
+  std::string key = "keystone:role";
+
+  Condition cond{TokenID::StringEquals, key.data(), key.size(), false};
+  cond.vals.push_back("testrole");
+
+  // No roles
+  EXPECT_FALSE(cond.eval({}));
+
+  // Single matching role
+  EXPECT_TRUE(cond.eval({{key, "testrole"}}));
+
+  // Single non-matching role
+  EXPECT_FALSE(cond.eval({{key, "member"}}));
+
+  //Multiple roles in env,one matches
+  Environment multi_env;
+  multi_env.emplace(key, "member");
+  multi_env.emplace(key, "testrole");
+  multi_env.emplace(key, "reader");
+  EXPECT_TRUE(cond.eval(multi_env));
+
+  //Multiple roles in env, no match
+  Environment no_match_env;
+  no_match_env.emplace(key, "member");
+  no_match_env.emplace(key, "reader");
+  EXPECT_FALSE(cond.eval(no_match_env));
+
+  // Multiple identical roles (redundancy check)
+  Environment duplicate_env;
+  duplicate_env.emplace(key, "testrole");
+  duplicate_env.emplace(key, "testrole");
+  EXPECT_TRUE(cond.eval(duplicate_env));
+}
+
+TEST_F(ConditionTest, KeyStoneRoleNotStringEquals)
+{
+  std::string key = "keystone:role";
+
+  Condition cond{TokenID::StringNotEquals, key.data(), key.size(), false};
+  cond.vals.push_back("admin");
+
+  // No roles
+  EXPECT_FALSE(cond.eval({}));
+
+  // Role matches
+  EXPECT_FALSE(cond.eval({{key, "admin"}}));
+
+  // Role doesn't match
+  EXPECT_TRUE(cond.eval({{key, "member"}}));
+
+  // Multiple roles in env, one matches -> false
+  Environment multi_env;
+  multi_env.emplace(key, "member");
+  multi_env.emplace(key, "admin");
+  EXPECT_FALSE(multi_env.count(key) == 0);
+  EXPECT_FALSE(cond.eval(multi_env));
+
+  // Multiple roles, none match -> true
+  Environment no_match_env;
+  no_match_env.emplace(key, "member");
+  no_match_env.emplace(key, "reader");
+  EXPECT_TRUE(cond.eval(no_match_env));
+}
+
+TEST_F(ConditionTest, KeyStoneRolePolicyParsing)
+{
+  string keystone_role_policy = R"(
+  {
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Effect" : "Allow",
+      "Principal": "*",
+      "Action": "s3:GetObject",
+      "Resource": [
+        "arn:aws:s3:::example_bucket/*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "keystone:role": "testrole"
+        }
+      }
+    }]
+  }
+  )";
+
+  string tenant = "arbitrary_tenant";
+  boost::optional<Policy> p;
+
+  ASSERT_NO_THROW(
+    p = Policy(cct.get(), &tenant, keystone_role_policy, true));
+  ASSERT_TRUE(p);
+  EXPECT_EQ(p->statements.size(), 1U);
+  EXPECT_EQ(p->statements[0].conditions.size(), 1U);
+  EXPECT_EQ(p->statements[0].conditions[0].key, "keystone:role");
+  EXPECT_EQ(p->statements[0].conditions[0].vals.size(), 1U);
+  EXPECT_EQ(p->statements[0].conditions[0].vals[0], "testrole");
+
+  // Eval with matching role in environment
+  Environment match_env;
+  match_env.emplace("keystone:role", "testrole");
+  EXPECT_TRUE(p->statements[0].conditions[0].eval(match_env));
+
+  // Eval with non-matching role
+  Environment nomatch_env;
+  nomatch_env.emplace("keystone:role", "member");
+  EXPECT_FALSE(p->statements[0].conditions[0].eval(nomatch_env));
+
+  // Eval with multiple roles, one matching
+  Environment multi_env;
+  multi_env.emplace("keystone:role", "member");
+  multi_env.emplace("keystone:role", "testrole");
+  EXPECT_TRUE(p->statements[0].conditions[0].eval(multi_env));
+}
+
+TEST_F(ConditionTest, KeystoneUserIdStringEquals)
+{
+  const std::string key = "keystone:userid";
+  Condition cond{TokenID::StringEquals, key.data(), key.size(), false};
+  cond.vals.push_back("user-123");
+
+  EXPECT_FALSE(cond.eval({}));
+  EXPECT_TRUE(cond.eval({{key, "user-123"}}));
+  EXPECT_FALSE(cond.eval({{key, "user-456"}}));
+}

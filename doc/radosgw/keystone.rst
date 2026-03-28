@@ -181,6 +181,19 @@ S3 API (with AWS-like access and secret keys), if the ``rgw s3 auth
 use keystone`` option is set. For details, see
 :doc:`s3/authentication`.
 
+Requests authenticated via Keystone (Swift tokens or S3 with Keystone-managed
+credentials) expose the Keystone idenitity in the IAM policy environment
+as the condition keys: ``keystone:role`` (role names) and
+``keystone:userid`` (user UUID). These conditions can be used in bucket
+policies and idenitity policies with ``StringEquals``, ``StringNotEquals`` etc.
+
+- **keystone:role** - Allow or deny by *role* (e.g only users with role
+  ``reader`` get read access). Use for RBAC.
+- **keystone:userid** - Restrict to specific *user*. Use when policy must
+  depend on who the user is, not just their role.
+
+See :doc:`bucketpolicy` for list of supported condition keys.
+
 Service Token Support
 ---------------------
 

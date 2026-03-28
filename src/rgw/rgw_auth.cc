@@ -1043,6 +1043,18 @@ void rgw::auth::RemoteApplier::modify_request_state(const DoutPrefixProvider* dp
   // copy our identity policies into req_state
   s->iam_identity_policies.insert(s->iam_identity_policies.end(),
                                   policies.begin(), policies.end());
+
+  for (auto role : this->info.keystone_roles) {
+    // Keystone roles are case-insensitive. Normalize the roles to
+    // lowercase before placing them into the environment.
+    std::transform(role.begin(), role.end(), role.begin(),
+      [](unsigned char c){ return std::tolower(c); });
+    s->env.emplace("keystone:role", std::move(role));
+  }
+
+  if (!info.keystone_user_id.empty()) {
+    s->env.emplace("keystone:userid", info.keystone_user_id);
+  }
 }
 
 std::optional<rgw::ARN> rgw::auth::RemoteApplier::get_caller_identity() const 
