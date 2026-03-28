@@ -34,7 +34,7 @@
 #include "include/utime.h"
 #include "KeyValueDB.h"
 #include "RocksDBStore.h"
-
+#include "common/admin_socket.h"
 #include "common/debug.h"
 
 #ifdef WITH_CRIMSON
@@ -189,13 +189,24 @@ int RocksDBStore::set_merge_operator(
   return 0;
 }
 
-class CephRocksdbLogger : public rocksdb::Logger {
+class CephRocksdbLogger : public rocksdb::Logger, public AdminSocketHook {
   CephContext *cct;
+  std::stringstream saved_init;
 public:
   explicit CephRocksdbLogger(CephContext *c) : cct(c) {
     cct->get();
+    if (cct->_conf->rocksdb_startuplog_save) {
+      AdminSocket *admin_socket = cct->get_admin_socket();
+      if (admin_socket) {
+        admin_socket->register_command("rocksdb initlog", this, "print rocksdb log captured on start");
+      }
+    }
   }
   ~CephRocksdbLogger() override {
+    AdminSocket *admin_socket = cct->get_admin_socket();
+    if (admin_socket) {
+      admin_socket->unregister_commands(this);
+    }
     cct->put();
   }
 
@@ -203,7 +214,16 @@ public:
   void Logv(const char* format, va_list ap) override {
     Logv(rocksdb::INFO_LEVEL, format, ap);
   }
-
+  void LogHeader(const char* format, va_list ap) override {
+    if (cct->_conf->rocksdb_startuplog_save) {
+      char buf[65536];
+      vsnprintf(buf, sizeof(buf), format, ap);
+      saved_init << buf << std::endl;
+    }
+    if (cct->_conf->rocksdb_startuplog_print) {
+      Logv(rocksdb::INFO_LEVEL, format, ap);
+    }
+  }
   // Write an entry to the log file with the specified log level
   // and format.  Any log with level under the internal log level
   // of *this (see @SetInfoLogLevel and @GetInfoLogLevel) will not be
@@ -215,6 +235,19 @@ public:
     char buf[65536];
     vsnprintf(buf, sizeof(buf), format, ap);
     *_dout << buf << dendl;
+
+  }
+  int call(
+    std::string_view command,
+    const cmdmap_t& cmdmap,
+    const bufferlist& inbl,
+    Formatter *f,
+    std::ostream& ss,
+    bufferlist& out) override
+  {
+    // the only command is "rocksdb initlog", so just print
+    out.append(saved_init.str());
+    return 0;
   }
 };
 

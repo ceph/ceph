@@ -3493,6 +3493,33 @@ options:
   level: advanced
   default: true
   with_legacy: true
+- name: rocksdb_startuplog_print
+  type: bool
+  level: advanced
+  default: false
+  flags:
+  - startup
+  with_legacy: true
+  desc: Print rocksdb initialization log to ceph log
+  long_desc: On each start rocksdb prints a lot of information about its configuration
+    and column family options. True to see it in ceph log, false to omit it from the log.
+    Only affects initial rocksdb output.
+  see_also:
+  - rocksdb_startuplog_save
+- name: rocksdb_startuplog_save
+  type: bool
+  level: advanced
+  default: true
+  flags:
+  - startup
+  with_legacy: true
+  desc: Store rocksdb initialization log for later
+  long_desc: On each start rocksdb prints a lot of information about its configuration
+    and column family options. It is often important to inspect the value later.
+    When true, admin socket command "rocksdb initlog" is created.
+    Only affects initial rocksdb output.
+  see_also:
+    - rocksdb_startuplog_print
 - name: rocksdb_cache_size
   type: size
   level: advanced
