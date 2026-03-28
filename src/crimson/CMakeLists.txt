@@ -173,6 +173,11 @@ set(crimson_mgr_srcs
 set(crimson_mon_srcs
   mon/MonClient.cc
   ${PROJECT_SOURCE_DIR}/src/mon/MonSub.cc)
+set(crimson_osdc_srcs
+  osdc/objecter.cc)
+set(crimson_client_srcs
+  client/io_context.cc
+  client/rados_client.cc)
 set(crimson_net_srcs
   ${PROJECT_SOURCE_DIR}/src/msg/async/crypto_onwire.cc
   ${PROJECT_SOURCE_DIR}/src/msg/async/compression_onwire.cc
@@ -188,8 +193,10 @@ set(crimson_net_srcs
   net/chained_dispatchers.cc)
 add_library(crimson STATIC
   ${crimson_auth_srcs}
+  ${crimson_client_srcs}
   ${crimson_mgr_srcs}
   ${crimson_mon_srcs}
+  ${crimson_osdc_srcs}
   ${crimson_net_srcs})
 target_compile_options(crimson PUBLIC
   "-ftemplate-backtrace-limit=0")

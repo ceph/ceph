@@ -19,6 +19,19 @@ install(TARGETS crimson-store-bench DESTINATION bin)
 add_executable(perf-crimson-msgr perf_crimson_msgr.cc)
 target_link_libraries(perf-crimson-msgr crimson)
 
+add_executable(crimson-rados-demo rados_demo.cc)
+if(HAS_VTA)
+  set_source_files_properties(rados_demo.cc
+    PROPERTIES COMPILE_FLAGS -fno-var-tracking-assignments)
+endif()
+target_link_libraries(crimson-rados-demo
+  crimson-main-config-bootstrap
+  crimson
+  crimson-common
+  legacy-option-headers
+  ${FMT_LIB})
+install(TARGETS crimson-rados-demo DESTINATION bin)
+
 add_executable(perf-async-msgr perf_async_msgr.cc)
 target_link_libraries(perf-async-msgr ceph-common global ${ALLOC_LIBS})
 
