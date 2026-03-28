@@ -181,9 +181,7 @@ void Background::run() {
     if (!lguard) {
       return;
     }
-    lguard->set_max_runtime(max_runtime);
-    lguard->reset_start_time();
-    
+
     std::vector<std::string> rgw_script_names;
     const auto rc = list_scripts(rgw_script_names);
     if (rc == -ENOENT || rc == -EAGAIN) {
@@ -191,7 +189,7 @@ void Background::run() {
     } else if (rc < 0) {
       ldpp_dout(dpp, 1) << "WARNING: failed to list background scripts. error " << rc << dendl;
     }
-
+    
     for (const auto& name : rgw_script_names) {
       const auto rc = read_script(name);
       if (rc == -ENOENT || rc == -EAGAIN) {
@@ -218,9 +216,7 @@ void Background::run() {
       if (perfcounter) {
         perfcounter->inc((failed ? l_rgw_lua_script_fail : l_rgw_lua_script_ok), 1);
       }
-      
     }
-
     process_scripts();
     std::unique_lock cond_lock(cond_mutex);
     cond.wait_for(cond_lock, std::chrono::seconds(execute_interval), [this]{return stopped;}); 
