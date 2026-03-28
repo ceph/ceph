@@ -438,6 +438,25 @@ CMAKE_DEPENDENT_OPTION(WITH_CEPH_DEBUG_MUTEX "Use debug ceph::mutex with lockdep
 
 option(WITH_CPUTRACE "Enable Cputrace support via the admin socket" OFF)
 
+# Determine default for WITH_CEPH_LOCKSTAT based on compiler/version
+set(_lockstat_default OFF)
+
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686|amd64|x86_64|AMD64")
+  foreach(_lang IN ITEMS C CXX)
+    if(DEFINED CMAKE_${_lang}_COMPILER_ID AND DEFINED CMAKE_${_lang}_COMPILER_VERSION)
+      if(CMAKE_${_lang}_COMPILER_ID STREQUAL "GNU"
+              AND CMAKE_${_lang}_COMPILER_VERSION VERSION_GREATER_EQUAL "11")
+        set(_lockstat_default ON)
+      elseif(CMAKE_${_lang}_COMPILER_ID STREQUAL "Clang"
+              AND CMAKE_${_lang}_COMPILER_VERSION VERSION_GREATER_EQUAL "18")
+        set(_lockstat_default ON)
+      endif()
+    endif()
+  endforeach()
+endif()
+
+option(WITH_CEPH_LOCKSTAT "Enable LockStat collection" ${_lockstat_default})
+
 #if allocator is set on command line make sure it matches below strings
 set(ALLOCATOR "" CACHE STRING
   "specify memory allocator to use. currently tcmalloc, tcmalloc_minimal, \

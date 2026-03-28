@@ -194,7 +194,6 @@ using ceph::encode;
 using ceph::fixed_u_to_string;
 using ceph::Formatter;
 using ceph::heartbeat_handle_d;
-using ceph::make_mutex;
 
 using namespace ceph::osd::scheduler;
 using TOPNSPC::common::cmd_getval;

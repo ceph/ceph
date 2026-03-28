@@ -20,7 +20,6 @@
 
 #include "common/admin_finisher.h" // for asok_finisher
 #include "common/LogClient.h"
-#include "common/fair_mutex.h"
 #include "common/Timer.h"
 #include "mgr/MgrClient.h"
 #include "msg/Dispatcher.h"
@@ -71,10 +70,10 @@ class MDSDaemon : public Dispatcher {
    * also check the `stopping` flag.  If stopping is true, you
    * must either do nothing and immediately drop the lock, or
    * never drop the lock again (i.e. call respawn()) */
-  ceph::fair_mutex mds_lock{"MDSDaemon::mds_lock"};
+  ceph::mutex mds_lock{ceph::make_mutex("MDSDaemon::mds_lock")};
   bool stopping = false;
 
-  class CommonSafeTimer<ceph::fair_mutex> timer;
+  class CommonSafeTimer<ceph::mutex> timer;
   std::string gss_ktfile_client{};
 
   int orig_argc;

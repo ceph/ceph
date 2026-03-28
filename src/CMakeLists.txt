@@ -203,6 +203,11 @@ if(WITH_CPUTRACE)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-DWITH_CPUTRACE>)
 endif()
 
+if(WITH_CEPH_LOCKSTAT)
+  message("Building with lockstat enabled")
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-DCEPH_LOCKSTAT>)
+endif()
+
 include(CheckCCompilerFlag)
 if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
     CHECK_C_COMPILER_FLAG(-fstack-protector-strong HAS_STACK_PROTECT)
