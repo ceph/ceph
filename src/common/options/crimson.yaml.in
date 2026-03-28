@@ -28,6 +28,92 @@ options:
   min: 0
   max: 32
 
+- name: crimson_io_properties_file
+  type: str
+  level: advanced
+  desc: Path to Seastar IO properties YAML file used to override
+        auto detected disk performance characteristics.
+  flags:
+  - startup
+
+- name: crimson_enable_scheduling_groups
+  type: bool
+  level: advanced
+  default: false
+  desc: Enable Seastar scheduling groups for crimson OSD
+
+- name: crimson_sg_client_shares
+  type: float
+  level: advanced
+  default: 1000
+  desc: Seastar scheduling group shares for client I/O
+
+- name: crimson_sg_peering_shares
+  type: float
+  level: advanced
+  default: 300
+  desc: Seastar scheduling group shares for peering
+
+- name: crimson_sg_urgent_recovery_shares
+  type: float
+  level: advanced
+  default: 200
+  desc: Seastar scheduling group shares for urgent recovery
+
+- name: crimson_sg_recovery_shares
+  type: float
+  level: advanced
+  default: 100
+  desc: Seastar scheduling group shares for background recovery
+
+- name: crimson_sg_scrub_shares
+  type: float
+  level: advanced
+  default: 50
+  desc: Seastar scheduling group shares for scrub
+
+- name: crimson_sg_background_shares
+  type: float
+  level: advanced
+  default: 50
+  desc: Seastar scheduling group shares for background tasks
+
+- name: crimson_sg_client_bandwidth
+  type: uint
+  level: advanced
+  default: 0
+  desc: IO bandwidth limit bytes/sec for client scheduling group
+
+- name: crimson_sg_peering_bandwidth
+  type: uint
+  level: advanced
+  default: 0
+  desc: IO bandwidth limit bytes/sec for peering scheduling group
+
+- name: crimson_sg_urgent_recovery_bandwidth
+  type: uint
+  level: advanced
+  default: 0
+  desc: IO bandwidth limit bytes/sec for urgent recovery scheduling group
+
+- name: crimson_sg_recovery_bandwidth
+  type: uint
+  level: advanced
+  default: 0
+  desc: IO bandwidth limit bytes/sec for recovery scheduling group
+
+- name: crimson_sg_scrub_bandwidth
+  type: uint
+  level: advanced
+  default: 0
+  desc: IO bandwidth limit bytes/sec for scrub scheduling group
+
+- name: crimson_sg_background_bandwidth
+  type: uint
+  level: advanced
+  default: 0
+  desc: IO bandwidth limit bytes/sec for background scheduling group
+
 # Reactor options:
 
 - name: crimson_reactor_backend

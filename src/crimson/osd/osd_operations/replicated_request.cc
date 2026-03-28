@@ -103,6 +103,9 @@ seastar::future<> RepRequest::with_pg(
 {
   LOG_PREFIX(RepRequest::with_pg);
   DEBUGI("{}", *this);
+  return shard_services.with_sg(
+    shard_services.get_sg_client(),
+    [this, pg=std::move(pg)]() mutable -> seastar::future<> {
   IRef ref = this;
   return interruptor::with_interruption([this, pg] {
     return with_pg_interruptible(pg);
@@ -113,6 +116,7 @@ seastar::future<> RepRequest::with_pg(
     logger().debug("{}: exit", *this);
     return handle.complete(
     ).finally([ref=std::move(ref), pg=std::move(pg)] {});
+  });
   });
 }
 

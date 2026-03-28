@@ -468,7 +468,7 @@ seastar::future<> OSD::start()
     ).then([this] {
       return osd_singleton_state.start_single(
         whoami, std::ref(*cluster_msgr), std::ref(*public_msgr),
-        std::ref(*monc), std::ref(*mgrc));
+        std::ref(*monc), std::ref(*mgrc), std::ref(shard_services));
     }).then([this] {
       return osd_states.start();
     }).then([this, store_shard_nums] {
@@ -484,6 +484,44 @@ seastar::future<> OSD::start()
         std::ref(store),
         std::ref(osd_states));
     });
+  }).then([this] {
+      return shard_services.invoke_on(PRIMARY_CORE,
+      [](ShardServices &ss) {
+        return seastar::when_all(
+          seastar::create_scheduling_group("client",          1000),
+          seastar::create_scheduling_group("peering",         300),
+          seastar::create_scheduling_group("urgent_recovery", 200),
+          seastar::create_scheduling_group("recovery",        100),
+          seastar::create_scheduling_group("scrub",           50),
+          seastar::create_scheduling_group("background",      50)
+        ).then([&ss](auto groups) {
+          ss.sg_client          = std::get<0>(groups).get();
+          ss.sg_peering         = std::get<1>(groups).get();
+          ss.sg_urgent_recovery = std::get<2>(groups).get();
+          ss.sg_recovery        = std::get<3>(groups).get();
+          ss.sg_scrub           = std::get<4>(groups).get();
+          ss.sg_background      = std::get<5>(groups).get();
+       });
+      });
+  }).then([this] {
+      // Broadcast to all other shards
+      auto &primary = shard_services.local();
+      return shard_services.invoke_on_all(
+        [sg_client          = primary.sg_client,
+         sg_peering         = primary.sg_peering,
+         sg_urgent_recovery = primary.sg_urgent_recovery,
+         sg_recovery        = primary.sg_recovery,
+         sg_scrub           = primary.sg_scrub,
+         sg_background      = primary.sg_background
+       ](ShardServices &ss) {
+         ss.sg_client          = sg_client;
+         ss.sg_peering         = sg_peering;
+         ss.sg_urgent_recovery = sg_urgent_recovery;
+         ss.sg_recovery        = sg_recovery;
+         ss.sg_scrub           = sg_scrub;
+         ss.sg_background      = sg_background;
+	 ss.scheduling_groups_enabled = local_conf().get_val<bool>("crimson_enable_scheduling_groups");
+      });
   }).then([this, FNAME] {
     heartbeat.reset(new Heartbeat{
 	whoami, get_shard_services(),

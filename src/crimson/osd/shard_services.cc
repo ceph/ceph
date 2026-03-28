@@ -134,7 +134,8 @@ OSDSingletonState::OSDSingletonState(
   crimson::net::Messenger &cluster_msgr,
   crimson::net::Messenger &public_msgr,
   crimson::mon::Client &monc,
-  crimson::mgr::Client &mgrc)
+  crimson::mgr::Client &mgrc,
+  seastar::sharded<ShardServices> &sharded_ss)
   : whoami(whoami),
     cluster_msgr(cluster_msgr),
     public_msgr(public_msgr),
@@ -153,7 +154,8 @@ OSDSingletonState::OSDSingletonState(
     snap_reserver(
       &cct,
       &finisher,
-      crimson::common::local_conf()->osd_max_trimming_pgs)
+      crimson::common::local_conf()->osd_max_trimming_pgs),
+    sharded_ss(sharded_ss)
 {
   crimson::common::local_conf().add_observer(this);
   osdmaps[0] = boost::make_local_shared<OSDMap>();
@@ -337,7 +339,20 @@ std::vector<std::string> OSDSingletonState::get_tracked_keys() const noexcept
   return {
     "osd_max_backfills"s,
     "osd_min_recovery_priority"s,
-    "osd_max_trimming_pgs"s
+    "osd_max_trimming_pgs"s,
+    "crimson_sg_client_shares"s,
+    "crimson_sg_peering_shares"s,
+    "crimson_sg_urgent_recovery_shares"s,
+    "crimson_sg_recovery_shares"s,
+    "crimson_sg_scrub_shares"s,
+    "crimson_sg_background_shares"s,
+    "crimson_enable_scheduling_groups"s,
+    "crimson_sg_client_bandwidth"s,
+    "crimson_sg_peering_bandwidth"s,
+    "crimson_sg_urgent_recovery_bandwidth"s,
+    "crimson_sg_recovery_bandwidth"s,
+    "crimson_sg_scrub_bandwidth"s,
+    "crimson_sg_background_bandwidth"s
   };
 }
 
@@ -345,6 +360,7 @@ void OSDSingletonState::handle_conf_change(
   const ConfigProxy& conf,
   const std::set <std::string> &changed)
 {
+  LOG_PREFIX(OSDSingletonState::handle_conf_change);
   if (changed.count("osd_max_backfills")) {
     local_reserver.set_max(conf->osd_max_backfills);
     remote_reserver.set_max(conf->osd_max_backfills);
@@ -355,6 +371,36 @@ void OSDSingletonState::handle_conf_change(
   }
   if (changed.count("osd_max_trimming_pgs")) {
     snap_reserver.set_max(conf->osd_max_trimming_pgs);
+  }
+
+  if (changed.count("crimson_enable_scheduling_groups")) {
+    bool enabled = conf.get_val<bool>("crimson_enable_scheduling_groups");
+    INFO("handle_conf_change: change crimson_enable_scheduling_groups {}", enabled);
+    std::ignore = sharded_ss.invoke_on_all([enabled](ShardServices &ss) {
+      ss.scheduling_groups_enabled = enabled;
+    });
+  }
+
+  auto &ss = sharded_ss.local();
+  for (const auto &[key, sg_member] : ShardServices::sg_share_keys) {
+    if (changed.count(std::string(key))) {
+       auto new_shares = static_cast<float>(conf.get_val<uint64_t>(key));
+       INFO("handle_conf_change: updating {} to {}", std::string(key), new_shares);
+       (ss.*sg_member).set_shares(
+        static_cast<float>(conf.get_val<uint64_t>(key)));
+    }
+  }
+
+  for (const auto &[key, sg_member] : ShardServices::sg_bandwidth_keys) {
+    if (changed.count(std::string(key))) {
+      auto bandwidth = conf.get_val<uint64_t>(key);
+      INFO("handle_conf_change: updating {} to {} bytes/sec",
+           std::string(key), bandwidth);
+      std::ignore = (ss.*sg_member).update_io_bandwidth(bandwidth)
+        .handle_exception([key, FNAME](std::exception_ptr ep) {
+         ERROR("failed to update bandwidth for {}: {}", key, ep);
+      });
+    }
   }
 }
 

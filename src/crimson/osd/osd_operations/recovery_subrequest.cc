@@ -31,6 +31,9 @@ seastar::future<> RecoverySubRequest::with_pg(
   ShardServices &shard_services, Ref<PG> pgref)
 {
   track_event<StartEvent>();
+  return shard_services.with_sg(
+    shard_services.get_sg_recovery(),
+    [this, pgref=std::move(pgref)]() mutable -> seastar::future<> {
   IRef opref = this;
   return interruptor::with_interruption([this, pgref] {
     LOG_PREFIX(RecoverySubRequest::with_pg);
@@ -49,6 +52,7 @@ seastar::future<> RecoverySubRequest::with_pg(
     track_event<CompletionEvent>();
     handle.exit();
   });
+    });
 }
 
 ConnectionPipeline &RecoverySubRequest::get_connection_pipeline()

@@ -244,14 +244,6 @@ class OSDSingletonState : public md_config_obs_t {
   using local_cached_map_t = OSDMapService::local_cached_map_t;
   using read_errorator = crimson::os::FuturizedStore::Shard::read_errorator;
 
-public:
-  OSDSingletonState(
-    int whoami,
-    crimson::net::Messenger &cluster_msgr,
-    crimson::net::Messenger &public_msgr,
-    crimson::mon::Client &monc,
-    crimson::mgr::Client &mgrc);
-
 private:
   const int whoami;
 
@@ -371,6 +363,16 @@ private:
   seastar::future<> store_maps(ceph::os::Transaction& t,
                                epoch_t start, Ref<MOSDMap> m);
   void trim_maps(ceph::os::Transaction& t, OSDSuperblock& superblock);
+
+public:
+  OSDSingletonState(
+    int whoami,
+    crimson::net::Messenger &cluster_msgr,
+    crimson::net::Messenger &public_msgr,
+    crimson::mon::Client &monc,
+    crimson::mgr::Client &mgrc,
+    seastar::sharded<ShardServices> &sharded_ss);
+  seastar::sharded<ShardServices> &sharded_ss;
 };
 
 /**
@@ -434,6 +436,62 @@ public:
 	    });
 	});
     }, std::move(orderer));
+  }
+
+  bool scheduling_groups_enabled;
+  seastar::scheduling_group sg_client;
+  seastar::scheduling_group sg_peering;
+  seastar::scheduling_group sg_urgent_recovery;
+  seastar::scheduling_group sg_recovery;
+  seastar::scheduling_group sg_scrub;
+  seastar::scheduling_group sg_background;
+
+  static constexpr std::pair<std::string_view, seastar::scheduling_group ShardServices::*>
+  sg_share_keys[] = {
+    {"crimson_sg_client_shares",           &ShardServices::sg_client},
+    {"crimson_sg_peering_shares",          &ShardServices::sg_peering},
+    {"crimson_sg_urgent_recovery_shares",  &ShardServices::sg_urgent_recovery},
+    {"crimson_sg_recovery_shares",         &ShardServices::sg_recovery},
+    {"crimson_sg_scrub_shares",            &ShardServices::sg_scrub},
+    {"crimson_sg_background_shares",       &ShardServices::sg_background},
+  };
+
+  static constexpr std::pair<std::string_view, seastar::scheduling_group ShardServices::*>
+  sg_bandwidth_keys[] = {
+    {"crimson_sg_client_bandwidth",           &ShardServices::sg_client},
+    {"crimson_sg_peering_bandwidths",          &ShardServices::sg_peering},
+    {"crimson_sg_urgent_recovery_bandwidth",  &ShardServices::sg_urgent_recovery},
+    {"crimson_sg_recovery_bandwidth",         &ShardServices::sg_recovery},
+    {"crimson_sg_scrub_bandwidth",            &ShardServices::sg_scrub},
+    {"crimson_sg_background_bandwidth",       &ShardServices::sg_background},
+  };
+
+  seastar::scheduling_group get_sg_client() {
+    return sg_client;
+  }
+  seastar::scheduling_group get_sg_peering() {
+    return sg_peering;
+  }
+  seastar::scheduling_group get_sg_urgent_recovery() {
+    return sg_urgent_recovery;
+  }
+  seastar::scheduling_group get_sg_recovery() {
+    return sg_recovery;
+  }
+  seastar::scheduling_group get_sg_scrub() {
+    return sg_scrub;
+  }
+  seastar::scheduling_group get_sg_background() {
+    return sg_background;
+  }
+
+  template <typename Func>
+  auto with_sg(seastar::scheduling_group sg, Func &&func) {
+    if (scheduling_groups_enabled) {
+      return seastar::with_scheduling_group(sg, std::forward<Func>(func));
+    } else {
+      return func();
+    }
   }
 
 private:

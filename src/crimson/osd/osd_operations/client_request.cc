@@ -241,6 +241,9 @@ seastar::future<> ClientRequest::with_pg_process(
   ceph_assert_always(shard_services);
   LOG_PREFIX(ClientRequest::with_pg_process);
 
+  return shard_services->with_sg(
+	 shard_services->get_sg_client(),
+	 [this, FNAME, pgref=std::move(pgref)]() mutable {
   epoch_t same_interval_since = pgref->get_interval_start_epoch();
   DEBUGDPP("{}: same_interval_since: {}", *pgref, *this, same_interval_since);
   const auto this_instance_id = instance_id++;
@@ -266,6 +269,7 @@ seastar::future<> ClientRequest::with_pg_process(
 	DEBUGDPP("{}.{}: exit", *pgref, *this, this_instance_id);
 	return ihref.handle.complete(
 	).finally([instance_handle=std::move(instance_handle)] {});
+    });
     });
 }
 
