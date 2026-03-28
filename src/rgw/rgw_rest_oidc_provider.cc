@@ -16,11 +16,29 @@
 #include "rgw_rest_iam.h"
 #include "rgw_rest_oidc_provider.h"
 #include "rgw_oidc_provider.h"
+#include "rgw_process_env.h"
 #include "rgw_sal.h"
 
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
+
+static int
+forward_oidc_iam_request(
+    RGWRESTOp* op,
+    req_state* s,
+    bufferlist& bl_post_body,
+    optional_yield y)
+{
+  const rgw::SiteConfig& site = *s->penv.site;
+  RGWXMLDecoder::XMLParser parser;
+  if (!parser.init()) {
+    ldpp_dout(op, 0) << "ERROR: failed to initialize xml parser" << dendl;
+    return -EINVAL;
+  }
+  return forward_iam_request_to_master(
+      op, site, s->user->get_info(), bl_post_body, parser, s->info, s->err, y);
+}
 
 int RGWRestOIDCProvider::verify_permission(optional_yield y)
 {
@@ -60,10 +78,6 @@ static std::string format_creation_date(ceph::real_time now)
 }
 
 
-RGWCreateOIDCProvider::RGWCreateOIDCProvider()
-  : RGWRestOIDCProvider(rgw::IAM::iamCreateOIDCProvider, RGW_CAP_WRITE)
-{
-}
 
 inline constexpr int MAX_OIDC_NUM_CLIENT_IDS = 100;
 inline constexpr int MAX_OIDC_CLIENT_ID_LEN = 255;
@@ -135,8 +149,20 @@ int RGWCreateOIDCProvider::init_processing(optional_yield y)
 
 void RGWCreateOIDCProvider::execute(optional_yield y)
 {
+  const rgw::SiteConfig& site = *s->penv.site;
+  if (!site.is_meta_master()) {
+    op_ret = forward_oidc_iam_request(this, s, bl_post_body, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, -1)
+          << "ERROR: forward_iam_request_to_master failed with error code: "
+          << op_ret << dendl;
+      return;
+    }
+  }
+
   constexpr bool exclusive = true;
-  op_ret = driver->store_oidc_provider(this, y, info, exclusive);
+  RGWObjVersionTracker objv_tracker;
+  op_ret = driver->store_oidc_provider(this, y, info, exclusive, &objv_tracker);
   if (op_ret == 0) {
     s->formatter->open_object_section_in_ns("CreateOpenIDConnectProviderResponse", RGW_REST_IAM_XMLNS);
     s->formatter->open_object_section("CreateOpenIDConnectProviderResult");
@@ -209,11 +235,6 @@ static int validate_provider_arn(const std::string& provider_arn,
 }
 
 
-RGWDeleteOIDCProvider::RGWDeleteOIDCProvider()
-  : RGWRestOIDCProvider(rgw::IAM::iamDeleteOIDCProvider, RGW_CAP_WRITE)
-{
-}
-
 int RGWDeleteOIDCProvider::init_processing(optional_yield y)
 {
   std::string_view account;
@@ -229,6 +250,16 @@ int RGWDeleteOIDCProvider::init_processing(optional_yield y)
 
 void RGWDeleteOIDCProvider::execute(optional_yield y)
 {
+  const rgw::SiteConfig& site = *s->penv.site;
+  if (!site.is_meta_master()) {
+    op_ret = forward_oidc_iam_request(this, s, bl_post_body, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, -1)
+          << "ERROR: forward_iam_request_to_master failed with error code: "
+          << op_ret << dendl;
+      return;
+    }
+  }
   op_ret = driver->delete_oidc_provider(this, y, resource.account, url);
 
   if (op_ret < 0 && op_ret != -ENOENT && op_ret != -EINVAL) {
@@ -244,10 +275,6 @@ void RGWDeleteOIDCProvider::execute(optional_yield y)
   }
 }
 
-RGWGetOIDCProvider::RGWGetOIDCProvider()
-  : RGWRestOIDCProvider(rgw::IAM::iamGetOIDCProvider, RGW_CAP_READ)
-{
-}
 
 int RGWGetOIDCProvider::init_processing(optional_yield y)
 {
@@ -281,7 +308,8 @@ static void dump_oidc_provider(const RGWOIDCProviderInfo& info, Formatter *f)
 void RGWGetOIDCProvider::execute(optional_yield y)
 {
   RGWOIDCProviderInfo info;
-  op_ret = driver->load_oidc_provider(this, y, resource.account, url, info);
+  op_ret = driver->load_oidc_provider(
+      this, y, resource.account, url, info, nullptr);
 
   if (op_ret < 0 && op_ret != -ENOENT && op_ret != -EINVAL) {
     op_ret = ERR_INTERNAL_ERROR;
@@ -300,10 +328,6 @@ void RGWGetOIDCProvider::execute(optional_yield y)
 }
 
 
-RGWListOIDCProviders::RGWListOIDCProviders()
-  : RGWRestOIDCProvider(rgw::IAM::iamListOIDCProviders, RGW_CAP_READ)
-{
-}
 
 void RGWListOIDCProviders::execute(optional_yield y)
 {
@@ -332,11 +356,6 @@ void RGWListOIDCProviders::execute(optional_yield y)
     s->formatter->close_section();
     s->formatter->close_section();
   }
-}
-
-RGWAddClientIdToOIDCProvider::RGWAddClientIdToOIDCProvider()
-  : RGWRestOIDCProvider(rgw::IAM::iamAddClientIdToOIDCProvider, RGW_CAP_WRITE)
-{
 }
 
 int RGWAddClientIdToOIDCProvider::init_processing(optional_yield y)
@@ -375,13 +394,25 @@ int RGWAddClientIdToOIDCProvider::init_processing(optional_yield y)
 void RGWAddClientIdToOIDCProvider::execute(optional_yield y)
 {
   RGWOIDCProviderInfo info;
-  op_ret = driver->load_oidc_provider(this, y, resource.account, url, info);
+  RGWObjVersionTracker objv_tracker;
+  op_ret = driver->load_oidc_provider(
+      this, y, resource.account, url, info, &objv_tracker);
 
   if (op_ret < 0) {
     if (op_ret != -ENOENT && op_ret != -EINVAL) {
       op_ret = ERR_INTERNAL_ERROR;
     }
     return;
+  }
+  const rgw::SiteConfig& site = *s->penv.site;
+  if (!site.is_meta_master()) {
+    op_ret = forward_oidc_iam_request(this, s, bl_post_body, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, -1)
+          << "ERROR: forward_iam_request_to_master failed with error code: "
+          << op_ret << dendl;
+      return;
+    }
   }
 
   if(std::find(info.client_ids.begin(), info.client_ids.end(), client_id) != info.client_ids.end()) {
@@ -391,7 +422,8 @@ void RGWAddClientIdToOIDCProvider::execute(optional_yield y)
     info.client_ids.emplace_back(client_id);
 
     constexpr bool exclusive = false;
-    op_ret = driver->store_oidc_provider(this, y, info, exclusive);
+    op_ret = driver->store_oidc_provider(
+        this, y, info, exclusive, &objv_tracker);
   }
   if (op_ret == 0 || op_ret == -EEXIST) {
     op_ret = 0;
@@ -406,12 +438,8 @@ void RGWAddClientIdToOIDCProvider::execute(optional_yield y)
   }
 }
 
-RGWRemoveCientIdFromOIDCProvider::RGWRemoveCientIdFromOIDCProvider()
-    : RGWRestOIDCProvider(rgw::IAM::iamRemoveClientIdFromOIDCProvider, RGW_CAP_WRITE)
-{
-}
-
-int RGWRemoveCientIdFromOIDCProvider::init_processing(optional_yield y)
+int
+RGWRemoveClientIdFromOIDCProvider::init_processing(optional_yield y)
 {
   std::string_view account;
   if (const auto& acc = s->auth.identity->get_account(); acc) {
@@ -444,10 +472,13 @@ int RGWRemoveCientIdFromOIDCProvider::init_processing(optional_yield y)
   return 0;
 }
 
-void RGWRemoveCientIdFromOIDCProvider::execute(optional_yield y)
+void
+RGWRemoveClientIdFromOIDCProvider::execute(optional_yield y)
 {
   RGWOIDCProviderInfo info;
-  op_ret = driver->load_oidc_provider(this, y, resource.account, url, info);
+  RGWObjVersionTracker objv_tracker;
+  op_ret = driver->load_oidc_provider(
+      this, y, resource.account, url, info, &objv_tracker);
 
   if (op_ret < 0) {
     if (op_ret != -ENOENT && op_ret != -EINVAL) {
@@ -455,13 +486,24 @@ void RGWRemoveCientIdFromOIDCProvider::execute(optional_yield y)
     }
     return;
   }
+  const rgw::SiteConfig& site = *s->penv.site;
+  if (!site.is_meta_master()) {
+    op_ret = forward_oidc_iam_request(this, s, bl_post_body, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, -1)
+          << "ERROR: forward_iam_request_to_master failed with error code: "
+          << op_ret << dendl;
+      return;
+    }
+  }
 
   auto position = std::find(info.client_ids.begin(), info.client_ids.end(), client_id);
 
   if(position != info.client_ids.end()) {
     info.client_ids.erase(position);
     constexpr bool exclusive = false;
-    op_ret = driver->store_oidc_provider(this, y, info, exclusive);
+    op_ret = driver->store_oidc_provider(
+        this, y, info, exclusive, &objv_tracker);
   }
 
   if (op_ret == 0) {
@@ -475,11 +517,6 @@ void RGWRemoveCientIdFromOIDCProvider::execute(optional_yield y)
     s->formatter->close_section();
     s->formatter->close_section();
   }
-}
-
-RGWUpdateOIDCProviderThumbprint::RGWUpdateOIDCProviderThumbprint()
-  : RGWRestOIDCProvider(rgw::IAM::iamUpdateOIDCProviderThumbprint, RGW_CAP_WRITE)
-{
 }
 
 int RGWUpdateOIDCProviderThumbprint::init_processing(optional_yield y)
@@ -524,7 +561,9 @@ int RGWUpdateOIDCProviderThumbprint::init_processing(optional_yield y)
 void RGWUpdateOIDCProviderThumbprint::execute(optional_yield y)
 {
   RGWOIDCProviderInfo info;
-  op_ret = driver->load_oidc_provider(this, y, resource.account, url, info);
+  RGWObjVersionTracker objv_tracker;
+  op_ret = driver->load_oidc_provider(
+      this, y, resource.account, url, info, &objv_tracker);
 
   if (op_ret < 0) {
     if (op_ret != -ENOENT && op_ret != -EINVAL) {
@@ -532,11 +571,21 @@ void RGWUpdateOIDCProviderThumbprint::execute(optional_yield y)
     }
     return;
   }
+  const rgw::SiteConfig& site = *s->penv.site;
+  if (!site.is_meta_master()) {
+    op_ret = forward_oidc_iam_request(this, s, bl_post_body, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, -1)
+          << "ERROR: forward_iam_request_to_master failed with error code: "
+          << op_ret << dendl;
+      return;
+    }
+  }
 
   info.thumbprints = std::move(thumbprints);
 
   constexpr bool exclusive = false;
-  op_ret = driver->store_oidc_provider(this, y, info, exclusive);
+  op_ret = driver->store_oidc_provider(this, y, info, exclusive, &objv_tracker);
   if (op_ret == 0) {
     s->formatter->open_object_section("AddClientIDToOpenIDConnectProviderResponse");
     s->formatter->open_object_section("ResponseMetadata");

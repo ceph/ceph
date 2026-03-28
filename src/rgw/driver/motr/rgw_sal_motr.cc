@@ -3092,7 +3092,8 @@ int MotrStore::list_roles(const DoutPrefixProvider *dpp,
 int DaosStore::store_oidc_provider(const DoutPrefixProvider* dpp,
                                    optional_yield y,
                                    const RGWOIDCProviderInfo& info,
-                                   bool exclusive)
+                                   bool exclusive,
+                                   RGWObjVersionTracker* objv_tracker)
 {
   return -ENOTSUP;
 }
@@ -3101,7 +3102,8 @@ int DaosStore::load_oidc_provider(const DoutPrefixProvider* dpp,
                                   optional_yield y,
                                   std::string_view tenant,
                                   std::string_view url,
-                                  RGWOIDCProviderInfo& info)
+                                  RGWOIDCProviderInfo& info,
+                                  RGWObjVersionTracker* objv_tracker)
 {
   return -ENOTSUP;
 }

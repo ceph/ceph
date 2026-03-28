@@ -1484,7 +1484,8 @@ namespace rgw::sal {
   int DBStore::store_oidc_provider(const DoutPrefixProvider *dpp,
                                    optional_yield y,
                                    const RGWOIDCProviderInfo& info,
-                                   bool exclusive)
+                                   bool exclusive,
+                                   RGWObjVersionTracker* objv_tracker)
   {
     return -ENOTSUP;
   }
@@ -1493,7 +1494,8 @@ namespace rgw::sal {
                                   optional_yield y,
                                   std::string_view account,
                                   std::string_view url,
-                                  RGWOIDCProviderInfo& info)
+                                  RGWOIDCProviderInfo& info,
+                                  RGWObjVersionTracker* objv_tracker)
   {
     return -ENOTSUP;
   }

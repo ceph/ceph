@@ -889,6 +889,9 @@ def check_oidc_provider_eq(zone_conn1, zone_conn2, arn):
 
     p1 = iam1.get_open_id_connect_provider(OpenIDConnectProviderArn=arn)
     p2 = iam2.get_open_id_connect_provider(OpenIDConnectProviderArn=arn)
+    # Remove transport metadata
+    p1.pop('ResponseMetadata', None)
+    p2.pop('ResponseMetadata', None)
     eq(p1, p2)
 
 def check_oidc_providers_eq(zone_conn1, zone_conn2):
@@ -3992,8 +3995,9 @@ def test_account_metadata_sync():
         iam.create_role(RoleName=name, AssumeRolePolicyDocument=json.dumps({'Version': '2012-10-17', 'Statement': [{'Effect': 'Allow', 'Principal': {'AWS': 'arn:aws:iam:::user/testuser'}, 'Action': ['sts:AssumeRole']}]}))
         iam.put_role_policy(RoleName=name, PolicyName='Allow', PolicyDocument=inline_policy)
         iam.attach_role_policy(RoleName=name, PolicyArn=managed_policy_arn)
-        # TODO: test oidc provider
-        #iam.create_open_id_connect_provider(ClientIDList=['clientid'], ThumbprintList=['3768084dfb3d2b68b7897bf5f565da8efEXAMPLE'], Url=f'http://{name}.example.com')
+        iam.create_open_id_connect_provider(ClientIDList=['clientid'],
+                                            ThumbprintList=['3768084dfb3d2b68b7897bf5f565da8efEXAMPLE'],
+                                            Url=f'http://{name}.example.com')
 
     realm_meta_checkpoint(realm)
 
@@ -4009,7 +4013,8 @@ def test_account_metadata_sync():
         iam = source_conn.iam_conn
         name = source_conn.name
 
-        #iam.delete_open_id_connect_provider(OpenIDConnectProviderArn=f'arn:aws:iam::RGW11111111111111111:oidc-provider/{name}.example.com')
+        iam.delete_open_id_connect_provider(
+            OpenIDConnectProviderArn=f'arn:aws:iam::RGW11111111111111111:oidc-provider/{name}.example.com')
 
         iam.detach_role_policy(RoleName=name, PolicyArn=managed_policy_arn)
         iam.delete_role_policy(RoleName=name, PolicyName='Allow')

@@ -679,12 +679,14 @@ class Driver {
     virtual int store_oidc_provider(const DoutPrefixProvider* dpp,
                                     optional_yield y,
                                     const RGWOIDCProviderInfo& info,
-                                    bool exclusive) = 0;
+                                    bool exclusive,
+                                    RGWObjVersionTracker* objv_tracker) = 0;
     virtual int load_oidc_provider(const DoutPrefixProvider* dpp,
                                    optional_yield y,
                                    std::string_view tenant,
                                    std::string_view url,
-                                   RGWOIDCProviderInfo& info) = 0;
+                                   RGWOIDCProviderInfo& info,
+                                   RGWObjVersionTracker* objv_tracker) = 0;
     virtual int delete_oidc_provider(const DoutPrefixProvider* dpp,
                                      optional_yield y,
                                      std::string_view tenant,
