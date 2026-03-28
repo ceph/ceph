@@ -106,6 +106,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   smbFeaturesList = ['domain'];
   currentURL: string;
   port: number = 443;
+  secondary_port: number = 8080;
   sslProtocolsItems: Array<ListItem> = Object.values(SSL_PROTOCOLS).map((protocol) => ({
     content: protocol,
     selected: true
@@ -293,6 +294,10 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       ],
       // RGW
       rgw_frontend_port: [
+        null,
+        [CdValidators.number(false), Validators.min(1), Validators.max(65535)]
+      ],
+      rgw_frontend_secondary_port: [
         null,
         [CdValidators.number(false), Validators.min(1), Validators.max(65535)]
       ],
@@ -658,6 +663,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       https_address: [null, [CdValidators.oauthAddressTest()]],
       redirect_url: [null],
       allowlist_domains: [null]
+    },
+    {
+      validators: [CdValidators.donotmatch('rgw_frontend_port','rgw_frontend_secondary_port')]
     });
   }
 
@@ -774,6 +782,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               this.serviceForm
                 .get('rgw_frontend_port')
                 .setValue(response[0].spec?.rgw_frontend_port);
+              this.serviceForm
+                .get('rgw_frontend_secondary_port')
+                .setValue(response[0].spec?.rgw_frontend_secondary_port);
               this.setRgwFields(
                 response[0].spec?.rgw_realm,
                 response[0].spec?.rgw_zonegroup,
@@ -1160,7 +1171,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     this.getDefaultPlacementCount(selectedServiceType);
 
     if (selectedServiceType === 'rgw') {
-      this.setRgwFields();
+      this.setRgwFields();      
     }
     if (selectedServiceType === 'mgmt-gateway') {
       let hrefSplitted = window.location.href.split(':');
@@ -1367,6 +1378,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         case 'rgw':
           if (_.isNumber(values['rgw_frontend_port']) && values['rgw_frontend_port'] > 0) {
             serviceSpec['rgw_frontend_port'] = values['rgw_frontend_port'];
+          }
+          if (_.isNumber(values['rgw_frontend_secondary_port']) && values['rgw_frontend_secondary_port'] > 0) {
+            serviceSpec['rgw_frontend_secondary_port'] = values['rgw_frontend_secondary_port'];
           }
           serviceSpec['ssl'] = values['ssl'];
           if (values['ssl']) {
