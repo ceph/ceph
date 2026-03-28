@@ -2056,27 +2056,38 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     }
   }
 
-  // check for op with rwordered and rebalance or localize reads
-  if (m->has_flag(CEPH_OSD_FLAGS_DIRECT_READ) && op->rwordered()) {
-    dout(4) << __func__ << ": rebelance or localized reads with rwordered not allowed "
-       << *m << dendl;
-    osd->reply_op_error(op, -EINVAL);
-    return;
-  }
-
   if (m->get_flags() & CEPH_OSD_FLAG_EC_DIRECT_READ) {
-    if (is_primary() || is_nonprimary()) {
+    if (op->rwordered()) {
+      // EC_DIRECT_READS have been introduced when any rwordered,
+      // balanced-or-localized op was getting `EINVAL`.
+      dout(4) << __func__ << ": EC direct reads with rwordered not allowed "
+              << *m << dendl;
+      osd->reply_op_error(op, -EINVAL);
+    } else if (is_primary() || is_nonprimary()) {
+      // primary or replica case
       op->set_ec_direct_read();
     } else {
       osd->handle_misdirected_op(this, op);
       return;
     }
-  } else if ((m->get_flags() & (CEPH_OSD_FLAG_BALANCE_READS |
-                                CEPH_OSD_FLAG_LOCALIZE_READS)) &&
-      op->may_read() &&
-      !(op->may_write() || op->may_cache())) {
-    // balanced reads; any replica will do
-    if (!(is_primary() || is_nonprimary())) {
+  } else if (m->get_flags() & (CEPH_OSD_FLAG_BALANCE_READS |
+                               CEPH_OSD_FLAG_LOCALIZE_READS)) {
+    if (is_primary()) {
+      // handling at primary is always fine, even it's a write
+      // flagged as balanced-or-localized-read.
+      // FALLTHROUGH
+    } else if (op->rwordered()) {
+      dout(4) << __func__
+              << ": balanced or localized reads with rwordered not allowed "
+                 "at outside primary " << *m << dendl;
+      // an rwordered does not make sense anywhere outside primary.
+      // neither on replica nor outside the acting set.
+      osd->reply_op_error(op, -EINVAL);
+      return;
+    } else if (is_nonprimary() && op->may_read()) {
+      // balanced or localized, non-rwordered read at replica is fine.
+      // FALLTHROUGH
+    } else {
       osd->handle_misdirected_op(this, op);
       return;
     }
