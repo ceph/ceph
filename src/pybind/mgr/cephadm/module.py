@@ -2087,6 +2087,8 @@ Then run the following:
         self.ssh.reset_con(host)
         # if host was in offline host list, we should remove it now.
         self.offline_hosts_remove(host)
+        # Make sure none of the service placement specs point to hosts that are no longer present.
+        self.spec_store.remove_host_from_placements(host)
         self.update_maintenance_healthcheck()
         self.event.set()  # refresh stray health check
         self.log.info('Removed host %s' % host)
