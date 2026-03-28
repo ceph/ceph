@@ -22,6 +22,13 @@ else
   CEPH_DENCODER=ceph-dencoder
 fi
 
+# ASAN builds need setarch -R to disable ASLR so each process can find a
+# contiguous 16+ TB shadow memory region. See https://clang.llvm.org/docs/AddressSanitizer.html
+if ldd $(command -v $CEPH_DENCODER) 2>/dev/null | grep -q libasan; then
+  echo "ASAN build detected: wrapping ceph-dencoder with 'setarch \$(uname -m) -R'"
+  CEPH_DENCODER="setarch $(uname -m) -R $CEPH_DENCODER"
+fi
+
 myversion=$($CEPH_DENCODER version)
 echo "Using ceph-dencoder version $myversion"
 if [ -z "$myversion" ]; then
@@ -279,14 +286,14 @@ do_join() {
         running_jobs=0
 }
 
-# Using $MAX_PARALLEL_JOBS jobs if defined, unless the number of logical
-# processors
+# Determine the number of parallel jobs to run.  Default to the number of
+# logical processors, or $MAX_PARALLEL_JOBS if set.
 if [ $(uname) == FreeBSD -o $(uname) == Darwin ]; then
   NPROC=$(sysctl -n hw.ncpu)
-  max_parallel_jobs=${MAX_PARALLEL_JOBS:-${NPROC}}
 else
-  max_parallel_jobs=${MAX_PARALLEL_JOBS:-$(nproc)}
+  NPROC=$(nproc)
 fi
+max_parallel_jobs=${MAX_PARALLEL_JOBS:-${NPROC}}
 
 output_file=$(mktemp /tmp/output_file-XXXXXXXXX)
 running_jobs=0
