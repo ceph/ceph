@@ -814,14 +814,18 @@ class TestNFS(MgrTestCase):
         info_output = json.loads(self._nfs_cmd('cluster', 'info', self.cluster_id))
         print(f'info {info_output}')
         info_ip = info_output[self.cluster_id].get('backend', [])[0].pop("ip")
+        # Pop placement since it may vary by test environment
+        info_placement = info_output[self.cluster_id].pop("placement", {})
         host_details = {
             self.cluster_id: {
                 'backend': [
                     {
                         "hostname": self._sys_cmd(['hostname']).decode("utf-8").strip(),
-                        "port": 2049
+                        "port": 2049,
+                        "status": "running"
                     }
                 ],
+                "deployment_type": "standalone",
                 "virtual_ip": None,
             }
         }
