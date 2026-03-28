@@ -500,6 +500,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             enum_allowed=['file', 'syslog', 'file,syslog'],
         ),
         Option(
+            'cephadm_binary_logging_level',
+            type='str',
+            default='debug',
+            desc='Logging verbosity for the cephadm binary when invoked by the mgr (e.g. check-host, gather-facts).',
+            enum_allowed=['info', 'debug', 'error', 'warning']
+        ),
+        Option(
             'oob_default_addr',
             type='str',
             default='169.254.1.1',
@@ -611,6 +618,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.certificate_automated_rotation_enabled = False
             self.certificate_check_debug_mode = False
             self.certificate_check_period = 0
+            self.cephadm_binary_logging_level = 'debug'
 
         self.notify(NotifyType.mon_map, None)
         self.config_notify()

@@ -4638,6 +4638,11 @@ def _get_parser():
         action='store_true',
         default=False,
         help='Do not run containers with --cgroups=split (currently only relevant when using podman)')
+    parser.add_argument(
+        '--logging-level',
+        choices=['info', 'debug', 'error', 'warning'],
+        default='debug',
+        help='Tunable log level for cephadm binary: info, debug, error, warning (default: debug)')
 
     subparsers = parser.add_subparsers(help='sub-command')
 

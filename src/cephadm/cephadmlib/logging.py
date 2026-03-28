@@ -173,7 +173,8 @@ def _copy(obj: Any) -> Any:
 
 
 def _complete_logging_config(
-    interactive: bool, destinations: Optional[List[str]]
+    interactive: bool, destinations: Optional[List[str]],
+    logging_level: str = 'debug',
 ) -> Dict[str, Any]:
     """Return a logging configuration dict, based on the runtime parameters
     cephadm was invoked with.
@@ -182,6 +183,9 @@ def _complete_logging_config(
     lc = _copy(_logging_config)
     if interactive:
         lc = _copy(_interactive_logging_config)
+
+    # Override the default 'debug' level with the logging level cephadm received
+    lc['handlers']['log_file']['level'] = logging_level.upper()
 
     handlers = lc['loggers']['']['handlers']
     if not destinations:
@@ -206,9 +210,11 @@ def cephadm_init_logging(
     if not os.path.exists(LOG_DIR):
         os.makedirs(LOG_DIR)
 
+    logging_level = getattr(ctx, 'logging_level', 'debug').lower()
     lc = _complete_logging_config(
         any(op in args for op in _INTERACTIVE_CMDS),
         getattr(ctx, 'log_dest', None),
+        logging_level=logging_level,
     )
     logging.config.dictConfig(lc)
 
@@ -228,7 +234,9 @@ def cephadm_init_logging(
         # option is set
         if ctx.verbose and handler.name in _VERBOSE_HANDLERS:
             handler.setLevel(QUIET_LOG_LEVEL)
-    logger.debug('%s\ncephadm %s' % ('-' * 80, args))
+
+    if logging_level == 'debug' or ctx.verbose:
+        logger.debug('%s\ncephadm %s' % ('-' * 80, args))
 
 
 def write_cephadm_logrotate_config(ctx: CephadmContext) -> None:
