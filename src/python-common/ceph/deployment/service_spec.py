@@ -2014,6 +2014,9 @@ class NvmeofServiceSpec(ServiceSpec):
         data = super().to_json()
         spec = data.setdefault('spec', {})
 
+        if self.rebalance_period_sec is not None:
+            spec['rebalance_period_sec'] = self.rebalance_period_sec
+
         if self.ssl:
             if self.server_cert and self.server_key:
                 spec['server_cert'] = self.server_cert
