@@ -1,7 +1,12 @@
-<div class="row h-25"
-     *cdScope="'configOpt'">
+<div cdsGrid
+     [fullWidth]="true"
+     [narrow]="true"
+     >
+  <div *cdScope="'configOpt'">
   <ng-container *ngIf="healthData$ | async as healthData">
-    <cd-card class="col-sm-3 px-3 d-flex"
+    <div cdsRow>
+    <cd-card class="cds-card"
+             cdsCol
              cardTitle="New Version"
              i18n-cardTitle
              aria-label="New Version"
@@ -9,14 +14,14 @@
              id="newVersionAvailable"
              *ngIf="upgradeStatus$ | async as status">
       <ng-container *ngIf="status.in_progress; else upgradeStatusTpl">
-        <div class="d-flex flex-column justify-content-center align-items-center mt-2">
+        <div class="cds-card-content">
           <h5 i18n
               *ngIf="status.is_paused; else inProgress">
             <i [ngClass]="[icons.spinner]"></i>
             Upgrade is paused {{executingTasks?.progress}}%</h5>
           <a class="mt-2 link-primary mb-2"
              routerLink="/upgrade/progress"
-             i18n>View Details...</a>
+             i18n>View Details...</a>`
         </div>
 
         <ng-template #inProgress>
@@ -28,24 +33,28 @@
       </ng-container>
     </cd-card>
 
-    <cd-card class="col-sm-3 px-3 d-flex"
+    <cd-card class="cds-card"
+             cdsCol
+             [columnNumbers]="{sm: 2, md: 2}"
              cardTitle="Current Version"
              i18n-cardTitle
              aria-label="Current Version"
              i18n-aria-label
              id="currentVersion">
-      <div class="d-flex flex-column justify-content-center align-items-center">
+      <div class="cds-card-content">
         <h5>{{ version }}</h5>
       </div>
     </cd-card>
 
-    <cd-card class="col-sm-3 px-3 d-flex"
+    <cd-card class="cds-card"
+             cdsCol
+             [columnNumbers]="{sm: 2, md: 2}"
              cardTitle="Cluster Status"
              i18n-cardTitle
              aria-label="Cluster Status"
              i18n-aria-label
              id="clusterStatus">
-      <div class="d-flex flex-column justify-content-center align-items-center">
+      <div class="cds-card-content">
         <ng-template #healthWarningAndError>
           <cds-toggletip  [ngStyle]="healthData.health.status | healthColor"
                           [dropShadow]="true"
@@ -74,13 +83,15 @@
       </div>
     </cd-card>
 
-    <cd-card class="col-sm-3 px-3 d-flex"
+    <cd-card class="cds-card"
+             cdsCol
+             [columnNumbers]="{sm: 2, md: 2}"
              cardTitle="MGR Count"
              i18n-cardTitle
              aria-label="MGR Count"
              i18n-aria-label
              id="mgrCount">
-      <div class="d-flex flex-column justify-content-center align-items-center">
+      <div class="cds-card-content">
         <h5>
           <i class="text-success"
              [ngClass]="[icons.success]"
@@ -90,8 +101,8 @@
         </h5>
       </div>
     </cd-card>
-
-    <div class="d-flex mt-3">
+    </div>
+    <div cdsRow>
       <dl class="w-50"
           *ngIf="fsid$ | async as fsid">
         <dt class="bold mt-5"
@@ -155,7 +166,7 @@
     </ng-template>
   </ng-container>
 </div>
-
+</div>
 <ng-template #noUpgradesAvailable>
   <span class="mt-1"
         id="no-upgrades-available"
