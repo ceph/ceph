@@ -17,10 +17,11 @@
 # By default ceph daemons and clients maintain a list of log_max_recent (default
 # 10000) log entries at a high debug level. This script will attempt to dump out
 # that log from a ceph::log::Log* passed to the ceph-dump-log function or, if no
-# object is passed, default to the globally available 'g_ceph_context->_log'
-# (thanks Kefu). This pointer may be obtained via the _log member of a
-# CephContext object (i.e. *cct->_log) from any thread that contains such a
-# CephContext. Normally, you will find a thread waiting in
+# object is passed, default to the globally available CephContext object
+# available at 'ceph::global::g_ceph_context->_log' or 'g_ceph_context->_log'
+# dependant on version (thanks Kefu). This pointer may be obtained via the _log
+# member of a CephContext object (i.e. *cct->_log) from any thread that contains
+# such a CephContext. Normally, you will find a thread waiting in
 # ceph::logging::Log::entry and the 'this' pointer from such a frame can also be
 # passed to ceph-dump-log.
 
@@ -42,7 +43,11 @@ class CephDumpLog(gdb.Command):
     def invoke(self, args, from_tty):
         arg_list = gdb.string_to_argv(args)
         if len(arg_list) < 1:
-            log = gdb.parse_and_eval('g_ceph_context->_log')
+            try:
+                log = gdb.parse_and_eval("'ceph::global::g_ceph_context'->_log")
+            except gdb.error:
+                # Fall back for older versions
+                log = gdb.parse_and_eval('g_ceph_context->_log')
         else:
             log = gdb.parse_and_eval(arg_list[0])
 
