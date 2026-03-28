@@ -9,8 +9,20 @@ describe('Host Page', () => {
 
   const hostnames = ['ceph-node-00', 'ceph-node-01', 'ceph-node-02', 'ceph-node-03'];
 
+  const orchestratorStatusAvailable = {
+    available: true,
+    message: '',
+    features: {
+      get_hosts: { available: true },
+      get_inventory: { available: true },
+      describe_service: { available: true },
+      apply: { available: true }
+    }
+  };
+
   beforeEach(() => {
     cy.login();
+    cy.intercept('GET', '**/ui-api/orchestrator/status', orchestratorStatusAvailable);
     hosts.navigateTo();
   });
 
