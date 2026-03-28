@@ -27,3 +27,6 @@ tasks:
     chance_pgpnum_fix: 1
     chance_bluestore_reshard: 1
     bluestore_new_sharding: random
+- mgr_thrash:
+    thrash_delay: 10
+    duration: 0
