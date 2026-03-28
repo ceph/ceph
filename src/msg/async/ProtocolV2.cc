@@ -149,6 +149,7 @@ void ProtocolV2::discard_out_queue() {
 }
 
 void ProtocolV2::reset_session() {
+  ceph_assert(connection->center->in_thread()); /* only event center thread can write to outgoing_bl */
   ldout(cct, 1) << __func__ << dendl;
 
   std::lock_guard<std::mutex> l(connection->write_lock);
@@ -592,6 +593,7 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
 
 template <class F>
 bool ProtocolV2::append_frame(F& frame) {
+  ceph_assert(connection->center->in_thread()); /* only event center thread can write to outgoing_bl */
   ceph::bufferlist bl;
   try {
     bl = frame.get_buffer(tx_frame_asm);
@@ -1682,13 +1684,10 @@ CtPtr ProtocolV2::handle_keepalive2(ceph::bufferlist &payload)
 
   ldout(cct, 30) << __func__ << " got KEEPALIVE2 tag ..." << dendl;
 
-  connection->write_lock.lock();
   auto keepalive_ack_frame = KeepAliveFrameAck::Encode(keepalive_frame.timestamp());
   if (!append_frame(keepalive_ack_frame)) {
-    connection->write_lock.unlock();
     return _fault();
   }
-  connection->write_lock.unlock();
 
   ldout(cct, 20) << __func__ << " got KEEPALIVE2 "
                  << keepalive_frame.timestamp() << dendl;

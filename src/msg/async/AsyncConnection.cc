@@ -313,7 +313,7 @@ ssize_t AsyncConnection::write(ceph::buffer::list &bl,
                                std::function<void(ssize_t)> callback,
                                bool more) {
 
-    std::unique_lock<std::mutex> l(write_lock);
+    ceph_assert(center->in_thread());
     outgoing_bl.claim_append(bl);
     ssize_t r = _try_send(more);
     if (r > 0) {
@@ -326,6 +326,8 @@ ssize_t AsyncConnection::write(ceph::buffer::list &bl,
 // else return < 0 means error
 ssize_t AsyncConnection::_try_send(bool more)
 {
+  ceph_assert(center->in_thread());
+
   if (async_msgr->cct->_conf->ms_inject_socket_failures && cs) {
     if (rand() % async_msgr->cct->_conf->ms_inject_socket_failures == 0) {
       ldout(async_msgr->cct, 0) << __func__ << " injecting socket failure" << dendl;
@@ -333,7 +335,6 @@ ssize_t AsyncConnection::_try_send(bool more)
     }
   }
 
-  ceph_assert(center->in_thread());
   ldout(async_msgr->cct, 25) << __func__ << " cs.send " << outgoing_bl.length()
                              << " bytes" << dendl;
   // network block would make ::send return EAGAIN, that would make here looks
@@ -642,6 +643,7 @@ void AsyncConnection::_stop() {
 }
 
 bool AsyncConnection::is_queued() const {
+  ceph_assert(center->in_thread());
   return outgoing_bl.length();
 }
 
