@@ -177,3 +177,41 @@ class RbdServiceTest(unittest.TestCase):
             # pylint: disable=protected-access
             res = RbdService._rbd_image_refs(ioctx_mock, str(i))
             self.assertEqual(res, images[i*2:(i*2)+2])
+      
+    @mock.patch.object(RbdMirroringService, 'get_schedule_interval')
+    @mock.patch.object(RbdMirroringService, 'get_schedule_time_for_image')
+    @mock.patch.object(RbdMirroringService, 'get_snapshot_schedule_info')
+    def test_rbd_image_inherited_schedule(self, mock_get_info, mock_get_time, mock_get_interval):
+        mock_get_info.return_value = None
+        mock_get_time.return_value = '2026-02-26T12:00:00Z'
+        mock_get_interval.side_effect = lambda spec: [{'schedule': '1d'}] if spec == 'pool1/' else None
+
+        with mock.patch('dashboard.services.rbd.rbd.Image') as mock_rbd_image, \
+             mock.patch('dashboard.services.rbd.CephService.get_pool_name_from_id') as mock_pool_id, \
+             mock.patch('dashboard.services.rbd.RbdConfiguration') as mock_config_cls, \
+             mock.patch('dashboard.services.rbd.RbdImageMetadataService') as mock_meta_cls:
+            
+            mock_pool_id.return_value = 'pool1'
+            mock_config_cls.return_value.list.return_value = []
+            mock_meta_cls.return_value.list.return_value = {}
+
+            img_instance = mock_rbd_image.return_value.__enter__.return_value
+            img_instance.stat.return_value = {'block_name_prefix': 'rbd_id.123'}
+            img_instance.mirror_image_get_info.return_value = {'state': rbd.RBD_MIRROR_IMAGE_ENABLED, 'primary': True}
+            img_instance.mirror_image_get_mode.return_value = 2
+            img_instance.create_timestamp.return_value = datetime.now()
+            img_instance.stripe_count.return_value = 1
+            img_instance.stripe_unit.return_value = 4194304
+            img_instance.old_format.return_value = False
+            img_instance.id.return_value = '123'
+            img_instance.features.return_value = 0
+            img_instance.list_snaps.return_value = []
+            img_instance.data_pool_id.return_value = 1
+
+            ioctx_mock = mock.Mock()
+            result = RbdService._rbd_image(ioctx_mock, 'pool1', None, 'image1')
+
+            schedule_info = result.get('schedule_info')
+            self.assertEqual(schedule_info['name'], 'pool1/image1')
+            self.assertEqual(schedule_info['schedule_source'], 'pool1/')
+            self.assertEqual(schedule_info['inherited'], 'pool')
