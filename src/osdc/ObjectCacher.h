@@ -481,13 +481,6 @@ class ObjectCacher {
 
   void bh_stat_add(BufferHead *bh);
   void bh_stat_sub(BufferHead *bh);
-  loff_t get_stat_tx() const { return stat_tx; }
-  loff_t get_stat_rx() const { return stat_rx; }
-  loff_t get_stat_dirty() const { return stat_dirty; }
-  loff_t get_stat_clean() const { return stat_clean; }
-  loff_t get_stat_zero() const { return stat_zero; }
-  loff_t get_stat_dirty_waiting() const { return stat_dirty_waiting; }
-  size_t get_stat_nr_dirty_waiters() const { return stat_nr_dirty_waiters; }
 
   void touch_bh(BufferHead *bh) {
     if (bh->is_dirty())
@@ -588,6 +581,14 @@ class ObjectCacher {
 
   void perf_start();
   void perf_stop();
+
+  loff_t get_stat_tx() const { return stat_tx; }
+  loff_t get_stat_rx() const { return stat_rx; }
+  loff_t get_stat_dirty() const { return stat_dirty; }
+  loff_t get_stat_clean() const { return stat_clean; }
+  loff_t get_stat_zero() const { return stat_zero; }
+  loff_t get_stat_dirty_waiting() const { return stat_dirty_waiting; }
+  size_t get_stat_nr_dirty_waiters() const { return stat_nr_dirty_waiters; }
 
 
 
