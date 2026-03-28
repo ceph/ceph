@@ -94,6 +94,7 @@ class AppMain {
   SiteConfig site;
   const DoutPrefixProvider* dpp;
   RGWProcessEnv env;
+  class AdminSocketHook* heap_profiler_hook{nullptr};
 
   class IOContextPoolHolder {
   private:

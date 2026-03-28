@@ -16,6 +16,8 @@
 #include <boost/intrusive/list.hpp>
 #include "global/global_init.h"
 #include "global/signal_handler.h"
+#include "common/admin_socket.h"
+#include "common/cmdparse.h"
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/Timer.h"
@@ -24,6 +26,7 @@
 #include "include/compat.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
+#include "perfglue/heap_profiler.h"
 #include "rgw_main.h"
 #include "rgw_asio_thread.h"
 #include "rgw_common.h"
@@ -82,13 +85,45 @@
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
+using TOPNSPC::common::cmd_getval;
 
 namespace {
   TracepointProvider::Traits rgw_op_tracepoint_traits(
     "librgw_op_tp.so", "rgw_op_tracing");
   TracepointProvider::Traits rgw_rados_tracepoint_traits(
     "librgw_rados_tp.so", "rgw_rados_tracing");
-}
+
+class RGWHeapProfilerHook : public AdminSocketHook {
+public:
+  int call(std::string_view command,
+	   const cmdmap_t& cmdmap,
+	   const ceph::buffer::list&,
+	   ceph::Formatter*,
+	   std::ostream& errss,
+	   ceph::buffer::list& out) override {
+    if (!ceph_using_tcmalloc()) {
+      errss << "not using tcmalloc";
+      return -EOPNOTSUPP;
+    }
+    string heapcmd;
+    if (!cmd_getval(cmdmap, "heapcmd", heapcmd)) {
+      errss << "unable to get value for command \"heap\"";
+      return -EINVAL;
+    }
+    vector<string> cmd_vec;
+    get_str_vec(heapcmd, cmd_vec);
+    string value;
+    if (cmd_getval(cmdmap, "value", value)) {
+      cmd_vec.push_back(value);
+    }
+    ostringstream ss;
+    ceph_heap_profiler_handle_command(cmd_vec, ss);
+    out.append(ss.str());
+    return 0;
+  }
+};
+
+} // anonymous namespace
 
 OpsLogFile* rgw::AppMain::ops_log_file;
 
@@ -257,6 +292,20 @@ int rgw::AppMain::init_storage()
 void rgw::AppMain::init_perfcounters()
 {
   (void) rgw_perf_start(dpp->get_cct());
+
+  auto cct = dpp->get_cct();
+  heap_profiler_hook = new RGWHeapProfilerHook();
+  int r = cct->get_admin_socket()->register_command(
+    "heap "
+    "name=heapcmd,type=CephChoices,strings="
+    "dump|start_profiler|stop_profiler|release|get_release_rate|set_release_rate|stats "
+    "name=value,type=CephString,req=false",
+    heap_profiler_hook,
+    "show heap usage info (available only if compiled with tcmalloc)");
+  if (r < 0) {
+    delete heap_profiler_hook;
+    heap_profiler_hook = nullptr;
+  }
 } /* init_perfcounters */
 
 void rgw::AppMain::init_http_clients()
@@ -663,6 +712,11 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
   rgw::curl::cleanup_curl();
   g_conf().remove_observer(implicit_tenant_context.get());
   implicit_tenant_context.reset(); // deletes
+  if (heap_profiler_hook) {
+    g_ceph_context->get_admin_socket()->unregister_commands(heap_profiler_hook);
+    delete heap_profiler_hook;
+    heap_profiler_hook = nullptr;
+  }
   rgw_perf_stop(g_ceph_context);
   ratelimiter.reset(); // deletes--ensure this happens before we destruct
 } /* AppMain::shutdown */

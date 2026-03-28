@@ -6344,7 +6344,7 @@ AWSSignerV4::prepare(const DoutPrefixProvider *dpp,
     // check if the header was already set (e.g. from a forwarded request)
     const char* existing_hash = info.env->get("HTTP_X_AMZ_CONTENT_SHA256");
     if (existing_hash) {
-      // use existing header value
+      // use existing header value-
       extra_headers["x-amz-content-sha256"] = existing_hash;
     } else {
     /* Some S3-compatible services require x-amz-content-sha256 header to always
