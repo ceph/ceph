@@ -2255,8 +2255,10 @@ fi
 %{_bindir}/radosgw-es
 %{_bindir}/radosgw-object-expirer
 %{_bindir}/rgw-policy-check
+%{_bindir}/rgw-policy-test
 %{_mandir}/man8/radosgw.8*
 %{_mandir}/man8/rgw-policy-check.8*
+%{_mandir}/man8/rgw-policy-test.8*
 %dir %{_localstatedir}/lib/ceph/radosgw
 %{_unitdir}/ceph-radosgw@.service
 %{_unitdir}/ceph-radosgw.target

@@ -7,8 +7,10 @@
 #include <chrono>
 #include <cstdint>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <string_view>
+#include <variant>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/container/flat_map.hpp>
@@ -18,6 +20,7 @@
 #include <boost/variant.hpp>
 
 #include <fmt/format.h>
+#include <fmt/ostream.h>
 
 #include "common/ceph_time.h"
 #include "common/iso_8601.h"
@@ -40,7 +43,7 @@ class Identity;
 namespace rgw {
 namespace IAM {
 
-enum {
+enum action_t {
   s3GetObject,
   s3GetObjectVersion,
   s3PutObject,
@@ -217,6 +220,9 @@ enum {
   allCount
 };
 
+boost::optional<rgw::auth::Principal>
+parse_principal(std::string&& s, std::string* errmsg);
+
 using Action_t = std::bitset<allCount>;
 using NotAction_t = Action_t;
 
@@ -337,7 +343,7 @@ inline int op_to_perm(std::uint64_t op) {
 }
 }
 
-const char* action_bit_string(uint64_t action);
+std::string_view action_bit_string(action_t action);
 
 enum class PolicyPrincipal {
   Role,
@@ -367,6 +373,61 @@ inline bool operator ==(const MaskedIP& l, const MaskedIP& r) {
   return (l.addr >> shift) == (r.addr >> shift);
 }
 
+class LogOut {
+  template <class... Ts>
+  struct overloaded : Ts... {
+    using Ts::operator()...;
+  };
+
+  mutable std::variant<std::monostate, std::ostream*, const DoutPrefixProvider*> log;
+  std::string prefix;
+
+public:
+  LogOut() : log(std::monostate{}) {}
+  LogOut(std::nullptr_t) : log(std::monostate{}) {}
+  LogOut(std::ostream& m) : log(&m) {}
+  LogOut(const DoutPrefixProvider* dpp)
+    : log(dpp) {
+    if (!dpp) [[unlikely]] {
+      log = std::monostate{};
+    } else {
+      std::ostringstream ostr;
+      dpp->gen_prefix(ostr);
+      prefix = std::move(ostr).str();
+    }
+  }
+
+  operator bool() const { return !std::holds_alternative<std::monostate>(log); };
+  void vformat(fmt::string_view fmt, fmt::format_args args) const {
+    std::visit(
+        overloaded{
+            [](std::monostate) {},
+            [&fmt, &args](std::ostream* o) {
+              assert(o); // We're constructing from a reference so `o` can't be null.
+              fmt::vprint(*o, fmt, args);
+              *o << std::endl;
+            },
+            [&fmt, &args, this](const DoutPrefixProvider* dpp) {
+              assert(dpp); // If we're given null, we switch to monostate
+
+              // The user has explicitly turned on policy logging, so
+              // we don't bother with the conditional logging
+              // business.
+              ceph::logging::StringEntry e(0, ceph_subsys_rgw, prefix);
+              fmt::vformat_to(e.get_inserter(), fmt, args);
+              dpp->get_cct()->_log->submit_entry(std::move(e));
+              return;
+            }
+            }, log);
+  }
+  template <typename... Args>
+  void format(fmt::format_string<Args...> fmt, Args&&... args) const
+  {
+    vformat(fmt, fmt::make_format_args(args...));
+  }
+};
+
+
 struct Condition {
   TokenID op;
   // Originally I was going to use a perfect hash table, but Marcus
@@ -385,8 +446,7 @@ struct Condition {
   Condition() = default;
   Condition(TokenID op, const char* s, std::size_t len, bool ifexists)
     : op(op), key(s, len), ifexists(ifexists) {}
-
-  bool eval(const Environment& e) const;
+  bool eval(const Environment& e, const LogOut& eval_log) const;
 
   static boost::optional<double> as_number(const std::string& s) {
     std::size_t p = 0;
@@ -483,43 +543,62 @@ struct Condition {
     }
   };
 
-  using unordered_multimap_it_pair = std::pair <std::unordered_multimap<std::string,std::string>::const_iterator, std::unordered_multimap<std::string,std::string>::const_iterator>;
+  using unordered_multimap_it_pair = std::pair<
+    std::unordered_multimap<std::string, std::string>::const_iterator,
+    std::unordered_multimap<std::string, std::string>::const_iterator>;
 
   template<typename F>
-  static bool multimap_all(F&& f, const unordered_multimap_it_pair& it,
-                           const std::vector<std::string>& v) {
+  static bool multimap_all(F&& f,
+                           const unordered_multimap_it_pair& it,
+                           const std::vector<std::string>& v,
+                           const LogOut& eval_log) {
     for (auto itr = it.first; itr != it.second; itr++) {
       bool matched = false;
+      std::string failmatch;
       for (const auto& d : v) {
         if (f(itr->second, d)) {
-	        matched = true;
+          matched = true;
+        } else if (eval_log && failmatch.empty()) {
+          failmatch = fmt::format("({}, {})", itr->second, d);
+        }
       }
-     }
-     if (!matched)
-      return false;
+      if (!matched) {
+        if (failmatch.empty()) {
+          eval_log.format("Values matched against were empty.");
+        } else {
+          eval_log.format("Predicate false for {}", failmatch);
+        }
+        return false;
+      }
     }
     return true;
   }
 
-  template<typename F>
-  static bool multimap_any(F&& f, const unordered_multimap_it_pair& it,
-                           const std::vector<std::string>& v) {
+  template <typename F>
+  static bool
+  multimap_any(F&& f,
+               const unordered_multimap_it_pair& it,
+               const std::vector<std::string>& v,
+               const LogOut& eval_log) {
     for (auto itr = it.first; itr != it.second; itr++) {
       for (const auto& d : v) {
         if (f(itr->second, d)) {
-	        return true;
+          eval_log.format("Predicate true for ({}, {})", itr->second, d);
+          return true;
+        }
       }
-     }
     }
     return false;
   }
 
   template<typename F>
   static bool multimap_none(F&& f, const unordered_multimap_it_pair& it,
-                            const std::vector<std::string>& v) {
+                            const std::vector<std::string>& v,
+                            const LogOut& eval_log) {
     for (auto itr = it.first; itr != it.second; itr++) {
       for (const auto& d : v) {
         if (f(itr->second, d)) {
+          eval_log.format("Predicate true for ({}, {})", itr->second, d);
           return false;
         }
       }
@@ -527,21 +606,25 @@ struct Condition {
     return true;
   }
 
-  template<typename F, typename X>
+  template <typename F, typename X>
   static bool typed_any(F&& f, X& x, const std::string& c,
-                        const std::vector<std::string>& v) {
+                        const std::vector<std::string>& v,
+                        const LogOut& eval_log) {
     auto xc = std::forward<X>(x)(c);
     if (!xc) {
+      eval_log.format("Failed to convert `{}`. Returning false.", c);
       return false;
     }
 
     for (const auto& d : v) {
       auto xd = x(d);
       if (!xd) {
+        eval_log.format("Failed to convert `{}`. Skipping.", d);
         continue;
       }
 
       if (f(*xc, *xd)) {
+        eval_log.format("Predicate true for ({}, {})", *xc, *xd);
         return true;
       }
     }
@@ -550,19 +633,23 @@ struct Condition {
 
   template<typename F, typename X>
   static bool typed_none(F&& f, X& x, const std::string& c,
-                         const std::vector<std::string>& v) {
+                         const std::vector<std::string>& v,
+                         const LogOut& eval_log) {
     auto xc = std::forward<X>(x)(c);
     if (!xc) {
+      eval_log.format("Failed to convert `{}`. Returning false.", c);
       return false;
     }
 
     for (const auto& d : v) {
       auto xd = x(d);
       if (!xd) {
+        eval_log.format("Failed to convert `{}`. Skipping.", d);
         continue;
       }
 
       if (f(*xc, *xd)) {
+        eval_log.format("Predicate true for ({}, {})", *xc, *xd);
         return false;
       }
     }
@@ -605,13 +692,21 @@ struct Statement {
   std::vector<Condition> conditions;
 
   Effect eval(const Environment& e,
-	      boost::optional<const rgw::auth::Identity&> ida,
-	      std::uint64_t action, boost::optional<const ARN&> resource, boost::optional<PolicyPrincipal&> princ_type=boost::none) const;
+              boost::optional<const rgw::auth::Identity&> ida,
+              std::uint64_t action,
+              boost::optional<const ARN&> resource,
+              const LogOut& eval_log,
+              boost::optional<PolicyPrincipal&> princ_type=boost::none) const;
 
-  Effect eval_principal(const Environment& e,
-		       boost::optional<const rgw::auth::Identity&> ida, boost::optional<PolicyPrincipal&> princ_type=boost::none) const;
+  Effect eval_principal(
+    const Environment& e,
+    boost::optional<const rgw::auth::Identity&> ida,
+    const LogOut& eval_log,
+    boost::optional<PolicyPrincipal&> princ_type = boost::none) const;
 
-  Effect eval_conditions(const Environment& e) const;
+  Effect
+  eval_conditions(const Environment& e,
+                  const LogOut& eval_log) const;
 };
 
 std::ostream& operator <<(std::ostream& m, const Statement& s);
@@ -650,14 +745,46 @@ struct Policy {
 	 std::string text,
 	 bool reject_invalid_principals);
 
+  Effect eval(std::ostream& out, const Environment& e,
+              boost::optional<const rgw::auth::Identity&> ida,
+              std::uint64_t action,
+              boost::optional<const ARN&> resource,
+              boost::optional<PolicyPrincipal&> princ_type = boost::none) const {
+    return eval(e, ida, action, resource, out, princ_type);
+  }
+
   Effect eval(const Environment& e,
-	      boost::optional<const rgw::auth::Identity&> ida,
-	      std::uint64_t action, boost::optional<const ARN&> resource, boost::optional<PolicyPrincipal&> princ_type=boost::none) const;
+              boost::optional<const rgw::auth::Identity&> ida,
+              std::uint64_t action,
+              boost::optional<const ARN&> resource,
+              boost::optional<PolicyPrincipal&> princ_type = boost::none) const {
+    return eval(e, ida, action, resource, {}, princ_type);
+  }
 
-  Effect eval_principal(const Environment& e,
-	      boost::optional<const rgw::auth::Identity&> ida, boost::optional<PolicyPrincipal&> princ_type=boost::none) const;
+  Effect eval(const DoutPrefixProvider* dpp,
+              const Environment& e,
+              boost::optional<const rgw::auth::Identity&> ida,
+              std::uint64_t action,
+              boost::optional<const ARN&> resource,
+              boost::optional<PolicyPrincipal&> princ_type = boost::none) const {
+    if (!dpp) {
+      return eval(e, ida, action, resource, {}, princ_type);
+    } else if (dpp->get_cct()->_conf.get_val<bool>(
+                   "rgw_copious_policy_logging")) {
+      return eval(e, ida, action, resource, dpp, princ_type);
+    } else {
+      return eval(e, ida, action, resource, {}, princ_type);
+    }
+  }
 
-  Effect eval_conditions(const Environment& e) const;
+  Effect eval_principal(
+      const Environment& e,
+      boost::optional<const rgw::auth::Identity&> ida,
+      const LogOut& eval_log,
+      boost::optional<PolicyPrincipal&> princ_type = boost::none) const;
+
+  Effect eval_conditions(const Environment& e,
+                         const LogOut& eval_log) const;
 
   template <typename F>
   bool has_conditional(const std::string& conditional, F p) const {
@@ -691,10 +818,38 @@ struct Policy {
   bool has_partial_conditional_value(const std::string& c) const {
     return has_conditional_value(c, Condition::ci_starts_with());
   }
+
+private:
+
+  Effect eval(const Environment& e,
+              boost::optional<const rgw::auth::Identity&> ida,
+              std::uint64_t action,
+              boost::optional<const ARN&> resource,
+              const LogOut& eval_log,
+              boost::optional<PolicyPrincipal&> princ_type  =boost::none) const;
+
 };
 
 std::ostream& operator <<(std::ostream& m, const Policy& p);
-bool is_public(const Policy& p);
+bool is_public(const Policy& p, const LogOut& eval_log);
 
+inline bool is_public(const DoutPrefixProvider* dpp, const Policy& p)
+{
+  bool b = false;
+  if (dpp) {
+    bool copious_logging = dpp->get_cct()->_conf.get_val<bool>("rgw_copious_policy_logging");
+    b = is_public(p, {copious_logging ? dpp : nullptr});
+  } else {
+    b = is_public(p, nullptr);
+  }
+  return b;
+}
+
+boost::optional<action_t> parse_action(std::string_view s);
 }
 }
+
+template <> struct fmt::formatter<rgw::IAM::MaskedIP> : ostream_formatter {};
+template <> struct fmt::formatter<rgw::IAM::Condition> : ostream_formatter {};
+template <> struct fmt::formatter<rgw::IAM::Statement> : ostream_formatter {};
+template <> struct fmt::formatter<rgw::IAM::Policy> : ostream_formatter {};

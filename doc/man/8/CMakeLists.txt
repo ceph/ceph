@@ -61,6 +61,7 @@ if(WITH_RADOSGW)
 	rgw-orphan-list.rst
 	rgw-gap-list.rst
 	rgw-policy-check.rst
+	rgw-policy-test.rst
 	ceph-diff-sorted.rst
 	rgw-restore-bucket-index.rst)
 endif()

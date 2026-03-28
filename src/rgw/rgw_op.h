@@ -448,7 +448,7 @@ protected:
   bool first_data;
   uint64_t cur_ofs;
   bufferlist waiting;
-  uint64_t action = 0;
+  rgw::IAM::action_t action{};
 
   bool get_retention;
   bool get_legal_hold;

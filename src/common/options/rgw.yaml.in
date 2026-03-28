@@ -4626,6 +4626,7 @@ options:
   default: 11
   services: 
     - rgw
+
 - name: rgw_usage_log_key_transition
   type: bool
   level: advanced
@@ -4642,3 +4643,12 @@ options:
   see_also:
   - rgw_enable_usage_log
   with_legacy: true
+
+- name: rgw_copious_policy_logging
+  type: bool
+  level: advanced
+  desc: Log the details of each policy evaluation in extreme verbosity
+  default: false
+  services:
+  - rgw
+  with_legacy: false
