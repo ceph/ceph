@@ -5764,7 +5764,9 @@ int RadosLuaManager::list_packages(const DoutPrefixProvider *dpp, optional_yield
     if (ret < 0) {
       return ret;
     }
-
+    if (more) {
+      start_after = *packages_chunk.rbegin();
+    }
     packages.merge(packages_chunk);
   }
 
