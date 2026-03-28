@@ -704,7 +704,15 @@ void NVMeofGwMap::process_gw_map_ka(
     } else {
       //========= prepare to Failback to this GW =========
       // find the GW that took over on the group st.ana_grp_id
-      find_failback_gw(gw_id, group_key, propose_pending);
+      std::chrono::seconds failback_delay = g_conf().get_val<std::chrono::seconds>
+                           ("mon_nvmeofgw_failback_delay");
+      if (failback_delay == std::chrono::seconds{0}) {
+        find_failback_gw(gw_id, group_key, propose_pending);
+      } else {
+        st.delay_failbacks_ts = std::chrono::system_clock::now() + failback_delay;
+        dout(4) << "failback delay " << failback_delay
+                << " set for gw "<< gw_id << dendl;
+      }
     }
   } else if (st.availability == gw_availability_t::GW_AVAILABLE) {
     for (auto& state_itr: created_gws[group_key][gw_id].sm_state) {
@@ -722,6 +730,8 @@ void NVMeofGwMap::process_gw_map_ka(
 void NVMeofGwMap::handle_abandoned_ana_groups(bool& propose)
 {
   propose = false;
+  std::chrono::system_clock::time_point now =
+           std::chrono::system_clock::now();
   for (auto& group_state: created_gws) {
     auto& group_key = group_state.first;
     auto& gws_states = group_state.second;
@@ -763,7 +773,13 @@ void NVMeofGwMap::handle_abandoned_ana_groups(bool& propose)
 		  gw_states_per_group_t::GW_STANDBY_STATE)) {
 	// 2. Failback missed: Check this GW is Available and Standby and
 	// no other GW is doing Failback to it
+
+  if (state.delay_failbacks_ts < now) {
 	find_failback_gw(gw_id, group_key, propose);
+  } else {
+    dout(4) << "failback not allowed for GW "<< gw_id
+            << " failback delay  not expired yet" << dendl;
+  }
       }
     }
     check_relocate_ana_groups(group_key, propose);
