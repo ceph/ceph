@@ -168,10 +168,12 @@ void ElectionLogic::start()
 void ElectionLogic::defer(int who)
 {
   if (strategy == CLASSIC) {
-      ldout(cct, 5) << "defer to " << who << dendl;
+      ldout(cct, 5) << fmt::format("defer to {} (mon.{})",
+        who, elector->get_rank_name(who)) << dendl;
       ceph_assert(who < elector->get_my_rank());
   } else {
-    ldout(cct, 5) << "defer to " << who << ", disallowed_leaders=" << elector->get_disallowed_leaders() << dendl;
+    ldout(cct, 5) << fmt::format("defer to {} (mon.{}), disallowed_leaders=",
+      who, elector->get_rank_name(who)) << elector->get_disallowed_leaders() << dendl;
     ceph_assert(!elector->get_disallowed_leaders().count(who));
   }
 
@@ -245,7 +247,7 @@ bool ElectionLogic::propose_classic_prefix(int from, epoch_t mepoch)
 void ElectionLogic::receive_propose(int from, epoch_t mepoch,
 				    const ConnectionTracker *ct)
 {
-  ldout(cct, 20) << __func__ << " from " << from << dendl;
+  ldout(cct, 20) << __func__ << " from " << from << " (mon." << elector->get_rank_name(from) << ")" << dendl;
   if (from == elector->get_my_rank()) {
     lderr(cct) << "I got a propose from my own rank, hopefully this is startup weirdness,dropping" << dendl;
     return;
@@ -471,7 +473,7 @@ void ElectionLogic::propose_connectivity_handler(int from, epoch_t mepoch,
 				     &leader_leader_liveness);
 	if ((from < leader_acked && leader_from_score >= leader_leader_score) ||
 	    (leader_from_score > leader_leader_score)) {
-    ldout(cct, 10) << "defering to " << from << dendl;
+    ldout(cct, 10) << "defering to " << from << " (mon." << elector->get_rank_name(from) << ")" << dendl;
 	  defer(from);
 	  leader_peer_tracker.reset(new ConnectionTracker(*ct));
 	} else { // we can't defer to them *this* round even though they should win...
@@ -482,24 +484,24 @@ void ElectionLogic::propose_connectivity_handler(int from, epoch_t mepoch,
 	  if ((from < leader_acked && cur_from_score >= cur_leader_score) ||
 	      (cur_from_score > cur_leader_score)) {
 	    ldout(cct, 5) << "Bumping epoch and starting new election; acked "
-			  << leader_acked << " should defer to " << from
-			  << " but there is score disagreement!" << dendl;
+			  << leader_acked << " (mon." << elector->get_rank_name(leader_acked) << ") should defer to " << from
+			  << " (mon." << elector->get_rank_name(from) << ") but there is score disagreement!" << dendl;
 	    bump_epoch(epoch+1);
 	    start();
 	  } else {
 	    ldout(cct, 5) << "no, we already acked " << leader_acked
-			  << " and it won't defer to " << from
-			  << " despite better round scores" << dendl;
+			  << " (mon." << elector->get_rank_name(leader_acked) << ") and it won't defer to " << from
+			  << " (mon." << elector->get_rank_name(from) << ") despite better round scores" << dendl;
 	  }
 	}
       } else {
-  ldout(cct, 10) << "defering to " << from << dendl;
+  ldout(cct, 10) << "defering to " << from << " (mon." << elector->get_rank_name(from) << ")" << dendl;
 	defer(from);
 	leader_peer_tracker.reset(new ConnectionTracker(*ct));
       }
     } else {
       // ignore them!
-      ldout(cct, 5) << "no, we already acked " << leader_acked << " with score >=" << from_score << dendl;
+      ldout(cct, 5) << "no, we already acked " << leader_acked << " (mon." << elector->get_rank_name(leader_acked) << ") with score >=" << from_score << dendl;
     }
   }
 }

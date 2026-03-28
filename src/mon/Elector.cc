@@ -112,6 +112,11 @@ bool Elector::is_current_member(int rank) const
   return mon->quorum.count(rank);
 }
 
+std::string Elector::get_rank_name(int rank) const
+{
+  return mon->monmap->get_name(rank);
+}
+
 void Elector::trigger_new_election()
 {
   mon->start_election();
@@ -454,7 +459,8 @@ void Elector::handle_nak(MonOpRequestRef op)
 
 void Elector::begin_peer_ping(int peer)
 {
-  dout(20) << __func__ << " with " << peer << dendl;
+  dout(20) << __func__ << " with " << peer 
+    << ((peer >= 0 && peer < ssize(mon->monmap->ranks)) ? " (mon." + mon->monmap->get_name(peer) + ")" : "") << dendl;
   if (peer < 0) {
     dout(20) << __func__ << " ignoring negative peer " << peer << dendl;
     return;
@@ -463,7 +469,7 @@ void Elector::begin_peer_ping(int peer)
     // This peer is already being pinged
     // so we don't need to schedule another ping_check
     // against it, ping_check will call itself because it is self-sustaining.
-    dout(20) << peer << " is already being pinged ... return " << dendl;
+    dout(20) << peer << " (mon." << mon->monmap->get_name(peer) << ") is already being pinged ... return " << dendl;
     return;
   }
   // Check if quorum feature is not set and we are in
@@ -492,7 +498,7 @@ void Elector::begin_peer_ping(int peer)
     return;
   }
   dout(30) << "schedule ping_check against peer: "
-    << peer << " every " << ping_timeout / PING_DIVISOR << "s" << dendl;
+    << peer << " (mon." << mon->monmap->get_name(peer) << ") every " << ping_timeout / PING_DIVISOR << "s" << dendl;
   mon->timer.add_event_after(ping_timeout / PING_DIVISOR,
 			     new C_MonContext{mon, [this, peer](int) {
 				 ping_check(peer);
@@ -501,7 +507,8 @@ void Elector::begin_peer_ping(int peer)
 
 bool Elector::send_peer_ping(int peer, const utime_t *n)
 {
-  dout(10) << __func__ << " to peer " << peer << dendl;
+  dout(10) << __func__ << " to peer " << peer 
+    << (peer >= 0 && peer < ssize(mon->monmap->ranks) ? " (mon." + mon->monmap->get_name(peer) + ")" : "") << dendl;
   if (peer < 0 || peer >= ssize(mon->monmap->ranks)) {
     // Monitor no longer exists in the monmap,
     // therefore, we shouldn't ping this monitor
@@ -521,7 +528,7 @@ bool Elector::send_peer_ping(int peer, const utime_t *n)
   MMonPing *ping = new MMonPing(MMonPing::PING, now, peer_tracker.get_encoded_bl());
   mon->messenger->send_to_mon(ping, mon->monmap->get_addrs(peer));
   peer_sent_ping[peer] = now;
-  dout(20) << " sent ping to peer: " << peer << " at " << now << dendl;
+  dout(20) << " sent ping to peer: " << peer << " (mon." << mon->monmap->get_name(peer) << ") at " << now << dendl;
   return true;
 }
 
@@ -539,18 +546,18 @@ void Elector::process_pending_pings()
 
 void Elector::ping_check(int peer)
 {
-  dout(20) << __func__ << "ing peer " << peer << dendl;
+  dout(20) << __func__ << "ing peer " << peer << " (mon." << mon->monmap->get_name(peer) << ")" << dendl;
 
   if (!live_pinging.count(peer) &&
       !dead_pinging.count(peer)) {
-    dout(20) << peer << " is no longer marked for pinging ... return" << dendl;
+    dout(20) << peer << " (mon." << mon->monmap->get_name(peer) << ") is no longer marked for pinging ... return" << dendl;
     return;
   }
   utime_t now = ceph_clock_now();
   utime_t& acked_ping = peer_acked_ping[peer];
   utime_t& newest_ping = peer_sent_ping[peer];
   if (!acked_ping.is_zero() && acked_ping < now - ping_timeout) {
-    dout(20) << "peer " << peer << " has not acked a ping in "
+    dout(20) << "peer " << peer << " (mon." << mon->monmap->get_name(peer) << ") has not acked a ping in "
        << now - acked_ping << " seconds" << dendl;
     peer_tracker.report_dead_connection(peer, now - acked_ping);
     acked_ping = now;
@@ -559,7 +566,7 @@ void Elector::ping_check(int peer)
   }
 
   if (acked_ping == newest_ping) {
-    dout(20) << "peer " << peer 
+    dout(20) << "peer " << peer << " (mon." << mon->monmap->get_name(peer) << ")"
       << " has not acked the newest ping"
       << " .. sending another ping" << dendl;
     if (!send_peer_ping(peer, &now)) {
@@ -570,7 +577,7 @@ void Elector::ping_check(int peer)
   }
 
   dout(30) << "Scheduling next ping_check for peer "
-    << peer << " in " << ping_timeout / PING_DIVISOR
+    << peer << " (mon." << mon->monmap->get_name(peer) << ") in " << ping_timeout / PING_DIVISOR
     << "s (recursively call ping_check until connection state changes)" << dendl;
   mon->timer.add_event_after(ping_timeout / PING_DIVISOR,
 			     new C_MonContext{mon, [this, peer](int) {
@@ -580,15 +587,15 @@ void Elector::ping_check(int peer)
 
 void Elector::begin_dead_ping(int peer)
 {
-  dout(20) << __func__ << " to peer " << peer << dendl;  
+  dout(20) << __func__ << " to peer " << peer << " (mon." << mon->monmap->get_name(peer) << ")" << dendl;  
   if (dead_pinging.count(peer)) {
-    dout(20) << peer << " already in dead_pinging ... return" << dendl;
+    dout(20) << peer << " (mon." << mon->monmap->get_name(peer) << ") already in dead_pinging ... return" << dendl;
     return;
   }
   
   live_pinging.erase(peer);
   dead_pinging.insert(peer);
-  dout(30) << "schedule dead_ping against peer: " << peer << dendl;
+  dout(30) << "schedule dead_ping against peer: " << peer << " (mon." << mon->monmap->get_name(peer) << ")" << dendl;
   mon->timer.add_event_after(ping_timeout,
 			     new C_MonContext{mon, [this, peer](int) {
 				 dead_ping(peer);
@@ -597,9 +604,9 @@ void Elector::begin_dead_ping(int peer)
 
 void Elector::dead_ping(int peer)
 {
-  dout(20) << __func__ << " to peer " << peer << dendl;
+  dout(20) << __func__ << " to peer " << peer << " (mon." << mon->monmap->get_name(peer) << ")" << dendl;
   if (!dead_pinging.count(peer)) {
-    dout(20) << __func__ << peer << " is no longer marked for dead pinging" << dendl;
+    dout(20) << __func__ << peer << " (mon." << mon->monmap->get_name(peer) << ") is no longer marked for dead pinging" << dendl;
     return;
   }
   ceph_assert(!live_pinging.count(peer));
@@ -609,7 +616,7 @@ void Elector::dead_ping(int peer)
 
   peer_tracker.report_dead_connection(peer, now - acked_ping);
   acked_ping = now;
-  dout(30) << "schedule " << __func__ << " against peer: " << peer << dendl;
+  dout(30) << "schedule " << __func__ << " against peer: " << peer << " (mon." << mon->monmap->get_name(peer) << ")" << dendl;
   mon->timer.add_event_after(ping_timeout,
 			       new C_MonContext{mon, [this, peer](int) {
 				   dead_ping(peer);
@@ -620,7 +627,8 @@ void Elector::handle_ping(MonOpRequestRef op)
 {
   MMonPing *m = static_cast<MMonPing*>(op->get_req());
   int prank = mon->monmap->get_rank(m->get_source_addr());
-  dout(20) << __func__ << " from: " << prank << dendl;
+  dout(20) << __func__ << " from: " << prank 
+    << (prank >= 0 ? " (mon." + mon->monmap->get_name(prank) + ")" : "") << dendl;
   if (prank < 0) {
     dout(5) << __func__ << " from unknown addr " << m->get_source_addr()
            << " mapped to rank " << prank << " (likely removed monitor) - dropping message" << dendl;
@@ -632,14 +640,14 @@ void Elector::handle_ping(MonOpRequestRef op)
   case MMonPing::PING:
     {
       dout(30) << "recieved PING from "
-        << prank << ", sending PING_REPLY back!" << dendl;
+        << prank << " (mon." << mon->monmap->get_name(prank) << "), sending PING_REPLY back!" << dendl;
       MMonPing *reply = new MMonPing(MMonPing::PING_REPLY, m->stamp, peer_tracker.get_encoded_bl());
       m->get_connection()->send_message(reply);
     }
     break;
 
   case MMonPing::PING_REPLY:
-    dout(30) << "recieved PING_REPLY from " << prank << dendl;
+    dout(30) << "recieved PING_REPLY from " << prank << " (mon." << mon->monmap->get_name(prank) << ")" << dendl;
     const utime_t& previous_acked = peer_acked_ping[prank];
     const utime_t& newest = peer_sent_ping[prank];
 
@@ -659,7 +667,7 @@ void Elector::handle_ping(MonOpRequestRef op)
     }
     utime_t now = ceph_clock_now();
     if (now - m->stamp > ping_timeout / PING_DIVISOR) {
-      dout(30) << "peer " << prank << " has not acked a ping in "
+      dout(30) << "peer " << prank << " (mon." << mon->monmap->get_name(prank) << ") has not acked a ping in "
         << now - m->stamp << " seconds, which is more than the "
         << ping_timeout / PING_DIVISOR << " seconds limit." 
         << " Sending another ping ..." << dendl;

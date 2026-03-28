@@ -146,6 +146,12 @@ public:
    * @returns true if the rank is in our current quorum, false otherwise.
    */
   virtual bool is_current_member(int rank) const = 0;
+  /**
+   * Get the monitor name for the given rank.
+   * @param rank the monitor rank whose name we want
+   * @returns the monitor name for the given rank
+   */
+  virtual std::string get_rank_name(int rank) const = 0;
   virtual ~ElectionOwner() {}
 };
 
