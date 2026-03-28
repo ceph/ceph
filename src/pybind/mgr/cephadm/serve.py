@@ -914,6 +914,9 @@ class CephadmServe:
 
         hosts_altered: Set[str] = set()
 
+        if service_type == 'nfs' and self.mgr.spec_store.needs_configuration(spec.service_name()):
+            svc.pre_daemon_service_config(spec)
+
         try:
             # assign names
             for i in range(len(slots_to_add)):

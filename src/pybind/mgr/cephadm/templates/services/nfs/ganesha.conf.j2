@@ -17,6 +17,9 @@ NFS_CORE_PARAM {
 	Monitoring_Addr = {{ monitoring_addr }};
 {% endif %}
         Monitoring_Port = {{ monitoring_port }};
+{% if cqos_port %}
+        Cqos_Port = {{ cqos_port }};
+{% endif %}
 }
 
 NFSv4 {
@@ -34,6 +37,10 @@ RADOS_KV {
         nodeid = {{ nodeid }};
         pool = "{{ pool }}";
         namespace = "{{ namespace }}";
+}
+
+CEPH_NODES_LIST {
+        Ceph_Nodes = {{ ceph_nodes|join(", ") }};
 }
 
 RADOS_URLS {

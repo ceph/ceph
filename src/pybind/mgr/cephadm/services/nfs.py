@@ -17,6 +17,7 @@ from .service_registry import register_cephadm_service
 from orchestrator import DaemonDescription, OrchestratorError
 from cephadm import utils
 from cephadm.services.cephadmservice import AuthEntity, CephadmDaemonDeploySpec, CephService
+from cephadm.schedule import get_placement_hosts
 if TYPE_CHECKING:
     from ..module import CephadmOrchestrator
 
@@ -120,9 +121,6 @@ class NFSService(CephService):
         self.mgr.log.info(f'Ensuring {nodeid} is in the ganesha grace table')
         self.run_grace_tool(spec, 'add', nodeid)
 
-        # create the rados config object
-        self.create_rados_config_obj(spec)
-
         port = daemon_spec.ports[0] if daemon_spec.ports else 2049
         monitoring_ip, monitoring_port = self.get_monitoring_details(daemon_spec.service_name, host)
 
@@ -147,6 +145,12 @@ class NFSService(CephService):
         if monitoring_ip:
             daemon_spec.port_ips.update({str(monitoring_port): monitoring_ip})
 
+        ceph_nodes = []
+        hosts = get_placement_hosts(spec, self.mgr.cache.get_schedulable_hosts(), self.mgr.cache.get_draining_hosts())
+        for host in hosts:
+            host_ip = self.mgr.inventory.get_addr(host.hostname)
+            ceph_nodes.append(host_ip)
+
         # generate the ganesha config
         def get_ganesha_conf() -> str:
             context: Dict[str, Any] = {
@@ -160,6 +164,7 @@ class NFSService(CephService):
                 "port": port,
                 "monitoring_addr": monitoring_ip,
                 "monitoring_port": monitoring_port,
+                "cqos_port": spec.cluster_qos_port,
                 "bind_addr": bind_addr,
                 "haproxy_hosts": [],
                 "nfs_idmap_conf": nfs_idmap_conf,
@@ -170,6 +175,7 @@ class NFSService(CephService):
                 "tls_min_version": spec.tls_min_version,
                 "tls_ktls": spec.tls_ktls,
                 "tls_debug": spec.tls_debug,
+                "ceph_nodes": ceph_nodes
             }
             if spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()
@@ -227,9 +233,15 @@ class NFSService(CephService):
 
         return get_cephadm_config(), self.get_dependencies(self.mgr, spec)
 
+    def pre_daemon_service_config(self, spec: ServiceSpec) -> None:
+        nfs_spec = cast(NFSServiceSpec, spec)
+        self.config(nfs_spec)
+        self.create_rados_config_obj(nfs_spec)
+
     def create_rados_config_obj(self,
                                 spec: NFSServiceSpec,
                                 clobber: bool = False) -> None:
+        config_file_data = None
         objname = spec.rados_config_name()
         cmd = [
             'rados',
@@ -244,6 +256,7 @@ class NFSService(CephService):
             timeout=10)
         if not result.returncode and not clobber:
             logger.info('Rados config object exists: %s' % objname)
+            config_file_data = result.stdout
         else:
             logger.info('Creating rados config object: %s' % objname)
             result = subprocess.run(
@@ -255,6 +268,20 @@ class NFSService(CephService):
                     f'Unable to create rados config object {objname}: {result.stderr.decode("utf-8")}'
                 )
                 raise RuntimeError(result.stderr.decode("utf-8"))
+        if spec.cluster_qos_config:
+            # set cluster level qos config
+            from nfs.cluster import config_cluster_qos_from_dict
+            assert spec.service_id
+            update_obj = False
+            if config_file_data and 'qosconf-nfs' in config_file_data.decode('utf-8'):
+                update_obj = True
+
+            config_cluster_qos_from_dict(
+                mgr=self.mgr,
+                cluster_id=spec.service_id,
+                qos_dict=spec.cluster_qos_config,
+                update_existing_obj=update_obj
+            )
 
     def create_keyring(self, daemon_spec: CephadmDaemonDeploySpec) -> str:
         daemon_id = daemon_spec.daemon_id
