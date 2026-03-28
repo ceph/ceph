@@ -15,9 +15,12 @@
 #include "perfglue/heap_profiler.h"
 #include "os/bluestore/Writer.h"
 #include "common/pretty_binary.h"
-
 #include <bitset>
 #include <sstream>
+#include <boost/random/mersenne_twister.hpp>
+#include <boost/random/uniform_int.hpp>
+
+typedef boost::mt11213b generator_type;
 
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
@@ -3975,6 +3978,50 @@ TEST(SimpleBitmap, boundaries2) {
     sbmap.clr(0, bit_count);
     ASSERT_TRUE(sbmap.get_next_set_extent(0) == null_extent);
     ASSERT_TRUE(sbmap.get_next_clr_extent(0) == full_extent);
+  }
+}
+
+TEST(SimpleBitmap, multithread) {
+  generator_type rng(1234567);
+  // 2^10 = 1K * 4KB = 4MB
+  // 2^20 = 1M * 4KB = 4GB
+  // 2^30 = 1G * 4KB = 4TB
+  for (uint64_t scale = 10; scale < 30; scale++) {
+    uint64_t bit_count = boost::uniform_int<uint64_t>(1 << scale, 2 << scale)(rng);
+    std::cout << "bit_count=" << bit_count << std::endl;
+    SimpleBitmap sbmap(g_ceph_context, bit_count);
+
+    auto randomer = [&](int thread_nr, int64_t* overall_set) {
+      generator_type local_rng(thread_nr);
+      boost::uniform_int<> size_gen(1, 100);
+      boost::uniform_int<> set_clear_gen(0,1);
+      int64_t overall_set_counter = 0;
+      for (int i = 0; i < 100000; i++) {
+        uint64_t size = size_gen(local_rng);
+        uint64_t location = boost::uniform_int<uint64_t>(0, bit_count - size)(local_rng);
+        int d = set_clear_gen(local_rng);
+        if (d) {
+          overall_set_counter += sbmap.set_atomic(location, size);
+        } else {
+          overall_set_counter -= sbmap.clr_atomic(location, size);
+        }
+      }
+      *overall_set = overall_set_counter;
+    };
+    static constexpr uint8_t thread_count = 8;
+    thread thr[thread_count];
+    int64_t overall_set[thread_count] = {0};
+    for (int t = 0; t < thread_count; t++) {
+      thr[t] = thread(randomer, t, &overall_set[t]);
+    }
+    int64_t bits_set_in_threads = 0;
+    for (int t = 0; t < thread_count; t++) {
+      thr[t].join();
+      bits_set_in_threads += overall_set[t];
+    }
+
+    uint64_t bits_cleared = sbmap.clr_atomic(0, bit_count);
+    EXPECT_EQ(bits_cleared, bits_set_in_threads);
   }
 }
 
