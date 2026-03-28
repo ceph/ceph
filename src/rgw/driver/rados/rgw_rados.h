@@ -1021,7 +1021,9 @@ public:
 		   optional_yield y,
 		   const std::string *user_data = nullptr,
 		   bool appendable = false,
-                   bool log_op = true);
+                   bool log_op = true,
+		   uint8_t restore_status = 0,
+		   ceph::real_time restore_expiry_date = {});
       int complete_del(const DoutPrefixProvider *dpp,
                        int64_t poolid, uint64_t epoch,
                        ceph::real_time& removed_mtime, /* mtime of removed object */

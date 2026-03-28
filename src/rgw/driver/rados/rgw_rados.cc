@@ -154,6 +154,52 @@ static inline void read_attr(std::map<std::string, bufferlist>& attrs,
   }
 }
 
+/**
+ * Decode restore status and expiry date from an attrs map for the bucket index.
+ * Tries primary first; if a key is missing and fallback is non-null, tries fallback.
+ */
+static void decode_restore_index_fields(
+    const rgw::sal::Attrs& primary,
+    const rgw::sal::Attrs* fallback,
+    uint8_t& restore_status,
+    ceph::real_time& restore_expiry_date)
+{
+  restore_status = 0;
+  restore_expiry_date = {};
+
+  bufferlist rs_bl;
+  if (auto it = primary.find(RGW_ATTR_RESTORE_STATUS); it != primary.end()) {
+    rs_bl = it->second;
+  } else if (fallback) {
+    if (auto it2 = fallback->find(RGW_ATTR_RESTORE_STATUS); it2 != fallback->end()) {
+      rs_bl = it2->second;
+    }
+  }
+  if (rs_bl.length()) {
+    try {
+      rgw::sal::RGWRestoreStatus rs;
+      auto bl_iter = rs_bl.cbegin();
+      decode(rs, bl_iter);
+      restore_status = static_cast<uint8_t>(rs);
+    } catch (buffer::error&) {}
+  }
+
+  bufferlist re_bl;
+  if (auto it = primary.find(RGW_ATTR_RESTORE_EXPIRY_DATE); it != primary.end()) {
+    re_bl = it->second;
+  } else if (fallback) {
+    if (auto it2 = fallback->find(RGW_ATTR_RESTORE_EXPIRY_DATE); it2 != fallback->end()) {
+      re_bl = it2->second;
+    }
+  }
+  if (re_bl.length()) {
+    try {
+      auto bl_iter = re_bl.cbegin();
+      decode(restore_expiry_date, bl_iter);
+    } catch (buffer::error&) {}
+  }
+}
+
 rgw_raw_obj rgw_obj_select::get_raw_obj(RGWRados* store) const
 {
   if (!is_raw) {
@@ -3434,6 +3480,12 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     }
   }
 
+  // extract restore fields for bucket index
+  uint8_t idx_restore_status = 0;
+  ceph::real_time idx_restore_expiry_date;
+  decode_restore_index_fields(attrs, nullptr,
+                              idx_restore_status, idx_restore_expiry_date);
+
   if (!op.size())
     return 0;
 
@@ -3494,7 +3546,8 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
                         meta.set_mtime, etag, content_type,
                         storage_class, meta.owner,
 			 meta.category, meta.remove_objs, rctx.y,
-			 meta.user_data, meta.appendable, log_op);
+			 meta.user_data, meta.appendable, log_op,
+			 idx_restore_status, idx_restore_expiry_date);
   tracepoint(rgw_rados, complete_exit, req_id.c_str());
   if (r < 0)
     goto done_cancel;
@@ -4097,6 +4150,12 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
   read_attr(attr_set, RGW_ATTR_OLH_INFO, olh_info_bl, &found_olh_info);
   read_attr(attr_set, RGW_ATTR_APPEND_PART_NUM, part_num_bl, &appendable);
 
+  // extract restore fields for bucket index
+  uint8_t idx_restore_status = 0;
+  ceph::real_time idx_restore_expiry_date;
+  decode_restore_index_fields(attr_set, nullptr,
+                              idx_restore_status, idx_restore_expiry_date);
+
   // check for a pure OLH object and if so exit early
   if (found_olh_info) {
     try {
@@ -4175,7 +4234,10 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
 			    nullptr, // remove_objs list
 			    y,
 			    nullptr, // user data string
-			    appendable);
+			    appendable,
+			    true, // log_op
+			    idx_restore_status,
+			    idx_restore_expiry_date);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
       ": update index complete for " << p(head_obj) << " returned: " <<
@@ -4197,6 +4259,8 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
     meta.etag = etag;
     meta.content_type = content_type;
     meta.appendable = appendable;
+    meta.restore_status = idx_restore_status;
+    meta.restore_expiry_date = idx_restore_expiry_date;
 
     ret = link_helper(false, meta, "linking version");
   } // if bucket is versioned
@@ -7604,33 +7668,52 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
       }
       int64_t poolid = ioctx.get_id();
 
-      // Retain Object category as CloudTiered while restore is in
-      // progress or failed or if its temporarily restored copy
+      /*
+       * Retain Object category as CloudTiered while restore is in
+       * progress or failed or if its temporarily restored copy.
+       * Check new attrs first, fall back to existing attrs for partial updates.
+       */
       RGWObjCategory category = RGWObjCategory::Main;
-      auto r_iter = attrs.find(RGW_ATTR_RESTORE_STATUS);
-      auto t_iter = attrs.find(RGW_ATTR_RESTORE_TYPE);
-      if (r_iter != attrs.end()) {
-        rgw::sal::RGWRestoreStatus st = rgw::sal::RGWRestoreStatus::None;
-        auto iter = r_iter->second.cbegin();
-
+      bufferlist rs_bl, rt_bl;
+      if (auto it = attrs.find(RGW_ATTR_RESTORE_STATUS); it != attrs.end()) {
+        rs_bl = it->second;
+      } else if (auto it2 = state->attrset.find(RGW_ATTR_RESTORE_STATUS);
+                 it2 != state->attrset.end()) {
+        rs_bl = it2->second;
+      }
+      if (rs_bl.length()) {
         try {
           using ceph::decode;
-          decode(st, iter);
+          rgw::sal::RGWRestoreStatus st = rgw::sal::RGWRestoreStatus::None;
+          auto bl_iter = rs_bl.cbegin();
+          decode(st, bl_iter);
 
           if (st != rgw::sal::RGWRestoreStatus::CloudRestored) {
             category = RGWObjCategory::CloudTiered;
           } else { // check if its temporary copy
-            if (t_iter != attrs.end()) {
+            if (auto it = attrs.find(RGW_ATTR_RESTORE_TYPE); it != attrs.end()) {
+              rt_bl = it->second;
+            } else if (auto it2 = state->attrset.find(RGW_ATTR_RESTORE_TYPE);
+                       it2 != state->attrset.end()) {
+              rt_bl = it2->second;
+            }
+            if (rt_bl.length()) {
               rgw::sal::RGWRestoreType rt;
-              decode(rt, t_iter->second);
+              decode(rt, rt_bl);
 
               if (rt == rgw::sal::RGWRestoreType::Temporary) {
                 category = RGWObjCategory::CloudTiered;
                 // temporary restore; set storage-class to cloudtier storage class
-                auto c_iter = attrs.find(RGW_ATTR_CLOUDTIER_STORAGE_CLASS);
-
-                if (c_iter != attrs.end()) {
-                  storage_class = rgw_bl_str(c_iter->second);
+                bufferlist sc_bl;
+                if (auto it = attrs.find(RGW_ATTR_CLOUDTIER_STORAGE_CLASS);
+                    it != attrs.end()) {
+                  sc_bl = it->second;
+                } else if (auto it2 = state->attrset.find(RGW_ATTR_CLOUDTIER_STORAGE_CLASS);
+                           it2 != state->attrset.end()) {
+                  sc_bl = it2->second;
+                }
+                if (sc_bl.length()) {
+                  storage_class = rgw_bl_str(sc_bl);
                 }
               }
             }
@@ -7638,10 +7721,17 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
         } catch (buffer::error& err) {
         }
       }
+      // extract restore fields for index, with partial-update fallback
+      uint8_t idx_restore_status = 0;
+      ceph::real_time idx_restore_expiry_date;
+      decode_restore_index_fields(attrs, &state->attrset,
+                                  idx_restore_status, idx_restore_expiry_date);
+
 	    ldpp_dout(dpp, 20) << "Setting obj category:" << category << ", storage_class:" << storage_class << dendl;
       r = index_op.complete(dpp, poolid, epoch, state->size, state->accounted_size,
                             mtime, etag, content_type, storage_class, owner,
-                            category, nullptr, y, nullptr, false, log_op);
+                            category, nullptr, y, nullptr, false, log_op,
+                            idx_restore_status, idx_restore_expiry_date);
     } else {
       int ret = index_op.cancel(dpp, nullptr, y, log_op);
       if (ret < 0) {
@@ -8075,7 +8165,9 @@ int RGWRados::Bucket::UpdateIndex::complete(const DoutPrefixProvider *dpp, int64
 					    optional_yield y,
 					    const string *user_data,
                                             bool appendable,
-                                            bool log_op)
+                                            bool log_op,
+					    uint8_t restore_status,
+					    ceph::real_time restore_expiry_date)
 {
   if (blind) {
     return 0;
@@ -8103,6 +8195,8 @@ int RGWRados::Bucket::UpdateIndex::complete(const DoutPrefixProvider *dpp, int64
   ent.meta.owner_display_name = owner.display_name;
   ent.meta.content_type = content_type;
   ent.meta.appendable = appendable;
+  ent.meta.restore_status = restore_status;
+  ent.meta.restore_expiry_date = restore_expiry_date;
 
   bool add_log = log_op && store->svc.zone->need_to_log_data();
 

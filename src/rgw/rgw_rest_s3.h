@@ -150,6 +150,7 @@ class RGWListBucket_ObjStore_S3 : public RGWListBucket_ObjStore {
 protected:
   bool objs_container;
   bool encode_key {false};
+  bool fetch_restore_status {false};
   int get_common_params();
   void send_common_response();
   void send_common_versioned_response();
