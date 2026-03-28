@@ -939,6 +939,16 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_keystone_verify_access_rules
+  type: bool
+  level: advanced
+  default: true
+  help: Enable enforcement of Keystone application credential access rules.
+- name: rgw_keystone_accepted_service_types
+  type: str
+  level: advanced
+  default: object-store, swift
+  help: Comma-separated list of Keystone service types RGW identifies as.
 - name: rgw_keystone_implicit_tenants
   type: str
   level: advanced

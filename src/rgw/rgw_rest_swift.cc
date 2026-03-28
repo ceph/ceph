@@ -2931,10 +2931,37 @@ RGWOp *RGWHandler_REST_Obj_SWIFT::op_options()
   return new RGWOptionsCORS_ObjStore_SWIFT;
 }
 
-
 int RGWHandler_REST_SWIFT::authorize(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  return rgw::auth::Strategy::apply(dpp, auth_strategy, s, y);
+
+  int ret = rgw::auth::Strategy::apply(dpp, auth_strategy, s, y);
+  if (ret < 0) {
+    return ret;
+  }
+  // Check for Keystone Application Credentials Access Rules
+  auto keystone_identity = dynamic_cast<rgw::auth::keystone::Identity*>(s->auth.identity.get());
+  if (keystone_identity) {
+    const auto& token = keystone_identity->get_token_envelope();
+    // Only enforce if the token actually has access rules (is a restricted app cred)
+    if (token.has_access_rules()) {
+      //match path and remove query params
+      std::string_view path = s->decoded_uri;
+      size_t pos = path.find('?');
+      if (pos != std::string_view::npos) {
+        path = path.substr(0, pos);
+      }
+      // Enforce access rules
+      if (!rgw::auth::keystone::check_access_rules(dpp, s->cct, 
+                                                   token.get_access_rules(), 
+                                                   s->info.method, path)) {
+        ldpp_dout(dpp, 0) << "Keystone Access Rules: request denied for method=" 
+                          << s->info.method << " path=" << path << dendl;
+        return -EACCES; // Returns 403 Forbidden
+      }
+    }
+  }
+
+  return 0;
 }
 
 int RGWHandler_REST_SWIFT::postauth_init(optional_yield y)
