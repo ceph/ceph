@@ -397,6 +397,7 @@ md_config_t::parse_buffer(ConfigValues& values,
   if (!cf.parse_buffer(string_view{buf, len}, warnings)) {
     return -EINVAL;
   }
+  int r = 0;
   const auto my_sections = get_my_sections(values);
   for (const auto &i : schema) {
     const auto &opt = i.second;
@@ -414,10 +415,11 @@ md_config_t::parse_buffer(ConfigValues& values,
         }
         *warnings << '\n';
       }
+      r = -EINVAL;
     }
   }
   cf.check_old_style_section_names({"mds", "mon", "osd"}, cerr);
-  return 0;
+  return r;
 }
 
 std::list<std::string>
