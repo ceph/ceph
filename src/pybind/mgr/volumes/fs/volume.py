@@ -507,6 +507,9 @@ class VolumeClient(CephfsClient["Module"]):
         subvolname = kwargs['sub_name']
         groupname  = kwargs['group_name']
 
+        if not subvolname:
+            return -errno.EINVAL, "", "subvolume name cannot be empty"
+
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
