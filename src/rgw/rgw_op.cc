@@ -5899,6 +5899,7 @@ class RGWCopyObjDPF : public rgw::sal::DataProcessorFactory {
   DataProcessorFilter cb;
   RGWGetObj_Filter* filter{&cb};
   bool need_decompress{false};
+  bool decompressed{false};
   RGWCompressionInfo decompress_info;
   boost::optional<RGWGetObj_Decompress> decompress;
   std::unique_ptr<RGWGetObj_Filter> decrypt;
@@ -5951,6 +5952,7 @@ public:
       s->src_object->set_obj_size(obj_size);
       static constexpr bool partial_content = false;
       decompress.emplace(s->cct, &decompress_info, partial_content, filter);
+      decompressed = true;
       filter = &*decompress;
       end_x = obj_size;
     }
@@ -6055,6 +6057,12 @@ public:
           << ", compressor_message=" << cs_info.compressor_message
           << ", blocks=" << cs_info.blocks.size() << dendl;
     }
+  }
+
+  uint64_t get_accounted_size(uint64_t default_size) override {
+    if (decompressed)
+      return decompress_info.orig_size;
+    return default_size;
   }
 };
 
