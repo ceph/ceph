@@ -46,10 +46,10 @@
 .balign 16
 .constants:
 	/* Barrett constant m - (4^32)/n */
-	.octa 0x00000000000000000000000104d101df
+	.octa 0x0000000000000000000000011f91caf6
 
 	/* Barrett constant n */
-	.octa 0x00000000000000000000000104c11db7
+	.octa 0x0000000000000000000000011edc6f41
 
 .bit_reflected_constants:
 	/* 33 bit reflected Barrett constant m - (4^32)/n */
