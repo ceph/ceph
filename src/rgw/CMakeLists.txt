@@ -398,6 +398,10 @@ if(WITH_RADOSGW_DAOS)
   link_directories( ${PC_DAOS_LIBRARY_DIRS} )
 endif()
 
+if(WITH_RADOSGW_D4N AND WITH_LIBURING)
+  target_link_libraries(rgw_common PRIVATE uring::uring)
+endif()
+
 set(rgw_a_srcs
   rgw_appmain.cc
   rgw_asio_client.cc

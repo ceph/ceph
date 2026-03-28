@@ -4035,6 +4035,98 @@ options:
   see_also:
   - rgw_thread_pool_size
   with_legacy: true
+- name: rgw_d4n_io_backend_type
+  type: str
+  level: advanced
+  desc: Specify the asynchronous I/O library for RGW D4N cache operations.
+  long_desc: The RGW D4N cache backend can use either libaio (POSIX AIO) or liburing (io_uring)
+    for asynchronous I/O operations. io_uring provides better performance on modern Linux
+    kernels but requires kernel 5.1+ and liburing. If liburing is not available or
+    initialization fails, the backend will automatically fall back to libaio.
+  default: libaio
+  services:
+  - rgw
+  enum_values:
+  - libaio
+  - liburing
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_d4n_io_uring_queue_depth
+  type: int
+  level: advanced
+  desc: io_uring submission queue depth for D4N cache operations.
+  long_desc: Specifies the number of entries in the io_uring submission queue. A larger
+    queue allows more concurrent I/O operations but consumes more kernel memory. This
+    option only applies when rgw_d4n_io_backend_type is set to liburing.
+  default: 2048
+  min: 4
+  max: 8192
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_d4n_io_uring_direct_io
+  type: bool
+  level: advanced
+  desc: Enable O_DIRECT for io_uring cache I/O operations.
+  long_desc: When enabled, io_uring will use O_DIRECT for bypassing the kernel page cache.
+    This can improve performance for large sequential I/O but requires 512-byte aligned
+    buffers. The io_uring backend automatically handles buffer alignment when this is
+    enabled. This option only applies when rgw_d4n_io_backend_type is set to liburing.
+  default: false
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_d4n_io_uring_sqpoll
+  type: bool
+  level: advanced
+  desc: Enable SQPOLL mode for kernel-side submission polling.
+  long_desc: When enabled, the kernel will poll the submission queue, eliminating the
+    need for syscalls to submit I/O operations. This can significantly reduce latency
+    but requires elevated privileges (CAP_SYS_NICE or root). If initialization fails,
+    the driver will fall back to normal mode. This option only applies when
+    rgw_d4n_io_backend_type is set to liburing.
+  default: false
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_d4n_io_uring_sq_thread_idle_ms
+  type: int
+  level: advanced
+  desc: SQPOLL thread idle timeout in milliseconds before sleeping.
+  long_desc: When SQPOLL mode is enabled, this sets how long the kernel polling thread
+    will spin before going to sleep when there are no submissions. Lower values save
+    CPU but may increase latency when new operations arrive. This option only applies
+    when rgw_d4n_io_uring_sqpoll is enabled.
+  default: 1000
+  min: 100
+  max: 60000
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_d4n_io_uring_iopoll
+  type: bool
+  level: advanced
+  desc: Enable IOPOLL mode for polling-based I/O completion.
+  long_desc: When enabled, io_uring will use polling for I/O completion instead of
+    interrupts. This can significantly reduce latency for NVMe devices that support
+    polling mode. IOPOLL requires O_DIRECT (rgw_d4n_io_uring_direct_io must be enabled)
+    and works best with high-performance NVMe storage. Note that IOPOLL is incompatible
+    with SQPOLL mode - if both are enabled, IOPOLL takes precedence.
+  default: false
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
 - name: rgw_lfuda_sync_frequency
   type: int
   level: advanced
