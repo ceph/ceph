@@ -41,79 +41,61 @@
       </div>
 
       <div *ngIf="configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS || configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3">
-        <div class="form-group row">
-          <label class="cd-col-form-label required"
-                 for="kms_provider"
-                 i18n>Key management service provider</label>
-          <div class="cd-col-form-input">
-            <select id="kms_provider"
-                    class="form-select"
-                    (change)="setKmsProvider()"
-                    formControlName="kms_provider">
-              <option *ngIf="kmsProviders !== null && kmsProviders.length === 0"
-                      ngValue="null"
-                      i18n>-- No kms providers available --</option>
-              <option *ngIf="kmsProviders !== null && kmsProviders.length > 0"
-                      ngValue=""
-                      i18n>-- Select a provider --</option>
-              <option *ngFor="let provider of kmsProviders"
-                      [value]="provider">{{ provider }}</option>
-            </select>
-            <cd-help-text>
-              <span i18n>Where the encryption keys are stored.
-              </span>
-            </cd-help-text>
-            <span class="invalid-feedback"
-                  *ngIf="configForm.showError('kms_provider', frm, 'required')"
-                  i18n>This field is required.</span>
-          </div>
+        <div class="form-item">
+          <cds-select id="kms_provider"
+                      formControlName="kms_provider"
+                      label="Key management service provider"
+                      helperText="Where the encryption keys are stored."
+                      invalidText="This field is required."
+                      i18n-label
+                      i18n-helperText
+                      i18n-invalidText
+                      [invalid]="configForm.showError('kms_provider', frm, 'required')"
+                      (change)="setKmsProvider()">
+            <option *ngIf="kmsProviders !== null && kmsProviders.length === 0"
+                    ngValue="null"
+                    i18n>-- No kms providers available --</option>
+            <option *ngIf="kmsProviders !== null && kmsProviders.length > 0"
+                    ngValue=""
+                    i18n>-- Select a provider --</option>
+            <option *ngFor="let provider of kmsProviders"
+                    [value]="provider">{{ provider }}</option>
+          </cds-select>
         </div>
       </div>
 
       <div *ngIf="kmsProviders.length !== 0 && configForm.getValue('kms_provider') !== ''">
         <div *ngIf="(configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS && configForm.getValue('kms_provider') === KMS_PROVIDER.VAULT) || configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3">
-          <div class="form-group row">
-            <label class="cd-col-form-label required"
-                   for="auth"
-                   i18n>Authentication Method</label>
-            <div class="cd-col-form-input">
-              <select class="form-select"
-                      id="auth"
-                      formControlName="auth">
-                <option *ngFor="let auth of authMethods"
-                        [value]="auth">{{ auth }}</option>
-              </select>
-              <cd-help-text>
-                <span i18n>Type of authentication method to be used with Vault
-                </span>
-              </cd-help-text>
-              <span class="invalid-feedback"
-                    *ngIf="configForm.showError('auth', frm, 'required')"
-                    i18n>This field is required.</span>
-            </div>
+          <div class="form-item">
+            <cds-select id="auth"
+                        formControlName="auth"
+                        label="Authentication Method"
+                        helperText="Type of authentication method to be used with Vault"
+                        invalidText="This field is required."
+                        i18n-label
+                        i18n-helperText
+                        i18n-invalidText
+                        [invalid]="configForm.showError('auth', frm, 'required')">
+              <option *ngFor="let auth of authMethods"
+                      [value]="auth">{{ auth }}</option>
+            </cds-select>
           </div>
         </div>
 
         <div *ngIf="(configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS && configForm.getValue('kms_provider') === KMS_PROVIDER.VAULT) || configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3">
-          <div class="form-group row">
-            <label class="cd-col-form-label required"
-                   for="secret_engine"
-                   i18n>Secret Engine</label>
-            <div class="cd-col-form-input">
-              <select class="form-select"
-                      id="secret_engine"
-                      formControlName="secret_engine">
-                <option *ngFor="let secret_engine of secretEngines"
-                        [value]="secret_engine">{{ secret_engine }}</option>
-              </select>
-              <cd-help-text>
-                <span i18n>Vault Secret Engine to be used to retrieve encryption keys.
-                </span>
-              </cd-help-text>
-              <span class="invalid-feedback"
-                    *ngIf="configForm.showError('secret_engine', frm, 'required')"
-                    i18n>This field is required.</span>
-            </div>
+          <div class="form-item">
+            <cds-select id="secret_engine"
+                        formControlName="secret_engine"
+                        label="Secret Engine"
+                        helperText="Vault Secret Engine to be used to retrieve encryption keys."
+                        invalidText="This field is required."
+                        i18n-label
+                        i18n-helperText
+                        i18n-invalidText
+                        [invalid]="configForm.showError('secret_engine', frm, 'required')">
+              <option *ngFor="let secret_engine of secretEngines"
+                      [value]="secret_engine">{{ secret_engine }}</option>
+            </cds-select>
           </div>
         </div>
 
@@ -161,34 +143,21 @@
         </div>
 
         <div *ngIf="configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS || configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3">
-          <div class="form-group row">
-            <label  class="cd-col-form-label required"
-                    for="addr">
-              <span i18n
-                    *ngIf="configForm.getValue('kms_provider') === KMS_PROVIDER.VAULT">Vault Address
-              </span>
-              <span i18n
-                    *ngIf="configForm.getValue('kms_provider') === KMS_PROVIDER.KMIP">KMIP Address
-              </span>
-            </label>
-            <div class="cd-col-form-input">
-              <input  class="form-control"
-                      id="addr"
-                      formControlName="addr"
-                      placeholder="http://127.0.0.1:8000"
-                      i18n>
-                <cd-help-text >
-                  <span *ngIf="configForm.getValue('kms_provider') === KMS_PROVIDER.VAULT"
-                        i18n>Vault server base address.
-                  </span>
-                  <span *ngIf="configForm.getValue('kms_provider') === KMS_PROVIDER.KMIP"
-                        i18n>Kmip server base address.
-                  </span>
-                </cd-help-text>
-              <span class="invalid-feedback"
-                    *ngIf="configForm.showError('addr', frm, 'required')"
-                    i18n>This field is required.</span>
-            </div>
+          <div class="form-item">
+            <cds-text-label [label]="configForm.getValue('kms_provider') === KMS_PROVIDER.VAULT ? 'Vault Address' : 'KMIP Address'"
+                            for="addr"
+                            [invalid]="configForm.showError('addr', frm, 'required')"
+                            invalidText="This field is required."
+                            [helperText]="configForm.getValue('kms_provider') === KMS_PROVIDER.VAULT ? 'Vault server base address.' : 'Kmip server base address.'"
+                            i18n-invalidText
+                            i18n-helperText>
+              <input cdsText
+                     id="addr"
+                     formControlName="addr"
+                     placeholder="http://127.0.0.1:8000"
+                     i18n-placeholder
+                     [invalid]="configForm.showError('addr', frm, 'required')">
+            </cds-text-label>
           </div>
         </div>
 

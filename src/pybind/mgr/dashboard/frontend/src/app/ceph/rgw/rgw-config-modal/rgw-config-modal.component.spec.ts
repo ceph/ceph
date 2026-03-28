@@ -5,6 +5,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
+import { InputModule, SelectModule } from 'carbon-components-angular';
 
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
@@ -21,7 +22,9 @@ describe('RgwConfigModalComponent', () => {
       ReactiveFormsModule,
       RouterTestingModule,
       HttpClientTestingModule,
-      ToastrModule.forRoot()
+      ToastrModule.forRoot(),
+      InputModule,
+      SelectModule
     ],
     providers: [NgbActiveModal]
   });
@@ -34,5 +37,12 @@ describe('RgwConfigModalComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('should render carbonized top-level controls', () => {
+    const nativeElement = fixture.nativeElement as HTMLElement;
+
+    expect(nativeElement.querySelectorAll('cds-select').length).toBeGreaterThanOrEqual(3);
+    expect(nativeElement.querySelector('cds-text-label[for="addr"]')).toBeTruthy();
   });
 });
