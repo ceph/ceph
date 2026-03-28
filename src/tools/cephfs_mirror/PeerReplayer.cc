@@ -30,6 +30,7 @@
                            << m_peer.uuid << ") " << __func__
 
 using namespace std;
+using sec_duration = std::chrono::duration<double>;
 
 // Performance Counters
 enum {
@@ -1420,12 +1421,16 @@ bool PeerReplayer::SyncMechanism::has_pending_work() const {
   return true;
 }
 
-void PeerReplayer::SyncMechanism::mark_crawl_finished(int ret) {
-  std::unique_lock lock(sdq_lock);
-  m_crawl_finished = true;
-  if (ret < 0)
-    m_crawl_error = true;
-  sdq_cv.notify_all();
+void PeerReplayer::SyncMechanism::mark_crawl_finished(int ret, double crawl_duration_secs) {
+  {
+    std::unique_lock lock(sdq_lock);
+    m_crawl_finished = true;
+    if (ret < 0)
+      m_crawl_error = true;
+    sdq_cv.notify_all();
+  }
+  // for crawl-state metrics
+  m_peer_replayer.set_crawl_finished(m_dir_root, true, crawl_duration_secs);
 }
 
 // Returns false if there is any error during data sync
@@ -1751,7 +1756,7 @@ int PeerReplayer::SnapDiffSync::get_changed_blocks(const std::string &epath,
   return r;
 }
 
-void PeerReplayer::SnapDiffSync::finish_crawl(int ret) {
+void PeerReplayer::SnapDiffSync::finish_crawl(int ret, double crawl_duration_secs) {
   dout(20) << dendl;
 
   while (!m_sync_stack.empty()) {
@@ -1767,7 +1772,7 @@ void PeerReplayer::SnapDiffSync::finish_crawl(int ret) {
   }
 
   // Crawl and entry operations are done syncing here. So mark crawl finished here
-  mark_crawl_finished(ret);
+  mark_crawl_finished(ret, crawl_duration_secs);
 }
 
 PeerReplayer::RemoteSync::RemoteSync(PeerReplayer& peer_replayer, std::string_view dir_root,
@@ -1904,7 +1909,7 @@ int PeerReplayer::RemoteSync::get_entry(std::string *epath, struct ceph_statx *s
   return 0;
 }
 
-void PeerReplayer::RemoteSync::finish_crawl(int ret) {
+void PeerReplayer::RemoteSync::finish_crawl(int ret, double crawl_duration_secs) {
   dout(20) << dendl;
 
   while (!m_sync_stack.empty()) {
@@ -1920,7 +1925,7 @@ void PeerReplayer::RemoteSync::finish_crawl(int ret) {
   }
 
   // Crawl and entry operations are done syncing here. So mark stack finished here
-  mark_crawl_finished(ret);
+  mark_crawl_finished(ret, crawl_duration_secs);
 }
 
 int PeerReplayer::do_synchronize(const std::string &dir_root, const Snapshot &current,
@@ -1967,6 +1972,9 @@ int PeerReplayer::do_synchronize(const std::string &dir_root, const Snapshot &cu
 
   // starting from this point we shouldn't care about manual closing of fh.c_fd,
   // it will be closed automatically when bound tdirp is closed.
+  sec_duration crawl_duration_time{0};
+  auto crawl_start_time = clock::now();
+  set_crawl_start_time(dir_root);
   while (true) {
     if (should_backoff(dir_root, &r)) {
       dout(0) << ": backing off r=" << r << dendl;
@@ -1995,7 +2003,9 @@ int PeerReplayer::do_synchronize(const std::string &dir_root, const Snapshot &cu
     }
   }
 
-  syncm->finish_crawl(r);
+  auto crawl_end_time = clock::now();
+  crawl_duration_time = sec_duration(crawl_end_time - crawl_start_time);
+  syncm->finish_crawl(r, crawl_duration_time.count());
 
   dout(20) << " cur:" << fh.c_fd
            << " prev:" << fh.p_fd
@@ -2523,6 +2533,40 @@ void PeerReplayer::run_datasync(SnapshotDataSyncThread *data_replayer) {
   } // outer while
 }
 
+std::string PeerReplayer::format_time(double total_seconds_d) {
+    // Round to nearest second
+    uint64_t total_seconds = static_cast<uint64_t>(std::llround(total_seconds_d));
+
+    uint64_t days = total_seconds / 86400;
+    total_seconds %= 86400;
+
+    uint64_t hours = total_seconds / 3600;
+    total_seconds %= 3600;
+
+    uint64_t minutes = total_seconds / 60;
+    uint64_t seconds = total_seconds % 60;
+
+    std::ostringstream oss;
+
+    if (days > 0) {
+        oss << days << "d "
+            << std::setw(2) << std::setfill('0') << hours   << "h "
+            << std::setw(2) << std::setfill('0') << minutes << "m "
+            << std::setw(2) << std::setfill('0') << seconds << "s";
+    } else if (hours > 0) {
+        oss << hours << "h "
+            << std::setw(2) << std::setfill('0') << minutes << "m "
+            << std::setw(2) << std::setfill('0') << seconds << "s";
+    } else if (minutes > 0) {
+        oss << minutes << "m "
+            << std::setw(2) << std::setfill('0') << seconds << "s";
+    } else {
+        oss << seconds << "s";
+    }
+
+    return oss.str();
+}
+
 std::string PeerReplayer::format_bytes(double bytes) {
   static constexpr double KiB = 1024.0;
   static constexpr double MiB = KiB * 1024.0;
@@ -2566,6 +2610,18 @@ void PeerReplayer::peer_status(Formatter *f) {
       f->open_object_section("current_syncing_snap");
       f->dump_unsigned("id", (*sync_stat.current_syncing_snap).first);
       f->dump_string("name", (*sync_stat.current_syncing_snap).second);
+      f->open_object_section("crawl");
+      if (sync_stat.crawl_finished) {
+        f->dump_string("state", "completed");
+        f->dump_string("duration", format_time(sync_stat.crawl_duration));
+      } else {
+        f->dump_string("state", "in-progress");
+        auto cur_time = clock::now();
+        sec_duration crawl_duration_till_now{0};
+        crawl_duration_till_now = sec_duration(cur_time - sync_stat.crawl_start_time);
+        f->dump_string("duration", format_time(crawl_duration_till_now.count()));
+      }
+      f->close_section(); //crawl
       f->open_object_section("bytes");
       f->dump_string("sync_bytes", format_bytes(sync_stat.sync_bytes));
       f->dump_string("total_bytes", format_bytes(sync_stat.total_bytes));
@@ -2593,7 +2649,7 @@ void PeerReplayer::peer_status(Formatter *f) {
       f->dump_unsigned("id", (*sync_stat.last_synced_snap).first);
       f->dump_string("name", (*sync_stat.last_synced_snap).second);
       if (sync_stat.last_sync_duration) {
-        f->dump_float("sync_duration", *sync_stat.last_sync_duration);
+        f->dump_string("sync_duration", format_time(*sync_stat.last_sync_duration));
         f->dump_stream("sync_time_stamp") << sync_stat.last_synced;
       }
       if (sync_stat.last_sync_bytes) {
