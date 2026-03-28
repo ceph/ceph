@@ -7253,6 +7253,7 @@ public:
 	 << byte_u_t(sum.statfs.available)
 	 << lowprecision_t(average_util)
 	 << ""
+   << sum.num_pgs
 	 << TextTable::endrow;
   }
 
