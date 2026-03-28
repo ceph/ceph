@@ -1,7 +1,7 @@
 -e ../../python-common
 asyncmock
 cherrypy
-cryptography
+cryptography==45.0.4
 jsonpatch
 Jinja2
 pecan
@@ -9,9 +9,9 @@ prettytable<3.4.0
 pyfakefs
 pyOpenSSL
 pytest-cov==2.7.1
-pyyaml
+pyyaml==6.0.2
 requests-mock
-scipy
+scipy==1.15.2
 werkzeug
 natsort
 bcrypt
