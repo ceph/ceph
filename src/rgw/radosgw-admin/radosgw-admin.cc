@@ -183,6 +183,7 @@ void usage()
   cout << "  bucket check                     check bucket index by verifying size and object count stats\n";
   cout << "  bucket check olh                 check for olh index entries and objects that are pending removal\n";
   cout << "  bucket check unlinked            check for object versions that are not visible in a bucket listing \n";
+  cout << "  bucket check orphan              check for list entries without corresponding instance entries\n";
   cout << "  bucket chown                     link bucket to specified user and update its object ACLs\n";
   cout << "  bucket reshard                   reshard bucket\n";
   cout << "  bucket set-min-shards            set the minimum number of shards that dynamic resharding will consider for a bucket\n";
@@ -721,6 +722,7 @@ enum class OPT {
   BUCKET_CHECK,
   BUCKET_CHECK_OLH,
   BUCKET_CHECK_UNLINKED,
+  BUCKET_CHECK_ORPHAN,
   BUCKET_SYNC_CHECKPOINT,
   BUCKET_SYNC_INFO,
   BUCKET_SYNC_STATUS,
@@ -972,6 +974,7 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket check", OPT::BUCKET_CHECK },
   { "bucket check olh", OPT::BUCKET_CHECK_OLH },
   { "bucket check unlinked", OPT::BUCKET_CHECK_UNLINKED },
+  { "bucket check orphan", OPT::BUCKET_CHECK_ORPHAN },
   { "bucket sync checkpoint", OPT::BUCKET_SYNC_CHECKPOINT },
   { "bucket sync info", OPT::BUCKET_SYNC_INFO },
   { "bucket sync status", OPT::BUCKET_SYNC_STATUS },
@@ -9296,6 +9299,15 @@ next:
       return 0;
     }
     RGWBucketAdminOp::check_index_unlinked(store, bucket_op, stream_flusher, dpp());
+  }
+
+  if (opt_cmd == OPT::BUCKET_CHECK_ORPHAN) {
+    rgw::sal::RadosStore* store = dynamic_cast<rgw::sal::RadosStore*>(driver);
+    if (!store) {
+      cerr << "WARNING: this command is only relevant when the cluster has a RADOS backing store." << std::endl;
+      return 0;
+    }
+    RGWBucketAdminOp::check_index_orphan(store, bucket_op, stream_flusher, dpp());
   }
 
   if (opt_cmd == OPT::BUCKET_RM) {

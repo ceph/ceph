@@ -931,6 +931,126 @@ static int check_index_unlinked(rgw::sal::RadosStore* const rados_store,
 }
 
 /**
+ * Check for orphaned list entries in a bucket shard - list entries that
+ * don't have a corresponding instance entry. This can happen due to
+ * incomplete cleanup or data corruption. These orphaned entries cause
+ * lifecycle operations to fail with ENOENT when they try to access the
+ * instance data. If op_state.fix_index is true, we remove the orphaned
+ * plain entry from the bucket index.
+ */
+static int check_index_orphan(rgw::sal::RadosStore* const rados_store,
+                              rgw::sal::Bucket* const bucket,
+                              const DoutPrefixProvider *dpp,
+                              RGWBucketAdminOpState& op_state,
+                              RGWFormatterFlusher& flusher,
+                              const int shard,
+                              uint64_t* const count_out,
+                              optional_yield y)
+{
+  const std::string empty_delim;
+  cls_rgw_obj_key marker;
+  rgw_cls_list_ret result;
+
+  RGWRados* store = rados_store->getRados();
+  RGWRados::BucketShard bs(store);
+
+  int ret = bs.init(dpp, bucket->get_info(), bucket->get_info().layout.current_index, shard, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, -1) << "ERROR bs.init(bucket=" << bucket << "): " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  *count_out = 0;
+  do {
+    librados::ObjectReadOperation op;
+    cls_rgw_bucket_list_op(op, marker, "", empty_delim, listing_max_entries,
+                           true /* list_versions */, &result);
+    bufferlist ibl;
+    ret = bs.bucket_obj.operate(dpp, std::move(op), &ibl, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, -1) << "ERROR cls_rgw_bucket_list_op(): " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+
+    for (auto const& entry : result.dir.m) {
+      const rgw_bucket_dir_entry& dir_entry = entry.second;
+      marker = dir_entry.key;
+
+      // Skip entries without instance (non-versioned objects)
+      if (dir_entry.key.instance.empty()) {
+        continue;
+      }
+
+      // Check if the instance entry exists
+      rgw_obj obj(bucket->get_key(), dir_entry.key);
+      rgw_bucket_dir_entry instance_entry;
+      ret = store->bi_get_instance(dpp, bucket->get_info(), obj, &instance_entry, y);
+      if (ret == 0) {
+        // Instance entry exists, not an orphan
+        continue;
+      }
+      if (ret != -ENOENT) {
+        ldpp_dout(dpp, -1) << "ERROR bi_get_instance(key='" << dir_entry.key << "'): "
+                          << cpp_strerror(-ret) << dendl;
+        continue;
+      }
+
+      // Instance entry doesn't exist - this is an orphan
+      // Only process delete markers (exists=false) to avoid data loss.
+      // Data-carrying objects (exists=true) would leave RADOS data orphaned.
+      if (dir_entry.exists) {
+        ldpp_dout(dpp, 0) << "WARNING: skipping orphaned data object '" << dir_entry.key
+                         << "' (exists=true). Removing would orphan RADOS data." << dendl;
+        // Report skipped data objects in JSON output
+        if (op_state.dump_keys) {
+          Formatter* const formatter = flusher.get_formatter();
+          formatter->open_object_section("object_instance");
+          formatter->dump_string("name", dir_entry.key.name);
+          formatter->dump_string("instance", dir_entry.key.instance);
+          formatter->dump_bool("delete_marker", false);
+          formatter->dump_string("action", "skipped");
+          formatter->dump_string("reason", "data object - removing would orphan RADOS data");
+          formatter->close_section();
+          if (formatter->get_len() > FORMATTER_LEN_FLUSH_THRESHOLD) {
+            flusher.flush();
+          }
+        }
+        continue;
+      }
+
+      if (op_state.will_fix_index()) {
+        // Remove the plain entry directly from omap
+        std::set<std::string> keys_to_remove;
+        keys_to_remove.insert(entry.first);
+        librados::ObjectWriteOperation wop;
+        wop.omap_rm_keys(keys_to_remove);
+        ret = bs.bucket_obj.operate(dpp, std::move(wop), y);
+        if (ret < 0) {
+          ldpp_dout(dpp, -1) << "ERROR removing orphan plain entry for key='" << dir_entry.key
+                            << "': " << cpp_strerror(-ret) << dendl;
+          continue;
+        }
+      }
+      if (op_state.dump_keys) {
+        Formatter* const formatter = flusher.get_formatter();
+        formatter->open_object_section("object_instance");
+        formatter->dump_string("name", dir_entry.key.name);
+        formatter->dump_string("instance", dir_entry.key.instance);
+        formatter->dump_bool("delete_marker", true);
+        formatter->dump_string("action", op_state.will_fix_index() ? "removed" : "would be removed with fix option");
+        formatter->close_section();
+        if (formatter->get_len() > FORMATTER_LEN_FLUSH_THRESHOLD) {
+          flusher.flush();
+        }
+      }
+      *count_out += 1;
+    }
+  } while (result.is_truncated);
+  flusher.flush();
+  return 0;
+}
+
+/**
  * Spawns separate coroutines to check each bucket shard for unlinked
  * instance entries (and remove them if op_state.fix_index is true).
  */
@@ -975,6 +1095,74 @@ int RGWBucket::check_index_unlinked(rgw::sal::RadosStore* const rados_store,
         if (!op_state.hide_progress) {
           ldpp_dout(dpp, 1) << "NOTICE: finished shard " << shard << " (" << shard_count <<
             " entries " << verb << ")" << dendl;
+        }
+      }
+    }, [] (std::exception_ptr eptr) {
+      if (eptr) std::rethrow_exception(eptr);
+    });
+  }
+  try {
+    context.run();
+  } catch (const std::system_error& e) {
+    return -e.code().value();
+  }
+
+  if (!op_state.hide_progress) {
+    ldpp_dout(dpp, 1) << "NOTICE: finished all shards (" << count_out <<
+      " entries " << verb << ")" << dendl;
+  }
+  if (op_state.dump_keys) {
+    formatter->close_section();
+    flusher.flush();
+  }
+  return 0;
+}
+
+/**
+ * Spawns separate coroutines to check each bucket shard for orphaned
+ * list entries (and remove them if op_state.fix_index is true).
+ */
+int RGWBucket::check_index_orphan(rgw::sal::RadosStore* const rados_store,
+                                  const DoutPrefixProvider *dpp,
+                                  RGWBucketAdminOpState& op_state,
+                                  RGWFormatterFlusher& flusher)
+{
+  const RGWBucketInfo& bucket_info = get_bucket_info();
+  if ((bucket_info.versioning_status() & BUCKET_VERSIONED) == 0) {
+    ldpp_dout(dpp, 0) << "WARNING: this command is only applicable to versioned buckets" << dendl;
+    return 0;
+  }
+
+  Formatter* formatter = flusher.get_formatter();
+  if (op_state.dump_keys) {
+    formatter->open_array_section("");
+  }
+
+  const int max_shards = rgw::num_shards(bucket_info.layout.current_index);
+  std::string verb = op_state.will_fix_index() ? "removed" : "found";
+  uint64_t count_out = 0;
+
+  int max_aio = std::max(1, op_state.get_max_aio());
+  int next_shard = 0;
+  boost::asio::io_context context;
+  for (int i=0; i<max_aio; i++) {
+    boost::asio::spawn(context, [&](boost::asio::yield_context yield) {
+      while (true) {
+        int shard = next_shard;
+        next_shard += 1;
+        if (shard >= max_shards) {
+          return;
+        }
+        uint64_t shard_count = 0;
+        int r = ::check_index_orphan(rados_store, &*bucket, dpp, op_state, flusher, shard, &shard_count, yield);
+        if (r < 0) {
+          ldpp_dout(dpp, -1) << "ERROR: error processing shard " << shard <<
+            " check_index_orphan(): " << r << dendl;
+        }
+        count_out += shard_count;
+        if (!op_state.hide_progress) {
+          ldpp_dout(dpp, 1) << "NOTICE: finished shard " << shard << " (" << shard_count <<
+                " entries " << verb << ")" << dendl;
         }
       }
     }, [] (std::exception_ptr eptr) {
@@ -1385,6 +1573,27 @@ int RGWBucketAdminOp::check_index_unlinked(rgw::sal::RadosStore* store,
   ret = bucket.check_index_unlinked(store, dpp, op_state, flusher);
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "check_index_unlinked(): " << ret << dendl;
+    return ret;
+  }
+  flusher.flush();
+  return 0;
+}
+
+int RGWBucketAdminOp::check_index_orphan(rgw::sal::RadosStore* store,
+                                         RGWBucketAdminOpState& op_state,
+                                         RGWFormatterFlusher& flusher,
+                                         const DoutPrefixProvider *dpp)
+{
+  flusher.start(0);
+  RGWBucket bucket;
+  int ret = bucket.init(store, op_state, null_yield, dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, -1) << "bucket.init(): " << ret << dendl;
+    return ret;
+  }
+  ret = bucket.check_index_orphan(store, dpp, op_state, flusher);
+  if (ret < 0) {
+    ldpp_dout(dpp, -1) << "check_index_orphan(): " << ret << dendl;
     return ret;
   }
   flusher.flush();
