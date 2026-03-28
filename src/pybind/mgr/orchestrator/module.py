@@ -497,7 +497,10 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                   addr: Optional[str] = None,
                   labels: Optional[List[str]] = None,
                   maintenance: Optional[bool] = False) -> HandleCommandResult:
-        """Add a host"""
+"""Add a host
+    Usage:
+    ceph orch host add <newhost> [<ip>] [--labels <label1>[,<label2>...]]
+        """
         _status = 'maintenance' if maintenance else ''
 
         # split multiple labels passed in with --labels=label1,label2
