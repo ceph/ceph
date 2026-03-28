@@ -116,6 +116,96 @@ std::ostream& operator<<(std::ostream& out, const bluestore_pextent_t& o);
 
 typedef mempool::bluestore_cache_other::vector<bluestore_pextent_t> PExtentVector;
 
+class PExtentVectorSlicer
+{
+  size_t idx = 0;
+  uint32_t entry_pos = 0;
+  uint32_t pos = 0;
+  uint32_t total = 0;
+  PExtentVector pext;
+public:
+  uint32_t size() const {
+    return total;
+  }
+  void setup(PExtentVector&& _p, uint32_t _total) {
+    reset();
+    std::swap(pext, _p);
+    total = _total;
+  }
+  void reset() {
+    idx = 0;
+    entry_pos = pos = 0;
+    total = 0;
+    pext.clear();
+  }
+  inline bool begin() const {
+    return idx == 0  && pos == 0;
+  }
+  inline bool end() const {
+    return idx >= pext.size();
+  }
+
+  void rewind() {
+    idx = 0;
+    entry_pos = pos = 0;
+  }
+  void fast_forward(uint32_t seek_pos) {
+    pos = 0;
+    entry_pos = 0;
+    if (seek_pos >= total) {
+      idx = pext.size();
+    } else {
+      size_t i = 0;
+      for (i = 0; i < pext.size(); i++) {
+	uint32_t delta = seek_pos - pos;
+	if (delta < pext[i].length) {
+	  entry_pos = pos;
+	  pos += delta;
+	  break;
+	} else {
+	  pos += pext[i].length;
+	}
+      }
+      idx = i;
+    }
+  }
+
+  uint32_t slice(PExtentVector& res,
+             uint32_t len = std::numeric_limits<uint32_t>::max()) {
+    res.clear();
+    if (end()) {
+      return 0;
+    } else if (begin() && len == total ) {
+      // fast track
+      res = pext;
+      idx = pext.size();
+      pos = entry_pos = 0;
+      return total;
+    }
+    size_t i;
+    uint32_t ret = 0; // amount of bytes returned
+    for (i = idx; i < pext.size() && len > 0; i++) {
+      ceph_assert(pos >= entry_pos);
+      uint32_t delta = pos - entry_pos;
+      uint32_t remaining = pext[i].length - delta;
+      uint32_t l;
+      if (len < remaining) {
+        l = len;
+	pos += l;
+      }	else {
+        l = remaining;
+        entry_pos += pext[i].length;
+	pos = entry_pos;
+	idx = i + 1;
+      }
+      res.emplace_back(bluestore_pextent_t(pext[i].offset + delta, l));
+      ret += l;
+      len -= l;
+    }
+    return ret;
+  }
+};
+
 template<>
 struct denc_traits<PExtentVector> {
   static constexpr bool supported = true;
@@ -234,6 +324,32 @@ struct bluestore_extent_ref_map_t {
 	ref_map[pos].decode(p);
       }
     }
+  }
+  template<class F>
+  int map_fn(uint64_t offset, uint32_t len, F&& f) const {
+    auto p = ref_map.lower_bound(offset);
+    auto pend = ref_map.end();
+    auto end = offset + len;
+    if ((p == pend || p->first > offset) && p != ref_map.begin()) {
+      --p;
+      if (p->first + p->second.length > offset) {
+	uint32_t l = std::min(uint32_t(p->first + p->second.length - offset), len);
+	int r = f(offset, l, p->second.refs);
+	if (r < 0)
+	  return r;
+	offset +=l;
+      }
+      ++p;
+    }
+    while (p != pend && end > offset && end > p->first) {
+      uint32_t l = std::min(p->second.length, uint32_t(end - p->first));
+      int r = f(p->first, l, p->second.refs);
+      if (r < 0)
+	return r;
+      offset = p->first + p->second.length;
+      ++p;
+    }
+    return 0;
   }
 
   void dump(ceph::Formatter *f) const;
@@ -1609,5 +1725,17 @@ private:
     return *aux_items.emplace(it, id);
   }
 };
+
+struct span_stat_t {
+  int64_t stored = 0;  // total bytes stored within a span
+  int64_t cached = 0;  // bytes from span kept in cache, not included in the analysis below
+  int64_t allocated = 0;
+  int64_t stored_compressed = 0;
+  int64_t allocated_compressed = 0;
+  int64_t allocated_shared = 0;
+  size_t extents = 0;
+  size_t frags = 0;
+};
+std::ostream& operator<<(std::ostream& out, const span_stat_t&);
 
 #endif
