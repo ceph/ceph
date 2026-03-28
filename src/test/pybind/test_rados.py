@@ -967,13 +967,13 @@ class TestIoctx(object):
         # use wait_for_complete() and wait for cb by
         # watching retval[0]
 
-        # this is a list so that the local cb() can modify it
         payload = b"bar\000frob"
         self.ioctx.write("foo", payload)
         self._take_down_acting_set('test_pool', 'foo')
 
         retval = [None]
         lock = threading.Condition()
+
         def cb(_, buf):
             with lock:
                 retval[0] = buf
@@ -987,16 +987,27 @@ class TestIoctx(object):
             eq(None, retval[0])
 
         self._let_osds_back_up()
-        comp.wait_for_complete()
+
+        # wait for completion with bounded polling (avoid infinite block)
+        for _ in range(100):
+            if comp.is_complete():
+                break
+            time.sleep(0.05)
+        else:
+            pytest.fail("AIO read did not complete in time")
+
+        # wait for callback to set retval
         loops = 0
         with lock:
             while retval[0] is None and loops <= 10:
                 lock.wait(timeout=5)
                 loops += 1
-        assert(loops <= 10)
+        assert loops <= 10
 
         eq(retval[0], payload)
         eq(sys.getrefcount(comp), 2)
+
+
 
     @pytest.mark.wait
     def test_aio_read_wait_for_complete_and_cb(self):
