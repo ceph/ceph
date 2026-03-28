@@ -33,6 +33,7 @@
 #include <string>
 #include "PGTransaction.h"
 #include "common/ostream_temp.h"
+#include "Coroutines.h"
 
 namespace Scrub {
   class Store;
@@ -600,7 +601,17 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      uint64_t off,
      uint64_t len,
      uint32_t op_flags,
-     ceph::buffer::list *bl) = 0;
+     ceph::buffer::list *bl,
+     uint64_t object_size,
+     std::optional<CoroHandles> coro
+   ) = 0;
+
+   virtual int objects_read_local(
+      const hobject_t &hoid,
+      uint64_t off,
+      uint64_t len,
+      uint32_t op_flags,
+      ceph::buffer::list *bl) = 0;
 
    virtual int objects_readv_sync(
      const hobject_t &hoid,

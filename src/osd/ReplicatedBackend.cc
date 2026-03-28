@@ -281,6 +281,18 @@ int ReplicatedBackend::objects_read_sync(
   uint64_t off,
   uint64_t len,
   uint32_t op_flags,
+  bufferlist *bl,
+  uint64_t object_size,
+  std::optional<CoroHandles> coro)
+{
+  return store->read(ch, ghobject_t(hoid), off, len, *bl, op_flags);
+}
+
+int ReplicatedBackend::objects_read_local(
+  const hobject_t &hoid,
+  uint64_t off,
+  uint64_t len,
+  uint32_t op_flags,
   bufferlist *bl)
 {
   return store->read(ch, ghobject_t(hoid), off, len, *bl, op_flags);
