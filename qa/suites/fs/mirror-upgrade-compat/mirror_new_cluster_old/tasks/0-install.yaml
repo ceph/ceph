@@ -1,0 +1,44 @@
+meta:
+- desc: setup ceph/squid
+log-rotate:
+  ceph-mds: 10G
+  ceph-osd: 10G
+overrides:
+  ceph:
+    create_rbd_pool: false
+tasks:
+- install:
+    branch: squid
+    extra_packages:
+      rpm:
+      - python3-cephfs
+      - cephfs-mirror
+      deb:
+      - python3-cephfs
+      - cephfs-mirror
+    exclude_packages:
+      - ceph-volume
+      - ceph-osd-classic
+      - ceph-osd-crimson
+- print: "**** done installing squid..."
+- print: "**** done start installing squid cephadm ..."
+- cephadm:
+    image: quay.ceph.io/ceph-ci/ceph:squid
+    compiled_cephadm_branch: squid
+    conf:
+      osd:
+        #set config option for which cls modules are allowed to be loaded / used
+        osd_class_load_list: "*"
+        osd_class_default_list: "*"
+- print: "**** done end installing squid cephadm ..."
+- cephadm.shell:
+    mon.a:
+      - ceph config set mgr mgr/cephadm/use_repo_digest true --force
+- print: "**** done cephadm.shell ceph config set mgr..."
+- cephadm.shell:
+    mon.a:
+      - ceph orch status
+      - ceph orch ps
+      - ceph orch ls
+      - ceph orch host ls
+      - ceph orch device ls

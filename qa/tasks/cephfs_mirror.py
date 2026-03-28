@@ -57,8 +57,9 @@ class CephFSMirror(Task):
         if 'run_in_foreground' in self.config:
             args.extend(['--foreground'])
 
-        self.ctx.daemons.add_daemon(
+        self.ctx.daemons.register_daemon(
             self.remote, 'cephfs-mirror', self.client,
+            cluster=self.cluster_name,
             args=args,
             logger=self.log.getChild(self.client),
             stdin=run.PIPE,
