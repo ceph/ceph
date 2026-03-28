@@ -240,6 +240,9 @@ RUN \
     grep -sqo "udev_rules = 0" /etc/lvm/lvm.conf && \
     grep -sqo "obtain_device_list_from_udev = 0" /etc/lvm/lvm.conf
 
+# Make shadow readable so OSD can call `sudo smartctl` for device monitoring
+RUN chmod 0400 /etc/shadow /etc/gshadow
+
 # CLEAN UP!
 RUN set -ex && \
     dnf clean all && \
