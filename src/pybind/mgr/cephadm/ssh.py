@@ -200,19 +200,25 @@ class SSHManager:
             log_content = log_string.getvalue()
             msg = f"Can't communicate with remote host `{addr}`, possibly because the host is not reachable or python3 is not installed on the host. {str(e)}"
             logger.exception(msg)
+            if log_content:
+                logger.debug(f'SSH log for {host} ({addr}): {log_content}')
             raise HostConnectionError(msg, host, addr)
         except asyncssh.Error as e:
             self.mgr.offline_hosts.add(host)
             log_content = log_string.getvalue()
-            msg = f'Failed to connect to {host} ({addr}). {str(e)}' + '\n' + f'Log: {log_content}'
+            msg = f'Failed to connect to {host} ({addr}). {str(e)}'
             logger.debug(msg)
+            if log_content:
+                logger.debug(f'SSH log for {host} ({addr}): {log_content}')
             raise HostConnectionError(msg, host, addr)
         except Exception as e:
             self.mgr.offline_hosts.add(host)
             log_content = log_string.getvalue()
-            logger.exception(str(e))
-            raise HostConnectionError(
-                f'Failed to connect to {host} ({addr}): {repr(e)}' + '\n' f'Log: {log_content}', host, addr)
+            msg = f'Failed to connect to {host} ({addr}): {repr(e)}'
+            logger.exception(msg)
+            if log_content:
+                logger.debug(f'SSH log for {host} ({addr}): {log_content}')
+            raise HostConnectionError(msg, host, addr)
         finally:
             log_string.flush()
             asyncssh_logger.removeHandler(ch)
