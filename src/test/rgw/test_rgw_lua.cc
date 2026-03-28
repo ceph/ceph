@@ -164,22 +164,22 @@ class TestLuaManager : public rgw::sal::StoreLuaManager {
     TestLuaManager() {
       rgw_perf_start(g_ceph_context);
     }
-    int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script, const std::string& name) override {
+    int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script, const std::string& name, std::string& script) override {
       std::this_thread::sleep_for(std::chrono::seconds(read_time));
       script = lua_script;
       return 0;
     }
-    int list_scripts(const DoutPrefixProvider* dpp, optional_yield y, const std::string& tenant, context ctx, RGWObjVersionTracker* objv, std::vector<std::string>& scripts) override {
+    int list_scripts(const DoutPrefixProvider* dpp, optional_yield y, const std::string& tenant, rgw::lua::context ctx, RGWObjVersionTracker* objv, std::vector<std::string>& scripts) override {
       return 0;
     }
-    std::tuple<rgw::lua::LuaCodeType, int> get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& name) override {
+    std::tuple<rgw::lua::LuaCodeType, int> get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override {
       std::this_thread::sleep_for(std::chrono::seconds(read_time));
       return std::make_tuple(lua_script, 0);
     }
-    int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script, const std::string& name) override {
+    int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override {
       return 0;
     }
-    int del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& name) override {
+    int del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override {
       return 0;
     }
     int add_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) override {
