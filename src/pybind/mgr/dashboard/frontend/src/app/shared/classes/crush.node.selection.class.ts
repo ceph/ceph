@@ -195,7 +195,7 @@ export class CrushNodeSelectionClass extends CdForm {
   }
 
   private getIncludedCustomValue(control: AbstractControl, includedIn: string[]) {
-    return control.dirty && includedIn.includes(control.value) ? control.value : '';
+    return includedIn.includes(control.value) ? control.value : '';
   }
 
   private setMostCommonDomain(failureControl: AbstractControl): string {
