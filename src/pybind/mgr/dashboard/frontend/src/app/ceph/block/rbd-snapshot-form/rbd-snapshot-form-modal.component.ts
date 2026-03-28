@@ -62,6 +62,15 @@ export class RbdSnapshotFormModalComponent extends BaseModal implements OnInit {
 
   ngOnInit(): void {
     this.peerConfigured$ = this.rbdMirrorService.getPeerForPool(this.poolName);
+
+    this.peerConfigured$.subscribe(peers => {
+      const control = this.snapshotForm.get('mirrorImageSnapshot');
+      if (peers && peers.length > 0) {
+        control.enable();
+      } else {
+        control.disable();
+      }
+    });
   }
 
   setSnapName(snapName: string) {

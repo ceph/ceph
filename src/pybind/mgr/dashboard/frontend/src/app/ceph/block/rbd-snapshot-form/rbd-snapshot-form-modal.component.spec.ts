@@ -79,12 +79,13 @@ describe('RbdSnapshotFormModalComponent', () => {
 
   // TODO: Fix this test. It is failing after updating the jest.
   // It looks like it is not recognizing if radio button is disabled or not
-  // it('should disable the mirror image snapshot creation when peer is not configured', () => {
-  //   spyOn(rbdMirrorService, 'getPeerForPool').and.returnValue(of([]));
-  //   component.mirroring = 'snapshot';
-  //   component.ngOnInit();
-  //   fixture.detectChanges();
-  //   const radio = fixture.debugElement.nativeElement.querySelector('#mirrorImageSnapshot');
-  //   expect(radio.disabled).toBe(true);
-  // });
+  it('should disable the mirror image snapshot creation when peer is not configured', () => {
+    spyOn(rbdMirrorService, 'getPeerForPool').and.returnValue(of([]));
+    component.mirroring = 'snapshot';
+      component.ngOnInit();
+    fixture.detectChanges(); 
+    const checkboxElement = fixture.debugElement.nativeElement.querySelector('#mirrorImageSnapshot');
+    const input = checkboxElement.querySelector('input');
+    expect(input.disabled).toBe(true);
+});
 });
