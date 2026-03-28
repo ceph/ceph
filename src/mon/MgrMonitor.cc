@@ -995,6 +995,14 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     f->dump_bool("available", map.get_available());
     f->dump_string("active_name", map.get_active_name());
     f->dump_unsigned("num_standby", map.get_num_standby());
+    f->open_array_section("standbys");
+    for (const auto& [gid, s] : map.standbys) {
+      f->open_object_section("standby_mgr");
+      f->dump_unsigned("gid", s.gid);
+      f->dump_string("name", s.name);
+      f->close_section();
+    }
+    f->close_section();
     f->close_section();
     f->flush(rdata);
   } else if (prefix == "mgr dump") {
