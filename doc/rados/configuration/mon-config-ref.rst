@@ -6,8 +6,8 @@
 
 Understanding how to configure a :term:`Ceph Monitor` is an important part of
 building a reliable :term:`Ceph Storage Cluster`. **All Ceph Storage Clusters
-have at least one monitor**. The monitor complement usually remains fairly
-consistent, but you can add, remove or replace a monitor in a cluster. See
+have at least one Monitor**. The Monitor complement usually remains fairly
+consistent, but you can add, remove or replace a Monitor in a cluster. See
 :ref:`adding-and-removing-monitors` for details.
 
 
@@ -32,7 +32,7 @@ component.  See :ref:`arch_scalability_and_high_availability` for more on this s
 
 The Ceph Monitor's primary function is to maintain a master copy of the cluster
 map. Monitors also provide authentication and logging services. All changes in
-the monitor services are written by the Ceph Monitor to a single Paxos
+the Monitor services are written by the Ceph Monitor to a single Paxos
 instance, and Paxos writes the changes to a key/value store. This provides
 strong consistency. Ceph Monitors are able to query the most recent version of
 the cluster map during sync operations, and they use the key/value store's
@@ -90,16 +90,16 @@ and `Monitoring OSDs and PGs`_ for additional details.
 Monitor Quorum
 --------------
 
-Our Configuring ceph section provides a trivial `Ceph configuration file`_ that
-provides for one monitor in the test cluster. A cluster will run fine with a
-single monitor; however, **a single monitor is a single-point-of-failure**. To
+The *Configuring Ceph* section provides a trivial `Ceph configuration file`_ that
+provides for one Monitor in the test cluster. A cluster will run fine with a
+single Monitor; however, **a single Monitor is a single-point-of-failure**. To
 ensure high availability in a production Ceph Storage Cluster, you should run
-Ceph with multiple monitors so that the failure of a single monitor **WILL NOT**
+Ceph with multiple Monitors so that the failure of a single Monitor **WILL NOT**
 bring down your entire cluster.
 
 When a Ceph Storage Cluster runs multiple Ceph Monitors for high availability,
 Ceph Monitors use `Paxos`_ to establish consensus about the master cluster map.
-A consensus requires a majority of monitors running to establish a quorum for
+A consensus requires a majority of Monitors running to establish a quorum for
 consensus about the cluster map (e.g., 1; 2 out of 3; 3 out of 5; 4 out of 6;
 etc.).
 
@@ -110,26 +110,26 @@ etc.).
 Consistency
 -----------
 
-When you add monitor settings to your Ceph configuration file, you need to be
+When you add Monitor settings to your Ceph configuration file, you need to be
 aware of some of the architectural aspects of Ceph Monitors. **Ceph imposes
-strict consistency requirements** for a Ceph monitor when discovering another
-Ceph Monitor within the cluster. Although Ceph Clients and other Ceph daemons
-use the Ceph configuration file to discover monitors, monitors discover each
+strict consistency requirements** for a Ceph Monitor when discovering another
+Ceph Monitor within the cluster. Although Ceph clients and other Ceph daemons
+use the Ceph configuration file to discover Monitors, Monitors discover each
 other using the monitor map (monmap), not the Ceph configuration file.
 
 A Ceph Monitor always refers to the local copy of the monmap when discovering
 other Ceph Monitors in the Ceph Storage Cluster. Using the monmap instead of the
 Ceph configuration file avoids errors that could break the cluster (e.g., typos
-in ``ceph.conf`` when specifying a monitor address or port). Since monitors use
+in ``ceph.conf`` when specifying a Monitor address or port). Since Monitors use
 monmaps for discovery and they share monmaps with clients and other Ceph
-daemons, **the monmap provides monitors with a strict guarantee that their
+daemons, **the monmap provides Monitors with a strict guarantee that their
 consensus is valid.**
 
 Strict consistency also applies to updates to the monmap. As with any other
 updates on the Ceph Monitor, changes to the monmap always run through a
 distributed consensus algorithm called `Paxos`_. The Ceph Monitors must agree on
 each update to the monmap, such as adding or removing a Ceph Monitor, to ensure
-that each monitor in the quorum has the same version of the monmap. Updates to
+that each Monitor in the quorum has the same version of the monmap. Updates to
 the monmap are incremental so that Ceph Monitors have the latest agreed upon
 version, and a set of previous versions. Maintaining a history enables a Ceph
 Monitor that has an older version of the monmap to catch up with the current
@@ -156,17 +156,17 @@ settings:
 - **Filesystem ID**: The ``fsid`` is the unique identifier for your
   object store. Since you can run multiple clusters on the same
   hardware, you must specify the unique ID of the object store when
-  bootstrapping a monitor.  Deployment tools usually do this for you
+  bootstrapping a Monitor.  Deployment tools usually do this for you
   (e.g., ``cephadm`` can call a tool like ``uuidgen``), but you
   may specify the ``fsid`` manually too.
   
-- **Monitor ID**: A monitor ID is a unique ID assigned to each monitor within 
+- **Monitor ID**: A Monitor ID is a unique ID assigned to each Monitor within 
   the cluster. It is an alphanumeric value, and by convention the identifier 
   usually follows an alphabetical increment (e.g., ``a``, ``b``, etc.). This 
   can be set in a Ceph configuration file (e.g., ``[mon.a]``, ``[mon.b]``, etc.), 
-  by a deployment tool, or using the ``ceph`` commandline.
+  by a deployment tool, or using the ``ceph`` command line.
 
-- **Keys**: The monitor must have secret keys. A deployment tool such as 
+- **Keys**: The Monitor must have secret keys. A deployment tool such as 
   ``cephadm`` usually does this for you, but you may
   perform this step manually too. See `Monitor Keyrings`_ for details.
 
@@ -178,10 +178,10 @@ Configuring Monitors
 ====================
 
 To apply configuration settings to the entire cluster, enter the configuration
-settings under ``[global]``. To apply configuration settings to all monitors in
+settings under ``[global]``. To apply configuration settings to all Monitors in
 your cluster, enter the configuration settings under ``[mon]``. To apply
-configuration settings to specific monitors, specify the monitor instance 
-(e.g., ``[mon.a]``). By convention, monitor instance names use alpha notation.
+configuration settings to specific Monitors, specify the Monitor instance 
+(e.g., ``[mon.a]``). By convention, Monitor instance names use alpha notation.
 
 .. code-block:: ini
 
@@ -199,9 +199,9 @@ configuration settings to specific monitors, specify the monitor instance
 Minimum Configuration
 ---------------------
 
-The bare minimum monitor settings for a Ceph monitor via the Ceph configuration
-file include a hostname and a network address for each monitor. You can configure
-these under ``[mon]`` or under the entry for a specific monitor.
+The bare minimum Monitor settings for a Ceph Monitor via the Ceph configuration
+file include a hostname and a network address for each Monitor. You can configure
+these under ``[mon]`` or under the entry for a specific Monitor.
 
 .. code-block:: ini
 
@@ -216,11 +216,11 @@ these under ``[mon]`` or under the entry for a specific monitor.
 
 See the `Network Configuration Reference`_ for details.
 
-.. note:: This minimum configuration for monitors assumes that a deployment 
+.. note:: This minimum configuration for Monitors assumes that a deployment 
    tool generates the ``fsid`` and the ``mon.`` key for you.
 
 Once you deploy a Ceph cluster, you **SHOULD NOT** change the IP addresses of
-monitors. However, if you decide to change the monitor's IP address, you
+Monitors. However, if you decide to change the Monitor's IP address, you
 must follow a specific procedure. See :ref:`Changing a Monitor's IP address` for
 details.
 
@@ -243,8 +243,8 @@ Initial Members
 ---------------
 
 We recommend running a production Ceph Storage Cluster with at least three Ceph
-Monitors to ensure high availability. When you run multiple monitors, you may
-specify the initial monitors that must be members of the cluster in order to
+Monitors to ensure high availability. When you run multiple Monitors, you may
+specify the initial Monitors that must be members of the cluster in order to
 establish a quorum. This may reduce the time it takes for your cluster to come
 online.
 
@@ -269,7 +269,7 @@ very often, which can interfere with Ceph OSD Daemon workloads if the data
 store is co-located with the OSD Daemons.
 
 In Ceph versions 0.58 and earlier, Ceph Monitors store their data in plain files. This 
-approach allows users to inspect monitor data with common tools like ``ls``
+approach allows users to inspect Monitor data with common tools like ``ls``
 and ``cat``. However, this approach didn't provide strong consistency.
 
 In Ceph versions 0.59 and later, Ceph Monitors store their data as key/value
@@ -307,7 +307,7 @@ Storage Capacity
 ----------------
 
 When a Ceph Storage Cluster gets close to its maximum capacity
-(see``mon_osd_full ratio``), Ceph prevents you from writing to or reading from OSDs
+(see ``mon_osd_full_ratio``), Ceph prevents you from writing to or reading from OSDs
 as a safety measure to prevent data loss. Therefore, letting a
 production Ceph Storage Cluster approach its full ratio is not a good practice,
 because it sacrifices high availability. The default full ratio is ``.95``, or
@@ -335,7 +335,7 @@ Ceph Nodes with one OSD per host, each OSD reading from
 and writing to a 3TB drive. So this exemplary Ceph Storage Cluster has a maximum
 actual capacity of 99TB. With a ``mon osd full ratio`` of ``0.95``, if the Ceph
 Storage Cluster falls to 5TB of remaining capacity, the cluster will not allow
-Ceph Clients to read and write data. So the Ceph Storage Cluster's operating
+Ceph clients to read and write data. So the Ceph Storage Cluster's operating
 capacity is 95TB, not 99TB.
 
 .. ditaa::
@@ -360,7 +360,7 @@ It is normal in such a cluster for one or two OSDs to fail. A less frequent but
 reasonable scenario involves a rack's router or power supply failing, which
 brings down multiple OSDs simultaneously (e.g., OSDs 7-12). In such a scenario,
 you should still strive for a cluster that can remain operational and achieve an
-``active + clean`` state--even if that means adding a few hosts with additional
+``active+clean`` state--even if that means adding a few hosts with additional
 OSDs in short order. If your capacity utilization is too high, you may not lose
 data, but you could still sacrifice data availability while resolving an outage
 within a failure domain if capacity utilization of the cluster exceeds the full
@@ -426,16 +426,16 @@ config store.
 
 .. tip:: These settings only apply during cluster creation. Afterwards they need
          to be changed in the OSDMap using ``ceph osd set-nearfull-ratio`` and
-         ``ceph osd set-full-ratio``
+         ``ceph osd set-full-ratio``.
 
 .. index:: heartbeat
 
 Heartbeat
 ---------
 
-Ceph monitors know about the cluster by requiring reports from each OSD, and by
+Ceph Monitors know about the cluster by requiring reports from each OSD, and by
 receiving reports from OSDs about the status of their neighboring OSDs. Ceph
-provides reasonable default settings for monitor/OSD interaction; however,  you
+provides reasonable default settings for Monitor/OSD interaction; however,  you
 may modify them as needed. See `Monitor/OSD Interaction`_ for details.
 
 
@@ -444,29 +444,29 @@ may modify them as needed. See `Monitor/OSD Interaction`_ for details.
 Monitor Store Synchronization
 -----------------------------
 
-When you run a production cluster with multiple monitors (recommended), each
-monitor checks to see if a neighboring monitor has a more recent version of the
-cluster map (e.g., a map in a neighboring monitor with one or more epoch numbers
-higher than the most current epoch in the map of the instant monitor).
-Periodically, one monitor in the cluster may fall behind the other monitors to
+When you run a production cluster with multiple Monitors (recommended), each
+Monitor checks to see if a neighboring Monitor has a more recent version of the
+cluster map (e.g., a map in a neighboring Monitor with one or more epoch numbers
+higher than the most current epoch in the map of the instant Monitor).
+Periodically, one Monitor in the cluster may fall behind the other Monitors to
 the point where it must leave the quorum, synchronize to retrieve the most
 current information about the cluster, and then rejoin the quorum. For the
-purposes of synchronization, monitors may assume one of three roles: 
+purposes of synchronization, Monitors may assume one of three roles: 
 
-#. **Leader**: The `Leader` is the first monitor to achieve the most recent
+#. **Leader**: The `Leader` is the first Monitor to achieve the most recent
    Paxos version of the cluster map.
 
-#. **Provider**: The `Provider` is a monitor that has the most recent version
+#. **Provider**: The `Provider` is a Monitor that has the most recent version
    of the cluster map, but wasn't the first to achieve the most recent version.
 
-#. **Requester:** A `Requester` is a monitor that has fallen behind the leader
+#. **Requester:** A `Requester` is a Monitor that has fallen behind the leader
    and must synchronize in order to retrieve the most recent information about
    the cluster before it can rejoin the quorum.
 
 These roles enable a leader to delegate synchronization duties to a provider,
 which prevents synchronization requests from overloading the leader--improving
 performance. In the following diagram, the requester has learned that it has
-fallen behind the other monitors. The requester asks the leader to synchronize,
+fallen behind the other Monitors. The requester asks the leader to synchronize,
 and the leader tells the requester to synchronize with a provider.
 
 
@@ -501,9 +501,9 @@ and the leader tells the requester to synchronize with a provider.
                   |                    |
 
 
-Synchronization always occurs when a new monitor joins the cluster. During
-runtime operations, monitors may receive updates to the cluster map at different
-times. This means the leader and provider roles may migrate from one monitor to
+Synchronization always occurs when a new Monitor joins the cluster. During
+runtime operations, Monitors may receive updates to the cluster map at different
+times. This means the leader and provider roles may migrate from one Monitor to
 another. If this happens while synchronizing (e.g., a provider falls behind the
 leader), the provider can terminate synchronization with a requester.
 
@@ -543,7 +543,7 @@ Clock
 -----
 
 Ceph daemons pass critical messages to each other, which must be processed
-before daemons reach a timeout threshold. If the clocks in Ceph monitors
+before daemons reach a timeout threshold. If the clocks in Ceph Monitors
 are not synchronized, it can lead to a number of anomalies. For example:
 
 - Daemons ignoring received messages (e.g., timestamps outdated)
@@ -552,9 +552,9 @@ are not synchronized, it can lead to a number of anomalies. For example:
 See `Monitor Store Synchronization`_ for details.
 
 
-.. tip:: You must configure NTP or PTP daemons on your Ceph monitor hosts to 
-         ensure that the monitor cluster operates with synchronized clocks.
-         It can be advantageous to have monitor hosts sync with each other
+.. tip:: You must configure NTP or PTP daemons on your Ceph Monitor hosts to 
+         ensure that the Monitor cluster operates with synchronized clocks.
+         It can be advantageous to have Monitor hosts sync with each other
          as well as with multiple quality upstream time sources.
 
 Clock drift may still be noticeable with NTP even though the discrepancy is not
