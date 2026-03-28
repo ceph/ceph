@@ -390,6 +390,7 @@ private:
     uint64_t total_bytes = 0; //total bytes counter, independently for each directory sync.
     uint64_t sync_files = 0; //sync files counter, independently for each directory sync.
     uint64_t total_files = 0; //total files counter, independently for each directory sync.
+    bool snapdiff = false; // RemoteSync/Snapdiff aka full/delta
     bool crawl_finished = false; // crawl_state - in-progress/completed
     clock::time_point crawl_start_time; // to show current crawl duration if crawl is in progress
     double crawl_duration = 0.0; // time taken to complete the crawl, includes a few entry operation like mkdir as well
@@ -428,6 +429,7 @@ private:
     sync_stat.total_bytes = 0;
     sync_stat.sync_files = 0;
     sync_stat.total_files = 0;
+    sync_stat.snapdiff = false;
     sync_stat.crawl_finished = false;
     sync_stat.crawl_start_time = clock::now();
     sync_stat.crawl_duration = 0.0;
@@ -476,6 +478,11 @@ private:
     sync_stat.last_sync_files = sync_stat.sync_files;
     ++sync_stat.synced_snap_count;
     _reset_sync_stat(dir_root);
+  }
+  void set_snapdiff(const std::string &dir_root, bool snapdiff) {
+    std::scoped_lock locker(m_lock);
+    auto &sync_stat = m_snap_sync_stats.at(dir_root);
+    sync_stat.snapdiff = snapdiff;
   }
   void set_crawl_finished(const std::string &dir_root, bool state, double seconds) {
     std::scoped_lock locker(m_lock);

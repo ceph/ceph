@@ -1955,9 +1955,11 @@ int PeerReplayer::do_synchronize(const std::string &dir_root, const Snapshot &cu
   if (fh.p_mnt == m_local_mount) {
     syncm = std::make_shared<SnapDiffSync>(*this, dir_root, m_local_mount, m_remote_mount,
                                            &fh, m_peer, current, prev);
+    set_snapdiff(dir_root, true); //for stats
   } else {
     syncm = std::make_shared<RemoteSync>(*this, dir_root, m_local_mount, m_remote_mount,
                                          &fh, m_peer, current, boost::none);
+    set_snapdiff(dir_root, false); //for stats
   }
 
   r = syncm->init_sync();
@@ -2610,6 +2612,10 @@ void PeerReplayer::peer_status(Formatter *f) {
       f->open_object_section("current_syncing_snap");
       f->dump_unsigned("id", (*sync_stat.current_syncing_snap).first);
       f->dump_string("name", (*sync_stat.current_syncing_snap).second);
+      if (sync_stat.snapdiff)
+        f->dump_string("sync-mode", "delta");
+      else
+        f->dump_string("sync-mode", "full");
       f->open_object_section("crawl");
       if (sync_stat.crawl_finished) {
         f->dump_string("state", "completed");
