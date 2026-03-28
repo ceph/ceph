@@ -10663,17 +10663,19 @@ void BlueStore::_fsck_check_objects(
           derr << "fsck error: " << pretty_binary_string(it->key())
             << " is unexpected" << dendl;
           ++errors;
+          if (repairer) {
+            repairer->remove_key(db, PREFIX_OBJ, it->key());
+          }
           continue;
         }
-        while (expecting_shards.front() > it->key()) {
+        if (expecting_shards.front() > it->key()) {
           derr << "fsck error:   saw " << pretty_binary_string(it->key())
             << dendl;
           derr << "fsck error:   exp "
             << pretty_binary_string(expecting_shards.front()) << dendl;
           ++errors;
-          expecting_shards.pop_front();
-          if (expecting_shards.empty()) {
-            break;
+          if (repairer) {
+            repairer->remove_key(db, PREFIX_OBJ, it->key());
           }
         }
         continue;
@@ -20577,7 +20579,12 @@ int BlueStore::read_allocation_from_onodes(SimpleBitmap *sbmap, read_alloc_stats
              << dendl;
         return -EIO;
       }
-      ceph_assert(oid == edecoder.get_oid());
+      if (oid != edecoder.get_oid()) {
+        derr << __func__ << " shard " << pretty_binary_string(okey)
+             << " oid: " << oid
+             << " not from current oid: " << edecoder.get_oid() << dendl;
+        continue;
+      }
       edecoder.decode_some(it->value(), nullptr);
       ++stats.shard_count;
     }
