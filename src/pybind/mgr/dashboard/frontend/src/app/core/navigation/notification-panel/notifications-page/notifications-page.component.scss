@@ -51,12 +51,16 @@
 
 // Empty state
 .empty-state {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cds-spacing-03);
+
   color: var(--cds-text-secondary);
   margin-top: var(--cds-spacing-05);
 
   p {
-    margin: var(--cds-spacing-03) 0 0 0;
+    margin: 0;
     font-size: var(--cds-body-01-font-size);
     line-height: var(--cds-body-01-line-height);
   }
@@ -132,7 +136,6 @@
 .empty-icon,
 .no-selection-icon {
   fill: var(--cds-icon-secondary);
-  margin-bottom: var(--cds-spacing-05);
 }
 
 // Text utilities
