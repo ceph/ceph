@@ -1020,10 +1020,9 @@ class Module(MgrModule):
         return pe.show(verbose=verbose)
 
     def optimize(self, plan: Plan) -> Tuple[int, str]:
-        self.log.info('Optimize plan %s' % plan.name)
         max_misplaced = cast(float, self.get_ceph_option('target_max_misplaced_ratio'))
-        self.log.info('Mode %s, max misplaced %f' %
-                      (plan.mode, max_misplaced))
+        self.log.info('Optimize plan %s, mode %s, max misplaced %f' %
+                      (plan.name, plan.mode, max_misplaced))
 
         info = self.get('pg_status')
         unknown = info.get('unknown_pgs_ratio', 0.0)
@@ -1073,7 +1072,7 @@ class Module(MgrModule):
                 return -errno.EINVAL, detail
 
     def do_read_balancing(self, plan: Plan) -> Tuple[int, str]:
-        self.log.info('do_read_balancing')
+        self.log.debug('do_read_balancing')
         osdmap_dump = plan.osdmap_dump
         msg = 'Unable to find further optimization, ' \
               'or distribution is already perfect'
@@ -1086,7 +1085,7 @@ class Module(MgrModule):
             detail = 'No pools available'
             self.log.info(detail)
             return -errno.ENOENT, detail
-        self.log.info('pools %s' % pools)
+        self.log.debug('pools %s' % pools)
 
         adjusted_pools = []
         inc = plan.inc
@@ -1140,18 +1139,16 @@ class Module(MgrModule):
                     break
             num_changes = plan.osdmap.balance_primaries(pool_id, inc)
             total_num_changes += num_changes
-        if total_num_changes < 0:
-            self.no_optimization_needed = True
-            self.log.debug('unable to balance reads.')
-            return -errno.EALREADY, msg
-        self.log.info('prepared {} read changes'.format(total_num_changes))
-        if total_num_changes == 0:
+        if total_num_changes > 0:
+            self.log.info('prepared {} read changes'.format(total_num_changes))
+        else:
+            self.log.debug('prepared {} read changes'.format(total_num_changes))
             self.no_optimization_needed = True
             return -errno.EALREADY, msg
         return 0, ''
 
     def do_upmap(self, plan: Plan) -> Tuple[int, str]:
-        self.log.info('do_upmap')
+        self.log.debug('do_upmap')
         max_optimizations = cast(float, self.get_module_option('upmap_max_optimizations'))
         max_deviation = cast(int, self.get_module_option('upmap_max_deviation'))
         osdmap_dump = plan.osdmap_dump
@@ -1166,7 +1163,7 @@ class Module(MgrModule):
             return -errno.ENOENT, detail
         # shuffle pool list so they all get equal (in)attention
         random.shuffle(pools)
-        self.log.info('pools %s' % pools)
+        self.log.debug('pools %s' % pools)
 
         adjusted_pools = []
         inc = plan.inc
@@ -1210,8 +1207,10 @@ class Module(MgrModule):
             left -= did
             if left <= 0:
                 break
-        self.log.info('prepared %d/%d upmap changes' % (total_did, max_optimizations))
-        if total_did == 0:
+        if total_did > 0:
+            self.log.info('prepared %d/%d upmap changes' % (total_did, max_optimizations))
+        else:
+            self.log.debug('prepared %d/%d upmap changes' % (total_did, max_optimizations))
             self.no_optimization_needed = True
             return -errno.EALREADY, 'Unable to find further optimization, ' \
                                     'or pool(s) pg_num is decreasing, ' \
@@ -1219,7 +1218,7 @@ class Module(MgrModule):
         return 0, ''
 
     def do_crush_compat(self, plan: MsPlan) -> Tuple[int, str]:
-        self.log.info('do_crush_compat')
+        self.log.debug('do_crush_compat')
         max_iterations = cast(int, self.get_module_option('crush_compat_max_iterations'))
         if max_iterations < 1:
             return -errno.EINVAL, '"crush_compat_max_iterations" must be >= 1'
@@ -1296,14 +1295,18 @@ class Module(MgrModule):
                 osds = len(best_pe.target_by_root[root])
                 min_pgs = osds * min_pg_per_osd
                 if best_pe.total_by_root[root][key] < min_pgs:
-                    self.log.info('Skipping root %s (pools %s), total pgs %d '
-                                  '< minimum %d (%d per osd)',
-                                  root, pools,
-                                  best_pe.total_by_root[root][key],
-                                  min_pgs, min_pg_per_osd)
+                    self.log.debug('Skipping root %s (pools %s), total pgs %d '
+                                   '< minimum %d (%d per osd)',
+                                   root, pools,
+                                   best_pe.total_by_root[root][key],
+                                   min_pgs, min_pg_per_osd)
                     continue
-                self.log.info('Balancing root %s (pools %s) by %s' %
-                              (root, pools, key))
+                if left == max_iterations:
+                    self.log.info('Balancing root %s (pools %s) by %s' %
+                                  (root, pools, key))
+                else:
+                    self.log.debug('Balancing root %s (pools %s) by %s' %
+                                   (root, pools, key))
                 target = best_pe.target_by_root[root]
                 actual = best_pe.actual_by_root[root][key]
                 queue = sorted(actual.keys(),
