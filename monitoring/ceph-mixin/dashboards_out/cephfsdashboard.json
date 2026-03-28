@@ -512,7 +512,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "sum(rate(ceph_mds_server_handle_client_request{cluster=~\"$cluster|\", }[$__rate_interval]) * on(ceph_daemon) (ceph_fs_metadata{cluster=~\"$cluster|\",  name=~\"$name\"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{cluster=~\"$cluster|\", }))",
+               "expr": "sum(rate(ceph_mds_server_handle_client_request{cluster=~\"$cluster|\", }[$__rate_interval]) * on(ceph_daemon) group_left() (ceph_mds_metadata{cluster=~\"$cluster\"} * on(fs_id) group_left(name) ceph_fs_metadata{cluster=~\"$cluster\", name=~\"$name\"}))",
                "format": "time_series",
                "interval": "$__rate_interval",
                "intervalFactor": 1,
@@ -590,7 +590,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "sum(ceph_mds_sessions_session_count{cluster=~\"$cluster|\", } * on(ceph_daemon) (ceph_fs_metadata{cluster=~\"$cluster|\",  name=~\"$name\"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{cluster=~\"$cluster|\", }))",
+               "expr": "sum(ceph_mds_sessions_session_count{cluster=~\"$cluster|\", } * on(ceph_daemon) group_left() (ceph_mds_metadata{cluster=~\"$cluster\"} * on(fs_id) group_left(name) ceph_fs_metadata{cluster=~\"$cluster\", name=~\"$name\"}))",
                "format": "time_series",
                "interval": "$__rate_interval",
                "intervalFactor": 1,
@@ -668,7 +668,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "sum(ceph_mds_inodes{cluster=~\"$cluster|\", } * on(ceph_daemon) (ceph_fs_metadata{cluster=~\"$cluster|\",  name=~\"$name\"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{cluster=~\"$cluster|\", }))",
+               "expr": "sum(ceph_mds_inodes{cluster=~\"$cluster|\", } * on(ceph_daemon) group_left() (ceph_mds_metadata{cluster=~\"$cluster\"} * on(fs_id) group_left(name) ceph_fs_metadata{cluster=~\"$cluster\", name=~\"$name\"}))",
                "format": "time_series",
                "interval": "$__rate_interval",
                "intervalFactor": 1,
@@ -1222,7 +1222,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "sum(rate(ceph_mds_forward{cluster=~\"$cluster|\", }[$__rate_interval]) * on(ceph_daemon) (ceph_fs_metadata{cluster=~\"$cluster|\",  name=~\"$name\"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{cluster=~\"$cluster|\", }))",
+               "expr": "sum(rate(ceph_mds_forward{cluster=~\"$cluster|\", }[$__rate_interval]) * on(ceph_daemon) group_left() (ceph_mds_metadata{cluster=~\"$cluster\"} * on(fs_id) group_left(name) ceph_fs_metadata{cluster=~\"$cluster\", name=~\"$name\"}))",
                "format": "time_series",
                "interval": "$__rate_interval",
                "intervalFactor": 1,
@@ -1312,7 +1312,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "sum(increase(ceph_mds_reply_latency_sum{cluster=~\"$cluster|\", }[$__rate_interval]) * on(ceph_daemon) (ceph_fs_metadata{cluster=~\"$cluster|\",  name=~\"$name\"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{cluster=~\"$cluster|\", })) / sum(increase(ceph_mds_reply_latency_count{cluster=~\"$cluster|\", }[$__rate_interval]) * on(ceph_daemon) (ceph_fs_metadata{cluster=~\"$cluster|\",  name=~\"$name\"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{cluster=~\"$cluster|\", }))",
+               "expr": "sum(increase(ceph_mds_reply_latency_sum{cluster=~\"$cluster|\", }[$__rate_interval]) * on(ceph_daemon) group_left() (ceph_mds_metadata{cluster=~\"$cluster\"} * on(fs_id) group_left(name) ceph_fs_metadata{cluster=~\"$cluster\", name=~\"$name\"})) / sum(increase(ceph_mds_reply_latency_count{cluster=~\"$cluster|\", }[$__rate_interval]) * on(ceph_daemon) group_left() (ceph_mds_metadata{cluster=~\"$cluster\"} * on(fs_id) group_left(name) ceph_fs_metadata{cluster=~\"$cluster\", name=~\"$name\"}))",
                "format": "time_series",
                "interval": "$__rate_interval",
                "intervalFactor": 1,
@@ -1391,7 +1391,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "sum(ceph_mds_caps{cluster=~\"$cluster|\", } * on(ceph_daemon) (ceph_fs_metadata{cluster=~\"$cluster|\",  name=~\"$name\"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{cluster=~\"$cluster|\", }))",
+               "expr": "sum(ceph_mds_caps{cluster=~\"$cluster|\", } * on(ceph_daemon) group_left() (ceph_mds_metadata{cluster=~\"$cluster\"} * on(fs_id) group_left(name) ceph_fs_metadata{cluster=~\"$cluster\", name=~\"$name\"}))",
                "format": "time_series",
                "interval": "$__rate_interval",
                "intervalFactor": 1,
@@ -1672,7 +1672,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "rate(ceph_mds_server_handle_client_request{cluster=~\"$cluster|\", }[$__rate_interval]) * on(ceph_daemon) (ceph_fs_metadata{cluster=~\"$cluster|\",  name=~\"$name\"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{cluster=~\"$cluster|\", })",
+               "expr": "rate(ceph_mds_server_handle_client_request{cluster=~\"$cluster|\", }[$__rate_interval]) * on(ceph_daemon) group_left() (ceph_mds_metadata{cluster=~\"$cluster\"} * on(fs_id) group_left(name) ceph_fs_metadata{cluster=~\"$cluster\", name=~\"$name\"})",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{ ceph_daemon }}",
@@ -1764,7 +1764,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "rate(ceph_mds_forward{cluster=~\"$cluster|\", }[$__rate_interval]) * on(ceph_daemon) (ceph_fs_metadata{cluster=~\"$cluster|\",  name=~\"$name\"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{cluster=~\"$cluster|\", })",
+               "expr": "rate(ceph_mds_forward{cluster=~\"$cluster|\", }[$__rate_interval]) * on(ceph_daemon) group_left() (ceph_mds_metadata{cluster=~\"$cluster\"} * on(fs_id) group_left(name) ceph_fs_metadata{cluster=~\"$cluster\", name=~\"$name\"})",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{ ceph_daemon }}",
@@ -1855,7 +1855,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "rate(ceph_mds_server_handle_slave_request{cluster=~\"$cluster|\", }[$__rate_interval]) * on(ceph_daemon) (ceph_fs_metadata{cluster=~\"$cluster|\",  name=~\"$name\"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{cluster=~\"$cluster|\", })",
+               "expr": "rate(ceph_mds_server_handle_slave_request{cluster=~\"$cluster|\", }[$__rate_interval]) * on(ceph_daemon) group_left() (ceph_mds_metadata{cluster=~\"$cluster\"} * on(fs_id) group_left(name) ceph_fs_metadata{cluster=~\"$cluster\", name=~\"$name\"})",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{ ceph_daemon }}",
@@ -1946,7 +1946,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "ceph_mds_sessions_session_count{cluster=~\"$cluster|\", } * on(ceph_daemon) (ceph_fs_metadata{cluster=~\"$cluster|\",  name=~\"$name\"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{cluster=~\"$cluster|\", })",
+               "expr": "ceph_mds_sessions_session_count{cluster=~\"$cluster|\", } * on(ceph_daemon) group_left() (ceph_mds_metadata{cluster=~\"$cluster\"} * on(fs_id) group_left(name) ceph_fs_metadata{cluster=~\"$cluster\", name=~\"$name\"})",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{ ceph_daemon }}",
@@ -2037,7 +2037,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "sum by (ceph_daemon) (increase(ceph_mds_reply_latency_sum{cluster=~\"$cluster|\", }[$__rate_interval]) * on(ceph_daemon) (ceph_fs_metadata{cluster=~\"$cluster|\",  name=~\"$name\"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{cluster=~\"$cluster|\", })) / sum by (ceph_daemon) (increase(ceph_mds_reply_latency_count{cluster=~\"$cluster|\", }[$__rate_interval]) * on(ceph_daemon) (ceph_fs_metadata{cluster=~\"$cluster|\",  name=~\"$name\"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{cluster=~\"$cluster|\", }))",
+               "expr": "sum by (ceph_daemon) (increase(ceph_mds_reply_latency_sum{cluster=~\"$cluster|\", }[$__rate_interval]) * on(ceph_daemon) group_left() (ceph_mds_metadata{cluster=~\"$cluster\"} * on(fs_id) group_left(name) ceph_fs_metadata{cluster=~\"$cluster\", name=~\"$name\"})) / sum by (ceph_daemon) (increase(ceph_mds_reply_latency_count{cluster=~\"$cluster|\", }[$__rate_interval]) * on(ceph_daemon) group_left() (ceph_mds_metadata{cluster=~\"$cluster\"} * on(fs_id) group_left(name) ceph_fs_metadata{cluster=~\"$cluster\", name=~\"$name\"}))",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{ ceph_daemon }}",
@@ -2126,14 +2126,14 @@
          ],
          "targets": [
             {
-               "expr": "sum(rate(ceph_objecter_op_r{cluster=~\"$cluster|\", }[$__rate_interval]) * on(ceph_daemon) (ceph_fs_metadata{cluster=~\"$cluster|\",  name=~\"$name\"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{cluster=~\"$cluster|\", }))",
+               "expr": "sum(rate(ceph_objecter_op_r{cluster=~\"$cluster|\", }[$__rate_interval]) * on(ceph_daemon) group_left() (ceph_mds_metadata{cluster=~\"$cluster\"} * on(fs_id) group_left(name) ceph_fs_metadata{cluster=~\"$cluster\", name=~\"$name\"}))",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Read Ops",
                "refId": "A"
             },
             {
-               "expr": "sum(rate(ceph_objecter_op_w{cluster=~\"$cluster|\", }[$__rate_interval]) * on(ceph_daemon) (ceph_fs_metadata{cluster=~\"$cluster|\",  name=~\"$name\"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{cluster=~\"$cluster|\", }))",
+               "expr": "sum(rate(ceph_objecter_op_w{cluster=~\"$cluster|\", }[$__rate_interval]) * on(ceph_daemon) group_left() (ceph_mds_metadata{cluster=~\"$cluster\"} * on(fs_id) group_left(name) ceph_fs_metadata{cluster=~\"$cluster\", name=~\"$name\"}))",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Write Ops",
@@ -2243,7 +2243,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "rate(ceph_mds_log_evadd{cluster=~\"$cluster|\", }[$__rate_interval]) * on(ceph_daemon) (ceph_fs_metadata{cluster=~\"$cluster|\",  name=~\"$name\"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{cluster=~\"$cluster|\", })",
+               "expr": "rate(ceph_mds_log_evadd{cluster=~\"$cluster|\", }[$__rate_interval]) * on(ceph_daemon) group_left() (ceph_mds_metadata{cluster=~\"$cluster\"} * on(fs_id) group_left(name) ceph_fs_metadata{cluster=~\"$cluster\", name=~\"$name\"})",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{ ceph_daemon }}",
@@ -2334,7 +2334,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "ceph_mds_log_ev{cluster=~\"$cluster|\", } * on(ceph_daemon) (ceph_fs_metadata{cluster=~\"$cluster|\",  name=~\"$name\"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{cluster=~\"$cluster|\", })",
+               "expr": "ceph_mds_log_ev{cluster=~\"$cluster|\", } * on(ceph_daemon) group_left() (ceph_mds_metadata{cluster=~\"$cluster\"} * on(fs_id) group_left(name) ceph_fs_metadata{cluster=~\"$cluster\", name=~\"$name\"})",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{ ceph_daemon }}",
@@ -2425,7 +2425,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "ceph_mds_log_seg{cluster=~\"$cluster|\", } * on(ceph_daemon) (ceph_fs_metadata{cluster=~\"$cluster|\",  name=~\"$name\"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{cluster=~\"$cluster|\", })",
+               "expr": "ceph_mds_log_seg{cluster=~\"$cluster|\", } * on(ceph_daemon) group_left() (ceph_mds_metadata{cluster=~\"$cluster\"} * on(fs_id) group_left(name) ceph_fs_metadata{cluster=~\"$cluster\", name=~\"$name\"})",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{ ceph_daemon }}",
@@ -2585,7 +2585,7 @@
                         "type": "prometheus",
                         "uid": "${datasource}"
                      },
-                     "expr": "ceph_mds_mem_ino{cluster=~\"$cluster|\", } * on(ceph_daemon) (ceph_fs_metadata{cluster=~\"$cluster|\",  name=~\"$name\"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{cluster=~\"$cluster|\", })",
+                     "expr": "ceph_mds_mem_ino{cluster=~\"$cluster|\", } * on(ceph_daemon) group_left() (ceph_mds_metadata{cluster=~\"$cluster\"} * on(fs_id) group_left(name) ceph_fs_metadata{cluster=~\"$cluster\", name=~\"$name\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "{{ ceph_daemon }}",
@@ -2677,7 +2677,7 @@
                         "type": "prometheus",
                         "uid": "${datasource}"
                      },
-                     "expr": "ceph_mds_exported_inodes{cluster=~\"$cluster|\", } * on(ceph_daemon) (ceph_fs_metadata{cluster=~\"$cluster|\",  name=~\"$name\"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{cluster=~\"$cluster|\", })",
+                     "expr": "ceph_mds_exported_inodes{cluster=~\"$cluster|\", } * on(ceph_daemon) group_left() (ceph_mds_metadata{cluster=~\"$cluster\"} * on(fs_id) group_left(name) ceph_fs_metadata{cluster=~\"$cluster\", name=~\"$name\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "{{ ceph_daemon }}",
@@ -2769,7 +2769,7 @@
                         "type": "prometheus",
                         "uid": "${datasource}"
                      },
-                     "expr": "ceph_mds_imported_inodes{cluster=~\"$cluster|\", } * on(ceph_daemon) (ceph_fs_metadata{cluster=~\"$cluster|\",  name=~\"$name\"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{cluster=~\"$cluster|\", })",
+                     "expr": "ceph_mds_imported_inodes{cluster=~\"$cluster|\", } * on(ceph_daemon) group_left() (ceph_mds_metadata{cluster=~\"$cluster\"} * on(fs_id) group_left(name) ceph_fs_metadata{cluster=~\"$cluster\", name=~\"$name\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "{{ ceph_daemon }}",
@@ -2861,7 +2861,7 @@
                         "type": "prometheus",
                         "uid": "${datasource}"
                      },
-                     "expr": "ceph_mds_mem_dn{cluster=~\"$cluster|\", } * on(ceph_daemon) (ceph_fs_metadata{cluster=~\"$cluster|\",  name=~\"$name\"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{cluster=~\"$cluster|\", })",
+                     "expr": "ceph_mds_mem_dn{cluster=~\"$cluster|\", } * on(ceph_daemon) group_left() (ceph_mds_metadata{cluster=~\"$cluster\"} * on(fs_id) group_left(name) ceph_fs_metadata{cluster=~\"$cluster\", name=~\"$name\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "{{ ceph_daemon }}",
@@ -2953,7 +2953,7 @@
                         "type": "prometheus",
                         "uid": "${datasource}"
                      },
-                     "expr": "ceph_mds_caps{cluster=~\"$cluster|\", } * on(ceph_daemon) (ceph_fs_metadata{cluster=~\"$cluster|\",  name=~\"$name\"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{cluster=~\"$cluster|\", })",
+                     "expr": "ceph_mds_caps{cluster=~\"$cluster|\", } * on(ceph_daemon) group_left() (ceph_mds_metadata{cluster=~\"$cluster\"} * on(fs_id) group_left(name) ceph_fs_metadata{cluster=~\"$cluster\", name=~\"$name\"})",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "{{ ceph_daemon }}",
