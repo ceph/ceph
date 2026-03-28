@@ -4,6 +4,9 @@ tasks:
    - kclient-workload
 user-workload:
   sequential:
+  - exec:
+      client.0:
+        - "sudo ceph auth caps client.0 mds 'allow all' mgr 'allow r' mon 'allow rw' osd 'allow rwx'"
   - ceph-fuse: [client.0]
   - workunit:
       subdir: fscrypt-fuse
@@ -14,6 +17,9 @@ user-workload:
       timeout: 4h
 kclient-workload:
   sequential:
+  - exec:
+      client.1:
+        - "sudo ceph auth caps client.1 mds 'allow all' mgr 'allow r' mon 'allow rw' osd 'allow rwx'"
   - kclient: [client.1]
   - workunit:
       subdir: fscrypt-kclient
