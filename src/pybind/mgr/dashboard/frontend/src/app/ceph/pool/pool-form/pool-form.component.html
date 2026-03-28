@@ -626,9 +626,6 @@
               i18n-label
               id="crushRule"
             >
-              <option [value]="null"
-                      i18n>-- Select a crush rule --
-              </option>
               @for (rule of current.rules; track rule.rule_name) {
               <option [value]="rule.rule_name">
                 {{ rule.rule_name }}

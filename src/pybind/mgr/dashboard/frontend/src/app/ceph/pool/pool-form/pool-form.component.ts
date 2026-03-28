@@ -244,23 +244,28 @@ export class PoolFormComponent extends CdForm implements OnInit {
   private setListControlStatus(controlName: string, arr: any[]) {
     const control = this.form.get(controlName);
     const value = control.value;
-    if (arr.length === 1 && (!value || !_.isEqual(value, arr[0]))) {
-      if (controlName === 'erasureProfile') {
+
+    if (controlName === 'erasureProfile') {
+      if (arr.length === 1 && (!value || !_.isEqual(value, arr[0]))) {
         control.setValue(arr[0].name);
-      } else {
-        control.setValue(arr[0].rule_name);
+      } else if (arr.length === 0 && value) {
+        control.setValue(null);
+      }
+    } else {
+      const selectedName = typeof value === 'string' ? value : value?.rule_name || value?.name;
+      const isSelected =
+        selectedName && arr.some((r) => r.rule_name === selectedName || r.name === selectedName);
+
+      if (arr.length > 0 && !isSelected) {
+        const defaultRule = arr.find((r: CrushRule) => r.rule_name === 'replicated_rule') || arr[0];
+        control.setValue(defaultRule.rule_name);
         this.replicatedRuleChange();
+      } else if (arr.length === 0 && value) {
+        control.setValue(null);
       }
-    } else if (arr.length === 0 && value) {
-      control.setValue(null);
     }
-    if (arr.length <= 1) {
-      if (control.enabled) {
-        control.disable();
-      }
-    } else if (control.disabled) {
-      control.enable();
-    }
+
+    arr.length <= 1 ? control.disable() : control.enable();
   }
 
   private initEditMode() {
@@ -345,7 +350,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
     const selectedApps = this.data.applications.selected || [];
     this.data.applications.available = _.uniq(apps.sort()).map((x: string) => {
       const option = new SelectOption(selectedApps.includes(x), x, this.data.APP_LABELS?.[x] || x);
-      (option as any).content = x;
+      (option as any).content = this.data.APP_LABELS?.[x] || x;
       return option;
     });
   }
