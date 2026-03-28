@@ -5110,8 +5110,8 @@ void BlueStore::DeferredBatch::prepare_write(
 	   << " 0x" << std::hex << offset << "~" << length
 	   << " crc " << i.first->second.bl.crc32c(-1)
 	   << std::dec << dendl;
-  seq_bytes[seq] += length;
 #ifdef DEBUG_DEFERRED
+  seq_bytes[seq] += length;
   _audit(cct);
 #endif
 }
@@ -5121,6 +5121,7 @@ void BlueStore::DeferredBatch::_discard(
 {
   generic_dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
 		   << std::dec << dendl;
+  [[maybe_unused]] uint64_t delta;
   auto p = iomap.lower_bound(offset);
   if (p != iomap.begin()) {
     --p;
@@ -5131,8 +5132,6 @@ void BlueStore::DeferredBatch::_discard(
       dout(20) << __func__ << "  keep head " << p->second.seq
 	       << " 0x" << std::hex << p->first << "~" << p->second.bl.length()
 	       << " -> 0x" << head.length() << std::dec << dendl;
-      auto i = seq_bytes.find(p->second.seq);
-      ceph_assert(i != seq_bytes.end());
       if (end > offset + length) {
 	bufferlist tail;
 	tail.substr_of(p->second.bl, offset + length - p->first,
@@ -5143,11 +5142,16 @@ void BlueStore::DeferredBatch::_discard(
 	auto &n = iomap[offset + length];
 	n.bl.swap(tail);
 	n.seq = p->second.seq;
-	i->second -= length;
+	delta = length;
       } else {
-	i->second -= end - offset;
+	delta = end - offset;
       }
+#if defined(DEBUG_DEFERRED)
+      auto i = seq_bytes.find(p->second.seq);
+      ceph_assert(i != seq_bytes.end());
+      i->second -= delta;
       ceph_assert(i->second >= 0);
+#endif
       p->second.bl.swap(head);
     }
     ++p;
@@ -5156,8 +5160,6 @@ void BlueStore::DeferredBatch::_discard(
     if (p->first >= offset + length) {
       break;
     }
-    auto i = seq_bytes.find(p->second.seq);
-    ceph_assert(i != seq_bytes.end());
     auto end = p->first + p->second.bl.length();
     if (end > offset + length) {
       unsigned drop_front = offset + length - p->first;
@@ -5170,18 +5172,24 @@ void BlueStore::DeferredBatch::_discard(
       auto &s = iomap[offset + length];
       s.seq = p->second.seq;
       s.bl.substr_of(p->second.bl, drop_front, keep_tail);
-      i->second -= drop_front;
+      delta = drop_front;
     } else {
       dout(20) << __func__ << "  drop " << p->second.seq
 	       << " 0x" << std::hex << p->first << "~" << p->second.bl.length()
 	       << std::dec << dendl;
-      i->second -= p->second.bl.length();
+      delta = p->second.bl.length();
     }
+#if defined(DEBUG_DEFERRED)
+      auto i = seq_bytes.find(p->second.seq);
+      ceph_assert(i != seq_bytes.end());
+      i->second -= delta;
     ceph_assert(i->second >= 0);
+#endif
     p = iomap.erase(p);
   }
 }
 
+#if defined(DEBUG_DEFERRED)
 void BlueStore::DeferredBatch::_audit(CephContext *cct)
 {
   map<uint64_t,int> sb;
@@ -5196,7 +5204,7 @@ void BlueStore::DeferredBatch::_audit(CephContext *cct)
   }
   ceph_assert(sb == seq_bytes);
 }
-
+#endif
 
 // Collection
 
@@ -15499,7 +15507,7 @@ void BlueStore::_deferred_submit_unlock(OpSequencer *osr)
   ceph_assert(!osr->deferred_running);
 
   auto b = osr->deferred_pending;
-  deferred_queue_size -= b->seq_bytes.size();
+  deferred_queue_size -= b->txcs.size();
   ceph_assert(deferred_queue_size >= 0);
 
   osr->deferred_running = osr->deferred_pending;

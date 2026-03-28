@@ -2142,11 +2142,12 @@ public:
     std::map<uint64_t,deferred_io> iomap; ///< map of ios in this batch
     deferred_queue_t txcs;           ///< txcs in this batch
     IOContext ioc;                   ///< our aios
+#if defined(DEBUG_DEFERRED)
     /// bytes of pending io for each deferred seq (may be 0)
     std::map<uint64_t,int> seq_bytes;
-
-    void _discard(CephContext *cct, uint64_t offset, uint64_t length);
     void _audit(CephContext *cct);
+#endif
+    void _discard(CephContext *cct, uint64_t offset, uint64_t length);
 
     DeferredBatch(CephContext *cct, OpSequencer *osr)
       : osr(osr), ioc(cct, this) {}
