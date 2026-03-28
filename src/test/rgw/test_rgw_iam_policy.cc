@@ -267,20 +267,22 @@ TEST_F(PolicyTest, Parse1) {
 TEST_F(PolicyTest, Eval1) {
   auto p  = Policy(cct.get(), &arbitrary_tenant, example1, true);
   Environment e;
+  boost::optional<Principal> principal;
 
   ARN arn1(Partition::aws, Service::s3,
 		       "", arbitrary_tenant, "example_bucket");
-  EXPECT_EQ(p.eval(e, none, s3ListBucket, arn1),
+  EXPECT_EQ(p.eval(e, none, s3ListBucket, arn1, principal),
 	    Effect::Allow);
+  EXPECT_FALSE(principal);
 
   ARN arn2(Partition::aws, Service::s3,
 		       "", arbitrary_tenant, "example_bucket");
-  EXPECT_EQ(p.eval(e, none, s3PutBucketAcl, arn2),
+  EXPECT_EQ(p.eval(e, none, s3PutBucketAcl, arn2, principal),
 	    Effect::Pass);
 
   ARN arn3(Partition::aws, Service::s3,
 		       "", arbitrary_tenant, "erroneous_bucket");
-  EXPECT_EQ(p.eval(e, none, s3ListBucket, arn3),
+  EXPECT_EQ(p.eval(e, none, s3ListBucket, arn3, principal),
 	    Effect::Pass);
 
 }
@@ -331,6 +333,7 @@ TEST_F(PolicyTest, Parse2) {
 TEST_F(PolicyTest, Eval2) {
   auto p  = Policy(cct.get(), &arbitrary_tenant, example2, true);
   Environment e;
+  boost::optional<Principal> principal;
 
   auto trueacct = FakeIdentity(
     Principal::account("ACCOUNT-ID-WITHOUT-HYPHENS"));
@@ -340,27 +343,29 @@ TEST_F(PolicyTest, Eval2) {
   for (auto i = 0ULL; i < s3All; ++i) {
     ARN arn1(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "mybucket");
-    EXPECT_EQ(p.eval(e, trueacct, i, arn1),
+    EXPECT_EQ(p.eval(e, trueacct, i, arn1, principal),
 	      Effect::Allow);
+    ASSERT_TRUE(principal);
+    EXPECT_TRUE(principal->is_account());
     ARN arn2(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "mybucket/myobject");
-    EXPECT_EQ(p.eval(e, trueacct, i, arn2),
+    EXPECT_EQ(p.eval(e, trueacct, i, arn2, principal),
 	      Effect::Allow);
     ARN arn3(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "mybucket");
-    EXPECT_EQ(p.eval(e, notacct, i, arn3),
+    EXPECT_EQ(p.eval(e, notacct, i, arn3, principal),
 	      Effect::Pass);
     ARN arn4(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "mybucket/myobject");
-    EXPECT_EQ(p.eval(e, notacct, i, arn4),
+    EXPECT_EQ(p.eval(e, notacct, i, arn4, principal),
 	      Effect::Pass);
     ARN arn5(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "notyourbucket");
-    EXPECT_EQ(p.eval(e, trueacct, i, arn5),
+    EXPECT_EQ(p.eval(e, trueacct, i, arn5, principal),
 	      Effect::Pass);
     ARN arn6(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "notyourbucket/notyourobject");
-    EXPECT_EQ(p.eval(e, trueacct, i, arn6),
+    EXPECT_EQ(p.eval(e, trueacct, i, arn6, principal),
 	      Effect::Pass);
 
   }
@@ -490,6 +495,7 @@ TEST_F(PolicyTest, Eval3) {
   Environment em;
   Environment tr = { { "aws:MultiFactorAuthPresent", "true" } };
   Environment fa = { { "aws:MultiFactorAuthPresent", "false" } };
+  boost::optional<Principal> principal;
 
   Action_t s3allow;
   s3allow[s3ListMultipartUploadParts] = 1;
@@ -532,12 +538,13 @@ TEST_F(PolicyTest, Eval3) {
 
   ARN arn1(Partition::aws, Service::s3,
 		       "", arbitrary_tenant, "mybucket");
-  EXPECT_EQ(p.eval(em, none, s3PutBucketPolicy, arn1),
+  EXPECT_EQ(p.eval(em, none, s3PutBucketPolicy, arn1, principal),
 	    Effect::Allow);
+  EXPECT_FALSE(principal);
 
   ARN arn2(Partition::aws, Service::s3,
 		       "", arbitrary_tenant, "mybucket");
-  EXPECT_EQ(p.eval(em, none, s3PutBucketPolicy, arn2),
+  EXPECT_EQ(p.eval(em, none, s3PutBucketPolicy, arn2, principal),
 	    Effect::Allow);
 
 
@@ -547,52 +554,52 @@ TEST_F(PolicyTest, Eval3) {
     }
     ARN arn3(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "confidential-data");
-    EXPECT_EQ(p.eval(em, none, op, arn3),
+    EXPECT_EQ(p.eval(em, none, op, arn3, principal),
 	      Effect::Pass);
     ARN arn4(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "confidential-data");
-    EXPECT_EQ(p.eval(tr, none, op, arn4),
+    EXPECT_EQ(p.eval(tr, none, op, arn4, principal),
 	      s3allow[op] ? Effect::Allow : Effect::Pass);
     ARN arn5(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "confidential-data");
-    EXPECT_EQ(p.eval(fa, none, op, arn5),
+    EXPECT_EQ(p.eval(fa, none, op, arn5, principal),
 	      Effect::Pass);
     ARN arn6(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "confidential-data/moo");
-    EXPECT_EQ(p.eval(em, none, op, arn6),
+    EXPECT_EQ(p.eval(em, none, op, arn6, principal),
 	      Effect::Pass);
     ARN arn7(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "confidential-data/moo");
-    EXPECT_EQ(p.eval(tr, none, op, arn7),
+    EXPECT_EQ(p.eval(tr, none, op, arn7, principal),
 	      s3allow[op] ? Effect::Allow : Effect::Pass);
     ARN arn8(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "confidential-data/moo");
-    EXPECT_EQ(p.eval(fa, none, op, arn8),
+    EXPECT_EQ(p.eval(fa, none, op, arn8, principal),
 	      Effect::Pass);
     ARN arn9(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "really-confidential-data");
-    EXPECT_EQ(p.eval(em, none, op, arn9),
+    EXPECT_EQ(p.eval(em, none, op, arn9, principal),
 	      Effect::Pass);
     ARN arn10(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "really-confidential-data");
-    EXPECT_EQ(p.eval(tr, none, op, arn10),
+    EXPECT_EQ(p.eval(tr, none, op, arn10, principal),
 	      Effect::Pass);
     ARN arn11(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "really-confidential-data");
-    EXPECT_EQ(p.eval(fa, none, op, arn11),
+    EXPECT_EQ(p.eval(fa, none, op, arn11, principal),
 	      Effect::Pass);
     ARN arn12(Partition::aws, Service::s3,
 			 "", arbitrary_tenant,
 			 "really-confidential-data/moo");
-    EXPECT_EQ(p.eval(em, none, op, arn12), Effect::Pass);
+    EXPECT_EQ(p.eval(em, none, op, arn12, principal), Effect::Pass);
     ARN arn13(Partition::aws, Service::s3,
 			 "", arbitrary_tenant,
 			 "really-confidential-data/moo");
-    EXPECT_EQ(p.eval(tr, none, op, arn13), Effect::Pass);
+    EXPECT_EQ(p.eval(tr, none, op, arn13, principal), Effect::Pass);
     ARN arn14(Partition::aws, Service::s3,
 			 "", arbitrary_tenant,
 			 "really-confidential-data/moo");
-    EXPECT_EQ(p.eval(fa, none, op, arn14), Effect::Pass);
+    EXPECT_EQ(p.eval(fa, none, op, arn14, principal), Effect::Pass);
 
   }
 }
@@ -630,15 +637,17 @@ TEST_F(PolicyTest, Parse4) {
 TEST_F(PolicyTest, Eval4) {
   auto p  = Policy(cct.get(), &arbitrary_tenant, example4, true);
   Environment e;
+  boost::optional<Principal> principal;
 
   ARN arn1(Partition::aws, Service::iam,
 		       "", arbitrary_tenant, "role/example_role");
-  EXPECT_EQ(p.eval(e, none, iamCreateRole, arn1),
+  EXPECT_EQ(p.eval(e, none, iamCreateRole, arn1, principal),
 	    Effect::Allow);
+  EXPECT_FALSE(principal);
 
   ARN arn2(Partition::aws, Service::iam,
 		       "", arbitrary_tenant, "role/example_role");
-  EXPECT_EQ(p.eval(e, none, iamDeleteRole, arn2),
+  EXPECT_EQ(p.eval(e, none, iamDeleteRole, arn2, principal),
 	    Effect::Pass);
 }
 
@@ -675,20 +684,22 @@ TEST_F(PolicyTest, Parse5) {
 TEST_F(PolicyTest, Eval5) {
   auto p  = Policy(cct.get(), &arbitrary_tenant, example5, true);
   Environment e;
+  boost::optional<Principal> principal;
 
   ARN arn1(Partition::aws, Service::iam,
 		       "", arbitrary_tenant, "role/example_role");
-  EXPECT_EQ(p.eval(e, none, iamCreateRole, arn1),
+  EXPECT_EQ(p.eval(e, none, iamCreateRole, arn1, principal),
 	    Effect::Allow);
+  EXPECT_FALSE(principal);
 
   ARN arn2(Partition::aws, Service::iam,
 		       "", arbitrary_tenant, "role/example_role");
-  EXPECT_EQ(p.eval(e, none, s3ListBucket, arn2),
+  EXPECT_EQ(p.eval(e, none, s3ListBucket, arn2, principal),
 	    Effect::Pass);
 
   ARN arn3(Partition::aws, Service::iam,
 		       "", "", "role/example_role");
-  EXPECT_EQ(p.eval(e, none, iamCreateRole, arn3),
+  EXPECT_EQ(p.eval(e, none, iamCreateRole, arn3, principal),
 	    Effect::Pass);
 }
 
@@ -725,15 +736,17 @@ TEST_F(PolicyTest, Parse6) {
 TEST_F(PolicyTest, Eval6) {
   auto p  = Policy(cct.get(), &arbitrary_tenant, example6, true);
   Environment e;
+  boost::optional<Principal> principal;
 
   ARN arn1(Partition::aws, Service::iam,
 		       "", arbitrary_tenant, "user/A");
-  EXPECT_EQ(p.eval(e, none, iamCreateRole, arn1),
+  EXPECT_EQ(p.eval(e, none, iamCreateRole, arn1, principal),
 	    Effect::Allow);
+  EXPECT_FALSE(principal);
 
   ARN arn2(Partition::aws, Service::iam,
 		       "", arbitrary_tenant, "user/A");
-  EXPECT_EQ(p.eval(e, none, s3ListBucket, arn2),
+  EXPECT_EQ(p.eval(e, none, s3ListBucket, arn2, principal),
 	    Effect::Allow);
 }
 
@@ -773,6 +786,7 @@ TEST_F(PolicyTest, Parse7) {
 TEST_F(PolicyTest, Eval7) {
   auto p  = Policy(cct.get(), &arbitrary_tenant, example7, true);
   Environment e;
+  boost::optional<Principal> principal;
 
   auto subacct = FakeIdentity(
     Principal::user(std::move(""), "A:subA"));
@@ -783,17 +797,19 @@ TEST_F(PolicyTest, Eval7) {
 
   ARN arn1(Partition::aws, Service::s3,
 		       "", arbitrary_tenant, "mybucket/*");
-  EXPECT_EQ(p.eval(e, subacct, s3ListBucket, arn1),
+  EXPECT_EQ(p.eval(e, subacct, s3ListBucket, arn1, principal),
 	    Effect::Allow);
+  ASSERT_TRUE(principal);
+  EXPECT_TRUE(principal->is_user());
   
   ARN arn2(Partition::aws, Service::s3,
 		       "", arbitrary_tenant, "mybucket/*");
-  EXPECT_EQ(p.eval(e, parentacct, s3ListBucket, arn2),
+  EXPECT_EQ(p.eval(e, parentacct, s3ListBucket, arn2, principal),
 	    Effect::Pass);
 
   ARN arn3(Partition::aws, Service::s3,
 		       "", arbitrary_tenant, "mybucket/*");
-  EXPECT_EQ(p.eval(e, sub2acct, s3ListBucket, arn3),
+  EXPECT_EQ(p.eval(e, sub2acct, s3ListBucket, arn3, principal),
 	    Effect::Pass);
 }
 
@@ -1272,97 +1288,98 @@ TEST_F(IPPolicyTest, EvalIPAddress) {
   allowedIPv6.emplace("aws:SourceIp", "::1");
   blocklistedIP.emplace("aws:SourceIp", "192.168.1.1");
   blocklistedIPv6.emplace("aws:SourceIp", "2001:0db8:85a3:0000:0000:8a2e:0370:7334");
+  boost::optional<Principal> principal;
 
   auto trueacct = FakeIdentity(
     Principal::account("ACCOUNT-ID-WITHOUT-HYPHENS"));
   // Without an IP address in the environment then evaluation will always pass
   ARN arn1(Partition::aws, Service::s3,
 			    "", arbitrary_tenant, "example_bucket");
-  EXPECT_EQ(allowp.eval(e, trueacct, s3ListBucket, arn1),
+  EXPECT_EQ(allowp.eval(e, trueacct, s3ListBucket, arn1, principal),
 	    Effect::Pass);
   ARN arn2(Partition::aws, Service::s3,
       "", arbitrary_tenant, "example_bucket/myobject");
-  EXPECT_EQ(fullp.eval(e, trueacct, s3ListBucket, arn2),
+  EXPECT_EQ(fullp.eval(e, trueacct, s3ListBucket, arn2, principal),
 	    Effect::Pass);
 
   ARN arn3(Partition::aws, Service::s3,
 			    "", arbitrary_tenant, "example_bucket");
-  EXPECT_EQ(allowp.eval(allowedIP, trueacct, s3ListBucket, arn3),
+  EXPECT_EQ(allowp.eval(allowedIP, trueacct, s3ListBucket, arn3, principal),
 	    Effect::Allow);
   ARN arn4(Partition::aws, Service::s3,
 			    "", arbitrary_tenant, "example_bucket");
-  EXPECT_EQ(allowp.eval(blocklistedIPv6, trueacct, s3ListBucket, arn4),
+  EXPECT_EQ(allowp.eval(blocklistedIPv6, trueacct, s3ListBucket, arn4, principal),
 	    Effect::Pass);
 
   ARN arn5(Partition::aws, Service::s3,
 			   "", arbitrary_tenant, "example_bucket");
-  EXPECT_EQ(denyp.eval(allowedIP, trueacct, s3ListBucket, arn5),
+  EXPECT_EQ(denyp.eval(allowedIP, trueacct, s3ListBucket, arn5, principal),
 	    Effect::Deny);
   ARN arn6(Partition::aws, Service::s3,
 			   "", arbitrary_tenant, "example_bucket/myobject");
-  EXPECT_EQ(denyp.eval(allowedIP, trueacct, s3ListBucket, arn6),
+  EXPECT_EQ(denyp.eval(allowedIP, trueacct, s3ListBucket, arn6, principal),
 	    Effect::Deny);
 
   ARN arn7(Partition::aws, Service::s3,
 			   "", arbitrary_tenant, "example_bucket");
-  EXPECT_EQ(denyp.eval(blocklistedIP, trueacct, s3ListBucket, arn7),
+  EXPECT_EQ(denyp.eval(blocklistedIP, trueacct, s3ListBucket, arn7, principal),
 	    Effect::Pass);
   ARN arn8(Partition::aws, Service::s3,
 			   "", arbitrary_tenant, "example_bucket/myobject");
-  EXPECT_EQ(denyp.eval(blocklistedIP, trueacct, s3ListBucket, arn8),
+  EXPECT_EQ(denyp.eval(blocklistedIP, trueacct, s3ListBucket, arn8, principal),
 	    Effect::Pass);
 
   ARN arn9(Partition::aws, Service::s3,
 			   "", arbitrary_tenant, "example_bucket");
-  EXPECT_EQ(denyp.eval(blocklistedIPv6, trueacct, s3ListBucket, arn9),
+  EXPECT_EQ(denyp.eval(blocklistedIPv6, trueacct, s3ListBucket, arn9, principal),
 	    Effect::Pass);
   ARN arn10(Partition::aws, Service::s3,
 			   "", arbitrary_tenant, "example_bucket/myobject");
-  EXPECT_EQ(denyp.eval(blocklistedIPv6, trueacct, s3ListBucket, arn10),
+  EXPECT_EQ(denyp.eval(blocklistedIPv6, trueacct, s3ListBucket, arn10, principal),
 	    Effect::Pass);
   ARN arn11(Partition::aws, Service::s3,
 			   "", arbitrary_tenant, "example_bucket");
-  EXPECT_EQ(denyp.eval(allowedIPv6, trueacct, s3ListBucket, arn11),
+  EXPECT_EQ(denyp.eval(allowedIPv6, trueacct, s3ListBucket, arn11, principal),
 	    Effect::Deny);
   ARN arn12(Partition::aws, Service::s3,
 			   "", arbitrary_tenant, "example_bucket/myobject");
-  EXPECT_EQ(denyp.eval(allowedIPv6, trueacct, s3ListBucket, arn12),
+  EXPECT_EQ(denyp.eval(allowedIPv6, trueacct, s3ListBucket, arn12, principal),
 	    Effect::Deny);
 
   ARN arn13(Partition::aws, Service::s3,
 			   "", arbitrary_tenant, "example_bucket");
-  EXPECT_EQ(fullp.eval(allowedIP, trueacct, s3ListBucket, arn13),
+  EXPECT_EQ(fullp.eval(allowedIP, trueacct, s3ListBucket, arn13, principal),
 	    Effect::Allow);
   ARN arn14(Partition::aws, Service::s3,
       "", arbitrary_tenant, "example_bucket/myobject");
-  EXPECT_EQ(fullp.eval(allowedIP, trueacct, s3ListBucket, arn14),
+  EXPECT_EQ(fullp.eval(allowedIP, trueacct, s3ListBucket, arn14, principal),
 	    Effect::Allow);
 
   ARN arn15(Partition::aws, Service::s3,
 			   "", arbitrary_tenant, "example_bucket");
-  EXPECT_EQ(fullp.eval(blocklistedIP, trueacct, s3ListBucket, arn15),
+  EXPECT_EQ(fullp.eval(blocklistedIP, trueacct, s3ListBucket, arn15, principal),
 	    Effect::Pass);
   ARN arn16(Partition::aws, Service::s3,
 			   "", arbitrary_tenant, "example_bucket/myobject");
-  EXPECT_EQ(fullp.eval(blocklistedIP, trueacct, s3ListBucket, arn16),
+  EXPECT_EQ(fullp.eval(blocklistedIP, trueacct, s3ListBucket, arn16, principal),
 	    Effect::Pass);
 
   ARN arn17(Partition::aws, Service::s3,
 			   "", arbitrary_tenant, "example_bucket");
-  EXPECT_EQ(fullp.eval(allowedIPv6, trueacct, s3ListBucket, arn17),
+  EXPECT_EQ(fullp.eval(allowedIPv6, trueacct, s3ListBucket, arn17, principal),
 	    Effect::Allow);
   ARN arn18(Partition::aws, Service::s3,
 			   "", arbitrary_tenant, "example_bucket/myobject");
-  EXPECT_EQ(fullp.eval(allowedIPv6, trueacct, s3ListBucket, arn18),
+  EXPECT_EQ(fullp.eval(allowedIPv6, trueacct, s3ListBucket, arn18, principal),
 	    Effect::Allow);
 
   ARN arn19(Partition::aws, Service::s3,
 			   "", arbitrary_tenant, "example_bucket");
-  EXPECT_EQ(fullp.eval(blocklistedIPv6, trueacct, s3ListBucket, arn19),
+  EXPECT_EQ(fullp.eval(blocklistedIPv6, trueacct, s3ListBucket, arn19, principal),
 	    Effect::Pass);
   ARN arn20(Partition::aws, Service::s3,
 			   "", arbitrary_tenant, "example_bucket/myobject");
-  EXPECT_EQ(fullp.eval(blocklistedIPv6, trueacct, s3ListBucket, arn20),
+  EXPECT_EQ(fullp.eval(blocklistedIPv6, trueacct, s3ListBucket, arn20, principal),
 	    Effect::Pass);
 }
 
