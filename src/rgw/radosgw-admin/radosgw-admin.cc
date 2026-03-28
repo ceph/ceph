@@ -353,6 +353,7 @@ void usage()
   cout << "  topic dump                       dump (in JSON format) all pending bucket notifications of a persistent topic\n";
   cout << "  script put                       upload a Lua script to a context\n";
   cout << "  script get                       get the Lua script of a context\n";
+  cout << "  script list                      list the Lua scripts of a context\n";
   cout << "  script rm                        remove the Lua scripts of a context\n";
   cout << "  script-package add               add a Lua package to the scripts allowlist\n";
   cout << "  script-package rm                remove a Lua package from the scripts allowlist\n";

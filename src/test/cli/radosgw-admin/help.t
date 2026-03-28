@@ -336,6 +336,7 @@
      --skip-zero-entries               log show only dumps entries that don't have zero value
                                        in one of the numeric field
      --infile=<file>                   file to read in when setting data
+     --script-name=<script-name>       name of the lua script
      --categories=<list>               comma separated list of categories, used in usage show
      --caps=<caps>                     list of caps (e.g., "usage=read, write; user=read")
      --op-mask=<op-mask>               permission of user's operations (e.g., "read, write, delete, *")
