@@ -2100,27 +2100,28 @@ int PGMap::dump_stuck_pg_stats(
   return 0;
 }
 
+std::vector<std::pair<int32_t, const osd_stat_t*>> get_sorted_osd_stats() const
+{
+  std::vector<std::pair<int32_t, osd_stat_t>> sorted_stats(osd_stat.begin(), osd_stat.end());
+  std::sort(sorted_stats.begin(), sorted_stats.end(), [](const auto& a, const auto& b) {
+    return a.first < b.first;
+  });
+  return sorted_stats;
+}
+
 void PGMap::dump_osd_perf_stats(ceph::Formatter *f) const
 {
   f->open_array_section("osd_perf_infos");
-  std::vector<int> sorted_osds;
-  for (auto i = osd_stat.begin(); i != osd_stat.end(); ++i) {
-    sorted_osds.push_back(i->first);
-  }
-  std::sort(sorted_osds.begin(), sorted_osds.end());
 
-  for (int osd_id : sorted_osds) {
-    auto i = osd_stat.find(osd_id);
-    if (i != osd_stat.end()) {
-      f->open_object_section("osd");
-      f->dump_int("id", i->first);
-      {
-        f->open_object_section("perf_stats");
-        i->second.os_perf_stat.dump(f);
-        f->close_section();
-      }
+  for (const auto& [osd_id, stat] : get_sorted_osd_stats()) {
+    f->open_object_section("osd");
+    f->dump_int("id", osd_id);
+    {
+      f->open_object_section("perf_stats");
+      stat.os_perf_stat.dump(f);
       f->close_section();
     }
+    f->close_section();
   }
   f->close_section();
 }
@@ -2131,20 +2132,11 @@ void PGMap::print_osd_perf_stats(std::ostream *ss) const
   tab.define_column("commit_latency(ms)", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("apply_latency(ms)", TextTable::LEFT, TextTable::RIGHT);
 
-  std::vector<int32_t> sorted_osds;
-  for (auto i = osd_stat.begin(); i != osd_stat.end(); ++i) {
-    sorted_osds.push_back(i->first);
-  }
-  std::sort(sorted_osds.begin(), sorted_osds.end());
-
-  for (int osd_id : sorted_osds) {
-    auto i = osd_stat.find(osd_id);
-    if (i != osd_stat.end()) {
-      tab << i->first;
-      tab << i->second.os_perf_stat.os_commit_latency_ns / 1000000ull;
-      tab << i->second.os_perf_stat.os_apply_latency_ns / 1000000ull;
-      tab << TextTable::endrow;
-    }
+  for (const auto& [osd_id, stat] : get_sorted_osd_stats()) {
+    tab << osd_id;
+    tab << stat.os_perf_stat.os_commit_latency_ns / 1000000ull;
+    tab << stat.os_perf_stat.os_apply_latency_ns / 1000000ull;
+    tab << TextTable::endrow;
   }
   (*ss) << tab;
 }
