@@ -221,12 +221,12 @@ private:
                                    const struct ceph_statx &stx, bool sync_check,
                                    const std::function<int (uint64_t, struct cblock *)> &callback);
 
-    virtual void finish_crawl(int ret) = 0;
+    virtual void finish_crawl(int ret, double crawl_duration_secs) = 0;
 
     void push_dataq_entry(PeerReplayer::SyncEntry e);
     bool pop_dataq_entry(PeerReplayer::SyncEntry &out);
     bool has_pending_work() const;
-    void mark_crawl_finished(int ret);
+    void mark_crawl_finished(int ret, double crawl_duration_secs);
     bool is_dataq_empty_unlocked() const {
       return m_sync_dataq.empty();
     }
@@ -335,7 +335,7 @@ private:
                   const std::function<int (const std::string&)> &dirsync_func,
                   const std::function<int (const std::string&)> &purge_func);
 
-    void finish_crawl(int ret);
+    void finish_crawl(int ret, double crawl_duration_secs);
   };
 
   class SnapDiffSync : public SyncMechanism {
@@ -355,7 +355,7 @@ private:
                            const struct ceph_statx &stx, bool sync_check,
                            const std::function<int (uint64_t, struct cblock *)> &callback);
 
-    void finish_crawl(int ret);
+    void finish_crawl(int ret, double crawl_duration_secs);
 
   private:
     int init_directory(const std::string &epath,
@@ -390,6 +390,9 @@ private:
     uint64_t total_bytes = 0; //total bytes counter, independently for each directory sync.
     uint64_t sync_files = 0; //sync files counter, independently for each directory sync.
     uint64_t total_files = 0; //total files counter, independently for each directory sync.
+    bool crawl_finished = false; // crawl_state - in-progress/completed
+    clock::time_point crawl_start_time; // to show current crawl duration if crawl is in progress
+    double crawl_duration = 0.0; // time taken to complete the crawl, includes a few entry operation like mkdir as well
   };
 
   void _inc_failed_count(const std::string &dir_root) {
@@ -425,6 +428,9 @@ private:
     sync_stat.total_bytes = 0;
     sync_stat.sync_files = 0;
     sync_stat.total_files = 0;
+    sync_stat.crawl_finished = false;
+    sync_stat.crawl_start_time = clock::now();
+    sync_stat.crawl_duration = 0.0;
   }
   void _set_last_synced_snap(const std::string &dir_root, uint64_t snap_id,
                             const std::string &snap_name) {
@@ -471,6 +477,12 @@ private:
     ++sync_stat.synced_snap_count;
     _reset_sync_stat(dir_root);
   }
+  void set_crawl_finished(const std::string &dir_root, bool state, double seconds) {
+    std::scoped_lock locker(m_lock);
+    auto &sync_stat = m_snap_sync_stats.at(dir_root);
+    sync_stat.crawl_finished = state;
+    sync_stat.crawl_duration = seconds;
+  }
   void inc_sync_bytes(const std::string &dir_root, const uint64_t& b) {
     std::scoped_lock locker(m_lock);
     auto &sync_stat = m_snap_sync_stats.at(dir_root);
@@ -480,6 +492,11 @@ private:
     std::scoped_lock locker(m_lock);
     auto &sync_stat = m_snap_sync_stats.at(dir_root);
     sync_stat.sync_files++;
+  }
+  void set_crawl_start_time(const std::string &dir_root) {
+    std::scoped_lock locker(m_lock);
+    auto &sync_stat = m_snap_sync_stats.at(dir_root);
+    sync_stat.crawl_start_time = clock::now();
   }
   void inc_total_bytes_files(const std::string &dir_root, const uint64_t& b) {
     std::scoped_lock locker(m_lock);
@@ -634,6 +651,7 @@ private:
 
   // format routines for peer_status
   static std::string format_bytes(double bytes);
+  static std::string format_time(double total_seconds);
 };
 
 } // namespace mirror
