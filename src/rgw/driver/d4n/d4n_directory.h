@@ -104,7 +104,8 @@ enum class ObjectFields { // Fields stored in object directory
   Etag,
   ObjSize,
   UserID,
-  DisplayName
+  DisplayName,
+  Acl
 };
 
 enum class BlockFields { // Fields stored in block directory 
@@ -121,7 +122,8 @@ enum class BlockFields { // Fields stored in block directory
   Etag,
   ObjSize,
   UserID,
-  DisplayName
+  DisplayName,
+  Acl
 };
 
 struct CacheObj {
@@ -134,6 +136,8 @@ struct CacheObj {
   uint64_t size; //total object size (and not block size), needed for list objects
   std::string user_id; // id of user, needed for list object versions
   std::string display_name; // display name of owner, needed for list object versions
+  std::string acl;
+  rgw::sal::Attrs attrs; // attrs for a head block
 };
 
 struct CacheBlock {
@@ -244,8 +248,7 @@ class BlockDirectory: public Directory {
     std::shared_ptr<connection> conn;
     std::string build_index(CacheBlock* block);
 
-    template<SeqContainer Container>
-    int set_values(const DoutPrefixProvider* dpp, CacheBlock& block, Container& redisValues, optional_yield y);
+    int set_values(const DoutPrefixProvider* dpp, CacheBlock& block, std::map<std::string, std::string>& redisValues, optional_yield y);
 };
 
 } } // namespace rgw::d4n

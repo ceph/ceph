@@ -259,55 +259,24 @@ int SSDDriver::restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataC
 					    block_func(dpp, key, offset, len, version, false, null_yield, localWeightStr);
 					    parsed = true;
 				        } else if (dirtyStr == "1") {
-                                            //dirty blocks - version in head block and offset, len in data blocks
+                            //we still have parsing for a head block because we maintain a head block only for delete markers
+                            // as there are no data blocks associated with it.
 					    std::string localWeightStr;
 					    std::string invalidStr;
 					    rgw::sal::Attrs attrs;
 					    get_attrs(dpp, file_entry.path(), attrs, null_yield);
-					    std::string etag, bucket_name;
-					    uint64_t size = 0;
-					    time_t creationTime = time_t(nullptr);
-					    rgw_user user;
 					    rgw_obj_key obj_key;
 					    bool deleteMarker = false;
-					    if (attrs.find(RGW_ATTR_ETAG) != attrs.end()) {
-						etag = attrs[RGW_ATTR_ETAG].to_str();
-						ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): etag: " << etag << dendl;
-					    }
-					    if (attrs.find(RGW_CACHE_ATTR_OBJECT_SIZE) != attrs.end()) {
-						size = std::stoull(attrs[RGW_CACHE_ATTR_OBJECT_SIZE].to_str());
-						ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): size: " << size << dendl;
-					    }
-					    if (attrs.find(RGW_CACHE_ATTR_MTIME) != attrs.end()) {
-						creationTime = ceph::real_clock::to_time_t(ceph::real_clock::from_double(std::stod(attrs[RGW_CACHE_ATTR_MTIME].to_str())));
-						ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): creationTime: " << creationTime << dendl;
-					    }
-					    if (attrs.find(RGW_ATTR_ACL) != attrs.end()) {
-						bufferlist bl_acl = attrs[RGW_ATTR_ACL];
-						RGWAccessControlPolicy policy;
-						auto iter = bl_acl.cbegin();
-						try {
-						    policy.decode(iter);
-						} catch (buffer::error& err) {
-						    ldpp_dout(dpp, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
-						    continue;
-						}
-						user = std::get<rgw_user>(policy.get_owner().id);
-						ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): rgw_user: " << user.to_str() << dendl;
-					    }
 					    obj_key.name = object_name;
+                        std::string instance;
 					    if (attrs.find(RGW_CACHE_ATTR_VERSION_ID) != attrs.end()) {
-						std::string instance = attrs[RGW_CACHE_ATTR_VERSION_ID].to_str();
-                            obj_key.instance = instance;
+						instance = attrs[RGW_CACHE_ATTR_VERSION_ID].to_str();
+						obj_key.instance = instance;
 					    }
 					    if (attrs.find(RGW_CACHE_ATTR_OBJECT_NS) != attrs.end()) {
 						obj_key.ns = attrs[RGW_CACHE_ATTR_OBJECT_NS].to_str();
 					    }
 					    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): rgw_obj_key: " << obj_key.get_oid() << dendl;
-					    if (attrs.find(RGW_CACHE_ATTR_BUCKET_NAME) != attrs.end()) {
-						bucket_name = attrs[RGW_CACHE_ATTR_BUCKET_NAME].to_str();
-						ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): bucket_name: " << bucket_name << dendl;
-					    }
 
 					    if (attrs.find(RGW_CACHE_ATTR_LOCAL_WEIGHT) != attrs.end()) {
 						localWeightStr = attrs[RGW_CACHE_ATTR_LOCAL_WEIGHT].to_str();
@@ -326,11 +295,31 @@ int SSDDriver::restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataC
 					    }
 
 					    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): calling func for: " << key << dendl;
-					    obj_func(dpp, key, version, deleteMarker, size, creationTime, user, etag, bucket_name, bucket_id, obj_key, null_yield, invalidStr);
+					    obj_func(dpp, key, version, deleteMarker, bucket_id, obj_key, instance, null_yield, invalidStr);
 					    block_func(dpp, key, offset, len, version, dirty, null_yield, localWeightStr);
 					    parsed = true;
                                         } // end-if dirtyStr == "1"
 				    } else if (parts.size() == 3) { //end-if parts.size() == 1
+                        std::string invalidStr;
+                        std::string etag, bucket_name;
+					    uint64_t size = 0;
+					    time_t creationTime = time_t(nullptr);
+					    rgw_user user;
+                        rgw::sal::Attrs attrs;
+                        get_attrs(dpp, file_entry.path(), attrs, null_yield);
+                        rgw_obj_key obj_key;
+                        obj_key.name = object_name;
+                        std::string instance;
+					    if (attrs.find(RGW_CACHE_ATTR_VERSION_ID) != attrs.end()) {
+						instance = attrs[RGW_CACHE_ATTR_VERSION_ID].to_str();
+						if (instance != "null") {
+						    obj_key.instance = instance;
+						}
+					    }
+					    if (attrs.find(RGW_CACHE_ATTR_OBJECT_NS) != attrs.end()) {
+						obj_key.ns = attrs[RGW_CACHE_ATTR_OBJECT_NS].to_str();
+					    }
+					    bool deleteMarker = false;
 					offset = std::stoull(parts[1]);
 					ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): offset: " << offset << dendl;
 
@@ -341,12 +330,19 @@ int SSDDriver::restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataC
 					ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): key: " << key << dendl;
 
 					std::string localWeightStr;
-					auto ret = get_attr(dpp, file_entry.path(), RGW_CACHE_ATTR_LOCAL_WEIGHT, localWeightStr, null_yield);
-					if (ret < 0) {
-					    ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): Failed to get attr: " << RGW_CACHE_ATTR_LOCAL_WEIGHT << dendl;
-					} else {
-					    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): localWeightStr: " << localWeightStr << dendl;
-					}
+					 if (attrs.find(RGW_CACHE_ATTR_LOCAL_WEIGHT) != attrs.end()) {
+                        localWeightStr = attrs[RGW_CACHE_ATTR_LOCAL_WEIGHT].to_str();
+                        ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): localWeightStr: " << localWeightStr << dendl;
+                    }
+                    if (attrs.find(RGW_CACHE_ATTR_INVALID) != attrs.end()) {
+                        invalidStr = attrs[RGW_CACHE_ATTR_INVALID].to_str();
+                        ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): invalidStr: " << invalidStr << dendl;
+                        //mark invalid data blocks as clean so that they are up for eviction.
+                        if (invalidStr == "1") {
+                            dirty = false;
+                        }
+                    }
+                    obj_func(dpp, key, version, deleteMarker, bucket_id, obj_key, instance, null_yield, invalidStr);
 					block_func(dpp, key, offset, len, version, dirty, null_yield, localWeightStr);
 					parsed = true;
 				    } 
@@ -398,47 +394,6 @@ int SSDDriver::put(const DoutPrefixProvider* dpp, const std::string& key, const 
     if (ec) {
         return ec.value();
     }
-    return 0;
-}
-
-int SSDDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs, optional_yield y)
-{
-    char buffer[len];
-    std::string location = create_dirs_get_filepath_from_key(dpp, partition_info.location, key);
-    ldpp_dout(dpp, 20) << __func__ << "(): location=" << location << dendl;
-    FILE *cache_file = nullptr;
-    int r = 0;
-    size_t nbytes = 0;
-
-    cache_file = fopen(location.c_str(), "r+");
-    if (cache_file == nullptr) {
-        ldpp_dout(dpp, 0) << "ERROR: get::fopen file has return error, errno=" << errno << dendl;
-        return -errno;
-    }
-
-    fseek(cache_file, offset, SEEK_SET);
-
-    nbytes = fread(buffer, 1, len, cache_file);
-    if (nbytes != len) {
-        fclose(cache_file);
-        ldpp_dout(dpp, 0) << "ERROR: get::io_read: fread has returned error: nbytes!=len, nbytes=" << nbytes << ", len=" << len << dendl;
-        return -EIO;
-    }
-
-    r = fclose(cache_file);
-    if (r != 0) {
-        ldpp_dout(dpp, 0) << "ERROR: get::fclose file has return error, errno=" << errno << dendl;
-        return -errno;
-    }
-
-    bl.append(buffer, len);
-
-    r = get_attrs(dpp, key, attrs, y);
-    if (r < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: get::get_attrs: failed to get attrs, r = " << r << dendl;
-        return r;
-    }
-
     return 0;
 }
 
@@ -608,6 +563,54 @@ rgw::AioResultList SSDDriver::put_async(const DoutPrefixProvider* dpp, optional_
     rgw_raw_obj r_obj;
     r_obj.oid = key;
     return aio->get(r_obj, ssd_cache_write_op(dpp, y, this, bl, len, attrs, key), cost, id);
+}
+
+int SSDDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs, optional_yield y)
+{
+    std::string location = create_dirs_get_filepath_from_key(dpp, partition_info.location, key);
+    ldpp_dout(dpp, 20) << __func__ << "(): location=" << location << dendl;
+
+    if (y) {
+        using namespace boost::asio;
+        boost::system::error_code ec;
+        yield_context yield = y.get_yield_context();
+        auto ex = yield.get_executor();
+        bl = this->get_async(dpp, ex, key, offset, len, boost::asio::bind_executor(ex, yield[ec]));
+        if (ec) {
+            ldpp_dout(dpp, 0) << "ERROR: SSDCache: get_async failed, ec=" << ec.message() << dendl;
+            return -ec.value();
+        }
+    } else {
+        std::vector<char> buffer(len);
+        auto deleter = [](FILE* f) { fclose(f); };
+        auto cache_file = std::unique_ptr<FILE, decltype(deleter)>(
+            fopen(location.c_str(), "r+"), deleter);
+
+        if (cache_file == nullptr) {
+            ldpp_dout(dpp, 0) << "ERROR: get::fopen file has return error, errno=" << errno << dendl;
+            return -errno;
+        }
+
+        if (fseek(cache_file.get(), offset, SEEK_SET) != 0) {
+            ldpp_dout(dpp, 0) << "ERROR: get::fseek failed, errno=" << errno << dendl;
+            return -errno;
+        }
+
+        size_t nbytes = fread(buffer.data(), 1, len, cache_file.get());
+        if (nbytes != len) {
+            ldpp_dout(dpp, 0) << "ERROR: get::io_read: fread has returned error: nbytes!=len, nbytes=" << nbytes << ", len=" << len << dendl;
+            return -EIO;
+        }
+
+        bl.append(buffer.data(), len);
+    }
+
+    ldpp_dout(dpp, 20) << "INFO: get::bl length: = " << bl.length() << dendl;
+    if (auto r = get_attrs(dpp, location, attrs, y); r < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: get::get_attrs: failed to get attrs, r = " << r << dendl;
+        return r;
+    }
+    return 0;
 }
 
 int SSDDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& key, optional_yield y)

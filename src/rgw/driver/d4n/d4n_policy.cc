@@ -52,10 +52,61 @@ static inline void redis_exec(std::shared_ptr<connection> conn,
 int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_context& io_context, rgw::sal::Driver* _driver) {
   response<int, int, int, int> resp;
   static auto obj_callback = [this](
-          const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, uint64_t size, 
-			    double creationTime, const rgw_user user, const std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
-			    const rgw_obj_key& obj_key, optional_yield y, std::string& restore_val) {
-    update_dirty_object(dpp, key, version, deleteMarker, size, creationTime, user, etag, bucket_name, bucket_id, obj_key, RefCount::NOOP, y, restore_val);
+          const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, const std::string& bucket_id,
+			    const rgw_obj_key& obj_key, const std::string& instance, optional_yield y, std::string& restore_val) {
+    std::string dirty_obj_key = rgw::sal::get_cache_block_prefix(bucket_id, obj_key.name, version);
+    if (!find_obj_entry(dirty_obj_key)) {
+      rgw::d4n::CacheBlock block;
+      if (instance == "null") {
+        block.cacheObj.objName = "_:null_" + obj_key.name;
+      } else {
+        block.cacheObj.objName = obj_key.get_oid();
+      }
+      block.cacheObj.bucketName = bucket_id;
+      block.blockID = 0;
+      block.size = 0;
+      auto ret = blockDir->get(dpp, &block, y);
+      if (ret < 0) {
+        //this can happen for invalid dirty objects (have been deleted)
+        ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() blockDir->get() failed: " << ret << dendl;
+        return;
+      }
+      rgw::sal::Attrs attrs = std::move(block.cacheObj.attrs);
+      std::string etag;
+      if (attrs.find(RGW_ATTR_ETAG) != attrs.end()) {
+        etag = attrs[RGW_ATTR_ETAG].to_str();
+        ldpp_dout(dpp, 20) << "LFUDAPolicy: " << __func__ << "(): etag: " << etag << dendl;
+      }
+      uint64_t size = 0;
+      if (attrs.find(RGW_CACHE_ATTR_OBJECT_SIZE) != attrs.end()) {
+        size = std::stoull(attrs[RGW_CACHE_ATTR_OBJECT_SIZE].to_str());
+        ldpp_dout(dpp, 20) << "LFUDAPolicy: " << __func__ << "(): size: " << size << dendl;
+      }
+      double creationTime = 0;
+      if (attrs.find(RGW_CACHE_ATTR_MTIME) != attrs.end()) {
+        creationTime = std::stod(attrs[RGW_CACHE_ATTR_MTIME].to_str());
+        ldpp_dout(dpp, 20) << "LFUDAPolicy: " << __func__ << "(): creationTime: " << creationTime << dendl;
+      }
+      rgw_user user;
+      if (attrs.find(RGW_ATTR_ACL) != attrs.end()) {
+        bufferlist bl_acl = attrs[RGW_ATTR_ACL];
+        RGWAccessControlPolicy policy;
+        auto iter = bl_acl.cbegin();
+        try {
+          policy.decode(iter);
+        } catch (buffer::error& err) {
+          ldpp_dout(dpp, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
+        }
+        user = std::get<rgw_user>(policy.get_owner().id);
+        ldpp_dout(dpp, 20) << "LFUDAPolicy: " << __func__ << "(): rgw_user: " << user.to_str() << dendl;
+      }
+      std::string bucket_name;
+      if (attrs.find(RGW_CACHE_ATTR_BUCKET_NAME) != attrs.end()) {
+        bucket_name = attrs[RGW_CACHE_ATTR_BUCKET_NAME].to_str();
+        ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): bucket_name: " << bucket_name << dendl;
+      }
+      update_dirty_object(dpp, dirty_obj_key, version, deleteMarker, size, creationTime, user, etag, bucket_name, bucket_id, obj_key, RefCount::NOOP, y, restore_val);
+    }
   };
 
   static auto block_callback = [this](
@@ -263,10 +314,13 @@ bool LFUDAPolicy::invalidate_dirty_object(const DoutPrefixProvider* dpp, const s
   if (p->second.second == State::INIT) {
     ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Setting State::INVALID for key=" << key << dendl;
     p->second.second = State::INVALID;
-    int ret = cacheDriver->set_attr(dpp, key, RGW_CACHE_ATTR_INVALID, "1", y);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "(): Failed to set xattr, ret=" << ret << dendl;
-      return false;
+    //head block is only for delete marker
+    if(p->second.first->delete_marker) {
+      int ret = cacheDriver->set_attr(dpp, key, RGW_CACHE_ATTR_INVALID, "1", y);
+      if (ret < 0) {
+        ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "(): Failed to set xattr, ret=" << ret << dendl;
+        return false;
+      }
     }
     return true;
   } else if (p->second.second == State::IN_PROGRESS) {
@@ -659,13 +713,15 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	    continue;
 	  }
 	  ll.unlock();
-	  if ((ret = cacheDriver->delete_data(dpp, e->key, y)) == 0) {
-	    if (!(ret = erase(dpp, e->key, y))) {
-	      ldpp_dout(dpp, 0) << "Failed to delete head policy entry for: " << e->key << ", ret=" << ret << dendl; // TODO: what must occur during failure?
-	    }
-	  } else {
-	    ldpp_dout(dpp, 0) << "Failed to delete head object for: " << e->key << ", ret=" << ret << dendl;
-	  }
+    if (e->delete_marker) {
+      if ((ret = cacheDriver->delete_data(dpp, e->key, y)) == 0) {
+        if (!(ret = erase(dpp, e->key, y))) {
+          ldpp_dout(dpp, 0) << "Failed to delete head policy entry for: " << e->key << ", ret=" << ret << dendl; // TODO: what must occur during failure?
+        }
+      } else {
+        ldpp_dout(dpp, 0) << "Failed to delete head object for: " << e->key << ", ret=" << ret << dendl;
+      }
+    }
 	} else {
 	  //ignore if block not found, as it could have been deleted earlier when refcount for it was 0
 	  ll.unlock();
@@ -763,6 +819,7 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	  off_t ofs = 0;
 
 	  rgw::sal::DataProcessor* filter = processor.get();
+    #if 0
 	  bufferlist bl;
 	  op_ret = cacheDriver->get_attrs(dpp, e->key, obj_attrs, null_yield); //get obj attrs from head
 	  if (op_ret < 0) {
@@ -770,6 +827,17 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	    erase_dirty_object(dpp, e->key, null_yield);
 	    continue;
 	  }
+    #endif
+    rgw::d4n::CacheBlock block;
+    block.cacheObj.objName = e->obj_key.get_oid();
+    block.cacheObj.bucketName = e->bucket_id;
+    block.blockID = 0;
+    block.size = 0;
+    auto ret = blockDir->get(dpp, &block, null_yield);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() blockDir->get() failed: " << ret << dendl;
+    }
+    obj_attrs = std::move(block.cacheObj.attrs);
 	  obj_attrs.erase(RGW_CACHE_ATTR_MTIME);
 	  obj_attrs.erase(RGW_CACHE_ATTR_OBJECT_SIZE);
 	  obj_attrs.erase(RGW_CACHE_ATTR_ACCOUNTED_SIZE);
@@ -862,13 +930,14 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	  } while(fst < lst);
 	} //end-else if delete_marker
 
-	//invoke update() with dirty flag set to false, to update in-memory metadata for head
-	this->update(dpp, e->key, 0, 0, e->version, false, 0, y);
-         
-        if ((ret = cacheDriver->set_attr(dpp, e->key, RGW_CACHE_ATTR_DIRTY, "0", y)) < 0) {
-	  ldpp_dout(dpp, 0) << __func__ << "(): Failed to update dirty attr in cache, ret=" << op_ret << dendl;
-        }
-
+  //head block exists only for delete marker
+  if (e->delete_marker) {
+    //invoke update() with dirty flag set to false, to update in-memory metadata for head
+    this->update(dpp, e->key, 0, 0, e->version, false, 0, y);
+    if ((ret = cacheDriver->set_attr(dpp, e->key, RGW_CACHE_ATTR_DIRTY, "0", y)) < 0) {
+      ldpp_dout(dpp, 0) << __func__ << "(): Failed to update dirty attr in cache, ret=" << op_ret << dendl;
+    }
+  }
 	if (null_instance) {
 	  //restore instance for directory data processing in later steps
 	  c_obj->set_instance("null");

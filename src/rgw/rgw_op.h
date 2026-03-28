@@ -2403,7 +2403,13 @@ inline int rgw_get_request_metadata(const DoutPrefixProvider *dpp,
       "x-amz-storage-class",
       "x-amz-content-sha256",
       "x-amz-checksum-algorithm",
-      "x-amz-date"
+      "x-amz-date",
+      //D4N cache related headers
+      "x-amz-remote-cache-request",
+      "x-amz-cache-blk-offset",
+      "x-amz-cache-blk-len",
+      "x-amz-cache-obj-size",
+      "x-amz-cache-object-version"
   };
 
   size_t valid_meta_count = 0;

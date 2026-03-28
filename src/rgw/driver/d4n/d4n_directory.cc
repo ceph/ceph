@@ -448,7 +448,8 @@ int ObjectDirectory::set(const DoutPrefixProvider* dpp, CacheObj* object, option
   redisValues.push_back(object->user_id);
   redisValues.push_back("displayName");
   redisValues.push_back(object->display_name);
-
+  redisValues.push_back("acl");
+  redisValues.push_back(object->acl);
   try {
     boost::system::error_code ec;
     response<ignore_t> resp;
@@ -484,6 +485,7 @@ int ObjectDirectory::get(const DoutPrefixProvider* dpp, CacheObj* object, option
   fields.push_back("objSize");
   fields.push_back("userId");
   fields.push_back("displayName");
+  fields.push_back("acl");
 
   try {
     boost::system::error_code ec;
@@ -513,6 +515,7 @@ int ObjectDirectory::get(const DoutPrefixProvider* dpp, CacheObj* object, option
     object->size = std::stoull(std::get<0>(resp).value()[std::size_t(Fields::ObjSize)]);
     object->user_id = std::get<0>(resp).value()[std::size_t(Fields::UserID)];
     object->display_name = std::get<0>(resp).value()[std::size_t(Fields::DisplayName)];
+    object->acl = std::get<0>(resp).value()[std::size_t(Fields::Acl)];
   } catch (std::exception &e) {
     ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
     return -EINVAL;
@@ -914,16 +917,13 @@ int BlockDirectory::exist_key(const DoutPrefixProvider* dpp, CacheBlock* block, 
   return std::get<0>(resp).value();
 }
 
-template<SeqContainer Container>
-int BlockDirectory::set_values(const DoutPrefixProvider* dpp, CacheBlock& block, Container& redisValues, optional_yield y)
+int BlockDirectory::set_values(const DoutPrefixProvider* dpp, CacheBlock& block, std::map<std::string, std::string>& redisValues, optional_yield y)
 {
   std::string hosts;
   /* Creating a redisValues of the entry's properties */
-  redisValues.push_back("blockID");
-  redisValues.push_back(std::to_string(block.blockID));
-  redisValues.push_back("version");
-  redisValues.push_back(block.version);
-  redisValues.push_back("deleteMarker");
+  redisValues["blockID"] = std::to_string(block.blockID);
+  redisValues["version"] = block.version;
+
   int ret = -1;
   if ((ret = check_bool(std::to_string(block.deleteMarker))) != -EINVAL) {
     block.deleteMarker = (ret != 0);
@@ -931,26 +931,20 @@ int BlockDirectory::set_values(const DoutPrefixProvider* dpp, CacheBlock& block,
     ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: Invalid bool value for delete marker" << dendl;
     return -EINVAL;
   }
-  redisValues.push_back(std::to_string(block.deleteMarker));
-  redisValues.push_back("size");
-  redisValues.push_back(std::to_string(block.size));
-  redisValues.push_back("globalWeight");
-  redisValues.push_back(std::to_string(block.globalWeight));
-  redisValues.push_back("objName");
-  redisValues.push_back(block.cacheObj.objName);
-  redisValues.push_back("bucketName");
-  redisValues.push_back(block.cacheObj.bucketName);
-  redisValues.push_back("creationTime");
-  redisValues.push_back(block.cacheObj.creationTime);
-  redisValues.push_back("dirty");
+  redisValues["deleteMarker"] = std::to_string(block.deleteMarker);
+  redisValues["size"] = std::to_string(block.size);
+  redisValues["globalWeight"] = std::to_string(block.globalWeight);
+  redisValues["objName"] = block.cacheObj.objName;
+  redisValues["bucketName"] = block.cacheObj.bucketName;
+  redisValues["creationTime"] = block.cacheObj.creationTime;
+
   if ((ret = check_bool(std::to_string(block.cacheObj.dirty))) != -EINVAL) {
     block.cacheObj.dirty = (ret != 0);
   } else {
     ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: Invalid bool value" << dendl;
     return -EINVAL;
   }
-  redisValues.push_back(std::to_string(block.cacheObj.dirty));
-  redisValues.push_back("hosts");
+  redisValues["dirty"] = std::to_string(block.cacheObj.dirty);
 
   hosts.clear();
   for (auto const& host : block.cacheObj.hostsList) {
@@ -961,18 +955,19 @@ int BlockDirectory::set_values(const DoutPrefixProvider* dpp, CacheBlock& block,
   }
 
   if (!hosts.empty())
-  hosts.pop_back();
+    hosts.pop_back();
 
-  redisValues.push_back(hosts);
-  redisValues.push_back("etag");
-  redisValues.push_back(block.cacheObj.etag);
-  redisValues.push_back("objSize");
-  redisValues.push_back(std::to_string(block.cacheObj.size));
-  redisValues.push_back("userId");
-  redisValues.push_back(block.cacheObj.user_id);
-  redisValues.push_back("displayName");
-  redisValues.push_back(block.cacheObj.display_name);
+  redisValues["hosts"] = hosts;
+  redisValues["etag"] = block.cacheObj.etag;
+  redisValues["objSize"] = std::to_string(block.cacheObj.size);
+  redisValues["userId"] = block.cacheObj.user_id;
+  redisValues["displayName"] = block.cacheObj.display_name;
+  redisValues["acl"] = block.cacheObj.acl;
 
+  redisValues["attrsCount"]   = std::to_string(block.cacheObj.attrs.size());
+  for (auto const& [key, bl] : block.cacheObj.attrs) {
+    redisValues["attr_" + key] = bl.to_str();
+  }
   return 0;
 }
 
@@ -983,7 +978,7 @@ int BlockDirectory::set(const DoutPrefixProvider* dpp, CacheBlock* block, option
   std::string key = build_index(block);
   ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): index is: " << key << dendl;
 
-  std::vector<std::string> redisValues;
+  std::map<std::string, std::string> redisValues;
 
   auto ret = set_values(dpp, *block, redisValues, y);
   if (ret < 0) {
@@ -995,10 +990,10 @@ int BlockDirectory::set(const DoutPrefixProvider* dpp, CacheBlock* block, option
     response<ignore_t> resp;
     if (pipeline && pipeline->is_pipeline()) {
       request& req = pipeline->get_request();
-      req.push_range("HSET", key, redisValues);
+      req.push_range("HSET", key, std::cbegin(redisValues), std::cend(redisValues));
     } else {
       request req;
-      req.push_range("HSET", key, redisValues);
+      req.push_range("HSET", key, std::cbegin(redisValues), std::cend(redisValues));
 
       redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
       if (ec) {
@@ -1021,13 +1016,12 @@ int BlockDirectory::set(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& 
     std::string key = build_index(&block);
     ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): index is: " << key << dendl;
 
-    //std::string hosts;
-    std::list<std::string> redisValues;
+    std::map<std::string, std::string> redisValues;
     auto ret = set_values(dpp, block, redisValues, y);
     if (ret < 0) {
       return ret;
     }
-    req.push_range("HSET", key, redisValues);
+    req.push_range("HSET", key, std::cbegin(redisValues), std::cend(redisValues));
   }
 
   try {
@@ -1125,6 +1119,7 @@ int BlockDirectory::get(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& 
     fields.push_back("objSize");
     fields.push_back("userId");
     fields.push_back("displayName");
+    fields.push_back("acl");
 
     try {
       req.push_range("HMGET", key, fields);
@@ -1173,6 +1168,7 @@ int BlockDirectory::get(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& 
     block->cacheObj.size = std::stoull(vec[std::size_t(Fields::ObjSize)]);
     block->cacheObj.user_id = vec[std::size_t(Fields::UserID)];
     block->cacheObj.display_name = vec[std::size_t(Fields::DisplayName)];
+    block->cacheObj.display_name = vec[std::size_t(Fields::Acl)];
   }
 
   return 0;
@@ -1181,30 +1177,13 @@ int BlockDirectory::get(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& 
 int BlockDirectory::get(const DoutPrefixProvider* dpp, CacheBlock* block, optional_yield y) 
 {
   std::string key = build_index(block);
-  std::vector<std::string> fields;
   ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): index is: " << key << dendl;
-
-  fields.push_back("blockID");
-  fields.push_back("version");
-  fields.push_back("deleteMarker");
-  fields.push_back("size");
-  fields.push_back("globalWeight");
-
-  fields.push_back("objName");
-  fields.push_back("bucketName");
-  fields.push_back("creationTime");
-  fields.push_back("dirty");
-  fields.push_back("hosts");
-  fields.push_back("etag");
-  fields.push_back("objSize");
-  fields.push_back("userId");
-  fields.push_back("displayName");
 
   try {
     boost::system::error_code ec;
-    response< std::optional<std::vector<std::string>> > resp;
+    response< std::map<std::string, std::string> > resp;
     request req;
-    req.push_range("HMGET", key, fields);
+    req.push("HGETALL", key);
 
     redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
 
@@ -1213,25 +1192,45 @@ int BlockDirectory::get(const DoutPrefixProvider* dpp, CacheBlock* block, option
       return -ec.value();
     }
 
-    if (std::get<0>(resp).value().value().empty()) {
+    const auto& fieldMap = std::get<0>(resp).value();
+    if (fieldMap.empty()) {
       ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): No values returned for key=" << key << dendl;
       return -ENOENT;
     } 
 
-    block->blockID = std::stoull(std::get<0>(resp).value().value()[0]);
-    block->version = std::get<0>(resp).value().value()[1];
-    block->deleteMarker = (std::stoi(std::get<0>(resp).value().value()[2]) != 0);
-    block->size = std::stoull(std::get<0>(resp).value().value()[3]);
-    block->globalWeight = std::stoull(std::get<0>(resp).value().value()[4]);
-    block->cacheObj.objName = std::get<0>(resp).value().value()[5];
-    block->cacheObj.bucketName = std::get<0>(resp).value().value()[6];
-    block->cacheObj.creationTime = std::get<0>(resp).value().value()[7];
-    block->cacheObj.dirty = (std::stoi(std::get<0>(resp).value().value()[8]) != 0);
-    boost::split(block->cacheObj.hostsList, std::get<0>(resp).value().value()[9], boost::is_any_of("_"));
-    block->cacheObj.etag = std::get<0>(resp).value().value()[10];
-    block->cacheObj.size = std::stoull(std::get<0>(resp).value().value()[11]);
-    block->cacheObj.user_id = std::get<0>(resp).value().value()[12];
-    block->cacheObj.display_name = std::get<0>(resp).value().value()[13];
+    block->blockID = std::stoull(fieldMap.at("blockID"));
+    block->version = fieldMap.at("version");
+    block->deleteMarker = (std::stoi(fieldMap.at("deleteMarker")) != 0);
+    block->size = std::stoull(fieldMap.at("size"));
+    block->globalWeight = std::stoull(fieldMap.at("globalWeight"));
+    block->cacheObj.objName = fieldMap.at("objName");
+    block->cacheObj.bucketName = fieldMap.at("bucketName");
+    block->cacheObj.creationTime = fieldMap.at("creationTime");
+    block->cacheObj.dirty = (std::stoi(fieldMap.at("dirty")) != 0);
+    boost::split(block->cacheObj.hostsList, fieldMap.at("hosts"), boost::is_any_of("_"));
+    block->cacheObj.etag = fieldMap.at("etag");
+    block->cacheObj.size = std::stoull(fieldMap.at("objSize"));
+    block->cacheObj.user_id = fieldMap.at("userId");
+    block->cacheObj.display_name = fieldMap.at("displayName");
+    block->cacheObj.acl = fieldMap.at("acl");
+
+    size_t attrsCount = std::stoull(fieldMap.at("attrsCount"));
+    size_t found = 0;
+    for (auto const& [field, value] : fieldMap) {
+      if (field.starts_with("attr_")) {
+        std::string attrKey = field.substr(5);
+        ceph::buffer::list bl;
+        bl.append(value);
+        block->cacheObj.attrs[attrKey] = std::move(bl);
+
+        if (++found == attrsCount) break;
+      }
+    }
+
+    if (found != attrsCount) {
+      ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "() ERROR: expected " << attrsCount << " attrs but found " << found << dendl;
+      return -EINVAL;
+    }
   } catch (std::exception &e) {
     ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
     return -EINVAL;
@@ -1264,6 +1263,7 @@ int BlockDirectory::get(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& 
     fields.push_back("objSize");
     fields.push_back("userId");
     fields.push_back("displayName");
+    fields.push_back("acl");
 
     try {
       req.push("HGETALL", key);
@@ -1311,7 +1311,8 @@ int BlockDirectory::get(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& 
               element.value == "size" || element.value == "globalWeight" || element.value == "objName" ||
               element.value == "bucketName" || element.value == "creationTime" || element.value == "dirty" ||
               element.value == "hosts" || element.value == "etag" || element.value == "objSize" ||
-              element.value == "userId" || element.value == "displayName") {
+              element.value == "userId" || element.value == "displayName" || element.value == "acl" ||
+              element.value == "attrsCount" || element.value.starts_with("attr_")) {
             prev_val = element.value;
             ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "() field key: " << prev_val << dendl;
             field_key = false;
@@ -1348,6 +1349,15 @@ int BlockDirectory::get(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& 
             block->cacheObj.user_id = element.value;
           } else if (prev_val == "displayName") {
             block->cacheObj.display_name = element.value;
+          } else if (prev_val == "acl") {
+            block->cacheObj.acl = element.value;
+          } else if (prev_val == "attrsCount") {
+            size_t attrsCount = std::stoi(element.value);
+          } else if (prev_val.starts_with("attr_")) {
+            std::string attrKey = prev_val.substr(5);
+            ceph::buffer::list bl;
+            bl.append(element.value);
+            block->cacheObj.attrs[attrKey] = std::move(bl);
           }
           j++;
           field_key= true;
