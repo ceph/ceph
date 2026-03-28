@@ -6,6 +6,7 @@ COPY \
     src/script/lib-build.sh \
     src/script/run-make.sh \
     ${CEPH_CTR_SRC}/src/script/
+COPY src/script/custom ${CEPH_CTR_SRC}/src/script/custom
 COPY debian ${CEPH_CTR_SRC}/debian
 COPY \
     ceph.spec.in \
@@ -21,6 +22,7 @@ ARG DISTRO
 ARG CEPH_CTR_SRC=/usr/local/src/ceph
 ARG CLEAN_DNF=yes
 ARG CEPH_BASE_BRANCH=main
+ARG CUSTOM_IMAGE_SCRIPT=
 ARG SCCACHE_VERSION=v0.8.2
 ARG SCCACHE_REPO=https://github.com/mozilla/sccache
 ARG WITH_CRIMSON=true
@@ -31,6 +33,7 @@ COPY --from=bootstrap ${CEPH_CTR_SRC} ${CEPH_CTR_SRC}
 RUN DISTRO=$DISTRO \
     CEPH_BASE_BRANCH=$CEPH_BASE_BRANCH \
     CLEAN_DNF=$CLEAN_DNF \
+    CUSTOM_IMAGE_SCRIPT=$CUSTOM_IMAGE_SCRIPT \
     CEPH_CTR_SRC=${CEPH_CTR_SRC} \
     WITH_CRIMSON=${WITH_CRIMSON} \
     FOR_MAKE_CHECK=${FOR_MAKE_CHECK} \

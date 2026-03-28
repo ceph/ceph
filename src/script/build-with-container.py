@@ -213,6 +213,7 @@ _CONTAINER_SOURCES = [
     "Dockerfile.build",
     "src/script/lib-build.sh",
     "src/script/run-make.sh",
+    "src/script/custom",
     "ceph.spec.in",
     "do_cmake.sh",
     "install-deps.sh",
@@ -342,12 +343,20 @@ def _hash_sources(bsize=4096):
     hh = hashlib.sha256()
     buf = bytearray(bsize)
     for path in sorted(_CONTAINER_SOURCES):
-        with open(path, "rb") as fh:
-            while True:
-                rlen = fh.readinto(buf)
-                hh.update(buf[:rlen])
-                if rlen < len(buf):
-                    break
+        source = pathlib.Path(path)
+        if not source.exists():
+            continue
+        paths = [source]
+        if source.is_dir():
+            paths = sorted(p for p in source.rglob("*") if p.is_file())
+        for fpath in paths:
+            hh.update(str(fpath).encode("utf8"))
+            with open(fpath, "rb") as fh:
+                while True:
+                    rlen = fh.readinto(buf)
+                    hh.update(buf[:rlen])
+                    if rlen < len(buf):
+                        break
     return f"sha256:{hh.hexdigest()}"
 
 
@@ -716,6 +725,22 @@ def npm_cache_dir(ctx):
 def build_container(ctx):
     """Generate a build environment container image."""
     ctx.build.wants(Steps.DNF_CACHE, ctx)
+    if ctx.cli.custom_image_script:
+        custom_script = pathlib.Path(ctx.cli.custom_image_script)
+        if custom_script.is_absolute():
+            raise ValueError(
+                "--custom-image-script must be a path relative to source root"
+            )
+        resolved_script = custom_script
+        if not resolved_script.is_file():
+            fallback = pathlib.Path("src/script/custom") / custom_script
+            if fallback.is_file():
+                resolved_script = fallback
+        if not resolved_script.is_file():
+            raise FileNotFoundError(
+                f"custom image script not found: {custom_script}"
+            )
+        ctx.cli.custom_image_script = str(resolved_script)
     cmd = [
         ctx.container_engine,
         "build",
@@ -747,6 +772,10 @@ def build_container(ctx):
         cmd.append(f"--build-arg=WITH_CRIMSON={with_crimson}")
     if ctx.cli.build_args:
         cmd.extend([f"--build-arg={v}" for v in ctx.cli.build_args])
+    if ctx.cli.custom_image_script:
+        cmd.append(
+            f"--build-arg=CUSTOM_IMAGE_SCRIPT={ctx.cli.custom_image_script}"
+        )
     cmd += ["-f", ctx.cli.containerfile, ctx.cli.containerdir]
     with ctx.user_command():
         _run(cmd, check=True, ctx=ctx)
@@ -1242,6 +1271,13 @@ def parse_cli(build_step_names):
         help=(
             "Extra argument to pass to container image build."
             " Can be used to override default build image behavior."
+        ),
+    )
+    g_image.add_argument(
+        "--custom-image-script",
+        help=(
+            "Run this script while building the container image. "
+            "Path must be relative to source root and included in build context."
         ),
     )
     g_image.add_argument(
