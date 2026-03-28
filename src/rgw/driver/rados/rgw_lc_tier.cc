@@ -405,6 +405,19 @@ int rgw_cloud_tier_get_object(RGWLCCloudTierCtx& tier_ctx, bool head,
     }
   }
 
+  /*
+   * The HTTP ETag header value is a quoted-string per RFC 7232.
+   * Strip the surrounding quotes so we do not double quote them.
+   */
+  etag = rgw_string_unquote(etag);
+
+  if (auto i = attrs.find(RGW_ATTR_ETAG); i != attrs.end()) {
+    const string unquoted = rgw_string_unquote(i->second.to_str());
+    bufferlist bl;
+    bl.append(unquoted);
+    i->second = std::move(bl);
+  }
+
   ldpp_dout(tier_ctx.dpp, 20) << __func__ << "(): Successfully fetched object from cloud bucket:" << dest_bucket << ", object: " << target_obj_name << dendl;
   return ret;
 }
