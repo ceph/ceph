@@ -3112,7 +3112,9 @@ int POSIXObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
     return ret;
   }
 
-  return 0;
+  ret = get_obj_attrs(y, dpp);
+
+  return ret;
 }
 
 int POSIXObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
@@ -3815,14 +3817,33 @@ int POSIXMultipartUpload::load(const DoutPrefixProvider *dpp, bool create)
 
 std::unique_ptr<rgw::sal::Object> POSIXMultipartUpload::get_meta_obj()
 {
+  std::unique_ptr<rgw::sal::Object> meta_obj{nullptr};
+
   load(nullptr);
+
   if (!shadow) {
     // This upload doesn't exist, but the API doesn't check this until it calls
     // on the *serializer*. So make a fake object in the parent bucket that
     // doesn't exist.  Put it in the MP namespace just in case.
-    return bucket->get_object(rgw_obj_key(get_meta(), std::string(), mp_ns));
+    meta_obj = bucket->get_object(rgw_obj_key(get_meta(), std::string(), mp_ns));
   }
-  return shadow->get_object(rgw_obj_key(get_meta(), std::string()));
+  meta_obj = shadow->get_object(rgw_obj_key(get_meta(), std::string()));
+
+  auto posix_meta_obj = static_cast<POSIXObject*>(meta_obj.get());
+  rgw::sal::Attrs attrs;
+  if (obj_retention) {
+    buffer::list obj_retention_bl;
+    obj_retention->encode(obj_retention_bl);
+    attrs[RGW_ATTR_OBJECT_RETENTION] = std::move(obj_retention_bl);
+  }
+  if (obj_legal_hold) {
+    buffer::list obj_legal_hold_bl;
+    obj_legal_hold->encode(obj_legal_hold_bl);
+    attrs[RGW_ATTR_OBJECT_LEGAL_HOLD] = std::move(obj_legal_hold_bl);
+  }
+  posix_meta_obj->set_attrs(attrs);
+
+  return meta_obj;
 }
 
 int POSIXMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
@@ -3850,6 +3871,14 @@ int POSIXMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
   }
 
   mp_obj.upload_info.cksum_type = cksum_type;
+  if (obj_retention) {
+    mp_obj.upload_info.obj_retention_exist = true;
+    mp_obj.upload_info.obj_retention = *obj_retention;
+  }
+  if (obj_legal_hold) {
+    mp_obj.upload_info.obj_legal_hold_exist = true;
+    mp_obj.upload_info.obj_legal_hold = *obj_legal_hold;
+  }
   mp_obj.upload_info.dest_placement = dest_placement;
   mp_obj.owner = owner;
 
@@ -4137,6 +4166,12 @@ int POSIXMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
       }
     }
     *rule = &mp_obj.upload_info.dest_placement;
+    if (mp_obj.upload_info.obj_retention_exist) {
+      obj_retention = mp_obj.upload_info.obj_retention;
+    }
+    if (mp_obj.upload_info.obj_legal_hold_exist) {
+      obj_legal_hold = mp_obj.upload_info.obj_legal_hold;
+    }
   }
 
   return 0;
