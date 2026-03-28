@@ -91,19 +91,19 @@ export class CephfsSnapshotscheduleListComponent
       {
         name: this.actionLabels.CREATE,
         permission: 'create',
-        icon: Icons.add,
+        icon: 'add',
         click: () => this.openModal(false)
       },
       {
         name: this.actionLabels.EDIT,
         permission: 'update',
-        icon: Icons.edit,
+        icon: 'edit',
         click: () => this.openModal(true)
       },
       {
         name: this.actionLabels.DELETE,
         permission: 'delete',
-        icon: Icons.trash,
+        icon: 'trash',
         click: () => this.deleteSnapshotSchedule()
       }
     ];
@@ -172,7 +172,7 @@ export class CephfsSnapshotscheduleListComponent
       {
         name: isActive ? this.actionLabels.DEACTIVATE : this.actionLabels.ACTIVATE,
         permission: 'update',
-        icon: isActive ? Icons.warning : Icons.success,
+        icon: isActive ? 'warning' : 'success',
         click: () =>
           isActive ? this.deactivateSnapshotSchedule() : this.activateSnapshotSchedule()
       }

@@ -139,6 +139,18 @@ Overflow menu
   box-shadow: none;
 }
 
+// Align action icons to the trailing edge of the overflow menu option, per
+// Carbon's menu anatomy guidance (https://carbondesignsystem.com/components/menu/usage/#anatomy).
+.cds--overflow-menu-options__option-content {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.cds--overflow-menu-options__option-content > .action-icon {
+  margin-inline-start: auto;
+}
+
 /******************************************
 Forms
 ******************************************/

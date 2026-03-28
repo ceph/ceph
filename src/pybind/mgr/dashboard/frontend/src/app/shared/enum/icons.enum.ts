@@ -12,12 +12,12 @@ export enum Icons {
   trash = 'trash-can', // Move to trash
   lock = 'locked', // Protect
   unlock = 'unlocked', // Unprotect
-  clone = 'fa fa-clone', // clone
-  undo = 'fa fa-undo', // Rollback, Restore
+  clone = 'replicate', // clone
+  undo = 'undo', // Rollback, Restore
   search = 'search', // Search
-  start = 'fa fa-play', // Enable
-  stop = 'fa fa-stop', // Disable
-  analyse = 'fa fa-stethoscope', // Scrub
+  start = 'play--filled', // Enable
+  stop = 'stop--filled', // Disable
+  analyse = 'stethoscope', // Scrub
   deepCheck = 'settings', // Deep Scrub, Setting, Configuration
   cogs = 'fa fa-cogs', // Multiple Settings, Configurations
   reweight = 'scales', // Reweight
@@ -25,7 +25,7 @@ export enum Icons {
   left = 'arrow--left', // Mark out
   right = 'arrow--right', // Mark in
   down = 'arrow--down', // Mark Down
-  erase = 'fa fa-eraser', // Purge  color: bd.$white;
+  erase = 'erase', // Purge
   expand = 'maximize', // Expand cluster
   user = 'user', // User, Initiators
   users = 'user--multiple', // Users, Groups
@@ -52,34 +52,36 @@ export enum Icons {
   server = 'fa fa-server', // Server, Portal
   filter = 'filter', // Filter
   lineChart = 'analytics', // Line chart
-  signOut = 'fa fa-sign-out', // Sign Out
+  signOut = 'logout', // Sign Out
   circle = 'dot-mark', // Circle
   bell = 'notification', // Notification
   mute = 'notification--off', // Mute or silence
   leftArrow = 'caret--left', // Left facing angle
   rightArrow = 'caret--right', // Right facing angle
   downArrow = 'caret--down',
-  flag = 'fa fa-flag', // OSD configuration
+  flag = 'flag', // OSD configuration
   clearFilters = 'close--filled', // Clear filters, solid x
   download = 'download', // Download
-  upload = 'fa fa-upload', // Upload
+  upload = 'upload', // Upload
   code = 'code', // JSON file
   document = 'document', // Text file
   wrench = 'tools', // Configuration Error
-  enter = 'fa fa-sign-in', // Enter
-  exit = 'fa fa-sign-out', // Exit
-  restart = 'fa fa-history', // Restart
+  enter = 'login', // Enter
+  exit = 'logout', // Exit
+  restart = 'restart', // Restart
   deploy = 'cube', // Deploy, Redeploy
   cubes = 'fa fa-cubes', // Object storage
   sitemap = 'fa fa-sitemap', // Cluster, network, connections
   database = 'fa fa-database', // Database, Block storage
-  bars = 'fa fa-bars', // Stack, bars
+  bars = 'list', // Stack, bars
   navicon = 'fa fa-navicon', // Navigation
   areaChart = 'fa fa-area-chart', // Area Chart, dashboard
-  eye = 'fa fa-eye', // Observability
+  eye = 'view', // Observability
   calendar = 'fa fa-calendar',
   externalUrl = 'fa fa-external-link', // links to external page
-  nfsExport = 'fa fa-server', // NFS export
+  nfsExport = 'export', // NFS export
+  documentAdd = 'document--add', // Create Bootstrap Token
+  documentImport = 'document--import', // Import Bootstrap Token
   launch = 'launch',
   parentChild = 'parent-child',
   dataTable = 'data-table',
@@ -170,7 +172,40 @@ export const ICON_TYPE = {
   arrowUpRight: ' arrow--up-right',
   inProgress: 'in-progress',
   arrowDown: 'arrow--down',
-  destroy: 'close'
+  destroy: 'close',
+  trash: 'trash',
+  lock: 'lock',
+  unlock: 'unlock',
+  clone: 'clone',
+  undo: 'undo',
+  start: 'start',
+  stop: 'stop',
+  analyse: 'analyse',
+  deepCheck: 'deepCheck',
+  reweight: 'reweight',
+  left: 'left',
+  right: 'right',
+  down: 'down',
+  erase: 'erase',
+  expand: 'expand',
+  flatten: 'flatten',
+  refresh: 'refresh',
+  exchange: 'exchange',
+  show: 'show',
+  clearFilters: 'clearFilters',
+  download: 'download',
+  upload: 'upload',
+  wrench: 'wrench',
+  enter: 'enter',
+  exit: 'exit',
+  signOut: 'signOut',
+  flag: 'flag',
+  restart: 'restart',
+  eye: 'eye',
+  bars: 'bars',
+  nfsExport: 'nfsExport',
+  documentAdd: 'documentAdd',
+  documentImport: 'documentImport'
 } as const;
 
 export const EMPTY_STATE_IMAGE = {

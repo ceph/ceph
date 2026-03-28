@@ -84,7 +84,7 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
         canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection,
         disable: (selection: CdTableSelection) =>
           !selection.hasSingleSelection || selection.first().cdExecuting,
-        icon: Icons.add,
+        icon: 'add',
         routerLink: () =>
           '/monitoring' + this.urlBuilder.getCreateFrom(this.selection.first().fingerprint),
         name: $localize`Create Silence`

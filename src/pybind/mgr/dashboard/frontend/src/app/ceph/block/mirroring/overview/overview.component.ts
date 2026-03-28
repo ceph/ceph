@@ -48,7 +48,7 @@ export class OverviewComponent implements OnInit, OnDestroy {
 
     const createBootstrapAction: CdTableAction = {
       permission: 'update',
-      icon: 'document--add',
+      icon: 'documentAdd',
       click: () => this.createBootstrapModal(),
       name: $localize`Create Bootstrap Token`,
       canBePrimary: () => true,
@@ -57,7 +57,7 @@ export class OverviewComponent implements OnInit, OnDestroy {
     };
     const importBootstrapAction: CdTableAction = {
       permission: 'update',
-      icon: 'document--import',
+      icon: 'documentImport',
       click: () => this.importBootstrapModal(),
       name: $localize`Import Bootstrap Token`,
       disable: () => false,

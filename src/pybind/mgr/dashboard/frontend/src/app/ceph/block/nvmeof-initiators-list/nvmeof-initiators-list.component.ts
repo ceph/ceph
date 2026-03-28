@@ -4,7 +4,6 @@ import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -90,7 +89,7 @@ export class NvmeofInitiatorsListComponent implements OnInit {
       {
         name: this.actionLabels.ADD,
         permission: 'create',
-        icon: Icons.add,
+        icon: 'add',
         click: () =>
           this.router.navigate([{ outlets: { modal: [URLVerbs.ADD, 'initiator'] } }], {
             queryParams: { group: this.group },
@@ -102,7 +101,7 @@ export class NvmeofInitiatorsListComponent implements OnInit {
       {
         name: $localize`Edit host key`,
         permission: 'update',
-        icon: Icons.edit,
+        icon: 'edit',
         click: () => this.editHostKeyModal(),
         disable: () => this.selection.selected.length !== 1,
         canBePrimary: (selection: CdTableSelection) => selection.selected.length === 1
@@ -110,7 +109,7 @@ export class NvmeofInitiatorsListComponent implements OnInit {
       {
         name: this.actionLabels.REMOVE,
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: 'destroy',
         click: () => this.removeInitiatorModal(),
         disable: () => !this.selection.hasSelection,
         canBePrimary: (selection: CdTableSelection) => selection.hasSelection

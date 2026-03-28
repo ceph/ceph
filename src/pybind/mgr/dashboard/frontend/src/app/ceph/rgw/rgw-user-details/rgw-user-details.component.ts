@@ -71,7 +71,7 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
         name: $localize`Show`,
         permission: 'read',
         click: () => this.showKeyModal(),
-        icon: Icons.show
+        icon: 'show'
       }
     ];
 

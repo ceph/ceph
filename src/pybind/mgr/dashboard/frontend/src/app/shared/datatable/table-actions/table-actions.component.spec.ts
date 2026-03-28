@@ -29,18 +29,18 @@ describe('TableActionsComponent', () => {
   beforeEach(() => {
     addAction = {
       permission: 'create',
-      icon: 'fa-plus',
+      icon: 'add',
       canBePrimary: (selection: CdTableSelection) => !selection.hasSelection,
       name: 'Add'
     };
     editAction = {
       permission: 'update',
-      icon: 'fa-pencil',
+      icon: 'edit',
       name: 'Edit'
     };
     copyAction = {
       permission: 'create',
-      icon: 'fa-copy',
+      icon: 'copy',
       canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection,
       disable: (selection: CdTableSelection) =>
         !selection.hasSingleSelection || selection.first().cdExecuting,
@@ -48,7 +48,7 @@ describe('TableActionsComponent', () => {
     };
     deleteAction = {
       permission: 'delete',
-      icon: 'fa-times',
+      icon: 'destroy',
       canBePrimary: (selection: CdTableSelection) => selection.hasSelection,
       disable: (selection: CdTableSelection) =>
         !selection.hasSelection || selection.first().cdExecuting,
@@ -56,14 +56,14 @@ describe('TableActionsComponent', () => {
     };
     protectAction = {
       permission: 'update',
-      icon: 'fa-lock',
+      icon: 'lock',
       canBePrimary: () => false,
       visible: (selection: CdTableSelection) => selection.hasSingleSelection,
       name: 'Protect'
     };
     unprotectAction = {
       permission: 'update',
-      icon: 'fa-unlock',
+      icon: 'unlock',
       canBePrimary: () => false,
       visible: (selection: CdTableSelection) => !selection.hasSingleSelection,
       name: 'Unprotect'
@@ -208,7 +208,7 @@ describe('TableActionsComponent', () => {
     it('should return a description if disable method returns a string', () => {
       const deleteWithDescAction: CdTableAction = {
         permission: 'delete',
-        icon: 'fa-times',
+        icon: 'destroy',
         canBePrimary: (selection: CdTableSelection) => selection.hasSelection,
         disable: () => {
           return 'Delete action disabled description';
@@ -229,7 +229,7 @@ describe('TableActionsComponent', () => {
   describe('useClickAction', () => {
     const editClickAction: CdTableAction = {
       permission: 'update',
-      icon: 'fa-pencil',
+      icon: 'edit',
       name: 'Edit',
       click: () => {
         return 'Edit action click';

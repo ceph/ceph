@@ -1,3 +1,4 @@
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { CdTableSelection } from './cd-table-selection';
 
 export class CdTableAction {
@@ -16,8 +17,8 @@ export class CdTableAction {
   // The name of the action
   name: string;
 
-  // The font awesome icon that will be used
-  icon: string;
+  // The icon type key used with cd-icon component
+  icon: keyof typeof ICON_TYPE;
 
   // For adding the default tooltip
   title?: string;

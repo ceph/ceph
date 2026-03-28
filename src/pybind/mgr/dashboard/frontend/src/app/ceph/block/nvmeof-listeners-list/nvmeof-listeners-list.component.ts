@@ -4,7 +4,7 @@ import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-import { Icons, EMPTY_STATE_IMAGE } from '~/app/shared/enum/icons.enum';
+import { EMPTY_STATE_IMAGE } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -88,7 +88,7 @@ export class NvmeofListenersListComponent implements OnInit {
       {
         name: this.actionLabels.ADD,
         permission: 'create',
-        icon: Icons.add,
+        icon: 'add',
         click: () =>
           this.router.navigate([{ outlets: { modal: [URLVerbs.ADD, 'listener'] } }], {
             queryParams: { group: this.group },
@@ -101,7 +101,7 @@ export class NvmeofListenersListComponent implements OnInit {
       {
         name: this.actionLabels.DELETE,
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: 'destroy',
         click: () => this.deleteListenerModal()
       }
     ];

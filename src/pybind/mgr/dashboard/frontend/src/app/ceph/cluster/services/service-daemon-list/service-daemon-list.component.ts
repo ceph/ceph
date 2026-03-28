@@ -117,28 +117,28 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
     this.tableActions = [
       {
         permission: 'update',
-        icon: Icons.start,
+        icon: 'start',
         click: () => this.daemonAction('start'),
         name: this.actionLabels.START,
         disable: () => this.actionDisabled('start')
       },
       {
         permission: 'update',
-        icon: Icons.stop,
+        icon: 'stop',
         click: () => this.daemonAction('stop'),
         name: this.actionLabels.STOP,
         disable: () => this.actionDisabled('stop')
       },
       {
         permission: 'update',
-        icon: Icons.restart,
+        icon: 'restart',
         click: () => this.daemonAction('restart'),
         name: this.actionLabels.RESTART,
         disable: () => this.actionDisabled('restart')
       },
       {
         permission: 'update',
-        icon: Icons.deploy,
+        icon: 'deploy',
         click: () => this.daemonAction('redeploy'),
         name: this.actionLabels.REDEPLOY,
         disable: () => this.actionDisabled('redeploy')

@@ -96,7 +96,7 @@ export class InventoryDevicesComponent implements OnInit, OnDestroy {
     this.tableActions = [
       {
         permission: 'update',
-        icon: Icons.show,
+        icon: 'show',
         click: () => this.identifyDevice(),
         name: $localize`Identify`,
         disable: (selection: CdTableSelection) => this.getDisable('identify', selection),

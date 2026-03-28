@@ -69,28 +69,28 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
     this.tableActions = [
       {
         permission: 'create',
-        icon: Icons.add,
+        icon: 'add',
         name: this.actionLabels.CONNECT,
         disable: (selection: CdTableSelection) => this.getDisable('Connect', selection),
         routerLink: () => this.urlBuilder.getConnect()
       },
       {
         permission: 'update',
-        icon: Icons.edit,
+        icon: 'edit',
         name: this.actionLabels.EDIT,
         disable: (selection: CdTableSelection) => this.getDisable('edit', selection),
         routerLink: () => this.urlBuilder.getEdit(this.selection.first().name)
       },
       {
         permission: 'update',
-        icon: Icons.refresh,
+        icon: 'refresh',
         name: this.actionLabels.RECONNECT,
         disable: (selection: CdTableSelection) => this.getDisable('reconnect', selection),
         routerLink: () => this.urlBuilder.getReconnect(this.selection.first().name)
       },
       {
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: 'destroy',
         name: this.actionLabels.DISCONNECT,
         disable: (selection: CdTableSelection) => this.getDisable('disconnect', selection),
         click: () => this.openDeleteClusterModal()

@@ -11,7 +11,6 @@ import { SmbService } from '~/app/shared/api/smb.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
-import { Icons } from '~/app/shared/enum/icons.enum';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { FinishedTask } from '~/app/shared/models/finished-task';
@@ -119,14 +118,14 @@ export class SmbShareListComponent implements OnInit {
       {
         name: `${this.actionLabels.CREATE}`,
         permission: 'create',
-        icon: Icons.add,
+        icon: 'add',
         routerLink: () => [`/${SHARE_PATH}/${URLVerbs.CREATE}`, this.clusterId],
         canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection
       },
       {
         name: this.actionLabels.EDIT,
         permission: 'update',
-        icon: Icons.edit,
+        icon: 'edit',
         routerLink: () => [
           `/${SHARE_PATH}/${URLVerbs.EDIT}`,
           this.clusterId,
@@ -135,7 +134,7 @@ export class SmbShareListComponent implements OnInit {
       },
       {
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: 'destroy',
         click: () => this.deleteShareModal(),
         name: this.actionLabels.DELETE
       }

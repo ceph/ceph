@@ -141,20 +141,20 @@ export class RgwUserListComponent extends ListWithDetails implements OnInit {
       this.selection.first() && `${encodeURIComponent(this.selection.first().uid)}`;
     const addAction: CdTableAction = {
       permission: 'create',
-      icon: Icons.add,
+      icon: 'add',
       routerLink: () => this.urlBuilder.getCreate(),
       name: this.actionLabels.CREATE,
       canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
     };
     const editAction: CdTableAction = {
       permission: 'update',
-      icon: Icons.edit,
+      icon: 'edit',
       routerLink: () => this.urlBuilder.getEdit(getUserUri()),
       name: this.actionLabels.EDIT
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
-      icon: Icons.destroy,
+      icon: 'destroy',
       click: () => this.deleteAction(),
       disable: () => !this.selection.hasSelection,
       name: this.actionLabels.DELETE
