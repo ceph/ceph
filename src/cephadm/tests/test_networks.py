@@ -262,6 +262,21 @@ class TestCommandListNetworks:
     def test_parse_ipv6_route(self, test_routes, test_ips, expected):
         assert _parse_ipv6_route(test_routes, test_ips) == expected
 
+    def test_parse_ipv6_route_allow_lo(self):
+        test_routes = dedent("""
+        ::1 dev lo proto kernel metric 256 pref medium
+        fe80::/64 dev ceph-brx proto kernel metric 256 pref medium
+        """)
+        test_ips = dedent("""
+        1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 state UNKNOWN qlen 1000
+            inet6 ::1/128 scope host
+               valid_lft forever preferred_lft forever
+        """)
+        expected = {
+            '::1/128': {'lo': {'::1'}}
+        }
+        assert _parse_ipv6_route(test_routes, test_ips, allow_lo=True) == expected
+
     @mock.patch('cephadmlib.net_utils.read_file')
     def test_get_ipv6_addr(self, _read_file):
         proc_net_if_net6 = """fe80000000000000505400fffe347999 02 40 20 80     eth0

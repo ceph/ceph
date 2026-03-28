@@ -4638,6 +4638,11 @@ def _get_parser():
         action='store_true',
         default=False,
         help='Do not run containers with --cgroups=split (currently only relevant when using podman)')
+    parser.add_argument(
+        '--allow-ipv6-lo-routes',
+        action='store_true',
+        default=False,
+        help='Allow IPv6 routes on loopback interface (lo) in network listings. Useful for BGP setups.')
 
     subparsers = parser.add_subparsers(help='sub-command')
 
