@@ -548,3 +548,36 @@ class IngressService(CephService):
             logger.debug(f'Placement has changed for {spec.service_name()} from {hosts} -> {current_hosts}')
             return True
         return False
+
+    def choose_next_action(
+        self,
+        scheduled_action: utils.Action,
+        daemon_type: Optional[str],
+        spec: Optional[ServiceSpec],
+        curr_deps: List[str],
+        last_deps: List[str],
+    ) -> utils.Action:
+        """Given the scheduled_action, service spec, daemon_type, and
+        current and previous dependency lists return the next action that
+        this service would prefer cephadm take.
+        """
+        action = super().choose_next_action(
+            scheduled_action, daemon_type, spec, curr_deps, last_deps
+        )
+        if (
+            action is not utils.Action.REDEPLOY
+            and daemon_type == 'haproxy'
+            and spec
+            and hasattr(spec, 'backend_service')
+        ):
+            backend_spec = self.mgr.spec_store[spec.backend_service].spec
+            if (
+                backend_spec.service_type == 'nfs'
+                and self.has_placement_changed(last_deps, spec)
+            ):
+                logger.debug(
+                    'Redeploy wanted %s: placement has changed',
+                    spec.service_name(),
+                )
+                action = utils.Action.REDEPLOY
+        return action

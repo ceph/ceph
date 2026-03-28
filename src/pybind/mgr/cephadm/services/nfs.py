@@ -435,3 +435,32 @@ class NFSService(CephService):
             if not monitoring_addr:
                 logger.debug(f"No IP address found in the network {spec.monitoring_networks} on host {host}.")
         return monitoring_addr, monitoring_port
+
+    def choose_next_action(
+        self,
+        scheduled_action: utils.Action,
+        daemon_type: Optional[str],
+        spec: Optional[ServiceSpec],
+        curr_deps: List[str],
+        last_deps: List[str],
+    ) -> utils.Action:
+        """Given the scheduled_action, service spec, daemon_type, and
+        current and previous dependency lists return the next action that
+        this service would prefer cephadm take.
+        """
+        if curr_deps == last_deps:
+            return scheduled_action
+        sym_diff = set(curr_deps).symmetric_difference(last_deps)
+        logger.info(
+            'Reconfigure wanted %s: deps %r -> %r (diff %r)',
+            spec.service_name() if spec else daemon_type,
+            last_deps,
+            curr_deps,
+            sym_diff,
+        )
+        action = utils.Action.RECONFIG
+        # check what has changed, based on that decide action
+        only_kmip_updated = all(s.startswith('kmip') for s in sym_diff)
+        if not only_kmip_updated:
+            action = utils.Action.REDEPLOY
+        return action

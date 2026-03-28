@@ -1139,51 +1139,28 @@ class CephadmServe:
             if dd.daemon_type in REQUIRES_POST_ACTIONS:
                 daemons_post[dd.daemon_type].append(dd)
 
-            if service_registry.get_service(daemon_type_to_service(dd.daemon_type)).get_active_daemon(
+            svc_type = daemon_type_to_service(dd.daemon_type)
+            svc_obj = service_registry.get_service(svc_type)
+            if svc_obj.get_active_daemon(
                self.mgr.cache.get_daemons_by_service(dd.service_name())).daemon_id == dd.daemon_id:
                 dd.is_active = True
             else:
                 dd.is_active = False
 
-            deps = self.mgr._calc_daemon_deps(spec, dd.daemon_type, dd.daemon_id)
+            deps = svc_obj.sorted_dependencies(self.mgr, spec, dd.daemon_type)
             last_deps, last_config = self.mgr.cache.get_daemon_last_config_deps(
                 dd.hostname, dd.name())
             if last_deps is None:
                 last_deps = []
-            action = self.mgr.cache.get_scheduled_daemon_action(dd.hostname, dd.name())
+            action = scheduled_action = (
+                self.mgr.cache.get_scheduled_daemon_action(
+                    dd.hostname, dd.name()
+                )
+            )
             if not last_config:
                 self.log.info('Reconfiguring %s (unknown last config time)...' % (
                     dd.name()))
                 action = 'reconfig'
-            elif last_deps != deps:
-                sym_diff = set(deps).symmetric_difference(last_deps)
-                self.log.info(f'Reconfiguring {dd.name()} deps {last_deps} -> {deps} (diff {sym_diff})')
-                action = 'reconfig'
-                # we need only redeploy if secure_monitoring_stack or mgmt-gateway value has changed:
-                # TODO(redo): check if we should just go always with redeploy (it's fast enough)
-                if dd.daemon_type in ['prometheus', 'node-exporter', 'alertmanager', 'ceph-exporter']:
-                    diff = list(set(last_deps).symmetric_difference(set(deps)))
-                    REDEPLOY_TRIGGERS = ['secure_monitoring_stack', 'mgmt-gateway']
-                    if any(svc in e for e in diff for svc in REDEPLOY_TRIGGERS):
-                        action = 'redeploy'
-                elif dd.daemon_type == 'jaeger-agent':
-                    # changes to jaeger-agent deps affect the way the unit.run for
-                    # the daemon is written, which we rewrite on redeploy, but not
-                    # on reconfig.
-                    action = 'redeploy'
-                elif dd.daemon_type == 'nfs':
-                    # check what has changed, based on that decide action
-                    only_kmip_updated = all(s.startswith('kmip') for s in list(sym_diff))
-                    if not only_kmip_updated:
-                        action = 'redeploy'
-            elif dd.daemon_type == 'haproxy':
-                if spec and hasattr(spec, 'backend_service'):
-                    backend_spec = self.mgr.spec_store[spec.backend_service].spec
-                    if backend_spec.service_type == 'nfs':
-                        svc = service_registry.get_service('ingress')
-                        if svc.has_placement_changed(deps, spec):
-                            self.log.debug(f'Redeploy {spec.service_name()} as placement has changed')
-                            action = 'redeploy'
             elif spec is not None and hasattr(spec, 'extra_container_args') and dd.extra_container_args != spec.extra_container_args:
                 self.log.debug(
                     f'{dd.name()} container cli args {dd.extra_container_args} -> {spec.extra_container_args}')
@@ -1196,19 +1173,36 @@ class CephadmServe:
                     f'{dd.name()} daemon entrypoint args {dd.extra_entrypoint_args} -> {spec.extra_entrypoint_args}')
                 dd.extra_entrypoint_args = spec.extra_entrypoint_args
                 action = 'redeploy'
-            elif self.mgr.last_monmap and \
-                    self.mgr.last_monmap > last_config and \
-                    dd.daemon_type in CEPH_TYPES:
-                self.log.info('Reconfiguring %s (monmap changed)...' % dd.name())
-                action = 'reconfig'
-            elif self.mgr.extra_ceph_conf_is_newer(last_config) and \
-                    dd.daemon_type in CEPH_TYPES:
-                self.log.info('Reconfiguring %s (extra config changed)...' % dd.name())
-                action = 'reconfig'
+            else:
+                # method uses new action enum type
+                _scheduled_action = utils.Action.create(scheduled_action)
+                _action = svc_obj.choose_next_action(
+                    _scheduled_action,
+                    dd.daemon_type,
+                    spec,
+                    curr_deps=deps,
+                    last_deps=last_deps,
+                )
+                if _action is not _scheduled_action:
+                    self.log.info(
+                        (
+                            'Daemon %s chose new action %s (was %s)'
+                            ' (deps: %r, last_deps: %r)'
+                        ),
+                        dd.name(),
+                        _action,
+                        _scheduled_action,
+                        deps,
+                        last_deps,
+                    )
+                    # convert back to legacy str type
+                    action = str(_action)
+            action = _ceph_service_next_action(
+                action, dd.daemon_type, dd.name(), self.mgr, last_config
+            )
 
             if action:
-                if self.mgr.cache.get_scheduled_daemon_action(dd.hostname, dd.name()) == 'redeploy' \
-                        and action == 'reconfig':
+                if scheduled_action == 'redeploy' and action == 'reconfig':
                     action = 'redeploy'
                 try:
                     daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(dd)
@@ -1889,3 +1883,26 @@ def _host_selector(svc: Any) -> Optional[HostSelector]:
     if hasattr(svc, 'filter_host_candidates'):
         return cast(HostSelector, svc)
     return None
+
+
+def _ceph_service_next_action(
+    action: Optional[str],
+    daemon_type: str,
+    name: str,
+    mgr: 'CephadmOrchestrator',
+    last_config: Optional[datetime.datetime],
+) -> Optional[str]:
+    if daemon_type not in CEPH_TYPES:
+        return action
+    if last_config is None:
+        return action
+    if action in ['reconfig', 'redeploy']:
+        return action
+
+    if mgr.last_monmap and mgr.last_monmap > last_config:
+        logger.info('Reconfiguring %s (monmap changed)...', name)
+        return 'reconfig'
+    if mgr.extra_ceph_conf_is_newer(last_config):
+        logger.info('Reconfiguring %s (extra config changed)...', name)
+        return 'reconfig'
+    return action
