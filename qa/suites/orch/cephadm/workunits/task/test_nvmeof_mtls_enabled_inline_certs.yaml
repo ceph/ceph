@@ -1,0 +1,142 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - CEPHADM_FAILED_DAEMON
+    log-only-match:
+      - CEPHADM_
+roles:
+- - host.a
+  - mon.a
+  - mgr.a
+  - osd.0
+- - host.b
+  - mon.b
+  - mgr.b
+  - osd.1
+- - host.c
+  - mon.c
+  - osd.2
+
+tasks:
+- install:
+- cephadm:
+
+# Deploy nvmeof using INLINE embedded certs (server/client + root CA)
+- cephadm.shell:
+    host.c:
+      - |
+        set -ex
+
+        DEPLOY_HOST=${HOSTNAME}
+
+        # 1) Create pool used by nvmeof
+        ceph osd pool create nvmeof 64 64 replicated
+        ceph osd pool application enable nvmeof rbd
+
+        # 2) Generate a minimal CA + server/client certs (inline cert source)
+        mkdir -p /tmp/nvmeof-inline-certs
+        cd /tmp/nvmeof-inline-certs
+
+        # Get the IP address clients will use: ask Ceph for DEPLOY_HOST addr
+        SERVER_IP="$(ceph orch host ls -f json | jq -r --arg H "$DEPLOY_HOST" '.[] | select(.hostname==$H) | .addr')"
+        if [ -z "$SERVER_IP" ] || [ "$SERVER_IP" = "null" ]; then
+          echo "ERROR: Could not resolve addr for $DEPLOY_HOST from 'ceph orch host ls'."
+          ceph orch host ls -f json-pretty || true
+          exit 1
+        fi
+        echo "Using SERVER_IP=$SERVER_IP for certificate SAN (host=$DEPLOY_HOST)"
+
+        # Root CA
+        openssl req -x509 -newkey rsa:4096 -nodes \
+          -keyout ca.key -out ca.crt -days 30 -sha256 \
+          -subj "/CN=nvmeof-test-root-ca"
+
+        # Server key + CSR
+        # CN is not used for modern verification; SANs are what matters.
+        openssl req -newkey rsa:4096 -nodes \
+          -keyout server.key -out server.csr \
+          -subj "/CN=${DEPLOY_HOST}"
+
+        # Server cert with SANs (host name + IP used by clients)
+        cat > server.ext <<EOF
+basicConstraints=CA:FALSE
+keyUsage=digitalSignature,keyEncipherment
+extendedKeyUsage=serverAuth
+subjectAltName=DNS:${DEPLOY_HOST},IP:${SERVER_IP}
+EOF
+
+        openssl x509 -req -in server.csr \
+          -CA ca.crt -CAkey ca.key -CAcreateserial \
+          -out server.crt -days 30 -sha256 \
+          -extfile server.ext
+
+        # Client key + CSR
+        openssl req -newkey rsa:4096 -nodes \
+          -keyout client.key -out client.csr \
+          -subj "/CN=nvmeof-test-client"
+
+        # Client cert
+        cat > client.ext <<EOF
+basicConstraints=CA:FALSE
+keyUsage=digitalSignature,keyEncipherment
+extendedKeyUsage=clientAuth
+EOF
+
+        openssl x509 -req -in client.csr \
+          -CA ca.crt -CAkey ca.key -CAcreateserial \
+          -out client.crt -days 30 -sha256 \
+          -extfile client.ext
+
+        # Show SANs (helps when debugging name mismatch)
+        openssl x509 -in server.crt -noout -text | awk '/Subject Alternative Name/{flag=1;next}/X509v3/{flag=0}flag' || true
+
+        # 3) Write nvmeof spec and embed cert material (certificate_source: inline)
+        cat <<'EOT' > /tmp/nvmeof-inline.yaml
+service_type: nvmeof
+service_id: nvmeof2.group
+placement:
+  hosts:
+    - ${HOSTNAME}
+spec:
+  group: group
+  pool: nvmeof
+  ssl: true
+  enable_auth: true
+  certificate_source: inline
+EOT
+
+        echo "  server_key: |" >> /tmp/nvmeof-inline.yaml
+        while read -r LINE; do echo "$LINE" | sed -e "s/^/    /"; done < server.key >> /tmp/nvmeof-inline.yaml
+        echo "  server_cert: |" >> /tmp/nvmeof-inline.yaml
+        while read -r LINE; do echo "$LINE" | sed -e "s/^/    /"; done < server.crt >> /tmp/nvmeof-inline.yaml
+
+        echo "  client_key: |" >> /tmp/nvmeof-inline.yaml
+        while read -r LINE; do echo "$LINE" | sed -e "s/^/    /"; done < client.key >> /tmp/nvmeof-inline.yaml
+        echo "  client_cert: |" >> /tmp/nvmeof-inline.yaml
+        while read -r LINE; do echo "$LINE" | sed -e "s/^/    /"; done < client.crt >> /tmp/nvmeof-inline.yaml
+
+        echo "  root_ca_cert: |" >> /tmp/nvmeof-inline.yaml
+        while read -r LINE; do echo "$LINE" | sed -e "s/^/    /"; done < ca.crt >> /tmp/nvmeof-inline.yaml
+
+        # 4) Apply spec
+        ceph orch apply -i /tmp/nvmeof-inline.yaml
+
+- cephadm.wait_for_service:
+    service: nvmeof.nvmeof2.group
+
+# Basic verification of the CLI path + daemon presence
+- cephadm.shell:
+    host.a:
+      - |
+        set -ex
+
+        echo "=== nvmeof daemons ==="
+        ceph orch ps --daemon-type nvmeof -f json-pretty
+
+        echo "=== test CLI: get nvmeof gateway info (group) ==="
+        ceph nvmeof gateway info group
+
+        echo "=== orch ls (nvmeof) ==="
+        ceph orch ls --service_type nvmeof -f json-pretty
+
+        echo "=== done ==="
