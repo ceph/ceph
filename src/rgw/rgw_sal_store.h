@@ -15,6 +15,8 @@
 
 #pragma once
 
+#include "include/buffer_fwd.h"
+#include "rgw_common.h"
 #include "rgw_sal.h"
 
 /**
@@ -48,7 +50,7 @@ struct RGWObjState {
 
   RGWObjVersionTracker objv_tracker;
 
-  std::map<std::string, ceph::buffer::list> attrset;
+  rgw::sal::Attrs attrset;
 
   RGWObjState() {};
   RGWObjState(const RGWObjState &rhs) : obj(rhs.obj) {
@@ -82,9 +84,9 @@ struct RGWObjState {
   ~RGWObjState() {};
 
   bool get_attr(std::string name, bufferlist& dest) {
-    auto iter = attrset.find(name);
-    if (iter != attrset.end()) {
-      dest = iter->second;
+    ceph::bufferlist* val = attrset.find(name);
+    if (val != nullptr) {
+      dest = *val;
       return true;
     }
     return false;
@@ -322,9 +324,9 @@ class StoreObject : public Object {
     virtual bool get_attr(const std::string& name, bufferlist &dest) override {
       if (!has_attrs())
 	return false;
-      auto iter = state.attrset.find(name);
-      if (iter != state.attrset.end()) {
-        dest = iter->second;
+      ceph::bufferlist* val = state.attrset.find(name);
+      if (val != nullptr) {
+        dest = *val;
         return true;
       }
       return false;
@@ -384,8 +386,9 @@ class StoreObject : public Object {
     virtual int get_torrent_info(const DoutPrefixProvider* dpp,
                                  optional_yield y, bufferlist& bl) override {
       const auto& attrs = get_attrs();
-      if (auto i = attrs.find(RGW_ATTR_TORRENT); i != attrs.end()) {
-        bl = i->second;
+      const auto val =  attrs.find(RGW_ATTR_TORRENT);
+      if (val != nullptr) {
+        bl = *val;
         return 0;
       }
       return -ENOENT;

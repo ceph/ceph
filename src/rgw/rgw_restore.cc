@@ -492,9 +492,9 @@ int Restore::process_restore_entry(RestoreEntry& entry, optional_yield y)
   target_placement.inherit_from(bucket->get_placement_rule());
 
   auto& attrs = obj->get_attrs();
-  auto attr_iter = attrs.find(RGW_ATTR_RESTORE_STATUS);
-  if (attr_iter != attrs.end()) {
-    bufferlist bl = attr_iter->second;
+  auto attr_val = attrs.find(RGW_ATTR_RESTORE_STATUS);
+  if (attr_val != nullptr) {
+    bufferlist bl = *attr_val;
     auto iter = bl.cbegin();
     using ceph::decode;
     decode(restore_status, iter);
@@ -508,9 +508,9 @@ int Restore::process_restore_entry(RestoreEntry& entry, optional_yield y)
     return 0;
   }
 
-  attr_iter = attrs.find(RGW_ATTR_STORAGE_CLASS);
-  if (attr_iter != attrs.end()) {
-    target_placement.storage_class = attr_iter->second.to_str();
+  attr_val = attrs.find(RGW_ATTR_STORAGE_CLASS);
+  if (attr_val != nullptr) {
+    target_placement.storage_class = (*attr_val).to_str();
   } else {
     ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: Attr RGW_ATTR_STORAGE_CLASS not found for object: " << obj->get_key() << dendl;
   }
@@ -554,9 +554,9 @@ int Restore::process_restore_entry(RestoreEntry& entry, optional_yield y)
     entry.status = rgw::sal::RGWRestoreStatus::CloudRestored;
     
     string etag;
-    attr_iter = attrs.find(RGW_ATTR_ETAG);
-    if (attr_iter != attrs.end()) {
-      etag = rgw_bl_str(attr_iter->second);
+    attr_val = attrs.find(RGW_ATTR_ETAG);
+    if (attr_val != nullptr) {
+      etag = rgw_bl_str(*attr_val);
     }
 
     // send notification in case the restore is successfully completed
@@ -770,9 +770,9 @@ int Restore::restore_obj_from_cloud(rgw::sal::Bucket* pbucket,
   if (notify) {
     auto& attrs = pobj->get_attrs();
     string etag;
-    auto attr_iter = attrs.find(RGW_ATTR_ETAG);
-    if (attr_iter != attrs.end()) {
-      etag = rgw_bl_str(attr_iter->second);
+    auto attr_val = attrs.find(RGW_ATTR_ETAG);
+    if (attr_val != nullptr) {
+      etag = rgw_bl_str(*attr_val);
     }
 
     ret = notify->publish_commit(dpp, pobj->get_size(), ceph::real_clock::now(), etag,
@@ -820,14 +820,13 @@ int Restore::list(const DoutPrefixProvider* dpp, RestoreEntry& entry,
           ldpp_dout(dpp, 0) << "ERROR: failed to stat object, returned error: " << cpp_strerror(-ret) << dendl;
           return -ret;
         }
-        for (map<string, bufferlist>::iterator getattriter = obj->get_attrs().begin(); getattriter != obj->get_attrs().end(); ++getattriter) {
-          bufferlist& bl = getattriter->second;
-          if (getattriter->first == RGW_ATTR_RESTORE_STATUS) {
+          auto attr_val = obj->get_attrs().find(RGW_ATTR_RESTORE_STATUS);
+          if (attr_val != nullptr) {
             rgw::sal::RGWRestoreStatus rs;
             {
               using ceph::decode;
               try {
-                decode(rs, bl);
+                decode(rs, *attr_val);
               } catch (const JSONDecoder::err& e) {
                 ldpp_dout(dpp, 0) << "failed to decode JSON input: " << e.what() << dendl;
                 return EINVAL;
@@ -840,7 +839,6 @@ int Restore::list(const DoutPrefixProvider* dpp, RestoreEntry& entry,
             } else {
               f->dump_string(iter->key.name, rgw::sal::rgw_restore_status_dump(rs));
             }
-          }
         }
       }
     }
@@ -874,7 +872,9 @@ int Restore::status(const DoutPrefixProvider* dpp, RestoreEntry& entry,
       return -ret;
     }
     map<string, bufferlist>::iterator iter;
-    for (iter = obj->get_attrs().begin(); iter != obj->get_attrs().end(); ++iter) {
+    // Getting full map from the Attrs class. So assuming the RGW_ATTR here are in the map and not in the array of the class.
+    auto attrsMap = obj->get_attrs().get_full_map();
+    for (iter = attrsMap.begin(); iter != attrsMap.end(); ++iter) {
       bufferlist& bl = iter->second;
       {
         using ceph::decode;

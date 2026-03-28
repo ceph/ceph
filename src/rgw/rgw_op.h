@@ -1190,7 +1190,7 @@ class RGWCreateBucket : public RGWOp {
 
  public:
   void emplace_attr(std::string&& key, buffer::list&& bl) {
-    createparams.attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
+    createparams.attrs.emplace_attr_to_map(std::move(key), std::move(bl)); /* key and bl are r-value refs */
   }
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
@@ -1357,7 +1357,7 @@ public:
   virtual int init_processing(optional_yield y) override;
 
   void emplace_attr(std::string&& key, buffer::list&& bl) {
-    attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
+    attrs.emplace_attr_to_map(std::move(key), std::move(bl)); /* key and bl are r-value refs */
   }
 
   int verify_permission(optional_yield y) override;
@@ -1502,7 +1502,7 @@ public:
   {}
 
   void emplace_attr(std::string&& key, buffer::list&& bl) {
-    attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
+    attrs.emplace_attr_to_map(std::move(key), std::move(bl)); /* key and bl are r-value refs */
   }
 
   int verify_permission(optional_yield y) override;
@@ -1684,7 +1684,7 @@ public:
                                   req_state *s);
 
   void emplace_attr(std::string&& key, buffer::list&& bl) {
-    attrs.emplace(std::move(key), std::move(bl));
+    attrs.emplace_attr_to_map(std::move(key), std::move(bl));
   }
 
   int init_processing(optional_yield y) override;
@@ -2570,7 +2570,7 @@ public:
   virtual ~RGWRMAttrs() {}
 
   void emplace_key(std::string&& key) {
-    attrs.emplace(std::move(key), buffer::list());
+    attrs.emplace_attr_to_map(std::move(key), buffer::list());
   }
 
   int verify_permission(optional_yield y);

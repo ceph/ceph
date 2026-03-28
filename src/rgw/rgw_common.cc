@@ -1705,11 +1705,11 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, req_state *s, uint6
 
 
 int verify_object_lock(const DoutPrefixProvider* dpp, const rgw::sal::Attrs& attrs, const bool bypass_perm, const bool bypass_governance_mode) {
-  auto aiter = attrs.find(RGW_ATTR_OBJECT_RETENTION);
-  if (aiter != attrs.end()) {
+  auto aval = attrs.find(RGW_ATTR_OBJECT_RETENTION);
+  if (aval != nullptr) {
     RGWObjectRetention obj_retention;
     try {
-      decode(obj_retention, aiter->second);
+      decode(obj_retention, *aval);
     } catch (buffer::error& err) {
       ldpp_dout(dpp, 0) << "ERROR: failed to decode RGWObjectRetention" << dendl;
       return -EIO;
@@ -1720,11 +1720,11 @@ int verify_object_lock(const DoutPrefixProvider* dpp, const rgw::sal::Attrs& att
       }
     }
   }
-  aiter = attrs.find(RGW_ATTR_OBJECT_LEGAL_HOLD);
-  if (aiter != attrs.end()) {
+  aval = attrs.find(RGW_ATTR_OBJECT_LEGAL_HOLD);
+  if (aval != nullptr) {
     RGWObjectLegalHold obj_legal_hold;
     try {
-      decode(obj_legal_hold, aiter->second);
+      decode(obj_legal_hold, *aval);
     } catch (buffer::error& err) {
       ldpp_dout(dpp, 0) << "ERROR: failed to decode RGWObjectLegalHold" << dendl;
       return -EIO;

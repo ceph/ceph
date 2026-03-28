@@ -1582,7 +1582,7 @@ class DB {
 
     int get_user(const DoutPrefixProvider *dpp,
         const std::string& query_str, const std::string& query_str_val,
-        RGWUserInfo& uinfo, std::map<std::string, bufferlist> *pattrs,
+        RGWUserInfo& uinfo, rgw::sal::Attrs *pattrs,
         RGWObjVersionTracker *pobjv_tracker);
     int store_user(const DoutPrefixProvider *dpp,
         RGWUserInfo& uinfo, bool exclusive, std::map<std::string, bufferlist> *pattrs,
@@ -1618,7 +1618,7 @@ class DB {
         bool *is_truncated);
     int update_bucket(const DoutPrefixProvider *dpp, const std::string& query_str,
         RGWBucketInfo& info, bool exclusive,
-        const rgw_owner* powner, std::map<std::string, bufferlist>* pattrs,
+        const rgw_owner* powner, rgw::sal::Attrs* pattrs,
         ceph::real_time* pmtime, RGWObjVersionTracker* pobjv);
 
     uint64_t get_max_head_size() { return ObjHeadSize; }
@@ -1840,7 +1840,7 @@ class DB {
         struct Params {
           ceph::real_time *lastmod;
           uint64_t *obj_size;
-	  std::map<std::string, bufferlist> *attrs;
+	        std::map<std::string, bufferlist> *attrs;
           rgw_obj *target_obj;
 
           Params() : lastmod(nullptr), obj_size(nullptr), attrs(nullptr),
@@ -1863,7 +1863,7 @@ class DB {
 
         struct MetaParams {
           ceph::real_time *mtime;
-	  std::map<std::string, bufferlist>* rmattrs;
+	        rgw::sal::Attrs *rmattrs;
           const bufferlist *data;
           RGWObjManifest *manifest;
           const std::string *ptag;
@@ -1897,10 +1897,10 @@ class DB {
                                bufferlist& data, uint64_t ofs);
         int _do_write_meta(const DoutPrefixProvider *dpp,
             uint64_t size, uint64_t accounted_size,
-	    std::map<std::string, bufferlist>& attrs,
+	    rgw::sal::Attrs& attrs,
             bool assume_noent, bool modify_tail);
         int write_meta(const DoutPrefixProvider *dpp, uint64_t size,
-	    uint64_t accounted_size, std::map<std::string, bufferlist>& attrs);
+	    uint64_t accounted_size, rgw::sal::Attrs& attrs);
       };
 
       struct Delete {
@@ -1957,8 +1957,8 @@ class DB {
       RGWBucketInfo& get_bucket_info() { return bucket_info; }
 
       int InitializeParamsfromObject(const DoutPrefixProvider *dpp, DBOpParams* params);
-      int set_attrs(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist>& setattrs,
-          std::map<std::string, bufferlist>* rmattrs);
+      int set_attrs(const DoutPrefixProvider *dpp, rgw::sal::Attrs& setattrs,
+          rgw::sal::Attrs* rmattrs);
       int transition(const DoutPrefixProvider *dpp,
                      const rgw_placement_rule& rule, const real_time& mtime,
                      uint64_t olh_epoch);

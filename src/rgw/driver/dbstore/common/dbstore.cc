@@ -2,7 +2,9 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "dbstore.h"
+#include "include/buffer_fwd.h"
 #include "log/Log.h"
+#include "rgw_common.h"
 
 using namespace std;
 
@@ -268,7 +270,7 @@ int DB::ProcessOp(const DoutPrefixProvider *dpp, std::string_view Op, DBOpParams
 
 int DB::get_user(const DoutPrefixProvider *dpp,
     const std::string& query_str, const std::string& query_str_val,
-    RGWUserInfo& uinfo, map<string, bufferlist> *pattrs,
+    RGWUserInfo& uinfo, rgw::sal::Attrs *pattrs,
     RGWObjVersionTracker *pobjv_tracker) {
   int ret = 0;
 
@@ -638,7 +640,7 @@ int DB::update_bucket(const DoutPrefixProvider *dpp, const std::string& query_st
     RGWBucketInfo& info,
     bool exclusive,
     const rgw_owner* powner,
-    map<std::string, bufferlist>* pattrs,
+    rgw::sal::Attrs* pattrs,
     ceph::real_time* pmtime,
     RGWObjVersionTracker* pobjv)
 {
@@ -646,7 +648,7 @@ int DB::update_bucket(const DoutPrefixProvider *dpp, const std::string& query_st
   DBOpParams params = {};
   obj_version bucket_version;
   RGWBucketInfo orig_info;
-  map<std::string, bufferlist> attrs;
+  rgw::sal::Attrs attrs;
 
   /* Check if the bucket already exists and return the old info, caller will have a use for it */
   orig_info.bucket.name = info.bucket.name;
@@ -1081,8 +1083,8 @@ out:
 }
 
 int DB::Object::set_attrs(const DoutPrefixProvider *dpp,
-                          map<string, bufferlist>& setattrs,
-                          map<string, bufferlist>* rmattrs)
+                          rgw::sal::Attrs& setattrs,
+                          rgw::sal::Attrs* rmattrs)
 {
   int ret = 0;
 
@@ -1106,13 +1108,10 @@ int DB::Object::set_attrs(const DoutPrefixProvider *dpp,
   params.op.obj.state = *state;
   attrs = &params.op.obj.state.attrset;
   if (rmattrs) {
-    for (iter = rmattrs->begin(); iter != rmattrs->end(); ++iter) {
-      (*attrs).erase(iter->first);
-    }
+    (*attrs).erase(*rmattrs);
   }
-  for (iter = setattrs.begin(); iter != setattrs.end(); ++iter) {
-    (*attrs)[iter->first] = iter->second;
-  }
+
+  (*attrs).set_attrs(setattrs);
 
   params.op.query_str = "attrs";
   /* As per https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingMetadata.html, 
@@ -1139,7 +1138,9 @@ int DB::Object::transition(const DoutPrefixProvider *dpp,
   int ret = 0;
 
   DBOpParams params = {};
-  map<string, bufferlist> *attrset;
+  rgw::sal::Attrs* attrset;
+
+  *attrset;
 
   store->InitializeParams(dpp, &params);
   InitializeParamsfromObject(dpp, &params);
@@ -1366,12 +1367,15 @@ int DB::Object::Read::prepare(const DoutPrefixProvider *dpp)
     *params.target_obj = state.obj;
   }
   if (params.attrs) {
-    *params.attrs = astate->attrset;
+    *params.attrs = astate->attrset.get_full_map();
     if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
       for (iter = params.attrs->begin(); iter != params.attrs->end(); ++iter) {
         ldpp_dout(dpp, 20) << "Read xattr rgw_rados: " << iter->first << dendl;
       }
     }
+
+
+    
   }
 
   if (conds.if_match || conds.if_nomatch) {
@@ -1696,13 +1700,13 @@ int DB::Object::Write::write_data(const DoutPrefixProvider* dpp,
 /* Write metadata & head object data */
 int DB::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
     uint64_t size, uint64_t accounted_size,
-    map<string, bufferlist>& attrs,
+    rgw::sal::Attrs& attrs,
     bool assume_noent, bool modify_tail)
 {
   DB *store = target->get_store();
 
   RGWObjState* state = &obj_state;
-  map<string, bufferlist> *attrset;
+  rgw::sal::Attrs* attrset;
   DBOpParams params = {};
   int ret = 0;
   string etag;
@@ -1724,8 +1728,8 @@ int DB::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
   attrset = &state->attrset;
   if (target->bucket_info.obj_lock_enabled() && target->bucket_info.obj_lock.has_rule()) {
     // && meta.flags == PUT_OBJ_CREATE) {
-    auto iter = attrs.find(RGW_ATTR_OBJECT_RETENTION);
-    if (iter == attrs.end()) {
+    auto val = attrs.find(RGW_ATTR_OBJECT_RETENTION);
+    if (val == nullptr) {
       real_time lock_until_date = target->bucket_info.obj_lock.get_lock_until_date(meta.set_mtime);
       string mode = target->bucket_info.obj_lock.get_mode();
       RGWObjectRetention obj_retention(mode, lock_until_date);
@@ -1744,42 +1748,34 @@ int DB::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
   }
 
   if (meta.rmattrs) {
-    for (iter = meta.rmattrs->begin(); iter != meta.rmattrs->end(); ++iter) {
-      const string& name = iter->first;
-      (*attrset).erase(name.c_str());
-    }
+      (*attrset).erase(*(meta.rmattrs));
   }
 
   if (meta.manifest) {
     storage_class = meta.manifest->get_tail_placement().placement_rule.storage_class;
 
     /* remove existing manifest attr */
-    iter = attrs.find(RGW_ATTR_MANIFEST);
-    if (iter != attrs.end())
-      attrs.erase(iter);
+    attrs.erase(RGW_ATTR_MANIFEST);
 
     bufferlist bl;
     encode(*meta.manifest, bl);
     (*attrset)[RGW_ATTR_MANIFEST] = bl;
   }
 
-  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
-    const string& name = iter->first;
-    bufferlist& bl = iter->second;
 
-    if (!bl.length())
-      continue;
 
-    (*attrset)[name.c_str()] = bl;
+  (*attrset).set_attrs(attrs);
 
-    if (name.compare(RGW_ATTR_ETAG) == 0) {
-      etag = rgw_bl_str(bl);
-      params.op.obj.etag = etag;
-    } else if (name.compare(RGW_ATTR_CONTENT_TYPE) == 0) {
-      content_type = rgw_bl_str(bl);
-    } else if (name.compare(RGW_ATTR_ACL) == 0) {
-      acl_bl = bl;
-    }
+  if (auto acl = attrs.find(RGW_ATTR_ETAG)) {
+      acl_bl = *acl;
+  }
+
+  if (auto etag_bl = attrs.find(RGW_ATTR_CONTENT_TYPE)) {
+      params.op.obj.etag = rgw_bl_str(*etag_bl);
+  }
+
+  if (auto ct_bl = attrs.find(RGW_ATTR_ACL)) {
+      content_type = rgw_bl_str(*ct_bl);
   }
 
   if (!storage_class.empty()) {
@@ -1828,7 +1824,7 @@ out:
 }
 
 int DB::Object::Write::write_meta(const DoutPrefixProvider *dpp, uint64_t size, uint64_t accounted_size,
-    map<string, bufferlist>& attrs)
+    rgw::sal::Attrs& attrs)
 {
   bool assume_noent = false;
   /* handle assume_noent */

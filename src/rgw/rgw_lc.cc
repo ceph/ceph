@@ -312,11 +312,11 @@ static bool pass_object_lock_check(rgw::sal::Driver* driver, rgw::sal::Object* o
       return false;
     }
   } else {
-    auto iter = obj->get_attrs().find(RGW_ATTR_OBJECT_RETENTION);
-    if (iter != obj->get_attrs().end()) {
+    auto val = obj->get_attrs().find(RGW_ATTR_OBJECT_RETENTION);
+    if (val != nullptr) {
       RGWObjectRetention retention;
       try {
-        decode(retention, iter->second);
+        decode(retention, *val);
       } catch (buffer::error& err) {
         ldpp_dout(dpp, 0) << "ERROR: failed to decode RGWObjectRetention"
 			       << dendl;
@@ -327,11 +327,11 @@ static bool pass_object_lock_check(rgw::sal::Driver* driver, rgw::sal::Object* o
         return false;
       }
     }
-    iter = obj->get_attrs().find(RGW_ATTR_OBJECT_LEGAL_HOLD);
-    if (iter != obj->get_attrs().end()) {
+    val = obj->get_attrs().find(RGW_ATTR_OBJECT_LEGAL_HOLD);
+    if (val != nullptr) {
       RGWObjectLegalHold obj_legal_hold;
       try {
-        decode(obj_legal_hold, iter->second);
+        decode(obj_legal_hold, *val);
       } catch (buffer::error& err) {
         ldpp_dout(dpp, 0) << "ERROR: failed to decode RGWObjectLegalHold"
 			       << dendl;
@@ -667,9 +667,9 @@ static int remove_expired_obj(const DoutPrefixProvider* dpp,
   auto have_notify = !event_types.empty();
   if (have_notify) {
     auto attrset = obj->get_attrs();
-    auto iter = attrset.find(RGW_ATTR_ETAG);
-    if (iter != attrset.end()) {
-      etag = rgw_bl_str(iter->second);
+    auto val = attrset.find(RGW_ATTR_ETAG);
+    if (val != nullptr) {
+      etag = rgw_bl_str(*val);
     }
   }
   auto size = obj->get_size();
@@ -1377,9 +1377,9 @@ public:
     }
 
     auto attrset = obj->get_attrs();
-    auto iter = attrset.find(RGW_ATTR_ETAG);
-    if (iter != attrset.end()) {
-      etag = rgw_bl_str(iter->second);
+    auto val = attrset.find(RGW_ATTR_ETAG);
+    if (val != nullptr) {
+      etag = rgw_bl_str(*val);
     }
 
     rgw::notify::EventTypeList event_types;
@@ -1658,16 +1658,15 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
     return -ENOENT;
   }
 
-  map<string, bufferlist>::iterator aiter
-    = bucket->get_attrs().find(RGW_ATTR_LC);
-  if (aiter == bucket->get_attrs().end()) {
+  auto val= bucket->get_attrs().find(RGW_ATTR_LC);
+  if (val == nullptr) {
     ldpp_dout(this, 0) << "WARNING: bucket_attrs.find(RGW_ATTR_LC) failed for "
 		       << bucket_name << " (terminates bucket_lc_process(...))"
 		       << dendl;
     return 0;
   }
 
-  bufferlist::const_iterator iter{&aiter->second};
+  bufferlist::const_iterator iter{&(*val)};
   try {
       config.decode(iter);
     } catch (const buffer::error& e) {
@@ -2776,8 +2775,8 @@ int fix_lc_shard_entry(const DoutPrefixProvider *dpp,
 		       rgw::sal::Lifecycle* sal_lc,
 		       rgw::sal::Bucket* bucket)
 {
-  if (auto aiter = bucket->get_attrs().find(RGW_ATTR_LC);
-      aiter == bucket->get_attrs().end()) {
+  if (auto val = bucket->get_attrs().find(RGW_ATTR_LC);
+      val == nullptr) {
     return 0;    // No entry, nothing to fix
   }
 

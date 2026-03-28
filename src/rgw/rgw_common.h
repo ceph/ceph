@@ -59,10 +59,6 @@ namespace ceph {
   class Formatter;
 }
 
-namespace rgw::sal {
-  using Attrs = std::map<std::string, ceph::buffer::list>;
-}
-
 namespace rgw::lua {
   class Background;
 }
@@ -70,6 +66,8 @@ namespace rgw::lua {
 struct RGWProcessEnv;
 
 using ceph::crypto::MD5;
+
+
 
 #define RGW_ATTR_PREFIX  "user.rgw."
 
@@ -202,6 +200,211 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_BUCKET_NOTIFICATION RGW_ATTR_PREFIX "bucket-notification"
 
 #define RGW_ATTR_INTERNAL_MTIME RGW_ATTR_PREFIX "rgw-internal-mtime"
+
+namespace rgw::sal {
+
+
+
+enum class Const_RGW_Attrs{
+  RGW_ATTR_ACL_CONST = 0,
+  RGW_ATTR_RATELIMIT_CONST = 1,
+  RGW_ATTR_LC_CONST = 2,
+  RGW_ATTR_COUNT = 3,
+};
+
+constexpr std::array<std::string_view, static_cast<size_t>(Const_RGW_Attrs::RGW_ATTR_COUNT)> rgw_attrs_array = {
+  RGW_ATTR_ACL,
+  RGW_ATTR_RATELIMIT,
+  RGW_ATTR_LC,
+};
+
+class Attrs {
+
+    std::array<ceph::bufferlist, static_cast<size_t>(Const_RGW_Attrs::RGW_ATTR_COUNT)> fastAttrArray;
+    std::map<std::string, ceph::bufferlist> defaultMap;
+
+public:
+
+    using iterator = std::map<std::string, ceph::buffer::list>::iterator;
+    using const_iterator = std::map<std::string, ceph::buffer::list>::const_iterator;
+
+    ceph::bufferlist* find(Const_RGW_Attrs key) {
+        return &fastAttrArray[static_cast<size_t>(key)];
+    }
+
+    const ceph::bufferlist* find(Const_RGW_Attrs key) const {
+        return &fastAttrArray[static_cast<size_t>(key)];
+    }
+    
+
+    ceph::bufferlist* find(const std::string& key) {
+        // Currently for backward comp - in case someone calls one of the array objects with string.
+        for(int i = 0; i < static_cast<size_t>(Const_RGW_Attrs::RGW_ATTR_COUNT); i++){
+            if(rgw_attrs_array[i] == key){
+                return &fastAttrArray[i];
+        }
+      }
+        
+        auto it = defaultMap.find(key);
+        return (it != defaultMap.end()) ? &it->second : nullptr;
+    }
+
+    const ceph::bufferlist* find(const std::string& key) const {
+        for(int i = 0; i < static_cast<size_t>(Const_RGW_Attrs::RGW_ATTR_COUNT); i++){
+            if(rgw_attrs_array[i] == key){
+                return &fastAttrArray[i];
+        }
+      }
+        
+        auto it = defaultMap.find(key);
+        return (it != defaultMap.end()) ? &it->second : nullptr;
+    }
+
+    ceph::bufferlist& operator[](const std::string& key) {
+    return defaultMap[key];
+}
+
+void erase(const Attrs& rmattrs) {
+    // Clear the corresponding entries in the fast array
+    for(int i = 0; i < static_cast<size_t>(Const_RGW_Attrs::RGW_ATTR_COUNT); i++){
+        if (rmattrs.fastAttrArray[i].length() > 0) {
+            fastAttrArray[i].clear();
+        }
+    }
+
+    // Remove keys from the default map
+    for (const auto& [key, _] : rmattrs.defaultMap) {
+        defaultMap.erase(key);
+    }
+}
+
+void erase(std::string& key) {
+      for(int i = 0; i < static_cast<size_t>(Const_RGW_Attrs::RGW_ATTR_COUNT); i++){
+            if(rgw_attrs_array[i] == key){
+                fastAttrArray[i].clear();
+                return;
+      }
+    }
+
+      defaultMap.erase(key);
+    
+}
+
+void erase(Const_RGW_Attrs index) {
+    const size_t idx = static_cast<size_t>(index);
+    if (idx < fastAttrArray.size()) {
+        fastAttrArray[idx].clear();
+    }
+}
+
+bool erase(const char* key) {
+    if (!key) return false;
+  
+    defaultMap.erase(std::string(key));
+    return true;
+}
+
+
+void set_attrs(const Attrs& rmattrs) {
+    for (size_t i = 0; i < fastAttrArray.size(); ++i) {
+        if (rmattrs.fastAttrArray[i].length() > 0) {
+            this->fastAttrArray[i] = rmattrs.fastAttrArray[i];
+        }
+    }
+
+    for (const auto& it : rmattrs.defaultMap) {
+        this->defaultMap[it.first] = it.second;
+    }
+}
+
+void emplace_attr_to_map(std::string&& key, buffer::list&& bl){
+  defaultMap.emplace(std::move(key), std::move(bl));
+}
+
+void operator=(std::map<std::string, ceph::bufferlist>& other){
+    defaultMap = other;
+}
+
+void operator=(const std::map<std::string, ceph::bufferlist>& other){
+    defaultMap = other;
+
+}
+
+std::map<std::string, ceph::bufferlist> get_full_map(){
+  std::map<std::string, ceph::bufferlist> fullMap = defaultMap;
+  for (size_t i = 0; i < rgw_attrs_array.size(); ++i) {
+        if (fastAttrArray[i].length() > 0) {
+            fullMap[std::string(rgw_attrs_array[i])] = fastAttrArray[i];
+        }
+  }
+  return fullMap;
+
+}
+
+
+void dump(const DoutPrefixProvider *dpp) const {
+    // Iterate through the fast array
+for (size_t i = 0; i < rgw_attrs_array.size(); ++i) {
+        if (fastAttrArray[i].length() > 0) {
+            // Use the constexpr array to get the name
+            ldpp_dout(dpp, 20) << "Read xattr rgw_rados (fast): " << rgw_attrs_array[i] << dendl;
+        }
+    }
+
+    // Iterate through the default map
+    for (auto it = defaultMap.begin(); it != defaultMap.end(); ++it) {
+        ldpp_dout(dpp, 20) << "Read xattr rgw_rados (map): " << it->first << dendl;
+    }
+}
+
+
+
+    void encode(ceph::bufferlist& bl) const {
+        std::map<std::string, ceph::bufferlist> to_encode = defaultMap;
+        for (size_t i = 0; i < rgw_attrs_array.size(); ++i) {
+          if (fastAttrArray[i].length() > 0) {
+              to_encode[std::string(rgw_attrs_array[i])] = fastAttrArray[i];
+          }
+        }
+
+        ::ceph::encode(to_encode, bl);
+    }
+
+    void decode(ceph::bufferlist::const_iterator& bl) {
+        std::map<std::string, ceph::bufferlist> decoded_map;
+        ::ceph::decode(decoded_map, bl);
+
+        for (auto& [key, val] : decoded_map) {
+            bool isFoundInFastArray = false;
+            for (size_t i = 0; i < rgw_attrs_array.size(); ++i) {
+                if (key == rgw_attrs_array[i]) {
+                    fastAttrArray[i] = std::move(val);
+                    isFoundInFastArray = true;
+                    break;
+                }
+            }
+            if (!isFoundInFastArray) {
+                defaultMap[key] = std::move(val);
+            }
+        }
+    }
+};
+
+}
+
+
+inline void encode(const rgw::sal::Attrs &p, bufferlist &bl)
+{
+  p.encode( bl);
+}
+
+inline void decode(rgw::sal::Attrs &o, const bufferlist& bl)
+{
+  auto p = bl.begin();
+  o.decode(p);
+  ceph_assert(p.end());
+}
+
 
 enum class RGWFormat : int8_t {
   BAD_FORMAT = -1,

@@ -34,8 +34,7 @@ inline auto AccessListFilterPrefix(std::string prefix) {
 namespace sal {
 
 /** A list of key-value attributes */
-using Attrs = std::map<std::string, ceph::buffer::list>;
-
+  class Attrs;
   class Driver;
   class User;
   struct UserList;

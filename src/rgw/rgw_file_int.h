@@ -2015,8 +2015,8 @@ public:
   }
 
   buffer::list* get_attr(const std::string& k) {
-    auto iter = attrs.find(k);
-    return (iter != attrs.end()) ? &(iter->second) : nullptr;
+    auto val = attrs.find(k);
+    return (val != nullptr) ? &(*val) : nullptr;
   }
 
 }; /* RGWPutObjRequest */
@@ -2199,11 +2199,11 @@ public:
   uint64_t get_size() { return _size; }
   real_time ctime() { return mod_time; } // XXX
   real_time mtime() { return mod_time; }
-  std::map<string, bufferlist>& get_attrs() { return attrs; }
+  rgw::sal::Attrs& get_attrs() { return attrs; }
 
   buffer::list* get_attr(const std::string& k) {
-    auto iter = attrs.find(k);
-    return (iter != attrs.end()) ? &(iter->second) : nullptr;
+    auto val = attrs.find(k);
+    return (val != nullptr) ? &(*val) : nullptr;
   }
 
   bool only_bucket() override { return false; }
