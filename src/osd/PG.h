@@ -1100,7 +1100,7 @@ protected:
 
   void requeue_object_waiters(std::map<hobject_t, std::list<OpRequestRef>>& m);
   void requeue_op(OpRequestRef op);
-  virtual void requeue_ops(std::list<OpRequestRef> &l);
+  void requeue_ops(std::list<OpRequestRef> &l);
 
   // stats that persist lazily
   object_stat_collection_t unstable_stats;

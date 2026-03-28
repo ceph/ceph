@@ -896,21 +896,6 @@ bool PrimaryLogPG::check_laggy_requeue(OpRequestRef& op)
   return false;
 }
 
-void PrimaryLogPG::requeue_ops(std::list<OpRequestRef>& l)
-{
-  ceph_assert(HAVE_FEATURE(recovery_state.get_min_upacting_features(),
-                      SERVER_OCTOPUS));
-  if ((!state_test(PG_STATE_WAIT) && !state_test(PG_STATE_LAGGY)) || &l == &waiting_for_readable) {
-    PG::requeue_ops(l);
-    return;
-  }
-  dout(20) << __func__ << " not readable ops (count=" << l.size() << ")" << dendl;
-  for (auto& op : l) {
-    op->mark_delayed("waiting for readable");
-  }
-  waiting_for_readable.splice(waiting_for_readable.begin(), l);
-}
-
 void PrimaryLogPG::recheck_readable()
 {
   if (!is_wait() && !is_laggy()) {
@@ -1769,18 +1754,14 @@ void PrimaryLogPG::release_object_locks(
 
   if (!to_req.empty()) {
     // requeue at front of scrub blocking queue if we are blocked by scrub
-    for (auto &&p: to_req) {
+    for (auto&& p : to_req) {
       if (m_scrubber->write_blocked_by_scrub(p.first->obs.oi.soid.get_head())) {
         for (auto& op : p.second) {
           op->mark_delayed("waiting for scrub");
         }
-	waiting_for_scrub.splice(
-	  waiting_for_scrub.begin(),
-	  p.second,
-	  p.second.begin(),
-	  p.second.end());
+        waiting_for_scrub.splice(waiting_for_scrub.begin(), p.second);
       } else {
-	requeue_ops(p.second);
+        requeue_ops(p.second);
       }
     }
   }

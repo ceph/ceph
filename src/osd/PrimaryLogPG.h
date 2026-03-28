@@ -1911,7 +1911,6 @@ public:
 
   bool check_laggy(OpRequestRef& op);
   bool check_laggy_requeue(OpRequestRef& op);
-  void requeue_ops(std::list<OpRequestRef>& l) override;
   void recheck_readable() override;
 
   bool is_backfill_target(pg_shard_t osd) const {
