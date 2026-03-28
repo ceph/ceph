@@ -1918,7 +1918,12 @@ RGWBucketSyncPolicyHandlerRef POSIXZone::get_sync_policy_handler() {
   return nullptr;
 }
 
-int POSIXLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script)
+int POSIXLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y, RGWObjVersionTracker* objv, const std::string& key, std::string& script)
+{
+  return -ENOENT;
+}
+
+int POSIXLuaManager::list_scripts(const DoutPrefixProvider* dpp, optional_yield y, const std::string& tenant, rgw::lua::context ctx, RGWObjVersionTracker* objv, std::vector<std::string>& scripts)
 {
   return -ENOENT;
 }

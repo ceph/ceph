@@ -507,11 +507,17 @@ class DaosLuaManager : public StoreLuaManager {
   DaosLuaManager(DaosStore* _s) : store(_s) {}
   virtual ~DaosLuaManager() = default;
 
-  virtual int get_script(const DoutPrefixProvider* dpp, optional_yield y,
+  virtual int get_script(const DoutPrefixProvider* dpp, optional_yield y, RGWObjVersionTracker* objv,
                          const std::string& key, std::string& script) override {
     DAOS_NOT_IMPLEMENTED_LOG(dpp);
     return -ENOENT;
   };
+
+  virtual int list_scripts(const DoutPrefixProvider* dpp, optional_yield y, const std::string& tenant, rgw::lua::context ctx,
+                         std::vector<std::string>& scripts) override {
+    DAOS_NOT_IMPLEMENTED_LOG(dpp);
+    return -ENOENT;
+  }
 
   virtual int put_script(const DoutPrefixProvider* dpp, optional_yield y,
                          const std::string& key,

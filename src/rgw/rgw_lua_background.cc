@@ -106,13 +106,22 @@ void Background::resume(rgw::sal::Driver*) {
   cond.notify_all();
 }
 
-int Background::read_script() {
+int Background::list_scripts(std::vector<std::string>& rgw_script_names) {
   std::unique_lock cond_lock(pause_mutex);
   if (paused) {
     return -EAGAIN;
   }
   std::string tenant;
-  return rgw::lua::read_script(&dp, lua_manager, tenant, null_yield, rgw::lua::context::background, rgw_script);
+  return rgw::lua::list_scripts(&dp, lua_manager, null_yield, tenant, rgw::lua::context::background, rgw_script_names);
+}
+
+int Background::read_script(const std::string& name) {
+  std::unique_lock cond_lock(pause_mutex);
+  if (paused) {
+    return -EAGAIN;
+  }
+  std::string tenant;
+  return rgw::lua::read_script(&dp, lua_manager, null_yield, tenant, rgw::lua::context::background, rgw_script, name);
 }
 
 std::unique_ptr<lua_state_guard> Background::initialize_lguard_state() {
@@ -172,12 +181,30 @@ void Background::run() {
     if (!lguard) {
       return;
     }
-    const auto rc = read_script();
-    if (rc == -ENOENT || rc == -EAGAIN) {
-      // either no script or paused, nothing to do
-    } else if (rc < 0) {
-      ldpp_dout(dpp, 1) << "WARNING: failed to read background script. error " << rc << dendl;
-    } else {
+
+    std::vector<std::string> rgw_script_names;
+    const auto rc = list_scripts(rgw_script_names); // load all scripts
+    rgw_script_names.push_back(""); // for backward compatibility, consider the "default" script as well
+    if (rc < 0 && rc != -ENOENT && rc != -EAGAIN) {
+      ldpp_dout(dpp, 1) << "WARNING: failed to list background scripts. error " << rc << dendl;
+    }
+    
+    for (const auto& name : rgw_script_names) {
+      if (name == "default") {
+        // skip the "default" script to prevent duplicates runs as we are already considering it
+        // when appending "" to rgw_script_names above
+        // this also works because the script put --script-name "" command maps the script name to "default"
+        continue;
+      }
+      const auto rc = read_script(name);
+      if (rc == -ENOENT || rc == -EAGAIN) {
+        // either no script or paused, nothing to do
+        continue;
+      }
+      if (rc < 0) {
+        ldpp_dout(dpp, 1) << "WARNING: failed to read background script. error " << rc << dendl;
+        continue;
+      }
       auto failed = false;
       auto L = lguard->get();
       try {
@@ -240,7 +267,7 @@ void Background::process_scripts() {
   }
   std::string script;
   for (const auto& key: updated_scripts) {
-    int r = lua_manager->get_script(&dp, null_yield, key, script);
+    int r = lua_manager->get_script(&dp, null_yield, nullptr, key, script);
     if (r < 0 && r != -ENOENT) {
       ldpp_dout(&dp, 10) << "ERROR: Failed to get script : " << key
                          << ". r = " << r << dendl;

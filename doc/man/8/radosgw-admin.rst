@@ -846,6 +846,10 @@ Options
 
     Specify a file to read when setting data.
 
+.. option:: --script-name
+
+    Specify a lua script name (default 'default').
+
 .. option:: --categories=<list>
 
     Comma separated list of categories, used in usage show.

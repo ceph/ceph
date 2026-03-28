@@ -25,6 +25,7 @@
 #include "rgw_role.h"
 #include "rgw_multi.h"
 #include "rgw_putobj_processor.h"
+#include "rgw_lua.h"
 #include "services/svc_tier_rados.h"
 #include "cls/lock/cls_lock_client.h"
 
@@ -1269,6 +1270,7 @@ class RadosLuaManager : public StoreLuaManager {
   int notify_script_update(const DoutPrefixProvider *dpp, const std::string& script_oid, optional_yield y);
   uint64_t get_watch_handle_for_script(const std::string& script_oid);
   std::string get_script_for_watch_handle(uint64_t handle);
+  int save_scripts(const DoutPrefixProvider* dpp, optional_yield y, const std::string& tenant, rgw::lua::context ctx, RGWObjVersionTracker* objv, const std::vector<std::string>& scripts);
 
   uint64_t watch_handle = 0;
   std::map<std::string, uint64_t> script_watches;
@@ -1279,7 +1281,8 @@ public:
   ~RadosLuaManager() override = default;
 
   // To be used by the radosgw-admin process
-  int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override;
+  int get_script(const DoutPrefixProvider* dpp, optional_yield y, RGWObjVersionTracker* objv, const std::string& key, std::string& script) override;
+  int list_scripts(const DoutPrefixProvider* dpp, optional_yield y, const std::string& tenant, rgw::lua::context ctx, RGWObjVersionTracker* objv, std::vector<std::string>& scripts) override;
   // To be used by the radosgw process
   std::tuple<rgw::lua::LuaCodeType, int> get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override;
   int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override;

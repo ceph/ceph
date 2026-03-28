@@ -213,6 +213,7 @@
     topic dump                       dump (in JSON format) all pending bucket notifications of a persistent topic
     script put                       upload a Lua script to a context
     script get                       get the Lua script of a context
+    script list                      list the Lua scripts of a context
     script rm                        remove the Lua scripts of a context
     script-package add               add a Lua package to the scripts allowlist
     script-package rm                remove a Lua package from the scripts allowlist
@@ -335,6 +336,7 @@
      --skip-zero-entries               log show only dumps entries that don't have zero value
                                        in one of the numeric field
      --infile=<file>                   file to read in when setting data
+     --script-name=<script-name>       name of the lua script
      --categories=<list>               comma separated list of categories, used in usage show
      --caps=<caps>                     list of caps (e.g., "usage=read, write; user=read")
      --op-mask=<op-mask>               permission of user's operations (e.g., "read, write, delete, *")

@@ -3874,8 +3874,12 @@ int MotrStore::init_metadata_cache(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-  int MotrLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script)
+  int MotrLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y, RGWObjVersionTracker* objv, const std::string& key, std::string& script)
   {
+    return -ENOENT;
+  }
+
+  int MotrLuaManager::list_scripts(const DoutPrefixProvider* dpp, optional_yield y, const std::string& tenant, rgw::lua::context ctx, RGWObjVersionTracker* objv, std::vector<std::string>& scripts) {
     return -ENOENT;
   }
 
