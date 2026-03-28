@@ -2100,12 +2100,14 @@ int PGMap::dump_stuck_pg_stats(
   return 0;
 }
 
-std::vector<std::pair<int32_t, const osd_stat_t*>> get_sorted_osd_stats() const
+std::vector<std::pair<int32_t, osd_stat_t>> PGMap::get_sorted_osd_stats() const
 {
   std::vector<std::pair<int32_t, osd_stat_t>> sorted_stats(osd_stat.begin(), osd_stat.end());
+
   std::sort(sorted_stats.begin(), sorted_stats.end(), [](const auto& a, const auto& b) {
     return a.first < b.first;
   });
+
   return sorted_stats;
 }
 
