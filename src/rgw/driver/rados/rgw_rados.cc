@@ -5600,6 +5600,17 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   boost::optional<RGWPutObj_Compress> compressor;
   CompressorRef plugin;
   rgw_placement_rule dest_placement(dest_bucket_info.placement_rule, tier_ctx.restore_storage_class);
+
+  // check if the dest placement is still valid
+  if (!tier_ctx.driver->valid_placement(dest_placement)) {
+    ret = -EINVAL;
+    ldpp_dout(dpp, 0) << "ERROR: non existent restore storage class:"
+	  	      << tier_ctx.restore_storage_class
+		      << ". Restore of object(" << dest_obj << ") , failed, ret="
+		      << ret << dendl;
+    return ret;
+  }
+
   RGWRadosPutObj cb(dpp, cct, plugin, compressor, &processor, progress_cb, progress_data,
                     [&](map<string, bufferlist> obj_attrs) {
                       processor.set_tail_placement(dest_placement);
