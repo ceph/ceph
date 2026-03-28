@@ -79,31 +79,37 @@ namespace ceph {
     oss << ClibBackTrace(1);
     dout_emergency(oss.str());
 
-    bool should_abort = true;
     if (g_assert_context) {
       lderr(g_assert_context) << g_assert_msg << std::endl;
       *_dout << oss.str() << dendl;
 
       // dump recent only if the abort signal handler won't do it for us
       if (!g_assert_context->_conf->fatal_signal_handlers) {
-	g_assert_context->_log->dump_recent();
+        g_assert_context->_log->dump_recent();
       }
+    }
 
-      // bypass the abort?
-      const auto supressions = get_str_list(
-	g_assert_context->_conf.get_val<std::string>("ceph_assert_supresssions"));
-      should_abort = std::none_of(
-	std::begin(supressions), std::end(supressions),
-	[file, line](const auto& supression) {
+#if CEPH_ASSERT_NORETURN
+    abort();
+#else
+    // bypass the abort?
+    bool should_abort = true;
+    const auto supressions =
+        get_str_list(g_assert_context->_conf.get_val<std::string>(
+            "ceph_assert_supresssions"));
+    should_abort = std::none_of(
+        std::begin(supressions), std::end(supressions),
+        [file, line](const auto& supression) {
 	  return supression == fmt::format("{}:{}", file, line);
         });
-    }
+
     if (should_abort) {
       abort();
     } else {
       dout_emergency("WARNING: ceph_assert() does NOT abort() due "
 		     "to ceph_assert_supresssions");
     }
+#endif
   }
 
   [[gnu::cold]] void __ceph_assert_fail(const assert_data &ctx)
