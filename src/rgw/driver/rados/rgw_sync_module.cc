@@ -35,6 +35,22 @@ auto RGWSyncModuleInstance::alloc_bucket_instance_meta_handler(rgw::sal::Driver*
                                                  svc_bucket, svc_bi, svc_datalog);
 }
 
+auto RGWSyncModuleInstance::alloc_vector_bucket_meta_handler(librados::Rados& rados,
+                                                      RGWSI_Bucket* svc_bucket,
+                                                      RGWBucketCtl* ctl_bucket)
+    -> std::unique_ptr<RGWMetadataHandler>
+{
+  return create_vector_bucket_metadata_handler(rados, svc_bucket, ctl_bucket);
+}
+
+auto RGWSyncModuleInstance::alloc_vector_bucket_instance_meta_handler(rgw::sal::Driver* driver,
+                                                               RGWSI_Zone* svc_zone,
+                                                               RGWSI_Bucket* svc_bucket)
+    -> std::unique_ptr<RGWMetadataHandler>
+{
+  return create_vector_bucket_instance_metadata_handler(driver, svc_zone,
+                                                 svc_bucket);
+}
 RGWStatRemoteObjCBCR::RGWStatRemoteObjCBCR(RGWDataSyncCtx *_sc,
                        rgw_bucket& _src_bucket, rgw_obj_key& _key) : RGWCoroutine(_sc->cct),
                                                           sc(_sc), sync_env(_sc->env),

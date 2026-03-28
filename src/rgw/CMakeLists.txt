@@ -146,7 +146,9 @@ set(librgw_common_srcs
   rgw_bucket_logging.cc
   rgw_rest_bucket_logging.cc
   rgw_bucket_sync.cc
-  rgw_rest_restore.cc)
+  rgw_rest_restore.cc
+  rgw_rest_s3vector.cc
+  rgw_s3vector.cc)
 
 list(APPEND librgw_common_srcs
   driver/immutable_config/store.cc
@@ -396,6 +398,19 @@ if(WITH_RADOSGW_DAOS)
   target_link_libraries(rgw_common PRIVATE daos dfs ds3 uuid duns)
   target_include_directories(rgw_common PRIVATE ${PC_DAOS_INCLUDEDIR} )
   link_directories( ${PC_DAOS_LIBRARY_DIRS} )
+endif()
+
+if(WITH_RADOSGW_LANCEDB)
+  # Create imported library target for liblancedb
+  add_library(lancedb SHARED IMPORTED)
+  set_target_properties(lancedb PROPERTIES
+    IMPORTED_LOCATION ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/liblancedb.so
+    IMPORTED_NO_SONAME TRUE
+  )
+  target_link_libraries(rgw_common PUBLIC lancedb)
+  add_dependencies(rgw_common lancedb-c)
+  install(FILES ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/liblancedb.so
+    DESTINATION ${CMAKE_INSTALL_LIBDIR})
 endif()
 
 set(rgw_a_srcs

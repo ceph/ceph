@@ -42,6 +42,8 @@ public:
 
   virtual rgw_raw_obj get_buckets_obj(const rgw_user& user_id) const = 0;
 
+  virtual rgw_raw_obj get_vector_buckets_obj(const rgw_user& user_id) const = 0;
+
   virtual int create_lister(const DoutPrefixProvider* dpp,
                             const std::string& marker,
                             std::unique_ptr<RGWMetadataLister>& lister) = 0;

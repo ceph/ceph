@@ -26,6 +26,7 @@
 #define dout_subsys ceph_subsys_rgw
 
 #define RGW_BUCKETS_OBJ_SUFFIX ".buckets"
+#define RGW_VECTOR_BUCKETS_OBJ_SUFFIX ".vectorbuckets"
 
 using namespace std;
 
@@ -59,6 +60,12 @@ int RGWSI_User_RADOS::do_start(optional_yield, const DoutPrefixProvider *dpp)
 rgw_raw_obj RGWSI_User_RADOS::get_buckets_obj(const rgw_user& user) const
 {
   string oid = user.to_str() + RGW_BUCKETS_OBJ_SUFFIX;
+  return rgw_raw_obj(svc.zone->get_zone_params().user_uid_pool, oid);
+}
+
+rgw_raw_obj RGWSI_User_RADOS::get_vector_buckets_obj(const rgw_user& user) const
+{
+  string oid = user.to_str() + RGW_VECTOR_BUCKETS_OBJ_SUFFIX;
   return rgw_raw_obj(svc.zone->get_zone_params().user_uid_pool, oid);
 }
 
@@ -572,6 +579,7 @@ int RGWSI_User_RADOS::remove_user_info(const RGWUserInfo& info,
       ldpp_dout(dpp, 0) << "ERROR: could not remove " << info.user_id << ":" << uid_bucks << ", should be fixed (err=" << ret << ")" << dendl;
       return ret;
     }
+    // TODO: remove vector buckets
   } else if (info.type != TYPE_ROOT) {
     // unlink the name from its account
     const RGWZoneParams& zone = svc.zone->get_zone_params();

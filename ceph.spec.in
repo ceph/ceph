@@ -50,6 +50,7 @@
 %bcond_without lttng
 %bcond_without libradosstriper
 %bcond_without ocf
+%bcond_without lancedb
 %global luarocks_package_name luarocks
 %bcond_without lua_packages
 %global _remote_tarball_prefix https://download.ceph.com/tarballs/
@@ -144,6 +145,13 @@
 %global _find_debuginfo_dwz_opts %{nil}
 %endif
 %bcond_with sccache
+
+%if 0%{with lancedb}
+# liblancedb.so is a bundled Rust library without a SONAME, so RPM's
+# auto-provides won't detect it. Exclude it from auto-requires to avoid
+# an unsatisfiable dependency.
+%global __requires_exclude ^liblancedb\\.so.*$
+%endif
 
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
 %{!?tmpfiles_create: %global tmpfiles_create systemd-tmpfiles --create}
@@ -316,6 +324,9 @@ BuildRequires:  librdkafka-devel
 %if 0%{with lua_packages}
 Requires:  lua-devel
 Requires:  %{luarocks_package_name}
+%endif
+%if 0%{with lancedb}
+BuildRequires:  cargo
 %endif
 %if 0%{with make_check}
 BuildRequires:  hostname
@@ -1501,6 +1512,11 @@ cmake .. \
 %if 0%{without lua_packages}
     -DWITH_RADOSGW_LUA_PACKAGES:BOOL=OFF \
 %endif
+%if 0%{with lancedb}
+    -DWITH_RADOSGW_LANCEDB:BOOL=ON \
+%else
+    -DWITH_RADOSGW_LANCEDB:BOOL=OFF \
+%endif
 %if 0%{with cmake_verbose_logging}
     -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON \
 %endif
@@ -1701,6 +1717,9 @@ rm -rf %{_vpath_builddir}
 %{_libdir}/libos_tp.so*
 %{_libdir}/libosd_tp.so*
 %{_libdir}/libmgr_op_tp.so*
+%endif
+%if 0%{with lancedb}
+%{_libdir}/liblancedb.so
 %endif
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph
 %if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}

@@ -46,6 +46,11 @@ auto create_metadata_handler(RGWSI_SysObj& sysobj, const RGWZoneParams& zone)
 rgw_raw_obj get_buckets_obj(const RGWZoneParams& zone,
                             std::string_view account_id);
 
+/// Return the rados object that tracks the given account's vector buckets. This
+/// can be used with the cls_user interface in namespace rgwrados::buckets.
+rgw_raw_obj get_vector_buckets_obj(const RGWZoneParams& zone,
+                            std::string_view account_id);
+
 /// Return the rados object that tracks the given account's users. This
 /// can be used with the cls_user interface in namespace rgwrados::users.
 rgw_raw_obj get_users_obj(const RGWZoneParams& zone,
