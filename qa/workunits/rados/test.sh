@@ -28,6 +28,10 @@ NEORADOS_TESTS=(
     read_operations snapshots watch_notify write_operations
 )
 
+VALGRIND_TESTS=(
+    neorados_leak_watch_notify
+)
+
 # Note on argument ordering: This script processes arguments sequentially,
 # so the order matters. Arguments must be provided in this specific sequence:
 # 1. --serial OR --crimson (optional)
@@ -102,6 +106,11 @@ if [ $vstart -eq 1 ]; then
         ninja -j$(nproc) ceph_test_neorados_$f
     done
 
+    for f in "${VALGRIND_TESTS[@]}";
+    do
+        ninja -j$(nproc) ceph_test_$f
+    done
+
     echo "Setting up a test cluster..."
     ninja -j$(nproc) vstart
     ../src/vstart.sh --debug --new -x --localhost --bluestore
@@ -133,9 +142,7 @@ do
 done
 
 # Running all tests in ceph_test_neorados
-for f in \
-    cls cmd handler_error io ec_io list ec_list misc pool read_operations snapshots \
-    watch_notify write_operations
+for f in "${NEORADOS_TESTS[@]}"
 do
     executable="ceph_test_neorados_$f"
     if [ $vstart -eq 1 ]; then
@@ -158,6 +165,31 @@ do
         fi
         # If running in serial mode, run the test directly
         if ! timeout $timeout $executable; then
+            echo "ERROR: Test $f timed out after $timeout seconds"
+            echo "Check the logs for failures in $f"
+            ret=1
+        fi
+    fi
+done
+
+# Running all tests in VALGRIND_TESTS
+for f in "${VALGRIND_TESTS[@]}"
+do
+    executable="ceph_test_$f"
+    if [ $vstart -eq 1 ]; then
+        executable="./bin/$executable"
+    fi
+    if [ $parallel -eq 1 ]; then
+        r=$(printf '%25s' "$f")
+        ff=$(echo "$f" | awk '{print $1}')
+        bash -o pipefail -exc "valgrind $executable --error-exitcode=1 --track-origins=yes --leak-check=yes --log-file=valgrind_$ff.log" &
+        pid=$!
+        echo "valgrind test $f on pid $pid"
+        pids[$f]=$pid
+        test_type["$f"]="valgrind" # Store test type for later use in parallel mode
+    else
+        # If running in serial mode, run the test directly
+        if ! timeout "$timeout" valgrind "$executable" --track-origins=yes --error-exitcode=1 --leak-check=yes; then
             echo "ERROR: Test $f timed out after $timeout seconds"
             echo "Check the logs for failures in $f"
             ret=1
