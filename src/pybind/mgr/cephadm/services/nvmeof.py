@@ -120,7 +120,7 @@ class NvmeofService(CephService):
                                              ['mon', 'profile rbd',
                                               'osd', 'profile rbd'])
 
-        super().register_for_certificates(daemon_spec)
+        super().prepare_certificates(daemon_spec)
         self.mgr.cert_mgr.register_self_signed_cert_key_pair(spec.service_name(), NVMEOF_CLIENT_CERT_LABEL)
         self.configure_tls(spec, daemon_spec)
 

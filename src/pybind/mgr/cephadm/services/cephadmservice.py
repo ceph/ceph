@@ -320,7 +320,22 @@ class CephadmService(metaclass=ABCMeta):
     def get_dependencies(cls, mgr: "CephadmOrchestrator",
                          spec: Optional[ServiceSpec] = None,
                          daemon_type: Optional[str] = None) -> List[str]:
-        return []
+
+        ssl_enabled = getattr(spec, 'ssl', False)
+        if not spec or not ssl_enabled:
+            return []
+
+        deps = []
+        cert_source = getattr(spec, 'certificate_source', None)
+        if cert_source:
+            deps.append(f'certificate_source: {cert_source}')
+        if spec.ssl_cert and spec.ssl_key:
+            deps.append(f'ssl_cert: {str(utils.md5_hash(spec.ssl_cert))}')
+            deps.append(f'ssl_key: {str(utils.md5_hash(spec.ssl_key))}')
+        if spec.ssl_ca_cert:
+            deps.append(f'ssl_ca_cert: {str(utils.md5_hash(spec.ssl_ca_cert))}')
+
+        return sorted(deps)
 
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
@@ -329,7 +344,7 @@ class CephadmService(metaclass=ABCMeta):
         svc_name = svc_spec.service_name()
         ip = ip_addr or self.mgr.inventory.get_addr(daemon_spec.host)
         host_fqdn = self.mgr.get_fqdn(daemon_spec.host)
-        tls_creds = self.mgr.cert_mgr.get_self_signed_tls_credentials(svc_name, host_fqdn, label)
+        tls_creds = self.mgr.cert_mgr.get_self_signed_tls_credentials(svc_name, daemon_spec.host, label)
         if not tls_creds:
             tls_creds = self.mgr.cert_mgr.generate_cert(host_fqdn, ip)
             self.mgr.cert_mgr.save_self_signed_cert_key_pair(svc_name, tls_creds, host=daemon_spec.host, label=label)
@@ -561,8 +576,38 @@ class CephadmService(metaclass=ABCMeta):
         if spec.is_using_certificates_source(CertificateSource.CEPHADM_SIGNED):
             self.mgr.cert_mgr.register_self_signed_cert_key_pair(spec.service_name())
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+    def prepare_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> None:
         self.register_for_certificates(daemon_spec)
+        self.reconcile_certificates(daemon_spec)
+
+    def reconcile_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> None:
+        """Garbage-collect stale TLS objects when the certificate source has changed."""
+        if not self.requires_certificates:
+            return
+        spec = self.mgr.spec_store[daemon_spec.service_name].spec
+        cert_source = getattr(spec, 'certificate_source', None)
+        svc_name = spec.service_name()
+        host = daemon_spec.host
+
+        # Inline-saved certs/keys are persisted in the certmgr store as user_made=True
+        # but editable=False. These should be garbage-collected once the service no
+        # longer uses INLINE.
+        if cert_source in (CertificateSource.REFERENCE.value, CertificateSource.CEPHADM_SIGNED.value):
+            self.mgr.cert_mgr.rm_inline_saved_cert_key_pair(
+                self.cert_name,
+                self.key_name,
+                service_name=svc_name,
+                host=host,
+                ca_cert_name=self.ca_cert_name,
+            )
+
+        # Cephadm-signed certs/keys are stored under cephadm-signed_* entities and
+        # should be removed when the service no longer uses CEPHADM_SIGNED.
+        if cert_source != CertificateSource.CEPHADM_SIGNED.value:
+            self.mgr.cert_mgr.try_rm_self_signed_cert_key_pair(svc_name, host)
+
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+        self.prepare_certificates(daemon_spec)
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         return daemon_spec
 
@@ -790,66 +835,73 @@ class CephadmService(metaclass=ABCMeta):
         Called after the daemon is removed.
         """
 
-        def _cleanup_tls_creds_for_host(svc_name: str, host: str, cert_source: Optional[str]) -> None:
+        def _cleanup_tls_creds_for_host(svc_name: str, host: str, cert_source: Optional[str], other_daemons_in_service: bool) -> None:
 
-            if cert_source == CertificateSource.CEPHADM_SIGNED.value:
-                logger.info(f"Removing cephadm-signed certificate/key for service: {svc_name}, host: {host}")
-                self.mgr.cert_mgr.rm_self_signed_cert_key_pair(svc_name, host)
-            elif cert_source == CertificateSource.INLINE.value:
-                logger.info(f"Removing inline-saved certificate/key for service: {svc_name}, host: {host}")
-                self.mgr.cert_mgr.rm_cert(self.cert_name, svc_name, host)
-                self.mgr.cert_mgr.rm_key(self.key_name, svc_name, host)
-                if self.ca_cert_name:
-                    self.mgr.cert_mgr.rm_cert(self.ca_cert_name, svc_name, host)
-            elif cert_source == CertificateSource.REFERENCE.value:
+            # Daemons can be removed after the service has switched certificate sources. Let's Clean up
+            # any cephadm-signed leftovers for this host regardless of the *current* source:
+            self.mgr.cert_mgr.try_rm_self_signed_cert_key_pair(svc_name, host)
+
+            # Inline-saved cleanup depends on TLS object scope:
+            # - HOST scope: safe to remove for this host when no other daemons remain on this host
+            # - SERVICE/GLOBAL scope: only remove when this is the last daemon of the service
+            if self.SCOPE in (TLSObjectScope.SERVICE, TLSObjectScope.GLOBAL):
+                if other_daemons_in_service:
+                    return
+                self.mgr.cert_mgr.rm_inline_saved_cert_key_pair(
+                    self.cert_name,
+                    self.key_name,
+                    service_name=svc_name,
+                    host=None,
+                    ca_cert_name=self.ca_cert_name,
+                )
+            else:  # Host Scope
+                self.mgr.cert_mgr.rm_inline_saved_cert_key_pair(
+                    self.cert_name,
+                    self.key_name,
+                    service_name=svc_name,
+                    host=host,
+                    ca_cert_name=self.ca_cert_name,
+                )
+
+            if cert_source == CertificateSource.REFERENCE.value:
                 # It's a reference cert/key to the certmgr so we must keep them as user may want to use them later
-                logger.info(f"Keeping referenced certificate/key for service: {svc_name}, host: {host}")
-            elif cert_source is None:
-                # This could happen when TLS is being disabled in spec by the user, so we lose the value
-                # of the certificate source but we still have to do our best to cleanup the TLS credentials.
-                logger.info(f"Removing certificate/key for service: {svc_name}, host: {host}")
-                self.mgr.cert_mgr.rm_self_signed_cert_key_pair_if_present(svc_name, host)
-                # try to remove inline certs (if any)
-                if not self.mgr.cert_mgr.is_cert_editable(self.cert_name, svc_name, host):
-                    self.mgr.cert_mgr.rm_cert_if_present(self.cert_name, svc_name, host)
-                    self.mgr.cert_mgr.rm_key_if_present(self.key_name, svc_name, host)
-                    if self.ca_cert_name:
-                        self.mgr.cert_mgr.rm_cert_if_present(self.ca_cert_name, svc_name, host)
-            else:
-                logger.error(f"Unknown cert-source {cert_source}. Cannot remove cert/key for: {svc_name}, host: {host}")
+                logger.info(
+                    "Certificate source is 'reference'; user-provided certmgr entries (if present) will be kept for service: %s, host: %s",
+                    svc_name, host
+                )
 
         assert daemon.daemon_type is not None
         assert daemon.hostname
         assert self.TYPE == daemon_type_to_service(daemon.daemon_type)
         logger.debug(f'Post remove daemon {self.TYPE}.{daemon.daemon_id}')
 
-        if self.requires_certificates:
+        if not self.requires_certificates:
+            # no certificates cleanup actions are needed
+            return
 
-            svc_name = daemon.service_name()
-            if svc_name not in self.mgr.spec_store:
-                return
+        svc_name = daemon.service_name()
+        if svc_name not in self.mgr.spec_store:
+            return
 
-            host = daemon.hostname
-            spec = self.mgr.spec_store[svc_name].spec
-            if not spec.ssl:
-                # Service no longer uses TLS; safe to clean up TLS credentials for this host
-                _cleanup_tls_creds_for_host(svc_name, host, spec.certificate_source)
-                return
+        host = daemon.hostname
+        spec = self.mgr.spec_store[svc_name].spec
 
-            remaining = [
-                d for d in self.mgr.cache.get_daemons_by_service(svc_name)
-                if d.hostname == host
-            ]
-            if remaining:
-                # The service still has daemons running on this host (e.g. during an HTTP -> HTTPS
-                # transition the daemons running on :80 are removed but new daemons running on :443
-                # area created), so the TLS cert/key may still be in use. Do not remove it yet.
-                logger.info(
-                    "Not removing TLS cert/key for %s on %s: still %d daemons present",
-                    svc_name, host, len(remaining)
-                )
-            else:
-                _cleanup_tls_creds_for_host(svc_name, host, spec.certificate_source)
+        # If TLS is disabled, we may not have a meaningful source anymore
+        cert_source = spec.certificate_source if spec.ssl else None
+
+        daemons = [
+            d for d in self.mgr.cache.get_daemons_by_service(svc_name)
+            if d.name() != daemon.name()
+        ]
+        remaining_on_host = [d for d in daemons if d.hostname == host]
+        if remaining_on_host:
+            logger.info(
+                "Not removing TLS cert/key for %s on %s: still %d daemons present",
+                svc_name, host, len(remaining_on_host)
+            )
+            return
+
+        _cleanup_tls_creds_for_host(svc_name, host, cert_source, other_daemons_in_service=bool(daemons))
 
     def purge(self, service_name: str) -> None:
         """Called to carry out any purge tasks following service removal"""
@@ -1291,6 +1343,9 @@ class RgwService(CephService):
                          spec: Optional[ServiceSpec] = None,
                          daemon_type: Optional[str] = None) -> List[str]:
         deps = []
+        # we keep the following deps calculation for backward compatibility
+        # as old RGW specs use rgw_frontend_ssl_certificate instead of modern
+        # ssl_cert/ssl_key fields
         rgw_spec = cast(RGWSpec, spec)
         ssl_cert = getattr(rgw_spec, 'rgw_frontend_ssl_certificate', None)
         if ssl_cert:
@@ -1298,7 +1353,8 @@ class RgwService(CephService):
                 ssl_cert = '\n'.join(ssl_cert)
             deps.append(f'ssl-cert:{str(utils.md5_hash(ssl_cert))}')
 
-        return sorted(deps)
+        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
+        return sorted(deps + parent_deps)
 
     def set_realm_zg_zone(self, spec: RGWSpec) -> None:
         assert self.TYPE == spec.service_type
@@ -1353,7 +1409,7 @@ class RgwService(CephService):
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
-        self.register_for_certificates(daemon_spec)
+        super().prepare_certificates(daemon_spec)
         rgw_id, _ = daemon_spec.daemon_id, daemon_spec.host
         spec = cast(RGWSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
 
@@ -1713,7 +1769,7 @@ class CephExporterService(CephService):
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
-        self.register_for_certificates(daemon_spec)
+        super().prepare_certificates(daemon_spec)
         spec = cast(CephExporterSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         keyring = self.get_keyring_with_caps(self.get_auth_entity(daemon_spec.daemon_id),
                                              ['mon', 'profile ceph-exporter',

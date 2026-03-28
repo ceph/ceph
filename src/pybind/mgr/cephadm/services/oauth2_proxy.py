@@ -34,7 +34,8 @@ class OAuth2ProxyService(CephadmService):
             for service in ['mgmt-gateway']
             for d in mgr.cache.get_daemons_by_service(service)
         ]
-        return deps
+        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
+        return sorted(deps + parent_deps)
 
     def get_service_ips_and_hosts(self, service_name: str) -> List[str]:
         entries = set()

@@ -117,16 +117,14 @@ class IngressService(CephService):
         assert ingress_spec.backend_service
         daemons = mgr.cache.get_daemons_by_service(ingress_spec.backend_service)
         deps = [d.name() for d in daemons]
-        for attr in ['ssl_cert', 'ssl_key']:
-            ssl_cert_key = getattr(ingress_spec, attr, None)
-            if ssl_cert_key:
-                assert isinstance(ssl_cert_key, str)
-                deps.append(f'ssl-cert-key:{str(utils.md5_hash(ssl_cert_key))}')
         backend_spec = mgr.spec_store[ingress_spec.backend_service].spec
         if backend_spec.service_type == 'nfs':
             hosts = get_placement_hosts(spec, mgr.cache.get_schedulable_hosts(), mgr.cache.get_draining_hosts())
             deps.append(f'placement_hosts:{",".join(sorted(h.hostname for h in hosts))}')
-        return sorted(deps)
+
+        from cephadm.services.cephadmservice import CephadmService
+        parent_deps = CephadmService.get_dependencies(mgr, spec)
+        return sorted(deps + parent_deps)
 
     def haproxy_generate_config(
             self,

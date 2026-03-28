@@ -6,7 +6,7 @@ from enum import Enum
 from cephadm.ssl_cert_utils import SSLCerts, SSLConfigException
 from mgr_util import verify_tls, certificate_days_to_expire, ServerConfigException
 from cephadm.ssl_cert_utils import get_certificate_info, get_private_key_info
-from cephadm.tlsobject_types import Cert, PrivKey, TLSObjectScope, TLSObjectException, TLSCredentials
+from cephadm.tlsobject_types import Cert, PrivKey, TLSObjectScope, TLSObjectException, TLSObjectProtocol, TLSCredentials
 from cephadm.tlsobject_store import TLSObjectStore
 
 if TYPE_CHECKING:
@@ -360,6 +360,46 @@ class CertMgr:
         self.cert_store.save_tlsobject(ss_cert_name, tls_creds.cert, host=host, user_made=False)
         self.key_store.save_tlsobject(ss_key_name, tls_creds.key, host=host, user_made=False)
 
+    def _is_inline_saved_tlsobject(self, obj: Optional[TLSObjectProtocol]) -> bool:
+        # Inline-saved credentials are persisted as user_made=True but editable=False.
+        return bool(obj and getattr(obj, 'user_made', False) and not getattr(obj, 'editable', True))
+
+    def rm_inline_saved_cert_key_pair(
+        self,
+        cert_name: str,
+        key_name: str,
+        service_name: Optional[str] = None,
+        host: Optional[str] = None,
+        ca_cert_name: Optional[str] = None,
+    ) -> None:
+        """Remove inline-saved (non-editable) TLS objects for a given service/host.
+        This intentionally does *not* remove user-provisioned certmgr entries
+        (editable=True), which are considered reusable references.
+        """
+        context = f"service={service_name!r}, host={host!r}" if host else f"service={service_name!r}"
+
+        cert_obj = cast(Cert, self.cert_store.get_tlsobject_if_exists(cert_name, service_name, host))
+        if self._is_inline_saved_tlsobject(cert_obj):
+            logger.info("Removing inline-saved cert %r (%s)", cert_name, context)
+            self.rm_cert_if_present(cert_name, service_name, host)
+        elif cert_obj:
+            logger.info("Skipping cert removal for %r — exists but is not inline-saved (editable=True) (%s)", cert_name, context)
+
+        key_obj = cast(PrivKey, self.key_store.get_tlsobject_if_exists(key_name, service_name, host))
+        if self._is_inline_saved_tlsobject(key_obj):
+            logger.info("Removing inline-saved private key %r (%s)", key_name, context)
+            self.rm_key_if_present(key_name, service_name, host)
+        elif key_obj:
+            logger.info("Skipping key removal for %r — exists but is not inline-saved (editable=True) (%s)", key_name, context)
+
+        if ca_cert_name:
+            ca_obj = cast(Cert, self.cert_store.get_tlsobject_if_exists(ca_cert_name, service_name, host))
+            if self._is_inline_saved_tlsobject(ca_obj):
+                logger.info("Removing inline-saved CA cert %r (%s)", ca_cert_name, context)
+                self.rm_cert_if_present(ca_cert_name, service_name, host)
+            elif ca_obj:
+                logger.info("Skipping CA cert removal for %r — exists but is not inline-saved (editable=True) (%s)", ca_cert_name, context)
+
     def rm_cert(self, cert_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> bool:
         return self.cert_store.rm_tlsobject(cert_name, service_name, host)
 
@@ -374,25 +414,22 @@ class CertMgr:
         try:
             return self.rm_cert(cert_name, service_name, host)
         except TLSObjectException:
-            logger.debug(
-                "TLS cert %s for service=%s host=%s not found; nothing to remove",
-                cert_name, service_name, host,
-            )
             return False
 
     def rm_key_if_present(self, key_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> bool:
         try:
             return self.rm_key(key_name, service_name, host)
         except TLSObjectException:
-            logger.debug(
-                "TLS key %s for service=%s host=%s not found; nothing to remove",
-                key_name, service_name, host,
-            )
             return False
 
-    def rm_self_signed_cert_key_pair_if_present(self, service_name: str, host: str, label: Optional[str] = None) -> None:
-        self.rm_cert_if_present(self.self_signed_cert(service_name, label), service_name, host)
-        self.rm_key_if_present(self.self_signed_key(service_name, label), service_name, host)
+    def try_rm_self_signed_cert_key_pair(self, service_name: str, host: str, label: Optional[str] = None) -> None:
+        cert_removed = self.rm_cert_if_present(self.self_signed_cert(service_name, label), service_name, host)
+        key_removed = self.rm_key_if_present(self.self_signed_key(service_name, label), service_name, host)
+        if cert_removed or key_removed:
+            logger.info(
+                f"Removing cephadm-signed cert/key for service: {service_name}, host: {host}: "
+                f"key/cert removed: {key_removed}/{cert_removed}"
+            )
 
     def cert_ls(self, filter_by: str = '',
                 include_details: bool = False,
