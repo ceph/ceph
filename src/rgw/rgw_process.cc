@@ -108,8 +108,10 @@ bool rate_limit(rgw::sal::Driver* driver, req_state* s) {
   s->user->get_id().to_str(userfind);
   userfind = "u" + userfind;
   s->ratelimit_user_name = userfind;
+  s->ratelimit_user_op = RGWRateLimitOp::None;
   std::string bucketfind = !rgw::sal::Bucket::empty(s->bucket.get()) ? "b" + s->bucket->get_marker() : "";
   s->ratelimit_bucket_marker = bucketfind;
+  s->ratelimit_bucket_op = RGWRateLimitOp::None;
   const char *method = s->info.method;
 
   bool is_sts_user = (s->auth.identity && s->auth.identity->get_identity_type() == TYPE_ROLE);
@@ -141,9 +143,10 @@ bool rate_limit(rgw::sal::Driver* driver, req_state* s) {
     *user_ratelimit = global_anon;
   }
   bool limit_bucket = false;
-  bool limit_user = s->ratelimit_data->should_rate_limit(method, s->ratelimit_user_name, s->time, user_ratelimit, s->info.request_params);
+  bool limit_user = s->ratelimit_data->should_rate_limit(method, s->ratelimit_user_name, s->time,
+    user_ratelimit, s->info.request_params, s->ratelimit_user_op);
 
-  if(!rgw::sal::Bucket::empty(s->bucket.get()))
+  if (!rgw::sal::Bucket::empty(s->bucket.get()))
   {
     iter = s->bucket->get_attrs().find(RGW_ATTR_RATELIMIT);
     if(iter != s->bucket->get_attrs().end()) {
@@ -161,11 +164,12 @@ bool rate_limit(rgw::sal::Driver* driver, req_state* s) {
       }
     }
     if (!limit_user) {
-      limit_bucket = s->ratelimit_data->should_rate_limit(method, s->ratelimit_bucket_marker, s->time, bucket_ratelimit, s->info.request_params);
+      limit_bucket = s->ratelimit_data->should_rate_limit(method, s->ratelimit_bucket_marker, s->time,
+        bucket_ratelimit, s->info.request_params, s->ratelimit_bucket_op);
     }
   }
-  if(limit_bucket && !limit_user) {
-    s->ratelimit_data->giveback_tokens(method, s->ratelimit_user_name, s->info.request_params, user_ratelimit);
+  if (limit_bucket && !limit_user) {
+    s->ratelimit_data->giveback_tokens(s->ratelimit_user_op, s->ratelimit_user_name, user_ratelimit);
   }
   s->user_ratelimit = *user_ratelimit;
   s->bucket_ratelimit = *bucket_ratelimit;

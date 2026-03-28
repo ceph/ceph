@@ -631,7 +631,8 @@ Quotas can be set for The Ceph Object Gateway on users and buckets. The "rate
 limit" includes the maximum number of read operations and write operations
 per accumulation interval as well as the number of bytes per accumulation interval
 that can be written or read per user or per bucket. It also includes the maximum
-number of list requests and delete operations per accumulation interval.
+number of list requests and delete operations per accumulation interval and the
+maximum processing time consumed by list requests per accumulation interval.
 The accumulation interval is configured by the :confval:`rgw_ratelimit_interval` option.
 The default value is 60 seconds.
 (Note: S3 Multi-Object Delete operation are currently not supported by rate limiting)
@@ -708,6 +709,11 @@ time has elapsed, "user A" will be able to send ``GET`` requests again.
   specify the maximum number of delete operations per accumulation interval per RGW instance.
   A ``0`` value disables throttling.
 
+- **Maximum List Time:** The ``--max-list-time`` setting allows you to
+  specify the maximum amount of processing time bucket listing requests may consume
+  per accumulation interval per RGW instance.
+  A ``0`` value disables throttling.
+
 - **Rate Limit Scope:** The ``--ratelimit-scope`` option sets the scope for the
   rate limit.  The options are ``bucket`` , ``user`` and ``anonymous``. Bucket
   rate limit apply to buckets.  The user rate limit applies to a user.  The
@@ -725,9 +731,10 @@ parameters:
 .. prompt:: bash #
 
    radosgw-admin ratelimit set --ratelimit-scope=user --uid=<uid> \
-                                 <[--max-read-ops=<num ops>] [--max-read-bytes=<num bytes>] \
+                                 [--max-read-ops=<num ops>] [--max-read-bytes=<num bytes>] \
                                  [--max-write-ops=<num ops>] [--max-write-bytes=<num bytes>] \
-                                 [--max-list-ops=<num ops>] [--max-delete-ops=<num ops>]>
+                                 [--max-list-ops=<num ops>] [--max-delete-ops=<num ops>] \
+                                 [--max-list-time=<seconds>]
 
 An example of using ``radosgw-admin ratelimit set`` to set a rate limit might
 look like this: 
@@ -791,9 +798,10 @@ The following is the general form of commands that set rate limit parameters:
 .. prompt:: bash #
 
    radosgw-admin ratelimit set --ratelimit-scope=bucket --bucket=<bucket> \
-                                 <[--max-read-ops=<num ops>] [--max-read-bytes=<num bytes>] \
+                                 [--max-read-ops=<num ops>] [--max-read-bytes=<num bytes>] \
                                  [--max-write-ops=<num ops>] [--max-write-bytes=<num bytes>] \
-                                 [--max-list-ops=<num ops>] [--max-delete-ops=<num ops>]>
+                                 [--max-list-ops=<num ops>] [--max-delete-ops=<num ops>] \
+                                 [--max-list-time=<seconds>]
 
 An example of using ``radosgw-admin ratelimit set`` to set a rate limit for a
 bucket might look like this: 

@@ -2842,8 +2842,11 @@ void RGWRateLimitInfo::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("max_read_ops", max_read_ops, obj);
   JSONDecoder::decode_json("max_write_ops", max_write_ops, obj);
+  JSONDecoder::decode_json("max_list_ops", max_list_ops, obj);
+  JSONDecoder::decode_json("max_delete_ops", max_delete_ops, obj);
   JSONDecoder::decode_json("max_read_bytes", max_read_bytes, obj);
   JSONDecoder::decode_json("max_write_bytes", max_write_bytes, obj);
+  JSONDecoder::decode_json("max_list_time", max_list_time, obj);
   JSONDecoder::decode_json("enabled", enabled, obj);
 }
 
@@ -2855,6 +2858,7 @@ void RGWRateLimitInfo::dump(Formatter *f) const
   f->dump_int("max_delete_ops", max_delete_ops);
   f->dump_int("max_read_bytes", max_read_bytes);
   f->dump_int("max_write_bytes", max_write_bytes);
+  f->dump_int("max_list_time", max_list_time);
   f->dump_bool("enabled", enabled);
 }
 

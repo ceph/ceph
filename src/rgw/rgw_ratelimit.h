@@ -5,9 +5,6 @@
 #include <condition_variable>
 #include "rgw_common.h"
 
-enum class OpType { Read, Write, List, Delete };
-
-
 class RateLimiterEntry {
   /* 
     fixed_point_rgw_ratelimit is important to preserve the precision of the token calculation
@@ -20,6 +17,7 @@ class RateLimiterEntry {
   struct counters {
     int64_t ops = 0;
     int64_t bytes = 0;
+    int64_t seconds = 0;
   };
   counters read;
   counters write;
@@ -28,87 +26,54 @@ class RateLimiterEntry {
   ceph::timespan ts;
   bool first_run = true;
   std::mutex ts_lock;
-  // Those functions are returning the integer value of the tokens 
-  int64_t read_ops () const
-  {
-    return read.ops / fixed_point_rgw_ratelimit;
-  }
-  int64_t write_ops() const
-  {
-    return write.ops / fixed_point_rgw_ratelimit;
-  }
-  int64_t list_ops() const
-  {
-    return list.ops / fixed_point_rgw_ratelimit;
-  }
-  int64_t delete_ops() const
-  {
-    return del.ops / fixed_point_rgw_ratelimit;
-  }
-  int64_t read_bytes() const
-  {
-    return read.bytes / fixed_point_rgw_ratelimit;
-  }
-  int64_t write_bytes() const
-  {
-    return write.bytes / fixed_point_rgw_ratelimit;
-  }
+  /* Functions to check if limit is reached */
   bool should_rate_limit_read(int64_t ops_limit, int64_t bw_limit) {
-    //check if tenants did not reach their bw or ops limits and that the limits are not 0 (which is unlimited)
-    if(((read_ops() - 1 < 0) && (ops_limit > 0)) ||
-      (read_bytes() < 0 && bw_limit > 0))
-  {
-    return true;
-  }
-    // we don't want to reduce ops' tokens if we've rejected it.
-    if (read_ops() > 0)
+    /* check if at least one op token is left or bw left is above zero
+       if limits are not 0 (which is unlimited)
+    */
+    if (((read.ops < fixed_point_rgw_ratelimit) && (ops_limit > 0)) ||
+        ((read.bytes <= 0) && (bw_limit > 0)))
     {
-      // make sure read.ops always greater or equal than 0
-      // to avoid large budget caused by the case that rate limiter was enabled and read.ops set to 0
+      return true;
+    }
+    // reduce ops' tokens if the op was allowed
+    if (ops_limit > 0) {
+      // only decrease read.ops if not unlimited (i.e. ops_limit == 0)
+      // to avoid large budget
       read.ops -= fixed_point_rgw_ratelimit;
     }
     return false;
   }
-  bool should_rate_limit_list(int64_t ops_limit)
+  bool should_rate_limit_list(int64_t ops_limit, int64_t time_limit)
   {
-    if ((list_ops() - 1 < 0) && (ops_limit > 0)) {
+    if (((list.ops < fixed_point_rgw_ratelimit) && (ops_limit > 0)) ||
+        ((list.seconds <= 0) && (time_limit > 0)))
+    {
       return true;
     }
-    if (list_ops() > 0)
-    {
-      // make sure list.ops always greater or equal than 0
-      // to avoid large budget caused by the case that rate limiter was enabled and list.ops set to 0
+    if (ops_limit > 0) {
       list.ops -= fixed_point_rgw_ratelimit;
     }
     return false;
   }
   bool should_rate_limit_delete(int64_t ops_limit)
   {
-    if ((delete_ops() - 1 < 0) && (ops_limit > 0)) {
+    if ((del.ops < fixed_point_rgw_ratelimit) && (ops_limit > 0)) {
       return true;
     }
-    if (delete_ops() > 0)
-    {
-      // make sure del.ops always greater or equal than 0
-      // to avoid large budget caused by the case that rate limiter was enabled and del.ops set to 0
+    if (ops_limit > 0) {
       del.ops -= fixed_point_rgw_ratelimit;
     }
     return false;
   }
   bool should_rate_limit_write(int64_t ops_limit, int64_t bw_limit) 
   {
-    //check if tenants did not reach their bw or ops limits and that the limits are not 0 (which is unlimited)
-    if(((write_ops() - 1 < 0) && (ops_limit > 0)) ||
-      (write_bytes() < 0 && bw_limit > 0))
+    if(((write.ops < fixed_point_rgw_ratelimit) && (ops_limit > 0)) ||
+       ((write.bytes <= 0) && (bw_limit > 0)))
     {
       return true;
     }
-
-    // we don't want to reduce ops' tokens if we've rejected it.
-    if (write_ops() > 0)
-    {
-      // make sure write.ops always greater or equal than 0
-      // to avoid large budget caused by the case that rate limiter was enabled and write.ops set to 0
+    if (ops_limit > 0) {
       write.ops -= fixed_point_rgw_ratelimit;
     }
     return false;
@@ -123,15 +88,10 @@ class RateLimiterEntry {
     const size_t accumulation_interval = g_ceph_context->_conf->rgw_ratelimit_interval;
     const auto min_duration = duration_cast<ceph::timespan>(seconds(accumulation_interval)) / fixed_point_rgw_ratelimit;
     const auto delta = curr_timestamp - ts;
-    if (delta < min_duration)
-    {
-      return false;
-    }
-    return true;
+    return delta >= min_duration;
   }
 
-  void increase_tokens(ceph::timespan curr_timestamp,
-                       const RGWRateLimitInfo* info)
+  void increase_tokens(ceph::timespan curr_timestamp, const RGWRateLimitInfo* info)
   {
     constexpr int fixed_point = fixed_point_rgw_ratelimit;
     if (first_run)
@@ -141,12 +101,13 @@ class RateLimiterEntry {
       read.ops = info->max_read_ops * fixed_point;
       read.bytes = info->max_read_bytes * fixed_point;
       list.ops = info->max_list_ops * fixed_point;
+      list.seconds = info->max_list_time * fixed_point;
       del.ops = info->max_delete_ops * fixed_point;
       ts = curr_timestamp;
       first_run = false;
       return;
     }
-    else if(curr_timestamp > ts && minimum_time_reached(curr_timestamp))
+    if(curr_timestamp > ts && minimum_time_reached(curr_timestamp))
     {
       const size_t accumulation_interval = g_ceph_context->_conf->rgw_ratelimit_interval;
       const int64_t time_in_ms = std::chrono::duration_cast<std::chrono::milliseconds>(curr_timestamp - ts).count() / static_cast<double>(accumulation_interval) / std::milli::den * fixed_point;
@@ -156,58 +117,86 @@ class RateLimiterEntry {
       const int64_t read_ops = info->max_read_ops * time_in_ms;
       const int64_t read_bw = info->max_read_bytes * time_in_ms;
       const int64_t list_ops = info->max_list_ops * time_in_ms;
+      const int64_t list_seconds = info->max_list_time * time_in_ms;
       const int64_t delete_ops = info->max_delete_ops * time_in_ms;
       read.ops = std::min(info->max_read_ops * fixed_point, read_ops + read.ops);
       read.bytes = std::min(info->max_read_bytes * fixed_point, read_bw + read.bytes);
       write.ops = std::min(info->max_write_ops * fixed_point, write_ops + write.ops);
       write.bytes = std::min(info->max_write_bytes * fixed_point, write_bw + write.bytes);
       list.ops = std::min(info->max_list_ops * fixed_point, list_ops + list.ops);
+      list.seconds = std::min(info->max_list_time * fixed_point, list_seconds + list.seconds);
       del.ops = std::min(info->max_delete_ops * fixed_point, delete_ops + del.ops);
     }
   }
 
   public:
-    bool should_rate_limit(OpType op_type, const RGWRateLimitInfo* ratelimit_info, ceph::timespan curr_timestamp)
+    bool should_rate_limit(RGWRateLimitOp op, const RGWRateLimitInfo* ratelimit_info, ceph::timespan curr_timestamp)
     {
       std::unique_lock lock(ts_lock);
       increase_tokens(curr_timestamp, ratelimit_info);
-      switch (op_type) {
-        case OpType::Read:
+      switch (op) {
+        case RGWRateLimitOp::Read:
           return should_rate_limit_read(ratelimit_info->max_read_ops, ratelimit_info->max_read_bytes);
-        case OpType::Write:
+        case RGWRateLimitOp::Write:
           return should_rate_limit_write(ratelimit_info->max_write_ops, ratelimit_info->max_write_bytes);
-        case OpType::List:
-          return should_rate_limit_list(ratelimit_info->max_list_ops);
-        case OpType::Delete:
+        case RGWRateLimitOp::List:
+          return should_rate_limit_list(ratelimit_info->max_list_ops, ratelimit_info->max_list_time);
+        case RGWRateLimitOp::Delete:
           return should_rate_limit_delete(ratelimit_info->max_delete_ops);
+        default:
+          return false;
       }
-      return false;
     }
-    void decrease_bytes(bool is_read, int64_t amount, const RGWRateLimitInfo* info) {
+    void decrease_bytes(RGWRateLimitOp op, int64_t amount, const RGWRateLimitInfo* info) {
       std::unique_lock lock(ts_lock);
-      // we don't want the tenant to be with higher debt than 120 seconds(2 min) of its limit
-      if (is_read)
-      {
-        read.bytes = std::max(read.bytes - amount * fixed_point_rgw_ratelimit,info->max_read_bytes * fixed_point_rgw_ratelimit * -2);
-      } else {
-        write.bytes = std::max(write.bytes - amount * fixed_point_rgw_ratelimit,info->max_write_bytes * fixed_point_rgw_ratelimit * -2);
+      // we don't want the tenant to be with higher debt than 2 times of its limit
+      switch (op) {
+        case RGWRateLimitOp::Read:
+          read.bytes = std::max(read.bytes - amount * fixed_point_rgw_ratelimit,
+            info->max_read_bytes * fixed_point_rgw_ratelimit * -2);
+          break;
+        case RGWRateLimitOp::Write:
+          write.bytes = std::max(write.bytes - amount * fixed_point_rgw_ratelimit,
+            info->max_write_bytes * fixed_point_rgw_ratelimit * -2);
+          break;
+        default:
+          break;
       }
     }
-    void giveback_tokens(OpType op_type)
+    void decrease_time(RGWRateLimitOp op, int64_t ms, const RGWRateLimitInfo* info) {
+      std::unique_lock lock(ts_lock);
+      // we don't want the tenant to be with higher debt than 2 times of its limit
+      switch (op) {
+        case RGWRateLimitOp::List:
+          list.seconds = std::max(list.seconds - (ms * fixed_point_rgw_ratelimit) / 1000,
+            info->max_list_time * fixed_point_rgw_ratelimit * -2);
+          break;
+        default:
+          break;
+      }
+    }
+    void giveback_tokens(RGWRateLimitOp op, const RGWRateLimitInfo* info)
     {
       std::unique_lock lock(ts_lock);
-      switch (op_type) {
-        case OpType::Read:
-          read.ops += fixed_point_rgw_ratelimit;
+      switch (op) {
+        case RGWRateLimitOp::Read:
+          // only give back token if one was taken (see should_rate_limit_read())
+          if (info->max_read_ops > 0)
+            read.ops += fixed_point_rgw_ratelimit;
           break;
-        case OpType::Write:
-          write.ops += fixed_point_rgw_ratelimit;
+        case RGWRateLimitOp::Write:
+          if (info->max_write_ops > 0)
+            write.ops += fixed_point_rgw_ratelimit;
           break;
-        case OpType::List:
-          list.ops += fixed_point_rgw_ratelimit;
+        case RGWRateLimitOp::List:
+          if (info->max_list_ops > 0)
+            list.ops += fixed_point_rgw_ratelimit;
           break;
-        case OpType::Delete:
-          del.ops += fixed_point_rgw_ratelimit;
+        case RGWRateLimitOp::Delete:
+          if (info->max_delete_ops > 0)
+            del.ops += fixed_point_rgw_ratelimit;
+          break;
+        default:
           break;
       }
     }
@@ -227,8 +216,9 @@ class RateLimiter : public DoutPrefix {
   static inline constexpr std::string_view RESOURCE_PATTERN_DELIMITER = "delimiter=";
 
 
-  static OpType op_type(const std::string_view method, const std::string_view resource, const RGWRateLimitInfo* ratelimit_info) {
-    const bool ratelimit_list = ratelimit_info && (ratelimit_info->max_list_ops > 0);
+  static RGWRateLimitOp op_type(const std::string_view method, const std::string_view resource, const RGWRateLimitInfo* ratelimit_info) {
+    const bool ratelimit_list = ratelimit_info &&
+      ((ratelimit_info->max_list_ops > 0) || (ratelimit_info->max_list_time > 0));
     const bool ratelimit_delete = ratelimit_info && (ratelimit_info->max_delete_ops > 0);
 
     auto contains_any = [](std::string_view s, auto&&... patterns) {
@@ -236,16 +226,16 @@ class RateLimiter : public DoutPrefix {
     };
     if (ratelimit_list && method == "GET" &&
         !resource.empty() && contains_any(resource, RESOURCE_PATTERN_LIST_TYPE, RESOURCE_PATTERN_PREFIX, RESOURCE_PATTERN_DELIMITER)) {
-      return OpType::List;
+      return RGWRateLimitOp::List;
     }
     if (method == "GET" || method == "HEAD")
     {
-      return OpType::Read;
+      return RGWRateLimitOp::Read;
     }
     if (ratelimit_delete && method == "DELETE") {
-      return OpType::Delete;
+      return RGWRateLimitOp::Delete;
     }
-    return OpType::Write;
+    return RGWRateLimitOp::Write;
   }
 
     // find or create an entry, and return its iterator
@@ -283,40 +273,42 @@ class RateLimiter : public DoutPrefix {
       ratelimit_entries.max_load_factor(1000);
     };
 
-    bool should_rate_limit(const char *method, const std::string& key, ceph::coarse_real_time curr_timestamp, const RGWRateLimitInfo* ratelimit_info, const std::string& resource) {
+    bool should_rate_limit(const char *method, const std::string& key, ceph::coarse_real_time curr_timestamp, const RGWRateLimitInfo* ratelimit_info, const std::string& resource, RGWRateLimitOp& op ) {
       ldpp_dout(this, 21) << "checking should_rate_limit: key=" << std::quoted(key) << " enabled=" << ratelimit_info->enabled << dendl;
       if (key.empty() || key.length() == 1 || !ratelimit_info->enabled)
       {
+        op = RGWRateLimitOp::None;
         return false;
       }
-      OpType type = op_type(method, resource, ratelimit_info);
+      op = op_type(method, resource, ratelimit_info);
       auto& it = find_or_create(key);
       auto curr_ts = curr_timestamp.time_since_epoch();
-      return it.should_rate_limit(type, ratelimit_info, curr_ts);
+      return it.should_rate_limit(op, ratelimit_info, curr_ts);
     }
-    void giveback_tokens(const char *method, const std::string& key, const std::string& resource, const RGWRateLimitInfo* ratelimit_info)
+    void giveback_tokens(RGWRateLimitOp op, const std::string& key, const RGWRateLimitInfo* info)
     {
-      OpType type = op_type(method, resource, ratelimit_info);
-      auto& it = find_or_create(key);
-      it.giveback_tokens(type);
+      if (op != RGWRateLimitOp::None)
+      {
+        auto& it = find_or_create(key);
+        it.giveback_tokens(op, info);
+      }
     }
-    void decrease_bytes(const char *method, const std::string& key, const int64_t amount, const RGWRateLimitInfo* info) {
-      if (key.empty() || key.length() == 1 || !info->enabled)
+    void decrease_bytes(RGWRateLimitOp op, const std::string& key, const int64_t amount, const RGWRateLimitInfo* info) {
+      // Only RGWRateLimitOp::Read and RGWRateLimitOp::Write affect bytes
+      if ((op == RGWRateLimitOp::Read && info->max_read_bytes) ||
+          (op == RGWRateLimitOp::Write && info->max_write_bytes))
       {
-        return;
+        auto& it = find_or_create(key);
+        it.decrease_bytes(op, amount, info);
       }
-      OpType type = op_type(method, "", info);
-      // Only read and write ops affect bytes
-      if ((type == OpType::Read && !info->max_read_bytes) || (type == OpType::Write && !info->max_write_bytes))
+    }
+    void decrease_time(RGWRateLimitOp op, const std::string& key, const int64_t ms, const RGWRateLimitInfo* info) {
+      // Only RGWRateLimitOp::List affects time
+      if (op == RGWRateLimitOp::List && info->max_list_time)
       {
-        return;
+        auto& it = find_or_create(key);
+        it.decrease_time(op, ms, info);
       }
-      auto& it = find_or_create(key);
-      if (type == OpType::Read)
-        it.decrease_bytes(true, amount, info);
-      else if (type == OpType::Write)
-        it.decrease_bytes(false, amount, info);
-      // OpType::List does not affect bytes
     }
     void clear() {
       ratelimit_entries.clear();
