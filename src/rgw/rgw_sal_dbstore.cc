@@ -1613,7 +1613,6 @@ namespace rgw::sal {
                                   optional_yield y,
                                   std::string_view id,
                                   RGWAccountInfo& info,
-                                  Attrs& attrs,
                                   RGWObjVersionTracker& objv)
   {
     return -ENOTSUP;
@@ -1624,7 +1623,6 @@ namespace rgw::sal {
                                     std::string_view tenant,
                                     std::string_view name,
                                     RGWAccountInfo& info,
-                                    Attrs& attrs,
                                     RGWObjVersionTracker& objv)
   {
     return -ENOTSUP;
@@ -1634,7 +1632,6 @@ namespace rgw::sal {
                                      optional_yield y,
                                      std::string_view email,
                                      RGWAccountInfo& info,
-                                     Attrs& attrs,
                                      RGWObjVersionTracker& objv)
   {
     return -ENOTSUP;
@@ -1644,7 +1641,6 @@ namespace rgw::sal {
                              optional_yield y, bool exclusive,
                              const RGWAccountInfo& info,
                              const RGWAccountInfo* old_info,
-                             const Attrs& attrs,
                              RGWObjVersionTracker& objv)
   {
     return -ENOTSUP;
