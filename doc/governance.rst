@@ -15,8 +15,9 @@ Key principles
  * Everyone's role is ultimately to serve the users and participation
    is voluntary.
 
-Bodies
-------
+========
+ Bodies
+========
 
 Ceph Executive Council
 ======================
@@ -125,6 +126,14 @@ Current Members
 Component Team Leads
 ====================
 
+Component Team Leads are selected by the executive council, generally based on
+the recommendation by team members and outgoing lead.  Periodic
+rotation of lead responsibility among team members is encouraged.
+
+.. _component team: https://ceph.io/en/community/team/
+
+The current component leads are documented at: `component team`_
+
 Responsibilities
 ----------------
 
@@ -135,12 +144,10 @@ Responsibilities
  * Bug triage, scrubs
  * etc.
 
-Team leads are selected by the executive council, generally based on
-the recommendation by team members and outgoing lead.  Periodic
-rotation of lead responsibility among team members is encouraged.
+.. _cf:
 
 The Ceph Foundation
--------------------
+===================
 
 The Ceph Foundation is organized as a directed fund under the Linux
 Foundation and is tasked with supporting the Ceph project community
@@ -150,4 +157,16 @@ into the collaborative development process.
 
 For more information, see :ref:`foundation`.
 
-.. _component team: https://ceph.io/en/community/team/
+===========
+ Processes
+===========
+
+Escalation and Dispute Resolution
+=================================
+
+The Ceph project operates on a consensus-driven model, with primary decision-making authority vested in the Ceph Steering Committee (CSC). If the CSC cannot reach consensus on a major technical decision, or if there is a perceived lack of action, the Ceph Executive Council (CEC) will facilitate a formal escalation procedure. This process normally concludes within two weeks.
+
+ * Escalation: Any member of the CSC who feels a technical matter of significant interest to the project is deadlocked or inadequately addressed may formally escalate the issue to the CEC.
+ * Mediation: The CEC will first attempt to mediate the dispute, working with all involved parties to find a mutually satisfactory solution.
+ * Recommendation: If mediation fails, the CEC will formulate a proposed resolution by either issuing a direct recommendation or convening a small review committee to evaluate the issue and recommend a course of action.
+ * Decision: The recommendation is presented to the CSC for a formal vote.
