@@ -551,8 +551,29 @@ cephadm operations. Run a command of the following form:
 
    ceph cephadm set-user <user>
 
-Prior to running this, the cluster SSH key needs to be added to this user's
-``authorized_keys`` file and non-root users must have passwordless sudo access.
+The ``set-user`` command automatically configures the specified user on all cluster
+hosts by calling ``cephadm setup-ssh-user`` on each host. This command is available starting
+with the Umbrella release and includes the following:
+
+- Setting up passwordless sudo access for non-root users
+- Authorizing the cluster's SSH public key for the user
+
+If you have already manually configured the user on all hosts, you can skip
+the automatic setup by using the ``--skip-pre-steps`` flag:
+
+.. prompt:: bash #
+
+   ceph cephadm set-user <user> --skip-pre-steps
+
+For manual setup of SSH users on individual hosts, you can use the
+``cephadm setup-ssh-user`` command directly:
+
+.. prompt:: bash #
+
+   cephadm setup-ssh-user --ssh-user <user> --ssh-pub-key <public_key>
+
+This command validates that the user exists, configures passwordless sudo access,
+and authorizes the SSH public key.
 
 
 Customizing the SSH Configuration
@@ -668,6 +689,94 @@ when executing ``ceph * metadata``. This in turn means cephadm also
 requires the bare host name when adding a host to the cluster:
 ``ceph orch host add <bare-name>``.
 
-..
-  TODO: This chapter needs to provide way for users to configure
-  Grafana in the dashboard, as this is right now very hard to do.
+Sudo Hardening
+=============
+
+Cephadm supports sudo hardening to enhance security by restricting sudo privilege
+escalation for non-root SSH users. When sudo hardening is enabled, cephadm uses the
+``cephadm_invoker.py`` script to securely execute cephadm commands with controlled
+privilege escalation.
+
+Enabling Sudo Hardening
+----------------------
+
+To enable sudo hardening for the entire cluster, use the following command:
+
+.. prompt:: bash #
+
+  ceph cephadm prepare-host-and-enable-sudo-hardening <user>
+
+This command performs a comprehensive sudo hardening setup:
+
+1. **Host Preparation**: Prepares all cluster hosts for sudo hardening by:
+   - Installing/upgrading cephadm RPM with the invoker script
+   - Configuring restricted sudo access for non-root users
+   - Setting up SSH key authorization
+
+2. **SSH User Configuration**: Sets the specified user for cluster SSH operations
+
+3. **Global Enablement**: Enables sudo hardening cluster-wide
+
+The ``<user>`` parameter specifies which non-root user should be configured for SSH access.
+This user will have restricted sudo access configured through the sudoers file.
+
+You can manually prepare a host for sudo hardening using:
+
+.. prompt:: bash #
+
+  cephadm prepare-host-sudo-hardening --ssh-user <user> --ssh-pub-key <pub_key>
+
+.. note:: During initial host addition, the root user is used for setup. After
+   Sudo hardening is enabled, the specified non-root user with restricted sudo
+   access will be used for ongoing operations.
+
+Sudo Hardening Workflow
+----------------------
+
+When sudo hardening is enabled, the following workflow is used:
+
+1. **Host Addition**: When adding a new host with ``ceph orch host add``, cephadm
+   automatically prepares the host for sudo hardening
+2. **Command Execution**: Instead of executing cephadm directly, commands are
+   routed through ``cephadm_invoker.py``
+3. **Binary Verification**: The invoker validates the cephadm binary's hash before execution
+4. **Secure Execution**: Commands are executed with restricted permissions
+
+The ``cephadm_invoker.py`` script provides the following subcommands:
+
+- ``run``: Execute cephadm binary with hash verification
+- ``deploy_cephadm_binary``: Deploy cephadm binary to final location
+- ``check_existence``: Check if a file exists
+
+Sudo Access Restrictions
+-------------------------
+
+Sudo hardening restricts sudo access for non-root users to enhance security. When a
+host is prepared for sudo hardening, the sudoers configuration is modified to limit
+the commands that can be executed with sudo. This prevents unauthorized command
+execution while still allowing necessary cephadm operations.
+
+The sudoers configuration restricts access to only the ``cephadm_invoker.py`` script
+and essential system commands, providing a secure execution environment.
+
+Security Benefits
+-----------------
+Sudo hardening provides the following security benefits:
+
+1. The invoker validates the cephadm binary's hash
+2. If validation fails, it signals for binary redeployment
+3. Commands are executed with restricted sudo permissions
+4. All operations are logged for security auditing
+
+
+Disabling Sudo Hardening
+-----------------------
+
+To disable sudo hardening:
+
+.. prompt:: bash #
+
+  ceph config set mgr mgr/cephadm/sudo_hardening false
+
+.. note:: Disabling sudo hardening does not automatically revert host configurations.
+   Hosts that were prepared for sudo hardening will retain the invoker setup.
