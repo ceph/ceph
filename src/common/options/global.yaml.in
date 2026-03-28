@@ -5672,6 +5672,14 @@ options:
   see_also:
   - bluestore_slow_ops_warn_lifetime
   - osd_op_complaint_time
+- name: bluestore_slow_scrub_ops_warn_threshold
+  type: uint
+  level: advanced
+  desc: Set the minimum number of BlueStore slow scrub ops before raising a health warning
+  default: 1
+  with_legacy: true
+  see_also:
+  - bluestore_slow_ops_warn_threshold
 - name: bluestore_fsck_error_on_no_per_pool_omap
   type: bool
   level: advanced
@@ -5700,6 +5708,12 @@ options:
   type: float
   level: advanced
   desc: Log a BlueStore operation if it is slower than this age (seconds)
+  default: 5
+  with_legacy: true
+- name: bluestore_log_scrub_op_age
+  type: float
+  level: advanced
+  desc: Log a BlueStore Scrub operation if it is slower than this age (seconds)
   default: 5
   with_legacy: true
 - name: bluestore_log_omap_iterator_age

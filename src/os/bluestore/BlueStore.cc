@@ -6603,6 +6603,16 @@ void BlueStore::_init_logger()
     "Slow op count for read wait aio",
     "srwc",
     PerfCountersBuilder::PRIO_USEFUL);
+  b.add_u64_counter(l_bluestore_slow_op_normal_count,
+    "slow_op_normal_count",
+    "Slow Normal op count in BlueStore",
+    "snoc",
+    PerfCountersBuilder::PRIO_USEFUL);
+  b.add_u64_counter(l_bluestore_slow_op_scrub_count,
+    "slow_op_scrub_count",
+    "Slow Scrub op count in BlueStore",
+    "ssoc",
+    PerfCountersBuilder::PRIO_USEFUL);
 
   // Resulting size axis configuration for op histograms, values are in bytes
   PerfHistogramCommon::axis_config_d alloc_hist_x_axis_config{
@@ -12697,10 +12707,18 @@ int BlueStore::read(
   dout(10) << __func__ << " " << cid << " " << oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
-  log_latency(__func__,
-    l_bluestore_read_lat,
-    mono_clock::now() - start,
-    cct->_conf->bluestore_log_op_age);
+
+  if (op_flags & CEPH_OSD_OP_FLAG_SCRUB) {
+    log_latency_scrub(__func__,
+      l_bluestore_read_lat,
+      mono_clock::now() - start,
+      cct->_conf->bluestore_log_scrub_op_age);
+  } else {
+    log_latency(__func__,
+      l_bluestore_read_lat,
+      mono_clock::now() - start,
+      cct->_conf->bluestore_log_op_age);
+  }
   return r;
 }
 
@@ -13052,13 +13070,23 @@ int BlueStore::_do_read(
       return -EIO;
     }
   }
-  log_latency_fn(__func__,
-    l_bluestore_read_wait_aio_lat,
-    mono_clock::now() - start,
-    cct->_conf->bluestore_log_op_age,
-    [&](auto lat) { return ", num_ios = " + stringify(num_ios); },
-    l_bluestore_slow_read_wait_aio_count
-  );
+  if (op_flags & CEPH_OSD_OP_FLAG_SCRUB) {
+    log_latency_fn_scrub(__func__,
+      l_bluestore_read_wait_aio_lat,
+      mono_clock::now() - start,
+      cct->_conf->bluestore_log_scrub_op_age,
+      [&](auto lat) { return ", num_ios = " + stringify(num_ios); },
+      l_bluestore_slow_read_wait_aio_count
+    );
+  } else {
+    log_latency_fn(__func__,
+      l_bluestore_read_wait_aio_lat,
+      mono_clock::now() - start,
+      cct->_conf->bluestore_log_op_age,
+      [&](auto lat) { return ", num_ios = " + stringify(num_ios); },
+      l_bluestore_slow_read_wait_aio_count
+    );
+  }
 
   bool csum_error = false;
   r = _generate_read_result_bl(o, offset, length, ready_regions,
@@ -13353,10 +13381,17 @@ int BlueStore::readv(
   dout(10) << __func__ << " " << cid << " " << oid
            << " fiemap " << m << std::dec
            << " = " << r << dendl;
-  log_latency(__func__,
-    l_bluestore_read_lat,
-    mono_clock::now() - start,
-    cct->_conf->bluestore_log_op_age);
+  if (op_flags & CEPH_OSD_OP_FLAG_SCRUB) {
+    log_latency_scrub(__func__,
+      l_bluestore_read_lat,
+      mono_clock::now() - start,
+      cct->_conf->bluestore_log_scrub_op_age);
+  } else {
+    log_latency(__func__,
+      l_bluestore_read_lat,
+      mono_clock::now() - start,
+      cct->_conf->bluestore_log_op_age);
+  }
   return r;
 }
 
@@ -13430,13 +13465,23 @@ int BlueStore::_do_readv(
       return -EIO;
     }
   }
-  log_latency_fn(__func__,
-    l_bluestore_read_wait_aio_lat,
-    mono_clock::now() - start,
-    cct->_conf->bluestore_log_op_age,
-    [&](auto lat) { return ", num_ios = " + stringify(num_ios); },
-    l_bluestore_slow_read_wait_aio_count
-  );
+  if (op_flags & CEPH_OSD_OP_FLAG_SCRUB) {
+    log_latency_fn_scrub(__func__,
+      l_bluestore_read_wait_aio_lat,
+      mono_clock::now() - start,
+      cct->_conf->bluestore_log_scrub_op_age,
+      [&](auto lat) { return ", num_ios = " + stringify(num_ios); },
+      l_bluestore_slow_read_wait_aio_count
+    );
+  } else {
+    log_latency_fn(__func__,
+      l_bluestore_read_wait_aio_lat,
+      mono_clock::now() - start,
+      cct->_conf->bluestore_log_op_age,
+      [&](auto lat) { return ", num_ios = " + stringify(num_ios); },
+      l_bluestore_slow_read_wait_aio_count
+    );
+  }
 
   ceph_assert(raw_results.size() == (size_t)m.num_intervals());
   i = 0;
@@ -18886,15 +18931,25 @@ int BlueStore::_merge_collection(
   return r;
 }
 
-size_t BlueStore::_trim_slow_op_event_queue(mono_clock::time_point cur_time) {
+std::pair<size_t, size_t> BlueStore::_trim_slow_op_event_queue(
+  mono_clock::time_point cur_time)
+{
   ceph_assert(ceph_mutex_is_locked(qlock));
   auto warn_duration = std::chrono::seconds(cct->_conf->bluestore_slow_ops_warn_lifetime);
   while (!slow_op_event_queue.empty() && 
-    ((slow_op_event_queue.front() < cur_time - warn_duration) ||
-      (slow_op_event_queue.size() > cct->_conf->bluestore_slow_ops_warn_threshold))) {
+    ((slow_op_event_queue.front().first < cur_time - warn_duration) ||
+      (slow_op_event_count > cct->_conf->bluestore_slow_ops_warn_threshold) ||
+        (slow_scrub_op_event_count > cct->_conf->bluestore_slow_scrub_ops_warn_threshold))) {
+      if (!slow_op_event_queue.front().second) {
+        slow_op_event_count--;
+        logger->dec(l_bluestore_slow_op_normal_count);
+      } else {
+        slow_scrub_op_event_count--;
+        logger->dec(l_bluestore_slow_op_scrub_count);
+      }
       slow_op_event_queue.pop();
   }
-  return slow_op_event_queue.size();
+  return {slow_op_event_count, slow_scrub_op_event_count};
 }
 
 void BlueStore::_add_slow_op_event() {
@@ -18903,7 +18958,21 @@ void BlueStore::_add_slow_op_event() {
   }
   std::lock_guard lock(qlock);
   auto cur_time = mono_clock::now();
-  slow_op_event_queue.push(cur_time);
+  slow_op_event_queue.push({cur_time, false});
+  slow_op_event_count++;
+  logger->inc(l_bluestore_slow_op_normal_count);
+  _trim_slow_op_event_queue(cur_time);
+}
+
+void BlueStore::_add_slow_scrub_op_event() {
+  if (!cct->_conf->bluestore_slow_scrub_ops_warn_threshold) {
+    return;
+  }
+  std::lock_guard lock(qlock);
+  auto cur_time = mono_clock::now();
+  slow_op_event_queue.push({cur_time, true});
+  slow_scrub_op_event_count++;
+  logger->inc(l_bluestore_slow_op_scrub_count);
   _trim_slow_op_event_queue(cur_time);
 }
 
@@ -18929,6 +18998,28 @@ void BlueStore::log_latency(
   }
 }
 
+void BlueStore::log_latency_scrub(
+  const char* name,
+  int idx,
+  const ceph::timespan& l,
+  double lat_threshold,
+  const char* info,
+  int idx2)
+{
+  logger->tinc_with_max(idx, l);
+  if (lat_threshold > 0.0 &&
+      l >= make_timespan(lat_threshold)) {
+    dout(0) << __func__ << " slow operation observed in scrub for " << name
+      << ", latency = " << l
+      << info
+      << dendl;
+    _add_slow_scrub_op_event();
+    if (idx2 > l_bluestore_first && idx2 < l_bluestore_last) {
+      logger->inc(idx2);
+    }
+  }
+}
+
 void BlueStore::log_latency_fn(
   const char* name,
   int idx,
@@ -18945,6 +19036,28 @@ void BlueStore::log_latency_fn(
       << fn(l)
       << dendl;
     _add_slow_op_event();
+    if (idx2 > l_bluestore_first && idx2 < l_bluestore_last) {
+      logger->inc(idx2);
+    }
+  }
+}
+
+void BlueStore::log_latency_fn_scrub(
+  const char* name,
+  int idx,
+  const ceph::timespan& l,
+  double lat_threshold,
+  std::function<string (const ceph::timespan& lat)> fn,
+  int idx2)
+{
+  logger->tinc_with_max(idx, l);
+  if (lat_threshold > 0.0 &&
+      l >= make_timespan(lat_threshold)) {
+    dout(0) << __func__ << " slow operation observed in scrub for " << name
+      << ", latency = " << l
+      << fn(l)
+      << dendl;
+    _add_slow_scrub_op_event();
     if (idx2 > l_bluestore_first && idx2 < l_bluestore_last) {
       logger->inc(idx2);
     }
@@ -19364,8 +19477,9 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
     spillover_alert.clear();
   }
   if (cct->_conf->bluestore_slow_ops_warn_threshold) {
-    size_t qsize = _trim_slow_op_event_queue(mono_clock::now());
-    if (qsize >= cct->_conf->bluestore_slow_ops_warn_threshold) {
+    auto [qsize, scrub_qsize] = _trim_slow_op_event_queue(mono_clock::now());
+    if (qsize >= cct->_conf->bluestore_slow_ops_warn_threshold ||
+        scrub_qsize >= cct->_conf->bluestore_slow_scrub_ops_warn_threshold) {
       ostringstream ss;
       ss << "observed slow operation indications in BlueStore";
       alerts.emplace("BLUESTORE_SLOW_OP_ALERT", ss.str());
