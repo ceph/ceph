@@ -43,6 +43,57 @@ class TestBatch(object):
         with pytest.raises(ArgumentError):
             arg_validators.ValidBatchDevice()('foo')
 
+    def test_exit_on_unavailable_fast_allocation(self, factory, conf_ceph_stub, mock_device_generator):
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        devs = [mock_device_generator() for _ in range(5)]
+        fast_devs = [mock_device_generator()]
+        fast_devs[0].available_lvm = False
+        args = factory(data_slots=1,
+                       osds_per_device=1,
+                       osd_ids=[],
+                       devices=devs,
+                       db_devices=fast_devs,
+                       wal_devices=[],
+                       objectstore='bluestore',
+                       block_db_size="1G",
+                       block_db_slots=1.0,
+                       dmcrypt=True,
+                       data_allocate_fraction=1.0,
+                       has_block_db_size_without_db_devices=None
+                      )
+        b = batch.Batch([])
+        b.args = args
+        with pytest.raises(SystemExit) as err:
+            b.get_deployment_layout()
+        assert err.value.code == 1
+
+    def test_exit_on_unavailable_very_fast_allocation(self, factory, conf_ceph_stub, mock_device_generator):
+        # ensure json reports are valid when empty
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        devs = [mock_device_generator() for _ in range(5)]
+        fast_devs = [mock_device_generator()]
+        fast_devs[0].available_lvm = False
+        very_fast_devs = [mock_device_generator()]
+        very_fast_devs[0].available_lvm = False
+        args = factory(data_slots=1,
+                       osds_per_device=1,
+                       osd_ids=[],
+                       devices=devs,
+                       db_devices=fast_devs,
+                       wal_devices=very_fast_devs,
+                       objectstore='bluestore',
+                       block_db_size="1G",
+                       block_db_slots=5,
+                       dmcrypt=True,
+                       data_allocate_fraction=1.0,
+                       has_block_db_size_without_db_devices=None
+                      )
+        b = batch.Batch([])
+        b.args = args
+        with pytest.raises(SystemExit) as err:
+            b.get_deployment_layout()
+        assert err.value.code == 1
+
     @pytest.mark.parametrize('format_', ['pretty', 'json', 'json-pretty'])
     def test_report(self, format_, factory, conf_ceph_stub, mock_device_generator):
         # just ensure reporting works
@@ -85,65 +136,6 @@ class TestBatch(object):
                        block_db_size="1G",
                        dmcrypt=True,
                        data_allocate_fraction=1.0,
-                      )
-        b = batch.Batch([])
-        b.args = args
-        plan = b.get_deployment_layout()
-        report = b._create_report(plan)
-        json.loads(report)
-
-    @pytest.mark.parametrize('format_', ['json', 'json-pretty'])
-    def test_json_report_valid_empty_unavailable_fast(self, format_, factory, conf_ceph_stub, mock_device_generator):
-        # ensure json reports are valid when empty
-        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
-        devs = [mock_device_generator() for _ in range(5)]
-        fast_devs = [mock_device_generator()]
-        fast_devs[0].available_lvm = False
-        args = factory(data_slots=1,
-                       osds_per_device=1,
-                       osd_ids=[],
-                       report=True,
-                       format=format_,
-                       devices=devs,
-                       db_devices=fast_devs,
-                       wal_devices=[],
-                       objectstore='bluestore',
-                       block_db_size="1G",
-                       block_db_slots=1.0,
-                       dmcrypt=True,
-                       data_allocate_fraction=1.0,
-                       has_block_db_size_without_db_devices=None
-                      )
-        b = batch.Batch([])
-        b.args = args
-        plan = b.get_deployment_layout()
-        report = b._create_report(plan)
-        json.loads(report)
-
-
-    @pytest.mark.parametrize('format_', ['json', 'json-pretty'])
-    def test_json_report_valid_empty_unavailable_very_fast(self, format_, factory, conf_ceph_stub, mock_device_generator):
-        # ensure json reports are valid when empty
-        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
-        devs = [mock_device_generator() for _ in range(5)]
-        fast_devs = [mock_device_generator()]
-        fast_devs[0].available_lvm = False
-        very_fast_devs = [mock_device_generator()]
-        very_fast_devs[0].available_lvm = False
-        args = factory(data_slots=1,
-                       osds_per_device=1,
-                       osd_ids=[],
-                       report=True,
-                       format=format_,
-                       devices=devs,
-                       db_devices=fast_devs,
-                       wal_devices=very_fast_devs,
-                       objectstore='bluestore',
-                       block_db_size="1G",
-                       block_db_slots=5,
-                       dmcrypt=True,
-                       data_allocate_fraction=1.0,
-                       has_block_db_size_without_db_devices=None
                       )
         b = batch.Batch([])
         b.args = args
