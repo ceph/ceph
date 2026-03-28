@@ -18,6 +18,7 @@
 #include <sys/stat.h>
 #include <sys/xattr.h>
 #include <unistd.h>
+#include <cstdint>
 #include "rgw_multi.h"
 #include "include/scope_guard.h"
 #include "common/Clock.h" // for ceph_clock_now()
@@ -34,6 +35,7 @@ const std::string ATTR_PREFIX = "user.X-RGW-";
 #define RGW_POSIX_ATTR_MPUPLOAD "POSIX-Multipart-Upload"
 #define RGW_POSIX_ATTR_OWNER "POSIX-Owner"
 #define RGW_POSIX_ATTR_OBJECT_TYPE "POSIX-Object-Type"
+#define RGW_POSIX_ATTR_MANIFEST "POSIX-Manifest"
 const std::string mp_ns = "multipart";
 const std::string MP_OBJ_PART_PFX = "part-";
 const std::string MP_OBJ_HEAD_NAME = MP_OBJ_PART_PFX + "00000";
@@ -145,7 +147,7 @@ static bool decode_attr(Attrs &attrs, const char *name, F &f) {
 
 static inline rgw_obj_key decode_obj_key(const char* fname)
 {
-  std::string dname, oname, ns;
+  std::string dname, oname, ns; // XXX ns is unused?
   dname = url_decode(fname);
   rgw_obj_key key;
   rgw_obj_key::parse_raw_oid(dname, &key);
@@ -433,7 +435,7 @@ int FSEnt::read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& at
   return get_x_attrs(y, dpp, get_fd(), attrs, get_name());
 }
 
-int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cache_cb_t& cb)
+int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags)
 {
   rgw_bucket_dir_entry bde{};
 
@@ -449,7 +451,7 @@ int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cach
     case ObjectType::VERSIONED:
       bde.flags = rgw_bucket_dir_entry::FLAG_VER;
       bde.exists = true;
-      if (!key.have_instance()) {
+      if (flags & FSEnt::FLAG_CURRENT) {
 	  bde.flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
       }
       break;
@@ -1081,7 +1083,7 @@ int Directory::get_ent(const DoutPrefixProvider *dpp, optional_yield y, const st
 }
 
 int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
-                          fill_cache_cb_t &cb)
+                          fill_cache_cb_t &cb, uint32_t flags)
 {
   int ret = for_each(dpp, [this, &cb, &dpp, &y](const char *name) {
     std::unique_ptr<FSEnt> ent;
@@ -1097,7 +1099,7 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
 
     ent->stat(dpp); // Stat the object to get the type
 
-    ret = ent->fill_cache(dpp, y, cb);
+    ret = ent->fill_cache(dpp, y, cb, FSEnt::FLAG_NONE);
     if (ret < 0)
       return ret;
     return 0;
@@ -1180,54 +1182,6 @@ int Symlink::stat(const DoutPrefixProvider* dpp, bool force)
 
   exist = true;
   return fill_target(dpp, parent, get_name(), std::string(), target, ctx);
-}
-
-int Symlink::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cache_cb_t& cb)
-{
-  rgw_bucket_dir_entry bde{};
-  int ret;
-
-  rgw_obj_key key = decode_obj_key(get_name());
-  key.get_index_key(&bde.key);
-  bde.ver.pool = 1;
-  bde.ver.epoch = 1;
-
-  bde.flags = rgw_bucket_dir_entry::FLAG_VER;
-  bde.exists = true;
-  bde.flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
-
-  if (!target) {
-    ret = stat(dpp, /*force=*/false);
-    if (ret < 0)
-      return ret;
-  }
-
-  Attrs attrs;
-  ret = target->read_attrs(dpp, y, attrs);
-  if (ret < 0)
-    return ret;
-
-  POSIXOwner o;
-  ret = decode_owner(attrs, o);
-  if (ret < 0) {
-    bde.meta.owner = "unknown";
-    bde.meta.owner_display_name = "unknown";
-  } else {
-    bde.meta.owner = o.user.to_str();
-    bde.meta.owner_display_name = o.display_name;
-  }
-  bde.meta.category = RGWObjCategory::Main;
-  bde.meta.size = stx.stx_size;
-  bde.meta.accounted_size = stx.stx_size;
-  bde.meta.mtime = from_statx_timestamp(stx.stx_mtime);
-  bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
-  bde.meta.appendable = true;
-  bufferlist etag_bl;
-  if (rgw::sal::get_attr(attrs, RGW_ATTR_ETAG, etag_bl)) {
-    bde.meta.etag = etag_bl.to_str();
-  }
-
-  return cb(dpp, bde);
 }
 
 int Symlink::read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs)
@@ -1384,13 +1338,13 @@ std::unique_ptr<File> MPDirectory::get_part_file(int partnum)
 }
 
 int MPDirectory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
-                          fill_cache_cb_t &cb)
+                            fill_cache_cb_t &cb, uint32_t flags)
 {
-  int ret = FSEnt::fill_cache(dpp, y, cb);
+  int ret = FSEnt::fill_cache(dpp, y, cb, FSEnt::FLAG_NONE);
   if (ret < 0)
     return ret;
 
-  return Directory::fill_cache(dpp, y, cb);
+  return Directory::fill_cache(dpp, y, cb, FSEnt::FLAG_NONE);
 }
 
 int VersionedDirectory::open(const DoutPrefixProvider* dpp)
@@ -1796,8 +1750,11 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y, 
 }
 
 int VersionedDirectory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
-                          fill_cache_cb_t &cb)
+                                   fill_cache_cb_t &cb, uint32_t flags)
 {
+  /* Fill cur_version */
+  stat(dpp, /*force=*/false);
+
   int ret = for_each(dpp, [this, &cb, &dpp, &y](const char *name) {
     std::unique_ptr<FSEnt> ent;
 
@@ -1812,9 +1769,17 @@ int VersionedDirectory::fill_cache(const DoutPrefixProvider *dpp, optional_yield
 
     ent->stat(dpp); // Stat the object to get the type
 
-    ret = ent->fill_cache(dpp, y, cb);
-    if (ret < 0)
-      return ret;
+    if (ent->get_type() != ObjectType::SYMLINK) {
+      uint32_t fill_flags =
+          (cur_version &&
+           (ent->get_name() == cur_version->get_name())) ?
+        FSEnt::FLAG_CURRENT :
+        FSEnt::FLAG_NONE;
+
+      ret = ent->fill_cache(dpp, y, cb, fill_flags);
+      if (ret < 0)
+        return ret;
+    }
     return 0;
   });
 
@@ -2347,7 +2312,7 @@ std::unique_ptr<Object> POSIXBucket::get_object(const rgw_obj_key& k)
 
 int POSIXObject::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cache_cb_t& cb)
 {
-  return ent->fill_cache(dpp, y, cb);
+  return ent->fill_cache(dpp, y, cb, FSEnt::FLAG_NONE);
 }
 
 int POSIXDriver::mint_listing_entry(const std::string &bname,
@@ -2414,9 +2379,9 @@ std::unique_ptr<RGWRole> POSIXDriver::get_role(const RGWRoleInfo& info)
 }
 
 int POSIXBucket::fill_cache(const DoutPrefixProvider* dpp, optional_yield y,
-			  fill_cache_cb_t& cb)
+                            fill_cache_cb_t& cb)
 {
-return dir->fill_cache(dpp, y, cb);
+  return dir->fill_cache(dpp, y, cb, FSEnt::FLAG_NONE);
 }
 
 int POSIXBucket::list(const DoutPrefixProvider* dpp, ListParams& params,
@@ -3112,7 +3077,9 @@ int POSIXObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
     return ret;
   }
 
-  return 0;
+  ret = get_obj_attrs(y, dpp);
+
+  return ret;
 }
 
 int POSIXObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
@@ -3543,6 +3510,20 @@ int POSIXObject::POSIXReadOp::prepare(optional_yield y, const DoutPrefixProvider
     return -EINVAL;
   }
 
+  buffer::list manifest_bl;
+  if (source->get_attr(RGW_POSIX_ATTR_MANIFEST, manifest_bl)) {
+    POSIXManifest manifest;
+    auto iter = manifest_bl.cbegin();
+    try {
+      manifest.decode(iter);
+      if (manifest.multipart_part_count > 0) {
+        params.parts_count = manifest.multipart_part_count;
+      }
+    } catch (buffer::error& err) {
+      // pass
+    }
+  }
+
 #if 0 // WIP
   if (params.mod_ptr || params.unmod_ptr) {
     obj_time_weight src_weight;
@@ -3815,14 +3796,33 @@ int POSIXMultipartUpload::load(const DoutPrefixProvider *dpp, bool create)
 
 std::unique_ptr<rgw::sal::Object> POSIXMultipartUpload::get_meta_obj()
 {
+  std::unique_ptr<rgw::sal::Object> meta_obj{nullptr};
+
   load(nullptr);
+
   if (!shadow) {
     // This upload doesn't exist, but the API doesn't check this until it calls
     // on the *serializer*. So make a fake object in the parent bucket that
     // doesn't exist.  Put it in the MP namespace just in case.
-    return bucket->get_object(rgw_obj_key(get_meta(), std::string(), mp_ns));
+    meta_obj = bucket->get_object(rgw_obj_key(get_meta(), std::string(), mp_ns));
   }
-  return shadow->get_object(rgw_obj_key(get_meta(), std::string()));
+  meta_obj = shadow->get_object(rgw_obj_key(get_meta(), std::string()));
+
+  auto posix_meta_obj = static_cast<POSIXObject*>(meta_obj.get());
+  rgw::sal::Attrs attrs;
+  if (obj_retention) {
+    buffer::list obj_retention_bl;
+    obj_retention->encode(obj_retention_bl);
+    attrs[RGW_ATTR_OBJECT_RETENTION] = std::move(obj_retention_bl);
+  }
+  if (obj_legal_hold) {
+    buffer::list obj_legal_hold_bl;
+    obj_legal_hold->encode(obj_legal_hold_bl);
+    attrs[RGW_ATTR_OBJECT_LEGAL_HOLD] = std::move(obj_legal_hold_bl);
+  }
+  posix_meta_obj->set_attrs(attrs);
+
+  return meta_obj;
 }
 
 int POSIXMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
@@ -3850,6 +3850,17 @@ int POSIXMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
   }
 
   mp_obj.upload_info.cksum_type = cksum_type;
+  mp_obj.upload_info.cksum_flags = cksum_flags;
+
+  if (obj_retention) {
+    mp_obj.upload_info.obj_retention_exist = true;
+    mp_obj.upload_info.obj_retention = *obj_retention;
+  }
+  if (obj_legal_hold) {
+    mp_obj.upload_info.obj_legal_hold_exist = true;
+    mp_obj.upload_info.obj_legal_hold = *obj_legal_hold;
+  }
+
   mp_obj.upload_info.dest_placement = dest_placement;
   mp_obj.owner = owner;
 
@@ -4064,9 +4075,17 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
     attrs[RGW_ATTR_COMPRESSION] = tmp;
   }
 
-  ret = shadow->merge_and_store_attrs(dpp, attrs, y);
-  if (ret < 0) {
-    return ret;
+  {
+    POSIXManifest manifest;
+    manifest.multipart_part_count = total_parts;
+    buffer::list manifest_bl;
+    manifest.encode(manifest_bl);
+    attrs[RGW_POSIX_ATTR_MANIFEST] = std::move(manifest_bl);
+
+    ret = shadow->merge_and_store_attrs(dpp, attrs, y);
+    if (ret < 0) {
+      return ret;
+    }
   }
 
   // Rename to target_obj
@@ -4137,6 +4156,17 @@ int POSIXMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
       }
     }
     *rule = &mp_obj.upload_info.dest_placement;
+
+    if (mp_obj.upload_info.obj_retention_exist) {
+      obj_retention = mp_obj.upload_info.obj_retention;
+    }
+    if (mp_obj.upload_info.obj_legal_hold_exist) {
+      obj_legal_hold = mp_obj.upload_info.obj_legal_hold;
+    }
+
+    /* no te olvides los cksum */
+    cksum_type = mp_obj.upload_info.cksum_type;
+    cksum_flags = mp_obj.upload_info.cksum_flags;
   }
 
   return 0;
