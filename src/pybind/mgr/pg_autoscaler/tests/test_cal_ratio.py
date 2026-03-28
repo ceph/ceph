@@ -1,6 +1,7 @@
 from pg_autoscaler import effective_target_ratio
 from pytest import approx
 
+# `tox -e py3 -- pg_autoscaler` to run all the tests under pg_autoscaler folder, including this one.
 
 def check_simple_ratio(target_ratio, tot_ratio):
     etr = effective_target_ratio(target_ratio, tot_ratio, 0, 0)
