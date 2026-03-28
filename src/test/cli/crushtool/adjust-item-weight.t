@@ -15,3 +15,11 @@
   $ crushtool -i two --update-item 0 3.0 device0 --loc host host0 --loc cluster cluster0 -o three > /dev/null
   $ crushtool -d three -o final
   $ diff final "$TESTDIR/simple.template.adj.three"
+
+#
+# update the weight of device0 in host=host0 to something above 100.0, which was a hardcoded max at some point in the past.
+#
+
+  $ crushtool -i three --update-item 0 123.0 device0 --loc host host0 --loc cluster cluster0 -o four > /dev/null
+  $ crushtool -d four -o final
+  $ diff final "$TESTDIR/simple.template.adj.four"
