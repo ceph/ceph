@@ -222,6 +222,13 @@ class HostFacts:
             dev
             for dev in os.listdir('/sys/block')
             if not dev.startswith(HostFacts._excluded_block_devices)
+            # Some systems expose multiple /sys/block entries for the same NVMe drive
+            # (ex: nvme2n1 (the real disk) and nvme2c2n1(an extra sysfs alias).
+            # To avoid counting the same disk twice,only consider entries that
+            # represent a real block device (the one with a valid sysfs 'dev'
+            # attribute and a corresponding /dev node).
+            and os.path.exists(os.path.join('/sys/block', dev, 'dev'))
+            and os.path.exists(os.path.join('/dev', dev))
         ]
 
     @property
