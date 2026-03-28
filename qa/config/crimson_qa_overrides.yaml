@@ -1,4 +1,7 @@
 overrides:
+  install:
+    ceph:
+      flavor: debug
   ceph:
     log-ignorelist:
     - \(POOL_APP_NOT_ENABLED\)
