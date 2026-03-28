@@ -1695,6 +1695,103 @@ def test_bucket_sync_disable_enable():
 
     zonegroup_data_checkpoint(zonegroup_conns)
 
+@attr('bucket_sync_disable')
+def test_versioned_bucket_sync_disable_enable_object_delete():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+
+    # create a bucket
+    bucket = primary.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # enable versioning
+    primary.s3_client.put_bucket_versioning(
+        Bucket=bucket.name,
+        VersioningConfiguration={'Status': 'Enabled'}
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+
+    obj = 'obj'
+
+    # upload an initial object
+    resp1 = primary.s3_client.put_object(Bucket=bucket.name, Key=obj, Body='')
+    version_id_1 = resp1.get('VersionId', 'null')
+    log.debug('created initial version id=%s', version_id_1)
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # upload the second version
+    resp2 = primary.s3_client.put_object(Bucket=bucket.name, Key=obj, Body='')
+    version_id_2 = resp2['VersionId']
+    log.debug('created new version id=%s', version_id_2)
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # upload the third version
+    resp3 = primary.s3_client.put_object(Bucket=bucket.name, Key=obj, Body='')
+    version_id_3 = resp3['VersionId']
+    log.debug('created new version id=%s', version_id_3)
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # test deleting the non-head from the secondary
+
+    log.debug(f"Disabling bucket sync for bucket:{bucket.name}")
+    disable_bucket_sync(realm.meta_master_zone(), bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload the fourth version - do this before the following object delete
+    # so it has a slightly smaller epoch
+    resp4 = primary.s3_client.put_object(Bucket=bucket.name, Key=obj, Body='')
+    version_id_4 = resp4['VersionId']
+    log.debug('created new version id=%s', version_id_4)
+
+    # Delete the second object version
+    cmd = ['object', 'rm', '--bucket', bucket.name, '--object', obj, '--object-version', version_id_2]
+    secondary.zone.cluster.admin(cmd)
+
+    log.debug(f"Enabling bucket sync for bucket:{bucket.name}")
+    enable_bucket_sync(realm.meta_master_zone(), bucket.name)
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # test deleting the head from the secondary
+
+    log.debug(f"Disabling bucket sync for bucket:{bucket.name}")
+    disable_bucket_sync(realm.meta_master_zone(), bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # Delete the fourth object version
+    cmd = ['object', 'rm', '--bucket', bucket.name, '--object', obj, '--object-version', version_id_4]
+    secondary.zone.cluster.admin(cmd)
+
+    log.debug(f"Enabling bucket sync for bucket:{bucket.name}")
+    enable_bucket_sync(realm.meta_master_zone(), bucket.name)
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # test deleting everything from the secondary
+
+    log.debug(f"Disabling bucket sync for bucket:{bucket.name}")
+    disable_bucket_sync(realm.meta_master_zone(), bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # Delete all object versions
+    cmd = ['object', 'rm', '--bucket', bucket.name, '--object', obj, '--object-version', version_id_1]
+    secondary.zone.cluster.admin(cmd)
+    cmd = ['object', 'rm', '--bucket', bucket.name, '--object', obj, '--object-version', version_id_2]
+    secondary.zone.cluster.admin(cmd)
+    cmd = ['object', 'rm', '--bucket', bucket.name, '--object', obj, '--object-version', version_id_3]
+    secondary.zone.cluster.admin(cmd)
+    cmd = ['object', 'rm', '--bucket', bucket.name, '--object', obj, '--object-version', version_id_4]
+    secondary.zone.cluster.admin(cmd)
+
+    log.debug(f"Enabling bucket sync for bucket:{bucket.name}")
+    enable_bucket_sync(realm.meta_master_zone(), bucket.name)
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
 def test_multipart_object_sync():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
@@ -4277,6 +4374,85 @@ def test_timestamp_based_epochs():
             else:
                 assert False, f"Object {name}: found {out_of_order_versions} versions which are out of order"
 
+def bucket_check_olh(zone, bucket, args = None):
+    cmd = ['bucket', 'check', 'olh', '--bucket', bucket, '--dump-keys', '--hide-progress'] + (args or [])
+    keys, _ = zone.cluster.admin(cmd, read_only=True)
+    return json.loads(keys)
+
+def bucket_check_unlinked(zone, bucket, args = None):
+    cmd = ['bucket', 'check', 'unlinked', '--bucket', bucket, '--dump-keys', '--hide-progress'] + (args or [])
+    keys, _ = zone.cluster.admin(cmd, read_only=True)
+    return json.loads(keys)
+
+def bucket_lc_process(zone, bucket, args = None):
+    cmd = ['lc', 'process', '--bucket', bucket] + (args or [])
+    zone.cluster.admin(cmd)
+
+def test_versioned_lifecycle_deletes():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    # use a lifecycle policy that removes all versions
+    lifecycle = {
+        "Rules": [{
+            "ID": "ExpireVersions",
+            "Status": "Enabled",
+            "Prefix": "",
+            "Expiration": {
+                "ExpiredObjectDeleteMarker": True
+            },
+            "NoncurrentVersionExpiration": {
+                "NoncurrentDays": 1
+            }
+        }]
+    }
+
+    # create a versioned bucket on each zone
+    buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns)
+
+    for zone, bucket in zone_bucket:
+        zone.s3_client.put_bucket_versioning(Bucket=bucket.name, VersioningConfiguration={'Status': 'Enabled'})
+        zone.s3_client.put_bucket_lifecycle_configuration(Bucket=bucket.name, LifecycleConfiguration=lifecycle)
+
+    realm_meta_checkpoint(realm)
+
+    # upload lots of objects/versions
+    NUM_OBJECTS = 20
+    NUM_VERSIONS = 20
+
+    for zone, bucket in zone_bucket:
+        for i in range(0, NUM_OBJECTS):
+            key = f"obj-{i}.txt"
+            for vid in range(0, NUM_VERSIONS):
+                zone.s3_client.put_object(Bucket=bucket.name, Key=key, Body=f"This is version {vid}")
+            # create a delete marker for each name
+            zone.s3_client.delete_object(Bucket=bucket.name, Key=key)
+        log.info(f"Finished uploads on zone={zone.name} bucket={bucket.name}")
+
+    # wait for all uploads to sync
+    for _, bucket in zone_bucket:
+        zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # run lifecycle on each zone to expire all versions. lifecycle changes aren't replicated,
+    # so we don't wait for bucket checkpoints before validating the results
+    for zone, bucket in zone_bucket:
+        # apply NoncurrentVersionExpiration and verify that all Versions were removed
+        bucket_lc_process(zone.zone, bucket.name, ['--rgw-lc-debug-interval=1'])
+        response = zone.s3_client.list_object_versions(Bucket=bucket.name)
+        assert 'Versions' not in response
+        assert 'DeleteMarkers' in response
+
+        # apply ExpiredObjectDeleteMarker and verify that all DeleteMarkers were removed
+        bucket_lc_process(zone.zone, bucket.name, ['--rgw-lc-debug-interval=1'])
+        response = zone.s3_client.list_object_versions(Bucket=bucket.name)
+        assert 'Versions' not in response
+        assert 'DeleteMarkers' not in response
+
+        # check for orphaned index entries
+        olh = bucket_check_olh(zone.zone, bucket.name)
+        assert len(olh) == 0
+        unlinked = bucket_check_unlinked(zone.zone, bucket.name)
+        assert len(unlinked) == 0
 
 def run_per_zonegroup(func):
     def wrapper(*args, **kwargs):
