@@ -449,7 +449,7 @@ int RadosBucket::remove(const DoutPrefixProvider* dpp,
 
   librados::Rados& rados = *store->getRados()->get_rados_handle();
   if (own_bucket) {
-    ret = store->ctl()->bucket->sync_owner_stats(dpp, rados, info.owner, info, y, nullptr);
+    ret = store->ctl()->bucket->sync_owner_stats(dpp, rados, info.owner, info, y, false, nullptr);
     if (ret < 0) {
       ldout(store->ctx(), 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
     }
@@ -609,7 +609,7 @@ int RadosBucket::remove_bypass_gc(int concurrent_max, bool
     return ret;
   }
 
-  sync_owner_stats(dpp, y, nullptr);
+  sync_owner_stats(dpp, y, false, nullptr);
   if (ret < 0) {
      ldpp_dout(dpp, 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
   }
@@ -671,10 +671,11 @@ int RadosBucket::read_stats_async(const DoutPrefixProvider *dpp,
 }
 
 int RadosBucket::sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                  bool reset,
                                   RGWBucketEnt* ent)
 {
   librados::Rados& rados = *store->getRados()->get_rados_handle();
-  return store->ctl()->bucket->sync_owner_stats(dpp, rados, info.owner, info, y, ent);
+  return store->ctl()->bucket->sync_owner_stats(dpp, rados, info.owner, info, y, reset, ent);
 }
 
 int RadosBucket::check_bucket_shards(const DoutPrefixProvider* dpp,

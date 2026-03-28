@@ -160,7 +160,7 @@ protected:
           std::string *max_marker = nullptr,
           bool *syncstopped = nullptr) override;
       virtual int read_stats_async(const DoutPrefixProvider *dpp, const bucket_index_layout_generation& idx_layout, int shard_id, boost::intrusive_ptr<ReadStatsCB> ctx) override;
-      int sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
+      int sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y, bool reset,
                            RGWBucketEnt* ent) override;
       int check_bucket_shards(const DoutPrefixProvider *dpp,
                               uint64_t num_objs, optional_yield y) override;
