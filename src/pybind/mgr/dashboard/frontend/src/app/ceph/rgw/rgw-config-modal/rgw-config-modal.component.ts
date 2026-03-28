@@ -1,7 +1,7 @@
 import { Component, EventEmitter, OnInit, Output } from '@angular/core';
-import { AbstractControl, Validators } from '@angular/forms';
+import { Validators } from '@angular/forms';
 
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import { BaseModal } from 'carbon-components-angular';
 import _ from 'lodash';
 
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
@@ -25,7 +25,7 @@ import { KmipConfig, VaultConfig } from '~/app/shared/models/rgw-encryption-conf
   styleUrls: ['./rgw-config-modal.component.scss'],
   standalone: false
 })
-export class RgwConfigModalComponent implements OnInit {
+export class RgwConfigModalComponent extends BaseModal implements OnInit {
   kmsProviders: string[];
 
   configForm: CdFormGroup;
@@ -44,11 +44,11 @@ export class RgwConfigModalComponent implements OnInit {
   KMS_PROVIDER = KMS_PROVIDER;
   constructor(
     private formBuilder: CdFormBuilder,
-    public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n,
     private rgwBucketService: RgwBucketService,
     private notificationService: NotificationService
   ) {
+    super();
     this.createForm();
   }
   ngOnInit(): void {
@@ -170,18 +170,6 @@ export class RgwConfigModalComponent implements OnInit {
     });
   }
 
-  fileUpload(files: FileList, controlName: string) {
-    const file: File = files[0];
-    const reader = new FileReader();
-    reader.addEventListener('load', () => {
-      const control: AbstractControl = this.configForm.get(controlName);
-      control.setValue(file);
-      control.markAsDirty();
-      control.markAsTouched();
-      control.updateValueAndValidity();
-    });
-  }
-
   onSubmit() {
     const values = this.configForm.getRawValue();
     let encryptionData: VaultConfig | KmipConfig;
@@ -229,7 +217,7 @@ export class RgwConfigModalComponent implements OnInit {
         this.configForm.setErrors({ cdSubmitButton: true });
       },
       complete: () => {
-        this.activeModal.close();
+        this.closeModal();
         this.table?.refreshBtn();
       }
     });
