@@ -181,6 +181,8 @@ class HealthTest(DashboardTestCase):
                     'total_used_bytes': int,
                     'total_used_raw_bytes': int,
                     'total_used_raw_ratio': float,
+                    'total_estimated_capacity': int,
+                    'total_estimated_avail_bytes': int,
                     'num_osds': int,
                     'num_per_pool_osds': int,
                     'num_per_pool_omap_osds': int
