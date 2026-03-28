@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "ProgramOptionReader.h"
+#include "common/io_exerciser/DataGenerator.h"
 #include "common/io_exerciser/IoOp.h"
 #include "common/io_exerciser/IoSequence.h"
 #include "common/io_exerciser/Model.h"
@@ -14,6 +15,8 @@
 #include "global/global_init.h"
 #include "include/random.h"
 #include "librados/librados_asio.h"
+
+using GenerationType = ceph::io_exerciser::data_generation::GenerationType;
 
 /* Overview
  *
@@ -461,7 +464,8 @@ class TestObject {
              std::optional<int> seqseed,
              bool testRecovery,
              bool checkConsistency,
-             bool delete_objects);
+             bool delete_objects,
+             GenerationType data_generation_type);
 
   int get_num_io();
   bool readyForIo();
@@ -486,6 +490,7 @@ class TestObject {
   bool testrecovery;
   bool checkconsistency;
   bool delete_objects;
+  GenerationType data_generation_type;
 };
 
 class TestRunner {
@@ -538,6 +543,8 @@ class TestRunner {
   int num_object_pairs;
   std::string primary_object_name;
   std::string secondary_object_name;
+
+  GenerationType data_generation_type;
 
   std::string line;
   ceph::split split = ceph::split("");
