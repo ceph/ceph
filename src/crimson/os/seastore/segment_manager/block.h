@@ -145,6 +145,8 @@ public:
     paddr_t addr,
     size_t len,
     ceph::bufferptr &out) final;
+  read_ertr::future<> readv(
+    paddr_t addr, std::vector<bufferptr> vecs) final;
 
   read_ertr::future<uint32_t> get_shard_nums() final;
 

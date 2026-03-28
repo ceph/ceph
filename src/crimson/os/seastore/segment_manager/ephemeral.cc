@@ -290,4 +290,47 @@ SegmentManager::read_ertr::future<> EphemeralSegmentManager::read(
   });
 }
 
+SegmentManager::read_ertr::future<> EphemeralSegmentManager::readv(
+  paddr_t addr,
+  std::vector<bufferptr> ptrs)
+{
+  size_t len = 0;
+  for (auto &ptr : ptrs) {
+    len += ptr.length();
+  }
+  auto& seg_addr = addr.as_seg_paddr();
+  if (seg_addr.get_segment_id().device_segment_id() >= get_num_segments()) {
+    logger().error(
+      "EphemeralSegmentManager::readv: invalid segment {}",
+      addr);
+    return crimson::ct_error::invarg::make();
+  }
+
+  if (seg_addr.get_segment_off() + len > config.segment_size) {
+    logger().error(
+      "EphemeralSegmentManager::read: invalid offset {}~0x{:x}!",
+      addr,
+      len);
+    return crimson::ct_error::invarg::make();
+  }
+
+  auto offset = get_offset(addr);
+  for (auto &ptr : ptrs) {
+    ptr.copy_in(0, ptr.length(), buffer + offset);
+    offset += ptr.length();
+  }
+
+  logger().debug(
+    "segment_read to segment {} at offset 0x{:x}, "
+    "physical offset 0x{:x}, length 0x{:x}",
+    seg_addr.get_segment_id().device_segment_id(),
+    seg_addr.get_segment_off(),
+    get_offset(addr),
+    len);
+
+  return read_ertr::now().safe_then([] {
+    return seastar::yield();
+  });
+}
+
 }
