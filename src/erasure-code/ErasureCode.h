@@ -41,6 +41,9 @@ class ErasureCode : public ErasureCodeInterface {
   std::string rule_device_class;
   int rule_osds_per_failure_domain = -1;
   int rule_num_failure_domains = -1;
+  
+  // for stretch cluster replicated EC
+  int replicas = 1;  // number of full replicas (r parameter)
 
   ~ErasureCode() override {
   }
@@ -63,6 +66,10 @@ class ErasureCode : public ErasureCodeInterface {
 
   virtual int get_sub_chunk_count() override {
     return 1;
+  }
+
+  int get_replicas() const {
+    return replicas;
   }
 
   [[deprecated]]

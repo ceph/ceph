@@ -872,7 +872,8 @@ COMMAND("osd erasure-code-profile set "
 	"name=profile,type=CephString,n=N,req=false "
 	"name=force,type=CephBool,req=false "
 	"name=yes_i_really_mean_it,type=CephBool,req=false",
-	"create erasure code profile <name> with [<key[=value]> ...] pairs. Add a --force at the end to override an existing profile (VERY DANGEROUS)",
+	"create erasure code profile <name> with [<key[=value]> ...] pairs. Add a --force at the end to override an existing profile (VERY DANGEROUS). "
+	"For stretch clusters, use r=<num> to specify number of full EC stripe replicas (default: 1)",
 	"osd", "rw")
 COMMAND("osd erasure-code-profile get "
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.]",

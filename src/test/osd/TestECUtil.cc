@@ -21,11 +21,73 @@
 #include "osd/osd_types.h"
 #include "common/ceph_argparse.h"
 #include "osd/ECTransaction.h"
-
 using namespace std;
 using namespace ECUtil;
 
-// FIXME: Once PRs are in, we should move the other ECUtil tests are moved here.
+TEST(ECUtil, stripe_info_t)
+{
+  const uint64_t swidth = 4096;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+
+  stripe_info_t s(k, m, swidth);
+  ASSERT_EQ(s.get_stripe_width(), swidth);
+
+  ASSERT_EQ(s.ro_offset_to_next_chunk_offset(0), 0u);
+  ASSERT_EQ(s.ro_offset_to_next_chunk_offset(1), s.get_chunk_size());
+  ASSERT_EQ(s.ro_offset_to_next_chunk_offset(swidth - 1),
+	    s.get_chunk_size());
+
+  ASSERT_EQ(s.ro_offset_to_prev_chunk_offset(0), 0u);
+  ASSERT_EQ(s.ro_offset_to_prev_chunk_offset(swidth), s.get_chunk_size());
+  ASSERT_EQ(s.ro_offset_to_prev_chunk_offset((swidth * 2) - 1),
+	    s.get_chunk_size());
+
+  ASSERT_EQ(s.ro_offset_to_next_stripe_ro_offset(0), 0u);
+  ASSERT_EQ(s.ro_offset_to_next_stripe_ro_offset(swidth - 1),
+	    s.get_stripe_width());
+
+  ASSERT_EQ(s.ro_offset_to_prev_stripe_ro_offset(swidth), s.get_stripe_width());
+  ASSERT_EQ(s.ro_offset_to_prev_stripe_ro_offset(swidth), s.get_stripe_width());
+  ASSERT_EQ(s.ro_offset_to_prev_stripe_ro_offset((swidth * 2) - 1),
+	    s.get_stripe_width());
+
+  ASSERT_EQ(s.aligned_ro_offset_to_chunk_offset(2*swidth),
+	    2*s.get_chunk_size());
+  ASSERT_EQ(s.shard_offset_to_ro_offset(shard_id_t(0), 2*s.get_chunk_size()),
+	    2*s.get_stripe_width());
+
+  // Stripe 1 + 1 chunk for 10 stripes needs to read 11 stripes starting
+  // from 1 because there is a partial stripe at the start and end
+  ASSERT_EQ(s.chunk_aligned_ro_range_to_shard_ro_range(swidth+s.get_chunk_size(), 10*swidth),
+	    make_pair(s.get_chunk_size(), 11*s.get_chunk_size()));
+
+  // Stripe 1 + 0 chunks for 10 stripes needs to read 10 stripes starting
+  // from 1 because there are no partial stripes
+  ASSERT_EQ(s.chunk_aligned_ro_range_to_shard_ro_range(swidth, 10*swidth),
+	    make_pair(s.get_chunk_size(), 10*s.get_chunk_size()));
+
+  // Stripe 0 + 1 chunk for 10 stripes needs to read 11 stripes starting
+  // from 0 because there is a partial stripe at the start and end
+  ASSERT_EQ(s.chunk_aligned_ro_range_to_shard_ro_range(s.get_chunk_size(), 10*swidth),
+	    make_pair<uint64_t>(0, 11*s.get_chunk_size()));
+
+  // Stripe 0 + 1 chunk for (10 stripes + 1 chunk) needs to read 11 stripes
+  // starting from 0 because there is a partial stripe at the start and end
+  ASSERT_EQ(s.chunk_aligned_ro_range_to_shard_ro_range(s.get_chunk_size(),
+							  10*swidth + s.get_chunk_size()),
+	    make_pair<uint64_t>(0, 11*s.get_chunk_size()));
+
+  // Stripe 0 + 2 chunks for (10 stripes + 2 chunks) needs to read 11 stripes
+  // starting from 0 because there is a partial stripe at the start
+  ASSERT_EQ(s.chunk_aligned_ro_range_to_shard_ro_range(2*s.get_chunk_size(),
+    10*swidth + 2*s.get_chunk_size()),
+    make_pair<uint64_t>(0, 11*s.get_chunk_size()));
+
+  ASSERT_EQ(s.ro_offset_len_to_stripe_ro_offset_len(swidth-10, (uint64_t)20),
+            make_pair((uint64_t)0, 2*swidth));
+}
+
 
 TEST(ECUtil, stripe_info_t_chunk_mapping)
 {
@@ -1553,4 +1615,87 @@ TEST(ECUtil, erase_after_ro_offset_single_byte)
 
   // Shard 1 should be empty
   ASSERT_FALSE(semap.contains_shard(shard_id_t(1)));
+}
+// Tests for ErasureCode 'r' (replicas) parameter validation
+#include "erasure-code/ErasureCode.h"
+#include "crush/CrushWrapper.h"
+
+namespace {
+
+// Minimal concrete ErasureCode subclass for testing the 'r' parameter
+class ErasureCodeTestR : public ceph::ErasureCode {
+public:
+  uint64_t get_supported_optimizations() const override { return 0; }
+  unsigned int get_chunk_count() const override { return 3; }
+  unsigned int get_data_chunk_count() const override { return 2; }
+  unsigned int get_chunk_size(unsigned int object_size) const override { return 4096; }
+  size_t get_minimum_granularity() override { return 1; }
+  [[deprecated]]
+  int encode_chunks(const std::set<int> &want_to_encode,
+                    std::map<int, bufferlist> *encoded) override { return 0; }
+  int encode_chunks(const shard_id_map<bufferptr> &in,
+                    shard_id_map<bufferptr> &out) override { return 0; }
+  [[deprecated]]
+  int decode_chunks(const std::set<int> &want_to_read,
+                    const std::map<int, bufferlist> &chunks,
+                    std::map<int, bufferlist> *decoded) override { return 0; }
+  int decode_chunks(const shard_id_set &want_to_read,
+                    shard_id_map<bufferptr> &in,
+                    shard_id_map<bufferptr> &out) override { return 0; }
+  int create_rule(const std::string &name,
+                  CrushWrapper &crush,
+                  std::ostream *ss) const override { return 0; }
+};
+
+} // anonymous namespace
+
+TEST(ECUtil, ErasureCodeReplicasDefault)
+{
+  // When 'r' is absent, get_replicas() should return 1 (default)
+  ErasureCodeTestR ec;
+  ErasureCodeProfile profile;
+  std::ostringstream ss;
+  ASSERT_EQ(0, ec.init(profile, &ss));
+  ASSERT_EQ(1, ec.get_replicas());
+}
+
+TEST(ECUtil, ErasureCodeReplicasExplicit2)
+{
+  // Explicit r=2 should succeed and get_replicas() should return 2
+  ErasureCodeTestR ec;
+  ErasureCodeProfile profile;
+  profile["r"] = "2";
+  std::ostringstream ss;
+  ASSERT_EQ(0, ec.init(profile, &ss));
+  ASSERT_EQ(2, ec.get_replicas());
+}
+
+TEST(ECUtil, ErasureCodeReplicasZeroInvalid)
+{
+  // r=0 should return -EINVAL
+  ErasureCodeTestR ec;
+  ErasureCodeProfile profile;
+  profile["r"] = "0";
+  std::ostringstream ss;
+  ASSERT_EQ(-EINVAL, ec.init(profile, &ss));
+}
+
+TEST(ECUtil, ErasureCodeReplicasNegativeInvalid)
+{
+  // r=-1 should return -EINVAL
+  ErasureCodeTestR ec;
+  ErasureCodeProfile profile;
+  profile["r"] = "-1";
+  std::ostringstream ss;
+  ASSERT_EQ(-EINVAL, ec.init(profile, &ss));
+}
+
+TEST(ECUtil, ErasureCodeReplicasNonNumericInvalid)
+{
+  // r=abc (non-numeric) should return -EINVAL
+  ErasureCodeTestR ec;
+  ErasureCodeProfile profile;
+  profile["r"] = "abc";
+  std::ostringstream ss;
+  ASSERT_EQ(-EINVAL, ec.init(profile, &ss));
 }
