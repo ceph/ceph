@@ -5,17 +5,20 @@
     <a ngbNavLink
        i18n>Pools List</a>
     <ng-template ngbNavContent>
-      <cd-table #table
-                id="pool-list"
-                [data]="pools"
-                [columns]="columns"
-                selectionType="single"
-                [hasDetails]="true"
-                [status]="tableStatus"
-                [autoReload]="-1"
-                (fetchData)="taskListService.fetch()"
-                (setExpandedRow)="setExpandedRow($event)"
-                (updateSelection)="updateSelection($event)">
+
+  <cd-table #table
+        id="pool-list"
+        [data]="pools"
+        [columns]="columns"
+        [extraFilterableColumns]="filters"
+        selectionType="single"
+        [hasDetails]="true"
+        [status]="tableStatus"
+        [autoReload]="-1"
+        (fetchData)="taskListService.fetch()"
+        (setExpandedRow)="setExpandedRow($event)"
+        (updateSelection)="updateSelection($event)"
+        (columnFiltersChanged)="onColumnFiltersChanged($event)">
         <cd-table-actions id="pool-list-actions"
                           class="table-actions"
                           [permission]="permissions.pool"
