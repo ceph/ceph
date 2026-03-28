@@ -68,3 +68,7 @@
 .. confval:: mds_symlink_recovery
 .. confval:: mds_extraordinary_events_dump_interval
 .. confval:: subv_metrics_window_interval
+.. confval:: mds_dmclock_enable
+.. confval:: mds_dmclock_reservation
+.. confval:: mds_dmclock_weight
+.. confval:: mds_dmclock_limit
