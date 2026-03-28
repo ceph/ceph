@@ -28,12 +28,27 @@ class OAuth2(SSOAuth):
 
     class OAuth2Config(BaseAuth.Config):
         roles_path: str
+        email_attr: str
+        scope: str
+        allowed_domains: str
 
-    def __init__(self, roles_path=None):
+    def __init__(self, roles_path=None, email_attr=None, scope=None, allowed_domains=None):
         self.roles_path = roles_path
+        self.email_attr = email_attr
+        self.scope = scope
+        self.allowed_domains = allowed_domains
 
     def get_roles_path(self):
         return self.roles_path
+
+    def get_email_attr(self):
+        return self.email_attr
+
+    def get_scope(self):
+        return self.scope
+
+    def get_allowed_domains(self):
+        return self.allowed_domains
 
     @staticmethod
     def enabled():
@@ -41,15 +56,23 @@ class OAuth2(SSOAuth):
 
     def to_dict(self) -> 'OAuth2Config':
         return {
-            'roles_path': self.roles_path
+            'roles_path': self.roles_path,
+            'email_attr': self.email_attr,
+            'scope': self.scope,
+            'allowed_domains': self.allowed_domains
         }
 
     @classmethod
     def from_dict(cls, s_dict: OAuth2Config) -> 'OAuth2':
         try:
-            return OAuth2(s_dict['roles_path'])
-        except KeyError:
-            return OAuth2({})
+            return OAuth2(
+                s_dict.get('roles_path'),
+                s_dict.get('email_attr'),
+                s_dict.get('scope'),
+                s_dict.get('allowed_domains')
+            )
+        except (KeyError, TypeError):
+            return OAuth2()
 
     @classmethod
     def get_auth_name(cls):

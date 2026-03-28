@@ -816,11 +816,33 @@ To check if SSO is enabled:
 
    ceph dashboard sso status
 
-To enable SSO:
+To enable SSO with basic OAuth2 configuration:
 
 .. prompt:: bash $
 
    ceph dashboard sso enable oauth2
+
+To enable SSO with OAuth2 configuration including email attribute, scope, and allowed domains:
+
+.. prompt:: bash $
+
+   ceph dashboard sso enable oauth2 \
+     email_attr=<email_attribute> \
+     scope=<oauth2_scope> \
+     allowed_domains=<comma,separated,domains>
+
+To show the current OAuth2 configuration:
+
+.. prompt:: bash $
+
+   ceph dashboard sso show oauth2
+
+**OAuth2 Configuration Parameters:**
+
+- ``roles_path``: JMESPath query to extract roles from the JWT token (optional)
+- ``email_attr``: JWT token attribute name containing the user's email address (optional)
+- ``scope``: OAuth2 scope to request during authentication (optional)
+- ``allowed_domains``: Comma-separated list of allowed email domains for user authentication (optional)
 
 .. _dashboard-alerting:
 
