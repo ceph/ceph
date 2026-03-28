@@ -56,6 +56,8 @@ Current Members
 Ceph Steering Committee
 =======================
 
+ .. _csc_responsibilities:
+
 Responsibilities
 ----------------
 
@@ -119,6 +121,23 @@ Current Members
  * Yingxin Cheng <yingxin.cheng@intel.com>
  * Yuri Weinstein <yweinste@redhat.com>
  * Zac Dover <zac.dover@proton.me>
+
+.. _removing_member:
+
+REMOVING A MEMBER
+-----------------
+
+A current member may resign at any time if they feel they will be unable to 
+continue fulfilling their project duties. Current members may be removed
+after becoming inactive, failing to fulfill their `responsibilities <https://docs.ceph.com/en/latest/governance/#responsibilities>`_,  
+or violating the `Code of Conduct <https://ceph.io/en/code-of-conduct/>`_. The CSC may also remove members for other reasons not listed here.
+
+Inactivity is defined as a period of very low or no activity in the project 
+for six months or more, without a specific schedule to resume full member 
+activity.
+
+A member may be automatically removed for failing to participate in an 
+official CSC election without providing a valid reason to the CSC Co-Chairs.
 
 .. _ctl:
 
