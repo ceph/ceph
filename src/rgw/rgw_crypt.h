@@ -186,6 +186,39 @@ inline uint64_t aead_plaintext_to_encrypted_offset(uint64_t plaintext_ofs) {
   return chunk_idx * AEAD_ENCRYPTED_CHUNK_SIZE + offset_in_chunk;
 }
 
+/*
+ * Generic cipher geometry helpers (parameterized by block sizes).
+ * CBC: block_size == enc_block_size (identity).
+ * AEAD: enc_block_size > block_size (expansion).
+ */
+
+inline off_t crypt_logical_to_enc_offset(off_t logical_ofs,
+                                          size_t block_size,
+                                          size_t enc_block_size) {
+  if (block_size == enc_block_size) return logical_ofs;
+  uint64_t chunk_idx = logical_ofs / block_size;
+  uint64_t offset_in_chunk = logical_ofs % block_size;
+  return chunk_idx * enc_block_size + offset_in_chunk;
+}
+
+inline off_t crypt_align_enc_block_end(off_t enc_ofs,
+                                        size_t block_size,
+                                        size_t enc_block_size) {
+  if (block_size == enc_block_size) return enc_ofs;
+  return (enc_ofs / enc_block_size) * enc_block_size + (enc_block_size - 1);
+}
+
+inline size_t crypt_enc_to_plaintext_size(size_t encrypted_size,
+                                           size_t block_size,
+                                           size_t enc_block_size) {
+  if (block_size == enc_block_size) return encrypted_size;
+  uint64_t full_chunks = encrypted_size / enc_block_size;
+  uint64_t remainder = encrypted_size % enc_block_size;
+  uint64_t tag_size = enc_block_size - block_size;
+  uint64_t partial = (remainder > tag_size) ? (remainder - tag_size) : 0;
+  return full_chunks * block_size + partial;
+}
+
 bool AES_256_ECB_encrypt(const DoutPrefixProvider* dpp,
                          CephContext* cct,
                          const uint8_t* key,
@@ -246,53 +279,8 @@ class RGWGetObj_BlockDecrypt : public RGWGetObj_Filter {
    */
   int process_part_boundaries(size_t& plain_part_ofs_out);
 
-  /**
-   * Result of finding which part contains a plaintext offset.
-   */
-  struct PartLocation {
-    size_t part_idx;            /**< Index into parts_len */
-    off_t offset_in_part;       /**< Plaintext offset within the part */
-    off_t cumulative_encrypted; /**< Total encrypted bytes before this part */
-  };
-
-  /**
-   * Find which part contains a given plaintext offset.
-   * @param plaintext_ofs  The plaintext offset to locate
-   * @param clamp_to_last  If true, stop at second-to-last part (for end offsets)
-   */
-  PartLocation find_part_for_plaintext_offset(off_t plaintext_ofs, bool clamp_to_last) const;
-
-  /**
-   * Align an encrypted offset up to the end of an encrypted block.
-   * For GCM: ensures we read complete blocks including auth tags.
-   */
-  off_t align_to_encrypted_block_end(off_t enc_ofs) const {
-    if (block_size == encrypted_block_size) {
-      return enc_ofs;  // CBC - no alignment needed
-    }
-    return (enc_ofs / encrypted_block_size) * encrypted_block_size + (encrypted_block_size - 1);
-  }
-
-  /**
-   * Convert a logical (plaintext) offset to encrypted (storage) offset.
-   * For AEAD modes: accounts for auth tag overhead per chunk.
-   */
-  off_t logical_to_encrypted_offset(off_t logical_ofs) const {
-    if (block_size == encrypted_block_size) {
-      return logical_ofs; // Non-AEAD (CBC) - no conversion needed
-    }
-    return aead_plaintext_to_encrypted_offset(logical_ofs);
-  }
-
-  /**
-   * Convert an encrypted size to plaintext size.
-   * For AEAD modes: removes the auth tag overhead per chunk.
-   */
   size_t encrypted_to_plaintext_size(size_t encrypted_size) const {
-    if (block_size == encrypted_block_size) {
-      return encrypted_size;  // Non-AEAD (CBC) - no conversion needed
-    }
-    return aead_encrypted_to_plaintext_size(encrypted_size, dpp);
+    return crypt_enc_to_plaintext_size(encrypted_size, block_size, encrypted_block_size);
   }
 
 public:
