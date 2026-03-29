@@ -631,7 +631,7 @@ void Elector::handle_ping(MonOpRequestRef op)
   switch(m->op) {
   case MMonPing::PING:
     {
-      dout(30) << "recieved PING from "
+      dout(30) << "received PING from "
         << prank << ", sending PING_REPLY back!" << dendl;
       MMonPing *reply = new MMonPing(MMonPing::PING_REPLY, m->stamp, peer_tracker.get_encoded_bl());
       m->get_connection()->send_message(reply);
@@ -639,7 +639,7 @@ void Elector::handle_ping(MonOpRequestRef op)
     break;
 
   case MMonPing::PING_REPLY:
-    dout(30) << "recieved PING_REPLY from " << prank << dendl;
+    dout(30) << "received PING_REPLY from " << prank << dendl;
     const utime_t& previous_acked = peer_acked_ping[prank];
     const utime_t& newest = peer_sent_ping[prank];
 
@@ -650,11 +650,11 @@ void Elector::handle_ping(MonOpRequestRef op)
     }
 
     if (m->stamp > previous_acked) {
-      dout(30) << "recieved good PING_REPLY!" << dendl;
+      dout(30) << "received good PING_REPLY!" << dendl;
       peer_tracker.report_live_connection(prank, m->stamp - previous_acked);
       peer_acked_ping[prank] = m->stamp;
     } else {
-      dout(30) << "recieved bad PING_REPLY! it's the same or older "
+      dout(30) << "received bad PING_REPLY! it's the same or older "
         << "than the most recent ack we got." << dendl;
     }
     utime_t now = ceph_clock_now();
