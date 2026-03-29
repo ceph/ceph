@@ -150,7 +150,14 @@ class NFSRados:
         with self.rados.open_ioctx(self.pool) as ioctx:
             ioctx.set_namespace(self.namespace)
             for obj in ioctx.list_objects():
-                obj.remove()
+                key = obj.key
+                try:
+                    obj.remove()
+                except ObjectNotFound:
+                    # Grace/recovery objects may be gone after NFS stops
+                    log.debug(
+                        'RADOS object %s/%s/%s already removed, skipping',
+                        self.pool, self.namespace, key)
 
     def check_user_config(self) -> bool:
         with self.rados.open_ioctx(self.pool) as ioctx:
