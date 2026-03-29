@@ -2048,15 +2048,14 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
   }
   else
   {
-    /**
-     * For AEAD encryption, the on-disk size includes authentication tags,
-     * but the bucket index stores plaintext size. Convert encrypted size
-     * to plaintext for comparison against the index entry.
+    /*
+     * AEAD on-disk size includes auth tags; use the stored plaintext
+     * size for comparison against the bucket index entry.
      */
     uint64_t obj_size = part->get_size();
-    uint64_t decrypted_size = 0;
-    if (rgw_get_aead_decrypted_size(this, part->get_attrs(), obj_size, &decrypted_size)) {
-      obj_size = decrypted_size;
+    uint64_t original_size = 0;
+    if (rgw_get_aead_original_size(this, part->get_attrs(), &original_size)) {
+      obj_size = original_size;
     }
     if (obj_size != ent.meta.size) {
       // hmm.. something wrong, object not as expected, abort!
