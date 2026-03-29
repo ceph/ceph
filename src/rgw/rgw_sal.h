@@ -1158,7 +1158,7 @@ class Object {
       virtual ~ReadOp() = default;
 
       /** Prepare the Read op.  Must be called first */
-      virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) = 0;
+      virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp, bool set_instance=true) = 0;
 
       /** Synchronous read. Read from @a ofs to @a end (inclusive)
        * into @a bl. Length is `end - ofs + 1`. */

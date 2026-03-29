@@ -507,7 +507,7 @@ class RadosObject : public StoreObject {
     public:
       RadosReadOp(RadosObject *_source, RGWObjectCtx *_rctx);
 
-      virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
+      virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp, bool set_instance=true) override;
 
       /*
        * Both `read` and `iterate` read up through index `end`

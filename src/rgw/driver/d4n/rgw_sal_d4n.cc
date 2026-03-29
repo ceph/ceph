@@ -1900,7 +1900,7 @@ std::unique_ptr<Object::DeleteOp> D4NFilterObject::get_delete_op()
   return std::make_unique<D4NFilterDeleteOp>(std::move(d), this);
 }
 
-int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
+int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp, bool set_instance)
 {
   //set a flag to show that incoming instance has no version specified
   bool is_latest_version = true;
@@ -2031,7 +2031,9 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
       perfcounter->inc(l_rgw_d4n_cache_hits);
     }
   }
-  
+  if(!set_instance) {
+    source->clear_instance();
+  }
   return 0;
 }
 

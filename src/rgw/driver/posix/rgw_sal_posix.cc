@@ -3519,7 +3519,7 @@ int POSIXObject::write_attrs(const DoutPrefixProvider* dpp, optional_yield y)
   return ent->write_attrs(dpp, y, state.attrset, nullptr);
 }
 
-int POSIXObject::POSIXReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
+int POSIXObject::POSIXReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp, bool set_instance)
 {
   int ret = source->stat(dpp);
   if (ret < 0)
@@ -3605,7 +3605,9 @@ int POSIXObject::POSIXReadOp::prepare(optional_yield y, const DoutPrefixProvider
   if (params.lastmod) {
     *params.lastmod = source->get_mtime();
   }
-
+  if(!set_instance) {
+    source->clear_instance();
+  }
   return 0;
 }
 

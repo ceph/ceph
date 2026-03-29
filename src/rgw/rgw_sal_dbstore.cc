@@ -668,7 +668,7 @@ namespace rgw::sal {
     parent_op(&op_target)
   { }
 
-  int DBObject::DBReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
+  int DBObject::DBReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp, bool set_instance)
   {
     uint64_t obj_size;
 
@@ -689,6 +689,9 @@ namespace rgw::sal {
       return ret;
 
     source->set_key(parent_op.state.obj.key);
+    if(!set_instance) {
+      source->get_key().instance.clear();
+    }
     source->set_obj_size(obj_size);
 
     return ret;

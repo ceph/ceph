@@ -347,11 +347,12 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
 
   std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op();
 
-  ret = rop->prepare(y, dpp);
+  ldpp_dout(dpp, 0) << "get_obj_policy_from_attr: object oid: " << obj->get_oid() << dendl;
+  ret = rop->prepare(y, dpp, false);
   if (ret < 0) {
     return ret;
   }
-
+  ldpp_dout(dpp, 0) << "after prepare get_obj_policy_from_attr: object oid: " << obj->get_oid() << dendl;
   ret = rop->get_attr(dpp, RGW_ATTR_ACL, bl, y);
   if (ret >= 0) {
     ret = decode_policy(dpp, cct, bl, policy);
@@ -373,7 +374,7 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
       storage_class->clear();
     }
   }
-
+  ldpp_dout(dpp, 0) << "End of get_obj_policy_from_attr: " << obj->get_oid() << dendl;
   return ret;
 }
 
@@ -1325,6 +1326,7 @@ int RGWGetObj::verify_permission(optional_yield y)
     action = s->object->get_instance().empty() ? rgw::IAM::s3GetObject : rgw::IAM::s3GetObjectVersion;
   }
 
+  ldpp_dout(this, 4) << "INFO: Action=" << action << dendl;
   if (!verify_object_permission(this, s, action)) {
     s->err.message = fmt::format("missing {} permission", rgw::IAM::action_bit_string(action));
 

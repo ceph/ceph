@@ -499,7 +499,7 @@ protected:
         public:
           DBReadOp(DBObject *_source, RGWObjectCtx *_octx);
 
-          virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
+          virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp, bool set_instance=true) override;
 
 	  /*
 	   * Both `read` and `iterate` read up through index `end`

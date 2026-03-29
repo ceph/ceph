@@ -979,7 +979,7 @@ public:
       source(_source) {}
     virtual ~POSIXReadOp() = default;
 
-    virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
+    virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp, bool set_instance=true) override;
     virtual int read(int64_t ofs, int64_t left, bufferlist& bl, optional_yield y,
 		     const DoutPrefixProvider* dpp) override;
     virtual int iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end,
