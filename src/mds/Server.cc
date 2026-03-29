@@ -5495,7 +5495,6 @@ void Server::handle_client_setattr(const MDRequestRef& mdr)
     respond_to_request(mdr, -EPERM);
     return;
   }
-
   __u32 mask = req->head.args.setattr.mask;
   __u32 access_mask = MAY_WRITE;
 
@@ -12677,6 +12676,7 @@ void Server::handle_client_readdir_snapdiff(const MDRequestRef& mdr)
   // which frag?
   frag_t fg = (__u32)req->head.args.snapdiff.frag;
   unsigned req_flags = (__u32)req->head.args.snapdiff.flags;
+  unsigned diff_mask = (__u32)req->head.args.snapdiff.mask;
   string offset_str = req->get_path2();
 
   __u32 offset_hash = 0;
@@ -12739,6 +12739,7 @@ void Server::handle_client_readdir_snapdiff(const MDRequestRef& mdr)
   dout(10) << __func__
     << " snap " << mdr->snapid
     << " vs. snap " << mdr->snapid_diff_other
+    << " input mask 0x" << diff_mask
     << dendl;
 
   if (mdr->snapid_diff_other == mdr->snapid ||
@@ -12785,6 +12786,7 @@ void Server::handle_client_readdir_snapdiff(const MDRequestRef& mdr)
     offset_str,
     offset_hash,
     req_flags,
+    diff_mask,
     dirbl);
 }
 
@@ -12831,6 +12833,7 @@ void Server::_readdir_diff(
   const string& offset_str,
   uint32_t offset_hash,
   unsigned req_flags,
+  unsigned diff_mask,
   bufferlist& dirbl)
 {
   // build dir contents
@@ -12863,6 +12866,7 @@ void Server::_readdir_diff(
     from_the_beginning ? nullptr : & skip_key,
     snapid_prev,
     snapid,
+    diff_mask,
     dnbl,
     [&](CDentry* dn, CInode* in, bool exists) {
       string name;
@@ -12946,18 +12950,51 @@ bool Server::build_snap_diff(
   dentry_key_t* skip_key,
   snapid_t snapid_prev,
   snapid_t snapid,
+  unsigned diff_mask,
   const bufferlist& dnbl,
   std::function<bool (CDentry*, CInode*, bool)> add_result_cb)
 {
-  client_t client = mdr->client_request->get_source().num();
-
   struct EntryInfo {
     CDentry* dn = nullptr;
     CInode* in = nullptr;
-    utime_t mtime;
 
     void reset() {
       *this = EntryInfo();
+    }
+    EntryInfo() {}
+    EntryInfo(CDentry* _dn, CInode* _in) : dn(_dn), in(_in) {}
+
+    bool valid() const {
+      return in != nullptr && dn != nullptr;
+    }
+    bool meta_differs(const CInode* _in, unsigned mask, unsigned& res_mask) const {
+      ceph_assert(in);
+      ceph_assert(_in);
+
+      auto my = in->get_inode();
+      auto oth = _in->get_inode();
+      ceph_assert(my);
+      ceph_assert(oth);
+      res_mask = 0;
+      if ((mask & CEPH_SNAPDIFF_MODE) && (my->mode != oth->mode))
+	res_mask |= CEPH_SNAPDIFF_MODE;
+      if ((mask & CEPH_SNAPDIFF_UID) && (my->uid != oth->uid))
+	res_mask |= CEPH_SNAPDIFF_UID;
+      if ((mask & CEPH_SNAPDIFF_GID) && (my->gid != oth->gid))
+	res_mask |= CEPH_SNAPDIFF_GID;
+      if ((mask & CEPH_SNAPDIFF_SIZE) && (my->size != oth->size))
+	res_mask |= CEPH_SNAPDIFF_SIZE;
+      if ((mask & CEPH_SNAPDIFF_NLINK) && (my->nlink != oth->nlink))
+	res_mask |= CEPH_SNAPDIFF_NLINK;
+      if ((mask & CEPH_SNAPDIFF_MTIME) && (my->mtime != oth->mtime))
+	res_mask |= CEPH_SNAPDIFF_MTIME;
+      if ((mask & CEPH_SNAPDIFF_ATIME) && (my->atime != oth->atime))
+	res_mask |= CEPH_SNAPDIFF_ATIME;
+      if ((mask & CEPH_SNAPDIFF_CTIME) && (my->ctime != oth->ctime))
+	res_mask |= CEPH_SNAPDIFF_CTIME;
+      if ((mask & CEPH_SNAPDIFF_BTIME) && (my->btime != oth->btime))
+	res_mask |= CEPH_SNAPDIFF_BTIME;
+      return res_mask != 0;
     }
   } before;
 
@@ -12968,9 +13005,11 @@ bool Server::build_snap_diff(
     ei.reset();
     return r;
   };
+  client_t client = mdr->client_request->get_source().num();
 
   auto it = !skip_key ? dir->begin() : dir->upper_bound(*skip_key);
 
+  diff_mask = diff_mask != 0 ? diff_mask : CEPH_SNAPDIFF_MTIME; // to preserve backward compatibility with the original impl.
   while(it != dir->end()) {
     CDentry* dn = it->second;
     dout(20) << __func__ << " " << it->first << "->" << *dn << dendl;
@@ -13027,7 +13066,6 @@ bool Server::build_snap_diff(
     }
     ceph_assert(in);
 
-    utime_t mtime = in->get_inode()->mtime;
     if (in->is_dir()) {
 
       // we need to maintain the order of entries (determined by their name hashes)
@@ -13063,9 +13101,7 @@ bool Server::build_snap_diff(
 	  << dn->first << "/" << dn->last << dendl;
 	continue;
       }
-      string_view name_before =
-        before.dn ? string_view(before.dn->get_name()) : string_view();
-      if (before.dn && dn->get_name() != name_before) {
+      if (before.valid() && before.dn->get_name() != dn->get_name()) {
         if (!insert_deleted(before)) {
           break;
         }
@@ -13074,33 +13110,32 @@ bool Server::build_snap_diff(
       if (snapid_prev >= dn->first && snapid_prev <= dn->last) {
 	dout(30) << __func__ << " dn_before " << dn->get_name() << " "
 	  << dn->first << "/" << dn->last << dendl;
-	before = EntryInfo {dn, in, mtime};
+	before = EntryInfo {dn, in};
 	continue;
       } else {
-	if (before.dn && dn->get_name() == name_before) {
+	if (before.valid() && before.dn->get_name() == dn->get_name()) {
 	  if (before.in->ino() != in->ino()) {
 	    dout(30) << __func__ << " inode changed " << dn->get_name() << " "
 		     << dn->first << "/" << dn->last
-		     << " " << before.mtime << " vs. " << mtime
 		     << dendl;
 	    if (!insert_deleted(before)) {
 	      break;
 	    }
 	    before.reset();
 	  } else {
-	    if (mtime == before.mtime) {
-	      dout(30) << __func__ << " timestamp not changed " << dn->get_name() << " "
-		       << dn->first << "/" << dn->last
-		       << " " << mtime
-		       << dendl;
+	    unsigned res_mask = 0;
+	    if (before.meta_differs(in, diff_mask, res_mask) ) {
+	      dout(0) << __func__ << " attrs changed " << dn->get_name() << " "
+		<< dn->first << "/" << dn->last
+		<< " result mask: 0x" << std::hex << res_mask << std::dec
+		<< dendl;
+	      before.reset();
+	    } else {
+	      dout(0) << __func__ << " attrs not changed " << dn->get_name() << " "
+		<< dn->first << "/" << dn->last
+		<< dendl;
 	      before.reset();
 	      continue;
-	    } else {
-	      dout(30) << __func__ << " timestamp changed " << dn->get_name() << " "
-		       << dn->first << "/" << dn->last
-		       << " " << before.mtime << " vs. " << mtime
-		       << dendl;
-	      before.reset();
 	    }
 	  }
 	}
