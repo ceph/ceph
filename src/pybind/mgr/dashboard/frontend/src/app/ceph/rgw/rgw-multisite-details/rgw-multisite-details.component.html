@@ -19,7 +19,9 @@
        Cluster->Services</a>
   </cd-alert-panel>
   <div [cdsStack]="'horizontal'"
-       [gap]="4">
+       [gap]="4"
+       class="mb-3"
+       >
     <cd-table-actions class="btn-group"
                       [permission]="permissions.rgw"
                       [selection]="selection"
@@ -42,7 +44,7 @@
   </div>
 </div>
 <div class="card">
-  <div class="card-header"
+  <div class="card-header border-subtle"
        data-testid="rgw-multisite-details-header"
        i18n>Topology Viewer</div>
   <div class="row">
