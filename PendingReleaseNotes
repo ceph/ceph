@@ -293,6 +293,9 @@
   to upgrade all OSDs in the cluster. For more details see tracker:
   https://tracker.ceph.com/issues/73031.
 
+* RADOS: The `ceph osd pool set threshold` command is deprecated in favor of the
+  `ceph config set mgr mgr/pg_autoscaler/ threshold` command.
+
 >=19.2.1
 
 * CephFS: The `fs subvolume create` command now allows tagging subvolumes through option

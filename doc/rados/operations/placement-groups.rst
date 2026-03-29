@@ -165,6 +165,12 @@ The output will resemble the following::
 
      ceph osd pool set threshold 2.0
 
+  .. note::
+
+   The ``ceph osd pool set threshold <val>`` command is deprecated and will be removed in a future release.
+   Use ``ceph config set mgr mgr/pg_autoscaler/threshold <val>`` instead.
+
+
   To get the current ``threshold`` value, run the following command:
 
   .. prompt:: bash #
