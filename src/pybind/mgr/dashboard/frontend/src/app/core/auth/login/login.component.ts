@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import _ from 'lodash';
@@ -15,7 +16,7 @@ import { ModalService } from '~/app/shared/services/modal.service';
   standalone: false
 })
 export class LoginComponent implements OnInit {
-  model = new Credentials();
+  loginForm: UntypedFormGroup;
   isLoginActive = false;
   returnUrl: string;
   postInstalled = false;
@@ -25,16 +26,24 @@ export class LoginComponent implements OnInit {
     private authStorageService: AuthStorageService,
     private modalService: ModalService,
     private route: ActivatedRoute,
-    private router: Router
-  ) {}
+    private router: Router,
+    private fb: UntypedFormBuilder
+  ) {
+    this.createForm();
+  }
+
+  createForm() {
+    this.loginForm = this.fb.group({
+      username: ['', [Validators.required]],
+      password: ['', [Validators.required]]
+    });
+  }
 
   ngOnInit() {
     if (this.authStorageService.isLoggedIn()) {
       this.router.navigate(['']);
     } else {
-      // Make sure all open modal dialogs are closed. This might be
-      // necessary when the logged in user is redirected to the login
-      // page after a 401.
+      // Make sure all open modal dialogs are closed.
       this.modalService.dismissAll();
 
       let token: string = null;
@@ -64,9 +73,22 @@ export class LoginComponent implements OnInit {
     }
   }
 
+  submitted = false;
   login() {
+    if (this.loginForm.invalid) {
+      this.submitted = true;
+      this.loginForm.markAllAsTouched();
+      return;
+    }
+
     localStorage.setItem('cluster_api_url', window.location.origin);
-    this.authService.login(this.model).subscribe(() => {
+
+    // Map reactive form values back to the Credentials model expected by the API
+    const credentials = new Credentials();
+    credentials.username = this.loginForm.value.username;
+    credentials.password = this.loginForm.value.password;
+
+    this.authService.login(credentials).subscribe(() => {
       const urlPath = this.postInstalled ? '/' : '/add-storage';
       let url = _.get(this.route.snapshot.queryParams, 'returnUrl', urlPath);
       if (!this.postInstalled && this.route.snapshot.queryParams['returnUrl'] === '/overview') {

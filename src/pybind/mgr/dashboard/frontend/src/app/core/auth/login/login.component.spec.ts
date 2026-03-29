@@ -42,6 +42,7 @@ describe('LoginComponent', () => {
 
   it('should not show create cluster wizard if cluster creation was successful', () => {
     component.postInstalled = true;
+    component.loginForm.setValue({ username: 'admin', password: 'admin' });
     component.login();
 
     expect(routerNavigateSpy).toHaveBeenCalledTimes(1);
@@ -50,6 +51,7 @@ describe('LoginComponent', () => {
 
   it('should show create cluster wizard if cluster creation was failed', () => {
     component.postInstalled = false;
+    component.loginForm.setValue({ username: 'admin', password: 'admin' });
     component.login();
 
     expect(routerNavigateSpy).toHaveBeenCalledTimes(1);
