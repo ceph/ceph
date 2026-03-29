@@ -4684,9 +4684,9 @@ options:
 - name: bluestore_prefer_deferred_size
   type: size
   level: advanced
-  desc: Writes smaller than this size will be written to the journal and then asynchronously
-    written to the device.  This can be beneficial when using rotational media where
-    seeks are expensive, and is helpful both with and without solid state journal/wal
+  desc: Writes smaller than this size will be written to the WAL and then asynchronously
+    written to the block (slow) device.  This can be beneficial when using rotational media where
+    seeks are expensive, and is helpful both with and without SSD WAL.
     devices.
   default: 0
   flags:
@@ -4705,7 +4705,7 @@ options:
 - name: bluestore_prefer_deferred_size_ssd
   type: size
   level: advanced
-  desc: Default bluestore_prefer_deferred_size for non-rotational (solid state) media
+  desc: Default bluestore_prefer_deferred_size for non-rotational (SSD) media
   default: 0
   see_also:
   - bluestore_prefer_deferred_size
