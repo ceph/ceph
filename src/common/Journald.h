@@ -66,7 +66,7 @@ class JournaldLogger {
 };
 
 /**
- * Logger to send cluster log recieved by MON to journald
+ * Logger to send cluster log received by MON to journald
  * 
  * @see JournaldLogger
  */
