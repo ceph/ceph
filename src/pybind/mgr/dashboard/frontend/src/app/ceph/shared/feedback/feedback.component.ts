@@ -31,6 +31,7 @@ export class FeedbackComponent extends CdForm implements OnInit, OnDestroy {
   tracker: string[] = ['bug', 'feature'];
   api_key: string;
   keySub: Subscription;
+  moduleUpdateSub: Subscription;
   submit: string;
   feedbackForm: CdFormGroup;
   isAPIKeySet = false;
@@ -48,12 +49,27 @@ export class FeedbackComponent extends CdForm implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.createForm();
+    this.refreshFeedbackModuleState();
+    this.moduleUpdateSub = this.mgrModuleService.updateCompleted$.subscribe(() => {
+      if (!this.isFeedbackEnabled) {
+        this.refreshFeedbackModuleState();
+      }
+    });
+  }
+
+  private refreshFeedbackModuleState() {
+    this.keySub?.unsubscribe();
     this.keySub = this.feedbackService.isKeyExist().subscribe({
       next: (data: boolean) => {
+        this.isFeedbackEnabled = true;
+        this.feedbackForm.enable();
         this.isAPIKeySet = data;
         if (this.isAPIKeySet) {
           this.feedbackForm.get('api_key').clearValidators();
+        } else {
+          this.feedbackForm.get('api_key').setValidators(Validators.required);
         }
+        this.feedbackForm.get('api_key').updateValueAndValidity();
       },
       error: () => {
         this.isFeedbackEnabled = false;
@@ -73,7 +89,8 @@ export class FeedbackComponent extends CdForm implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    this.keySub.unsubscribe();
+    this.keySub?.unsubscribe();
+    this.moduleUpdateSub?.unsubscribe();
   }
 
   onSubmit() {
