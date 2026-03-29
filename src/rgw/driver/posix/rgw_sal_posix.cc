@@ -2180,9 +2180,10 @@ std::unique_ptr<Notification> POSIXDriver::get_notification(
 // TODO: marker and other params
 int POSIXDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& owner,
 			     const std::string& tenant, const std::string& marker,
-			     const std::string& end_marker, uint64_t max,
-			     bool need_stats, BucketList &result, optional_yield y)
+			     const std::string& end_marker, const std::string& prefix, uint64_t max,
+		     bool need_stats, BucketList &result, optional_yield y)
 {
+  (void)prefix;
   DIR* dir;
   struct dirent* entry;
   int dfd;

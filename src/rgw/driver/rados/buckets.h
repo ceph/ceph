@@ -56,6 +56,7 @@ int list(const DoutPrefixProvider* dpp,
          const std::string& tenant,
          const std::string& marker,
          const std::string& end_marker,
+         const std::string& prefix,
          uint64_t max,
          rgw::sal::BucketList& buckets);
 

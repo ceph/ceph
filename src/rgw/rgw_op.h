@@ -916,6 +916,7 @@ protected:
   int64_t limit;
   uint64_t limit_max;
   bool is_truncated;
+  std::string prefix;
 
   RGWUsageStats global_stats;
   std::map<std::string, RGWUsageStats> policies_stats;

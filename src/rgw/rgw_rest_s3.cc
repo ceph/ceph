@@ -1624,6 +1624,8 @@ void RGWDeleteBucketReplication_ObjStore_S3::send_response()
 
 int RGWListBuckets_ObjStore_S3::get_params(optional_yield y)
 {
+  prefix = s->info.args.get("prefix");
+
   auto continuation_token = s->info.args.get_optional("continuation-token");
   if (continuation_token) {
     marker = *continuation_token;
@@ -1642,7 +1644,7 @@ int RGWListBuckets_ObjStore_S3::get_params(optional_yield y)
     }
     limit = *value;
   }
-  // TODO: support "prefix" and "bucket-region" params?
+  // TODO: support "bucket-region" params?
 
   // a request is only considered to be "paginated" if it specifies
   // either "max-buckets" or "continuation-token"
@@ -1652,6 +1654,7 @@ int RGWListBuckets_ObjStore_S3::get_params(optional_yield y)
 
   return 0;
 }
+
 
 void RGWListBuckets_ObjStore_S3::send_response_begin(bool has_buckets)
 {

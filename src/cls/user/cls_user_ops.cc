@@ -50,6 +50,8 @@ list<cls_user_remove_bucket_op> cls_user_remove_bucket_op::generate_test_instanc
 void cls_user_list_buckets_op::dump(Formatter *f) const
 {
   encode_json("marker", marker, f);
+  encode_json("end_marker", end_marker, f);
+  encode_json("prefix", prefix, f);
   encode_json("max_entries", max_entries, f);
 }
 
@@ -59,6 +61,8 @@ list<cls_user_list_buckets_op> cls_user_list_buckets_op::generate_test_instances
   ls.emplace_back();
   cls_user_list_buckets_op op;;
   op.marker = "marker";
+  op.end_marker = "end";
+  op.prefix = "prefix";
   op.max_entries = 1000;
   ls.push_back(std::move(op));
   return ls;

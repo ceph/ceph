@@ -78,6 +78,7 @@ public:
 void cls_user_bucket_list(librados::ObjectReadOperation& op,
                           const string& in_marker,
                           const string& end_marker,
+                          const string& prefix,
                           int max_entries,
                           list<cls_user_bucket_entry>& entries,
                           string *out_marker,
@@ -88,6 +89,7 @@ void cls_user_bucket_list(librados::ObjectReadOperation& op,
   cls_user_list_buckets_op call;
   call.marker = in_marker;
   call.end_marker = end_marker;
+  call.prefix = prefix;
   call.max_entries = max_entries;
 
   encode(call, inbl);
