@@ -249,7 +249,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
           return /^[^@/]+$/.test(value) ? null : { rbdImageName: true };
         })
       ]),
-      namespace_size: new UntypedFormControl(null), // UI only - not sent to backend
+      namespace_size: new UntypedFormControl(512), // Block size in bytes; default 512
       host_access: new UntypedFormControl('all'), // UI only - determines visibility
       initiators: new UntypedFormControl([]) // UI only - selected hosts
     });
