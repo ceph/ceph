@@ -218,15 +218,7 @@ static void init_headers(map<string, bufferlist>& attrs,
     } else if (strncmp(name, RGW_ATTR_META_PREFIX,
           sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
       name += sizeof(RGW_ATTR_META_PREFIX) - 1;
-      string sname(name);
-      string name_prefix = RGW_ATTR_META_PREFIX;
-      char full_name_buf[name_prefix.size() + sname.size() + 1];
-      snprintf(full_name_buf, sizeof(full_name_buf), "%.*s%.*s",
-          static_cast<int>(name_prefix.length()),
-          name_prefix.data(),
-          static_cast<int>(sname.length()),
-          sname.data());
-      headers[full_name_buf] = rgw_bl_str(kv.second);
+      headers[fmt::format("{}{}", RGW_ATTR_META_PREFIX, name)] = rgw_bl_str(kv.second);
     } else if (strcmp(name,RGW_ATTR_CONTENT_TYPE) == 0) {
       headers["CONTENT_TYPE"] = rgw_bl_str(kv.second);
     }

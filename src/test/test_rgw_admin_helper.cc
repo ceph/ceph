@@ -308,7 +308,8 @@ namespace admin_helper
             /* child */
             list<string> l;
             get_str_list(cmd, " \t", l);
-            char *argv[l.size()];
+	    // One extra for argv[0] and one for the NULL.
+            std::vector<char*> argv(l.size() + 2);
             unsigned loop = 1;
 
             argv[0] = (char *)"radosgw-admin";
@@ -322,7 +323,7 @@ namespace admin_helper
             {
                 cout << "Unable to open stdout file" << std::endl;
             }
-            execv((g_test->get_rgw_admin_path()).c_str(), argv);
+            execv((g_test->get_rgw_admin_path()).c_str(), argv.data());
         }
         else if (pid > 0)
         {

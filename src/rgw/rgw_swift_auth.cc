@@ -3,6 +3,7 @@
 
 #include <array>
 #include <algorithm>
+#include <span>
 #include <string_view>
 
 #include <boost/container/static_vector.hpp>
@@ -20,7 +21,6 @@
 
 #include "rgw_client_io.h"
 #include "rgw_http_client.h"
-#include "rgw_sal_rados.h"
 #include "include/str_list.h"
 
 #define dout_context g_ceph_context
@@ -473,8 +473,7 @@ ExternalTokenEngine::authenticate(const DoutPrefixProvider* dpp,
   }
 
   auth_url.append("token");
-  char url_buf[auth_url.size() + 1 + token.length() + 1];
-  sprintf(url_buf, "%s/%s", auth_url.c_str(), token.c_str());
+  auto url_buf = fmt::format("{}/{}", auth_url, token);
 
   RGWHTTPHeadersCollector validator(cct, "GET", url_buf, { "X-Auth-Groups", "X-Auth-Ttl" });
 
@@ -542,8 +541,9 @@ static int build_token(const string& swift_user,
 
   bufferptr p(CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
 
-  char buf[bl.length() * 2 + 1];
-  buf_to_hex((const unsigned char *)bl.c_str(), bl.length(), buf);
+  std::string buf;
+  buf.reserve(bl.length() * 2);
+  buf_to_hex(std::span{bl.c_str(), bl.length()}, std::back_inserter(buf));
   dout(20) << "build_token token=" << buf << dendl;
 
   char k[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
@@ -676,10 +676,12 @@ SignedTokenEngine::authenticate(const DoutPrefixProvider* dpp,
 
   if (memcmp(local_tok_bl.c_str(), tok_bl.c_str(),
              local_tok_bl.length()) != 0) {
-    char buf[local_tok_bl.length() * 2 + 1];
+    std::string buf;
+    buf.reserve(local_tok_bl.length() * 2);
 
-    buf_to_hex(reinterpret_cast<const unsigned char *>(local_tok_bl.c_str()),
-               local_tok_bl.length(), buf);
+    buf_to_hex(
+        std::span{local_tok_bl.c_str(), local_tok_bl.length()},
+        std::back_inserter(buf));
 
     ldpp_dout(dpp, 0) << "NOTICE: tokens mismatch tok=" << buf << dendl;
     return result_t::deny(-EPERM);
@@ -801,12 +803,12 @@ void RGW_SWIFT_Auth_Get::execute(optional_yield y)
     goto done;
 
   {
-    static constexpr size_t PREFIX_LEN = sizeof("AUTH_rgwtk") - 1;
-    char token_val[PREFIX_LEN + bl.length() * 2 + 1];
+    static constexpr auto PREFIX = "AUTH_rgwtk"sv;
+    std::string token_val;
+    token_val.reserve(PREFIX.size() + bl.length() * 2 + 1);
 
-    snprintf(token_val, PREFIX_LEN + 1, "AUTH_rgwtk");
-    buf_to_hex((const unsigned char *)bl.c_str(), bl.length(),
-	       token_val + PREFIX_LEN);
+    token_val.append(PREFIX);
+    buf_to_hex(std::span{bl.c_str(), bl.length()}, std::back_inserter(token_val));
 
     dump_header(s, "X-Storage-Token", token_val);
     dump_header(s, "X-Auth-Token", token_val);

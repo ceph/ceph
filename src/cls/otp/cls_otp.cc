@@ -8,20 +8,16 @@
  *
  */
 
-#include <errno.h>
-#include <map>
+#include <cerrno>
 #include <list>
 
 #include <boost/range/adaptor/reversed.hpp>
 
+#include <boost/container/small_vector.hpp>
+
 #include <liboath/oath.h>
 
-#include "include/types.h"
-#include "include/utime.h"
 #include "objclass/objclass.h"
-
-#include "common/errno.h"
-#include "common/Clock.h"
 
 #include "cls/otp/cls_otp_ops.h"
 #include "cls/otp/cls_otp_types.h"
@@ -268,8 +264,8 @@ static int write_header(cls_method_context_t hctx, const otp_header& h)
 static int parse_seed(const string& seed, SeedType seed_type, bufferlist *seed_bin)
 {
   size_t slen = seed.length();
-  char secret[seed.length()];
-  char *psecret = secret;
+  boost::container::small_vector<char, 1024> secret(seed.length());
+  char *psecret = secret.data();
   int result;
   bool need_free = false;
 

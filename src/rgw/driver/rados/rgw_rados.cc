@@ -2466,12 +2466,8 @@ int RGWRados::create_pool(const DoutPrefixProvider *dpp, const rgw_pool& pool)
 
 void RGWRados::create_bucket_id(string *bucket_id)
 {
-  uint64_t iid = instance_id();
-  uint64_t bid = next_bucket_id();
-  char buf[svc.zone->get_zone_params().get_id().size() + 48];
-  snprintf(buf, sizeof(buf), "%s.%" PRIu64 ".%" PRIu64,
-           svc.zone->get_zone_params().get_id().c_str(), iid, bid);
-  *bucket_id = buf;
+  *bucket_id = fmt::format("{}.{}.{}", svc.zone->get_zone_params().get_id(),
+			   instance_id(), next_bucket_id());
 }
 
 int RGWRados::create_bucket(const DoutPrefixProvider* dpp,
@@ -3060,10 +3056,10 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
   }
 
   const string& src_name = obj.get_oid();
-  char buf[src_name.size() + 32];
   struct timespec ts = ceph::real_clock::to_timespec(state->mtime);
-  snprintf(buf, sizeof(buf), "%03x%s/%lld.%06ld", (int)src_name.size(),
-           src_name.c_str(), (long long)ts.tv_sec, ts.tv_nsec / 1000);
+  auto buf = fmt::format("{:03x}{}/{}.{:06}", int(src_name.size()),
+			src_name, static_cast<long long>(ts.tv_sec),
+			ts.tv_nsec / 1000);
 
   RGWBucketInfo dest_bucket_info;
 
@@ -6886,7 +6882,6 @@ static void generate_fake_tag(const DoutPrefixProvider *dpp, RGWRados* store, ma
   }
 
   unsigned char md5[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  char md5_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   MD5 hash;
   // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
   hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
@@ -6899,8 +6894,7 @@ static void generate_fake_tag(const DoutPrefixProvider *dpp, RGWRados* store, ma
   }
 
   hash.Final(md5);
-  buf_to_hex(md5, CEPH_CRYPTO_MD5_DIGESTSIZE, md5_str);
-  tag.append(md5_str);
+  buf_to_hex(md5, std::back_inserter(tag));
 
   ldpp_dout(dpp, 10) << "generate_fake_tag new tag=" << tag << dendl;
 
