@@ -3,10 +3,10 @@
 <div cdsGrid
      [fullWidth]="true"
      [narrow]="true"
-     class="cds-mt-5 cds-mb-5 overview">
-  <div cdsRow>
+     class="cds-mt-6 cds-mb-6 overview">
+  <div cdsRow
+       class="cds-mb-5">
     <div cdsCol
-         class="cds-mb-5"
          [columnNumbers]="{lg: 11}">
       <cd-overview-health-card
           [vm]="health"
@@ -16,14 +16,15 @@
         ></cd-overview-health-card>
     </div>
     <div cdsCol
-         class="cds-mb-5"
+         class="overview-pr-0"
          [columnNumbers]="{lg: 5}">
       <cd-overview-alerts-card [compact]="!activeHealthTab"></cd-overview-alerts-card>
     </div>
   </div>
-  <div cdsRow>
+  <div cdsRow
+       class="cds-mb-5">
     <div cdsCol
-         class="cds-mb-5"
+         class="overview-pr-0"
          [columnNumbers]="{lg: 16}">
       <cd-overview-storage-card
         [totalCapacity]="storageCard?.totalCapacity"
@@ -39,7 +40,7 @@
   </div>
   <div cdsRow>
     <div cdsCol
-         class="cds-mb-5"
+         class="overview-pr-0"
          [columnNumbers]="{ lg: 16 }">
       <cd-performance-card></cd-performance-card>
     </div>
