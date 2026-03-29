@@ -371,7 +371,7 @@ int PyModule::load(PyThreadState *pMainThreadState)
 
     int r;
 
-    pPickleModule = PyImport_ImportModuleNoBlock("pickle");
+    pPickleModule = PyImport_ImportModule("pickle");
     if (!pPickleModule) {
       derr << "Unable to load pickle" << dendl;
       return -EINVAL;
