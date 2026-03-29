@@ -425,7 +425,13 @@ struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t, LBALeafNode> {
     assert(is_viewable());
     assert(is_indirect());
     assert(!is_end());
-    return iter.get_val().pladdr.build_laddr(key);
+    if (likely(!hobject_t::is_temp_pool(get_key().get_pool()))) {
+      return iter.get_val().pladdr.build_laddr(key);
+    } else {
+      auto k = key;
+      k.set_pool(hobject_t::POOL_TEMP_START - key.get_pool());
+      return iter.get_val().pladdr.build_laddr(k);
+    }
   }
   checksum_t get_checksum() const {
     assert(is_viewable());

@@ -1726,6 +1726,19 @@ struct laddr_hint_t {
     laddr_t clone_prefix,
     extent_len_t block_size);
 
+  static laddr_hint_t create_temp_object_data_hint(
+    laddr_shard_t shard,
+    laddr_pool_t pool,
+    laddr_crush_hash_t crush,
+    local_object_id_t object_id,
+    extent_len_t block_size);
+  static laddr_hint_t create_temp_object_md_hint(
+    laddr_shard_t shard,
+    laddr_pool_t pool,
+    laddr_crush_hash_t crush,
+    local_object_id_t id,
+    extent_len_t block_size);
+
   void find_next_random();
 
   bool conflict_with(laddr_t other) const {

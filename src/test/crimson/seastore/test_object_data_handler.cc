@@ -43,24 +43,35 @@ public:
       std::swap(layout.xattr_root, o_mlayout.xattr_root);
     });
   }
-  laddr_hint_t get_hint() const {
+  laddr_hint_t init_hint(
+    extent_len_t block_size,
+    bool is_metadata) const final {
     laddr_hint_t hint;
     hint.addr = laddr_t::from_byte_offset(0);
+    hint.addr.set_pool(1);
     hint.condition = laddr_conflict_condition_t::all_at_object_content;
     hint.policy = laddr_conflict_policy_t::linear_search;
     hint.block_size = laddr_t::UNIT_SIZE;
     return hint;
   }
-  laddr_hint_t init_hint(
+  laddr_hint_t generate_temp_hint(
+    local_object_id_t object_id,
     extent_len_t block_size,
     bool is_metadata) const final {
-    return get_hint();
+    ceph_abort("impossible for now");
+    return laddr_hint_t{};
   }
   laddr_hint_t generate_clone_hint(
     local_object_id_t object_id,
     extent_len_t block_size,
     bool is_metadata) const final {
-    return get_hint();
+    laddr_hint_t hint;
+    hint.addr = laddr_t::from_byte_offset(0);
+    hint.addr.set_pool(1);
+    hint.condition = laddr_conflict_condition_t::clone_prefix_at_clone_id;
+    hint.policy = laddr_conflict_policy_t::gen_random;
+    hint.block_size = laddr_t::UNIT_SIZE;
+    return hint;
   }
   ~TestOnode() final = default;
 
@@ -213,7 +224,14 @@ struct object_data_handler_test_t:
 	ObjectDataHandler objhandler(MAX_OBJECT_SIZE);
 	auto &target = get_object(target_snap);
 	target.clone_from(head);
+        auto id = head.onode->get_layout()
+            .object_data
+            .get()
+            .get_reserved_data_base()
+            .get_local_object_id();
 	head.onode->swap_layout(t, *(target.onode));
+        head.onode->reset_sibling_object_id();
+        head.onode->set_sibling_object_id(id);
 	co_await objhandler.clone(
 	  ObjectDataHandler::context_t{
 	    *tm, t, *(target.onode), &*(head.onode)

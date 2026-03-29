@@ -426,6 +426,9 @@ class key_hobj_t {
   pool_t pool() const {
     return ghobj.hobj.pool;
   }
+  pool_t logical_pool() const {
+    return ghobj.hobj.get_logical_pool();
+  }
   crush_hash_t crush() const {
     // Note: this is the reversed version of the object hash
     return ghobj.hobj.get_bitwise_key_u32();
@@ -444,6 +447,18 @@ class key_hobj_t {
     extent_len_t block_size) const {
     return laddr_hint_t::create_fresh_object_md_hint(
       shard(), pool(), crush(), block_size);
+  }
+  laddr_hint_t create_temp_object_data_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size) const {
+    return laddr_hint_t::create_temp_object_data_hint(
+      shard(), pool(), crush(), object_id, block_size);
+  }
+  laddr_hint_t create_temp_object_md_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size) const {
+    return laddr_hint_t::create_temp_object_md_hint(
+      shard(), pool(), crush(), object_id, block_size);
   }
   laddr_hint_t create_clone_object_data_hint(
     local_object_id_t object_id,
@@ -546,6 +561,7 @@ class key_view_t {
    */
   inline shard_t shard() const;
   inline pool_t pool() const;
+  inline pool_t logical_pool() const;
   inline crush_hash_t crush() const;
   laddr_hint_t create_onode_hint(
     extent_len_t block_size = laddr_t::UNIT_SIZE) const {
@@ -561,6 +577,18 @@ class key_view_t {
     extent_len_t block_size) const {
     return laddr_hint_t::create_fresh_object_md_hint(
       shard(), pool(), crush(), block_size);
+  }
+  laddr_hint_t create_temp_object_data_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size) const {
+    return laddr_hint_t::create_temp_object_data_hint(
+      shard(), pool(), crush(), object_id, block_size);
+  }
+  laddr_hint_t create_temp_object_md_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size) const {
+    return laddr_hint_t::create_temp_object_md_hint(
+      shard(), pool(), crush(), object_id, block_size);
   }
   laddr_hint_t create_clone_object_data_hint(
     local_object_id_t object_id,
@@ -792,6 +820,14 @@ shard_t key_view_t::shard() const {
 
 pool_t key_view_t::pool() const {
   return shard_pool_packed().pool();
+}
+
+pool_t key_view_t::logical_pool() const {
+  auto pool = shard_pool_packed().pool();
+  if (unlikely(hobject_t::is_temp_pool(pool))) {
+    return hobject_t::get_temp_pool(pool);
+  }
+  return pool;
 }
 
 crush_hash_t key_view_t::crush() const {
