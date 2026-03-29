@@ -95,6 +95,20 @@ laddr_hint_t Value::init_hint(
   }
 }
 
+laddr_hint_t Value::generate_temp_hint(
+  local_object_id_t object_id,
+  extent_len_t block_size,
+  bool is_metadata) const
+{
+  if (is_metadata) {
+    return p_cursor->get_key_view(vb.get_header_magic())
+        .create_temp_object_md_hint(object_id, block_size);
+  } else {
+    return p_cursor->get_key_view(vb.get_header_magic())
+        .create_temp_object_data_hint(object_id, block_size);
+  }
+}
+
 laddr_hint_t Value::generate_clone_hint(
   local_object_id_t object_id,
   extent_len_t block_size,

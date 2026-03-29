@@ -82,6 +82,10 @@ protected:
     local_object_id_t object_id,
     extent_len_t block_size,
     bool is_metadata) const = 0;
+  virtual laddr_hint_t generate_temp_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size,
+    bool is_metadata) const = 0;
   laddr_hint_t get_hint(extent_len_t block_size, bool is_metadata) const {
     assert(block_size >= laddr_t::UNIT_SIZE);
     auto prefix = get_clone_prefix();
@@ -92,8 +96,13 @@ protected:
         return laddr_hint_t::create_object_data_hint(*prefix, block_size);
       }
     } else if (sibling_object_id) {
-      return generate_clone_hint(
-        *sibling_object_id, block_size, is_metadata);
+      if (get_hobj().is_temp()) {
+        return generate_temp_hint(
+          *sibling_object_id, block_size, is_metadata);
+      } else {
+        return generate_clone_hint(
+          *sibling_object_id, block_size, is_metadata);
+      }
     } else {
       return init_hint(block_size, is_metadata);
     }
@@ -190,9 +199,20 @@ public:
     }
     return std::nullopt;
   }
+  bool maybe_set_sibling_object_id(local_object_id_t id) {
+    if (sibling_object_id) {
+      return false;
+    }
+    set_sibling_object_id(id);
+    return true;
+  }
   void set_sibling_object_id(local_object_id_t id) {
     assert(!sibling_object_id);
     sibling_object_id = id;
+  }
+  // should only be used for unittest
+  void reset_sibling_object_id() {
+    sibling_object_id.reset();
   }
   friend std::ostream& operator<<(std::ostream &out, const Onode &rhs);
 };

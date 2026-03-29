@@ -166,8 +166,7 @@ FLTreeOnodeManager::get_onode_ret FLTreeOnodeManager::get_onode(
   LOG_PREFIX(FLTreeOnodeManager::get_onode);
   return tree.find(
     trans, hoid
-  ).si_then([this, &hoid, &trans, FNAME](auto cursor)
-              -> get_onode_ret {
+  ).si_then([this, &hoid, &trans, FNAME](auto cursor) -> get_onode_ret {
     if (cursor == tree.end()) {
       DEBUGT("no entry for {}", trans, hoid);
       return crimson::ct_error::enoent::make();

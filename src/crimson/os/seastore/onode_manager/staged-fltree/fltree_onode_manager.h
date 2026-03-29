@@ -27,6 +27,14 @@ struct FakeOnode final : Onode {
     return LADDR_HINT_NULL;
   }
 
+  laddr_hint_t generate_temp_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size,
+    bool is_metadata) const final {
+    ceph_abort("impossible");
+    return LADDR_HINT_NULL;
+  }
+
   bool is_alive() const final { return true; }
   const onode_layout_t &get_layout() const final {
     return layout;
@@ -372,6 +380,14 @@ struct FLTreeOnode final : Onode, Value {
     bool is_metadata) const final {
     return Value::generate_clone_hint(object_id, block_size, is_metadata);
   }
+  laddr_hint_t generate_temp_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size,
+    bool is_metadata) const final {
+    return Value::generate_temp_hint(
+      object_id, block_size, is_metadata);
+  }
+
   ~FLTreeOnode() final {}
 };
 

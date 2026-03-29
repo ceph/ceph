@@ -1761,6 +1761,7 @@ SeaStore::Shard::_do_transaction_step(
   auto fut = onode_iertr::make_ready_future<OnodeRef>(OnodeRef());
   bool create = false;
   if (op->op == Transaction::OP_TOUCH ||
+      op->op == Transaction::OP_TOUCH_TEMP ||
       op->op == Transaction::OP_CREATE ||
       op->op == Transaction::OP_WRITE ||
       op->op == Transaction::OP_ZERO) {
@@ -1778,7 +1779,8 @@ SeaStore::Shard::_do_transaction_step(
       fut = onode_manager->get_or_create_onode(*ctx.transaction, oid);
     }
   }
-  return fut.si_then([&, op, this, FNAME](auto get_onode) {
+  return fut.si_then([&, op, this, FNAME](auto get_onode)
+                      -> OnodeManager::get_or_create_onode_iertr::future<> {
     OnodeRef& onode = onodes[op->oid];
     if (!onode) {
       assert(get_onode);
@@ -1800,6 +1802,14 @@ SeaStore::Shard::_do_transaction_step(
 	assert(!d_onode);
 	d_onode = dest_onode;
 	return seastar::now();
+      });
+    } else if (op->op == Transaction::OP_TOUCH_TEMP && !d_onode) {
+      const ghobject_t& dest_oid = i.get_oid(op->dest_oid);
+      DEBUGT("op {}, get_onode dest oid={} ...",
+             *ctx.transaction, (uint32_t)op->op, dest_oid);
+      return onode_manager->get_or_create_onode(*ctx.transaction, dest_oid
+      ).si_then([&d_onode](auto target_onode) {
+        d_onode = target_onode;
       });
     } else {
       return OnodeManager::get_or_create_onode_iertr::now();
@@ -1826,6 +1836,30 @@ SeaStore::Shard::_do_transaction_step(
                op->op == Transaction::OP_CREATE ? "CREATE" : "TOUCH",
                oid);
         return _touch(ctx, *onode);
+      }
+      case Transaction::OP_TOUCH_TEMP:
+      {
+        const auto &dest_oid = i.get_oid(op->dest_oid);
+        DEBUGT("op {}, temp oid={}, oid={} ...",
+               *ctx.transaction,
+               "TOUCH_TEMP",
+               oid,
+               dest_oid);
+        OnodeRef& d_onode = onodes[op->dest_oid];
+        assert(d_onode);
+        assert(d_onode->get_hobj() == dest_oid.hobj);
+        assert(!dest_oid.hobj.is_temp());
+        assert(oid.hobj.is_temp());
+        return _touch(ctx, *d_onode
+        ).si_then([&onode, this, &ctx, &d_onode] {
+          assert(d_onode);
+          auto prefix = d_onode->get_clone_prefix();
+          assert(prefix);
+          prefix->set_pool(onode->get_hobj().pool);
+          auto object_id = prefix->get_local_object_id();
+          onode->set_sibling_object_id(object_id);
+          return _touch(ctx, *onode);
+        });
       }
       case Transaction::OP_WRITE:
       {
@@ -1986,8 +2020,9 @@ SeaStore::Shard::_do_transaction_step(
         DEBUGT("op COLL_MOVE_RENAME, oid={}, dest oid={} ...",
                *ctx.transaction, oid, i.get_oid(op->dest_oid));
 	ceph_assert(op->cid == op->dest_cid);
+        auto &target_onode = onodes[op->dest_oid];
 	return _rename(
-	  ctx, onode, onodes[op->dest_oid]
+	  ctx, onode, target_onode
 	).si_then([&onode] {
 	  onode.reset();
 	});
@@ -2030,8 +2065,10 @@ void rename_onode_omap_metadata(
   Transaction &t, Onode &src, Onode &dst)
 {
   auto src_prefix = *src.get_clone_prefix();
-  auto dst_prefix = *dst.get_clone_prefix();
-
+  auto dst_prefix = src_prefix;
+  if (auto prefix = dst.get_clone_prefix(); prefix) {
+    dst_prefix = *prefix;
+  }
   auto rename_root = [&src, &dst, src_prefix, dst_prefix](omap_type_t type) {
     auto root = src.get_root(type).get(dst.get_metadata_hint());
     if (root.is_null()) {
@@ -2058,11 +2095,17 @@ SeaStore::Shard::_rename(
   OnodeRef &onode,
   OnodeRef &d_onode)
 {
-  auto &objHandler = ObjectDataHandler(max_object_size);
-  co_await objHanlder.rename(ObjectDataHandler::context_t{
+  auto prefix = onode->get_clone_prefix();
+  assert(prefix);
+  prefix->set_pool(onode->get_hobj().get_logical_pool());
+  auto object_id = prefix->get_local_object_id();
+  std::ignore = d_onode->maybe_set_sibling_object_id(object_id);
+  auto olayout = onode->get_layout();
+  ObjectDataHandler objHandler(max_object_size);
+  co_await objHandler.rename(ObjectDataHandler::context_t{
     *transaction_manager, *ctx.transaction, *onode, d_onode.get()
   });
-  auto olayout = onode->get_layout();
+
   uint32_t size = olayout.size;
   auto oi_bl = ceph::bufferlist::static_from_mem(
     &olayout.oi[0],

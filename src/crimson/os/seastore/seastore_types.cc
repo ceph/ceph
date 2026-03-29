@@ -294,6 +294,52 @@ laddr_hint_t laddr_hint_t::create_fresh_object_md_hint(
   return hint;
 }
 
+laddr_hint_t laddr_hint_t::create_temp_object_data_hint(
+  laddr_shard_t shard,
+  laddr_pool_t pool,
+  laddr_crush_hash_t crush,
+  local_object_id_t id,
+  extent_len_t block_size)
+{
+  laddr_hint_t hint{
+    L_ADDR_MIN,
+    laddr_conflict_condition_t::clone_prefix_at_clone_id,
+    laddr_conflict_policy_t::gen_random,
+    block_size
+  };
+  hint.addr.set_shard(shard);
+  hint.addr.set_pool(pool);
+  hint.addr.set_reversed_hash(crush);
+  hint.addr.set_local_object_id(id);
+
+  CHECK_OBJECT_INFO(hint.addr, shard, pool, crush);
+  assert(hint.addr.get_local_object_id() == id);
+  assert(!hint.addr.is_metadata());
+  assert(hint.addr.get_offset_bytes() == 0);
+  return hint;
+}
+
+laddr_hint_t laddr_hint_t::create_temp_object_md_hint(
+  laddr_shard_t shard,
+  laddr_pool_t pool,
+  laddr_crush_hash_t crush,
+  local_object_id_t id,
+  extent_len_t block_size)
+{
+  auto hint = create_temp_object_data_hint(
+    shard, pool, crush, id, block_size);
+  auto addr = hint.addr;
+
+  hint.addr.set_metadata(true);
+
+  CHECK_OBJECT_INFO(hint.addr, shard, pool, crush);
+  assert(hint.addr.get_clone_prefix() == addr.get_clone_prefix());
+  assert(hint.addr.is_metadata());
+  boost::ignore_unused(addr);
+  return hint;
+}
+
+
 laddr_hint_t laddr_hint_t::create_clone_object_data_hint(
   laddr_shard_t shard,
   laddr_pool_t pool,
