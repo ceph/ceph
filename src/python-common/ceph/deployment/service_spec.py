@@ -1773,8 +1773,8 @@ class NvmeofServiceSpec(ServiceSpec):
                                                 extra_entrypoint_args=extra_entrypoint_args,
                                                 custom_configs=custom_configs)
 
-        #: RADOS pool where ceph-nvmeof config data is stored.
-        self.pool = pool
+        #: RADOS pool where ceph-nvmeof config data is stored (use '.nvmeof' as default).
+        self.pool = pool or '.nvmeof'
         #: ``addr`` address of the nvmeof gateway
         self.addr = addr
         #: ``addr_map`` per node address map of the nvmeof gateways
