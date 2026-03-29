@@ -1,4 +1,4 @@
-import { Component, Input, OnInit } from '@angular/core';
+import { Component, Input, OnChanges, OnInit, SimpleChanges } from '@angular/core';
 import { forkJoin, of } from 'rxjs';
 import { UntypedFormControl, Validators } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
@@ -33,6 +33,7 @@ export class NvmeofSubsystemsStepOneComponent implements OnInit, TearsheetStep {
   };
 
   hosts: ListenerItem[] = [];
+  private lastFetchedContext?: string;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -52,7 +53,11 @@ export class NvmeofSubsystemsStepOneComponent implements OnInit, TearsheetStep {
 
   ngOnInit() {
     this.createForm();
-    this.setHosts();
+    this.refreshHosts();
+  }
+
+  ngOnChanges(_changes: SimpleChanges) {
+    this.refreshHosts();
   }
 
   setHosts() {
@@ -73,6 +78,24 @@ export class NvmeofSubsystemsStepOneComponent implements OnInit, TearsheetStep {
           .filter((h) => !consumedHosts.has(h.content));
       }
     );
+  }
+
+  private refreshHosts() {
+    if (!this.group) {
+      return;
+    }
+
+    if (this.listenersOnly && !this.subsystemNQN) {
+      return;
+    }
+
+    const fetchContext = `${this.group}|${this.subsystemNQN || ''}|${this.listenersOnly}`;
+    if (fetchContext === this.lastFetchedContext) {
+      return;
+    }
+
+    this.lastFetchedContext = fetchContext;
+    this.setHosts();
   }
 
   createForm() {
