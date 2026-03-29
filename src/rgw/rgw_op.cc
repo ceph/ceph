@@ -5946,7 +5946,7 @@ public:
     }
 
     bool src_encrypted = s->src_object->get_attrs().count(RGW_ATTR_CRYPT_MODE);
-    if (need_decompress && !src_encrypted) {
+    if (need_decompress) {
       obj_size = decompress_info.orig_size;
       s->src_object->set_obj_size(obj_size);
       static constexpr bool partial_content = false;
