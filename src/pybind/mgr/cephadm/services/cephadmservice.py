@@ -719,6 +719,144 @@ class CephadmService(metaclass=ABCMeta):
             ''
         )
 
+    def ok_to_upgrade_osd(
+            self,
+            crush_bucket: str,
+            ceph_version: str,
+            max: Optional[int] = None,
+            known: Optional[List[str]] = None,  # output argument
+            all_osds_upgraded: Optional[List[bool]] = None,  # output: [0] set True when all in bucket already at target version
+    ) -> HandleCommandResult:
+        """
+        Call 'osd ok-to-upgrade' to determine OSDs safe to upgrade within a CRUSH bucket.
+        If known is provided and the command succeeds, it is extended with daemon names
+        (e.g. 'osd.0') for OSDs that are ok to upgrade, or for OSDs already at target
+        version when the response has all_osds_upgraded (redeploy with upgrade image
+        inline with ok-to-stop). If all_osds_upgraded is provided (e.g. a single-element
+        list), [0] is set to True when the response indicates all OSDs in the bucket
+        are already at the target version.
+        """
+        cmd_dict: Dict[str, Any] = {
+            'prefix': "osd ok-to-upgrade",
+            'crush_bucket': crush_bucket,
+            'ceph_version': ceph_version,
+        }
+        if max is not None:
+            cmd_dict['max'] = max
+        else:
+            cmd_dict['max'] = self.mgr.max_parallel_osd_upgrades
+
+        self.mgr.log.debug(
+            'ok_to_upgrade_osd: crush_bucket=%s ceph_version=%s max=%s',
+            crush_bucket, ceph_version, cmd_dict.get('max'),
+        )
+        r = HandleCommandResult(*self.mgr.mon_command(cmd_dict))
+        if r.retval:
+            self.mgr.log.debug(
+                'ok_to_upgrade_osd: retval=%s stderr=%s (skip parsing stdout)',
+                r.retval, r.stderr,
+            )
+            return r
+
+        try:
+            j = json.loads(r.stdout)
+        except json.decoder.JSONDecodeError:
+            self.mgr.log.warning("osd ok-to-upgrade didn't return structured result")
+            raise
+
+        # ``osd ok-to-upgrade`` JSON: mgr may nest the report under ``ok_to_upgrade`` or
+        # flatten fields at the top level. Current Ceph versions typically emit the flat
+        # shape (scalar ``ok_to_upgrade`` bool plus sibling keys). Nested appears when the
+        # report object is dumped as a single child dict under ``ok_to_upgrade``.
+        # Nested: {"ok_to_upgrade": {"ok_to_upgrade": true, "osds_ok_to_upgrade": [...], ...}}
+        # Flat:   {"ok_to_upgrade": true, "osds_in_crush_bucket": [...], "osds_ok_to_upgrade": [...], ...}
+        if isinstance(j.get('ok_to_upgrade'), dict):
+            report = j['ok_to_upgrade']
+            self.mgr.log.debug(
+                'ok-to-upgrade: format=nested (report under ok_to_upgrade), '
+                'keys=%s',
+                list(report.keys()),
+            )
+        else:
+            report = j
+            self.mgr.log.debug(
+                'ok-to-upgrade: format=flat (top-level keys), keys=%s',
+                list(j.keys()),
+            )
+
+        bad_no_version = report.get('bad_no_version', [])
+        if bad_no_version:
+            self.mgr.log.warning(
+                'ok-to-upgrade: OSDs with unknown version in bucket %s: %s. '
+                'These OSDs will not be considered for upgrade.',
+                crush_bucket, bad_no_version,
+            )
+        total_osds = report.get('osds_in_crush_bucket', report.get('osds', []))
+        requested_max = cmd_dict.get('max')
+        osds_ok_raw = report.get('osds_ok_to_upgrade', [])
+        ok_upgrade_raw = report.get('ok_upgrade', [])
+        self.mgr.log.debug(
+            'ok-to-upgrade: bucket %s contains %d OSDs total (report contents: '
+            'all_osds_upgraded=%s, ok_to_upgrade=%s, osds_ok_to_upgrade len=%s, '
+            'osds_upgraded len=%s, ok_upgrade=%s)',
+            crush_bucket, len(total_osds),
+            report.get('all_osds_upgraded'),
+            report.get('ok_to_upgrade'),
+            len(osds_ok_raw),
+            len(report.get('osds_upgraded', [])),
+            ok_upgrade_raw,
+        )
+        # Debug: requested max vs what mon actually returned (helps when mon ignores max)
+        self.mgr.log.debug(
+            'ok-to-upgrade: requested max=%s, mon returned osds_ok_to_upgrade len=%d '
+            '(raw ids from list)=%s, ok_upgrade=%s',
+            requested_max, len(osds_ok_raw),
+            [x.get('ok_upgrade') if isinstance(x, dict) else x for x in osds_ok_raw],
+            ok_upgrade_raw if isinstance(ok_upgrade_raw, list) else [ok_upgrade_raw],
+        )
+
+        # When all_osds_upgraded is true, list of OSDs to upgrade is empty (do not add to known).
+        if known is not None and report.get('all_osds_upgraded'):
+            if all_osds_upgraded is not None and len(all_osds_upgraded) > 0:
+                all_osds_upgraded[0] = True
+            self.mgr.log.info(
+                'ok-to-upgrade: bucket %s: all OSDs already at target version; list empty',
+                crush_bucket,
+            )
+            return HandleCommandResult(
+                0,
+                f'OSDs in crush bucket {crush_bucket} safe to upgrade',
+                ''
+            )
+
+        if known is not None and report.get('ok_to_upgrade'):
+            osds_ok = report.get('osds_ok_to_upgrade', [])
+            known_len_before = len(known)
+            for item in osds_ok:
+                osd_id = item.get('ok_upgrade') if isinstance(item, dict) else item
+                if osd_id is not None:
+                    known.append(f'osd.{osd_id}')
+            # Alternate format: top-level "ok_upgrade" as list of OSD ids
+            if not osds_ok:
+                alt_ok = report.get('ok_upgrade', [])
+                if isinstance(alt_ok, list):
+                    for osd_id in alt_ok:
+                        if osd_id is not None:
+                            known.append(f'osd.{osd_id}')
+            added_count = len(known) - known_len_before
+            self.mgr.log.debug(
+                'ok_to_upgrade_osd: requested max=%s, mon returned %d OSD(s), '
+                'added to known=%d; known=%s',
+                requested_max, len(osds_ok) or len(report.get('ok_upgrade', [])),
+                added_count, known,
+            )
+
+        return HandleCommandResult(
+            0,
+            f'OSDs in crush bucket {crush_bucket} safe to upgrade',
+            ''
+        )
+
     def ok_to_stop(
             self,
             daemon_ids: List[str],

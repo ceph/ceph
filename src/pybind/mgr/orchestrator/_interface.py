@@ -458,6 +458,16 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def host_ok_to_upgrade(self, hostname: str, ceph_version: str, max: Optional[int] = None) -> OrchResult[str]:
+        """
+        Check if OSDs on the specified host can be safely upgraded to the given Ceph version.
+
+        :param hostname: host (CRUSH bucket) name
+        :param ceph_version: target Ceph version (e.g. '20.3.0-5843-g82e79171')
+        :param max: optional max number of OSDs to consider ok to upgrade
+        """
+        raise NotImplementedError()
+
     def enter_host_maintenance(self, hostname: str, force: bool = False, yes_i_really_mean_it: bool = False) -> OrchResult[str]:
         """
         Place a host in maintenance, stopping daemons and disabling it's systemd target

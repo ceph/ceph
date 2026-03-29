@@ -799,6 +799,15 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         completion = self.host_ok_to_stop(hostname)
         return completion_to_result(completion)
 
+    @OrchestratorCLICommand.Write('orch host ok-to-upgrade')
+    def _host_ok_to_upgrade(self, hostname: str, ceph_version: str, max: Optional[int] = None) -> HandleCommandResult:
+        """
+        Check if OSDs on the specified host can be safely upgraded to the given Ceph version.
+        Uses host as CRUSH bucket for quick debugging.
+        """
+        completion = self.host_ok_to_upgrade(hostname, ceph_version, max=max)
+        return completion_to_result(completion)
+
     @OrchestratorCLICommand.Write('orch host maintenance enter')
     def _host_maintenance_enter(self, hostname: str, force: bool = False, yes_i_really_mean_it: bool = False) -> HandleCommandResult:
         """

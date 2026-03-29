@@ -10,7 +10,8 @@ from cephadm.registry import Registry
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.utils import ceph_release_to_major, name_to_config_section, CEPH_UPGRADE_ORDER, \
-    CEPH_TYPES, CEPH_IMAGE_TYPES, NON_CEPH_IMAGE_TYPES, MONITORING_STACK_TYPES, GATEWAY_TYPES
+    CEPH_TYPES, CEPH_IMAGE_TYPES, NON_CEPH_IMAGE_TYPES, MONITORING_STACK_TYPES, GATEWAY_TYPES, \
+    get_crush_bucket_from_hostname, get_crush_host_names_with_osds
 from cephadm.ssh import HostConnectionError
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus, daemon_type_to_service
 
@@ -25,6 +26,10 @@ logger = logging.getLogger(__name__)
 # from ceph_fs.h
 CEPH_MDSMAP_ALLOW_STANDBY_REPLAY = (1 << 5)
 CEPH_MDSMAP_NOT_JOINABLE = (1 << 0)
+
+# Ok-to-upgrade / ok-to-stop retry tuning
+CEPH_WAIT_FOR_UPGRADE_MAX_RETRIES = 4
+CEPH_WAIT_FOR_UPGRADE_RETRY_DELAY_SECS = 15
 
 
 def normalize_image_digest(digest: str, default_registry: str) -> str:
@@ -537,6 +542,106 @@ class CephadmUpgrade:
             return True
         return False
 
+    def _get_osd_crush_bucket_key(self, d: DaemonDescription) -> str:
+        """
+        Return the CRUSH bucket name used for ok-to-upgrade for this OSD.
+        The mon command 'osd ok-to-upgrade' accepts bucket types: rack, chassis,
+        host, and osd. Default is host (short hostname).
+        """
+        assert d.hostname is not None
+        return get_crush_bucket_from_hostname(d.hostname)
+
+    def _should_skip_daemon_same_image(self, d: DaemonDescription, target_image: str) -> bool:
+        """True if daemon has no container_image_id but already has target image name."""
+        return not d.container_image_id and d.container_image_name == target_image
+
+    def _wait_for_ok_to_upgrade(
+            self,
+            need_upgrade_osds: List[Tuple[DaemonDescription, bool]],
+            target_version_short: str,
+            known_ok_to_upgrade: List[str],  # NOTE: output argument!
+            target_image: Optional[str] = None,
+    ) -> bool:
+        """
+        Use ok-to-upgrade to determine which OSDs can be safely upgraded.
+        Populates known_ok_to_upgrade with daemon names (e.g. 'osd.0') that are
+        safe to upgrade. Uses CRUSH host bucket names from osd tree so
+        'osd ok-to-upgrade' gets the correct bucket names (avoids hostname/CRUSH
+        mismatch e.g. ceph-node-0 vs incerta01).
+        Returns True if at least one OSD is safe to upgrade, or all buckets
+        already at target (e.g. image redeploy); False otherwise.
+        """
+        tries = CEPH_WAIT_FOR_UPGRADE_MAX_RETRIES
+        while tries > 0:
+            if not self.upgrade_state or self.upgrade_state.paused:
+                return False
+
+            known_ok_to_upgrade.clear()
+            # Use CRUSH host names from osd tree (correct bucket names for the mon).
+            buckets_to_query = get_crush_host_names_with_osds(self.mgr)
+            logger.debug(
+                'Upgrade: _wait_for_ok_to_upgrade try %d, bucket_type=host, buckets=%s, '
+                'target_version_short=%s',
+                5 - tries, buckets_to_query, target_version_short,
+            )
+
+            all_buckets_all_osds_upgraded = True
+            for bucket in buckets_to_query:
+                known_for_bucket: List[str] = []
+                all_osds_upgraded_ref: List[bool] = [False]
+                logger.debug(
+                    'Upgrade: ok-to-upgrade inspecting bucket_type=host, bucket=%s',
+                    bucket,
+                )
+                r = service_registry.get_service(
+                    daemon_type_to_service('osd')).ok_to_upgrade_osd(
+                    crush_bucket=bucket,
+                    ceph_version=target_version_short,
+                    known=known_for_bucket,
+                    all_osds_upgraded=all_osds_upgraded_ref,
+                )
+                if not r.retval and known_for_bucket:
+                    known_ok_to_upgrade.extend(known_for_bucket)
+                    logger.info(
+                        'Upgrade: With ok-to-upgrade: host=%s selected %d OSD(s): %s',
+                        bucket, len(known_for_bucket), ', '.join(known_for_bucket),
+                    )
+                    logger.debug(
+                        'Upgrade: ok_to_upgrade path, bucket=%s known_for_bucket=%s',
+                        bucket, known_for_bucket,
+                    )
+                if r.retval:
+                    logger.info(f'Upgrade: With ok-to-upgrade: {r.stderr}')
+                    logger.debug('Upgrade: ok_to_upgrade_osd retval=%s for bucket=%s', r.retval, bucket)
+                    all_buckets_all_osds_upgraded = False
+                elif not all_osds_upgraded_ref[0]:
+                    all_buckets_all_osds_upgraded = False
+
+            if known_ok_to_upgrade:
+                logger.info(
+                    'Upgrade: ok-to-upgrade selected %d OSD(s) total: %s',
+                    len(known_ok_to_upgrade), ', '.join(known_ok_to_upgrade),
+                )
+                return True
+
+            # All buckets reported all_osds_upgraded (same-version; e.g. image redeploy). Return True
+            # so caller can fall through to ok-to-stop; no point retrying.
+            if all_buckets_all_osds_upgraded:
+                logger.info(
+                    'Upgrade: ok-to-upgrade: all buckets already at target version.'
+                    'Deploying through to ok-to-stop.')
+                return True
+
+            # No OSDs safe to upgrade; retry after a delay
+            logger.debug(
+                'Upgrade: no OSDs safe to upgrade this round, sleeping %ds (tries left=%d)',
+                CEPH_WAIT_FOR_UPGRADE_RETRY_DELAY_SECS, tries - 1,
+            )
+            time.sleep(CEPH_WAIT_FOR_UPGRADE_RETRY_DELAY_SECS)
+            tries -= 1
+        logger.info('Upgrade: With ok-to-upgrade: No OSDs safe to upgrade at this time')
+        return False
+
     def _wait_for_ok_to_stop(
             self, s: DaemonDescription,
             known: Optional[List[str]] = None,  # NOTE: output argument!
@@ -544,7 +649,7 @@ class CephadmUpgrade:
         # only wait a little bit; the service might go away for something
         assert s.daemon_type is not None
         assert s.daemon_id is not None
-        tries = 4
+        tries = CEPH_WAIT_FOR_UPGRADE_MAX_RETRIES
         while tries > 0:
             if not self.upgrade_state or self.upgrade_state.paused:
                 return False
@@ -559,7 +664,7 @@ class CephadmUpgrade:
                 return True
             logger.info(f'Upgrade: {r.stderr}')
 
-            time.sleep(15)
+            time.sleep(CEPH_WAIT_FOR_UPGRADE_RETRY_DELAY_SECS)
             tries -= 1
         return False
 
@@ -820,17 +925,64 @@ class CephadmUpgrade:
     def _to_upgrade(self, need_upgrade: List[Tuple[DaemonDescription, bool]], target_image: str) -> Tuple[bool, List[Tuple[DaemonDescription, bool]]]:
         to_upgrade: List[Tuple[DaemonDescription, bool]] = []
         known_ok_to_stop: List[str] = []
+        known_ok_to_upgrade: List[str] = []
+        ok_to_upgrade_gave_empty = False  # set when ok-to-upgrade returned no OSDs (e.g. same-version diff image)
+        # Upgrade scope comes from --hosts: need_upgrade includes every daemon type on those hosts
+        # (mon, mgr, osd, …). OSDs are already in that list, so we skip osd ok-to-upgrade per CRUSH bucket
+        # and use ok-to-stop for OSDs like other daemons.
+        host_scoped = self.upgrade_state is not None and self.upgrade_state.hosts is not None
+
+        # Full-cluster OSD version upgrades use ok-to-upgrade first; redeploy-only OSDs use ok-to-stop (later phase).
+        osd_entries = [(d, flag) for (d, flag) in need_upgrade if d.daemon_type == 'osd']
+        has_osd_entries = bool(osd_entries)
+        all_are_redeploy_only = all(d_entry[1] for d_entry in osd_entries)
+        osd_version_upgrade = has_osd_entries and not all_are_redeploy_only
+        if osd_version_upgrade and self.upgrade_state and self.upgrade_state.target_version:
+            if host_scoped:
+                logger.debug(
+                    'Upgrade: --hosts set; skipping ok-to-upgrade, OSD version upgrades use '
+                    'ok-to-stop with other daemons on selected hosts',
+                )
+            else:
+                logger.debug('Upgrade: Use ok-to-upgrade for OSD daemons (version upgrade)')
+                target_version_short = self.upgrade_state.target_version
+                if target_version_short.startswith('ceph version '):
+                    target_version_short = target_version_short.split(' ')[2]
+                # get the OSD entries that versions upgrades only, redeploy would be done later in separate phase
+                osd_version_only: List[Tuple[DaemonDescription, bool]] = [
+                    (d, f) for (d, f) in osd_entries if not f]
+                if not self._wait_for_ok_to_upgrade(
+                        osd_version_only, target_version_short, known_ok_to_upgrade,
+                        target_image=target_image):
+                    return False, to_upgrade
+
+                for d_entry in need_upgrade:
+                    d = d_entry[0]
+                    if self._should_skip_daemon_same_image(d, target_image):
+                        logger.debug(
+                            'daemon %s has unknown container_image_id but has correct image name' % (d.name()))
+                        continue
+                    if d.daemon_type == 'osd' and d.name() in known_ok_to_upgrade:
+                        logger.info(f'Upgrade: {d.name()} is safe to upgrade')
+                        to_upgrade.append(d_entry)
+                if known_ok_to_upgrade:
+                    return True, to_upgrade
+                # Same-version different-image: ok-to-upgrade found no OSDs (e.g. all_osds_upgraded).
+                logger.info(
+                    'Upgrade: ok-to-upgrade found no OSDs safe to upgrade. '
+                    'Checking for same-version image updates via ok-to-stop.')
+                ok_to_upgrade_gave_empty = True
+
         for d_entry in need_upgrade:
             d = d_entry[0]
             assert d.daemon_type is not None
             assert d.daemon_id is not None
             assert d.hostname is not None
 
-            if not d.container_image_id:
-                if d.container_image_name == target_image:
-                    logger.debug(
-                        'daemon %s has unknown container_image_id but has correct image name' % (d.name()))
-                    continue
+            if self._should_skip_daemon_same_image(d, target_image):
+                logger.debug(
+                    'daemon %s has unknown container_image_id but has correct image name' % (d.name()))
+                continue
 
             if known_ok_to_stop:
                 if d.name() in known_ok_to_stop:
@@ -839,11 +991,24 @@ class CephadmUpgrade:
                 continue
 
             if d.daemon_type == 'osd':
-                # NOTE: known_ok_to_stop is an output argument for
-                # _wait_for_ok_to_stop
+                # Full cluster: defer this OSD until a later tick when ok-to-upgrade has named it in its batch.
+                # With --hosts, we skip ok-to-upgrade entirely, so do not defer: ask osd ok-to-stop next (same as mon/mds).
+                defer_for_ok_to_upgrade = (
+                    not d_entry[1]
+                    and self.upgrade_state
+                    and self.upgrade_state.target_version
+                    and not ok_to_upgrade_gave_empty
+                    and not host_scoped
+                )
+                if defer_for_ok_to_upgrade:
+                    assert self.upgrade_state is not None
+                    logger.debug(
+                        'Upgrade: Deferring OSD %s to ok-to-upgrade path (target_version=%s)',
+                        d.name(), self.upgrade_state.target_version,
+                    )
+                    return False, to_upgrade  # Defer; use ok-to-upgrade path next time
                 if not self._wait_for_ok_to_stop(d, known_ok_to_stop):
                     return False, to_upgrade
-
             if d.daemon_type == 'mon' and self._enough_mons_for_ok_to_stop():
                 if not self._wait_for_ok_to_stop(d, known_ok_to_stop):
                     return False, to_upgrade
@@ -1249,8 +1414,10 @@ class CephadmUpgrade:
 
             if any(d in target_digests for d in self.mgr.get_active_mgr_digests()):
                 # only after the mgr itself is upgraded can we expect daemons to have
-                # deployed_by == target_digests
-                need_upgrade += need_upgrade_deployer
+                # deployed_by == target_digests. For OSDs, keep redeploy-only in a separate
+                # phase (inline with ok-to-stop), do not merge deployer here.
+                if daemon_type != 'osd':
+                    need_upgrade += need_upgrade_deployer
 
             # prepare filesystems for daemon upgrades?
             if (
@@ -1269,6 +1436,16 @@ class CephadmUpgrade:
             self._upgrade_daemons(to_upgrade, target_image, target_digests)
             if to_upgrade:
                 return
+
+            # OSD redeploy-only phase (inline with ok-to-stop): when no version-upgrade
+            # OSDs were selected, try redeploy-only OSDs via ok-to-stop path.
+            if daemon_type == 'osd' and _continue:
+                need_upgrade_redeploy = [(d, f) for (d, f) in need_upgrade_deployer if d.daemon_type == 'osd']
+                if need_upgrade_redeploy:
+                    _continue2, to_upgrade2 = self._to_upgrade(need_upgrade_redeploy, target_image)
+                    if _continue2 and to_upgrade2:
+                        self._upgrade_daemons(to_upgrade2, target_image, target_digests)
+                        return
 
             self._handle_need_upgrade_self(need_upgrade_self, daemon_type == 'mgr')
 

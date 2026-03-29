@@ -174,3 +174,65 @@ def get_node_proxy_status_value(data: Any, key: str, lower: bool = False) -> str
     if not isinstance(value, str):
         return ''
     return value.lower() if lower else value
+
+
+def get_crush_bucket_from_hostname(hostname: str) -> str:
+    """Extract CRUSH bucket name (short hostname).
+
+    Callers must ensure ``hostname`` is not None before calling (e.g. assert on
+    ``DaemonDescription.hostname``); this helper does not validate input.
+    """
+    return hostname.split('.')[0]
+
+
+def get_crush_host_names_with_osds(mgr: "CephadmOrchestrator") -> List[str]:
+    """
+    Get CRUSH host bucket names that contain at least one OSD.
+    Uses 'osd tree' JSON; returns names of type 'host' nodes that have non-empty children.
+    Used by ok-to-upgrade so we pass real CRUSH host names (e.g. incerta01) instead of
+    cephadm hostnames (e.g. ceph-node-0) when they differ.
+    Returns empty list on any failure (caller can fall back to hostname-based grouping).
+    """
+    try:
+        _, out, _ = mgr.check_mon_command({
+            'prefix': 'osd tree',
+            'format': 'json',
+        })
+    except Exception as e:
+        logger.debug(
+            'Upgrade: get_crush_host_names_with_osds: osd tree command failed: %s',
+            e,
+        )
+        return []
+    try:
+        tree = json.loads(out)
+    except json.JSONDecodeError as e:
+        logger.debug(
+            'Upgrade: get_crush_host_names_with_osds: failed to parse osd tree JSON: %s',
+            e,
+        )
+        return []
+    nodes = tree.get('nodes', [])
+    if not isinstance(nodes, list):
+        logger.debug(
+            'Upgrade: get_crush_host_names_with_osds: nodes is not a list',
+        )
+        return []
+    # Collect host-type bucket names that have at least one child (OSD).
+    crush_host_names: List[str] = []
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        if node.get('type') != 'host':
+            continue
+        children = node.get('children')
+        if not children:
+            continue
+        name = node.get('name')
+        if name:
+            crush_host_names.append(name)
+    logger.debug(
+        'Upgrade: get_crush_host_names_with_osds: found %d CRUSH host(s) with OSDs: %s',
+        len(crush_host_names), crush_host_names,
+    )
+    return crush_host_names
