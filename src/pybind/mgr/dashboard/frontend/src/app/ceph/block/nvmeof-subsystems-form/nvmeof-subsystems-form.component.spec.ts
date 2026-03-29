@@ -17,6 +17,7 @@ import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { NvmeofSubsystemsStepOneComponent } from './nvmeof-subsystem-step-1/nvmeof-subsystem-step-1.component';
 import {
   ComboBoxModule,
+  FileUploaderModule,
   GridModule,
   InputModule,
   RadioModule,
@@ -74,6 +75,7 @@ describe('NvmeofSubsystemsFormComponent', () => {
         GridModule,
         RadioModule,
         TagModule,
+        FileUploaderModule,
         ToastrModule.forRoot(),
         ComboBoxModule
       ]

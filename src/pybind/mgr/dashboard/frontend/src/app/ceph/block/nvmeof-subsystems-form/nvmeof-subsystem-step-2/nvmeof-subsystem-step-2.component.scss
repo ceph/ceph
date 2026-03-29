@@ -1,11 +1,13 @@
 .cd-nvmeof-subsystem-step-two {
+  --host-input-width: 62%;
+
   &-manual-hosts {
     display: flex;
     align-items: flex-start;
   }
 
   &-manual-hosts-input {
-    flex: 0.5;
+    flex: 0 0 var(--host-input-width);
     margin-right: var(--cds-spacing-05);
   }
 
@@ -15,6 +17,35 @@
 
   &-specific-hosts-tag {
     max-inline-size: 17rem;
+  }
+
+  &-csv-container {
+    inline-size: var(--host-input-width);
+  }
+
+  &-csv-input {
+    display: block;
+    inline-size: 100%;
+
+    .cds--file,
+    .cds--file-browse-btn,
+    .cds--file-container,
+    .cds--file__drop-container {
+      width: 100% !important;
+      max-width: 100% !important;
+      display: block;
+    }
+
+    .cds--file__drop-container {
+      min-block-size: 7rem !important;
+    }
+  }
+
+  &-csv-error-panel {
+    .cds--inline-notification,
+    .cds--actionable-notification {
+      width: 100%;
+    }
   }
 
   &-influencer {

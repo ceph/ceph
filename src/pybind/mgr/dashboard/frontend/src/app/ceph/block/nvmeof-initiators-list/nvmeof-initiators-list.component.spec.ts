@@ -98,4 +98,13 @@ describe('NvmeofInitiatorsListComponent', () => {
     tick();
     expect(component.authStatus).toBe('Bi-directional');
   }));
+
+  it('should return true for host-level dhchap key usage', () => {
+    expect(component.isDhchapEnabledForHost({ nqn: 'nqn.host', use_dhchap: true })).toBe(true);
+  });
+
+  it('should return false for wildcard or host without dhchap', () => {
+    expect(component.isDhchapEnabledForHost({ nqn: '*', use_dhchap: true })).toBe(false);
+    expect(component.isDhchapEnabledForHost({ nqn: 'nqn.host', use_dhchap: false })).toBe(false);
+  });
 });
