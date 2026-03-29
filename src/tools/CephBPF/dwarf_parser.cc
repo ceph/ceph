@@ -242,6 +242,7 @@ VarLocation DwarfParser::translate_param_location(Dwarf_Die *func,
   int r = dwarf_getlocation_addr(&loc_attr, pc, &expr, &len, 1);
   if (r != 1 || len <= 0) {
     cerr << "Get param location expr failed for symbol " << symbol << endl;
+    abort();
   }
 
   VarLocation varloc;
@@ -560,6 +561,7 @@ int handle_function(Dwarf_Die *die, void *data) {
 
 void DwarfParser::translate_expr(Dwarf_Attribute *fb_attr, Dwarf_Op *expr,
                                  Dwarf_Addr pc, VarLocation &varloc) {
+  assert(expr != nullptr);
   int atom = expr->atom;
 
   // TODO can put a debug message to print the atom's name in string
@@ -616,6 +618,7 @@ void DwarfParser::translate_expr(Dwarf_Attribute *fb_attr, Dwarf_Op *expr,
       int res = dwarf_getlocation_addr(fb_attr, pc, &fb_expr, &fb_exprlen, 1);
       if (res != 1) {
         cerr << "translate_expr get fb_expr failed" << endl;
+        abort();
       }
 
       translate_expr(fb_attr, fb_expr, pc, varloc);
@@ -644,6 +647,10 @@ void DwarfParser::translate_expr(Dwarf_Attribute *fb_attr, Dwarf_Op *expr,
         }
       }
 
+      if (cfa_ops == nullptr) {
+        cerr << "failed to resolve CFA for DW_OP_call_frame_cfa" << endl;
+        abort();
+      }
       translate_expr(fb_attr, cfa_ops, pc, varloc);
     } break;
   case DW_OP_reg0 ... DW_OP_reg31:
@@ -664,7 +671,7 @@ Dwfl *DwarfParser::create_dwfl(int fd, const char *fname) {
   Dwfl *dwfl = nullptr;
   if (dwfl_fd < 0) {
     cerr << "create_dwfl dup failed" << endl;
-    return 0;
+    return nullptr;
   }
 
   static const Dwfl_Callbacks callbacks = {
@@ -780,7 +787,8 @@ void DwarfParser::add_module(string path) {
   const char *fname = path.c_str();
   int fd = open(fname, O_RDONLY);
   if (fd == -1) {
-    cerr << "cannot open input file " << fname;
+    cerr << "cannot open input file " << fname << endl;
+    return;
   }
   
   Dwfl *dwfl = create_dwfl(fd, fname);
