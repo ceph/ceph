@@ -6,6 +6,12 @@ NFS_CORE_PARAM {
         mount_path_pseudo = true;
         Enable_UDP = false;
         NFS_Port = {{ port }};
+{% if nlm_port %}
+        NLM_Port = {{ nlm_port }};
+{% endif %}
+{% if mnt_port %}
+        MNT_Port = {{ mnt_port }};
+{% endif %}
         allow_set_io_flusher_fail = true;
 {% if bind_addr %}
         Bind_addr = {{ bind_addr }};

@@ -54,6 +54,8 @@ Alternatively, an NFS service can be applied using a YAML specification.
       host2: 10.0.0.101
     spec:
       port: 12345
+      nlm_port: 32803
+      mnt_port: 20048
       monitoring_port: 567
       monitoring_ip_addrs:
         host1: 10.0.0.123
@@ -78,6 +80,10 @@ IP address is assigned to the host, that IP address will be used. If the IP
 address is not present and ``monitoring_networks`` is specified, an IP address
 that matches one of the specified networks will be used. If neither condition
 is met, the default binding will happen on all available network interfaces.
+The ``nlm_port`` and ``mnt_port`` parameters are optional and allow pinning
+the NFS Lock Manager (NLM, used by NFSv3) and NFSv3 mount protocol ports
+respectively. They are only rendered in the ganesha config when explicitly set.
+This is useful when you need stable ports for firewall rules.
 
 TLS/SSL Example
 ---------------
