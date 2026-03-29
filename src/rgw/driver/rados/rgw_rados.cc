@@ -3904,7 +3904,9 @@ static void set_copy_attrs(map<string, bufferlist>& src_attrs,
   }
 }
 
-int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj, const DoutPrefixProvider *dpp, optional_yield y)
+int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj,
+                          const std::string& dest_storage_class,
+                          const DoutPrefixProvider *dpp, optional_yield y)
 {
   RGWObjectCtx octx(this->driver);
   rgw::sal::Attrs attrset;
@@ -3921,6 +3923,11 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj, c
   if (ret < 0)
     return ret;
 
+  std::string current_storage_class;
+  if (auto i = attrset.find(RGW_ATTR_STORAGE_CLASS); i != attrset.end()) {
+    current_storage_class = i->second.to_str();
+  }
+
   attrset.erase(RGW_ATTR_ID_TAG);
   attrset.erase(RGW_ATTR_TAIL_TAG);
   attrset.erase(RGW_ATTR_STORAGE_CLASS);
@@ -3930,8 +3937,22 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj, c
     (void) decode_policy(dpp, i->second, &owner);
   }
 
+  rgw_placement_rule dest_placement;
+  dest_placement.inherit_from(dest_bucket_info.placement_rule);
+  if (!dest_storage_class.empty()) {
+    dest_placement.storage_class = dest_storage_class;
+  } else if (!current_storage_class.empty()) {
+    dest_placement.storage_class = current_storage_class;
+  }
+
+  if (!driver->valid_placement(dest_placement)) {
+    ldpp_dout(dpp, 0) << "ERROR: invalid dest placement for rewrite: "
+                      << dest_placement.to_str() << dendl;
+    return -EINVAL;
+  }
+
   return copy_obj_data(octx, owner, dest_bucket_info,
-                       dest_bucket_info.placement_rule,
+                       dest_placement,
                        read_op, obj_size - 1, obj, NULL, mtime,
                        attrset, 0, real_time(), NULL, NULL, dpp, y);
 }
