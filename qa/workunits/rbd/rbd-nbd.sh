@@ -67,7 +67,7 @@ function cleanup()
 
     set +e
 
-    mount | fgrep ${TEMPDIR}/mnt && _sudo umount -f ${TEMPDIR}/mnt
+    mount | grep -F ${TEMPDIR}/mnt && _sudo umount -f ${TEMPDIR}/mnt
 
     rm -Rf ${TEMPDIR}
     if [ -n "${DEV}" ]
