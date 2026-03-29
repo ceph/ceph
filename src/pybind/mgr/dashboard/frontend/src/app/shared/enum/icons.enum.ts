@@ -128,7 +128,8 @@ export enum Icons {
   warningAlt = 'warning--alt',
   arrowUpRight = 'arrow--up-right',
   inProgress = 'in-progress',
-  arrowDown = 'arrow--down'
+  arrowDown = 'arrow--down',
+  cloudMonitoring = 'cloud--monitoring'
 }
 
 export enum IconSize {
@@ -169,7 +170,8 @@ export const ICON_TYPE = {
   checkMarkOutline: 'checkmark--outline',
   arrowUpRight: ' arrow--up-right',
   inProgress: 'in-progress',
-  arrowDown: 'arrow--down'
+  arrowDown: 'arrow--down',
+  cloudMonitoring: 'cloud--monitoring'
 } as const;
 
 export const EMPTY_STATE_IMAGE = {
