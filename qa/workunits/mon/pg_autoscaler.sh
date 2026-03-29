@@ -152,5 +152,42 @@ ceph osd pool rm bulk2 bulk2 --yes-i-really-really-mean-it
 ceph osd pool rm warn0 warn0 --yes-i-really-really-mean-it
 ceph osd pool rm warn1 warn1 --yes-i-really-really-mean-it
 
-echo OK
+# Don't create pool if exceeding mon_max_pg_per_osd ceiling
+ceph config set osd mon_max_pg_per_osd 75
+ceph config set global mon_target_pg_per_osd 70
+ceph osd pool create bulk0 --bulk
+ceph osd pool create bulk1 --bulk
 
+sleep 60
+if ! ceph osd pool create data1 2>&1 | grep -q "Error ERANGE"; then
+    echo "failed"
+    exit 1
+fi
+
+if ceph osd pool create data1 --force-pg-limit 2>&1 | grep -q "Error ERANGE"; then
+    echo "failed"
+    exit 1
+fi
+
+ceph osd pool rm bulk0 bulk0 --yes-i-really-really-mean-it
+ceph osd pool rm bulk1 bulk1 --yes-i-really-really-mean-it
+ceph osd pool rm data1 data1 --yes-i-really-really-mean-it
+
+# Don't increase pool size if exceeding mon_max_pg_per_osd ceiling
+ceph config set osd mon_max_pg_per_osd 85
+ceph config set global mon_target_pg_per_osd 70
+ceph osd pool create bulk0 --bulk
+ceph osd pool create bulk1 --bulk
+
+sleep 60
+ceph osd pool create data1
+if ! ceph osd pool set data1 size 4 2>&1 | grep -q "Error ERANGE"; then
+    echo "failed"
+    exit 1
+fi
+
+ceph osd pool rm bulk0 bulk0 --yes-i-really-really-mean-it
+ceph osd pool rm bulk1 bulk1 --yes-i-really-really-mean-it
+ceph osd pool rm data1 data1 --yes-i-really-really-mean-it
+
+echo OK

@@ -7447,12 +7447,14 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
   stringstream ss;
   string rule_name;
   bool bulk = false;
+  bool force_create = false;
   int ret = 0;
   ret = prepare_new_pool(m->name, m->crush_rule, rule_name,
 			 0, 0, 0, 0, 0, 0, 0.0,
 			 erasure_code_profile,
 			 pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, {}, bulk,
 			 cct->_conf.get_val<bool>("osd_pool_default_crimson"),
+       force_create,
 			 &ss);
 
   if (ret < 0) {
@@ -8052,7 +8054,16 @@ int OSDMonitor::check_pg_num(int64_t pool,
   // assume min cluster size 3
   osd_num_by_crush = std::max(osd_num_by_crush, 3u);
   auto projected_pgs_per_osd = projected / osd_num_by_crush;
-
+  uint64_t pg_limit = max_pgs_per_osd * osd_num_by_crush;
+  if (projected > pg_limit) {
+      *ss << " pg_num " << pg_num
+      << " size " << size
+      << " for this pool would result in "
+      << projected
+      << " cumulative PGs which exceeds the limit of "
+      << "value of " << max_pgs_per_osd;
+    return -ERANGE;
+  }
   if (projected_pgs_per_osd > max_pgs_per_osd) {
     if (pool >= 0) {
       *ss << "pool id " << pool;
@@ -8107,8 +8118,10 @@ int OSDMonitor::prepare_new_pool(string& name,
 				 string pg_autoscale_mode,
 				 bool bulk,
 				 bool crimson,
+         bool force_create,
 				 ostream *ss)
 {
+  const unsigned PG_NUM_MIN = g_conf().get_val<uint64_t>("mon_min_pool_pg_num");
   if (crimson && pg_autoscale_mode.empty()) {
     // default pg_autoscale_mode to off for crimson, we'll error out below if
     // the user tried to actually set pg_autoscale_mode to something other than
@@ -8200,8 +8213,11 @@ int OSDMonitor::prepare_new_pool(string& name,
     dout(10) << __func__ << " crush smoke test duration: "
              << duration << dendl;
   }
-  r = check_pg_num(-1, pg_num, size, crush_rule, ss);
-  if (r) {
+  if (!pg_num_min) {
+    pg_num_min = PG_NUM_MIN;
+  }
+  r = check_pg_num(-1, std::max(pg_num, pg_num_min), size, crush_rule, ss);
+  if (r && !force_create) {
     dout(10) << "check_pg_num returns " << r << dendl;
     return r;
   }
@@ -8217,7 +8233,6 @@ int OSDMonitor::prepare_new_pool(string& name,
     dout(10) << "prepare_pool_stripe_width returns " << r << dendl;
     return r;
   }
-  
   bool fread = false;
   if (pool_type == pg_pool_t::TYPE_ERASURE) {
     switch (fast_read) {
@@ -8489,6 +8504,7 @@ void OSDMonitor::enable_pool_ec_direct_reads(pg_pool_t &p) {
 int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
                                          stringstream& ss)
 {
+  const unsigned PG_NUM_MIN = g_conf().get_val<uint64_t>("mon_min_pool_pg_num");
   string poolstr;
   cmd_getval(cmdmap, "pool", poolstr);
   int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
@@ -8590,7 +8606,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     }
     if (n > p.size) {
       // only when increasing pool size
-      int r = check_pg_num(pool, p.get_pg_num(), n, p.get_crush_rule(), &ss);
+      int r = check_pg_num(pool, std::max(p.get_pg_num(), PG_NUM_MIN), n, p.get_crush_rule(), &ss);
       if (r < 0) {
         return r;
       }
@@ -8725,7 +8741,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -ERANGE;
     }
     if (n > (int)p.get_pg_num_target()) {
-      int r = check_pg_num(pool, n, p.get_size(), p.get_crush_rule(), &ss);
+      int r = check_pg_num(pool, std::max<uint64_t>(n, PG_NUM_MIN), p.get_size(), p.get_crush_rule(), &ss);
       if (r) {
 	return r;
       }
@@ -13874,7 +13890,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     bool crimson = cmd_getval_or<bool>(cmdmap, "crimson", false) ||
       cct->_conf.get_val<bool>("osd_pool_default_crimson");
-
+    bool force_create = false;
+    cmd_getval(cmdmap, "force_pg_limit", force_create);
     err = prepare_new_pool(poolstr,
 			   -1, // default crush rule
 			   rule_name,
@@ -13886,6 +13903,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 			   pg_autoscale_mode,
 			   bulk,
 			   crimson,
+         force_create,
 			   &ss);
     if (err < 0) {
       switch(err) {
