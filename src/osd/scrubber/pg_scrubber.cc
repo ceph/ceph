@@ -1028,7 +1028,7 @@ std::optional<uint64_t> PgScrubber::select_range()
       if (objects.empty()) {
 	ceph_assert(0 ==
 		    "Somehow we got more than 2 objects which"
-		    "have the same head but are not clones");
+		    " have the same head but are not clones");
       }
       back = objects.back();
     }
@@ -1669,8 +1669,6 @@ void PgScrubber::replica_scrub_op(OpRequestRef op)
   preemption_data.reset();
   preemption_data.force_preemptability(msg->allow_preemption);
 
-  replica_scrubmap_pos.reset();	 // needed? RRR
-
   set_queued_or_active();
   advance_token();
   const auto& conf = m_pg->get_cct()->_conf;
@@ -2048,65 +2046,7 @@ void PgScrubber::scrub_finish()
     }
   }
 
-  {
-    // finish up
-    ObjectStore::Transaction t;
-    m_pg->recovery_state.update_stats(
-      [this](auto& history, auto& stats) {
-	dout(10) << "m_pg->recovery_state.update_stats() errors:"
-		 << m_shallow_errors << "/" << m_deep_errors << " deep? "
-		 << m_is_deep << dendl;
-	utime_t now = ceph_clock_now();
-	history.last_scrub = m_pg->recovery_state.get_info().last_update;
-	history.last_scrub_stamp = now;
-	if (m_is_deep) {
-	  history.last_deep_scrub = m_pg->recovery_state.get_info().last_update;
-	  history.last_deep_scrub_stamp = now;
-	}
-
-	if (m_is_deep) {
-	  if ((m_shallow_errors == 0) && (m_deep_errors == 0)) {
-	    history.last_clean_scrub_stamp = now;
-	  }
-	  stats.stats.sum.num_shallow_scrub_errors = m_shallow_errors;
-	  stats.stats.sum.num_deep_scrub_errors = m_deep_errors;
-	  auto omap_stats = m_be->this_scrub_omapstats();
-	  stats.stats.sum.num_large_omap_objects =
-	    omap_stats.large_omap_objects;
-	  stats.stats.sum.num_omap_bytes = omap_stats.omap_bytes;
-	  stats.stats.sum.num_omap_keys = omap_stats.omap_keys;
-	  dout(19) << "scrub_finish shard " << m_pg_whoami
-		   << " num_omap_bytes = " << stats.stats.sum.num_omap_bytes
-		   << " num_omap_keys = " << stats.stats.sum.num_omap_keys
-		   << dendl;
-	} else {
-	  stats.stats.sum.num_shallow_scrub_errors = m_shallow_errors;
-	  // XXX: last_clean_scrub_stamp doesn't mean the pg is not inconsistent
-	  // because of deep-scrub errors
-	  if (m_shallow_errors == 0) {
-	    history.last_clean_scrub_stamp = now;
-	  }
-	}
-
-	stats.stats.sum.num_scrub_errors =
-	  stats.stats.sum.num_shallow_scrub_errors +
-	  stats.stats.sum.num_deep_scrub_errors;
-
-	if (m_flags.check_repair) {
-	  m_flags.check_repair = false;
-	  if (m_pg->info.stats.stats.sum.num_scrub_errors) {
-	    state_set(PG_STATE_FAILED_REPAIR);
-	    dout(10) << "scrub_finish "
-		     << m_pg->info.stats.stats.sum.num_scrub_errors
-		     << " error(s) still present after re-scrub" << dendl;
-	  }
-	}
-	return true;
-      },
-      &t);
-    int tr = m_osds->store->queue_transaction(m_pg->ch, std::move(t), nullptr);
-    ceph_assert(tr == 0);
-  }
+  emit_scrub_result();
 
   if (has_error) {
     m_pg->queue_peering_event(PGPeeringEventRef(
@@ -2130,6 +2070,66 @@ void PgScrubber::scrub_finish()
   if (m_pg->is_active() && m_pg->is_primary()) {
     m_pg->recovery_state.share_pg_info();
   }
+}
+
+void
+PgScrubber::emit_scrub_result()
+{
+  ObjectStore::Transaction t;
+  m_pg->recovery_state.update_stats(
+      [this](auto& history, auto& stats) {
+        dout(10) << "m_pg->recovery_state.update_stats() errors:"
+                 << m_shallow_errors << "/" << m_deep_errors << " deep? "
+                 << m_is_deep << dendl;
+        utime_t now = ceph_clock_now();
+        history.last_scrub = m_pg->recovery_state.get_info().last_update;
+        history.last_scrub_stamp = now;
+        if (m_is_deep) {
+          history.last_deep_scrub = m_pg->recovery_state.get_info().last_update;
+          history.last_deep_scrub_stamp = now;
+        }
+
+        if (m_is_deep) {
+          if ((m_shallow_errors == 0) && (m_deep_errors == 0)) {
+            history.last_clean_scrub_stamp = now;
+          }
+          stats.stats.sum.num_shallow_scrub_errors = m_shallow_errors;
+          stats.stats.sum.num_deep_scrub_errors = m_deep_errors;
+          auto omap_stats = m_be->this_scrub_omapstats();
+          stats.stats.sum.num_large_omap_objects = omap_stats.large_omap_objects;
+          stats.stats.sum.num_omap_bytes = omap_stats.omap_bytes;
+          stats.stats.sum.num_omap_keys = omap_stats.omap_keys;
+          dout(19) << "scrub_finish shard " << m_pg_whoami
+                   << " num_omap_bytes = " << stats.stats.sum.num_omap_bytes
+                   << " num_omap_keys = " << stats.stats.sum.num_omap_keys
+                   << dendl;
+        } else {
+          stats.stats.sum.num_shallow_scrub_errors = m_shallow_errors;
+          // XXX: last_clean_scrub_stamp doesn't mean the pg is not inconsistent
+          // because of deep-scrub errors
+          if (m_shallow_errors == 0) {
+            history.last_clean_scrub_stamp = now;
+          }
+        }
+
+        stats.stats.sum.num_scrub_errors =
+            stats.stats.sum.num_shallow_scrub_errors +
+            stats.stats.sum.num_deep_scrub_errors;
+
+        if (m_flags.check_repair) {
+          m_flags.check_repair = false;
+          if (m_pg->info.stats.stats.sum.num_scrub_errors) {
+            state_set(PG_STATE_FAILED_REPAIR);
+            dout(10) << "scrub_finish "
+                     << m_pg->info.stats.stats.sum.num_scrub_errors
+                     << " error(s) still present after re-scrub" << dendl;
+          }
+        }
+        return true;
+      },
+      &t);
+  int tr = m_osds->store->queue_transaction(m_pg->ch, std::move(t), nullptr);
+  ceph_assert(tr == 0);
 }
 
 
@@ -2286,7 +2286,7 @@ void PgScrubber::requeue_penalized(
 	     << dendl;
     return;
   }
-  /// \todo fix the 5s' to use a cause-specific delay parameter
+
   auto& trgt = m_scrub_job->delay_on_failure(s_or_d, cause, scrub_clock_now);
   ceph_assert(!trgt.queued);
   m_osds->get_scrub_services().enqueue_target(trgt);
@@ -2800,9 +2800,9 @@ bool PgScrubber::is_token_current(Scrub::act_token_t received_token)
   if (received_token == 0 || received_token == m_current_token) {
     return true;
   }
-  dout(5) << __func__ << " obsolete token (" << received_token << " vs current "
-	  << m_current_token << dendl;
-
+  dout(5) << fmt::format("{}: obsolete token {} does not match current ({})",
+                  __func__, received_token, m_current_token)
+           << dendl;
   return false;
 }
 
