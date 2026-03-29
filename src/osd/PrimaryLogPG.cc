@@ -1754,28 +1754,14 @@ void PrimaryLogPG::release_object_locks(
 
   if (!to_req.empty()) {
     // requeue at front of scrub blocking queue if we are blocked by scrub
-    for (auto &&p: to_req) {
+    for (auto&& p : to_req) {
       if (m_scrubber->write_blocked_by_scrub(p.first->obs.oi.soid.get_head())) {
         for (auto& op : p.second) {
           op->mark_delayed("waiting for scrub");
         }
-
-	waiting_for_scrub.splice(
-	  waiting_for_scrub.begin(),
-	  p.second,
-	  p.second.begin(),
-	  p.second.end());
-      } else if (is_laggy()) {
-        for (auto& op : p.second) {
-          op->mark_delayed("waiting for readable");
-        }
-	waiting_for_readable.splice(
-	  waiting_for_readable.begin(),
-	  p.second,
-	  p.second.begin(),
-	  p.second.end());
+        waiting_for_scrub.splice(waiting_for_scrub.begin(), p.second);
       } else {
-	requeue_ops(p.second);
+        requeue_ops(p.second);
       }
     }
   }
