@@ -73,6 +73,7 @@ num_users   = 0
 num_conns   = 0
 run_prefix=''.join(random.choice(string.ascii_lowercase) for _ in range(16))
 test_path = os.path.normpath(os.path.dirname(os.path.realpath(__file__))) + '/../'
+cluster_id = os.environ.get('RGW_TEST_CLUSTER_ID', 'noname')
 
 #-----------------------------------------------
 def bash(cmd, **kwargs):
@@ -83,15 +84,15 @@ def bash(cmd, **kwargs):
     return (s, process.returncode)
 
 #-----------------------------------------------
-def admin(args, **kwargs):
+def admin(args, cluster_id='noname', **kwargs):
     """ radosgw-admin command """
-    cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_admin', 'noname'] + args
+    cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_admin', cluster_id] + args
     return bash(cmd, **kwargs)
 
 #-----------------------------------------------
-def rados(args, **kwargs):
+def rados(args, cluster_id='noname', **kwargs):
     """ rados command """
-    cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_rados', 'noname'] + args
+    cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_rados', cluster_id] + args
     return bash(cmd, **kwargs)
 
 #-----------------------------------------------
@@ -175,7 +176,7 @@ def another_user(uid, tenant, display_name):
     secret_key = run_prefix + "_" +str(num_users) + "_" + str(time.time())
 
     cmd = ['user', 'create', '--uid', uid, '--tenant', tenant, '--access-key', access_key, '--secret-key', secret_key, '--display-name', display_name]
-    result = admin(cmd)
+    result = admin(cmd, cluster_id=cluster_id)
     assert result[1] == 0
 
     hostname = get_config_host()
@@ -385,7 +386,7 @@ def gen_files(files, start_size, factor, max_copies_count=4):
 
 #-------------------------------------------------------------------------------
 def count_space_in_all_buckets():
-    result = rados(['df'])
+    result = rados(['df'], cluster_id=cluster_id)
     assert result[1] == 0
     log.debug("=============================================")
     for line in result[0].splitlines():
@@ -426,7 +427,7 @@ def count_objects_in_bucket(bucket_name, conn):
 
 #-------------------------------------------------------------------------------
 def count_object_parts_in_all_buckets(verbose=False, expected_size=0):
-    result = rados(['lspools'])
+    result = rados(['lspools'], cluster_id=cluster_id)
     assert result[1] == 0
     found=False
     for pool in result[0].split():
@@ -439,7 +440,7 @@ def count_object_parts_in_all_buckets(verbose=False, expected_size=0):
         log.debug("Pool %s doesn't exists!", POOLNAME)
         return 0
 
-    result = rados(['ls', '-p ', POOLNAME])
+    result = rados(['ls', '-p ', POOLNAME], cluster_id=cluster_id)
     assert result[1] == 0
     names=result[0].split()
     rados_count = len(names)
@@ -457,7 +458,7 @@ def count_object_parts_in_all_buckets(verbose=False, expected_size=0):
         if verbose:
             log.debug(rados_name)
         if expected_size:
-            result = rados(['-p ', POOLNAME, 'stat', rados_name])
+            result = rados(['-p ', POOLNAME, 'stat', rados_name], cluster_id=cluster_id)
             assert result[1] == 0
             stat = result[0].split()
             byte_size=int(stat[-1])
@@ -550,7 +551,7 @@ def delete_bucket_with_all_objects(bucket_name, conn):
 
 #-------------------------------------------------------------------------------
 def verify_pool_is_empty():
-    result = admin(['gc', 'process', '--include-all'])
+    result = admin(['gc', 'process', '--include-all'], cluster_id=cluster_id)
     assert result[1] == 0
     assert count_object_parts_in_all_buckets(False, 0) == 0
 
@@ -1059,7 +1060,7 @@ def delete_dup_objects_multi(files, conns, bucket_names):
             delete_objects_multi(conns, bucket_names, ten_id, object_keys)
 
     # must call garbage collection for predictable count
-    result = admin(['gc', 'process', '--include-all'])
+    result = admin(['gc', 'process', '--include-all'], cluster_id=cluster_id)
     assert result[1] == 0
 
 
@@ -1095,7 +1096,7 @@ def delete_dup_objects(bucket_name, files, conn):
         assert(check_if_any_obj_exists(bucket_name, delete_list_total, conn)==False)
 
     # must call garbage collection for predictable count
-    result = admin(['gc', 'process', '--include-all'])
+    result = admin(['gc', 'process', '--include-all'], cluster_id=cluster_id)
     assert result[1] == 0
 
 
@@ -1368,7 +1369,7 @@ def read_dedup_stats(dry_run):
     dedup_ratio_estimate=Dedup_Ratio()
     dedup_ratio_actual=Dedup_Ratio()
 
-    result = admin(['dedup', 'stats'])
+    result = admin(['dedup', 'stats'], cluster_id=cluster_id)
     assert result[1] == 0
 
     jstats=json.loads(result[0])
@@ -1418,7 +1419,7 @@ def read_dedup_stats(dry_run):
 #-------------------------------------------------------------------------------
 def set_bucket_index_throttling(limit):
     cmd = ['dedup', 'throttle', '--max-bucket-index-ops', str(limit)]
-    result = admin(cmd)
+    result = admin(cmd, cluster_id=cluster_id)
     assert result[1] == 0
     log.debug(result[0])
 
@@ -1430,10 +1431,10 @@ def exec_dedup_internal(expected_dedup_stats, dry_run, max_dedup_time):
 
     log.debug("sending exec_dedup request: dry_run=%d", dry_run)
     if dry_run:
-        result = admin(['dedup', 'estimate'])
+        result = admin(['dedup', 'estimate'], cluster_id=cluster_id)
         reset_full_dedup_stats(expected_dedup_stats)
     else:
-        result = admin(['dedup', 'exec', '--yes-i-really-mean-it'])
+        result = admin(['dedup', 'exec', '--yes-i-really-mean-it'], cluster_id=cluster_id)
 
     assert result[1] == 0
     log.debug("wait for dedup to complete")
@@ -1675,11 +1676,11 @@ def check_full_dedup_state():
     global full_dedup_state_was_checked
     global full_dedup_state_disabled
     log.debug("check_full_dedup_state:: sending FULL Dedup request")
-    result = admin(['dedup', 'exec', '--yes-i-really-mean-it'])
+    result = admin(['dedup', 'exec', '--yes-i-really-mean-it'], cluster_id=cluster_id)
     if result[1] == 0:
         log.debug("full dedup is enabled!")
         full_dedup_state_disabled = False
-        result = admin(['dedup', 'abort'])
+        result = admin(['dedup', 'abort'], cluster_id=cluster_id)
         assert result[1] == 0
     else:
         log.debug("full dedup is disabled, skip all full dedup tests")
@@ -1850,7 +1851,7 @@ def verify_objects_with_version(bucket_name, op_log, conn, config):
         # call garbage collect for tail objects before reading the same src_filename
         # this will help detect bad deletions
         if src_filename in pend_delete_set:
-            result = admin(['gc', 'process', '--include-all'])
+            result = admin(['gc', 'process', '--include-all'], cluster_id=cluster_id)
             assert result[1] == 0
 
         # only objects larger than RADOS_OBJ_SIZE got tail-objects
@@ -1949,7 +1950,7 @@ CORRUPTIONS = ("no corruption", "change_etag", "illegal_hex_value",
 
 #------------------------------------------------------------------------------
 def change_object_etag(rados_name, new_etag):
-    result = rados(['-p ', POOLNAME, 'setxattr', rados_name, ETAG_ATTR, new_etag])
+    result = rados(['-p ', POOLNAME, 'setxattr', rados_name, ETAG_ATTR, new_etag], cluster_id=cluster_id)
     assert result[1] == 0
 
 #------------------------------------------------------------------------------
@@ -1997,7 +1998,7 @@ def gen_new_etag(etag, corruption, expected_dedup_stats):
 #------------------------------------------------------------------------------
 def corrupt_etag(key, corruption, expected_dedup_stats):
     log.debug("key=%s, corruption=%s", key, corruption);
-    result = rados(['ls', '-p ', POOLNAME])
+    result = rados(['ls', '-p ', POOLNAME], cluster_id=cluster_id)
     assert result[1] == 0
 
     names=result[0].split()
@@ -2008,7 +2009,7 @@ def corrupt_etag(key, corruption, expected_dedup_stats):
             rados_name = name
             break;
 
-    result = rados(['-p ', POOLNAME, 'getxattr', rados_name, ETAG_ATTR])
+    result = rados(['-p ', POOLNAME, 'getxattr', rados_name, ETAG_ATTR], cluster_id=cluster_id)
     assert result[1] == 0
     old_etag = result[0]
 
@@ -2360,7 +2361,7 @@ def test_copy_after_dedup():
         for (bucket_name, conn) in zip(bucket_names, conns):
             delete_bucket_with_all_objects(bucket_name, conn)
 
-        result = admin(['gc', 'process', '--include-all'])
+        result = admin(['gc', 'process', '--include-all'], cluster_id=cluster_id)
         assert result[1] == 0
         bucket_names.clear()
         conns.clear()
@@ -2884,7 +2885,7 @@ def test_dedup_inc_with_remove_multi_tenants():
                 conns[i].delete_object(Bucket=bucket_names[i], Key=key)
 
         # must call garbage collection for a predictable count
-        result = admin(['gc', 'process', '--include-all'])
+        result = admin(['gc', 'process', '--include-all'], cluster_id=cluster_id)
         assert result[1] == 0
 
         # run dedup again
@@ -2986,7 +2987,7 @@ def test_dedup_inc_with_remove():
             delete_objects(conn, bucket_name, object_keys)
 
         # must call garbage collection for predictable count
-        result = admin(['gc', 'process', '--include-all'])
+        result = admin(['gc', 'process', '--include-all'], cluster_id=cluster_id)
         assert result[1] == 0
 
         # run dedup again
