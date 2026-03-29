@@ -45,7 +45,7 @@ To run the s3tests suite do the following::
 
 Running test using vstart_runner.py
 -----------------------------------
-CephFS and Ceph Manager code is be tested using `vstart_runner.py`_.
+CephFS and Ceph Manager code can be tested using `vstart_runner.py`_.
 
 Running your first test
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -69,9 +69,9 @@ in a custom virtual environment with clone `teuthology`_ repository using
     $ pip install teuthology[test]@git+https://github.com/ceph/teuthology
     $ deactivate
 
-If for some unforeseen reason above approaches do no work (maybe boostrap
-script doesn't work due to a bug or you can't download tethology at the
-moment) teuthology can be installed manually manually from copy of
+If for some unforeseen reason above approaches do not work (maybe the bootstrap
+script doesn't work due to a bug or you can't download teuthology at the
+moment) teuthology can be installed manually from copy of
 teuthology repo already present on your machine::
 
     $ cd teuthology
@@ -167,7 +167,7 @@ vstart_runner.py primarily does three things -
           checked in ``<ceph-repo-root>/build/bin/``. If present, the first
           argument is replaced with the path to binary file.
 
-Running Workunits Using vstart_enviroment.sh
+Running Workunits Using vstart_environment.sh
 --------------------------------------------
 
 Code can be tested by building Ceph locally from source, starting a vstart
@@ -179,7 +179,7 @@ Set up the environment
 
 Configure your environment::
 
-    $ . ./build/vstart_enviroment.sh
+    $ . ./build/vstart_environment.sh
 
 Running a test
 ^^^^^^^^^^^^^^
