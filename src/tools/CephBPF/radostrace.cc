@@ -599,7 +599,7 @@ int main(int argc, char **argv) {
 
   struct radostrace_bpf *skel;
   int ret = 0;
-  struct ring_buffer *rb;
+  struct ring_buffer *rb = nullptr;
 
   DwarfParser dwarfparser(rados_probes, probe_units);
 
@@ -675,7 +675,7 @@ int main(int argc, char **argv) {
 
   debug_print("New a ring buffer\n");
 
-  rb = ring_buffer__new(bpf_map__fd(skel->maps.rb), handle_event, NULL, NULL);
+  rb = ring_buffer__new(bpf_map__fd(skel->maps.rb), handle_event, nullptr, nullptr);
   if (!rb) {
     cerr << "failed to setup ring_buffer" << std::endl;
     goto cleanup;
