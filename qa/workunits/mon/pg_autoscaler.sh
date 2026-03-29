@@ -30,7 +30,9 @@ function wait_for() {
     return 0
 }
 
-function power2() { echo "x=l($1)/l(2); scale=0; 2^((x+0.5)/1)" | bc -l;}
+function power2_floor() { echo "x=l($1)/l(2); scale=0; 2^(x/1)" | bc -l;}
+
+function power2_ceil() { echo "x=l($1)/l(2); scale=0; 2^((x+0.999)/1)" | bc -l; }
 
 function eval_actual_expected_val() {
     local actual_value=$1
@@ -93,13 +95,13 @@ POOL_SIZE_4=$(ceph osd pool get bulk2 size| grep -Eo '[0-9]{1,4}')
 # Since the Capacity ratio = 0 we first meta pool remains the same pg_num
 
 TARGET_PG_1=$(ceph osd pool get meta0 pg_num| grep -Eo '[0-9]{1,4}')
-PG_LEFT=$NUM_OSDS*100
+PG_LEFT=$(($NUM_OSDS*100 - $TARGET_PG_1 * $POOL_SIZE_1))
 NUM_POOLS_LEFT=$NUM_POOLS-1
 # Rest of the pool is bulk and even pools so pretty straight forward
 # calculations.
-TARGET_PG_2=$(power2 $((($PG_LEFT)/($NUM_POOLS_LEFT)/($POOL_SIZE_2))))
-TARGET_PG_3=$(power2 $((($PG_LEFT)/($NUM_POOLS_LEFT)/($POOL_SIZE_3))))
-TARGET_PG_4=$(power2 $((($PG_LEFT)/($NUM_POOLS_LEFT)/($POOL_SIZE_4))))
+TARGET_PG_2=$(power2_floor $((($PG_LEFT)/($NUM_POOLS_LEFT)/($POOL_SIZE_2))))
+TARGET_PG_3=$(power2_floor $((($PG_LEFT)/($NUM_POOLS_LEFT)/($POOL_SIZE_3))))
+TARGET_PG_4=$(power2_floor $((($PG_LEFT)/($NUM_POOLS_LEFT)/($POOL_SIZE_4))))
 
 # evaluate target_pg against pg num of each pools
 wait_for 300 "ceph osd pool get meta0 pg_num | grep $TARGET_PG_1"
@@ -109,7 +111,7 @@ wait_for 300 "ceph osd pool get bulk2 pg_num | grep $TARGET_PG_4"
 
 # target ratio
 ceph osd pool set meta0 target_size_ratio 5
-ceph osd pool set bulk0 target_size_ratio 1
+ceph osd pool set bulk0 target_size_ratio 2
 sleep 60
 APGS=$(ceph osd dump -f json-pretty | jq '.pools[0].pg_num_target')
 BPGS=$(ceph osd dump -f json-pretty | jq '.pools[1].pg_num_target')
@@ -151,6 +153,57 @@ ceph osd pool rm bulk1 bulk1 --yes-i-really-really-mean-it
 ceph osd pool rm bulk2 bulk2 --yes-i-really-really-mean-it
 ceph osd pool rm warn0 warn0 --yes-i-really-really-mean-it
 ceph osd pool rm warn1 warn1 --yes-i-really-really-mean-it
+
+# test POOL_PG_ABOVE_AUTOSCALER_TARGET health warning
+
+# No managed pools so no warning
+ceph osd pool create warn0 256 --autoscale-mode=off
+wait_for 120 "ceph health detail | grep HEALTH_OK"
+
+ceph osd pool create bulk0 --bulk
+ceph osd pool create bulk1 --bulk
+
+NUM_POOLS=$(ceph osd pool ls | wc -l)
+
+# bulk pools shouldn't scale and pg_num should be 1
+wait_for 120 "ceph health detail | grep POOL_PG_ABOVE_AUTOSCALER_TARGET"
+wait_for 300 "ceph osd pool get bulk0 pg_num | grep 1"
+wait_for 300 "ceph osd pool get bulk1 pg_num | grep 1"
+
+# no warning when noautoscale is set
+ceph osd pool set noautoscale
+wait_for 120 "ceph health detail | grep HEALTH_OK"
+
+# change pg_autoscale_mode to on but increase threshold so pool fails to scale down still
+ceph osd pool unset noautoscale
+ceph osd pool set threshold 10.0
+ceph osd pool set warn0 pg_autoscale_mode on
+wait_for 120 "ceph health detail | grep POOL_PG_ABOVE_AUTOSCALER_TARGET"
+
+# pool should scale down after decreasing threshold
+ceph osd pool set threshold 3.0
+wait_for 120 "ceph health detail | grep HEALTH_OK"
+
+# calculate new pg_num after warn0 scalews down
+POOL_SIZE_1=$(ceph osd pool get warn0 size| grep -Eo '[0-9]{1,4}')
+POOL_SIZE_2=$(ceph osd pool get bulk0 size| grep -Eo '[0-9]{1,4}')
+POOL_SIZE_3=$(ceph osd pool get bulk1 size| grep -Eo '[0-9]{1,4}')
+
+TARGET_PG_1=$(ceph osd dump -f json-pretty | jq '.pools[0].pg_num_target')
+PG_LEFT=$(($NUM_OSDS*100 - $TARGET_PG_1 * $POOL_SIZE_1))
+NUM_POOLS_LEFT=$NUM_POOLS-1
+TARGET_PG_2=$(power2_floor $((($PG_LEFT)/($NUM_POOLS_LEFT)/($POOL_SIZE_2))))
+TARGET_PG_3=$(power2_floor $((($PG_LEFT)/($NUM_POOLS_LEFT)/($POOL_SIZE_3))))
+
+# evaluate target_pg against pg num of each pools
+APGS=$(ceph osd dump -f json-pretty | jq '.pools[1].pg_num_target')
+BPGS=$(ceph osd dump -f json-pretty | jq '.pools[1].pg_num_target')
+test $APGS -eq $TARGET_PG_2
+test $BPGS -eq $TARGET_PG_3
+
+ceph osd pool rm warn0 warn0 --yes-i-really-really-mean-it
+ceph osd pool rm bulk0 bulk0 --yes-i-really-really-mean-it
+ceph osd pool rm bulk1 bulk1 --yes-i-really-really-mean-it
 
 echo OK
 

@@ -1284,6 +1284,20 @@ To address this issue, you can increase the PG count for existing pools or
 create new pools.  For more information, see
 :ref:`choosing-number-of-placement-groups`.
 
+POOL_PG_ABOVE_AUTOSCALER_TARGET
+____________________________
+
+One or more pools have a ``pg_num`` that which exceeds the total budget.
+
+If autoscale is disabled for a pool which exceeds total budget, pools
+managed by the autoscaler cannot scale up when remaining budget <= 0.
+Autoscaler scale-down recommendations may be allowed.
+
+If autoscale is enabled, pools that exceed total budget will attempt to
+scale down. Scale-down fails to trigger if reduction does not satisfy
+autoscaler downscale threshold / merge constraints, and the pool will
+continue to exceed total budget.
+
 POOL_PG_NUM_NOT_POWER_OF_TWO
 ____________________________
 
