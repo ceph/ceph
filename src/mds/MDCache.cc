@@ -14860,6 +14860,19 @@ struct C_ListSnapsAggregator : public MDSIOContext {
   std::vector<std::unique_ptr<MDCache::SnapSetContext>> snap_set_context;
 };
 
+// Helper class to wrap MDSContext for the finisher
+class C_MDS_OnFinisher : public MDSContext {
+  MDSRank *mds;
+  MDSContext *mds_ctx;
+  Finisher *finisher;
+public:
+  C_MDS_OnFinisher(MDSRank *mds, MDSContext *ctx, Finisher *fr) : mds(mds), mds_ctx(ctx), finisher(fr) {}
+  void finish(int r) override {
+    finisher->queue(mds_ctx, r);
+  }
+  MDSRank *get_mds() override { return mds; }
+};
+
 void MDCache::file_blockdiff(CInode *in1, CInode *in2, BlockDiff *block_diff, uint64_t max_objects,
 			     MDSContext *ctx) {
   ceph_assert(in1->last <= in2->last);
@@ -14914,7 +14927,10 @@ void MDCache::file_blockdiff(CInode *in1, CInode *in2, BlockDiff *block_diff, ui
   }
 
   C_ListSnapsAggregator *on_finish = new C_ListSnapsAggregator(mds, in1, in2, block_diff, ctx);
-  MDSGatherBuilder gather_ctx(g_ceph_context, on_finish);
+  // To prevent the aggregator from finishing ctx synchronously during activate(), we wrap the
+  // aggregator completion in the finisher as well. This avoids the deadlock of reacquiring
+  // mds_lock via MDSIOContext complete. See https://tracker.ceph.com/issues/75676 for more info
+  MDSGatherBuilder gather_ctx(g_ceph_context, new C_MDS_OnFinisher(mds, on_finish, mds->finisher));
 
   while (scans > 0) {
     ObjectOperation op;
