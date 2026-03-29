@@ -45,6 +45,9 @@ public:
   // epoch is for Paxos synchronization  mechanizm
   epoch_t epoch = 0;
   bool delay_propose = false;
+  uint64_t published_features = 0;
+  static constexpr uint64_t FLAG_BEACONDIFF = (1<<0);
+  uint64_t ever_enabled_features = 0;
 
   std::map<NvmeGroupKey, NvmeGwMonStates>  created_gws;
 
@@ -94,6 +97,7 @@ public:
           std::string &location, bool &propose_pending);
   int cfg_location_disaster_clear(const NvmeGroupKey& group_key,
           std::string &location, bool &propose_pending);
+  int cfg_enable_disable_beacon_diff(bool enable, bool &propose_pending);
   void process_gw_map_ka(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     epoch_t& last_osd_epoch,  bool &propose_pending);
@@ -193,24 +197,17 @@ public:
 
   void encode(ceph::buffer::list &bl, uint64_t features) const  {
     using ceph::encode;
-    uint8_t version = 1;
-    if (HAVE_FEATURE(features, NVMEOFHAMAP)) {
-      version = 2;
-    }
-    if (HAVE_FEATURE(features, NVMEOF_BEACON_DIFF)) {
-      version = 3;
-    }
-    ENCODE_START(version, version, bl);
+    static const uint8_t version = 3;
+    static const uint8_t cversion = 1;
+    ENCODE_START(version, cversion, bl);
     encode(epoch, bl);// global map epoch
 
     encode(created_gws, bl, features); //Encode created GWs
     encode(fsm_timers, bl, features);
-    if (version >= 2) {
-      encode(gw_epoch, bl);
-    }
-    if (version >=3) {
-      encode(disaster_locations, bl);
-    }
+    encode(gw_epoch, bl);
+    encode(disaster_locations, bl);
+    encode(ever_enabled_features, bl);
+    encode(published_features, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -230,6 +227,9 @@ public:
     }
     if (struct_v >=3) {
       decode(disaster_locations, bl);
+      decode(ever_enabled_features, bl);
+      decode(published_features, bl);
+      dout(20) << " decoded features " << published_features << dendl;
       dout(20)  << "decode  disaster location "  << dendl;
     }
     DECODE_FINISH(bl);

@@ -1495,6 +1495,11 @@ COMMAND("nvme-gw disaster-clear"
     " set location to clear Disaster state - failbacks allowed for recovered location",
     "mgr", "rw")
 
+COMMAND("nvme-gw set"
+    " name=var,type=CephChoices,strings=beacon-diff"
+    " name=val,type=CephString ",
+    "enable beacon-diff feature",
+    "mgr", "rw")
 
 // these are tell commands that were implemented as CLI commands in
 // the broken pre-octopus way that we want to allow to work when a
