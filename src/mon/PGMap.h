@@ -376,6 +376,7 @@ public:
                              const utime_t ts,
                              const int64_t pool,
                              const pool_stat_t& old_pool_sum);
+  std::vector<std::pair<int32_t, osd_stat_t>> get_sorted_osd_stats() const;
 
  public:
 
