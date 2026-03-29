@@ -160,7 +160,6 @@ inline void set(transaction_handle txn, const char *k, const char *v, ceph::libf
 {
  detail::maybe_commit mc(txn, commit_after);
 
- // Since we've got a static extent key, we need to be sure we convert data appropriately:
  return txn->set(detail::as_fdb_span(k), detail::as_fdb_span(v));
 }
 
@@ -173,7 +172,6 @@ inline void set(transaction_handle txn, auto b, auto e)
 inline void set(database_handle dbh, auto b, auto e)
 {
  return set(make_transaction(dbh), b, e); 
-//JFW:, commit_after_op::commit);
 }
 
 } // namespace ceph::libfdb
@@ -308,45 +306,12 @@ inline bool key_exists(database_handle dbh, std::string_view k)
 
 namespace ceph::libfdb {
 
-/*
-// Retreives batches from the database, then performs copy and conversion in its own batches:
-// May need to make ValueT uint8_t (possibly encoding implications, but we can get to that in time)
-template <template <typename ...> typename MapT = std::map,
-          typename KeyT = std::string,
-          typename ValueT = std::string>
-inline auto make_generator(ceph::libfdb::transaction_handle txn, ceph::libfdb::select key_range) 
-{
-fmt::println("JFW: make_generator() about to return a new generator.":
- // Notice that we have copied the key_range selector (they may want to use it elsewhere); this also
- // keeps our state within the lambda closure:
- return [txn, key_range] -> std::generator<MapT<KeyT, ValueT>> {
-fmt::println("JFW: generator called.");
-      MapT<KeyT, ValueT> out;
-
-      for(const auto& kv_block : ceph::libfdb::detail::range_block_generator(txn, key_range)) {
-
-fmt::println("outer generator: {} entries returned", kv_block.size());
-        // Each round we get from the block generator is a span, so let's desugar that into
-        // pairs for our container:
-        for(const auto& kvp : kv_block) {
-          out.insert(detail::to_decoded_kv_pair(kvp));
-        }
-
-        co_yield out;  
-      }
- };
-}
-*/
-
-// KNOWN LIMITATION: this only works with values returned as string for now, we need to solve deferred type resolution:
-// Importantly, notice that we make a copy of the transaction_handle, as it must be viable because the underlying
-// FDB data lifetime is bound to it:
 template <typename ValueT = std::string>
 inline auto pair_generator(ceph::libfdb::transaction_handle txn, ceph::libfdb::select key_range) 
   -> std::generator<std::pair<std::string, ValueT>>
 {
 int n = 0;
- for(const std::span<const FDBKeyValue>& kvp_block : ceph::libfdb::detail::generate_FDB_pairs(txn, key_range)) {
+ for(const std::span<const FDBKeyValue>& kvp_block : ceph::libfdb::detail::generate_FDB_pairs(*txn, key_range)) {
 fmt::println("JFW: span block {} received", ++n);
    for(const auto& kvp : kvp_block) {
      co_yield ceph::libfdb::detail::to_decoded_kv_pair(kvp);
@@ -359,22 +324,6 @@ inline auto pair_generator(ceph::libfdb::database_handle& dbh, ceph::libfdb::sel
 {
  return pair_generator<ValueT>(ceph::libfdb::make_transaction(dbh), key_range);
 }
-
-/*
- * block_generator:
-template <template <typename ...> typename MapT = std::map,
-          typename KeyT = std::string,
-          typename ValueT = std::string>
-range generator
-
-if block being retried: stop()
-separate range into blocks (by chunk size)
-dispatch txn per block
-  for each txn:
-    if time exhausted:
-      separate block into subranges (?)
-      retry: recursion
-*/
 
 } // namespace ceph::libfdb
 

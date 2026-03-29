@@ -280,8 +280,7 @@ struct maybe_commit;
 
 future_value await_ready_range_future(transaction_handle txn, const ceph::libfdb::select& key_range, int& iteration);
 
-//JFW: std::generator<std::span<const FDBKeyValue>> range_block_generator(transaction_handle txn, ceph::libfdb::select key_range);
-std::generator<std::span<const FDBKeyValue>> generate_FDB_pairs(ceph::libfdb::transaction_handle txn, ceph::libfdb::select key_range);
+std::generator<std::span<const FDBKeyValue>> generate_FDB_pairs(ceph::libfdb::transaction& txn_owner, ceph::libfdb::select key_range);
 
 } // namespace ceph::libfdb::detail
 
@@ -370,9 +369,7 @@ class database final
  detail::database_system db_system;
 
  private:
-
-//JFW: prolly should be shared
- std::unique_ptr<FDBDatabase, decltype(&fdb_database_destroy)> db_handle;
+ std::shared_ptr<FDBDatabase> db_handle; // JFW: , decltype(&fdb_database_destroy)> db_handle;
 
  FDBDatabase *create_database_ptr(const std::filesystem::path cluster_file_path) {
     FDBDatabase *fdbp = nullptr;
@@ -500,9 +497,6 @@ class transaction final
     fdb_transaction_clear_range(raw_handle(),
         (const uint8_t *)key_range.begin_key.data(), key_range.begin_key.size(), 
         (const uint8_t *)key_range.end_key.data(), key_range.end_key.size());
-
-fmt::println("JFW: performing an extra special commit");
-commit();
  }
 
  bool key_exists(std::string_view k) {
@@ -538,8 +532,8 @@ commit();
  friend inline bool commit(transaction_handle& txn);
  friend inline bool commit(transaction_handle txn);
 
- //JFW: friend std::generator<std::span<const FDBKeyValue>> ceph::libfdb::detail::range_block_generator(transaction_handle txn, ceph::libfdb::select key_range);
- friend std::generator<std::span<const FDBKeyValue>> ceph::libfdb::detail::generate_FDB_pairs(ceph::libfdb::transaction_handle txn, ceph::libfdb::select key_range);
+ // JFW: the signature kinda suggests this might as well be a static member function-- TODO:
+ friend std::generator<std::span<const FDBKeyValue>> ceph::libfdb::detail::generate_FDB_pairs(ceph::libfdb::transaction& txn_owner, ceph::libfdb::select key_range);
 
  // private:
  friend struct ceph::libfdb::detail::maybe_commit;
@@ -566,6 +560,7 @@ template <typename OutIterT>
 requires std::output_iterator<OutIterT, std::pair<std::string, std::string>>
 inline bool ceph::libfdb::transaction::get_value_range_from_transaction(const ceph::libfdb::select& key_range, OutIterT out_iter)
 {
+/*
  const fdb_bool_t is_snapshot = false;
 
  const FDBKeyValue *out_kvs = nullptr;
@@ -592,8 +587,15 @@ inline bool ceph::libfdb::transaction::get_value_range_from_transaction(const ce
 
 fmt::println("JFW: fdb_future_get_keyvalue_array() returned {} items", out_count);
 
+if(out_more)
 fmt::println("JFW: OBTAINING MOAR");
- std::transform(out_kvs, out_count + out_kvs, out_iter, detail::to_decoded_kv_pair);
+*/
+
+ auto flattened = detail::generate_FDB_pairs(*this, key_range) | std::views::join;
+ std::ranges::transform(flattened, out_iter, detail::to_decoded_kv_pair);
+
+// auto out_kvs = detail::generate_FDB_pairs(*this, key_range);
+ //JFW:std::transform(out_kvs, out_count + out_kvs, out_iter, detail::to_decoded_kv_pair);
 
  return true;
 }
@@ -666,46 +668,18 @@ inline bool ceph::libfdb::transaction::get_single_value_from_transaction(const s
 // parameters have to change for subsequent reads.
 inline ceph::libfdb::future_value ceph::libfdb::transaction::get_range_future_from_transaction(const ceph::libfdb::select& selection, int& iteration /* JFW: make const */)
 {
+// JFW: doubting selection is the right place for *state*, though; this needs much thought:
   const auto& begin_key  = selection.begin_key;
   const auto& end_key    = selection.end_key;
-// JFW: doubting selection is the right place for state
-//  const auto& options    = selection.options;
-//  const auto& iteration  = options.iteration; // should start at one, is incremented when streaming_mode_t::iterator is enabled, else ignored
 
 fmt::println("JFW: get_range_future_from_transaction(): begin = {} end = {}", selection.begin_key, selection.end_key);
-/*JFW:
-  // By default give (begin, end]; not much in the C API documentation about selector details, the Python docs
-  // have a bit more information-- this is actually anything but easy to figure out, they made it hard...:
-  bool begin_or_eq = true;
-  int begin_offset = 0;
-
-  bool end_or_eq   = true;
-  int end_offset = 0; 
-
-  int limit = 0; // options.stride; 0 == unlim; else max number of pairs to return at once (more() function)
-  int target_bytes = 0;       // 0 == unlim; else enables more() function of fdb_future_get_keyvalue_array()
-  FDBStreamingMode streaming_mode = FDB_STREAMING_MODE_WANT_ALL; // options.streaming_mode; // FDB_STREAMING_MODE_WANT_ALL 
-  bool is_snapshot = false;
-  bool reverse = false;
-
-// JFW: HACK:
-if(iteration > 1) {
-fmt::println("JFW: setting up for SUBSEQUENT gather");
-begin_or_eq = true;
-begin_offset = 1;
-end_or_eq = true;
-end_offset = 0;
-}*/
 
 int begin_offset = 0;
-int match_begin = first gt_or_eq;       // this is used the first time /only/
 if(iteration > 1) { 
   begin_offset = 1; 
-  match_begin = first gt
 }
 
-int end_offset = 0;
-//JFW:if(iteration > 1) { end_offset = 0; }
+const int end_offset = 1;
 
 fmt::println("JFW: fdb_transaction_get_range(): begin_key = \"{}\", end_key = \"{}\", begin_offset = {}, end_offset = {}, iteration = {}",
               std::string_view(begin_key.data(), begin_key.size()), 
@@ -724,13 +698,12 @@ fmt::println("JFW: fdb_transaction_get_range(): begin_key = \"{}\", end_key = \"
 
                       (const uint8_t *)end_key.data(), end_key.size(),          // the end selector key
                       1,                                                        // end or eq
-                      end_offset,                                               // end offset // JFW: was 0
+                      end_offset,                                               // end offset (a shift AFTER end is matched)
 
                       // How should results be grouped/chunked:
                       0,                                                        // limit (0 == unlimited)
                       0,                                                        // target bytes (0 == unlimited)
-//JFW:                      FDB_STREAMING_MODE_ITERATOR,                        // streaming mode (JFW: FDB_STREAMING_MODE_WANT_ALL)
-                      FDB_STREAMING_MODE_WANT_ALL,                              // streaming mode (JFW: FDB_STREAMING_MODE_WANT_ALL)
+                      FDB_STREAMING_MODE_ITERATOR,                              // streaming mode (JFW: FDB_STREAMING_MODE_WANT_ALL)
                       iteration,                                                // iteration # (produced side effect)
 
                       // Other options:
@@ -761,13 +734,8 @@ namespace ceph::libfdb::detail {
 
 // Generators:
 // The returned memory should be copied immediately as its lifetime will end once the Future is destoyed:
-inline std::generator<std::span<const FDBKeyValue>> generate_FDB_pairs(ceph::libfdb::transaction_handle txn, ceph::libfdb::select key_range) 
+inline std::generator<std::span<const FDBKeyValue>> generate_FDB_pairs(ceph::libfdb::transaction& txn_owner, ceph::libfdb::select key_range) 
 {
-static auto first_time = std::chrono::steady_clock::now();
-/*
- co_yield std::span<const FDBKeyValue, 0>();
- co_return;
-*/
   // As FDB is stateless, we need to track state somewhere:
   int iteration = 0;     
   int more_available = 1;
@@ -781,7 +749,7 @@ fmt::println("JFW: range_block_generator(): {} <-> {}", key_range.begin_key, key
      iteration++;
 
 fmt::println("JFW: iteration {}", iteration);
-     ceph::libfdb::future_value fv = txn->get_range_future_from_transaction(key_range, iteration);
+     ceph::libfdb::future_value fv = txn_owner.get_range_future_from_transaction(key_range, iteration);
   
      if(fdb_error_t r = fdb_future_block_until_ready(fv.raw_handle()); 0 != r) {
        throw libfdb_exception(r);
@@ -792,13 +760,6 @@ fmt::println("JFW: iteration {}", iteration);
      }
  
 fmt::println("JFW: range_block_generator(): out_count = {}, more_available = {}; yielding", out_count, more_available);
-
-if(0 == more_available) {
-static auto end_time = std::chrono::steady_clock::now();
-std::chrono::duration<double> elapsed_seconds = end - start;
-fmt::println("JFW: more available has changed at {} seconds", elapsed_seconds.count());
-abort();
-}
 
 /*
 for(const auto& kvp : std::span<const FDBKeyValue>(out_kvs, out_count)) {
@@ -812,13 +773,9 @@ fmt::println("JFW: returning block of {} entries (out_count was {})", r.size(), 
     co_yield r;// JFW: std::span<const FDBKeyValue>(out_kvs, out_count);
 
     if(more_available) {
-// Make the first part of the range for the new search equal to the last one from the old search:
-       const auto& last_key = r.back(); // JFW: eeew! out_kvs[out_count - 1];
-       key_range.begin_key = std::string_view((const char *)last_key.key, last_key.key_length);
-
-       // ...this may well invalidate the previous Future, so if the user needed the memory we returned, they
-       // better have copied it! (That's part of why this is in ::detail.)
-  //     fv = txn->get_range_future_from_transaction(key_range, iteration);
+      // Make the first part of the range for the new search equal to the last one from the old search:
+      const auto& last_key = r.back(); // JFW: eeew! out_kvs[out_count - 1];
+      key_range.begin_key = std::string_view((const char *)last_key.key, last_key.key_length);
 fmt::println("JFW: more_available == true, reading from \"{}\"...", key_range.begin_key);
      }
   }

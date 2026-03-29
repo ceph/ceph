@@ -28,6 +28,23 @@ between FDB's types! If you have a user type to add, this is the place!
 #include <cstdint>
 #include <string_view>
 
+/*
+ * block_generator:
+template <template <typename ...> typename MapT = std::map,
+          typename KeyT = std::string,
+          typename ValueT = std::string>
+range generator
+
+if block being retried: stop()
+separate range into blocks (by chunk size)
+dispatch txn per block
+  for each txn:
+    if time exhausted:
+      separate block into subranges (?)
+      retry: recursion
+*/
+
+/*** Conversions: */
 namespace ceph::libfdb::to {
 
 inline auto convert(ceph::buffer::list& from) -> std::vector<std::uint8_t>

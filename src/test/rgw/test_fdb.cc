@@ -79,8 +79,9 @@ auto key_counter(auto txn, const auto& selector, auto& out_values) -> auto {
  out_values.clear();
 
  lfdb::get(txn, selector, 
-           std::inserter(out_values, std::begin(out_values)));
+           std::inserter(out_values, std::end(out_values)));
 
+fmt::println("JFW:\n{}", out_values);
  return out_values.size();
 };
 
@@ -98,8 +99,6 @@ inline std::map<std::string, std::string> make_monotonic_kvs(const int N, std::s
   kvs.insert({ make_key(i, prefix), make_value(i) });
  }
 
- fmt::println("JFW: generated {} kv pairs", kvs.size());
-
  return kvs;
 }
 
@@ -109,8 +108,6 @@ inline auto write_monotonic_kvs(lfdb::database_handle dbh, const int N, std::str
 
  for(const auto& [k, v] : kvs)
   lfdb::set(lfdb::make_transaction(dbh), k, v, lfdb::commit_after_op::commit);
-
- fmt::println("JFW: wrote {} kv pairs to the database", kvs.size());
 
  return kvs;
 }
@@ -126,34 +123,42 @@ constexpr const char * const pearl_msg =
 // Clean up test keys when we leave scope:
 struct janitor final
 {
+ ceph::libfdb::database_handle dbh_;
+
  // flip this off if you need artifacts after debugging:
  bool drop_after_scope = true;
 
- janitor()
+ janitor(ceph::libfdb::database_handle dbh_)
+  : dbh_(dbh_)
  {
-fmt::println("JFW: janitor tidying up before tasks...");
-  drop_all();
- } 
+  REQUIRE(nullptr != dbh_);
+ }
+
+ janitor()
+  : janitor(ceph::libfdb::create_database())
+ {}
 
  ~janitor()
  {
-fmt::println("JFW: janitor tidying up after scope...");
   if(drop_after_scope)
-   drop_all();
+   drop_all(dbh_);
  }
 
- static void drop_all() {
+ ceph::libfdb::database_handle dbh() { return dbh_; }
+
+ static void drop_all(ceph::libfdb::database_handle dbh_) {
+
    // Note: technically, 0xFF, 0xFF is needed to include the system keys (if the transaction's allowed to
-   // access these), but I don't think any tests will be doing this, at least not for now; the documentation
-   // with details is unfortunately light on, for instance, whether or not after 0xFF the NULL character is
-   // included, but we'll assume it is (again, for our purposes):
-   const char begin_key[] = { (char)0x00 };
-   const char end_key[]   = { (char)0xFF };
-   lfdb::erase(lfdb::make_transaction(lfdb::create_database()),
-              lfdb::select { begin_key, end_key }, 
-              lfdb::commit_after_op::commit);
-sleep(1);
+   // access these). However, special permissions are needed to access these magical "system keys" and we
+   // probably don't actually want to delete them erroneously. So, we stick with our key range...
+   // ("500,000,000 records aught to be enough for anybody.") 
+   lfdb::erase(ceph::libfdb::make_transaction(dbh_),
+               lfdb::select { make_key(1), make_key(500'000'000) });
    }
+
+  void drop_all() {
+    return drop_all(dbh());
+  }
 };
 
 // Basically, make sure we're actually linking with the library:
@@ -166,11 +171,10 @@ TEST_CASE()
 TEST_CASE("fdb simple", "[rgw][fdb]") {
  janitor j;
 
+ auto dbh = j.dbh();
+
  const string_view k = "key";
  const string v = fmt::format("value-{:%c}", std::chrono::system_clock::now());
-
- auto dbh = lfdb::create_database();
- REQUIRE(nullptr != dbh);
 
  SECTION("read missing key") {
     const string_view missing_key = "missing_key";
@@ -250,20 +254,10 @@ TEST_CASE("fdb simple", "[rgw][fdb]") {
 TEST_CASE("fdb simple (delete keys in range)", "[rgw][fdb]") {
  janitor j;
 
-//JFW: j.drop_after_scope = false; // JFW TESTING
-/*
-const char begin_key[] = { (char)0x00 };
-const char end_key[]   = { (char)0xFF };
-lfdb::erase(lfdb::make_transaction(lfdb::create_database()),
- lfdb::select { begin_key, end_key },
- lfdb::commit_after_op::commit);
-*/
  const auto selector = lfdb::select { "\x00", "\xFF" };
 
- auto dbh = lfdb::create_database();
+ auto dbh = j.dbh();
 
- // Make sure there's nothing in the database overlapping our range:
- lfdb::erase(lfdb::make_transaction(dbh), selector);
  REQUIRE(0 == key_count(dbh, selector));
 
  // Write a bunch of kvs-- for this particular test, we use a hard-coded number specifically:
@@ -290,8 +284,7 @@ TEMPLATE_PRODUCT_TEST_CASE("multi-key ops", "[rgw][fdb]",
 {
  janitor j;
 
- auto dbh = lfdb::create_database();
- CHECK(nullptr != dbh);
+ auto dbh = j.dbh();
 
  // Write a sequence of keys so we have some data to work with:
  const auto kvs = write_monotonic_kvs(dbh, 100);
@@ -325,6 +318,44 @@ TEMPLATE_PRODUCT_TEST_CASE("multi-key ops", "[rgw][fdb]",
     CHECK(std::end(out_values) != std::ranges::find(out_values, string_pair { make_key(i), make_value(i) }));
   }
  }
+}
+
+TEST_CASE("check selectors", "[fdb][rgw]") {
+ janitor j;
+
+ const int nentries = 11;
+
+ const auto select_all = lfdb::select { make_key(1), make_key(nentries) };
+
+ auto dbh = j.dbh();
+
+ // Make sure that there's nothing in our test range:
+ j.drop_all();
+ REQUIRE(0 == key_count(dbh, select_all));
+
+ const auto kvs = write_monotonic_kvs(dbh, nentries);
+
+ // Make sure there's exactly as many entries as we added:
+ REQUIRE(nentries == key_count(dbh, select_all));
+
+ std::vector<std::pair<std::string, std::string>> out;
+ lfdb::get(dbh, select_all, std::back_inserter(out));
+
+ // These /are/ the droids you're looking for:
+ CHECK(nentries == out.size());
+ CHECK(make_key(1) == out.front().first);
+ CHECK(make_key(nentries) == out.back().first);
+
+ // Get exactly no entries:
+ out.clear();
+ lfdb::get(dbh, lfdb::select { make_key(0), make_key(0) }, std::back_inserter(out));
+ CHECK(0 == out.size());
+
+ // Get exactly one entry: 
+ out.clear();
+ lfdb::get(dbh, lfdb::select { make_key(1), make_key(1) }, std::back_inserter(out));
+ REQUIRE(1 == out.size());
+ CHECK(make_key(1) == out.front().first);
 }
 
 TEST_CASE("fdb conversions (built-in)", "[fdb][rgw]") {
@@ -430,14 +461,9 @@ TEST_CASE("fdb conversions (functions)", "[fdb][rgw]")
 TEST_CASE("generators", "[fdb]") {
  janitor j;
 
-fmt::println("JFW: explicitly clearing DB and disabling tidy-up flag...");
- j.drop_all();
-/*JFW:
- j.drop_after_scope = false;
-sleep(5);*/
+ const unsigned nkeys = GENERATE(10); // JFW: GENERATE(0, 1, 2, 3, 10, 100, 1'000);
 
- const unsigned nkeys = GENERATE(100'000); // 0, 1, 2, 3, 10, 1'000, 5'000, 10'000); // JFW: , 100'000, 200'000); // JFW: , 1'000'000);
-fmt::println("JFW: run with nkeys = {}", nkeys);
+fmt::println("JFW: nkeys = {}", nkeys);
 
  auto dbh = lfdb::create_database();
 
@@ -445,18 +471,13 @@ fmt::println("JFW: run with nkeys = {}", nkeys);
  REQUIRE(nkeys == kvs_in.size());
 
  SECTION("block_generator, kv pair return") {
-    int total_processed = 0;
     std::map<std::string, std::string> out;
 
     // pair_generator returns key-value pairs, keeping the specified transaction (or implicitly created one)
-    // alive until exhausted:
+    // alive until exhausted (note that this may cause the transaction to expire if approaching 5s or so):
     for(auto&& kvp : lfdb::pair_generator(dbh, lfdb::select { make_key(1), make_key(nkeys) }))
-{
      out.emplace(kvp);
-    total_processed++;
-}
 
-fmt::println("JFW: out: {} records ({})", out.size(), total_processed);
     CHECK(nkeys == out.size());
 
     // Be sure we captured the head and the tail:
@@ -473,7 +494,7 @@ TEMPLATE_PRODUCT_TEST_CASE("associative data", "[fdb][rgw]",
 {
  janitor j;
 
- auto dbh = lfdb::create_database();
+ auto dbh = j.dbh();
 
  TestType kvs{
       { "hello", "world" },
@@ -497,7 +518,7 @@ SCENARIO("implicit transactions", "[fdb][rgw]")
 {
  janitor j;
 
- auto dbh = lfdb::create_database();
+ auto dbh = j.dbh();
 
  std::string_view k = "hi", v = "there";
 
@@ -566,9 +587,8 @@ SCENARIO("implicit transactions", "[fdb][rgw]")
  }
 
  SECTION("round trip") {
+  janitor j(dbh);
   using namespace ceph::libfdb;
-  
-  auto dbh = create_database();
   
   set(dbh, "key", "value");
   
