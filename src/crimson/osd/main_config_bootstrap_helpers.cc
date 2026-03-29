@@ -21,7 +21,6 @@
 #include "crimson/common/perf_counters_collection.h"
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Messenger.h"
-#include "crimson/osd/main_config_bootstrap_helpers.h"
 
 #include <sys/wait.h> // for waitpid()
 
