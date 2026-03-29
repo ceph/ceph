@@ -107,16 +107,14 @@ describe('RbdSnapshotListComponent', () => {
   });
 
   describe('api delete request', () => {
-    let called: boolean;
     let rbdService: RbdService;
     let notificationService: NotificationService;
     let authStorageService: AuthStorageService;
 
     beforeEach(() => {
       fixture.detectChanges();
-      const modalService = TestBed.inject(ModalCdsService);
+      modalService = TestBed.inject(ModalCdsService);
       const actionLabelsI18n = TestBed.inject(ActionLabelsI18n);
-      called = false;
       rbdService = new RbdService(null, null);
       notificationService = new NotificationService(null, null, null);
       authStorageService = new AuthStorageService();
@@ -139,20 +137,20 @@ describe('RbdSnapshotListComponent', () => {
       spyOn(modalService, 'stopLoadingSpinner').and.stub();
     });
 
-    // @TODO: fix this later. fails with the new cds modal.
-    // disabling this for now.
-    it.skip('should call stopLoadingSpinner if the request fails', fakeAsync(() => {
-      // expect(container.querySelector('cds-placeholder')).not.toBeNull();
-      component.updateSelection(new CdTableSelection([{ name: 'someName' }]));
-      expect(called).toBe(false);
-      component.deleteSnapshotModal();
-      component.modalRef.snapshotForm = { value: { snapName: 'someName' } };
-      component.modalRef.submitAction();
-      tick(500);
-      spyOn(modalService, 'stopLoadingSpinner').and.callFake(() => {
-        called = true;
+    it('should call stopLoadingSpinner if the request fails', fakeAsync(() => {
+      const modalRef: any = { snapshotForm: 'deletionForm' };
+      spyOn(modalService, 'show').and.callFake((_modalComp: any, config: any) => {
+        modalRef.submitAction = config.submitAction;
+        return modalRef;
       });
-      expect(called).toBe(true);
+
+      component.updateSelection(new CdTableSelection([{ name: 'someName' }]));
+      component.deleteSnapshotModal();
+
+      modalRef.submitAction();
+      tick();
+
+      expect(modalService.stopLoadingSpinner).toHaveBeenCalledWith('deletionForm');
     }));
   });
 
@@ -219,38 +217,32 @@ describe('RbdSnapshotListComponent', () => {
     });
   });
 
-  // cds-modal opening fails in the unit tests. since e2e is already there, disabling this.
-  // @TODO: should be fixed later on
-  describe.skip('snapshot modal dialog', () => {
+  describe('snapshot modal dialog', () => {
+    let modalRef: any;
+
     beforeEach(() => {
       component.poolName = 'pool01';
       component.rbdName = 'image01';
-      spyOn(TestBed.inject(ModalService), 'show').and.callFake(() => {
-        const ref: any = {};
-        ref.componentInstance = new RbdSnapshotFormModalComponent(
-          null,
-          null,
-          null,
-          null,
-          TestBed.inject(ActionLabelsI18n),
-          null,
-          component.poolName
-        );
-        ref.componentInstance.onSubmit = new Subject();
-        return ref;
-      });
+      modalRef = {
+        setEditing: jasmine.createSpy('setEditing'),
+        setSnapName: jasmine.createSpy('setSnapName'),
+        onSubmit: new Subject<string>()
+      };
+      spyOn(TestBed.inject(ModalCdsService), 'show').and.returnValue(modalRef);
     });
 
     it('should display old snapshot name', () => {
       component.selection.selected = [{ name: 'oldname' }];
       component.openEditSnapshotModal();
-      expect(component.modalRef.componentInstance.snapName).toBe('oldname');
-      expect(component.modalRef.componentInstance.editing).toBeTruthy();
+      expect(modalRef.setEditing).toHaveBeenCalled();
+      expect(modalRef.setSnapName).toHaveBeenCalledWith('oldname');
     });
 
     it('should display suggested snapshot name', () => {
       component.openCreateSnapshotModal();
-      expect(component.modalRef.componentInstance.snapName).toMatch(
+      expect(modalRef.setEditing).not.toHaveBeenCalled();
+      expect(modalRef.setSnapName).toHaveBeenCalled();
+      expect(modalRef.setSnapName.calls.mostRecent().args[0]).toMatch(
         RegExp(`^${component.rbdName}_[\\d-]+T[\\d.:]+[\\+-][\\d:]+$`)
       );
     });
