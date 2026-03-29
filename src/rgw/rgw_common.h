@@ -359,6 +359,7 @@ inline constexpr const char* RGW_REST_STS_XMLNS =
 #define ERR_BUSY_RESHARDING      2300 // also in cls_rgw_types.h, don't change!
 #define ERR_NO_SUCH_ENTITY       2301
 #define ERR_LIMIT_EXCEEDED       2302
+#define ERR_CONCURRENT_MODIFICATION 2303
 
 // STS Errors
 #define ERR_PACKED_POLICY_TOO_LARGE 2400
