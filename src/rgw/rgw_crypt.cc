@@ -19,6 +19,7 @@
 #include "crypto/crypto_accel.h"
 #include "crypto/crypto_plugin.h"
 #include "rgw/rgw_kms.h"
+#include "rgw_range_projection.h"
 #include "rapidjson/document.h"
 #include "rapidjson/writer.h"
 #include "rapidjson/error/error.h"
@@ -1525,56 +1526,23 @@ int RGWGetObj_BlockDecrypt::fixup_range(off_t& bl_ofs, off_t& bl_end) {
     }
   }
 
-  if (parts_len.size() > 0) {
-    // Multipart object: find parts containing start and end offsets
-    PartLocation start_loc = find_part_for_plaintext_offset(bl_ofs, false);
-    PartLocation end_loc = find_part_for_plaintext_offset(bl_end, true);  // clamp to last
+  // Save the pre-encryption input offsets for filter state
+  off_t pre_enc_ofs = bl_ofs;
+  off_t pre_enc_end = bl_end;
 
-    // Block-align end within its part (in plaintext space)
-    size_t part_plaintext_end = encrypted_to_plaintext_size(parts_len[end_loc.part_idx]);
-    off_t rounded_end = std::min(
-        (off_t)((end_loc.offset_in_part & ~(block_size - 1)) + (block_size - 1)),
-        (off_t)(part_plaintext_end - 1));
+  auto range = project_encrypt_range(bl_ofs, bl_end, block_size,
+                               encrypted_block_size, encrypted_total_size,
+                               parts_len);
 
-    // enc_begin_skip is offset within the starting block
-    enc_begin_skip = start_loc.offset_in_part & (block_size - 1);
-    ofs = bl_ofs - enc_begin_skip;
-    end = bl_end;
+  // Initialize filter state from projection result.
+  // ofs/end are plaintext-space offsets used by process().
+  enc_begin_skip = range.enc_begin_skip;
+  ofs = pre_enc_ofs - enc_begin_skip;
+  end = pre_enc_end;
+  enc_ofs = range.ofs;
 
-    // Convert end offset: plaintext -> encrypted, then align to encrypted block
-    off_t enc_end = align_to_encrypted_block_end(logical_to_encrypted_offset(rounded_end));
-    enc_end = std::min(enc_end, (off_t)(parts_len[end_loc.part_idx] - 1));
-    bl_end = end_loc.cumulative_encrypted + enc_end;
-
-    // Convert start offset: align in plaintext, then convert to encrypted
-    off_t aligned_start = std::max((off_t)0, start_loc.offset_in_part - enc_begin_skip);
-    bl_ofs = start_loc.cumulative_encrypted + logical_to_encrypted_offset(aligned_start);
-
-    // Clamp start to end (handles invalid ranges)
-    bl_ofs = std::min(bl_ofs, bl_end);
-    enc_ofs = bl_ofs;
-  }
-  else
-  {
-    // Simple object (no multipart)
-    enc_begin_skip = bl_ofs & (block_size - 1);
-    ofs = bl_ofs & ~(block_size - 1);
-    end = bl_end;
-
-    // Calculate block-aligned logical range
-    off_t aligned_start = bl_ofs & ~(block_size - 1);
-    off_t aligned_end = (bl_end & ~(block_size - 1)) + (block_size - 1);
-
-    // Convert to encrypted offsets
-    bl_ofs = logical_to_encrypted_offset(aligned_start);
-    bl_end = align_to_encrypted_block_end(logical_to_encrypted_offset(aligned_end));
-    enc_ofs = bl_ofs;
-
-    // Clamp to actual encrypted object size
-    if (encrypted_total_size > 0 && bl_end >= encrypted_total_size) {
-      bl_end = encrypted_total_size - 1;
-    }
-  }
+  bl_ofs = range.ofs;
+  bl_end = range.end;
 
   ldpp_dout(this->dpp, 20) << "fixup_range [" << inp_ofs << "," << inp_end
       << "] => [" << bl_ofs << "," << bl_end << "]"
@@ -1671,29 +1639,6 @@ int RGWGetObj_BlockDecrypt::process_part_boundaries(size_t& plain_part_ofs_out) 
 
   plain_part_ofs_out = plain_part_ofs;
   return 0;
-}
-
-RGWGetObj_BlockDecrypt::PartLocation
-RGWGetObj_BlockDecrypt::find_part_for_plaintext_offset(off_t plaintext_ofs, bool clamp_to_last) const
-{
-  PartLocation loc = {0, plaintext_ofs, 0};
-
-  // If clamp_to_last, stop at second-to-last part (used for end offsets)
-  size_t limit = (clamp_to_last && parts_len.size() > 0)
-                 ? (parts_len.size() - 1)
-                 : parts_len.size();
-
-  while (loc.part_idx < limit) {
-    size_t part_plain = encrypted_to_plaintext_size(parts_len[loc.part_idx]);
-    if (loc.offset_in_part < (off_t)part_plain) {
-      break;  // Found the part containing this offset
-    }
-    loc.offset_in_part -= part_plain;
-    loc.cumulative_encrypted += parts_len[loc.part_idx];
-    loc.part_idx++;
-  }
-
-  return loc;
 }
 
 int RGWGetObj_BlockDecrypt::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) {

@@ -1357,217 +1357,128 @@ TEST(TestRGWCrypto, verify_AES_256_GCM_aad_offset_mismatch)
 
 // Test helper class to expose private methods for unit testing
 // (declared as friend in RGWGetObj_BlockDecrypt)
-class TestableBlockDecrypt : public RGWGetObj_BlockDecrypt {
-public:
-  // Re-export PartLocation struct for test code
-  using PartLocation = RGWGetObj_BlockDecrypt::PartLocation;
-
-  TestableBlockDecrypt(const DoutPrefixProvider* dpp,
-                       CephContext* cct,
-                       RGWGetObj_Filter* next,
-                       std::unique_ptr<BlockCrypt> crypt,
-                       std::vector<size_t> parts_len)
-    : RGWGetObj_BlockDecrypt(dpp, cct, next, std::move(crypt),
-                             std::move(parts_len), null_yield) {}
-
-  // Wrapper to expose private method for testing
-  PartLocation find_part_for_plaintext_offset(off_t plaintext_ofs, bool clamp_to_last) const {
-    return RGWGetObj_BlockDecrypt::find_part_for_plaintext_offset(plaintext_ofs, clamp_to_last);
-  }
-};
+// PartLocation tests use the free function find_part_for_offset()
+// from rgw_range_projection.h instead of the removed class method.
+#include "rgw_range_projection.h"
 
 TEST(TestRGWCrypto, verify_PartLocation_single_part)
 {
-  const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
-  ut_get_sink get_sink;
-
   std::vector<size_t> parts = {10 * 1024 * 1024};
-  auto crypt = std::make_unique<BlockCryptNone>(4096);
-  TestableBlockDecrypt decrypt(&no_dpp, g_ceph_context, &get_sink,
-                               std::move(crypt), parts);
+  size_t idx; off_t ofs_in_part, cumulative;
 
-  auto loc = decrypt.find_part_for_plaintext_offset(0, false);
-  ASSERT_EQ(loc.part_idx, 0u);
-  ASSERT_EQ(loc.offset_in_part, 0);
-  ASSERT_EQ(loc.cumulative_encrypted, 0);
+  find_part_for_offset(0, parts, 4096, 4096, false, idx, ofs_in_part, cumulative);
+  ASSERT_EQ(idx, 0u);
+  ASSERT_EQ(ofs_in_part, 0);
+  ASSERT_EQ(cumulative, 0);
 
-  loc = decrypt.find_part_for_plaintext_offset(1000, false);
-  ASSERT_EQ(loc.part_idx, 0u);
-  ASSERT_EQ(loc.offset_in_part, 1000);
-  ASSERT_EQ(loc.cumulative_encrypted, 0);
+  find_part_for_offset(1000, parts, 4096, 4096, false, idx, ofs_in_part, cumulative);
+  ASSERT_EQ(idx, 0u);
+  ASSERT_EQ(ofs_in_part, 1000);
+  ASSERT_EQ(cumulative, 0);
 
-  loc = decrypt.find_part_for_plaintext_offset(10 * 1024 * 1024 - 1, false);
-  ASSERT_EQ(loc.part_idx, 0u);
-  ASSERT_EQ(loc.offset_in_part, 10 * 1024 * 1024 - 1);
-  ASSERT_EQ(loc.cumulative_encrypted, 0);
+  find_part_for_offset(10 * 1024 * 1024 - 1, parts, 4096, 4096, false, idx, ofs_in_part, cumulative);
+  ASSERT_EQ(idx, 0u);
+  ASSERT_EQ(ofs_in_part, 10 * 1024 * 1024 - 1);
+  ASSERT_EQ(cumulative, 0);
 }
 
 TEST(TestRGWCrypto, verify_PartLocation_multipart_cbc)
 {
-  const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
-  ut_get_sink get_sink;
+  const size_t ps = 5 * 1024 * 1024;
+  std::vector<size_t> parts = {ps, ps, ps};
+  size_t idx; off_t ofs_in_part, cumulative;
 
-  const size_t part_size = 5 * 1024 * 1024;
-  std::vector<size_t> parts = {part_size, part_size, part_size};
-  auto crypt = std::make_unique<BlockCryptNone>(4096);
-  TestableBlockDecrypt decrypt(&no_dpp, g_ceph_context, &get_sink,
-                               std::move(crypt), parts);
+  find_part_for_offset(0, parts, 4096, 4096, false, idx, ofs_in_part, cumulative);
+  ASSERT_EQ(idx, 0u); ASSERT_EQ(ofs_in_part, 0); ASSERT_EQ(cumulative, 0);
 
-  auto loc = decrypt.find_part_for_plaintext_offset(0, false);
-  ASSERT_EQ(loc.part_idx, 0u);
-  ASSERT_EQ(loc.offset_in_part, 0);
-  ASSERT_EQ(loc.cumulative_encrypted, 0);
+  find_part_for_offset(ps - 1, parts, 4096, 4096, false, idx, ofs_in_part, cumulative);
+  ASSERT_EQ(idx, 0u); ASSERT_EQ(ofs_in_part, (off_t)(ps - 1)); ASSERT_EQ(cumulative, 0);
 
-  loc = decrypt.find_part_for_plaintext_offset(part_size - 1, false);
-  ASSERT_EQ(loc.part_idx, 0u);
-  ASSERT_EQ(loc.offset_in_part, (off_t)(part_size - 1));
-  ASSERT_EQ(loc.cumulative_encrypted, 0);
+  find_part_for_offset(ps, parts, 4096, 4096, false, idx, ofs_in_part, cumulative);
+  ASSERT_EQ(idx, 1u); ASSERT_EQ(ofs_in_part, 0); ASSERT_EQ(cumulative, (off_t)ps);
 
-  loc = decrypt.find_part_for_plaintext_offset(part_size, false);
-  ASSERT_EQ(loc.part_idx, 1u);
-  ASSERT_EQ(loc.offset_in_part, 0);
-  ASSERT_EQ(loc.cumulative_encrypted, (off_t)part_size);
+  find_part_for_offset(ps + 1000, parts, 4096, 4096, false, idx, ofs_in_part, cumulative);
+  ASSERT_EQ(idx, 1u); ASSERT_EQ(ofs_in_part, 1000); ASSERT_EQ(cumulative, (off_t)ps);
 
-  loc = decrypt.find_part_for_plaintext_offset(part_size + 1000, false);
-  ASSERT_EQ(loc.part_idx, 1u);
-  ASSERT_EQ(loc.offset_in_part, 1000);
-  ASSERT_EQ(loc.cumulative_encrypted, (off_t)part_size);
+  find_part_for_offset(2 * ps, parts, 4096, 4096, false, idx, ofs_in_part, cumulative);
+  ASSERT_EQ(idx, 2u); ASSERT_EQ(ofs_in_part, 0); ASSERT_EQ(cumulative, (off_t)(2 * ps));
 
-  loc = decrypt.find_part_for_plaintext_offset(2 * part_size, false);
-  ASSERT_EQ(loc.part_idx, 2u);
-  ASSERT_EQ(loc.offset_in_part, 0);
-  ASSERT_EQ(loc.cumulative_encrypted, (off_t)(2 * part_size));
-
-  loc = decrypt.find_part_for_plaintext_offset(3 * part_size - 100, false);
-  ASSERT_EQ(loc.part_idx, 2u);
-  ASSERT_EQ(loc.offset_in_part, (off_t)(part_size - 100));
-  ASSERT_EQ(loc.cumulative_encrypted, (off_t)(2 * part_size));
+  find_part_for_offset(3 * ps - 100, parts, 4096, 4096, false, idx, ofs_in_part, cumulative);
+  ASSERT_EQ(idx, 2u); ASSERT_EQ(ofs_in_part, (off_t)(ps - 100)); ASSERT_EQ(cumulative, (off_t)(2 * ps));
 }
 
 TEST(TestRGWCrypto, verify_PartLocation_multipart_aead)
 {
-  const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
-  ut_get_sink get_sink;
+  const size_t pp = 1024 * AEAD_CHUNK_SIZE;  // 4MB plaintext per part
+  const size_t ep = aead_plaintext_to_encrypted_size(pp);
+  std::vector<size_t> parts = {ep, ep, ep};
+  size_t idx; off_t ofs_in_part, cumulative;
 
-  // For AEAD, parts_len contains ENCRYPTED sizes (with auth tag overhead)
-  const size_t plaintext_per_part = 1024 * AEAD_CHUNK_SIZE;  // 4MB
-  const size_t encrypted_per_part = aead_plaintext_to_encrypted_size(plaintext_per_part);
-  std::vector<size_t> parts = {encrypted_per_part, encrypted_per_part, encrypted_per_part};
+  find_part_for_offset(0, parts, 4096, 4112, false, idx, ofs_in_part, cumulative);
+  ASSERT_EQ(idx, 0u); ASSERT_EQ(ofs_in_part, 0); ASSERT_EQ(cumulative, 0);
 
-  auto crypt = std::make_unique<BlockCryptNoneAEAD>();
-  TestableBlockDecrypt decrypt(&no_dpp, g_ceph_context, &get_sink,
-                               std::move(crypt), parts);
+  find_part_for_offset(pp - 1, parts, 4096, 4112, false, idx, ofs_in_part, cumulative);
+  ASSERT_EQ(idx, 0u); ASSERT_EQ(ofs_in_part, (off_t)(pp - 1)); ASSERT_EQ(cumulative, 0);
 
-  auto loc = decrypt.find_part_for_plaintext_offset(0, false);
-  ASSERT_EQ(loc.part_idx, 0u);
-  ASSERT_EQ(loc.offset_in_part, 0);
-  ASSERT_EQ(loc.cumulative_encrypted, 0);
+  find_part_for_offset(pp, parts, 4096, 4112, false, idx, ofs_in_part, cumulative);
+  ASSERT_EQ(idx, 1u); ASSERT_EQ(ofs_in_part, 0); ASSERT_EQ(cumulative, (off_t)ep);
 
-  loc = decrypt.find_part_for_plaintext_offset(plaintext_per_part - 1, false);
-  ASSERT_EQ(loc.part_idx, 0u);
-  ASSERT_EQ(loc.offset_in_part, (off_t)(plaintext_per_part - 1));
-  ASSERT_EQ(loc.cumulative_encrypted, 0);
+  find_part_for_offset(pp + 8192, parts, 4096, 4112, false, idx, ofs_in_part, cumulative);
+  ASSERT_EQ(idx, 1u); ASSERT_EQ(ofs_in_part, 8192); ASSERT_EQ(cumulative, (off_t)ep);
 
-  loc = decrypt.find_part_for_plaintext_offset(plaintext_per_part, false);
-  ASSERT_EQ(loc.part_idx, 1u);
-  ASSERT_EQ(loc.offset_in_part, 0);
-  ASSERT_EQ(loc.cumulative_encrypted, (off_t)encrypted_per_part);
-
-  loc = decrypt.find_part_for_plaintext_offset(plaintext_per_part + 8192, false);
-  ASSERT_EQ(loc.part_idx, 1u);
-  ASSERT_EQ(loc.offset_in_part, 8192);
-  ASSERT_EQ(loc.cumulative_encrypted, (off_t)encrypted_per_part);
-
-  loc = decrypt.find_part_for_plaintext_offset(2 * plaintext_per_part, false);
-  ASSERT_EQ(loc.part_idx, 2u);
-  ASSERT_EQ(loc.offset_in_part, 0);
-  ASSERT_EQ(loc.cumulative_encrypted, (off_t)(2 * encrypted_per_part));
+  find_part_for_offset(2 * pp, parts, 4096, 4112, false, idx, ofs_in_part, cumulative);
+  ASSERT_EQ(idx, 2u); ASSERT_EQ(ofs_in_part, 0); ASSERT_EQ(cumulative, (off_t)(2 * ep));
 }
 
 TEST(TestRGWCrypto, verify_PartLocation_clamp_to_last)
 {
-  const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
-  ut_get_sink get_sink;
+  const size_t ps = 5 * 1024 * 1024;
+  std::vector<size_t> parts = {ps, ps, ps};
+  size_t idx; off_t ofs_in_part, cumulative;
 
-  const size_t part_size = 5 * 1024 * 1024;
-  std::vector<size_t> parts = {part_size, part_size, part_size};
-  auto crypt = std::make_unique<BlockCryptNone>(4096);
-  TestableBlockDecrypt decrypt(&no_dpp, g_ceph_context, &get_sink,
-                               std::move(crypt), parts);
+  find_part_for_offset(2 * ps + 1000, parts, 4096, 4096, false, idx, ofs_in_part, cumulative);
+  ASSERT_EQ(idx, 2u); ASSERT_EQ(ofs_in_part, 1000);
 
-  // Offset within object - both modes return the same
-  auto loc = decrypt.find_part_for_plaintext_offset(2 * part_size + 1000, false);
-  ASSERT_EQ(loc.part_idx, 2u);
-  ASSERT_EQ(loc.offset_in_part, 1000);
+  find_part_for_offset(2 * ps + 1000, parts, 4096, 4096, true, idx, ofs_in_part, cumulative);
+  ASSERT_EQ(idx, 2u); ASSERT_EQ(ofs_in_part, 1000);
 
-  loc = decrypt.find_part_for_plaintext_offset(2 * part_size + 1000, true);
-  ASSERT_EQ(loc.part_idx, 2u);
-  ASSERT_EQ(loc.offset_in_part, 1000);
+  find_part_for_offset(3 * ps + 5000, parts, 4096, 4096, false, idx, ofs_in_part, cumulative);
+  ASSERT_EQ(idx, 3u); ASSERT_EQ(ofs_in_part, 5000);
 
-  // Offset beyond all parts - without clamping returns invalid index
-  loc = decrypt.find_part_for_plaintext_offset(3 * part_size + 5000, false);
-  ASSERT_EQ(loc.part_idx, 3u);
-  ASSERT_EQ(loc.offset_in_part, 5000);
-
-  // With clamping - stays at last valid part
-  loc = decrypt.find_part_for_plaintext_offset(3 * part_size + 5000, true);
-  ASSERT_EQ(loc.part_idx, 2u);
-  ASSERT_EQ(loc.offset_in_part, (off_t)(part_size + 5000));
+  find_part_for_offset(3 * ps + 5000, parts, 4096, 4096, true, idx, ofs_in_part, cumulative);
+  ASSERT_EQ(idx, 2u); ASSERT_EQ(ofs_in_part, (off_t)(ps + 5000));
 }
 
 TEST(TestRGWCrypto, verify_PartLocation_unequal_parts)
 {
-  const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
-  ut_get_sink get_sink;
-
-  // Parts: 1MB, 3MB, 2MB
+  // CBC parts: 1MB, 3MB, 2MB
   std::vector<size_t> parts = {1024 * 1024, 3 * 1024 * 1024, 2 * 1024 * 1024};
-  auto crypt = std::make_unique<BlockCryptNone>(4096);
-  TestableBlockDecrypt decrypt(&no_dpp, g_ceph_context, &get_sink,
-                               std::move(crypt), parts);
+  size_t idx; off_t ofs_in_part, cumulative;
 
-  auto loc = decrypt.find_part_for_plaintext_offset(500 * 1024, false);
-  ASSERT_EQ(loc.part_idx, 0u);
-  ASSERT_EQ(loc.offset_in_part, 500 * 1024);
-  ASSERT_EQ(loc.cumulative_encrypted, 0);
+  find_part_for_offset(500 * 1024, parts, 4096, 4096, false, idx, ofs_in_part, cumulative);
+  ASSERT_EQ(idx, 0u); ASSERT_EQ(ofs_in_part, 500 * 1024); ASSERT_EQ(cumulative, 0);
 
-  loc = decrypt.find_part_for_plaintext_offset(1536 * 1024, false);  // 1.5MB
-  ASSERT_EQ(loc.part_idx, 1u);
-  ASSERT_EQ(loc.offset_in_part, 512 * 1024);
-  ASSERT_EQ(loc.cumulative_encrypted, 1024 * 1024);
+  find_part_for_offset(1536 * 1024, parts, 4096, 4096, false, idx, ofs_in_part, cumulative);
+  ASSERT_EQ(idx, 1u); ASSERT_EQ(ofs_in_part, 512 * 1024); ASSERT_EQ(cumulative, 1024 * 1024);
 
-  loc = decrypt.find_part_for_plaintext_offset(4608 * 1024, false);  // 4.5MB
-  ASSERT_EQ(loc.part_idx, 2u);
-  ASSERT_EQ(loc.offset_in_part, 512 * 1024);
-  ASSERT_EQ(loc.cumulative_encrypted, 4 * 1024 * 1024);
+  find_part_for_offset(4608 * 1024, parts, 4096, 4096, false, idx, ofs_in_part, cumulative);
+  ASSERT_EQ(idx, 2u); ASSERT_EQ(ofs_in_part, 512 * 1024); ASSERT_EQ(cumulative, 4 * 1024 * 1024);
 }
 
 TEST(TestRGWCrypto, verify_PartLocation_no_manifest)
 {
-  // Single-part objects don't have a multipart manifest, so parts_len is empty.
-  // The code treats this as one logical part starting at offset 0.
-  const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
-  ut_get_sink get_sink;
-
+  // Empty parts = single-part object
   std::vector<size_t> parts = {};
-  auto crypt = std::make_unique<BlockCryptNone>(4096);
-  TestableBlockDecrypt decrypt(&no_dpp, g_ceph_context, &get_sink,
-                               std::move(crypt), parts);
+  size_t idx; off_t ofs_in_part, cumulative;
 
-  auto loc = decrypt.find_part_for_plaintext_offset(0, false);
-  ASSERT_EQ(loc.part_idx, 0u);
-  ASSERT_EQ(loc.offset_in_part, 0);
-  ASSERT_EQ(loc.cumulative_encrypted, 0);
+  find_part_for_offset(0, parts, 4096, 4096, false, idx, ofs_in_part, cumulative);
+  ASSERT_EQ(idx, 0u); ASSERT_EQ(ofs_in_part, 0); ASSERT_EQ(cumulative, 0);
 
-  loc = decrypt.find_part_for_plaintext_offset(1000, false);
-  ASSERT_EQ(loc.part_idx, 0u);
-  ASSERT_EQ(loc.offset_in_part, 1000);
-  ASSERT_EQ(loc.cumulative_encrypted, 0);
+  find_part_for_offset(1000, parts, 4096, 4096, false, idx, ofs_in_part, cumulative);
+  ASSERT_EQ(idx, 0u); ASSERT_EQ(ofs_in_part, 1000); ASSERT_EQ(cumulative, 0);
 
-  loc = decrypt.find_part_for_plaintext_offset(10 * 1024 * 1024, false);
-  ASSERT_EQ(loc.part_idx, 0u);
-  ASSERT_EQ(loc.offset_in_part, 10 * 1024 * 1024);
-  ASSERT_EQ(loc.cumulative_encrypted, 0);
+  find_part_for_offset(10 * 1024 * 1024, parts, 4096, 4096, false, idx, ofs_in_part, cumulative);
+  ASSERT_EQ(idx, 0u); ASSERT_EQ(ofs_in_part, 10 * 1024 * 1024); ASSERT_EQ(cumulative, 0);
 }
 
 

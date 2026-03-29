@@ -230,6 +230,13 @@ target_link_libraries(unittest_rgw_crypto
   ${CRYPTO_LIBS}
   )
 
+add_executable(unittest_rgw_range_projection test_rgw_range_projection.cc)
+add_ceph_unittest(unittest_rgw_range_projection)
+target_link_libraries(unittest_rgw_range_projection
+  ${rgw_libs}
+  ${UNITTEST_LIBS}
+  )
+
 if(WITH_RADOSGW_RADOS)
 set(test_rgw_reshard_srcs test_rgw_reshard.cc)
 add_executable(unittest_rgw_reshard
