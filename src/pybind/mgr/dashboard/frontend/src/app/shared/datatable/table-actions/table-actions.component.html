@@ -36,6 +36,9 @@
                                   data-testid="table-action-option-btn"
                                   i18n>
         {{ action.name }}
+        <svg class="action-icon"
+             [cdsIcon]="action.icon"
+             size="16"></svg>
         </cds-overflow-menu-option>
       </ng-container>
     </ng-template>
@@ -68,6 +71,9 @@
                                 data-testid="table-action-option-btn"
                                 i18n>
       {{ action.name }}
+      <svg class="action-icon"
+           [cdsIcon]="action.icon"
+           size="16"></svg>
       </cds-overflow-menu-option>
     </ng-container>
   </cds-overflow-menu>
