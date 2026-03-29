@@ -19174,6 +19174,75 @@ int Client::fcopyfile(const char *spath, const char *dpath, UserPerm& perms, mod
   return 0;
 }
 
+int Client::fcopyfilex(int source_fd, off_t source_start, int dest_fd, off_t dest_start, size_t size, unsigned flags)
+{
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied())
+    return -ENOTCONN;
+
+  ldout(cct, 10) << "fcopyfilex source_fd=" << source_fd << " source_start=" << source_start
+                 << " dest_fd=" << dest_fd << " dest_start=" << dest_start
+                 << " size=" << size << " flags=" << flags << dendl;
+
+  std::scoped_lock lock(client_lock);
+  Fh *src_fh = get_filehandle(source_fd);
+  if (!src_fh)
+    return -EBADF;
+
+  Fh *dest_fh = get_filehandle(dest_fd);
+  if (!dest_fh)
+    return -EBADF;
+
+#if defined(__linux__) && defined(O_PATH)
+  if (src_fh->flags & O_PATH || dest_fh->flags & O_PATH)
+    return -EBADF;
+#endif
+
+  if (size == 0)
+    return 0;
+
+  // For now, ignore flags - could be used for future extensions
+
+  bufferlist bl;
+  size_t remaining = size;
+  off_t src_offset = source_start;
+  off_t dest_offset = dest_start;
+  const size_t chunk_size = 1048576; // 1MB chunks
+  while (remaining > 0) {
+    size_t to_read = std::min(remaining, chunk_size);
+
+    // Read from source
+    int r = _read(src_fh, src_offset, to_read, &bl);
+    if (r < 0) {
+      ldout(cct, 10) << "fcopyfilex: error reading from source_fd=" << source_fd
+                     << " at offset=" << src_offset << " size=" << to_read << " r=" << r << dendl;
+      return r;
+    }
+
+    if (r == 0) {
+      // EOF reached
+      break;
+    }
+
+    // Write to dest
+    bufferlist write_bl;
+    write_bl.substr_of(bl, 0, r);
+    int w = _write(dest_fh, dest_offset, r, std::move(write_bl));
+    if (w < 0) {
+      ldout(cct, 10) << "fcopyfilex: error writing to dest_fd=" << dest_fd
+                     << " at offset=" << dest_offset << " size=" << r << " w=" << w << dendl;
+      return w;
+    }
+
+    src_offset += r;
+    dest_offset += r;
+    remaining -= r;
+    bl.clear();
+  }
+
+  return size - remaining; // Return number of bytes copied
+}
+
 StandaloneClient::StandaloneClient(Messenger *m, MonClient *mc,
 				   boost::asio::io_context& ictx)
   : Client(m, mc, new Objecter(m->cct, m, mc, ictx))
