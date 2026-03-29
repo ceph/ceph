@@ -3324,6 +3324,8 @@ void PGMap::get_health_checks(
         summary += " experiencing stalled read in block device of BlueStore";
       } else if (asum.first == "WAL_DEVICE_STALLED_READ_ALERT") {
         summary += " experiencing stalled read in wal device of BlueFS";
+      } else if (asum.first == "BLUESTORE_BLUEFS_OVERSIZED") {
+        summary += " have BlueFS usage exceeding configured ratio of main device size";
       } else if (asum.first == "DB_DEVICE_STALLED_READ_ALERT") {
         summary += " experiencing stalled read in db device of BlueFS";
       } else if (asum.first.find("_DISCARD_QUEUE") != std::string::npos) {

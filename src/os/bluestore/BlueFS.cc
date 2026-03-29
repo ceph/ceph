@@ -631,7 +631,6 @@ uint64_t BlueFS::_get_used(unsigned id) const
 uint64_t BlueFS::get_used(unsigned id)
 {
   ceph_assert(id < alloc.size());
-  ceph_assert(alloc[id]);
   return _get_used(id);
 }
 
