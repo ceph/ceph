@@ -1,9 +1,9 @@
 import { OSDsPageHelper } from '../cluster/osds.po';
-import { DashboardV3PageHelper } from '../ui/dashboard-v3.po';
+import { OvevriewPagehelper } from '../ui/dashboard-v3.po';
 
 describe('OSDs page', () => {
   const osds = new OSDsPageHelper();
-  const overview = new DashboardV3PageHelper();
+  const overview = new OvevriewPagehelper();
 
   before(() => {
     cy.login();

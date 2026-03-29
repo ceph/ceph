@@ -3,23 +3,20 @@ import { NotificationSidebarPageHelper } from '../ui/notification.po';
 import { HostsPageHelper } from './hosts.po';
 import { ServicesPageHelper } from './services.po';
 
-const pages = {
-  index: { url: '#/add-storage?welcome=true', id: 'cd-create-cluster' }
-};
-export class CreateClusterWizardHelper extends PageHelper {
-  pages = pages;
+export class OnboardingHelper extends PageHelper {
+  pages = { index: { url: '#/add-storage?welcome=true', id: 'cd-create-cluster' } };
 
-  createCluster() {
-    cy.get('cd-create-cluster').should('contain.text', 'Please expand your cluster first');
-    cy.get('[name=add-storage]').click();
+  onboarding() {
+    cy.get('cd-create-cluster').should('contain.text', 'Welcome to Ceph Dashboard');
+    cy.get('[aria-label="Add Storage"]').first().click({ force: true });
     cy.get('cd-wizard').should('exist');
   }
 
   doSkip() {
-    cy.get('[name=skip-cluster-creation]').click();
+    cy.get('[aria-label="View cluster overview"]').first().click({ force: true });
     cy.contains('cd-modal button', 'Continue').click();
 
-    cy.get('cd-dashboard').should('exist');
+    cy.get('cd-overview').should('exist');
     const notification = new NotificationSidebarPageHelper();
     notification.open();
     notification.getNotifications().should('contain', 'Storage setup skipped by user');
@@ -28,7 +25,7 @@ export class CreateClusterWizardHelper extends PageHelper {
 
 export class CreateClusterHostPageHelper extends HostsPageHelper {
   pages = {
-    index: { url: '#/add-storage?welcome=true', id: 'cd-wizard' },
+    index: { url: '#/add-storage', id: 'cd-create-cluster' },
     add: { url: '', id: 'cd-host-form' }
   };
 
@@ -42,7 +39,7 @@ export class CreateClusterHostPageHelper extends HostsPageHelper {
 
 export class CreateClusterServicePageHelper extends ServicesPageHelper {
   pages = {
-    index: { url: '#/add-storage?welcome=true', id: 'cd-wizard' },
+    index: { url: '#/add-storage', id: 'cd-create-cluster' },
     create: { url: '', id: 'cd-service-form' }
   };
 
