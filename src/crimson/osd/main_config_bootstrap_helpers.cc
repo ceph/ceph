@@ -224,13 +224,12 @@ _get_early_config(int argc, const char *argv[])
 	                     " or crimson_cpu_num must be set");
 	      ceph_abort();
 	    }
-	    std::string smp = fmt::format("{}", reactor_num);
 	    ret.early_args.emplace_back("--smp");
-	    ret.early_args.emplace_back(smp);
+	    ret.early_args.emplace_back(fmt::format("{}", reactor_num));
 	    ret.early_args.emplace_back("--thread-affinity");
 	    ret.early_args.emplace_back("0");
 	    logger().info("get_early_config: set --thread-affinity 0 --smp {}",
-	                  smp);
+	                  reactor_num);
 
 	  }
 	} else {
