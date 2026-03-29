@@ -42,11 +42,9 @@ using ceph::timespan_str;
 using result_t = Scrub::SnapMapReaderI::result_t;
 using code_t = Scrub::SnapMapReaderI::result_t::code_t;
 
-
-const string SnapMapper::MAPPING_PREFIX = "SNA_";
-const string SnapMapper::OBJECT_PREFIX = "OBJ_";
-
-const char *SnapMapper::PURGED_SNAP_PREFIX = "PSN_";
+static const std::string MAPPING_PREFIX = "SNA_";
+static const std::string OBJECT_PREFIX = "OBJ_";
+static const char *PURGED_SNAP_PREFIX = "PSN_";
 
 /*
 
