@@ -44,26 +44,29 @@ RBMDevice::mkfs_ret RBMDevice::do_primary_mkfs(device_config_t config,
     );
   }
 
-  super.block_size = (*st).block_size;
-  super.size = (*st).size;
-  super.config = std::move(config);
-  super.journal_size = journal_size;
-  ceph_assert_always(super.journal_size > 0);
-  ceph_assert_always(super.size >= super.journal_size);
+  const size_t cur_block_size = (*st).block_size;
+  const size_t cur_total_size = (*st).size;
+  ceph_assert_always(journal_size > 0);
+  ceph_assert_always(cur_total_size >= journal_size);
   ceph_assert_always(shard_num > 0);
 
-  std::vector<rbm_shard_info_t> shard_infos(shard_num);
+  std::vector<device_shard_info_t> shard_infos(shard_num);
   for (int i = 0; i < shard_num; i++) {
-    uint64_t aligned_size = 
-      (super.size / shard_num) -
-      ((super.size / shard_num) % super.block_size);
+    uint64_t aligned_size =
+      (cur_total_size / shard_num) -
+      ((cur_total_size / shard_num) % cur_block_size);
     shard_infos[i].size = aligned_size;
     shard_infos[i].start_offset = i * aligned_size;
-    assert(shard_infos[i].size > super.journal_size);
+    assert(shard_infos[i].size > journal_size);
   }
-  super.shard_infos = shard_infos;
-  super.shard_num = shard_num;
   shard_info = shard_infos[seastar::this_shard_id()];
+  super = device_superblock_t::make_rbm(
+    shard_num,
+    cur_block_size,
+    cur_total_size,
+    journal_size,
+    std::move(config),
+    std::move(shard_infos));
   DEBUG("super {} ", super);
 
   // write super block
@@ -107,7 +110,7 @@ write_ertr::future<> RBMDevice::write_rbm_superblock()
   co_return co_await write(RBM_START_ADDRESS, bp);
 }
 
-read_ertr::future<rbm_superblock_t> RBMDevice::read_rbm_superblock(
+read_ertr::future<device_superblock_t> RBMDevice::read_rbm_superblock(
   rbm_abs_addr addr)
 {
   LOG_PREFIX(RBMDevice::read_rbm_superblock);
@@ -117,7 +120,7 @@ read_ertr::future<rbm_superblock_t> RBMDevice::read_rbm_superblock(
   bufferlist bl;
   bl.append(bptr);
   auto p = bl.cbegin();
-  rbm_superblock_t super_block;
+  device_superblock_t super_block;
   bool err = false;
   try {
     decode(super_block, p);
@@ -127,7 +130,7 @@ read_ertr::future<rbm_superblock_t> RBMDevice::read_rbm_superblock(
     err = true;
   }
   if (err) {
-    co_return co_await read_ertr::future<rbm_superblock_t>(
+    co_return co_await read_ertr::future<device_superblock_t>(
       crimson::ct_error::input_output_error::make()
     );
   }
@@ -135,7 +138,7 @@ read_ertr::future<rbm_superblock_t> RBMDevice::read_rbm_superblock(
   bufferlist meta_b_header;
   super_block.crc = 0;
   encode(super_block, meta_b_header);
-  assert(ceph::encoded_sizeof<rbm_superblock_t>(super_block) <
+  assert(ceph::encoded_sizeof<device_superblock_t>(super_block) <
       super_block.block_size);
 
   // Do CRC verification only if data protection is not supported.
@@ -143,7 +146,7 @@ read_ertr::future<rbm_superblock_t> RBMDevice::read_rbm_superblock(
     if (meta_b_header.crc32c(-1) != crc) {
       DEBUG("bad crc on super block, expected {} != actual {} ",
 	    meta_b_header.crc32c(-1), crc);
-      co_return co_await read_ertr::future<rbm_superblock_t>(
+      co_return co_await read_ertr::future<device_superblock_t>(
 	crimson::ct_error::input_output_error::make()
       );
     }
@@ -153,7 +156,7 @@ read_ertr::future<rbm_superblock_t> RBMDevice::read_rbm_superblock(
   super_block.crc = crc;
   super = super_block;
   DEBUG("got {} ", super);
-  co_return co_await read_ertr::future<rbm_superblock_t>(
+  co_return co_await read_ertr::future<device_superblock_t>(
     read_ertr::ready_future_marker{},
     super_block
   );
@@ -231,7 +234,8 @@ read_ertr::future<uint32_t> RBMDevice::get_shard_nums()
 
 EphemeralRBMDeviceRef create_test_ephemeral(uint64_t journal_size, uint64_t data_size) {
   return EphemeralRBMDeviceRef(
-    new EphemeralRBMDevice(journal_size + data_size + 
+    new EphemeralRBMDevice(
+      (journal_size + data_size) * seastar::smp::count +
 	random_block_device::RBMDevice::get_shard_reserved_size(),
 	EphemeralRBMDevice::TEST_BLOCK_SIZE));
 }
@@ -313,7 +317,7 @@ EphemeralRBMDevice::mount_ret EphemeralRBMDevice::mount() {
 }
 
 EphemeralRBMDevice::mkfs_ret EphemeralRBMDevice::mkfs(device_config_t config) {
-  return do_primary_mkfs(config, 1, DEFAULT_TEST_CBJOURNAL_SIZE);
+  return do_primary_mkfs(config, seastar::smp::count, DEFAULT_TEST_CBJOURNAL_SIZE);
 }
 
 }

@@ -20,71 +20,6 @@
 
 namespace crimson::os::seastore::segment_manager::zbd {
 
-  struct zbd_shard_info_t {
-    size_t size = 0;
-    size_t segments = 0;
-    size_t first_segment_offset = 0;
-
-    DENC(zbd_shard_info_t, v, p) {
-      DENC_START(1, 1, p);
-      denc(v.size, p);
-      denc(v.segments, p);
-      denc(v.first_segment_offset, p);
-      DENC_FINISH(p);
-    }
-  };
-
-  struct zbd_sm_metadata_t {
-    uint32_t shard_num = 0;
-    size_t segment_size = 0;
-    size_t segment_capacity = 0;
-    size_t zones_per_segment = 0;
-    size_t zone_capacity = 0;
-    size_t block_size = 0;
-    size_t zone_size = 0;
-
-    std::vector<zbd_shard_info_t> shard_infos;
-
-    seastore_meta_t meta;
-    
-    bool major_dev = false;
-    magic_t magic = 0;
-    device_type_t dtype = device_type_t::NONE;
-    device_id_t device_id = 0;
-    secondary_device_set_t secondary_devices;
-
-    DENC(zbd_sm_metadata_t, v, p) {
-      DENC_START(1, 1, p);
-      denc(v.shard_num, p);
-      denc(v.segment_size, p);
-      denc(v.segment_capacity, p);
-      denc(v.zones_per_segment, p);
-      denc(v.zone_capacity, p);
-      denc(v.block_size, p);
-      denc(v.zone_size, p);
-      denc(v.shard_infos, p);
-      denc(v.meta, p);
-      denc(v.magic, p);
-      denc(v.dtype, p);
-      denc(v.device_id, p);
-      if (v.major_dev) {
-	denc(v.secondary_devices, p);
-      }
-      DENC_FINISH(p);
-    }
-
-    void validate() const {
-      for (unsigned int i = 0; i < seastar::smp::count; i++) {
-        ceph_assert_always(shard_infos[i].size > 0);
-        ceph_assert_always(shard_infos[i].size <= DEVICE_OFF_MAX);
-        ceph_assert_always(shard_infos[i].segments > 0);
-        ceph_assert_always(shard_infos[i].segments <= DEVICE_SEGMENT_ID_MAX);
-      }
-      ceph_assert_always(segment_capacity > 0);
-      ceph_assert_always(segment_capacity <= SEGMENT_OFF_MAX);
-    }
-  };
-
   using write_ertr = crimson::errorator<crimson::ct_error::input_output_error>;
   using read_ertr = crimson::errorator<crimson::ct_error::input_output_error>;
 
@@ -153,6 +88,8 @@ namespace crimson::os::seastore::segment_manager::zbd {
       return device_type_t::ZBD;
     }
 
+    read_ertr::future<uint32_t> get_shard_nums() final;
+
     size_t get_available_size() const final {
       return shard_info.size;
     };
@@ -166,7 +103,7 @@ namespace crimson::os::seastore::segment_manager::zbd {
     };
 
     const seastore_meta_t &get_meta() const {
-      return metadata.meta;
+      return metadata.config.meta;
     };
 
     device_id_t get_device_id() const final;
@@ -183,8 +120,8 @@ namespace crimson::os::seastore::segment_manager::zbd {
   private:
     friend class ZBDSegment;
     std::string device_path;
-    zbd_shard_info_t shard_info;
-    zbd_sm_metadata_t metadata;
+    device_shard_info_t shard_info;
+    device_superblock_t metadata;
     seastar::file device;
     uint32_t nr_zones;
     struct effort_t {
@@ -231,9 +168,6 @@ namespace crimson::os::seastore::segment_manager::zbd {
 
     mount_ret shard_mount();
 
-    uint32_t device_shard_nums = 0;
-    store_index_t store_index = 0;
-    bool shard_status = true;
     class MultiShardDevices {
     public:
       std::vector<std::unique_ptr<ZBDSegmentManager>> mshard_devices;
@@ -257,9 +191,3 @@ namespace crimson::os::seastore::segment_manager::zbd {
 
 }
 
-WRITE_CLASS_DENC_BOUNDED(
-  crimson::os::seastore::segment_manager::zbd::zbd_shard_info_t
-)
-WRITE_CLASS_DENC_BOUNDED(
-  crimson::os::seastore::segment_manager::zbd::zbd_sm_metadata_t
-)

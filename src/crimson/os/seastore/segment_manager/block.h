@@ -217,8 +217,8 @@ private:
 
   std::string device_path;
   std::unique_ptr<SegmentStateTracker> tracker;
-  block_shard_info_t shard_info;
-  block_sm_superblock_t superblock;
+  device_shard_info_t shard_info;
+  device_superblock_t superblock;
   seastar::file device;
 
   void set_device_id(device_id_t id) {
