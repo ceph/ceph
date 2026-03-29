@@ -144,3 +144,8 @@ add_subdirectory(immutable_object_cache)
 add_subdirectory(ceph-dencoder)
 add_subdirectory(erasure-code)
 add_subdirectory(ceph_dedup)
+
+# eBPF tracing tools
+if(WITH_EBPF_TRACE)
+  add_subdirectory(CephBPF)
+endif()
