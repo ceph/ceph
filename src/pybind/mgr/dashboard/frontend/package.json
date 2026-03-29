@@ -94,7 +94,7 @@
     "@angular/cli": "19.2.9",
     "@angular/compiler-cli": "19.2.9",
     "@angular/language-service": "19.2.9",
-    "@applitools/eyes-cypress": "3.52.0",
+    "@applitools/eyes-cypress": "3.58.11",
     "@compodoc/compodoc": "1.1.26",
     "@cypress/browserify-preprocessor": "3.0.2",
     "@juggle/resize-observer": "3.4.0",
