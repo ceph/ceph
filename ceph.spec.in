@@ -311,7 +311,7 @@ BuildRequires:  yaml-cpp-devel >= 0.6
 BuildRequires:  librabbitmq-devel
 %endif
 %if 0%{with kafka_endpoint}
-BuildRequires:  librdkafka-devel
+BuildRequires:  librdkafka-devel >= 1.1.0
 %endif
 %if 0%{with lua_packages}
 Requires:  lua-devel
