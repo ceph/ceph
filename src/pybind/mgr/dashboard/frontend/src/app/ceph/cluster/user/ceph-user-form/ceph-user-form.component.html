@@ -1,0 +1,185 @@
+<form
+  [formGroup]="form"
+  (ngSubmit)="onSubmit()"
+  novalidate>
+
+  <div
+    cdsGrid
+    [fullWidth]="true">
+
+    <div
+      cdsCol
+      [columnNumbers]="{ sm: 4, md: 12 }">
+
+      <!-- HEADING -->
+      <div
+        cdsRow
+        class="form-heading">
+        <div
+          cdsCol
+          [columnNumbers]="{ sm: 4, md: 12 }">
+          <h3>Create User</h3>
+          <cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
+        </div>
+      </div>
+
+      <!-- USER ENTITY -->
+      <div
+        cdsRow
+        class="form-item">
+        <div
+          cdsCol
+          [columnNumbers]="{ sm: 4, md: 7 }">
+
+          <label class="cds--label">User entity *</label>
+
+          <div
+            class="cds--text-input__field-wrapper">
+            <span class="cds--text-input__prefix">client.</span>
+
+            <input
+              cdsText
+              id="username"
+              formControlName="username"
+              placeholder="Enter username"
+            />
+          </div>
+
+        </div>
+      </div>
+
+      <!-- CAPABILITIES -->
+      <div
+        cdsRow
+        class="form-heading">
+        <div
+          cdsCol
+          [columnNumbers]="{ sm: 4, md: 12 }">
+          <h4>Capabilities</h4>
+        </div>
+      </div>
+
+      <div
+        formArrayName="caps">
+
+        <!-- LABEL ROW -->
+        <div
+          cdsRow
+          class="cap-label-row">
+          <div
+            cdsCol
+            [columnNumbers]="{ sm: 4, md: 3 }">
+            <label class="cds--label">Entity *</label>
+          </div>
+
+          <div
+            cdsCol
+            [columnNumbers]="{ sm: 4, md: 3 }">
+            <label class="cds--label">Entity Capabilities *</label>
+          </div>
+
+          <div
+            cdsCol
+            [columnNumbers]="{ sm: 4, md: 1 }">
+          </div>
+        </div>
+
+        <!-- INPUT ROWS -->
+        <div
+          *ngFor="let cap of caps.controls; let i = index"
+          [formGroupName]="i"
+          cdsRow
+          class="cap-input-row"
+        >
+
+          <!-- ENTITY -->
+          <div
+            cdsCol
+            [columnNumbers]="{ sm: 4, md: 3 }">
+            <cds-select formControlName="entity">
+              <option
+                value=""
+                disabled>Select entity</option>
+              <option value="mon">mon</option>
+              <option value="osd">osd</option>
+              <option value="mgr">mgr</option>
+              <option value="mds">mds</option>
+              <option value="rgw">rgw</option>
+            </cds-select>
+          </div>
+
+          <!-- PERMISSION -->
+          <div
+            cdsCol
+            [columnNumbers]="{ sm: 4, md: 3 }">
+            <cds-select formControlName="permission">
+              <option
+                value=""
+                disabled>Select permission</option>
+              <option value="allow r">allow r</option>
+              <option value="allow rw">allow rw</option>
+              <option value="allow rwx">allow rwx</option>
+            </cds-select>
+          </div>
+
+          <!-- REMOVE -->
+          <div
+            cdsCol
+            [columnNumbers]="{ sm: 4, md: 1 }"
+            class="remove-col">
+            <button
+              cdsButton="ghost"
+              size="sm"
+              type="button"
+              (click)="removeCap(i)"
+              aria-label="Remove capability"
+            >
+              <svg
+                cdsIcon="close"
+                size="16"></svg>
+            </button>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- ADD BUTTON -->
+      <div
+        cdsRow
+        class="form-item">
+        <div
+          cdsCol
+          [columnNumbers]="{ sm: 4, md: 4 }"
+          class="add-btn-col">
+          <button
+            cdsButton="secondary"
+            size="sm"
+            type="button"
+            (click)="addCap()"
+          >
+            Add Capability
+            <svg
+              cdsIcon="add"
+              size="16"
+              class="cds--btn__icon"></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- ACTIONS -->
+      <div
+        cdsRow>
+        <div
+          cdsCol
+          [columnNumbers]="{ sm: 4, md: 12 }">
+          <cd-form-button-panel
+            wrappingClass="form-button"></cd-form-button-panel>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+</form>
