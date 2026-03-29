@@ -366,6 +366,36 @@ class TestGetDevices(object):
         assert result[lv_path]['type'] == 'lvm'
         assert result[lv_path]['human_readable_size'] == '100.00 MB'
 
+    def test_nvme_reads_vendor_model_rev_under_controller(
+        self, patched_get_block_devs_sysfs, fake_filesystem
+    ):
+        nvme_path = '/dev/nvme0n1'
+        patched_get_block_devs_sysfs.return_value = [
+            [nvme_path, nvme_path, 'disk', nvme_path]
+        ]
+        fake_filesystem.create_dir('/sys/block/nvme0n1/slaves')
+        fake_filesystem.create_dir('/sys/block/nvme0n1/queue')
+        fake_filesystem.create_file(
+            '/sys/block/nvme0n1/device/nvme0/device/vendor',
+            contents='Samsung',
+        )
+        fake_filesystem.create_file(
+            '/sys/block/nvme0n1/device/nvme0/device/model',
+            contents='SSD 990 PRO',
+        )
+        fake_filesystem.create_file(
+            '/sys/block/nvme0n1/device/nvme0/device/rev',
+            contents='1B2Q',
+        )
+        with patch('ceph_volume.util.disk.UdevData') as MockUdevData:
+            mock_instance = MagicMock()
+            mock_instance.is_lvm = False
+            MockUdevData.return_value = mock_instance
+            result = disk.get_devices()
+        assert result[nvme_path]['vendor'] == 'Samsung'
+        assert result[nvme_path]['model'] == 'SSD 990 PRO'
+        assert result[nvme_path]['rev'] == '1B2Q'
+
 
 class TestSizeCalculations(object):
 
