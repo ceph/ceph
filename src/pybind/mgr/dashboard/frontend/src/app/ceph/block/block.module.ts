@@ -339,7 +339,7 @@ const routes: Routes = [
         redirectTo: 'error',
         header: $localize`NVMe/TCP Gateway not configured`,
         button_name: $localize`Configure NVMe/TCP`,
-        button_route: ['/services', { outlets: { modal: ['create', 'nvmeof'] } }],
+        button_route: '/block/nvmeof/gateways/create',
         uiConfig: false
       }
     },
