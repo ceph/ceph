@@ -5517,14 +5517,26 @@ bool OSD::maybe_wait_for_max_pg(const OSDMapRef& osdmap,
 // to re-trigger a peering, we have to twiddle the pg mapping a little bit,
 // see PG::should_restart_peering(). OSDMap::pg_to_up_acting_osds() will turn
 // to up set if pg_temp is empty. so an empty pg_temp won't work.
-static vector<int32_t> twiddle(const vector<int>& acting) {
+static vector<int32_t> twiddle(const vector<int>& acting, const OSDMapRef& osdmap, pg_t pgid) {
+  vector<int32_t> twiddled;
   if (acting.size() > 1) {
-    return {acting[0]};
+    twiddled = {acting[0]};
   } else {
-    vector<int32_t> twiddled(acting.begin(), acting.end());
+    twiddled = vector<int32_t>(acting.begin(), acting.end());
     twiddled.push_back(-1);
-    return twiddled;
   }
+  
+  // Optimized EC does not cope with pg temp with a mismatched size.
+  // Only resize for EC pools with optimizations enabled.
+  const pg_pool_t *pool = osdmap->get_pg_pool(pgid.pool());
+  if (pool && pool->is_erasure() && pool->allows_ecoptimizations()) {
+    unsigned pool_size = pool->get_size();
+    if (twiddled.size() < pool_size) {
+      twiddled.resize(pool_size, CRUSH_ITEM_NONE);
+    }
+  }
+  
+  return twiddled;
 }
 
 void OSD::resume_creating_pg()
@@ -5557,7 +5569,7 @@ void OSD::resume_creating_pg()
       dout(20) << __func__ << " pg " << pg->first << dendl;
       vector<int> acting;
       get_osdmap()->pg_to_up_acting_osds(pg->first.pgid, nullptr, nullptr, &acting, nullptr);
-      service.queue_want_pg_temp(pg->first.pgid, twiddle(acting), true);
+      service.queue_want_pg_temp(pg->first.pgid, twiddle(acting, get_osdmap(), pg->first.pgid), true);
       pg = pending_creates_from_osd.erase(pg);
       do_sub_pg_creates = true;
       spare_pgs--;
