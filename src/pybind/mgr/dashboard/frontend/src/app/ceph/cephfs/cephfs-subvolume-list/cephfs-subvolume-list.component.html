@@ -89,20 +89,19 @@
                       type="error">
               {{errorMessage}}
       </cd-alert-panel>
-      <div class="form-group">
-        <div class="custom-control custom-checkbox">
-          <input type="checkbox"
-                 class="custom-control-input"
-                 name="retainSnapshots"
-                 id="retainSnapshots"
-                 formControlName="retainSnapshots">
-          <label class="custom-control-label"
-                 for="retainSnapshots"
-                 i18n>Retain snapshots <cd-helper>The subvolume can be removed retaining
+      <div class="form-item cds-pt-3">
+        <cds-checkbox id="retainSnapshots"
+                      formControlName="retainSnapshots"
+                      autofocus
+                      [required]="true"
+                      modal-primary-focus
+                      ariaLabel="confirmation"
+                      i18n>Retain snapshots
+          <cd-help-text>The subvolume can be removed retaining
                   existing snapshots using this option.
                    If snapshots are retained, the subvolume is considered empty for all
-                    operations not involving the retained snapshots.</cd-helper></label>
-        </div>
+                    operations not involving the retained snapshots.</cd-help-text>
+        </cds-checkbox>
       </div>
     </ng-container>
   </ng-container>
