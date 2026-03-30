@@ -560,42 +560,8 @@ template <typename OutIterT>
 requires std::output_iterator<OutIterT, std::pair<std::string, std::string>>
 inline bool ceph::libfdb::transaction::get_value_range_from_transaction(const ceph::libfdb::select& key_range, OutIterT out_iter)
 {
-/*
- const fdb_bool_t is_snapshot = false;
-
- const FDBKeyValue *out_kvs = nullptr;
- int out_count = 0;             // updated by FDB's read
- fdb_bool_t out_more = false;   // true if there's more to read
-
- int iteration = 0;
- future_value fv = get_range_future_from_transaction(key_range, iteration);
-
- if(fdb_error_t r = fdb_future_block_until_ready(fv.raw_handle()); 0 != r) {
-   throw libfdb_exception(r);
- }
-
- if(fdb_error_t r = fdb_future_get_keyvalue_array(fv.raw_handle(), &out_kvs, &out_count, &out_more); 0 != r) {
-
-   auto fv2 = future_value(fdb_transaction_on_error(raw_handle(), r));
-
-   if(fdb_error_t r2 = fdb_future_block_until_ready(fv2.raw_handle()); 0 != r2) {
-     throw libfdb_exception(r);
-   }
-
-   return false;
- }
-
-fmt::println("JFW: fdb_future_get_keyvalue_array() returned {} items", out_count);
-
-if(out_more)
-fmt::println("JFW: OBTAINING MOAR");
-*/
-
  auto flattened = detail::generate_FDB_pairs(*this, key_range) | std::views::join;
  std::ranges::transform(flattened, out_iter, detail::to_decoded_kv_pair);
-
-// auto out_kvs = detail::generate_FDB_pairs(*this, key_range);
- //JFW:std::transform(out_kvs, out_count + out_kvs, out_iter, detail::to_decoded_kv_pair);
 
  return true;
 }
@@ -679,7 +645,7 @@ if(iteration > 1) {
   begin_offset = 1; 
 }
 
-const int end_offset = 1;
+const int end_offset = 0;
 
 fmt::println("JFW: fdb_transaction_get_range(): begin_key = \"{}\", end_key = \"{}\", begin_offset = {}, end_offset = {}, iteration = {}",
               std::string_view(begin_key.data(), begin_key.size()), 
@@ -745,6 +711,30 @@ inline std::generator<std::span<const FDBKeyValue>> generate_FDB_pairs(ceph::lib
 
 fmt::println("JFW: range_block_generator(): {} <-> {}", key_range.begin_key, key_range.end_key);
 
+  for(int iteration = 1; more_available; iteration++) {
+fmt::println("JFW: iteration {}", iteration);
+     ceph::libfdb::future_value fv = txn_owner.get_range_future_from_transaction(key_range, iteration);
+  
+     if(fdb_error_t r = fdb_future_block_until_ready(fv.raw_handle()); 0 != r) {
+       throw libfdb_exception(r);
+     }
+ 
+     if(fdb_error_t r = fdb_future_get_keyvalue_array(fv.raw_handle(), &out_kvs, &out_count, &more_available); 0 != r) {
+       throw libfdb_exception(r);
+     }
+
+auto r = std::span<const FDBKeyValue>(out_kvs, out_count);
+fmt::println("JFW: returning block of {} entries (out_count was {})", r.size(), out_count);
+    co_yield r;// JFW: std::span<const FDBKeyValue>(out_kvs, out_count);
+
+    if(more_available) {
+      // Make the first part of the range for the new search equal to the last one from the old search:
+      const auto& last_key = r.back();
+      key_range.begin_key = std::string_view((const char *)last_key.key, last_key.key_length);
+     }
+  }
+
+/*
   while(more_available) {
      iteration++;
 
@@ -759,28 +749,17 @@ fmt::println("JFW: iteration {}", iteration);
        throw libfdb_exception(r);
      }
  
-fmt::println("JFW: range_block_generator(): out_count = {}, more_available = {}; yielding", out_count, more_available);
-
-/*
-for(const auto& kvp : std::span<const FDBKeyValue>(out_kvs, out_count)) {
-  fmt::println("JFW:\t{}", std::string_view((const char *)kvp.key, kvp.key_length));
-}
-*/
-
-
 auto r = std::span<const FDBKeyValue>(out_kvs, out_count);
 fmt::println("JFW: returning block of {} entries (out_count was {})", r.size(), out_count);
     co_yield r;// JFW: std::span<const FDBKeyValue>(out_kvs, out_count);
 
     if(more_available) {
       // Make the first part of the range for the new search equal to the last one from the old search:
-      const auto& last_key = r.back(); // JFW: eeew! out_kvs[out_count - 1];
+      const auto& last_key = r.back();
       key_range.begin_key = std::string_view((const char *)last_key.key, last_key.key_length);
-fmt::println("JFW: more_available == true, reading from \"{}\"...", key_range.begin_key);
      }
   }
-
- //JFW: co_return;
+*/
 }
 
 } // namespace ceph::libfdb::detail

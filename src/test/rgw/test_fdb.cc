@@ -1,9 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- // vim: ts=8 sw=2 smarttab ft=cpp 
-
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2025 International Business Machines Corp. (IBM)
+ * Copyright (C) 2025-2026 International Business Machines Corp. (IBM)
  *      
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -67,7 +66,7 @@ fixed prefix followed by integers: */
 
 // As we manipulate keys and values quite a bit, it's helpful to have a recipe for them:
 std::string make_key(const int n, std::string_view prefix = "key") {
- return fmt::format("{}_{:04d}", prefix, n);
+return fmt::format("{}_{:04d}", prefix, n);
 }
 
 std::string make_value(const int n) {
@@ -81,7 +80,7 @@ auto key_counter(auto txn, const auto& selector, auto& out_values) -> auto {
  lfdb::get(txn, selector, 
            std::inserter(out_values, std::end(out_values)));
 
-fmt::println("JFW:\n{}", out_values);
+fmt::println("JFW: SELECT ({}, {}]\n{}", selector.begin_key, selector.end_key, out_values); // JFW
  return out_values.size();
 };
 
@@ -90,12 +89,11 @@ auto key_count(auto& dbh, const auto& selector) {
  return key_counter(lfdb::make_transaction(dbh), selector, _);
 }
 
-// Note that the generated keys are ONE based, not zero:
 inline std::map<std::string, std::string> make_monotonic_kvs(const int N, std::string_view prefix = "key")
 {
  std::map<std::string, std::string> kvs;
 
- for(const auto i : std::ranges::iota_view(1, 1 + N)) {
+ for(const auto i : std::ranges::iota_view(0, N)) {
   kvs.insert({ make_key(i, prefix), make_value(i) });
  }
 
@@ -147,18 +145,31 @@ struct janitor final
  ceph::libfdb::database_handle dbh() { return dbh_; }
 
  static void drop_all(ceph::libfdb::database_handle dbh_) {
+   lfdb::erase(ceph::libfdb::make_transaction(dbh_),
+               lfdb::select { "", "\xFF" });
+ }
 
-   // Note: technically, 0xFF, 0xFF is needed to include the system keys (if the transaction's allowed to
+ void drop_all() { 
+  return drop_all(dbh()); 
+ }
+
+ static void drop_all_keys(ceph::libfdb::database_handle dbh_) {
+
+   // Note: technically, [0x00, 0xFF) is needed to include the system keys (if the transaction's allowed to
    // access these). However, special permissions are needed to access these magical "system keys" and we
    // probably don't actually want to delete them erroneously. So, we stick with our key range...
    // ("500,000,000 records aught to be enough for anybody.") 
    lfdb::erase(ceph::libfdb::make_transaction(dbh_),
-               lfdb::select { make_key(1), make_key(500'000'000) });
+               lfdb::select { make_key(0), make_key(500'000'000) });
    }
 
-  void drop_all() {
-    return drop_all(dbh());
+  void drop_all_keys() {
+    return drop_all_keys(dbh());
   }
+
+/* This is tempting, but I think it might also *hide* bugs at times. Thoughts?
+  operator ceph::libfdb::database_handle() { ... }
+*/
 };
 
 // Basically, make sure we're actually linking with the library:
@@ -251,31 +262,25 @@ TEST_CASE("fdb simple", "[rgw][fdb]") {
  }
 }
 
-TEST_CASE("fdb simple (delete keys in range)", "[rgw][fdb]") {
+TEST_CASE("delete keys in range", "[rgw][fdb]") {
  janitor j;
-
- const auto selector = lfdb::select { "\x00", "\xFF" };
-
  auto dbh = j.dbh();
 
+ // Exactly 20 keys, 0-19:
+ const auto selector = lfdb::select { make_key(0), make_key(20) };
+
  REQUIRE(0 == key_count(dbh, selector));
-
- // Write a bunch of kvs-- for this particular test, we use a hard-coded number specifically:
  const auto kvs = write_monotonic_kvs(dbh, 20);
-
- lfdb::set(lfdb::make_transaction(dbh), begin(kvs), end(kvs), lfdb::commit_after_op::commit);
- CHECK(20 == key_count(dbh, selector));
+ REQUIRE(20 == key_count(dbh, selector));
 
  // Erase some more of the range:
- lfdb::erase(lfdb::make_transaction(dbh), lfdb::select { make_key(10), make_key(15) }, lfdb::commit_after_op::commit);
- CHECK(15 == key_count(dbh, selector));
-
+ lfdb::erase(dbh, lfdb::select { make_key(10), make_key(15) });
  // Erase a single value:
- lfdb::erase(lfdb::make_transaction(dbh), make_key(5), lfdb::commit_after_op::commit);
- CHECK(14 == key_count(dbh, selector));
+ lfdb::erase(dbh, make_key(5));
+ CHECK(19 == key_count(dbh, selector));
 
  // Erase the entire range:
- lfdb::erase(lfdb::make_transaction(dbh), selector, lfdb::commit_after_op::commit);
+ lfdb::erase(lfdb::make_transaction(dbh), selector);
  CHECK(0 == key_count(dbh, selector));
 }
 
@@ -405,7 +410,7 @@ TEST_CASE("fdb conversions (built-in)", "[fdb][rgw]") {
 TEST_CASE("fdb conversions (round-trip)", "[fdb][rgw]") {
  janitor j;
 
- auto dbh = lfdb::create_database();
+ auto dbh = j.dbh();
 
  // string_view -> string
  {
@@ -465,7 +470,7 @@ TEST_CASE("generators", "[fdb]") {
 
 fmt::println("JFW: nkeys = {}", nkeys);
 
- auto dbh = lfdb::create_database();
+ auto dbh = j.dbh();
 
  const auto kvs_in = write_monotonic_kvs(dbh, nkeys);
  REQUIRE(nkeys == kvs_in.size());
@@ -545,7 +550,7 @@ SCENARIO("implicit transactions", "[fdb][rgw]")
  }
 
  SECTION("implicitly create and complete transactions-- selection operations") {
-  // With an implicit transaction, transactions should commit by default:
+  // With an implicit transaction, mutating transactions should commit by default:
   const auto selector = lfdb::select { make_key(0), make_key(20) };
 
   const auto kvs = write_monotonic_kvs(dbh, 20);
@@ -555,31 +560,31 @@ SCENARIO("implicit transactions", "[fdb][rgw]")
   CHECK(15 == key_count(dbh, selector));
 
   // Let's look around the edge cases of the selection:   
-  CHECK_FALSE(lfdb::key_exists(dbh, "key_00"));
-  CHECK_FALSE(lfdb::key_exists(dbh, "key_05"));
+  CHECK_FALSE(lfdb::key_exists(dbh, make_key(1)));
+  CHECK_FALSE(lfdb::key_exists(dbh, make_key(5)));
 
-  CHECK(lfdb::key_exists(dbh, "key_00"));
-  CHECK(lfdb::key_exists(dbh, "key_06"));
+  CHECK(lfdb::key_exists(dbh, make_key(0)));
+  CHECK(lfdb::key_exists(dbh, make_key(6)));
  }
 
  SECTION("test behavior with shared transaction") {
-
-  SECTION("write in uncommitted transaction") {
-    // With a shared transaction, transactions should NOT commit on API calls by default:
-    auto txn = lfdb::make_transaction(dbh);
-  
-    lfdb::set(txn, "Herman", "Hollerith");
-   
-    // Key exists with respect to this transaction: 
-    CHECK(lfdb::key_exists(txn, "Herman"));
+    SECTION("write in uncommitted transaction") {
+      using lfdb::commit_after_op;
     
-    lfdb::set(txn, "John", "Backus");
-  
-    // Key exists with respect to this transaction: 
-    CHECK(lfdb::key_exists(txn, "John"));
-
-    // transaction is abandoned
-  }
+      auto txn = lfdb::make_transaction(dbh);
+    
+      lfdb::set(txn, "Herman", "Hollerith", commit_after_op::no_commit);
+     
+      // Key exists with respect to this transaction: 
+      CHECK(lfdb::key_exists(txn, "Herman"));
+      
+      lfdb::set(txn, "John", "Backus", commit_after_op::no_commit);
+    
+      // Key exists with respect to this transaction: 
+      CHECK(lfdb::key_exists(txn, "John", commit_after_op::no_commit));
+    
+      // transaction is abandoned
+    }
 
   // These were only set in the abandoned transaction:
   CHECK_FALSE(lfdb::key_exists(dbh, "Herman"));
@@ -652,7 +657,7 @@ TEST_CASE("mini-demo", "[fdb]") {
     { "displayName", "John Doe" }
   };
   
- auto dbh = lfdb::create_database();
+ auto dbh = j.dbh();
 
  lfdb::set(dbh, "bucket_obj", bucket_entries);
 
@@ -661,6 +666,8 @@ TEST_CASE("mini-demo", "[fdb]") {
 
  CAPTURE(out["userId"]);
  REQUIRE(bucket_entries == out);
+
+ j.drop_all();
 }
 
 // Adapted from Catch2 documentation:
