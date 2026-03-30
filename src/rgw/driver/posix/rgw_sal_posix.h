@@ -23,6 +23,9 @@
 #include "common/dout.h"
 #include "bucket_cache.h"
 #include "posixDB.h"
+#include "objclass/objclass.h"
+
+class RGWLC;
 
 namespace rgw { namespace sal {
 
@@ -34,6 +37,11 @@ using BucketCache = file::listing::BucketCache<POSIXDriver, POSIXBucket>;
 
 /* integration w/bucket listing cache */
 using fill_cache_cb_t = file::listing::fill_cache_cb_t;
+
+const std::string lc_ns = "lifecycle";
+const std::string LC_PRE = "." + lc_ns + "_";
+inline std::string get_lc_global_entry_path() { return LC_PRE + "lc_global_entry"; }
+inline std::string get_lc_global_head_path() { return LC_PRE + "lc_global_head"; }
 
 struct ObjectType {
   enum Type {
@@ -484,6 +492,8 @@ protected:
   int root_fd;
   RGWSyncModuleInstanceRef sync_module;
   RGWQuotaHandler* quota_handler{nullptr};
+  RGWLC* lc{nullptr};
+  bool use_lc_thread;
 
 public:
   POSIXDriver(CephContext *_cct) : StoreDriver(), cct(_cct), zone(this)
@@ -502,6 +512,10 @@ public:
     cct = _cct;
   }
 
+  POSIXDriver& set_run_lc_thread(bool _use_lc_thread) {
+    use_lc_thread = _use_lc_thread;
+    return *this;
+  }
   virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp);
   virtual const std::string get_name() const override { return "posix"; }
   virtual std::string get_cluster_id(const DoutPrefixProvider* dpp,  optional_yield y) override { return "PLACEHOLDER"; };
@@ -654,7 +668,7 @@ public:
   virtual int get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup) override;
   virtual int list_all_zones(const DoutPrefixProvider* dpp, std::list<std::string>& zone_ids) override;
   virtual int cluster_stat(RGWClusterStat& stats) override;
-  virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override { return nullptr; } // TODO: implement
+  virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
   virtual std::unique_ptr<Restore> get_restore(void) { return nullptr; }
   virtual bool process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y) override { return 0; }
 
@@ -684,7 +698,7 @@ public:
 				      optional_yield y,
 				      const std::string& topic_queue) override { return -ENOTSUP; }
 
-  virtual RGWLC* get_rgwlc(void) override { return NULL; } // TODO: Lifecycle not currently supported
+  virtual RGWLC* get_rgwlc(void) override { return lc; } 
   virtual rgw::restore::Restore* get_rgwrestore(void) { return nullptr; }
   virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return NULL; }
 
@@ -1250,6 +1264,69 @@ struct POSIXUploadPartInfo {
   }
 };
 WRITE_CLASS_ENCODER(POSIXUploadPartInfo)
+
+class LCPOSIXSerializer : public StoreLCSerializer {
+  sem_t* lock;
+
+public:
+  LCPOSIXSerializer(POSIXDriver* driver, const std::string& oid, const std::string& lock_name, const std::string& cookie);
+
+  virtual int try_lock(const DoutPrefixProvider* dpp, ceph::timespan dur, optional_yield y) override;
+  virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override;
+};
+
+/* LC global formatting:
+ * Entry file:
+ * { 
+ *   "oid": ...,
+ *   "bucket": ...,
+ *   "start_time": ...,
+ *   "status": ...
+ * }
+ * Head file:
+ * {
+ *   "oid": ...,
+ *   "start_date": ...,
+ *   "marker": ...,
+ *   "shard_rollover_date": ...,
+ * }
+ */
+
+class POSIXLifecycle : public Lifecycle {
+  POSIXDriver* driver;
+  POSIXBucket* lc_bucket;
+
+public:
+  POSIXLifecycle(POSIXDriver* _driver) : driver(_driver) {}
+  virtual ~POSIXLifecycle() = default;
+
+  int read_lc_global(const DoutPrefixProvider* dpp, optional_yield y, const std::string& type, std::string& out, std::unique_ptr<File>& lc_global_out);
+  int write_lc_global(const DoutPrefixProvider* dpp, optional_yield y, bufferlist& bl, std::unique_ptr<File>& lc_global);
+  void set_bucket(POSIXBucket* bucket) { lc_bucket = bucket; }
+  int process_lc(const std::unique_ptr<rgw::sal::Bucket>& optional_bucket);
+  virtual int get_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                        const std::string& oid, const std::string& marker,
+                        LCEntry& entry) override;
+  virtual int get_next_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                             const std::string& oid, const std::string& marker,
+                             LCEntry& entry) override;
+  virtual int set_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                        const std::string& oid, const LCEntry& entry) override;
+  virtual int list_entries(const DoutPrefixProvider* dpp, optional_yield y,
+                           const std::string& oid, const std::string& marker,
+                           uint32_t max_entries,
+                           std::vector<LCEntry>& entries) override;
+  virtual int rm_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                       const std::string& oid, const LCEntry& entry) override;
+  virtual int get_head(const DoutPrefixProvider* dpp, optional_yield y,
+                       const std::string& oid, LCHead& head) override;
+  virtual int put_head(const DoutPrefixProvider* dpp, optional_yield y,
+                       const std::string& oid, const LCHead& head) override;
+
+  virtual std::unique_ptr<LCSerializer> get_serializer(const std::string& lock_name,
+                                                       const std::string& oid,
+                                                       const std::string& cookie) override;
+};
 
 class POSIXMultipartUpload;
 
