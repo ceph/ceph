@@ -196,6 +196,7 @@ enum {
   iamDeletePolicyVersion,
   iamGetPolicyVersion,
   iamSetDefaultPolicyVersion,
+  iamListPolicyVersions,
   iamAll,
 
 
