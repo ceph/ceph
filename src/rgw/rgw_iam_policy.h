@@ -198,6 +198,7 @@ enum action_t {
   iamListPolicies,
   iamCreatePolicyVersion,
   iamDeletePolicyVersion,
+  iamGetPolicyVersion,
   iamAll,
 
 
