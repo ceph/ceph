@@ -3470,3 +3470,169 @@ class TestDoSnapMdOp:
 
         cephfs.rmsnap(dir_path, snap_name)
         cephfs.rmdir(dir_path)
+
+
+class TestFcopyfilex:
+    '''
+    Tests for fcopyfilex() method of CephFS Python bindings.
+    '''
+
+    PERMS = 0o755
+    FILE_SRC = b'file_src'
+    FILE_DST = b'file_dst'
+
+    def _create_test_files(self, data_size, dst_initial_size=0):
+        '''
+        Helper function to create source and destination test files.
+        Returns the pattern data array for verification.
+        '''
+        # Create pattern data: repeating sequence for easy verification
+        pattern = bytes(range(256))
+        data = (pattern * ((data_size // 256) + 1))[:data_size]
+
+        # Write source file
+        fd_src_write = cephfs.open(self.FILE_SRC, 'w', self.PERMS)
+        cephfs.write(fd_src_write, data, 0)
+        cephfs.close(fd_src_write)
+
+        # Create destination file with initial content
+        fd_dst = cephfs.open(self.FILE_DST, 'w+', self.PERMS)
+        cephfs.write(fd_dst, b'0' * dst_initial_size, 0)
+        cephfs.close(fd_dst)
+
+        return data
+
+    def _write_file_and_test_fcopyfilex(self, data_size, src_offset, dst_offset,
+                                        copy_length, expected_copied=None):
+        '''
+        Helper function to test fcopyfilex() with specified offsets.
+        Creates a source file with pattern data, opens it for reading,
+        creates a destination file, calls fcopyfilex() with the given parameters,
+        and verifies the data was copied correctly to the destination at the right offset.
+
+        Args:
+            expected_copied: Expected number of bytes actually copied (defaults to copy_length for full copies)
+        '''
+        if expected_copied is None:
+            expected_copied = copy_length
+
+        data = self._create_test_files(data_size, dst_offset + copy_length)
+
+        # Reopen source for reading
+        fd_src = cephfs.open(self.FILE_SRC, 'r', self.PERMS)
+
+        # Reopen destination for writing
+        fd_dst = cephfs.open(self.FILE_DST, 'w+', self.PERMS)
+
+        # Perform fcopyfilex
+        copied = cephfs.fcopyfilex(fd_src, src_offset, fd_dst, dst_offset, copy_length)
+        assert copied == expected_copied
+
+        # Close files
+        cephfs.close(fd_src)
+        cephfs.close(fd_dst)
+
+        # Verify the copied data
+        fd_verify = cephfs.open(self.FILE_DST, 'r', self.PERMS)
+        result_data = cephfs.read(fd_verify, dst_offset, expected_copied)
+        cephfs.close(fd_verify)
+
+        expected_data = data[src_offset:src_offset + expected_copied]
+        assert result_data == expected_data
+
+    def test_fcopyfilex_with_offset(self, testdir):
+        '''
+        Test that fcopyfilex() copies a byte range from one file descriptor to another.
+        '''
+        self._write_file_and_test_fcopyfilex(24, 5, 10, 10)
+
+    def test_with_regfile_of_size_0_5MB(self, testdir):
+        '''
+        Test that fcopyfilex() copies a 0.5 MB file correctly.
+        '''
+        size = int(0.5 * 1000 * 1000)
+        self._write_file_and_test_fcopyfilex(size, 0, 0, size)
+
+    def test_with_regfile_of_size_2MB(self, testdir):
+        '''
+        Test that fcopyfilex() copies a 2 MB file correctly.
+        '''
+        size = int(2 * 1000 * 1000)
+        self._write_file_and_test_fcopyfilex(size, 0, 0, size)
+
+    def test_with_regfile_of_size_1MB(self, testdir):
+        '''
+        Test that fcopyfilex() copies a 1 MB file correctly.
+        '''
+        size = int(1000 * 1000)
+        self._write_file_and_test_fcopyfilex(size, 0, 0, size)
+
+    def test_with_regfile_of_size_2MiB(self, testdir):
+        '''
+        Test that fcopyfilex() copies a 2 MiB file correctly.
+        '''
+        size = int(2 * 1024 * 1024)
+        self._write_file_and_test_fcopyfilex(size, 0, 0, size)
+
+    def test_with_regfile_of_size_1_15MB(self, testdir):
+        '''
+        Test that fcopyfilex() copies a 1.15 MB file correctly.
+        '''
+        size = int(1.15 * 1000 * 1000)
+        self._write_file_and_test_fcopyfilex(size, 0, 0, size)
+
+    def test_with_regfile_of_size_1_5MB(self, testdir):
+        '''
+        Test that fcopyfilex() copies a 1.5 MB file correctly.
+        '''
+        size = int(1.5 * 1000 * 1000)
+        self._write_file_and_test_fcopyfilex(size, 0, 0, size)
+
+    def test_with_regfile_of_size_1GB(self, testdir):
+        '''
+        Test that fcopyfilex() copies a 1 GB file correctly.
+        '''
+        size = int(1 * 1000 * 1000 * 1000)
+        self._write_file_and_test_fcopyfilex(size, 0, 0, size)
+
+    def test_fcopyfilex_source_offset_beyond_file(self, testdir):
+        '''
+        Test that fcopyfilex() copies 0 bytes when source offset is beyond file size.
+        '''
+        data_size = 100
+        src_offset = 150  # Beyond file size
+        dst_offset = 0
+        copy_length = 50
+
+        self._write_file_and_test_fcopyfilex(data_size, src_offset, dst_offset, copy_length, expected_copied=0)
+
+    def test_fcopyfilex_partial_copy_due_to_source_size(self, testdir):
+        '''
+        Test that fcopyfilex() handles partial copy when source offset + length exceeds file size.
+        '''
+        data_size = 50
+        src_offset = 20
+        dst_offset = 0
+        copy_length = 50  # This will exceed available data (50 - 20 = 30 bytes available)
+        expected_copied = 30  # Only 30 bytes available from offset 20
+
+        self._write_file_and_test_fcopyfilex(data_size, src_offset, dst_offset,
+                                             copy_length, expected_copied)
+
+    def test_fcopyfilex_destination_offset_beyond_size(self, testdir):
+        '''
+        Test that fcopyfilex() handles destination offset beyond current file size.
+        '''
+        data_size = 50
+        src_offset = 0
+        dst_offset = 100  # Beyond current destination file size
+        copy_length = 20
+
+        self._write_file_and_test_fcopyfilex(data_size, src_offset, dst_offset, copy_length)
+
+
+    def test_fcopyfilex_invalid_fd(self, testdir):
+        '''
+        Test that fcopyfilex() fails when file descriptors are invalid.
+        '''
+        assert_raises(libcephfs.Error, cephfs.fcopyfilex, 0xab01, 0, 0xab02, 0, 16, 0)
