@@ -752,3 +752,68 @@ void RGWGetPolicyVersion::execute(optional_yield y)
     s->formatter->close_section();
   }
 }
+
+int RGWSetDefaultPolicyVersion::set_default_policy_version(const DoutPrefixProvider *dpp,
+  optional_yield y,
+  std::string_view account,
+  std::string_view policy_name,
+  std::string_view version_id)
+{
+  rgw::IAM::ManagedPolicyInfo info;
+  auto oid = get_name_key(account, policy_name);
+  op_ret = driver->get_customer_managed_policy(this, y, arn.account, policy_name, info);
+  if(op_ret < 0){
+    return op_ret;
+  }
+
+  int key = ceph::parse<int>(version_id.substr(1)).value();
+  auto it = info.versions.find(key);
+
+  if(it != info.versions.end()) {
+    info.default_version = version_id;
+    info.is_attachable = false;
+    it->second.is_default_version = true;
+    op_ret = driver->create_customer_managed_policy(this, y, info, false);
+    if(op_ret < 0) {
+      ldpp_dout(dpp, 20) << "failed to set_default_policy_version " << policy_name << " with: " << cpp_strerror(op_ret) << dendl;
+      return op_ret;
+    }
+  } else {
+    ldpp_dout(dpp, 20) << "version_id does not exist" << dendl;
+    return -ENOENT;
+  }
+
+  return op_ret;
+}
+
+int RGWSetDefaultPolicyVersion::init_processing(optional_yield y)
+{
+  version_id = s->info.args.get("VersionId");
+  const std::regex pattern(R"(^v[1-9][0-9]*$)");
+
+  if(std::regex_match(version_id, pattern)) {
+    std::string_view account;
+    if (const auto& acc = s->auth.identity->get_account(); acc) {
+      account = acc->id;
+      std::string provider_arn = s->info.args.get("PolicyArn");
+      return validate_policy_arn(provider_arn, account, arn, s->err.message);
+    }
+  }
+  return -ERR_METHOD_NOT_ALLOWED;
+}
+
+void RGWSetDefaultPolicyVersion::execute(optional_yield y)
+{
+  std::string policy_name = arn.resource.substr(arn.resource.rfind('/') + 1);
+  rgw::IAM::PolicyVersion policy_version;
+  op_ret = set_default_policy_version(this, y, arn.account, policy_name, version_id);
+  if(op_ret < 0) {
+    ldpp_dout(this, 20) << "failed to set default policy version: " << strerror(op_ret) << dendl;
+  } else {
+    s->formatter->open_object_section_in_ns("SetDefaultPolicyVersionResponse", RGW_REST_IAM_XMLNS);
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->close_section();
+  }
+}
