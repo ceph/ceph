@@ -5299,6 +5299,7 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
     // Data is rewritten as a single stream; drop stale multipart boundaries
     attrs.erase(RGW_ATTR_CRYPT_PARTS);
     attrs.erase(RGW_ATTR_CRYPT_PART_NUMS);
+    attrs.erase(RGW_ATTR_CRYPT_PREFETCH_ALIGN);
     return copy_obj_data(dest_obj_ctx, owner, dest_bucket_info, dest_placement, read_op, obj_size - 1, dest_obj,
                          mtime, real_time(), attrs, olh_epoch, delete_at, petag, dp_factory, dpp, y);
   }

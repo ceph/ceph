@@ -194,6 +194,7 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_CRYPT_PART_NUMS RGW_ATTR_CRYPT_PREFIX "part-numbers"
 #define RGW_ATTR_CRYPT_SALT     RGW_ATTR_CRYPT_PREFIX "salt"
 #define RGW_ATTR_CRYPT_ORIGINAL_SIZE RGW_ATTR_CRYPT_PREFIX "original-size"
+#define RGW_ATTR_CRYPT_PREFETCH_ALIGN RGW_ATTR_CRYPT_PREFIX "prefetch-align"
 
 /* SSE-S3 Encryption Attributes */
 #define RGW_ATTR_BUCKET_ENCRYPTION_PREFIX RGW_ATTR_PREFIX "sse-s3."

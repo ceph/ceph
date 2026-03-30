@@ -2016,6 +2016,25 @@ bool rgw_get_aead_decrypted_size(const DoutPrefixProvider* dpp,
 }
 
 
+/*
+ * Write RGW_ATTR_CRYPT_PREFETCH_ALIGN for size-expanding ciphers
+ * so cls/prefetch can compute on-disk read ranges from xattrs.
+ */
+static void maybe_write_prefetch_align(
+    BlockCrypt* block_crypt,
+    std::map<std::string, ceph::bufferlist>& attrs)
+{
+  if (!block_crypt) return;
+  size_t plain_bs = block_crypt->get_block_size();
+  size_t enc_bs = block_crypt->get_encrypted_block_size();
+  if (enc_bs > plain_bs) {
+    bufferlist bl;
+    encode(static_cast<uint32_t>(plain_bs), bl);
+    encode(static_cast<uint32_t>(enc_bs), bl);
+    attrs[RGW_ATTR_CRYPT_PREFETCH_ALIGN] = std::move(bl);
+  }
+}
+
 int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
                            std::map<std::string, ceph::bufferlist>& attrs,
                            std::unique_ptr<BlockCrypt>* block_crypt,
@@ -2106,6 +2125,13 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
 
       if (use_gcm) {
         set_attr(attrs, RGW_ATTR_CRYPT_MODE, "SSE-C-AES256-GCM");
+        if (!block_crypt) {
+          // multipart-init: write prefetch align from AEAD constants
+          bufferlist align_bl;
+          encode(static_cast<uint32_t>(AEAD_CHUNK_SIZE), align_bl);
+          encode(static_cast<uint32_t>(AEAD_ENCRYPTED_CHUNK_SIZE), align_bl);
+          attrs[RGW_ATTR_CRYPT_PREFETCH_ALIGN] = std::move(align_bl);
+        }
         std::string salt = generate_gcm_salt(s, attrs);
         set_gcm_plaintext_size(s, attrs, is_copy);
 
@@ -2141,6 +2167,8 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
         }
       }
 
+      if (block_crypt && *block_crypt)
+        maybe_write_prefetch_align(block_crypt->get(), attrs);
       crypt_http_responses["x-amz-server-side-encryption-customer-algorithm"] = "AES256";
       crypt_http_responses["x-amz-server-side-encryption-customer-key-MD5"] = std::string(keymd5);
       return 0;
@@ -2218,6 +2246,12 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
 
         if (use_gcm) {
           set_attr(attrs, RGW_ATTR_CRYPT_MODE, "SSE-KMS-GCM");
+          if (!block_crypt) {
+            bufferlist align_bl;
+            encode(static_cast<uint32_t>(AEAD_CHUNK_SIZE), align_bl);
+            encode(static_cast<uint32_t>(AEAD_ENCRYPTED_CHUNK_SIZE), align_bl);
+            attrs[RGW_ATTR_CRYPT_PREFETCH_ALIGN] = std::move(align_bl);
+          }
           std::string salt = generate_gcm_salt(s, attrs);
           set_gcm_plaintext_size(s, attrs, is_copy);
 
@@ -2258,6 +2292,8 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
         ::ceph::crypto::zeroize_for_security(actual_key.data(), actual_key.length());
 
         crypt_http_responses["x-amz-server-side-encryption"] = "aws:kms";
+        if (block_crypt && *block_crypt)
+          maybe_write_prefetch_align(block_crypt->get(), attrs);
         crypt_http_responses["x-amz-server-side-encryption-aws-kms-key-id"] = std::string(key_id);
         crypt_http_responses["x-amz-server-side-encryption-context"] = std::move(cooked_context);
         return 0;
@@ -2308,6 +2344,12 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
 
       if (use_gcm) {
         set_attr(attrs, RGW_ATTR_CRYPT_MODE, "AES256-GCM");
+        if (!block_crypt) {
+          bufferlist align_bl;
+          encode(static_cast<uint32_t>(AEAD_CHUNK_SIZE), align_bl);
+          encode(static_cast<uint32_t>(AEAD_ENCRYPTED_CHUNK_SIZE), align_bl);
+          attrs[RGW_ATTR_CRYPT_PREFETCH_ALIGN] = std::move(align_bl);
+        }
         std::string salt = generate_gcm_salt(s, attrs);
         set_gcm_plaintext_size(s, attrs, is_copy);
 
@@ -2347,6 +2389,8 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
       }
       ::ceph::crypto::zeroize_for_security(actual_key.data(), actual_key.length());
 
+      if (block_crypt && *block_crypt)
+        maybe_write_prefetch_align(block_crypt->get(), attrs);
       crypt_http_responses["x-amz-server-side-encryption"] = "AES256";
 
       return 0;
@@ -2373,6 +2417,12 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
 
       if (use_gcm) {
         set_attr(attrs, RGW_ATTR_CRYPT_MODE, "RGW-AUTO-GCM");
+        if (!block_crypt) {
+          bufferlist align_bl;
+          encode(static_cast<uint32_t>(AEAD_CHUNK_SIZE), align_bl);
+          encode(static_cast<uint32_t>(AEAD_ENCRYPTED_CHUNK_SIZE), align_bl);
+          attrs[RGW_ATTR_CRYPT_PREFETCH_ALIGN] = std::move(align_bl);
+        }
         std::string salt = generate_gcm_salt(s, attrs);
         set_gcm_plaintext_size(s, attrs, is_copy);
 
@@ -2420,6 +2470,8 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
         }
         ::ceph::crypto::zeroize_for_security(actual_key, sizeof(actual_key));
       }
+      if (block_crypt && *block_crypt)
+        maybe_write_prefetch_align(block_crypt->get(), attrs);
       return 0;
     }
   }
