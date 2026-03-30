@@ -1662,6 +1662,10 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
           break;
         }
 
+        // Delete any leftover objects from previous failed migrations
+        pg_t source_pg = get_source_pg_from_hash(start_obj);
+        pool_migration_target_delete(source_pg, start_obj);
+
         // Store the op until local reservations are complete and we can reply to the source PG
         pending_pool_migration_reservation_op = op;
         pending_pool_migration_reservation_ops = m->ops;
@@ -15244,6 +15248,69 @@ bool PrimaryLogPG::pool_migration_source_delete(hobject_t oid)
     return true;
 }
 
+void PrimaryLogPG::pool_migration_target_delete(const pg_t &source_pg, const hobject_t &watermark)
+{
+  dout(20) << __func__ << " deleting objects with watermark >= " << watermark << dendl;
+
+  hobject_t pg_end = info.pgid.pgid.get_hobj_end(pool.info.get_pg_num());
+  hobject_t current = watermark;
+  uint64_t deleted = 0;
+  bool done = false;
+
+  while (current < pg_end && !done) {
+    vector<hobject_t> objects;
+    hobject_t next;
+
+    int r = pgbackend->objects_list_partial(
+      current,
+      cct->_conf->osd_backfill_scan_min,
+      cct->_conf->osd_backfill_scan_max,
+      &objects,
+      &next);
+
+    ceph_assert(r >= 0);
+
+    for (const auto& obj : objects) {
+      if (obj >= pg_end) {
+        dout(20) << __func__ << " reached PG end at " << obj << dendl;
+        done = true;
+        break;
+      }
+
+      // We don't want to delete objects that came from other source PGs
+      pg_t obj_source_pg = get_source_pg_from_hash(obj);
+      if (obj_source_pg != source_pg) {
+        dout(20) << __func__ << " skipping " << obj << " from source PG " << obj_source_pg << dendl;
+        continue;
+      }
+
+      ObjectContextRef obc = get_object_context(obj, false);
+      if (!obc || !obc->obs.exists) {
+        continue;
+      }
+
+      OpContextUPtr ctx = simple_opc_create(obc);
+      ctx->at_version = get_next_version();
+
+      int ret = _delete_oid(ctx.get(), true, false);
+      ceph_assert(ret == 0);
+      if (obc->obs.oi.is_omap()) {
+        ctx->delta_stats.num_objects_omap--;
+      }
+      finish_ctx(ctx.get(), pg_log_entry_t::DELETE);
+      simple_opc_submit(std::move(ctx));
+      deleted++;
+    }
+
+    if (next == current || next >= pg_end) {
+      break;
+    }
+    current = next;
+  }
+
+  dout(20) << __func__ << " deleted " << deleted << " stale objects" << dendl;
+}
+
 void PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r)
 {
   dout(10) << __func__ << " " << oid << " failed with " << r << dendl;
@@ -15316,6 +15383,17 @@ void PrimaryLogPG::initialize_pool_migration_target_pg_list()
   dout(20) << __func__ << " source PG " << get_pgid()
            << " will migrate to " << pool_migration_target_pgs.size()
            << " target PGs: " << pool_migration_target_pgs << dendl;
+}
+
+/**
+ * Get the pg_t for the migration source PG from a hash position
+ */
+pg_t PrimaryLogPG::get_source_pg_from_hash(const hobject_t &hobj)
+{
+  std::optional<int64_t> migration_source_pool = get_pgpool().info.migration_src;
+  ceph_assert(migration_source_pool.has_value());
+  const pg_pool_t *spi = get_osdmap()->get_pg_pool((int) migration_source_pool.value());
+  return { spi->raw_hash_to_pg(hobj.get_hash()), (uint64_t) migration_source_pool.value() };
 }
 
 /**

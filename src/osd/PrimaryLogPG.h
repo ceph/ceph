@@ -1434,6 +1434,7 @@ protected:
    */
   uint64_t recover_pool_migration(uint64_t max, ThreadPool::TPHandle &handle,
 			          bool *work_started);
+  pg_t get_source_pg_from_hash(const hobject_t &hobj);
   pg_t get_target_pg_from_hash(const hobject_t &hobj);
   uint16_t count_remaining_target_pgs(const hobject_t &hobj);
   void pool_migration_request_target_reservation() override;
@@ -1675,6 +1676,7 @@ public:
 
   void handle_pool_migration_copy_failure(hobject_t oid, int r);
   bool pool_migration_source_delete(hobject_t oid);
+  void pool_migration_target_delete(const pg_t& source_pg, const hobject_t& watermark);
 
 private:
   int do_scrub_ls(const MOSDOp *op, OSDOp *osd_op);
