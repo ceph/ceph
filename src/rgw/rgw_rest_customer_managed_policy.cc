@@ -8,6 +8,7 @@
 #include <string>
 #include "rgw_process_env.h"
 #include <errno.h>
+#include "rgw_arn.h"
 #include "common/errno.h"
 
 
@@ -678,6 +679,73 @@ void RGWDeletePolicyVersion::execute(optional_yield y)
     ldpp_dout(this, 20) << "failed to delete policy version: " << strerror(op_ret) << dendl;
   } else {
     s->formatter->open_object_section_in_ns("DeletePolicyVersionResponse ", RGW_REST_IAM_XMLNS);
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->close_section();
+  }
+}
+
+int RGWGetPolicyVersion::init_processing(optional_yield y)
+{
+  version_id = s->info.args.get("VersionId");
+  const std::regex pattern(R"(^v[1-9][0-9]*$)");
+
+  if(std::regex_match(version_id, pattern)) {
+    std::string_view account;
+    if (const auto& acc = s->auth.identity->get_account(); acc) {
+      account = acc->id;
+      std::string provider_arn = s->info.args.get("PolicyArn");
+      return validate_policy_arn(provider_arn, account, arn, s->err.message);
+    }
+  }
+  return -ERR_METHOD_NOT_ALLOWED;
+}
+
+int RGWGetPolicyVersion::get_policy_version(const DoutPrefixProvider *dpp,
+    optional_yield y,
+    std::string_view account,
+    std::string_view policy_name,
+    std::string_view version_id,
+    rgw::IAM::PolicyVersion& policy_version)
+{
+  rgw::IAM::ManagedPolicyInfo info;
+  auto oid = get_name_key(account, policy_name);
+  op_ret = driver->get_customer_managed_policy(this, y, arn.account, policy_name, info);
+  if(op_ret < 0){
+    return op_ret;
+  }
+
+  int key = ceph::parse<int>(version_id.substr(1)).value();
+  auto it = info.versions.find(key);
+
+  if(it != info.versions.end()) {
+    policy_version = std::move(it->second);
+  } else {
+    ldpp_dout(dpp, 20) << "version_id does not exist" << dendl;
+    return -ENOENT;
+  }
+
+  return op_ret;
+}
+
+void RGWGetPolicyVersion::execute(optional_yield y)
+{
+  std::string policy_name = arn.resource.substr(arn.resource.rfind('/') + 1);
+  rgw::IAM::PolicyVersion policy_version;
+  op_ret = get_policy_version(this, y, arn.account, policy_name, version_id, policy_version);
+  if(op_ret < 0) {
+    ldpp_dout(this, 20) << "failed to get policy version: " << strerror(op_ret) << dendl;
+  } else {
+    s->formatter->open_object_section_in_ns("GetPolicyVersionResponse", RGW_REST_IAM_XMLNS);
+    s->formatter->open_object_section("GetPolicyVersionResult");
+    s->formatter->open_object_section("PolicyVersion");
+    encode_json("Document", policy_version.document , s->formatter);
+    encode_json("IsDefaultVersion", policy_version.is_default_version , s->formatter);
+    encode_json("VersionId", policy_version.version_id , s->formatter);
+    encode_json("CreateDate", policy_version.create_date , s->formatter);
+    s->formatter->close_section();
+    s->formatter->close_section();
     s->formatter->open_object_section("ResponseMetadata");
     s->formatter->dump_string("RequestId", s->trans_id);
     s->formatter->close_section();
