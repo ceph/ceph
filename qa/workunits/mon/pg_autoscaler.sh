@@ -1,7 +1,7 @@
 #!/bin/bash -ex
 
 NUM_OSDS=$(ceph osd ls | wc -l)
-if [ $NUM_OSDS -lt 6 ]; then
+if [ $NUM_OSDS -lt ]; then
     echo "test requires at least 6 OSDs"
     exit 1
 fi
@@ -114,8 +114,8 @@ function test_autoscaler_basic() {
     sleep 60
     APGS=$(ceph osd dump -f json-pretty | jq '.pools[0].pg_num_target')
     BPGS=$(ceph osd dump -f json-pretty | jq '.pools[1].pg_num_target')
-    test $APGS -gt 100
-    test $BPGS -gt 10
+    test $APGS -gt 200
+    test $BPGS -gt 20
 
     # small ratio change does not change pg_num
     ceph osd pool set meta0 target_size_ratio 7
@@ -341,8 +341,11 @@ EOF
     # -6  pg_target = 100
     # -7: pg_target = 100
 
-    TARGET_PG_1=$(power2_floor $MON_TARGET_PG_PER_OSD)
-    TARGET_PG_2=$(power2_floor $(( ($NUM_OSDS - 3) * $MON_TARGET_PG_PER_OSD )))
+    POOL_SIZE_1=$(ceph osd pool get data0 size| grep -Eo '[0-9]{1,4}')
+    POOL_SIZE_2=$(ceph osd pool get data3 size| grep -Eo '[0-9]{1,4}')
+
+    TARGET_PG_1=$(power2_floor $(( $MON_TARGET_PG_PER_OSD / $POOL_SIZE_1 )))
+    TARGET_PG_2=$(power2_floor $(( ($NUM_OSDS - 3) * $MON_TARGET_PG_PER_OSD / $POOL_SIZE_2 )))
 
 
     wait_for 300 "ceph osd pool get data0 pg_num | grep $TARGET_PG_1"
@@ -365,7 +368,7 @@ ceph osd pool set threshold 1.0
 test_autoscaler_basic || return 1
 test_pool_starvation || return 1
 test_exact_budget || return 1
-test_overlapping_roots || exit 1
+test_overlapping_roots || return 1
 
 echo OK
 
