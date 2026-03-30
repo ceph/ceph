@@ -45,6 +45,9 @@
 #ifdef WITH_RADOSGW_D4N
 #include "driver/d4n/rgw_sal_d4n.h" 
 #endif
+#ifdef D4N_USE_FDB_SINK
+#include "driver/fdbd4n/rgw_sal_fdbd4n.h" 
+#endif
 
 #ifdef WITH_RADOSGW_MOTR
 #include "driver/motr/rgw_sal_motr.h"
@@ -269,6 +272,18 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
     }
   }
 #endif
+#ifdef WITH_D4N_USE_FDB_SINK
+  else if ("fdbd4n" == cfg.filter_name) {
+    rgw::sal::Driver* next = driver;
+    driver = newFDBD4NFilter(next, io_context, admin);
+
+    if (driver->initialize(cct, dpp) < 0) {
+      delete driver;
+      delete next;
+      return nullptr;
+    }
+  }
+#endif
 
   return driver;
 }
@@ -421,6 +436,11 @@ DriverManager::Config DriverManager::get_config(bool admin, CephContext* cct)
 #ifdef WITH_RADOSGW_D4N
   else if (config_filter == "d4n") {
     cfg.filter_name= "d4n";
+  }
+#endif
+#ifdef D4N_USE_FDB_SINK
+  else if (config_filter == "fdbd4n") {
+    cfg.filter_name= "fdbd4n";
   }
 #endif
 

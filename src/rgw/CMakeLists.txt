@@ -343,7 +343,21 @@ if(D4N_USE_FDB_SINK)
  message("Building with FDB support as D4N sink (experimental).")
 
  target_include_directories(rgw_common PRIVATE
-	driver/fdb)
+    rgw/fdb
+	rgw/driver/fdbd4n
+    rgw/driver/cache
+	rgw/driver/redis
+	rgw/driver/ssd
+    rgw/driver/shared
+    rgw/driver/)
+
+  list(APPEND librgw_common_srcs
+        rgw_redis_driver.cc
+        rgw_ssd_driver.cc
+        driver/fdbd4n/fdbd4n_directory.cc
+        driver/fdbd4n/fdbd4n_policy.cc
+        driver/fdbd4n/rgw_sal_fdbd4n.cc)
+
 endif(D4N_USE_FDB_SINK)
 
 include(CheckCXXCompilerFlag)
