@@ -398,6 +398,8 @@ class PgAutoscaler(MgrModule):
         if self.has_noautoscale_flag():
             return 0, "", "noautoscale is already set!"
         else:
+            # No PG budgeting so don't warn about interference
+            self.set_health_checks({})
             self.mon_command({
                 'prefix': 'config set',
                 'who': 'global',
@@ -1041,7 +1043,10 @@ class PgAutoscaler(MgrModule):
         # drop them from consideration.
         too_few = []
         too_many = []
+        pools_above_autoscaler_target = []
+
         bytes_and_ratio = []
+        all_unmanaged = True
         health_checks: Dict[str, Dict[str, Union[int, str, List[str]]]] = {}
 
         total_bytes = dict([(r, 0) for r in iter(root_map)])
@@ -1060,6 +1065,19 @@ class PgAutoscaler(MgrModule):
             if p['target_bytes'] > 0:
                 total_target_bytes[p['crush_root_id']] += p['target_bytes'] * p['raw_used_rate']
                 target_bytes_pools[p['crush_root_id']].append(p['pool_name'])
+            pg_num = p['pg_num_target'] * p['raw_used_rate']
+            root_id = p['crush_root_id']
+            if pg_num > root_map[root_id].pg_target:
+                target = root_map[root_id].pg_target
+                assert target is not None
+                msg = 'Pool %s has %d PGs total which exceeds root id %d budget of %d' % (
+                    p['pool_name'],
+                    pg_num,
+                    p['crush_root_id'],
+                    target)
+                pools_above_autoscaler_target.append(msg)
+            if p['pg_autoscale_mode'] != 'off':
+                all_unmanaged = False
             if p['pg_autoscale_mode'] == 'warn':
                 msg = 'Pool %s has %d placement groups, should have %d' % (
                     p['pool_name'],
@@ -1100,7 +1118,6 @@ class PgAutoscaler(MgrModule):
                     self.log.error("pg_num adjustment on {0} to {1} failed: {2}"
                                    .format(p['pool_name'],
                                            p['pg_num_final'], r))
-
         if too_few:
             summary = "{0} pools have too few placement groups".format(
                 len(too_few))
@@ -1119,7 +1136,15 @@ class PgAutoscaler(MgrModule):
                 'count': len(too_many),
                 'detail': too_many
             }
-
+        if pools_above_autoscaler_target and not all_unmanaged:
+            summary = "{0} pools exceed total PG budget".format(
+                len(pools_above_autoscaler_target))
+            health_checks['POOL_PG_ABOVE_AUTOSCALER_TARGET'] = {
+                'severity': 'warning',
+                'summary': summary,
+                'count': len(pools_above_autoscaler_target),
+                'detail': pools_above_autoscaler_target
+            }
         too_much_target_bytes = []
         for root_id, total in total_bytes.items():
             total_target = int(total_target_bytes[root_id])
