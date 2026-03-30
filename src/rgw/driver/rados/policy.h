@@ -106,5 +106,4 @@ int list_policies(const DoutPrefixProvider *dpp,
               std::string_view marker,
               uint32_t max_items,
               rgw::IAM::PolicyList& listing);
-
 }

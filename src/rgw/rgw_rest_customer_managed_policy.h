@@ -128,3 +128,19 @@ public:
   const char* name() const override { return "get_policy_version"; }
   RGWOpType get_type() override { return RGW_OP_GET_POLICY_VERSION; }
 };
+
+class RGWSetDefaultPolicyVersion : public RGWRestPolicy {
+  std::string policy_arn;
+  std::string version_id;
+  int set_default_policy_version(const DoutPrefixProvider *dpp,
+    optional_yield y,
+    std::string_view account,
+    std::string_view policy_name,
+    std::string_view version_id);
+public:
+  int init_processing(optional_yield y) override;
+  void execute(optional_yield y) override;
+  RGWSetDefaultPolicyVersion() : RGWRestPolicy(rgw::IAM::iamSetDefaultPolicyVersion, RGW_CAP_WRITE){ }
+  const char* name() const override { return "set_default_policy_version"; }
+  RGWOpType get_type() override { return RGW_OP_SET_DEFAULT_POLICY_VERSION; }
+};
