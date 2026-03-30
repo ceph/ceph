@@ -120,6 +120,7 @@ using rgw::IAM::iamSimulateCustomPolicy;
 using rgw::IAM::iamSimulatePrincipalPolicy;
 using rgw::IAM::iamGetAccountSummary;
 using rgw::IAM::iamGetPolicyVersion;
+using rgw::IAM::iamSetDefaultPolicyVersion;
 using rgw::IAM::snsGetTopicAttributes;
 using rgw::IAM::snsListTopics;
 using rgw::Service;
