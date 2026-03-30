@@ -23,8 +23,6 @@ Some terminology is made up for the purposes of this module:
 
 INTERVAL = 5
 
-PG_NUM_MIN = 32  # unless specified on a per-pool basis
-
 if TYPE_CHECKING:
     import sys
     if sys.version_info >= (3, 8):
@@ -191,6 +189,7 @@ class PgAutoscaler(MgrModule):
     NATIVE_OPTIONS = [
         'mon_target_pg_per_osd',
         'mon_max_pg_per_osd',
+        'osd_pool_default_pg_num'
     ]
 
     MODULE_OPTIONS = [
@@ -221,6 +220,7 @@ class PgAutoscaler(MgrModule):
             self.sleep_interval = 60
             self.mon_target_pg_per_osd = 0
             self.threshold = 3.0
+            self.osd_pool_default_pg_num = 32
 
     def config_notify(self) -> None:
         for opt in self.NATIVE_OPTIONS:
@@ -518,6 +518,102 @@ class PgAutoscaler(MgrModule):
             pools: List[Dict[str, Any]],
             pg_total: Optional[int],
     ) -> None:
+        """
+        Calculate the final_pool_pg_target based on the backtracked optimal allocation
+        """
+        for i, group in enumerate(pool_groups):
+            for pool_name, p in group.pools.items():
+                min_pg = p.get('options', {}).get('pg_num_min', self.osd_pool_default_pg_num)
+                max_pg = p.get('options', {}).get('pg_num_max')
+                pool_pg_target = int(group.pg_target_total / group.size())
+                final_pool_pg_target_total = backtrack[i].current_pg_sum - backtrack[i].prev_pg_sum + group.rd_down_total
+                final_pool_pg_target = final_pool_pg_target_total / group.size()
+                final_pool_pg_target_per_replica = int(final_pool_pg_target / p['size'])
+                if min_pg > final_pool_pg_target_per_replica:
+                    final_pool_pg_target_per_replica = min_pg
+                    final_pool_pg_target = min_pg * p['size']
+                if max_pg and max_pg < final_pool_pg_target_per_replica:
+                    final_pool_pg_target_per_replica = max_pg
+                    final_pool_pg_target = max_pg * p['size']
+                self.log.info("{} final_pool_pg_target_per_replica {}".format(p['pool_name'], final_pool_pg_target_per_replica))
+
+                assert pg_total is not None
+                final_ratio = final_pool_pg_target / pg_total
+                final_ratios.append(final_ratio)
+                pool_pg_targets.append(pool_pg_target)
+                final_pool_pg_targets.append(final_pool_pg_target_per_replica)
+                pools.append(p)
+                self.log.info("Pool '{0}' using {1} of space, pg target {2} quantized to {3}".format(
+                    pool_name,
+                    final_ratio,
+                    pool_pg_target,
+                    final_pool_pg_target,
+                ))
+                if group.size() > 0:
+                    self.log.info("{} pools share the same target_ratio and pg_target. Rounding them in the same direction".format(group.size()))
+                if p['pg_autoscale_mode'] == 'on':
+                    assert is_power_of_two(final_pool_pg_target_per_replica)
+
+    def _find_optimal_pg_distribution (
+            self,
+            root_map: Dict[int, CrushRootResourceStatus],
+            root_id: int,
+            base: int,
+            cost: int,
+            pool_groups: List[PoolGroup],
+            backtrack: List[BacktrackNode]
+    ) -> None:
+        """
+        Determine which pools to round up per root_id using knapsack problem dynamic programming.
+        The cost associated with a rounding decision is the absolute difference
+        between the target PG value and the rounded PG value: cost = abs(pg_target - rounded_pg).
+        If multiple solutions have the same total cost, the solution with the higher cumulative PG count is selected.
+        The time complexity of this problem is O(nlog2(budget)) where n = number of pools and budget = target_pg_num
+        of the cluster.
+        """
+        pg_left = root_map[root_id].pg_left
+        budget =  pg_left - base
+        assert pg_left is not None
+
+        rd_up_cost_dict: List[Tuple[int, int]] = [] # list of (rd_up_cost, pool_index)
+        for i in range(len(pool_groups)):
+            rd_up_cost = pool_groups[i].rd_up_total - pool_groups[i].rd_down_total
+            rd_up_cost_dict.append((rd_up_cost, i))
+        # parent lets us reconstruct which pools were upgraded:
+        # parent[new pg total] = (cummulative cost, current pg total)
+        parent: List[Dict[int, Tuple[int, int]]] = [defaultdict(lambda: (0, 0)) for _ in range(len(pool_groups)+1)]
+        parent[0][0] = (cost, 0)
+        for (rd_up_cost, pool_index) in rd_up_cost_dict:
+            parent[pool_index+1] = {k: (v[0], k) for k, v in parent[pool_index].items()}
+            for current_pg_sum, (cost, prev_pg_sum) in parent[pool_index].items():
+                next_rd_up_cost = current_pg_sum + rd_up_cost
+                next_rd_up_weight = cost - pool_groups[pool_index].deviation_cost_down_total + pool_groups[pool_index].deviation_cost_up_total
+                if next_rd_up_cost <= budget:
+                    if next_rd_up_cost not in parent[pool_index+1] or next_rd_up_weight < parent[pool_index+1][next_rd_up_cost][0]:
+                        parent[pool_index+1][next_rd_up_cost] = (next_rd_up_weight, current_pg_sum)
+        # Select solution with the smallest cost. With tiebreaker, choose solution that allocates the most total pgs
+        opt = None
+        for current_pg_sum, (cost, prev_pg_sum) in parent[-1].items():
+            if opt is None or cost < opt[1] or (cost == opt[1] and current_pg_sum > opt[0]):
+                opt = BacktrackNode(current_pg_sum, cost, prev_pg_sum)
+        assert opt is not None
+        backtrack.append(opt)
+        for i in range(len(parent)-2, 0, -1):
+            (current_pg_sum, cost, prev_pg_sum) = backtrack[-1]
+            backtrack.append(BacktrackNode(prev_pg_sum, parent[i][prev_pg_sum][0], parent[i][prev_pg_sum][1]))
+        backtrack.reverse()
+
+    def _calculate_final_pool_pg_target(
+            self,
+            root_map: Dict[int, CrushRootResourceStatus],
+            root_id: int,
+            capacity_ratio: float,
+            bias: float,
+            even_pools: Dict[str, Dict[str, Any]],
+            bulk_pools: Dict[str, Dict[str, Any]],
+            func_pass: 'PassT',
+            bulk: bool,
+    ) -> Union[Tuple[float, int, int], Tuple[None, None, None]]:
         """
         Calculate the final_pool_pg_target based on the backtracked optimal allocation
         """
