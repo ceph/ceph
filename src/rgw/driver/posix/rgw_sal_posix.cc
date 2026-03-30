@@ -3465,6 +3465,20 @@ int POSIXObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y)
     return -EINVAL;
   }
 
+  ret = open(dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 20)
+        << "ERROR: POSIXAtomicWriter failed opening file" << dendl;
+    return ret;
+  }
+
+  ret = stat(dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 20)
+        << "ERROR: POSIXAtomicWriter failed closing file" << dendl;
+    return ret;
+  }
+
   fill_cache( nullptr, null_yield,
       [&](const DoutPrefixProvider *dpp, rgw_bucket_dir_entry &bde) -> int {
 	driver->get_bucket_cache()->add_entry(dpp, b->get_name(), bde);
