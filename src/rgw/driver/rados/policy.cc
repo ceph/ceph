@@ -12,8 +12,6 @@
 
 namespace rgwrados::policy
 {
-static const int max_policy_versions = 5;
-static const int max_tags = 50;
 static const std::string oid_prefix = "customer-managed-policy.";
 static constexpr std::string_view policy_oid_prefix = "policies.";
 

@@ -200,6 +200,7 @@ enum action_t {
   iamGetPolicyVersion,
   iamSetDefaultPolicyVersion,
   iamListPolicyVersions,
+  iamTagPolicy,
   iamAll,
 
 
