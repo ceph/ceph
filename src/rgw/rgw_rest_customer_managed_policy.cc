@@ -935,3 +935,69 @@ void RGWListPolicyVersions::send_response()
     start_response();
   }
 }
+
+int RGWTagPolicy::tag_policy(const DoutPrefixProvider *dpp,
+    optional_yield y,
+    std::string_view account,
+    std::string_view policy_name,
+    std::multimap<std::string, std::string>& tags)
+{
+  rgw::IAM::ManagedPolicyInfo info;
+  const int max_tags = 50;
+  auto oid = get_name_key(account, policy_name);
+  op_ret = driver->get_customer_managed_policy(this, y, arn.account, policy_name, info);
+  if(op_ret < 0){
+    return op_ret;
+  }
+
+  if(tags.size() + info.tags.size() > max_tags) {
+    return -ERR_LIMIT_EXCEEDED;
+  }
+
+  info.tags.insert(tags.begin(), tags.end());
+
+  op_ret = driver->create_customer_managed_policy(this, y, info, false);
+  if(op_ret < 0) {
+    ldpp_dout(dpp, 20) << "failed to tag policy " << policy_name << " with: " << cpp_strerror(op_ret) << dendl;
+    return op_ret;
+  }
+
+  return op_ret;
+}
+
+int RGWTagPolicy::init_processing(optional_yield y)
+{
+  int ret = parse_tags(this, s->info.args.get_params(), tags, s->err.message);
+  if(ret < 0) {
+    return ret;
+  }
+
+  if (tags.size() > MAX_TAG_SIZE) {
+    s->err.message = "Tags count cannot exceed 50";
+    return -ERR_LIMIT_EXCEEDED;
+  }
+
+  std::string_view account;
+  if (const auto& acc = s->auth.identity->get_account(); acc) {
+    account = acc->id;
+    std::string provider_arn = s->info.args.get("PolicyArn");
+    return validate_policy_arn(provider_arn, account, arn, s->err.message);
+  }
+
+  return -ERR_METHOD_NOT_ALLOWED;
+}
+
+void RGWTagPolicy::execute(optional_yield y)
+{
+  std::string policy_name = arn.resource.substr(arn.resource.rfind('/') + 1);
+  op_ret = tag_policy(this, y, arn.account, policy_name, tags);
+  if(op_ret < 0) {
+    ldpp_dout(this, 20) << "failed to tag policy: " << policy_name << " with: " << strerror(op_ret) << dendl;
+  } else {
+    s->formatter->open_object_section_in_ns("TagPolicyResponse", RGW_REST_IAM_XMLNS);
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->close_section();
+  }
+}
