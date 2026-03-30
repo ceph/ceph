@@ -23,7 +23,7 @@ class TestPgAutoscaler(object):
     def setup_method(self):
         # a bunch of attributes for testing.
         self.autoscaler = module.PgAutoscaler('module_name', 0, 0)
-
+        self.autoscaler.osd_pool_default_pg_num = 32
     def create_group(self,
         pools: Dict[str, Any],
         root_map: Dict[int, RootMapItem],
