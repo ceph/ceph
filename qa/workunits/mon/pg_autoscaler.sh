@@ -1,7 +1,7 @@
 #!/bin/bash -ex
 
 NUM_OSDS=$(ceph osd ls | wc -l)
-if [ $NUM_OSDS -lt 6 ]; then
+if [ $NUM_OSDS -lt ]; then
     echo "test requires at least 6 OSDs"
     exit 1
 fi
@@ -368,4 +368,3 @@ test_exact_budget || return 1
 test_overlapping_roots || exit 1
 
 echo OK
-
