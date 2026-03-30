@@ -91,6 +91,10 @@
 #include "driver/d4n/rgw_sal_d4n.h"
 #endif
 
+#ifdef WITH_RADOSGW_POSIX
+#include "driver/posix/rgw_sal_posix.h"
+#endif
+
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
 #define TRACEPOINT_PROBE_DYNAMIC_LINKAGE
@@ -6743,6 +6747,11 @@ void RGWPutLC::execute(optional_yield y)
     return;
   }
 
+#ifdef WITH_RADOSGW_POSIX
+  rgw::sal::POSIXLifecycle* lc = static_cast<rgw::sal::POSIXLifecycle *>(driver->get_rgwlc()->get_lc());
+  lc->set_bucket(static_cast<rgw::sal::POSIXBucket *>(s->bucket.get()));
+#endif
+
   op_ret = driver->get_rgwlc()->set_bucket_config(this, y, s->bucket.get(),
                                                   s->bucket_attrs, &new_config);
   if (op_ret < 0) {
@@ -6759,6 +6768,11 @@ void RGWDeleteLC::execute(optional_yield y)
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
+
+#ifdef WITH_RADOSGW_POSIX
+  rgw::sal::POSIXLifecycle* lc = static_cast<rgw::sal::POSIXLifecycle *>(driver->get_rgwlc()->get_lc());
+  lc->set_bucket(static_cast<rgw::sal::POSIXBucket *>(s->bucket.get()));
+#endif
 
   // remove RGW_ATTR_LC and remove the bucket from the 'lc list'
   constexpr bool update_attrs = true;

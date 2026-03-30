@@ -2701,6 +2701,7 @@ int RGWLC::set_bucket_config(const DoutPrefixProvider* dpp, optional_yield y,
     bufferlist lc_bl;
     config->encode(lc_bl);
     attrs[RGW_ATTR_LC] = std::move(lc_bl);
+    dout(0) << "Sam 1" << dendl;
 
     ret = bucket->merge_and_store_attrs(dpp, attrs, y);
     if (ret < 0) {
@@ -2731,6 +2732,8 @@ int RGWLC::remove_bucket_config(const DoutPrefixProvider* dpp, optional_yield y,
   rgw::sal::Attrs& attrs = bucket->get_attrs();
   if (update_attrs && attrs.erase(RGW_ATTR_LC)) {
     ret = bucket->put_info(dpp, false, real_time(), y);
+    dout(0) << "Sam 2" << dendl;
+    attrs = bucket->get_attrs();
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "RGWLC::RGWDeleteLC() failed to set attrs on bucket="
 			 << b.name << " returned err=" << ret << dendl;

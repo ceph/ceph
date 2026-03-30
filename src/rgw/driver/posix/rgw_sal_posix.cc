@@ -23,6 +23,8 @@
 #include "include/scope_guard.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/errno.h"
+#include "common/split.h"
+#include "rgw_lc.h"
 
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
@@ -37,6 +39,7 @@ const std::string ATTR_PREFIX = "user.X-RGW-";
 #define RGW_POSIX_ATTR_OBJECT_TYPE "POSIX-Object-Type"
 #define RGW_POSIX_ATTR_MANIFEST "POSIX-Manifest"
 const std::string mp_ns = "multipart";
+const std::string lc_ns = "lifecycle";
 const std::string MP_OBJ_PART_PFX = "part-";
 const std::string MP_OBJ_HEAD_NAME = MP_OBJ_PART_PFX + "00000";
 
@@ -1964,6 +1967,9 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
       }
     }
   }
+  lc = new RGWLC();
+  lc->initialize(cct, this);
+
   ldpp_dout(dpp, 20) << "root_fd: " << root_dir->get_fd() << dendl;
 
   ldpp_dout(dpp, 20) << "SUCCESS" << dendl;
@@ -2097,6 +2103,11 @@ int POSIXDriver::list_all_zones(const DoutPrefixProvider* dpp,
 int POSIXDriver::cluster_stat(RGWClusterStat& stats)
 {
   return 0;
+}
+
+std::unique_ptr<Lifecycle> POSIXDriver::get_lifecycle(void) 
+{
+  return std::make_unique<POSIXLifecycle>(this);
 }
 
 std::unique_ptr<Writer> POSIXDriver::get_append_writer(const DoutPrefixProvider *dpp,
@@ -2724,8 +2735,17 @@ int POSIXBucket::write_attrs(const DoutPrefixProvider* dpp, optional_yield y)
   // Bucket info is stored as an attribute, but not in attrs[]
   bufferlist bl;
   encode(info, bl);
-  Attrs extra_attrs;
+  Attrs orig_attrs, extra_attrs;
   extra_attrs[RGW_POSIX_ATTR_BUCKET_INFO] = bl;
+
+  ret = dir->read_attrs(dpp, y, orig_attrs);
+
+  for (auto attr : orig_attrs) {
+    if (auto found = attrs.find(attr.first); found == attrs.end()) {
+      /* Attribute needs to be erased */
+      remove_x_attr(dpp, y, dir->get_fd(), attr.first, get_name());
+    }
+  }
 
   return dir->write_attrs(dpp, y, attrs, &extra_attrs);
 }
@@ -4229,6 +4249,249 @@ int POSIXMultipartWriter::prepare(optional_yield y)
 int POSIXMultipartWriter::process(bufferlist&& data, uint64_t offset)
 {
   return part_file->write(offset, data, dpp, null_yield);
+}
+
+LCPOSIXSerializer::LCPOSIXSerializer(POSIXDriver* driver, const std::string& _oid, const std::string& lock_name, const std::string& cookie) :
+  StoreLCSerializer(_oid)
+{
+  // TODO: are cookies used here?
+  unsigned int init_value = 10; // TOOO: what init value should be used?
+  lock = sem_open(lock_name.c_str(), O_CREAT, O_RDWR, init_value);
+}
+
+int LCPOSIXSerializer::try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y)
+{ 
+  struct timespec ts;
+  ts.tv_sec = dur;
+  sem_timedwait(lock, &ts);
+  return 0;
+} 
+
+int LCPOSIXSerializer::unlock(const DoutPrefixProvider *dpp, optional_yield y)
+{
+  sem_post(lock);
+  return 0;
+}
+
+int POSIXLifecycle::process_lc(const std::unique_ptr<rgw::sal::Bucket>& optional_bucket)
+{
+  auto lc = this->driver->get_rgwlc();
+  RGWLC::LCWorker worker(lc, this->driver->ctx(), lc, 0);
+  auto ret = lc->process(&worker, optional_bucket, true /* once */);
+  lc->stop_processor(); // sets down_flag, but returns immediately
+  return ret;
+}
+
+int POSIXLifecycle::get_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                              const std::string& oid, const std::string& marker,
+                              LCEntry& entry)
+{
+  int ret;
+  static std::string lc_pre{"." + lc_ns + "_"};
+  bufferlist bl;
+  auto bucket_dir = lc_bucket->get_dir();
+
+  std::string fname = url_encode(lc_pre + oid, true);
+  auto lc_entry = std::make_unique<File>(
+          fname, bucket_dir, driver->ctx());
+  
+  ret = lc_entry->stat(dpp, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = lc_entry->open(dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 10) << __func__ << "Failed to open lc entry, ret=" << ret << dendl;
+    return ret;
+  }
+
+  ret = lc_entry->read(0, lc_entry->get_stx().stx_size, bl, dpp, null_yield); // TODO: will offset/left always be 0?
+  if (ret < 0) {
+    ldpp_dout(dpp, 10) << __func__ << "Failed to read lc entry, ret=" << ret << dendl;
+    return ret;
+  }
+
+  bufferlist::const_iterator bi = bl.begin();
+  cls_rgw_lc_entry cls_entry;
+  cls_entry.decode(bi);
+
+  entry.bucket = std::move(cls_entry.bucket);
+  entry.start_time = cls_entry.start_time;
+  entry.status = cls_entry.status;
+
+  return 0;
+}
+
+int POSIXLifecycle::get_next_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                                   const std::string& oid, const std::string& marker,
+                                   LCEntry& entry)
+{
+  /*librados::ObjectReadOperation op;
+  bufferlist bl;
+  cls_rgw_lc_get_next_entry(op, marker, bl);
+
+  auto& ioctx = *store->getPOSIX()->get_lc_pool_ctx();
+  int ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), nullptr, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  cls_rgw_lc_entry cls_entry;
+  ret = cls_rgw_lc_get_next_entry_decode(bl, cls_entry);
+  if (ret < 0) {
+    return ret;
+  }
+
+  entry.bucket = std::move(cls_entry.bucket);
+  entry.start_time = cls_entry.start_time;
+  entry.status = cls_entry.status;*/
+  return 0;
+}
+
+int POSIXLifecycle::set_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                              const std::string& oid, const LCEntry& entry)
+{
+  int ret;
+  static std::string lc_pre{"." + lc_ns + "_"};
+  cls_rgw_lc_entry cls_entry;
+  bufferlist bl;
+  auto bucket_dir = lc_bucket->get_dir();
+
+  cls_entry.bucket = entry.bucket;
+  cls_entry.start_time = entry.start_time;
+  cls_entry.status = entry.status;
+  cls_entry.encode(bl);
+
+  std::string fname = url_encode(lc_pre + oid, true);
+  auto lc_entry = std::make_unique<File>(
+          fname, bucket_dir, driver->ctx()); // TODO: FSEnt or File?
+  ret = lc_entry->stat(dpp, y);
+  if (ret == -ENOENT) {
+    ret = lc_entry->create(dpp);
+    if (ret < 0) {
+      ldpp_dout(dpp, 10) << __func__ << "Failed to create lc entry, ret=" << ret << dendl;
+      return ret;
+    }
+  } else {
+    return ret;
+  }
+
+  ret = lc_entry->open(dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 10) << __func__ << "Failed to open lc entry, ret=" << ret << dendl;
+    return ret;
+  }
+  
+  ret = lc_entry->write(0, bl, dpp, null_yield); // TODO: will offset always be 0?
+  if (ret < 0) {
+    ldpp_dout(dpp, 10) << __func__ << "Failed to write lc entry, ret=" << ret << dendl;
+  }
+
+  return ret;
+}
+
+int POSIXLifecycle::list_entries(const DoutPrefixProvider* dpp, optional_yield y,
+                                 const std::string& oid, const std::string& marker,
+                                 uint32_t max_entries, std::vector<LCEntry>& entries)
+{
+  entries.clear();
+
+  /*librados::ObjectReadOperation op;
+  bufferlist bl;
+  cls_rgw_lc_list(op, marker, max_entries, bl);
+
+  auto& ioctx = *store->getPOSIX()->get_lc_pool_ctx();
+  int ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), nullptr, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  vector<cls_rgw_lc_entry> cls_entries;
+  ret = cls_rgw_lc_list_decode(bl, cls_entries);
+  if (ret < 0) {
+    return ret;
+  }
+
+  for (auto& entry : cls_entries) {
+    entries.push_back(LCEntry{entry.bucket, entry.start_time, entry.status});
+  }
+
+  return ret;*/
+  return 0;
+}
+
+int POSIXLifecycle::rm_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                             const std::string& oid, const LCEntry& entry)
+{
+  int ret;
+  static std::string lc_pre{"." + lc_ns + "_"};
+  auto bucket_dir = lc_bucket->get_dir();
+
+  std::string fname = url_encode(lc_pre + oid, true);
+  auto lc_entry = std::make_unique<File>(
+          fname, bucket_dir, driver->ctx()); // TODO: FSEnt or File?
+  
+  ret = lc_entry->stat(dpp, y);
+  if (ret < 0) {
+    return ret;
+  }
+  ret = lc_entry->remove(dpp, y, true); // TODO: delete children should be true?
+  if (ret < 0) {
+    ldpp_dout(dpp, 10) << __func__ << "Failed to remove lc entry, ret=" << ret << dendl;
+  }
+
+  return ret;
+}
+
+int POSIXLifecycle::get_head(const DoutPrefixProvider* dpp, optional_yield y,
+                             const std::string& oid, LCHead& head)
+{
+  /*librados::ObjectReadOperation op;
+  bufferlist bl;
+  cls_rgw_lc_get_head(op, bl);
+
+  auto& ioctx = *store->getPOSIX()->get_lc_pool_ctx();
+  int ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), nullptr, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  cls_rgw_lc_obj_head cls_head;
+  ret = cls_rgw_lc_get_head_decode(bl, cls_head);
+  if (ret < 0) {
+    return ret;
+  }
+
+  head.start_date = cls_head.start_date;
+  head.shard_rollover_date = cls_head.shard_rollover_date;
+  head.marker = std::move(cls_head.marker);
+  return 0;*/
+  return 0;
+}
+
+int POSIXLifecycle::put_head(const DoutPrefixProvider* dpp, optional_yield y,
+                             const std::string& oid, const LCHead& head)
+{
+  /*cls_rgw_lc_obj_head cls_head;
+
+  cls_head.marker = head.marker;
+  cls_head.start_date = head.start_date;
+  cls_head.shard_rollover_date = head.shard_rollover_date;
+
+  librados::ObjectWriteOperation op;
+  cls_rgw_lc_put_head(op, cls_head);
+
+  auto& ioctx = *store->getPOSIX()->get_lc_pool_ctx();
+  return rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);*/
+  return 0;
+}
+
+std::unique_ptr<LCSerializer> POSIXLifecycle::get_serializer(const std::string& lock_name,
+                                                             const std::string& oid,
+                                                             const std::string& cookie)
+{
+  return std::make_unique<LCPOSIXSerializer>(driver, oid, lock_name, cookie);
 }
 
 int POSIXMultipartWriter::complete(
