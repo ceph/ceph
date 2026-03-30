@@ -16118,7 +16118,7 @@ int PrimaryLogPG::get_internal_versions(const hobject_t& soid,
     return -ENOENT;
   }
 
-  if (is_primary()) {
+  if (is_primary() && pool.info.is_erasure()) {
     for (unsigned int i = 0; i < pool.info.get_size(); ++i) {
       (*out)[shard_id_t(i)] = obc->obs.oi.version;
     }
