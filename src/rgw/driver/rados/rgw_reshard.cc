@@ -4,6 +4,7 @@
 #include <limits>
 #include <sstream>
 #include <chrono>
+#include <ctime>
 
 #include "rgw_zone.h"
 #include "driver/rados/rgw_bucket.h"
@@ -36,6 +37,61 @@ const string bucket_instance_lock_name = "bucket_instance_lock";
 // key reduction values; NB maybe expose some in options
 constexpr uint64_t default_min_objs_per_shard = 10000;
 constexpr uint32_t min_dynamic_shards = 11;
+
+namespace {
+
+constexpr int hours_in_a_day = 24;
+constexpr int secs_in_a_day = 60 * 60 * 24;
+
+bool should_reshard_work_now(const std::string& worktime, const utime_t& now)
+{
+  int start_hour = 0;
+  int start_minute = 0;
+  int end_hour = 23;
+  int end_minute = 59;
+  std::sscanf(worktime.c_str(), "%d:%d-%d:%d", &start_hour, &start_minute,
+              &end_hour, &end_minute);
+
+  struct tm bdt;
+  time_t tt = now.sec();
+  localtime_r(&tt, &bdt);
+
+  // next-day adjustment if the configured end_hour is less than start_hour
+  if (end_hour < start_hour) {
+    bdt.tm_hour = bdt.tm_hour > end_hour ? bdt.tm_hour : bdt.tm_hour + hours_in_a_day;
+    end_hour += hours_in_a_day;
+  }
+
+  return ((bdt.tm_hour * 60 + bdt.tm_min >= start_hour * 60 + start_minute) &&
+          (bdt.tm_hour * 60 + bdt.tm_min <= end_hour * 60 + end_minute));
+}
+
+int schedule_next_reshard_start_time(const std::string& worktime,
+                                     const utime_t& now)
+{
+  int start_hour = 0;
+  int start_minute = 0;
+  int end_hour = 23;
+  int end_minute = 59;
+  std::sscanf(worktime.c_str(), "%d:%d-%d:%d", &start_hour, &start_minute,
+              &end_hour, &end_minute);
+
+  struct tm bdt;
+  time_t tt = now.sec();
+  time_t nt;
+  localtime_r(&tt, &bdt);
+
+  bdt.tm_hour = start_hour;
+  bdt.tm_min = start_minute;
+  bdt.tm_sec = 0;
+
+  nt = mktime(&bdt);
+  int secs = int(nt - tt);
+
+  return secs > 0 ? secs : secs + secs_in_a_day;
+}
+
+} // anonymous namespace
 
 /* All primes up to 2000 used to attempt to make dynamic sharding use
  * a prime numbers of shards. Note: this list also includes 1 for when
@@ -1818,8 +1874,14 @@ void *RGWReshard::ReshardWorker::entry() {
   }
 
   do {
-    utime_t start = ceph_clock_now();
-    reshard->process_all_logshards(this, null_yield);
+    int secs = 0;
+    const auto now = ceph_clock_now();
+    const auto worktime = cct->_conf.get_val<std::string>("rgw_dynamic_resharding_work_time");
+    const bool should_work = (debug_interval > 0) || should_reshard_work_now(worktime, now);
+
+    if (should_work) {
+      utime_t start = now;
+      reshard->process_all_logshards(this, null_yield);
 
     if (reshard->going_down()) {
       break;
@@ -1828,7 +1890,7 @@ void *RGWReshard::ReshardWorker::entry() {
     utime_t end = ceph_clock_now();
     utime_t elapsed = end - start;
 
-    int secs = cct->_conf.get_val<uint64_t>("rgw_reshard_thread_interval");
+    secs = cct->_conf.get_val<uint64_t>("rgw_reshard_thread_interval");
     secs = std::max(1, int(secs * interval_factor));
 
     if (secs <= elapsed.sec()) {
@@ -1836,6 +1898,12 @@ void *RGWReshard::ReshardWorker::entry() {
     }
 
     secs -= elapsed.sec();
+    } else {
+      secs = schedule_next_reshard_start_time(worktime, now);
+      ldpp_dout(this, 20) << "outside rgw_dynamic_resharding_work_time=" << worktime
+                          << ", sleeping " << secs << " seconds until next window"
+                          << dendl;
+    }
 
     // note: this will likely wait for the intended period of
     // time, but could wait for less
