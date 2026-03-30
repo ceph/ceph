@@ -7,10 +7,7 @@
   display: block;
   max-width: 800px;
   margin: 0 auto;
-  padding: var(--cds-spacing-04);
-  border: 1px solid var(--cds-border-subtle-01);
-  border-radius: 8px;
-  background-color: var(--cds-layer);
+  padding: $spacing-04;
 }
 
 /* Prefix styling */
@@ -18,7 +15,7 @@
   background-color: var(--cds-layer-accent-01);
   border: 1px solid var(--cds-border-subtle-01);
   border-right: none;
-  padding: var(--cds-spacing-03) var(--cds-spacing-04);
+  padding: $spacing-03 $spacing-04;
   display: flex;
   align-items: center;
   color: var(--cds-text-secondary);
@@ -26,13 +23,13 @@
 
 /* Label row spacing */
 .cap-label-row {
-  margin-bottom: var(--cds-spacing-03);
+  margin-bottom: $spacing-03;
 }
 
 /* Input row alignment */
 .cap-input-row {
   align-items: center;
-  margin-bottom: var(--cds-spacing-03);
+  margin-bottom: $spacing-03;
 }
 
 /* Remove button alignment */
@@ -42,15 +39,7 @@
   justify-content: center;
 }
 
-/* Ghost button alignment fix */
-:host ::ng-deep button[cdsButton='ghost'] {
-  height: 2.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 /* Capability button alignment */
 .add-btn-col {
-  padding-left: var(--cds-spacing-05);
+  padding-left: $spacing-05;
 }

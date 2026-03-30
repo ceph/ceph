@@ -18,7 +18,7 @@
         <div
           cdsCol
           [columnNumbers]="{ sm: 4, md: 12 }">
-          <h3>Create User</h3>
+          <h3 i18n>Create User</h3>
           <cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
         </div>
       </div>
@@ -31,7 +31,9 @@
           cdsCol
           [columnNumbers]="{ sm: 4, md: 7 }">
 
-          <label class="cds--label">User entity *</label>
+          <label
+            class="cds--label"
+            i18n>User entity *</label>
 
           <div
             class="cds--text-input__field-wrapper">
@@ -42,6 +44,7 @@
               id="username"
               formControlName="username"
               placeholder="Enter username"
+              i18n-placeholder
             />
           </div>
 
@@ -55,7 +58,7 @@
         <div
           cdsCol
           [columnNumbers]="{ sm: 4, md: 12 }">
-          <h4>Capabilities</h4>
+          <h4 i18n>Capabilities</h4>
         </div>
       </div>
 
@@ -69,13 +72,17 @@
           <div
             cdsCol
             [columnNumbers]="{ sm: 4, md: 3 }">
-            <label class="cds--label">Entity *</label>
+            <label
+              class="cds--label"
+              i18n>Entity *</label>
           </div>
 
           <div
             cdsCol
             [columnNumbers]="{ sm: 4, md: 3 }">
-            <label class="cds--label">Entity Capabilities *</label>
+            <label
+              class="cds--label"
+              i18n>Entity Capabilities *</label>
           </div>
 
           <div
@@ -85,8 +92,8 @@
         </div>
 
         <!-- INPUT ROWS -->
+      @for (cap of caps.controls; let i = $index; track i) {
         <div
-          *ngFor="let cap of caps.controls; let i = index"
           [formGroupName]="i"
           cdsRow
           class="cap-input-row"
@@ -99,7 +106,8 @@
             <cds-select formControlName="entity">
               <option
                 value=""
-                disabled>Select entity</option>
+                disabled
+                i18n>Select entity</option>
               <option value="mon">mon</option>
               <option value="osd">osd</option>
               <option value="mgr">mgr</option>
@@ -115,7 +123,8 @@
             <cds-select formControlName="permission">
               <option
                 value=""
-                disabled>Select permission</option>
+                disabled
+                i18n>Select permission</option>
               <option value="allow r">allow r</option>
               <option value="allow rw">allow rw</option>
               <option value="allow rwx">allow rwx</option>
@@ -141,6 +150,7 @@
           </div>
 
         </div>
+      }
 
       </div>
 
@@ -158,11 +168,10 @@
             type="button"
             (click)="addCap()"
           >
-            Add Capability
-            <svg
-              cdsIcon="add"
-              size="16"
-              class="cds--btn__icon"></svg>
+            <span i18n>Add Capability</span>
+            <cd-icon
+            type="add"
+            size="16"></cd-icon>
           </button>
         </div>
       </div>

@@ -42,15 +42,5 @@ export class CephUserFormComponent {
     if (this.form.invalid) {
       return;
     }
-    const formValue = this.form.value;
-
-    const payload = {
-      user: `client.${formValue.username.trim()}`,
-      caps: formValue.caps.map(
-        (c: { entity: string; permission: string }) => `${c.entity} ${c.permission}`
-      )
-    };
-    console.debug(payload);
-    // TODO: integrate with API service
   }
 }
