@@ -454,7 +454,8 @@ public:
 	/* XXX we may not need to recover the cache key */
 	std::string_view svk __attribute__((unused)) =
 	  key.get<string_view>(); // {name, instance, [ns]}
-	std::string_view svv = data.get<string_view>();
+        std::string_view svv = data.get<string_view>();
+        /* XXXX ser_v conversation may be bogus */
 	std::string ser_v{svv};
 	zpp::bits::in in_v(ser_v);
 	struct timespec ts;

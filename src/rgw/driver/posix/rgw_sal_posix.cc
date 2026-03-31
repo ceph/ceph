@@ -15,6 +15,7 @@
 
 #include "rgw_sal_posix.h"
 #include <dirent.h>
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/xattr.h>
 #include <unistd.h>
@@ -23,6 +24,7 @@
 #include "include/scope_guard.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/errno.h"
+#include "zpp_bits.h"
 
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
@@ -36,6 +38,7 @@ const std::string ATTR_PREFIX = "user.X-RGW-";
 #define RGW_POSIX_ATTR_OWNER "POSIX-Owner"
 #define RGW_POSIX_ATTR_OBJECT_TYPE "POSIX-Object-Type"
 #define RGW_POSIX_ATTR_MANIFEST "POSIX-Manifest"
+#define RGW_POSIX_ATTR_VERSION "POSIX-DataVersion"
 const std::string mp_ns = "multipart";
 const std::string MP_OBJ_PART_PFX = "part-";
 const std::string MP_OBJ_HEAD_NAME = MP_OBJ_PART_PFX + "00000";
@@ -1428,9 +1431,89 @@ int VersionedDirectory::create(const DoutPrefixProvider* dpp, bool* existed, boo
   return 0;
 }
 
-std::string VersionedDirectory::get_new_instance()
+struct POSIXLockAdaptor {
+private:
+  int fd;
+  std::mutex mtx;
+
+  struct flock f_desc {
+    .l_type = F_WRLCK,
+    .l_whence = SEEK_SET,
+    .l_start = 0,
+    .l_len = UINT32_MAX
+  };
+
+public:
+  POSIXLockAdaptor(int _fd) :
+    fd(_fd)
+  {}
+
+  void lock()
+  {
+    mtx.lock();
+    (void) fcntl(fd, F_OFD_SETLKW, &f_desc);
+  }
+
+  bool try_lock()
+  {
+    if (mtx.try_lock()) {
+      if (fcntl(fd, F_OFD_SETLK, &f_desc) != -1) {
+        return true;
+      }
+      mtx.unlock();
+    }
+    return false;
+  }
+
+  void unlock() {
+    (void) fcntl(fd, F_UNLCK, &f_desc);
+    mtx.unlock();
+  }
+}; /* POSIXLockAdaptor */
+
+std::string VersionedDirectory::get_new_instance(const DoutPrefixProvider* dpp)
 {
-  return gen_rand_instance_name();
+  auto _fd = get_fd();
+  assert(_fd > 0); // XXX this is invariant, yes?
+
+  uint64_t version{UINT64_MAX};
+  std::string attrname = ATTR_PREFIX + RGW_POSIX_ATTR_VERSION;
+
+  {
+    POSIXLockAdaptor l_adaptor(_fd);
+    std::lock_guard<POSIXLockAdaptor> lk(l_adaptor);
+
+    /* XXX is vallen a portable constant? */
+    std::string value;
+    zpp::bits::errc errc{};
+    ssize_t vallen = fgetxattr(_fd, attrname.c_str(), nullptr, 0);
+    if (vallen > 0) {
+      value.reserve(vallen + 1);
+      vallen = fgetxattr(_fd, attrname.c_str(), &value[0], vallen);
+      if (vallen < 0) {
+        ldpp_dout(dpp, 0) << __func__ << ": ERROR: could not get attribute "
+                          << attrname << ": " << cpp_strerror(errno) << dendl;
+      }
+      std::string_view svv{value.data()};
+      zpp::bits::in in_v(svv);
+      errc = in_v(version);
+      --version;
+    }
+    value.clear();
+    zpp::bits::out out(value);
+    errc = out(version);
+    if (errc.code != std::errc{0}) {
+      abort();
+    }
+    int ret = fsetxattr(fd, attrname.c_str(), value.c_str(), value.length(), 0);
+    if (ret < 0) {
+      ret = errno;
+      ldpp_dout(dpp, 0) << "ERROR: could not write attribute " << attrname
+                        << cpp_strerror(ret) << dendl;
+    }
+  }
+
+  return std::to_string(version) /* gen_rand_instance_name() */;
 }
 
 int VersionedDirectory::add_file(const DoutPrefixProvider* dpp, std::unique_ptr<FSEnt>&& file, bool* existed, bool temp_file)
@@ -1688,7 +1771,7 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y, 
 
     /* Add a delete marker */
     rgw_obj_key key = decode_obj_key(get_name());
-    key.instance = gen_rand_instance_name();
+    key.instance = get_new_instance(dpp) /* gen_rand_instance_name() */;
     tgtname = get_key_fname(key, /*use_version=*/true);
     newlink = true;
     ret = remove_symlink(dpp, y);

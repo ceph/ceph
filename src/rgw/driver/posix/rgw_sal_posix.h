@@ -333,7 +333,7 @@ public:
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) override;
   virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children) override;
   virtual std::string get_cur_version() override;
-  std::string get_new_instance();
+  std::string get_new_instance(const DoutPrefixProvider* dpp);
   int remove_symlink(const DoutPrefixProvider *dpp, optional_yield y, std::string match = "");
   int add_file(const DoutPrefixProvider *dpp, std::unique_ptr<FSEnt>&& file, bool* existed = nullptr, bool temp_file = false);
   FSEnt* get_cur_version_ent() { return cur_version.get(); };
