@@ -90,6 +90,53 @@ enum {
 using cctptr = boost::intrusive_ptr<CephContext>;
 using rsptr = std::shared_ptr<librados::Rados>;
 
+struct cephsqlite_fileloc {
+  std::string pool;
+  std::string radosns;
+  std::string name;
+};
+
+struct cephsqlite_fileio {
+  cctptr cct;
+  rsptr cluster; // anchor for ioctx
+  librados::IoCtx ioctx;
+  std::unique_ptr<SimpleRADOSStriper> rs;
+
+  ~cephsqlite_fileio() {
+    close();
+  }
+
+  void close() {
+    /* order matters! */
+    rs.reset();
+    ioctx.close();
+    cluster.reset();
+    cct.reset();
+  }
+};
+
+std::ostream& operator<<(std::ostream &out, const cephsqlite_fileloc& fileloc) {
+  return out
+    << "["
+    << fileloc.pool
+    << ":"
+    << fileloc.radosns
+    << "/"
+    << fileloc.name
+    << "]"
+    ;
+}
+
+struct cephsqlite_file {
+  sqlite3_file base;
+  struct sqlite3_vfs* vfs = nullptr;
+  int flags = 0;
+  // There are 5 lock states: https://sqlite.org/c3ref/c_lock_exclusive.html
+  int lock = 0;
+  struct cephsqlite_fileloc loc{};
+  struct cephsqlite_fileio io{};
+};
+
 struct cephsqlite_appdata {
   ~cephsqlite_appdata() {
     {
@@ -165,6 +212,14 @@ struct cephsqlite_appdata {
     std::scoped_lock lock(cluster_mutex);
     return _open(_cct);
   }
+  void add_file(cephsqlite_file* file) {
+    std::scoped_lock lock(cluster_mutex);
+    open_files.insert(file);
+  }
+  void del_file(cephsqlite_file* file) {
+    std::scoped_lock lock(cluster_mutex);
+    open_files.erase(file);
+  }
 
   std::unique_ptr<PerfCounters> logger;
   std::shared_ptr<PerfCounters> striper_logger;
@@ -196,6 +251,10 @@ private:
     return 0;
   }
   void _disconnect() {
+    for (auto&& file : open_files) {
+      /* tear down state */
+      file->io.close();
+    }
     if (cluster) {
       cluster.reset();
     }
@@ -221,43 +280,8 @@ private:
   ceph::mutex cluster_mutex = ceph::make_mutex("libcephsqlite");;
   cctptr cct;
   rsptr cluster;
+  std::set<cephsqlite_file*> open_files;
 };
-
-struct cephsqlite_fileloc {
-  std::string pool;
-  std::string radosns;
-  std::string name;
-};
-
-struct cephsqlite_fileio {
-  cctptr cct;
-  rsptr cluster; // anchor for ioctx
-  librados::IoCtx ioctx;
-  std::unique_ptr<SimpleRADOSStriper> rs;
-};
-
-std::ostream& operator<<(std::ostream &out, const cephsqlite_fileloc& fileloc) {
-  return out
-    << "["
-    << fileloc.pool
-    << ":"
-    << fileloc.radosns
-    << "/"
-    << fileloc.name
-    << "]"
-    ;
-}
-
-struct cephsqlite_file {
-  sqlite3_file base;
-  struct sqlite3_vfs* vfs = nullptr;
-  int flags = 0;
-  // There are 5 lock states: https://sqlite.org/c3ref/c_lock_exclusive.html
-  int lock = 0;
-  struct cephsqlite_fileloc loc{};
-  struct cephsqlite_fileio io{};
-};
-
 
 #define getdata(vfs) (*((cephsqlite_appdata*)((vfs)->pAppData)))
 
@@ -337,6 +361,7 @@ static int Close(sqlite3_file *file)
   auto f = (cephsqlite_file*)file;
   auto start = ceph::coarse_mono_clock::now();
   df(5) << dendl;
+  getdata(f->vfs).del_file(f);
   f->~cephsqlite_file();
   auto end = ceph::coarse_mono_clock::now();
   getdata(f->vfs).logger->tinc(P_OPF_CLOSE, end-start);
@@ -598,6 +623,7 @@ static int Open(sqlite3_vfs *vfs, const char *name, sqlite3_file *file,
     ceph_assert(0); /* xFullPathname validates! */
   }
   f->flags = flags;
+  getdata(vfs).add_file(f);
 
 enoent_retry:
   if (int rc = makestriper(vfs, cct, cluster, f->loc, &f->io); rc < 0) {
