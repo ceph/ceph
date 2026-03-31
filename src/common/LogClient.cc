@@ -162,14 +162,26 @@ void LogChannel::do_log(clog_type prio, std::stringstream& ss)
   }
 }
 
+void LogChannel::do_log(clog_type prio, LogMsg &&m) {
+  LogEntry e;
+  std::ostringstream oss;
+  oss << m;
+  e.stamp = ceph_clock_now();
+  // seq and who should be set for syslog/graylog/log_to_mon
+  e.addrs = parent->get_myaddrs();
+  e.name = parent->get_myname();
+  e.rank = parent->get_myrank();
+  e.prio = prio;
+  // stash a copy here for backward compatibility
+  e.msg = oss.str();
+  e.channel = get_log_channel();
+  e.logmsg = std::move(m);
+
+  _do_log(std::move(e));
+}
+
 void LogChannel::do_log(clog_type prio, const std::string& s)
 {
-  std::lock_guard l(channel_lock);
-  if (CLOG_ERROR == prio) {
-    ldout(cct,-1) << "log " << prio << " : " << s << dendl;
-  } else {
-    ldout(cct,0) << "log " << prio << " : " << s << dendl;
-  }
   LogEntry e;
   e.stamp = ceph_clock_now();
   // seq and who should be set for syslog/graylog/log_to_mon
@@ -179,6 +191,18 @@ void LogChannel::do_log(clog_type prio, const std::string& s)
   e.prio = prio;
   e.msg = s;
   e.channel = get_log_channel();
+
+  _do_log(std::move(e));
+}
+
+void LogChannel::_do_log(LogEntry &&e) {
+  std::lock_guard l(channel_lock);
+
+  if (!e.has_logmsg()) {
+    ldout(cct, 0) << "log " << e.prio << " : " << e.msg << dendl;
+  } else {
+    ldout(cct, 0) << "log " << e.prio << " : " << e.logmsg << dendl;
+  }
 
   // log to monitor?
   if (log_to_monitors) {
