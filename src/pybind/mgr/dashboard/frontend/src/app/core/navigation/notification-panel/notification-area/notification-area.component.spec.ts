@@ -185,12 +185,12 @@ describe('NotificationAreaComponent', () => {
     const infoNotification = createNotification(
       NotificationType.info,
       'Info Today',
-      new Date(today.getTime() + 1000).toISOString()
+      new Date(today.getTime() - 60000).toISOString()
     );
     const warningNotification = createNotification(
       NotificationType.warning,
       'Warning Today',
-      new Date(today.getTime() + 2000).toISOString()
+      new Date(today.getTime() - 30000).toISOString()
     );
 
     mockDataSource.next([infoNotification, warningNotification]);
@@ -217,12 +217,12 @@ describe('NotificationAreaComponent', () => {
       createNotification(
         NotificationType.success,
         'Success 1',
-        new Date(today.getTime() + 1000).toISOString()
+        new Date(today.getTime() - 60000).toISOString()
       ),
       createNotification(
         NotificationType.info,
         'Info 1',
-        new Date(today.getTime() + 2000).toISOString()
+        new Date(today.getTime() - 30000).toISOString()
       )
     ];
 
