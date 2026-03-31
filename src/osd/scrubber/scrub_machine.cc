@@ -31,11 +31,7 @@ using namespace std::chrono_literals;
   ScrubMachineListener* scrbr = machine.m_scrbr;		 \
   std::ignore = scrbr;                                           \
   auto pg_id = machine.m_pg_id;					 \
-  std::ignore = pg_id; \
-  auto trace = machine.m_tracer; \
-  std::ignore = trace;  \
-  auto parent_trace = machine.m_parent_trace;  \
-  std::ignore = parent_trace; \
+  std::ignore = pg_id;
 
 NamedSimply::NamedSimply(ScrubMachineListener* scrubber, const char* name)
 {
@@ -139,6 +135,7 @@ NotActive::NotActive(my_context ctx)
 {
   dout(10) << "-- state -->> NotActive" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  machine.clear_spans();
   scrbr->clear_queued_or_active();
 }
 
@@ -153,22 +150,14 @@ PrimaryActive::PrimaryActive(my_context ctx)
   dout(10) << "-- state -->> PrimaryActive" << dendl;
   // insert this PG into the OSD scrub queue. Calculate initial schedule
   scrbr->schedule_scrub_with_osd();
-  // TODO: Naveen: The "trace" should be part of pg_scrubber. That way we can maintain
-  // the information better. Maybe a function like "scrbr->get_current_span() ?"
-  auto span_label = fmt::format("{}_primary_PrimaryActive", pg_id.pgid);
-  auto span = tracing::scrubber::tracer.add_span(span_label, context<ScrubMachine>().m_tracer);
-  if (span && span->IsRecording()){
-    auto text = "TRACE SPAN " + span_label + " active";
-    dout(10) << text<< dendl;
-  }
-
-  context<ScrubMachine>().m_parent_trace = context<ScrubMachine>().m_tracer;
-  std::swap(span, context<ScrubMachine>().m_tracer);
+  context<ScrubMachine>().push_span(
+      fmt::format("{}_primary_PrimaryActive", pg_id.pgid));
 }
 
 PrimaryActive::~PrimaryActive()
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  machine.pop_span();
   // we may have set some PG state flags without reaching Session.
   // And we may be holding a 'local resource'.
   scrbr->clear_pgscrub_state();
@@ -183,6 +172,7 @@ PrimaryIdle::PrimaryIdle(my_context ctx)
     , NamedSimply(context<ScrubMachine>().m_scrbr, "PrimaryActive/PrimaryIdle")
 {
   dout(10) << "-- state -->> PrimaryActive/PrimaryIdle" << dendl;
+  context<ScrubMachine>().clear_spans();
 }
 
 sc::result PrimaryIdle::react(const StartScrub&)
@@ -216,19 +206,14 @@ Session::Session(my_context ctx)
   m_counters_idx = &scrbr->get_unlabeled_counters();
   m_osd_counters->inc(m_counters_idx->started_cnt);
 
-  auto span_label = fmt::format("{}_primary_PrimaryActive/Session", pg_id.pgid);
-  auto span = tracing::scrubber::tracer.add_span(span_label, context<ScrubMachine>().m_tracer);
-  context<ScrubMachine>().m_parent_trace = context<ScrubMachine>().m_tracer;
-  if (span && span->IsRecording()){
-    auto text = "TRACE SPAN " + span_label + " active";
-    dout(10) << text<< dendl;
-  }
-  std::swap(span, context<ScrubMachine>().m_tracer);
+  context<ScrubMachine>().push_span(
+      fmt::format("{}_primary_PrimaryActive/Session", pg_id.pgid));
 }
 
 Session::~Session()
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  machine.pop_span();
   m_reservations.reset();
   machine.m_session_started_at.reset();
 
@@ -298,14 +283,13 @@ ReservingReplicas::ReservingReplicas(my_context ctx)
     post_event(RemotesReserved{});
   }
 
-  auto span_label = fmt::format("{}_primary_PrimaryActive/Session/ReservingReplicas", pg_id.pgid);
-  auto span = tracing::scrubber::tracer.add_span(span_label, context<ScrubMachine>().m_tracer);
-  if (span && span->IsRecording()){
-    auto text = "TRACE SPAN " + span_label + " active";
-    dout(10) << text<< dendl;
-  }
-  context<ScrubMachine>().m_parent_trace = context<ScrubMachine>().m_tracer; // parent trace, _primary_PrimaryActive/Session/
-  // std::swap(span, context<ScrubMachine>().m_tracer); no need to swap because we aren't extending down the chain
+  context<ScrubMachine>().push_span(
+      fmt::format("{}_primary_PrimaryActive/Session/ReservingReplicas", pg_id.pgid));
+}
+
+ReservingReplicas::~ReservingReplicas()
+{
+  context<ScrubMachine>().pop_span();
 }
 
 sc::result ReservingReplicas::react(const ReplicaGrant& ev)
@@ -370,13 +354,8 @@ ActiveScrubbing::ActiveScrubbing(my_context ctx)
 
   scrbr->on_init();
 
-  auto span_label = fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing", pg_id.pgid);
-  auto span = tracing::scrubber::tracer.add_span(span_label, context<ScrubMachine>().m_parent_trace);
-  if (span && span->IsRecording()){
-    auto text = "TRACE SPAN " + span_label + " active";
-    dout(10) << text<< dendl;
-  }
-  std::swap(span, context<ScrubMachine>().m_tracer);
+  context<ScrubMachine>().push_span(
+      fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing", pg_id.pgid));
 }
 
 /**
@@ -385,6 +364,7 @@ ActiveScrubbing::ActiveScrubbing(my_context ctx)
 ActiveScrubbing::~ActiveScrubbing()
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  machine.pop_span();
   auto& session = context<Session>();
   dout(15) << __func__ << dendl;
 
@@ -420,6 +400,8 @@ RangeBlocked::RangeBlocked(my_context ctx)
 {
   dout(10) << "-- state -->> Session/Act/RangeBlocked" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  machine.push_span(
+      fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing/RangeBlocked", pg_id.pgid));
 
   auto grace = scrbr->get_range_blocked_grace();
   if (grace == ceph::timespan{}) {
@@ -460,6 +442,11 @@ sc::result RangeBlocked::react(const RangeBlockedAlarm&)
   return discard_event();
 }
 
+RangeBlocked::~RangeBlocked()
+{
+  context<ScrubMachine>().pop_span();
+}
+
 // ----------------------- PendingTimer -----------------------------------
 
 /**
@@ -472,8 +459,11 @@ PendingTimer::PendingTimer(my_context ctx)
   dout(10) << "-- state -->> Session/Act/PendingTimer" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
 
+  machine.push_span(
+      fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing/PendingTimer", pg_id.pgid));
+
   auto sleep_time = scrbr->get_scrub_sleep_time();
-  
+
   if (sleep_time.count()) {
     // the following log line is used by osd-scrub-test.sh
     dout(20) << __func__ << " scrub state is PendingTimer, sleeping" << dendl;
@@ -482,15 +472,6 @@ PendingTimer::PendingTimer(my_context ctx)
 	     << " sleeping for " << sleep_time << dendl;
     m_sleep_timer = machine.schedule_timer_event_after<SleepComplete>(
       sleep_time);
-
-  auto span_label = fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing/PendingTimer", pg_id.pgid);
-  auto span = tracing::scrubber::tracer.add_span(span_label, context<ScrubMachine>().m_tracer);
-  if (span && span->IsRecording()){
-    auto text = "TRACE SPAN " + span_label + " active";
-    dout(10) << text<< dendl;
-  }
-  context<ScrubMachine>().m_parent_trace = context<ScrubMachine>().m_tracer; // parent trace, _primary_PrimaryActive/Session/ActiveScrubbing/
-  // std::swap(span, context<ScrubMachine>().m_tracer); no need to swap because we aren't extending down the chain
   } else {
     scrbr->queue_for_scrub_resched(Scrub::scrub_prio_t::high_priority);
   }
@@ -507,6 +488,11 @@ sc::result PendingTimer::react(const SleepComplete&)
 
   scrbr->queue_for_scrub_resched(Scrub::scrub_prio_t::low_priority);
   return discard_event();
+}
+
+PendingTimer::~PendingTimer()
+{
+  context<ScrubMachine>().pop_span();
 }
 
 // ----------------------- NewChunk -----------------------------------
@@ -530,15 +516,8 @@ NewChunk::NewChunk(my_context ctx)
   //  ChunkIsBusy. If 'busy', we transition to Blocked, and wait for the
   //  range to become available.
   scrbr->select_range_n_notify();
-  // auto span_label = fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing/NewChunk", pg_id.pgid);
-  // auto span = tracing::scrubber::tracer.add_span(span_label, trace);
-  // std::swap(span, trace);
-  auto span_label = fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing/NewChunk", pg_id.pgid);
-  auto span = tracing::scrubber::tracer.add_span(span_label, context<ScrubMachine>().m_tracer);
-  if (span && span->IsRecording()){
-    auto text = "TRACE SPAN " + span_label + " active";
-    dout(10) << text<< dendl;
-  }
+  machine.push_span(
+      fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing/NewChunk", pg_id.pgid));
 }
 
 sc::result NewChunk::react(const SelectedChunkFree&)
@@ -550,18 +529,27 @@ sc::result NewChunk::react(const SelectedChunkFree&)
   return transit<WaitPushes>();
 }
 
+NewChunk::~NewChunk()
+{
+  context<ScrubMachine>().pop_span();
+}
+
 // ----------------------- WaitPushes -----------------------------------
 
 WaitPushes::WaitPushes(my_context ctx)
     : my_base(ctx)
     , NamedSimply(context<ScrubMachine>().m_scrbr, "Session/Act/WaitPushes")
 {
-  DECLARE_LOCALS;  
+  DECLARE_LOCALS;
   dout(10) << " -- state -->> Session/Act/WaitPushes" << dendl;
-  auto span_label = fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing/WaitPushes", pg_id.pgid);
-  auto span = tracing::scrubber::tracer.add_span(span_label, context<ScrubMachine>().m_tracer);
+  machine.push_span(
+      fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing/WaitPushes", pg_id.pgid));
   post_event(ActivePushesUpd{});
-  
+}
+
+WaitPushes::~WaitPushes()
+{
+  context<ScrubMachine>().pop_span();
 }
 
 /*
@@ -590,9 +578,14 @@ WaitLastUpdate::WaitLastUpdate(my_context ctx)
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << " -- state -->> Session/Act/WaitLastUpdate" << dendl;
-  auto span_label = fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing/WaitLastUpdate", pg_id.pgid);
-  auto span = tracing::scrubber::tracer.add_span(span_label, context<ScrubMachine>().m_tracer);
+  machine.push_span(
+      fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing/WaitLastUpdate", pg_id.pgid));
   post_event(UpdatesApplied{});
+}
+
+WaitLastUpdate::~WaitLastUpdate()
+{
+  context<ScrubMachine>().pop_span();
 }
 
 /**
@@ -625,8 +618,8 @@ sc::result WaitLastUpdate::react(const InternalAllUpdates&)
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << "WaitLastUpdate::react(const InternalAllUpdates&)" << dendl;
 
-  auto& tracer = context<ScrubMachine>().m_tracer;
-  auto ctx = tracer ? tracer->GetContext() : jspan_context{false, false};
+  auto& span = context<ScrubMachine>().current_span();
+  auto ctx = span ? span->GetContext() : jspan_context{false, false};
   scrbr->get_replicas_maps(scrbr->get_preemptor().is_preemptable(), ctx);
   return transit<BuildMap>();
 }
@@ -643,9 +636,8 @@ BuildMap::BuildMap(my_context ctx)
 
   // no need to check for an epoch change, as all possible flows that brought
   // us here have a check_interval() verification of their final event.
-  auto span_label = fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing/BuildMap", pg_id.pgid);
-  auto span = tracing::scrubber::tracer.add_span(span_label, context<ScrubMachine>().m_tracer);
-
+  machine.push_span(
+      fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing/BuildMap", pg_id.pgid));
 
   if (scrbr->get_preemptor().was_preempted()) {
 
@@ -672,6 +664,11 @@ BuildMap::BuildMap(my_context ctx)
   }
 }
 
+BuildMap::~BuildMap()
+{
+  context<ScrubMachine>().pop_span();
+}
+
 sc::result BuildMap::react(const IntLocalMapDone&)
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
@@ -688,8 +685,16 @@ DrainReplMaps::DrainReplMaps(my_context ctx)
     , NamedSimply(context<ScrubMachine>().m_scrbr, "Session/Act/DrainReplMaps")
 {
   dout(10) << "-- state -->> Session/Act/DrainReplMaps" << dendl;
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  machine.push_span(
+      fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing/DrainReplMaps", pg_id.pgid));
   // we may have got all maps already. Send the event that will make us check.
   post_event(GotReplicas{});
+}
+
+DrainReplMaps::~DrainReplMaps()
+{
+  context<ScrubMachine>().pop_span();
 }
 
 sc::result DrainReplMaps::react(const GotReplicas&)
@@ -716,9 +721,14 @@ WaitReplicas::WaitReplicas(my_context ctx)
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << "-- state -->> Session/Act/WaitReplicas" << dendl;
-  auto span_label = fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing/WaitReplicas", pg_id.pgid);
-  auto span = tracing::scrubber::tracer.add_span(span_label, context<ScrubMachine>().m_tracer);
+  machine.push_span(
+      fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing/WaitReplicas", pg_id.pgid));
   post_event(GotReplicas{});
+}
+
+WaitReplicas::~WaitReplicas()
+{
+  context<ScrubMachine>().pop_span();
 }
 
 /**
@@ -780,14 +790,18 @@ WaitDigestUpdate::WaitDigestUpdate(my_context ctx)
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << "-- state -->> Session/Act/WaitDigestUpdate" << dendl;
 
-  auto span_label = fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing/WaitDigestUpdate", pg_id.pgid);
-  auto span = tracing::scrubber::tracer.add_span(span_label, context<ScrubMachine>().m_tracer);
-  std::swap(span, context<ScrubMachine>().m_tracer);
+  machine.push_span(
+      fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing/WaitDigestUpdate", pg_id.pgid));
 
   // perform an initial check: maybe we already
   // have all the updates we need:
   // (note that DigestUpdate is usually an external event)
   post_event(DigestUpdate{});
+}
+
+WaitDigestUpdate::~WaitDigestUpdate()
+{
+  context<ScrubMachine>().pop_span();
 }
 
 sc::result WaitDigestUpdate::react(const DigestUpdate&)
@@ -823,13 +837,48 @@ sc::result WaitDigestUpdate::react(const ScrubFinished&)
   return transit<PrimaryIdle>();
 }
 
-ScrubMachine::ScrubMachine(PG* pg, ScrubMachineListener* pg_scrub, jspan_ptr parent_span)
+ScrubMachine::ScrubMachine(PG* pg, ScrubMachineListener* pg_scrub, jspan_ptr root_span)
     : m_pg_id{pg->pg_id}
     , m_scrbr{pg_scrub}
-    , m_tracer{parent_span}
-{}
+{
+  // seed the stack with the root span so the first state has a parent
+  if (root_span) {
+    m_span_stack.push_back(std::move(root_span));
+  }
+}
 
 ScrubMachine::~ScrubMachine() = default;
+
+static const jspan_ptr empty_jspan_ptr;
+
+const jspan_ptr& ScrubMachine::current_span() const
+{
+  return m_span_stack.empty() ? empty_jspan_ptr : m_span_stack.back();
+}
+
+void ScrubMachine::push_span(const std::string& label)
+{
+  auto span = tracing::scrubber::tracer.add_span(label, current_span());
+  m_span_stack.push_back(std::move(span));
+}
+
+void ScrubMachine::push_span(const std::string& label, const jspan_context& parent_ctx)
+{
+  auto span = tracing::scrubber::tracer.add_span(label, parent_ctx);
+  m_span_stack.push_back(std::move(span));
+}
+
+void ScrubMachine::pop_span()
+{
+  if (!m_span_stack.empty()) {
+    m_span_stack.pop_back();
+  }
+}
+
+void ScrubMachine::clear_spans()
+{
+  m_span_stack.clear();
+}
 
 
 // -------- for replicas -----------------------------------------------------
@@ -1045,7 +1094,10 @@ ReplicaIdle::ReplicaIdle(my_context ctx)
     , NamedSimply(context<ScrubMachine>().m_scrbr, "ReplicaActive/ReplicaIdle")
 {
   dout(10) << "-- state -->> ReplicaActive/ReplicaIdle" << dendl;
+  context<ScrubMachine>().clear_spans();
 }
+
+ReplicaIdle::~ReplicaIdle() = default;
 
 
 sc::result ReplicaIdle::react(const StartReplica& ev)
@@ -1075,18 +1127,11 @@ ReplicaActiveOp::ReplicaActiveOp(my_context ctx)
 {
   dout(10) << "-- state -->> ReplicaActive/ReplicaActiveOp" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  auto span_label = fmt::format("{}_replica_ReplicaActive/ReplicaActiveOp", pg_id.pgid);
   // Use the trace context propagated from the primary via MOSDRepScrub so that
   // replica spans are linked under the same trace as the primary.
-  auto& primary_ctx = context<ScrubMachine>().m_replica_parent_ctx;
-  auto span = tracing::scrubber::tracer.add_span(span_label, primary_ctx);
-  if (span && span->IsRecording()) {
-    dout(10) << "REPLICA TRACE SPAN " << span_label << " active" << dendl;
-  } else {
-    dout(10) << "REPLICA TRACE SPAN " << span_label << " inactive (no primary context)" << dendl;
-  }
-  context<ScrubMachine>().m_parent_trace = context<ScrubMachine>().m_tracer;
-  std::swap(span, context<ScrubMachine>().m_tracer);
+  machine.push_span(
+      fmt::format("{}_replica_ReplicaActive/ReplicaActiveOp", pg_id.pgid),
+      machine.m_replica_parent_ctx);
   scrbr->on_replica_init();
 }
 
@@ -1095,6 +1140,7 @@ ReplicaActiveOp::~ReplicaActiveOp()
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << __func__ << dendl;
+  machine.pop_span();
   scrbr->replica_handling_done();
 }
 
@@ -1133,15 +1179,13 @@ ReplicaWaitUpdates::ReplicaWaitUpdates(my_context ctx)
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << "-- state -->> ReplicaActive/ReplicaActiveOp/ReplicaWaitUpdates"
 	   << dendl;
-  auto span_label = fmt::format("{}_replica_ReplicaActive/ReplicaActiveOp/ReplicaWaitUpdates", pg_id.pgid);
-  if (context<ScrubMachine>().m_tracer && context<ScrubMachine>().m_tracer->IsRecording()){
-    auto text = "REPLICA TRACE SPAN " + span_label + " active";
-    dout(10) << text<< dendl;
-  } else {
-    auto text = "REPLICA TRACE SPAN " + span_label + " inactive";
-    dout(10) << text<< dendl;
-  }
-  auto span = tracing::scrubber::tracer.add_span(span_label, context<ScrubMachine>().m_tracer);
+  machine.push_span(
+      fmt::format("{}_replica_ReplicaActive/ReplicaActiveOp/ReplicaWaitUpdates", pg_id.pgid));
+}
+
+ReplicaWaitUpdates::~ReplicaWaitUpdates()
+{
+  context<ScrubMachine>().pop_span();
 }
 
 
@@ -1174,9 +1218,14 @@ ReplicaBuildingMap::ReplicaBuildingMap(my_context ctx)
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << "-- state -->> ReplicaActive/ReplicaActiveOp/ReplicaBuildingMap"
 	   << dendl;
-  auto span_label = fmt::format("{}_replica_ReplicaActive/ReplicaActiveOp/ReplicaBuildingMap", pg_id.pgid);
-  auto span = tracing::scrubber::tracer.add_span(span_label, context<ScrubMachine>().m_tracer);
+  machine.push_span(
+      fmt::format("{}_replica_ReplicaActive/ReplicaActiveOp/ReplicaBuildingMap", pg_id.pgid));
   post_event(SchedReplica{});
+}
+
+ReplicaBuildingMap::~ReplicaBuildingMap()
+{
+  context<ScrubMachine>().pop_span();
 }
 
 
