@@ -285,6 +285,8 @@ void InstanceReplayer<I>::acquire_group(InstanceWatcher<I> *instance_watcher,
     // detect if the group has been deleted while the leader was offline
     auto& group_replayer = it->second;
     group_replayer->set_finished(false);
+    dout(10) << "duplicate notification received, restarting: "
+             << group_replayer << dendl;
     group_replayer->restart(new C_TrackedOp(m_async_op_tracker, nullptr));
   }
 
@@ -308,14 +310,11 @@ void InstanceReplayer<I>::release_group(const std::string &global_group_id,
   }
 
   auto group_replayer = it->second;
-  if (group_replayer->is_finished()) {
-    m_group_replayers.erase(it);
-  }
+  m_group_replayers.erase(it);
+
   on_finish = new LambdaContext(
     [group_replayer, on_finish] (int r) {
-      if (group_replayer->is_finished()) {
-        group_replayer->destroy();
-      }
+      group_replayer->destroy();
       on_finish->complete(0);
     });
   stop_group_replayer(group_replayer, on_finish);
