@@ -192,17 +192,13 @@ public:
   }
   void show_config(ceph::Formatter* f) const;
 
-  seastar::future<> parse_argv(std::vector<const char*>& argv) {
-    // we could pass whatever is unparsed to seastar, but seastar::app_template
-    // is used for driving the seastar application, and
-    // crimson::common::ConfigProxy is not available until seastar engine is up
-    // and running, so we have to feed the command line args to app_template
-    // first, then pass them to ConfigProxy.
-    return do_change([&argv, this](ConfigValues& values) {
-      get_config().parse_argv(values,
-			      obs_mgr,
-			      argv,
-			      CONF_CMDLINE);
+  seastar::future<> parse_argv(std::vector<std::string> args) {
+    // Take args by value so the lambda can safely be invoked on another shard
+    return do_change([args = std::move(args), this](ConfigValues& values) {
+      std::vector<const char*> argv;
+      argv.reserve(args.size());
+      for (const auto& s : args) argv.push_back(s.c_str());
+      get_config().parse_argv(values, obs_mgr, argv, CONF_CMDLINE);
     });
   }
 

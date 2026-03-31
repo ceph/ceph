@@ -135,3 +135,21 @@ target_link_libraries(
   unittest-crimson-scrub
   crimson-common
   crimson::gtest)
+
+add_executable(unittest-crimson-pg-pool-shift
+  test_pg_pool_shift.cc)
+add_ceph_test(unittest-crimson-pg-pool-shift
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest-crimson-pg-pool-shift
+  --memory 256M --smp 1)
+target_link_libraries(unittest-crimson-pg-pool-shift
+  crimson-common
+  crimson::gtest)
+
+add_executable(unittest-crimson-objecter
+  test_objecter.cc)
+add_ceph_test(unittest-crimson-objecter
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest-crimson-objecter
+  --memory 256M --smp 1)
+target_link_libraries(unittest-crimson-objecter
+  crimson
+  crimson::gtest)
