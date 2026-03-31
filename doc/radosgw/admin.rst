@@ -622,6 +622,31 @@ commands, as in the following examples:
    be restarted for the changes to take effect.
 
 
+.. _radosgw-bucket-prune:
+
+Pruning a Bucket
+================
+
+The ``bucket prune`` command removes all objects from a bucket while leaving
+the bucket itself and its policies (ACL, lifecycle configuration, etc.) intact.
+This differs from ``bucket rm``, which deletes the bucket entirely.
+
+Objects are deleted and queued to garbage collection as normal:
+
+.. prompt:: bash #
+
+   radosgw-admin bucket prune --bucket=<bucket-name>
+
+To remove objects via async AIO instead, bypassing garbage collection, use
+``--bypass-gc``:
+
+.. prompt:: bash #
+
+   radosgw-admin bucket prune --bucket=<bucket-name> --bypass-gc
+
+.. note:: ``bucket prune`` is only supported by the rados driver. Other
+   drivers (dbstore, daos, motr, posix) return ``-ENOTSUP``.
+
 .. _radosgw-rate-limit-management:
 
 Rate Limit Management

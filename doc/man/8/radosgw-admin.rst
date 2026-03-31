@@ -103,6 +103,12 @@ as follows:
 :command:`bucket rm`
   Remove a bucket.
 
+:command:`bucket prune`
+  Remove all objects from a bucket while leaving the bucket itself and
+  its policies (ACL, lifecycle, etc.) intact. Objects are queued to
+  garbage collection as normal. Use ``--bypass-gc`` to remove objects
+  via async AIO instead, skipping garbage collection.
+
 :command:`bucket check`
   Check bucket index.
 
