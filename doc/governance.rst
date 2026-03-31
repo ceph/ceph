@@ -112,7 +112,7 @@ Current Members
  * Radoslaw Zarzynski <rzarzyns@redhat.com>
  * Sam Just <sjust@redhat.com>
  * Venky Shankar <vshankar@redhat.com>
- * Vikhyat Umrao <vikhyat@redhat.com>
+ * Vikhyat Umrao <vikhyat@ibm.com>
  * Xie Xingguo <xie.xingguo@zte.com.cn>
  * Yaarit Hatuka <yhatuka@ibm.com>
  * Yehuda Sadeh <yehuda@redhat.com>
