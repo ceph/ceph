@@ -790,7 +790,7 @@ void EMetaBlob::remotebit::dump(Formatter *f) const
   case S_IFSOCK:
     type_string = "sock"; break;
   default:
-    assert (0 == "unknown d_type!");
+    ceph_abort_msg("unknown d_type");
   }
   f->dump_string("d_type", type_string);
   f->dump_string("dirty", dirty ? "true" : "false");

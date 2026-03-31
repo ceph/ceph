@@ -239,7 +239,7 @@ protected:
   virtual void _spillover_range(uint64_t start, uint64_t end) {
     // this should be overriden when range count cap is present,
     // i.e. (range_count_cap > 0)
-    ceph_assert(false);
+    ceph_abort();
   }
   // to be overriden by Hybrid wrapper
   virtual uint64_t _get_spilled_over() const {
@@ -252,7 +252,7 @@ protected:
     PExtentVector* extents) {
     // this should be overriden when range count cap is present,
     // i.e. (range_count_cap > 0)
-    ceph_assert(false);
+    ceph_abort();
     return 0;
   }
 

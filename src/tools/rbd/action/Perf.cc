@@ -235,7 +235,7 @@ void format_stat(StatDescriptor stat_descriptor, double stat,
     }
     break;
   default:
-    ceph_assert(false);
+    ceph_abort();
     break;
   }
 }
@@ -290,7 +290,7 @@ void format(const ImageStats& image_stats, Formatter* f, bool global_search) {
         title = "RD_LAT ";
         break;
       default:
-        ceph_assert(false);
+        ceph_abort();
         break;
       }
       tbl.define_column(title, TextTable::RIGHT, TextTable::RIGHT);
@@ -439,7 +439,7 @@ private:
         title = "READ LAT";
         break;
       default:
-        ceph_assert(false);
+        ceph_abort();
         break;
       }
       m_columns[pair.first] = (title);

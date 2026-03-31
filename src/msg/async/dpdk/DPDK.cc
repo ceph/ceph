@@ -1366,7 +1366,7 @@ std::unique_ptr<DPDKDevice> create_dpdk_net_device(
 {
   // Check that we have at least one DPDK-able port
   if (rte_eth_dev_count_avail() == 0) {
-    ceph_assert(false && "No Ethernet ports - bye\n");
+    ceph_abort_msg("no ethernet ports available");
   } else {
     ldout(cct, 10) << __func__ << " ports number: " << int(rte_eth_dev_count_avail()) << dendl;
   }

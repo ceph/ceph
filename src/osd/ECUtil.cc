@@ -1141,7 +1141,7 @@ std::ostream &operator<<(std::ostream &out, const log_entry_t &rhs) {
   case COMPLETE: out << "COMPLETE";
     break;
   default:
-    ceph_assert(false);
+    ceph_abort();
   }
   return out << "[" << rhs.shard << "]->" << rhs.io << "\n";
 }

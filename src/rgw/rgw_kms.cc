@@ -88,7 +88,7 @@ public:
 	return r;
     }
     static void Free(void *p) {
-	ceph_assert(0 == "Free should not be called");
+	ceph_abort_msg("Free should not be called");
     }
 private:
     //! Copy constructor is not permitted.
