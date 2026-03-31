@@ -837,6 +837,19 @@ int FilterBucket::remove_bypass_gc(int concurrent_max,
   return next->remove_bypass_gc(concurrent_max, keep_index_consistent, y, dpp);
 }
 
+int FilterBucket::prune(const DoutPrefixProvider* dpp, bool delete_children, optional_yield y)
+{
+  return next->prune(dpp, delete_children, y);
+}
+
+int FilterBucket::prune_bypass_gc(int concurrent_max,
+					 bool keep_index_consistent,
+					 optional_yield y,
+					 const DoutPrefixProvider* dpp)
+{
+  return next->prune_bypass_gc(concurrent_max, keep_index_consistent, y, dpp);
+}
+
 int FilterBucket::set_acl(const DoutPrefixProvider* dpp,
 			  RGWAccessControlPolicy &acl, optional_yield y)
 {
