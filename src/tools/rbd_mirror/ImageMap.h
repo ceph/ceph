@@ -132,7 +132,6 @@ private:
   }
 
   void handle_peer_ack(const image_map::GlobalId &global_id, int r);
-  void handle_peer_ack_remove(const image_map::GlobalId &global_id, int r);
 
   void handle_load(const std::map<image_map::GlobalId,
                                   cls::rbd::MirrorImageMap> &image_mapping);
