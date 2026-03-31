@@ -1037,6 +1037,9 @@ class API:
 
 class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     MGR_POOL_NAME = ".mgr"
+    # if this is changed, ensure the cephfs recovery tools
+    # also know about it.
+    AUDIT_POOL_NAME = ".audit"
 
     # Priority definitions for perf counters
     PRIO_CRITICAL = 10
@@ -1232,6 +1235,14 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             self.log.debug("creating new mgr pool")
             self.create_pool(self.MGR_POOL_NAME)
             self.appify_pool(self.MGR_POOL_NAME, 'mgr')
+
+    @API.perm('w')
+    @API.expose
+    def create_audit_pool(self) -> None:
+        if not self.pool_exists(self.AUDIT_POOL_NAME):
+            self.log.debug("creating audit pool")
+            self.create_pool(self.AUDIT_POOL_NAME)
+            self.appify_pool(self.AUDIT_POOL_NAME, 'auditman')
 
     def create_skeleton_schema(self, db: sqlite3.Connection) -> None:
         SQL = [
