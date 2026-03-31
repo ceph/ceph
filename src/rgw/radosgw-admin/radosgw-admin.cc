@@ -730,6 +730,7 @@ enum class OPT {
   BUCKET_SYNC_DISABLE,
   BUCKET_SYNC_ENABLE,
   BUCKET_RM,
+  BUCKET_PRUNE,
   BUCKET_REWRITE,
   BUCKET_RESHARD,
   BUCKET_SET_MIN_SHARDS,
@@ -981,6 +982,7 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket sync disable", OPT::BUCKET_SYNC_DISABLE },
   { "bucket sync enable", OPT::BUCKET_SYNC_ENABLE },
   { "bucket rm", OPT::BUCKET_RM },
+  { "bucket prune", OPT::BUCKET_PRUNE },
   { "bucket rewrite", OPT::BUCKET_REWRITE },
   { "bucket reshard", OPT::BUCKET_RESHARD },
   { "bucket set-min-shards", OPT::BUCKET_SET_MIN_SHARDS },
@@ -9296,6 +9298,14 @@ next:
       return 0;
     }
     RGWBucketAdminOp::check_index_unlinked(store, bucket_op, stream_flusher, dpp());
+  }
+
+  if (opt_cmd == OPT::BUCKET_PRUNE) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket name required" << std::endl;
+      return 1;
+    }
+    RGWBucketAdminOp::prune_bucket(driver, bucket_op, null_yield, dpp(), bypass_gc, true);
   }
 
   if (opt_cmd == OPT::BUCKET_RM) {
