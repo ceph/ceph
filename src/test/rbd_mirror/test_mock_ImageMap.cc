@@ -715,6 +715,102 @@ TEST_F(TestMockImageMap, AddRemoveRemoteImageDuplicateNotification) {
   ASSERT_EQ(0, when_shut_down(mock_image_map.get()));
 }
 
+// Test plan:
+// 1. Add an image for a remote peer and finish the initial acquire.
+// 2. Remove the image, but keep the remove ACK pending.
+// 3. Add the same image again before the old ACK arrives.
+// 4. Send the old remove ACK and check that it does not remove the new entry.
+// 5. Remove the image again. A removal notification shows that the new entry
+//    was kept.
+TEST_F(TestMockImageMap, RemoveReaddRemoteImageBeforeRemoveAck) {
+  MockThreads mock_threads(m_threads);
+  expect_work_queue(mock_threads);
+
+  InSequence seq;
+
+  MockLoadRequest mock_load_request;
+  expect_load_request(mock_load_request, 0);
+
+  MockListener mock_listener(this);
+
+  std::unique_ptr<MockImageMap> mock_image_map{
+    MockImageMap::create(m_local_io_ctx, &mock_threads, m_local_instance_id,
+                         mock_listener)};
+
+  C_SaferCond cond;
+  mock_image_map->init(&cond);
+  ASSERT_EQ(0, cond.wait());
+
+  std::set<std::string> global_image_ids{"global id 1"};
+  MockUpdateRequest mock_update_request;
+  std::map<std::string, Context*> peer_ack_ctxs;
+
+  // Add the image for uuid1 and save the mapping.
+  expect_add_event(mock_threads);
+  expect_update_request(mock_update_request, 0);
+  expect_add_event(mock_threads);
+  listener_acquire_images(mock_listener, global_image_ids, &peer_ack_ctxs);
+
+  auto entities = make_image_entities(global_image_ids);
+  mock_image_map->update_images("uuid1", std::move(entities), {});
+  ASSERT_TRUE(wait_for_map_update(1));
+  ASSERT_TRUE(wait_for_listener_notify(1));
+  // Finish the first acquire. This ACK must not change who owns the image.
+  remote_peer_ack_nowait(mock_image_map.get(), global_image_ids, 0,
+                         &peer_ack_ctxs);
+
+  // Start removing the image, but keep the remove ACK pending. The mapping is
+  // removed now, even though the listener operation is not finished yet.
+  std::map<std::string, Context*> peer_remove_ack_ctxs;
+  listener_remove_images(mock_listener, "uuid1", global_image_ids,
+                         &peer_remove_ack_ctxs);
+  expect_add_event(mock_threads);
+  listener_release_images(mock_listener, global_image_ids, &peer_ack_ctxs);
+  update_map_request(mock_threads, mock_update_request, global_image_ids, 0);
+  update_map_and_acquire(mock_threads, mock_update_request, mock_listener,
+                         global_image_ids, 0, &peer_ack_ctxs);
+
+  // Remove uuid1's last entry. ImageMap should erase it and notify the
+  // listener right away.
+  entities = make_image_entities(global_image_ids);
+  mock_image_map->update_images("uuid1", {}, std::move(entities));
+  ASSERT_TRUE(wait_for_listener_notify(2));
+
+  // Add the image again before the old remove ACK arrives. uuid1 should be
+  // present again in the current mapping.
+  entities = make_image_entities(global_image_ids);
+  mock_image_map->update_images("uuid1", std::move(entities), {});
+
+  // Finish the old remove ACK before the release ACK. It must not remove the
+  // mapping created by the second add.
+  remote_peer_ack_nowait(mock_image_map.get(), global_image_ids, 0,
+                         &peer_remove_ack_ctxs);
+  remote_peer_ack_wait(mock_image_map.get(), global_image_ids, 0,
+                       &peer_ack_ctxs);
+  ASSERT_TRUE(wait_for_listener_notify(1));
+  remote_peer_ack_nowait(mock_image_map.get(), global_image_ids, 0,
+                         &peer_ack_ctxs);
+
+  // Remove the image again. This notification proves that the second add was
+  // not undone by the old ACK.
+  listener_remove_images(mock_listener, "uuid1", global_image_ids,
+                         &peer_remove_ack_ctxs);
+  expect_add_event(mock_threads);
+  listener_release_images(mock_listener, global_image_ids, &peer_ack_ctxs);
+  update_map_request(mock_threads, mock_update_request, global_image_ids, 0);
+
+  entities = make_image_entities(global_image_ids);
+  mock_image_map->update_images("uuid1", {}, std::move(entities));
+  ASSERT_TRUE(wait_for_listener_notify(2));
+  remote_peer_ack_nowait(mock_image_map.get(), global_image_ids, 0,
+                         &peer_remove_ack_ctxs);
+  remote_peer_ack_wait(mock_image_map.get(), global_image_ids, 0,
+                       &peer_ack_ctxs);
+
+  wait_for_scheduled_task();
+  ASSERT_EQ(0, when_shut_down(mock_image_map.get()));
+}
+
 TEST_F(TestMockImageMap, AcquireImageErrorRetry) {
   MockThreads mock_threads(m_threads);
   expect_work_queue(mock_threads);
