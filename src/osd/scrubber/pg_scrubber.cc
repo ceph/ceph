@@ -1266,6 +1266,8 @@ void PgScrubber::_request_scrub_map(pg_shard_t replica,
 				     m_flags.priority,
 				     m_pg->ops_blocked_by_scrub());
   repscrubop->otel_trace = parent_ctx;
+  dout(10) << __func__ << " osd." << replica
+	   << " otel_trace_valid=" << parent_ctx.IsValid() << dendl;
 
   // default priority. We want the replica-scrub processed prior to any recovery
   // or client io messages (we are holding a lock!)
@@ -1661,7 +1663,9 @@ void PgScrubber::replica_scrub_op(OpRequestRef op)
   replica_scrubmap = ScrubMap{};
   replica_scrubmap_pos = ScrubMapBuilder{};
 
-  // m_fsm->m_replica_parent_ctx = msg->otel_trace;
+  bool otel_valid = msg->otel_trace.IsValid();
+  dout(10) << __func__ << " pg:" << m_pg->pg_id
+	   << " otel_trace_valid=" << otel_valid << dendl;
   m_fsm->set_replica_parent_ctx(msg->otel_trace);
   m_replica_min_epoch = msg->min_epoch;
   m_start = msg->start;
@@ -2685,7 +2689,12 @@ PgScrubber::PgScrubber(PG* pg)
     , preemption_data{pg}
 {
   tracing::scrubber::tracer.init(m_osds->cct, "pg_scrubber");
+  bool tracer_enabled = tracing::scrubber::tracer.is_enabled();
   auto scrubber_parent_span = tracing::scrubber::tracer.start_trace("pg-scrubber-initialized");
+  bool root_recording = scrubber_parent_span && scrubber_parent_span->IsRecording();
+  dout(10) << "PgScrubber::ctor pg=" << m_pg->pg_id
+	   << " tracer_enabled=" << tracer_enabled
+	   << " root_span_recording=" << root_recording << dendl;
   m_fsm = std::make_unique<ScrubMachine>(m_pg, this, scrubber_parent_span);
   m_fsm->initiate();
   m_scrub_job.emplace(m_osds->cct, m_pg->pg_id, m_osds->get_nodeid());
