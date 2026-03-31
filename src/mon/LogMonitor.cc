@@ -567,6 +567,7 @@ void LogMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   dout(20) << __func__ << " writing " << num << " entries" << dendl;
   for (auto& p : pending_log) {
     bufferlist ebl;
+    p.second.epoch = version;
     p.second.encode(ebl, mon.get_quorum_con_features());
 
     auto& bounds = pending_channel_info[p.second.channel];
