@@ -3007,46 +3007,69 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
       return RECALC_OP_TARGET_POOL_DNE;
     }
   }
-  // pool migration
-  if (pi->is_migration_src()) {
-    const pg_pool_t *tpi = osdmap->get_pg_pool(*pi->migration_target);
-    bool migrated = false;
-    if (!tpi->is_migration_target()) {
-      // migration has finished
-      migrated = true;
-    } else {
-      const auto& iter = pool_migration_watermarks.find(t->target_oloc.pool);
-      if (iter != pool_migration_watermarks.end()) {
-	if (t->get_hobj() < iter->second) {
-	  // object has been migrated
-	  migrated = true;
-	}
-      }
-    }
-    if (migrated) {
-      t->target_oloc.pool = *pi->migration_target;
-      pi = tpi;
-      if (!pi) {
-	t->osd = -1;
-	return RECALC_OP_TARGET_POOL_DNE;
-      }
-      if (pi->has_flag(pg_pool_t::FLAG_EIO)) {
-	return RECALC_OP_TARGET_POOL_EIO;
-      }
-    }
-  }
   pg_t pgid;
+  unsigned pg_num = pi->get_pg_num();
+  unsigned pg_num_mask = pi->get_pg_num_mask();
+  ps_t actual_ps;
+  pg_t actual_pgid;
   if (t->precalc_pgid) {
     ceph_assert(t->flags & CEPH_OSD_FLAG_IGNORE_OVERLAY);
-    ceph_assert(t->base_oid.name.empty()); // make sure this is a pg op
+    ceph_assert(t->base_oid.name.empty()); // make sure this is a pg op (not redirected by pool migration)
     ceph_assert(t->base_oloc.pool == (int64_t)t->base_pgid.pool());
     pgid = t->base_pgid;
+    actual_ps = ceph_stable_mod(pgid.ps(), pg_num, pg_num_mask);
+    actual_pgid = pg_t(actual_ps, pgid.pool());
   } else {
     int ret = osdmap->object_locator_to_pg(t->target_oid, t->target_oloc,
-					   pgid);
+                                           pgid);
     if (ret == -ENOENT) {
       t->osd = -1;
       return RECALC_OP_TARGET_POOL_DNE;
+    }
+    actual_ps = ceph_stable_mod(pgid.ps(), pg_num, pg_num_mask);
+    actual_pgid = pg_t(actual_ps, pgid.pool());
+    if (pi->is_migration_src()) {
+      // pool is migrating or has finished migration
+      const pg_pool_t *tpi = osdmap->get_pg_pool(*pi->migration_target);
+      if (!tpi) {
+        t->osd = -1;
+        return RECALC_OP_TARGET_POOL_DNE;
+      }
+      if (tpi->has_flag(pg_pool_t::FLAG_EIO)) {
+        return RECALC_OP_TARGET_POOL_EIO;
+      }
+      bool migrated = false;
+      if (!tpi->is_migration_target()) {
+        // pool migration has finished
+        migrated = true;
+      } else if (pi->has_pg_migrated(actual_pgid)) {
+        // PG has finished migration
+        migrated = true;
+      } else if (pi->is_pg_migrating(actual_pgid)) {
+        // PG is migrating - check watermark
+        const auto& iter = pool_migration_watermarks.find(actual_pgid);
+        if (iter != pool_migration_watermarks.end()) {
+          if (t->get_hobj() < iter->second) {
+            // object has been migrated
+            migrated = true;
+          }
+        }
+      } // else: PG has not started migration
+      if (migrated) {
+        t->target_oloc.pool = *pi->migration_target;
+        pi = tpi;
+        pg_num = pi->get_pg_num();
+        pg_num_mask = pi->get_pg_num_mask();
+        // Recalculate pgid for the target pool
+        int ret = osdmap->object_locator_to_pg(t->target_oid, t->target_oloc,
+                                               pgid);
+        if (ret == -ENOENT) {
+          t->osd = -1;
+          return RECALC_OP_TARGET_POOL_DNE;
+        }
+        actual_ps = ceph_stable_mod(pgid.ps(), pg_num, pg_num_mask);
+        actual_pgid = pg_t(actual_ps, pgid.pool());
+      }
     }
   }
   ldout(cct,20) << __func__ << " target " << t->target_oid << " "
@@ -3057,13 +3080,9 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
 
   int size = pi->size;
   int min_size = pi->min_size;
-  unsigned pg_num = pi->get_pg_num();
-  unsigned pg_num_mask = pi->get_pg_num_mask();
   unsigned pg_num_pending = pi->get_pg_num_pending();
   int up_primary, acting_primary;
   vector<int> up, acting;
-  ps_t actual_ps = ceph_stable_mod(pgid.ps(), pg_num, pg_num_mask);
-  pg_t actual_pgid(actual_ps, pgid.pool());
   if (!lookup_pg_mapping(actual_pgid, osdmap->get_epoch(), &up, &up_primary,
                          &acting, &acting_primary)) {
     osdmap->pg_to_up_acting_osds(actual_pgid, &up, &up_primary,
@@ -3780,7 +3799,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
       sul.unlock();
       sul.lock();
       r.update_migration_watermark(
-	  pool_migration_watermarks[op->target.target_oloc.pool]);
+         pool_migration_watermarks[m->get_pg()]);
     } else {
       r.combine_with_locator(op->target.target_oloc,
 			     op->target.target_oid.name);

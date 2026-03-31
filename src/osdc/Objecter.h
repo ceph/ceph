@@ -1828,10 +1828,11 @@ private:
       it++;
     }
   }
-  // Cache of pool migration watermarks for each pool. Cleared on each epoch
-  // and updated by the OSD providing the current watermark when redirecting
-  // a request to the target pool. Use rwlock for thread safety when accessing.
-  std::map<int64_t, hobject_t> pool_migration_watermarks;
+  // Cache of pool migration watermarks for each placement group. Cleared on
+  // each epoch and updated by the OSD providing the current watermark when
+  // redirecting a request to the target pool. Use rwlock for thread safety
+  // when accessing.
+  std::map<pg_t, hobject_t> pool_migration_watermarks;
 public:
   void maybe_request_map();
 
