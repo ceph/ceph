@@ -318,6 +318,23 @@ inline uint32_t num_shards(const bucket_index_layout_generation& index) {
   return num_shards(index.layout);
 }
 
+inline uint32_t num_shards(const bucket_fifo_log_layout& fifo) {
+  return fifo.num_shards > 0 ? fifo.num_shards : 1;
+}
+inline uint32_t num_shards(const bucket_log_layout& log) {
+  switch (log.type) {
+  case BucketLogType::InIndex:
+    return num_shards(log.in_index.layout);
+  case BucketLogType::FIFO:
+    return num_shards(log.fifo);
+  default:
+    return 0;
+  }
+}
+inline uint32_t num_shards(const bucket_log_layout_generation& log) {
+  return num_shards(log.layout);
+}
+
 inline uint32_t current_num_shards(const BucketLayout& layout) {
   return num_shards(layout.current_index);
 }
