@@ -19,11 +19,16 @@
 using ceph::containers::tiny_vector;
 
 RGWBILogFIFO::RGWBILogFIFO(neorados::RADOS rados,
-                             const neorados::IOContext& loc,
-                             std::span<const std::string> shard_oids)
-  : fifos(shard_oids.size(),
-          [&rados, &loc, &shard_oids](std::size_t i, auto emplacer) {
-            emplacer.emplace(rados, bilog_fifo_oid(shard_oids[i]), loc);
+                             const neorados::IOContext& log_pool,
+                             std::string_view bucket_id,
+                             uint64_t log_gen,
+                             uint32_t num_shards)
+  : fifos(num_shards,
+          [&rados, &log_pool, bucket_id, log_gen](std::size_t i, auto emplacer) {
+            emplacer.emplace(rados,
+                             bilog_fifo_oid(bucket_id, log_gen,
+                             static_cast<int>(i)),
+                             log_pool);
           })
 {}
 

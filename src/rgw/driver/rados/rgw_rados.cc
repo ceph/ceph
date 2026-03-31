@@ -10976,29 +10976,23 @@ RGWBILogUpdateBatch RGWRados::get_or_create_fifo_bilog_batch(
     }
   }
 
-  const auto& index_layout = rgw::log_to_index_layout(log_layout);
-  librados::IoCtx index_pool;
-  std::map<int, std::string> bucket_objs;
-  int r = svc.bi_rados->open_bucket_index(
-      dpp, bucket_info, std::nullopt, index_layout,
-      &index_pool, &bucket_objs, nullptr);
+  librados::IoCtx log_ioctx;
+  int r = rgw_init_ioctx(dpp, get_rados_handle(),
+                         svc.zone->get_zone_params().log_pool,
+                         log_ioctx, true, false);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__
-                      << ": open_bucket_index failed for "
-                      << bucket_info.bucket << ": " << cpp_strerror(r) << dendl;
-    // return a null fifo batch: callers can still call add_maybe_flush/flush safely
+                      << ": failed to open log pool: " << cpp_strerror(r) << dendl;
     return RGWBILogUpdateBatch(dpp, neo, nullptr);
   }
 
-  // build ordered shard OID vector.
-  std::vector<std::string> shard_oids;
-  shard_oids.reserve(bucket_objs.size());
-  for (auto& [/*shard_id*/_, oid] : bucket_objs) {
-    shard_oids.push_back(oid);
-  }
-
-  neorados::IOContext neo_loc(index_pool.get_id());
-  auto fifo = std::make_shared<RGWBILogFIFO>(neo, neo_loc, shard_oids);
+  neorados::IOContext neo_loc(log_ioctx.get_id());
+  const auto& fifo_layout = log_layout.layout.fifo;
+  auto fifo = std::make_shared<RGWBILogFIFO>(
+      neo, neo_loc,
+      bucket_info.bucket.bucket_id,
+      log_layout.gen,
+      fifo_layout.num_shards);
 
   {
     std::unique_lock wl(fifo_bilog_cache_lock_);

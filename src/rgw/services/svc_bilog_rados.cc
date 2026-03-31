@@ -3,6 +3,7 @@
 
 #include "svc_bilog_rados.h"
 #include "svc_bi_rados.h"
+#include "svc_zone.h"
 
 #include "rgw_asio_thread.h"
 #include "driver/rados/shard_io.h"
@@ -401,11 +402,12 @@ int RGWSI_BILog_RADOS_InIndex::get_log_status(
 
 // FIFO backend
 // ------------
-// each bucket shard keeps its bilog in a dedicated FIFO object whose name is
-// derived from the shard index OID via bilog_fifo_oid().  FIFO objects are
-// created lazily on the first write. there is no explicit creation step at
-// bucket creation time.
-// callers just construct a LazyFIFO and call list/trim/etc.
+// FIFO bilog objects are stored in the log pool and the shard count for an active
+// generation is stored in log_layout.layout.fifo.num_shards and chosen at
+// bucket creation/reshard time via bilog_shards_for_index().
+//
+// FIFO objects are created lazily on the first write. callers just construct a
+// LazyFIFO and call list/trim/etc.
 //
 // Marker format
 // -------------
@@ -465,31 +467,35 @@ int RGWSI_BILog_RADOS_FIFO::log_trim(
     return 0;
   }
 
-  librados::IoCtx index_pool;
-  std::map<int, std::string> shard_oids;
-  const auto& current_index = rgw::log_to_index_layout(log_layout);
-  int r = bi_->open_bucket_index(dpp, bucket_info, shard_id, current_index,
-                                 &index_pool, &shard_oids, nullptr);
+  librados::IoCtx log_ioctx;
+  const auto& zone_params = bi_->svc.zone->get_zone_params();
+  int r = rgw_init_ioctx(dpp, bi_->rados, zone_params.log_pool, log_ioctx,
+                         true, false);
   if (r < 0) {
     return r;
   }
+  neorados::IOContext neo_loc(log_ioctx.get_id());
 
-  neorados::IOContext neo_loc(index_pool.get_id());
+  const auto& fifo_layout = log_layout.layout.fifo;
+  const std::string& bucket_id = bucket_info.bucket.bucket_id;
+  const uint64_t log_gen = log_layout.gen;
+
   BucketIndexShardsManager end_marker_mgr;
   r = end_marker_mgr.from_string(end_marker, shard_id);
   if (r < 0) {
     return r;
   }
 
+  const int first = (shard_id >= 0) ? shard_id : 0;
+  const int last  = (shard_id >= 0) ? shard_id
+                                     : static_cast<int>(fifo_layout.num_shards) - 1;
   int ret = 0;
-  for (auto& [sid, oid] : shard_oids) {
+  for (int sid = first; sid <= last; ++sid) {
     const std::string shard_end = end_marker_mgr.get(sid, "");
     if (shard_end.empty()) {
       continue;
     }
-    // each bucket index shard OID maps to a FIFO object named
-    // <shard_oid>.bilog.fifo.  LazyFIFO opens (or creates) it on demand.
-    const std::string fifo_oid = bilog_fifo_oid(oid);
+    const std::string fifo_oid = bilog_fifo_oid(bucket_id, log_gen, sid);
     LazyFIFO lf(*rados_neo, fifo_oid, neo_loc);
     try {
       if (y) {
@@ -536,16 +542,30 @@ int RGWSI_BILog_RADOS_FIFO::log_list(
     return 0;
   }
 
-  librados::IoCtx index_pool;
-  std::map<int, std::string> shard_oids;
-  const auto& current_index = rgw::log_to_index_layout(log_layout);
-  int r = bi_->open_bucket_index(dpp, bucket_info, shard_id, current_index,
-                                 &index_pool, &shard_oids, nullptr);
+  librados::IoCtx log_ioctx;
+  const auto& zone_params = bi_->svc.zone->get_zone_params();
+  int r = rgw_init_ioctx(dpp, bi_->rados, zone_params.log_pool, log_ioctx,
+                         true, false);
   if (r < 0) {
     return r;
   }
+  neorados::IOContext neo_loc(log_ioctx.get_id());
 
-  neorados::IOContext neo_loc(index_pool.get_id());
+  const auto& fifo_layout = log_layout.layout.fifo;
+  const std::string& bucket_id = bucket_info.bucket.bucket_id;
+  const uint64_t log_gen = log_layout.gen;
+
+  // build a shard_id → fifo_oid map directly from the bilog layout.
+  std::map<int, std::string> shard_oids;
+  {
+    const int first = (shard_id >= 0) ? shard_id : 0;
+    const int last  = (shard_id >= 0) ? shard_id
+                                       : static_cast<int>(fifo_layout.num_shards) - 1;
+    for (int sid = first; sid <= last; ++sid) {
+      shard_oids[sid] = bilog_fifo_oid(bucket_id, log_gen, sid);
+    }
+  }
+
   BucketIndexShardsManager marker_mgr;
   r = marker_mgr.from_string(marker, shard_id);
   if (r < 0) {
@@ -564,7 +584,7 @@ int RGWSI_BILog_RADOS_FIFO::log_list(
     static constexpr uint32_t FIFO_BATCH_SIZE = 128;
     const uint32_t fetch = std::min<uint32_t>(max - total, FIFO_BATCH_SIZE);
     std::vector<fifo::entry> entries_buf(fetch);
-    const std::string fifo_oid = bilog_fifo_oid(oid);
+    const std::string& fifo_oid = oid;  // oid is already bilog_fifo_oid(bucket_id, log_gen, sid)
     LazyFIFO lf(*rados_neo, fifo_oid, neo_loc);
     // raw per-shard resume marker. empty string means from the beginning.
     std::string shard_marker = marker_mgr.get(sid, "");
@@ -654,18 +674,32 @@ int RGWSI_BILog_RADOS_FIFO::get_log_status(
   // if a FIFO object does not yet exist for a shard (new bucket with no
   // operations logged), last_entry_info() returns an empty marker string.
   // the caller should treat an empty marker as nothing to trim.
-  librados::IoCtx index_pool;
-  std::map<int, std::string> shard_oids;
-  const auto& current_index = rgw::log_to_index_layout(log_layout);
-  int r = bi_->open_bucket_index(dpp, bucket_info, shard_id, current_index,
-                                 &index_pool, &shard_oids, nullptr);
+
+  librados::IoCtx log_ioctx;
+  const auto& zone_params = bi_->svc.zone->get_zone_params();
+  int r = rgw_init_ioctx(dpp, bi_->rados, zone_params.log_pool, log_ioctx,
+                         true, false);
   if (r < 0) {
     return r;
   }
+  neorados::IOContext neo_loc(log_ioctx.get_id());
 
-  neorados::IOContext neo_loc(index_pool.get_id());
+  const auto& fifo_layout = log_layout.layout.fifo;
+  const std::string& bucket_id = bucket_info.bucket.bucket_id;
+  const uint64_t log_gen = log_layout.gen;
+
+  std::map<int, std::string> shard_oids;
+  {
+    const int first = (shard_id >= 0) ? shard_id : 0;
+    const int last  = (shard_id >= 0) ? shard_id
+                                       : static_cast<int>(fifo_layout.num_shards) - 1;
+    for (int sid = first; sid <= last; ++sid) {
+      shard_oids[sid] = bilog_fifo_oid(bucket_id, log_gen, sid);
+    }
+  }
+
   for (auto& [sid, oid] : shard_oids) {
-    const std::string fifo_oid = bilog_fifo_oid(oid);
+    const std::string& fifo_oid = oid;  // oid is already bilog_fifo_oid(bucket_id, log_gen, sid)
     LazyFIFO lf(*rados_neo, fifo_oid, neo_loc);
     try {
       auto get_info = [&]() -> std::tuple<std::string, ceph::real_time> {

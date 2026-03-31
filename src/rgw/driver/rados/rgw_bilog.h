@@ -9,6 +9,9 @@
 #include <string_view>
 #include <vector>
 
+#include <algorithm>
+#include <cmath>
+
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/spawn.hpp>
 
@@ -23,6 +26,7 @@
 #include "neorados/cls/fifo.h"
 
 #include "rgw_log_backing.h"
+#include "rgw_bucket_layout.h"
 
 class RGWSI_BucketIndex_RADOS;
 
@@ -30,27 +34,47 @@ namespace asio = boost::asio;
 namespace fifo = neorados::cls::fifo;
 using ceph::containers::tiny_vector;
 
-// FIFO OID for a given index shard OID "<shard_oid>.bilog"
-// e.g. ".dir.{bucket_id}.{gen}.{shard_id}.bilog"
-inline std::string bilog_fifo_oid(std::string_view shard_oid)
+// build a bilog FIFO OID with format: "{bucket_id}.{log_gen}.{shard_id}.bilog".
+inline std::string bilog_fifo_oid(std::string_view bucket_id,
+                                   uint64_t log_gen,
+                                   int shard_id)
 {
-  return std::string{shard_oid} + ".bilog";
+  return std::string{bucket_id} + '.' +
+         std::to_string(log_gen) + '.' +
+         std::to_string(shard_id) + ".bilog";
 }
 
-// per-bucket FIFO bilog: one LazyFIFO per index shard, stored in the same
-// RADOS pool as the bucket index, with OID = <shard_oid>.bilog.
-//
-// callers obtain shard_oids from open_bucket_index() and pass them to the
-// constructor. The shard count and gen are recorded in bucket_log_layout
-// (field 'in_index') so that trim/list can reconstruct the OIDs later.
+// compute an appropriate number of bilog shards for a given index shard count
+// upon reshard. uses logarithmic formula to keep the bilog shard count much lower,
+// growing slowly every time index shards double, bilog gets 2 more shards.
+// typically ranges from 7 to 21 across the default index max shards 11 to 1999 shards.
+inline uint32_t bilog_shards_for_index(uint32_t index_shards,
+                                       uint32_t min_shards = 7,
+                                       uint32_t max_shards = 0)
+{
+  if (index_shards == 0) {
+    return min_shards;
+  }
+  auto v = static_cast<uint32_t>(std::log2(index_shards) * 2.0);
+  v = std::max(v, min_shards);
+  if (max_shards > 0) {
+    v = std::min(v, max_shards);
+  }
+  return v;
+}
+
+// per-bucket FIFO bilog: one LazyFIFO per bilog shard, stored in the log pool.
+
+// shard count is recorded in bucket_log_layout_generation::layout::fifo::num_shards.
 class RGWBILogFIFO {
   tiny_vector<LazyFIFO> fifos;
 
 public:
-  // fifos[i] will use OID bilog_fifo_oid(shard_oids[i]).
   RGWBILogFIFO(neorados::RADOS rados,
-               const neorados::IOContext& loc,
-               std::span<const std::string> shard_oids);
+               const neorados::IOContext& log_pool,
+               std::string_view bucket_id,
+               uint64_t log_gen,
+               uint32_t num_shards);
 
   int num_shards() const {
     return static_cast<int>(fifos.size());
