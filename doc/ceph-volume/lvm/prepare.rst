@@ -25,7 +25,7 @@ the backend, which can be done by using the following flags and arguments:
 
 ``bluestore``
 -------------
-:term:`Bluestore<bluestore>` is the default backend for new OSDs.  Bluestore
+:term:`BlueStore<bluestore>` is the default backend for new OSDs.  BlueStore
 supports the following configurations:
 
 * a block device, a block.wal device, and a block.db device
@@ -70,7 +70,7 @@ Starting with Ceph Squid, you can opt for TPM2 token enrollment for the created 
 If a ``block.db`` device or a ``block.wal`` device is needed, it can be
 specified with ``--block.db`` or ``--block.wal``. These can be physical
 devices, partitions, or logical volumes. ``block.db`` and ``block.wal`` are
-optional for bluestore.
+optional for BlueStore.
 
 For both ``block.db`` and ``block.wal``, partitions can be used as-is, and 
 therefore are not made into logical volumes.
@@ -102,10 +102,10 @@ directory looks like this:
 In the above case, a device was used for ``block``, so ``ceph-volume`` created
 a volume group and a logical volume using the following conventions:
 
-* volume group name: ``ceph-{cluster fsid}`` (or if the volume group already
-  exists: ``ceph-{random uuid}``)
+* volume group name: ``ceph-<cluster fsid>`` (or if the volume group already
+  exists: ``ceph-<random uuid>``)
 
-* logical volume name: ``osd-block-{osd_fsid}``
+* logical volume name: ``osd-block-<osd_fsid>``
 
 
 .. _ceph-volume-lvm-prepare_filestore:
@@ -114,11 +114,11 @@ a volume group and a logical volume using the following conventions:
 -------------
 .. warning:: Filestore has been deprecated in the Reef release and is no longer supported.
 
-``Filestore<filestore>`` is the OSD backend that prepares logical volumes for a
-`filestore`-backed object-store OSD.
+Filestore is the OSD backend that prepares logical volumes for a
+filestore-backed object-store OSD.
 
 
-``Filestore<filestore>`` uses a logical volume to store OSD data and it uses
+Filestore uses a logical volume to store OSD data and it uses
 physical devices, partitions, or logical volumes to store the journal.  If a
 physical device is used to create a filestore backend, a logical volume will be
 created on that physical device. If the provided volume group's name begins
@@ -196,7 +196,7 @@ To fetch the monmap by using the bootstrap key from the OSD, use this command:
    /var/lib/ceph/bootstrap-osd/ceph.keyring mon getmap -o \
    /var/lib/ceph/osd/<cluster name>-<osd id>/activate.monmap
 
-To populate the OSD directory (which has already been mounted), use this ``ceph-osd`` command:  
+To populate the OSD directory (which has already been mounted), use this ``ceph-osd`` command:
 
 .. prompt:: bash #
 
@@ -252,7 +252,7 @@ print``:
     Partition Table: gpt
     Disk Flags:
 
-Now lets create a single partition, and verify later if ``blkid`` can find
+Now let's create a single partition, and verify later if ``blkid`` can find
 a ``PARTUUID`` that is needed by ``ceph-volume``:
 
 .. prompt:: bash #
@@ -270,9 +270,9 @@ a ``PARTUUID`` that is needed by ``ceph-volume``:
 Existing OSDs
 -------------
 For existing clusters that want to use this new system and have OSDs that are
-already running there are a few things to take into account:
+already running, there are a few things to take into account:
 
-.. warning:: this process will forcefully format the data device, destroying
+.. warning:: This process will forcefully format the data device, destroying
              existing data, if any.
 
 * OSD paths should follow this convention::
@@ -290,7 +290,7 @@ any data** in the OSD):
 
    ceph-volume lvm prepare --filestore --osd-id 0 --osd-fsid E3D291C1-E7BF-4984-9794-B60D9FA139CB
 
-The command line tool will not contact the monitor to generate an OSD ID and
+The command line tool will not contact the Monitor to generate an OSD ID and
 will format the LVM device in addition to storing the metadata on it so that it
 can be started later (for detailed metadata description see
 :ref:`ceph-volume-lvm-tags`).
@@ -336,7 +336,7 @@ regardless of the type of volume (journal or data) or OSD objectstore:
 * ``osd_id``
 * ``crush_device_class``
 
-For :term:`bluestore` these tags will be added:
+For :term:`BlueStore`, these tags will be added:
 
 * ``block_device``
 * ``block_uuid``
@@ -350,12 +350,12 @@ For :term:`bluestore` these tags will be added:
 
 Summary
 -------
-To recap the ``prepare`` process for :term:`bluestore`:
+To recap the ``prepare`` process for :term:`BlueStore`:
 
 #. Accepts raw physical devices, partitions on physical devices or logical volumes as arguments.
 #. Creates logical volumes on any raw physical devices.
 #. Generate a UUID for the OSD
-#. Ask the monitor get an OSD ID reusing the generated UUID
+#. Ask the Monitor for an OSD ID reusing the generated UUID
 #. OSD data directory is created on a tmpfs mount.
 #. ``block``, ``block.wal``, and ``block.db`` are symlinked if defined.
 #. monmap is fetched for activation

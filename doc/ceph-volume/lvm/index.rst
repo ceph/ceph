@@ -27,7 +27,7 @@ Implements the functionality needed to deploy OSDs from the ``lvm`` subcommand:
 **Internal functionality**
 
 There are other aspects of the ``lvm`` subcommand that are internal and not
-exposed to the user, these sections explain how these pieces work together,
+exposed to the user. These sections explain how these pieces work together,
 clarifying the workflows of the tool.
 
 :ref:`Systemd Units <ceph-volume-lvm-systemd>` |
