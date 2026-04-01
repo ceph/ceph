@@ -15,7 +15,7 @@ Synopsis
 Note
 ====
 
-**rbd-fuse** is not recommended for any production or high performance workloads.
+**rbd-fuse** is not recommended for any production or high-performance workloads.
 
 Description
 ===========
@@ -40,7 +40,7 @@ Any options not recognized by rbd-fuse will be passed on to libfuse.
 .. option:: -c ceph.conf
 
    Use *ceph.conf* configuration file instead of the default
-   ``/etc/ceph/ceph.conf`` to determine monitor addresses during startup.
+   ``/etc/ceph/ceph.conf`` to determine Monitor addresses during startup.
 
 .. option:: -p pool
 

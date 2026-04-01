@@ -15,17 +15,17 @@ Synopsis
 Description
 ===========
 
-**monmaptool** is a utility to create, view, and modify a monitor
+**monmaptool** is a utility to create, view, and modify a Monitor
 cluster map for the Ceph distributed storage system. The monitor map
 specifies the only fixed addresses in the Ceph distributed system.
 All other daemons bind to arbitrary addresses and register themselves
-with the monitors.
+with the Monitors.
 
 When creating a map with --create, a new monitor map with a new,
 random UUID will be created. It should be followed by one or more
-monitor addresses.
+Monitor addresses.
 
-The default Ceph monitor port for messenger protocol v1 is 6789, and
+The default Ceph Monitor port for messenger protocol v1 is 6789, and
 3300 for protocol v2.
 
 Multiple actions can be performed per invocation.
@@ -43,7 +43,7 @@ Options
 
    list the enabled features as well as the available ones.
 
-   By default, a human readable output is produced.
+   By default, a human-readable output is produced.
 
 .. option:: --create
 
@@ -59,7 +59,7 @@ Options
 .. option:: --generate
 
    generate a new monmap based on the values on the command line or specified
-   in the ceph configuration.  This is, in order of preference,
+   in the Ceph configuration.  This is, in order of preference,
 
       #. ``--monmap filename`` to specify a monmap to load
       #. ``--mon-host 'host1,ip2'`` to specify a list of hosts or ip addresses
@@ -74,18 +74,18 @@ Options
 
 .. option:: --add name ip[:port]
 
-   add a monitor with the specified ip:port to the map.
+   add a Monitor with the specified ip:port to the map.
 
-   If the *nautilus* feature is set, and the port is not, the monitor
+   If the *nautilus* feature is set, and the port is not, the Monitor
    will be added for both messenger protocols.
 
 .. option:: --addv name [protocol:ip:port[,...]]
 
-   add a monitor with the specified version:ip:port to the map.
+   add a Monitor with the specified version:ip:port to the map.
 
 .. option:: --rm name
 
-   remove the monitor with the specified name from the map.
+   remove the Monitor with the specified name from the map.
 
 .. option:: --fsid uuid
 
@@ -110,7 +110,7 @@ Options
 Example
 =======
 
-To create a new map with three monitors (for a fresh Ceph cluster)::
+To create a new map with three Monitors (for a fresh Ceph cluster)::
 
         monmaptool --create --add nodeA 192.168.0.10 --add nodeB 192.168.0.11 \
           --add nodeC 192.168.0.12 --enable-all-features --clobber monmap
@@ -119,7 +119,7 @@ To display the contents of the map::
 
         monmaptool --print monmap
 
-To replace one monitor::
+To replace one Monitor::
 
         monmaptool --rm nodeA monmap
         monmaptool --add nodeA 192.168.0.9 monmap
@@ -137,4 +137,4 @@ See also
 ========
 
 :doc:`ceph <ceph>`\(8),
-:doc:`crushtool <crushtool>`\(8),
+:doc:`crushtool <crushtool>`\(8)

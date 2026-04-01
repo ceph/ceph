@@ -36,13 +36,13 @@ Global Options
 
 .. option:: --pgid
 
-   As an alternative to ``--pool``, ``--pgid`` also allow users to specify the
+   As an alternative to ``--pool``, ``--pgid`` also allows users to specify the
    PG id to which the command will be directed. With this option, certain
    commands like ``ls`` allow users to limit the scope of the command to the given PG.
 
 .. option:: -N namespace, --namespace namespace
 
-   Specify the rados namespace to use for the object.
+   Specify the RADOS namespace to use for the object.
 
 .. option:: --all
 
@@ -65,12 +65,12 @@ Global Options
 .. option:: -i infile
 
    will specify an input file to be passed along as a payload with the
-   command to the monitor cluster. This is only used for specific
-   monitor commands.
+   command to the Monitor cluster. This is only used for specific
+   Monitor commands.
 
 .. option:: -m monaddress[:port]
 
-   Connect to specified monitor (instead of looking through ceph.conf).
+   Connect to specified Monitor (instead of looking through ceph.conf).
 
 .. option:: -b block_size
 
@@ -78,9 +78,9 @@ Global Options
 
 .. option:: --striper
 
-   Uses the striping API of rados rather than the default one.
+   Uses the striping API of RADOS rather than the default one.
    Available for stat, stat2, get, put, append, truncate, rm, ls
-   and all xattr related operation.
+   and all xattr-related operation.
 
 .. option:: -O object_size, --object-size object_size
 
@@ -142,7 +142,7 @@ Load gen options
 
 .. option:: --min-object-size
 
-  Min object size.
+   Min object size.
 
 .. option:: --max-object-size
 
@@ -314,10 +314,10 @@ Pool specific commands
   Remove *attr* from the extended attributes of an object.
 
 :command:`stat` *name*
-   Get stat (ie. mtime, size) of given object
+  Get stat (i.e. mtime, size) of given object
 
 :command:`stat2` *name*
-   Get stat (similar to stat, but with high precision time) of given object
+  Get stat (similar to stat, but with high precision time) of given object
 
 :command:`listomapkeys` *name*
   List all the keys stored in the object map of object name.
@@ -346,7 +346,7 @@ Pool specific commands
   Set the value of the object map header of object name.
 
 :command:`export` *filename*
-  Serialize pool contents to a file or standard output.\n"
+  Serialize pool contents to a file or standard output.
 
 :command:`import` [--dry-run] [--no-overwrite] < filename | - >
   Load pool contents from a file or standard input

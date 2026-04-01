@@ -16,7 +16,7 @@ Description
 ===========
 
 **librados-config** is a utility that displays information about the
-  installed ``librados``.
+installed ``librados``.
 
 
 Options
