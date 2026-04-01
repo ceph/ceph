@@ -50,7 +50,7 @@ export class DeleteConfirmationModalComponent extends BaseModal implements OnIni
   }
 
   ngOnInit() {
-    const controls = {
+    const controls: Record<string, AbstractControl> = {
       impact: new UntypedFormControl(this.impact),
       confirmation: new UntypedFormControl(false, {
         validators: [
@@ -71,6 +71,13 @@ export class DeleteConfirmationModalComponent extends BaseModal implements OnIni
         ]
       })
     };
+
+    if (
+      this.impact === this.impactEnum.high &&
+      this.bodyContext?.forceDeleteAcknowledgementMessage
+    ) {
+      controls.forceDeleteAck = new UntypedFormControl(false, [Validators.requiredTrue]);
+    }
 
     if (this.childFormGroup) {
       controls['child'] = this.childFormGroup;
@@ -93,6 +100,16 @@ export class DeleteConfirmationModalComponent extends BaseModal implements OnIni
         map((value: string) => value !== target)
       );
     }
+  }
+
+  get forceDeleteAckSatisfied(): boolean {
+    if (
+      !(this.impact === this.impactEnum.high && this.bodyContext?.forceDeleteAcknowledgementMessage)
+    ) {
+      return true;
+    }
+    const c = this.deletionForm?.get('forceDeleteAck');
+    return c ? !!c.value : true;
   }
 
   matchResourceName(control: AbstractControl): ValidationErrors | null {
