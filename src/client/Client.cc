@@ -754,6 +754,14 @@ void Client::_finish_init()
     plb.add_u64_counter(l_c_caps_grant, "caps_grant", "Capability grants");
     plb.add_u64_counter(l_c_caps_revoke, "caps_revoke", "Capability revokes");
     plb.add_u64_counter(l_c_caps_release, "caps_release", "Capability releases");
+    plb.add_u64_avg(l_c_fscrypt_wr_amp, "fscrypt_wr_amp",
+		    "Average fscrypt write amplification ratio (x100)");
+    plb.add_u64_avg(l_c_fscrypt_rd_amp, "fscrypt_rd_amp",
+		    "Average fscrypt read amplification ratio (x100)");
+    plb.add_time_avg(l_c_fscrypt_enc_lat, "fscrypt_enc_lat", "Encryption time");
+    plb.add_time_avg(l_c_fscrypt_dec_lat, "fscrypt_dec_lat", "Decryption time");
+    plb.add_time_avg(l_c_fscrypt_rd_lat, "fscrypt_rd_lat", "Overall fscrypt read latency");
+    plb.add_time_avg(l_c_fscrypt_wr_lat, "fscrypt_wr_lat", "Overall fscrypt write latency");
     logger.reset(plb.create_perf_counters());
     cct->get_perfcounters_collection()->add(logger.get());
   }
@@ -8965,7 +8973,9 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 	header.data_len = (8 + 8 + 4);
 	header.file_offset = 0;
       } else {
+        auto dec_start = mono_clock_now();
         r = fscrypt_denc->decrypt_bl(offset, target_len, read_start, holes, &bl);
+        logger->tinc(l_c_fscrypt_dec_lat, mono_clock_now() - dec_start);
 
         if (r < 0) {
           ldout(cct, 20) << __func__ << "(): failed to decrypt buffer: r=" << r << dendl;
@@ -8974,7 +8984,9 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 
 	// 2. encrypt bl
         if (fscrypt_denc) {
+          auto enc_start = mono_clock_now();
           r = fscrypt_denc->encrypt_bl(offset, bl.length(), bl, &ebl);
+          logger->tinc(l_c_fscrypt_enc_lat, mono_clock_now() - enc_start);
 	}
 
         header.data_len = (8 + 8 + 4 + ebl.length());
@@ -11833,12 +11845,21 @@ success:
   if (r >= 0) {
 #if defined(__linux__)
     if (fscrypt_denc) {
+      // Read amplification is the ratio of aligned physical span to logical
+      // read size (e.g. read(4000, 8192) spans 0..12288 -> amp 1.5).
+      if (target_len > 0) {
+        uint64_t amp_x100 = (read_len * 100) / target_len;
+        clnt->logger->inc(l_c_fscrypt_rd_amp, amp_x100);
+      }
       std::vector<ObjectCacher::ObjHole> holes;
+      auto dec_start = mono_clock_now();
       r = fscrypt_denc->decrypt_bl(off, target_len, read_start, holes, pbl);
+      clnt->logger->tinc(l_c_fscrypt_dec_lat, mono_clock_now() - dec_start);
       if (r < 0) {
 	ldout(clnt->cct, 20) << __func__ << "(): failed to decrypt buffer: r=" << r << dendl;
       }
       bl->claim_append(*pbl);
+      clnt->logger->tinc(l_c_fscrypt_rd_lat, mono_clock_now() - start_time);
     }
 #endif
     // r is expected to hold value of effective bytes read.
@@ -12127,8 +12148,16 @@ void Client::C_Read_Async_Finisher::finish(int r)
 {
 #if defined(__linux__)
   if (denc && r > 0) {
+      // Read amplification is the ratio of aligned physical span to logical
+      // read size (e.g. read(4000, 8192) spans 0..12288 -> amp 1.5).
+      if (len > 0) {
+        uint64_t amp_x100 = (read_len * 100) / len;
+        clnt->logger->inc(l_c_fscrypt_rd_amp, amp_x100);
+      }
       std::vector<ObjectCacher::ObjHole> holes;
+      auto dec_start = mono_clock_now();
       r = denc->decrypt_bl(off, len, read_start, holes, bl);
+      clnt->logger->tinc(l_c_fscrypt_dec_lat, mono_clock_now() - dec_start);
       if (r < 0) {
         // ldout(cct, 20) << __func__ << "(): failed to decrypt buffer: r=" << r << dendl;
       } else {
@@ -12203,6 +12232,8 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
     // Release C_Read_Async_Finisher from managed pointer, we need to complete
     // immediately. The C_Read_Async_Finisher is safely handled and won't be
     // abandoned.
+
+    // Complete the crf immediately with 0 bytes
     io_finish.release()->complete(0);
 
     // Signal async completion
@@ -12267,11 +12298,20 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
   if (r >= 0) {
 #if defined(__linux__) 
     if (fscrypt_denc) {
+      // Read amplification is the ratio of aligned physical span to logical
+      // read size (e.g. read(4000, 8192) spans 0..12288 -> amp 1.5).
+      if (target_len > 0) {
+        uint64_t amp_x100 = (read_len * 100) / target_len;
+        logger->inc(l_c_fscrypt_rd_amp, amp_x100);
+      }
+      auto dec_start = mono_clock_now();
       r = fscrypt_denc->decrypt_bl(off, target_len, read_start, holes, bl);
+      logger->tinc(l_c_fscrypt_dec_lat, mono_clock_now() - dec_start);
       if (r < 0) {
         ldout(cct, 20) << __func__ << "(): failed to decrypt buffer: r=" << r << dendl;
         return r;
       }
+      logger->tinc(l_c_fscrypt_rd_lat, mono_clock_now() - start_time);
     }
 #endif
     r = bl->length();
@@ -12326,6 +12366,7 @@ uint64_t read_start;
 #endif
   ldout(cct, 10) << __func__ << " " << *in << " " << off << "~" << len << dendl;
 
+  auto start_time = mono_clock_now();
   // 0 success, 1 continue and < 0 error happen.
   auto wait_and_copy = [&](C_SaferCond &onfinish, bufferlist &tbl, int wanted) {
     int r = onfinish.wait();
@@ -12393,14 +12434,23 @@ uint64_t read_start;
   if (r >= 0) {
 #if defined(__linux__)
     if (fscrypt_denc) {
+      // Read amplification is the ratio of aligned physical span to logical
+      // read size (e.g. read(4000, 8192) spans 0..12288 -> amp 1.5).
+      if (target_len > 0) {
+        uint64_t amp_x100 = (read_len * 100) / target_len;
+        logger->inc(l_c_fscrypt_rd_amp, amp_x100);
+      }
       std::vector<ObjectCacher::ObjHole> holes;
+      auto dec_start = mono_clock_now();
       r = fscrypt_denc->decrypt_bl(off, target_len, read_start, holes, pbl);
+      logger->tinc(l_c_fscrypt_dec_lat, mono_clock_now() - dec_start);
       if (r < 0) {
         ldout(cct, 20) << __func__ << "(): failed to decrypt buffer: r=" << r << dendl;
       }
 
       read = pbl->length();
       bl->claim_append(*pbl);
+      logger->tinc(l_c_fscrypt_rd_lat, mono_clock_now() - start_time);
     } else
 #endif
       read = pbl->length();
@@ -12694,6 +12744,9 @@ bool Client::C_Write_Finisher::try_complete()
       ldout(clnt->cct, 19) << " complete with iofinished_r " << iofinished_r << dendl;
       onfinish->complete(iofinished_r);
     }
+    if (encrypted) {
+      clnt->logger->tinc(l_c_fscrypt_wr_lat, mono_clock_now() - start);
+    }
     clnt->logger->inc(l_c_aio_completions);
     clnt->logger->dec(l_c_aio_in_flight);
     onfinish = nullptr;
@@ -12715,6 +12768,7 @@ Client::WriteEncMgr::WriteEncMgr(Client *clnt,
                                                    offset(offset), size(size), bl(bl),
                                                    async(async)
 {
+  start = mono_clock_now();
 #if defined(__linux__)
   denc = fscrypt->get_fdata_denc(in->fscrypt_ctx, &in->fscrypt_key_validator);
 #endif
@@ -12794,6 +12848,14 @@ int Client::WriteEncMgr::read_modify_write(Context *_iofinish)
   end_block = fscrypt_block_from_ofs(endoff - 1);
   end_block_ofs = fscrypt_block_start(endoff - 1);
   ofs_in_end_block = fscrypt_ofs_in_block(endoff - 1);
+
+  // Write amplification is the ratio of aligned physical span to logical
+  // write size (e.g. write(4000, 8192) spans 0..12288 -> amp 1.5).
+  if (size > 0) {
+    uint64_t aligned_end = fscrypt_next_block_start(offset + size);
+    uint64_t amp_x100 = ((aligned_end - start_block_ofs) * 100) / size;
+    clnt->logger->inc(l_c_fscrypt_wr_amp, amp_x100);
+  }
 
   need_read_start = ofs_in_start_block > 0 || (ofs_in_start_block == 0 && ((endoff - offset) < FSCRYPT_BLOCK_SIZE));
   need_read_end = (endoff <= in->effective_size() && ofs_in_end_block < FSCRYPT_BLOCK_SIZE && start_block != end_block);
@@ -12932,7 +12994,9 @@ bool Client::WriteEncMgr::do_try_finish(int r)
     offset = start_block_ofs;
 
     pbl = &encbl;
+    auto enc_start = mono_clock_now();
     r = denc->encrypt_bl(offset, bl.length(), bl, &encbl);
+    clnt->logger->tinc(l_c_fscrypt_enc_lat, mono_clock_now() - enc_start);
     if (r < 0) {
       ldout(cct, 0) << "failed to encrypt bl: r=" << r << dendl;
     }
@@ -13276,6 +13340,9 @@ success:
   // do not get here if non-blocking caller (onfinish != nullptr)
   ldout(cct, 10) << " _write_filer_succeess" << dendl;
   r = _write_success(f, start, fpos, request_offset, request_size, enc_mgr->get_ofs(), enc_mgr->get_size(), in, enc_mgr->encrypted());
+  if (enc_mgr->encrypted()) {
+    logger->tinc(l_c_fscrypt_wr_lat, mono_clock_now() - start);
+  }
 
   if (r >= 0 && do_fsync) {
     int64_t r1;
