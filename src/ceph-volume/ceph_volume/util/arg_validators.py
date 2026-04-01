@@ -258,3 +258,35 @@ class ValidFraction(object):
         if math.isnan(fraction_float) or fraction_float <= 0.0 or fraction_float > 1.0:
             raise argparse.ArgumentError(None, 'Fraction %f not in (0,1.0]' % fraction_float)
         return fraction_float
+
+
+VALID_SEASTORE_SECONDARY_TYPES = {'HDD', 'SSD', 'ZBD', 'RANDOM_BLOCK_SSD'}
+
+
+class ValidSeastoreSecondary(object):
+    """
+    Validate and parse a seastore secondary device specification of the form
+    DEVICE:TYPE where TYPE is one of HDD, SSD, ZBD, RANDOM_BLOCK_SSD.
+    Returns a (device, type) tuple.
+    """
+
+    def __call__(self, value):
+        parts = value.split(':')
+        if len(parts) != 2:
+            raise argparse.ArgumentError(
+                None,
+                '--seastore-secondary must be in DEVICE:TYPE format, got: %s' % value
+            )
+        device, dtype = parts
+        if not device:
+            raise argparse.ArgumentError(
+                None,
+                '--seastore-secondary device path cannot be empty'
+            )
+        if dtype not in VALID_SEASTORE_SECONDARY_TYPES:
+            raise argparse.ArgumentError(
+                None,
+                'Invalid seastore secondary device type %r, must be one of: %s' % (
+                    dtype, ', '.join(sorted(VALID_SEASTORE_SECONDARY_TYPES)))
+            )
+        return device, dtype
