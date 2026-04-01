@@ -162,6 +162,11 @@ enum {
   l_c_caps_grant,
   l_c_caps_revoke,
   l_c_caps_release,
+  l_c_fscrypt_wr_amp,
+  l_c_fscrypt_enc_lat,
+  l_c_fscrypt_dec_lat,
+  l_c_fscrypt_rd_lat,
+  l_c_fscrypt_wr_lat,
   l_c_last,
 };
 
@@ -1914,6 +1919,7 @@ private:
 
     int64_t get_ofs() { return offset; }
     uint64_t get_size() { return size; }
+    utime_t start;
   };
 
   class WriteEncMgr_Buffered : public WriteEncMgr {
