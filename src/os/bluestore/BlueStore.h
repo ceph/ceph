@@ -614,6 +614,9 @@ public:
     inline bool is_loaded() const {
       return loaded;
     }
+    /// Calls back function for any inidividual extent within the specified range.
+    /// The functions gets mapped extent offset, remaining length and references
+    /// count.
     template<class F>
     int map_fn(uint32_t x_off, uint32_t x_len, F&& f) const {
       ceph_assert(loaded && persistent);

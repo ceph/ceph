@@ -341,6 +341,9 @@ struct bluestore_extent_ref_map_t {
       }
     }
   }
+  /// Calls back function for any inidividual extent within the specified range.
+  /// The functions gets mapped extent offset, remaining length and references
+  /// count.
   template<class F>
   int map_fn(uint64_t offset, uint32_t len, F&& f) const {
     auto p = ref_map.lower_bound(offset);
