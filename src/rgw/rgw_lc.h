@@ -571,6 +571,8 @@ struct ILCBucketLister {
   virtual ~ILCBucketLister() = default;
 
   virtual rgw_bucket get_bucket_key () const noexcept = 0;
+  
+  virtual std::string_view get_bucket_name () const noexcept = 0;
 
   virtual int list(rgw::sal::Bucket::ListParams& params,
                    int max_entries,
@@ -647,17 +649,15 @@ class LCObjsLister {
     return (page_index * PAGE_SIZE) + (obj_iter - list_results.objs.begin());
   }
 
- private:
+private:
 
-  // assuming obj_iter points to a non-current version for object foo skip ahead until either:
-  // - a current version for the same object is found;
-  // - we reach a version for a different object;
-  obj_iter_type skip_to_the_first_current(obj_iter_type from, boost::asio::yield_context y);
-
-  // assuming obj_iter points to a current version for object foo skip ahead until either:
-  // - a non-current version for the same object is found;
-  // - we reach a version for a different object;
-  obj_iter_type skip_currents(obj_iter_type from, boost::asio::yield_context y);
+  // assuming obj_iter points to the first instance of an object 'foo' will do either of:
+  // - return the same iter if the first instance is current;
+  // - if the first one is non-current skips to the next object key which has its first instance as current 
+  obj_iter_type skip_to_key_with_first_current(obj_iter_type from, boost::asio::yield_context y);
+  
+  // looks at the object key pointed to by the @from iterator and skips to the first instance of the next object 
+  obj_iter_type skip_to_the_next_key(obj_iter_type from, boost::asio::yield_context y);
 
 }; /* LCObjsLister */
 
@@ -794,6 +794,10 @@ namespace  sal {
 
     rgw_bucket get_bucket_key () const noexcept override {
       return bucket->get_key();
+    }
+    
+    std::string_view get_bucket_name() const noexcept override {
+      return bucket->get_name();
     }
 
     int list(rgw::sal::Bucket::ListParams& params,

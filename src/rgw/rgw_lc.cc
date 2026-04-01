@@ -1530,9 +1530,16 @@ int LCObjsLister::init(boost::asio::yield_context y) {
   if (res < 0)
     return  res;
 
-  obj_iter = skip_to_the_first_current(obj_iter, y);
+  obj_iter = skip_to_key_with_first_current(obj_iter, y);
 
   return 0;
+}
+
+void LCObjsLister::delay() {
+  if (delay_ms) {
+    maybe_warn_about_blocking(dpp);
+    std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));      
+  }
 }
 
 int LCObjsLister::fetch(boost::asio::yield_context y) {
@@ -1548,70 +1555,54 @@ int LCObjsLister::fetch(boost::asio::yield_context y) {
   return 0;
 }
 
-void LCObjsLister::delay() {
-  if (delay_ms) {
-    maybe_warn_about_blocking(dpp);
-    std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));      
-  }
-}
-
-LCObjsLister::obj_iter_type LCObjsLister::skip_to_the_first_current(obj_iter_type from, boost::asio::yield_context y) {
-  if (list_results.objs.empty())
+LCObjsLister::obj_iter_type LCObjsLister::skip_to_key_with_first_current(obj_iter_type from, boost::asio::yield_context y) {
+  if (list_results.objs.empty() || from == list_results.objs.end())
     return list_results.objs.end();
-
-  // if the @from already pointing at the current just return it and increment the counter;
-  auto first = *from;
-  if (first.is_current()) {
-    num_noncurrent=0;
-    num_current = 1;
-    return from;
-  }
-
-  ldpp_dout(dpp, 20) << "LCObjsLister::next(): skipping " << from->key << " (newer than the current)" <<  dendl;
-
-  pre_obj = first;
-  num_noncurrent=1;
-  num_current=0;
-  ++from;
+  
+  // if the @from is already pointing at the current just return it and set the counters;
   do {
-    for (auto i=from; i!=list_results.objs.end(); ++i) {
-      // are we still on the same object?
-      if (i->key.name==pre_obj.key.name) {
-        // are we now pointing at the current instance?
-        if (i->is_current() && num_current==0) {
-          num_current = 1;
-          // log the number of non-current elements newer than the current ;
-          ldpp_dout(dpp, 1) << "WARNING: bucket " << backend->get_bucket_key() << " "
-                            << "object " << i->key.name << ": found " << num_noncurrent
-                            << " version(s) newer than the current" << dendl;
-          return  i;
-        }
-        ++num_noncurrent;
-      } else {
-        // we have now advanced to a new object
-        if (i->is_current()) {
-          num_noncurrent = 0;
-          num_current = 1;
-          return i;
-        }
-        num_noncurrent = 1;
-        pre_obj = *i;
-      }
-      ldpp_dout(dpp, 1) << "WARNING: LCObjsLister::next(): skipping " << i->key << " (newer than the current)" <<  dendl;
+    auto first = *from;
+    if (first.is_current()) {
+      num_noncurrent=0;
+      num_current = 1;
+      return from;
     }
 
+    ldpp_dout(dpp, 5) << "LCObjsLister::next(): skipping object " 
+      << from->key << " (newer than the current)" 
+      << " in bucket=" << backend->get_bucket_name() 
+      <<  dendl;
+    from = skip_to_the_next_key(from, y);
+  }
+  while (from != list_results.objs.end());
+ 
+  return from;
+}
+
+LCObjsLister::obj_iter_type LCObjsLister::skip_to_the_next_key (obj_iter_type from, boost::asio::yield_context y) {
+  auto cur_obj = *from;
+  
+  auto i=from+1;
+  do {
+    for (; i!=list_results.objs.end(); ++i) {
+      if (i->key.name!=cur_obj.key.name) {
+        return i;
+      }
+    }
+    
     // we reached the end of the current list results batch;
     // need to fetch the next page and start over;
     if (list_results.is_truncated && fetch(y)==0) {
-      // fetch() sets obj_iter to the beginning of the new results page
-      from = obj_iter;
+      i = obj_iter;
     } else {
       break;
     }
-  } while (true);
-
-  return list_results.objs.end();
+  }
+  while (true);
+  
+  return i;
 }
+
 
 bool LCObjsLister::get_obj(rgw_bucket_dir_entry *obj) const {
   ceph_assert(obj!=nullptr);
@@ -1648,54 +1639,24 @@ bool LCObjsLister::next(boost::asio::yield_context y) {
     if (!obj_iter->is_current())
       ++num_noncurrent;
     else {
-      // looks like we have multiple currents in a row;
-      obj_iter = skip_currents(obj_iter, y);
+      ldpp_dout(dpp, 5) << "LCObjsLister::next(): skipping object " 
+        << obj_iter->key << " (multiple currents)"
+        << " in bucket=" << backend->get_bucket_name() 
+        <<  dendl;
+      obj_iter = skip_to_the_next_key(obj_iter, y);
+      obj_iter = skip_to_key_with_first_current(obj_iter, y);
     }
   }
   else
-    obj_iter = skip_to_the_first_current(obj_iter, y);
+    obj_iter = skip_to_key_with_first_current(obj_iter, y);
 
   if (obj_iter != list_results.objs.end()) {
-    ldpp_dout(dpp, 20) << "LCObjsLister::next(): advanced to " << obj_iter->key << " at position " << get_entry_pos() << dendl;
+    ldpp_dout(dpp, 20) << "LCObjsLister::next(): advanced to " << obj_iter->key 
+      << " at position " << get_entry_pos() 
+      << " in bucket=" << backend->get_bucket_name() << dendl;
   }
 
   return obj_iter != list_results.objs.end();
-}
-
-LCObjsLister::obj_iter_type LCObjsLister::skip_currents(obj_iter_type from, boost::asio::yield_context y) {
-  ceph_assert(from!=list_results.objs.end());
-
-  auto cur_obj = *from;
-  ceph_assert(cur_obj.is_current());
-  ldpp_dout(dpp, 20) << "LCObjsLister::next(): skipping " << from->key << " (multiple currents)" <<  dendl;
-  ++num_current;
-  auto i=from+1;
-  do {
-    for (; i!=list_results.objs.end(); ++i) {
-      if (cur_obj.key.name==i->key.name) {
-        if (i->is_current()) {
-          ++num_current;
-          ldpp_dout(dpp, 20) << "LCObjsLister::next(): skipping " << i->key << " (multiple currents)" <<  dendl;
-        }
-        else {
-          ++num_noncurrent;
-          return i;
-        }
-      }
-      else
-        return skip_to_the_first_current(i, y);
-    }
-
-    // we reached the end of the current list results batch;
-    // need to fetch the next page and start over;
-    if (list_results.is_truncated && fetch(y)==0) {
-      i = obj_iter;
-    } else {
-      break;
-    }
-  } while (true);
-
-  return i;
 }
 
 boost::optional<std::string> LCObjsLister::next_key_name() const {
