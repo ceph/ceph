@@ -3243,3 +3243,230 @@ class TestFcopyfile:
         mode.
         '''
         self._write_file_and_test_fcopyfile(testdir, int(1 * 1000 * 1000 * 1000))
+
+
+class TestDoSnapMdOp:
+    '''
+    Contains tests for do_snap_md_op().
+    '''
+
+    def test_create_allows_adding(self, testdir):
+        '''
+        Test that do_snap_md_op() allows adding new key-value pairs to snapshot
+        metadata in create mode.
+        '''
+        dir_path = '/dir1'
+        snap_name = 'snap0'
+        snap_path = os.path.join(dir_path, '.snap', snap_name)
+
+        cephfs.mkdir(dir_path, 0o755)
+        md = {'foo': 'bar', 'zig': 'zag', 'abcdefg': '12345'}
+        cephfs.mksnap(dir_path, snap_name, 0o755, metadata=md)
+
+        cephfs.do_snap_md_op(snap_path, 'foo2', 'bar2',
+                             libcephfs.CEPH_SNAP_MD_OP_CREATE)
+        # update metadata at our end too.
+        md['foo2'] = 'bar2'
+
+        # verify that "create" was successful
+        snap_info = cephfs.snap_info(snap_path)
+        assert_equal(snap_info['metadata']['foo'], md['foo'])
+        assert_equal(snap_info['metadata']['foo2'], md['foo2'])
+        assert_equal(snap_info['metadata']['zig'], md['zig'])
+        assert_equal(snap_info['metadata']['abcdefg'], md['abcdefg'])
+        assert_greater(snap_info['id'], 1)
+
+        cephfs.rmsnap(dir_path, snap_name)
+        cephfs.rmdir(dir_path)
+
+    def test_create_allows_updating(self, testdir):
+        '''
+        Test that do_snap_md_op() allows updating new key-value pairs to snapshot
+        metadata in create mode.
+        '''
+        dir_path = '/dir1'
+        snap_name = 'snap0'
+        snap_path = os.path.join(dir_path, '.snap', snap_name)
+
+        cephfs.mkdir(dir_path, 0o755)
+        md = {'foo': 'bar', 'zig': 'zag', 'abcdefg': '12345'}
+        cephfs.mksnap(dir_path, snap_name, 0o755, metadata=md)
+
+        cephfs.do_snap_md_op(snap_path, 'foo', 'bar123',
+                             libcephfs.CEPH_SNAP_MD_OP_CREATE)
+        # update metadata at our end too.
+        md['foo'] = 'bar123'
+
+        # verify that "create" was successful
+        snap_info = cephfs.snap_info(snap_path)
+        assert_equal(snap_info['metadata']['foo'], md['foo'])
+        assert_equal(snap_info['metadata']['zig'], md['zig'])
+        assert_equal(snap_info['metadata']['abcdefg'], md['abcdefg'])
+        assert_greater(snap_info['id'], 1)
+
+        cephfs.rmsnap(dir_path, snap_name)
+        cephfs.rmdir(dir_path)
+
+    def test_excl_allows_adding(self, testdir):
+        '''
+        Test that do_snap_md_op() allows adding key-value pair in snapshot
+        metadata in EXCL mode.
+        '''
+        dir_path = '/dir1'
+        snap_name = 'snap0'
+        snap_path = os.path.join(dir_path, '.snap', snap_name)
+
+        cephfs.mkdir(dir_path, 0o755)
+        md = {'foo': 'bar', 'zig': 'zag', 'abcdefg': '12345'}
+        cephfs.mksnap(dir_path, snap_name, 0o755, metadata=md)
+
+        cephfs.do_snap_md_op(snap_path, 'foo2', 'bar2',
+                             libcephfs.CEPH_SNAP_MD_OP_CREATE | \
+                             libcephfs.CEPH_SNAP_MD_OP_EXCL)
+        # update metadata at our end too.
+        md['foo2'] = 'bar2'
+
+        # verify that update was successful
+        snap_info = cephfs.snap_info(snap_path)
+        assert_equal(snap_info['metadata']['foo'], md['foo'])
+        assert_equal(snap_info['metadata']['zig'], md['zig'])
+        assert_equal(snap_info['metadata']['abcdefg'], md['abcdefg'])
+        assert_greater(snap_info['id'], 1)
+
+        cephfs.rmsnap(dir_path, snap_name)
+        cephfs.rmdir(dir_path)
+
+    def test_excl_disallows_updating(self, testdir):
+        '''
+        Test that do_snap_md_op() rejects updating key-value pair in snapshot
+        metadata in EXCL mode.
+        '''
+        dir_path = '/dir1'
+        snap_name = 'snap0'
+        snap_path = os.path.join(dir_path, '.snap', snap_name)
+
+        cephfs.mkdir(dir_path, 0o755)
+        md = {'foo': 'bar', 'zig': 'zag', 'abcdefg': '12345'}
+        cephfs.mksnap(dir_path, snap_name, 0o755, metadata=md)
+
+        assert_raises(libcephfs.InvalidValue, cephfs.do_snap_md_op, snap_path,
+                      'foo', 'bar123', libcephfs.CEPH_SNAP_MD_OP_CREATE | \
+                      libcephfs.CEPH_SNAP_MD_OP_EXCL)
+
+        # verify that update was successful
+        snap_info = cephfs.snap_info(snap_path)
+        assert_equal(snap_info['metadata']['foo'], md['foo'])
+        assert_equal(snap_info['metadata']['zig'], md['zig'])
+        assert_equal(snap_info['metadata']['abcdefg'], md['abcdefg'])
+        assert_greater(snap_info['id'], 1)
+
+        cephfs.rmsnap(dir_path, snap_name)
+        cephfs.rmdir(dir_path)
+
+    def test_remove(self, testdir):
+        '''
+        Test that do_snap_md_op() allows removing key-value pairs from snapshot
+        metadata.
+        '''
+        dir_path = '/dir1'
+        snap_name = 'snap0'
+        snap_path = os.path.join(dir_path, '.snap', snap_name)
+
+        cephfs.mkdir(dir_path, 0o755)
+        md = {'foo': 'bar', 'foo2': 'bar2', 'zig': 'zag', 'abcdefg': '12345'}
+        cephfs.mksnap(dir_path, snap_name, 0o755, metadata=md)
+
+        cephfs.do_snap_md_op(snap_path, 'foo2', 'bar2',
+                             libcephfs.CEPH_SNAP_MD_OP_REMOVE)
+        # update metadata at our end too.
+        md.pop('foo2')
+
+        # verify that "create" was successful
+        snap_info = cephfs.snap_info(snap_path)
+        assert_equal(snap_info['metadata']['foo'], md['foo'])
+        assert_equal(snap_info['metadata']['zig'], md['zig'])
+        assert_equal(snap_info['metadata']['abcdefg'], md['abcdefg'])
+        try:
+            snap_info['metadata']['foo2']
+        except KeyError:
+            pass
+        else:
+            raise RuntimeError('Key "foo2" must\'ve been absent in snapshot '
+                                'metadata')
+        assert_greater(snap_info['id'], 1)
+
+        cephfs.rmsnap(dir_path, snap_name)
+        cephfs.rmdir(dir_path)
+
+    def test_with_empty_strings(self, testdir):
+        '''
+        Test all snap MD ops with empty string
+        '''
+        dir_path = '/dir1'
+        snap_name = 'snap0'
+        snap_path = os.path.join(dir_path, '.snap', snap_name)
+
+        cephfs.mkdir(dir_path, 0o755)
+        md = {'foo': 'bar', 'zig': 'zag', 'abcdefg': '12345'}
+        cephfs.mksnap(dir_path, snap_name, 0o755, metadata=md)
+
+        # test adding k-v pair via CREATE with empty strings
+        cephfs.do_snap_md_op(snap_path, '', '',
+                             libcephfs.CEPH_SNAP_MD_OP_CREATE)
+        cephfs.do_snap_md_op(snap_path, '', '1',
+                             libcephfs.CEPH_SNAP_MD_OP_CREATE)
+
+        # test adding k-v pair via EXCL with empty strings
+        cephfs.do_snap_md_op(snap_path, '1', '',
+                             libcephfs.CEPH_SNAP_MD_OP_CREATE | \
+                             libcephfs.CEPH_SNAP_MD_OP_EXCL)
+
+        # test remove k-v with empty strings
+        cephfs.do_snap_md_op(snap_path, '', '',
+                             libcephfs.CEPH_SNAP_MD_OP_REMOVE)
+        cephfs.do_snap_md_op(snap_path, '1', '',
+                             libcephfs.CEPH_SNAP_MD_OP_REMOVE)
+
+        # verify that "create" was successful
+        snap_info = cephfs.snap_info(snap_path)
+        assert_equal(snap_info['metadata']['foo'], md['foo'])
+        assert_equal(snap_info['metadata']['zig'], md['zig'])
+        assert_equal(snap_info['metadata']['abcdefg'], md['abcdefg'])
+
+        cephfs.rmsnap(dir_path, snap_name)
+        cephfs.rmdir(dir_path)
+
+    def test_neg(self, testdir):
+        '''
+        Test that do_snap_md_op() errors out when snapshot metadata operation
+        fails.
+        '''
+        dir_path = '/dir1'
+        snap_name = 'snap0'
+        snap_path = os.path.join(dir_path, '.snap', snap_name)
+
+        cephfs.mkdir(dir_path, 0o755)
+        md = {'foo': 'bar', 'zig': 'zag', 'abcdefg': '12345'}
+        cephfs.mksnap(dir_path, snap_name, 0o755, metadata=md)
+
+        # actual testing begins
+        # test updating k-v pair in EXCL mode
+        assert_raises(libcephfs.InvalidValue, cephfs.do_snap_md_op, snap_path,
+                      'foo', 'bar2', libcephfs.CEPH_SNAP_MD_OP_CREATE | \
+                      libcephfs.CEPH_SNAP_MD_OP_EXCL)
+        # test remove non-existing k-v pair
+        assert_raises(libcephfs.InvalidValue, cephfs.do_snap_md_op, snap_path,
+                      'foo2', 'bar2', libcephfs.CEPH_SNAP_MD_OP_REMOVE)
+        # test with invalid op_flag
+        assert_raises(libcephfs.InvalidValue, cephfs.do_snap_md_op, snap_path,
+                      'foo2', 'bar2', 5)
+
+        # verify that "create" was successful
+        snap_info = cephfs.snap_info(snap_path)
+        assert_equal(snap_info['metadata']['foo'], md['foo'])
+        assert_equal(snap_info['metadata']['zig'], md['zig'])
+        assert_equal(snap_info['metadata']['abcdefg'], md['abcdefg'])
+        assert_greater(snap_info['id'], 1)
+
+        cephfs.rmsnap(dir_path, snap_name)
+        cephfs.rmdir(dir_path)
