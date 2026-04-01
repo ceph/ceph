@@ -72,6 +72,20 @@ CEPH_SETATTR_BTIME = 0x200
 
 CEPH_NOSNAP = -2
 
+
+# XXX: DON'T FORGET to update values in src/include/cephfs/snap_types.h, if you
+# make any changes below.
+#
+# NOTE: Regretfully re-defined here to avoid all the compiler/path black magic
+# required to pass the "docs" CI job. Compiling via 'cdef extern' works locally
+# but fails in the isolated ReadTheDocs build environment due to missing directory
+# hierarchies.
+cpdef enum:
+    CEPH_SNAP_MD_OP_CREATE = (1 << 0)
+    CEPH_SNAP_MD_OP_EXCL   = (1 << 1)
+    CEPH_SNAP_MD_OP_REMOVE = (1 << 2)
+
+
 # XXX: errno definitions, hard-coded numbers here are errnos defined by Linux
 # that are used for the Ceph on-the-wire status codes.
 EBLOCKLISTED = ceph_to_hostos_errno(108)
@@ -1254,6 +1268,41 @@ cdef class LibCephFS(object):
                   info.snap_metadata[:info.nr_snap_metadata]}
             ceph_free_snap_info_buffer(&info)
         return {'id': info.id, 'metadata': md}
+
+    def do_snap_md_op(self, snap_path, md_key, md_val, op_flag):
+        '''
+        Create, update or remove a key-value pair from snapshot metadata.
+
+        :param snap_path: snapshot path
+        :param md_key: key for the key-value pair
+        :param md_val: value for the key-value pair
+        :param op_flag: flag indicating the op to be performed. it can be
+                        create, update or remove.
+
+        :raises: :class: `TypeError`
+        :raises: :class: `Error`
+
+        :returns: 0 on success
+        '''
+        self.require_state('mounted')
+
+        snap_path = cstr(snap_path, 'snap_path')
+        md_key = cstr(md_key, 'md_key')
+        md_val = cstr(md_val, 'md_val')
+
+        if not isinstance(op_flag, int):
+            raise TypeError('"op_flag" must be an int')
+
+        cdef:
+            char* _snap_path = snap_path
+            char* _md_key = md_key
+            char* _md_val = md_val
+            int _op_flag = op_flag
+
+        with nogil:
+            ret = ceph_do_snap_md_op(self.cluster, _snap_path, _md_key, _md_val, _op_flag)
+        if ret < 0:
+            raise make_ex(ret, 'snap_md_op')
 
     def chmod(self, path, mode) -> None:
         """
