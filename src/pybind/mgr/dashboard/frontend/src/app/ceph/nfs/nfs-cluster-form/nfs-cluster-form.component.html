@@ -193,6 +193,82 @@
         </div>
       </cd-form-advanced-fieldset>
 
+      <!-- Protocol Options -->
+      <cd-form-advanced-fieldset title="Protocol Options">
+        <!-- Enable NFSv3 -->
+        <div class="form-item">
+          <cds-checkbox
+            id="enable_nlm"
+            formControlName="enable_nlm"
+            i18n
+          >
+            Enable NFSv3 (NLM)
+          </cds-checkbox>
+          <cd-helper i18n>
+            Enable NFSv3 protocol support with Network Lock Manager (NLM). When disabled, only NFSv4 is available.
+          </cd-helper>
+        </div>
+      </cd-form-advanced-fieldset>
+
+      <!-- Bind Addresses -->
+      <cd-form-advanced-fieldset title="Bind Addresses">
+        <!-- Bind Addresses -->
+        <div class="form-item">
+          <cds-text-label
+            labelInputID="bind_addrs"
+            i18n
+            helperText="Comma-separated list of IP addresses for NFS to bind to (e.g., '192.168.1.10,192.168.1.11')."
+            i18n-helperText
+          >
+            Bind Addresses
+            <input
+              cdsText
+              type="text"
+              id="bind_addrs"
+              formControlName="bind_addrs"
+              placeholder="192.168.1.10,192.168.1.11"
+              i18n-placeholder
+            />
+          </cds-text-label>
+        </div>
+      </cd-form-advanced-fieldset>
+
+      <!-- Monitoring -->
+      <cd-form-advanced-fieldset title="Monitoring">
+        <!-- Monitoring Addresses -->
+        <div class="form-item">
+          <cds-text-label
+            labelInputID="monitoring_addrs"
+            i18n
+            helperText="Comma-separated list of IP addresses for monitoring endpoint to bind to (e.g., '192.168.1.10,192.168.1.11')."
+            i18n-helperText
+          >
+            Monitoring Addresses
+            <input
+              cdsText
+              type="text"
+              id="monitoring_addrs"
+              formControlName="monitoring_addrs"
+              placeholder="192.168.1.10,192.168.1.11"
+              i18n-placeholder
+            />
+          </cds-text-label>
+        </div>
+
+        <!-- Monitoring Port -->
+        <div class="form-item">
+          <cds-number
+            [id]="'monitoring_port'"
+            formControlName="monitoring_port"
+            [label]="'Monitoring Port'"
+            [min]="1"
+            placeholder="9587"
+            helperText="Port for NFS Ganesha metrics endpoint. Default is 9587."
+            i18n-helperText
+          ></cds-number>
+        </div>
+      </cd-form-advanced-fieldset>
+
       <cd-form-button-panel
         (submitActionEvent)="submitAction()"
         [form]="nfsForm"

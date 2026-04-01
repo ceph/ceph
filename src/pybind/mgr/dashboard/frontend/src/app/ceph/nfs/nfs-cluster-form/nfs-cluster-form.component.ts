@@ -98,7 +98,11 @@ export class NfsClusterFormComponent extends CdForm implements OnInit {
         ]
       ],
       ingress_mode: ['default'],
-      port: ['', [Validators.min(1)]]
+      port: ['', [Validators.min(1)]],
+      enable_nlm: [false],
+      bind_addrs: [''],
+      monitoring_addrs: [''],
+      monitoring_port: ['', [Validators.min(1)]]
     });
 
     this.orchService.status().subscribe((status) => {
@@ -133,7 +137,11 @@ export class NfsClusterFormComponent extends CdForm implements OnInit {
     const payload: any = {
       cluster_id: values.cluster_id,
       ingress: !!values.ingress,
-      port: values.port || undefined
+      port: values.port || undefined,
+      enable_nlm: !!values.enable_nlm,
+      bind_addrs: values.bind_addrs || undefined,
+      monitoring_addrs: values.monitoring_addrs || undefined,
+      monitoring_port: values.monitoring_port || undefined
     };
 
     const placementSpec = this.getPlacementSpec(values);

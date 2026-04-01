@@ -3,6 +3,9 @@ import logging
 import os
 from functools import partial, wraps
 from typing import Any, Dict, List, Optional, Union
+
+import yaml
+
 import cephfs
 from mgr_module import NFS_GANESHA_SUPPORTED_FSALS
 from orchestrator.module import IngressType
@@ -157,18 +160,38 @@ class NFSGaneshaCluster(RESTController):
             'virtual_ip': (str, 'Virtual IP for ingress', {'optional': True}),
             'ingress_mode': (str, 'Ingress mode (one of: default, keepalive-only, '
                             'haproxy-standard, haproxy-protocol)', {'optional': True}),
-            'port': (int, 'Port to use', {'optional': True})
+            'port': (int, 'Port to use', {'optional': True}),
+            'enable_nlm': (bool, 'Enable NFSv3 with Network Lock Manager', {'optional': True}),
+            'bind_addrs': (str, 'Comma-separated list of IP addresses for NFS to bind to', {'optional': True}),
+            'monitoring_addrs': (str, 'Comma-separated list of IP addresses for monitoring endpoint', {'optional': True}),
+            'monitoring_port': (int, 'Port for NFS Ganesha metrics endpoint', {'optional': True})
         }
     )
     @RESTController.MethodMap(version=APIVersion(1, 0))
     def create(self, cluster_id: str, placement: Optional[Union[str, Dict]] = None,
                ingress: Optional[bool] = None, virtual_ip: Optional[str] = None,
-               ingress_mode: Optional[str] = None, port: Optional[int] = None) -> Any:
+               ingress_mode: Optional[str] = None, port: Optional[int] = None,
+               enable_nlm: Optional[bool] = None, bind_addrs: Optional[str] = None,
+               monitoring_addrs: Optional[str] = None,
+               monitoring_port: Optional[int] = None) -> Any:
         """Create an NFS-Ganesha cluster."""
         logger.debug(
-            "Creating NFS cluster: cluster_id=%s, placement=%s, ingress=%s",
-            cluster_id, placement, ingress
+            "Creating NFS cluster: cluster_id=%s, placement=%s, ingress=%s, enable_nlm=%s",
+            cluster_id, placement, ingress, enable_nlm
         )
+
+        # Build additional config for inbuf
+        inbuf_config: Dict[str, Any] = {}
+        if enable_nlm is not None:
+            inbuf_config['enable_nlm'] = enable_nlm
+        if bind_addrs:
+            inbuf_config['bind_addrs'] = bind_addrs
+        if monitoring_addrs:
+            inbuf_config['monitoring_addrs'] = monitoring_addrs
+        if monitoring_port is not None:
+            inbuf_config['monitoring_port'] = monitoring_port
+
+        inbuf = yaml.dump(inbuf_config) if inbuf_config else None
 
         return mgr.remote(
             'nfs',
@@ -178,7 +201,8 @@ class NFSGaneshaCluster(RESTController):
             ingress=ingress,
             virtual_ip=virtual_ip,
             ingress_mode=parse_ingress_mode(ingress_mode),
-            port=port
+            port=port,
+            inbuf=inbuf
         )
 
     @raise_on_failure
