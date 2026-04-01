@@ -11966,6 +11966,12 @@ void Client::do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len)
       int r2 = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
 				       readahead_extent.first, readahead_extent.second,
 				       NULL, 0, onfinish2);
+      if (r2 > 0) {
+	logger->inc(l_c_osdc_hit);
+      } else if (r2 == 0) {
+	logger->inc(l_c_osdc_miss);
+      }
+
       if (r2 == 0) {
 	ldout(cct, 20) << "readahead initiated, c " << onfinish2 << dendl;
 	get_cap_ref(in, CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE);
