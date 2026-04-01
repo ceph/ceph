@@ -1,6 +1,6 @@
 import pytest
 from argparse import Namespace
-from unittest.mock import patch, Mock, MagicMock
+from unittest.mock import patch, Mock
 from ceph_volume.objectstore.seastore_lvm import SeastoreLvm
 from ceph_volume.api.lvm import Volume
 from ceph_volume.util import system
@@ -90,7 +90,7 @@ class TestSeastoreLvm:
         assert self.lvm.tags['ceph.seastore_secondary_count'] == 0
 
 
-    @patch('ceph_volume.objectstore.seastore_lvm.prepare_utils.link_seastore_secondary')
+    @patch('ceph_volume.objectstore.seastore.prepare_utils.link_seastore_secondary')
     @patch('ceph_volume.objectstore.baseobjectstore.BaseObjectStore.prepare_osd_req')
     def test_prepare_osd_req_no_secondaries(self, m_super, m_link, factory):
         args = factory(seastore_secondary=[])
@@ -100,7 +100,7 @@ class TestSeastoreLvm:
         m_super.assert_called_once()
         m_link.assert_not_called()
 
-    @patch('ceph_volume.objectstore.seastore_lvm.prepare_utils.link_seastore_secondary')
+    @patch('ceph_volume.objectstore.seastore.prepare_utils.link_seastore_secondary')
     @patch('ceph_volume.objectstore.baseobjectstore.BaseObjectStore.prepare_osd_req')
     def test_prepare_osd_req_with_secondaries(self, m_super, m_link, factory):
         args = factory(seastore_secondary=[('/dev/sdb', 'HDD'), ('/dev/sdc', 'SSD')])
@@ -112,7 +112,7 @@ class TestSeastoreLvm:
         m_link.assert_any_call('/dev/sdc', 'SSD', 2, '0')
 
 
-    @patch('ceph_volume.objectstore.seastore_lvm.prepare_utils.unlink_seastore_secondaries')
+    @patch('ceph_volume.objectstore.seastore.prepare_utils.unlink_seastore_secondaries')
     def test_unlink_bs_symlinks_no_block(self, m_unlink, fake_filesystem):
         osd_path = '/var/lib/ceph/osd/ceph-0'
         fake_filesystem.create_dir(osd_path)
@@ -120,7 +120,7 @@ class TestSeastoreLvm:
         self.lvm.unlink_bs_symlinks()
         m_unlink.assert_called_once_with(osd_path)
 
-    @patch('ceph_volume.objectstore.seastore_lvm.prepare_utils.unlink_seastore_secondaries')
+    @patch('ceph_volume.objectstore.seastore.prepare_utils.unlink_seastore_secondaries')
     def test_unlink_bs_symlinks_removes_block(self, m_unlink, fake_filesystem):
         osd_path = '/var/lib/ceph/osd/ceph-0'
         fake_filesystem.create_dir(osd_path)
@@ -179,8 +179,6 @@ class TestSeastoreLvm:
         monkeypatch.setattr(system, 'chown', lambda path: 0)
         monkeypatch.setattr('ceph_volume.configuration.load', lambda: None)
         monkeypatch.setattr('ceph_volume.util.system.path_is_mounted', lambda path: False)
-        m_create_osd_path.return_value = MagicMock()
-        m_success.return_value = MagicMock()
 
         lvs = [Volume(lv_name='lv_foo-block',
                       lv_path='/fake-block-path',
@@ -216,8 +214,6 @@ class TestSeastoreLvm:
         monkeypatch.setattr(system, 'chown', lambda path: 0)
         monkeypatch.setattr('ceph_volume.configuration.load', lambda: None)
         monkeypatch.setattr('ceph_volume.util.system.path_is_mounted', lambda path: False)
-        m_create_osd_path.return_value = MagicMock()
-        m_success.return_value = MagicMock()
 
         lvs = [Volume(lv_name='lv_foo-block',
                       lv_path='/fake-block-path',
@@ -255,8 +251,6 @@ class TestSeastoreLvm:
         monkeypatch.setattr(system, 'chown', lambda path: 0)
         monkeypatch.setattr('ceph_volume.configuration.load', lambda: None)
         monkeypatch.setattr('ceph_volume.util.system.path_is_mounted', lambda path: False)
-        m_create_osd_path.return_value = MagicMock()
-        m_success.return_value = MagicMock()
 
         lvs = [Volume(lv_name='lv_foo-block',
                       lv_path='/fake-block-path',

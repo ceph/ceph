@@ -1,67 +1,48 @@
-import logging
 import os
-from ceph_volume import conf, terminal, process
+from typing import List, Optional
+
+from ceph_volume import conf, configuration, process, terminal
 from ceph_volume.api import lvm as api
+from ceph_volume.systemd import systemctl
 from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.util import system
-from ceph_volume.systemd import systemctl
-from ceph_volume import configuration
 from .lvm import Lvm
-from typing import List, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    import argparse
-
-logger = logging.getLogger(__name__)
+from .seastore import SeastoreMixin
 
 
-class SeastoreLvm(Lvm):
+class SeastoreLvm(SeastoreMixin, Lvm):
     """
     LVM-backed seastore OSD.  Inherits the full prepare/activate machinery from
-    Lvm but overrides the parts that are BlueStore-specific.
+    Lvm but overrides the parts that are BlueStore-specific via SeastoreMixin.
     """
-
-    def add_objectstore_opts(self) -> None:
-        # Seastore does not use --bluestore-block-wal/db-path.
-        affinity = self.get_osdspec_affinity()
-        if affinity:
-            self.osd_mkfs_cmd.extend(['--osdspec-affinity', affinity])
 
     def setup_metadata_devices(self) -> None:
         """
         Record secondary device metadata in LVM tags on the block LV.
-        Secondaries are raw devices — no new LVs are created for them.
+        Secondaries are raw devices -- no new LVs are created for them.
         Tag keys: ceph.seastore_secondary_{i}_{count,device,type,id}
         """
-        secondaries = getattr(self.args, 'seastore_secondary', []) or []
+        secondaries = getattr(self.args, 'seastore_secondary', [])
         self.tags['ceph.seastore_secondary_count'] = len(secondaries)
         for i, (device, dtype) in enumerate(secondaries):
             self.tags['ceph.seastore_secondary_%d_device' % i] = device
             self.tags['ceph.seastore_secondary_%d_type' % i] = dtype
             self.tags['ceph.seastore_secondary_%d_id' % i] = i + 1
 
-    def prepare_osd_req(self, tmpfs: bool = True) -> None:
-        super().prepare_osd_req(tmpfs=tmpfs)
-        secondaries = getattr(self.args, 'seastore_secondary', []) or []
-        for i, (device, dtype) in enumerate(secondaries):
-            prepare_utils.link_seastore_secondary(device, dtype, i + 1, self.osd_id)
+    @staticmethod
+    def _find_block_lv(osd_lvs: List[api.Volume]) -> Optional[api.Volume]:
+        """Return the block LV from a list of OSD LVs, or None."""
+        for lv in osd_lvs:
+            if lv.tags.get('ceph.type') == 'block':
+                return lv
+        return None
 
-    def unlink_bs_symlinks(self) -> None:
-        block_path = os.path.join(self.osd_path, 'block')
-        if os.path.exists(block_path):
-            os.unlink(block_path)
-        prepare_utils.unlink_seastore_secondaries(self.osd_path)
-
-    def _get_secondaries_from_lvs(self, osd_lvs: List[api.Volume]):
+    def _get_secondaries_from_lvs(self, osd_lvs: List[api.Volume]) -> list:
         """
         Reconstruct the list of (device, dtype, dev_id) tuples from LVM tags
         stored on the block LV.
         """
-        osd_block_lv = None
-        for lv in osd_lvs:
-            if lv.tags.get('ceph.type') == 'block':
-                osd_block_lv = lv
-                break
+        osd_block_lv = self._find_block_lv(osd_lvs)
         if osd_block_lv is None:
             return []
 
@@ -86,11 +67,8 @@ class SeastoreLvm(Lvm):
                   osd_lvs: List[api.Volume],
                   no_systemd: bool = False,
                   no_tmpfs: bool = False) -> None:
-        for lv in osd_lvs:
-            if lv.tags.get('ceph.type') == 'block':
-                osd_block_lv = lv
-                break
-        else:
+        osd_block_lv = self._find_block_lv(osd_lvs)
+        if osd_block_lv is None:
             raise RuntimeError('could not find a seastore OSD to activate')
 
         osd_id = osd_block_lv.tags['ceph.osd_id']
@@ -105,10 +83,9 @@ class SeastoreLvm(Lvm):
 
         self.unlink_bs_symlinks()
 
-        osd_lv_path = osd_block_lv.lv_path
-        system.chown(self.osd_path)
-        process.run(['ln', '-snf', osd_lv_path, os.path.join(self.osd_path, 'block')])
-        system.chown(os.path.join(self.osd_path, 'block'))
+        block_path = os.path.join(self.osd_path, 'block')
+        process.run(['ln', '-snf', osd_block_lv.lv_path, block_path])
+        system.chown(block_path)
         system.chown(self.osd_path)
 
         for device, dtype, dev_id in self._get_secondaries_from_lvs(osd_lvs):
