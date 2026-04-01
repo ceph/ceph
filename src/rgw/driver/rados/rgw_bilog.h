@@ -63,8 +63,18 @@ inline uint32_t bilog_shards_for_index(uint32_t index_shards,
   return v;
 }
 
-// per-bucket FIFO bilog: one LazyFIFO per bilog shard, stored in the log pool.
+inline rgw::bucket_log_layout_generation fifo_log_layout_from_index(
+    uint64_t gen, const rgw::bucket_index_layout_generation& index)
+{
+  rgw::bucket_log_layout_generation log;
+  log.gen = gen;
+  log.layout.type = rgw::BucketLogType::FIFO;
+  log.layout.in_index = {index.gen, index.layout.normal};
+  log.layout.fifo.num_shards = bilog_shards_for_index(index.layout.normal.num_shards);
+  return log;
+}
 
+// per-bucket FIFO bilog: one LazyFIFO per bilog shard, stored in the log pool.
 // shard count is recorded in bucket_log_layout_generation::layout::fifo::num_shards.
 class RGWBILogFIFO {
   tiny_vector<LazyFIFO> fifos;
