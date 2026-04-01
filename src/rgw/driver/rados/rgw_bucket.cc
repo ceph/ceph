@@ -3009,6 +3009,7 @@ void init_default_bucket_layout(CephContext *cct, rgw::BucketLayout& layout,
 				const RGWZone& zone,
 				std::optional<rgw::BucketIndexType> type,
 				std::optional<uint32_t> shards) {
+
   layout.current_index.gen = 0;
   layout.current_index.layout.normal.hash_type = rgw::BucketHashType::Mod;
 
@@ -3030,12 +3031,7 @@ void init_default_bucket_layout(CephContext *cct, rgw::BucketLayout& layout,
     const bool use_fifo =
       (cct->_conf.get_val<std::string>("rgw_default_bucket_bilog_type") == "fifo");
     if (use_fifo) {
-      rgw::bucket_log_layout_generation fifo_log;
-      fifo_log.gen = 0;
-      fifo_log.layout.type = rgw::BucketLogType::FIFO;
-      fifo_log.layout.in_index = {layout.current_index.gen,
-                                  layout.current_index.layout.normal};
-      layout.logs.push_back(fifo_log);
+      layout.logs.push_back(fifo_log_layout_from_index(0, layout.current_index));
     } else {
       layout.logs.push_back(log_layout_from_index(0, layout.current_index));
     }

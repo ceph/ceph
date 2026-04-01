@@ -805,16 +805,10 @@ static int commit_target_layout(rgw::sal::RadosStore* store,
   layout.resharding = rgw::BucketReshardState::None;
 
   // add the new log generation, preserving the bilog backend type.
-  // FIFO-backed buckets keep FIFO after reshard; the in_index field still
-  // records the new index generation so shard OIDs can be constructed
-  // via bilog_fifo_oid.
+  // FIFO-backed buckets keep FIFO after reshard; in_index records which
+  // index generation's writes this log generation covers.
   if (is_fifo) {
-    rgw::bucket_log_layout_generation fifo_log;
-    fifo_log.gen = next_log_gen;
-    fifo_log.layout.type = rgw::BucketLogType::FIFO;
-    fifo_log.layout.in_index = {layout.current_index.gen,
-                                layout.current_index.layout.normal};
-    layout.logs.push_back(fifo_log);
+    layout.logs.push_back(fifo_log_layout_from_index(next_log_gen, layout.current_index));
   } else {
     layout.logs.push_back(log_layout_from_index(next_log_gen, layout.current_index));
   }
