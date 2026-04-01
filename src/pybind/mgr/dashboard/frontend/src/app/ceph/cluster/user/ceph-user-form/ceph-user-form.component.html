@@ -108,11 +108,11 @@
                 value=""
                 disabled
                 i18n>Select entity</option>
-              <option value="mon">mon</option>
-              <option value="osd">osd</option>
-              <option value="mgr">mgr</option>
-              <option value="mds">mds</option>
-              <option value="rgw">rgw</option>
+              <option value="mon" i18n>mon</option>
+              <option value="osd" i18n>osd</option>
+              <option value="mgr" i18n>mgr</option>
+              <option value="mds" i18n>mds</option>
+              <option value="rgw" i18n>rgw</option>
             </cds-select>
           </div>
 
@@ -125,9 +125,9 @@
                 value=""
                 disabled
                 i18n>Select permission</option>
-              <option value="allow r">allow r</option>
-              <option value="allow rw">allow rw</option>
-              <option value="allow rwx">allow rwx</option>
+              <option value="allow r" i18n>allow r</option>
+              <option value="allow rw" i18n>allow rw</option>
+              <option value="allow rwx" i18n>allow rwx</option>
             </cds-select>
           </div>
 
@@ -143,9 +143,8 @@
               (click)="removeCap(i)"
               aria-label="Remove capability"
             >
-              <svg
-                cdsIcon="close"
-                size="16"></svg>
+              <cd-icon
+               type="destroy"></cd-icon>
             </button>
           </div>
 
@@ -161,7 +160,7 @@
         <div
           cdsCol
           [columnNumbers]="{ sm: 4, md: 4 }"
-          class="add-btn-col">
+          class="cds-pl-6">
           <button
             cdsButton="secondary"
             size="sm"
