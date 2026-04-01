@@ -909,3 +909,19 @@ void Inode::set_effective_size(uint64_t size)
 
   *(ceph_le64 *)fscrypt_file.data() = size;
 }
+
+void Inode::move_to_unpinned() {
+  while (!pinned_dentries.empty()) {
+    auto it = pinned_dentries.begin();
+    (*it)->do_unpin();
+  }
+  ceph_assert(pinned_dentries.empty());
+}
+
+void Inode::move_to_pinnned() {
+  while (!unpinned_dentries.empty()) {
+    auto it = unpinned_dentries.begin();
+    (*it)->do_pin();
+  }
+  ceph_assert(unpinned_dentries.empty());
+}

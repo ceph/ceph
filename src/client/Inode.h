@@ -266,6 +266,24 @@ struct Inode : RefCountedObject {
 
   uint64_t  ll_ref = 0;   // separate ref count for ll client
   xlist<Dentry *> dentries; // if i'm linked to a dentry.
+  /*
+  For files, the dentry reference count is not incremented because multiple
+  dentries may point to the same inode. Managing dentry reference counting is
+  not straightforward, since in functions such as Client::_ll_get and
+  Client::_ll_put we do not know exactly which dentry is being targeted for
+  increment or decrement. To handle this, we maintain two lists of dentries.
+
+  Initially, at link time, all dentries are placed in the unpinned list.
+  Whenever the inode reference count is incremented, all dentries in the
+  unpinned list are pinned and moved to the file_pinned_dentries list. These
+  dentries remain pinned until the inode's reference count drops to zero.
+
+  This ensures that dentries associated with a file are protected from
+  unintended cache eviction.
+  https://tracker.ceph.com/issues/75825
+  */
+  xlist<Dentry *> pinned_dentries; 
+  xlist<Dentry *> unpinned_dentries;
   std::string    symlink;  // symlink content, if it's a symlink
   std::map<std::string,bufferptr> xattrs;
   std::map<frag_t,int> fragmap;  // known frag -> mds mappings
@@ -280,6 +298,10 @@ struct Inode : RefCountedObject {
     ceph_assert(!dentries.empty());
     return *dentries.begin();
   }
+
+  void move_to_unpinned();
+
+  void move_to_pinnned();
 
   void make_long_path(filepath& p);
   void make_short_path(filepath& p);
