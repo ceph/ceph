@@ -3,6 +3,7 @@ import logging
 import argparse
 from textwrap import dedent
 from ceph_volume import objectstore
+from ceph_volume.util.arg_validators import validate_objectstore_args
 from .common import prepare_parser
 from typing import List, Optional
 
@@ -58,6 +59,7 @@ class Prepare(object):
             self.args = parser.parse_args(self.argv)
         if self.args.bluestore:
             self.args.objectstore = 'bluestore'
+        validate_objectstore_args(self.args)
         self.objectstore = objectstore.mapping['LVM'][self.args.objectstore](args=self.args)
         if self.objectstore is not None:
             self.objectstore.safe_prepare()

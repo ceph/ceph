@@ -260,6 +260,23 @@ class ValidFraction(object):
         return fraction_float
 
 
+def validate_objectstore_args(args):
+    """Reject flag combinations that cross objectstore boundaries.
+
+    Seastore does not use --block.db / --block.wal, and bluestore does
+    not use --seastore-secondary.  Call this after argument parsing in
+    every prepare/create path.
+    """
+    if args.objectstore == 'seastore':
+        if getattr(args, 'block_db', None):
+            raise RuntimeError('--block.db cannot be used with --objectstore seastore')
+        if getattr(args, 'block_wal', None):
+            raise RuntimeError('--block.wal cannot be used with --objectstore seastore')
+    elif args.objectstore == 'bluestore':
+        if getattr(args, 'seastore_secondary', None):
+            raise RuntimeError('--seastore-secondary cannot be used with --objectstore bluestore')
+
+
 VALID_SEASTORE_SECONDARY_TYPES = {'HDD', 'SSD', 'ZBD', 'RANDOM_BLOCK_SSD'}
 
 

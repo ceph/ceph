@@ -3,6 +3,7 @@ import logging
 import os
 from textwrap import dedent
 from ceph_volume import terminal, objectstore
+from ceph_volume.util.arg_validators import validate_objectstore_args
 from .common import create_parser
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,7 @@ class Prepare(object):
         self.args = parser.parse_args(self.argv)
         if self.args.bluestore:
             self.args.objectstore = 'bluestore'
+        validate_objectstore_args(self.args)
         if self.args.dmcrypt:
             if not self.args.with_tpm and not os.getenv('CEPH_VOLUME_DMCRYPT_SECRET'):
                 terminal.error('encryption was requested (--dmcrypt) but environment variable ' \
