@@ -33,6 +33,7 @@
 #include "MetricCollector.h"
 #include "OSDPerfMetricCollector.h"
 #include "MDSPerfMetricCollector.h"
+#include "MgrContext.h"
 
 #include <boost/scoped_ptr.hpp>
 
@@ -246,6 +247,12 @@ private:
   Context *tick_event;
   void tick();
   void schedule_tick_locked(double delay_sec);
+  bool audit_pool_exists{false};
+  bool audit_pool_appified{false};
+  bool _enough_osds_exist() const;
+  std::pair<int, std::string> _create_audit_pool();
+  std::pair<int, std::string> _appify_audit_pool();
+  void _ensure_audit_pool();
 
   class OSDPerfMetricCollectorListener : public MetricListener {
   public:
@@ -370,6 +377,8 @@ public:
                     const cmdmap_t& cmdmap,
                     Formatter *f,
                     std::ostream& ss);
+
+  void ensure_audit_pool();
 };
 
 #endif
