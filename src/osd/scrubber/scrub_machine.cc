@@ -205,6 +205,11 @@ Session::Session(my_context ctx)
   m_counters_idx = &scrbr->get_unlabeled_counters();
   m_osd_counters->inc(m_counters_idx->started_cnt);
 
+  // Push PrimaryActive's span here (not in PrimaryActive's ctor) so that
+  // it gets exported when Session ends. PrimaryActive itself outlives the
+  // scrub session, so a span pushed there would stay unexported for too long.
+  context<ScrubMachine>().push_span(
+      fmt::format("{}_primary_PrimaryActive", pg_id.pgid));
   context<ScrubMachine>().push_span(
       fmt::format("{}_primary_PrimaryActive/Session", pg_id.pgid));
 }
@@ -212,7 +217,8 @@ Session::Session(my_context ctx)
 Session::~Session()
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  machine.pop_span();
+  machine.pop_span();  // Session
+  machine.pop_span();  // PrimaryActive
   m_reservations.reset();
   machine.m_session_started_at.reset();
 
