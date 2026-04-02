@@ -24,8 +24,8 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
+  "id": 40,
   "links": [],
-  "liveNow": false,
   "panels": [
     {
       "datasource": {
@@ -54,7 +54,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               }
             ]
           },
@@ -86,7 +86,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "9.4.7",
+      "pluginVersion": "12.3.1",
       "targets": [
         {
           "datasource": {
@@ -95,8 +95,8 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by (subvolume_path) (ceph_mds_subvolume_metrics_used_bytes{cluster=\"$cluster\",fs_name=\"$filesystem\", subvolume_path=\"$subvolume\"})",
-          "instant": true,
+          "expr": "sum(ceph_mds_subvolume_metrics_used_bytes{cluster=\"$cluster\",fs_name=\"$filesystem\", subvolume_path=\"$subvolume\"})",
+          "instant": false,
           "legendFormat": "Used",
           "range": true,
           "refId": "A"
@@ -108,9 +108,9 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by (subvolume_path) (ceph_mds_subvolume_metrics_quota_bytes{cluster=\"$cluster\",fs_name=\"$filesystem\", subvolume_path=\"$subvolume\"})",
+          "expr": "sum(ceph_mds_subvolume_metrics_quota_bytes{cluster=\"$cluster\",fs_name=\"$filesystem\", subvolume_path=\"$subvolume\"})",
           "hide": false,
-          "instant": true,
+          "instant": false,
           "legendFormat": "Quota",
           "range": true,
           "refId": "B"
@@ -136,7 +136,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               }
             ]
           },
@@ -168,7 +168,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "9.4.7",
+      "pluginVersion": "12.3.1",
       "targets": [
         {
           "datasource": {
@@ -177,7 +177,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by (subvolume_path) (ceph_mds_subvolume_metrics_avg_read_iops{cluster=~\"$cluster\",fs_name=~\"$filesystem\", subvolume_path=~\"$subvolume\"})",
+          "expr": "sum(ceph_mds_subvolume_metrics_avg_read_iops{cluster=~\"$cluster\",fs_name=~\"$filesystem\", subvolume_path=~\"$subvolume\"})",
           "instant": false,
           "legendFormat": "Read",
           "range": true,
@@ -190,7 +190,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by (subvolume_path) (ceph_mds_subvolume_metrics_avg_write_iops{cluster=~\"$cluster\",fs_name=~\"$filesystem\", subvolume_path=~\"$subvolume\"})",
+          "expr": "sum(ceph_mds_subvolume_metrics_avg_write_iops{cluster=~\"$cluster\",fs_name=~\"$filesystem\", subvolume_path=~\"$subvolume\"})",
           "hide": false,
           "instant": false,
           "legendFormat": "Write",
@@ -218,7 +218,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               }
             ]
           },
@@ -250,7 +250,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "9.4.7",
+      "pluginVersion": "12.3.1",
       "targets": [
         {
           "datasource": {
@@ -259,7 +259,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by (subvolume_path) (ceph_mds_subvolume_metrics_avg_read_tp_Bps{cluster=~\"$cluster\",fs_name=~\"$filesystem\", subvolume_path=~\"$subvolume\"})",
+          "expr": "sum(ceph_mds_subvolume_metrics_avg_read_tp_Bps{cluster=~\"$cluster\",fs_name=~\"$filesystem\", subvolume_path=~\"$subvolume\"})",
           "instant": false,
           "legendFormat": "Read",
           "range": true,
@@ -272,7 +272,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by (subvolume_path) (ceph_mds_subvolume_metrics_avg_write_tp_Bps{cluster=~\"$cluster\",fs_name=~\"$filesystem\", subvolume_path=~\"$subvolume\"})",
+          "expr": "sum(ceph_mds_subvolume_metrics_avg_write_tp_Bps{cluster=~\"$cluster\",fs_name=~\"$filesystem\", subvolume_path=~\"$subvolume\"})",
           "hide": false,
           "instant": false,
           "legendFormat": "Write",
@@ -300,7 +300,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               }
             ]
           },
@@ -332,7 +332,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "9.4.7",
+      "pluginVersion": "12.3.1",
       "targets": [
         {
           "datasource": {
@@ -341,7 +341,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by (subvolume_path) (ceph_mds_subvolume_metrics_avg_read_lat_msec{cluster=~\"$cluster\",fs_name=~\"$filesystem\", subvolume_path=~\"$subvolume\"})",
+          "expr": "sum(ceph_mds_subvolume_metrics_avg_read_lat_msec{cluster=~\"$cluster\",fs_name=~\"$filesystem\", subvolume_path=~\"$subvolume\"})",
           "instant": false,
           "legendFormat": "Read",
           "range": true,
@@ -354,7 +354,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by (subvolume_path) (ceph_mds_subvolume_metrics_avg_write_lat_msec{cluster=~\"$cluster\",fs_name=~\"$filesystem\", subvolume_path=~\"$subvolume\"})",
+          "expr": "sum(ceph_mds_subvolume_metrics_avg_write_lat_msec{cluster=~\"$cluster\",fs_name=~\"$filesystem\", subvolume_path=~\"$subvolume\"})",
           "hide": false,
           "instant": false,
           "legendFormat": "Write",
@@ -377,11 +377,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -390,6 +392,7 @@
               "tooltip": false,
               "viz": false
             },
+            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -397,7 +400,8 @@
               "type": "linear"
             },
             "showPoints": "auto",
-            "spanNulls": false,
+            "showValues": false,
+            "spanNulls": true,
             "stacking": {
               "group": "A",
               "mode": "none"
@@ -412,7 +416,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               }
             ]
           },
@@ -429,17 +433,20 @@
       "id": 8,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "mode": "single",
           "sort": "none"
         }
       },
-      "pluginVersion": "9.4.7",
+      "pluginVersion": "12.3.1",
       "targets": [
         {
           "datasource": {
@@ -448,7 +455,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by (subvolume_path) (ceph_mds_subvolume_metrics_used_bytes{cluster=~\"$cluster\",fs_name=~\"$filesystem\", subvolume_path=~\"$subvolume\"})",
+          "expr": "sum(ceph_mds_subvolume_metrics_used_bytes{cluster=~\"$cluster\",fs_name=~\"$filesystem\", subvolume_path=~\"$subvolume\"})",
           "instant": true,
           "legendFormat": "Used",
           "range": true,
@@ -470,11 +477,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -483,6 +492,7 @@
               "tooltip": false,
               "viz": false
             },
+            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineStyle": {
               "fill": "solid"
@@ -493,6 +503,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": true,
             "stacking": {
               "group": "A",
@@ -508,7 +519,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               }
             ]
           },
@@ -525,8 +536,10 @@
       "id": 4,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -536,7 +549,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.6.0",
+      "pluginVersion": "12.3.1",
       "targets": [
         {
           "datasource": {
@@ -545,7 +558,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by (subvolume_path) (ceph_mds_subvolume_metrics_avg_read_iops{cluster=~\"$cluster\",fs_name=~\"$filesystem\", subvolume_path=~\"$subvolume\"})",
+          "expr": "sum(ceph_mds_subvolume_metrics_avg_read_iops{cluster=~\"$cluster\",fs_name=~\"$filesystem\", subvolume_path=~\"$subvolume\"})",
           "instant": false,
           "legendFormat": "Read",
           "range": true,
@@ -558,7 +571,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by (subvolume_path) (ceph_mds_subvolume_metrics_avg_write_iops{cluster=~\"$cluster\",fs_name=~\"$filesystem\", subvolume_path=~\"$subvolume\"})",
+          "expr": "sum(ceph_mds_subvolume_metrics_avg_write_iops{cluster=~\"$cluster\",fs_name=~\"$filesystem\", subvolume_path=~\"$subvolume\"})",
           "hide": false,
           "instant": false,
           "legendFormat": "Write",
@@ -581,11 +594,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -594,6 +609,7 @@
               "tooltip": false,
               "viz": false
             },
+            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -601,6 +617,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": true,
             "stacking": {
               "group": "A",
@@ -616,7 +633,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               }
             ]
           },
@@ -633,8 +650,10 @@
       "id": 5,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -644,7 +663,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.6.0",
+      "pluginVersion": "12.3.1",
       "targets": [
         {
           "datasource": {
@@ -653,8 +672,8 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by (subvolume_path) (ceph_mds_subvolume_metrics_avg_read_tp_Bps{cluster=~\"$cluster\",fs_name=~\"$filesystem\", subvolume_path=~\"$subvolume\"})",
-          "instant": true,
+          "expr": "sum(ceph_mds_subvolume_metrics_avg_read_tp_Bps{cluster=~\"$cluster\",fs_name=~\"$filesystem\", subvolume_path=~\"$subvolume\"})",
+          "instant": false,
           "legendFormat": "Read",
           "range": true,
           "refId": "A"
@@ -666,9 +685,9 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by (subvolume_path) (ceph_mds_subvolume_metrics_avg_write_tp_Bps{cluster=~\"$cluster\",fs_name=~\"$filesystem\", subvolume_path=~\"$subvolume\"})",
+          "expr": "sum(ceph_mds_subvolume_metrics_avg_write_tp_Bps{cluster=~\"$cluster\",fs_name=~\"$filesystem\", subvolume_path=~\"$subvolume\"})",
           "hide": false,
-          "instant": true,
+          "instant": false,
           "legendFormat": "Write",
           "range": true,
           "refId": "B"
@@ -689,11 +708,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -702,6 +723,7 @@
               "tooltip": false,
               "viz": false
             },
+            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -709,6 +731,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": true,
             "stacking": {
               "group": "A",
@@ -724,7 +747,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -745,8 +768,10 @@
       "id": 6,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -756,7 +781,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.6.0",
+      "pluginVersion": "12.3.1",
       "targets": [
         {
           "datasource": {
@@ -765,7 +790,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by (subvolume_path) (ceph_mds_subvolume_metrics_avg_read_lat_msec{cluster=~\"$cluster\",fs_name=~\"$filesystem\", subvolume_path=~\"$subvolume\"})",
+          "expr": "sum(ceph_mds_subvolume_metrics_avg_read_lat_msec{cluster=~\"$cluster\",fs_name=~\"$filesystem\", subvolume_path=~\"$subvolume\"})",
           "instant": false,
           "legendFormat": "Read",
           "range": true,
@@ -778,7 +803,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by (subvolume_path) (ceph_mds_subvolume_metrics_avg_write_lat_msec{cluster=~\"$cluster\",fs_name=~\"$filesystem\", subvolume_path=~\"$subvolume\"})",
+          "expr": "sum(ceph_mds_subvolume_metrics_avg_write_lat_msec{cluster=~\"$cluster\",fs_name=~\"$filesystem\", subvolume_path=~\"$subvolume\"})",
           "hide": false,
           "instant": false,
           "legendFormat": "Write",
@@ -790,10 +815,9 @@
       "type": "timeseries"
     }
   ],
+  "preload": false,
   "refresh": "10s",
-  "revision": 1,
-  "schemaVersion": 38,
-  "style": "dark",
+  "schemaVersion": 42,
   "tags": [
     "overview"
   ],
@@ -801,26 +825,20 @@
     "list": [
       {
         "current": {
-          "selected": true,
           "text": "Dashboard",
           "value": "Dashboard"
         },
-        "hide": 0,
         "includeAll": false,
         "label": "Data Source",
-        "multi": false,
         "name": "datasource",
         "options": [],
         "query": "prometheus",
-        "queryValue": "",
         "refresh": 1,
         "regex": "",
-        "skipUrlSync": false,
         "type": "datasource"
       },
       {
         "current": {
-          "selected": true,
           "text": "cluster1",
           "value": "cluster1"
         },
@@ -830,10 +848,8 @@
         },
         "definition": "label_values(ceph_health_status, cluster)",
         "description": "",
-        "hide": 0,
         "includeAll": false,
         "label": "Cluster",
-        "multi": false,
         "name": "cluster",
         "options": [],
         "query": {
@@ -842,13 +858,10 @@
         },
         "refresh": 1,
         "regex": "",
-        "skipUrlSync": false,
-        "sort": 0,
         "type": "query"
       },
       {
         "current": {
-          "selected": false,
           "text": "a",
           "value": "a"
         },
@@ -857,10 +870,8 @@
           "uid": "${datasource}"
         },
         "definition": "label_values(ceph_fs_metadata{cluster=~\"$cluster\"},name)",
-        "hide": 0,
         "includeAll": false,
         "label": "Filesystem",
-        "multi": false,
         "name": "filesystem",
         "options": [],
         "query": {
@@ -869,25 +880,18 @@
         },
         "refresh": 2,
         "regex": "",
-        "skipUrlSync": false,
-        "sort": 0,
         "type": "query"
       },
       {
         "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
         },
         "datasource": {
           "type": "prometheus",
           "uid": "${datasource}"
         },
         "definition": "label_values(ceph_mds_subvolume_metrics_avg_read_iops{cluster=~\"$cluster\", fs_name=~\"$filesystem\"},subvolume_path)",
-        "hide": 0,
-        "includeAll": true,
+        "includeAll": false,
         "label": "Subvolume path",
-        "multi": false,
         "name": "subvolume",
         "options": [],
         "query": {
@@ -896,8 +900,6 @@
         },
         "refresh": 2,
         "regex": "",
-        "skipUrlSync": false,
-        "sort": 0,
         "type": "query"
       }
     ]
@@ -910,6 +912,5 @@
   "timezone": "browser",
   "title": "Ceph - Filesystem Subvolume Overview",
   "uid": "af0wifl5kbda8d",
-  "version": 1,
-  "weekStart": ""
+  "version": 1
 }
