@@ -2,7 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { of } from 'rxjs';
 
@@ -33,7 +33,7 @@ describe('NvmeofInitiatorsFormComponent', () => {
         {
           provide: ActivatedRoute,
           useValue: {
-            queryParams: of({ group: 'test-group' }),
+            queryParamMap: of(convertToParamMap({ group: 'test-group' })),
             params: of({ subsystem_nqn: 'nqn.test' }),
             parent: {
               params: of({ subsystem_nqn: 'nqn.test' })
@@ -60,6 +60,22 @@ describe('NvmeofInitiatorsFormComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('should set allowAllHosts to true when disableAllowAll is not set', () => {
+    const router = TestBed.inject(Router);
+    spyOn(router, 'getCurrentNavigation').and.returnValue(null);
+    component.ngOnInit();
+    expect(component.allowAllHosts).toBe(true);
+  });
+
+  it('should set allowAllHosts to false when disableAllowAll is true in navigation state', () => {
+    const router = TestBed.inject(Router);
+    spyOn(router, 'getCurrentNavigation').and.returnValue({
+      extras: { state: { disableAllowAll: true } }
+    } as any);
+    component.ngOnInit();
+    expect(component.allowAllHosts).toBe(false);
   });
 
   it('should initialize with two steps (Host access control + Authentication optional)', () => {
