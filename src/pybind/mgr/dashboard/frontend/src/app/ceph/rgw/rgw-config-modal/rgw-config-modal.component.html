@@ -31,8 +31,9 @@
         </cds-radio-group>
       </div>
 
-      <div *ngIf="configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS || configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3"
-           class="form-item">
+      @if (configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS ||
+      configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3) {
+      <div class="form-item">
         <cds-select id="kms_provider"
                     formControlName="kms_provider"
                     label="Key management service provider"
@@ -43,20 +44,26 @@
                     i18n-invalidText
                     [invalid]="configForm.showError('kms_provider', frm, 'required')"
                     (change)="setKmsProvider()">
-          <option *ngIf="kmsProviders !== null && kmsProviders.length === 0"
-                  ngValue="null"
+          @if (kmsProviders !== null && kmsProviders.length === 0) {
+          <option ngValue="null"
                   i18n>-- No kms providers available --</option>
-          <option *ngIf="kmsProviders !== null && kmsProviders.length > 0"
-                  ngValue=""
+          }
+          @if (kmsProviders !== null && kmsProviders.length > 0) {
+          <option ngValue=""
                   i18n>-- Select a provider --</option>
-          <option *ngFor="let provider of kmsProviders"
-                  [value]="provider">{{ provider }}</option>
+          }
+          @for (provider of kmsProviders; track provider) {
+          <option [value]="provider">{{ provider }}</option>
+          }
         </cds-select>
       </div>
+      }
 
-      <div *ngIf="kmsProviders.length !== 0 && configForm.getValue('kms_provider') !== ''">
-        <div *ngIf="(configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS && configForm.getValue('kms_provider') === KMS_PROVIDER.VAULT) || configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3"
-             class="form-item">
+      @if (kmsProviders.length !== 0 && configForm.getValue('kms_provider') !== '') {
+        @if ((configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS &&
+        configForm.getValue('kms_provider') === KMS_PROVIDER.VAULT) ||
+        configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3) {
+        <div class="form-item">
           <cds-select id="auth"
                       formControlName="auth"
                       label="Authentication Method"
@@ -66,13 +73,17 @@
                       i18n-helperText
                       i18n-invalidText
                       [invalid]="configForm.showError('auth', frm, 'required')">
-            <option *ngFor="let auth of authMethods"
-                    [value]="auth">{{ auth }}</option>
+            @for (auth of authMethods; track auth) {
+            <option [value]="auth">{{ auth }}</option>
+            }
           </cds-select>
         </div>
+        }
 
-        <div *ngIf="(configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS && configForm.getValue('kms_provider') === KMS_PROVIDER.VAULT) || configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3"
-             class="form-item">
+        @if ((configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS &&
+        configForm.getValue('kms_provider') === KMS_PROVIDER.VAULT) ||
+        configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3) {
+        <div class="form-item">
           <cds-select id="secret_engine"
                       formControlName="secret_engine"
                       label="Secret Engine"
@@ -82,13 +93,17 @@
                       i18n-helperText
                       i18n-invalidText
                       [invalid]="configForm.showError('secret_engine', frm, 'required')">
-            <option *ngFor="let secret_engine of secretEngines"
-                    [value]="secret_engine">{{ secret_engine }}</option>
+            @for (secret_engine of secretEngines; track secret_engine) {
+            <option [value]="secret_engine">{{ secret_engine }}</option>
+            }
           </cds-select>
         </div>
+        }
 
-        <div *ngIf="(configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS && configForm.getValue('kms_provider') === KMS_PROVIDER.VAULT) || configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3"
-             class="form-item">
+        @if ((configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS &&
+        configForm.getValue('kms_provider') === KMS_PROVIDER.VAULT) ||
+        configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3) {
+        <div class="form-item">
           <cds-text-label for="secret_path"
                           helperText="Vault secret URL prefix, which can be used to restrict access to a particular subset of the Vault secret space."
                           i18n
@@ -101,9 +116,12 @@
                    formControlName="secret_path">
           </cds-text-label>
         </div>
+        }
 
-        <div *ngIf="(configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS && configForm.getValue('kms_provider') === KMS_PROVIDER.VAULT) || configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3"
-             class="form-item">
+        @if ((configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS &&
+        configForm.getValue('kms_provider') === KMS_PROVIDER.VAULT) ||
+        configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3) {
+        <div class="form-item">
           <cds-text-label for="namespace"
                           helperText="Vault Namespace to be used to select your tenant."
                           i18n
@@ -115,53 +133,70 @@
                    formControlName="namespace">
           </cds-text-label>
         </div>
+        }
 
-        <div *ngIf="configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS || configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3"
-             class="form-item">
+        @if (configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS ||
+        configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3) {
+        <div class="form-item">
           <cds-text-label for="addr"
-                          [invalid]="configForm.showError('addr', frm, 'required')"
+                          [invalid]="addressRef.isInvalid"
                           [invalidText]="addressError"
                           [helperText]="configForm.getValue('kms_provider') === KMS_PROVIDER.VAULT ? 'Vault server base address.' : 'Kmip server base address.'">
             {{ configForm.getValue('kms_provider') === KMS_PROVIDER.VAULT ? 'Vault Address' : 'KMIP Address' }}
             <input cdsText
+                   cdValidate
                    id="addr"
+                   #addressRef="cdValidate"
                    formControlName="addr"
                    placeholder="http://127.0.0.1:8000"
                    i18n-placeholder
-                   [invalid]="configForm.showError('addr', frm, 'required')">
+                   [invalid]="addressRef.isInvalid">
           </cds-text-label>
           <ng-template #addressError>
+            @if (configForm.showError('addr', frm, 'required')) {
             <span class="invalid-feedback"
-                  *ngIf="configForm.showError('addr', frm, 'required')"
                   i18n>This field is required.</span>
+            } @else if (configForm.showError('addr', frm, 'invalidURL')) {
+            <span class="invalid-feedback"
+                  i18n>Please enter a valid URL.</span>
+            }
           </ng-template>
         </div>
+        }
 
-        <div *ngIf="((configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS && configForm.getValue('kms_provider') === KMS_PROVIDER.VAULT) || configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3) && configForm.getValue('auth') === 'token'"
-             class="form-item">
+        @if (((configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS &&
+        configForm.getValue('kms_provider') === KMS_PROVIDER.VAULT) ||
+        configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3) &&
+        configForm.getValue('auth') === 'token') {
+        <div class="form-item">
           <cds-text-label for="token"
-                          [invalid]="configForm.showError('token', frm, 'required')"
+                          [invalid]="tokenRef.isInvalid"
                           [invalidText]="tokenError"
                           helperText="Provide the path to the Vault token file on the RGW host."
                           i18n
                           i18n-helperText>Token file path
             <input cdsText
+                   cdValidate
                    type="text"
                    id="token"
+                   #tokenRef="cdValidate"
                    placeholder="/path/to/token"
                    i18n-placeholder
                    formControlName="token"
-                   [invalid]="configForm.showError('token', frm, 'required')">
+                   [invalid]="tokenRef.isInvalid">
           </cds-text-label>
           <ng-template #tokenError>
+            @if (configForm.showError('token', frm, 'required')) {
             <span class="invalid-feedback"
-                  *ngIf="configForm.showError('token', frm, 'required')"
                   i18n>This field is required.</span>
+            }
           </ng-template>
         </div>
+        }
 
-        <div *ngIf="configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS && configForm.getValue('kms_provider') === KMS_PROVIDER.KMIP"
-             class="form-item">
+        @if (configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS &&
+        configForm.getValue('kms_provider') === KMS_PROVIDER.KMIP) {
+        <div class="form-item">
           <cds-text-label for="kms_key_template"
                           helperText="sse-kms; kmip key names"
                           i18n
@@ -172,9 +207,11 @@
                    formControlName="kms_key_template">
           </cds-text-label>
         </div>
+        }
 
-        <div *ngIf="configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS && configForm.getValue('kms_provider') === KMS_PROVIDER.KMIP"
-             class="form-item">
+        @if (configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS &&
+        configForm.getValue('kms_provider') === KMS_PROVIDER.KMIP) {
+        <div class="form-item">
           <cds-text-label for="s3_key_template"
                           helperText="sse-s3; kmip key template"
                           i18n
@@ -185,9 +222,11 @@
                    formControlName="s3_key_template">
           </cds-text-label>
         </div>
+        }
 
-        <div *ngIf="configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS && configForm.getValue('kms_provider') === KMS_PROVIDER.KMIP"
-             class="form-item">
+        @if (configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS &&
+        configForm.getValue('kms_provider') === KMS_PROVIDER.KMIP) {
+        <div class="form-item">
           <cds-text-label for="username"
                           helperText="When authenticating via username."
                           i18n
@@ -197,9 +236,11 @@
                    formControlName="username">
           </cds-text-label>
         </div>
+        }
 
-        <div *ngIf="configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS && configForm.getValue('kms_provider') === KMS_PROVIDER.KMIP"
-             class="form-item">
+        @if (configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS &&
+        configForm.getValue('kms_provider') === KMS_PROVIDER.KMIP) {
+        <div class="form-item">
           <cds-password-label for="password"
                               helperText="Optional with username."
                               i18n
@@ -211,9 +252,11 @@
                    formControlName="password">
           </cds-password-label>
         </div>
+        }
 
-        <div *ngIf="configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS || configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3"
-             class="form-item">
+        @if (configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS ||
+        configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3) {
+        <div class="form-item">
           <cds-text-label for="ssl_cert"
                           helperText="Path for custom CA certificate used when accessing the server."
                           i18n
@@ -226,9 +269,11 @@
                    i18n-placeholder>
           </cds-text-label>
         </div>
+        }
 
-        <div *ngIf="configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS || configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3"
-             class="form-item">
+        @if (configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS ||
+        configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3) {
+        <div class="form-item">
           <cds-text-label for="client_cert"
                           helperText="Path for the client certificate used when accessing the server."
                           i18n
@@ -241,9 +286,11 @@
                    i18n-placeholder>
           </cds-text-label>
         </div>
+        }
 
-        <div *ngIf="configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS || configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3"
-             class="form-item">
+        @if (configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_KMS ||
+        configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3) {
+        <div class="form-item">
           <cds-text-label for="client_key"
                           helperText="Path for the private key required for the client certificate."
                           i18n
@@ -256,7 +303,8 @@
                    i18n-placeholder>
           </cds-text-label>
         </div>
-      </div>
+        }
+      }
     </div>
 
     <cd-form-button-panel (submitActionEvent)="onSubmit()"
