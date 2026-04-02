@@ -150,14 +150,14 @@ PrimaryActive::PrimaryActive(my_context ctx)
   dout(10) << "-- state -->> PrimaryActive" << dendl;
   // insert this PG into the OSD scrub queue. Calculate initial schedule
   scrbr->schedule_scrub_with_osd();
-  context<ScrubMachine>().push_span(
-      fmt::format("{}_primary_PrimaryActive", pg_id.pgid));
+  // No span pushed here — PrimaryActive outlives the scrub session,
+  // so its span would not be exported until much later (interval change
+  // or PG destruction). Session spans parent directly to m_root_ctx.
 }
 
 PrimaryActive::~PrimaryActive()
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  machine.pop_span();
   // we may have set some PG state flags without reaching Session.
   // And we may be holding a 'local resource'.
   scrbr->clear_pgscrub_state();
