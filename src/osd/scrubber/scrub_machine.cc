@@ -907,8 +907,8 @@ void ScrubMachine::pop_span()
 
 void ScrubMachine::clear_spans()
 {
-  dout(10) << "clear_spans: clearing " << m_span_stack.size() << " spans" << dendl;
-  m_span_stack.clear();
+  // dout(10) << "clear_spans: clearing " << m_span_stack.size() << " spans" << dendl;
+  // m_span_stack.clear();
 }
 
 
