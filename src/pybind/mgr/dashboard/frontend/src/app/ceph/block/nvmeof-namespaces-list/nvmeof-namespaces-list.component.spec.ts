@@ -32,8 +32,11 @@ const mockNamespaces = [
 ];
 
 class MockNvmeOfService {
+  gatewayGroupsResponse: any = [[{ id: 'g1' }]];
+  namespacesResponse: any = { namespaces: mockNamespaces };
+
   listGatewayGroups() {
-    return of([[{ id: 'g1' }]]);
+    return of(this.gatewayGroupsResponse);
   }
 
   formatGwGroupsList(_response: any) {
@@ -41,7 +44,7 @@ class MockNvmeOfService {
   }
 
   listNamespaces(_group?: string) {
-    return of({ namespaces: mockNamespaces });
+    return of(this.namespacesResponse);
   }
 }
 
@@ -62,6 +65,7 @@ describe('NvmeofNamespacesListComponent', () => {
   let fixture: ComponentFixture<NvmeofNamespacesListComponent>;
 
   let modalService: MockModalCdsService;
+  let nvmeofService: MockNvmeOfService;
 
   beforeEach(async () => {
     const nvmeofStateServiceMock = {
@@ -88,6 +92,7 @@ describe('NvmeofNamespacesListComponent', () => {
     component.subsystemNQN = 'nqn.2001-07.com.ceph:1721040751436';
     fixture.detectChanges();
     modalService = TestBed.inject(ModalCdsService) as any;
+    nvmeofService = TestBed.inject(NvmeofService) as any;
   });
 
   it('should create', () => {
@@ -123,5 +128,48 @@ describe('NvmeofNamespacesListComponent', () => {
     expect(args.itemNames).toEqual([1]);
     expect(args.itemDescription).toBeDefined();
     expect(typeof args.submitActionObservable).toBe('function');
+  });
+
+  it('should deduplicate namespaces by nsid and subsystem nqn', (done) => {
+    component.group = 'g1';
+    nvmeofService.namespacesResponse = {
+      namespaces: [
+        { nsid: 1, ns_subsystem_nqn: 'sub1' },
+        { nsid: 1, ns_subsystem_nqn: 'sub1' },
+        { nsid: 1, ns_subsystem_nqn: 'sub2' }
+      ]
+    };
+
+    component.namespaces$.pipe(take(1)).subscribe((namespaces) => {
+      expect(namespaces).toEqual([
+        { nsid: 1, ns_subsystem_nqn: 'sub1', unique_id: '1_sub1' },
+        { nsid: 1, ns_subsystem_nqn: 'sub2', unique_id: '1_sub2' }
+      ]);
+      done();
+    });
+
+    component.listNamespaces();
+  });
+
+  it('should default to first group and keep default placeholder when groups exist', () => {
+    component.group = null;
+    component.gwGroups = [{ content: 'g1', selected: false }] as any;
+
+    component.updateGroupSelectionState();
+
+    expect(component.group).toBe('g1');
+    expect(component.gwGroupsEmpty).toBe(false);
+    expect(component.gwGroupPlaceholder).toBe('Enter group name');
+  });
+
+  it('should set error placeholder and call preventDefault on group fetch failure', () => {
+    const preventDefault = jasmine.createSpy('preventDefault');
+
+    component.handleGatewayGroupsError({ preventDefault });
+
+    expect(component.gwGroups).toEqual([]);
+    expect(component.gwGroupsEmpty).toBe(true);
+    expect(component.gwGroupPlaceholder).toBe('Unable to fetch Gateway groups');
+    expect(preventDefault).toHaveBeenCalled();
   });
 });
