@@ -13,8 +13,15 @@
       #tearsheetStep
       modal-primary-focus
       [group]="group"
-      [existingHosts]="existingHosts"
-    ></cd-nvmeof-subsystem-step-two>
+      [allowAllHosts]="allowAllHosts"
+      [existingHosts]="existingHosts"></cd-nvmeof-subsystem-step-two>
+  </cd-tearsheet-step>
+  @if(showAuthStep) {
+  <cd-tearsheet-step>
+    <cd-nvmeof-subsystem-step-three
+      #tearsheetStep
+      [stepTwoValue]="stepTwoValue"
+      [group]="group"></cd-nvmeof-subsystem-step-three>
   </cd-tearsheet-step>
   @if (showAuthStep) {
     <cd-tearsheet-step>
