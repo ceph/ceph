@@ -172,7 +172,6 @@ PrimaryIdle::PrimaryIdle(my_context ctx)
     , NamedSimply(context<ScrubMachine>().m_scrbr, "PrimaryActive/PrimaryIdle")
 {
   dout(10) << "-- state -->> PrimaryActive/PrimaryIdle" << dendl;
-  context<ScrubMachine>().clear_spans();
 }
 
 sc::result PrimaryIdle::react(const StartScrub&)
@@ -847,15 +846,16 @@ ScrubMachine::ScrubMachine(PG* pg, ScrubMachineListener* pg_scrub, jspan_ptr roo
     : m_pg_id{pg->pg_id}
     , m_scrbr{pg_scrub}
 {
-  // seed the stack with the root span so the first state has a parent
-  if (root_span) {
-    bool recording = root_span->IsRecording();
+  // Save the root span's context so we can parent future spans to it.
+  // The root span itself is not stored — it ends when the caller's
+  // shared_ptr goes out of scope, ensuring it gets exported promptly.
+  if (root_span && root_span->IsRecording()) {
+    m_root_ctx = root_span->GetContext();
     dout(10) << "ScrubMachine::ctor pg=" << m_pg_id
-	     << " root_span recording=" << recording << dendl;
-    m_span_stack.push_back(std::move(root_span));
+	     << " root_ctx valid=" << m_root_ctx.IsValid() << dendl;
   } else {
     dout(10) << "ScrubMachine::ctor pg=" << m_pg_id
-	     << " root_span is null" << dendl;
+	     << " root_span is null or not recording" << dendl;
   }
 }
 
@@ -870,14 +870,15 @@ const jspan_ptr& ScrubMachine::current_span() const
 
 void ScrubMachine::push_span(const std::string& label)
 {
-  auto& parent = current_span();
-  bool parent_valid = parent && parent->IsRecording();
-  bool tracer_enabled = tracing::scrubber::tracer.is_enabled();
-  auto span = tracing::scrubber::tracer.add_span(label, parent);
+  jspan_ptr span;
+  if (!m_span_stack.empty()) {
+    auto& parent = m_span_stack.back();
+    span = tracing::scrubber::tracer.add_span(label, parent);
+  } else if (m_root_ctx.IsValid()) {
+    span = tracing::scrubber::tracer.add_span(label, m_root_ctx);
+  }
   bool span_recording = span && span->IsRecording();
   dout(10) << "push_span: " << label
-	   << " tracer_enabled=" << tracer_enabled
-	   << " parent_valid=" << parent_valid
 	   << " stack_depth=" << m_span_stack.size()
 	   << " new_span_recording=" << span_recording << dendl;
   m_span_stack.push_back(std::move(span));
@@ -907,8 +908,8 @@ void ScrubMachine::pop_span()
 
 void ScrubMachine::clear_spans()
 {
-  // dout(10) << "clear_spans: clearing " << m_span_stack.size() << " spans" << dendl;
-  // m_span_stack.clear();
+  dout(10) << "clear_spans: clearing " << m_span_stack.size() << " spans" << dendl;
+  m_span_stack.clear();
 }
 
 

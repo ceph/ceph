@@ -304,13 +304,19 @@ class ScrubMachine : public ScrubFsmIf, public sc::state_machine<ScrubMachine, N
   /// Each state constructor pushes a span, each destructor pops it.
   std::vector<jspan_ptr> m_span_stack;
 
+  /// saved context from the root span created in PgScrubber ctor.
+  /// The root span itself ends promptly (so it gets exported), but its
+  /// context stays valid and serves as the parent when the stack is empty.
+  jspan_context m_root_ctx{false, false};
+
   /// trace context received from primary via MOSDRepScrub
   jspan_context m_replica_parent_ctx{false, false};
 
   /// return the current (topmost) span, or an empty jspan_ptr if the stack is empty
   const jspan_ptr& current_span() const;
 
-  /// push a new span as a child of the current top-of-stack span
+  /// push a new span as a child of the current top-of-stack span,
+  /// or as a child of the root context if the stack is empty.
   void push_span(const std::string& label);
 
   /// push a new span parented to a specific trace context (for replica spans)
