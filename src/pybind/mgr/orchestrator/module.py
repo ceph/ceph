@@ -2359,6 +2359,17 @@ Usage:
         out = completion.result_str()
         return HandleCommandResult(stdout=out)
 
+    @OrchestratorCLICommand.Write('orch set-allow-label-remove-service')
+    def _set_allow_label_remove_service(self, service_name: str, value: str) -> HandleCommandResult:
+        """Set allow_label_remove_service parameter for the given service name"""
+        if value.lower() not in ("true", "false"):
+            return HandleCommandResult(stderr=f"{value} is not a valid argument, pass 'true' or 'false'", retval=-errno.EINVAL)
+        allow = value.lower() == "true"
+        completion = self.set_allow_label_remove_service(service_name, allow)
+        raise_if_exception(completion)
+        out = completion.result_str()
+        return HandleCommandResult(stdout=out)
+    
     @OrchestratorCLICommand.Write('orch set backend')
     def _set_backend(self, module_name: Optional[str] = None) -> HandleCommandResult:
         """
