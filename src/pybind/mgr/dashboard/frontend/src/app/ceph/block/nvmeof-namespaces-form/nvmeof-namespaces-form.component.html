@@ -62,9 +62,9 @@
            class="form-item">
         <div cdsCol>
           <cds-number
+            formControlName="nsCount"
             cdValidate
             #nsCountRef="cdValidate"
-            formControlName="nsCount"
             label="Number of namespaces"
             helperText="No. of namespaces to generate. Value must be between 1 and 5."
             [min]="MIN_NAMESPACE_CREATE"
@@ -77,35 +77,28 @@
         </div>
       </div>
 
-      <!-- Image Size -->
+      <!-- Namespace Size (UI only) -->
       <div cdsRow
            class="form-item">
-        <div
-          cdsCol
-          [columnNumbers]="{md: 4}">
-          <cds-text-label
-            label="Image size (GiB)"
-            helperText="The size of the namespace image."
-            [invalid]="imageSize.isInvalid"
-            [invalidText]="sizeError"
-            cdRequiredField="Image Size"
+        <div cdsCol>
+          <cds-number
+            formControlName="namespace_size"
+            cdValidate
+            #namespaceSizeRef="cdValidate"
+            label="Namespace size (GiB)"
+            helperText="Specify the size to expose to hosts. Leave blank for full device/file."
+            placeholder="e.g. 100"
+            [min]="0"
+            [invalid]="namespaceSizeRef.isInvalid"
+            [invalidText]="namespaceSizeError"
             i18n-label
             i18n-helperText>
-            <input cdsText
-                   cdValidate
-                   #imageSize="cdValidate"
-                   type="text"
-                   placeholder="e.g. 100 GiB"
-                   id="image_size"
-                   formControlName="image_size"
-                   defaultUnit="GiB"
-                   [min]="0"
-                   [invalid]="imageSize.isInvalid"
-                   cdDimlessBinary>
-          </cds-text-label>
-          <ng-template #sizeError>
+          </cds-number>
+          <ng-template #namespaceSizeError>
+            @if (nsForm.controls['namespace_size'].hasError('blockSizeMultiple')) {
             <span
-              i18n>Enter a valid size (e.g., 10GiB).</span>
+              i18n>Size must be a multiple of the block size (typically 512 or 4096 bytes).</span>
+            }
           </ng-template>
         </div>
       </div>
@@ -252,16 +245,15 @@
               i18n>Image name (optional)</label>
             <cds-text-label
               helperText="Provide a name for the images. For bulk creation, this will be used as the base prefix with numeric suffixes (e.g., img-1, img-2). Leave blank to auto-generate."
-              [invalid]="rbdImageName.isInvalid"
+              [invalid]="rbdImageNameRef.isInvalid"
               [invalidText]="nsForm.getError('rbdImageName', 'rbd_image_name') ? 'Image name contains invalid characters' : ''"
               i18n-helperText
               i18n-invalidText>
               <input cdsText
                      cdValidate
-                     #rbdImageName="cdValidate"
+                     #rbdImageNameRef="cdValidate"
                      placeholder="Enter a name"
-                     formControlName="rbd_image_name"
-                     [invalid]="rbdImageName.isInvalid" />
+                     formControlName="rbd_image_name" />
             </cds-text-label>
           </div>
         </div>
@@ -297,21 +289,36 @@
       </div>
       }
 
-      <!-- Namespace Block Size (bytes) -->
+      <!-- Image Size -->
       <div cdsRow
            class="form-item">
-        <div cdsCol>
-          <cds-number
-            cdValidate
-            #namespaceSize="cdValidate"
-            formControlName="namespace_size"
-            label="Namespace block size (bytes)"
-            helperText="Specify the block size to expose to the hosts. Leave blank for the default block size of 512 bytes."
-            [min]="0"
-            [invalid]="namespaceSize.isInvalid"
+        <div
+          cdsCol
+          [columnNumbers]="{md: 4}">
+          <cds-text-label
+            label="Image size (GiB)"
+            helperText="The size of the namespace image."
+            [invalid]="imageSizeRef.isInvalid"
+            [invalidText]="sizeError"
+            cdRequiredField="Image Size"
             i18n-label
             i18n-helperText>
-          </cds-number>
+            <input cdsText
+                   cdValidate
+                   #imageSizeRef="cdValidate"
+                   type="text"
+                   placeholder="e.g. 100 GiB"
+                   id="image_size"
+                   formControlName="image_size"
+                   defaultUnit="GiB"
+                   [min]="0"
+                   [invalid]="imageSizeRef.isInvalid"
+                   cdDimlessBinary>
+          </cds-text-label>
+          <ng-template #sizeError>
+            <span
+              i18n>Enter a valid size (e.g., 10GiB).</span>
+          </ng-template>
         </div>
       </div>
 
