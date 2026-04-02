@@ -79,6 +79,7 @@ export enum AUTHENTICATION {
 }
 
 export const NO_AUTH = 'No authentication';
+export const ALLOW_ALL_HOSTS = '*';
 
 export const HOST_TYPE = {
   ALL: 'all',
