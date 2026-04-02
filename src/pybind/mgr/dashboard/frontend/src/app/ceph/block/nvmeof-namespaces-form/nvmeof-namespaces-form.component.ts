@@ -45,7 +45,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
 
   nsForm: CdFormGroup;
   subsystemNQN: string;
-  subsystems: NvmeofSubsystem[] = [];
+  subsystems: NvmeofSubsystem[] | null = null;
   rbdPools: Array<Pool> = null;
   rbdImages: any[] = [];
   initiatorCandidates: { content: string; selected: boolean }[] = [];
