@@ -38,6 +38,9 @@ export class RgwZoneService {
       sync_from: zone.sync_from,
       sync_from_all: zone.sync_from_all
     });
+    if (zone.tier_type) {
+      params = params.append('tier_type', zone.tier_type);
+    }
     return this.http.post(`${this.url}`, null, { params: params });
   }
 
