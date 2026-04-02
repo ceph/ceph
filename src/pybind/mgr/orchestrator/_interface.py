@@ -834,6 +834,14 @@ class Orchestrator(object):
         """get prometheus access information"""
         raise NotImplementedError()
 
+    def get_prometheus_config_template(self) -> OrchResult[str]:
+        """get prometheus config template"""
+        raise NotImplementedError()
+
+    def set_prometheus_config_template(self, template: str) -> OrchResult[str]:
+        """set prometheus config template"""
+        raise NotImplementedError()
+
     def get_security_config(self) -> OrchResult[Dict[str, bool]]:
         """get security config"""
         raise NotImplementedError()

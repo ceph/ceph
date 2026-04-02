@@ -3364,6 +3364,28 @@ Then run the following:
                 'certificate': self.cert_mgr.get_root_ca()}
 
     @handle_orch_error
+    def get_prometheus_config_template(self) -> str:
+        r, outs, err = self.mon_command({
+            'prefix': 'config-key get',
+            'key': 'mgr/cephadm/services/prometheus/prometheus.yml'
+        })
+        if r != 0:
+            raise RuntimeError(f"Failed to get Prometheus config template: {err}")
+        return outs
+
+    @handle_orch_error
+    def set_prometheus_config_template(self, template: str) -> str:
+        r, outs, err = self.check_mon_command({
+            'prefix': 'config-key set',
+            'key': 'mgr/cephadm/services/prometheus/prometheus.yml',
+            'val': template
+        })
+        if r != 0:
+            raise RuntimeError(f"Failed to set Prometheus config template: {err}")
+        self.perform_service_action('reconfig', 'prometheus')
+        return outs
+
+    @handle_orch_error
     def get_security_config(self) -> Dict[str, bool]:
         security_enabled, mgmt_gw_enabled, _ = self._get_security_config()
         return {'security_enabled': security_enabled,

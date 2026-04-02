@@ -244,6 +244,16 @@ class MonitoringManager(ResourceManager):
         """Get security config information"""
         return self.api.get_security_config()
 
+    @wait_api_result
+    def get_prometheus_config_template(self) -> str:
+        """Get the content of Prometheus configuration file"""
+        return self.api.get_prometheus_config_template()
+
+    @wait_api_result
+    def set_prometheus_config_template(self, template: str) -> str:
+        """Set the content of Prometheus configuration file"""
+        return self.api.set_prometheus_config_template(template)
+
 
 class OrchClient(object):
 

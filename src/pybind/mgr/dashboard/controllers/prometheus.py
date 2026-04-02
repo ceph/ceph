@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import json
 import os
+import re
 import tempfile
 import time
 from datetime import datetime
@@ -217,6 +218,184 @@ class PrometheusRESTController(RESTController):
             return content
         raise DashboardException(content, http_status_code=400, component='prometheus')
 
+    def _set_prometheus_remote_write(self, cluster_fsid: str, remote_write_url: str,
+                                     allowed_metrics: str):
+        orch_client = OrchClient.instance()
+        template_content = orch_client.monitoring.get_prometheus_config_template()
+
+        external_labels = [
+            "  external_labels:",
+            f"    cluster: {cluster_fsid}"
+        ]
+
+        relabel_config_entry = [
+            "    - source_labels: [__address__]",
+            "      target_label: cluster",
+            f"      replacement: {cluster_fsid}"
+        ]
+
+        remote_write_block = [
+            "remote_write:",
+            f"  - url: '{remote_write_url}/prometheus/api/v1/write'",
+            "    tls_config:",
+            "      insecure_skip_verify: true",
+            "    write_relabel_configs:",
+            "      - source_labels: [__name__]",
+            f"        regex: '^({allowed_metrics})$'",
+            "        action: keep",
+            "      - source_labels: [__name__]",
+            "        regex: 'ALERTS|ALERTS_FOR_STATE'",
+            "        action: drop",
+        ]
+
+        lines = template_content.splitlines()
+
+        # ---- Insert external_labels ----
+        if not any("external_labels:" in line for line in lines):
+            new_lines = []
+            inserted = False
+            for line in lines:
+                new_lines.append(line)
+                if not inserted and re.match(r"^\s*global:", line):
+                    new_lines.extend(external_labels)
+                    inserted = True
+            lines = new_lines
+
+        # ---- Process scrape configs ----
+        modified_lines = []
+        inside_scrape = False
+        inside_relabel = False
+        has_cluster = False
+        job_start_idx = -1
+        relabel_start_idx = -1
+
+        def insert_block(idx, block):
+            return modified_lines[:idx] + block + modified_lines[idx:]
+
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            stripped = line.strip()
+
+            if stripped.startswith("- job_name:"):
+                # finalize previous job
+                if inside_scrape and not has_cluster and job_start_idx != -1:
+                    if relabel_start_idx != -1:
+                        modified_lines = insert_block(relabel_start_idx + 1, relabel_config_entry)
+                    else:
+                        modified_lines = insert_block(
+                            job_start_idx + 1,
+                            ["    relabel_configs:"] + relabel_config_entry
+                        )
+
+                inside_scrape = True
+                inside_relabel = False
+                has_cluster = False
+                job_start_idx = len(modified_lines)
+                relabel_start_idx = -1
+
+                modified_lines.append(line)
+                i += 1
+                continue
+
+            if inside_scrape and stripped.startswith("relabel_configs:"):
+                inside_relabel = True
+                relabel_start_idx = len(modified_lines)
+                modified_lines.append(line)
+                i += 1
+                continue
+
+            if inside_relabel and "target_label: cluster" in stripped:
+                has_cluster = True
+
+            if inside_scrape and stripped == "":
+                if not has_cluster and job_start_idx != -1:
+                    if relabel_start_idx != -1:
+                        modified_lines = insert_block(relabel_start_idx + 1, relabel_config_entry)
+                    else:
+                        modified_lines = insert_block(
+                            job_start_idx + 1,
+                            ["    relabel_configs:"] + relabel_config_entry
+                        )
+                inside_scrape = False
+
+            modified_lines.append(line)
+            i += 1
+
+        # finalize last job
+        if inside_scrape and not has_cluster and job_start_idx != -1:
+            if relabel_start_idx != -1:
+                modified_lines = insert_block(relabel_start_idx + 1, relabel_config_entry)
+            else:
+                modified_lines = insert_block(
+                    job_start_idx + 1,
+                    ["    relabel_configs:"] + relabel_config_entry
+                )
+
+        # ---- Update or Add remote_write ----
+        remote_write_start = None
+
+        for idx, line in enumerate(modified_lines):
+            if line.strip().startswith("remote_write:"):
+                remote_write_start = idx
+                break
+
+        if remote_write_start is not None:
+            new_lines = []
+            i = 0
+            while i < len(modified_lines):
+                line = modified_lines[i]
+                stripped = line.strip()
+                if stripped.startswith("remote_write:"):
+                    for line_item in remote_write_block:
+                        new_lines.append(line_item)
+                    i += 1
+                    while i < len(modified_lines):
+                        next_line = modified_lines[i]
+                        if next_line and not next_line.startswith(" "):
+                            break
+                        i += 1
+                    continue
+                new_lines.append(line)
+                i += 1
+            modified_lines = new_lines
+
+        else:
+            modified_lines.append("")
+            modified_lines.extend(remote_write_block)
+
+        orch_client.monitoring.set_prometheus_config_template("\n".join(modified_lines))
+
+    def _delete_prometheus_remote_write(self):
+        orch_client = OrchClient.instance()
+        template_content = orch_client.monitoring.get_prometheus_config_template()
+        lines = template_content.splitlines()
+        modified_lines = []
+        i = 0
+
+        while i < len(lines):
+            line = lines[i]
+            stripped = line.strip()
+
+            if stripped.startswith("remote_write:"):
+                # Skip entire remote_write block
+                i += 1
+                while i < len(lines):
+                    next_line = lines[i]
+
+                    # Stop at next top-level section
+                    if next_line and not next_line.startswith(" "):
+                        break
+
+                    i += 1
+                continue
+
+            modified_lines.append(line)
+            i += 1
+
+        final_output = "\n".join(modified_lines)
+        orch_client.monitoring.set_prometheus_config_template(final_output)
+
 
 @APIRouter('/prometheus', Scope.PROMETHEUS)
 @APIDoc("Prometheus Management API", "Prometheus")
@@ -265,6 +444,15 @@ class Prometheus(PrometheusRESTController):
     def get_prometeus_query_data(self, **params):
         params['query'] = params.pop('params')
         return self.prometheus_proxy('GET', '/query', params)
+
+    @RESTController.Collection(method='PUT', path='/remote_write')
+    def set_prometheus_remote_write(self, cluster_fsid: str, remote_write_url: str,
+                                    allowed_metrics: str):
+        return self._set_prometheus_remote_write(cluster_fsid, remote_write_url, allowed_metrics)
+
+    @RESTController.Collection(method='DELETE', path='/remote_write')
+    def delete_prometheus_remote_write(self):
+        return self._delete_prometheus_remote_write()
 
 
 @APIRouter('/prometheus/notifications', Scope.PROMETHEUS)
