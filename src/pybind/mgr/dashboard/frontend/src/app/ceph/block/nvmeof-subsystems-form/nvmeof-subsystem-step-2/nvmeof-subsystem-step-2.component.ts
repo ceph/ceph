@@ -20,6 +20,7 @@ import { TearsheetStep } from '~/app/shared/models/tearsheet-step';
 export class NvmeofSubsystemsStepTwoComponent implements OnInit, TearsheetStep {
   @Input() group!: string;
   @Input() existingHosts: string[] = [];
+  @Input() allowAllHosts = true;
   @ViewChild('rightInfluencer', { static: true })
   rightInfluencer?: TemplateRef<any>;
   formGroup: CdFormGroup;

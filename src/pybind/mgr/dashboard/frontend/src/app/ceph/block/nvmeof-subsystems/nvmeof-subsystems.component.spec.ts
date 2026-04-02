@@ -160,4 +160,39 @@ describe('NvmeofSubsystemsComponent', () => {
   it('should set first group as default initially', () => {
     expect(component.group).toBe('default');
   });
+
+  it('should mark only current group as selected', () => {
+    component.group = 'foo';
+    component.gwGroups = [{ content: 'default' }, { content: 'foo' }] as any;
+
+    component.updateGroupSelectionState();
+
+    expect(component.gwGroups).toEqual([
+      { content: 'default', selected: false },
+      { content: 'foo', selected: true }
+    ]);
+  });
+
+  it('should clear selected group and refresh subsystem list', () => {
+    component.group = 'default';
+    const getSubsystemsSpy = spyOn(component, 'getSubsystems');
+
+    component.onGroupClear();
+
+    expect(component.group).toBeNull();
+    expect(getSubsystemsSpy).toHaveBeenCalled();
+  });
+
+  it('should set error placeholder and prevent default on groups load error', () => {
+    const preventDefault = jasmine.createSpy('preventDefault');
+    component.context = { error: jasmine.createSpy('error') } as any;
+
+    component.handleGatewayGroupsError({ preventDefault });
+
+    expect(component.gwGroups).toEqual([]);
+    expect(component.gwGroupsEmpty).toBe(true);
+    expect(component.gwGroupPlaceholder).toBe('Unable to fetch Gateway groups');
+    expect(preventDefault).toHaveBeenCalled();
+    expect(component.context.error).toHaveBeenCalled();
+  });
 });
