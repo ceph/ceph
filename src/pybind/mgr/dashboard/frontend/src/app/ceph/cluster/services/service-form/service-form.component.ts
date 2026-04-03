@@ -668,6 +668,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         if (params?.type) {
           this.serviceType = params.type;
           this.serviceForm.get('service_type').setValue(this.serviceType);
+          this.onServiceTypeChange(this.serviceType);
         }
       });
     } else if (this.router.url.includes('services/(modal:edit')) {

@@ -3,11 +3,12 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
+import { Router } from '@angular/router';
 
 import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
 
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { PaginateObservable } from '~/app/shared/api/paginate.model';
@@ -449,6 +450,28 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
       });
 
       it('should set default values correctly onInit', () => {
+        expect(form.get('service_type').value).toBe('nvmeof');
+        expect(form.get('group').value).toBe('default');
+        expect(form.get('pool').value).toBe('rbd');
+        expect(form.get('service_id').value).toBe('rbd.default');
+      });
+
+      it('should populate nvmeof defaults when the route type arrives after init', () => {
+        const params$ = new Subject<{ type: string }>();
+        const router = TestBed.inject(Router);
+
+        jest.spyOn(router, 'url', 'get').mockReturnValue('/services/(modal:create/nvmeof)');
+        (component as any).route.params = params$.asObservable();
+
+        form.get('service_type').reset();
+        form.get('pool').reset();
+        form.get('service_id').reset();
+        component.serviceType = undefined;
+
+        component.resolveRoute();
+        params$.next({ type: 'nvmeof' });
+        fixture.detectChanges();
+
         expect(form.get('service_type').value).toBe('nvmeof');
         expect(form.get('group').value).toBe('default');
         expect(form.get('pool').value).toBe('rbd');
