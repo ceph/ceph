@@ -12696,7 +12696,7 @@ TEST_P(StoreTestSpecificAUSize, BasicReformattingTest) {
   const PerfCounters* logger = store->get_perf_counters();
 
   pool_opts_t popts;
-  popts.set(pool_opts_t::DEEP_SCRUB_DEFRAGMENT, static_cast <int64_t>(1));
+  popts.set(pool_opts_t::DEEP_SCRUB_REFORMAT, "defragment");
   store->set_collection_opts(ch, popts);
 
   cerr << "Creating collection " << cid << std::endl;
@@ -12894,7 +12894,7 @@ TEST_P(StoreTestSpecificAUSize, BasicReformattingTest) {
     ASSERT_EQ(3, logger->get(l_bluestore_reformat_issued));
   }
   // check none reformatting setting
-  popts.set(pool_opts_t::DEEP_SCRUB_DEFRAGMENT, static_cast <int64_t>(0));
+  popts.set(pool_opts_t::DEEP_SCRUB_REFORMAT, "");
   store->set_collection_opts(ch, popts);
   cerr << "Making and fragmenting object, single small gap, no reformatting" << std::endl;
   {
@@ -12961,7 +12961,8 @@ TEST_P(StoreTestSpecificAUSize, CompressedReformattingTest) {
   const PerfCounters* logger = store->get_perf_counters();
 
   pool_opts_t popts;
-  popts.set(pool_opts_t::DEEP_SCRUB_RECOMPRESS, static_cast <int64_t>(1));
+  popts.set(pool_opts_t::DEEP_SCRUB_REFORMAT, "recompress");
+
   store->set_collection_opts(ch, popts);
 
   cerr << "Creating collection " << cid << std::endl;
@@ -13086,8 +13087,7 @@ TEST_P(StoreTestSpecificAUSize, CompressedReformattingTest) {
   wait_fn();
 
   //check both reformatting options enabled, data is compressible
-  popts.set(pool_opts_t::DEEP_SCRUB_DEFRAGMENT, static_cast <int64_t>(1));
-  popts.set(pool_opts_t::DEEP_SCRUB_RECOMPRESS, static_cast <int64_t>(1));
+  popts.set(pool_opts_t::DEEP_SCRUB_REFORMAT, "recompress, defragment");
   store->set_collection_opts(ch, popts);
   cerr << "Making and fragmenting compressible object, 'both' reformatting mode" << std::endl;
   {
@@ -13252,7 +13252,7 @@ TEST_P(StoreTestSpecificAUSize, LazyCompressionReformattingTest) {
   const PerfCounters* logger = store->get_perf_counters();
 
   pool_opts_t popts;
-  popts.set(pool_opts_t::DEEP_SCRUB_RECOMPRESS, static_cast <int64_t>(1));
+  popts.set(pool_opts_t::DEEP_SCRUB_REFORMAT, "recompress");
   popts.set(pool_opts_t::COMPRESSION_MODE, "force_lazy");
 
   store->set_collection_opts(ch, popts);
@@ -13393,8 +13393,7 @@ TEST_P(StoreTestSpecificAUSize, LazyCompressionReformattingTest) {
   wait_fn();
 
   //check both reformatting options enabled, data is compressible
-  popts.set(pool_opts_t::DEEP_SCRUB_DEFRAGMENT, static_cast <int64_t>(1));
-  popts.set(pool_opts_t::DEEP_SCRUB_RECOMPRESS, static_cast <int64_t>(1));
+  popts.set(pool_opts_t::DEEP_SCRUB_REFORMAT, "recompress, defragment");
   store->set_collection_opts(ch, popts);
   cerr << "Making and fragmenting compressible object, 'both' reformatting mode" << std::endl;
   {
