@@ -4,7 +4,7 @@ from typing import Optional
 
 class NFSException(Exception):
     def __init__(self, err_msg: str, errno: int = -1) -> None:
-        super(NFSException, self).__init__(errno, err_msg)
+        super(NFSException, self).__init__(err_msg)
         self.errno = errno
         self.err_msg = err_msg
 

@@ -9,4 +9,5 @@ export interface NFSCluster {
   virtual_ip: number;
   port: number;
   backend: NFSBackend[];
+  enable_rdma?: boolean;
 }
