@@ -10167,8 +10167,8 @@ int RGWRados::get_bucket_storage_classes_stats(const DoutPrefixProvider *dpp, op
     if (!has_storage_class) {
       sc_stats.reset();
     }
-    ver_mgr.add(viter->first, fmt::format("%lu", (unsigned long)iter->ver));
-    master_ver_mgr.add(viter->first, fmt::format("%lu", (unsigned long)iter->master_ver));
+    ver_mgr.add(viter->first, std::to_string(iter->ver));
+    master_ver_mgr.add(viter->first, std::to_string(iter->master_ver));
     if (shard_id >= 0) {
       *max_marker = iter->max_marker;
     } else {
