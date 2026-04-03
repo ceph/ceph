@@ -420,18 +420,22 @@
         <legend class="cds--label"
                 cdRequiredField="Transport Protocol"
                 i18n>Transport Protocol (required)</legend>
-        <cds-checkbox formControlName="transportUDP"
-                      name="transportUDP"
-                      id="transportUDP"
-                      [invalid]="nfsForm.controls.transportUDP.invalid && (nfsForm.controls.transportUDP.dirty)"
-                      [invalidText]="transportError"
-                      i18n>UDP</cds-checkbox>
         <cds-checkbox formControlName="transportTCP"
                       name="transportTCP"
                       id="transportTCP"
                       [invalid]="nfsForm.controls.transportTCP.invalid && (nfsForm.controls.transportTCP.dirty)"
                       [invalidText]="transportError"
                       i18n>TCP</cds-checkbox>
+        <cds-checkbox formControlName="transportUDP"
+                      name="transportUDP"
+                      id="transportUDP"
+                      [invalid]="nfsForm.controls.transportUDP.invalid && (nfsForm.controls.transportUDP.dirty)"
+                      [invalidText]="transportError"
+                      i18n>UDP</cds-checkbox>
+        <cds-checkbox formControlName="transportRDMA"
+                      name="transportRDMA"
+                      id="transportRDMA"
+                      i18n>RDMA</cds-checkbox>
         <ng-template #transportError>
           <span class="invalid-feedback"
                 *ngIf="nfsForm.showError('transportUDP', formDir, 'required') ||

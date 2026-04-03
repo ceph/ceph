@@ -314,18 +314,19 @@ export class NfsFormComponent extends CdForm implements OnInit {
       squash: new UntypedFormControl(this.nfsSquash[0]),
       transportUDP: new UntypedFormControl(true, {
         validators: [
-          CdValidators.requiredIf({ transportTCP: false }, (value: boolean) => {
+          CdValidators.requiredIf({ transportTCP: false, transportRDMA: false }, (value: boolean) => {
             return !value;
           })
         ]
       }),
       transportTCP: new UntypedFormControl(true, {
         validators: [
-          CdValidators.requiredIf({ transportUDP: false }, (value: boolean) => {
+          CdValidators.requiredIf({ transportUDP: false, transportRDMA: false }, (value: boolean) => {
             return !value;
           })
         ]
       }),
+      transportRDMA: new UntypedFormControl(false),
       clients: this.formBuilder.array([]),
       security_label: new UntypedFormControl(false),
 
@@ -381,6 +382,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
 
     res.transportTCP = res.transports.indexOf('TCP') !== -1;
     res.transportUDP = res.transports.indexOf('UDP') !== -1;
+    res.transportRDMA = res.transports.indexOf('RDMA') !== -1;
     delete res.transports;
 
     Object.entries(this.nfsService.nfsSquash).forEach(([key, value]) => {
@@ -688,6 +690,10 @@ export class NfsFormComponent extends CdForm implements OnInit {
       requestModel.transports.push('UDP');
     }
     delete requestModel.transportUDP;
+    if (requestModel.transportRDMA) {
+      requestModel.transports.push('RDMA');
+    }
+    delete requestModel.transportRDMA;
 
     requestModel.clients.forEach((client: any) => {
       if (_.isString(client.addresses)) {
