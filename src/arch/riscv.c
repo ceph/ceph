@@ -2,7 +2,7 @@
  * Runtime detection of RISC-V vector crypto support.
  */
 
-#include <sys/hwprobe.h>
+#include <asm/hwprobe.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 
@@ -10,11 +10,11 @@ int ceph_arch_riscv_zbc = 0;
 int ceph_arch_riscv_zvbc = 0;
 
 #ifndef RISCV_HWPROBE_EXT_ZBC
-#define RISCV_HWPROBE_EXT_ZBC (1ULL << 15)
+#define RISCV_HWPROBE_EXT_ZBC (1ULL << 7)
 #endif
 
 #ifndef RISCV_HWPROBE_EXT_ZVBC
-#define RISCV_HWPROBE_EXT_ZVBC (1ULL << 20)
+#define RISCV_HWPROBE_EXT_ZVBC (1ULL << 18)
 #endif
 
 static int do_hwprobe(struct riscv_hwprobe *pairs, size_t count)

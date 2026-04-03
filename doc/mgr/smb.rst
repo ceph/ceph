@@ -765,7 +765,7 @@ keybridge
         kmip_ca_cert
             Optional object. Required for type ``kmip``.
             The fields are described in :ref:`tls source fields<tls-source-fields>`.
-   peer_policy
+    peer_policy
         Optional, one of ``restricted`` or ``unrestricted``.
         Used to control what processes the keybridge server will permit
         for access. This option is meant for testing and development only.

@@ -1,5 +1,8 @@
+import contextlib
 import json
-from unittest.mock import patch
+from unittest.mock import patch, ANY
+
+import pytest
 
 from cephadm.module import CephadmOrchestrator
 from ceph.deployment.service_spec import CustomContainerSpec
@@ -150,3 +153,47 @@ class TestCustomContainer:
                     error_ok=True,
                     use_current_daemon_image=False,
                 )
+
+
+@pytest.mark.parametrize(
+    'newargs',
+    [
+        {'cargs': ['--secret=foo,target=/etc/foo.x']},
+        {'eargs': ['flip flop']},
+        {'eargs': ['flip flop'], "cargs": None},
+    ],
+)
+def test_custom_cont_choose_next_action(
+    cephadm_module, mock_cephadm, newargs
+):
+    cargs1 = cargs2 = ['--secret=foo,type=env']
+    eargs1 = eargs2 = ['flim flam']
+    if 'cargs' in newargs:
+        cargs2 = newargs['cargs']
+    if 'eargs' in newargs:
+        eargs2 = newargs['eargs']
+    spec = CustomContainerSpec(
+        service_id='tsettinu',
+        image='quay.io/foobar/barbaz:latest',
+        entrypoint='/usr/local/bin/blat.sh',
+        ports=[9090],
+        extra_container_args=cargs1,
+        extra_entrypoint_args=eargs1,
+    )
+    # use a second spec to avoid messing around with ArgumentSpec types
+    spec2 = CustomContainerSpec(
+        service_id='tsettinu',
+        image='quay.io/foobar/barbaz:latest',
+        entrypoint='/usr/local/bin/blat.sh',
+        ports=[9090],
+        extra_container_args=cargs2,
+        extra_entrypoint_args=eargs2,
+    )
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(with_host(cephadm_module, 'test'))
+        stack.enter_context(with_service(cephadm_module, spec))
+        cephadm_module.apply([spec2])
+        # manually invoke _check_daemons to trigger a call to
+        # _daemon_action so we can check what action was chosen
+        mock_cephadm.serve(cephadm_module)._check_daemons()
+        mock_cephadm._daemon_action.assert_called_with(ANY, action='redeploy')

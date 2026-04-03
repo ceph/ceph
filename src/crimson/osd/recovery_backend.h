@@ -189,6 +189,15 @@ public:
     seastar::future<> wait_for_pushes(pg_shard_t shard) {
       return pushes[shard].get_shared_future();
     }
+    bool has_pushes() const {
+      return !pushes.empty();
+    }
+    seastar::future<> wait_for_all_pushes() {
+      return seastar::parallel_for_each(pushes,
+	[](auto& entry) {
+	  return entry.second.get_shared_future();
+	});
+    }
     seastar::future<> wait_for_recovered() {
       if (!recovered) {
 	recovered = seastar::shared_promise<>();

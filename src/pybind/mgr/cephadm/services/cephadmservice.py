@@ -317,10 +317,25 @@ class CephadmService(metaclass=ABCMeta):
         pass
 
     @classmethod
-    def get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
-                         daemon_type: Optional[str] = None) -> List[str]:
+    def get_dependencies(
+        cls,
+        mgr: "CephadmOrchestrator",
+        spec: Optional[ServiceSpec] = None,
+        daemon_type: Optional[str] = None,
+    ) -> List[str]:
         return []
+
+    @classmethod
+    def sorted_dependencies(
+        cls,
+        mgr: "CephadmOrchestrator",
+        spec: Optional[ServiceSpec] = None,
+        daemon_type: Optional[str] = None,
+    ) -> List[str]:
+        """A version of get_dependencies that guarantees that the returned
+        list is in sorted order.
+        """
+        return sorted(cls.get_dependencies(mgr, spec, daemon_type))
 
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
@@ -870,6 +885,30 @@ class CephadmService(metaclass=ABCMeta):
 
     def has_placement_changed(self, deps: List[str], spec: ServiceSpec) -> bool:
         return False
+
+    def choose_next_action(
+        self,
+        scheduled_action: utils.Action,
+        daemon_type: Optional[str],
+        spec: Optional[ServiceSpec],
+        curr_deps: List[str],
+        last_deps: List[str],
+    ) -> utils.Action:
+        """Given the scheduled_action, service spec, daemon_type, and
+        current and previous dependency lists return the next action that
+        this service would prefer cephadm take.
+        """
+        if curr_deps == last_deps:
+            return scheduled_action
+        sym_diff = set(curr_deps).symmetric_difference(last_deps)
+        logger.info(
+            'Reconfigure wanted %s: deps %r -> %r (diff %r)',
+            spec.service_name() if spec else daemon_type,
+            last_deps,
+            curr_deps,
+            sym_diff,
+        )
+        return utils.Action.RECONFIG
 
 
 class CephService(CephadmService):
@@ -1746,6 +1785,22 @@ class CephExporterService(CephService):
 
         return daemon_spec
 
+    def choose_next_action(
+        self,
+        scheduled_action: utils.Action,
+        daemon_type: Optional[str],
+        spec: Optional[ServiceSpec],
+        curr_deps: List[str],
+        last_deps: List[str],
+    ) -> utils.Action:
+        """Given the scheduled_action, service spec, daemon_type, and
+        current and previous dependency lists return the next action that
+        this service would prefer cephadm take.
+        """
+        return next_action_for_mgmt_stack_service(
+            scheduled_action, daemon_type, spec, curr_deps, last_deps
+        )
+
 
 @register_cephadm_service
 class CephfsMirrorService(CephService):
@@ -1843,3 +1898,51 @@ class CephadmAgent(CephService):
         return config, sorted([str(self.mgr.get_mgr_ip()), str(agent.server_port),
                                self.mgr.cert_mgr.get_root_ca(),
                                str(self.mgr.get_module_option('device_enhanced_scan'))])
+
+
+def next_action_for_mgmt_stack_service(
+    scheduled_action: utils.Action,
+    daemon_type: Optional[str],
+    spec: Optional[ServiceSpec],
+    curr_deps: List[str],
+    last_deps: List[str],
+) -> utils.Action:
+    """This function exists to help refactor existing code to use
+    choose_next_action instead of if-blocks inside serve.py.
+    It avoids the need to muck around with common base classes at the
+    cost of some duplication.
+    Call this from choose_next_action.
+    """
+    if curr_deps == last_deps:
+        return scheduled_action
+    sym_diff = set(curr_deps).symmetric_difference(last_deps)
+    logger.info(
+        'Reconfigure wanted %s: deps %r -> %r (diff %r)',
+        spec.service_name() if spec else daemon_type,
+        last_deps,
+        curr_deps,
+        sym_diff,
+    )
+    action = utils.Action.RECONFIG
+    # we need only redeploy if secure_monitoring_stack or mgmt-gateway value has changed:
+    # TODO(redo): check if we should just go always with redeploy (it's fast enough)
+    # TODO(jjm) remove this assert when refactoring process WRT
+    # choose_next_action is done.
+    assert daemon_type in [
+        'prometheus',
+        'node-exporter',
+        'alertmanager',
+        'ceph-exporter',
+    ]
+    REDEPLOY_TRIGGERS = ['secure_monitoring_stack', 'mgmt-gateway']
+    # [from: JJM, to: Redo] in different commits you added calls to
+    # symmetric_difference  for the same variables. I have removed this
+    # duplication but please let me know if I overlooked something WRT
+    # to that in case it was intentional.
+    # Also what is this line below trying to check? I struggle with nested
+    # inline comprehensions but its seems to me you just want to know if
+    # the service newly depends on one of these mgmt stack deps?
+    # If so we ought to be able to vastly simplify this...
+    if any(svc in e for e in sym_diff for svc in REDEPLOY_TRIGGERS):
+        action = utils.Action.REDEPLOY
+    return action

@@ -5,7 +5,7 @@
 Implements the functionality needed to deploy OSDs from the ``zfs`` subcommand:
 ``ceph-volume zfs``
 
-The current implementation only works for ZFS on FreeBSD
+The current implementation only works for ZFS on FreeBSD.
 
 **Command Line Subcommands**
 
@@ -25,7 +25,7 @@ The current implementation only works for ZFS on FreeBSD
 **Internal functionality**
 
 There are other aspects of the ``zfs`` subcommand that are internal and not
-exposed to the user, these sections explain how these pieces work together,
+exposed to the user. These sections explain how these pieces work together,
 clarifying the workflows of the tool.
 
 :ref:`zfs <ceph-volume-zfs-api>`

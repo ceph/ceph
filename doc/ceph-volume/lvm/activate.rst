@@ -20,7 +20,7 @@ For information about OSDs deployed by cephadm, refer to
 
 New OSDs
 --------
-To activate newly prepared OSDs both the :term:`OSD id` and :term:`OSD uuid`
+To activate newly prepared OSDs, both the :term:`OSD ID` and :term:`OSD UUID`
 need to be supplied. For example::
 
     ceph-volume lvm activate --bluestore 0 0263644D-0BF1-4D6D-BC34-28BD98AE3BC8
@@ -44,11 +44,11 @@ and will activate them one by one. If any of the OSDs are already running, it
 will report them in the command output and skip them, making it safe to rerun
 (idempotent).
 
-requiring uuids
+Requiring UUIDs
 ^^^^^^^^^^^^^^^
-The :term:`OSD uuid` is being required as an extra step to ensure that the
+The :term:`OSD UUID` is being required as an extra step to ensure that the
 right OSD is being activated. It is entirely possible that a previous OSD with
-the same id exists and would end up activating the incorrect one.
+the same ID exists and would end up activating the incorrect one.
 
 
 dmcrypt
@@ -63,19 +63,19 @@ Discovery
 With OSDs previously created by ``ceph-volume``, a *discovery* process is
 performed using :term:`LVM tags` to enable the systemd units.
 
-The systemd unit will capture the :term:`OSD id` and :term:`OSD uuid` and
+The systemd unit will capture the :term:`OSD ID` and :term:`OSD UUID` and
 persist it. Internally, the activation will enable it like::
 
-    systemctl enable ceph-volume@lvm-$id-$uuid
+    systemctl enable ceph-volume@lvm-<id>-<uuid>
 
 For example::
 
     systemctl enable ceph-volume@lvm-0-8715BEB4-15C5-49DE-BA6F-401086EC7B41
 
-Would start the discovery process for the OSD with an id of ``0`` and a UUID of
+Would start the discovery process for the OSD with an ID of ``0`` and a UUID of
 ``8715BEB4-15C5-49DE-BA6F-401086EC7B41``.
 
-.. note:: for more details on the systemd workflow see :ref:`ceph-volume-lvm-systemd`
+.. note:: For more details on the systemd workflow, see :ref:`ceph-volume-lvm-systemd`.
 
 The systemd unit will look for the matching OSD device, and by looking at its
 :term:`LVM tags` will proceed to:
@@ -93,19 +93,19 @@ The systemd unit will look for the matching OSD device, and by looking at its
 Existing OSDs
 -------------
 For existing OSDs that have been deployed with ``ceph-disk``, they need to be
-scanned and activated :ref:`using the simple sub-command <ceph-volume-simple>`.
+scanned and activated :ref:`using the simple subcommand <ceph-volume-simple>`.
 If a different tool was used then the only way to port them over to the new
 mechanism is to prepare them again (losing data). See
 :ref:`ceph-volume-lvm-existing-osds` for details on how to proceed.
 
 Summary
 -------
-To recap the ``activate`` process for :term:`bluestore`:
+To recap the ``activate`` process for :term:`BlueStore`:
 
-#. Require both :term:`OSD id` and :term:`OSD uuid`
-#. Enable the system unit with matching id and uuid
+#. Require both :term:`OSD ID` and :term:`OSD UUID`
+#. Enable the system unit with matching ID and UUID
 #. Create the ``tmpfs`` mount at the OSD directory in
-   ``/var/lib/ceph/osd/$cluster-$id/``
+   ``/var/lib/ceph/osd/<cluster>-<id>/``
 #. Recreate all the files needed with ``ceph-bluestore-tool prime-osd-dir`` by
    pointing it to the OSD ``block`` device.
 #. The systemd unit will ensure all devices are ready and linked

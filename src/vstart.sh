@@ -813,6 +813,7 @@ prepare_conf() {
         pid file = $CEPH_OUT_DIR/\$name.pid
         heartbeat file = $CEPH_OUT_DIR/\$name.heartbeat
 "
+    local extblkdev_conf=""
 
     local mgr_modules="iostat nfs"
     if $with_mgr_dashboard; then
@@ -863,6 +864,7 @@ prepare_conf() {
         enable experimental unrecoverable data corrupting features = *
         osd_crush_chooseleaf_type = 0
         debug asok assert abort = true
+        $(format_conf "${extblkdev_conf}")
         $(format_conf "${msgr_conf}")
         $(format_conf "${extra_conf}")
         $AUTOSCALER_OPTS
@@ -923,6 +925,10 @@ EOF
                [ ${#bluestore_wal_devs[@]} -gt 0 ]; then
                 # when use physical disk, not create file for db/wal
                 BLUESTORE_OPTS=""
+            else
+                # vstart's default file-backed OSDs are not suitable for
+                # extblkdev plugins that probe hardware capabilities.
+                extblkdev_conf="osd_extblkdev_plugins ="
             fi
         fi
         if [ "$io_uring_enabled" -eq 1 ]; then

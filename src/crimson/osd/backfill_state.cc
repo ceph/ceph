@@ -747,10 +747,7 @@ void BackfillState::enqueue_standalone_delete(
   const eversion_t &v,
   const std::vector<pg_shard_t> &peers)
 {
-  progress_tracker->enqueue_drop(obj);
-  for (auto bt : peers) {
-    backfill_machine.backfill_listener.enqueue_drop(bt, obj, v);
-  }
+  backfill_machine.backfill_listener.send_recovery_deletes(obj, peers);
 }
 
 std::ostream &operator<<(std::ostream &out, const BackfillState::PGFacade &pg) {

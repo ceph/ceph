@@ -110,7 +110,7 @@ filling up the file system used by the Monitor. It might also indicate that the
 Monitor database is too large (see ``MON_DISK_BIG`` below).  Another common
 scenario is that Ceph logging subsystem levels have been raised for
 troubleshooting purposes without subsequent return to default levels.  Ongoing
-verbose logging can easily fill up the files system containing ``/var/log``. If
+verbose logging can easily fill up the file system containing ``/var/log``. If
 you trim logs that are currently open, remember to restart or instruct your
 syslog or other daemon to re-open the log file. Another common dynamic is
 that users or processes have written a large amount of data to ``/tmp``
@@ -200,7 +200,7 @@ To disable the grace period entirely (immediate reporting), set the value to 0:
    ceph config set mon mon_netsplit_grace_period 0
 
 MON_COLOCATED
-____________
+_____________
 
 Two or more Monitors are located on the same node. This health check is 
 raised when multiple Monitors share the same IP address. This check is by 

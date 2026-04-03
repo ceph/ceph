@@ -1116,7 +1116,7 @@ def ceph_osds(ctx, config):
             if osd_type:
                 add_osd_args.extend(['--osd-type', osd_type])
             objectstore = config.get('conf', {}).get('osd', {}).get('osd objectstore')
-            if objectstore:
+            if objectstore and objectstore != 'bluestore':
                 add_osd_args.extend(['--objectstore', objectstore])
             if use_skip_validation:
                 try:
@@ -1146,7 +1146,7 @@ def ceph_osds(ctx, config):
             if osd_type:
                 osd_cmd.extend(['--osd-type', osd_type])
             objectstore = config.get('conf', {}).get('osd', {}).get('osd objectstore')
-            if objectstore:
+            if objectstore and objectstore != 'bluestore':
                 osd_cmd.extend(['--objectstore', objectstore])
             _shell(ctx, cluster_name, remote, osd_cmd)
             # expect the number of scratch devs

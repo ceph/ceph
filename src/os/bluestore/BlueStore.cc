@@ -19363,6 +19363,32 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
   } else if (!spillover_alert.empty()){
     spillover_alert.clear();
   }
+  // CHECK: BlueFS usage relative to main device size
+  if (bluefs) {
+    uint64_t db_used = bluefs->get_used(BlueFS::BDEV_DB);
+    uint64_t wal_used = bluefs->get_used(BlueFS::BDEV_WAL);
+    uint64_t slow_used = bluefs->get_used(BlueFS::BDEV_SLOW);
+    uint64_t main_size = bdev->get_size();
+
+    if (main_size > 0) {
+      uint64_t total_bluefs_usage = db_used + wal_used + slow_used;
+      double ratio = static_cast<double>(total_bluefs_usage) /
+                     static_cast<double>(main_size);
+      double warn_ratio =
+        cct->_conf.get_val<double>("bluestore_bluefs_warn_ratio");
+
+      if (ratio > warn_ratio) {
+        ostringstream ss;
+        ss << "BlueFS usage (" << byte_u_t(total_bluefs_usage)
+           << ") exceeds " << std::fixed << std::setprecision(4)
+           << (warn_ratio * 100.0) << "% of main device ("
+           << byte_u_t(main_size) << ", "
+           << std::fixed << std::setprecision(2)
+           << ratio * 100.0 << "%)";
+        alerts.emplace("BLUESTORE_BLUEFS_OVERSIZED", ss.str());
+      }
+    }
+  }
   if (cct->_conf->bluestore_slow_ops_warn_threshold) {
     size_t qsize = _trim_slow_op_event_queue(mono_clock::now());
     if (qsize >= cct->_conf->bluestore_slow_ops_warn_threshold) {

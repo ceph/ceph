@@ -6,7 +6,7 @@ Common Settings
 The `Hardware Recommendations`_ section provides some hardware guidelines for
 configuring a Ceph Storage Cluster. It is possible for a single :term:`Ceph
 Node` to run multiple daemons. For example, a single node with multiple drives
-ususally runs one ``ceph-osd`` for each drive. Ideally, each node will be
+usually runs one ``ceph-osd`` for each drive. Ideally, each node will be
 assigned to a particular type of process. For example, some nodes might run
 ``ceph-osd`` daemons, other nodes might run ``ceph-mds`` daemons, and still
 other nodes might run ``ceph-mon`` daemons.
@@ -53,7 +53,7 @@ are located according to the ``tmp_dir`` config.
 .. confval:: tmp_dir
 
 The ``$TMPDIR`` environment variable is used to initialize the config, if
-present, but may be overriden on the command-line. A default may also
+present, but may be overridden on the command line. A default may also
 be set for the cluster using the usual ``ceph config`` API.
 
 The template for the temporary files created by daemons is controlled

@@ -283,7 +283,6 @@ int main(int argc, const char* argv[])
           should_stop.wait().get();
           INFO("crimson shutting down");
           osd.stop().get();
-          // stop()s registered using defer() are called here
         } catch (...) {
           logger().error("startup failed: {}", std::current_exception());
           return EXIT_FAILURE;

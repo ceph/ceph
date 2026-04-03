@@ -13,6 +13,8 @@ tasks:
       - python3-rbd
       - python3-cephfs
       - ceph-volume
+      - ceph-osd-classic
+      - ceph-osd-crimson
     extra_packages:
       - python-rados
       - python-rgw

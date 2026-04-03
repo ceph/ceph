@@ -3,7 +3,17 @@ import json
 import socket
 from enum import Enum
 from functools import wraps
-from typing import Optional, Callable, TypeVar, List, NewType, TYPE_CHECKING, Any, NamedTuple
+from typing import (
+    Any,
+    Callable,
+    List,
+    NamedTuple,
+    NewType,
+    Optional,
+    TYPE_CHECKING,
+    TypeVar,
+    Union,
+)
 from orchestrator import OrchestratorError
 import hashlib
 
@@ -58,6 +68,25 @@ class SpecialHostLabels(str, Enum):
 
     def to_json(self) -> str:
         return self.value
+
+    def __str__(self) -> str:
+        return self.value
+
+
+class Action(str, Enum):
+    NO_ACTION = ''
+    RECONFIG = 'reconfig'
+    REDEPLOY = 'redeploy'
+    RESTART = 'restart'
+    ROTATE_KEY = 'rotate-key'
+    START = 'start'
+    STOP = 'stop'
+
+    @classmethod
+    def create(cls, action: Union[str, 'Action', None]) -> 'Action':
+        if not action:
+            return cls.NO_ACTION
+        return cls(action)
 
     def __str__(self) -> str:
         return self.value
