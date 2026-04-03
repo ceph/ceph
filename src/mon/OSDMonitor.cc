@@ -5472,7 +5472,7 @@ namespace {
     PG_AUTOSCALE_BIAS, DEDUP_TIER, DEDUP_CHUNK_ALGORITHM, 
     DEDUP_CDC_CHUNK_SIZE, POOL_EIO, BULK, PG_NUM_MAX, READ_RATIO,
     EC_OPTIMIZATIONS, EC_DATA_SHARD_COUNT, EC_CODING_SHARD_COUNT,
-    DEEP_SCRUB_DEFRAGMENT, DEEP_SCRUB_RECOMPRESS };
+    DEEP_SCRUB_REFORMAT };
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -6281,8 +6281,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"allow_ec_optimizations", EC_OPTIMIZATIONS},
       {"ec_data_shard_count", EC_DATA_SHARD_COUNT},
       {"ec_coding_shard_count", EC_CODING_SHARD_COUNT},
-      {"deep_scrub_defragment", DEEP_SCRUB_DEFRAGMENT},
-      {"deep_scrub_recompress", DEEP_SCRUB_RECOMPRESS},
+      {"deep_scrub_reformat", DEEP_SCRUB_REFORMAT},
     };
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
@@ -6530,8 +6529,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case DEDUP_CHUNK_ALGORITHM:
 	  case DEDUP_CDC_CHUNK_SIZE:
           case READ_RATIO:
-	  case DEEP_SCRUB_DEFRAGMENT:
-	  case DEEP_SCRUB_RECOMPRESS:
+	  case DEEP_SCRUB_REFORMAT:
 	    {
 	      pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
 	      if (p->opts.is_set(key)) {
@@ -6710,8 +6708,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case DEDUP_CHUNK_ALGORITHM:
 	  case DEDUP_CDC_CHUNK_SIZE:
           case READ_RATIO:
-	  case DEEP_SCRUB_DEFRAGMENT:
-	  case DEEP_SCRUB_RECOMPRESS:
+	  case DEEP_SCRUB_REFORMAT:
 	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
 	      if (i->second == *it)
 		break;

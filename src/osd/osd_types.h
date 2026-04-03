@@ -1144,8 +1144,7 @@ public:
      * completion if there are no other in progress writes.
      */
     PCT_UPDATE_DELAY,
-    DEEP_SCRUB_DEFRAGMENT, // perform defragmentation when deep-scrubbing
-    DEEP_SCRUB_RECOMPRESS, // perform recompression when deep-scrubbing
+    DEEP_SCRUB_REFORMAT,   // perform data reformatting when deep-scrubbing
   };
 
   enum type_t {
