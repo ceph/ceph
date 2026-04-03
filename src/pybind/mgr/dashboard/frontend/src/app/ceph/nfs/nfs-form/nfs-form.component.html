@@ -25,6 +25,7 @@
           label="Cluster"
           cdRequiredField="Cluster"
           id="cluster_id"
+          (change)="clusterChangeHandler()"
           [invalid]="nfsForm.controls.cluster_id.invalid && nfsForm.controls.cluster_id.dirty"
           [invalidText]="clusterError"
           [skeleton]="allClusters === null"
@@ -40,7 +41,7 @@
           @if (allClusters !== null && allClusters.length > 0) {
             <option value="">-- Select the cluster --</option>
           }
-          @for (cluster of allClusters; track cluster) {
+          @for (cluster of allClusters; track cluster.cluster_id) {
             <option [value]="cluster.cluster_id">
               {{ cluster.cluster_id }}
             </option>
@@ -677,6 +678,15 @@
           i18n
           >TCP</cds-checkbox
         >
+        @if (isSelectedClusterRdmaEnabled()) {
+          <cds-checkbox
+            formControlName="transportRDMA"
+            name="transportRDMA"
+            id="transportRDMA"
+            i18n
+            >RDMA</cds-checkbox
+          >
+        }
         <ng-template #transportError>
           @if (
             nfsForm.showError('transportUDP', formDir, 'required') ||

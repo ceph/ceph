@@ -22,6 +22,24 @@ describe('NfsFormComponent', () => {
   let activatedRoute: ActivatedRouteStub;
   let router: Router;
 
+  const nfsClusterListResponse = [
+    {
+      name: 'mynfs',
+      enable_rdma: false,
+      backend: [],
+      virtual_ip: null,
+      placement: {}
+    }
+  ];
+
+  const flushNfsClusterList = () => {
+    const req = httpTesting.expectOne(
+      (request) =>
+        request.url === 'api/nfs-ganesha/cluster' && request.params.get('info') === 'true'
+    );
+    req.flush(nfsClusterListResponse);
+  };
+
   configureTestBed({
     declarations: [NfsFormComponent, NfsFormClientComponent],
     imports: [
@@ -41,7 +59,7 @@ describe('NfsFormComponent', () => {
 
   const matchSquash = (backendSquashValue: string, uiSquashValue: string) => {
     component.ngOnInit();
-    httpTesting.expectOne('api/nfs-ganesha/cluster').flush(['mynfs']);
+    flushNfsClusterList();
     httpTesting.expectOne('ui-api/nfs-ganesha/cephfs/filesystems').flush([{ id: 1, name: 'a' }]);
     httpTesting.expectOne('api/nfs-ganesha/export/mynfs/1').flush({
       fsal: {
@@ -72,7 +90,7 @@ describe('NfsFormComponent', () => {
     RgwHelper.selectDaemon();
     fixture.detectChanges();
 
-    httpTesting.expectOne('api/nfs-ganesha/cluster').flush(['mynfs']);
+    flushNfsClusterList();
     httpTesting.expectOne('ui-api/nfs-ganesha/cephfs/filesystems').flush([{ id: 1, name: 'a' }]);
     httpTesting.verify();
   });
@@ -98,9 +116,80 @@ describe('NfsFormComponent', () => {
       subvolume: '',
       subvolume_group: '_nogroup',
       transportTCP: true,
-      transportUDP: true
+      transportUDP: true,
+      transportRDMA: false
     });
     expect(component.nfsForm.get('cluster_id').disabled).toBeFalsy();
+  });
+
+  it('should hide RDMA transport when cluster does not support it', () => {
+    component.resolveClusters([
+      {
+        name: 'no-rdma-cluster',
+        enable_rdma: false,
+        backend: [],
+        virtual_ip: null,
+        placement: {}
+      }
+    ]);
+    expect(component.isSelectedClusterRdmaEnabled()).toBe(false);
+  });
+
+  it('should show RDMA transport when selected cluster supports it', () => {
+    component.allClusters = [
+      { cluster_id: 'rdma-cluster', enable_rdma: true },
+      { cluster_id: 'no-rdma-cluster', enable_rdma: false }
+    ];
+    component.nfsForm.get('cluster_id').setValue('rdma-cluster');
+    expect(component.isSelectedClusterRdmaEnabled()).toBe(true);
+  });
+
+  it('should pre-select cluster from route param (selected row)', () => {
+    component.isEdit = false;
+    component.selectedClusterId = 'second-cluster';
+    component.resolveClusters([
+      {
+        name: 'first-cluster',
+        enable_rdma: false,
+        backend: [],
+        virtual_ip: null,
+        placement: {}
+      },
+      {
+        name: 'second-cluster',
+        enable_rdma: true,
+        backend: [],
+        virtual_ip: null,
+        placement: {}
+      }
+    ]);
+    expect(component.nfsForm.get('cluster_id').value).toBe('second-cluster');
+    expect(component.isSelectedClusterRdmaEnabled()).toBe(true);
+    expect(component.nfsForm.get('transportRDMA').value).toBe(true);
+  });
+
+  it('should not auto-select when no cluster context provided', () => {
+    component.isEdit = false;
+    component.selectedClusterId = '';
+    component.nfsForm.get('cluster_id').setValue('');
+    component.resolveClusters([
+      {
+        name: 'first-cluster',
+        enable_rdma: false,
+        backend: [],
+        virtual_ip: null,
+        placement: {}
+      },
+      {
+        name: 'second-cluster',
+        enable_rdma: true,
+        backend: [],
+        virtual_ip: null,
+        placement: {}
+      }
+    ]);
+    // No selectedClusterId → user must pick from dropdown
+    expect(component.nfsForm.get('cluster_id').value).toBe('');
   });
 
   it('should prepare data when selecting an cluster', () => {

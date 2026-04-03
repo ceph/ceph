@@ -34,6 +34,7 @@ import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-g
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
 import { RgwExportType } from '../nfs-list/nfs-list.component';
 import { DEFAULT_SUBVOLUME_GROUP } from '~/app/shared/constants/cephfs.constant';
+import { NFSCluster, NFSClusterOption } from '../models/nfs-cluster-config';
 
 @Component({
   selector: 'cd-nfs-form',
@@ -54,7 +55,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
   cluster_id: string = null;
   export_id: string = null;
 
-  allClusters: { cluster_id: string }[] = null;
+  allClusters: NFSClusterOption[] = null;
   icons = Icons;
 
   allFsNames: any[] = null;
@@ -77,6 +78,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
   selectedFsName: string = '';
   selectedSubvolGroup: string = '';
   selectedSubvol: string = '';
+  selectedClusterId: string = '';
   defaultSubVolGroup = DEFAULT_SUBVOLUME_GROUP;
 
   pathDataSource = (text$: Observable<string>) => {
@@ -120,7 +122,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
     this.nfsAccessType = this.nfsService.nfsAccessType;
     this.nfsSquash = Object.keys(this.nfsService.nfsSquash);
     this.createForm();
-    const promises: Observable<any>[] = [this.nfsService.listClusters()];
+    const promises: Observable<any>[] = [this.nfsService.listClusters(true)];
 
     if (this.storageBackend === SUPPORTED_FSAL.RGW) {
       promises.push(this.rgwSiteService.get('realms'));
@@ -156,10 +158,18 @@ export class NfsFormComponent extends CdForm implements OnInit {
     } else {
       this.action = this.actionLabels.CREATE;
       this.route.params.subscribe(
-        (params: { fs_name: string; subvolume_group: string; subvolume?: string }) => {
+        (params: {
+          fs_name: string;
+          subvolume_group: string;
+          subvolume?: string;
+          cluster_id?: string;
+        }) => {
           this.selectedFsName = params.fs_name;
           this.selectedSubvolGroup = params.subvolume_group;
           if (params.subvolume) this.selectedSubvol = params.subvolume;
+          if (params.cluster_id) {
+            this.selectedClusterId = decodeURIComponent(params.cluster_id);
+          }
         }
       );
 
@@ -180,6 +190,16 @@ export class NfsFormComponent extends CdForm implements OnInit {
       }
       this.loadingReady();
     });
+  }
+
+  isSelectedClusterRdmaEnabled(): boolean {
+    const clusterId = this.nfsForm?.get('cluster_id')?.value;
+    return !!this.allClusters?.find((c: NFSClusterOption) => c.cluster_id === clusterId)
+      ?.enable_rdma;
+  }
+
+  clusterChangeHandler() {
+    this.nfsForm.get('transportRDMA').setValue(this.isSelectedClusterRdmaEnabled());
   }
 
   volumeChangeHandler() {
@@ -320,18 +340,25 @@ export class NfsFormComponent extends CdForm implements OnInit {
       squash: new UntypedFormControl(this.nfsSquash[0]),
       transportUDP: new UntypedFormControl(true, {
         validators: [
-          CdValidators.requiredIf({ transportTCP: false }, (value: boolean) => {
-            return !value;
-          })
+          CdValidators.requiredIf(
+            { transportTCP: false, transportRDMA: false },
+            (value: boolean) => {
+              return !value;
+            }
+          )
         ]
       }),
       transportTCP: new UntypedFormControl(true, {
         validators: [
-          CdValidators.requiredIf({ transportUDP: false }, (value: boolean) => {
-            return !value;
-          })
+          CdValidators.requiredIf(
+            { transportUDP: false, transportRDMA: false },
+            (value: boolean) => {
+              return !value;
+            }
+          )
         ]
       }),
+      transportRDMA: new UntypedFormControl(false),
       clients: this.formBuilder.array([]),
       security_label: new UntypedFormControl(false),
 
@@ -387,6 +414,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
 
     res.transportTCP = res.transports.indexOf('TCP') !== -1;
     res.transportUDP = res.transports.indexOf('UDP') !== -1;
+    res.transportRDMA = res.transports.indexOf('RDMA') !== -1;
     delete res.transports;
 
     Object.entries(this.nfsService.nfsSquash).forEach(([key, value]) => {
@@ -438,13 +466,17 @@ export class NfsFormComponent extends CdForm implements OnInit {
     this.getSubVol(fsName);
   }
 
-  resolveClusters(clusters: string[]) {
-    this.allClusters = [];
-    for (const cluster of clusters) {
-      this.allClusters.push({ cluster_id: cluster });
-    }
-    if (!this.isEdit && this.allClusters.length > 0) {
-      this.nfsForm.get('cluster_id').setValue(this.allClusters[0].cluster_id);
+  resolveClusters(clusters: NFSCluster[]) {
+    this.allClusters = clusters.map((cluster) => ({
+      cluster_id: cluster.name,
+      enable_rdma: cluster.enable_rdma ?? false
+    }));
+    if (!this.isEdit && this.selectedClusterId) {
+      const target = this.allClusters.find((c) => c.cluster_id === this.selectedClusterId);
+      if (target) {
+        this.nfsForm.get('cluster_id').setValue(target.cluster_id);
+        this.nfsForm.get('transportRDMA').setValue(target.enable_rdma);
+      }
     }
   }
 
@@ -622,7 +654,6 @@ export class NfsFormComponent extends CdForm implements OnInit {
         call: this.nfsService.update(this.cluster_id, _.parseInt(this.export_id), requestModel)
       });
     } else {
-      // Create
       action = this.taskWrapper.wrapTaskAroundCall({
         task: new FinishedTask('nfs/create', {
           path: requestModel.path,
@@ -697,6 +728,10 @@ export class NfsFormComponent extends CdForm implements OnInit {
       requestModel.transports.push('UDP');
     }
     delete requestModel.transportUDP;
+    if (requestModel.transportRDMA && this.isSelectedClusterRdmaEnabled()) {
+      requestModel.transports.push('RDMA');
+    }
+    delete requestModel.transportRDMA;
 
     requestModel.clients.forEach((client: any) => {
       if (_.isString(client.addresses)) {
