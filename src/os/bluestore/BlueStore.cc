@@ -17795,12 +17795,9 @@ void BlueStore::_maybe_reformat_object(Collection* c, OnodeRef& o,
   uint64_t offset, size_t length, const bufferlist& bl, uint32_t op_flags,
   const span_stat_t& span_stat)
 {
-  int64_t opt_defragment = 0;
-  int64_t opt_recompress = 0;
-  c->pool_opts.get(pool_opts_t::DEEP_SCRUB_DEFRAGMENT, &opt_defragment);
-  c->pool_opts.get(pool_opts_t::DEEP_SCRUB_RECOMPRESS, &opt_recompress);
-  dout(10) << __func__ << " defragment = " << opt_defragment
-    << " recompress = " << opt_recompress
+  string opt_reformat;
+  c->pool_opts.get(pool_opts_t::DEEP_SCRUB_REFORMAT, &opt_reformat);
+  dout(10) << __func__ << " reformat = " << opt_reformat
     << " span stat {" << span_stat << "}"
     << dendl;
   _dump_onode<30>(cct, *o);
@@ -17811,7 +17808,7 @@ void BlueStore::_maybe_reformat_object(Collection* c, OnodeRef& o,
   WriteContext wctx;
 
   if (span_stat.cached == 0 && span_stat.allocated_shared == 0) {
-    if (opt_defragment || opt_recompress) {
+    if (!opt_reformat.empty()) {
       // will probably need write context
       _choose_write_options(c, o, op_flags, &wctx);
     }
@@ -17819,7 +17816,7 @@ void BlueStore::_maybe_reformat_object(Collection* c, OnodeRef& o,
     // - object isn't cached (meaning it's not being written at the moment),
     // - and there are no shared blobs withing the span.
     //   as this might result is used space increase.
-    if (opt_recompress) {
+    if (opt_reformat.find("recompress") != string::npos) {
       if (wctx.compress &&
 	span_stat.allocated > 0) {
 	ceph_assert(wctx.compressor);
@@ -17874,7 +17871,7 @@ void BlueStore::_maybe_reformat_object(Collection* c, OnodeRef& o,
 	}
       }
     }
-    if (!might_need_recompress && opt_defragment) {
+    if (!might_need_recompress && opt_reformat.find("defragment") != string::npos) {
       if (span_stat.frags > 1) {
 	logger->inc(l_bluestore_reformat_defragment_attempted);
 	PExtentVector prealloc;
