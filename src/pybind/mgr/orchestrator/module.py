@@ -1984,7 +1984,7 @@ Usage:
 
                 if dry_run and not isinstance(spec, HostSpec):
                     spec.preview_only = dry_run
-                    
+
                 if isinstance(spec, TracingSpec) and spec.service_type == 'jaeger-tracing':
                     specs.extend(spec.get_tracing_specs())
                     continue
@@ -1997,7 +1997,7 @@ Usage:
             if not service_type:
                 raise OrchestratorValidationError(usage)
             specs = [ServiceSpec(service_type.value, placement=placementspec,
-                                 unmanaged=unmanaged, preview_only=dry_run, 
+                                 unmanaged=unmanaged, preview_only=dry_run,
                                  allow_label_remove_service=allow_label_remove_service)]
         cmd_result = self._apply_misc(specs, dry_run, format, no_overwrite, continue_on_error)
         if errs:
@@ -2369,7 +2369,7 @@ Usage:
         raise_if_exception(completion)
         out = completion.result_str()
         return HandleCommandResult(stdout=out)
-    
+
     @OrchestratorCLICommand.Write('orch set backend')
     def _set_backend(self, module_name: Optional[str] = None) -> HandleCommandResult:
         """

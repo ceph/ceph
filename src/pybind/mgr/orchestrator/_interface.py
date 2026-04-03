@@ -674,7 +674,7 @@ class Orchestrator(object):
         :return: None
         """
         raise NotImplementedError()
-    
+
     def plan(self, spec: Sequence["GenericSpec"]) -> OrchResult[List]:
         """
         Plan (Dry-run, Preview) a List of Specs.

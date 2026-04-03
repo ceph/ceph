@@ -538,7 +538,7 @@ class SpecStore():
         self._specs[service_name].allow_label_remove_service = value
         self.save(self._specs[service_name])
         return f'Set <allow_label_remove_service> to {str(value)} for service {service_name}'
-    
+
     def needs_configuration(self, name: str) -> bool:
         return self._needs_configuration.get(name, False)
 
