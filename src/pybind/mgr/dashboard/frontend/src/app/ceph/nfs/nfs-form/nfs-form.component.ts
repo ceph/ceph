@@ -34,6 +34,7 @@ import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-g
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
 import { RgwExportType } from '../nfs-list/nfs-list.component';
 import { DEFAULT_SUBVOLUME_GROUP } from '~/app/shared/constants/cephfs.constant';
+import { NFSCluster, NFSClusterOption } from '../models/nfs-cluster-config';
 
 @Component({
   selector: 'cd-nfs-form',
@@ -54,7 +55,8 @@ export class NfsFormComponent extends CdForm implements OnInit {
   cluster_id: string = null;
   export_id: string = null;
 
-  allClusters: { cluster_id: string }[] = null;
+  allClusters: NFSClusterOption[] = null;
+  clusterRdmaEnabled = false;
   icons = Icons;
 
   allFsNames: any[] = null;
@@ -177,6 +179,9 @@ export class NfsFormComponent extends CdForm implements OnInit {
       this.resolveFsals(data[1]);
       if (data[2]) {
         this.resolveModel(data[2]);
+      }
+      if (this.isEdit) {
+        this.updateClusterRdmaAvailability(this.cluster_id);
       }
       this.loadingReady();
     });
@@ -314,18 +319,25 @@ export class NfsFormComponent extends CdForm implements OnInit {
       squash: new UntypedFormControl(this.nfsSquash[0]),
       transportUDP: new UntypedFormControl(true, {
         validators: [
-          CdValidators.requiredIf({ transportTCP: false }, (value: boolean) => {
-            return !value;
-          })
+          CdValidators.requiredIf(
+            { transportTCP: false, transportRDMA: false },
+            (value: boolean) => {
+              return !value;
+            }
+          )
         ]
       }),
       transportTCP: new UntypedFormControl(true, {
         validators: [
-          CdValidators.requiredIf({ transportUDP: false }, (value: boolean) => {
-            return !value;
-          })
+          CdValidators.requiredIf(
+            { transportUDP: false, transportRDMA: false },
+            (value: boolean) => {
+              return !value;
+            }
+          )
         ]
       }),
+      transportRDMA: new UntypedFormControl(false),
       clients: this.formBuilder.array([]),
       security_label: new UntypedFormControl(false),
 
@@ -368,6 +380,20 @@ export class NfsFormComponent extends CdForm implements OnInit {
         })
       )
     });
+
+    this.nfsForm.get('cluster_id').valueChanges.subscribe((clusterId: string) => {
+      this.updateClusterRdmaAvailability(clusterId);
+    });
+  }
+
+  updateClusterRdmaAvailability(clusterId: string) {
+    const cluster = this.allClusters?.find(
+      (cluster: NFSClusterOption) => cluster.cluster_id === clusterId
+    );
+    this.clusterRdmaEnabled = cluster?.enable_rdma ?? false;
+    if (!this.clusterRdmaEnabled) {
+      this.nfsForm.get('transportRDMA').setValue(false);
+    }
   }
 
   resolveModel(res: any) {
@@ -381,6 +407,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
 
     res.transportTCP = res.transports.indexOf('TCP') !== -1;
     res.transportUDP = res.transports.indexOf('UDP') !== -1;
+    res.transportRDMA = res.transports.indexOf('RDMA') !== -1;
     delete res.transports;
 
     Object.entries(this.nfsService.nfsSquash).forEach(([key, value]) => {
@@ -430,11 +457,11 @@ export class NfsFormComponent extends CdForm implements OnInit {
     });
   }
 
-  resolveClusters(clusters: string[]) {
-    this.allClusters = [];
-    for (const cluster of clusters) {
-      this.allClusters.push({ cluster_id: cluster });
-    }
+  resolveClusters(clusters: NFSCluster[]) {
+    this.allClusters = clusters.map((cluster) => ({
+      cluster_id: cluster.name,
+      enable_rdma: cluster.enable_rdma ?? false
+    }));
     if (!this.isEdit && this.allClusters.length > 0) {
       this.nfsForm.get('cluster_id').setValue(this.allClusters[0].cluster_id);
     }
@@ -689,6 +716,10 @@ export class NfsFormComponent extends CdForm implements OnInit {
       requestModel.transports.push('UDP');
     }
     delete requestModel.transportUDP;
+    if (requestModel.transportRDMA) {
+      requestModel.transports.push('RDMA');
+    }
+    delete requestModel.transportRDMA;
 
     requestModel.clients.forEach((client: any) => {
       if (_.isString(client.addresses)) {
