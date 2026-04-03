@@ -1647,10 +1647,8 @@ static inline int rgw_str_to_bool(const char *s, int def_val)
 static inline void append_rand_alpha(CephContext *cct, const std::string& src, std::string& dest, int len)
 {
   dest = src;
-  char buf[len + 1];
-  gen_rand_alphanumeric(cct, buf, len);
   dest.append("_");
-  dest.append(buf);
+  dest.append(gen_rand_alphanumeric(cct, len));
 }
 
 static inline uint64_t rgw_rounded_kb(uint64_t bytes)
