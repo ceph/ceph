@@ -21,7 +21,8 @@
       class="table-actions"
       [permission]="permission"
       [selection]="selection"
-      [tableActions]="tableActions">
+      [tableActions]="tableActions"
+    >
     </cd-table-actions>
   </cd-table>
 </div>
@@ -45,33 +46,34 @@
   let-value="data.value"
   let-row="data.row"
 >
-@if (value) {
+  @if (value) {
   <div
     [cdsStack]="'horizontal'"
     gap="4"
   >
-  @if (value === HostStatus.AVAILABLE || value === HostStatus.RUNNING) {
+    @if (value === HostStatus.AVAILABLE || value === HostStatus.RUNNING) {
     <cd-icon type="success"></cd-icon>
-  } @else {
+    } @else {
     <cd-icon type="error"></cd-icon>
-  }
-  <span class="cds-ml-3">{{ value | titlecase }}</span>
+    }
+    <span class="cds-ml-3">{{ value | titlecase }}</span>
   </div>
-} @else {
+  } @else {
   <span>-</span>
-}
+  }
 </ng-template>
 
 <ng-template
   #labelsTpl
   let-value="data.value"
 >
-@if (value && value.length > 0) {
-  <cds-tag *ngFor="let label of value"
-           class="tag tag-dark">{{ label }}</cds-tag>
-} @else {
+  @if (value && value.length > 0) {
+  <cds-tag
+    *ngFor="let label of value"
+    class="tag tag-dark"
+    >{{ label }}</cds-tag
+  >
+  } @else {
   <span>-</span>
-}
+  }
 </ng-template>
-
-

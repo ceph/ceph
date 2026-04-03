@@ -1,17 +1,25 @@
-<cds-modal size="sm"
-           [open]="open"
-           [hasScrollingContent]="false"
-           (overlaySelected)="closeModal()">
+<cds-modal
+  size="sm"
+  [open]="open"
+  [hasScrollingContent]="false"
+  (overlaySelected)="closeModal()"
+>
   <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        modal-primary-focus
-        i18n>Individual OSD flags</h3>
+    <h3
+      cdsModalHeaderHeading
+      modal-primary-focus
+      i18n
+    >
+      Individual OSD flags
+    </h3>
   </cds-modal-header>
 
   <div cdsModalContent>
-    <form name="osdFlagsForm"
-          [formGroup]="osdFlagsForm"
-          novalidate>
+    <form
+      name="osdFlagsForm"
+      [formGroup]="osdFlagsForm"
+      novalidate
+    >
       <div>
         @for (flag of flags; track flag.code; let last = $last) {
         <div>
@@ -24,10 +32,13 @@
           >
             <strong>{{ flag.name }}</strong>
             @if (flag.clusterWide) {
-            <cds-tag class="cds-ml-3"
-                     [cdsTooltip]="clusterWideTooltip"
-                     trigger="hover"
-                     i18n>Cluster-wide</cds-tag>
+            <cds-tag
+              class="cds-ml-3"
+              [cdsTooltip]="clusterWideTooltip"
+              trigger="hover"
+              i18n
+              >Cluster-wide</cds-tag
+            >
             }
 
             <div class="cds-mt-4">
@@ -44,16 +55,20 @@
   </div>
 
   <cds-modal-footer>
-    <button [cdsButton]="'ghost'"
-            (click)="closeModal()"
-            type="button"
-            i18n>
+    <button
+      [cdsButton]="'ghost'"
+      (click)="closeModal()"
+      type="button"
+      i18n
+    >
       Cancel
     </button>
-    <button [cdsButton]="'secondary'"
-            (click)="resetSelection()"
-            type="button"
-            i18n>
+    <button
+      [cdsButton]="'secondary'"
+      (click)="resetSelection()"
+      type="button"
+      i18n
+    >
       Restore previous selection
     </button>
     @if (permissions.osd.update) {
@@ -61,7 +76,8 @@
       (submitAction)="submitAction()"
       [form]="osdFlagsForm"
       [submitText]="actionLabels.UPDATE"
-    >{{ actionLabels.UPDATE }}</cd-submit-button>
+      >{{ actionLabels.UPDATE }}</cd-submit-button
+    >
     }
   </cds-modal-footer>
 </cds-modal>

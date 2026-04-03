@@ -1,6 +1,8 @@
-<nav class="pagination"
-     aria-label="Pagination"
-     i18n-aria-label>
+<nav
+  class="pagination"
+  aria-label="Pagination"
+  i18n-aria-label
+>
   <button
     class="pagination__btn pagination__btn_first"
     aria-label="Go to first page"
@@ -8,8 +10,10 @@
     [disabled]="!canPrevious()"
     (click)="selectPage(1)"
   >
-    <i class="fa fa-angle-double-left"
-       aria-hidden="true"></i>
+    <i
+      class="fa fa-angle-double-left"
+      aria-hidden="true"
+    ></i>
   </button>
   <button
     class="pagination__btn pagination__btn_prev"
@@ -18,8 +22,10 @@
     [disabled]="!canPrevious()"
     (click)="prevPage()"
   >
-    <i class="fa fa-angle-left"
-       aria-hidden="true"></i>
+    <i
+      class="fa fa-angle-left"
+      aria-hidden="true"
+    ></i>
   </button>
   <div class="pagination__pages">
     <input
@@ -42,8 +48,10 @@
     (click)="nextPage()"
     [disabled]="!canNext()"
   >
-    <i class="fa fa-angle-right"
-       aria-hidden="true"></i>
+    <i
+      class="fa fa-angle-right"
+      aria-hidden="true"
+    ></i>
   </button>
   <button
     class="pagination__btn pagination__btn_last"
@@ -52,7 +60,9 @@
     [disabled]="!canNext()"
     (click)="selectPage(totalPages)"
   >
-    <i class="fa fa-angle-double-right"
-       aria-hidden="true"></i>
+    <i
+      class="fa fa-angle-double-right"
+      aria-hidden="true"
+    ></i>
   </button>
 </nav>

@@ -1,6 +1,8 @@
 {
   "arrowParens": "always",
   "printWidth": 100,
+  "singleAttributePerLine": true,
   "singleQuote": true,
-  "trailingComma": "none"
+  "trailingComma": "none",
+  "tabWidth": 2
 }

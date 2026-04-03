@@ -7,13 +7,15 @@
   <div class="sidebar-layout-shell">
     <cds-sidenav
       [expanded]="true"
-      class="sidebar-layout-nav">
+      class="sidebar-layout-nav"
+    >
       @for (item of items; track item.label) {
       <cds-sidenav-item
         [route]="item.route"
         [routeExtras]="item.routeExtras"
         [useRouter]="true"
-        [routerLinkActiveOptions]="item.routerLinkActiveOptions || { exact: false }">
+        [routerLinkActiveOptions]="item.routerLinkActiveOptions || { exact: false }"
+      >
         <span class="cds--type-heading-compact-01">{{ item.label }}</span>
       </cds-sidenav-item>
       }

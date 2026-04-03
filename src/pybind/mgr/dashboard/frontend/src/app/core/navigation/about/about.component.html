@@ -1,30 +1,35 @@
-<cds-modal [open]="open"
-           size="md"
-           (overlaySelected)="closeModal()">
+<cds-modal
+  [open]="open"
+  size="md"
+  (overlaySelected)="closeModal()"
+>
   <cds-modal-header (closeSelect)="closeModal()">
     <div class="header-content">
-      <img src="assets/Ceph_Ceph_Logo_with_text_red_white.svg"
-           class="ceph-logo"
-           alt="{{ projectConstants.organization }}">
-    <h3 class="modal-title">
-      <strong>{{ projectConstants.projectName }}</strong>
-    </h3>
+      <img
+        src="assets/Ceph_Ceph_Logo_with_text_red_white.svg"
+        class="ceph-logo"
+        alt="{{ projectConstants.organization }}"
+      />
+      <h3 class="modal-title">
+        <strong>{{ projectConstants.projectName }}</strong>
+      </h3>
     </div>
-
   </cds-modal-header>
-    <section cdsModalContent
-             modal-primary-focus>
-    <div class="modal-body" >
+  <section
+    cdsModalContent
+    modal-primary-focus
+  >
+    <div class="modal-body">
       <div class="product-versions">
         <strong i18n>Version</strong>
-        <br>
+        <br />
         {{ versionNumber }}
         {{ versionHash }}
-        <br>
+        <br />
         {{ versionName }}
       </div>
 
-      <br>
+      <br />
 
       <dl>
         <dt i18n>Ceph Manager</dt>
@@ -41,7 +46,7 @@
         <dd>{{ modalVariables.browserOS }}</dd>
       </dl>
     </div>
-    </section>
+  </section>
 
   <cds-modal-footer>
     <div class="footer-content">
@@ -50,5 +55,3 @@
     </div>
   </cds-modal-footer>
 </cds-modal>
-
-

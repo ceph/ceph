@@ -1,31 +1,40 @@
 @if (service) {
-  <cds-tabs [cacheActive]="false">
-    <cds-tab heading="Daemons"
-             i18n-heading>
-      <cd-service-daemon-list
-        [serviceName]="service?.service_name"
-        mode="daemons">
-      </cd-service-daemon-list>
-    </cds-tab>
+<cds-tabs [cacheActive]="false">
+  <cds-tab
+    heading="Daemons"
+    i18n-heading
+  >
+    <cd-service-daemon-list
+      [serviceName]="service?.service_name"
+      mode="daemons"
+    >
+    </cd-service-daemon-list>
+  </cds-tab>
 
-    @if (hasCertificate) {
-      <cds-tab heading="Certificate"
-               i18n-heading>
-        <cd-service-certificate-details
-          [certificate]="certificate"
-          [serviceName]="service?.service_name"
-          [serviceType]="service?.service_type"
-          (editService)="onEditService($event)">
-        </cd-service-certificate-details>
-      </cds-tab>
-    }
+  @if (hasCertificate) {
+  <cds-tab
+    heading="Certificate"
+    i18n-heading
+  >
+    <cd-service-certificate-details
+      [certificate]="certificate"
+      [serviceName]="service?.service_name"
+      [serviceType]="service?.service_type"
+      (editService)="onEditService($event)"
+    >
+    </cd-service-certificate-details>
+  </cds-tab>
+  }
 
-    <cds-tab heading="Service Events"
-             i18n-heading>
-      <cd-service-daemon-list
-        [serviceName]="service?.service_name"
-        mode="events">
-      </cd-service-daemon-list>
-    </cds-tab>
-  </cds-tabs>
+  <cds-tab
+    heading="Service Events"
+    i18n-heading
+  >
+    <cd-service-daemon-list
+      [serviceName]="service?.service_name"
+      mode="events"
+    >
+    </cd-service-daemon-list>
+  </cds-tab>
+</cds-tabs>
 }

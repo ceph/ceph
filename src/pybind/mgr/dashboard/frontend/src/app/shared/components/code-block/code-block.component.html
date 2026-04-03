@@ -11,8 +11,10 @@
 </ng-container>
 
 <ng-template #singleCodeBlock>
-  <pre class="d-flex px-2 py-3 align-items-center justify-content-between text-dark"
-       id="singleCodeBlock">
+  <pre
+    class="d-flex px-2 py-3 align-items-center justify-content-between text-dark"
+    id="singleCodeBlock"
+  >
     <span [ngClass]="{'text-wrap': textWrap}">{{codes}}</span>
     <cd-copy-2-clipboard-button
       [source]="codes"

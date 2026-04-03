@@ -4,9 +4,7 @@
   hasScrollingContent="true"
   (overlaySelected)="closeModal()"
 >
-  <cds-modal-header
-    (closeSelect)="closeModal()"
-  >
+  <cds-modal-header (closeSelect)="closeModal()">
     <h3
       cdsModalHeaderHeading
       i18n
@@ -24,9 +22,7 @@
       class="modal-wrapper"
     >
       <!-- Name -->
-      <div
-        class="form-item"
-      >
+      <div class="form-item">
         <cds-text-label
           [invalid]="!form.controls.name.valid && form.controls.name.dirty"
           [invalidText]="nameError"
@@ -42,9 +38,7 @@
             placeholder="Add issue title"
           />
         </cds-text-label>
-        <ng-template
-          #nameError
-        >
+        <ng-template #nameError>
           @if (form.showError('name', formDir, 'required')) {
           <span
             class="invalid-feedback"
@@ -52,16 +46,14 @@
           >
             This field is required!
           </span>
-          }
-          @if (form.showError('name', formDir, 'pattern')) {
+          } @if (form.showError('name', formDir, 'pattern')) {
           <span
             class="invalid-feedback"
             i18n
           >
             The name can only consist of alphanumeric characters, dashes and underscores.
           </span>
-          }
-          @if (form.showError('name', formDir, 'uniqueName')) {
+          } @if (form.showError('name', formDir, 'uniqueName')) {
           <span
             class="invalid-feedback"
             i18n
@@ -73,9 +65,7 @@
       </div>
 
       <!-- Plugin -->
-      <div
-        class="form-item"
-      >
+      <div class="form-item">
         <cds-select
           [label]="pluginLabelTpl"
           id="plugin"
@@ -85,24 +75,15 @@
           i18n
         >
           @if (!plugins) {
-          <option
-            value=""
-          >
-            Loading...
-          </option>
-          }
-          @for (plugin of plugins; track plugin) {
-          <option
-            [value]="plugin"
-          >
+          <option value="">Loading...</option>
+          } @for (plugin of plugins; track plugin) {
+          <option [value]="plugin">
             {{ plugin }}
           </option>
           }
         </cds-select>
 
-        <ng-template
-          #pluginError
-        >
+        <ng-template #pluginError>
           <span
             class="invalid-feedback"
             i18n
@@ -111,21 +92,14 @@
           </span>
         </ng-template>
 
-        <ng-template
-          #pluginLabelTpl
-        >
+        <ng-template #pluginLabelTpl>
           Plugin
-          <cd-helper
-            [html]="tooltips.plugins[plugin].description"
-          >
-          </cd-helper>
+          <cd-helper [html]="tooltips.plugins[plugin].description"> </cd-helper>
         </ng-template>
       </div>
 
       <!-- Data Chunk k -->
-      <div
-        class="form-item"
-      >
+      <div class="form-item">
         <cds-number
           id="k"
           label="Data chunks (k)"
@@ -138,9 +112,7 @@
           i18n
         >
         </cds-number>
-        <ng-template
-          #dataChunkError
-        >
+        <ng-template #dataChunkError>
           @if (form.showError('k', formDir, 'required')) {
           <span
             class="invalid-feedback"
@@ -148,62 +120,56 @@
           >
             This field is required!
           </span>
-          }
-          @if (form.showError('k', formDir, 'min')) {
+          } @if (form.showError('k', formDir, 'min')) {
           <span
             class="invalid-feedback"
             i18n
           >
             Must be equal to or greater than 2.
           </span>
-          }
-          @if (form.showError('k', formDir, 'max') && form.getValue('crushFailureDomain') === CrushFailureDomains.Osd) {
+          } @if (form.showError('k', formDir, 'max') && form.getValue('crushFailureDomain') ===
+          CrushFailureDomains.Osd) {
           <span
             class="invalid-feedback"
             i18n
           >
-            Chunks (k+m) have exceeded the available OSDs of {{deviceCount}}.
+            Chunks (k+m) have exceeded the available OSDs of {{ deviceCount }}.
           </span>
-          }
-          @if (form.showError('k', formDir, 'max') && form.getValue('crushFailureDomain') === CrushFailureDomains.Host) {
+          } @if (form.showError('k', formDir, 'max') && form.getValue('crushFailureDomain') ===
+          CrushFailureDomains.Host) {
           <span
             class="invalid-feedback"
             i18n
           >
-            Chunks (k+m+1) have exceeded the available hosts of {{deviceCount}}.
+            Chunks (k+m+1) have exceeded the available hosts of {{ deviceCount }}.
           </span>
-          }
-          @if (form.showError('k', formDir, 'unequal')) {
+          } @if (form.showError('k', formDir, 'unequal')) {
           <span
             class="invalid-feedback"
             i18n
           >
             For an equal distribution k has to be a multiple of (k+m)/l.
           </span>
-          }
-          @if (form.showError('k', formDir, 'kLowerM')) {
+          } @if (form.showError('k', formDir, 'kLowerM')) {
           <span
             class="invalid-feedback"
             i18n
           >
             K has to be equal to or greater than m in order to recover data correctly through c.
           </span>
-          }
-          @if (plugin === 'lrc') {
+          } @if (plugin === 'lrc') {
           <span
             class="form-text text-muted"
             i18n
           >
-            Distribution factor: {{lrcMultiK}}
+            Distribution factor: {{ lrcMultiK }}
           </span>
           }
         </ng-template>
       </div>
 
       <!-- Coding chunks (m) -->
-      <div
-        class="form-item"
-      >
+      <div class="form-item">
         <cds-number
           id="m"
           label="Coding chunks (m)"
@@ -223,29 +189,28 @@
           >
             This field is required!
           </span>
-          }
-          @if (form.showError('m', formDir, 'min')) {
+          } @if (form.showError('m', formDir, 'min')) {
           <span
             class="invalid-feedback"
             i18n
           >
             Must be equal to or greater than 1.
           </span>
-          }
-          @if (form.showError('m', formDir, 'max') && form.getValue('crushFailureDomain') ===  CrushFailureDomains.Osd) {
+          } @if (form.showError('m', formDir, 'max') && form.getValue('crushFailureDomain') ===
+          CrushFailureDomains.Osd) {
           <span
             class="invalid-feedback"
             i18n
           >
-            Chunks (k+m) have exceeded the available OSDs of {{deviceCount}}.
+            Chunks (k+m) have exceeded the available OSDs of {{ deviceCount }}.
           </span>
-          }
-          @if (form.showError('m', formDir, 'max') && form.getValue('crushFailureDomain') ===  CrushFailureDomains.Host) {
+          } @if (form.showError('m', formDir, 'max') && form.getValue('crushFailureDomain') ===
+          CrushFailureDomains.Host) {
           <span
             class="invalid-feedback"
             i18n
           >
-            Chunks (k+m+1) have exceeded the available hosts of {{deviceCount}}.
+            Chunks (k+m+1) have exceeded the available hosts of {{ deviceCount }}.
           </span>
           }
         </ng-template>
@@ -253,9 +218,7 @@
 
       <!-- Durability estimator (c) -->
       @if (plugin === 'shec') {
-      <div
-        class="form-item"
-      >
+      <div class="form-item">
         <cds-number
           id="c"
           label="Durability estimator (c)"
@@ -267,9 +230,7 @@
           i18n
         >
         </cds-number>
-        <ng-template
-          #durabilityError
-        >
+        <ng-template #durabilityError>
           @if (form.showError('c', formDir, 'min')) {
           <span
             class="invalid-feedback"
@@ -277,8 +238,7 @@
           >
             Must be equal to or greater than 1.
           </span>
-          }
-          @if (form.showError('c', formDir, 'cGreaterM')) {
+          } @if (form.showError('c', formDir, 'cGreaterM')) {
           <span
             class="invalid-feedback"
             i18n
@@ -328,11 +288,10 @@
               cdsIcon="unlocked"
               size="16"
               class="cds--btn__icon"
-            >
-            </svg>
+            ></svg>
           </cds-icon-button>
           } @else {
-            <cds-icon-button
+          <cds-icon-button
             data-testid="d-calc-btn"
             kind="primary"
             size="sm"
@@ -342,71 +301,53 @@
               cdsIcon="locked"
               size="16"
               class="cds--btn__icon"
-            >
-            </svg>
+            ></svg>
           </cds-icon-button>
           }
         </div>
-        <ng-template
-          #dHelper
-        >
+        <ng-template #dHelper>
           <span>
             @if (!dCalc && (getDMin() < getDMax())) {
             <p
               class="form-text text-muted"
               i18n
             >
-              D can be set from {{getDMin()}} to {{getDMax()}}
+              D can be set from {{ getDMin() }} to {{ getDMax() }}
             </p>
-            }
-            @if (!dCalc && getDMin() === getDMax()) {
+            } @if (!dCalc && getDMin() === getDMax()) {
             <p
               class="form-text text-muted"
               i18n
             >
-              D can only be set to {{getDMax()}}
+              D can only be set to {{ getDMax() }}
             </p>
             }
           </span>
         </ng-template>
-        <ng-template
-          #dCalcTooltip
-        >
-          <span
-            i18n
-          >
-            D is automatically updated on k and m changes
-          </span>
+        <ng-template #dCalcTooltip>
+          <span i18n> D is automatically updated on k and m changes </span>
         </ng-template>
-        <ng-template
-          #dError
-        >
+        <ng-template #dError>
           @if (form.showError('d', formDir, 'dMin')) {
           <span
             class="invalid-feedback"
             i18n
           >
-            D has to be greater than k ( {{getDMin()}} ).
+            D has to be greater than k ( {{ getDMin() }} ).
           </span>
-          }
-          @if (form.showError('d', formDir, 'dMax')) {
+          } @if (form.showError('d', formDir, 'dMax')) {
           <span
             class="invalid-feedback"
             i18n
           >
-            D has to be lower than k + m ( {{getDMax()}} ).
+            D has to be lower than k + m ( {{ getDMax() }} ).
           </span>
           }
         </ng-template>
 
-        <ng-template
-          #labelTpl
-        >
+        <ng-template #labelTpl>
           Helper chunks (d)
-          <cd-helper
-            [html]="tooltips.plugins.clay.d"
-          >
-          </cd-helper>
+          <cd-helper [html]="tooltips.plugins.clay.d"> </cd-helper>
         </ng-template>
       </div>
       }
@@ -431,17 +372,11 @@
         >
         </cds-number>
 
-        <ng-template
-          #lHelper
-        >
-          <span>
-            Locality groups: {{lrcGroups}}
-          </span>
+        <ng-template #lHelper>
+          <span> Locality groups: {{ lrcGroups }} </span>
         </ng-template>
 
-        <ng-template
-          #lError
-        >
+        <ng-template #lError>
           @if (form.showError('l', formDir, 'required')) {
           <span
             class="invalid-feedback"
@@ -449,16 +384,14 @@
           >
             This field is required!
           </span>
-          }
-          @if (form.showError('l', formDir, 'min')) {
+          } @if (form.showError('l', formDir, 'min')) {
           <span
             class="invalid-feedback"
             i18n
           >
             Must be equal to or greater than 1.
           </span>
-          }
-          @if (form.showError('l', formDir, 'unequal')) {
+          } @if (form.showError('l', formDir, 'unequal')) {
           <span
             class="invalid-feedback"
             i18n
@@ -468,22 +401,15 @@
           }
         </ng-template>
 
-        <ng-template
-          #localityLabelTpl
-        >
+        <ng-template #localityLabelTpl>
           Locality (l)
-          <cd-helper
-            [html]="tooltips.plugins.lrc.l"
-          >
-          </cd-helper>
+          <cd-helper [html]="tooltips.plugins.lrc.l"> </cd-helper>
         </ng-template>
       </div>
       }
 
       <!-- Crush failure domain-->
-      <div
-        class="form-item"
-      >
+      <div class="form-item">
         <cds-select
           label="Crush failure domain"
           id="crushFailureDomain"
@@ -492,18 +418,9 @@
           i18n
         >
           @if (!failureDomains) {
-          <option
-            value=""
-          >
-            Loading...
-          </option>
-          }
-          @for (domain of failureDomainKeys; track domain) {
-          <option
-            [value]="domain"
-          >
-            {{ domain }} ( {{failureDomains[domain].length}} )
-          </option>
+          <option value="">Loading...</option>
+          } @for (domain of failureDomainKeys; track domain) {
+          <option [value]="domain">{{ domain }} ( {{ failureDomains[domain].length }} )</option>
           }
         </cds-select>
       </div>
@@ -516,16 +433,17 @@
         <cds-number
           label="Crush num failure domain"
           [helperText]="tooltips.crushNumFailureDomains"
-          [invalid]="form.controls.crushNumFailureDomains.invalid && form.controls.crushNumFailureDomains.dirty"
+          [invalid]="
+            form.controls.crushNumFailureDomains.invalid &&
+            form.controls.crushNumFailureDomains.dirty
+          "
           [invalidText]="crushNumFailureDomainsError"
           formControlName="crushNumFailureDomains"
           min="0"
           i18n
         >
         </cds-number>
-        <ng-template
-          #crushNumFailureDomainsError
-        >
+        <ng-template #crushNumFailureDomainsError>
           @if (form.showError('crushNumFailureDomains', formDir, 'required')) {
           <span
             class="invalid-feedback"
@@ -545,16 +463,17 @@
         <cds-number
           label="Crush osds per failure domain"
           [helperText]="tooltips.crushOsdsPerFailureDomain"
-          [invalid]="form.controls.crushOsdsPerFailureDomain.invalid && form.controls.crushOsdsPerFailureDomain.dirty"
+          [invalid]="
+            form.controls.crushOsdsPerFailureDomain.invalid &&
+            form.controls.crushOsdsPerFailureDomain.dirty
+          "
           [invalidText]="crushOsdsPerFailureDomainError"
           formControlName="crushOsdsPerFailureDomain"
           min="0"
           i18n
         >
         </cds-number>
-        <ng-template
-          #crushOsdsPerFailureDomainError
-        >
+        <ng-template #crushOsdsPerFailureDomainError>
           @if (form.showError('crushOsdsPerFailureDomain', formDir, 'required')) {
           <span
             class="invalid-feedback"
@@ -568,9 +487,7 @@
 
       <!-- Crush locality -->
       @if (plugin === PLUGIN.LRC) {
-      <div
-        class="form-item"
-      >
+      <div class="form-item">
         <cds-select
           label="Crush Locality"
           id="crushLocality"
@@ -579,25 +496,11 @@
           i18n
         >
           @if (!failureDomains) {
-          <option
-            value=""
-          >
-            Loading...
-          </option>
-          }
-          @if (failureDomainKeys.length > 0) {
-          <option
-            value=""
-          >
-            None
-          </option>
-          }
-          @for (domain of failureDomainKeys; track domain) {
-          <option
-            [value]="domain"
-          >
-            {{ domain }} ( {{failureDomains[domain].length}} )
-          </option>
+          <option value="">Loading...</option>
+          } @if (failureDomainKeys.length > 0) {
+          <option value="">None</option>
+          } @for (domain of failureDomainKeys; track domain) {
+          <option [value]="domain">{{ domain }} ( {{ failureDomains[domain].length }} )</option>
           }
         </cds-select>
       </div>
@@ -605,9 +508,7 @@
 
       <!-- Scalar mds -->
       @if (PLUGIN.CLAY === plugin) {
-      <div
-        class="form-item"
-      >
+      <div class="form-item">
         <cds-select
           label="Scalar mds"
           id="scalar_mds"
@@ -616,9 +517,7 @@
           i18n
         >
           @for (plugin of [PLUGIN.JERASURE, PLUGIN.ISA, PLUGIN.SHEC]; track plugin) {
-          <option
-            [value]="plugin"
-          >
+          <option [value]="plugin">
             {{ plugin }}
           </option>
           }
@@ -628,9 +527,7 @@
 
       <!-- Technique -->
       @if ([PLUGIN.JERASURE, PLUGIN.ISA, PLUGIN.CLAY].includes(plugin)) {
-      <div
-        class="form-item"
-      >
+      <div class="form-item">
         <cds-select
           label="Technique"
           id="technique"
@@ -639,9 +536,7 @@
           i18n
         >
           @for (technique of techniques; track technique) {
-          <option
-            [value]="technique"
-          >
+          <option [value]="technique">
             {{ technique }}
           </option>
           }
@@ -666,9 +561,7 @@
           i18n
         >
         </cds-number>
-        <ng-template
-          #packetSizeError
-        >
+        <ng-template #packetSizeError>
           @if (form.showError('packetSize', formDir, 'min')) {
           <span
             class="invalid-feedback"
@@ -683,9 +576,7 @@
 
       <!-- Crush root -->
       @if ([PLUGIN.JERASURE, PLUGIN.ISA, PLUGIN.CLAY].includes(plugin)) {
-      <div
-        class="form-item"
-      >
+      <div class="form-item">
         <cds-dropdown
           label="Crush root"
           id="crushRoot"
@@ -694,18 +585,13 @@
           [helperText]="tooltips.crushRoot"
           i18n-label
         >
-          <cds-dropdown-list
-            [items]="buckets"
-          >
-          </cds-dropdown-list>
+          <cds-dropdown-list [items]="buckets"> </cds-dropdown-list>
         </cds-dropdown>
       </div>
       }
 
       <!-- Crush device class -->
-      <div
-        class="form-item"
-      >
+      <div class="form-item">
         <cds-select
           [label]="crushDeviceClassLabelTpl"
           id="crushDeviceClass"
@@ -714,15 +600,9 @@
           i18n
           i18n-helperText
         >
-          <option
-            value=""
-          >
-            All devices
-          </option>
+          <option value="">All devices</option>
           @for (deviceClass of devices; track deviceClass) {
-          <option
-            [value]="deviceClass"
-          >
+          <option [value]="deviceClass">
             {{ deviceClass }}
           </option>
           }
@@ -733,20 +613,13 @@
           i18n
         >
           Crush device class
-          <cd-helper
-            [html]="tooltips.crushDeviceClass"
-          >
-          </cd-helper>
+          <cd-helper [html]="tooltips.crushDeviceClass"> </cd-helper>
         </ng-template>
       </div>
 
       <!-- Directory -->
-      <div
-        class="form-item"
-      >
-        <cds-text-label
-          [helperText]="tooltips.directory"
-        >
+      <div class="form-item">
+        <cds-text-label [helperText]="tooltips.directory">
           Directory
           <input
             cdsText

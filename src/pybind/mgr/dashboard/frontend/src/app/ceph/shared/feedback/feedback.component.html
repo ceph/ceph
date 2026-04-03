@@ -3,26 +3,34 @@
   [open]="open"
   [hasScrollingContent]="false"
   (overlaySelected)="closeModal()"
-  >
+>
   <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        i18n>Report an issue</h3>
+    <h3
+      cdsModalHeaderHeading
+      i18n
+    >
+      Report an issue
+    </h3>
   </cds-modal-header>
 
-  <form name="feedbackForm"
-        [formGroup]="feedbackForm"
-        #formDir="ngForm">
+  <form
+    name="feedbackForm"
+    [formGroup]="feedbackForm"
+    #formDir="ngForm"
+  >
     <div
       cdsModalContent
       class="modal-wrapper"
     >
       @if (!isFeedbackEnabled) {
-      <cd-alert-panel type="error"
-                      spacingClass="mb-3"
-                      actionName="Enable"
-                      class="align-items-center"
-                      (action)="enableFeedbackModule()"
-                      i18n-actionName>
+      <cd-alert-panel
+        type="error"
+        spacingClass="mb-3"
+        actionName="Enable"
+        class="align-items-center"
+        (action)="enableFeedbackModule()"
+        i18n-actionName
+      >
         In order to report an issue, Feedback module must be enabled.
       </cd-alert-panel>
       }
@@ -49,18 +57,28 @@
 
         <ng-template #apiKeyError>
           @if (feedbackForm.showError('api_key', formDir, 'required')) {
-          <span class="invalid-feedback"
-                i18n> Ceph Tracker API key is required. </span>
+          <span
+            class="invalid-feedback"
+            i18n
+          >
+            Ceph Tracker API key is required.
+          </span>
           } @if (feedbackForm.showError('api_key', formDir, 'invalidApiKey')) {
-          <span class="invalid-feedback"
-                i18n> Ceph Tracker API key is invalid. </span>
+          <span
+            class="invalid-feedback"
+            i18n
+          >
+            Ceph Tracker API key is invalid.
+          </span>
           }
         </ng-template>
 
         <ng-template #apiKeyHelperTpl>
           You can obtain your API key from
-          <a href="https://tracker.ceph.com/my/account"
-             target="_blank">https://tracker.ceph.com/my/account
+          <a
+            href="https://tracker.ceph.com/my/account"
+            target="_blank"
+            >https://tracker.ceph.com/my/account
           </a>
         </ng-template>
       </div>
@@ -100,8 +118,8 @@
           [invalid]="!feedbackForm.controls.tracker.valid && feedbackForm.controls.tracker.dirty"
           [invalidText]="trackerError"
           i18n
-        > Tracker
-          @for (trackerName of tracker; track trackerName) {
+        >
+          Tracker @for (trackerName of tracker; track trackerName) {
           <option [value]="trackerName">{{ trackerName }}</option>
           }
         </cds-select>
@@ -143,7 +161,9 @@
       <div class="form-item">
         <cds-text-label
           cdRequiredField="Description"
-          [invalid]="!feedbackForm.controls.description.valid && feedbackForm.controls.description.dirty"
+          [invalid]="
+            !feedbackForm.controls.description.valid && feedbackForm.controls.description.dirty
+          "
           [invalidText]="descriptionError"
           [disabled]="!isFeedbackEnabled"
           i18n
@@ -172,8 +192,7 @@
       [submitText]="submit"
       [modalForm]="true"
     ></cd-form-button-panel>
-    }
-    @else {
+    } @else {
     <cd-form-button-panel
       [showSubmit]="false"
       [modalForm]="true"
