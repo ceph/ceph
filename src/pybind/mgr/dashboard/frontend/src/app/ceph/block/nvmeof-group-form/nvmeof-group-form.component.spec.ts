@@ -74,6 +74,12 @@ describe('NvmeofGroupFormComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('should not render the block pool selector on the create page', () => {
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    expect(nativeElement.querySelector('#pool')).toBeNull();
+    expect(nativeElement.textContent).not.toContain('Block pool');
+  });
+
   it('should initialize form with empty fields', () => {
     expect(form.controls.groupName.value).toBeNull();
     expect(form.controls.unmanaged.value).toBe(false);
