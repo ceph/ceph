@@ -13,6 +13,7 @@
 
 #include "rgw_zone.h"
 
+#include <atomic>
 #include <shared_mutex> // for std::shared_lock
 
 #define dout_subsys ceph_subsys_rgw
@@ -29,6 +30,7 @@ class RGWWatcher : public DoutPrefixProvider , public librados::WatchCtx2 {
   uint64_t watch_handle;
   bool unregister_done{false};
   uint64_t retries = 0;
+  std::atomic<bool> reinit_pending{false};
 
   class C_ReinitWatch : public Context {
     RGWWatcher *watcher;
@@ -48,6 +50,12 @@ class RGWWatcher : public DoutPrefixProvider , public librados::WatchCtx2 {
 public:
   RGWWatcher(CephContext *_cct, RGWSI_Notify *s, int i, rgw_rados_ref o)
     : cct(_cct), svc(s), index(i), obj(std::move(o)), watch_handle(0) {}
+
+  RGWWatcher(RGWWatcher&& rhs) noexcept
+    : cct(rhs.cct), svc(rhs.svc), index(rhs.index),
+      obj(std::move(rhs.obj)), watch_handle(rhs.watch_handle),
+      unregister_done(rhs.unregister_done), retries(rhs.retries),
+      reinit_pending(rhs.reinit_pending.load(std::memory_order_relaxed)) {}
 
   rgw_rados_ref& get_obj() { return obj; }
 
@@ -81,10 +89,15 @@ public:
     ldpp_dout(this, -1) << "RGWWatcher::handle_error cookie " << cookie
 			<< " err " << cpp_strerror(err) << dendl;
     svc->remove_watcher(index);
-    svc->schedule_context(new C_ReinitWatch(this));
+    bool expected = false;
+    if (reinit_pending.compare_exchange_strong(expected, true)) {
+      svc->schedule_context(new C_ReinitWatch(this));
+    }
   }
 
   void reinit() {
+    reinit_pending.store(false);
+
     if (retries > 100) {
       lderr(cct) << "ERROR: Looping in attempt to reinit watch. Halting."
 		 << dendl;
@@ -99,7 +112,9 @@ public:
 	  return;
 	} else {
 	  ++retries;
+	  reinit_pending.store(true);
 	  svc->schedule_context(new C_ReinitWatch(this));
+	  return;
 	}
       }
     }
@@ -107,9 +122,11 @@ public:
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: register_watch() returned ret=" << ret << dendl;
       ++retries;
+      reinit_pending.store(true);
       svc->schedule_context(new C_ReinitWatch(this));
       return;
     }
+    retries = 0;
   }
 
   int unregister_watch(optional_yield y) {
