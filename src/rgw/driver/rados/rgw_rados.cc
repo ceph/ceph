@@ -9394,7 +9394,9 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
   /* update olh object */
   r = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, std::move(op), y);
   if (r < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": could not apply olh update to oid \"" << ref.obj.oid << "\", r=" << r << dendl;
+    if (r != -ECANCELED) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": could not apply olh update to oid \"" << ref.obj.oid << "\", r=" << r << dendl;
+    }
     return r;
   }
 

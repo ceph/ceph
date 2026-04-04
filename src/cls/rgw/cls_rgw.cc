@@ -1407,6 +1407,8 @@ static int read_olh(cls_method_context_t hctx,cls_rgw_obj_key& obj_key, rgw_buck
 static void update_olh_log(rgw_bucket_olh_entry& olh_data_entry, OLHLogOp op, const string& op_tag,
                            cls_rgw_obj_key& key, bool delete_marker, uint64_t epoch)
 {
+  CLS_LOG(20, "%s: op=%d op_tag=%s key=%s epoch=%lu", __func__,
+          op, op_tag.c_str(), key.to_string().c_str(), epoch);
   vector<rgw_bucket_olh_log_entry>& log = olh_data_entry.pending_log[epoch];
   rgw_bucket_olh_log_entry log_entry;
   log_entry.epoch = epoch;
@@ -1820,6 +1822,9 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     return -EINVAL;
   }
 
+  CLS_LOG(20, "%s: op_tag=%s key=%s olh_epoch=%lu", __func__,
+          op.op_tag.c_str(), op.key.to_string().c_str(), op.olh_epoch);
+
   struct rgw_bucket_dir_header header;
   int rc = read_bucket_header(hctx, &header);
   if (rc < 0) {
@@ -1854,6 +1859,16 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     return ret;
   }
 
+  /* read olh */
+  BIOLHEntry olh(hctx, op.key);
+  bool olh_found = false;
+  ret = olh.init(&olh_found);
+  if (ret < 0) {
+    return ret;
+  }
+
+  uint64_t now_epoch = duration_cast<std::chrono::nanoseconds>(real_clock::now().time_since_epoch()).count();
+
   if (existed && !real_clock::is_zero(op.unmod_since)) {
     timespec mtime = ceph::real_clock::to_timespec(obj.mtime());
     timespec unmod = ceph::real_clock::to_timespec(op.unmod_since);
@@ -1862,7 +1877,13 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
       unmod.tv_nsec = 0;
     }
     if (mtime >= unmod) {
-      return 0; /* no need tof set error, we just return 0 and avoid
+      olh.update_log(CLS_RGW_OLH_OP_STALE, op.op_tag, op.key, false, now_epoch);
+      ret = olh.write(header);
+      if (ret < 0) {
+        CLS_LOG(0, "ERROR: failed to update olh ret=%d", ret);
+        return ret;
+      }
+      return 0; /* no need to set error, we just return 0 and avoid
 		 * writing to the bi log */
     }
   }
@@ -1905,18 +1926,9 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     obj.init_as_delete_marker(op.meta);
   }
 
-  /* read olh */
-  BIOLHEntry olh(hctx, op.key);
-  bool olh_found = false;
-  ret = olh.init(&olh_found);
-  if (ret < 0) {
-    return ret;
-  }
-
   const uint64_t prev_epoch = olh.get_epoch();
 
   // op.olh_epoch is provided (> 0) in the case when a remote epoch is coming in as the result of multisite sync;
-  uint64_t now_epoch = duration_cast<std::chrono::nanoseconds>(real_clock::now().time_since_epoch()).count();
   uint64_t candidate_epoch = op.olh_epoch ? op.olh_epoch : now_epoch;
   if (olh.start_modify(candidate_epoch)) {
     // promote this version to current if it's a newer epoch, or if it matches the
@@ -2057,6 +2069,9 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     return -EINVAL;
   }
 
+  CLS_LOG(20, "%s: op_tag=%s key=%s olh_epoch=%lu", __func__,
+          op.op_tag.c_str(), op.key.to_string().c_str(), op.olh_epoch);
+
   cls_rgw_obj_key dest_key = op.key;
 
   struct rgw_bucket_dir_header header;
@@ -2163,7 +2178,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     if (!obj.is_delete_marker()) {
       olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, now_epoch);
     } else {
-      olh.update_log(CLS_RGW_OLH_OP_STALE, op.op_tag, op.key, false, now_epoch);
+      olh.update_log(CLS_RGW_OLH_OP_STALE, op.op_tag, op.key, true, now_epoch);
 
       /* this is a delete marker, it's our responsibility to remove its
        * instance entry */
@@ -2185,7 +2200,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     }
 
     if (obj.is_delete_marker()) {
-      olh.update_log(CLS_RGW_OLH_OP_STALE, op.op_tag, op.key, false, now_epoch);
+      olh.update_log(CLS_RGW_OLH_OP_STALE, op.op_tag, op.key, true, now_epoch);
 
       ret = olh.write(header);
       if (ret < 0) {
