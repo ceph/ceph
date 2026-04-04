@@ -4627,8 +4627,10 @@ def test_versioned_lifecycle_deletes():
 
     for zone, bucket in zone_bucket:
         zone.s3_client.put_bucket_versioning(Bucket=bucket.name, VersioningConfiguration={'Status': 'Enabled'})
-        zone.s3_client.put_bucket_lifecycle_configuration(Bucket=bucket.name, LifecycleConfiguration=lifecycle)
+    realm_meta_checkpoint(realm)
 
+    for zone, bucket in zone_bucket:
+        zone.s3_client.put_bucket_lifecycle_configuration(Bucket=bucket.name, LifecycleConfiguration=lifecycle)
     realm_meta_checkpoint(realm)
 
     # upload lots of objects/versions
