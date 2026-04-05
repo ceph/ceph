@@ -1727,7 +1727,8 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
 	dirp->cache_index++;
       }
       // add to cached result list
-      dirp->buffer.push_back(dir_result_t::dentry(dn->offset, dname, dn->alternate_name, in));
+      dirp->buffer.push_back(
+          dir_result_t::dentry(dn->offset, dname, dn->alternate_name, in, dn));
       ldout(cct, 15) << __func__ << "  " << hex << dn->offset << dec << ": '" << dname << "' -> " << in->ino << dendl;
     }
 
