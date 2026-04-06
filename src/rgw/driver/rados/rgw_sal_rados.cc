@@ -21,6 +21,8 @@
 
 #include <boost/algorithm/string.hpp>
 
+#include <boost/asio/bind_cancellation_slot.hpp>
+
 #include <fmt/core.h>
 
 #include "common/async/blocked_completion.h"

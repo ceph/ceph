@@ -34,7 +34,7 @@
 #include "common/async/async_cond.h"
 #include "common/async/yield_context.h"
 
-#include "common/ceph_context.h"
+#include "include/common_fwd.h"
 #include "common/ceph_json.h"
 #include "common/ceph_time.h"
 #include "common/Formatter.h"
@@ -47,8 +47,6 @@
 #include "rgw_sync_policy.h"
 #include "rgw_trim_bilog.h"
 #include "rgw_zone.h"
-
-#include "common/async/spawn_group.h"
 
 namespace asio = boost::asio;
 namespace bc = boost::container;

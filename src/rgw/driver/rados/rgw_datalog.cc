@@ -22,8 +22,8 @@
 #include "include/neorados/RADOS.hpp"
 
 #include "common/async/blocked_completion.h"
-#include "common/async/co_throttle.h"
-#include "common/async/librados_completion.h"
+#include "common/async/librados_completion.h" // IWYU pragma: keep
+#include "common/async/spawn_group.h"
 #include "common/async/yield_context.h"
 
 #include "common/dout.h"
@@ -194,15 +194,15 @@ public:
 			    asio::use_awaitable);
 
       entries = entries.first(lentries.size());
-      std::ranges::transform(lentries, std::begin(entries),
-			     [](const auto& e) {
-			       rgw_data_change_log_entry entry;
-			       entry.log_id = e.id;
-			       entry.log_timestamp = e.timestamp;
-			       auto liter = e.data.cbegin();
-			       decode(entry.entry, liter);
-			       return entry;
-			     });
+      ranges::transform(lentries, std::begin(entries),
+                        [](const auto& e) {
+                          rgw_data_change_log_entry entry;
+                          entry.log_id = e.id;
+                          entry.log_timestamp = e.timestamp;
+                          auto liter = e.data.cbegin();
+                          decode(entry.entry, liter);
+                          return entry;
+                        });
       co_return std::make_tuple(std::move(entries), lmark);
     } catch (const buffer::error& err) {
       ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
@@ -319,15 +319,15 @@ public:
       auto [lentries, outmark] =
 	co_await fifos[shard].list(dpp, marker, log_entries);
       entries = entries.first(lentries.size());
-      std::ranges::transform(lentries, entries.begin(),
-			     [](const auto& e) {
-			       rgw_data_change_log_entry entry ;
-			       entry.log_id = e.marker;
-			       entry.log_timestamp = e.mtime;
-			       auto liter = e.data.cbegin();
-			       decode(entry.entry, liter);
-			       return entry;
-			     });
+      ::ranges::transform(lentries, entries.begin(),
+                          [](const auto& e) {
+                            rgw_data_change_log_entry entry ;
+                            entry.log_id = e.marker;
+                            entry.log_timestamp = e.mtime;
+                            auto liter = e.data.cbegin();
+                            decode(entry.entry, liter);
+                            return entry;
+                          });
       co_return  std::make_tuple(std::move(entries),
 				 outmark ? std::move(*outmark) : std::string{});
     } catch (const buffer::error& err) {
@@ -1581,7 +1581,6 @@ RGWDataChangesLog::decrement_sems(
   ceph::mono_time fetch_time,
   bc::flat_map<std::string, uint64_t>&& semcount)
 {
-  namespace sem_set = neorados::cls::sem_set;
   while (!semcount.empty()) {
     bc::flat_set<std::string> batch;
     for (auto j = 0u; j < sem_max_keys && !semcount.empty(); ++j) {
