@@ -348,7 +348,7 @@ NFS_CORE_PARAM {
         assert export.pseudo == "/cephfs_a/"
         assert export.access_type == "RW"
         # assert export.squash == "root_squash"  # probably correct value
-        assert export.squash == "no_root_squash"
+        assert export.squash == "root_squash"
         assert export.protocols == [4]
         #        assert export.transports == {"TCP", "UDP"}
         assert export.fsal.name == "CEPH"
@@ -405,7 +405,7 @@ NFS_CORE_PARAM {
         assert export.path == "/"
         assert export.pseudo == "/cephfs_b/"
         assert export.access_type == "RW"
-        assert export.squash == "no_root_squash"
+        assert export.squash == "root_squash"
         assert export.protocols == [4]
         assert export.fsal.name == "CEPH"
         assert export.fsal.user_id == "nfs.foo.b.lgudhr"
@@ -474,7 +474,7 @@ NFS_CORE_PARAM {
                            'protocols': [4],
                            'pseudo': '/cephfs_a/',
                            'security_label': True,
-                           'squash': 'no_root_squash',
+                           'squash': 'root_squash',
                            'transports': []}
 
         export = [e for e in conf.exports['foo'] if e.export_id == 2][0]

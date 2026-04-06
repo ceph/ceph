@@ -314,7 +314,7 @@ according to specified export permissions. See the `NFS-Ganesha Export Sample`_
 for permissible values.
 
 ``<squash>`` defines the kind of user id squashing to be performed. The default
-value is ``no_root_squash``. See the `NFS-Ganesha Export Sample`_ for
+value is ``root_squash``. See the `NFS-Ganesha Export Sample`_ for
 permissible values.
 
 ``<sectype>`` specifies which authentication methods will be used when
@@ -388,7 +388,7 @@ according to specified export permissions. See the `NFS-Ganesha Export
 Sample`_ for permissible values.
 
 ``<squash>`` defines the kind of user id squashing to be performed. The
-default value is ``no_root_squash``. See the `NFS-Ganesha Export Sample`_ for
+default value is ``root_squash``. See the `NFS-Ganesha Export Sample`_ for
 permissible values.
 
 ``<sectype>`` specifies which authentication methods will be used when
