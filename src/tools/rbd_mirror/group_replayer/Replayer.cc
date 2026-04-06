@@ -200,12 +200,19 @@ void Replayer<I>::handle_schedule_load_group_snapshots(int r) {
     if (m_state != STATE_REPLAYING) {
       return;
     }
+
+    ceph_assert(m_load_snapshots_task != nullptr);
+    m_load_snapshots_task = nullptr;
+
+    if (m_retry_validate_snap) {
+      m_retry_validate_snap = false;
+      if (!m_local_group_snaps.empty() && !m_check_creating_snaps) {
+        validate_local_group_snapshots(&locker);
+        return;
+      }
+    }
+    load_local_group_snapshots(&locker);
   }
-
-  ceph_assert(m_load_snapshots_task != nullptr);
-  m_load_snapshots_task = nullptr;
-
-  is_resync_requested();
 }
 
 template <typename I>
@@ -381,126 +388,23 @@ void Replayer<I>::init(Context* on_finish) {
   on_finish->complete(0);
 
   m_update_group_state = true;
-  is_resync_requested();
-}
-
-template <typename I>
-void Replayer<I>::is_resync_requested() {
-  dout(10) << "m_local_group_id=" << m_local_group_id << dendl;
-
-  librados::ObjectReadOperation op;
-  librbd::cls_client::metadata_get_start(&op, RBD_GROUP_RESYNC);
-
-  m_out_bl.clear();
-
-  std::string group_header_oid = librbd::util::group_header_name(
-      m_local_group_id);
-  m_in_flight_op_tracker.start_op();
-  auto aio_comp = create_rados_callback(
-    new LambdaContext([this](int r) {
-      handle_is_resync_requested(r);
-      m_in_flight_op_tracker.finish_op();
-    }));
-
-  int r = m_local_io_ctx.aio_operate(group_header_oid, aio_comp,
-                                     &op, &m_out_bl);
-  ceph_assert(r == 0);
-  aio_comp->release();
-}
-
-template <typename I>
-void Replayer<I>::handle_is_resync_requested(int r) {
-  std::unique_lock locker{m_lock};
-  dout(10) << "r=" << r << dendl;
-
-  if (is_replay_interrupted(&locker)) {
-    return;
-  }
-  std::string value;
-  if (r == 0) {
-    auto it = m_out_bl.cbegin();
-    r = librbd::cls_client::metadata_get_finish(&it, &value);
-  }
-  if (r < 0 && r != -ENOENT) {
-    derr << "failed reading metadata: " << cpp_strerror(r) << dendl;
-  } else if (r == 0) {
-    dout(10) << "local group resync requested" << dendl;
-    m_resync_requested = true;
-    load_remote_group_snapshots();
-    return;
-  }
-
-  is_rename_requested();
-}
-
-template <typename I>
-void Replayer<I>::is_rename_requested() {
-  dout(10) << "m_local_group_id=" << m_local_group_id << dendl;
-
-  librados::ObjectReadOperation op;
-  librbd::cls_client::dir_get_name_start(&op, m_remote_group_id);
-  m_out_bl.clear();
-  m_in_flight_op_tracker.start_op();
-  auto comp = create_rados_callback(
-    new LambdaContext([this](int r) {
-      handle_is_rename_requested(r);
-      m_in_flight_op_tracker.finish_op();
-    }));
-
-  int r = m_remote_io_ctx.aio_operate(RBD_GROUP_DIRECTORY, comp, &op,
-                                      &m_out_bl);
-  ceph_assert(r == 0);
-  comp->release();
-}
-
-template <typename I>
-void Replayer<I>::handle_is_rename_requested(int r) {
-  std::unique_lock locker{m_lock};
-  dout(10) << "r=" << r << dendl;
-
-  if (is_replay_interrupted(&locker)) {
-    return;
-  }
-  std::string remote_group_name;
-  if (r == 0) {
-    auto iter = m_out_bl.cbegin();
-    r = librbd::cls_client::dir_get_name_finish(&iter, &remote_group_name);
-  }
-  if (r < 0) {
-    derr << "failed to retrieve remote group name: " << cpp_strerror(r)
-         << dendl;
-  } else if (r == 0 && m_local_group_ctx &&
-             m_local_group_ctx->name != remote_group_name) {
-    dout(10) << "remote group renamed" << dendl;
-    handle_replay_complete(&locker, 0, "remote group renamed");
-    return;
-  }
-
-  auto ctx = new LambdaContext(
-    [this](int r) {
-      validate_local_group_snapshots();
-      m_in_flight_op_tracker.finish_op();
-    });
-  m_in_flight_op_tracker.start_op();
-  m_threads->work_queue->queue(ctx, 0);
-}
-
-template <typename I>
-void Replayer<I>::validate_local_group_snapshots() {
-  dout(10) << "m_local_group_id=" << m_local_group_id << dendl;
-
-  std::unique_lock locker{m_lock};
-  if (is_replay_interrupted(&locker)) {
-    return;
-  }
-
-  if (m_local_group_snaps.empty() || m_check_creating_snaps) {
+  {
+    std::unique_lock locker{m_lock};
     load_local_group_snapshots(&locker);
+  }
+}
+
+template <typename I>
+void Replayer<I>::validate_local_group_snapshots(
+    std::unique_lock<ceph::mutex>* locker) {
+  dout(10) << "m_local_group_id=" << m_local_group_id << dendl;
+
+  if (is_replay_interrupted(locker)) {
     return;
   }
 
   m_in_flight_op_tracker.start_op();
-  locker.unlock();
+  locker->unlock();
 
   // prepare gather context for async operations
   auto ctx = new LambdaContext([this](int) {
@@ -533,11 +437,7 @@ void Replayer<I>::validate_local_group_snapshots() {
 
     // setup validation callback
     Context *sub_ctx = gather_ctx->new_sub();
-    auto ctx = new LambdaContext([this, sub_ctx](int r) {
-      if (r < 0) {
-        std::unique_lock locker{m_lock};
-        m_retry_validate_snap = true;
-      }
+    auto ctx = new LambdaContext([sub_ctx](int r) {
       sub_ctx->complete(r);
     });
 
@@ -655,24 +555,6 @@ void Replayer<I>::handle_load_remote_group_snapshots(int r) {
     return;
   }
 
-  if (m_resync_requested) {
-    if (is_group_primary(m_remote_group_snaps)) {
-      handle_replay_complete(&locker, 0, "resync requested");
-      return;
-    }
-    dout(10) << "cannot resync as remote is not primary" << dendl;
-    m_resync_requested = false;
-    is_rename_requested();
-    return;
-  }
-
-  if (m_retry_validate_snap) {
-    m_retry_validate_snap = false;
-    locker.unlock();
-    schedule_load_group_snapshots();
-    return;
-  }
-
   for (auto remote_snap = m_remote_group_snaps.begin();
        remote_snap != m_remote_group_snaps.end(); ) {
     auto remote_snap_ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
@@ -691,6 +573,7 @@ void Replayer<I>::handle_load_remote_group_snapshots(int r) {
       ++remote_snap;
     }
   }
+
   check_local_group_snapshots(&locker);
 }
 
@@ -732,7 +615,110 @@ void Replayer<I>::check_local_group_snapshots(
     }
   }
 
-  scan_for_unsynced_group_snapshots(locker);
+  is_resync_requested();
+}
+
+template <typename I>
+void Replayer<I>::is_resync_requested() {
+  dout(10) << "m_local_group_id=" << m_local_group_id << dendl;
+
+  librados::ObjectReadOperation op;
+  librbd::cls_client::metadata_get_start(&op, RBD_GROUP_RESYNC);
+
+  m_out_bl.clear();
+
+  std::string group_header_oid = librbd::util::group_header_name(
+      m_local_group_id);
+  m_in_flight_op_tracker.start_op();
+  auto aio_comp = create_rados_callback(
+    new LambdaContext([this](int r) {
+      handle_is_resync_requested(r);
+      m_in_flight_op_tracker.finish_op();
+    }));
+
+  int r = m_local_io_ctx.aio_operate(group_header_oid, aio_comp,
+                                     &op, &m_out_bl);
+  ceph_assert(r == 0);
+  aio_comp->release();
+}
+
+template <typename I>
+void Replayer<I>::handle_is_resync_requested(int r) {
+  std::unique_lock locker{m_lock};
+  dout(10) << "r=" << r << dendl;
+
+  if (is_replay_interrupted(&locker)) {
+    return;
+  }
+  std::string value;
+  if (r == 0) {
+    auto it = m_out_bl.cbegin();
+    r = librbd::cls_client::metadata_get_finish(&it, &value);
+  }
+  if (r < 0 && r != -ENOENT) {
+    derr << "failed reading metadata: " << cpp_strerror(r) << dendl;
+  } else if (r == 0) {
+    dout(10) << "local group resync requested" << dendl;
+    if (is_group_primary(m_remote_group_snaps)) {
+      handle_replay_complete(&locker, 0, "resync requested");
+      return;
+    }
+    dout(10) << "cannot resync as remote is not primary" << dendl;
+  }
+
+  is_rename_requested();
+}
+
+template <typename I>
+void Replayer<I>::is_rename_requested() {
+  dout(10) << "m_local_group_id=" << m_local_group_id << dendl;
+
+  librados::ObjectReadOperation op;
+  librbd::cls_client::dir_get_name_start(&op, m_remote_group_id);
+  m_out_bl.clear();
+  m_in_flight_op_tracker.start_op();
+  auto comp = create_rados_callback(
+    new LambdaContext([this](int r) {
+      handle_is_rename_requested(r);
+      m_in_flight_op_tracker.finish_op();
+    }));
+
+  int r = m_remote_io_ctx.aio_operate(RBD_GROUP_DIRECTORY, comp, &op,
+                                      &m_out_bl);
+  ceph_assert(r == 0);
+  comp->release();
+}
+
+template <typename I>
+void Replayer<I>::handle_is_rename_requested(int r) {
+  std::unique_lock locker{m_lock};
+  dout(10) << "r=" << r << dendl;
+
+  if (is_replay_interrupted(&locker)) {
+    return;
+  }
+  std::string remote_group_name;
+  if (r == 0) {
+    auto iter = m_out_bl.cbegin();
+    r = librbd::cls_client::dir_get_name_finish(&iter, &remote_group_name);
+  }
+  if (r < 0) {
+    derr << "failed to retrieve remote group name: " << cpp_strerror(r)
+         << dendl;
+  } else if (r == 0 && m_local_group_ctx &&
+             m_local_group_ctx->name != remote_group_name) {
+    dout(10) << "remote group renamed" << dendl;
+    handle_replay_complete(&locker, 0, "remote group renamed");
+    return;
+  }
+
+  if (m_retry_validate_snap) {
+    locker.unlock();
+    schedule_load_group_snapshots();
+    return;
+  }
+
+  scan_for_unsynced_group_snapshots(&locker);
 }
 
 template <typename I>
