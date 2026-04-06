@@ -78,7 +78,7 @@ describe('NvmeofInitiatorsFormComponent', () => {
   describe('should test form', () => {
     beforeEach(() => {
       nvmeofService = TestBed.inject(NvmeofService);
-      spyOn(nvmeofService, 'addSubsystemInitiators').and.stub();
+      spyOn(nvmeofService, 'addSubsystemInitiators').and.returnValue(of({}));
     });
 
     it('should be creating request correctly', () => {
@@ -117,6 +117,22 @@ describe('NvmeofInitiatorsFormComponent', () => {
         gw_group: 'test-group',
         hosts: [{ dhchap_key: '', host_nqn: 'host2' }]
       });
+    });
+
+    it('should not submit when hostType is SPECIFIC and no host is provided', () => {
+      const subsystemNQN = 'nqn.test';
+      component.subsystemNQN = subsystemNQN;
+      component.group = 'test-group';
+
+      const payload: any = {
+        hostType: HOST_TYPE.SPECIFIC,
+        addedHosts: []
+      };
+
+      component.onSubmit(payload);
+
+      expect(nvmeofService.addSubsystemInitiators).not.toHaveBeenCalled();
+      expect(component.isSubmitLoading).toBe(false);
     });
   });
 });
