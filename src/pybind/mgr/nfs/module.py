@@ -41,7 +41,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             path: Optional[str] = '/',
             readonly: Optional[bool] = False,
             client_addr: Optional[List[str]] = None,
-            squash: str = 'none',
+            squash: str = 'root_squash',
             sectype: Optional[List[str]] = None,
             cmount_path: Optional[str] = "/"
     ) -> Dict[str, Any]:
@@ -71,7 +71,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             user_id: Optional[str] = None,
             readonly: Optional[bool] = False,
             client_addr: Optional[List[str]] = None,
-            squash: str = 'none',
+            squash: str = 'root_squash',
             sectype: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Create an RGW export"""
