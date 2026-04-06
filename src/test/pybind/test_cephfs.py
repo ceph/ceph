@@ -1728,6 +1728,20 @@ class TestRmtree:
         cephfs.rmtree('dir3', should_cancel, suppress_errors=False)
         assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir3')
 
+    def test_rmtree_on_root(self):
+        cephfs.mkdir('/dir1', 0o755)
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir1/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.rmtree('/', suppress_errors=False)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, '/dir1/file1')
+
     def test_rmtree_with_and_without_should_cancel(self):
         cephfs.mkdir('dir1', 0o755)
         for i in range(1, 6):
