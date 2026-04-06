@@ -574,7 +574,10 @@ Example Procedure
    
    .. prompt:: bash #
     
-      ceph orch reconfig osd
+      ceph orch reconfig osd.<service_id>
+
+   The ``<service_id>`` value can be obtained from
+   the output of the command ``ceph orch ls osd``.
 
 *The above procedure was developed by Eugen Block and was successfully tested
 in February 2024 on Ceph version 18.2.1 (Reef).*
