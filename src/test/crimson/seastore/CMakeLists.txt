@@ -5,17 +5,14 @@ function(avoid_asan_uar_slowdown name)
     ASAN_OPTIONS=string_append::max_uar_stack_size_log=16)
 endfunction()
 
-add_executable(unittest-transaction-manager
+add_executable(ceph_test_transaction_manager
   test_block.cc
   test_transaction_manager.cc
   ../gtest_seastar.cc)
-  add_ceph_unittest(unittest-transaction-manager
-  --memory 256M --smp 1)
 target_link_libraries(
-  unittest-transaction-manager
+  ceph_test_transaction_manager
   ${CMAKE_DL_LIBS}
   crimson-seastore)
-avoid_asan_uar_slowdown(unittest-transaction-manager)
 
 add_executable(unittest-omap-manager
   test_omap_manager.cc
@@ -28,13 +25,11 @@ target_link_libraries(
   crimson-seastore)
 avoid_asan_uar_slowdown(unittest-omap-manager)
 
-add_executable(unittest-btree-lba-manager
+add_executable(ceph_test_btree_lba_manager
   test_btree_lba_manager.cc
   ../gtest_seastar.cc)
-add_ceph_unittest(unittest-btree-lba-manager
-  --memory 256M --smp 1)
 target_link_libraries(
-  unittest-btree-lba-manager
+  ceph_test_btree_lba_manager
   ${CMAKE_DL_LIBS}
   crimson-seastore)
 
@@ -57,19 +52,16 @@ target_link_libraries(
   crimson::gtest
   crimson-seastore)
 
-add_executable(unittest-object-data-handler
+add_executable(ceph_test_object_data_handler
   test_object_data_handler.cc
   ../gtest_seastar.cc
   ${PROJECT_SOURCE_DIR}/src/crimson/osd/lsan_suppressions.cc)
-add_ceph_unittest(unittest-object-data-handler
-  --memory 256M --smp 1)
 target_link_libraries(
-  unittest-object-data-handler
+  ceph_test_object_data_handler
   crimson::gtest
   crimson-seastore
   crimson-os
   crimson-common)
-avoid_asan_uar_slowdown(unittest-object-data-handler)
 
 add_executable(unittest-collection-manager
   test_collection_manager.cc
@@ -84,17 +76,14 @@ target_link_libraries(
   crimson-os
   crimson-common)
 
-add_executable(unittest-seastore
+add_executable(ceph_test_seastore
   test_seastore.cc
   ../gtest_seastar.cc)
-add_ceph_unittest(unittest-seastore
-  --memory 256M --smp 1)
 target_link_libraries(
-  unittest-seastore
+  ceph_test_seastore
   ${CMAKE_DL_LIBS}
   crimson-seastore
   crimson-common)
-avoid_asan_uar_slowdown(unittest-seastore)
 
 add_executable(unittest-seastore-randomblock-manager
   test_randomblock_manager.cc)
