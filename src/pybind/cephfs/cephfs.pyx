@@ -3117,7 +3117,7 @@ cdef class LibCephFS(object):
         finally:
            free(buf)
 
-    def rmtree(self, trash_path, should_cancel, suppress_errors=False):
+    def rmtree(self, trash_path, should_cancel=lambda: False, suppress_errors=False):
         '''
         Delete entire file hierarchy present under trash_path when trash_path is
         a dir. Do this deletion using depth-first (to prevent excessive memory
