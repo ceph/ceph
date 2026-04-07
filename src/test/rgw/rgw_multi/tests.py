@@ -4191,17 +4191,17 @@ def test_timestamp_based_epochs():
 
 def bucket_check_olh(zone, bucket, args = None):
     cmd = ['bucket', 'check', 'olh', '--bucket', bucket, '--dump-keys', '--hide-progress'] + (args or [])
-    keys, _ = zone.cluster.admin(cmd, read_only=True)
+    keys, _ = zone.cluster.admin(cmd + zone.zone_args(), read_only=True)
     return json.loads(keys)
 
 def bucket_check_unlinked(zone, bucket, args = None):
     cmd = ['bucket', 'check', 'unlinked', '--bucket', bucket, '--dump-keys', '--hide-progress'] + (args or [])
-    keys, _ = zone.cluster.admin(cmd, read_only=True)
+    keys, _ = zone.cluster.admin(cmd + zone.zone_args(), read_only=True)
     return json.loads(keys)
 
 def bucket_lc_process(zone, bucket, args = None):
     cmd = ['lc', 'process', '--bucket', bucket] + (args or [])
-    zone.cluster.admin(cmd)
+    zone.cluster.admin(cmd + zone.zone_args())
 
 def test_versioned_lifecycle_deletes():
     zonegroup = realm.master_zonegroup()
