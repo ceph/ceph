@@ -17,6 +17,7 @@
 
 #include <cassert>
 #include <chrono>
+#include <deque>
 #include <exception>
 #include <functional>
 #include <string>
@@ -27,12 +28,20 @@
 #include <variant>
 #include <vector>
 
+#include <boost/asio/execution/executor.hpp>
+
+#include <boost/asio/experimental/cancellation_condition.hpp>
+#include <boost/asio/experimental/parallel_group.hpp>
+
+#include <boost/asio/append.hpp>
+#include <boost/asio/associated_immediate_executor.hpp>
+#include <boost/asio/async_result.hpp>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/cancellation_signal.hpp>
 #include <boost/asio/cancellation_type.hpp>
 #include <boost/asio/co_spawn.hpp>
+#include <boost/asio/consign.hpp>
 #include <boost/asio/error.hpp>
-#include <boost/asio/execution/executor.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/this_coro.hpp>
@@ -223,7 +232,7 @@ run_coro(
       what);
 }
 
-/// Call a C++ coroutine from a stacful coroutine if we can, but block
+/// Call a C++ coroutine from a stackful coroutine if we can, but block
 /// if we get `null_yield.` handling exceptions by returning negative
 /// error codes and passing out the `what()` string.
 template <
@@ -518,6 +527,9 @@ struct overloads : Ts... {
 using shutdown_promise =
     ::boost::asio::experimental::promise<void(std::exception_ptr)>;
 
+/// Vector to accumulate labeled shutdown promises
+using shutdown_vector = std::vector<std::pair<std::string, shutdown_promise>>;
+
 /// \defgroup TaskHandles Handles for long-running coroutines
 ///
 /// Handles for long-running tasks and background loops that can be
@@ -622,9 +634,7 @@ public:
   /// `join` or `shutdown` have been called, it is a contract
   /// violation.
   void
-  shutdown(
-      std::string label,
-      std::vector<std::pair<std::string, shutdown_promise>>& to_wait)
+  shutdown(std::string label, shutdown_vector& to_wait)
   {
     assert(state() == task_state::running);
     scope_guard _{[this] { runnable.template emplace<std::monostate>(); }};
@@ -1227,6 +1237,100 @@ auto
 membind(T& obj, M U::* pm)
 {
   return std::bind_front(std::mem_fn(pm), std::ref(obj));
+}
+
+template <
+    boost::asio::execution::executor Executor,
+    boost::asio::completion_token_for<void(std::exception_ptr)> CompletionToken>
+auto
+await_shutdowns(
+    const DoutPrefixProvider* dpp,
+    Executor executor,
+    shutdown_vector&& to_wait,
+    CompletionToken&& token)
+{
+  namespace asio = boost::asio;
+  using asio::experimental::make_parallel_group;
+  using asio::experimental::wait_for_all;
+  auto e = asio::get_associated_executor(token, executor);
+  auto consigned = asio::consign(
+      std::forward<CompletionToken>(token), boost::asio::make_work_guard(e));
+  return asio::async_initiate<decltype(consigned), void(std::exception_ptr)>(
+      [e, dpp, to_wait = std::move(to_wait)](auto handler) mutable {
+        if (to_wait.empty()) [[unlikely]] {
+          auto i = asio::get_associated_immediate_executor(handler, e);
+          asio::dispatch(
+              i, asio::append(std::move(handler), std::exception_ptr{}));
+          return;
+        }
+        std::vector<std::string> labels;
+        // Due to reallocation, std::vector won't use a move
+        // constructor that isn't noexcept, and `executor_binder`'s
+        // move constructor isn't, seemingly as an oversight.
+        //
+        // This worked fine with views because `to_vector` knew a size
+        // in advance and so there was no potential reallocation
+        // codepath. Heck Jammy.
+        std::deque<decltype(boost::asio::bind_executor(
+            e, std::declval<shutdown_promise>()))>
+            promises;
+        for (auto&& [label, promise] : to_wait) {
+          labels.emplace_back(std::move(label));
+          // `make_parallel_group` requires `get_executor()` which promises
+          // do not have.
+          promises.emplace_back(asio::bind_executor(e, std::move(promise)));
+        }
+        // This way we can keep it alive and not have all the promises
+        // get canceled.
+        auto pg = std::make_shared<decltype(make_parallel_group(std::move(promises)))>(
+            make_parallel_group(std::move(promises)));
+        pg->async_wait(
+            wait_for_all{},
+            [e, dpp, pg, labels = std::move(labels),
+             handler = std::move(handler)](
+                std::vector<std::size_t> completion_order,
+                std::vector<std::exception_ptr> exceptions) mutable {
+              auto what = [](std::exception_ptr e) {
+                if (e)
+                  try {
+                    std::rethrow_exception(e);
+                  } catch (const std::exception& e) {
+                    return std::string(e.what());
+                  } catch (...) {
+                    return std::string(
+                        "Exception not descended from std::exception.");
+                  }
+                return std::string("No error.");
+              };
+              auto is_cancellation = [](std::exception_ptr e) {
+                if (e)
+                  try {
+                    std::rethrow_exception(e);
+                  } catch (const boost::system::system_error& e) {
+                    return (e.code() == asio::error::operation_aborted);
+                  } catch (...) {
+                  }
+                return false;
+              };
+              std::exception_ptr returned_error;
+              for (auto& idx : completion_order) {
+                auto label = std::move(labels[idx]);
+                auto eptr = std::move(exceptions[idx]);
+                if (eptr && !is_cancellation(eptr)) {
+                  ldpp_dout(dpp, 1)
+                      << "Shutting down " << label << " failed with exception "
+                      << what(eptr) << dendl;
+                  if (!returned_error) {
+                    returned_error = std::move(eptr);
+                  }
+                }
+              }
+              asio::post(
+                  e,
+                  asio::append(std::move(handler), std::move(returned_error)));
+            });
+      },
+      consigned);
 }
 } // namespace rgw
 

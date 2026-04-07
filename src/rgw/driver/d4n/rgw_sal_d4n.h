@@ -91,7 +91,8 @@ class D4NFilterDriver : public FilterDriver {
     void save_y(optional_yield y) { this->y = y; }
     std::shared_ptr<connection> get_conn() { return conn; }
     std::shared_ptr<rgw::d4n::RedisPool> get_redis_pool() { return redis_pool; }
-    void shutdown() override;
+    void shutdown(
+        std::vector<std::pair<std::string, shutdown_promise>>& to_wait) override;
 };
 
 class D4NFilterUser : public FilterUser {

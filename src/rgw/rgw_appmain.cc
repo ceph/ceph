@@ -636,7 +636,14 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
     lua_background->shutdown();
   }
 
-  env.driver->shutdown();
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "rgw shutdown: ");
+  int r = env.driver->do_shutdown(&dp, null_yield);
+  if (r < 0) {
+    ldpp_dout(&dp, -1)
+        << "Failed shutting down drivers: r = " << r
+        << " Shutdown may hang, crash, or go wonky." << dendl;
+  }
+
   // Do this before closing storage so requests don't try to call into
   // closed storage.
   context_pool->finish();

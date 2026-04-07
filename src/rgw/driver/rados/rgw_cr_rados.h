@@ -123,6 +123,7 @@ public:
   RGWAsyncRadosProcessor(CephContext *_cct, int num_threads);
   ~RGWAsyncRadosProcessor() {}
   void start();
+  void set_down_flag() { going_down = true; }
   void stop();
   void handle_request(const DoutPrefixProvider *dpp, RGWAsyncRadosRequest *req);
   void queue(RGWAsyncRadosRequest *req);

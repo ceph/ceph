@@ -10,7 +10,6 @@
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/bind_cancellation_slot.hpp>
 #include <boost/asio/co_spawn.hpp>
-#include <boost/asio/experimental/awaitable_operators.hpp>
 
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
@@ -21,9 +20,8 @@
 #include "include/fs_types.h"
 #include "include/neorados/RADOS.hpp"
 
-#include "common/async/blocked_completion.h"
+#include "common/async/co_throttle.h"
 #include "common/async/librados_completion.h" // IWYU pragma: keep
-#include "common/async/spawn_group.h"
 #include "common/async/yield_context.h"
 
 #include "common/dout.h"
@@ -448,7 +446,7 @@ void DataLogBackends::handle_empty_to(uint64_t new_tail) {
 int RGWDataChangesLog::start(const DoutPrefixProvider *dpp,
 			     const RGWZone* zone,
 			     const RGWZoneParams& zoneparams,
-			     bool background_tasks) noexcept
+			     bool background_tasks, optional_yield y) noexcept
 {
   log_data = zone->log_data;
   try {
@@ -457,7 +455,7 @@ int RGWDataChangesLog::start(const DoutPrefixProvider *dpp,
 		   start(dpp, zoneparams.log_pool,
 			 background_tasks, background_tasks,
 			 background_tasks),
-		   async::use_blocked);
+		   rgw::oyc(dpp, y));
   } catch (const sys::system_error& e) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
 		       << ": Failed to start datalog: " << e.what()
@@ -514,12 +512,8 @@ RGWDataChangesLog::start(const DoutPrefixProvider *dpp,
   }
 
   if (renew) {
-    renew_future = asio::co_spawn(
-      renew_strand,
-      renew_run(),
-      asio::bind_cancellation_slot(renew_signal.slot(),
-				   asio::bind_executor(renew_strand,
-						       asio::use_future)));
+    renew_task.emplace(asio::make_strand(executor), rgw::membind(*this, &RGWDataChangesLog::renew_run),
+                       rgw::running);
   }
   if (watch) {
     // Establish watch here so we won't be 'started up' until we're watching.
@@ -529,22 +523,14 @@ RGWDataChangesLog::start(const DoutPrefixProvider *dpp,
       throw sys::system_error{ENOTCONN, sys::generic_category(),
 			      "Unable to establish recovery watch!"};
     }
-    watch_future = asio::co_spawn(
-      watch_strand,
-      watch_loop(),
-      asio::bind_cancellation_slot(watch_signal.slot(),
-				   asio::bind_executor(watch_strand,
-						       asio::use_future)));
+    watch_task.emplace(asio::make_strand(executor), watch_loop(),
+                       rgw::running);
   }
   if (recovery) {
     // Recovery can run concurrent with normal operation, so we don't
     // have to block startup while we do all that I/O.
-    recovery_future = asio::co_spawn(
-      recovery_strand,
-      recover(dpp),
-      asio::bind_cancellation_slot(recovery_signal.slot(),
-				   asio::bind_executor(recovery_strand,
-						       asio::use_future)));
+    recovery_task.emplace(asio::make_strand(executor),
+                          recover(dpp), rgw::running);
   }
   co_return;
 }
@@ -731,7 +717,7 @@ int RGWDataChangesLog::choose_oid(const rgw_bucket_shard& bs) {
 asio::awaitable<void>
 RGWDataChangesLog::renew_entries(const DoutPrefixProvider* dpp)
 {
-  if (!log_data) {
+  if (!log_data || down_flag) {
     co_return;
   }
 
@@ -1031,7 +1017,7 @@ int RGWDataChangesLog::add_entry(const DoutPrefixProvider* dpp,
 		  [this, dpp, &bucket_info, &gen,
 		   &shard_id](asio::yield_context y) {
 		    add_entry(dpp, bucket_info, gen, shard_id, y);
-		  }, async::use_blocked);
+		  }, rgw::oyc(dpp, y));
     }
   } catch (const std::exception&) {
     return ceph::from_exception(std::current_exception());
@@ -1256,105 +1242,59 @@ bool RGWDataChangesLog::going_down() const
   return down_flag;
 }
 
-// Now, if we had an awaitable future…
-asio::awaitable<void> RGWDataChangesLog::async_shutdown()
+void
+RGWDataChangesLog::shutdown(rgw::shutdown_vector& to_wait)
 {
-  DoutPrefix dp{cct, ceph_subsys_rgw, "Datalog Shutdown"};
-  if (down_flag) {
-    co_return;
-  }
-  down_flag = true;
-  if (!ran_background)  {
-    co_return;
-  }
-  renew_stop();
-  // Revisit this later
-  asio::dispatch(renew_strand,
-		 [this]() {
-		   renew_signal.emit(asio::cancellation_type::terminal);
-		 });
-  asio::dispatch(recovery_strand,
-		 [this]() {
-		   recovery_signal.emit(asio::cancellation_type::terminal);
-		 });
-  asio::dispatch(watch_strand,
-		 [this]() {
-		   watch_signal.emit(asio::cancellation_type::terminal);
-		 });
-  if (watchcookie && rados->check_watch(watchcookie)) {
-    auto wc = watchcookie;
-    watchcookie = 0;
-    try {
-      co_await rados->unwatch(wc, loc, asio::use_awaitable);
-    } catch (const std::exception& e) {
-      ldpp_dout(&dp, 2)
-	<< "RGWDataChangesLog::async_shutdown: unwatch failed: " << e.what()
-	<< dendl;
-    }
-  }
-  co_return;
-}
-
-void RGWDataChangesLog::blocking_shutdown()
-{
+  using asio::experimental::use_promise;
   DoutPrefix dp{cct, ceph_subsys_rgw, "Datalog Shutdown"};
   if (down_flag) {
     return;
   }
   down_flag = true;
-  if (ran_background)  {
-    renew_stop();
-    // Revisit this later
-    asio::dispatch(renew_strand,
-		   [this]() {
-		     renew_signal.emit(asio::cancellation_type::terminal);
-		   });
-    try {
-      renew_future.wait();
-    } catch (const std::future_error& e) {
-      if (e.code() != std::future_errc::no_state) {
-	throw;
-      }
+  if (ran_background) {
+    if (renew_task) {
+      renew_task->cancel();
+      renew_task->shutdown("terminating datalog renewal loop", to_wait);
+      renew_task.reset();
     }
-    asio::dispatch(recovery_strand,
-		   [this]() {
-		     recovery_signal.emit(asio::cancellation_type::terminal);
-		   });
-    try {
-      recovery_future.wait();
-    } catch (const std::future_error& e) {
-      if (e.code() != std::future_errc::no_state) {
-	throw;
-      }
+    if (recovery_task) {
+      recovery_task->cancel();
+      recovery_task->shutdown("terminating datalog recovery task", to_wait);
+      recovery_task.reset();
     }
-    asio::dispatch(watch_strand,
-		   [this]() {
-		     watch_signal.emit(asio::cancellation_type::terminal);
-		   });
-    try {
-      watch_future.wait();
-    } catch (const std::future_error& e) {
-      if (e.code() != std::future_errc::no_state) {
-	throw;
-      }
-    }
-    if (watchcookie && rados->check_watch(watchcookie)) {
-      auto wc = watchcookie;
-      watchcookie = 0;
-      try {
-	rados->unwatch(wc, loc, async::use_blocked);
-      } catch (const std::exception& e) {
-	ldpp_dout(&dp, 2)
-	  << "RGWDataChangesLog::blocking_shutdown: unwatch failed: " << e.what()
-	  << dendl;
-      }
+    if (watch_task) {
+      to_wait.emplace_back(
+          "terminating datalog recovery watch",
+          asio::spawn(
+              asio::any_io_executor{watch_task->get_executor()},
+              [this, dp](asio::yield_context y) {
+                if (watch_task) {
+                  watch_task->cancel();
+                  watch_task->join(y);
+                  watch_task.reset();
+                }
+                if (watchcookie && rados->check_watch(watchcookie)) {
+                  auto wc = watchcookie;
+                  watchcookie = 0;
+                  try {
+                    rados->unwatch(wc, loc, y);
+                  } catch (const std::exception& e) {
+                    ldpp_dout(&dp, 2)
+                        << "RGWDataChangesLog::shutdown: unwatch failed: "
+                        << e.what() << dendl;
+                  }
+                }
+              },
+              use_promise));
     }
   }
   if (bes) {
-    bes->shutdown();
-    bes.reset();
+    to_wait.emplace_back(
+        std::string("terminating datalog backend"),
+        asio::spawn(
+            asio::any_io_executor{rados->get_executor()},
+            [this](asio::yield_context y) { bes->shutdown(y); }, use_promise));
   }
-  return;
 }
 
 RGWDataChangesLog::~RGWDataChangesLog() {
@@ -1364,65 +1304,47 @@ RGWDataChangesLog::~RGWDataChangesLog() {
   }
 }
 
-asio::awaitable<void> RGWDataChangesLog::renew_run() {
-  static constexpr auto runs_per_prune = 150;
-  auto run = 0;
-  renew_timer.emplace(co_await asio::this_coro::executor);
+asio::awaitable<ceph::timespan> RGWDataChangesLog::renew_run() {
   std::string_view operation;
   const DoutPrefix dp(cct, dout_subsys, "rgw data changes log: ");
-  for (;;) try {
-      ldpp_dout(&dp, 2) << "RGWDataChangesLog::ChangesRenewThread: start"
-			<< dendl;
-      operation = "RGWDataChangesLog::renew_entries"sv;
-      co_await renew_entries(&dp);
+  try {
+    ldpp_dout(&dp, 2) << "RGWDataChangesLog::renew_run: start" << dendl;
+    operation = "RGWDataChangesLog::renew_entries"sv;
+    co_await renew_entries(&dp);
+    operation = {};
+
+    if (renew_run_counter == runs_per_prune) {
+      std::optional<uint64_t> through;
+      ldpp_dout(&dp, 2)
+          << "RGWDataChangesLog::renew_run: pruning old generations"
+          << dendl;
+      operation = "trim_generations"sv;
+      co_await trim_generations(&dp, through);
       operation = {};
-      if (going_down())
-	break;
-
-      if (run == runs_per_prune) {
-	std::optional<uint64_t> through;
-	ldpp_dout(&dp, 2) << "RGWDataChangesLog::ChangesRenewThread: pruning old generations" << dendl;
-	operation = "trim_generations"sv;
-	co_await trim_generations(&dp, through);
-	operation = {};
-	if (through) {
-	  ldpp_dout(&dp, 2)
-	    << "RGWDataChangesLog::ChangesRenewThread: pruned generations "
-	    << "through " << *through << "." << dendl;
-	} else {
-	  ldpp_dout(&dp, 2)
-	    << "RGWDataChangesLog::ChangesRenewThread: nothing to prune."
-	    << dendl;
-	}
-        run = 0;
+      if (through) {
+        ldpp_dout(&dp, 2)
+            << "RGWDataChangesLog::renew_run: pruned generations "
+            << "through " << *through << "." << dendl;
       } else {
-	++run;
+        ldpp_dout(&dp, 20)
+            << "RGWDataChangesLog::renew_run: nothing to prune."
+            << dendl;
       }
-
-      int interval = cct->_conf->rgw_data_log_window * 3 / 4;
-      renew_timer->expires_after(std::chrono::seconds(interval));
-      co_await renew_timer->async_wait(asio::use_awaitable);
-    } catch (sys::system_error& e) {
-      if (e.code() == asio::error::operation_aborted) {
-	ldpp_dout(&dp, 10)
-	  << "RGWDataChangesLog::renew_entries canceled, going down" << dendl;
-	break;
-      } else {
-	ldpp_dout(&dp, 0)
-	  << "renew_thread: ERROR: "
-	  << (operation.empty() ? operation : "<unknown"sv)
-	  << "threw exception: " << e.what() << dendl;
-	continue;
-      }
+      renew_run_counter = 0;
+    } else {
+      ++renew_run_counter;
     }
-}
-
-void RGWDataChangesLog::renew_stop()
-{
-  std::lock_guard l{lock};
-  if (renew_timer) {
-    renew_timer->cancel();
+  } catch (sys::system_error& e) {
+    if (e.code() == asio::error::operation_aborted) {
+      ldpp_dout(&dp, 10)
+          << "RGWDataChangesLog::renew_entries canceled, going down" << dendl;
+    } else {
+      ldpp_dout(&dp, 0) << "renew_thread: ERROR: "
+                        << (operation.empty() ? "<unknown>"sv : operation)
+                        << "threw exception: " << e.what() << dendl;
+    }
   }
+  co_return std::chrono::seconds(cct->_conf->rgw_data_log_window * 3 / 4);
 }
 
 void RGWDataChangesLog::mark_modified(int shard_id, const rgw_bucket_shard& bs, uint64_t gen)
@@ -1639,17 +1561,12 @@ RGWDataChangesLog::recover_shard(const DoutPrefixProvider* dpp, int index)
 asio::awaitable<void> RGWDataChangesLog::recover(
   const DoutPrefixProvider* dpp)
 {
-  co_await asio::co_spawn(
-    recovery_strand,
-    [this](const DoutPrefixProvider* dpp)-> asio::awaitable<void, strand_t> {
-      auto ex = recovery_strand;
-      auto group = async::spawn_group{ex, static_cast<size_t>(num_shards)};
-      for (auto i = 0; i < num_shards; ++i) {
-	boost::asio::co_spawn(ex, recover_shard(dpp, i), group);
-      }
-      co_await group.wait();
-    }(dpp),
-    asio::use_awaitable);
+  auto ex = co_await asio::this_coro::executor;
+  auto throttle = async::co_throttle{ex, 32};
+  for (auto i = 0; i < num_shards; ++i) {
+    co_await throttle.spawn(recover_shard(dpp, i));
+  }
+  co_await throttle.wait();
 
   std::unique_lock l(lock);
   last_recovery = ceph::mono_clock::now();

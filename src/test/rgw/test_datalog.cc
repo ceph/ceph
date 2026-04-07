@@ -15,14 +15,20 @@
 
 #include "rgw_datalog.h"
 
+#include <ranges>
 #include <string_view>
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
+#include <boost/asio/experimental/parallel_group.hpp>
+#include <boost/asio/experimental/cancellation_condition.hpp>
+#include <boost/asio/experimental/promise.hpp>
+
 #include <boost/system/errc.hpp>
 #include <boost/system/error_code.hpp>
 
+#include <async_utils.h>
 #include <fmt/format.h>
 
 #include "include/neorados/RADOS.hpp"
@@ -32,6 +38,9 @@
 #include "test/neorados/common_tests.h"
 
 #include "gtest/gtest.h"
+
+namespace ranges = std::ranges;
+namespace views = std::views;
 
 namespace asio = boost::asio;
 namespace ss = neorados::cls::sem_set;
@@ -199,8 +208,14 @@ public:
   ~DataLogTestBase() override = default;
 
   /// \brief Delete pool used for testing
-  boost::asio::awaitable<void> CoTearDown() override {
-    co_await datalog->async_shutdown();
+  boost::asio::awaitable<void>
+  CoTearDown() override
+  {
+    rgw::shutdown_vector to_wait;
+    datalog->shutdown(to_wait);
+    co_await rgw::await_shutdowns(
+        nullptr, co_await asio::this_coro::executor, std::move(to_wait),
+        asio::use_awaitable);
     co_await clean_pool();
     co_return;
   }

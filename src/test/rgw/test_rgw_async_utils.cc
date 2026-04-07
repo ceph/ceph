@@ -354,7 +354,7 @@ CORO_TEST_F(Task, Shutdown, Task)
   EXPECT_EQ(strand, task.get_executor());
 
   EXPECT_EQ(rgw::task_state::running, task.state());
-  std::vector<std::pair<std::string, rgw::shutdown_promise>> v;
+  rgw::shutdown_vector v;
   task.shutdown(label, v);
   EXPECT_EQ(rgw::task_state::dead, task.state());
   EXPECT_EQ(1u, v.size());
@@ -430,6 +430,16 @@ CORO_TEST_F(Loop, Wake, Loop)
   co_return;
 }
 
+namespace {
+void
+rethrower(std::exception_ptr e)
+{
+  if (e) {
+    std::rethrow_exception(e);
+  }
+}
+}
+
 // The rest of the base class functionality is already covered in the Task tests.
 
 class YTask : public ::testing::Test {
@@ -448,14 +458,6 @@ public:
   {
     rgw::wait_for(3s, y);
     ++value;
-  }
-
-  static void
-  rethrower(std::exception_ptr e)
-  {
-    if (e) {
-      std::rethrow_exception(e);
-    }
   }
 };
 
@@ -529,7 +531,7 @@ TEST_F(YTask, Shutdown)
         EXPECT_EQ(strand, task.get_executor());
 
         ASSERT_EQ(rgw::task_state::running, task.state());
-        std::vector<std::pair<std::string, rgw::shutdown_promise>> v;
+        rgw::shutdown_vector v;
         task.shutdown(label, v);
         ASSERT_EQ(rgw::task_state::dead, task.state());
         ASSERT_EQ(1u, v.size());
@@ -553,14 +555,6 @@ public:
   {
     ++value;
     return delay;
-  }
-
-  static void
-  rethrower(std::exception_ptr e)
-  {
-    if (e) {
-      std::rethrow_exception(e);
-    }
   }
 };
 
@@ -630,3 +624,125 @@ TEST_F(YLoop, Wake)
 }
 
 // The rest of the base class functionality is already covered in the YTask tests.
+
+namespace {
+rgw::task<>
+thrower(ceph::timespan delay, auto executor, auto exception, bool& executed)
+{
+  return rgw::task{
+      asio::make_strand(executor),
+      [](ceph::timespan delay, auto e, bool& executed) -> asio::awaitable<void> {
+        co_await rgw::wait_for(delay);
+        executed = true;
+        throw e;
+      }(delay, std::forward<decltype(exception)>(exception), executed)};
+}
+} // namespace
+
+CORO_TEST(AwaitShutdowns, AwaitShutdowns)
+{
+  bool ran1 = false;
+  auto task1 = thrower(
+      10us, co_await asio::this_coro::executor, std::logic_error{"Oh no!"},
+      ran1);
+  bool ran2 = false;
+  auto task2 = thrower(
+      500ms, co_await asio::this_coro::executor,
+      std::runtime_error{"O me miserum!"}, ran2);
+  task1.run();
+  task2.run();
+
+  rgw::shutdown_vector to_wait;
+  task1.shutdown("task1", to_wait);
+  task2.shutdown("task2", to_wait);
+
+  EXPECT_THROW(
+      co_await rgw::await_shutdowns(
+          nullptr, co_await asio::this_coro::executor, std::move(to_wait),
+          asio::use_awaitable),
+      std::logic_error);
+  EXPECT_TRUE(ran1);
+  EXPECT_TRUE(ran2);
+}
+
+CORO_TEST(AwaitShutdowns, AwaitShutdownsRev)
+{
+  bool ran1 = false;
+  auto task1 = thrower(
+      10us, co_await asio::this_coro::executor, std::logic_error{"Oh no!"},
+      ran1);
+  bool ran2 = false;
+  auto task2 = thrower(
+      500ms, co_await asio::this_coro::executor,
+      std::runtime_error{"O me miserum!"}, ran2);
+  task2.run();
+  task1.run();
+
+  rgw::shutdown_vector to_wait;
+  task2.shutdown("task2", to_wait);
+  task1.shutdown("task1", to_wait);
+
+  EXPECT_THROW(
+      co_await rgw::await_shutdowns(
+          nullptr, co_await asio::this_coro::executor, std::move(to_wait),
+          asio::use_awaitable),
+      std::logic_error);
+  EXPECT_TRUE(ran1);
+  EXPECT_TRUE(ran2);
+}
+
+TEST(YAwaitShutdowns, AwaitShutdowns)
+{
+  asio::io_context io_context;
+  asio::spawn(
+      io_context,
+      [](asio::yield_context y) {
+        bool ran1 = false;
+        auto task1 =
+            thrower(10us, y.get_executor(), std::logic_error{"Oh no!"}, ran1);
+        bool ran2 = false;
+        auto task2 = thrower(
+            500ms, y.get_executor(), std::runtime_error{"O me miserum!"}, ran2);
+        task1.run();
+        task2.run();
+
+        rgw::shutdown_vector to_wait;
+        task1.shutdown("task1", to_wait);
+        task2.shutdown("task2", to_wait);
+
+        EXPECT_THROW(
+            rgw::await_shutdowns(nullptr, y.get_executor(), std::move(to_wait), y), std::logic_error);
+        EXPECT_TRUE(ran1);
+        EXPECT_TRUE(ran2);
+      },
+      rethrower);
+  io_context.run();
+}
+
+TEST(YAwaitShutdowns, AwaitShutdownsRev)
+{
+  asio::io_context io_context;
+  asio::spawn(
+      io_context,
+      [](asio::yield_context y) {
+        bool ran1 = false;
+        auto task1 =
+            thrower(10us, y.get_executor(), std::logic_error{"Oh no!"}, ran1);
+        bool ran2 = false;
+        auto task2 = thrower(
+            500ms, y.get_executor(), std::runtime_error{"O me miserum!"}, ran2);
+        task2.run();
+        task1.run();
+
+        rgw::shutdown_vector to_wait;
+        task2.shutdown("task2", to_wait);
+        task1.shutdown("task1", to_wait);
+
+        EXPECT_THROW(
+            rgw::await_shutdowns(nullptr, y.get_executor(), std::move(to_wait), y), std::logic_error);
+        EXPECT_TRUE(ran1);
+        EXPECT_TRUE(ran2);
+      },
+      rethrower);
+  io_context.run();
+}

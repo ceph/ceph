@@ -98,8 +98,16 @@ void RGWRealmReloader::reload()
   // TODO: make RGWRados responsible for rgw_log_usage lifetime
   rgw_log_usage_finalize();
 
-  env.driver->shutdown();
-  // Drain outstanding work 
+  auto r = env.driver->do_shutdown(&dp, null_yield);
+
+  if (r < 0) {
+    ldpp_dout(&dp, -1)
+        << "Failed shutting down drivers in realm reloader: r = " << r
+        << " Continuing would leave radosgw in an inconsistent state." << dendl;
+    abort();
+  }
+
+  // Drain outstanding work
   context_pool.finish();
   // destroy the existing driver
   DriverManager::close_storage(env.driver);
@@ -182,7 +190,7 @@ void RGWRealmReloader::reload()
     }
   }
 
-  int r = env.driver->register_to_service_map(&dp, "rgw", service_map_meta);
+  r = env.driver->register_to_service_map(&dp, "rgw", service_map_meta);
   if (r < 0) {
     ldpp_dout(&dp, -1) << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
 

@@ -1068,7 +1068,8 @@ bool RGWIndexCompletionManager::handle_completion(completion_t cb, complete_op_d
   return false;
 }
 
-void RGWRados::finalize()
+void
+RGWRados::shutdown(rgw::shutdown_vector& to_wait)
 {
   if (run_sync_thread) {
     std::lock_guard l{meta_sync_thread_lock};
@@ -1083,12 +1084,19 @@ void RGWRados::finalize()
     }
   }
 
-  /* Before joining any sync threads, drain outstanding requests &
-   * mark the async_processor as going_down() */
+  if (svc.async_processor) {
+    svc.async_processor->set_down_flag();
+  }
+
+  // TODO(Æmerson): Turn threads into Asio threads so we can cancel them.
+}
+
+void RGWRados::finalize()
+{
+  // Before joining any sync threads, drain outstanding requests.
   if (svc.async_processor) {
     svc.async_processor->stop();
   }
-
   if (run_sync_thread) {
     std::lock_guard l{meta_sync_thread_lock};
     meta_sync_processor_thread->stop();

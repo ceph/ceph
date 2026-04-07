@@ -17,16 +17,25 @@
 
 #include <cstdint>
 #include <optional>
+
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/io_context.hpp>
+
+#include <boost/asio/experimental/promise.hpp>
+
 #include <boost/intrusive_ptr.hpp>
+
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
 #include "common/tracer.h"
+
+#include "async_utils.h"
 #include "rgw_cksum.h"
 #include "rgw_sal_fwd.h"
 #include "rgw_lua.h"
 #include "rgw_notify_event_type.h"
 #include "rgw_req_context.h"
-#include "include/random.h"
+
 #include "include/function2.hpp"
 
 // FIXME: following subclass dependencies
@@ -44,17 +53,16 @@ using RGWBucketSyncPolicyHandlerRef = std::shared_ptr<RGWBucketSyncPolicyHandler
 class RGWDataSyncStatusManager;
 class RGWSyncModuleInstance;
 typedef std::shared_ptr<RGWSyncModuleInstance> RGWSyncModuleInstanceRef;
-class RGWCompressionInfo;
+struct RGWCompressionInfo;
 struct rgw_pubsub_topics;
 struct rgw_pubsub_bucket_topics;
-class RGWZonePlacementInfo;
+struct RGWZonePlacementInfo;
 struct rgw_pubsub_topic;
 struct RGWOIDCProviderInfo;
 struct RGWRoleInfo;
 class RGWGetObj_Filter;
 
 using RGWBucketListNameFilter = std::function<bool (const std::string&)>;
-
 
 namespace rgw {
   class Aio;
@@ -152,7 +160,7 @@ namespace rgw { namespace sal {
 
 #define RGW_SAL_VERSION 1
 
-struct MPSerializer;
+class MPSerializer;
 class GCChain;
 class RGWRole;
 
@@ -717,8 +725,21 @@ class Driver {
     /** Check to see if this placement rule is valid */
     virtual bool valid_placement(const rgw_placement_rule& rule) = 0;
 
-    /** Shut down background tasks, to be called while Asio is running. */
-    virtual void shutdown(void) { };
+    /**
+     * @brief Shut down background tasks
+     *
+     * Cancel threads, shut down subsystems. Push promises that should
+     * be waited on onto `to_wait`.
+     *
+     * \warning Do not do blocking joins or similar or you risk
+     * deadlock. Cleanup and cancel and push the promises for
+     * anything you wish to join onto the vector.
+     *
+     * @param[inout] to_wait Vector of promises that will be waited on.
+     */
+    virtual void
+    shutdown(shutdown_vector& to_wait)
+    {}
 
     /** Clean up a driver for termination */
     virtual void finalize(void) = 0;
@@ -728,6 +749,11 @@ class Driver {
 
     /** Register admin APIs unique to this driver */
     virtual void register_admin_apis(RGWRESTMgr* mgr) = 0;
+
+    /** Shut down the SAL, stackful coroutine version */
+    int do_shutdown(
+        const DoutPrefixProvider* dpp,
+        optional_yield y) noexcept;
 }; // class Driver
 
 

@@ -1874,7 +1874,7 @@ std::unique_ptr<Writer> D4NFilterDriver::get_atomic_writer(const DoutPrefixProvi
   return std::make_unique<D4NFilterWriter>(std::move(writer), this, obj, dpp, true, y);
 }
 
-void D4NFilterDriver::shutdown()
+void D4NFilterDriver::shutdown(shutdown_vector& to_wait)
 {
   // call cancel() on the connection's executor
   boost::asio::dispatch(conn->get_executor(), [c = conn] { c->cancel(); });
@@ -1885,7 +1885,7 @@ void D4NFilterDriver::shutdown()
   bucketDir.reset();
   policyDriver.reset();
 
-  next->shutdown();
+  next->shutdown(to_wait);
 }
 
 std::unique_ptr<Object::ReadOp> D4NFilterObject::get_read_op()

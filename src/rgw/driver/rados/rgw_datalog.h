@@ -4,7 +4,6 @@
 #pragma once
 
 #include <cstdint>
-#include <future>
 #include <list>
 #include <memory>
 #include <mutex>
@@ -15,11 +14,12 @@
 #include <variant>
 #include <vector>
 
-#include <boost/asio/use_future.hpp>
+#include <boost/asio/experimental/promise.hpp>
 #include <boost/asio/steady_timer.hpp>
 
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
+
 #include <boost/smart_ptr/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
@@ -28,20 +28,23 @@
 #include "include/neorados/RADOS.hpp"
 
 #include "include/buffer.h"
+#include "include/common_fwd.h"
 #include "include/encoding.h"
 #include "include/function2.hpp"
 
 #include "common/async/async_cond.h"
 #include "common/async/yield_context.h"
 
-#include "include/common_fwd.h"
 #include "common/ceph_json.h"
 #include "common/ceph_time.h"
 #include "common/Formatter.h"
 #include "common/lru_map.h"
 
-#include "cls/log/cls_log_types.h"
 #include "neorados/cls/sem_set.h"
+
+#include "cls/log/cls_log_types.h"
+
+#include "async_utils.h"
 #include "rgw_basic_types.h"
 #include "rgw_log_backing.h"
 #include "rgw_sync_policy.h"
@@ -357,16 +360,9 @@ class RGWDataChangesLog {
 
   using executor_t = asio::io_context::executor_type;
   executor_t executor;
-  using strand_t = asio::strand<executor_t>;
-  strand_t renew_strand{executor};
-  asio::cancellation_signal renew_signal = asio::cancellation_signal();
-  std::future<void> renew_future;
-  strand_t watch_strand{executor};
-  asio::cancellation_signal watch_signal = asio::cancellation_signal();
-  std::future<void> watch_future;
-  strand_t recovery_strand{executor};
-  asio::cancellation_signal recovery_signal = asio::cancellation_signal();
-  std::future<void> recovery_future;
+  std::optional<rgw::run_loop<>> renew_task;
+  std::optional<rgw::task<>> watch_task;
+  std::optional<rgw::task<>> recovery_task;
 
   ceph::mono_time last_recovery = ceph::mono_clock::zero();
 
@@ -410,9 +406,9 @@ class RGWDataChangesLog {
 		      uint64_t gen,
 		      ceph::real_time expiration);
 
-  std::optional<asio::steady_timer> renew_timer;
-  asio::awaitable<void> renew_run();
-  void renew_stop();
+  static constexpr auto runs_per_prune = 150;
+  int renew_run_counter = 0;
+  asio::awaitable<ceph::timespan> renew_run();
 
   std::function<bool(const rgw_bucket& bucket, optional_yield y,
                      const DoutPrefixProvider *dpp)> bucket_filter;
@@ -441,8 +437,9 @@ public:
 			      // all off (radosgw-admin)
 			      bool recovery, bool watch, bool renew);
 
-  int start(const DoutPrefixProvider *dpp, const RGWZone* _zone,
-	    const RGWZoneParams& zoneparams, bool background_tasks) noexcept;
+  int start(const DoutPrefixProvider* dpp, const RGWZone* _zone,
+            const RGWZoneParams& zoneparams, bool background_tasks,
+            optional_yield y) noexcept;
   asio::awaitable<bool> establish_watch(const DoutPrefixProvider* dpp,
 					std::string_view oid);
   asio::awaitable<void> process_notification(const DoutPrefixProvider* dpp,
@@ -520,8 +517,7 @@ public:
 		 bc::flat_map<std::string, uint64_t>&& semcount);
   asio::awaitable<void> recover_shard(const DoutPrefixProvider* dpp, int index);
   asio::awaitable<void> recover(const DoutPrefixProvider* dpp);
-  asio::awaitable<void> async_shutdown();
-  void blocking_shutdown();
+  void shutdown(rgw::shutdown_vector& to_wait);
 
   asio::awaitable<void> admin_sem_list(std::optional<int> req_shard,
 				       std::uint64_t max_entries,

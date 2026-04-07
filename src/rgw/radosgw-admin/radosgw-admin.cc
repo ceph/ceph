@@ -1308,7 +1308,7 @@ public:
 			   ceph::async::io_context_pool* pool)
     : driver(_s), pool(pool) {}
   ~StoreDestructor() {
-    driver->shutdown();
+    driver->do_shutdown(dpp(), null_yield);
     pool->finish();
     DriverManager::close_storage(driver);
     rgw_http_client_cleanup();
