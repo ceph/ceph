@@ -3,12 +3,27 @@
 
 #include "./scrub_job.h"
 
+#ifdef WITH_CRIMSON
+#include "crimson/osd/scrub/pg_scrubber.h"
+#include "crimson/common/log.h"
+#else
 #include "common/debug.h"
-
+#include "pg_scrubber.h"
+#endif
 #include "common/Formatter.h"
 
-#include "pg_scrubber.h"
-
+#ifdef WITH_CRIMSON
+#define Scrub crimson::osd::scrub
+#define get_conf() crimson::common::local_conf()
+SET_SUBSYS(osd);
+#define CRIMSON_LOG_PREFIX(...) LOG_PREFIX(__VA_ARGS__)
+#define CRIMSON_DEBUG(...) DEBUG(__VA_ARGS__)
+#else
+#define get_conf() cct->_conf
+#define CRIMSON_LOG_PREFIX(...)
+#undef CRIMSON_DEBUG
+#define CRIMSON_DEBUG(...) dout(10) << fmt::format(__VA_ARGS__) << dendl
+#endif
 using must_scrub_t = Scrub::must_scrub_t;
 using sched_params_t = Scrub::sched_params_t;
 using OSDRestrictions = Scrub::OSDRestrictions;
@@ -53,7 +68,7 @@ void SchedTarget::up_urgency_to(urgency_t u)
 
 // ////////////////////////////////////////////////////////////////////////// //
 // ScrubJob
-
+#ifndef WITH_CRIMSON
 #define dout_subsys ceph_subsys_osd
 #undef dout_context
 #define dout_context (cct)
@@ -65,7 +80,16 @@ static std::ostream& _prefix_fn(std::ostream* _dout, T* t, std::string fn = "")
 {
   return t->gen_prefix(*_dout, fn);
 }
-
+#endif
+#ifdef WITH_CRIMSON
+ScrubJob::ScrubJob(const spg_t& pg, int node_id)
+    : pgid{pg}
+    , whoami{node_id}
+    , shallow_target{pg, scrub_level_t::shallow}
+    , deep_target{pg, scrub_level_t::deep}
+    , random_gen{random_dev()}
+{}
+#else
 ScrubJob::ScrubJob(CephContext* cct, const spg_t& pg, int node_id)
     : pgid{pg}
     , whoami{node_id}
@@ -75,7 +99,7 @@ ScrubJob::ScrubJob(CephContext* cct, const spg_t& pg, int node_id)
     , random_gen{random_dev()}
     , log_msg_prefix{fmt::format("osd.{} scrub-job:pg[{}]:", node_id, pgid)}
 {}
-
+#endif
 // debug usage only
 namespace std {
 ostream& operator<<(ostream& out, const ScrubJob& sjob)
@@ -116,10 +140,10 @@ void ScrubJob::adjust_shallow_schedule(
     const Scrub::sched_conf_t& app_conf,
     utime_t scrub_clock_now)
 {
-  dout(10) << fmt::format(
-		  "at entry: shallow target:{}, conf:{}, last-stamp:{:s}",
-		  shallow_target, app_conf, last_scrub)
-	   << dendl;
+  CRIMSON_LOG_PREFIX(ScrubJob::adjust_shallow_schedule);
+  CRIMSON_DEBUG(
+    "at entry: shallow target:{}, conf:{}, last-stamp:{:s}",
+    shallow_target, app_conf, last_scrub);
 
   auto& sh_times = shallow_target.sched_info.schedule;	// shorthand
 
@@ -144,11 +168,9 @@ void ScrubJob::adjust_shallow_schedule(
     // the target time is already set. Make sure to reset the n.b.
     sh_times.not_before = sh_times.scheduled_at;
   }
-
-  dout(10) << fmt::format(
-		  "adjusted: nb:{:s} target:{:s} ({})", sh_times.not_before,
-		  sh_times.scheduled_at, state_desc())
-	   << dendl;
+  CRIMSON_DEBUG(
+    "adjusted: nb:{:s} target:{:s} ({})", sh_times.not_before,
+		  sh_times.scheduled_at, state_desc());
 }
 
 
@@ -167,15 +189,19 @@ double ScrubJob::guaranteed_offset(
   return app_conf.shallow_interval * (2.0 + app_conf.interval_randomize_ratio);
 }
 
-
+#ifdef WITH_CRIMSON
+using PG_Scrubber = crimson::osd::scrub::PGScrubber;
+#else
+using PG_Scrubber = PgScrubber;
+#endif
 void ScrubJob::operator_forced(scrub_level_t s_or_d, scrub_type_t scrub_type)
 {
   auto& trgt = get_target(s_or_d);
   trgt.up_urgency_to(
       (scrub_type == scrub_type_t::do_repair) ? urgency_t::must_repair
 					      : urgency_t::operator_requested);
-  trgt.sched_info.schedule.scheduled_at = PgScrubber::scrub_must_stamp();
-  trgt.sched_info.schedule.not_before = PgScrubber::scrub_must_stamp();
+  trgt.sched_info.schedule.scheduled_at = PG_Scrubber::scrub_must_stamp();
+  trgt.sched_info.schedule.not_before = PG_Scrubber::scrub_must_stamp();
 }
 
 
@@ -211,7 +237,6 @@ ScrubJob::earliest_eligible(utime_t scrub_clock_now) const
   return std::nullopt;
 }
 
-
 SchedTarget& ScrubJob::earliest_target()
 {
   std::weak_ordering compr = cmp_future_entries(
@@ -241,22 +266,20 @@ const SchedTarget& ScrubJob::earliest_target(utime_t scrub_clock_now) const
   return (compr == std::weak_ordering::less) ? shallow_target : deep_target;
 }
 
-
 utime_t ScrubJob::get_sched_time() const
 {
   return earliest_target().sched_info.schedule.not_before;
 }
-
 
 void ScrubJob::adjust_deep_schedule(
     utime_t last_deep,
     const Scrub::sched_conf_t& app_conf,
     utime_t scrub_clock_now)
 {
-  dout(10) << fmt::format(
-		  "at entry: deep target:{}, conf:{}, last-stamp:{:s}",
-		  deep_target, app_conf, last_deep)
-	   << dendl;
+  CRIMSON_LOG_PREFIX(ScrubJob::adjust_deep_schedule);
+  CRIMSON_DEBUG(
+    "at entry: deep target:{}, conf:{}, last-stamp:{:s}", deep_target,
+    app_conf, last_deep);
 
   auto& dp_times = deep_target.sched_info.schedule;  // shorthand
 
@@ -270,12 +293,11 @@ void ScrubJob::adjust_deep_schedule(
 	normal_dist(random_gen), app_conf.deep_interval - 2 * sdv,
 	app_conf.deep_interval + 2 * sdv);
     adj_target += next_delay;
-    dout(20) << fmt::format(
-		    "deep scrubbing: next_delay={:.0f} (interval={:.0f}, "
-		    "ratio={:.3f}), adjusted:{:s}",
-		    next_delay, app_conf.deep_interval,
-		    app_conf.deep_randomize_ratio, adj_target)
-	     << dendl;
+
+    CRIMSON_DEBUG("deep scrubbing: next_delay={:.0f} (interval={:.0f}, "
+                  "ratio={:.3f}), adjusted:{:s}",
+                  next_delay, app_conf.deep_interval,
+                  app_conf.deep_randomize_ratio, adj_target);
 
     dp_times.scheduled_at = adj_target;
     dp_times.not_before = adj_target;
@@ -283,11 +305,9 @@ void ScrubJob::adjust_deep_schedule(
     // the target time is already set. The n.b. is set to same
     dp_times.not_before = dp_times.scheduled_at;
   }
-
-  dout(10) << fmt::format(
-		  "adjusted: nb:{:s} target:{:s} ({})", dp_times.not_before,
-		  dp_times.scheduled_at, state_desc())
-	   << dendl;
+  CRIMSON_DEBUG(
+    "adjusted: nb:{:s} target:{:s} ({})", dp_times.not_before,
+		 dp_times.scheduled_at, state_desc());
 }
 
 
@@ -316,7 +336,7 @@ SchedTarget& ScrubJob::delay_on_failure(
       // for all other possible delay causes: use the default delay
       break;
   }
-  const seconds delay = seconds(cct->_conf.get_val<int64_t>(delay_param));
+  const seconds delay = seconds(get_conf().get_val<int64_t>(delay_param));
 
   auto& delayed_target =
       (level == scrub_level_t::deep) ? deep_target : shallow_target;
@@ -324,11 +344,12 @@ SchedTarget& ScrubJob::delay_on_failure(
       std::max(scrub_clock_now, delayed_target.sched_info.schedule.not_before) +
       utime_t{delay};
   delayed_target.sched_info.last_issue = delay_cause;
-  dout(20) << fmt::format(
-		  "delayed {}scrub due to {} for {}s. Updated: {}",
-		  (level == scrub_level_t::deep ? "deep " : ""), delay_cause,
-		  delay.count(), delayed_target)
-	   << dendl;
+  CRIMSON_LOG_PREFIX(ScrubJob::delay_on_failure);
+  CRIMSON_DEBUG(
+    "delayed {}scrub due to {} for {}s. Updated: {}",
+    (level == scrub_level_t::deep ? "deep " : ""), delay_cause,
+     delay.count(), delayed_target);
+
   return delayed_target;
 }
 

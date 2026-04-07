@@ -20,8 +20,9 @@
 #include "osd/osd_perf_counters.h" // for osd_counter_idx_t
 
 #include "ECUtil.h"
+#ifndef WITH_CRIMSON
 #include "OpRequest.h"
-
+#endif
 namespace ceph {
 class Formatter;
 }
@@ -62,7 +63,7 @@ struct AsyncScrubResData {
   }
 };
 
-
+#ifndef WITH_CRIMSON
 /// Facilitating scrub-related object access to private PG data
 class ScrubberPasskey {
 private:
@@ -75,14 +76,17 @@ private:
   ScrubberPasskey(const ScrubberPasskey&) = default;
   ScrubberPasskey& operator=(const ScrubberPasskey&) = delete;
 };
-
+#endif
 /// randomly returns true with probability equal to the passed parameter
 static inline bool random_bool_with_probability(double probability) {
   return (ceph::util::generate_random_number<double>(0.0, 1.0) < probability);
 }
-
+#ifdef WITH_CRIMSON
+namespace crimson::osd::scrub {
+#define Scrub crimson::osd::scrub
+#else
 namespace Scrub {
-
+#endif
 /// high/low OP priority
 enum class scrub_prio_t : bool { low_priority = false, high_priority = true };
 
@@ -201,8 +205,11 @@ struct formatter<Scrub::scrub_schedule_t> {
 };
 
 }  // namespace fmt
-
+#ifdef WITH_CRIMSON
+namespace crimson::osd::scrub {
+#else
 namespace Scrub {
+#endif
 
 /**
  * the result of the last attempt to schedule a scrub for a specific PG.
@@ -255,6 +262,7 @@ struct formatter<Scrub::delay_cause_t> : ::fmt::formatter<std::string_view> {
 
 namespace Scrub {
 
+#ifndef WITH_CRIMSON
 /// PG services used by the scrubber backend
 struct PgScrubBeListener {
   virtual ~PgScrubBeListener() = default;
@@ -337,10 +345,10 @@ struct ScrubCounterSet {
   osd_counter_idx_t rsv_failed_elapsed; ///< time for reservation to fail
   osd_counter_idx_t rsv_secondaries_num; ///< number of replicas (EC or rep)
 };
-
+#endif
 }  // namespace Scrub
 
-
+#ifndef WITH_CRIMSON
 /**
  *  The interface used by the PG when requesting scrub-related info or services
  */
@@ -583,3 +591,4 @@ struct ScrubPgIF {
 			 Formatter* f,
 			 std::stringstream& ss) = 0;
 };
+#endif
