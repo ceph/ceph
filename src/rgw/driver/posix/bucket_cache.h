@@ -399,7 +399,9 @@ public:
 
       txn->commit();
       bucket->flags |= BucketCacheEntry<D, B>::FLAG_FILLED;
-      un->add_watch(bucket->name, bucket);
+      if (bucket->name.find("2~") == std::string::npos) {
+	un->add_watch(bucket->name, bucket);
+      }
       return rc;
     } /* fill */
 
@@ -516,8 +518,13 @@ public:
 	  bde.key.name = *ev.name;
 	  /* XXX will need work (if not straight up magic) to have
 	   * side loading support instance and ns */
-	  auto concat_k = concat_key(bde.key);
 	  rc = driver->mint_listing_entry(b->name, bde);
+	  if (rc < 0) {
+	    // mint_listing_entry failed (object may have been deleted), skip
+	    break;
+	  }
+	  // Calculate key AFTER mint_listing_entry which decodes the filename
+	  auto concat_k = concat_key(bde.key);
 	  std::string ser_data;
 	  zpp::bits::out out(ser_data);
 	  struct timespec ts{ceph::real_clock::to_timespec(bde.meta.mtime)};
@@ -536,8 +543,14 @@ public:
 	  break;
 	case EventType::REMOVE:
 	{
-	  auto& ev_name = *ev.name;
-	  txn->del(b->dbi, ev_name);
+	  // Let the driver translate the raw filename to a cache key
+	  rgw_obj_index_key idx_key;
+	  rc = driver->decode_listing_key(*ev.name, idx_key);
+	  if (rc < 0) {
+	    break;
+	  }
+	  auto concat_k = concat_key(idx_key);
+	  txn->del(b->dbi, concat_k);
 	}
 	  break;
 	[[unlikely]] case EventType::INVALIDATE:

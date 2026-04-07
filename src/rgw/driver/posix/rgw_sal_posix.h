@@ -782,6 +782,11 @@ public:
    * by inotify or similar */
   int mint_listing_entry(
     const std::string& bucket, rgw_bucket_dir_entry& bde /* OUT */);
+
+  /* called by BucketCache layer to translate a raw filename into a
+   * cache lookup key (for REMOVE events) */
+  int decode_listing_key(
+    std::string_view fname, rgw_obj_index_key& idx_key /* OUT */);
 };
 
 class POSIXNotification : public StoreNotification {
@@ -1184,6 +1189,10 @@ struct POSIXMPObj {
       return false;
     oid = meta.substr(0, mid_pos);
     upload_id = meta.substr(mid_pos + 1, end_pos - mid_pos - 1);
+    // Validate upload_id has correct prefix to avoid parsing file extensions
+    if (!is_v2_upload_id(upload_id)) {
+      return false;
+    }
     init(oid, upload_id, _owner);
     return true;
   }
