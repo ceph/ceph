@@ -182,9 +182,9 @@ auth_suite=TLS1.2
 policy_path={confdir}
 enable_tls_client_auth=False
 tls_cipher_suites=
-    TLS_RSA_WITH_AES_128_CBC_SHA256
-    TLS_RSA_WITH_AES_256_CBC_SHA256
-    TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384
+    AES128-SHA256
+    AES256-SHA256
+    ECDHE-RSA-AES256-SHA384
 logging_level=DEBUG
 database_path={confdir}/pykmip.sqlite
 [client]
