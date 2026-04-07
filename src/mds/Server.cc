@@ -5632,6 +5632,7 @@ void Server::handle_client_setattr(const MDRequestRef& mdr)
     pi.inode->time_warp_seq++;   // maybe not a timewarp, but still a serialization point.
   if (mask & CEPH_SETATTR_SIZE) {
     if (truncating_smaller) {
+      mdr->no_early_reply = true;
       pi.inode->truncate(old_size, req->head.args.setattr.size, req->get_data().cbegin());
       le->metablob.add_truncate_start(cur->ino());
     } else {
