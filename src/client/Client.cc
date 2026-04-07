@@ -12585,6 +12585,9 @@ bool Client::C_Write_Finisher::try_complete()
       ldout(clnt->cct, 19) << " complete with iofinished_r " << iofinished_r << dendl;
       onfinish->complete(iofinished_r);
     }
+    if (encrypted) {
+      clnt->logger->tinc(l_c_fscrypt_wr_lat, mono_clock_now() - start);
+    }
     clnt->logger->inc(l_c_aio_completions);
     clnt->logger->dec(l_c_aio_in_flight);
     onfinish = nullptr;
@@ -12834,7 +12837,6 @@ bool Client::WriteEncMgr::do_try_finish(int r)
     }
 
     size = encbl.length();
-    clnt->logger->tinc(l_c_fscrypt_wr_lat, mono_clock_now() - start);
     if (size > bl.length()) {
       clnt->logger->inc(l_c_fscrypt_wr_amp, size - bl.length());
     }
@@ -13176,6 +13178,9 @@ success:
   // do not get here if non-blocking caller (onfinish != nullptr)
   ldout(cct, 10) << " _write_filer_succeess" << dendl;
   r = _write_success(f, start, fpos, request_offset, request_size, enc_mgr->get_ofs(), enc_mgr->get_size(), in, enc_mgr->encrypted());
+  if (enc_mgr->encrypted()) {
+    logger->tinc(l_c_fscrypt_wr_lat, mono_clock_now() - start);
+  }
 
   if (r >= 0 && do_fsync) {
     int64_t r1;
