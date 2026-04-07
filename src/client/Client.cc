@@ -752,6 +752,7 @@ void Client::_finish_init()
     plb.add_u64_counter(l_c_caps_revoke, "caps_revoke", "Capability revokes");
     plb.add_u64_counter(l_c_caps_release, "caps_release", "Capability releases");
     plb.add_u64_counter(l_c_fscrypt_wr_amp, "fscrypt_wr_amp", "Extra bytes written due to padding and RMW");
+    plb.add_u64_counter(l_c_fscrypt_rd_amp, "fscrypt_rd_amp", "Extra bytes read due to block alignment");
     plb.add_time_avg(l_c_fscrypt_enc_lat, "fscrypt_enc_lat", "Encryption time");
     plb.add_time_avg(l_c_fscrypt_dec_lat, "fscrypt_dec_lat", "Decryption time");
     plb.add_time_avg(l_c_fscrypt_rd_lat, "fscrypt_rd_lat", "Overall fscrypt read latency");
@@ -11702,6 +11703,9 @@ success:
   if (r >= 0) {
 #if defined(__linux__)
     if (fscrypt_denc) {
+      if (read_len > target_len) {
+        clnt->logger->inc(l_c_fscrypt_rd_amp, read_len - target_len);
+      }
       std::vector<ObjectCacher::ObjHole> holes;
       auto dec_start = mono_clock_now();
       r = fscrypt_denc->decrypt_bl(off, target_len, read_start, holes, pbl);
@@ -12141,6 +12145,9 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
   if (r >= 0) {
 #if defined(__linux__) 
     if (fscrypt_denc) {
+      if (read_len > target_len) {
+        logger->inc(l_c_fscrypt_rd_amp, read_len - target_len);
+      }
       auto dec_start = mono_clock_now();
       r = fscrypt_denc->decrypt_bl(off, target_len, read_start, holes, bl);
       logger->tinc(l_c_fscrypt_dec_lat, mono_clock_now() - dec_start);
@@ -12271,6 +12278,9 @@ uint64_t read_start;
   if (r >= 0) {
 #if defined(__linux__)
     if (fscrypt_denc) {
+      if (read_len > target_len) {
+        logger->inc(l_c_fscrypt_rd_amp, read_len - target_len);
+      }
       std::vector<ObjectCacher::ObjHole> holes;
       auto dec_start = mono_clock_now();
       r = fscrypt_denc->decrypt_bl(off, target_len, read_start, holes, pbl);
@@ -12698,6 +12708,7 @@ int Client::WriteEncMgr::read_modify_write(Context *_iofinish)
   }
 
   if (need_read_end) {
+    clnt->logger->inc(l_c_fscrypt_wr_amp, FSCRYPT_BLOCK_SIZE);
     finish_read_end_ctx.reset(new iofinish_method_ctx<WriteEncMgr>(*this, &WriteEncMgr::finish_read_end_cb, &aioc));
 
     r = read(end_block_ofs, FSCRYPT_BLOCK_SIZE, &endbl, finish_read_end_ctx.get());
