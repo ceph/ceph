@@ -1756,7 +1756,7 @@ def test_versioned_bucket_sync_disable_enable_object_delete():
 
     # Delete the second object version
     cmd = ['object', 'rm', '--bucket', bucket.name, '--object', obj, '--object-version', version_id_2]
-    secondary.zone.cluster.admin(cmd)
+    secondary.zone.cluster.admin(cmd + secondary.zone.zone_args())
 
     log.debug(f"Enabling bucket sync for bucket:{bucket.name}")
     enable_bucket_sync(realm.meta_master_zone(), bucket.name)
@@ -1771,7 +1771,7 @@ def test_versioned_bucket_sync_disable_enable_object_delete():
 
     # Delete the fourth object version
     cmd = ['object', 'rm', '--bucket', bucket.name, '--object', obj, '--object-version', version_id_4]
-    secondary.zone.cluster.admin(cmd)
+    secondary.zone.cluster.admin(cmd + secondary.zone.zone_args())
 
     log.debug(f"Enabling bucket sync for bucket:{bucket.name}")
     enable_bucket_sync(realm.meta_master_zone(), bucket.name)
@@ -1786,13 +1786,13 @@ def test_versioned_bucket_sync_disable_enable_object_delete():
 
     # Delete all object versions
     cmd = ['object', 'rm', '--bucket', bucket.name, '--object', obj, '--object-version', version_id_1]
-    secondary.zone.cluster.admin(cmd)
+    secondary.zone.cluster.admin(cmd + secondary.zone.zone_args())
     cmd = ['object', 'rm', '--bucket', bucket.name, '--object', obj, '--object-version', version_id_2]
-    secondary.zone.cluster.admin(cmd)
+    secondary.zone.cluster.admin(cmd + secondary.zone.zone_args())
     cmd = ['object', 'rm', '--bucket', bucket.name, '--object', obj, '--object-version', version_id_3]
-    secondary.zone.cluster.admin(cmd)
+    secondary.zone.cluster.admin(cmd + secondary.zone.zone_args())
     cmd = ['object', 'rm', '--bucket', bucket.name, '--object', obj, '--object-version', version_id_4]
-    secondary.zone.cluster.admin(cmd)
+    secondary.zone.cluster.admin(cmd + secondary.zone.zone_args())
 
     log.debug(f"Enabling bucket sync for bucket:{bucket.name}")
     enable_bucket_sync(realm.meta_master_zone(), bucket.name)
@@ -2122,7 +2122,7 @@ def test_bucket_log_trim_after_delete_bucket_secondary_reshard():
         cmd = ['object', 'rm'] + primary.zone.zone_args()
         cmd += ['--bucket', test_bucket.name]
         cmd += ['--object', obj]
-        primary.zone.cluster.admin(cmd)
+        primary.zone.cluster.admin(cmd + primary.zone.zone_args())
 
     # delete bucket and test bilog autotrim
     primary.s3_client.delete_bucket(Bucket=test_bucket.name)
