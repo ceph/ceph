@@ -14,8 +14,10 @@
 
 #pragma once
 
+#include <functional>
 #include <map>
 #include <memory>
+#include <span>
 #include <string>
 #include <vector>
 #include <boost/optional.hpp>
@@ -26,6 +28,11 @@
 #include "Gil.h"
 #include "mon/MgrMap.h"
 
+#ifdef WITH_CRIMSON
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
 
 class MonClient;
 
