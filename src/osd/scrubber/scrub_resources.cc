@@ -26,7 +26,7 @@ ScrubResources::ScrubResources(
     : log_upwards{log_access}
     , conf{config}
 {}
-#endif
+
 // ------------------------- scrubbing as primary on this OSD -----------------
 
 // can we increase the number of concurrent scrubs performed by Primaries
@@ -34,31 +34,48 @@ ScrubResources::ScrubResources(
 // performed by replicas.
 bool ScrubResources::can_inc_scrubs() const
 {
-#ifndef WITH_CRIMSON
   std::lock_guard lck{resource_lock};
-#endif
   return can_inc_local_scrubs_unlocked();
+
+}
+#endif
+#ifdef WITH_CRIMSON
+int ScrubResources::get_scrubs_local() const
+{
+  return scrubs_local;
 }
 
 std::unique_ptr<LocalResourceWrapper> ScrubResources::inc_scrubs_local(
+    bool is_high_priority, int scrubs_total)
+{
+  LOG_PREFIX(ScrubResources::inc_scrubs_local);
+  if (is_high_priority || scrubs_total < crimson::common::local_conf().get_val<int64_t>("osd_max_scrubs")) {
+    ++scrubs_local;
+    DEBUG(
+          "{} -> {} (max {})", "", (scrubs_local - 1),
+          scrubs_local,
+          crimson::common::local_conf().get_val<int64_t>("osd_max_scrubs"));
+    return std::make_unique<LocalResourceWrapper>(*this);
+  } else {
+    DEBUG(
+          "Cannot add local scrubs. Current counter ({}) >= max ({})", "",
+          scrubs_total,
+          crimson::common::local_conf().get_val<int64_t>("osd_max_scrubs"));
+    return nullptr;
+  }
+}
+#else
+std::unique_ptr<LocalResourceWrapper> ScrubResources::inc_scrubs_local(
     bool is_high_priority)
 {
-#ifndef WITH_CRIMSON
+
   std::lock_guard lck{resource_lock};
-#endif
   if (is_high_priority || can_inc_local_scrubs_unlocked()) {
     ++scrubs_local;
-#ifndef WITH_CRIMSON
     log_upwards(fmt::format(
 	"{}: {} -> {} (max {})", __func__, (scrubs_local - 1), scrubs_local,
 	conf->osd_max_scrubs));
-#else
-  LOG_PREFIX(ScrubResources::inc_scrubs_local);
-  DEBUG(
-        "{} -> {} (max {})", "", (scrubs_local - 1),
-        scrubs_local,
-        crimson::common::local_conf().get_val<int64_t>("osd_max_scrubs")/seastar::smp::count);
-#endif
+
     return std::make_unique<LocalResourceWrapper>(*this);
   }
   return nullptr;
@@ -66,26 +83,16 @@ std::unique_ptr<LocalResourceWrapper> ScrubResources::inc_scrubs_local(
 
 bool ScrubResources::can_inc_local_scrubs_unlocked() const
 {
-#ifdef WITH_CRIMSON
-  LOG_PREFIX(ScrubResources::can_inc_scrubs);
-  if (scrubs_local < crimson::common::local_conf().get_val<int64_t>("osd_max_scrubs")/seastar::smp::count) {
-    return true;
-  }
-  DEBUG(
-      "Cannot add local scrubs. Current counter ({}) >= max ({})", "",
-      scrubs_local,
-      crimson::common::local_conf().get_val<int64_t>("osd_max_scrubs")/seastar::smp::count);
-#else
   if (scrubs_local < conf->osd_max_scrubs) {
     return true;
   }
   log_upwards(fmt::format(
       "{}: Cannot add local scrubs. Current counter ({}) >= max ({})", __func__,
       scrubs_local, conf->osd_max_scrubs));
-#endif
+
   return false;
 }
-
+#endif
 void ScrubResources::dec_scrubs_local()
 {
 #ifndef WITH_CRIMSON

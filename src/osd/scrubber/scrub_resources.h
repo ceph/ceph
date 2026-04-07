@@ -52,19 +52,21 @@ class ScrubResources {
   log_upwards_t log_upwards;  ///< access into the owner's dout()
 
   const ceph::common::ConfigProxy& conf;
-#endif
+
   /// an aux used to check available local scrubs. Must be called with
   /// the resource lock held.
-  bool can_inc_local_scrubs_unlocked() const;
 
+  bool can_inc_local_scrubs_unlocked() const;
+#endif
  public:
 #ifdef WITH_CRIMSON
    ScrubResources() = default;
+   std::unique_ptr<LocalResourceWrapper> inc_scrubs_local(bool is_high_priority, int scrubs_total);
 #else
   explicit ScrubResources(
       log_upwards_t log_access,
       const ceph::common::ConfigProxy& config);
-#endif
+
   /**
    * \returns true if the number of concurrent scrubs is
    *  below osd_max_scrubs
@@ -73,9 +75,12 @@ class ScrubResources {
 
   /// increments the number of scrubs acting as a Primary
   std::unique_ptr<LocalResourceWrapper> inc_scrubs_local(bool is_high_priority);
-
+#endif
   /// decrements the number of scrubs acting as a Primary
   void dec_scrubs_local();
+#ifdef WITH_CRIMSON
+  int get_scrubs_local() const;
+#endif
 
   void dump_scrub_reservations(ceph::Formatter* f) const;
 };
