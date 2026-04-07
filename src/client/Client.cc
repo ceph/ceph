@@ -3919,24 +3919,28 @@ void Client::put_cap_ref(Inode *in, int cap)
 int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
 {
   Inode *in = fh->inode.get();
+  return get_caps(in, fh, need, want, phave, endoff);
+}
 
+int Client::get_caps(Inode *in, Fh *fh, int need, int want, int *phave, loff_t endoff)
+{
   int r = check_pool_perm(in, need);
   if (r < 0)
     return r;
 
   while (1) {
     int file_wanted = in->caps_file_wanted();
-    if ((file_wanted & need) != need) {
+    if (fh && (file_wanted & need) != need) {
       ldout(cct, 10) << "get_caps " << *in << " need " << ccap_string(need)
 		     << " file_wanted " << ccap_string(file_wanted) << ", EBADF "
 		     << dendl;
       return -EBADF;
     }
 
-    if ((fh->mode & CEPH_FILE_MODE_WR) && fh->gen != fd_gen)
+    if (fh && (fh->mode & CEPH_FILE_MODE_WR) && fh->gen != fd_gen)
       return -EBADF;
 
-    if ((in->flags & I_ERROR_FILELOCK) && fh->has_any_filelocks())
+    if (fh && (in->flags & I_ERROR_FILELOCK) && fh->has_any_filelocks())
       return -EIO;
 
     int implemented;
@@ -8645,17 +8649,38 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
                                  &fscrypt_denc);
       read_start = offset;
 
-      get_cap_ref(in, CEPH_CAP_FILE_CACHE);
       std::vector<ObjectCacher::ObjHole> holes;
       auto target_len = std::min(read_len, stx->stx_size - offset);
-      int r = objectcacher->file_read_ex(&in->oset, &in->layout, in->snapid,
-                                     read_start, target_len, &bl, 0, &holes, io_finish.get());
+
+      int have;
+      int r = get_caps(in, nullptr, CEPH_CAP_FILE_RD, 0, &have, -1);
+      if (r < 0) {
+        return r;
+      }
+
+      if (cct->_conf->client_oc)
+        r = objectcacher->file_read_ex(&in->oset, &in->layout, in->snapid,
+                                       read_start, target_len, &bl, 0, &holes, io_finish.get());
+      else
+        filer->read_trunc(in->ino, &in->layout, in->snapid, read_start, 4096, &bl, 0,
+                          in->truncate_size, in->truncate_seq, io_finish.get());
+
       if (r == 0) {
         client_lock.unlock();
         r = io_finish_cond->wait();
         client_lock.lock();
       }
-      put_cap_ref(in, CEPH_CAP_FILE_CACHE);
+
+      // if r is -ENOENT, no data to return, not a real error
+      if (r == -ENOENT) {
+        r = 0;
+      }
+
+      if (r < 0) {
+        return r;
+      }
+
+      put_cap_ref(in, CEPH_CAP_FILE_RD);
 
       header.ver = 1;
       header.compat = 1;
