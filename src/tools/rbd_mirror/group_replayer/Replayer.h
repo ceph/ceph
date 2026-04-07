@@ -109,6 +109,7 @@ private:
   std::vector<cls::rbd::GroupSnapshot> m_local_group_snaps;
   std::vector<cls::rbd::GroupSnapshot> m_remote_group_snaps;
   std::vector<std::pair<std::string, ImageReplayer<ImageCtxT> *>> m_replayers_by_image_id;
+  const cls::rbd::GroupSnapshot* m_last_local_snap = nullptr;
 
   bool m_update_group_state = true;
 
@@ -253,7 +254,8 @@ private:
   void prune_mirror_group_snapshots(std::unique_lock<ceph::mutex>* locker);
   void prune_group_snapshots(std::unique_lock<ceph::mutex>* locker);
   void prune_creating_group_snapshots_if_any(
-      std::unique_lock<ceph::mutex>* locker);
+      std::unique_lock<ceph::mutex>* locker,
+      std::shared_ptr<std::vector<cls::rbd::GroupSnapshot>> prune_group_snaps);
   void handle_prune_creating_group_snapshots_if_any(
       const std::vector<cls::rbd::GroupImageStatus>& local_images,
       const std::vector<cls::rbd::GroupSnapshot>& prune_group_snaps);
