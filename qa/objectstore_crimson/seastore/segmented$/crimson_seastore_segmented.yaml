@@ -4,6 +4,7 @@ overrides:
       osd:
         # crimson's osd objectstore option
         osd objectstore: seastore
+        seastore_full_integrity_check: false
         debug seastore: 20
         debug seastore onode: 20
         debug seastore odata: 20
