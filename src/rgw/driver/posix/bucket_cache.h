@@ -543,12 +543,12 @@ public:
 	  break;
 	case EventType::REMOVE:
 	{
-	  // Decode the filename to get the proper key (consistent with ADD)
-	  std::string decoded_name = url_decode(*ev.name);
-	  rgw_obj_key key;
-	  rgw_obj_key::parse_raw_oid(decoded_name, &key);
+	  // Let the driver translate the raw filename to a cache key
 	  rgw_obj_index_key idx_key;
-	  key.get_index_key(&idx_key);
+	  rc = driver->decode_listing_key(*ev.name, idx_key);
+	  if (rc < 0) {
+	    break;
+	  }
 	  auto concat_k = concat_key(idx_key);
 	  txn->del(b->dbi, concat_k);
 	}

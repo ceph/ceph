@@ -2371,6 +2371,13 @@ int POSIXDriver::mint_listing_entry(const std::string &bname,
     return ret;
 }
 
+int POSIXDriver::decode_listing_key(std::string_view fname,
+                                     rgw_obj_index_key& idx_key) {
+  rgw_obj_key key = decode_obj_key(std::string(fname));
+  key.get_index_key(&idx_key);
+  return 0;
+}
+
 std::unique_ptr<LuaManager> POSIXDriver::get_lua_manager(const std::string& luarocks_path)
 {
   return std::make_unique<POSIXLuaManager>(this);
