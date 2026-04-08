@@ -48,38 +48,33 @@ bool ISALCryptoAccel::cbc_decrypt(unsigned char* out, const unsigned char* in, s
   return true;
 }
 
-/**
+/*
  * Thread-local GCM key cache to avoid re-running aes_gcm_pre_256() for
- * repeated keys. Key material is securely wiped on key change and thread exit.
+ * repeated keys. Key material is securely wiped on thread exit.
  */
+struct gcm_key_cache_t {
+  unsigned char last_key[CryptoAccel::AES_256_KEYSIZE];
+  alignas(16) gcm_key_data cached_gkey;
+
+  ~gcm_key_cache_t() {
+    ceph_memzero_s(last_key, sizeof(last_key), sizeof(last_key));
+    ceph_memzero_s(&cached_gkey, sizeof(cached_gkey), sizeof(cached_gkey));
+  }
+};
+
 static inline const gcm_key_data* get_cached_gcm_key(const unsigned char* key)
 {
-  struct gcm_key_cache_t {
-    bool valid = false;
-    unsigned char last_key[CryptoAccel::AES_256_KEYSIZE];
-    alignas(16) gcm_key_data cached_gkey;
+  static thread_local std::unique_ptr<gcm_key_cache_t> cache;
 
-    void purge() {
-      if (valid) {
-        ceph_memzero_s(last_key, sizeof(last_key), sizeof(last_key));
-        ceph_memzero_s(&cached_gkey, sizeof(cached_gkey), sizeof(cached_gkey));
-        valid = false;
-      }
-    }
+  if (!cache)
+    cache = std::make_unique<gcm_key_cache_t>();
 
-    ~gcm_key_cache_t() { purge(); }
-  };
-
-  static thread_local gcm_key_cache_t cache;
-
-  if (!cache.valid || memcmp(cache.last_key, key, CryptoAccel::AES_256_KEYSIZE) != 0) {
-    cache.purge();
-    aes_gcm_pre_256(key, &cache.cached_gkey);
-    memcpy(cache.last_key, key, CryptoAccel::AES_256_KEYSIZE);
-    cache.valid = true;
+  if (memcmp(cache->last_key, key, CryptoAccel::AES_256_KEYSIZE) != 0) {
+    aes_gcm_pre_256(key, &cache->cached_gkey);
+    memcpy(cache->last_key, key, CryptoAccel::AES_256_KEYSIZE);
   }
 
-  return &cache.cached_gkey;
+  return &cache->cached_gkey;
 }
 
 bool ISALCryptoAccel::gcm_encrypt(unsigned char* out, const unsigned char* in, size_t size,

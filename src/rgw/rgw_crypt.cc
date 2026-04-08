@@ -664,14 +664,6 @@ public:
   static const size_t CHUNK_SIZE = 4096;
   static const size_t ENCRYPTED_CHUNK_SIZE = CHUNK_SIZE + GCM_TAG_SIZE; // 4112
 
-  /**
-   * Combined index layout for IV derivation:
-   *   - Upper 24 bits: part_number (supports up to 16M parts; S3 limit is 10K)
-   *   - Lower 40 bits: chunk_index (supports up to 4 PB per part at 4KB chunks)
-   */
-  static constexpr unsigned CHUNK_INDEX_BITS = 40;
-  static constexpr uint64_t MAX_CHUNK_INDEX = (1ULL << CHUNK_INDEX_BITS) - 1;
-
   const DoutPrefixProvider* dpp;
 private:
   CephContext* cct;
@@ -897,19 +889,10 @@ public:
     return ENCRYPTED_CHUNK_SIZE;
   }
 
-  /**
-   * Encode chunk index as 8-byte big-endian AAD.
-   * Binds ciphertext to stream position, preventing chunk reordering attacks.
-   */
+  // Encode chunk index as 8-byte big-endian AAD for chunk reordering protection.
   static void encode_chunk_aad(uint8_t (&aad)[8], uint64_t chunk_index) {
-    aad[0] = (chunk_index >> 56) & 0xFF;
-    aad[1] = (chunk_index >> 48) & 0xFF;
-    aad[2] = (chunk_index >> 40) & 0xFF;
-    aad[3] = (chunk_index >> 32) & 0xFF;
-    aad[4] = (chunk_index >> 24) & 0xFF;
-    aad[5] = (chunk_index >> 16) & 0xFF;
-    aad[6] = (chunk_index >> 8) & 0xFF;
-    aad[7] = chunk_index & 0xFF;
+    uint64_t be = boost::endian::native_to_big(chunk_index);
+    memcpy(aad, &be, sizeof(be));
   }
 
   CryptoAccelRef get_gcm_accel()
@@ -1273,18 +1256,18 @@ public:
     return true;
   }
 
-  /**
+  /*
    * IV cursor for efficient sequential IV generation.
-   * Emits zero-based IV and increments per chunk.
+   * Emits a 96-bit IV and increments per chunk.
    *
-   * Combined index layout (64 bits):
-   *   - Upper 24 bits: part_number (supports up to 16M parts; S3 limit is 10K)
-   *   - Lower 40 bits: chunk_index (supports up to 1T chunks per part)
+   * IV layout (96 bits):
+   *   - Upper 32 bits: part_number (supports up to 4B parts; S3 limit is 10K)
+   *   - Lower 64 bits: chunk_index (supports up to 64 EB per part at 4KB chunks)
    */
   struct iv_cursor {
-    uint64_t lo;           // host-order low 64 bits of current IV
-    uint32_t hi;           // host-order high 32 bits of current IV
-    uint64_t chunk_index;  // current chunk index (for AAD)
+    uint32_t hi;           // part_number
+    uint64_t lo;           // chunk_index
+    uint64_t chunk_index;  // for AAD
 
     void emit(unsigned char (&iv)[AES_256_IVSIZE]) const {
       uint32_t be_hi = boost::endian::native_to_big(hi);
@@ -1295,32 +1278,15 @@ public:
 
     void advance() {
       lo++;
-      if (lo == 0) hi++;
       chunk_index++;
     }
   };
 
   bool init_iv_cursor(iv_cursor& cursor, off_t stream_offset) {
     ceph_assert(salt_initialized);
-
-    uint64_t chunk_index = stream_offset / CHUNK_SIZE;
-    if (chunk_index > MAX_CHUNK_INDEX) {
-      ldpp_dout(dpp, 0) << "ERROR: chunk_index " << chunk_index
-                        << " exceeds maximum " << MAX_CHUNK_INDEX
-                        << " - IV collision risk" << dendl;
-      return false;
-    }
-
-    cursor.chunk_index = chunk_index;
-    uint64_t combined_index =
-        (static_cast<uint64_t>(part_number_) << CHUNK_INDEX_BITS) | chunk_index;
-
-    /*
-     * Fixed zero IV base -- safe because derive_object_key() guarantees
-     * a unique key per object. IV uniqueness comes from the counter.
-     */
-    cursor.hi = 0;
-    cursor.lo = combined_index;
+    cursor.hi = part_number_;
+    cursor.lo = stream_offset / CHUNK_SIZE;
+    cursor.chunk_index = cursor.lo;
     return true;
   }
 };
