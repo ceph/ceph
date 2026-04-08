@@ -1,4 +1,20 @@
-ARG FROM_IMAGE="quay.io/centos/centos:stream9"
+{# Jinja2 template for the Ceph container image.
+   Rendered by container/build.py from CI environment variables.
+   All distro-specific decisions (el_ver, dist_path, distro_id, distro_major)
+   are resolved at render time -- no runtime /etc/os-release parsing needed.
+
+   Template variables injected by build.py:
+     from_image          - base container image (e.g. quay.io/rockylinux/rockylinux:10)
+     ganesha_repo_baseurl - baseurl for the NFS-Ganesha yum repo
+     osd_flavor          - OSD flavour: default | crimson-debug | crimson-release | debug
+     ci_container        - "true" for CI builds that pull from shaman
+     custom_ceph_repo_url - optional URL to override the ceph.repo (for hackers)
+     distro_id           - centos | rocky | almalinux
+     distro_major        - major version string, e.g. "9" or "10"
+     el_ver              - e.g. "el9" or "el10"
+     dist_path           - e.g. "centos/9" or "rocky/10"
+#}
+ARG FROM_IMAGE="{{ from_image }}"
 FROM $FROM_IMAGE
 
 # allow FROM_IMAGE to be visible inside this stage
@@ -13,14 +29,18 @@ ARG CEPH_SHA1
 # Ceph git repo (ceph-ci.git or ceph.git)
 ARG CEPH_GIT_REPO
 
-# (optional) Define the baseurl= for the ganesha.repo
-ARG GANESHA_REPO_BASEURL="https://buildlogs.centos.org/centos/\$releasever-stream/storage/\$basearch/nfsganesha-5/"
+# (optional) Define the baseurl= for the ganesha.repo (centos/almalinux only;
+# Rocky uses the shaman API instead).
+ARG GANESHA_REPO_BASEURL="{{ ganesha_repo_baseurl_for_arg }}"
 
-# (optional) Set to "crimson" to install crimson packages.
-ARG OSD_FLAVOR="default"
+# (optional) Set to "crimson-debug" or "crimson-release" to install crimson packages.
+ARG OSD_FLAVOR="{{ osd_flavor }}"
 
 # (optional) Should be 'true' for CI builds (pull from shaman, etc.)
-ARG CI_CONTAINER="true"
+ARG CI_CONTAINER="{{ ci_container }}"
+
+# (optional, for hackers) Override the ceph repo with this URL.
+ARG CUSTOM_CEPH_REPO_URL
 
 
 RUN /bin/echo -e "\
@@ -51,6 +71,9 @@ OSD_FLAVOR=${OSD_FLAVOR}
 #   keeping run steps separate makes local rebuilds quick, but images are big without squash option
 #===================================================================================================
 
+# Use bash so var setting works.
+SHELL ["/bin/bash", "-c"]
+
 # Disable documentation
 # (assumes only [main] section exists)
 RUN \
@@ -63,52 +86,70 @@ RUN \
 # Pre-reqs
 RUN dnf install -y --setopt=install_weak_deps=False epel-release jq
 
-# Add NFS-Ganesha repo
-RUN \
-    echo "[ganesha]" > /etc/yum.repos.d/ganesha.repo && \
-    echo "name=ganesha" >> /etc/yum.repos.d/ganesha.repo && \
-    echo "baseurl=${GANESHA_REPO_BASEURL}" >> /etc/yum.repos.d/ganesha.repo && \
-    echo "gpgcheck=0" >> /etc/yum.repos.d/ganesha.repo && \
-    echo "enabled=1" >> /etc/yum.repos.d/ganesha.repo
+# NFS-Ganesha repo
+# Rocky Linux uses the shaman API to fetch the ganesha repo dynamically.
+# CentOS and AlmaLinux use a static baseurl with DNF releasever/basearch variables.
+{% if distro_id == 'rocky' %}
+RUN curl -fs -L \
+    "https://shaman.ceph.com/api/repos/nfs-ganesha/main/latest/{{ dist_path }}/repo?arch=$(arch)" \
+    -o /etc/yum.repos.d/ganesha.repo
+{% else %}
+RUN { \
+        printf '%s\n' '[ganesha]'; \
+        printf '%s\n' 'name=ganesha'; \
+        printf '%s\n' "baseurl=${GANESHA_REPO_BASEURL}"; \
+        printf '%s\n' 'gpgcheck=0'; \
+        printf '%s\n' 'enabled=1'; \
+    } > /etc/yum.repos.d/ganesha.repo
+{% endif %}
 
-# ISCSI repo
-RUN set -ex && \
-    curl -s -L https://shaman.ceph.com/api/repos/tcmu-runner/main/latest/centos/9/repo?arch=$(arch) -o /etc/yum.repos.d/tcmu-runner.repo && \
+# iSCSI repo
+# quincy/reef use the stable download.ceph.com repo; all others use shaman.
+RUN set -eux && \
+    curl -s -L "https://shaman.ceph.com/api/repos/tcmu-runner/main/latest/{{ dist_path }}/repo?arch=$(arch)" \
+        -o /etc/yum.repos.d/tcmu-runner.repo && \
     case "${CEPH_REF}" in \
         quincy|reef) \
-            curl -fs -L https://download.ceph.com/ceph-iscsi/3/rpm/el9/ceph-iscsi.repo -o /etc/yum.repos.d/ceph-iscsi.repo ;\
-            ;;\
+            curl -fs -L "https://download.ceph.com/ceph-iscsi/3/rpm/{{ el_ver }}/ceph-iscsi.repo" \
+                -o /etc/yum.repos.d/ceph-iscsi.repo ;;\
         main|*) \
-            curl -fs -L https://shaman.ceph.com/api/repos/ceph-iscsi/main/latest/centos/9/repo -o /etc/yum.repos.d/ceph-iscsi.repo ;\
-            ;;\
+            curl -fs -L "https://shaman.ceph.com/api/repos/ceph-iscsi/main/latest/{{ dist_path }}/repo" \
+                -o /etc/yum.repos.d/ceph-iscsi.repo ;;\
     esac
 
 # Ceph repo
+{% if custom_ceph_repo_url %}
+# CUSTOM_CEPH_REPO_URL is set: fetch ceph repo directly from the provided URL.
+RUN curl -L -o /etc/yum.repos.d/ceph.repo "{{ custom_ceph_repo_url }}"
+{% else %}
+# Normal ceph repo setup: CI builds pull from shaman, release builds from download.ceph.com.
 RUN --mount=type=secret,id=prerelease_creds set -ex && \
     rpm --import 'https://download.ceph.com/keys/release.asc' && \
     ARCH=$(arch); if [ "${ARCH}" == "aarch64" ]; then ARCH="arm64"; fi ;\
     IS_RELEASE=0 ;\
     if [[ "${CI_CONTAINER}" == "true" ]] ; then \
-        # TODO: this can return different ceph builds (SHA1) for x86 vs. arm runs. is it important to fix?
-        REPO_URL=$(curl -fs "https://shaman.ceph.com/api/search/?project=ceph&distros=centos/9/${ARCH}&flavor=${OSD_FLAVOR}&ref=${CEPH_REF}&sha1=latest" | jq -r .[0].url) ;\
+        REPO_URL=$(curl -fs "https://shaman.ceph.com/api/search/?project=ceph&distros={{ dist_path }}/${ARCH}&flavor=${OSD_FLAVOR}&ref=${CEPH_REF}&sha1=latest" | jq -r .[0].url) ;\
     else \
         IS_RELEASE=1 ;\
         source /run/secrets/prerelease_creds; \
-        REPO_URL="https://${PRERELEASE_USERNAME}:${PRERELEASE_PASSWORD}@download.ceph.com/prerelease/ceph/rpm-${CEPH_REF}/el9/" ;\
+        REPO_URL="https://${PRERELEASE_USERNAME}:${PRERELEASE_PASSWORD}@download.ceph.com/prerelease/ceph/rpm-${CEPH_REF}/{{ el_ver }}/" ;\
     fi && \
-    rpm -Uvh "$REPO_URL/noarch/ceph-release-1-${IS_RELEASE}.el9.noarch.rpm" ; \
+    rpm -Uvh "$REPO_URL/noarch/ceph-release-1-${IS_RELEASE}.{{ el_ver }}.noarch.rpm" ; \
     if [[ "$IS_RELEASE" == 1 ]] ; then \
         sed -i "s;http://download.ceph.com/;https://${PRERELEASE_USERNAME}:${PRERELEASE_PASSWORD}@download.ceph.com/prerelease/ceph/;" /etc/yum.repos.d/ceph.repo ; \
         dnf clean expire-cache ; \
     fi
-
+{% endif %}
 
 # Copr repos
 # scikit for mgr-diskprediction-local
 # ref: https://github.com/ceph/ceph-container/pull/1821
+# Only available up through EL 9; skipped on EL 10+.
+{% if distro_major | int <= 9 %}
 RUN \
     dnf install -y --setopt=install_weak_deps=False dnf-plugins-core && \
     dnf copr enable -y tchaikov/python-scikit-learn
+{% endif %}
 
 # Update package mgr
 RUN dnf update -y --setopt=install_weak_deps=False
@@ -144,12 +185,22 @@ rbd-mirror" \
 >> packages.txt
 
 # Optional crimson package(s)
+{% if osd_flavor in ('crimson-debug', 'crimson-release') %}
+RUN echo "ceph-osd-crimson" >> packages.txt
+{% else %}
 RUN if [[ "${OSD_FLAVOR}" == "crimson-debug" || "${OSD_FLAVOR}" == "crimson-release" ]]; then \
-    echo "ceph-crimson-osd" >> packages.txt ; \
+    echo "ceph-osd-crimson" >> packages.txt ; \
 fi
+{% endif %}
 
 # Ceph "Recommends"
-RUN echo "nvme-cli python3-saml smartmontools" >> packages.txt
+RUN echo "nvme-cli smartmontools" >> packages.txt
+# python3-saml is only available on EL <= 9.
+# SAML2 SSO was deprecated in favour of OAuth2 and the dependency was dropped for EL 10+.
+{% if distro_major | int <= 9 %}
+RUN echo "python3-saml" >> packages.txt
+{% endif %}
+
 # NFS-Ganesha
 RUN echo "\
 dbus-daemon \
@@ -224,4 +275,3 @@ ENV CEPH_IS_DEVEL="${CI_CONTAINER}" \
     CEPH_VERSION="${CEPH_REF}" \
     CEPH_OSD_FLAVOR="${OSD_FLAVOR}" \
     FROM_IMAGE="${FROM_IMAGE}"
-
