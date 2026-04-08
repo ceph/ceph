@@ -13674,7 +13674,7 @@ void PrimaryLogPG::_clear_recovery_state()
   for (map<hobject_t, ObjectContextRef>::iterator i = recovering.begin();
        i != recovering.end();
        recovering.erase(i++)) {
-    if (i->second) {
+    if (i->second && i->second->rwstate.recovery_read_marker) {
       i->second->drop_recovery_read(&blocked_ops);
       requeue_ops(blocked_ops);
     }
