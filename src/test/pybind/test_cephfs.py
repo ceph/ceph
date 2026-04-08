@@ -866,9 +866,6 @@ def test_snapdiff(testdir):
     assert_equal(cnt, 2)
     diff.close()
 
-    # remove directory
-    purge_dir(b"/snapdiff_test");
-
 def test_single_target_command():
     command = {'prefix': u'session ls', 'format': 'json'}
     mds_spec  = "a"
