@@ -8332,12 +8332,11 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	bool is_pool_migration = (op.copy_from.flags & CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION);
 	if (is_pool_migration) {
 	  // Verify target has reservations for pool migration
-    // FIXME: Needs Jamie's reservation code for pool_migration_target_has_reservations to be set correctly
-//	  if (!pool_migration_target_has_reservations) {
-//	    dout(10) << "copy_from with pool migration flag but target does not have reservations" << dendl;
-//	    result = -EAGAIN;  // Tell source to retry after getting reservations
-//	    break;
-//	  }
+	  if (!recovery_state.is_migrating()) {
+	    dout(10) << "copy_from with pool migration flag but target is not in migrating state" << dendl;
+	    result = -EAGAIN;  // Tell source to retry after getting reservations
+	    break;
+	  }
 
 	  dout(20) << "copy_from for pool migration with reservations, proceeding" << dendl;
 	}
