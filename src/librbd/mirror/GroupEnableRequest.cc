@@ -141,11 +141,7 @@ void GroupEnableRequest<I>::handle_prepare_group_images(int r) {
     return;
   }
 
-  if (m_images.empty()) {
-    set_mirror_group_enabling();
-  } else {
-    validate_images();
-  }
+  validate_images();
 }
 
 template <typename I>
@@ -276,15 +272,18 @@ void GroupEnableRequest<I>::handle_create_primary_group_snapshot(int r) {
     return;
   }
 
-  if (m_image_ctxs.empty()) {
-    update_primary_group_snapshot();
-  } else {
-    create_primary_image_snapshots();
-  }
+  create_primary_image_snapshots();
 }
 
 template <typename I>
 void GroupEnableRequest<I>::create_primary_image_snapshots() {
+  // GroupImageCreatePrimaryRequest asserts if there are no member images.
+  // Skip this step and update the primary group snapshot directly.
+  if (m_image_ctxs.empty()) {
+    update_primary_group_snapshot();
+    return;
+  }
+
   ldout(m_cct, 10) << dendl;
 
   auto num_images = m_image_ctxs.size();
@@ -368,11 +367,7 @@ void GroupEnableRequest<I>::handle_update_primary_group_snapshot(int r) {
     return;
   }
 
-  if (m_image_ctxs.empty()) {
-    set_mirror_group_enabled();
-  } else {
-    set_mirror_images_enabled();
-  }
+  set_mirror_images_enabled();
 }
 
 template <typename I>
@@ -479,10 +474,6 @@ void GroupEnableRequest<I>::handle_notify_mirroring_watcher(int r) {
 
 template <typename I>
 void GroupEnableRequest<I>::close_images() {
-  if (m_image_ctxs.empty()) {
-    finish(m_ret_val);
-    return;
-  }
   ldout(m_cct, 10) << dendl;
 
   auto ctx = create_context_callback<
