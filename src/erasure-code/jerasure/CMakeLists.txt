@@ -11,6 +11,7 @@ target_link_libraries(jerasure_utils legacy-option-headers)
 # not part of the jerasure library itself.
 add_library(jerasure_init_objs OBJECT jerasure_init.cc)
 
+if(NOT WITH_SYSTEM_JERASURE)
 # Set the CFLAGS correctly for gf-complete based on SIMD compiler support
 set(GF_COMPILE_FLAGS)
 if(HAVE_ARMV8_SIMD)
@@ -92,6 +93,7 @@ add_library(jerasure_vendored STATIC
   $<TARGET_OBJECTS:gf-complete_objs>
   $<TARGET_OBJECTS:jerasure_lib_objs>)
 add_library(Jerasure::jerasure ALIAS jerasure_vendored)
+endif()
 
 # ec_jerasure plugin
 set(ec_jerasure_objs
