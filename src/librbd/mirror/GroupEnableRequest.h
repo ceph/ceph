@@ -47,7 +47,7 @@ private:
    *    v                                  *
    * PREPARE_GROUP_IMAGES  * * * * * * * * *
    *    |                                  *
-   *    v  (skip if not needed)            *
+   *    v                                  *
    * VALIDATE_IMAGES   * * * * * * * * * * *
    *    |                                  *
    *    v                                  *
@@ -62,7 +62,7 @@ private:
    *    v (complete)                       *
    * UPDATE_PRIMARY_GROUP_SNAP * * * * * * *
    *    |                                  *
-   *    v (skip if not needed)             *
+   *    v                                  *
    * SET_MIRROR_IMAGES_ENABLED * * * * * * *
    *    |                                  *
    *    v                                  *
@@ -71,7 +71,7 @@ private:
    *    v                            (if required)
    * NOTIFY_MIRRORING_WATCHER           cleanup
    *    |                                  *
-   *    v (skip if not needed)             *
+   *    v                                  *
    * CLOSE_IMAGE < * * * * * * * * * * * * *
    *    |
    *    v
