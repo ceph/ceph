@@ -560,11 +560,11 @@
         },
         {
           alert: 'CephNodeDiskspaceWarning',
-          expr: 'predict_linear(node_filesystem_free_bytes{device=~"/.*"}[2d], 3600 * 24 * 5) * on(cluster, instance) group_left(nodename) node_uname_info < 0',
+          expr: '(predict_linear(node_filesystem_free_bytes{device=~"/.*"}[2d], 3600 * 24 * 5) < 0 and (node_filesystem_free_bytes{device=~"/.*"} / node_filesystem_size_bytes{device=~"/.*"} < 0.2)) * on(cluster, instance) group_left(nodename) node_uname_info',
           labels: { severity: 'warning', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.8.4' },
           annotations: {
             summary: 'Host filesystem free space is getting low%(cluster)s' % $.MultiClusterSummary(),
-            description: 'Mountpoint {{ $labels.mountpoint }} on {{ $labels.nodename }} will be full in less than 5 days based on the 48 hour trailing fill rate.',
+            description: 'Mountpoint {{ $labels.mountpoint }} on {{ $labels.nodename }} will be full in less than 5 days based on the 48 hour trailing fill rate, and is currently over 80% full.',
           },
         },
         {
@@ -756,7 +756,7 @@
         {
           alert: 'PrometheusJobMissing',
           'for': '30s',
-          expr: 'absent(up{job="ceph"})',
+          expr: 'absent(up{job="rook-ceph-mgr"})',
           labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.12.1' },
           annotations: {
             summary: 'The scrape job for Ceph is missing from Prometheus',
