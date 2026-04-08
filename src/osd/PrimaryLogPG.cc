@@ -8337,7 +8337,6 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    result = -EAGAIN;  // Tell source to retry after getting reservations
 	    break;
 	  }
-
 	  dout(20) << "copy_from for pool migration with reservations, proceeding" << dendl;
 	}
 
@@ -15717,6 +15716,7 @@ void PrimaryLogPG::on_pool_migration_source_reserved() {
 
 void PrimaryLogPG::on_pool_migration_target_reserved() {
   dout(20) << __func__ << dendl;
+
   ceph_assert(pending_pool_migration_reservation_op);
   ceph_assert(pending_pool_migration_reservation_ops.size() == 1);
   auto& osd_op = pending_pool_migration_reservation_ops[0];
@@ -15736,22 +15736,23 @@ void PrimaryLogPG::on_pool_migration_target_reserved() {
 void PrimaryLogPG::on_pool_migration_target_suspended(bool toofull)
 {
   dout(20) << __func__ << " toofull=" << toofull << dendl;
-  int result = toofull ? -ENOSPC : -ECANCELED;
 
-  ceph_assert(pending_pool_migration_reservation_op);
-  ceph_assert(pending_pool_migration_reservation_ops.size() == 1);
-  auto& osd_op = pending_pool_migration_reservation_ops[0];
-  pg_pool_migration_reservation_response_t response(result);
-  encode(response, osd_op.outdata);
+  if (pending_pool_migration_reservation_op) {
+    int result = toofull ? -ENOSPC : -ECANCELED;
+    ceph_assert(pending_pool_migration_reservation_ops.size() == 1);
+    auto& osd_op = pending_pool_migration_reservation_ops[0];
+    pg_pool_migration_reservation_response_t response(result);
+    encode(response, osd_op.outdata);
 
-  MOSDOp *m = static_cast<MOSDOp*>(pending_pool_migration_reservation_op->get_nonconst_req());
-  MOSDOpReply *reply = new MOSDOpReply(m, result, get_osdmap_epoch(),
-                                         CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK, false);
-  reply->claim_op_out_data(pending_pool_migration_reservation_ops);
-  m->get_connection()->send_message(reply);
+    MOSDOp *m = static_cast<MOSDOp*>(pending_pool_migration_reservation_op->get_nonconst_req());
+    MOSDOpReply *reply = new MOSDOpReply(m, result, get_osdmap_epoch(),
+                                           CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK, false);
+    reply->claim_op_out_data(pending_pool_migration_reservation_ops);
+    m->get_connection()->send_message(reply);
 
-  pending_pool_migration_reservation_op.reset();
-  pending_pool_migration_reservation_ops.clear();
+    pending_pool_migration_reservation_op.reset();
+    pending_pool_migration_reservation_ops.clear();
+  }
 }
 
 void PrimaryLogPG::pool_migration_request_target_reservation() {
