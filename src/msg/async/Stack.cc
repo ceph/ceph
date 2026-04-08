@@ -65,7 +65,9 @@ std::shared_ptr<NetworkStack> NetworkStack::create(CephContext *c,
   std::shared_ptr<NetworkStack> stack = nullptr;
 
   if (t == "posix")
-    stack.reset(new PosixNetworkStack(c));
+    stack.reset(new PosixNetworkStack(c, false));
+  else if (t == "smc")
+    stack.reset(new PosixNetworkStack(c, true));
 #ifdef HAVE_RDMA
   else if (t == "rdma")
     stack.reset(new RDMAStack(c));
