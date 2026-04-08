@@ -137,6 +137,20 @@ public:
     }
     return image_id;
   }
+  std::vector<std::string> get_peer_uuids() const {
+    std::lock_guard locker{m_lock};
+
+    std::vector<std::string> uuids;
+    uuids.reserve(m_peers.size());
+
+    for (const auto& peer : m_peers) {
+      if (!peer.uuid.empty()) {
+        uuids.emplace_back(peer.uuid);
+      }
+    }
+
+    return uuids;
+  }
 
   void start(Context *on_finish, bool manual = false, bool restart = false);
   void stop(Context *on_finish, bool manual = false, bool restart = false);
