@@ -39,43 +39,50 @@ private:
   /**
    * @verbatim
    *
-   * <start>
-   *    |
-   *    v                         (on error)
-   * GET_MIRROR_GROUP  * * * * * * * * * * *
-   *    |                                  *
-   *    v                                  *
-   * PREPARE_GROUP_IMAGES  * * * * * * * * *
-   *    |                                  *
-   *    v                                  *
-   * VALIDATE_IMAGES   * * * * * * * * * * *
-   *    |                                  *
-   *    v                                  *
-   * SET_MIRROR_GROUP_ENABLING * * * * * * *
-   *    |                                  *
-   *    v (incomplete)                     *
-   * CREATE_PRIMARY_GROUP_SNAP * * * * * * *
-   *    |                                  *
-   *    v (skip if not needed)             *
-   * CREATE_PRIMARY_IMAGE_SNAPS            *
-   *    |                                  *
-   *    v (complete)                       *
-   * UPDATE_PRIMARY_GROUP_SNAP * * * * * * *
-   *    |                                  *
-   *    v                                  *
-   * SET_MIRROR_IMAGES_ENABLED * * * * * * *
-   *    |                                  *
-   *    v                                  *
-   * SET_MIRROR_GROUP_ENABLED  * * * * * * *
-   *    |                                  *
-   *    v                            (if required)
-   * NOTIFY_MIRRORING_WATCHER           cleanup
-   *    |                                  *
-   *    v                                  *
-   * CLOSE_IMAGE < * * * * * * * * * * * * *
-   *    |
-   *    v
-   * <finish>
+   *                            <start>
+   *                               |
+   *                               v                         (on error)
+   *                            GET_MIRROR_GROUP  * * * * * * * * * * * * * * *
+   *                               |                                          *
+   *                               v                         (on error)       *
+   *                            PREPARE_GROUP_IMAGES  * * * * * * * * * * *   *
+   *                               |                                      *   *
+   *                               v                         (on error)   *   *
+   *                            VALIDATE_IMAGES * * * * * * * * * * * * * *   *
+   *                               |                                      *   *
+   *                               V                         (on error)   *   *
+   *                            SET_MIRROR_GROUP_ENABLING * * * * * * * * *   *
+   *                               |                                      *   *
+   *  (complete snapshot present)  v                         (on error)   *   *
+   *        < - - - - - - - - - CHECK_PRIMARY_GROUP_SNAP_COMPLETE * * * * *   *
+   *        |                      | (complete snapshot absent)           *   *
+   *        |                      |                                      *   *
+   *        v                      v (incomplete)            (on error)   *   *
+   *  FETCH_GLOBAL_IMAGE_IDS    CREATE_PRIMARY_GROUP_SNAP * * * * * * * * *   *
+   *        |                      |                                      *   *
+   *        |                      v (skip if not needed)    (on error)   *   *
+   *        |                   CREATE_PRIMARY_IMAGE_SNAPS * * * * * * *  *   *
+   *        |                      |                                      *   *
+   *        |                      v (complete)              (on error)   *   *
+   *        |                   UPDATE_PRIMARY_GROUP_SNAP * * * * * * * * *   *
+   *        |                      |                                      *   *
+   *        |                      v                         (on error)   *   *
+   *        v - - - - - - - - > SET_MIRROR_IMAGES_ENABLED * * * * * * * * *   *
+   *        *                      |                                      *   *
+   *        *                      v                         (on error)   *   *
+   *        *                   SET_MIRROR_GROUP_ENABLED  * * * * * * * * *   *
+   *        *                      |                                      *   *
+   *        *                      v                                      *   *
+   *        *                   GROUP_UNLINK_PEER                         *   *
+   *        *                      |                                      *   *
+   *        *                      v                                      *   *
+   *        *                   NOTIFY_MIRRORING_WATCHER                  *   *
+   *        *                      |                                      *   *
+   *        *  (on error)          v                                      *   *
+   *        * * * * * * * * * * CLOSE_IMAGES < * * * * * * * * * * * * *  *   *
+   *                               |                                          *
+   *                               v * * * * * * * * * * * * * * * * * * * *  *
+   *                            <finish>
    *
    * @endverbatim
    */
@@ -103,11 +110,9 @@ private:
   std::vector<cls::rbd::GroupImageStatus> m_images;
 
   cls::rbd::GroupSnapshot m_group_snap;
+  std::vector<cls::rbd::GroupSnapshot> m_group_snaps;
   std::vector<uint64_t> m_snap_ids;
   std::vector<std::string> m_global_image_ids;
-
-  bool m_need_to_cleanup_group_snapshot = false;
-  bool m_need_to_cleanup_mirror_images = false;
 
   void get_mirror_group();
   void handle_get_mirror_group(int r);
@@ -117,11 +122,16 @@ private:
 
   void validate_images();
 
-  void create_primary_group_snapshot();
-  void handle_create_primary_group_snapshot(int r);
-
   void set_mirror_group_enabling();
   void handle_set_mirror_group_enabling(int r);
+
+  void check_primary_group_snap_complete();
+  void handle_check_primary_group_snap_complete(int r);
+
+  void fetch_global_image_ids();
+
+  void create_primary_group_snapshot();
+  void handle_create_primary_group_snapshot(int r);
 
   void create_primary_image_snapshots();
   void handle_create_primary_image_snapshots(int r);
@@ -135,30 +145,14 @@ private:
   void set_mirror_group_enabled();
   void handle_set_mirror_group_enabled(int r);
 
+  void group_unlink_peer();
+  void handle_group_unlink_peer(int r);
+
   void notify_mirroring_watcher();
   void handle_notify_mirroring_watcher(int r);
 
   void close_images();
   void handle_close_images(int r);
-
-  // Cleanup
-  void disable_mirror_group();
-  void handle_disable_mirror_group(int r);
-
-  void get_mirror_images_for_cleanup();
-  void handle_get_mirror_images_for_cleanup(int r);
-
-  void disable_mirror_images();
-  void handle_disable_mirror_images(int r);
-
-  void remove_primary_group_snapshot();
-  void handle_remove_primary_group_snapshot(int r);
-
-  void remove_mirror_images();
-  void handle_remove_mirror_images(int r);
-
-  void remove_mirror_group();
-  void handle_remove_mirror_group(int r);
 
   void finish(int r);
 };
