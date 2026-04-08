@@ -1094,7 +1094,7 @@ public:
 
   struct MigratingTarget : boost::statechart::state< MigratingTarget, Active >, NamedState {
     typedef boost::mpl::list<
-      boost::statechart::transition< StopTargetPoolMigration, Clean >,
+      boost::statechart::custom_reaction< StopTargetPoolMigration >,
       boost::statechart::custom_reaction< DoRecovery >,
       boost::statechart::custom_reaction< RemotePoolMigrationRejectedTooFull >,
       boost::statechart::custom_reaction< RemotePoolMigrationRevoked >,
@@ -1103,6 +1103,7 @@ public:
     explicit MigratingTarget(my_context ctx);
     void migration_release_reservations();
     void suspend_migration();
+    boost::statechart::result react(const StopTargetPoolMigration& evt);
     boost::statechart::result react(const DoRecovery& evt);
     boost::statechart::result react(const RemotePoolMigrationRejectedTooFull& evt);
     boost::statechart::result react(const RemotePoolMigrationRevoked& evt);
