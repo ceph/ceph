@@ -96,7 +96,7 @@ def load_sso_db():
 
 
 @DBCLICommand.Write("dashboard sso enable oauth2")
-def enable_sso(_, roles_path: Optional[str] = None):
+def enable_sso(_, roles_path: Optional[str] = None, issuer_url: Optional[str] = None):
     mgr.SSO_DB.protocol = AuthType.OAUTH2
     if jmespath and roles_path:
         try:
@@ -104,6 +104,8 @@ def enable_sso(_, roles_path: Optional[str] = None):
             mgr.SSO_DB.config.roles_path = roles_path
         except (JMESPathError, SyntaxError):
             return HandleCommandResult(stdout='Syntax invalid for "roles_path"')
+    if issuer_url:
+        mgr.SSO_DB.config.issuer_url = issuer_url
     mgr.SSO_DB.save()
     mgr.set_module_option('sso_oauth2', True)
     return HandleCommandResult(stdout='SSO is "enabled" with "OAuth2" protocol.')

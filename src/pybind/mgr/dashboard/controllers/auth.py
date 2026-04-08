@@ -164,6 +164,11 @@ class Auth(RESTController, ControllerAuthMixin):
     @allow_empty_body
     def logout(self):
         logger.debug('Logout started')
+        if mgr.SSO_DB.protocol == AuthType.OAUTH2:
+            return {
+                'redirect_url': OAuth2.get_logout_redirect_url(),
+                'protocol': OAuth2.get_auth_name()
+            }
         token = JwtManager.get_token(cherrypy.request)
         JwtManager.blocklist_token(token)
         self._delete_token_cookie(token)
@@ -177,18 +182,18 @@ class Auth(RESTController, ControllerAuthMixin):
                  parameters={'token': (str, 'Authentication Token')},
                  responses={201: AUTH_CHECK_SCHEMA})
     def check(self, token):
-        if token:
-            if mgr.SSO_DB.protocol == AuthType.OAUTH2:
-                user = OAuth2.get_user(token)
-            else:
-                user = JwtManager.get_user(token)
-            if user:
-                return {
-                    'username': user.username,
-                    'permissions': user.permissions_dict(),
-                    'sso': BaseAuth.from_db(mgr.SSO_DB).sso,
-                    'pwdUpdateRequired': user.pwd_update_required
-                }
+        user = None
+        if mgr.SSO_DB.protocol == AuthType.OAUTH2:
+            user = OAuth2.get_user_from_headers(cherrypy.request)
+        elif token:
+            user = JwtManager.get_user(token)
+        if user:
+            return {
+                'username': user.username,
+                'permissions': user.permissions_dict(),
+                'sso': BaseAuth.from_db(mgr.SSO_DB).sso,
+                'pwdUpdateRequired': user.pwd_update_required
+            }
         return {
             'login_url': BaseAuth.from_db(mgr.SSO_DB).LOGIN_URL,
             'cluster_status': ClusterModel.from_db().dict()['status']
