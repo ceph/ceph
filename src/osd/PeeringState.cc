@@ -6332,10 +6332,19 @@ void PeeringState::MigratingTarget::migration_release_reservations()
 }
 
 boost::statechart::result
+PeeringState::MigratingTarget::react(const StopTargetPoolMigration &c)
+{
+  DECLARE_LOCALS;
+  migration_release_reservations();
+  return transit<Clean>();
+}
+
+boost::statechart::result
 PeeringState::MigratingTarget::react(const DoRecovery &c)
 {
   DECLARE_LOCALS;
   pl->on_pool_migration_target_suspended(false);
+  migration_release_reservations();
   return transit<WaitLocalRecoveryReserved>();
 }
 
@@ -6345,6 +6354,7 @@ PeeringState::MigratingTarget::react(const RemotePoolMigrationRejectedTooFull &)
   DECLARE_LOCALS;
   ps->state_set(PG_STATE_MIGRATION_TOOFULL);
   pl->on_pool_migration_target_suspended(true);
+  migration_release_reservations();
   return transit<Clean>();
 }
 
@@ -6354,6 +6364,7 @@ PeeringState::MigratingTarget::react(const RemotePoolMigrationRevokedTooFull &)
   DECLARE_LOCALS;
   ps->state_set(PG_STATE_MIGRATION_TOOFULL);
   pl->on_pool_migration_target_suspended(true);
+  migration_release_reservations();
   return transit<Clean>();
 }
 
@@ -6363,6 +6374,7 @@ PeeringState::MigratingTarget::react(const RemotePoolMigrationRevoked &)
   DECLARE_LOCALS;
   ps->state_set(PG_STATE_MIGRATION_WAIT);
   pl->on_pool_migration_target_suspended(false);
+  migration_release_reservations();
   return transit<Clean>();
 }
 
@@ -6371,7 +6383,6 @@ void PeeringState::MigratingTarget::exit()
   context< PeeringMachine >().log_exit(state_name, enter_time);
   DECLARE_LOCALS;
   ps->state_clear(PG_STATE_MIGRATING);
-  migration_release_reservations();
   utime_t dur = ceph_clock_now() - enter_time;
   pl->get_peering_perf().tinc(rs_migratingsource_latency, dur);
 }
