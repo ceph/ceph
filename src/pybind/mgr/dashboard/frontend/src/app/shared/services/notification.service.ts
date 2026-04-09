@@ -1,4 +1,5 @@
-import { Injectable, NgZone } from '@angular/core';
+import { Injectable, NgZone, SecurityContext } from '@angular/core';
+import { DomSanitizer } from '@angular/platform-browser';
 
 import _ from 'lodash';
 import { BehaviorSubject } from 'rxjs';
@@ -49,10 +50,50 @@ export class NotificationService {
   constructor(
     private taskMessageService: TaskMessageService,
     private cdDatePipe: CdDatePipe,
-    private ngZone: NgZone
+    private ngZone: NgZone,
+    private domSanitizer: DomSanitizer
   ) {
     this._loadStoredNotifications();
     this._loadMutedState();
+  }
+
+  private sanitizeHtml(value?: string): string | undefined {
+    if (!_.isString(value)) {
+      return value;
+    }
+    return this.domSanitizer.sanitize(SecurityContext.HTML, value) ?? '';
+  }
+
+  private sanitizeConfig(config: CdNotificationConfig): CdNotificationConfig {
+    config.title = this.sanitizeHtml(config.title);
+    config.message = this.sanitizeHtml(config.message);
+
+    if (config.options) {
+      config.options = {
+        ...config.options,
+        title: this.sanitizeHtml(config.options.title),
+        subtitle: this.sanitizeHtml(config.options.subtitle),
+        caption: this.sanitizeHtml(config.options.caption)
+      };
+    }
+
+    return config;
+  }
+
+  private sanitizeNotification(notification: CdNotification): CdNotification {
+    notification.title = this.sanitizeHtml(notification.title);
+    notification.message = this.sanitizeHtml(notification.message);
+
+    if (notification.options) {
+      notification.options = {
+        ...notification.options,
+        title: this.sanitizeHtml(notification.options.title),
+        subtitle: this.sanitizeHtml(notification.options.subtitle),
+        caption: this.sanitizeHtml(notification.options.caption)
+      };
+    }
+
+    return notification;
   }
 
   private _loadStoredNotifications() {
@@ -71,6 +112,7 @@ export class NotificationService {
         notifications = [];
       }
     }
+    notifications = notifications.map((notification) => this.sanitizeNotification(notification));
     this.dataSource.next(notifications);
     this.hasUnreadSource.next(notifications?.length > 0);
   }
@@ -108,7 +150,7 @@ export class NotificationService {
    * Saving a shown notification in local storage
    */
   save(notification: CdNotification) {
-    const notifications = [notification, ...this.dataSource.getValue()];
+    const notifications = [this.sanitizeNotification(notification), ...this.dataSource.getValue()];
 
     const limited = notifications
       .sort((a, b) => (a.timestamp > b.timestamp ? -1 : 1))
@@ -180,7 +222,7 @@ export class NotificationService {
           application
         );
       }
-      this._queueToShow(config);
+      this._queueToShow(this.sanitizeConfig(config));
     }, this.SHOW_DELAY);
   }
 
@@ -196,7 +238,7 @@ export class NotificationService {
 
   private _showQueued() {
     this._getUnifiedTitleQueue().forEach((config) => {
-      const notification = new CdNotification(config);
+      const notification = this.sanitizeNotification(new CdNotification(config));
 
       if (!notification.isFinishedTask) {
         this.save(notification);
@@ -212,7 +254,7 @@ export class NotificationService {
       if (configs.length > 1) {
         config.message = '<ul>' + configs.map((c) => `<li>${c.message}</li>`).join('') + '</ul>';
       }
-      return config;
+      return this.sanitizeConfig(config);
     });
   }
 
@@ -241,7 +283,7 @@ export class NotificationService {
     const toast: ToastContent = {
       title: notification.title,
       subtitle: notification.message || '',
-      caption: this._renderTimeAndApplicationHtml(notification),
+      caption: this.sanitizeHtml(this._renderTimeAndApplicationHtml(notification)) || '',
       type: carbonType,
       lowContrast: lowContrast,
       showClose: true,

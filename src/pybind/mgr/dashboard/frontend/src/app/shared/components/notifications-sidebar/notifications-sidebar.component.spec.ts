@@ -6,6 +6,7 @@ import {
   TestBed,
   tick
 } from '@angular/core/testing';
+import { DomSanitizer } from '@angular/platform-browser';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
@@ -32,6 +33,16 @@ import { NotificationsSidebarComponent } from './notifications-sidebar.component
 describe('NotificationsSidebarComponent', () => {
   let component: NotificationsSidebarComponent;
   let fixture: ComponentFixture<NotificationsSidebarComponent>;
+  const mockSanitizer = {
+    sanitize: (_context: unknown, value: string | null | undefined) => {
+      if (typeof value !== 'string') {
+        return value ?? null;
+      }
+      return value
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/\son\w+=(["']).*?\1/gi, '');
+    }
+  };
   let prometheusUpdatePermission: string;
   let prometheusReadPermission: string;
   let prometheusCreatePermission: string;
@@ -49,7 +60,14 @@ describe('NotificationsSidebarComponent', () => {
       ClickOutsideModule
     ],
     declarations: [NotificationsSidebarComponent],
-    providers: [PrometheusService, SettingsService, SummaryService, NotificationService, RbdService]
+    providers: [
+      PrometheusService,
+      SettingsService,
+      SummaryService,
+      NotificationService,
+      RbdService,
+      { provide: DomSanitizer, useValue: mockSanitizer }
+    ]
   });
 
   beforeEach(() => {
@@ -165,6 +183,24 @@ describe('NotificationsSidebarComponent', () => {
       tick(6000);
       expect(component.notifications.length).toBe(1);
       expect(component.notifications[0].title).toBe('Sample title');
+      discardPeriodicTasks();
+    }));
+
+    it('should sanitize HTML content before rendering notification messages', fakeAsync(() => {
+      const notificationService: NotificationService = TestBed.inject(NotificationService);
+      fixture.detectChanges();
+
+      notificationService.show(
+        NotificationType.success,
+        'Sample title',
+        '<script>alert(1)</script><b>Safe</b>'
+      );
+      tick(6000);
+      fixture.detectChanges();
+
+      const message = fixture.nativeElement.querySelector('.card-text');
+      expect(message.innerHTML).toContain('<b>Safe</b>');
+      expect(message.innerHTML).not.toContain('<script');
       discardPeriodicTasks();
     }));
   });

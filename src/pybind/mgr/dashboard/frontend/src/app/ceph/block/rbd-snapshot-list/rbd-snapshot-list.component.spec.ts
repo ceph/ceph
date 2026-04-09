@@ -40,6 +40,9 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { CoreModule } from '~/app/core/core.module';
 
 describe('RbdSnapshotListComponent', () => {
+  const mockSanitizer = {
+    sanitize: (_context: unknown, value: string | null | undefined) => value ?? null
+  };
   let component: RbdSnapshotListComponent;
   let fixture: ComponentFixture<RbdSnapshotListComponent>;
   let summaryService: SummaryService;
@@ -118,7 +121,7 @@ describe('RbdSnapshotListComponent', () => {
       const actionLabelsI18n = TestBed.inject(ActionLabelsI18n);
       called = false;
       rbdService = new RbdService(null, null);
-      notificationService = new NotificationService(null, null, null);
+      notificationService = new NotificationService(null, null, null, mockSanitizer as any);
       authStorageService = new AuthStorageService();
       authStorageService.set(USER, { 'rbd-image': ['create', 'read', 'update', 'delete'] });
       component = new RbdSnapshotListComponent(

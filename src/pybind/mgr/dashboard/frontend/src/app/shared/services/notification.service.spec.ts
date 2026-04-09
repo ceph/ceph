@@ -1,5 +1,6 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { fakeAsync, TestBed, tick, flush } from '@angular/core/testing';
+import { DomSanitizer } from '@angular/platform-browser';
 import _ from 'lodash';
 
 import { configureTestBed } from '~/testing/unit-test-helper';
@@ -13,12 +14,23 @@ import { TaskMessageService } from './task-message.service';
 
 describe('NotificationService', () => {
   let service: NotificationService;
+  const mockSanitizer = {
+    sanitize: (_context: unknown, value: string | null | undefined) => {
+      if (typeof value !== 'string') {
+        return value ?? null;
+      }
+      return value
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/\son\w+=(["']).*?\1/gi, '');
+    }
+  };
 
   configureTestBed({
     providers: [
       NotificationService,
       TaskMessageService,
       { provide: CdDatePipe, useValue: { transform: (d: any) => d } },
+      { provide: DomSanitizer, useValue: mockSanitizer },
       RbdService
     ],
     imports: [HttpClientTestingModule]
@@ -47,8 +59,17 @@ describe('NotificationService', () => {
       'cdNotifications',
       '[{"type":2,"message":"foobar","timestamp":"2018-05-24T09:41:32.726Z"}]'
     );
-    service = new NotificationService(null, null, null);
+    service = new NotificationService(null, null, null, mockSanitizer as any);
     expect(service['dataSource'].getValue().length).toBe(1);
+  }));
+
+  it('should sanitize stored notifications loaded from local storage', fakeAsync(() => {
+    localStorage.setItem(
+      'cdNotifications',
+      '[{"type":2,"message":"<script>alert(1)</script><b>safe</b>","timestamp":"2018-05-24T09:41:32.726Z"}]'
+    );
+    service = new NotificationService(null, null, null, mockSanitizer as any);
+    expect(service['dataSource'].getValue()[0].message).toBe('<b>safe</b>');
   }));
 
   it('should cancel a notification', fakeAsync(() => {
@@ -283,6 +304,23 @@ describe('NotificationService', () => {
       expect(toasts[0].title).toBe('Alert resolved');
       expect(toasts[0].subtitle).toBe('Some alert resolved');
       expect(toasts[0].caption).not.toContain('Prometheus');
+      flush();
+    }));
+
+    it('should sanitize toast message html before passing it to Carbon', fakeAsync(() => {
+      service.show(
+        () =>
+          new CdNotificationConfig(
+            NotificationType.error,
+            'Some error',
+            '<script>alert(1)</script><b>safe</b>'
+          )
+      );
+      tick(510);
+      const toasts = service['activeToastsSource'].getValue();
+      expect(toasts.length).toBe(1);
+      expect(toasts[0].subtitle).toBe('<b>safe</b>');
+      expect(toasts[0].subtitle).not.toContain('<script');
       flush();
     }));
   });
