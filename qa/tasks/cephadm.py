@@ -550,13 +550,19 @@ def pull_image(ctx, config):
             '--registry-password', registry['password'],
         ]
         cmd = login_cmd + [run.Raw('&&')] + cmd
-    run.wait(ctx.cluster.run(args=cmd, wait=False))
+
+    # Use 'label' to prevent teuthology from logging the 'cmd' list with passwords.
+    # This satisfies the security requirement while keeping the code minimal.
+    run.wait(ctx.cluster.run(
+        args=cmd,
+        wait=False,
+        label="cephadm bootstrap with registry login"
+    ))
 
     try:
         yield
     finally:
         pass
-
 
 @contextlib.contextmanager
 def setup_ca_signed_keys(ctx, config):
@@ -1508,14 +1514,12 @@ def stop(ctx, config):
         cluster, type_, id_ = teuthology.split_role(role)
         ctx.daemons.get_daemon(type_, id_, cluster).stop()
         clusters.add(cluster)
-    
+
     if ctx.ceph[cluster].watchdog:
         for cluster in clusters:
             ctx.ceph[cluster].watchdog.stop()
             ctx.ceph[cluster].watchdog.join()
-
     yield
-
 
 def shell(ctx, config):
     """
@@ -1566,7 +1570,7 @@ def _shell_command(obj):
 def apply(ctx, config):
     """
     Apply spec
-    
+
       tasks:
         - cephadm.apply:
             specs:
