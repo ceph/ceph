@@ -23,12 +23,14 @@ export interface CephServiceSpec {
   status: CephServiceStatus;
   spec: CephServiceAdditionalSpec;
   placement: CephServicePlacement;
+  events?: string[];
 }
 
 // Type for service spec update payload (excludes read-only status field)
 export type CephServiceSpecUpdate = Omit<CephServiceSpec, 'status'>;
 
 export interface CephServiceAdditionalSpec {
+  placement?: CephServicePlacement;
   backend_service: string;
   api_user: string;
   api_password: string;
@@ -81,6 +83,7 @@ export interface CephServicePlacement {
   placement?: string;
   hosts?: string[];
   label?: string | string[];
+  locations?: Record<string, string[]>;
 }
 
 export interface QatSepcs {
