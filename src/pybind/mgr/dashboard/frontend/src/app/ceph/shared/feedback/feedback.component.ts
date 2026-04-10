@@ -51,9 +51,7 @@ export class FeedbackComponent extends CdForm implements OnInit, OnDestroy {
     this.createForm();
     this.refreshFeedbackModuleState();
     this.moduleUpdateSub = this.mgrModuleService.updateCompleted$.subscribe(() => {
-      if (!this.isFeedbackEnabled) {
-        this.refreshFeedbackModuleState();
-      }
+      this.refreshFeedbackModuleState();
     });
   }
 

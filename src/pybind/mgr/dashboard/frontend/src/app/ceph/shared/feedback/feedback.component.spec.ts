@@ -81,6 +81,19 @@ describe('FeedbackComponent', () => {
     expect(component.isAPIKeySet).toBe(false);
   });
 
+  it('should always refresh feedback state after module updates complete', () => {
+    const mgrModuleService = TestBed.inject(MgrModuleService);
+    const refreshSpy = spyOn<any>(component, 'refreshFeedbackModuleState').and.callThrough();
+    spyOn(feedbackService, 'isKeyExist').and.returnValue(of(true));
+
+    fixture.detectChanges();
+    refreshSpy.calls.reset();
+
+    mgrModuleService.updateCompleted$.next();
+
+    expect(refreshSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('should test invalid api-key', () => {
     fixture.detectChanges();
     formHelper = new FormHelper(component.feedbackForm);
