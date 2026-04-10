@@ -269,6 +269,8 @@ using bptr_c_it_t = buffer::ptr::const_iterator;
 
 extern const std::vector<uint64_t> bdev_label_positions;
 
+class OnodeReformatContext;
+
 class BlueStore : public ObjectStore,
 		  public md_config_obs_t {
   // -----------------------------------------------------
@@ -2930,8 +2932,7 @@ private:
   void _txc_exec(TransContext* txc, ThreadPool::TPHandle* handle);
   void _txc_update_store_statfs(TransContext *txc);
   void _txc_add_transaction(TransContext *txc, Transaction *t);
-  void _txc_exec_reformat_write(TransContext* txc,
-				Collection* c, OnodeRef o,
+  void _txc_exec_reformat_write(Collection* c, OnodeRef o,
                                 uint64_t offset, size_t length,
 			        const bufferlist& bl,
                                 WriteContext& wctx);
@@ -3355,6 +3356,15 @@ private:
   void _measure_static_frag(Collection *c, const OnodeRef& o);
 
   int _do_read(
+    Collection* c,
+    const ghobject_t& oid,
+    uint64_t offset,
+    size_t len,
+    ceph::buffer::list& bl,
+    uint32_t op_flags,
+    OnodeReformatContext& reformat_ctx);
+
+  int _do_basic_read(
     Collection *c,
     OnodeRef& o,
     uint64_t offset,
@@ -3749,9 +3759,6 @@ private:
                                     ///< ctx has precompressed data
 
     PExtentVectorSlicer prealloc_slicer; ///< Prealloc vector incremental slicer
-    void setup_prealloc(PExtentVector&& from, uint32_t total_bytes);
-    void dispose_remaining_prealloc(Allocator* alloc);
-    void rewind_prealloc();
 
     uint32_t preallocated() const { return prealloc_slicer.size(); }
 
@@ -3880,14 +3887,16 @@ private:
     CollectionRef c,
     OnodeRef& o,
     WriteContext *wctx);
-  void _maybe_reformat_object(
+
+  void _maybe_need_reformat_onode(OnodeReformatContext& ctx,
+    Collection* c);
+  void _maybe_do_reformat_onode(OnodeReformatContext& ctx,
     Collection* c,
     OnodeRef& o,
     uint64_t offset,
     size_t length,
     const bufferlist& bl,
-    uint32_t op_flags,
-    const span_stat_t& span_stat);
+    uint32_t op_flags);
   void _wctx_finish(
     TransContext *txc,
     CollectionRef& c,

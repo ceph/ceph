@@ -161,31 +161,6 @@ public:
     return idx >= pext.size();
   }
 
-  void rewind() {
-    idx = 0;
-    entry_pos = pos = 0;
-  }
-  void fast_forward(uint32_t seek_pos) {
-    pos = 0;
-    entry_pos = 0;
-    if (seek_pos >= total) {
-      idx = pext.size();
-    } else {
-      size_t i = 0;
-      for (i = 0; i < pext.size(); i++) {
-	uint32_t delta = seek_pos - pos;
-	if (delta < pext[i].length) {
-	  entry_pos = pos;
-	  pos += delta;
-	  break;
-	} else {
-	  pos += pext[i].length;
-	}
-      }
-      idx = i;
-    }
-  }
-
   uint32_t slice(PExtentVector& res,
              uint32_t len = std::numeric_limits<uint32_t>::max()) {
     res.clear();
