@@ -36,6 +36,9 @@ overrides:
       - CEPHADM_FAILED_DAEMON
       - failed cephadm daemon
       - osd.* is in unknown state
+      - POOL_FULL
+      - pool full
+      - pool\(s\) full
 tasks:
 - install:
     branch: tentacle
