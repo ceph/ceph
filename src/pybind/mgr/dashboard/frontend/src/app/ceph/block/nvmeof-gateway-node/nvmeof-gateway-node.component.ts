@@ -28,7 +28,7 @@ import { Permission } from '~/app/shared/models/permissions';
 
 import { Host } from '~/app/shared/models/host.interface';
 import { NvmeofGatewayNodeMode } from '~/app/shared/models/nvmeof';
-import { CephServiceSpec } from '~/app/shared/models/service.interface';
+import { CephServiceSpec, CephServiceSpecUpdate } from '~/app/shared/models/service.interface';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
@@ -228,11 +228,9 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
         deletionMessage: $localize`Removing <strong>${hostname}</strong> will detach it from the gateway group and stop handling new I/O requests. Active connections may be disrupted.<br><br>You can re-add this node later if required.`
       },
       submitActionObservable: () => {
-        const updatedSpec = _.cloneDeep(this.serviceSpec);
-        updatedSpec.placement.hosts = updatedSpec.placement.hosts.filter((h) => h !== hostname);
-        delete updatedSpec.status;
-        if (updatedSpec['events']) {
-          delete updatedSpec['events'];
+        const updatedSpec = this.buildRemoveGatewaySpecPayload(hostname);
+        if (!updatedSpec) {
+          return of(null);
         }
         return this.taskWrapper
           .wrapTaskAroundCall({
@@ -256,6 +254,34 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
           );
       }
     });
+  }
+
+  private buildRemoveGatewaySpecPayload(hostname: string): CephServiceSpecUpdate | null {
+    if (!this.serviceSpec) {
+      this.notificationService.show(
+        NotificationType.error,
+        $localize`Service specification is missing.`
+      );
+      return null;
+    }
+
+    const { status, ...updatedSpec } = _.cloneDeep(this.serviceSpec);
+
+    if (updatedSpec['events']) {
+      delete updatedSpec['events'];
+    }
+
+    if (!updatedSpec.placement) {
+      updatedSpec.placement = {};
+    }
+
+    if ('locations' in updatedSpec.placement) {
+      delete updatedSpec.placement.locations;
+    }
+
+    const currentHosts = updatedSpec.placement.hosts || [];
+    updatedSpec.placement.hosts = currentHosts.filter((h: string) => h !== hostname);
+    return updatedSpec;
   }
 
   ngOnDestroy(): void {
@@ -357,10 +383,10 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
 
     const allUsedHostnames = new Set<string>();
     groupList.forEach((group: CephServiceSpec) => {
-      const hosts = group.placement?.hosts || (group.spec as any)?.placement?.hosts || [];
+      const hosts = group.placement?.hosts || group.spec?.placement?.hosts || [];
       hosts.forEach((hostname: string) => allUsedHostnames.add(hostname));
 
-      const label = group.placement?.label || (group.spec as any)?.placement?.label;
+      const label = group.placement?.label || group.spec?.placement?.label;
       if (label) {
         (hostList || []).forEach((host: Host) => {
           if (host.labels?.includes(label as string)) {
@@ -391,9 +417,9 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
       this.hosts = [];
     } else {
       const placementHosts =
-        this.serviceSpec.placement?.hosts || (this.serviceSpec.spec as any)?.placement?.hosts || [];
+        this.serviceSpec.placement?.hosts || this.serviceSpec.spec?.placement?.hosts || [];
       const placementLabel =
-        this.serviceSpec.placement?.label || (this.serviceSpec.spec as any)?.placement?.label;
+        this.serviceSpec.placement?.label || this.serviceSpec.spec?.placement?.label;
 
       if (placementHosts.length > 0) {
         const currentGroupHosts = new Set<string>(placementHosts);
