@@ -220,7 +220,7 @@ different configuration option to determine the default memory budget:
 ``bluestore_cache_size_hdd`` if the primary device is an HDD, or
 ``bluestore_cache_size_ssd`` if the primary device is an SSD.
 
-BlueStore and the rest of the Ceph OSD daemon make every effort to work within
+BlueStore and the other subsystems within the OSD  make every effort to work within
 this memory budget. Note that in addition to the configured cache size, there
 is also memory consumed by the OSD itself. There is additional utilization due
 to memory fragmentation and other allocator overhead. 
