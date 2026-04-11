@@ -20,20 +20,19 @@ seastar::future<> PGShardManager::load_pgs(crimson::os::FuturizedStore& store)
     return seastar::parallel_for_each(
       colls_cores,
       [this](auto coll_core) {
-        auto[coll, shard_core_index] = coll_core;
-        auto[shard_core, store_index] = shard_core_index;
+        auto[coll, shard_core] = coll_core;
 	spg_t pgid;
 	if (coll.is_pg(&pgid)) {
           return get_pg_to_shard_mapping().get_or_create_pg_mapping(
-            pgid, shard_core, store_index
-          ).then([this, pgid] (auto core_store) {
+            pgid, shard_core
+          ).then([this, pgid] (auto core) {
             return this->with_remote_shard_state(
-              core_store.first,
-              [pgid, core_store](
+              core,
+              [pgid](
 	      PerShardState &per_shard_state,
 	      ShardServices &shard_services) {
 	      return shard_services.load_pg(
-		pgid, core_store.second
+		pgid
 	      ).then([pgid, &per_shard_state](auto &&pg) {
 		logger().info("load_pgs: loaded {}", pgid);
 		return pg->clear_temp_objects(
