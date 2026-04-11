@@ -212,9 +212,7 @@ public:
    * atomic_write_unit does not require fsync().
    */
 
-  NVMeBlockDevice(std::string device_path, store_index_t store_index = 0)
-    : RBMDevice(store_index),
-      device_path(device_path) {}
+  NVMeBlockDevice(std::string device_path) : device_path(device_path) {}
   ~NVMeBlockDevice() = default;
 
   open_ertr::future<> open(
@@ -289,11 +287,17 @@ public:
     return device_path;
   }
 
-  seastar::future<> start(uint32_t shard_nums) final;
+  seastar::future<> start() final {
+    return shard_devices.start(device_path);
+  }
 
-  seastar::future<> stop() final;
+  seastar::future<> stop() final {
+    return shard_devices.stop();
+  }
 
-  Device& get_sharded_device(store_index_t store_index = 0) final;
+  Device& get_sharded_device() final {
+    return shard_devices.local();
+  }
 
   uint64_t get_preffered_write_granularity() const { return write_granularity; }
   uint64_t get_preffered_write_alignment() const { return write_alignment; }
@@ -373,26 +377,7 @@ private:
 
   int namespace_id; // TODO: multi namespaces
   std::string device_path;
-
-  class MultiShardDevices {
-    public:
-      std::vector<std::unique_ptr<NVMeBlockDevice>> mshard_devices;
-
-    public:
-    MultiShardDevices(size_t count,
-                      const std::string path)
-    : mshard_devices() {
-      mshard_devices.reserve(count);
-      for (size_t store_index = 0; store_index < count; ++store_index) {
-        mshard_devices.emplace_back(std::make_unique<NVMeBlockDevice>(
-          path, store_index));
-      }
-    }
-    ~MultiShardDevices() {
-     mshard_devices.clear();
-    }
-  };
-  seastar::sharded<MultiShardDevices> shard_devices;
+  seastar::sharded<NVMeBlockDevice> shard_devices;
 };
 
 }
