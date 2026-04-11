@@ -3,27 +3,16 @@
   width: 100%;
 }
 
-.login-container {
-  padding-left: 5vw;
-}
-
 .login-grid-column {
-  min-width: 400px;
-  max-width: 550px;
+  width: 100%;
+  min-width: 25rem;
+  max-width: 53rem;
 }
-
-.input-box{
-  margin-bottom: 10px;
-}
-
 
 .ceph-input-block {
   width: 100%;
   background-color: var(--cds-layer-02, #29323a);
   border-left: 4px solid var(--cds-text-primary, #fff);
-  margin: var(--cds-spacing-07);
-  padding-top: var(--cds-spacing-04);
-  padding-bottom: var(--cds-spacing-04);
   transition: border-color 0.2s ease;
   display: flex;
   flex-direction: column;
@@ -35,8 +24,6 @@
 
 .ceph-label {
   color: var(--cds-text-secondary, #a8b2b8);
-  padding-left: var(--cds-spacing-05);
-  margin: 10px;
 }
 
 .pwd-wrapper {
@@ -45,18 +32,16 @@
   width: 100%;
 }
 
-.ceph-input {
-  background-color: transparent !important;
-  border: none !important;
-  color: var(--cds-text-primary, #fff) !important;
-  padding-left: var(--cds-spacing-05);
-  margin-left: 10px;
-  box-shadow: none !important;
+.login-container-form .ceph-input-block .ceph-input {
+  background-color: transparent;
+  border: none;
+  color: var(--cds-text-primary, #fff);
+  box-shadow: none;
   width: 100%;
   flex-grow: 1;
 
   &:focus {
-    outline: none !important;
+    outline: none;
   }
 }
 
@@ -64,8 +49,6 @@
   background: transparent;
   border: none;
   color: var(--cds-text-secondary, #a8b2b8);
-  padding: 0 var(--cds-spacing-05);
-  margin-right: 10px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -85,8 +68,6 @@
   background-color: #008799 !important;
   border-color: #008799 !important;
   color: #fff !important;
-  padding-left: 2rem;
-  padding-right: 2rem;
 
   &:hover {
     background-color: #006e7d !important;
@@ -110,6 +91,6 @@
 input:-webkit-autofill {
   animation-fill-mode: both;
   animation-name: autofill-dark;
-  -webkit-text-fill-color: #fff !important;
-  box-shadow: 0 0 0 1000px #29323a inset !important;
+  -webkit-text-fill-color: #fff;
+  box-shadow: 0 0 0 1000px #29323a inset;
 }

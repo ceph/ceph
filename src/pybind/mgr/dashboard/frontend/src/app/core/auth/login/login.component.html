@@ -1,5 +1,5 @@
 @if (isLoginActive){
-<div class="login-container">
+<div class="login-container-form">
   <form
        [formGroup]="loginForm"
        (ngSubmit)="login()"
@@ -27,25 +27,26 @@
 
         <div
         cdsRow
-        class="form-item input-box">
-          <div class="ceph-input-block">
-            <label
+        class="form-item input-box cds-mb-4">
+          <div class="ceph-input-block cds-mt-6 cds-mb-6 cds-pl-6 cds-pr-6 cds-pt-4 cds-pb-4">
+            <cds-label
               for="username"
-              class="cds--label ceph-label"
+              class="cds--label ceph-label cds-m-0"
               i18n>
               Username
-            </label>
+            </cds-label>
             <input ibmText
                    id="username"
-                   name="username"
                    formControlName="username"
                    type="text"
-                   class="ceph-input"
+                   class="ceph-input cds-pl-0"
                    required
                    autofocus>
     @if (loginForm.controls['username'].invalid &&
         (loginForm.controls['username'].touched || submitted)) {
-            <div class="cds--form-requirement">
+            <div
+            class="cds--form-requirement"
+            i18n>
               Username is required
             </div>
     }
@@ -54,29 +55,30 @@
 
         <div
         cdsRow
-        class="form-item input-box">
-          <div class="ceph-input-block">
-            <label
+        class="form-item input-box cds-mb-4">
+          <div class="ceph-input-block cds-mt-6 cds-mb-6 cds-pl-6 cds-pr-6 cds-pt-4 cds-pb-4">
+            <cds-label
             for="password"
-            class="cds--label ceph-label"
-            i18n>Password</label>
+            class="cds--label ceph-label cds-m-0"
+            i18n>Password</cds-label>
             <div class="pwd-wrapper">
               <input ibmText
                      id="password"
-                     name="password"
                      formControlName="password"
                      type="password"
-                     class="ceph-input"
+                     class="ceph-input cds-pl-0"
                      required>
-              <button
+              <cds-button
               type="button"
               cdPasswordButton="password"
-              class="pwd-toggle-btn"
-              aria-label="toggle-password"></button>
+              class="pwd-toggle-btn cds-mr-2 cds-pr-4"
+              aria-label="toggle-password"></cds-button>
             </div>
     @if (loginForm.controls['password'].invalid &&
         (loginForm.controls['password'].touched || submitted)) {
-            <div class="cds--form-requirement">
+            <div
+            class="cds--form-requirement"
+            i18n>
               Password is required
             </div>
     }
@@ -86,13 +88,14 @@
         <div
         cdsRow
         class="form-actions">
-          <button
-          ibmButton="primary"
+          <cds-button
+          kind="primary"
           type="submit"
-          class="ceph-submit-btn"
+          class="ceph-submit-btn cds-pl-8 cds-pr-8 cds-pt-3 cds-pb-3"
+          (click)="login($event)"
           i18n>
             Log in
-          </button>
+          </cds-button>
         </div>
 
       </div>
