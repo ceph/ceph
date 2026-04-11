@@ -291,8 +291,7 @@ static seastar::future<int> action_on_all_objects(
 {
   auto pgs = co_await st.list_pgs();
 
-  for (const auto& [coll, shard_info] : pgs) {
-    auto [shard_id, store_index] = shard_info;
+  for (const auto& [coll, shard_id] : pgs) {
     if (pgid_filter.has_value()) {
       spg_t cand_pgid;
       if (!coll.is_pg(&cand_pgid)) {
@@ -328,7 +327,7 @@ static seastar::future<bool> find_shard_for_object(
     fmt::println(std::cerr, "PG '{}' not found for {} object", config.coll, object_type);
     co_return false;
   }
-  st.set_shard_id(it->second.first);
+  st.set_shard_id(it->second);
   co_return true;
 }
 
