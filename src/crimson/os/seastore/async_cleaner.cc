@@ -410,7 +410,6 @@ JournalTrimmerImpl::config_t::get_test(
 }
 
 JournalTrimmerImpl::JournalTrimmerImpl(
-  store_index_t store_index,
   BackrefManager &backref_manager,
   config_t config,
   backend_type_t type,
@@ -428,7 +427,7 @@ JournalTrimmerImpl::JournalTrimmerImpl(
   config.validate();
   ceph_assert(roll_start >= 0);
   ceph_assert(roll_size > 0);
-  register_metrics(store_index);
+  register_metrics();
 }
 
 void JournalTrimmerImpl::set_journal_head(journal_seq_t head)
@@ -735,20 +734,16 @@ JournalTrimmerImpl::trim_dirty()
   });
 }
 
-void JournalTrimmerImpl::register_metrics(store_index_t store_index)
+void JournalTrimmerImpl::register_metrics()
 {
   namespace sm = seastar::metrics;
   metrics.add_group("journal_trimmer", {
     sm::make_counter("dirty_journal_bytes",
                      [this] { return get_dirty_journal_size(); },
-                     sm::description("the size of the journal for dirty extents"),
-                     {sm::label_instance("shard_store_index",
-                                         std::to_string(store_index))}),
+                     sm::description("the size of the journal for dirty extents")),
     sm::make_counter("alloc_journal_bytes",
                      [this] { return get_alloc_journal_size(); },
-                     sm::description("the size of the journal for alloc info"),
-                     {sm::label_instance("shard_store_index",
-                                         std::to_string(store_index))}),
+                     sm::description("the size of the journal for alloc info"))
   });
 }
 
@@ -912,7 +907,6 @@ std::ostream &operator<<(
 }
 
 SegmentCleaner::SegmentCleaner(
-  store_index_t store_index,
   config_t config,
   SegmentManagerGroupRef&& sm_group,
   BackrefManager &backref_manager,
@@ -920,8 +914,7 @@ SegmentCleaner::SegmentCleaner(
   rewrite_gen_t max_rewrite_generation,
   bool detailed,
   bool is_cold)
-  : store_index(store_index),
-    detailed(detailed),
+  : detailed(detailed),
     is_cold(is_cold),
     config(config),
     sm_group(std::move(sm_group)),
@@ -967,127 +960,96 @@ void SegmentCleaner::register_metrics()
   metrics.add_group(prefix, {
     sm::make_counter("segments_number",
 		     [this] { return segments.get_num_segments(); },
-		     sm::description("the number of segments"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		     sm::description("the number of segments")),
     sm::make_counter("segment_size",
 		     [this] { return segments.get_segment_size(); },
-		     sm::description("the bytes of a segment"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		     sm::description("the bytes of a segment")),
     sm::make_counter("segments_in_journal",
 		     [this] { return get_segments_in_journal(); },
-		     sm::description("the number of segments in journal"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		     sm::description("the number of segments in journal")),
     sm::make_counter("segments_type_journal",
 		     [this] { return segments.get_num_type_journal(); },
-		     sm::description("the number of segments typed journal"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		     sm::description("the number of segments typed journal")),
     sm::make_counter("segments_type_ool",
 		     [this] { return segments.get_num_type_ool(); },
-		     sm::description("the number of segments typed out-of-line"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		     sm::description("the number of segments typed out-of-line")),
     sm::make_counter("segments_open",
 		     [this] { return segments.get_num_open(); },
-		     sm::description("the number of open segments"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		     sm::description("the number of open segments")),
     sm::make_counter("segments_empty",
 		     [this] { return segments.get_num_empty(); },
-		     sm::description("the number of empty segments"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		     sm::description("the number of empty segments")),
     sm::make_counter("segments_closed",
 		     [this] { return segments.get_num_closed(); },
-		     sm::description("the number of closed segments"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		     sm::description("the number of closed segments")),
 
     sm::make_counter("segments_count_open_journal",
 		     [this] { return segments.get_count_open_journal(); },
-		     sm::description("the count of open journal segment operations"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		     sm::description("the count of open journal segment operations")),
     sm::make_counter("segments_count_open_ool",
 		     [this] { return segments.get_count_open_ool(); },
-		     sm::description("the count of open ool segment operations"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		     sm::description("the count of open ool segment operations")),
     sm::make_counter("segments_count_release_journal",
 		     [this] { return segments.get_count_release_journal(); },
-		     sm::description("the count of release journal segment operations"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		     sm::description("the count of release journal segment operations")),
     sm::make_counter("segments_count_release_ool",
 		     [this] { return segments.get_count_release_ool(); },
-		     sm::description("the count of release ool segment operations"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		     sm::description("the count of release ool segment operations")),
     sm::make_counter("segments_count_close_journal",
 		     [this] { return segments.get_count_close_journal(); },
-		     sm::description("the count of close journal segment operations"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		     sm::description("the count of close journal segment operations")),
     sm::make_counter("segments_count_close_ool",
 		     [this] { return segments.get_count_close_ool(); },
-		     sm::description("the count of close ool segment operations"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		     sm::description("the count of close ool segment operations")),
 
     sm::make_counter("total_bytes",
 		     [this] { return segments.get_total_bytes(); },
-		     sm::description("the size of the space"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		     sm::description("the size of the space")),
     sm::make_counter("available_bytes",
 		     [this] { return segments.get_available_bytes(); },
-		     sm::description("the size of the space is available"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		     sm::description("the size of the space is available")),
     sm::make_counter("unavailable_unreclaimable_bytes",
 		     [this] { return get_unavailable_unreclaimable_bytes(); },
-		     sm::description("the size of the space is unavailable and unreclaimable"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		     sm::description("the size of the space is unavailable and unreclaimable")),
     sm::make_counter("unavailable_reclaimable_bytes",
 		     [this] { return get_unavailable_reclaimable_bytes(); },
-		     sm::description("the size of the space is unavailable and reclaimable"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		     sm::description("the size of the space is unavailable and reclaimable")),
     sm::make_counter("used_bytes", stats.used_bytes,
-		     sm::description("the size of the space occupied by live extents"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		     sm::description("the size of the space occupied by live extents")),
     sm::make_counter("unavailable_unused_bytes",
 		     [this] { return get_unavailable_unused_bytes(); },
-		     sm::description("the size of the space is unavailable and not alive"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		     sm::description("the size of the space is unavailable and not alive")),
 
     sm::make_counter("projected_count", stats.projected_count,
-		    sm::description("the number of projected usage reservations"),
-        {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		    sm::description("the number of projected usage reservations")),
     sm::make_counter("projected_used_bytes_sum", stats.projected_used_bytes_sum,
-		    sm::description("the sum of the projected usage in bytes"),
-        {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		    sm::description("the sum of the projected usage in bytes")),
 
     sm::make_counter("reclaimed_bytes", stats.reclaimed_bytes,
-		     sm::description("rewritten bytes due to reclaim"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		     sm::description("rewritten bytes due to reclaim")),
     sm::make_counter("reclaimed_segment_bytes", stats.reclaimed_segment_bytes,
-		     sm::description("rewritten bytes due to reclaim"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		     sm::description("rewritten bytes due to reclaim")),
     sm::make_counter("closed_journal_used_bytes", stats.closed_journal_used_bytes,
-		     sm::description("used bytes when close a journal segment"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		     sm::description("used bytes when close a journal segment")),
     sm::make_counter("closed_journal_total_bytes", stats.closed_journal_total_bytes,
-		     sm::description("total bytes of closed journal segments"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		     sm::description("total bytes of closed journal segments")),
     sm::make_counter("closed_ool_used_bytes", stats.closed_ool_used_bytes,
-		     sm::description("used bytes when close a ool segment"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		     sm::description("used bytes when close a ool segment")),
     sm::make_counter("closed_ool_total_bytes", stats.closed_ool_total_bytes,
-		     sm::description("total bytes of closed ool segments"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		     sm::description("total bytes of closed ool segments")),
 
     sm::make_gauge("available_ratio",
                    [this] { return segments.get_available_ratio(); },
-                   sm::description("ratio of available space to total space"),
-                   {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+                   sm::description("ratio of available space to total space")),
     sm::make_gauge("reclaim_ratio",
                    [this] { return get_reclaim_ratio(); },
-                   sm::description("ratio of reclaimable space to unavailable space"),
-                   {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+                   sm::description("ratio of reclaimable space to unavailable space")),
 
     sm::make_histogram("segment_utilization_distribution",
 		       [this]() -> seastar::metrics::histogram& {
 		         return stats.segment_util;
 		       },
-		       sm::description("utilization distribution of all segments"),
-           {sm::label_instance("shard_store_index", std::to_string(store_index))})
+		       sm::description("utilization distribution of all segments"))
   });
 }
 
@@ -1828,13 +1790,11 @@ void SegmentCleaner::print(std::ostream &os, bool is_detailed) const
 }
 
 RBMCleaner::RBMCleaner(
-  store_index_t store_index,
   RBMDeviceGroupRef&& rb_group,
   BackrefManager &backref_manager,
   LBAManager &lba_manager,
   bool detailed)
-  : store_index(store_index),
-    detailed(detailed),
+  : detailed(detailed),
     rb_group(std::move(rb_group)),
     backref_manager(backref_manager),
     lba_manager(lba_manager)
@@ -2046,15 +2006,12 @@ void RBMCleaner::register_metrics()
   metrics.add_group("rbm_cleaner", {
     sm::make_counter("total_bytes",
 		     [this] { return get_total_bytes(); },
-		     sm::description("the size of the space"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		     sm::description("the size of the space")),
     sm::make_counter("available_bytes",
 		     [this] { return get_total_bytes() - get_journal_bytes() - stats.used_bytes; },
-		     sm::description("the size of the space is available"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+		     sm::description("the size of the space is available")),
     sm::make_counter("used_bytes", stats.used_bytes,
-		     sm::description("the size of the space occupied by live extents"),
-         {sm::label_instance("shard_store_index", std::to_string(store_index))})
+		     sm::description("the size of the space occupied by live extents")),
   });
 }
 

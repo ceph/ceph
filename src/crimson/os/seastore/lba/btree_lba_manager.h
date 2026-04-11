@@ -53,10 +53,10 @@ using LBABtree = FixedKVBtree<
  */
 class BtreeLBAManager : public LBAManager {
 public:
-  BtreeLBAManager(Cache &cache, store_index_t store_index)
+  BtreeLBAManager(Cache &cache)
     : cache(cache)
   {
-    register_metrics(store_index);
+    register_metrics();
   }
 
   mkfs_ret mkfs(
@@ -320,7 +320,7 @@ private:
   }
 
   seastar::metrics::metric_group metrics;
-  void register_metrics(store_index_t store_index);
+  void register_metrics();
 
   /**
    * _update_mapping
