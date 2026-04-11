@@ -26,13 +26,25 @@ class Transaction;
 namespace crimson::os {
 class FuturizedCollection;
 class FuturizedStore;
-struct BackendStore {
+
+struct RelayStore {
   FuturizedStore &f_store;  // indicate alienstore/seastore/cyanstore, not shard store
   store_shard_t shard_id;       // indicate on which core it should run
   store_index_t store_index;    // indicate which shard store on this core
-  BackendStore(FuturizedStore &f_store, store_shard_t shard_id, store_index_t store_index)
+  RelayStore(FuturizedStore &f_store, store_shard_t shard_id, store_index_t store_index)
     : f_store(f_store), shard_id(shard_id), store_index(store_index) {}
+
+  static seastar::future<> with_store_do_transaction(
+    RelayStore store,
+    boost::intrusive_ptr<FuturizedCollection> ch, // TODO: move back to `FuturizedStore::Shard::CollectionRef ch,`
+    ceph::os::Transaction&& txn);
+
+  template<auto MemberFunc, typename... Args>
+  static auto with_store(RelayStore store, Args&&... args);
 };
+
+// scaffolding
+using BackendStore = RelayStore;
 
 class FuturizedStore {
 public:
@@ -260,7 +272,7 @@ protected:
 };
 
 template<auto MemberFunc, typename... Args>
-auto with_store(BackendStore store, Args&&... args)
+auto RelayStore::with_store(RelayStore store, Args&&... args)
 {
   using raw_return_type = decltype((std::declval<crimson::os::FuturizedStore::Shard>().*MemberFunc)(std::forward<Args>(args)...));
 
@@ -318,9 +330,13 @@ auto with_store(BackendStore store, Args&&... args)
   }
 }
 
-seastar::future<> with_store_do_transaction(
-  BackendStore store,
-  FuturizedStore::Shard::CollectionRef ch,
-  ceph::os::Transaction&& txn);
+// scaffolding routers to future RelayStore
+constexpr auto with_store_do_transaction = &RelayStore::with_store_do_transaction;
+
+template<auto MemberFunc, typename... Args>
+auto with_store(BackendStore store, Args&&... args)
+{
+  return RelayStore::with_store<MemberFunc>(store, std::forward<Args>(args)...);
+}
 
 }
