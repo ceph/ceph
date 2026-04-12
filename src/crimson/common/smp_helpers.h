@@ -20,7 +20,12 @@
 namespace crimson {
 
 using core_id_t = seastar::shard_id;
+using store_index_t = uint32_t;
+using store_shard_t = uint32_t;
 static constexpr core_id_t NULL_CORE = std::numeric_limits<core_id_t>::max();
+static constexpr store_index_t NULL_STORE_INDEX = std::numeric_limits<store_index_t>::max();
+static constexpr store_shard_t GLOBAL_STORE = std::numeric_limits<store_shard_t>::max();
+static constexpr store_index_t META_STORE_INDEX = 0;
 
 /**
  * submit_to

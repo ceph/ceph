@@ -11,7 +11,7 @@
 #include <seastar/core/future.hh>
 
 #include "os/Transaction.h"
-#include "crimson/common/smp_helpers.h"
+#include "crimson/common/config_proxy.h"
 #include "crimson/common/smp_helpers.h"
 #include "crimson/osd/exceptions.h"
 #include "include/buffer_fwd.h"
@@ -25,6 +25,14 @@ class Transaction;
 
 namespace crimson::os {
 class FuturizedCollection;
+class FuturizedStore;
+struct BackendStore {
+  FuturizedStore &f_store;  // indicate alienstore/seastore/cyanstore, not shard store
+  store_shard_t shard_id;       // indicate on which core it should run
+  store_index_t store_index;    // indicate which shard store on this core
+  BackendStore(FuturizedStore &f_store, store_shard_t shard_id, store_index_t store_index)
+    : f_store(f_store), shard_id(shard_id), store_index(store_index) {}
+};
 
 class FuturizedStore {
 public:
@@ -35,6 +43,14 @@ public:
     // no copying
     explicit Shard(const Shard& o) = delete;
     const Shard& operator=(const Shard& o) = delete;
+
+    bool is_shard_store_active(store_index_t store_index, uint32_t store_shard_nums) {
+      if(seastar::this_shard_id() + seastar::smp::count * store_index >= store_shard_nums) {
+        // store_index is out of range {} - inactivating this store shard
+        return false;
+      }
+      return true;
+    }
 
     using CollectionRef = boost::intrusive_ptr<FuturizedCollection>;
     using base_errorator = crimson::errorator<crimson::ct_error::input_output_error>;
