@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import { Observable, Subject, Subscription, forkJoin, of, timer } from 'rxjs';
+import { EMPTY, Observable, Subject, Subscription, forkJoin, of, timer } from 'rxjs';
 import { catchError, map, switchMap } from 'rxjs/operators';
 
 import { AlertmanagerSilence } from '../models/alertmanager-silence';
@@ -12,6 +12,7 @@ import {
   PrometheusRuleGroup
 } from '../models/prometheus-alerts';
 import moment from 'moment';
+import { MgrModuleService } from './mgr-module.service';
 
 export type PromethuesGaugeMetricResult = {
   metric: Record<string, string>; // metric metadata
@@ -23,8 +24,7 @@ export type PromqlGuageMetric = {
   result: PromethuesGaugeMetricResult[];
 };
 
-export const STORAGE_TYPE_WARNING =
-  'Storage type details are unavailable. Upgrade this cluster to version 9.0 or later to access them.';
+const PROMETHEUS_MODULE = 'prometheus';
 
 @Injectable({
   providedIn: 'root'
@@ -42,10 +42,10 @@ export class PrometheusService {
     alertmanager: 'ui-api/prometheus/alertmanager-api-host',
     prometheus: 'ui-api/prometheus/prometheus-api-host'
   };
-  private settings: { [url: string]: string } = {};
+  private settings: Record<string, string | undefined> = {};
   updatedChrtData = new Subject<any>();
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private mgrModuleService: MgrModuleService) {}
 
   unsubscribe() {
     if (this.timerGetPrometheusDataSub) {
@@ -63,20 +63,81 @@ export class PrometheusService {
     return this.http.get<any>(`${this.baseURL}/prometheus_query_data`, { params });
   }
 
-  ifAlertmanagerConfigured(fn: (value?: string) => void, elseFn?: () => void): void {
-    this.ifSettingConfigured(this.settingsKey.alertmanager, fn, elseFn);
-  }
-
   disableAlertmanagerConfig(): void {
     this.disableSetting(this.settingsKey.alertmanager);
   }
 
-  ifPrometheusConfigured(fn: (value?: string) => void, elseFn?: () => void): void {
-    this.ifSettingConfigured(this.settingsKey.prometheus, fn, elseFn);
-  }
-
   disablePrometheusConfig(): void {
     this.disableSetting(this.settingsKey.prometheus);
+  }
+
+  withPrometheusEnabled<T>(
+    source$: Observable<T>,
+    fallback$: Observable<T> = EMPTY
+  ): Observable<T> {
+    return this.isPrometheusModuleEnabled().pipe(
+      switchMap((enabled) => (enabled ? source$ : fallback$)),
+      catchError(() => fallback$)
+    );
+  }
+
+  isPrometheusModuleEnabled(): Observable<boolean> {
+    return this.mgrModuleService.list().pipe(
+      map((modules) =>
+        modules.some((module) => module.name === PROMETHEUS_MODULE && module.enabled)
+      ),
+      catchError(() => of(false))
+    );
+  }
+
+  isPrometheusUsable(): Observable<boolean> {
+    return this.isPrometheusModuleEnabled().pipe(
+      switchMap((enabled) =>
+        enabled ? this.isSettingConfigured(this.settingsKey.prometheus) : of(false)
+      ),
+      catchError(() => of(false))
+    );
+  }
+
+  isAlertmanagerUsable(): Observable<boolean> {
+    return this.isPrometheusModuleEnabled().pipe(
+      switchMap((enabled) =>
+        enabled ? this.isSettingConfigured(this.settingsKey.alertmanager) : of(false)
+      ),
+      catchError(() => of(false))
+    );
+  }
+
+  ifSettingConfigured(url: string, fn: (value?: string) => void, elseFn?: () => void): void {
+    const setting = this.settings[url];
+
+    if (setting === undefined) {
+      this.http.get(url).subscribe(
+        (data: any) => {
+          this.settings[url] = this.getSettingsValue(data);
+          this.ifSettingConfigured(url, fn, elseFn);
+        },
+        (resp) => {
+          if (resp.status !== 401) {
+            this.settings[url] = '';
+          }
+        }
+      );
+    } else if (setting !== '') {
+      fn(setting);
+    } else {
+      if (elseFn) {
+        elseFn();
+      }
+    }
+  }
+
+  ifAlertmanagerConfigured(fn: (value?: string) => void, elseFn?: () => void): void {
+    this.ifSettingConfigured(this.settingsKey.alertmanager, fn, elseFn);
+  }
+
+  ifPrometheusConfigured(fn: (value?: string) => void, elseFn?: () => void): void {
+    this.ifSettingConfigured(this.settingsKey.prometheus, fn, elseFn);
   }
 
   getAlerts(clusterFilteredAlerts = false, params = {}): Observable<AlertmanagerAlert[]> {
@@ -125,27 +186,30 @@ export class PrometheusService {
     return this.http.get<AlertmanagerNotification[]>(url);
   }
 
-  ifSettingConfigured(url: string, fn: (value?: string) => void, elseFn?: () => void): void {
-    const setting = this.settings[url];
-    if (setting === undefined) {
-      this.http.get(url).subscribe(
-        (data: any) => {
-          this.settings[url] = this.getSettingsValue(data);
-          this.ifSettingConfigured(url, fn, elseFn);
-        },
-        (resp) => {
-          if (resp.status !== 401) {
-            this.settings[url] = '';
-          }
-        }
-      );
-    } else if (setting !== '') {
-      fn(setting);
-    } else {
-      if (elseFn) {
-        elseFn();
-      }
+  getConfiguredSetting(url: string): Observable<string | null> {
+    const cached = this.settings[url];
+
+    if (cached !== undefined) {
+      return of(cached || null);
     }
+
+    return this.http.get(url).pipe(
+      map((data: any) => {
+        const value = this.getSettingsValue(data);
+        this.settings[url] = value;
+        return value || null;
+      }),
+      catchError((resp) => {
+        if (resp.status !== 401) {
+          this.settings[url] = '';
+        }
+        return of(null);
+      })
+    );
+  }
+
+  isSettingConfigured(url: string): Observable<boolean> {
+    return this.getConfiguredSetting(url).pipe(map((value) => !!value));
   }
 
   // Easiest way to stop reloading external content that can't be reached
@@ -158,16 +222,17 @@ export class PrometheusService {
   }
 
   getGaugeQueryData(query: string): Observable<PromqlGuageMetric> {
-    let result$: Observable<PromqlGuageMetric> = of({ result: [] } as PromqlGuageMetric);
+    return this.isPrometheusUsable().pipe(
+      switchMap((usable) => {
+        if (!usable) {
+          return of({ result: [] } as PromqlGuageMetric);
+        }
 
-    this.ifPrometheusConfigured(() => {
-      result$ = this.getPrometheusQueryData({ params: query }).pipe(
-        map((result: PromqlGuageMetric) => result),
-        catchError(() => of({ result: [] } as PromqlGuageMetric))
-      );
-    });
-
-    return result$;
+        return this.getPrometheusQueryData({ params: query }).pipe(
+          catchError(() => of({ result: [] } as PromqlGuageMetric))
+        );
+      })
+    );
   }
 
   formatGuageMetric(data: string): number {
@@ -206,14 +271,19 @@ export class PrometheusService {
     allMultiClusterQueries: string[]
   ) {
     return new Observable((observer) => {
-      this.ifPrometheusConfigured(() => {
+      this.isPrometheusUsable().subscribe((usable) => {
+        if (!usable) {
+          observer.complete();
+          return;
+        }
+
         if (this.timerGetPrometheusDataSub) {
           this.timerGetPrometheusDataSub.unsubscribe();
         }
 
         this.timerGetPrometheusDataSub = timer(0, this.timerTime).subscribe(() => {
-          let requests: any[] = [];
-          let queryNames: string[] = [];
+          const requests: any[] = [];
+          const queryNames: string[] = [];
 
           Object.entries(multiClusterQueries).forEach(([key, _value]) => {
             for (const queryName in multiClusterQueries[key].queries) {
@@ -284,27 +354,33 @@ export class PrometheusService {
     checkNan?: boolean
   ): Observable<Record<string, [number, string][]>> {
     return timer(0, this.timerTime).pipe(
-      switchMap(() => {
-        this.ifPrometheusConfigured(() => {});
+      switchMap(() =>
+        this.isPrometheusUsable().pipe(
+          switchMap((usable) => {
+            if (!usable) {
+              return of([] as Array<{ queryName: string; values: any[] }>);
+            }
 
-        const updatedTime = this.updateTimeStamp(selectedTime);
+            const updatedTime = this.updateTimeStamp(selectedTime);
 
-        const observables = Object.entries(queries).map(([queryName, query]) =>
-          this.getPrometheusData({
-            params: encodeURIComponent(query),
-            start: updatedTime.start,
-            end: updatedTime.end,
-            step: updatedTime.step
-          }).pipe(
-            map((data: any) => ({
-              queryName,
-              values: data.result?.length ? data.result[0].values : []
-            }))
-          )
-        );
+            const observables = Object.entries(queries).map(([queryName, query]) =>
+              this.getPrometheusData({
+                params: encodeURIComponent(query),
+                start: updatedTime.start,
+                end: updatedTime.end,
+                step: updatedTime.step
+              }).pipe(
+                map((data: any) => ({
+                  queryName,
+                  values: data.result?.length ? data.result[0].values : []
+                }))
+              )
+            );
 
-        return forkJoin(observables) as Observable<Array<{ queryName: string; values: any[] }>>;
-      }),
+            return forkJoin(observables) as Observable<Array<{ queryName: string; values: any[] }>>;
+          })
+        )
+      ),
       map((results) => {
         const formattedResults: Record<string, [number, string][]> = {};
 

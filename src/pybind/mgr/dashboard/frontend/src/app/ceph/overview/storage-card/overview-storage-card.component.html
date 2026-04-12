@@ -5,6 +5,7 @@
         i18n>Storage overview</h2>
   </ng-template>
   <!-- CAPACITY USAGE TEXT -->
+   @if(!storageEmptyState) {
   <div class="overview-storage-card-usage-text">
     @if( usedRaw !== null && totalRaw !== null && usedRawUnit && totalRawUnit) {
     <h5>
@@ -54,7 +55,12 @@
     </cds-skeleton-text>
     }
   </div>
+  }
+  @else {
+    <cd-empty-state [emptyStateText]="storageEmptyState"></cd-empty-state>
+  }
   <!-- CAPACITY BREAKDOWN CHART -->
+  @if (!prometheusEmptyState && !storageEmptyState) {
   @if(isBreakdownLoaded) {
   <ibm-meter-chart
     [options]="options"
@@ -126,4 +132,5 @@
     </div>
   </div>
   }
+}
 </cd-productive-card>

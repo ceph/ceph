@@ -19,6 +19,7 @@ import { FormatterService } from '~/app/shared/services/formatter.service';
 import { AreaChartComponent } from '~/app/shared/components/area-chart/area-chart.component';
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { BreakdownChartData, CapacityThreshold, TrendPoint } from '~/app/shared/models/overview';
+import { EmptyStateComponent } from '~/app/shared/components/empty-state/empty-state.component';
 
 const CHART_HEIGHT = '45px';
 
@@ -33,7 +34,8 @@ const CHART_HEIGHT = '45px';
     LayoutModule,
     AreaChartComponent,
     ComponentsModule,
-    TagModule
+    TagModule,
+    EmptyStateComponent
   ],
   standalone: true,
   templateUrl: './overview-storage-card.component.html',
@@ -44,6 +46,9 @@ const CHART_HEIGHT = '45px';
 export class OverviewStorageCardComponent {
   private readonly formatterService = inject(FormatterService);
   private readonly cdr = inject(ChangeDetectorRef);
+
+  @Input() storageEmptyState: string | null = '';
+  @Input() prometheusEmptyState: string | null = '';
 
   @Input()
   set totalCapacity(value: number) {

@@ -86,6 +86,7 @@ export class OverviewHealthCardComponent {
   private readonly authStorageService = inject(AuthStorageService);
 
   @Input({ required: true }) vm!: HealthCardVM;
+  @Input() emptyStateText: string | null = '';
   @Output() viewIncidents = new EventEmitter<void>();
   @Output() viewPGStates = new EventEmitter<void>();
   @Output() activeSectionChange = new EventEmitter<HealthCardTabSection | null>();
