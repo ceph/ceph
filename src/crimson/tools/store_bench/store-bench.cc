@@ -127,7 +127,7 @@ class PGLogWorkload final : public StoreBenchWorkload {
   unsigned log_length = 256;
 
 public:
-  po::options_description get_options() final {
+  po::options_description get_options() override {
     po::options_description ret{"PGLogWorkload"};
     ret.add_options()
       ("num-logs", po::value<unsigned>(&num_logs),
@@ -142,8 +142,8 @@ public:
   }
   seastar::future<results_t> run(
     const common_options_t &common,
-    crimson::os::FuturizedStore &global_store) final;
-  ~PGLogWorkload() final {}
+    crimson::os::FuturizedStore &global_store) override;
+  ~PGLogWorkload() {}
 };
 
 class RGWIndexWorkload final : public StoreBenchWorkload {
@@ -157,7 +157,7 @@ class RGWIndexWorkload final : public StoreBenchWorkload {
 public:
   po::options_description options{"RGWIndexWorkload"};
 
-  po::options_description get_options() final {
+  po::options_description get_options() override {
     po::options_description ret{"PGLogWorkload"};
     ret.add_options()
       ("num_indices", po::value<unsigned>(&num_indices),
@@ -180,8 +180,8 @@ public:
   }
   seastar::future<results_t> run(
     const common_options_t &common,
-    crimson::os::FuturizedStore &global_store) final;
-  ~RGWIndexWorkload() final {}
+    crimson::os::FuturizedStore &global_store) override;
+  ~RGWIndexWorkload() {}
 };
 
 /**
@@ -592,7 +592,7 @@ class RandomWriteWorkload final : public StoreBenchWorkload {
     return size_per_shard / size_per_obj;
   }
 public:
-  po::options_description get_options() final {
+  po::options_description get_options() override {
     po::options_description ret{"RandomWriteWorkload"};
     ret.add_options()
       ("prefill-size", po::value<uint64_t>(&prefill_size),
@@ -612,8 +612,8 @@ public:
   }
   seastar::future<results_t> run(
     const common_options_t &common,
-    crimson::os::FuturizedStore &global_store) final;
-  ~RandomWriteWorkload() final {}
+    crimson::os::FuturizedStore &global_store) override;
+  ~RandomWriteWorkload() {}
 };
 
 seastar::future<bufferptr> generate_random_bp(uint64_t size)
