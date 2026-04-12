@@ -339,7 +339,7 @@ public:
     std::swap(o, orderer);
     return seastar::when_all(
       shard_services.dispatch_context(
-        store_index,
+//        store_index,
 	get_collection_ref(),
 	std::move(rctx)),
       shard_services.run_orderer(std::move(o))

@@ -294,7 +294,8 @@ PG::interruptible_future<> PG::find_unfound(epoch_t epoch_started)
         PeeringState::UnfoundRecovery());
     }
   }
-  return get_shard_services().dispatch_context(store_index, get_collection_ref(), std::move(rctx));
+  //return get_shard_services().dispatch_context(store_index, get_collection_ref(), std::move(rctx));
+  return get_shard_services().dispatch_context(get_collection_ref(), std::move(rctx));
 }
 
 void PG::recheck_readable()

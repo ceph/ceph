@@ -27,12 +27,13 @@ using read_errorator = crimson::os::FuturizedStore::Shard::read_errorator;
 class OSDMeta {
   template<typename T> using Ref = boost::intrusive_ptr<T>;
 
-  crimson::os::BackendStore store;
+  //crimson::os::BackendStore b_store;
+  crimson::os::FuturizedStore::Shard& store;
   Ref<crimson::os::FuturizedCollection> coll;
 
 public:
   OSDMeta(Ref<crimson::os::FuturizedCollection> coll,
-          crimson::os::BackendStore store)
+          crimson::os::FuturizedStore::Shard& store)
     : store{store}, coll{coll}
   {}
 
