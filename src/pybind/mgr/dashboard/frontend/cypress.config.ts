@@ -23,7 +23,7 @@ export default defineConfig({
   env: {
     LOGIN_USER: 'admin',
     LOGIN_PWD: 'admin',
-    CEPH2_URL: 'https://localhost:4202/'
+    CEPH2_URL: 'https://localhost:11002/'
   },
 
   chromeWebSecurity: false,
@@ -55,7 +55,7 @@ export default defineConfig({
       )
       return require('./cypress/plugins/index.js')(on, config);
     },
-    baseUrl: 'https://localhost:4200/',
+    baseUrl: 'https://localhost:11000/',
     excludeSpecPattern: ['*.po.ts', '**/orchestrator/**'],
     experimentalSessionAndOrigin: true,
     specPattern: 'cypress/e2e/**/*-spec.{js,jsx,ts,tsx,feature}'

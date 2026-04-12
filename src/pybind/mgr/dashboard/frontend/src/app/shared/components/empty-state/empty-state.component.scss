@@ -1,0 +1,18 @@
+@use '@carbon/colors';
+
+empty-state {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: var(--cds-spacing-05);
+  height: 350px;
+
+  p {
+    font-size: 12px !important;
+  }
+
+  img {
+    width: 100px !important;
+    height: 100px !important;
+  }
+}

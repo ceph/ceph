@@ -1,5 +1,5 @@
 import { ChartTabularData, GaugeChartOptions } from '@carbon/charts-angular';
-import { HealthCheck, PgStateCount } from './health.interface';
+import { HealthCheck, HealthSnapshotMap, PgStateCount } from './health.interface';
 import _ from 'lodash';
 
 // Types
@@ -390,4 +390,90 @@ export function calcActiveCleanSeverityAndReasons(
   const activeCleanPercent = Number(((activeCleanTotal / totalPg) * 100).toFixed(2));
 
   return { activeCleanPercent, severity, reasons };
+}
+
+/**
+ * Mapper: HealthSnapshotMap -> HealthCardVM
+ * Runs only when healthData$ emits.
+ */
+export function buildHealthCardVM(d: HealthSnapshotMap): HealthCardVM {
+  const checksObj: Record<string, HealthCheck> = d.health?.checks ?? {};
+  const clusterHealth = getClusterHealth(d.health.status as HealthStatus);
+  const pgStates = d?.pgmap?.pgs_by_state ?? [];
+  const totalPg = d?.pgmap?.num_pgs ?? 0;
+
+  const { incidents, checks } = getHealthChecksAndIncidents(checksObj);
+  const resiliencyHealth = getResiliencyDisplay(checks, pgStates);
+  const {
+    activeCleanPercent,
+    severity: activeCleanChartSeverity,
+    reasons: activeCleanChartReason
+  } = calcActiveCleanSeverityAndReasons(pgStates, totalPg);
+
+  // --- System sub-states ---
+
+  // MON
+  const monTotal = d.monmap?.num_mons ?? 0;
+  const monQuorum = (d.monmap as any)?.quorum?.length ?? 0;
+  const monSev: Severity = monQuorum < monTotal ? SEVERITY.warn : SEVERITY.ok;
+
+  // MGR
+  const mgrActive = d.mgrmap?.num_active ?? 0;
+  const mgrStandby = d.mgrmap?.num_standbys ?? 0;
+  const mgrSev: Severity =
+    mgrActive < 1 ? SEVERITY.err : mgrStandby < 1 ? SEVERITY.warn : SEVERITY.ok;
+
+  // OSD
+  const osdUp = (d.osdmap as any)?.up ?? 0;
+  const osdIn = (d.osdmap as any)?.in ?? 0;
+  const osdTotal = (d.osdmap as any)?.num_osds ?? 0;
+  const osdDown = safeDifference(osdTotal, osdUp);
+  const osdOut = safeDifference(osdTotal, osdIn);
+  const osdSev: Severity = osdDown > 0 || osdOut > 0 ? SEVERITY.err : SEVERITY.ok;
+
+  // HOSTS
+  const hostsTotal = d.num_hosts ?? 0;
+  const hostsAvailable = (d as any)?.num_hosts_available ?? 0;
+  const hostsSev: Severity = hostsAvailable < hostsTotal ? SEVERITY.warn : SEVERITY.ok;
+
+  // Overall = worst of the subsystem severities.
+  const overallSystemSev = maxSeverity(monSev, mgrSev, osdSev, hostsSev);
+
+  return {
+    fsid: d.fsid,
+    overallSystemSev: SeverityIconMap[overallSystemSev],
+
+    incidents,
+    checks,
+
+    pgs: {
+      total: totalPg,
+      states: pgStates,
+      io: [
+        { label: $localize`Client write`, value: d?.pgmap?.write_bytes_sec ?? 0 },
+        { label: $localize`Client read`, value: d?.pgmap?.read_bytes_sec ?? 0 },
+        { label: $localize`Recovery I/O`, value: d?.pgmap?.recovering_bytes_per_sec ?? 0 }
+      ],
+      activeCleanChartData: [{ group: 'value', value: activeCleanPercent }],
+      activeCleanChartOptions: {
+        ...ACTIVE_CLEAN_CHART_OPTIONS,
+        color: { scale: { value: SEVERITY_TO_COLOR[activeCleanChartSeverity] } }
+      },
+      activeCleanChartReason
+    },
+
+    clusterHealth,
+    resiliencyHealth,
+
+    mon: { value: $localize`Quorum: ${monQuorum}/${monTotal}`, severity: SeverityIconMap[monSev] },
+    mgr: {
+      value: $localize`${mgrActive} active, ${mgrStandby} standby`,
+      severity: SeverityIconMap[mgrSev]
+    },
+    osd: { value: $localize`${osdIn}/${osdUp} in/up`, severity: SeverityIconMap[osdSev] },
+    hosts: {
+      value: $localize`${hostsAvailable} / ${hostsTotal} available`,
+      severity: SeverityIconMap[hostsSev]
+    }
+  };
 }
