@@ -285,9 +285,9 @@ public:
     obc_lru.for_each(std::forward<F>(f));
   }
 
-  std::vector<std::string> get_tracked_keys() const noexcept final;
+  std::vector<std::string> get_tracked_keys() const noexcept final override;
   void handle_conf_change(const crimson::common::ConfigProxy& conf,
-                          const std::set <std::string> &changed) final;
+                          const std::set <std::string> &changed) final override;
 };
 
 std::optional<hobject_t> resolve_oid(const SnapSet &ss,

@@ -67,14 +67,14 @@ public:
     Ref<PG> pg,
     ShardServices& ss,
     epoch_t epoch_started);
-  void print(std::ostream&) const final;
+  void print(std::ostream&) const override;
 
   std::tuple<
     RecoveryBackend::RecoveryBlockingEvent
   > tracking_events;
 
 private:
-  void dump_detail(Formatter* f) const final;
+  void dump_detail(Formatter* f) const override;
   interruptible_future<seastar::stop_iteration> do_recovery() override;
   const hobject_t soid;
   const eversion_t need;

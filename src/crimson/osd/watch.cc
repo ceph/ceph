@@ -19,6 +19,7 @@ namespace {
 
 namespace crimson::osd {
 
+
 Watch::~Watch()
 {
   logger().debug("{} gid={} cookie={}", __func__, get_watcher_gid(), get_cookie());

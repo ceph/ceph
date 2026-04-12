@@ -28,8 +28,8 @@ public:
     OperationTypeCode::replicated_request_reply;
   ReplicatedRequestReply(crimson::net::ConnectionRef&&, Ref<MOSDRepOpReply>&&);
 
-  void print(std::ostream &) const final;
-  void dump_detail(ceph::Formatter* f) const final;
+  void print(std::ostream &) const override;
+  void dump_detail(ceph::Formatter* f) const override;
 
   spg_t get_pgid() const {
     return req->get_spg();

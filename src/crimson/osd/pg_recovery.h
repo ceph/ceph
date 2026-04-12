@@ -54,7 +54,7 @@ public:
   void enqueue_push(
     const hobject_t& obj,
     const eversion_t& v,
-    const std::vector<pg_shard_t> &peers) final;
+    const std::vector<pg_shard_t> &peers) final override;
   void cancel_backfill();  // called from PG::on_change()
 private:
   PGRecoveryListener* pg;
@@ -147,25 +147,25 @@ private:
   void request_replica_scan(
     const pg_shard_t& target,
     const hobject_t& begin,
-    const hobject_t& end) final;
+    const hobject_t& end) final override;
   void request_primary_scan(
-    const hobject_t& begin) final;
+    const hobject_t& begin) final override;
   void enqueue_drop(
     const pg_shard_t& target,
     const hobject_t& obj,
-    const eversion_t& v) final;
+    const eversion_t& v) final override;
   void send_recovery_deletes(
     const hobject_t& obj,
-    const std::vector<pg_shard_t>& peers) final;
-  void maybe_flush() final;
+    const std::vector<pg_shard_t>& peers) final override;
+  void maybe_flush() final override;
   void update_peers_last_backfill(
-    const hobject_t& new_last_backfill) final;
-  bool budget_available() const final;
+    const hobject_t& new_last_backfill) final override;
+  bool budget_available() const final override;
   void request_budget_retry() final;
 
   template <typename T>
   void start_peering_event_operation_listener(T &&evt, float delay = 0);
-  void backfilled() final;
+  void backfilled() final override;
   void request_backfill();
   void all_replicas_recovered();
   void reset_backfill_state();  // common reset logic
