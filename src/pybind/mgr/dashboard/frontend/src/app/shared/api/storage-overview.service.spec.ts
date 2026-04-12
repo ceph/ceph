@@ -4,21 +4,35 @@ import { of } from 'rxjs';
 import { configureTestBed } from '~/testing/unit-test-helper';
 
 import { OverviewStorageService } from './storage-overview.service';
+import { PrometheusService } from './prometheus.service';
+import { FormatterService } from '../services/formatter.service';
 
 describe('OverviewStorageService', () => {
   let service: OverviewStorageService;
 
+  const prometheusServiceMock = {
+    getRangeQueriesData: jest.fn(),
+    getPrometheusQueryData: jest.fn(),
+    getGaugeQueryData: jest.fn(),
+    formatGuageMetric: jest.fn()
+  };
+
+  const formatterServiceMock = {
+    formatToBinary: jest.fn(),
+    convertToUnit: jest.fn()
+  };
+
   configureTestBed({
-    imports: [HttpClientTestingModule]
+    imports: [HttpClientTestingModule],
+    providers: [
+      { provide: PrometheusService, useValue: prometheusServiceMock },
+      { provide: FormatterService, useValue: formatterServiceMock }
+    ]
   });
 
   beforeEach(() => {
-    TestBed.configureTestingModule({});
-    service = TestBed.inject(OverviewStorageService);
-  });
-
-  afterEach(() => {
     jest.clearAllMocks();
+    service = TestBed.inject(OverviewStorageService);
   });
 
   it('should be created', () => {
