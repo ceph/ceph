@@ -1665,7 +1665,6 @@ class DB {
     /*	DB() {}*/
 
     DB(CephContext *_cct) : db_name("default_db"),
-
     table_name_prefix(db_name),
     account_table(db_name+"_account_table"),
     user_table(db_name+"_user_table"),
