@@ -751,7 +751,7 @@ public:
 
   seastar::future<std::vector<coll_core_t>> list_collections() override;
 
-  seastar::future<std::string> get_default_device_class() final;
+  seastar::future<std::string> get_default_device_class() override;
 
   seastar::future<std::string> get_data_backend_type_name() final;
 

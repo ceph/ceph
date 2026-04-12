@@ -126,7 +126,7 @@ public:
   initialize_omap_ret initialize_omap(
     Transaction &t,
     laddr_hint_t hint,
-    omap_type_t type) final;
+    omap_type_t type) final override;
 
   /**
    * omap_set_keys
@@ -139,14 +139,14 @@ public:
    * @param _kvs   Batch of keys to set
    */
   omap_set_keys_ret omap_set_keys(omap_root_t &log_root,
-    Transaction &t, std::map<std::string, ceph::bufferlist> kvs) final;
+    Transaction &t, std::map<std::string, ceph::bufferlist> kvs) final override;
 
   // see omap_set_keys
   omap_set_key_ret omap_set_key(
     omap_root_t &log_root,
     Transaction &t,
     std::string key,
-    ceph::bufferlist value) final;
+    ceph::bufferlist value) final override;
 
   /**
    * omap_get_value
@@ -160,7 +160,7 @@ public:
    */
   omap_get_value_ret
   omap_get_value(const omap_root_t &log_root, Transaction &t,
-    std::string key) final;
+    std::string key) final override;
 
   /**
    * omap_list
@@ -182,7 +182,7 @@ public:
     const std::optional<std::string> &first,
     const std::optional<std::string> &last,
     OMapManager::omap_list_config_t config =
-    OMapManager::omap_list_config_t()) final;
+    OMapManager::omap_list_config_t()) final override;
 
   /**
    * omap_rm_key_range
@@ -200,7 +200,7 @@ public:
     omap_root_t &log_root,
     Transaction &t,
     const std::string &first,
-    const std::string &last) final;
+    const std::string &last) final override;
 
   /**
    * omap_rm_key
@@ -219,13 +219,13 @@ public:
   omap_rm_key_ret omap_rm_key(
     omap_root_t &log_root,
     Transaction &t,
-    std::string key) final;
+    std::string key) final override;
 
 
   omap_rm_keys_ret omap_rm_keys(
     omap_root_t &omap_root,
     Transaction &t,
-    std::set<std::string> keys) final;
+    std::set<std::string> keys) final override;
 
   /**
    * omap_clear
@@ -237,7 +237,7 @@ public:
    *
    */
   omap_clear_ret omap_clear(omap_root_t &log_root,
-    Transaction &t) final;
+    Transaction &t) final override;
 
 
   /**
@@ -264,7 +264,7 @@ public:
     Transaction &t,
     ObjectStore::omap_iter_seek_t &start_from,
     omap_iterate_cb_t callback
-  ) final;
+  ) final override;
 
 
   omap_list_iertr::future<>

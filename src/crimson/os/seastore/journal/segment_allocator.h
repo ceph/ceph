@@ -51,25 +51,25 @@ class SegmentAllocator : public JournalAllocator {
 
  public:
   // overriding methods
-  const std::string& get_name() const final {
+  const std::string& get_name() const final override {
     return print_name;
   }
 
-  extent_len_t get_block_size() const final {
+  extent_len_t get_block_size() const final override {
     return sm_group.get_block_size();
   }
 
-  bool can_write() const final {
+  bool can_write() const final override {
     return !!current_segment;
   }
 
-  segment_nonce_t get_nonce() const final {
+  segment_nonce_t get_nonce() const final override {
     assert(can_write());
     return current_segment_nonce;
   }
 
   // returns true iff the current segment has insufficient space
-  bool needs_roll(std::size_t length) const final {
+  bool needs_roll(std::size_t length) const final override {
     assert(can_write());
     assert(current_segment->get_write_capacity() ==
            sm_group.get_segment_size());
@@ -79,23 +79,23 @@ class SegmentAllocator : public JournalAllocator {
   }
 
   // open for write and generate the correct print name
-  open_ret open(bool is_mkfs) final;
+  open_ret open(bool is_mkfs) final override;
 
   // close the current segment and initialize next one
-  roll_ertr::future<> roll() final;
+  roll_ertr::future<> roll() final override;
 
-  journal_seq_t get_written_to() const final;
+  journal_seq_t get_written_to() const final override;
 
   // write the buffer, return the write result
   //
   // May be called concurrently, but writes may complete in any order.
   // If rolling/opening, no write is allowed.
-  write_ertr::future<> write(ceph::bufferlist&& to_write) final;
+  write_ertr::future<> write(ceph::bufferlist&& to_write) final override;
 
   using close_ertr = base_ertr;
-  close_ertr::future<> close() final;
+  close_ertr::future<> close() final override;
 
-  void update_modify_time(record_t& record) final {
+  void update_modify_time(record_t& record) final override {
     segment_provider.update_modify_time(
       get_segment_id(),
       record.modify_time,
