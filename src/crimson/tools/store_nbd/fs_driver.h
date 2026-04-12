@@ -11,27 +11,27 @@ public:
   FSDriver(config_t config)
   : config(config)
   {}
-  ~FSDriver() final {}
+  ~FSDriver() {}
 
-  bufferptr get_buffer(size_t size) final {
+  bufferptr get_buffer(size_t size) override {
     return ceph::buffer::create_page_aligned(size);
   }
 
   seastar::future<> write(
     off_t offset,
-    bufferptr ptr) final;
+    bufferptr ptr) override;
 
   seastar::future<bufferlist> read(
     off_t offset,
-    size_t size) final;
+    size_t size) override;
 
   size_t get_size() const {
     return size;
   }
 
-  seastar::future<> mount() final;
+  seastar::future<> mount() override;
 
-  seastar::future<> close() final;
+  seastar::future<> close() override;
 
 private:
   size_t size = 0;
