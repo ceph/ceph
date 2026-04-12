@@ -475,6 +475,7 @@ class POSIXDriver : public StoreDriver {
 protected:	
   CephContext *cct;
   std::unique_ptr<rgw::store::POSIXUserDB> userDB;
+  std::unique_ptr<rgw::store::POSIXAccountDB> accountDB;
   POSIXZone zone;
   std::unique_ptr<BucketCache> bucket_cache;
   std::string base_path;
@@ -491,6 +492,7 @@ public:
     auto db_full_path = std::filesystem::path(db_path) / db_name;
     
     userDB = std::make_unique<rgw::store::POSIXUserDB>(db_full_path.string(), cct);
+    accountDB = std::make_unique<rgw::store::POSIXAccountDB>(db_full_path.string(), cct);
   }
   virtual ~POSIXDriver() { }
 
@@ -518,32 +520,32 @@ public:
 				 std::string_view id,
 				 RGWAccountInfo& info,
 				 Attrs& attrs,
-				 RGWObjVersionTracker& objv) override { return -ENOTSUP; }
+				 RGWObjVersionTracker& objv) override;
   virtual int load_account_by_name(const DoutPrefixProvider* dpp,
 				 optional_yield y,
 				 std::string_view tenant,
 				 std::string_view name,
 				 RGWAccountInfo& info,
 				 Attrs& attrs,
-				 RGWObjVersionTracker& objv) override { return -ENOTSUP; }
+				 RGWObjVersionTracker& objv) override;
   virtual int load_account_by_email(const DoutPrefixProvider* dpp,
 				  optional_yield y,
 				  std::string_view email,
 				  RGWAccountInfo& info,
 				  Attrs& attrs,
-				  RGWObjVersionTracker& objv) override { return -ENOTSUP; }
+				  RGWObjVersionTracker& objv) override;
 
   virtual int store_account(const DoutPrefixProvider* dpp,
 			  optional_yield y, bool exclusive,
 			  const RGWAccountInfo& info,
 			  const RGWAccountInfo* old_info,
 			  const Attrs& attrs,
-			  RGWObjVersionTracker& objv) override { return -ENOTSUP; }
+			  RGWObjVersionTracker& objv) override;
 
   virtual int delete_account(const DoutPrefixProvider* dpp,
 			     optional_yield y,
 			     const RGWAccountInfo& info,
-			     RGWObjVersionTracker& objv) override { return -ENOTSUP; }
+			     RGWObjVersionTracker& objv) override;
 
   virtual int load_stats(const DoutPrefixProvider* dpp,
 			 optional_yield y,
