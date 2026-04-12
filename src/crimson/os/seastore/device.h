@@ -9,6 +9,7 @@
 
 #include "crimson/common/errorator.h"
 #include "crimson/os/seastore/seastore_types.h"
+#include "crimson/common/smp_helpers.h"
 
 namespace crimson::os::seastore {
 

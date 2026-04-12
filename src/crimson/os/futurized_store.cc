@@ -33,7 +33,7 @@ FuturizedStore::create(const std::string& type,
   }
 }
 
-seastar::future<> with_store_do_transaction(
+seastar::future<> RelayStore::with_store_do_transaction(
   BackendStore store,
   FuturizedStore::Shard::CollectionRef ch,
   ceph::os::Transaction&& txn)

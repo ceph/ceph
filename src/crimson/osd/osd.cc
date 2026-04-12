@@ -191,7 +191,7 @@ seastar::future<> OSD::open_meta_coll()
     coll_t::meta()
   ).then([this, FNAME](auto ch) {
     DEBUG("registering metadata collection");    
-    pg_shard_manager.init_meta_coll(ch, store.get_backend_store(META_STORE_INDEX));
+    pg_shard_manager.init_meta_coll(ch, crimson::os::BackendStore::get_backend_store(store, META_STORE_INDEX));
     return seastar::now();
   });
 }
@@ -270,11 +270,11 @@ seastar::future<OSDMeta> OSD::open_or_create_meta_coll(FuturizedStore &store)
       return store.get_sharded_store().create_new_collection(
 	coll_t::meta()
       ).then([&store](auto ch) {
-	return OSDMeta(ch, store.get_backend_store(META_STORE_INDEX));
+	return OSDMeta(ch, crimson::os::BackendStore::get_backend_store(store, META_STORE_INDEX));
       });
     } else {
       DEBUG("meta collection already exists");
-      return seastar::make_ready_future<OSDMeta>(ch, store.get_backend_store(META_STORE_INDEX));
+      return seastar::make_ready_future<OSDMeta>(ch, crimson::os::BackendStore::get_backend_store(store, META_STORE_INDEX));
     }
   });
 }
@@ -463,7 +463,7 @@ seastar::future<> OSD::start()
   startup_time = ceph::mono_clock::now();
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
   DEBUG("starting store");
-  return store.start().then([this] (auto store_shard_nums) {
+  return store.start().then([this] (const auto store_shard_nums) {
     return pg_to_shard_mappings.start(0, seastar::smp::count, store_shard_nums
     ).then([this] {
       return osd_singleton_state.start_single(
