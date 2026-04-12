@@ -4,6 +4,7 @@
 #include "./scrubber_generators.h"
 #include "./scrubber_test_datasets.h"
 
+#include <expected>
 #include <gtest/gtest.h>
 #include <signal.h>
 #include <stdio.h>
@@ -256,10 +257,10 @@ class TestScrubber : public ScrubBeListener, public Scrub::SnapMapReaderI {
   int get_snaps(const hobject_t& hoid,
 		std::set<snapid_t>* snaps_set) const;
 
-  tl::expected<std::set<snapid_t>, result_t> get_snaps(
+  std::expected<std::set<snapid_t>, result_t> get_snaps(
     const hobject_t& oid) const final;
 
-  tl::expected<std::set<snapid_t>, result_t> get_snaps_check_consistency(
+  std::expected<std::set<snapid_t>, result_t> get_snaps_check_consistency(
     const hobject_t& oid) const final
   {
     /// \todo for now
@@ -319,7 +320,7 @@ int TestScrubber::get_snaps(const hobject_t& hoid,
   return 0;
 }
 
-tl::expected<std::set<snapid_t>, Scrub::SnapMapReaderI::result_t>
+std::expected<std::set<snapid_t>, Scrub::SnapMapReaderI::result_t>
 TestScrubber::get_snaps(const hobject_t& oid) const
 {
   std::set<snapid_t> snapset;
@@ -327,7 +328,7 @@ TestScrubber::get_snaps(const hobject_t& oid) const
   if (r >= 0) {
     return snapset;
   }
-  return tl::make_unexpected(Scrub::SnapMapReaderI::result_t{
+  return std::unexpected(Scrub::SnapMapReaderI::result_t{
     Scrub::SnapMapReaderI::result_t::code_t::not_found,
     r});
 }

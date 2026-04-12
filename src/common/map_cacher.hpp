@@ -17,10 +17,10 @@
 #define MAPCACHER_H
 
 #include "include/Context.h"
-#include "include/expected.hpp"
 #include "common/sharedptr_registry.hpp"
 
 #include <boost/optional.hpp>
+#include <expected>
 
 #include <map>
 #include <set>
@@ -142,7 +142,7 @@ public:
     K last_key;
     V data;
   };
-  using MaybePosAndData = tl::expected<PosAndData, int>;
+  using MaybePosAndData = std::expected<PosAndData, int>;
 
   MaybePosAndData get_1st_after_key(
       K key  ///< [in] key after which to get next
@@ -158,13 +158,13 @@ public:
       std::pair<K, V> store;
       int r = driver->get_next(key, &store);
       if (r < 0 && r != -ENOENT) {
-        return tl::unexpected(r);
+        return std::unexpected(r);
       } else if (r == 0) {
 	got_store = true;
       }
 
       if (!got_cached && !got_store) {
-        return tl::unexpected(-ENOENT);
+        return std::unexpected(-ENOENT);
       } else if (got_cached && (!got_store || store.first >= cached.first)) {
 	if (cached.second) {
 	  return PosAndData{cached.first, *cached.second};
@@ -177,7 +177,7 @@ public:
       }
     }
     ceph_abort();  // not reachable
-    return tl::unexpected(-EINVAL);
+    return std::unexpected(-EINVAL);
   }
 
 
