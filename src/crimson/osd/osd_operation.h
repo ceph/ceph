@@ -156,11 +156,11 @@ struct OperationT : InterruptibleOperation {
   using IRef = boost::intrusive_ptr<T>;
   using ICRef = boost::intrusive_ptr<const T>;
 
-  unsigned get_type() const final {
+  unsigned get_type() const final override {
     return static_cast<unsigned>(T::type);
   }
 
-  const char *get_type_name() const final {
+  const char *get_type_name() const final override {
     return T::type_name;
   }
 
@@ -365,9 +365,9 @@ public:
   void start();
   seastar::future<> stop();
 
-  std::vector<std::string> get_tracked_keys() const noexcept final;
+  std::vector<std::string> get_tracked_keys() const noexcept final override;
   void handle_conf_change(const ConfigProxy& conf,
-			  const std::set<std::string> &changed) final;
+			  const std::set<std::string> &changed) final override;
   void update_from_config(const ConfigProxy &conf);
 
   bool available() const {
@@ -400,7 +400,7 @@ public:
 
   void initialize_scheduler(CephContext* cct, ConfigProxy &conf, bool is_rotational, int whoami);
 private:
-  void dump_detail(Formatter *f) const final;
+  void dump_detail(Formatter *f) const final override;
 
   crimson::osd::scheduler::SchedulerRef scheduler;
 

@@ -31,13 +31,13 @@ public:
 		    CollectionRef coll,
 		    crimson::osd::ShardServices& shard_services,
 		    DoutPrefixProvider &dpp);
-  void got_rep_op_reply(const MOSDRepOpReply& reply) final;
-  seastar::future<> stop() final;
-  void on_actingset_changed(bool same_primary) final;
+  void got_rep_op_reply(const MOSDRepOpReply& reply) final override;
+  seastar::future<> stop() final override;
+  void on_actingset_changed(bool same_primary) final override;
 
   PGBackend::get_attr_ierrorator::future<ceph::bufferlist> getxattr(
     const hobject_t& soid,
-    std::string&& key) const final;
+    std::string&& key) const final override;
 
 private:
   ll_read_ierrorator::future<ceph::bufferlist>
@@ -45,7 +45,7 @@ private:
         uint64_t object_size,
         uint64_t off,
         uint64_t len,
-        uint32_t flags) final;
+        uint32_t flags) final override;
   rep_op_fut_t submit_transaction(
     const std::set<pg_shard_t> &pg_shards,
     crimson::osd::ObjectContextRef&& obc,
@@ -53,7 +53,7 @@ private:
     ceph::os::Transaction&& txn,
     osd_op_params_t&& osd_op_p,
     epoch_t min_epoch, epoch_t max_epoch,
-    std::vector<pg_log_entry_t>&& log_entries) final;
+    std::vector<pg_log_entry_t>&& log_entries) final override;
   const pg_t pgid;
   class pending_on_t : public seastar::weakly_referencable<pending_on_t> {
   public:
@@ -93,7 +93,7 @@ private:
     ceph_tid_t tid);
 
   seastar::future<> request_committed(
-    const osd_reqid_t& reqid, const eversion_t& at_version) final;
+    const osd_reqid_t& reqid, const eversion_t& at_version) final override;
 
   seastar::timer<seastar::lowres_clock> pct_timer;
 

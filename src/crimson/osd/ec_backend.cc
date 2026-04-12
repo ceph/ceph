@@ -248,7 +248,7 @@ struct ECCrimsonOp : ECCommon::RMWPipeline::Op {
       shard_id_map<ceph::os::Transaction> *transactions,
       DoutPrefixProvider *dpp,
       const OSDMapRef &osdmap,
-      bool &first_write_in_interval) final
+      bool &first_write_in_interval) final override
   {
     assert(t);
     ECTransaction::generate_transactions(
@@ -271,7 +271,7 @@ struct ECCrimsonOp : ECCommon::RMWPipeline::Op {
   bool skip_transaction(
       std::set<shard_id_t> &pending_roll_forward,
       shard_id_t shard,
-      ceph::os::Transaction &transaction) final {
+      ceph::os::Transaction &transaction) final override {
     if (transaction.empty()) {
       return true;
     }

@@ -79,7 +79,7 @@ public:
 class ScrubRequested final : public RemoteScrubEventBaseT<ScrubRequested> {
   bool deep = false;
 protected:
-  ifut<> handle_event(PG &pg) final;
+  ifut<> handle_event(PG &pg) override;
 
 public:
   static constexpr OperationTypeCode type = OperationTypeCode::scrub_requested;
@@ -93,10 +93,10 @@ public:
     return epoch;
   }
 
-  void print(std::ostream &out) const final {
+  void print(std::ostream &out) const override {
     out << "(deep=" << deep << ")";
   }
-  void dump_detail(ceph::Formatter *f) const final {
+  void dump_detail(ceph::Formatter *f) const override {
     f->dump_bool("deep", deep);
   }
 
@@ -105,7 +105,7 @@ public:
 class ScrubMessage final : public RemoteScrubEventBaseT<ScrubMessage> {
   MessageRef m;
 protected:
-  ifut<> handle_event(PG &pg) final;
+  ifut<> handle_event(PG &pg) override;
 
 public:
   static constexpr OperationTypeCode type = OperationTypeCode::scrub_message;
@@ -121,10 +121,10 @@ public:
     return epoch;
   }
 
-  void print(std::ostream &out) const final {
+  void print(std::ostream &out) const override {
     out << "(m=" << *m << ")";
   }
-  void dump_detail(ceph::Formatter *f) const final {
+  void dump_detail(ceph::Formatter *f) const override {
     f->dump_stream("m") << *m;
   }
 
@@ -158,16 +158,16 @@ public:
   ScrubFindRange(const hobject_t &begin, Args&&... args)
     : ScrubAsyncOpT(std::forward<Args>(args)...), begin(begin) {}
 
-  void print(std::ostream &out) const final {
+  void print(std::ostream &out) const final override {
     out << "(begin=" << begin << ")";
   }
-  void dump_detail(ceph::Formatter *f) const final {
+  void dump_detail(ceph::Formatter *f) const final override {
     f->dump_stream("begin") << begin;
   }
 
 
 protected:
-  ifut<> run(PG &pg) final;
+  ifut<> run(PG &pg) final override;
 };
 
 class ScrubReserveRange : public ScrubAsyncOpT<ScrubReserveRange> {
@@ -184,17 +184,17 @@ public:
   ScrubReserveRange(const hobject_t &begin, const hobject_t &end, Args&&... args)
     : ScrubAsyncOpT(std::forward<Args>(args)...), begin(begin), end(end) {}
 
-  void print(std::ostream &out) const final {
+  void print(std::ostream &out) const final override {
     out << "(begin=" << begin << ", end=" << end << ")";
   }
-  void dump_detail(ceph::Formatter *f) const final {
+  void dump_detail(ceph::Formatter *f) const final override {
     f->dump_stream("begin") << begin;
     f->dump_stream("end") << end;
   }
 
 
 protected:
-  ifut<> run(PG &pg) final;
+  ifut<> run(PG &pg) final override;
 };
 
 class ScrubScan : public ScrubAsyncOpT<ScrubScan> {
@@ -217,14 +217,14 @@ class ScrubScan : public ScrubAsyncOpT<ScrubScan> {
 public:
   static constexpr OperationTypeCode type = OperationTypeCode::scrub_scan;
 
-  void print(std::ostream &out) const final {
+  void print(std::ostream &out) const final override {
     out << "(deep=" << deep
 	<< ", local=" << local
 	<< ", begin=" << begin
 	<< ", end=" << end
 	<< ")";
   }
-  void dump_detail(ceph::Formatter *f) const final {
+  void dump_detail(ceph::Formatter *f) const final override {
     f->dump_bool("deep", deep);
     f->dump_bool("local", local);
     f->dump_stream("begin") << begin;
@@ -237,7 +237,7 @@ public:
     : ScrubAsyncOpT(pg), deep(deep), local(local), begin(begin), end(end) {}
 
 protected:
-  ifut<> run(PG &pg) final;
+  ifut<> run(PG &pg) final override;
 };
 
 struct obj_scrub_progress_t {

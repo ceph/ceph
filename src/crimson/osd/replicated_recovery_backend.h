@@ -25,11 +25,11 @@ public:
 			    PGBackend* backend);
   interruptible_future<> handle_recovery_op(
     Ref<MOSDFastDispatchOp> m,
-    crimson::net::ConnectionXcoreRef conn) final;
+    crimson::net::ConnectionXcoreRef conn) final override;
 
   interruptible_future<> recover_object(
     const hobject_t& soid,
-    eversion_t need) final;
+    eversion_t need) final override;
 
 protected:
   interruptible_future<> handle_pull(
@@ -96,7 +96,7 @@ protected:
   interruptible_future<std::optional<PushOp>> _handle_push_reply(
     pg_shard_t peer,
     const PushReplyOp &op);
-  seastar::future<> on_stop() final {
+  seastar::future<> on_stop() final override {
     return seastar::now();
   }
 private:

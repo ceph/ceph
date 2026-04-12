@@ -30,9 +30,9 @@ public:
       watch(std::move(watch)) {
   }
 
-  const hobject_t& get_target_oid() const final;
-  PG::do_osd_ops_params_t get_do_osd_ops_params() const final;
-  std::vector<OSDOp> create_osd_ops() final;
+  const hobject_t& get_target_oid() const override;
+  PG::do_osd_ops_params_t get_do_osd_ops_params() const override;
+  std::vector<OSDOp> create_osd_ops() override;
 
 private:
   WatchRef watch;

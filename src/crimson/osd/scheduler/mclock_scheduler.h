@@ -176,31 +176,31 @@ public:
   std::string display_queues() const;
 
   // Enqueue op in the back of the regular queue
-  void enqueue(item_t &&item) final;
+  void enqueue(item_t &&item) final override;
 
   // Enqueue the op in the front of the high priority queue
-  void enqueue_front(item_t &&item) final;
+  void enqueue_front(item_t &&item) final override;
 
   // Return an op to be dispatch
-  WorkItem dequeue() final;
+  WorkItem dequeue() final override;
 
   // Returns if the queue is empty
-  bool empty() const final {
+  bool empty() const final override {
     return scheduler.empty() && high_priority.empty();
   }
 
   // Formatted output of the queue
-  void dump(ceph::Formatter &f) const final;
+  void dump(ceph::Formatter &f) const final override;
 
-  void print(std::ostream &ostream) const final {
+  void print(std::ostream &ostream) const final override {
     ostream << "mClockScheduer ";
     ostream << ", cutoff=" << cutoff_priority;
   }
 
-  std::vector<std::string> get_tracked_keys() const noexcept final;
+  std::vector<std::string> get_tracked_keys() const noexcept final override;
 
   void handle_conf_change(const ConfigProxy& conf,
-			  const std::set<std::string> &changed) final;
+			  const std::set<std::string> &changed) final override;
 
   double get_cost_per_io() const {
     return mclock_conf.get_cost_per_io();

@@ -88,7 +88,7 @@ public:
     ] = conf.get_val<uint64_t>("osd_client_op_priority");
   }
 
-  void enqueue(item_t &&item) final {
+  void enqueue(item_t &&item) override {
     if (use_strict(item.params.klass))
       queue.enqueue_strict(
 	item.params.owner, get_priority(item.params.klass), std::move(item));
@@ -98,7 +98,7 @@ public:
 	item.params.cost, std::move(item));
   }
 
-  void enqueue_front(item_t &&item) final {
+  void enqueue_front(item_t &&item) override {
     if (use_strict(item.params.klass))
       queue.enqueue_strict_front(
 	item.params.owner, get_priority(item.params.klass), std::move(item));
@@ -108,19 +108,19 @@ public:
 	item.params.cost, std::move(item));
   }
 
-  bool empty() const final {
+  bool empty() const override {
     return queue.empty();
   }
 
-  WorkItem dequeue() final {
+  WorkItem dequeue() override {
     return queue.dequeue();
   }
 
-  void dump(ceph::Formatter &f) const final {
+  void dump(ceph::Formatter &f) const override {
     return queue.dump(&f);
   }
 
-  void print(std::ostream &out) const final {
+  void print(std::ostream &out) const override {
     out << "ClassedOpQueueScheduler(queue=";
     queue.print(out);
     out << ", cutoff=" << cutoff << ")";

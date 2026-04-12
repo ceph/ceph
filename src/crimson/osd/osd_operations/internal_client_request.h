@@ -34,8 +34,8 @@ private:
   static constexpr OperationTypeCode type =
     OperationTypeCode::internal_client_request;
 
-  void print(std::ostream &) const final;
-  void dump_detail(Formatter *f) const final;
+  void print(std::ostream &) const final override;
+  void dump_detail(Formatter *f) const final override;
 
   CommonPGPipeline& client_pp();
 

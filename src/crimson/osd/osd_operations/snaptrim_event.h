@@ -52,8 +52,8 @@ public:
       snapid(snapid),
       needs_pause(needs_pause) {}
 
-  void print(std::ostream &) const final;
-  void dump_detail(ceph::Formatter* f) const final;
+  void print(std::ostream &) const override;
+  void dump_detail(ceph::Formatter* f) const override;
   snap_trim_event_ret_t start();
 
 private:
@@ -104,8 +104,8 @@ public:
     snap_to_trim(snap_to_trim) {
   }
 
-  void print(std::ostream &) const final;
-  void dump_detail(ceph::Formatter* f) const final;
+  void print(std::ostream &) const final override;
+  void dump_detail(ceph::Formatter* f) const final override;
   snap_trim_obj_subevent_ret_t start();
 
   CommonPGPipeline& client_pp();

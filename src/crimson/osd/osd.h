@@ -98,9 +98,9 @@ class OSD final : public crimson::net::Dispatcher,
   OSDSuperblock superblock;
 
   // Dispatcher methods
-  std::optional<seastar::future<>> ms_dispatch(crimson::net::ConnectionRef, MessageRef) final;
-  void ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) final;
-  void ms_handle_remote_reset(crimson::net::ConnectionRef conn) final;
+  std::optional<seastar::future<>> ms_dispatch(crimson::net::ConnectionRef, MessageRef) override;
+  void ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) override;
+  void ms_handle_remote_reset(crimson::net::ConnectionRef conn) override;
 
   std::optional<seastar::future<>> do_ms_dispatch(crimson::net::ConnectionRef, MessageRef);
 
@@ -110,11 +110,11 @@ class OSD final : public crimson::net::Dispatcher,
   // which pgs were scanned for min_lec
   std::vector<pg_t> min_last_epoch_clean_pgs;
   void update_stats();
-  seastar::future<MessageURef> get_stats() final;
+  seastar::future<MessageURef> get_stats() override;
 
   // AuthHandler methods
   void handle_authentication(const EntityName& name,
-			     const AuthCapsInfo& caps) final;
+			     const AuthCapsInfo& caps) override;
 
   seastar::sharded<PGShardMapping> pg_to_shard_mappings;
   seastar::sharded<OSDSingletonState> osd_singleton_state;
@@ -131,9 +131,9 @@ class OSD final : public crimson::net::Dispatcher,
   seastar::timer<seastar::lowres_clock> stats_timer;
   std::vector<ShardServices::shard_stats_t> shard_stats;
 
-  std::vector<std::string> get_tracked_keys() const noexcept final;
+  std::vector<std::string> get_tracked_keys() const noexcept override;
   void handle_conf_change(const ConfigProxy& conf,
-                          const std::set<std::string> &changed) final;
+                          const std::set<std::string> &changed) override;
 
   // admin-socket
   seastar::lw_shared_ptr<crimson::admin::AdminSocket> asok;
@@ -146,7 +146,7 @@ public:
       crimson::net::MessengerRef client_msgr,
       crimson::net::MessengerRef hb_front_msgr,
       crimson::net::MessengerRef hb_back_msgr);
-  ~OSD() final;
+  ~OSD();
 
   auto &get_pg_shard_manager() {
     return pg_shard_manager;
