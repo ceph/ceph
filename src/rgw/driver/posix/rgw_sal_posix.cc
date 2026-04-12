@@ -2028,6 +2028,94 @@ int POSIXDriver::get_user_by_swift(const DoutPrefixProvider* dpp, const std::str
   return -ENOTSUP;
 }
 
+int POSIXDriver::load_account_by_id(const DoutPrefixProvider* dpp,
+				 optional_yield y,
+				 std::string_view id,
+				 RGWAccountInfo& info,
+				 Attrs& attrs,
+				 RGWObjVersionTracker& objv)
+{
+  RGWObjVersionTracker objv_tracker;
+
+  int ret = accountDB->get_account(dpp, std::string("account_id"), std::string(id), info, &attrs,
+      &objv_tracker);
+
+  if (ret < 0)
+    return ret;
+
+  objv = objv_tracker;
+  return 0;
+}
+
+int POSIXDriver::load_account_by_name(const DoutPrefixProvider* dpp,
+				 optional_yield y,
+				 std::string_view tenant,
+				 std::string_view name,
+				 RGWAccountInfo& info,
+				 Attrs& attrs,
+				 RGWObjVersionTracker& objv)
+{
+  RGWObjVersionTracker objv_tracker;
+
+  int ret = accountDB->get_account(dpp, std::string("name"), std::string(name), info, &attrs,
+      &objv_tracker);
+
+  if (ret < 0)
+    return ret;
+
+  objv = objv_tracker;
+  return 0;
+}
+
+int POSIXDriver::load_account_by_email(const DoutPrefixProvider* dpp,
+				  optional_yield y,
+				  std::string_view email,
+				  RGWAccountInfo& info,
+				  Attrs& attrs,
+				  RGWObjVersionTracker& objv)
+{
+  RGWObjVersionTracker objv_tracker;
+
+  int ret = accountDB->get_account(dpp, std::string("email"), std::string(email), info, &attrs,
+      &objv_tracker);
+
+  if (ret < 0)
+    return ret;
+
+  objv = objv_tracker;
+  return 0;
+}
+
+int POSIXDriver::store_account(const DoutPrefixProvider* dpp,
+			  optional_yield y, bool exclusive,
+			  const RGWAccountInfo& info,
+			  const RGWAccountInfo* old_info,
+			  const Attrs& attrs,
+			  RGWObjVersionTracker& objv)
+{
+  int ret = accountDB->store_account(dpp, info, exclusive, &attrs, &objv);
+
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
+int POSIXDriver::delete_account(const DoutPrefixProvider* dpp,
+			     optional_yield y,
+			     const RGWAccountInfo& info,
+			     RGWObjVersionTracker& objv)
+{
+  int ret = accountDB->remove_account(dpp, info, &objv);
+
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
+
+
 int POSIXDriver::load_owner_by_email(const DoutPrefixProvider* dpp,
 				    optional_yield y,
 				    std::string_view email,
