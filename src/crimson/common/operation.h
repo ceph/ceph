@@ -262,7 +262,7 @@ public:
   }
 
 private:
-  const char *get_type_name() const final {
+  const char *get_type_name() const final override {
     return static_cast<const T*>(this)->type_name;
   }
   using event_list_t = boost::intrusive::list<BlockingEvent>;
@@ -312,7 +312,7 @@ struct AggregateBlockingEvent {
       typename std::list<T>::iterator iter;
       typename T::template Trigger<OpT> trigger;
 
-      typename T::TriggerI &get_trigger() final {
+      typename T::TriggerI &get_trigger() override {
 	return trigger;
       }
 
@@ -322,13 +322,13 @@ struct AggregateBlockingEvent {
 	iter(event.events.emplace(event.events.end())),
 	trigger(*iter, op) {}
 
-      ~TriggerContainer() final {
+      ~TriggerContainer() {
 	event.events.erase(iter);
       }
     };
 
   protected:
-    typename TriggerI::TriggerContainerIRef create_part_trigger() final {
+    typename TriggerI::TriggerContainerIRef create_part_trigger() override {
       return std::make_unique<TriggerContainer>(event, op);
     }
 
@@ -441,13 +441,13 @@ class OperationRegistryT : public OperationRegistryI {
   > registries;
 
 protected:
-  void do_register(Operation *op) final {
+  void do_register(Operation *op) final override {
     const auto op_type = op->get_type();
     registries[op_type].push_back(*op);
     op->set_id(++next_id);
   }
 
-  bool registries_empty() const final {
+  bool registries_empty() const final override {
     return std::all_of(registries.begin(),
 		       registries.end(),
 		       [](auto& opl) {
@@ -656,7 +656,7 @@ public:
  */
 template <class T>
 class OrderedExclusivePhaseT : public PipelineStageIT<T> {
-  void dump_detail(ceph::Formatter *f) const final {
+  void dump_detail(ceph::Formatter *f) const final override {
     f->dump_unsigned("waiting", waiting);
     if (held_by != Operation::NULL_ID) {
       f->dump_unsigned("held_by_operation_id", held_by);
@@ -670,11 +670,11 @@ class OrderedExclusivePhaseT : public PipelineStageIT<T> {
     ExitBarrier(OrderedExclusivePhaseT &phase, Operation::id_t id)
       : phase(&phase), op_id(id) {}
 
-    std::optional<seastar::future<>> wait() final {
+    std::optional<seastar::future<>> wait() override {
       return std::nullopt;
     }
 
-    ~ExitBarrier() final {
+    ~ExitBarrier() {
       assert(phase);
       assert(phase->core == seastar::this_shard_id());
       phase->exit(op_id);
@@ -724,7 +724,7 @@ private:
 template <class T>
 class OrderedConcurrentPhaseT : public PipelineStageIT<T> {
 private:
-  void dump_detail(ceph::Formatter *f) const final {}
+  void dump_detail(ceph::Formatter *f) const final override {}
 
   template <class TriggerT>
   class ExitBarrier final : public PipelineExitBarrierI {
@@ -737,7 +737,7 @@ private:
       seastar::future<> &&barrier,
       TriggerT& trigger) : phase(&phase), barrier(std::move(barrier)), trigger(trigger) {}
 
-    std::optional<seastar::future<>> wait() final {
+    std::optional<seastar::future<>> wait() override {
       assert(phase);
       assert(barrier);
       auto ret = std::move(*barrier);
@@ -745,7 +745,7 @@ private:
       return trigger.maybe_record_exit_barrier(std::move(ret));
     }
 
-    ~ExitBarrier() final {
+    ~ExitBarrier() {
       assert(phase);
       assert(phase->core == seastar::this_shard_id());
       if (barrier) {
@@ -784,17 +784,17 @@ private:
  */
 template <class T>
 class UnorderedStageT : public PipelineStageIT<T> {
-  void dump_detail(ceph::Formatter *f) const final {}
+  void dump_detail(ceph::Formatter *f) const final override {}
 
   class ExitBarrier final : public PipelineExitBarrierI {
   public:
     ExitBarrier() = default;
 
-    std::optional<seastar::future<>> wait() final {
+    std::optional<seastar::future<>> wait() override {
       return std::nullopt;
     }
 
-    ~ExitBarrier() final {}
+    ~ExitBarrier() {}
   };
 
 public:
