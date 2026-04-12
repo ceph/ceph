@@ -5,6 +5,8 @@
 #include "include/Context.h"
 #include "common/Cond.h"
 #include "common/dout.h"
+#include <boost/asio/dispatch.hpp>
+#include <boost/asio/post.hpp>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -28,19 +30,6 @@ AsioContextWQ::~AsioContextWQ() {
   m_strand.reset();
 }
 
-void AsioContextWQ::queue(Context *ctx, int r) {
-  ++m_queued_ops;
-
-  // ensure all legacy ContextWQ users are dispatched sequentially for
-  // backwards compatibility (i.e. might not be concurrent thread-safe)
-  boost::asio::post(*m_strand, [this, ctx, r]() {
-    ctx->complete(r);
-
-    ceph_assert(m_queued_ops > 0);
-    --m_queued_ops;
-  });
-}
-
 void AsioContextWQ::drain() {
   ldout(get_cct(), 20) << dendl;
   C_SaferCond ctx;
@@ -54,9 +43,23 @@ void AsioContextWQ::drain_handler(Context* ctx) {
     return;
   }
 
-  // new items might be queued while we are trying to drain, so we
-  // might need to post the handler multiple times
   boost::asio::post(*m_strand, [this, ctx]() { drain_handler(ctx); });
+}
+
+void AsioContextWQ::post(Work fn) {
+  boost::asio::post(*m_io_context, std::move(fn));
+}
+
+void AsioContextWQ::dispatch(Work fn) {
+  boost::asio::dispatch(*m_io_context, std::move(fn));
+}
+
+void AsioContextWQ::post_serial(Work fn) {
+  boost::asio::post(*m_strand, std::move(fn));
+}
+
+void AsioContextWQ::dispatch_serial(Work fn) {
+  boost::asio::dispatch(*m_strand, std::move(fn));
 }
 
 } // namespace asio

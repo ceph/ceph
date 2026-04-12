@@ -42,6 +42,7 @@ target_link_libraries(rbd_test_mock PUBLIC
 # doesn't use add_ceph_test because it is called by run-rbd-unit-tests.sh
 set(unittest_librbd_srcs
   test_BlockGuard.cc
+  test_librbd_executor.cc
   test_main.cc
   test_mock_fixture.cc
   test_mock_ConfigWatcher.cc

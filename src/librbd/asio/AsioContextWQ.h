@@ -16,26 +16,29 @@ namespace asio {
 /**
  * ASIO-based implementation of ContextWQ.
  *
- * This implementation uses Boost.ASIO's io_context and strand to schedule
- * work on ASIO thread pools, ensuring sequential execution for backwards
- * compatibility with legacy code.
+ * Parallel work uses io_context; serial work (post_serial / queue)
+ * shares one strand
  */
 class AsioContextWQ : public ContextWQ {
 public:
+  using executor_type = boost::asio::io_context::executor_type;
+
   explicit AsioContextWQ(CephContext* cct, boost::asio::io_context& io_context);
   ~AsioContextWQ() override;
 
-  void queue(Context *ctx, int r = 0) override;
   void drain() override;
+
+  void post(Work fn) override;
+  void dispatch(Work fn) override;
+  void post_serial(Work fn) override;
+  void dispatch_serial(Work fn) override;
 
 private:
   boost::asio::io_context* m_io_context;
-  using executor_type = boost::asio::io_context::executor_type;
   std::unique_ptr<boost::asio::strand<executor_type>> m_strand;
 
   void drain_handler(Context* ctx);
 
-  // Helper to get CephContext* from base class's void* m_cct
   CephContext* get_cct() const {
     return static_cast<CephContext*>(m_cct);
   }

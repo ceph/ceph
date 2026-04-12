@@ -19,9 +19,7 @@ AsioEngine::AsioEngine(std::shared_ptr<librados::Rados> rados)
   : m_rados_api(std::make_shared<neorados::RADOS>(
       neorados::RADOS::make_with_librados(*rados))),
     m_cct(m_rados_api->cct()),
-    m_io_context(m_rados_api->get_io_context()),
-    m_api_strand(std::make_unique<boost::asio::strand<executor_type>>(
-      boost::asio::make_strand(m_io_context))) {
+    m_io_context(m_rados_api->get_io_context()) {
 
   // ASIO mode: Create ASIO-based ContextWQ (default mode)
   m_context_wq = std::make_shared<asio::AsioContextWQ>(m_cct, m_io_context);
@@ -44,7 +42,6 @@ AsioEngine::AsioEngine(librados::IoCtx& io_ctx)
 
 AsioEngine::~AsioEngine() {
   ldout(m_cct, 20) << dendl;
-  m_api_strand.reset();
 }
 
 void AsioEngine::set_context_wq(std::shared_ptr<asio::ContextWQ> context_wq) {

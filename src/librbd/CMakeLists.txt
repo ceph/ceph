@@ -51,6 +51,7 @@ set(librbd_internal_srcs
   api/Snapshot.cc
   api/Trash.cc
   api/Utils.cc
+  asio/ContextWQ.cc
   asio/AsioContextWQ.cc
   cache/ImageWriteback.cc
   cache/ObjectCacherObjectDispatch.cc
