@@ -28,33 +28,33 @@ class CircularBoundedJournal;
 class CircularJournalSpace : public JournalAllocator {
 
  public:
-  const std::string& get_name() const final {
+  const std::string& get_name() const final override {
     return print_name;
   }
 
-  extent_len_t get_block_size() const final;
+  extent_len_t get_block_size() const final override;
 
-  bool can_write() const final {
+  bool can_write() const final override {
     return (device != nullptr);
   }
 
-  segment_nonce_t get_nonce() const final {
+  segment_nonce_t get_nonce() const final override {
     return header.magic;
   }
 
-  bool needs_roll(std::size_t length) const final;
+  bool needs_roll(std::size_t length) const final override;
 
-  roll_ertr::future<> roll() final;
+  roll_ertr::future<> roll() final override;
 
-  journal_seq_t get_written_to() const final {
+  journal_seq_t get_written_to() const final override {
     return written_to;
   }
 
-  write_ertr::future<> write(ceph::bufferlist&& to_write) final;
+  write_ertr::future<> write(ceph::bufferlist&& to_write) final override;
 
-  void update_modify_time(record_t& record) final {}
+  void update_modify_time(record_t& record) final override {}
 
-  close_ertr::future<> close() final {
+  close_ertr::future<> close() final override {
     return write_header(
     ).safe_then([this]() -> close_ertr::future<> {
       initialized = false;
@@ -67,7 +67,7 @@ class CircularJournalSpace : public JournalAllocator {
     );
   }
 
-  open_ret open(bool is_mkfs) final;
+  open_ret open(bool is_mkfs) final override;
 
  public:
   CircularJournalSpace(RBMDevice * device);

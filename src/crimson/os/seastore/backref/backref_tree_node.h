@@ -62,7 +62,7 @@ public:
 
   static constexpr extent_types_t TYPE = extent_types_t::BACKREF_INTERNAL;
 
-  extent_types_t get_type() const final {
+  extent_types_t get_type() const final override {
     return TYPE;
   }
 };
@@ -87,14 +87,14 @@ public:
 
   static constexpr extent_types_t TYPE = extent_types_t::BACKREF_LEAF;
 
-  extent_types_t get_type() const final  {
+  extent_types_t get_type() const final override  {
     return TYPE;
   }
 
   const_iterator insert(
     const_iterator iter,
     paddr_t key,
-    backref_map_val_t val) final {
+    backref_map_val_t val) final override {
     journal_insert(
       iter,
       key,
@@ -105,33 +105,33 @@ public:
 
   void update(
     const_iterator iter,
-    backref_map_val_t val) final {
+    backref_map_val_t val) final override {
     return journal_update(
       iter,
       val,
       maybe_get_delta_buffer());
   }
 
-  void remove(const_iterator iter) final {
+  void remove(const_iterator iter) final override {
     return journal_remove(
       iter,
       maybe_get_delta_buffer());
   }
 
-  void do_on_rewrite(Transaction &t, CachedExtent &extent) final {}
-  void do_on_replace_prior() final {}
-  void do_prepare_commit() final {}
+  void do_on_rewrite(Transaction &t, CachedExtent &extent) final override {}
+  void do_on_replace_prior() final override {}
+  void do_prepare_commit() final override {}
 
 
   void on_split(
     Transaction &t,
     BackrefLeafNode &left,
-    BackrefLeafNode &right) final {}
+    BackrefLeafNode &right) final override {}
 
   void on_merge(
     Transaction &t,
     BackrefLeafNode &left,
-    BackrefLeafNode &right) final {}
+    BackrefLeafNode &right) final override {}
 
   void on_balance(
     Transaction &t,
@@ -139,17 +139,17 @@ public:
     BackrefLeafNode &right,
     uint32_t pivot_idx,
     BackrefLeafNode &replacement_left,
-    BackrefLeafNode &replacement_right) final {}
+    BackrefLeafNode &replacement_right) final override {}
 
   void adjust_copy_src_dest_on_split(
     Transaction &t,
     BackrefLeafNode &left,
-    BackrefLeafNode &right) final {}
+    BackrefLeafNode &right) final override {}
 
   void adjust_copy_src_dest_on_merge(
     Transaction &t,
     BackrefLeafNode &left,
-    BackrefLeafNode &right) final {}
+    BackrefLeafNode &right) final override {}
 
   void adjust_copy_src_dest_on_balance(
     Transaction &t,
@@ -157,13 +157,13 @@ public:
     BackrefLeafNode &right,
     uint32_t pivot_idx,
     BackrefLeafNode &replacement_left,
-    BackrefLeafNode &replacement_right) final {}
+    BackrefLeafNode &replacement_right) final override {}
   // backref leaf nodes don't have to resolve relative addresses
-  void resolve_relative_addrs(paddr_t base) final {}
+  void resolve_relative_addrs(paddr_t base) final override {}
 
-  void node_resolve_vals(iterator from, iterator to) const final {}
+  void node_resolve_vals(iterator from, iterator to) const final override {}
 
-  void node_unresolve_vals(iterator from, iterator to) const final {}
+  void node_unresolve_vals(iterator from, iterator to) const final override {}
 };
 using BackrefLeafNodeRef = BackrefLeafNode::Ref;
 

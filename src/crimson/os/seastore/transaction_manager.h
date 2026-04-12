@@ -848,27 +848,27 @@ public:
       Transaction::src_t src,
       const char* name,
       cache_hint_t cache_hint = CACHE_HINT_TOUCH,
-      bool is_weak=false) final {
+      bool is_weak=false) final override {
     return cache->create_transaction(src, name, cache_hint, is_weak);
   }
 
   using ExtentCallbackInterface::submit_transaction_direct_ret;
   submit_transaction_direct_ret submit_transaction_direct(
     Transaction &t,
-    std::optional<journal_seq_t> seq_to_trim = std::nullopt) final;
+    std::optional<journal_seq_t> seq_to_trim = std::nullopt) final override;
 
   using ExtentCallbackInterface::get_next_dirty_extents_ret;
   get_next_dirty_extents_ret get_next_dirty_extents(
     Transaction &t,
     journal_seq_t seq,
-    size_t max_bytes) final;
+    size_t max_bytes) final override;
 
   using ExtentCallbackInterface::rewrite_extent_ret;
   rewrite_extent_ret rewrite_extent(
     Transaction &t,
     CachedExtentRef extent,
     rewrite_gen_t target_generation,
-    sea_time_point modify_time) final;
+    sea_time_point modify_time) final override;
 
   using ExtentCallbackInterface::get_extents_if_live_ret;
   get_extents_if_live_ret get_extents_if_live(
@@ -876,7 +876,7 @@ public:
     extent_types_t type,
     paddr_t paddr,
     laddr_t laddr,
-    extent_len_t len) final;
+    extent_len_t len) final override;
 
   /**
    * read_root_meta

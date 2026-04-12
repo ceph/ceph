@@ -174,7 +174,7 @@ using SegmentManagerRef = std::unique_ptr<SegmentManager>;
 
 class SegmentManager : public Device {
 public:
-  backend_type_t get_backend_type() const final {
+  backend_type_t get_backend_type() const final override {
     return backend_type_t::SEGMENTED;
   }
 

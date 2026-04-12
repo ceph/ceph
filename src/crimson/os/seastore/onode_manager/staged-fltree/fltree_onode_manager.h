@@ -61,14 +61,14 @@ struct FLTreeOnode final : Onode, Value {
     };
     Recorder(bufferlist &bl) : ValueDeltaRecorder(bl) {}
 
-    value_magic_t get_header_magic() const final {
+    value_magic_t get_header_magic() const final override {
       return TREE_CONF.value_magic;
     }
 
     void apply_value_delta(
       ceph::bufferlist::const_iterator &bliter,
       NodeExtentMutable &value,
-      laddr_offset_t value_addr_offset) final;
+      laddr_offset_t value_addr_offset) final override;
 
     void encode_update(NodeExtentMutable &payload_mut, delta_op_t op);
   };
@@ -76,7 +76,7 @@ struct FLTreeOnode final : Onode, Value {
   bool is_alive() const {
     return status != status_t::DELETED;
   }
-  const onode_layout_t &get_layout() const final {
+  const onode_layout_t &get_layout() const override {
     assert(status != status_t::DELETED);
     return *read_payload<onode_layout_t>();
   }
@@ -92,7 +92,7 @@ struct FLTreeOnode final : Onode, Value {
     layout_func(p.first, p.second);
   }
 
-  void swap_layout(Transaction &t, Onode &onode) final {
+  void swap_layout(Transaction &t, Onode &onode) override {
     _swap_layout(t, static_cast<FLTreeOnode&>(onode));
   }
 
@@ -142,7 +142,7 @@ struct FLTreeOnode final : Onode, Value {
     });
   }
 
-  void set_need_cow(Transaction &t) final {
+  void set_need_cow(Transaction &t) override {
     with_mutable_layout(
       t,
       [](NodeExtentMutable &payload_mut, Recorder *recorder) {
@@ -156,7 +156,7 @@ struct FLTreeOnode final : Onode, Value {
     });
   }
 
-  void unset_need_cow(Transaction &t) final {
+  void unset_need_cow(Transaction &t) override {
     with_mutable_layout(
       t,
       [](NodeExtentMutable &payload_mut, Recorder *recorder) {
@@ -170,7 +170,7 @@ struct FLTreeOnode final : Onode, Value {
     });
   }
 
-  void update_onode_size(Transaction &t, uint32_t size) final {
+  void update_onode_size(Transaction &t, uint32_t size) override {
     with_mutable_layout(
       t,
       [size](NodeExtentMutable &payload_mut, Recorder *recorder) {
@@ -184,7 +184,7 @@ struct FLTreeOnode final : Onode, Value {
     });
   }
 
-  void update_omap_root(Transaction &t, omap_root_t &oroot) final {
+  void update_omap_root(Transaction &t, omap_root_t &oroot) override {
     assert(oroot.get_type() == omap_type_t::OMAP ||
 	  oroot.get_type() == omap_type_t::LOG);
     with_mutable_layout(
@@ -200,7 +200,7 @@ struct FLTreeOnode final : Onode, Value {
     });
   }
 
-  void update_xattr_root(Transaction &t, omap_root_t &xroot) final {
+  void update_xattr_root(Transaction &t, omap_root_t &xroot) override {
     assert(xroot.get_type() == omap_type_t::XATTR);
     with_mutable_layout(
       t,
@@ -215,7 +215,7 @@ struct FLTreeOnode final : Onode, Value {
     });
   }
 
-  void update_object_data(Transaction &t, object_data_t &odata) final {
+  void update_object_data(Transaction &t, object_data_t &odata) override {
     with_mutable_layout(
       t,
       [&odata](NodeExtentMutable &payload_mut, Recorder *recorder) {
@@ -229,7 +229,7 @@ struct FLTreeOnode final : Onode, Value {
     });
   }
 
-  void update_object_info(Transaction &t, ceph::bufferlist &oi_bl) final {
+  void update_object_info(Transaction &t, ceph::bufferlist &oi_bl) override {
     with_mutable_layout(
       t,
       [&oi_bl](NodeExtentMutable &payload_mut, Recorder *recorder) {
@@ -248,7 +248,7 @@ struct FLTreeOnode final : Onode, Value {
     });
   }
 
-  void clear_object_info(Transaction &t) final {
+  void clear_object_info(Transaction &t) override {
     with_mutable_layout(
       t, [](NodeExtentMutable &payload_mut, Recorder *recorder) {
 	auto &mlayout = *reinterpret_cast<onode_layout_t*>(
@@ -262,7 +262,7 @@ struct FLTreeOnode final : Onode, Value {
     });
   }
 
-  void update_snapset(Transaction &t, ceph::bufferlist &ss_bl) final {
+  void update_snapset(Transaction &t, ceph::bufferlist &ss_bl) override {
     with_mutable_layout(
       t,
       [&ss_bl](NodeExtentMutable &payload_mut, Recorder *recorder) {
@@ -281,7 +281,7 @@ struct FLTreeOnode final : Onode, Value {
     });
   }
 
-  void clear_snapset(Transaction &t) final {
+  void clear_snapset(Transaction &t) override {
     with_mutable_layout(
       t,
       [](NodeExtentMutable &payload_mut, Recorder *recorder) {
@@ -301,10 +301,10 @@ struct FLTreeOnode final : Onode, Value {
     status = status_t::DELETED;
   }
 
-  laddr_t get_hint() const final {
+  laddr_t get_hint() const override {
     return Value::get_hint();
   }
-  ~FLTreeOnode() final {}
+  ~FLTreeOnode() {}
 };
 
 using OnodeTree = Btree<FLTreeOnode>;
@@ -333,29 +333,29 @@ public:
 
   contains_onode_ret contains_onode(
     Transaction &trans,
-    const ghobject_t &hoid) final;
+    const ghobject_t &hoid) final override;
 
   get_onode_ret get_onode(
     Transaction &trans,
-    const ghobject_t &hoid) final;
+    const ghobject_t &hoid) final override;
 
   get_or_create_onode_ret get_or_create_onode(
     Transaction &trans,
-    const ghobject_t &hoid) final;
+    const ghobject_t &hoid) final override;
 
   get_or_create_onodes_ret get_or_create_onodes(
     Transaction &trans,
-    const std::vector<ghobject_t> &hoids) final;
+    const std::vector<ghobject_t> &hoids) final override;
 
   erase_onode_ret erase_onode(
     Transaction &trans,
-    OnodeRef &onode) final;
+    OnodeRef &onode) final override;
 
   list_onodes_ret list_onodes(
     Transaction &trans,
     const ghobject_t& start,
     const ghobject_t& end,
-    uint64_t limit) final;
+    uint64_t limit) final override;
 
   ~FLTreeOnodeManager();
 };

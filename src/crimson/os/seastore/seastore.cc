@@ -97,14 +97,14 @@ public:
   FileMDStore(const std::string& root) : root(root) {}
 
   write_meta_ret write_meta(
-    const std::string& key, const std::string& value) final {
+    const std::string& key, const std::string& value) override {
     std::string path = fmt::format("{}/{}", root, key);
     ceph::bufferlist bl;
     bl.append(value + "\n");
     return crimson::write_file(std::move(bl), path);
   }
 
-  read_meta_ret read_meta(const std::string& key) final {
+  read_meta_ret read_meta(const std::string& key) override {
     std::string path = fmt::format("{}/{}", root, key);
     return seastar::file_exists(
       path

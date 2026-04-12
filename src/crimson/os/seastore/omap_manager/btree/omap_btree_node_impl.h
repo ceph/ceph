@@ -67,7 +67,7 @@ struct OMapInnerNode
     return iter_end();
   }
 
-  void do_on_rewrite(Transaction &t, LogicalCachedExtent &extent) final {
+  void do_on_rewrite(Transaction &t, LogicalCachedExtent &extent) final override {
     auto &ext = static_cast<OMapInnerNode&>(extent);
     this->parent_node_t::on_rewrite(t, ext);
     this->sync_children_capacity();
@@ -80,7 +80,7 @@ struct OMapInnerNode
     }
   }
 
-  void prepare_commit(Transaction &t) final {
+  void prepare_commit(Transaction &t) final override {
     if (is_rewrite_transaction(t.get_src())) {
       return;
     }
@@ -114,7 +114,7 @@ struct OMapInnerNode
     }
   }
 
-  void do_on_replace_prior(Transaction &t) final {
+  void do_on_replace_prior(Transaction &t) final override {
     if (is_rewrite_transaction(t.get_src())) {
       return;
     }
@@ -127,11 +127,11 @@ struct OMapInnerNode
     }
   }
 
-  void lcn_on_invalidated(Transaction &t) final {
+  void lcn_on_invalidated(Transaction &t) final override {
     this->child_node_t::on_invalidated();
   }
 
-  void on_initial_write() final {
+  void on_initial_write() final override {
     if (this->is_btree_root()) {
       //TODO: should involve RootChildNode
       this->child_node_t::reset_parent_tracker();
@@ -142,7 +142,7 @@ struct OMapInnerNode
     return this->get_split_pivot().get_offset();
   }
 
-  omap_node_meta_t get_node_meta() const final { return get_meta(); }
+  omap_node_meta_t get_node_meta() const final override { return get_meta(); }
   bool extent_will_overflow(size_t ksize, std::optional<size_t> vsize) const {
     return is_overflow(ksize);
   }
@@ -152,15 +152,15 @@ struct OMapInnerNode
   bool extent_is_below_min() const { return below_min(); }
   uint32_t get_node_size() { return get_size(); }
 
-  void on_fully_loaded() final {
+  void on_fully_loaded() final override {
     this->set_layout_buf(this->get_bptr().c_str());
   }
 
-  void on_clean_read() final {
+  void on_clean_read() final override {
     this->sync_children_capacity();
   }
 
-  CachedExtentRef duplicate_for_write(Transaction&) final {
+  CachedExtentRef duplicate_for_write(Transaction&) final override {
     assert(delta_buffer.empty());
     return CachedExtentRef(new OMapInnerNode(*this));
   }
@@ -170,39 +170,39 @@ struct OMapInnerNode
     return is_mutation_pending() ? &delta_buffer : nullptr;
   }
 
-  get_value_ret get_value(omap_context_t oc, const std::string &key) final;
+  get_value_ret get_value(omap_context_t oc, const std::string &key) final override;
 
   insert_ret insert(
     omap_context_t oc,
     const std::string &key,
-    const ceph::bufferlist &value) final;
+    const ceph::bufferlist &value) final override;
 
   bool exceeds_max_kv_limit(
     const std::string &key,
-    const ceph::bufferlist &value) const final {
+    const ceph::bufferlist &value) const final override {
     return (key.length() + sizeof(laddr_le_t)) > (capacity() / 4);
   }
 
   rm_key_ret rm_key(
     omap_context_t oc,
-    const std::string &key) final;
+    const std::string &key) final override;
 
   rm_key_range_ret rm_key_range(
     omap_context_t oc,
-    key_range_t &key_range) final;
+    key_range_t &key_range) final override;
 
   iterate_ret iterate(
     omap_context_t oc,
     ObjectStore::omap_iter_seek_t &start_from,
-    omap_iterate_cb_t callback) final;
+    omap_iterate_cb_t callback) final override;
 
   list_ret list(
     omap_context_t oc,
     const std::optional<std::string> &first,
     const std::optional<std::string> &last,
-    omap_list_config_t config) final;
+    omap_list_config_t config) final override;
 
-  clear_ret clear(omap_context_t oc) final;
+  clear_ret clear(omap_context_t oc) final override;
 
   using split_children_iertr = base_iertr;
   using split_children_ret = split_children_iertr::future
@@ -210,10 +210,10 @@ struct OMapInnerNode
   split_children_ret make_split_children(omap_context_t oc);
 
   full_merge_ret make_full_merge(
-    omap_context_t oc, OMapNodeRef right) final;
+    omap_context_t oc, OMapNodeRef right) final override;
 
   make_balanced_ret make_balanced(
-    omap_context_t oc, OMapNodeRef right, uint32_t pivot_idx) final;
+    omap_context_t oc, OMapNodeRef right, uint32_t pivot_idx) final override;
 
   using make_split_insert_iertr = base_iertr; 
   using make_split_insert_ret = make_split_insert_iertr::future<mutation_result_t>;
@@ -234,14 +234,14 @@ struct OMapInnerNode
     omap_context_t oc, internal_const_iterator_t iter,
     mutation_result_t mresult);
 
-  std::ostream &print_detail_l(std::ostream &out) const final;
+  std::ostream &print_detail_l(std::ostream &out) const final override;
 
   static constexpr extent_types_t TYPE = extent_types_t::OMAP_INNER;
-  extent_types_t get_type() const final {
+  extent_types_t get_type() const final override {
     return TYPE;
   }
 
-  ceph::bufferlist get_delta() final {
+  ceph::bufferlist get_delta() final override {
     ceph::bufferlist bl;
     if (!delta_buffer.empty()) {
       encode(delta_buffer, bl);
@@ -250,7 +250,7 @@ struct OMapInnerNode
     return bl;
   }
 
-  void apply_delta(const ceph::bufferlist &bl) final {
+  void apply_delta(const ceph::bufferlist &bl) final override {
     assert(bl.length());
     delta_inner_buffer_t buffer;
     auto bptr = bl.cbegin();
@@ -329,7 +329,7 @@ struct OMapLeafNode
   using base_child_t = BaseChildNode<OMapInnerNode, std::string>;
   using child_node_t = ChildNode<OMapInnerNode, OMapLeafNode, std::string>;
 
-  void do_on_rewrite(Transaction &t, LogicalCachedExtent &extent) final {
+  void do_on_rewrite(Transaction &t, LogicalCachedExtent &extent) final override {
     // During rewriting, an omap node may not be seen by users yet.
     // If it becomes seen upon commiting, we need to fix the rewritting
     // extent in prepare_commit().
@@ -340,11 +340,11 @@ struct OMapLeafNode
     }
   }
 
-  void lcn_on_invalidated(Transaction &t) final {
+  void lcn_on_invalidated(Transaction &t) final override {
     this->child_node_t::on_invalidated();
   }
 
-  void prepare_commit(Transaction &t) final {
+  void prepare_commit(Transaction &t) final override {
     if (is_rewrite_transaction(t.get_src())) {
       return;
     }
@@ -377,7 +377,7 @@ struct OMapLeafNode
     }
   }
 
-  void do_on_replace_prior(Transaction &t) final {
+  void do_on_replace_prior(Transaction &t) final override {
     ceph_assert(!this->is_rewrite());
     if (!this->is_btree_root() && !is_rewrite_transaction(t.get_src())) {
       [[maybe_unused]] auto &prior =
@@ -408,7 +408,7 @@ struct OMapLeafNode
     this->set_layout_buf(this->get_bptr().c_str(), this->get_bptr().length());
   }
 
-  omap_node_meta_t get_node_meta() const final { return get_meta(); }
+  omap_node_meta_t get_node_meta() const final override { return get_meta(); }
   bool extent_will_overflow(
     size_t ksize, std::optional<size_t> vsize) const {
     return is_overflow(ksize, *vsize);
@@ -419,11 +419,11 @@ struct OMapLeafNode
   bool extent_is_below_min() const { return below_min(); }
   uint32_t get_node_size() { return get_size(); }
 
-  void on_fully_loaded() final {
+  void on_fully_loaded() final override {
     this->set_layout_buf(this->get_bptr().c_str(), this->get_bptr().length());
   }
 
-  CachedExtentRef duplicate_for_write(Transaction&) final {
+  CachedExtentRef duplicate_for_write(Transaction&) final override {
     assert(delta_buffer.empty());
     return CachedExtentRef(new OMapLeafNode(*this));
   }
@@ -434,39 +434,39 @@ struct OMapLeafNode
   }
 
   get_value_ret get_value(
-    omap_context_t oc, const std::string &key) final;
+    omap_context_t oc, const std::string &key) final override;
 
   insert_ret insert(
     omap_context_t oc,
     const std::string &key,
-    const ceph::bufferlist &value) final;
+    const ceph::bufferlist &value) final override;
 
   bool exceeds_max_kv_limit(
     const std::string &key,
-    const ceph::bufferlist &value) const final {
+    const ceph::bufferlist &value) const final override {
     return (key.length() + value.length()) > (capacity() / 4);
   }
 
   rm_key_ret rm_key(
-    omap_context_t oc, const std::string &key) final;
+    omap_context_t oc, const std::string &key) final override;
 
   rm_key_range_ret rm_key_range(
     omap_context_t oc,
-    key_range_t &key_range) final;
+    key_range_t &key_range) final override;
 
   iterate_ret iterate(
     omap_context_t oc,
     ObjectStore::omap_iter_seek_t &start_from,
-    omap_iterate_cb_t callback) final;
+    omap_iterate_cb_t callback) final override;
 
   list_ret list(
     omap_context_t oc,
     const std::optional<std::string> &first,
     const std::optional<std::string> &last,
-    omap_list_config_t config) final;
+    omap_list_config_t config) final override;
 
   clear_ret clear(
-    omap_context_t oc) final;
+    omap_context_t oc) final override;
 
   using split_children_iertr = base_iertr;
   using split_children_ret = split_children_iertr::future
@@ -476,19 +476,19 @@ struct OMapLeafNode
 
   full_merge_ret make_full_merge(
     omap_context_t oc,
-    OMapNodeRef right) final;
+    OMapNodeRef right) final override;
 
   make_balanced_ret make_balanced(
     omap_context_t oc,
     OMapNodeRef _right,
-    uint32_t pivot_idx) final;
+    uint32_t pivot_idx) final override;
 
   static constexpr extent_types_t TYPE = extent_types_t::OMAP_LEAF;
-  extent_types_t get_type() const final {
+  extent_types_t get_type() const final override {
     return TYPE;
   }
 
-  ceph::bufferlist get_delta() final {
+  ceph::bufferlist get_delta() final override {
     ceph::bufferlist bl;
     if (!delta_buffer.empty()) {
       encode(delta_buffer, bl);
@@ -497,7 +497,7 @@ struct OMapLeafNode
     return bl;
   }
 
-  void apply_delta(const ceph::bufferlist &_bl) final {
+  void apply_delta(const ceph::bufferlist &_bl) final override {
     assert(_bl.length());
     ceph::bufferlist bl = _bl;
     bl.rebuild();
@@ -511,7 +511,7 @@ struct OMapLeafNode
     return this->get_split_pivot().get_offset();
   }
 
-  std::ostream &print_detail_l(std::ostream &out) const final;
+  std::ostream &print_detail_l(std::ostream &out) const final override;
 
   std::pair<internal_const_iterator_t, internal_const_iterator_t>
   get_leaf_entries(std::string &key);

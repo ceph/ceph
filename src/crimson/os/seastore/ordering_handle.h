@@ -61,8 +61,8 @@ public:
     return handle;
   }
 private:
-  void dump_detail(ceph::Formatter *f) const final {}
-  void print(std::ostream &) const final {}
+  void dump_detail(ceph::Formatter *f) const final override {}
+  void print(std::ostream &) const final override {}
 };
 
 struct OperationProxy {
@@ -92,26 +92,26 @@ struct OperationProxyT : OperationProxy {
     return static_cast<const OpT*>(op.get());
   }
 
-  seastar::future<> enter(WritePipeline::ReserveProjectedUsage& s) final {
+  seastar::future<> enter(WritePipeline::ReserveProjectedUsage& s) final override {
     return that()->enter_stage(s);
   }
-  seastar::future<> enter(WritePipeline::OolWritesAndLBAUpdates& s) final {
+  seastar::future<> enter(WritePipeline::OolWritesAndLBAUpdates& s) final override {
     return that()->enter_stage(s);
   }
-  seastar::future<> enter(WritePipeline::Prepare& s) final {
+  seastar::future<> enter(WritePipeline::Prepare& s) final override {
     return that()->enter_stage(s);
   }
-  seastar::future<> enter(WritePipeline::DeviceSubmission& s) final {
+  seastar::future<> enter(WritePipeline::DeviceSubmission& s) final override {
     return that()->enter_stage(s);
   }
-  seastar::future<> enter(WritePipeline::Finalize& s) final {
+  seastar::future<> enter(WritePipeline::Finalize& s) final override {
     return that()->enter_stage(s);
   }
 
-  void exit() final {
+  void exit() final override {
     return that()->handle.exit();
   }
-  seastar::future<> complete() final {
+  seastar::future<> complete() final override {
     return that()->handle.complete();
   }
 };

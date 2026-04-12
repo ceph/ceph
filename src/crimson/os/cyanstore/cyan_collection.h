@@ -39,7 +39,7 @@ struct Collection final : public FuturizedCollection {
   pool_opts_t pool_opts;
 
   Collection(const coll_t& c);
-  ~Collection() final;
+  ~Collection();
 
   ObjectRef create_object() const;
   ObjectRef get_object(ghobject_t oid);

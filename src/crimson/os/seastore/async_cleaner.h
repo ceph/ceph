@@ -550,30 +550,30 @@ public:
    * JournalTrimmer interfaces
    */
 
-  journal_seq_t get_journal_head() const final {
+  journal_seq_t get_journal_head() const final override {
     return journal_head;
   }
 
-  void set_journal_head(journal_seq_t) final;
+  void set_journal_head(journal_seq_t) final override;
 
-  segment_seq_t get_journal_head_sequence() const final {
+  segment_seq_t get_journal_head_sequence() const final override {
     return journal_head_seq;
   }
 
-  void set_journal_head_sequence(segment_seq_t) final;
+  void set_journal_head_sequence(segment_seq_t) final override;
 
-  journal_seq_t get_dirty_tail() const final {
+  journal_seq_t get_dirty_tail() const final override {
     return journal_dirty_tail;
   }
 
-  journal_seq_t get_alloc_tail() const final {
+  journal_seq_t get_alloc_tail() const final override {
     return journal_alloc_tail;
   }
 
   void update_journal_tails(
-      journal_seq_t dirty_tail, journal_seq_t alloc_tail) final;
+      journal_seq_t dirty_tail, journal_seq_t alloc_tail) final override;
 
-  std::size_t get_trim_size_per_cycle() const final {
+  std::size_t get_trim_size_per_cycle() const final override {
     return config.max_backref_bytes_per_cycle +
       get_dirty_bytes_to_trim();
   }
@@ -607,7 +607,7 @@ public:
         backend_type, reserved_usage, roll_start, roll_size);
   }
 
-  bool try_reserve_inline_usage(std::size_t usage) final {
+  bool try_reserve_inline_usage(std::size_t usage) final override {
     reserved_usage += usage;
     if (should_block_io_on_trim()) {
       reserved_usage -= usage;
@@ -617,7 +617,7 @@ public:
     }
   }
 
-  void release_inline_usage(std::size_t usage) final {
+  void release_inline_usage(std::size_t usage) final override {
     ceph_assert(reserved_usage >= usage);
     reserved_usage -= usage;
   }
@@ -798,35 +798,35 @@ public:
   int64_t allocate(
     segment_id_t segment,
     segment_off_t offset,
-    extent_len_t len) final {
+    extent_len_t len) final override {
     return update_usage(segment, len);
   }
 
   int64_t release(
     segment_id_t segment,
     segment_off_t offset,
-    extent_len_t len) final {
+    extent_len_t len) final override {
     return update_usage(segment, -(int64_t)len);
   }
 
-  int64_t get_usage(segment_id_t segment) const final {
+  int64_t get_usage(segment_id_t segment) const final override {
     return live_bytes_by_segment[segment].live_bytes;
   }
 
-  double calc_utilization(segment_id_t segment) const final {
+  double calc_utilization(segment_id_t segment) const final override {
     auto& seg_bytes = live_bytes_by_segment[segment];
     return (double)seg_bytes.live_bytes / (double)seg_bytes.total_bytes;
   }
 
-  void dump_usage(segment_id_t) const final;
+  void dump_usage(segment_id_t) const final override;
 
-  void reset() final {
+  void reset() final override {
     for (auto &i : live_bytes_by_segment) {
       i.second = {0, 0};
     }
   }
 
-  SpaceTrackerIRef make_empty() const final {
+  SpaceTrackerIRef make_empty() const final override {
     auto ret = SpaceTrackerIRef(new SpaceTrackerSimple(*this));
     ret->reset();
     return ret;
@@ -906,7 +906,7 @@ public:
   int64_t allocate(
     segment_id_t segment,
     segment_off_t offset,
-    extent_len_t len) final {
+    extent_len_t len) final override {
     return segment_usage[segment].allocate(
       segment.device_segment_id(),
       offset,
@@ -917,7 +917,7 @@ public:
   int64_t release(
     segment_id_t segment,
     segment_off_t offset,
-    extent_len_t len) final {
+    extent_len_t len) final override {
     return segment_usage[segment].release(
       segment.device_segment_id(),
       offset,
@@ -925,23 +925,23 @@ public:
       block_size_by_segment_manager[segment.device_id()]);
   }
 
-  int64_t get_usage(segment_id_t segment) const final {
+  int64_t get_usage(segment_id_t segment) const final override {
     return segment_usage[segment].get_usage();
   }
 
-  double calc_utilization(segment_id_t segment) const final {
+  double calc_utilization(segment_id_t segment) const final override {
     return segment_usage[segment].calc_utilization();
   }
 
-  void dump_usage(segment_id_t seg) const final;
+  void dump_usage(segment_id_t seg) const final override;
 
-  void reset() final {
+  void reset() final override {
     for (auto &i: segment_usage) {
       i.second.reset();
     }
   }
 
-  SpaceTrackerIRef make_empty() const final {
+  SpaceTrackerIRef make_empty() const final override {
     auto ret = SpaceTrackerIRef(new SpaceTrackerDetailed(*this));
     ret->reset();
     return ret;
@@ -1338,16 +1338,16 @@ public:
    * SegmentProvider interfaces
    */
 
-  const segment_info_t& get_seg_info(segment_id_t id) const final {
+  const segment_info_t& get_seg_info(segment_id_t id) const final override {
     return segments[id];
   }
 
   segment_id_t allocate_segment(
-      segment_seq_t, segment_type_t, data_category_t, rewrite_gen_t) final;
+      segment_seq_t, segment_type_t, data_category_t, rewrite_gen_t) final override;
 
-  void close_segment(segment_id_t segment) final;
+  void close_segment(segment_id_t segment) final override;
 
-  void update_segment_avail_bytes(segment_type_t type, paddr_t offset) final {
+  void update_segment_avail_bytes(segment_type_t type, paddr_t offset) final override {
     assert(type == segment_type_t::OOL ||
            trimmer != nullptr); // segment_type_t::JOURNAL
     segments.update_written_to(type, offset);
@@ -1355,12 +1355,12 @@ public:
   }
 
   void update_modify_time(
-      segment_id_t id, sea_time_point tp, std::size_t num_extents) final {
+      segment_id_t id, sea_time_point tp, std::size_t num_extents) final override {
     ceph_assert(num_extents == 0 || tp != NULL_TIME);
     segments.update_modify_time(id, tp, num_extents);
   }
 
-  SegmentManagerGroup* get_segment_manager_group() final {
+  SegmentManagerGroup* get_segment_manager_group() final override {
     return sm_group.get();
   }
 
@@ -1368,19 +1368,19 @@ public:
    * AsyncCleaner interfaces
    */
 
-  void set_background_callback(BackgroundListener *cb) final {
+  void set_background_callback(BackgroundListener *cb) final override {
     background_callback = cb;
   }
 
-  void set_extent_callback(ExtentCallbackInterface *cb) final {
+  void set_extent_callback(ExtentCallbackInterface *cb) final override {
     extent_callback = cb;
   }
 
-  const segments_info_t* get_segments_info() const final {
+  const segments_info_t* get_segments_info() const final override {
    return &segments;
   }
 
-  store_statfs_t get_stat() const final {
+  store_statfs_t get_stat() const final override {
     store_statfs_t st;
     st.total = segments.get_total_bytes();
     st.available = segments.get_total_bytes() - stats.used_bytes;
@@ -1392,27 +1392,27 @@ public:
     return st;
   }
 
-  void print(std::ostream &, bool is_detailed) const final;
+  void print(std::ostream &, bool is_detailed) const final override;
 
-  bool check_usage_is_empty() const final {
+  bool check_usage_is_empty() const final override {
     return space_tracker->equals(*space_tracker->make_empty());
   }
 
-  mount_ret mount() final;
+  mount_ret mount() final override;
 
-  void mark_space_used(paddr_t, extent_len_t) final;
+  void mark_space_used(paddr_t, extent_len_t) final override;
 
-  void mark_space_free(paddr_t, extent_len_t) final;
+  void mark_space_free(paddr_t, extent_len_t) final override;
   
-  void commit_space_used(paddr_t addr, extent_len_t len) final {
+  void commit_space_used(paddr_t addr, extent_len_t len) final override {
     mark_space_used(addr, len);
   }
 
-  bool try_reserve_projected_usage(std::size_t) final;
+  bool try_reserve_projected_usage(std::size_t) final override;
 
-  void release_projected_usage(size_t) final;
+  void release_projected_usage(size_t) final override;
 
-  bool should_block_io_on_clean() const final {
+  bool should_block_io_on_clean() const final override {
     assert(background_callback->is_ready());
     if (get_segments_reclaimable() == 0) {
       // No CLOSED segments to reclaim
@@ -1422,12 +1422,12 @@ public:
     return aratio < config.available_ratio_hard_limit;
   }
 
-  bool can_clean_space() const final {
+  bool can_clean_space() const final override {
     assert(background_callback->is_ready());
     return get_segments_reclaimable() > 0;
   }
 
-  bool should_clean_space() const final {
+  bool should_clean_space() const final override {
     assert(background_callback->is_ready());
     if (get_segments_reclaimable() == 0) {
       return false;
@@ -1441,19 +1441,19 @@ public:
     );
   }
 
-  clean_space_ret clean_space() final;
+  clean_space_ret clean_space() final override;
 
-  const std::set<device_id_t>& get_device_ids() const final {
+  const std::set<device_id_t>& get_device_ids() const final override {
     return sm_group->get_device_ids();
   }
 
-  std::size_t get_reclaim_size_per_cycle() const final {
+  std::size_t get_reclaim_size_per_cycle() const final override {
     return config.reclaim_bytes_per_cycle;
   }
 
   // Testing interfaces
 
-  bool check_usage(bool has_cold_tier) final;
+  bool check_usage(bool has_cold_tier) final override;
 
 private:
   /*
@@ -1732,19 +1732,19 @@ public:
    * AsyncCleaner interfaces
    */
 
-  void set_background_callback(BackgroundListener *cb) final {
+  void set_background_callback(BackgroundListener *cb) final override {
     background_callback = cb;
   }
 
-  void set_extent_callback(ExtentCallbackInterface *cb) final {
+  void set_extent_callback(ExtentCallbackInterface *cb) final override {
     extent_callback = cb;
   }
 
-  const segments_info_t* get_segments_info() const final {
+  const segments_info_t* get_segments_info() const final override {
    return nullptr;
   }
 
-  store_statfs_t get_stat() const final {
+  store_statfs_t get_stat() const final override {
     store_statfs_t st;
     st.total = get_total_bytes();
     st.available = get_total_bytes() - get_journal_bytes() - stats.used_bytes;
@@ -1753,44 +1753,44 @@ public:
     return st;
   }
 
-  void print(std::ostream &, bool is_detailed) const final;
+  void print(std::ostream &, bool is_detailed) const final override;
 
-  mount_ret mount() final;
+  mount_ret mount() final override;
 
-  void mark_space_used(paddr_t, extent_len_t) final;
+  void mark_space_used(paddr_t, extent_len_t) final override;
 
-  void mark_space_free(paddr_t, extent_len_t) final;
+  void mark_space_free(paddr_t, extent_len_t) final override;
 
-  void commit_space_used(paddr_t, extent_len_t) final;
+  void commit_space_used(paddr_t, extent_len_t) final override;
 
-  bool try_reserve_projected_usage(std::size_t) final;
+  bool try_reserve_projected_usage(std::size_t) final override;
 
-  void release_projected_usage(size_t) final;
+  void release_projected_usage(size_t) final override;
 
-  bool should_block_io_on_clean() const final {
+  bool should_block_io_on_clean() const final override {
     return false;
   }
 
-  bool can_clean_space() const final {
+  bool can_clean_space() const final override {
     return false;
   }
 
-  bool should_clean_space() const final {
+  bool should_clean_space() const final override {
     return false;
   }
 
-  clean_space_ret clean_space() final;
+  clean_space_ret clean_space() final override;
 
-  const std::set<device_id_t>& get_device_ids() const final {
+  const std::set<device_id_t>& get_device_ids() const final override {
     return rb_group->get_device_ids();
   }
 
-  std::size_t get_reclaim_size_per_cycle() const final {
+  std::size_t get_reclaim_size_per_cycle() const final override {
     return 0;
   }
 
 #ifdef UNIT_TESTS_BUILT
-  void prefill_fragmented_devices() final {
+  void prefill_fragmented_devices() final override {
     LOG_PREFIX(RBMCleaner::prefill_fragmented_devices);
     SUBDEBUG(seastore_cleaner, "");
     auto rbs = rb_group->get_rb_managers();
@@ -1851,9 +1851,9 @@ public:
 
   // Testing interfaces
 
-  bool check_usage(bool has_cold_tier) final;
+  bool check_usage(bool has_cold_tier) final override;
 
-  bool check_usage_is_empty() const final {
+  bool check_usage_is_empty() const final override {
     // TODO
     return true;
   }

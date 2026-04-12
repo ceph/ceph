@@ -20,17 +20,17 @@ struct RootMetaBlock : LogicalChildNode {
   RootMetaBlock(const RootMetaBlock &rhs)
     : LogicalChildNode(rhs) {}
 
-  CachedExtentRef duplicate_for_write(Transaction&) final {
+  CachedExtentRef duplicate_for_write(Transaction&) final override {
     return CachedExtentRef(new RootMetaBlock(*this));
   }
 
   static constexpr extent_types_t TYPE = extent_types_t::ROOT_META;
-  extent_types_t get_type() const final {
+  extent_types_t get_type() const final override {
     return extent_types_t::ROOT_META;
   }
 
   /// dumps root meta as delta
-  ceph::bufferlist get_delta() final {
+  ceph::bufferlist get_delta() final override {
     ceph::bufferlist bl;
     ceph::buffer::ptr bptr(get_bptr(), 0, MAX_META_LENGTH);
     bl.append(bptr);
@@ -38,7 +38,7 @@ struct RootMetaBlock : LogicalChildNode {
   }
 
   /// overwrites root
-  void apply_delta(const ceph::bufferlist &_bl) final
+  void apply_delta(const ceph::bufferlist &_bl) final override
   {
     assert(_bl.length() == MAX_META_LENGTH);
     ceph::bufferlist bl = _bl;

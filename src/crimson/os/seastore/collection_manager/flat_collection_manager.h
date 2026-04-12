@@ -26,16 +26,16 @@ class FlatCollectionManager : public CollectionManager {
 public:
   explicit FlatCollectionManager(TransactionManager &tm);
 
-  mkfs_ret mkfs(Transaction &t) final;
+  mkfs_ret mkfs(Transaction &t) final override;
 
   create_ret create(coll_root_t &coll_root, Transaction &t, coll_t cid,
-                    coll_info_t info) final;
+                    coll_info_t info) final override;
 
-  list_ret list(const coll_root_t &coll_root, Transaction &t) final;
+  list_ret list(const coll_root_t &coll_root, Transaction &t) final override;
 
-  remove_ret remove(const coll_root_t &coll_root, Transaction &t, coll_t cid) final;
+  remove_ret remove(const coll_root_t &coll_root, Transaction &t, coll_t cid) final override;
 
-  update_ret update(const coll_root_t &coll_root, Transaction &t, coll_t cid, coll_info_t info) final;
+  update_ret update(const coll_root_t &coll_root, Transaction &t, coll_t cid, coll_info_t info) final override;
 };
 using FlatCollectionManagerRef = std::unique_ptr<FlatCollectionManager>;
 }

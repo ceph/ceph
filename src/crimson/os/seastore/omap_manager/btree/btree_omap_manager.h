@@ -67,55 +67,55 @@ public:
   explicit BtreeOMapManager(TransactionManager &tm);
 
   initialize_omap_ret initialize_omap(Transaction &t, laddr_t hint,
-    omap_type_t type) final;
+    omap_type_t type) final override;
 
   omap_get_value_ret omap_get_value(
     const omap_root_t &omap_root,
     Transaction &t,
-    const std::string &key) final;
+    const std::string &key) final override;
 
   omap_set_key_ret omap_set_key(
     omap_root_t &omap_root,
     Transaction &t,
-    const std::string &key, const ceph::bufferlist &value) final;
+    const std::string &key, const ceph::bufferlist &value) final override;
 
   omap_set_keys_ret omap_set_keys(
     omap_root_t &omap_root,
     Transaction &t,
-    std::map<std::string, ceph::bufferlist>&& keys) final;
+    std::map<std::string, ceph::bufferlist>&& keys) final override;
 
   omap_rm_key_ret omap_rm_key(
     omap_root_t &omap_root,
     Transaction &t,
-    const std::string &key) final;
+    const std::string &key) final override;
 
   omap_rm_key_range_ret omap_rm_key_range(
     omap_root_t &omap_root,
     Transaction &t,
     const std::string &first,
-    const std::string &last) final;
+    const std::string &last) final override;
 
   omap_iterate_ret omap_iterate(
     const omap_root_t &omap_root,
     Transaction &t,
     ObjectStore::omap_iter_seek_t &start_from,
-    omap_iterate_cb_t callback) final;
+    omap_iterate_cb_t callback) final override;
 
   omap_list_ret omap_list(
     const omap_root_t &omap_root,
     Transaction &t,
     const std::optional<std::string> &first,
     const std::optional<std::string> &last,
-    omap_list_config_t config = omap_list_config_t()) final;
+    omap_list_config_t config = omap_list_config_t()) final override;
 
   omap_clear_ret omap_clear(
     omap_root_t &omap_root,
-    Transaction &t) final;
+    Transaction &t) final override;
 
   omap_rm_keys_ret omap_rm_keys(
     omap_root_t &omap_root,
     Transaction &t,
-    std::set<std::string>& keys) final;
+    std::set<std::string>& keys) final override;
 };
 using BtreeOMapManagerRef = std::unique_ptr<BtreeOMapManager>;
 

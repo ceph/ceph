@@ -1478,7 +1478,7 @@ public:
     : CachedExtent(other, s),
      seen_by_users(other.seen_by_users) {}
 
-  void on_rewrite(Transaction &t, CachedExtent &extent, extent_len_t off) final {
+  void on_rewrite(Transaction &t, CachedExtent &extent, extent_len_t off) final override {
     assert(get_type() == extent.get_type());
     auto &lextent = (LogicalCachedExtent&)extent;
     set_laddr((lextent.get_laddr() + off).checked_to_laddr());
@@ -1513,18 +1513,18 @@ public:
   }
 
   void apply_delta_and_adjust_crc(
-    paddr_t base, const ceph::bufferlist &bl) final {
+    paddr_t base, const ceph::bufferlist &bl) final override {
     apply_delta(bl);
     set_last_committed_crc(calc_crc32c());
   }
 
-  bool is_logical() const final {
+  bool is_logical() const final override {
     assert(is_logical_type(get_type()));
     assert(!is_physical_type(get_type()));
     return true;
   }
 
-  std::ostream &print_detail(std::ostream &out) const final;
+  std::ostream &print_detail(std::ostream &out) const final override;
 
   struct modified_region_t {
     extent_len_t offset;
@@ -1551,11 +1551,11 @@ protected:
 
   virtual void logical_on_delta_write() {}
 
-  void on_delta_write(paddr_t record_block_offset) final {
+  void on_delta_write(paddr_t record_block_offset) final override {
     logical_on_delta_write();
   }
 
-  void on_state_commit() final {
+  void on_state_commit() final override {
     auto &prior = static_cast<LogicalCachedExtent&>(*get_prior_instance());
     prior.laddr = laddr;
     do_on_state_commit();

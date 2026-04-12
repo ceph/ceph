@@ -1107,7 +1107,7 @@ public:
     }
   }
 
-  bool is_retired_placeholder() const final {
+  bool is_retired_placeholder() const final override {
     auto &me = down_cast();
     return me.is_placeholder();
   }
@@ -1180,25 +1180,25 @@ private:
     assert(iter.get_key() == me.get_begin());
     return iter.get_offset();
   }
-  bool _is_valid() const final {
+  bool _is_valid() const final override {
     return down_cast().is_valid();
   }
-  bool _is_stable() const final {
+  bool _is_stable() const final override {
     return down_cast().is_stable();
   }
-  bool _is_mutable() const final {
+  bool _is_mutable() const final override {
     return down_cast().is_mutable();
   }
-  bool _is_exist_clean() const final {
+  bool _is_exist_clean() const final override {
     return down_cast().is_exist_clean();
   }
-  bool _is_exist_mutation_pending() const final {
+  bool _is_exist_mutation_pending() const final override {
     return down_cast().is_exist_mutation_pending();
   }
-  bool _is_pending_io() const final {
+  bool _is_pending_io() const final override {
     return down_cast().is_pending_io();
   }
-  key_t node_begin() const final {
+  key_t node_begin() const final override {
     return down_cast().get_begin();
   }
 };

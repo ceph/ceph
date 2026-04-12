@@ -57,7 +57,9 @@ struct FixedKVNode : CachedExtent {
     return get_node_meta().is_in_range(key);
   }
 
-  void on_rewrite(Transaction &t, CachedExtent &extent, extent_len_t off) final {
+  void
+  on_rewrite(Transaction& t, CachedExtent& extent, extent_len_t off) final override
+  {
     assert(get_type() == extent.get_type());
     assert(off == 0);
     range = get_node_meta();
@@ -82,14 +84,14 @@ struct FixedKVNode : CachedExtent {
     }
   }
 
-  void on_delta_write(paddr_t record_block_offset) final {
+  void on_delta_write(paddr_t record_block_offset) final override {
     // All in-memory relative addrs are necessarily record-relative
     assert(get_prior_instance());
     assert(pending_for_transaction);
     resolve_relative_addrs(record_block_offset);
   }
 
-  void on_clean_read() final {
+  void on_clean_read() final override {
     // From initial write of block, relative addrs are necessarily block-relative
     resolve_relative_addrs(get_paddr());
   }
@@ -153,12 +155,12 @@ struct FixedKVInternalNode
   using child_node_t = ChildNode<node_type_t, node_type_t, NODE_KEY>;
   using root_node_t = RootChildNode<RootBlock, node_type_t>;
 
-  bool is_linked() const final {
+  bool is_linked() const final override {
     return this->has_parent_tracker() ||
 	   (this->is_btree_root() && this->has_root_parent());
   }
 
-  void do_on_rewrite(Transaction &t, CachedExtent &extent) final {
+  void do_on_rewrite(Transaction &t, CachedExtent &extent) final override {
     this->parent_node_t::on_rewrite(t, static_cast<node_type_t&>(extent));
   }
 
@@ -177,7 +179,7 @@ struct FixedKVInternalNode
     this->set_layout_buf(this->get_bptr().c_str());
   }
 
-  uint16_t get_node_split_pivot() const final{
+  uint16_t get_node_split_pivot() const final override{
     return this->get_split_pivot().get_offset();
   }
 
@@ -185,7 +187,7 @@ struct FixedKVInternalNode
     this->set_layout_buf(this->get_bptr().c_str());
   }
 
-  void prepare_commit(Transaction &t) final {
+  void prepare_commit(Transaction &t) final override {
     if (!is_rewrite_transaction(t.get_src())) {
       parent_node_t::prepare_commit();
     }
@@ -201,7 +203,7 @@ struct FixedKVInternalNode
     }
   }
 
-  void on_initial_write() final {
+  void on_initial_write() final override {
     // All in-memory relative addrs are necessarily block-relative
     resolve_relative_addrs(this->get_paddr());
     if (this->is_btree_root()) {
@@ -209,11 +211,11 @@ struct FixedKVInternalNode
     }
   }
 
-  void on_data_commit() final {
+  void on_data_commit() final override {
     this->set_layout_buf(this->get_bptr().c_str());
   }
 
-  void on_invalidated(Transaction &t) final {
+  void on_invalidated(Transaction &t) final override {
     this->child_node_t::on_invalidated();
   }
 
@@ -221,11 +223,11 @@ struct FixedKVInternalNode
     return this->get_meta();
   }
 
-  uint32_t calc_crc32c() const final {
+  uint32_t calc_crc32c() const final override {
     return this->calc_phy_checksum();
   }
 
-  void update_in_extent_chksum_field(uint32_t crc) final {
+  void update_in_extent_chksum_field(uint32_t crc) final override {
     this->set_phy_checksum(crc);
   }
 
@@ -244,11 +246,11 @@ struct FixedKVInternalNode
     return CachedExtentRef(new node_type_t(*this));
   };
 
-  void clear_delta() final {
+  void clear_delta() final override {
     delta_buffer.clear();
   }
 
-  void on_replace_prior(Transaction &t) final {
+  void on_replace_prior(Transaction &t) final override {
     if (!is_rewrite_transaction(t.get_src())) {
       this->parent_node_t::on_replace_prior();
       if (this->is_btree_root()) {
@@ -399,7 +401,7 @@ struct FixedKVInternalNode
       pivot);
   }
 
-  void on_fully_loaded() final {
+  void on_fully_loaded() final override {
     this->set_layout_buf(this->get_bptr().c_str());
   }
 
@@ -412,7 +414,7 @@ struct FixedKVInternalNode
    * resolve_relative_addrs fixes up relative internal references
    * based on base.
    */
-  void resolve_relative_addrs(paddr_t base) final {
+  void resolve_relative_addrs(paddr_t base) final override {
     LOG_PREFIX(FixedKVInternalNode::resolve_relative_addrs);
     for (auto i: *this) {
       if (i->get_val().is_relative()) {
@@ -504,7 +506,7 @@ struct FixedKVInternalNode
     return this->get_size() < get_min_capacity();
   }
 
-  void reapply_delta() final {
+  void reapply_delta() final override {
     if (delta_buffer.empty()) {
       return;
     }
@@ -608,7 +610,7 @@ struct FixedKVLeafNode
     this->set_layout_buf(this->get_bptr().c_str());
   }
 
-  bool is_linked() const final {
+  bool is_linked() const final override {
     return this->has_parent_tracker() ||
 	   (this->is_btree_root() && this->has_root_parent());
   }
@@ -629,7 +631,7 @@ struct FixedKVLeafNode
     }
   }
 
-  void on_data_commit() final {
+  void on_data_commit() final override {
     this->set_layout_buf(this->get_bptr().c_str());
   }
 
@@ -637,11 +639,11 @@ struct FixedKVLeafNode
     this->set_layout_buf(this->get_bptr().c_str());
   }
 
-  void on_invalidated(Transaction &t) final {
+  void on_invalidated(Transaction &t) final override {
     this->child_node_t::on_invalidated();
   }
 
-  void on_initial_write() final {
+  void on_initial_write() final override {
     // All in-memory relative addrs are necessarily block-relative
     this->resolve_relative_addrs(this->get_paddr());
     if (this->is_btree_root()) {
@@ -658,7 +660,7 @@ struct FixedKVLeafNode
     return v != modifications;
   }
 
-  uint16_t get_node_split_pivot() const final{
+  uint16_t get_node_split_pivot() const final override{
     return this->get_split_pivot().get_offset();
   }
 
@@ -672,12 +674,12 @@ struct FixedKVLeafNode
     }
   }
 
-  void on_fully_loaded() final {
+  void on_fully_loaded() final override {
     this->set_layout_buf(this->get_bptr().c_str());
   }
 
   virtual void do_prepare_commit() = 0;
-  void prepare_commit(Transaction &t) final {
+  void prepare_commit(Transaction &t) final override {
     if (!is_rewrite_transaction(t.get_src())) {
       do_prepare_commit();
     }
@@ -685,7 +687,7 @@ struct FixedKVLeafNode
   }
 
   virtual void do_on_replace_prior() = 0;
-  void on_replace_prior(Transaction &t) final {
+  void on_replace_prior(Transaction &t) final override {
     ceph_assert(!this->is_rewrite());
     if (!is_rewrite_transaction(t.get_src())) {
       do_on_replace_prior();
@@ -702,11 +704,11 @@ struct FixedKVLeafNode
     return this->get_meta();
   }
 
-  uint32_t calc_crc32c() const final {
+  uint32_t calc_crc32c() const final override {
     return this->calc_phy_checksum();
   }
 
-  void update_in_extent_chksum_field(uint32_t crc) final {
+  void update_in_extent_chksum_field(uint32_t crc) final override {
     this->set_phy_checksum(crc);
   }
 
@@ -724,7 +726,7 @@ struct FixedKVLeafNode
     return CachedExtentRef(new node_type_t(*static_cast<node_type_t*>(this)));
   };
 
-  void clear_delta() final {
+  void clear_delta() final override {
     delta_buffer.clear();
   }
 
@@ -886,7 +888,7 @@ struct FixedKVLeafNode
     return this->get_size() < get_min_capacity();
   }
 
-  void reapply_delta() final {
+  void reapply_delta() final override {
     if (delta_buffer.empty()) {
       return;
     }

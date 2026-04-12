@@ -43,12 +43,12 @@ struct singleton_ec : std::error_code {
   };
 private:
   struct this_error_category : std::error_category {
-    const char* name() const noexcept final {
+    const char* name() const noexcept final override {
       // XXX: we could concatenate with MsgV at compile-time but the burden
       // isn't worth the benefit.
       return "singleton_ec";
     }
-    std::string message([[maybe_unused]] const int ev) const final {
+    std::string message([[maybe_unused]] const int ev) const final override {
       assert(ev == 42);
       return MsgV;
     }

@@ -106,7 +106,7 @@ public:
     CollectionRef,
     const ghobject_t&,
     uint32_t op_flags = 0) override;
-  seastar::future<std::string> get_default_device_class() final;
+  seastar::future<std::string> get_default_device_class() override;
   get_attr_errorator::future<ceph::bufferlist> omap_get_header(
     CollectionRef,
     const ghobject_t&,
