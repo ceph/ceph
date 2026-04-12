@@ -153,7 +153,7 @@ public:
   Interceptor *interceptor = nullptr;
 #endif
 
-  seastar::future<> mark_down(const entity_addr_t& a) final {
+  seastar::future<> mark_down(const entity_addr_t& a) override {
     auto conn = lookup_conn(a);
     if (conn) {
       return seastar::smp::submit_to(

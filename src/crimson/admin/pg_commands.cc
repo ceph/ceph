@@ -36,7 +36,7 @@ public:
   {}
   seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
                                       std::string_view format,
-                                      ceph::bufferlist&& input) const final
+                                      ceph::bufferlist&& input) const final override
   {
     // we have "ceph tell <pgid> <cmd>". and it is the ceph cli's responsibility
     // to add "pgid" to the cmd dict. as rados_pg_command() does not set it for
@@ -102,7 +102,7 @@ private:
   do_command(Ref<PG> pg,
              const cmdmap_t&,
              std::string_view format,
-             ceph::bufferlist&& input) const final
+             ceph::bufferlist&& input) const override
   {
     std::unique_ptr<Formatter> f{Formatter::create(format,
                                                    "json-pretty",
@@ -129,7 +129,7 @@ public:
   do_command(Ref<PG> pg,
              const cmdmap_t& cmdmap,
              std::string_view,
-             ceph::bufferlist&&) const final
+             ceph::bufferlist&&) const override
   {
     // what to do with the unfound object specifically.
     std::string cmd;
@@ -165,7 +165,7 @@ public:
   do_command(Ref<PG> pg,
 	     const cmdmap_t& cmdmap,
 	     std::string_view format,
-	     ceph::bufferlist&&) const final
+	     ceph::bufferlist&&) const final override
   {
     LOG_PREFIX(ScrubCommand::do_command);
     DEBUGDPP("deep: {}", *pg, deep);

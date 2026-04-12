@@ -13,19 +13,19 @@ public:
 
   // client
   std::vector<uint32_t>
-  get_supported_auth_methods(int peer_type) final {
+  get_supported_auth_methods(int peer_type) final override {
     return {CEPH_AUTH_NONE};
   }
 
   std::vector<uint32_t>
   get_supported_con_modes(int peer_type,
-			  uint32_t auth_method) final {
+			  uint32_t auth_method) final override {
     return {CEPH_CON_MODE_CRC};
   }
 
   uint32_t pick_con_mode(int peer_type,
 			 uint32_t auth_method,
-			 const std::vector<uint32_t>& preferred_modes) final {
+			 const std::vector<uint32_t>& preferred_modes) final override {
     ceph_assert(auth_method == CEPH_AUTH_NONE);
     ceph_assert(preferred_modes.size() &&
                 preferred_modes[0] == CEPH_CON_MODE_CRC);
@@ -33,7 +33,7 @@ public:
   }
 
   AuthAuthorizeHandler* get_auth_authorize_handler(int peer_type,
-						   int auth_method) final {
+						   int auth_method) final override {
     return nullptr;
   }
 

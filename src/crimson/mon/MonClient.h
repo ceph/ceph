@@ -119,21 +119,21 @@ public:
   void print(std::ostream&) const;
 private:
   // AuthServer methods
-  std::vector<uint32_t> get_supported_auth_methods(int peer_type) final;
+  std::vector<uint32_t> get_supported_auth_methods(int peer_type) final override;
   std::vector<uint32_t> get_supported_con_modes(int peer_type,
-						uint32_t auth_method) final;
+						uint32_t auth_method) final override;
   uint32_t pick_con_mode(int peer_type,
 			 uint32_t auth_method,
-			 const std::vector<uint32_t>& preferred_modes) final;
+			 const std::vector<uint32_t>& preferred_modes) final override;
   AuthAuthorizeHandler* get_auth_authorize_handler(int peer_type,
-						   int auth_method) final;
+						   int auth_method) final override;
   int handle_auth_request(crimson::net::Connection &conn,
 			  AuthConnectionMeta &auth_meta,
 			  bool more,
 			  uint32_t auth_method,
 			  const ceph::bufferlist& payload,
 			  uint64_t *p_peer_global_id,
-			  ceph::bufferlist *reply) final;
+			  ceph::bufferlist *reply) final override;
 
   crimson::common::CephContext cct; // for auth_registry
   AuthRegistry auth_registry;
@@ -142,19 +142,19 @@ private:
   // AuthClient methods
   crimson::auth::AuthClient::auth_request_t
   get_auth_request(crimson::net::Connection &conn,
-		   AuthConnectionMeta &auth_meta) final;
+		   AuthConnectionMeta &auth_meta) final override;
 
    // Handle server's request to continue the handshake
   ceph::bufferlist handle_auth_reply_more(crimson::net::Connection &conn,
 					  AuthConnectionMeta &auth_meta,
-					  const bufferlist& bl) final;
+					  const bufferlist& bl) final override;
 
    // Handle server's indication that authentication succeeded
   int handle_auth_done(crimson::net::Connection &conn,
 		       AuthConnectionMeta &auth_meta,
 		       uint64_t global_id,
 		       uint32_t con_mode,
-		       const bufferlist& bl) final;
+		       const bufferlist& bl) final override;
 
    // Handle server's indication that the previous auth attempt failed
   int handle_auth_bad_method(crimson::net::Connection &conn,
@@ -162,7 +162,7 @@ private:
 			     uint32_t old_auth_method,
 			     int result,
 			     const std::vector<uint32_t>& allowed_methods,
-			     const std::vector<uint32_t>& allowed_modes) final;
+			     const std::vector<uint32_t>& allowed_modes) final override;
 
 private:
   void tick();

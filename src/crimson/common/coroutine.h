@@ -60,7 +60,7 @@ struct interrupt_cond_capture {
     template <typename T>
     type_erased_cond_checker(T &&t) : cond(std::forward<T>(t)) {}
 
-    std::optional<Future> may_interrupt() final {
+    std::optional<Future> may_interrupt() override {
       return cond->template may_interrupt<Future>();
     }
   };
@@ -135,7 +135,7 @@ public:
   std::suspend_never initial_suspend() noexcept { return { }; }
   std::suspend_never final_suspend() noexcept { return { }; }
 
-  void run_and_dispose() noexcept final {
+  void run_and_dispose() noexcept final override {
     if constexpr (is_interruptible) {
       cond.restore();
     }
