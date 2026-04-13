@@ -106,6 +106,7 @@ public:
     std::map<std::string, ceph::buffer::list, std::less<>> attrs; // xattrs
     uint64_t truncate_seq;
     uint64_t truncate_size;
+    bool whiteout; ///< Source object is whiteout
     bool is_data_digest() {
       return flags & object_copy_data_t::FLAG_DATA_DIGEST;
     }
@@ -120,7 +121,8 @@ public:
 	flags(0),
 	source_data_digest(-1), source_omap_digest(-1),
 	data_digest(-1), omap_digest(-1),
-	truncate_seq(0), truncate_size(0)
+	truncate_seq(0), truncate_size(0),
+        whiteout(false)
     {}
   };
 
