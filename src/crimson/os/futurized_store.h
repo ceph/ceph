@@ -30,11 +30,10 @@ class FuturizedStore;
 struct RelayStore;
 
 struct RelayStoreSelector {
-  RelayStore &f_store;  // indicate alienstore/seastore/cyanstore, not shard store
+  FuturizedStore &f_store;  // indicate alienstore/seastore/cyanstore, not shard store
   store_shard_t shard_id;       // indicate on which core it should run
   store_index_t store_index;    // indicate which shard store on this core
-  RelayStoreSelector(FuturizedStore &f_store, store_shard_t shard_id, store_index_t store_index);
-  RelayStoreSelector(RelayStore &f_store, store_shard_t shard_id, store_index_t store_index)
+  RelayStoreSelector(FuturizedStore &f_store, store_shard_t shard_id, store_index_t store_index)
     : f_store(f_store), shard_id(shard_id), store_index(store_index) {}
 };
 
@@ -254,6 +253,19 @@ public:
 				       const std::string& value) = 0;
   // called on the shard and get this FuturizedStore::shard;
   virtual Shard& get_sharded_store() = 0;
+  Shard& get_sharded_store(store_index_t store_index) {
+    return get_sharded_store();
+  }
+  RelayStoreSelector get_backend_store(store_index_t store_index) {
+    auto this_id = seastar::this_shard_id();
+    auto store_shard_nums = 42U;
+    if (this_id < store_shard_nums) {
+      return BackendStore(*this, this_id, store_index);
+    } else {
+      auto shard_id = this_id % store_shard_nums;
+      return BackendStore(*this, shard_id, store_index);
+    }
+  }
 
   virtual seastar::future<std::tuple<int, std::string>> read_meta(
     const std::string& key) = 0;
@@ -267,22 +279,7 @@ protected:
 };
 
 struct RelayStore {
-  RelayStoreSelector get_backend_store(store_index_t store_index)
-  {
-    assert(!shard_stores.local().mshard_stores.empty());
-    if (store_index != NULL_STORE_INDEX) {
-      assert(store_index < shard_stores.local().mshard_stores.size());
-    }
-    auto this_id = seastar::this_shard_id();
-    if (this_id < store_shard_nums) {
-      return RelayStoreSelector(*this, this_id, store_index);
-    } else {
-      auto shard_id = this_id % store_shard_nums;
-      return RelayStoreSelector(*this, shard_id, store_index);
-    }
-  }
-
-  FuturizedStore::Shard& get_sharded_store(store_index_t store_index = 0)
+  FuturizedStore::Shard& get_sharded_store(store_index_t store_index)
   {
     assert(store_index < shard_stores.local().mshard_stores.size());
     auto &shard_store = *(shard_stores.local().mshard_stores[store_index]);
