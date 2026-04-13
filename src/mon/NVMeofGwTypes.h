@@ -259,14 +259,16 @@ struct NvmeGwClientState {
   gw_availability_t availability;
   uint64_t last_beacon_seq_number;
   bool last_beacon_seq_ooo; //out of order sequence
+  uint64_t map_features; // last map features
   NvmeGwClientState(NvmeAnaGrpId id, epoch_t epoch, gw_availability_t available,
-     uint64_t sequence, bool sequence_ooo)
+     uint64_t sequence, bool sequence_ooo, uint64_t last_published_features)
     : group_id(id), gw_map_epoch(epoch), availability(available),
-      last_beacon_seq_number(sequence), last_beacon_seq_ooo(sequence_ooo) {}
+      last_beacon_seq_number(sequence), last_beacon_seq_ooo(sequence_ooo),
+	  map_features(last_published_features) {}
 
   NvmeGwClientState()
     : NvmeGwClientState(
-      REDUNDANT_GW_ANA_GROUP_ID, 0, gw_availability_t::GW_UNAVAILABLE, 0, 0) {}
+      REDUNDANT_GW_ANA_GROUP_ID, 0, gw_availability_t::GW_UNAVAILABLE, 0, 0, 0) {}
 };
 
 struct Tmdata {
