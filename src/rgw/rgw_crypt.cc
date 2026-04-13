@@ -3300,17 +3300,16 @@ constexpr int SSE_C_GROUP = 1;
 constexpr int KMS_GROUP = 2;
 }
 
-int get_encryption_defaults(req_state *s)
+int rgw_prepare_encryption_defaults(req_state *s)
 {
-  int meta_sse_group = 0;
   constexpr auto sse_c_prefix = "x-amz-server-side-encryption-customer-";
   constexpr auto encrypt_attr = "x-amz-server-side-encryption";
   constexpr auto context_attr = "x-amz-server-side-encryption-context";
   constexpr auto kms_attr = "x-amz-server-side-encryption-aws-kms-key-id";
   constexpr auto bucket_key_attr = "x-amz-server-side-encryption-bucket-key-enabled";
-  bool bucket_configuration_found { false };
-  bool rest_only { false };
 
+  // Reject mixing SSE-C with SSE-KMS/SSE-S3 in the same request.
+  int meta_sse_group = 0;
   for (auto& kv : s->info.crypt_attribute_map) {
     if (kv.first.find(sse_c_prefix) == 0)
       meta_sse_group |= SSE_C_GROUP;
@@ -3322,9 +3321,11 @@ int get_encryption_defaults(req_state *s)
     return -EINVAL;
   }
 
+  // Load the bucket's default-encryption policy.
+  bool bucket_configuration_found { false };
+  RGWBucketEncryptionConfig bucket_encryption_conf;
   const auto& buck_attrs = s->bucket_attrs;
   auto aiter = buck_attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY);
-  RGWBucketEncryptionConfig bucket_encryption_conf;
   if (aiter != buck_attrs.end()) {
     ldpp_dout(s, 5) << "Found RGW_ATTR_BUCKET_ENCRYPTION_POLICY on "
 	    << s->bucket_name << dendl;
@@ -3341,13 +3342,16 @@ int get_encryption_defaults(req_state *s)
     }
   }
   if (meta_sse_group & SSE_C_GROUP) {
-    ldpp_dout(s, 20) << "get_encryption_defaults: no defaults cause sse-c forced"
+    ldpp_dout(s, 20) << "rgw_prepare_encryption_defaults: no defaults cause sse-c forced"
 	<< dendl;
     return 0;			// sse-c: no defaults here
   }
+
+  // Merge REST headers with the bucket's defaults.
   std::string sse_algorithm { bucket_encryption_conf.sse_algorithm() };
   auto kms_master_key_id { bucket_encryption_conf.kms_master_key_id() };
   bool bucket_key_enabled { bucket_encryption_conf.bucket_key_enabled() };
+  bool rest_only { false };
   bool kms_attr_seen = false;
   if (bucket_configuration_found) {
     ldpp_dout(s, 5) << "RGW_ATTR_BUCKET_ENCRYPTION ALGO: "
@@ -3356,62 +3360,51 @@ int get_encryption_defaults(req_state *s)
 
   auto iter = s->info.crypt_attribute_map.find(encrypt_attr);
   if (iter != s->info.crypt_attribute_map.end()) {
-ldpp_dout(s, 20) << "get_encryption_defaults: found encrypt_attr " << encrypt_attr << " = " << iter->second << ", setting sse_algorithm to that" << dendl;
+    ldpp_dout(s, 20) << "rgw_prepare_encryption_defaults: found encrypt_attr " << encrypt_attr
+	<< " = " << iter->second << ", setting sse_algorithm to that" << dendl;
     rest_only = true;
     sse_algorithm = iter->second;
   } else if (sse_algorithm != "") {
     rgw_set_amz_meta_header(s->info.crypt_attribute_map, encrypt_attr, sse_algorithm, OVERWRITE);
   }
 
-  iter = s->info.crypt_attribute_map.find(kms_attr);
-  if (iter != s->info.crypt_attribute_map.end()) {
-ldpp_dout(s, 20) << "get_encryption_defaults: found kms_attr " << kms_attr << " = " << iter->second << ", setting kms_attr_seen" << dendl;
-    if (!rest_only) {
-      s->err.message = std::string("incomplete rest sse parms: ") + kms_attr + " not valid without kms";
-      ldpp_dout(s, 5) << __func__ << "argument problem: " << s->err.message << dendl;
-      return -EINVAL;
+  // Merges a single REST sse attribute with its bucket-level default: if the
+  // header was set on the request, validate it against rest_only; otherwise
+  // fall back to the bucket default (when one is given).
+  auto merge_kms_attr = [&](const char* attr_name, const std::string& bucket_default) -> int {
+    auto it = s->info.crypt_attribute_map.find(attr_name);
+    if (it != s->info.crypt_attribute_map.end()) {
+      ldpp_dout(s, 20) << "rgw_prepare_encryption_defaults: found " << attr_name << " = "
+	  << it->second << ", setting kms_attr_seen" << dendl;
+      if (!rest_only) {
+        s->err.message = std::string("incomplete rest sse parms: ") + attr_name + " not valid without kms";
+        ldpp_dout(s, 5) << __func__ << "argument problem: " << s->err.message << dendl;
+        return -EINVAL;
+      }
+      kms_attr_seen = true;
+    } else if (!rest_only && !bucket_default.empty()) {
+      ldpp_dout(s, 20) << "rgw_prepare_encryption_defaults: no " << attr_name << ", but default = "
+	  << bucket_default << ", setting kms_attr_seen" << dendl;
+      kms_attr_seen = true;
+      rgw_set_amz_meta_header(s->info.crypt_attribute_map, attr_name, bucket_default, OVERWRITE);
     }
-    kms_attr_seen = true;
-  } else if (!rest_only && kms_master_key_id != "") {
-ldpp_dout(s, 20) << "get_encryption_defaults: no kms_attr, but kms_master_key_id = " << kms_master_key_id << ", setting kms_attr_seen" << dendl;
-    kms_attr_seen = true;
-    rgw_set_amz_meta_header(s->info.crypt_attribute_map, kms_attr, kms_master_key_id, OVERWRITE);
-  }
+    return 0;
+  };
 
-  iter = s->info.crypt_attribute_map.find(bucket_key_attr);
-  if (iter != s->info.crypt_attribute_map.end()) {
-ldpp_dout(s, 20) << "get_encryption_defaults: found bucket_key_attr " << bucket_key_attr << " = " << iter->second << ", setting kms_attr_seen" << dendl;
-    if (!rest_only) {
-      s->err.message = std::string("incomplete rest sse parms: ") + bucket_key_attr + " not valid without kms";
-      ldpp_dout(s, 5) << __func__ << "argument problem: " << s->err.message << dendl;
-      return -EINVAL;
-    }
-    kms_attr_seen = true;
-  } else if (!rest_only && bucket_key_enabled) {
-ldpp_dout(s, 20) << "get_encryption_defaults: no bucket_key_attr, but bucket_key_enabled,  setting kms_attr_seen" << dendl;
-    kms_attr_seen = true;
-    rgw_set_amz_meta_header(s->info.crypt_attribute_map, bucket_key_attr, "true", OVERWRITE);
-  }
+  if (int r = merge_kms_attr(kms_attr, kms_master_key_id); r < 0) return r;
+  if (int r = merge_kms_attr(bucket_key_attr, bucket_key_enabled ? "true" : ""); r < 0) return r;
+  if (int r = merge_kms_attr(context_attr, ""); r < 0) return r;
 
-  iter = s->info.crypt_attribute_map.find(context_attr);
-  if (iter != s->info.crypt_attribute_map.end()) {
-ldpp_dout(s, 20) << "get_encryption_defaults: found context_attr " << context_attr << " = " << iter->second << ", setting kms_attr_seen" << dendl;
-    if (!rest_only) {
-      s->err.message = std::string("incomplete rest sse parms: ") + context_attr + " not valid without kms";
-      ldpp_dout(s, 5) << __func__ << "argument problem: " << s->err.message << dendl;
-      return -EINVAL;
-    }
-    kms_attr_seen = true;
-  }
-
+  // Finalize / validate the resulting sse_algorithm.
   if (kms_attr_seen && sse_algorithm == "") {
-ldpp_dout(s, 20) << "get_encryption_defaults: kms_attr but no algorithm, defaulting to aws_kms" << dendl;
+    ldpp_dout(s, 20) << "rgw_prepare_encryption_defaults: kms_attr but no algorithm, defaulting to aws_kms" << dendl;
     sse_algorithm = "aws:kms";
   }
-for (const auto& kv: s->info.crypt_attribute_map) {
-ldpp_dout(s, 20) << "get_encryption_defaults:  final map: " << kv.first << " = " << kv.second << dendl;
-}
-ldpp_dout(s, 20) << "get_encryption_defaults:  kms_attr_seen is " << kms_attr_seen << " and sse_algorithm is " << sse_algorithm << dendl;
+  for (const auto& kv: s->info.crypt_attribute_map) {
+    ldpp_dout(s, 20) << "rgw_prepare_encryption_defaults:  final map: " << kv.first << " = " << kv.second << dendl;
+  }
+  ldpp_dout(s, 20) << "rgw_prepare_encryption_defaults:  kms_attr_seen is " << kms_attr_seen
+      << " and sse_algorithm is " << sse_algorithm << dendl;
   if (kms_attr_seen && sse_algorithm != "aws:kms") {
     s->err.message = "algorithm <" + sse_algorithm + "> but got sse-kms attributes";
     return -EINVAL;

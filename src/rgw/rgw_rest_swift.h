@@ -17,7 +17,6 @@
 
 class RGWGetObj_ObjStore_SWIFT : public RGWGetObj_ObjStore {
   int custom_http_ret = 0;
-  std::map<std::string, std::string> crypt_http_responses;
 public:
   RGWGetObj_ObjStore_SWIFT() {}
   ~RGWGetObj_ObjStore_SWIFT() override {}
@@ -116,7 +115,6 @@ public:
 
 class RGWPutObj_ObjStore_SWIFT : public RGWPutObj_ObjStore {
   std::string lo_etag;
-  std::map<std::string, std::string> crypt_http_responses;
 public:
   RGWPutObj_ObjStore_SWIFT() {}
   ~RGWPutObj_ObjStore_SWIFT() override {}

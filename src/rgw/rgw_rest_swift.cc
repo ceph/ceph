@@ -1028,9 +1028,9 @@ int RGWPutObj_ObjStore_SWIFT::get_params(optional_yield y)
   }
 
   // Apply bucket-level encryption defaults (same as S3)
-  int ret = get_encryption_defaults(s);
+  int ret = rgw_prepare_encryption_defaults(s);
   if (ret < 0) {
-    ldpp_dout(this, 5) << __func__ << "(): get_encryption_defaults() returned ret=" << ret << dendl;
+    ldpp_dout(this, 5) << __func__ << "(): rgw_prepare_encryption_defaults() returned ret=" << ret << dendl;
     return ret;
   }
 
@@ -1168,11 +1168,11 @@ int RGWPutObj_ObjStore_SWIFT::get_encrypt_filter(
     rgw::sal::DataProcessor *cb)
 {
   std::unique_ptr<BlockCrypt> block_crypt;
+  std::map<std::string, std::string> dummy_crypt_responses;
   int res = rgw_s3_prepare_encrypt(s, s->yield, attrs, &block_crypt,
-                                   crypt_http_responses);
+                                   dummy_crypt_responses);
   if (res == 0 && block_crypt != nullptr) {
-    filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb,
-                                             std::move(block_crypt), s->yield));
+    *filter = std::make_unique<RGWPutObj_BlockEncrypt>(s, s->cct, cb, std::move(block_crypt), s->yield);
   }
   return res;
 }
@@ -1606,44 +1606,8 @@ int RGWGetObj_ObjStore_SWIFT::get_decrypt_filter(
     RGWGetObj_Filter* cb,
     bufferlist* manifest_bl)
 {
-  std::unique_ptr<BlockCrypt> block_crypt;
   static constexpr bool copy_source = false;
-  int res = rgw_s3_prepare_decrypt(s, s->yield, attrs, &block_crypt,
-                                   &crypt_http_responses, copy_source);
-  if (res < 0) {
-    return res;
-  }
-  if (block_crypt == nullptr) {
-    return 0;
-  }
-
-  // in case of a multipart upload, we need to know the part lengths to
-  // correctly decrypt across part boundaries
-  std::vector<size_t> parts_len;
-
-  // for replicated objects, the original part lengths are preserved in an xattr
-  if (auto i = attrs.find(RGW_ATTR_CRYPT_PARTS); i != attrs.end()) {
-    try {
-      auto p = i->second.cbegin();
-      using ceph::decode;
-      decode(parts_len, p);
-    } catch (const buffer::error&) {
-      ldpp_dout(this, 1) << "failed to decode RGW_ATTR_CRYPT_PARTS" << dendl;
-      return -EIO;
-    }
-  } else if (manifest_bl) {
-    // otherwise, we read the part lengths from the manifest
-    res = RGWGetObj_BlockDecrypt::read_manifest_parts(this, *manifest_bl,
-                                                      parts_len);
-    if (res < 0) {
-      return res;
-    }
-  }
-
-  *filter = std::make_unique<RGWGetObj_BlockDecrypt>(
-      s, s->cct, cb, std::move(block_crypt),
-      std::move(parts_len), s->yield);
-  return 0;
+  return ::get_decrypt_filter(filter, cb, s, attrs, manifest_bl, nullptr, copy_source);
 }
 
 int RGWGetObj_ObjStore_SWIFT::send_response_data_error(optional_yield y)
