@@ -2240,20 +2240,14 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
     if (m->get_snapid() != CEPH_NOSNAP) {
       // writes to clones are invalid, except for a copy_from op used by
       // pool migration to migrate clones
-      bool block_write = false;
-      for (vector<OSDOp>::iterator p = m->ops.begin(); p != m->ops.end(); ++p) {
-        OSDOp& osd_op = *p;
+      for (auto&& osd_op: m->ops) {
         if ((osd_op.op.op != CEPH_OSD_OP_COPY_FROM) ||
              ((osd_op.op.op == CEPH_OSD_OP_COPY_FROM) &&
 	    !(osd_op.op.copy_from.flags & CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION))) {
-	  dout(20) << __func__ << " copy_from pool migration flag not set" << osd_op.op.op << dendl;
-          block_write = true;
+          dout(20) << __func__ << ": write to clone not valid " << *m << dendl;
+          osd->reply_op_error(op, -EINVAL);
+          return;
 	}
-      }
-      if (block_write) {
-	dout(20) << __func__ << ": write to clone not valid " << *m << dendl;
-	osd->reply_op_error(op, -EINVAL);
-	return;
       }
     }
 
@@ -2551,10 +2545,13 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
 
   if (r && (r != -ENOENT || !obc)) {
     // copy the reqids for copy get on ENOENT
-    if (r == -ENOENT &&
-	(m->ops[0].op.op == CEPH_OSD_OP_COPY_GET)) {
-      fill_in_copy_get_noent(op, oid, m->ops[0]);
-      return;
+    if (r == -ENOENT) {
+      for (auto&& osd_op: m->ops) {
+        if (osd_op.op.op == CEPH_OSD_OP_COPY_GET) {
+          fill_in_copy_get_noent(op, oid, m->ops[0]);
+          return;
+        }
+      }
     }
     dout(20) << __func__ << ": find_object_context got error " << r << dendl;
     if (op->may_write() &&
@@ -2641,11 +2638,12 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
       (!obc->obs.exists ||
        ((m->get_snapid() != CEPH_SNAPDIR) &&
 	obc->obs.oi.is_whiteout()))) {
-    // copy the reqids for copy get on ENOENT
-    if (m->ops[0].op.op == CEPH_OSD_OP_COPY_GET) {
-      fill_in_copy_get_noent(op, oid, m->ops[0]);
-      close_op_ctx(ctx);
-      return;
+    for (auto&& osd_op: m->ops) {
+      if (osd_op.op.op == CEPH_OSD_OP_COPY_GET) {
+        fill_in_copy_get_noent(op, oid, m->ops[0]);
+        close_op_ctx(ctx);
+        return;
+      }
     }
     reply_ctx(ctx, -ENOENT);
     return;
@@ -9938,6 +9936,22 @@ void PrimaryLogPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
   cop->objecter_tid2 = 0;  // assume this ordered before us (if it happened)
   ObjectContextRef& cobc = cop->obc;
 
+  if (r == -ENOENT &&
+      (cop->flags & CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION) &&
+      cop->results.mirror_snapset &&
+      cop->results.snapset.seq != 0) {
+    // Head object does not exist, but there are clones. The object is marked
+    // as whiteout in the source pool, create an empty whiteout object in
+    // the target pool
+    dout(20) << __func__ << " migrating whiteout head object " << oid << dendl;
+    cop->results.whiteout = true;
+    r = 0;
+    cop->rval = 0;
+    cop->cursor.attr_complete = true;
+    cop->cursor.data_complete = true;
+    cop->cursor.omap_complete = true;
+  }
+
   if (r < 0)
     goto out;
 
@@ -10374,6 +10388,12 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
   } else {
     dout(10) << __func__ << " clearing omap flag on " << obs.oi.soid << dendl;
     obs.oi.clear_flag(object_info_t::FLAG_OMAP);
+  }
+
+  if (cb->results->whiteout) {
+    dout(20) << __func__ << " setting whiteout flag on " << obs.oi.soid << dendl;
+    obs.oi.set_flag(object_info_t::FLAG_WHITEOUT);
+    ++ctx->delta_stats.num_whiteouts;
   }
 
   interval_set<uint64_t> ch;
