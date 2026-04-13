@@ -77,11 +77,12 @@ public:
   }
 }; /* class TokenEngine */
 
-class Identity : public rgw::auth::Identity {
-public:
-  // Virtual getter to access the token from the Swift handler
-  virtual const rgw::keystone::TokenEnvelope& get_token_envelope() const = 0;
-};
+bool path_matches_pattern(std::string_view pattern, std::string_view path);
+
+bool check_access_rules(const DoutPrefixProvider* dpp,
+                        const std::vector<rgw::keystone::TokenEnvelope::AccessRule>& rules,
+                        std::string_view method,
+                        std::string_view path);
 
 class SecretCache {
   using token_envelope_t = rgw::keystone::TokenEnvelope;
