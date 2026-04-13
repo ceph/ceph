@@ -31,6 +31,20 @@
 
 namespace crimson::os::seastore {
 
+template <class ServiceT>
+class multisharded : private seastar::sharded<ServiceT> {
+  using base_t = seastar::sharded<ServiceT>;
+public:
+  using base_t::start;
+  using base_t::start_single;
+  using base_t::stop;
+
+  using base_t::local;
+  using base_t::invoke_on_all;
+  using base_t::map_reduce0;
+  using base_t::map;
+};
+
 class Onode;
 using OnodeRef = boost::intrusive_ptr<Onode>;
 class TransactionManager;
@@ -611,7 +625,7 @@ private:
   MDStoreRef mdstore;
   DeviceRef device;
   std::vector<DeviceRef> secondaries;
-  seastar::sharded<SeaStore::Shard> shard_stores;
+  multisharded<SeaStore::Shard> shard_stores;
 
   mutable seastar::lowres_clock::time_point last_tp =
     seastar::lowres_clock::time_point::min();
