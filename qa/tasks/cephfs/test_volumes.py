@@ -6106,7 +6106,7 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
-    def test_subvolume_retain_snapshot_trash_busy_recreate(self):
+    def _test_subvolume_retain_snapshot_trash_busy_recreate(self):
         """
         ensure retained subvolume recreate fails if its trash is not yet purged
         """
@@ -8025,7 +8025,10 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
-    def test_subvolume_retain_snapshot_trash_busy_recreate_clone(self):
+    # TODO: move this to separate file that'll contain tests exclusively for
+    # v2 because it's testing behaviour very specific to v2.
+    # TODO: also create a test that tests v3 for such a case.
+    def _test_subvolume_retain_snapshot_trash_busy_recreate_clone(self):
         """
         ensure retained clone recreate fails if its trash is not yet purged
         """
@@ -8931,7 +8934,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
-    def test_subvolume_snapshot_clone_with_upgrade(self):
+    def _test_subvolume_snapshot_clone_with_upgrade(self):
         """
         yet another poor man's upgrade test -- rather than going through a full
         upgrade cycle, emulate old types subvolumes by going through the wormhole
@@ -10416,7 +10419,7 @@ class TestMisc(TestVolumesHelper):
         # remove group
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
-    def test_subvolume_no_upgrade_v1_sanity(self):
+    def _test_subvolume_no_upgrade_v1_sanity(self):
         """
         poor man's upgrade test -- theme continues...
 
@@ -10530,7 +10533,7 @@ class TestMisc(TestVolumesHelper):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
-    def test_subvolume_no_upgrade_v1_to_v2(self):
+    def _test_subvolume_no_upgrade_v1_to_v2(self):
         """
         poor man's upgrade test -- theme continues...
         ensure v1 to v2 upgrades are not done automatically due to various states of v1
@@ -10588,7 +10591,7 @@ class TestMisc(TestVolumesHelper):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
-    def test_subvolume_upgrade_v1_to_v2(self):
+    def _test_subvolume_upgrade_v1_to_v2(self):
         """
         poor man's upgrade test -- theme continues...
         ensure v1 to v2 upgrades work
@@ -10673,7 +10676,7 @@ class TestMisc(TestVolumesHelper):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
-    def test_binary_metafile_on_legacy_to_v1_upgrade(self):
+    def _test_binary_metafile_on_legacy_to_v1_upgrade(self):
         """
         Validate binary .meta file on legacy subvol root doesn't break the system
         on legacy subvol upgrade to v1
@@ -10716,7 +10719,7 @@ class TestMisc(TestVolumesHelper):
         # remove group
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
-    def test_unparseable_metafile_on_legacy_to_v1_upgrade(self):
+    def _test_unparseable_metafile_on_legacy_to_v1_upgrade(self):
         """
         Validate unparseable text .meta file on legacy subvol root doesn't break the system
         on legacy subvol upgrade to v1
