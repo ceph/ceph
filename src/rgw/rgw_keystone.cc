@@ -513,10 +513,10 @@ void rgw::keystone::TokenEnvelope::decode(JSONObj* const root_obj)
   ApplicationCredential tmp_app_cred;
   if (JSONDecoder::decode_json("application_credential", tmp_app_cred, root_obj, false)) {
     app_cred = std::move(tmp_app_cred);
-  // Parse application_credential.access_rules if present
-  JSONObjIter app_cred_iter = root_obj->find_first("application_credential");
-  if (!app_cred_iter.end()) {
-    JSONDecoder::decode_json("access_rules", access_rules, *app_cred_iter);
+    JSONObjIter app_cred_iter = root_obj->find_first("application_credential");
+    if (!app_cred_iter.end()) {
+      JSONDecoder::decode_json("access_rules", access_rules, *app_cred_iter);
+    }
   }
 
   struct tm t;
