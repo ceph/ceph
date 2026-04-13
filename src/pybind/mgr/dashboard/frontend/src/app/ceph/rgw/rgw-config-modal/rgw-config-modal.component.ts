@@ -27,6 +27,10 @@ import { KmipConfig, VaultConfig } from '~/app/shared/models/rgw-encryption-conf
 })
 export class RgwConfigModalComponent extends BaseModal implements OnInit {
   kmsProviders: string[];
+  selectedProviderByEncryptionType: Record<string, string> = {
+    [ENCRYPTION_TYPE.SSE_KMS]: KMS_PROVIDER.VAULT,
+    [ENCRYPTION_TYPE.SSE_S3]: KMS_PROVIDER.VAULT
+  };
 
   configForm: CdFormGroup;
 
@@ -82,26 +86,23 @@ export class RgwConfigModalComponent extends BaseModal implements OnInit {
             : this.selectedEncryptionConfigValues['client_key']
       };
       this.configForm.patchValue(patchValues);
+      this.selectedProviderByEncryptionType[patchValues.encryptionType] = patchValues.kms_provider;
       this.configForm.get('kms_provider').disable();
     }
-    this.checkKmsProviders();
+    this.syncKmsProviders();
   }
 
-  setKmsProvider() {
-    const selectedEncryptionType = this.configForm.get('encryptionType').value;
-    this.kmsProviders =
+  private getProvidersForEncryptionType(selectedEncryptionType: string) {
+    return (
       selectedEncryptionType === ENCRYPTION_TYPE.SSE_KMS
         ? [KMS_PROVIDER.VAULT, KMS_PROVIDER.KMIP]
-        : [KMS_PROVIDER.VAULT];
-    const currentProvider = this.configForm.get('kms_provider').value;
-    if (!this.kmsProviders.includes(currentProvider)) {
-      this.configForm.get('kms_provider').setValue(this.kmsProviders.length ? this.kmsProviders[0] : '');
-    }
+        : [KMS_PROVIDER.VAULT]
+    );
   }
-  checkKmsProviders() {
-    if (!this.editing) {
-      this.setKmsProvider();
-    }
+
+  syncKmsProviders() {
+    const selectedEncryptionType = this.configForm.get('encryptionType').value;
+    this.kmsProviders = this.getProvidersForEncryptionType(selectedEncryptionType);
 
     if (
       this.allEncryptionConfigValues &&
@@ -127,8 +128,27 @@ export class RgwConfigModalComponent extends BaseModal implements OnInit {
         this.kmsProviders = this.kmsProviders.filter((provider) => !s3Backends.includes(provider));
       }
     }
-    if (!this.editing && this.kmsProviders.length === 0) {
-      this.configForm.get('kms_provider').setValue('');
+    if (!this.editing) {
+      const rememberedProvider = this.selectedProviderByEncryptionType[selectedEncryptionType];
+      const nextProvider = this.kmsProviders.includes(rememberedProvider)
+        ? rememberedProvider
+        : this.kmsProviders[0] || '';
+      this.configForm.get('kms_provider').setValue(nextProvider, { emitEvent: false });
+      if (nextProvider) {
+        this.selectedProviderByEncryptionType[selectedEncryptionType] = nextProvider;
+      }
+    }
+  }
+
+  onEncryptionTypeChange() {
+    this.syncKmsProviders();
+  }
+
+  onKmsProviderChange() {
+    const encryptionType = this.configForm.get('encryptionType').value;
+    const provider = this.configForm.get('kms_provider').value;
+    if (provider) {
+      this.selectedProviderByEncryptionType[encryptionType] = provider;
     }
   }
 

@@ -23,11 +23,11 @@
                          i18n-helperText>
           <cds-radio [value]="ENCRYPTION_TYPE.SSE_S3"
                      [disabled]="editing && configForm.getValue('encryptionType') !== ENCRYPTION_TYPE.SSE_S3"
-                     (change)="checkKmsProviders()"
+                     (change)="onEncryptionTypeChange()"
                      i18n>SSE-S3</cds-radio>
           <cds-radio [value]="ENCRYPTION_TYPE.SSE_KMS"
                      [disabled]="editing && configForm.getValue('encryptionType') !== ENCRYPTION_TYPE.SSE_KMS"
-                     (change)="checkKmsProviders()"
+                     (change)="onEncryptionTypeChange()"
                      i18n>SSE-KMS</cds-radio>
         </cds-radio-group>
       </div>
@@ -45,7 +45,7 @@
                     i18n-helperText
                     i18n-invalidText
                     [invalid]="configForm.showError('kms_provider', frm, 'required')"
-                    (change)="setKmsProvider()">
+                    (change)="onKmsProviderChange()">
           @if (kmsProviders !== null && kmsProviders.length === 0) {
           <option ngValue="null"
                   i18n>-- No kms providers available --</option>
@@ -109,7 +109,6 @@
         configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3) {
         <div class="form-item">
           <cds-text-label for="secret_path"
-                          cdOptionalField="Secret Path"
                           helperText="Vault secret URL prefix, which can be used to restrict access to a particular subset of the Vault secret space."
                           i18n
                           i18n-helperText>Secret Path
@@ -128,7 +127,6 @@
         configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3) {
         <div class="form-item">
           <cds-text-label for="namespace"
-                          cdOptionalField="Namespace"
                           helperText="Vault Namespace to be used to select your tenant."
                           i18n
                           i18n-helperText>Namespace
@@ -206,7 +204,6 @@
         configForm.getValue('kms_provider') === KMS_PROVIDER.KMIP) {
         <div class="form-item">
           <cds-text-label for="kms_key_template"
-                          cdOptionalField="KMS Key Template"
                           helperText="sse-kms; kmip key names"
                           i18n
                           i18n-helperText>KMS Key Template
@@ -222,7 +219,6 @@
         configForm.getValue('kms_provider') === KMS_PROVIDER.KMIP) {
         <div class="form-item">
           <cds-text-label for="s3_key_template"
-                          cdOptionalField="S3 Key Template"
                           helperText="sse-s3; kmip key template"
                           i18n
                           i18n-helperText>S3 Key Template
@@ -238,7 +234,6 @@
         configForm.getValue('kms_provider') === KMS_PROVIDER.KMIP) {
         <div class="form-item">
           <cds-text-label for="username"
-                          cdOptionalField="Username"
                           helperText="When authenticating via username."
                           i18n
                           i18n-helperText>Username
@@ -253,7 +248,6 @@
         configForm.getValue('kms_provider') === KMS_PROVIDER.KMIP) {
         <div class="form-item">
           <cds-password-label for="password"
-                              cdOptionalField="Password"
                               helperText="Optional with username."
                               i18n
                               i18n-helperText>Password
@@ -270,7 +264,6 @@
         configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3) {
         <div class="form-item">
           <cds-text-label for="ssl_cert"
-                          cdOptionalField="CA Certificate Path"
                           helperText="Path for custom CA certificate used when accessing the server."
                           i18n
                           i18n-helperText>CA Certificate Path
@@ -288,7 +281,6 @@
         configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3) {
         <div class="form-item">
           <cds-text-label for="client_cert"
-                          cdOptionalField="Client Certificate Path"
                           helperText="Path for the client certificate used when accessing the server."
                           i18n
                           i18n-helperText>Client Certificate Path
@@ -306,7 +298,6 @@
         configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3) {
         <div class="form-item">
           <cds-text-label for="client_key"
-                          cdOptionalField="Client Private Key Path"
                           helperText="Path for the private key required for the client certificate."
                           i18n
                           i18n-helperText>Client Private Key Path

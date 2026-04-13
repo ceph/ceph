@@ -67,21 +67,32 @@ describe('RgwConfigModalComponent', () => {
     expect(nativeElement.querySelector('cds-password-label[for="password"]')).toBeTruthy();
   });
 
-  it('should reset unsupported provider when switching from SSE-KMS to SSE-S3', () => {
+  it('should restore the last SSE-KMS provider when switching back from SSE-S3', () => {
     component.configForm.patchValue({
       encryptionType: component.ENCRYPTION_TYPE.SSE_KMS,
       kms_provider: component.KMS_PROVIDER.KMIP
     });
+    component.onKmsProviderChange();
 
     component.configForm.patchValue({
       encryptionType: component.ENCRYPTION_TYPE.SSE_S3
     });
-
-    component.checkKmsProviders();
+    component.onEncryptionTypeChange();
     fixture.detectChanges();
 
     expect(component.kmsProviders).toEqual([component.KMS_PROVIDER.VAULT]);
     expect(component.configForm.getValue('kms_provider')).toBe(component.KMS_PROVIDER.VAULT);
-    expect((fixture.nativeElement as HTMLElement).querySelector('cds-select#kms_provider')).toBeTruthy();
+
+    component.configForm.patchValue({
+      encryptionType: component.ENCRYPTION_TYPE.SSE_KMS
+    });
+    component.onEncryptionTypeChange();
+    fixture.detectChanges();
+
+    expect(component.kmsProviders).toEqual([
+      component.KMS_PROVIDER.VAULT,
+      component.KMS_PROVIDER.KMIP
+    ]);
+    expect(component.configForm.getValue('kms_provider')).toBe(component.KMS_PROVIDER.KMIP);
   });
 });
