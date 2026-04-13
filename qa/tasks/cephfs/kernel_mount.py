@@ -51,6 +51,8 @@ class KernelMountBase(CephFSMount):
 
         if not self.cephfs_mntpt:
             self.cephfs_mntpt = '/'
+        if not self.cephfs_name:
+            self.cephfs_name = self._get_default_cephfs_name()
 
         self._create_mntpt()
 
@@ -70,6 +72,14 @@ class KernelMountBase(CephFSMount):
             self.gather_mount_info()
         except:
             log.warn('failed to fetch mount info - tests depending on mount addr/inst may fail!')
+
+    def _get_default_cephfs_name(self):
+        cmd_stdout, cmd_stderr = StringIO(), StringIO()
+        self.client_remote.run(args=['ceph', 'fs', 'ls', '--format', 'json'],
+                               stdout=cmd_stdout, stderr=cmd_stderr)
+        cmd_stdout = cmd_stdout.getvalue()
+        cmd_stdout = json.loads(cmd_stdout)
+        return cmd_stdout[0]['name']
 
     def gather_mount_info(self):
         self.id = self._get_global_id()
