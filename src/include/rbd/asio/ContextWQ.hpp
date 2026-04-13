@@ -20,6 +20,12 @@
 #include <functional>
 #include <memory>
 
+#if defined(__GNUC__) && !defined(__MINGW32__)
+#define LIBRBD_ASIO_CONTEXT_WQ_API __attribute__((visibility("default")))
+#else
+#define LIBRBD_ASIO_CONTEXT_WQ_API
+#endif
+
 // Forward declaration only when Context is not already defined
 #ifndef CEPH_CONTEXT_H
 struct Context;
@@ -38,8 +44,10 @@ namespace asio {
  * - post / dispatch: general parallel work
  * - post_serial / dispatch_serial: strictly ordered functor path
  * - queue(Context*, r): legacy Context::complete ordering + drain accounting
+ *
+ * Exported from librbd.so for out-of-tree implementations
  */
-class ContextWQ {
+class LIBRBD_ASIO_CONTEXT_WQ_API ContextWQ {
 public:
   using Work = std::function<void()>;
 

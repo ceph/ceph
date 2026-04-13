@@ -179,6 +179,7 @@ target_link_libraries(unittest_librbd
   rbd_test
   rbd_api
   rbd_internal
+  rbd_asio_context_wq
   rbd_test_mock
   journal
   journal_test_mock
@@ -208,6 +209,7 @@ target_link_libraries(ceph_test_librbd
   rbd_test
   rbd_api
   rbd_internal
+  rbd_asio_context_wq
   rbd_types
   journal
   cls_journal_client
