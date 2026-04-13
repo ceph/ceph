@@ -1,5 +1,5 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
@@ -93,6 +93,25 @@ describe('FeedbackComponent', () => {
 
     expect(refreshSpy).toHaveBeenCalledTimes(1);
   });
+
+  it('should retry feedback state refresh after module update until backend is ready', fakeAsync(() => {
+    const mgrModuleService = TestBed.inject(MgrModuleService);
+    spyOn(feedbackService, 'isKeyExist').and.returnValues(
+      throwError(() => ({ status: 400 })), // initial ngOnInit check
+      throwError(() => ({ status: 400 })), // first refresh after updateCompleted$
+      of(false) // retry succeeds
+    );
+
+    fixture.detectChanges();
+    expect(component.isFeedbackEnabled).toBe(false);
+
+    mgrModuleService.updateCompleted$.next();
+    tick(1000);
+
+    expect(component.isFeedbackEnabled).toBe(true);
+    expect(component.feedbackForm.enabled).toBe(true);
+    expect(component.isAPIKeySet).toBe(false);
+  }));
 
   it('should test invalid api-key', () => {
     fixture.detectChanges();
