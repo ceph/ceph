@@ -172,7 +172,7 @@ class ExportMgr:
             completion = self.mgr.describe_service(service_type='nfs', service_name=f'nfs.{cluster_id}')
             services = orchestrator.raise_if_exception(completion)
             for service in services:
-                if service.spec and isinstance(service.spec, NFSServiceSpec):
+                if service.spec:
                     spec = cast(NFSServiceSpec, service.spec)
                     if getattr(spec, 'enable_nfsv3', False):
                         return [3, 4]
