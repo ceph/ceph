@@ -32,6 +32,31 @@
 namespace crimson::os::seastore {
 
 template <class ServiceT>
+class simplysharded : private seastar::sharded<ServiceT> {
+  using base_t = seastar::sharded<ServiceT>;
+public:
+
+  template <typename... Args>
+  seastar::future<> start(size_t num_shards, Args&&... args) noexcept;
+
+  using base_t::stop;
+  using base_t::local;
+  using base_t::map_reduce0;
+  using base_t::map;
+  using base_t::invoke_on_all;
+};
+
+template <typename ServiceT>
+template <typename... Args>
+seastar::future<>
+simplysharded<ServiceT>::start(const size_t num_shards, Args&&... args) noexcept
+{
+  // never ever change num of shards after mkfs
+  ceph_assert(num_shards == seastar::smp::count);
+  return base_t::start(std::forward<Args>(args)...);
+}
+
+template <class ServiceT>
 class multisharded : private seastar::sharded<ServiceT> {
   using base_t = seastar::sharded<ServiceT>;
 public:

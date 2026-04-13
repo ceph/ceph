@@ -226,7 +226,7 @@ seastar::future<> SeaStore::start()
   device = std::move(device_obj);
   co_await device->start();
   ceph_assert(device);
-  co_await shard_stores.start(root, device.get(), is_test);
+  co_await shard_stores.start(seastar::smp::count, root, device.get(), is_test);
   INFO("done");
 }
 
@@ -238,7 +238,7 @@ seastar::future<> SeaStore::test_start(DeviceRef device_obj)
   ceph_assert(device_obj);
   ceph_assert(root == "");
   device = std::move(device_obj);
-  co_await shard_stores.start_single(root, device.get(), true);
+  co_await shard_stores.start(1, root, device.get(), true);
   INFO("done");
 }
 
