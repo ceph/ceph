@@ -36,14 +36,24 @@ class multisharded : private seastar::sharded<ServiceT> {
   using base_t = seastar::sharded<ServiceT>;
 public:
   using base_t::start;
-  using base_t::start_single;
+  using base_t::start_single; // just for unittesting
   using base_t::stop;
 
   using base_t::local;
-  using base_t::invoke_on_all;
   using base_t::map_reduce0;
   using base_t::map;
+
+  template <typename Func, typename... Args>
+  seastar::future<> invoke_on_all(Func func, Args... args) noexcept;
 };
+
+
+template <typename ServiceT>
+template <typename Func, typename... Args>
+seastar::future<>
+multisharded<ServiceT>::invoke_on_all(Func func, Args... args) noexcept {
+  return base_t::invoke_on_all(std::move(func), std::move(args)...);
+}
 
 class Onode;
 using OnodeRef = boost::intrusive_ptr<Onode>;
