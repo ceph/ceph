@@ -1168,8 +1168,9 @@ int RGWPutObj_ObjStore_SWIFT::get_encrypt_filter(
     rgw::sal::DataProcessor *cb)
 {
   std::unique_ptr<BlockCrypt> block_crypt;
+  std::map<std::string, std::string> dummy_crypt_responses;
   int res = rgw_s3_prepare_encrypt(s, s->yield, attrs, &block_crypt,
-                                   crypt_http_responses);
+                                   dummy_crypt_responses);
   if (res == 0 && block_crypt != nullptr) {
     filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb,
                                              std::move(block_crypt), s->yield));
@@ -1609,7 +1610,7 @@ int RGWGetObj_ObjStore_SWIFT::get_decrypt_filter(
   std::unique_ptr<BlockCrypt> block_crypt;
   static constexpr bool copy_source = false;
   int res = rgw_s3_prepare_decrypt(s, s->yield, attrs, &block_crypt,
-                                   &crypt_http_responses, copy_source);
+                                   nullptr, copy_source);
   if (res < 0) {
     return res;
   }

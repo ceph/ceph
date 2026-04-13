@@ -2029,41 +2029,6 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
 
   auto part_attrs = part->get_attrs();
   std::unique_ptr<BlockCrypt> block_crypt;
-  static constexpr bool copy_source = false;
-  op_ret = rgw_s3_prepare_decrypt(s, s->yield, part_attrs, &block_crypt,
-                                  nullptr, copy_source);
-  if (op_ret < 0) {
-    ldpp_dout(this, 0) << "ERROR: failed to prepare decryption for manifest part" << dendl;
-    return op_ret;
-  }
-  if (block_crypt != nullptr) {
-    std::vector<size_t> parts_len;
-    if (auto i = part_attrs.find(RGW_ATTR_CRYPT_PARTS); i != part_attrs.end()) {
-      try {
-        auto p = i->second.cbegin();
-        using ceph::decode;
-        decode(parts_len, p);
-      } catch (const buffer::error&) {
-        ldpp_dout(this, 1) << "failed to decode RGW_ATTR_CRYPT_PARTS for manifest part" << dendl;
-        return -EIO;
-      }
-    } else if (auto manifest_iter = part_attrs.find(RGW_ATTR_MANIFEST);
-               manifest_iter != part_attrs.end()) {
-      op_ret = RGWGetObj_BlockDecrypt::read_manifest_parts(this, manifest_iter->second,
-                                                           parts_len);
-      if (op_ret < 0) {
-        return op_ret;
-      }
-    }
-
-    decrypt = std::make_unique<RGWGetObj_BlockDecrypt>(
-        s, s->cct, filter, std::move(block_crypt),
-        std::move(parts_len), s->yield);
-    filter = decrypt.get();
-    // Adjust offsets for decryption block alignment
-    filter->fixup_range(cur_ofs, cur_end);
-  }
-
   bool need_decompress;
   op_ret = rgw_compression_info_from_attrset(part_attrs, need_decompress, cs_info);
   if (op_ret < 0) {
@@ -2090,6 +2055,19 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
           << ", actual read size=" << ent.meta.size << dendl;
       return -EIO;
 	  }
+  }
+  
+  auto manifest_iter = part_attrs.find(RGW_ATTR_MANIFEST);
+  bufferlist* manifest_bl = (manifest_iter != part_attrs.end()) ? &manifest_iter->second : nullptr;
+  
+  op_ret = ::get_decrypt_filter(&decrypt, filter, s, part_attrs, manifest_bl, nullptr, false);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "ERROR: failed to prepare decryption for manifest part" << dendl;
+    return op_ret;
+  }
+  
+  if (decrypt != nullptr) {
+    filter = decrypt.get();
   }
 
   op_ret = rgw_policy_from_attrset(s, s->cct, part->get_attrs(), &obj_policy);
