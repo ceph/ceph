@@ -9760,6 +9760,13 @@ paths:
                 nqn:
                   description: NVMeoF subsystem NQN
                   type: string
+                port:
+                  description: Port to use for the created listeners
+                  type: integer
+                secure_listeners:
+                  default: false
+                  description: Make all the auto-listeners for this subsystem secure
+                  type: boolean
                 serial_number:
                   description: Subsystem serial number
                   type: string
