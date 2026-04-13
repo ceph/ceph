@@ -6106,48 +6106,6 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
-    def _test_subvolume_retain_snapshot_trash_busy_recreate(self):
-        """
-        ensure retained subvolume recreate fails if its trash is not yet purged
-        """
-        subvolume = self._gen_subvol_name()
-        snapshot = self._gen_subvol_snap_name()
-
-        # create subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume)
-
-        # snapshot subvolume
-        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
-
-        # remove with snapshot retention
-        self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--retain-snapshots")
-
-        # fake a trash entry
-        self._update_fake_trash(subvolume)
-
-        # recreate subvolume
-        try:
-            self._fs_cmd("subvolume", "create", self.volname, subvolume)
-        except CommandFailedError as ce:
-            self.assertEqual(ce.exitstatus, errno.EAGAIN, "invalid error code on recreate of subvolume with purge pending")
-        else:
-            self.fail("expected recreate of subvolume with purge pending to fail")
-
-        # clear fake trash entry
-        self._update_fake_trash(subvolume, create=False)
-
-        # recreate subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume)
-
-        # remove snapshot
-        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
-
-        # remove subvolume
-        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
-
-        # verify trash dir is clean
-        self._wait_for_trash_empty()
-
     def test_subvolume_rm_with_snapshots(self):
         subvolume = self._gen_subvol_name()
         snapshot = self._gen_subvol_snap_name()
@@ -8021,66 +7979,6 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         # verify list subvolumes returns an empty list
         subvolumels = json.loads(self._fs_cmd('subvolume', 'ls', self.volname))
         self.assertEqual(len(subvolumels), 0)
-
-        # verify trash dir is clean
-        self._wait_for_trash_empty()
-
-    # TODO: move this to separate file that'll contain tests exclusively for
-    # v2 because it's testing behaviour very specific to v2.
-    # TODO: also create a test that tests v3 for such a case.
-    def _test_subvolume_retain_snapshot_trash_busy_recreate_clone(self):
-        """
-        ensure retained clone recreate fails if its trash is not yet purged
-        """
-        subvolume = self._gen_subvol_name()
-        snapshot = self._gen_subvol_snap_name()
-        clone = self._gen_subvol_clone_name()
-
-        # create subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume)
-
-        # snapshot subvolume
-        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
-
-        # clone subvolume snapshot
-        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
-
-        # check clone status
-        self._wait_for_clone_to_complete(clone)
-
-        # snapshot clone
-        self._fs_cmd("subvolume", "snapshot", "create", self.volname, clone, snapshot)
-
-        # remove clone with snapshot retention
-        self._fs_cmd("subvolume", "rm", self.volname, clone, "--retain-snapshots")
-
-        # fake a trash entry
-        self._update_fake_trash(clone)
-
-        # clone subvolume snapshot (recreate)
-        try:
-            self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
-        except CommandFailedError as ce:
-            self.assertEqual(ce.exitstatus, errno.EAGAIN, "invalid error code on recreate of clone with purge pending")
-        else:
-            self.fail("expected recreate of clone with purge pending to fail")
-
-        # clear fake trash entry
-        self._update_fake_trash(clone, create=False)
-
-        # recreate subvolume
-        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
-
-        # check clone status
-        self._wait_for_clone_to_complete(clone)
-
-        # remove snapshot
-        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
-        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, clone, snapshot)
-
-        # remove subvolume
-        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
-        self._fs_cmd("subvolume", "rm", self.volname, clone)
 
         # verify trash dir is clean
         self._wait_for_trash_empty()
@@ -10896,3 +10794,109 @@ class TestCorruptedSubvolumes(TestVolumesHelper):
         self.run_ceph_cmd(f'fs subvolume snapshot rm {self.volname} {sv1} {ss1} '
                            '--force')
         self.run_ceph_cmd(f'fs subvolume rm {self.volname} {sv1} --force')
+
+
+class TestSubvolumeV2:
+    '''
+    Test feature specific to subvolume v2.
+    '''
+
+    def _test_subvolume_retain_snapshot_trash_busy_recreate(self):
+        """
+        ensure retained subvolume recreate fails if its trash is not yet purged
+        """
+        subvolume = self._gen_subvol_name()
+        snapshot = self._gen_subvol_snap_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # remove with snapshot retention
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--retain-snapshots")
+
+        # fake a trash entry
+        self._update_fake_trash(subvolume)
+
+        # recreate subvolume
+        try:
+            self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EAGAIN, "invalid error code on recreate of subvolume with purge pending")
+        else:
+            self.fail("expected recreate of subvolume with purge pending to fail")
+
+        # clear fake trash entry
+        self._update_fake_trash(subvolume, create=False)
+
+        # recreate subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    # TODO: also create a test that tests v3 for such a case.
+    def _test_subvolume_retain_snapshot_trash_busy_recreate_clone(self):
+        """
+        ensure retained clone recreate fails if its trash is not yet purged
+        """
+        subvolume = self._gen_subvol_name()
+        snapshot = self._gen_subvol_snap_name()
+        clone = self._gen_subvol_clone_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # clone subvolume snapshot
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
+
+        # check clone status
+        self._wait_for_clone_to_complete(clone)
+
+        # snapshot clone
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, clone, snapshot)
+
+        # remove clone with snapshot retention
+        self._fs_cmd("subvolume", "rm", self.volname, clone, "--retain-snapshots")
+
+        # fake a trash entry
+        self._update_fake_trash(clone)
+
+        # clone subvolume snapshot (recreate)
+        try:
+            self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EAGAIN, "invalid error code on recreate of clone with purge pending")
+        else:
+            self.fail("expected recreate of clone with purge pending to fail")
+
+        # clear fake trash entry
+        self._update_fake_trash(clone, create=False)
+
+        # recreate subvolume
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
+
+        # check clone status
+        self._wait_for_clone_to_complete(clone)
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, clone, snapshot)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, clone)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
