@@ -3329,7 +3329,8 @@ class TestSubvolumes(TestVolumesHelper):
         self._fs_cmd("subvolume", "create", self.volname, subvolume)
         self._fs_cmd("subvolume", "pin", self.volname, subvolume, "export", "1")
         path = self._fs_cmd("subvolume", "getpath", self.volname, subvolume)
-        path = os.path.dirname(path) # get subvolume path
+        for i in range(0, 3):
+            path = os.path.dirname(path) # get subvolume path
 
         self._get_subtrees(status=status, rank=1)
         self._wait_subtrees([(path, 1)], status=status)
