@@ -208,8 +208,8 @@ class HardwareManager(ResourceManager):
 class CertStoreManager(ResourceManager):
 
     @wait_api_result
-    def get_nvmeof_tls_bundle(self, service_name: str) -> Dict[str, str]:
-        return self.api.get_nvmeof_tls_bundle(service_name)
+    def get_nvmeof_tls_bundle(self, service_name: str, daemon_name: str) -> Dict[str, str]:
+        return self.api.get_nvmeof_tls_bundle(service_name, daemon_name)
 
     @wait_api_result
     def get_cert(self, entity: str, service_name: Optional[str] = None,

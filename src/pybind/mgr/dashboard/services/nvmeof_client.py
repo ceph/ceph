@@ -54,13 +54,12 @@ else:
                     res = NvmeofGatewaysConfig.get_service_info(gw_group)
                 if res is None:
                     raise DashboardException("Gateway group does not exist")
-                service_name, self.gateway_addr = res
+                service_name, self.gateway_addr, self.daemon_name = res
             except TypeError as e:
                 raise DashboardException(
                     f'Unable to retrieve the gateway info: {e}'
                 )
 
-            self.daemon_name = ''
             # While creating listener need to direct request to the gateway
             # address where listener is supposed to be added.
             if server_address:
@@ -75,12 +74,12 @@ else:
                     None
                 )
                 if matched_gateway:
-                    self.daemon_name = matched_gateway.get('daemon_name')
                     self.gateway_addr = matched_gateway.get('service_url')
                     logger.debug("Gateway address set to: %s", self.gateway_addr)
             enable_auth = is_mtls_enabled(service_name)
             if enable_auth:
-                tls_bundle = NvmeofGatewaysConfig.get_nvmeof_tls_bundle(service_name)
+                tls_bundle = NvmeofGatewaysConfig.get_nvmeof_tls_bundle(service_name,
+                                                                        self.daemon_name)
                 if tls_bundle:
                     logger.info('Securely connecting to: %s', self.gateway_addr)
                     encoded_tls_bundle = encode_tls_bundle(tls_bundle)
@@ -100,7 +99,6 @@ else:
             self.service_name = service_name
             if self.channel is not None:
                 self.stub = pb2_grpc.GatewayStub(self.channel)
-
 
     Model = Dict[str, Any]
     Collection = List[Model]

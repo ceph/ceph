@@ -381,7 +381,7 @@ class NvmeofService(CephService):
 
         for dd in dds:
             # dd.hostname is the short host name used for HOST-scoped certmgr objects
-            if dd.name == daemon_name:
+            if dd.name() == daemon_name:
                 return dd.hostname
 
         return None

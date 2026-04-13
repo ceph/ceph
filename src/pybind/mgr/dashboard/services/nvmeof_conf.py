@@ -120,11 +120,11 @@ class NvmeofGatewaysConfig(object):
             )
 
     @classmethod
-    def get_nvmeof_tls_bundle(cls, service_name: str):
+    def get_nvmeof_tls_bundle(cls, service_name: str, daemon_name: str):
         try:
             orch = OrchClient.instance()
             if orch.available():
-                return orch.cert_store.get_nvmeof_tls_bundle(service_name)
+                return orch.cert_store.get_nvmeof_tls_bundle(service_name, daemon_name)
             return None
         except OrchestratorError:
             # just return None if any orchestrator error is raised
@@ -144,7 +144,7 @@ def _get_name_url_for_group(gateways, group):
                 config = _get_running_daemon_svc_config(svc_config, running_daemons)
 
                 if config:
-                    return service_name, config['service_url']
+                    return service_name, config['service_url'], config['daemon_name']
         return None
 
     except OrchestratorError:
@@ -182,7 +182,8 @@ def _get_default_service(gateways):
                 component="nvmeof"
             )
         service_name = gateway_keys[0]
-        return service_name, gateways[service_name][0]['service_url']
+        return service_name, gateways[service_name][0]['service_url'], \
+            gateways[service_name][0]['daemon_name']
     return None
 
 
