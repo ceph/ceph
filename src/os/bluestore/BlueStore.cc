@@ -9251,7 +9251,7 @@ int BlueStore::expand_devices(ostream& out)
 	      << std::endl;
           continue;
         } else {
-          int64_t old_size = my_label.size;
+          uint64_t old_size = my_label.size;
           my_label.size = size;
           out << devid
 	      << " : Expanding to 0x" << std::hex << size
@@ -9266,9 +9266,12 @@ int BlueStore::expand_devices(ostream& out)
                 << " : size updated to 0x" << std::hex << size
                 << std::dec << "(" << byte_u_t(size) << ")"
                 << std::endl;
+            // online expand needs to update allocator now
+            // offline does not need this as update will happen
+            // on next open
+            if (!need_to_close)
+              bluefs->expand_device(devid, size, old_size);
           }
-          ceph_assert(mounted);
-          bluefs->expand_device(devid, size, old_size);
         }
       }
     }
@@ -9326,6 +9329,12 @@ int BlueStore::expand_devices(ostream& out)
           << " : size updated to 0x" << std::hex << size
           << std::dec << "(" << byte_u_t(size) << ")"
           << std::endl;
+
+      if (need_to_close) {
+        _close_db_and_around();
+        r = _open_db_and_around(false);
+        ceph_assert(r == 0);
+      }
 
       fm->expand(aligned_size, db);
       alloc->expand(aligned_size);
