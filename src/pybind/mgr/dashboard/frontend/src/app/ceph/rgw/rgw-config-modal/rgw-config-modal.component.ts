@@ -93,6 +93,10 @@ export class RgwConfigModalComponent extends BaseModal implements OnInit {
       selectedEncryptionType === ENCRYPTION_TYPE.SSE_KMS
         ? [KMS_PROVIDER.VAULT, KMS_PROVIDER.KMIP]
         : [KMS_PROVIDER.VAULT];
+    const currentProvider = this.configForm.get('kms_provider').value;
+    if (!this.kmsProviders.includes(currentProvider)) {
+      this.configForm.get('kms_provider').setValue(this.kmsProviders.length ? this.kmsProviders[0] : '');
+    }
   }
   checkKmsProviders() {
     if (!this.editing) {
@@ -123,10 +127,8 @@ export class RgwConfigModalComponent extends BaseModal implements OnInit {
         this.kmsProviders = this.kmsProviders.filter((provider) => !s3Backends.includes(provider));
       }
     }
-    if (!this.editing) {
-      if (this.kmsProviders.length > 0) {
-        this.configForm.get('kms_provider').setValue(this.kmsProviders[0]);
-      }
+    if (!this.editing && this.kmsProviders.length === 0) {
+      this.configForm.get('kms_provider').setValue('');
     }
   }
 

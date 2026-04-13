@@ -15,6 +15,7 @@
     <div cdsModalContent>
       <div class="form-item">
         <label class="cds--label fw-bold"
+               cdRequiredField="Encryption Type"
                i18n>Encryption Type</label>
         <cds-radio-group formControlName="encryptionType"
                          orientation="horizontal"
@@ -37,6 +38,7 @@
         <cds-select id="kms_provider"
                     formControlName="kms_provider"
                     label="Key management service provider"
+                    cdRequiredField="Key management service provider"
                     helperText="Where the encryption keys are stored."
                     invalidText="This field is required."
                     i18n-label
@@ -67,6 +69,7 @@
           <cds-select id="auth"
                       formControlName="auth"
                       label="Authentication Method"
+                      cdRequiredField="Authentication Method"
                       helperText="Type of authentication method to be used with Vault."
                       invalidText="This field is required."
                       i18n-label
@@ -87,6 +90,7 @@
           <cds-select id="secret_engine"
                       formControlName="secret_engine"
                       label="Secret Engine"
+                      cdRequiredField="Secret Engine"
                       helperText="Vault Secret Engine to be used to retrieve encryption keys."
                       invalidText="This field is required."
                       i18n-label
@@ -105,6 +109,7 @@
         configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3) {
         <div class="form-item">
           <cds-text-label for="secret_path"
+                          cdOptionalField="Secret Path"
                           helperText="Vault secret URL prefix, which can be used to restrict access to a particular subset of the Vault secret space."
                           i18n
                           i18n-helperText>Secret Path
@@ -123,6 +128,7 @@
         configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3) {
         <div class="form-item">
           <cds-text-label for="namespace"
+                          cdOptionalField="Namespace"
                           helperText="Vault Namespace to be used to select your tenant."
                           i18n
                           i18n-helperText>Namespace
@@ -139,6 +145,7 @@
         configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3) {
         <div class="form-item">
           <cds-text-label for="addr"
+                          [cdRequiredField]="configForm.getValue('kms_provider') === KMS_PROVIDER.VAULT ? 'Vault Address' : 'KMIP Address'"
                           [invalid]="addressRef.isInvalid"
                           [invalidText]="addressError"
                           [helperText]="configForm.getValue('kms_provider') === KMS_PROVIDER.VAULT ? 'Vault server base address.' : 'Kmip server base address.'">
@@ -170,6 +177,7 @@
         configForm.getValue('auth') === 'token') {
         <div class="form-item">
           <cds-text-label for="token"
+                          cdRequiredField="Token file path"
                           [invalid]="tokenRef.isInvalid"
                           [invalidText]="tokenError"
                           helperText="Provide the path to the Vault token file on the RGW host."
@@ -198,6 +206,7 @@
         configForm.getValue('kms_provider') === KMS_PROVIDER.KMIP) {
         <div class="form-item">
           <cds-text-label for="kms_key_template"
+                          cdOptionalField="KMS Key Template"
                           helperText="sse-kms; kmip key names"
                           i18n
                           i18n-helperText>KMS Key Template
@@ -213,6 +222,7 @@
         configForm.getValue('kms_provider') === KMS_PROVIDER.KMIP) {
         <div class="form-item">
           <cds-text-label for="s3_key_template"
+                          cdOptionalField="S3 Key Template"
                           helperText="sse-s3; kmip key template"
                           i18n
                           i18n-helperText>S3 Key Template
@@ -228,6 +238,7 @@
         configForm.getValue('kms_provider') === KMS_PROVIDER.KMIP) {
         <div class="form-item">
           <cds-text-label for="username"
+                          cdOptionalField="Username"
                           helperText="When authenticating via username."
                           i18n
                           i18n-helperText>Username
@@ -242,6 +253,7 @@
         configForm.getValue('kms_provider') === KMS_PROVIDER.KMIP) {
         <div class="form-item">
           <cds-password-label for="password"
+                              cdOptionalField="Password"
                               helperText="Optional with username."
                               i18n
                               i18n-helperText>Password
@@ -258,6 +270,7 @@
         configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3) {
         <div class="form-item">
           <cds-text-label for="ssl_cert"
+                          cdOptionalField="CA Certificate Path"
                           helperText="Path for custom CA certificate used when accessing the server."
                           i18n
                           i18n-helperText>CA Certificate Path
@@ -275,6 +288,7 @@
         configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3) {
         <div class="form-item">
           <cds-text-label for="client_cert"
+                          cdOptionalField="Client Certificate Path"
                           helperText="Path for the client certificate used when accessing the server."
                           i18n
                           i18n-helperText>Client Certificate Path
@@ -292,6 +306,7 @@
         configForm.getValue('encryptionType') === ENCRYPTION_TYPE.SSE_S3) {
         <div class="form-item">
           <cds-text-label for="client_key"
+                          cdOptionalField="Client Private Key Path"
                           helperText="Path for the private key required for the client certificate."
                           i18n
                           i18n-helperText>Client Private Key Path
