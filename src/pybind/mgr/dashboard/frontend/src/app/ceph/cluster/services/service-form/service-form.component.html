@@ -6,7 +6,8 @@
         i18n>{{ action | titlecase }} {{ resource }}</h3>
     <cd-help-text></cd-help-text>
   </cds-modal-header>
-  <section cdsModalContent>
+  <section cdsModalContent
+           hasForm="true">
     <form #frm="ngForm"
           [formGroup]="serviceForm"
           novalidate>
@@ -185,7 +186,7 @@
               <input cdsText
                      type="text"
                      [value]="serviceForm.controls.service_type.value + '.'"
-                     readonly="true">
+                     disabled="true">
             </cds-text-label>
           </div>
           <cds-text-label [invalid]="serviceForm.controls.service_id.invalid && serviceForm.controls.service_id.dirty"
