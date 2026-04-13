@@ -9223,7 +9223,7 @@ int BlueStore::expand_devices(ostream& out)
       continue;
     }
     my_bdev->refresh_size();
-    uint64_t size = my_bdev ? my_bdev->get_size() : 0;
+    uint64_t size = my_bdev->get_size();
 
     if (size == 0) {
       // no bdev
@@ -9266,7 +9266,7 @@ int BlueStore::expand_devices(ostream& out)
                 << " : size updated to 0x" << std::hex << size
                 << std::dec << "(" << byte_u_t(size) << ")"
                 << std::endl;
-            // online expand needs to update allocator now
+            // online expand needs to update BlueFS allocator(s) now
             // offline does not need this as update will happen
             // on next open
             if (!need_to_close)
@@ -9332,14 +9332,22 @@ int BlueStore::expand_devices(ostream& out)
 
       if (need_to_close) {
         _close_db_and_around();
+        //
+        // Mount in read/write to sync expansion changes
+        // and make sure everything is all right.
+        //
+        before_expansion_bdev_size = size0; // preserve orignal size to permit
+                                            // following _db_open_and_around()
+                                            // do some post-init stuff on opened
+                                            // allocator.
         r = _open_db_and_around(false);
         ceph_assert(r == 0);
+      } else {
+        fm->expand(aligned_size, db);
+        alloc->expand(aligned_size);
+        uint64_t aligned_size0 = p2roundup(size0, min_alloc_size);
+        alloc->init_add_free(aligned_size0, aligned_size - aligned_size0);
       }
-
-      fm->expand(aligned_size, db);
-      alloc->expand(aligned_size);
-      uint64_t aligned_size0 = p2roundup(size0, min_alloc_size);
-      alloc->init_add_free(aligned_size0, aligned_size - aligned_size0);
 
       dout(1) << __func__
               << " : size updated to 0x" << std::hex << size
