@@ -21,7 +21,10 @@ seastar::future<> PGShardManager::load_pgs(crimson::os::FuturizedStore& store)
       colls_cores,
       [this](auto coll_core) {
         auto[coll, shard_core_index] = coll_core;
-        auto[shard_core, store_index] = shard_core_index;
+	// this is the place where store_index begins in the OSD layer.
+	// We keep store_index solely to honor what FuturizedStore has
+	// told about coll-to-storeshard assignment through list_collections()
+        auto[shard_core, store_index] = std::make_pair(shard_core_index, 42);
 	spg_t pgid;
 	if (coll.is_pg(&pgid)) {
           return get_pg_to_shard_mapping().get_or_create_pg_mapping(

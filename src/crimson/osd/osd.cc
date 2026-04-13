@@ -463,7 +463,8 @@ seastar::future<> OSD::start()
   startup_time = ceph::mono_clock::now();
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
   DEBUG("starting store");
-  return store.start().then([this] (auto store_shard_nums) {
+  return store.start().then([this] {
+    size_t store_shard_nums = 42;
     return pg_to_shard_mappings.start(0, seastar::smp::count, store_shard_nums
     ).then([this] {
       return osd_singleton_state.start_single(
