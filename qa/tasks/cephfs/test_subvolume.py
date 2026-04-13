@@ -290,7 +290,6 @@ class TestSubvolumeMetrics(CephFSTestCase):
         and disappear after the aggregation window expires.
         """
         subvol_name = "metrics_subv"
-        subv_path = "/volumes/_nogroup/metrics_subv"
 
         # ensure metrics absent and quota not set yet
         self.assertFalse(self.get_subvolume_metrics(),
@@ -300,6 +299,8 @@ class TestSubvolumeMetrics(CephFSTestCase):
         quota_bytes = 5 * 1024 * 1024 * 1024
         self.fs.run_ceph_cmd('fs', 'subvolume', 'create', 'cephfs', subvol_name,
                              "--size", str(quota_bytes))
+        subv_path = self.fs.get_ceph_cmd_stdout(f'fs subvolume getpath {self.fs.name} {subvol_name}')
+        subv_path = subv_path.replace('/mnt\n', '')
 
         # generate some I/O
         mount_point = self.mount_a.get_mount_point()
@@ -425,12 +426,13 @@ class TestSubvolumeMetrics(CephFSTestCase):
         broadcast to clients.
         """
         subvol_name = "resize_test_subv"
-        subv_path = f"/volumes/_nogroup/{subvol_name}"
 
         # create subvolume with initial quota (1 GiB)
         initial_quota = 1 * 1024 * 1024 * 1024
         self.fs.run_ceph_cmd('fs', 'subvolume', 'create', 'cephfs', subvol_name,
                              "--size", str(initial_quota))
+        subv_path = self.fs.get_ceph_cmd_stdout(f'fs subvolume getpath {self.fs.name} {subvol_name}')
+        subv_path = subv_path.replace('/mnt\n', '')
 
         # access subvolume to trigger registration
         mount_point = self.mount_a.get_mount_point()
@@ -552,8 +554,6 @@ class TestSubvolumeMetrics(CephFSTestCase):
         """
         subvol1_name = "multi_subv1"
         subvol2_name = "multi_subv2"
-        subv1_path = f"/volumes/_nogroup/{subvol1_name}"
-        subv2_path = f"/volumes/_nogroup/{subvol2_name}"
 
         # create two subvolumes with different quotas
         quota1 = 1 * 1024 * 1024 * 1024  # 1 GiB
@@ -563,6 +563,11 @@ class TestSubvolumeMetrics(CephFSTestCase):
                              "--size", str(quota1))
         self.fs.run_ceph_cmd('fs', 'subvolume', 'create', 'cephfs', subvol2_name,
                              "--size", str(quota2))
+
+        subv1_path = self.fs.get_ceph_cmd_stdout(f'fs subvolume getpath {self.fs.name} {subvol1_name}')
+        subv1_path = subv1_path.replace('/mnt\n', '')
+        subv2_path = self.fs.get_ceph_cmd_stdout(f'fs subvolume getpath {self.fs.name} {subvol2_name}')
+        subv2_path = subv2_path.replace('/mnt\n', '')
 
         mount_point = self.mount_a.get_mount_point()
 
@@ -617,10 +622,11 @@ class TestSubvolumeMetrics(CephFSTestCase):
         Verify that subvolumes without quota (unlimited) report quota_bytes=0.
         """
         subvol_name = "unlimited_subv"
-        subv_path = f"/volumes/_nogroup/{subvol_name}"
 
         # create subvolume without quota
         self.fs.run_ceph_cmd('fs', 'subvolume', 'create', 'cephfs', subvol_name)
+        subv_path = self.fs.get_ceph_cmd_stdout(f'fs subvolume getpath {self.fs.name} {subvol_name}')
+        subv_path = subv_path.replace('/mnt\n', '')
 
         # access subvolume and do I/O
         mount_point = self.mount_a.get_mount_point()
@@ -669,12 +675,13 @@ class TestSubvolumeMetrics(CephFSTestCase):
         - Verifying metrics accurately track all changes
         """
         subvol_name = "stress_subv"
-        subv_path = f"/volumes/_nogroup/{subvol_name}"
 
         # Phase 1: Create subvolume with initial small quota
         initial_quota = 100 * 1024 * 1024  # 100 MiB
         self.fs.run_ceph_cmd('fs', 'subvolume', 'create', 'cephfs', subvol_name,
                              "--size", str(initial_quota))
+        subv_path = self.fs.get_ceph_cmd_stdout(f'fs subvolume getpath {self.fs.name} {subvol_name}')
+        subv_path = subv_path.replace('/mnt\n', '')
 
         mount_point = self.mount_a.get_mount_point()
         subvolume_fs_path = self.fs.get_ceph_cmd_stdout('fs', 'subvolume', 'getpath', 'cephfs', subvol_name).strip()
