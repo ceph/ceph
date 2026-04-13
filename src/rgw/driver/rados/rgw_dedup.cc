@@ -2612,7 +2612,8 @@ namespace rgw::dedup {
     // Reset the counters that will be recalculated during STEP_READ_ATTRIBUTES step.
     // Note that dedup_bytes_estimate should not be reset, as it remains unmodified
     //      during that step.
-    uint64_t singleton_count = p_stats->big_objs_stat.singleton_count;
+    // Objects with singleton_count are cleared from the table after each step.
+    //      Keep the existing count and add to it new singleton (if created)
     uint64_t unique_count    = p_stats->big_objs_stat.unique_count;
     uint64_t duplicate_count = p_stats->big_objs_stat.duplicate_count;
     p_stats->big_objs_stat.unique_count = 0;
@@ -2641,7 +2642,6 @@ namespace rgw::dedup {
       // skip this step when no storage_class update !!
       ldpp_dout(dpp, 10) << __func__ <<"::no storage_class update, skip second call"
                          << " to p_table->count_duplicates()"<< dendl;
-      p_stats->big_objs_stat.singleton_count = singleton_count;
       p_stats->big_objs_stat.unique_count    = unique_count;
       p_stats->big_objs_stat.duplicate_count = duplicate_count;
     }

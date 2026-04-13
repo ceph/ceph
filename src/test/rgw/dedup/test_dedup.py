@@ -9,8 +9,6 @@ import hashlib
 from multiprocessing import Process
 import filecmp
 import os
-import shlex
-import signal
 import string
 import shutil
 import pytest
@@ -18,7 +16,6 @@ import json
 from collections import namedtuple
 import boto3
 from boto3.s3.transfer import TransferConfig
-from typing import List, Tuple
 from dataclasses import dataclass
 
 from . import(

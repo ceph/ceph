@@ -316,12 +316,13 @@ namespace rgw::dedup {
         continue;
       }
 
-      if (hash_tab[tab_idx].val.not_enough_copies()) {
+      if (hash_tab[tab_idx].val.is_singleton()) {
         p_objs_stats->singleton_count++;
       }
-      else {
+      else if (hash_tab[tab_idx].val.get_count() > 1) {
         p_objs_stats->unique_count ++;
       }
+      // else -> this entry was removed after a change in placement
     }
   }
 
