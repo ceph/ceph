@@ -1,5 +1,6 @@
-import { Component, EventEmitter, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, OnDestroy, OnInit, Output } from '@angular/core';
 import { Validators } from '@angular/forms';
+import { Subscription } from 'rxjs';
 
 import { BaseModal } from 'carbon-components-angular';
 import _ from 'lodash';
@@ -25,12 +26,13 @@ import { KmipConfig, VaultConfig } from '~/app/shared/models/rgw-encryption-conf
   styleUrls: ['./rgw-config-modal.component.scss'],
   standalone: false
 })
-export class RgwConfigModalComponent extends BaseModal implements OnInit {
+export class RgwConfigModalComponent extends BaseModal implements OnInit, OnDestroy {
   kmsProviders: string[];
   selectedProviderByEncryptionType: Record<string, string> = {
     [ENCRYPTION_TYPE.SSE_KMS]: KMS_PROVIDER.VAULT,
     [ENCRYPTION_TYPE.SSE_S3]: KMS_PROVIDER.VAULT
   };
+  private formSubscriptions = new Subscription();
 
   configForm: CdFormGroup;
 
@@ -89,7 +91,22 @@ export class RgwConfigModalComponent extends BaseModal implements OnInit {
       this.selectedProviderByEncryptionType[patchValues.encryptionType] = patchValues.kms_provider;
       this.configForm.get('kms_provider').disable();
     }
+    this.formSubscriptions.add(
+      this.configForm.get('encryptionType').valueChanges.subscribe(() => this.syncKmsProviders())
+    );
+    this.formSubscriptions.add(
+      this.configForm.get('kms_provider').valueChanges.subscribe((provider) => {
+        const encryptionType = this.configForm.get('encryptionType').value;
+        if (!this.editing && provider) {
+          this.selectedProviderByEncryptionType[encryptionType] = provider;
+        }
+      })
+    );
     this.syncKmsProviders();
+  }
+
+  ngOnDestroy(): void {
+    this.formSubscriptions.unsubscribe();
   }
 
   private getProvidersForEncryptionType(selectedEncryptionType: string) {
@@ -137,18 +154,6 @@ export class RgwConfigModalComponent extends BaseModal implements OnInit {
       if (nextProvider) {
         this.selectedProviderByEncryptionType[selectedEncryptionType] = nextProvider;
       }
-    }
-  }
-
-  onEncryptionTypeChange() {
-    this.syncKmsProviders();
-  }
-
-  onKmsProviderChange() {
-    const encryptionType = this.configForm.get('encryptionType').value;
-    const provider = this.configForm.get('kms_provider').value;
-    if (provider) {
-      this.selectedProviderByEncryptionType[encryptionType] = provider;
     }
   }
 

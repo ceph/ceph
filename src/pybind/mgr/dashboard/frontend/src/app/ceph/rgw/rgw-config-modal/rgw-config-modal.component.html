@@ -5,7 +5,8 @@
   <cds-modal-header (closeSelect)="closeModal()">
     <h3 cdsModalHeaderHeading
         i18n>{{ action | titlecase }} RGW Encryption Configurations</h3>
-    <cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
+    <cd-help-text [formAllFieldsRequired]="false"
+                  i18n>Fields marked with * are required.</cd-help-text>
   </cds-modal-header>
 
   <form name="configForm"
@@ -23,11 +24,9 @@
                          i18n-helperText>
           <cds-radio [value]="ENCRYPTION_TYPE.SSE_S3"
                      [disabled]="editing && configForm.getValue('encryptionType') !== ENCRYPTION_TYPE.SSE_S3"
-                     (change)="onEncryptionTypeChange()"
                      i18n>SSE-S3</cds-radio>
           <cds-radio [value]="ENCRYPTION_TYPE.SSE_KMS"
                      [disabled]="editing && configForm.getValue('encryptionType') !== ENCRYPTION_TYPE.SSE_KMS"
-                     (change)="onEncryptionTypeChange()"
                      i18n>SSE-KMS</cds-radio>
         </cds-radio-group>
       </div>
@@ -44,8 +43,7 @@
                     i18n-label
                     i18n-helperText
                     i18n-invalidText
-                    [invalid]="configForm.showError('kms_provider', frm, 'required')"
-                    (change)="onKmsProviderChange()">
+                    [invalid]="configForm.showError('kms_provider', frm, 'required')">
           @if (kmsProviders !== null && kmsProviders.length === 0) {
           <option ngValue="null"
                   i18n>-- No kms providers available --</option>

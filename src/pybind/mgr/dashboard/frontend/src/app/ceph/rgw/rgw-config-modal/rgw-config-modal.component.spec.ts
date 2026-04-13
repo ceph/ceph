@@ -72,12 +72,11 @@ describe('RgwConfigModalComponent', () => {
       encryptionType: component.ENCRYPTION_TYPE.SSE_KMS,
       kms_provider: component.KMS_PROVIDER.KMIP
     });
-    component.onKmsProviderChange();
+    fixture.detectChanges();
 
     component.configForm.patchValue({
       encryptionType: component.ENCRYPTION_TYPE.SSE_S3
     });
-    component.onEncryptionTypeChange();
     fixture.detectChanges();
 
     expect(component.kmsProviders).toEqual([component.KMS_PROVIDER.VAULT]);
@@ -86,7 +85,6 @@ describe('RgwConfigModalComponent', () => {
     component.configForm.patchValue({
       encryptionType: component.ENCRYPTION_TYPE.SSE_KMS
     });
-    component.onEncryptionTypeChange();
     fixture.detectChanges();
 
     expect(component.kmsProviders).toEqual([
