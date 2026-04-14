@@ -259,6 +259,14 @@ void shutdown() {
   s_manager.reset();
 }
 
+void pause() {
+  shutdown();
+}
+
+void resume(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver) {
+  init(dpp, driver);
+}
+
 bool notify_index_update(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& index_name) {
   if (!s_manager) {
     ldpp_dout(dpp, 1) << "ERROR: failed to notify s3vectors manager about table update: manager is not initialized" << dendl;
