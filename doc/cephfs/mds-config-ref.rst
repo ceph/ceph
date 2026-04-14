@@ -67,4 +67,5 @@
 .. confval:: mds_min_caps_per_client
 .. confval:: mds_symlink_recovery
 .. confval:: mds_extraordinary_events_dump_interval
+.. confval:: mds_trace_sliding_window_sec
 .. confval:: subv_metrics_window_interval

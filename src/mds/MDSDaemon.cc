@@ -309,6 +309,9 @@ void MDSDaemon::set_up_admin_socket()
   r = admin_socket->register_command("dump_ops_in_flight", asok_hook,
 				     "show the ops currently in flight");
   ceph_assert(r == 0);
+  r = admin_socket->register_command("trace dump", asok_hook,
+				     "dump completed traces from sliding window");
+  ceph_assert(r == 0);
   r = admin_socket->register_command("ops "
 				     "name=flags,type=CephChoices,strings=locks,n=N,req=false "
 				     "name=path,type=CephString,req=false "
