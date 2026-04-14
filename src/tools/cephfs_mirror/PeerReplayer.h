@@ -10,7 +10,14 @@
 #include "ServiceDaemon.h"
 #include "Types.h"
 
+#include <deque>
+#include <functional>
+#include <map>
+#include <queue>
 #include <stack>
+#include <string>
+#include <vector>
+
 #include <boost/optional.hpp>
 
 namespace cephfs {
