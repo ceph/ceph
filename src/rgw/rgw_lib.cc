@@ -545,6 +545,7 @@ namespace rgw {
     }
 
     main.init_lua();
+    main.init_s3vector();
 #ifdef WITH_RADOSGW_RADOS
     main.init_dedup();
 #endif
