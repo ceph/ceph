@@ -40,7 +40,6 @@ private:
   pg_missing_set<false> shard_not_missing_const;
   pg_pool_t pg_pool;
   set<pg_shard_t> acting_recovery_backfill_shards;
-  shard_id_set acting_recovery_backfill_shard_id_set;
   map<pg_shard_t, pg_info_t> shard_info;
   PGLog pg_log;
   pg_info_t shard_pg_info;
@@ -48,6 +47,7 @@ private:
 
 public:
   set<pg_shard_t> acting_shards;
+  shard_id_set acting_recovery_backfill_shard_id_set;
 
   ECListenerStub()
     : pg_log(NULL) {}
@@ -1295,4 +1295,455 @@ TEST(ECCommon, decode8) {
   acting_set.insert_range(shard_id_t(2), 2);
 
   test_decode(k, m, chunk_size, object_size, want, acting_set);
+}
+
+// Zone support tests for get_min_avail_to_read_shards
+TEST(ECCommon, get_min_avail_to_read_shards_zones_local_zone_available) {
+  // Test that when all shards are available in local zone, they are preferred
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const int nshards = 6;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12; // 2 zones with k+m shards each
+  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Set up shards in both zones (0-5 in zone 0, 6-11 in zone 1)
+  for (int i = 0; i < 12; i++) {
+    listenerStub.acting_shards.insert(pg_shard_t(i, shard_id_t(i)));
+  }
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+
+  // Request reads from data shards in zone 0
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  ECCommon::read_request_t read_request(to_read_list, ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::No, ECCommon::WantOmapKeys::No, "", 0, object_size);
+  int r = pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
+
+  ASSERT_EQ(r, 0);
+
+  // Verify that only local zone shards (0-5) are used
+  for (auto &[shard_id, shard_read] : read_request.shard_reads) {
+    ASSERT_LT(int(shard_id), nshards) << "Should only use local zone shards";
+    ASSERT_EQ(shard_read.pg_shard.shard, shard_id);
+  }
+}
+
+TEST(ECCommon, get_min_avail_to_read_shards_zones_fallback_to_remote) {
+  // Test that when local zone shards are missing, remote zone shards are used
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12; // 2 zones
+  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Only add shards from remote zone (6-11) and one from local zone
+  listenerStub.acting_shards.insert(pg_shard_t(0, shard_id_t(0))); // Local zone
+  for (int i = 6; i < 12; i++) {
+    listenerStub.acting_shards.insert(pg_shard_t(i, shard_id_t(i))); // Remote zone
+  }
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+
+  // Request reads from all data shards
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  ECCommon::read_request_t read_request(to_read_list, ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::No, ECCommon::WantOmapKeys::No, "", 0, object_size);
+  int r = pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
+
+  ASSERT_EQ(r, 0);
+
+  // Verify that remote zone shards are used (should have shards >= 6)
+  bool has_remote_shard = false;
+  for (auto &[shard_id, shard_read] : read_request.shard_reads) {
+    if (int(shard_read.pg_shard.shard) >= 6) {
+      has_remote_shard = true;
+      break;
+    }
+  }
+  ASSERT_TRUE(has_remote_shard) << "Should use remote zone shards when local unavailable";
+}
+
+TEST(ECCommon, get_min_avail_to_read_shards_zones_missing_shard_local) {
+  // Test handling of missing shard in local zone with zones enabled
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12;
+  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Add all local zone shards except shard 1
+  for (int i = 0; i < 6; i++) {
+    if (i != 1) {
+      listenerStub.acting_shards.insert(pg_shard_t(i, shard_id_t(i)));
+    }
+  }
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  ECCommon::read_request_t read_request(to_read_list, ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::No, ECCommon::WantOmapKeys::No, "", 0, object_size);
+  int r = pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
+
+  ASSERT_EQ(r, 0);
+
+  // Should use parity shard to recover missing data shard
+  bool has_parity = false;
+  for (auto &[shard_id, shard_read] : read_request.shard_reads) {
+    if (std::cmp_greater_equal(int(shard_id), k)) {
+      has_parity = true;
+    }
+  }
+  ASSERT_TRUE(has_parity) << "Should use parity shard when data shard missing";
+}
+
+TEST(ECCommon, get_min_avail_to_read_shards_zones_error_shards) {
+  // Test that error_shards parameter works correctly with zones
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12;
+  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Add all shards from both zones
+  for (int i = 0; i < 12; i++) {
+    listenerStub.acting_shards.insert(pg_shard_t(i, shard_id_t(i)));
+  }
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  // Mark shard 1 as having an error
+  std::set<pg_shard_t> error_shards;
+  error_shards.emplace(1, shard_id_t(1));
+
+  ECCommon::read_request_t read_request(to_read_list, ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::No, ECCommon::WantOmapKeys::No, "", 0, object_size);
+  int r = pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request, error_shards);
+
+  ASSERT_EQ(r, 0);
+
+  // Verify shard 1 is not in the read request
+  ASSERT_EQ(read_request.shard_reads.count(shard_id_t(1)), 0u)
+    << "Error shard should not be in read request";
+}
+
+TEST(ECCommon, get_min_avail_to_read_shards_zones_three_zones) {
+  // Test with 3 zones
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 18; // 3 zones
+  pool.opts.set(pool_opts_t::NUM_ZONES, 3);
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Add shards from all three zones
+  for (int i = 0; i < 18; i++) {
+    listenerStub.acting_shards.insert(pg_shard_t(i, shard_id_t(i)));
+  }
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  ECCommon::read_request_t read_request(to_read_list, ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::No, ECCommon::WantOmapKeys::No, "", 0, object_size);
+  int r = pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
+
+  ASSERT_EQ(r, 0);
+
+  // Should prefer local zone (0-5)
+  for (auto &[shard_id, shard_read] : read_request.shard_reads) {
+    ASSERT_LT(int(shard_id), 6) << "Should prefer local zone shards";
+  }
+}
+
+TEST(ECCommon, get_min_avail_to_read_shards_zones_insufficient_shards) {
+  // Test error case when not enough shards available even with zones
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12;
+  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Only add 2 shards - not enough to decode
+  listenerStub.acting_shards.insert(pg_shard_t(0, shard_id_t(0)));
+  listenerStub.acting_shards.insert(pg_shard_t(1, shard_id_t(1)));
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  ECCommon::read_request_t read_request(to_read_list, ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::No, ECCommon::WantOmapKeys::No, "", 0, object_size);
+  int r = pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
+
+  ASSERT_NE(r, 0) << "Should fail when insufficient shards available";
+}
+
+TEST(ECCommon, get_min_avail_to_read_shards_zones_redundant_reads) {
+  // Test redundant reads with zones enabled
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12;
+  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Add all local zone shards
+  for (int i = 0; i < 6; i++) {
+    listenerStub.acting_shards.insert(pg_shard_t(i, shard_id_t(i)));
+  }
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  ECCommon::read_request_t read_request(to_read_list, ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::No, ECCommon::WantOmapKeys::No, "", 0, object_size);
+  // Enable redundant reads
+  int r = pipeline.get_min_avail_to_read_shards(hoid, false, true, read_request);
+
+  ASSERT_EQ(r, 0);
+
+  // With redundant reads, should read from all available shards
+  ASSERT_EQ(read_request.shard_reads.size(), 6u)
+    << "Redundant reads should use all available shards";
+}
+
+TEST(ECCommon, get_min_avail_to_read_shards_zones_recovery_mode) {
+  // Test recovery mode with zones
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12;
+  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Add shards from both zones
+  for (int i = 0; i < 12; i++) {
+    listenerStub.acting_shards.insert(pg_shard_t(i, shard_id_t(i)));
+  }
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  ECCommon::read_request_t read_request(to_read_list, ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::No, ECCommon::WantOmapKeys::No, "", 0, object_size);
+  // Enable recovery mode (for_recovery = true)
+  int r = pipeline.get_min_avail_to_read_shards(hoid, true, false, read_request);
+
+  ASSERT_EQ(r, 0);
+
+  // In recovery mode, should still prefer local zone
+  for (auto &[shard_id, shard_read] : read_request.shard_reads) {
+    ASSERT_LT(int(shard_id), 6) << "Recovery should prefer local zone";
+  }
+}
+
+TEST(ECCommon, get_min_avail_to_read_shards_zones_mixed_availability) {
+  // Test with mixed shard availability across zones
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12;
+  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Add some shards from local zone (0, 2, 4) and some from remote (7, 9, 11)
+  listenerStub.acting_shards.insert(pg_shard_t(0, shard_id_t(0)));
+  listenerStub.acting_shards.insert(pg_shard_t(2, shard_id_t(2)));
+  listenerStub.acting_shards.insert(pg_shard_t(4, shard_id_t(4)));
+  listenerStub.acting_shards.insert(pg_shard_t(7, shard_id_t(7)));
+  listenerStub.acting_shards.insert(pg_shard_t(9, shard_id_t(9)));
+  listenerStub.acting_shards.insert(pg_shard_t(11, shard_id_t(11)));
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  ECCommon::read_request_t read_request(to_read_list, ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::No, ECCommon::WantOmapKeys::No, "", 0, object_size);
+  int r = pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
+
+  ASSERT_EQ(r, 0);
+
+  // Should use a mix, but prefer local when possible
+  int remote_count = 0;
+  for (auto &[shard_id, shard_read] : read_request.shard_reads) {
+    if (int(shard_read.pg_shard.shard) >= 6) {
+      remote_count++;
+    }
+  }
+
+  // Should have used some remote shards since local doesn't have enough
+  ASSERT_GT(remote_count, 0) << "Should use remote shards when local insufficient";
+}
+
+// Test for the fix in 9a9c55e: get_readable_writable_shard_id_sets() must return
+// relative shard IDs (zone-local), not absolute IDs, so that downstream consumers
+// such as WritePlanObj::intersect with get_parity_shards() produce correct results
+// for zone-1 PGs in stretch mode.
+TEST(ECCommon, get_readable_writable_shard_id_sets_returns_relative_shards) {
+  // Use k=2, m=1 so k+m=3.  Zone-0 absolute shards: {0,1,2}.
+  // Zone-1 absolute shards: {3,4,5}.  Relative shards are always {0,1,2}.
+  const unsigned int k = 2;
+  const unsigned int m = 1;
+  const uint64_t swidth = 4096 * k;
+
+  pg_pool_t pool;
+  pool.size = 6; // 2 zones * (k+m)
+  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+  ErasureCodeInterfaceRef ec_impl(new MockErasureCode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Simulate a zone-1 PG: acting shards carry absolute IDs 3, 4, 5
+  listenerStub.acting_shards.insert(pg_shard_t(0, shard_id_t(3)));
+  listenerStub.acting_shards.insert(pg_shard_t(1, shard_id_t(4)));
+  listenerStub.acting_shards.insert(pg_shard_t(2, shard_id_t(5)));
+
+  // acting_recovery_backfill also uses absolute shard IDs for zone-1
+  listenerStub.acting_recovery_backfill_shard_id_set.insert(shard_id_t(3));
+  listenerStub.acting_recovery_backfill_shard_id_set.insert(shard_id_t(4));
+  listenerStub.acting_recovery_backfill_shard_id_set.insert(shard_id_t(5));
+
+  auto [readable, writable] = pipeline.get_readable_writable_shard_id_sets();
+
+  // Both sets must contain only relative shard IDs {0, 1, 2}, not {3, 4, 5}.
+  shard_id_set expected;
+  expected.insert(shard_id_t(0));
+  expected.insert(shard_id_t(1));
+  expected.insert(shard_id_t(2));
+
+  EXPECT_EQ(readable, expected)
+    << "readable set must use relative shard IDs, not absolute zone-1 IDs";
+  EXPECT_EQ(writable, expected)
+    << "writable set must use relative shard IDs, not absolute zone-1 IDs";
+
+  // Sanity check: the relative set does not contain the absolute zone-1 IDs
+  EXPECT_FALSE(readable.contains(shard_id_t(3)));
+  EXPECT_FALSE(readable.contains(shard_id_t(4)));
+  EXPECT_FALSE(readable.contains(shard_id_t(5)));
 }
