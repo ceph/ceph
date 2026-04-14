@@ -2629,7 +2629,7 @@ options:
   type: str
   level: advanced
   desc: Default EC profile for new erasure-coded pools
-  default: plugin=isa technique=reed_sol_van k=2 m=2
+  default: plugin=isa technique=reed_sol_van k=2 m=2 num_zones=1
   services:
   - mon
   flags:

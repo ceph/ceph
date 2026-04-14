@@ -7800,18 +7800,33 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
   case pg_pool_t::TYPE_ERASURE:
     {
       if (osdmap.stretch_mode_enabled) {
-	*ss << "prepare_pool_size: we are in stretch mode; cannot create EC pools!";
-	return -EINVAL;
+ *ss << "prepare_pool_size: we are in stretch mode; cannot create EC pools!";
+ return -EINVAL;
       }
       ErasureCodeInterfaceRef erasure_code;
       err = get_erasure_code(erasure_code_profile, &erasure_code, ss);
       if (err == 0) {
-	*size = erasure_code->get_chunk_count();
-	*min_size =
-	  erasure_code->get_data_chunk_count() +
-	  std::min<int>(1, erasure_code->get_coding_chunk_count() - 1);
-	ceph_assert(*min_size <= *size);
-	ceph_assert(*min_size >= erasure_code->get_data_chunk_count());
+ unsigned base_size = erasure_code->get_chunk_count();
+ 
+ // Get num_zones from the EC profile, default to 1
+ ErasureCodeProfile profile = osdmap.get_erasure_code_profile(erasure_code_profile);
+ int num_zones = 1;
+ auto it = profile.find("num_zones");
+ if (it != profile.end()) {
+   std::string err_str;
+   num_zones = strict_strtol(it->second.c_str(), 10, &err_str);
+   if (!err_str.empty() || num_zones < 1) {
+     *ss << "invalid num_zones value in erasure code profile: " << it->second;
+     return -EINVAL;
+   }
+ }
+ 
+ *size = num_zones * base_size;
+ *min_size =
+   erasure_code->get_data_chunk_count() +
+   std::min<int>(1, erasure_code->get_coding_chunk_count() - 1);
+ ceph_assert(*min_size <= *size);
+ ceph_assert(*min_size >= erasure_code->get_data_chunk_count());
       }
     }
     break;
@@ -8332,6 +8347,20 @@ int OSDMonitor::prepare_new_pool(string& name,
 
   if (pool_type == pg_pool_t::TYPE_ERASURE) {
       pi->erasure_code_profile = erasure_code_profile;
+      
+      // Set NUM_ZONES from the EC profile
+      ErasureCodeProfile profile = osdmap.get_erasure_code_profile(erasure_code_profile);
+      auto it = profile.find("num_zones");
+      if (it != profile.end()) {
+        std::string err_str;
+        int num_zones = strict_strtol(it->second.c_str(), 10, &err_str);
+        if (err_str.empty() && num_zones >= 1) {
+          pi->opts.set(pool_opts_t::NUM_ZONES, static_cast<int64_t>(num_zones));
+        }
+      } else {
+        // Default to 1 if not specified
+        pi->opts.set(pool_opts_t::NUM_ZONES, static_cast<int64_t>(1));
+      }
   } else {
       pi->erasure_code_profile = "";
   }
@@ -8440,19 +8469,38 @@ int OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p,
       return -EINVAL;
     }
     // Restrict the set of shards that can be a primary to the 1st data
-    // raw_shard (raw_shard 0) and the coding parity raw_shards because§
+    // raw_shard (raw_shard 0) and the coding parity raw_shards because
     // the other shards (including local parity for LRC) may not have
     // up to date copies of xattrs including OI
+    // For multi-zone configurations, we need to mark non-primary shards
+    // across all zones: shard + (k+m)*zone for each zone
     p.nonprimary_shards.clear();
-    for (raw_shard_id_t raw_shard; raw_shard < k + m; ++raw_shard) {
+    
+    // Get num_zones from the EC profile, default to 1
+    ErasureCodeProfile profile = osdmap.get_erasure_code_profile(p.erasure_code_profile);
+    int num_zones = 1;
+    auto it = profile.find("num_zones");
+    if (it != profile.end()) {
+      std::string err_str;
+      num_zones = strict_strtol(it->second.c_str(), 10, &err_str);
+      if (!err_str.empty() || num_zones < 1) {
+        num_zones = 1;
+      }
+    }
+    
+    for (raw_shard_id_t raw_shard(0); raw_shard < k + m; ++raw_shard) {
       if (raw_shard > 0 && raw_shard < k) {
-	shard_id_t shard;
-	if (erasure_code->get_chunk_mapping().size() > raw_shard ) {
-	  shard = shard_id_t(erasure_code->get_chunk_mapping().at(int(raw_shard)));
-	} else {
-	  shard = shard_id_t(int(raw_shard));
-	}
-        p.nonprimary_shards.insert(shard);
+       shard_id_t rel_shard;
+       if (erasure_code->get_chunk_mapping().size() > static_cast<size_t>(int(raw_shard))) {
+         rel_shard = erasure_code->get_chunk_mapping().at(int(raw_shard));
+       } else {
+         rel_shard = shard_id_t(int8_t(raw_shard));
+       }
+       // Add this shard across all zones
+       for (int zone = 0; zone < num_zones; ++zone) {
+         shard_id_t shard = shard_id_t(int8_t(rel_shard) + (k + m) * zone);
+         p.nonprimary_shards.insert(shard);
+       }
       }
     }
     p.flags |= pg_pool_t::FLAG_EC_OPTIMIZATIONS;
@@ -9276,6 +9324,22 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
         ss << "read_ratio must be between 0 and 100";
         return -ERANGE;
       }
+    } else if (var == "num_zones") {
+      if (interr.length()) {
+        ss << "error parsing int value '" << val << "': " << interr;
+        return -EINVAL;
+      }
+      if (n < 0) {
+        ss << "num_zones must be non-negative";
+        return -EINVAL;
+      }
+      // For EC pools, validate that num_zones is compatible with pool
+      if (p.type == pg_pool_t::TYPE_ERASURE) {
+        if (n < 1) {
+          ss << "num_zones must be at least 1 for erasure coded pools";
+          return -EINVAL;
+        }
+      }
     }
 
     pool_opts_t::opt_desc_t desc = pool_opts_t::get_opt_desc(var);
@@ -9316,6 +9380,40 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     ss << "unrecognized variable '" << var << "'";
     return -EINVAL;
   }
+  
+  // For EC pools, adjust pool size when num_zones is set
+  if (var == "num_zones" && p.type == pg_pool_t::TYPE_ERASURE) {
+    int64_t num_zones = 0;
+    p.opts.get(pool_opts_t::NUM_ZONES, &num_zones);
+    
+    if (num_zones > 0) {
+      // Get the base EC pool size (k + m)
+      ErasureCodeInterfaceRef erasure_code;
+      stringstream tmp;
+      int err = get_erasure_code(p.erasure_code_profile, &erasure_code, &tmp);
+      if (err == 0) {
+        unsigned base_size = erasure_code->get_chunk_count();
+        unsigned new_size = num_zones * base_size;
+        
+        // Check if pool size is changing (increasing)
+        if (new_size > p.size) {
+          // Validate the new size with pg_num
+          int r = check_pg_num(pool, p.get_pg_num(), new_size, p.get_crush_rule(), &ss);
+          if (r < 0) {
+            return r;
+          }
+        }
+        
+        // Set pool size = num_zones * (k + m)
+        p.size = new_size;
+        ss << "; pool size adjusted to " << (int)p.size
+           << " (" << num_zones << " zones * " << base_size << " chunks)";
+      } else {
+        ss << "; warning: could not adjust pool size: " << tmp.str();
+      }
+    }
+  }
+  
   if (val != "unset") {
     ss << "set pool " << pool << " " << var << " to " << val;
   } else {
