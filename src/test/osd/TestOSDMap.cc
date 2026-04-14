@@ -3679,9 +3679,7 @@ void test_primaryfirst_patterns(
   }
 }
 
-// Main test: test all combinations of k, m for a single zone.
-//
-// num_zones is intentionally fixed at 1 here (stretch EC not implemented yet)
+// Main test: test all combinations of k, m, num_zones
 TEST_F(OSDMapTest, pgtemp_primaryfirst_comprehensive) {
   set_up_map();
 
@@ -3691,12 +3689,15 @@ TEST_F(OSDMapTest, pgtemp_primaryfirst_comprehensive) {
   // Test all combinations:
   // k = 2 to 5 inclusive
   // m = 1 to 3 inclusive
-  constexpr int num_zones = 1;
+  // num_zones = 1 to 3 inclusive
   for (int k = 2; k <= 5; k++) {
     for (int m = 1; m <= 3; m++) {
-      SCOPED_TRACE(::testing::Message()
-        << "k=" << k << " m=" << m << " num_zones=" << num_zones);
-      test_primaryfirst_patterns(osdmap, pgid, k, m, num_zones);
+      for (int num_zones = 1; num_zones <= 3; num_zones++)
+      {
+        SCOPED_TRACE(::testing::Message()
+          << "k=" << k << " m=" << m << " num_zones=" << num_zones);
+        test_primaryfirst_patterns(osdmap, pgid, k, m, num_zones);
+      }
     }
   }
 }
