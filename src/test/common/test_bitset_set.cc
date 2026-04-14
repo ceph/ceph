@@ -265,14 +265,14 @@ TEST(bitset_set, find_nth) {
 
 TEST(bitset_set, left_shift) {
   bitset_set<128, Key> bitset;
-  
+
   // Test shift by 0 (no change)
   bitset.insert(0);
   bitset.insert(5);
   bitset.insert(10);
   auto result = bitset << 0;
   ASSERT_EQ(bitset, result);
-  
+
   // Test simple left shift
   bitset.clear();
   bitset.insert(0);
@@ -285,7 +285,7 @@ TEST(bitset_set, left_shift) {
   ASSERT_FALSE(result.contains(0));
   ASSERT_FALSE(result.contains(1));
   ASSERT_FALSE(result.contains(2));
-  
+
   // Test shift across word boundary (64 bits)
   bitset.clear();
   bitset.insert(0);
@@ -295,7 +295,7 @@ TEST(bitset_set, left_shift) {
   ASSERT_TRUE(result.contains(64));
   ASSERT_FALSE(result.contains(0));
   ASSERT_FALSE(result.contains(63));
-  
+
   // Test word-aligned shift
   bitset.clear();
   bitset.insert(0);
@@ -305,33 +305,33 @@ TEST(bitset_set, left_shift) {
   ASSERT_TRUE(result.contains(65));
   ASSERT_FALSE(result.contains(0));
   ASSERT_FALSE(result.contains(1));
-  
+
   // Test shift beyond max_bits
   bitset.clear();
   bitset.insert(0);
   result = bitset << 128;
   ASSERT_TRUE(result.empty());
-  
+
   // Test shift that loses some bits
   bitset.clear();
   bitset.insert(120);
   bitset.insert(127);
   result = bitset << 5;
   ASSERT_TRUE(result.contains(125));
-  ASSERT_FALSE(result.contains(132)); // Would be out of range
+  ASSERT_FALSE(result.contains(Key(int8_t(132)))); // Would be out of range (132 wraps to -124)
   ASSERT_EQ(1, result.size());
 }
 
 TEST(bitset_set, right_shift) {
   bitset_set<128, Key> bitset;
-  
+
   // Test shift by 0 (no change)
   bitset.insert(5);
   bitset.insert(10);
   bitset.insert(15);
   auto result = bitset >> 0;
   ASSERT_EQ(bitset, result);
-  
+
   // Test simple right shift
   bitset.clear();
   bitset.insert(3);
@@ -344,7 +344,7 @@ TEST(bitset_set, right_shift) {
   ASSERT_FALSE(result.contains(3));
   ASSERT_FALSE(result.contains(4));
   ASSERT_FALSE(result.contains(5));
-  
+
   // Test shift across word boundary (64 bits)
   bitset.clear();
   bitset.insert(1);
@@ -354,7 +354,7 @@ TEST(bitset_set, right_shift) {
   ASSERT_TRUE(result.contains(63));
   ASSERT_FALSE(result.contains(1));
   ASSERT_FALSE(result.contains(64));
-  
+
   // Test word-aligned shift
   bitset.clear();
   bitset.insert(64);
@@ -364,13 +364,13 @@ TEST(bitset_set, right_shift) {
   ASSERT_TRUE(result.contains(1));
   ASSERT_FALSE(result.contains(64));
   ASSERT_FALSE(result.contains(65));
-  
+
   // Test shift beyond max_bits
   bitset.clear();
   bitset.insert(127);
   result = bitset >> 128;
   ASSERT_TRUE(result.empty());
-  
+
   // Test shift that loses some bits
   bitset.clear();
   bitset.insert(0);
@@ -383,7 +383,7 @@ TEST(bitset_set, right_shift) {
 
 TEST(bitset_set, shift_assignment) {
   bitset_set<128, Key> bitset;
-  
+
   // Test left shift assignment
   bitset.insert(0);
   bitset.insert(1);
@@ -392,7 +392,7 @@ TEST(bitset_set, shift_assignment) {
   ASSERT_TRUE(bitset.contains(4));
   ASSERT_FALSE(bitset.contains(0));
   ASSERT_FALSE(bitset.contains(1));
-  
+
   // Test right shift assignment
   bitset.clear();
   bitset.insert(5);
@@ -406,12 +406,12 @@ TEST(bitset_set, shift_assignment) {
 
 TEST(bitset_set, shift_multiple_words) {
   bitset_set<128, Key> bitset;
-  
+
   // Test pattern across multiple words
   for (int i = 0; i < 128; i += 8) {
     bitset.insert(i);
   }
-  
+
   auto result = bitset << 4;
   for (int i = 0; i < 128; i += 8) {
     if (i + 4 < 128) {
@@ -419,7 +419,7 @@ TEST(bitset_set, shift_multiple_words) {
     }
     ASSERT_FALSE(result.contains(i));
   }
-  
+
   result = bitset >> 4;
   for (int i = 0; i < 128; i += 8) {
     if (i >= 4) {
@@ -430,13 +430,13 @@ TEST(bitset_set, shift_multiple_words) {
 
 TEST(bitset_set, shift_edge_cases) {
   bitset_set<128, Key> bitset;
-  
+
   // Empty set
   auto result = bitset << 5;
   ASSERT_TRUE(result.empty());
   result = bitset >> 5;
   ASSERT_TRUE(result.empty());
-  
+
   // Full set left shift
   bitset.insert_range(0, 128);
   result = bitset << 10;
@@ -444,7 +444,7 @@ TEST(bitset_set, shift_edge_cases) {
   for (int i = 10; i < 128; ++i) {
     ASSERT_TRUE(result.contains(i));
   }
-  
+
   // Full set right shift
   result = bitset >> 10;
   ASSERT_EQ(118, result.size()); // 128 - 10 bits remain
@@ -455,13 +455,13 @@ TEST(bitset_set, shift_edge_cases) {
 
 TEST(bitset_set, shift_boundary_behavior) {
   bitset_set<128, Key> bitset;
-  
+
   // Test that shift-left followed by shift-right zeros bits that went out of range
   bitset.insert(0);
   bitset.insert(64);
   bitset.insert(120);
   bitset.insert(127);
-  
+
   // Shift left by 10, then right by 10 - bits at 120 and 127 should be lost
   auto result = (bitset << 10) >> 10;
   ASSERT_TRUE(result.contains(0));
@@ -469,21 +469,21 @@ TEST(bitset_set, shift_boundary_behavior) {
   ASSERT_FALSE(result.contains(120)); // Lost when shifted left
   ASSERT_FALSE(result.contains(127)); // Lost when shifted left
   ASSERT_EQ(2, result.size());
-  
+
   // Test that shift-right followed by shift-left zeros bits that went out of range
   bitset.clear();
   bitset.insert(0);
   bitset.insert(5);
   bitset.insert(64);
   bitset.insert(127);
-  
+
   result = (bitset >> 10) << 10;
   ASSERT_FALSE(result.contains(0));  // Lost when shifted right
   ASSERT_FALSE(result.contains(5));  // Lost when shifted right
   ASSERT_TRUE(result.contains(64));
   ASSERT_TRUE(result.contains(127));
   ASSERT_EQ(2, result.size());
-  
+
   // Test large shift that loses everything
   bitset.clear();
   bitset.insert_range(0, 128);
@@ -495,7 +495,7 @@ TEST(bitset_set, shift_boundary_behavior) {
   for (int i = 64; i < 128; ++i) {
     ASSERT_FALSE(result.contains(i));
   }
-  
+
   // Test shift beyond range
   bitset.clear();
   bitset.insert_range(0, 128);
@@ -507,23 +507,23 @@ TEST(bitset_set, shift_boundary_behavior) {
 TEST(bitset_set, bitwise_and) {
   bitset_set<128, Key> bitset1;
   bitset_set<128, Key> bitset2;
-  
+
   // Test empty sets
   auto result = bitset1 & bitset2;
   ASSERT_TRUE(result.empty());
-  
+
   // Test one empty, one non-empty
   bitset1.insert(5);
   bitset1.insert(10);
   result = bitset1 & bitset2;
   ASSERT_TRUE(result.empty());
-  
+
   // Test no overlap
   bitset2.insert(15);
   bitset2.insert(20);
   result = bitset1 & bitset2;
   ASSERT_TRUE(result.empty());
-  
+
   // Test partial overlap
   bitset2.insert(10);
   result = bitset1 & bitset2;
@@ -532,7 +532,7 @@ TEST(bitset_set, bitwise_and) {
   ASSERT_FALSE(result.contains(5));
   ASSERT_FALSE(result.contains(15));
   ASSERT_FALSE(result.contains(20));
-  
+
   // Test complete overlap
   bitset1.clear();
   bitset2.clear();
@@ -547,7 +547,7 @@ TEST(bitset_set, bitwise_and) {
   ASSERT_TRUE(result.contains(1));
   ASSERT_TRUE(result.contains(2));
   ASSERT_TRUE(result.contains(3));
-  
+
   // Test across word boundaries
   bitset1.clear();
   bitset2.clear();
@@ -568,11 +568,11 @@ TEST(bitset_set, bitwise_and) {
 TEST(bitset_set, bitwise_or) {
   bitset_set<128, Key> bitset1;
   bitset_set<128, Key> bitset2;
-  
+
   // Test empty sets
   auto result = bitset1 | bitset2;
   ASSERT_TRUE(result.empty());
-  
+
   // Test one empty, one non-empty
   bitset1.insert(5);
   bitset1.insert(10);
@@ -580,7 +580,7 @@ TEST(bitset_set, bitwise_or) {
   ASSERT_EQ(2, result.size());
   ASSERT_TRUE(result.contains(5));
   ASSERT_TRUE(result.contains(10));
-  
+
   // Test no overlap
   bitset2.insert(15);
   bitset2.insert(20);
@@ -590,7 +590,7 @@ TEST(bitset_set, bitwise_or) {
   ASSERT_TRUE(result.contains(10));
   ASSERT_TRUE(result.contains(15));
   ASSERT_TRUE(result.contains(20));
-  
+
   // Test partial overlap
   bitset2.insert(10);
   result = bitset1 | bitset2;
@@ -599,7 +599,7 @@ TEST(bitset_set, bitwise_or) {
   ASSERT_TRUE(result.contains(10));
   ASSERT_TRUE(result.contains(15));
   ASSERT_TRUE(result.contains(20));
-  
+
   // Test complete overlap
   bitset1.clear();
   bitset2.clear();
@@ -614,7 +614,7 @@ TEST(bitset_set, bitwise_or) {
   ASSERT_TRUE(result.contains(1));
   ASSERT_TRUE(result.contains(2));
   ASSERT_TRUE(result.contains(3));
-  
+
   // Test across word boundaries
   bitset1.clear();
   bitset2.clear();
@@ -633,17 +633,17 @@ TEST(bitset_set, bitwise_or) {
 TEST(bitset_set, bitwise_and_assignment) {
   bitset_set<128, Key> bitset1;
   bitset_set<128, Key> bitset2;
-  
+
   // Test empty sets
   bitset1 &= bitset2;
   ASSERT_TRUE(bitset1.empty());
-  
+
   // Test one empty, one non-empty
   bitset1.insert(5);
   bitset1.insert(10);
   bitset1 &= bitset2;
   ASSERT_TRUE(bitset1.empty());
-  
+
   // Test no overlap
   bitset1.insert(5);
   bitset1.insert(10);
@@ -651,7 +651,7 @@ TEST(bitset_set, bitwise_and_assignment) {
   bitset2.insert(20);
   bitset1 &= bitset2;
   ASSERT_TRUE(bitset1.empty());
-  
+
   // Test partial overlap
   bitset1.clear();
   bitset2.clear();
@@ -667,7 +667,7 @@ TEST(bitset_set, bitwise_and_assignment) {
   ASSERT_TRUE(bitset1.contains(15));
   ASSERT_FALSE(bitset1.contains(5));
   ASSERT_FALSE(bitset1.contains(20));
-  
+
   // Test complete overlap
   bitset1.clear();
   bitset2.clear();
@@ -682,7 +682,7 @@ TEST(bitset_set, bitwise_and_assignment) {
   ASSERT_TRUE(bitset1.contains(1));
   ASSERT_TRUE(bitset1.contains(2));
   ASSERT_TRUE(bitset1.contains(3));
-  
+
   // Test across word boundaries
   bitset1.clear();
   bitset2.clear();
@@ -703,11 +703,11 @@ TEST(bitset_set, bitwise_and_assignment) {
 TEST(bitset_set, bitwise_or_assignment) {
   bitset_set<128, Key> bitset1;
   bitset_set<128, Key> bitset2;
-  
+
   // Test empty sets
   bitset1 |= bitset2;
   ASSERT_TRUE(bitset1.empty());
-  
+
   // Test one empty, one non-empty
   bitset2.insert(5);
   bitset2.insert(10);
@@ -715,7 +715,7 @@ TEST(bitset_set, bitwise_or_assignment) {
   ASSERT_EQ(2, bitset1.size());
   ASSERT_TRUE(bitset1.contains(5));
   ASSERT_TRUE(bitset1.contains(10));
-  
+
   // Test no overlap
   bitset1.clear();
   bitset2.clear();
@@ -729,7 +729,7 @@ TEST(bitset_set, bitwise_or_assignment) {
   ASSERT_TRUE(bitset1.contains(10));
   ASSERT_TRUE(bitset1.contains(15));
   ASSERT_TRUE(bitset1.contains(20));
-  
+
   // Test partial overlap
   bitset1.clear();
   bitset2.clear();
@@ -742,7 +742,7 @@ TEST(bitset_set, bitwise_or_assignment) {
   ASSERT_TRUE(bitset1.contains(5));
   ASSERT_TRUE(bitset1.contains(10));
   ASSERT_TRUE(bitset1.contains(15));
-  
+
   // Test complete overlap
   bitset1.clear();
   bitset2.clear();
@@ -757,7 +757,7 @@ TEST(bitset_set, bitwise_or_assignment) {
   ASSERT_TRUE(bitset1.contains(1));
   ASSERT_TRUE(bitset1.contains(2));
   ASSERT_TRUE(bitset1.contains(3));
-  
+
   // Test across word boundaries
   bitset1.clear();
   bitset2.clear();
@@ -777,7 +777,7 @@ TEST(bitset_set, bitwise_operators_combined) {
   bitset_set<128, Key> bitset1;
   bitset_set<128, Key> bitset2;
   bitset_set<128, Key> bitset3;
-  
+
   // Test combination: (A | B) & C
   bitset1.insert(1);
   bitset1.insert(2);
@@ -785,11 +785,11 @@ TEST(bitset_set, bitwise_operators_combined) {
   bitset2.insert(3);
   bitset3.insert(2);
   bitset3.insert(4);
-  
+
   auto result = (bitset1 | bitset2) & bitset3;
   ASSERT_EQ(1, result.size());
   ASSERT_TRUE(result.contains(2));
-  
+
   // Test combination: (A & B) | C
   bitset1.clear();
   bitset2.clear();
@@ -800,13 +800,13 @@ TEST(bitset_set, bitwise_operators_combined) {
   bitset2.insert(3);
   bitset3.insert(4);
   bitset3.insert(5);
-  
+
   result = (bitset1 & bitset2) | bitset3;
   ASSERT_EQ(3, result.size());
   ASSERT_TRUE(result.contains(2));
   ASSERT_TRUE(result.contains(4));
   ASSERT_TRUE(result.contains(5));
-  
+
   // Test chained assignment operators
   bitset1.clear();
   bitset2.clear();
@@ -820,7 +820,7 @@ TEST(bitset_set, bitwise_operators_combined) {
   bitset3.insert(3);
   bitset3.insert(4);
   bitset3.insert(5);
-  
+
   bitset1 &= bitset2;  // bitset1 now has {2, 3}
   bitset1 |= bitset3;  // bitset1 now has {2, 3, 4, 5}
   ASSERT_EQ(4, bitset1.size());
@@ -833,7 +833,7 @@ TEST(bitset_set, bitwise_operators_combined) {
 TEST(bitset_set, bitwise_operators_consistency_with_static_methods) {
   bitset_set<128, Key> bitset1;
   bitset_set<128, Key> bitset2;
-  
+
   // Populate sets
   bitset1.insert(1);
   bitset1.insert(2);
@@ -843,12 +843,12 @@ TEST(bitset_set, bitwise_operators_consistency_with_static_methods) {
   bitset2.insert(3);
   bitset2.insert(4);
   bitset2.insert(64);
-  
+
   // Test that & operator matches intersection static method
   auto and_result = bitset1 & bitset2;
   auto intersection_result = bitset_set<128, Key>::intersection(bitset1, bitset2);
   ASSERT_EQ(and_result, intersection_result);
-  
+
   // Test that | operator produces union (no static method exists, but verify behavior)
   auto or_result = bitset1 | bitset2;
   ASSERT_EQ(5, or_result.size());
