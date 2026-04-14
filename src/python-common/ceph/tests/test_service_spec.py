@@ -1422,3 +1422,27 @@ def test_non_osd_services_do_not_get_default_termination_if_not_provided(spec_da
 
     spec_section = j.get('spec', {})
     assert 'termination_grace_period_seconds' not in spec_section
+
+
+def test_nvmeof_rebalance_period_sec_zero_exported():
+    """Verify that a zero value of rebalance_period_sec is included in exported spec"""
+    spec_data = """
+service_type: nvmeof
+service_id: nvmeof-zero-rebalance
+placement:
+  count: 1
+spec:
+  pool: nvmeof_pool
+  rebalance_period_sec: 0
+"""
+    data = yaml.safe_load(spec_data)
+    spec_obj = ServiceSpec.from_json(data)
+
+    j = spec_obj.to_json()
+    assert 'spec' in j
+    assert 'rebalance_period_sec' in j['spec']
+    assert j['spec']['rebalance_period_sec'] == 0
+
+    spec2 = ServiceSpec.from_json(j)
+    j2 = spec2.to_json()
+    assert j2['spec']['rebalance_period_sec'] == 0
