@@ -254,9 +254,6 @@ public:
 				       const std::string& value) = 0;
   // called on the shard and get this FuturizedStore::shard;
   virtual Shard& get_sharded_store(store_index_t store_index = 0) = 0;
-  Shard& get_sharded_store(store_index_t store_index) {
-    return get_sharded_store();
-  }
   RelayStoreSelector get_backend_store(store_index_t store_index) {
     auto this_id = seastar::this_shard_id();
     auto store_shard_nums = 42U;
