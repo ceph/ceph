@@ -1309,3 +1309,76 @@ TEST(Transaction, AppendOpTypes)
   cout << "Checking encoded/decoded with 2 buffers transaction1" << std::endl;
   check_content_transaction1(decode2);
 }
+
+TEST(Transaction, RemapShard)
+{
+  shard_id_t old_shard(2);
+  shard_id_t new_shard(5);
+
+  spg_t old_spg(pg_t(1, 2), old_shard);
+  coll_t cid(old_spg);
+
+  ghobject_t oid(hobject_t("testobj", "", CEPH_NOSNAP, 0x42, 2, ""),
+                 ghobject_t::NO_GEN, old_shard);
+
+  // Build source transaction with several op types
+  ObjectStore::Transaction src;
+  src.create_collection(cid, 12);
+  src.touch(cid, oid);
+
+  bufferlist write_data;
+  write_data.append("hello world");
+  src.write(cid, oid, 0, write_data.length(), write_data);
+
+  // Copy and remap
+  ObjectStore::Transaction dst(src);
+  dst.remap_shard(new_shard);
+
+  // Verify op count preserved
+  ASSERT_EQ(dst.get_num_ops(), src.get_num_ops());
+
+  auto it = dst.begin();
+
+  // Op 1: create_collection
+  {
+    auto* op = it.decode_op();
+    ASSERT_EQ(op->op, ObjectStore::Transaction::OP_MKCOLL);
+    spg_t result_pgid;
+    coll_t result_cid = it.get_cid(op->cid);
+    ASSERT_TRUE(result_cid.is_pg(&result_pgid));
+    EXPECT_EQ(result_pgid.shard, new_shard);
+  }
+
+  // Op 2: touch
+  {
+    auto* op = it.decode_op();
+    ASSERT_EQ(op->op, ObjectStore::Transaction::OP_TOUCH);
+    EXPECT_EQ(it.get_oid(op->oid).shard_id, new_shard);
+    spg_t result_pgid;
+    ASSERT_TRUE(it.get_cid(op->cid).is_pg(&result_pgid));
+    EXPECT_EQ(result_pgid.shard, new_shard);
+  }
+
+  // Op 3: write — also verify data integrity
+  {
+    auto* op = it.decode_op();
+    ASSERT_EQ(op->op, ObjectStore::Transaction::OP_WRITE);
+    EXPECT_EQ(it.get_oid(op->oid).shard_id, new_shard);
+    bufferlist read_data;
+    it.decode_bl(read_data);
+    EXPECT_TRUE(read_data.contents_equal(write_data));
+  }
+
+  // Verify no more ops
+  EXPECT_FALSE(it.have_op());
+
+  // Verify source transaction is unchanged
+  auto src_it = src.begin();
+  {
+    auto* op = src_it.decode_op();
+    ASSERT_EQ(op->op, ObjectStore::Transaction::OP_MKCOLL);
+    spg_t result_pgid;
+    ASSERT_TRUE(src_it.get_cid(op->cid).is_pg(&result_pgid));
+    EXPECT_EQ(result_pgid.shard, old_shard);
+  }
+}
