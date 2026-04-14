@@ -1717,9 +1717,10 @@ ObjectDataHandler::clone_ret
 ObjectDataHandler::copy_on_write(
   context_t ctx)
 {
+  LOG_PREFIX(ObjectDataHandler::copy_on_write);
   return with_objects_data(
     ctx,
-    [ctx, this](auto &object_data, auto &d_object_data) -> clone_ret
+    [FNAME, ctx, this](auto &object_data, auto &d_object_data) -> clone_ret
   {
     auto mapping = co_await ctx.tm.get_pin(
       ctx.t, object_data.get_reserved_data_base()
@@ -1728,6 +1729,10 @@ ObjectDataHandler::copy_on_write(
       crimson::ct_error::assert_all{"unexpected enoent"}
     );
     co_await do_clone(ctx, object_data, d_object_data, mapping, false);
+    DEBUGT("{} -> {}",
+      ctx.t,
+      object_data.get_reserved_data_base(),
+      d_object_data.get_reserved_data_base());
     auto old_base = object_data.get_reserved_data_base();
     auto old_len = object_data.get_reserved_data_len();
     assert(ctx.d_onode->need_cow());
