@@ -19,6 +19,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstring>
+#include <fstream>
 #include <iostream>
 #include <map>
 #include <numeric>
@@ -28,6 +29,8 @@
 #include <string>
 #include <thread>
 #include <vector>
+
+#include "common/JSONFormatter.h"
 
 // Standard Public Ceph API
 #include <cephfs/libcephfs.h>
@@ -61,21 +64,52 @@ uint64_t parse_size(const string& val) {
   }
 
   if (end_pos < val.length()) {
-    char suffix = std::toupper(val[end_pos]);
-    switch (suffix) {
+    string suffix_str = val.substr(end_pos);
+    for (auto& c : suffix_str)
+      c = std::toupper(c);
+
+    // Check for "iB" suffix (e.g. KiB, MiB, GiB, TiB)
+    bool is_binary =
+        (suffix_str.length() >= 3 && suffix_str.substr(1, 2) == "IB");
+    // Check for "B" suffix (e.g. KB, MB, GB, TB)
+    bool is_si =
+        (suffix_str.length() >= 2 && suffix_str[1] == 'B' && !is_binary);
+
+    char suffix = suffix_str[0];
+    uint64_t multiplier = 1;
+    if (is_si) {
+      switch (suffix) {
       case 'K':
-        num *= 1024;
+        multiplier = 1000ULL;
         break;
       case 'M':
-        num *= 1024ULL * 1024;
+        multiplier = 1000ULL * 1000;
         break;
       case 'G':
-        num *= 1024ULL * 1024 * 1024;
+        multiplier = 1000ULL * 1000 * 1000;
         break;
       case 'T':
-        num *= 1024ULL * 1024 * 1024 * 1024;
+        multiplier = 1000ULL * 1000 * 1000 * 1000;
         break;
+      }
+    } else {
+      // Binary or single letter (default to binary)
+      switch (suffix) {
+      case 'K':
+        multiplier = 1024ULL;
+        break;
+      case 'M':
+        multiplier = 1024ULL * 1024;
+        break;
+      case 'G':
+        multiplier = 1024ULL * 1024 * 1024;
+        break;
+      case 'T':
+        multiplier = 1024ULL * 1024 * 1024 * 1024;
+        break;
+      }
     }
+    num *= multiplier;
   }
   return num;
 }
@@ -125,6 +159,7 @@ struct BenchConfig {
   string subdir;
   int uid;
   int gid;
+  string json_path;
 };
 
 struct ThreadStats {
@@ -420,7 +455,13 @@ void bench_cleanup_worker(int thread_id,
   }
 }
 
-void print_statistics(const string& type, const vector<double>& rates, const string& unit) {
+void
+print_statistics(
+    const string& type,
+    const vector<double>& rates,
+    const string& unit,
+    ceph::Formatter* f = nullptr)
+{
   if (rates.empty()) {
     return;
   }
@@ -436,6 +477,17 @@ void print_statistics(const string& type, const vector<double>& rates, const str
   cout << "  Std Dev: " << stdev << " " << unit << std::endl;
   cout << "  Min:     " << min_val << " " << unit << std::endl;
   cout << "  Max:     " << max_val << " " << unit << std::endl;
+
+  if (f) {
+    f->open_object_section(type);
+    f->dump_int("runs", rates.size());
+    f->dump_float("mean", mean);
+    f->dump_float("stddev", stdev);
+    f->dump_float("min", min_val);
+    f->dump_float("max", max_val);
+    f->dump_string("unit", unit);
+    f->close_section();
+  }
 }
 
 // Helper to check for errors and print them
@@ -479,9 +531,31 @@ int do_bench(BenchConfig& config) {
   // Setup bench directory
   config.subdir = config.dir_prefix + RandomHelper::generate_hex_suffix();
 
+  std::unique_ptr<ceph::JSONFormatter> json_formatter;
+  if (!config.json_path.empty()) {
+    json_formatter = std::make_unique<ceph::JSONFormatter>(true);
+    json_formatter->open_object_section("benchmark");
+    json_formatter->open_object_section("configuration");
+    json_formatter->dump_int("threads", config.num_threads);
+    json_formatter->dump_int("iterations", config.iterations);
+    json_formatter->dump_int("files", config.num_files);
+    json_formatter->dump_unsigned("file_size", config.file_size);
+    json_formatter->dump_unsigned("block_size", config.block_size);
+    json_formatter->dump_string(
+        "filesystem",
+        config.filesystem.empty() ? "(default)" : config.filesystem);
+    json_formatter->dump_string("root", config.mount_root);
+    json_formatter->dump_string("subdirectory", config.subdir);
+    json_formatter->dump_int("uid", config.uid);
+    json_formatter->dump_int("gid", config.gid);
+    json_formatter->close_section(); // configuration
+    json_formatter->open_array_section("iterations");
+  }
+
   cout << "Benchmark Configuration:" << std::endl;
   cout << "  Threads: " << config.num_threads << " | Iterations: " << config.iterations << std::endl;
-  cout << "  Files: " << config.num_files << " | Size: " << config.file_size << std::endl;
+  cout << "  Files: " << config.num_files << " | Size: " << config.file_size
+       << " bytes" << std::endl;
   cout << "  Filesystem: " << (config.filesystem.empty() ? "(default)" : config.filesystem) << std::endl;
   cout << "  Root: " << config.mount_root << std::endl;
   cout << "  Subdirectory: " << config.subdir << std::endl;
@@ -505,6 +579,11 @@ int do_bench(BenchConfig& config) {
 
   for (int iter = 1; iter <= config.iterations; ++iter) {
     cout << "\n--- Iteration " << iter << " of " << config.iterations << " ---" << std::endl;
+
+    if (json_formatter) {
+      json_formatter->open_object_section("iteration");
+      json_formatter->dump_int("number", iter);
+    }
 
     // --- WRITE PHASE ---
     cout << "Starting Write Phase..." << std::endl;
@@ -542,6 +621,7 @@ int do_bench(BenchConfig& config) {
     }
 
     double elapsed_sec = duration_cast<milliseconds>(end_time - start_time).count() / 1000.0;
+
     double w_rate = (double)total_write_bytes / 1024.0 / 1024.0 / elapsed_sec;
     double w_fps = (double)total_files / elapsed_sec;
 
@@ -550,9 +630,19 @@ int do_bench(BenchConfig& config) {
 
     cout << "  Write: ";
     if (config.file_size > 0) {
-      cout << w_rate << " MB/s, ";
+      cout << w_rate << " MiB/s, ";
     }
     cout << w_fps << " files/s (" << elapsed_sec << "s)" << std::endl;
+
+    if (json_formatter) {
+      json_formatter->open_object_section("write");
+      if (config.file_size > 0) {
+        json_formatter->dump_float("throughput_mbps", w_rate);
+      }
+      json_formatter->dump_float("files_per_sec", w_fps);
+      json_formatter->dump_float("duration_sec", elapsed_sec);
+      json_formatter->close_section(); // write
+    }
 
     // --- REMOUNT / CACHE CLEAR ---
     if (!config.per_thread_mount) {
@@ -603,6 +693,7 @@ int do_bench(BenchConfig& config) {
     }
 
     elapsed_sec = duration_cast<milliseconds>(end_time - start_time).count() / 1000.0;
+
     double r_rate = (double)total_read_bytes / 1024.0 / 1024.0 / elapsed_sec;
     double r_fps = (double)total_files / elapsed_sec;
 
@@ -611,9 +702,20 @@ int do_bench(BenchConfig& config) {
 
     cout << "  Read:  ";
     if (config.file_size > 0) {
-      cout << r_rate << " MB/s, ";
+      cout << r_rate << " MiB/s, ";
     }
     cout << r_fps << " files/s (" << elapsed_sec << "s)" << std::endl;
+
+    if (json_formatter) {
+      json_formatter->open_object_section("read");
+      if (config.file_size > 0) {
+        json_formatter->dump_float("throughput_mbps", r_rate);
+      }
+      json_formatter->dump_float("files_per_sec", r_fps);
+      json_formatter->dump_float("duration_sec", elapsed_sec);
+      json_formatter->close_section(); // read
+      json_formatter->close_section(); // iteration
+    }
 
     // Cleanup for next iteration
     if (iter < config.iterations) {
@@ -640,13 +742,34 @@ int do_bench(BenchConfig& config) {
 
   cout << std::endl << std::endl << "*** Final Report ***" << std::endl;
 
+  if (json_formatter) {
+    json_formatter->close_section(); // iterations
+    json_formatter->open_object_section("summary");
+  }
+
   // Statistics Output
   if (config.file_size > 0) {
-    print_statistics("Write Throughput", write_mbps, "MB/s");
-    print_statistics("Read Throughput", read_mbps, "MB/s");
+    print_statistics(
+        "Write Throughput", write_mbps, "MiB/s", json_formatter.get());
+    print_statistics(
+        "Read Throughput", read_mbps, "MiB/s", json_formatter.get());
   }
-  print_statistics("File Creates", write_fps, "files/s");
-  print_statistics("File Reads (Opens)", read_fps, "files/s");
+  print_statistics("File Creates", write_fps, "files/s", json_formatter.get());
+  print_statistics(
+      "File Reads (Opens)", read_fps, "files/s", json_formatter.get());
+
+  if (json_formatter) {
+    json_formatter->close_section(); // summary
+    json_formatter->close_section(); // benchmark
+    std::ofstream ofs(config.json_path);
+    if (ofs.is_open()) {
+      json_formatter->flush(ofs);
+      cout << "\nResults saved to " << config.json_path << std::endl;
+    } else {
+      cerr << "\nError: Could not open " << config.json_path << " for writing."
+           << std::endl;
+    }
+  }
 
   if (config.cleanup) {
     cout << "\nCleaning up..." << std::endl;
@@ -709,7 +832,8 @@ int main(int argc, char **argv) {
     ("dir-prefix", po::value<string>(&config.dir_prefix)->default_value("bench_run_"), "Directory prefix")
     ("root-path", po::value<string>(&config.mount_root)->default_value("/"), "Root path in CephFS")
     ("per-thread-mount", po::bool_switch(&config.per_thread_mount), "Use separate mount per thread")
-    ("no-cleanup", po::bool_switch(&no_cleanup), "Disable cleanup of files");
+    ("no-cleanup", po::bool_switch(&no_cleanup), "Disable cleanup of files")
+    ("json", po::value<string>(&config.json_path), "Output results to a JSON file");
 
   // Hidden positional option for the sub-command
   po::options_description hidden("Hidden options");
