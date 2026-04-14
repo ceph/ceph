@@ -166,7 +166,7 @@ void ECCommon::ReadPipeline::get_all_avail_shards(
              << " (rel_shard=" << rel_shard << ")" << dendl;
     const pg_missing_t &missing = get_parent()->get_shard_missing(pg_shard);
     if (error_shards && error_shards->contains(pg_shard)) {
-d      dout(10) << __func__ << ": skipping acting " << pg_shard
+      dout(10) << __func__ << ": skipping acting " << pg_shard
                << " (rel_shard=" << rel_shard << ") - in error_shards" << dendl;
       continue;
     }

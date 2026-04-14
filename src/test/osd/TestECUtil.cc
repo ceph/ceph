@@ -1616,3 +1616,43 @@ TEST(ECUtil, erase_after_ro_offset_single_byte)
   // Shard 1 should be empty
   ASSERT_FALSE(semap.contains_shard(shard_id_t(1)));
 }
+
+
+// Test get_base_shard and get_shard_zone
+TEST(ECUtil, get_base_shard)
+{
+  int k = 2;
+  int m = 1;
+  stripe_info_t sinfo(k, m, 4096 * k);
+  
+  // Basic: k+m=3, so shard % 3
+  ASSERT_EQ(shard_id_t(0), sinfo.get_rel_shard(shard_id_t(0)));
+  ASSERT_EQ(shard_id_t(2), sinfo.get_rel_shard(shard_id_t(2)));
+  ASSERT_EQ(shard_id_t(0), sinfo.get_rel_shard(shard_id_t(3)));
+  ASSERT_EQ(shard_id_t(1), sinfo.get_rel_shard(shard_id_t(100)));
+  
+  // Zone: shard / 3
+  ASSERT_EQ(0, sinfo.get_shard_zone(shard_id_t(2)));
+  ASSERT_EQ(1, sinfo.get_shard_zone(shard_id_t(3)));
+  ASSERT_EQ(33, sinfo.get_shard_zone(shard_id_t(100)));
+}
+
+
+
+// Verify consistency: abs_shard == zone * (k+m) + rel_shard
+TEST(ECUtil, get_shard_zone_consistency_with_get_rel_shard)
+{
+  int k = 4;
+  int m = 2;
+  int chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k);
+
+  // Test a few examples
+  for (int shard_id = 0; shard_id < 20; shard_id++) {
+    shard_id_t abs_shard(shard_id);
+    int zone = sinfo.get_shard_zone(abs_shard);
+    shard_id_t rel_shard = sinfo.get_rel_shard(abs_shard);
+    int reconstructed = zone * sinfo.get_k_plus_m() + rel_shard.id;
+    ASSERT_EQ(shard_id, reconstructed);
+  }
+}

@@ -94,7 +94,7 @@ public:
    * @param value The value to set
    */
   void set_config(const std::string& option, const std::string& value);
-  
+
 private:
   /**
    * dispatch_buffered_messages - Check for and dispatch any buffered messages
@@ -138,6 +138,14 @@ public:
    */
   void mark_osds_down(const std::vector<int>& osd_ids);
   
+  /**
+   * Set the pool min_size.
+   * Creates a new OSDMap epoch and triggers peering.
+   *
+   * @param new_min_size The new min_size value
+   */
+  void set_pool_min_size(unsigned new_min_size);
+
   /**
    * Advance to a new epoch without changing OSD states.
    * Useful for testing re-peering scenarios.

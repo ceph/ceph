@@ -78,15 +78,15 @@ protected:
   /// across sequential operations on the same object. This is critical for
   /// EC attr_cache continuity.
   std::map<hobject_t, ObjectContextRef> object_contexts;
-  
+
   /// Track outstanding writes per object. When this reaches 0, we can safely
   /// clear attr_cache (as there are no in-flight writes that might have stale
   /// cached OI data).
   std::map<hobject_t, int> outstanding_writes;
-  
+
   // OpTracker for wrapping messages in OpRequestRef
   std::shared_ptr<OpTracker> op_tracker;
-  
+
   ceph::ErasureCodeInterfaceRef ec_impl;
   std::map<int, std::unique_ptr<ECExtentCache::LRU>> lrus;
   int k = 4;  // data chunks
@@ -94,6 +94,7 @@ protected:
   uint64_t stripe_unit = 4096;  // aka chunk_size
   std::string ec_plugin = "isa";
   std::string ec_technique = "reed_sol_van";
+  int num_zones = 0;
 
   int num_replicas = 3;
   int min_size = 2;
@@ -104,11 +105,11 @@ protected:
   
   // Transaction ID counter - increments with each transaction
   ceph_tid_t next_tid = 1;
-  
+
   // Version counter for auto-generating versions in write* functions
   // The epoch comes from osdmap, this tracks the second version number
   uint64_t next_version = 1;
-  
+
   class TestDpp : public NoDoutPrefix {
   public:
     TestDpp(CephContext *cct) : NoDoutPrefix(cct, ceph_subsys_osd) {}
@@ -188,7 +189,7 @@ public:
     backends.clear();
     object_contexts.clear();
     outstanding_writes.clear();
-    
+
     if (pool_type == EC) {
       lrus.clear();
       ec_impl.reset();

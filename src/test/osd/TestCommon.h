@@ -47,6 +47,7 @@ struct BackendConfig {
   uint64_t stripe_unit = 4096;  // aka chunk_size; stripe_width = stripe_unit * k
   int k = 4;  // data chunks (EC only)
   int m = 2;  // coding chunks (EC only)
+  int num_zones = 0;  // number of zones (0 = default, size = k+m)
   // Label for test naming
   std::string label;
 };
