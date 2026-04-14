@@ -18,6 +18,7 @@
 #include <iostream>
 #include <sstream>
 #include <ranges>
+#include <expected>
 #include <fmt/ostream.h>
 
 #include "ECInject.h"
@@ -150,87 +151,133 @@ void ECCommon::ReadPipeline::get_all_avail_shards(
     shard_id_set &have,
     shard_id_map<pg_shard_t> &shards,
     const bool for_recovery,
+    int local_zone,
+    bool allow_remote_zone,
     const std::optional<set<pg_shard_t>> &error_shards) {
   for (auto &&pg_shard: get_parent()->get_acting_shards()) {
-    dout(10) << __func__ << ": checking acting " << pg_shard << dendl;
-    const pg_missing_t &missing = get_parent()->get_shard_missing(pg_shard);
-    if (error_shards && error_shards->contains(pg_shard)) {
+    const auto [rel_shard, zone] = sinfo.get_rel_shard_and_zone(pg_shard.shard);
+    if (!allow_remote_zone && zone != local_zone) {
+      dout(10) << __func__ << ": skipping acting " << pg_shard
+               << " (rel_shard=" << rel_shard << ") - wrong zone " << zone
+               << " (local=" << local_zone << ")" << dendl;
       continue;
     }
-    const shard_id_t &shard = pg_shard.shard;
+    dout(10) << __func__ << ": checking acting " << pg_shard
+             << " (rel_shard=" << rel_shard << ")" << dendl;
+    const pg_missing_t &missing = get_parent()->get_shard_missing(pg_shard);
+    if (error_shards && error_shards->contains(pg_shard)) {
+d      dout(10) << __func__ << ": skipping acting " << pg_shard
+               << " (rel_shard=" << rel_shard << ") - in error_shards" << dendl;
+      continue;
+    }
 #ifndef WITH_CRIMSON
     if (cct->_conf->bluestore_debug_inject_read_err &&
-      ECInject::test_read_error1(ghobject_t(hoid, ghobject_t::NO_GEN, shard))) {
-      dout(0) << __func__ << " Error inject - Missing shard " << shard << dendl;
+      ECInject::test_read_error1(ghobject_t(hoid, ghobject_t::NO_GEN, rel_shard))) {
+      dout(0) << __func__ << " Error inject - Missing shard " << rel_shard << dendl;
       continue;
     }
 #endif
     if (!missing.is_missing(hoid)) {
-      ceph_assert(!have.contains(shard));
-      have.insert(shard);
-      ceph_assert(!shards.contains(shard));
-      shards.insert(shard, pg_shard);
+      if (have.contains(rel_shard)) {
+        ceph_assert(allow_remote_zone);
+        // With zones, multiple pg_shards can map to the same relative shard
+        // Skip if we already have this relative shard
+        dout(10) << __func__ << ": skipping acting " << pg_shard
+                 << " (rel_shard=" << rel_shard << ") - already have this shard" << dendl;
+        continue;
+      }
+      dout(10) << __func__ << ": adding acting " << pg_shard
+               << " (rel_shard=" << rel_shard << ") - object not missing" << dendl;
+      have.insert(rel_shard);
+      ceph_assert(!shards.contains(rel_shard));
+      shards.insert(rel_shard, pg_shard);
+    } else {
+      dout(10) << __func__ << ": skipping acting " << pg_shard
+               << " (rel_shard=" << rel_shard << ") - object is missing" << dendl;
     }
   }
 
   if (for_recovery) {
     for (auto &&pg_shard: get_parent()->get_backfill_shards()) {
       if (error_shards && error_shards->contains(pg_shard)) {
+        dout(10) << __func__ << ": skipping backfill " << pg_shard
+                 << " - in error_shards" << dendl;
         continue;
       }
-      const shard_id_t &shard = pg_shard.shard;
-      if (have.contains(shard)) {
-        ceph_assert(shards.contains(shard));
+      const auto [rel_shard, zone] = sinfo.get_rel_shard_and_zone(pg_shard.shard);
+      if (!allow_remote_zone && zone != local_zone) {
+        dout(10) << __func__ << ": skipping backfill " << pg_shard
+                 << " (rel_shard=" << rel_shard << ") - wrong zone " << zone
+                 << " (local=" << local_zone << ")" << dendl;
         continue;
       }
-      dout(10) << __func__ << ": checking backfill " << pg_shard << dendl;
-      ceph_assert(!shards.count(shard));
+      if (have.contains(rel_shard)) {
+        ceph_assert(shards.contains(rel_shard));
+        dout(10) << __func__ << ": skipping backfill " << pg_shard
+                 << " (rel_shard=" << rel_shard << ") - already have this shard" << dendl;
+        continue;
+      }
+      dout(10) << __func__ << ": checking backfill " << pg_shard
+               << " (rel_shard=" << rel_shard << ")" << dendl;
+      ceph_assert(!shards.count(rel_shard));
       const pg_info_t &info = get_parent()->get_shard_info(pg_shard);
       if (hoid < info.last_backfill &&
         !get_parent()->get_shard_missing(pg_shard).is_missing(hoid)) {
-        have.insert(shard);
-        shards.insert(shard, pg_shard);
+        dout(10) << __func__ << ": adding backfill " << pg_shard
+                 << " (rel_shard=" << rel_shard << ") - hoid < last_backfill and not missing" << dendl;
+        have.insert(rel_shard);
+        shards.insert(rel_shard, pg_shard);
+      } else {
+        dout(10) << __func__ << ": skipping backfill " << pg_shard
+                 << " (rel_shard=" << rel_shard << ") - hoid=" << hoid
+                 << " last_backfill=" << info.last_backfill
+                 << " is_missing=" << get_parent()->get_shard_missing(pg_shard).is_missing(hoid) << dendl;
       }
     }
 
     auto miter = get_parent()->get_missing_loc_shards().find(hoid);
     if (miter != get_parent()->get_missing_loc_shards().end()) {
       for (auto &&pg_shard: miter->second) {
+
         dout(10) << __func__ << ": checking missing_loc " << pg_shard << dendl;
         if (const auto m = get_parent()->maybe_get_shard_missing(pg_shard)) {
           ceph_assert(!m->is_missing(hoid));
         }
         if (error_shards && error_shards->contains(pg_shard)) {
+          dout(10) << __func__ << ": skipping missing_loc " << pg_shard
+                   << " - in error_shards" << dendl;
           continue;
         }
-        have.insert(pg_shard.shard);
-        shards.insert(pg_shard.shard, pg_shard);
+        const auto [rel_shard, zone] = sinfo.get_rel_shard_and_zone(pg_shard.shard);
+        if (!allow_remote_zone && zone != local_zone) {
+          dout(10) << __func__ << ": skipping missing_loc " << pg_shard
+                   << " (rel_shard=" << rel_shard << ") - wrong zone " << zone
+                   << " (local=" << local_zone << ")" << dendl;
+          continue;
+        }
+        dout(10) << __func__ << ": adding missing_loc " << pg_shard
+                 << " (rel_shard=" << rel_shard << ")" << dendl;
+        have.insert(rel_shard);
+        shards.insert(rel_shard, pg_shard);
       }
     }
   }
 }
 
-int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
+std::expected<std::tuple<shard_id_set, shard_id_map<pg_shard_t>, shard_id_set>, int>
+ECCommon::ReadPipeline::select_shards_for_read(
     const hobject_t &hoid,
+    const shard_id_set &want,
     bool for_recovery,
-    bool do_redundant_reads,
-    read_request_t &read_request,
-    const std::optional<set<pg_shard_t>> &error_shards) {
-  // Make sure we don't do redundant reads for recovery
-  ceph_assert(!for_recovery || !do_redundant_reads);
-
-  if (read_request.object_size == 0) {
-    dout(10) << __func__ << " empty read" << dendl;
-    return 0;
-  }
-
+    bool allow_remote_zone,
+    const std::optional<set<pg_shard_t>> &error_shards)
+{
   shard_id_set have;
   shard_id_map<pg_shard_t> shards(sinfo.get_k_plus_m());
+  auto zone = sinfo.get_shard_zone(get_parent()->whoami_shard().shard);
+  get_all_avail_shards(hoid, have, shards, for_recovery, zone, allow_remote_zone, error_shards);
 
   shard_id_set need_set;
-  shard_id_set want;
-
-  read_request.shard_want_to_read.populate_shard_id_set(want);
 
   int r = 0;
   auto kth_iter = want.find_nth(sinfo.get_k());
@@ -248,10 +295,41 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
   }
 
   if (r < 0) {
-    dout(20) << "minimum_to_decode_failed r: " << r << "want: " << want
+    dout(20) << "minimum_to_decode_failed r: " << r << " want: " << want
       << " have: " << have << " need: " << need_set << dendl;
-    return r;
+    return std::unexpected(r);
   }
+
+  return std::make_tuple(std::move(have), std::move(shards), std::move(need_set));
+}
+
+int ECCommon::ReadPipeline::  get_min_avail_to_read_shards(
+    const hobject_t &hoid,
+    bool for_recovery,
+    bool do_redundant_reads,
+    read_request_t &read_request,
+    const std::optional<set<pg_shard_t>> &error_shards) {
+  // Make sure we don't do redundant reads for recovery
+  ceph_assert(!for_recovery || !do_redundant_reads);
+
+  if (read_request.object_size == 0) {
+    dout(10) << __func__ << " empty read" << dendl;
+    return 0;
+  }
+  shard_id_set want;
+  read_request.shard_want_to_read.populate_shard_id_set(want);
+
+  // Try to get shards from local zone first, fall back to remote zone if needed
+  auto result = select_shards_for_read(hoid, want, for_recovery, false, error_shards);
+  if (!result && sinfo.get_num_zones() > 1) {
+    result = select_shards_for_read(hoid, want, for_recovery, true, error_shards);
+  }
+  if (!result) {
+    return result.error();
+  }
+
+  // Extract the values from the expected result
+  auto& [have, shards, need_set] = result.value();
 
   if (do_redundant_reads) {
     need_set.insert(have);
@@ -291,9 +369,6 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
     shard_id_t shard_id(shard);
     extent_set extents = extra_extents;
     shard_read_t shard_read;
-    if (need_sub_chunks) {
-      shard_read.subchunk = need_sub_chunks->at(shard_id);
-    }
     shard_read.pg_shard = shards[shard_id];
 
     if (read_request.shard_want_to_read.contains(shard)) {
@@ -401,7 +476,7 @@ int ECCommon::ReadPipeline::get_remaining_shards(
     // empty read!
     shard_id_set have;
     shard_id_map<pg_shard_t> pg_shards(sinfo.get_k_plus_m());
-    get_all_avail_shards(hoid, have, pg_shards, for_recovery, error_shards);
+    get_all_avail_shards(hoid, have, pg_shards, for_recovery, 0, 0, error_shards);
     for (auto shard : have) {
       if (!sinfo.is_nonprimary_shard(shard)) {
         shard_read_t shard_read;
@@ -816,8 +891,8 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
     op.delta_stats);
 
   shard_id_map<ObjectStore::Transaction> trans(sinfo.get_k_plus_m());
-  for (auto &&shard: get_parent()->
-       get_acting_recovery_backfill_shard_id_set()) {
+  for (auto &&shard : sinfo.zones_or(get_parent()->
+           get_acting_recovery_backfill_shard_id_set())) {
     trans[shard];
   }
 
@@ -850,14 +925,28 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
     oid_to_version[op.hoid] = op.version;
   }
   for (auto &&pg_shard: get_parent()->get_acting_recovery_backfill_shards()) {
-    ObjectStore::Transaction &transaction = trans.at(pg_shard.shard);
-    shard_id_t shard = pg_shard.shard;
+    // Use shard % (k+m) to get the relative shard for zone duplication
+    shard_id_t abs_shard = pg_shard.shard;
+    shard_id_t rel_shard = sinfo.get_rel_shard(abs_shard);
+
+    // Skip if relative shard transaction doesn't exist (relative shard not in acting set)
+    if (!trans.contains(rel_shard)) {
+      dout(20) << __func__ << " Skipping shard " << abs_shard
+               << " - relative shard " << rel_shard << " not in acting set" << dendl;
+      continue;
+    }
+
+    // FIXME: We can avoid copying the last copy here.
+    ObjectStore::Transaction transaction = trans.at(rel_shard);
+    if (abs_shard != rel_shard) {
+      transaction.remap_shard(abs_shard);
+    }
     if (transaction.empty()) {
-      dout(20) << __func__ << " Transaction for osd." << pg_shard.osd << " shard " << shard << " is empty" << dendl;
+      dout(20) << __func__ << " Transaction for osd." << pg_shard.osd << " shard " << pg_shard.shard << " is empty" << dendl;
     } else {
       // NOTE: All code between dout and dendl is executed conditionally on
       //       debug level.
-      dout(20) << __func__ << " Transaction for osd." << pg_shard.osd << " shard " << shard << " contents ";
+      dout(20) << __func__ << " Transaction for osd." << pg_shard.osd << " shard " << pg_shard.shard << " contents ";
       Formatter *f = Formatter::create("json");
       f->open_object_section("t");
       transaction.dump(f);
@@ -873,14 +962,14 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
      * As such we must never skip a transaction completely.  Note that if
      * should_send is false, then an empty transaction is sent.
      */
-    if (!next_write_all_shards && should_send && op.skip_transaction(pending_roll_forward, shard, transaction)) {
+    if (!next_write_all_shards && should_send && op.skip_transaction(pending_roll_forward, pg_shard.shard, transaction)) {
       // Must be an empty transaction
       ceph_assert(transaction.empty());
-      dout(20) << __func__ << " Skipping transaction for shard " << shard << dendl;
+      dout(20) << __func__ << " Skipping transaction for shard " << pg_shard.shard << dendl;
       continue;
     }
     if (!should_send || transaction.empty()) {
-      dout(20) << __func__ << " Sending empty transaction for shard " << shard << dendl;
+      dout(20) << __func__ << " Sending empty transaction for shard " << pg_shard.shard << dendl;
     }
     op.pending_commits++;
     const pg_stat_t &stats =
@@ -1423,8 +1512,10 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
 
       op.recovery_progress.data_recovered_to += read_size;
 
+      shard_id_set missing_for_read = sinfo.zones_or(op.missing_on_shards);
+
       // We only need to recover shards that are missing.
-      for (auto shard : shard_id_set::difference(sinfo.get_all_shards(), op.missing_on_shards)) {
+      for (auto shard : shard_id_set::difference(sinfo.get_all_shards(), missing_for_read)) {
         want.erase(shard);
       }
 
@@ -1495,7 +1586,7 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
         pop.soid = op.hoid;
         pop.version = op.recovery_info.oi.get_version_for_shard(pg_shard.shard);
 
-        op.returned_data->get_sparse_buffer(pg_shard.shard, pop.data, pop.data_included);
+        op.returned_data->get_sparse_buffer(sinfo.get_rel_shard(pg_shard.shard), pop.data, pop.data_included);
         ceph_assert(pop.data.length() == pop.data_included.size());
 
         dout(10) << __func__ << ": pop shard=" << pg_shard
