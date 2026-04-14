@@ -683,6 +683,22 @@ public_addrs
         a host. Run ``cephadm list-networks`` for an example of these mappings.
         If destination is not supplied the network is automatically determined
         using the address value supplied and taken as the destination.
+ssl
+    ``ssl`` is used to store certificate, key and ca_cert for host for service in
+    certificate manager.
+
+    enabled
+        If set to ``true`` will the set cert, key and ca_cert for service for
+        host and cert, key and ca_cert will be set as ``inline``. These cert, key
+        and ca_cert will be get update to certificate manager of cephadm.
+    cert
+        The fields are described in :ref:`tls source fields<tls-source-fields>`
+    key
+        The fields are described in :ref:`tls source fields<tls-source-fields>`
+    ca_cert
+        Optional object. The fields are described in :ref:`tls source
+        fields<tls-source-fields>`
+
 remote_control
     Optional object. This object configures an SMB cluster to deploy an extra
     ``remote control`` service. This service provides a gRPC server that

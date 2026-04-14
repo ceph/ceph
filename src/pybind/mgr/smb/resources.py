@@ -21,6 +21,7 @@ from ceph.smb.constants import (
     IOPS_LIMIT_MAX,
     REMOTE_CONTROL,
     REMOTE_CONTROL_LOCAL,
+    FEATURES,
 )
 from ceph.smb.network import to_network
 from object_format import ErrorResponseBase
@@ -742,6 +743,23 @@ class ExternalCephClusterSource(_RBase):
         rc.ref.quiet = True
         return rc
 
+@resourcelib.component()
+class SSLCertificate(_RBase):
+    enabled: Optional[bool] = None
+    cert: Optional[TLSSource] = None
+    key: Optional[TLSSource] = None
+    ca_cert: Optional[TLSSource] = None
+
+    def validate(self) -> None:
+        if bool(self.cert) ^ bool(self.key):
+            raise ValueError('cert and key values must be provided together')
+
+    @property
+    def is_enabled(self) -> bool:
+        if self.enabled is not None:
+            return self.enabled
+        return bool(self.cert and self.key)
+
 
 @resourcelib.component()
 class RemoteControl(_RBase):
@@ -894,6 +912,7 @@ class Cluster(_RBase):
     bind_addrs: Optional[List[ClusterBindIP]] = None
     # configure a remote control sidecar server.
     remote_control: Optional[RemoteControl] = None
+    ssl: Optional[SSLCertificate] = None
     # connect the smb cluster and all its shares to cephfs file systems
     # hosted on an external ceph cluster
     external_ceph_cluster: Optional[ExternalCephClusterSource] = None
@@ -933,6 +952,10 @@ class Cluster(_RBase):
             raise ValueError(
                 'bind_addrs must have at least one value or not be set'
             )
+        if self.ssl:
+            if not self.ssl.cert or not self.ssl.key:
+                raise ValueError("SSL requires cert and key")
+
         validation.check_debug_level(self.debug_level)
 
     @resourcelib.customize
@@ -960,6 +983,15 @@ class Cluster(_RBase):
         return self.remote_control.is_enabled
 
     @property
+    def ssl_is_enabled(self) -> bool:
+        """Return true if a remote control service should be enabled for this
+        cluster.
+        """
+        if not self.ssl:
+            return False
+        return self.ssl.is_enabled
+
+    @property
     def keybridge_is_enabled(self) -> bool:
         """Return true if a keybridge service should be enabled for this
         cluster.
@@ -967,6 +999,21 @@ class Cluster(_RBase):
         if not self.keybridge:
             return False
         return self.keybridge.is_enabled
+
+    def is_feature_enabled(self, feature: str) -> bool:
+        """Return true if the specified SMB feature is enabled for this
+        cluster.
+        """
+        if feature not in FEATURES:
+            raise ValueError(f'unknown SMB feature: {feature}')
+        if feature == FEATURES.REMOTE_CONTROL:
+            return self.remote_control_is_enabled
+        elif feature == FEATURES.KEYBRIDGE:
+            return self.keybridge_is_enabled
+        elif feature == 'ssl':
+            return self.ssl_is_enabled
+        else:
+            return False
 
     def is_clustered(self) -> bool:
         """Return true if smbd instance should use (CTDB) clustering."""

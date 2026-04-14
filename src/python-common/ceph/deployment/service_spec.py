@@ -13,6 +13,7 @@ from ipaddress import (
     ip_interface,
     ip_network,
 )
+import ssl
 from typing import (
     Any,
     Callable,
@@ -30,7 +31,6 @@ from typing import (
     TypedDict,
     Literal
 )
-from venv import logger
 
 import yaml
 
@@ -3700,6 +3700,57 @@ class SMBClusterBindIPSpec:
                 )
         return out
 
+class SSLParameters:
+    def __init__(
+        self,
+        enabled: bool = False,
+        ssl_cert: Optional[str] = None,
+        ssl_key: Optional[str] = None,
+        ssl_ca_cert: Optional[str] = None,
+        certificate_source: Optional[str] = None,
+    ):
+        self.enabled = enabled
+        self.ssl_cert = ssl_cert
+        self.ssl_key = ssl_key
+        self.ssl_ca_cert = ssl_ca_cert
+        self.certificate_source = certificate_source
+        self.validate()
+
+    def validate(self, component: str = "ssl") -> None:
+        if not self.enabled:
+            return
+        logger.info("the componet is %s", component)
+        missing: list[Any] = []
+        if not self.ssl_cert: missing.append("ssl_cert")
+        if not self.ssl_key: missing.append("ssl_key")
+        if component == "ssl" and not self.certificate_source: missing.append("certificate_source")
+
+        if missing:
+            raise ValueError(
+                f"[{component}] SSL is enabled but the following fields are missing: {', '.join(missing)}"
+            )
+
+    @classmethod
+    def from_dict(cls, data: Any) -> 'SSLParameters':
+        if not isinstance(data, dict):
+            return cls(enabled=False)
+
+        return cls(
+            enabled=data.get('enabled', False),
+            ssl_cert=data.get('ssl_cert'),
+            ssl_key=data.get('ssl_key'),
+            ssl_ca_cert=data.get('ssl_ca_cert'),
+            certificate_source=data.get('certificate_source'),
+        )
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            'enabled': self.enabled,
+            'ssl_cert': self.ssl_cert,
+            'ssl_key': self.ssl_key,
+            'ssl_ca_cert': self.ssl_ca_cert,
+            'certificate_source': self.certificate_source,
+        }
 
 class SMBExternalCephCluster:
     """Configure access to a non-local Ceph cluster for SMB services."""
@@ -3842,24 +3893,9 @@ class SMBSpec(ServiceSpec):
         # custom_ports - A mapping of services to ports. If a service is
         # not listed the default port will be used.
         custom_ports: Optional[Dict[str, int]] = None,
-        bind_addrs: Optional[List[SMBClusterBindIPSpec]] = None,
-        ssl: bool = False,
-        ssl_cert: Optional[str] = None,
-        ssl_key: Optional[str] = None,
-        ssl_ca_cert: Optional[str] = None,
-        certificate_source: Optional[str] = None,
-        tls_ktls: bool = False,
-        tls_debug: bool = False,
-        tls_min_version: Optional[str] = None,
-        tls_ciphers: Optional[str] = None,
-        # === remote control server ===
-        remote_control_ssl_cert: Optional[str] = None,
-        remote_control_ssl_key: Optional[str] = None,
-        remote_control_ca_cert: Optional[str] = None,
-        # == keybridge ==
-        keybridge_kmip_ssl_cert: Optional[str] = None,
-        keybridge_kmip_ssl_key: Optional[str] = None,
-        keybridge_kmip_ca_cert: Optional[str] = None,
+        bind_addrs: Optional[List[SMBClusterBindIPSpec]] = None,        
+        ssl: Optional[dict] = None,
+        ssl_certificates: Optional[Dict[str, SSLParameters]] = None,
         # === cluster configs ===
         # ceph_cluster_configs - An optional list of extra ceph clusters
         # typically external to the current cluster that the smb services
@@ -3875,17 +3911,34 @@ class SMBSpec(ServiceSpec):
     ) -> None:
         if service_type != self.service_type:
             raise ValueError(f'invalid service_type: {service_type!r}')
+
+        if ssl_certificates:
+            self.ssl_certificates = {
+                name: (
+                    value
+                    if isinstance(value, SSLParameters)
+                    else SSLParameters.from_dict(value)
+                )
+                for name, value in ssl_certificates.items()
+            }
+        else:
+            self.ssl_certificates = {}
+        #ssl_certificates from smb mgr module
+        self.ssl_certificates.setdefault(
+            'ssl', SSLParameters.from_dict(ssl or {})
+        )
+        ssl_def = self.ssl_certificates['ssl']
         super().__init__(
             self.service_type,
             service_id=service_id,
             placement=placement,
             count=count,
             config=config,
-            ssl=ssl,
-            ssl_cert=ssl_cert,
-            ssl_key=ssl_key,
-            ssl_ca_cert=ssl_ca_cert,
-            certificate_source=certificate_source,
+            ssl=ssl_def.enabled if ssl_def else False,
+            ssl_cert=ssl_def.ssl_cert,
+            ssl_key=ssl_def.ssl_key,
+            ssl_ca_cert=ssl_def.ssl_ca_cert,
+            certificate_source=ssl_def.certificate_source,
             unmanaged=unmanaged,
             preview_only=preview_only,
             networks=networks,
@@ -3907,23 +3960,11 @@ class SMBSpec(ServiceSpec):
         )
         self.custom_ports = custom_ports
         self.bind_addrs = SMBClusterBindIPSpec.convert_list(bind_addrs)
-        self.remote_control_ssl_cert = remote_control_ssl_cert
-        self.remote_control_ssl_key = remote_control_ssl_key
-        self.remote_control_ca_cert = remote_control_ca_cert
-        self.keybridge_kmip_ssl_cert = keybridge_kmip_ssl_cert
-        self.keybridge_kmip_ssl_key = keybridge_kmip_ssl_key
-        self.keybridge_kmip_ca_cert = keybridge_kmip_ca_cert
         self.ceph_cluster_configs = SMBExternalCephCluster.convert_list(
             ceph_cluster_configs
         )
         self.tunables = tunables or {}
         self.validate()
-
-        #TLS fields
-        self.tls_ktls = tls_ktls
-        self.tls_debug = tls_debug
-        self.tls_min_version = tls_min_version
-        self.tls_ciphers = tls_ciphers
 
     def validate(self) -> None:
         if not self.cluster_id:
@@ -3964,18 +4005,22 @@ class SMBSpec(ServiceSpec):
                 raise ValueError(f'{key} is not a valid service name')
 
         # TLS certificate validation
-        if self.ssl and not self.certificate_source:
-            raise SpecValidationError('If SSL is enabled, a certificate source must be provided.')
-        if self.certificate_source == CertificateSource.INLINE.value:
-            tls_field_names = [
-                'ssl_cert',
-                'ssl_key',
-                'ssl_ca_cert',
-            ]
-            tls_fields = [getattr(self, tls_field) for tls_field in tls_field_names]
-            if any(tls_fields) and not all(tls_fields):
-                raise SpecValidationError(
-                    f'Either none or all of {tls_field_names} attributes must be set'
+        ssl_def = self.ssl_certificates.get('ssl')
+        if ssl_def and ssl_def.enabled and not ssl_def.certificate_source:
+             raise ValueError('If SSL is enabled, a certificate_source must be provided.')
+
+        if ssl_def and ssl_def.enabled and ssl_def.certificate_source == 'inline':
+            tls_fields = {
+                'ssl_cert': ssl_def.ssl_cert,
+                'ssl_key': ssl_def.ssl_key,
+                'ssl_ca_cert': ssl_def.ssl_ca_cert,
+                'certificate_source': ssl_def.certificate_source,
+            }
+            present_fields = [k for k, v in tls_fields.items() if v]
+            if 0 < len(present_fields) < 3:
+                missing = set(tls_fields.keys()) - set(present_fields)
+                raise ValueError(
+                    f'For inline SSL, all TLS fields must be provided. Missing: {", ".join(missing)}'
                 )
 
     def _derive_cluster_uri(self, uri: str, objname: str) -> str:
@@ -4020,6 +4065,7 @@ class SMBSpec(ServiceSpec):
     def to_json(self) -> "OrderedDict[str, Any]":
         obj = super().to_json()
         spec = obj.get('spec')
+
         if spec and spec.get('cluster_public_addrs'):
             spec['cluster_public_addrs'] = [
                 a.to_json() for a in spec['cluster_public_addrs']
@@ -4030,7 +4076,25 @@ class SMBSpec(ServiceSpec):
             spec['ceph_cluster_configs'] = [
                 c.to_json() for c in spec['ceph_cluster_configs']
             ]
+
+        if self.ssl_certificates and spec:
+            spec['ssl_certificates'] = {
+                k: v.to_json() for k, v in self.ssl_certificates.items()
+            }
         return obj
+    @classmethod
+    def _from_json_impl(cls, json_spec: dict) -> 'SMBSpec':
+        # Filter out certificate_source - it's stored in SSLParameters, not SMBSpec
+        logger.info("SMBSpec._from_json_impl: json_spec=%r", json_spec)
+        args = json_spec.copy()
+        if 'spec' in args:
+            spec = args['spec'].copy()
+            spec.pop('certificate_source', None)
+            args['spec'] = spec
+        else:
+            args.pop('certificate_source', None)
+        
+        return super(SMBSpec, cls)._from_json_impl(args)
 
 
 class NodeProxySpec(ServiceSpec):

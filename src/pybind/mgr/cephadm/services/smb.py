@@ -1,9 +1,11 @@
 import errno
 import ipaddress
 import logging
-from typing import Any, Dict, List, Tuple, cast, Optional, Iterable, Union, TYPE_CHECKING
+from typing import Any, Dict, List, Tuple, cast, Optional, Iterable, Union
 
 from mgr_module import HandleCommandResult
+from cephadm.tlsobject_types import TLSObjectScope, TLSCredentials, EMPTY_TLS_CREDENTIALS
+from ceph.smb.constants import FEATURES
 
 from ceph.deployment.service_spec import (
     SMBExternalCephCluster,
@@ -23,8 +25,6 @@ from ..schedule import DaemonPlacement
 from cephadm.tlsobject_types import TLSObjectScope
 logger = logging.getLogger(__name__)
 from cephadm import utils
-#if TYPE_CHECKING:
-#    from ..module import CephadmOrchestrator
 
 def _add_cfg(cfg_dict: Dict[str, Any], key: str, value: Any) -> None:
     if value:
@@ -43,48 +43,18 @@ class SMBService(CephService):
     def config(self, spec: ServiceSpec) -> None:
         assert self.TYPE == spec.service_type
         smb_spec = cast(SMBSpec, spec)
-
-        # Inline TLS support via certmgr
         if smb_spec.ssl:
-            if not (smb_spec.ssl_cert and smb_spec.ssl_key and smb_spec.ssl_ca_cert):
+            if not smb_spec.ssl_certificates:
                 raise ValueError(
-                    "ssl enabled for smb but ssl_cert / ssl_key / ssl_ca_cert not provided"
+                    "SMB ssl enabled but no ssl_certificates provided"
                 )
-
-            service_name = smb_spec.service_name()
-
-            cert_name = "smb_ssl_cert"
-            key_name = "smb_ssl_key"
-            ca_cert_name = "smb_ssl_ca_cert"
 
             self.mgr.cert_mgr.register_cert_key_pair(
                 consumer=self.TYPE,
-                cert_name=cert_name,
-                key_name=key_name,
-                ca_cert_name=ca_cert_name,
+                cert_name="smb_ssl_cert",
+                key_name="smb_ssl_key",
+                ca_cert_name="smb_ssl_ca_cert",
                 scope=TLSObjectScope.SERVICE,
-            )
-
-            self.mgr.cert_mgr.save_cert(
-                cert_name,
-                smb_spec.ssl_cert,
-                service_name=service_name,
-                user_made=True,
-                editable=True,
-            )
-            self.mgr.cert_mgr.save_key(
-                key_name,
-                smb_spec.ssl_key,
-                service_name=service_name,
-                user_made=True,
-                editable=True,
-            )
-            self.mgr.cert_mgr.save_cert(
-                ca_cert_name,
-                smb_spec.ssl_ca_cert,
-                service_name=service_name,
-                user_made=True,
-                editable=True,
             )
         self._configure_cluster_meta(smb_spec)
 
@@ -175,6 +145,34 @@ class SMBService(CephService):
         )
         return daemon_spec
 
+    def _get_certificates_from_spec_ssl_certificates(
+        self,
+        svc_spec: ServiceSpec,
+        daemon_spec: CephadmDaemonDeploySpec,
+        feature : Optional[str] = None
+        ) -> TLSCredentials:
+        assert svc_spec
+        if feature != "ssl" and feature not in FEATURES:
+            raise ValueError(
+                f"Invalid feature '{feature}' for service '{daemon_spec.service_name}'. "
+                f"Allowed features are: {sorted(FEATURES)} (or 'ssl')"
+            )
+        smbspec = cast(SMBSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
+        ssl_certs = getattr(smbspec, "ssl_certificates", None)
+        if not ssl_certs:
+            logger.debug("No ssl_certificates defined in spec for service '%s'", svc_spec.service_name)
+            return EMPTY_TLS_CREDENTIALS
+
+        ssl_params = smbspec.ssl_certificates.get(feature)
+        if not ssl_params:
+            logger.debug("No SSL parameters found for feature '%s'", feature, svc_spec.service_name)
+            return EMPTY_TLS_CREDENTIALS
+        return TLSCredentials(
+            cert=ssl_params.ssl_cert,
+            key=ssl_params.ssl_key,
+            ca_cert=ssl_params.ssl_ca_cert,
+        )
+
     def generate_config(
         self, daemon_spec: CephadmDaemonDeploySpec
     ) -> Tuple[Dict[str, Any], List[str]]:
@@ -184,6 +182,7 @@ class SMBService(CephService):
         smb_spec = cast(
             SMBSpec, self.mgr.spec_store[daemon_spec.service_name].spec
         )
+        ssl_certificates = smb_spec.ssl_certificates or {}
         config_blobs: Dict[str, Any] = {}
 
         config_blobs['cluster_id'] = smb_spec.cluster_id
@@ -196,15 +195,15 @@ class SMBService(CephService):
         _add_cfg(config_blobs, 'cluster_lock_uri', smb_spec.cluster_lock_uri)
         cluster_public_addrs = smb_spec.strict_cluster_ip_specs()
         _add_cfg(config_blobs, 'cluster_public_addrs', cluster_public_addrs)
-        
-        if (smb_spec.ssl and smb_spec.ssl_cert and smb_spec.ssl_key and smb_spec.ssl_ca_cert):
-            config_blobs['ssl_cert'] = str(utils.md5_hash(smb_spec.ssl_cert))
-            config_blobs['ssl_key'] = str(utils.md5_hash(smb_spec.ssl_key))
-            config_blobs['ssl_ca_cert'] = str(utils.md5_hash(smb_spec.ssl_ca_cert))
-        config_blobs['tls_ktls'] = smb_spec.tls_ktls
-        config_blobs['tls_debug'] = smb_spec.tls_debug
-        _add_cfg(config_blobs, 'tls_min_version', smb_spec.tls_min_version)
-        _add_cfg(config_blobs, 'tls_ciphers', smb_spec.tls_ciphers)
+
+        if smb_spec.ssl:
+            tls_creds = self.get_certificates(daemon_spec, ca_cert_required=True)
+            if tls_creds.cert and tls_creds.key:
+                files = config_blobs.setdefault('files', {})
+                files['ssl.crt'] = tls_creds.cert
+                files['ssl.key'] = tls_creds.key
+                files['ssl-ca.crt'] = tls_creds.ca_cert
+
         ceph_users = smb_spec.include_ceph_users or []
         config_blobs.update(
             self._ceph_config_and_keyring_for(
@@ -221,40 +220,15 @@ class SMBService(CephService):
         config_blobs['service_ports'] = smb_spec.service_ports()
         if smb_spec.bind_addrs:
             config_blobs['bind_networks'] = smb_spec.bind_networks()
-        if 'remote-control' in smb_spec.features:
-            files = config_blobs.setdefault('files', {})
-            _add_cfg(
-                files,
-                'remote_control.ssl.crt',
-                self._cert_or_uri(smb_spec.remote_control_ssl_cert),
-            )
-            _add_cfg(
-                files,
-                'remote_control.ssl.key',
-                self._cert_or_uri(smb_spec.remote_control_ssl_key),
-            )
-            _add_cfg(
-                files,
-                'remote_control.ca.crt',
-                self._cert_or_uri(smb_spec.remote_control_ca_cert),
-            )
-        if 'keybridge' in smb_spec.features:
-            files = config_blobs.setdefault('files', {})
-            _add_cfg(
-                files,
-                'keybridge.ssl.crt',
-                self._cert_or_uri(smb_spec.keybridge_kmip_ssl_cert),
-            )
-            _add_cfg(
-                files,
-                'keybridge.ssl.key',
-                self._cert_or_uri(smb_spec.keybridge_kmip_ssl_key),
-            )
-            _add_cfg(
-                files,
-                'keybridge.ca.crt',
-                self._cert_or_uri(smb_spec.keybridge_kmip_ca_cert),
-            )
+
+        for feature in smb_spec.features:
+            if feature in ssl_certificates:
+                feature_creds = self.get_certificates(daemon_spec, ca_cert_required=True, feature=feature)
+                if feature_creds.cert and feature_creds.key:
+                    files = config_blobs.setdefault('files', {})
+                    _add_cfg(files, f'{feature}.ssl.crt', feature_creds.cert)
+                    _add_cfg(files, f'{feature}.ssl.key', feature_creds.key)
+                    _add_cfg(files, f'{feature}.ca.crt', feature_creds.ca_cert)
         for ext_cluster in smb_spec.ceph_cluster_configs or []:
             files = config_blobs.setdefault('files', {})
             c_name = f'{ext_cluster.alias}.ceph.conf'

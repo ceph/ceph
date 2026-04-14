@@ -1,4 +1,3 @@
-import hashlib
 from textwrap import dedent
 import json
 import urllib.parse
@@ -4999,12 +4998,13 @@ class TestSMB:
                 service_id="foo",
                 config_uri='rados://.smb/foxtrot/config2.json',
                 placement=PlacementSpec(hosts=['test']),
-                ssl=True,
-                ssl_cert=ceph_generated_cert,
-                ssl_key=ceph_generated_key,
-                ssl_ca_cert=cephadm_root_ca,
-                certificate_source='inline',
-                tls_min_version='TLSv1.3'
+                ssl={
+                    'enabled': True,
+                    'ssl_cert': ceph_generated_cert,
+                    'ssl_key': ceph_generated_key,
+                    'ssl_ca_cert': cephadm_root_ca,
+                    'certificate_source':'inline',
+                },
             )
 
             with with_service(cephadm_module, smb_spec):
@@ -5016,17 +5016,123 @@ class TestSMB:
                     )
                 )
                 # ---- TLS assertions against dict keys ----
-                expected_cert_id = hashlib.md5(ceph_generated_cert.encode()).hexdigest()
-                assert smb_generated_conf['ssl_cert'] == expected_cert_id
-                expected_key = hashlib.md5(ceph_generated_key.encode()).hexdigest()
-                assert smb_generated_conf['ssl_key'] == expected_key
-                expected_root_ca = hashlib.md5(cephadm_root_ca.encode()).hexdigest()
-                assert smb_generated_conf['ssl_ca_cert'] == expected_root_ca
+                assert smb_generated_conf['files']['ssl.crt'] == ceph_generated_cert
+                assert smb_generated_conf['files']['ssl.key'] == ceph_generated_key
+                assert smb_generated_conf['files']['ssl-ca.crt'] == cephadm_root_ca
 
-                assert smb_generated_conf['tls_min_version'] == 'TLSv1.3'
-                assert smb_generated_conf['tls_ktls'] is False
-                assert smb_generated_conf['tls_debug'] is False
-                
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_smb_tls_with_certmgr_validation(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """
+        Test SMB service with TLS certificates validated through certmgr.
+        This test validates that when applying an SMB spec with SSL:
+        1. The SMB service's config() method registers cert/key/ca-cert with certmgr
+        2. Certificates can be saved to certmgr
+        3. Certificates are retrieved from certmgr during service deployment
+        4. Certificates can be listed and removed from certmgr
+        """
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test', addr='1.2.3.7'):
+            cephadm_module.cache.update_host_networks(
+                'test',
+                {'1.2.3.0/24': {'if0': ['1.2.3.7']}}
+            )
+
+            # Create SMB spec with SSL enabled - this simulates 'ceph smb apply -i smb.yaml'
+            smb_spec = SMBSpec(
+                cluster_id="foxtrot",
+                service_id="foo",
+                config_uri='rados://.smb/foxtrot/config2.json',
+                placement=PlacementSpec(hosts=['test']),
+                ssl={
+                    'enabled': True,
+                    'ssl_cert': ceph_generated_cert,
+                    'ssl_key': ceph_generated_key,
+                    'ssl_ca_cert': cephadm_root_ca,
+                    'certificate_source': 'inline',
+                },
+            )
+
+            service_name = smb_spec.service_name()
+
+            # Apply the service - this calls SMBService.config() which registers certs with cert_mgr
+            with with_service(cephadm_module, smb_spec):
+                # Verify that cert_mgr has registered the certificate names
+                # The config() method calls cert_mgr.register_cert_key_pair()
+                assert 'smb_ssl_cert' in cephadm_module.cert_mgr.cert_store.objects_by_name or \
+                       cephadm_module.cert_mgr.cert_store.is_registered('smb_ssl_cert')
+                assert 'smb_ssl_key' in cephadm_module.cert_mgr.key_store.objects_by_name or \
+                       cephadm_module.cert_mgr.key_store.is_registered('smb_ssl_key')
+                assert 'smb_ssl_ca_cert' in cephadm_module.cert_mgr.cert_store.objects_by_name or \
+                       cephadm_module.cert_mgr.cert_store.is_registered('smb_ssl_ca_cert')
+
+                # Now save actual certificate data to certmgr (simulating user providing certs)
+                cephadm_module.cert_mgr.save_cert(
+                    'smb_ssl_cert',
+                    ceph_generated_cert,
+                    service_name=service_name,
+                    user_made=True
+                )
+                cephadm_module.cert_mgr.save_key(
+                    'smb_ssl_key',
+                    ceph_generated_key,
+                    service_name=service_name
+                )
+                cephadm_module.cert_mgr.save_cert(
+                    'smb_ssl_ca_cert',
+                    cephadm_root_ca,
+                    service_name=service_name,
+                    user_made=True
+                )
+
+                # Verify certificates are stored and retrievable from certmgr
+                assert cephadm_module.cert_mgr.get_cert('smb_ssl_cert', service_name=service_name) == ceph_generated_cert
+                assert cephadm_module.cert_mgr.get_key('smb_ssl_key', service_name=service_name) == ceph_generated_key
+                assert cephadm_module.cert_mgr.get_cert('smb_ssl_ca_cert', service_name=service_name) == cephadm_root_ca
+
+                # Generate config and verify certificates are used in deployment
+                smb_generated_conf, _ = service_registry.get_service('smb').generate_config(
+                    CephadmDaemonDeploySpec(
+                        host='test',
+                        daemon_id='foo.test.0',
+                        service_name=service_name
+                    )
+                )
+
+                # Verify TLS files are present in generated config
+                assert 'files' in smb_generated_conf
+                assert 'ssl.crt' in smb_generated_conf['files']
+                assert 'ssl.key' in smb_generated_conf['files']
+                assert 'ssl-ca.crt' in smb_generated_conf['files']
+
+                # Verify certificate content matches what was stored in certmgr
+                assert smb_generated_conf['files']['ssl.crt'] == ceph_generated_cert
+                assert smb_generated_conf['files']['ssl.key'] == ceph_generated_key
+                assert smb_generated_conf['files']['ssl-ca.crt'] == cephadm_root_ca
+
+                # Test certificate listing via certmgr
+                cert_list = cephadm_module.cert_mgr.cert_ls(include_details=True)
+                assert 'smb_ssl_cert' in cert_list
+                assert 'smb_ssl_ca_cert' in cert_list
+                assert cert_list['smb_ssl_cert']['scope'] == 'service'
+                assert service_name in cert_list['smb_ssl_cert']['certificates']
+
+                # Test key listing via certmgr
+                key_list = cephadm_module.cert_mgr.key_ls()
+                assert 'smb_ssl_key' in key_list
+                assert service_name in key_list['smb_ssl_key']['keys']
+
+                # Test certificate removal from certmgr
+                assert cephadm_module.cert_mgr.rm_cert('smb_ssl_cert', service_name=service_name) is True
+                assert cephadm_module.cert_mgr.get_cert('smb_ssl_cert', service_name=service_name) is None
+
+                # Test key removal from certmgr
+                cephadm_module.cert_mgr.rm_key('smb_ssl_key', service_name=service_name)
+                assert cephadm_module.cert_mgr.get_key('smb_ssl_key', service_name=service_name) is None
+
+                # Test CA cert removal from certmgr
+                assert cephadm_module.cert_mgr.rm_cert('smb_ssl_ca_cert', service_name=service_name) is True
+                assert cephadm_module.cert_mgr.get_cert('smb_ssl_ca_cert', service_name=service_name) is None
 
 class TestMgmtGateway:
     @patch("cephadm.serve.CephadmServe._run_cephadm")

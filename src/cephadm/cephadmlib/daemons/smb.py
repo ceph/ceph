@@ -190,7 +190,7 @@ class RemoteControlConfig:
     port: int
     tls_files: TLSFiles
     listen_to: Optional[List[ListenTo]] = None
-    unix_sock_path: str = '/run/remote-control.s'
+    unix_sock_path: str = '/run/remote_control.s'
 
     @property
     def listen_to_tcp(self) -> bool:
@@ -512,7 +512,7 @@ class RemoteControlContainer(SambaContainerCommon):
 
     def container_args(self) -> List[str]:
         return super().container_args() + [
-            '--entrypoint=samba-remote-control'
+            '--entrypoint=samba-remote_control'
         ]
 
 

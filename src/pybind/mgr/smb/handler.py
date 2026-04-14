@@ -17,7 +17,7 @@ import contextlib
 import dataclasses
 import logging
 import time
-
+from ceph.deployment.service_spec import SMBSpec, SSLParameters, CertificateSource
 import ceph.smb.constants
 from ceph.deployment.service_spec import SMBExternalCephCluster, SMBSpec
 from ceph.fs.earmarking import EarmarkTopScope
@@ -1055,17 +1055,27 @@ def _generate_smb_service_spec(
     user_entities: Optional[List[str]] = None
     if data_entity:
         user_entities = [data_entity]
-    rc_cert = rc_key = rc_ca_cert = None
+
+    ssl_certificates: Dict[str, SSLParameters] = {}
+    if cluster.ssl_is_enabled:
+        assert cluster.ssl
+        ssl_certificates['ssl'] = SSLParameters(
+            enabled=True,
+            ssl_cert = _tls_pem(cluster.ssl.cert, tls_credential_entries),
+            ssl_key = _tls_pem(cluster.ssl.key, tls_credential_entries),
+            ssl_ca_cert = _tls_pem(cluster.ssl.ca_cert, tls_credential_entries),
+            certificate_source = CertificateSource.INLINE.value,
+        )
     if cluster.remote_control_is_enabled:
         assert cluster.remote_control
-        rc_cert = _tls_uri(
-            cluster.remote_control.cert, tls_credential_entries
+        ssl_certificates[_REMOTE_CONTROL] = SSLParameters(
+            enabled=True,
+            ssl_cert = _tls_uri(cluster.remote_control.cert, tls_credential_entries),
+            ssl_key = _tls_uri(cluster.remote_control.key, tls_credential_entries),
+            ssl_ca_cert = _tls_uri(cluster.remote_control.ca_cert, tls_credential_entries),
+            certificate_source = 'uri',
+
         )
-        rc_key = _tls_uri(cluster.remote_control.key, tls_credential_entries)
-        rc_ca_cert = _tls_uri(
-            cluster.remote_control.ca_cert, tls_credential_entries
-        )
-    kb_cert = kb_key = kb_ca_cert = None
     if cluster.keybridge_is_enabled:
         assert cluster.keybridge  # type narrow
         # TODO: current all KMIP scopes must share the same tls creds
@@ -1080,11 +1090,16 @@ def _generate_smb_service_spec(
         ]
         if kmip_scopes:
             kmip_scope = kmip_scopes[0]
-            kb_cert = _tls_uri(kmip_scope.kmip_cert, tls_credential_entries)
-            kb_key = _tls_uri(kmip_scope.kmip_key, tls_credential_entries)
-            kb_ca_cert = _tls_uri(
-                kmip_scope.kmip_ca_cert, tls_credential_entries
+            ssl_certificates[_KEYBRIDGE] = SSLParameters(
+                enabled=True,
+                ssl_cert = _tls_uri(kmip_scope.kmip_cert, tls_credential_entries),
+                ssl_key = _tls_uri(kmip_scope.kmip_key, tls_credential_entries),
+                ssl_ca_cert = _tls_uri(
+                    kmip_scope.kmip_ca_cert, tls_credential_entries
+                ),
+                certificate_source = 'uri',
             )
+    #"""
     ceph_cluster_configs = None
     if ext_ceph_cluster:
         exo = checked(ext_ceph_cluster.cluster)
@@ -1111,14 +1126,9 @@ def _generate_smb_service_spec(
         cluster_public_addrs=cluster.service_spec_public_addrs(),
         custom_ports=cluster.custom_ports,
         bind_addrs=cluster.service_spec_bind_addrs(),
-        remote_control_ssl_cert=rc_cert,
-        remote_control_ssl_key=rc_key,
-        remote_control_ca_cert=rc_ca_cert,
-        keybridge_kmip_ssl_cert=kb_cert,
-        keybridge_kmip_ssl_key=kb_key,
-        keybridge_kmip_ca_cert=kb_ca_cert,
         ceph_cluster_configs=ceph_cluster_configs,
         tunables=_service_spec_tunables(cluster),
+        ssl_certificates=ssl_certificates,
     )
 
 
@@ -1303,6 +1313,13 @@ def _has_proxied_vfs(change_group: ClusterChangeGroup) -> bool:
 def _smb_port(cluster: resources.Cluster, default: int = 445) -> int:
     return (cluster.custom_ports or {}).get("smb", default)
 
+def _tls_pem(
+    src: Optional[resources.TLSSource],
+    tls_credential_entries: Dict[str, ConfigEntry],
+) -> Optional[str]:
+    if src is None:
+        return None
+    return tls_credential_entries[src.ref].get_data()
 
 def _tls_uri(
     src: Optional[resources.TLSSource],
