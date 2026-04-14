@@ -16,6 +16,7 @@
 #include "Resetter.h"
 
 #include <memory>
+#include "common/Cond.h"
 #include "common/debug.h"
 #include "common/errno.h"
 #include "osdc/Journaler.h"
