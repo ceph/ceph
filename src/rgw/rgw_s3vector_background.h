@@ -13,6 +13,8 @@ class DoutPrefixProvider;
 namespace rgw::s3vector {
   bool init(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver);
   void shutdown();
+  void pause();
+  void resume(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver);
   // update whenever new vectors are added to an index
   bool notify_index_update(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& index_name);
 }
