@@ -3196,46 +3196,65 @@ const std::vector<int> OSDMap::pgtemp_undo_primaryfirst(const pg_pool_t& pool,
   return acting;
 }
 
-const shard_id_t OSDMap::pgtemp_primaryfirst(const pg_pool_t& pool,
-	const pg_t pg, const shard_id_t shard) const
+shard_id_t OSDMap::pgtemp_undo_primaryfirst(const pg_pool_t& pool,
+                                            const pg_t pg, const shard_id_t primary_first_pos) const
 {
-  if ((shard == shard_id_t::NO_SHARD) ||
-      (shard == shard_id_t(0))) {
-    return shard;
+  if ((primary_first_pos == shard_id_t::NO_SHARD) ||
+      (primary_first_pos == shard_id_t(0)) ||
+      !pool.allows_ecoptimizations() ||
+      !has_pgtemp(pool.raw_pg_to_pg(pg))) {
+    return primary_first_pos;
   }
-  shard_id_t result = shard;
-  if (pool.allows_ecoptimizations()) {
-    if (has_pgtemp(pool.raw_pg_to_pg(pg))) {
-      int num_parity_shards = pool.size - pool.nonprimary_shards.size() - 1;
-      if (shard >= pool.size - num_parity_shards) {
-	result = shard_id_t(result + num_parity_shards + 1 - pool.size);
-      } else {
-	result = shard_id_t(result + num_parity_shards);
+  shard_id_t i(0);
+  shard_id_t j(pool.size - pool.nonprimary_shards.size());
+  for (shard_id_t shard(0); shard < pool.size; ++shard) {
+    if (pool.is_nonprimary_shard(shard_id_t(shard))) {
+      if (j == primary_first_pos) {
+        return shard;
       }
+      ++j;
+    } else {
+      if (i == primary_first_pos) {
+        return shard;
+      }
+      ++i;
     }
   }
-  return result;
+  ceph_abort("Shard out of range!");
 }
 
-shard_id_t OSDMap::pgtemp_undo_primaryfirst(const pg_pool_t& pool,
-	const pg_t pg, const shard_id_t shard) const
+bool OSDMap::undo_pre_stretch_zones_primaryfirst(spg_t *pgid) const
 {
-  if ((shard == shard_id_t::NO_SHARD) ||
-      (shard == shard_id_t(0))) {
-    return shard;
+  const pg_pool_t *pool = get_pg_pool(pgid->pool());
+  if (!pool || pgid->shard >= pool->size) {
+    return false;
   }
-  shard_id_t result = shard;
-  if (pool.allows_ecoptimizations()) {
-    if (has_pgtemp(pool.raw_pg_to_pg(pg))) {
-      int num_parity_shards = pool.size - pool.nonprimary_shards.size() - 1;
-      if (shard > num_parity_shards) {
-	result = shard_id_t(result - num_parity_shards);
-      } else {
-	result = shard_id_t(result + pool.size - num_parity_shards - 1);
-      }
-    }
+  if (pool->get_num_zones() < 2 ||
+      pgid->shard == shard_id_t::NO_SHARD ||
+      pgid->shard == shard_id_t(0) ||
+      !pool->allows_ecoptimizations() ||
+      !has_pgtemp(pool->raw_pg_to_pg(pgid->pgid))) {
+    return true;
   }
-  return result;
+  // the client gave position p, after the primary, the shard p - parity, and
+  // a parity position the shard p + size - parity - 1
+  const int size = pool->size;
+  const int parity = size - pool->nonprimary_shards.size() - 1;
+  const int shard = pgid->shard.id;
+  const int pos = shard >= size - parity ? shard - size + parity + 1
+                                         : shard + parity;
+  pgid->reset_shard(pgtemp_undo_primaryfirst(*pool, pgid->pgid, shard_id_t(pos)));
+  return true;
+}
+
+bool OSDMap::undo_pre_tentacle_primaryfirst(spg_t *pgid) const
+{
+  const pg_pool_t *pool = get_pg_pool(pgid->pool());
+  if (!pool || pgid->shard >= pool->size) {
+    return false;
+  }
+  pgid->reset_shard(pgtemp_undo_primaryfirst(*pool, pgid->pgid, pgid->shard));
+  return true;
 }
 
 void OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg,
