@@ -1147,6 +1147,7 @@ public:
      * completion if there are no other in progress writes.
      */
     PCT_UPDATE_DELAY,
+    NUM_ZONES,  // number of zones for the pool
   };
 
   enum type_t {
@@ -2017,6 +2018,30 @@ public:
     } else {
       return shard_id_t::NO_SHARD;
     }
+  }
+
+  int get_num_zone() const {
+    int64_t num_zones = 1;  // default: single-zone pool
+    opts.get(pool_opts_t::NUM_ZONES, &num_zones);
+
+    return static_cast<int>(num_zones);
+  }
+
+  int get_zone_size() const {
+    return size / get_num_zone();
+  }
+
+  /// EC multi-zone: convert absolute shard ID to relative shard ID
+  /// For multi-zone EC pools: absolute_shard = relative_shard + zone * (k+m)
+  /// where k+m = pool.size
+  shard_id_t get_relative_shard(const shard_id_t shard) const {
+
+    // Fast path for common case (id < size) and negative shards
+    if (std::cmp_less(shard.id, get_zone_size())) {
+      return shard;
+    }
+    // Convert absolute to relative using modulo
+    return shard_id_t(shard.id % get_zone_size());
   }
 
   void encode(ceph::buffer::list& bl, uint64_t features) const;
