@@ -575,7 +575,6 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     );
     for (shard_id_t shard_id; shard_id < k; ++shard_id) {
       ref.shard_reads[shard_id].extents = to_read_list[shard_id];
-      ref.shard_reads[shard_id].subchunk = ecode->default_sub_chunk;
       ref.shard_reads[shard_id].pg_shard = pg_shard_t(int(shard_id));
       ref.shard_reads[shard_id].pg_shard = pg_shard_t(int(shard_id), shard_id);
     }
@@ -604,7 +603,6 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     for (shard_id_t i; i<k; ++i) {
       shard_id_t shard_id(i);
       ref.shard_reads[shard_id].extents = to_read_list[i];
-      ref.shard_reads[shard_id].subchunk = ecode->default_sub_chunk;
       ref.shard_reads[shard_id].pg_shard = pg_shard_t(int(i), shard_id);
     }
 
@@ -631,7 +629,6 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     for (int i=0; i < (int)k; i++) {
       shard_id_t shard_id(i);
       ECCommon::shard_read_t &ref_shard_read = ref.shard_reads[shard_id];
-      ref_shard_read.subchunk = ecode->default_sub_chunk;
       ref_shard_read.extents.insert(i*2*align_size, align_size);
       ref_shard_read.pg_shard = pg_shard_t(i, shard_id_t(i));
     }
@@ -668,12 +665,10 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
       if (i != missing_shard) {
         shard_id_t shard_id(i);
 	to_read_list[i].union_of(to_read_list[missing_shard]);
-        ref.shard_reads[shard_id].subchunk = ecode->default_sub_chunk;
 	ref.shard_reads[shard_id].extents = to_read_list[i];
         ref.shard_reads[shard_id].pg_shard = pg_shard_t(int(i), shard_id);
       } else {
 	ECCommon::shard_read_t parity_shard_read;
-	parity_shard_read.subchunk = ecode->default_sub_chunk;
 	parity_shard_read.extents.union_of(to_read_list[i]);
 	ref.shard_reads[shard_id_t(parity_shard)] = parity_shard_read;
         ref.shard_reads[shard_id_t(parity_shard)].pg_shard = pg_shard_t(parity_shard, shard_id_t(parity_shard));
@@ -719,7 +714,6 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
       if (i==missing_shard) {
 	continue;
       }
-      ref.shard_reads[shard_id_t(i)].subchunk = ecode->default_sub_chunk;
     }
 
     listenerStub.acting_shards.erase(pg_shard_t(missing_shard, shard_id_t(missing_shard)));
@@ -754,7 +748,6 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     );
     for (unsigned int i=0; i<k+2; i++) {
       ECCommon::shard_read_t shard_read;
-      shard_read.subchunk = ecode->default_sub_chunk;
       shard_read.extents = extents_to_read;
       shard_read.pg_shard = pg_shard_t(i, shard_id_t(i));
       ref.shard_reads[shard_id_t(i)] = shard_read;
@@ -791,14 +784,12 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     std::vector<ECCommon::shard_read_t> want_to_read(empty_shard_vector);
     for (shard_id_t i; i<k; ++i) {
       if (i != missing_shard) {
-        want_to_read[int(i)].subchunk = ecode->default_sub_chunk;
         want_to_read[int(i)].extents.union_of(to_read_list[missing_shard]);
         want_to_read[int(i)].extents.union_of(to_read_list[i]);
         want_to_read[int(i)].pg_shard = pg_shard_t(int(i), shard_id_t(i));
         ref.shard_reads[shard_id_t(i)] = want_to_read[int(i)];
       } else {
         ECCommon::shard_read_t parity_shard_read;
-        parity_shard_read.subchunk = ecode->default_sub_chunk;
         parity_shard_read.extents.union_of(to_read_list[missing_shard]);
         parity_shard_read.pg_shard = pg_shard_t(parity_shard, shard_id_t(parity_shard));
         ref.shard_reads[shard_id_t(parity_shard)] = parity_shard_read;
@@ -853,14 +844,12 @@ TEST(ECCommon, shard_read_combo_tests)
     );
     {
       ECCommon::shard_read_t shard_read;
-      shard_read.subchunk = ecode->default_sub_chunk;
       shard_read.extents.insert(20*1024, 4*1024);
       shard_read.pg_shard = pg_shard_t(0, shard_id_t(0));
       ref.shard_reads[shard_id_t(0)] = shard_read;
     }
     {
       ECCommon::shard_read_t shard_read;
-      shard_read.subchunk = ecode->default_sub_chunk;
       shard_read.extents.insert(16*1024, 8*1024);
       shard_read.pg_shard = pg_shard_t(1, shard_id_t(1));
       ref.shard_reads[shard_id_t(1)] = shard_read;
@@ -886,14 +875,12 @@ TEST(ECCommon, shard_read_combo_tests)
     );
     {
       ECCommon::shard_read_t shard_read;
-      shard_read.subchunk = ecode->default_sub_chunk;
       shard_read.extents.insert(8*1024, 4*1024);
       shard_read.pg_shard = pg_shard_t(0, shard_id_t(0));
       ref.shard_reads[shard_id_t(0)] = shard_read;
     }
     {
       ECCommon::shard_read_t shard_read;
-      shard_read.subchunk = ecode->default_sub_chunk;
       shard_read.extents.insert(4*1024, 8*1024);
       shard_read.pg_shard = pg_shard_t(1, shard_id_t(1));
       ref.shard_reads[shard_id_t(1)] = shard_read;
@@ -999,7 +986,6 @@ TEST(ECCommon, get_remaining_shards)
     int parity_shard = 4;
     for (unsigned int i=0; i<k; i++) {
       ECCommon::shard_read_t shard_read;
-      shard_read.subchunk = ecode->default_sub_chunk;
       shard_read.extents.insert(0,4096);
       unsigned int shard_id = std::cmp_equal(i, missing_shard) ? parity_shard : i;
       shard_read.pg_shard = pg_shard_t(shard_id, shard_id_t(shard_id));
@@ -1040,7 +1026,6 @@ TEST(ECCommon, get_remaining_shards)
     int parity_shard = 4;
     for (unsigned int i=0; i<k; i++) {
       ECCommon::shard_read_t shard_read;
-      shard_read.subchunk = ecode->default_sub_chunk;
       unsigned int shard_id = i==missing_shard?parity_shard:i;
       ref.shard_reads[shard_id_t(shard_id)] = shard_read;
     }
