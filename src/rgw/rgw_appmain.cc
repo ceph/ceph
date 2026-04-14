@@ -512,8 +512,6 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
     derr << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
     /* ignore error */
   }
-  s3vector::init(dpp, env.driver);
-
 #ifdef WITH_RADOSGW_RADOS
   if (env.driver->get_name() == "rados") {
     // add a watcher to respond to realm configuration changes
@@ -533,6 +531,9 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
       }
     if (dedup_background) {
       rgw_pauser->add_pauser(dedup_background.get());
+    }
+    if (s3vector_pauser) {
+      rgw_pauser->add_pauser(s3vector_pauser.get());
     }
       reloader = std::make_unique<RGWRealmReloader>(
           env, *implicit_tenant_context, service_map_meta, rgw_pauser.get(), context_pool_holder.get());
@@ -601,6 +602,12 @@ void rgw::AppMain::init_dedup()
 }
 #endif
 
+void rgw::AppMain::init_s3vector()
+{
+  s3vector::init(dpp, env.driver);
+  s3vector_pauser = std::make_unique<S3VectorPauser>(dpp);
+}
+
 void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
 {
   // stop the realm reloader
@@ -639,6 +646,7 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
   }
 
   s3vector::shutdown();
+  s3vector_pauser.reset();
 
   env.driver->shutdown();
   // Do this before closing storage so requests don't try to call into
