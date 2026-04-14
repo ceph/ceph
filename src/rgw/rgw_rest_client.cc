@@ -425,16 +425,8 @@ auto RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const 
   string params_str;
   get_params_str(new_info.args.get_params(), params_str);
 
-  string new_url = endpoint.get_url();
-  string& resource = new_info.request_uri;
-  string new_resource = resource;
-  if (new_url[new_url.size() - 1] == '/' && resource[0] == '/') {
-    new_url = new_url.substr(0, new_url.size() - 1);
-  } else if (resource[0] != '/') {
-    new_resource = "/";
-    new_resource.append(resource);
-  }
-  new_url.append(new_resource + params_str);
+  endpoint.set_path(new_info.request_uri);
+  endpoint.set_query(params_str);
 
   bufferlist::iterator bliter;
 
@@ -446,7 +438,6 @@ auto RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const 
   }
 
   method = new_info.method;
-  endpoint.set_url(new_url);
 
   std::ignore = process(dpp, y);
 
@@ -581,7 +572,9 @@ void RGWRESTGenerateHTTPHeaders::init(const string& _method, const string& host,
                           url_encode(iter->second, encode_slash));
   }
 
-  endpoint = _endpoint.with_url(_endpoint.get_url() + resource + params_str);
+  endpoint = _endpoint;
+  endpoint.set_path(resource);
+  endpoint.set_query(params_str);
 
   const std::string date_str = get_gmt_date_str();
   new_env->set("HTTP_DATE", date_str.c_str());
@@ -692,8 +685,8 @@ void RGWRESTStreamS3PutObj::send_init(const rgw_obj& obj)
 
   if (host_style == VirtualStyle) {
     resource_str = obj.get_oid();
-    new_endpoint.set_url(protocol + "://" + bucket_name + "." + host);
     new_host = bucket_name + "." + new_host;
+    new_endpoint.set_host(new_host);
   } else {
     resource_str = bucket_name + "/" + obj.get_oid();
   }
@@ -847,13 +840,13 @@ int RGWRESTStreamRWRequest::do_send_prepare(const DoutPrefixProvider *dpp, RGWAc
   }
 
   if (host_style == VirtualStyle) {
-    new_endpoint.set_url(protocol + "://" + bucket_name + "." + host);
+    new_host = bucket_name + "." + host;
+    new_endpoint.set_host(new_host);
     if(pos == string::npos) {
       new_resource = "";
     } else {
       new_resource = new_resource.substr(pos+1);
     }
-    new_host = bucket_name + "." + host;
   }
   new_endpoint.add_trailing_slash();
 
