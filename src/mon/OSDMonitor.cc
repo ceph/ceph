@@ -8539,6 +8539,12 @@ int OSDMonitor::prepare_new_pool(string& name,
 
     spi->set_flag(pg_pool_t::FLAG_NOPGCHANGE);
     pi->set_flag(pg_pool_t::FLAG_NOPGCHANGE);
+    if (pool_type == pg_pool_t::TYPE_ERASURE) {
+      // The target pool for pool migration must have overwrites enabled
+      // because clients will use the source pool to decide how to align
+      // writes and this may have a different stripe_width
+      pi->set_flag(pg_pool_t::FLAG_EC_OVERWRITES);
+    }
     spi->pg_autoscale_mode = pg_pool_t::pg_autoscale_mode_t::OFF;
     pi->pg_autoscale_mode = pg_pool_t::pg_autoscale_mode_t::OFF;
 
