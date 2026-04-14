@@ -236,7 +236,7 @@ static int parse_new_dev(const char *dev_str, struct ceph_mount_info *cmi,
 
 	name_end = strstr(dev_str, "@");
 	if (!name_end) {
-		mount_ceph_debug("invalid new device string format\n");
+		fprintf(stderr, "invalid new device string format\n");
 		return -ENODEV;
 	}
 
@@ -395,14 +395,14 @@ static int fetch_config_info(struct ceph_mount_info *cmi)
 	cci = mmap((void *)0, sizeof(*cci), PROT_READ | PROT_WRITE,
 		   MAP_ANONYMOUS | MAP_SHARED, -1, 0);
 	if (cci == MAP_FAILED) {
-		mount_ceph_debug("Unable to allocate memory: %s\n",
+		fprintf(stderr, "Unable to allocate memory: %s\n",
 				 strerror(errno));
 		return EX_SYSERR;
 	}
 
 	pid = fork();
 	if (pid < 0) {
-		mount_ceph_debug("fork() failure: %s\n", strerror(errno));
+		fprintf(stderr, "fork() failure: %s\n", strerror(errno));
 		ret = EX_SYSERR;
 		goto out;
 	}
@@ -426,13 +426,13 @@ static int fetch_config_info(struct ceph_mount_info *cmi)
 		/* parent */
 		pid = wait(&ret);
 		if (!WIFEXITED(ret)) {
-			mount_ceph_debug("Child process terminated abnormally.\n");
+			fprintf(stderr, "Child process terminated abnormally.\n");
 			ret = EX_SYSERR;
 			goto out;
 		}
 		ret = WEXITSTATUS(ret);
 		if (ret) {
-			mount_ceph_debug("Child exited with status %d\n", ret);
+			fprintf(stderr, "Child exited with status %d\n", ret);
 			ret = EX_SYSERR;
 			goto out;
 		}
@@ -448,7 +448,7 @@ static int fetch_config_info(struct ceph_mount_info *cmi)
 			if (len < SECRET_BUFSIZE) {
 				memcpy(cmi->cmi_secret, cci->cci_secret, len + 1);
 			} else {
-				mount_ceph_debug("secret is too long (len=%zu max=%zu)!\n", len, SECRET_BUFSIZE);
+				fprintf(stderr, "secret is too long (len=%zu max=%zu)!\n", len, SECRET_BUFSIZE);
         ret = EX_SYSERR;
         goto out;
 			}
