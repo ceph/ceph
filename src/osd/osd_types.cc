@@ -1409,7 +1409,9 @@ static opt_mapping_t opt_mapping = boost::assign::map_list_of
 	   ("read_ratio", pool_opts_t::opt_desc_t(
              pool_opts_t::READ_RATIO, pool_opts_t::INT))
 	   ("pct_update_delay", pool_opts_t::opt_desc_t(
-             pool_opts_t::PCT_UPDATE_DELAY, pool_opts_t::INT));
+             pool_opts_t::PCT_UPDATE_DELAY, pool_opts_t::INT))
+	   ("num_zones", pool_opts_t::opt_desc_t(
+             pool_opts_t::NUM_ZONES, pool_opts_t::INT));
 
 bool pool_opts_t::is_opt_name(const std::string& name)
 {
