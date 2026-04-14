@@ -32,7 +32,7 @@ public:
   public:
     Shard(std::string path,
       uint32_t store_shard_nums,
-      store_index_t store_index);
+      store_index_t max_local_store_num);
     ~Shard() = default;
 
     seastar::future<struct stat> stat(
@@ -133,17 +133,11 @@ public:
     seastar::future<std::vector<coll_core_t>> list_collections();
 
     uint64_t get_used_bytes() const {
-      if (!store_active) {
-        return 0;
-      }
       return used_bytes;
     }
 
     unsigned int get_store_index() const {
       return store_index;
-    }
-    bool get_status() const {
-      return store_active;
     }
 
   private:
@@ -192,7 +186,9 @@ public:
     std::unordered_map<coll_t, boost::intrusive_ptr<Collection>> coll_map;
     std::map<coll_t, boost::intrusive_ptr<Collection>> new_coll_map;
     store_index_t store_index;
-    bool store_active = true;
+    // the number of store shards a particular SeaStar's reactor has seen
+    friend class CyanStore;
+    thread_local static store_index_t reactor_local_stores_num;
   };
 
   CyanStore(const std::string& path);
@@ -217,26 +213,8 @@ public:
   seastar::future<> write_meta(const std::string& key,
 		  const std::string& value) override;
 
-  BackendStore get_backend_store(store_index_t store_index) override {
-    assert(!shard_stores.local().mshard_stores.empty());
-    if (store_index != NULL_STORE_INDEX) {
-      assert(store_index < shard_stores.local().mshard_stores.size());
-    }
-    auto this_id = seastar::this_shard_id();
-    if (this_id < store_shard_nums) {
-      return BackendStore(*this, this_id, store_index);
-    } else {
-      auto shard_id = this_id % store_shard_nums;
-      return BackendStore(*this, shard_id, store_index);
-    }
-  }
-
-  FuturizedStore::Shard& get_sharded_store(store_index_t store_index = 0) override
-  {
-    assert(store_index < shard_stores.local().mshard_stores.size());
-    auto &shard_store = *(shard_stores.local().mshard_stores[store_index]);
-    assert(shard_store.get_status() == true);
-    return shard_store;
+  FuturizedStore::Shard& get_sharded_store(store_index_t store_index = 0) override {
+    return shard_stores.local(store_index);
   }
 
   seastar::future<std::tuple<int, std::string>>
@@ -250,26 +228,7 @@ public:
 
 
 private:
-class MultiShardStores {
-  public:
-    std::vector<std::unique_ptr<CyanStore::Shard>> mshard_stores;
-
-  public:
-    MultiShardStores(size_t count,
-                     const std::string path,
-                     uint32_t store_shard_nums)
-    : mshard_stores() {
-      mshard_stores.reserve(count); // Reserve space for the shards
-      for (size_t store_index = 0; store_index < count; ++store_index) {
-        mshard_stores.emplace_back(std::make_unique<CyanStore::Shard>(
-          path, store_shard_nums, store_index));
-      }
-    }
-    ~MultiShardStores() {
-      mshard_stores.clear();
-    }
-  };
-  seastar::sharded<CyanStore::MultiShardStores> shard_stores;
+  crimson::os::multisharded<CyanStore::Shard> shard_stores;
   uint32_t store_shard_nums = 0;
   const std::string path;
   uuid_d osd_fsid;
