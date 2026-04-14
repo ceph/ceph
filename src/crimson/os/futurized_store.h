@@ -229,7 +229,8 @@ public:
   explicit FuturizedStore(const FuturizedStore& o) = delete;
   const FuturizedStore& operator=(const FuturizedStore& o) = delete;
 
-  virtual seastar::future<> start() = 0;
+  //return the number of store shards
+  virtual seastar::future<uint32_t> start() = 0;
 
   virtual seastar::future<> stop() = 0;
 
@@ -252,7 +253,7 @@ public:
   virtual seastar::future<> write_meta(const std::string& key,
 				       const std::string& value) = 0;
   // called on the shard and get this FuturizedStore::shard;
-  virtual Shard& get_sharded_store() = 0;
+  virtual Shard& get_sharded_store(store_index_t store_index = 0) = 0;
   Shard& get_sharded_store(store_index_t store_index) {
     return get_sharded_store();
   }
@@ -270,7 +271,7 @@ public:
   virtual seastar::future<std::tuple<int, std::string>> read_meta(
     const std::string& key) = 0;
 
-  using coll_core_t = std::pair<coll_t, core_id_t>;
+  using coll_core_t = std::pair<coll_t, std::pair<core_id_t, store_index_t>>;
   virtual seastar::future<std::vector<coll_core_t>> list_collections() = 0;
 
   virtual seastar::future<std::string> get_default_device_class() = 0;

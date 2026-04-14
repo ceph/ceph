@@ -267,7 +267,9 @@ public:
     Shard(
       std::string root,
       Device* device,
-      bool is_test);
+      bool is_test,
+      uint32_t store_shard_nums,
+      store_index_t store_index = 0);
     ~Shard() = default;
 
     seastar::future<struct stat> stat(
@@ -390,6 +392,10 @@ public:
     shard_stats_t get_io_stats(bool report_detail, double seconds) const;
 
     cache_stats_t get_cache_stats(bool report_detail, double seconds) const;
+
+    unsigned int get_store_index() const {
+      return store_index;
+    }
 
   private:
     struct internal_context_t {
@@ -697,6 +703,7 @@ public:
     OnodeManagerRef onode_manager;
 
     common::Throttle throttler;
+    store_index_t store_index;
 
     seastar::metrics::metric_group metrics;
     void register_metrics();
@@ -713,7 +720,7 @@ public:
     MDStoreRef mdstore);
   ~SeaStore();
 
-  seastar::future<> start() override;
+  seastar::future<uint32_t> start() override;
   seastar::future<> stop() override;
 
   Device::access_ertr::future<> _mount();
@@ -755,10 +762,13 @@ public:
 
   seastar::future<std::string> get_default_device_class() final;
 
-  FuturizedStore::Shard& get_sharded_store() override {
-    return shard_stores.local();
+  FuturizedStore::Shard& get_sharded_store(store_index_t store_index = 0) override
+  {
+    assert(store_index < shard_stores.local().mshard_stores.size());
+    auto &shard_store = *(shard_stores.local().mshard_stores[store_index]);
+    assert(shard_store.get_status() == true);
+    return shard_store;
   }
-
   static col_obj_ranges_t
   get_objs_range(CollectionRef ch, unsigned bits);
 
@@ -780,12 +790,17 @@ private:
 
   seastar::future<> set_secondaries();
 
+  seastar::future<> get_shard_nums();
+  seastar::future<> shard_stores_start(bool is_test);
+  seastar::future<> shard_stores_stop();
+
 private:
   std::string root;
   MDStoreRef mdstore;
   DeviceRef device;
   std::vector<DeviceRef> secondaries;
   multisharded<SeaStore::Shard> shard_stores;
+  uint32_t store_shard_nums = 0;
 
   mutable seastar::lowres_clock::time_point last_tp =
     seastar::lowres_clock::time_point::min();

@@ -129,13 +129,16 @@ using crimson::common::get_conf;
 SeaStore::Shard::Shard(
   std::string root,
   Device* dev,
-  bool is_test)
+  bool is_test,
+  uint32_t store_shard_nums,
+  store_index_t store_index)
   :root(root),
    max_object_size(
      get_conf<uint64_t>("seastore_default_max_object_size")),
    is_test(is_test),
    throttler(
-      get_conf<uint64_t>("seastore_max_concurrent_transactions"))
+      get_conf<uint64_t>("seastore_max_concurrent_transactions")),
+   store_index(store_index)
 {
   device = &(dev->get_sharded_device());
   register_metrics();
@@ -204,7 +207,44 @@ void SeaStore::Shard::register_metrics()
   );
 }
 
-seastar::future<> SeaStore::start()
+seastar::future<> SeaStore::get_shard_nums()
+{
+  LOG_PREFIX(SeaStore::get_shard_nums);
+  auto tuple = co_await read_meta("mkfs_done");
+  auto [done, value] = tuple;
+  if (done == -1) {
+    INFO("seastore not mkfs yet");
+    store_shard_nums = seastar::smp::count;
+    co_return;
+  } else {
+    INFO("seastore mkfs done");
+    auto shard_nums = co_await device->get_shard_nums(
+      ).handle_error(
+        crimson::ct_error::assert_all{
+          "Invalid error in device->get_shard_nums"
+      });
+    INFO("seastore shard nums {}", shard_nums);
+    store_shard_nums = shard_nums;
+    co_return;
+  }
+}
+
+seastar::future<> SeaStore::shard_stores_start(bool is_test)
+{
+  LOG_PREFIX(SeaStore::shard_stores_start);
+  auto num_shard_services = (store_shard_nums + seastar::smp::count - 1 ) / seastar::smp::count;
+  INFO("store_shard_nums={} seastar::smp={}, num_shard_services={}", store_shard_nums, seastar::smp::count, num_shard_services);
+  return shard_stores.start(num_shard_services, root, device.get(), is_test, store_shard_nums);
+}
+
+seastar::future<> SeaStore::shard_stores_stop()
+{
+  LOG_PREFIX(SeaStore::shard_stores_stop);
+  INFO("stopping shard stores");
+  return shard_stores.stop();
+}
+
+seastar::future<uint32_t> SeaStore::start()
 {
   LOG_PREFIX(SeaStore::start);
   INFO("...");
@@ -224,10 +264,12 @@ seastar::future<> SeaStore::start()
   ceph_assert(root != "");
   DeviceRef device_obj = co_await Device::make_device(root, d_type);
   device = std::move(device_obj);
-  co_await device->start();
+  co_await get_shard_nums();
+  co_await device->start(/*store_shard_nums*/);
   ceph_assert(device);
-  co_await shard_stores.start(seastar::smp::count, root, device.get(), is_test);
+  co_await shard_stores_start(is_test);
   INFO("done");
+  co_return store_shard_nums;
 }
 
 seastar::future<> SeaStore::test_start(DeviceRef device_obj)
@@ -238,7 +280,7 @@ seastar::future<> SeaStore::test_start(DeviceRef device_obj)
   ceph_assert(device_obj);
   ceph_assert(root == "");
   device = std::move(device_obj);
-  co_await shard_stores.start(1, root, device.get(), true);
+  co_await shard_stores.start_single(1, root, device.get(), true, seastar::smp::count);
   INFO("done");
 }
 
@@ -255,7 +297,7 @@ seastar::future<> SeaStore::stop()
   if (device) {
     co_await device->stop();
   }
-  co_await shard_stores.stop();
+  co_await shard_stores_stop();
   INFO("done");
 }
 
@@ -936,7 +978,7 @@ SeaStore::Shard::open_collection(const coll_t& cid)
   ).then([cid, this, FNAME] (auto colls_cores) {
     if (auto found = std::find(colls_cores.begin(),
                                colls_cores.end(),
-                               std::make_pair(cid, seastar::this_shard_id()));
+                               std::make_pair(cid, std::make_pair(seastar::this_shard_id(), store_index)));
       found != colls_cores.end()) {
       DEBUG("cid={} exists", cid);
       return seastar::make_ready_future<CollectionRef>(_get_collection(cid));
@@ -980,12 +1022,12 @@ SeaStore::Shard::list_collections()
           return transaction_manager->read_collection_root(t
           ).si_then([this, &t](auto coll_root) {
             return collection_manager->list(coll_root, t);
-          }).si_then([&ret](auto colls) {
+          }).si_then([this, &ret](auto colls) {
             ret.resize(colls.size());
             std::transform(
               colls.begin(), colls.end(), ret.begin(),
-              [](auto p) {
-              return std::make_pair(p.first, seastar::this_shard_id());
+              [this](auto p) {
+              return std::make_pair(p.first, std::make_pair(seastar::this_shard_id(), store_index));
             });
           });
         });
