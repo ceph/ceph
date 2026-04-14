@@ -490,6 +490,123 @@ class bitset_set {
 
     return std::strong_ordering::equal;
   }
+
+  /** Left shift operator - shifts all bits left by n positions.
+   * Bits that shift beyond max_bits are lost.
+   */
+  friend bitset_set operator<<(const bitset_set &lhs, unsigned int n) {
+    bitset_set result;
+    if (n == 0) {
+      result.copy(lhs);
+      return result;
+    }
+    if (n >= max_bits) {
+      // All bits shifted out
+      return result;
+    }
+
+    unsigned int word_shift = n / bits_per_uint64_t;
+    unsigned int bit_shift = n % bits_per_uint64_t;
+
+    if (bit_shift == 0) {
+      // Simple word-aligned shift
+      for (size_t i = word_count - 1; i >= word_shift; --i) {
+        result.words[i] = lhs.words[i - word_shift];
+      }
+    } else {
+      // Shift with bit offset
+      unsigned int complement_shift = bits_per_uint64_t - bit_shift;
+      for (size_t i = word_count - 1; i > word_shift; --i) {
+        result.words[i] = (lhs.words[i - word_shift] << bit_shift) |
+                          (lhs.words[i - word_shift - 1] >> complement_shift);
+      }
+      result.words[word_shift] = lhs.words[0] << bit_shift;
+    }
+
+    return result;
+  }
+
+  /** Right shift operator - shifts all bits right by n positions.
+   * Bits that shift below 0 are lost.
+   */
+  friend bitset_set operator>>(const bitset_set &lhs, unsigned int n) {
+    bitset_set result;
+    if (n == 0) {
+      result.copy(lhs);
+      return result;
+    }
+    if (n >= max_bits) {
+      // All bits shifted out
+      return result;
+    }
+
+    unsigned int word_shift = n / bits_per_uint64_t;
+    unsigned int bit_shift = n % bits_per_uint64_t;
+
+    if (bit_shift == 0) {
+      // Simple word-aligned shift
+      for (size_t i = 0; i < word_count - word_shift; ++i) {
+        result.words[i] = lhs.words[i + word_shift];
+      }
+    } else {
+      // Shift with bit offset
+      unsigned int complement_shift = bits_per_uint64_t - bit_shift;
+      for (size_t i = 0; i < word_count - word_shift - 1; ++i) {
+        result.words[i] = (lhs.words[i + word_shift] >> bit_shift) |
+                          (lhs.words[i + word_shift + 1] << complement_shift);
+      }
+      result.words[word_count - word_shift - 1] =
+        lhs.words[word_count - 1] >> bit_shift;
+    }
+
+    return result;
+  }
+
+  /** Left shift assignment operator */
+  bitset_set &operator<<=(unsigned int n) {
+    *this = *this << n;
+    return *this;
+  }
+
+  /** Right shift assignment operator */
+  bitset_set &operator>>=(unsigned int n) {
+    *this = *this >> n;
+    return *this;
+  }
+
+  /** Bitwise AND operator - returns intersection of two sets */
+  friend bitset_set operator&(const bitset_set &lhs, const bitset_set &rhs) {
+    bitset_set result;
+    for (size_t i = 0; i < word_count; ++i) {
+      result.words[i] = lhs.words[i] & rhs.words[i];
+    }
+    return result;
+  }
+
+  /** Bitwise OR operator - returns union of two sets */
+  friend bitset_set operator|(const bitset_set &lhs, const bitset_set &rhs) {
+    bitset_set result;
+    for (size_t i = 0; i < word_count; ++i) {
+      result.words[i] = lhs.words[i] | rhs.words[i];
+    }
+    return result;
+  }
+
+  /** Bitwise AND assignment operator - sets this to intersection with other */
+  bitset_set &operator&=(const bitset_set &other) {
+    for (size_t i = 0; i < word_count; ++i) {
+      words[i] &= other.words[i];
+    }
+    return *this;
+  }
+
+  /** Bitwise OR assignment operator - sets this to union with other */
+  bitset_set &operator|=(const bitset_set &other) {
+    for (size_t i = 0; i < word_count; ++i) {
+      words[i] |= other.words[i];
+    }
+    return *this;
+  }
 };
 
 // make sure fmt::range would not try (and fail) to treat bitset_set as a range
