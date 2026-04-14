@@ -1376,12 +1376,14 @@ public:
   const std::vector<int> pgtemp_undo_primaryfirst(const pg_pool_t& pool,
 			   const pg_t pg,
 			   const std::vector<int>& acting) const;
-  const shard_id_t pgtemp_primaryfirst(const pg_pool_t& pool,
-				       const pg_t pg,
-				       const shard_id_t shard) const;
   shard_id_t pgtemp_undo_primaryfirst(const pg_pool_t& pool,
 					    const pg_t pg,
 					    const shard_id_t shard) const;
+  /// Correct the shard that a pre-Tentacle client gives an op to an
+  /// optimized EC pool with pg_temp: its position in primary-first order.
+  /// The client's map can be older than this one: false if the pool or
+  /// the shard is not in this map.
+  bool undo_pre_tentacle_primaryfirst(spg_t *pgid) const;
 
   bool in_removed_snaps_queue(int64_t pool, snapid_t snap) const {
     auto p = removed_snaps_queue.find(pool);
