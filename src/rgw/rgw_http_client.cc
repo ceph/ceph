@@ -333,7 +333,7 @@ void RGWHTTPClient::init()
     }
   }
 
-  const string& url = endpoint.get_url();
+  const string url = endpoint.get_url();
 
   auto pos = url.find("://");
   if (pos == string::npos) {

@@ -273,11 +273,11 @@ RGWEndpoint RGWRESTConn::get_endpoint()
 
 void RGWRESTConn::set_endpoint_unconnectable(const RGWEndpoint& endpoint)
 {
-  const string& orig_url = endpoint.get_original_url();
+  const string& endpoint_id = endpoint.get_endpoint_url_lookup_id();
   const string& connect_to = endpoint.get_connect_to();
 
-  ResolvedEndpoint* res_ep = find_resolved_endpoint(orig_url);
-  if (orig_url.empty() || !res_ep) {
+  ResolvedEndpoint* res_ep = find_resolved_endpoint(endpoint_id);
+  if (endpoint_id.empty() || !res_ep) {
     ldout(cct, 0) << "ERROR: endpoint is not valid or not found: "
       << endpoint << dendl;
     return;
@@ -301,7 +301,7 @@ void RGWRESTConn::set_endpoint_unconnectable(const RGWEndpoint& endpoint)
   for (auto& res_ip : res_ep->resolved_ips) {
     res_ip.mark_down();
   }
-  ldout(cct, 10) << "set all IPs unconnectable for endpoint url=" << orig_url << dendl;
+  ldout(cct, 10) << "set all IPs unconnectable for endpoint=" << endpoint << dendl;
 }
 
 void RGWRESTConn::populate_params(param_vec_t& params, const rgw_owner* uid, const string& zonegroup)

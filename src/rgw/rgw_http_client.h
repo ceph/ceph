@@ -10,6 +10,7 @@
 #include "rgw_http_client_types.h"
 
 #include <atomic>
+#include <boost/url.hpp>
 
 using param_pair_t = std::pair<std::string, std::string>;
 using param_vec_t = std::vector<param_pair_t>;
@@ -23,21 +24,22 @@ class RGWHTTPManager;
 /**
  * RGWEndpoint - Represents an HTTP endpoint with additional metdata such as connection routing.
  *
- * Unlike a plain URL string, RGWEndpoint carries additional information needed
- * to leverage libcurl's CURLOPT_CONNECT_TO option. This enables RGW to route
- * requests to specific IP addresses while preserving the original hostname for
- * TLS/SNI and Host headers.
+ * Wraps boost::urls::url for proper URL manipulation (set_path, set_query,
+ * set_host) instead of raw string concatenation.
+ *
+ * Carries a CURLOPT_CONNECT_TO override for IP-level routing.
  *
  * Fields:
- *  - url:          The effective URL for the request (may be modified with paths).
- *  - original_url: The initially configured endpoint URL (preserved for reference).
- *  - connect_to:   libcurl CONNECT_TO string (format: "host:port:addr:port") to
- *                  override connection routing without changing the request URL.
+ *  - endpoint_url_lookup_id: The initially configured endpoint URL (immutable).
+ *                 Used as a lookup key in RGWRESTConn to find the ResolvedEndpoint
+ *                 for health tracking (marking IPs as up/down).
+ *  - url:         boost::urls::url for the request URL (mutable via set_path, etc.).
+ *  - connect_to:  libcurl CONNECT_TO string (format: "host:port:addr:port").
  */
 struct RGWEndpoint {
 private:
-  std::string url;
-  std::string original_url;
+  std::string endpoint_url_lookup_id;
+  boost::urls::url url;
   std::string connect_to;
 
 public:
@@ -45,45 +47,57 @@ public:
 
   RGWEndpoint(const char* u) : RGWEndpoint(std::string(u)) {}
 
-  RGWEndpoint(std::string u, std::string c = {})
-    : url(std::move(u)), original_url(url), connect_to(std::move(c)) {}
-
-  RGWEndpoint with_url(std::string new_url) const {
-    RGWEndpoint e = *this;
-    e.set_url(std::move(new_url));
-    return e;
-  }
-
-  void set_url(const std::string& _url) {
-    url = _url;
-    // Capture the first URL assignment as the original
-    if (original_url.empty()) {
-      original_url = _url;
+  RGWEndpoint(const std::string& u) : endpoint_url_lookup_id(u) {
+    auto r = boost::urls::parse_uri(u);
+    if (r.has_value()) {
+      url = r.value();
     }
   }
-  const std::string& get_url() const { return url; }
-  const std::string& get_original_url() const { return original_url; }
 
-  void set_connect_to(const std::string& _connect_to) { connect_to = _connect_to; }
-  const std::string& get_connect_to() const { return connect_to; }
+  RGWEndpoint(const std::string& u, const std::string& c)
+    : endpoint_url_lookup_id(u), connect_to(c) {
+    auto r = boost::urls::parse_uri(u);
+    if (r.has_value()) {
+      url = r.value();
+    }
+  }
+
+  void set_url(const std::string& u) {
+    auto r = boost::urls::parse_uri(u);
+    if (r.has_value()) {
+      url = r.value();
+    }
+    if (endpoint_url_lookup_id.empty()) {
+      endpoint_url_lookup_id = u;
+    }
+  }
+
+  std::string get_url() const { return std::string(url.buffer()); }
+  const std::string& get_endpoint_url_lookup_id() const { return endpoint_url_lookup_id; }
+
+  void set_path(const std::string& path) { url.set_encoded_path(path); }
+  void set_query(const std::string& q) {
+    if (q.empty()) return;
+    // strip leading '?' - if present, boost::urls adds it automatically
+    url.set_encoded_query(q[0] == '?' ? q.substr(1) : q);
+  }
+  void set_host(const std::string& h) { url.set_host(h); }
 
   void add_trailing_slash() {
-    if (! url.empty() && url.back() != '/')
-      append_to_url("/");
+    auto path = std::string(url.encoded_path());
+    if (path.empty() || path.back() != '/') {
+      path += '/';
+      url.set_encoded_path(path);
+    }
   }
 
-  void append_to_url(const std::string& suffix) {
-    url.append(suffix);
-  }
+  void set_connect_to(const std::string& c) { connect_to = c; }
+  const std::string& get_connect_to() const { return connect_to; }
 
   friend std::ostream& operator<<(std::ostream& os, const RGWEndpoint& ep) {
-    os << "RGWEndpoint: url=" << ep.url;
-    if (!ep.original_url.empty() && ep.original_url != ep.url) {
-      os << " original_url=" << ep.original_url;
-    }
-    if (!ep.connect_to.empty()) {
-      os << " connect_to=" << ep.connect_to;
-    }
+    os << "RGWEndpoint: url=" << ep.url.buffer()
+       << " endpoint_url_lookup_id=" << (ep.endpoint_url_lookup_id.empty() ? "<empty>" : ep.endpoint_url_lookup_id)
+       << " connect_to=" << (ep.connect_to.empty() ? "<empty>" : ep.connect_to);
     return os;
   }
 };
