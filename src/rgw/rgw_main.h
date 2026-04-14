@@ -31,6 +31,7 @@
 #ifdef WITH_RADOSGW_RADOS
 #include "rgw_dedup.h"
 #endif
+#include "rgw_s3vector_background.h"
 #include "rgw_dmclock_scheduler_ctx.h"
 #include "rgw_ratelimit.h"
 
@@ -54,6 +55,18 @@ public:
 
 };
 
+class S3VectorPauser : public RGWRealmReloader::Pauser {
+  const DoutPrefixProvider* dpp;
+public:
+  S3VectorPauser(const DoutPrefixProvider* dpp) : dpp(dpp) {}
+  void pause() override {
+    rgw::s3vector::pause();
+  }
+  void resume(rgw::sal::Driver* driver) override {
+    rgw::s3vector::resume(dpp, driver);
+  }
+};
+
 namespace rgw {
 
 namespace lua { class Background; }
@@ -75,6 +88,7 @@ class AppMain {
   std::unique_ptr<rgw::LDAPHelper> ldh;
   RGWREST rest;
   std::unique_ptr<rgw::lua::Background> lua_background;
+  std::unique_ptr<S3VectorPauser> s3vector_pauser;
 #ifdef WITH_RADOSGW_RADOS
   std::unique_ptr<rgw::dedup::Background> dedup_background;
 #endif
@@ -141,6 +155,7 @@ public:
   void init_tracepoints();
   void init_lua();
   void init_kms_cache();
+  void init_s3vector();
 #ifdef WITH_RADOSGW_RADOS
   void init_dedup();
 #endif
