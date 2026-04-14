@@ -81,15 +81,14 @@ protected:
   /// across sequential operations on the same object. This is critical for
   /// EC attr_cache continuity.
   std::map<int, std::map<hobject_t, ObjectContextRef>> object_contexts;
-  
   /// Track outstanding writes per object. When this reaches 0, we can safely
   /// clear attr_cache (as there are no in-flight writes that might have stale
   /// cached OI data).
   std::map<hobject_t, int> outstanding_writes;
-  
+
   // OpTracker for wrapping messages in OpRequestRef
   std::shared_ptr<OpTracker> op_tracker;
-  // Scrub infrastructure - initialized once and reused across scrub operations
+// Scrub infrastructure - initialized once and reused across scrub operations
   std::unique_ptr<MockScrubBeListener> scrub_listener;
   std::unique_ptr<MockSnapMapReader> snap_reader;
   ceph::ErasureCodeInterfaceRef ec_impl;
@@ -99,6 +98,7 @@ protected:
   uint64_t stripe_unit = 4096;  // aka chunk_size
   std::string ec_plugin = "isa";
   std::string ec_technique = "reed_sol_van";
+  int num_zones = 1;
 
   int num_replicas = 3;
   int min_size = 2;
@@ -109,11 +109,12 @@ protected:
   
   // Transaction ID counter - increments with each transaction
   ceph_tid_t next_tid = 1;
-  
+
   // Version counter for auto-generating versions in write* functions
   // The epoch comes from osdmap, this tracks the second version number
   uint64_t next_version = 1;
-  
+
+
   std::unique_ptr<NoDoutPrefix> dpp;
 
 public:
@@ -159,12 +160,12 @@ public:
     g_conf().set_safe_to_start_threads();
     
     CephContext *cct = g_ceph_context;
-    
+
     // Make dout statements flush immediately - we don't care about performance in tests
     if (cct->_log) {
       cct->_log->set_max_new(1);
     }
-    
+
     dpp = std::make_unique<NoDoutPrefix>(cct, ceph_subsys_osd);
     event_loop = std::make_unique<EventLoop>(dpp.get());
     
@@ -195,7 +196,7 @@ public:
     backends.clear();
     object_contexts.clear();
     outstanding_writes.clear();
-    
+
     if (pool_type == EC) {
       lrus.clear();
       ec_impl.reset();
@@ -289,7 +290,7 @@ public:
     obc->ssc = nullptr;
     return obc;
   }
-    
+
   /**
    * Set the next version number for auto-generation.
    * This can be used by tests after rollback to set the version to a specific value.
@@ -354,13 +355,13 @@ public:
   int do_create_and_write_impl(
     const std::string& obj_name,
     const std::string& data);
-  
+
   int do_write_impl(
     const std::string& obj_name,
     uint64_t offset,
     const std::string& data,
     uint64_t object_size,
-    bool run = true);
+bool run = true);
 
   int do_truncate_and_write_impl(
     const std::string& obj_name,
@@ -368,13 +369,12 @@ public:
     std::optional<uint64_t> truncate_size,
     const std::vector<std::pair<uint64_t, std::string>>& writes,
     bool run = true);
-
   int do_write_attribute_impl(
     const std::string& obj_name,
     const std::string& attr_name,
     const std::string& attr_value,
     bool force_all_shards);
-  
+
   virtual int create_and_write(
     const std::string& obj_name,
     const std::string& data);

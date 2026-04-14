@@ -35,7 +35,7 @@ void PGBackendTestFixture::setup_ec_pool()
 {
   CephContext *cct = g_ceph_context;
 
-  int num_osds = k + m;
+  int num_osds = (num_zones > 0) ? (num_zones * (k + m)) : (k + m);
 
   osdmap = std::make_shared<OSDMap>();
   osdmap->set_max_osd(num_osds);
@@ -69,7 +69,7 @@ void PGBackendTestFixture::setup_ec_pool()
   // This will properly calculate up_osd_features
   osdmap->apply_incremental(inc);
 
-  pg_pool_t pool = OSDMapTestHelpers::create_ec_pool(k, m, stripe_unit * k, pool_flags);
+  pg_pool_t pool = OSDMapTestHelpers::create_ec_pool(k, m, stripe_unit * k, pool_flags, pool_id, num_zones);
   OSDMapTestHelpers::add_pool(osdmap, pool_id, pool);
 
   pgid = pg_t(0, pool_id);
@@ -1174,9 +1174,9 @@ void PGBackendTestFixture::verify_object(
   bufferlist read_data;
   int read_result = read_object(obj_name, offset, expected_data.length(), read_data, object_size);
 
-  EXPECT_GE(read_result, 0) << "Read should complete successfully";
-  EXPECT_EQ(read_data.length(), expected_data.length()) << "Read data length should match";
-  
+  ASSERT_GE(read_result, 0) << "Read should complete successfully";
+  ASSERT_EQ(read_data.length(), expected_data.length()) << "Read data length should match";
+
   if (read_data.length() == expected_data.length()) {
     const char* read_buf = read_data.c_str();
     const char* expected_buf = expected_data.c_str();
@@ -1202,9 +1202,9 @@ void PGBackendTestFixture::create_and_write_verify(
   const std::string& data)
 {
   int result = create_and_write(obj_name, data);
-  
-  EXPECT_GE(result, 0) << "Write should complete successfully";
-  
+
+  ASSERT_GE(result, 0) << "Write should complete successfully";
+
   // Always verify - tests should only use this helper when success is expected
   verify_object(obj_name, data, 0, data.length());
 }
@@ -1217,21 +1217,21 @@ void PGBackendTestFixture::write_verify(
   const std::string& context_msg)
 {
   int result = write(obj_name, offset, data, object_size);
-  
+
   std::string msg_suffix = context_msg.empty() ? "" : " (" + context_msg + ")";
-  EXPECT_GE(result, 0) << "Write should complete successfully" << msg_suffix;
-  
+  ASSERT_GE(result, 0) << "Write should complete successfully" << msg_suffix;
+
   // Always verify - tests should only use this helper when success is expected
   bufferlist read_data;
   int read_result = read_object(obj_name, offset, data.length(), read_data,
                                  std::max(object_size, offset + data.length()));
-  
-  EXPECT_GE(read_result, 0) << "Read should complete successfully" << msg_suffix;
-  EXPECT_EQ(read_data.length(), data.length()) << "Read data length should match" << msg_suffix;
-  
+
+  ASSERT_GE(read_result, 0) << "Read should complete successfully" << msg_suffix;
+  ASSERT_EQ(read_data.length(), data.length()) << "Read data length should match" << msg_suffix;
+
   if (read_data.length() == data.length()) {
     std::string read_string(read_data.c_str(), read_data.length());
-    EXPECT_EQ(read_string, data) << "Written data should match" << msg_suffix;
+    ASSERT_EQ(read_string, data) << "Written data should match" << msg_suffix;
   }
 }
 
