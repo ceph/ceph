@@ -95,12 +95,10 @@ CyanStore::mount_ertr::future<> CyanStore::mount()
 {
   ceph_assert(seastar::this_shard_id() == primary_core);
   return shard_stores.invoke_on_all([](auto &local_store) {
-    return seastar::do_for_each(local_store.mshard_stores, [](auto& mshard_store) {
-      return mshard_store->mount().handle_error(
-        crimson::ct_error::assert_all{
-          "Invalid error in CyanStore::mount"
-        });
-    });
+    return local_store.mount().handle_error(
+      crimson::ct_error::assert_all{
+        "Invalid error in CyanStore::mount"
+      });
   });
 }
 
@@ -108,9 +106,7 @@ seastar::future<> CyanStore::umount()
 {
   ceph_assert(seastar::this_shard_id() == primary_core);
   return shard_stores.invoke_on_all([](auto &local_store) {
-    return seastar::do_for_each(local_store.mshard_stores, [](auto& mshard_store) {
-      return mshard_store->umount();
-    });
+    return local_store.umount();
   });
 }
 
@@ -120,18 +116,8 @@ seastar::future<store_statfs_t> CyanStore::stat() const
   logger().debug("{}", __func__);
 
   return shard_stores.map_reduce0(
-    [](const auto& local_store) {
-      return seastar::map_reduce(
-        local_store.mshard_stores.begin(),
-        local_store.mshard_stores.end(),
-        [](const auto& mshard_store) {
-          return seastar::make_ready_future<uint64_t>(
-            mshard_store->get_used_bytes()
-          );
-        },
-        uint64_t{0},
-        std::plus<uint64_t>()
-      );
+    [](const CyanStore::Shard &local_store) {
+      return local_store.get_used_bytes();
     },
     uint64_t{0},
     std::plus<uint64_t>()
@@ -181,10 +167,9 @@ CyanStore::mkfs_ertr::future<> CyanStore::mkfs(uuid_d new_osd_fsid)
   }).safe_then([this]{
     return write_meta("type", "memstore");
   }).safe_then([this] {
-    return shard_stores.invoke_on_all([](auto &local_store) {
-      return seastar::do_for_each(local_store.mshard_stores, [](auto& mshard_store) {
-        return mshard_store->mkfs();
-      });
+    return shard_stores.invoke_on_all(
+      [](auto &local_store) {
+      return local_store.mkfs();
     });
   });
 }
@@ -197,17 +182,10 @@ CyanStore::Shard::Shard(
     store_index(store_index)
 {
   ceph_assert(store_index < store_shard_nums);
-  if (store_active = is_shard_store_active(store_index, store_shard_nums); !store_active) {
-    logger().info("store_index {} is out of range - inactivating this store shard, store_shard_nums {}", store_index, store_shard_nums);
-  }
-
 }
 
 seastar::future<> CyanStore::Shard::mkfs()
 {
-  if (!store_active) {
-    return seastar::now();
-  }
   std::string fn =
     path + "/collections" + std::to_string(seastar::this_shard_id());
   ceph::bufferlist bl;
@@ -221,29 +199,16 @@ seastar::future<std::vector<coll_core_t>>
 CyanStore::list_collections()
 {
   ceph_assert(seastar::this_shard_id() == primary_core);
-  return shard_stores.map_reduce0(
-    [](auto& local_store) {
-    // For each local store, collect all collections from its mshard_stores
-    return seastar::map_reduce(
-      local_store.mshard_stores.begin(),
-      local_store.mshard_stores.end(),
-      [](auto& mshard_store) {
-        return mshard_store->list_collections();
-      },
-      std::vector<coll_core_t>(),  // Initial empty vector
-      [](auto&& merged, auto&& result) {  // Reduction function
-        merged.insert(merged.end(), result.begin(), result.end());
-        return std::move(merged);
+  return seastar::do_with(std::vector<coll_core_t>{}, [this](auto &collections) {
+    return shard_stores.map([](auto &local_store) {
+      return local_store.list_collections();
+    }).then([&collections](std::vector<std::vector<coll_core_t>> results) {
+      for (auto& colls : results) {
+        collections.insert(collections.end(), colls.begin(), colls.end());
       }
-    );
-    },
-    std::vector<coll_core_t>(),  // Initial empty vector for final reduction
-    [](auto&& total, auto&& shard_result) {  // Final reduction function
-      total.insert(total.end(), shard_result.begin(), shard_result.end());
-      return std::move(total);
-    }
-  ).then([](auto all_collections) {
-    return seastar::make_ready_future<std::vector<coll_core_t>>(std::move(all_collections));
+      return seastar::make_ready_future<std::vector<coll_core_t>>(
+        std::move(collections));
+    });
   });
 }
 
@@ -255,9 +220,6 @@ CyanStore::get_default_device_class()
 
 CyanStore::mount_ertr::future<> CyanStore::Shard::mount()
 {
-  if (!store_active) {
-    return mount_ertr::now();
-  }
   static const char read_file_errmsg[]{"read_file"};
   ceph::bufferlist bl;
   std::string fn =
@@ -289,9 +251,6 @@ CyanStore::mount_ertr::future<> CyanStore::Shard::mount()
 
 seastar::future<> CyanStore::Shard::umount()
 {
-  if (!store_active) {
-    return seastar::now();
-  }
   return seastar::do_with(std::set<coll_t>{}, [this](auto& collections) {
     return seastar::do_for_each(coll_map, [&collections, this](auto& coll) {
       auto& [col, ch] = coll;
@@ -320,7 +279,6 @@ CyanStore::Shard::list_objects(
   uint64_t limit,
   uint32_t op_flags) const
 {
-  assert(store_active);
   auto c = static_cast<Collection*>(ch.get());
   logger().debug("{} {} {} {} {}",
                  __func__, c->get_cid(), start, end, limit);
@@ -344,7 +302,6 @@ CyanStore::Shard::list_objects(
 seastar::future<CollectionRef>
 CyanStore::Shard::create_new_collection(const coll_t& cid)
 {
-  assert(store_active);
   auto c = new Collection{cid};
   new_coll_map[cid] = c;
   return seastar::make_ready_future<CollectionRef>(c);
@@ -353,16 +310,12 @@ CyanStore::Shard::create_new_collection(const coll_t& cid)
 seastar::future<CollectionRef>
 CyanStore::Shard::open_collection(const coll_t& cid)
 {
-  assert(store_active);
   return seastar::make_ready_future<CollectionRef>(_get_collection(cid));
 }
 
 seastar::future<std::vector<coll_core_t>>
 CyanStore::Shard::list_collections()
 {
-  if (!store_active) {
-    return seastar::make_ready_future<std::vector<coll_core_t>>();
-  }
   std::vector<coll_core_t> collections;
   for (auto& coll : coll_map) {
     collections.push_back(std::make_pair(coll.first, std::make_pair(seastar::this_shard_id(), store_index)));
@@ -376,7 +329,6 @@ CyanStore::Shard::exists(
   const ghobject_t &oid,
   uint32_t op_flags)
 {
-  assert(store_active);
   auto c = static_cast<Collection*>(ch.get());
   if (!c->exists) {
     return base_errorator::make_ready_future<bool>(false);
@@ -392,7 +344,6 @@ seastar::future<>
 CyanStore::Shard::set_collection_opts(CollectionRef ch,
                                       const pool_opts_t& opts)
 {
-  assert(store_active);
   auto c = static_cast<Collection*>(ch.get());
   logger().debug("{} {}", __func__, c->get_cid());
   c->pool_opts = opts;
@@ -407,7 +358,6 @@ CyanStore::Shard::read(
   size_t len,
   uint32_t op_flags)
 {
-  assert(store_active);
   auto c = static_cast<Collection*>(ch.get());
   logger().debug("{} {} {} {}~{}",
                 __func__, c->get_cid(), oid, offset, len);
@@ -435,7 +385,6 @@ CyanStore::Shard::readv(
   interval_set<uint64_t>& m,
   uint32_t op_flags)
 {
-  assert(store_active);
   return seastar::do_with(ceph::bufferlist{},
     [this, ch, oid, &m, op_flags](auto& bl) {
     return crimson::do_for_each(m,
@@ -457,7 +406,6 @@ CyanStore::Shard::get_attr(
   std::string_view name,
   uint32_t op_flags) const
 {
-  assert(store_active);
   auto c = static_cast<Collection*>(ch.get());
   logger().debug("{} {} {}",
                 __func__, c->get_cid(), oid);
@@ -478,7 +426,6 @@ CyanStore::Shard::get_attrs(
   const ghobject_t& oid,
   uint32_t op_flags)
 {
-  assert(store_active);
   auto c = static_cast<Collection*>(ch.get());
   logger().debug("{} {} {}",
 		 __func__, c->get_cid(), oid);
@@ -496,7 +443,6 @@ auto CyanStore::Shard::omap_get_values(
   uint32_t op_flags)
   -> read_errorator::future<omap_values_t>
 {
-  assert(store_active);
   auto c = static_cast<Collection*>(ch.get());
   logger().debug("{} {} {}", __func__, c->get_cid(), oid);
   auto o = c->get_object(oid);
@@ -521,7 +467,6 @@ auto CyanStore::Shard::omap_iterate(
   omap_iterate_conf_t on_conflict)
   -> CyanStore::Shard::read_errorator::future<ObjectStore::omap_iter_ret_t>
 {
-  assert(store_active);
   auto c = static_cast<Collection*>(ch.get());
   logger().debug("{} {} {}", __func__, c->get_cid(), oid);
   auto o = c->get_object(oid);
@@ -547,7 +492,6 @@ auto CyanStore::Shard::omap_get_header(
   uint32_t op_flags)
   -> CyanStore::Shard::get_attr_errorator::future<ceph::bufferlist>
 {
-  assert(store_active);
   auto c = static_cast<Collection*>(ch.get());
   auto o = c->get_object(oid);
   if (!o) {
@@ -562,7 +506,6 @@ seastar::future<> CyanStore::Shard::do_transaction_no_callbacks(
   CollectionRef ch,
   ceph::os::Transaction&& t)
 {
-  assert(store_active);
   using ceph::os::Transaction;
   int r = 0;
   try {
@@ -1117,7 +1060,6 @@ CyanStore::Shard::fiemap(
   uint64_t len,
   uint32_t op_flags)
 {
-  assert(store_active);
   auto c = static_cast<Collection*>(ch.get());
 
   ObjectRef o = c->get_object(oid);
@@ -1134,7 +1076,6 @@ CyanStore::Shard::stat(
   const ghobject_t& oid,
   uint32_t op_flags)
 {
-  assert(store_active);
   auto c = static_cast<Collection*>(ch.get());
   auto o = c->get_object(oid);
   if (!o) {
