@@ -551,7 +551,7 @@ COMMAND("mon set_location " \
 	"specify location <args> for the monitor <name>, using CRUSH bucket names", \
 	"mon", "rw")
 COMMAND("mon enable_stretch_mode " \
-	"name=tiebreaker_mon,type=CephString, "
+	"name=tiebreaker_mon,type=CephString,req=false, "
 	"name=new_crush_rule,type=CephString, "
 	"name=dividing_bucket,type=CephString, ",
 	"enable stretch mode, changing the peering rules and "

@@ -15582,6 +15582,10 @@ void OSDMonitor::try_enable_stretch_mode_pools(stringstream& ss, bool *okay,
 					       set<pg_pool_t*>* pools,
 					       const string& new_crush_rule)
 {
+  /* Validate pool configurations for stretch mode enablement.
+   * This checks that the specified crush rule exists and that all pools
+   * are replicated pools with default size/min_size.
+   */
   dout(20) << __func__ << dendl;
   *okay = false;
   int new_crush_rule_result = osdmap.crush->get_rule_id(new_crush_rule);
@@ -15623,11 +15627,11 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
 					 const string& dividing_bucket,
 					 uint32_t bucket_count,
 					 const set<pg_pool_t*>& pools,
-					 const string& new_crush_rule)
+					 const string& new_crush_rule,
+					 CrushWrapper& crush)
 {
   dout(20) << __func__ << dendl;
   *okay = false;
-  CrushWrapper crush = _get_pending_crush();
   int dividing_id = -1;
   if (auto type_id = crush.get_validated_type_id(dividing_bucket);
       !type_id.has_value()) {
