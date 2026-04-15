@@ -19,6 +19,7 @@
 #include "crimson/os/cyanstore/cyan_object.h"
 #include "crimson/os/cyanstore/cyan_collection.h"
 #include "crimson/os/futurized_store.h"
+#include "crimson/os/sharding_helpers.h"
 
 namespace ceph::os {
 class Transaction;
