@@ -12,6 +12,8 @@
  * Foundation.  See file COPYING.
  *
  */
+
+#include "common/Cond.h"
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
 #include "include/stringify.h"

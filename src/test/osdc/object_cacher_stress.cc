@@ -11,6 +11,7 @@
 #include "common/ceph_argparse.h"
 #include "common/ceph_mutex.h"
 #include "common/common_init.h"
+#include "common/Cond.h"
 #include "common/config.h"
 #include "common/snap_types.h"
 #include "global/global_init.h"
