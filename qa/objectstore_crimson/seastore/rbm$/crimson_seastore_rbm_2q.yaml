@@ -6,6 +6,7 @@ overrides:
         osd objectstore: seastore
         seastore cachepin type: 2Q
         seastore main device type: RANDOM_BLOCK_SSD
+        seastore_full_integrity_check: false
         debug seastore: 20
         debug seastore onode: 20
         debug seastore odata: 20
