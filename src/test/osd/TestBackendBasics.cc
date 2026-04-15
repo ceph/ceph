@@ -41,6 +41,7 @@
 #include <gtest/gtest.h>
 #include "test/osd/PGBackendTestFixture.h"
 #include "test/osd/TestCommon.h"
+#include "crush/CrushWrapper.h"
 #include "messages/MOSDECSubOpWrite.h"
 
 using namespace std;
