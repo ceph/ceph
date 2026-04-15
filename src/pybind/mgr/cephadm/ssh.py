@@ -295,17 +295,10 @@ class SSHManager:
                                log_command: Optional[bool] = True,
                                ) -> Tuple[str, str, int]:
         conn = await self._remote_connection(host, addr)
-
-        # For hosts being added, always use root (no sudo) even if cluster
-        # is configured to use non-root user. This allows initial setup.
-        is_host_being_added = host in self.mgr.hosts_being_added
-        use_sudo = (self.mgr.ssh_user != 'root') and not is_host_being_added
-        if is_host_being_added:
-            logger.debug(f'Host {host} is being added, using root user without sudo')
-
         # Enforce invoker usage if SSH hardening is enabled
         self._enforce_sudo_hardening(host, cmd_components)
 
+        use_sudo = (self.mgr.ssh_user != 'root')
         rcmd = RemoteSudoCommand.wrap(cmd_components, use_sudo=use_sudo)
         try:
             address = addr or self.mgr.inventory.get_addr(host)

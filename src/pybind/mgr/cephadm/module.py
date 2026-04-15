@@ -541,10 +541,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.event = Event()
         self.ssh = ssh.SSHManager(self)
 
-        # Track hosts being added - these hosts will use root user temporarily
-        # even if cluster is configured to use non-root user
-        self.hosts_being_added: Set[str] = set()
-
         if self.get_store('pause'):
             self.paused = True
         else:
@@ -2134,18 +2130,6 @@ Then run the following:
             self.log.debug(f'Could not determine cluster version: {e}')
         return None
 
-    def _cleanup_add_host_tracking(self, hostname: str) -> None:
-        """Clean up host from tracking sets and reset SSH connection."""
-        try:
-            self.hosts_being_added.discard(hostname)
-        except Exception as e:
-            self.log.debug(f'Failed to remove {hostname} from hosts_being_added: {e}')
-
-        try:
-            self.ssh.reset_con(hostname)
-        except Exception as e:
-            self.log.debug(f'Failed to reset SSH connection for {hostname}: {e}')
-
     def _prepare_new_host_for_sudo_hardening(self, hostname: str, addr: str) -> None:
         """
         Prepare a new host for sudo hardening before adding to inventory.
@@ -2176,21 +2160,6 @@ Then run the following:
             )
         self.log.info('Successfully prepared host %s for sudo hardening', hostname)
 
-    def _setup_user_on_new_host(self, hostname: str, addr: Optional[str]) -> None:
-        """
-        user setup for new hosts (when sudo hardening is disabled).
-        """
-        try:
-            assert self.ssh_pub
-            assert self.ssh_user
-            self._setup_user_on_host(hostname, self.ssh_user, self.ssh_pub, addr=addr)
-        except OrchestratorError as oe:
-            self.log.exception('Failed to setup user %s on %s: %s', self.ssh_user, hostname, oe)
-            self.log.warning('Please manually setup user %s on %s', hostname, self.ssh_user, hostname)
-        except Exception as e:
-            self.log.exception('Unexpected error setting up user %s on %s: %s', self.ssh_user, hostname, e)
-            self.log.warning('You may need to manually setup user %s on %s', self.ssh_user, hostname)
-
     def _add_host(self, spec):
         # type: (HostSpec) -> str
         """
@@ -2199,74 +2168,53 @@ Then run the following:
         :param host: host name
         """
         HostSpec.validate(spec)
+        ip_addr = self._check_valid_addr(spec.hostname, spec.addr)
+        if spec.addr == spec.hostname and ip_addr:
+            spec.addr = ip_addr
 
-        # Check if this is a new host BEFORE any SSH operations
-        is_new_host = spec.hostname not in self.inventory
-        if is_new_host and self.ssh_user and self.ssh_user != 'root':
+        if spec.hostname in self.inventory and self.inventory.get_addr(spec.hostname) != spec.addr:
+            self.cache.refresh_all_host_info(spec.hostname)
+
+        if spec.oob:
+            if not spec.oob.get('addr'):
+                spec.oob['addr'] = self.oob_default_addr
+            if not spec.oob.get('port'):
+                spec.oob['port'] = '443'
+            host_oob_info = dict()
+            host_oob_info['addr'] = spec.oob['addr']
+            host_oob_info['port'] = spec.oob['port']
+            host_oob_info['username'] = spec.oob['username']
+            host_oob_info['password'] = spec.oob['password']
+            self.node_proxy_cache.update_oob(spec.hostname, host_oob_info)
+
+        # prime crush map?
+        if spec.location:
+            self.check_mon_command({
+                'prefix': 'osd crush add-bucket',
+                'name': spec.hostname,
+                'type': 'host',
+                'args': [f'{k}={v}' for k, v in spec.location.items()],
+            })
+
+        if spec.hostname not in self.inventory:
+            self.cache.prime_empty_host(spec.hostname)
+        self.inventory.add_host(spec)
+        self.offline_hosts_remove(spec.hostname)
+        if spec.status == 'maintenance':
+            self.update_maintenance_healthcheck()
+        self.event.set()  # refresh stray health check
+        self.log.info('Added host %s' % spec.hostname)
+
+        if self.sudo_hardening and self.ssh_user and self.ssh_user != 'root':
             try:
-                self.hosts_being_added.add(spec.hostname)
-                self.log.info('Adding new host %s, will use root user temporarily for setup', spec.hostname)
+                self._prepare_new_host_for_sudo_hardening(spec.hostname, spec.addr)
             except Exception as e:
-                self.log.warning('Failed to add %s to hosts_being_added tracking: %s', spec.hostname, e)
-
-        try:
-            ip_addr = self._check_valid_addr(spec.hostname, spec.addr)
-            if spec.addr == spec.hostname and ip_addr:
-                spec.addr = ip_addr
-            if spec.hostname in self.inventory and self.inventory.get_addr(spec.hostname) != spec.addr:
-                self.cache.refresh_all_host_info(spec.hostname)
-
-            if spec.oob:
-                if not spec.oob.get('addr'):
-                    spec.oob['addr'] = self.oob_default_addr
-                if not spec.oob.get('port'):
-                    spec.oob['port'] = '443'
-                host_oob_info = dict()
-                host_oob_info['addr'] = spec.oob['addr']
-                host_oob_info['port'] = spec.oob['port']
-                host_oob_info['username'] = spec.oob['username']
-                host_oob_info['password'] = spec.oob['password']
-                self.node_proxy_cache.update_oob(spec.hostname, host_oob_info)
-
-            # prime crush map?
-            if spec.location:
-                self.check_mon_command({
-                    'prefix': 'osd crush add-bucket',
-                    'name': spec.hostname,
-                    'type': 'host',
-                    'args': [f'{k}={v}' for k, v in spec.location.items()],
-                })
-
-            # BEFORE adding host to inventory, prepare it for sudo hardening if needed
-            if is_new_host and self.sudo_hardening and self.ssh_user and self.ssh_user != 'root':
-                try:
-                    self._prepare_new_host_for_sudo_hardening(spec.hostname, spec.addr)
-                except Exception as e:
-                    self.log.exception('Sudo hardening preparation failed for %s: %s', spec.hostname, e)
-                    raise OrchestratorError(
-                        f'Failed to prepare host {spec.hostname} for sudo hardening. '
-                        f'Host was not added to the cluster. Error: {e}'
-                    )
-            elif is_new_host and self.ssh_user and self.ssh_user != 'root':
-                # Sudo hardening not enabled, just perform set user setup presteps
-                self._setup_user_on_new_host(spec.hostname, spec.addr)
-
-            if spec.hostname not in self.inventory:
-                self.cache.prime_empty_host(spec.hostname)
-            self.inventory.add_host(spec)
-            self.offline_hosts_remove(spec.hostname)
-            if spec.status == 'maintenance':
-                self.update_maintenance_healthcheck()
-            self.event.set()  # refresh stray health check
-            self.log.info('Added host %s' % spec.hostname)
-
-            return "Added host '{}' with addr '{}'".format(spec.hostname, spec.addr)
-        except Exception:
-            raise
-        finally:
-            if is_new_host and self.ssh_user and self.ssh_user != 'root':
-                self.log.debug('Cleaning up %s ', spec.hostname)
-                self._cleanup_add_host_tracking(spec.hostname)
+                self.log.exception('Sudo hardening preparation failed for %s: %s', spec.hostname, e)
+                raise OrchestratorError(
+                    f'Failed to prepare host {spec.hostname} for sudo hardening. '
+                    f'Host was not added to the cluster. Error: {e}'
+                )
+        return "Added host '{}' with addr '{}'".format(spec.hostname, spec.addr)
 
     @handle_orch_error
     def add_host(self, spec: HostSpec) -> str:
