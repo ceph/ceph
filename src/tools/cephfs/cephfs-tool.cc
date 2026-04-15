@@ -160,6 +160,7 @@ struct BenchConfig {
   int uid;
   int gid;
   string json_path;
+  int duration;
 };
 
 struct ThreadStats {
@@ -244,15 +245,20 @@ int setup_mount(struct ceph_mount_info **cmount, const BenchConfig& config, std:
 }
 
 // Worker function for Write phase
-void bench_write_worker(int thread_id,
-                        int files_to_write,
-                        BenchConfig config,
-                        struct ceph_mount_info *shared_cmount,
-                        ThreadStats &stats,
-                        std::atomic<bool>& stop_signal,
-                        std::stringstream& ss) {
+void
+bench_write_worker(
+    int thread_id,
+    int files_to_write,
+    BenchConfig config,
+    struct ceph_mount_info* shared_cmount,
+    ThreadStats& stats,
+    std::atomic<bool>& stop_signal,
+    std::stringstream& ss,
+    steady_clock::time_point phase_start_time)
+{
 
   struct ceph_mount_info *cmount = shared_cmount;
+  auto duration_limit = std::chrono::seconds(config.duration);
 
   if (config.per_thread_mount) {
     if (int rc = setup_mount(&cmount, config, ss); rc < 0) {
@@ -265,12 +271,25 @@ void bench_write_worker(int thread_id,
 
   auto buffer = std::vector<char>(config.block_size);
   RandomHelper::fill_buffer(std::as_writable_bytes(std::span(buffer)));
-  for (int i = 0; i < files_to_write; ++i) {
+
+  for (int i = 0;; ++i) {
     if (stop_signal) {
       break; // Check if we should stop
     }
 
-    string fname = config.subdir + "/" + config.prefix + std::to_string(thread_id) + "_" + std::to_string(i);
+    // Check duration limit first if specified
+    if (config.duration > 0) {
+      if ((steady_clock::now() - phase_start_time) >= duration_limit) {
+        break; // Duration limit reached
+      }
+    } else if (i >= files_to_write) {
+      // If no duration, stop when we've written all target files
+      break;
+    }
+
+    int file_idx = i % files_to_write;
+    string fname = config.subdir + "/" + config.prefix +
+                   std::to_string(thread_id) + "_" + std::to_string(file_idx);
 
     // O_CREAT ensures we measure creation overhead
     int fd = ceph_open(cmount, fname.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0644);
@@ -287,6 +306,11 @@ void bench_write_worker(int thread_id,
 
     while (written < config.file_size) {
       if (stop_signal) {
+        break;
+      }
+
+      if (config.duration > 0 &&
+          (steady_clock::now() - phase_start_time) >= duration_limit) {
         break;
       }
 
@@ -322,7 +346,9 @@ void bench_write_worker(int thread_id,
         stop_signal = true;
         break;
       }
-      stats.files++;
+      if (stats.files < (uint64_t)files_to_write) {
+        stats.files++;
+      }
     } else {
       // Attempt close on error, ignore result
       ceph_close(cmount, fd);
@@ -340,15 +366,20 @@ void bench_write_worker(int thread_id,
 }
 
 // Worker function for Read phase
-void bench_read_worker(int thread_id,
-                       int files_to_read,
-                       BenchConfig config,
-                       struct ceph_mount_info *shared_cmount,
-                       ThreadStats &stats,
-                       std::atomic<bool>& stop_signal,
-                       std::stringstream& ss) {
+void
+bench_read_worker(
+    int thread_id,
+    int files_to_read,
+    BenchConfig config,
+    struct ceph_mount_info* shared_cmount,
+    ThreadStats& stats,
+    std::atomic<bool>& stop_signal,
+    std::stringstream& ss,
+    steady_clock::time_point phase_start_time)
+{
 
   struct ceph_mount_info *cmount = shared_cmount;
+  auto duration_limit = std::chrono::seconds(config.duration);
 
   if (config.per_thread_mount) {
     if (int rc = setup_mount(&cmount, config, ss); rc < 0) {
@@ -360,12 +391,22 @@ void bench_read_worker(int thread_id,
 
   std::vector<char> buffer(config.block_size);
 
-  for (int i = 0; i < files_to_read; ++i) {
+  for (int i = 0;; ++i) {
     if (stop_signal) {
       break;
     }
 
-    string fname = config.subdir + "/" + config.prefix + std::to_string(thread_id) + "_" + std::to_string(i);
+    if (config.duration > 0) {
+      if ((steady_clock::now() - phase_start_time) >= duration_limit) {
+        break;
+      }
+    } else if (i >= files_to_read) {
+      break;
+    }
+
+    int file_idx = i % files_to_read;
+    string fname = config.subdir + "/" + config.prefix +
+                   std::to_string(thread_id) + "_" + std::to_string(file_idx);
 
     int fd = ceph_open(cmount, fname.c_str(), O_RDONLY, 0);
     if (fd < 0) {
@@ -376,8 +417,14 @@ void bench_read_worker(int thread_id,
     }
 
     uint64_t total_read = 0;
+    bool read_error = false;
     while (total_read < config.file_size) {
       if (stop_signal) {
+        break;
+      }
+
+      if (config.duration > 0 &&
+          (steady_clock::now() - phase_start_time) >= duration_limit) {
         break;
       }
 
@@ -386,6 +433,7 @@ void bench_read_worker(int thread_id,
         ss << "Thread " << thread_id << " read error: " << strerror(-rc) << std::endl;
         stats.errors++;
         stop_signal = true;
+        read_error = true;
         break;
       }
       if (rc == 0) {
@@ -397,13 +445,21 @@ void bench_read_worker(int thread_id,
       stats.ops++;
     }
 
-    if (int rc = ceph_close(cmount, fd); rc < 0) {
-      ss << "Thread " << thread_id << " close error " << fname << ": " << strerror(-rc) << std::endl;
-      stats.errors++;
-      stop_signal = true;
+    if (!read_error && !stop_signal) {
+      if (int rc = ceph_close(cmount, fd); rc < 0) {
+        ss << "Thread " << thread_id << " close error " << fname << ": "
+           << strerror(-rc) << std::endl;
+        stats.errors++;
+        stop_signal = true;
+        break;
+      }
+      if (stats.files < (uint64_t)files_to_read) {
+        stats.files++;
+      }
+    } else {
+      ceph_close(cmount, fd);
       break;
     }
-    stats.files++;
   }
 
   if (config.per_thread_mount) {
@@ -576,6 +632,7 @@ int do_bench(BenchConfig& config) {
   std::vector<double> read_fps;
 
   std::atomic<bool> stop_signal{false};
+  std::vector<ThreadStats> write_stats(config.num_threads);
 
   for (int iter = 1; iter <= config.iterations; ++iter) {
     cout << "\n--- Iteration " << iter << " of " << config.iterations << " ---" << std::endl;
@@ -588,7 +645,7 @@ int do_bench(BenchConfig& config) {
     // --- WRITE PHASE ---
     cout << "Starting Write Phase..." << std::endl;
     std::vector<std::thread> threads;
-    std::vector<ThreadStats> write_stats(config.num_threads);
+    std::fill(write_stats.begin(), write_stats.end(), ThreadStats{});
     auto thread_outputs = std::vector<std::stringstream>(config.num_threads);
 
     auto start_time = steady_clock::now();
@@ -596,8 +653,10 @@ int do_bench(BenchConfig& config) {
     for (int i = 0; i < config.num_threads; ++i) {
       int f_count = files_per_thread + (i < remainder ? 1 : 0);
       struct ceph_mount_info *worker_mount = config.per_thread_mount ? NULL : shared_cmount;
-      threads.emplace_back(bench_write_worker, i, f_count, config, worker_mount,
-                           std::ref(write_stats[i]), std::ref(stop_signal), std::ref(thread_outputs[i]));
+      threads.emplace_back(
+          bench_write_worker, i, f_count, config, worker_mount,
+          std::ref(write_stats[i]), std::ref(stop_signal),
+          std::ref(thread_outputs[i]), start_time);
     }
     for (auto& t : threads) {
       t.join();
@@ -666,10 +725,11 @@ int do_bench(BenchConfig& config) {
     start_time = steady_clock::now();
 
     for (int i = 0; i < config.num_threads; ++i) {
-      int f_count = files_per_thread + (i < remainder ? 1 : 0);
       struct ceph_mount_info *worker_mount = config.per_thread_mount ? NULL : shared_cmount;
-      threads.emplace_back(bench_read_worker, i, f_count, config, worker_mount,
-                           std::ref(read_stats[i]), std::ref(stop_signal), std::ref(thread_outputs[i]));
+      threads.emplace_back(
+          bench_read_worker, i, write_stats[i].files, config, worker_mount,
+          std::ref(read_stats[i]), std::ref(stop_signal),
+          std::ref(thread_outputs[i]), start_time);
     }
     for (auto& t : threads) {
       t.join();
@@ -725,10 +785,10 @@ int do_bench(BenchConfig& config) {
       stop_signal = false;
 
       for (int i = 0; i < config.num_threads; ++i) {
-        int f_count = files_per_thread + (i < remainder ? 1 : 0);
         struct ceph_mount_info *worker_mount = config.per_thread_mount ? NULL : shared_cmount;
-        threads.emplace_back(bench_cleanup_worker, i, f_count, config, worker_mount,
-                             std::ref(stop_signal), std::ref(thread_outputs[i]));
+        threads.emplace_back(
+            bench_cleanup_worker, i, write_stats[i].files, config, worker_mount,
+            std::ref(stop_signal), std::ref(thread_outputs[i]));
       }
       for (auto& t : threads) {
         t.join();
@@ -777,11 +837,17 @@ int do_bench(BenchConfig& config) {
     auto thread_outputs = std::vector<std::stringstream>(config.num_threads);
     stop_signal = false;
 
+    // Note: This cleanup uses the number of files written in the LAST iteration.
+    // If the tool is intended to cleanup all files ever written across all iterations,
+    // this logic might need refinement if iterations write different number of files.
+    // However, since we use the same filename pattern per iteration, cleaning the
+    // max number of files written in any iteration or just the last one is typical.
+    // Here we use write_stats from the last iteration.
     for (int i = 0; i < config.num_threads; ++i) {
-      int f_count = files_per_thread + (i < remainder ? 1 : 0);
       struct ceph_mount_info *worker_mount = config.per_thread_mount ? NULL : shared_cmount;
-      threads.emplace_back(bench_cleanup_worker, i, f_count, config, worker_mount,
-                           std::ref(stop_signal), std::ref(thread_outputs[i]));
+      threads.emplace_back(
+          bench_cleanup_worker, i, write_stats[i].files, config, worker_mount,
+          std::ref(stop_signal), std::ref(thread_outputs[i]));
     }
     for (auto& t : threads) {
       t.join();
@@ -833,7 +899,8 @@ int main(int argc, char **argv) {
     ("root-path", po::value<string>(&config.mount_root)->default_value("/"), "Root path in CephFS")
     ("per-thread-mount", po::bool_switch(&config.per_thread_mount), "Use separate mount per thread")
     ("no-cleanup", po::bool_switch(&no_cleanup), "Disable cleanup of files")
-    ("json", po::value<string>(&config.json_path), "Output results to a JSON file");
+    ("json", po::value<string>(&config.json_path), "Output results to a JSON file")
+    ("duration", po::value<int>(&config.duration)->default_value(0), "Limit each phase to N seconds (0 = no limit)");
 
   // Hidden positional option for the sub-command
   po::options_description hidden("Hidden options");
