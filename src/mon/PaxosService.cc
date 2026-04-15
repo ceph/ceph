@@ -602,3 +602,12 @@ void PaxosService::wait_for_writeable(MonOpRequestRef op, Context *c) {
 void PaxosService::cancel_events() {
   paxos.cancel_events();
 }
+
+
+health_check_map_t& PaxosService::get_health_checks_pending_writeable() {
+  return health_checks.get_pending_map_writeable();
+}
+
+health_check_map_t const& PaxosService::get_health_checks() const {
+  return health_checks.get_map();
+}
