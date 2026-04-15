@@ -96,17 +96,13 @@ protected:
   /**
    * The pending health check map. Only callable by the service itself.
    */
-  health_check_map_t& get_health_checks_pending_writeable() {
-    return health_checks.get_pending_map_writeable();
-  }
+  health_check_map_t& get_health_checks_pending_writeable();
 
 public:
   /**
    * The current (i.e. not pending) health check map.
    */
-  health_check_map_t const& get_health_checks() const {
-    return health_checks.get_map();
-  }
+  health_check_map_t const& get_health_checks() const;
 
   /**
    * @defgroup PaxosService_h_callbacks Callback classes
