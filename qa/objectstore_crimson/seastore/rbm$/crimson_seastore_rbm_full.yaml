@@ -4,12 +4,8 @@ overrides:
       osd:
         # crimson's osd objectstore option
         osd objectstore: seastore
-        seastore cachepin type: 2Q
-        seastore hot device type: RANDOM_BLOCK_SSD
-        seastore hot backend type: RANDOM_BLOCK
-        seastore cold device type: RANDOM_BLOCK_HDD
-        seastore cold backend type: RANDOM_BLOCK
-        seastore_full_integrity_check: false
+        seastore main device type: RANDOM_BLOCK_SSD
+        seastore_full_integrity_check: true
         debug seastore: 20
         debug seastore onode: 20
         debug seastore odata: 20
