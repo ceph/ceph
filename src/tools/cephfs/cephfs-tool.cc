@@ -167,6 +167,8 @@ struct BenchConfig {
   string json_path;
   int duration;
   string perf_dump_path;
+  string client_oc;
+  string client_oc_size;
 };
 
 struct ThreadStats {
@@ -198,6 +200,26 @@ int setup_mount(struct ceph_mount_info **cmount, const BenchConfig& config, std:
   } else {
     if (int rc = ceph_conf_read_file(*cmount, NULL); rc < 0) { // Search default locations
       out_stream << "Failed to read default ceph config: " << strerror(-rc) << endl;
+      return cleanup_on_fail(rc);
+    }
+  }
+
+  // 1b. Apply client_oc override
+  if (!config.client_oc.empty()) {
+    if (int rc = ceph_conf_set(*cmount, "client_oc", config.client_oc.c_str()); rc < 0) {
+      out_stream << "Failed to set client_oc option: " << strerror(-rc) << endl;
+      return cleanup_on_fail(rc);
+    }
+  }
+
+  // 1c. Apply client_oc_size override
+  if (!config.client_oc_size.empty()) {
+    uint64_t oc_size = parse_size(config.client_oc_size);
+    string oc_size_str = std::to_string(oc_size);
+    if (int rc = ceph_conf_set(*cmount, "client_oc_size", oc_size_str.c_str());
+        rc < 0) {
+      out_stream << "Failed to set client_oc_size option: " << strerror(-rc)
+                 << endl;
       return cleanup_on_fail(rc);
     }
   }
@@ -641,6 +663,20 @@ int do_bench(BenchConfig& config) {
     json_formatter->dump_string("subdirectory", config.subdir);
     json_formatter->dump_int("uid", config.uid);
     json_formatter->dump_int("gid", config.gid);
+    if (!config.client_oc.empty()) {
+      char buf[128];
+      int rc = ceph_conf_get(shared_cmount, "client_oc", buf, sizeof(buf));
+      if (rc >= 0) {
+        json_formatter->dump_string("client_oc", buf);
+      }
+    }
+    if (!config.client_oc_size.empty()) {
+      char buf[128];
+      int rc = ceph_conf_get(shared_cmount, "client_oc_size", buf, sizeof(buf));
+      if (rc >= 0) {
+        json_formatter->dump_string("client_oc_size", buf);
+      }
+    }
     json_formatter->close_section(); // configuration
     json_formatter->open_array_section("iterations");
   }
@@ -654,6 +690,20 @@ int do_bench(BenchConfig& config) {
   cout << "  Subdirectory: " << config.subdir << std::endl;
   cout << "  UID: " << config.uid << std::endl;
   cout << "  GID: " << config.gid << std::endl;
+  if (!config.client_oc.empty()) {
+    char buf[128];
+    int rc = ceph_conf_get(shared_cmount, "client_oc", buf, sizeof(buf));
+    if (rc >= 0) {
+      cout << "  client_oc: " << buf << std::endl;
+    }
+  }
+  if (!config.client_oc_size.empty()) {
+    char buf[128];
+    int rc = ceph_conf_get(shared_cmount, "client_oc_size", buf, sizeof(buf));
+    if (rc >= 0) {
+      cout << "  client_oc_size: " << buf << std::endl;
+    }
+  }
 
   if (int rc = ceph_mkdir(shared_cmount, config.subdir.c_str(), 0755); rc < 0) {
     cerr << "Failed to create bench directory '" << config.subdir << "': " << strerror(-rc) << std::endl;
@@ -926,7 +976,9 @@ int main(int argc, char **argv) {
     ("keyring,k", po::value<string>(&config.keyring), "Path to keyring file")
     ("filesystem,fs", po::value<string>(&config.filesystem), "CephFS filesystem name to mount")
     ("uid", po::value<int>(&config.uid)->default_value(-1), "User ID to mount as")
-    ("gid", po::value<int>(&config.gid)->default_value(-1), "Group ID to mount as");
+    ("gid", po::value<int>(&config.gid)->default_value(-1), "Group ID to mount as")
+    ("client-oc", po::value<string>(&config.client_oc), "Set the 'client_oc' option (0|1)")
+    ("client-oc-size", po::value<string>(&config.client_oc_size), "Set the 'client_oc_size' option");
 
   // Group 2: Benchmark Options
   po::options_description bench("Benchmark Options (used with 'bench' command)");
