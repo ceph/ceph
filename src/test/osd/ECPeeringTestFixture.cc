@@ -16,6 +16,7 @@
 #include "test/osd/ECPeeringTestFixture.h"
 #include "test/osd/MockECRecPred.h"
 #include "test/osd/MockECReadPred.h"
+#include "crush/crush.h" // for CRUSH_ITEM_NONE
 
 // ShardDpp implementation
 std::ostream& ECPeeringTestFixture::ShardDpp::gen_prefix(std::ostream& out) const {

@@ -39,6 +39,7 @@
 #include "common/config.h"
 #include "include/ceph_assert.h"
 
+#include "msg/Messenger.h"
 #include "messages/MMonProbe.h"
 #include "messages/MRoute.h"
 #include "messages/MGenericMessage.h"
