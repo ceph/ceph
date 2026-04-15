@@ -8,6 +8,7 @@
 #include <string>
 
 #include "include/health.h"
+#include "include/types.h"
 #include "include/utime.h"
 #include "common/CanHasPrint.h"
 #include "common/Formatter.h"
