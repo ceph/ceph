@@ -31,6 +31,9 @@
 #include <vector>
 
 #include "common/JSONFormatter.h"
+#include "common/ceph_context.h"
+#include "common/cmdparse.h"
+#include "common/perf_counters_collection.h"
 
 // Standard Public Ceph API
 #include <cephfs/libcephfs.h>
@@ -39,6 +42,8 @@
 
 // Boost Program Options
 #include <boost/program_options.hpp>
+
+#include "cls/journal/cls_journal_types.h"
 
 using std::cerr;
 using std::cout;
@@ -161,6 +166,7 @@ struct BenchConfig {
   int gid;
   string json_path;
   int duration;
+  string perf_dump_path;
 };
 
 struct ThreadStats {
@@ -467,6 +473,35 @@ bench_read_worker(
       ss << "Thread " << thread_id << " unmount failed: " << strerror(-rc) << std::endl;
     }
     ceph_shutdown(cmount);
+  }
+}
+
+void
+execute_perf_dump(struct ceph_mount_info* cmount, const string& output_path)
+{
+  if (output_path.empty()) {
+    return;
+  }
+
+  char* perf_dump = nullptr;
+  int rc = ceph_get_perf_counters(cmount, &perf_dump);
+  if (rc < 0) {
+    cerr << "Error: Failed to get performance counters: " << strerror(-rc)
+         << endl;
+    return;
+  }
+
+  if (perf_dump) {
+    std::ofstream ofs(output_path);
+    if (!ofs.is_open()) {
+      cerr << "Error: Could not open " << output_path
+           << " for writing performance counters." << endl;
+      free(perf_dump);
+      return;
+    }
+    ofs << perf_dump;
+    free(perf_dump);
+    cout << "Performance counters dumped to " << output_path << endl;
   }
 }
 
@@ -861,9 +896,15 @@ int do_bench(BenchConfig& config) {
     }
   }
 
+  if (!config.perf_dump_path.empty()) {
+    execute_perf_dump(shared_cmount, config.perf_dump_path);
+  }
+
   if (int rc = ceph_unmount(shared_cmount); rc < 0) {
     cerr << "Final unmount failed: " << strerror(-rc) << endl;
   }
+
+
   ceph_shutdown(shared_cmount);
   return 0;
 }
@@ -900,7 +941,8 @@ int main(int argc, char **argv) {
     ("per-thread-mount", po::bool_switch(&config.per_thread_mount), "Use separate mount per thread")
     ("no-cleanup", po::bool_switch(&no_cleanup), "Disable cleanup of files")
     ("json", po::value<string>(&config.json_path), "Output results to a JSON file")
-    ("duration", po::value<int>(&config.duration)->default_value(0), "Limit each phase to N seconds (0 = no limit)");
+    ("duration", po::value<int>(&config.duration)->default_value(0), "Limit each phase to N seconds (0 = no limit)")
+    ("perf-dump", po::value<string>(&config.perf_dump_path), "File to dump performance counters to");
 
   // Hidden positional option for the sub-command
   po::options_description hidden("Hidden options");
