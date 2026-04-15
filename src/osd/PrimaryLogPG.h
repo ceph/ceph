@@ -1211,7 +1211,7 @@ protected:
   bool new_pool_migration_interval_in_flight;
 
   /// objects waiting for lock retry to delete source after successful copy_from
-  std::list<hobject_t> pool_migration_source_delete_pending_lock;
+  std::set<hobject_t> pool_migration_source_delete_pending_lock;
   /// target PG in pool migration has taken reservations and replied
   bool pool_migration_reservations_granted = false;
   /// current migration target pg

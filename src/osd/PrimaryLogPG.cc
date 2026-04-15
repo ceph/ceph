@@ -2276,8 +2276,8 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
       // Op is redirected and provide client with updated
       // migration watermark
       dout(20) << __func__ << ": object " << m->get_hobj()
-	       << " has been migrated to pool "
-	       << *pi->migration_target << dendl;
+	       << " has been migrated to pool " << *pi->migration_target
+               << " watermark " << pool_migration_watermark << dendl;
       auto m = op->get_req<MOSDOp>();
       int flags = m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK);
       MOSDOpReply *reply = new MOSDOpReply(m, -ENOENT, get_osdmap_epoch(),
@@ -15265,13 +15265,29 @@ void PrimaryLogPG::pool_migration_source_start_delete_head(hobject_t oid)
 
 void PrimaryLogPG::pool_migration_source_start_delete(hobject_t oid)
 {
-  bool list_was_empty = pool_migration_source_delete_pending_lock.empty();
-  pool_migration_source_delete_pending_lock.push_back(oid);
+  pool_migration_source_delete_pending_lock.insert(oid);
 
-  // If the list is not empty, this object will be processed when earlier objects complete
-  if (list_was_empty) {
-    pool_migration_source_delete(oid);
+  if (pool_migration_watermark == oid) {
+    while (pool_migration_source_delete_pending_lock.contains(pool_migration_watermark)) {
+      dout(20) << "BILL: try delete " << pool_migration_watermark << dendl;
+      if (!pool_migration_source_delete(pool_migration_watermark)) {
+        break;
+      }
+    }
+  } else {
+    // Copy completed out of order - wait for earlier copy to complete.
+    dout(20) << "BILL: pool migration delaying delete of " << oid << dendl;
+    dout(20) << "BILL: " << pool_migration_watermark << dendl;
+    for (auto&& obj : pool_migration_source_delete_pending_lock) {
+      dout(20) << "BILL: sdpl " << obj << dendl;
+    }
+    for (auto&& obj : pool_migrations_in_flight) {
+      dout(20) << "BILL: pmif " << obj << dendl;
+    }
+    // Check that the watermark object is being migrated
+    ceph_assert(pool_migrations_in_flight.contains(pool_migration_watermark));
   }
+
 }
 
 bool PrimaryLogPG::pool_migration_source_delete(hobject_t oid)
@@ -15282,14 +15298,14 @@ bool PrimaryLogPG::pool_migration_source_delete(hobject_t oid)
 
   if (!ctx->lock_manager.get_pool_migration_write(oid, obc)) {
     close_op_ctx(ctx.release());
-    // Lock acquisition failed - object is already in pending list
+    // Lock acquisition failed - object is already in pending set
     dout(20) << "pool migration delayed on " << oid
              << "; could not get lock, will retry" << dendl;
     return false;
   }
 
-  // Lock acquired successfully - remove from pending list
-  pool_migration_source_delete_pending_lock.remove(oid);
+  // Lock acquired successfully - remove from pending set
+  pool_migration_source_delete_pending_lock.erase(oid);
 
   ctx->register_on_finish(
             [this, oid]() {
@@ -15491,8 +15507,12 @@ uint64_t PrimaryLogPG::recover_pool_migration(
   // First, retry any pending lock acquisitions for source deletes
   // This ensures we complete in-progress migrations before starting new ones
   while (!pool_migration_source_delete_pending_lock.empty() && ops < max) {
-    hobject_t oid = pool_migration_source_delete_pending_lock.front();
-
+    hobject_t oid = *pool_migration_source_delete_pending_lock.begin();
+    if (oid != pool_migration_watermark) {
+      // Wait for an earlier copy to complete
+      ceph_assert(pool_migrations_in_flight.contains(pool_migration_watermark));
+      break;
+    }
     dout(20) << __func__ << " retrying source delete lock acquisition for " << oid << dendl;
 
     // Try to delete - returns true if lock acquired, false otherwise
