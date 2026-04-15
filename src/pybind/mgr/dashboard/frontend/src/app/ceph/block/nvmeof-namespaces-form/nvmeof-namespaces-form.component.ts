@@ -149,12 +149,17 @@ export class NvmeofNamespacesFormComponent implements OnInit {
     const requests: Observable<HttpResponse<Object>>[] = [];
 
     for (let i = 1; i <= nsCount; i++) {
+      const blockSize = this.nsForm.getValue('namespace_size');
       const request: NamespaceCreateRequest = {
         gw_group: this.group,
         rbd_image_name: `nvme_${pool}_${this.group}_${this.randomString()}`,
         rbd_pool: pool,
         create_image: true
       };
+
+      if (blockSize) {
+        request['block_size'] = blockSize;
+      }
       if (rbdImageSize) {
         request['rbd_image_size'] = rbdImageSize;
       }
