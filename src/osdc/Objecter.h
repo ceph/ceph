@@ -1943,6 +1943,15 @@ public:
 		       target_oloc.nspace);
     }
 
+    hobject_t get_hobj(pg_t pgid) {
+      return hobject_t(target_oid,
+		       target_oloc.key,
+		       CEPH_NOSNAP,
+		       target_oloc.hash >= 0 ? target_oloc.hash : pgid.ps(),
+		       target_oloc.pool,
+		       target_oloc.nspace);
+    }
+
     bool contained_by(const hobject_t& begin, const hobject_t& end) {
       hobject_t h = get_hobj();
       int r = cmp(h, begin);

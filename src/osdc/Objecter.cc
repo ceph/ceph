@@ -3049,7 +3049,7 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
         // PG is migrating - check watermark
         const auto& iter = pool_migration_watermarks.find(actual_pgid);
         if (iter != pool_migration_watermarks.end()) {
-          if (t->get_hobj() < iter->second) {
+          if (t->get_hobj(pgid) < iter->second) {
             // object has been migrated
             migrated = true;
           }
