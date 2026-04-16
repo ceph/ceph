@@ -126,20 +126,23 @@ public:
 
 using crimson::common::get_conf;
 
+thread_local store_index_t SeaStore::Shard::reactor_local_stores_num = 0;
+
 SeaStore::Shard::Shard(
   std::string root,
   Device* dev,
   bool is_test,
   uint32_t store_shard_nums,
-  store_index_t store_index)
+  store_index_t max_local_store_num)
   :root(root),
    max_object_size(
      get_conf<uint64_t>("seastore_default_max_object_size")),
    is_test(is_test),
    throttler(
       get_conf<uint64_t>("seastore_max_concurrent_transactions")),
-   store_index(store_index)
+   store_index(reactor_local_stores_num++)
 {
+  ceph_assert(store_index < max_local_store_num);
   device = &(dev->get_sharded_device());
   register_metrics();
 }
@@ -218,11 +221,15 @@ seastar::future<> SeaStore::get_shard_nums()
     co_return;
   } else {
     INFO("seastore mkfs done");
+#if 0
     auto shard_nums = co_await device->get_shard_nums(
       ).handle_error(
         crimson::ct_error::assert_all{
           "Invalid error in device->get_shard_nums"
       });
+#else
+    auto shard_nums = 42U;
+#endif
     INFO("seastore shard nums {}", shard_nums);
     store_shard_nums = shard_nums;
     co_return;
@@ -232,9 +239,10 @@ seastar::future<> SeaStore::get_shard_nums()
 seastar::future<> SeaStore::shard_stores_start(bool is_test)
 {
   LOG_PREFIX(SeaStore::shard_stores_start);
-  auto num_shard_services = (store_shard_nums + seastar::smp::count - 1 ) / seastar::smp::count;
-  INFO("store_shard_nums={} seastar::smp={}, num_shard_services={}", store_shard_nums, seastar::smp::count, num_shard_services);
-  return shard_stores.start(num_shard_services, root, device.get(), is_test, store_shard_nums);
+  auto max_local_store_num = (store_shard_nums + seastar::smp::count - 1 ) / seastar::smp::count;
+  INFO("store_shard_nums={} seastar::smp={}, num_shard_services={}", store_shard_nums, seastar::smp::count, max_local_store_num);
+  Shard::reactor_local_stores_num = 0; // paranoia
+  return shard_stores.start(store_shard_nums, root, device.get(), is_test, store_shard_nums, max_local_store_num);
 }
 
 seastar::future<> SeaStore::shard_stores_stop()
@@ -280,7 +288,7 @@ seastar::future<> SeaStore::test_start(DeviceRef device_obj)
   ceph_assert(device_obj);
   ceph_assert(root == "");
   device = std::move(device_obj);
-  co_await shard_stores.start_single(1, root, device.get(), true, seastar::smp::count);
+  co_await shard_stores.start(1, root, device.get(), true, seastar::smp::count, 1);
   INFO("done");
 }
 
