@@ -16,6 +16,11 @@ public:
   template <typename... Args>
   seastar::future<> start(size_t num_shards, Args&&... args) noexcept;
 
+  template <typename Func, typename... Args>
+  seastar::future<> invoke_on_locals(Func func, Args... args) noexcept {
+    return func(this->local(), args...);
+  }
+
   using base_t::stop;
   using base_t::local;
   using base_t::map_reduce0;
@@ -49,12 +54,14 @@ public:
   template <typename Func, typename... Args>
   seastar::future<> invoke_on_all(Func func, Args... args) noexcept;
 
+  template <typename Func, typename... Args>
+  seastar::future<> invoke_on_locals(Func func, Args... args) noexcept;
+
   template <typename Mapper, typename Initial, typename Reduce>
   seastar::future<Initial>
   map_reduce0(Mapper map, Initial initial, Reduce reduce) const;
 
   template <typename Mapper> auto map(Mapper mapper);
-
 };
 
 template <typename ServiceT>
@@ -138,6 +145,20 @@ multisharded<ServiceT>::invoke_on_all(Func func, Args... args) noexcept
           return func(*(this->_instances[c]), args...);
         }
       );
+    });
+}
+
+template <typename ServiceT>
+template <typename Func, typename... Args>
+seastar::future<>
+multisharded<ServiceT>::invoke_on_locals(Func func, Args... args) noexcept
+{
+  return seastar::parallel_for_each(
+    std::views::iota(size_t(seastar::this_shard_id()), _instances.size())
+      || std::views::stride(seastar::smp::count),
+    [this, func, args...](size_t global_idx) mutable {
+      ceph_assert(global_idx % seastar::smp::count == seastar::this_shard_id());
+      return func(*(this->_instances[global_idx]), args...);
     });
 }
 
