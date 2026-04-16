@@ -93,6 +93,47 @@ class PendingPGs final : public DaemonHealthMetricCollector {
   vector<DaemonKey> osds;
 };
 
+class HighDebugLevel final : public DaemonHealthMetricCollector {
+  bool _is_relevant(daemon_metric type) const override {
+    return type == daemon_metric::HIGH_DEBUG_LEVEL;
+  }
+  health_check_t& _get_check(health_check_map_t& cm) const override {
+    return cm.get_or_add("HIGH_DEBUG_LEVEL", HEALTH_WARN, "", 1);
+  }
+  bool _update(const DaemonKey& daemon,
+               const DaemonHealthMetric& metric) override {
+    // n1 = number of elevated subsystems, n2 = max level
+    auto num_elevated = metric.get_n1();
+    auto max_level = metric.get_n2();
+    value.n1 += num_elevated;
+    value.n2 = std::max(value.n2, max_level);
+    if (num_elevated) {
+      daemons.push_back(daemon);
+      return true;
+    }
+    return false;
+  }
+  void _summarize(health_check_t& check) const override {
+    if (daemons.empty()) {
+      return;
+    }
+    ostringstream ss;
+    if (daemons.size() > 1) {
+      if (daemons.size() > 10) {
+        ss << vector<DaemonKey>(daemons.begin(), daemons.begin()+10) << "...";
+      } else {
+        ss << daemons;
+      }
+    } else {
+      ss << daemons.front();
+    }
+    check.summary =
+      fmt::format("{} subsystems across {} daemon(s) have high debug levels (max {}): {}",
+                  value.n1, daemons.size(), value.n2, ss.str());
+  }
+  vector<DaemonKey> daemons;
+};
+
 } // anonymous namespace
 
 unique_ptr<DaemonHealthMetricCollector>
@@ -103,6 +144,8 @@ DaemonHealthMetricCollector::create(daemon_metric m)
     return std::make_unique<SlowOps>();
   case daemon_metric::PENDING_CREATING_PGS:
     return std::make_unique<PendingPGs>();
+  case daemon_metric::HIGH_DEBUG_LEVEL:
+    return std::make_unique<HighDebugLevel>();
   default:
     return {};
   }
