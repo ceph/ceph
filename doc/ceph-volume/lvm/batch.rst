@@ -160,6 +160,45 @@ It is also possible to provide explicit sizes to `ceph-volume` via the arguments
 this is not possible, no OSDs will be deployed.
 
 
+Collocating data OSDs on fast devices
+-------------------------------------
+In mixed HDD and NVMe deployments, NVMe devices can be used as shared
+``block.db`` devices for multiple HDD-based OSDs. This may leave remaining
+space on the NVMe that could be utilized for an additional data-only OSD
+(for example, to store metadata pools on fast storage).
+
+The ``--osd-collocate-on-fast`` flag enables this behavior. When specified,
+``ceph-volume`` will create an additional data-only OSD on each fast device
+(``--db-devices`` or ``--wal-devices``) using the remaining space after DB/WAL
+allocations::
+
+    $ ceph-volume lvm batch /dev/sdb /dev/sdc /dev/sdd --db-devices /dev/nvme0n1 --osd-collocate-on-fast
+
+This will deploy:
+
+* Three OSDs on the HDDs with their ``block.db`` on the NVMe
+* One additional data-only OSD on the NVMe using the remaining space
+
+When ``block.db`` sizes are auto-sized, enabling
+``--osd-collocate-on-fast`` sizes each ``block.db`` from the corresponding data
+OSD size (using the default 4% guideline) and leaves the remaining
+fast-device space for the collocated OSD. Explicitly configured metadata sizes
+are left unchanged.
+
+The ``--min-collocated-osd-size`` option (default: 10 GB) controls the minimum
+remaining space required to create a collocated OSD. If the remaining space on
+a fast device is less than this threshold, no collocated OSD will be created
+on that device::
+
+    $ ceph-volume lvm batch /dev/sdb /dev/sdc --db-devices /dev/nvme0n1 --osd-collocate-on-fast --min-collocated-osd-size 50G
+
+In the report output, collocated OSDs are marked with
+``(collocated on fast device)`` to distinguish them from regular OSDs.
+
+.. note:: The ``--osd-collocate-on-fast`` option requires ``--db-devices``
+          or ``--wal-devices`` to be specified.
+
+
 Idempotency and disk replacements
 =================================
 `ceph-volume lvm batch` intends to be idempotent, i.e. calling the same command
