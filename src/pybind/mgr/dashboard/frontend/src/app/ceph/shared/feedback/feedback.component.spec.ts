@@ -113,6 +113,29 @@ describe('FeedbackComponent', () => {
     expect(component.isAPIKeySet).toBe(false);
   }));
 
+  it('should stop retry state after all module-refresh attempts fail', fakeAsync(() => {
+    const mgrModuleService = TestBed.inject(MgrModuleService);
+    spyOn(feedbackService, 'isKeyExist').and.returnValues(
+      throwError(() => ({ status: 400 })), // initial ngOnInit check
+      throwError(() => ({ status: 400 })), // first refresh after updateCompleted$
+      throwError(() => ({ status: 400 })), // retry 1
+      throwError(() => ({ status: 400 })), // retry 2
+      throwError(() => ({ status: 400 })), // retry 3
+      throwError(() => ({ status: 400 })), // retry 4
+      throwError(() => ({ status: 400 })) // retry 5
+    );
+
+    fixture.detectChanges();
+    mgrModuleService.updateCompleted$.next();
+
+    tick(5000);
+
+    expect(component.pendingModuleRefreshRetries).toBe(0);
+    expect(component.moduleRefreshTimeoutId).toBeNull();
+    expect(component.isFeedbackEnabled).toBe(false);
+    expect(component.feedbackForm.disabled).toBe(true);
+  }));
+
   it('should test invalid api-key', () => {
     fixture.detectChanges();
     formHelper = new FormHelper(component.feedbackForm);

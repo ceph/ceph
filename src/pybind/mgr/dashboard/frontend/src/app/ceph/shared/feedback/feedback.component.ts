@@ -61,17 +61,21 @@ export class FeedbackComponent extends CdForm implements OnInit, OnDestroy {
     });
   }
 
+  private stopModuleRefreshRetryState() {
+    this.pendingModuleRefreshRetries = 0;
+    if (this.moduleRefreshTimeoutId) {
+      clearTimeout(this.moduleRefreshTimeoutId);
+      this.moduleRefreshTimeoutId = null;
+    }
+  }
+
   private refreshFeedbackModuleState(retryOnError: boolean) {
     this.keySub?.unsubscribe();
     this.keySub = this.feedbackService.isKeyExist().subscribe({
       next: (data: boolean) => {
         this.isFeedbackEnabled = true;
         this.feedbackForm.enable();
-        this.pendingModuleRefreshRetries = 0;
-        if (this.moduleRefreshTimeoutId) {
-          clearTimeout(this.moduleRefreshTimeoutId);
-          this.moduleRefreshTimeoutId = null;
-        }
+        this.stopModuleRefreshRetryState();
         this.isAPIKeySet = data;
         if (this.isAPIKeySet) {
           this.feedbackForm.get('api_key').clearValidators();
@@ -88,6 +92,8 @@ export class FeedbackComponent extends CdForm implements OnInit, OnDestroy {
           this.moduleRefreshTimeoutId = window.setTimeout(() => {
             this.refreshFeedbackModuleState(true);
           }, this.MODULE_REFRESH_RETRY_DELAY_MS);
+        } else {
+          this.stopModuleRefreshRetryState();
         }
       }
     });
@@ -106,9 +112,7 @@ export class FeedbackComponent extends CdForm implements OnInit, OnDestroy {
   ngOnDestroy() {
     this.keySub?.unsubscribe();
     this.moduleUpdateSub?.unsubscribe();
-    if (this.moduleRefreshTimeoutId) {
-      clearTimeout(this.moduleRefreshTimeoutId);
-    }
+    this.stopModuleRefreshRetryState();
   }
 
   onSubmit() {
