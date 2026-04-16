@@ -447,6 +447,10 @@ add_executable(unittest_ceph_timer test_ceph_timer.cc)
 add_ceph_unittest(unittest_ceph_timer)
 target_link_libraries(unittest_ceph_timer global ceph-common)
 
+add_executable(unittest_debug_level_guard test_debug_level_guard.cc)
+target_link_libraries(unittest_debug_level_guard global ceph-common)
+add_ceph_unittest(unittest_debug_level_guard)
+
 add_executable(unittest_option test_option.cc)
 target_link_libraries(unittest_option ceph-common GTest::Main)
 add_ceph_unittest(unittest_option)
