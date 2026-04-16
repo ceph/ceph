@@ -50,7 +50,8 @@ protected:
 
 public:
   using load_metadata_ertr = crimson::errorator<
-    crimson::ct_error::object_corrupted>;
+    crimson::ct_error::object_corrupted,
+    crimson::ct_error::enoent>;
   using load_metadata_iertr =
     ::crimson::interruptible::interruptible_errorator<
       ::crimson::osd::IOInterruptCondition,
