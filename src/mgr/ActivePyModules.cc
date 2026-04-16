@@ -1137,7 +1137,7 @@ PyObject* ActivePyModules::get_perf_schema_python(
     size_t pos = type.path.rfind('.');
     std::string sub_counter_name = type.path.substr(pos + 1, type.path.length());
     Formatter::ObjectSection counter_section(*f, sub_counter_name);
-    f->create_unique("description", type.description);
+    f->dump_string("description", type.description);
     if (!type.nick.empty()) {
       f->dump_string("nick", type.nick);
     }
