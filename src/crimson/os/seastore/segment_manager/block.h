@@ -13,6 +13,7 @@
 #include "crimson/common/layout.h"
 
 #include "crimson/os/seastore/segment_manager.h"
+#include "crimson/os/sharding_helpers.h"
 
 namespace crimson::os::seastore::segment_manager::block {
 
@@ -112,17 +113,12 @@ public:
 class BlockSegmentManager final : public SegmentManager {
 // interfaces used by Device
 public:
-  seastar::future<> start() {
-    return shard_devices.start(device_path, superblock.config.spec.dtype);
-  }
+  seastar::future<> start(uint32_t shard_nums) override;
 
-  seastar::future<> stop() {
-    return shard_devices.stop();
-  }
+  seastar::future<> stop() override;
 
-  Device& get_sharded_device() override {
-    return shard_devices.local();
-  }
+  Device& get_sharded_device(store_index_t store_index = 0) override;
+
   mount_ret mount() override;
 
   mkfs_ret mkfs(device_config_t) override;
@@ -132,8 +128,10 @@ public:
 
   BlockSegmentManager(
     const std::string &path,
-    device_type_t dtype)
-  : device_path(path) {
+    device_type_t dtype,
+    store_index_t store_index = 0)
+  : device_path(path),
+    store_index(store_index) {
     ceph_assert(get_device_type() == device_type_t::NONE);
     superblock.config.spec.dtype = dtype;
   }
@@ -151,6 +149,8 @@ public:
 
   read_ertr::future<> readv(
     paddr_t addr, std::vector<bufferptr> vecs) override;
+
+  read_ertr::future<uint32_t> get_shard_nums() override;
 
   device_type_t get_device_type() const override {
     return superblock.config.spec.dtype;
@@ -259,7 +259,33 @@ private:
   // all shards mount
   mount_ret shard_mount();
 
-  seastar::sharded<BlockSegmentManager> shard_devices;
+  uint32_t device_shard_nums = 0;
+  store_index_t store_index = 0;
+  bool store_active = true;
+#if 0
+  class MultiShardDevices {
+    public:
+      std::vector<std::unique_ptr<BlockSegmentManager>> mshard_devices;
+
+    public:
+    MultiShardDevices(size_t count,
+                      const std::string path,
+                      device_type_t dtype)
+    : mshard_devices() {
+      mshard_devices.reserve(count);
+      for (size_t store_index = 0; store_index < count; ++store_index) {
+        mshard_devices.emplace_back(std::make_unique<BlockSegmentManager>(
+          path, dtype, store_index));
+      }
+    }
+    ~MultiShardDevices() {
+     mshard_devices.clear();
+    }
+  };
+  seastar::sharded<MultiShardDevices> shard_devices;
+#else
+  crimson::os::multisharded<BlockSegmentManager> shard_devices;
+#endif
 };
 
 }

@@ -479,6 +479,43 @@ BlockSegmentManager::~BlockSegmentManager()
 {
 }
 
+seastar::future<> BlockSegmentManager::start(uint32_t shard_nums)
+{
+  LOG_PREFIX(BlockSegmentManager::start);
+  device_shard_nums = shard_nums;
+  auto num_shard_services = (device_shard_nums + seastar::smp::count - 1 ) / seastar::smp::count;
+  INFO("device_shard_nums={} seastar::smp={}, num_shard_services={}", device_shard_nums, seastar::smp::count, num_shard_services);
+  return shard_devices.start(num_shard_services, device_path, superblock.config.spec.dtype);
+
+}
+
+seastar::future<> BlockSegmentManager::stop()
+{
+  return shard_devices.stop();
+}
+
+Device& BlockSegmentManager::get_sharded_device(store_index_t store_index)
+{
+  return shard_devices.local(store_index);
+}
+
+SegmentManager::read_ertr::future<uint32_t> BlockSegmentManager::get_shard_nums()
+{
+  return open_device(
+    device_path
+  ).safe_then([this](auto p) {
+    device = std::move(p.first);
+    auto sd = p.second;
+    return read_superblock(device, sd);
+  }).safe_then([](auto sb) {
+    return read_ertr::make_ready_future<uint32_t>(sb.shard_num);
+  }).handle_error(
+    crimson::ct_error::assert_all{
+      "Invalid error in BlockSegmentManager::get_shard_nums"
+    }
+  );
+}
+
 BlockSegmentManager::mount_ret BlockSegmentManager::mount()
 {
   return shard_devices.invoke_on_all([](auto &local_device) {
@@ -499,9 +536,12 @@ BlockSegmentManager::mount_ret BlockSegmentManager::shard_mount()
     device = std::move(p.first);
     auto sd = p.second;
     return read_superblock(device, sd);
-  }).safe_then([=, this](auto sb) {
+  }).safe_then([=, this](auto sb) ->mount_ertr::future<> {
     set_device_id(sb.config.spec.id);
-    shard_info = sb.shard_infos[seastar::this_shard_id()];
+    const auto global_store_index =
+      seastar::this_shard_id() + seastar::smp::count * store_index;
+    ceph_assert(global_store_index < sb.shard_num);
+    shard_info = sb.shard_infos[global_store_index];
     INFO("{} read {}", device_id_printer_t{get_device_id()}, shard_info);
     sb.validate();
     superblock = sb;

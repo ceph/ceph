@@ -143,7 +143,7 @@ SeaStore::Shard::Shard(
    store_index(reactor_local_stores_num++)
 {
   ceph_assert(store_index < max_local_store_num);
-  device = &(dev->get_sharded_device());
+  device = &(dev->get_sharded_device(store_index));
   register_metrics();
 }
 
@@ -153,6 +153,7 @@ SeaStore::SeaStore(
   : root(root),
     mdstore(std::move(mdstore))
 {
+  store_shard_nums = seastar::smp::count;
 }
 
 SeaStore::~SeaStore() = default;
@@ -221,7 +222,7 @@ seastar::future<> SeaStore::get_shard_nums()
     co_return;
   } else {
     INFO("seastore mkfs done");
-#if 0
+#if 1
     auto shard_nums = co_await device->get_shard_nums(
       ).handle_error(
         crimson::ct_error::assert_all{
@@ -273,7 +274,7 @@ seastar::future<uint32_t> SeaStore::start()
   DeviceRef device_obj = co_await Device::make_device(root, d_type);
   device = std::move(device_obj);
   co_await get_shard_nums();
-  co_await device->start(/*store_shard_nums*/);
+  co_await device->start(store_shard_nums);
   ceph_assert(device);
   co_await shard_stores_start(is_test);
   INFO("done");
@@ -326,19 +327,19 @@ Device::access_ertr::future<> SeaStore::_mount()
 
   ceph_assert(seastar::this_shard_id() == primary_core);
   co_await device->mount();
-  ceph_assert(device->get_sharded_device().get_block_size() >= laddr_t::UNIT_SIZE);
+  ceph_assert(device->get_sharded_device(0).get_block_size() >= laddr_t::UNIT_SIZE);
 
-  auto &sec_devices = device->get_sharded_device().get_secondary_devices();
+  auto &sec_devices = device->get_sharded_device(0).get_secondary_devices();
   for (auto& device_entry : sec_devices) {
     device_id_t id = device_entry.first;
     [[maybe_unused]] magic_t magic = device_entry.second.magic;
     device_type_t dtype = device_entry.second.dtype;
     std::string path = fmt::format("{}/block.{}.{}", root, dtype, std::to_string(id));
     DeviceRef sec_dev = co_await Device::make_device(path, dtype);
-    co_await sec_dev->start();
+    co_await sec_dev->start(store_shard_nums);
     co_await sec_dev->mount();
-    ceph_assert(sec_dev->get_sharded_device().get_block_size() >= laddr_t::UNIT_SIZE);
-    assert(sec_dev->get_sharded_device().get_magic() == magic);
+    ceph_assert(sec_dev->get_sharded_device(0).get_block_size() >= laddr_t::UNIT_SIZE);
+    assert(sec_dev->get_sharded_device(0).get_magic() == magic);
     secondaries.emplace_back(std::move(sec_dev));
     co_await set_secondaries();
   }
@@ -438,8 +439,10 @@ seastar::future<> SeaStore::set_secondaries()
 {
   auto sec_dev_ite = secondaries.rbegin();
   Device* sec_dev = sec_dev_ite->get();
+
   return shard_stores.invoke_on_all([sec_dev](auto &local_store) {
-    local_store.set_secondaries(sec_dev->get_sharded_device());
+    unsigned int index = local_store.get_store_index();
+    local_store.set_secondaries(sec_dev->get_sharded_device(index));
   });
 }
 
@@ -515,7 +518,7 @@ Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
         DeviceRef sec_dev = co_await Device::make_device(path, dtype);
         auto p_sec_dev = sec_dev.get();
         secondaries.emplace_back(std::move(sec_dev));
-        co_await p_sec_dev->start();
+        co_await p_sec_dev->start(store_shard_nums);
         magic_t magic = (magic_t)std::rand();
         sds.emplace((device_id_t)id, device_spec_t{magic, dtype, (device_id_t)id});
         co_await p_sec_dev->mkfs(
@@ -544,7 +547,7 @@ Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
   co_await device->mount();
   DEBUG("mkfs managers");
   co_await shard_stores.invoke_on_all([] (auto &local_store) {
-      return local_store.mkfs_managers().handle_error(
+    return local_store.mkfs_managers().handle_error(
       crimson::ct_error::assert_all{"Invalid error in SeaStoreS::mkfs_managers"});
   });
   co_await prepare_meta(new_osd_fsid);
