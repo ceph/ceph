@@ -1549,6 +1549,24 @@ class TestCephadm(object):
             assert all(any(cmd in exp_cmd for exp_cmd in exp_commands)
                        for cmd in out), f'Expected cmds from f{out} in {exp_commands}'
 
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_raw_seastore_driveselection_to_ceph_volume(self, cephadm_module):
+        with with_host(cephadm_module, 'test'):
+            dg = DriveGroupSpec(
+                service_id='test.spec',
+                method='raw',
+                placement=PlacementSpec(host_pattern='test'),
+                data_devices=DeviceSelection(paths=['/dev/sda']),
+                objectstore='seastore',
+                osd_type='crimson',
+            )
+            dg.validate()
+            ds = DriveSelection(dg, Devices([Device(path='/dev/sda')]))
+            out = cephadm_module.osd_service.driveselection_to_ceph_volume(ds, [], False)
+            assert out == [
+                'raw prepare --objectstore seastore --data /dev/sda --osd-type crimson',
+            ]
+
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm(
         json.dumps([
             dict(
