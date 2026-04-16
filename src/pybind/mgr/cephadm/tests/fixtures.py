@@ -145,14 +145,23 @@ def wait(m: CephadmOrchestrator, c: OrchResult) -> Any:
     return raise_if_exception(c)
 
 
+def _noop_refresh_hosts_and_daemons(self: Any) -> None:
+    """Avoid SSH / agent checks in unit tests; they mark hosts offline without real infra."""
+    return None
+
+
 @contextmanager
 def with_host(m: CephadmOrchestrator, name, addr='1::4', refresh_hosts=True, rm_with_force=True):
-    with mock.patch("cephadm.utils.resolve_ip", return_value=addr):
+    # Skip real SSH in unit tests (check-host / key setup); inventory still updates.
+    with mock.patch("cephadm.utils.resolve_ip", return_value=addr), \
+            mock.patch.object(m, "_check_valid_addr", return_value=addr), \
+            mock.patch.object(CephadmServe, "_refresh_hosts_and_daemons", _noop_refresh_hosts_and_daemons):
         wait(m, m.add_host(HostSpec(hostname=name)))
         if refresh_hosts:
             CephadmServe(m)._refresh_hosts_and_daemons()
             receive_agent_metadata(m, name)
         yield
+        m.offline_hosts.discard(name)
         wait(m, m.remove_host(name, force=rm_with_force))
 
 

@@ -397,11 +397,11 @@ class DriveGroupSpec(ServiceSpec):
                 self.service_id,
                 'method raw only supports bluestore')
         if self.method == 'raw' and self.objectstore == 'seastore':
-            if self.db_devices is not None and self.db_devices.paths:
+            if self.db_devices is not None:
                 raise DriveGroupValidationError(
                     self.service_id,
                     'method raw with objectstore seastore does not support db_devices')
-            if self.wal_devices is not None and self.wal_devices.paths:
+            if self.wal_devices is not None:
                 raise DriveGroupValidationError(
                     self.service_id,
                     'method raw with objectstore seastore does not support wal_devices')
