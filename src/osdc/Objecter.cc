@@ -3302,6 +3302,22 @@ void Objecter::_session_op_remove(OSDSession *from, Op *op)
   ldout(cct, 15) << __func__ << " " << from->osd << " " << op->tid << dendl;
 }
 
+void Objecter::_session_op_remove(OSDSession *from, std::map<ceph_tid_t,Op*>::iterator& it)
+{
+  ceph_assert(it->second->session == from);
+  // from->lock is locked
+
+  if (from->is_homeless()) {
+    num_homeless_ops--;
+  }
+
+  ldout(cct, 15) << __func__ << " " << from->osd << " " << it->second->tid << dendl;
+
+  it->second->session = NULL;
+  it = from->ops.erase(it);
+  put_session(from);
+}
+
 void Objecter::_session_linger_op_assign(OSDSession *to, LingerOp *op)
 {
   // to lock is locked unique
@@ -3782,32 +3798,74 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
   if (m->is_redirect_reply()) {
     ldout(cct, 5) << " got redirect reply; redirecting" << dendl;
-    if (op->has_completion())
-      num_in_flight--;
-    _session_op_remove(s, op);
-    sl.unlock();
-
-    // FIXME: two redirects could race and reorder
-
-    op->tid = 0;
     const request_redirect_t& r = m->get_redirect();
+
     if (r.is_pool_migration()) {
       //Pool migration is redirecting request to the
       //target pool because the object has been migrated
 
+      // Calculate previous and new watermark
+      hobject_t previous_watermark;
+      hobject_t new_watermark;
+      std::list<Op*> retry;
+      {
+        const auto& it = pool_migration_watermarks.find(m->get_pg());
+        if (it != pool_migration_watermarks.end()) {
+          previous_watermark = it->second;
+        }
+      }
+      r.update_migration_watermark(new_watermark);
+      // Remove all ops (including this one) from the OSDSession
+      // that need to be retried because the watermark has advanced.
+      // Other removed ops that are still inflight will later fail
+      // with redirect but will be ignored as stray
+      bool found = false;
+      for (auto it = s->ops.begin(); it != s->ops.end(); ) {
+        if (it->second->target.actual_pgid.pgid == m->get_pg()) {
+          int r = it->second->target.contained_by(previous_watermark, new_watermark);
+          if (r) {
+            if (it->second->has_completion())
+              num_in_flight--;
+            it->second->tid = 0;
+            retry.push_back(it->second);
+            if (it->second == op) {
+              found = true;
+            }
+            _session_op_remove(s, it);
+          } else {
+            ++it;
+          }
+        } else {
+          ++it;
+        }
+      }
+      ceph_assert(found);
+      sl.unlock();
       //Upgrade to unique lock to update watermark
       sul.unlock();
       sul.lock();
       r.update_migration_watermark(
          pool_migration_watermarks[m->get_pg()]);
+      for (auto& it : retry) {
+        _op_submit(it, sul, NULL);
+      }
+      retry.clear();
     } else {
+      if (op->has_completion())
+        num_in_flight--;
+      _session_op_remove(s, op);
+      sl.unlock();
+
+      // FIXME: two redirects could race and reorder
+
+      op->tid = 0;
       r.combine_with_locator(op->target.target_oloc,
 			     op->target.target_oid.name);
       op->target.flags |= (CEPH_OSD_FLAG_REDIRECTED |
 			   CEPH_OSD_FLAG_IGNORE_CACHE |
 			   CEPH_OSD_FLAG_IGNORE_OVERLAY);
+      _op_submit(op, sul, NULL);
     }
-    _op_submit(op, sul, NULL);
     m->put();
     return;
   }

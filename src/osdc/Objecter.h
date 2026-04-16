@@ -2656,6 +2656,7 @@ public:
 
   void _session_op_assign(OSDSession *s, Op *op);
   void _session_op_remove(OSDSession *s, Op *op);
+  void _session_op_remove(OSDSession *s, std::map<ceph_tid_t,Op*>::iterator& it);
   void _session_linger_op_assign(OSDSession *to, LingerOp *op);
   void _session_linger_op_remove(OSDSession *from, LingerOp *op);
   void _session_command_op_assign(OSDSession *to, CommandOp *op);
