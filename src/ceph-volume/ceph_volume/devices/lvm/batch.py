@@ -14,6 +14,9 @@ from typing import Any, Dict, List, Optional, Tuple
 mlogger = terminal.MultiLogger(__name__)
 logger = logging.getLogger(__name__)
 
+DEFAULT_AUTO_BLOCK_DB_RATIO = 0.04
+UNSET_REQUESTED_SIZE = object()
+
 
 device_list_template = """
   * {path: <25} {size: <10} {state}"""
@@ -41,18 +44,19 @@ def separate_devices_from_lvs(devices: List[device.Device]) -> Tuple[List[device
     return phys, lvm
 
 
-def get_physical_fast_allocs(devices: List[device.Device], type_: str, fast_slots_per_device: int, new_osds: int, args: argparse.Namespace) -> List[Tuple[str, float, disk.Size, int]]:
+def get_physical_fast_allocs(devices: List[device.Device], type_: str, fast_slots_per_device: int, new_osds: int, args: argparse.Namespace, requested_size: Any = UNSET_REQUESTED_SIZE) -> List[Tuple[str, float, disk.Size, int]]:
     requested_slots = getattr(args, '{}_slots'.format(type_))
     if not requested_slots or requested_slots < fast_slots_per_device:
         if requested_slots:
             mlogger.info('{}_slots argument is too small, ignoring'.format(type_))
         requested_slots = fast_slots_per_device
 
-    requested_size = getattr(args, '{}_size'.format(type_), 0)
-    if not requested_size or requested_size == 0:
-        # no size argument was specified, check ceph.conf
-        get_size_fct = getattr(prepare, 'get_{}_size'.format(type_))
-        requested_size = get_size_fct(lv_format=False)
+    if requested_size is UNSET_REQUESTED_SIZE:
+        requested_size = getattr(args, '{}_size'.format(type_), 0)
+        if not requested_size or requested_size == 0:
+            # no size argument was specified, check ceph.conf
+            get_size_fct = getattr(prepare, 'get_{}_size'.format(type_))
+            requested_size = get_size_fct(lv_format=False)
 
     ret: List[Tuple[str, float, disk.Size, int]] = []
     vg_device_map = group_devices_by_vg(devices)
@@ -290,6 +294,19 @@ class Batch(object):
             default=None,
             help="Additional cryptsetup luksOpen options (use the same syntax as the cryptsetup CLI)",
         )
+        parser.add_argument(
+            '--osd-collocate-on-fast',
+            dest='osd_collocate_on_fast',
+            action='store_true',
+            help='Create an additional data-only OSD on each fast device (db/wal) using remaining space',
+        )
+        parser.add_argument(
+            '--min-collocated-osd-size',
+            dest='min_collocated_osd_size',
+            type=disk.Size.parse,
+            default=disk.Size(gb=10),
+            help='Minimum size for collocated OSD on fast device (default: 10G)',
+        )
         self.args = parser.parse_args(argv)
         if self.args.bluestore:
             self.args.objectstore = 'bluestore'
@@ -433,10 +450,12 @@ class Batch(object):
         requested_osds = self.args.osds_per_device * len(phys_devs) + len(lvm_devs)
 
         fast_type = 'block_db'
+        requested_fast_size = self._get_requested_fast_size(fast_type)
         fast_allocations = self.fast_allocations(fast_devices,
                                                  requested_osds,
                                                  num_osds,
-                                                 fast_type)
+                                                 fast_type,
+                                                 requested_fast_size)
         if fast_devices and not fast_allocations:
             mlogger.info('{} fast devices were passed, but none are available'.format(len(fast_devices)))
             return []
@@ -445,10 +464,12 @@ class Batch(object):
                 len(fast_allocations), num_osds))
             exit(1)
 
+        requested_very_fast_size = self._get_requested_fast_size('block_wal')
         very_fast_allocations = self.fast_allocations(very_fast_devices,
                                                       requested_osds,
                                                       num_osds,
-                                                      'block_wal')
+                                                      'block_wal',
+                                                      requested_very_fast_size)
         if very_fast_devices and not very_fast_allocations:
             mlogger.info('{} very fast devices were passed, but none are available'.format(len(very_fast_devices)))
             return []
@@ -459,6 +480,8 @@ class Batch(object):
 
         if fast_devices:
             fast_alloc: Optional[tuple[str, float, disk.Size, int]] = None
+            planned_fast_allocations: List[Tuple[str, float, disk.Size, int]] = []
+            fast_device_sizes = {dev.path: dev.vg_size[0] for dev in fast_devices if dev.available_lvm}
             for osd in plan:
                 if self.args.has_block_db_size_without_db_devices:
                     for i, _fast_alloc in enumerate(fast_allocations):
@@ -469,13 +492,122 @@ class Batch(object):
                     fast_alloc = fast_allocations.pop() if fast_allocations else None
 
                 if fast_alloc:
+                    fast_alloc = self._auto_size_collocated_fast_alloc(
+                        osd,
+                        fast_alloc,
+                        fast_type,
+                        requested_fast_size,
+                        fast_device_sizes,
+                    )
+                    planned_fast_allocations.append(fast_alloc)
                     osd.add_fast_device(*fast_alloc, type_=fast_type)
 
+            planned_very_fast_allocations = []
             if very_fast_devices and self.args.objectstore == 'bluestore':
-                osd.add_very_fast_device(*very_fast_allocations.pop())
+                very_fast_alloc = very_fast_allocations.pop()
+                planned_very_fast_allocations.append(very_fast_alloc)
+                osd.add_very_fast_device(*very_fast_alloc)
+        else:
+            planned_fast_allocations = []
+            planned_very_fast_allocations = []
+
+        if getattr(self.args, 'osd_collocate_on_fast', False):
+            if not fast_devices and not very_fast_devices:
+                mlogger.error('--osd-collocate-on-fast requires --db-devices or --wal-devices')
+                raise SystemExit(1)
+
+            all_fast_allocs = planned_fast_allocations + planned_very_fast_allocations
+            collocated_osds = self._create_collocated_osds(
+                fast_devices or [],
+                very_fast_devices or [],
+                all_fast_allocs
+            )
+            plan.extend(collocated_osds)
+
         return plan
 
-    def fast_allocations(self, devices: List[device.Device], requested_osds: int, new_osds: int, type_: str) -> List[Tuple[str, float, disk.Size, int]]:
+    def _create_collocated_osds(
+        self,
+        db_devices: List[device.Device],
+        wal_devices: List[device.Device],
+        fast_allocations: List[Tuple[str, float, disk.Size, int]]
+    ) -> List["OSD"]:
+        '''
+        Create data-only OSDs on fast devices using remaining space after
+        DB/WAL allocations.
+        '''
+        collocated: List["OSD"] = []
+
+        all_fast_devices = {dev.path: dev for dev in db_devices + wal_devices}
+
+        planned_usage: Dict[str, int] = {}
+        for path, _, abs_size, _ in fast_allocations:
+            if path not in planned_usage:
+                planned_usage[path] = 0
+            planned_usage[path] += int(abs_size)
+
+        for dev_path, dev in all_fast_devices.items():
+            if not dev.available_lvm:
+                continue
+
+            device_size = dev.vg_size[0]
+            used_space = planned_usage.get(dev_path, 0)
+            remaining_size = disk.Size(b=device_size - used_space)
+
+            min_size = getattr(self.args, 'min_collocated_osd_size', disk.Size(gb=10))
+            if remaining_size < min_size:
+                mlogger.warning(
+                    f'Remaining space on {dev_path} ({remaining_size}) is less than '
+                    f'minimum ({min_size}), skipping collocated OSD'
+                )
+                continue
+
+            rel_size = int(remaining_size) / device_size
+            osd_id = self.args.osd_ids.pop() if self.args.osd_ids else None
+
+            osd = Batch.OSD(
+                data_path=dev_path,
+                rel_size=rel_size,
+                abs_size=remaining_size,
+                slots=1,
+                id_=osd_id,
+                encryption='dmcrypt' if self.args.dmcrypt else None,
+                symlink=dev.symlink,
+                collocated=True
+            )
+            collocated.append(osd)
+            mlogger.info(f'Adding collocated data OSD on {dev_path} with size {remaining_size}')
+
+        return collocated
+
+    def _get_requested_fast_size(self, type_: str) -> Optional[disk.Size]:
+        requested_size = getattr(self.args, '{}_size'.format(type_), None)
+        if requested_size is not None:
+            return requested_size
+        get_size_fct = getattr(prepare, 'get_{}_size'.format(type_))
+        return get_size_fct(lv_format=False)
+
+    def _auto_size_collocated_fast_alloc(self,
+                                         osd: "OSD",
+                                         fast_alloc: Tuple[str, float, disk.Size, int],
+                                         type_: str,
+                                         requested_size: Optional[disk.Size],
+                                         fast_device_sizes: Dict[str, int]) -> Tuple[str, float, disk.Size, int]:
+        if type_ != 'block_db' or requested_size is not None:
+            return fast_alloc
+        if not getattr(self.args, 'osd_collocate_on_fast', False):
+            return fast_alloc
+        fast_path, _, abs_size, slots = fast_alloc
+        fast_device_size = fast_device_sizes.get(fast_path)
+        if fast_device_size is None:
+            return fast_alloc
+
+        target_size = disk.Size(b=int(int(osd.data.abs_size) * DEFAULT_AUTO_BLOCK_DB_RATIO))
+        target_size = min(target_size, abs_size)
+        relative_size = int(target_size) / fast_device_size
+        return (fast_path, relative_size, target_size, slots)
+
+    def fast_allocations(self, devices: List[device.Device], requested_osds: int, new_osds: int, type_: str, requested_size: Any = UNSET_REQUESTED_SIZE) -> List[Tuple[str, float, disk.Size, int]]:
         ret: List[Tuple[str, float, disk.Size, int]] = []
         if not devices:
             return ret
@@ -499,7 +631,8 @@ class Batch(object):
                                             type_,
                                             fast_slots_per_device,
                                             new_osds,
-                                            self.args))
+                                            self.args,
+                                            requested_size))
         return ret
 
     class OSD(object):
@@ -521,7 +654,8 @@ class Batch(object):
                      slots: int,
                      id_: Optional[str] = None,
                      encryption: Optional[str] = None,
-                     symlink: Optional[str] = None) -> None:
+                     symlink: Optional[str] = None,
+                     collocated: bool = False) -> None:
             self.id_ = id_
             self.data = self.VolSpec(path=data_path,
                                 rel_size=rel_size,
@@ -532,6 +666,7 @@ class Batch(object):
             self.very_fast: Optional[Any] = None
             self.encryption: Optional[str] = encryption
             self.symlink: Optional[str] = symlink
+            self.collocated: bool = collocated
 
         def add_fast_device(self, path: str, rel_size: float, abs_size: disk.Size, slots: int, type_: str) -> None:
             self.fast = self.VolSpec(path=path,
@@ -577,6 +712,8 @@ class Batch(object):
 
         def report(self) -> str:
             report = ''
+            if self.collocated:
+                report += templates.osd_collocated
             if self.id_:
                 report += templates.osd_reused_id.format(
                     id_=self.id_)

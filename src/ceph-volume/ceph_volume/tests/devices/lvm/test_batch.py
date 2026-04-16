@@ -259,8 +259,8 @@ class TestBatch(object):
             assert fast[2] == int(dev.vg_size[0] / 2)
 
     def test_get_physical_fast_allocs_abs_size_unused_devs(self, factory,
-                                               conf_ceph_stub,
-                                               mock_devices_available):
+                                                conf_ceph_stub,
+                                                mock_devices_available):
         conf_ceph_stub('[global]\nfsid=asdf-lkjh')
         args = factory(block_db_slots=None, get_block_db_size=None)
         dev_size = 21474836480
@@ -394,3 +394,213 @@ class TestBatchOsd(object):
                                                         '5G',
                                                         1,
                                                         'block_wal')
+
+    def test_osd_collocated_flag(self):
+        osd = batch.Batch.OSD('/dev/data', 1.0, disk.Size(gb=100), 1, None, None, None, collocated=True)
+        assert osd.collocated is True
+
+    def test_osd_collocated_default_false(self):
+        osd = batch.Batch.OSD('/dev/data', 1.0, disk.Size(gb=100), 1)
+        assert osd.collocated is False
+
+
+class TestCollocatedOsds(object):
+
+    def test_collocate_flag_parsed(self):
+        b = batch.Batch(['--osd-collocate-on-fast'])
+        assert b.args.osd_collocate_on_fast is True
+
+    def test_collocate_flag_default_false(self):
+        b = batch.Batch([])
+        assert b.args.osd_collocate_on_fast is False
+
+    def test_min_collocated_size_parsed(self):
+        b = batch.Batch(['--min-collocated-osd-size', '20G'])
+        assert b.args.min_collocated_osd_size == disk.Size(gb=20)
+
+    def test_min_collocated_size_default(self):
+        b = batch.Batch([])
+        assert b.args.min_collocated_osd_size == disk.Size(gb=10)
+
+    def test_collocate_requires_db_devices(self, factory, conf_ceph_stub, mock_device_generator):
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        devs = [mock_device_generator() for _ in range(2)]
+        args = factory(
+            data_slots=1,
+            osds_per_device=1,
+            osd_ids=[],
+            devices=devs,
+            db_devices=[],
+            wal_devices=[],
+            objectstore='bluestore',
+            block_db_size=None,
+            block_db_slots=None,
+            dmcrypt=False,
+            data_allocate_fraction=1.0,
+            osd_collocate_on_fast=True,
+            min_collocated_osd_size=disk.Size(gb=10),
+            has_block_db_size_without_db_devices=False
+        )
+        b = batch.Batch([])
+        b.args = args
+        with pytest.raises(SystemExit):
+            b.get_deployment_layout()
+
+    def test_collocate_creates_extra_osd(self, factory, conf_ceph_stub, mock_device_generator):
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        data_devs = [mock_device_generator(path='sda'), mock_device_generator(path='sdb')]
+        db_dev = mock_device_generator(path='nvme0n1', vg_size=[107374182400])
+        db_dev.vg_free = [107374182400]
+        db_size = disk.Size(gb=10)
+        args = factory(
+            data_slots=1,
+            osds_per_device=1,
+            osd_ids=[],
+            devices=data_devs,
+            db_devices=[db_dev],
+            wal_devices=[],
+            objectstore='bluestore',
+            block_db_size=db_size,
+            block_db_slots=None,
+            dmcrypt=False,
+            data_allocate_fraction=1.0,
+            osd_collocate_on_fast=True,
+            min_collocated_osd_size=disk.Size(gb=10),
+            has_block_db_size_without_db_devices=False
+        )
+        b = batch.Batch([])
+        b.args = args
+        plan = b.get_deployment_layout()
+        assert len(plan) == 3
+        collocated_osds = [osd for osd in plan if osd.collocated]
+        assert len(collocated_osds) == 1
+        assert 'nvme0n1' in collocated_osds[0].data.path
+        assert collocated_osds[0].data.abs_size == disk.Size(b=db_dev.vg_size[0] - 2 * int(db_size))
+
+    def test_collocate_creates_extra_osd_with_auto_db_size(self, factory, conf_ceph_stub, mock_device_generator):
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        data_size = int(disk.Size(tb=1))
+        data_devs = [
+            mock_device_generator(path='sda', vg_size=[data_size], vg_free=[data_size]),
+            mock_device_generator(path='sdb', vg_size=[data_size], vg_free=[data_size]),
+        ]
+        db_size = int(disk.Size(gb=100))
+        db_dev = mock_device_generator(path='nvme0n1', vg_size=[db_size], vg_free=[db_size])
+        args = factory(
+            data_slots=1,
+            osds_per_device=1,
+            osd_ids=[],
+            devices=data_devs,
+            db_devices=[db_dev],
+            wal_devices=[],
+            objectstore='bluestore',
+            block_db_size=None,
+            block_db_slots=None,
+            dmcrypt=False,
+            data_allocate_fraction=1.0,
+            osd_collocate_on_fast=True,
+            min_collocated_osd_size=disk.Size(gb=10),
+            has_block_db_size_without_db_devices=False
+        )
+        b = batch.Batch([])
+        b.args = args
+        plan = b.get_deployment_layout()
+        assert len(plan) == 3
+        collocated_osds = [osd for osd in plan if osd.collocated]
+        assert len(collocated_osds) == 1
+        db_osds = [osd for osd in plan if not osd.collocated]
+        expected_db_size = disk.Size(b=int(data_size * batch.DEFAULT_AUTO_BLOCK_DB_RATIO))
+        for osd in db_osds:
+            assert osd.fast.abs_size == expected_db_size
+        assert collocated_osds[0].data.abs_size == disk.Size(b=db_size - 2 * int(expected_db_size))
+
+    def test_collocate_skipped_insufficient_space(self, factory, conf_ceph_stub, mock_device_generator):
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        data_devs = [mock_device_generator(path='sda'), mock_device_generator(path='sdb')]
+        db_dev = mock_device_generator(path='nvme0n1', vg_size=[26843545600])
+        db_dev.vg_free = [26843545600]
+        args = factory(
+            data_slots=1,
+            osds_per_device=1,
+            osd_ids=[],
+            devices=data_devs,
+            db_devices=[db_dev],
+            wal_devices=[],
+            objectstore='bluestore',
+            block_db_size=disk.Size(gb=10),
+            block_db_slots=None,
+            dmcrypt=False,
+            data_allocate_fraction=1.0,
+            osd_collocate_on_fast=True,
+            min_collocated_osd_size=disk.Size(gb=50),
+            has_block_db_size_without_db_devices=False
+        )
+        b = batch.Batch([])
+        b.args = args
+        plan = b.get_deployment_layout()
+        assert len(plan) == 2
+        collocated_osds = [osd for osd in plan if osd.collocated]
+        assert len(collocated_osds) == 0
+
+    def test_collocate_multiple_db_devices(self, factory, conf_ceph_stub, mock_device_generator):
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        data_devs = [mock_device_generator(path=f'sd{c}') for c in 'abcd']
+        db_devs = [
+            mock_device_generator(path='nvme0n1', vg_size=[107374182400]),
+            mock_device_generator(path='nvme1n1', vg_size=[107374182400])
+        ]
+        for dev in db_devs:
+            dev.vg_free = [107374182400]
+        db_size = disk.Size(gb=10)
+        args = factory(
+            data_slots=1,
+            osds_per_device=1,
+            osd_ids=[],
+            devices=data_devs,
+            db_devices=db_devs,
+            wal_devices=[],
+            objectstore='bluestore',
+            block_db_size=db_size,
+            block_db_slots=None,
+            dmcrypt=False,
+            data_allocate_fraction=1.0,
+            osd_collocate_on_fast=True,
+            min_collocated_osd_size=disk.Size(gb=10),
+            has_block_db_size_without_db_devices=False
+        )
+        b = batch.Batch([])
+        b.args = args
+        plan = b.get_deployment_layout()
+        assert len(plan) == 6
+        collocated_osds = [osd for osd in plan if osd.collocated]
+        assert len(collocated_osds) == 2
+        for osd in collocated_osds:
+            assert osd.data.abs_size == disk.Size(b=db_devs[0].vg_size[0] - 2 * int(db_size))
+
+    def test_backwards_compat_no_collocate(self, factory, conf_ceph_stub, mock_device_generator):
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        data_devs = [mock_device_generator(path='sda'), mock_device_generator(path='sdb')]
+        db_dev = mock_device_generator(path='nvme0n1', vg_size=[107374182400])
+        db_dev.vg_free = [107374182400]
+        args = factory(
+            data_slots=1,
+            osds_per_device=1,
+            osd_ids=[],
+            devices=data_devs,
+            db_devices=[db_dev],
+            wal_devices=[],
+            objectstore='bluestore',
+            block_db_size=disk.Size(gb=10),
+            block_db_slots=None,
+            dmcrypt=False,
+            data_allocate_fraction=1.0,
+            osd_collocate_on_fast=False,
+            min_collocated_osd_size=disk.Size(gb=10),
+            has_block_db_size_without_db_devices=False
+        )
+        b = batch.Batch([])
+        b.args = args
+        plan = b.get_deployment_layout()
+        assert len(plan) == 2
+        collocated_osds = [osd for osd in plan if osd.collocated]
+        assert len(collocated_osds) == 0

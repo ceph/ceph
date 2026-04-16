@@ -19,6 +19,10 @@ osd_encryption = """
   encryption:     {enc: <15}"""
 
 
+osd_collocated = """
+  (collocated on fast device)"""
+
+
 total_osds = """
 Total OSDs: {total_osds}
 """
