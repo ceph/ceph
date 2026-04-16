@@ -505,7 +505,7 @@ class Export:
             if p not in [3, 4]:
                 raise NFSInvalidOperation(f"Invalid protocol {p}")
 
-        valid_transport = ["UDP", "TCP"]
+        valid_transport = ["UDP", "TCP", "RDMA"]
         for trans in self.transports:
             if trans.upper() not in valid_transport:
                 raise NFSInvalidOperation(f'{trans} is not a valid transport protocol')

@@ -552,6 +552,61 @@ def test_alertmanager_spec_2():
     assert 'default_webhook_urls' in spec.user_data.keys()
 
 
+def test_nfs_spec_rdma_default():
+    """NFS spec without RDMA: enable_rdma is False, get_port_start returns 2 ports."""
+    spec = NFSServiceSpec(service_id='mynfs', placement=PlacementSpec(count=1))
+    assert spec.enable_rdma is False
+    assert spec.rdma_port is None
+    assert spec.get_port_start() == [2049, 9587]
+    assert spec.get_colocation_port_fields() == ['data_port', 'monitoring_port']
+
+
+def test_nfs_spec_rdma_enabled():
+    """NFS spec with enable_rdma: get_port_start returns 3 ports, default rdma_port 20049."""
+    spec = NFSServiceSpec(
+        service_id='mynfs',
+        placement=PlacementSpec(count=1),
+        enable_rdma=True,
+    )
+    assert spec.enable_rdma is True
+    assert spec.rdma_port is None
+    assert spec.get_port_start() == [2049, 9587, 20049]
+    assert spec.get_colocation_port_fields() == ['data_port', 'monitoring_port', 'rdma_port']
+
+
+def test_nfs_spec_rdma_custom_port():
+    """NFS spec with enable_rdma and custom rdma_port."""
+    spec = NFSServiceSpec(
+        service_id='mynfs',
+        placement=PlacementSpec(count=1),
+        port=3049,
+        monitoring_port=9588,
+        enable_rdma=True,
+        rdma_port=20050,
+    )
+    assert spec.enable_rdma is True
+    assert spec.rdma_port == 20050
+    assert spec.get_port_start() == [3049, 9588, 20050]
+
+
+def test_nfs_spec_from_json_rdma():
+    """NFS spec enable_rdma and rdma_port roundtrip via from_json/to_json."""
+    data = {
+        'service_id': 'mynfs',
+        'service_type': 'nfs',
+        'placement': {'count': 1},
+        'spec': {
+            'enable_rdma': True,
+            'rdma_port': 1234,
+        },
+    }
+    spec = NFSServiceSpec.from_json(data)
+    assert spec.enable_rdma is True
+    assert spec.rdma_port == 1234
+    out = spec.to_json()
+    assert out.get('spec', {}).get('enable_rdma') is True
+    assert out.get('spec', {}).get('rdma_port') == 1234
+
 
 def test_repr():
     val = """ServiceSpec.from_json(yaml.safe_load('''service_type: crash

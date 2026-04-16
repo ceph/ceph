@@ -1161,6 +1161,99 @@ NFS_CORE_PARAM {
         assert export.clients[0].access_type == 'rw'
         assert export.clients[0].addresses == ["192.168.1.0/8"]
         assert export.cluster_id == self.cluster_id
+
+    def test_create_export_default_transports_rdma_cluster(self):
+        """When cluster has enable_rdma=True, new exports get default Transports = tcp, RDMA."""
+        self._do_mock_test(self._do_test_create_export_default_transports_rdma_cluster)
+
+    def _do_test_create_export_default_transports_rdma_cluster(self):
+        nfs_mod = Module('nfs', '', '')
+        conf = ExportMgr(nfs_mod)
+        rdma_spec = NFSServiceSpec(service_id=self.cluster_id, enable_rdma=True)
+        with mock.patch('nfs.export.get_nfs_spec_for_cluster', return_value=rdma_spec):
+            r = conf.create_export(
+                fsal_type='rgw',
+                cluster_id=self.cluster_id,
+                bucket='rdmabucket',
+                pseudo_path='/rdmabucket',
+                read_only=False,
+                squash='root',
+                addr=["192.168.0.0/16"],
+            )
+        assert r["bind"] == "/rdmabucket"
+        export = conf._fetch_export(self.cluster_id, '/rdmabucket')
+        assert export is not None
+        assert sorted(export.transports) == ["RDMA", "TCP"]
+
+    def test_export_transport_rdma_valid(self):
+        """Export with Transports = TCP, RDMA is valid."""
+        export_block = """
+EXPORT {
+    export_id = 1;
+    path = "/";
+    pseudo = "/rdma_export";
+    access_type = "RW";
+    squash = "none";
+    protocols = 4;
+    transports = "TCP", "RDMA";
+    FSAL {
+        name = "CEPH";
+        filesystem = "a";
+        cmount_path = "/";
+    }
+}
+"""
+        blocks = GaneshaConfParser(export_block).parse()
+        export = Export.from_export_block(blocks[0], self.cluster_id)
+        assert set(export.transports) == {"TCP", "RDMA"}
+        # Validate should pass (RDMA is in valid_transport)
+        nfs_mod = Module('nfs', '', '')
+        conf = ExportMgr(nfs_mod)
+        with mock.patch('nfs.export.check_fs', return_value=True), \
+                mock.patch('nfs.ganesha_conf.check_fs', return_value=True):
+            export.validate(conf.mgr)
+
+    def test_update_export_without_transport_rdma_cluster(self):
+        """Apply export update without Transport fields; result has Transports = TCP, RDMA."""
+        self._do_mock_test(self._do_test_update_export_without_transport_rdma_cluster)
+
+    def _do_test_update_export_without_transport_rdma_cluster(self):
+        nfs_mod = Module('nfs', '', '')
+        conf = ExportMgr(nfs_mod)
+        # Existing export at /rgw has Transports = TCP, UDP (from export_2)
+        export_before = conf._fetch_export(self.cluster_id, '/rgw')
+        assert export_before is not None
+        assert set(export_before.transports) == {"TCP", "UDP"}
+
+        # apply_export with no 'transports' field; cluster has enable_rdma -> default TCP, RDMA
+        rdma_spec = NFSServiceSpec(service_id=self.cluster_id, enable_rdma=True)
+        with mock.patch('nfs.export.get_nfs_spec_for_cluster', return_value=rdma_spec):
+            r = conf.apply_export(self.cluster_id, json.dumps({
+                'export_id': 2,
+                'path': '/',
+                'pseudo': '/rgw',
+                'cluster_id': self.cluster_id,
+                'access_type': 'RO',
+                'squash': 'root',
+                'security_label': False,
+                'protocols': [4, 3],
+                'clients': [],
+                'fsal': {
+                    'name': 'RGW',
+                    'user_id': 'nfs.foo.bucket',
+                    'access_key_id': 'the_access_key',
+                    'secret_access_key': 'the_secret_key',
+                },
+            }))
+        assert len(r.changes) == 1
+
+        export_after = conf._fetch_export(self.cluster_id, '/rgw')
+        assert export_after is not None
+        assert export_after.export_id == 2
+        assert export_after.access_type == 'RO'
+        assert export_after.squash == 'root'
+        # Updated export has Transports = TCP, RDMA (default when transports omitted and RDMA enabled)
+        assert set(export_after.transports) == {'TCP', 'RDMA'}
     
     def _do_test_create_export_cephfs_with_cmount_path(self):
         nfs_mod = Module('nfs', '', '')
