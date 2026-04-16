@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <iostream>
 #include <mutex>
+#include <filesystem>
 #include <condition_variable>
 #include "fmt/format.h"
 #include <map>
@@ -1627,6 +1628,7 @@ WRITE_CLASS_ENCODER(DBOLHInfo)
 class DB {
   private:
     const std::string db_name;
+    const std::string table_name_prefix;
     rgw::sal::Driver* driver;
     const std::string account_table;
     const std::string user_table;
@@ -1650,18 +1652,21 @@ class DB {
 
   public:
     DB(std::string db_name, CephContext *_cct) : db_name(db_name),
-    account_table(db_name+"_account_table"),
-    user_table(db_name+"_user_table"),
-    bucket_table(db_name+"_bucket_table"),
-    quota_table(db_name+"_quota_table"),
-    lc_head_table(db_name+"_lc_head_table"),
-    lc_entry_table(db_name+"_lc_entry_table"),
+    table_name_prefix(std::filesystem::path(db_name).filename()),
+    account_table(table_name_prefix + "_account_table"),
+    user_table(table_name_prefix + "_user_table"),
+    bucket_table(table_name_prefix + "_bucket_table"),
+    quota_table(table_name_prefix + "_quota_table"),
+    lc_head_table(table_name_prefix + "_lc_head_table"),
+    lc_entry_table(table_name_prefix + "_lc_entry_table"),
     cct(_cct),
     dp(_cct, ceph_subsys_rgw, "rgw DBStore backend: ")
   {}
     /*	DB() {}*/
 
     DB(CephContext *_cct) : db_name("default_db"),
+
+    table_name_prefix(db_name),
     account_table(db_name+"_account_table"),
     user_table(db_name+"_user_table"),
     bucket_table(db_name+"_bucket_table"),
@@ -1682,13 +1687,13 @@ class DB {
     const std::string getLCHeadTable() { return lc_head_table; }
     const std::string getLCEntryTable() { return lc_entry_table; }
     const std::string getObjectTable(std::string bucket) {
-      return db_name+"_"+bucket+"_object_table"; }
+      return table_name_prefix+"_"+bucket+"_object_table"; }
     const std::string getObjectDataTable(std::string bucket) {
-      return db_name+"_"+bucket+"_objectdata_table"; }
+      return table_name_prefix+"_"+bucket+"_objectdata_table"; }
     const std::string getObjectView(std::string bucket) {
-      return db_name+"_"+bucket+"_object_view"; }
+      return table_name_prefix+"_"+bucket+"_object_view"; }
     const std::string getObjectTrigger(std::string bucket) {
-      return db_name+"_"+bucket+"_object_trigger"; }
+      return table_name_prefix+"_"+bucket+"_object_trigger"; }
 
     std::map<std::string, class ObjectOp*> getObjectMap();
 

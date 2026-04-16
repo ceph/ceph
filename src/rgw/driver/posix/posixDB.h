@@ -151,12 +151,6 @@ class RemovePOSIXUserOp: public SQLRemoveUser {};
 class POSIXUserDB : public SQLiteDB {
   private:
     const std::string db_name;
-    const std::string user_table;
-    const std::string bucket_table;
-    const std::string quota_table;
-    const std::string lc_head_table;
-    const std::string lc_entry_table;
-
     rgw::sal::Driver* driver;
 
   protected:
@@ -172,7 +166,6 @@ class POSIXUserDB : public SQLiteDB {
 
     POSIXUserDB(std::string db_name, CephContext *_cct) : SQLiteDB(db_name, _cct),
 		db_name(db_name),
-		user_table(db_name+"_user_table"),
 		cct(_cct),
 		dp(_cct, ceph_subsys_rgw, "rgw POSIXUserDBStore backend: ")
                 { DB::set_context(cct); }
