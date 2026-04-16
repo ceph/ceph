@@ -71,11 +71,12 @@ int POSIXUserDB::Initialize(string logfile, int loglevel)
   DBOpParams params = {};
   RGWAccessKey key("0555b35654ad1656d804", "h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q==");
 
-  params.user_table = user_table;
-  params.bucket_table = bucket_table;
-  params.quota_table = quota_table;
-  params.lc_entry_table = lc_entry_table;
-  params.lc_head_table = lc_head_table;
+  params.user_table = getUserTable();
+  params.bucket_table = getBucketTable();
+  params.quota_table = getQuotaTable();
+  params.lc_entry_table = getLCEntryTable();
+  params.lc_head_table = getLCHeadTable();
+
   params.op.user.uinfo.display_name = "tester";
   params.op.user.uinfo.user_id.id = "test";
   params.op.user.uinfo.access_keys["default"] = key;
