@@ -1201,6 +1201,8 @@ protected:
   hobject_t pool_migration_watermark;
   /// currently migrating objects
   std::set<hobject_t> pool_migrations_in_flight;
+  /// new writes blocked by pool migration
+  std::set<hobject_t> pool_migration_blocked_writes;
   /// count of snaps being migrated per head object
   std::map<hobject_t,int> pool_migration_clones_in_flight;
   /// last pool migration operation started

@@ -518,7 +518,19 @@ void PrimaryLogPG::on_global_recover(
   }
 
   backfills_in_flight.erase(soid);
-  pool_migrations_in_flight.erase(soid);
+  if (pool_migrations_in_flight.erase(soid)) {
+    // Migrations complete in order, kick any blocked writes for this object
+    // and any earlier objects
+    for (auto it = pool_migration_blocked_writes.begin();
+         it != pool_migration_blocked_writes.end() && *it <= soid;
+         it = pool_migration_blocked_writes.erase(it)) {
+      dout(20) << " kicking degraded waiters on " << *it << dendl;
+      auto degraded_object_entry = waiting_for_degraded_object.find(*it);
+      ceph_assert(degraded_object_entry != waiting_for_degraded_object.end());
+      requeue_ops(degraded_object_entry->second);
+      waiting_for_degraded_object.erase(degraded_object_entry);
+    }
+  }
 
   recovering.erase(i);
   finish_recovery_op(soid);
@@ -695,11 +707,14 @@ bool PrimaryLogPG::is_degraded_or_backfilling_object(const hobject_t& soid)
     if (pool_migration_watermark == soid &&
 	new_pool_migration_interval)
       return true;
-    // Object is degraded if we are migrating it to another pool
+    // Object is degraded if it is in the range of objects currently
+    // being migrated. If its a write to a new object add it to the
+    // blocked writes set
     if (pool_migration_watermark <= soid &&
-	last_pool_migration_started >= soid &&
-	pool_migrations_in_flight.count(soid))
+	last_pool_migration_started.get_head() >= soid) {
+      pool_migration_blocked_writes.insert(soid);
       return true;
+    }
   }
   return false;
 }
@@ -15269,21 +15284,12 @@ void PrimaryLogPG::pool_migration_source_start_delete(hobject_t oid)
 
   if (pool_migration_watermark == oid) {
     while (pool_migration_source_delete_pending_lock.contains(pool_migration_watermark)) {
-      dout(20) << "BILL: try delete " << pool_migration_watermark << dendl;
       if (!pool_migration_source_delete(pool_migration_watermark)) {
         break;
       }
     }
   } else {
     // Copy completed out of order - wait for earlier copy to complete.
-    dout(20) << "BILL: pool migration delaying delete of " << oid << dendl;
-    dout(20) << "BILL: " << pool_migration_watermark << dendl;
-    for (auto&& obj : pool_migration_source_delete_pending_lock) {
-      dout(20) << "BILL: sdpl " << obj << dendl;
-    }
-    for (auto&& obj : pool_migrations_in_flight) {
-      dout(20) << "BILL: pmif " << obj << dendl;
-    }
     // Check that the watermark object is being migrated
     ceph_assert(pool_migrations_in_flight.contains(pool_migration_watermark));
   }
@@ -15397,7 +15403,7 @@ void PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r)
   dout(10) << __func__ << " " << oid << " failed with " << r << dendl;
 
   // Remove from in-flight tracking
-  pool_migrations_in_flight.erase(oid);
+  pool_migrations_in_flight.erase(oid); // BILL: FIXME This isn't good enough - it can leave I/O hung
 
   // Check error type and take appropriate action
   if (r == -EAGAIN || r == -EBUSY) {
@@ -15588,9 +15594,6 @@ uint64_t PrimaryLogPG::recover_pool_migration(
       // Migrate head object first
       soid = soid.get_head();
     }
-    ceph_assert(new_pool_migration_interval ||
-                (action == DELETE_HEAD) ||
-                !is_degraded_or_backfilling_object(soid));
 
     ObjectContextRef obc = get_object_context(soid, false);
     ceph_assert(obc);
