@@ -699,7 +699,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "P43CA22E17D0F9596"
+        "uid": "${datasource}"
       },
       "description": "A time-series chart showing latency over time, useful for detecting performance degradation and intermittent delays.",
       "fieldConfig": {
