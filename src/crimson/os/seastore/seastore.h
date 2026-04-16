@@ -96,7 +96,7 @@ public:
       Device* device,
       bool is_test,
       uint32_t store_shard_nums,
-      store_index_t store_index = 0);
+      store_index_t max_local_store_num);
     ~Shard() = default;
 
     seastar::future<struct stat> stat(
@@ -531,6 +531,8 @@ public:
 
     common::Throttle throttler;
     store_index_t store_index;
+    friend class SeaStore;
+    thread_local static store_index_t reactor_local_stores_num;
 
     seastar::metrics::metric_group metrics;
     void register_metrics();
@@ -591,10 +593,7 @@ public:
 
   FuturizedStore::Shard& get_sharded_store(store_index_t store_index = 0) override
   {
-    assert(store_index < shard_stores.local().mshard_stores.size());
-    auto &shard_store = *(shard_stores.local().mshard_stores[store_index]);
-    assert(shard_store.get_status() == true);
-    return shard_store;
+    return shard_stores.local(store_index);
   }
   static col_obj_ranges_t
   get_objs_range(CollectionRef ch, unsigned bits);
