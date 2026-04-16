@@ -8018,7 +8018,8 @@ bool MDCache::shutdown_pass()
           dir->is_freezing() ||
           dir->is_ambiguous_dir_auth() ||
           dir->state_test(CDir::STATE_EXPORTING) ||
-          dir->get_inode()->is_ephemerally_pinned()) {
+          (mds->mdsmap->get_max_mds() > 0 &&
+           dir->get_inode()->is_ephemerally_pinned())) {
         continue;
       }
       ls.push_back(dir);
