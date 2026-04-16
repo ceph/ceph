@@ -32,7 +32,7 @@ public:
   public:
     Shard(std::string path,
       uint32_t store_shard_nums,
-      store_index_t store_index);
+      store_index_t max_local_store_num);
     ~Shard() = default;
 
     seastar::future<struct stat> stat(
@@ -186,6 +186,9 @@ public:
     std::unordered_map<coll_t, boost::intrusive_ptr<Collection>> coll_map;
     std::map<coll_t, boost::intrusive_ptr<Collection>> new_coll_map;
     store_index_t store_index;
+    // the number of store shards a particular SeaStar's reactor has seen
+    friend class CyanStore;
+    thread_local static store_index_t reactor_local_stores_num;
   };
 
   CyanStore(const std::string& path);
@@ -225,7 +228,8 @@ public:
 
 
 private:
-  seastar::sharded<CyanStore::Shard> shard_stores;
+  crimson::os::multisharded<CyanStore::Shard> shard_stores;
+  uint32_t store_shard_nums = 0;
   const std::string path;
   uuid_d osd_fsid;
 };

@@ -30,6 +30,8 @@ namespace crimson::os {
 
 using ObjectRef = boost::intrusive_ptr<Object>;
 
+thread_local store_index_t CyanStore::Shard::reactor_local_stores_num = 0;
+
 CyanStore::CyanStore(const std::string& path)
   : path{path}
 {}
@@ -76,9 +78,10 @@ seastar::future<uint32_t> CyanStore::start()
 {
   ceph_assert(seastar::this_shard_id() == primary_core);
   return get_shard_nums().then([this] {
-    auto num_shard_services = (store_shard_nums + seastar::smp::count - 1 ) / seastar::smp::count;
-    logger().info("store_shard_nums={} seastar::smp={}, num_shard_services={}", store_shard_nums, seastar::smp::count, num_shard_services);
-    return shard_stores.start(num_shard_services, path, store_shard_nums);
+    auto max_local_store_num = (store_shard_nums + seastar::smp::count - 1 ) / seastar::smp::count;
+    logger().info("store_shard_nums={} seastar::smp={}, num_shard_services={}", store_shard_nums, seastar::smp::count, max_local_store_num);
+    Shard::reactor_local_stores_num = 0; // paranoia
+    return shard_stores.start(store_shard_nums, path, store_shard_nums, max_local_store_num);
   }).then([this] {
     logger().debug("CyanStore started with {} shard stores", store_shard_nums);
     return seastar::make_ready_future<uint32_t>(store_shard_nums);
@@ -177,11 +180,12 @@ CyanStore::mkfs_ertr::future<> CyanStore::mkfs(uuid_d new_osd_fsid)
 CyanStore::Shard::Shard(
   std::string path,
   uint32_t store_shard_nums,
-  store_index_t store_index)
+  store_index_t max_local_store_num)
   : path(path),
-    store_index(store_index)
+    store_index(reactor_local_stores_num++)
 {
   ceph_assert(store_index < store_shard_nums);
+  ceph_assert(store_index < max_local_store_num);
 }
 
 seastar::future<> CyanStore::Shard::mkfs()
