@@ -43,6 +43,7 @@
 #endif
 
 
+#include "common/debug_level_guard.h"
 #include "crush/CrushLocation.h"
 
 #ifdef HAVE_BREAKPAD
@@ -389,6 +390,9 @@ private:
   std::set<std::string> _experimental_features;
 
   ceph::PluginRegistry* _plugin_registry;
+
+  DebugLevelGuard _debug_level_guard;
+
 #ifdef CEPH_DEBUG_MUTEX
   md_config_obs_t *_lockdep_obs;
 #endif
@@ -397,6 +401,11 @@ private:
   ceph::mutex _msgr_hook_lock = ceph::make_mutex("CephContext::msgr_hook");
 public:
   TOPNSPC::crush::CrushLocation crush_location;
+
+  /// Check debug subsystem levels and auto-revert any that have been
+  /// above high_debug_level_threshold for longer than
+  /// high_debug_level_reset_timeout. Called from daemon tick functions.
+  void check_debug_level_guard();
   void modify_msgr_hook(std::function<AdminSocketHook*(void)> create,
 			std::function<void(AdminSocketHook*)> add);
 private:

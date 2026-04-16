@@ -509,6 +509,36 @@ options:
   daemon_default: 10000
   # default changed by common_preinit()
   with_legacy: true
+- name: high_debug_level_threshold
+  type: int
+  level: advanced
+  desc: Debug log level at or above which a subsystem is considered excessively high
+  long_desc: When any debug_* subsystem has its log level set at or above this
+    threshold, the daemon will issue a health warning and start a timer to
+    automatically revert it to the previous safe level after
+    high_debug_level_reset_timeout seconds. Set to 0 to disable the guard.
+  default: 0
+  min: 0
+  max: 30
+  flags:
+  - runtime
+  see_also:
+  - high_debug_level_reset_timeout
+- name: high_debug_level_reset_timeout
+  type: secs
+  level: advanced
+  desc: Seconds before an excessively high debug level is auto-reverted
+  long_desc: When a debug subsystem exceeds high_debug_level_threshold, the
+    daemon will automatically revert it to the previous level after this many
+    seconds. Set to 0 to disable the auto-revert while keeping the health
+    warning. This protects against accidental high debug levels causing disk
+    I/O floods and CPU overhead in production.
+  default: 300
+  min: 0
+  flags:
+  - runtime
+  see_also:
+  - high_debug_level_threshold
 - name: log_to_file
   type: bool
   level: basic
