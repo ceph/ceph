@@ -10,6 +10,7 @@ import _ from 'lodash';
 import { of } from 'rxjs';
 
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
+import { HostService } from '~/app/shared/api/host.service';
 import { PaginateObservable } from '~/app/shared/api/paginate.model';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SharedModule } from '~/app/shared/shared.module';
@@ -20,6 +21,7 @@ import { TextLabelListComponent } from '~/app/shared/components/text-label-list/
 import { USER } from '~/app/shared/constants/app.constants';
 import {
   CheckboxModule,
+  ComboBoxModule,
   InputModule,
   ModalModule,
   NumberModule,
@@ -60,6 +62,7 @@ describe('ServiceFormComponent', () => {
       NumberModule,
       ModalModule,
       CheckboxModule,
+      ComboBoxModule,
       RadioModule,
       TextLabelListComponent
     ]
@@ -87,11 +90,7 @@ describe('ServiceFormComponent', () => {
     it('should test placement (host)', () => {
       formHelper.setValue('service_type', 'crash');
       formHelper.setValue('placement', 'hosts');
-      formHelper.setValue('hosts', [
-        { content: 'mgr0', selected: true },
-        { content: 'mon0', selected: true },
-        { content: 'osd0', selected: true }
-      ]);
+      formHelper.setValue('hosts', ['mgr0', 'mon0', 'osd0']);
       formHelper.setValue('count', 2);
       component.onSubmit();
       expect(cephServiceService.create).toHaveBeenCalledWith({
@@ -115,7 +114,10 @@ describe('ServiceFormComponent', () => {
       expect(cephServiceService.create).toHaveBeenCalledWith({
         service_type: 'mgr',
         placement: {
-          label: 'foo'
+          label: {
+            content: 'foo',
+            selected: true
+          }
         },
         unmanaged: false
       });
@@ -780,6 +782,30 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         const serviceId = fixture.componentInstance.serviceForm.get('service_id');
         expect(serviceType.disabled).toBeTruthy();
         expect(serviceId.disabled).toBeTruthy();
+      });
+
+      it('should set label when editing a service with label placement', () => {
+        const hostService = TestBed.inject(HostService);
+        spyOn(hostService, 'getAllHosts').and.returnValue(of([]));
+        spyOn(hostService, 'getLabels').and.returnValue(of(['foo', 'bar']));
+
+        const service = {
+          service_type: 'mgr',
+          service_id: 'mgr',
+          unmanaged: false,
+          placement: { count: 1, label: 'foo' }
+        };
+        const paginate_obs = new PaginateObservable<any>(of([service]));
+        spyOn(cephServiceService, 'list').and.returnValue(paginate_obs);
+
+        component.serviceName = 'mgr';
+        component.serviceType = 'mgr';
+        component.editing = true;
+        component.ngOnInit();
+
+        expect(component.serviceForm.get('placement').value).toBe('label');
+        expect(component.serviceForm.get('label').value).toBe('foo');
+        expect(component.labelOptions.find((item) => item.content === 'foo')?.selected).toBe(true);
       });
 
       it('should not edit pools for nvmeof service', () => {
