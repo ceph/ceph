@@ -1,0 +1,35 @@
+.cd-nvmeof-subsystem-step-two {
+  // Full width of the tearsheet content column; min-inline-size allows nested
+  // Carbon grid rows to shrink instead of bleeding into the right influencer.
+  min-inline-size: 0;
+  inline-size: 100%;
+
+  &-manual-hosts {
+    display: flex;
+    align-items: flex-start;
+  }
+
+  &-manual-hosts-input {
+    flex: 0.5;
+    margin-right: var(--cds-spacing-05);
+  }
+
+  &-added-hosts-text {
+    color: var(--cds-text-secondary);
+  }
+
+  &-specific-hosts-tag {
+    max-inline-size: 17rem;
+  }
+
+  &-influencer {
+    .cds--contained-list-item__content {
+      max-inline-size: 18rem !important;
+      padding-left: 0 !important;
+    }
+
+    .cds--contained-list__header {
+      padding: 0 !important;
+    }
+  }
+}
