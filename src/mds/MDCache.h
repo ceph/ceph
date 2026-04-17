@@ -646,7 +646,6 @@ private:
   public:
   void finish(int r) override {
     ceph_assert(on_finish);
-    MDSContext::finish(r);
     on_finish(r);
   }
   Formatter* get_formatter() const {
