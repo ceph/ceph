@@ -11,6 +11,9 @@ NFS_CORE_PARAM {
         Enable_UDP = false;
         NFS_Port = {{ port }};
         allow_set_io_flusher_fail = true;
+{% if haproxy_hosts %}
+        HAProxy_Hosts = {{ haproxy_hosts|join(", ") }};
+{% endif %}
 {% if monitoring_addr %}
         Monitoring_Addr = {{ monitoring_addr }};
 {% endif %}
@@ -19,9 +22,6 @@ NFS_CORE_PARAM {
 {% endif %}
 {% if bind_addr %}
         Bind_addr = {{ bind_addr }};
-{% endif %}
-{% if haproxy_hosts %}
-        HAProxy_Hosts = {{ haproxy_hosts|join(", ") }};
 {% endif %}
 {% if enable_rdma and rdma_port %}
         NFS_RDMA_Port = {{ rdma_port }};
@@ -94,5 +94,4 @@ TLS_CONFIG{
 {% endif %}
 }
 {% endif %}
-
 %url    {{ url }}
