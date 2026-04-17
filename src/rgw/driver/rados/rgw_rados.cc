@@ -1107,6 +1107,11 @@ void RGWRados::finalize()
   }
   delete sync_tracer;
   
+  if (use_restore_thread) {
+    restore->stop_processor();
+  }
+  restore = NULL;
+
   delete lc;
   lc = NULL; 
 
@@ -1148,11 +1153,6 @@ void RGWRados::finalize()
   if (run_bucket_logging_thread) {
     rgw::bucketlogging::shutdown();
   }
-
-  if (use_restore_thread) {
-    restore->stop_processor();
-  }
-  restore = NULL;
 }
 
 /** 
