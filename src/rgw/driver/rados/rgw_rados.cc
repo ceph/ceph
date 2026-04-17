@@ -1107,6 +1107,11 @@ void RGWRados::finalize()
   }
   delete sync_tracer;
   
+  if (use_restore_thread) {
+    restore->stop_processor();
+  }
+  restore = NULL;
+
   delete lc;
   lc = NULL; 
 
