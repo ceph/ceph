@@ -10320,7 +10320,7 @@ int MDCache::scan_stray_dir(dirfrag_t next, std::unique_ptr<MDCache::C_MDS_DumpS
   // only if we came from asok cmd handler
   if (cmd_ctx) {
     cmd_ctx->end_dump();
-    cmd_ctx->finish(0);
+    cmd_ctx->complete(0);
   }
   return 0;
 }
