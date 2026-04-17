@@ -45,6 +45,26 @@ template <> struct fmt::formatter<z_op>: fmt::formatter<std::string_view> {
 
 namespace crimson::os::seastore::segment_manager::zbd {
 
+seastar::future<> ZBDSegmentManager::start(uint32_t shard_nums)
+{
+  LOG_PREFIX(ZBDSegmentManager::start);
+  device_shard_nums = shard_nums;
+  auto num_shard_services = (device_shard_nums + seastar::smp::count - 1 ) / seastar::smp::count;
+  INFO("device_shard_nums={} seastar::smp={}, num_shard_services={}", device_shard_nums, seastar::smp::count, num_shard_services);
+  return shard_devices.start(shards_num, device_path, store_index);
+
+}
+
+seastar::future<> ZBDSegmentManager::stop()
+{
+  return shard_devices.stop();
+}
+
+Device& ZBDSegmentManager::get_sharded_device(store_index_t store_index)
+{
+  return shard_devices.local(store_index);
+}
+
 using open_device_ret = ZBDSegmentManager::access_ertr::future<
   std::pair<seastar::file, seastar::stat_data>>;
 static open_device_ret open_device(
@@ -436,6 +456,22 @@ read_metadata(seastar::file &device, seastar::stat_data sd)
     });
 }
 
+ZBDSegmentManager::read_ertr::future<uint32_t> ZBDSegmentManager::get_shard_nums()
+{
+  return open_device(
+    device_path, seastar::open_flags::rw
+  ).safe_then([this](auto p) {
+    device = std::move(p.first);
+    auto sd = p.second;
+    return read_metadata(device, sd);
+  }).safe_then([this](auto meta){
+    return read_ertr::make_ready_future<uint32_t>(meta.shard_num);
+  }).handle_error(
+    crimson::ct_error::assert_all{
+      "Invalid error in ZBDSegmentManager::get_shard_nums"
+  });
+}
+
 ZBDSegmentManager::mount_ret ZBDSegmentManager::mount()
 {
   return shard_devices.invoke_on_all([](auto &local_device) {
@@ -456,7 +492,15 @@ ZBDSegmentManager::mount_ret ZBDSegmentManager::shard_mount()
     auto sd = p.second;
     return read_metadata(device, sd);
   }).safe_then([=, this](auto meta){
-    shard_info = meta.shard_infos[seastar::this_shard_id()];
+    if(seastar::this_shard_id() + seastar::smp::count * store_index >= meta.shard_num) {
+      ERROR("{} shard_id {} out of range {}",
+        device_id_printer_t{get_device_id()},
+        seastar::this_shard_id() + seastar::smp::count * store_index,
+        sb.shard_num);
+      ceph_abort_msg("too many CPU shards");
+      return mount_ertr::now();
+    }
+    shard_info = meta.shard_infos[seastar::this_shard_id() + seastar::smp::count * store_index];
     metadata = meta;
     return mount_ertr::now();
   });
@@ -465,7 +509,7 @@ ZBDSegmentManager::mount_ret ZBDSegmentManager::shard_mount()
 ZBDSegmentManager::mkfs_ret ZBDSegmentManager::mkfs(
   device_config_t config)
 {
-  return shard_devices.local().primary_mkfs(config
+  return shard_devices.local(0).primary_mkfs(config
     ).safe_then([this] {
     return shard_devices.invoke_on_all([](auto &local_device) {
       return local_device.shard_mkfs(
