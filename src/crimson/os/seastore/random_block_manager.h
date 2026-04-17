@@ -50,7 +50,7 @@ struct rbm_superblock_t {
   uint64_t journal_size = 0;
   checksum_t crc = 0;
   device_config_t config;
-  unsigned int shard_num = 0;
+  uint32_t shard_num = 0;
   // Must be assigned if ent-to-end-data-protection features is enabled
   uint32_t nvme_block_size = 0;
   std::vector<rbm_shard_info_t> shard_infos;
@@ -71,7 +71,6 @@ struct rbm_superblock_t {
   }
 
   void validate() const {
-    ceph_assert(shard_num == seastar::smp::count);
     ceph_assert(block_size > 0);
     for (unsigned int i = 0; i < seastar::smp::count; i ++) {
       ceph_assert(shard_infos[i].size > block_size &&

@@ -35,7 +35,7 @@ namespace crimson::os::seastore::segment_manager::zbd {
   };
 
   struct zbd_sm_metadata_t {
-    unsigned int shard_num = 0;
+    uint32_t shard_num = 0;
     size_t segment_size = 0;
     size_t segment_capacity = 0;
     size_t zones_per_segment = 0;
@@ -74,7 +74,6 @@ namespace crimson::os::seastore::segment_manager::zbd {
     }
 
     void validate() const {
-      ceph_assert_always(shard_num == seastar::smp::count);
       for (unsigned int i = 0; i < seastar::smp::count; i++) {
         ceph_assert_always(shard_infos[i].size > 0);
         ceph_assert_always(shard_infos[i].size <= DEVICE_OFF_MAX);
@@ -121,22 +120,18 @@ namespace crimson::os::seastore::segment_manager::zbd {
   class ZBDSegmentManager final : public SegmentManager{
   // interfaces used by Device
   public:
-    seastar::future<> start() {
-      return shard_devices.start(device_path);
-    }
+    seastar::future<> start(uint32_t shard_nums) override;
 
-    seastar::future<> stop() {
-      return shard_devices.stop();
-    }
+    seastar::future<> stop() override;
 
-    Device& get_sharded_device() override {
-      return shard_devices.local();
-    }
+    Device& get_sharded_device(store_index_t store_index = 0) override;
 
     mount_ret mount() override;
     mkfs_ret mkfs(device_config_t meta) override;
 
-    ZBDSegmentManager(const std::string &path) : device_path(path) {}
+    ZBDSegmentManager(const std::string &path, store_index_t store_index = 0)
+    : device_path(path),
+      store_index(store_index) {}
 
     ~ZBDSegmentManager() override = default;
 
@@ -155,13 +150,9 @@ namespace crimson::os::seastore::segment_manager::zbd {
       paddr_t addr,
       std::vector<bufferptr> ptrs) override;
 
-<<<<<<< HEAD
     read_ertr::future<uint32_t> get_shard_nums() override;
 
     device_type_t get_device_type() const override {
-=======
-    device_type_t get_device_type() const final {
->>>>>>> parent of 89d5be273a6 (crimson/os/seastore: support other devices)
       return device_type_t::ZBD;
     }
 
@@ -223,7 +214,7 @@ namespace crimson::os::seastore::segment_manager::zbd {
       }
     } stats;
 
-    void register_metrics();
+    void register_metrics(store_index_t store_index);
     seastar::metrics::metric_group metrics;
 
     Segment::close_ertr::future<> segment_close(
@@ -243,7 +234,28 @@ namespace crimson::os::seastore::segment_manager::zbd {
 
     mount_ret shard_mount();
 
-    seastar::sharded<ZBDSegmentManager> shard_devices;
+    uint32_t device_shard_nums = 0;
+    store_index_t store_index = 0;
+    bool shard_status = true;
+    class MultiShardDevices {
+    public:
+      std::vector<std::unique_ptr<ZBDSegmentManager>> mshard_devices;
+
+    public:
+    MultiShardDevices(size_t count,
+                      const std::string path)
+    : mshard_devices() {
+      mshard_devices.reserve(count);
+      for (size_t store_index = 0; store_index < count; ++store_index) {
+        mshard_devices.emplace_back(std::make_unique<ZBDSegmentManager>(
+          path, store_index));
+      }
+    }
+    ~MultiShardDevices() {
+     mshard_devices.clear();
+    }
+  };
+  seastar::sharded<MultiShardDevices> shard_devices;
   };
 
 }
