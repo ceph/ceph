@@ -197,7 +197,7 @@ void ImageMap<I>::process_updates() {
   // notify listener (acquire, release) and update on-disk map. note
   // that its safe to process this outside m_lock as we still hold
   // timer lock.
-  notify_listener_acquire_release_images(acquire_updates, release_updates);
+  notify_listener_acquire_release_entities(acquire_updates, release_updates);
   update_image_mapping(std::move(map_updates), std::move(map_removals));
 }
 
@@ -307,7 +307,7 @@ void ImageMap<I>::schedule_action(const GlobalId &global_id) {
 }
 
 template <typename I>
-void ImageMap<I>::notify_listener_acquire_release_images(
+void ImageMap<I>::notify_listener_acquire_release_entities(
     const Updates &acquire, const Updates &release) {
   if (acquire.empty() && release.empty()) {
     return;
@@ -358,8 +358,8 @@ void ImageMap<I>::notify_listener_acquire_release_images(
 }
 
 template <typename I>
-void ImageMap<I>::notify_listener_remove_images(const std::string &mirror_uuid,
-                                                const Updates &remove) {
+void ImageMap<I>::notify_listener_remove_entities(const std::string &mirror_uuid,
+                                                  const Updates &remove) {
   dout(5) << "mirror_uuid=" << mirror_uuid << ", "
           << "remove=[" << remove << "]" << dendl;
 
@@ -466,8 +466,8 @@ void ImageMap<I>::update_images_removed(
 
   if (!to_remove.empty()) {
     // removal notification will be notified instantly. this is safe
-    // even after scheduling action for images as we still hold m_lock
-    notify_listener_remove_images(mirror_uuid, to_remove);
+    // even after scheduling action for entities as we still hold m_lock
+    notify_listener_remove_entities(mirror_uuid, to_remove);
   }
 }
 
