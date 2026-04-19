@@ -24,6 +24,7 @@
 #include "common/ceph_context.h"
 #include "common/debug.h"
 #include "common/dout.h"
+#include "common/PluginRegistry.h"
 
 namespace TOPNSPC {
 
