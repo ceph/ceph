@@ -20,6 +20,7 @@
 #include <cmath>
 #include <cstring>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <map>
 #include <numeric>
@@ -169,13 +170,15 @@ struct BenchConfig {
   string perf_dump_path;
   string client_oc;
   string client_oc_size;
+  bool show_progress;
+  int progress_interval;
 };
 
 struct ThreadStats {
-  uint64_t bytes_transferred = 0;
-  uint64_t ops = 0;    // read/write calls
-  uint64_t files = 0;  // files successfully opened/closed
-  int errors = 0;
+  std::atomic<uint64_t> bytes_transferred{0};
+  std::atomic<uint64_t> ops{0}; // read/write calls
+  std::atomic<uint64_t> files{0}; // files successfully opened/closed
+  std::atomic<int> errors{0};
 };
 
 // --- Setup Helper (Updated to use stream for output) ---
@@ -270,6 +273,84 @@ int setup_mount(struct ceph_mount_info **cmount, const BenchConfig& config, std:
   }
 
   return 0;
+}
+
+void
+progress_reporter(
+    const string& phase,
+    const vector<ThreadStats>& stats,
+    const BenchConfig& config,
+    std::atomic<bool>& stop_signal,
+    steady_clock::time_point start_time)
+{
+  if (!config.show_progress)
+    return;
+
+  char type_char = (phase == "write" ? 'w' : 'r');
+  uint64_t total_files_to_do = config.num_files;
+  int last_interval = -1;
+
+  while (!stop_signal) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    uint64_t total_bytes = 0;
+    uint64_t total_ops = 0;
+    uint64_t total_files_done = 0;
+
+    for (const auto& s : stats) {
+      total_bytes += s.bytes_transferred.load();
+      total_ops += s.ops.load();
+      total_files_done += s.files.load();
+    }
+
+    auto now = steady_clock::now();
+    double elapsed_sec = duration_cast<milliseconds>(now - start_time).count() /
+                         1000.0;
+    if (elapsed_sec <= 0)
+      continue;
+
+    double progress_pct = 0;
+    double eta_sec = 0;
+
+    if (config.duration > 0) {
+      progress_pct = (elapsed_sec / config.duration) * 100.0;
+      if (progress_pct > 0) {
+        eta_sec = (config.duration - elapsed_sec);
+      }
+    } else if (total_files_to_do > 0) {
+      progress_pct = ((double)total_files_done / total_files_to_do) * 100.0;
+      if (total_files_done > 0) {
+        double files_per_sec = total_files_done / elapsed_sec;
+        eta_sec = (total_files_to_do - total_files_done) / files_per_sec;
+      }
+    }
+
+    if (progress_pct > 100.0)
+      progress_pct = 100.0;
+    if (eta_sec < 0)
+      eta_sec = 0;
+
+    int current_interval = (int)(progress_pct / config.progress_interval);
+    if (current_interval > last_interval) {
+      last_interval = current_interval;
+
+      double mbps = (double)total_bytes / 1024.0 / 1024.0 / elapsed_sec;
+      double iops = (double)total_ops / elapsed_sec;
+
+      int eta_m = (int)eta_sec / 60;
+      int eta_s = (int)eta_sec % 60;
+
+      std::cout << "\r[" << std::fixed << std::setprecision(0) << progress_pct
+                << "%]"
+                << "[" << type_char << "=" << std::setprecision(1) << mbps
+                << "MiB/s]"
+                << "[" << type_char << "=" << (uint64_t)iops << " IOPS]"
+                << "[eta " << std::setfill('0') << std::setw(2) << eta_m
+                << "m:" << std::setw(2) << eta_s << "s]" << std::flush;
+    }
+  }
+  // Clear the progress line
+  std::cout << "\r" << std::string(80, ' ') << "\r" << std::flush;
 }
 
 // Worker function for Write phase
@@ -732,10 +813,23 @@ int do_bench(BenchConfig& config) {
     // --- WRITE PHASE ---
     cout << "Starting Write Phase..." << std::endl;
     std::vector<std::thread> threads;
-    std::fill(write_stats.begin(), write_stats.end(), ThreadStats{});
+    for (auto& s : write_stats) {
+      s.bytes_transferred = 0;
+      s.ops = 0;
+      s.files = 0;
+      s.errors = 0;
+    }
     auto thread_outputs = std::vector<std::stringstream>(config.num_threads);
 
     auto start_time = steady_clock::now();
+
+    std::atomic<bool> write_progress_stop{false};
+    std::thread write_progress_thread;
+    if (config.show_progress) {
+      write_progress_thread = std::thread(
+          progress_reporter, "write", std::ref(write_stats), std::ref(config),
+          std::ref(write_progress_stop), start_time);
+    }
 
     for (int i = 0; i < config.num_threads; ++i) {
       int f_count = files_per_thread + (i < remainder ? 1 : 0);
@@ -747,6 +841,13 @@ int do_bench(BenchConfig& config) {
     }
     for (auto& t : threads) {
       t.join();
+    }
+
+    if (config.show_progress) {
+      write_progress_stop = true;
+      if (write_progress_thread.joinable()) {
+        write_progress_thread.join();
+      }
     }
 
     if (check_and_report_errors(stop_signal, thread_outputs)) {
@@ -811,15 +912,30 @@ int do_bench(BenchConfig& config) {
 
     start_time = steady_clock::now();
 
+    std::atomic<bool> read_progress_stop{false};
+    std::thread read_progress_thread;
+    if (config.show_progress) {
+      read_progress_thread = std::thread(
+          progress_reporter, "read", std::ref(read_stats), std::ref(config),
+          std::ref(read_progress_stop), start_time);
+    }
+
     for (int i = 0; i < config.num_threads; ++i) {
       struct ceph_mount_info *worker_mount = config.per_thread_mount ? NULL : shared_cmount;
       threads.emplace_back(
-          bench_read_worker, i, write_stats[i].files, config, worker_mount,
-          std::ref(read_stats[i]), std::ref(stop_signal),
+          bench_read_worker, i, (int)write_stats[i].files.load(), config,
+          worker_mount, std::ref(read_stats[i]), std::ref(stop_signal),
           std::ref(thread_outputs[i]), start_time);
     }
     for (auto& t : threads) {
       t.join();
+    }
+
+    if (config.show_progress) {
+      read_progress_stop = true;
+      if (read_progress_thread.joinable()) {
+        read_progress_thread.join();
+      }
     }
 
     if (check_and_report_errors(stop_signal, thread_outputs)) {
@@ -874,8 +990,8 @@ int do_bench(BenchConfig& config) {
       for (int i = 0; i < config.num_threads; ++i) {
         struct ceph_mount_info *worker_mount = config.per_thread_mount ? NULL : shared_cmount;
         threads.emplace_back(
-            bench_cleanup_worker, i, write_stats[i].files, config, worker_mount,
-            std::ref(stop_signal), std::ref(thread_outputs[i]));
+            bench_cleanup_worker, i, (int)write_stats[i].files.load(), config,
+            worker_mount, std::ref(stop_signal), std::ref(thread_outputs[i]));
       }
       for (auto& t : threads) {
         t.join();
@@ -933,8 +1049,8 @@ int do_bench(BenchConfig& config) {
     for (int i = 0; i < config.num_threads; ++i) {
       struct ceph_mount_info *worker_mount = config.per_thread_mount ? NULL : shared_cmount;
       threads.emplace_back(
-          bench_cleanup_worker, i, write_stats[i].files, config, worker_mount,
-          std::ref(stop_signal), std::ref(thread_outputs[i]));
+          bench_cleanup_worker, i, (int)write_stats[i].files.load(), config,
+          worker_mount, std::ref(stop_signal), std::ref(thread_outputs[i]));
     }
     for (auto& t : threads) {
       t.join();
@@ -996,7 +1112,9 @@ int main(int argc, char **argv) {
     ("no-cleanup", po::bool_switch(&no_cleanup), "Disable cleanup of files")
     ("json", po::value<string>(&config.json_path), "Output results to a JSON file")
     ("duration", po::value<int>(&config.duration)->default_value(0), "Limit each phase to N seconds (0 = no limit)")
-    ("perf-dump", po::value<string>(&config.perf_dump_path), "File to dump performance counters to");
+    ("perf-dump", po::value<string>(&config.perf_dump_path), "File to dump performance counters to")
+    ("progress", po::bool_switch(&config.show_progress), "Show progress and current bandwidth during benchmark")
+    ("progress-interval", po::value<int>(&config.progress_interval)->default_value(10), "Progress update interval in percent (1-100)");
 
   // Hidden positional option for the sub-command
   po::options_description hidden("Hidden options");
@@ -1045,6 +1163,12 @@ int main(int argc, char **argv) {
     config.file_size = parse_size(size_str);
     config.block_size = parse_size(block_size_str);
     config.fsync_every_bytes = parse_size(fsync_str);
+
+    if (config.progress_interval < 1 || config.progress_interval > 100) {
+      cerr << "Error: progress-interval must be between 1 and 100\n";
+      return 1;
+    }
+
     return do_bench(config);
   } else {
     cerr << "Unknown command: " << subcommand << "\n";
