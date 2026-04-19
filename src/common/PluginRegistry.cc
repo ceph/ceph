@@ -17,6 +17,7 @@
  */
 
 #include "PluginRegistry.h"
+#include "Plugin.h"
 #include "ceph_ver.h"
 #include "common/ceph_context.h"
 #include "common/errno.h"

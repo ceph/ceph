@@ -6,7 +6,7 @@
 
 #include "include/common_fwd.h"
 #include "include/Context.h"
-#include "common/PluginRegistry.h"
+#include "common/Plugin.h"
 #include "librbd/cache/ImageWriteback.h"
 
 namespace librbd {
