@@ -1295,7 +1295,8 @@ namespace rgw::dedup {
   // command-line called from radosgw-admin.cc
   int cluster::dedup_restart_scan(rgw::sal::RadosStore *store,
                                   dedup_req_type_t dedup_type,
-                                  const DoutPrefixProvider *dpp)
+                                  const DoutPrefixProvider *dpp,
+                                  const dedup_filter_t *p_filter)
   {
     ldpp_dout(dpp, 1) << __func__ << "::dedup_type = " << dedup_type << dendl;
 
@@ -1337,7 +1338,17 @@ namespace rgw::dedup {
     ret = swap_epoch(store, dpp, &old_epoch, dedup_type, 0, 0);
     if (ret == 0) {
       ldpp_dout(dpp, 10) << __func__ << "::Epoch object was reset" << dendl;
-      return dedup_control(store, dpp, URGENT_MSG_RESTART);
+
+      // Build the RESTART bufferlist, optionally including the filter
+      bufferlist urgent_msg_bl;
+      urgent_msg_t urgent_msg = URGENT_MSG_RESTART;
+      ceph::encode(urgent_msg, urgent_msg_bl);
+      bool has_filter = (p_filter != nullptr);
+      ceph::encode(has_filter, urgent_msg_bl);
+      if (has_filter) {
+        encode(*p_filter, urgent_msg_bl);
+      }
+      return dedup_control_bl(store, dpp, urgent_msg, urgent_msg_bl);
     }
     else {
       return ret;
