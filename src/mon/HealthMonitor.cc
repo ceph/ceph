@@ -25,6 +25,7 @@
 #include "include/common_fwd.h"
 #include "include/stringify.h"
 
+#include "mon/DataStats.h"
 #include "mon/Monitor.h"
 #include "mon/MonMap.h"
 #include "mon/HealthMonitor.h"

@@ -28,7 +28,7 @@
 #include "PaxosService.h"
 #include "mds/MDSMap.h"
 #include "mds/MDSHealth.h" // for mds_metric_t
-#include "mon/mon_types.h" // for Metadata
+#include "mon/Metadata.h"
 #include "CommandHandler.h"
 
 class Monitor;
