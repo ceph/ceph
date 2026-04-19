@@ -42,7 +42,7 @@
 typedef void *cap_t;
 #endif
 
-#include "common/PluginRegistry.h"
+#include "common/Plugin.h"
 
 namespace ceph {
   class ExtBlkDevState {
