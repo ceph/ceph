@@ -29,7 +29,7 @@
 #include "global/global_context.h"
 #include "msg/Connection.h" // for ConnectionRef
 #include "msg/msg_types.h"
-#include "mon/mon_types.h"
+#include "mon/FeatureMap.h"
 
 #include "auth/AuthServiceHandler.h"
 #include "osd/OSDMap.h"
