@@ -105,11 +105,12 @@ image_replayer::Replayer* StateBuilder<I>::create_replayer(
     Threads<I>* threads,
     InstanceWatcher<I>* instance_watcher,
     const std::string& local_mirror_uuid,
+    const std::string& local_mirror_peer_uuid,
     PoolMetaCache* pool_meta_cache,
     ReplayerListener* replayer_listener) {
   return Replayer<I>::create(
-    threads, instance_watcher, local_mirror_uuid, pool_meta_cache, this,
-    replayer_listener);
+    threads, instance_watcher, local_mirror_uuid, local_mirror_peer_uuid,
+    pool_meta_cache, this, replayer_listener);
 }
 
 } // namespace snapshot
