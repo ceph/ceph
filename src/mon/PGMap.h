@@ -28,7 +28,6 @@
 #include "common/Formatter.h"
 #include "osd/osd_types.h"
 #include "include/mempool.h"
-#include "mon/mon_types.h"
 
 #include <cstdint>
 #include <iosfwd>
