@@ -382,6 +382,8 @@ namespace rgw::dedup {
     this->ingress_corrupted_etag += other.ingress_corrupted_etag;
     this->ingress_skip_too_small_bytes += other.ingress_skip_too_small_bytes;
     this->ingress_skip_too_small += other.ingress_skip_too_small;
+    this->ingress_skip_filtered_bucket += other.ingress_skip_filtered_bucket;
+    this->ingress_skip_filtered_storage_class += other.ingress_skip_filtered_storage_class;
 
     return *this;
   }
@@ -439,6 +441,14 @@ namespace rgw::dedup {
         f->dump_unsigned("Ingress skip: too small bytes",
                          this->ingress_skip_too_small_bytes);
       }
+      if (this->ingress_skip_filtered_bucket) {
+        f->dump_unsigned("Ingress skip: filtered bucket",
+                         this->ingress_skip_filtered_bucket);
+      }
+      if (this->ingress_skip_filtered_storage_class) {
+        f->dump_unsigned("Ingress skip: filtered storage class",
+                         this->ingress_skip_filtered_storage_class);
+      }
     }
 
     {
@@ -489,6 +499,8 @@ namespace rgw::dedup {
 
     encode(w.ingress_skip_too_small_bytes, bl);
     encode(w.ingress_skip_too_small, bl);
+    encode(w.ingress_skip_filtered_bucket, bl);
+    encode(w.ingress_skip_filtered_storage_class, bl);
 
     encode(w.duration, bl);
     ENCODE_FINISH(bl);
@@ -516,6 +528,8 @@ namespace rgw::dedup {
     decode(w.ingress_corrupted_etag, bl);
     decode(w.ingress_skip_too_small_bytes, bl);
     decode(w.ingress_skip_too_small, bl);
+    decode(w.ingress_skip_filtered_bucket, bl);
+    decode(w.ingress_skip_filtered_storage_class, bl);
 
     decode(w.duration, bl);
     DECODE_FINISH(bl);

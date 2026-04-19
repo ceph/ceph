@@ -2299,6 +2299,7 @@ namespace rgw::dedup {
     if (!d_filter.allow_storage_class(storage_class)) {
       ldpp_dout(dpp, 20) << __func__ << "::skip storage_class (filter): "
                          << storage_class << dendl;
+      p_worker_stats->ingress_skip_filtered_storage_class++;
       return 0;
     }
     if (storage_class == RGW_STORAGE_CLASS_STANDARD) {
@@ -2753,6 +2754,7 @@ namespace rgw::dedup {
           ldpp_dout(dpp, 20) <<__func__ << "::bucket=" << bucket << dendl;
           if (!d_filter.allow_bucket(bucket.name)) {
             ldpp_dout(dpp, 10) << __func__ << "::skip bucket (filter): " << bucket.name << dendl;
+            p_worker_stats->ingress_skip_filtered_bucket++;
             continue;
           }
           ret = ingress_bucket_objects_single_shard(disk_arr, bucket, worker_id,
