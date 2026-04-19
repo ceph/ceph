@@ -116,7 +116,7 @@ struct Peer {
 
 template <typename I>
 std::ostream& operator<<(std::ostream& lhs, const Peer<I>& peer) {
-  return lhs << "uuid=" << peer.uuid << ", "
+  return lhs << "uuid=" << peer.uuid << ", remote_pool_meta="
              << peer.remote_pool_meta;
 }
 
