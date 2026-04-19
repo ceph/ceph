@@ -23,9 +23,11 @@
 #include "common/config_fwd.h"
 #include "common/ceph_releases.h"
 #include "include/types.h" // for epoch_t
+#include "include/utime.h" // for utime_t
 #include "include/uuid.h" // for uuid_d
 
-#include "mon/mon_types.h" // for mon_feature_t
+#include "mon/mon_feature_t.h"
+#include "msg/msg_types.h" // for entity_addrvec_t
 
 #include <iosfwd>
 #include <map>
