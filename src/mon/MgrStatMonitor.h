@@ -7,6 +7,8 @@
 #include "include/Context.h"
 #include "PaxosService.h"
 #include "mon/PGMap.h"
+#include "mon/PoolAvailability.h"
+#include "mon/ProgressEvent.h"
 #include "mgr/ServiceMap.h"
 
 struct Subscription;
