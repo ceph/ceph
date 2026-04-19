@@ -9,6 +9,7 @@
 #include "common/AsyncOpTracker.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/mirror/snapshot/Types.h"
+#include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/image_replayer/TimeRollingMean.h"
 #include <boost/accumulators/accumulators.hpp>
 #include <boost/accumulators/statistics/stats.hpp>
@@ -205,6 +206,7 @@ private:
   PoolMetaCache* m_pool_meta_cache;
   StateBuilder<ImageCtxT>* m_state_builder;
   ReplayerListener* m_replayer_listener;
+  Peer<ImageCtxT>* m_remote_image_peer;
 
   mutable ceph::mutex m_lock;
 
@@ -271,8 +273,8 @@ private:
   void scan_local_mirror_snapshots(std::unique_lock<ceph::mutex>* locker);
   void scan_remote_mirror_snapshots(std::unique_lock<ceph::mutex>* locker);
 
-  void prune_non_primary_snapshot(uint64_t snap_id);
-  void handle_prune_non_primary_snapshot(int r);
+  void prune_snapshot(uint64_t snap_id);
+  void handle_prune_snapshot(int r);
 
   void copy_snapshots();
   void handle_copy_snapshots(int r);

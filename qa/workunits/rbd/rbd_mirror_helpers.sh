@@ -826,6 +826,71 @@ wait_for_non_primary_snap_present()
     return 1
 }
 
+wait_for_snap_not_present()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local snap_id=$4
+    local snap_count
+    local s
+
+    for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32; do
+        sleep ${s}
+        snap_count=$(rbd --cluster ${cluster} snap list --all ${pool}/${image} --format xml | \
+                     xmlstarlet sel -t -v "count(//snapshots/snapshot[id='${snap_id}'])")
+        [ "${snap_count}" = "0" ] && return 0
+    done
+
+    return 1
+}
+
+wait_for_non_primary_snap_not_present()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local primary_snap_id=$4
+    local snap_count
+    local s
+
+    for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32; do
+        sleep ${s}
+        snap_count=$(rbd --cluster ${cluster} snap list --all ${pool}/${image} --format xml | \
+            xmlstarlet sel -t -v "count(//snapshots/snapshot/namespace[primary_snap_id='${primary_snap_id}'])")
+        [ "${snap_count}" = "0" ] && return 0
+    done
+    return 1
+}
+
+validate_last_mirror_snapshot_state_and_role()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local expected_state=$4     # "primary" or "non-primary" or "demoted"
+    local expected_role=$5      # "primary" or "non_primary"
+    local xml_output
+    local last_name
+    local last_state
+
+    xml_output=$(rbd --cluster ${cluster} snap list --all ${pool}/${image} --format xml)
+
+    last_name=$(xmlstarlet sel -t -v "snapshots/snapshot[last()]/name" <<< "$xml_output")
+    last_state=$(xmlstarlet sel -t -v "snapshots/snapshot[last()]/namespace/state" <<< "$xml_output")
+
+    if [[ "$last_name" != ".mirror.${expected_role}."* ]]; then
+        echo "${cluster}/${pool}/${image}: Expected last snapshot role ${expected_role}, " \
+            "got '${last_name}'"
+        return 1
+    fi
+    if [[ "${last_state}" != "${expected_state}" ]]; then
+        echo "${cluster}/${pool}/${image}: Expected last snapshot state '${expected_state}', " \
+            "got '${last_state}'"
+        return 1
+    fi
+}
+
 wait_for_snapshot_sync_complete()
 {
     local local_cluster=$1
