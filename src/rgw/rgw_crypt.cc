@@ -14,6 +14,7 @@
 #include <auth/Crypto.h>
 #include <rgw/rgw_b64.h>
 #include <rgw/rgw_rest_s3.h>
+#include "common/PluginRegistry.h"
 #include "include/ceph_assert.h"
 #include "include/function2.hpp"
 #include "crypto/crypto_accel.h"
