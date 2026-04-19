@@ -3657,3 +3657,446 @@ def test_dedup_identical_copies_multipart_small():
     log.info("test_dedup_identical_copies_multipart:full test")
     __test_dedup_identical_copies(files, config, dry_run, verify, force_clean)
 
+
+#===============================================================================
+#             Helpers: Bucket / Storage-Class Filter List Tests
+#===============================================================================
+#-------------------------------------------------------------------------------
+def write_filter_list_file(filepath, lines):
+    """Write a filter list file with the given lines, one per line."""
+    with open(filepath, 'w') as f:
+        for line in lines:
+            f.write(line + '\n')
+
+
+#-------------------------------------------------------------------------------
+def wait_for_dedup_completion(max_wait=300):
+    """Poll dedup stats until the current dedup run completes.
+
+    Returns the final JSON stats dict (from 'radosgw-admin dedup stats').
+    Asserts if dedup does not complete within max_wait seconds.
+    """
+    wait_time = 0
+    timeout_step = 3
+    while wait_time < max_wait:
+        time.sleep(timeout_step)
+        wait_time += timeout_step
+        ret = admin(['dedup', 'stats'])
+        assert ret[1] == 0
+        jstats = json.loads(ret[0])
+        if jstats.get('completed', False):
+            log.info("dedup completed in %d seconds", wait_time)
+            return jstats
+    assert False, "Dedup did not complete within %d seconds" % max_wait
+
+
+#-------------------------------------------------------------------------------
+def get_filter_skip_counter(jstats, stat_key):
+    """Return the value of a named skip counter from the dedup stats JSON.
+
+    The counter is looked up in worker_stats['skipped'][stat_key].
+    Returns 0 if the key is absent.
+    """
+    worker_stats = jstats.get('worker_stats', {})
+    skipped = worker_stats.get('skipped', {})
+    return skipped.get(stat_key, 0)
+
+
+#===============================================================================
+#           Test Group 1: Filter File Parsing / Name Validation
+#===============================================================================
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_filter_bucket_list_parsing():
+    """Validate CLI parsing of bucket filter list files (allow/deny).
+
+    Exercises the file-parsing layer in radosgw-admin without waiting for a
+    full dedup scan to complete.  Only the return-code of the admin command is
+    checked.
+    """
+    prepare_test()
+    try:
+        # 1. Valid bucket names — one per line.
+        filepath = OUT_DIR + "valid_buckets.txt"
+        write_filter_list_file(filepath, ['my-bucket-1', 'my-bucket-2', 'bucket-3'])
+        result = admin(['dedup', 'estimate', '--allow-bucket-list', filepath])
+        assert result[1] == 0, "Expected success for valid bucket names"
+        admin(['dedup', 'abort'])
+
+        # 2. Valid names with inline comments and leading whitespace.
+        filepath = OUT_DIR + "comments_buckets.txt"
+        write_filter_list_file(filepath, [
+            '# this is a comment',
+            'my-bucket-1   # inline comment',
+            '  my-bucket-2',
+        ])
+        result = admin(['dedup', 'estimate', '--allow-bucket-list', filepath])
+        assert result[1] == 0, "Expected success for file with comments/whitespace"
+        admin(['dedup', 'abort'])
+
+        # 3. Invalid bucket name: uppercase letters.
+        filepath = OUT_DIR + "invalid_upper.txt"
+        write_filter_list_file(filepath, ['MyBucket'])
+        result = admin(['dedup', 'estimate', '--allow-bucket-list', filepath])
+        assert result[1] != 0, "Expected failure for uppercase bucket name"
+
+        # 4. Invalid bucket name: illegal character '!'.
+        filepath = OUT_DIR + "invalid_chars.txt"
+        write_filter_list_file(filepath, ['bad_bucket!'])
+        result = admin(['dedup', 'estimate', '--allow-bucket-list', filepath])
+        assert result[1] != 0, "Expected failure for bucket name with illegal chars"
+
+        # 5. Invalid bucket name: shorter than the 3-character minimum.
+        filepath = OUT_DIR + "invalid_short.txt"
+        write_filter_list_file(filepath, ['ab'])
+        result = admin(['dedup', 'estimate', '--allow-bucket-list', filepath])
+        assert result[1] != 0, "Expected failure for bucket name shorter than 3 chars"
+
+        # 6. Mutual exclusivity: --allow-bucket-list and --deny-bucket-list together.
+        allow_file = OUT_DIR + "allow_buckets.txt"
+        deny_file  = OUT_DIR + "deny_buckets.txt"
+        write_filter_list_file(allow_file, ['my-bucket-1'])
+        write_filter_list_file(deny_file,  ['my-bucket-2'])
+        result = admin(['dedup', 'estimate',
+                        '--allow-bucket-list', allow_file,
+                        '--deny-bucket-list',  deny_file])
+        assert result[1] != 0, "Expected failure when both allow and deny lists are given"
+
+        # 7. Non-existent file path.
+        result = admin(['dedup', 'estimate', '--allow-bucket-list',
+                        '/nonexistent/bucket_list.txt'])
+        assert result[1] != 0, "Expected failure for non-existent filter file"
+
+        # 8. Empty file — no names, no filtering; should succeed.
+        filepath = OUT_DIR + "empty_buckets.txt"
+        write_filter_list_file(filepath, [])
+        result = admin(['dedup', 'estimate', '--allow-bucket-list', filepath])
+        assert result[1] == 0, "Expected success for empty bucket list file"
+        admin(['dedup', 'abort'])
+
+        # 9. File with only comments and blank lines — effectively empty; should succeed.
+        filepath = OUT_DIR + "comments_only.txt"
+        write_filter_list_file(filepath,
+                               ['# comment', '', '  ', '# another comment'])
+        result = admin(['dedup', 'estimate', '--allow-bucket-list', filepath])
+        assert result[1] == 0, "Expected success for file with only comments/blanks"
+        admin(['dedup', 'abort'])
+
+    finally:
+        cleanup_local()
+
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_filter_storage_class_list_parsing():
+    """Validate CLI parsing of storage-class filter list files (allow/deny).
+
+    Exercises the file-parsing layer in radosgw-admin without waiting for a
+    full dedup scan to complete.  Only the return-code of the admin command is
+    checked.
+    """
+    prepare_test()
+    try:
+        # 1. Valid storage-class names.
+        filepath = OUT_DIR + "valid_sc.txt"
+        write_filter_list_file(filepath, ['STANDARD', 'STANDARD_IA', 'GLACIER'])
+        result = admin(['dedup', 'estimate', '--allow-storage-class-list', filepath])
+        assert result[1] == 0, "Expected success for valid storage-class names"
+        admin(['dedup', 'abort'])
+
+        # 2. Mutual exclusivity: --allow-storage-class-list and --deny-storage-class-list.
+        allow_file = OUT_DIR + "allow_sc.txt"
+        deny_file  = OUT_DIR + "deny_sc.txt"
+        write_filter_list_file(allow_file, ['STANDARD'])
+        write_filter_list_file(deny_file,  ['GLACIER'])
+        result = admin(['dedup', 'estimate',
+                        '--allow-storage-class-list', allow_file,
+                        '--deny-storage-class-list',  deny_file])
+        assert result[1] != 0, \
+            "Expected failure when both allow and deny storage-class lists are given"
+
+        # 3. Non-existent file path.
+        result = admin(['dedup', 'estimate', '--deny-storage-class-list',
+                        '/nonexistent/sc_list.txt'])
+        assert result[1] != 0, "Expected failure for non-existent storage-class filter file"
+
+        # 4. Empty file — should succeed.
+        filepath = OUT_DIR + "empty_sc.txt"
+        write_filter_list_file(filepath, [])
+        result = admin(['dedup', 'estimate', '--deny-storage-class-list', filepath])
+        assert result[1] == 0, "Expected success for empty storage-class list file"
+        admin(['dedup', 'abort'])
+
+        # 5. File with only comments and blank lines — should succeed.
+        filepath = OUT_DIR + "sc_comments_only.txt"
+        write_filter_list_file(filepath, ['# STANDARD', '', '  '])
+        result = admin(['dedup', 'estimate', '--allow-storage-class-list', filepath])
+        assert result[1] == 0, \
+            "Expected success for storage-class file with only comments/blanks"
+        admin(['dedup', 'abort'])
+
+    finally:
+        cleanup_local()
+
+
+#===============================================================================
+#          Test Group 2: Bucket Deny-list Filter
+#===============================================================================
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_filter_deny_bucket_estimate():
+    """Verify that objects in a denied bucket are skipped during dedup estimate.
+
+    Three buckets each hold one copy of the same large object.  The first
+    bucket is added to the deny-list.  After estimate, the
+    'Ingress skip: filtered bucket' counter must be > 0.
+    """
+    prepare_test()
+    conn = get_single_connection()
+    bucket_a = gen_bucket_name()
+    bucket_b = gen_bucket_name()
+    bucket_c = gen_bucket_name()
+    deny_file = OUT_DIR + "deny_bucket_list.txt"
+
+    try:
+        conn.create_bucket(Bucket=bucket_a)
+        conn.create_bucket(Bucket=bucket_b)
+        conn.create_bucket(Bucket=bucket_c)
+
+        # One large file, three identical copies spread across the three buckets.
+        files = []
+        gen_files_fixed_copies(files, 1, MULTIPART_SIZE, 3)
+        filename = files[0][0]
+
+        conn.upload_file(OUT_DIR + filename, bucket_a,
+                         gen_object_name(filename, 0), Config=default_config)
+        conn.upload_file(OUT_DIR + filename, bucket_b,
+                         gen_object_name(filename, 1), Config=default_config)
+        conn.upload_file(OUT_DIR + filename, bucket_c,
+                         gen_object_name(filename, 2), Config=default_config)
+
+        # Deny bucket_a so its object is skipped by the filter.
+        write_filter_list_file(deny_file, [bucket_a])
+
+        result = admin(['dedup', 'estimate', '--deny-bucket-list', deny_file])
+        assert result[1] == 0
+
+        jstats = wait_for_dedup_completion()
+
+        skip_count = get_filter_skip_counter(jstats, 'Ingress skip: filtered bucket')
+        assert skip_count > 0, (
+            "Expected ingress_skip_filtered_bucket > 0 when bucket %s is denied, "
+            "got %d" % (bucket_a, skip_count))
+
+    finally:
+        cleanup_local()
+        for bname in [bucket_a, bucket_b, bucket_c]:
+            try:
+                delete_bucket_with_all_objects(bname, conn)
+            except Exception as e:
+                log.warning("Failed to cleanup bucket %s: %s", bname, e)
+        verify_pool_is_empty()
+
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_filter_deny_bucket_exec():
+    """Verify that dedup exec skips denied buckets and leaves their objects intact.
+
+    Three buckets each hold one copy of the same large object.  The first
+    bucket is denied.  After exec, the object in the denied bucket must still
+    be readable and byte-identical to the original.
+    """
+    if full_dedup_is_disabled():
+        return
+
+    prepare_test()
+    conn = get_single_connection()
+    bucket_a = gen_bucket_name()
+    bucket_b = gen_bucket_name()
+    bucket_c = gen_bucket_name()
+    deny_file = OUT_DIR + "deny_bucket_list.txt"
+
+    try:
+        conn.create_bucket(Bucket=bucket_a)
+        conn.create_bucket(Bucket=bucket_b)
+        conn.create_bucket(Bucket=bucket_c)
+
+        files = []
+        gen_files_fixed_copies(files, 1, MULTIPART_SIZE, 3)
+        filename = files[0][0]
+        key_a = gen_object_name(filename, 0)
+        key_b = gen_object_name(filename, 1)
+        key_c = gen_object_name(filename, 2)
+
+        conn.upload_file(OUT_DIR + filename, bucket_a, key_a, Config=default_config)
+        conn.upload_file(OUT_DIR + filename, bucket_b, key_b, Config=default_config)
+        conn.upload_file(OUT_DIR + filename, bucket_c, key_c, Config=default_config)
+
+        # Deny bucket_a.
+        write_filter_list_file(deny_file, [bucket_a])
+
+        result = admin(['dedup', 'exec', '--yes-i-really-mean-it',
+                        '--deny-bucket-list', deny_file])
+        assert result[1] == 0
+
+        jstats = wait_for_dedup_completion()
+
+        # Run GC to finalise any freed objects.
+        result = admin(['gc', 'process', '--include-all'])
+        assert result[1] == 0
+
+        # The object in the denied bucket must be intact and readable.
+        tmpfile = OUT_DIR + "verify_temp"
+        conn.download_file(bucket_a, key_a, tmpfile, Config=default_config)
+        assert filecmp.cmp(tmpfile, OUT_DIR + filename, shallow=False), \
+            "Object in denied bucket %s was corrupted after dedup" % bucket_a
+        os.remove(tmpfile)
+
+        # Confirm the filter counter was incremented.
+        skip_count = get_filter_skip_counter(jstats, 'Ingress skip: filtered bucket')
+        assert skip_count > 0, (
+            "Expected ingress_skip_filtered_bucket > 0 when bucket %s is denied, "
+            "got %d" % (bucket_a, skip_count))
+
+    finally:
+        cleanup_local()
+        for bname in [bucket_a, bucket_b, bucket_c]:
+            try:
+                delete_bucket_with_all_objects(bname, conn)
+            except Exception as e:
+                log.warning("Failed to cleanup bucket %s: %s", bname, e)
+        verify_pool_is_empty()
+
+
+#===============================================================================
+#          Test Group 3: Storage-Class Deny-list Filter
+#===============================================================================
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_filter_deny_storage_class_estimate():
+    """Verify that objects whose storage class is denied are skipped during estimate.
+
+    Two buckets each hold one copy of a large object uploaded with the default
+    STANDARD storage class.  Denying STANDARD means every object is filtered
+    and 'Ingress skip: filtered storage class' must be > 0.
+    """
+    prepare_test()
+    conn = get_single_connection()
+    bucket_0 = gen_bucket_name()
+    bucket_1 = gen_bucket_name()
+    deny_file = OUT_DIR + "deny_storage_class_list.txt"
+
+    try:
+        conn.create_bucket(Bucket=bucket_0)
+        conn.create_bucket(Bucket=bucket_1)
+
+        files = []
+        gen_files_fixed_copies(files, 1, MULTIPART_SIZE, 2)
+        filename = files[0][0]
+        key_0 = gen_object_name(filename, 0)
+        key_1 = gen_object_name(filename, 1)
+
+        conn.upload_file(OUT_DIR + filename, bucket_0, key_0, Config=default_config)
+        conn.upload_file(OUT_DIR + filename, bucket_1, key_1, Config=default_config)
+
+        # Deny STANDARD — both uploads use the default STANDARD class.
+        write_filter_list_file(deny_file, ['STANDARD'])
+
+        result = admin(['dedup', 'estimate', '--deny-storage-class-list', deny_file])
+        assert result[1] == 0
+
+        jstats = wait_for_dedup_completion()
+
+        skip_count = get_filter_skip_counter(
+            jstats, 'Ingress skip: filtered storage class')
+        assert skip_count > 0, (
+            "Expected ingress_skip_filtered_storage_class > 0 when STANDARD is "
+            "denied, got %d" % skip_count)
+
+    finally:
+        cleanup_local()
+        for bname in [bucket_0, bucket_1]:
+            try:
+                delete_bucket_with_all_objects(bname, conn)
+            except Exception as e:
+                log.warning("Failed to cleanup bucket %s: %s", bname, e)
+        verify_pool_is_empty()
+
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_filter_deny_storage_class_exec():
+    """Verify that dedup exec skips objects whose storage class is denied.
+
+    Two buckets each hold one copy of a large object with the default STANDARD
+    storage class.  Denying STANDARD means no dedup should occur: the rados
+    object count must be unchanged and both objects must still be readable.
+    """
+    if full_dedup_is_disabled():
+        return
+
+    prepare_test()
+    conn = get_single_connection()
+    bucket_0 = gen_bucket_name()
+    bucket_1 = gen_bucket_name()
+    deny_file = OUT_DIR + "deny_storage_class_list.txt"
+
+    try:
+        conn.create_bucket(Bucket=bucket_0)
+        conn.create_bucket(Bucket=bucket_1)
+
+        files = []
+        gen_files_fixed_copies(files, 1, MULTIPART_SIZE, 2)
+        filename = files[0][0]
+        key_0 = gen_object_name(filename, 0)
+        key_1 = gen_object_name(filename, 1)
+
+        conn.upload_file(OUT_DIR + filename, bucket_0, key_0, Config=default_config)
+        conn.upload_file(OUT_DIR + filename, bucket_1, key_1, Config=default_config)
+
+        rados_count_before = count_object_parts_in_all_buckets(False, 0)
+
+        # Deny STANDARD — all objects should be filtered, no dedup should occur.
+        write_filter_list_file(deny_file, ['STANDARD'])
+
+        result = admin(['dedup', 'exec', '--yes-i-really-mean-it',
+                        '--deny-storage-class-list', deny_file])
+        assert result[1] == 0
+
+        jstats = wait_for_dedup_completion()
+
+        result = admin(['gc', 'process', '--include-all'])
+        assert result[1] == 0
+
+        # Rados object count must be unchanged since no dedup happened.
+        rados_count_after = count_object_parts_in_all_buckets(False, 0)
+        assert rados_count_after == rados_count_before, (
+            "Expected no dedup when STANDARD storage class is denied, "
+            "but rados count changed: before=%d after=%d" %
+            (rados_count_before, rados_count_after))
+
+        # Both objects must still be readable and byte-identical to the original.
+        tmpfile = OUT_DIR + "verify_temp"
+        for (bname, key) in [(bucket_0, key_0), (bucket_1, key_1)]:
+            conn.download_file(bname, key, tmpfile, Config=default_config)
+            assert filecmp.cmp(tmpfile, OUT_DIR + filename, shallow=False), \
+                "Object %s/%s was corrupted after a no-op dedup" % (bname, key)
+            os.remove(tmpfile)
+
+        # Confirm all objects were filtered.
+        skip_count = get_filter_skip_counter(
+            jstats, 'Ingress skip: filtered storage class')
+        assert skip_count > 0, (
+            "Expected ingress_skip_filtered_storage_class > 0 when STANDARD is "
+            "denied, got %d" % skip_count)
+
+    finally:
+        cleanup_local()
+        for bname in [bucket_0, bucket_1]:
+            try:
+                delete_bucket_with_all_objects(bname, conn)
+            except Exception as e:
+                log.warning("Failed to cleanup bucket %s: %s", bname, e)
+        verify_pool_is_empty()
+
