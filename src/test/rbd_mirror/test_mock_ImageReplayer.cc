@@ -178,9 +178,11 @@ struct StateBuilder<librbd::MockTestImageCtx> {
   }
 
   MOCK_METHOD1(close, void(Context*));
-  MOCK_METHOD5(create_replayer, Replayer*(Threads<librbd::MockTestImageCtx>*,
+  MOCK_METHOD6(create_replayer, Replayer*(Threads<librbd::MockTestImageCtx>*,
                                           InstanceWatcher<librbd::MockTestImageCtx>*,
-                                          const std::string&, PoolMetaCache*,
+                                          const std::string&,
+                                          const std::string&,
+                                          PoolMetaCache*,
                                           ReplayerListener*));
 
   StateBuilder() {
@@ -312,8 +314,8 @@ public:
 
   void expect_create_replayer(MockStateBuilder& mock_state_builder,
                               MockReplayer& mock_replayer) {
-    EXPECT_CALL(mock_state_builder, create_replayer(_, _, _, _, _))
-      .WillOnce(WithArg<4>(
+    EXPECT_CALL(mock_state_builder, create_replayer(_, _, _, _, _, _))
+      .WillOnce(WithArg<5>(
         Invoke([&mock_replayer]
                (image_replayer::ReplayerListener* replayer_listener) {
           mock_replayer.replayer_listener = replayer_listener;
