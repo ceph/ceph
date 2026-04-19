@@ -238,6 +238,7 @@ if(WITH_RADOSGW_RADOS)
           driver/rados/rgw_dedup_store.cc
           driver/rados/rgw_dedup_utils.cc
           driver/rados/rgw_dedup_cluster.cc
+          driver/rados/rgw_dedup_filter.cc
 	  rgw_coroutine.cc
 	)
 endif()

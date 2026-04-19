@@ -269,6 +269,7 @@ namespace rgw::dedup {
     uint32_t d_max_obj_size_for_split = (16ULL * 1024 * 1024);
     uint32_t d_head_object_size       = (4ULL * 1024 * 1024);
     control_t d_ctl;
+    dedup_filter_t d_filter;
     uint64_t d_watch_handle = 0;
     DedupWatcher d_watcher_ctx;
 

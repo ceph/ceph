@@ -34,6 +34,49 @@ Admin Commands
    Displays dedup throttle setting.
 
 
+Allow/Deny Filtering
+====================
+
+The ``dedup estimate`` and ``dedup exec`` commands support optional allow/deny
+filters for buckets and storage classes. These filters control which buckets
+and which storage classes participate in the dedup process.
+
+Allow and deny lists are **mutually exclusive** for each category:
+
+- **Allow mode** -- everything is excluded except items listed in the file.
+- **Deny mode** -- everything is included except items listed in the file.
+
+The filter files contain one name per line. Blank lines and lines starting
+with ``#`` are ignored. Only whitespace is permitted after the name on the
+same line.
+
+Bucket names are validated against RGW/S3 bucket naming rules (relaxed mode).
+Storage-class names must contain only uppercase letters, digits, and
+underscores (e.g. ``STANDARD``, ``REDUCED_REDUNDANCY``).
+
+.. prompt:: bash #
+
+   radosgw-admin dedup estimate --allow-bucket-list=<path-to-file>
+
+.. prompt:: bash #
+
+   radosgw-admin dedup estimate --deny-bucket-list=<path-to-file>
+
+.. prompt:: bash #
+
+   radosgw-admin dedup estimate --allow-storage-class-list=<path-to-file>
+
+.. prompt:: bash #
+
+   radosgw-admin dedup estimate --deny-storage-class-list=<path-to-file>
+
+Multiple filters can be combined (one per category):
+
+.. prompt:: bash #
+
+   radosgw-admin dedup estimate --allow-bucket-list=<bucket-file> --deny-storage-class-list=<sc-file>
+
+
 Skipped Objects
 ===============
 

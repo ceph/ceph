@@ -82,6 +82,7 @@ extern "C" {
 #include "rgw_account.h"
 #include "rgw_bucket_logging.h"
 #include "rgw_dedup_cluster.h"
+#include "rgw_dedup_filter.h"
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
 #include "services/svc_bilog_rados.h"
@@ -497,6 +498,11 @@ void usage()
   cout << "   --disable-feature                 disable a zone/zonegroup feature\n";
   cout << "\n";
   cout << "<date> := \"YYYY-MM-DD[ hh:mm:ss]\"\n";
+  cout << "\nDedup filter options:\n";
+  cout << "   --allow-bucket-list           path to file listing bucket names to include in dedup (mutually exclusive with --deny-bucket-list)\n";
+  cout << "   --deny-bucket-list            path to file listing bucket names to exclude from dedup (mutually exclusive with --allow-bucket-list)\n";
+  cout << "   --allow-storage-class-list    path to file listing storage classes to include in dedup (mutually exclusive with --deny-storage-class-list)\n";
+  cout << "   --deny-storage-class-list     path to file listing storage classes to exclude from dedup (mutually exclusive with --allow-storage-class-list)\n";
   cout << "\nDedup throttle options:\n";
   cout << "   --max-bucket-index-ops        specify max bucket-index requests per second allowed for an RGW during dedup, 0 means unlimited\n";
   cout << "   --max-metadata-ops            specify max metadata requests per second allowed for an RGW during dedup, 0 means unlimited\n";
@@ -3742,6 +3748,10 @@ int main(int argc, const char **argv)
   bool have_max_read_bytes = false;
   bool have_max_bucket_index_ops = false;
   bool have_max_metadata_ops = false;
+  string allow_bucket_list_file;
+  string deny_bucket_list_file;
+  string allow_storage_class_list_file;
+  string deny_storage_class_list_file;
   int include_all = false;
   int allow_unordered = false;
 
@@ -4080,6 +4090,14 @@ int main(int argc, const char **argv)
 	return EINVAL;
       }
       have_max_metadata_ops = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--allow-bucket-list", (char*)NULL)) {
+      allow_bucket_list_file = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--deny-bucket-list", (char*)NULL)) {
+      deny_bucket_list_file = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--allow-storage-class-list", (char*)NULL)) {
+      allow_storage_class_list_file = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--deny-storage-class-list", (char*)NULL)) {
+      deny_storage_class_list_file = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--date", "--time", (char*)NULL)) {
       date = val;
       if (end_date.empty())
@@ -9406,7 +9424,15 @@ next:
 #endif
       }
 
-      int ret = cluster::dedup_restart_scan(store, dedup_type, dpp());
+      int ret;
+      dedup_filter_t filter(allow_bucket_list_file, deny_bucket_list_file,
+			    allow_storage_class_list_file,
+			    deny_storage_class_list_file, ret);
+      if (ret != 0) {
+	return -ret;
+      }
+
+      ret = cluster::dedup_restart_scan(store, dedup_type, dpp(), filter);
       if (ret == 0) {
 	std::cout << "Dedup was restarted successfully" << std::endl;
       }

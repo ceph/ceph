@@ -358,6 +358,12 @@
   
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
   
+  Dedup filter options:
+     --allow-bucket-list           path to file listing bucket names to include in dedup (mutually exclusive with --deny-bucket-list)
+     --deny-bucket-list            path to file listing bucket names to exclude from dedup (mutually exclusive with --allow-bucket-list)
+     --allow-storage-class-list    path to file listing storage classes to include in dedup (mutually exclusive with --deny-storage-class-list)
+     --deny-storage-class-list     path to file listing storage classes to exclude from dedup (mutually exclusive with --allow-storage-class-list)
+  
   Dedup throttle options:
      --max-bucket-index-ops        specify max bucket-index requests per second allowed for an RGW during dedup, 0 means unlimited
      --max-metadata-ops            specify max metadata requests per second allowed for an RGW during dedup, 0 means unlimited

@@ -2291,11 +2291,16 @@ namespace rgw::dedup {
     p_worker_stats->ingress_obj++;
     p_worker_stats->ingress_obj_bytes += ondisk_byte_size;
 
-    // We limit dedup to objects from the same storage_class
-    // TBD-Future:
-    // Should we use a skip-list of storage_classes we should skip (like glacier) ?
     const std::string& storage_class =
       rgw_placement_rule::get_canonical_storage_class(entry.meta.storage_class);
+
+    if (!d_filter.storage_class_allowed(storage_class)) {
+      ldpp_dout(dpp, 10) << __func__ << "::skipping object " << entry.key.name
+                         << " with storage_class " << storage_class
+                         << " (filtered)" << dendl;
+      return 0;
+    }
+
     if (storage_class == RGW_STORAGE_CLASS_STANDARD) {
       p_worker_stats->default_storage_class_objs++;
       p_worker_stats->default_storage_class_objs_bytes += ondisk_byte_size;
@@ -2685,6 +2690,11 @@ namespace rgw::dedup {
             goto err;
           }
           ldpp_dout(dpp, 20) <<__func__ << "::bucket=" << bucket << dendl;
+          if (!d_filter.bucket_allowed(bucket.name)) {
+            ldpp_dout(dpp, 10) << __func__ << "::skipping bucket "
+                               << bucket.name << " (filtered)" << dendl;
+            continue;
+          }
           ret = read_bucket_stats(bucket, &d_all_buckets_obj_count,
                                   &d_all_buckets_obj_size);
           if (unlikely(ret != 0)) {
@@ -2754,6 +2764,11 @@ namespace rgw::dedup {
             continue;
           }
           ldpp_dout(dpp, 20) <<__func__ << "::bucket=" << bucket << dendl;
+          if (!d_filter.bucket_allowed(bucket.name)) {
+            ldpp_dout(dpp, 10) << __func__ << "::skipping bucket "
+                               << bucket.name << " (filtered)" << dendl;
+            continue;
+          }
           ret = ingress_bucket_objects_single_shard(disk_arr, bucket, worker_id,
                                                     num_work_shards, p_worker_stats);
           if (unlikely(ret != 0)) {
@@ -3042,6 +3057,13 @@ namespace rgw::dedup {
     ceph_assert(d_ctl.dedup_type == dedup_req_type_t::DEDUP_TYPE_ESTIMATE);
 #endif
     ldpp_dout(dpp, 10) << __func__ << "::" << d_ctl.dedup_type << dendl;
+
+    // load allow/deny filter lists from the control pool
+    ret = cluster::load_dedup_filter(store, dpp, &d_filter);
+    if (ret != 0) {
+      ldpp_dout(dpp, 1) << __func__ << "::ERR: failed to load dedup filter" << dendl;
+      return ret;
+    }
 
     return 0;
   }

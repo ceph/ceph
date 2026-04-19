@@ -37,6 +37,7 @@
 namespace rgw::dedup {
   const char* DEDUP_EPOCH_TOKEN = "EPOCH_TOKEN";
   const char* DEDUP_WATCH_OBJ = "DEDUP_WATCH_OBJ";
+  const char* DEDUP_FILTER_ATTR = "rgw.dedup.attr.filter";
 
   static constexpr unsigned EPOCH_MAX_LOCK_DURATION_SEC = 30;
   struct shard_progress_t;
@@ -1297,7 +1298,8 @@ namespace rgw::dedup {
   // command-line called from radosgw-admin.cc
   int cluster::dedup_restart_scan(rgw::sal::RadosStore *store,
                                   dedup_req_type_t dedup_type,
-                                  const DoutPrefixProvider *dpp)
+                                  const DoutPrefixProvider *dpp,
+                                  const dedup_filter_t& filter)
   {
     ldpp_dout(dpp, 1) << __func__ << "::dedup_type = " << dedup_type << dendl;
 
@@ -1336,6 +1338,32 @@ namespace rgw::dedup {
 #else
     ceph_assert(dedup_type == dedup_req_type_t::DEDUP_TYPE_ESTIMATE);
 #endif
+
+    // store filter lists in the control pool
+    {
+      librados::IoCtx ctl_ioctx;
+      ret = get_control_ioctx(store, dpp, ctl_ioctx);
+      if (ret != 0) {
+        return ret;
+      }
+      bufferlist filter_bl;
+      encode(filter, filter_bl);
+      librados::ObjectWriteOperation op;
+      std::string oid(DEDUP_EPOCH_TOKEN);
+      op.setxattr(DEDUP_FILTER_ATTR, filter_bl);
+      ret = ctl_ioctx.operate(oid, &op);
+      if (ret != 0) {
+        ldpp_dout(dpp, 1) << __func__ << "::ERR: failed to store dedup filter: "
+                          << cpp_strerror(-ret) << dendl;
+        return ret;
+      }
+      ldpp_dout(dpp, 5) << __func__ << "::stored dedup filter: bucket_mode="
+                        << filter.bucket_mode << ", bucket_list_size="
+                        << filter.bucket_list.size() << ", sc_mode="
+                        << filter.storage_class_mode << ", sc_list_size="
+                        << filter.storage_class_list.size() << dendl;
+    }
+
     ret = swap_epoch(store, dpp, &old_epoch, dedup_type, 0, 0);
     if (ret == 0) {
       ldpp_dout(dpp, 10) << __func__ << "::Epoch object was reset" << dendl;
@@ -1344,6 +1372,48 @@ namespace rgw::dedup {
     else {
       return ret;
     }
+  }
+
+  //---------------------------------------------------------------------------
+  int cluster::load_dedup_filter(rgw::sal::RadosStore *store,
+                                 const DoutPrefixProvider *dpp,
+                                 dedup_filter_t *p_filter)
+  {
+    librados::IoCtx ctl_ioctx;
+    int ret = get_control_ioctx(store, dpp, ctl_ioctx);
+    if (ret != 0) {
+      return ret;
+    }
+
+    std::string oid(DEDUP_EPOCH_TOKEN);
+    bufferlist bl;
+    ret = ctl_ioctx.getxattr(oid, DEDUP_FILTER_ATTR, bl);
+    if (ret < 0) {
+      if (ret == -ENODATA || ret == -ENOENT) {
+        *p_filter = dedup_filter_t();
+        return 0;
+      }
+      ldpp_dout(dpp, 1) << __func__ << "::ERR: failed to read dedup filter: "
+                        << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+
+    auto iter = bl.cbegin();
+    try {
+      decode(*p_filter, iter);
+    } catch (const ceph::buffer::error &e) {
+      ldpp_dout(dpp, 1) << __func__ << "::ERR: failed to decode dedup filter: "
+                        << e.what() << dendl;
+      *p_filter = dedup_filter_t();
+      return -EIO;
+    }
+
+    ldpp_dout(dpp, 5) << __func__ << "::loaded dedup filter: bucket_mode="
+                      << p_filter->bucket_mode << ", bucket_list_size="
+                      << p_filter->bucket_list.size() << ", sc_mode="
+                      << p_filter->storage_class_mode << ", sc_list_size="
+                      << p_filter->storage_class_list.size() << dendl;
+    return 0;
   }
 
   //---------------------------------------------------------------------------
