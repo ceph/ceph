@@ -17,7 +17,7 @@
 
 #include "msg/Message.h"
 #include "messages/MMonQuorumService.h"
-#include "mon/mon_types.h"
+#include "mon/DataStats.h"
 
 class MMonHealth final : public MMonQuorumService {
 public:
