@@ -28,25 +28,47 @@ namespace rgw::dedup {
   };
 
   struct dedup_filter_t {
-    // Bucket filter
-    filter_mode_t bucket_mode = filter_mode_t::FILTER_NONE;
-    std::unordered_set<std::string> bucket_set;
+    // Default constructor: no filter (all buckets/storage classes pass)
+    dedup_filter_t() = default;
 
-    // Storage-class filter
-    filter_mode_t storage_class_mode = filter_mode_t::FILTER_NONE;
-    std::unordered_set<std::string> storage_class_set;
+    // Constructor from file paths. Empty string = no filter for that dimension.
+    // allow and deny are mutually exclusive per dimension.
+    // Check errcode() after construction to detect any error.
+    dedup_filter_t(const std::string& allow_bucket_file,
+                   const std::string& deny_bucket_file,
+                   const std::string& allow_sc_file,
+                   const std::string& deny_sc_file,
+                   const DoutPrefixProvider* dpp);
+
+    // Returns 0 on success, negative errno if construction failed.
+    int errcode() const { return d_errcode; }
+
+    // Returns true if any filter dimension is active.
+    bool is_active() const {
+      return bucket_mode != filter_mode_t::FILTER_NONE ||
+             storage_class_mode != filter_mode_t::FILTER_NONE;
+    }
 
     // Returns true if the bucket should be processed
     bool allow_bucket(const std::string& bucket_name) const;
     // Returns true if the storage class should be processed
     bool allow_storage_class(const std::string& storage_class) const;
-  };
 
-  // Read a filter file: one name per line, '#' starts a comment, whitespace trimmed.
-  // On success returns 0 and populates name_set; on error returns a negative errno.
-  int read_filter_file(const std::string& path,
-                       std::unordered_set<std::string>& name_set /*OUT*/,
-                       const DoutPrefixProvider* dpp);
+    // Public data accessed by encode/decode free functions
+    filter_mode_t bucket_mode = filter_mode_t::FILTER_NONE;
+    std::unordered_set<std::string> bucket_set;
+    filter_mode_t storage_class_mode = filter_mode_t::FILTER_NONE;
+    std::unordered_set<std::string> storage_class_set;
+
+  private:
+    // Read filter file: one name per line, '#' starts a comment, whitespace trimmed.
+    // On success returns 0 and populates name_set; on error returns a negative errno.
+    static int read_filter_file(const std::string& path,
+                                std::unordered_set<std::string>& name_set,
+                                const DoutPrefixProvider* dpp);
+
+    int d_errcode = 0;
+  };
 
   void encode(const dedup_filter_t& f, ceph::bufferlist& bl);
   void decode(dedup_filter_t& f, ceph::bufferlist::const_iterator& bl);

@@ -9424,65 +9424,17 @@ next:
 #endif
       }
 
-      // Validate and build the dedup filter
-      if (!allow_bucket_list_file.empty() && !deny_bucket_list_file.empty()) {
-	cerr << "ERROR: --allow-bucket-list and --deny-bucket-list are mutually exclusive"
-	     << std::endl;
-	return EINVAL;
-      }
-      if (!allow_storage_class_list_file.empty() && !deny_storage_class_list_file.empty()) {
-	cerr << "ERROR: --allow-storage-class-list and --deny-storage-class-list are mutually exclusive"
-	     << std::endl;
-	return EINVAL;
-      }
-
-      dedup_filter_t dedup_filter;
-      bool have_filter = false;
-
-      if (!allow_bucket_list_file.empty()) {
-	int r = read_filter_file(allow_bucket_list_file, dedup_filter.bucket_set, dpp());
-	if (r < 0) {
-	  cerr << "ERROR: failed to read --allow-bucket-list file: "
-	       << allow_bucket_list_file << std::endl;
-	  return -r;
-	}
-	dedup_filter.bucket_mode = filter_mode_t::FILTER_ALLOW;
-	have_filter = true;
-      }
-      else if (!deny_bucket_list_file.empty()) {
-	int r = read_filter_file(deny_bucket_list_file, dedup_filter.bucket_set, dpp());
-	if (r < 0) {
-	  cerr << "ERROR: failed to read --deny-bucket-list file: "
-	       << deny_bucket_list_file << std::endl;
-	  return -r;
-	}
-	dedup_filter.bucket_mode = filter_mode_t::FILTER_DENY;
-	have_filter = true;
-      }
-
-      if (!allow_storage_class_list_file.empty()) {
-	int r = read_filter_file(allow_storage_class_list_file, dedup_filter.storage_class_set, dpp());
-	if (r < 0) {
-	  cerr << "ERROR: failed to read --allow-storage-class-list file: "
-	       << allow_storage_class_list_file << std::endl;
-	  return -r;
-	}
-	dedup_filter.storage_class_mode = filter_mode_t::FILTER_ALLOW;
-	have_filter = true;
-      }
-      else if (!deny_storage_class_list_file.empty()) {
-	int r = read_filter_file(deny_storage_class_list_file, dedup_filter.storage_class_set, dpp());
-	if (r < 0) {
-	  cerr << "ERROR: failed to read --deny-storage-class-list file: "
-	       << deny_storage_class_list_file << std::endl;
-	  return -r;
-	}
-	dedup_filter.storage_class_mode = filter_mode_t::FILTER_DENY;
-	have_filter = true;
+      // Build the dedup filter from the supplied file paths
+      dedup_filter_t dedup_filter(allow_bucket_list_file, deny_bucket_list_file,
+				  allow_storage_class_list_file,
+				  deny_storage_class_list_file, dpp());
+      if (int r = dedup_filter.errcode(); r != 0) {
+	cerr << "ERROR: failed to build dedup filter: " << cpp_strerror(-r) << std::endl;
+	return -r;
       }
 
       int ret = cluster::dedup_restart_scan(store, dedup_type, dpp(),
-					    have_filter ? &dedup_filter : nullptr);
+					    dedup_filter.is_active() ? &dedup_filter : nullptr);
       if (ret == 0) {
 	std::cout << "Dedup was restarted successfully" << std::endl;
       }

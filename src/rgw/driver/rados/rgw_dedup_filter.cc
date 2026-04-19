@@ -33,8 +33,9 @@ namespace rgw::dedup {
       return bucket_set.count(bucket_name) > 0;
     case filter_mode_t::FILTER_DENY:
       return bucket_set.count(bucket_name) == 0;
+    default:
+      return true;
     }
-    return true;
   }
 
   //---------------------------------------------------------------------------
@@ -47,15 +48,16 @@ namespace rgw::dedup {
       return storage_class_set.count(storage_class) > 0;
     case filter_mode_t::FILTER_DENY:
       return storage_class_set.count(storage_class) == 0;
+    default:
+      return true;
     }
-    return true;
   }
 
   //---------------------------------------------------------------------------
-  // Read filter file: one name per line, '#' starts a comment, whitespace trimmed.
-  int read_filter_file(const std::string& path,
-                       std::unordered_set<std::string>& name_set /*OUT*/,
-                       const DoutPrefixProvider* dpp)
+  // Private static helper: read filter file, one name per line.
+  int dedup_filter_t::read_filter_file(const std::string& path,
+                                       std::unordered_set<std::string>& name_set,
+                                       const DoutPrefixProvider* dpp)
   {
     std::ifstream f(path);
     if (!f.is_open()) {
@@ -85,6 +87,62 @@ namespace rgw::dedup {
     }
 
     return 0;
+  }
+
+  //---------------------------------------------------------------------------
+  dedup_filter_t::dedup_filter_t(const std::string& allow_bucket_file,
+                                 const std::string& deny_bucket_file,
+                                 const std::string& allow_sc_file,
+                                 const std::string& deny_sc_file,
+                                 const DoutPrefixProvider* dpp)
+  {
+    // Validate mutual exclusivity
+    if (!allow_bucket_file.empty() && !deny_bucket_file.empty()) {
+      ldpp_dout(dpp, 1) << __func__
+                        << ":: --allow-bucket-list and --deny-bucket-list are mutually exclusive"
+                        << dendl;
+      d_errcode = -EINVAL;
+      return;
+    }
+    if (!allow_sc_file.empty() && !deny_sc_file.empty()) {
+      ldpp_dout(dpp, 1) << __func__
+                        << ":: --allow-storage-class-list and --deny-storage-class-list are mutually exclusive"
+                        << dendl;
+      d_errcode = -EINVAL;
+      return;
+    }
+
+    // Bucket filter
+    if (!allow_bucket_file.empty()) {
+      d_errcode = read_filter_file(allow_bucket_file, bucket_set, dpp);
+      if (d_errcode < 0) {
+        return;
+      }
+      bucket_mode = filter_mode_t::FILTER_ALLOW;
+    }
+    else if (!deny_bucket_file.empty()) {
+      d_errcode = read_filter_file(deny_bucket_file, bucket_set, dpp);
+      if (d_errcode < 0) {
+        return;
+      }
+      bucket_mode = filter_mode_t::FILTER_DENY;
+    }
+
+    // Storage-class filter
+    if (!allow_sc_file.empty()) {
+      d_errcode = read_filter_file(allow_sc_file, storage_class_set, dpp);
+      if (d_errcode < 0) {
+        return;
+      }
+      storage_class_mode = filter_mode_t::FILTER_ALLOW;
+    }
+    else if (!deny_sc_file.empty()) {
+      d_errcode = read_filter_file(deny_sc_file, storage_class_set, dpp);
+      if (d_errcode < 0) {
+        return;
+      }
+      storage_class_mode = filter_mode_t::FILTER_DENY;
+    }
   }
 
   //---------------------------------------------------------------------------
