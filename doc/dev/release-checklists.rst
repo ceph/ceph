@@ -36,7 +36,7 @@ Make sure X (and, ideally, X+1) is defined:
 - [ ] src/include/rados.h (`CEPH_RELEASE_*` and `MAX`)
 - [ ] src/include/rbd/librbd.h (`LIBRBD_VER_MINOR` to X)
 - [ ] src/mds/cephfs_features.h (`CEPHFS_CURRENT_RELEASE`)
-- [ ] src/mon/mon_types.h (`ceph::features::mon::FEATURE_*` and related structs and helpers)
+- [ ] src/mon/mon_feature_t.h (`ceph::features::mon::FEATURE_*` and related structs and helpers)
 
 Github Actions
 ~~~~~~~~~~~~~~

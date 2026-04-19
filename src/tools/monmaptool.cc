@@ -24,7 +24,7 @@
 #include "include/container_ios.h"
 #include "include/str_list.h"
 #include "mon/MonMap.h"
-#include "mon/mon_types.h" // for ceph::features::mon::*
+#include "mon/mon_feature_t.h" // for ceph::features::mon::*
 
 using std::cerr;
 using std::cout;
