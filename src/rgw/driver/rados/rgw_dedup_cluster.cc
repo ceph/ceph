@@ -1341,14 +1341,13 @@ namespace rgw::dedup {
 
       // Build the RESTART bufferlist, optionally including the filter
       bufferlist urgent_msg_bl;
-      urgent_msg_t urgent_msg = URGENT_MSG_RESTART;
-      ceph::encode(urgent_msg, urgent_msg_bl);
+      ceph::encode(URGENT_MSG_RESTART, urgent_msg_bl);
       bool has_filter = (p_filter != nullptr);
       ceph::encode(has_filter, urgent_msg_bl);
       if (has_filter) {
         encode(*p_filter, urgent_msg_bl);
       }
-      return dedup_control_bl(store, dpp, urgent_msg, urgent_msg_bl);
+      return dedup_control_bl(store, dpp, URGENT_MSG_RESTART, urgent_msg_bl);
     }
     else {
       return ret;

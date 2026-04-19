@@ -59,7 +59,7 @@ namespace rgw::dedup {
   {
     std::ifstream f(path);
     if (!f.is_open()) {
-      ldpp_dout(dpp, 1) << __func__ << "::failed to open filter file: " << path << dendl;
+      ldpp_dout(dpp, 1) << __func__ << ":: failed to open filter file: " << path << dendl;
       return -ENOENT;
     }
 

@@ -21,7 +21,7 @@
 
 namespace rgw::dedup {
 
-  enum class filter_mode_t {
+  enum class filter_mode_t : uint8_t {
     FILTER_NONE,   // no filter active
     FILTER_ALLOW,  // allowlist: only listed items pass
     FILTER_DENY    // denylist:  listed items are blocked
