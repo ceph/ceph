@@ -17,6 +17,7 @@
 #include "crypto/isa-l/isal_crypto_plugin.h"
 
 #include "ceph_ver.h"
+#include "common/PluginRegistry.h"
 // -----------------------------------------------------------------------------
 
 const char *__ceph_plugin_version()
