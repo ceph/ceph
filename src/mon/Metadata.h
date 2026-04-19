@@ -13,25 +13,13 @@
  * 
  */
 
-#ifndef CEPH_MON_TYPES_H
-#define CEPH_MON_TYPES_H
+#ifndef CEPH_MON_METADATA_H
+#define CEPH_MON_METADATA_H
 
-// use as paxos_service index
-enum {
-  PAXOS_MDSMAP,
-  PAXOS_OSDMAP,
-  PAXOS_LOG,
-  PAXOS_MONMAP,
-  PAXOS_AUTH,
-  PAXOS_MGR,
-  PAXOS_MGRSTAT,
-  PAXOS_HEALTH,
-  PAXOS_CONFIG,
-  PAXOS_KV,
-  PAXOS_NVMEGW,
-  PAXOS_NUM
-};
+#include <map>
+#include <string>
 
-#define CEPH_MON_ONDISK_MAGIC "ceph mon volume v012"
+/// for information like os, kernel, hostname, memory info, cpu model.
+typedef std::map<std::string, std::string> Metadata;
 
 #endif
