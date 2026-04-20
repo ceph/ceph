@@ -554,6 +554,7 @@ set(libcommon_files
   mon/MonClient.cc
   mon/MonMap.cc
   mon/MonSub.cc
+  mon/mon_feature_t.cc
   mon/error_code.cc
   mgr/DaemonHealthMetric.cc
   mgr/MgrClient.cc
