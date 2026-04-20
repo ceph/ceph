@@ -16,7 +16,7 @@ from typing import Any, cast, Dict, List, Optional, Set, Union
 
 from cephadmlib.call_wrappers import call, call_throws, CallVerbosity
 from cephadmlib.context import CephadmContext
-from cephadmlib.data_utils import bytes_to_human
+from ceph.utils import bytes_to_human
 from cephadmlib.exe_utils import find_executable
 from cephadmlib.file_utils import read_file
 from cephadmlib.net_utils import get_fqdn, get_ipv4_address, get_ipv6_address

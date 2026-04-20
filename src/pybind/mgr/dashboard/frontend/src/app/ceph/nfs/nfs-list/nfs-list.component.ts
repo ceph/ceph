@@ -101,7 +101,7 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
     const createAction: CdTableAction = {
       permission: 'create',
       icon: Icons.add,
-      routerLink: () => `/${prefix}/nfs/create`,
+      routerLink: () => `/${prefix}/nfs/create/${this.clusterId}`,
       canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection,
       name: this.actionLabels.CREATE
     };
@@ -174,7 +174,7 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
         cellTemplate: this.protocolTpl
       },
       {
-        name: $localize`Transports`,
+        name: $localize`Transport Protocol`,
         prop: 'transports',
         flexGrow: 2,
         cellTemplate: this.transportTpl
