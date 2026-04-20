@@ -13,6 +13,7 @@ set(lib_mon_srcs
   Monitor.cc
   MonitorBackup.cc
   MonmapMonitor.cc
+  MonOpRequest.cc
   LogMonitor.cc
   AuthMonitor.cc
   ConfigMap.cc
