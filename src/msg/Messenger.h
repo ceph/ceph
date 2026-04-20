@@ -243,6 +243,9 @@ public:
     return my_addrs->as_legacy_addr();
   }
 
+  auto get_shutdown_timeout() const {
+    return shutdown_timeout;
+  }
 
   /**
    * std::set messenger's instance
@@ -860,6 +863,9 @@ public:
   /**
    * @} // Dispatcher Interfacing
    */
+
+private:
+  std::chrono::milliseconds shutdown_timeout;
 };
 
 

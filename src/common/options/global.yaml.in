@@ -43,6 +43,14 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: ms_shutdown_timeout
+  type: millisecs
+  level: advanced
+  desc: Timeout for connection to shutdown gracefully
+  default: 120000
+  flags:
+  - runtime
+  min: 1
 - name: public_addrv
   type: addrvec
   level: basic
