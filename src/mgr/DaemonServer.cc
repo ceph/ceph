@@ -44,6 +44,7 @@
 #include "messages/MPGStats.h"
 #include "messages/MOSDScrub2.h"
 #include "messages/MOSDForceRecovery.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/JSONFormatter.h"
 #include "common/pick_address.h"
