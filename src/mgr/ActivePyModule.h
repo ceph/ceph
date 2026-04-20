@@ -22,6 +22,7 @@
 #include "common/LogEntry.h"
 #include "common/Thread.h"
 #include "common/Finisher.h"
+#include "global/global_context.h" // for g_ceph_context
 #include "mon/health_check.h"
 #include "mgr/Gil.h"
 
