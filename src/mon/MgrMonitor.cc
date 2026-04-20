@@ -20,6 +20,7 @@
 #include "messages/MMonCommand.h"
 
 #include "include/stringify.h"
+#include "include/util.h" // for dump_services()
 #include "mgr/MgrContext.h"
 #include "mgr/mgr_commands.h"
 #include "OSDMonitor.h"
@@ -28,6 +29,8 @@
 #include "Monitor.h"
 #include "Paxos.h"
 
+#include "common/debug.h"
+#include "common/errno.h"
 #include "common/TextTable.h"
 #include "include/stringify.h"
 

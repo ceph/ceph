@@ -46,7 +46,7 @@ class Monitor;
 class PGMap;
 struct MonSession;
 class MOSDMap;
-
+struct Subscription;
 
 /// information about a particular peer's failure reports for one osd
 struct failure_reporter_t {

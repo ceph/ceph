@@ -24,6 +24,7 @@
 
 #include "common/config.h"
 #include "include/ceph_features.h"
+#include "include/util.h" // for ceph_data_stats_t
 
 #include "mon/MonMap.h"
 #include "mon/Monitor.h"
@@ -35,6 +36,7 @@
 #include "include/CompatSet.h"
 
 #include "common/ceph_argparse.h"
+#include "common/debug.h"
 #include "common/pick_address.h"
 #include "common/JSONFormatter.h"
 #include "common/Throttle.h"

@@ -18,6 +18,7 @@
 #include <iostream>
 #include "include/encoding.h"
 #include "include/utime.h"
+#include "common/debug.h"
 #include "common/Formatter.h"
 #include "common/ceph_releases.h"
 #include "common/version.h"

@@ -47,7 +47,9 @@
 #include "auth/AuthMethodList.h"
 #include "auth/KeyRing.h"
 #include "include/common_fwd.h"
+#include "include/CompatSet.h"
 #include "mon/MonitorDBStore.h"
+#include "mon/mon_types.h" // for Metadata, PAXOS_*, ScrubResult
 #include "mgr/MgrClient.h"
 #include <boost/smart_ptr/atomic_shared_ptr.hpp>
 #include <boost/smart_ptr/shared_ptr.hpp>

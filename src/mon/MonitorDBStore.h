@@ -14,8 +14,6 @@
 #ifndef CEPH_MONITOR_DB_STORE_H
 #define CEPH_MONITOR_DB_STORE_H
 
-#include "include/types.h"
-#include "include/buffer.h"
 #include <set>
 #include <map>
 #include <string>
@@ -24,7 +22,10 @@
 #include <fstream>
 #include "kv/KeyValueDB.h"
 
+#include "include/buffer.h"
 #include "include/ceph_assert.h"
+#include "include/Context.h"
+#include "include/types.h" // for version_t
 #include "common/JSONFormatter.h"
 #include "common/Finisher.h"
 #include "common/errno.h"

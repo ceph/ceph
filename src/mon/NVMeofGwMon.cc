@@ -16,6 +16,7 @@
 #include "include/stringify.h"
 #include "NVMeofGwMon.h"
 #include "Monitor.h"
+#include "common/errno.h"
 #include "messages/MMonCommand.h"
 #include "messages/MNVMeofGwBeacon.h"
 #include "messages/MNVMeofGwMap.h"

@@ -21,6 +21,7 @@
 #include "messages/MMonJoin.h"
 
 #include "common/ceph_argparse.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include <sstream>
 #include "common/config.h"

@@ -52,6 +52,7 @@
 #include "MonClient.h"
 #include "error_code.h"
 #include "MonMap.h"
+#include "mon_types.h" // for ceph::features::mon::*
 
 #include "auth/Auth.h"
 #include "auth/KeyRing.h"

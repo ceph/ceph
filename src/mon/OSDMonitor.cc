@@ -74,6 +74,7 @@
 #include "common/prime.h"
 
 #include "common/config.h"
+#include "common/debug.h"
 #include "common/errno.h"
 
 #include "erasure-code/ErasureCodePlugin.h"

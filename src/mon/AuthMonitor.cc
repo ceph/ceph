@@ -33,6 +33,7 @@
 
 #include "auth/AuthServiceHandler.h"
 #include "auth/KeyRing.h"
+#include "common/debug.h"
 #include "include/stringify.h"
 #include "include/ceph_assert.h"
 

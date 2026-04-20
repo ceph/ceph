@@ -20,6 +20,8 @@
 #include <time.h>
 #include <iterator>
 
+#include "crush/CrushWrapper.h"
+
 #include "include/ceph_assert.h"
 #include "include/common_fwd.h"
 #include "include/stringify.h"
@@ -34,8 +36,10 @@
 #include "messages/MMonCommand.h"
 #include "messages/MMonHealthChecks.h"
 
+#include "common/debug.h"
 #include "common/Formatter.h"
 #include "common/prime.h"
+#include "crush/CrushWrapper.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix

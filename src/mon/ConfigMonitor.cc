@@ -11,6 +11,7 @@
 #include "messages/MConfig.h"
 #include "messages/MGetConfig.h"
 #include "messages/MMonCommand.h"
+#include "common/debug.h"
 #include "common/JSONFormatter.h"
 #include "common/TextTable.h"
 #include "common/cmdparse.h"

@@ -30,6 +30,8 @@
 #include "MonMap.h"
 #include "MonitorDBStore.h"
 
+struct Subscription;
+
 class MonmapMonitor : public PaxosService {
  public:
   MonmapMonitor(Monitor &mn, Paxos &p, const std::string& service_name)

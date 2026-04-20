@@ -32,12 +32,14 @@
 #include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/post.hpp>
 
+#include "msg/Dispatcher.h"
 #include "msg/Messenger.h"
 
 #include "MonMap.h"
 #include "MonSub.h"
 
 #include "common/admin_socket.h"
+#include "common/debug.h"
 #include "common/strtol.h" // for strict_strtoll()
 #include "common/Timer.h"
 #include "common/config.h"
