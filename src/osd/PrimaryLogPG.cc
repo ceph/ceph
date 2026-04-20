@@ -4946,6 +4946,16 @@ int PrimaryLogPG::trim_object(
   OpContextUPtr ctx = simple_opc_create(obc);
   ctx->head_obc = head_obc;
 
+  if (pool_migrations_in_flight.count(head_oid)) {
+    dout(10) << __func__ << ": BILL Currently migrating head object " << head_oid << " " << first << dendl; // BILL:FIXME remove BILL once created in testing
+    // Migration will take+release write lock on head object as it
+    // completes the migration of the object. Use the write lock release to
+    // kick the trimmer to retry
+    ctx->lock_manager.snaptrimmer_set_write_marker(obc, first);
+    close_op_ctx(ctx.release());
+    return -ENOLCK;
+  }
+
   if (!ctx->lock_manager.get_snaptrimmer_write(
 	coid,
 	obc,
@@ -9966,7 +9976,20 @@ void PrimaryLogPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
     cop->cursor.data_complete = true;
     cop->cursor.omap_complete = true;
   }
-
+  if (r == -ENOENT &&
+      (cop->flags & CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION) &&
+      oid.is_snap()) {
+    // Clone object does not exist, it has either been trimmed or is on the
+    // trimq. Create an empty clone object in the target pool and then
+    // trim it to update the snapset and stats
+    dout(20) << __func__ << " migrating trimmed clone object " << oid << dendl;
+    r = 0;
+    cop->results.needs_trim = true;
+    cop->rval = 0;
+    cop->cursor.attr_complete = true;
+    cop->cursor.data_complete = true;
+    cop->cursor.omap_complete = true;
+  }
   if (r < 0)
     goto out;
 
@@ -10409,6 +10432,13 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
     dout(20) << __func__ << " setting whiteout flag on " << obs.oi.soid << dendl;
     obs.oi.set_flag(object_info_t::FLAG_WHITEOUT);
     ++ctx->delta_stats.num_whiteouts;
+  }
+
+  if (cb->results->needs_trim) {
+    dout(20) << __func__ << " BILL need to trim object " << obs.oi.soid << dendl;
+    //FIXME: call trim_object - need to work out if we can use this ctx for trim_object
+    //or whether trim should be done separtely. Ideally we wouldn't need to create the
+    //clone object and then delete it.
   }
 
   interval_set<uint64_t> ch;

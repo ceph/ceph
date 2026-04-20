@@ -120,6 +120,9 @@ public:
   bool get_write_greedy(OpRequestRef& op) {
     return get_write(op, true);
   }
+  void snaptrimmer_set_write_marker() {
+    rwstate.snaptrimmer_set_write_marker();
+  }
   bool get_snaptrimmer_write(bool mark_if_unsuccessful) {
     return rwstate.get_snaptrimmer_write(mark_if_unsuccessful);
   }
@@ -256,6 +259,12 @@ public:
       return true;
     } else {
       return false;
+    }
+  }
+  /// Flag that trimmer needs kicking when write lock is released
+  void snaptrimmer_set_write_marker(ObjectContextRef obc, bool mark_if_unsuccessful) {
+    if (mark_if_unsuccessful) {
+      obc->snaptrimmer_set_write_marker();
     }
   }
   /// Get write lock for snap trim
