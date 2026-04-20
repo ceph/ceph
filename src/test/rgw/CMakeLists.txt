@@ -426,6 +426,18 @@ target_link_libraries(ceph_test_datalog
 install(TARGETS ceph_test_datalog DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
+# Test for storage class stats with std::optional
+add_executable(unittest_rgw_storage_class_stats
+               test_rgw_storage_class_stats.cc
+              )
+target_link_libraries(unittest_rgw_storage_class_stats
+                      cls_rgw_client
+                      cls_user_client
+                      global
+                      ${UNITTEST_LIBS}
+                      )
+add_ceph_unittest(unittest_rgw_storage_class_stats)
+
 #
 # Helper for adding RGW tests built with Catch2:
 # Note: to define a test that does not use Catch2::main(), use:
