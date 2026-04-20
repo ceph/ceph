@@ -15,7 +15,7 @@ import operator
 
 from ceph.fs.earmarking import EarmarkTopScope
 
-from . import config_store, resources
+from . import config_store, resources, rgw
 from .enums import (
     AuthMode,
     ConfigNS,
@@ -54,8 +54,9 @@ class Staging:
     the destination store.
     """
 
-    def __init__(self, store: ConfigStore) -> None:
+    def __init__(self, store: ConfigStore, tool_exec: rgw.ToolExecer) -> None:
         self.destination_store = store
+        self._tool_execer = tool_exec
         self.incoming: Dict[EntryKey, SMBResource] = {}
         self.deleted: Dict[EntryKey, SMBResource] = {}
         self._store_keycache: Set[EntryKey] = set()
@@ -358,6 +359,63 @@ def _check_share_resource(
             msg="no matching cluster id",
             status={"cluster_id": share.cluster_id},
         )
+
+    # Handle RGW shares - validate bucket existence and auto-fetch credentials
+    if share.rgw is not None:
+        # Validate bucket exists
+        if not rgw.validate_rgw_bucket(
+            staging._tool_execer, share.rgw.bucket
+        ):
+            raise ErrorResult(
+                share,
+                msg=f"RGW bucket '{share.rgw.bucket}' does not exist or is not accessible",
+            )
+
+        # Auto-fetch credentials if not provided
+        if (
+            not share.rgw.user_id
+            or not share.rgw.access_key_id
+            or not share.rgw.secret_access_key
+        ):
+            try:
+                log.debug(
+                    f"Auto-fetching RGW credentials for bucket {share.rgw.bucket}"
+                )
+                (
+                    fetched_user_id,
+                    access_key,
+                    secret_key,
+                ) = rgw.fetch_rgw_credentials(
+                    staging._tool_execer,
+                    share.rgw.bucket,
+                    share.rgw.user_id or '',
+                )
+                # Update the share's RGW storage with fetched credentials
+                share.rgw = resources.RGWStorage(
+                    bucket=share.rgw.bucket,
+                    user_id=fetched_user_id,
+                    access_key_id=access_key,
+                    secret_access_key=secret_key,
+                )
+                log.debug(
+                    f"Successfully fetched credentials for user {fetched_user_id}"
+                )
+            except ValueError as e:
+                raise ErrorResult(
+                    share,
+                    msg=f"Failed to fetch RGW credentials: {str(e)}",
+                )
+
+        name_used_by = _share_name_in_use(staging, share)
+        if name_used_by:
+            raise ErrorResult(
+                share,
+                msg="share name already in use",
+                status={"conflicting_share_id": name_used_by},
+            )
+        return
+
+    # Handle CephFS shares
     assert share.cephfs is not None
     try:
         volpath = path_resolver.resolve_exists(

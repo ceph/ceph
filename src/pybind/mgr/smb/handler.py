@@ -23,7 +23,7 @@ import ceph.smb.constants
 from ceph.deployment.service_spec import SMBExternalCephCluster, SMBSpec
 from ceph.fs.earmarking import EarmarkTopScope
 
-from . import config_store, external, resources
+from . import config_store, external, resources, rgw
 from .enums import (
     AuthMode,
     CephFSStorageProvider,
@@ -314,6 +314,7 @@ class ClusterConfigHandler:
         authorizer: Optional[AccessAuthorizer] = None,
         orch: Optional[OrchSubmitter] = None,
         earmark_resolver: Optional[EarmarkResolver] = None,
+        tool_execer: 'rgw.ToolExecer',
     ) -> None:
         self.internal_store = internal_store
         self.public_store = public_store
@@ -328,6 +329,7 @@ class ClusterConfigHandler:
         if earmark_resolver is None:
             earmark_resolver = cast(EarmarkResolver, _FakeEarmarkResolver())
         self._earmark_resolver = earmark_resolver
+        self._tool_execer = tool_execer
         log.info(
             'Initialized new ClusterConfigHandler with'
             f' internal store {self.internal_store!r},'
@@ -347,7 +349,7 @@ class ClusterConfigHandler:
         """
         log.debug('applying changes to internal data store')
         results = ResultGroup()
-        staging = Staging(self.internal_store)
+        staging = Staging(self.internal_store, self._tool_execer)
         try:
             incoming = order_resources(inputs)
             for resource in incoming:
@@ -634,18 +636,43 @@ class ClusterConfigHandler:
         assert isinstance(cluster, resources.Cluster)
         # vols: hold the cephfs volumes our shares touch. some operations are
         # disabled/skipped unless we touch volumes.
-        vols = {share.checked_cephfs.volume for share in change_group.shares}
+        vols = {
+            share.checked_cephfs.volume
+            for share in change_group.shares
+            if share.cephfs is not None
+        }
+        # rgw_buckets: hold the RGW buckets our shares touch
+        rgw_buckets = {
+            share.rgw.bucket
+            for share in change_group.shares
+            if share.rgw is not None
+        }
         # save the various object types
         previous_info = _swap_pending_cluster_info(
             self.public_store,
             change_group,
-            orch_needed=bool(vols and self._orch),
+            orch_needed=bool((vols or rgw_buckets) and self._orch),
         )
         _save_pending_join_auths(self.priv_store, change_group)
         _save_pending_users_and_groups(self.priv_store, change_group)
         _save_pending_tls_credentials(self.priv_store, change_group)
+        _save_pending_rgw_credentials(self.priv_store, change_group)
+        rgw_credential_entries = {
+            share.share_id: change_group.cache[
+                external.rgw_credentials_key(
+                    change_group.cluster.cluster_id, share.share_id
+                )
+            ]
+            for share in change_group.shares
+            if share.rgw is not None
+            and share.rgw.access_key_id
+            and share.rgw.secret_access_key
+        }
         cluster_conf = _ClusterConf.assemble(
-            change_group, self._path_resolver, self._authorizer
+            change_group,
+            self._path_resolver,
+            self._authorizer,
+            rgw_credential_entries,
         )
         _save_pending_config(self.public_store, cluster_conf)
         # remove any stray objects
@@ -684,6 +711,17 @@ class ClusterConfigHandler:
             ]
             for tc in change_group.tls_credentials
         }
+        rgw_credential_entries = {
+            share.share_id: change_group.cache[
+                external.rgw_credentials_key(
+                    cluster.cluster_id, share.share_id
+                )
+            ]
+            for share in change_group.shares
+            if share.rgw is not None
+            and share.rgw.access_key_id
+            and share.rgw.secret_access_key
+        }
         ext_ceph_cluster = None
         if change_group.ext_ceph_clusters:
             assert len(change_group.ext_ceph_clusters) == 1
@@ -706,9 +744,31 @@ class ClusterConfigHandler:
         # via orch.  This differs from NFS because ganesha embeds the cephx
         # keys directly in each export definition block while samba needs the
         # ceph keyring to load keys.
+        # For RGW shares, we don't need CephFS volumes but still need orchestration.
         previous_orch = previous_info.get('orch_needed', False)
-        if self._orch and (vols or previous_orch):
+        if self._orch and (vols or rgw_buckets or previous_orch):
+            log.debug(
+                'Submitting SMB service spec for cluster %s: '
+                'shares=%d (cephfs_vols=%d, rgw_buckets=%d), '
+                'previous_orch=%s',
+                cluster.cluster_id,
+                len(change_group.shares),
+                len(vols),
+                len(rgw_buckets),
+                previous_orch,
+            )
             self._orch.submit_smb_spec(smb_spec)
+        else:
+            log.debug(
+                'Skipping SMB service orchestration for cluster %s: '
+                'orch_enabled=%s, shares=%d, cephfs_vols=%d, rgw_buckets=%d, previous_orch=%s',
+                cluster.cluster_id,
+                bool(self._orch),
+                len(change_group.shares),
+                len(vols),
+                len(rgw_buckets),
+                previous_orch,
+            )
 
     def _remove_cluster(self, cluster_id: str) -> None:
         log.info('Removing cluster: %s', cluster_id)
@@ -762,6 +822,8 @@ class _ShareConf:
     resolver: PathResolver
     cephx_entity: str
     ceph_cluster: str
+    rgw_access_key_uri: Optional[str] = None
+    rgw_secret_key_uri: Optional[str] = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -777,6 +839,7 @@ class _ClusterConf:
         change_group: ClusterChangeGroup,
         default_resolver: PathResolver,
         authorizer: AccessAuthorizer,
+        rgw_credential_entries: Dict[str, ConfigEntry],
     ) -> Self:
         extcc = None
         assert isinstance(change_group.cluster, resources.Cluster)
@@ -794,25 +857,112 @@ class _ClusterConf:
             ceph_cluster = 'exo'
             cephx_entity = checked(extcc.cluster).cephfs_user.name
         elif change_group.shares:
-            log.debug('local ceph cluster with shares')
-            cephx_entity = _cephx_data_entity(change_group.cluster)
-            # ensure an entity exists with access to the volumes
-            for share in change_group.shares:
-                authorizer.authorize_entity(
-                    share.checked_cephfs.volume, cephx_entity
+            # Check if we have any CephFS shares that need CephX auth
+            has_cephfs_shares = any(
+                s.cephfs is not None for s in change_group.shares
+            )
+            if has_cephfs_shares:
+                log.debug('local ceph cluster with CephFS shares')
+                cephx_entity = _cephx_data_entity(change_group.cluster)
+                # ensure an entity exists with access to the volumes (CephFS only)
+                for share in change_group.shares:
+                    if share.cephfs:
+                        authorizer.authorize_entity(
+                            share.checked_cephfs.volume, cephx_entity
+                        )
+                cephadm_data_entity = cephx_entity
+            else:
+                log.debug(
+                    'local ceph cluster with RGW shares only (no CephX auth needed)'
                 )
-            cephadm_data_entity = cephx_entity
         else:
             log.debug('local cluster without shares: skipping ceph auth')
         return cls(
             change_group.cluster,
             [
-                _ShareConf(s, resolver, cephx_entity, ceph_cluster)
+                _make_share_conf(
+                    s,
+                    resolver,
+                    cephx_entity,
+                    ceph_cluster,
+                    rgw_credential_entries,
+                )
                 for s in change_group.shares
             ],
             change_group,
             cephadm_data_entity,
         )
+
+
+def _make_share_conf(
+    s: resources.Share,
+    resolver: PathResolver,
+    cephx_entity: str,
+    ceph_cluster: str,
+    rgw_credential_entries: Dict[str, ConfigEntry],
+) -> _ShareConf:
+    creds_entry = rgw_credential_entries.get(s.share_id)
+    # Get the URI from the ConfigEntry object, not from the data
+    access_key_uri = (
+        f'URI:{creds_entry.uri}:access_key_id' if creds_entry else None
+    )
+    secret_key_uri = (
+        f'URI:{creds_entry.uri}:secret_access_key' if creds_entry else None
+    )
+    return _ShareConf(
+        s,
+        resolver,
+        cephx_entity,
+        ceph_cluster,
+        rgw_access_key_uri=access_key_uri,
+        rgw_secret_key_uri=secret_key_uri,
+    )
+
+
+def _generate_rgw_share(
+    conf: _ShareConf,
+) -> Dict[str, Dict[str, str]]:
+    """Generate Samba configuration for an RGW-backed share."""
+    share = conf.resource
+    rgw = share.rgw
+    assert rgw is not None, "RGW storage configuration missing"
+
+    # Use URI-based credential references (already formatted in _make_share_conf)
+    access_key_uri = conf.rgw_access_key_uri or ''
+    secret_key_uri = conf.rgw_secret_key_uri or ''
+
+    cfg = {
+        # smb.conf options
+        'options': {
+            'vfs objects': 'ceph_rgw',
+            'ceph_rgw:config_file': '/etc/ceph/ceph.conf',
+            'ceph_rgw:keyring_file': '/etc/ceph/ceph.client.admin.keyring',
+            'ceph_rgw:bucket': rgw.bucket,
+            'ceph_rgw:user_id': rgw.user_id or '',
+            'ceph_rgw:access_key': access_key_uri,
+            'ceph_rgw:secret_access_key': secret_key_uri,
+            'ceph_rgw:debug': 'off',
+            'read only': ynbool(share.readonly),
+            'browseable': ynbool(share.browseable),
+            'kernel share modes': 'no',
+            'smbd profiling share': 'yes',
+        }
+    }
+
+    if share.comment is not None:
+        cfg['options']['comment'] = share.comment
+    if share.max_connections is not None:
+        cfg['options']['max connections'] = str(share.max_connections)
+
+    # extend share with user+group login access lists
+    _generate_share_login_control(share, cfg)
+    _generate_share_hosts_access(share, cfg)
+    # extend share with custom options
+    custom_opts = share.cleaned_custom_smb_share_options
+    if custom_opts:
+        cfg['options'].update(custom_opts)
+        cfg['options']['x:ceph:has_custom_options'] = 'yes'
+    return cfg
 
 
 def _generate_share(conf: _ShareConf) -> Dict[str, Dict[str, str]]:
@@ -988,7 +1138,12 @@ def _generate_config(conf: _ClusterConf) -> Dict[str, Any]:
     _set_debug_level(cluster_global_opts, conf)
 
     share_configs = {
-        share.resource.name: _generate_share(share) for share in conf.shares
+        share.resource.name: (
+            _generate_rgw_share(share)
+            if share.resource.rgw
+            else _generate_share(share)
+        )
+        for share in conf.shares
     }
 
     instance_features = []
@@ -1272,6 +1427,31 @@ def _save_pending_tls_credentials(
         change_group.cache_updated_entry(tc_entry)
 
 
+def _save_pending_rgw_credentials(
+    store: ConfigStore,
+    change_group: ClusterChangeGroup,
+) -> None:
+    """Save RGW credentials for shares in the priv store."""
+    cluster = change_group.cluster
+    assert isinstance(cluster, resources.Cluster)
+
+    # Save credentials for each RGW share
+    for share in change_group.shares:
+        if share.rgw is not None:
+            # Only save if credentials are present
+            if share.rgw.access_key_id and share.rgw.secret_access_key:
+                ext_key = external.rgw_credentials_key(
+                    cluster.cluster_id, share.share_id
+                )
+                creds_entry = store[ext_key]
+                creds_data = {
+                    'access_key_id': share.rgw.access_key_id,
+                    'secret_access_key': share.rgw.secret_access_key,
+                }
+                creds_entry.set(creds_data)
+                change_group.cache_updated_entry(creds_entry)
+
+
 def _save_pending_config(
     store: ConfigStore,
     cluster_conf: _ClusterConf,
@@ -1313,11 +1493,12 @@ def _store_transaction(store: ConfigStore) -> Iterator[None]:
 
 
 def _has_proxied_vfs(change_group: ClusterChangeGroup) -> bool:
-    """Return true if any shares in the change group use the new vfs module
-    with the proxied cephfs library.
+    """Return true if any CephFS-backed shares in the change group use the
+    new vfs module with the proxied cephfs library.
     """
     return any(
-        s.checked_cephfs.provider.expand()
+        s.cephfs is not None
+        and s.checked_cephfs.provider.expand()
         == CephFSStorageProvider.SAMBA_VFS_PROXIED
         for s in change_group.shares
     )
