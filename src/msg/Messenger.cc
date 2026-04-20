@@ -14,6 +14,7 @@
 
 const char** Messenger::get_tracked_conf_keys() const noexcept {
   static const char* keys[] = {
+    "ms_shutdown_timeout",
     nullptr,
   };
   return keys;
@@ -21,6 +22,9 @@ const char** Messenger::get_tracked_conf_keys() const noexcept {
 
 void Messenger::handle_conf_change(const ConfigProxy& conf, const std::set<std::string>& changed) {
   ldout(cct, 2) << __func__ << ": " << changed << dendl;
+  if (changed.count("ms_shutdown_timeout")) {
+    shutdown_timeout = conf.get_val<std::chrono::milliseconds>("ms_shutdown_timeout");
+  }
 }
 
 Messenger *Messenger::create_client_messenger(CephContext *cct, std::string lname)
@@ -72,6 +76,7 @@ Messenger::Messenger(CephContext *cct_, entity_name_t w)
   auth_registry.refresh_config();
   comp_registry.refresh_config();
   cct->_conf.add_observer(this);
+  shutdown_timeout = cct->_conf.get_val<std::chrono::milliseconds>("ms_shutdown_timeout");
 }
 
 Messenger::~Messenger()
