@@ -358,6 +358,19 @@ def _check_share_resource(
             msg="no matching cluster id",
             status={"cluster_id": share.cluster_id},
         )
+    
+    # Handle RGW shares - no path validation needed
+    if share.rgw is not None:
+        name_used_by = _share_name_in_use(staging, share)
+        if name_used_by:
+            raise ErrorResult(
+                share,
+                msg="share name already in use",
+                status={"conflicting_share_id": name_used_by},
+            )
+        return
+    
+    # Handle CephFS shares
     assert share.cephfs is not None
     try:
         volpath = path_resolver.resolve_exists(
