@@ -14,6 +14,7 @@ target_link_libraries(ceph_test_rados
   ${CMAKE_DL_LIBS}
   cls_cas_internal
   cls_cas_client
+  json_structures
   )
 install(TARGETS
   ceph_test_rados

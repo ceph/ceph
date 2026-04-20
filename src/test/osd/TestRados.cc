@@ -497,6 +497,10 @@ void usage(const char *prog)
   cout << "        [--dedup_chunk_algo <fastcdc|fixcdc>]" << std::endl;
   cout << "        [--dedup_chunk_size <bytes>]" << std::endl;
   cout << "        [--timestamps]" << std::endl;
+  cout << "        [--migrate-pool]" << std::endl;
+  cout << "        [--initial-migration-delay <int>]" << std::endl;
+  cout << "        [--migration-interval <int>]" << std::endl;
+  cout << "        [--migration-pg-count <int>]" << std::endl;
   cout << std::endl;
   cout << "Model-based RADOS integration stress test. Verifies data correctness by" << std::endl;
   cout << "comparing object data and metadata returned by RADOS against an in-memory model." << std::endl;
@@ -574,7 +578,10 @@ int main(int argc, char **argv)
   string chunk_algo = "";
   string chunk_size = "";
   size_t max_attr_len = 20000;
-
+  bool migrate_pool = false;
+  int migration_interval = 60;
+  std::optional<int> migration_pg_num;
+  int initial_migration_delay = 0;
 
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
@@ -687,6 +694,14 @@ int main(int argc, char **argv)
       chunk_size = argv[++i];
     } else if (strcmp(argv[i], "--timestamps") == 0) {
       timestamp = true;
+    } else if (strcmp(argv[i], "--migrate-pool") == 0) {
+      migrate_pool = true;
+    } else if (strcmp(argv[i], "--initial-migration-delay") == 0) {
+      initial_migration_delay = atoi(argv[++i]);
+    } else if (strcmp(argv[i], "--migration-interval") == 0) {
+      migration_interval = atoi(argv[++i]);
+    } else if (strcmp(argv[i], "--migration-pg-count") == 0) {
+      migration_pg_num = atoi(argv[++i]);
     } else {
       cerr << "unknown arg " << argv[i] << std::endl;
       usage(argv[0]);
@@ -763,6 +778,10 @@ int main(int argc, char **argv)
     chunk_algo,
     chunk_size,
     max_attr_len,
+    migrate_pool,
+    migration_interval,
+    migration_pg_num,
+    initial_migration_delay,
     id);
 
   TestOpStat stats;
