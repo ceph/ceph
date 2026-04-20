@@ -36,6 +36,8 @@
 #include <vector>
 #include <fstream>
 
+#include <fmt/ranges.h>
+
 // C++ compatibility: bpftool generates skeleton code using _Bool (C99 type).
 // glibc's stdbool.h defines _Bool as bool in C++ mode, but Clang's stdbool.h
 // only does this when __STRICT_ANSI__ is not set. With -std=c++XX (strict mode),
@@ -358,7 +360,7 @@ int attach_uprobe(struct radostrace_bpf *skel,
 
   string pid_path = path;
   if (process_id != -1) {
-    pid_path = "/proc/" + to_string(process_id) + "/root" + path;
+    pid_path = fmt::format("/proc/{}/root{}", process_id, path);
   }
 
   string path_basename = get_basename(path);
@@ -369,7 +371,7 @@ int attach_uprobe(struct radostrace_bpf *skel,
     return 0;
   }
   if (v > 0)
-      funcname = funcname + "_v" + to_string(v);
+      funcname = fmt::format("{}_v{}", funcname, v);
   int prog_id = func_progid[funcname];
   struct bpf_link *ulink = bpf_program__attach_uprobe(
       *skel->skeleton->progs[prog_id].prog,
@@ -398,14 +400,14 @@ int attach_retuprobe(struct radostrace_bpf *skel,
 
   string pid_path = path;
   if (process_id != -1) {
-    pid_path = "/proc/" + to_string(process_id) + "/root" + path;
+    pid_path = fmt::format("/proc/{}/root{}", process_id, path);
   }
 
   string path_basename = get_basename(path);
   auto &func2pc = dp.mod_func2pc[path_basename];
   size_t func_addr = func2pc[funcname];
   if (v > 0)
-      funcname = funcname + "_v" + to_string(v);
+      funcname = fmt::format("{}_v{}", funcname, v);
   int prog_id = func_progid[funcname];
   struct bpf_link *ulink = bpf_program__attach_uprobe(
       *skel->skeleton->progs[prog_id].prog,
@@ -429,9 +431,7 @@ static int handle_event(void *ctx, void *data, size_t size) {
     (void)ctx;
     (void)size;
     struct client_op_v * op_v = (struct client_op_v *)data;
-    stringstream ss;
-    ss << hex << op_v->m_seed;
-    string pgid(ss.str());
+    string pgid = fmt::format("{:x}", op_v->m_seed);
 
     // Define field widths based on actual data
     struct FieldWidths {
@@ -450,19 +450,9 @@ static int handle_event(void *ctx, void *data, size_t size) {
     static bool firsttime = true;
     
     // Compile acting OSD list
-    stringstream acting_osd_list;
-    acting_osd_list << "[";
-    {
-        bool first = true;
-        for (int i = 0; i < MAX_ACTING_SIZE; ++i) {
-            if (op_v->acting[i] < 0) break;
-            if (!first) acting_osd_list << ",";
-            acting_osd_list << op_v->acting[i];
-            first = false;
-        }
-        acting_osd_list << "]";
-    }
-    string acting_str = acting_osd_list.str();
+    auto* acting_end = std::find_if(std::begin(op_v->acting), std::end(op_v->acting),
+                                    [](int v) { return v < 0; });
+    string acting_str = fmt::format("[{}]", fmt::join(std::begin(op_v->acting), acting_end, ","));
 
     // Compile Ops list
     stringstream ops_list;
@@ -590,7 +580,7 @@ int main(int argc, char **argv) {
 
   // Validate process_id if specified
   if (process_id != -1) {
-    string proc_path = "/proc/" + to_string(process_id);
+    string proc_path = fmt::format("/proc/{}", process_id);
     if (access(proc_path.c_str(), F_OK) != 0) {
       cerr << "Error: Process ID " << process_id << " does not exist" << std::endl;
       return 1;
