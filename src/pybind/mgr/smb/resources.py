@@ -399,6 +399,49 @@ class LoginAccessEntry(_RBase):
 
 
 @resourcelib.component()
+class RGWStorage(_RBase):
+    """Description of where in an RGW bucket a share is located."""
+
+    bucket: str
+    user_id: Optional[str] = None
+    path: str = '/'
+    access_key_id: Optional[str] = None
+    secret_access_key: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        # remove extra slashes, relative path components, etc.
+        self.path = validation.normalize_path(self.path)
+
+    def validate(self) -> None:
+        if not self.bucket:
+            raise ValueError('bucket requires a value')
+        validation.check_path(self.path)
+
+    def convert(self, operation: ConversionOp) -> Self:
+        """Convert password fields based on the operation."""
+        return self.__class__(
+            bucket=self.bucket,
+            user_id=self.user_id,
+            path=self.path,
+            access_key_id=_password_convert(self.access_key_id, operation)
+            if self.access_key_id
+            else None,
+            secret_access_key=_password_convert(
+                self.secret_access_key, operation
+            )
+            if self.secret_access_key
+            else None,
+        )
+
+    @resourcelib.customize
+    def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
+        rc.user_id.quiet = True
+        rc.access_key_id.quiet = True
+        rc.secret_access_key.quiet = True
+        return rc
+
+
+@resourcelib.component()
 class HostAccessEntry(_RBase):
     access: HostAccess
     address: str = ''
@@ -459,6 +502,7 @@ class Share(_RBase):
     comment: Optional[str] = None
     max_connections: Optional[int] = None
     cephfs: Optional[CephFSStorage] = None
+    rgw: Optional[RGWStorage] = None
     custom_smb_share_options: Optional[Dict[str, str]] = None
     login_control: Optional[List[LoginAccessEntry]] = None
     restrict_access: bool = False
@@ -479,9 +523,19 @@ class Share(_RBase):
         validation.check_share_name(self.name)
         if self.intent != Intent.PRESENT:
             raise ValueError('Share must have present intent')
-        # currently only cephfs is supported
-        if self.cephfs is None:
-            raise ValueError('a cephfs configuration is required')
+        # Ensure exactly one storage backend is specified
+        storage_count = sum(
+            [
+                self.cephfs is not None,
+                self.rgw is not None,
+            ]
+        )
+        if storage_count == 0:
+            raise ValueError(
+                'a storage configuration is required (cephfs or rgw)'
+            )
+        if storage_count > 1:
+            raise ValueError('only one storage backend can be specified')
         if self.max_connections is not None and self.max_connections < 0:
             raise ValueError(
                 'max_connections must be 0 or a non-negative integer'
