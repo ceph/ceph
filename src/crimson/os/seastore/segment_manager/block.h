@@ -129,7 +129,7 @@ public:
   BlockSegmentManager(
     const std::string &path,
     device_type_t dtype,
-    store_index_t store_index = 0)
+    store_index_t store_index)
   : device_path(path),
     store_index(store_index) {
     ceph_assert(get_device_type() == device_type_t::NONE);

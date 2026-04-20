@@ -591,7 +591,7 @@ public:
 
   seastar::future<std::string> get_default_device_class() final;
 
-  FuturizedStore::Shard& get_sharded_store(store_index_t store_index = 0) override
+  FuturizedStore::Shard& get_sharded_store(store_index_t store_index) override
   {
     return shard_stores.local(store_index);
   }

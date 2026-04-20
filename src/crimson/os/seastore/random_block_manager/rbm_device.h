@@ -94,7 +94,7 @@ protected:
     std::vector<bufferptr> ptrs) = 0;
 
 public:
-  RBMDevice(store_index_t store_index = 0)
+  RBMDevice(store_index_t store_index)
   : store_index(store_index) {}
   virtual ~RBMDevice() = default;
 
@@ -218,6 +218,7 @@ public:
   constexpr static uint32_t TEST_BLOCK_SIZE = 4096;
 
   EphemeralRBMDevice(size_t size, uint64_t block_size) :
+    RBMDevice(0),
     size(size), block_size(block_size), buf(nullptr) {
   }
   ~EphemeralRBMDevice() {

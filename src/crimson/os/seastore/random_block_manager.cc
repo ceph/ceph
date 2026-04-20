@@ -15,7 +15,7 @@ get_rb_device(
   return seastar::make_ready_future<random_block_device::RBMDeviceRef>(
     std::make_unique<
       random_block_device::nvme::NVMeBlockDevice
-    >(device + "/block"));
+    >(device + "/block", 0));
 }
 
 }

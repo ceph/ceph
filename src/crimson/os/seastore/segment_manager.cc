@@ -92,7 +92,7 @@ LOG_PREFIX(SegmentManager::get_segment_manager);
 	} else {
 	  return std::make_unique<
 	    segment_manager::block::BlockSegmentManager
-	    >(device + "/block", dtype);
+	    >(device + "/block", dtype, 0 /* store_index */);
 	}
       });
     });
@@ -100,7 +100,7 @@ LOG_PREFIX(SegmentManager::get_segment_manager);
   return seastar::make_ready_future<crimson::os::seastore::SegmentManagerRef>(
     std::make_unique<
       segment_manager::block::BlockSegmentManager
-    >(device + "/block", dtype));
+    >(device + "/block", dtype, 0 /* store_index */));
 #endif
 }
 
