@@ -7564,12 +7564,13 @@ int BlueStore::_lock_fsid()
   return 0;
 }
 
-bool BlueStore::is_rotational()
+bool BlueStore::_is_main_rotational()
 {
   if (bdev) {
     return bdev->is_rotational();
   }
 
+  // Do open main devicet if not yet opened.
   bool rotational = true;
   int r = _open_path();
   if (r < 0)
@@ -7596,37 +7597,58 @@ bool BlueStore::is_rotational()
   return rotational;
 }
 
+bool BlueStore::is_rotational()
+{
+  return _use_rotational_settings();
+}
+
 bool BlueStore::is_journal_rotational()
 {
   if (!bluefs) {
-    dout(5) << __func__ << " bluefs disabled, default to store media type"
+    dout(5) << __func__ << " bluefs disabled, default to main device type"
             << dendl;
-    return is_rotational();
+    return _use_rotational_settings();
   }
-  dout(10) << __func__ << " " << (int)bluefs->wal_is_rotational() << dendl;
-  return bluefs->wal_is_rotational();
+  if (cct->_conf->bluestore_debug_enforce_settings == "ssd" ||
+             cct->_conf->bluestore_debug_enforce_settings == "hybrid") {
+    dout(10) << __func__ << " overriden to ssd mode." << dendl;
+    return false;
+  }
+  bool r = bluefs->wal_is_rotational();
+  dout(10) << __func__ << " " << (int)r << dendl;
+  return r;
 }
 
 bool BlueStore::is_db_rotational()
 {
   if (!bluefs) {
-    dout(5) << __func__ << " bluefs disabled, default to store media type"
+    dout(5) << __func__ << " bluefs disabled, default to main device type"
             << dendl;
-    return is_rotational();
+    return _use_rotational_settings();
   }
-  dout(10) << __func__ << " " << (int)bluefs->db_is_rotational() << dendl;
-  return bluefs->db_is_rotational();
+  if (cct->_conf->bluestore_debug_enforce_settings == "ssd" ||
+             cct->_conf->bluestore_debug_enforce_settings == "hybrid") {
+    dout(10) << __func__ << " overriden to ssd mode." << dendl;
+    return false;
+  }
+  bool r = bluefs->db_is_rotational();
+  dout(10) << __func__ << " " << (int)r << dendl;
+  return r;
 }
 
 bool BlueStore::_use_rotational_settings()
 {
-  if (cct->_conf->bluestore_debug_enforce_settings == "hdd") {
-    return true;
-  }
   if (cct->_conf->bluestore_debug_enforce_settings == "ssd") {
+    dout(10) << __func__ << " overriden to ssd." << dendl;
     return false;
   }
-  return bdev->is_rotational();
+  if (cct->_conf->bluestore_debug_enforce_settings == "hybrid") {
+    dout(10) << __func__ << " overriden to hdd." << dendl;
+    return true;
+  }
+  bool r = _is_main_rotational();
+  dout(0) << __func__ << " returns " << r << dendl;
+  return r;
 }
 
 bool BlueStore::is_statfs_recoverable() const
