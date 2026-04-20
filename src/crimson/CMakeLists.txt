@@ -135,6 +135,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/mon/MgrMap.cc
   ${PROJECT_SOURCE_DIR}/src/mon/MonCap.cc
   ${PROJECT_SOURCE_DIR}/src/mon/MonMap.cc
+  ${PROJECT_SOURCE_DIR}/src/mon/mon_feature_t.cc
   ${PROJECT_SOURCE_DIR}/src/osd/osd_types.cc
   ${PROJECT_SOURCE_DIR}/src/osd/ECMsgTypes.cc
   ${PROJECT_SOURCE_DIR}/src/osd/HitSet.cc
