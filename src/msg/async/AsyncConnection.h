@@ -156,6 +156,7 @@ public:
     STATE_CONNECTING_RE,
     STATE_ACCEPTING,
     STATE_CONNECTION_ESTABLISHED,
+    STATE_SHUTTING_DOWN,
     STATE_CLOSED
   };
 
@@ -166,6 +167,7 @@ public:
                                         "STATE_CONNECTING_RE",
                                         "STATE_ACCEPTING",
                                         "STATE_CONNECTION_ESTABLISHED",
+                                        "STATE_SHUTTING_DOWN",
                                         "STATE_CLOSED"};
       return statenames[state];
   }
@@ -205,6 +207,7 @@ private:
   ceph::coarse_mono_clock::time_point last_connect_started;
   ceph::coarse_mono_clock::time_point last_active;
   ceph::mono_clock::time_point recv_start_time;
+  ceph::coarse_mono_clock::time_point shutdown_start;
   uint64_t last_tick_id = 0;
   const uint64_t connect_timeout_us;
   const uint64_t inactive_timeout_us;
@@ -245,6 +248,9 @@ private:
   }
 
   bool is_msgr2() const override;
+  bool is_shutdown() const {
+    return state == STATE_SHUTTING_DOWN;
+  }
 
   void dump(Formatter* f, bool tcp_info);
 
