@@ -11,6 +11,7 @@ set(lib_mon_srcs
   MgrStatMonitor.cc
   Monitor.cc
   MonmapMonitor.cc
+  MonOpRequest.cc
   LogMonitor.cc
   AuthMonitor.cc
   ConfigMap.cc
