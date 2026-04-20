@@ -551,6 +551,7 @@ set(libcommon_files
   mon/MonitorDBStoreStats.cc
   mon/mon_feature_t.cc
   mon/error_code.cc
+  mon/PoolAvailability.cc
   mgr/DaemonHealthMetric.cc
   mgr/MgrClient.cc
   mon/MgrMap.cc
