@@ -599,8 +599,12 @@ class RgwClient(RestClient):
         """
         # pylint: disable=unused-argument
         result = request()
-        if 'Status' not in result:
-            result['Status'] = 'Suspended'
+        if not isinstance(result, dict):
+            result = {}
+        # RGW omits Status when versioning has never been configured (CLI/radosgw-admin
+        # reports "off"). That must not be shown as "Suspended", which means versioning was enabled
+        if not result.get('Status'):
+            result['Status'] = 'Off'
         if 'MfaDelete' not in result:
             result['MfaDelete'] = 'Disabled'
         return result
