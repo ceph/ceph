@@ -154,10 +154,12 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQu
     protocol = std::unique_ptr<Protocol>(new ProtocolV1(this));
   }
   logger->inc(l_msgr_created_connections);
+  ldout(async_msgr->cct, 20) << " con" << dendl;
 }
 
 AsyncConnection::~AsyncConnection()
 {
+  ldout(async_msgr->cct, 20) << " des" << dendl;
   if (recv_buf)
     delete[] recv_buf;
   ceph_assert(!delay_state);
@@ -556,6 +558,11 @@ int AsyncConnection::send_msg(MessageRef&& m)
 		      << this
 		      << dendl;
 
+  if (unlikely(state == STATE_SHUTTING_DOWN)) {
+    ldout(async_msgr->cct, 10) << __func__ << " cannot send as connection is shutdown or closed" << dendl;
+    return -ESHUTDOWN;
+  }
+
   if (is_blackhole()) {
     lgeneric_subdout(async_msgr->cct, ms, 0) << __func__ << ceph_entity_type_name(peer_type)
       << " blackhole " << *m << dendl;
@@ -730,8 +737,8 @@ void AsyncConnection::send_keepalive()
 
 void AsyncConnection::mark_down()
 {
-  ldout(async_msgr->cct, 1) << __func__ << dendl;
   std::lock_guard<std::mutex> l(lock);
+  ldout(async_msgr->cct, 1) << __func__ << dendl;
   protocol->stop();
 }
 
@@ -739,6 +746,17 @@ void AsyncConnection::handle_write()
 {
   ldout(async_msgr->cct, 10) << __func__ << dendl;
   protocol->write_event();
+
+  std::lock_guard<std::mutex> l(lock);
+  if (state == STATE_SHUTTING_DOWN) {
+    std::unique_lock<std::mutex> wl(write_lock);
+    if (!protocol->is_queued() && protocol->sent_queue_empty()) {
+      ldout(async_msgr->cct, 10) << __func__ << ": all messages sent and acked, tearing down." << dendl;
+      wl.unlock();
+      protocol->stop();
+      dispatch_queue->queue_reset(this);
+    }
+  }
 }
 
 void AsyncConnection::handle_write_callback() {
@@ -765,8 +783,33 @@ void AsyncConnection::stop(bool queue_reset) {
 
 void AsyncConnection::shutdown()
 {
-  /* FIXME: stop() discards out queue so this doesn't actually flush sent messages */
-  return stop(true);
+  {
+    std::lock_guard<std::mutex> l(lock);
+    if (state == STATE_CLOSED || state == STATE_SHUTTING_DOWN)
+      return;
+
+    ldout(async_msgr->cct, 10) << __func__ << " gracefully" << dendl;
+    state = STATE_SHUTTING_DOWN;
+    shutdown_start = ceph::coarse_mono_clock::now();
+    protocol->shutdown();
+
+    // Safely re-arm the timer inside the EventCenter's thread to avoid
+    // triggering ceph_assert(in_thread()). Capture a reference to 'this'
+    // so the connection stays alive until the lambda executes.
+    AsyncConnectionRef conn = this;
+    center->submit_to(center->get_id(), [conn]() {
+      std::lock_guard<std::mutex> l(conn->lock);
+      if (conn->state != STATE_SHUTTING_DOWN) return;
+
+      if (conn->last_tick_id) {
+        conn->center->delete_time_event(conn->last_tick_id);
+      }
+
+      uint64_t timeout = (uint64_t)conn->async_msgr->get_shutdown_timeout().count() * 1000ull;
+      conn->last_tick_id = conn->center->create_time_event(timeout, conn->tick_handler);
+    }, /* always_async = */ true);
+  }
+  dispatch_queue->discard_queue(conn_id); /* drop all subsequent messages */
 }
 
 void AsyncConnection::cleanup() {
@@ -796,6 +839,19 @@ void AsyncConnection::tick(uint64_t id)
   ldout(async_msgr->cct, 20) << __func__ << " last_id=" << last_tick_id
                              << " last_active=" << last_active << dendl;
   std::lock_guard<std::mutex> l(lock);
+  if (state == STATE_SHUTTING_DOWN) {
+    auto since = now - shutdown_start;
+    auto timeout = async_msgr->get_shutdown_timeout();
+    if (since >= timeout) {
+      ldout(async_msgr->cct, 1) << __func__ << " shutdown timeout reached, faulting!" << dendl;
+      protocol->fault();
+      return;
+    }
+
+    uint64_t left = std::chrono::duration_cast<std::chrono::microseconds>(timeout - since).count();
+    last_tick_id = center->create_time_event(left, tick_handler);
+    return;
+  }
   last_tick_id = 0;
   if (!is_connected()) {
     if (connect_timeout_us <=

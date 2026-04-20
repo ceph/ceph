@@ -125,6 +125,21 @@ void ProtocolV2::accept() {
 
 bool ProtocolV2::is_connected() { return can_write; }
 
+void ProtocolV2::shutdown() {
+  if (state == CLOSED) return;
+
+  std::lock_guard<std::mutex> l(connection->write_lock);
+  shutting_down = true;
+
+  // Always defer to the write handler to teardown to avoid deadlocks!
+  connection->center->dispatch_event_external(connection->write_handler);
+}
+
+bool ProtocolV2::sent_queue_empty() const {
+  /* must hold write_lock */
+  return sent.empty();
+}
+
 /*
  * Tears down the message queues, and removes them from the
  * DispatchQueue Must hold write_lock prior to calling.
@@ -338,10 +353,10 @@ CtPtr ProtocolV2::_fault() {
   // requeue sent items
   requeue_sent();
 
-  if (out_queue.empty() && state >= START_ACCEPT &&
-      state <= SESSION_ACCEPTING && !replacing) {
-    ldout(cct, 2) << __func__ << " with nothing to send and in the half "
-                   << " accept state just closed" << dendl;
+  if (shutting_down || (out_queue.empty() && state >= START_ACCEPT &&
+      state <= SESSION_ACCEPTING && !replacing)) {
+    ldout(cct, 2) << __func__ << " shutting down or with nothing to send and in the half "
+                   << "accept state just closed" << dendl;
     connection->write_lock.unlock();
     stop();
     connection->dispatch_queue->queue_reset(connection);
@@ -617,6 +632,11 @@ void ProtocolV2::handle_message_ack(uint64_t seq) {
                    << " >= " << m->get_seq() << " on " << m << " " << *m
                    << dendl;
   }
+
+  if (unlikely(shutting_down) && sent_queue_empty()) {
+    connection->center->dispatch_event_external(connection->write_handler);
+  }
+
   connection->write_lock.unlock();
   connection->logger->tinc(l_msgr_handle_ack_lat, ceph::mono_clock::now() - now);
 }
@@ -754,6 +774,7 @@ void ProtocolV2::write_event() {
 }
 
 bool ProtocolV2::is_queued() {
+  /* must hold write_lock */
   return !out_queue.empty() || connection->is_queued();
 }
 
@@ -1435,6 +1456,20 @@ CtPtr ProtocolV2::handle_message() {
   auto message = ceph::ref_t<Message>(_m, false); /* consume ref */
   _m = nullptr;
   state = READ_MESSAGE_COMPLETE;
+
+  if (connection->is_shutdown() || shutting_down) {
+    ldout(cct, 10) << __func__ << " connection is shutdown, dropping incoming " << *message << dendl;
+
+    if (connection->policy.throttler_messages)
+      connection->policy.throttler_messages->put();
+    if (connection->policy.throttler_bytes)
+      connection->policy.throttler_bytes->put(cur_msg_size);
+    connection->dispatch_queue->dispatch_throttle_release(cur_msg_size);
+
+    handle_message_ack(current_header.ack_seq);
+    state = READY;
+    return CONTINUE(read_frame);
+  }
 
   INTERCEPT(17);
 

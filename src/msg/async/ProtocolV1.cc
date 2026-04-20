@@ -91,6 +91,20 @@ bool ProtocolV1::is_connected() {
   return can_write.load() == WriteStatus::CANWRITE;
 }
 
+void ProtocolV1::shutdown() {
+  std::lock_guard<std::mutex> l(connection->write_lock);
+  if (can_write.load() == WriteStatus::CLOSED)
+    return;
+  shutting_down = true;
+  // trigger write_event to send remaining messages or finalize shutdown
+  connection->center->dispatch_event_external(connection->write_handler);
+}
+
+bool ProtocolV1::sent_queue_empty() const {
+  /* must hold write_lock */
+  return sent.empty();
+}
+
 void ProtocolV1::stop() {
   ldout(cct, 20) << __func__ << dendl;
   if (state == CLOSED) {
@@ -134,10 +148,10 @@ void ProtocolV1::fault() {
   // requeue sent items
   requeue_sent();
 
-  if (!once_ready && out_q.empty() && state >= START_ACCEPT &&
-      state <= ACCEPTING_WAIT_CONNECT_MSG_AUTH && !replacing) {
-    ldout(cct, 10) << __func__ << " with nothing to send and in the half "
-                   << " accept state just closed" << dendl;
+  if (shutting_down || (!once_ready && out_q.empty() && state >= START_ACCEPT &&
+      state <= ACCEPTING_WAIT_CONNECT_MSG_AUTH && !replacing)) {
+    ldout(cct, 10) << __func__ << " shutting down or with nothing to send and in the half "
+                   << "accept state just closed" << dendl;
     connection->write_lock.unlock();
     stop();
     connection->dispatch_queue->queue_reset(connection);
@@ -611,6 +625,11 @@ CtPtr ProtocolV1::handle_tag_ack(char *buffer, int r) {
                    << " >= " << m->get_seq() << " on " << m << " " << *m
                    << dendl;
   }
+
+  if (unlikely(shutting_down) && sent_queue_empty()) {
+    connection->center->dispatch_event_external(connection->write_handler);
+  }
+
   connection->write_lock.unlock();
   connection->logger->tinc(l_msgr_handle_ack_lat, ceph::mono_clock::now() - now);
 
@@ -923,6 +942,18 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
   ldout(cct, 20) << __func__ << " got " << front.length() << " + "
                  << middle.length() << " + " << data.length() << " byte message"
                  << dendl;
+
+  if (shutting_down || connection->is_shutdown()) {
+    ldout(cct, 10) << __func__ << " shutting down, dropping incoming message" << dendl;
+    if (connection->policy.throttler_messages)
+      connection->policy.throttler_messages->put();
+    if (connection->policy.throttler_bytes)
+      connection->policy.throttler_bytes->put(cur_msg_size);
+    connection->dispatch_queue->dispatch_throttle_release(cur_msg_size);
+    state = OPENED;
+    return CONTINUE(wait_message);
+  }
+
   Message *_message = decode_message(cct, messenger->crcflags, current_header,
                                     footer, front, middle, data, connection);
   if (!_message) {

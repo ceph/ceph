@@ -14,6 +14,7 @@
 
 std::vector<std::string> Messenger::get_tracked_keys() const noexcept {
   static constexpr auto as_sv = std::to_array<std::string_view>({
+      "ms_shutdown_timeout",
   });
   static_assert(std::is_sorted(as_sv.begin(), as_sv.end()),
                 "keys are not sorted!");
@@ -22,6 +23,9 @@ std::vector<std::string> Messenger::get_tracked_keys() const noexcept {
 
 void Messenger::handle_conf_change(const ConfigProxy& conf, const std::set<std::string>& changed) {
   ldout(cct, 2) << __func__ << ": " << changed << dendl;
+  if (changed.count("ms_shutdown_timeout")) {
+    shutdown_timeout = conf.get_val<std::chrono::milliseconds>("ms_shutdown_timeout");
+  }
 }
 
 Messenger *Messenger::create_client_messenger(CephContext *cct, std::string lname)
@@ -73,6 +77,7 @@ Messenger::Messenger(CephContext *cct_, entity_name_t w)
   auth_registry.refresh_config();
   comp_registry.refresh_config();
   cct->_conf.add_observer(this);
+  shutdown_timeout = cct->_conf.get_val<std::chrono::milliseconds>("ms_shutdown_timeout");
 }
 
 Messenger::~Messenger()
