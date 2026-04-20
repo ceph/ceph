@@ -129,9 +129,11 @@ namespace crimson::os::seastore::segment_manager::zbd {
     mount_ret mount() override;
     mkfs_ret mkfs(device_config_t meta) override;
 
-    ZBDSegmentManager(const std::string &path, store_index_t store_index = 0)
-    : device_path(path),
-      store_index(store_index) {}
+    ZBDSegmentManager(
+      std::optional<crimson::os::shard_desc_t> store_shard_desc,
+      const std::string &path)
+    : store_shard_desc(store_shard_desc),
+      device_path(path) {}
 
     ~ZBDSegmentManager() override = default;
 
@@ -234,8 +236,7 @@ namespace crimson::os::seastore::segment_manager::zbd {
 
     mount_ret shard_mount();
 
-    uint32_t device_shard_nums = 0;
-    store_index_t store_index = 0;
+    std::optional<crimson::os::shard_desc_t> store_shard_desc,
     crimson::os::multisharded<ZBDSegmentManager> shard_devices;
   };
 

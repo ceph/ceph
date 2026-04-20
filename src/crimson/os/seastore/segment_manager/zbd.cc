@@ -48,10 +48,9 @@ namespace crimson::os::seastore::segment_manager::zbd {
 seastar::future<> ZBDSegmentManager::start(uint32_t shard_nums)
 {
   LOG_PREFIX(ZBDSegmentManager::start);
-  device_shard_nums = shard_nums;
-  auto num_shard_services = (device_shard_nums + seastar::smp::count - 1 ) / seastar::smp::count;
-  INFO("device_shard_nums={} seastar::smp={}, num_shard_services={}", device_shard_nums, seastar::smp::count, num_shard_services);
-  return shard_devices.start(shards_num, device_path, store_index);
+  auto num_shard_services = (shards_num + seastar::smp::count - 1 ) / seastar::smp::count;
+  INFO("device_shard_nums={} seastar::smp={}, num_shard_services={}", shards_num, seastar::smp::count, num_shard_services);
+  return shard_devices.start(shards_num, device_path);
 
 }
 
@@ -492,15 +491,15 @@ ZBDSegmentManager::mount_ret ZBDSegmentManager::shard_mount()
     auto sd = p.second;
     return read_metadata(device, sd);
   }).safe_then([=, this](auto meta){
-    if(seastar::this_shard_id() + seastar::smp::count * store_index >= meta.shard_num) {
+    if(store_shard_desc->global_index() >= meta.shard_num) {
       ERROR("{} shard_id {} out of range {}",
         device_id_printer_t{get_device_id()},
-        seastar::this_shard_id() + seastar::smp::count * store_index,
+        store_shard_desc->global_index(),
         sb.shard_num);
       ceph_abort_msg("too many CPU shards");
       return mount_ertr::now();
     }
-    shard_info = meta.shard_infos[seastar::this_shard_id() + seastar::smp::count * store_index];
+    shard_info = meta.shard_infos[store_shard_desc->global_index()];
     metadata = meta;
     return mount_ertr::now();
   });

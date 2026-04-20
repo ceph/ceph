@@ -92,10 +92,10 @@ public:
   class Shard : public FuturizedStore::Shard {
   public:
     Shard(
+      crimson::os::shard_desc_t store_shard_desc,
       std::string root,
       Device* device,
       bool is_test,
-      uint32_t store_shard_nums,
       store_index_t max_local_store_num);
     ~Shard() = default;
 
@@ -221,7 +221,7 @@ public:
     cache_stats_t get_cache_stats(bool report_detail, double seconds) const;
 
     unsigned int get_store_index() const {
-      return store_index;
+      return store_shard_desc.local_index;
     }
 
   private:
@@ -530,9 +530,9 @@ public:
     OnodeManagerRef onode_manager;
 
     common::Throttle throttler;
-    store_index_t store_index;
+    crimson::os::shard_desc_t store_shard_desc;
     friend class SeaStore;
-    thread_local static store_index_t reactor_local_stores_num;
+    thread_local static store_index_t reactor_local_stores_num; // just for debug
 
     seastar::metrics::metric_group metrics;
     void register_metrics();

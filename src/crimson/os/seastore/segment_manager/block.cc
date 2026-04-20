@@ -482,10 +482,9 @@ BlockSegmentManager::~BlockSegmentManager()
 seastar::future<> BlockSegmentManager::start(uint32_t shard_nums)
 {
   LOG_PREFIX(BlockSegmentManager::start);
-  device_shard_nums = shard_nums;
-  auto num_shard_services = (device_shard_nums + seastar::smp::count - 1 ) / seastar::smp::count;
-  INFO("device_shard_nums={} seastar::smp={}, num_shard_services={}", device_shard_nums, seastar::smp::count, num_shard_services);
-  return shard_devices.start(shard_nums, device_path, superblock.config.spec.dtype, store_index);
+  auto num_shard_services = (shard_nums + seastar::smp::count - 1 ) / seastar::smp::count;
+  INFO("device_shard_nums={} seastar::smp={}, num_shard_services={}", shard_nums, seastar::smp::count, num_shard_services);
+  return shard_devices.start(shard_nums, device_path, superblock.config.spec.dtype);
 
 }
 
@@ -538,10 +537,8 @@ BlockSegmentManager::mount_ret BlockSegmentManager::shard_mount()
     return read_superblock(device, sd);
   }).safe_then([=, this](auto sb) ->mount_ertr::future<> {
     set_device_id(sb.config.spec.id);
-    const auto global_store_index =
-      seastar::this_shard_id() + seastar::smp::count * store_index;
-    ceph_assert(global_store_index < sb.shard_num);
-    shard_info = sb.shard_infos[global_store_index];
+    ceph_assert(store_shard_desc->global_shards_num == sb.shard_num);
+    shard_info = sb.shard_infos[store_shard_desc->global_index()];
     INFO("{} read {}", device_id_printer_t{get_device_id()}, shard_info);
     sb.validate();
     superblock = sb;

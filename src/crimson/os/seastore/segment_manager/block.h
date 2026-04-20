@@ -127,11 +127,12 @@ public:
   close_ertr::future<> close();
 
   BlockSegmentManager(
+    std::optional<crimson::os::shard_desc_t> store_shard_desc,
     const std::string &path,
-    device_type_t dtype,
-    store_index_t store_index)
+    device_type_t dtype)
   : device_path(path),
-    store_index(store_index) {
+    store_shard_desc(store_shard_desc)
+  {
     ceph_assert(get_device_type() == device_type_t::NONE);
     superblock.config.spec.dtype = dtype;
   }
@@ -259,8 +260,7 @@ private:
   // all shards mount
   mount_ret shard_mount();
 
-  uint32_t device_shard_nums = 0;
-  store_index_t store_index = 0;
+  std::optional<crimson::os::shard_desc_t> store_shard_desc;
   crimson::os::multisharded<BlockSegmentManager> shard_devices;
 };
 

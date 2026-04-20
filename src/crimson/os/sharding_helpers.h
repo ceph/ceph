@@ -5,8 +5,20 @@
 
 #include <seastar/core/sharded.hh>
 
+#include "crimson/common/smp_helpers.h"
+
 namespace crimson::os {
 
+struct shard_desc_t {
+  size_t local_index; // local in the domain of same reactor
+  size_t global_shards_num; // number of storage shards across all reactors
+
+  auto global_index() const {
+    auto gidx = seastar::this_shard_id() + seastar::smp::count * local_index;
+    ceph_assert(gidx < global_shards_num);
+    return gidx;
+  }
+};
 
 template <class ServiceT>
 class simplysharded : private seastar::sharded<ServiceT> {
@@ -35,7 +47,9 @@ simplysharded<ServiceT>::start(const size_t num_shards, Args&&... args) noexcept
 {
   // never ever change num of shards after mkfs
   ceph_assert(num_shards == seastar::smp::count);
-  return base_t::start(std::forward<Args>(args)...);
+  return base_t::start(
+    shard_desc_t{0, num_shards},
+    std::forward<Args>(args)...);
 }
 
 
@@ -67,14 +81,16 @@ public:
 template <typename ServiceT>
 template <typename... Args>
 seastar::future<>
-multisharded<ServiceT>::start(const size_t num_shards, Args&&... args) noexcept
+multisharded<ServiceT>::start(const std::size_t num_shards, Args&&... args) noexcept
 {
   _instances.resize(num_shards);
   return seastar::parallel_for_each(
     std::views::iota(size_t(0), num_shards),
     [this, num_shards, ...args = std::forward<Args>(args)](auto c) mutable {
-      return seastar::smp::submit_to(c % seastar::smp::count, [this, c, args...] mutable {
-        this->_instances[c] = seastar::make_shared<ServiceT>(args...);
+      return seastar::smp::submit_to(c % seastar::smp::count, [this, c, num_shards, args...] mutable {
+        this->_instances[c] = seastar::make_shared<ServiceT>(
+          shard_desc_t{c / seastar::smp::count, num_shards},
+          args...);
         return seastar::now();
       });
     });
