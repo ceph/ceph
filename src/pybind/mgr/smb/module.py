@@ -25,6 +25,7 @@ from . import (
     rados_store,
     resources,
     results,
+    rgw_utils,
     sqlite_store,
     utils,
 )
@@ -100,6 +101,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             authorizer=authorizer,
             orch=self._orch_backend(enable_orch=uo),
             earmark_resolver=earmark_resolver,
+            mgr=self,
         )
 
     def _backend_store(self, store_conf: str = '') -> ConfigStore:
@@ -542,6 +544,50 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             for cid, shid in self._handler.share_ids()
             if cid == cluster_id
         ]
+
+    @SMBCLICommand('share create rgw', perm='rw')
+    def share_create_rgw(
+        self,
+        cluster_id: str,
+        share_id: str,
+        bucket: str,
+        share_name: str = '',
+        user_id: str = '',
+        path: str = '/',
+        readonly: bool = False,
+    ) -> results.Result:
+        """Create an SMB share backed by RGW"""
+        try:
+            # Fetch RGW credentials
+            (
+                fetched_user_id,
+                access_key,
+                secret_key,
+            ) = rgw_utils.fetch_rgw_credentials(self, bucket, user_id)
+
+            share = resources.Share(
+                cluster_id=cluster_id,
+                share_id=share_id,
+                name=share_name or share_id,
+                readonly=readonly,
+                rgw=resources.RGWStorage(
+                    bucket=bucket,
+                    user_id=fetched_user_id,
+                    path=path,
+                    access_key_id=access_key,
+                    secret_access_key=secret_key,
+                ),
+            )
+            return self._apply_res([share], create_only=True).one()
+        except ValueError as e:
+            # Create a minimal share resource for error reporting
+            error_share = resources.Share(
+                cluster_id=cluster_id,
+                share_id=share_id,
+                name=share_name or share_id,
+                cephfs=resources.CephFSStorage(volume='error', path='/'),
+            )
+            return results.ErrorResult(error_share, msg=str(e))
 
     @SMBCLICommand('share create', perm='rw')
     def share_create(
