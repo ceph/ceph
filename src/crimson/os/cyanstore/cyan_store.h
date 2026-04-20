@@ -30,8 +30,9 @@ class CyanStore final : public FuturizedStore {
 public:
   class Shard : public FuturizedStore::Shard {
   public:
-    Shard(std::string path,
-      uint32_t store_shard_nums,
+    Shard(
+      crimson::os::shard_desc_t store_shard_desc,
+      std::string path,
       store_index_t max_local_store_num);
     ~Shard() = default;
 
@@ -137,7 +138,7 @@ public:
     }
 
     unsigned int get_store_index() const {
-      return store_index;
+      return store_shard_desc.local_index;
     }
 
   private:
@@ -185,8 +186,9 @@ public:
     const std::string path;
     std::unordered_map<coll_t, boost::intrusive_ptr<Collection>> coll_map;
     std::map<coll_t, boost::intrusive_ptr<Collection>> new_coll_map;
-    store_index_t store_index;
+    crimson::os::shard_desc_t store_shard_desc;
     // the number of store shards a particular SeaStar's reactor has seen
+    // (just for debug)
     friend class CyanStore;
     thread_local static store_index_t reactor_local_stores_num;
   };

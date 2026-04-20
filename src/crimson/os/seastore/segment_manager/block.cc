@@ -482,10 +482,9 @@ BlockSegmentManager::~BlockSegmentManager()
 seastar::future<> BlockSegmentManager::start(uint32_t shard_nums)
 {
   LOG_PREFIX(BlockSegmentManager::start);
-  device_shard_nums = shard_nums;
-  auto num_shard_services = (device_shard_nums + seastar::smp::count - 1 ) / seastar::smp::count;
-  INFO("device_shard_nums={} seastar::smp={}, num_shard_services={}", device_shard_nums, seastar::smp::count, num_shard_services);
-  return shard_devices.start(shard_nums, device_path, superblock.config.spec.dtype, store_index);
+  auto num_shard_services = (shard_nums + seastar::smp::count - 1 ) / seastar::smp::count;
+  INFO("device_shard_nums={} seastar::smp={}, num_shard_services={}", shard_nums, seastar::smp::count, num_shard_services);
+  return shard_devices.start(shard_nums, device_path, superblock.config.spec.dtype);
 
 }
 
@@ -540,16 +539,14 @@ BlockSegmentManager::mount_ret BlockSegmentManager::shard_mount()
     INFO("got superblock: shard_num={} while global_shards_num={}",
          sb.shard_num, store_shard_desc->global_shards_num);
     set_device_id(sb.config.spec.id);
-    const auto global_store_index =
-      seastar::this_shard_id() + seastar::smp::count * store_index;
-    if(global_store_index >= sb.shard_num) {
+    if(store_shard_desc->global_index() >= sb.shard_num) {
       INFO("{} shard_id {} out of range {}",
         device_id_printer_t{get_device_id()},
-        global_store_index,
+        store_shard_desc->global_index(),
         sb.shard_num);
       return mount_ertr::now();
     }
-    shard_info = sb.shard_infos[global_store_index];
+    shard_info = sb.shard_infos[store_shard_desc->global_index()];
     INFO("{} read {}", device_id_printer_t{get_device_id()}, shard_info);
     sb.validate();
     superblock = sb;

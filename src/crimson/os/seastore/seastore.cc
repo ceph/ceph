@@ -129,10 +129,10 @@ using crimson::common::get_conf;
 thread_local store_index_t SeaStore::Shard::reactor_local_stores_num = 0;
 
 SeaStore::Shard::Shard(
+  crimson::os::shard_desc_t store_shard_desc,
   std::string root,
   Device* dev,
   bool is_test,
-  uint32_t store_shard_nums,
   store_index_t max_local_store_num)
   :root(root),
    max_object_size(
@@ -140,11 +140,11 @@ SeaStore::Shard::Shard(
    is_test(is_test),
    throttler(
       get_conf<uint64_t>("seastore_max_concurrent_transactions")),
-   store_index(reactor_local_stores_num++)
+   store_shard_desc(store_shard_desc)
 {
   LOG_PREFIX(SeaStore::Shard::Shard);
-  INFO("construcing Shard on reactor={}, local_store_idx={}", seastar::this_shard_id(), store_index);
-  ceph_assert(store_index < max_local_store_num);
+  INFO("construcing Shard on reactor={}, local_store_idx={}", seastar::this_shard_id(), store_shard_desc.local_index);
+  ceph_assert(store_shard_desc.local_index < max_local_store_num);
   device = &(dev->get_sharded_device(0));
 }
 
@@ -244,7 +244,7 @@ seastar::future<> SeaStore::shard_stores_start(bool is_test)
   auto max_local_store_num = (store_shard_nums + seastar::smp::count - 1 ) / seastar::smp::count;
   INFO("store_shard_nums={} seastar::smp={}, num_shard_services={}", store_shard_nums, seastar::smp::count, max_local_store_num);
   Shard::reactor_local_stores_num = 0; // paranoia
-  return shard_stores.start(store_shard_nums, root, device.get(), is_test, store_shard_nums, max_local_store_num);
+  return shard_stores.start(store_shard_nums, root, device.get(), is_test, max_local_store_num);
 }
 
 seastar::future<> SeaStore::shard_stores_stop()
@@ -290,7 +290,7 @@ seastar::future<> SeaStore::test_start(DeviceRef device_obj)
   ceph_assert(device_obj);
   ceph_assert(root == "");
   device = std::move(device_obj);
-  co_await shard_stores.start(1, root, device.get(), true, seastar::smp::count, 1);
+  co_await shard_stores.start(1, root, device.get(), true, 1);
   INFO("done");
 }
 
@@ -990,7 +990,11 @@ SeaStore::Shard::open_collection(const coll_t& cid)
   ).then([cid, this, FNAME] (auto colls_cores) {
     if (auto found = std::find(colls_cores.begin(),
                                colls_cores.end(),
-                               std::make_pair(cid, std::make_pair(seastar::this_shard_id(), store_index)));
+                               std::make_pair(
+                                 cid,
+                                 std::make_pair(
+                                   seastar::this_shard_id(),
+                                   (store_index_t)store_shard_desc.local_index)));
       found != colls_cores.end()) {
       DEBUG("cid={} exists", cid);
       return seastar::make_ready_future<CollectionRef>(_get_collection(cid));
@@ -1039,7 +1043,9 @@ SeaStore::Shard::list_collections()
             std::transform(
               colls.begin(), colls.end(), ret.begin(),
               [this](auto p) {
-              return std::make_pair(p.first, std::make_pair(seastar::this_shard_id(), store_index));
+              return std::make_pair(
+                p.first,
+                std::make_pair(seastar::this_shard_id(), store_shard_desc.local_index));
             });
           });
         });
