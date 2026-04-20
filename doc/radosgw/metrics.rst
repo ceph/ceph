@@ -201,24 +201,28 @@ Enabling Usage Metrics
 ----------------------
 
 Usage metrics are disabled by default. To enable them:
-ceph config set client.rgw rgw_enable_usage_perf_counters true
-ceph config set client.rgw rgw_usage_cache_path /var/lib/ceph/radosgw/usage_cache.mdb
+
+.. prompt:: bash #
+
+   ceph config set client.rgw rgw_enable_usage_perf_counters true
+   ceph config set client.rgw rgw_usage_cache_path /var/lib/ceph/radosgw/usage_cache.mdb
 
 After setting the config, restart the RGW service to apply the changes
 
 Background Refresh
 ------------------
 
-Usage metrics are not updated in the I/O path. A background thread periodically syncs statistics from RADOS (the source of truth) at the interval defined by rgw usage stats refresh interval which is by default set to 20 mins,
-On startup, the RGW daemon loads cached statistics from the LMDB database immediately, so metrics are available without waiting for the first refresh cycle.
+Usage metrics are not updated in the I/O path.
+A background thread periodically syncs statistics from RADOS (the source of truth) at the interval defined by :confval:`rgw_usage_stats_refresh_interval`.
 
 Viewing Usage Metrics
 ---------------------
 
 Usage metrics are labeled perf counters and do **not** appear in ``perf dump``. They must be queried using ``counter dump``::
 
-    # ceph --admin-daemon <asok> counter dump | grep -A 20 rgw_bucket_usage
+.. prompt:: bash #
 
+   ceph --admin-daemon <asok> counter dump | jq '.rgw_bucket_usage'
 Example output::
   
   "rgw_bucket_usage": [

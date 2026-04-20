@@ -56,6 +56,10 @@ UsagePerfCounters::~UsagePerfCounters() {
 }
 
 void UsagePerfCounters::create_global_counters() {
+  if(global_counters){
+    ldout(cct, 10) << "Global counters already created, skipping" << dendl;
+    return;
+  }
   PerfCountersBuilder b(cct, "rgw_usage", l_rgw_usage_first, l_rgw_usage_last);
   b.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
   
