@@ -553,6 +553,7 @@ set(libcommon_files
   mon/error_code.cc
   mon/FeatureMap.cc
   mon/PoolAvailability.cc
+  mon/ScrubResult.cc
   mgr/DaemonHealthMetric.cc
   mgr/MgrClient.cc
   mon/MgrMap.cc
