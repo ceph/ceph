@@ -140,6 +140,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/mon/MonitorDBStoreStats.cc
   ${PROJECT_SOURCE_DIR}/src/mon/mon_feature_t.cc
   ${PROJECT_SOURCE_DIR}/src/mon/PoolAvailability.cc
+  ${PROJECT_SOURCE_DIR}/src/mon/ProgressEvent.cc
   ${PROJECT_SOURCE_DIR}/src/mon/ScrubResult.cc
   ${PROJECT_SOURCE_DIR}/src/osd/osd_types.cc
   ${PROJECT_SOURCE_DIR}/src/osd/ECMsgTypes.cc
