@@ -127,6 +127,7 @@ private:
   } pre_auth;
 
   bool keepalive;
+  bool shutting_down = false;
   bool write_in_progress = false;
 
   CompConnectionMeta comp_meta;
@@ -216,12 +217,14 @@ public:
   virtual void connect() override;
   virtual void accept() override;
   virtual bool is_connected() override;
+  virtual void shutdown() override;
   virtual void stop() override;
   virtual void fault() override;
   virtual void send_message(MessageRef&& m) override;
   virtual void send_keepalive() override;
 
   virtual void read_event() override;
+  virtual bool sent_queue_empty() const override;
   virtual void write_event() override;
   virtual bool is_queued() override;
 

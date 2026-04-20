@@ -119,6 +119,8 @@ public:
   virtual void accept() = 0;
   // true -> protocol is ready for sending messages
   virtual bool is_connected() = 0;
+  // shutdown connection
+  virtual void shutdown() = 0;
   // stop connection
   virtual void stop() = 0;
   // signal and handle connection failure
@@ -131,6 +133,8 @@ public:
   virtual void read_event() = 0;
   virtual void write_event() = 0;
   virtual bool is_queued() = 0;
+
+  virtual bool sent_queue_empty() const = 0;
 
   virtual void dump(Formatter *f) = 0;
 
