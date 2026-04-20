@@ -4394,6 +4394,35 @@ uint64_t OSDMonitor::calculate_migrating_pg_count(int source_pgnum,
 
 // ---
 
+void OSDMonitor::insert_new_removed_snap(int64_t pool, snapid_t s)
+{
+  pg_pool_t& pi = osdmap.pools[pool];
+  if (pending_inc.new_pools.count(pool)) {
+    pi = pending_inc.new_pools[pool];
+  }
+  if (pi.migration_target.has_value()) {
+    int64_t target_pool = pi.migration_target.value();
+
+    // Pool is migrating or has finished migrating, need to
+    // trim the snap on the target pool
+    pending_inc.new_removed_snaps[target_pool].insert(s);
+
+    pi = osdmap.pools[target_pool];
+    if (pending_inc.new_pools.count(target_pool)) {
+      pi = pending_inc.new_pools[target_pool];
+    }
+    if (pi.migration_src.has_value()) {
+      int64_t source_pool = pi.migration_src.value();
+      // Midway through a migration, also need to trim the
+      // snap on the source pool
+      pending_inc.new_removed_snaps[source_pool].insert(s);
+    }
+  } else {
+    // Not migrating, just trim the snap for the pool
+    pending_inc.new_removed_snaps[pool].insert(s);
+  }
+}
+
 bool OSDMonitor::preprocess_remove_snaps(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
@@ -4479,7 +4508,7 @@ bool OSDMonitor::prepare_remove_snaps(MonOpRequestRef op)
 	newpi->set_snap_epoch(pending_inc.epoch);
 	dout(10) << " added pool " << pool << " snap " << s
 		 << " to removed_snaps queue" << dendl;
-	pending_inc.new_removed_snaps[pool].insert(s);
+        insert_new_removed_snap(pool, s);
       }
     }
   }
@@ -4764,7 +4793,7 @@ bool OSDMonitor::remove_pool_snap(std::string_view snapname,
   snapid_t snapid = pp.snap_exists(snapname);
   if (snapid) {
     pp.remove_snap(snapid);
-    pending_inc.new_removed_snaps[pool].insert(snapid);
+    insert_new_removed_snap(pool, snapid);
     return true;
   }
   return false;
@@ -13922,7 +13951,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     for (const auto i : force_removed_snapids) {
       if (!dry_run) {
-        pending_inc.new_removed_snaps[pool].insert(snapid_t(i));
+        insert_new_removed_snap(pool, snapid_t(i));
       }
     }
 
@@ -15334,7 +15363,7 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
       pp.remove_unmanaged_snap(
 	m->snapid,
 	osdmap.require_osd_release < ceph_release_t::octopus);
-      pending_inc.new_removed_snaps[m->pool].insert(m->snapid);
+      insert_new_removed_snap(m->pool, m->snapid);
       changed = true;
     }
     break;

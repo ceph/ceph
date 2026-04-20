@@ -640,6 +640,7 @@ private:
     }
   };
 
+  void insert_new_removed_snap(int64_t pool, snapid_t s);
   bool preprocess_remove_snaps(MonOpRequestRef op);
   bool prepare_remove_snaps(MonOpRequestRef op);
 
