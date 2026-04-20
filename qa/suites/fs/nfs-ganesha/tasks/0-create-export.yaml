@@ -1,0 +1,53 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd shutdown pgref assert: true
+tasks:
+- cephadm:
+    roleless: false
+- cephadm.shell:
+    mon.a:
+      - ceph orch status
+      - ceph orch ps
+      - ceph orch ls
+      - ceph orch host ls
+      - ceph orch device ls
+- cephadm.shell:
+    mon.a:
+      - cmd: ceph nfs cluster create nfs-ganesha-test
+      - cmd: ceph nfs export apply nfs-ganesha-test -i /dev/stdin
+        stdin: |
+          {
+              "export": {
+                  "export_id": 1,
+                  "path": "/",
+                  "cluster_id": "nfs-ganesha-test",
+                  "pseudo": "/nfsganesha",
+                  "access_type": "RW",
+                  "squash": "none",
+                  "security_label": true,
+                  "protocols": [
+                      4
+                  ],
+                  "transports": [
+                      "TCP"
+                  ],
+                  "fsal": {
+                      "name": "CEPH",
+                      "user_id": "nfs.nfs-ganesha-test.cephfs.a4cd9f65",
+                      "fs_name": "cephfs",
+                      "cmount_path": "/"
+                  },
+                  "clients": [],
+                  "delegations": "R"
+              }
+          }
+      # for debug
+      - cmd: ceph nfs export info nfs-ganesha-test --pseudo_path=/nfsganesha
+      # for debug
+      - cmd: ceph orch ls --service-name nfs.nfs-ganesha-test --export
+      # sleep a bit
+      - cmd: sleep 60
+      # more debug
+      - cmd: ceph orch ps
