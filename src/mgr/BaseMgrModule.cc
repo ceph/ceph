@@ -24,6 +24,7 @@
 #include "Mgr.h"
 
 #include "mon/MonClient.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/JSONFormatter.h"
 #include "common/version.h"
