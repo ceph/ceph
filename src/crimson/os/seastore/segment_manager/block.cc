@@ -485,7 +485,7 @@ seastar::future<> BlockSegmentManager::start(uint32_t shard_nums)
   device_shard_nums = shard_nums;
   auto num_shard_services = (device_shard_nums + seastar::smp::count - 1 ) / seastar::smp::count;
   INFO("device_shard_nums={} seastar::smp={}, num_shard_services={}", device_shard_nums, seastar::smp::count, num_shard_services);
-  return shard_devices.start(num_shard_services, device_path, superblock.config.spec.dtype);
+  return shard_devices.start(shard_nums, device_path, superblock.config.spec.dtype, store_index);
 
 }
 

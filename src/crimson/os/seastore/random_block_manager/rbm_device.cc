@@ -191,11 +191,11 @@ RBMDevice::mount_ret RBMDevice::do_shard_mount()
   );
   LOG_PREFIX(RBMDevice::do_shard_mount);
   if(seastar::this_shard_id() + seastar::smp::count * store_index >= s.shard_num) {
-    INFO("{} shard_id {} out of range {}",
+    ERROR("{} shard_id {} out of range {}",
          device_id_printer_t{get_device_id()},
          seastar::this_shard_id() + seastar::smp::count * store_index,
          s.shard_num);
-    shard_status = false;
+    ceph_abort_msg("too many CPU shards");
     co_return;
   }
   shard_info = s.shard_infos[seastar::this_shard_id() + seastar::smp::count * store_index];

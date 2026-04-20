@@ -51,7 +51,7 @@ seastar::future<> ZBDSegmentManager::start(uint32_t shard_nums)
   device_shard_nums = shard_nums;
   auto num_shard_services = (device_shard_nums + seastar::smp::count - 1 ) / seastar::smp::count;
   INFO("device_shard_nums={} seastar::smp={}, num_shard_services={}", device_shard_nums, seastar::smp::count, num_shard_services);
-  return shard_devices.start(num_shard_services, device_path);
+  return shard_devices.start(shards_num, device_path, store_index);
 
 }
 
@@ -62,8 +62,7 @@ seastar::future<> ZBDSegmentManager::stop()
 
 Device& ZBDSegmentManager::get_sharded_device(store_index_t store_index)
 {
-  assert(store_index < shard_devices.local().mshard_devices.size());
-  return *shard_devices.local().mshard_devices[store_index];
+  return shard_devices.local(store_index);
 }
 
 using open_device_ret = ZBDSegmentManager::access_ertr::future<
@@ -476,12 +475,10 @@ ZBDSegmentManager::read_ertr::future<uint32_t> ZBDSegmentManager::get_shard_nums
 ZBDSegmentManager::mount_ret ZBDSegmentManager::mount()
 {
   return shard_devices.invoke_on_all([](auto &local_device) {
-    return seastar::do_for_each(local_device.mshard_devices, [](auto& mshard_device) {
-      return mshard_device->shard_mount(
-      ).handle_error(
-        crimson::ct_error::assert_all{
-          "Invalid error in ZBDSegmentManager::mount"
-      });
+    return local_device.shard_mount(
+    ).handle_error(
+      crimson::ct_error::assert_all{
+        "Invalid error in ZBDSegmentManager::mount"
     });
   });
 }
@@ -496,11 +493,11 @@ ZBDSegmentManager::mount_ret ZBDSegmentManager::shard_mount()
     return read_metadata(device, sd);
   }).safe_then([=, this](auto meta){
     if(seastar::this_shard_id() + seastar::smp::count * store_index >= meta.shard_num) {
-      INFO("{} shard_id {} out of range {}",
+      ERROR("{} shard_id {} out of range {}",
         device_id_printer_t{get_device_id()},
         seastar::this_shard_id() + seastar::smp::count * store_index,
         sb.shard_num);
-      shard_status = false;
+      ceph_abort_msg("too many CPU shards");
       return mount_ertr::now();
     }
     shard_info = meta.shard_infos[seastar::this_shard_id() + seastar::smp::count * store_index];
@@ -512,15 +509,13 @@ ZBDSegmentManager::mount_ret ZBDSegmentManager::shard_mount()
 ZBDSegmentManager::mkfs_ret ZBDSegmentManager::mkfs(
   device_config_t config)
 {
-  return shard_devices.local().mshard_devices[0]->primary_mkfs(config
+  return shard_devices.local(0).primary_mkfs(config
     ).safe_then([this] {
     return shard_devices.invoke_on_all([](auto &local_device) {
-      return seastar::do_for_each(local_device.mshard_devices, [](auto& mshard_device) {
-        return mshard_device->shard_mkfs(
-        ).handle_error(
-          crimson::ct_error::assert_all{
-            "Invalid error in ZBDSegmentManager::mkfs"
-        });
+      return local_device.shard_mkfs(
+      ).handle_error(
+        crimson::ct_error::assert_all{
+          "Invalid error in ZBDSegmentManager::mkfs"
       });
     });
   });

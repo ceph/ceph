@@ -261,31 +261,7 @@ private:
 
   uint32_t device_shard_nums = 0;
   store_index_t store_index = 0;
-  bool store_active = true;
-#if 0
-  class MultiShardDevices {
-    public:
-      std::vector<std::unique_ptr<BlockSegmentManager>> mshard_devices;
-
-    public:
-    MultiShardDevices(size_t count,
-                      const std::string path,
-                      device_type_t dtype)
-    : mshard_devices() {
-      mshard_devices.reserve(count);
-      for (size_t store_index = 0; store_index < count; ++store_index) {
-        mshard_devices.emplace_back(std::make_unique<BlockSegmentManager>(
-          path, dtype, store_index));
-      }
-    }
-    ~MultiShardDevices() {
-     mshard_devices.clear();
-    }
-  };
-  seastar::sharded<MultiShardDevices> shard_devices;
-#else
   crimson::os::multisharded<BlockSegmentManager> shard_devices;
-#endif
 };
 
 }
