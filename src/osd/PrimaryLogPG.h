@@ -107,6 +107,7 @@ public:
     uint64_t truncate_seq;
     uint64_t truncate_size;
     bool whiteout; ///< Source object is whiteout
+    bool needs_trim; ///< Source object has pending trim
     bool is_data_digest() {
       return flags & object_copy_data_t::FLAG_DATA_DIGEST;
     }
@@ -122,7 +123,7 @@ public:
 	source_data_digest(-1), source_omap_digest(-1),
 	data_digest(-1), omap_digest(-1),
 	truncate_seq(0), truncate_size(0),
-        whiteout(false)
+        whiteout(false), needs_trim(false)
     {}
   };
 

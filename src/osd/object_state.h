@@ -166,6 +166,9 @@ struct RWState {
   }
   bool empty() const { return state == RWNONE; }
 
+  void snaptrimmer_set_write_marker() {
+    snaptrimmer_write_marker = true;
+  }
   bool get_snaptrimmer_write(bool mark_if_unsuccessful) {
     if (get_write_lock()) {
       return true;
