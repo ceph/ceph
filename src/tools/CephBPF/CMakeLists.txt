@@ -166,7 +166,7 @@ target_link_libraries(radostrace
   LibDw::LibDw
   ZLIB::ZLIB
   ${CMAKE_DL_LIBS}
-  fmt::fmt-header-only
+  ${FMT_LIB}
 )
 
 add_dependencies(radostrace
