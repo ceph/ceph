@@ -77,6 +77,11 @@ Synopsis
         [--dedup_chunk_algo <fastcdc|fixcdc>]
         [--dedup_chunk_size <bytes>]
         [--timestamps]
+        [--migrate-pool]
+        [--initial-migration-delay <seconds>]
+        [--migration-interval <seconds>]
+        [--migration-pg-count <pg_num>]
+
 
 At least one ``--op`` with a positive weight is required.
 
@@ -122,7 +127,7 @@ Pool Type and Behavior
 ``--ec-pool``
     Indicates that the target is an erasure-coded pool **that does not support overwrites**.
     **Must appear before any** ``--op`` **arguments.**
-    
+
     .. note::
 
        This is largely a legacy parameter. When Ceph originally introduced
@@ -133,7 +138,7 @@ Pool Type and Behavior
        prevents the test runner from passing this flag.
 
     Using this flag has the following effects:
-    
+
     1. Implicitly sets ``--no-sparse``.
     2. Initial object creation writes use ``append`` mode instead of ``write``.
     3. Overwrite operations (``write``, ``write_excl``, ``writesame``) are
@@ -149,6 +154,33 @@ Pool Type and Behavior
 
 ``--pool-snaps``
     Use pool-level snapshots instead of self-managed snapshots.
+
+Pool Migration
+--------------
+
+``--migrate-pool``
+    Begin a pool migration from the pool receiving operations to a new pool.
+    If the migration completes during the test, another be scheduled such that there is
+    always an ongoing migration.
+
+    .. note::
+
+        This will migrate all objects from the original pool to a new pool which has the same name as
+        the original pool, followed by a migration suffix.
+
+``--initial-migration-delay <seconds>``
+    How long to wait in seconds after the test has began to
+    start the first pool migration. Default: ``0``.
+
+``--migration-interval <seconds>``
+    How long to wait between successive pool migrations in seconds.
+    Default: ``60``.
+
+``--migration-pg-count <n>``
+    Number of PGs the target migration pool should have (0-65536). If set,
+    successive migrations will flip-flop between the original pool's PG
+    count and the specified number. If not set, target will retain the
+    original pool's PG count.
 
 Read Routing
 ------------
@@ -394,6 +426,22 @@ Deduplication test::
       --op write 50 \
       --op set_chunk 30 \
       --op tier_promote 10
+
+Pool migration test::
+
+    ceph_test_rados \
+      --pool testpool \
+      --migrate-pool \
+      --migration-pg-count 16 \
+      --migration-interval 30 \
+      --initial-migration-delay 20 \
+      --max-ops 10000 \
+      --objects 500 \
+      --max-in-flight 16 \
+      --size 4000000 \
+      --op read 100 \
+      --op write 100 \
+      --op delete 10
 
 Exit Status
 -----------
