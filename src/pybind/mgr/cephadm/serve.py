@@ -1801,7 +1801,7 @@ class CephadmServe:
             try:
                 out, err, code = await self.mgr.ssh._execute_command(
                     host, cmd, stdin=stdin, addr=addr)
-                if code == 2 or code == 127:
+                if code == 2 or code == 127 or 'command not found' in err:
                     # Use invoker to check file existence when SSH hardening is enabled
                     if self.mgr.sudo_hardening and self.mgr.invoker_path:
                         check_cmd = ssh.RemoteCommand(
