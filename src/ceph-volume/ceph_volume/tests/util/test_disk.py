@@ -378,6 +378,40 @@ class TestGetBlockDevsSysfs(object):
 
         assert disk.get_block_devs_sysfs(device='sr0') == []
 
+    def test_ram_device_is_skipped(self, fake_filesystem):
+        fake_filesystem.create_file('/dev/ram0')
+        fake_filesystem.create_dir('/sys/dev/block')
+        fake_filesystem.create_dir('/sys/block/ram0/holders')
+
+        assert disk.get_block_devs_sysfs(device='ram0') == []
+
+    def test_ram_device_partitions_are_skipped(self, fake_filesystem):
+        fake_filesystem.create_file('/dev/ram0')
+        fake_filesystem.create_dir('/sys/dev/block')
+        fake_filesystem.create_dir('/sys/block/ram0/holders')
+
+        # If ram0 is skipped, skip its partition ram0p1 too.
+        with patch('ceph_volume.util.disk.get_partitions', MagicMock(return_value={"ram0p1": "ram0"})):
+            assert disk.get_block_devs_sysfs(device='ram0') == []
+
+    def test_ram_devices_are_skipped_in_full_scan(self, fake_filesystem):
+        # Common inventory path: scan /sys/block and include partitions.
+        fake_filesystem.create_dir('/sys/dev/block')
+
+        fake_filesystem.create_file('/dev/ram0')
+        fake_filesystem.create_dir('/sys/block/ram0/holders')
+
+        fake_filesystem.create_file('/dev/sda')
+        fake_filesystem.create_dir('/sys/block/sda/holders')
+
+        with patch('ceph_volume.util.disk.get_partitions', MagicMock(return_value={"ram0p1": "ram0"})):
+            result = disk.get_block_devs_sysfs()
+
+        paths = [row[0] for row in result]
+        assert '/dev/sda' in paths
+        assert '/dev/ram0' not in paths
+        assert '/dev/ram0p1' not in paths
+
     def test_regular_device_is_not_skipped(self, fake_filesystem):
         # normal disk should still be reported.
         fake_filesystem.create_file('/dev/sda')
