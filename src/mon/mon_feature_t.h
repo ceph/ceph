@@ -16,13 +16,15 @@
 #ifndef CEPH_MON_FEATURE_T_H
 #define CEPH_MON_FEATURE_T_H
 
+#include <cstdint>
+#include <iosfwd>
 #include <list>
-#include <ostream>
+#include <string>
 
 #include "include/encoding.h"
-#include "common/bit_str.h" // for print_bit_str()
-#include "common/ceph_releases.h"
-#include "common/Formatter.h"
+
+enum class ceph_release_t : std::uint8_t;
+namespace ceph { class Formatter; }
 
 namespace ceph {
   namespace features {
@@ -39,7 +41,7 @@ namespace ceph {
        *    of the raw features. When this happens, this interface will change
        *    accordingly. So should consumers of this interface.
        */
-      static inline const char *get_feature_name(uint64_t b);
+      const char *get_feature_name(uint64_t b);
     }
   }
 }
@@ -178,50 +180,16 @@ public:
     features &= ~(f.features);
   }
 
-  void print(std::ostream& out) const {
-    out << "[";
-    print_bit_str(features, out, ceph::features::mon::get_feature_name);
-    out << "]";
-  }
+  void print(std::ostream& out) const;
+  void print_with_value(std::ostream& out) const;
 
-  void print_with_value(std::ostream& out) const {
-    out << "[";
-    print_bit_str(features, out, ceph::features::mon::get_feature_name, true);
-    out << "]";
-  }
+  void dump(ceph::Formatter *f, const char *sec_name = NULL) const;
+  void dump_with_value(ceph::Formatter *f, const char *sec_name = NULL) const;
 
-  void dump(ceph::Formatter *f, const char *sec_name = NULL) const {
-    f->open_array_section((sec_name ? sec_name : "features"));
-    dump_bit_str(features, f, ceph::features::mon::get_feature_name);
-    f->close_section();
-  }
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& p);
 
-  void dump_with_value(ceph::Formatter *f, const char *sec_name = NULL) const {
-    f->open_array_section((sec_name ? sec_name : "features"));
-    dump_bit_str(features, f, ceph::features::mon::get_feature_name, true);
-    f->close_section();
-  }
-
-  void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(HEAD_VERSION, COMPAT_VERSION, bl);
-    encode(features, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(ceph::buffer::list::const_iterator& p) {
-    DECODE_START(COMPAT_VERSION, p);
-    decode(features, p);
-    DECODE_FINISH(p);
-  }
-
-  static std::list<mon_feature_t> generate_test_instances() {
-    std::list<mon_feature_t> ls;
-    ls.emplace_back();
-    ls.emplace_back();
-    ls.back().features = 1;
-    ls.emplace_back();
-    ls.back().features = 2;
-    return ls;
-  }
+  static std::list<mon_feature_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(mon_feature_t)
 
@@ -317,129 +285,13 @@ namespace ceph {
           );
       }
 
-      static inline mon_feature_t get_feature_by_name(const std::string &n);
+      mon_feature_t get_feature_by_name(const std::string &n);
     }
   }
 }
 
-static inline ceph_release_t infer_ceph_release_from_mon_features(mon_feature_t f)
-{
-  if (f.contains_all(ceph::features::mon::FEATURE_UMBRELLA)) {
-    return ceph_release_t::umbrella;
-  }
-  if (f.contains_all(ceph::features::mon::FEATURE_TENTACLE)) {
-    return ceph_release_t::tentacle;
-  }
-  if (f.contains_all(ceph::features::mon::FEATURE_SQUID)) {
-    return ceph_release_t::squid;
-  }
-  if (f.contains_all(ceph::features::mon::FEATURE_REEF)) {
-    return ceph_release_t::reef;
-  }
-  if (f.contains_all(ceph::features::mon::FEATURE_QUINCY)) {
-    return ceph_release_t::quincy;
-  }
-  if (f.contains_all(ceph::features::mon::FEATURE_PACIFIC)) {
-    return ceph_release_t::pacific;
-  }
-  if (f.contains_all(ceph::features::mon::FEATURE_OCTOPUS)) {
-    return ceph_release_t::octopus;
-  }
-  if (f.contains_all(ceph::features::mon::FEATURE_NAUTILUS)) {
-    return ceph_release_t::nautilus;
-  }
-  if (f.contains_all(ceph::features::mon::FEATURE_MIMIC)) {
-    return ceph_release_t::mimic;
-  }
-  if (f.contains_all(ceph::features::mon::FEATURE_LUMINOUS)) {
-    return ceph_release_t::luminous;
-  }
-  if (f.contains_all(ceph::features::mon::FEATURE_KRAKEN)) {
-    return ceph_release_t::kraken;
-  }
-  return ceph_release_t::unknown;
-}
+ceph_release_t infer_ceph_release_from_mon_features(mon_feature_t f);
 
-static inline const char *ceph::features::mon::get_feature_name(uint64_t b) {
-  mon_feature_t f(b);
-
-  if (f == FEATURE_KRAKEN) {
-    return "kraken";
-  } else if (f == FEATURE_LUMINOUS) {
-    return "luminous";
-  } else if (f == FEATURE_MIMIC) {
-    return "mimic";
-  } else if (f == FEATURE_OSDMAP_PRUNE) {
-    return "osdmap-prune";
-  } else if (f == FEATURE_NAUTILUS) {
-    return "nautilus";
-  } else if (f == FEATURE_PINGING) {
-    return "elector-pinging";
-  } else if (f == FEATURE_OCTOPUS) {
-    return "octopus";
-  } else if (f == FEATURE_PACIFIC) {
-    return "pacific";
-  } else if (f == FEATURE_QUINCY) {
-    return "quincy";
-  } else if (f == FEATURE_REEF) {
-    return "reef";
-  } else if (f == FEATURE_SQUID) {
-    return "squid";
-  } else if (f == FEATURE_TENTACLE) {
-    return "tentacle";
-  } else if (f == FEATURE_UMBRELLA) {
-    return "umbrella";
-  // Release-independent features
-  } else if (f == FEATURE_NVMEOF_BEACON_DIFF) {
-    return "nvmeof_beacon_diff";
-  } else if (f == FEATURE_RESERVED) {
-    return "reserved";
-  }
-  return "unknown";
-}
-
-inline mon_feature_t ceph::features::mon::get_feature_by_name(const std::string &n) {
-
-  if (n == "kraken") {
-    return FEATURE_KRAKEN;
-  } else if (n == "luminous") {
-    return FEATURE_LUMINOUS;
-  } else if (n == "mimic") {
-    return FEATURE_MIMIC;
-  } else if (n == "osdmap-prune") {
-    return FEATURE_OSDMAP_PRUNE;
-  } else if (n == "nautilus") {
-    return FEATURE_NAUTILUS;
-  } else if (n == "feature-pinging") {
-    return FEATURE_PINGING;
-  } else if (n == "octopus") {
-    return FEATURE_OCTOPUS;
-  } else if (n == "pacific") {
-    return FEATURE_PACIFIC;
-  } else if (n == "quincy") {
-    return FEATURE_QUINCY;
-  } else if (n == "reef") {
-    return FEATURE_REEF;
-  } else if (n == "squid") {
-    return FEATURE_SQUID;
-  } else if (n == "tentacle") {
-    return FEATURE_TENTACLE;
-  } else if (n == "umbrella") {
-    return FEATURE_UMBRELLA;
-  // Release-independent features
-  } else if (n == "nvmeof_beacon_diff") {
-    return FEATURE_NVMEOF_BEACON_DIFF;
-  } else if (n == "reserved") {
-    return FEATURE_RESERVED;
-  }
-  return FEATURE_NONE;
-}
-
-inline std::ostream& operator<<(std::ostream& out, const mon_feature_t& f) {
-  out << "mon_feature_t(";
-  f.print(out);
-  out << ")";
-  return out;
-}
+std::ostream& operator<<(std::ostream& out, const mon_feature_t& f);
 
 #endif
