@@ -131,6 +131,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/messages/MClientSnap.cc
   ${PROJECT_SOURCE_DIR}/src/messages/MMonCommand.cc
   ${PROJECT_SOURCE_DIR}/src/messages/MMonCommandAck.cc
+  ${PROJECT_SOURCE_DIR}/src/mon/DataStats.cc
   ${PROJECT_SOURCE_DIR}/src/mon/PGMap.cc
   ${PROJECT_SOURCE_DIR}/src/mon/MgrMap.cc
   ${PROJECT_SOURCE_DIR}/src/mon/MonCap.cc

@@ -543,6 +543,7 @@ set(libcommon_files
   messages/MClientSnap.cc
   messages/MMonCommand.cc
   messages/MMonCommandAck.cc
+  mon/DataStats.cc
   mon/MonCap.cc
   mon/MonClient.cc
   mon/MonMap.cc
