@@ -61,6 +61,7 @@
 #ifdef WITH_RADOSGW_RADOS
 #include "rgw_sal_rados.h"
 #endif
+#include "rgw_sc_quota_checker.h"
 #include "rgw_torrent.h"
 #include "rgw_cksum_pipe.h"
 #include "rgw_lua_data_filter.h"
@@ -4625,6 +4626,23 @@ void RGWPutObj::execute(optional_yield y)
       ldpp_dout(this, 20) << "check_quota() returned ret=" << op_ret << dendl;
       return;
     }
+
+    op_ret = rgw_check_storage_class_quota(
+      this,
+      driver,
+      s->bucket.get(),
+      s->user.get(),
+      s->dest_placement.name,
+      s->dest_placement.storage_class,
+      static_cast<uint64_t>(s->content_length),
+      1,
+      y);
+
+    if (op_ret < 0) {
+      ldpp_dout(this, 5) << "rgw_check_storage_class_quota() returned ret="
+                        << op_ret << dendl;
+      return;
+    }
   }
 
   if (supplied_etag) {
@@ -4893,6 +4911,23 @@ void RGWPutObj::execute(optional_yield y)
   op_ret = s->bucket->check_quota(this, quota, s->obj_size, y);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "second check_quota() returned op_ret=" << op_ret << dendl;
+    return;
+  }
+
+  op_ret = rgw_check_storage_class_quota(
+    this,
+    driver,
+    s->bucket.get(),
+    s->user.get(),
+    s->dest_placement.name,
+    s->dest_placement.storage_class,
+    s->obj_size,
+    1,
+    y);
+  
+    if (op_ret < 0) {
+    ldpp_dout(this, 5) << "second rgw_check_storage_class_quota() returned ret="
+                      << op_ret << dendl;
     return;
   }
 
@@ -6386,6 +6421,18 @@ void RGWCopyObj::execute(optional_yield y)
       if (op_ret < 0) {
         return;
       }
+      op_ret = rgw_check_storage_class_quota(
+          this, driver,
+          s->bucket.get(), s->user.get(),
+          s->dest_placement.name,
+          s->dest_placement.storage_class,
+          s->src_object->get_accounted_size(),
+          1, y);
+      if (op_ret < 0) {
+        ldpp_dout(this, 5) << "SC quota exceeded for copy operation ret="
+                           << op_ret << dendl;
+        return;
+      }
     }
   }
 
@@ -7557,6 +7604,43 @@ void RGWCompleteMultipart::execute(optional_yield y)
     op_ret = -ERR_INTERNAL_ERROR;
     s->err.message = "This multipart completion is already in progress";
     return;
+  }
+
+  // Parts are already loaded into upload->get_parts() if cksum_type != none
+  // (try_sum_part_cksums called list_parts). If cksum_type == none they haven't
+  // been listed yet, so we do it now.
+  {
+    if (upload->get_parts().empty()) {
+      bool trunc = false;
+      int marker = 0;
+      int r = upload->list_parts(this, s->cct,
+                                static_cast<int>(parts->parts.size()),
+                                marker, &marker, &trunc, y);
+      if (r < 0) {
+        ldpp_dout(this, 1) << "WARNING: list_parts for SC quota check returned "
+                          << r << " — allowing upload (fail-open)" << dendl;
+      }
+    }
+
+    uint64_t total_size = 0;
+    for (const auto& [num, part] : upload->get_parts()) {
+      total_size += part->get_size();
+    }
+
+    if (total_size > 0 && dest_placement != nullptr) {
+      int r = rgw_check_storage_class_quota(
+          this, driver,
+          s->bucket.get(), s->user.get(),
+          dest_placement->name,
+          dest_placement->storage_class,
+          total_size, 1, y);
+      if (r < 0) {
+        ldpp_dout(this, 5) << "SC quota exceeded for multipart upload ret="
+                          << r << dendl;
+        op_ret = r;
+        return;
+      }
+    }
   }
 
   op_ret =

@@ -1527,7 +1527,7 @@ void set_quota_info(RGWQuotaInfo& quota, OPT opt_cmd, int64_t max_size, int64_t 
     case OPT::GLOBAL_QUOTA_DISABLE:
       quota.enabled = false;
       break;
-    default:
+    default:f
       break;
   }
 }
@@ -3714,6 +3714,7 @@ int main(int argc, const char **argv)
   string object_version;
   string placement_id;
   std::optional<string> opt_storage_class;
+  std::string opt_placement_target;
   list<string> tags;
   list<string> tags_add;
   list<string> tags_rm;
@@ -4276,6 +4277,8 @@ int main(int argc, const char **argv)
       placement_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--storage-class", (char*)NULL)) {
       opt_storage_class = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--placement-target", (char*)NULL)) {
+      opt_placement_target = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--tags", (char*)NULL)) {
       get_str_list(val, ",", tags);
     } else if (ceph_argparse_witharg(args, i, &val, "--tags-add", (char*)NULL)) {
@@ -11407,14 +11410,88 @@ next:
         cerr << "ERROR: invalid quota scope specification." << std::endl;
         return EINVAL;
       }
-      set_bucket_quota(driver, opt_cmd, tenant, bucket_name,
-                       max_size, max_objects, have_max_size, have_max_objects);
+      if (opt_cmd == OPT::QUOTA_SET && opt_storage_class && !opt_placement_target.empty()) {
+        std::unique_ptr<rgw::sal::Bucket> bkt;
+        int r = driver->load_bucket(dpp(), rgw_bucket(tenant, bucket_name), &bkt, null_yield);
+        if (r < 0) {
+          cerr << "could not get bucket info for bucket=" << bucket_name
+               << ": " << cpp_strerror(-r) << std::endl;
+          return -r;
+        }
+        RGWQuotaInfo& bq = bkt->get_info().quota;
+        const std::string sc_key = rgw_sc_quota_key(opt_placement_target, *opt_storage_class);
+        RGWStorageClassQuota& scq = bq.storage_class_quotas[sc_key];
+        if (have_max_size)    scq.max_size    = max_size < 0 ? -1 : max_size;
+        if (have_max_objects) scq.max_objects = max_objects < 0 ? -1 : max_objects;
+        scq.enabled = true;
+        if (bq.enforcement_mode == RGWQuotaEnforcementMode::LEGACY) {
+          bq.enforcement_mode = RGWQuotaEnforcementMode::HYBRID;
+        }
+        r = bkt->put_info(dpp(), false, real_time(), null_yield);
+        if (r < 0) {
+          cerr << "ERROR: failed writing bucket quota: " << cpp_strerror(-r) << std::endl;
+          return -r;
+        }
+      } else {
+        set_bucket_quota(driver, opt_cmd, tenant, bucket_name,
+                         max_size, max_objects, have_max_size, have_max_objects);
+      }
     } else if (!rgw::sal::User::empty(user)) {
       if (quota_scope == "bucket") {
-        return set_user_bucket_quota(opt_cmd, ruser, user_op, max_size, max_objects, have_max_size, have_max_objects);
-      } else if (quota_scope == "user") {
-        return set_user_quota(opt_cmd, ruser, user_op, max_size, max_objects, have_max_size, have_max_objects);
-      } else {
+        if (opt_cmd == OPT::QUOTA_SET && opt_storage_class && !opt_placement_target.empty()) {
+          int r = user->load_user(dpp(), null_yield);
+          if (r < 0) {
+            cerr << "could not load user: " << cpp_strerror(-r) << std::endl;
+            return -r;
+          }
+          RGWQuotaInfo& bq = user->get_info().quota.bucket_quota;
+          const std::string sc_key = rgw_sc_quota_key(opt_placement_target, *opt_storage_class);
+          RGWStorageClassQuota& scq = bq.storage_class_quotas[sc_key];
+          if (have_max_size)    scq.max_size    = max_size < 0 ? -1 : max_size;
+          if (have_max_objects) scq.max_objects = max_objects < 0 ? -1 : max_objects;
+          scq.enabled = true;
+          if (bq.enforcement_mode == RGWQuotaEnforcementMode::LEGACY) {
+            bq.enforcement_mode = RGWQuotaEnforcementMode::HYBRID;
+          }
+          user_op.set_bucket_quota(bq);
+          string err;
+          r = ruser.modify(dpp(), user_op, null_yield, &err);
+          if (r < 0) {
+            cerr << "ERROR: failed updating user info: " << cpp_strerror(-r) << ": " << err << std::endl;
+            return -r;
+          }
+        } else {
+          return set_user_bucket_quota(opt_cmd, ruser, user_op, max_size, max_objects, have_max_size, have_max_objects);
+        }
+      } 
+        else if (quota_scope == "user") {
+        if (opt_cmd == OPT::QUOTA_SET && opt_storage_class && !opt_placement_target.empty()) {
+          int r = user->load_user(dpp(), null_yield);
+          if (r < 0) {
+            cerr << "could not load user: " << cpp_strerror(-r) << std::endl;
+            return -r;
+          }
+          RGWQuotaInfo& uq = user->get_info().quota.user_quota;
+          const std::string sc_key = rgw_sc_quota_key(opt_placement_target, *opt_storage_class);
+          RGWStorageClassQuota& scq = uq.storage_class_quotas[sc_key];
+          if (have_max_size)    scq.max_size    = max_size < 0 ? -1 : max_size;
+          if (have_max_objects) scq.max_objects = max_objects < 0 ? -1 : max_objects;
+          scq.enabled = true;
+          if (uq.enforcement_mode == RGWQuotaEnforcementMode::LEGACY) {
+            uq.enforcement_mode = RGWQuotaEnforcementMode::HYBRID;
+          }
+          user_op.set_user_quota(uq);
+          string err;
+          r = ruser.modify(dpp(), user_op, null_yield, &err);
+          if (r < 0) {
+            cerr << "ERROR: failed updating user info: " << cpp_strerror(-r) << ": " << err << std::endl;
+            return -r;
+          }
+        } else {
+          return set_user_quota(opt_cmd, ruser, user_op, max_size, max_objects, have_max_size, have_max_objects);
+        }
+      } 
+        else {
         cerr << "ERROR: invalid quota scope specification. Please specify either --quota-scope=bucket, or --quota-scope=user" << std::endl;
         return EINVAL;
       }
