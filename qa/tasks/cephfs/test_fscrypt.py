@@ -397,40 +397,6 @@ class TestFSCryptVolumes(CephFSTestCase):
         self.mount_a.run_shell_payload(f"sudo fscrypt purge --force --verbose {self.mount_a.hostfs_mntpt}")
         super().tearDown()
 
-    def _compare_trees(self, src, dst):
-        files = os.listdir(src)
-        for file in files:
-            src_file = f'{src}/{file}'
-            dst_file = f'{dst}/{file}'
-
-            exists = os.path.exists(dst_file)
-            lexists = os.path.lexists(dst_file)
-            if not exists and not lexists:
-                log.debug(f'path_dne:={dst_file}')
-                raise
-
-            if os.path.islink(src):
-                #do link check
-                if os.readlink(src_file) != os.readlink(dst_file):
-                    raise
-            elif os.path.isfile(src):
-                #check reported size
-                rsize_match = os.path.getsize(src_file) == os.path.getsize(dst_file)
-                if not rsize_match:
-                    raise
-
-                #check contents
-                src_hash = self._md5hash_file(src_file)
-                dest_hash = self._md5hash_file(dst_file)
-                if src_hash != dest_hash:
-                    raise
-
-    def _md5hash_file(self, file):
-        md5 = hashlib.md5()
-        with open(file, "rb") as f:
-            md5.update(f.read())
-        return md5.hexdigest()
-
     def _get_sv_path(self, v, sv):
         sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} {sv}')
         sv_path = sv_path.strip()
@@ -525,8 +491,7 @@ class TestFSCryptVolumes(CephFSTestCase):
                 rand_file = f'{src_path}/{i}/rand_file{j}'
                 block = ''.join(random.choice(string.ascii_letters) for _ in range(1 * 1024 * 1024))
                 contents = block * 16
-                with open(rand_file, 'w') as f:
-                    f.write(contents)
+                self.mount_a.write_file(rand_file, contents)
 
             self.mount_a.symlink(rand_file, f'{rand_file}-sym')
 
@@ -539,11 +504,11 @@ class TestFSCryptVolumes(CephFSTestCase):
         dst_path = f'{c_path}'
 
         #compare unlocked
-        self._compare_trees(src_path, dst_path)
+        self.mount_a.compare_trees(src_path, dst_path)
 
         #compare locked
         self.mount_a.run_shell_payload(f"sudo fscrypt lock --verbose {src_path}")
-        self._compare_trees(src_path, dst_path)
+        self.mount_a.compare_trees(src_path, dst_path)
 
     def test_fscrypt_clone_long_name(self):
         """ Test that an fscrypt tree with long names can be cloned """
@@ -565,8 +530,7 @@ class TestFSCryptVolumes(CephFSTestCase):
         for i in range(255):
             long_name += 'a'
 
-        with open(long_name, 'w') as f:
-            f.write('contents')
+        self.mount_a.write_file(long_name, 'contents')
 
         long_symlink = f'{src_path}/'
         for i in range(255):
@@ -583,11 +547,11 @@ class TestFSCryptVolumes(CephFSTestCase):
         dst_path = f'{c_path}'
 
         #compare unlocked
-        self._compare_trees(src_path, dst_path)
+        self.mount_a.compare_trees(src_path, dst_path)
 
         #compare locked
         self.mount_a.run_shell_payload(f"sudo fscrypt lock --verbose {src_path}")
-        self._compare_trees(src_path, dst_path)
+        self.mount_a.compare_trees(src_path, dst_path)
 
 class TestFSCryptXFS(XFSTestsDev):
 
