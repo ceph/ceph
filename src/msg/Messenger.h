@@ -91,7 +91,11 @@ struct Interceptor {
 
 #endif
 
-class Messenger {
+class Messenger: public md_config_obs_t {
+public:
+  std::vector<std::string> get_tracked_keys() const noexcept final;
+  void handle_conf_change(const ConfigProxy& conf, const std::set<std::string>& changed) override;
+
 private:
   struct PriorityDispatcher {
     using priority_t = Dispatcher::priority_t;
@@ -169,7 +173,7 @@ public:
    * or use the create() function.
    */
   Messenger(CephContext *cct_, entity_name_t w);
-  virtual ~Messenger() {}
+  virtual ~Messenger();
 
   /**
    * create a new messenger

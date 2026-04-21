@@ -10,6 +10,20 @@
 
 #include "msg/async/AsyncMessenger.h"
 
+#define dout_subsys ceph_subsys_ms
+
+std::vector<std::string> Messenger::get_tracked_keys() const noexcept {
+  static constexpr auto as_sv = std::to_array<std::string_view>({
+  });
+  static_assert(std::is_sorted(as_sv.begin(), as_sv.end()),
+                "keys are not sorted!");
+  return {as_sv.begin(), as_sv.end()};
+}
+
+void Messenger::handle_conf_change(const ConfigProxy& conf, const std::set<std::string>& changed) {
+  ldout(cct, 2) << __func__ << ": " << changed << dendl;
+}
+
 Messenger *Messenger::create_client_messenger(CephContext *cct, std::string lname)
 {
   std::string public_msgr_type = cct->_conf->ms_public_type.empty() ? cct->_conf.get_val<std::string>("ms_type") : cct->_conf->ms_public_type;
@@ -58,6 +72,12 @@ Messenger::Messenger(CephContext *cct_, entity_name_t w)
 {
   auth_registry.refresh_config();
   comp_registry.refresh_config();
+  cct->_conf.add_observer(this);
+}
+
+Messenger::~Messenger()
+{
+  cct->_conf.remove_observer(this);
 }
 
 void Messenger::set_endpoint_addr(const entity_addr_t& a,
