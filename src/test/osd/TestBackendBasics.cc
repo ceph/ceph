@@ -354,6 +354,11 @@ TEST_P(TestBackendBasics, DirectRead) {
     EXPECT_GE(read_result, 0)
       << param.label << " direct read to shard " << shard_id << " should complete successfully";
 
+    if (obj_name == "test_direct_read_EC_ISA_Opt_k4m2_su4k_4k")
+    {
+      std::cout << obj_name << " is the test of interest" << std::endl;
+    }
+
     // For direct reads, we expect to get back only the data for this shard
     // which is one stripe_unit
     ASSERT_EQ(shard_data.length(), stripe_unit)
