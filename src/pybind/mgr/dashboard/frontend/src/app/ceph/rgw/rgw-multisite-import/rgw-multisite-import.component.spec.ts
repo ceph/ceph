@@ -4,6 +4,15 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
+import {
+  ButtonModule,
+  CheckboxModule,
+  ComboBoxModule,
+  InputModule,
+  ModalModule,
+  NumberModule,
+  SelectModule
+} from 'carbon-components-angular';
 import { SharedModule } from '~/app/shared/shared.module';
 
 import { RgwMultisiteImportComponent } from './rgw-multisite-import.component';
@@ -19,7 +28,14 @@ describe('RgwMultisiteImportComponent', () => {
       ReactiveFormsModule,
       RouterTestingModule,
       HttpClientTestingModule,
-      ToastrModule.forRoot()
+      ToastrModule.forRoot(),
+      ModalModule,
+      InputModule,
+      CheckboxModule,
+      ComboBoxModule,
+      SelectModule,
+      NumberModule,
+      ButtonModule
     ],
     declarations: [RgwMultisiteImportComponent],
     providers: [NgbActiveModal]
