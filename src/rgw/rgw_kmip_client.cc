@@ -18,15 +18,21 @@ RGWKMIPManager *rgw_kmip_manager;
 int
 RGWKMIPTransceiver::wait(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  if (done)
+  /* done is std::atomic<bool> so this load is safe without the lock.
+   * The worker sets done under the lock before notify_all(), so the acquire
+   * load here pairs with that release store. */
+  if (done.load(std::memory_order_acquire))
     return ret;
 
-  // TODO: when given a coroutine yield context, suspend instead of blocking
+  /* NOTE: optional_yield y is not yet used to yield the coroutine; the
+   * current implementation blocks the calling thread.  A future improvement
+   * should post the KMIP work to the asio executor and co_await the result
+   * via rgw::run_coro(), removing this blocking wait entirely. */
   maybe_warn_about_blocking(dpp);
 
   std::unique_lock l{lock};
-  if (!done)
-    cond.wait(l);
+  cond.wait(l, [this] { return done.load(std::memory_order_relaxed); });
+
   if (ret) {
     lderr(cct) << "kmip process failed, " << ret << dendl;
   }
