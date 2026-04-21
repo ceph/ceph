@@ -611,48 +611,56 @@ void GroupPromoteRequest<I>::fix_group_membership(
     return;
   }
 
-  auto ctx = create_context_callback<
-      GroupPromoteRequest<I>,
-      &GroupPromoteRequest<I>::handle_fix_group_membership>(this);
+  remove_images_from_group();
+}
 
-  auto gather = new C_Gather(m_cct, ctx);
-  // remove images and disable mirroring
+template <typename I>
+void GroupPromoteRequest<I>::remove_images_from_group() {
+  ldout(m_cct, 10) << dendl;
+
+  auto gather = new C_Gather(m_cct,
+    create_context_callback<GroupPromoteRequest<I>,
+      &GroupPromoteRequest<I>::handle_remove_images_from_group>(this));
+
   for (auto& spec : m_to_remove) {
-    auto it = std::find_if(m_image_ctxs.begin(), m_image_ctxs.end(),
-      [&](auto* ictx) {
-        return spec.image_id == ictx->id &&
-               spec.pool_id == ictx->md_ctx.get_id();
-      });
+    librados::ObjectWriteOperation op;
+    cls_client::group_image_remove(&op, {spec.image_id, spec.pool_id});
 
-    if (it == m_image_ctxs.end()) {
-      continue;
-    }
-
-    auto* ictx = *it;
     Context* subctx = gather->new_sub();
-    auto req = mirror::GroupRemoveImageRequest<I>::create(
-        ictx, m_group_id, m_group_ioctx, subctx);
-    req->send();
+    auto comp = create_rados_callback(subctx);
+
+    int r = m_group_ioctx.aio_operate(util::group_header_name(m_group_id),
+                                      comp, &op);
+    ceph_assert(r == 0);
+
+    comp->release();
   }
 
   gather->activate();
 }
 
 template <typename I>
-void GroupPromoteRequest<I>::handle_fix_group_membership(int r) {
+void GroupPromoteRequest<I>::handle_remove_images_from_group(int r) {
   ldout(m_cct, 10) << "r=" << r << dendl;
 
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
+    lderr(m_cct) << "failed to remove images from group: "
+                 << cpp_strerror(r) << dendl;
+
     m_ret_val = r;
     release_exclusive_locks();
     return;
   }
 
-  // Safe erase of removed images
+  // make a copy and erase removed images
+  m_image_ctxs_old_membership = m_image_ctxs;
   for (auto& spec : m_to_remove) {
     auto it = std::find_if(
         m_image_ctxs.begin(), m_image_ctxs.end(),
-        [&](I* ictx) { return ictx->id == spec.image_id; });
+        [&](I* ictx) {
+          return ictx->id == spec.image_id &&
+                 ictx->md_ctx.get_id() == spec.pool_id;
+        });
 
     if (it != m_image_ctxs.end()) {
       m_image_ctxs.erase(it);
@@ -943,17 +951,66 @@ void GroupPromoteRequest<I>::handle_group_unlink_peer(int r) {
   if (r < 0) {
     lderr(m_cct) << "failed to unlink mirror group snapshot: "
                  << cpp_strerror(r) << dendl;
-  }
-
-  if (r == 0 && !m_to_remove.empty()) {
-    // At this point, any non-primary and incomplete primary group snapshots
-    // should already have been pruned. We can now safely remove the images
-    // that are no longer members of the group.
-    remove_non_member_images();
+    release_exclusive_locks();
     return;
   }
 
-  release_exclusive_locks();
+  disable_removed_images();
+}
+
+template <typename I>
+void GroupPromoteRequest<I>::disable_removed_images() {
+  if (m_to_remove.empty()) {
+    release_exclusive_locks();
+    return;
+  }
+
+  ldout(m_cct, 10) << dendl;
+
+  auto ctx = create_context_callback<GroupPromoteRequest<I>,
+    &GroupPromoteRequest<I>::handle_disable_removed_images>(this);
+
+  auto gather = new C_Gather(m_cct, ctx);
+  for (auto& spec : m_to_remove) {
+    auto it = std::find_if(m_image_ctxs_old_membership.begin(),
+      m_image_ctxs_old_membership.end(),
+      [&](auto* ictx) {
+        return spec.image_id == ictx->id &&
+               spec.pool_id == ictx->md_ctx.get_id();
+      });
+
+    if (it == m_image_ctxs_old_membership.end()) {
+      lderr(m_cct) << "missing ictx for image_id="
+                   << spec.image_id << " pool_id="
+                   << spec.pool_id << dendl;
+      continue;
+    }
+
+    auto* ictx = *it;
+    Context* subctx = gather->new_sub();
+    auto req = mirror::GroupRemoveImageRequest<I>::create(
+      ictx, m_group_id, m_group_ioctx, subctx);
+    req->send();
+  }
+
+  gather->activate();
+}
+
+template <typename I>
+void GroupPromoteRequest<I>::handle_disable_removed_images(int r) {
+  ldout(m_cct, 10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(m_cct) << "failed to disable removed images: "
+                 << cpp_strerror(r) << dendl;
+    release_exclusive_locks();
+    return;
+  }
+
+  // At this point, any non-primary and incomplete primary group snapshots
+  // should already have been pruned. We can now safely remove the images
+  // that are no longer members of the group.
+  remove_non_member_images();
 }
 
 template <typename I>
@@ -979,9 +1036,16 @@ void GroupPromoteRequest<I>::remove_non_member_images() {
   // promotion.
   for (const auto& image : m_images) {
     if (image.state == cls::rbd::GROUP_IMAGE_LINK_STATE_INCOMPLETE) {
-      ldout(m_cct, 10) << "removing incomplete image: "
+      ldout(m_cct, 10) << "removing image with incomplete group link state: "
                        << image.spec.image_id << dendl;
-      m_to_remove.push_back(image.spec);
+      auto exists = std::any_of(m_to_remove.begin(), m_to_remove.end(),
+        [&](const cls::rbd::GroupImageSpec& s) {
+          return s.image_id == image.spec.image_id &&
+          s.pool_id == image.spec.pool_id;
+        });
+      if (!exists) {
+        m_to_remove.push_back(image.spec);
+      }
     }
   }
 
