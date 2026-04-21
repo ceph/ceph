@@ -83,13 +83,7 @@ private:
    * ACQUIRE_EXCLUSIVE_LOCKS ---------------------------|
    *    |                                               |
    *    v  (skip if not needed)                         |
-   * FIX_GROUP_MEMBERSHIP                               |
-   *    |                                               |
-   *    v  (skip if not needed)                         |
    * REMOVE_IMAGES_FROM_GROUP                           |
-   *    |                                               |
-   *    v  (skip if not needed)                         |
-   * LIST_GROUP_IMAGES                                  |
    *    |                                               |
    *    v                                               |
    * ROLLBACK                                           |
@@ -197,15 +191,8 @@ private:
   void acquire_exclusive_locks();
   void handle_acquire_exclusive_locks(int r);
 
-  void fix_group_membership(
-      std::vector<cls::rbd::GroupImageSpec>& current_membership,
-      std::vector<cls::rbd::GroupImageSpec>& rollback_membership);
-
   void remove_images_from_group();
   void handle_remove_images_from_group(int r);
-
-  void list_group_images();
-  void handle_list_group_images(int r);
 
   void rollback();
   void handle_rollback(int r);
