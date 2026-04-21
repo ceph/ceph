@@ -60,6 +60,13 @@ struct RGWKmipWorker: public Thread {
   }
 };
 
+/*
+ * Tear down KMIP + TLS in dependency order:
+ * 1) release encode buffer and KMIP context
+ * 2) SSL_shutdown (best-effort close_notify) while SSL is still wired to the BIO
+ * 3) BIO_free_all frees SSL and closes the TCP fd
+ * 4) SSL_CTX last
+ */
 static void
 kmip_free_handle_stuff(RGWKmipHandle *kmip)
 {
@@ -71,10 +78,20 @@ kmip_free_handle_stuff(RGWKmipHandle *kmip)
   }
   if (kmip->need_to_free_kmip)
     kmip_destroy(kmip->kmip_ctx);
-  if (kmip->bio)
+  if (kmip->ssl) {
+    int rc = SSL_shutdown(kmip->ssl);
+    if (rc == 0)
+    (void)SSL_shutdown(kmip->ssl);
+  }
+  if (kmip->bio) {
     BIO_free_all(kmip->bio);
-  if (kmip->ctx)
+    kmip->bio = nullptr;
+    kmip->ssl = nullptr;
+  }
+  if (kmip->ctx) {
     SSL_CTX_free(kmip->ctx);
+    kmip->ctx = nullptr;
+  }
 }
 
 class RGWKmipHandleBuilder {
@@ -158,6 +175,10 @@ RGWKmipHandleBuilder::build() const
 	size_t ns;
 
   r->ctx = SSL_CTX_new(TLS_client_method());
+  if (!r->ctx) {
+    lderr(cct) << "SSL_CTX_new failed" << dendl;
+    goto Done;
+  }
 
   if (!clientcert)
     ;
@@ -236,7 +257,7 @@ RGWKmipHandleBuilder::build() const
     r->credential->credential_value = r->upc;
     int i = kmip_add_credential(r->kmip_ctx, r->credential);
     if (i != KMIP_OK) {
-      fprintf(stderr,"failed to add credential to kmip\n");
+      lderr(cct) << "kmip_add_credential failed err=" << i << dendl;
       goto Done;
     }
   }
