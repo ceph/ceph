@@ -260,7 +260,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         { color: 'rgba(50, 172, 45, 0.97)', value: null },
       ])
       .addTarget($.addTargetSchema(
-        expr='sum(rate(ceph_mds_server_handle_client_request{%(matchers)s}[$__rate_interval]) * on(ceph_daemon) (ceph_fs_metadata{%(matchers)s name=~"$name"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{%(matchers)s}))' % $.matchers(),
+        expr='sum(rate(ceph_mds_server_handle_client_request{%(matchers)s}[$__rate_interval]) * on(ceph_daemon) group_left() (ceph_mds_metadata{%(matchers)s} * on(fs_id) group_left(name) ceph_fs_metadata{%(matchers)s name=~"$name"})' % $.matchers(),
         interval='$__rate_interval',
         datasource={ type: 'prometheus', uid: '${datasource}' },
         step=60,
@@ -289,7 +289,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         { color: 'rgba(50, 172, 45, 0.97)', value: null },
       ])
       .addTarget($.addTargetSchema(
-        expr='sum(ceph_mds_sessions_session_count{%(matchers)s} * on(ceph_daemon) (ceph_fs_metadata{%(matchers)s name=~"$name"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{%(matchers)s}))' % $.matchers(),
+        expr='sum(ceph_mds_sessions_session_count{%(matchers)s} * on(ceph_daemon) group_left() (ceph_mds_metadata{%(matchers)s} * on(fs_id) group_left(name) ceph_fs_metadata{%(matchers)s name=~"$name"})' % $.matchers(),
         interval='$__rate_interval',
         datasource={ type: 'prometheus', uid: '${datasource}' },
         step=60,
@@ -318,7 +318,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         { color: 'rgba(50, 172, 45, 0.97)', value: null },
       ])
       .addTarget($.addTargetSchema(
-        expr='sum(ceph_mds_inodes{%(matchers)s} * on(ceph_daemon) (ceph_fs_metadata{%(matchers)s name=~"$name"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{%(matchers)s}))' % $.matchers(),
+        expr='sum(ceph_mds_inodes{%(matchers)s} * on(ceph_daemon) group_left() (ceph_mds_metadata{%(matchers)s} * on(fs_id) group_left(name) ceph_fs_metadata{%(matchers)s name=~"$name"})' % $.matchers(),
         interval='$__rate_interval',
         datasource={ type: 'prometheus', uid: '${datasource}' },
         step=60,
@@ -521,7 +521,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         { color: 'rgba(50, 172, 45, 0.97)', value: null },
       ])
       .addTarget($.addTargetSchema(
-        expr='sum(rate(ceph_mds_forward{%(matchers)s}[$__rate_interval]) * on(ceph_daemon) (ceph_fs_metadata{%(matchers)s name=~"$name"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{%(matchers)s}))' % $.matchers(),
+        expr='sum(rate(ceph_mds_forward{%(matchers)s}[$__rate_interval]) * on(ceph_daemon) group_left() (ceph_mds_metadata{%(matchers)s} * on(fs_id) group_left(name) ceph_fs_metadata{%(matchers)s name=~"$name"})' % $.matchers(),
         interval='$__rate_interval',
         datasource={ type: 'prometheus', uid: '${datasource}' },
         step=60,
@@ -557,7 +557,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         { color: 'rgba(50, 172, 45, 0.97)', value: null },
       ])
       .addTarget($.addTargetSchema(
-        expr='sum(increase(ceph_mds_reply_latency_sum{%(matchers)s}[$__rate_interval]) * on(ceph_daemon) (ceph_fs_metadata{%(matchers)s name=~"$name"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{%(matchers)s})) / sum(increase(ceph_mds_reply_latency_count{%(matchers)s}[$__rate_interval]) * on(ceph_daemon) (ceph_fs_metadata{%(matchers)s name=~"$name"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{%(matchers)s}))' % $.matchers(),
+        expr='sum(increase(ceph_mds_reply_latency_sum{%(matchers)s}[$__rate_interval]) * on(ceph_daemon) group_left() (ceph_mds_metadata{%(matchers)s} * on(fs_id) group_left(name) ceph_fs_metadata{%(matchers)s name=~"$name"}) / sum(increase(ceph_mds_reply_latency_count{%(matchers)s}[$__rate_interval]) * on(ceph_daemon) group_left() (ceph_mds_metadata{%(matchers)s} * on(fs_id) group_left(name) ceph_fs_metadata{%(matchers)s name=~"$name"})' % $.matchers(),
         interval='$__rate_interval',
         range=true,
         datasource={ type: 'prometheus', uid: '${datasource}' },
@@ -587,7 +587,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         { color: 'rgba(50, 172, 45, 0.97)', value: null },
       ])
       .addTarget($.addTargetSchema(
-        expr='sum(ceph_mds_caps{%(matchers)s} * on(ceph_daemon) (ceph_fs_metadata{%(matchers)s name=~"$name"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{%(matchers)s}))' % $.matchers(),
+        expr='sum(ceph_mds_caps{%(matchers)s} * on(ceph_daemon) group_left() (ceph_mds_metadata{%(matchers)s} * on(fs_id) group_left(name) ceph_fs_metadata{%(matchers)s name=~"$name"})' % $.matchers(),
         interval='$__rate_interval',
         datasource={ type: 'prometheus', uid: '${datasource}' },
         step=60,
@@ -800,7 +800,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         { color: 'green' },
       ])
       .addTarget($.addTargetSchema(
-        expr='sum by (ceph_daemon) (increase(ceph_mds_reply_latency_sum{%(matchers)s}[$__rate_interval]) * on(ceph_daemon) (ceph_fs_metadata{%(matchers)s name=~"$name"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{%(matchers)s})) / sum by (ceph_daemon) (increase(ceph_mds_reply_latency_count{%(matchers)s}[$__rate_interval]) * on(ceph_daemon) (ceph_fs_metadata{%(matchers)s name=~"$name"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{%(matchers)s}))' % $.matchers(),
+        expr='sum by (ceph_daemon) (increase(ceph_mds_reply_latency_sum{%(matchers)s}[$__rate_interval]) * on(ceph_daemon) group_left() (ceph_mds_metadata{%(matchers)s} * on(fs_id) group_left(name) ceph_fs_metadata{%(matchers)s name=~"$name"}) / sum by (ceph_daemon) (increase(ceph_mds_reply_latency_count{%(matchers)s}[$__rate_interval]) * on(ceph_daemon) group_left() (ceph_mds_metadata{%(matchers)s} * on(fs_id) group_left(name) ceph_fs_metadata{%(matchers)s name=~"$name"})' % $.matchers(),
         datasource={ type: 'prometheus', uid: '${datasource}' },
         legendFormat='{{ ceph_daemon }}',
       )),
@@ -819,11 +819,11 @@ local g = import 'grafonnet/grafana.libsonnet';
       )
       .addTargets([
         $.addTargetSchema(
-          'sum(rate(ceph_objecter_op_r{%(matchers)s}[$__rate_interval]) * on(ceph_daemon) (ceph_fs_metadata{%(matchers)s name=~"$name"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{%(matchers)s}))' % $.matchers(),
+          'sum(rate(ceph_objecter_op_r{%(matchers)s}[$__rate_interval]) * on(ceph_daemon) group_left() (ceph_mds_metadata{%(matchers)s} * on(fs_id) group_left(name) ceph_fs_metadata{%(matchers)s name=~"$name"})' % $.matchers(),
           'Read Ops'
         ),
         $.addTargetSchema(
-          'sum(rate(ceph_objecter_op_w{%(matchers)s}[$__rate_interval]) * on(ceph_daemon) (ceph_fs_metadata{%(matchers)s name=~"$name"} * on(fs_id) group_left(ceph_daemon) ceph_mds_metadata{%(matchers)s}))' % $.matchers(),
+          'sum(rate(ceph_objecter_op_w{%(matchers)s}[$__rate_interval]) * on(ceph_daemon) group_left() (ceph_mds_metadata{%(matchers)s} * on(fs_id) group_left(name) ceph_fs_metadata{%(matchers)s name=~"$name"})' % $.matchers(),
           'Write Ops'
         ),
       ])
