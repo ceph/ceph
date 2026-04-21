@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
-// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab ft=cpp
+#include<atomic>
 
 #pragma once
 
@@ -32,19 +33,18 @@ public:
   } outkey[1] = {0, 0};
   // end must free
   int ret;
-  bool done;
+  std::atomic<bool> done{false};
   ceph::mutex lock = ceph::make_mutex("rgw_kmip_req::lock");
   ceph::condition_variable cond;
 
   int wait(const DoutPrefixProvider* dpp, optional_yield y);
-  RGWKMIPTransceiver(CephContext * const cct,
-    kmip_operation operation)
+  RGWKMIPTransceiver(CephContext * const cct, kmip_operation operation)
   : cct(cct),
     operation(operation),
-    ret(-EDOM),
-    done(false)
+    ret(-EDOM)
   {}
-  ~RGWKMIPTransceiver();
+
+  virtual ~RGWKMIPTransceiver();
 
   int send();
   int process(const DoutPrefixProvider* dpp, optional_yield y);
