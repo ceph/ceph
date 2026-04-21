@@ -74,6 +74,9 @@ public:
 
     virtual void run(OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) = 0;
     virtual SchedulerClass get_scheduler_class() const = 0;
+    virtual utime_t get_time_queued() const {
+      return utime_t();
+    }
 
     virtual ~OpQueueable() {}
     friend std::ostream& operator<<(std::ostream& out, const OpQueueable& q) {
@@ -166,6 +169,10 @@ public:
     qos_cost = scaled_cost;
   }
 
+  utime_t get_time_queued() const {
+    return qitem ? qitem->get_time_queued() : utime_t();
+  }
+
   friend std::ostream& operator<<(std::ostream& out, const OpSchedulerItem& item) {
     out << "OpSchedulerItem("
         << item.get_ordering_token() << " " << *item.qitem;
@@ -220,10 +227,12 @@ public:
 };
 
 class PGOpItem : public PGOpQueueable {
+  utime_t time_queued;
   OpRequestRef op;
 
 public:
-  PGOpItem(spg_t pg, OpRequestRef op) : PGOpQueueable(pg), op(std::move(op)) {}
+  PGOpItem(spg_t pg, OpRequestRef op)
+    : PGOpQueueable(pg), time_queued(ceph_clock_now()), op(std::move(op)) {}
 
   std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGOpItem(op=" << *(op->get_req()) << ")";
@@ -282,13 +291,19 @@ public:
     }
   }
 
+  utime_t get_time_queued() const final{
+    return time_queued;
+  }
+
   void run(OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
 };
 
 class PGPeeringItem : public PGOpQueueable {
+  utime_t time_queued;
   PGPeeringEventRef evt;
 public:
-  PGPeeringItem(spg_t pg, PGPeeringEventRef e) : PGOpQueueable(pg), evt(e) {}
+  PGPeeringItem(spg_t pg, PGPeeringEventRef e)
+    : PGOpQueueable(pg), time_queued(ceph_clock_now()), evt(e) {}
   std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGPeeringEvent(" << evt->get_desc() << ")";
   }
@@ -307,6 +322,9 @@ public:
   }
   SchedulerClass get_scheduler_class() const final {
     return SchedulerClass::immediate;
+  }
+  utime_t get_time_queued() const final{
+    return time_queued;
   }
 };
 
@@ -537,6 +555,9 @@ public:
   uint64_t get_reserved_pushes() const final {
     return reserved_pushes;
   }
+  utime_t get_time_queued() const final {
+    return time_queued;
+  }
   void run(
     OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
   SchedulerClass get_scheduler_class() const final {
@@ -564,6 +585,9 @@ public:
   std::string print() const final {
     return fmt::format(
 	"PGRecoveryContext(pgid={} c={} epoch={})", get_pgid(), (void*)c.get(), epoch);
+  }
+  utime_t get_time_queued() const final {
+    return time_queued;
   }
   void run(
     OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
@@ -632,6 +656,10 @@ public:
 
   SchedulerClass get_scheduler_class() const final {
     return priority_to_scheduler_class(op->get_req()->get_priority());
+  }
+
+  utime_t get_time_queued() const final {
+    return time_queued;
   }
 
   void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle)

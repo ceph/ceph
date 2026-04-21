@@ -41,6 +41,15 @@ enum class scheduler_class_t : uint8_t {
   immediate,
 };
 
+// scheduler op types - used for perf counters
+enum class scheduler_op_type_t : uint8_t {
+  peering_op = 0,
+  ec_read_op,
+  ec_write_op,
+  ec_rec_read_op,
+  unknown,
+};
+
 #ifdef WITH_CRIMSON
 using SchedulerClass = scheduler_class_t;
 using MonClient = crimson::mon::Client;
@@ -50,11 +59,31 @@ using SchedulerClass = op_scheduler_class;
 
 enum {
   l_mclock_first = 15000,
+  // scheduler class queue lengths
   l_mclock_immediate_queue_len,
   l_mclock_client_queue_len,
   l_mclock_recovery_queue_len,
   l_mclock_best_effort_queue_len,
   l_mclock_all_type_queue_len,
+  // op specific counters
+  // peering
+  l_mclock_peering_lat,
+  l_mclock_peering_len,
+  // client ops
+  l_mclock_client_lat,
+  // ec reads
+  l_mclock_ec_r_ops,
+  l_mclock_ec_r_lat,
+  l_mclock_ec_r_len,
+  // ec writes
+  l_mclock_ec_w_ops,
+  l_mclock_ec_w_lat,
+  l_mclock_ec_w_len,
+  // ec recovery reads
+  l_mclock_ec_rec_r_ops,
+  l_mclock_ec_rec_r_outb,
+  l_mclock_ec_rec_r_lat,
+  l_mclock_ec_rec_r_len,
   l_mclock_last,
 };
 
@@ -222,8 +251,12 @@ public:
 
   void set_from_config();
   void init_logger();
-  void get_mclock_counter(scheduler_id_t id);
-  void put_mclock_counter(scheduler_id_t id);
+  void get_mclock_counter(scheduler_id_t id,
+                          scheduler_op_type_t op_type,
+                          uint64_t cost);
+  void put_mclock_counter(scheduler_id_t id,
+                          scheduler_op_type_t op_type,
+                          utime_t time_queued);
   double get_cost_per_io() const;
   double get_capacity_per_shard() const;
   void handle_conf_change(const ConfigProxy& conf,
