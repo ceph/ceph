@@ -1,6 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { CUSTOM_ELEMENTS_SCHEMA, SimpleChange } from '@angular/core';
-import { DatePipe } from '@angular/common';
 import { ChartsModule } from '@carbon/charts-angular';
 import { AreaChartComponent } from './area-chart.component';
 import { NumberFormatterService } from '../../services/number-formatter.service';
@@ -10,7 +9,6 @@ describe('AreaChartComponent', () => {
   let component: AreaChartComponent;
   let fixture: ComponentFixture<AreaChartComponent>;
   let numberFormatterService: NumberFormatterService;
-  let datePipe: DatePipe;
 
   const mockData: ChartPoint[] = [
     {
@@ -41,23 +39,15 @@ describe('AreaChartComponent', () => {
       unitlessLabels: ['', 'k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y']
     };
 
-    const datePipeMock = {
-      transform: jest.fn().mockReturnValue('01 Jan, 00:00:00')
-    };
-
     await TestBed.configureTestingModule({
       imports: [ChartsModule, AreaChartComponent],
-      providers: [
-        { provide: NumberFormatterService, useValue: numberFormatterMock },
-        { provide: DatePipe, useValue: datePipeMock }
-      ],
+      providers: [{ provide: NumberFormatterService, useValue: numberFormatterMock }],
       schemas: [CUSTOM_ELEMENTS_SCHEMA]
     }).compileComponents();
 
     fixture = TestBed.createComponent(AreaChartComponent);
     component = fixture.componentInstance;
     numberFormatterService = TestBed.inject(NumberFormatterService);
-    datePipe = TestBed.inject(DatePipe);
   });
 
   it('should mount', () => {
@@ -133,18 +123,23 @@ describe('AreaChartComponent', () => {
     expect(component.chartOptions?.tooltip?.enabled).toBe(true);
   });
 
-  it('should format tooltip with custom date format', () => {
+  it('should format tooltip: Time label and Carbon time axis format', () => {
     const testDate = new Date('2024-01-01T12:30:45Z');
-    const formattedDate = '01 Jan, 12:30:45';
-    const defaultHTML = '<div><p class="value">2024-01-01T12:30:45Z</p></div>';
+    const defaultHTML =
+      '<ul class="multi-tooltip"><li><div class="datapoint-tooltip">' +
+      '<div class="label"><p>x-value</p></div><p class="value">ignored</p></div></li></ul>';
 
-    (datePipe.transform as jest.Mock).mockReturnValue(formattedDate);
+    component.rawData = mockData;
+    component.chartOptions = {
+      axes: { bottom: { ticks: { number: 4 } } }
+    } as any;
 
     const result = component.formatChartTooltip(defaultHTML, [{ date: testDate }]);
 
-    expect(datePipe.transform).toHaveBeenCalledWith(testDate, 'dd MMM, HH:mm:ss');
-    expect(result).toContain(formattedDate);
-    expect(result).not.toContain('2024-01-01T12:30:45Z');
+    expect(result).toContain('<p>Time</p>');
+    expect(result).not.toContain('x-value');
+    expect(result).toMatch(/<p class="value">[^<]+<\/p>/);
+    expect(result).not.toContain('ignored');
   });
 
   it('should return default HTML if tooltip data is empty', () => {

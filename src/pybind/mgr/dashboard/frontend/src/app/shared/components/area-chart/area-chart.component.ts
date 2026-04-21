@@ -13,11 +13,18 @@ import {
   ChartTabularData,
   ToolbarControlTypes,
   ScaleTypes,
-  ChartsModule
+  ChartsModule,
+  TickRotations
 } from '@carbon/charts-angular';
+import {
+  computeTimeIntervalName,
+  formatTick,
+  options as carbonChartPresets,
+  timeScale as carbonTimeScaleDefaults,
+  TimeIntervalFormats
+} from '@carbon/charts';
 import merge from 'lodash.merge';
 import { NumberFormatterService } from '../../services/number-formatter.service';
-import { DatePipe } from '@angular/common';
 import { ChartPoint } from '../../models/area-chart-point';
 import {
   DECIMAL,
@@ -26,6 +33,8 @@ import {
   getDivisor,
   getLabels
 } from '../../helpers/unit-format-utils';
+
+const DEFAULT_TICKS_COUNT = 4;
 
 @Component({
   selector: 'cd-area-chart',
@@ -59,7 +68,6 @@ export class AreaChartComponent implements OnChanges {
 
   private cdr = inject(ChangeDetectorRef);
   private numberFormatter: NumberFormatterService = inject(NumberFormatterService);
-  private datePipe = inject(DatePipe);
   private lastEmittedRawValues?: Record<string, number>;
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -94,7 +102,12 @@ export class AreaChartComponent implements OnChanges {
 
     // Merge base and custom chart options
     const defaultOptions = this.getChartOptions(max, labels, divisor);
-    this.chartOptions = merge({}, defaultOptions, this.customOptions || {});
+    this.chartOptions = merge(
+      {},
+      { timeScale: merge({}, carbonTimeScaleDefaults) },
+      defaultOptions,
+      this.customOptions || {}
+    );
     this.cdr.detectChanges();
   }
 
@@ -129,7 +142,21 @@ export class AreaChartComponent implements OnChanges {
     this.lastEmittedRawValues = { ...latestEntry.values };
   }
 
+  // Calculate time span in seconds from raw data timestamps
+  private getTimeSpanInSeconds(): number {
+    if (!this.rawData || this.rawData.length < 2) {
+      return 0;
+    }
+    const firstTimestamp = new Date(this.rawData[0].timestamp).getTime();
+    const lastTimestamp = new Date(this.rawData[this.rawData.length - 1].timestamp).getTime();
+    return (lastTimestamp - firstTimestamp) / 1000;
+  }
+
   private getChartOptions(max: number, labels: string[], divisor: number): AreaChartOptions {
+    // Check if time span is approximately 5 minutes (300 seconds ± 30 seconds tolerance)
+    const timeSpan = this.getTimeSpanInSeconds();
+    const isFiveMinuteSpan = timeSpan > 0 && timeSpan >= 270 && timeSpan <= 330;
+
     return {
       legend: {
         enabled: this.legendEnabled
@@ -139,8 +166,8 @@ export class AreaChartComponent implements OnChanges {
           mapsTo: 'date',
           scaleType: ScaleTypes.TIME,
           ticks: {
-            number: 4,
-            rotateIfSmallerThan: 0
+            number: DEFAULT_TICKS_COUNT,
+            rotation: isFiveMinuteSpan ? TickRotations.ALWAYS : TickRotations.AUTO
           }
         },
         left: {
@@ -161,8 +188,14 @@ export class AreaChartComponent implements OnChanges {
       tooltip: {
         enabled: true,
         showTotal: false,
-        valueFormatter: (value: number): string =>
-          (this.formatValueForChart(value, labels, divisor, this.decimals) || value).toString(),
+        valueFormatter: (value: number | Date): string => {
+          if (value instanceof Date) {
+            return value.toString();
+          }
+          return (
+            this.formatValueForChart(value, labels, divisor, this.decimals) || value
+          ).toString();
+        },
         customHTML: (data, defaultHTML) => this.formatChartTooltip(defaultHTML, data)
       },
       points: {
@@ -193,15 +226,42 @@ export class AreaChartComponent implements OnChanges {
     };
   }
 
-  // Custom tooltip formatter to replace default timestamp with a formatted one.
+  // Tooltip: use "Time" instead of Carbon's default "x-value", and format the
+  // timestamp with the same rules as the chart's time axis (formatTick).
   formatChartTooltip(defaultHTML: string, data: { date: Date }[]): string {
     if (!data?.length) return defaultHTML;
 
-    const formattedTime = this.datePipe.transform(data[0].date, 'dd MMM, HH:mm:ss');
-    return defaultHTML.replace(
-      /<p class="value">.*?<\/p>/,
-      `<p class="value">${formattedTime}</p>`
+    const timeMs = new Date(data[0].date).getTime();
+    const tickCount = this.chartOptions?.axes?.bottom?.ticks?.number ?? DEFAULT_TICKS_COUNT;
+    const tickStops = this.getTimeAxisTickStops(tickCount);
+    const timeScaleOpts = merge({}, carbonTimeScaleDefaults, this.chartOptions?.timeScale ?? {});
+    const interval = computeTimeIntervalName(
+      tickStops,
+      timeScaleOpts.timeInterval as keyof TimeIntervalFormats | undefined
     );
+    const tickIndex = tickStops.reduce(
+      (bestI, t, i, arr) => (Math.abs(t - timeMs) < Math.abs(arr[bestI] - timeMs) ? i : bestI),
+      0
+    );
+    const locale = merge({}, carbonChartPresets.areaChart.locale, this.chartOptions?.locale ?? {});
+    const formattedTime = formatTick(timeMs, tickIndex, tickStops, interval, timeScaleOpts, locale);
+
+    return defaultHTML
+      .replace(/<p>x-value<\/p>/i, '<p>Time</p>')
+      .replace(/<p class="value">.*?<\/p>/, `<p class="value">${formattedTime}</p>`);
+  }
+
+  /** Approximate time-axis tick positions (same count as axis) for timeScale formatting. */
+  private getTimeAxisTickStops(tickCount: number): number[] {
+    if (!this.rawData?.length) return [];
+    const times = this.rawData.map((p) => new Date(p.timestamp).getTime());
+    const min = Math.min(...times);
+    const max = Math.max(...times);
+    if (max === min) {
+      return [min];
+    }
+    const tickCtn = Math.max(2, tickCount);
+    return Array.from({ length: tickCtn }, (_, i) => min + ((max - min) * i) / (tickCtn - 1));
   }
 
   // Uses number formatter service to convert chart value based on unit and divisor.
