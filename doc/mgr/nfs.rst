@@ -624,6 +624,14 @@ There are two methds for examining NFS-Ganesha logs:
     .. prompt:: bash #
 
        cephadm logs --fsid <fsid> --name nfs.mynfs.0.0.myhost.xkfzal
+   
+   Alternatively, NFS-Ganesha logs are also available on the host at:
+
+    .. prompt:: bash #
+
+      cat /var/log/ceph/<fsid>/<daemon_name>/ganesha.log
+      # Example:
+      cat /var/log/ceph/60756928-8801-4110-9511-858524800000/nfs.mynfs.0.0.myhost.xkfzal/ganesha.log
 
 #. ``rook``:
 
