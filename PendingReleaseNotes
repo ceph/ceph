@@ -267,6 +267,15 @@
   rather rigid and also challenging to disseminate in some environments.  The
   key can be embedded in the migration spec or just referenced from there while
   stored in the MON config-key store.
+* MGR: ``ceph osd perf`` now reports per-OSD latency KPIs pulled from the
+  Manager's cached perf counters: ``op_latency``, ``op_r_latency``,
+  ``op_w_latency``, ``bluestore_w_latency``, ``bluestore_r_latency`` and
+  ``kv_sync``. The old ``commit_latency_ms`` and ``apply_latency_ms`` columns
+  (and their JSON keys, including the ``*_ns`` variants) are gone from this
+  command. On BlueStore both always reported the same number, so they were
+  redundant. Prometheus and the Dashboard read ``os_perf_stat`` from the PG map
+  directly rather than from this CLI, so ``ceph_osd_commit_latency_ms``,
+  ``ceph_osd_apply_latency_ms`` and the matching Grafana panels keep working.
 
 >=20.0.0
 
