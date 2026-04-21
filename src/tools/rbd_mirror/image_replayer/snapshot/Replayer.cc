@@ -516,12 +516,8 @@ void Replayer<I>::scan_local_mirror_snapshots(
         // if remote has new snapshots, we would sync from here
         m_local_snap_id_start = local_snap_id;
         ceph_assert(m_local_snap_id_end == CEPH_NOSNAP);
-
-        if (mirror_ns->mirror_peer_uuids.empty()) {
-          // no other peer will attempt to sync to this snapshot so store as
-          // a candidate for removal
-          prune_snap_ids.insert(local_snap_id);
-        }
+        // Mark snapshot as candidate for removal as no other peer will sync to it
+        prune_snap_ids.insert(local_snap_id);
       } else if (mirror_ns->last_copied_object_number == 0 &&
                  m_local_snap_id_start > 0) {
         // snapshot might be missing image state, object-map, etc, so just
