@@ -517,8 +517,11 @@ void Replayer<I>::scan_local_mirror_snapshots(
         // if remote has new snapshots, we would sync from here
         m_local_snap_id_start = local_snap_id;
         ceph_assert(m_local_snap_id_end == CEPH_NOSNAP);
-
-        if (mirror_ns->mirror_peer_uuids.empty()) {
+        const auto& peer_uuids = mirror_ns->mirror_peer_uuids;
+        if (peer_uuids.empty() ||
+            (mirror_ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED &&
+             peer_uuids.size() == 1 &&
+             peer_uuids.count(m_local_mirror_peer_uuid) == 1)) {
           // no other peer will attempt to sync to this snapshot so store as
           // a candidate for removal
           prune_snap_ids.insert(local_snap_id);
