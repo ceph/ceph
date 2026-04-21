@@ -3368,6 +3368,19 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_crypt_kmip_worker_threads
+  type: int
+  level: advanced
+  desc: parallel KMIP client worker threads for SSE-S3 (each runs its own connection pool)
+  long_desc: >
+    Requests are queued and processed concurrently up to this many workers.
+    Each worker may open one or more TLS sessions to the KMIP server; size this
+    for KMIP server limits and RGW load. Minimum 1, maximum 32.
+  default: 1
+  min: 1
+  max: 32
+  services:
+  - rgw
 - name: rgw_crypt_suppress_logs
   type: bool
   level: advanced
