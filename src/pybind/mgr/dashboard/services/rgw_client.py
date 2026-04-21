@@ -2484,12 +2484,14 @@ class RgwMultisite:
         if tier_type is not None:
             rgw_zone_modify_cmd.append('--tier-type')
             rgw_zone_modify_cmd.append(tier_type)
-        if sync_from is not None:
-            rgw_zone_modify_cmd.append('--sync-from')
-            rgw_zone_modify_cmd.append(sync_from)
         if sync_from_all is not None:
             rgw_zone_modify_cmd.append('--sync-from-all')
             rgw_zone_modify_cmd.append(str(sync_from_all).lower())
+        if sync_from is not None:
+            sync_from_all_enabled = (
+                sync_from_all is not None and str(sync_from_all).lower() == 'true')
+            sync_from_option = '--sync-from-rm' if sync_from_all_enabled else '--sync-from'
+            rgw_zone_modify_cmd.extend([sync_from_option, sync_from])
         try:
             exit_code, _, err = mgr.send_rgwadmin_command(rgw_zone_modify_cmd)
             if exit_code > 0:
