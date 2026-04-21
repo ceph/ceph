@@ -18,17 +18,15 @@ RGWKMIPManager *rgw_kmip_manager;
 int
 RGWKMIPTransceiver::wait(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  if (done)
-    return ret;
-
-  // TODO: when given a coroutine yield context, suspend instead of blocking
-  maybe_warn_about_blocking(dpp);
-
   std::unique_lock l{lock};
-  if (!done)
-    cond.wait(l);
+  if (!done) {
+    // TODO: when given a coroutine yield context, suspend instead of blocking
+    maybe_warn_about_blocking(dpp);
+    cond.wait(l, [this] { return done; });
+  }
+
   if (ret) {
-    lderr(cct) << "kmip process failed, " << ret << dendl;
+    lderr(cct) << "kmip_worker[" << worker_id << "] process failed, " << ret << dendl;
   }
   return ret;
 }
