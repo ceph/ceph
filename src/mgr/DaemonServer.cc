@@ -16,6 +16,7 @@
 #include "DaemonState.h"
 #include "Mgr.h"
 #include "MgrSession.h"
+#include "PerfCounterInstance.h"
 
 #include "include/stringify.h"
 #include "include/str_list.h"
@@ -54,8 +55,12 @@
 
 #include <iomanip>
 
+#include <algorithm>
+#include <array>
 #include <list>
 #include <map>
+#include <optional>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -2042,6 +2047,152 @@ bool DaemonServer::_handle_command(
 			      &on_finish->from_mon, &on_finish->outs, on_finish);
       return true;
     }
+  } else if (prefix == "osd perf") {
+    // Per-OSD latency KPIs pulled from the mgr's cached perf counters.
+    // Crimson OSDs use seastar metrics rather than PerfCounters, so the
+    // paths below won't be present in their daemon_state; the plain-text
+    // table omits a column entirely if no OSD has data for it, and the
+    // JSON output skips missing fields per-OSD.
+    //
+    // The previous commit/apply latency columns were dropped from the
+    // plain-text table. The JSON output still carries the legacy
+    // commit_latency_ms/apply_latency_ms (and *_ns) keys for scripts that
+    // parse them; they are deprecated and will be removed in a later
+    // release. Prometheus and the dashboard read
+    // pg_map.osd_stat.os_perf_stat directly, not the CLI.
+    struct extra_col {
+      const char* path;        // mgr perf counter path
+      const char* json_field;  // JSON key
+      const char* column;      // plain-table column header
+    };
+    static const std::array<extra_col, 6> extra = {{
+      {"osd.op_latency",         "op_latency_ms",          "op_latency(ms)"},
+      {"osd.op_r_latency",       "op_r_latency_ms",        "op_r_latency(ms)"},
+      {"osd.op_w_latency",       "op_w_latency_ms",        "op_w_latency(ms)"},
+      {"bluestore.write_lat",    "bluestore_w_latency_ms", "bluestore_w_latency(ms)"},
+      {"bluestore.read_lat",     "bluestore_r_latency_ms", "bluestore_r_latency(ms)"},
+      {"bluestore.kv_sync_lat",  "kv_sync_latency_ms",     "kv_sync_latency(ms)"},
+    }};
+    using perf_row_t = std::array<std::optional<uint64_t>, extra.size()>;
+
+    // Bound the per-op avg walk-back so a long idle stretch can't drag
+    // a stale "busy" reference point into the displayed value.
+    const utime_t avg_max_age{60, 0};
+
+    // Fetch the OSD's DaemonState once and read every column under a
+    // single hold of its lock.
+    auto lookup_row = [this, &avg_max_age](int osd_id) {
+      perf_row_t row;
+      auto daemon = daemon_state.get(DaemonKey{"osd", std::to_string(osd_id)});
+      if (!daemon) {
+        return row;
+      }
+      std::lock_guard l(daemon->lock);
+      for (size_t i = 0; i < extra.size(); ++i) {
+        auto it = daemon->perf_counters.instances.find(extra[i].path);
+        if (it != daemon->perf_counters.instances.end()) {
+          row[i] = it->second.get_current_avg(avg_max_age);
+        }
+      }
+      return row;
+    };
+
+    // Render a nanosecond latency as milliseconds. >=1 ms is integer
+    // milliseconds; sub-millisecond shows three decimals so fast
+    // storage does not render as "0".
+    auto format_ms = [](uint64_t ns) -> std::string {
+      if (ns >= 1000000ULL) {
+        return std::to_string(ns / 1000000ULL);
+      }
+      std::ostringstream oss;
+      oss << std::fixed << std::setprecision(3) << (ns / 1000000.0);
+      return oss.str();
+    };
+
+    // Copy the OSD list (and the legacy os_perf_stat for the JSON
+    // output) out of pg_map under its lock; do all perf-counter lookups
+    // + formatting outside so daemon->lock is never acquired while
+    // pg_map's lock is held. osd_stat is unordered, so sort by id.
+    std::vector<std::pair<int, objectstore_perf_stat_t>> osds;
+    r = cluster_state.with_pgmap([&](const PGMap& pg_map) {
+      osds.reserve(pg_map.osd_stat.size());
+      for (const auto& [osd_id, stat] : pg_map.osd_stat) {
+        osds.emplace_back(osd_id, stat.os_perf_stat);
+      }
+      return 0;
+    });
+    std::sort(osds.begin(), osds.end(),
+              [](const auto& a, const auto& b) { return a.first < b.first; });
+
+    if (f) {
+      f->open_object_section("osdstats");
+      f->open_array_section("osd_perf_infos");
+      for (const auto& [osd_id, os_perf_stat] : osds) {
+        f->open_object_section("osd");
+        f->dump_int("id", osd_id);
+        f->open_object_section("perf_stats");
+        // Deprecated legacy keys, kept for one release.
+        os_perf_stat.dump(f.get());
+        const auto row = lookup_row(osd_id);
+        for (size_t i = 0; i < extra.size(); ++i) {
+          if (row[i]) {
+            // Three decimals keeps the JSON compact and matches the
+            // plain-text table; double precision would leak
+            // "0.056222000000000001"-style noise via
+            // JSONFormatter::dump_float.
+            f->dump_format_unquoted(extra[i].json_field, "%.3f",
+                                    *row[i] / 1000000.0);
+          }
+        }
+        f->close_section();
+        f->close_section();
+      }
+      f->close_section();
+      f->close_section();
+      f->flush(cmdctx->odata);
+    } else {
+      // First pass: record which columns have data for any OSD. Drop
+      // columns with nothing to report (typical on pure-crimson
+      // clusters) so the table isn't padded with `-` placeholders.
+      std::vector<perf_row_t> rows;
+      rows.reserve(osds.size());
+      std::array<bool, extra.size()> has_data{};
+      for (const auto& [osd_id, _] : osds) {
+        rows.push_back(lookup_row(osd_id));
+        for (size_t i = 0; i < extra.size(); ++i) {
+          if (rows.back()[i]) {
+            has_data[i] = true;
+          }
+        }
+      }
+
+      TextTable tab;
+      tab.define_column("osd", TextTable::LEFT, TextTable::RIGHT);
+      for (size_t i = 0; i < extra.size(); ++i) {
+        if (has_data[i]) {
+          tab.define_column(extra[i].column, TextTable::LEFT, TextTable::RIGHT);
+        }
+      }
+      for (size_t row_idx = 0; row_idx < osds.size(); ++row_idx) {
+        tab << osds[row_idx].first;
+        for (size_t i = 0; i < extra.size(); ++i) {
+          if (!has_data[i]) {
+            continue;
+          }
+          if (rows[row_idx][i]) {
+            tab << format_ms(*rows[row_idx][i]);
+          } else {
+            tab << "-";
+          }
+        }
+        tab << TextTable::endrow;
+      }
+      std::ostringstream os;
+      os << tab;
+      cmdctx->odata.append(os.str());
+    }
+    cmdctx->reply(r, ss);
+    return true;
   } else if (prefix == "osd df") {
     string method, filter;
     cmd_getval(cmdctx->cmdmap, "output_method", method);
