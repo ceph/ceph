@@ -6,6 +6,9 @@
 #include <mutex>
 #include <string.h>
 
+#include <sys/socket.h>
+#include <sys/time.h>
+
 #include "include/compat.h"
 #include "common/errno.h"
 #include "rgw_common.h"
@@ -24,6 +27,21 @@ extern "C" {
 #define dout_subsys ceph_subsys_rgw
 
 static enum kmip_version protocol_version = KMIP_1_0;
+
+static void kmip_bio_set_socket_io_timeout(BIO *bio, int seconds)
+{
+  if (!bio || seconds <= 0) {
+    return;
+  }
+  const int fd = BIO_get_fd(bio, nullptr);
+  if (fd < 0) {
+    return;
+  }
+  struct timeval tv = {};
+  tv.tv_sec = seconds;
+  (void)setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+  (void)setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+}
 
 struct RGWKmipHandle {
   int uses;
@@ -222,6 +240,16 @@ RGWKmipHandleBuilder::build() const
       << ":" << portstring << dendl;
     ERR_print_errors_ceph(cct);
     goto Done;
+  }
+
+  {
+    int64_t sec = cct->_conf->rgw_crypt_kmip_socket_io_timeout_sec;
+    if (sec < 0) {
+      sec = 0;
+    } else if (sec > 300) {
+      sec = 300;
+    }
+    kmip_bio_set_socket_io_timeout(r->bio, static_cast<int>(sec));
   }
 
   // setup kmip
