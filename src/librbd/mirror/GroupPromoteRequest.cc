@@ -30,12 +30,6 @@
 namespace librbd {
 namespace mirror {
 
-namespace {
-
-const uint32_t MAX_RETURN = 1024;
-
-} // anonymous namespace
-
 using util::create_context_callback;
 using util::create_rados_callback;
 
@@ -533,58 +527,48 @@ void GroupPromoteRequest<I>::handle_acquire_exclusive_locks(int r) {
   if (!m_need_rollback) {
     ldout(m_cct, 10) << "no rollback required" << dendl;
     create_primary_group_snapshot();
-  } else {
-    // current membership
-    std::vector<cls::rbd::GroupImageSpec> current_membership;
-    for (const auto& image : m_images) {
-      current_membership.push_back(image.spec);
-    }
-
-    // rollback membership
-    auto* rollback_snap = &m_rollback_group_snap;
-    std::vector<cls::rbd::GroupImageSpec> rollback_membership;
-    for (auto& it : rollback_snap->snaps) {
-      rollback_membership.emplace_back(it.image_id, it.pool);
-    }
-
-    if (rollback_membership != current_membership) {
-      ldout(m_cct, 10) << "rollback group snapshot membership with snap id: "
-                       << rollback_snap->id
-                       << ", does not match current group membership"
-                       << dendl;
-      fix_group_membership(current_membership, rollback_membership);
-      return;
-    }
-    rollback();
+    return;
   }
-}
 
-template <typename I>
-void GroupPromoteRequest<I>::fix_group_membership(
-    std::vector<cls::rbd::GroupImageSpec>& current_membership,
-    std::vector<cls::rbd::GroupImageSpec>& rollback_membership) {
-  ldout(m_cct, 10) << dendl;
+  // current membership
+  std::vector<cls::rbd::GroupImageSpec> current_membership;
+  for (const auto& image : m_images) {
+    current_membership.push_back(image.spec);
+  }
 
-  m_to_add.clear();
-  m_to_remove.clear();
+  // rollback membership
+  auto* rollback_snap = &m_rollback_group_snap;
+  std::vector<cls::rbd::GroupImageSpec> rollback_membership;
+  for (auto& it : rollback_snap->snaps) {
+    rollback_membership.emplace_back(it.image_id, it.pool);
+  }
+
+  if (rollback_membership == current_membership) {
+    rollback();
+    return;
+  }
+
+  ldout(m_cct, 10) << "rollback group snapshot membership with snap id: "
+                   << rollback_snap->id
+                   << ", does not match current group membership"
+                   << dendl;
 
   std::set<std::pair<std::string, int64_t>> current_set;
   std::set<std::pair<std::string, int64_t>> rollback_set;
-
   for (auto& img : current_membership) {
     current_set.insert({img.image_id, img.pool_id});
   }
-
   for (auto& img : rollback_membership) {
     rollback_set.insert({img.image_id, img.pool_id});
   }
 
+  m_to_add.clear();
+  m_to_remove.clear();
   for (auto& img : rollback_membership) {
     if (!current_set.count({img.image_id, img.pool_id})) {
       m_to_add.push_back(img);
     }
   }
-
   for (auto& img : current_membership) {
     if (!rollback_set.count({img.image_id, img.pool_id})) {
       m_to_remove.push_back(img);
@@ -594,7 +578,6 @@ void GroupPromoteRequest<I>::fix_group_membership(
   ldout(m_cct, 10) << "fixing group membership, "
                    << "to_add=" << m_to_add.size()
                    << ", to_remove=" << m_to_remove.size() << dendl;
-
   if (!m_to_add.empty()) {
     lderr(m_cct) << "rollback requires adding images to group, but dynamic "
                  << "group removal is not supported today" << dendl;
@@ -602,8 +585,7 @@ void GroupPromoteRequest<I>::fix_group_membership(
     release_exclusive_locks();
     return;
   }
-
-  if (!m_to_remove.empty() && m_to_remove.size() > 1) {
+  if (m_to_remove.size() > 1) {
     lderr(m_cct) << "rollback requires more than one image to be removed from "
                  << "the group, this is not supported today" << dendl;
     m_ret_val = -EINVAL;
@@ -667,54 +649,22 @@ void GroupPromoteRequest<I>::handle_remove_images_from_group(int r) {
     }
   }
 
-  m_images.clear();
-  list_group_images();
-}
+  // Remove from m_images
+  for (auto& spec : m_to_remove) {
+    auto it = std::remove_if(
+        m_images.begin(), m_images.end(),
+        [&](const cls::rbd::GroupImageStatus& image) {
+          return image.spec.image_id == spec.image_id &&
+                 image.spec.pool_id == spec.pool_id;
+        });
 
-template <typename I>
-void GroupPromoteRequest<I>::list_group_images() {
-  ldout(m_cct, 10) << dendl;
-
-  librados::ObjectReadOperation op;
-  cls_client::group_image_list_start(&op, m_start_after, MAX_RETURN);
-
-  auto comp = create_rados_callback<
-    GroupPromoteRequest<I>,
-    &GroupPromoteRequest<I>::handle_list_group_images>(this);
-
-  m_out_bl.clear();
-  int r = m_group_ioctx.aio_operate(
-    librbd::util::group_header_name(m_group_id), comp, &op, &m_out_bl);
-  ceph_assert(r == 0);
-  comp->release();
-}
-
-template <typename I>
-void GroupPromoteRequest<I>::handle_list_group_images(int r) {
-  ldout(m_cct, 10) << "r=" << r << dendl;
-
-  std::vector<cls::rbd::GroupImageStatus> images;
-  if (r == 0) {
-    auto iter = m_out_bl.cbegin();
-    r = cls_client::group_image_list_finish(&iter, &images);
+    if (it != m_images.end()) {
+      m_images.erase(it, m_images.end());
+    }
   }
 
-  if (r < 0) {
-    lderr(m_cct) << "group_id=" << m_group_id
-                 << " error listing images in group: "
-                 << cpp_strerror(r) << dendl;
-    m_ret_val = r;
-    release_exclusive_locks();
-    return;
-  }
-
-  auto image_count = images.size();
-  m_images.insert(m_images.end(), images.begin(), images.end());
-  if (image_count == MAX_RETURN) {
-    m_start_after = images.rbegin()->spec;
-    list_group_images();
-    return;
- }
+  ldout(m_cct, 10) << "updated membership: "
+                   << "remaining images=" << m_images.size() << dendl;
 
   rollback();
 }
