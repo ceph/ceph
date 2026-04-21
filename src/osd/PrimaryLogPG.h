@@ -1416,6 +1416,7 @@ protected:
 
   void update_range(
     PoolMigrationInterval *pmi,
+    hobject_t watermark,
     HBHandle *handle
     );
 
