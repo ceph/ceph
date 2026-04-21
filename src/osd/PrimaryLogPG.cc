@@ -13424,11 +13424,7 @@ std::optional<hobject_t> PrimaryLogPG::consider_updating_migration_watermark(std
   if (deleted.contains(pool_migration_watermark)) {
     hobject_t current(pool_migration_watermark);
     do {
-      if (pool_migration_info.is_end(current)) {
-        // Would it make sense to call objects_list_partial for the next object in this (rare) case?
-        dout(20) << __func__ << " end of interval reached (" << current <<  "), rescan required" << dendl;
-        break;
-      }
+      update_range(&pool_migration_info, pool_migration_watermark, nullptr);
       dout(20) << __func__ << " deleting object " << current << dendl;
       current = next_pool_migration(current);
     } while (deleted.contains(current));
@@ -14928,6 +14924,7 @@ void PrimaryLogPG::update_range(
 
 void PrimaryLogPG::update_range(
   PoolMigrationInterval *pmi,
+  hobject_t watermark,
   HBHandle *handle)
 {
   int local_min = cct->_conf->osd_backfill_scan_min;
@@ -14937,6 +14934,9 @@ void PrimaryLogPG::update_range(
     dout(10) << __func__<< ": pmi is old, rescanning local pool_migration_info" << dendl;
     pmi->clear();
     pmi->version = info.last_update;
+    scan_range_migration(local_min, local_max, pmi, handle);
+  } else if (watermark >= pmi->end || pmi->empty()) {
+    dout(10) << __func__ << " no migration targets in pmi, rescanning" << dendl;
     scan_range_migration(local_min, local_max, pmi, handle);
   }
 
@@ -15117,7 +15117,9 @@ void PrimaryLogPG::scan_range_migration(
   dout(20) << ls << dendl;
 
   for (vector<hobject_t>::iterator p = ls.begin(); p != ls.end(); ++p) {
-    handle->reset_tp_timeout();
+    if (handle) {
+      handle->reset_tp_timeout();
+    }
 
     eversion_t version;
     ObjectContextRef obc = object_contexts.lookup(*p);
@@ -15579,16 +15581,8 @@ uint64_t PrimaryLogPG::recover_pool_migration(
     *work_started = true;
 
     // Process log updates and ensure our interval is populated
-    update_range(&pool_migration_info, &handle);
-    if (last_pool_migration_started >= pool_migration_info.end || pool_migration_info.empty()) {
-      dout(20) << __func__ << " no migration targets in interval, trying rescan" << dendl;
-      scan_range_migration(
-              cct->_conf->osd_backfill_scan_min,
-              cct->_conf->osd_backfill_scan_max,
-              &pool_migration_info,
-              &handle);
-    }
     hobject_t soid = last_pool_migration_started;
+    update_range(&pool_migration_info, soid, &handle);
 
     // TODO Jamie - we can't call get_object_context if soid is min
     if (soid.is_min()) {
