@@ -1,5 +1,6 @@
 from typing import Dict, List
 from textwrap import dedent
+import errno
 import json
 import urllib.parse
 import yaml
@@ -1811,3 +1812,66 @@ spec:
                         error_ok=True,
                         use_current_daemon_image=False,
                     )
+
+    @patch("cephadm.services.monitoring.PrometheusService.get_dependencies", lambda *a, **k: [])
+    def test_prometheus_config_sets_default_when_missing(self, cephadm_module):
+
+        svc = PrometheusService(cephadm_module)
+
+        daemon_spec = Mock()
+        daemon_spec.daemon_type = 'prometheus'
+        daemon_spec.service_name = 'prometheus'
+        daemon_spec.host = 'test'
+
+        cephadm_module.get_store = Mock(return_value=None)
+        cephadm_module.set_store = Mock()
+
+        loader = Mock()
+        loader.get_source.return_value = ("raw_template_content", None, None)
+        cephadm_module.template.engine.env.loader = loader
+
+        cephadm_module.template.render = Mock(return_value="rendered_config")
+
+        cephadm_module._get_security_config = Mock(return_value=(False, False, False))
+        cephadm_module._get_alertmanager_credentials = Mock(return_value=(None, None))
+        cephadm_module._get_mgr_ips = Mock(return_value=['127.0.0.1'])
+
+        cephadm_module.spec_store = {
+            'prometheus': Mock()
+        }
+        cephadm_module.spec_store['prometheus'].spec = PrometheusSpec('prometheus')
+
+        svc.generate_config(daemon_spec)
+
+        cephadm_module.set_store.assert_called_once_with(
+            'services/prometheus/prometheus.yml',
+            "raw_template_content"
+        )
+
+    @patch("cephadm.services.monitoring.PrometheusService.get_dependencies", lambda *a, **k: [])
+    def test_prometheus_config_does_not_override_existing(self, cephadm_module):
+
+        svc = PrometheusService(cephadm_module)
+
+        daemon_spec = Mock()
+        daemon_spec.daemon_type = 'prometheus'
+        daemon_spec.service_name = 'prometheus'
+        daemon_spec.host = 'test'
+
+        cephadm_module.get_store = Mock(return_value="existing")
+        cephadm_module.set_store = Mock()
+
+        cephadm_module.template.render = Mock(return_value="rendered_config")
+
+        cephadm_module._get_security_config = Mock(return_value=(False, False, False))
+        cephadm_module._get_alertmanager_credentials = Mock(return_value=(None, None))
+        cephadm_module._get_mgr_ips = Mock(return_value=['127.0.0.1'])
+
+        cephadm_module.spec_store = {
+            'prometheus': Mock()
+        }
+        cephadm_module.spec_store['prometheus'].spec = PrometheusSpec('prometheus')
+
+        svc.generate_config(daemon_spec)
+
+        cephadm_module.set_store.assert_not_called()
