@@ -7417,6 +7417,13 @@ int BlueStore::_init_alloc()
     }
     if (restore_allocator(alloc, &num, &bytes) == 0) {
       dout(5) << __func__ << "::NCB::restore_allocator() completed successfully alloc=" << alloc << dendl;
+      if (before_expansion_bdev_size > 0 &&
+          before_expansion_bdev_size < bdev_label.size) {
+        // we grow the allocation range, must reflect it in the allocation file
+        alloc->init_add_free(before_expansion_bdev_size,
+                             bdev_label.size - before_expansion_bdev_size);
+        need_to_destage_allocation_file = true;
+      }
     } else {
       // This must mean that we had an unplanned shutdown and didn't manage to destage the allocator
       dout(0) << __func__ << "::NCB::restore_allocator() failed! Run Full Recovery from ONodes (might take a while) ..." << dendl;
@@ -7427,13 +7434,6 @@ int BlueStore::_init_alloc()
 	derr << __func__ << "::NCB::If no HW fault is found, please report failure and consider redeploying OSD" << dendl;
 	return -ENOTRECOVERABLE;
       }
-    }
-    if (before_expansion_bdev_size > 0 &&
-        before_expansion_bdev_size < bdev_label.size) {
-      // we grow the allocation range, must reflect it in the allocation file
-      alloc->init_add_free(before_expansion_bdev_size,
-                           bdev_label.size - before_expansion_bdev_size);
-      need_to_destage_allocation_file = true;    
     }
   }
   before_expansion_bdev_size = 0;
