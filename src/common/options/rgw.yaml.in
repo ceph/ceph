@@ -3354,6 +3354,20 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_crypt_kmip_socket_io_timeout_sec
+  type: int
+  level: advanced
+  desc: KMIP TLS per-socket read/write timeout (SO_RCVTIMEO/SO_SNDTIMEO), seconds
+  long_desc: >
+    Applied after TCP+TLS connect on the BIO used for KMIP. Limits how long
+    each socket recv/send may block. Use 0 to disable (falls back to the
+    kernel TCP retransmit timeout). Does not bound total KMIP request time by itself.
+  default: 300
+  min: 0
+  max: 300
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_crypt_suppress_logs
   type: bool
   level: advanced
