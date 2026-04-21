@@ -375,7 +375,6 @@ public:
                              const utime_t ts,
                              const int64_t pool,
                              const pool_stat_t& old_pool_sum);
-  std::vector<std::pair<int32_t, osd_stat_t>> get_sorted_osd_stats() const;
 
  public:
 
@@ -511,9 +510,6 @@ public:
   void dump_osd_stats(std::ostream& ss) const;
   void dump_osd_sum_stats(std::ostream& ss) const;
   void dump_filtered_pg_stats(std::ostream& ss, std::set<pg_t>& pgs) const;
-
-  void dump_osd_perf_stats(ceph::Formatter *f) const;
-  void print_osd_perf_stats(std::ostream *ss) const;
 
   void dump_osd_blocked_by_stats(ceph::Formatter *f) const;
   void print_osd_blocked_by_stats(std::ostream *ss) const;

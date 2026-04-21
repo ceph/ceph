@@ -79,6 +79,13 @@ add_ceph_unittest(unittest_mgr_ttlcache)
 target_link_libraries(unittest_mgr_ttlcache ceph-common
   Python3::Python ${CMAKE_DL_LIBS} ${GSSAPI_LIBRARIES})
 
+# unittest_mgr_perf_counter_instance
+add_executable(unittest_mgr_perf_counter_instance
+  test_perf_counter_instance.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/PerfCounterInstance.cc)
+add_ceph_unittest(unittest_mgr_perf_counter_instance)
+target_link_libraries(unittest_mgr_perf_counter_instance ceph-common)
+
 #scripts
 if(WITH_MGR_DASHBOARD_FRONTEND)
   if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
