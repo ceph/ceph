@@ -1694,7 +1694,9 @@ int PeerReplayer::SnapDiffSync::get_changed_blocks(const std::string &epath,
   dout(20) << ": dir_root=" << m_dir_root << ", epath=" << epath
            << ", sync_check=" << sync_check << dendl;
 
-  if (!sync_check || stx.stx_size <= m_peer_replayer.blockdiff_min_file_size) {
+  if (!sync_check ||
+      stx.stx_size <= m_peer_replayer.blockdiff_min_file_size ||
+      !is_blockdiff_supported()) {
     return SyncMechanism::get_changed_blocks(epath, stx, sync_check, callback);
   }
 
@@ -1702,6 +1704,12 @@ int PeerReplayer::SnapDiffSync::get_changed_blocks(const std::string &epath,
   int r = ceph_file_blockdiff_init(m_local, m_dir_root.c_str(), epath.c_str(),
                                    (*m_prev).first.c_str(), m_current.first.c_str(), &info);
   if (r != 0 && r != -ENOENT) {
+    if (r == -EINVAL) {
+      dout(5) << ": failed to init file blockdiff: r=" << r
+              << " blockdiff not supported, use full copy" << dendl;
+      set_blockdiff_supported(false);
+      return SyncMechanism::get_changed_blocks(epath, stx, sync_check, callback);
+    }
     derr << ": failed to init file blockdiff: r=" << r << dendl;
     return r;
   }
