@@ -8555,6 +8555,17 @@ int OSDMonitor::prepare_new_pool(string& name,
   }
 
   if (source_pool_id) {
+  // Check if there are any previous migration sources pointing to the current migration source
+  // If there is change its migration_target value to point to the current migration target
+  for (auto& [pool_id, pool_ptr] : osdmap.get_pools()) {
+    if (pool_ptr.migration_target == source_pool_id.value()) {
+      pg_pool_t *temp_pool = pending_inc.get_new_pool(pool_id, &pool_ptr);
+      temp_pool->migration_target = pool;
+      dout(10) << "Updating transitive migration pointer: pool " << pool_id
+                << " now points to " << pool << " (was " << source_pool_id.value() << ")" << dendl;
+    }
+  }
+
     const pg_pool_t *sp = osdmap.get_pg_pool(source_pool_id.value());
     pg_pool_t *spi = pending_inc.get_new_pool(source_pool_id.value(), sp);
 
