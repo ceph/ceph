@@ -239,7 +239,6 @@ export class RgwMultisiteWizardComponent implements OnInit {
       zoneName: new UntypedFormControl('default_zone', {
         validators: [Validators.required]
       }),
-      archive_zone: new UntypedFormControl(false, {}),
       zone_endpoints: new UntypedFormControl(null, {
         validators: [Validators.required]
       }),
@@ -387,7 +386,6 @@ export class RgwMultisiteWizardComponent implements OnInit {
         ? [].concat(values['zone_endpoints']).join(',')
         : '';
       const username = values['username'];
-      const tierType = values['archive_zone'] ? 'archive' : '';
       if (!this.isMultiClusterConfigured || this.stepsToSkip['Select cluster']) {
         this.rgwMultisiteService
           .setUpMultisiteReplication(
@@ -395,7 +393,6 @@ export class RgwMultisiteWizardComponent implements OnInit {
             zonegroupName,
             zonegroupEndpoints,
             zoneName,
-            tierType,
             zoneEndpoints,
             username
           )
@@ -425,7 +422,6 @@ export class RgwMultisiteWizardComponent implements OnInit {
             zonegroupName,
             zonegroupEndpoints,
             zoneName,
-            tierType,
             zoneEndpoints,
             username,
             cluster,
