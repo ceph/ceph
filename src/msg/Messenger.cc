@@ -10,6 +10,19 @@
 
 #include "msg/async/AsyncMessenger.h"
 
+#define dout_subsys ceph_subsys_ms
+
+const char** Messenger::get_tracked_conf_keys() const noexcept {
+  static const char* keys[] = {
+    nullptr,
+  };
+  return keys;
+}
+
+void Messenger::handle_conf_change(const ConfigProxy& conf, const std::set<std::string>& changed) {
+  ldout(cct, 2) << __func__ << ": " << changed << dendl;
+}
+
 Messenger *Messenger::create_client_messenger(CephContext *cct, std::string lname)
 {
   std::string public_msgr_type = cct->_conf->ms_public_type.empty() ? cct->_conf.get_val<std::string>("ms_type") : cct->_conf->ms_public_type;
@@ -58,6 +71,12 @@ Messenger::Messenger(CephContext *cct_, entity_name_t w)
 {
   auth_registry.refresh_config();
   comp_registry.refresh_config();
+  cct->_conf.add_observer(this);
+}
+
+Messenger::~Messenger()
+{
+  cct->_conf.remove_observer(this);
 }
 
 void Messenger::set_endpoint_addr(const entity_addr_t& a,
