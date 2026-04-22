@@ -171,8 +171,6 @@ public:
     return get_acting_recovery_backfill();
   }
 
-  bool should_send_op(pg_shard_t peer, const hobject_t &hoid) override;
-
   spg_t primary_spg_t() const override {
     return spg_t(get_info().pgid.pgid, get_primary().shard);
   }
@@ -696,7 +694,7 @@ public:
   bool get_need_up_thru() const {
     return peering_state.get_need_up_thru();
   }
-  bool should_send_op(pg_shard_t peer, const hobject_t &hoid) const;
+  bool should_send_op(pg_shard_t peer, const hobject_t &hoid) final;
   epoch_t get_same_interval_since() const {
     return get_info().history.same_interval_since;
   }
