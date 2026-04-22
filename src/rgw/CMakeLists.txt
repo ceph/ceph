@@ -32,6 +32,7 @@ function(gperf_generate input output)
 endfunction()
 
 find_package(ICU 52.0 COMPONENTS uc REQUIRED)
+find_package(CLI11 REQUIRED)
 
 set(librgw_common_srcs
   spdk/crc64.c
@@ -538,6 +539,7 @@ add_executable(radosgw-admin ${radosgw_admin_srcs})
 target_link_libraries(radosgw-admin
   legacy-option-headers
   ${rgw_libs} librados
+  CLI11::CLI11
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
