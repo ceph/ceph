@@ -144,7 +144,11 @@
 %global _find_debuginfo_dwz_opts %{nil}
 %endif
 %bcond_with sccache
+%if 0%{?rhel} && 0%{?rhel} >= 10
+%bcond_without pypkg
+%else
 %bcond_with pypkg
+%endif
 
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
 %{!?tmpfiles_create: %global tmpfiles_create systemd-tmpfiles --create}
