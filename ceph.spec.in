@@ -1251,6 +1251,9 @@ descriptions, and submitting the command to the appropriate daemon.
 Summary:	Python 3 utility libraries for Ceph
 %if 0%{?fedora} || 0%{?rhel} >= 8 || 0%{?openEuler}
 Requires:       python%{python3_pkgversion}-pyyaml
+%if %{with pypkg}
+Recommends:     python%{python3_pkgversion}-ceph-smb-ctl
+%endif
 %endif
 %if 0%{?suse_version}
 Requires:       python%{python3_pkgversion}-PyYAML
@@ -1396,6 +1399,22 @@ Group:          System/Monitoring
 %endif
 %description node-proxy
 This package provides a Ceph hardware monitoring agent.
+
+%if %{with pypkg}
+%package -n python%{python3_pkgversion}-ceph-smb-ctl
+Summary:        Ceph SMB Service Remote-Control Client
+BuildArch:      noarch
+%if 0%{?suse_version}
+Group:          System/Filesystems
+%endif
+Requires:       python%{python3_pkgversion}-ceph-common = %{_epoch_prefix}%{version}-%{release}
+Requires:       python%{python3_pkgversion}-grpcio
+Requires:       python%{python3_pkgversion}-grpcio-reflection
+%description -n python%{python3_pkgversion}-ceph-smb-ctl
+This package provides a tool to interact with Ceph's SMB Service Remote-Control
+gRPC API as a client.
+%endif
+%dnl end package python%{python3_pkgversion}-ceph-smb-ctl
 
 #################################################################################
 # common
@@ -2787,5 +2806,10 @@ exit 0
 %dir %{python3_sitelib}/ceph_node_proxy
 %{python3_sitelib}/ceph_node_proxy/*
 %{python3_sitelib}/ceph_node_proxy-*
+
+%if %{with pypkg}
+%files -n python%{python3_pkgversion}-ceph-smb-ctl
+%{_bindir}/ceph-smb-ctl
+%endif
 
 %changelog
