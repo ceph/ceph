@@ -1106,6 +1106,14 @@ This enables distributed subtree partitioning policy for the "csi" subvolume
 group. This will cause every subvolume within the group to be automatically
 pinned to one of the available ranks on the file system.
 
+.. note:: Setting pins on the default group i.e. ``_nogroup`` is allowed.
+
+Here's an example of setting pins on the default group:
+
+.. prompt:: bash #
+
+   ceph fs subvolumegroup pin <vol_name> _nogroup <pin_type> <pin_setting>
+
 Normalization and Case Sensitivity
 ----------------------------------
 
