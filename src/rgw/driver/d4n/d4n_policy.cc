@@ -49,6 +49,10 @@ static inline void redis_exec(std::shared_ptr<connection> conn,
 }
 
 int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_context& io_context, rgw::sal::Driver* _driver) {
+  cache_capacity = cacheDriver->get_current_partition_info(dpp).size;
+  eviction_watermark_bytes = cache_capacity * EVICTION_WATERMARK;
+  target_bytes = cache_capacity * TARGET_WATERMARK;
+
   response<int, int, int, int> resp;
   static auto obj_callback = [this](
           const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, const std::string& bucket_id,
@@ -154,6 +158,22 @@ int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_
   asio::co_spawn(io_context.get_executor(),
 		   redis_sync(dpp, y), asio::detached);
 
+  eviction_timer.emplace(io_context);
+  boost::asio::spawn(
+        io_context,
+        [this, dpp](boost::asio::yield_context yield) {
+          optional_yield y{yield};
+          background_eviction_worker(dpp, y);
+        },
+        [this, dpp](std::exception_ptr e) {
+          if (e) {
+            eviction_done_promise.set_exception(e);
+          } else {
+            eviction_done_promise.set_value();
+          }
+          ldpp_dout(dpp, 10) << "Background eviction co-routine stopped" << dendl;
+      }
+    );
   return 0;
 }
 
@@ -400,6 +420,101 @@ int LFUDAPolicy::exist_key(const std::string& key) {
   }
 
   return false;
+}
+
+int LFUDAPolicy::perform_background_eviction(const DoutPrefixProvider* dpp, uint64_t bytes_to_free, optional_yield y)
+{
+  uint64_t total_freed = 0;
+  int ret = 0;
+
+  // Evict in batches to avoid holding locks too long
+  while (total_freed < bytes_to_free && !quit) {
+    uint64_t before = cacheDriver->get_free_space(dpp, y);
+    uint64_t batch_size = std::min(bytes_to_free - total_freed, EVICTION_BATCH_SIZE);
+
+    // call eviction
+    ret = eviction(dpp, batch_size, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 5) << "Background eviction failed: " << ret << dendl;
+      break;
+    }
+
+    uint64_t after = cacheDriver->get_free_space(dpp, y);
+    uint64_t actually_freed = 0;
+    if (after > before) {
+      actually_freed = after - before;
+      total_freed += actually_freed;
+    }
+
+    ldpp_dout(dpp, 20) << "Batch freed " << actually_freed << " bytes (requested " << batch_size << ")" << dendl;
+  }
+  uint64_t final_used = cache_capacity - cacheDriver->get_free_space(dpp, y);
+  if (final_used < eviction_watermark_bytes) {
+    ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__
+                         << " final_used=" << final_used
+                         << " dropped below watermark=" << eviction_watermark_bytes
+                         << ", clearing flag" << dendl;
+  }
+
+  ldpp_dout(dpp, 10) << "Background eviction completed: freed " 
+                 << (total_freed / 1024 / 1024) << "MB" << dendl;
+  return ret;
+}
+
+void LFUDAPolicy::background_eviction_worker(const DoutPrefixProvider* dpp, optional_yield y)
+{
+  ldpp_dout(dpp, 10) << "Background eviction co-routine started" << dendl;
+  int consecutive_failures = 0;
+  const int MAX_BACKOFF = 5;  // Max 2^5 = 32x CHECK_INTERVAL
+  while (!quit) {
+    auto wait_duration = CHECK_INTERVAL;
+    if (consecutive_failures > 0) {
+      int multiplier = 1 << std::min(consecutive_failures, MAX_BACKOFF);
+      wait_duration = CHECK_INTERVAL * multiplier;
+      ldpp_dout(dpp, 10) << "Backing off: waiting " << wait_duration.count() << dendl;
+    }
+    eviction_timer->expires_after(wait_duration);
+    boost::system::error_code ec;
+    eviction_timer->async_wait(y.get_yield_context()[ec]);
+
+    if (ec == boost::asio::error::operation_aborted || quit.load()) {
+      break;
+    }
+
+    // Check current cache usage
+    uint64_t free_space = cacheDriver->get_free_space(dpp, y);
+    uint64_t used_space = (free_space < cache_capacity) ? (cache_capacity - free_space) : 0;
+
+    ldpp_dout(dpp, 20) << "LFUDAPolicy:: " << __func__ << " cache_capacity: " << cache_capacity << dendl;
+    ldpp_dout(dpp, 20) << "LFUDAPolicy:: " << __func__ << " free_space: " << free_space << dendl;
+    ldpp_dout(dpp, 10) << "LFUDAPolicy:: " << __func__ << " used_space: " << used_space << dendl;
+
+    // Only evict if above watermark
+    if (used_space < eviction_watermark_bytes) {
+      consecutive_failures = 0;
+      continue;
+    }
+
+    // Calculate bytes to free (evict to TARGET_WATERMARK)
+    uint64_t bytes_to_free = (used_space > target_bytes) ? (used_space - target_bytes) : 0;
+    if (bytes_to_free == 0) {
+      consecutive_failures = 0;
+      continue;
+    }
+
+    double usage_pct = (static_cast<double>(used_space) / cache_capacity) * 100;
+    ldpp_dout(dpp, 5) << "Cache at " << usage_pct 
+                   << "% - evicting " << (bytes_to_free / 1024 / 1024) 
+                   << "MB to reach " << TARGET_WATERMARK << dendl;
+
+    // Perform eviction
+    auto ret = perform_background_eviction(dpp, bytes_to_free, y);
+    if (ret < 0) {
+      consecutive_failures++;
+    } else {
+      consecutive_failures = 0;
+    }
+  }
 }
 
 int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) {
