@@ -3091,10 +3091,10 @@ options:
   type: str
   level: advanced
   desc: Where the SSE-KMS encryption keys are stored. Supported KMS systems are OpenStack
-    Barbican ('barbican', the default) and HashiCorp Vault ('vault').
+    Barbican ('barbican', the default), HashiCorp Vault ('vault'), and KMIP ('kmip')
   fmt_desc: Where the SSE-KMS encryption keys are stored. Supported KMS
-    systems are OpenStack Barbican (``barbican``, the default) and
-    HashiCorp Vault (``vault``).
+    systems are OpenStack Barbican (``barbican``, the default),
+    HashiCorp Vault (``vault``), and KMIP (``kmip``).
   default: barbican
   services:
   - rgw
@@ -3381,6 +3381,7 @@ options:
   max: 32
   services:
   - rgw
+  with_legacy: true
 - name: rgw_crypt_suppress_logs
   type: bool
   level: advanced
@@ -3411,15 +3412,16 @@ options:
 - name: rgw_crypt_sse_s3_backend
   type: str
   level: advanced
-  desc: Where the SSE-S3 encryption keys are stored. The only valid choice here is
-    HashiCorp Vault ('vault').
-  fmt_desc: Where the SSE-S3 encryption keys are stored. The only valid
-    choice is HashiCorp Vault (``vault``).
+  desc: Where the SSE-S3 encryption keys are stored. Valid choices are HashiCorp
+    Vault ('vault') and KMIP ('kmip').
+  fmt_desc: Where the SSE-S3 encryption keys are stored. Valid choices are
+    HashiCorp Vault (``vault``) and KMIP (``kmip``).
   default: vault
   services:
   - rgw
   enum_values:
   - vault
+  - kmip
   with_legacy: true
 
 - name: rgw_crypt_sse_s3_vault_secret_engine
