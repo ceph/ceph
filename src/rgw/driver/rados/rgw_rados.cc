@@ -5583,8 +5583,18 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   }
 
   uint64_t olh_epoch = 0; // read it from attrs fetched from cloud below
+  /*
+   * For null-version restores (no cloud-side versioned epoch) pass
+   * olh_epoch=1 so set_olh's start_modify() takes the non-promote
+   * branch (1 < current OLH epoch) and refreshes the bucket-index
+   * list entry's size/etag/mtime. Other restores stay disengaged.
+   */
+  std::optional<uint64_t> processor_olh_epoch = std::nullopt;
+  if (dest_obj.key.have_null_instance() && olh_epoch == 0) {
+    processor_olh_epoch = 1;
+  }
   rgw::putobj::AtomicObjectProcessor processor(aio.get(), this, dest_bucket_info, nullptr,
-                                  owner, obj_ctx, dest_obj_bi, olh_epoch, tag, dpp, y, no_trace);
+                                  owner, obj_ctx, dest_obj_bi, processor_olh_epoch, tag, dpp, y, no_trace);
  
   void (*progress_cb)(off_t, void *) = NULL;
   void *progress_data = NULL;
