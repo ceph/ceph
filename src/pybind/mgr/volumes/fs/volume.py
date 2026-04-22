@@ -1271,7 +1271,7 @@ class VolumeClient(CephfsClient["Module"]):
 
         try:
             with open_volume(self, volname) as fs_handle:
-                with open_group(fs_handle, self.volspec, groupname) as group:
+                with open_group(fs_handle, self.volspec, groupname, allow_nogroup_op = True) as group:
                     group.pin(pin_type, pin_setting)
                     ret = 0, json.dumps({}), ""
         except VolumeException as ve:
