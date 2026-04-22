@@ -650,7 +650,9 @@ class HostCache():
                 self.devices[host] += self.load_host_devices(host)
                 self.networks[host] = j.get('networks_and_interfaces', {})
                 self.osdspec_previews[host] = j.get('osdspec_previews', {})
-                self.last_client_files[host] = j.get('last_client_files', {})
+                self.last_client_files[host] = {
+                    path: tuple(v) for path, v in j.get('last_client_files', {}).items()
+                }
                 for name, ts in j.get('osdspec_last_applied', {}).items():
                     self.osdspec_last_applied[host][name] = str_to_datetime(ts)
 
