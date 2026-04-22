@@ -502,11 +502,12 @@ int SSDDriver::initialize(const DoutPrefixProvider* dpp)
      * cache performance while maintaining partition correctedness. */
     try {
         efs::space_info space = efs::space(partition_info.location);
+        partition_info.size = space.capacity - partition_info.reserve_size;
         free_space = calculate_free_space(space.available, partition_info.reserve_size);
     } catch (const efs::filesystem_error& e) {
         ldpp_dout(dpp, 0) << "initialize::: ERROR initializing the cache storage space info: " << e.what() << dendl;
         return -EINVAL;
-	}
+    }
     reserved_space = 0;
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): reserved_space=" << reserved_space << dendl;
 
