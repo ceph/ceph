@@ -1278,6 +1278,14 @@ class Object {
 
     /** Load the object state for this object. */
     virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) = 0;
+    /** Resolve the current version's instance via the OLH without mutating
+     *  this object's key/state. Default returns empty for drivers that don't
+     *  support OLH. */
+    virtual int get_current_version(const DoutPrefixProvider* dpp, optional_yield y,
+                                    std::string& instance) {
+      instance.clear();
+      return 0;
+    }
     /** Set attributes for this object from the backing store.  Attrs can be set or
      * deleted.  @note the attribute APIs may be revisited in the future. */
     virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags) = 0;

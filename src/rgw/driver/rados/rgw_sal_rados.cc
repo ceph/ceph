@@ -2887,6 +2887,21 @@ int RadosObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
   return ret;
 }
 
+int RadosObject::get_current_version(const DoutPrefixProvider* dpp, optional_yield y,
+                                     std::string& instance)
+{
+  RGWObjState* pstate = nullptr;
+  RGWObjManifest* pmanifest = nullptr;
+  int ret = store->getRados()->get_obj_state(dpp, rados_ctx, bucket->get_info(),
+                                             get_obj(), &pstate, &pmanifest,
+                                             /*follow_olh=*/true, y);
+  if (ret < 0) {
+    return ret;
+  }
+  instance = pstate->obj.key.instance;
+  return 0;
+}
+
 int RadosObject::read_attrs(const DoutPrefixProvider* dpp, RGWRados::Object::Read &read_op, optional_yield y, rgw_obj* target_obj)
 {
   read_op.params.attrs = &state.attrset;
