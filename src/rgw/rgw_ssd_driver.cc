@@ -213,6 +213,7 @@ int SSDDriver::initialize(const DoutPrefixProvider* dpp)
      * Recalibration of free_space occurs in a background thread every 10 minutes with additional efs::space calls to improve 
      * cache performance while maintaining partition correctedness. */
     efs::space_info space = efs::space(partition_info.location);
+    partition_info.size = space.capacity - partition_info.reserve_size;
     free_space = (space.available < partition_info.reserve_size) ? 0 : (space.available - partition_info.reserve_size);
     reserved_space = 0;
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): reserved_space=" << reserved_space << dendl;
@@ -381,8 +382,6 @@ int SSDDriver::restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataC
 				    } else if (parts.size() == 3) { //end-if parts.size() == 1
                         std::string invalidStr;
                         std::string etag, bucket_name;
-					    uint64_t size = 0;
-					    time_t creationTime = time_t(nullptr);
 					    rgw_user user;
                         rgw::sal::Attrs attrs;
                         get_attrs(dpp, file_entry.path(), attrs, null_yield);
