@@ -58,9 +58,12 @@ private:
 };
 
 namespace fs = std::filesystem;
-seastar::future<> CyanStore::get_shard_nums()
+seastar::future<uint32_t> CyanStore::get_storage_shard_count()
 {
-  store_shard_nums = 0;
+  // determine the number once and cache
+  if (store_shard_nums) {
+    return seastar::make_ready_future<uint32_t>(store_shard_nums);
+  }
   for (const auto& entry : fs::directory_iterator(path)) {
     const std::string filename = entry.path().filename().string();
     if (filename.rfind("collections", 0) == 0) {
@@ -71,13 +74,14 @@ seastar::future<> CyanStore::get_shard_nums()
     // If no collections files found, assume seastar::smp::count shards
     store_shard_nums = seastar::smp::count;
   }
-  return seastar::make_ready_future<>();
+  return seastar::make_ready_future<uint32_t>(store_shard_nums);
 }
 
 seastar::future<uint32_t> CyanStore::start()
 {
   ceph_assert(seastar::this_shard_id() == primary_core);
-  return get_shard_nums().then([this] {
+  return get_storage_shard_count().then([this](auto store_shard_nums) {
+    ceph_assert(this->store_shard_nums == store_shard_nums);
     auto max_local_store_num = (store_shard_nums + seastar::smp::count - 1 ) / seastar::smp::count;
     logger().info("store_shard_nums={} seastar::smp={}, num_shard_services={}", store_shard_nums, seastar::smp::count, max_local_store_num);
     Shard::reactor_local_stores_num = 0; // paranoia
