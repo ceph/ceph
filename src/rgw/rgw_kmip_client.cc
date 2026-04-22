@@ -7,6 +7,7 @@
 #include "rgw_asio_thread.h"
 #include "rgw_common.h"
 #include "rgw_kmip_client.h"
+#include "rgw_kmip_sse_s3.h"
 
 #include <atomic>
 
@@ -32,7 +33,6 @@ RGWKMIPTransceiver::wait(const DoutPrefixProvider* dpp, optional_yield y)
 
   std::unique_lock l{lock};
   cond.wait(l, [this] { return done.load(std::memory_order_relaxed); });
-
   if (ret) {
     lderr(cct) << "kmip process failed, " << ret << dendl;
   }
@@ -78,6 +78,32 @@ RGWKMIPTransceiver::~RGWKMIPTransceiver()
   }
 }
 
+int
+RGWKMIPManager::execute_fn(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::function<int(KMIP*, BIO*)> op_fn)
+{
+  /* Virtual-dispatch wrapper for transceivers that need ops more complex
+   * than the legacy fixed-schema path (LOCATE/GET/DESTROY). The op enum
+   * passed to the parent is a placeholder; do_one_entry routes by the
+   * non-zero return from execute(), not by the enum value. */
+  struct LambdaTransceiver : public RGWKMIPTransceiver {
+    std::function<int(KMIP*, BIO*)> op_fn;
+    LambdaTransceiver(CephContext* cct, std::function<int(KMIP*, BIO*)> op_fn)
+      : RGWKMIPTransceiver(cct, ENCRYPT /* placeholder, see comment above */),
+        op_fn(std::move(op_fn)) {}
+    int execute(KMIP* ctx, BIO* bio) override {
+      int r = op_fn(ctx, bio);
+      return (r == 0) ? 1 : r;  // map success (0) to non-zero so do_one_entry takes the custom path
+    }
+  };
+
+  LambdaTransceiver op(cct, std::move(op_fn));
+  int r = add_request(&op);
+  if (r < 0) return r;
+  return op.wait(dpp, y);
+}
+
 void
 rgw_kmip_client_init(RGWKMIPManager &m)
 {
@@ -88,6 +114,12 @@ rgw_kmip_client_init(RGWKMIPManager &m)
 void
 rgw_kmip_client_cleanup()
 {
-  rgw_kmip_manager->stop();
-  delete rgw_kmip_manager;
+  if (rgw_kmip_manager) {
+    rgw_kmip_manager->stop();
+  }
+  cleanup_kmip_sse_s3_backend();
+  if (rgw_kmip_manager) {
+    delete rgw_kmip_manager;
+    rgw_kmip_manager = nullptr;
+  }
 }
