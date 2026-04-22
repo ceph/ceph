@@ -305,6 +305,7 @@ class SplitOp {
   virtual void assemble_buffer_read(bufferlist &bl_out, int ops_index) const = 0;
   virtual void init_read(OSDOp &op, bool sparse, int ops_index) = 0;
   virtual bool version_mismatch() const = 0;
+  virtual void init_reference_sub_read() = 0;
   void init(OSDOp &op, int ops_index);
 
   Objecter::Op *orig_op;
@@ -430,6 +431,14 @@ class ECSplitOp : public SplitOp{
   using SplitOp::SplitOp;
   
   /**
+   * @brief Initialize reference_sub_read to primary shard.
+   *
+   * Performs reverse lookup to find which acting index corresponds to the
+   * primary shard. Must be called after _calc_target() populates the acting set.
+   */
+  void init_reference_sub_read();
+  
+  /**
    * @brief Assemble sparse read results from EC shards.
    *
    * Iterates through the EC stripe, collecting extent maps and data buffers
@@ -546,6 +555,8 @@ class ReplicaSplitOp : public SplitOp {
    * @return true if versions mismatch, false if consistent
    */
   bool version_mismatch() const override;
+  
+  void init_reference_sub_read() override;
   
   /**
    * @brief Construct a ReplicaSplitOp.
