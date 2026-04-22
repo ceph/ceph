@@ -107,7 +107,7 @@ export class NvmeofGatewayGroupComponent implements OnInit {
     ];
     const createAction: CdTableAction = {
       permission: 'create',
-      icon: Icons.add,
+      icon: 'add',
       disable: () => (this.nodesAvailable ? false : $localize`Gateway nodes are not available`),
       routerLink: () => this.urlBuilder.getCreate(),
       name: this.actionLabels.CREATE,
@@ -116,7 +116,7 @@ export class NvmeofGatewayGroupComponent implements OnInit {
 
     const viewAction: CdTableAction = {
       permission: 'read',
-      icon: Icons.eye,
+      icon: 'eye',
       click: () => this.getViewDetails(),
       name: $localize`View details`,
       canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection
@@ -124,7 +124,7 @@ export class NvmeofGatewayGroupComponent implements OnInit {
 
     const deleteAction: CdTableAction = {
       permission: 'delete',
-      icon: Icons.destroy,
+      icon: 'destroy',
       click: () => this.deleteGatewayGroupModal(),
       name: this.actionLabels.DELETE,
       canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection

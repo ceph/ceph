@@ -11,7 +11,6 @@ import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
 import { ViewCacheStatus } from '~/app/shared/enum/view-cache-status.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -100,7 +99,7 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
 
     const createAction: CdTableAction = {
       permission: 'create',
-      icon: Icons.add,
+      icon: 'add',
       routerLink: () => `/${prefix}/nfs/create`,
       canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection,
       name: this.actionLabels.CREATE
@@ -108,7 +107,7 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
 
     const editAction: CdTableAction = {
       permission: 'update',
-      icon: Icons.edit,
+      icon: 'edit',
       routerLink: () => [
         `/${prefix}/nfs/edit/${getNfsUri()}`,
         {
@@ -123,7 +122,7 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
 
     const deleteAction: CdTableAction = {
       permission: 'delete',
-      icon: Icons.destroy,
+      icon: 'destroy',
       click: () => this.deleteNfsModal(),
       name: this.actionLabels.DELETE
     };

@@ -105,7 +105,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
     this.tableActions = [
       {
         permission: 'create',
-        icon: Icons.add,
+        icon: 'add',
         click: () => this.openModal(),
         name: this.actionLabels.CREATE,
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
@@ -113,14 +113,14 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
       },
       {
         permission: 'update',
-        icon: Icons.edit,
+        icon: 'edit',
         click: () => this.openModal(true),
         name: this.actionLabels.EDIT,
         disable: (selection: CdTableSelection) => this.getDisable('update', selection)
       },
       {
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: 'destroy',
         click: () => this.deleteAction(),
         name: this.actionLabels.DELETE,
         disable: (selection: CdTableSelection) => this.getDisable('delete', selection)

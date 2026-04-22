@@ -113,27 +113,27 @@ export class CephfsSubvolumeGroupComponent implements OnInit, OnChanges {
       {
         name: this.actionLabels.CREATE,
         permission: 'create',
-        icon: Icons.add,
+        icon: 'add',
         click: () => this.openModal(),
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
       },
       {
         name: this.actionLabels.EDIT,
         permission: 'update',
-        icon: Icons.edit,
+        icon: 'edit',
         click: () => this.openModal(true)
       },
       {
         name: this.actionLabels.NFS_EXPORT,
         permission: 'create',
-        icon: Icons.nfsExport,
+        icon: 'nfsExport',
         routerLink: () => ['/cephfs/nfs/create', this.fsName, this.selection?.first()?.name],
         disable: () => !this.selection.hasSingleSelection
       },
       {
         name: this.actionLabels.REMOVE,
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: 'destroy',
         click: () => this.removeSubVolumeModal()
       }
     ];

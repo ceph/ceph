@@ -147,26 +147,26 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
       {
         name: this.actionLabels.CREATE,
         permission: 'create',
-        icon: Icons.add,
+        icon: 'add',
         click: () => this.openModal()
       },
       {
         name: this.actionLabels.EDIT,
         permission: 'update',
-        icon: Icons.edit,
+        icon: 'edit',
         click: () => this.openModal(true)
       },
       {
         name: this.actionLabels.ATTACH,
         permission: 'read',
-        icon: Icons.bars,
+        icon: 'bars',
         disable: () => !this.selection?.hasSelection,
         click: () => this.showAttachInfo()
       },
       {
         name: this.actionLabels.NFS_EXPORT,
         permission: 'create',
-        icon: Icons.nfsExport,
+        icon: 'nfsExport',
         routerLink: () => [
           '/cephfs/nfs/create',
           this.fsName,
@@ -178,7 +178,7 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
       {
         name: this.actionLabels.REMOVE,
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: 'destroy',
         click: () => this.removeSubVolumeModal()
       }
     ];

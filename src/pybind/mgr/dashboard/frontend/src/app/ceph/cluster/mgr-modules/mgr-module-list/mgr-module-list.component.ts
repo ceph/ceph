@@ -4,7 +4,6 @@ import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -69,21 +68,21 @@ export class MgrModuleListComponent extends ListWithDetails {
           return Object.values(this.selection.first().options).length === 0;
         },
         routerLink: () => `/mgr-modules/edit/${getModuleUri()}`,
-        icon: Icons.edit
+        icon: 'edit'
       },
       {
         name: $localize`Enable`,
         permission: 'update',
         click: () => this.updateModuleState(),
         disable: () => this.isTableActionDisabled('enabled'),
-        icon: Icons.start
+        icon: 'start'
       },
       {
         name: $localize`Disable`,
         permission: 'update',
         click: () => this.updateModuleState(),
         disable: () => this.getTableActionDisabledDesc(),
-        icon: Icons.stop
+        icon: 'stop'
       }
     ];
   }

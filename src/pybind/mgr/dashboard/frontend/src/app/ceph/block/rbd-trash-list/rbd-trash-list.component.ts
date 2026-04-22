@@ -68,13 +68,13 @@ export class RbdTrashListComponent implements OnInit {
     this.permission = this.authStorageService.getPermissions().rbdImage;
     const restoreAction: CdTableAction = {
       permission: 'update',
-      icon: Icons.undo,
+      icon: 'undo',
       click: () => this.restoreModal(),
       name: this.actionLabels.RESTORE
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
-      icon: Icons.destroy,
+      icon: 'destroy',
       click: () => this.deleteModal(),
       name: this.actionLabels.DELETE
     };

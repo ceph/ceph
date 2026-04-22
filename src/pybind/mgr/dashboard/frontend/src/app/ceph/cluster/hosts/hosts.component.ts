@@ -142,7 +142,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         name: this.actionLabels.ADD_STORAGE,
         permission: 'create',
         buttonKind: 'secondary',
-        icon: Icons.expand,
+        icon: 'expand',
         routerLink: '/add-storage',
         disable: (selection: CdTableSelection) => this.getDisable('add', selection),
         visible: () => this.showExpandClusterBtn
@@ -152,7 +152,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
       {
         name: this.actionLabels.ADD,
         permission: 'create',
-        icon: Icons.add,
+        icon: 'add',
         click: () =>
           this.router.url.includes('/hosts')
             ? this.router.navigate([BASE_URL, { outlets: { modal: [URLVerbs.ADD] } }])
@@ -164,35 +164,35 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
       {
         name: this.actionLabels.EDIT,
         permission: 'update',
-        icon: Icons.edit,
+        icon: 'edit',
         click: () => this.editAction(),
         disable: (selection: CdTableSelection) => this.getDisable('edit', selection)
       },
       {
         name: this.actionLabels.START_DRAIN,
         permission: 'update',
-        icon: Icons.exit,
+        icon: 'exit',
         click: () => this.hostDrain(),
         visible: () => !this.showGeneralActionsOnly && !this.draining
       },
       {
         name: this.actionLabels.STOP_DRAIN,
         permission: 'update',
-        icon: Icons.exit,
+        icon: 'exit',
         click: () => this.hostDrain(true),
         visible: () => !this.showGeneralActionsOnly && this.draining
       },
       {
         name: this.actionLabels.REMOVE,
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: 'destroy',
         click: () => this.deleteAction(),
         disable: (selection: CdTableSelection) => this.getDisable('remove', selection)
       },
       {
         name: this.actionLabels.ENTER_MAINTENANCE,
         permission: 'update',
-        icon: Icons.enter,
+        icon: 'enter',
         click: () => this.hostMaintenance(),
         disable: (selection: CdTableSelection) =>
           this.getDisable('maintenance', selection) ||
@@ -203,7 +203,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
       {
         name: this.actionLabels.EXIT_MAINTENANCE,
         permission: 'update',
-        icon: Icons.exit,
+        icon: 'exit',
         click: () => this.hostMaintenance(),
         disable: (selection: CdTableSelection) =>
           this.getDisable('maintenance', selection) ||

@@ -13,7 +13,6 @@ import {
 } from '../models/rgw-storage-class.model';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { FinishedTask } from '~/app/shared/models/finished-task';
-import { Icons } from '~/app/shared/enum/icons.enum';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
 import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
@@ -108,20 +107,20 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
       {
         name: this.actionLabels.CREATE,
         permission: 'create',
-        icon: Icons.add,
+        icon: 'add',
         click: () => this.router.navigate([this.urlBuilder.getCreate()]),
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
       },
       {
         name: this.actionLabels.EDIT,
         permission: 'update',
-        icon: Icons.edit,
+        icon: 'edit',
         routerLink: () => [`/${BASE_URL}/edit/${getStorageUri()}`]
       },
       {
         name: this.actionLabels.REMOVE,
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: 'destroy',
         click: () => this.removeStorageClassModal()
       }
     ];

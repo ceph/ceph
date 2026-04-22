@@ -10,7 +10,6 @@ import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete
 import { FormModalComponent } from '~/app/shared/components/form-modal/form-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -55,20 +54,20 @@ export class RoleListComponent extends ListWithDetails implements OnInit {
     this.permission = this.authStorageService.getPermissions().user;
     const addAction: CdTableAction = {
       permission: 'create',
-      icon: Icons.add,
+      icon: 'add',
       routerLink: () => this.urlBuilder.getCreate(),
       name: this.actionLabels.CREATE
     };
     const cloneAction: CdTableAction = {
       permission: 'create',
-      icon: Icons.clone,
+      icon: 'clone',
       name: this.actionLabels.CLONE,
       disable: () => !this.selection.hasSingleSelection,
       click: () => this.cloneRole()
     };
     const editAction: CdTableAction = {
       permission: 'update',
-      icon: Icons.edit,
+      icon: 'edit',
       disable: () => !this.selection.hasSingleSelection || this.selection.first().system,
       routerLink: () =>
         this.selection.first() && this.urlBuilder.getEdit(this.selection.first().name),
@@ -76,7 +75,7 @@ export class RoleListComponent extends ListWithDetails implements OnInit {
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
-      icon: Icons.destroy,
+      icon: 'destroy',
       disable: () => !this.selection.hasSingleSelection || this.selection.first().system,
       click: () => this.deleteRoleModal(),
       name: this.actionLabels.DELETE

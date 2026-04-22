@@ -91,33 +91,33 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
       {
         name: this.actionLabels.CREATE,
         permission: 'create',
-        icon: Icons.add,
+        icon: 'add',
         click: () => this.router.navigate([this.urlBuilder.getCreate()]),
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
       },
       {
         name: this.actionLabels.EDIT,
         permission: 'update',
-        icon: Icons.edit,
+        icon: 'edit',
         click: () =>
           this.router.navigate([this.urlBuilder.getEdit(String(this.selection.first().id))])
       },
       {
         name: this.actionLabels.AUTHORIZE,
         permission: 'update',
-        icon: Icons.edit,
+        icon: 'edit',
         click: () => this.authorizeModal()
       },
       {
         name: this.actionLabels.ATTACH,
         permission: 'read',
-        icon: Icons.bars,
+        icon: 'bars',
         disable: () => !this.selection?.hasSelection,
         click: () => this.showAttachInfo()
       },
       {
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: 'destroy',
         click: () => this.removeVolumeModal(),
         name: this.actionLabels.REMOVE,
         disable: this.getDisableDesc.bind(this)

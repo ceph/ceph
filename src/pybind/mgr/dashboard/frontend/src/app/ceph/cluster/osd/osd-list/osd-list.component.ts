@@ -124,7 +124,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
       {
         name: this.actionLabels.CREATE,
         permission: 'create',
-        icon: Icons.add,
+        icon: 'add',
         click: () => this.router.navigate([this.urlBuilder.getCreate()]),
         disable: (selection: CdTableSelection) => this.getDisable('create', selection),
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
@@ -132,20 +132,20 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
       {
         name: this.actionLabels.EDIT,
         permission: 'update',
-        icon: Icons.edit,
+        icon: 'edit',
         click: () => this.editAction()
       },
       {
         name: this.actionLabels.FLAGS,
         permission: 'update',
-        icon: Icons.flag,
+        icon: 'flag',
         click: () => this.configureFlagsIndivAction(),
         disable: () => !this.hasOsdSelected
       },
       {
         name: this.actionLabels.SCRUB,
         permission: 'update',
-        icon: Icons.analyse,
+        icon: 'analyse',
         click: () => this.scrubAction(false),
         disable: () => !this.hasOsdSelected,
         canBePrimary: (selection: CdTableSelection) => selection.hasSelection
@@ -153,7 +153,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
       {
         name: this.actionLabels.DEEP_SCRUB,
         permission: 'update',
-        icon: Icons.deepCheck,
+        icon: 'deepCheck',
         click: () => this.scrubAction(true),
         disable: () => !this.hasOsdSelected
       },
@@ -162,28 +162,28 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         permission: 'update',
         click: () => this.reweight(),
         disable: () => !this.hasOsdSelected || !this.selection.hasSingleSelection,
-        icon: Icons.reweight
+        icon: 'reweight'
       },
       {
         name: this.actionLabels.MARK_OUT,
         permission: 'update',
         click: () => this.showConfirmationModal($localize`out`, this.osdService.markOut),
         disable: () => this.isNotSelectedOrInState('out'),
-        icon: Icons.left
+        icon: 'left'
       },
       {
         name: this.actionLabels.MARK_IN,
         permission: 'update',
         click: () => this.showConfirmationModal($localize`in`, this.osdService.markIn),
         disable: () => this.isNotSelectedOrInState('in'),
-        icon: Icons.right
+        icon: 'right'
       },
       {
         name: this.actionLabels.MARK_DOWN,
         permission: 'update',
         click: () => this.showConfirmationModal($localize`down`, this.osdService.markDown),
         disable: () => this.isNotSelectedOrInState('down'),
-        icon: Icons.down
+        icon: 'down'
       },
       {
         name: this.actionLabels.MARK_LOST,
@@ -200,7 +200,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
             this.osdService.markLost
           ),
         disable: () => this.isNotSelectedOrInState('up'),
-        icon: Icons.flatten
+        icon: 'flatten'
       },
       {
         name: this.actionLabels.PURGE,
@@ -220,7 +220,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
             }
           ),
         disable: () => this.isNotSelectedOrInState('up'),
-        icon: Icons.erase
+        icon: 'erase'
       },
       {
         name: this.actionLabels.DESTROY,
@@ -240,14 +240,14 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
             }
           ),
         disable: () => this.isNotSelectedOrInState('up'),
-        icon: Icons.clearFilters
+        icon: 'clearFilters'
       },
       {
         name: this.actionLabels.DELETE,
         permission: 'delete',
         click: () => this.delete(),
         disable: (selection: CdTableSelection) => this.getDisable('delete', selection),
-        icon: Icons.destroy
+        icon: 'destroy'
       }
     ];
   }
@@ -256,21 +256,21 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
     this.clusterWideActions = [
       {
         name: $localize`Flags`,
-        icon: Icons.flag,
+        icon: 'flag',
         click: () => this.configureFlagsAction(),
         permission: 'read',
         visible: () => this.permissions.osd.read
       },
       {
         name: $localize`Recovery Priority`,
-        icon: Icons.deepCheck,
+        icon: 'deepCheck',
         click: () => this.configureQosParamsAction(),
         permission: 'read',
         visible: () => this.permissions.configOpt.read
       },
       {
         name: $localize`PG scrub`,
-        icon: Icons.analyse,
+        icon: 'analyse',
         click: () => this.configurePgScrubAction(),
         permission: 'read',
         visible: () => this.permissions.configOpt.read

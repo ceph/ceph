@@ -147,7 +147,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
       tableActions: [
         {
           name: this.actionLabels.SET,
-          icon: Icons.edit,
+          icon: 'edit',
           permission: 'update',
           visible: (selection) =>
             !selection.hasSelection || (selection.first() && selection.first().dirValue === 0),
@@ -155,14 +155,14 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
         },
         {
           name: this.actionLabels.UPDATE,
-          icon: Icons.edit,
+          icon: 'edit',
           permission: 'update',
           visible: (selection) => selection.first() && selection.first().dirValue > 0,
           click: () => this.updateQuotaModal()
         },
         {
           name: this.actionLabels.UNSET,
-          icon: Icons.destroy,
+          icon: 'destroy',
           permission: 'update',
           disable: (selection) =>
             !selection.hasSelection || (selection.first() && selection.first().dirValue === 0),
@@ -200,7 +200,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
       tableActions: [
         {
           name: this.actionLabels.CREATE,
-          icon: Icons.add,
+          icon: 'add',
           permission: 'create',
           canBePrimary: (selection) => !selection.hasSelection,
           click: () => this.createSnapshot(),
@@ -208,7 +208,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
         },
         {
           name: this.actionLabels.DELETE,
-          icon: Icons.destroy,
+          icon: 'destroy',
           permission: 'delete',
           click: () => this.deleteSnapshotModal()
         }

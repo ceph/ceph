@@ -10,9 +10,9 @@
           [preserveFragment]="currentAction.preserveFragment ? '' : null"
           data-testid="primary-action">
     <span i18n>{{ currentAction.name }}</span>
-    <svg class="cds--btn__icon"
-         cdsIcon="add"
-         size="16"></svg>
+    <cd-icon class="cds--btn__icon"
+             [useDefault]="true"
+             [type]="currentAction.icon"></cd-icon>
   </button>
   <ng-container *ngIf="primaryDropDown">
     <button class="primary-dropdown-btn"
@@ -36,6 +36,8 @@
                                   data-testid="table-action-option-btn"
                                   i18n>
         {{ action.name }}
+        <cd-icon class="action-icon"
+                 [type]="action.icon"></cd-icon>
         </cds-overflow-menu-option>
       </ng-container>
     </ng-template>
@@ -68,6 +70,8 @@
                                 data-testid="table-action-option-btn"
                                 i18n>
       {{ action.name }}
+      <cd-icon class="action-icon"
+               [type]="action.icon"></cd-icon>
       </cds-overflow-menu-option>
     </ng-container>
   </cds-overflow-menu>

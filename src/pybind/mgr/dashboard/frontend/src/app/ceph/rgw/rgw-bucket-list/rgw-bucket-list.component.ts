@@ -9,7 +9,6 @@ import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
-import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -117,20 +116,20 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit, O
       )}`;
     const addAction: CdTableAction = {
       permission: 'create',
-      icon: Icons.add,
+      icon: 'add',
       routerLink: () => this.urlBuilder.getCreate(),
       name: this.actionLabels.CREATE,
       canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
     };
     const editAction: CdTableAction = {
       permission: 'update',
-      icon: Icons.edit,
+      icon: 'edit',
       routerLink: () => this.urlBuilder.getEdit(getBucketUri()),
       name: this.actionLabels.EDIT
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
-      icon: Icons.destroy,
+      icon: 'destroy',
       title: $localize`Bucket is not empty. Remove all objects before deletion.`,
       click: () => this.deleteAction(),
       disable: () => this.selection.first()?.num_objects > 0,
@@ -138,7 +137,7 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit, O
     };
     const tieringAction: CdTableAction = {
       permission: 'update',
-      icon: Icons.edit,
+      icon: 'edit',
       click: () => this.openTieringModal(),
       disable: () => !this.selection.hasSelection,
       name: this.actionLabels.TIERING

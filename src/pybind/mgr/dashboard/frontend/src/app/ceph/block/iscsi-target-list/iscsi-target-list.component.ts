@@ -74,20 +74,20 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
     this.tableActions = [
       {
         permission: 'create',
-        icon: Icons.add,
+        icon: 'add',
         routerLink: () => '/block/iscsi/targets/create',
         name: this.actionLabels.CREATE
       },
       {
         permission: 'update',
-        icon: Icons.edit,
+        icon: 'edit',
         routerLink: () => `/block/iscsi/targets/edit/${this.selection.first().target_iqn}`,
         name: this.actionLabels.EDIT,
         disable: () => this.getEditDisableDesc()
       },
       {
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: 'destroy',
         click: () => this.deleteIscsiTargetModal(),
         name: this.actionLabels.DELETE,
         disable: () => this.getDeleteDisableDesc()

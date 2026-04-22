@@ -146,7 +146,7 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
     this.tableActions = [
       {
         permission: 'create',
-        icon: Icons.add,
+        icon: 'add',
         click: () => this.addGateway(),
         name: $localize`Add`,
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection,
@@ -154,7 +154,7 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
       },
       {
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: 'destroy',
         click: () => this.removeGateway(),
         name: $localize`Remove`,
         disable: (selection: CdTableSelection) => !selection.hasSelection

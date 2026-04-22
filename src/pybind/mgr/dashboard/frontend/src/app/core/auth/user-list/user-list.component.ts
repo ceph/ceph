@@ -61,20 +61,20 @@ export class UserListComponent implements OnInit {
     this.permission = this.authStorageService.getPermissions().user;
     const addAction: CdTableAction = {
       permission: 'create',
-      icon: Icons.add,
+      icon: 'add',
       routerLink: () => this.urlBuilder.getCreate(),
       name: this.actionLabels.CREATE
     };
     const editAction: CdTableAction = {
       permission: 'update',
-      icon: Icons.edit,
+      icon: 'edit',
       routerLink: () =>
         this.selection.first() && this.urlBuilder.getEdit(this.selection.first().username),
       name: this.actionLabels.EDIT
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
-      icon: Icons.destroy,
+      icon: 'destroy',
       click: () => this.deleteUserModal(),
       name: this.actionLabels.DELETE
     };
