@@ -13,7 +13,9 @@
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/use_awaitable.hpp>
+#ifdef HAVE_CLI11
 #include <CLI/CLI.hpp>
+#endif
 
 extern "C" {
 #include <liboath/oath.h>
@@ -3610,17 +3612,14 @@ struct Cli11PocParseResult {
   OPT opt_cmd = OPT::NO_CMD;
 };
 
+#ifdef HAVE_CLI11
 static int try_parse_cli11_poc(const std::vector<const char*>& args,
-                               Cli11PocParseResult* out,
-                               std::string* err)
+                               Cli11PocParseResult* out)
 {
   if (!out) {
     return -EINVAL;
   }
   *out = {};
-  if (err) {
-    err->clear();
-  }
   if (args.empty()) {
     return 0;
   }
@@ -3662,10 +3661,7 @@ static int try_parse_cli11_poc(const std::vector<const char*>& args,
   int cli11_argc = static_cast<int>(cli11_argv.size());
   try {
     app.parse(cli11_argc, cli11_argv.data());
-  } catch (const CLI::ParseError& e) {
-    if (err) {
-      *err = e.what();
-    }
+  } catch (const CLI::ParseError&) {
     return 0;
   }
 
@@ -3682,6 +3678,7 @@ static int try_parse_cli11_poc(const std::vector<const char*>& args,
 
   return 0;
 }
+#endif // HAVE_CLI11
 
 // This has an uncaught exception. Even if the exception is caught, the program
 // would need to be terminated, so the warning is simply suppressed.
@@ -4597,16 +4594,20 @@ int main(int argc, const char **argv)
     exit(1);
   }
   else {
+    bool cli11_poc_matched = false;
+#ifdef HAVE_CLI11
     Cli11PocParseResult cli11_poc;
-    std::string cli11_poc_err;
-    const int cli11_poc_ret = try_parse_cli11_poc(args, &cli11_poc, &cli11_poc_err);
+    const int cli11_poc_ret = try_parse_cli11_poc(args, &cli11_poc);
     if (cli11_poc_ret < 0) {
       return -cli11_poc_ret;
     }
-
     if (cli11_poc.matched) {
       opt_cmd = cli11_poc.opt_cmd;
-    } else {
+      cli11_poc_matched = true;
+    }
+#endif // HAVE_CLI11
+
+    if (!cli11_poc_matched) {
       std::vector<string> extra_args;
       std::vector<string> expected;
 
