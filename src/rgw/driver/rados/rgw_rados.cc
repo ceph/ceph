@@ -5690,8 +5690,14 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   }
 
   uint64_t olh_epoch = 0; // read it from attrs fetched from cloud below
+  /*
+   * Versioned restores still re-link at their original epoch: complete()
+   * re-arms it from RGW_ATTR_RESTORE_VERSIONED_EPOCH. The nullopt covers
+   * objects with no recorded epoch (null versions, non-versioned), where
+   * an engaged 0 would mean "next epoch" and promote over the real latest.
+   */
   rgw::putobj::AtomicObjectProcessor processor(aio.get(), this, dest_bucket_info, nullptr,
-                                  owner, obj_ctx, dest_obj_bi, olh_epoch, tag, dpp, y, no_trace);
+                                  owner, obj_ctx, dest_obj_bi, std::nullopt, tag, dpp, y, no_trace);
  
   void (*progress_cb)(off_t, void *) = NULL;
   void *progress_data = NULL;
@@ -5896,6 +5902,36 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
                            (rgw_zone_set *)&zone_set, &canceled, rctx, log_op ? rgw::sal::FLAG_LOG_OP : 0);
   if (ret < 0) {
     return ret;
+  }
+
+  if (dest_obj.key.have_null_instance()) {
+    /*
+     * Keep a sole null version current: promote only when the OLH does
+     * not already resolve to a real version, never demoting the latest.
+     */
+    rgw_obj head = dest_obj;
+    head.key.instance.clear();
+    RGWObjState* st = nullptr;
+    if (get_obj_state(dpp, &obj_ctx, dest_bucket_info, head, &st, nullptr, true, y) >= 0 &&
+        (!st->exists || st->obj.key.instance.empty() || st->obj.key.have_null_instance())) {
+      set_olh(dpp, obj_ctx, dest_bucket_info, dest_obj_bi, false, nullptr,
+              olh_epoch, real_time(), false, y, nullptr, log_op);
+    }
+  }
+
+  /*
+   * complete() doesn't write the separate version list entry; refresh it
+   * so the listing reflects the restored size. No-op for non-versioned
+   * entries.
+   */
+  int r = bucket_index_refresh_instance(dpp, dest_bucket_info, dest_obj_bi, y);
+  if (r == -EOPNOTSUPP) {
+    ldpp_dout(dpp, 4) << "WARNING: bucket_refresh_instance not supported by OSD; "
+                      << "listing metadata for " << dest_obj << " may be stale" << dendl;
+  } else if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to refresh listing entry for " << dest_obj
+                      << ": " << r << dendl;
+    return r;
   }
 
   // set size to be used to send bucket notification
