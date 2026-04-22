@@ -152,6 +152,9 @@
   ``--namespace-isolated``, but only subvolumes created afterwards inherit the
   isolation. See the "Subvolume groups" section of ``doc/cephfs/fs-volumes.rst``
   for the restrictions that apply when converting an existing group.
+* CephFS: Setting subvolumegroup pins on the default group i.e. ``_nogroup``
+  is now allowed. It can done by providing ``_nogroup`` as the group name.
+  ``ceph fs subvolumegroup pin <vol_name> _nogroup <pin_type> <pin_setting>``
 
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
