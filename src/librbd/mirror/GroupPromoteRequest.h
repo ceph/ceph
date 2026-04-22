@@ -83,10 +83,7 @@ private:
    * ACQUIRE_EXCLUSIVE_LOCKS ---------------------------|
    *    |                                               |
    *    v  (skip if not needed)                         |
-   * FIX_GROUP_MEMBERSHIP                               |
-   *    |                                               |
-   *    v  (skip if not needed)                         |
-   * LIST_GROUP_IMAGES                                  |
+   * REMOVE_IMAGES_FROM_GROUP                           |
    *    |                                               |
    *    v                                               |
    * ROLLBACK                                           |
@@ -105,6 +102,9 @@ private:
    *    |                                                |        |
    *    v                                                v        |
    * GROUP_UNLINK_PEER               ENABLE_NON_PRIMARY_FEATURES  |
+   *    |                                                |        |
+   *    v  (skip if not required)                        |        |
+   * DISABLE_REMOVED_IMAGES                              |        |
    *    |                                                |        |
    *    v  (skip if not required)                        |        |
    * REMOVE_NON_MEMBER_IMAGES                            |        |
@@ -137,6 +137,7 @@ private:
   std::set<std::string> m_mirror_peer_uuids;
   std::vector<cls::rbd::GroupImageStatus> m_images;
   std::vector<ImageCtxT *> m_image_ctxs;
+  std::vector<ImageCtxT *> m_image_ctxs_old_membership;
   std::vector<librados::IoCtx> m_remove_ioctxs;
   ceph::bufferlist m_out_bl;
   cls::rbd::GroupImageSpec m_start_after;
@@ -190,13 +191,8 @@ private:
   void acquire_exclusive_locks();
   void handle_acquire_exclusive_locks(int r);
 
-  void fix_group_membership(
-      std::vector<cls::rbd::GroupImageSpec>& current_membership,
-      std::vector<cls::rbd::GroupImageSpec>& rollback_membership);
-  void handle_fix_group_membership(int r);
-
-  void list_group_images();
-  void handle_list_group_images(int r);
+  void remove_images_from_group();
+  void handle_remove_images_from_group(int r);
 
   void rollback();
   void handle_rollback(int r);
@@ -215,6 +211,9 @@ private:
 
   void group_unlink_peer();
   void handle_group_unlink_peer(int r);
+
+  void disable_removed_images();
+  void handle_disable_removed_images(int r);
 
   void remove_non_member_images();
   void handle_remove_non_member_images(int r);
