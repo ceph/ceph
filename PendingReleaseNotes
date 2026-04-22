@@ -1,3 +1,34 @@
+* RGW: Bucket Logging suppports creating log buckets in EC pools.
+  Implicit logging object commits are now performed asynchronously.
+* RGW: OpenSSL engine support is deprecated in favor of provider support.
+  - Removed the `openssl_engine_opts` configuration option. OpenSSL engine configuration in string format is no longer supported.
+  - Added the `openssl_conf` configuration option for loading specified providers as default providers.
+    Configuration file syntax follows the OpenSSL standard (see https://github.com/openssl/openssl/blob/master/doc/man5/config.pod).
+    If the default provider is required when also using custom providers,
+    it must be explicitly loaded in the configuration file or code (see https://github.com/openssl/openssl/blob/master/README-PROVIDERS.md).
+
+* DASHBOARD: Removed the older landing page which was deprecated in Quincy.
+  Admins can no longer enable the older, deprecated landing page layout by
+  adjusting FEATURE_TOGGLE_DASHBOARD.
+* DASHBOARD: RGW Service form updated to take input regarding QAT compression.
+  - QAT compression is an optional field which can be set to 'Hardware' or 'Software' by selecting options from provided dropdwon. If 'None' is selected, compression is removed altogether.
+* Monitoring: Added new Prometheus alerts for certificate management:
+  - CephCertificateError: Fires when a Ceph certificate has expired (critical severity).
+  - CephCertificateWarning: Fires when a Ceph certificate is about to expire (warning severity).
+* CephFS: The `peer_add` command is deprecated in favor of the `peer_bootstrap` command.
+* RADOS: When objects are read during deep scrubs, the data is read in strides,
+  and the scrubbing process is delayed between each read in order to avoid monopolizing
+  the I/O capacity of the OSD.
+  The default stride size (``osd_deep_scrub_stride``) was 512 KBytes, and is now 4 MBytes.
+
+* CephFS: The offline CephFS tools (cephfs-data-scan, cephfs-journal-tool,
+  and cephfs-table-tool) now include progress tracking with ETA (Estimated Time of
+  Arrival) for long-running operations. Progress updates are displayed automatically
+  at regular intervals, showing completion percentage, processed items, and time
+  estimates. This feature is enabled by default for relevant commands including
+  scan_extents, scan_inodes, and other state-changing operations.
+  Related Tracker: https://tracker.ceph.com/issues/63191
+
 >=20.0.0
 
 * RADOS: leader monitor and stretch mode status are now included in the `ceph status` output.

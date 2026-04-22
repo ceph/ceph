@@ -3209,3 +3209,59 @@ tests:
         exp_annotations:
           summary: "Host (nqn.2) was disconnected 1 times from subsystem (nqn.2016-06.io.spdk:cnode1.mygroup) in last 24 hours"
           description: "Host was disconnected due to host keep alive timeout"
+
+# Certificate Management - Error Alert
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="CEPHADM_CERT_ERROR", cluster="mycluster", message="Certificate has expired", severity="HEALTH_ERR"}'
+      values: '1 1 1 1 1 1 1 1 1'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="CEPHADM_CERT_ERROR"} > 0
+       eval_time: 2m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="CEPHADM_CERT_ERROR", cluster="mycluster", message="Certificate has expired", severity="HEALTH_ERR"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephCertificateError
+    - eval_time: 5m
+      alertname: CephCertificateError
+      exp_alerts:
+      - exp_labels:
+          name: CEPHADM_CERT_ERROR
+          severity: critical
+          cluster: mycluster
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.15.1
+          message: Certificate has expired
+        exp_annotations:
+          summary: Ceph certificate error detected on cluster mycluster
+          description: "Certificate has expired. Please check 'ceph health detail' for more information and take appropriate action to resolve the certificate issue."
+
+# Certificate Management - Warning Alert
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="CEPHADM_CERT_WARNING", cluster="mycluster", message="Certificate expires soon", severity="HEALTH_WARN"}'
+      values: '1 1 1 1 1 1 1 1 1'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="CEPHADM_CERT_WARNING"} > 0
+       eval_time: 2m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="CEPHADM_CERT_WARNING", cluster="mycluster", message="Certificate expires soon", severity="HEALTH_WARN"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephCertificateWarning
+    - eval_time: 5m
+      alertname: CephCertificateWarning
+      exp_alerts:
+      - exp_labels:
+          name: CEPHADM_CERT_WARNING
+          severity: warning
+          cluster: mycluster
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.15.2
+          message: Certificate expires soon
+        exp_annotations:
+          summary: Ceph certificate warning detected on cluster mycluster
+          description: "Certificate expires soon. Please check 'ceph health detail' for more information and take appropriate action to resolve the certificate issue."

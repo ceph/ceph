@@ -5,34 +5,22 @@
 </div>
 
 <ng-template #serviceDetailsTpl>
-  <ng-container>
-    <nav ngbNav
-         #nav="ngbNav"
-         class="nav-tabs"
-         cdStatefulTab="service-details">
-      <ng-container ngbNavItem="details">
-        <a ngbNavLink
-           i18n>Daemons</a>
-        <ng-template ngbNavContent>
-          <ng-container *ngTemplateOutlet="serviceDaemonDetailsTpl"></ng-container>
-        </ng-template>
-      </ng-container>
-      <ng-container ngbNavItem="service_events">
-        <a ngbNavLink
-           i18n>Service Events</a>
-        <ng-template ngbNavContent>
-          <cd-table *ngIf="hasOrchestrator"
-                    #serviceTable
-                    [data]="services"
-                    [columns]="serviceColumns"
-                    columnMode="flex"
-                    (fetchData)="getServices($event)">
-          </cd-table>
-        </ng-template>
-      </ng-container>
-    </nav>
-    <div [ngbNavOutlet]="nav"></div>
-  </ng-container>
+@switch (mode) {
+  @case ('daemons') {
+  <ng-container *ngTemplateOutlet="serviceDaemonDetailsTpl"></ng-container>
+  }
+  @case ('events') {
+  @if (hasOrchestrator) {
+  <cd-table
+    #serviceTable
+    [data]="services"
+    [columns]="serviceColumns"
+    columnMode="flex"
+    (fetchData)="getServices($event)">
+  </cd-table>
+  }
+  }
+}
 </ng-template>
 
 <ng-template #statusTpl

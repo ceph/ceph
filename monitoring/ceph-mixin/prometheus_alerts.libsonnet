@@ -1047,5 +1047,30 @@
         },
       ],
     },
+    {
+      name: 'certmgr',
+      rules: [
+        {
+          alert: 'CephCertificateError',
+          'for': '1m',
+          expr: 'ceph_health_detail{name="CEPHADM_CERT_ERROR"} == 1',
+          labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.15.1' },
+          annotations: {
+            summary: 'Ceph certificate error detected%(cluster)s' % $.MultiClusterSummary(),
+            description: "{{ $labels.message }}. Please check 'ceph health detail' for more information and take appropriate action to resolve the certificate issue.",
+          },
+        },
+        {
+          alert: 'CephCertificateWarning',
+          'for': '1m',
+          expr: 'ceph_health_detail{name="CEPHADM_CERT_WARNING"} == 1',
+          labels: { severity: 'warning', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.15.2' },
+          annotations: {
+            summary: 'Ceph certificate warning detected%(cluster)s' % $.MultiClusterSummary(),
+            description: "{{ $labels.message }}. Please check 'ceph health detail' for more information and take appropriate action to resolve the certificate issue.",
+          },
+        },
+      ],
+    },
   ],
 }
