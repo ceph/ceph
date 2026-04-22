@@ -20,11 +20,12 @@ class Group(GroupTemplate):
     # that are not assigned to a group (i.e. created with group=None)
     NO_GROUP_NAME = "_nogroup"
 
-    def __init__(self, fs, vol_spec, groupname):
-        if groupname == Group.NO_GROUP_NAME:
-            raise VolumeException(-errno.EPERM, "Operation not permitted for group '{0}' as it is an internal group.".format(groupname))
-        if groupname in vol_spec.INTERNAL_DIRS:
-            raise VolumeException(-errno.EINVAL, "'{0}' is an internal directory and not a valid group name.".format(groupname))
+    def __init__(self, fs, vol_spec, groupname, allow_nogroup_op = False):
+        if not allow_nogroup_op:
+            if groupname == Group.NO_GROUP_NAME:
+                raise VolumeException(-errno.EPERM, "Operation not permitted for group '{0}' as it is an internal group.".format(groupname))
+            if groupname in vol_spec.INTERNAL_DIRS:
+                raise VolumeException(-errno.EINVAL, "'{0}' is an internal directory and not a valid group name.".format(groupname))
         self.fs = fs
         self.user_id = None
         self.group_id = None
@@ -318,16 +319,17 @@ def remove_group(fs, vol_spec, groupname):
 
 
 @contextmanager
-def open_group(fs, vol_spec, groupname):
+def open_group(fs, vol_spec, groupname, allow_nogroup_op = False):
     """
     open a subvolume group. This API is to be used as a context manager.
 
     :param fs: ceph filesystem handle
     :param vol_spec: volume specification
     :param groupname: subvolume group name
+    :param allow_nogroup_op: check to allow operation on _nogroup
     :return: yields a group object (subclass of GroupTemplate)
     """
-    group = Group(fs, vol_spec, groupname)
+    group = Group(fs, vol_spec, groupname, allow_nogroup_op)
     try:
         st = fs.stat(group.path)
         group.uid = int(st.st_uid)
