@@ -1417,6 +1417,7 @@ TEST(ExtentMap, split_blob) {
   int csum_type = Checksummer::CSUM_CRC32C;
   size_t csum_val_size = Checksummer::get_csum_value_size(csum_type);
 
+  bool might_need_fix = false;
   auto make_blob = [&](uint64_t o1,
                        uint64_t l1,
                        uint64_t o2,
@@ -1454,7 +1455,8 @@ TEST(ExtentMap, split_blob) {
     // pextents of the blob. Which rather shouldn't happen
     // in real life.
     em.set_lextent(coll, 0, 0, full_len, lb, nullptr);
-    auto rb = em.split_blob(lb, l1, l1);
+    auto rb = em.split_blob(lb, l1, l1, might_need_fix);
+    ASSERT_TRUE(might_need_fix);
 
     ASSERT_EQ(l1, lb->get_blob().get_logical_length());
     ASSERT_EQ(l1 / csum_chunk * csum_val_size, lb->get_blob().csum_data.length());
@@ -1485,7 +1487,23 @@ TEST(ExtentMap, split_blob) {
     ASSERT_EQ(rb, ex_it->blob);
     ASSERT_EQ(l1, ex_it->logical_offset);
     ASSERT_EQ(0, ex_it->blob_offset);
+    ASSERT_EQ(l2 + l3 + l4, ex_it->length);
+
+    // now do extent map normalization (fix dangling refs)
+    em.maybe_normalize(0, full_len);
+
+    ASSERT_EQ(2u, em.extent_map.size());
+    ex_it = em.seek_lextent(0);
+    ASSERT_EQ(lb, ex_it->blob);
+    ASSERT_EQ(0u, ex_it->logical_offset);
+    ASSERT_EQ(0u, ex_it->blob_offset);
+    ASSERT_EQ(l1, ex_it->length);
+    ++ex_it;
+    ASSERT_EQ(rb, ex_it->blob);
+    ASSERT_EQ(l1, ex_it->logical_offset);
+    ASSERT_EQ(0, ex_it->blob_offset);
     ASSERT_EQ(l2 + l3, ex_it->length);
+
   }
   {
     // Split at 0x3000:
@@ -1508,7 +1526,9 @@ TEST(ExtentMap, split_blob) {
     // pextents of the blob. Which rather shouldn't happen
     // in real life.
     em.set_lextent(coll, 0, 0, full_len, lb, nullptr);
-    auto rb = em.split_blob(lb, l1 + l2, l1 + l2);
+    auto rb = em.split_blob(lb, l1 + l2, l1 + l2, might_need_fix);
+
+    ASSERT_TRUE(might_need_fix);
 
     ASSERT_EQ(l1, lb->get_blob().get_logical_length()); // tail(l2) was pruned
     ASSERT_EQ(l1 / csum_chunk * csum_val_size, lb->get_blob().csum_data.length());
@@ -1528,6 +1548,55 @@ TEST(ExtentMap, split_blob) {
 
     ASSERT_EQ(2u, em.extent_map.size());
     auto ex_it = em.seek_lextent(0);
+
+    ASSERT_EQ(lb, ex_it->blob);
+    ASSERT_EQ(0u, ex_it->logical_offset);
+    ASSERT_EQ(0u, ex_it->blob_offset);
+    ASSERT_EQ(l1 + l2, ex_it->length);
+    ++ex_it;
+    ASSERT_EQ(rb, ex_it->blob);
+    ASSERT_EQ(l1 + l2, ex_it->logical_offset);
+    ASSERT_EQ(0, ex_it->blob_offset);
+    ASSERT_EQ(l3 + l4, ex_it->length);
+
+    // now do the second part normalization (fix dangling refs)
+    em.maybe_normalize(l1 + l2, full_len);
+
+    ASSERT_EQ(2u, em.extent_map.size());
+    ex_it = em.seek_lextent(0);
+
+    ASSERT_EQ(lb, ex_it->blob);
+    ASSERT_EQ(0u, ex_it->logical_offset);
+    ASSERT_EQ(0u, ex_it->blob_offset);
+    ASSERT_EQ(l1 + l2, ex_it->length);
+    ++ex_it;
+    ASSERT_EQ(rb, ex_it->blob);
+    ASSERT_EQ(l1 + l2, ex_it->logical_offset);
+    ASSERT_EQ(0, ex_it->blob_offset);
+    ASSERT_EQ(l3, ex_it->length);
+
+    // and the first part normalization (fix dangling refs)
+    em.maybe_normalize(0, l1 + l2);
+
+    ASSERT_EQ(2u, em.extent_map.size());
+    ex_it = em.seek_lextent(0);
+
+    ASSERT_EQ(lb, ex_it->blob);
+    ASSERT_EQ(0u, ex_it->logical_offset);
+    ASSERT_EQ(0u, ex_it->blob_offset);
+    ASSERT_EQ(l1, ex_it->length);
+    ++ex_it;
+    ASSERT_EQ(rb, ex_it->blob);
+    ASSERT_EQ(l1 + l2, ex_it->logical_offset);
+    ASSERT_EQ(0, ex_it->blob_offset);
+    ASSERT_EQ(l3, ex_it->length);
+
+
+    // and finally no-op fukk one
+    em.maybe_normalize(0, full_len);
+
+    ASSERT_EQ(2u, em.extent_map.size());
+    ex_it = em.seek_lextent(0);
 
     ASSERT_EQ(lb, ex_it->blob);
     ASSERT_EQ(0u, ex_it->logical_offset);
@@ -1560,7 +1629,9 @@ TEST(ExtentMap, split_blob) {
     // invalid  pextents of the blob. Which permits prunning the tail
     // during the split
     em.set_lextent(coll, 0, 0, full_len - l4, lb, nullptr);
-    auto rb = em.split_blob(lb, full_len - l4, full_len - l4);
+    auto rb = em.split_blob(lb, full_len - l4, full_len - l4, might_need_fix);
+
+    ASSERT_FALSE(might_need_fix);
 
     ASSERT_EQ(full_len - l4, lb->get_blob().get_logical_length()); // tail(l4) was pruned
     ASSERT_EQ((full_len - l4) / csum_chunk * csum_val_size, lb->get_blob().csum_data.length());
@@ -1600,7 +1671,9 @@ TEST(ExtentMap, split_blob) {
     size_t full_len = l1 + l2 + l3 + l4;
     em.set_lextent(coll, 0, 0, l1, lb, nullptr);
     em.set_lextent(coll, l1 + l2, l1 + l2, l3, lb, nullptr);
-    auto rb = em.split_blob(lb, full_len - l4, full_len - 4);
+    auto rb = em.split_blob(lb, full_len - l4, full_len - 4, might_need_fix);
+
+    ASSERT_FALSE(might_need_fix);
 
     ASSERT_EQ(full_len - l4, lb->get_blob().get_logical_length()); // tail(l4) was pruned
     ASSERT_EQ((full_len - l4) / csum_chunk * csum_val_size, lb->get_blob().csum_data.length());
@@ -1649,7 +1722,9 @@ TEST(ExtentMap, split_blob) {
     // Which permits prunning the tail during the split
     // and this extent removal
     em.set_lextent(coll, full_len - l4, full_len - l4, l4, lb, nullptr);
-    auto rb = em.split_blob(lb, l1 + l2 + l3, l1 + l2 + l3);
+    auto rb = em.split_blob(lb, l1 + l2 + l3, l1 + l2 + l3, might_need_fix);
+
+    ASSERT_FALSE(might_need_fix);
 
     ASSERT_EQ(l1 + l2 + l3, lb->get_blob().get_logical_length()); // tail(l4) was pruned
     ASSERT_EQ((l1 + l2 + l3) / csum_chunk * csum_val_size, lb->get_blob().csum_data.length());
@@ -1689,7 +1764,9 @@ TEST(ExtentMap, split_blob) {
     BlueStore::BlobRef lb = make_blob(o1, l1, o2, l2, o3, l3, o4, l4);
     size_t full_len = l1 + l2 + l3 + l4;
     em.set_lextent(coll, l1, l1, full_len - l1, lb, nullptr);
-    auto rb = em.split_blob(lb, l1, l1);
+    auto rb = em.split_blob(lb, l1, l1, might_need_fix);
+
+    ASSERT_FALSE(might_need_fix);
 
     ASSERT_TRUE(!lb->is_referenced());
     ASSERT_TRUE(rb != nullptr);
@@ -1729,7 +1806,8 @@ TEST(ExtentMap, split_blob) {
     size_t full_len = l1 + l2 + l3 + l4;
     em.set_lextent(coll, l1, l1, l2, lb, nullptr);
     em.set_lextent(coll, full_len - l4, full_len - l4, l4, lb, nullptr);
-    auto rb = em.split_blob(lb, l1, l1);
+    auto rb = em.split_blob(lb, l1, l1, might_need_fix);
+    ASSERT_FALSE(might_need_fix);
 
     ASSERT_TRUE(!lb->is_referenced());
     ASSERT_TRUE(rb != nullptr);

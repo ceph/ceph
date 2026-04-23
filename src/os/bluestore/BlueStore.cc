@@ -3883,6 +3883,8 @@ void BlueStore::ExtentMap::reshard_action(
 
     size_t has_new_spanning = 0;
 
+    uint32_t fix_start = std::numeric_limits<uint32_t>::max();
+    uint32_t fix_end = 0;
     for (auto extent = extent_map.lower_bound(Extent(needs_reshard_begin)); extent != extent_map.end(); ++extent) {
       if (extent->logical_offset >= needs_reshard_end) {
 	break;
@@ -3928,7 +3930,15 @@ void BlueStore::ExtentMap::reshard_action(
 		  dout(20) << __func__ << "    splitting blob, bstart 0x"
 			   << std::hex << bstart1 << " blob_offset 0x"
 			   << blob_offset << std::dec << " " << *b << dendl;
-                  BlobRef b1 = split_blob(b, blob_offset, sh.shard_info->offset);
+                  bool might_need_fix = false;
+                  BlobRef b1 = split_blob(b, blob_offset, sh.shard_info->offset,
+                    might_need_fix);
+
+                  if (might_need_fix) {
+                    fix_start = std::min(fix_start, bstart);
+                    fix_end = std::max(fix_end, bend);
+                  }
+
                   if (b1) {
                     // switch b to the new right-hand side, in case it
                     // *also* has to get split.
@@ -3977,7 +3987,10 @@ void BlueStore::ExtentMap::reshard_action(
 	  dout(20) << __func__ << "    un-spanning " << *extent->blob << dendl;
 	}
       }
-    }
+    } // for (auto extent = ...
+
+    maybe_normalize(fix_start, fix_end);
+
     size_t bcount_threshold = g_conf()->bluestore_debug_too_many_blobs_threshold;
     if (has_new_spanning &&
           bcount_threshold &&
@@ -3992,7 +4005,7 @@ void BlueStore::ExtentMap::reshard_action(
           _dump_onode<0>(cct, *onode);
         });
     }
-  }
+  } // if (extent_map_shards.empty()) .. else {
 
   clear_needs_reshard();
 }
@@ -4684,7 +4697,8 @@ BlueStore::Extent *BlueStore::ExtentMap::set_lextent(
 BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
   BlobRef lb,
   uint32_t blob_offset,
-  uint32_t pos)
+  uint32_t pos,
+  bool& might_need_fix)
 {
   uint32_t end_pos = pos + lb->get_blob().get_logical_length() - blob_offset;
   dout(20) << __func__ << " 0x" << std::hex << pos << " end 0x" << end_pos
@@ -4693,8 +4707,12 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
   BlobRef rb = onode->c->new_blob();
   lb->split(onode->c, blob_offset, rb.get());
 
+  auto& lblob = lb->get_blob();
   auto& rblob = rb->get_blob();
   bool rb_allocated = false;
+
+  might_need_fix = false;
+
   auto ep0 = seek_lextent(pos);
   while (ep0 != extent_map.end() && ep0->logical_offset < end_pos) {
      auto ep = ep0;
@@ -4705,15 +4723,9 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
     if (ep->logical_offset < pos) {
       uint64_t lleft = pos - ep->logical_offset;
       uint64_t lright = ep->length - lleft;
-      bool warn = false;
-      if (rblob.get_logical_length() < lright) {
-        // generally we shouldn't get here,
-        // this means the extent was [partially] referencing to "invalid"
-        // piece of a blob.
-        // Let's fix the issue and even warn if new extent is created
-        lright = rblob.get_logical_length();
-        warn = true;
-      }
+
+      might_need_fix = might_need_fix || (rblob.get_logical_length() < lright);
+
       // Deliberately call is_unallocated() as it's counterpart is_allocated()
       // returns true when FULL blob is allocated only while we're fine
       // with partial allocation.
@@ -4723,10 +4735,6 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
         ceph_assert(ep->length >= lleft); // by the nature of seek_lextent
         Extent *ne = new Extent(pos, 0, lright, rb);
         extent_map.insert(*ne);
-        if (warn) {
-          dout(5) << __func__ << "  [warn] right truncated " << *ne
-                              << dendl;
-        }
         dout(30) << __func__ << "  split " << *ep << dendl;
         dout(30) << __func__ << "     to " << *ne << dendl;
       } else {
@@ -4734,37 +4742,18 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
         dout(30) << __func__ << "     to " << "(dummy)" << dendl;
       }
       ep->length = lleft;
-      auto lb_len = lb->get_blob().get_logical_length();
-      if (lb_len < ep->length) {
-        // generally we shouldn't get here,
-        // this means the extent was [partially] referencing to "invalid"
-        // piece of a blob.
-        // Let's warn and fix the issue
-        ep->length = lb_len;
-        dout(5) << __func__ << "  [warn] left truncated " << *ep
-                            <<dendl;
-      }
+      might_need_fix = might_need_fix || (lblob.get_logical_length() < lleft);
+
     } else {
       //Extent references right blob only,
       // let's switch blob
       ceph_assert(ep->blob_offset >= blob_offset);
-      auto l = rblob.get_logical_length();
-      bool warn = false;
-      if (l < ep->length) {
-        // generally we shouldn't get here,
-        // this means the extent was [partially] referencing to "invalid"
-        // piece of a blob.
-        // Let's warn and fix the issue
-        warn = true;
-        ep->length = l;
-      }
+
+      might_need_fix = might_need_fix || (rblob.get_logical_length() < ep->length);
+
       ep->blob = rb;
       ep->blob_offset -= blob_offset;
-      if (warn) {
-        dout(5) << __func__ << "  [warn] truncated+adjusted " << *ep << dendl;
-      } else {
-        dout(30) << __func__ << "  adjusted " << *ep << dendl;
-      }
+      dout(30) << __func__ << "  adjusted " << *ep << dendl;
       // But let's make a final check whether we have anything
       // valid behind the extent.
       // Deliberately use is_unallocated() as it's counterpart is_allocated()
@@ -4791,6 +4780,39 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
     rb.reset();
   }
   return rb;
+}
+
+void BlueStore::ExtentMap::maybe_normalize(uint32_t start, uint32_t end)
+{
+  if (end > 0) {
+    ceph_assert(start < std::numeric_limits<uint32_t>::max());
+
+    auto ep0 = seek_lextent(start);
+    while (ep0 != extent_map.end() && ep0->logical_offset < end) {
+      auto ep = ep0;
+      ++ep0;
+      auto& blob = ep->blob->get_blob();
+      auto blob_len = blob.get_logical_length();
+      if (blob_len == 0 ||
+          blob.is_unallocated(0, blob.get_ondisk_length())) {
+        // We get no valid pextents under the extent at all.
+        // Generally this shouldn't happen unless
+        // the extent was [partially] referencing to "invalid"
+        // piece of a blob.
+        // Let's warn and erase the extent
+        dout(10) << __func__ << " thrown away:" << *ep << dendl;
+        extent_map.erase(ep);
+      } else if (ep->length > blob_len) {
+        // generally we shouldn't get here,
+        // this means the extent is [partially] referencing to "invalid"
+        // piece of a blob.
+        // Let's warn and fix the issue
+        ep->length = blob_len;
+        dout(10) << __func__ << " truncated: " << *ep
+                 <<dendl;
+      }
+    }
+  }
 }
 
 BlueStore::ExtentMap::debug_au_vector_t

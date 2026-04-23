@@ -1203,7 +1203,19 @@ public:
 			old_extent_map_t *old_extents);
 
     /// split a blob (and referring extents)
-    BlobRef split_blob(BlobRef lb, uint32_t blob_offset, uint32_t pos);
+    BlobRef split_blob(BlobRef lb,
+                       uint32_t blob_offset,
+                       uint32_t pos,
+                       bool& might_need_fix // Output flag indicating if extent map
+                                            // has references to invalid pextents
+                                            // within resulting blobs.
+                                            // One should call maybe_normalize()
+                                            // to get rid of that.
+                      );
+
+    /// Do cleanup dead references  (aka points to invalid pextents)
+    /// out of specific Extent Map span.
+    void maybe_normalize(uint32_t start, uint32_t end);
 
     /// allocation unit status
     struct debug_au_state_t {
