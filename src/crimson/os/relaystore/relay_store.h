@@ -19,17 +19,18 @@ class _RelayStore final : public FuturizedStore {
 
 public:
   class Shard : public FuturizedStore::Shard {
-    _RelayStore& store;
+    using base_t = FuturizedStore::Shard;
+    FuturizedStore::Shard& shard;
 
     template<auto MemberFunc, typename... Args>
-    decltype(auto) RelayStore::with_store(Args&&... args)
+    decltype(auto) with_store(Args&&... args)
     {
-      return (store.*MemberFunc)(std::forward<Args>(args)...);
+      return (shard.*MemberFunc)(std::forward<Args>(args)...);
     }
 
   public:
     Shard(_RelayStore& store)
-      : store(store)
+      : shard(store.get_sharded_store())
     {}
     ~Shard() = default;
 
@@ -38,7 +39,7 @@ public:
       const ghobject_t& oid,
       uint32_t op_flags = 0) final
     {
-      return with_store<&crimson::os::FuturizedStore::Shard::stat>(c, oid, op_flags);
+      return with_store<&base_t::stat>(c, oid, op_flags);
     }
 
     base_errorator::future<bool> exists(
@@ -132,21 +133,13 @@ public:
 
     using coll_core_t = FuturizedStore::coll_core_t;
     seastar::future<std::vector<coll_core_t>> list_collections();
-
-    uint64_t get_used_bytes() const {
-      return used_bytes;
-    }
-
-    unsigned int get_store_index() const {
-      return store_shard_desc.local_index;
-    }
   };
   friend Shard;
 
-  RelayStore(FuturizedStore& decorated_store)
+  _RelayStore(FuturizedStore& decorated_store)
     : decorated_store(decorated_store)
   {}
-  ~RelayStore() final;
+  ~_RelayStore() final;
 
   seastar::future<uint32_t> start() final;
 
@@ -168,7 +161,7 @@ public:
 		  const std::string& value) final;
 
   FuturizedStore::Shard& get_sharded_store(store_index_t store_index = 0) final {
-    return shard_stores.local(store_index);
+    return decorated_store.get_sharded_store(store_index);
   }
 
   seastar::future<std::tuple<int, std::string>>
