@@ -455,6 +455,8 @@ namespace rgw::s3vector {
       lancedb_connection_free(conn);
       return lancedb_error_to_errno(result);
     }
+    // we are not failing the operation if we cannot notify the background process on index removal
+    notify_index_remove(dpp, configuration.vector_bucket_name, configuration.index_name);
     return 0;
   }
 
