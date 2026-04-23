@@ -122,7 +122,7 @@ TEST(cls_rgw_gc, gc_queue_ops1)
   string marker, next_marker;
   uint64_t max = 1;
   bool expired_only = false, truncated;
-  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info1, &truncated, next_marker);
+  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info1, truncated, next_marker);
   ASSERT_EQ(1, list_info1.size());
 
   for (auto it : list_info1) {
@@ -151,7 +151,7 @@ TEST(cls_rgw_gc, gc_queue_ops2)
   string marker1, next_marker1;
   uint64_t max1 = 2;
   bool expired_only1 = false, truncated1;
-  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker1, max1, expired_only1, list_info, &truncated1, next_marker1);
+  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker1, max1, expired_only1, list_info, truncated1, next_marker1);
   ASSERT_EQ(0, list_info.size());
 
   //Test enqueue
@@ -180,7 +180,7 @@ TEST(cls_rgw_gc, gc_queue_ops2)
   string marker, next_marker;
   uint64_t max = 2;
   bool expired_only = false, truncated;
-  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info1, &truncated, next_marker);
+  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info1, truncated, next_marker);
   ASSERT_EQ(2, list_info1.size());
 
   int i = 0;
@@ -192,7 +192,7 @@ TEST(cls_rgw_gc, gc_queue_ops2)
 
   max = 1;
   truncated = false;
-  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info2, &truncated, next_marker);
+  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info2, truncated, next_marker);
   auto it = list_info2.front();
   ASSERT_EQ(1, list_info2.size());
   ASSERT_EQ(true, truncated);
@@ -200,7 +200,7 @@ TEST(cls_rgw_gc, gc_queue_ops2)
   std::cerr << "[          ] next_marker is: = " << next_marker << std::endl;
 
   marker = next_marker;
-  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info3, &truncated, next_marker);
+  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info3, truncated, next_marker);
   it = list_info3.front();
   ASSERT_EQ(1, list_info3.size());
   ASSERT_EQ(false, truncated);
@@ -247,7 +247,7 @@ TEST(cls_rgw_gc, gc_queue_ops5)
   string marker, next_marker, marker1;
   uint64_t max = 10;
   bool expired_only = true, truncated;
-  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info1, &truncated, next_marker);
+  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info1, truncated, next_marker);
   ASSERT_EQ(2, list_info1.size());
 
   int i = 0;
@@ -265,7 +265,7 @@ TEST(cls_rgw_gc, gc_queue_ops5)
 
   //Test list queue again for all entries
   expired_only = false;
-  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info2, &truncated, next_marker);
+  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info2, truncated, next_marker);
   ASSERT_EQ(1, list_info2.size());
 
 }
@@ -331,7 +331,7 @@ TEST(cls_rgw_gc, gc_queue_ops6)
   string marker, next_marker;
   uint64_t max = 2;
   bool expired_only = false, truncated;
-  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info1, &truncated, next_marker);
+  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info1, truncated, next_marker);
   ASSERT_EQ(2, list_info1.size());
 
   int i = 1;
@@ -403,7 +403,7 @@ TEST(cls_rgw_gc, gc_queue_ops7)
   string marker, next_marker;
   uint64_t max = 2;
   bool expired_only = false, truncated;
-  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info1, &truncated, next_marker);
+  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info1, truncated, next_marker);
   ASSERT_EQ(2, list_info1.size());
 
   int i = 1;
@@ -475,7 +475,7 @@ TEST(cls_rgw_gc, gc_queue_ops8)
   string marker, next_marker;
   uint64_t max = 2;
   bool expired_only = false, truncated;
-  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info1, &truncated, next_marker);
+  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info1, truncated, next_marker);
   ASSERT_EQ(2, list_info1.size());
 
   int i = 1;

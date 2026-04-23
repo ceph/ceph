@@ -651,7 +651,7 @@ void cls_rgw_gc_list(ObjectReadOperation& op, const string& marker,
 
 int cls_rgw_gc_list_decode(const bufferlist& out,
                            std::list<cls_rgw_gc_obj_info>& entries,
-                           bool *truncated, std::string& next_marker)
+                           bool& truncated, std::string& next_marker)
 {
   cls_rgw_gc_list_ret ret;
   try {
@@ -663,8 +663,7 @@ int cls_rgw_gc_list_decode(const bufferlist& out,
 
   entries.swap(ret.entries);
 
-  if (truncated)
-    *truncated = ret.truncated;
+  truncated = ret.truncated;
   next_marker = std::move(ret.next_marker);
   return 0;
 }
