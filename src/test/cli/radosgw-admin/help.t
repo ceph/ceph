@@ -268,6 +268,8 @@
                                          mdlog list
                                          data sync status
                                          sync error trim
+                                         gc list
+                                         gc process
                                        required for:
                                          mdlog trim
      --gen=<gen-id>                    optional for:
