@@ -9728,7 +9728,7 @@ next:
 
     do {
       list<cls_rgw_gc_obj_info> result;
-      int ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->list_gc_objs(&index, marker, 1000, !include_all, result, &truncated, processing_queue, gc_shard_id);
+      int ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->list_gc_objs(index, marker, 1000, !include_all, result, truncated, processing_queue, gc_shard_id);
       if (ret < 0) {
 	cerr << "ERROR: failed to list objs: " << cpp_strerror(-ret) << std::endl;
 	return 1;
