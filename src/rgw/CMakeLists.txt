@@ -236,6 +236,7 @@ if(WITH_RADOSGW_RADOS)
           driver/rados/config/zone.cc
           driver/rados/config/zonegroup.cc
           driver/rados/rgw_dedup.cc
+          driver/rados/rgw_dedup_filter.cc
           driver/rados/rgw_dedup_table.cc
           driver/rados/rgw_dedup_store.cc
           driver/rados/rgw_dedup_utils.cc
