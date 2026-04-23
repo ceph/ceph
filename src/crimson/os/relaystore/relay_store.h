@@ -15,19 +15,31 @@
 namespace crimson::os {
 
 class _RelayStore final : public FuturizedStore {
+  FuturizedStore& decorated_store;
+
 public:
   class Shard : public FuturizedStore::Shard {
+    _RelayStore& store;
+
+    template<auto MemberFunc, typename... Args>
+    decltype(auto) RelayStore::with_store(Args&&... args)
+    {
+      return (store.*MemberFunc)(std::forward<Args>(args)...);
+    }
+
   public:
-    Shard(
-      crimson::os::shard_desc_t store_shard_desc,
-      std::string path,
-      store_index_t max_local_store_num);
+    Shard(_RelayStore& store)
+      : store(store)
+    {}
     ~Shard() = default;
 
     seastar::future<struct stat> stat(
       CollectionRef c,
       const ghobject_t& oid,
-      uint32_t op_flags = 0) final;
+      uint32_t op_flags = 0) final
+    {
+      return with_store<&crimson::os::FuturizedStore::Shard::stat>(c, oid, op_flags);
+    }
 
     base_errorator::future<bool> exists(
       CollectionRef ch,
@@ -129,8 +141,11 @@ public:
       return store_shard_desc.local_index;
     }
   };
+  friend Shard;
 
-  RelayStore(const std::string& path);
+  RelayStore(FuturizedStore& decorated_store)
+    : decorated_store(decorated_store)
+  {}
   ~RelayStore() final;
 
   seastar::future<uint32_t> start() final;
