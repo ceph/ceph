@@ -24,13 +24,25 @@
 namespace rgw::s3vector {
 
 class Manager : public DoutPrefixProvider {
+public:
+    using table_name_t = std::pair<std::string, std::string>; // pair of vector bucket name and index name
+    struct message_t {
+      enum class Op {
+        UPDATE,
+        REMOVE
+      };
+      message_t(const std::string& bucket_name, const std::string& index_name, Op _type) :
+          table_name(bucket_name, index_name), type(_type) {}
+      const table_name_t table_name;
+      const Op type;
+    };
 
+private:
   // use mmap/mprotect to allocate 128k coroutine stacks
   auto make_stack_allocator() {
     return boost::context::protected_fixedsize_stack{128*1024};
   }
-  using table_name_t = std::pair<std::string, std::string>; // pair of vector bucket name and index name
-  using MessageQueue =  boost::lockfree::queue<table_name_t*, boost::lockfree::fixed_sized<true>>;
+  using MessageQueue =  boost::lockfree::queue<message_t*, boost::lockfree::fixed_sized<true>>;
   using Executor = boost::asio::io_context::executor_type;
   bool shutdown = false;
   CephContext* const cct;
@@ -121,8 +133,13 @@ class Manager : public DoutPrefixProvider {
     while (!shutdown) {
       std::vector<table_name_t> tables_to_process;
       const auto message_count = messages.consume_all([&tables_to_process, this](auto message) {
-        std::unique_ptr<table_name_t> message_guard(message);
-        const auto table_name = std::move(*message);
+        std::unique_ptr<message_t> message_guard(message);
+        const auto table_name = std::move(message->table_name);
+        if (message->type == message_t::Op::REMOVE) {
+          ldpp_dout(this, 20) << "INFO: received remove message for table: " << table_name.first << "." << table_name.second << dendl;
+          tables.erase(table_name);
+          return;
+        }
         auto [it, inserted] = tables.emplace(table_name, ceph::coarse_real_clock::now());
         if (inserted) {
           ldpp_dout(this, 20) << "INFO: will try to process new table: " << table_name.first << "." << table_name.second << dendl;
@@ -146,7 +163,7 @@ class Manager : public DoutPrefixProvider {
         // start processing a table
         tokens_waiter::token token(&tw);
         boost::asio::spawn(make_strand(io_context), std::allocator_arg, make_stack_allocator(),
-            [this, table_name](boost::asio::yield_context yield) {
+            [this, token = std::move(token), table_name](boost::asio::yield_context yield) {
           const int rc = process_table(table_name, yield);
           if (rc < 0) {
             ldpp_dout(this, 1) << "ERROR: failed to process table: " << table_name.first << "." << table_name.second << " with error code: " << rc << dendl;
@@ -218,18 +235,18 @@ public:
     ldpp_dout(this, 10) << "INfO: started manager" << dendl;
   }
 
-  bool notify_index_update(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& index_name) {
+  bool notify_index(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& index_name, message_t::Op op) {
     if (shutdown) {
-      ldpp_dout(dpp, 1) << "ERROR: failed to notify s3vectors manager about index update: manager is shutting down" << dendl;
+      ldpp_dout(dpp, 1) << "ERROR: failed to notify s3vectors manager about index: manager is shutting down" << dendl;
       return false;
     }
-    auto message_guard = std::make_unique<table_name_t>(bucket_name, index_name);
+    auto message_guard = std::make_unique<message_t>(bucket_name, index_name, op);
     if (messages.push(message_guard.get())) {
       std::ignore = message_guard.release(); // ownership transferred to the queue
-      ldpp_dout(dpp, 20) << "INFO: notified s3vectors manager about index update" << dendl;
+      ldpp_dout(dpp, 20) << "INFO: notified s3vectors manager about index" << dendl;
       return true;
     }
-    ldpp_dout(dpp, 1) << "ERROR: failed to notify s3vectors manager about index update: queue is full" << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to notify s3vectors manager about index: queue is full" << dendl;
     return false;
   }
 
@@ -272,7 +289,15 @@ bool notify_index_update(const DoutPrefixProvider* dpp, const std::string& bucke
     ldpp_dout(dpp, 1) << "ERROR: failed to notify s3vectors manager about table update: manager is not initialized" << dendl;
     return false;
   }
-  return s_manager->notify_index_update(dpp, bucket_name, index_name);
+  return s_manager->notify_index(dpp, bucket_name, index_name, Manager::message_t::Op::UPDATE);
+}
+
+bool notify_index_remove(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& index_name) {
+  if (!s_manager) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to notify s3vectors manager about table remove: manager is not initialized" << dendl;
+    return false;
+  }
+  return s_manager->notify_index(dpp, bucket_name, index_name, Manager::message_t::Op::REMOVE);
 }
 
 } // namespace rgw::s3vector
