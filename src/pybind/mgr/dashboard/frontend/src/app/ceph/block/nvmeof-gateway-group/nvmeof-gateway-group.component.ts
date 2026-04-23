@@ -228,6 +228,7 @@ export class NvmeofGatewayGroupComponent implements OnInit {
       }
     });
   }
+
   private checkNodesAvailability(): void {
     forkJoin([this.nvmeofService.listGatewayGroups(), this.hostService.getAllHosts()]).subscribe(
       ([groups, hosts]: [GatewayGroup[][], any[]]) => {
@@ -236,6 +237,15 @@ export class NvmeofGatewayGroupComponent implements OnInit {
         groupList.forEach((group: CephServiceSpec) => {
           const placementHosts = group.placement?.hosts || [];
           placementHosts.forEach((hostname: string) => usedHosts.add(hostname));
+
+          const placementLabel = group.placement?.label;
+          if (placementLabel) {
+            (hosts || []).forEach((host) => {
+              if (host.labels?.includes(placementLabel)) {
+                usedHosts.add(host.hostname);
+              }
+            });
+          }
         });
 
         const availableHosts = (hosts || []).filter((host) => {

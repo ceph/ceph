@@ -85,9 +85,22 @@ export class NvmeofService {
     }).pipe(
       map(({ groups, hosts }) => {
         const usedHosts = new Set<string>();
+
         (groups?.[0] ?? []).forEach((group: CephServiceSpec) => {
-          group.placement?.hosts?.forEach((hostname: string) => usedHosts.add(hostname));
+          const placementHosts = group.placement?.hosts || [];
+          const placementLabel = group.placement?.label;
+
+          placementHosts.forEach((hostname: string) => usedHosts.add(hostname));
+
+          if (placementLabel) {
+            (hosts || []).forEach((host: Host) => {
+              if (host.labels?.includes(placementLabel as string)) {
+                usedHosts.add(host.hostname);
+              }
+            });
+          }
         });
+
         return (hosts || []).filter((host: Host) => {
           const isAvailable =
             host.status === HostStatus.AVAILABLE || host.status === HostStatus.RUNNING;
@@ -125,15 +138,8 @@ export class NvmeofService {
 
         if (hosts?.length) {
           return allHosts.filter((host: Host) => hosts.includes(host.hostname));
-        } else if (label?.length) {
-          if (typeof label === 'string') {
-            return allHosts.filter((host: Host) => host?.labels?.includes(label));
-          }
-          return allHosts.filter(
-            (host: Host) =>
-              host?.labels?.length === label?.length &&
-              _.isEqual([...host.labels].sort(), [...label].sort())
-          );
+        } else if (label) {
+          return allHosts.filter((host: Host) => host?.labels?.includes(label as string));
         }
         return [];
       })
