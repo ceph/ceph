@@ -10347,14 +10347,14 @@ int RGWRados::gc_operate(const DoutPrefixProvider *dpp, string& oid, librados::O
   return rgw_rados_operate(dpp, gc_pool_ctx, oid, std::move(op), pbl, y);
 }
 
-int RGWRados::list_gc_objs(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated, bool& processing_queue)
+int RGWRados::list_gc_objs(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated, bool& processing_queue, std::optional<int> shard_id)
 {
-  return gc->list(index, marker, max, expired_only, result, truncated, processing_queue);
+  return gc->list(index, marker, max, expired_only, result, truncated, processing_queue, shard_id);
 }
 
-int RGWRados::process_gc(bool expired_only, optional_yield y)
+int RGWRados::process_gc(bool expired_only, optional_yield y, std::optional<int> shard_id)
 {
-  return gc->process(expired_only, y);
+  return gc->process(expired_only, y, shard_id);
 }
 
 int RGWRados::process_lc(const std::unique_ptr<rgw::sal::Bucket>& optional_bucket)
