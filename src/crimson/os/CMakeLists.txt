@@ -8,9 +8,11 @@ if(WITH_BLUESTORE)
   set(alienstore_lib crimson-alienstore)
 endif()
 
+add_subdirectory(relaystore)
 add_subdirectory(seastore)
 target_link_libraries(crimson-os
   crimson-cyanstore
   ${alienstore_lib}
+  crimson-relaystore
   crimson-seastore
   crimson)
