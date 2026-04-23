@@ -755,7 +755,7 @@ static bool cmp_objs(cls_rgw_obj& obj1, cls_rgw_obj& obj2)
 }
 
 static int gc_list(librados::IoCtx& io_ctx, std::string& oid, std::string& marker, uint32_t max, bool expired_only,
-                   std::list<cls_rgw_gc_obj_info>& entries, bool *truncated, std::string& next_marker)
+                   std::list<cls_rgw_gc_obj_info>& entries, bool& truncated, std::string& next_marker)
 {
   librados::ObjectReadOperation op;
   bufferlist bl;
@@ -798,7 +798,7 @@ TEST_F(cls_rgw, gc_set)
   string next_marker;
 
   /* list chains, verify truncated */
-  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 8, true, entries, &truncated, next_marker));
+  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 8, true, entries, truncated, next_marker));
   ASSERT_EQ(8, (int)entries.size());
   ASSERT_EQ(1, truncated);
 
@@ -806,7 +806,7 @@ TEST_F(cls_rgw, gc_set)
   next_marker.clear();
 
   /* list all chains, verify not truncated */
-  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 10, true, entries, &truncated, next_marker));
+  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 10, true, entries, truncated, next_marker));
   ASSERT_EQ(10, (int)entries.size());
   ASSERT_EQ(0, truncated);
  
@@ -875,14 +875,14 @@ TEST_F(cls_rgw, gc_list)
   string next_marker;
 
   /* list chains, verify truncated */
-  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 8, true, entries, &truncated, next_marker));
+  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 8, true, entries, truncated, next_marker));
   ASSERT_EQ(8, (int)entries.size());
   ASSERT_EQ(1, truncated);
 
   marker = next_marker;
   next_marker.clear();
 
-  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 8, true, entries2, &truncated, next_marker));
+  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 8, true, entries2, truncated, next_marker));
   ASSERT_EQ(2, (int)entries2.size());
   ASSERT_EQ(0, truncated);
 
@@ -952,7 +952,7 @@ TEST_F(cls_rgw, gc_defer)
   string next_marker;
 
   /* list chains, verify num entries as expected */
-  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 1, true, entries, &truncated, next_marker));
+  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 1, true, entries, truncated, next_marker));
   ASSERT_EQ(1, (int)entries.size());
   ASSERT_EQ(0, truncated);
 
@@ -966,7 +966,7 @@ TEST_F(cls_rgw, gc_defer)
   next_marker.clear();
 
   /* verify list doesn't show deferred entry (this may fail if cluster is thrashing) */
-  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 1, true, entries, &truncated, next_marker));
+  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 1, true, entries, truncated, next_marker));
   ASSERT_EQ(0, (int)entries.size());
   ASSERT_EQ(0, truncated);
 
@@ -975,7 +975,7 @@ TEST_F(cls_rgw, gc_defer)
   next_marker.clear();
 
   /* verify list shows deferred entry */
-  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 1, true, entries, &truncated, next_marker));
+  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 1, true, entries, truncated, next_marker));
   ASSERT_EQ(1, (int)entries.size());
   ASSERT_EQ(0, truncated);
 
@@ -991,7 +991,7 @@ TEST_F(cls_rgw, gc_defer)
   next_marker.clear();
 
   /* verify entry was removed */
-  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 1, true, entries, &truncated, next_marker));
+  ASSERT_EQ(0, gc_list(ioctx, oid, marker, 1, true, entries, truncated, next_marker));
   ASSERT_EQ(0, (int)entries.size());
   ASSERT_EQ(0, truncated);
 
