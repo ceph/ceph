@@ -11,8 +11,8 @@
 
 class Dentry : public LRUObject {
 public:
-  explicit Dentry(Dir *_dir, const std::string &_name) :
-    dir(_dir), name(_name), inode_xlist_link(this)
+  explicit Dentry(Dir* _dir, const std::string& _name) :
+    dir(_dir), name(_name), inode_xlist_link(this), pin_tracked_link(this)
   {
     auto r = dir->dentries.insert(make_pair(name, this));
     ceph_assert(r.second);
@@ -44,6 +44,12 @@ public:
   void link(InodeRef in) {
     inode = in;
     inode->dentries.push_back(&inode_xlist_link);
+    if (inode->ll_ref) {
+      inode->pinned_dentries.push_back(&pin_tracked_link);
+      get(); // ll_ref -> dn pin
+    } else {
+      inode->unpinned_dentries.push_back(&pin_tracked_link);
+    }
     if (inode->is_dir()) {
       if (inode->dir)
         get(); // dir -> dn pin
@@ -60,9 +66,27 @@ public:
         put(); // ll_ref -> dn pin
     }
     ceph_assert(inode_xlist_link.get_list() == &inode->dentries);
+
+    if (pin_tracked_link.get_list() == &inode->pinned_dentries ||
+        pin_tracked_link.get_list() == &inode->unpinned_dentries) {
+      if (pin_tracked_link.get_list() == &inode->pinned_dentries) {
+        put();
+      }
+      pin_tracked_link.remove_myself();
+    }
     inode_xlist_link.remove_myself();
     inode.reset();
     dir->num_null_dentries++;
+  }
+
+  void do_pin() {
+    inode->pinned_dentries.push_back(&pin_tracked_link);
+    get();
+  }
+
+  void do_unpin() {
+    inode->unpinned_dentries.push_back(&pin_tracked_link);
+    put();
   }
   void mark_primary() {
     if (inode && inode->dentries.front() != this)
@@ -111,6 +135,7 @@ public:
 
 private:
   xlist<Dentry *>::item inode_xlist_link;
+  xlist<Dentry *>::item pin_tracked_link;
 };
 
 #endif

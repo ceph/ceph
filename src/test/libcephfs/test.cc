@@ -4611,3 +4611,176 @@ TEST(LibCephFS, ConcurrentWriteAndFsync) {
   ASSERT_EQ(0, ceph_unmount(cmount));
   ceph_shutdown(cmount);
 }
+
+TEST(LibCephFS, SnappedFileOpenTest) {
+  struct InodeDeleter {
+    struct ceph_mount_info* cmount = nullptr;
+    void operator()(Inode* inode) const {
+      if (cmount && inode) {
+        ceph_ll_forget(cmount, inode, 1);
+      }
+    }
+  };
+  struct FhDeleter {
+    struct ceph_mount_info* cmount = nullptr;
+    void operator()(struct Fh* fh) const {
+      if (cmount && fh) {
+        ceph_ll_close(cmount, fh);
+      }
+    }
+  };
+
+  struct DirptrDeleter {
+    struct ceph_mount_info* cmount = nullptr;
+    void operator()(struct ceph_dir_result* dirp) const {
+      if (cmount && dirp) {
+        ceph_ll_releasedir(cmount, dirp);
+      }
+    }
+  };
+
+  using InodePtr = std::unique_ptr<Inode, InodeDeleter>;
+  using FhPtr = std::unique_ptr<struct Fh, FhDeleter>;
+  using DirptrPtr = std::unique_ptr<struct ceph_dir_result, DirptrDeleter>;
+  auto make_inode_ptr = [](struct ceph_mount_info* cmount, Inode* inode) {
+    return InodePtr(inode, InodeDeleter{cmount});
+  };
+  auto make_fh_ptr = [](struct ceph_mount_info* cmount, struct Fh* fh) {
+    return FhPtr(fh, FhDeleter{cmount});
+  };
+  auto make_dirptr_ptr = [](struct ceph_mount_info* cmount, struct ceph_dir_result* dirp) {
+    return DirptrPtr(dirp, DirptrDeleter{cmount});
+  };
+  constexpr int file_count = 2;
+  constexpr int file_size = 1LL << 30;
+  const unsigned stat_flags = AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW;
+  std::string test_dir = "test_dir";
+  std::string snapped_dir = "snapped_dir";
+  std::string snap_name = "snap_before_delete";
+  struct ceph_mount_info *cmount1;
+  auto mount_and_create_files = [&]() {
+    ASSERT_EQ(0, ceph_create(&cmount1, NULL));
+    ASSERT_EQ(0, ceph_conf_read_file(cmount1, NULL));
+    ASSERT_EQ(0, ceph_conf_parse_env(cmount1, NULL));
+    ASSERT_EQ(0, ceph_mount(cmount1, NULL));
+    const UserPerm* perms = ceph_mount_perms(cmount1);
+    Inode* root_raw = nullptr;
+    ASSERT_EQ(0, ceph_ll_lookup_root(cmount1, &root_raw));
+    ASSERT_NE(root_raw, nullptr);
+    auto root = make_inode_ptr(cmount1, root_raw);
+
+    Inode* test_dir_inode_raw = nullptr;
+    struct ceph_statx stx;
+    ASSERT_EQ(0, ceph_ll_mkdir(cmount1, root.get(),
+              test_dir.c_str(), 0777, &test_dir_inode_raw,
+              &stx, 0, stat_flags, perms));
+    ASSERT_NE(test_dir_inode_raw, nullptr);
+    auto test_dir_inode = make_inode_ptr(cmount1, test_dir_inode_raw);
+
+    Inode* snapped_dir_inode_raw = nullptr;
+    ASSERT_EQ(0, ceph_ll_mkdir(cmount1, test_dir_inode.get(),
+              snapped_dir.c_str(), 0777, &snapped_dir_inode_raw,
+              &stx, 0, stat_flags, perms));
+    ASSERT_NE(snapped_dir_inode_raw, nullptr);
+    auto snapped_dir_inode = make_inode_ptr(cmount1, snapped_dir_inode_raw);
+    std::vector<char> random_payload(file_size);
+    for (int i = 0; i < file_size; ++i) {
+      random_payload[i] = static_cast<char>(i % 256);
+    }
+    std::vector <InodePtr> file_inodes;
+    std::vector <FhPtr> file_fhs;
+    for (int i = 0; i < file_count; ++i) {
+      std::string file_name = "file_" + std::to_string(i);
+      Inode* file_inode_raw = nullptr;
+      Fh* file_fh_raw = nullptr;
+      ASSERT_EQ(0, ceph_ll_create(cmount1, snapped_dir_inode.get(),
+                file_name.c_str(), 0644, O_CREAT | O_TRUNC | O_RDWR,
+              &file_inode_raw, &file_fh_raw, &stx, 0, stat_flags, perms));
+      ASSERT_NE(file_inode_raw, nullptr);
+      auto file_inode = make_inode_ptr(cmount1, file_inode_raw);
+      auto file_fh = make_fh_ptr(cmount1, file_fh_raw);
+      size_t bytes_written = ceph_ll_write(cmount1, file_fh.get(), 0,
+                random_payload.size(), random_payload.data());
+      ASSERT_EQ(bytes_written, random_payload.size());
+      ASSERT_EQ(0, ceph_ll_fsync(cmount1, file_fh.get(), 0));
+      file_inodes.push_back(std::move(file_inode));
+      file_fhs.push_back(std::move(file_fh));
+    }
+    
+    Inode* snap_dir_inode_raw = nullptr;
+    ASSERT_EQ(0, ceph_ll_lookup(cmount1, snapped_dir_inode.get(),
+                                ".snap", &snap_dir_inode_raw, &stx,
+                                0, stat_flags, perms));
+    ASSERT_NE(snap_dir_inode_raw, nullptr);
+    InodePtr snap_dir_inode = make_inode_ptr(cmount1, snap_dir_inode_raw);
+
+    Inode* snapshot_inode_raw = nullptr;
+    ASSERT_EQ(0, ceph_ll_mkdir(cmount1, snap_dir_inode.get(),
+              snap_name.c_str(), 0777, &snapshot_inode_raw,
+              &stx, 0, stat_flags, perms));
+    ASSERT_NE(snap_dir_inode_raw, nullptr);
+    auto snapshot_inode = make_inode_ptr(cmount1, snapshot_inode_raw);
+
+    for (int i = 0; i < file_count; ++i) {
+      std::string file_name = "file_" + std::to_string(i);
+      ASSERT_EQ(0, ceph_ll_unlink(cmount1, snapped_dir_inode.get(),
+              file_name.c_str(), perms));
+    }
+  };
+  mount_and_create_files();
+  ASSERT_EQ(0, ceph_unmount(cmount1));
+  ceph_shutdown(cmount1);
+  std::this_thread::sleep_for(std::chrono::seconds(30));
+  struct ceph_mount_info *cmount2;
+  auto mount_and_open_snapped_files = [&]() {
+    ASSERT_EQ(0, ceph_create(&cmount2, NULL));
+    ASSERT_EQ(0, ceph_conf_read_file(cmount2, NULL));
+    ASSERT_EQ(0, ceph_conf_parse_env(cmount2, NULL));
+    ASSERT_EQ(0, ceph_conf_set(cmount2, "client_cache_size", "0"));
+    ASSERT_EQ(0, ceph_mount(cmount2, NULL));
+    const UserPerm* perms = ceph_mount_perms(cmount2);
+    struct ceph_statx stx;
+    Inode* root_raw = nullptr;
+    ASSERT_EQ(0, ceph_ll_lookup_root(cmount2, &root_raw));
+    auto root = make_inode_ptr(cmount2, root_raw);
+    Inode* snaphost_inode_raw = nullptr;
+    std::string snap_path = test_dir + "/" + snapped_dir + "/.snap/" + snap_name;
+    ASSERT_EQ(0, ceph_ll_lookup(cmount2, root.get(), snap_path.c_str(),
+              &snaphost_inode_raw, &stx, 0, stat_flags, perms));
+    auto snaphost_inode = make_inode_ptr(cmount2, snaphost_inode_raw);
+    struct ceph_dir_result* dirp_raw = nullptr;
+    ASSERT_EQ(0, ceph_ll_opendir(cmount2, snaphost_inode.get(), &dirp_raw, perms));
+    auto dirp = make_dirptr_ptr(cmount2, dirp_raw);
+    std::vector <std::string> file_names;
+    std::vector <InodePtr> file_inodes;
+    while (true) {
+      struct dirent de{};
+      Inode* entry_raw = nullptr;
+      int r = ceph_readdirplus_r(cmount2, dirp.get(), &de, &stx, CEPH_STATX_MODE |
+                                CEPH_STATX_UID | CEPH_STATX_GID | CEPH_STATX_SIZE
+                                | CEPH_STATX_MTIME, stat_flags, &entry_raw);
+      ASSERT_TRUE(r >= 0);
+      if (r == 0) {
+        break;
+      }
+      auto entry_inode = make_inode_ptr(cmount2, entry_raw);
+      std::string name = de.d_name;
+      if (name == "." || name == "..") {
+        continue;
+      }
+      file_names.push_back(name);
+      file_inodes.push_back(std::move(entry_inode));
+    }
+    dirp = nullptr; // release dirp before unmounting
+    std::vector <FhPtr> openned_fh;
+    for (int i = 0; i < file_inodes.size(); ++i) {
+      Fh* fh_raw = nullptr;
+      ASSERT_EQ(0, ceph_ll_open(cmount2, file_inodes[i].get(), O_RDONLY, &fh_raw, perms));
+      auto fh = make_fh_ptr(cmount2, fh_raw);
+      openned_fh.push_back(std::move(fh));
+    }
+  };
+  mount_and_open_snapped_files();
+  ASSERT_EQ(0, ceph_unmount(cmount2));
+  ceph_shutdown(cmount2);
+}
