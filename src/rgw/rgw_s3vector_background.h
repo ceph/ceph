@@ -17,5 +17,7 @@ namespace rgw::s3vector {
   void resume(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver);
   // update whenever new vectors are added to an index
   bool notify_index_update(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& index_name);
+  // update whenever a index is removed
+  bool notify_index_remove(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& index_name);
 }
 
