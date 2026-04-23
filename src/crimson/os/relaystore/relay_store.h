@@ -123,11 +123,12 @@ public:
       uint64_t limit,
       uint32_t op_flags = 0) const final
     {
+      return with_store<&base_t::list_objects>(c, start, end, limit, op_flags);
     }
 
     seastar::future<CollectionRef> create_new_collection(const coll_t& cid) final
     {
-      return with_store<&base_t::create_new_collection>(oid);
+      return with_store<&base_t::create_new_collection>(cid);
     }
 
     seastar::future<CollectionRef> open_collection(const coll_t& cid) final
@@ -139,11 +140,15 @@ public:
       CollectionRef c,
       const pool_opts_t& opts) final
     {
+      return with_store<&base_t::set_collection_opts>(c, opts);
     }
 
     seastar::future<> do_transaction_no_callbacks(
       CollectionRef ch,
-      ceph::os::Transaction&& txn) final;
+      ceph::os::Transaction&& txn) final
+    {
+      return with_store<&base_t::do_transaction_no_callbacks>(ch, std::move(txn));
+    }
 
     read_errorator::future<std::map<uint64_t, uint64_t>>
     fiemap(
@@ -153,10 +158,12 @@ public:
       uint64_t len,
       uint32_t op_flags) final
     {
+      return with_store<&base_t::fiemap>(c, oid, off, len, op_flags);
     }
 
     unsigned get_max_attr_name_length() const final
     {
+      return with_store<&base_t::get_max_attr_name_length>();
     }
 
   public:
@@ -179,37 +186,76 @@ public:
   {}
   ~_RelayStore() final;
 
-  seastar::future<uint32_t> start() final;
+  seastar::future<uint32_t> start() final
+  {
+    return decorated_store.start();
+  }
 
-  seastar::future<> stop() final;
+  seastar::future<> stop() final
+  {
+    return decorated_store.stop();
+  }
 
-  mount_ertr::future<> mount() final;
+  mount_ertr::future<> mount() final
+  {
+    return decorated_store.mount();
+  }
 
-  seastar::future<> umount() final;
+  seastar::future<> umount() final
+  {
+    return decorated_store.umount();
+  }
 
-  mkfs_ertr::future<> mkfs(uuid_d new_osd_fsid) final;
+  mkfs_ertr::future<> mkfs(uuid_d new_osd_fsid) final
+  {
+    return decorated_store.mkfs(new_osd_fsid);
+  }
 
-  seastar::future<store_statfs_t> stat() const final;
+  seastar::future<store_statfs_t> stat() const final
+  {
+    return decorated_store.stat();
+  }
 
-  seastar::future<store_statfs_t> pool_statfs(int64_t pool_id) const final;
+  seastar::future<store_statfs_t> pool_statfs(int64_t pool_id) const final
+  {
+    return decorated_store.pool_statfs(pool_id);
+  }
 
-  uuid_d get_fsid() const final;
+  uuid_d get_fsid() const final
+  {
+    return decorated_store.get_fsid();
+  }
 
   seastar::future<> write_meta(const std::string& key,
-		  const std::string& value) final;
+		  const std::string& value) final
+  {
+    return decorated_store.write_meta(key, value);
+  }
 
   FuturizedStore::Shard& get_sharded_store(store_index_t store_index = 0) final {
     return decorated_store.get_sharded_store(store_index);
   }
 
   seastar::future<std::tuple<int, std::string>>
-  read_meta(const std::string& key) final;
+  read_meta(const std::string& key) final
+  {
+    return decorated_store.read_meta(key);
+  }
 
-  seastar::future<std::vector<coll_core_t>> list_collections() final;
+  seastar::future<std::vector<coll_core_t>> list_collections() final
+  {
+    return decorated_store.list_collections();
+  }
 
-  seastar::future<std::string> get_default_device_class() final;
+  seastar::future<std::string> get_default_device_class() final
+  {
+    return decorated_store.get_default_device_class();
+  }
 
-  seastar::future<uint32_t> get_storage_shard_count() final;
+  seastar::future<uint32_t> get_storage_shard_count() final
+  {
+    return decorated_store.get_storage_shard_count();
+  }
 };
 
 } // namespace crimson::os
