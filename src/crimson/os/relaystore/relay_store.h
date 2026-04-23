@@ -45,37 +45,56 @@ public:
     base_errorator::future<bool> exists(
       CollectionRef ch,
       const ghobject_t& oid,
-      uint32_t op_flags = 0) final;
+      uint32_t op_flags = 0) final
+    {
+      return with_store<&base_t::exists>(ch, oid, op_flags);
+    }
 
     read_errorator::future<ceph::bufferlist> read(
       CollectionRef c,
       const ghobject_t& oid,
       uint64_t offset,
       size_t len,
-      uint32_t op_flags = 0) final;
+      uint32_t op_flags = 0) final
+    {
+      return with_store<&base_t::read>(c, oid, offset, len, op_flags);
+    }
+
 
     read_errorator::future<ceph::bufferlist> readv(
       CollectionRef c,
       const ghobject_t& oid,
       interval_set<uint64_t>& m,
-      uint32_t op_flags = 0) final;
+      uint32_t op_flags = 0) final
+    {
+      return with_store<&base_t::readv>(c, oid, m, op_flags);
+    }
 
     get_attr_errorator::future<ceph::bufferlist> get_attr(
       CollectionRef c,
       const ghobject_t& oid,
       std::string_view name,
-      uint32_t op_flags = 0) const final;
+      uint32_t op_flags = 0) const final
+    {
+      return with_store<&base_t::get_attr>(c, oid, name, op_flags);
+    }
 
     get_attrs_ertr::future<attrs_t> get_attrs(
       CollectionRef c,
       const ghobject_t& oid,
-      uint32_t op_flags = 0) final;
+      uint32_t op_flags = 0) final
+    {
+      return with_store<&base_t::get_attrs>(c, oid, op_flags);
+    }
 
     read_errorator::future<omap_values_t> omap_get_values(
       CollectionRef c,
       const ghobject_t& oid,
       const omap_keys_t& keys,
-      uint32_t op_flags = 0) final;
+      uint32_t op_flags = 0) final
+    {
+      return with_store<&base_t::omap_get_values>(c, oid, keys, op_flags);
+    }
 
     read_errorator::future<ObjectStore::omap_iter_ret_t> omap_iterate(
       CollectionRef c,
@@ -83,13 +102,18 @@ public:
       ObjectStore::omap_iter_seek_t start_from,
       omap_iterate_cb_t callback,
       uint32_t op_flags = 0,
-      omap_iterate_conf_t on_conflict = nullptr
-    ) final;
+      omap_iterate_conf_t on_conflict = nullptr) final
+    {
+      return with_store<&base_t::omap_iterate>(c, oid, start_from, callback, op_flags,  on_conflict);
+    }
 
     get_attr_errorator::future<ceph::bufferlist> omap_get_header(
       CollectionRef c,
       const ghobject_t& oid,
-      uint32_t op_flags = 0) final;
+      uint32_t op_flags = 0) final
+    {
+      return with_store<&base_t::omap_get_header>(c, oid, op_flags);
+    }
 
     seastar::future<std::tuple<std::vector<ghobject_t>, ghobject_t>>
     list_objects(
@@ -97,15 +121,25 @@ public:
       const ghobject_t& start,
       const ghobject_t& end,
       uint64_t limit,
-      uint32_t op_flags = 0) const final;
+      uint32_t op_flags = 0) const final
+    {
+    }
 
-    seastar::future<CollectionRef> create_new_collection(const coll_t& cid) final;
+    seastar::future<CollectionRef> create_new_collection(const coll_t& cid) final
+    {
+      return with_store<&base_t::create_new_collection>(oid);
+    }
 
-    seastar::future<CollectionRef> open_collection(const coll_t& cid) final;
+    seastar::future<CollectionRef> open_collection(const coll_t& cid) final
+    {
+      return with_store<&base_t::open_collection>(cid);
+    }
 
     seastar::future<> set_collection_opts(
       CollectionRef c,
-      const pool_opts_t& opts) final;
+      const pool_opts_t& opts) final
+    {
+    }
 
     seastar::future<> do_transaction_no_callbacks(
       CollectionRef ch,
@@ -117,9 +151,13 @@ public:
       const ghobject_t& oid,
       uint64_t off,
       uint64_t len,
-      uint32_t op_flags) final;
+      uint32_t op_flags) final
+    {
+    }
 
-    unsigned get_max_attr_name_length() const final;
+    unsigned get_max_attr_name_length() const final
+    {
+    }
 
   public:
     // only exposed to RelayStore
