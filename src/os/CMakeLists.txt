@@ -43,4 +43,12 @@ if(WITH_BLUESTORE)
     global kv os)
   install(TARGETS ceph-bluestore-tool
     DESTINATION bin)
+
+  add_executable(ceph-bluestore-decode
+    bluestore/bluestore_decode_tool.cc)
+  target_link_libraries(ceph-bluestore-decode
+    global kv os)
+  install(TARGETS ceph-bluestore-decode
+    DESTINATION bin)
+
 endif()
