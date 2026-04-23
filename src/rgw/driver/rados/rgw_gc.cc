@@ -259,13 +259,18 @@ static int gc_list(const DoutPrefixProvider* dpp, optional_yield y, librados::Io
   return cls_rgw_gc_list_decode(bl, entries, truncated, next_marker);
 }
 
-int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated, bool& processing_queue)
+int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated, bool& processing_queue, std::optional<int> shard_id)
 {
   result.clear();
   string next_marker;
   bool check_queue = false;
 
-  for (; *index < max_objs && result.size() < max; (*index)++, marker.clear(), check_queue = false) {
+  int max_index = shard_id.has_value() ? (shard_id.value() + 1) : max_objs;
+  if (shard_id.has_value()) {
+    *index = shard_id.value();
+  }
+
+  for (; *index < max_index && result.size() < max; (*index)++, marker.clear(), check_queue = false) {
     std::list<cls_rgw_gc_obj_info> entries, queue_entries;
     int ret = 0;
 
@@ -320,7 +325,7 @@ int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std
 
     marker = next_marker;
 
-    if (*index == max_objs - 1) {
+    if (*index == max_index - 1) {
       if (queue_entries.size() > 0 && *truncated) {
         processing_queue = true;
       } else {
@@ -739,19 +744,26 @@ done:
   return 0;
 }
 
-int RGWGC::process(bool expired_only, optional_yield y)
+int RGWGC::process(bool expired_only, optional_yield y, std::optional<int> shard_id)
 {
   int max_secs = cct->_conf->rgw_gc_processor_max_time;
 
-  const int start = ceph::util::generate_random_number(0, max_objs - 1);
-
   RGWGCIOManager io_manager(this, store->ctx(), this);
 
-  for (int i = 0; i < max_objs; i++) {
-    int index = (i + start) % max_objs;
-    int ret = process(index, max_secs, expired_only, io_manager, y);
+  if (shard_id.has_value()) {
+    // Process only the specified shard
+    int ret = process(shard_id.value(), max_secs, expired_only, io_manager, y);
     if (ret < 0)
       return ret;
+  } else {
+    // Process all shards with random start
+    const int start = ceph::util::generate_random_number(0, max_objs - 1);
+    for (int i = 0; i < max_objs; i++) {
+      int index = (i + start) % max_objs;
+      int ret = process(index, max_secs, expired_only, io_manager, y);
+      if (ret < 0)
+        return ret;
+    }
   }
   if (!going_down()) {
     io_manager.drain();
