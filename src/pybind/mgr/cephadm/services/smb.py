@@ -1,7 +1,7 @@
 import errno
 import ipaddress
 import logging
-from typing import Any, Dict, List, Tuple, cast, Optional, Iterable, Union
+from typing import Any, Dict, List, Tuple, cast, Optional, Iterable, Union, TYPE_CHECKING
 
 from mgr_module import HandleCommandResult
 from cephadm.tlsobject_types import TLSObjectScope, TLSCredentials, EMPTY_TLS_CREDENTIALS
