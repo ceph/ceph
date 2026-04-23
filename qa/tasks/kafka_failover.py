@@ -136,9 +136,17 @@ def install_kafka(ctx, config):
     finally:
         log.info('Removing packaged dependencies of Kafka...')
         kafka_dir=get_kafka_dir(ctx, config)
+        kafka_file = kafka_prefix + get_kafka_version(config) + '.tgz'
         for (client,_) in config.items():
             ctx.cluster.only(client).run(
                 args=['rm', '-rf', '{tdir}'.format(tdir=kafka_dir)],
+            )
+            ctx.cluster.only(client).run(
+                args=[
+                    'rm',
+                    '-f',
+                    '{tdir}/{doc}'.format(tdir=teuthology.get_testdir(ctx), doc=kafka_file),
+                ],
             )
 
 
@@ -311,4 +319,3 @@ def task(ctx,config):
         lambda: run_admin_cmds(ctx=ctx, config=config),
         ):
         yield
-
