@@ -7,7 +7,7 @@
 #include "include/int_types.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
-#include "include/object.h" // for snapid_t
+#include "include/snapid.h" // for snapid_t
 #include "include/stringify.h"
 #include "include/utime.h"
 #include "msg/msg_types.h"

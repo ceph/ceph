@@ -36,6 +36,7 @@
 
 #include "include/CompatSet.h"
 #include "include/common_fwd.h"
+#include "include/sobject.h"
 
 #include "OpRequest.h"
 #include "Session.h"
