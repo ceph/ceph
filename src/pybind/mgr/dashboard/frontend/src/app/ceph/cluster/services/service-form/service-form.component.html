@@ -1030,6 +1030,22 @@
           }
         </ng-template>
       </div>
+      <!-- Scope -->
+      <div class="form-item">
+        <cd-text-label-list formControlName="scope"
+                            label="Scope"
+                            helperText="OAuth scope specification."
+                            placeholder="openid profile email">
+        </cd-text-label-list>
+      </div>
+      <!-- Email_domains -->
+      <div class="form-item">
+        <cd-text-label-list formControlName="email_domains"
+                            label="Email domains"
+                            helperText="Email domains to be allowed."
+                            placeholder="*">
+        </cd-text-label-list>
+      </div>
       <!-- Allowlist_domains -->
       <div class="form-item">
         <cd-text-label-list formControlName="allowlist_domains"
@@ -1037,6 +1053,16 @@
                             helperText="Domains to be allowed to redirect to, used for login or logout."
                             placeholder="192.168.100.1:8080">
         </cd-text-label-list>
+      </div>
+      <!-- SSL Insecure Skip Verify -->
+      <div class="form-item">
+        <cds-checkbox i18n-label
+                      formControlName="ssl_insecure_skip_verify">
+          Skip TLS verification
+          <cd-help-text i18n>
+            Skip TLS certificate verification for the OIDC provider. Use only in non-production environments.
+          </cd-help-text>
+        </cds-checkbox>
       </div>
       }
 
