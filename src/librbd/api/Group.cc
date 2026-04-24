@@ -467,7 +467,7 @@ int Group<I>::remove(librados::IoCtx& io_ctx, const char *group_name)
 
   r = io_ctx.remove(header_oid);
   if (r < 0 && r != -ENOENT) {
-    lderr(cct) << "error removing header: " << cpp_strerror(-r) << dendl;
+    lderr(cct) << "error removing header: " << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -616,7 +616,7 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
                              &image_id);
   if (r < 0) {
     lderr(cct) << "error reading image id object: "
-	       << cpp_strerror(-r) << dendl;
+	       << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -650,14 +650,14 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
 
   if (r < 0) {
     lderr(cct) << "error adding image reference to group: "
-	       << cpp_strerror(-r) << dendl;
+	       << cpp_strerror(r) << dendl;
     return r;
   }
 
   r = cls_client::image_group_add(&image_ioctx, image_header_oid, group_spec);
   if (r < 0) {
     lderr(cct) << "error adding group reference to image: "
-	       << cpp_strerror(-r) << dendl;
+	       << cpp_strerror(r) << dendl;
     cls::rbd::GroupImageSpec spec(image_id, image_ioctx.get_id());
     cls_client::group_image_remove(&group_ioctx, group_header_oid, spec);
     // Ignore errors in the clean up procedure.
@@ -676,7 +676,7 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
 				  attached_st);
   if (r < 0) {
     lderr(cct) << "error updating image reference to group: "
-	       << cpp_strerror(-r) << dendl;
+	       << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -737,7 +737,7 @@ int Group<I>::image_remove(librados::IoCtx& group_ioctx,
       &image_id);
   if (r < 0) {
     lderr(cct) << "error reading image id object: "
-      << cpp_strerror(-r) << dendl;
+      << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -1427,7 +1427,7 @@ int Group<I>::group_image_list_by_id(librados::IoCtx& group_ioctx,
 
     if (r < 0) {
       lderr(cct) << "error reading image list from group: "
-	<< cpp_strerror(-r) << dendl;
+	<< cpp_strerror(r) << dendl;
       return r;
     }
     images->insert(images->end(),
@@ -1501,7 +1501,7 @@ int Group<I>::group_image_remove(librados::IoCtx& group_ioctx, string group_id,
 
   if (r < 0) {
     lderr(cct) << "couldn't put image into removing state: "
-	       << cpp_strerror(-r) << dendl;
+	       << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -1509,7 +1509,7 @@ int Group<I>::group_image_remove(librados::IoCtx& group_ioctx, string group_id,
 				     group_spec);
   if ((r < 0) && (r != -ENOENT)) {
     lderr(cct) << "couldn't remove group reference from image"
-	       << cpp_strerror(-r) << dendl;
+	       << cpp_strerror(r) << dendl;
     return r;
   } else if (r >= 0) {
     ImageWatcher<I>::notify_header_update(image_ioctx, image_header_oid);
@@ -1518,7 +1518,7 @@ int Group<I>::group_image_remove(librados::IoCtx& group_ioctx, string group_id,
   r = cls_client::group_image_remove(&group_ioctx, group_header_oid, spec);
   if (r < 0) {
     lderr(cct) << "couldn't remove image from group"
-	       << cpp_strerror(-r) << dendl;
+	       << cpp_strerror(r) << dendl;
     return r;
   }
 
