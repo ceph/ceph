@@ -21,6 +21,7 @@
 #include "include/encoding.h"
 #include "include/object.h" // for object_t
 #include "include/shard_id.h"
+#include "include/sobject.h" // for sobject_t
 #include "include/types.h" // for version_t
 
 #include "reverse.h"
