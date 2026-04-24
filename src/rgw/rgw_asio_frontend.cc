@@ -1087,7 +1087,7 @@ void AsioFrontend::on_accept(Listener& l, tcp::socket stream)
   if (l.use_ssl) {
     boost::asio::spawn(make_strand(context), std::allocator_arg, make_stack_allocator(),
       [this, s=std::move(stream)] (boost::asio::yield_context yield) mutable {
-        auto conn = boost::intrusive_ptr{new Connection(std::move(s))};
+        auto conn = boost::intrusive_ptr{new Connection(std::move(s), yield.get_executor())};
         auto c = connections.add(*conn);
         // wrap the tcp stream in an ssl stream
         boost::asio::ssl::stream<tcp::socket&> stream{conn->socket, *ssl_context};
@@ -1122,7 +1122,7 @@ void AsioFrontend::on_accept(Listener& l, tcp::socket stream)
 #endif // WITH_RADOSGW_BEAST_OPENSSL
     boost::asio::spawn(make_strand(context), std::allocator_arg, make_stack_allocator(),
       [this, s=std::move(stream)] (boost::asio::yield_context yield) mutable {
-        auto conn = boost::intrusive_ptr{new Connection(std::move(s))};
+        auto conn = boost::intrusive_ptr{new Connection(std::move(s), yield.get_executor())};
         auto c = connections.add(*conn);
         auto timeout = timeout_timer{yield.get_executor(), request_timeout, conn};
         boost::system::error_code ec;
@@ -1166,7 +1166,7 @@ void AsioFrontend::stop()
   }
 
   // close all connections
-  connections.close(ec);
+  connections.close();
   pause_mutex.cancel();
 }
 
@@ -1192,7 +1192,7 @@ void AsioFrontend::pause()
   const bool graceful_stop{ g_ceph_context->_conf->rgw_graceful_stop };
   if (!graceful_stop) {
     // close all connections so outstanding requests fail quickly
-    connections.close(ec);
+    connections.close();
   }
 
   // pause and wait until outstanding requests complete
