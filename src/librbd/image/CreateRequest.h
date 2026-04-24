@@ -5,12 +5,14 @@
 #define CEPH_LIBRBD_IMAGE_CREATE_REQUEST_H
 
 #include "common/config_fwd.h"
+#include "common/fault_injector.h"
 #include "include/int_types.h"
 #include "include/buffer.h"
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/ImageCtx.h"
+#include <string_view>
 
 class Context;
 
@@ -24,6 +26,8 @@ namespace asio { struct ContextWQ; }
 
 namespace image {
 
+using CreateRequestFaultInjector = FaultInjector<std::string_view>;
+
 template <typename ImageCtxT = ImageCtx>
 class CreateRequest {
 public:
@@ -36,11 +40,14 @@ public:
                                const std::string &non_primary_global_image_id,
                                const std::string &primary_mirror_uuid,
                                asio::ContextWQ *op_work_queue,
-                               Context *on_finish) {
+                               Context *on_finish,
+                               const CreateRequestFaultInjector& fault_injector =
+                                 {}) {
     return new CreateRequest(config, ioctx, image_name, image_id, size,
                              image_options, create_flags,
                              mirror_image_mode, non_primary_global_image_id,
-                             primary_mirror_uuid, op_work_queue, on_finish);
+                             primary_mirror_uuid, op_work_queue, on_finish,
+                             fault_injector);
   }
 
   static int validate_order(CephContext *cct, uint8_t order);
@@ -51,41 +58,56 @@ private:
   /**
    * @verbatim
    *
-   *                                  <start> . . . . > . . . . .
-   *                                     |                      .
-   *                                     v                      .
-   *                               VALIDATE DATA POOL           v (pool validation
-   *                                     |                      .  disabled)
-   *                                     v                      .
-   * (error: bottom up)         ADD IMAGE TO DIRECTORY  < . . . .
-   *  _______<_______                    |
-   * |               |                   v
-   * |               |            CREATE ID OBJECT
-   * |               |               /   |
-   * |      REMOVE FROM DIR <-------/    v
-   * |               |           NEGOTIATE FEATURES (when using default features)
-   * |               |                   |
-   * |               |                   v         (stripingv2 disabled)
-   * |               |              CREATE IMAGE. . . . > . . . .
-   * v               |               /   |                      .
-   * |      REMOVE ID OBJ <---------/    v                      .
-   * |               |          SET STRIPE UNIT COUNT           .
-   * |               |               /   |  \ . . . . . > . . . .
-   * |      REMOVE HEADER OBJ<------/    v                     /. (object-map
-   * |               |\           OBJECT MAP RESIZE . . < . . * v  disabled)
-   * |               | \              /  |  \ . . . . . > . . . .
-   * |               |  *<-----------/   v                     /. (journaling
-   * |               |             FETCH MIRROR MODE. . < . . * v  disabled)
-   * |               |                /   |                     .
-   * |     REMOVE OBJECT MAP<--------/    v                     .
-   * |               |\             JOURNAL CREATE              .
-   * |               | \               /  |                     .
-   * v               |  *<------------/   v                     .
-   * |               |           MIRROR IMAGE ENABLE            .
-   * |               |                /   |                     .
-   * |        JOURNAL REMOVE*<-------/    |                     .
-   * |                                    v                     .
-   * |_____________>___________________<finish> . . . . < . . . .
+    *           <start>
+    *              |
+    *              v
+    *      VALIDATE DATA POOL
+    *              |
+    *              v
+    *     NEGOTIATE FEATURES (optional)
+    *              |
+    *              v
+    *        CREATE IMAGE HEADER
+    *              |
+    *              v
+    *   FAIL AFTER HEADER (fault injector: "after_header")
+    *              |
+    *              v
+    *    SET STRIPE UNIT / COUNT
+    *              |
+    *              v
+    *      OBJECT MAP RESIZE (if enabled)
+    *              |
+    *              v
+    *     FETCH MIRROR MODE (if journaling)
+    *              |
+    *              v
+    *        JOURNAL CREATE (if enabled)
+    *              |
+    *              v
+    *     MIRROR IMAGE ENABLE (if requested)
+    *              |
+    *              v
+    *       CREATE rbd_id.<name>
+    *              |
+    *              v
+    *   FAIL AFTER ID CREATE (fault injector: "after_id_create")
+    *              |
+    *              v
+    *       ADD TO rbd_directory
+    *              |
+    *              v
+    *   FAIL AFTER DIR ADD (fault injector: "after_dir_add")
+    *              |
+    *              v
+    *            <finish>
+    *
+    * CreateRequestFaultInjector supports InjectError, InjectAbort, and
+    * InjectDelay at the named checkpoints above.
+    *
+    * Cleanup path: remove_mirror_image -> journal_remove -> remove_object_map
+    * -> remove_header_object -> remove_id_object -> remove_from_dir
+    * -> complete(m_r_saved).
    *
    * @endverbatim
    */
@@ -98,7 +120,8 @@ private:
                 cls::rbd::MirrorImageMode mirror_image_mode,
                 const std::string &non_primary_global_image_id,
                 const std::string &primary_mirror_uuid,
-                asio::ContextWQ *op_work_queue, Context *on_finish);
+                asio::ContextWQ *op_work_queue, Context *on_finish,
+                const CreateRequestFaultInjector& fault_injector);
 
   const ConfigProxy& m_config;
   IoCtx m_io_ctx;
@@ -128,6 +151,10 @@ private:
   int m_r_saved = 0;  // used to return actual error after cleanup
   file_layout_t m_layout;
   std::string m_id_obj, m_header_obj, m_objmap_name;
+  bool m_directory_added = false;
+  bool m_id_object_created = false;
+  bool m_mirror_image_enabled = false;
+  CreateRequestFaultInjector m_fault_injector;
 
   bufferlist m_outbl;
   cls::rbd::MirrorMode m_mirror_mode = cls::rbd::MIRROR_MODE_DISABLED;
@@ -138,6 +165,7 @@ private:
 
   void add_image_to_directory();
   void handle_add_image_to_directory(int r);
+  int check_fault_injection(std::string_view stage);
 
   void create_id_object();
   void handle_create_id_object(int r);
@@ -166,6 +194,9 @@ private:
   void complete(int r);
 
   // cleanup
+  void remove_mirror_image();
+  void handle_remove_mirror_image(int r);
+
   void journal_remove();
   void handle_journal_remove(int r);
 
