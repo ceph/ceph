@@ -210,13 +210,14 @@ public:
 			 << err.what() << dendl;
       throw;
     } catch (const sys::system_error& e) {
-      if (e.code() == sys::errc::no_such_file_or_directory) {
-	co_return std::make_tuple(entries.first(0), std::string{});
+      if (e.code() == sys::errc::no_such_file_or_directory ||
+          e.code() == ceph::buffer::errc::end_of_buffer) {
+        co_return std::make_tuple(entries.first(0), std::string{});
       } else {
-	ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
-			   << ": failed to list " << oids[shard]
-			   << ": " << e.what() << dendl;
-	throw;
+        ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
+              << ": failed to list " << oids[shard]
+              << ": " << e.what() << dendl;
+	      throw;
       }
     }
   }
@@ -228,7 +229,8 @@ public:
       co_return RGWDataChangesLogInfo{.marker = header.max_marker,
 				      .last_update = header.max_time};
     } catch (const sys::system_error& e) {
-      if (e.code() == sys::errc::no_such_file_or_directory) {
+      if (e.code() == sys::errc::no_such_file_or_directory || 
+          e.code() == ceph::buffer::errc::end_of_buffer) {
 	co_return RGWDataChangesLogInfo{};
       }
       ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
@@ -244,7 +246,8 @@ public:
 			  asio::use_awaitable);
       co_return;
     } catch (const sys::system_error& e) {
-      if (e.code() == sys::errc::no_such_file_or_directory) {
+      if (e.code() == sys::errc::no_such_file_or_directory || 
+          e.code() == ceph::buffer::errc::end_of_buffer) {
 	co_return;
       } else {
 	ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
@@ -268,7 +271,8 @@ public:
 	  co_return false;
 	}
       } catch (const sys::system_error& e) {
-	if (e.code() == sys::errc::no_such_file_or_directory) {
+	if (e.code() == sys::errc::no_such_file_or_directory || 
+      e.code() == ceph::buffer::errc::end_of_buffer) {
 	  continue;
 	}
       }
@@ -1474,7 +1478,8 @@ RGWDataChangesLog::read_sems(int index, std::string cursor) {
 				       &out, &cursor)),
       nullptr, asio::use_awaitable);
   } catch (const sys::system_error& e) {
-    if (e.code() != sys::errc::no_such_file_or_directory) {
+    if (e.code() != sys::errc::no_such_file_or_directory || 
+        e.code() == ceph::buffer::errc::end_of_buffer) {
       throw;
     }
   }
@@ -1705,7 +1710,8 @@ RGWDataChangesLog::admin_sem_list(std::optional<int> req_shard,
 	mkeep = marker;
       }
     } catch (const sys::system_error& e) {
-      if (e.code() == sys::errc::no_such_file_or_directory) {
+      if (e.code() == sys::errc::no_such_file_or_directory || 
+          e.code() == ceph::buffer::errc::end_of_buffer) {
 	if (!req_shard) {
 	  begin_next = true;
 	  ++shard;
