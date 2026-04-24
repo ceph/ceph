@@ -10,6 +10,7 @@
 #include "common/ceph_crypto.h"
 #include "common/errno.h"
 #include "include/random.h"
+#include "include/sha_digest_fmt.h"
 #include "auth/AuthClient.h"
 #include "auth/AuthServer.h"
 #include "auth/AuthSessionHandler.h" // for struct DecryptionError
