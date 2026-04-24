@@ -42,6 +42,7 @@
 #include "common/likely.h"
 #include "include/Context.h"
 #include "common/Clock.h"
+#include "common/OnFinisher.h"
 
 #include "osdc/Objecter.h"
 
