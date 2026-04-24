@@ -3950,6 +3950,56 @@ class SMBClusterBindIPSpec:
                 )
         return out
 
+class SSLParameters:
+    def __init__(
+        self,
+        enabled: bool = False,
+        ssl_cert: Optional[str] = None,
+        ssl_key: Optional[str] = None,
+        ssl_ca_cert: Optional[str] = None,
+        certificate_source: Optional[str] = None,
+    ):
+        self.enabled = enabled
+        self.ssl_cert = ssl_cert
+        self.ssl_key = ssl_key
+        self.ssl_ca_cert = ssl_ca_cert
+        self.certificate_source = certificate_source
+        self.validate()
+
+    def validate(self, component: str = "ssl") -> None:
+        if not self.enabled:
+            return
+        missing: list[Any] = []
+        if not self.ssl_cert: missing.append("ssl_cert")
+        if not self.ssl_key: missing.append("ssl_key")
+        if component == "ssl" and not self.certificate_source: missing.append("certificate_source")
+
+        if missing:
+            raise ValueError(
+                f"[{component}] SSL is enabled but the following fields are missing: {', '.join(missing)}"
+            )
+
+    @classmethod
+    def from_dict(cls, data: Any) -> 'SSLParameters':
+        if not isinstance(data, dict):
+            return cls(enabled=False)
+
+        return cls(
+            enabled=data.get('enabled', False),
+            ssl_cert=data.get('ssl_cert'),
+            ssl_key=data.get('ssl_key'),
+            ssl_ca_cert=data.get('ssl_ca_cert'),
+            certificate_source=data.get('certificate_source'),
+        )
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            'enabled': self.enabled,
+            'ssl_cert': self.ssl_cert,
+            'ssl_key': self.ssl_key,
+            'ssl_ca_cert': self.ssl_ca_cert,
+            'certificate_source': self.certificate_source,
+        }
 
 class SMBExternalCephCluster:
     """Configure access to a non-local Ceph cluster for SMB services."""
