@@ -13,11 +13,14 @@
  *
  */
 
+#include <iomanip> // for std::setprecision()
 #include <memory>
 #include <functional>
 
 #include "mclock_common.h"
 #include "debug.h"
+
+#include "common/Clock.h" // for ceph_clock_now()
 
 #ifdef WITH_CRIMSON
 #include "crimson/common/perf_counters_collection.h"
