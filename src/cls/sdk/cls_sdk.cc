@@ -4,6 +4,8 @@
 #include "include/rados/objclass.h"
 #include "cls_sdk_ops.h"
 
+#include <cerrno> // for EIO
+
 CLS_VER(1,0)
 CLS_NAME(sdk)
 
