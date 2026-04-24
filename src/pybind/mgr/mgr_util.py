@@ -926,20 +926,36 @@ def profile_method(skip_attribute: bool = False) -> Callable[[Callable[..., T]],
 
 
 def parse_combined_pem_file(pem_data: str) -> Tuple[Optional[str], Optional[str]]:
+    """Extract the (first) certificate and the private key from a combined PEM blob.
 
-    # Extract the certificate
+    Supports all three common private-key PEM block types:
+
+    * ``-----BEGIN RSA PRIVATE KEY-----``  (PKCS#1)
+    * ``-----BEGIN PRIVATE KEY-----``       (PKCS#8 unencrypted)
+    * ``-----BEGIN EC PRIVATE KEY-----``    (SEC1 EC)
+
+    Only the *first* CERTIFICATE block is extracted as the "leaf" certificate.
+    For fullchain PEMs (key + multiple certs) callers that need the full chain
+    should use :func:`~cephadm.ssl_cert_utils.split_fullchain_pem` instead.
+    """
+    import re
+
     cert_start = "-----BEGIN CERTIFICATE-----"
     cert_end = "-----END CERTIFICATE-----"
     cert = None
     if cert_start in pem_data and cert_end in pem_data:
         cert = pem_data[pem_data.index(cert_start):pem_data.index(cert_end) + len(cert_end)]
 
-    # Extract the private key
-    key_start = "-----BEGIN PRIVATE KEY-----"
-    key_end = "-----END PRIVATE KEY-----"
     private_key = None
-    if key_start in pem_data and key_end in pem_data:
-        private_key = pem_data[pem_data.index(key_start):pem_data.index(key_end) + len(key_end)]
+    # Try every supported key-block type in order of most common first.
+    for key_start, key_end in (
+        ("-----BEGIN PRIVATE KEY-----", "-----END PRIVATE KEY-----"),         # PKCS#8
+        ("-----BEGIN RSA PRIVATE KEY-----", "-----END RSA PRIVATE KEY-----"),  # PKCS#1
+        ("-----BEGIN EC PRIVATE KEY-----", "-----END EC PRIVATE KEY-----"),    # SEC1 EC
+    ):
+        if key_start in pem_data and key_end in pem_data:
+            private_key = pem_data[pem_data.index(key_start):pem_data.index(key_end) + len(key_end)]
+            break
 
     return cert, private_key
 

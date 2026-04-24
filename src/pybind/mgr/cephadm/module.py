@@ -18,6 +18,7 @@ from threading import Event
 from ceph.deployment.service_spec import PrometheusSpec
 from cephadm.cert_mgr import CertMgr
 from cephadm.tlsobject_store import TLSObjectScope, TLSObjectException
+from cephadm.ssl_cert_utils import SSLConfigException, contains_private_key, split_fullchain_pem
 
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
@@ -3547,6 +3548,25 @@ Then run the following:
 
         if consumer not in self.cert_mgr.list_consumers():
             raise OrchestratorError(f"Invalid service: {consumer}. Please use 'ceph orch certmgr bindings ls' to list valid bindings.")
+
+        # --- Fullchain PEM auto-detection -----------------------------------
+        # When the user passes a fullchain PEM (private key + cert chain bundled
+        # in a single blob) as the ``cert`` argument the key is extracted here so
+        # the rest of the function always operates on a clean cert-only PEM and an
+        # explicit key string.
+        if contains_private_key(cert):
+            if key:
+                raise OrchestratorError(
+                    'Received a fullchain PEM (cert blob contains an embedded private key) '
+                    'but a separate --key argument was also provided. '
+                    'Please either supply the fullchain PEM without a separate key, '
+                    'or supply a plain certificate PEM with the key separately.'
+                )
+            try:
+                cert, key = split_fullchain_pem(cert)
+            except SSLConfigException as exc:
+                raise OrchestratorError(f'Failed to parse fullchain PEM: {exc}') from exc
+        # --------------------------------------------------------------------
 
         # Check the certificate validity status
         target = service_name or hostname

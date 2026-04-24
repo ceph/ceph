@@ -43,7 +43,13 @@ from ceph.cephadm.d3n_types import (
 from cephadm.services.rgw_d3n import D3NDevicePlanner
 from .service_registry import register_cephadm_service
 from cephadm.tlsobject_types import TLSObjectScope, TLSCredentials, EMPTY_TLS_CREDENTIALS
-from cephadm.ssl_cert_utils import extract_ips_and_fqdns_from_cert
+from cephadm.ssl_cert_utils import (
+    extract_ips_and_fqdns_from_cert,
+    split_fullchain_pem,
+    contains_private_key,
+    is_fullchain_pem,
+    SSLConfigException,
+)
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -431,6 +437,14 @@ class CephadmService(metaclass=ABCMeta):
     ) -> TLSCredentials:
         """
         Fetch and persist the TLS certificate and key for a service spec.
+
+        Supports fullchain PEM input: when the ``cert_attr`` field on the spec
+        contains a combined PEM blob (private key + one or more certificate
+        blocks), the key is automatically extracted and stored separately so
+        that downstream consumers always receive clean cert-only and key-only
+        values.  The ``key_attr`` field must be empty when a fullchain PEM is
+        used; an error is raised if both are provided simultaneously.
+
         Returns:
             A TLSCredentials if both are available; otherwise EMPTY_TLS_CREDENTIALS.
         """
@@ -444,6 +458,33 @@ class CephadmService(metaclass=ABCMeta):
 
         service_name = svc_spec.service_name()
         host = daemon_spec.host
+
+        # --- Fullchain PEM auto-detection ------------------------------------
+        # Enterprise CAs often output key + chain as a single blob.  When
+        # the cert field embeds a private key we split it here so the rest of
+        # the stack remains unaware of multi-block PEM input.
+        if cert and contains_private_key(cert):
+            if key:
+                logger.error(
+                    f"Service '{service_name}': '{cert_attr}' is a fullchain PEM "
+                    f"(contains an embedded private key) but '{key_attr}' is also "
+                    f"set. Please supply a fullchain PEM without a separate key, "
+                    f"or a plain certificate PEM with the key field."
+                )
+                return EMPTY_TLS_CREDENTIALS
+            try:
+                cert, key = split_fullchain_pem(cert)
+                logger.debug(
+                    "certmgr: split fullchain PEM from spec for service '%s' "
+                    "(cert_attr=%s)", service_name, cert_attr
+                )
+            except SSLConfigException as exc:
+                logger.error(
+                    f"Service '{service_name}': failed to parse fullchain PEM "
+                    f"from '{cert_attr}': {exc}"
+                )
+                return EMPTY_TLS_CREDENTIALS
+        # ---------------------------------------------------------------------
 
         missing = []
         if not cert:
