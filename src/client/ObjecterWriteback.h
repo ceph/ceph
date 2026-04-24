@@ -6,6 +6,7 @@
 
 #include "osdc/Objecter.h"
 #include "osdc/WritebackHandler.h"
+#include "common/OnFinisher.h"
 
 class ObjecterWriteback : public WritebackHandler {
  public:
