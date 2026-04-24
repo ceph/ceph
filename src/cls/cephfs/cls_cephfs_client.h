@@ -1,6 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <cstdint>
+#include <string>
+
+#include "include/buffer_fwd.h"
 #include "include/rados/librados_fwd.hpp"
 #include "mds/mdstypes.h"
 #include "cls_cephfs.h"
