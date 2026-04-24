@@ -18,13 +18,7 @@
 #include <cstdint>
 #include <cstring> // for memcmp(), memcpy()
 #include <list>
-#include <ostream>
 #include <string>
-
-#include <fmt/core.h> // for FMT_VERSION
-#if FMT_VERSION >= 90000
-#include <fmt/ostream.h>
-#endif
 
 #include "common/Formatter.h"
 #include "include/encoding.h"
@@ -81,16 +75,6 @@ struct sha_digest_t {
     return ls;
   }
 };
-
-template<uint8_t S>
-inline std::ostream &operator<<(std::ostream &out, const sha_digest_t<S> &b) {
-  std::string str = b.to_str();
-  return out << str;
-}
-
-#if FMT_VERSION >= 90000
-template <uint8_t S> struct fmt::formatter<sha_digest_t<S>> : fmt::ostream_formatter {};
-#endif
 
 using sha1_digest_t = sha_digest_t<20>;
 WRITE_CLASS_ENCODER(sha1_digest_t)
