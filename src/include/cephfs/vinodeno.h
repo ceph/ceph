@@ -15,7 +15,7 @@
 
 #include "include/encoding.h"
 #include "include/fs_types.h" // for inodeno_t
-#include "include/object.h" // for snapid_t
+#include "include/snapid.h" // for snapid_t
 
 struct vinodeno_t {
   vinodeno_t() {}
