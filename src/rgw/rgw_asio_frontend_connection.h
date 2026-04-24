@@ -2,9 +2,12 @@
 
 #include <mutex>
 
+#include <boost/asio/any_io_executor.hpp>
+#include <boost/asio/dispatch.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/beast/core/flat_static_buffer.hpp>
 #include <boost/intrusive/list.hpp>
+#include <boost/smart_ptr/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
 namespace rgw::asio {
@@ -21,12 +24,19 @@ struct Connection : boost::intrusive::list_base_hook<>,
 {
   tcp::socket socket;
   parse_buffer buffer;
+  // executor of the handle_connection coroutine's strand. used so that close()
+  // from outside the strand (e.g. frontend pause) serializes with coroutine
+  // operations on the socket instead of racing the reactor
+  boost::asio::any_io_executor strand;
+  Connection(tcp::socket&& socket,
+             boost::asio::any_io_executor strand) noexcept
+      : socket(std::move(socket)), strand(std::move(strand)) {}
 
-  explicit Connection(tcp::socket&& socket) noexcept
-      : socket(std::move(socket)) {}
-
-  void close(boost::system::error_code& ec) {
-    socket.close(ec);
+  void close() {
+    boost::asio::dispatch(strand, [c = boost::intrusive_ptr<Connection>{this}] {
+      boost::system::error_code ec;
+      c->socket.close(ec);
+    });
   }
 
   tcp::socket& get_socket() { return socket; }
@@ -60,16 +70,21 @@ class ConnectionList {
     std::lock_guard lock{mutex};
     return connections.size();
   }
-  void close(boost::system::error_code& ec) {
+  void close() {
     std::lock_guard lock{mutex};
     for (auto& conn : connections) {
-      // cancel pending reactor operations which delivers operation_aborted
-      // to completion handlers and then shutdown the transport so any
-      // subsequent I/O attempts fail immediately.
-      conn.socket.cancel(ec);
-      conn.socket.shutdown(tcp::socket::shutdown_both, ec);
+      // dispatch operations to the connection's strand so it serializes with
+      // the handle_connection coroutine.
+      boost::asio::dispatch(
+	  conn.strand, [c = boost::intrusive_ptr<Connection>{&conn}] {
+	    boost::system::error_code ec;
+	    // cancel pending reactor operations which delivers operation_aborted
+	    // to completion handlers and then shutdown the transport so any
+	    // subsequent I/O attempts fail immediately.
+	    c->socket.cancel(ec);
+	    c->socket.shutdown(tcp::socket::shutdown_both, ec);
+	  });
     }
   }
 };
-
 } // namespace rgw::asio
