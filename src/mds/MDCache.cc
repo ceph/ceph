@@ -80,6 +80,7 @@
 
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/OnFinisher.h"
 #include "common/perf_counters.h"
 #include "common/safe_io.h"
 

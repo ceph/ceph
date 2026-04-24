@@ -22,6 +22,7 @@
 #include "common/debug.h"
 #include "common/errno.h" // for cpp_strerror()
 #include "common/Finisher.h"
+#include "common/OnFinisher.h"
 
 #include "include/ceph_assert.h"
 

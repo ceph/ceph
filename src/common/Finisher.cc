@@ -5,6 +5,7 @@
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/perf_counters.h"
 #include "include/container_ios.h"
+#include "include/Context.h"
 
 #ifdef WITH_CRIMSON
 #include "crimson/common/perf_counters_collection.h"
