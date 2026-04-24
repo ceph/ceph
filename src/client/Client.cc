@@ -59,6 +59,7 @@ using namespace std::literals::string_view_literals;
 #include <sys/statvfs.h>
 
 #include "common/config.h"
+#include "common/OnFinisher.h"
 #include "common/version.h"
 #include "common/async/blocked_completion.h"
 #include "common/strescape.h"
