@@ -8,10 +8,12 @@
 #include <list>
 #include <memory>
 
+#include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/bind_executor.hpp>
 #include <boost/asio/bind_cancellation_slot.hpp>
 #include <boost/asio/cancellation_signal.hpp>
 #include <boost/asio/detached.hpp>
+#include <boost/asio/dispatch.hpp>
 #include <boost/asio/error.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
@@ -414,9 +416,14 @@ struct Connection : boost::intrusive::list_base_hook<>,
 {
   tcp::socket socket;
   parse_buffer buffer;
+  // executor of the handle_connection coroutine's strand. used so that close()
+  // from outside the strand (e.g. frontend pause) serializes with coroutine
+  // operations on the socket instead of racing the reactor
+  boost::asio::any_io_executor strand;
 
-  explicit Connection(tcp::socket&& socket) noexcept
-      : socket(std::move(socket)) {}
+  Connection(tcp::socket&& socket,
+             boost::asio::any_io_executor strand) noexcept
+      : socket(std::move(socket)), strand(std::move(strand)) {}
 
   void close(boost::system::error_code& ec) {
     socket.close(ec);
@@ -449,10 +456,19 @@ class ConnectionList {
     connections.push_back(conn);
     return Guard{this, &conn};
   }
-  void close(boost::system::error_code& ec) {
+  void close() {
     std::lock_guard lock{mutex};
     for (auto& conn : connections) {
-      conn.socket.close(ec);
+      // dispatch close() to the connection's strand so it serializes with
+      // the handle_connection coroutine. calling socket.close() from another
+      // thread can race with the coroutine's next async_read_some(), where
+      // the reactor would dereference the socket's descriptor_state after it
+      // has been deregistered
+      boost::asio::dispatch(conn.strand,
+        [c = boost::intrusive_ptr<Connection>{&conn}] {
+          boost::system::error_code ec;
+          c->socket.close(ec);
+        });
     }
     connections.clear();
   }
@@ -1194,7 +1210,8 @@ void AsioFrontend::on_accept(Listener& l, tcp::socket stream)
 #endif
     boost::asio::spawn(make_strand(context), std::allocator_arg, make_stack_allocator(),
       [this, s=std::move(stream), ssl_ctx] (boost::asio::yield_context yield) mutable {
-        auto conn = boost::intrusive_ptr{new Connection(std::move(s))};
+        auto conn = boost::intrusive_ptr{
+            new Connection(std::move(s), yield.get_executor())};
         auto c = connections.add(*conn);
         // wrap the tcp stream in an ssl stream
         boost::asio::ssl::stream<tcp::socket&> stream{conn->socket, *ssl_ctx};
@@ -1229,7 +1246,8 @@ void AsioFrontend::on_accept(Listener& l, tcp::socket stream)
 #endif // WITH_RADOSGW_BEAST_OPENSSL
     boost::asio::spawn(make_strand(context), std::allocator_arg, make_stack_allocator(),
       [this, s=std::move(stream)] (boost::asio::yield_context yield) mutable {
-        auto conn = boost::intrusive_ptr{new Connection(std::move(s))};
+        auto conn = boost::intrusive_ptr{
+            new Connection(std::move(s), yield.get_executor())};
         auto c = connections.add(*conn);
         auto timeout = timeout_timer{yield.get_executor(), request_timeout, conn};
         boost::system::error_code ec;
@@ -1274,7 +1292,7 @@ void AsioFrontend::stop()
   }
 
   // close all connections
-  connections.close(ec);
+  connections.close();
   pause_mutex.cancel();
 }
 
@@ -1300,7 +1318,7 @@ void AsioFrontend::pause()
   const bool graceful_stop{ g_ceph_context->_conf->rgw_graceful_stop };
   if (!graceful_stop) {
     // close all connections so outstanding requests fail quickly
-    connections.close(ec);
+    connections.close();
   }
 
   // pause and wait until outstanding requests complete
