@@ -22,6 +22,7 @@
 #include "include/stringify.h"
 #include "osd/osd_types.h"
 #include "common/errno.h"
+#include "common/Formatter.h"
 #include "common/hostname.h"
 #include "common/dout.h"
 
