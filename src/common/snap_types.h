@@ -11,11 +11,6 @@
 #include "include/utime.h"
 #include "include/fs_types.h" // for struct inodeno_t
 
-#include <fmt/core.h> // for FMT_VERSION
-#if FMT_VERSION >= 90000
-#include <fmt/ostream.h>
-#endif
-
 namespace ceph {
 class Formatter;
 }
@@ -109,9 +104,5 @@ struct SnapContext {
 WRITE_CLASS_ENCODER(SnapContext)
 
 std::ostream& operator<<(std::ostream& out, const SnapContext& snapc);
-
-#if FMT_VERSION >= 90000
-template <> struct fmt::formatter<SnapContext> : fmt::ostream_formatter {};
-#endif
 
 #endif
