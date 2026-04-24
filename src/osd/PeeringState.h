@@ -986,12 +986,14 @@ public:
     typedef boost::mpl::list<
       boost::statechart::transition< DoRecovery, WaitLocalRecoveryReserved >,
       boost::statechart::custom_reaction<StartTargetPoolMigration>,
+      boost::statechart::custom_reaction<RemotePoolMigrationReserved>,
       boost::statechart::custom_reaction<SetForceRecovery>,
       boost::statechart::custom_reaction<SetForceBackfill>
     > reactions;
     explicit Clean(my_context ctx);
     void exit();
     boost::statechart::result react(const StartTargetPoolMigration &evt);
+    boost::statechart::result react(const RemotePoolMigrationReserved &evt);
     boost::statechart::result react(const boost::statechart::event_base&) {
       return discard_event();
     }

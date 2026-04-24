@@ -1215,19 +1215,18 @@ protected:
 
   /// objects waiting for lock retry to delete source after successful copy_from
   std::set<hobject_t> pool_migration_source_delete_pending_lock;
-  /// target PG in pool migration has taken reservations and replied
-  bool pool_migration_reservations_granted = false;
+  /// source PG has received reservation granted response from target PG
+  bool pool_migration_reservations_granted_source = false;
+  /// target PG has taken reservations and replied to the source PG
+  bool pool_migration_reservations_granted_target = false;
   /// current migration target pg
   std::optional<pg_t> pool_migration_target_pg;
   /// list of all target pgs a particular source pg will migrate to
   std::vector<pg_t> pool_migration_target_pgs;
   /// index of current target pg in pool_migration_target_pgs
   size_t pool_migration_current_target_index = 0;
-  /// source PG has sent reservation request and is waiting for target to reply
-  bool pool_migration_waiting_for_reservations = false;
-  /// pending reservation request for target to reply to
-  OpRequestRef pending_pool_migration_reservation_op;
-  std::vector<OSDOp> pending_pool_migration_reservation_ops;
+  /// pending reservation requests for target to reply to
+  std::vector<OpRequestRef> pending_pool_migration_reservation_ops;
 
   void initialize_pool_migration_target_pg_list();
   hobject_t next_pool_migration(std::optional<hobject_t> start);
