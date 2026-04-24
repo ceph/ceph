@@ -15,6 +15,7 @@
 
 #include "common/config.h"
 #include "common/debug.h"
+#include "common/OnFinisher.h"
 #include "osdc/Journaler.h"
 #include "events/ESubtreeMap.h"
 #include "events/ESession.h"
