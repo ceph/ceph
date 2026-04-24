@@ -23,6 +23,7 @@
 #include "common/errno.h"
 #include "include/ceph_assert.h"
 #include "common/Finisher.h"
+#include "common/OnFinisher.h"
 
 #define dout_subsys ceph_subsys_journaler
 #undef dout_prefix

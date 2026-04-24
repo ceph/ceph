@@ -27,6 +27,7 @@
 #include "common/config.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/OnFinisher.h"
 #include "include/encoding_small_vector.h" // for encoding frag_vec_t
 
 enum {
