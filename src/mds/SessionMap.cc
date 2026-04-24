@@ -227,7 +227,7 @@ void SessionMap::_load_finish(
     bool more_session_vals)
 {
   if (operation_r < 0) {
-    derr << "_load_finish got " << cpp_strerror(operation_r) << dendl;
+    derr << __func__ << " got " << cpp_strerror(operation_r) << dendl;
     mds->clog->error() << "error reading sessionmap '" << get_object_name()
                        << "' " << operation_r << " ("
                        << cpp_strerror(operation_r) << ")";
@@ -319,7 +319,7 @@ void SessionMap::_load_finish(
  */
 void SessionMap::load(MDSContext *onload)
 {
-  dout(10) << "load" << dendl;
+  dout(10) << "__func__" << dendl;
 
   if (onload)
     waiting_for_load.push_back(onload);
@@ -373,12 +373,12 @@ void SessionMap::_load_legacy_finish(int r, bufferlist &bl)
 { 
   auto blp = bl.cbegin();
   if (r < 0) {
-    derr << "_load_finish got " << cpp_strerror(r) << dendl;
+    derr << __func__ << " got " << cpp_strerror(r) << dendl;
     ceph_abort_msg("failed to load sessionmap");
   }
   dump();
   decode_legacy(blp);  // note: this sets last_cap_renew = now()
-  dout(10) << "_load_finish v " << version 
+  dout(10) << __func__ << " v " << version
 	   << ", " << session_map.size() << " sessions, "
 	   << bl.length() << " bytes"
 	   << dendl;
