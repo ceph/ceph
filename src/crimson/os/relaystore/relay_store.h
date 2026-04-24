@@ -23,14 +23,14 @@ public:
     FuturizedStore::Shard& shard;
 
     template<auto MemberFunc, typename... Args>
-    decltype(auto) with_store(Args&&... args)
+    decltype(auto) with_store(this auto&& self, Args&&... args)
     {
-      return (shard.*MemberFunc)(std::forward<Args>(args)...);
+      return (std::forward_like<decltype(self)>(self.shard).*MemberFunc)(std::forward<Args>(args)...);
     }
 
   public:
-    Shard(_RelayStore& store)
-      : shard(store.get_sharded_store())
+    Shard(FuturizedStore::Shard& shard)
+      : shard(shard)
     {}
     ~Shard() = default;
 
@@ -232,8 +232,18 @@ public:
     return decorated_store.write_meta(key, value);
   }
 
-  FuturizedStore::Shard& get_sharded_store(store_index_t store_index = 0) final {
-    return decorated_store.get_sharded_store(store_index);
+  FuturizedStore::Shard& get_sharded_store(store_index_t store_index = 0) final
+  {
+    seastar::sharded<std::vector<std::unique_ptr<Shard>>> decorated_shards;
+    auto& local_shards = decorated_shards.local();
+    if (store_index >= local_shards.size()) {
+      local_shards.resize(store_index + 1);
+    }
+    if (!local_shards[store_index]) {
+      auto& shard_to_decorate = decorated_store.get_sharded_store(store_index);
+      local_shards[store_index] = std::make_unique<Shard>(shard_to_decorate);
+    }
+    return *local_shards[store_index];
   }
 
   seastar::future<std::tuple<int, std::string>>
