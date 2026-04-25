@@ -43,15 +43,17 @@ static auto cct = std::make_unique<CephContext>(CEPH_ENTITY_TYPE_ANY);
 
 static NoDoutPrefix dp(cct.get(), ceph_subsys_rgw);
 
+static asio::awaitable<void>
+maybethrow(int code)
+{
+  if (code != 0) {
+    throw sys::system_error{code, sys::generic_category()};
+  }
+  co_return;
+}
+
 TEST(CoSpawn, CoSpawn) {
   async::io_context_pool pool{3};
-
-  auto maybethrow = [](int code) -> asio::awaitable<void> {
-    if (code != 0) {
-      throw sys::system_error{code, sys::generic_category()};
-    }
-    co_return;
-  };
 
   int r = 0;
   r = rgw::run_coro(&dp, pool, maybethrow(ENOENT), nullptr);
@@ -204,4 +206,46 @@ TEST(CoSpawn, CoSpawn) {
   ASSERT_EQ(instr, s);
   ASSERT_TRUE(p);
   ASSERT_EQ(5, *p);
+}
+
+TEST(HybridToken, HybridToken)
+{
+  ceph::async::io_context_pool io_context{3, [] { is_asio_thread = true; }};
+  bool ran = false;
+  asio::spawn(
+      io_context,
+      [&](asio::yield_context yc) {
+        optional_yield y{yc};
+
+        ASSERT_NO_THROW(
+            co_spawn(yc.get_executor(), maybethrow(0), rgw::oyc(&dp, y)));
+        ASSERT_NO_THROW(co_spawn(
+            yc.get_executor(), maybethrow(0), rgw::oyc(&dp, null_yield)));
+
+        ASSERT_THROW(
+            co_spawn(yc.get_executor(), maybethrow(ENOENT), rgw::oyc(&dp, y)),
+            sys::system_error);
+        ASSERT_THROW(
+            co_spawn(
+                yc.get_executor(), maybethrow(ENOENT),
+                rgw::oyc(&dp, null_yield)),
+            sys::system_error);
+
+        {
+          std::exception_ptr eptr;
+          ASSERT_NO_THROW(co_spawn(
+              yc.get_executor(), maybethrow(ENOENT), rgw::oyc(&dp, y, eptr)));
+          ASSERT_EQ(-ENOENT, ceph::from_exception(eptr));
+        }
+        {
+          std::exception_ptr eptr;
+          ASSERT_NO_THROW(co_spawn(
+              yc.get_executor(), maybethrow(ENOENT), rgw::oyc(&dp, null_yield, eptr)));
+          ASSERT_EQ(-ENOENT, ceph::from_exception(eptr));
+        }
+
+        ran = true;
+      },
+      rgw::oyc(&dp, null_yield));
+  ASSERT_TRUE(ran);
 }
