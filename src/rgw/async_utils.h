@@ -15,22 +15,40 @@
 
 #pragma once
 
+#include <cassert>
+#include <chrono>
 #include <exception>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <tuple>
 #include <type_traits>
 #include <utility>
+#include <variant>
+#include <vector>
 
 #include <boost/asio/awaitable.hpp>
-#include <boost/asio/execution/executor.hpp>
+#include <boost/asio/cancellation_signal.hpp>
+#include <boost/asio/cancellation_type.hpp>
 #include <boost/asio/co_spawn.hpp>
+#include <boost/asio/error.hpp>
+#include <boost/asio/execution/executor.hpp>
+#include <boost/asio/spawn.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/this_coro.hpp>
+
+#include <boost/asio/experimental/promise.hpp>
+#include <boost/asio/experimental/use_promise.hpp>
+
+#include "include/function2.hpp"
+#include "include/scope_guard.h"
 
 #include "common/async/blocked_completion.h"
 #include "common/async/concepts.h"
-#include "common/async/yield_context.h"
 #include "common/async/redirect_error.h"
+#include "common/async/yield_context.h"
 
+#include "common/ceph_time.h"
 #include "common/dout.h"
 #include "common/dout_fmt.h"
 #include "common/error_code.h"
@@ -47,7 +65,6 @@ namespace rgw {
 ///
 /// Bridging adaptors between different flavors of coroutines.
 /// @{
-///
 
 /// Call a coroutine and block until it completes, handling exceptions
 /// by returning negative error codes and passing out the `what()`
@@ -432,16 +449,16 @@ struct oy_completer {
 ///
 /// \warning Errors from calls made using this adaptor will throw.
 ///
-/// \example For neorados,
-/// ```c++
+/// For example, with neorados:
 ///
+/// \code{.cpp}
 /// try {
 ///   rados.execute(o, ioc, std::move(op), oyc(dpp, y));
 /// } catch (sys::system_error& e) {
-///   …
+///   // …
 /// }
 ///
-/// ```
+/// \endcode
 ///
 /// \param[in] dpp Logging for `maybe_warn_about_blocking()`
 /// \param[in] y The yield_context, maybe. Maybe not.
@@ -489,6 +506,727 @@ inline auto
 oyc(const DoutPrefixProvider* dpp, optional_yield y, Disposition& disposition)
 {
   return ceph::async::redirect_error(oyc(dpp, y), disposition);
+}
+
+/// Helper type for visitors, from <https://en.cppreference.com/w/cpp/utility/variant/visit.html>
+template <class... Ts>
+struct overloads : Ts... {
+  using Ts::operator()...;
+};
+
+/// Promise used when shutting down the SAL
+using shutdown_promise =
+    ::boost::asio::experimental::promise<void(std::exception_ptr)>;
+
+/// \defgroup TaskHandles Handles for long-running coroutines
+///
+/// Handles for long-running tasks and background loops that can be
+/// cancelled and joined.
+/// @{
+
+/// Type tag to construct handle with coroutine running
+struct running_t {};
+
+/// Create a handle with the coroutine running
+inline constexpr running_t running{};
+
+/// Current state of a task handle
+enum class task_state {
+  /// Handle is not running but can be run
+  ready,
+  /// Handle is running and may be canceled or joined
+  running,
+  /// Handle is dead and cannot be used
+  dead
+};
+
+namespace detail {
+template <
+    typename CoroType,
+    ceph::async::strand Strand = boost::asio::strand<boost::asio::any_io_executor>>
+class metatask_base {
+public:
+  using coro_type = CoroType;
+  using executor_type = Strand;
+  using value_type = void;
+  using promise_type =
+      boost::asio::experimental::promise<void(std::exception_ptr)>;
+
+  /// Return the executor on which the coroutine will run
+  ///
+  /// \returns The executor for running coroutines, a strand in this
+  /// case
+  executor_type
+  get_executor() const
+  {
+    return strand;
+  }
+
+  /// \brief Return the state of the task
+  ///
+  /// \returns A value of type `task_state`
+  task_state
+  state() const
+  {
+    return std::visit(
+        overloads{
+            [](const coro_type&) { return task_state::ready; },
+            [](const promise_type&) { return task_state::running; },
+            [](const std::monostate&) { return task_state::dead; }},
+        runnable);
+  }
+
+  /// Cancels the currently running coroutine
+  ///
+  /// \note Cancellation is idempotent with the same cancellation
+  /// level
+  ///
+  /// \pre The task must be running. If `run` has not been called, or
+  /// `join` or `shutdown` have been called, it is a contract
+  /// violation.
+  void
+  cancel(
+      boost::asio::cancellation_type cancellation_level =
+          boost::asio::cancellation_type::all)
+  {
+    assert(state() == task_state::running);
+    std::get<promise_type>(runnable).cancel(cancellation_level);
+  }
+
+  /// Joins the currently running coroutine
+  ///
+  /// \param[in] token The Asio completion token
+  ///
+  /// \pre The task must be running. If `run` has not been called, or
+  /// `join` or `shutdown` have been called, it is a contract
+  /// violation.
+  ///
+  /// \returns Value appropriate to the completion token.
+  template<boost::asio::completion_token_for<void(std::exception_ptr)> CompletionToken>
+  auto
+  join(CompletionToken&& token)
+  {
+    assert(state() == task_state::running);
+    scope_guard _{[this] { runnable.template emplace<std::monostate>(); }};
+    // Extending the promise's lifetime through the execution of the handler.
+    auto p = std::make_shared<promise_type>(std::get<promise_type>(std::move(runnable)));
+    return (*p)(boost::asio::consign(std::forward<CompletionToken>(token), p));
+  }
+
+  /// Extracts the completion of the running coroutine for shutdown
+  ///
+  /// \note This function is intended to hook into the SAL shutdown
+  /// flow that accumulates multiple promises to wait on.
+  ///
+  /// \pre The task must be running. If `run` has not been called, or
+  /// `join` or `shutdown` have been called, it is a contract
+  /// violation.
+  void
+  shutdown(
+      std::string label,
+      std::vector<std::pair<std::string, shutdown_promise>>& to_wait)
+  {
+    assert(state() == task_state::running);
+    scope_guard _{[this] { runnable.template emplace<std::monostate>(); }};
+    to_wait.emplace_back(std::move(label), std::get<promise_type>(std::move(runnable)));
+  }
+
+  metatask_base(const metatask_base&) = delete;
+  metatask_base& operator =(const metatask_base&) = delete;
+  metatask_base(metatask_base&&) = delete;
+  metatask_base& operator =(metatask_base&&) = delete;
+
+protected:
+  template <typename... Args>
+  metatask_base(Strand strand, Args&&... args) :
+    strand(strand), runnable(std::forward<Args>(args)...)
+  {}
+
+  Strand strand;
+  std::variant<promise_type, coro_type, std::monostate> runnable;
+};
+
+template <
+    ceph::async::strand Strand = boost::asio::strand<boost::asio::any_io_executor>>
+class task_base : public metatask_base<boost::asio::awaitable<void>, Strand> {
+  using Base = metatask_base<boost::asio::awaitable<void>, Strand>;
+protected:
+  using Base::runnable;
+  using Base::strand;
+public:
+  using typename Base::coro_type;
+  using typename Base::executor_type;
+  using typename Base::value_type;
+  using typename Base::promise_type;
+
+  using Base::get_executor;
+  using Base::state;
+  using Base::cancel;
+  using Base::join;
+  using Base::shutdown;
+
+  /// Starts the coroutine running
+  ///
+  /// \pre The task may not be running and may not have run before. If
+  /// `run()` has been called before or the `running` version of the
+  /// constructor was called, it is a contract violation.
+  void
+  run()
+  {
+    using boost::asio::experimental::use_promise;
+    assert(state() == task_state::ready);
+    runnable.template emplace<promise_type>(boost::asio::co_spawn(
+        strand, std::get<coro_type>(std::move(runnable)),
+        boost::asio::bind_executor(strand, use_promise)));
+    assert(state() == task_state::running);
+  }
+
+  /// \brief Construct a task_base from an awaitable, ready
+  ///
+  /// \param[in] strand The strand on which to run
+  /// \param[in] coro The awaitable for the task
+  task_base(Strand strand, coro_type&& coro) :
+    Base(strand, std::in_place_type<coro_type>, std::move(coro))
+  {}
+
+  /// \brief Construct a task_base from a promise, running
+  ///
+  /// \param[in] strand The strand on which to run
+  /// \param[in] promise The promise for the currently running task
+  task_base(Strand strand, promise_type&& promise) :
+    Base(strand, std::in_place_type<promise_type>, std::move(promise))
+  {}
+
+  /// \brief Construct an empty task_base, dead
+  ///
+  /// \param[in] strand The strand on which to run
+  task_base(Strand strand) :
+    Base(strand, std::monostate{})
+  {}
+};
+
+template <
+    ceph::async::strand Strand = boost::asio::strand<boost::asio::any_io_executor>>
+class ytask_base : public metatask_base<fu2::unique_function<void(boost::asio::yield_context)>, Strand> {
+  using Base = metatask_base<fu2::unique_function<void(boost::asio::yield_context)>, Strand>;
+protected:
+  using Base::runnable;
+  using Base::strand;
+public:
+  using typename Base::coro_type;
+  using typename Base::executor_type;
+  using typename Base::value_type;
+  using typename Base::promise_type;
+
+  using Base::get_executor;
+  using Base::state;
+  using Base::cancel;
+  using Base::join;
+  using Base::shutdown;
+
+  /// Starts the coroutine running
+  ///
+  /// \pre The task may not be running and may not have run before. If
+  /// `run()` has been called before or the `start_running` version of
+  /// the constructor was called, it is a contract violation.
+  void
+  run()
+  {
+    using boost::asio::experimental::use_promise;
+    assert(state() == task_state::ready);
+    runnable.template emplace<promise_type>(boost::asio::spawn(
+        boost::asio::any_io_executor{strand},
+        std::get<coro_type>(std::move(runnable)),
+        boost::asio::bind_executor(strand, use_promise)));
+    assert(state() == task_state::running);
+  }
+
+  /// \brief Construct a ytask_base from a function, ready
+  ///
+  /// \param[in] strand The strand on which to run
+  /// \param[in] coro The function for the task
+  ytask_base(Strand strand, coro_type&& coro) :
+    Base(strand, std::in_place_type<coro_type>, std::move(coro))
+  {}
+
+  /// \brief Construct a ytask_base from a promise, running
+  ///
+  /// \param[in] strand The strand on which to run
+  /// \param[in] promise The promise for the running task
+  ytask_base(Strand strand, promise_type&& promise) :
+    Base(strand, std::in_place_type<promise_type>, std::move(promise))
+  {}
+
+  /// \brief Construct an empty ytask_base, dead
+  ///
+  /// \param[in] strand The strand on which to run
+  ytask_base(Strand strand) :
+    Base(strand, std::monostate{}) {}
+};
+} // namespace detail
+
+/// \brief Handle for long-running tasks
+///
+/// Example:
+/// ```
+/// rgw::task task{boost::asio::make_strand(co_await boost::asio::this_coro::executor),
+///                some_coroutine(), rgw::running};
+/// do_some();
+/// other_things();
+/// co_await task.join(asio::use_awaitable); // Wait for completion.
+/// ```
+///
+/// \warning This class makes no attempt at serialization. Use a
+/// strand or mutex if you need that.
+template <
+    ceph::async::strand Strand = boost::asio::strand<boost::asio::any_io_executor>>
+class task final : public detail::task_base<Strand> {
+  using Base = detail::task_base<Strand>;
+public:
+  using typename Base::coro_type;
+  using typename Base::executor_type;
+  using typename Base::value_type;
+  using typename Base::promise_type;
+
+  using Base::get_executor;
+  using Base::state;
+  using Base::run;
+  using Base::cancel;
+  using Base::join;
+  using Base::shutdown;
+
+  /// \brief Construct a task from an awaitable, ready to be run
+  ///
+  /// \param[in] strand The strand on which to run
+  /// \param[in] coro The awaitable for the task
+  task(Strand strand, coro_type coro) :
+    Base(strand, std::move(coro))
+  {
+    assert(state() == task_state::ready);
+  }
+
+  /// \brief Construct a task from a coroutine function, ready to be run
+  ///
+  /// \param[in] strand The strand on which to run
+  /// \param[in] coro_fun The coroutine function for the task
+  template <std::invocable<> CoroFun>
+    requires(std::is_same_v<std::invoke_result_t<CoroFun>, coro_type>)
+  task(Strand strand, CoroFun&& coro_fun) :
+    Base(strand, std::invoke(std::forward<CoroFun>(coro_fun)))
+  {
+    assert(state() == task_state::ready);
+  }
+
+  /// \brief Construct a running task from an awaitable
+  ///
+  /// \param[in] strand The strand on which to run
+  /// \param[in] coro The awaitable for the task
+  task(Strand strand, coro_type coro, running_t /**< Type tag */) :
+    Base(strand,
+        boost::asio::co_spawn(
+            strand,
+            std::move(coro),
+            boost::asio::bind_executor(
+                strand,
+                boost::asio::experimental::use_promise)))
+  {
+    assert(state() == task_state::running);
+  }
+
+  /// \brief Construct a running task from a coroutine function
+  ///
+  /// \param[in] strand The strand on which to run
+  /// \param[in] coro_fun The coroutine function for the task
+  template <std::invocable<> CoroFun>
+    requires(std::is_same_v<std::invoke_result_t<CoroFun>, coro_type>)
+  task(Strand strand, CoroFun&& coro_fun, running_t /**< Type tag */) :
+    Base(strand,
+        boost::asio::co_spawn(
+            strand,
+            std::invoke(std::forward<CoroFun>(coro_fun)),
+            boost::asio::bind_executor(
+                strand,
+                boost::asio::experimental::use_promise)))
+  {
+    assert(state() == task_state::running);
+  }
+};
+
+/// \brief Handle for periodic maintenance tasks
+///
+/// The supplied function returns an optional containing its intended
+/// delay. If the optional is empty, the loop will exit.
+///
+/// Example:
+///
+/// ```
+/// asio::awaitable<ceph::timespan>
+/// periodic()
+/// {
+///   co_await maintenance();
+///   co_return 3s;
+/// }
+/// ```
+///
+/// ```
+/// rgw::run_loop loop{boost::asio::make_strand(co_await boost::asio::this_coro::executor),
+///                    &periodic, rgw::running};
+/// co_await make_work();
+/// loop.wake();
+/// other_things();
+/// loop.cancel();
+/// co_await loop.join(asio::use_awaitable); // Wait for completion.
+/// ```
+///
+/// \warning This class makes no attempt at serialization. Use a
+/// strand or mutex if you need that.
+template <
+    typename Rep = ceph::rep,
+    typename Ratio = std::nano,
+    ceph::async::strand Strand = boost::asio::strand<boost::asio::any_io_executor>>
+class run_loop final : public detail::task_base<Strand> {
+  using Base = detail::task_base<Strand>;
+  using Base::runnable;
+  using Base::strand;
+  using timer_t = boost::asio::steady_timer;
+public:
+  using duration = std::chrono::duration<Rep, Ratio>;
+  using coro_type = boost::asio::awaitable<duration>;
+  using typename Base::executor_type;
+  using typename Base::value_type;
+  using typename Base::promise_type;
+
+  using Base::get_executor;
+  using Base::state;
+  using Base::run;
+  using Base::cancel;
+  using Base::join;
+  using Base::shutdown;
+
+  /// \brief Construct a run_loop from a coroutine function, ready to be run
+  ///
+  /// \param[in] strand The strand on which to run
+  /// \param[in] coro_fun The coroutine function for the loop. It must return
+  ///                     its intended delay before being re-run
+  template <std::invocable<> CoroFun>
+    requires(std::is_same_v<std::invoke_result_t<CoroFun>, coro_type>)
+  run_loop(Strand strand, CoroFun&& coro_fun) :
+    Base(strand)
+  {
+    runnable.template emplace<typename Base::coro_type>(loop(std::forward<CoroFun>(coro_fun), timer_));
+    assert(state() == task_state::ready);
+  }
+
+  /// \brief Construct a running run_loop from a coroutine function
+  ///
+  /// \param[in] strand The strand on which to run
+  /// \param[in] coro_fun The coroutine function for the loop. It must return
+  ///                     its intended delay before being re-run
+  template <std::invocable<> CoroFun>
+    requires(std::is_same_v<std::invoke_result_t<CoroFun>, coro_type>)
+  run_loop(Strand strand, CoroFun&& coro_fun, running_t /**< Type tag */) :
+    Base(strand)
+  {
+    runnable.template emplace<promise_type>(boost::asio::co_spawn(
+        strand, loop(std::forward<CoroFun>(coro_fun), timer_),
+        boost::asio::bind_executor(
+            strand, boost::asio::experimental::use_promise)));
+    assert(state() == task_state::running);
+  }
+
+  /// \brief Wake a waiting task
+  ///
+  /// \note This wakes the task only when sleeping in the pause between runs.
+  void
+  wake()
+  {
+    assert(state() == task_state::running);
+    boost::asio::dispatch(strand, [timer = this->timer_] {
+      timer->cancel();
+    });
+  }
+
+private:
+
+  template <std::invocable<> CoroFun>
+    requires(std::is_same_v<std::invoke_result_t<CoroFun>, coro_type>)
+  static boost::asio::awaitable<void>
+  loop(CoroFun coro_fun, std::shared_ptr<timer_t> timer)
+  {
+    try {
+      while ((co_await boost::asio::this_coro::cancellation_state).cancelled() ==
+             boost::asio::cancellation_type::none) {
+        auto delay = co_await coro_fun();
+        timer->expires_after(delay);
+        try {
+          co_await timer->async_wait(boost::asio::use_awaitable);
+        } catch (boost::system::system_error& e) {
+          // If the coroutine has been canceled we'll exit when we hit
+          // the while condition. Otherwise, we've been awoken.
+          if (e.code() != boost::asio::error::operation_aborted) {
+            throw;
+          }
+        }
+      }
+    } catch (boost::system::system_error& e) {
+      // Since cancellation is an expected way to exit, it is not
+      // exceptional.
+      if (e.code() != boost::asio::error::operation_aborted) {
+        throw;
+      }
+    }
+  }
+
+  // This is a shared pointer so the coroutine handle itself can own a
+  // reference and promise cancellation through the `run_loop`
+  // destructor will propagate to the timer properly.
+  std::shared_ptr<timer_t> timer_ = std::make_shared<timer_t>(get_executor());
+};
+
+/// \brief Handle for long-running tasks, stackful version
+///
+/// Example:
+/// ```
+/// rgw::ytask task{boost::asio::make_strand(y.get_executor()),
+///                 &some_coroutine, rgw::running};
+/// do_some();
+/// other_things();
+/// join(y); // Wait for completion.
+/// ```
+///
+/// \warning This class makes no attempt at serialization. Use a
+/// strand or mutex if you need that.
+template <
+    ceph::async::strand Strand = boost::asio::strand<boost::asio::any_io_executor>>
+class ytask final : public detail::ytask_base<Strand> {
+  using Base = detail::ytask_base<Strand>;
+public:
+  using typename Base::coro_type;
+  using typename Base::executor_type;
+  using typename Base::value_type;
+  using typename Base::promise_type;
+
+  using Base::get_executor;
+  using Base::state;
+  using Base::run;
+  using Base::cancel;
+  using Base::join;
+  using Base::shutdown;
+
+  /// \brief Construct a ytask from a stackful coroutine function, ready to be run
+  ///
+  /// \param[in] strand The strand on which to run
+  /// \param[in] coro The stackful coroutine function for the task
+  template <std::invocable<boost::asio::yield_context> Coro>
+    requires(std::is_void_v<
+                std::invoke_result_t<Coro, boost::asio::yield_context>>)
+  ytask(Strand strand, Coro&& coro) :
+    Base(strand, std::forward<Coro>(coro))
+  {
+    assert(state() == task_state::ready);
+  }
+
+  /// \brief Construct a running ytask from a stackful coroutine function
+  ///
+  /// \param[in] strand The strand on which to run
+  /// \param[in] coro The stackful coroutine function for the task
+  template <std::invocable<boost::asio::yield_context> Coro>
+    requires(
+        std::is_void_v<std::invoke_result_t<Coro, boost::asio::yield_context>>)
+  ytask(Strand strand, Coro&& coro, running_t) :
+    Base(
+        strand,
+        boost::asio::spawn(
+            boost::asio::any_io_executor{strand},
+            std::forward<Coro>(coro),
+            boost::asio::bind_executor(
+                strand,
+                boost::asio::experimental::use_promise)))
+  {
+    assert(state() == task_state::running);
+  }
+};
+
+/// \brief Handle for periodic maintenance tasks, stackful version
+///
+/// Example:
+///
+/// ```
+/// ceph::timespan
+/// periodic(asio::yield_context y)
+/// {
+///   maintenance(y);
+///   return 3s;
+/// }
+/// ```
+///
+/// ```
+/// rgw::yrun_loop loop{asio::make_strand(y.get_executor()),
+///                     &periodic, rgw::running};
+/// make_work(y);
+/// loop.wake();
+/// other_things();
+/// loop.cancel();
+/// loop.join(y); // Wait for completion.
+/// ```
+///
+/// \warning This class makes no attempt at serialization. Use a
+/// strand or mutex if you need that.
+template <
+    typename Rep = ceph::rep,
+    typename Ratio = std::nano,
+    ceph::async::strand Strand = boost::asio::strand<boost::asio::any_io_executor>>
+class yrun_loop final : public detail::ytask_base<Strand> {
+  using Base = detail::ytask_base<Strand>;
+  using Base::runnable;
+  using Base::strand;
+  using timer_t = boost::asio::steady_timer;
+public:
+  using duration = std::chrono::duration<Rep, Ratio>;
+  using typename Base::executor_type;
+  using typename Base::value_type;
+  using typename Base::promise_type;
+
+  using Base::get_executor;
+  using Base::state;
+  using Base::run;
+  using Base::cancel;
+  using Base::join;
+  using Base::shutdown;
+
+  /// \brief Construct a yrun_loop from a stackful coroutine, ready to
+  /// be run
+  ///
+  /// \param[in] strand The strand on which to run
+  /// \param[in] coro_fun The coroutine function for the loop. It must return
+  ///                     its intended delay before being re-run
+  template <std::invocable<boost::asio::yield_context> CoroFun>
+    requires(std::is_convertible_v<
+             std::invoke_result_t<CoroFun, boost::asio::yield_context>,
+             duration>)
+  yrun_loop(Strand strand, CoroFun&& coro_fun) :
+    Base(strand)
+  {
+    runnable.template emplace<typename Base::coro_type>(
+        [timer = timer_, coro_fun = std::forward<CoroFun>(coro_fun)](
+            boost::asio::yield_context y) mutable {
+          loop(std::forward<CoroFun>(coro_fun), std::move(timer), y);
+        });
+    assert(state() == task_state::ready);
+  }
+
+  /// \brief Construct a running yrun_loop from a coroutine function
+  ///
+  /// \param[in] strand The strand on which to run
+  /// \param[in] coro_fun The coroutine function for the loop. It must return
+  ///                     its intended delay before being re-run
+  template <std::invocable<boost::asio::yield_context> CoroFun>
+    requires(std::is_convertible_v<
+             std::invoke_result_t<CoroFun, boost::asio::yield_context>,
+             duration>)
+  yrun_loop(Strand strand, CoroFun&& coro_fun, running_t /**< Type tag */) :
+    Base(strand)
+  {
+    runnable.template emplace<promise_type>(boost::asio::spawn(
+        boost::asio::any_io_executor(strand),
+        [timer = timer_, coro_fun = std::forward<CoroFun>(coro_fun)](
+            boost::asio::yield_context y) mutable {
+          loop(std::forward<CoroFun>(coro_fun), std::move(timer), y);
+        },
+        boost::asio::bind_executor(
+            strand, boost::asio::experimental::use_promise)));
+    assert(state() == task_state::running);
+  }
+
+  /// \brief Wake a waiting task
+  ///
+  /// \note This wakes the task only when sleeping in the pause between runs.
+  void
+  wake()
+  {
+    assert(state() == task_state::running);
+    boost::asio::dispatch(strand, [timer = timer_] {
+      timer->cancel();
+    });
+  }
+
+private:
+  template <std::invocable<boost::asio::yield_context> CoroFun>
+    requires(std::is_convertible_v<
+             std::invoke_result_t<CoroFun, boost::asio::yield_context>,
+             duration>)
+  static void
+  loop(
+      CoroFun coro_fun,
+      std::shared_ptr<timer_t> timer,
+      boost::asio::yield_context y)
+  {
+    try {
+      while (y.get_cancellation_state().cancelled() ==
+             boost::asio::cancellation_type::none) {
+        auto delay = coro_fun(y);
+        timer->expires_after(delay);
+        try {
+          timer->async_wait(y);
+        } catch (boost::system::system_error& e) {
+          // If the coroutine has been canceled we'll exit when we hit
+          // the while condition. Otherwise, we've been awoken.
+          if (e.code() != boost::asio::error::operation_aborted) {
+            throw;
+          }
+        }
+      }
+    } catch (boost::system::system_error& e) {
+      // Since cancellation is the only way we exit, it is not
+      // exceptional.
+      if (e.code() != boost::asio::error::operation_aborted) {
+        throw;
+      }
+    }
+  }
+
+  // This is a shared pointer so the coroutine handle itself can own a
+  // reference and promise cancellation through the `run_loop`
+  // destructor will propagate to the timer properly.
+  std::shared_ptr<timer_t> timer_ = std::make_shared<timer_t>(get_executor());
+};
+/// @}
+
+/// \brief Convenience to wait within a C++20 coroutine
+///
+/// @param[in] delay Time to wait
+template <typename Rep, typename Period>
+boost::asio::awaitable<void>
+wait_for(std::chrono::duration<Rep, Period> delay)
+{
+  boost::asio::steady_timer timer{
+      co_await boost::asio::this_coro::executor, delay};
+  co_await timer.async_wait(boost::asio::use_awaitable);
+}
+
+/// \brief Convenience to wait within a stackful coroutine
+///
+/// @param[in] delay Time to wait
+/// @param[in] y Yield context
+template <typename Rep, typename Period>
+void
+wait_for(std::chrono::duration<Rep, Period> delay, boost::asio::yield_context y)
+{
+  boost::asio::steady_timer timer{y.get_executor(), delay};
+  timer.async_wait(y);
+}
+
+/// \brief Return a function object binding a member function to an
+/// object
+///
+/// \param[in] obj The object to bind
+/// \param[in] pm The member function to be bound
+template <typename M, typename T, typename U>
+  requires(std::is_base_of_v<U, T>)
+auto
+membind(T& obj, M U::* pm)
+{
+  return std::bind_front(std::mem_fn(pm), std::ref(obj));
 }
 } // namespace rgw
 
