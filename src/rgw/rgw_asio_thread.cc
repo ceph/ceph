@@ -23,6 +23,12 @@ thread_local bool is_asio_thread = false;
 
 void maybe_warn_about_blocking(const DoutPrefixProvider* dpp)
 {
+  // This is a logging function, by contract null pointers to logging
+  // functions are a no-op.
+  if (!dpp) {
+    return;
+  }
+
   // work on asio threads should be asynchronous, so warn when they block
   if (!is_asio_thread) {
     return;
