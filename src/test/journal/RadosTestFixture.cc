@@ -62,6 +62,20 @@ void RadosTestFixture::TearDown() {
   }
   delete m_timer;
 
+  // ObjectPlayer holds m_timer_lock by ref and re-acquires it in its
+  // destructor.  The watch task's read aio completes on the librados
+  // finish_strand, which also runs ~C_WatchFetch -> ~ObjectPlayer.  The
+  // sync aio_flush() only waits on aio_write_list and does not drain
+  // read completions, so use aio_flush_async() to defer a barrier on
+  // finish_strand: when it fires, every earlier completion -- including
+  // the chain that re-acquires m_timer_lock -- has finished.
+  {
+    auto flush = librados::Rados::aio_create_completion();
+    m_ioctx.aio_flush_async(flush);
+    flush->wait_for_complete();
+    flush->release();
+  }
+
   m_work_queue->drain();
   delete m_work_queue;
 }
