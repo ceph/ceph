@@ -64,7 +64,7 @@ ssl_locking_callback(
   [[maybe_unused]] const int line)
 {
   if (mutex_num < 0 || static_cast<size_t>(mutex_num) >= ssl_mutexes.size()) {
-    ceph_assert_always("openssl passed wrong mutex index" == nullptr);
+    ceph_abort_msg("openssl passed wrong mutex index");
   }
 
   if (mode & CRYPTO_READ) {

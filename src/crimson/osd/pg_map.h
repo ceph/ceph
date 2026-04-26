@@ -30,7 +30,7 @@ public:
   /// Returns mapping if present, NULL_CORE otherwise
   core_id_t get_pg_mapping(spg_t pgid) {
     auto iter = pg_to_core.find(pgid);
-    ceph_assert_always(iter == pg_to_core.end() || iter->second.first != NULL_CORE);
+    ceph_assert(iter == pg_to_core.end() || iter->second.first != NULL_CORE);
     return iter == pg_to_core.end() ? NULL_CORE : iter->second.first;
   }
 
@@ -50,7 +50,7 @@ public:
   /// Map to cores in [min_core_mapping, core_mapping_limit)
   PGShardMapping(core_id_t min_core_mapping, core_id_t core_mapping_limit, uint32_t store_shard_nums)
     : store_shard_nums(store_shard_nums) {
-    ceph_assert_always(min_core_mapping < core_mapping_limit);
+    ceph_assert(min_core_mapping < core_mapping_limit);
     auto max_core_mapping = std::min(min_core_mapping + store_shard_nums, core_mapping_limit);
     auto num_shard_services = (store_shard_nums + seastar::smp::count - 1 ) / seastar::smp::count;
     auto num_alien_cores = (seastar::smp::count + store_shard_nums -1 ) / store_shard_nums;

@@ -115,7 +115,7 @@ struct ErrorHelper<crimson::errorator<AllowedErrors...>>
       }
       return false; //  continue
     }());
-    ceph_assert_always(ep);
+    ceph_assert(ep);
     return errorator<AllowedErrors...>\
       ::template make_exception_future2<FutureValueT>(std::move(ep));
   }
