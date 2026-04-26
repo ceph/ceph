@@ -238,7 +238,12 @@ ceph::perf_counters::PerfCountersCache *lc_counters_cache = nullptr;
 const std::string rgw_lc_counters_key = "rgw_lc_per_bucket";
 
 void add_lc_counters(PerfCountersBuilder *pcb) {
-  pcb->set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
+  /*
+   * mgr can't expose labeled counters via its prometheus module, so
+   * register at PRIO_DEBUGONLY to keep them out of MgrReport under the
+   * default mgr_stats_threshold.
+   */
+  pcb->set_prio_default(PerfCountersBuilder::PRIO_DEBUGONLY);
 
   pcb->add_u64(l_rgw_lc_per_bucket_start_time, "start_time",
                "LC processing start timestamp (Unix epoch seconds)");

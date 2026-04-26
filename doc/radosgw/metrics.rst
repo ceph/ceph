@@ -277,6 +277,8 @@ To track lifecycle metrics per bucket, set :confval:`rgw_lc_counters_cache` to `
 
 Lifecycle metrics are stored as labeled performance counters in memory. All counters are lost when the Ceph Object Gateway restarts or crashes.
 
+Since ``ceph-mgr`` cannot expose labeled counters today; use the per-host ``ceph-exporter`` daemon to scrape these metrics.
+
 Lifecycle Counter Cache Size & Eviction
 ----------------------------------------
 
