@@ -52,6 +52,7 @@ private:
   rgw::sal::Driver* const driver;
   std::unordered_map<table_name_t, ceph::coarse_real_time, boost::hash<table_name_t>> tables;
   MessageQueue messages;
+  static constexpr auto idle_sleep = std::chrono::milliseconds(1000); // 1s
 
   CephContext *get_cct() const override { return cct; }
   unsigned get_subsys() const override { return dout_subsys; }
@@ -122,7 +123,7 @@ private:
     // TODO: implement actual lancedb table processing logic here
     // for PoC just sleep for some time to simulate processing
     ldpp_dout(this, 20) << "INFO: started processing table: " << table_name.first << "." << table_name.second << dendl;
-    async_sleep(yield, std::chrono::milliseconds(1000));
+    async_sleep(yield, idle_sleep);
     ldpp_dout(this, 20) << "INFO: done processing table: " << table_name.first << "." << table_name.second << dendl;
     return 0;
   }
@@ -180,7 +181,7 @@ private:
       if (message_count == 0) {
         // if no messages, sleep for a while before checking again
         ldpp_dout(this, 20) << "INFO: no tables to process" << dendl;
-        async_sleep(yield, std::chrono::milliseconds(1000));
+        async_sleep(yield, idle_sleep);
       }
     }
     ldpp_dout(this, 5) << "INFO: manager stopped. done processing all tables" << dendl;
@@ -188,7 +189,11 @@ private:
 
 public:
 
-  ~Manager() = default;
+  ~Manager() {
+    messages.consume_all([](auto message) {
+      std::unique_ptr<message_t> message_guard(message);
+    });
+  }
 
   void stop() {
     ldpp_dout(this, 5) << "INFO: manager received stop signal. shutting down..." << dendl;
@@ -198,13 +203,13 @@ public:
       if (worker.joinable()) {
         // try graceful shutdown first
         auto future = std::async(std::launch::async, [&worker]() {worker.join();});
-        if (future.wait_for(std::chrono::milliseconds(1000)) == std::future_status::timeout) {
+        if (future.wait_for(idle_sleep*2) == std::future_status::timeout) {
           // force stop if graceful shutdown takes too long
           if (!io_context.stopped()) {
             ldpp_dout(this, 5) << "INFO: force shutdown of manager" << dendl;
             io_context.stop();
           }
-          worker.join();
+          future.wait();
         }
       }
     }
