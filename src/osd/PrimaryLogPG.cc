@@ -15394,6 +15394,8 @@ bool PrimaryLogPG::pool_migration_source_delete(hobject_t oid)
               } else {
                 // Object was removed from the recovering list when OSD went down/up?
                 dout(20) << __func__ << " object not in recovering" << dendl;
+                new_pool_migration_interval_in_flight = false;
+                pool_migrations_in_flight.erase(oid);
               }
             });
   ctx->at_version = get_next_version();
