@@ -29,7 +29,7 @@ class RGWEndpoint:
 
     def url(self):
         proto = 'https' if self.cert else 'http'
-        return '{proto}://{hostname}:{port}/'.format(proto=proto, hostname=self.hostname, port=self.port)
+        return '{proto}://{hostname}:{port}/'.format(proto=proto, hostname=self.dns_name, port=self.port)
 
 @contextlib.contextmanager
 def start_rgw(ctx, config, clients):
