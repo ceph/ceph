@@ -18,7 +18,7 @@ export class AuthStorageService {
     pwdExpirationDate: number = null,
     pwdUpdateRequired: boolean = false
   ) {
-    localStorage.setItem('dashboard_username', username);
+    localStorage.setItem(LocalStorage.DASHBOARD_USERNAME, username);
     localStorage.setItem('dashboard_permissions', JSON.stringify(new Permissions(permissions)));
     localStorage.setItem('user_pwd_expiration_date', String(pwdExpirationDate));
     localStorage.setItem('user_pwd_update_required', String(pwdUpdateRequired));
@@ -26,17 +26,17 @@ export class AuthStorageService {
   }
 
   remove() {
-    localStorage.removeItem('dashboard_username');
+    localStorage.removeItem(LocalStorage.DASHBOARD_USERNAME);
     localStorage.removeItem('user_pwd_expiration_data');
     localStorage.removeItem('user_pwd_update_required');
   }
 
   isLoggedIn() {
-    return localStorage.getItem('dashboard_username') !== null;
+    return localStorage.getItem(LocalStorage.DASHBOARD_USERNAME) !== null;
   }
 
   getUsername() {
-    return localStorage.getItem('dashboard_username');
+    return localStorage.getItem(LocalStorage.DASHBOARD_USERNAME);
   }
 
   getPermissions(): Permissions {

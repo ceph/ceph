@@ -1,18 +1,21 @@
 @use '@carbon/colors';
 
-empty-state {
+.empty-state {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
   gap: var(--cds-spacing-05);
-  height: 350px;
-
-  p {
-    font-size: 12px !important;
-  }
+  margin-top: 283px;
+  padding: var(--cds-spacing-05) var(--cds-spacing-05) var(--cds-spacing-07) var(--cds-spacing-05);
+  width: 264px;
+  margin-left: var(--cds-spacing-05);
 
   img {
-    width: 100px !important;
-    height: 100px !important;
+    width: 80px !important;
+    height: 80px !important;
+  }
+
+  span {
+    color: var(--cds-text-secondary);
   }
 }

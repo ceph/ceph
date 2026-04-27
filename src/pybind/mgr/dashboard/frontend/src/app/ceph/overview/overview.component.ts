@@ -7,8 +7,16 @@ import {
   ViewEncapsulation
 } from '@angular/core';
 import { GridModule, LayoutModule, TilesModule } from 'carbon-components-angular';
-import { combineLatest, EMPTY, Observable } from 'rxjs';
-import { catchError, exhaustMap, map, shareReplay, startWith, switchMap } from 'rxjs/operators';
+import { combineLatest, EMPTY, Observable, timer } from 'rxjs';
+import {
+  catchError,
+  distinctUntilChanged,
+  exhaustMap,
+  map,
+  shareReplay,
+  startWith,
+  switchMap
+} from 'rxjs/operators';
 
 import { HealthService } from '~/app/shared/api/health.service';
 import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
@@ -34,6 +42,7 @@ import { PrometheusService } from '~/app/shared/api/prometheus.service';
 const SECONDS_PER_HOUR = 3600;
 const SECONDS_PER_DAY = 86400;
 const TREND_DAYS = 7;
+const PROMETHUES_CONFIG_POLL_INTERVAL = 60000;
 
 @Component({
   selector: 'cd-overview',
@@ -83,9 +92,11 @@ export class OverviewComponent {
   );
 
   /* EMPTY STATE DATA */
-  readonly isPrometheusUsable$ = this.prometheusService
-    .isPrometheusUsable()
-    .pipe(shareReplay({ bufferSize: 1, refCount: true }));
+  readonly isPromethuesConfigured$ = timer(0, PROMETHUES_CONFIG_POLL_INTERVAL).pipe(
+    switchMap(() => this.prometheusService.refreshPrometheusUsable()),
+    distinctUntilChanged(),
+    shareReplay({ bufferSize: 1, refCount: true })
+  );
 
   readonly hasNoOSDs$ = this.healthData$.pipe(
     map((data: HealthSnapshotMap) => (data?.osdmap?.num_osds ?? 0) === 0),
@@ -95,16 +106,16 @@ export class OverviewComponent {
   readonly storageEmptyState$ = this.hasNoOSDs$.pipe(startWith(false)).pipe(
     map((hasNoOSDs) => {
       if (hasNoOSDs) {
-        return $localize`You must have storage configured to access this capability.`;
+        return $localize`You can view capacity usage and related metrics here once you add storage.`;
       }
       return '';
     }),
     shareReplay({ bufferSize: 1, refCount: true })
   );
 
-  readonly prometheusEmptyState$ = this.isPrometheusUsable$.pipe(
-    map((isPrometheusUsable) =>
-      isPrometheusUsable
+  readonly prometheusEmptyState$ = this.isPromethuesConfigured$.pipe(
+    map((isPromethuesConfigured) =>
+      isPromethuesConfigured
         ? ''
         : $localize`You must have Prometheus configured to access this capability.`
     ),
@@ -120,34 +131,36 @@ export class OverviewComponent {
     shareReplay({ bufferSize: 1, refCount: true })
   );
 
-  readonly averageConsumption$ = this.isPrometheusUsable$.pipe(
-    switchMap((usable) =>
-      usable
+  readonly averageConsumption$ = this.isPromethuesConfigured$.pipe(
+    switchMap((isConfigured) =>
+      isConfigured
         ? this.refreshIntervalObs(() => this.overviewStorageService.getAverageConsumption())
         : EMPTY
     ),
     shareReplay({ bufferSize: 1, refCount: true })
   );
 
-  readonly timeUntilFull$ = this.isPrometheusUsable$.pipe(
-    switchMap((usable) =>
-      usable ? this.refreshIntervalObs(() => this.overviewStorageService.getTimeUntilFull()) : EMPTY
+  readonly timeUntilFull$ = this.isPromethuesConfigured$.pipe(
+    switchMap((isConfigured) =>
+      isConfigured
+        ? this.refreshIntervalObs(() => this.overviewStorageService.getTimeUntilFull())
+        : EMPTY
     ),
     shareReplay({ bufferSize: 1, refCount: true })
   );
 
-  readonly breakdownRawData$ = this.isPrometheusUsable$.pipe(
-    switchMap((usable) =>
-      usable
+  readonly breakdownRawData$ = this.isPromethuesConfigured$.pipe(
+    switchMap((isConfigured) =>
+      isConfigured
         ? this.refreshIntervalObs(() => this.overviewStorageService.getStorageBreakdown())
         : EMPTY
     ),
     shareReplay({ bufferSize: 1, refCount: true })
   );
 
-  readonly capacityThresholds$ = this.isPrometheusUsable$.pipe(
-    switchMap((usable) =>
-      usable
+  readonly capacityThresholds$ = this.isPromethuesConfigured$.pipe(
+    switchMap((isConfigured) =>
+      isConfigured
         ? this.refreshIntervalObs(() => this.overviewStorageService.getRawCapacityThresholds())
         : EMPTY
     ),
@@ -156,9 +169,9 @@ export class OverviewComponent {
 
   // getTrendData() is already a polling stream through getRangeQueriesData()
   // hence no refresh needed.
-  readonly trendData$ = this.isPrometheusUsable$.pipe(
-    switchMap((usable) =>
-      usable
+  readonly trendData$ = this.isPromethuesConfigured$.pipe(
+    switchMap((isConfigured) =>
+      isConfigured
         ? this.overviewStorageService.getTrendData(
             Math.floor(Date.now() / 1000) - TREND_DAYS * SECONDS_PER_DAY,
             Math.floor(Date.now() / 1000),

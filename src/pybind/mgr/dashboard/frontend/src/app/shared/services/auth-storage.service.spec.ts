@@ -14,13 +14,13 @@ describe('AuthStorageService', () => {
 
   it('should store username', () => {
     service.set(username, '');
-    expect(localStorage.getItem('dashboard_username')).toBe(username);
+    expect(localStorage.getItem(LocalStorage.DASHBOARD_USERNAME)).toBe(username);
   });
 
   it('should remove username', () => {
     service.set(username, '');
     service.remove();
-    expect(localStorage.getItem('dashboard_username')).toBe(null);
+    expect(localStorage.getItem(LocalStorage.DASHBOARD_USERNAME)).toBe(null);
   });
 
   it('should be loggedIn', () => {

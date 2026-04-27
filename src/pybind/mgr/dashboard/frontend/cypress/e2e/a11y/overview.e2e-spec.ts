@@ -1,7 +1,7 @@
-import { OvevriewPagehelper } from '../ui/dashboard-v3.po';
+import { OverviewPagehelper } from '../ui/overview.po';
 
 describe('Overview Page', { retries: 0 }, () => {
-  const overview = new OvevriewPagehelper();
+  const overview = new OverviewPagehelper();
 
   beforeEach(() => {
     cy.login();

@@ -88,7 +88,7 @@ export class NavigationPageHelper extends PageHelper {
     navs.forEach((nav: any) => {
       cy.get('cds-sidenav-item').each(($link) => {
         if ($link.text().trim() === nav.menu.trim()) {
-          cy.wrap($link).click();
+          cy.wrap($link).click({ force: true });
         }
       });
       if (nav.submenus) {
