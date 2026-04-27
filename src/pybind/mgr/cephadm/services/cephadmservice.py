@@ -156,7 +156,6 @@ class CephadmDaemonDeploySpec:
                  service_name: str,
                  network: Optional[str] = None,
                  keyring: Optional[str] = None,
-                 extra_args: Optional[List[str]] = None,
                  ceph_conf: str = '',
                  extra_files: Optional[Dict[str, Any]] = None,
                  daemon_type: Optional[str] = None,
@@ -184,11 +183,6 @@ class CephadmDaemonDeploySpec:
 
         # for run_cephadm.
         self.keyring: Optional[str] = keyring
-
-        # FIXME: finish removing this
-        # For run_cephadm. Would be great to have more expressive names.
-        # self.extra_args: List[str] = extra_args or []
-        assert not extra_args
 
         self.ceph_conf = ceph_conf
         self.extra_files = extra_files or {}
@@ -269,10 +263,6 @@ class CephadmDaemonDeploySpec:
             extra_container_args=cast(GeneralArgList, self.extra_container_args),
             extra_entrypoint_args=cast(GeneralArgList, self.extra_entrypoint_args),
         )
-
-    @property
-    def extra_args(self) -> List[str]:
-        return []
 
 
 class CephadmService(metaclass=ABCMeta):
