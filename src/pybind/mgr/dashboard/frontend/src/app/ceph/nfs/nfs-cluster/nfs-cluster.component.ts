@@ -1,7 +1,7 @@
-import { Component, NgZone, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Component, NgZone, OnInit, TemplateRef, ViewChild, inject } from '@angular/core';
 import { NfsService } from '~/app/shared/api/nfs.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
-import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -11,9 +11,15 @@ import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { NFSCluster } from '../models/nfs-cluster-config';
 import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
 import { BehaviorSubject, Observable } from 'rxjs';
+import { Router } from '@angular/router';
 import { switchMap } from 'rxjs/operators';
-const BASE_URL = 'cephfs/nfs';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+const BASE_URL = 'cephfs/nfs/cluster';
 @Component({
   selector: 'cd-nfs-cluster',
   templateUrl: './nfs-cluster.component.html',
@@ -31,6 +37,7 @@ export class NfsClusterComponent extends ListWithDetails implements OnInit {
   @ViewChild('virtualIpTpl', { static: true })
   virtualIpTpl: TemplateRef<any>;
 
+  CLUSTER_PATH = 'nfs/cluster';
   columns: CdTableColumn[] = [];
   selection: CdTableSelection = new CdTableSelection();
   tableActions: CdTableAction[] = [];
@@ -39,14 +46,19 @@ export class NfsClusterComponent extends ListWithDetails implements OnInit {
   clusters$: Observable<NFSCluster[]>;
   subject = new BehaviorSubject<NFSCluster[]>([]);
 
-  constructor(
-    public actionLabels: ActionLabelsI18n,
-    protected ngZone: NgZone,
-    private authStorageService: AuthStorageService,
-    private nfsService: NfsService,
-    private orchService: OrchestratorService
-  ) {
+  public actionLabels = inject(ActionLabelsI18n);
+  protected ngZone = inject(NgZone);
+  private authStorageService = inject(AuthStorageService);
+  private nfsService = inject(NfsService);
+  private orchService = inject(OrchestratorService);
+  private urlBuilder = inject(URLBuilderService);
+  private router = inject(Router);
+  private modalService = inject(ModalCdsService);
+  private taskWrapper = inject(TaskWrapperService);
+
+  constructor() {
     super();
+    this.permission = this.authStorageService.getPermissions().nfs;
   }
 
   ngOnInit(): void {
@@ -55,6 +67,7 @@ export class NfsClusterComponent extends ListWithDetails implements OnInit {
     });
     this.permission = this.authStorageService.getPermissions().nfs;
     this.clusters$ = this.subject.pipe(switchMap(() => this.nfsService.nfsClusterList()));
+    this.loadData();
     this.columns = [
       {
         name: $localize`Name`,
@@ -80,6 +93,42 @@ export class NfsClusterComponent extends ListWithDetails implements OnInit {
         cellTemplate: this.virtualIpTpl
       }
     ];
+
+    this.tableActions = [
+      {
+        name: `${this.actionLabels.CREATE} cluster`,
+        permission: 'create',
+        icon: Icons.add,
+        click: () => this.router.navigateByUrl(this.urlBuilder.getCreate()),
+        canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection
+      },
+      {
+        name: this.actionLabels.DELETE,
+        permission: 'delete',
+        icon: Icons.destroy,
+        click: () => this.removeNFSClusterModal(),
+        canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection
+      }
+    ];
+  }
+
+  removeNFSClusterModal() {
+    const cluster = this.selection.first();
+    const cluster_id = cluster?.name || cluster?.cluster_id;
+    const modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
+      itemDescription: $localize`Cluster`,
+      itemNames: [cluster_id],
+      submitActionObservable: () =>
+        this.taskWrapper.wrapTaskAroundCall({
+          task: new FinishedTask(`${this.CLUSTER_PATH}/${URLVerbs.DELETE}`, {
+            cluster_id: cluster_id
+          }),
+          call: this.nfsService.deleteCluster(cluster_id)
+        })
+    });
+    modalRef.closed.subscribe(() => {
+      this.loadData();
+    });
   }
 
   loadData() {

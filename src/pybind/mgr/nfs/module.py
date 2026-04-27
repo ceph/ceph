@@ -142,7 +142,10 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                 inbuf: Optional[str] = None) -> None:
         """Create an NFS Cluster"""
         ssl_cert = ssl_key = ssl_ca_cert = tls_min_version = tls_ciphers = None
-        ssl = tls_ktls = tls_debug = False
+        ssl = tls_ktls = tls_debug = enable_nlm = False
+        monitoring_port = None
+        bind_addrs = None
+        monitoring_addrs = None
         if inbuf:
             config = yaml.safe_load(inbuf)
             ssl = config.get('ssl')
@@ -153,6 +156,10 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             tls_ktls = config.get('tls_ktls')
             tls_debug = config.get('tls_debug')
             tls_ciphers = config.get('tls_ciphers')
+            enable_nlm = config.get('enable_nlm', False)
+            monitoring_port = config.get('monitoring_port')
+            bind_addrs = config.get('bind_addrs')
+            monitoring_addrs = config.get('monitoring_addrs')
 
         return self.nfs.create_nfs_cluster(cluster_id=cluster_id, placement=placement,
                                            virtual_ip=virtual_ip, ingress=ingress,
@@ -164,7 +171,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                            tls_ktls=tls_ktls,
                                            tls_debug=tls_debug,
                                            tls_min_version=tls_min_version,
-                                           tls_ciphers=tls_ciphers)
+                                           tls_ciphers=tls_ciphers,
+                                           enable_nlm=enable_nlm,
+                                           monitoring_port=monitoring_port,
+                                           bind_addrs=bind_addrs,
+                                           monitoring_addrs=monitoring_addrs)
 
     @NFSCLICommand('nfs cluster rm', perm='rw')
     @object_format.EmptyResponder()

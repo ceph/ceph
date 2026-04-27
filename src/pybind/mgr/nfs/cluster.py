@@ -73,9 +73,18 @@ class NFSCluster:
             tls_debug: bool = False,
             tls_min_version: Optional[str] = None,
             tls_ciphers: Optional[str] = None,
+            enable_nlm: bool = False,
+            monitoring_port: Optional[int] = None,
+            bind_addrs: Optional[str] = None,
+            monitoring_addrs: Optional[str] = None,
     ) -> None:
         if not port:
             port = 2049   # default nfs port
+
+        # Parse comma-separated addresses into lists
+        networks = [addr.strip() for addr in bind_addrs.split(',')] if bind_addrs else None
+        monitoring_networks = [addr.strip() for addr in monitoring_addrs.split(',')] if monitoring_addrs else None
+
         if virtual_ip:
             # nfs + ingress
             # run NFS on non-standard port
@@ -114,7 +123,11 @@ class NFSCluster:
                                   tls_ktls=tls_ktls,
                                   tls_debug=tls_debug,
                                   tls_min_version=tls_min_version,
-                                  tls_ciphers=tls_ciphers)
+                                  tls_ciphers=tls_ciphers,
+                                  enable_nlm=enable_nlm,
+                                  monitoring_port=monitoring_port,
+                                  networks=networks,
+                                  monitoring_networks=monitoring_networks)
             completion = self.mgr.apply_nfs(spec)
             orchestrator.raise_if_exception(completion)
             ispec = IngressSpec(service_type='ingress',
@@ -140,7 +153,11 @@ class NFSCluster:
                                   tls_ktls=tls_ktls,
                                   tls_debug=tls_debug,
                                   tls_min_version=tls_min_version,
-                                  tls_ciphers=tls_ciphers)
+                                  tls_ciphers=tls_ciphers,
+                                  enable_nlm=enable_nlm,
+                                  monitoring_port=monitoring_port,
+                                  networks=networks,
+                                  monitoring_networks=monitoring_networks)
             completion = self.mgr.apply_nfs(spec)
             orchestrator.raise_if_exception(completion)
         log.debug("Successfully deployed nfs daemons with cluster id %s and placement %s",
@@ -172,6 +189,10 @@ class NFSCluster:
             tls_debug: bool = False,
             tls_min_version: Optional[str] = None,
             tls_ciphers: Optional[str] = None,
+            enable_nlm: bool = False,
+            monitoring_port: Optional[int] = None,
+            bind_addrs: Optional[str] = None,
+            monitoring_addrs: Optional[str] = None,
     ) -> None:
         try:
             if virtual_ip:
@@ -197,7 +218,8 @@ class NFSCluster:
             if cluster_id not in available_clusters(self.mgr):
                 self._call_orch_apply_nfs(cluster_id, placement, virtual_ip, ingress_mode, port,
                                           ssl, ssl_cert, ssl_key, ssl_ca_cert, tls_ktls, tls_debug,
-                                          tls_min_version, tls_ciphers)
+                                          tls_min_version, tls_ciphers, enable_nlm, monitoring_port,
+                                          bind_addrs, monitoring_addrs)
                 return
             raise NonFatalError(f"{cluster_id} cluster already exists")
         except Exception as e:
@@ -261,6 +283,50 @@ class NFSCluster:
             'virtual_ip': None,
             'backend': backends,
         }
+
+        # Get NFS service spec for additional fields
+        try:
+            nfs_spec_result = self.mgr.describe_service(service_type='nfs')
+            nfs_services = orchestrator.raise_if_exception(nfs_spec_result)
+            for s in nfs_services:
+                if hasattr(s.spec, 'service_id') and s.spec.service_id == cluster_id:
+                    nfs_spec = cast(NFSServiceSpec, s.spec)
+                    # Include NFS spec fields
+                    if nfs_spec.enable_nlm:
+                        r['enable_nlm'] = nfs_spec.enable_nlm
+                    if nfs_spec.networks:
+                        r['bind_addrs'] = nfs_spec.networks
+                    if nfs_spec.monitoring_networks:
+                        r['monitoring_addrs'] = nfs_spec.monitoring_networks
+                    if nfs_spec.monitoring_port:
+                        r['monitoring_port'] = nfs_spec.monitoring_port
+                    if nfs_spec.port:
+                        r['nfs_port'] = nfs_spec.port
+                    break
+        except Exception:
+            pass
+
+        # If no daemons found, but placement spec has hosts, show those as backend and try to resolve IP
+        if not backends:
+            try:
+                spec_result = self.mgr.describe_service(service_type='nfs')
+                services = orchestrator.raise_if_exception(spec_result)
+                for s in services:
+                    if hasattr(s.spec, 'service_id') and s.spec.service_id == cluster_id and hasattr(s.spec, 'placement'):
+                        hosts = getattr(s.spec.placement, 'hosts', None)
+                        if hosts:
+                            resolved_backends = []
+                            for h in hosts:
+                                ip = ''
+                                try:
+                                    ip = resolve_ip(str(h))
+                                except Exception:
+                                    pass
+                                resolved_backends.append({'hostname': str(h), 'ip': ip, 'port': None})
+                            r['backend'] = resolved_backends
+                        break
+            except Exception:
+                pass
         sc = self.mgr.describe_service(service_type='ingress')
         services = orchestrator.raise_if_exception(sc)
         for i in services:
