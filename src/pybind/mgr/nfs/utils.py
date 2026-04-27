@@ -1,3 +1,4 @@
+import enum
 import functools
 import logging
 import stat
@@ -128,3 +129,10 @@ def cephfs_path_is_dir(mgr: 'Module', fs: str, path: str) -> None:
                               cephfs.AT_SYMLINK_NOFOLLOW)
         if not stat.S_ISDIR(stx.get('mode')):
             raise NotADirectoryError()
+
+
+class NFSRadosObjectType(enum.Enum):
+    # class for the type of things the nfs module writes to rados
+    export = 'export'
+    nfs_config = 'nfs_config'  # primarily for pointing to ganesha towards its exports
+    common_config = 'common_config'
