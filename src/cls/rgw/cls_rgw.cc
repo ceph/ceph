@@ -1925,6 +1925,10 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
 
   // op.olh_epoch is provided (> 0) in the case when a remote epoch is coming in as the result of multisite sync;
   uint64_t candidate_epoch = op.olh_epoch ? op.olh_epoch : now_epoch;
+
+  encode(candidate_epoch, *out);
+  CLS_LOG(20, "%s: key=%s olh_epoch=%lu candidate_epoch=%lu",
+          __func__, op.key.to_string().c_str(), op.olh_epoch, candidate_epoch);
   if (olh.start_modify(candidate_epoch)) {
     // promote this version to current if it's a newer epoch, or if it matches the
     // current epoch and sorts after the current instance
@@ -2101,6 +2105,10 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
 
   uint64_t now_epoch = duration_cast<std::chrono::nanoseconds>(real_clock::now().time_since_epoch()).count();
   uint64_t candidate_epoch = op.olh_epoch ? op.olh_epoch : now_epoch;
+
+  encode(candidate_epoch, *out);
+  CLS_LOG(20, "%s: key=%s olh_epoch=%lu candidate_epoch=%lu",
+          __func__, op.key.to_string().c_str(), op.olh_epoch, candidate_epoch);
 
   if (!olh_found) {
     bool instance_only = false;

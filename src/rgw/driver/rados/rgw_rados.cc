@@ -9355,24 +9355,41 @@ int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp, RGWBucketInfo
     // issue the cls op first. only push to the FIFO on success so that a
     // crash between the cls op and the FIFO push leaves the secondary behind
     // rather than ahead with a diverged OLH pointer
+    //
+    // CLS returns the epoch it committed in the output bufferlist. use that
+    // to record the same epoch in the FIFO bilog entry
+    bufferlist epoch_out_bl;
     int ret = guard_reshard(dpp, &bs, obj_instance, bucket_info,
 	              [&](BucketShard *bs) -> int {
 	                auto& ref = bs->bucket_obj;
 	                librados::ObjectWriteOperation op;
 	                op.assert_exists(); // bucket index shard must exist
 	                cls_rgw_guard_bucket_resharding(op, -ERR_BUSY_RESHARDING);
+	                epoch_out_bl.clear();
 	                op_issuer.link_olh(op, olh_state.olh_tag, delete_marker,
 	                                   meta, olh_epoch, unmod_since,
-	                                   high_precision_time);
+	                                   high_precision_time, &epoch_out_bl);
 	                return rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid,
-	                                        std::move(op), y);
+	                                        std::move(op), y,
+	                                        librados::OPERATION_RETURNVEC);
 	              }, y);
     if (ret < 0) {
       ldpp_dout(dpp, 20) << "link_olh() returned r=" << ret << dendl;
       return ret;
     }
-    bilog.add_maybe_flush(olh_epoch, key, op_tag, delete_marker,
-                          ceph::real_time{}, zones_trace);
+
+    uint64_t committed_epoch = olh_epoch;
+    try {
+      auto iter = epoch_out_bl.cbegin();
+      decode(committed_epoch, iter);
+    } catch (const ceph::buffer::error&) {
+      ldpp_dout(dpp, 0) << "WARNING: " << __func__
+                        << ": failed to decode committed epoch from link_olh response" << dendl;
+    }
+    ldpp_dout(dpp, 20) << __func__ << ": committed_epoch=" << committed_epoch
+                       << " olh_epoch=" << olh_epoch << " key=" << key << dendl;
+    bilog.add_maybe_flush(committed_epoch, key, op_tag, delete_marker,
+                          meta ? meta->mtime : ceph::real_time{}, zones_trace);
     int r = bilog.flush(y);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: " << __func__
@@ -9439,22 +9456,36 @@ int RGWRados::bucket_index_unlink_instance(const DoutPrefixProvider *dpp,
       [&](auto& op_issuer, auto& bilog) -> int {
         // cls op first, FIFO push on success only (same as
         // bucket_index_link_olh to avoid secondary OLH pointer divergence).
+        bufferlist epoch_out_bl;
         int ret = guard_reshard(dpp, &bs, obj_instance, bucket_info,
               [&](BucketShard *bs) -> int {
                 auto& ref = bs->bucket_obj;
                 librados::ObjectWriteOperation op;
                 op.assert_exists(); // bucket index shard must exist
                 cls_rgw_guard_bucket_resharding(op, -ERR_BUSY_RESHARDING);
-                op_issuer.unlink_instance(op, olh_tag, olh_epoch);
+                epoch_out_bl.clear();
+                op_issuer.unlink_instance(op, olh_tag, olh_epoch, &epoch_out_bl);
                 return rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid,
-                                        std::move(op), y);
+                                        std::move(op), y,
+                                        librados::OPERATION_RETURNVEC);
               }, y);
         if (ret < 0) {
           ldpp_dout(dpp, 20) << "unlink_instance() returned r=" << ret << dendl;
           return ret;
         }
 
-        bilog.add_maybe_flush(olh_epoch, ceph::real_time{}, op_issuer);
+        uint64_t committed_epoch = olh_epoch;
+        try {
+          auto iter = epoch_out_bl.cbegin();
+          decode(committed_epoch, iter);
+        } catch (const ceph::buffer::error&) {
+          ldpp_dout(dpp, 0) << "WARNING: " << __func__
+                            << ": failed to decode committed epoch from unlink_instance response"
+                            << dendl;
+        }
+        ldpp_dout(dpp, 20) << __func__ << ": committed_epoch=" << committed_epoch
+                           << " olh_epoch=" << olh_epoch << " key=" << key << dendl;
+        bilog.add_maybe_flush(committed_epoch, ceph::real_time{}, op_issuer);
         int r = bilog.flush(y);
         if (r < 0) {
           ldpp_dout(dpp, 0) << "ERROR: " << __func__
@@ -9753,6 +9784,7 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
           need_to_link = true;
           need_to_remove = false;
           key = entry.key;
+          link_epoch = entry.epoch;
           delete_marker = entry.delete_marker;
           link_op_tag = entry.op_tag;
         } else {
