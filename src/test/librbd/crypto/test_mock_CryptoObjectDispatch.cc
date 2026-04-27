@@ -881,7 +881,16 @@ TEST_P(TestMockCryptoCryptoObjectDispatch, PrepareCopyup) {
                           ceph::bufferlist::static_from_mem(data + 9, 1)});
 
   expect_get_object_size();
-  expect_encrypt(6);
+
+  // AEAD encrypts the full object in one call per snapshot to generate
+  // integrity tags for all blocks. 
+  // Non-AEAD encrypts each aligned extent independently.
+  if (GetParam().meta_size > 0) {
+    expect_encrypt(2);  // 1 full-object encrypt * 2 snapshots
+  } else {
+    expect_encrypt(6);  // 3 extents * 2 snapshots
+  }
+
   InSequence seq;
   ASSERT_EQ(0, mock_crypto_object_dispatch->prepare_copyup(
       11, &snapshot_sparse_bufferlist));
@@ -891,7 +900,57 @@ TEST_P(TestMockCryptoCryptoObjectDispatch, PrepareCopyup) {
   auto& snap1_result = snapshot_sparse_bufferlist[0];
   auto& snap2_result = snapshot_sparse_bufferlist[1];
 
-  // snap1: 3 source extents aligned to 3 contiguous blocks {0, 12288}
+  if (GetParam().meta_size > 0) {
+    // AEAD encrypts the full object so every block has an integrity tag.
+    // Ao ther object data will be at range [0, object_size) and tags at range [object_size,
+    // object_size + total_meta), which SparseBufferlist merges into one
+    // contiguous extent for sparse_copyup.
+    uint64_t obj_size = mock_image_ctx->layout.object_size;
+    uint64_t num_blocks = obj_size / GetParam().data_block_size;
+    uint64_t total_meta = num_blocks * GetParam().meta_size;
+    uint64_t total_len = obj_size + total_meta;
+
+    // snap1: full object data + meta (merged), sparse data overlaid
+    auto it = snap1_result.begin();
+    ASSERT_NE(it, snap1_result.end());
+    ASSERT_EQ(0, it.get_off());
+    ASSERT_EQ(total_len, it.get_len());
+
+    // verify data portion: extents overlaid on zero-filled object buffer
+    std::string snap1_data = it.get_val().bl.to_str().substr(0, obj_size);
+    std::string expected(obj_size, '\0');
+    expected[0] = '1';
+    expected[8191] = '2';
+    expected[8193] = '3'; 
+    expected[8194] = '4'; 
+    expected[8195] = '5';
+    ASSERT_TRUE(snap1_data == expected);
+
+    ASSERT_EQ(++it, snap1_result.end());
+
+    // snap2: accumulated state (snap1 current_bl + snap2 overlays)
+    // snap2 zeroes [0,2), writes "678" at [8191,8194), writes "9" at 16384
+    it = snap2_result.begin();
+    ASSERT_NE(it, snap2_result.end());
+    ASSERT_EQ(0, it.get_off());
+    ASSERT_EQ(total_len, it.get_len());
+
+    std::string snap2_data = it.get_val().bl.to_str().substr(0, obj_size);
+    std::string expected2(obj_size, '\0');
+    // offset 0-1 zeroed by snap2 (was "1\0")
+    // offset 8191-8193 overwritten by snap2 "678"
+    // offset 8194-8195 remain "45" from snap1
+    expected2[8191] = '6'; 
+    expected2[8192] = '7';
+    expected2[8193] = '8'; 
+    expected2[8194] = '4'; 
+    expected2[8195] = '5';
+    expected2[16384] = '9';
+    ASSERT_TRUE(snap2_data == expected2);
+
+    ASSERT_EQ(++it, snap2_result.end());
+    return;
+  }
   auto it = snap1_result.begin();
   ASSERT_NE(it, snap1_result.end());
   ASSERT_EQ(0, it.get_off());
@@ -901,14 +960,6 @@ TEST_P(TestMockCryptoCryptoObjectDispatch, PrepareCopyup) {
     std::string("1") + std::string(4095, '\0') +
     std::string(4095, '\0') + std::string("2") +
     std::string(1, '\0') + std::string("345") + std::string(4092, '\0'));
-
-  if (GetParam().meta_size > 0) {
-    // AEAD: meta for 3 blocks at object_size
-    uint64_t obj_size = mock_image_ctx->layout.object_size;
-    ASSERT_NE(++it, snap1_result.end());
-    ASSERT_EQ(obj_size, it.get_off());
-    ASSERT_EQ(3 * GetParam().meta_size, it.get_len());
-  }
   ASSERT_EQ(++it, snap1_result.end());
 
   // snap2: 3 blocks contiguous {0, 12288} + 1 block at {16384, 4096}
@@ -926,20 +977,6 @@ TEST_P(TestMockCryptoCryptoObjectDispatch, PrepareCopyup) {
   ASSERT_EQ(4096, it.get_len());
   ASSERT_TRUE(it.get_val().bl.to_str() ==
     std::string("9") + std::string(4095, '\0'));
-
-  if (GetParam().meta_size > 0) {
-    // AEAD: meta for first group (3 blocks) at object_size
-    uint64_t obj_size = mock_image_ctx->layout.object_size;
-    ASSERT_NE(++it, snap2_result.end());
-    ASSERT_EQ(obj_size, it.get_off());
-    ASSERT_EQ(3 * GetParam().meta_size, it.get_len());
-
-    // AEAD: meta for second group (1 block at block_num=4) at
-    // object_size + 4 * meta_size
-    ASSERT_NE(++it, snap2_result.end());
-    ASSERT_EQ(obj_size + 4 * GetParam().meta_size, it.get_off());
-    ASSERT_EQ(GetParam().meta_size, it.get_len());
-  }
   ASSERT_EQ(++it, snap2_result.end());
 }
 

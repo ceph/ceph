@@ -698,50 +698,69 @@ int CryptoObjectDispatch<I>::prepare_copyup(
     io::SparseBufferlist encrypted_sparse_bufferlist;
     const uint64_t meta_size = m_crypto->get_meta_size();
     const uint64_t block_size = m_crypto->get_block_size();
-    for (auto& extent : extent_map) {
-      auto [aligned_off, aligned_len] = m_crypto->align(
-              extent.get_off(), extent.get_len());
 
+    if (meta_size != 0) {
+      // AEAD: encrypt the full object to generate integrity tags for all
+      // blocks, ensuring complete data+meta coverage for copyup.
       auto [image_extents, _] = io::util::object_to_area_extents(
-          m_image_ctx, object_no, {{aligned_off, aligned_len}});
+          m_image_ctx, object_no, {{0, object_size}});
 
       ceph::bufferlist encrypted_bl;
       uint64_t position = 0;
-      for (auto [image_offset, image_length]: image_extents) {
+      for (auto [image_offset, image_length] : image_extents) {
         ceph::bufferlist aligned_bl;
-        aligned_bl.substr_of(current_bl, aligned_off + position, image_length);
-        aligned_bl.rebuild(); // to deep copy aligned_bl from current_bl
+        aligned_bl.substr_of(current_bl, position, image_length);
+        aligned_bl.rebuild();
         position += image_length;
 
         auto r = m_crypto->encrypt(&aligned_bl, image_offset);
         if (r != 0) {
           return r;
         }
-
         encrypted_bl.append(aligned_bl);
       }
 
-      if (meta_size != 0) {
-        // Split layout: data at logical offsets, meta beyond object_size
-        uint64_t num_blocks = aligned_len / block_size;
-        uint64_t data_len = num_blocks * block_size;
-        uint64_t meta_len = num_blocks * meta_size;
-        ceph_assert(encrypted_bl.length() == data_len + meta_len);
+      uint64_t num_blocks = object_size / block_size;
+      uint64_t data_len = num_blocks * block_size;
+      uint64_t meta_len = num_blocks * meta_size;
+      ceph_assert(encrypted_bl.length() == data_len + meta_len);
 
-        ceph::bufferlist data_bl;
-        data_bl.substr_of(encrypted_bl, 0, data_len);
-        encrypted_sparse_bufferlist.insert(
-          aligned_off, data_len,
-          {io::SPARSE_EXTENT_STATE_DATA, data_len, std::move(data_bl)});
+      ceph::bufferlist data_bl;
+      data_bl.substr_of(encrypted_bl, 0, data_len);
+      encrypted_sparse_bufferlist.insert(
+        0, data_len,
+        {io::SPARSE_EXTENT_STATE_DATA, data_len, std::move(data_bl)});
 
-        uint64_t start_block = aligned_off / block_size;
-        uint64_t meta_off = object_size + start_block * meta_size;
-        ceph::bufferlist meta_bl;
-        meta_bl.substr_of(encrypted_bl, data_len, meta_len);
-        encrypted_sparse_bufferlist.insert(
-          meta_off, meta_len,
-          {io::SPARSE_EXTENT_STATE_DATA, meta_len, std::move(meta_bl)});
-      } else {
+      ceph::bufferlist meta_bl;
+      meta_bl.substr_of(encrypted_bl, data_len, meta_len);
+      encrypted_sparse_bufferlist.insert(
+        object_size, meta_len,
+        {io::SPARSE_EXTENT_STATE_DATA, meta_len, std::move(meta_bl)});
+    } else {
+      // non-AEAD: encrypt only the extents with data
+      for (auto& extent : extent_map) {
+        auto [aligned_off, aligned_len] = m_crypto->align(
+                extent.get_off(), extent.get_len());
+
+        auto [image_extents, _] = io::util::object_to_area_extents(
+            m_image_ctx, object_no, {{aligned_off, aligned_len}});
+
+        ceph::bufferlist encrypted_bl;
+        uint64_t position = 0;
+        for (auto [image_offset, image_length]: image_extents) {
+          ceph::bufferlist aligned_bl;
+          aligned_bl.substr_of(current_bl, aligned_off + position, image_length);
+          aligned_bl.rebuild();
+          position += image_length;
+
+          auto r = m_crypto->encrypt(&aligned_bl, image_offset);
+          if (r != 0) {
+            return r;
+          }
+
+          encrypted_bl.append(aligned_bl);
+        }
+
         ceph_assert(encrypted_bl.length() == aligned_len);
         encrypted_sparse_bufferlist.insert(aligned_off, aligned_len,
           {io::SPARSE_EXTENT_STATE_DATA, aligned_len,
