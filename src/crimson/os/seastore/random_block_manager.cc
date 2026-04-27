@@ -13,16 +13,17 @@ seastar::future<random_block_device::RBMDeviceRef>
 get_rb_device(
   const std::string &device, device_type_t dtype)
 {
+  std::string device_path = normalize_device_path(device);
   if (dtype == device_type_t::RANDOM_BLOCK_HDD) {
     return seastar::make_ready_future<random_block_device::RBMDeviceRef>(
       std::make_unique<
         random_block_device::RotationalDevice
-      >(device + "/block"));
+      >(std::move(device_path)));
   } else {
     return seastar::make_ready_future<random_block_device::RBMDeviceRef>(
       std::make_unique<
         random_block_device::nvme::NVMeBlockDevice
-      >(device + "/block"));
+      >(std::move(device_path)));
   }
 }
 
