@@ -1848,7 +1848,8 @@ struct CLSRGWLinkOLHBase : private cls_rgw_bi_log_related_op {
                 const rgw_bucket_dir_entry_meta* meta,
                 uint64_t olh_epoch,
                 ceph::real_time unmod_since,
-                bool high_precision_time) const;
+                bool high_precision_time,
+                ceph::bufferlist* epoch_out_bl = nullptr) const;
 };
 
 // typed OLH-link issuer. DeleteMarkerV selects LINK_OLH vs LINK_OLH_DM.
@@ -1877,7 +1878,8 @@ struct CLSRGWUnlinkInstance : cls_rgw_bi_log_related_op {
   }
   void unlink_instance(librados::ObjectWriteOperation& o,
                        const std::string& olh_tag,
-                       uint64_t olh_epoch) const;
+                       uint64_t olh_epoch,
+                       ceph::bufferlist* epoch_out_bl = nullptr) const;
 };
 
 namespace cls::rgw {
