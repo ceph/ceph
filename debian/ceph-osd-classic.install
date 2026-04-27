@@ -1,0 +1,9 @@
+#! /usr/bin/dh-exec
+
+usr/bin/ceph-bluestore-tool
+usr/bin/ceph-objectstore-tool
+usr/bin/ceph-osd => /usr/bin/ceph-osd-classic
+usr/bin/ceph_objectstore_bench
+usr/lib/libos_tp.so*
+usr/lib/libosd_tp.so*
+usr/share/man/man8/ceph-bluestore-tool.8

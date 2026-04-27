@@ -1,0 +1,18 @@
+#!/bin/bash
+
+printf 'Commit is:\n' >&2
+git log -1 >&2
+
+find qa/suites/ -type d -execdir ln -sfT ../.qa/ {}/.qa \;
+
+git add '*.qa'
+
+DIFF=$(git diff --cached)
+
+if [ -z "$DIFF" ]; then
+  printf 'passed\n'
+  exit 0
+else
+  printf 'Please apply the following patch:\n\n%s\n' "$DIFF"
+  exit 1
+fi

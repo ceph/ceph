@@ -1,0 +1,15 @@
+
+<button cdsButton="ghost"
+        class="clipboard-btn"
+        [ngClass]="{'clipboard-btn-with-text': text}"
+        [size]="size"
+        description="Copy to Clipboard"
+        i18n-description
+        (click)="onClick()">
+  @if(text) {
+  <span data-toggle="tooltip"
+        [title]="text"
+        class="cds--type-mono">{{text}}</span>
+  }
+  <cd-icon type="copy"></cd-icon>
+</button>

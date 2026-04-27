@@ -1,0 +1,26 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        setuser: ceph
+        setgroup: ceph
+        debug rgw: 20
+        debug rgw_restore: 20
+        rgw crypt s3 kms backend: testing
+        rgw crypt s3 kms encryption keys: testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
+        rgw crypt require ssl: false
+        rgw sts key: abcdefghijklmnop
+        rgw s3 auth use sts: true
+        rgw lc debug interval: 10
+        rgw_restore_debug_interval: 20
+        rgw_restore_processor_period: 10
+  rgw:
+    storage classes:
+      LUKEWARM:
+      FROZEN:
+    frontend: beast
+  s3tests:
+    storage classes: LUKEWARM, FROZEN
+    accounts:
+      iam root: RGW88888888888888888
+      iam alt root: RGW99999999999999999

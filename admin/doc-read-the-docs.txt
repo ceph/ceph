@@ -1,0 +1,2 @@
+plantweb
+readthedocs-sphinx-search@git+https://github.com/readthedocs/readthedocs-sphinx-search@main

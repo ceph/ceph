@@ -1,0 +1,5 @@
+tasks:
+  - notification-tests:
+      client.0:
+        extra_attr: ["http_test"]
+        rgw_server: client.0

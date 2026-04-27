@@ -1,0 +1,90 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2016 John Spray <john.spray@redhat.com>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation.  See file COPYING.
+ */
+
+
+#ifndef MGR_STANDBY_H_
+#define MGR_STANDBY_H_
+
+#include "auth/Auth.h"
+#include "common/async/context_pool.h"
+#include "common/Finisher.h"
+#include "common/Timer.h"
+#include "common/LogClient.h"
+
+#include "mon/MonClient.h"
+#include "osdc/Objecter.h"
+#include "PyModuleRegistry.h"
+#include "MgrClient.h"
+
+class MMgrMap;
+class Mgr;
+class PyModuleConfig;
+class MgrHook;
+
+class MgrStandby : public Dispatcher,
+		   public md_config_obs_t {
+public:
+  // config observer bits
+  std::vector<std::string> get_tracked_keys() const noexcept override;
+  void handle_conf_change(const ConfigProxy& conf,
+			  const std::set <std::string> &changed) override;
+  int asok_command(std::string_view cmd, const cmdmap_t& cmdmap, Formatter* f, std::ostream& errss);
+
+protected:
+  ceph::async::io_context_pool poolctx;
+  MonClient monc;
+  std::unique_ptr<Messenger> client_messenger;
+  Objecter objecter;
+
+  MgrClient mgrc;
+
+  LogClient log_client;
+  LogChannelRef clog, audit_clog;
+
+  ceph::mutex lock = ceph::make_mutex("MgrStandby::lock");
+  Finisher finisher;
+  SafeTimer timer;
+
+  PyModuleRegistry py_module_registry;
+  std::shared_ptr<Mgr> active_mgr;
+  std::unique_ptr<MgrHook> asok_hook;
+
+  int orig_argc;
+  const char **orig_argv;
+
+  std::string state_str();
+
+  void handle_mgr_map(ceph::ref_t<MMgrMap> m);
+  void _update_log_config();
+  void send_beacon();
+
+  bool available_in_map;
+
+public:
+  MgrStandby(int argc, const char **argv);
+  ~MgrStandby() override;
+
+  Dispatcher::dispatch_result_t ms_dispatch2(const ceph::ref_t<Message>& m) override;
+  bool ms_handle_reset(Connection *con) override { return false; }
+  void ms_handle_remote_reset(Connection *con) override {}
+  bool ms_handle_refused(Connection *con) override;
+
+  int init();
+  void respawn();
+  int main(std::vector<const char *> args);
+  void tick();
+};
+
+#endif
+

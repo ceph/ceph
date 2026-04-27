@@ -1,0 +1,35 @@
+meta:
+- desc: |
+   install ceph/squid v19.2.3
+tasks:
+- install:
+    tag: v19.2.3
+    exclude_packages:
+      - ceph-osd-classic
+      - ceph-osd-crimson
+- print: "**** done installing squid v19.2.3"
+- ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(FS_
+      - \(MDS_
+      - \(OSD_
+      - \(MON_DOWN\)
+      - \(CACHE_POOL_
+      - \(POOL_
+      - \(MGR_DOWN\)
+      - \(PG_
+      - \(SMALLER_PGP_NUM\)
+      - Monitor daemon marked osd
+      - Behind on trimming
+      - Manager daemon
+    conf:
+      global:
+        mon warn on pool no app: false
+- exec:
+    mon.a:
+    - ceph osd dump -f json-pretty
+    - ceph versions
+    - ceph fs status
+    - ceph health detail
+- print: "**** done ceph"

@@ -1,0 +1,41 @@
+@use './src/styles/vendor/variables' as vv;
+
+.overview {
+  background-color: vv.$body-bg-alt;
+  margin: 0;
+  padding: 0;
+}
+
+.container-fluid {
+  overflow: auto;
+  padding-top: var(--cds-spacing-09);
+  padding-bottom: var(--cds-spacing-09);
+
+  &:has(.tearsheet--full) {
+    padding-left: 0;
+    padding-right: 0;
+    overflow: hidden;
+
+    .breadcrumbs--padding {
+      padding-left: var(--cds-spacing-07);
+    }
+  }
+
+  &:has(.sidebar-layout--full) {
+    padding-left: 0;
+    padding-right: 0;
+
+    .breadcrumbs--padding {
+      padding-left: var(--cds-spacing-07);
+    }
+  }
+}
+
+.rgw-dashboard {
+  background-color: vv.$body-bg-alt;
+}
+
+.cd-alert-container {
+  display: flex;
+  flex-direction: column;
+}

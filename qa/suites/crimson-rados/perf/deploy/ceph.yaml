@@ -1,0 +1,8 @@
+tasks:
+- install:
+- ceph:
+    wait-for-scrub: false
+    conf:
+      osd:
+        debug monc: 20
+- ssh_keys:

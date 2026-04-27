@@ -1,0 +1,3 @@
+from mgr_module import CLICommandBase
+
+DiskpredictionLocalCLICommand = CLICommandBase.make_registry_subtype("DiskpredictionLocalCLICommand")

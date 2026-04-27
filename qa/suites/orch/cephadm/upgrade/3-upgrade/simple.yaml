@@ -1,0 +1,29 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - CEPHADM_STRAY_DAEMON
+      - CEPHADM_FAILED_DAEMON
+      - CEPHADM_AGENT_DOWN
+    log-only-match:
+      - CEPHADM_
+tasks:
+- cephadm.shell:
+    env: [sha1]
+    mon.a:
+      # setup rgw
+      - radosgw-admin realm create --rgw-realm=r --default
+      - radosgw-admin zonegroup create --rgw-zonegroup=default --master --default
+      - radosgw-admin zone create --rgw-zonegroup=default --rgw-zone=z --master --default
+      - radosgw-admin period update --rgw-realm=r --commit
+      - ceph orch apply rgw foo --realm r --zone z --placement=2 --port=8000
+      # simple rgw spec (will have no "spec" field) to make sure that works with rgw spec migration
+      - ceph orch apply rgw smpl
+      # setup iscsi
+      - ceph osd pool create foo
+      - rbd pool init foo
+      - ceph orch apply iscsi foo u p
+      - sleep 120
+      - ceph config set mon mon_warn_on_insecure_global_id_reclaim false --force
+      - ceph config set mon mon_warn_on_insecure_global_id_reclaim_allowed false --force
+      - ceph config set global log_to_journald false --force
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1

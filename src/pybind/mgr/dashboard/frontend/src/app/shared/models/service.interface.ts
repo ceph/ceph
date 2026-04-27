@@ -1,0 +1,130 @@
+export interface CephServiceStatus {
+  container_image_id: string;
+  container_image_name: string;
+  size: number;
+  running: number;
+  last_refresh: Date;
+  created: Date;
+}
+
+export enum CephCertificateStatus {
+  valid = 'valid',
+  expired = 'expired',
+  expiring = 'expiring',
+  expiringSoon = 'expiring_soon',
+  notConfigured = 'not_configured',
+  invalid = 'invalid'
+}
+
+export enum DaemonAction {
+  START = 'start',
+  STOP = 'stop',
+  RESTART = 'restart',
+  REDEPLOY = 'redeploy'
+}
+
+export const CERTIFICATE_STATUS_ICON_MAP: Record<string, string> = {
+  valid: 'success',
+  expiring: 'warning',
+  expiring_soon: 'warning',
+  expired: 'danger',
+  not_configured: 'warning',
+  invalid: 'danger',
+  default: 'warning'
+};
+
+export interface CephServiceCertificate {
+  cert_name: string;
+  scope: string;
+  requires_certificate: boolean;
+  status: CephCertificateStatus | string;
+  days_to_expiration: number;
+  signed_by: string;
+  has_certificate: boolean;
+  certificate_source: string;
+  expiry_date: string;
+  issuer: string;
+  common_name: string;
+}
+// This will become handy when creating arbitrary services
+export interface CephServiceSpec {
+  service_name: string;
+  service_type: string;
+  service_id: string;
+  unmanaged: boolean;
+  status: CephServiceStatus;
+  certificate?: CephServiceCertificate;
+  spec: CephServiceAdditionalSpec;
+  placement: CephServicePlacement;
+  events?: string[];
+}
+
+// Type for service spec update payload (excludes read-only status field)
+export type CephServiceSpecUpdate = Omit<CephServiceSpec, 'status'>;
+
+export interface CephServiceAdditionalSpec {
+  placement?: CephServicePlacement;
+  backend_service: string;
+  api_user: string;
+  api_password: string;
+  api_port: number;
+  api_secure: boolean;
+  rgw_frontend_port: number;
+  trusted_ip_list: string[];
+  virtual_ip: string;
+  frontend_port: number;
+  monitor_port: number;
+  virtual_interface_networks: string[];
+  pool: string;
+  group: string;
+  root_ca_cert: string;
+  client_cert: string;
+  client_key: string;
+  server_cert: string;
+  server_key: string;
+  rgw_frontend_ssl_certificate: string;
+  ssl: boolean;
+  ssl_cert: string;
+  ssl_certificate: string;
+  ssl_key: string;
+  ssl_certificate_key: string;
+  ssl_protocols: string[];
+  ssl_ciphers: string[];
+  certificate_source: string;
+  port: number;
+  initial_admin_password: string;
+  rgw_realm: string;
+  rgw_zonegroup: string;
+  rgw_zone: string;
+  cluster_id: string;
+  features: string[];
+  config_uri: string;
+  custom_dns: string[];
+  join_sources: string[];
+  include_ceph_users: string[];
+  https_address: string;
+  provider_display_name: string;
+  client_id: string;
+  client_secret: string;
+  oidc_issuer_url: string;
+  enable_auth: boolean;
+  qat: QatSepcs;
+}
+
+export interface CephServicePlacement {
+  count?: number;
+  placement?: string;
+  hosts?: string[];
+  label?: string | string[];
+  locations?: Record<string, string[]>;
+}
+
+export interface QatSepcs {
+  [key: string]: string;
+}
+
+export enum QatOptions {
+  hw = 'hw',
+  sw = 'sw',
+  none = 'none'
+}

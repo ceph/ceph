@@ -1,0 +1,6 @@
+tasks:
+  - cephfs_test_runner:
+      fail_on_skip: false
+      modules:
+        - tasks.cephfs.volumes.test_clone_stats.TestCloneProgressReporter
+        - tasks.cephfs.volumes.test_clone_stats.TestOngoingClonesCounter

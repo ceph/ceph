@@ -1,0 +1,12 @@
+tasks:
+- install:
+    extra_packages:
+      deb:
+        - ceph-osd-crimson
+        - ceph-osd-crimson-dbg
+      rpm:
+        - ceph-osd-crimson
+        - ceph-osd-crimson-debuginfo
+- pexec:
+    all:
+      - sudo update-alternatives --set ceph-osd /usr/bin/ceph-osd-crimson

@@ -1,0 +1,12 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    remove)
+        update-alternatives --remove ceph-osd /usr/bin/ceph-osd-classic
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

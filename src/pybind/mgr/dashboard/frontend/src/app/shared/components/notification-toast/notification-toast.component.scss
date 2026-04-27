@@ -1,0 +1,77 @@
+@use '@carbon/styles/scss/theme' as *;
+@use '@carbon/styles/scss/spacing' as *;
+@use '@carbon/styles/scss/layer' as *;
+@use '@carbon/styles/scss/type' as *;
+
+.cds--toast-notification-container {
+  position: fixed;
+  top: $spacing-10;
+  right: $spacing-04;
+  max-width: $spacing-13 * 8;
+  z-index: 9000;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+
+  cds-toast {
+    pointer-events: all;
+    margin-bottom: $spacing-03;
+    transform-origin: top right;
+
+    ::ng-deep {
+      .cds--toast-notification__title,
+      .cds--toast-notification__subtitle,
+      .cds--toast-notification__caption {
+        color: $text-primary;
+      }
+
+      .cds--toast-notification__close-button {
+        color: $icon-primary;
+      }
+
+      .cds--toast-notification__close-button:hover {
+        background-color: transparent;
+      }
+
+      .cds--toast-notification__close-icon {
+        fill: currentcolor;
+      }
+
+      .toast-caption-container {
+        display: flex;
+        justify-content: flex-start;
+        align-items: center;
+        width: 100%;
+      }
+
+      .toast-caption-container .date {
+        flex-shrink: 0;
+      }
+    }
+  }
+}
+
+@keyframes toast-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes toast-slide-out {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+}

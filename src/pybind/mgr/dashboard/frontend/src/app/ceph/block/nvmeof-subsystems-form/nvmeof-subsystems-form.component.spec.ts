@@ -1,0 +1,132 @@
+import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { ReactiveFormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
+import { RouterTestingModule } from '@angular/router/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+
+import { ToastrModule } from 'ngx-toastr';
+
+import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
+
+import { SharedModule } from '~/app/shared/shared.module';
+import {
+  NvmeofSubsystemsFormComponent,
+  SubsystemPayload
+} from './nvmeof-subsystems-form.component';
+import { NvmeofService } from '~/app/shared/api/nvmeof.service';
+import { NvmeofSubsystemsStepOneComponent } from './nvmeof-subsystem-step-1/nvmeof-subsystem-step-1.component';
+import {
+  ComboBoxModule,
+  GridModule,
+  InputModule,
+  RadioModule,
+  TagModule
+} from 'carbon-components-angular';
+import { NvmeofSubsystemsStepThreeComponent } from './nvmeof-subsystem-step-3/nvmeof-subsystem-step-3.component';
+import { AUTHENTICATION, HOST_TYPE } from '~/app/shared/models/nvmeof';
+import { NvmeofSubsystemsStepTwoComponent } from './nvmeof-subsystem-step-2/nvmeof-subsystem-step-2.component';
+import { NvmeofSubsystemsStepFourComponent } from './nvmeof-subsystem-step-4/nvmeof-subsystem-step-4.component';
+import { of } from 'rxjs';
+
+describe('NvmeofSubsystemsFormComponent', () => {
+  let component: NvmeofSubsystemsFormComponent;
+  let fixture: ComponentFixture<NvmeofSubsystemsFormComponent>;
+  let nvmeofService: NvmeofService;
+  const mockTimestamp = 1720693470789;
+  const mockGroupName = 'default';
+  const mockPayload: SubsystemPayload = {
+    nqn: '',
+    gw_group: mockGroupName,
+    subsystemDchapKey: 'Q2VwaE52bWVvRkNoYXBTeW50aGV0aWNLZXkxMjM0NTY=',
+    addedHosts: [],
+    hostType: HOST_TYPE.ALL,
+    listeners: [],
+    hostDchapKeyList: [],
+    authType: AUTHENTICATION.Bidirectional
+  };
+
+  beforeEach(async () => {
+    spyOn(Date, 'now').and.returnValue(mockTimestamp);
+    await TestBed.configureTestingModule({
+      declarations: [
+        NvmeofSubsystemsFormComponent,
+        NvmeofSubsystemsStepOneComponent,
+        NvmeofSubsystemsStepThreeComponent,
+        NvmeofSubsystemsStepTwoComponent,
+        NvmeofSubsystemsStepFourComponent
+      ],
+      providers: [
+        NgbActiveModal,
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            queryParams: of({ group: mockGroupName })
+          }
+        }
+      ],
+      imports: [
+        HttpClientTestingModule,
+        NgbTypeaheadModule,
+        ReactiveFormsModule,
+        RouterTestingModule,
+        SharedModule,
+        InputModule,
+        GridModule,
+        RadioModule,
+        TagModule,
+        ToastrModule.forRoot(),
+        ComboBoxModule
+      ]
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(NvmeofSubsystemsFormComponent);
+    component = fixture.componentInstance;
+    component.ngOnInit();
+    fixture.detectChanges();
+  });
+
+  it('should create', () => {
+    expect(component).toBeTruthy();
+  });
+
+  describe('should test form', () => {
+    beforeEach(() => {
+      nvmeofService = TestBed.inject(NvmeofService);
+      spyOn(nvmeofService, 'createSubsystem').and.returnValue(of({}));
+      spyOn(nvmeofService, 'addSubsystemInitiators').and.returnValue(of({}));
+    });
+
+    it('should be creating request correctly', () => {
+      const expectedNqn = 'nqn.2001-07.com.ceph:' + mockTimestamp;
+      mockPayload['nqn'] = expectedNqn;
+      component.onSubmit(mockPayload);
+      expect(nvmeofService.createSubsystem).toHaveBeenCalledWith({
+        nqn: expectedNqn,
+        gw_group: mockGroupName,
+        dhchap_key: 'Q2VwaE52bWVvRkNoYXBTeW50aGV0aWNLZXkxMjM0NTY='
+      });
+    });
+
+    it('should add initiators with wildcard when hostType is ALL', () => {
+      const payload: SubsystemPayload = {
+        nqn: 'test-nqn',
+        gw_group: mockGroupName,
+        addedHosts: [],
+        hostType: HOST_TYPE.ALL,
+        subsystemDchapKey: 'Q2VwaE52bWVvRkNoYXBTeW50aGV0aWNLZXkxMjM0NTY=',
+        listeners: [],
+        authType: AUTHENTICATION.Bidirectional,
+        hostDchapKeyList: []
+      };
+
+      component.group = mockGroupName;
+      component.onSubmit(payload);
+
+      expect(nvmeofService.addSubsystemInitiators).toHaveBeenCalledWith('test-nqn.default', {
+        allow_all: true,
+        hosts: [],
+        gw_group: mockGroupName
+      });
+    });
+  });
+});

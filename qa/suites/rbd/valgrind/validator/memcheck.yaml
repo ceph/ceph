@@ -1,0 +1,9 @@
+overrides:
+  install:
+    ceph:
+      debuginfo: true
+  rbd_fsx:
+    valgrind: ["--tool=memcheck"]
+  workunit:
+    env:
+      VALGRIND: "--tool=memcheck --leak-check=full"

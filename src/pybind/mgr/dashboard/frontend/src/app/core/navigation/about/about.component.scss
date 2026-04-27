@@ -1,0 +1,41 @@
+@use './src/styles/vendor/variables' as vv;
+@use '@carbon/layout';
+
+::ng-deep .cds--modal-container {
+  position: relative;
+  background-color: vv.$secondary;
+  background-image: url('../../../../assets/ceph_background.gif');
+  background-position: right bottom;
+  background-repeat: no-repeat;
+  color: vv.$white;
+}
+
+.header-content {
+  padding-left: layout.$spacing-11;
+  padding-top: layout.$spacing-07;
+}
+
+.product-versions {
+  margin-top: layout.$spacing-05;
+}
+
+.product-versions strong {
+  margin-right: layout.$spacing-03;
+}
+
+.modal-body {
+  padding-left: layout.$spacing-11;
+  padding-right: layout.$spacing-11;
+  color: vv.$white;
+}
+
+.ceph-logo {
+  margin-bottom: layout.$spacing-07;
+  width: 20%;
+}
+
+::ng-deep .cds--modal-footer {
+  border-top: 0;
+  display: block;
+  padding: layout.$spacing-05 layout.$spacing-12 layout.$spacing-07;
+}

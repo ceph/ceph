@@ -1,0 +1,13 @@
+@use '@carbon/layout';
+
+table {
+  table-layout: fixed;
+}
+
+table td {
+  word-wrap: break-word;
+}
+
+.spacing-left {
+  margin-left: layout.$spacing-03;
+}

@@ -1,0 +1,19 @@
+{
+    "pool" : "nfs-ganesha",
+    "namespace" : "nfs-ns",
+    "files": {
+        "ganesha.conf": [
+            "NFS_CORE_PARAM {",
+            "        allow_set_io_flusher_fail = true;",
+            "}",
+            "",
+            "RADOS_URLS {",
+            "        userid = admin;",
+            "}",
+            "",
+            "%url    rados://nfs-ganesha/nfs-ns/conf-nfs.a",
+            ""
+        ],
+        "idmap.conf": ""
+    }
+}

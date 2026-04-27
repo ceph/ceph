@@ -1,0 +1,749 @@
+# -*- coding: utf-8 -*-
+# pylint: disable=unused-argument
+# pylint: disable=too-many-statements,too-many-branches
+
+import logging
+import math
+from datetime import datetime, timezone
+from functools import partial
+from typing import Any, Dict, Optional
+
+import cherrypy
+import rbd
+
+from .. import mgr
+from ..controllers.pool import RBDPool
+from ..exceptions import DashboardException
+from ..security import Scope
+from ..services.ceph_service import CephService
+from ..services.exception import handle_rados_error, handle_rbd_error, serialize_dashboard_exception
+from ..services.rbd import MIRROR_IMAGE_MODE, RbdConfiguration, \
+    RbdImageMetadataService, RbdMirroringService, RbdService, \
+    RbdSnapshotService, format_bitmask, format_features, get_image_spec, \
+    parse_image_spec, rbd_call, rbd_image_call
+from ..tools import ViewCache, str_to_bool
+from . import APIDoc, APIRouter, BaseController, CreatePermission, \
+    DeletePermission, Endpoint, EndpointDoc, ReadPermission, RESTController, \
+    Task, UIRouter, UpdatePermission, allow_empty_body
+from ._version import APIVersion
+
+logger = logging.getLogger(__name__)
+
+RBD_SCHEMA = ([{
+    "value": ([str], ''),
+    "pool_name": (str, 'pool name')
+}])
+
+RBD_TRASH_SCHEMA = [{
+    "status": (int, ''),
+    "value": ([str], ''),
+    "pool_name": (str, 'pool name')
+}]
+
+RBD_GROUP_LIST_SCHEMA = [{
+    "group": (str, 'group name'),
+    "num_images": (int, '')
+}]
+
+RBD_GROUP_GET_SCHEMA = {
+    "images": ([dict], 'List of images in the group with their pool, namespace, and name')
+}
+
+RBD_GROUP_SNAPSHOT_LIST_SCHEMA = [{
+    "id": (str, 'snapshot id'),
+    "name": (str, 'snapshot name'),
+    "state": (int, 'snapshot state'),
+    "namespace_type": (int, 'namespace type')
+}]
+
+RBD_GROUP_SNAPSHOT_GET_SCHEMA = {
+    "id": (str, 'snapshot id'),
+    "name": (str, 'snapshot name'),
+    "state": (int, 'snapshot state'),
+    "namespace_type": (int, 'namespace type'),
+    "image_snap_name": (str, 'image snapshot name'),
+    "image_snaps": ([dict], 'image snapshots')
+}
+
+
+# pylint: disable=not-callable
+def RbdTask(name, metadata, wait_for):  # noqa: N802
+    def composed_decorator(func):
+        func = handle_rados_error('pool')(func)
+        func = handle_rbd_error()(func)
+        return Task("rbd/{}".format(name), metadata, wait_for,
+                    partial(serialize_dashboard_exception, include_http_status=True))(func)
+    return composed_decorator
+
+
+@APIRouter('/block/image', Scope.RBD_IMAGE)
+@APIDoc("RBD Management API", "Rbd")
+class Rbd(RESTController):
+
+    DEFAULT_LIMIT = 5
+
+    def _rbd_list(self, pool_name=None, offset=0, limit=DEFAULT_LIMIT, search='', sort=''):
+        if pool_name:
+            pools = [pool_name]
+        else:
+            pools = [p['pool_name'] for p in CephService.get_pool_list('rbd')]
+
+        images, num_total_images = RbdService.rbd_pool_list(
+            pools, offset=offset, limit=limit, search=search, sort=sort)
+        cherrypy.response.headers['X-Total-Count'] = num_total_images
+        pool_result = {}
+        for i, image in enumerate(images):
+            pool = image['pool_name']
+            if pool not in pool_result:
+                pool_result[pool] = {'value': [], 'pool_name': image['pool_name']}
+            pool_result[pool]['value'].append(image)
+
+            images[i]['configuration'] = RbdConfiguration(
+                pool, image['namespace'], image['name']).list()
+            images[i]['metadata'] = rbd_image_call(
+                pool, image['namespace'], image['name'],
+                lambda ioctx, image: RbdImageMetadataService(image).list())
+
+        return list(pool_result.values())
+
+    @handle_rbd_error()
+    @handle_rados_error('pool')
+    @EndpointDoc("Display Rbd Images",
+                 parameters={
+                     'pool_name': (str, 'Pool Name'),
+                     'limit': (int, 'limit'),
+                     'offset': (int, 'offset'),
+                 },
+                 responses={200: RBD_SCHEMA})
+    @RESTController.MethodMap(version=APIVersion(2, 0))  # type: ignore
+    def list(self, pool_name=None, offset: int = 0, limit: int = DEFAULT_LIMIT,
+             search: str = '', sort: str = ''):
+        return self._rbd_list(pool_name, offset=int(offset), limit=int(limit),
+                              search=search, sort=sort)
+
+    @handle_rbd_error()
+    @handle_rados_error('pool')
+    @EndpointDoc("Get Rbd Image Info",
+                 parameters={
+                     'image_spec': (str, 'URL-encoded "pool/rbd_name". e.g. "rbd%2Ffoo"'),
+                     'omit_usage': (bool, 'When true, usage information is not returned'),
+                 },
+                 responses={200: RBD_SCHEMA})
+    def get(self, image_spec, omit_usage=False):
+        try:
+            omit_usage_bool = str_to_bool(omit_usage)
+        except ValueError:
+            omit_usage_bool = False
+        return RbdService.get_image(image_spec, omit_usage_bool)
+
+    @RbdTask('create',
+             {'pool_name': '{pool_name}', 'namespace': '{namespace}', 'image_name': '{name}'}, 2.0)
+    def create(self, name, pool_name, size, namespace=None, schedule_interval='',
+               obj_size=None, features=None, stripe_unit=None, stripe_count=None,
+               data_pool=None, configuration=None, metadata=None,
+               mirror_mode=None):
+
+        RbdService.create(name, pool_name, size, namespace,
+                          obj_size, features, stripe_unit, stripe_count,
+                          data_pool, configuration, metadata)
+
+        if mirror_mode:
+            RbdMirroringService.enable_image(name, pool_name, namespace,
+                                             MIRROR_IMAGE_MODE[mirror_mode])
+
+        if schedule_interval:
+            image_spec = get_image_spec(pool_name, namespace, name)
+            RbdMirroringService.snapshot_schedule_add(image_spec, schedule_interval)
+
+    @RbdTask('delete', ['{image_spec}'], 2.0)
+    def delete(self, image_spec):
+        return RbdService.delete(image_spec)
+
+    @RbdTask('edit', ['{image_spec}', '{name}'], 4.0)
+    def set(self, image_spec, name=None, size=None, features=None,
+            configuration=None, metadata=None, enable_mirror=None, primary=None,
+            force=False, resync=False, mirror_mode=None, image_mirror_mode=None,
+            schedule_interval='', remove_scheduling=False, schedule_level=None):
+        return RbdService.set(image_spec, name, size, features,
+                              configuration, metadata, enable_mirror, primary,
+                              force, resync, mirror_mode, image_mirror_mode,
+                              schedule_interval, remove_scheduling, schedule_level)
+
+    @RbdTask('copy',
+             {'src_image_spec': '{image_spec}',
+              'dest_pool_name': '{dest_pool_name}',
+              'dest_namespace': '{dest_namespace}',
+              'dest_image_name': '{dest_image_name}'}, 2.0)
+    @RESTController.Resource('POST')
+    @allow_empty_body
+    def copy(self, image_spec, dest_pool_name, dest_namespace, dest_image_name,
+             snapshot_name=None, obj_size=None, features=None,
+             stripe_unit=None, stripe_count=None, data_pool=None,
+             configuration=None, metadata=None):
+        return RbdService.copy(image_spec, dest_pool_name, dest_namespace, dest_image_name,
+                               snapshot_name, obj_size, features,
+                               stripe_unit, stripe_count, data_pool,
+                               configuration, metadata)
+
+    @RbdTask('flatten', ['{image_spec}'], 2.0)
+    @RESTController.Resource('POST')
+    @UpdatePermission
+    @allow_empty_body
+    def flatten(self, image_spec):
+        return RbdService.flatten(image_spec)
+
+    @RESTController.Collection('GET')
+    def default_features(self):
+        rbd_default_features = mgr.get('config')['rbd_default_features']
+        return format_bitmask(int(rbd_default_features))
+
+    @RESTController.Collection('GET')
+    def clone_format_version(self):
+        """Return the RBD clone format version.
+        """
+        rbd_default_clone_format = mgr.get('config')['rbd_default_clone_format']
+        if rbd_default_clone_format != 'auto':
+            return int(rbd_default_clone_format)
+        osd_map = mgr.get_osdmap().dump()
+        min_compat_client = osd_map.get('min_compat_client', '')
+        require_min_compat_client = osd_map.get('require_min_compat_client', '')
+        if max(min_compat_client, require_min_compat_client) < 'mimic':
+            return 1
+
+        return 2
+
+    @RbdTask('trash/move', ['{image_spec}'], 2.0)
+    @RESTController.Resource('POST')
+    @allow_empty_body
+    def move_trash(self, image_spec, delay=0):
+        """Move an image to the trash.
+        Images, even ones actively in-use by clones,
+        can be moved to the trash and deleted at a later time.
+        """
+        return RbdService.move_image_to_trash(image_spec, delay)
+
+
+@UIRouter('/block/rbd')
+class RbdStatus(BaseController):
+    @EndpointDoc("Display RBD Image feature status")
+    @Endpoint()
+    @ReadPermission
+    def status(self):
+        status: Dict[str, Any] = {'available': True, 'message': None}
+        if not CephService.get_pool_list('rbd'):
+            status['available'] = False
+            status['message'] = 'No Block Pool is available in the cluster. Please click ' \
+                                'on \"Configure Default Pool\" button to ' \
+                                'get started.'  # type: ignore
+        return status
+
+    @Endpoint('POST')
+    @EndpointDoc('Configure Default Block Pool')
+    @CreatePermission
+    def configure(self):
+        rbd_pool = RBDPool()
+
+        if not CephService.get_pool_list('rbd'):
+            rbd_pool.create('rbd')
+
+
+@APIRouter('/block/image/{image_spec}/snap', Scope.RBD_IMAGE)
+@APIDoc("RBD Snapshot Management API", "RbdSnapshot")
+class RbdSnapshot(RESTController):
+
+    RESOURCE_ID = "snapshot_name"
+
+    @RbdTask('snap/create',
+             ['{image_spec}', '{snapshot_name}', '{mirrorImageSnapshot}'], 2.0)
+    def create(self, image_spec, snapshot_name, mirrorImageSnapshot):
+        pool_name, namespace, image_name = parse_image_spec(image_spec)
+
+        def _create_snapshot(ioctx, img, snapshot_name):
+            mirror_info = img.mirror_image_get_info()
+            mirror_mode = None
+            if mirror_info['state'] == rbd.RBD_MIRROR_IMAGE_ENABLED:
+                mirror_mode = img.mirror_image_get_mode()
+
+            if (mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT) and mirrorImageSnapshot:
+                img.mirror_image_create_snapshot()
+            else:
+                img.create_snap(snapshot_name)
+
+        return rbd_image_call(pool_name, namespace, image_name, _create_snapshot,
+                              snapshot_name)
+
+    @RbdTask('snap/delete',
+             ['{image_spec}', '{snapshot_name}'], 2.0)
+    def delete(self, image_spec, snapshot_name):
+        return RbdSnapshotService.remove_snapshot(image_spec, snapshot_name)
+
+    @RbdTask('snap/edit',
+             ['{image_spec}', '{snapshot_name}'], 4.0)
+    def set(self, image_spec, snapshot_name, new_snap_name=None,
+            is_protected=None):
+        def _edit(ioctx, img, snapshot_name):
+            if new_snap_name and new_snap_name != snapshot_name:
+                img.rename_snap(snapshot_name, new_snap_name)
+                snapshot_name = new_snap_name
+            if is_protected is not None and \
+                    is_protected != img.is_protected_snap(snapshot_name):
+                if is_protected:
+                    img.protect_snap(snapshot_name)
+                else:
+                    img.unprotect_snap(snapshot_name)
+
+        pool_name, namespace, image_name = parse_image_spec(image_spec)
+        return rbd_image_call(pool_name, namespace, image_name, _edit, snapshot_name)
+
+    @RbdTask('snap/rollback',
+             ['{image_spec}', '{snapshot_name}'], 5.0)
+    @RESTController.Resource('POST')
+    @UpdatePermission
+    @allow_empty_body
+    def rollback(self, image_spec, snapshot_name):
+        def _rollback(ioctx, img, snapshot_name):
+            img.rollback_to_snap(snapshot_name)
+
+        pool_name, namespace, image_name = parse_image_spec(image_spec)
+        return rbd_image_call(pool_name, namespace, image_name, _rollback, snapshot_name)
+
+    @RbdTask('clone',
+             {'parent_image_spec': '{image_spec}',
+              'child_pool_name': '{child_pool_name}',
+              'child_namespace': '{child_namespace}',
+              'child_image_name': '{child_image_name}'}, 2.0)
+    @RESTController.Resource('POST')
+    @allow_empty_body
+    def clone(self, image_spec, snapshot_name, child_pool_name,
+              child_image_name, child_namespace=None, obj_size=None, features=None,
+              stripe_unit=None, stripe_count=None, data_pool=None,
+              configuration=None, metadata=None):
+        """
+        Clones a snapshot to an image
+        """
+
+        pool_name, namespace, image_name = parse_image_spec(image_spec)
+
+        def _parent_clone(p_ioctx):
+            def _clone(ioctx):
+                # Set order
+                l_order = None
+                if obj_size and obj_size > 0:
+                    l_order = int(round(math.log(float(obj_size), 2)))
+
+                # Set features
+                feature_bitmask = format_features(features)
+
+                rbd_inst = rbd.RBD()
+                rbd_inst.clone(p_ioctx, image_name, snapshot_name, ioctx,
+                               child_image_name, feature_bitmask, l_order,
+                               stripe_unit, stripe_count, data_pool)
+
+                RbdConfiguration(pool_ioctx=ioctx, image_name=child_image_name).set_configuration(
+                    configuration)
+                if metadata:
+                    with rbd.Image(ioctx, child_image_name) as image:
+                        RbdImageMetadataService(image).set_metadata(metadata)
+
+            return rbd_call(child_pool_name, child_namespace, _clone)
+
+        rbd_call(pool_name, namespace, _parent_clone)
+
+
+@APIRouter('/block/image/trash', Scope.RBD_IMAGE)
+@APIDoc("RBD Trash Management API", "RbdTrash")
+class RbdTrash(RESTController):
+    RESOURCE_ID = "image_id_spec"
+
+    def __init__(self):
+        super().__init__()
+        self.rbd_inst = rbd.RBD()
+
+    @ViewCache()
+    def _trash_pool_list(self, pool_name):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            result = []
+            namespaces = self.rbd_inst.namespace_list(ioctx)
+            # images without namespace
+            namespaces.append('')
+            for namespace in namespaces:
+                ioctx.set_namespace(namespace)
+                images = self.rbd_inst.trash_list(ioctx)
+                for trash in images:
+                    trash['pool_name'] = pool_name
+                    trash['namespace'] = namespace
+                    trash['deletion_time'] = trash['deletion_time'].isoformat()
+                    trash['deferment_end_time'] = trash['deferment_end_time'].isoformat()
+                    result.append(trash)
+            return result
+
+    def _trash_list(self, pool_name=None):
+        if pool_name:
+            pools = [pool_name]
+        else:
+            pools = [p['pool_name'] for p in CephService.get_pool_list('rbd')]
+
+        result = []
+        for pool in pools:
+            # pylint: disable=unbalanced-tuple-unpacking
+            status, value = self._trash_pool_list(pool)
+            result.append({'status': status, 'value': value, 'pool_name': pool})
+        return result
+
+    @handle_rbd_error()
+    @handle_rados_error('pool')
+    @EndpointDoc("Get RBD Trash Details by pool name",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool'),
+                 },
+                 responses={200: RBD_TRASH_SCHEMA})
+    def list(self, pool_name=None):
+        """List all entries from trash."""
+        return self._trash_list(pool_name)
+
+    @handle_rbd_error()
+    @handle_rados_error('pool')
+    @RbdTask('trash/purge', ['{pool_name}'], 2.0)
+    @RESTController.Collection('POST', query_params=['pool_name'])
+    @DeletePermission
+    @allow_empty_body
+    def purge(self, pool_name=None):
+        """Remove all expired images from trash."""
+        now = datetime.now(timezone.utc).isoformat()
+        pools = self._trash_list(pool_name)
+
+        for pool in pools:
+            for image in pool['value']:
+                if image['deferment_end_time'] < now:
+                    logger.info('Removing trash image %s (pool=%s, namespace=%s, name=%s)',
+                                image['id'], pool['pool_name'], image['namespace'], image['name'])
+                    rbd_call(pool['pool_name'], image['namespace'],
+                             self.rbd_inst.trash_remove, image['id'], 0)
+
+    @RbdTask('trash/restore', ['{image_id_spec}', '{new_image_name}'], 2.0)
+    @RESTController.Resource('POST')
+    @CreatePermission
+    @allow_empty_body
+    def restore(self, image_id_spec, new_image_name):
+        """Restore an image from trash."""
+        pool_name, namespace, image_id = parse_image_spec(image_id_spec)
+        return rbd_call(pool_name, namespace, self.rbd_inst.trash_restore, image_id,
+                        new_image_name)
+
+    @RbdTask('trash/remove', ['{image_id_spec}'], 2.0)
+    def delete(self, image_id_spec, force=False):
+        """Delete an image from trash.
+        If image deferment time has not expired you can not removed it unless use force.
+        But an actively in-use by clones or has snapshots can not be removed.
+        """
+        pool_name, namespace, image_id = parse_image_spec(image_id_spec)
+        return rbd_call(pool_name, namespace, self.rbd_inst.trash_remove, image_id,
+                        int(str_to_bool(force)))
+
+
+@APIRouter('/block/pool/{pool_name}/namespace', Scope.RBD_IMAGE)
+@APIDoc("RBD Namespace Management API", "RbdNamespace")
+class RbdNamespace(RESTController):
+
+    def __init__(self):
+        super().__init__()
+        self.rbd_inst = rbd.RBD()
+
+    def create(self, pool_name, namespace):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            namespaces = self.rbd_inst.namespace_list(ioctx)
+            if namespace in namespaces:
+                raise DashboardException(
+                    msg='Namespace already exists',
+                    code='namespace_already_exists',
+                    component='rbd')
+            return self.rbd_inst.namespace_create(ioctx, namespace)
+
+    def delete(self, pool_name, namespace):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            # pylint: disable=unbalanced-tuple-unpacking
+            images, _ = RbdService.rbd_pool_list([pool_name], namespace=namespace)
+            if images:
+                raise DashboardException(
+                    msg='Namespace contains images which must be deleted first',
+                    code='namespace_contains_images',
+                    component='rbd')
+            return self.rbd_inst.namespace_remove(ioctx, namespace)
+
+    def list(self, pool_name):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            result = []
+            namespaces = self.rbd_inst.namespace_list(ioctx)
+            for namespace in namespaces:
+                # pylint: disable=unbalanced-tuple-unpacking
+                images, _ = RbdService.rbd_pool_list([pool_name], namespace=namespace)
+                result.append({
+                    'namespace': namespace,
+                    'num_images': len(images) if images else 0
+                })
+            return result
+
+
+NAMESPACE_PARAM_DESC = ('Optional RBD namespace within the pool. Provides logical '
+                        'isolation of images. When specified, operations are scoped to '
+                        'that namespace. If omitted, the default namespace is used.')
+
+
+@APIRouter('/block/pool/{pool_name}/group', Scope.RBD_IMAGE)
+@APIDoc("RBD Group Management API", "RbdGroup")
+class RbdGroup(RESTController):
+    def __init__(self):
+        super().__init__()
+        self.rbd_inst = rbd.RBD()
+
+    @handle_rbd_error()
+    @EndpointDoc("List all RBD groups in a pool",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool to list groups from'),
+                     'namespace': (str, NAMESPACE_PARAM_DESC),
+                 },
+                 responses={200: RBD_GROUP_LIST_SCHEMA})
+    def list(self, pool_name, namespace=None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            result = []
+            groups = self.rbd_inst.group_list(ioctx)
+            for group in groups:
+                result.append({
+                    'group': group,
+                    'num_images': len(list(rbd.Group(ioctx, group).list_images()))
+                })
+            return result
+
+    @handle_rbd_error()
+    @EndpointDoc("Get details of a specific RBD group including its member images",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool containing the group'),
+                     'group_name': (str, 'Name of the group to retrieve'),
+                     'namespace': (str, NAMESPACE_PARAM_DESC),
+                 },
+                 responses={200: RBD_GROUP_GET_SCHEMA})
+    @RESTController.Collection('GET', path='/{group_name}')
+    def get(self, pool_name, group_name, namespace=None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            result = []
+            groups = self.rbd_inst.group_list(ioctx)
+            if group_name in groups:
+                result.append({
+                    'images': list(rbd.Group(ioctx, group_name).list_images())
+                })
+            else:
+                raise DashboardException(
+                    msg='Group not found',
+                    code='group_not_found',
+                    component='rbd')
+            return result
+
+    @handle_rbd_error()
+    @EndpointDoc("Create a new RBD group in the specified pool",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool where the group will be created'),
+                     'name': (str, 'Name for the new group'),
+                     'namespace': (str, NAMESPACE_PARAM_DESC),
+                 })
+    def create(self, pool_name, name, namespace=None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            return self.rbd_inst.group_create(ioctx, name)
+
+    @handle_rbd_error()
+    @EndpointDoc("Delete an RBD group. All images must be removed from the group first.",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool containing the group'),
+                     'group_name': (str, 'Name of the group to delete'),
+                     'namespace': (str, NAMESPACE_PARAM_DESC),
+                 },
+                 responses={200: None})
+    def delete(self, pool_name, group_name, namespace=None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            return self.rbd_inst.group_remove(ioctx, group_name)
+
+    @handle_rbd_error()
+    @EndpointDoc("Rename an existing RBD group",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool containing the group'),
+                     'group_name': (str, 'Current name of the group'),
+                     'new_name': (str, 'New name for the group'),
+                     'namespace': (str, NAMESPACE_PARAM_DESC),
+                 },
+                 responses={200: None})
+    def set(self, pool_name, group_name, new_name, namespace=None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            if new_name == group_name:
+                return None
+            return self.rbd_inst.group_rename(ioctx, group_name, new_name)
+
+    @RESTController.Collection('POST', path='/{group_name}/image')
+    @handle_rbd_error()
+    @EndpointDoc("Add an RBD image to a group. The image must be in the same pool and namespace.",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool containing both the group and image'),
+                     'group_name': (str, 'Name of the group to add the image to'),
+                     'image_name': (str, 'Name of the image to add to the group'),
+                     'namespace': (str, NAMESPACE_PARAM_DESC),
+                 },
+                 responses={200: None})
+    def add_image(self, pool_name, group_name, image_name, namespace=None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            group = rbd.Group(ioctx, group_name)
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            return group.add_image(ioctx, image_name)
+
+    @RESTController.Collection('DELETE', path='/{group_name}/image')
+    @handle_rbd_error()
+    @EndpointDoc("Remove an RBD image from a group. The image itself is not deleted.",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool containing the group'),
+                     'group_name': (str, 'Name of the group to remove the image from'),
+                     'image_name': (str, 'Name of the image to remove from the group'),
+                     'namespace': (str, NAMESPACE_PARAM_DESC),
+                 },
+                 responses={200: None})
+    def remove_image(self, pool_name, group_name, image_name, namespace=None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            group = rbd.Group(ioctx, group_name)
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            return group.remove_image(ioctx, image_name)
+
+
+@APIRouter('/block/pool/{pool_name}/group/{group_name}/snap', Scope.RBD_IMAGE)
+@APIDoc("RBD Group Snapshot Management API", "RbdGroupSnapshot")
+class RbdGroupSnapshot(RESTController):
+
+    RESOURCE_ID = "snapshot_name"
+
+    def __init__(self):
+        super().__init__()
+        self.rbd_inst = rbd.RBD()
+
+    @handle_rbd_error()
+    @EndpointDoc("List all snapshots of an RBD group",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool containing the group'),
+                     'group_name': (str, 'Name of the group to list snapshots for'),
+                     'namespace': (str, NAMESPACE_PARAM_DESC),
+                 },
+                 responses={200: RBD_GROUP_SNAPSHOT_LIST_SCHEMA})
+    def list(self, pool_name: str, group_name: str, namespace: Optional[str] = None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            group = rbd.Group(ioctx, group_name)
+            result = []
+            for snap in group.list_snaps():
+                result.append({
+                    'id': snap['id'],
+                    'name': snap['name'],
+                    'state': snap['state'],
+                    'namespace_type': snap['namespace_type']
+                })
+            return result
+
+    @handle_rbd_error()
+    @EndpointDoc("Get detailed information about a specific group snapshot",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool containing the group'),
+                     'group_name': (str, 'Name of the group'),
+                     'snapshot_name': (str, 'Name of the snapshot to retrieve'),
+                     'namespace': (str, NAMESPACE_PARAM_DESC),
+                 },
+                 responses={200: RBD_GROUP_SNAPSHOT_GET_SCHEMA})
+    def get(self, pool_name: str, group_name: str, snapshot_name: str,
+            namespace: Optional[str] = None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            group = rbd.Group(ioctx, group_name)
+            return group.get_snap_info(snapshot_name)
+
+    @RbdTask('group_snap/create',
+             ['{pool_name}', '{group_name}', '{snapshot_name}'], 2.0)
+    @EndpointDoc("Create a crash-consistent snapshot of all images in the group",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool containing the group'),
+                     'group_name': (str, 'Name of the group to snapshot'),
+                     'snapshot_name': (str, 'Name for the new snapshot'),
+                     'namespace': (str, NAMESPACE_PARAM_DESC),
+                     'flags': (int, 'Snapshot creation flags (optional)'),
+                 },
+                 responses={200: None})
+    def create(self, pool_name: str, group_name: str, snapshot_name: str,
+               namespace: Optional[str] = None, flags: int = 0):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            group = rbd.Group(ioctx, group_name)
+            return group.create_snap(snapshot_name, flags)
+
+    @RbdTask('group_snap/delete',
+             ['{pool_name}', '{group_name}', '{snapshot_name}'], 2.0)
+    @EndpointDoc("Delete a group snapshot. This removes the snapshot for all images in the group.",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool containing the group'),
+                     'group_name': (str, 'Name of the group'),
+                     'snapshot_name': (str, 'Name of the snapshot to delete'),
+                     'namespace': (str, NAMESPACE_PARAM_DESC),
+                 },
+                 responses={200: None})
+    def delete(self, pool_name: str, group_name: str, snapshot_name: str,
+               namespace: Optional[str] = None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            group = rbd.Group(ioctx, group_name)
+            return group.remove_snap(snapshot_name)
+
+    @RbdTask('group_snap/update',
+             ['{pool_name}', '{group_name}', '{snapshot_name}'], 4.0)
+    @EndpointDoc("Rename a group snapshot",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool containing the group'),
+                     'group_name': (str, 'Name of the group'),
+                     'snapshot_name': (str, 'Current name of the snapshot'),
+                     'new_snap_name': (str, 'New name for the snapshot'),
+                     'namespace': (str, NAMESPACE_PARAM_DESC),
+                 },
+                 responses={200: None})
+    def set(self, pool_name, group_name, snapshot_name, new_snap_name=None, namespace=None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            group = rbd.Group(ioctx, group_name)
+            if new_snap_name and new_snap_name != snapshot_name:
+                return group.rename_snap(snapshot_name, new_snap_name)
+            return None
+
+    @RbdTask('group_snap/rollback',
+             ['{pool_name}', '{group_name}', '{snapshot_name}'], 5.0)
+    @RESTController.Resource('POST')
+    @UpdatePermission
+    @allow_empty_body
+    @EndpointDoc("Rollback all images in the group to their state at the time of the snapshot",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool containing the group'),
+                     'group_name': (str, 'Name of the group to rollback'),
+                     'snapshot_name': (str, 'Name of the snapshot to rollback to'),
+                     'namespace': (str, NAMESPACE_PARAM_DESC),
+                 },
+                 responses={200: None})
+    def rollback(self, pool_name, group_name, snapshot_name, namespace=None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            group = rbd.Group(ioctx, group_name)
+            return group.rollback_to_snap(snapshot_name)

@@ -1,0 +1,193 @@
+<div class="scroll-overflow">
+  <div
+    [cdsStack]="'vertical'"
+    gap="3">
+    <div
+      class="cds--type-heading-03"
+      i18n>Create or select entity</div>
+    <p
+      class="cds--type-body-01"
+      i18n>
+      Choose an existing CephFS mirroring entity or create a new one to be used for mirroring.
+    </p>
+  </div>
+  <cds-tile>
+    <div>
+      <cds-radio-group [(ngModel)]="isCreatingNewEntity">
+        <cds-radio
+          [value]="true"
+          (click)="onCreateEntitySelected()"
+          i18n> Create new entity </cds-radio>
+        <cds-radio
+          [value]="false"
+          (click)="onExistingEntitySelected()"
+          i18n> Use existing entity </cds-radio>
+      </cds-radio-group>
+    </div>
+
+    @if (isCreatingNewEntity) {
+    @if (showCreateRequirementsWarning) {
+    <cd-alert-panel
+      type="warning"
+      class="cds-ml-3 cds-mr-3"
+      dismissible="true"
+      (dismissed)="onDismissCreateRequirementsWarning()">
+      <div
+        [cdsStack]="'vertical'"
+        gap="2">
+        <div
+          class="cds--type-heading-compact-01"
+          i18n>Mirroring entity requirements</div>
+        <div
+          class="cds--type-body-compact-01"
+          i18n>
+          This entity will be used by the mirroring service to manage snapshots and replication.
+          It will require the proper permissions to replicate data.
+        </div>
+      </div>
+    </cd-alert-panel>
+    }
+
+    @if (showCreateCapabilitiesInfo) {
+    <cd-alert-panel
+      type="info"
+      dismissible="true"
+      (dismissed)="onDismissCreateCapabilitiesInfo()">
+      <div
+        [cdsStack]="'vertical'"
+        gap="1">
+        <div
+          class="cds--type-heading-compact-01"
+          i18n>Capabilities added automatically.</div>
+        <div
+          class="cds--type-body-compact-01 requirements-list"
+          i18n>
+          If you create a new entity, the following capabilities will be assigned automatically:
+        </div>
+        <ul class="list-disc">
+          @for (cap of capabilities; track cap.name) {
+          <li>
+            {{ cap.name }}: {{ cap.permission }}
+          </li>
+          }
+        </ul>
+      </div>
+    </cd-alert-panel>
+    }
+
+    <form
+      name="entityForm"
+      #formDir="ngForm"
+      [formGroup]="entityForm"
+      novalidate>
+      <div
+        [cdsStack]="'vertical'"
+        gap="5"
+        class="form-item form-item-append cds-mt-5">
+        <cds-text-label
+          labelInputID="user_entity"
+          i18n
+          cdRequiredField="Ceph entity"
+          [helperText]="userEntityHelperText"
+          [invalid]="!entityForm.controls['user_entity'].valid && (entityForm.controls['user_entity'].dirty)"
+          [invalidText]="userEntityError"
+          i18n-invalidText>
+          Ceph entity
+          <div
+            [cdsStack]="'horizontal'"
+            gap="0">
+            <input
+              cdsText
+              value="client."
+              readonly
+              name="client_prefix" />
+            <input
+              cdsText
+              name="user_entity"
+              formControlName="user_entity"
+              [invalid]="!entityForm.controls['user_entity'].valid && (entityForm.controls['user_entity'].dirty)" />
+          </div>
+        </cds-text-label>
+
+        <ng-template #userEntityError>
+          @if (entityForm.showError('user_entity', formDir, 'required')) {
+          <span
+            class="invalid-feedback"
+            i18n>This field is required.</span>
+          }
+          @if (entityForm.showError('user_entity', formDir, 'forbiddenClientPrefix')) {
+          <span
+            class="invalid-feedback"
+            i18n>Do not include 'client.' prefix. Enter only the entity suffix.</span>
+          }
+        </ng-template>
+      </div>
+      <div>
+        <cd-form-button-panel
+          (submitActionEvent)="submitAction()"
+          [form]="entityForm"
+          submitText="Create entity"
+          i18n-submitText
+          [showCancel]="false">
+        </cd-form-button-panel>
+      </div>
+    </form>
+    }
+
+    @if (!isCreatingNewEntity && showSelectRequirementsWarning) {
+    <cd-alert-panel
+      type="warning"
+      class="cds-ml-3 cds-mr-3"
+      dismissible="true"
+      (dismissed)="onDismissSelectRequirementsWarning()">
+      <div
+        [cdsStack]="'vertical'"
+        gap="2">
+        <div
+          class="cds--type-heading-compact-01"
+          i18n>Mirroring entity requirements</div>
+        <div
+          class="cds--type-body-compact-01"
+          i18n>
+          This selected entity will be used by the mirroring service to manage snapshots and
+          replication. It must have rwps capabilities on MDS, MON, and OSD.
+        </div>
+      </div>
+    </cd-alert-panel>
+    @if (showSelectEntityInfo) {
+    <cd-alert-panel
+      type="info"
+      class="cds-mb-3"
+      dismissible="true"
+      (dismissed)="onDismissSelectEntityInfo()">
+      <div
+        [cdsStack]="'vertical'"
+        gap="2">
+        <div
+          class="cds--type-heading-01"
+          i18n>Entity selection note</div>
+        <div
+          class="cds--type-body-compact-01"
+          i18n>
+          Only entities with valid rwps capabilities can be used for mirroring.
+        </div>
+      </div>
+    </cd-alert-panel>
+    }
+    }
+
+    @let entities = (entities$ | async);
+    @if (!isCreatingNewEntity && entities) {
+    <cd-table
+      #table
+      [data]="entities"
+      [columns]="columns"
+      columnMode="flex"
+      selectionType="singleRadio"
+      (updateSelection)="updateSelection($event)"
+      (fetchData)="loadEntities($event)">
+    </cd-table>
+    }
+  </cds-tile>
+</div>
+

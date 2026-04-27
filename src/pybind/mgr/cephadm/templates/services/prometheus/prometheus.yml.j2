@@ -1,0 +1,107 @@
+# {{ cephadm_managed }}
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+  external_labels:
+    cluster: {{ cluster_fsid }}
+
+rule_files:
+  - /etc/prometheus/alerting/*
+
+{% if 'alertmanager' in service_discovery_cfg %}
+alerting:
+  alertmanagers:
+  {% if security_enabled %}
+    - scheme: https
+      basic_auth:
+        username: {{ alertmanager_web_user }}
+        password: {{ alertmanager_web_password }}
+      tls_config:
+        ca_file: root_cert.pem
+        cert_file: prometheus.crt
+        key_file: prometheus.key
+      path_prefix: '{{ alertmanager_url_prefix }}'
+      http_sd_configs:
+      {% for url in service_discovery_cfg['alertmanager'] %}
+        - url: {{ url }}
+          basic_auth:
+            username: {{ service_discovery_username }}
+            password: {{ service_discovery_password }}
+          tls_config:
+            ca_file: root_cert.pem
+            cert_file: prometheus.crt
+            key_file: prometheus.key
+      {% endfor %}
+  {% else %}
+    - scheme: http
+      http_sd_configs:
+      {% for url in service_discovery_cfg['alertmanager'] %}
+        - url: {{ url }}
+      {% endfor %}
+  {% endif %}
+{% endif %}
+
+scrape_configs:
+{% for service, urls in service_discovery_cfg.items() %}
+ {% if service != 'alertmanager' %}
+  - job_name: '{{ service }}'
+    relabel_configs:
+    - source_labels: [__address__]
+      target_label: cluster
+      replacement: {{ cluster_fsid }}
+    {% if service == 'ceph' %}
+    - source_labels: [instance]
+      target_label: instance
+      replacement: 'ceph_cluster'
+    {% endif %}
+    {% if security_enabled %}
+    scheme: https
+    tls_config:
+      ca_file: root_cert.pem
+      cert_file: prometheus.crt
+      key_file: prometheus.key
+    {% endif %}
+    honor_labels: true
+    http_sd_configs:
+    {% for url in urls %}
+    - url: {{ url }}
+      {% if security_enabled %}
+      basic_auth:
+        username: {{ service_discovery_username }}
+        password: {{ service_discovery_password }}
+      tls_config:
+        ca_file: root_cert.pem
+        cert_file: prometheus.crt
+        key_file: prometheus.key
+      {% endif %}
+    {% endfor %}
+
+ {% endif %}
+{% endfor %}
+
+{% for url, details in clusters_credentials.items() %}
+  - job_name: 'federate_{{ loop.index }}'
+    scrape_interval: 15s
+    honor_labels: true
+    metrics_path: {{ federate_path }}
+    relabel_configs:
+    - source_labels: [__address__]
+      target_label: cluster
+      replacement: {{ cluster_fsid }}
+{% if security_enabled %}
+    scheme: https
+    tls_config:
+      ca_file: {{ details['cert_file_name'] }}
+    basic_auth:
+      username: {{ details['user'] }}
+      password: {{ details['password'] }}
+{% endif %}
+    params:
+      'match[]':
+        - '{job="ceph"}'
+        - '{job="node"}'
+        - '{job="haproxy"}'
+        - '{job="ceph-exporter"}'
+    static_configs:
+    - targets: ['{{ url }}']
+{% endfor %}

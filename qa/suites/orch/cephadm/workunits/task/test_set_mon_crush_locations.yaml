@@ -1,0 +1,114 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - MON_DOWN
+      - POOL_APP_NOT_ENABLED
+      - mon down
+      - mons down
+      - out of quorum
+      - CEPHADM_FAILED_DAEMON
+    log-only-match:
+      - CEPHADM_
+roles:
+- - host.a
+  - osd.0
+  - mon.a
+  - mgr.a
+- - host.b
+  - osd.1
+  - mon.b
+  - mgr.b
+- - host.c
+  - osd.2
+  - mon.c
+tasks:
+- install:
+- cephadm:
+- cephadm.apply:
+    specs:
+      - service_type: mon
+        service_id: foo
+        placement:
+          count: 3
+        spec:
+          crush_locations:
+            host.a:
+              - datacenter=a
+            host.b:
+              - datacenter=b
+              - rack=2
+            host.c:
+              - datacenter=a
+              - rack=3
+- cephadm.shell:
+    host.a:
+      - |
+        set -ex
+        # since we don't know the real hostnames before the test, the next
+        # bit is in order to replace the fake hostnames "host.a/b/c" with
+        # the actual names cephadm knows the host by within the mon spec
+        ceph orch host ls --format json | jq -r '.[] | .hostname' > realnames
+        echo $'host.a\nhost.b\nhost.c' > fakenames
+        ceph orch ls --service-name mon --export > mon.yaml
+        MONSPEC=`cat mon.yaml`
+        echo "$MONSPEC"
+        while read realname <&3 && read fakename <&4; do
+          MONSPEC="${MONSPEC//$fakename/$realname}"
+        done 3<realnames 4<fakenames
+        echo "$MONSPEC" > mon.yaml
+        cat mon.yaml
+        # now the spec should have the real hostnames, so let's re-apply
+        ceph orch apply -i mon.yaml
+        sleep 90
+        ceph orch ps --refresh
+        ceph orch ls --service-name mon --export > mon.yaml; ceph orch apply -i mon.yaml
+        sleep 90
+        ceph mon dump
+        ceph mon dump --format json
+        # verify all the crush locations got set from "ceph mon dump" output expecting
+        # datacenter=a for mon a, datacenter=b, rack=2 for mon b, datacenter=a, rack=3 for mon c
+        # we loop over these files that tell us which mon, what crush key and what crush value to look for
+        # checking mon with id: a, b, b, c, c
+        echo $'a\nb\nb\nc\nc' > mon_ids
+        # checking crush keys: datacenter, datacenter, rack, datacenter, rack
+        echo $'datacenter\ndatacenter\nrack\ndatacenter\nrack' > crush_keys
+        # checking crush values: a, b, 2, a, 3
+        echo $'a\nb\n2\na\n3' > crush_values
+        # The expected format for each mon in the mon dump output as of writing this is (under "mons" key)
+        #         {
+        #   "rank": 1,
+        #   "name": "b",
+        #   "public_addrs": {
+        #     "addrvec": [
+        #       {
+        #         "type": "v2",
+        #         "addr": "10.20.193.146:3300",
+        #         "nonce": 0
+        #       },
+        #       {
+        #         "type": "v1",
+        #         "addr": "10.20.193.146:6789",
+        #         "nonce": 0
+        #       }
+        #     ]
+        #   },
+        #   "addr": "10.20.193.146:6789/0",
+        #   "public_addr": "10.20.193.146:6789/0",
+        #   "priority": 0,
+        #   "weight": 0,
+        #   "time_added": "2026-02-19T17:19:05:089735+0000",
+        #   "crush_location": [
+        #     {
+        #       "key": "datacenter",
+        #       "val": "b"
+        #     },
+        #     {
+        #       "key": "rack",
+        #       "val": "2"
+        #     }
+        #   ]
+        # },
+        while read monid <&3 && read crush_key <&4; read crush_value <&5; do
+          ceph mon dump --format json | jq --arg monid "$monid" --arg crush_key "$crush_key" --arg crush_value "$crush_value" -e '.mons | .[] | select(.name == $monid) | .crush_location | .[] | select(.key == $crush_key)'
+          ceph mon dump --format json | jq --arg monid "$monid" --arg crush_key "$crush_key" --arg crush_value "$crush_value" -e '.mons | .[] | select(.name == $monid) | .crush_location | .[] | select(.key == $crush_key) | .val == $crush_value'
+        done 3<mon_ids 4<crush_keys 5<crush_values

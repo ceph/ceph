@@ -1,0 +1,187 @@
+<!-- Full Tearsheet -->
+ @if(type === 'full') {
+<div
+  cdsGrid
+  class="tearsheet--full"
+  [useCssGrid]="true"
+  [fullWidth]="true">
+  <div cdsCol
+       class="tearsheet-cols--full"
+       [columnNumbers]="{'lg': 16, 'md': 16, 'sm': 16}">
+    <!-- Tearsheet Header -->
+    <header
+      class="tearsheet-header tearsheet-header--full border-subtle-block-end">
+      <h4 class="cds--type-heading-04 tearsheet-header-title">
+        {{title}}
+      </h4>
+      <p class="cds--type-body-02 tearsheet-header-description">
+        {{description}}
+      </p>
+    </header>
+    <section cdsGrid
+             class="tearsheet-body"
+             [useCssGrid]="true"
+             [fullWidth]="true">
+      <!-- Tearsheet Influencer-->
+      <div cdsCol
+           [columnNumbers]="{'lg': 3, 'md': 3, 'sm': 3}"
+           class="tearsheet-left-influencer border-subtle-inline-end">
+        <cds-progress-indicator
+          orientation="vertical"
+          [steps]="steps"
+          [current]="currentStep"
+          spacing="equal"
+          (stepSelected)="onStepSelect($event)">
+        </cds-progress-indicator>
+      </div>
+      <div cdsCol
+           [columnNumbers]="{'lg': 13, 'md': 13, 'sm': 13}"
+           class="tearsheet-main">
+        <!-- Tearsheet Content Area -->
+        <div class="tearsheet-content tearsheet-content--full">
+        <ng-container
+          *ngTemplateOutlet="activeStepTemplate">
+        </ng-container>
+        </div>
+        <!-- Tearsheet Footer -->
+        <cds-modal-footer class="tearsheet-footer tearsheet-footer--full border-subtle-top">
+          <button cdsButton="ghost"
+                  class="tearsheet-footer-cancel"
+                  (click)="closeTearsheet()"
+                  size="xl"
+                  i18n>Cancel</button>
+          @if (steps.length > 1) {
+          <button cdsButton="secondary"
+                  size="xl"
+                  [disabled]="currentStep === 0"
+                  (click)="onPrevious()"
+                  i18n>Previous</button>
+          }
+          @if (currentStep === lastStep) {
+          <button cdsButton="primary"
+                  size="xl"
+                  (click)="onSubmit()"
+                  i18n>{{submitButtonLabel}}</button>
+          }
+          @else {
+          <button cdsButton="primary"
+                  size="xl"
+                  (click)="onNext()"
+                  i18n>Next</button>
+          }
+        </cds-modal-footer>
+      </div>
+    </section>
+  </div>
+</div>
+}
+@else {
+<!-- Wide Tearsheet -->
+<cds-modal
+  [size]="size"
+  [open]="isOpen"
+  (overlaySelected)="closeTearsheet()">
+  <!-- Tearsheet Header -->
+  <header
+    class="tearsheet-header border-subtle-block-end">
+    <h4 cdsModalHeaderHeading
+        class="cds--type-heading-04 tearsheet-header-title">
+        {{title}}
+    </h4>
+    <p class="cds--type-body-02 tearsheet-header-description">
+      {{description}}
+    </p>
+  </header>
+  <section cdsGrid
+           class="tearsheet-body"
+           [condensed]="true"
+           [useCssGrid]="true"
+           [fullWidth]="true">
+    <!-- Tearsheet Left Influencer-->
+    @if (steps.length > 1) {
+    <div cdsCol
+         [columnNumbers]="{lg: 3, md: 3, sm: 3}"
+         class="tearsheet-left-influencer border-subtle-inline-end">
+      <cds-progress-indicator
+        orientation="vertical"
+        [steps]="steps"
+        [current]="currentStep"
+        spacing="equal"
+        (stepSelected)="onStepSelect($event)">
+      </cds-progress-indicator>
+    </div>
+    }
+    <div cdsCol
+         [columnNumbers]="steps.length > 1 ? {lg: 13, md: 13, sm: 13} : {lg: 16, md: 16, sm: 16}"
+         class="tearsheet-main">
+      @if (showRightInfluencer) {
+      <!-- Tearsheet content with right influencer  -->
+      <div
+        cdsGrid
+        [condensed]="true"
+        [useCssGrid]="true"
+        [fullWidth]="true">
+        <div
+          cdsCol
+          class="tearsheet-content"
+          [columnNumbers]="{ lg: 10 }">
+          <ng-container *ngTemplateOutlet="activeStepTemplate"></ng-container>
+        </div>
+        <aside
+          cdsCol
+          [columnNumbers]="{ lg: 3 }"
+          class="tearsheet-right-influencer">
+          <ng-container *ngTemplateOutlet="rightInfluencerTemplate"></ng-container>
+        </aside>
+      </div>
+      }
+      @else {
+      <!-- Tearsheet content without right influencer -->
+      <div class="tearsheet-content">
+        <ng-container *ngTemplateOutlet="activeStepTemplate"></ng-container>
+      </div>
+      }
+      <!-- Tearsheet Footer -->
+      <cds-modal-footer class="tearsheet-footer border-subtle-top">
+        <button cdsButton="ghost"
+                (click)="closeTearsheet()"
+                size="xl"
+                i18n>Cancel</button>
+        @if (steps.length > 1) {
+        <button cdsButton="secondary"
+                size="xl"
+                [disabled]="currentStep === 0"
+                (click)="onPrevious()"
+                i18n>Previous</button>
+        }
+        @if (currentStep === lastStep) {
+        <button cdsButton="primary"
+                size="xl"
+                class="tearsheet-footer-submit"
+                [disabled]="isSubmitLoading"
+                (click)="handleSubmit()"
+                i18n>
+          @if (isSubmitLoading) {
+          <cds-loading
+            [isActive]="isSubmitLoading"
+            [overlay]="false"
+            size="sm">
+          </cds-loading>
+            {{submitButtonLoadingLabel}}...
+          }
+          @else {
+            {{submitButtonLabel}}
+          }
+        </button>
+        }
+        @else {
+        <button cdsButton="primary"
+                size="xl"
+                (click)="onNext()"
+                i18n>Next</button>
+        }
+      </cds-modal-footer>
+    </div>
+  </section>
+</cds-modal>
+}
