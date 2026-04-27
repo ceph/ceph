@@ -147,8 +147,8 @@ class OpenSSLKeys(Task):
             if san_ext:
                 remove_files.append(ext)
                 ca_cert.remote.write_file(path=ext,
-                    data='subjectAltName = DNS:{},IP:{}'.format(
-                        cn,
+                        data='subjectAltName = DNS:{},DNS:*.{},IP:{}'.format(
+                        cn, cn,
                         config.get('ip', cert.remote.ip_address)))
 
             # create the signed certificate
