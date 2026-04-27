@@ -1,3 +1,4 @@
+<!-- htmllint attr-new-line="false" -->
 <cds-modal size="lg"
            [open]="open"
            (overlaySelected)="closeModal()">
@@ -11,40 +12,43 @@
           [formGroup]="serviceForm"
           novalidate>
       @if (serviceForm.controls.service_type.value === 'rgw' && showRealmCreationForm) {
-      <cd-alert-panel type="info"
-                      spacingClass="mb-3"
-                      i18n>
-        <a class="text-decoration-underline"
-           (click)="createMultisiteSetup()">
-          Click here</a> to create a new Realm/Zonegroup/Zone
-      </cd-alert-panel>
+        <cd-alert-panel class="no-margin-bottom mb-3"
+                        [showTitle]="false"
+                        size="slim"
+                        type="info"
+                        [dismissible]="false"
+                        [actionName]="'Click here'"
+                        (action)="createMultisiteSetup()">
+          <span i18n>
+            To create a new Realm/Zonegroup/Zone.</span>
+        </cd-alert-panel>
       }
 
       @if (serviceForm.controls.service_type.value === 'oauth2-proxy') {
-      <cd-alert-panel type="info"
-                      spacingClass="mb-3"
-                      i18n>
-        Authentication must be enabled in an active `mgmt-gateway` service to enable Single Sign-On(SSO) with
-        `oauth2-proxy`
-      </cd-alert-panel>
+        <cd-alert-panel type="info"
+                        spacingClass="mb-3"
+                        i18n>
+          Authentication must be enabled in an active `mgmt-gateway` service to enable Single Sign-On(SSO) with
+          `oauth2-proxy`
+        </cd-alert-panel>
       }
       @if (serviceForm.controls.service_type.value === 'mgmt-gateway') {
-      <cd-alert-panel type="info"
-                      spacingClass="mb-3"
-                      i18n>
-        With an active mgmt-gateway service, the dashboard will continue to be served on {{currentURL}}:{{port}} and all
-        other services will be accessible from {{currentURL}}:{{port}}/service_name
-      </cd-alert-panel>
+        <cd-alert-panel type="info"
+                        spacingClass="mb-3"
+                        i18n>
+          With an active mgmt-gateway service, the dashboard will continue to be served on {{currentURL}}:{{port}} and all
+          other services will be accessible from {{currentURL}}:{{port}}/service_name
+        </cd-alert-panel>
       }
 
       @if (serviceForm.controls.service_type.value === 'smb') {
-      <cd-alert-panel type="warning"
-                      spacingClass="mb-3"
-                      i18n>
-        SMB service management is intended for advanced users only.
-        For most scenarios, it is recommended to use the SMB module instead.
-        To manage SMB clusters and shares, please visit the <a routerLink="/cephfs/smb">SMB page</a>.
-      </cd-alert-panel>
+        <cd-alert-panel type="warning"
+                        spacingClass="mb-3"
+                        i18n>
+          SMB service management is intended for advanced users only.
+          For most scenarios, it is recommended to use the SMB module instead.
+          To manage SMB clusters and shares, please visit the <a routerLink="/cephfs/smb">SMB page</a>.
+        </cd-alert-panel>
       }
 
       <!-- Service type -->
@@ -322,18 +326,19 @@
       @if (hostsAndLabels$ | async; as data) {
       @if (!serviceForm.controls.unmanaged.value && serviceForm.controls.placement.value === 'label') {
       <div class="form-item">
-        <cds-combo-box type="multi"
-                       selectionFeedback="top-after-reopen"
-                       label="Label"
-                       cdRequiredField="Label"
-                       formControlName="label"
-                       id="label"
-                       [appendInline]="true"
-                       [items]="data.labels"
-                       [invalid]="serviceForm.controls.label.invalid && serviceForm.controls.label.dirty"
-                       [invalidText]="requiredFieldLabel"
-                       (selected)="multiSelector($event, 'label')"
-                       i18n>
+        <cds-combo-box
+          type="multi"
+          selectionFeedback="top-after-reopen"
+          label="Label"
+          cdRequiredField="Label"
+          formControlName="label"
+          id="label"
+          [appendInline]="true"
+          [items]="data.labels"
+          [invalid]="serviceForm.controls.label.invalid && serviceForm.controls.label.dirty"
+          [invalidText]="requiredFieldLabel"
+          (selected)="multiSelector($event, 'label')"
+          i18n>
           <cds-dropdown-list></cds-dropdown-list>
         </cds-combo-box>
         <ng-template #requiredFieldLabel>
@@ -511,10 +516,10 @@
       @if (serviceForm.controls.service_type.value === 'smb') {
       <div class="form-item">
         <cds-text-label cdRequiredField="Cluster id"
-                        helperText="A short name identifying the SMB “cluster”. In this case a cluster is simply a management unit of one or more Samba services sharing a common configuration, and may not provide actual clustering or availability mechanisms."
-                        i18n-helperText
-                        [invalid]="serviceForm.controls.cluster_id.invalid && serviceForm.controls.cluster_id.dirty"
-                        [invalidText]="requiredFieldClusterId">
+          helperText="A short name identifying the SMB “cluster”. In this case a cluster is simply a management unit of one or more Samba services sharing a common configuration, and may not provide actual clustering or availability mechanisms."
+          i18n-helperText
+          [invalid]="serviceForm.controls.cluster_id.invalid && serviceForm.controls.cluster_id.dirty"
+          [invalidText]="requiredFieldClusterId">
           <input cdsText
                  type="text"
                  id="cluster_id"
@@ -617,10 +622,10 @@
       <!-- virtual_ip -->
       <div class="form-item">
         <cds-text-label cdRequiredField="Virtual IP"
-                        helperText="The virtual IP address and subnet (in CIDR notation) where the ingress service will be available."
-                        i18n-helperText
-                        [invalid]="serviceForm.controls.virtual_ip.invalid && serviceForm.controls.virtual_ip.dirty"
-                        [invalidText]="requiredFieldVirtualIp">
+          helperText="The virtual IP address and subnet (in CIDR notation) where the ingress service will be available."
+          i18n-helperText
+          [invalid]="serviceForm.controls.virtual_ip.invalid && serviceForm.controls.virtual_ip.dirty"
+          [invalidText]="requiredFieldVirtualIp">
           <input cdsText
                  type="text"
                  id="virtual_ip"
@@ -746,7 +751,9 @@
             }
             @if (serviceForm.showError('snmp_destination', frm, 'snmpDestinationPattern')) {
             <span class="invalid-feedback"
-                  i18n>The value does not match the pattern: <strong>hostname:port</strong></span>
+                  i18n>The value does not match the pattern:
+                  <strong>hostname:port</strong>
+            </span>
             }
           </ng-template>
         </cds-text-label>
@@ -772,7 +779,8 @@
           }
           @if (serviceForm.showError('engine_id', frm, 'snmpEngineIdPattern')) {
           <span class="invalid-feedback"
-                i18n>The value does not match the pattern: <strong>Must be in hexadecimal and length must be multiple of
+                i18n>The value does not match the pattern: <strong>Must be in hexadecimal and
+              length must be multiple of
               2
               with min value = 10 and max value = 64.</strong></span>
           }
@@ -971,8 +979,8 @@
       <!-- oidc_issuer_url -->
       <div class="form-item">
         <cds-text-label cdRequiredField="OIDC issuer URL"
-                        [invalid]="serviceForm.controls.oidc_issuer_url.invalid && serviceForm.controls.oidc_issuer_url.dirty"
-                        [invalidText]="invalidOidcIssuerUrlError">
+          [invalid]="serviceForm.controls.oidc_issuer_url.invalid && serviceForm.controls.oidc_issuer_url.dirty"
+          [invalidText]="invalidOidcIssuerUrlError">
           <input cdsText
                  type="text"
                  id="oidc_issuer_url"
@@ -1035,9 +1043,9 @@
       <!-- Allowlist_domains -->
       <div class="form-item">
         <cd-text-label-list formControlName="allowlist_domains"
-                            label="Allowlist domains"
-                            helperText="Domains to be allowed to redirect to, used for login or logout."
-                            placeholder="192.168.100.1:8080">
+          label="Allowlist domains"
+          helperText="Domains to be allowed to redirect to, used for login or logout."
+          placeholder="192.168.100.1:8080">
         </cd-text-label-list>
       </div>
       }
@@ -1084,18 +1092,19 @@
       </div>
       <!-- ssl_protocols -->
       <div class="form-item">
-        <cds-combo-box type="multi"
-                       label="SSL protocols"
-                       selectionFeedback="top-after-reopen"
-                       for="ssl_protocols"
-                       name="ssl_protocols"
-                       formControlName="ssl_protocols"
-                       id="ssl_protocols"
-                       placeholder="Select protocols..."
-                       [appendInline]="true"
-                       [items]="sslProtocolsItems"
-                       i18n-placeholder
-                       i18n>
+        <cds-combo-box
+          type="multi"
+          label="SSL protocols"
+          selectionFeedback="top-after-reopen"
+          for="ssl_protocols"
+          name="ssl_protocols"
+          formControlName="ssl_protocols"
+          id="ssl_protocols"
+          placeholder="Select protocols..."
+          [appendInline]="true"
+          [items]="sslProtocolsItems"
+          i18n-placeholder
+          i18n>
           <cds-dropdown-list></cds-dropdown-list>
         </cds-combo-box>
       </div>
@@ -1111,7 +1120,8 @@
                  formControlName="ssl_ciphers" />
           @if (serviceForm.showError('ssl_ciphers', frm, 'invalidPattern')) {
           <span class="invalid-feedback"
-                i18n>Invalid cipher suite. Each cipher must be separated by '-' and each cipher suite must be separated
+                i18n>Invalid cipher suite. Each cipher must be separated by '-' and each cipher
+            suite must be separated
             by
             ':'</span>
           }
@@ -1133,7 +1143,8 @@
       }
 
       <!-- Certificate Management UI -->
-      @if (serviceForm.controls.ssl.value && ['rgw', 'ingress', 'iscsi', 'grafana', 'oauth2-proxy', 'mgmt-gateway', 'nvmeof', 'nfs'].includes(serviceForm.controls.service_type.value)) {
+      @if (serviceForm.controls.ssl.value && ['rgw', 'ingress', 'iscsi', 'grafana', 'oauth2-proxy', 'mgmt-gateway',
+      'nvmeof', 'nfs'].includes(serviceForm.controls.service_type.value)) {
       <div>
         <!-- Current Certificate Section - Only shown in Edit mode when certificate exists -->
         @if (editing && currentCertificate?.has_certificate) {
@@ -1149,7 +1160,8 @@
             <div class="col-6">
               <label class="cds--label"
                      i18n>Valid Until</label>
-              <div>{{ currentCertificate.expiry_date | cdDate }} • {{ currentCertificate.days_to_expiration }} <span i18n>days left</span></div>
+              <div>{{ currentCertificate.expiry_date | cdDate }} • {{ currentCertificate.days_to_expiration }} <span
+                  i18n>days left</span></div>
             </div>
           </div>
           <div class="row mt-3">
@@ -1159,12 +1171,12 @@
               <div class="align-items-center">
                 <cd-icon [type]="statusIconMap[currentCertificate.status] || statusIconMap['default']"></cd-icon>
                 @switch (currentCertificate.status) {
-                  @case ('valid') { <span i18n>Valid</span> }
-                  @case ('expiring') { <span i18n>Expiring soon</span> }
-                  @case ('expired') { <span i18n>Expired</span> }
-                  @case ('not_configured') { <span i18n>Not configured</span> }
-                  @case ('invalid') { <span i18n>Invalid</span> }
-                  @default { {{ currentCertificate.status }} }
+                @case ('valid') { <span i18n>Valid</span> }
+                @case ('expiring') { <span i18n>Expiring soon</span> }
+                @case ('expired') { <span i18n>Expired</span> }
+                @case ('not_configured') { <span i18n>Not configured</span> }
+                @case ('invalid') { <span i18n>Invalid</span> }
+                @default { {{ currentCertificate.status }} }
                 }
               </div>
             </div>
@@ -1191,8 +1203,8 @@
                            orientation="horizontal"
                            helperText="Select how certificates will be signed for this service. Choose internal to use the cluster’s CA, or external to upload certificates signed by your organization.">
             <cds-radio value="internal"
-                       (change)="onCertificateTypeChange('internal')"
-                       i18n>
+            (change)="onCertificateTypeChange('internal')"
+            i18n>
               Internal
             </cds-radio>
             <cds-radio value="external"
@@ -1204,11 +1216,11 @@
         </div>
 
         @if (showCertSourceChangeWarning) {
-          <cd-alert-panel type="warning"
-                          spacingClass="mb-3"
-                          i18n>
-            Changing the certificate source will redeploy the service daemons to apply the new certificate configuration.
-          </cd-alert-panel>
+        <cd-alert-panel type="warning"
+                        spacingClass="mb-3"
+                        i18n>
+          Changing the certificate source will redeploy the service daemons to apply the new certificate configuration.
+        </cd-alert-panel>
         }
 
         @if (serviceForm.controls.certificateType.value === 'internal') {
@@ -1232,7 +1244,8 @@
       <!-- ssl_cert - Only show when SSL is enabled AND certificate type is external -->
       @if (showExternalSslCert) {
       <div class="form-item">
-        <ng-container *ngTemplateOutlet="fileUploaderTextarea; context: { controlName: 'ssl_cert', title: 'Certificate Input', helperText: 'Uploaded files will populate the certificate details automatically. Or paste the PEM content directly in the text area.', description: 'Upload a .crt file, or paste the certificate PEM content directly.', invalidTemplate: invalidSslCertError, isRequired: false }"></ng-container>
+        <ng-container
+          *ngTemplateOutlet="fileUploaderTextarea; context: { controlName: 'ssl_cert', title: 'Certificate Input', helperText: 'Uploaded files will populate the certificate details automatically. Or paste the PEM content directly in the text area.', description: 'Upload a .crt file, or paste the certificate PEM content directly.', invalidTemplate: invalidSslCertError, isRequired: false }"></ng-container>
         <ng-template #invalidSslCertError>
           @if (serviceForm.showError('ssl_cert', frm, 'required')) {
           <span class="invalid-feedback"
@@ -1247,7 +1260,8 @@
       }
       @if (showExternalSslKey) {
       <div class="form-item">
-        <ng-container *ngTemplateOutlet="fileUploaderTextarea; context: { controlName: 'ssl_key', title: 'Private Key Input', helperText: 'Uploaded files will populate the private key details automatically. Or paste the PEM content directly in the text area.', description: 'Upload a .key file, or paste the private key PEM content directly.', invalidTemplate: invalidSslKeyError, isRequired: false }"></ng-container>
+        <ng-container
+          *ngTemplateOutlet="fileUploaderTextarea; context: { controlName: 'ssl_key', title: 'Private Key Input', helperText: 'Uploaded files will populate the private key details automatically. Or paste the PEM content directly in the text area.', description: 'Upload a .key file, or paste the private key PEM content directly.', invalidTemplate: invalidSslKeyError, isRequired: false }"></ng-container>
         <ng-template #invalidSslKeyError>
           @if (serviceForm.showError('ssl_key', frm, 'required')) {
           <span class="invalid-feedback"
@@ -1260,9 +1274,11 @@
         </ng-template>
       </div>
       <!-- ssl_ca_cert - Only show for NFS when SSL is enabled AND certificate type is external -->
-      @if (serviceForm.controls.ssl.value && serviceForm.controls.certificateType.value === 'external' && serviceForm.controls.service_type.value === 'nfs') {
+      @if (serviceForm.controls.ssl.value && serviceForm.controls.certificateType.value === 'external' &&
+      serviceForm.controls.service_type.value === 'nfs') {
       <div class="form-item">
-        <ng-container *ngTemplateOutlet="fileUploaderTextarea; context: { controlName: 'ssl_ca_cert', title: 'CA Certificate Input', helperText: 'Uploaded files will populate the CA certificate details automatically. Or paste the PEM content directly in the text area.', description: 'Upload a CA certificate file, or paste the CA certificate PEM content directly.', invalidTemplate: invalidSslCaCertError, isRequired: false }"></ng-container>
+        <ng-container
+          *ngTemplateOutlet="fileUploaderTextarea; context: { controlName: 'ssl_ca_cert', title: 'CA Certificate Input', helperText: 'Uploaded files will populate the CA certificate details automatically. Or paste the PEM content directly in the text area.', description: 'Upload a CA certificate file, or paste the CA certificate PEM content directly.', invalidTemplate: invalidSslCaCertError, isRequired: false }"></ng-container>
         <ng-template #invalidSslCaCertError>
           @if (serviceForm.showError('ssl_ca_cert', frm, 'required')) {
           <span class="invalid-feedback"
@@ -1279,20 +1295,20 @@
 
       <!-- RGW QAT Compression -->
       @if(serviceForm.controls.service_type.value === 'rgw') {
-        <div class="form-item"
-             formGroupName="qat">
-          <cds-select formControlName="compression"
-                      name="compression"
-                      label="QAT compression mode"
-                      id="compression"
-                      helperText="QAT compression is optional. Choose Hardware or Software to enable compression, or select None to disable it."
-                      i18n-helperText>
-            <option *ngFor="let option of qatCompressionOptions"
-                    [value]="option.value"
-                    i18n>{{ option.label }}</option>
-          </cds-select>
-        </div>
-        }
+      <div class="form-item"
+      formGroupName="qat">
+        <cds-select formControlName="compression"
+                    name="compression"
+                    label="QAT compression mode"
+                    id="compression"
+                    helperText="QAT compression is optional. Choose Hardware or Software to enable compression, or select None to disable it."
+                    i18n-helperText>
+          <option *ngFor="let option of qatCompressionOptions"
+                  [value]="option.value"
+                  i18n>{{ option.label }}</option>
+        </cds-select>
+      </div>
+      }
       }
       <!-- Grafana -->
       @if (serviceForm.controls.service_type.value === 'grafana') {
@@ -1366,7 +1382,8 @@
       @if (serviceForm.controls.enable_mtls.value) {
       <!-- root_ca_cert -->
       <div class="form-item">
-        <ng-container *ngTemplateOutlet="fileUploaderTextarea; context: { controlName: 'root_ca_cert', title: 'Root CA Certificate Input', helperText: 'Uploaded files will populate the Root CA certificate details automatically. Or paste the PEM content directly in the text area.', description: 'Upload a Root CA certificate file, or paste the Root CA certificate PEM content directly.', invalidTemplate: invalidRootCaCertError, isRequired: true }"></ng-container>
+        <ng-container
+          *ngTemplateOutlet="fileUploaderTextarea; context: { controlName: 'root_ca_cert', title: 'Root CA Certificate Input', helperText: 'Uploaded files will populate the Root CA certificate details automatically. Or paste the PEM content directly in the text area.', description: 'Upload a Root CA certificate file, or paste the Root CA certificate PEM content directly.', invalidTemplate: invalidRootCaCertError, isRequired: true }"></ng-container>
         <ng-template #invalidRootCaCertError>
           @if (serviceForm.showError('root_ca_cert', frm, 'required')) {
           <span class="invalid-feedback"
@@ -1377,7 +1394,8 @@
 
       <!-- client_cert -->
       <div class="form-item">
-        <ng-container *ngTemplateOutlet="fileUploaderTextarea; context: { controlName: 'client_cert', title: 'Client Certificate Input', helperText: 'Uploaded files will populate the client certificate details automatically. Or paste the PEM content directly in the text area.', description: 'Upload a client certificate file, or paste the client certificate PEM content directly.', invalidTemplate: invalidClientCertError, isRequired: true }"></ng-container>
+        <ng-container
+          *ngTemplateOutlet="fileUploaderTextarea; context: { controlName: 'client_cert', title: 'Client Certificate Input', helperText: 'Uploaded files will populate the client certificate details automatically. Or paste the PEM content directly in the text area.', description: 'Upload a client certificate file, or paste the client certificate PEM content directly.', invalidTemplate: invalidClientCertError, isRequired: true }"></ng-container>
         <ng-template #invalidClientCertError>
           @if (serviceForm.showError('client_cert', frm, 'required')) {
           <span class="invalid-feedback"
@@ -1388,7 +1406,8 @@
 
       <!-- client_key -->
       <div class="form-item">
-        <ng-container *ngTemplateOutlet="fileUploaderTextarea; context: { controlName: 'client_key', title: 'Client Key Input', helperText: 'Uploaded files will populate the client key details automatically. Or paste the PEM content directly in the text area.', description: 'Upload a client key file, or paste the client key PEM content directly.', invalidTemplate: invalidClientKeyError, isRequired: true }"></ng-container>
+        <ng-container
+          *ngTemplateOutlet="fileUploaderTextarea; context: { controlName: 'client_key', title: 'Client Key Input', helperText: 'Uploaded files will populate the client key details automatically. Or paste the PEM content directly in the text area.', description: 'Upload a client key file, or paste the client key PEM content directly.', invalidTemplate: invalidClientKeyError, isRequired: true }"></ng-container>
         <ng-template #invalidClientKeyError>
           @if (serviceForm.showError('client_key', frm, 'required')) {
           <span class="invalid-feedback"
@@ -1399,7 +1418,8 @@
 
       <!-- server_cert -->
       <div class="form-item">
-        <ng-container *ngTemplateOutlet="fileUploaderTextarea; context: { controlName: 'server_cert', title: 'Gateway Server Certificate Input', helperText: 'Uploaded files will populate the gateway server certificate details automatically. Or paste the PEM content directly in the text area.', description: 'Upload a gateway server certificate file, or paste the certificate PEM content directly.', invalidTemplate: invalidServerCertError, isRequired: true }"></ng-container>
+        <ng-container
+          *ngTemplateOutlet="fileUploaderTextarea; context: { controlName: 'server_cert', title: 'Gateway Server Certificate Input', helperText: 'Uploaded files will populate the gateway server certificate details automatically. Or paste the PEM content directly in the text area.', description: 'Upload a gateway server certificate file, or paste the certificate PEM content directly.', invalidTemplate: invalidServerCertError, isRequired: true }"></ng-container>
         <ng-template #invalidServerCertError>
           @if (serviceForm.showError('server_cert', frm, 'required')) {
           <span class="invalid-feedback"
@@ -1410,7 +1430,8 @@
 
       <!-- server_key -->
       <div class="form-item">
-        <ng-container *ngTemplateOutlet="fileUploaderTextarea; context: { controlName: 'server_key', title: 'Gateway Server Key Input', helperText: 'Uploaded files will populate the gateway server key details automatically. Or paste the PEM content directly in the text area.', description: 'Upload a gateway server key file, or paste the key PEM content directly.', invalidTemplate: invalidServerKeyError, isRequired: true }"></ng-container>
+        <ng-container
+          *ngTemplateOutlet="fileUploaderTextarea; context: { controlName: 'server_key', title: 'Gateway Server Key Input', helperText: 'Uploaded files will populate the gateway server key details automatically. Or paste the PEM content directly in the text area.', description: 'Upload a gateway server key file, or paste the key PEM content directly.', invalidTemplate: invalidServerKeyError, isRequired: true }"></ng-container>
         <ng-template #invalidServerKeyError>
           @if (serviceForm.showError('server_key', frm, 'required')) {
           <span class="invalid-feedback"

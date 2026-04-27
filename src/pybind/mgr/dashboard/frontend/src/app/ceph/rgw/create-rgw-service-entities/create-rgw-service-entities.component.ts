@@ -1,6 +1,5 @@
 import { Component, EventEmitter, OnInit, Output } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
 import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
@@ -31,7 +30,6 @@ export class CreateRgwServiceEntitiesComponent extends CdForm implements OnInit 
   submitAction = new EventEmitter();
 
   constructor(
-    public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n,
     public rgwMultisiteService: RgwMultisiteService,
     public rgwZoneService: RgwZoneService,
@@ -79,32 +77,30 @@ export class CreateRgwServiceEntitiesComponent extends CdForm implements OnInit 
       .create(this.realm, true)
       .toPromise()
       .then(() => {
-        this.rgwZonegroupService
-          .create(this.realm, this.zonegroup, true, true)
-          .toPromise()
-          .then(() => {
-            this.rgwZoneService
-              .create(this.zone, this.zonegroup, true, true, this.zone.endpoints)
-              .toPromise()
-              .then(() => {
-                this.notificationService.show(
-                  NotificationType.success,
-                  $localize`Realm/Zonegroup/Zone created successfully`
-                );
-                this.submitAction.emit({
-                  realm: this.realm,
-                  zonegroup: this.zonegroup,
-                  zone: this.zone
-                });
-                this.closeModal();
-              })
-              .catch(() => {
-                this.notificationService.show(
-                  NotificationType.error,
-                  $localize`Realm/Zonegroup/Zone creation failed`
-                );
-              });
-          });
+        return this.rgwZonegroupService.create(this.realm, this.zonegroup, true, true).toPromise();
+      })
+      .then(() => {
+        return this.rgwZoneService
+          .create(this.zone, this.zonegroup, true, true, this.zone.endpoints)
+          .toPromise();
+      })
+      .then(() => {
+        this.notificationService.show(
+          NotificationType.success,
+          $localize`Realm/Zonegroup/Zone created successfully`
+        );
+        this.submitAction.emit({
+          realm: this.realm,
+          zonegroup: this.zonegroup,
+          zone: this.zone
+        });
+        this.closeModal();
+      })
+      .catch(() => {
+        this.notificationService.show(
+          NotificationType.error,
+          $localize`Realm/Zonegroup/Zone creation failed`
+        );
       });
   }
 }
