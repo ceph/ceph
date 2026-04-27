@@ -91,12 +91,15 @@ export class PrometheusService {
   }
 
   isPrometheusUsable(): Observable<boolean> {
-    return this.isPrometheusModuleEnabled().pipe(
-      switchMap((enabled) =>
-        enabled ? this.isSettingConfigured(this.settingsKey.prometheus) : of(false)
-      ),
+    return this.isSettingConfigured(this.settingsKey.prometheus).pipe(
+      map((isConfigured) => isConfigured),
       catchError(() => of(false))
     );
+  }
+
+  refreshPrometheusUsable(): Observable<boolean> {
+    delete this.settings[this.settingsKey.prometheus];
+    return this.isPrometheusUsable();
   }
 
   isAlertmanagerUsable(): Observable<boolean> {

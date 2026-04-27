@@ -35,9 +35,11 @@ describe('OSDs page', () => {
 
           // landing page is easier to check OSD status
           overview.navigateTo();
-          overview.infoCardBody('OSDs').should('contain.text', `${expectedCount} total`);
-          overview.infoCardBody('OSDs').should('contain.text', `${expectedCount} up`);
-          overview.infoCardBody('OSDs').should('contain.text', `${expectedCount} in`);
+          overview.clickSystemsTab();
+          cy.get(`[data-test-id="OSD-value"]`).should(
+            'contain.text',
+            `${expectedCount}/${expectedCount} in/up`
+          );
 
           cy.wait(30000);
           expect(Number(newCount)).to.be.gte(2);

@@ -22,7 +22,7 @@ import { table } from 'table';
 let auth: any;
 
 const fillAuth = () => {
-  window.localStorage.setItem('dashboard_username', auth.username);
+  window.localStorage.setItem(LocalStorage.DASHBOARD_USERNAME, auth.username);
   window.localStorage.setItem('dashboard_permissions', auth.permissions);
   window.localStorage.setItem('user_pwd_expiration_date', auth.pwdExpirationDate);
   window.localStorage.setItem('user_pwd_update_required', auth.pwdUpdateRequired);

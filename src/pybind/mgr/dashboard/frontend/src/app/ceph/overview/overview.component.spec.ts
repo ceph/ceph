@@ -1,4 +1,10 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import {
+  ComponentFixture,
+  discardPeriodicTasks,
+  fakeAsync,
+  TestBed,
+  tick
+} from '@angular/core/testing';
 import { of, Subject, throwError } from 'rxjs';
 
 import { OverviewComponent } from './overview.component';
@@ -47,12 +53,12 @@ describe('OverviewComponent', () => {
   };
 
   let mockPrometheusService: {
-    isPrometheusUsable: jest.Mock;
+    refreshPrometheusUsable: jest.Mock;
   };
 
   beforeEach(async () => {
     mockPrometheusService = {
-      isPrometheusUsable: jest.fn().mockReturnValue(of(true))
+      refreshPrometheusUsable: jest.fn().mockReturnValue(of(true))
     };
 
     mockHealthService = { getHealthSnapshot: jest.fn() };
@@ -247,7 +253,7 @@ describe('OverviewComponent', () => {
     mockRefreshIntervalService.intervalData$.complete();
   });
 
-  it('storageCardVm$ should emit storage view model with mapped fields', (done) => {
+  it('storageCardVm$ should emit storage view model with mapped fields', fakeAsync((done) => {
     const mockData: HealthSnapshotMap = {
       fsid: 'fsid-storage',
       health: { status: 'HEALTH_OK', checks: {} },
@@ -302,8 +308,10 @@ describe('OverviewComponent', () => {
       done();
     });
 
+    tick(0);
     mockRefreshIntervalService.intervalData$.next();
-  });
+    discardPeriodicTasks();
+  }));
 
   it('storageCardVm$ should emit safe defaults before storage side streams resolve', (done) => {
     const mockData: HealthSnapshotMap = {
@@ -327,7 +335,7 @@ describe('OverviewComponent', () => {
     } as any;
 
     mockHealthService.getHealthSnapshot.mockReturnValue(of(mockData));
-    mockOverviewStorageService.getStorageBreakdown.mockReturnValue(of(null));
+    mockOverviewStorageService.getStorageBreakdown.mockReturnValue(of({ result: [] }));
 
     const sub = component.storageCardVm$.subscribe((vm) => {
       expect(vm.totalCapacity).toBe(1000);

@@ -275,17 +275,16 @@ describe('OverviewStorageService', () => {
   });
 
   describe('getStorageBreakdown', () => {
-    it('should call getPrometheusQueryData with storage breakdown query', () => {
+    it('should call getGaugeQueryData with storage breakdown query', () => {
       const promSpy = jest
-        .spyOn(service['prom'], 'getPrometheusQueryData')
+        .spyOn(service['prom'], 'getGaugeQueryData')
         .mockReturnValue(of({}) as any);
 
       service.getStorageBreakdown().subscribe();
 
-      expect(promSpy).toHaveBeenCalledWith({
-        params:
-          'sum by (application) (ceph_pool_bytes_used * on(pool_id) group_left(instance, name, application) ceph_pool_metadata{application=~"(.*Block.*)|(.*Filesystem.*)|(.*Object.*)|(..*)"})'
-      });
+      expect(promSpy).toHaveBeenCalledWith(
+        'sum by (application) (ceph_pool_bytes_used * on(pool_id) group_left(instance, name, application) ceph_pool_metadata{application=~"(.*Block.*)|(.*Filesystem.*)|(.*Object.*)|(..*)"})'
+      );
     });
   });
 
