@@ -5036,26 +5036,6 @@ extern "C" int rbd_open_read_only(rados_ioctx_t p, const char *name,
   return rbd_open_read_only_with_context_wq(p, name, image, snap_name, NULL);
 }
 
-extern "C" int rbd_get_ceph_context(rbd_image_t image, void** cct)
-{
-  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  if (ictx == NULL || cct == NULL) {
-    return -EINVAL;
-  }
-  *cct = static_cast<void*>(ictx->cct);
-  return 0;
-}
-
-extern "C" void rbd_context_complete(void* ctx, int r)
-{
-  if (ctx == NULL) {
-    return;
-  }
-  // Cast the opaque pointer to Context* and complete it
-  auto context = static_cast<Context*>(ctx);
-  context->complete(r);
-}
-
 extern "C" int rbd_open_by_id_read_only(rados_ioctx_t p, const char *id,
 			                rbd_image_t *image, const char *snap_name)
 {
