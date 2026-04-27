@@ -387,6 +387,18 @@ public:
 
 using check_create_device_ertr = Device::access_ertr;
 using check_create_device_ret = check_create_device_ertr::future<>;
+
+/**
+ * Normalize device argument for both segmented and RBM backends.
+ *
+ * Examples:
+ * - "/var/lib/ceph/osd/osd.0" -> "/var/lib/ceph/osd/osd.0/block"
+ * - "/var/lib/ceph/osd/osd.0/block" -> unchanged
+ * - "/var/lib/ceph/osd/osd.0/block.db.1" -> unchanged
+ * - "/dev/nvme0n1" -> unchanged
+ */
+std::string normalize_device_path(const std::string& device);
+
 check_create_device_ret check_create_device(
   const std::string path,
   size_t size);

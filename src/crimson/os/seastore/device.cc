@@ -13,6 +13,25 @@ SET_SUBSYS(seastore);
 
 namespace crimson::os::seastore {
 
+std::string normalize_device_path(const std::string& device)
+{
+  std::string device_path = device;
+  const bool has_dev_prefix = device_path.rfind("/dev/", 0) == 0;
+  const auto last_slash = device_path.find_last_of('/');
+  const std::string basename =
+    (last_slash == std::string::npos) ?
+      device_path :
+      device_path.substr(last_slash + 1);
+  const bool has_block_basename =
+    basename == "block" ||
+    basename.rfind("block.", 0) == 0;
+  if (!has_dev_prefix &&
+      !has_block_basename) {
+    device_path += "/block";
+  }
+  return device_path;
+}
+
 std::ostream& operator<<(std::ostream& out, const device_spec_t& ds)
 {
   return out << "device_spec("
