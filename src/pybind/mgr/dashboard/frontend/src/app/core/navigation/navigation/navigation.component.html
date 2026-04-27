@@ -34,7 +34,8 @@
         <cd-language-selector class="d-flex"></cd-language-selector>
       </cds-header-navigation>
       <div class="cds--btn cds--btn--icon-only cds--header__action"
-           (click)="toggleSidebar()">
+           data-testid="header-notification-icon"
+           (click)="onNotificationSelected($event)">
         <cd-notifications></cd-notifications>
       </div>
       <div class="cds--btn cds--btn--icon-only cds--header__action">
