@@ -525,6 +525,15 @@ class SpecStore():
         self.save(self._specs[service_name])
         return f'Set unmanaged to {str(value)} for service {service_name}'
 
+    def set_allow_label_remove_service(self, service_name: str, value: bool) -> str:
+        if service_name not in self._specs:
+            return f'No service of name {service_name} found. Check "ceph orch ls" for all known services'
+        if self._specs[service_name].allow_label_remove_service == value:
+            return f'Service {service_name} already has <allow_label_remove_service> set to {value}. No action taken.'
+        self._specs[service_name].allow_label_remove_service = value
+        self.save(self._specs[service_name])
+        return f'Set <allow_label_remove_service> to {str(value)} for service {service_name}'
+
     def needs_configuration(self, name: str) -> bool:
         return self._needs_configuration.get(name, False)
 

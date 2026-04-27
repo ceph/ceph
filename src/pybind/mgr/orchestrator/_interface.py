@@ -656,6 +656,14 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def set_allow_label_remove_service(self, service_name: str, value: bool) -> OrchResult[str]:
+        """
+        Set allow_label_remove_service parameter to True/False for a given service
+
+        :return: None
+        """
+        raise NotImplementedError()
+
     def plan(self, spec: Sequence["GenericSpec"]) -> OrchResult[List]:
         """
         Plan (Dry-run, Preview) a List of Specs.

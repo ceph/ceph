@@ -4094,6 +4094,10 @@ Then run the following:
         return self.spec_store.set_unmanaged(service_name, value)
 
     @handle_orch_error
+    def set_allow_label_remove_service(self, service_name: str, value: bool) -> str:
+        return self.spec_store.set_allow_label_remove_service(service_name, value)
+
+    @handle_orch_error
     def upgrade_check(self, image: str, version: str) -> str:
         if self.inventory.get_host_with_state("maintenance"):
             raise OrchestratorError("check aborted - you have hosts in maintenance state")

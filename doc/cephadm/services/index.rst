@@ -925,3 +925,69 @@ See Also
 
 * See :ref:`cephadm-osd-declarative` for special handling of unmanaged OSDs.
 * See also :ref:`cephadm-pause`.
+
+
+.. _cephadm-spec-allow-label-remove-service:
+
+Allow Label Placement to Remove All Instances of a Service
+==========================================================
+
+Cephadm supports allowing label placement to remove all instances of a
+service by removing all labels for that service. By default, this feature
+is disabled to protect against users accidentally removing services by
+accident.
+
+
+Allow on Specification Application
+----------------------------------
+
+To allow label placement to remove all instances of a service, set
+``allow_label_remove_service=True`` in :ref:`orchestrator-cli-service-spec` (example.yaml).
+
+``example.yaml``:
+
+.. code-block:: yaml
+
+    service_type: node-exporter
+    placement:
+      label: node-exporter
+    allow_label_remove_service: true
+
+.. prompt:: bash #
+
+    ceph orch apply -i example.yaml
+
+It can also be set using the ``--allow-label-remove-service`` option.
+
+.. prompt:: bash #
+
+    ceph orch apply node-exporter --placement="label:node-exporter" --allow-label-remove-service
+
+
+Allow After Specification Application
+-------------------------------------
+
+To allow label placement to remove all instances of a service after specification
+has been applied, use ``ceph orch set-allow-label-remove-service`` command. The
+commands requires the service name (as reported in ``ceph orch ls``) and boolean
+value as arguments.
+
+.. prompt:: bash #
+
+    ceph orch set-allow-label-remove-service node-exporter true
+
+This will allow the node-exporter service to have all instances removed by label
+placement.
+
+.. prompt:: bash #
+
+    ceph orch set-allow-label-remove-service node-exporter false
+
+This will disallow the node-exporter service to have all instances removed by label
+placement.
+
+.. note::
+    
+  You can use ``ceph orch set-allow-label-remove-service`` on any service, including
+  services that don't have label placement, but it won't have any tangible effect
+  unless the service uses label placement.

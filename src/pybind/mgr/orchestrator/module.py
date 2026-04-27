@@ -1833,11 +1833,12 @@ Usage:
                    unmanaged: bool = False,
                    no_overwrite: bool = False,
                    continue_on_error: bool = False,
-                   inbuf: Optional[str] = None) -> HandleCommandResult:
+                   inbuf: Optional[str] = None,
+                   allow_label_remove_service: bool = False) -> HandleCommandResult:
         """Update the size or placement for a service or apply a large yaml spec"""
         usage = """Usage:
   ceph orch apply -i <yaml spec> [--dry-run]
-  ceph orch apply <service_type> [--placement=<placement_string>] [--unmanaged]
+  ceph orch apply <service_type> [--placement=<placement_string>] [--unmanaged] [--allow-label-remove-service]
         """
         errs: List[str] = []
         if inbuf:
@@ -1912,7 +1913,8 @@ Usage:
             if not service_type:
                 raise OrchestratorValidationError(usage)
             specs = [ServiceSpec(service_type.value, placement=placementspec,
-                                 unmanaged=unmanaged, preview_only=dry_run)]
+                                 unmanaged=unmanaged, preview_only=dry_run,
+                                 allow_label_remove_service=allow_label_remove_service)]
         cmd_result = self._apply_misc(specs, dry_run, format, no_overwrite, continue_on_error)
         if errs:
             # HandleCommandResult is a named tuple, so use
@@ -2266,6 +2268,17 @@ Usage:
     def _set_managed(self, service_name: str) -> HandleCommandResult:
         """Set 'unmanaged: false' for the given service name"""
         completion = self.set_unmanaged(service_name, False)
+        raise_if_exception(completion)
+        out = completion.result_str()
+        return HandleCommandResult(stdout=out)
+
+    @OrchestratorCLICommand.Write('orch set-allow-label-remove-service')
+    def _set_allow_label_remove_service(self, service_name: str, value: str) -> HandleCommandResult:
+        """Set allow_label_remove_service parameter for the given service name"""
+        if value.lower() not in ("true", "false"):
+            return HandleCommandResult(stderr=f"{value} is not a valid argument, pass 'true' or 'false'", retval=-errno.EINVAL)
+        allow = value.lower() == "true"
+        completion = self.set_allow_label_remove_service(service_name, allow)
         raise_if_exception(completion)
         out = completion.result_str()
         return HandleCommandResult(stdout=out)

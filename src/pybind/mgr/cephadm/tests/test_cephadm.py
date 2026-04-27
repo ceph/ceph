@@ -2767,6 +2767,14 @@ Traceback (most recent call last):
         cephadm_module.spec_store.set_unmanaged('crash', False)
         assert not cephadm_module.spec_store._specs['crash'].unmanaged
 
+    def test_set_allow_label_remove_service(self, cephadm_module):
+        cephadm_module.spec_store._specs['node-exporter'] = ServiceSpec('node-exporter', allow_label_remove_service=False)
+        assert not cephadm_module.spec_store._specs['node-exporter'].allow_label_remove_service
+        cephadm_module.spec_store.set_allow_label_remove_service('node-exporter', True)
+        assert cephadm_module.spec_store._specs['node-exporter'].allow_label_remove_service
+        cephadm_module.spec_store.set_allow_label_remove_service('node-exporter', False)
+        assert not cephadm_module.spec_store._specs['node-exporter'].allow_label_remove_service
+
     def test_inventory_known_hostnames(self, cephadm_module):
         cephadm_module.inventory.add_host(HostSpec('host1', '1.2.3.1'))
         cephadm_module.inventory.add_host(HostSpec('host2', '1.2.3.2'))
