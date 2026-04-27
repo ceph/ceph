@@ -16,6 +16,7 @@
 
 #include "services/svc_sys_obj.h"
 #include "services/svc_bucket.h"
+#include "include/common_fwd.h"
 
 struct rgw_http_param_pair;
 class RGWRESTConn;
@@ -1478,17 +1479,20 @@ class RGWContinuousLeaseCR : public RGWCoroutine {
   ceph::coarse_mono_time current_time;
 
   LatencyMonitor* latency;
+  PerfCounters* counters;
 
 public:
   RGWContinuousLeaseCR(RGWAsyncRadosProcessor* async_rados,
                        rgw::sal::RadosStore* _store,
                        rgw_raw_obj obj, std::string lock_name,
                        int interval, RGWCoroutine* caller,
-		       LatencyMonitor* const latency)
+                       LatencyMonitor* const latency,
+                       PerfCounters* counters = nullptr)
     : RGWCoroutine(_store->ctx()), async_rados(async_rados), store(_store),
       obj(std::move(obj)), lock_name(std::move(lock_name)),
       interval(interval), interval_tolerance(ceph::make_timespan(9*interval/10)),
-      ts_interval(ceph::make_timespan(interval)), caller(caller), latency(latency)
+      ts_interval(ceph::make_timespan(interval)), caller(caller), latency(latency),
+      counters(counters)
   {}
 
   virtual ~RGWContinuousLeaseCR() override;

@@ -972,7 +972,11 @@ int RGWContinuousLeaseCR::operate(const DoutPrefixProvider *dpp)
       current_time = ceph::coarse_mono_clock::now();
       yield call(new RGWSimpleRadosLockCR(async_rados, store, obj, lock_name, cookie, interval));
       if (latency) {
-	      latency->add_latency(ceph::coarse_mono_clock::now() - current_time);
+	      auto elapsed = ceph::coarse_mono_clock::now() - current_time;
+	      latency->add_latency(elapsed);
+	      if (counters) {
+	        counters->tinc(sync_counters::l_lock, elapsed);
+	      }
       }
       current_time = ceph::coarse_mono_clock::now();
       if (current_time - last_renew_try_time > interval_tolerance) {
@@ -996,7 +1000,11 @@ int RGWContinuousLeaseCR::operate(const DoutPrefixProvider *dpp)
     current_time = ceph::coarse_mono_clock::now();
     yield call(new RGWSimpleRadosUnlockCR(async_rados, store, obj, lock_name, cookie));
     if (latency) {
-      latency->add_latency(ceph::coarse_mono_clock::now() - current_time);
+      auto elapsed = ceph::coarse_mono_clock::now() - current_time;
+      latency->add_latency(elapsed);
+      if (counters) {
+        counters->tinc(sync_counters::l_lock, elapsed);
+      }
     }
     return set_state(RGWCoroutine_Done);
   }
