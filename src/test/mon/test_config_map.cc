@@ -203,3 +203,46 @@ TEST(ConfigMap, result_sections)
   ASSERT_EQ("g", c["foo"]);
 }
 
+TEST(ConfigMap, result_sources)
+{
+  ConfigMap cm;
+  boost::intrusive_ptr<CephContext> cct{new CephContext(CEPH_ENTITY_TYPE_CLIENT), false};
+  auto crush = std::make_unique<CrushWrapper>();
+  crush->finalize();
+
+  for (auto [who, value] : {std::pair{"global", "g"}, std::pair{"mon", "m"},
+                            std::pair{"mon.a", "a"}}) {
+    ASSERT_EQ(0, cm.add_option(
+      cct.get(), "foo", who, value,
+      [&](const std::string& name) {
+        return nullptr;
+      }));
+  }
+  ASSERT_EQ(0, cm.add_option(
+    cct.get(), "bar", "global", "g",
+    [&](const std::string& name) {
+      return nullptr;
+    }));
+
+  // the source is the section that gives the value
+  EntityName n;
+  n.set(CEPH_ENTITY_TYPE_MON, "a");
+  std::unordered_map<std::string, ConfigMap::ValueSource> src;
+  auto c = cm.generate_entity_map(n, {}, crush.get(), "none", &src);
+  ASSERT_EQ("a", c["foo"]);
+  ASSERT_EQ("mon.a", src["foo"].section);
+  ASSERT_EQ("a", src["foo"].option->raw_value);
+  ASSERT_EQ("global", src["bar"].section);
+
+  n.set(CEPH_ENTITY_TYPE_MON, "b");
+  src.clear();
+  c = cm.generate_entity_map(n, {}, crush.get(), "none", &src);
+  ASSERT_EQ("m", c["foo"]);
+  ASSERT_EQ("mon", src["foo"].section);
+
+  n.set(CEPH_ENTITY_TYPE_MDS, "c");
+  src.clear();
+  c = cm.generate_entity_map(n, {}, crush.get(), "none", &src);
+  ASSERT_EQ("g", c["foo"]);
+  ASSERT_EQ("global", src["foo"].section);
+}
