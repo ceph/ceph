@@ -380,7 +380,9 @@ std::ostream &LogNode::print_detail_l(std::ostream &out) const
       << ", num=" << this->get_size()
       << ", used_space=" << this->use_space()
       << ", capacity=" << this->get_capacity()
-      << ", last_pos=" << this->get_last_pos();
+      << ", last_pos=" << this->get_last_pos()
+      << ", first_key=" << this->iter_cbegin().get_key()
+      << ", last_key=" << this->get_last_key();
   if (has_laddr()) {
     out << ", begin=" << get_begin()
 	<< ", end=" << get_end();
