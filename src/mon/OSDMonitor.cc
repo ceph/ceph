@@ -4078,7 +4078,19 @@ bool OSDMonitor::prepare_pg_ready_to_merge(MonOpRequestRef op)
     return false; /* nothing to propose, yet */
   }
 
-  if (m->ready) {
+  bool allow_merge = true;
+  if (m->ready && p.has_flag(pg_pool_t::FLAG_CRIMSON)) {
+    if (!p.has_flag(pg_pool_t::FLAG_CRIMSON_ALLOW_PG_MERGE)) {
+      allow_merge = false;
+      mon.clog->warn() << "blocking crimson pg merge for " << m->pgid
+                       << " (pool '" << osdmap.get_pool_name(m->pgid.pool())
+                       << "') because pool flag 'crimson_allow_pg_merge' is not set";
+      dout(1) << __func__ << " blocking crimson pg merge for " << m->pgid
+              << " because pool flag crimson_allow_pg_merge is not set" << dendl;
+    }
+  }
+
+  if (m->ready && allow_merge) {
     p.dec_pg_num(m->pgid,
 		 pending_inc.epoch,
 		 m->source_version,
@@ -8742,11 +8754,14 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -EPERM;
     }
     // check for Crimson pools
-    // pg merging is not yet supported in Crimson
+    // pg merging is only supported when explicitly enabled per-pool (crimson_allow_pg_merge)
     if (p.has_flag(pg_pool_t::FLAG_CRIMSON)) {
       if (n < (int)p.get_pg_num()) {
-        ss << "crimson-osd does not support decreasing pg_num_actual (shrinking)";
-        return -ENOTSUP;
+        if (!p.has_flag(pg_pool_t::FLAG_CRIMSON_ALLOW_PG_MERGE)) {
+          ss << "crimson-osd does not support decreasing pg_num_actual (shrinking) "
+             << "unless the pool flag crimson_allow_pg_merge is set";
+          return -ENOTSUP;
+        }
       }
       if (n > (int)p.get_pg_num() && !g_conf().get_val<bool>("crimson_allow_pg_split")) {
         ss << "crimson_allow_pg_split is false; pg_num_actual increase denied";
@@ -8805,11 +8820,14 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -EPERM;
     }
     // check for Crimson pools
-    // pg merging is not yet supported in Crimson
+    // pg merging is only supported when explicitly enabled per-pool (crimson_allow_pg_merge)
     if (p.has_flag(pg_pool_t::FLAG_CRIMSON)) {
       if (n < (int)p.get_pg_num_target()) {
-        ss << "crimson-osd does not support decreasing pg_num";
-        return -ENOTSUP;
+        if (!p.has_flag(pg_pool_t::FLAG_CRIMSON_ALLOW_PG_MERGE)) {
+          ss << "crimson-osd does not support decreasing pg_num "
+             << "unless the pool flag crimson_allow_pg_merge is set";
+          return -ENOTSUP;
+        }
       }
       if (n > (int)p.get_pg_num_target() && !g_conf().get_val<bool>("crimson_allow_pg_split")) {
         ss << "crimson_allow_pg_split is false; pg_num increase denied for crimson pool";
@@ -8886,11 +8904,14 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -EPERM;
     }
     // check for Crimson pools
-    // pg merging is not yet supported in Crimson
+    // pg merging is only supported when explicitly enabled per-pool (crimson_allow_pg_merge)
     if (p.has_flag(pg_pool_t::FLAG_CRIMSON)) {
       if (n < (int)p.get_pgp_num()) {
-        ss << "crimson-osd does not support decreasing pgp_num_actual";
-        return -ENOTSUP;
+        if (!p.has_flag(pg_pool_t::FLAG_CRIMSON_ALLOW_PG_MERGE)) {
+          ss << "crimson-osd does not support decreasing pgp_num_actual "
+             << "unless the pool flag crimson_allow_pg_merge is set";
+          return -ENOTSUP;
+        }
       }
       if (n > (int)p.get_pgp_num() && !g_conf().get_val<bool>("crimson_allow_pg_split")) {
         ss << "crimson_allow_pg_split is false; pgp_num_actual increase denied";
@@ -8921,11 +8942,14 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -EPERM;
     }
     // check for Crimson pools
-    // pg merging is not yet supported in Crimson
+    // pg merging is only supported when explicitly enabled per-pool (crimson_allow_pg_merge)
     if (p.has_flag(pg_pool_t::FLAG_CRIMSON)) {
       if (n < (int)p.get_pgp_num_target()) {
-        ss << "crimson-osd does not support decreasing pgp_num";
-        return -ENOTSUP;
+        if (!p.has_flag(pg_pool_t::FLAG_CRIMSON_ALLOW_PG_MERGE)) {
+          ss << "crimson-osd does not support decreasing pgp_num "
+             << "unless the pool flag crimson_allow_pg_merge is set";
+          return -ENOTSUP;
+        }
       }
       if (n > (int)p.get_pgp_num_target() && !g_conf().get_val<bool>("crimson_allow_pg_split")) {
         ss << "crimson_allow_pg_split is false; pgp_num increase denied";
@@ -8978,7 +9002,8 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     p.crush_rule = id;
   } else if (var == "nodelete" || var == "nopgchange" ||
 	     var == "nosizechange" || var == "write_fadvise_dontneed" ||
-	     var == "noscrub" || var == "nodeep-scrub" || var == "bulk") {
+	     var == "noscrub" || var == "nodeep-scrub" || var == "bulk" ||
+	     var == "crimson_allow_pg_merge") {
     uint64_t flag = pg_pool_t::get_flag_by_name(var);
     // make sure we only compare against 'n' if we didn't receive a string
     if (val == "true" || (interr.empty() && n == 1)) {
