@@ -6022,7 +6022,18 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::Driver* driver,
   // has bucket
   if (enable_s3vector && is_s3vector_op(s)) {
     ldpp_dout(s, 20) << "INFO: s3vector op: " << s->init_state.url_bucket << dendl;
-    return new RGWHandler_REST_s3Vector(auth_registry);
+    const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+    int ret;
+    bufferlist data;
+    std::tie(ret, data) = rgw_rest_read_all_input(s, max_size, false);
+    if (ret < 0) {
+      return nullptr;
+    }
+    if (!s->info.args.exists("PayloadHash")) {
+      const auto payload_hash = rgw::auth::s3::calc_v4_payload_hash(data.to_str());
+      s->info.args.append("PayloadHash", payload_hash);
+    }
+    return new RGWHandler_REST_s3Vector(auth_registry, data);
   }
   return new RGWHandler_REST_Bucket_S3(auth_registry, enable_pubsub);
 }
@@ -6665,22 +6676,6 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_POST_BUCKET_LOGGING:
         case RGW_OP_GET_BUCKET_LOGGING: 
         case RGW_OP_PUT_BUCKET_OWNERSHIP_CONTROLS:
-        case RGW_OP_S3VECTOR_CREATE_INDEX:
-        case RGW_OP_S3VECTOR_CREATE_VECTOR_BUCKET:
-        case RGW_OP_S3VECTOR_DELETE_INDEX:
-        case RGW_OP_S3VECTOR_DELETE_VECTOR_BUCKET:
-        case RGW_OP_S3VECTOR_DELETE_VECTOR_BUCKET_POLICY:
-        case RGW_OP_S3VECTOR_DELETE_VECTORS:
-        case RGW_OP_S3VECTOR_GET_INDEX:
-        case RGW_OP_S3VECTOR_GET_VECTOR_BUCKET:
-        case RGW_OP_S3VECTOR_GET_VECTOR_BUCKET_POLICY:
-        case RGW_OP_S3VECTOR_GET_VECTORS:
-        case RGW_OP_S3VECTOR_LIST_INDEXES:
-        case RGW_OP_S3VECTOR_LIST_VECTOR_BUCKETS:
-        case RGW_OP_S3VECTOR_LIST_VECTORS:
-        case RGW_OP_S3VECTOR_PUT_VECTOR_BUCKET_POLICY:
-        case RGW_OP_S3VECTOR_PUT_VECTORS:
-        case RGW_OP_S3VECTOR_QUERY_VECTORS:
           break;
         default:
           ldpp_dout(s, 10) << "ERROR: AWS4 completion for operation: " << s->op_type << ", NOT IMPLEMENTED" << dendl;
