@@ -220,36 +220,43 @@ namespace cohort {
 	  Lane& lane = lane_of(o);
 	  lane.lock.lock();
 	  refcnt = o->lru_refcnt.load();
-	  if (unlikely(refcnt == 0)) {
-	    Object::Queue::iterator it =
-	      Object::Queue::s_iterator_to(*o);
-	    lane.q.erase(it);
-	    tdo = o;
+          if (unlikely(refcnt == 0)) {
+	    if (o->lru_hook.is_linked()) {
+              Object::Queue::iterator it = Object::Queue::s_iterator_to(*o);
+              if (o->active.test()) {
+                lane.active.erase(it);
+	      } else {
+                lane.q.erase(it);
+	      }
+              tdo = o;
+	    } /* is-linked */
 	  }
 	  lane.lock.unlock();
 	} else if (unlikely(refcnt == SENTINEL_REFCNT)) {
 	  Lane& lane = lane_of(o);
 	  lane.lock.lock();
 	  refcnt = o->lru_refcnt.load();
-	  if (likely(refcnt == SENTINEL_REFCNT)) {
-	    /* move to MRU */
-            Object::Queue::iterator it = Object::Queue::s_iterator_to(*o);
-            auto active = o->active.test();
-            if (active) {
-              lane.active.erase(it);
-            } else {
-              lane.q.erase(it);
-            }
-            lane.q.push_front(*o);
-	    /* hiwat check */
-            if (lane.q.size() > lane_hiwat) {
-              /* discard the actual lane LRU immediately */
-              Object* o2 = &(lane.q.back());
-	      Object::Queue::iterator it = Object::Queue::s_iterator_to(*o2);
-	      lane.q.erase(it);
-	      tdo = o2;
-	    }
-	  }
+          if (likely(refcnt == SENTINEL_REFCNT)) {
+            if (o->lru_hook.is_linked()) {
+              /* move to MRU */
+              Object::Queue::iterator it = Object::Queue::s_iterator_to(*o);
+              auto active = o->active.test();
+              if (active) {
+                lane.active.erase(it);
+              } else {
+                lane.q.erase(it);
+              }
+              lane.q.push_front(*o);
+              /* hiwat check */
+              if (lane.q.size() > lane_hiwat) {
+                /* discard the actual lane LRU immediately */
+                Object *o2 = &(lane.q.back());
+                Object::Queue::iterator it = Object::Queue::s_iterator_to(*o2);
+                lane.q.erase(it);
+                tdo = o2;
+              }
+            } /* is-linked */
+          } /* sentinel-refcnt */
 	  lane.lock.unlock();
 	}
 	/* unref out-of-line && !LOCKED */
