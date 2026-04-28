@@ -137,18 +137,18 @@ def daemon_to_container(
     container_binds: Optional[List[List[str]]] = None,
     envs: Optional[List[str]] = None,
     args: Optional[List[str]] = None,
-    auto_podman_args: bool = True,
-    auto_podman_mounts: bool = True,
+    auto_service_args: bool = True,
+    auto_update_mounts: bool = True,
 ) -> CephContainer:
     """daemon_to_container is a utility function that serves to create
     CephContainer instances from a container daemon form's customize and
     entrypoint methods.
     Most of the parameters (like mounts, container_args, etc) can be passed in
     to "pre customize" the values.
-    The auto_podman_args argument enables adding default arguments expected on
-    all podman daemons (true by default).
-    The auto_podman_mounts argument enables adding mounts expected on all
-    daemons running on podman (true by default).
+    The auto_service_args argument enables adding default arguments expected on
+    all daemons (true by default).
+    The auto_update_mounts argument enables adding mounts expected on all
+    daemons (true by default).
     """
     container_args = container_args if container_args else []
     container_mounts = container_mounts if container_mounts else {}
@@ -165,9 +165,9 @@ def daemon_to_container(
     daemon.customize_process_args(ctx, args)
 
     _is_podman = isinstance(ctx.container_engine, Podman)
-    if auto_podman_mounts and _is_podman:
+    if auto_update_mounts:
         ctx.container_engine.update_mounts(ctx, container_mounts)
-    if auto_podman_args and _is_podman:
+    if auto_service_args:
         container_args.extend(
             ctx.container_engine.service_args(
                 ctx, daemon.identity.service_name

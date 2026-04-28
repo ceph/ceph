@@ -158,12 +158,17 @@ class BasicContainer:
         return cmd_args + self.container_args + envs + vols + binds
 
     def build_run_cmd(self) -> List[str]:
-        return (
+        cmd = (
             [self._container_engine, 'run']
             + self.build_engine_run_args()
             + [self.image]
             + list(self.args)
         )
+
+        if "--restart" in cmd and "--rm" in cmd:
+            cmd.remove("--rm")
+
+        return cmd
 
     def build_rm_cmd(
         self, cname: str = '', storage: bool = False
@@ -532,13 +537,11 @@ class SidecarContainer(BasicContainer):
     def build_engine_run_args(self) -> List[str]:
         assert isinstance(self.identity, DaemonSubIdentity)
         cmd_args = super().build_engine_run_args()
-        if self._using_podman:
-            # sidecar containers are always services, otherwise they
-            # would not be sidecars
-            cmd_args += self.ctx.container_engine.service_args(
-                self.ctx, self.identity.sidecar_service_name
-            )
-        return cmd_args
+        # sidecar containers are always services, otherwise they
+        # would not be sidecars
+        cmd_args += self.ctx.container_engine.service_args(
+            self.ctx, self.identity.sidecar_service_name
+        )
 
     def run_cmd(self) -> List[str]:
         if not (self.envs and self.envs[0].startswith('NODE_NAME=')):
