@@ -55,7 +55,7 @@
                      [flip]="true"
                      [offset]="dropDownOnlyOffset"
                      data-testid="table-action-btn"
-                     class="d-flex justify-content-end">
+                     class="cds--display-flex cds--justify-content-end">
     <ng-container *ngFor="let action of dropDownActions">
       <cds-overflow-menu-option *ngIf="currentAction !== action"
                                 class="{{ toClassName(action) }}"
