@@ -6170,7 +6170,18 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::Driver* driver,
   // has bucket
   if (enable_s3vector && is_s3vector_op(s)) {
     ldpp_dout(s, 20) << "INFO: s3vector op: " << s->init_state.url_bucket << dendl;
-    return new RGWHandler_REST_s3Vector(auth_registry);
+    const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+    int ret;
+    bufferlist data;
+    std::tie(ret, data) = rgw_rest_read_all_input(s, max_size, false);
+    if (ret < 0) {
+      return nullptr;
+    }
+    if (!s->info.args.exists("PayloadHash")) {
+      const auto payload_hash = rgw::auth::s3::calc_v4_payload_hash(data.to_str());
+      s->info.args.append("PayloadHash", payload_hash);
+    }
+    return new RGWHandler_REST_s3Vector(auth_registry, data);
   }
   return new RGWHandler_REST_Bucket_S3(auth_registry, enable_pubsub);
 }

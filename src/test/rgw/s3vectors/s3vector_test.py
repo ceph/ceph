@@ -61,17 +61,11 @@ def connection(service_name='s3vectors'):
     else:
         scheme = 'http://'
 
-    if service_name == 's3vectors':
-        config = Config(signature_version='s3v4')
-    else:
-        config = None
-
     client = boto3.client(service_name,
             endpoint_url=scheme+hostname+':'+str(port_no),
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
-            region_name=get_config_zonegroup(),
-            config=config)
+            region_name=get_config_zonegroup())
 
     return client
 
@@ -91,17 +85,11 @@ def connection2(service_name='s3vectors'):
     else:
         scheme = 'http://'
 
-    if service_name == 's3vectors':
-        config = Config(signature_version='s3v4')
-    else:
-        config = None
-
     client = boto3.client(service_name,
             endpoint_url=scheme+hostname+':'+str(port_no),
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
-            region_name=get_config_zonegroup(),
-            config=config)
+            region_name=get_config_zonegroup())
 
     return client
 
@@ -127,8 +115,7 @@ def another_user(tenant=None):
             endpoint_url=scheme+hostname+':'+str(port_no),
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
-            region_name=get_config_zonegroup(),
-            config=Config(signature_version='s3v4'))
+            region_name=get_config_zonegroup())
 
     return client
 
