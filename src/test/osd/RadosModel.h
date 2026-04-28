@@ -78,13 +78,18 @@ public:
   uint64_t handle = 0;
   bool waiting = false;
   ceph::mutex lock = ceph::make_mutex("watch lock");
-  TestWatchContext() = default;
+  librados::IoCtx& io_ctx;
+  const std::string oid;
+  TestWatchContext(librados::IoCtx& io_ctx, const std::string oid) : io_ctx(io_ctx), oid(oid) {}
   void handle_notify(uint64_t notify_id, uint64_t cookie,
 		     uint64_t notifier_id,
 		     bufferlist &bl) override {
+    std::cout << "watch handle_notify " << notify_id << " " << cookie << " " << notifier_id << std::endl;
     std::lock_guard l{lock};
     waiting = false;
     cond.notify_all();
+    bufferlist empty;
+    io_ctx.notify_ack(oid, notify_id, cookie, empty);
   }
   void handle_error(uint64_t cookie, int err) override {
     std::lock_guard l{lock};
@@ -415,7 +420,7 @@ public:
 
   TestWatchContext *watch(const std::string &oid) {
     ceph_assert(!watches.count(oid));
-    return (watches[oid] = new TestWatchContext);
+    return (watches[oid] = new TestWatchContext(io_ctx, prefix+oid));
   }
 
   void unwatch(const std::string &oid) {
