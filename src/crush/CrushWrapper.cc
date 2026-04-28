@@ -319,6 +319,7 @@ int CrushWrapper::rename_rule(const string& srcname,
   return 0;
 }
 
+
 void CrushWrapper::find_takes(set<int> *roots) const
 {
   for (unsigned i=0; i<crush->max_rules; i++) {
@@ -2275,15 +2276,7 @@ void CrushWrapper::reweight_bucket(
   }
   //cout << __func__ << " finish " << b->id << " " << *weightv << std::endl;
 }
-
-int CrushWrapper::add_simple_rule_at(
-  string name, string root_name,
-  string failure_domain_name,
-  int num_failure_domains,
-  string device_class,
-  string mode, int rule_type,
-  int rno,
-  ostream *err)
+int CrushWrapper::_find_free_rule_id(const string& name, int rno, ostream *err) const
 {
   if (rule_exists(name)) {
     if (err)
@@ -2302,6 +2295,21 @@ int CrushWrapper::add_simple_rule_at(
         break;
     }
   }
+  return rno;
+}
+
+int CrushWrapper::add_simple_rule_at(
+  string name, string root_name,
+  string failure_domain_name,
+  int num_failure_domains,
+  string device_class,
+  string mode, int rule_type,
+  int rno,
+  ostream *err)
+{
+  rno = _find_free_rule_id(name, rno, err);
+  if (rno < 0) return rno;
+
   if (!name_exists(root_name)) {
     if (err)
       *err << "root item " << root_name << " does not exist";
@@ -2390,6 +2398,159 @@ int CrushWrapper::add_simple_rule(
     device_class,
     mode,
     rule_type, -1, err);
+}
+
+int CrushWrapper::add_simple_stretch_rule_at(
+  string name, string root_name,
+  string zone_failure_domain_name,
+  string osd_failure_domain_name,
+  int num_failure_domains, int num_replica_per_zone,
+  string device_class,
+  string mode, int rule_type,
+  bool force,
+  int rno,
+  ostream *err)
+{
+  rno = _find_free_rule_id(name, rno, err);
+  if (rno < 0) return rno;
+
+  if (!name_exists(root_name)) {
+    if (err)
+      *err << "root item " << root_name << " does not exist";
+    return -ENOENT;
+  }
+  int root = get_item_id(root_name);
+  int zone_type = 0;
+  if (zone_failure_domain_name.length()) {
+    zone_type = get_type_id(zone_failure_domain_name);
+    if (zone_type < 0) {
+      if (err)
+	*err << "unknown type " << zone_failure_domain_name;
+      return -EINVAL;
+    }
+  }
+  int osd_type = 0;
+  if (osd_failure_domain_name.length()) {
+    osd_type = get_type_id(osd_failure_domain_name);
+    if (osd_type < 0) {
+      if (err)
+	*err << "unknown type " << osd_failure_domain_name;
+      return -EINVAL;
+    }
+  }
+  if (device_class.size()) {
+    if (!class_exists(device_class)) {
+      if (err)
+	*err << "device class " << device_class << " does not exist";
+      return -EINVAL;
+    }
+    int c = get_class_id(device_class);
+    if (class_bucket.count(root) == 0 ||
+	class_bucket[root].count(c) == 0) {
+      if (err)
+	*err << "root " << root_name << " has no devices with class "
+	     << device_class;
+      return -EINVAL;
+    }
+    root = class_bucket[root][c];
+  }
+
+  if (num_failure_domains <= 0) {
+    if (err)
+      *err << "num_failure_domains = " << num_failure_domains << " is less than or equal to 0";
+    return -EINVAL;
+  }
+
+  if (num_replica_per_zone <= 0) {
+    if (err)
+      *err << "num_replica_per_zone = " << num_replica_per_zone << " is less than or equal to 0";
+    return -EINVAL;
+  }
+
+  std::vector<int> children;
+  get_children_of_type(root, zone_type, &children, false);
+  if (int(children.size()) < num_failure_domains && !force) {
+    if (err)
+      *err << "number of zones " << children.size() << " for type "
+           << zone_failure_domain_name << " is less than num_failure_domains " << num_failure_domains;
+    return -EINVAL;
+  }
+
+  if (!force) {
+    for (auto child : children) {
+      std::vector<int> osd_failure_domains;
+      get_children_of_type(child, osd_type, &osd_failure_domains, false);
+      if (int(osd_failure_domains.size()) < num_replica_per_zone) {
+        if (err)
+          *err << "zone " << get_item_name(child) << " has only " << osd_failure_domains.size()
+               << " items of type " << osd_failure_domain_name << " (minimum" << num_replica_per_zone << ")";
+        return -EINVAL;
+      }
+      for (auto osd_failure_domain : osd_failure_domains) {
+        std::vector<int> osds;
+        get_children_of_type(osd_failure_domain, 0, &osds, false);
+        if (osds.empty()) {
+          if (err)
+            *err << osd_failure_domain_name << " " << get_item_name(osd_failure_domain) << " has no OSDs";
+          return -EINVAL;
+        }
+      }
+    }
+  }
+
+  if (mode != "firstn" && mode != "indep") {
+    if (err)
+      *err << "unknown mode " << mode;
+    return -EINVAL;
+  }
+
+  int steps = 4;
+  crush_rule *rule = crush_make_rule(steps, rule_type);
+  ceph_assert(rule);
+  int step = 0;
+  crush_rule_set_step(rule, step++, CRUSH_RULE_TAKE, root, 0);
+  crush_rule_set_step(
+    rule, step++,
+    CRUSH_RULE_CHOOSE_FIRSTN,
+    0,
+    zone_type);
+  crush_rule_set_step(
+      rule, step++,
+      CRUSH_RULE_CHOOSELEAF_FIRSTN,
+      num_replica_per_zone,
+      osd_type);
+  crush_rule_set_step(rule, step++, CRUSH_RULE_EMIT, 0, 0);
+
+  int ret = crush_add_rule(crush, rule, rno);
+  if(ret < 0) {
+    if (err)
+      *err << "failed to add rule " << rno << " because " << cpp_strerror(ret);
+    free(rule);
+    return ret;
+  }
+  set_rule_name(rno, name);
+  have_rmaps = false;
+  return rno;
+}
+
+int CrushWrapper::add_simple_stretch_rule(
+  string name, string root_name,
+  string zone_failure_domain_name,
+  string osd_failure_domain_name,
+  int num_failure_domains, int num_replica_per_zone,
+  string device_class,
+  string mode, int rule_type,
+  bool force,
+  ostream *err)
+{
+  return add_simple_stretch_rule_at(
+    name, root_name,
+    zone_failure_domain_name,
+    osd_failure_domain_name,
+    num_failure_domains, num_replica_per_zone,
+    device_class, mode,
+    rule_type, force,
+    -1, err);
 }
 
 int CrushWrapper::add_multi_osd_per_failure_domain_rule_at(
