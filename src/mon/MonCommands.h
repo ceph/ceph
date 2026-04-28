@@ -779,6 +779,17 @@ COMMAND("osd crush rule create-replicated "
 	"name=class,type=CephString,goodchars=" CLASS_GOODCHARS ",req=false",
 	"create crush rule <name> for replicated pool to start from <root>, replicate across buckets of type <type>, use devices of type <class> (ssd or hdd)",
 	"osd", "rw")
+COMMAND("osd crush rule create-stretch-replicated "
+	"name=rule_name,type=CephString,req=false,goodchars=[A-Za-z0-9-_.] "
+	"name=root,type=CephString,req=false,goodchars=[A-Za-z0-9-_.] "
+	"name=zone_failure_domain,type=CephString,req=false,goodchars=[A-Za-z0-9-_.] "
+	"name=osd_failure_domain,type=CephString,req=false,goodchars=[A-Za-z0-9-_.] "
+	"name=zones,type=CephInt,range=0,req=false "
+	"name=num_replica_per_zone,type=CephInt,range=0,req=false "
+	"name=force,type=CephBool,req=false "
+	"name=class,type=CephString,goodchars=" CLASS_GOODCHARS ",req=false",
+	"create crush rule <name> for stretch cluster to start from <root>, spread across buckets of type <zone_failure_domain>, and replicate across <osd_failure_domain> with <num_replica_per_zone>",
+	"osd", "rw")
 COMMAND("osd crush rule create-erasure "
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] "
 	"name=profile,type=CephString,req=false,goodchars=[A-Za-z0-9-_.=]",
