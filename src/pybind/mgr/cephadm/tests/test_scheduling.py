@@ -2082,3 +2082,58 @@ def test_related_service_downsize(service_type, placement, hosts, daemons, relat
     assert sorted(got_add) == sorted(expected_add)
 
     assert sorted([d.name() for d in to_remove]) == sorted(expected_remove)
+
+
+def test_ingress_scale_down_defers_related_when_ranked_backend_exceeds_required():
+    """
+    With ingress count below current daemons, ranked NFS backends still above
+    placement target (related_service_required_count), remove only ingress on
+    hosts without NFS first; defer removing co-located ingress until NFS scales
+    down (next iteration).
+    """
+    spec = IngressSpec(
+        service_type='ingress',
+        service_id='nfs.test',
+        frontend_port=443,
+        monitor_port=8888,
+        virtual_ip='10.0.0.20/8',
+        backend_service='nfs.test',
+        placement=PlacementSpec(count=1),
+    )
+    hosts = [HostSpec(h) for h in 'host1 host2 host3'.split()]
+    daemons = [
+        DaemonDescription('haproxy', 'ingress1', 'host1'),
+        DaemonDescription('keepalived', 'ingress1', 'host1'),
+        DaemonDescription('haproxy', 'ingress2', 'host2'),
+        DaemonDescription('keepalived', 'ingress2', 'host2'),
+        DaemonDescription('haproxy', 'ingress3', 'host3'),
+        DaemonDescription('keepalived', 'ingress3', 'host3'),
+    ]
+    related_service_daemons = [
+        DaemonDescription('nfs', 'nfs1', 'host1', rank=0, rank_generation=0),
+        DaemonDescription('nfs', 'nfs2', 'host2', rank=1, rank_generation=0),
+    ]
+    all_slots, to_add, to_remove = HostAssignment(
+        spec=spec,
+        hosts=hosts,
+        unreachable_hosts=[],
+        draining_hosts=[],
+        daemons=daemons,
+        related_service_daemons=related_service_daemons,
+        related_service_required_count=1,
+        primary_daemon_type='haproxy',
+        per_host_daemon_type='keepalived',
+        rank_map=None,
+    ).place()
+
+    assert sorted(str(p) for p in all_slots) == sorted([
+        'haproxy:host1(*:443,8888,1024)',
+        'haproxy:host2(*:443,8888,1024)',
+        'keepalived:host1',
+        'keepalived:host2',
+    ])
+    assert to_add == []
+    assert sorted(d.name() for d in to_remove) == sorted([
+        'haproxy.ingress3',
+        'keepalived.ingress3',
+    ])
