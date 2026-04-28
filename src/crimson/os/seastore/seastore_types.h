@@ -2140,6 +2140,24 @@ struct alloc_delta_t {
   }
 };
 
+struct lognode_delta_t {
+  enum class op_t : uint_fast8_t {
+    INSERT,
+    DELETE,
+  } op;
+  laddr_t base_lognode_laddr;
+  bufferlist buffer;
+
+  DENC(lognode_delta_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.op, p);
+    denc(v.base_lognode_laddr, p);
+    denc(v.buffer, p);
+    DENC_FINISH(p);
+  }
+};
+using lognode_deltas_t = std::vector<lognode_delta_t>;
+
 struct extent_info_t {
   extent_types_t type = extent_types_t::NONE;
   laddr_t addr = L_ADDR_NULL;
@@ -3134,6 +3152,7 @@ WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_header_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::alloc_blk_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::alloc_delta_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_tail_t)
+WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::lognode_delta_t)
 
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<crimson::os::seastore::cache_access_stats_printer_t> : fmt::ostream_formatter {};

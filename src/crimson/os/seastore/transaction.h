@@ -689,6 +689,10 @@ public:
     return cache_hint;
   }
 
+  void add_lognode_delta(lognode_delta_t &&delta) {
+    lognode_deltas.emplace_back(std::move(delta));
+  }
+
   btree_cursor_stats_t cursor_stats;
   bool need_wait_rewrite = false;
 
@@ -919,6 +923,8 @@ private:
   backref_entry_refs_t backref_entries;
 
   cache_hint_t cache_hint = CACHE_HINT_TOUCH;
+
+  lognode_deltas_t lognode_deltas;
 };
 using TransactionRef = Transaction::Ref;
 

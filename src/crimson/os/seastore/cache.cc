@@ -1775,6 +1775,15 @@ record_t Cache::prepare_record(
     record.push_back(std::move(delta));
   }
 
+  for (auto b : t.lognode_deltas) {
+    bufferlist bl;
+    encode(b, bl);
+    delta_info_t delta;
+    delta.type = extent_types_t::LOG_NODE;
+    delta.bl = bl;
+    record.push_back(std::move(delta));
+  }
+
   if (is_background_transaction(trans_src)) {
     assert(journal_head != JOURNAL_SEQ_NULL);
     assert(journal_dirty_tail != JOURNAL_SEQ_NULL);
