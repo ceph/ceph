@@ -1157,6 +1157,24 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_kill_ino_prealloc_at
+  type: int
+  level: dev
+  default: 0
+  services:
+  - mds
+  flags:
+  - runtime
+  fmt_desc: Inject MDS failure in the inode preallocation machinery (for developers only).
+  long_desc: "Injects an MDS crash at targeted stages in the inode preallocation lifecycle:
+  * 1: INO_PREALLOC_DELEGATE_BEFORE - Fail before delegating preallocated inodes to client session.
+  * 2: INO_PREALLOC_DELEGATE_AFTER - Fail after updating session delegated_inos, before sending extra_bl reply.
+  * 3: INO_PREALLOC_PREPARE_NEW_INODE - Fail during prepare_new_inode before ino allocation.
+  * 4: INO_PREALLOC_APPLY_ALLOCATED_BEFORE - Fail after journal submission, before apply_allocated_inos session update.
+  * 5: INO_PREALLOC_APPLY_ALLOCATED_AFTER - Fail after updating session preallocation state, before reply/save.
+  * 6: INO_PREALLOC_SESSION_SAVE_BEFORE - Fail inside SessionMap::save() before persisting dirty sessions to OMAP.
+  * 7: INO_PREALLOC_REPLAY_ERASE_BEFORE - Fail during EMetaBlob::replay() before erasing used preallocated inodes."
+
 - name: mds_kill_link_at
   type: int
   level: dev

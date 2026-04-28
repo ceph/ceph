@@ -3595,6 +3595,11 @@ CDentry* Server::prepare_stray_dentry(const MDRequestRef& mdr, CInode *in)
 CInode* Server::prepare_new_inode(const MDRequestRef& mdr, CDir *dir, inodeno_t useino, unsigned mode,
 				  const file_layout_t *layout)
 {
+  if (g_conf().get_val<int64_t>("mds_kill_ino_prealloc_at") == INO_PREALLOC_PREPARE_NEW_INODE) {
+    g_conf().set_val("mds_kill_ino_prealloc_at", "0");
+    ceph_abort_msg("killpoint INO_PREALLOC_PREPARE_NEW_INODE");
+  }
+
   CInode *in = new CInode(mdcache);
   auto _inode = in->_get_inode();
   
@@ -3741,6 +3746,11 @@ void Server::apply_allocated_inos(const MDRequestRef& mdr, Session *session)
 	   << " / " << mdr->prealloc_inos
 	   << " / " << mdr->used_prealloc_ino << dendl;
 
+  if (g_conf().get_val<int64_t>("mds_kill_ino_prealloc_at") == INO_PREALLOC_APPLY_ALLOCATED_BEFORE) {
+    g_conf().set_val("mds_kill_ino_prealloc_at", "0");
+    ceph_abort_msg("killpoint INO_PREALLOC_APPLY_ALLOCATED_BEFORE");
+  }
+
   if (mdr->alloc_ino) {
     mds->inotable->apply_alloc_id(mdr->alloc_ino);
   }
@@ -3756,6 +3766,11 @@ void Server::apply_allocated_inos(const MDRequestRef& mdr, Session *session)
     ceph_assert(session);
     session->info.prealloc_inos.erase(mdr->used_prealloc_ino);
     mds->sessionmap.mark_dirty(session);
+  }
+
+  if (g_conf().get_val<int64_t>("mds_kill_ino_prealloc_at") == INO_PREALLOC_APPLY_ALLOCATED_AFTER) {
+    g_conf().set_val("mds_kill_ino_prealloc_at", "0");
+    ceph_abort_msg("killpoint INO_PREALLOC_APPLY_ALLOCATED_AFTER");
   }
 }
 

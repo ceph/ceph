@@ -1033,4 +1033,36 @@ struct SubvolumeMetric {
     void dump(Formatter *f) const;
     friend std::ostream& operator<<(std::ostream& os, const SubvolumeMetric &m);
 };
+
+/**
+ * Killpoints for testing MDS inode preallocation lifecycle and crash recovery.
+ *
+ * Configured via the runtime option `mds_kill_ino_prealloc_at`.
+ * Used in QA test suites (e.g., test_inode_preallocation.py) to simulate
+ * active MDS crashes at specific state mutation boundaries before journal/OMAP flush,
+ * ensuring standby-replay daemons handle uncommitted preallocation logs cleanly.
+ */
+enum ino_prealloc_killpoint : std::int8_t {
+  // SessionMap::delegate_inos(): Before slicing free range into delegated_inos.
+  INO_PREALLOC_DELEGATE_BEFORE = 1,
+
+  // SessionMap::delegate_inos(): After updating delegated_inos, before extra_bl reply.
+  INO_PREALLOC_DELEGATE_AFTER,
+
+  // Server::prepare_new_inode(): Before assigning/projecting new inode allocation.
+  INO_PREALLOC_PREPARE_NEW_INODE,
+
+  // Server::apply_allocated_inos(): After journal submission, before in-memory session update.
+  INO_PREALLOC_APPLY_ALLOCATED_BEFORE,
+
+  // Server::apply_allocated_inos(): After session update, before replying/flushing session map.
+  INO_PREALLOC_APPLY_ALLOCATED_AFTER,
+
+  // SessionMap::save(): Immediately prior to writing dirty SessionMap OMAP records to RADOS.
+  INO_PREALLOC_SESSION_SAVE_BEFORE,
+
+  // EMetaBlob::replay(): During journal replay on standby/recovering MDS, right before prealloc_inos.erase().
+  INO_PREALLOC_REPLAY_ERASE_BEFORE,
+};
+
 #endif
