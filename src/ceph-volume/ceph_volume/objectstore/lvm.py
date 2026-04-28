@@ -322,7 +322,8 @@ class Lvm(BaseObjectStore):
             if is_encrypted:
                 encryption_utils.luks_open(dmcrypt_secret,
                                            device_lv.__dict__['lv_path'],
-                                           device_uuid)
+                                           device_uuid,
+                                           with_tpm=self.with_tpm)
                 return '/dev/mapper/%s' % device_uuid
             return device_lv.__dict__['lv_path']
 
@@ -332,7 +333,8 @@ class Lvm(BaseObjectStore):
             if is_encrypted:
                 encryption_utils.luks_open(dmcrypt_secret,
                                            physical_device,
-                                           device_uuid)
+                                           device_uuid,
+                                           with_tpm=self.with_tpm)
                 return '/dev/mapper/%s' % device_uuid
             return physical_device
 

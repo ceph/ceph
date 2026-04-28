@@ -330,6 +330,42 @@ def is_ceph_device(lv: "Volume") -> bool:
 
     return True
 
+
+def volume_is_lvm_objectstore_lv(lv: "Volume") -> bool:
+    return lv.tags.get('ceph.type') in ('block', 'db', 'wal')
+
+
+def ceph_volume_lvm_prepare_lv_paths() -> set[str]:
+    paths: set[str] = set()
+    try:
+        for lv in get_lvs():
+            if not volume_is_lvm_objectstore_lv(lv) or not lv.lv_path:
+                continue
+            paths.add(lv.lv_path)
+            try:
+                paths.add(os.path.realpath(lv.lv_path))
+            except OSError:
+                pass
+    except Exception:
+        logger.debug('get_lvs failed while building ceph LVM prepare path set',
+                     exc_info=True)
+    return paths
+
+
+def is_ceph_volume_lvm_prepared(devpath: str,
+                                prepared_lv_paths: Optional[set[str]] = None) -> bool:
+    paths = (prepared_lv_paths if prepared_lv_paths is not None
+             else ceph_volume_lvm_prepare_lv_paths())
+    if not devpath or not paths:
+        return False
+    if devpath in paths:
+        return True
+    try:
+        return os.path.realpath(devpath) in paths
+    except OSError:
+        return False
+
+
 class Lvm:
     def __init__(self, name_key: str, tags_key: str, **kw: Any) -> None:
         self.name: str = kw.get(name_key, '')

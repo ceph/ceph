@@ -7,7 +7,7 @@ from ceph_volume.util import system, disk
 from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.util import encryption as encryption_utils
 from ceph_volume.util import nvme as nvme_utils
-from ceph_volume.util.device import Device
+from ceph_volume.api import lvm as lvm_api
 from ceph_volume.devices.lvm.common import rollback_osd
 from ceph_volume.devices.raw.list import direct_report
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
@@ -165,7 +165,9 @@ class Raw(BaseObjectStore):
 
         This function activates Ceph Object Storage Daemons (OSDs) on the system.
         It iterates over all block devices, checking if they have a LUKS2 signature and
-        are encrypted for Ceph. If a device's OSD fsid matches and it is enrolled with TPM2,
+        are encrypted for Ceph. LVs tagged by ``ceph-volume lvm prepare`` / ``lvm batch``
+        (``ceph.type`` in block/db/wal) are skipped so raw activation does not consume
+        LVM-backed OSDs. If a device's OSD fsid matches and it is enrolled with TPM2,
         the function pre-activates it. After collecting the relevant devices, it attempts to
         activate any OSDs found.
 
@@ -175,20 +177,22 @@ class Raw(BaseObjectStore):
         assert self.devices or self.osd_id or self.osd_fsid
 
         activated_any: bool = False
+        lvm_prepare_lv_paths = lvm_api.ceph_volume_lvm_prepare_lv_paths()
 
         for d in disk.lsblk_all(abspath=True):
             device: str = d.get('NAME', '')
+            if lvm_api.is_ceph_volume_lvm_prepared(device, lvm_prepare_lv_paths):
+                continue
             luks2 = encryption_utils.CephLuks2(device)
             if luks2.is_ceph_encrypted:
                 if luks2.is_tpm2_enrolled and self.osd_fsid == luks2.osd_fsid:
                     self.pre_activate_tpm2(device)
         found = direct_report(self.devices)
 
-        holders = disk.get_block_device_holders()
         for osd_uuid, meta in found.items():
             realpath_device = os.path.realpath(meta['device'])
-            parent_device = holders.get(realpath_device)
-            if parent_device and any('ceph.cluster_fsid' in lv.lv_tags for lv in Device(parent_device).lvs):
+            if lvm_api.is_ceph_volume_lvm_prepared(realpath_device,
+                                                   lvm_prepare_lv_paths):
                 continue
             osd_id = meta['osd_id']
             if self.osd_id is not None and str(osd_id) != str(self.osd_id):
