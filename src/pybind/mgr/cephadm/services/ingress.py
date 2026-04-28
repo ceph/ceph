@@ -8,7 +8,7 @@ from ceph.deployment.service_spec import ServiceSpec, IngressSpec, MonitorCertSo
 from ceph.deployment.utils import is_ipv6
 from mgr_util import build_url
 from cephadm import utils
-from orchestrator import OrchestratorError, DaemonDescription
+from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService, CephadmService
 from .service_registry import register_cephadm_service
 from cephadm.tlsobject_types import TLSCredentials
@@ -327,6 +327,56 @@ class IngressService(CephService):
         daemon_spec.final_config, daemon_spec.deps = self.keepalived_generate_config(daemon_spec)
 
         return daemon_spec
+
+    @staticmethod
+    def _ingress_keepalived_required_count(
+        mgr: "CephadmOrchestrator",
+        ispec: IngressSpec,
+    ) -> int:
+        """
+        get keepalived slot count from ingress placement only
+        """
+        return ispec.placement.get_target_count(mgr.cache.get_schedulable_hosts())
+
+    @staticmethod
+    def keepalived_should_auto_start(
+        mgr: "CephadmOrchestrator",
+        dd: DaemonDescription,
+        spec: ServiceSpec,
+    ) -> bool:
+        """
+        Whether a stopped keepalived unit should be started by the serve loop.
+        Does not auto-start while more keepalived daemons exist than the placement target
+        """
+        ispec = cast(IngressSpec, spec)
+        ingress_daemons = mgr.cache.get_daemons_by_service(ispec.service_name())
+        keepalived_total = len(
+            [d for d in ingress_daemons if d.daemon_type == 'keepalived']
+        )
+        required = IngressService._ingress_keepalived_required_count(mgr, ispec)
+        if keepalived_total > required:
+            return False
+        if ispec.keepalive_only:
+            if not ispec.backend_service:
+                return False
+            for d in mgr.cache.get_daemons_by_service(ispec.backend_service):
+                if d.hostname != dd.hostname:
+                    continue
+                if d.status in (
+                    DaemonDescriptionStatus.running,
+                    DaemonDescriptionStatus.starting,
+                ):
+                    return True
+            return False
+        for d in mgr.cache.get_daemons_by_service(spec.service_name()):
+            if d.daemon_type != 'haproxy' or d.hostname != dd.hostname:
+                continue
+            if d.status in (
+                DaemonDescriptionStatus.running,
+                DaemonDescriptionStatus.starting,
+            ):
+                return True
+        return False
 
     @staticmethod
     def get_keepalived_dependencies(mgr: "CephadmOrchestrator", spec: Optional[ServiceSpec]) -> List[str]:
