@@ -5734,6 +5734,8 @@ WRITE_CLASS_ENCODER(object_copy_cursor_t)
  * the copy request). The client then looks into the attrs, data, and/or omap
  * based on the contents of the cursor.
  */
+struct watch_info_t;
+
 struct object_copy_data_t {
   enum {
     FLAG_DATA_DIGEST = 1<<0,
@@ -5763,12 +5765,15 @@ struct object_copy_data_t {
   uint64_t truncate_seq;
   uint64_t truncate_size;
 
+  std::map<std::pair<uint64_t, entity_name_t>, watch_info_t> watchers;
+
 public:
   object_copy_data_t() :
     size((uint64_t)-1), data_digest(-1),
     omap_digest(-1), flags(0),
     truncate_seq(0),
-    truncate_size(0) {}
+    truncate_size(0),
+    watchers() {}
 
   static std::list<object_copy_data_t> generate_test_instances();
   void encode(ceph::buffer::list& bl, uint64_t features) const;

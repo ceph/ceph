@@ -5654,7 +5654,7 @@ list<object_copy_cursor_t> object_copy_cursor_t::generate_test_instances()
 
 void object_copy_data_t::encode(ceph::buffer::list& bl, uint64_t features) const
 {
-  ENCODE_START(8, 5, bl);
+  ENCODE_START(9, 5, bl);
   encode(size, bl);
   encode(mtime, bl);
   encode(attrs, bl);
@@ -5671,12 +5671,13 @@ void object_copy_data_t::encode(ceph::buffer::list& bl, uint64_t features) const
   encode(truncate_seq, bl);
   encode(truncate_size, bl);
   encode(reqid_return_codes, bl);
+  encode(watchers, bl, features);
   ENCODE_FINISH(bl);
 }
 
 void object_copy_data_t::decode(ceph::buffer::list::const_iterator& bl)
 {
-  DECODE_START(8, bl);
+  DECODE_START(9, bl);
   if (struct_v < 5) {
     // old
     decode(size, bl);
@@ -5737,6 +5738,11 @@ void object_copy_data_t::decode(ceph::buffer::list::const_iterator& bl)
     if (struct_v >= 8) {
       decode(reqid_return_codes, bl);
     }
+    if (struct_v >= 9) {
+      decode(watchers,bl);
+    } else {
+      watchers.clear();
+    }
   }
   DECODE_FINISH(bl);
 }
@@ -5773,7 +5779,17 @@ list<object_copy_data_t> object_copy_data_t::generate_test_instances()
   o.back().omap_header.append("this is an omap header");
   o.back().snaps.push_back(123);
   o.back().reqids.push_back(make_pair(osd_reqid_t(), version_t()));
-
+  entity_addr_t ea;
+  ea.set_type(entity_addr_t::TYPE_LEGACY);
+  ea.set_nonce(5);
+  ea.set_family(AF_INET);
+  ea.set_in4_quad(0, 127);
+  ea.set_in4_quad(1, 0);
+  ea.set_in4_quad(2, 1);
+  ea.set_in4_quad(3, 2);
+  ea.set_port(2);
+  o.back().watchers[make_pair(123, entity_name_t::CLIENT(777))] = watch_info_t(123, 99, ea);
+  o.back().watchers[make_pair(456, entity_name_t::CLIENT(555))] = watch_info_t(456, 60, ea);
   return o;
 }
 
@@ -5809,6 +5825,15 @@ void object_copy_data_t::dump(Formatter *f) const
     if (it != reqid_return_codes.end()) {
       f->dump_int("return_code", it->second);
     }
+    f->close_section();
+  }
+  f->close_section();
+  f->open_object_section("watchers");
+  for (auto p = watchers.cbegin(); p != watchers.cend(); ++p) {
+    CachedStackStringStream css;
+    *css << p->first.second;
+    f->open_object_section(css->strv());
+    p->second.dump(f);
     f->close_section();
   }
   f->close_section();
