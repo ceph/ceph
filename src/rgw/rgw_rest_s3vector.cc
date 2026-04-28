@@ -3,6 +3,7 @@
 
 #include "rgw_op.h"
 #include "rgw_rest_s3vector.h"
+#include "rgw_rest_s3.h"
 #include "rgw_s3vector.h"
 #include "rgw_process_env.h"
 #include "common/async/yield_context.h"
@@ -16,14 +17,11 @@ namespace {
 class RGWS3VectorBase : public RGWDefaultResponseOp {
 protected:
   bufferlist in_data;
+public:
+  explicit RGWS3VectorBase(bufferlist&& data) : in_data(std::move(data)) {}
+protected:
   template<typename T>
   int do_init_processing(T& configuration, optional_yield y) {
-    const auto max_size = s->cct->_conf->rgw_max_put_param_size;
-    int ret = 0;
-    if (std::tie(ret, in_data) = read_all_input(s, max_size, false); ret < 0) {
-      ldpp_dout(this, 1) << "ERROR: failed to read JSON s3vector payload, ret = " << ret << dendl;
-      return ret;
-    }
     if (in_data.length() == 0) {
       ldpp_dout(this, 1) << "ERROR: JSON s3vector payload missing" << dendl;
       return -EINVAL;
@@ -47,7 +45,9 @@ protected:
 
 class RGWS3VectorCreateIndex : public RGWS3VectorBase {
   rgw::s3vector::create_index_t configuration;
-
+public:
+  explicit RGWS3VectorCreateIndex(bufferlist&& data) : RGWS3VectorBase(std::move(data)) {}
+private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector CreateIndex" << dendl;
     // policy TODO: implement permission check
@@ -102,7 +102,9 @@ class RGWS3VectorCreateIndex : public RGWS3VectorBase {
 class RGWS3VectorCreateVectorBucket : public RGWS3VectorBase {
   rgw::s3vector::create_vector_bucket_t configuration;
   std::unique_ptr<rgw::sal::VectorBucket> bucket;
-
+public:
+  explicit RGWS3VectorCreateVectorBucket(bufferlist&& data) : RGWS3VectorBase(std::move(data)) {}
+private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector CreateVectorBucket" << dendl;
     if (s->auth.identity->is_anonymous()) {
@@ -236,7 +238,9 @@ class RGWS3VectorCreateVectorBucket : public RGWS3VectorBase {
 
 class RGWS3VectorDeleteIndex : public RGWS3VectorBase {
   rgw::s3vector::delete_index_t configuration;
-
+public:
+  explicit RGWS3VectorDeleteIndex(bufferlist&& data) : RGWS3VectorBase(std::move(data)) {}
+private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector DeleteIndex" << dendl;
     // policy TODO: implement permission check
@@ -269,7 +273,9 @@ class RGWS3VectorDeleteIndex : public RGWS3VectorBase {
 
 class RGWS3VectorDeleteVectorBucket : public RGWS3VectorBase {
   rgw::s3vector::delete_vector_bucket_t configuration;
-
+public:
+  explicit RGWS3VectorDeleteVectorBucket(bufferlist&& data) : RGWS3VectorBase(std::move(data)) {}
+private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector DeleteVectorBucket" << dendl;
     if (!verify_bucket_permission(this, s, configuration.vector_bucket_arn.get(), rgw::IAM::s3vectorsDeleteVectorBucket)) {
@@ -329,7 +335,9 @@ class RGWS3VectorDeleteVectorBucket : public RGWS3VectorBase {
 
 class RGWS3VectorDeleteVectorBucketPolicy : public RGWS3VectorBase {
   rgw::s3vector::delete_vector_bucket_policy_t configuration;
-
+public:
+  explicit RGWS3VectorDeleteVectorBucketPolicy(bufferlist&& data) : RGWS3VectorBase(std::move(data)) {}
+private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector DeleteVectorBucketPolicy" << dendl;
     // policy TODO: implement permission check
@@ -362,7 +370,9 @@ class RGWS3VectorDeleteVectorBucketPolicy : public RGWS3VectorBase {
 
 class RGWS3VectorPutVectors : public RGWS3VectorBase {
   rgw::s3vector::put_vectors_t configuration;
-
+public:
+  explicit RGWS3VectorPutVectors(bufferlist&& data) : RGWS3VectorBase(std::move(data)) {}
+private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector PutVectors" << dendl;
     // policy TODO: implement permission check
@@ -396,7 +406,9 @@ class RGWS3VectorPutVectors : public RGWS3VectorBase {
 class RGWS3VectorGetVectors : public RGWS3VectorBase {
   rgw::s3vector::get_vectors_t configuration;
   rgw::s3vector::get_vectors_reply_t reply;
-
+public:
+  explicit RGWS3VectorGetVectors(bufferlist&& data) : RGWS3VectorBase(std::move(data)) {}
+private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector GetVectors" << dendl;
     // policy TODO: implement permission check
@@ -448,7 +460,9 @@ class RGWS3VectorGetVectors : public RGWS3VectorBase {
 class RGWS3VectorListVectors : public RGWS3VectorBase {
   rgw::s3vector::list_vectors_t configuration;
   rgw::s3vector::list_vectors_reply_t reply;
-
+public:
+  explicit RGWS3VectorListVectors(bufferlist&& data) : RGWS3VectorBase(std::move(data)) {}
+private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector ListVectors" << dendl;
     // policy TODO: implement permission check
@@ -501,7 +515,9 @@ class RGWS3VectorListVectorBuckets : public RGWS3VectorBase {
   rgw::s3vector::list_vector_buckets_t configuration;
   rgw::sal::BucketList listing;
   std::string zonegroup_name;
-
+public:
+  explicit RGWS3VectorListVectorBuckets(bufferlist&& data) : RGWS3VectorBase(std::move(data)) {}
+private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector ListVectorBuckets" << dendl;
     if (s->auth.identity->is_anonymous()) {
@@ -582,7 +598,9 @@ class RGWS3VectorListVectorBuckets : public RGWS3VectorBase {
 class RGWS3VectorGetVectorBucket : public RGWS3VectorBase {
   rgw::s3vector::get_vector_bucket_t configuration;
   std::unique_ptr<rgw::sal::VectorBucket> bucket;
-
+public:
+  explicit RGWS3VectorGetVectorBucket(bufferlist&& data) : RGWS3VectorBase(std::move(data)) {}
+private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector GetVectorBucket" << dendl;
 
@@ -656,7 +674,9 @@ class RGWS3VectorGetVectorBucket : public RGWS3VectorBase {
 class RGWS3VectorGetIndex : public RGWS3VectorBase {
   rgw::s3vector::get_index_t configuration;
   rgw::s3vector::get_index_reply_t reply;
-
+public:
+  explicit RGWS3VectorGetIndex(bufferlist&& data) : RGWS3VectorBase(std::move(data)) {}
+private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector GetIndex" << dendl;
     // policy TODO: implement permission check
@@ -708,7 +728,9 @@ class RGWS3VectorGetIndex : public RGWS3VectorBase {
 class RGWS3VectorListIndexes : public RGWS3VectorBase {
   rgw::s3vector::list_indexes_t configuration;
   rgw::s3vector::list_indexes_reply_t reply;
-
+public:
+  explicit RGWS3VectorListIndexes(bufferlist&& data) : RGWS3VectorBase(std::move(data)) {}
+private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector ListIndexes" << dendl;
     // policy TODO: implement permission check
@@ -766,7 +788,9 @@ class RGWS3VectorListIndexes : public RGWS3VectorBase {
 
 class RGWS3VectorPutVectorBucketPolicy : public RGWS3VectorBase {
   rgw::s3vector::put_vector_bucket_policy_t configuration;
-
+public:
+  explicit RGWS3VectorPutVectorBucketPolicy(bufferlist&& data) : RGWS3VectorBase(std::move(data)) {}
+private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector PutVectorBucketPolicy" << dendl;
     // policy TODO: implement permission check
@@ -799,7 +823,9 @@ class RGWS3VectorPutVectorBucketPolicy : public RGWS3VectorBase {
 
 class RGWS3VectorGetVectorBucketPolicy : public RGWS3VectorBase {
   rgw::s3vector::get_vector_bucket_policy_t configuration;
-
+public:
+  explicit RGWS3VectorGetVectorBucketPolicy(bufferlist&& data) : RGWS3VectorBase(std::move(data)) {}
+private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector GetVectorBucketPolicy" << dendl;
     // policy TODO: implement permission check
@@ -832,7 +858,9 @@ class RGWS3VectorGetVectorBucketPolicy : public RGWS3VectorBase {
 
 class RGWS3VectorDeleteVectors : public RGWS3VectorBase {
   rgw::s3vector::delete_vectors_t configuration;
-
+public:
+  explicit RGWS3VectorDeleteVectors(bufferlist&& data) : RGWS3VectorBase(std::move(data)) {}
+private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector DeleteVectors" << dendl;
     // policy TODO: implement permission check
@@ -866,7 +894,9 @@ class RGWS3VectorDeleteVectors : public RGWS3VectorBase {
 class RGWS3VectorQueryVectors : public RGWS3VectorBase {
   rgw::s3vector::query_vectors_t configuration;
   rgw::s3vector::query_vectors_reply_t reply;
-
+public:
+  explicit RGWS3VectorQueryVectors(bufferlist&& data) : RGWS3VectorBase(std::move(data)) {}
+private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector QueryVectors" << dendl;
     // policy TODO: implement permission check
@@ -918,47 +948,51 @@ class RGWS3VectorQueryVectors : public RGWS3VectorBase {
 }
 
 int RGWHandler_REST_s3Vector::init(rgw::sal::Driver* driver, req_state *s, rgw::io::BasicClient *cio) {
-  if (int ret = RGWHandler_REST_S3::init(driver, s, cio); ret < 0) {
+  s->dialect = "s3vectors";
+  if (int ret = RGWHandler_REST::init(driver, s, cio); ret < 0) {
     return ret;
   }
-  // s3vectors API uses JSON formatter
   return RGWHandler_REST::allocate_formatter(s, RGWFormat::JSON, false);
+}
+
+int RGWHandler_REST_s3Vector::authorize(const DoutPrefixProvider* dpp, optional_yield y) {
+  return RGW_Auth_S3::authorize(dpp, driver, auth_registry, s, y);
 }
 
 RGWOp* RGWHandler_REST_s3Vector::op_post() {
   const auto& op_name = s->init_state.url_bucket;
   if (op_name == "CreateIndex")
-    return new RGWS3VectorCreateIndex();
+    return new RGWS3VectorCreateIndex(std::move(bl_post_body));
   if (op_name == "CreateVectorBucket")
-    return new RGWS3VectorCreateVectorBucket();
+    return new RGWS3VectorCreateVectorBucket(std::move(bl_post_body));
   if (op_name == "PutVectors")
-    return new RGWS3VectorPutVectors();
+    return new RGWS3VectorPutVectors(std::move(bl_post_body));
   if (op_name == "PutVectorBucketPolicy")
-    return new RGWS3VectorPutVectorBucketPolicy();
+    return new RGWS3VectorPutVectorBucketPolicy(std::move(bl_post_body));
   if (op_name == "DeleteVectors")
-    return new RGWS3VectorDeleteVectors();
+    return new RGWS3VectorDeleteVectors(std::move(bl_post_body));
   if (op_name == "DeleteIndex")
-    return new RGWS3VectorDeleteIndex();
+    return new RGWS3VectorDeleteIndex(std::move(bl_post_body));
   if (op_name == "DeleteVectorBucket")
-    return new RGWS3VectorDeleteVectorBucket();
+    return new RGWS3VectorDeleteVectorBucket(std::move(bl_post_body));
   if (op_name == "DeleteVectorBucketPolicy")
-    return new RGWS3VectorDeleteVectorBucketPolicy();
+    return new RGWS3VectorDeleteVectorBucketPolicy(std::move(bl_post_body));
   if (op_name == "GetIndex")
-    return new RGWS3VectorGetIndex();
+    return new RGWS3VectorGetIndex(std::move(bl_post_body));
   if (op_name == "GetVectors")
-    return new RGWS3VectorGetVectors();
+    return new RGWS3VectorGetVectors(std::move(bl_post_body));
   if (op_name == "GetVectorBucket")
-    return new RGWS3VectorGetVectorBucket();
+    return new RGWS3VectorGetVectorBucket(std::move(bl_post_body));
   if (op_name == "GetVectorBucketPolicy")
-    return new RGWS3VectorGetVectorBucketPolicy();
+    return new RGWS3VectorGetVectorBucketPolicy(std::move(bl_post_body));
   if (op_name == "ListIndexes")
-    return new RGWS3VectorListIndexes();
+    return new RGWS3VectorListIndexes(std::move(bl_post_body));
   if (op_name == "ListVectors")
-    return new RGWS3VectorListVectors();
+    return new RGWS3VectorListVectors(std::move(bl_post_body));
   if (op_name == "ListVectorBuckets")
-    return new RGWS3VectorListVectorBuckets();
+    return new RGWS3VectorListVectorBuckets(std::move(bl_post_body));
   if (op_name == "QueryVectors")
-    return new RGWS3VectorQueryVectors();
+    return new RGWS3VectorQueryVectors(std::move(bl_post_body));
   return nullptr;
 }
 
