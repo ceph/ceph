@@ -219,6 +219,7 @@ class HostAssignment(object):
                  draining_hosts: List[orchestrator.HostSpec],
                  daemons: List[orchestrator.DaemonDescription],
                  related_service_daemons: Optional[List[DaemonDescription]] = None,
+                 related_service_required_count: Optional[int] = None,
                  networks: Dict[str, Dict[str, Dict[str, List[str]]]] = {},
                  filter_new_host: Optional[Callable[[str, ServiceSpec], bool]] = None,
                  allow_colo: bool = False,
@@ -240,6 +241,7 @@ class HostAssignment(object):
         self.service_name = spec.service_name()
         self.daemons = daemons
         self.related_service_daemons = related_service_daemons
+        self.related_service_required_count = related_service_required_count
         self.networks = networks
         self.allow_colo = allow_colo
         self.per_host_daemon_type = per_host_daemon_type
@@ -473,8 +475,27 @@ class HostAssignment(object):
                     # If we still need to remove more, remove from hosts with related services
                     remaining_needed = total_excess - len(to_delete)
                     if remaining_needed > 0:
-                        remaining = [dd for dd in existing if dd not in to_delete]
-                        to_delete.extend(remaining[count:])
+                        # Restrict defer-removal behavior to ingress only.
+                        should_defer_related_removal = False
+                        if self.spec.service_type == 'ingress':
+                            related_service_count = len(self.related_service_daemons)
+                            related_service_required_count = (
+                                self.related_service_required_count or count
+                            )
+                            related_service_is_ranked = any(
+                                dd.rank is not None
+                                for dd in self.related_service_daemons
+                            )
+                            # For ingress with ranked backends (e.g. NFS), if backend
+                            # scale-down is still pending, defer deleting co-located
+                            # ingress daemons until a later iteration.
+                            should_defer_related_removal = (
+                                related_service_is_ranked
+                                and related_service_count > related_service_required_count
+                            )
+                        if not should_defer_related_removal:
+                            remaining = [dd for dd in existing if dd not in to_delete]
+                            to_delete.extend(remaining[count:])
 
                     non_matching_daemons = to_delete
                 else:

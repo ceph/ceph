@@ -860,6 +860,17 @@ class CephadmServe:
         rank_map = None
         if svc.ranked(spec):
             rank_map = self.mgr.spec_store[spec.service_name()].rank_map or {}
+        related_service_required_count = None
+        if service_type == 'ingress':
+            ingress_spec = cast(IngressSpec, spec)
+            assert ingress_spec.backend_service
+            backend_spec = self.mgr.spec_store.active_specs.get(
+                ingress_spec.backend_service
+            )
+            if backend_spec and backend_spec.placement:
+                related_service_required_count = backend_spec.placement.get_target_count(
+                    self.mgr.cache.get_schedulable_hosts()
+                )
         host_selector = _host_selector(svc)
         ha = HostAssignment(
             spec=spec,
@@ -870,6 +881,7 @@ class CephadmServe:
             blocking_daemon_hosts=blocking_daemon_hosts,
             daemons=daemons,
             related_service_daemons=related_service_daemons,
+            related_service_required_count=related_service_required_count,
             networks=self.mgr.cache.networks,
             filter_new_host=host_filters.get(service_type, None),
             allow_colo=svc.allow_colo(),
