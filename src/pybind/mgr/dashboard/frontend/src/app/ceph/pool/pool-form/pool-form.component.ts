@@ -27,7 +27,6 @@ import { CrushRule } from '~/app/shared/models/crush-rule';
 import { CrushStep } from '~/app/shared/models/crush-step';
 import { ErasureCodeProfile } from '~/app/shared/models/erasure-code-profile';
 import { FinishedTask } from '~/app/shared/models/finished-task';
-import { Permission } from '~/app/shared/models/permissions';
 import { PoolFormInfo } from '~/app/shared/models/pool-form-info';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -41,6 +40,7 @@ import { PoolEditModeResponseModel } from '../../block/mirroring/pool-edit-mode-
 import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
 import { MonitorService } from '~/app/shared/api/monitor.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { Permissions } from '~/app/shared/models/permissions';
 
 interface FormFieldDescription {
   externalFieldName: string;
@@ -72,7 +72,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
 
   isFormSubmitted = false;
 
-  permission: Permission;
+  permissions: Permissions;
   form: CdFormGroup;
   ecProfiles: ErasureCodeProfile[];
   selectedEcp: ErasureCodeProfile;
@@ -138,11 +138,11 @@ export class PoolFormComponent extends CdForm implements OnInit {
   }
 
   authenticate() {
-    this.permission = this.authStorageService.getPermissions().pool;
+    this.permissions = this.authStorageService.getPermissions();
     if (
-      !this.permission.read ||
-      (!this.permission.update && this.editing) ||
-      (!this.permission.create && !this.editing)
+      !this.permissions?.pool?.read ||
+      (!this.permissions?.pool?.update && this.editing) ||
+      (!this.permissions?.pool?.create && !this.editing)
     ) {
       throw new DashboardNotFoundError();
     }
@@ -221,13 +221,15 @@ export class PoolFormComponent extends CdForm implements OnInit {
   }
 
   ngOnInit() {
-    this.monitorService.getMonitor().subscribe((data: MonitorResponse) => {
-      this.isStretchMode = data?.mon_status?.stretch_mode || false;
-      if (this.isStretchMode) {
-        this.applyStretchModeRestrictions();
-      }
-      this.replicatedRuleChange();
-    });
+    if (this.permissions?.monitor?.read) {
+      this.monitorService.getMonitor().subscribe((data: MonitorResponse) => {
+        this.isStretchMode = data?.mon_status?.stretch_mode || false;
+        if (this.isStretchMode) {
+          this.applyStretchModeRestrictions();
+        }
+        this.replicatedRuleChange();
+      });
+    }
     this.poolService.getInfo().subscribe((info: PoolFormInfo) => {
       this.initInfo(info);
       if (this.editing) {
