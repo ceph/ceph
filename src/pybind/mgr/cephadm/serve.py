@@ -34,6 +34,7 @@ from mgr_module import MonCommandFailed
 from mgr_util import format_bytes
 from cephadm.services.service_registry import service_registry
 from cephadm.services.nfs import NFSService
+from cephadm.services.ingress import IngressService
 
 from . import utils
 from . import exchange
@@ -45,7 +46,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 REQUIRES_POST_ACTIONS = ['grafana', 'iscsi', 'prometheus', 'alertmanager', 'rgw', 'nvmeof', 'mgmt-gateway']
-DISABLED_SERVICES = ['nfs']
+# Daemons not systemd-enabled on deploy, mgr start them when not user stopped
+DISABLED_SERVICES = ['nfs', 'keepalived']
 
 WHICH = ssh.RemoteExecutable('which')
 CEPHADM_EXE = ssh.RemoteExecutable('/usr/bin/cephadm')
@@ -1248,6 +1250,10 @@ class CephadmServe:
                             highest_gen_daemon = max(same_rank_daemons,
                                                      key=lambda d: d.rank_generation or 0)
                             should_start = (dd == highest_gen_daemon)
+                    elif dd.daemon_type == 'keepalived' and spec is not None:
+                        should_start = IngressService.keepalived_should_auto_start(
+                            self.mgr, dd, spec
+                        )
                     else:
                         should_start = True
                     if should_start:
