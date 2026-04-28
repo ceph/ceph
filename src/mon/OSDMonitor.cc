@@ -7566,6 +7566,51 @@ int OSDMonitor::normalize_profile(const string& profilename,
   return 0;
 }
 
+int OSDMonitor::crush_rule_create_replica(const string &name,
+					     const string &root,
+               int num_zones,
+               int num_replica_per_zone,
+               const string &zone_failure_domain,
+               const string &osd_failure_domain,
+               const string &device_class,
+               bool force,
+					     ostream *ss)
+{
+  if (osdmap.crush->rule_exists(name)) {
+    // The name is uniquely associated to a ruleid and the rule it contains
+      // From the user point of view, the rule is more meaningfull.
+      return -EEXIST;
+    }
+
+    CrushWrapper newcrush = _get_pending_crush();
+
+    if (newcrush.rule_exists(name)) {
+      // The name is uniquely associated to a ruleid and the rule it contains
+      // From the user point of view, the rule is more meaningfull.
+      return -EALREADY;
+    } else {
+      int ruleno;
+      if (num_zones > 1) {
+        ruleno = newcrush.add_simple_stretch_rule(
+        name, root, zone_failure_domain, osd_failure_domain, num_zones, num_replica_per_zone, device_class,
+        "firstn", pg_pool_t::TYPE_REPLICATED, force, ss);
+      }
+      else {
+        ruleno = newcrush.add_simple_rule(
+        name, root, osd_failure_domain, device_class,
+        "firstn", pg_pool_t::TYPE_REPLICATED, ss);
+      }
+      if (ruleno < 0) {
+        return ruleno;
+      }
+
+      pending_inc.crush.clear();
+      newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
+      return ruleno;
+  }
+  return 0;
+}
+
 int OSDMonitor::crush_rule_create_erasure(const string &name,
 					     const string &profile,
 					     int *rule,
@@ -11759,33 +11804,59 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     cmd_getval(cmdmap, "type", type);
     cmd_getval(cmdmap, "class", device_class);
 
-    if (osdmap.crush->rule_exists(name)) {
-      // The name is uniquely associated to a ruleid and the rule it contains
-      // From the user point of view, the rule is more meaningfull.
-      ss << "rule " << name << " already exists";
-      err = 0;
-      goto reply_no_propose;
-    }
-
-    CrushWrapper newcrush = _get_pending_crush();
-
-    if (newcrush.rule_exists(name)) {
-      // The name is uniquely associated to a ruleid and the rule it contains
-      // From the user point of view, the rule is more meaningfull.
-      ss << "rule " << name << " already exists";
-      err = 0;
-    } else {
-      int ruleno = newcrush.add_simple_rule(
-	name, root, type, device_class,
-	"firstn", pg_pool_t::TYPE_REPLICATED, &ss);
-      if (ruleno < 0) {
-	err = ruleno;
+    err = crush_rule_create_replica(name, root, 1, 1, "", type, device_class, false, &ss);
+    if (err < 0) {
+      switch(err) {
+      case -EEXIST: // return immediately
+	ss << "rule " << name << " already exists";
+	err = 0;
 	goto reply_no_propose;
+      case -EALREADY: // wait for pending to be proposed
+	ss << "rule " << name << " already exists";
+	err = 0;
+	break;
+      default: // non recoverable error
+ 	goto reply_no_propose;
       }
-
-      pending_inc.crush.clear();
-      newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
+    } else {
+      ss << "created rule " << name << " at " << err;
     }
+
+    getline(ss, rs);
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
+					      get_last_committed() + 1));
+    return true;
+
+  } else if (prefix == "osd crush rule create-stretch-replicated") {
+    string name = cmd_getval_or<string>(cmdmap, "rule_name", "stretch_rule");
+    string root = cmd_getval_or<string>(cmdmap, "root", "default");
+    int num_zones = cmd_getval_or<int64_t>(cmdmap, "zones", 2);
+    int num_replica_per_zone = cmd_getval_or<int64_t>(cmdmap, "num_replica_per_zone", 2);
+    string zone_failure_domain = cmd_getval_or<string>(cmdmap, "zone_failure_domain", "datacenter");
+    string osd_failure_domain = cmd_getval_or<string>(cmdmap, "osd_failure_domain", "host");
+    bool force = false;
+    cmd_getval(cmdmap, "force", force);
+    string device_class;
+    cmd_getval(cmdmap, "class", device_class);
+
+    err = crush_rule_create_replica(name, root, num_zones, num_replica_per_zone, zone_failure_domain, osd_failure_domain, device_class, force, &ss);
+    if (err < 0) {
+      switch(err) {
+      case -EEXIST: // return immediately
+	ss << "rule " << name << " already exists";
+	err = 0;
+	goto reply_no_propose;
+      case -EALREADY: // wait for pending to be proposed
+	ss << "rule " << name << " already exists";
+	err = 0;
+	break;
+      default: // non recoverable error
+ 	goto reply_no_propose;
+      }
+    } else {
+      ss << "created rule " << name << " at " << err;
+    }
+
     getline(ss, rs);
     wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
