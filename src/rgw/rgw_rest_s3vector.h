@@ -3,21 +3,21 @@
 
 #pragma once
 
-#include "rgw_rest_s3.h"
+#include "rgw_rest.h"
 
-class RGWHandler_REST_s3Vector : public RGWHandler_REST_S3 {
-protected:
-  int init_permissions(RGWOp* op, optional_yield y) override {return 0;}
-  int read_permissions(RGWOp* op, optional_yield y) override {return 0;}
-  bool supports_quota() override {return false;}
+class RGWHandler_REST_s3Vector : public RGWHandler_REST {
+  const rgw::auth::StrategyRegistry& auth_registry;
+  bufferlist bl_post_body;
+  RGWOp *op_post() override;
 
 public:
-  explicit RGWHandler_REST_s3Vector(const rgw::auth::StrategyRegistry& auth_registry)
-    : RGWHandler_REST_S3(auth_registry) {}
-  virtual ~RGWHandler_REST_s3Vector() = default;
+  RGWHandler_REST_s3Vector(const rgw::auth::StrategyRegistry& auth_registry,
+                           const bufferlist& bl_post_body)
+    : auth_registry(auth_registry), bl_post_body(bl_post_body) {}
+  ~RGWHandler_REST_s3Vector() override = default;
 
   int init(rgw::sal::Driver* driver, req_state *s, rgw::io::BasicClient *cio) override;
-  RGWOp *op_post() override;
-  static RGWOp* create_post_op(const std::string& op_name);
+  int authorize(const DoutPrefixProvider* dpp, optional_yield y) override;
+  int postauth_init(optional_yield y) override { return 0; }
+  int read_permissions(RGWOp* op, optional_yield y) override { return 0; }
 };
-
