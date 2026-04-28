@@ -754,6 +754,85 @@ The relevant erasure-code profile properties are as follows:
    explicitly. If only the erasure-code profile is specified and the rule
    argument is omitted, then Ceph will create the CRUSH rule automatically.
 
+Creating a rule for a replicated pool in stretch mode
+-----------------------------------------------------
+
+Create the following CRUSH rule for a stretch cluster spread across geographically separated data centers::
+
+   rule stretch_rule {
+      id 2
+      type replicated
+      step take {root}
+      step choose firstn 0 type {zone-failure-domain}
+      step chooseleaf firstn {num_replica_per_zone} type {host-failure-domain}
+      step emit
+   }
+
+Unless the ``--force`` flag is used, the command performs several validation
+checks on the CRUSH hierarchy:
+1. **Number of zones**: The hierarchy under ``root`` must contain at least
+   ``zones`` buckets of type ``zone-failure-domain``.
+2. **Items per zone**: Each zone bucket must contain at least ``num_replica_per_zone`` items of type
+   ``osd-failure-domain``.
+3. **OSD presence**: Each ``osd-failure-domain`` bucket must contain at least
+   one OSD.
+
+To create a rule for a replicated pool in stretch mode, run a command of the following form:
+
+.. prompt:: bash $
+
+   ceph osd crush rule create-stretch-replicated [{name}] [{root}] [{zone-failure-domain}]
+   [{osd-failure-domain}] [{zones}] [{num_replica_per_zone}] [--force] [{class}]
+
+For details on this command's parameters, see the following:
+
+``name``
+   :Description: The name of the rule.
+   :Type: String
+   :Required: No
+   :Default: ``stretch_rule``
+
+``root``
+   :Description: The name of the CRUSH hierarchy node under which data is to be placed.
+   :Type: String
+   :Required: No
+   :Default: ``default``
+
+``zone-failure-domain``
+   :Description: The type of CRUSH nodes used for the top-level distribution (zones).
+   :Type: String
+   :Required: No
+   :Default: ``datacenter``
+
+``osd-failure-domain``
+   :Description: The type of CRUSH nodes used for the second-level distribution within each zone.
+   :Type: String
+   :Required: No
+   :Default: ``host``
+
+``zones``
+   :Description: The number of zones expected in the root.
+   :Type: Integer
+   :Required: No
+   :Default: ``2``
+
+``num_replica_per_zone``
+   :Description: The expected number of replica failure-domain to choose per zone.
+   :Type: Integer
+   :Required: No
+   :Default: ``2``
+
+``force``
+   :Description: If set, bypasses validation checks for the number of zones and OSD failure domains.
+   :Type: Boolean
+   :Required: No
+   :Default: ``false``
+
+``class``
+   :Description: The device class on which data is to be placed (e.g., `ssd` or `hdd`).
+   :Type: String
+   :Required: No
+   :Example: ``ssd``
 
 .. _rados-crush-msr-rules:
 
