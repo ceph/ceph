@@ -922,17 +922,19 @@ def _list_ipv4_networks(
 def _parse_ipv4_route(out: str) -> Dict[str, Dict[str, Set[str]]]:
     r = {}  # type: Dict[str, Dict[str, Set[str]]]
     p = re.compile(
-        r'^(\S+) (?:via \S+)? ?dev (\S+) (.*)scope link (.*)src (\S+)'
+        r'^(?P<net>\S+)(?: via \S+)? dev (?P<iface>\S+).*?(?:\ssrc\s(?P<src>\S+))(?:\s|$)'
     )
     for line in out.splitlines():
-        m = p.findall(line)
+        m = p.search(line)
         if not m:
             continue
-        net = m[0][0]
+        net = m.group('net')
+        if net.lower() == 'default':
+            continue
         if '/' not in net:  # aggregate /32 mask for single host sub-networks
             net += '/32'
-        iface = m[0][1]
-        ip = m[0][4]
+        iface = m.group('iface')
+        ip = m.group('src')
         if net not in r:
             r[net] = {}
         if iface not in r[net]:

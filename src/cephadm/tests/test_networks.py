@@ -1,10 +1,14 @@
+# flake8: noqa: Q000, W291
+# This test file includes large multiline `ip`/`ip -6` fixtures copied from real
+# host output; keep them byte-stable (including occasional trailing spaces in the
+# captured text) and allow legacy double-quoted dict literals in expectations.
 import json
 from textwrap import dedent
 from unittest import mock
 
 import pytest
 
-from tests.fixtures import with_cephadm_ctx, cephadm_fs, import_cephadm
+from tests.fixtures import with_cephadm_ctx, cephadm_fs, import_cephadm  # noqa: F401
 
 from cephadmlib.host_facts import _parse_ipv4_route, _parse_ipv6_route
 from cephadmlib.net_utils import get_ipv6_address
@@ -103,6 +107,15 @@ class TestCommandListNetworks:
                 '10.88.0.0/16': {'cni-podman0': {'10.88.0.1'}},
                 '172.21.3.1/32': {'tun0': {'172.21.3.2'}},
                 '192.168.122.0/24': {'virbr0': {'192.168.122.1'}}
+            }
+        ), (
+            dedent("""
+            10.1.0.40 dev dummy0 proto kernel scope host src 10.1.0.40
+            10.123.166.0/24 dev bond0 proto kernel scope link src 10.123.166.1
+            """),
+            {
+                '10.1.0.40/32': {'dummy0': {'10.1.0.40'}},
+                '10.123.166.0/24': {'bond0': {'10.123.166.1'}},
             }
         ),
     ])
@@ -277,7 +290,7 @@ fe80000000000000505400fffe04c154 03 40 20 80     eth1
 
     @mock.patch('cephadmlib.host_facts.call_throws')
     @mock.patch('cephadmlib.host_facts.find_executable')
-    def test_command_list_networks(self, _find_exe, _call_throws, cephadm_fs, capsys):
+    def test_command_list_networks(self, _find_exe, _call_throws, cephadm_fs, capsys):  # noqa: F811
         _call_throws.return_value = ('10.4.0.1 dev tun0 proto kernel scope link src 10.4.0.2 metric 50\n', '', '')
         _find_exe.return_value = 'ip'
         with with_cephadm_ctx([]) as ctx:
