@@ -598,6 +598,26 @@ public:
     return !devices_by_id[addr.get_device_id()]->is_end_to_end_data_protection();
   }
 
+  using post_trim_callback_t =
+    std::function<base_ertr::future<>(journal_seq_t target)>;
+  void set_post_trim_callback(post_trim_callback_t cb)
+  {
+    background_process.set_post_trim_callback(std::move(cb));
+  }
+
+  base_ertr::future<> post_trim_callback(journal_seq_t target)
+  {
+    return background_process.post_trim_callback(target);
+  }
+
+  base_ertr::future<> wait_for_trim_log(std::function<bool()> f) {
+    return background_process.wait_for_trim_log(f);
+  }
+
+  void request_trim_log(journal_seq_t target) {
+    background_process.request_trim_log(target);
+  }
+
 private:
   rewrite_gen_t adjust_generation(
       data_category_t category,
@@ -876,6 +896,28 @@ private:
       return !trimmer || !main_cleaner;
     }
 
+
+    void set_post_trim_callback(post_trim_callback_t cb) {
+      trimmer->set_post_trim_callback(cb);
+    }
+
+    void clear_post_trim_callback() {
+      trimmer->set_post_trim_callback(post_trim_callback_t{});
+    }
+
+    base_ertr::future<> post_trim_callback(journal_seq_t target) {
+      return trimmer->post_trim_callback(target);
+    }
+
+    base_ertr::future<> wait_for_trim_log(std::function<bool()> f) {
+      return trim_log_waiters.wait(f);
+    }
+
+    void request_trim_log(journal_seq_t target) {
+      trimmer->request_trim_log(target);
+      maybe_wake_background();
+    }
+
   protected:
     state_t get_state() const final {
       return state;
@@ -891,6 +933,10 @@ private:
     }
 
     void maybe_wake_blocked_io() final;
+
+    void notify_trim_log_completetion() final {
+      trim_log_waiters.broadcast();
+    }
 
   private:
     // reserve helpers
@@ -1114,6 +1160,8 @@ private:
     bool is_running_until_halt = false;
     state_t state = state_t::STOP;
     eviction_state_t eviction_state;
+
+    seastar::condition_variable trim_log_waiters;
 
     friend class ::transaction_manager_test_t;
   };

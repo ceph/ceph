@@ -73,6 +73,9 @@ public:
   omap_set_keys_ret omap_set_keys(omap_root_t &log_root,
     Transaction &t, std::map<std::string, ceph::bufferlist>&& _kvs) final;
 
+  omap_set_keys_ret _omap_set_keys(omap_root_t &log_root,
+    Transaction &t, std::map<std::string, ceph::bufferlist>&& _kvs);
+
   // see omap_set_keys
   omap_set_key_ret omap_set_key(
     omap_root_t &log_root,
@@ -133,6 +136,12 @@ public:
     Transaction &t,
     const std::string &first,
     const std::string &last) final;
+
+  omap_rm_key_range_ret _omap_rm_key_range(
+    omap_root_t &log_root,
+    Transaction &t,
+    const std::string &first,
+    const std::string &last);
 
   /**
    * omap_rm_key
@@ -342,6 +351,22 @@ public:
     Transaction &t, LogNodeRef tail,
     const std::string &key, const ceph::bufferlist &value);
 
+  omap_set_key_ret
+  sync_log(Transaction &t, lognode_delta_t &delta, omap_root_t &log_root);
+  struct extracted_lognode_deltas_t {
+    lognode_deltas_t deltas;
+    journal_seq_t min_seq = JOURNAL_SEQ_NULL;
+    journal_seq_t max_seq = JOURNAL_SEQ_NULL;
+  };
+  /*
+   * The returned deltas are grouped by oid and are not guaranteed to be in
+   * journal order. min_seq and max_seq record the minimum and maximum
+   * journal_seq_t values among the merged deltas for a correctness check.
+   * This is safe even though the deltas are unordered because all returned
+   * deltas are flushed by a single transaction, and max_seq is used as the
+   * log-node trim target only after the transaction completes.
+   */
+  extracted_lognode_deltas_t extract_merged_deltas(lognode_deltas_t& deltas);
 
   TransactionManager &tm;
 };

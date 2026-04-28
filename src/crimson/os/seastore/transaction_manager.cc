@@ -53,7 +53,7 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
   ).safe_then([this] {
     return journal->open_for_mkfs();
   }).safe_then([this](auto start_seq) {
-    journal->get_trimmer().update_journal_tails(start_seq, start_seq);
+    journal->get_trimmer().update_journal_tails(start_seq, start_seq, start_seq);
     journal->get_trimmer().set_journal_head(start_seq);
     return epm->open_for_write();
   }).safe_then([this, FNAME]() {
@@ -115,6 +115,7 @@ TransactionManager::mount()
 	const auto &e,
 	const journal_seq_t &dirty_tail,
 	const journal_seq_t &alloc_tail,
+	const journal_seq_t &log_tail,
 	sea_time_point modify_time)
       {
 	auto start_seq = offsets.write_result.start_seq;
@@ -124,6 +125,7 @@ TransactionManager::mount()
 	  e,
 	  dirty_tail,
 	  alloc_tail,
+	  log_tail,
 	  modify_time);
       });
   }).safe_then([this] {
@@ -578,7 +580,8 @@ TransactionManager::do_submit_transaction(
       start_seq);
     journal->get_trimmer().update_journal_tails(
       cache->get_oldest_dirty_from().value_or(start_seq),
-      cache->get_oldest_backref_dirty_from().value_or(start_seq));
+      cache->get_oldest_backref_dirty_from().value_or(start_seq),
+      cache->get_oldest_log_dirty_from().value_or(start_seq));
     }).handle_error(
       submit_transaction_iertr::pass_further{},
       crimson::ct_error::assert_all{"Hit error submitting to journal"}
@@ -615,6 +618,15 @@ TransactionManager::get_next_dirty_extents(
   LOG_PREFIX(TransactionManager::get_next_dirty_extents);
   DEBUGT("max_bytes=0x{:x}B, seq={}", t, max_bytes, seq);
   return cache->get_next_dirty_extents(t, seq, max_bytes);
+}
+
+TransactionManager::get_next_dirty_log_node_ret
+TransactionManager::get_next_dirty_log_node(
+  journal_seq_t seq)
+{
+  LOG_PREFIX(TransactionManager::get_next_dirty_log_node);
+  DEBUG("seq={}", seq);
+  return cache->get_next_dirty_log_node(seq);
 }
 
 TransactionManager::rewrite_extent_ret

@@ -156,6 +156,7 @@ void Cache::register_metrics(store_index_t store_index)
     {src_t::TRIM_ALLOC, {sm::label_instance("src", "TRIM_ALLOC")}},
     {src_t::CLEANER_MAIN, {sm::label_instance("src", "CLEANER_MAIN")}},
     {src_t::CLEANER_COLD, {sm::label_instance("src", "CLEANER_COLD")}},
+    {src_t::TRIM_LOG, {sm::label_instance("src", "TRIM_LOG")}},
   };
   assert(labels_by_src.size() == (std::size_t)src_t::MAX);
 
@@ -1775,6 +1776,15 @@ record_t Cache::prepare_record(
     record.push_back(std::move(delta));
   }
 
+  for (auto &b : t.lognode_deltas) {
+    bufferlist bl;
+    encode(b, bl);
+    delta_info_t delta;
+    delta.type = extent_types_t::LOG_NODE_INFO;
+    delta.bl = std::move(bl);
+    record.push_back(std::move(delta));
+  }
+
   if (is_background_transaction(trans_src)) {
     assert(journal_head != JOURNAL_SEQ_NULL);
     assert(journal_dirty_tail != JOURNAL_SEQ_NULL);
@@ -1807,7 +1817,23 @@ record_t Cache::prepare_record(
       alloc_tail = *maybe_alloc_tail;
     }
     ceph_assert(alloc_tail != JOURNAL_SEQ_NULL);
-    auto tails = journal_tail_delta_t{alloc_tail, dirty_tail};
+    auto maybe_log_tail = get_oldest_log_dirty_from();
+    if (t.lognode_trim_target != JOURNAL_SEQ_NULL) {
+      auto it = pending_lognode_deltas_by_seq.upper_bound(
+       t.lognode_trim_target);
+      if (it == pending_lognode_deltas_by_seq.end()) {
+	maybe_log_tail = std::nullopt;
+      } else {
+	maybe_log_tail = it->first;
+      }
+    }
+    journal_seq_t log_tail;
+    if (!maybe_log_tail.has_value()) {
+      log_tail = journal_head;
+    } else {
+      log_tail = *maybe_log_tail;
+    }
+    auto tails = journal_tail_delta_t{alloc_tail, dirty_tail, log_tail};
     SUBDEBUGT(seastore_t, "update tails as delta {}", t, tails);
     bufferlist bl;
     encode(tails, bl);
@@ -2121,6 +2147,28 @@ void Cache::complete_commit(
     }
   }
 
+  if (t.lognode_deltas.size()) {
+    DEBUGT("lognode deltas start_seq {}, oid {} ",
+      t, start_seq, t.lognode_deltas.begin()->oid);
+    assert(t.get_src() != Transaction::src_t::TRIM_LOG);
+    // force to store only a transaction per jouranl_seq_t in pending_lognode_deltas_by_seq
+    journal_seq_t record_seq{
+      start_seq.segment_seq,
+      final_block_start
+    };
+    pending_lognode_deltas_by_seq[record_seq].insert(
+      pending_lognode_deltas_by_seq[record_seq].end(),
+      std::make_move_iterator(t.lognode_deltas.begin()),
+      std::make_move_iterator(t.lognode_deltas.end()));
+  }
+
+  if (t.get_src() == Transaction::src_t::TRIM_LOG) {
+    DEBUGT("TRIM_LOG target {}", t, t.lognode_trim_target);
+    pending_lognode_deltas_by_seq.erase(
+      pending_lognode_deltas_by_seq.begin(),
+      pending_lognode_deltas_by_seq.upper_bound(t.lognode_trim_target));
+  }
+
   if (!can_drop_backref()) {
     apply_backref_byseq(t.move_backref_entries(), start_seq);
     commit_backref_entries(std::move(backref_entries), start_seq);
@@ -2203,6 +2251,7 @@ Cache::replay_delta(
   const delta_info_t &delta,
   const journal_seq_t &dirty_tail,
   const journal_seq_t &alloc_tail,
+  const journal_seq_t &log_tail,
   sea_time_point modify_time)
 {
   LOG_PREFIX(Cache::replay_delta);
@@ -2243,6 +2292,24 @@ Cache::replay_delta(
     // this delta should have been dealt with during segment cleaner mounting
     return replay_delta_ertr::make_ready_future<std::pair<bool, CachedExtentRef>>(
       std::make_pair(false, nullptr));
+  }
+  
+  // replay log
+  if (delta.type == extent_types_t::LOG_NODE_INFO) {
+    if (journal_seq < log_tail) {
+      DEBUG("journal_seq {} < log_tail {}, don't replay {}",
+	journal_seq, log_tail, delta);
+      return replay_delta_ertr::make_ready_future<std::pair<bool, CachedExtentRef>>(
+	std::make_pair(false, nullptr));
+    }
+    lognode_delta_t d;
+    auto iter = delta.bl.cbegin();
+    decode(d, iter);
+    journal_seq_t record_seq{
+      journal_seq.segment_seq,
+      record_base
+    };
+    pending_lognode_deltas_by_seq[record_seq].emplace_back(std::move(d));
   }
 
   // replay alloc
@@ -2393,6 +2460,32 @@ Cache::replay_delta(
 	std::make_pair(true, extent));
     });
   }
+}
+
+lognode_deltas_t
+Cache::get_next_dirty_log_node(
+  journal_seq_t seq)
+{
+  LOG_PREFIX(Cache::get_next_dirty_log_node);
+  lognode_deltas_t cand;
+  for (auto& [entry_seq, deltas] : pending_lognode_deltas_by_seq) {
+    if (entry_seq > seq) {
+      break;
+    }
+    DEBUG(
+      "entry_seq={}, target_seq={}, entries={}, first oid={}",
+      entry_seq,
+      seq,
+      deltas.size(),
+      deltas.begin()->oid
+    );
+
+    for (auto& delta : deltas) {
+      delta.j_seq = entry_seq;
+      cand.emplace_back(delta);
+    }
+  }
+  return cand;
 }
 
 Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(

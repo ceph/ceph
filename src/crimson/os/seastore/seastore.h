@@ -187,6 +187,23 @@ public:
 
     omap_root_t select_log_omap_root(Onode& onode) const;
 
+    base_ertr::future<> handle_log_flush(journal_seq_t target);
+    base_iertr::future<> do_handle_log_flush(
+      Transaction& t,
+      lognode_deltas_t &entries,
+      journal_seq_t max_seq);
+    template <typename Result, typename ReadFunc>
+    read_errorator::future<Result>
+    repeat_with_onode_after_lognode_flush(
+      CollectionRef ch,
+      const ghobject_t& oid,
+      Transaction::src_t src,
+      const char* op_name,
+      op_type_t op_type,
+      uint32_t op_flags,
+      ReadFunc&& read_func);
+
+
   // only exposed to SeaStore
   public:
     base_ertr::future<> umount();

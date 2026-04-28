@@ -61,6 +61,20 @@ LogManager::omap_set_keys(
   DEBUGT("enter kv size {}", t, _kvs.size());
   assert(log_root.get_type() == omap_type_t::LOG);
 
+  lognode_delta_t delta;
+  assert(log_root.associated_oid);
+  delta.oid = *log_root.associated_oid;
+  delta.op = lognode_delta_t::op_t::INSERT;
+  encode(_kvs, delta.buffer);
+  t.add_lognode_delta(std::move(delta));
+  co_return;
+}
+
+LogManager::omap_set_keys_ret
+LogManager::_omap_set_keys(
+  omap_root_t &log_root,
+  Transaction &t, std::map<std::string, ceph::bufferlist>&& _kvs) 
+{
   auto kvs = std::move(_kvs);
   auto ext = co_await log_load_extent<LogNode>(
     t, log_root.addr, BEGIN_KEY, END_KEY);
@@ -759,16 +773,29 @@ LogManager::omap_rm_keys(
 
     bool continuous = is_continuous_fixed_width(key_set);
     if (continuous) {
-      // fast path
-      co_await remove_kvs(
-	t, addr,
-	*key_set.begin(),
-	*key_set.rbegin(),
-	nullptr);
+      lognode_delta_t delta;
+      assert(log_root.associated_oid);
+      delta.oid = *log_root.associated_oid;
+      delta.op = lognode_delta_t::op_t::DELETE;
+      std::vector<std::pair<std::string, std::string>> keys;
+      auto pair = std::make_pair(*key_set.begin(), *key_set.rbegin());
+      keys.emplace_back(pair);
+      encode(keys, delta.buffer);
+      t.add_lognode_delta(std::move(delta));
+      co_return;
     } else {
+      lognode_delta_t delta;
+      assert(log_root.associated_oid);
+      delta.oid = *log_root.associated_oid;
+      delta.op = lognode_delta_t::op_t::DELETE;
+      std::vector<std::pair<std::string, std::string>> keys;
       for (auto& p : key_set) {
-	co_await remove_kv(t, log_root.addr, p, nullptr);
+	auto pair = std::make_pair(p, p);
+	keys.emplace_back(pair);
       }
+      encode(keys, delta.buffer);
+      t.add_lognode_delta(std::move(delta));
+      co_return;
     }
   };
   co_await remove_key_set(keys, log_root.addr);
@@ -787,6 +814,30 @@ LogManager::omap_rm_key_range(
   LOG_PREFIX(LogManager::omap_rm_key_range);
   DEBUGT("first={}, last={}", t, first, last);
   assert(log_root.get_type() == omap_type_t::LOG);
+
+  lognode_delta_t delta;
+  assert(log_root.associated_oid);
+  delta.oid = *log_root.associated_oid;
+  delta.op = lognode_delta_t::op_t::DELETE;
+  auto p = std::make_pair(first, last);
+  std::vector<std::pair<std::string, std::string>> keys;
+  keys.emplace_back(p);
+  encode(keys, delta.buffer);
+  t.add_lognode_delta(std::move(delta));
+  co_return;
+}
+
+LogManager::omap_rm_key_range_ret 
+LogManager::_omap_rm_key_range(
+  omap_root_t &log_root,
+  Transaction &t,
+  const std::string &first,
+  const std::string &last)
+{
+  LOG_PREFIX(LogManager::omap_rm_key_range);
+  DEBUGT("first={}, last={}", t, first, last);
+  assert(log_root.get_type() == omap_type_t::LOG);
+
   co_await remove_kvs(t, log_root.addr, first, last, nullptr);
   // for dup list
   co_await remove_kvs(t, 
@@ -862,5 +913,154 @@ LogManager::omap_iterate(
     ObjectStore::omap_iter_ret_t>(std::move(ret));
 }
 
+
+LogManager::omap_set_key_ret
+LogManager::sync_log(Transaction &t, lognode_delta_t &delta, omap_root_t &log_root)
+{
+  LOG_PREFIX(LogManager::sync_log);
+  if (delta.op == lognode_delta_t::op_t::INSERT) {
+    assert(delta.op == lognode_delta_t::op_t::INSERT);
+    std::map<std::string, ceph::bufferlist> kvs;
+    auto iter = delta.buffer.cbegin();
+    decode(kvs, iter);
+    if (!kvs.empty()) {
+      DEBUGT("insert op buffer size:{}, first key:{}", t,
+	delta.buffer.length(), kvs.begin()->first);
+      co_await _omap_set_keys(log_root, t, std::move(kvs));
+    }
+  } else {
+    assert(delta.op == lognode_delta_t::op_t::DELETE);
+    std::vector<std::pair<std::string, std::string>> range;
+    auto iter = delta.buffer.cbegin();
+    decode(range, iter);
+    for (auto &p : range) {
+      DEBUGT("delete op {} ~ {}", t, p.first, p.second);
+      // delete all because even same keys can be appended 
+      co_await _omap_rm_key_range(log_root, t, p.first, p.second);
+    }
+  }
+  co_return;
+}
+
+LogManager::extracted_lognode_deltas_t
+LogManager::extract_merged_deltas(lognode_deltas_t& deltas)
+{
+  LOG_PREFIX(LogManager::extract_merged_deltas);
+  lognode_deltas_t merged;
+  if (deltas.empty()) {
+    DEBUG("deltas is empty");
+    return {};
+  }
+  struct pending_group_t {
+    ghobject_t oid;
+    journal_seq_t last_seq = JOURNAL_SEQ_NULL;
+    std::map<std::string, ceph::bufferlist> merged_kvs; // for insert
+    std::vector<std::pair<std::string, std::string>> decoded_ranges; // for delete
+  };
+  std::map<ghobject_t, pending_group_t> groups;
+  for (auto it = deltas.begin(); it != deltas.end();) {
+    auto found = groups.find(it->oid);
+    if (found == groups.end()) {
+      auto [iter, inserted] = groups.emplace(
+        it->oid,
+        pending_group_t{
+          .oid = it->oid,
+          .last_seq = it->j_seq,
+        });
+      ceph_assert(inserted);
+      found = iter;
+    }
+    if (it->op == lognode_delta_t::op_t::DELETE && 
+	found->second.last_seq < it->j_seq &&
+	(found->second.merged_kvs.size())) {
+      break;
+    }
+    ceph_assert(found->second.last_seq <= it->j_seq);
+    journal_seq_t merged_seq = JOURNAL_SEQ_NULL;
+    if (it->op == lognode_delta_t::op_t::INSERT) {
+      std::map<std::string, ceph::bufferlist> &merged_kvs =
+	found->second.merged_kvs;
+      std::map<std::string, ceph::bufferlist> kvs;
+      auto buffer_iter = it->buffer.cbegin();
+      decode(kvs, buffer_iter);
+      ceph_assert(!kvs.empty());
+      DEBUG("Merge insert op, j_seq:{}, oid:{}", it->j_seq, it->oid);
+      for (auto& [key, value] : kvs) {
+	merged_kvs.insert_or_assign(
+	  std::move(key),
+	  std::move(value));
+      }
+    } else if (it->op == lognode_delta_t::op_t::DELETE) {
+      std::vector<std::pair<std::string, std::string>> &merged_ranges =
+	found->second.decoded_ranges;
+      std::vector<std::pair<std::string, std::string>> decoded_ranges;
+      auto buffer_iter = it->buffer.cbegin();
+      decode(decoded_ranges, buffer_iter);
+      DEBUG("Merge delete op, j_seq:{}, oid:{}", it->j_seq, it->oid);
+      for (auto& range : decoded_ranges) {
+	if (merged_ranges.empty()) {
+	  merged_ranges.emplace_back(std::move(range));
+	  continue;
+	}
+	auto& last = merged_ranges.back();
+	std::set<std::string> can_merge{
+	  last.second,
+	  range.first
+	};
+	if (is_continuous_fixed_width(can_merge)) {
+	  last.second = std::move(range.second);
+	} else {
+	  merged_ranges.emplace_back(std::move(range));
+	}
+      }
+    }
+    merged_seq = it->j_seq;
+    it = deltas.erase(it);
+    found->second.last_seq = merged_seq;
+    it = deltas.begin();
+  }
+
+  journal_seq_t min_seq = JOURNAL_SEQ_NULL;
+  journal_seq_t max_seq = JOURNAL_SEQ_NULL;
+
+  auto update_min_max = [&](journal_seq_t seq) {
+    assert(seq != JOURNAL_SEQ_NULL);
+    if (min_seq == JOURNAL_SEQ_NULL || seq < min_seq) {
+      min_seq = seq;
+    }
+    if (max_seq == JOURNAL_SEQ_NULL || max_seq < seq) {
+      max_seq = seq;
+    }
+  };
+
+  for (auto &p : groups) {
+    if (p.second.merged_kvs.size()) {
+      // lognode_delta_t::op_t::INSERT
+      lognode_delta_t d;
+      d.oid = p.second.oid;
+      d.op = lognode_delta_t::op_t::INSERT;
+      d.j_seq = p.second.last_seq;
+      encode(p.second.merged_kvs, d.buffer);
+      merged.emplace_back(std::move(d));
+    } 
+    if (p.second.decoded_ranges.size()) { 
+      // lognode_delta_t::op_t::DELETE
+      lognode_delta_t d;
+      d.oid = p.second.oid;
+      d.op = lognode_delta_t::op_t::DELETE;
+      d.j_seq = p.second.last_seq;
+      encode(p.second.decoded_ranges, d.buffer);
+      merged.emplace_back(std::move(d));
+    }
+    update_min_max(p.second.last_seq);
+  }
+  assert(min_seq != JOURNAL_SEQ_NULL);
+  assert(max_seq != JOURNAL_SEQ_NULL);
+  return {
+    .deltas = std::move(merged),
+    .min_seq = min_seq,
+    .max_seq = max_seq,
+  };
+}
 
 }

@@ -468,7 +468,8 @@ void JournalTrimmerImpl::set_journal_head_sequence(
 
 void JournalTrimmerImpl::update_journal_tails(
   journal_seq_t dirty_tail,
-  journal_seq_t alloc_tail)
+  journal_seq_t alloc_tail,
+  journal_seq_t log_tail)
 {
   LOG_PREFIX(JournalTrimmerImpl::update_journal_tails);
 
@@ -507,6 +508,23 @@ void JournalTrimmerImpl::update_journal_tails(
     } else {
       INFO("journal_alloc_tail {} => {}, {}",
             alloc_tail, journal_alloc_tail, stat_printer_t{*this, false});
+    }
+  }
+
+  if (log_tail != JOURNAL_SEQ_NULL) {
+    if (journal_log_tail != JOURNAL_SEQ_NULL &&
+        journal_log_tail > log_tail) {
+      ERROR("journal_log_tail {} => {} is backwards!",
+            journal_log_tail, log_tail);
+      ceph_abort();
+    }
+    std::swap(journal_log_tail, log_tail);
+    if (journal_log_tail.segment_seq == log_tail.segment_seq) {
+      DEBUG("journal_log_tail {} => {}, {}",
+            log_tail, journal_log_tail, stat_printer_t{*this, false});
+    } else {
+      INFO("journal_log_tail {} => {}, {}",
+            log_tail, journal_log_tail, stat_printer_t{*this, false});
     }
   }
 
@@ -572,6 +590,18 @@ journal_seq_t JournalTrimmerImpl::get_alloc_tail_target() const
   return ret;
 }
 
+journal_seq_t JournalTrimmerImpl::get_log_tail_target() const
+{
+  assert(background_callback->is_ready());
+  auto ret = journal_head.add_offset(
+      backend_type,
+      // use dirty bytes
+      -static_cast<device_off_t>(config.target_journal_dirty_bytes / 4),
+      roll_start,
+      roll_size);
+  return ret;
+}
+
 std::size_t JournalTrimmerImpl::get_dirty_journal_size() const
 {
   if (!background_callback->is_ready()) {
@@ -604,6 +634,18 @@ std::size_t JournalTrimmerImpl::get_alloc_journal_size() const
 seastar::future<> JournalTrimmerImpl::trim() {
   return seastar::when_all(
     [this] {
+      if (should_trim_log()) {
+        return trim_log(
+        ).handle_error(
+          crimson::ct_error::assert_all{
+            "encountered invalid error in trim_log"
+          }
+        );
+      } else {
+        return seastar::now();
+      }
+    },
+    [this] {
       if (should_trim_alloc()) {
         return trim_alloc(
         ).handle_error(
@@ -628,6 +670,33 @@ seastar::future<> JournalTrimmerImpl::trim() {
       }
     }
   ).discard_result();
+}
+
+JournalTrimmerImpl::trim_ertr::future<>
+JournalTrimmerImpl::trim_log()
+{
+  LOG_PREFIX(JournalTrimmerImpl::trim_log);
+  assert(background_callback->is_ready());
+
+  auto& shard_stats = extent_callback->get_shard_stats();
+  ++(shard_stats.pending_bg_num);
+
+  auto target = get_log_tail_target();
+  DEBUG("start, log_tail={}, target={}",
+	 journal_log_tail, target);
+  if (requested_log_trim_target != JOURNAL_SEQ_NULL) {
+    target = requested_log_trim_target;
+  }
+  return post_trim_callback(target
+  ).finally([this, FNAME, &shard_stats, target] {
+    DEBUG("finish, log_tail={}", journal_log_tail);
+    if (target == requested_log_trim_target) {
+      background_callback->notify_trim_log_completetion();
+      requested_log_trim_target = JOURNAL_SEQ_NULL;
+    }
+    assert(shard_stats.pending_bg_num);
+    --(shard_stats.pending_bg_num);
+  });
 }
 
 JournalTrimmerImpl::trim_ertr::future<>
@@ -693,7 +762,6 @@ JournalTrimmerImpl::trim_dirty()
     ++(shard_stats.pending_bg_num);
     return repeat_eagain([this, FNAME, &shard_stats, target] {
       ++(shard_stats.repeat_trim_dirty_num);
-
       return extent_callback->with_transaction_intr(
 	Transaction::src_t::TRIM_DIRTY,
 	"trim_dirty",
@@ -759,7 +827,8 @@ std::ostream &operator<<(
   if (stats.trimmer.background_callback->is_ready()) {
     os << "should_block_io_on_trim=" << stats.trimmer.should_block_io_on_trim()
        << ", should_(trim_dirty=" << stats.trimmer.should_start_trim_dirty()
-       << ", trim_alloc=" << stats.trimmer.should_trim_alloc() << ")";
+       << ", trim_alloc=" << stats.trimmer.should_trim_alloc() 
+       << ", trim_log=" << stats.trimmer.should_trim_log() << ")";
   } else {
     os << "not-ready";
   }

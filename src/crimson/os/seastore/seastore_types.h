@@ -23,6 +23,7 @@
 #include "include/rados.h"
 
 #include "crimson/common/errorator.h"
+#include "common/hobject.h"
 
 namespace crimson::os::seastore {
 
@@ -1481,8 +1482,9 @@ enum class extent_types_t : uint8_t {
   BACKREF_INTERNAL = 15,
   BACKREF_LEAF = 16,
   LOG_NODE = 17,
+  LOG_NODE_INFO = 18,
   // None and the number of valid extent_types_t
-  NONE = 18,
+  NONE = 19,
 };
 using extent_types_le_t = uint8_t;
 constexpr auto EXTENT_TYPES_MAX = static_cast<uint8_t>(extent_types_t::NONE);
@@ -1769,11 +1771,13 @@ std::ostream &operator<<(std::ostream &out, const delta_info_t &delta);
 struct journal_tail_delta_t {
   journal_seq_t alloc_tail;
   journal_seq_t dirty_tail;
+  journal_seq_t log_tail;
 
   DENC(journal_tail_delta_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.alloc_tail, p);
     denc(v.dirty_tail, p);
+    denc(v.log_tail, p);
     DENC_FINISH(p);
   }
 };
@@ -1862,6 +1866,7 @@ struct omap_root_t {
   laddr_t hint = L_ADDR_MIN;
   bool mutated = false;
   omap_type_t type = omap_type_t::NONE;
+  std::optional<ghobject_t> associated_oid;
 
   omap_root_t() = default;
   omap_root_t(laddr_t addr, depth_t depth, laddr_t addr_min, omap_type_t type)
@@ -2140,6 +2145,20 @@ struct alloc_delta_t {
   }
 };
 
+struct lognode_delta_t {
+  enum class op_t : uint_fast8_t {
+    INSERT,
+    DELETE,
+  } op;
+  bufferlist buffer;
+  ghobject_t oid;
+  journal_seq_t j_seq; // in-memory only to track jouranl_seq_t containing this delta
+
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& p);
+};
+using lognode_deltas_t = std::vector<lognode_delta_t>;
+
 struct extent_info_t {
   extent_types_t type = extent_types_t::NONE;
   laddr_t addr = L_ADDR_NULL;
@@ -2181,6 +2200,7 @@ struct segment_header_t {
 
   journal_seq_t dirty_tail;
   journal_seq_t alloc_tail;
+  journal_seq_t log_tail;
   segment_nonce_t segment_nonce;
 
   segment_type_t type;
@@ -2199,6 +2219,7 @@ struct segment_header_t {
     denc(v.physical_segment_id, p);
     denc(v.dirty_tail, p);
     denc(v.alloc_tail, p);
+    denc(v.log_tail, p);
     denc(v.segment_nonce, p);
     denc(v.type, p);
     denc(v.category, p);
@@ -2243,6 +2264,7 @@ enum class transaction_type_t : uint8_t {
   TRIM_ALLOC,
   CLEANER_MAIN,
   CLEANER_COLD,
+  TRIM_LOG,
   MAX
 };
 
@@ -2274,7 +2296,8 @@ constexpr bool is_rewrite_transaction(transaction_type_t type) {
 
 constexpr bool is_trim_transaction(transaction_type_t type) {
   return (type == transaction_type_t::TRIM_DIRTY ||
-      type == transaction_type_t::TRIM_ALLOC);
+      type == transaction_type_t::TRIM_ALLOC ||
+      type == transaction_type_t::TRIM_LOG);
 }
 
 constexpr bool is_modify_transaction(transaction_type_t type) {
@@ -3134,6 +3157,7 @@ WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_header_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::alloc_blk_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::alloc_delta_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_tail_t)
+WRITE_CLASS_ENCODER(crimson::os::seastore::lognode_delta_t)
 
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<crimson::os::seastore::cache_access_stats_printer_t> : fmt::ostream_formatter {};

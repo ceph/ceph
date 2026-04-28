@@ -122,12 +122,14 @@ class CircularJournalSpace : public JournalAllocator {
     // start offset of CircularBoundedJournal in the device
     journal_seq_t dirty_tail;
     journal_seq_t alloc_tail;
+    journal_seq_t log_tail;
     segment_nonce_t magic;
 
     DENC(cbj_header_t, v, p) {
       DENC_START(1, 1, p);
       denc(v.dirty_tail, p);
       denc(v.alloc_tail, p);
+      denc(v.log_tail, p);
       denc(v.magic, p);
       DENC_FINISH(p);
     }
@@ -162,6 +164,9 @@ class CircularJournalSpace : public JournalAllocator {
   }
   journal_seq_t get_alloc_tail() const {
     return header.alloc_tail;
+  }
+  journal_seq_t get_log_tail() const {
+    return header.log_tail;
   }
 
   /* 
@@ -222,9 +227,11 @@ class CircularJournalSpace : public JournalAllocator {
 
   seastar::future<> update_journal_tail(
     journal_seq_t dirty,
-    journal_seq_t alloc) {
+    journal_seq_t alloc,
+    journal_seq_t log) {
     header.dirty_tail = dirty;
     header.alloc_tail = alloc;
+    header.log_tail = log;
     return write_header(
     ).handle_error(
       crimson::ct_error::assert_all{

@@ -1422,6 +1422,60 @@ omap_root_t SeaStore::Shard::select_log_omap_root(Onode& onode) const
   return get_omap_root(omap_type_t::OMAP, onode);
 }
 
+template <typename Result, typename ReadFunc>
+SeaStore::Shard::read_errorator::future<Result>
+SeaStore::Shard::repeat_with_onode_after_lognode_flush(
+  CollectionRef ch,
+  const ghobject_t& oid,
+  Transaction::src_t src,
+  const char* op_name,
+  op_type_t op_type,
+  uint32_t op_flags,
+  ReadFunc&& read_func)
+{
+  using read_func_t = std::decay_t<ReadFunc>;
+  using checked_result_t = std::optional<Result>;
+  return seastar::do_with(
+    read_func_t(std::forward<ReadFunc>(read_func)),
+    [this, ch, oid, src, op_name, op_type, op_flags](auto& read_func) {
+      return repeat_with_onode<checked_result_t>(
+        ch, oid, src, op_name, op_type, op_flags,
+        [this, &read_func](
+          auto& t,
+          auto& onode) -> base_iertr::future<checked_result_t> {
+          auto root = select_log_omap_root(onode);
+          if (root.get_type() == omap_type_t::LOG &&
+              transaction_manager->has_lognode_deltas()) {
+            return base_iertr::make_ready_future<
+              checked_result_t>(std::nullopt);
+          }
+          return read_func(t, onode
+          ).si_then([](Result result) {
+	    return checked_result_t{std::move(result)};
+          });
+        }
+      ).safe_then(
+        [this, ch, oid, src, op_name, op_type, op_flags, &read_func](
+          checked_result_t result) mutable -> read_errorator::future<Result> {
+          if (result) {
+            return read_errorator::make_ready_future<Result>(
+              std::move(*result));
+          }
+	  auto seq = transaction_manager->get_latest_dirty_lognode_delta();
+	  transaction_manager->request_trim_log(seq);
+	  return transaction_manager->wait_for_trim_log(seq
+          ).safe_then(
+            [this, ch, oid, src, op_name, op_type, op_flags, &read_func]() mutable {
+              return repeat_with_onode<Result>(
+                ch, oid, src, op_name, op_type, op_flags, [this, &read_func](
+                  auto& t, auto& onode) {
+                  return read_func(t, onode);
+              });
+          });
+      });
+  });
+}
+
 SeaStore::Shard::read_errorator::future<SeaStore::Shard::omap_values_t>
 SeaStore::Shard::omap_get_values(
   CollectionRef ch,
@@ -1432,8 +1486,7 @@ SeaStore::Shard::omap_get_values(
   assert(store_active);
   ++(shard_stats.read_num);
   ++(shard_stats.pending_read_num);
-
-  return repeat_with_onode<omap_values_t>(
+  return repeat_with_onode_after_lognode_flush<omap_values_t>(
     ch,
     oid,
     Transaction::src_t::READ,
@@ -1469,7 +1522,7 @@ SeaStore::Shard::omap_iterate(
     [this, ch, &oid, callback, op_flags, on_conflict] (
     auto &start_from, auto &conflict_counter)
   {
-    return repeat_with_onode<ObjectStore::omap_iter_ret_t>(
+    return repeat_with_onode_after_lognode_flush<ObjectStore::omap_iter_ret_t>(
       ch,
       oid,
       Transaction::src_t::READ,
@@ -1869,6 +1922,9 @@ SeaStore::Shard::_do_transaction_step(
 	auto root = select_log_omap_root(*onode);
         DEBUGT("op OMAP_SETKEYS, oid={}, omap size={}, type={} ...",
                *ctx.transaction, oid, aset.size(), root.get_type());
+	if (root.get_type() == omap_type_t::LOG) {
+	  root.associated_oid = oid;
+	}
         return omaptree_set_keys(
           *ctx.transaction,
           std::move(root),
@@ -1890,6 +1946,9 @@ SeaStore::Shard::_do_transaction_step(
 	auto root = select_log_omap_root(*onode);
         DEBUGT("op OMAP_RMKEYS, oid={}, omap size={}, type={} ...",
                *ctx.transaction, oid, keys.size(), root.get_type());
+	if (root.get_type() == omap_type_t::LOG) {
+	  root.associated_oid = oid;
+	}
         return omaptree_rm_keys(
           *ctx.transaction,
           std::move(root),
@@ -1904,6 +1963,9 @@ SeaStore::Shard::_do_transaction_step(
 	auto root = select_log_omap_root(*onode);
         DEBUGT("op OMAP_RMKEYRANGE, oid={}, first={}, last={}, type={}...",
                *ctx.transaction, oid, first, last, root.get_type());
+	if (root.get_type() == omap_type_t::LOG) {
+	  root.associated_oid = oid;
+	}
         return omaptree_rm_keyrange(
           *ctx.transaction,
           std::move(root),
@@ -2616,6 +2678,11 @@ void SeaStore::Shard::init_managers()
       *transaction_manager);
   onode_manager = std::make_unique<crimson::os::seastore::onode::FLTreeOnodeManager>(
       *transaction_manager);
+  transaction_manager->get_epm()->set_post_trim_callback(
+    [this] (journal_seq_t target) {
+      return handle_log_flush(target);
+    }
+  );
 }
 
 double SeaStore::Shard::reset_report_interval() const
@@ -3059,6 +3126,7 @@ SeaStore::Shard::omaptree_set_keys(
     {
       assert(root.get_type() < omap_type_t::NONE);
       base_iertr::future<> maybe_create_root = base_iertr::now();
+      assert(root.get_type() == omap_type_t::LOG && !root.is_null());
       if (root.is_null()) {
 	maybe_create_root = manager.initialize_omap(t,
 	  onode.get_metadata_hint(device->get_block_size()),
@@ -3206,6 +3274,98 @@ SeaStore::Shard::omaptree_rm_key(
   } else {
     return run(BtreeOMapManager(*transaction_manager));
   }
+}
+
+base_ertr::future<> SeaStore::Shard::handle_log_flush(journal_seq_t target)
+{
+  assert(store_active);
+  LOG_PREFIX(SeaStoreS::handle_log_flush);
+  std::optional<journal_seq_t> completed_seq;
+  return seastar::do_with(
+    completed_seq,
+    [this, FNAME, target](auto& completed_seq) {
+    return ::crimson::repeat([this, FNAME, &completed_seq, target] {
+      auto entries =
+	transaction_manager->get_next_dirty_log_node(
+	target);
+      DEBUG("the number of dirty log node deltas {} target {}", entries.size(), target);
+      if (entries.empty()) {
+	return base_ertr::make_ready_future<
+	  seastar::stop_iteration>(seastar::stop_iteration::yes);
+      }
+      DEBUG("before extract: entries={}", entries.size());
+      auto extracted = LogManager(*transaction_manager).extract_merged_deltas(entries);
+      ceph_assert(extracted.deltas.size());
+      assert(extracted.deltas.size());
+      // Since log entries are keyed by record-level journal_seq_t, extract_merged_deltas() 
+      // must consume a complete record-level sequence at a time. Therefore, the first
+      // sequence returned by the next extraction must be greater than the last completed sequence.
+      if (completed_seq) {
+	ceph_assert(*completed_seq < extracted.min_seq);
+      }
+      DEBUG("after extract: extracted={}, remaining={}, min_seq={}, max_seq={}",
+	extracted.deltas.size(), entries.size(), extracted.min_seq, extracted.max_seq);
+
+      return seastar::do_with(
+        std::move(extracted),
+        [this, FNAME, &completed_seq](auto& extracted) {
+	return repeat_eagain([this, &extracted] {
+	  return transaction_manager->with_transaction_intr(
+	    Transaction::src_t::TRIM_LOG,
+	    "trim_log",
+	    CACHE_HINT_NOCACHE,
+	    [this, &extracted](auto& t) -> base_iertr::future<>  {
+	    return do_handle_log_flush(t, extracted.deltas, extracted.max_seq);
+	  });
+	}).safe_then([&completed_seq, &extracted] {
+	  completed_seq = extracted.max_seq;
+          return seastar::stop_iteration::no;
+        });
+      });
+    });
+  });
+}
+
+base_iertr::future<>
+SeaStore::Shard::do_handle_log_flush(
+  Transaction& t,
+  lognode_deltas_t &entries,
+  journal_seq_t max_seq)
+{
+  LOG_PREFIX(SeaStoreS::do_handle_log_flush);
+  std::map<ghobject_t, OnodeRef> onodes;
+  DEBUG("lognode_deltas_t length:{} max_seq:{}", entries.size(), max_seq);
+  for (auto &p : entries) {
+    auto ret = onodes.find(p.oid);
+    if (ret == onodes.end()) {
+      onodes[p.oid] = co_await onode_manager->get_onode(t, p.oid
+      ).handle_error_interruptible(
+	crimson::ct_error::assert_all(
+	  "Invalid error in onode_manager->get_onode"
+      ));
+      if (!onodes[p.oid]){
+	TRACE("no onode:{}, deleted oid? ", p.oid);
+	continue;
+      }
+    }
+
+    DEBUG("Get oid:{} buffer size:{}", p.oid, p.buffer.length());
+    ceph_assert(onodes[p.oid]);
+    auto root = select_log_omap_root(*(onodes[p.oid]));
+    LogManager log_manager(*transaction_manager);
+    co_await log_manager.sync_log(t, p, root
+    ).handle_error_interruptible(
+      crimson::ct_error::assert_all(
+	"Invalid error in log_manager.sync_log"
+      )
+    );
+    if (root.must_update()) {
+      omaptree_update_root(t, root, *(onodes[p.oid]));
+    }
+  }
+  ceph_assert(max_seq != JOURNAL_SEQ_NULL);
+  t.set_lognode_trim_target(max_seq);
+  co_await transaction_manager->submit_transaction(t);
 }
 
 }

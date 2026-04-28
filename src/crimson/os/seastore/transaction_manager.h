@@ -737,6 +737,36 @@ public:
     journal_seq_t seq,
     size_t max_bytes) final;
 
+  using ExtentCallbackInterface::get_next_dirty_log_node_ret;
+  get_next_dirty_log_node_ret get_next_dirty_log_node(
+    journal_seq_t seq) final;
+
+  void add_pending_lognode_deltas(lognode_deltas_t &&l) {
+    cache->add_pending_lognode_deltas(std::move(l));
+  }
+  
+  bool has_lognode_deltas() {
+    return cache->has_lognode_deltas();
+  }
+  
+  base_ertr::future<> wait_for_trim_log(journal_seq_t target) {
+    if (!cache->has_pending_lognode_deltas_up_to(target)) {
+      return base_ertr::make_ready_future<>();
+    }
+    auto func = [this, target] {
+      return !cache->has_pending_lognode_deltas_up_to(target);
+    };
+    return epm->wait_for_trim_log(func);
+  }
+
+  void request_trim_log(journal_seq_t target) {
+    epm->request_trim_log(target);
+  }
+
+  journal_seq_t get_latest_dirty_lognode_delta() {
+    return cache->get_latest_dirty_lognode_delta();
+  }
+
   using ExtentCallbackInterface::rewrite_extent_ret;
   rewrite_extent_ret rewrite_extent(
     Transaction &t,

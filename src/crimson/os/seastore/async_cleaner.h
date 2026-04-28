@@ -382,6 +382,10 @@ public:
     Transaction &t,
     std::optional<journal_seq_t> seq_to_trim = std::nullopt) = 0;
 
+  using get_next_dirty_log_node_ret = lognode_deltas_t;
+  virtual get_next_dirty_log_node_ret get_next_dirty_log_node(
+    journal_seq_t seq) { return {}; }
+
 private:
   template <typename Func, bool IsWeak>
   auto do_with_transaction_intr(
@@ -420,6 +424,8 @@ struct BackgroundListener {
   virtual void maybe_wake_blocked_io() = 0;
   virtual state_t get_state() const = 0;
 
+  virtual void notify_trim_log_completetion() = 0;
+
   bool is_ready() const {
     return get_state() >= state_t::RUNNING;
   }
@@ -450,9 +456,11 @@ public:
   // get the committed journal alloc tail
   virtual journal_seq_t get_alloc_tail() const = 0;
 
+  virtual journal_seq_t get_log_tail() const = 0;
+
   // set the committed journal tails
   virtual void update_journal_tails(
-      journal_seq_t dirty_tail, journal_seq_t alloc_tail) = 0;
+      journal_seq_t dirty_tail, journal_seq_t alloc_tail, journal_seq_t log_tail) = 0;
 
   // try reserve the projected usage in journal
   // returns if the reservation is successful
@@ -466,6 +474,7 @@ public:
   virtual ~JournalTrimmer() {}
 
   journal_seq_t get_journal_tail() const {
+    assert(get_dirty_tail() <= get_alloc_tail());
     if (tail_include_alloc) {
       return std::min(get_alloc_tail(), get_dirty_tail());
     } else {
@@ -501,6 +510,8 @@ class BackrefManager;
 class LBAManager;
 class JournalTrimmerImpl;
 using JournalTrimmerImplRef = std::unique_ptr<JournalTrimmerImpl>;
+using post_trim_callback_t =
+  std::function<base_ertr::future<>(journal_seq_t)>;
 
 /**
  * Journal trimming implementation
@@ -570,8 +581,13 @@ public:
     return journal_alloc_tail;
   }
 
+  journal_seq_t get_log_tail() const final {
+    return journal_log_tail;
+  }
+
   void update_journal_tails(
-      journal_seq_t dirty_tail, journal_seq_t alloc_tail) final;
+      journal_seq_t dirty_tail, journal_seq_t alloc_tail,
+      journal_seq_t log_tail) final;
 
   std::size_t get_trim_size_per_cycle() const final {
     return config.max_backref_bytes_per_cycle +
@@ -590,15 +606,31 @@ public:
     background_callback = cb;
   }
 
+  void set_post_trim_callback(post_trim_callback_t cb) {
+    _post_trim_callback = cb;
+  }
+
+  base_ertr::future<> post_trim_callback(journal_seq_t seq) {
+    return _post_trim_callback(seq);
+  }
+
+  void request_trim_log(journal_seq_t seq) {
+    if (requested_log_trim_target == JOURNAL_SEQ_NULL ||
+      requested_log_trim_target < seq) {
+      requested_log_trim_target = seq;
+    }
+  }
+
   void reset() {
     journal_head_seq = NULL_SEG_SEQ;
     journal_head = JOURNAL_SEQ_NULL;
     journal_dirty_tail = JOURNAL_SEQ_NULL;
     journal_alloc_tail = JOURNAL_SEQ_NULL;
+    journal_log_tail = JOURNAL_SEQ_NULL;
   }
 
   bool should_trim() const {
-    return should_trim_alloc() || should_start_trim_dirty();
+    return should_trim_alloc() || should_start_trim_dirty() || should_trim_log();
   }
 
   bool should_block_io_on_trim() const {
@@ -664,17 +696,27 @@ private:
     return get_alloc_tail_target() > journal_alloc_tail;
   }
 
+  bool should_trim_log() const {
+    if (requested_log_trim_target != JOURNAL_SEQ_NULL) {
+      return true;
+    }
+    return get_log_tail_target() > journal_log_tail;
+  }
+
   using trim_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
   trim_ertr::future<> trim_dirty();
 
   trim_ertr::future<> trim_alloc();
 
+  trim_ertr::future<> trim_log();
+
   journal_seq_t get_tail_limit() const;
   journal_seq_t get_dirty_tail_min_target() const;
   journal_seq_t get_dirty_tail_target() const;
   journal_seq_t get_dirty_tail_target_per_cycle() const;
   journal_seq_t get_alloc_tail_target() const;
+  journal_seq_t get_log_tail_target() const;
   std::size_t get_dirty_journal_size() const;
   std::size_t get_alloc_journal_size() const;
   std::size_t get_journal_dirty_bytes() const {
@@ -710,10 +752,13 @@ private:
   journal_seq_t journal_head;
   journal_seq_t journal_dirty_tail;
   journal_seq_t journal_alloc_tail;
+  journal_seq_t journal_log_tail;
+  journal_seq_t requested_log_trim_target;
 
   std::size_t reserved_usage;
 
   seastar::metrics::metric_group metrics;
+  post_trim_callback_t _post_trim_callback;
 };
 
 std::ostream &operator<<(

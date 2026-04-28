@@ -365,6 +365,7 @@ std::ostream &operator<<(std::ostream &out, const journal_tail_delta_t &delta)
   return out << "journal_tail_delta_t("
              << "alloc_tail=" << delta.alloc_tail
              << ", dirty_tail=" << delta.dirty_tail
+             << ", log_tail=" << delta.log_tail
              << ")";
 }
 
@@ -447,6 +448,8 @@ std::ostream &operator<<(std::ostream &os, transaction_type_t type)
     return os << "TRIM_DIRTY";
   case transaction_type_t::TRIM_ALLOC:
     return os << "TRIM_ALLOC";
+  case transaction_type_t::TRIM_LOG:
+    return os << "TRIM_LOG";
   case transaction_type_t::CLEANER_MAIN:
     return os << "CLEANER_MAIN";
   case transaction_type_t::CLEANER_COLD:
@@ -569,6 +572,22 @@ std::ostream& operator<<(std::ostream& out, const record_group_t& rg)
              << "num_records=" << rg.records.size()
              << ", " << rg.size
              << ")";
+}
+
+void lognode_delta_t::encode(ceph::buffer::list& bl) const {
+  ENCODE_START(1, 1, bl);
+  encode(op, bl);
+  encode(buffer, bl);
+  encode(oid, bl);
+  ENCODE_FINISH(bl);
+}
+
+void lognode_delta_t::decode(ceph::buffer::list::const_iterator& p) {
+  DECODE_START(1, p);
+  decode(op, p);
+  decode(buffer, p);
+  decode(oid, p);
+  DECODE_FINISH(p);
 }
 
 ceph::bufferlist encode_record(

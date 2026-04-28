@@ -1018,6 +1018,8 @@ private:
   backref_entryrefs_by_seq_t backref_entryrefs_by_seq;
   backref_entry_mset_t backref_entry_mset;
 
+  std::map<journal_seq_t, lognode_deltas_t> pending_lognode_deltas_by_seq;
+
   using backref_entry_query_mset_t = std::multiset<
       backref_entry_t, backref_entry_t::cmp_t>;
   backref_entry_query_mset_t get_backref_entries_in_range(
@@ -1378,6 +1380,7 @@ public:
     const delta_info_t &delta,
     const journal_seq_t &dirty_tail,
     const journal_seq_t &alloc_tail,
+    const journal_seq_t &log_tail,
     sea_time_point modify_time);
 
   /**
@@ -1497,6 +1500,46 @@ public:
     Transaction &t,
     journal_seq_t seq,
     size_t max_bytes);
+
+  lognode_deltas_t get_next_dirty_log_node(
+    journal_seq_t seq);
+
+  void add_pending_lognode_deltas(lognode_deltas_t &&l) {
+    for (auto &p : l) {
+      pending_lognode_deltas_by_seq[p.j_seq].emplace_back(std::move(p)); 
+    }
+  }
+
+  std::optional<journal_seq_t> get_oldest_log_dirty_from() const {
+    LOG_PREFIX(Cache::get_oldest_log_dirty_from);
+    if (pending_lognode_deltas_by_seq.size()) {
+      SUBDEBUG(seastore_cache, "dirty_log_oldest: {}", pending_lognode_deltas_by_seq.begin()->first);
+      return pending_lognode_deltas_by_seq.begin()->first;
+    } 
+    return std::nullopt;
+  }
+
+  bool has_lognode_deltas() const {
+    return pending_lognode_deltas_by_seq.size() != 0;
+  }
+
+  bool has_pending_lognode_deltas_up_to(journal_seq_t target) {
+    if (pending_lognode_deltas_by_seq.empty()) {
+      return false;
+    }
+    return pending_lognode_deltas_by_seq.begin() !=
+	   pending_lognode_deltas_by_seq.upper_bound(target);
+  }
+
+  journal_seq_t get_latest_dirty_lognode_delta() const {
+    if (!pending_lognode_deltas_by_seq.size()) {
+      return JOURNAL_SEQ_NULL;
+    }
+    LOG_PREFIX(Cache::get_latest_dirty_lognode_delta);
+    SUBDEBUG(seastore_cache, "dirty_latest: {}",
+      pending_lognode_deltas_by_seq.rbegin()->first);
+    return pending_lognode_deltas_by_seq.rbegin()->first;
+  }
 
   /// returns std::nullopt if no pending alloc-infos
   std::optional<journal_seq_t> get_oldest_backref_dirty_from() const {
