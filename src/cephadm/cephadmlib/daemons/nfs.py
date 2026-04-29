@@ -90,7 +90,7 @@ class NFSGanesha(ContainerDaemonForm):
         
         daemon_name = self.get_daemon_name()
         host_log_dir = f'/var/log/ceph/{self.fsid}/{daemon_name}'
-        mounts[host_log_dir] = '/var/log/ganesha:z'
+        mounts[host_log_dir] = '/var/log/ceph:z'
         if self.rgw:
             cluster = self.rgw.get('cluster', 'ceph')
             rgw_user = self.rgw.get('user', 'admin')
