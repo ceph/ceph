@@ -115,6 +115,7 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_BUCKET_LOGGING RGW_ATTR_PREFIX "logging"
 #define RGW_ATTR_BUCKET_LOGGING_MTIME RGW_ATTR_PREFIX "logging-mtime"
 #define RGW_ATTR_BUCKET_LOGGING_SOURCES RGW_ATTR_PREFIX "logging-sources"
+#define RGW_ATTR_ARCHIVE_INSTANCE_MTIME RGW_ATTR_PREFIX "zone.archive.instance.mtime"
 
 /* S3 Object Lock*/
 #define RGW_ATTR_OBJECT_LOCK        RGW_ATTR_PREFIX "object-lock"
