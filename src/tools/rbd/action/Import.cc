@@ -9,6 +9,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/Throttle.h"
+#include "common/OrderedThrottle.h"
 #include "include/compat.h"
 #include "include/encoding.h"
 #include "common/debug.h"
