@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 
@@ -357,10 +358,10 @@ public:
             << "WARNING: sync lock latency elevated, halving concurrency."
             << " avg_latency_ms=" << std::chrono::duration_cast<std::chrono::milliseconds>(avg_latency()).count()
             << " threshold_ms=" << std::chrono::duration_cast<std::chrono::milliseconds>(threshold).count()
-            << " concurrency=" << (concurrency / 2) << dendl;
+            << " concurrency=" << std::max(int64_t{1}, concurrency / 2) << dendl;
         state = State::Throttled;
       }
-      return concurrency / 2;
+      return std::max(int64_t{1}, concurrency / 2);
     } else [[likely]] {
       if (state != State::Normal) [[unlikely]] {
         ldout(cct, 1)
