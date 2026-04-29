@@ -18,7 +18,6 @@
 
 #include <atomic>
 
-#include "common/Cond.h"
 #include "common/ceph_mutex.h"
 #include "common/snap_types.h"
 #include "common/zipkin_trace.h"
