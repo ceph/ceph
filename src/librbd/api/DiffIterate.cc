@@ -17,7 +17,7 @@
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/errno.h"
 #include "common/Cond.h"
-#include "common/Throttle.h"
+#include "common/OrderedThrottle.h"
 #include "osdc/Striper.h"
 #include <boost/tuple/tuple.hpp>
 #include <list>
