@@ -4,6 +4,7 @@ import json
 import logging
 import threading
 from contextlib import contextmanager
+import stat
 from typing import (
     List,
     Any,
@@ -81,17 +82,6 @@ def normalize_path(path: str) -> str:
         if path[:2] == "//":
             path = path[1:]
     return path
-
-
-def validate_cephfs_path(mgr: 'Module', fs_name: str, path: str) -> None:
-    try:
-        cephfs_path_is_dir(mgr, fs_name, path)
-    except NotADirectoryError:
-        raise NFSException(f"path {path} is not a dir", -errno.ENOTDIR)
-    except cephfs.ObjectNotFound:
-        raise NFSObjectNotFound(f"path {path} does not exist")
-    except cephfs.Error as e:
-        raise NFSException(e.args[1], -e.args[0])
 
 
 def get_enctag_from_path(mgr: 'Module', fs_name: str, path: str) -> Optional[str]:
@@ -192,6 +182,8 @@ class ExportMgr:
         # One lock per cluster, created on demand, see _ceph_users_locked().
         self._ceph_users_locks: Dict[str, Any] = {}
         self._ceph_users_locks_guard = threading.Lock()
+        self._cephfs_client_lock = threading.Lock()
+        self._cephfs_client: Optional[CephfsClient] = None
 
     def _get_cluster_protocols(self, cluster_id: str) -> List[int]:
         """Get the list of supported NFS protocols for a cluster.
@@ -692,6 +684,25 @@ class ExportMgr:
             raise ErrorResponse(f"Cluster {cluster_id!r} does not exist",
                                 return_value=-errno.ENOENT)
 
+    def _get_cephfs_client(self) -> CephfsClient:
+        with self._cephfs_client_lock:
+            if self._cephfs_client is None:
+                self._cephfs_client = CephfsClient(self.mgr)
+        return self._cephfs_client
+
+    def validate_cephfs_path(self, fs_name: str, path: str) -> None:
+        try:
+            cephfs_client = self._get_cephfs_client()
+            with open_filesystem(cephfs_client, fs_name) as fs_handle:
+                stx = fs_handle.statx(path.encode('utf-8'), cephfs.CEPH_STATX_MODE,
+                                      cephfs.AT_SYMLINK_NOFOLLOW)
+                if not stat.S_ISDIR(stx.get('mode')):
+                    raise NFSException(f"path {path} is not a dir", -errno.ENOTDIR)
+        except cephfs.ObjectNotFound:
+            raise NFSObjectNotFound(f"path {path} does not exist")
+        except cephfs.Error as e:
+            raise NFSException(e.args[1], -e.args[0])
+
     def create_export(self, addr: Optional[List[str]] = None, **kwargs: Any) -> Dict[str, Any]:
         self._validate_cluster_id(kwargs['cluster_id'])
         # if addr(s) are provided, construct client list and adjust outer block
@@ -1189,7 +1200,7 @@ class ExportMgr:
             if not check_fs(self.mgr, fs_name):
                 raise FSNotFound(fs_name)
 
-            validate_cephfs_path(self.mgr, fs_name, path)
+            self.validate_cephfs_path(fs_name, path)
 
             # Validate kmip_key_id against subvolume enctag for CephFS
             kmip_key_id = ex_dict.get("kmip_key_id")
@@ -1250,7 +1261,7 @@ class ExportMgr:
                              kmip_key_id: Optional[str] = None
                              ) -> Dict[str, Any]:
 
-        validate_cephfs_path(self.mgr, fs_name, path)
+        self.validate_cephfs_path(fs_name, path)
         if cmount_path != "/":
             _validate_cmount_path(cmount_path, path)  # type: ignore
 
