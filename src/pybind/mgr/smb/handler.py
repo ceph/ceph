@@ -293,7 +293,7 @@ class ClusterConfigHandler:
         authorizer: Optional[AccessAuthorizer] = None,
         orch: Optional[OrchSubmitter] = None,
         earmark_resolver: Optional[EarmarkResolver] = None,
-        mgr: Optional[Any] = None,
+        mgr: Any,
     ) -> None:
         self.internal_store = internal_store
         self.public_store = public_store

@@ -54,8 +54,9 @@ class Staging:
     the destination store.
     """
 
-    def __init__(self, store: ConfigStore) -> None:
+    def __init__(self, store: ConfigStore, mgr: Any = None) -> None:
         self.destination_store = store
+        self._mgr = mgr
         self.incoming: Dict[EntryKey, SMBResource] = {}
         self.deleted: Dict[EntryKey, SMBResource] = {}
         self._store_keycache: Set[EntryKey] = set()
@@ -358,9 +359,18 @@ def _check_share_resource(
             msg="no matching cluster id",
             status={"cluster_id": share.cluster_id},
         )
-    
-    # Handle RGW shares - no path validation needed
+
+    # Handle RGW shares - validate bucket existence
     if share.rgw is not None:
+        from . import rgw_utils
+
+        # Validate bucket exists
+        if not rgw_utils.validate_rgw_bucket(staging._mgr, share.rgw.bucket):
+            raise ErrorResult(
+                share,
+                msg=f"RGW bucket '{share.rgw.bucket}' does not exist or is not accessible",
+            )
+
         name_used_by = _share_name_in_use(staging, share)
         if name_used_by:
             raise ErrorResult(
@@ -369,7 +379,7 @@ def _check_share_resource(
                 status={"conflicting_share_id": name_used_by},
             )
         return
-    
+
     # Handle CephFS shares
     assert share.cephfs is not None
     try:

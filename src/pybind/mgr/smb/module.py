@@ -92,6 +92,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             authorizer=authorizer,
             orch=self._orch_backend(enable_orch=uo),
             earmark_resolver=earmark_resolver,
+            mgr=self,
         )
 
     def _backend_store(self, store_conf: str = '') -> ConfigStore:
