@@ -39,8 +39,6 @@
 #include "common/StackStringStream.h"
 #include "common/TrackedOp.h"
 
-#include "messages/MMDSPeerRequest.h"
-
 class LogSegment;
 class BatchOp;
 class CInode;
@@ -48,6 +46,7 @@ class CDir;
 class CDentry;
 class MDSCacheObject;
 class MDSContext;
+class MMDSPeerRequest;
 class Session;
 class ScatterLock;
 class SimpleLock;
