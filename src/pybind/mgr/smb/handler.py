@@ -314,7 +314,7 @@ class ClusterConfigHandler:
         authorizer: Optional[AccessAuthorizer] = None,
         orch: Optional[OrchSubmitter] = None,
         earmark_resolver: Optional[EarmarkResolver] = None,
-        mgr: Optional[Any] = None,
+        mgr: Any,
     ) -> None:
         self.internal_store = internal_store
         self.public_store = public_store
@@ -641,11 +641,17 @@ class ClusterConfigHandler:
             for share in change_group.shares
             if share.cephfs is not None
         }
+        # rgw_buckets: hold the RGW buckets our shares touch
+        rgw_buckets = {
+            share.rgw.bucket
+            for share in change_group.shares
+            if share.rgw is not None
+        }
         # save the various object types
         previous_info = _swap_pending_cluster_info(
             self.public_store,
             change_group,
-            orch_needed=bool(vols and self._orch),
+            orch_needed=bool((vols or rgw_buckets) and self._orch),
         )
         _save_pending_join_auths(self.priv_store, change_group)
         _save_pending_users_and_groups(self.priv_store, change_group)
@@ -712,9 +718,31 @@ class ClusterConfigHandler:
         # via orch.  This differs from NFS because ganesha embeds the cephx
         # keys directly in each export definition block while samba needs the
         # ceph keyring to load keys.
+        # For RGW shares, we don't need CephFS volumes but still need orchestration.
         previous_orch = previous_info.get('orch_needed', False)
-        if self._orch and (vols or previous_orch):
+        if self._orch and (vols or rgw_buckets or previous_orch):
+            log.info(
+                'Submitting SMB service spec for cluster %s: '
+                'shares=%d (cephfs_vols=%d, rgw_buckets=%d), '
+                'previous_orch=%s',
+                cluster.cluster_id,
+                len(change_group.shares),
+                len(vols),
+                len(rgw_buckets),
+                previous_orch,
+            )
             self._orch.submit_smb_spec(smb_spec)
+        else:
+            log.warning(
+                'Skipping SMB service orchestration for cluster %s: '
+                'orch_enabled=%s, shares=%d, cephfs_vols=%d, rgw_buckets=%d, previous_orch=%s',
+                cluster.cluster_id,
+                bool(self._orch),
+                len(change_group.shares),
+                len(vols),
+                len(rgw_buckets),
+                previous_orch,
+            )
 
     def _remove_cluster(self, cluster_id: str) -> None:
         log.info('Removing cluster: %s', cluster_id)
@@ -800,15 +828,24 @@ class _ClusterConf:
             ceph_cluster = 'exo'
             cephx_entity = checked(extcc.cluster).cephfs_user.name
         elif change_group.shares:
-            log.debug('local ceph cluster with shares')
-            cephx_entity = _cephx_data_entity(change_group.cluster)
-            # ensure an entity exists with access to the volumes (CephFS only)
-            for share in change_group.shares:
-                if share.cephfs:
-                    authorizer.authorize_entity(
-                        share.checked_cephfs.volume, cephx_entity
-                    )
-            cephadm_data_entity = cephx_entity
+            # Check if we have any CephFS shares that need CephX auth
+            has_cephfs_shares = any(
+                s.cephfs is not None for s in change_group.shares
+            )
+            if has_cephfs_shares:
+                log.debug('local ceph cluster with CephFS shares')
+                cephx_entity = _cephx_data_entity(change_group.cluster)
+                # ensure an entity exists with access to the volumes (CephFS only)
+                for share in change_group.shares:
+                    if share.cephfs:
+                        authorizer.authorize_entity(
+                            share.checked_cephfs.volume, cephx_entity
+                        )
+                cephadm_data_entity = cephx_entity
+            else:
+                log.debug(
+                    'local ceph cluster with RGW shares only (no CephX auth needed)'
+                )
         else:
             log.debug('local cluster without shares: skipping ceph auth')
         return cls(
