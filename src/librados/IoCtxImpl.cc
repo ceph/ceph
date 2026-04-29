@@ -22,6 +22,7 @@
 #include "librados/PoolAsyncCompletionImpl.h"
 #include "librados/RadosClient.h"
 #include "include/ceph_assert.h"
+#include "common/Cond.h"
 #include "common/valgrind.h"
 #include "common/EventTrace.h"
 
