@@ -764,6 +764,10 @@ class FSSnapshotMirror:
         except MirrorException as me:
             return me.args[0], '', me.args[1]
 
+    def metrics_status(self, filesystem, mirrored_dir_path, peer_uuid):
+        """Return cephfs mirror metrics as JSON"""
+        return 0, json.dumps({}), ''
+
     def daemon_status(self, format='json'):
         try:
             with self.lock:
