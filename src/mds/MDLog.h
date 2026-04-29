@@ -44,7 +44,6 @@ enum {
 
 #include "include/fs_types.h" // for inodeno_t
 #include "include/types.h"
-#include "include/Context.h"
 
 #include "common/DecayCounter.h"
 #include "common/Thread.h"
@@ -61,6 +60,7 @@ enum {
 #include <vector>
 
 struct EstimatedReplayTime;
+class Context;
 class Journaler;
 class JournalPointer;
 class LogEvent;
