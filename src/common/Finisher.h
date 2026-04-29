@@ -26,7 +26,6 @@
 #include "include/Context.h"
 #include "common/Thread.h"
 #include "common/ceph_mutex.h"
-#include "common/Cond.h"
 #include "common/perf_counters.h" // for class PerfCounters
 
 /// Finisher queue length performance counter ID.
