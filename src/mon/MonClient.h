@@ -33,7 +33,6 @@
 #include <boost/asio/post.hpp>
 
 #include "msg/Dispatcher.h"
-#include "msg/Messenger.h"
 
 #include "MonMap.h"
 #include "MonSub.h"
@@ -48,6 +47,7 @@
 #include "auth/AuthClient.h"
 #include "auth/AuthServer.h"
 
+class Messenger;
 class MMonMap;
 class MConfig;
 class MMonGetVersionReply;
@@ -557,7 +557,7 @@ public:
   }
 
   void set_messenger(Messenger *m) { messenger = m; }
-  entity_addrvec_t get_myaddrs() const { return messenger->get_myaddrs(); }
+  entity_addrvec_t get_myaddrs() const;
   AuthAuthorizer* build_authorizer(int service_id) const;
 
   void set_want_keys(uint32_t want) {
