@@ -30,7 +30,6 @@ function(gperf_generate input output)
     COMMENT "Generate ${output}"
     )
 endfunction()
-
 find_package(ICU 52.0 COMPONENTS uc REQUIRED)
 
 set(librgw_common_srcs
@@ -569,7 +568,20 @@ target_link_libraries(radosgw PRIVATE
 if(WITH_RADOSGW_FDB)
  message("FoundationDB support is active (experimental)")
 
+ include(HasCppFeature)
+
  add_library(rgw_fdb INTERFACE)
+
+ require_cpp_feature(__cpp_lib_generator CEPH_LIBFDB_HAS_GENERATOR
+   TARGET rgw_fdb
+   GIT_REPOSITORY https://github.com/lewissbaker/generator
+   GIT_TAG main
+   EXCLUDE_FROM_ALL YES
+   SYSTEM YES)
+
+ require_cpp_feature(__cpp_lib_flat_map CEPH_LIBFDB_HAS_FLAT_MAP
+   TARGET rgw_fdb
+   USE_ALTERNATIVE Boost::headers Boost::boost)
 
  target_link_libraries(rgw_fdb INTERFACE
   -lfdb_c
@@ -603,6 +615,8 @@ if(WITH_RADOSGW_FDB)
  target_include_directories(zpp_bits INTERFACE "${CMAKE_BINARY_DIR}/_deps/zpp_bits-src/")
 
  target_link_libraries(rgw_fdb INTERFACE zpp_bits)
+
+ list(APPEND rgw_libs rgw_fdb)
 
 endif(WITH_RADOSGW_FDB)
 
