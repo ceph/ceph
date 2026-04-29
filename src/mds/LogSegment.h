@@ -18,7 +18,6 @@
 
 #include "include/elist.h"
 #include "include/interval_set.h"
-#include "include/Context.h"
 #include "include/types.h" // for version_t
 
 #include <unordered_set>
@@ -37,7 +36,9 @@ class CInode;
 class CDentry;
 class MDSContext;
 class C_MDSInternalNoop;
+template <class ContextType, class ContextInstanceType> class C_GatherBase;
 using MDSGather = C_GatherBase<MDSContext, C_MDSInternalNoop>;
+template <class ContextType, class GatherType> class C_GatherBuilderBase;
 using MDSGatherBuilder = C_GatherBuilderBase<MDSContext, MDSGather>;
 class MDSRank;
 struct MDPeerUpdate;
