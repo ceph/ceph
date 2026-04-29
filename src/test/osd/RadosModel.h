@@ -84,7 +84,8 @@ public:
   void handle_notify(uint64_t notify_id, uint64_t cookie,
 		     uint64_t notifier_id,
 		     bufferlist &bl) override {
-    std::cout << "watch handle_notify " << notify_id << " " << cookie << " " << notifier_id << std::endl;
+    std::cout << "watch handle_notify oid=" << oid << " notify_id=" << notify_id
+              << " cookie=" << cookie << " notifier_id=" << notifier_id << std::endl;
     std::lock_guard l{lock};
     waiting = false;
     cond.notify_all();
@@ -93,7 +94,7 @@ public:
   }
   void handle_error(uint64_t cookie, int err) override {
     std::lock_guard l{lock};
-    std::cout << "watch handle_error " << err << std::endl;
+    std::cout << "watch handle_error oid=" << oid << " err=" << err << std::endl;
   }
   void start() {
     std::lock_guard l{lock};
@@ -394,7 +395,14 @@ public:
 	}
 
 	if (inflight.size() >= (unsigned) max_in_flight || (!next && !inflight.empty())) {
-	  cout_prefix() << " waiting on " << inflight.size() << std::endl;
+          std::string active;
+          for (auto i : inflight) {
+            if (active.length()) {
+              active += ",";
+            }
+            active += std::to_string(i->num);
+          }
+	  cout_prefix() << " waiting on " << inflight.size() << " ops, inflight ops=(" << active << ")" << std::endl;
 	  wait_cond.wait(state_locker);
 	} else {
 	  break;
@@ -1467,6 +1475,7 @@ public:
   {
     std::unique_lock state_locker{context->state_lock};
     if (context->get_watch_context(oid)) {
+      // Don't delete objects that are being watched
       context->kick();
       return;
     }
@@ -2078,8 +2087,10 @@ public:
   {
     context->state_lock.lock();
     if (context->get_watch_context(oid)) {
+      // Don't rollback objects that are being watched
       context->kick();
       context->state_lock.unlock();
+      done = true;
       return;
     }
 
@@ -2962,6 +2973,7 @@ public:
   {
     std::unique_lock state_locker{context->state_lock};
     if (context->get_watch_context(oid)) {
+      // Don't unset redirect on watched objects
       context->kick();
       return;
     }
