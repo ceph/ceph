@@ -212,6 +212,39 @@ class TestBaseObjectStore:
         with pytest.raises(NotImplementedError):
             BaseObjectStore([]).activate()
 
+    def test_enroll_tpm2_default_pcrs(self, monkeypatch, factory):
+        captured: dict = {}
+
+        def fake_call(cmd, **kwargs):
+            captured['cmd'] = cmd
+            return ([], '', 0)
+
+        monkeypatch.setattr(
+            'ceph_volume.objectstore.baseobjectstore.process.call', fake_call)
+        args = factory(with_tpm=True)
+        bo = BaseObjectStore(args)
+        bo.dmcrypt_key = 'sekrit'
+        bo.enroll_tpm2('/dev/sdz')
+        assert '--tpm2-pcrs' in captured['cmd']
+        i = captured['cmd'].index('--tpm2-pcrs')
+        assert captured['cmd'][i + 1] == '7'
+
+    def test_enroll_tpm2_custom_pcrs(self, monkeypatch, factory):
+        captured: dict = {}
+
+        def fake_call(cmd, **kwargs):
+            captured['cmd'] = cmd
+            return ([], '', 0)
+
+        monkeypatch.setattr(
+            'ceph_volume.objectstore.baseobjectstore.process.call', fake_call)
+        args = factory(with_tpm=True, tpm2_pcrs='9+12')
+        bo = BaseObjectStore(args)
+        bo.dmcrypt_key = 'sekrit'
+        bo.enroll_tpm2('/dev/sdz')
+        i = captured['cmd'].index('--tpm2-pcrs')
+        assert captured['cmd'][i + 1] == '9+12'
+
     @patch('ceph_volume.objectstore.baseobjectstore.prepare_utils.create_key', Mock(return_value=['AQCee6ZkzhOrJRAAZWSvNC3KdXOpC2w8ly4AZQ==']))
     def setup_method(self, m_create_key):
         self.b = BaseObjectStore([])
