@@ -107,7 +107,8 @@ public:
     uint64_t truncate_seq;
     uint64_t truncate_size;
     bool whiteout; ///< Source object is whiteout
-    bool needs_trim; ///< Source object has pending trim
+    std::map<std::pair<uint64_t, entity_name_t>, watch_info_t> watchers;
+
     bool is_data_digest() {
       return flags & object_copy_data_t::FLAG_DATA_DIGEST;
     }
@@ -123,7 +124,7 @@ public:
 	source_data_digest(-1), source_omap_digest(-1),
 	data_digest(-1), omap_digest(-1),
 	truncate_seq(0), truncate_size(0),
-        whiteout(false), needs_trim(false)
+        whiteout(false), watchers()
     {}
   };
 
@@ -1665,8 +1666,10 @@ public:
 
   void handle_backoff(OpRequestRef& op);
 
+  int add_trim_to_ctx(OpContext *ctx, const hobject_t &coid, snapid_t snap_to_trim,
+                      ObjectContextRef obc, ObjectContextRef head_obc);
   int trim_object(bool first, const hobject_t &coid, snapid_t snap_to_trim,
-		  OpContextUPtr *ctxp);
+                  OpContextUPtr *ctxp);
   void snap_trimmer(epoch_t e) override;
   void kick_snap_trim() override;
   void snap_trimmer_scrub_complete() override;
