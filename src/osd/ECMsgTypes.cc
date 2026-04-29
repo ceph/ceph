@@ -14,6 +14,7 @@
  */
 
 #include "ECMsgTypes.h"
+#include "common/Formatter.h"
 
 using std::list;
 using std::make_pair;
