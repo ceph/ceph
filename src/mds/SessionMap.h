@@ -27,7 +27,6 @@
 
 #include "include/ceph_assert.h"
 #include "include/cephfs/types.h" // for mds_rank_t
-#include "include/Context.h"
 #include "include/xlist.h"
 #include "include/elist.h"
 #include "include/interval_set.h"
@@ -45,7 +44,9 @@
 struct MDRequestImpl;
 class MDSContext;
 class C_MDSInternalNoop;
+template <class ContextType, class ContextInstanceType> class C_GatherBase;
 using MDSGather = C_GatherBase<MDSContext, C_MDSInternalNoop>;
+template <class ContextType, class GatherType> class C_GatherBuilderBase;
 using MDSGatherBuilder = C_GatherBuilderBase<MDSContext, MDSGather>;
 
 enum {
