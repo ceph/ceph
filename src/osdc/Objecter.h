@@ -1134,6 +1134,7 @@ struct ObjectOperation {
     mempool::osd_pglog::map<uint32_t, int> *out_reqid_return_codes;
     uint64_t *out_truncate_seq;
     uint64_t *out_truncate_size;
+    std::map<std::pair<uint64_t, entity_name_t>, watch_info_t> *out_watchers;
     int *prval;
     C_ObjectOperation_copyget(object_copy_cursor_t *c,
 			      uint64_t *s,
@@ -1150,6 +1151,7 @@ struct ObjectOperation {
 			      mempool::osd_pglog::map<uint32_t, int> *oreqid_return_codes,
 			      uint64_t *otseq,
 			      uint64_t *otsize,
+                              std::map<std::pair<uint64_t, entity_name_t>, watch_info_t> *owatchers,
 			      int *r)
       : cursor(c),
 	out_size(s), out_mtime(m),
@@ -1160,6 +1162,7 @@ struct ObjectOperation {
 	out_reqid_return_codes(oreqid_return_codes),
 	out_truncate_seq(otseq),
 	out_truncate_size(otsize),
+        out_watchers(owatchers),
 	prval(r) {}
     void finish(int r) override {
       using ceph::decode;
@@ -1205,6 +1208,8 @@ struct ObjectOperation {
 	  *out_truncate_seq = copy_reply.truncate_seq;
 	if (out_truncate_size)
 	  *out_truncate_size = copy_reply.truncate_size;
+        if (out_watchers)
+          *out_watchers = copy_reply.watchers;
 	*cursor = copy_reply.cursor;
       } catch (const ceph::buffer::error& e) {
 	if (prval)
@@ -1230,6 +1235,7 @@ struct ObjectOperation {
 		mempool::osd_pglog::map<uint32_t, int> *out_reqid_return_codes,
 		uint64_t *truncate_seq,
 		uint64_t *truncate_size,
+                std::map<std::pair<uint64_t, entity_name_t>, watch_info_t> *out_watchers,
 		int *prval) {
     using ceph::encode;
     OSDOp& osd_op = add_op(CEPH_OSD_OP_COPY_GET);
@@ -1245,7 +1251,8 @@ struct ObjectOperation {
 				    out_flags, out_data_digest,
 				    out_omap_digest, out_reqids,
 				    out_reqid_return_codes, truncate_seq,
-				    truncate_size, prval);
+				    truncate_size, out_watchers,
+                                    prval);
     out_bl[p] = &h->bl;
     set_handler(h);
   }
