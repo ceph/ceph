@@ -907,6 +907,7 @@ class ServiceSpec(object):
         'mgmt-gateway': {'user_cert_allowed': True, 'scope': 'global', 'requires_ca_cert': False},
         'nvmeof': {'user_cert_allowed': True, 'scope': 'service', 'requires_ca_cert': False},
         'nfs': {'user_cert_allowed': True, 'scope': 'service', 'requires_ca_cert': True},
+        'smb': {'user_cert_allowed': True, 'scope': 'service', 'requires_ca_cert': True},
 
         # Services that only support cephadm-signed certificates
         'agent': {'user_cert_allowed': False, 'scope': 'host', 'requires_ca_cert': False},
