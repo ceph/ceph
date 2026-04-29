@@ -5,50 +5,46 @@
 
 #include <iostream>
 #include <functional>
+
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
 
 #include "include/rados/librados.hpp"
-#include "include/Context.h"
-#include "include/random.h"
-#include "common/RefCountedObj.h"
+
+#include "common/async/context_pool.h"
+#include "common/ceph_mutex.h"
 #include "common/ceph_time.h"
 #include "common/Timer.h"
-#include "common/async/context_pool.h"
-#include "rgw_common.h"
+
+#include "cls/otp/cls_otp_types.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/version/cls_version_types.h"
-#include "cls/log/cls_log_types.h"
-#include "cls/timeindex/cls_timeindex_types.h"
-#include "cls/otp/cls_otp_types.h"
-#include "rgw_quota.h"
-#include "rgw_log.h"
-#include "rgw_metadata.h"
-#include "rgw_meta_sync_status.h"
-#include "rgw_period_puller.h"
-#include "rgw_obj_manifest.h"
-#include "rgw_sync_module.h"
-#include "rgw_trim_bilog.h"
-#include "rgw_service.h"
-#include "rgw_sal_store.h"
-#include "rgw_aio.h"
-#include "rgw_d3n_cacherequest.h"
 
 #include "services/svc_bi_rados.h"
-#include "common/Throttle.h"
-#include "common/ceph_mutex.h"
-#include "rgw_cache.h"
-#include "rgw_sal_fwd.h"
-#include "rgw_pubsub.h"
-#include "rgw_tools.h"
-#include "rgw_restore.h"
+#include "services/svc_sys_obj_cache.h"
+
 #include "async_utils.h"
+#include "rgw_aio.h"
+#include "rgw_common.h"
+#include "rgw_d3n_cacherequest.h"
+#include "rgw_log.h"
+#include "rgw_metadata.h"
+#include "rgw_obj_manifest.h"
+#include "rgw_pubsub.h"
+#include "rgw_quota.h"
+#include "rgw_restore.h"
+#include "rgw_sal_fwd.h"
+#include "rgw_sal_store.h"
+#include "rgw_service.h"
+#include "rgw_sync_module.h"
+#include "rgw_tools.h"
+#include "rgw_trim_bilog.h"
 
 struct D3nDataCache;
 struct RGWLCCloudTierCtx;
 
 class RGWWatcher;
-class ACLOwner;
+struct ACLOwner;
 class RGWGC;
 class RGWMetaNotifier;
 class RGWDataNotifier;
@@ -297,9 +293,6 @@ namespace rgw { namespace sal {
 } }
 
 class RGWAsyncRadosProcessor;
-
-template <class T>
-class RGWChainedCacheImpl;
 
 struct bucket_info_entry {
   RGWBucketInfo info;

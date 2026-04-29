@@ -23,7 +23,6 @@
 #include "rgw_rados.h"
 #include "rgw_notify.h"
 #include "rgw_role.h"
-#include "rgw_multi.h"
 #include "rgw_putobj_processor.h"
 #include "services/svc_tier_rados.h"
 #include "cls/lock/cls_lock_client.h"
@@ -36,18 +35,17 @@ extern const std::string pubsub_oid_prefix; // v1 topic metadata prefix
 extern const std::string pubsub_bucket_oid_infix;  // v1 notification in-fix
 
 class RadosPlacementTier: public StorePlacementTier {
-  RadosStore* store;
   RGWZoneGroupPlacementTier tier;
 public:
-  RadosPlacementTier(RadosStore* _store, const RGWZoneGroupPlacementTier& _tier) : store(_store), tier(_tier) {}
-  virtual ~RadosPlacementTier() = default;
+  RadosPlacementTier(const RGWZoneGroupPlacementTier& _tier) : tier(_tier) {}
+  ~RadosPlacementTier() override = default;
 
-  virtual const std::string& get_tier_type() { return tier.tier_type; }
-  virtual bool is_tier_type_s3() { return (tier.is_tier_type_s3()); }
-  virtual const std::string& get_storage_class() { return tier.storage_class; }
-  virtual bool retain_head_object() { return tier.retain_head_object; }
-  virtual bool allow_read_through() { return tier.allow_read_through; }
-  virtual uint64_t get_read_through_restore_days() { return tier.read_through_restore_days; }
+  const std::string& get_tier_type() override { return tier.tier_type; }
+  bool is_tier_type_s3() override { return (tier.is_tier_type_s3()); }
+  const std::string& get_storage_class() override { return tier.storage_class; }
+  bool retain_head_object() override { return tier.retain_head_object; }
+  bool allow_read_through() override { return tier.allow_read_through; }
+  uint64_t get_read_through_restore_days() override { return tier.read_through_restore_days; }
   RGWZoneGroupPlacementTier& get_rt() { return tier; }
 };
 
@@ -57,37 +55,37 @@ class RadosZoneGroup : public StoreZoneGroup {
   std::string empty;
 public:
   RadosZoneGroup(RadosStore* _store, const RGWZoneGroup& _group) : store(_store), group(_group) {}
-  virtual ~RadosZoneGroup() = default;
+  ~RadosZoneGroup() override = default;
 
-  virtual const std::string& get_id() const override { return group.get_id(); };
-  virtual const std::string& get_name() const override { return group.get_name(); };
-  virtual int equals(const std::string& other_zonegroup) const override {
+  const std::string& get_id() const override { return group.get_id(); };
+  const std::string& get_name() const override { return group.get_name(); };
+  int equals(const std::string& other_zonegroup) const override {
     return group.equals(other_zonegroup);
   };
-  virtual bool placement_target_exists(std::string& target) const override;
-  virtual bool is_master_zonegroup() const override {
+  bool placement_target_exists(std::string& target) const override;
+  bool is_master_zonegroup() const override {
     return group.is_master_zonegroup();
   };
-  virtual const std::string& get_api_name() const override { return group.api_name; };
-  virtual void get_placement_target_names(std::set<std::string>& names) const override;
-  virtual const std::string& get_default_placement_name() const override {
+  const std::string& get_api_name() const override { return group.api_name; };
+  void get_placement_target_names(std::set<std::string>& names) const override;
+  const std::string& get_default_placement_name() const override {
     return group.default_placement.name; };
-  virtual int get_hostnames(std::list<std::string>& names) const override {
+  int get_hostnames(std::list<std::string>& names) const override {
     names = group.hostnames;
     return 0;
   };
-  virtual int get_s3website_hostnames(std::list<std::string>& names) const override {
+  int get_s3website_hostnames(std::list<std::string>& names) const override {
     names = group.hostnames_s3website;
     return 0;
   };
   virtual int get_zone_count() const override {
     return group.zones.size();
   }
-  virtual int get_placement_tier(const rgw_placement_rule& rule, std::unique_ptr<PlacementTier>* tier);
-  virtual int get_zone_by_id(const std::string& id, std::unique_ptr<Zone>* zone) override;
-  virtual int get_zone_by_name(const std::string& name, std::unique_ptr<Zone>* zone) override;
-  virtual int list_zones(std::list<std::string>& zone_ids) override;
-  virtual std::unique_ptr<ZoneGroup> clone() override {
+  int get_placement_tier(const rgw_placement_rule& rule, std::unique_ptr<PlacementTier>* tier) override;
+  int get_zone_by_id(const std::string& id, std::unique_ptr<Zone>* zone) override;
+  int get_zone_by_name(const std::string& name, std::unique_ptr<Zone>* zone) override;
+  int list_zones(std::list<std::string>& zone_ids) override;
+  std::unique_ptr<ZoneGroup> clone() override {
     return std::make_unique<RadosZoneGroup>(store, group);
   }
   const RGWZoneGroup& get_group() const { return group; }
@@ -274,7 +272,7 @@ class RadosStore : public StoreDriver {
 		     uint64_t max, bool need_stats, BucketList& buckets,
 		     optional_yield y) override;
     virtual bool is_meta_master() override;
-    virtual Zone* get_zone() { return zone.get(); }
+    virtual Zone* get_zone() override { return zone.get(); }
     virtual std::string zone_unique_id(uint64_t unique_num) override;
     virtual std::string zone_unique_trans_id(const uint64_t unique_num) override;
     virtual int get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup) override;
@@ -373,8 +371,8 @@ class RadosStore : public StoreDriver {
     virtual void meta_list_keys_complete(void* handle) override;
     virtual std::string meta_get_marker(void* handle) override;
     virtual int meta_remove(const DoutPrefixProvider* dpp, std::string& metadata_key, optional_yield y) override;
-    virtual const RGWSyncModuleInstanceRef& get_sync_module() { return rados->get_sync_module(); }
-    virtual std::string get_host_id() { return rados->host_id; }
+    virtual const RGWSyncModuleInstanceRef& get_sync_module() override { return rados->get_sync_module(); }
+    virtual std::string get_host_id() override { return rados->host_id; }
     std::unique_ptr<LuaManager> get_lua_manager(const std::string& luarocks_path) override;
     virtual std::unique_ptr<RGWRole> get_role(std::string name,
 					      std::string tenant,
@@ -997,30 +995,23 @@ public:
     finalize();
   }
 
-  virtual int initialize(const DoutPrefixProvider* dpp, optional_yield y,
-		  int n_objs, std::vector<std::string>& obj_names) override;
+  int initialize(const DoutPrefixProvider* dpp, optional_yield y,
+                 int n_objs, std::vector<std::string>& obj_names) override;
   void finalize();  
 
-  virtual int add_entries(const DoutPrefixProvider* dpp, optional_yield y,
-	       int index, const std::vector<rgw::restore::RestoreEntry>& restore_entries) override;
-  virtual int list(const DoutPrefixProvider *dpp, optional_yield y,
-	       	   int index,
-	           const std::string& marker, std::string* out_marker,
-		   uint32_t max_entries, std::vector<rgw::restore::RestoreEntry>& entries,
-		   bool* truncated) override;
-  virtual int trim_entries(const DoutPrefixProvider *dpp, optional_yield y,
-		 	  int index, const std::string_view& marker) override;
-  virtual std::unique_ptr<RestoreSerializer> get_serializer(
-	  				       const std::string& lock_name,
-					       const std::string& oid,
-					       const std::string& cookie) override;
-  /** Below routines deal with actual FIFO */
-  int trim(const DoutPrefixProvider *dpp, optional_yield y,
-		int index, const std::string_view& marker);
-  int push(const DoutPrefixProvider *dpp, optional_yield y,
-		int index, ceph::buffer::list&& bl);
-  int push(const DoutPrefixProvider *dpp, optional_yield y,
-		int index, std::deque<ceph::buffer::list>&& items);
+  int add_entries(const DoutPrefixProvider* dpp, optional_yield y,
+                  int index, const std::vector<rgw::restore::RestoreEntry>& restore_entries) override;
+  void list(const DoutPrefixProvider *dpp, int index,
+            const std::string& marker, std::string* out_marker,
+            uint32_t max_entries, std::vector<rgw::restore::RestoreEntry>& entries,
+            bool* truncated, boost::asio::yield_context yc) override;
+  void trim_entries(const DoutPrefixProvider* dpp, int index,
+                    const std::string_view& marker,
+                    boost::asio::yield_context yc) override;
+  std::unique_ptr<RestoreSerializer> get_serializer(
+      const std::string& lock_name,
+      const std::string& oid,
+      const std::string& cookie) override;
 };
 
 class RadosNotification : public StoreNotification {

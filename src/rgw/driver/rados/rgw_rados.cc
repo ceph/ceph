@@ -1088,6 +1088,10 @@ RGWRados::shutdown(rgw::shutdown_vector& to_wait)
     svc.async_processor->set_down_flag();
   }
 
+  if (use_restore_thread) {
+    restore->stop_processor();
+    restore->shutdown(to_wait);
+  }
   // TODO(Æmerson): Turn threads into Asio threads so we can cancel them.
 }
 
@@ -1341,8 +1345,8 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
   lc = new RGWLC();
   lc->initialize(cct, this->driver);
 
-  restore = make_unique<rgw::restore::Restore>();
-  ret = restore->initialize(cct, this->driver);
+  restore = make_unique<rgw::restore::Restore>(driver->get_io_context());
+  ret = restore->initialize(cct, this->driver, y);
 
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to initialize restore thread" << dendl;

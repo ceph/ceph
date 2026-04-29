@@ -75,7 +75,6 @@
 #include "services/svc_mdlog.h"
 #include "services/svc_quota.h"
 #include "services/svc_sys_obj.h"
-#include "services/svc_sys_obj_cache.h"
 #include "services/svc_tier_rados.h"
 #include "services/svc_user.h"
 #include "services/svc_zone.h"
@@ -5026,11 +5025,10 @@ int RadosRestore::initialize(const DoutPrefixProvider* dpp, optional_yield y,
   num_objs = n_objs;
   obj_names = o_names;
 
-  maybe_warn_about_blocking(dpp);
   for (auto i=0; i < num_objs; i++) {
     std::unique_ptr<fifo::FIFO> fifo_tmp;
     try {
-      fifo_tmp = fifo::FIFO::create(dpp, r, obj_names[i], neo_ioctx, ceph::async::use_blocked);
+      fifo_tmp = fifo::FIFO::create(dpp, r, obj_names[i], neo_ioctx, rgw::oyc(dpp, y));
     } catch (const sys::system_error& e) {
       ldpp_dout(dpp, -1) << "creating fifo object for index=" << i
 	   << ", objname=" << obj_names[i] << " failed : " << e.what() << dendl;
@@ -5054,62 +5052,26 @@ void RadosRestore::finalize() {
   fifos.clear();
 }
 
-
 int RadosRestore::add_entries(const DoutPrefixProvider* dpp, optional_yield y,
-		int index, const std::vector<rgw::restore::RestoreEntry>& restore_entries) {
-  std::deque<ceph::buffer::list> ent_list;
-
-  for (auto& entry : restore_entries) {
-    bufferlist bl;
-
-    encode(entry, bl);
-    ent_list.push_back(std::move(bl));
-
-  }
-
-  ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
-		 << "Adding " << restore_entries.size() << " entries to FIFO:"
-		 << obj_names[index] << dendl;
-
-  int ret = push(dpp, y, index, std::move(ent_list));
-
-  if (ret < 0) {
-    ldpp_dout(dpp, -1) << "ERROR: push() returned " << ret << dendl;
-    return ret;
-  }
-
-  return 0;
-}
-
-int RadosRestore::push(const DoutPrefixProvider *dpp, optional_yield y,
-		int index, std::deque<ceph::buffer::list>&& items) {
-  ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
-		 << "Pushing entries to FIFO:" << obj_names[index] << dendl;
-  maybe_warn_about_blocking(dpp);
+                              int index, const std::vector<rgw::restore::RestoreEntry>& restore_entries) {
   try {
-    fifos[index]->push(dpp, items, ceph::async::use_blocked);
-  } catch (const sys::system_error& e) {
-    ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
-		 << ": unable to push to FIFO: " << obj_names[index]
-		 << ": " << e.what() << dendl;
-    return ceph::from_error_code(e.code());
-  }
-  return 0;
-}
+    std::deque<ceph::buffer::list> ent_list;
 
-int RadosRestore::push(const DoutPrefixProvider *dpp, optional_yield y,
-		int index, ceph::buffer::list&& bl) {
-  ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
-		 << "Pushing entry to FIFO:" << obj_names[index] << dendl;
+    for (const auto& entry : restore_entries) {
+      bufferlist bl;
 
-  maybe_warn_about_blocking(dpp);
-  try {
-    fifos[index]->push(dpp, std::move(bl), ceph::async::use_blocked);
-  } catch (const sys::system_error& e) {
-    ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
-		 << ": unable to push to FIFO: " << obj_names[index]
-		 << ": " << e.what() << dendl;
-    return ceph::from_error_code(e.code());
+      encode(entry, bl);
+      ent_list.push_back(std::move(bl));
+    }
+
+    ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << "Adding "
+                       << restore_entries.size()
+                       << " entries to FIFO:" << obj_names[index] << dendl;
+
+    fifos[index]->push(dpp, std::move(ent_list), rgw::oyc(dpp, y));
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, -1) << "ERROR: push() failed with: " << e.what() << dendl;
+    return ceph::from_exception(std::current_exception());
   }
   return 0;
 }
@@ -5141,10 +5103,10 @@ struct rgw_restore_fifo_entry {
 };
 WRITE_CLASS_ENCODER(rgw_restore_fifo_entry)
 
-int RadosRestore::list(const DoutPrefixProvider *dpp, optional_yield y,
-	       	   int index, const std::string& marker, std::string* out_marker,
-		   uint32_t max_entries, std::vector<rgw::restore::RestoreEntry>& entries,
-		   bool* truncated)
+void RadosRestore::list(const DoutPrefixProvider *dpp,
+                        int index, const std::string& marker, std::string* out_marker,
+                        uint32_t max_entries, std::vector<rgw::restore::RestoreEntry>& entries,
+                        bool* truncated, asio::yield_context yc)
 {
   std::vector<fifo::entry> restore_entries{max_entries};
   std::string omark = {};
@@ -5153,10 +5115,9 @@ int RadosRestore::list(const DoutPrefixProvider *dpp, optional_yield y,
   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
 		 << "Listing entries from FIFO:" << obj_names[index] << dendl;
 
-  maybe_warn_about_blocking(dpp);
   try {
-    auto [lentries, lmark] = fifos[index]->list(dpp, marker,
-			  	 restore_entries, ceph::async::use_blocked);
+    auto [lentries, lmark] =
+        fifos[index]->list(dpp, marker, restore_entries, yc);
     entries.clear();
 
     for (const auto& entry : lentries) {
@@ -5175,11 +5136,18 @@ int RadosRestore::list(const DoutPrefixProvider *dpp, optional_yield y,
     }
   } catch (const sys::system_error& e) {
     if (e.code() == sys::errc::no_such_file_or_directory) {
+      entries.clear();
+      if (out_marker) {
+        out_marker->clear();
+      }
+      if (truncated) {
+        *truncated = false;
+      }
     } else {
       ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
 		 << ": unable to list FIFO: " << obj_names[index]
 		 << ": " << e.what() << dendl;
-      return ceph::from_error_code(e.code());
+      throw;
     }
   }
 
@@ -5197,33 +5165,25 @@ int RadosRestore::list(const DoutPrefixProvider *dpp, optional_yield y,
 		 << (truncated ? *truncated : false) 
 		 << ", out_marker:" << (out_marker ? *out_marker : "") << dendl;
 
-  return 0;
 }
 
-int RadosRestore::trim_entries(const DoutPrefixProvider *dpp, optional_yield y,
-			int index, const std::string_view& marker)
+void
+RadosRestore::trim_entries(
+    const DoutPrefixProvider* dpp,
+    int index,
+    const std::string_view& marker,
+    asio::yield_context yc)
 {
   assert(index < num_objs);
 
-  int ret = trim(dpp, y, index, marker);
-  return ret;
-}
-
-int RadosRestore::trim(const DoutPrefixProvider *dpp, optional_yield y,
-		int index, const std::string_view& marker) {
-  ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
-		 << "Trimming FIFO:" << obj_names[index] << " upto marker:" << marker << dendl;
-
-  maybe_warn_about_blocking(dpp);
   try {
-    fifos[index]->trim(dpp, std::string(marker), false, ceph::async::use_blocked);
+    fifos[index]->trim(dpp, std::string(marker), false, yc);
   } catch (const sys::system_error& e) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
-		 << ": unable to trim FIFO: " << obj_names[index]
-		 << ": " << e.what() << dendl;
-    return ceph::from_error_code(e.code());
+                       << ": unable to trim FIFO: " << obj_names[index] << ": "
+                       << e.what() << dendl;
+    throw;
   }
-  return 0;
 }
 
 int RadosNotification::publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags)
@@ -5347,7 +5307,7 @@ int RadosZoneGroup::get_placement_tier(const rgw_placement_rule& rule,
   }
 
   PlacementTier* t;
-  t = new RadosPlacementTier(store, ttier->second);
+  t = new RadosPlacementTier(ttier->second);
   if (!t)
     return -ENOMEM;
 

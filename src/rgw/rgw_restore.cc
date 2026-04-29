@@ -1,54 +1,39 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
-#include <fmt/chrono.h>
-#include <string.h>
+#include <cstring>
 #include <iostream>
 #include <map>
-#include <algorithm>
-#include <tuple>
-#include <functional>
+#include <vector>
 
-#include <boost/algorithm/string/split.hpp>
-#include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/asio/cancellation_type.hpp>
+#include <boost/asio/error.hpp>
+#include <boost/asio/this_coro.hpp>
 #include <boost/variant.hpp>
 
-#include "include/scope_guard.h"
-#include "include/function2.hpp"
-#include "common/Clock.h" // for ceph_clock_now()
-#include "common/Formatter.h"
-#include "common/containers.h"
-#include "common/split.h"
-#include <common/errno.h>
+#include <fmt/chrono.h>
+
 #include "include/random.h"
-#include "cls/lock/cls_lock_client.h"
-#include "rgw_perf_counters.h"
+
+#include "common/Formatter.h"
+#include "common/errno.h"
+#include "common/dout.h"
+
+#include "async_utils.h"
 #include "rgw_common.h"
-#include "rgw_bucket.h"
 #include "rgw_restore.h"
 #include "rgw_restore_waiter.h"
-#include "rgw_zone.h"
-#include "rgw_string.h"
-#include "rgw_multi.h"
 #include "rgw_sal.h"
-#include "rgw_lc_tier.h"
 #include "rgw_notify.h"
-#include "common/dout.h"
 
 #include "fmt/format.h"
 
-#include "services/svc_sys_obj.h"
-#include "services/svc_zone.h"
-#include "services/svc_tier_rados.h"
 #include "common/ceph_time.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw_restore
 
-
-constexpr int32_t hours_in_a_day = 24;
-constexpr int32_t secs_in_a_day = hours_in_a_day * 60 * 60;
 static constexpr size_t listing_max_entries = 1000;
 
 using namespace std;
@@ -114,6 +99,12 @@ void RestoreEntry::generate_test_instances(std::list<RestoreEntry*>& l)
 static std::string restore_id = "rgw restore";
 static std::string restore_req_id = "0";
 
+Restore::~Restore()
+{
+  ceph_assert(worker.state() != rgw::task_state::running);
+  finalize();
+}
+
 void Restore::send_notification(const DoutPrefixProvider* dpp,
                               rgw::sal::Driver* driver,
                               rgw::sal::Object* obj,
@@ -148,7 +139,7 @@ void Restore::send_notification(const DoutPrefixProvider* dpp,
   }
 }
 
-int Restore::initialize(CephContext *_cct, rgw::sal::Driver* _driver) {
+int Restore::initialize(CephContext *_cct, rgw::sal::Driver* _driver, optional_yield y) {
   int ret = 0;
   cct = _cct;
   driver = _driver;
@@ -179,7 +170,7 @@ int Restore::initialize(CephContext *_cct, rgw::sal::Driver* _driver) {
     return -EINVAL;
   }
 
-  ret = sal_restore->initialize(this, null_yield, max_objs, obj_names);
+  ret = sal_restore->initialize(this, y, max_objs, obj_names);
 
   if (ret < 0) {
     ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": failed to initialize sal_restore" << dendl;
@@ -217,39 +208,28 @@ static inline std::ostream& operator<<(std::ostream &os, RestoreEntry& ent) {
   return os;
 }
 
-void Restore::RestoreWorker::stop()
-{
-  std::lock_guard l{lock};
-  cond.notify_all();
-}
-
-bool Restore::going_down()
-{
-  return down_flag;
-}
-
 void Restore::start_processor()
 {
-  worker = std::make_unique<Restore::RestoreWorker>(this, cct, this);
-  worker->create("rgw_restore");
+  worker.run();
 }
 
 void Restore::stop_processor()
 {
-  down_flag = true;
-  if (worker) {
-    worker->stop();
-    worker->join();
+  if (worker.state() == rgw::task_state::running) {
+    worker.cancel();
   }
-  worker.reset(nullptr);
+}
+
+void Restore::shutdown(shutdown_vector& to_wait)
+{
+  if (worker.state() == rgw::task_state::running) {
+    worker.shutdown("Restore worker", to_wait);
+  }
 }
 
 void Restore::wake_worker()
 {
-  if (worker) {
-    std::lock_guard lock(worker->lock);
-    worker->cond.notify_one();
-  }
+  worker.wake();
 }
 
 unsigned Restore::get_subsys() const
@@ -270,44 +250,43 @@ int Restore::choose_oid(const RestoreEntry& e) {
   return static_cast<int>(index);
 }
 
-void *Restore::RestoreWorker::entry() {
+ceph::timespan
+Restore::worker_task(asio::yield_context y)
+{
+  ceph::timespan duration;
+  ceph::timespan period;
   do {
-    ceph_timespec start = ceph::real_clock::to_ceph_timespec(real_clock::now());
-    int r = 0;
-    r = restore->process(this, null_yield);
-    if (r < 0) {
-      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ": ERROR: restore process() returned error r=" << r << dendl;	    
+    auto start = ceph::mono_clock::now();
+    try {
+      process(y);
+    } catch (const sys::system_error& e) {
+      if (e.code() == asio::error::operation_aborted) {
+        throw;
+      }
+      ldpp_dout(this, -1) << "ERROR: restore process() threw exception: "
+                          << e.what() << dendl;
+    } catch (const std::exception& e) {
+      ldpp_dout(this, -1)
+          << "ERROR: restore process() threw exception: " << e.what()
+          << dendl;
     }
-    if (restore->going_down())
-      break;
-    ceph_timespec end = ceph::real_clock::to_ceph_timespec(real_clock::now());
-    auto d = end - start;
-    end = d;
-    int secs = cct->_conf->rgw_restore_processor_period;
+    duration = ceph::mono_clock::now() - start;
+    period = std::chrono::seconds(cct->_conf->rgw_restore_processor_period);
+  } while (period < duration);
 
-    if (secs < d)
-      continue; // next round
-
-    std::unique_lock locker{lock};
-    cond.wait_for(locker, std::chrono::seconds(secs));
-  } while (!restore->going_down());
-
-  return NULL;
-
+  return period;
 }
 
-int Restore::process(RestoreWorker* worker, optional_yield y)
+void Restore::process(asio::yield_context y)
 {
-  int max_secs = cct->_conf->rgw_restore_lock_max_time;
+  std::chrono::seconds max_secs{cct->_conf->rgw_restore_lock_max_time};
 
   const int start = ceph::util::generate_random_number(0, max_objs - 1);
   for (int i = 0; i < max_objs; i++) {
     int index = (i + start) % max_objs;
-    int ret = process(index, max_secs, y);
-    if (ret < 0)
-      return ret;
+    // Exceptions from process are thrown here.
+    process(index, max_secs, y);
   }
-  return 0;
 }
 
 // unique_lock expects an unlock() taking no arguments, but
@@ -316,10 +295,15 @@ int Restore::process(RestoreWorker* worker, optional_yield y)
 struct RestoreLockAdapter {
   rgw::sal::RestoreSerializer& serializer;
   const DoutPrefixProvider* dpp = nullptr;
-  optional_yield y;
+  asio::yield_context y;
 
   void unlock() {
-    serializer.unlock(dpp, y);
+    try {
+      serializer.unlock(dpp, y);
+    } catch (const std::exception& e) {
+      ldpp_dout(dpp, 5) << "restore worker: Error in relinquishing lock: " << e.what() << dendl;
+      // Swallow the exception since this is called from `unique_lock`'s destructor.
+    }
   }
 };
 
@@ -330,39 +314,43 @@ struct RestoreLockAdapter {
  * While processing the entries, if any of their restore operation is still in
  * progress, such entries are added back to the list.
  */ 
-int Restore::process(int index, int max_secs, optional_yield y)
+void Restore::process(int index, std::chrono::seconds max_time, asio::yield_context y)
 {
-  ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": process entered index="	
-		      << index << ", max_secs=" << max_secs << dendl;
+  ldpp_dout(this, 20) << __PRETTY_FUNCTION__
+                      << ": process entered index=" << index
+                      << ", max_time=" << max_time << dendl;
 
   /* list used to gather still IN_PROGRESS */
   std::vector<RestoreEntry> r_entries;
 
-  std::unique_ptr<rgw::sal::RestoreSerializer> serializer =
-  			sal_restore->get_serializer(std::string(restore_index_lock_name),
-				       	std::string(obj_names[index]),
-					worker->thr_name());
-  utime_t end = ceph_clock_now();
-
-  /* max_secs should be greater than zero. We don't want a zero max_secs
+  /* time should be greater than zero. We don't want a zero max_time
    * to be translated as no timeout, since we'd then need to break the
    * lock and that would require a manual intervention. In this case
    * we can just wait it out. */
+  if (max_time <= 0s) {
+    throw sys::system_error{
+        EAGAIN, sys::generic_category(),
+        "Max secs should be greater than zero."};
+  }
+  std::unique_ptr<rgw::sal::RestoreSerializer> serializer =
+  			sal_restore->get_serializer(std::string(restore_index_lock_name),
+				       	std::string(obj_names[index]),
+					"restore_thrd: ");
+  auto end = ceph::mono_clock::now() + max_time;
 
-  if (max_secs <= 0)
-    return -EAGAIN;
-
-  end += max_secs;
-  const ceph::timespan time = std::chrono::seconds(max_secs);
-  int ret = serializer->try_lock(this, time, y);
+  int ret = serializer->try_lock(this, max_time, y);
   if (ret == -EBUSY || ret == -EEXIST) {
     /* already locked by another lc processor */
-    ldpp_dout(this, 0) << __PRETTY_FUNCTION__ << ": failed to acquire lock on "	 
-		       << obj_names[index] << dendl;
-    return -EBUSY;
+    ldpp_dout(this, 0) << __PRETTY_FUNCTION__ << ": failed to acquire lock on "
+                       << obj_names[index] << dendl;
+    throw sys::system_error{
+        EBUSY, sys::generic_category(),
+        "Already locked by another restore processor."};
+  } else if (ret < 0) {
+    // On other errors just go to the next shard and try again next
+    // iteration.
+    return;
   }
-  if (ret < 0)
-    return 0;
 
   auto lock_adapter = RestoreLockAdapter{*serializer, this, y};
   std::unique_lock<RestoreLockAdapter> lock(lock_adapter, std::adopt_lock);
@@ -374,24 +362,27 @@ int Restore::process(int index, int max_secs, optional_yield y)
     int max = 100;
     std::vector<RestoreEntry> entries;
 
-    ret = sal_restore->list(this, y, index, marker, &next_marker, max, entries, &truncated);
-    ldpp_dout(this, 20) << __PRETTY_FUNCTION__ <<
-      ": list on shard:" << obj_names[index] << " returned:" << ret <<
-      ", entries.size=" << entries.size() << ", truncated=" << truncated <<
-      ", marker='" << marker << "'" <<
-      ", next_marker='" << next_marker << "'" << dendl;
-
-    if (ret < 0)
-      goto done;
+    try {
+      sal_restore->list(this, index, marker, &next_marker, max, entries, &truncated, y);
+      ldpp_dout(this, 20) << __PRETTY_FUNCTION__ <<
+        ": list on shard:" << obj_names[index] << " returned success:"
+        ", entries.size=" << entries.size() << ", truncated=" << truncated <<
+        ", marker='" << marker << "'" <<
+        ", next_marker='" << next_marker << "'" << dendl;
+    } catch (const std::exception& e) {
+      ldpp_dout(this, 0) << __PRETTY_FUNCTION__
+                          << ": list on shard:" << obj_names[index]
+                          << " failed:" << e.what() << dendl;
+      throw;
+    }
 
     if (entries.size() == 0) {
       lock.unlock();
-      return 0;
+      return;
     }
 
     marker = next_marker;
-    std::vector<RestoreEntry>::iterator iter;
-    for (iter = entries.begin(); iter != entries.end(); ++iter) {
+    for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
       RestoreEntry entry = *iter;
 
       ret = process_restore_entry(entry, y);
@@ -405,18 +396,12 @@ int Restore::process(int index, int max_secs, optional_yield y)
 
       // Skip the entry of object/bucket which no longer exists
       if (ret < 0 && (ret != -ENOENT))
-        goto done;
+        return;
 
       ///process all entries, trim and re-add
-      utime_t now = ceph_clock_now();
+      auto now = ceph::mono_clock::now();
       if (now >= end) {
-        goto done;
-      }
-
-      if (going_down()) {
- 	// leave early, even if tag isn't removed, it's ok since it
-	// will be picked up next time around
-	goto done;
+        return;
       }
     }
   } while (truncated);
@@ -424,9 +409,12 @@ int Restore::process(int index, int max_secs, optional_yield y)
   ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": trimming till marker: '" << marker
 		 	 << "' on shard:"
   	  	         << obj_names[index] << dendl;    
-  ret = sal_restore->trim_entries(this, y, index, marker);
-  if (ret < 0) {
-    ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: failed to trim entries on "	    	  	         << obj_names[index] << dendl;
+  try {
+    sal_restore->trim_entries(this, index, marker, y);
+  } catch (const std::exception& e) {
+    ldpp_dout(this, -1) << __PRETTY_FUNCTION__
+                        << ": ERROR: failed to trim entries on "
+                        << obj_names[index] << ": " << e.what() << dendl;
   }
 
   if (!r_entries.empty()) {
@@ -438,11 +426,6 @@ int Restore::process(int index, int max_secs, optional_yield y)
   }
 
   r_entries.clear();
-
-done:
-  lock.unlock();
-
-  return ret;
 }
 
 int Restore::process_restore_entry(RestoreEntry& entry, optional_yield y)
@@ -470,7 +453,7 @@ int Restore::process_restore_entry(RestoreEntry& entry, optional_yield y)
 
   // fill in the details from entry
   // bucket, obj, days, state=in_progress
-  ret = driver->load_bucket(this, entry.bucket, &bucket, null_yield);
+  ret = driver->load_bucket(this, entry.bucket, &bucket, y);
   if (ret < 0) {
     ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: get_bucket for "
 	   		<< bucket->get_name()	  
@@ -479,7 +462,7 @@ int Restore::process_restore_entry(RestoreEntry& entry, optional_yield y)
   }
   obj = bucket->get_object(entry.obj_key);
 
-  ret = obj->load_obj_state(this, null_yield, true);
+  ret = obj->load_obj_state(this, y, true);
 
   if (ret < 0) {
     ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: get_object for "
@@ -585,13 +568,6 @@ done:
   return ret;
 }
 
-time_t Restore::thread_stop_at()
-{
-  uint64_t interval = (cct->_conf->rgw_restore_debug_interval > 0)
-    ? cct->_conf->rgw_restore_debug_interval : secs_in_a_day;
-
-  return time(nullptr) + interval;
-}
 
 int Restore::set_cloud_restore_status(const DoutPrefixProvider* dpp,
 			   rgw::sal::Object* pobj, optional_yield y,

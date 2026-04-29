@@ -18,7 +18,6 @@
 #include <cstdint>
 #include <optional>
 
-#include <boost/asio/awaitable.hpp>
 #include <boost/asio/io_context.hpp>
 
 #include <boost/asio/experimental/promise.hpp>
@@ -46,7 +45,7 @@ struct RGWBucketEnt;
 class RGWRESTMgr;
 class RGWLC;
 struct rgw_user_bucket;
-class RGWUsageBatch;
+struct RGWUsageBatch;
 class RGWCoroutinesManagerRegistry;
 class RGWBucketSyncPolicyHandler;
 using RGWBucketSyncPolicyHandlerRef = std::shared_ptr<RGWBucketSyncPolicyHandler>;
@@ -1762,17 +1761,24 @@ public:
 		  int n_objs, std::vector<std::string>& obj_names) = 0;  
   /** Add list of restore entries */
   virtual int add_entries(const DoutPrefixProvider* dpp, optional_yield y,
-	       int index, const std::vector<rgw::restore::RestoreEntry>& restore_entries) = 0;
+                          int index, const std::vector<rgw::restore::RestoreEntry>& restore_entries) = 0;
   /** List all known entries given a marker */
-  virtual int list(const DoutPrefixProvider *dpp, optional_yield y,
-	       	   int index,
-	           const std::string& marker, std::string* out_marker,
-		   uint32_t max_entries, std::vector<rgw::restore::RestoreEntry>& entries,
-		   bool* truncated) = 0;
+  virtual void list(
+      const DoutPrefixProvider* dpp,
+      int index,
+      const std::string& marker,
+      std::string* out_marker,
+      uint32_t max_entries,
+      std::vector<rgw::restore::RestoreEntry>& entries,
+      bool* truncated,
+      boost::asio::yield_context y) = 0;
 
-  /** Trim restore entries upto the marker */
-  virtual int trim_entries(const DoutPrefixProvider *dpp, optional_yield y,
-		 	  int index, const std::string_view& marker) = 0;
+  /** Trim restore entries up to the marker */
+  virtual void trim_entries(
+      const DoutPrefixProvider* dpp,
+      int index,
+      const std::string_view& marker,
+      boost::asio::yield_context y) = 0;
 
   /** Get a serializer for restore processing */
   virtual std::unique_ptr<RestoreSerializer> get_serializer(

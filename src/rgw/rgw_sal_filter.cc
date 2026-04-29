@@ -1487,17 +1487,17 @@ int FilterRestore::add_entries(const DoutPrefixProvider* dpp, optional_yield y,
 }
 
 /** List all known entries */
-int FilterRestore::list(const DoutPrefixProvider *dpp, optional_yield y,
+void FilterRestore::list(const DoutPrefixProvider *dpp,
 	       	   int index, const std::string& marker, std::string* out_marker,
 		   uint32_t max_entries, std::vector<rgw::restore::RestoreEntry>& entries,
-		   bool* truncated) {
-  return next->list(dpp, y, index, marker, out_marker, max_entries,
-  		    entries, truncated);
+		   bool* truncated, asio::yield_context y) {
+  return next->list(dpp, index, marker, out_marker, max_entries,
+  		    entries, truncated, y);
 }
 
-int FilterRestore::trim_entries(const DoutPrefixProvider *dpp, optional_yield y,
-		 	        int index, const std::string_view& marker) {
-  return next->trim_entries(dpp, y, index, marker);
+void FilterRestore::trim_entries(const DoutPrefixProvider *dpp,
+                                 int index, const std::string_view& marker, asio::yield_context y) {
+  return next->trim_entries(dpp, index, marker, y);
 }
 
 
