@@ -389,6 +389,11 @@ bool ScrubJob::observes_load_limit(urgency_t urgency)
   return urgency < urgency_t::after_repair;
 }
 
+bool ScrubJob::observes_trims_load(urgency_t urgency)
+{
+  return urgency < urgency_t::repairing;
+}
+
 bool ScrubJob::requires_reservation(urgency_t urgency)
 {
   return urgency < urgency_t::after_repair;
