@@ -55,6 +55,8 @@ set(common_srcs
   TableFormatter.cc
   Thread.cc
   Throttle.cc
+  OrderedThrottle.cc
+  TokenBucketThrottle.cc
   Timer.cc
   TracepointProvider.cc
   TrackedOp.cc
