@@ -11,6 +11,7 @@
 #include "global/global_init.h"
 #include "common/debug.h"
 #include "msg/Messenger.h"
+#include "msg/CompletionHook.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 #include "common/perf_counters.h"
