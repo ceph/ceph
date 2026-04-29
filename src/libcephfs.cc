@@ -26,6 +26,7 @@
 #include "common/async/context_pool.h"
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
+#include "common/Cond.h"
 #include "common/config.h"
 #include "common/version.h"
 #include "mon/MonClient.h"
