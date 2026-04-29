@@ -7,7 +7,7 @@
 #include "common/ceph_context.h"
 #include "common/ceph_mutex.h"
 #include "common/Timer.h"
-#include "common/Throttle.h"
+#include "common/TokenBucketThrottle.h"
 #include "common/Cond.h"
 #include "include/rados/librados.hpp"
 
