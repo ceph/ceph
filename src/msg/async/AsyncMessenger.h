@@ -27,8 +27,6 @@
 #include "include/spinlock.h"
 
 #include "common/ceph_mutex.h"
-#include "common/Cond.h"
-#include "common/Thread.h"
 
 #include "msg/SimplePolicyMessenger.h"
 #include "msg/DispatchQueue.h"
