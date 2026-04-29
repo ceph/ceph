@@ -5,6 +5,7 @@
 #include "include/rados/librados.hpp"
 #include "common/AsyncOpTracker.h"
 #include "common/Clock.h" // for ceph_clock_now()
+#include "common/Cond.h"
 #include "common/errno.h"
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
