@@ -39,8 +39,8 @@
 #include "common/RefCountedObj.h"
 
 #include "msg/Connection.h" // for ConnectionRef
-#include "msg/Message.h"
 
+class Message;
 struct MDRequestImpl;
 class MDSContext;
 class C_MDSInternalNoop;
