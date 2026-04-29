@@ -337,6 +337,8 @@ public:
       });
   }
 
+  seastar::future<uint64_t> calc_snap_trim_queue_total() const;
+
   /**
    * for_each_pgid
    *

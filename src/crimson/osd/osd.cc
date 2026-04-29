@@ -69,6 +69,7 @@ SET_SUBSYS(osd);
 
 namespace {
   static constexpr int TICK_INTERVAL = 1;
+  static constexpr int TRIM_QLENGTHS_UPDATE_PERIOD = 5;
 }
 
 using std::make_unique;
@@ -122,6 +123,15 @@ OSD::OSD(int id, uint32_t nonce,
       ).then([this] {
 	update_stats();
         mgrc->update_daemon_health(get_health_metrics());
+	if (++trim_queue_length_countdown >= TRIM_QLENGTHS_UPDATE_PERIOD) {
+	  trim_queue_length_countdown = 0;
+	  std::ignore = pg_shard_manager.calc_snap_trim_queue_total(
+	  ).then([this](uint64_t total) {
+	    LOG_PREFIX(OSD::tick);
+	    snap_trim_queue_total = total;
+	    DEBUG("snap_trim_queue_total: {}", total);
+	  });
+	}
 	tick_timer.arm(
 	  std::chrono::seconds(TICK_INTERVAL));
       });
