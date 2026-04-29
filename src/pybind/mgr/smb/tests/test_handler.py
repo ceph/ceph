@@ -25,6 +25,7 @@ def thandler():
         # into a single store. Do that to simplify testing a bit.
         public_store=ext_store,
         priv_store=ext_store,
+        mgr=None,
     )
 
 
