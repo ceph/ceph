@@ -107,6 +107,11 @@ void OsdScrub::initiate_scrub(bool is_recovery_active)
 	<< dendl;
   }
 
+  {
+    auto stqt = m_osd_svc.get_snap_trim_queue_total();
+    dout(20) << fmt::format("snap_trim_queue_total: {}", stqt) << dendl;
+  }
+
   const utime_t scrub_time = ceph_clock_now();
 
   // check the OSD-wide environment conditions (scrub resources, time, etc.).
