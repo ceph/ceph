@@ -19,6 +19,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/ceph_releases.h"
+#include "common/Cond.h"
 #include "common/config.h"
 #include "OSD.h"
 #include "OpRequest.h"

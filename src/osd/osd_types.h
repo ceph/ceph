@@ -43,6 +43,7 @@
 #include "include/types.h"
 #include "include/utime.h"
 #include "include/CompatSet.h"
+#include "common/bitset_set.h"
 #include "common/dout.h"
 #include "common/histogram.h" // for pow2_hist_t
 #include "include/interval_set.h"
