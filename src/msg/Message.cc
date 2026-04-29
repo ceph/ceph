@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "Message.h"
+#include "CompletionHook.h"
 
 #ifdef ENCODE_DUMP
 # include <typeinfo>
@@ -234,6 +235,16 @@
 #define DEBUGLVL  10    // debug level of output
 
 #define dout_subsys ceph_subsys_ms
+
+Message::~Message() {
+  if (byte_throttler)
+    byte_throttler->put(payload.length() + middle.length() + data.length());
+  release_message_throttle();
+  trace.event("message destructed");
+  /* call completion hooks (if any) */
+  if (completion_hook)
+    completion_hook->complete(0);
+}
 
 void Message::encode(uint64_t features, int crcflags, bool skip_header_crc)
 {

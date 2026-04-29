@@ -29,7 +29,6 @@
 #include <fmt/ostream.h>
 #endif
 
-#include "include/Context.h"
 #include "common/RefCountedObj.h"
 #include "common/ThrottleInterface.h"
 #include "common/config.h"
@@ -304,14 +303,7 @@ public:
   void encode_otel_trace(ceph::buffer::list &bl, uint64_t features) const;
   void decode_otel_trace(ceph::buffer::list::const_iterator &p, bool create = false);
 
-  class CompletionHook : public Context {
-  protected:
-    Message *m;
-    friend class Message;
-  public:
-    explicit CompletionHook(Message *_m) : m(_m) {}
-    virtual void set_message(Message *_m) { m = _m; }
-  };
+  class CompletionHook;
 
   typedef boost::intrusive::list<Message,
 				 boost::intrusive::member_hook<
@@ -352,15 +344,7 @@ public:
   }
 
 protected:
-  ~Message() override {
-    if (byte_throttler)
-      byte_throttler->put(payload.length() + middle.length() + data.length());
-    release_message_throttle();
-    trace.event("message destructed");
-    /* call completion hooks (if any) */
-    if (completion_hook)
-      completion_hook->complete(0);
-  }
+  ~Message() override;
 public:
   const ConnectionRef& get_connection() const {
 #ifdef WITH_CRIMSON
