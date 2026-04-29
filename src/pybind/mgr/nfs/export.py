@@ -2,6 +2,7 @@ import errno
 import hashlib
 import json
 import logging
+import stat
 from typing import (
     List,
     Any,
@@ -12,11 +13,12 @@ from typing import (
     Callable,
     Set,
     cast)
+from threading import Lock
 from os.path import normpath
 from ceph.fs.earmarking import EarmarkTopScope
 import cephfs
 
-from mgr_util import CephFSEarmarkResolver
+from mgr_util import CephFSEarmarkResolver, CephfsClient, open_filesystem
 from rados import TimedOut, ObjectNotFound
 
 from object_format import ErrorResponse
@@ -43,8 +45,7 @@ from .utils import (
     available_clusters,
     check_fs,
     get_nfs_spec_for_cluster,
-    restart_nfs_service,
-    cephfs_path_is_dir)
+    restart_nfs_service)
 from .rados_utils import NFSRados
 
 if TYPE_CHECKING:
@@ -73,17 +74,6 @@ def normalize_path(path: str) -> str:
         if path[:2] == "//":
             path = path[1:]
     return path
-
-
-def validate_cephfs_path(mgr: 'Module', fs_name: str, path: str) -> None:
-    try:
-        cephfs_path_is_dir(mgr, fs_name, path)
-    except NotADirectoryError:
-        raise NFSException(f"path {path} is not a dir", -errno.ENOTDIR)
-    except cephfs.ObjectNotFound:
-        raise NFSObjectNotFound(f"path {path} does not exist")
-    except cephfs.Error as e:
-        raise NFSException(e.args[1], -e.args[0])
 
 
 def _validate_cmount_path(cmount_path: str, path: str) -> None:
@@ -161,6 +151,8 @@ class ExportMgr:
         self.rados_pool = POOL_NAME
         self._exports: Optional[Dict[str, List[Export]]] = export_ls
         self.skip_notify_nfs_server = False
+        self._cephfs_client_lock = Lock()
+        self._cephfs_client: Optional[CephfsClient] = None
 
     def _get_cluster_protocols(self, cluster_id: str) -> List[int]:
         """Get the list of supported NFS protocols for a cluster.
@@ -373,6 +365,25 @@ class ExportMgr:
         if cluster_id not in clusters:
             raise ErrorResponse(f"Cluster {cluster_id!r} does not exist",
                                 return_value=-errno.ENOENT)
+
+    def _get_cephfs_client(self) -> CephfsClient:
+        with self._cephfs_client_lock:
+            if self._cephfs_client is None:
+                self._cephfs_client = CephfsClient(self.mgr)
+        return self._cephfs_client
+
+    def validate_cephfs_path(self, fs_name: str, path: str) -> None:
+        try:
+            cephfs_client = self._get_cephfs_client()
+            with open_filesystem(cephfs_client, fs_name) as fs_handle:
+                stx = fs_handle.statx(path.encode('utf-8'), cephfs.CEPH_STATX_MODE,
+                                      cephfs.AT_SYMLINK_NOFOLLOW)
+                if not stat.S_ISDIR(stx.get('mode')):
+                    raise NotADirectoryError(f"path {path} is not a dir")
+        except cephfs.ObjectNotFound:
+            raise NFSObjectNotFound(f"path {path} does not exist")
+        except cephfs.Error as e:
+            raise NFSException(e.args[1], -e.args[0])
 
     def create_export(self, addr: Optional[List[str]] = None, **kwargs: Any) -> Dict[str, Any]:
         self._validate_cluster_id(kwargs['cluster_id'])
@@ -660,7 +671,7 @@ class ExportMgr:
             if not check_fs(self.mgr, fs_name):
                 raise FSNotFound(fs_name)
 
-            validate_cephfs_path(self.mgr, fs_name, path)
+            self.validate_cephfs_path(fs_name, path)
 
             # Check if earmark is set for the path, given path is of subvolume
             if earmark_resolver:
@@ -710,7 +721,7 @@ class ExportMgr:
                              earmark_resolver: Optional[CephFSEarmarkResolver] = None
                              ) -> Dict[str, Any]:
 
-        validate_cephfs_path(self.mgr, fs_name, path)
+        self.validate_cephfs_path(fs_name, path)
         if cmount_path != "/":
             _validate_cmount_path(cmount_path, path)  # type: ignore
 
