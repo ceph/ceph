@@ -16,13 +16,9 @@
 #ifndef CEPH_OS_FS_H
 #define CEPH_OS_FS_H
 
-#include <errno.h>
-#include <time.h>
-
 #include <string>
 
 #include "include/types.h"
-#include "common/Cond.h"
 
 class FS {
 public:

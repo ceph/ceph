@@ -38,7 +38,7 @@
 #include "MonSub.h"
 
 #include "common/admin_socket.h"
-#include "common/debug.h"
+#include "common/dout.h"
 #include "common/strtol.h" // for strict_strtoll()
 #include "common/Timer.h"
 #include "common/config.h"
