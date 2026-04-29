@@ -582,6 +582,8 @@ class PrometheusService(CephadmService):
         retention_time = get_field_from_spec(spec, 'retention_time', '15d')
         retention_size = get_field_from_spec(spec, 'retention_size', '0')
         targets = get_field_from_spec(spec, 'targets', [])
+        remote_write_url = get_field_from_spec(spec, 'remote_write_url', '')
+        remote_write_allowed_metrics = get_field_from_spec(spec, 'remote_write_allowed_metrics', '')
 
         # build service discovery end-point
         security_enabled, mgmt_gw_enabled, oauth2_enabled = self.mgr._get_security_config()
@@ -607,6 +609,8 @@ class PrometheusService(CephadmService):
             'service_discovery_password': self.mgr.http_server.service_discovery.password,
             'service_discovery_cfg': self.get_service_discovery_cfg(security_enabled, mgmt_gw_enabled),
             'external_prometheus_targets': targets,
+            'remote_write_url': remote_write_url,
+            'remote_write_allowed_metrics': remote_write_allowed_metrics,
             'cluster_fsid': self.mgr._cluster_fsid,
             'clusters_credentials': cluster_credentials,
             'federate_path': federate_path
@@ -682,6 +686,12 @@ class PrometheusService(CephadmService):
         if not mgmt_gw_enabled:
             # Ceph mgrs are dependency because when mgmt-gateway is not enabled the service-discovery depends on mgrs ips
             deps += mgr.cache.get_daemons_by_types(['mgr'])
+
+        if spec:
+            prometheus_spec = cast(PrometheusSpec, spec)
+
+            deps.append(f'remote_write_url:{prometheus_spec.remote_write_url}')
+            deps.append(f'remote_write_metrics:{prometheus_spec.remote_write_allowed_metrics}')
 
         return sorted(deps)
 

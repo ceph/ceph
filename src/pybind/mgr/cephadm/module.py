@@ -3428,6 +3428,55 @@ Then run the following:
         return 'prometheus multi-cluster targets updated'
 
     @handle_orch_error
+    def set_prometheus_remote_write(self, url: str, remote_write_allowed_metrics: List[str]) -> str:
+        if not url or not url.strip():
+            return 'Invalid URL. URL cannot be empty.'
+
+        try:
+            parsed_url = urlparse(url)
+            host = parsed_url.hostname
+
+            if parsed_url.scheme not in ('http', 'https'):
+                return 'Invalid URL. Scheme must be http or https.'
+            if not host:
+                return 'Invalid URL. Hostname is missing.'
+        except ValueError as e:
+            return f'Invalid url. {str(e)}'
+
+        prometheus_spec = cast(PrometheusSpec, self.spec_store['prometheus'].spec)
+        if not prometheus_spec:
+            return "Service prometheus not found\n"
+
+        if url == prometheus_spec.remote_write_url:
+            return f"Remote write URL '{url}' already exists.\n"
+
+        prometheus_spec.remote_write_url = url
+        prometheus_spec.remote_write_allowed_metrics = '|'.join(remote_write_allowed_metrics)
+
+        spec = ServiceSpec.from_json(prometheus_spec.to_json())
+        self.apply([spec], no_overwrite=False)
+
+        return 'prometheus remote write updated'
+
+    @handle_orch_error
+    def remove_prometheus_remote_write(self, url: str) -> str:
+        if not url or not url.strip():
+            return 'Invalid URL. URL cannot be empty.'
+
+        prometheus_spec = cast(PrometheusSpec, self.spec_store['prometheus'].spec)
+        if url == prometheus_spec.remote_write_url:
+            prometheus_spec.remote_write_url = ''
+            prometheus_spec.remote_write_allowed_metrics = ''
+        else:
+            return f"Remote write URL '{url}' does not exist.\n"
+        if not prometheus_spec:
+            return "Service prometheus not found\n"
+
+        spec = ServiceSpec.from_json(prometheus_spec.to_json())
+        self.apply([spec], no_overwrite=False)
+        return 'prometheus remote write removed'
+
+    @handle_orch_error
     def set_alertmanager_access_info(self, user: str, password: str) -> str:
         self.set_store(AlertmanagerService.USER_CFG_KEY, user)
         self.set_store(AlertmanagerService.PASS_CFG_KEY, password)
