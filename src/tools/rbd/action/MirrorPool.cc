@@ -16,7 +16,7 @@
 #include "common/Formatter.h"
 #include "common/safe_io.h" // for safe_read()
 #include "common/TextTable.h"
-#include "common/Throttle.h"
+#include "common/OrderedThrottle.h"
 #include "global/global_context.h"
 #include <fstream>
 #include <functional>
