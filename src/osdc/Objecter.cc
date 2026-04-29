@@ -3723,7 +3723,14 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   // get pio
   ceph_tid_t tid = m->get_tid();
 
-  shunique_lock sul(rwlock, ceph::acquire_shared);
+  shunique_lock sul(rwlock, std::defer_lock);
+  if (m->is_redirect_reply() && m->get_redirect().is_pool_migration()) {
+    // Pool migration redirect - Exclusive lock required
+    sul.lock();
+  } else {
+    // Normal path - Shared lock
+    sul.lock_shared();
+  }
   if (!initialized) {
     m->put();
     return;
@@ -3819,11 +3826,19 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
       // that need to be retried because the watermark has advanced.
       // Other removed ops that are still inflight will later fail
       // with redirect but will be ignored as stray
+      //
+      // Exclusive rwlock is required to:
+      // 1. Ensure safe update of pool_migration_watermark
+      // 2. Prevent new I/Os racing with this completion and using
+      //    the old watermark after the session lock is released
+      // 3. Permit linger ops to be moved between sessions
       bool found = false;
+      ldout(cct, 15) << __func__ << " redirect for " << op->target.target_oid << " previous=" << previous_watermark << " new=" << new_watermark << dendl;
       for (auto it = s->ops.begin(); it != s->ops.end(); ) {
         if (it->second->target.actual_pgid.pgid == m->get_pg()) {
           int r = it->second->target.contained_by(previous_watermark, new_watermark);
           if (r) {
+            ldout(cct, 20) << __func__ << " found for retrying " << it->second->target.target_oid << dendl;
             if (it->second->has_completion())
               num_in_flight--;
             it->second->tid = 0;
@@ -3833,6 +3848,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
             }
             _session_op_remove(s, it);
           } else {
+            ldout(cct, 20) << __func__ << " not retrying " << it->second->target.target_oid << dendl;
             ++it;
           }
         } else {
@@ -3841,11 +3857,23 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
       }
       ceph_assert(found);
       sl.unlock();
-      //Upgrade to unique lock to update watermark
-      sul.unlock();
-      sul.lock();
+
       r.update_migration_watermark(
          pool_migration_watermarks[m->get_pg()]);
+
+      // Check if linger ops need moving to a different session.
+      // There is no need to resend them - any in flight ops will
+      // be on the retry list, this just ensures future requests
+      // are routed correctly
+      auto lp = s->linger_ops.begin();
+      while (lp != s->linger_ops.end()) {
+        auto linger_op = lp->second;
+        ++lp;
+        // _recalc_linger_op_target may touch linger_ops, prevent
+        // iterator invalidation
+        _recalc_linger_op_target(linger_op, sul);
+      }
+
       for (auto& it : retry) {
         _op_submit(it, sul, NULL);
       }
