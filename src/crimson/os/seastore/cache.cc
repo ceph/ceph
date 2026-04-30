@@ -2159,15 +2159,16 @@ void Cache::complete_commit(
     commit_backref_entries(std::move(backref_entries), start_seq);
   }
 
-  t.for_each_finalized_fresh_block([&t](const CachedExtentRef &i) {
-    if (should_use_no_conflict_publish(t.get_src(), i->get_type())) {
+  // Rewrite publishes committed state into the shared prior instance.
+  // "next" extents are staging objects and must be discarded.
+  // TODO: Apply for user-txn once safe.
+  if (is_rewrite_transaction(t.get_src())) {
+    t.for_each_finalized_fresh_block([&t](const CachedExtentRef &i) {
       i->set_invalid(t);
-    }
-  });
-
-  for (auto &i: t.mutated_block_list) {
-    if (should_use_no_conflict_publish(t.get_src(), i->get_type())) {
+    });
+    for (auto &i: t.mutated_block_list) {
         i->set_invalid(t);
+      }
     }
   }
 }
