@@ -226,10 +226,11 @@ public:
 
   seastar::future<std::string> get_default_device_class() override;
 
-  seastar::future<uint32_t> get_storage_shard_count();
-
+  uint32_t get_storage_shard_count() override;
 
 private:
+  seastar::future<> determine_storage_shard_count();
+
   crimson::os::multisharded<CyanStore::Shard> shard_stores;
   uint32_t store_shard_nums = 0;
   const std::string path;

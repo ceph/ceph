@@ -212,14 +212,17 @@ void SeaStore::Shard::register_metrics()
   );
 }
 
-seastar::future<uint32_t> SeaStore::get_storage_shard_count()
+uint32_t SeaStore::get_storage_shard_count()
 {
-  LOG_PREFIX(SeaStore::get_storage_shard_count);
-  if (store_shard_nums) {
-    INFO("seastore number of storage shards already determined as {}",
-         store_shard_nums);
-    co_return store_shard_nums;
-  }
+  ceph_assert(store_shard_nums > 0);
+  return store_shard_nums;
+}
+
+seastar::future<> SeaStore::determine_storage_shard_count()
+{
+  LOG_PREFIX(SeaStore::determine_storage_shard_count);
+  // run only once
+  ceph_assert(store_shard_nums == 0);
   auto tuple = co_await read_meta("mkfs_done");
   auto [done, value] = tuple;
   if (done == -1) {
@@ -239,7 +242,6 @@ seastar::future<uint32_t> SeaStore::get_storage_shard_count()
     INFO("seastore shard nums {}", shard_nums);
     store_shard_nums = shard_nums;
   }
-  co_return store_shard_nums;
 }
 
 seastar::future<> SeaStore::shard_stores_start(bool is_test)
@@ -278,7 +280,7 @@ seastar::future<uint32_t> SeaStore::start()
   ceph_assert(root != "");
   DeviceRef device_obj = co_await Device::make_device(root, d_type);
   device = std::move(device_obj);
-  std::ignore = co_await get_storage_shard_count();
+  co_await determine_storage_shard_count();
   co_await device->start(store_shard_nums);
   ceph_assert(device);
   co_await shard_stores_start(is_test);

@@ -310,7 +310,7 @@ public:
     return decorated_store.get_default_device_class();
   }
 
-  seastar::future<uint32_t> get_storage_shard_count() final
+  uint32_t get_storage_shard_count() final
   {
     return decorated_store.get_storage_shard_count();
   }

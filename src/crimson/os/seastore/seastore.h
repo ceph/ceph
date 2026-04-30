@@ -596,7 +596,11 @@ public:
     return shard_stores.local(store_index);
   }
 
-  seastar::future<uint32_t> get_storage_shard_count();
+private:
+  seastar::future<void> determine_storage_shard_count();
+ 
+public:
+  uint32_t get_storage_shard_count() override;
 
   static col_obj_ranges_t
   get_objs_range(CollectionRef ch, unsigned bits);

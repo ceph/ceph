@@ -118,8 +118,8 @@ public:
     uint64_t len,
     uint32_t op_flags) override;
 
-  seastar::future<uint32_t> get_storage_shard_count() override {
-    return seastar::make_ready_future<uint32_t>(seastar::smp::count);
+  uint32_t get_storage_shard_count() override {
+    return seastar::smp::count;
   }
   FuturizedStore::Shard& get_sharded_store(store_index_t store_index = 0) override {
     return *this;
