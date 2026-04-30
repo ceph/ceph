@@ -16,14 +16,14 @@
 #ifndef COMMON_STACKSTRINGSTREAM_H
 #define COMMON_STACKSTRINGSTREAM_H
 
-#include <boost/container/small_vector.hpp>
 
-#include <algorithm>
 #include <memory>
 #include <ostream>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include <boost/container/small_vector.hpp>
 
 #include "include/inline_memory.h"
 
@@ -131,7 +131,7 @@ public:
   using osptr = std::unique_ptr<sss>;
 
   CachedStackStringStream() {
-    if (cache.destructed || cache.c.empty()) {
+    if (cache_destructed || cache.c.empty()) {
       osp = std::make_unique<sss>();
     } else {
       osp = std::move(cache.c.back());
@@ -144,7 +144,7 @@ public:
   CachedStackStringStream(CachedStackStringStream&&) = delete;
   CachedStackStringStream& operator=(CachedStackStringStream&&) = delete;
   ~CachedStackStringStream() {
-    if (!cache.destructed && cache.c.size() < max_elems) {
+    if (!cache_destructed && cache.c.size() < max_elems) {
       cache.c.emplace_back(std::move(osp));
     }
   }
@@ -181,12 +181,13 @@ private:
     using container = std::vector<osptr>;
 
     Cache() {}
-    ~Cache() { destructed = true; }
+    ~Cache() { cache_destructed = true; }
 
     container c;
-    bool destructed = false;
   };
+  friend Cache;
 
+  inline static thread_local bool cache_destructed = false;
   inline static thread_local Cache cache;
   osptr osp;
 };
