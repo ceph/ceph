@@ -550,9 +550,7 @@ class NodeExtentAccessorT {
       return c.nm.retire_extent(c.t, to_discard
       ).handle_error_interruptible(
         eagain_iertr::pass_further{},
-        crimson::ct_error::assert_all(fmt::format(
-          "{} during retire -- to_disgard={}, fresh={}",
-          FNAME, to_discard->get_laddr(), fresh_extent->get_laddr()).c_str())
+        crimson::ct_error::assert_all("fatal error in OTree::Extent::rebuild")
       );
     }).si_then([this, c] {
       boost::ignore_unused(c);  // avoid clang warning;
@@ -568,8 +566,7 @@ class NodeExtentAccessorT {
     return c.nm.retire_extent(c.t, std::move(extent)
     ).handle_error_interruptible(
       eagain_iertr::pass_further{},
-      crimson::ct_error::assert_all(fmt::format(
-        "{} addr={}", FNAME, addr).c_str())
+      crimson::ct_error::assert_all("fatal error in OTree::Extent::retire")
 #ifndef NDEBUG
     ).si_then([c] {
       assert(!c.t.is_conflicted());

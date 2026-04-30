@@ -690,8 +690,7 @@ eagain_ifuture<Ref<Node>> Node::load(
   return c.nm.read_extent(c.t, addr
   ).handle_error_interruptible(
     eagain_iertr::pass_further{},
-    crimson::ct_error::assert_all(fmt::format(
-      "{} -- addr={}, is_level_tail={}", FNAME, addr, expect_is_level_tail).c_str())
+    crimson::ct_error::assert_all("fatal error in Node::load")
   ).si_then([FNAME, c, addr, expect_is_level_tail](auto extent)
 	      -> eagain_ifuture<Ref<Node>> {
     assert(extent);
