@@ -1,0 +1,15 @@
+# ISA plugin with k=4, m=2
+# ISA plugin requires x86_64 architecture
+arch: x86_64
+overrides:
+  ceph:
+    pool-config:
+      ec_pool: true
+      min_size: 4
+      erasure_code_profile:
+        name: isa42profile
+        plugin: isa
+        k: 4
+        m: 2
+        technique: reed_sol_van
+        crush-failure-domain: osd
