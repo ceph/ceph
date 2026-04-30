@@ -1,0 +1,16 @@
+# Jerasure plugin with k=2, m=2, custom crush
+overrides:
+  ceph:
+    pool-config:
+      ec_pool: true
+      erasure_code_profile:
+        name: jerasure22profile
+        plugin: jerasure
+        k: 2
+        m: 2
+        technique: reed_sol_van
+        crush-failure-domain: osd
+      erasure_code_crush:
+        name: teuthologycrush
+        type: erasure
+        erasure-code-profile: jerasure22profile

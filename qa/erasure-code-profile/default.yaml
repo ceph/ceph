@@ -1,0 +1,10 @@
+# Default erasure code profile
+overrides:
+  ceph:
+    pool-config:
+      ec_pool: true
+      erasure_code_profile:
+        name: teuthologyprofile
+        k: 2
+        m: 1
+        crush-failure-domain: osd

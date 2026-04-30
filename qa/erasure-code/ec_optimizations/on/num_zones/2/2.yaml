@@ -1,0 +1,6 @@
+# Multi-zone configuration (stretched pools)
+# Requires ec_optimizations: on
+overrides:
+  ceph:
+    pool-config:
+      num_zones: 2
