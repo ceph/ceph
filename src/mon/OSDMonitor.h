@@ -510,6 +510,7 @@ private:
 			bool force,
 			std::ostream *ss);
   int crush_rule_create_erasure(const std::string &name,
+        int num_zones,
 				const std::string &profile,
 				int *rule,
 				std::ostream *ss);
