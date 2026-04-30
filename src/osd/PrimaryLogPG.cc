@@ -13986,7 +13986,7 @@ bool PrimaryLogPG::start_recovery_ops(
   }
 
   if (state_test(PG_STATE_MIGRATING)) {
-      started += recover_pool_migration(max - started, handle, &work_in_progress);
+    started += recover_pool_migration(max - started, handle, &work_in_progress);
   }
 
   dout(10) << " started " << started << dendl;
@@ -15364,6 +15364,8 @@ struct C_Migrate : public Context {
         ceph_assert(pg->pool_migration_clones_in_flight.count(head));
         if (--pg->pool_migration_clones_in_flight[head] == 0) {
           pg->pool_migration_source_start_delete_head(head);
+        } else {
+          ldpp_dout(pg, 20) << "C_Migrate::finish pool migration cannot delete " << head << " as clones still in flight" << dendl;
         }
       }
     } else {
@@ -15450,6 +15452,7 @@ void PrimaryLogPG::pool_migration_source_start_delete(hobject_t oid)
     // Copy completed out of order - wait for earlier copy to complete.
     // Check that the watermark object is being migrated
     ceph_assert(pool_migrations_in_flight.contains(pool_migration_watermark));
+    dout(20) << __func__ << " pool migration " << oid << " waiting for " << pool_migration_watermark << dendl;
   }
 
 }
@@ -15467,6 +15470,7 @@ bool PrimaryLogPG::pool_migration_source_delete(hobject_t oid)
              << "; could not get lock, will retry" << dendl;
     return false;
   }
+  dout(20) << __func__ << " pool migration deleting " << oid << dendl;
 
   // Lock acquired successfully - remove from pending set
   pool_migration_source_delete_pending_lock.erase(oid);
@@ -15486,6 +15490,17 @@ bool PrimaryLogPG::pool_migration_source_delete(hobject_t oid)
                 new_pool_migration_interval_in_flight = false;
                 pool_migrations_in_flight.erase(oid);
               }
+              while (!pool_migration_source_delete_pending_lock.empty()) {
+                hobject_t oid = *pool_migration_source_delete_pending_lock.begin();
+                if (oid != pool_migration_watermark) {
+                  // Wait for an earlier copy to complete
+                  ceph_assert(pool_migrations_in_flight.contains(pool_migration_watermark));
+                  break;
+                }
+                if (!pool_migration_source_delete(oid)) {
+                  break;
+                }
+              }
             });
   ctx->at_version = get_next_version();
   ceph_assert(ctx->new_obs.exists);
@@ -15494,7 +15509,6 @@ bool PrimaryLogPG::pool_migration_source_delete(hobject_t oid)
   if (obc->obs.oi.is_omap()) {
     ctx->delta_stats.num_objects_omap--;
   }
-  dout(20) << __func__ << " pool migration deleting " << oid << dendl;
   finish_ctx(ctx.get(), pg_log_entry_t::DELETE);
   simple_opc_submit(std::move(ctx));
   return true;
@@ -15793,7 +15807,9 @@ uint64_t PrimaryLogPG::recover_pool_migration(
       ceph_assert(pool_migration_clones_in_flight.count(soid));
       if (--pool_migration_clones_in_flight[soid] == 0) {
         pool_migration_source_start_delete_head(soid);
-      } // Else: head will be deleted when last clone finishes copy
+      } else {
+        dout(20) << __func__ << " waiting for clones to complete copy before deleting head " << dendl;
+      }
       continue;
     }
 
