@@ -5077,6 +5077,15 @@ void PeeringState::apply_op_stats(
   const hobject_t &soid,
   const object_stat_sum_t &delta_stats)
 {
+  psdout(20) << fmt::format(
+	"apply_op_stats {} d.objs={} d.clns={} d.bytes={}"
+	" -> objs={} clns={} bytes={}",
+	soid, delta_stats.num_objects, delta_stats.num_object_clones,
+	delta_stats.num_bytes,
+	info.stats.stats.sum.num_objects + delta_stats.num_objects,
+	info.stats.stats.sum.num_object_clones + delta_stats.num_object_clones,
+	info.stats.stats.sum.num_bytes + delta_stats.num_bytes)
+	     << dendl;
   info.stats.stats.add(delta_stats);
   info.stats.stats.floor(0);
 
