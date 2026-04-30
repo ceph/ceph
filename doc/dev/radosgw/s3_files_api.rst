@@ -16,8 +16,10 @@ Goals
 
 Add an opt-in REST API to ``radosgw`` (selectable via
 ``rgw_enable_apis``) that implements the AWS S3 Files API control
-plane: ``Filesystem``, ``AccessPoint``, and ``MountTarget``
-resources, plus the operations that manage them.
+plane: ``FileSystem``, ``AccessPoint``, and ``MountTarget``
+resources, plus the operations that manage them. The wire-level
+protocol is REST + JSON (Smithy ``restJson1``), not S3's XML
+shape.
 
 The API is **declarative**. RGW translates each call into state
 persisted in FoundationDB. Per-zone reconciler microservices watch
@@ -27,18 +29,33 @@ to match.
 RGW itself never serves the file protocol. The data path stays in
 ``nfs-ganesha`` (and, eventually, Samba).
 
+Reference: the AWS Smithy model is vendored in-tree at
+``src/rgw/spec/aws/s3files/<version>/s3files-<version>.json``
+(Apache-2.0, see ``src/rgw/spec/aws/LICENSE`` and ``NOTICE``).
+Source: ``aws/api-models-aws`` on GitHub, daily-updated. Currently
+tracked version: ``2025-05-05``. Update process is documented in
+``src/rgw/spec/aws/README.md``.
+
 Non-goals (v1)
 --------------
 
-* Cross-zonegroup federation of Filesystems.
+* Cross-zonegroup federation of FileSystems.
 * SMB (Samba) data plane.
-* Per-AccessPoint resource policies.
-* Operator-supplied ``IpAddress`` on ``CreateMountTarget`` (the
-  field, if AWS sends it, is accepted and ignored).
+* Operator-supplied IP address on ``CreateMountTarget`` (the
+  ``ipv4Address`` / ``ipv6Address`` fields are accepted and
+  ignored).
 * Automatic VIP-pool allocation. Mount-target endpoints come from
-  the cephadm-managed ``service: nfs`` for the zone.
+  the per-zone files-placement binding.
 * Cross-zone failover of MountTargets.
 * DNS publishing.
+* KMS encryption enforcement (``kmsKeyId`` is captured in spec
+  but not acted on).
+* Synchronization configuration enforcement (config is captured
+  in spec; the reconciler does not act on it because we serve the
+  bucket directly).
+* FileSystem resource policy enforcement at the NFS data plane —
+  v1 enforces policies for API control-plane calls only, not for
+  NFS-mount-time access decisions.
 
 Architecture
 ============
@@ -64,69 +81,219 @@ Architecture
                                           +---------------------------+
 
 * RGW is the control-plane API; stateless w.r.t. file resources.
-* FoundationDB is the source of truth.
+* FoundationDB (per-realm) is the source of truth.
 * Reconcilers run **per zone**, watch only their own subspace, and
   program the cephadm-managed NFS service local to that zone.
 * keepalived/haproxy/VIP plumbing is owned by cephadm's NFS
   service. The reconciler only programs Ganesha exports and reads
-  the service's ``virtual_ip`` to populate MountTarget endpoints.
+  the placement binding to populate MountTarget endpoints.
 
 Resource model
 ==============
 
-Three nested resource types, with progressively narrower scope.
+Three resource types, tracking the AWS S3 Files API.
+``AccessPoint`` and ``MountTarget`` are **siblings**, both
+children of ``FileSystem`` — not nested.
 
-Filesystem (zonegroup-scoped)
+::
+
+   FileSystem ─┬─ AccessPoint    (POSIX identity / path scope)
+               └─ MountTarget    (network identity, per zone)
+
+FileSystem (zonegroup-scoped)
 -----------------------------
 
-* Bound 1:1 to an S3 bucket. The zonegroup is **derived** from the
-  bucket's placement at create time, not caller-supplied.
-* Spec: bucket reference, captured ``placement`` name (see
-  `Files placements`_), optional default export attributes,
-  lifecycle policy fields.
-* The captured ``placement`` is immutable for the life of the
-  Filesystem.
-* Status: zonegroup-level phase only. The Filesystem resource
-  itself programs nothing.
+Bound 1:1 to an S3 bucket and an optional path prefix within it.
+The zonegroup is **derived** from the bucket's placement at create
+time; not caller-supplied.
 
-AccessPoint (zonegroup-scoped, parent = Filesystem)
+Spec (AWS shape):
+
+* ``bucket`` — S3 bucket ARN. Required.
+* ``prefix`` — optional path prefix within the bucket; scopes the
+  filesystem's view. Default empty (whole bucket).
+* ``roleArn`` — IAM role ARN granting service permission to
+  access the bucket. Required at create. v1 validates that the
+  ARN names a Ceph IAM role that exists in the caller's account
+  (RGW already supports account- and role-scoped IAM); wire-level
+  role assumption / delegation is deferred.
+* ``kmsKeyId`` — optional. Captured in spec; not enforced.
+* ``placement`` — captured Files-placement name (see
+  `Files placements`_). Resolved from the active
+  ``files_default_placement`` at create time, or supplied
+  explicitly. Immutable.
+* ``acceptBucketWarning`` — boolean; controls whether warnings
+  about bucket configuration are tolerated at create time.
+* ``tags`` — list of key/value tag pairs.
+
+Status / response fields:
+
+* ``status`` — lifecycle state (see `Lifecycle states`_).
+* ``creationTime`` — Unix epoch.
+* Server-assigned: ``fileSystemId``, ``fileSystemArn``,
+  ``ownerId``.
+* ``name`` — convenience, derived from the ``Name`` tag if
+  present (per AWS convention).
+
+Immutability: AWS exposes no ``UpdateFileSystem``. The FileSystem
+spec is **immutable** post-create. Resource policy,
+synchronization configuration, and tags are managed via dedicated
+ops.
+
+AccessPoint (zonegroup-scoped, child of FileSystem)
 ---------------------------------------------------
 
-* Holds the ``nfs-ganesha`` export shape: protocol, squash,
-  read-only/read-write, sec_flavors, anonymous uid/gid, allowed
-  clients (CIDRs), optional sub-path under the bucket.
-* Every zone's reconciler in the parent zonegroup renders this
-  into a local Ganesha export.
-* Status is **per-zone** — one status sub-key per zone (see
-  `FoundationDB layout`_).
+A POSIX-identity / path-scope refinement on a FileSystem. AWS's
+``CreateAccessPoint`` exposes a deliberately small surface:
 
-MountTarget (zone-scoped, parent = AccessPoint)
------------------------------------------------
+Spec:
 
-* The zone-local network identity that exposes an AccessPoint.
-* **Zone selection (request)**: the AWS ``subnetId`` field is
-  reinterpreted as a Ceph zone-id. The literal zone-id is
-  validated against the period. (``availabilityZoneId`` is a
-  response-only field in the AWS shape and is not accepted as
-  input.)
-* **Zone identification (response)**: ``availabilityZoneId`` and
-  ``availabilityZoneName`` are populated with the same zone-id on
-  Describe and Create responses, matching AWS's "this MT lives in
-  AZ X" convention.
-* **IP address**: any caller-supplied ``IpAddress`` field is
-  accepted and **ignored**. The mount endpoint is taken from the
-  ``virtual_ip`` of the cephadm ``service: nfs`` deployed in the
-  target zone, populated by the reconciler into ``status``.
-* Lifecycle: created ``Pending``; transitions to ``Available``
-  once the reconciler has programmed Ganesha and published the
-  endpoint into ``status``.
+* ``fileSystemId`` — parent. Required.
+* ``posixUser`` — uid, gid, secondary gid list. Optional.
+* ``rootDirectory`` — path within the parent FileSystem (further
+  narrowing the FileSystem's prefix); optional creation
+  permissions for new directories.
+* ``tags`` — tag list.
 
-All MountTargets in a given zone share that zone's
-``virtual_ip``. They are distinguished by Ganesha export
-pseudo-path, one per AccessPoint.
+Notably absent from the AccessPoint API surface:
+``squash``, ``ro/rw``, ``sec_flavors``, ``allowed_clients``,
+``anon_uid/gid``. AWS does not expose these on the AP — they are
+defaults of the managed service. We follow the same shape: those
+NFS-export attributes live in **zone-level files-placement
+defaults** (see `Files placements`_), not on the AccessPoint API.
+
+Status: lifecycle state plus **per-zone** status sub-keys (one
+per zone in the parent zonegroup) reflecting each zone's
+reconciler progress.
+
+Immutability: AWS exposes no ``UpdateAccessPoint``. The AP spec
+is immutable post-create.
+
+Every zone's reconciler in the parent zonegroup renders the AP
+into a local Ganesha export — applying the placement's export
+defaults plus the AP's posixUser and rootDirectory.
+
+MountTarget (zone-scoped, child of FileSystem)
+----------------------------------------------
+
+The zone-local network identity that exposes a FileSystem.
+Sibling to AccessPoints, **not** nested under them — at most one
+MountTarget per (FileSystem, zone) pair, serving every
+AccessPoint on the FileSystem through pseudo-path
+discrimination.
+
+Spec (request fields, mapping to AWS shape):
+
+* ``fileSystemId`` — parent. Required.
+* ``subnetId`` — required by AWS shape. **Reinterpreted as a
+  Ceph zone-id**; validated against the period.
+  ``availabilityZoneId`` is response-only in the AWS shape and is
+  not accepted as input.
+* ``ipv4Address`` / ``ipv6Address`` — accepted and ignored.
+* ``ipAddressType`` — accepted; ``IPV4_ONLY`` is the default.
+* ``securityGroups`` — accepted and ignored (no VPC SG model in
+  Ceph).
+
+Status / response fields:
+
+* Server-assigned: ``mountTargetId``, ``ownerId``,
+  ``networkInterfaceId`` (synthesized stub), ``vpcId``
+  (synthesized stub).
+* ``availabilityZoneId``, ``availabilityZoneName`` populated with
+  the zone-id, matching AWS's "this MT lives in AZ X" convention.
+* ``ipv4Address`` populated by the reconciler from the resolved
+  ``virtual_ip`` of the placement's NFS endpoint binding.
+* ``status`` — lifecycle state (see `Lifecycle states`_).
+
+Mutability: ``UpdateMountTarget`` is the only update operation in
+the AWS surface. v1 accepts the call and updates spec; the
+mutable fields (``securityGroups``, ``ipAddressType``) remain
+effectively no-ops at the data plane.
+
+All MountTargets serving a given (FileSystem, zone) pair share
+the placement's ``virtual_ip``. AccessPoints under the FileSystem
+are distinguished by Ganesha export pseudo-path (see
+`Pseudo-path scheme`_).
+
+Lifecycle states
+================
+
+All three resources expose the AWS lifecycle state enum::
+
+   AVAILABLE | CREATING | DELETING | DELETED | ERROR | UPDATING
+
+Transitions:
+
+* On create: ``CREATING`` → ``AVAILABLE`` once the reconciler
+  reports success in (for FS/AP) every zone in the zonegroup, or
+  (for MT) the bound zone.
+* On delete: ``AVAILABLE`` → ``DELETING`` → ``DELETED`` after
+  finalizers clear (see `Lifecycle and deletion`_).
+* On update (MT only): ``AVAILABLE`` → ``UPDATING`` →
+  ``AVAILABLE``.
+* On reconcile failure: ``ERROR`` with ``statusMessage``
+  describing the operator-fixable cause.
+
+Resource policies
+=================
+
+FileSystems carry an optional resource policy — IAM-policy-shaped
+JSON, modeled on S3 bucket policies. Managed via:
+
+* ``PutFileSystemPolicy`` — set or replace the policy on a FS.
+* ``GetFileSystemPolicy``
+* ``DeleteFileSystemPolicy``
+
+v1 enforcement scope: **API control-plane calls only**. Policies
+are evaluated against subsequent S3-Files-API operations against
+the FileSystem (e.g., who can ``PutFileSystemPolicy`` or
+``CreateAccessPoint`` on this FS, cross-account access, etc.).
+They are **not** consulted at NFS mount time or for in-flight NFS
+operations — the EFS-style mount helper auth flow (sigv4 over a
+TLS-tunneled mount) is not implemented at the data plane in v1.
+Wire-level policy enforcement is a follow-on.
+
+Storage: policy JSON lives alongside the FS spec in FDB.
+
+AccessPoints do not carry resource policies in AWS; we follow
+that shape.
+
+Synchronization configuration
+=============================
+
+AWS S3 Files exposes ``GetSynchronizationConfiguration`` and
+``PutSynchronizationConfiguration`` to control sync between the
+file system view and the underlying S3 bucket.
+
+We serve the bucket directly through Ganesha — no separate file
+layer maintains a synced replica — so most of this surface is
+no-op semantically. We still:
+
+* **Accept and store** the configuration in FDB alongside the FS
+  spec.
+* Return it verbatim from ``GetSynchronizationConfiguration``.
+* Surface a status reflecting the spec, but do not implement any
+  reconciler-side actions in v1.
+
+This preserves API-shape compatibility for clients that issue the
+calls, without committing to operational semantics we don't need.
+
+Tagging
+=======
+
+Standard AWS tagging surface, applied to all three resource
+types:
+
+* ``ListTagsForResource`` (input: resource ARN)
+* ``TagResource``
+* ``UntagResource``
+
+Tags are key/value pairs stored alongside the resource spec in
+FDB. The convention of deriving a resource's ``name`` from a tag
+named ``Name`` (per AWS) is honored on ``Get*`` responses.
 
 Pseudo-path scheme
-------------------
+==================
 
 For an AccessPoint owned by account ``A`` with id ``ap-id``, the
 Ganesha export pseudo-path is::
@@ -171,33 +338,34 @@ space, with collision retry. It is never exposed to clients.
 Scoping summary
 ---------------
 
-+---------------+--------------+---------------------+
-| Resource      | Spec scope   | Status fan-out      |
-+===============+==============+=====================+
-| Filesystem    | zonegroup    | none                |
-+---------------+--------------+---------------------+
-| AccessPoint   | zonegroup    | one per zone in zg  |
-+---------------+--------------+---------------------+
-| MountTarget   | zone         | one (this zone)     |
-+---------------+--------------+---------------------+
++---------------+--------------+------------------------+
+| Resource      | Spec scope   | Status fan-out         |
++===============+==============+========================+
+| FileSystem    | zonegroup    | one per zone in zg     |
++---------------+--------------+------------------------+
+| AccessPoint   | zonegroup    | one per zone in zg     |
++---------------+--------------+------------------------+
+| MountTarget   | zone         | one (this zone)        |
++---------------+--------------+------------------------+
 
 Files placements
 ================
 
-NFS service binding is managed through a placement system that
-mirrors the existing bucket-placement machinery, with a separate
-namespace and a different backend type.
+NFS service binding **and** export defaults are managed through a
+placement system that mirrors the existing bucket-placement
+machinery, with a separate namespace.
 
 Why a separate placement namespace
 ----------------------------------
 
 Bucket placement encodes data-locality decisions (pool selection,
 EC profile, storage class). Files placement encodes which
-file-protocol service fronts a given Filesystem (the cephadm
-``service: nfs`` name today; SMB later). The two are orthogonal:
-a Filesystem on a "cold" bucket may legitimately be served by a
-premium NFS cluster, and vice versa. They get separate placement
-namespaces accordingly.
+file-protocol service fronts a given FileSystem (the cephadm
+``service: nfs`` name today; SMB later) and the export defaults
+to apply (squash, sec flavors, allowed clients, etc.). The two
+are orthogonal: a FileSystem on a "cold" bucket may legitimately
+be served by a premium NFS cluster, and vice versa. They get
+separate placement namespaces accordingly.
 
 Schema
 ------
@@ -208,57 +376,73 @@ Mirrors bucket placement field-for-field, with a new type:
 
   - ``files_placement_targets`` — list of named placements.
   - ``files_default_placement`` — zonegroup-wide default name for
-    new Filesystems.
+    new FileSystems.
 
 * **Zone** (period config):
 
-  - ``files_placement_services`` — per-placement-name binding to a
-    backend NFS endpoint. Each binding is a flat record::
+  - ``files_placement_services`` — per-placement-name binding to
+    a backend NFS endpoint **plus export defaults**::
 
        {
-         virtual_ip:  "10.0.0.5",        # optional
-         port:        2049,              # optional, paired with virtual_ip
-         nfs_service: "nfs.zone-a-prod"  # optional
+         # Endpoint (XOR-validated):
+         virtual_ip:  "10.0.0.5",          # optional
+         port:        2049,                # paired with virtual_ip
+         nfs_service: "nfs.zone-a-prod",   # optional
+
+         # Export defaults — applied by the reconciler to every
+         # AccessPoint export rendered against this placement:
+         export: {
+           access_mode:     "rw",                 # rw | ro
+           sec_flavors:     ["sys"],              # sys, krb5, krb5i, krb5p
+           allowed_clients: ["10.0.0.0/8"],       # CIDR list
+           squash:          "no_root_squash",     # root | no_root | all
+           anon_uid:        65534,
+           anon_gid:        65534
+         }
        }
 
-    Validation: **exactly one** of ``(virtual_ip + port)`` or
-    ``nfs_service`` must be set per binding. Both forms are
-    accepted; the reconciler resolves either to a concrete
-    endpoint at MountTarget creation time. SMB will get its own
-    sibling field once the SMB data plane lands.
+    Endpoint validation: **exactly one** of ``(virtual_ip + port)``
+    or ``nfs_service`` per binding. Both forms are accepted; the
+    reconciler resolves either to a concrete endpoint at MountTarget
+    creation time. SMB will get its own sibling field once the SMB
+    data plane lands.
+
+    Export defaults form the per-export baseline. An
+    AccessPoint's ``posixUser`` and ``rootDirectory`` further
+    refine each rendered export.
 
 Defaults are zonegroup-scoped (matching bucket placement); the
 per-zone-ness lives in the bindings, where it belongs — different
 zones can map the same placement name to differently-named local
-NFS services or VIPs.
+NFS services or VIPs and to different export-default tunings.
 
 Capture and immutability
 ------------------------
 
-* ``CreateFilesystem`` resolves the active
+* ``CreateFileSystem`` resolves the active
   ``files_default_placement`` (or an explicitly-supplied placement
-  name) and records it as ``Filesystem.spec.placement``.
+  name) and records it as ``FileSystem.spec.placement``.
 * The captured placement is **immutable** for the life of the
-  Filesystem.
+  FileSystem.
 * Updating ``files_default_placement`` does not migrate existing
-  Filesystems — new ones get the new default; old ones keep their
+  FileSystems — new ones get the new default; old ones keep their
   captured name.
 
 This is the bucket-placement migration story applied to NFS
 service rotation: roll out a new NFS service, define a new
-placement bound to it, set it as default, and new Filesystems
+placement bound to it, set it as default, and new FileSystems
 land on the new service while existing ones remain where they
 are until deliberately migrated.
 
 Resolution
 ----------
 
-For a MountTarget in zone Z, with parent Filesystem ``F``:
+For a MountTarget in zone Z, with parent FileSystem ``F``:
 
 1. Look up ``F.spec.placement`` (the captured placement name).
 2. In zone Z's period config, read
-   ``files_placement_services[name]``. Branch on which form is
-   set:
+   ``files_placement_services[name]``. Branch on the endpoint
+   form:
 
    - If ``virtual_ip`` and ``port`` are set, use them directly.
    - If ``nfs_service`` is set, query the local Ceph cluster's
@@ -269,12 +453,12 @@ For a MountTarget in zone Z, with parent Filesystem ``F``:
 3. Write the resolved endpoint into ``MountTarget.status``.
 
 If step 2 yields nothing — zone Z has no binding for the placement
-name — the MountTarget in Z stays ``Pending`` and surfaces
+name — the MountTarget in Z stays ``CREATING`` and surfaces
 "placement '<name>' not bound in zone <Z>". Operator-fixable.
 
 If step 2 names a service that the local orch can't resolve, the
-MountTarget stays ``Pending`` with an explicit
-"unresolved nfs_service '<name>'" condition.
+MountTarget transitions to ``ERROR`` with
+"unresolved nfs_service '<name>'".
 
 Operator workflow
 -----------------
@@ -286,12 +470,18 @@ Familiar from bucket placement, mirrored::
    radosgw-admin zonegroup files-placement default \
      --placement-id gen2
 
-   # Zone binding takes one of two mutually-exclusive forms:
+   # Zone binding takes one of two mutually-exclusive endpoint
+   # forms, plus optional export-default flags:
    radosgw-admin zone files-placement add \
      --placement-id gen2 \
-     <[--nfs-service NAME] | [--virtual-ip IP --port PORT]>
+     <[--nfs-service NAME] | [--virtual-ip IP --port PORT]> \
+     [--access-mode rw|ro] \
+     [--sec-flavor sys,krb5,...] \
+     [--allowed-clients CIDR,...] \
+     [--squash root|no_root|all]
 
-The CLI rejects bindings that supply both forms or neither.
+The CLI rejects bindings that supply both endpoint forms or
+neither.
 
 State backend
 =============
@@ -356,10 +546,19 @@ Resource keys
 
    ("rgw","files","v1",zg,"fs",fs_id,"spec")
    ("rgw","files","v1",zg,"fs",fs_id,"status")
+   ("rgw","files","v1",zg,"fs",fs_id,"status","zone",zone)
+   ("rgw","files","v1",zg,"fs",fs_id,"policy")
+   ("rgw","files","v1",zg,"fs",fs_id,"sync-config")
+   ("rgw","files","v1",zg,"fs",fs_id,"tags")
+
    ("rgw","files","v1",zg,"ap",ap_id,"spec")
+   ("rgw","files","v1",zg,"ap",ap_id,"status")
    ("rgw","files","v1",zg,"ap",ap_id,"status","zone",zone)
+   ("rgw","files","v1",zg,"ap",ap_id,"tags")
+
    ("rgw","files","v1",zg,"zone",zone,"mt",mt_id,"spec")
    ("rgw","files","v1",zg,"zone",zone,"mt",mt_id,"status")
+   ("rgw","files","v1",zg,"zone",zone,"mt",mt_id,"tags")
 
 Per-zone control keys
 ---------------------
@@ -369,10 +568,9 @@ Per-zone control keys
    ("rgw","files","v1",zg,"zone",zone,"wakeup")
    ("rgw","files","v1",zg,"zone",zone,"reconcilers",host)
 
-NFS endpoint information is **not** kept in FDB in v1; it lives
-in zone period config under ``files_placement_services`` (see
-`Files placements`_), supplied by the operator via
-``radosgw-admin``.
+NFS endpoint information is **not** kept in FDB; it lives in zone
+period config under ``files_placement_services`` (see `Files
+placements`_), supplied by the operator via ``radosgw-admin``.
 
 Conventions
 -----------
@@ -419,8 +617,9 @@ lease pattern, since FDB has no native leases.
 Spec/status writer contract
 ---------------------------
 
-* RGW writes only ``spec`` keys, ``wakeup`` keys, and creates
-  ``status`` keys with default values when a resource is created.
+* RGW writes only ``spec`` keys, ``policy`` / ``sync-config`` /
+  ``tags`` keys, ``wakeup`` keys, and creates ``status`` keys
+  with default values when a resource is created.
 * Reconcilers write only the ``status/zone/<zone>`` sub-key for
   their own zone, the heartbeat row, and (during deletion) remove
   their finalizer entry from the spec.
@@ -431,7 +630,8 @@ Lifecycle and deletion
 
 * Every spec write inside a single transaction also bumps the
   appropriate ``wakeup`` keys (one per zone in the zonegroup for
-  AccessPoints; one for MountTargets).
+  FileSystems and AccessPoints; the bound zone's wakeup for
+  MountTargets).
 * Spec writes record their commit versionstamp; reconciler status
   writes record an ``observed_versionstamp`` so the API layer can
   surface convergence ("Programmed in 2/3 zones").
@@ -439,19 +639,25 @@ Lifecycle and deletion
 Finalizers
 ----------
 
-Each AccessPoint carries a finalizer set, with one entry per zone
-in its zonegroup. Deletion is **two-phase**:
+FileSystem and AccessPoint each carry a finalizer set, with one
+entry per zone in the parent zonegroup. Deletion is **two-phase**:
 
-1. ``DeleteAccessPoint`` sets ``deletion_timestamp`` on the spec.
-   The spec key is **not** removed.
+1. ``DeleteFileSystem`` / ``DeleteAccessPoint`` sets
+   ``deletion_timestamp`` on the spec and transitions ``status``
+   to ``DELETING``. The spec key is **not** removed.
 2. Each zone's reconciler observes the deletion, tears down its
-   local Ganesha export, and removes its own finalizer entry.
+   local Ganesha exports for the resource, and removes its own
+   finalizer entry.
 3. RGW reads the spec, sees an empty finalizer set, and removes
-   the spec and status keys in one transaction.
+   the spec, status, and ancillary (policy / sync-config / tags)
+   keys in one transaction.
 
 This avoids orphan exports surviving after the FDB record is
-gone. ``DeleteFilesystem`` cascades to AccessPoints;
-``DeleteAccessPoint`` cascades to MountTargets.
+gone.
+
+MountTargets, being zone-scoped with no per-zone fan-out, use a
+simpler one-finalizer pattern: their bound zone's reconciler
+clears it after teardown.
 
 REST API surface
 ================
@@ -462,16 +668,42 @@ Enabled via a new ``files`` entry in ``rgw_enable_apis`` (default
 ``rgw::AppMain::cond_init_apis()`` alongside the existing S3,
 Swift, IAM, etc. managers.
 
-Operations to be implemented in v1 cover create / describe /
-update (where applicable) / delete / list for each of
-``Filesystem``, ``AccessPoint``, and ``MountTarget``. Exact
-request and response shapes track the AWS S3 Files API docs and
-will be captured in a follow-on op-mapping table.
+Wire protocol is REST + JSON (Smithy ``restJson1``), authenticated
+with sigv4. Operations to be implemented in v1 (verbatim AWS
+shape):
 
-Authentication uses the existing S3 sigv4 path. Authorization
-adds a new IAM action namespace
-(e.g. ``s3:CreateFileAccessPoint``), wired through
+FileSystem:
+  ``CreateFileSystem``, ``GetFileSystem``, ``ListFileSystems``,
+  ``DeleteFileSystem``, ``GetFileSystemPolicy``,
+  ``PutFileSystemPolicy``, ``DeleteFileSystemPolicy``,
+  ``GetSynchronizationConfiguration``,
+  ``PutSynchronizationConfiguration``.
+
+AccessPoint:
+  ``CreateAccessPoint``, ``GetAccessPoint``, ``ListAccessPoints``,
+  ``DeleteAccessPoint``.
+
+MountTarget:
+  ``CreateMountTarget``, ``GetMountTarget``, ``ListMountTargets``,
+  ``UpdateMountTarget``, ``DeleteMountTarget``.
+
+Tagging (any resource):
+  ``ListTagsForResource``, ``TagResource``, ``UntagResource``.
+
+Note the absence of ``UpdateFileSystem`` and
+``UpdateAccessPoint``: those resources are immutable post-create
+in the AWS shape; we follow that contract.
+
+Authorization adds a new IAM action namespace (e.g.
+``s3files:CreateFileSystem``, ``s3files:CreateAccessPoint``,
+``s3files:CreateMountTarget``, etc.), wired through
 ``rgw_iam_policy*`` so existing policy machinery enforces it.
+FileSystem resource policies are evaluated alongside identity
+policies for control-plane authz.
+
+Detailed op-by-op shapes (request/response fields, errors, paths,
+divergence notes) live in the companion document
+:doc:`s3_files_api_ops`.
 
 Configuration options (provisional)
 -----------------------------------
@@ -483,9 +715,9 @@ New ``rgw.yaml.in`` entries (names provisional):
   ``("rgw","files","v1")``)
 * ``rgw_files_fdb_request_timeout_ms``
 
-Per-zone NFS service bindings are **not** config knobs; they live
-in zone period config under ``files_placement_services`` (see
-`Files placements`_).
+Per-zone NFS service bindings and export defaults are **not**
+config knobs; they live in zone period config under
+``files_placement_services`` (see `Files placements`_).
 
 Reconciler service
 ==================
@@ -501,16 +733,21 @@ Responsibilities (zone Z):
 * On fire, reconcile:
 
   - For each AccessPoint in the zonegroup, render the local
-    Ganesha export configuration; reload Ganesha if changed.
-  - For each MountTarget bound to Z, ensure the export
-    pseudo-path is configured and write the served endpoint into
-    status.
+    Ganesha export configuration (placement export defaults +
+    AP's posixUser + AP's rootDirectory + parent FileSystem's
+    prefix); reload Ganesha if changed.
+  - For each MountTarget bound to Z, ensure the Ganesha exports
+    are configured and write the resolved endpoint into status.
   - Honor the finalizer protocol on deletion.
 
 * Write the heartbeat row every N seconds.
-* Never write to ``spec``.
+* Never write to ``spec``, ``policy``, ``sync-config``, or
+  ``tags`` keys.
 
-The reconciler is NFS-only in v1. SMB is a follow-on.
+The reconciler is NFS-only in v1. SMB is a follow-on. The
+reconciler does **not** implement synchronization configuration
+(``sync-config`` is observed for visibility but no actions are
+taken — we serve the bucket directly).
 
 Day-1 implementation note
 -------------------------
@@ -529,16 +766,18 @@ Failure modes
   caches. Existing Ganesha exports keep serving — only the
   control plane is affected, and only realm-wide.
 * **Reconciler offline in zone Z.** New work in Z stays
-  ``Pending``; existing exports keep serving (Ganesha config is
+  ``CREATING``; existing exports keep serving (Ganesha config is
   not removed). API surfaces "no live reconciler in zone Z".
 * **Placement not bound in zone Z.** MountTarget stays
-  ``Pending`` with "placement '<name>' not bound in zone <Z>".
+  ``CREATING`` with "placement '<name>' not bound in zone <Z>".
   Operator-fixable via ``radosgw-admin zone files-placement add``.
 * **nfs_service name doesn't resolve via local orch.**
-  MountTarget stays ``Pending`` with
+  MountTarget transitions to ``ERROR`` with
   "unresolved nfs_service '<name>'".
-* **Bucket moves zonegroups.** Filesystem becomes orphaned and
-  surfaces an Error condition. v1 does not auto-migrate.
+* **roleArn names a non-existent role.** ``CreateFileSystem``
+  returns 400 ``ValidationException`` synchronously.
+* **Bucket moves zonegroups.** FileSystem becomes orphaned and
+  surfaces an ``ERROR`` condition. v1 does not auto-migrate.
 
 Coordination
 ============
@@ -559,6 +798,10 @@ Coordination
   this document and shared with the broader FDB-in-RGW workstream.
 * Build flag is shared: ``-DWITH_RADOSGW_FDB=ON``. C++23 / GCC 14+
   baseline matches PR #65535.
+* AWS Smithy model service version ``2025-05-05`` is vendored at
+  ``src/rgw/spec/aws/s3files/2025-05-05/`` as the design target;
+  updates pulled from ``aws/api-models-aws`` per the workflow in
+  ``src/rgw/spec/aws/README.md``.
 
 Open questions
 ==============
@@ -569,8 +812,11 @@ Open questions
   (operator-readable)?
 * Realm FDB deployment shape — operator-deployed standalone, or
   hosted on one Ceph cluster's mgr?
-* Do AccessPoints default to "every zone in the zonegroup", or
-  must callers explicitly opt zones in?
-* Does ``DescribeFilesystem`` synthesize aggregate availability
-  from per-zone status, or surface raw per-zone breakdown?
-* Multiple NFS services per zone — necessary in v1?
+* ``DeleteFileSystem`` cascade semantics: refuse if children
+  exist (require operator to delete APs/MTs first), or cascade
+  with finalizer fan-out across all children?
+* Does ``GetFileSystem`` synthesize aggregate availability from
+  per-zone status, or surface raw per-zone breakdown?
+* Multiple NFS services per zone — useful enough to support in v1?
+* IAM action namespace: ``s3files:*`` (matches AWS service
+  namespace) or fold under existing ``s3:*``?
