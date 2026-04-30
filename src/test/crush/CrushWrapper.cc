@@ -21,6 +21,7 @@
  *
  */
 
+#include <array>
 #include <cmath>
 #include <iostream>
 #include <gtest/gtest.h>
@@ -1554,6 +1555,469 @@ TEST_F(CrushWrapperTest, try_remap_rule) {
     ASSERT_EQ(0, out[0]);
     ASSERT_EQ(5, out[1]);
     ASSERT_EQ(16, out[2]);
+  }
+}
+
+TEST_F(CrushWrapperTest, stretch_replica) {
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
+  c->create();
+  c->set_type_name(0, "osd");
+  c->set_type_name(1, "host");
+  c->set_type_name(2, "datacenter");
+  c->set_type_name(3, "root");
+
+  int bno;
+  int r = c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_DEFAULT,
+                      3, 0, NULL, NULL, &bno);
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(-1, bno);
+  c->set_item_name(bno, "default");
+
+  ostringstream err;
+  map<string,string> loc;
+  int rule_id;
+  // Only one datacenter exists yet — wrong number of zones
+  for (int i = 0; i < 3; ++i) {
+    loc["root"] = "default";
+    loc["datacenter"] = "a";
+    loc["host"] = "a" + to_string(i);
+    c->insert_item(cct, i, 1.0, "osd." + to_string(i), loc);
+    err.str("");
+    rule_id = c->add_simple_stretch_rule("stretch_rule", "default", "datacenter", "host", 2, 3, "", "firstn", pg_pool_t::TYPE_REPLICATED, false, &err);
+    ASSERT_EQ(rule_id, -EINVAL);
+    ASSERT_NE(err.str().find("is not equal to num_failure_domains"), string::npos);
+  }
+  // Datacenter "b" exists but has fewer than 3 hosts
+  for (int i = 3; i < 5; ++i) {
+    loc["root"] = "default";
+    loc["datacenter"] = "b";
+    loc["host"] = "b" + to_string(i);
+    c->insert_item(cct, i, 1.0, "osd." + to_string(i), loc);
+    err.str("");
+    rule_id = c->add_simple_stretch_rule("stretch_rule", "default", "datacenter", "host", 2, 3, "", "firstn", pg_pool_t::TYPE_REPLICATED, false, &err);
+    ASSERT_EQ(rule_id, -EINVAL);
+    ASSERT_NE(err.str().find("has only"), string::npos);
+  }
+
+  loc["datacenter"] = "b";
+  loc["host"] = "b5";
+  c->insert_item(cct, 5, 1.0, "osd.5", loc);
+
+  //Should pass now that 2 datacenters have 3 hosts each
+  rule_id = c->add_simple_stretch_rule("stretch_rule", "default", "datacenter", "host", 2, 3, "", "firstn", pg_pool_t::TYPE_REPLICATED, false, &err);
+  ASSERT_GE(rule_id, 0);
+
+  c->finalize();
+
+  std::vector<uint32_t> weight(c->get_max_devices(), 0x10000);
+
+  for (int x = 0; x < 100; ++x) {
+    std::vector<int> out;
+    c->do_rule(rule_id, x, out, 6, weight, 0);
+    ASSERT_EQ(6, out.size());
+    int count_a = 0;
+    int count_b = 0;
+    for (auto osd : out) {
+      auto full_loc = c->get_full_location(osd);
+      if (full_loc["datacenter"] == "a") count_a++;
+      if (full_loc["datacenter"] == "b") count_b++;
+    }
+    ASSERT_EQ(3, count_a);
+    ASSERT_EQ(3, count_b);
+  }
+
+}
+
+TEST_F(CrushWrapperTest, stretch_ec) {
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
+  c->create();
+  c->set_type_name(0, "osd");
+  c->set_type_name(1, "host");
+  c->set_type_name(2, "datacenter");
+  c->set_type_name(3, "root");
+
+  int bno;
+  int r = c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_DEFAULT,
+                      3, 0, NULL, NULL, &bno);
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(-1, bno);
+  c->set_item_name(bno, "default");
+
+  ostringstream err;
+  map<string,string> loc;
+  int rule_id;
+  // Only one datacenter exists yet — wrong number of zones
+  for (int i = 0; i < 3; ++i) {
+    loc["root"] = "default";
+    loc["datacenter"] = "a";
+    loc["host"] = "a" + to_string(i);
+    c->insert_item(cct, i, 1.0, "osd." + to_string(i), loc);
+    err.str("");
+    rule_id = c->add_simple_stretch_rule("stretch_rule", "default", "datacenter", "host", 2, 3, "", "indep", pg_pool_t::TYPE_ERASURE, false, &err);
+    ASSERT_EQ(rule_id, -EINVAL);
+    ASSERT_NE(err.str().find("is not equal to num_failure_domains"), string::npos);
+  }
+  // Datacenter "b" exists but has fewer than 3 hosts
+  for (int i = 3; i < 5; ++i) {
+    loc["root"] = "default";
+    loc["datacenter"] = "b";
+    loc["host"] = "b" + to_string(i);
+    c->insert_item(cct, i, 1.0, "osd." + to_string(i), loc);
+    err.str("");
+    rule_id = c->add_simple_stretch_rule("stretch_rule", "default", "datacenter", "host", 2, 3, "", "indep", pg_pool_t::TYPE_ERASURE, false, &err);
+    ASSERT_EQ(rule_id, -EINVAL);
+    ASSERT_NE(err.str().find("has only"), string::npos);
+  }
+
+  loc["datacenter"] = "b";
+  loc["host"] = "b5";
+  c->insert_item(cct, 5, 1.0, "osd.5", loc);
+
+  // Should pass now that 2 datacenters have 3 hosts each
+  err.str("");
+  rule_id = c->add_simple_stretch_rule("stretch_rule", "default", "datacenter", "host", 2, 3, "", "indep", pg_pool_t::TYPE_ERASURE, false, &err);
+  ASSERT_GE(rule_id, 0);
+
+  c->finalize();
+
+  std::vector<uint32_t> weight(c->get_max_devices(), 0x10000);
+
+  // indep mode: a lost OSD produces CRUSH_ITEM_NONE rather than compacting the
+  // result, so skip holes when counting zone membership.
+  for (int x = 0; x < 100; ++x) {
+    std::vector<int> out;
+    c->do_rule(rule_id, x, out, 6, weight, 0);
+    ASSERT_EQ(6, out.size());
+    int count_a = 0;
+    int count_b = 0;
+    for (auto osd : out) {
+      if (osd == CRUSH_ITEM_NONE) continue;
+      auto full_loc = c->get_full_location(osd);
+      if (full_loc["datacenter"] == "a") count_a++;
+      if (full_loc["datacenter"] == "b") count_b++;
+    }
+    ASSERT_EQ(3, count_a);
+    ASSERT_EQ(3, count_b);
+  }
+
+}
+
+// With the osd failure domain, a zone with fewer OSDs in than copies per zone
+// must leave holes, not map OSDs that are out.
+TEST_F(CrushWrapperTest, stretch_osd_failure_domain_skips_out_osds) {
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
+  c->create();
+  c->set_type_name(0, "osd");
+  c->set_type_name(1, "host");
+  c->set_type_name(2, "datacenter");
+  c->set_type_name(3, "root");
+  int bno;
+  ASSERT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_DEFAULT,
+                             3, 0, NULL, NULL, &bno));
+  c->set_item_name(bno, "default");
+  for (int i = 0; i < 8; ++i) {
+    map<string,string> loc = {{"root", "default"},
+                              {"datacenter", i < 4 ? "a" : "b"},
+                              {"host", i < 4 ? "a0" : "b0"}};
+    c->insert_item(cct, i, 1.0, "osd." + to_string(i), loc);
+  }
+  ostringstream err;
+  int ec_rule = c->add_simple_stretch_rule("ec", "default", "datacenter", "osd",
+    2, 3, "", "indep", pg_pool_t::TYPE_ERASURE, false, &err);
+  ASSERT_GE(ec_rule, 0) << err.str();
+  int rep_rule = c->add_simple_stretch_rule("rep", "default", "datacenter", "osd",
+    2, 3, "", "firstn", pg_pool_t::TYPE_REPLICATED, false, &err);
+  ASSERT_GE(rep_rule, 0) << err.str();
+  c->finalize();
+
+  std::vector<uint32_t> weight(c->get_max_devices(), 0x10000);
+  weight[5] = 0;
+  weight[6] = 0;
+  for (int rule : {ec_rule, rep_rule}) {
+    for (int x = 0; x < 200; ++x) {
+      std::vector<int> out;
+      c->do_rule(rule, x, out, 6, weight, 0);
+      for (int osd : out) {
+        if (osd != CRUSH_ITEM_NONE) {
+          ASSERT_NE(0u, weight[osd]) << "rule " << rule << " x " << x
+                                     << " mapped out osd." << osd;
+        }
+      }
+    }
+  }
+}
+
+// Three-zone device-class stretch EC rule: zone-contiguous blocks that stay put when OSDs go out.
+TEST_F(CrushWrapperTest, stretch_ec_three_zones_device_class) {
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
+  c->create();
+  c->set_type_name(0, "osd");
+  c->set_type_name(1, "host");
+  c->set_type_name(2, "datacenter");
+  c->set_type_name(3, "root");
+  int bno;
+  ASSERT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_DEFAULT,
+                             3, 0, NULL, NULL, &bno));
+  c->set_item_name(bno, "default");
+
+  ostringstream err;
+  const string dcs[] = {"a", "b", "c"};
+  for (int i = 0; i < 12; ++i) {
+    map<string,string> loc = {{"root", "default"}, {"datacenter", dcs[i / 4]},
+                              {"host", dcs[i / 4] + to_string(i)}};
+    c->insert_item(cct, i, 1.0, "osd." + to_string(i), loc);
+    ASSERT_GE(c->update_device_class(i, "ssd", "osd." + to_string(i), &err), 0);
+  }
+  ASSERT_EQ(-EINVAL, c->add_simple_stretch_rule("s2", "default", "datacenter", "host",
+    2, 3, "ssd", "indep", pg_pool_t::TYPE_ERASURE, false, &err));
+  int rule_id = c->add_simple_stretch_rule("s", "default", "datacenter", "host",
+    3, 3, "ssd", "indep", pg_pool_t::TYPE_ERASURE, false, &err);
+  ASSERT_GE(rule_id, 0) << err.str();
+  c->finalize();
+
+  std::vector<uint32_t> weight(c->get_max_devices(), 0x10000);
+  std::vector<uint32_t> zone_b_out = weight;
+  for (int i = 4; i < 8; ++i) {
+    zone_b_out[i] = 0;
+  }
+  std::vector<uint32_t> osd_out = weight;
+  osd_out[1] = 0;
+
+  for (int x = 0; x < 200; ++x) {
+    std::vector<int> out;
+    c->do_rule(rule_id, x, out, 9, weight, 0);
+    ASSERT_EQ(9u, out.size());
+    std::set<string> zones;
+    for (int block = 0; block < 3; ++block) {
+      string zone = c->get_full_location(out[block * 3])["datacenter"];
+      zones.insert(zone);
+      for (int i = block * 3; i < block * 3 + 3; ++i) {
+        ASSERT_NE(CRUSH_ITEM_NONE, out[i]) << "x=" << x;
+        EXPECT_EQ(zone, c->get_full_location(out[i])["datacenter"]) << "x=" << x;
+      }
+    }
+    EXPECT_EQ(3u, zones.size()) << "x=" << x;
+
+    std::vector<int> out_b;
+    c->do_rule(rule_id, x, out_b, 9, zone_b_out, 0);
+    ASSERT_EQ(9u, out_b.size());
+    std::vector<int> out_1;
+    c->do_rule(rule_id, x, out_1, 9, osd_out, 0);
+    ASSERT_EQ(9u, out_1.size());
+    for (int i = 0; i < 9; ++i) {
+      bool in_b = c->get_full_location(out[i])["datacenter"] == "b";
+      EXPECT_EQ(in_b ? CRUSH_ITEM_NONE : out[i], out_b[i]) << "x=" << x << " i=" << i;
+      if (out[i] != 1 && c->get_full_location(out[i])["datacenter"] != "a") {
+        EXPECT_EQ(out[i], out_1[i]) << "x=" << x << " i=" << i;
+      }
+    }
+  }
+}
+
+// The rule placement tests use root default with data centers a and b, each
+// with three hosts of one ssd OSD, and rules of the steps {op, arg1, arg2}.
+static void add_two_zones(CephContext *cct, CrushWrapper *c)
+{
+  c->create();
+  c->set_type_name(0, "osd");
+  c->set_type_name(1, "host");
+  c->set_type_name(2, "datacenter");
+  c->set_type_name(3, "root");
+  int root;
+  ASSERT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_DEFAULT,
+                             3, 0, NULL, NULL, &root));
+  c->set_item_name(root, "default");
+  ostringstream err;
+  for (int i = 0; i < 6; ++i) {
+    const string dc = i < 3 ? "a" : "b";
+    map<string,string> loc = {{"root", "default"}, {"datacenter", dc},
+                              {"host", dc + to_string(i)}};
+    c->insert_item(cct, i, 1.0, "osd." + to_string(i), loc);
+    ASSERT_GE(c->update_device_class(i, "ssd", "osd." + to_string(i), &err), 0);
+  }
+}
+
+static int add_rule_of_steps(CrushWrapper *c, const string& name, int type,
+                             const vector<array<int, 3>>& steps)
+{
+  const int rule = c->add_rule(-1, steps.size(), type);
+  for (unsigned i = 0; i < steps.size(); ++i) {
+    c->set_rule_step(rule, i, steps[i][0], steps[i][1], steps[i][2]);
+  }
+  c->set_rule_name(rule, name);
+  return rule;
+}
+
+TEST_F(CrushWrapperTest, rule_placement_of_generated_rules) {
+  CrushWrapper c;
+  add_two_zones(cct, &c);
+  const int root = c.get_item_id("default");
+  ostringstream err;
+  CrushWrapper::rule_placement_t p;
+
+  int rule = c.add_simple_rule("one-zone", "default", "host", 0, "",
+                               "firstn", pg_pool_t::TYPE_REPLICATED, &err);
+  ASSERT_EQ(0, c.get_rule_placement(rule, false, &p, &err)) << err.str();
+  EXPECT_EQ(root, p.root);
+  EXPECT_EQ("", p.device_class);
+  EXPECT_EQ(-1, p.zone_type);
+  EXPECT_EQ(1, p.num_zones);
+  EXPECT_EQ(1, p.osd_type);
+  EXPECT_EQ(0, p.per_zone);
+  EXPECT_EQ(-EINVAL, c.get_rule_placement(rule, true, &p, &err));
+
+  rule = c.add_simple_rule("one-zone-ssd-osd", "default", "", 0, "ssd",
+                           "indep", pg_pool_t::TYPE_ERASURE, &err);
+  ASSERT_EQ(0, c.get_rule_placement(rule, false, &p, &err)) << err.str();
+  EXPECT_EQ(root, p.root);
+  EXPECT_EQ("ssd", p.device_class);
+  EXPECT_EQ(-1, p.zone_type);
+  EXPECT_EQ(0, p.osd_type);
+
+  rule = c.add_simple_stretch_rule("two-zones-ssd", "default", "datacenter",
+                                   "host", 2, 3, "ssd", "firstn",
+                                   pg_pool_t::TYPE_REPLICATED, false, &err);
+  ASSERT_EQ(0, c.get_rule_placement(rule, true, &p, &err)) << err.str();
+  EXPECT_EQ(root, p.root);
+  EXPECT_EQ("ssd", p.device_class);
+  EXPECT_EQ(2, p.zone_type);
+  EXPECT_EQ(2, p.num_zones);
+  EXPECT_EQ(1, p.osd_type);
+  EXPECT_EQ(3, p.per_zone);
+  EXPECT_EQ(-EINVAL, c.get_rule_placement(rule, false, &p, &err));
+
+  rule = c.add_simple_stretch_rule("two-zones-osd", "default", "datacenter",
+                                   "osd", 2, 1, "", "indep",
+                                   pg_pool_t::TYPE_ERASURE, false, &err);
+  ASSERT_EQ(0, c.get_rule_placement(rule, true, &p, &err)) << err.str();
+  EXPECT_EQ(root, p.root);
+  EXPECT_EQ("", p.device_class);
+  EXPECT_EQ(2, p.zone_type);
+  EXPECT_EQ(0, p.osd_type);
+  EXPECT_EQ(1, p.per_zone);
+}
+
+// A choose step of buckets followed by a choose step of one OSD in each picks
+// the zones in a rule over zones, and the OSD failure domain in a rule in one
+// zone
+TEST_F(CrushWrapperTest, rule_placement_of_one_osd_in_each_bucket) {
+  CrushWrapper c;
+  add_two_zones(cct, &c);
+  const int root = c.get_item_id("default");
+  const int rule = add_rule_of_steps(
+    &c, "one-osd-each", CRUSH_RULE_TYPE_REPLICATED,
+    {{CRUSH_RULE_TAKE, root, 0},
+     {CRUSH_RULE_CHOOSE_FIRSTN, 0, 1},
+     {CRUSH_RULE_CHOOSE_FIRSTN, 1, 0},
+     {CRUSH_RULE_EMIT, 0, 0}});
+  ostringstream err;
+  CrushWrapper::rule_placement_t p;
+  ASSERT_EQ(0, c.get_rule_placement(rule, false, &p, &err)) << err.str();
+  EXPECT_EQ(-1, p.zone_type);
+  EXPECT_EQ(1, p.osd_type);
+  EXPECT_EQ(0, p.per_zone);
+  ASSERT_EQ(0, c.get_rule_placement(rule, true, &p, &err)) << err.str();
+  EXPECT_EQ(1, p.zone_type);
+  EXPECT_EQ(0, p.num_zones);
+  EXPECT_EQ(0, p.osd_type);
+  EXPECT_EQ(1, p.per_zone);
+
+  const int zones_rule = add_rule_of_steps(
+    &c, "zones-hosts-osds", CRUSH_RULE_TYPE_REPLICATED,
+    {{CRUSH_RULE_TAKE, root, 0},
+     {CRUSH_RULE_CHOOSE_FIRSTN, 2, 2},
+     {CRUSH_RULE_CHOOSE_FIRSTN, 2, 1},
+     {CRUSH_RULE_CHOOSELEAF_FIRSTN, 1, 0},
+     {CRUSH_RULE_EMIT, 0, 0}});
+  ASSERT_EQ(0, c.get_rule_placement(zones_rule, true, &p, &err)) << err.str();
+  EXPECT_EQ(root, p.root);
+  EXPECT_EQ(2, p.zone_type);
+  EXPECT_EQ(2, p.num_zones);
+  EXPECT_EQ(1, p.osd_type);
+  EXPECT_EQ(2, p.per_zone);
+}
+
+// A rule for global stretch mode may take each zone in turn
+TEST_F(CrushWrapperTest, rule_placement_of_rule_taking_each_zone) {
+  CrushWrapper c;
+  add_two_zones(cct, &c);
+  const int rule = add_rule_of_steps(
+    &c, "each-zone", CRUSH_RULE_TYPE_REPLICATED,
+    {{CRUSH_RULE_TAKE, c.get_item_id("a~ssd"), 0},
+     {CRUSH_RULE_CHOOSELEAF_FIRSTN, 2, 1},
+     {CRUSH_RULE_EMIT, 0, 0},
+     {CRUSH_RULE_TAKE, c.get_item_id("b~ssd"), 0},
+     {CRUSH_RULE_CHOOSELEAF_FIRSTN, 2, 1},
+     {CRUSH_RULE_EMIT, 0, 0}});
+  ostringstream err;
+  CrushWrapper::rule_placement_t p;
+  ASSERT_EQ(0, c.get_rule_placement(rule, true, &p, &err)) << err.str();
+  EXPECT_EQ(c.get_item_id("default"), p.root);
+  EXPECT_EQ("ssd", p.device_class);
+  EXPECT_EQ(2, p.zone_type);
+  EXPECT_EQ(2, p.num_zones);
+  EXPECT_EQ(1, p.osd_type);
+  EXPECT_EQ(2, p.per_zone);
+  EXPECT_EQ(-EINVAL, c.get_rule_placement(rule, false, &p, &err));
+}
+
+TEST_F(CrushWrapperTest, rule_placement_of_other_rules) {
+  CrushWrapper c;
+  add_two_zones(cct, &c);
+  const int root = c.get_item_id("default");
+  const int a = c.get_item_id("a");
+  const int b = c.get_item_id("b");
+  ostringstream err;
+  CrushWrapper::rule_placement_t p;
+  EXPECT_EQ(-ENOENT, c.get_rule_placement(5, true, &p, &err));
+
+  const int msr = c.add_indep_multi_osd_per_failure_domain_rule(
+    "msr", "default", "host", 2, 2, "", &err);
+  ASSERT_GE(msr, 0) << err.str();
+  EXPECT_EQ(-EINVAL, c.get_rule_placement(msr, false, &p, &err));
+
+  const vector<vector<array<int, 3>>> others = {
+    // emits hosts
+    {{CRUSH_RULE_TAKE, root, 0},
+     {CRUSH_RULE_CHOOSE_FIRSTN, 2, 2},
+     {CRUSH_RULE_CHOOSE_FIRSTN, 0, 1},
+     {CRUSH_RULE_EMIT, 0, 0}},
+    // chooses data centers, then hosts, then two OSDs in each
+    {{CRUSH_RULE_TAKE, root, 0},
+     {CRUSH_RULE_CHOOSE_FIRSTN, 2, 2},
+     {CRUSH_RULE_CHOOSE_FIRSTN, 2, 1},
+     {CRUSH_RULE_CHOOSELEAF_FIRSTN, 2, 0},
+     {CRUSH_RULE_EMIT, 0, 0}},
+    // never emits
+    {{CRUSH_RULE_TAKE, root, 0},
+     {CRUSH_RULE_CHOOSE_FIRSTN, 2, 2},
+     {CRUSH_RULE_CHOOSELEAF_FIRSTN, 0, 1}},
+    // takes one zone twice
+    {{CRUSH_RULE_TAKE, a, 0},
+     {CRUSH_RULE_CHOOSELEAF_FIRSTN, 2, 1},
+     {CRUSH_RULE_EMIT, 0, 0},
+     {CRUSH_RULE_TAKE, a, 0},
+     {CRUSH_RULE_CHOOSELEAF_FIRSTN, 2, 1},
+     {CRUSH_RULE_EMIT, 0, 0}},
+    // chooses differently in each zone
+    {{CRUSH_RULE_TAKE, a, 0},
+     {CRUSH_RULE_CHOOSELEAF_FIRSTN, 2, 1},
+     {CRUSH_RULE_EMIT, 0, 0},
+     {CRUSH_RULE_TAKE, b, 0},
+     {CRUSH_RULE_CHOOSELEAF_FIRSTN, 1, 1},
+     {CRUSH_RULE_EMIT, 0, 0}},
+    // takes a zone and the root
+    {{CRUSH_RULE_TAKE, a, 0},
+     {CRUSH_RULE_CHOOSELEAF_FIRSTN, 2, 1},
+     {CRUSH_RULE_EMIT, 0, 0},
+     {CRUSH_RULE_TAKE, root, 0},
+     {CRUSH_RULE_CHOOSELEAF_FIRSTN, 2, 1},
+     {CRUSH_RULE_EMIT, 0, 0}},
+  };
+  for (unsigned i = 0; i < others.size(); ++i) {
+    const int rule = add_rule_of_steps(&c, "other-" + to_string(i),
+                                       CRUSH_RULE_TYPE_REPLICATED, others[i]);
+    EXPECT_EQ(-EINVAL, c.get_rule_placement(rule, true, &p, &err)) << i;
   }
 }
 

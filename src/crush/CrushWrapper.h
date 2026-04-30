@@ -620,6 +620,34 @@ public:
   void find_takes_by_rule(int rule, std::set<int> *roots) const;
 
   /**
+   * The placement that a rule gives a pool, for a rule of the shape that
+   * pools are created with: take the root, choose num_zones buckets of
+   * zone_type, choose per_zone buckets of osd_type in each and an OSD under
+   * each, emit. A rule over one zone has no choose of zones. A rule that
+   * takes each zone in turn, as rules for global stretch mode may, has the
+   * zones' parent as its root. Counts are as in the rule's steps: 0 or less
+   * is relative to the pool size.
+   */
+  struct rule_placement_t {
+    int root = 0;
+    std::string device_class;  // empty: none
+    int zone_type = -1;        // -1: one zone
+    int num_zones = 1;
+    int osd_type = 0;
+    int per_zone = 0;
+  };
+
+  /**
+   * The placement of rule, read as a rule over zones if zones is set, else
+   * as a rule in one zone. The steps alone cannot tell them apart: a choose
+   * step of buckets followed by a choose step of one OSD in each can pick
+   * either the zones or the OSD failure domain. Returns a negative errno,
+   * with the reason in *ss, for a rule of another shape.
+   */
+  int get_rule_placement(int rule, bool zones, rule_placement_t *placement,
+                         std::ostream *ss) const;
+
+  /**
    * find tree roots
    *
    * These are parentless nodes in the map.
@@ -1128,6 +1156,7 @@ private:
   float _get_take_weight_osd_map(int root, std::map<int,float> *pmap) const;
   void _normalize_weight_map(float sum, const std::map<int,float>& m,
 			     std::map<int,float> *pmap) const;
+  int _find_free_rule_id(const std::string& name, int rno, std::ostream *err) const;
 
 public:
   /**
@@ -1235,6 +1264,14 @@ public:
       device_class, mode, rule_type, err);
   }
 
+
+  int add_simple_stretch_rule(
+    std::string name, std::string root_name, std::string zone_failure_domain_type,
+    std::string osd_failure_domain_type,
+    int num_failure_domains, int num_replica_per_zone,
+    std::string device_class, std::string mode, int rule_type, bool force,
+    std::ostream *err = 0);
+
   int add_indep_multi_osd_per_failure_domain_rule(
     std::string name, std::string root_name, std::string failure_domain_type,
     int osds_per_failure_domain,
@@ -1260,6 +1297,14 @@ public:
       name, root_name, failure_domain_type, -1,
       device_class, mode, rule_type, rno, err);
   }
+
+  int add_simple_stretch_rule_at(
+    std::string name, std::string root_name,
+    std::string zone_failure_domain_type,
+    std::string osd_failure_domain_type,
+    int num_failure_domains, int num_replica_per_zone,
+    std::string device_class, std::string mode,
+    int rule_type, bool force, int rno, std::ostream *err = 0);
 
   int add_multi_osd_per_failure_domain_rule_at(
     std::string name, std::string root_name, std::string failure_domain_type,
@@ -1307,6 +1352,10 @@ private:
   int detach_bucket(CephContext *cct, int item);
 
   int get_new_bucket_id();
+
+  int _resolve_root_to_class(int &root, const std::string &root_name,
+                             const std::string &device_class,
+                             std::ostream *err);
 
 public:
   int get_max_buckets() const {
