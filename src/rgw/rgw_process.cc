@@ -6,6 +6,7 @@
 #include "common/WorkQueue.h"
 #include "include/scope_guard.h"
 
+#include <string_view>
 #include <utility>
 #include "rgw_auth_registry.h"
 #include "rgw_dmclock_scheduler.h"
@@ -30,6 +31,24 @@
 using namespace std;
 using rgw::dmclock::Scheduler;
 
+static void log_ratelimit_hit(req_state* s, std::string_view scope,
+                              const RGWRateLimitInfo& ratelimit_info)
+{
+    ldpp_dout(s, 5) << "rate limited: scope=" << scope
+                    << " uid=" << std::quoted(s->user->get_id().to_str())
+                    << " method=" << (s->info.method ? s->info.method : "-")
+                    << (scope == "bucket" ? " bucket=\"" : "")
+                    << (scope == "bucket" ? s->bucket_name : "")
+                    << (scope == "bucket" ? "\"" : "")
+                    << " limits={"
+                    << "read_ops=" << ratelimit_info.max_read_ops
+                    << ", write_ops=" << ratelimit_info.max_write_ops
+                    << ", read_bytes=" << ratelimit_info.max_read_bytes
+                    << ", write_bytes=" << ratelimit_info.max_write_bytes
+                    << ", list_ops=" << ratelimit_info.max_list_ops
+                    << ", delete_ops=" << ratelimit_info.max_delete_ops
+                    << "}" << dendl;
+}
 void RGWProcess::RGWWQ::_dump_queue()
 {
   if (!g_conf()->subsys.should_gather<ceph_subsys_rgw, 20>()) {
@@ -169,6 +188,11 @@ bool rate_limit(rgw::sal::Driver* driver, req_state* s) {
   }
   s->user_ratelimit = *user_ratelimit;
   s->bucket_ratelimit = *bucket_ratelimit;
+  if (limit_user) {
+    log_ratelimit_hit(s, "user", s->user_ratelimit);
+  } else if (limit_bucket) {
+    log_ratelimit_hit(s, "bucket", s->bucket_ratelimit);
+  }
   return (limit_user || limit_bucket);
 }
 
