@@ -48,6 +48,43 @@ class CephTestRados(WatchedProcess):
             log.info("Stopping instance %s", test_id)
             proc.stdin.close()
 
+def _validate_pool_config(config):
+    """
+    Validate pool configuration for incompatible combinations.
+    
+    Args:
+        config: Pool configuration dictionary
+        
+    Raises:
+        ValueError: If configuration contains incompatible settings
+    """
+    # Rule 1: num_zones > 1 (stretched pools) requires ec_optimizations
+    num_zones = config.get('num_zones', 1)
+    if num_zones > 1:
+        log.info(
+            "num_zones=%d detected. Ensure osd_pool_default_flag_ec_optimizations "
+            "is set to true in ceph configuration.", num_zones
+        )
+    
+    # Rule 2: erasure_code_profile requires ec_pool
+    if 'erasure_code_profile' in config and not config.get('ec_pool', False):
+        raise ValueError(
+            "erasure_code_profile specified but ec_pool is not true"
+        )
+    
+    # Rule 3: erasure_code_use_overwrites requires ec_pool
+    if config.get('erasure_code_use_overwrites', False) and not config.get('ec_pool', False):
+        raise ValueError(
+            "erasure_code_use_overwrites requires ec_pool to be true"
+        )
+    
+    # Rule 4: erasure_code_crush requires ec_pool
+    if 'erasure_code_crush' in config and not config.get('ec_pool', False):
+        raise ValueError(
+            "erasure_code_crush specified but ec_pool is not true"
+        )
+
+
 @contextlib.contextmanager
 def task(ctx, config):
     """
@@ -67,6 +104,7 @@ def task(ctx, config):
           runs: <number of times to run> - the pool is remade between runs
           ec_pool: use an ec pool
           erasure_code_profile: profile to use with the erasure coded pool
+          erasure_code_crush: crush rule configuration for erasure coded pool
           fast_read: enable ec_pool's fast_read
           min_size: set the min_size of created pool
           pool_snaps: use pool snapshots instead of selfmanaged snapshots
@@ -75,8 +113,10 @@ def task(ctx, config):
                                   Let osd backend don't keep data in cache.
           pct_update_delay: delay before primary propogates pct on write pause,
                             defaults to 5s if balance_reads is set
+          use-pool-config: if true, read pool configuration from overrides/ceph/pool-config
+                          instead of from tasks/rados (default: false)
 
-    For example::
+    For example (traditional style)::
 
         tasks:
         - ceph:
@@ -106,6 +146,35 @@ def task(ctx, config):
             pool_snaps: true
             write_fadvise_dontneed: true
             runs: 10
+        - interactive:
+
+    For example (new pool-config style)::
+
+        overrides:
+          ceph:
+            pool-config:
+              ec_pool: true
+              erasure_code_profile:
+                name: isa42profile
+                plugin: isa
+                k: 4
+                m: 2
+                technique: reed_sol_van
+                crush-failure-domain: osd
+              num_zones: 2
+              fast_read: true
+        tasks:
+        - ceph:
+        - rados:
+            use-pool-config: true
+            clients: [client.0]
+            ops: 4000
+            objects: 50
+            op_weights:
+              read: 100
+              write: 0
+              append: 100
+              delete: 50
         - interactive:
 
     Optionally, you can provide the pool name to run against:
@@ -172,8 +241,41 @@ def task(ctx, config):
     log.info("config is {config}".format(config=str(config)))
     overrides = ctx.config.get('overrides', {})
     log.info("overrides is {overrides}".format(overrides=str(overrides)))
+    
+    use_pool_config = config.get('use-pool-config', False)
+    
+    if use_pool_config:
+        log.info("Using pool configuration from overrides/ceph/pool-config")
+        pool_config = overrides.get('ceph', {}).get('pool-config', {})
+        
+        if pool_config:
+            log.info("pool-config is {pool_config}".format(pool_config=str(pool_config)))
+
+            pool_settings = [
+                'ec_pool',
+                'erasure_code_use_overwrites',
+                'erasure_code_profile',
+                'erasure_code_crush',
+                'fast_read',
+                'min_size',
+                'num_zones',
+            ]
+            
+            for setting in pool_settings:
+                if setting in pool_config:
+                    # Don't override if already set in config (config takes precedence)
+                    if setting not in config:
+                        config[setting] = pool_config[setting]
+                        log.info("Set {setting} from pool-config: {value}".format(
+                            setting=setting, value=pool_config[setting]))
+        else:
+            log.warning("use-pool-config is true but no pool-config found in overrides/ceph")
+    
+    # Apply rados-specific overrides (for backward compatibility)
     teuthology.deep_merge(config, overrides.get('rados', {}))
-    log.info("config is {config}".format(config=str(config)))
+    log.info("config after merge is {config}".format(config=str(config)))
+    
+    _validate_pool_config(config)
 
     object_size = int(config.get('object_size', 4000000))
     op_weights = config.get('op_weights', {})
