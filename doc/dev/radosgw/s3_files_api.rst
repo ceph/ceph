@@ -719,6 +719,30 @@ Per-zone NFS service bindings and export defaults are **not**
 config knobs; they live in zone period config under
 ``files_placement_services`` (see `Files placements`_).
 
+Error codes
+===========
+
+Smithy declares the six exception types and their HTTP status
+codes (see `REST API surface`_), but the inner ``errorCode``
+member of each exception is typed only as a non-empty string —
+AWS does not publish canonical values. The single source of
+truth for the values RGW returns is the C++ header
+``src/rgw/rgw_s3files_errors.h``, with a Python mirror at
+``src/test/rgw/s3files/errors.py`` for the conformance test
+suite.
+
+The catalog covers validation failures (invalid ARNs, bad
+formats, malformed policy documents), not-found cases, conflicts
+(duplicate FS for a bucket, MT-already-in-zone,
+FS-has-children, placement-not-bound-in-zone,
+unresolved-nfs_service), quota breaches, throttling, and
+internal errors. Names are ``UPPER_SNAKE_CASE`` to keep them
+visually distinct from the PascalCase exception types.
+
+This is a Ceph-defined extension point. Clients should treat the
+exception type as the primary classification and ``errorCode``
+as an operator-debug identifier.
+
 Reconciler service
 ==================
 
