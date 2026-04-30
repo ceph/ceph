@@ -67,6 +67,13 @@ else:
                     self.daemon_name = matched_gateway.get('daemon_name')
                     self.gateway_addr = matched_gateway.get('service_url')
                     logger.debug("Gateway address set to: %s", self.gateway_addr)
+                else:
+                    raise DashboardException(
+                        msg=f"No gateway found matching server address: {server_address}",
+                        code='server_address_not_found',
+                        component='nvmeof',
+                        http_status_code=400
+                    )
             enable_auth = is_mtls_enabled(service_name)
             if enable_auth:
                 client_key = NvmeofGatewaysConfig.get_client_key(service_name)
