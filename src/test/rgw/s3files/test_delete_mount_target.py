@@ -11,11 +11,11 @@ from . import errors, NONEXISTENT_MT_ID
 
 
 @pytest.mark.conformance
-def test_delete_existing(s3files_client, test_file_system, test_zone_id):
+def test_delete_existing(s3files_client, test_file_system, test_subnet_id):
     """Create + delete + assert subsequent get returns NotFound."""
     mt = s3files_client.create_mount_target(
         fileSystemId=test_file_system['fileSystemId'],
-        subnetId=test_zone_id,
+        subnetId=test_subnet_id,
     )
     mt_id = mt['mountTargetId']
     s3files_client.delete_mount_target(mountTargetId=mt_id)

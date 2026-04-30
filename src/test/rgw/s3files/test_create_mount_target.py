@@ -18,19 +18,22 @@ from . import errors, NONEXISTENT_FS_ID
 
 
 @pytest.mark.conformance
-def test_create_minimum(s3files_client, test_file_system, test_zone_id):
-    """Minimum valid request: fileSystemId + subnetId(=zone-id)."""
+def test_create_minimum(
+    s3files_client, test_file_system, test_subnet_id, test_zone_id
+):
+    """Minimum valid request: fileSystemId + subnetId."""
     resp = s3files_client.create_mount_target(
         fileSystemId=test_file_system['fileSystemId'],
-        subnetId=test_zone_id,
+        subnetId=test_subnet_id,
     )
     try:
         assert 'mountTargetId' in resp
         assert resp['fileSystemId'] == test_file_system['fileSystemId']
-        assert resp['subnetId'] == test_zone_id
-        assert resp['status'] in ('CREATING', 'AVAILABLE')
-        # availabilityZoneId is response-populated with the same zone
+        # subnetId round-trips in its `subnet-{zone}` request form
+        assert resp['subnetId'] == test_subnet_id
+        # availabilityZoneId carries the bare zone-id (no `subnet-` prefix)
         assert resp.get('availabilityZoneId') == test_zone_id
+        assert resp['status'] in ('CREATING', 'AVAILABLE')
     finally:
         s3files_client.delete_mount_target(mountTargetId=resp['mountTargetId'])
 
@@ -39,9 +42,9 @@ def test_create_minimum(s3files_client, test_file_system, test_zone_id):
 
 
 @pytest.mark.conformance
-def test_create_missing_file_system_id(s3files_client, test_zone_id):
+def test_create_missing_file_system_id(s3files_client, test_subnet_id):
     with pytest.raises(s3files_client.exceptions.ValidationException):
-        s3files_client.create_mount_target(subnetId=test_zone_id)
+        s3files_client.create_mount_target(subnetId=test_subnet_id)
 
 
 @pytest.mark.conformance
@@ -56,13 +59,13 @@ def test_create_missing_subnet_id(s3files_client, test_file_system):
 
 
 @pytest.mark.conformance
-def test_create_on_nonexistent_file_system(s3files_client, test_zone_id):
+def test_create_on_nonexistent_file_system(s3files_client, test_subnet_id):
     with pytest.raises(
         s3files_client.exceptions.ResourceNotFoundException
     ) as exc:
         s3files_client.create_mount_target(
             fileSystemId=NONEXISTENT_FS_ID,
-            subnetId=test_zone_id,
+            subnetId=test_subnet_id,
         )
     err = exc.value.response.get('Error', {})
     assert err.get('errorCode') == errors.FILE_SYSTEM_NOT_FOUND, err
@@ -73,7 +76,7 @@ def test_create_on_nonexistent_file_system(s3files_client, test_zone_id):
 
 @pytest.mark.conformance
 def test_only_one_mount_target_per_file_system_per_zone(
-    s3files_client, test_file_system, test_zone_id
+    s3files_client, test_file_system, test_subnet_id
 ):
     """AWS-shape rule: one mount target per AZ per filesystem.
 
@@ -82,7 +85,7 @@ def test_only_one_mount_target_per_file_system_per_zone(
     """
     first = s3files_client.create_mount_target(
         fileSystemId=test_file_system['fileSystemId'],
-        subnetId=test_zone_id,
+        subnetId=test_subnet_id,
     )
     try:
         with pytest.raises(
@@ -90,7 +93,7 @@ def test_only_one_mount_target_per_file_system_per_zone(
         ) as exc:
             s3files_client.create_mount_target(
                 fileSystemId=test_file_system['fileSystemId'],
-                subnetId=test_zone_id,
+                subnetId=test_subnet_id,
             )
         err = exc.value.response.get('Error', {})
         assert err.get('errorCode') == errors.MOUNT_TARGET_ALREADY_IN_ZONE, err

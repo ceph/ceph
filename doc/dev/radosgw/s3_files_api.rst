@@ -185,10 +185,15 @@ discrimination.
 Spec (request fields, mapping to AWS shape):
 
 * ``fileSystemId`` — parent. Required.
-* ``subnetId`` — required by AWS shape. **Reinterpreted as a
-  Ceph zone-id**; validated against the period.
-  ``availabilityZoneId`` is response-only in the AWS shape and is
-  not accepted as input.
+* ``subnetId`` — required by AWS shape. **Carries a Ceph
+  zone-id**, encoded as ``subnet-{zone_id}`` to satisfy the
+  Smithy ``SubnetId`` pattern ``^subnet-[0-9a-f]{8,40}$``.
+  RGW strips the ``subnet-`` prefix at the API layer to recover
+  the zone-id and validates it against the active period. The
+  zone-id must therefore be a hex string, 8..40 chars (Ceph
+  zones use 32-char hex UUIDs, which fit naturally).
+  ``availabilityZoneId`` is response-only in the AWS shape and
+  is not accepted as input.
 * ``ipv4Address`` / ``ipv6Address`` — accepted and ignored.
 * ``ipAddressType`` — accepted; ``IPV4_ONLY`` is the default.
 * ``securityGroups`` — accepted and ignored (no VPC SG model in
@@ -200,7 +205,8 @@ Status / response fields:
   ``networkInterfaceId`` (synthesized stub), ``vpcId``
   (synthesized stub).
 * ``availabilityZoneId``, ``availabilityZoneName`` populated with
-  the zone-id, matching AWS's "this MT lives in AZ X" convention.
+  the bare zone-id (no ``subnet-`` prefix), matching AWS's "this
+  MT lives in AZ X" convention.
 * ``ipv4Address`` populated by the reconciler from the resolved
   ``virtual_ip`` of the placement's NFS endpoint binding.
 * ``status`` — lifecycle state (see `Lifecycle states`_).

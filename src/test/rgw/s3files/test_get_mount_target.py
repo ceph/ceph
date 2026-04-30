@@ -11,12 +11,14 @@ from . import errors, NONEXISTENT_MT_ID
 
 
 @pytest.mark.conformance
-def test_get_existing(s3files_client, test_mount_target, test_zone_id):
+def test_get_existing(
+    s3files_client, test_mount_target, test_zone_id, test_subnet_id
+):
     mt_id = test_mount_target['mountTargetId']
     resp = s3files_client.get_mount_target(mountTargetId=mt_id)
     assert resp['mountTargetId'] == mt_id
     assert resp['fileSystemId'] == test_mount_target['fileSystemId']
-    assert resp['subnetId'] == test_zone_id
+    assert resp['subnetId'] == test_subnet_id
     assert resp.get('availabilityZoneId') == test_zone_id
     assert resp['status'] in ('CREATING', 'AVAILABLE')
 

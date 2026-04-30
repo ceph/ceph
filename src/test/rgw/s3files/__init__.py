@@ -69,6 +69,17 @@ def get_zone_id():
     return main_zone_id
 
 
+def make_subnet_id(zone_id):
+    """Encode a Ceph zone-id as a value that satisfies the AWS
+    `SubnetId` Smithy pattern `^subnet-[0-9a-f]{8,40}$`.
+
+    The zone-id is required to be hex (8..40 chars) so it can be
+    passed through verbatim. RGW strips the `subnet-` prefix at
+    the API layer to recover the zone-id.
+    """
+    return f"subnet-{zone_id}"
+
+
 # Pattern-valid IDs that are vanishingly unlikely to exist. Used by
 # tests that exercise "resource not found" paths without tripping
 # the boto3 client-side regex validator (the Smithy patterns are
