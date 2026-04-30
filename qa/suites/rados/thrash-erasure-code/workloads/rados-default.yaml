@@ -1,0 +1,21 @@
+# Default RADOS workload (no pool configuration)
+# Pool configuration comes from erasure-code directory
+tasks:
+  - rados:
+      use-pool-config: true
+      clients: [client.0]
+      ops: 4000
+      objects: 50
+      write_append_excl: false
+      op_weights:
+        read: 100
+        write: 0
+        append: 100
+        delete: 50
+        snap_create: 50
+        snap_remove: 50
+        rollback: 50
+        copy_from: 50
+        setattr: 25
+        rmattr: 25
+  - print: "**** done rados ec task"
