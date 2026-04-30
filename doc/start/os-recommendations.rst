@@ -63,12 +63,11 @@ non-Linux systems but these are not supported by the core Ceph effort.
 +---------------+-------------------+----------------+---------------+
 | MS Windows    | D                 | D              | D             |
 +---------------+-------------------+----------------+---------------+
-
-- **A**: Ceph provides packages and has done comprehensive tests on the
+- **A**: Ceph teams provide packages and has done comprehensive tests on the
   software in them.
-- **B**: Ceph provides packages and has done basic tests on the software
+- **B**: Ceph teams provide packages and has done basic tests on the software
   in them.
-- **C**: Ceph provides packages only. No tests have been done on
+- **C**: Ceph teams provide packages only. No tests have been done on
   these releases.
 - **D**: Client packages are available from an external site but are not
   maintained or tested by the core Ceph team.
@@ -79,13 +78,13 @@ Container Hosts
 This table shows the operating systems that support Ceph's official
 container images.
 
-+---------------+-------------------+----------------+------------------+
-|               | Tentacle (20.2.z) | Squid (19.2.z) | Reef (18.2.z)    |
-+===============+===================+================+==================+
-| CentOS 9      | H                 | H              | H                |
-+---------------+-------------------+----------------+------------------+
-| Ubuntu 22.04  | H                 | H              | H                |
-+---------------+-------------------+----------------+------------------+
++-----------------------+-------------------+----------------+------------------+
+|                       | Tentacle (20.2.z) | Squid (19.2.z) | Reef (18.2.z)    |
++=======================+===================+================+==================+
+| CentOS 9 (x86_64)     | H                 | H              | H                |
++-----------------------+-------------------+----------------+------------------+
+| Ubuntu 22.04 (x86_64) | H                 | H              | H                |
++-----------------------+-------------------+----------------+------------------+
+- **H**: Ceph teams test this distribution as a container host.
 
-- **H**: Ceph tests this distribution as a container host.
-
+  .. important:: Note that ARM host architecture has NOT been tested with the publishied containers
