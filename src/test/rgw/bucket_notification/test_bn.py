@@ -39,7 +39,6 @@ from .api import PSTopicS3, \
     delete_all_topics, \
     put_object_tagging, \
     admin, \
-    ceph_admin, \
     set_rgw_config_option, \
     bash, \
     S3Connection, \
@@ -905,7 +904,7 @@ def test_topic():
     list_topics(0, tenant)
 
 
-@pytest.mark.manual_test
+@pytest.mark.basic_test
 def test_topic_name():
     """ test topic name validation """
     conn = connection()
@@ -915,7 +914,6 @@ def test_topic_name():
     zonegroup = get_config_zonegroup()
     bucket_name = gen_bucket_name()
     invalid_topic_name = bucket_name + '+' + TOPIC_SUFFIX
-    rgw_client = f'client.rgw.{get_config_port()}'
 
     # fail to create topic
     endpoint_address = 'http://127.0.0.1:7001/'
@@ -924,13 +922,13 @@ def test_topic_name():
     pytest.raises(Exception, topic_conf.set_config)
 
     # relax topic name validation
-    set_rgw_config_option(rgw_client, 'rgw_relaxed_topic_names', 'true', get_config_cluster())
+    set_rgw_config_option('rgw_relaxed_topic_names', 'true', get_config_cluster())
     # create topic
     expected_arn = 'arn:aws:sns:' + zonegroup + '::' + invalid_topic_name
     topic_arn = topic_conf.set_config()
     assert topic_arn == expected_arn
 
-    set_rgw_config_option(rgw_client, 'rgw_relaxed_topic_names', 'false', get_config_cluster())
+    set_rgw_config_option('rgw_relaxed_topic_names', 'false', get_config_cluster())
 
     # get topic (should be possible regardless of the relaxed topic name setting)
     parsed_result = get_topic(invalid_topic_name)
@@ -3705,7 +3703,7 @@ def test_persistent_notification_pushback():
 
 
 def verify_idleness(port, sleep_time, max_time):
-    set_rgw_config_option('client.rgw', 'rgw_kafka_connection_idle', max_time, get_config_cluster())
+    set_rgw_config_option('rgw_kafka_connection_idle', max_time, get_config_cluster())
     is_idle = False
     start_time = time.time()
     while not is_idle:
@@ -3722,7 +3720,7 @@ def verify_idleness(port, sleep_time, max_time):
                 assert False, "radosgw<->kafka connection is still not idle after {}s".format(time_diff)
 
     # set the original idle time
-    set_rgw_config_option('client.rgw', 'rgw_kafka_connection_idle', 300, get_config_cluster())
+    set_rgw_config_option('rgw_kafka_connection_idle', 300, get_config_cluster())
 
 
 @pytest.mark.kafka_test
@@ -5780,9 +5778,9 @@ def persistent_notification_shard_config_change(endpoint_type, conn, new_num_sha
     """ test to check if notifications work when config value for determining num_shards is changed..."""
     
     default_num_shards = 11
-    rgw_client = f'client.rgw.{get_config_port()}'
+    cluster = get_config_cluster()
     if (old_num_shards != default_num_shards):
-        set_rgw_config_option(rgw_client, 'rgw_bucket_persistent_notif_num_shards', old_num_shards, get_config_cluster())
+        set_rgw_config_option('rgw_bucket_persistent_notif_num_shards', old_num_shards, cluster)
 
     bucket_name = gen_bucket_name()
     bucket = conn.create_bucket(bucket_name)
@@ -5828,8 +5826,8 @@ def persistent_notification_shard_config_change(endpoint_type, conn, new_num_sha
     create_object_and_verify_events(bucket, 'foo', topic_name, receiver, expected_keys, deletions=True)
 
     ## change config value for num_shards to new_num_shards
-    set_rgw_config_option(rgw_client, 'rgw_bucket_persistent_notif_num_shards', new_num_shards, get_config_cluster())
-    
+    set_rgw_config_option('rgw_bucket_persistent_notif_num_shards', new_num_shards, cluster)
+
     ## create objects in the bucket (async)
     expected_keys = []
     create_object_and_verify_events(bucket, 'bar', topic_name, receiver, expected_keys, deletions=True)
@@ -5843,7 +5841,7 @@ def persistent_notification_shard_config_change(endpoint_type, conn, new_num_sha
 
     ##revert config value for num_shards to default
     if (new_num_shards != default_num_shards):
-        set_rgw_config_option(rgw_client, 'rgw_bucket_persistent_notif_num_shards', default_num_shards, get_config_cluster())
+        set_rgw_config_option('rgw_bucket_persistent_notif_num_shards', default_num_shards, cluster)
 
 
 def create_object_and_verify_events(bucket, key_name, topic_name, receiver, expected_keys, deletions=False):
@@ -6053,16 +6051,7 @@ def kafka_batch_size(match_batch_size):
 
     if match_batch_size:
         # set rgw_kafka_max_batch_size using the daemon-specific entity name
-        rgw_client = 'client.rgw.{}'.format(get_config_port())
-        set_rgw_config_option(rgw_client, 'rgw_kafka_max_batch_size', max_batch_size, get_config_cluster())
-        # verify config is set in mon store
-        result = ceph_admin(['config', 'get', rgw_client, 'rgw_kafka_max_batch_size'], get_config_cluster())
-        assert result[1] == 0, 'failed to get config from mon store'
-        actual_value = result[0].strip().split('\n')[-1]
-        assert actual_value == str(max_batch_size), \
-            'rgw_kafka_max_batch_size not set in mon store: got {} expected {}'.format(actual_value, max_batch_size)
-        # wait for config to propagate from monitor to RGW daemon
-        time.sleep(10)
+        set_rgw_config_option('rgw_kafka_max_batch_size', max_batch_size, get_config_cluster())
 
     # fix the topic to point to correct broker
     endpoint_address = 'kafka://' + host + ':' + str(right_port)
@@ -6088,8 +6077,7 @@ def kafka_batch_size(match_batch_size):
 
     # cleanup
     if match_batch_size:
-        rgw_client = 'client.rgw.{}'.format(get_config_port())
-        set_rgw_config_option(rgw_client, 'rgw_kafka_max_batch_size', 0, get_config_cluster())
+        set_rgw_config_option('rgw_kafka_max_batch_size', 0, get_config_cluster())
     kafka_topics = os.path.join(kafka_dir, 'bin/kafka-topics.sh')
     subprocess.run(
         [kafka_topics,
@@ -6106,13 +6094,13 @@ def kafka_batch_size(match_batch_size):
         receiver.close(task)
 
 
-@pytest.mark.manual_test
+@pytest.mark.kafka_test
 def test_kafka_batch_size():
     """ test that setting rgw_kafka_max_batch_size limits the batch size sent to kafka """
     kafka_batch_size(match_batch_size=True)
 
 
-@pytest.mark.manual_test
+@pytest.mark.kafka_test
 def test_kafka_batch_size_mismatch():
     """ test that without rgw_kafka_max_batch_size, batched messages exceed the broker limit """
     kafka_batch_size(match_batch_size=False)
