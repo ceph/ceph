@@ -1644,11 +1644,18 @@ record_t Cache::prepare_record(
 	  i->get_length(),
 	  i->get_type()));
     }
+
+    // No-conflict handoff for *fresh extents* only applies to rewrite extents.
+    // User-created fresh LBA nodes have no prior_instance, so there is nothing to hand off from.
+    const bool do_handoff =
+      should_use_no_conflict_publish(t.get_src(), i->get_type()) &&
+      i->get_prior_instance(); // only rewrite-style fresh extents have a prior
+
     i->set_io_wait(CachedExtent::extent_state_t::CLEAN,
-                   should_use_no_conflict_publish(t.get_src(), i->get_type()));
+                   do_handoff);
     // Note, paddr is known until complete_commit(),
     // so add_extent() later.
-    if (should_use_no_conflict_publish(t.get_src(), i->get_type())) {
+    if (do_handoff) {
       assert(i->get_prior_instance());
       assert(!i->committer);
       assert(!i->get_prior_instance()->committer);
@@ -1657,7 +1664,7 @@ record_t Cache::prepare_record(
       auto &committer = *i->committer;
       committer.block_trans(t);
       i->get_prior_instance()->set_io_wait(
-        CachedExtent::extent_state_t::CLEAN, should_use_no_conflict_publish(t.get_src(), i->get_type()));
+        CachedExtent::extent_state_t::CLEAN, true);
     }
   }
 
@@ -2009,7 +2016,14 @@ void Cache::complete_commit(
     i->pending_for_transaction = TRANS_ID_NULL;
     i->on_initial_write();
     const auto t_src = t.get_src();
-    if (should_use_no_conflict_publish(t_src, i->get_type())) {
+
+    const bool do_handoff =
+      should_use_no_conflict_publish(t_src, i->get_type()) &&
+      i->get_prior_instance();   // only rewrite-style fresh rewrite extents
+
+    if (do_handoff) {
+      DEBUGT("unblocking commit {}", t, *i);
+      ceph_assert(is_lba_backref_node(i->get_type()));
       ceph_assert(i->committer);
       auto &committer = *i->committer;
       auto &prior = *i->get_prior_instance();
