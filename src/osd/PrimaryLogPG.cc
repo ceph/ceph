@@ -1725,8 +1725,8 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
           pool_migration_reservations_granted_target = false;
         }
 
-        // No need to reply, the source PG doesn't care about the result
-        return;
+        // Send success, the source PG ignores this reply
+        result = 0;
       }
       break;
 
