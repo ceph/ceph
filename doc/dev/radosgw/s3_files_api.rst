@@ -164,15 +164,25 @@ Mirrors bucket placement field-for-field, with a new type:
 
 * **Zone** (period config):
 
-  - ``files_placement_services`` — per-placement-name binding to
-    backend services. Structured value:
-    ``{ nfs: <cephadm-service-name>, smb: <cephadm-service-name> }``.
-    v1 populates only ``nfs``.
+  - ``files_placement_services`` — per-placement-name binding to a
+    backend NFS endpoint. Each binding is a flat record::
+
+       {
+         virtual_ip:  "10.0.0.5",        # optional
+         port:        2049,              # optional, paired with virtual_ip
+         nfs_service: "nfs.zone-a-prod"  # optional
+       }
+
+    Validation: **exactly one** of ``(virtual_ip + port)`` or
+    ``nfs_service`` must be set per binding. Both forms are
+    accepted; the reconciler resolves either to a concrete
+    endpoint at MountTarget creation time. SMB will get its own
+    sibling field once the SMB data plane lands.
 
 Defaults are zonegroup-scoped (matching bucket placement); the
 per-zone-ness lives in the bindings, where it belongs — different
 zones can map the same placement name to differently-named local
-NFS services.
+NFS services or VIPs.
 
 Capture and immutability
 ------------------------
@@ -198,17 +208,25 @@ Resolution
 For a MountTarget in zone Z, with parent Filesystem ``F``:
 
 1. Look up ``F.spec.placement`` (the captured placement name).
-2. In zone Z's period config, look up
-   ``files_placement_services[name].nfs`` → cephadm NFS service
-   name.
-3. Read the FDB NFS-service registration record for that service
-   (cephadm-published) → ``virtual_ip``, port, etc.
-4. Write the resolved endpoint into ``MountTarget.status``.
+2. In zone Z's period config, read
+   ``files_placement_services[name]``. Branch on which form is
+   set:
+
+   - If ``virtual_ip`` and ``port`` are set, use them directly.
+   - If ``nfs_service`` is set, query the local Ceph cluster's
+     ``orch`` to resolve the named service to its ``virtual_ip``
+     and port. This is a read-only orch query; cephadm itself is
+     unmodified.
+
+3. Write the resolved endpoint into ``MountTarget.status``.
 
 If step 2 yields nothing — zone Z has no binding for the placement
 name — the MountTarget in Z stays ``Pending`` and surfaces
-"placement '<name>' not bound to any NFS service in zone <Z>".
-Operator-fixable.
+"placement '<name>' not bound in zone <Z>". Operator-fixable.
+
+If step 2 names a service that the local orch can't resolve, the
+MountTarget stays ``Pending`` with an explicit
+"unresolved nfs_service '<name>'" condition.
 
 Operator workflow
 -----------------
@@ -219,18 +237,23 @@ Familiar from bucket placement, mirrored::
      --placement-id gen2
    radosgw-admin zonegroup files-placement default \
      --placement-id gen2
+
+   # Zone binding takes one of two mutually-exclusive forms:
    radosgw-admin zone files-placement add \
      --placement-id gen2 \
-     --nfs-service nfs.zone-a-prod
+     <[--nfs-service NAME] | [--virtual-ip IP --port PORT]>
+
+The CLI rejects bindings that supply both forms or neither.
 
 State backend
 =============
 
-FoundationDB. RGW Files is the second consumer in RGW after
-``fdbd4n`` (PR ceph/ceph#65535). It builds on the
-``src/rgw/fdb/`` wrapper introduced by that PR, and contributes
-back a watch primitive, a thin tuple/directory abstraction, and
-versionstamp helpers.
+FoundationDB. The Files API builds on the ``src/rgw/fdb/`` wrapper
+from PR ceph/ceph#65535, and contributes back a watch primitive,
+a thin tuple/directory abstraction, and versionstamp helpers.
+Files API and ``fdbd4n`` share the wrapper and conventions but
+run against **separate FDB instances** scoped to different
+concerns (see `Cluster scope`_).
 
 Why FoundationDB
 ----------------
@@ -240,17 +263,30 @@ Why FoundationDB
   zone's wakeup key in one transaction).
 * Watches drive the reconciler loop without polling.
 * Global commit-version stamps replace ad-hoc generation counters.
-* The deployment cost is amortized across other RGW FDB
-  consumers (``fdbd4n``, future indexes, realm state).
 
 Cluster scope
 -------------
 
-A single FDB cluster **per Ceph cluster**, matching the other RGW
-FDB consumers (D4N, indexes), which want the FDB instance local
-to RGW for latency. Zonegroup is a **keyspace prefix**, not a
-separate FDB deployment. Cross-zonegroup federation is handled
-by RGW multisite metadata sync over RADOS, not by FDB.
+A single FDB cluster **per realm**. The realm-level scope gives a
+single source of truth for zonegroup-scoped Files API state across
+the entire realm — no cross-cluster replication needed for
+control-plane writes, and cross-zonegroup federation is just a
+prefix in the keyspace.
+
+D4N and indexes use their own **per-Ceph-cluster** FDB instances,
+sized for their hot-path latency requirements; the Files API does
+not share or piggyback on those instances. The wrapper, tuple
+conventions, and schema-versioning agreement are still shared
+across consumers.
+
+Eventually realm metadata itself (zonegroup definitions, period
+state) is expected to lift from RADOS into FDB. Placing Files API
+state at the realm level now aligns with that direction rather
+than building something we'd later migrate.
+
+The control-plane latency cost — RGW writes pay round-trip to the
+realm-FDB cluster, which may not be local — is acceptable; Files
+API CRUD is not hot-path.
 
 FoundationDB layout
 ===================
@@ -284,7 +320,11 @@ Per-zone control keys
 
    ("rgw","files","v1",zg,"zone",zone,"wakeup")
    ("rgw","files","v1",zg,"zone",zone,"reconcilers",host)
-   ("rgw","files","v1",zg,"zone",zone,"nfs-services",svc)
+
+NFS endpoint information is **not** kept in FDB in v1; it lives
+in zone period config under ``files_placement_services`` (see
+`Files placements`_), supplied by the operator via
+``radosgw-admin``.
 
 Conventions
 -----------
@@ -436,18 +476,21 @@ the FDB wrapper stabilizes.
 Failure modes
 =============
 
-* **FDB unreachable from RGW.** Control-plane writes return
+* **Realm FDB unreachable from RGW.** Control-plane writes return
   503 with ``Retry-After``. Reads also 503; do not serve stale
-  caches.
+  caches. Existing Ganesha exports keep serving — only the
+  control plane is affected, and only realm-wide.
 * **Reconciler offline in zone Z.** New work in Z stays
   ``Pending``; existing exports keep serving (Ganesha config is
   not removed). API surfaces "no live reconciler in zone Z".
-* **NFS service in Z has no virtual_ip configured.** MountTarget
-  stays ``Pending``; status surfaces the operator-fixable error.
+* **Placement not bound in zone Z.** MountTarget stays
+  ``Pending`` with "placement '<name>' not bound in zone <Z>".
+  Operator-fixable via ``radosgw-admin zone files-placement add``.
+* **nfs_service name doesn't resolve via local orch.**
+  MountTarget stays ``Pending`` with
+  "unresolved nfs_service '<name>'".
 * **Bucket moves zonegroups.** Filesystem becomes orphaned and
   surfaces an Error condition. v1 does not auto-migrate.
-* **VIP collision.** Reconciler reports ``Error`` in MountTarget
-  status. v1 does not reallocate.
 
 Coordination
 ============
@@ -455,14 +498,17 @@ Coordination
 * Builds on PR ceph/ceph#65535 (chardan, draft) which adds
   ``src/rgw/fdb/`` and ``src/rgw/driver/fdbd4n/``.
 * Files API contributes back: a watch primitive, a thin
-  tuple/directory layer, and versionstamp helpers.
+  tuple/directory layer, and versionstamp helpers — useful to
+  ``fdbd4n`` even though the two run against different FDB
+  instances.
 * Tuple-prefix convention to be agreed across FDB-in-RGW
   consumers; the ``("rgw","files","v1",...)`` shape proposed here
-  assumes a peer prefix ``("rgw","fdbd4n",...)``.
+  assumes a peer prefix ``("rgw","fdbd4n",...)`` in the per-cluster
+  FDB.
 * Schema-version policy (single global vs per-subsystem) to be
   agreed across consumers.
-* Deployment of the FDB cluster itself is out of scope of this
-  document and shared with the broader FDB-in-RGW workstream.
+* Deployment of the realm FDB cluster itself is out of scope of
+  this document and shared with the broader FDB-in-RGW workstream.
 * Build flag is shared: ``-DWITH_RADOSGW_FDB=ON``. C++23 / GCC 14+
   baseline matches PR #65535.
 
@@ -473,6 +519,8 @@ Open questions
 * Schema-version policy: global, or per-subsystem?
 * Value encoding: zpp_bits (matches fdbd4n) or JSON
   (operator-readable)?
+* Realm FDB deployment shape — operator-deployed standalone, or
+  hosted on one Ceph cluster's mgr?
 * Do AccessPoints default to "every zone in the zonegroup", or
   must callers explicitly opt zones in?
 * Does ``DescribeFilesystem`` synthesize aggregate availability
