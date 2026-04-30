@@ -95,7 +95,7 @@ TEST_P(ParameterTest, parameter_all)
   EXPECT_EQ(8, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
   EXPECT_STREQ("default", shec->rule_root.c_str());
-  EXPECT_STREQ("osd", shec->rule_failure_domain.c_str());
+  EXPECT_STREQ("osd", shec->rule_osd_failure_domain.c_str());
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, result);
 
