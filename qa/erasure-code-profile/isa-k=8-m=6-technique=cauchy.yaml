@@ -1,0 +1,14 @@
+# ISA plugin with k=8, m=6, cauchy technique
+# ISA plugin requires x86_64 architecture
+arch: x86_64
+overrides:
+  ceph:
+    pool-config:
+      ec_pool: true
+      erasure_code_profile:
+        name: isa86profile
+        plugin: isa
+        k: 8
+        m: 6
+        technique: cauchy
+        crush-failure-domain: osd

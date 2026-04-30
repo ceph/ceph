@@ -1,0 +1,12 @@
+# SHEC plugin with k=4, m=3, c=2
+overrides:
+  ceph:
+    pool-config:
+      ec_pool: true
+      erasure_code_profile:
+        name: shec432profile
+        plugin: shec
+        k: 4
+        m: 3
+        c: 2
+        crush-failure-domain: osd

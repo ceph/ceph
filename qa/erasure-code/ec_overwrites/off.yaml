@@ -1,0 +1,5 @@
+# Disable erasure code overwrites (default)
+overrides:
+  ceph:
+    pool-config:
+      erasure_code_use_overwrites: false
