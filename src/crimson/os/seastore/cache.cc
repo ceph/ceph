@@ -983,6 +983,8 @@ void Cache::commit_replace_extent(
     CachedExtentRef next,
     CachedExtentRef prev)
 {
+  LOG_PREFIX(Cache::commit_replace_extent);
+  SUBDEBUGT(seastore_t, "", t);
   assert(next->get_paddr() == prev->get_paddr());
   assert(next->get_paddr().is_absolute() || next->get_paddr().is_root());
   assert(next->version == prev->version + 1);
@@ -1372,6 +1374,7 @@ record_t Cache::prepare_record(
       continue;
     }
     if (should_use_no_conflict_publish(t.get_src(), i->get_type())) {
+      DEBUGT("prepaing handoff, blocking transaction -- {}", t, *i);
       i->new_committer(t);
       i->committer->block_trans(t);
     }
@@ -1487,12 +1490,16 @@ record_t Cache::prepare_record(
    * - prepare_commit()
    */
   for (auto &i: t.mutated_block_list) {
+    DEBUGT("inspecting mutated_block_list {}~0x{:x} -- {}", t, i->get_paddr(), i->get_length(), *i);
     if (!i->is_valid()) {
+      DEBUGT("marked invalid {}", t, *i);
       continue;
     }
 
     if (i->is_mutation_pending()) {
       const bool use_no_conflict = should_use_no_conflict_publish(t.get_src(), i->get_type());
+      DEBUGT("mutation pending {} use_no_conflict {}", t, *i, use_no_conflict);
+
       // Block the new extent readers until the journal commit completes.
       i->set_io_wait(CachedExtent::extent_state_t::DIRTY, use_no_conflict);
 
@@ -1995,6 +2002,7 @@ void Cache::complete_commit(
   }
 
   backref_entry_refs_t backref_entries;
+  DEBUGT("commit fresh blocks", t);
   t.for_each_finalized_fresh_block([&](const CachedExtentRef &i) {
     if (!i->is_valid()) {
       return;
@@ -2035,9 +2043,7 @@ void Cache::complete_commit(
       committer.commit_state();
       committer.sync_checksum();
       committer.commit_and_share_paddr();
-      if (is_lba_backref_node(i->get_type())) {
-        committer.commit_data();
-      }
+      committer.commit_data();
       touch_extent_fully(prior, &t_src, t.get_cache_hint());
       committer.sync_version();
       committer.unblock_trans(t);
@@ -2090,6 +2096,7 @@ void Cache::complete_commit(
     }
   });
 
+    DEBUGT("commit mutated blocks", t);
   // Add new copy of mutated blocks, set_io_wait to block until written
   for (auto &i: t.mutated_block_list) {
     if (!i->is_valid()) {
@@ -2115,7 +2122,7 @@ void Cache::complete_commit(
     }
     i->on_delta_write(final_block_start);
     if (should_use_no_conflict_publish(t.get_src(), i->get_type())) {
-      TRACET("committing paddr to prior for {}, prior={}",
+      DEBUGT("committing paddr to prior for {}, prior={}",
         t, *i, *i->prior_instance);
       assert(i->committer);
       auto &committer = *i->committer;

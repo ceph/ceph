@@ -545,6 +545,8 @@ TransactionManager::do_submit_transaction(
   );
 
   while (tref.need_wait_visibility) {
+    SUBDEBUGT(seastore_t, "awaiting visibilty", tref);
+    // TODO: Add perf count
     co_await trans_intr::make_interruptible(seastar::yield());
   }
   if (trim_alloc_to && *trim_alloc_to != JOURNAL_SEQ_NULL) {
