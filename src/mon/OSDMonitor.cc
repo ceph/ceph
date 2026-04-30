@@ -7760,6 +7760,7 @@ int OSDMonitor::normalize_profile(const string& profilename,
 }
 
 int OSDMonitor::crush_rule_create_erasure(const string &name,
+               int num_zones,
 					     const string &profile,
 					     int *rule,
 					     ostream *ss)
@@ -7784,7 +7785,7 @@ int OSDMonitor::crush_rule_create_erasure(const string &name,
       return err;
     }
 
-    err = erasure_code->create_rule(name, newcrush, ss);
+    err = erasure_code->create_rule(name, num_zones, newcrush, ss);
     erasure_code.reset();
     if (err < 0)
       return err;
@@ -8135,6 +8136,7 @@ int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
     case pg_pool_t::TYPE_ERASURE:
       {
 	int err = crush_rule_create_erasure(rule_name,
+                 num_zones,
 					       erasure_code_profile,
 					       crush_rule, ss);
 	switch (err) {
@@ -12124,8 +12126,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto wait;
     if (err)
       goto reply_no_propose;
-    string name, poolstr;
+    string name;
     cmd_getval(cmdmap, "name", name);
+    int num_zones = cmd_getval_or<int64_t>(cmdmap, "zones", 1);
     string profile;
     cmd_getval(cmdmap, "profile", profile);
     if (profile == "")
@@ -12154,7 +12157,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     int rule;
-    err = crush_rule_create_erasure(name, profile, &rule, &ss);
+    err = crush_rule_create_erasure(name, num_zones, profile, &rule, &ss);
     if (err < 0) {
       switch(err) {
       case -EEXIST: // return immediately
