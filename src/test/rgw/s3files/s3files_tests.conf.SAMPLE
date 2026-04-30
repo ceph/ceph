@@ -9,3 +9,6 @@ secret_key = h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q==
 display_name = M. Tester
 user_id = testid
 email = tester@ceph.com
+# zone_id: passed as `subnetId` on CreateMountTarget. Must match a
+# zone configured in the active period.
+zone_id = default

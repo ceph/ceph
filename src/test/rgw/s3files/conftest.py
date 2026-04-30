@@ -16,7 +16,7 @@ import string
 import pytest
 from botocore.exceptions import ClientError
 
-from . import setup, make_client, get_user_id
+from . import setup, make_client, get_user_id, get_zone_id
 
 log = logging.getLogger(__name__)
 
@@ -160,5 +160,33 @@ def test_access_point(s3files_client, test_file_system):
         log.warning(
             "failed to delete AccessPoint %s",
             resp['accessPointId'],
+            exc_info=True,
+        )
+
+
+# ---------------------------------------------------------------- mount target
+
+
+@pytest.fixture(scope="session")
+def test_zone_id(setup_config):
+    """The zone-id smuggled as `subnetId` on CreateMountTarget."""
+    return get_zone_id()
+
+
+@pytest.fixture(scope="function")
+def test_mount_target(s3files_client, test_file_system, test_zone_id):
+    """A freshly-created MountTarget on a fresh FileSystem in the
+    configured zone."""
+    resp = s3files_client.create_mount_target(
+        fileSystemId=test_file_system['fileSystemId'],
+        subnetId=test_zone_id,
+    )
+    yield resp
+    try:
+        s3files_client.delete_mount_target(mountTargetId=resp['mountTargetId'])
+    except ClientError:
+        log.warning(
+            "failed to delete MountTarget %s",
+            resp['mountTargetId'],
             exc_info=True,
         )

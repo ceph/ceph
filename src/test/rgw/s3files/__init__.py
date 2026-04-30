@@ -40,6 +40,9 @@ def setup():
     global main_user_id
     main_user_id = cfg.get('s3 main', 'user_id')
 
+    global main_zone_id
+    main_zone_id = cfg.get('s3 main', 'zone_id', fallback='default')
+
 
 def get_endpoint_url():
     global default_scheme, default_host, default_port
@@ -59,6 +62,11 @@ def get_secret_key():
 def get_user_id():
     global main_user_id
     return main_user_id
+
+
+def get_zone_id():
+    global main_zone_id
+    return main_zone_id
 
 
 def make_client(service_name):
