@@ -137,3 +137,28 @@ def test_file_system(s3files_client, bucket_arn, shared_test_role):
         s3files_client.delete_file_system(fileSystemId=fs_id)
     except ClientError:
         log.warning("failed to delete FileSystem %s", fs_id, exc_info=True)
+
+
+# ---------------------------------------------------------------- access point
+
+
+@pytest.fixture(scope="function")
+def test_access_point(s3files_client, test_file_system):
+    """A freshly-created AccessPoint on a fresh FileSystem.
+
+    Best-effort cleanup; tests that have created child resources
+    (MTs) on the parent FS are responsible for cleaning those up
+    first.
+    """
+    resp = s3files_client.create_access_point(
+        fileSystemId=test_file_system['fileSystemId'],
+    )
+    yield resp
+    try:
+        s3files_client.delete_access_point(accessPointId=resp['accessPointId'])
+    except ClientError:
+        log.warning(
+            "failed to delete AccessPoint %s",
+            resp['accessPointId'],
+            exc_info=True,
+        )

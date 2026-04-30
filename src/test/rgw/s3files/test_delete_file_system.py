@@ -1,10 +1,6 @@
 """Conformance tests for DeleteFileSystem.
 
 Smithy reference: com.amazonaws.s3files#DeleteFileSystem.
-
-Note: the test_delete_with_children case lives in the AccessPoint
-test file once that handler ships, since it requires
-CreateAccessPoint.
 """
 
 import pytest
@@ -35,3 +31,20 @@ def test_delete_nonexistent(s3files_client):
         )
     err = exc.value.response.get('Error', {})
     assert err.get('errorCode') == errors.FILE_SYSTEM_NOT_FOUND, err
+
+
+@pytest.mark.conformance
+def test_delete_with_children_rejected(s3files_client, test_file_system):
+    """Deleting a FileSystem with active AccessPoints fails with
+    ConflictException + FILE_SYSTEM_HAS_CHILDREN. Tracks the
+    no-cascade semantics decision in the design doc Open
+    questions; flip this test if cascade is later chosen."""
+    fs_id = test_file_system['fileSystemId']
+    ap = s3files_client.create_access_point(fileSystemId=fs_id)
+    try:
+        with pytest.raises(s3files_client.exceptions.ConflictException) as exc:
+            s3files_client.delete_file_system(fileSystemId=fs_id)
+        err = exc.value.response.get('Error', {})
+        assert err.get('errorCode') == errors.FILE_SYSTEM_HAS_CHILDREN, err
+    finally:
+        s3files_client.delete_access_point(accessPointId=ap['accessPointId'])
