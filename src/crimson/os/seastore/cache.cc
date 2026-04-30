@@ -2128,14 +2128,14 @@ void Cache::complete_commit(
       auto &committer = *i->committer;
       committer.commit_state();
       committer.sync_checksum();
-      committer.unblock_trans(t);
       auto &prior = *i->prior_instance;
       prior.pending_for_transaction = TRANS_ID_NULL;
       ceph_assert(prior.is_valid());
-      if (is_lba_backref_node(i->get_type())) {
-        committer.commit_data();
-      }
+      committer.commit_and_share_paddr();
+      committer.commit_data();
       committer.sync_version();
+      DEBUGT("commit unblocking (mutated blocks) {}", t, *i);
+      committer.unblock_trans(t);
       prior.complete_io();
       prior.clear_delta();
       i->committer.reset();
