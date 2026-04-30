@@ -3,33 +3,18 @@
 These tests confirm that the boto3 client is available locally
 (validates the boto3 version pin) and that the configured RGW
 endpoint accepts a request at the transport layer. They do not
-yet exercise any specific operation semantics — those live in the
-per-op conformance tests.
+yet exercise any specific operation semantics — those live in
+the per-op conformance tests.
 """
 
 import logging
 
-import boto3
 import pytest
 from botocore.exceptions import EndpointConnectionError, ClientError
 
-from . import (
-    get_access_key,
-    get_endpoint_url,
-    get_secret_key,
-)
+from . import make_client
 
 log = logging.getLogger(__name__)
-
-
-def make_s3files_client():
-    return boto3.client(
-        's3files',
-        endpoint_url=get_endpoint_url(),
-        aws_access_key_id=get_access_key(),
-        aws_secret_access_key=get_secret_key(),
-        region_name='default',
-    )
 
 
 @pytest.mark.smoke
@@ -40,7 +25,7 @@ def test_boto3_has_s3files_client():
     (boto3 >= 1.42.0) and catches environments where an older
     boto3 would silently leave operations missing.
     """
-    client = make_s3files_client()
+    client = make_client('s3files')
     assert client is not None
 
     # Spot-check a representative slice of the operation surface so
@@ -78,7 +63,7 @@ def test_rgw_endpoint_reachable():
     Once handlers exist, this test refines into a positive
     list_file_systems assertion in test_list_file_systems.py.
     """
-    client = make_s3files_client()
+    client = make_client('s3files')
     try:
         client.list_file_systems()
     except EndpointConnectionError as e:

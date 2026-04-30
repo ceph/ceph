@@ -1,6 +1,8 @@
 import configparser
 import os
 
+import boto3
+
 
 def setup():
     cfg = configparser.RawConfigParser()
@@ -57,3 +59,21 @@ def get_secret_key():
 def get_user_id():
     global main_user_id
     return main_user_id
+
+
+def make_client(service_name):
+    """Construct a boto3 client of the given service against the
+    configured RGW endpoint, using the configured credentials.
+
+    Examples:
+        make_client('s3files')
+        make_client('s3')
+        make_client('iam')
+    """
+    return boto3.client(
+        service_name,
+        endpoint_url=get_endpoint_url(),
+        aws_access_key_id=get_access_key(),
+        aws_secret_access_key=get_secret_key(),
+        region_name='default',
+    )
