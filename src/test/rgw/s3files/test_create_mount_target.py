@@ -11,7 +11,7 @@ Note: subnetId carries a Ceph zone-id in this implementation
 
 import pytest
 
-from . import errors
+from . import errors, NONEXISTENT_FS_ID
 
 
 # ---------------------------------------------------------------- positive
@@ -61,7 +61,7 @@ def test_create_on_nonexistent_file_system(s3files_client, test_zone_id):
         s3files_client.exceptions.ResourceNotFoundException
     ) as exc:
         s3files_client.create_mount_target(
-            fileSystemId="fs-no-such-thing-9z9z9z",
+            fileSystemId=NONEXISTENT_FS_ID,
             subnetId=test_zone_id,
         )
     err = exc.value.response.get('Error', {})

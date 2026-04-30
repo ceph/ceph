@@ -10,7 +10,7 @@ the spec change but treats SGs as no-ops at the data plane.
 
 import pytest
 
-from . import errors
+from . import errors, NONEXISTENT_MT_ID
 
 
 @pytest.mark.conformance
@@ -40,7 +40,7 @@ def test_update_nonexistent(s3files_client):
         s3files_client.exceptions.ResourceNotFoundException
     ) as exc:
         s3files_client.update_mount_target(
-            mountTargetId="fsmt-no-such-9z9z9z",
+            mountTargetId=NONEXISTENT_MT_ID,
             securityGroups=["sg-test"],
         )
     err = exc.value.response.get('Error', {})

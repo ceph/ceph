@@ -5,7 +5,7 @@ Smithy reference: com.amazonaws.s3files#DeleteFileSystem.
 
 import pytest
 
-from . import errors
+from . import errors, NONEXISTENT_FS_ID
 
 
 @pytest.mark.conformance
@@ -27,7 +27,7 @@ def test_delete_nonexistent(s3files_client):
         s3files_client.exceptions.ResourceNotFoundException
     ) as exc:
         s3files_client.delete_file_system(
-            fileSystemId="fs-no-such-thing-9z9z9z"
+            fileSystemId=NONEXISTENT_FS_ID
         )
     err = exc.value.response.get('Error', {})
     assert err.get('errorCode') == errors.FILE_SYSTEM_NOT_FOUND, err

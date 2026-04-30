@@ -1,0 +1,76 @@
+"""Conformance tests for TagResource.
+
+Smithy reference: com.amazonaws.s3files#TagResource.
+Errors: InternalServerException, ResourceNotFoundException,
+ValidationException.
+"""
+
+import pytest
+
+from . import errors, NONEXISTENT_FS_ID, NONEXISTENT_AP_ID
+
+
+@pytest.fixture(params=["test_file_system", "test_access_point"])
+def taggable_arn(request):
+    resource = request.getfixturevalue(request.param)
+    return resource.get('fileSystemArn') or resource['accessPointArn']
+
+
+def _tag_map(tags):
+    return {t['Key']: t['Value'] for t in tags}
+
+
+@pytest.mark.conformance
+def test_tag_adds_tags(s3files_client, taggable_arn):
+    s3files_client.tag_resource(
+        resourceId=taggable_arn,
+        tags=[
+            {"Key": "env", "Value": "ci"},
+            {"Key": "owner", "Value": "test"},
+        ],
+    )
+    got = _tag_map(
+        s3files_client.list_tags_for_resource(resourceId=taggable_arn)['tags']
+    )
+    assert got.get('env') == 'ci'
+    assert got.get('owner') == 'test'
+
+
+@pytest.mark.conformance
+def test_tag_replaces_existing_value(s3files_client, taggable_arn):
+    """A second TagResource with the same key replaces its value."""
+    s3files_client.tag_resource(
+        resourceId=taggable_arn,
+        tags=[{"Key": "env", "Value": "old"}],
+    )
+    s3files_client.tag_resource(
+        resourceId=taggable_arn,
+        tags=[{"Key": "env", "Value": "new"}],
+    )
+    got = _tag_map(
+        s3files_client.list_tags_for_resource(resourceId=taggable_arn)['tags']
+    )
+    assert got.get('env') == 'new'
+
+
+@pytest.mark.conformance
+def test_tag_missing_tags(s3files_client, taggable_arn):
+    with pytest.raises(s3files_client.exceptions.ValidationException):
+        s3files_client.tag_resource(resourceId=taggable_arn)
+
+
+@pytest.mark.conformance
+@pytest.mark.parametrize("bogus_id", [NONEXISTENT_FS_ID, NONEXISTENT_AP_ID])
+def test_tag_on_nonexistent(s3files_client, bogus_id):
+    with pytest.raises(
+        s3files_client.exceptions.ResourceNotFoundException
+    ) as exc:
+        s3files_client.tag_resource(
+            resourceId=bogus_id,
+            tags=[{"Key": "k", "Value": "v"}],
+        )
+    err = exc.value.response.get('Error', {})
+    assert err.get('errorCode') in (
+        errors.FILE_SYSTEM_NOT_FOUND,
+        errors.ACCESS_POINT_NOT_FOUND,
+    ), err

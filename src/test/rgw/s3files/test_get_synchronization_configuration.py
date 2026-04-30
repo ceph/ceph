@@ -7,7 +7,7 @@ InternalServerException.
 
 import pytest
 
-from . import errors
+from . import errors, NONEXISTENT_FS_ID
 
 
 _MIN_IMPORT_RULES = [
@@ -40,7 +40,7 @@ def test_get_on_nonexistent_file_system(s3files_client):
         s3files_client.exceptions.ResourceNotFoundException
     ) as exc:
         s3files_client.get_synchronization_configuration(
-            fileSystemId="fs-no-such-thing-9z9z9z",
+            fileSystemId=NONEXISTENT_FS_ID,
         )
     err = exc.value.response.get('Error', {})
     assert err.get('errorCode') == errors.FILE_SYSTEM_NOT_FOUND, err

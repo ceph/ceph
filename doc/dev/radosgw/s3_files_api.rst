@@ -281,12 +281,16 @@ calls, without committing to operational semantics we don't need.
 Tagging
 =======
 
-Standard AWS tagging surface, applied to all three resource
-types:
+Standard AWS tagging surface:
 
-* ``ListTagsForResource`` (input: resource ARN)
+* ``ListTagsForResource`` (input: resource ARN or id)
 * ``TagResource``
 * ``UntagResource``
+
+Per the AWS Smithy ``ResourceId`` pattern, tagging applies to
+**FileSystem** and **AccessPoint** resources only. MountTargets
+are not taggable in the AWS shape — their identifiers do not
+match the ``ResourceId`` pattern — and we follow that contract.
 
 Tags are key/value pairs stored alongside the resource spec in
 FDB. The convention of deriving a resource's ``name`` from a tag
@@ -558,7 +562,6 @@ Resource keys
 
    ("rgw","files","v1",zg,"zone",zone,"mt",mt_id,"spec")
    ("rgw","files","v1",zg,"zone",zone,"mt",mt_id,"status")
-   ("rgw","files","v1",zg,"zone",zone,"mt",mt_id,"tags")
 
 Per-zone control keys
 ---------------------

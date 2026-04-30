@@ -7,7 +7,7 @@ ResourceNotFoundException, ValidationException.
 
 import pytest
 
-from . import errors
+from . import errors, NONEXISTENT_MT_ID
 
 
 @pytest.mark.conformance
@@ -28,6 +28,6 @@ def test_delete_nonexistent(s3files_client):
     with pytest.raises(
         s3files_client.exceptions.ResourceNotFoundException
     ) as exc:
-        s3files_client.delete_mount_target(mountTargetId="fsmt-no-such-9z9z9z")
+        s3files_client.delete_mount_target(mountTargetId=NONEXISTENT_MT_ID)
     err = exc.value.response.get('Error', {})
     assert err.get('errorCode') == errors.MOUNT_TARGET_NOT_FOUND, err

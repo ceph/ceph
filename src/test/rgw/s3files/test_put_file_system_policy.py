@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-from . import errors
+from . import errors, NONEXISTENT_FS_ID
 
 
 _VALID_POLICY = json.dumps({
@@ -75,7 +75,7 @@ def test_put_on_nonexistent_file_system(s3files_client):
         s3files_client.exceptions.ResourceNotFoundException
     ) as exc:
         s3files_client.put_file_system_policy(
-            fileSystemId="fs-no-such-thing-9z9z9z",
+            fileSystemId=NONEXISTENT_FS_ID,
             policy=_VALID_POLICY,
         )
     err = exc.value.response.get('Error', {})

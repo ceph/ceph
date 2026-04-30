@@ -5,7 +5,7 @@ Smithy reference: com.amazonaws.s3files#GetFileSystem.
 
 import pytest
 
-from . import errors
+from . import errors, NONEXISTENT_FS_ID
 
 
 @pytest.mark.conformance
@@ -34,6 +34,6 @@ def test_get_nonexistent(s3files_client):
     with pytest.raises(
         s3files_client.exceptions.ResourceNotFoundException
     ) as exc:
-        s3files_client.get_file_system(fileSystemId="fs-no-such-thing-9z9z9z")
+        s3files_client.get_file_system(fileSystemId=NONEXISTENT_FS_ID)
     err = exc.value.response.get('Error', {})
     assert err.get('errorCode') == errors.FILE_SYSTEM_NOT_FOUND, err

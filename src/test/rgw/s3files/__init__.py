@@ -69,6 +69,15 @@ def get_zone_id():
     return main_zone_id
 
 
+# Pattern-valid IDs that are vanishingly unlikely to exist. Used by
+# tests that exercise "resource not found" paths without tripping
+# the boto3 client-side regex validator (the Smithy patterns are
+# `^fs-[0-9a-f]{17,40}$`, `^fsap-...`, `^fsmt-...`).
+NONEXISTENT_FS_ID = "fs-" + "0" * 32
+NONEXISTENT_AP_ID = "fsap-" + "0" * 32
+NONEXISTENT_MT_ID = "fsmt-" + "0" * 32
+
+
 def make_client(service_name):
     """Construct a boto3 client of the given service against the
     configured RGW endpoint, using the configured credentials.

@@ -12,7 +12,7 @@ behavior.
 
 import pytest
 
-from . import errors
+from . import errors, NONEXISTENT_FS_ID
 
 
 _MIN_IMPORT_RULES = [
@@ -153,7 +153,7 @@ def test_put_on_nonexistent_file_system(s3files_client):
         s3files_client.exceptions.ResourceNotFoundException
     ) as exc:
         s3files_client.put_synchronization_configuration(
-            fileSystemId="fs-no-such-thing-9z9z9z",
+            fileSystemId=NONEXISTENT_FS_ID,
             importDataRules=_MIN_IMPORT_RULES,
             expirationDataRules=_MIN_EXPIRATION_RULES,
         )
