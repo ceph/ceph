@@ -27,7 +27,8 @@
 #include "osd/osd_types.h"
 
 #define DEFAULT_RULE_ROOT "default"
-#define DEFAULT_RULE_FAILURE_DOMAIN "host"
+#define DEFAULT_RULE_ZONE_FAILURE_DOMAIN "datacenter"
+#define DEFAULT_RULE_OSD_FAILURE_DOMAIN "host"
 
 using std::make_pair;
 using std::map;
@@ -50,14 +51,33 @@ int ErasureCode::init(
   err |= to_string("crush-root", profile,
 		   &rule_root,
 		   DEFAULT_RULE_ROOT, ss);
-  err |= to_string("crush-failure-domain", profile,
-		   &rule_failure_domain,
-		   DEFAULT_RULE_FAILURE_DOMAIN, ss);
+  err |= to_string("crush-zone-failure-domain", profile,
+		   &rule_zone_failure_domain,
+		   DEFAULT_RULE_ZONE_FAILURE_DOMAIN, ss);
+  // Try new key first, fall back to old key for backward compatibility
+  if (profile.find("crush-osd-failure-domain") != profile.end()) {
+    err |= to_string("crush-osd-failure-domain", profile,
+		     &rule_osd_failure_domain,
+		     DEFAULT_RULE_OSD_FAILURE_DOMAIN, ss);
+  } else {
+    err |= to_string("crush-failure-domain", profile,
+		     &rule_osd_failure_domain,
+		     DEFAULT_RULE_OSD_FAILURE_DOMAIN, ss);
+  }
+  if (profile.find("crush-num-osd-failure-domains") != profile.end()) {
+    err |= to_int("crush-num-osd-failure-domains", profile,
+		&rule_num_osd_failure_domains,
+		"0", ss);
+  } else {
+    err |= to_int("crush-num-failure-domains", profile,
+      &rule_num_osd_failure_domains,
+      "0", ss);
+  }
   err |= to_int("crush-osds-per-failure-domain", profile,
 		&rule_osds_per_failure_domain,
 		"0", ss);
-  err |= to_int("crush-num-failure-domains", profile,
-		&rule_num_failure_domains,
+  err |= to_int("num_zones", profile,
+		&rule_num_zones,
 		"0", ss);
   err |= to_string("crush-device-class", profile,
 		   &rule_device_class,
@@ -73,20 +93,36 @@ int ErasureCode::create_rule(
   CrushWrapper &crush,
   std::ostream *ss) const
 {
+  if (rule_num_zones > 1) {
+    unsigned int k = get_data_chunk_count();
+    unsigned int m = get_chunk_count() - k;
+    return crush.add_simple_stretch_rule(
+      name,
+      rule_root,
+      rule_zone_failure_domain,
+      rule_osd_failure_domain,
+      rule_num_zones,
+      k + m,
+      rule_device_class,
+      "indep",
+      pg_pool_t::TYPE_ERASURE,
+      false,
+      ss);
+  }
   if (rule_osds_per_failure_domain <= 1) {
     return crush.add_simple_rule(
       name,
       rule_root,
-      rule_failure_domain,
-      rule_num_failure_domains,
+      rule_osd_failure_domain,
+      rule_num_osd_failure_domains,
       rule_device_class,
       "indep",
       pg_pool_t::TYPE_ERASURE,
       ss);
   } else {
-    if (rule_num_failure_domains < 1)  {
+    if (rule_num_osd_failure_domains < 1)  {
       if (ss) {
-	*ss << "crush-num-failure-domains " << rule_num_failure_domains
+	*ss << "crush-num-failure-domains " << rule_num_osd_failure_domains
 	    << " must be >= 1 if crush-osds-per-failure-domain specified";
 	return -EINVAL;
       }
@@ -94,8 +130,8 @@ int ErasureCode::create_rule(
     return crush.add_indep_multi_osd_per_failure_domain_rule(
       name,
       rule_root,
-      rule_failure_domain,
-      rule_num_failure_domains,
+      rule_osd_failure_domain,
+      rule_num_osd_failure_domains,
       rule_osds_per_failure_domain,
       rule_device_class,
       ss);
