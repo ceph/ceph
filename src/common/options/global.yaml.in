@@ -2953,7 +2953,7 @@ options:
 - name: osd_min_split_replica_read_size
   type: uint
   level: advanced
-  default: 0
+  default: 262144
   fmt_desc: The minimum size (in bytes) of a read to a single replica. For split
     reads, all reads will be at least this size before a client will split it
     across multiple replicas. Set to 0 to disable read splitting for replica pools.
