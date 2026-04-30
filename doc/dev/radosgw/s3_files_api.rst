@@ -104,10 +104,15 @@ MountTarget (zone-scoped, parent = AccessPoint)
 -----------------------------------------------
 
 * The zone-local network identity that exposes an AccessPoint.
-* **Zone selection**: the AWS ``subnetId`` field is reinterpreted
-  as a Ceph zone-id. ``availabilityZoneId``, if present in the AWS
-  shape, is preferred over ``subnetId``. The literal zone-id is
-  validated against the period.
+* **Zone selection (request)**: the AWS ``subnetId`` field is
+  reinterpreted as a Ceph zone-id. The literal zone-id is
+  validated against the period. (``availabilityZoneId`` is a
+  response-only field in the AWS shape and is not accepted as
+  input.)
+* **Zone identification (response)**: ``availabilityZoneId`` and
+  ``availabilityZoneName`` are populated with the same zone-id on
+  Describe and Create responses, matching AWS's "this MT lives in
+  AZ X" convention.
 * **IP address**: any caller-supplied ``IpAddress`` field is
   accepted and **ignored**. The mount endpoint is taken from the
   ``virtual_ip`` of the cephadm ``service: nfs`` deployed in the
