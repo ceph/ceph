@@ -2286,9 +2286,9 @@ constexpr bool is_modify_transaction(transaction_type_t type) {
  *
  * Currently true for:
  *  - rewrite (background) transactions, for any non-root extent
+ *  - user (txn_manager) transactions that mutate LBA nodes
  *
  *  To be expanded to:
- *  - user (txn_manager) transactions that mutate LBA nodes
  *  - Onode/Omap nodes
  */
 constexpr bool should_use_no_conflict_publish(transaction_type_t txn_type,
@@ -2298,10 +2298,8 @@ constexpr bool should_use_no_conflict_publish(transaction_type_t txn_type,
     return false;
   }
 
-  // TODO: Extend this as support grows (e.g. Onode/OMAP nodes).
-  //       is_user_transaction(txn_type) && is_lba_node(ext_type)
-
-  return is_rewrite_transaction(txn_type);
+  return is_rewrite_transaction(txn_type) ||
+         (is_user_transaction(txn_type) && is_lba_node(ext_type) && is_modify_transaction(txn_type));
 }
 
 
