@@ -246,10 +246,11 @@ Why FoundationDB
 Cluster scope
 -------------
 
-A single FDB cluster, scoped at the same level as other RGW FDB
-consumers (per Ceph cluster or per realm; final scope to be
-agreed). Zonegroup is a **keyspace prefix**, not a separate FDB
-deployment.
+A single FDB cluster **per Ceph cluster**, matching the other RGW
+FDB consumers (D4N, indexes), which want the FDB instance local
+to RGW for latency. Zonegroup is a **keyspace prefix**, not a
+separate FDB deployment. Cross-zonegroup federation is handled
+by RGW multisite metadata sync over RADOS, not by FDB.
 
 FoundationDB layout
 ===================
@@ -472,7 +473,6 @@ Open questions
 * Schema-version policy: global, or per-subsystem?
 * Value encoding: zpp_bits (matches fdbd4n) or JSON
   (operator-readable)?
-* FDB cluster scope: per Ceph cluster, or per realm?
 * Do AccessPoints default to "every zone in the zonegroup", or
   must callers explicitly opt zones in?
 * Does ``DescribeFilesystem`` synthesize aggregate availability
