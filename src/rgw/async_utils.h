@@ -964,15 +964,17 @@ private:
   loop(CoroFun coro_fun, std::shared_ptr<timer_t> timer)
   {
     try {
-      while ((co_await boost::asio::this_coro::cancellation_state).cancelled() ==
-             boost::asio::cancellation_type::none) {
+      // GCC 14 has a bug related to parenthesized `co_await` expressions.
+      for (auto state = co_await boost::asio::this_coro::cancellation_state;
+           state.cancelled() == boost::asio::cancellation_type::none;
+           state = co_await boost::asio::this_coro::cancellation_state) {
         auto delay = co_await coro_fun();
         timer->expires_after(delay);
         try {
           co_await timer->async_wait(boost::asio::use_awaitable);
         } catch (boost::system::system_error& e) {
           // If the coroutine has been canceled we'll exit when we hit
-          // the while condition. Otherwise, we've been awoken.
+          // the loop condition. Otherwise, we've been awoken.
           if (e.code() != boost::asio::error::operation_aborted) {
             throw;
           }
