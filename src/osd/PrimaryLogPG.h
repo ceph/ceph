@@ -1222,14 +1222,9 @@ protected:
   bool pool_migration_reservations_granted_target = false;
   /// current migration target pg
   std::optional<pg_t> pool_migration_target_pg;
-  /// list of all target pgs a particular source pg will migrate to
-  std::vector<pg_t> pool_migration_target_pgs;
-  /// index of current target pg in pool_migration_target_pgs
-  size_t pool_migration_current_target_index = 0;
   /// pending reservation requests for target to reply to
   std::vector<OpRequestRef> pending_pool_migration_reservation_ops;
 
-  void initialize_pool_migration_target_pg_list();
   hobject_t next_pool_migration(std::optional<hobject_t> start);
   hobject_t earliest_pool_migration()
   {

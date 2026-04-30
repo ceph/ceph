@@ -1683,6 +1683,13 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
           return;
         }
 
+        if (m->get_map_epoch() < get_osdmap_epoch()) {
+          dout(20) << __func__ << " ignoring stale reservation request from epoch "
+                   << m->get_map_epoch() << " (current epoch is "
+                   << get_osdmap_epoch() << ")" << dendl;
+          return;
+        }
+
         if (pool_migration_reservations_granted_target) {
           dout(20) << __func__ << " reservations already granted, returning success to source PG" << dendl;
           result = 0;
@@ -1692,13 +1699,6 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
         if (!pending_pool_migration_reservation_ops.empty()) {
           dout(20) << __func__ << " reservations already requested, adding op to the replies list" << dendl;
           pending_pool_migration_reservation_ops.push_back(op);
-          return;
-        }
-
-        if (m->get_map_epoch() < get_osdmap_epoch()) {
-          dout(20) << __func__ << " ignoring stale reservation request from epoch "
-                   << m->get_map_epoch() << " (current epoch is "
-                   << get_osdmap_epoch() << ")" << dendl;
           return;
         }
 
@@ -1725,8 +1725,8 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
           pool_migration_reservations_granted_target = false;
         }
 
-        pg_pool_migration_reservation_response_t response(0);
-        encode(response, osd_op.outdata);
+        // No need to reply, the source PG doesn't care about the result
+        return;
       }
       break;
 
@@ -13585,7 +13585,6 @@ void PrimaryLogPG::_on_activate_committed(HBHandle *handle)
     update_migration_watermark(hobject_t());
   }
   last_pool_migration_started = pool_migration_watermark;
-  initialize_pool_migration_target_pg_list();
 }
 
 void PrimaryLogPG::on_activate_committed(HBHandle *handle)
@@ -13598,6 +13597,14 @@ void PrimaryLogPG::on_activate_complete(HBHandle *handle)
 {
   check_local();
   _on_activate_committed(handle);
+
+  // Clear pool migration flag if it's still set but migration was completed
+  if (state_test(PG_STATE_MIGRATING) &&
+      pool_migration_watermark.is_max() &&
+      !needs_pool_migration()) {
+    dout(10) << "activate clearing migrating state" << dendl;
+    state_clear(PG_STATE_MIGRATING);
+  }
 
   // all clean?
   if (needs_recovery()) {
@@ -15605,40 +15612,52 @@ void PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r)
   }
 }
 
-void PrimaryLogPG::initialize_pool_migration_target_pg_list()
+/**
+ * Work out how many target PGs are still to be migrated from
+ * a hash position within this PG.
+ *
+ * Does not have knowledge of other source PGs which may also be
+ * migrating simultaneously, these will be included in the returned count.
+ */
+uint16_t PrimaryLogPG::count_remaining_target_pgs(const hobject_t &hobj)
 {
-  pool_migration_target_pgs.clear();
-  pool_migration_current_target_index = 0;
-
-  if (!pool.info.migration_target) {
-    return;
-  }
+  std::optional<int64_t> migration_target_pool = get_pgpool().info.migration_target;
+  ceph_assert(migration_target_pool.has_value());
 
   const pg_pool_t *spi = get_osdmap()->get_pg_pool((int) get_pgid().pool());
-  const pg_pool_t *tpi = get_osdmap()->get_pg_pool((int) pool.info.migration_target.value());
+  const pg_pool_t *tpi = get_osdmap()->get_pg_pool((int) migration_target_pool.value());
+  const uint32_t position_hash = hobj.get_hash();
   const uint32_t mask = (1UL << 32) - 1;
+  vector<pg_t> still_to_migrate;
 
-  // Calculate all target PGs this source PG will migrate to
-  for (unsigned pgid = 0; pgid < std::max(spi->get_pg_num(), tpi->get_pg_num()); pgid++) {
+  for (unsigned pgid = 0;
+                pgid < std::max(spi->get_pg_num(), tpi->get_pg_num());
+                pgid++) {
     uint32_t lowest_hash = ~((pgid + 1) ^ mask) - 1;
     unsigned source_pgid = spi->raw_hash_to_pg(lowest_hash);
     unsigned target_pgid = tpi->raw_hash_to_pg(lowest_hash);
     pg_t source_pg{source_pgid, (uint64_t) get_pgid().pool()};
-    pg_t target_pg{target_pgid, (uint64_t) pool.info.migration_target.value()};
+    pg_t target_pg{target_pgid, (uint64_t) migration_target_pool.value()};
 
-    if (source_pg == get_pgid().pgid) {
-      pool_migration_target_pgs.push_back(target_pg);
+    if (source_pg == get_pgid().pgid &&
+       (tpi->raw_hash_to_pg(position_hash) == target_pgid ||
+       reverse_bits(position_hash) <= reverse_bits(lowest_hash))) {
+      // Watermark hash position is in the current or a higher target PG - include
+      still_to_migrate.push_back(target_pg);
     }
   }
 
-  // Remove duplicates and sort
-  std::sort(pool_migration_target_pgs.begin(), pool_migration_target_pgs.end());
-  auto last = std::unique(pool_migration_target_pgs.begin(), pool_migration_target_pgs.end());
-  pool_migration_target_pgs.erase(last, pool_migration_target_pgs.end());
+  // May have duplicate entries if source pg_num > target pg_num
+  std::sort(still_to_migrate.begin(), still_to_migrate.end());
+  auto last = std::unique(still_to_migrate.begin(), still_to_migrate.end());
+  still_to_migrate.erase(last, still_to_migrate.end());
 
-  dout(20) << __func__ << " source PG " << get_pgid()
-           << " will migrate to " << pool_migration_target_pgs.size()
-           << " target PGs: " << pool_migration_target_pgs << dendl;
+  dout(20) << __func__ << " hobj hash: " << std::hex << reverse_bits(position_hash)
+           << ". source pg: " << spi->raw_hash_to_pg(position_hash)
+           << ". target pg: " << tpi->raw_hash_to_pg(position_hash)
+           << ". still_to_migrate: " << still_to_migrate << dendl;
+
+  return still_to_migrate.size();
 }
 
 /**
@@ -15780,7 +15799,7 @@ uint64_t PrimaryLogPG::recover_pool_migration(
 
     pg_t current_target_pg = get_target_pg_from_hash(soid);
     dout(20) << __func__ << " current_target_pg: " << current_target_pg << dendl;
-    
+
     // Check if we need to switch target PGs
     if (pool_migration_reservations_granted_source &&
         pool_migration_target_pg.has_value() &&
@@ -15792,12 +15811,12 @@ uint64_t PrimaryLogPG::recover_pool_migration(
       dout(20) << __func__ << " switching from target " << *pool_migration_target_pg
                << " to " << current_target_pg << dendl;
       pool_migration_release_target_reservation();
-      pool_migration_current_target_index++;
       return ops;
     }
 
     if (!pool_migration_reservations_granted_source) {
-      dout(20) << __func__ << " requesting/waiting for reservation" << dendl;
+      dout(20) << __func__ << " requesting/waiting for reservation for target " << current_target_pg << dendl;
+      pool_migration_target_pg = current_target_pg;
       pool_migration_request_target_reservation();
       return ops;
     }
@@ -15961,33 +15980,21 @@ void PrimaryLogPG::on_pool_migration_target_suspended(bool toofull)
 void PrimaryLogPG::pool_migration_request_target_reservation() {
   dout(20) << __func__ << dendl;
 
-  if (!pool.info.migration_target) {
+  if (!pool.info.is_migration_src()) {
     ceph_abort_msg("Target PGs should not be sending pool migration reservation requests!");
   }
 
-  if (pool_migration_target_pgs.empty()) {
-    initialize_pool_migration_target_pg_list();
+  if (!pool_migration_target_pg.has_value()) {
+    pool_migration_target_pg = get_target_pg_from_hash(pool_migration_watermark);
   }
 
-  if (pool_migration_current_target_index >= pool_migration_target_pgs.size()) {
-    dout(20) << __func__ << " all target PGs completed" << dendl;
+  uint16_t total_target_pgs = count_remaining_target_pgs(pool_migration_watermark);
+  if (total_target_pgs == 0) {
+    dout(20) << __func__ << " no remaining target PGs, migration complete" << dendl;
     return;
   }
-
-  if (pool_migration_watermark.is_max()) {
-    dout(20) << __func__ << " watermark is max" << dendl;
-    return;
-  }
-
-  pg_t current_target = pool_migration_target_pgs[pool_migration_current_target_index];
-
-  pool_migration_target_pg = current_target;
-
-  hobject_t soid = last_pool_migration_started;
-  unsigned remaining_target_pgs = pool_migration_target_pgs.size() - pool_migration_current_target_index;
-  ceph_assert(pool_migration_target_pg.has_value());
-  int64_t num_objects = std::ceil(info.stats.stats.sum.num_objects / remaining_target_pgs);
-  int64_t num_bytes = std::ceil(info.stats.stats.sum.num_bytes / remaining_target_pgs);
+  int64_t num_objects = std::ceil(info.stats.stats.sum.num_objects / (double)total_target_pgs);
+  int64_t num_bytes = std::ceil(info.stats.stats.sum.num_bytes / (double)total_target_pgs);
 
   object_locator_t target_oloc(*pool.info.migration_target, pool_migration_target_pg->ps());
 
