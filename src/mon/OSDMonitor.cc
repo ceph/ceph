@@ -12017,7 +12017,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto wait;
     if (err)
       goto reply_no_propose;
-    string name, poolstr;
+    string name;
     cmd_getval(cmdmap, "name", name);
     string profile;
     cmd_getval(cmdmap, "profile", profile);

@@ -121,11 +121,15 @@ void OSDECProfileGetRequest::decode_json(JSONObj* obj) {
 
 void OSDECProfileGetReply::dump(Formatter* f) const {
   encode_json("crush-device-class", crush_device_class, f);
-  encode_json("crush-failure-domain", crush_failure_domain, f);
-  encode_json("crush-num-failure-domains", crush_num_failure_domains, f);
+  encode_json("crush-failure-domain", crush_osd_failure_domain, f);
+  encode_json("crush-num-failure-domains", crush_num_osd_failure_domains, f);
+  encode_json("crush-zone-failure-domain", crush_zone_failure_domain, f);
+  encode_json("crush-osd-failure-domain", crush_osd_failure_domain, f);
+  encode_json("crush-num-osd-failure-domains", crush_num_osd_failure_domains, f);
   encode_json("crush-osds-per-failure-domain", crush_osds_per_failure_domain,
               f);
   encode_json("crush-root", crush_root, f);
+  encode_json("num-zones", num_zones, f);
   encode_json("plugin", plugin, f);
   encode_json("k", k, f);
   encode_json("m", m, f);
@@ -141,12 +145,17 @@ void OSDECProfileGetReply::dump(Formatter* f) const {
 
 void OSDECProfileGetReply::decode_json(JSONObj* obj) {
   JSONDecoder::decode_json("crush-device-class", crush_device_class, obj);
-  JSONDecoder::decode_json("crush-failure-domain", crush_failure_domain, obj);
+  JSONDecoder::decode_json("crush-failure-domain", crush_osd_failure_domain, obj);
   JSONDecoder::decode_json("crush-num-failure-domains",
-                           crush_num_failure_domains, obj);
+                           crush_num_osd_failure_domains, obj);
+  JSONDecoder::decode_json("crush-zone-failure-domain", crush_zone_failure_domain, obj);
+  JSONDecoder::decode_json("crush-osd-failure-domain", crush_osd_failure_domain, obj);
+  JSONDecoder::decode_json("crush-num-osd-failure-domains",
+                           crush_num_osd_failure_domains, obj);
   JSONDecoder::decode_json("crush-osds-per-failure-domain",
                            crush_osds_per_failure_domain, obj);
   JSONDecoder::decode_json("crush-root", crush_root, obj);
+  JSONDecoder::decode_json("num-zones", num_zones, obj);
   JSONDecoder::decode_json("plugin", plugin, obj);
   JSONDecoder::decode_json("k", k, obj);
   JSONDecoder::decode_json("m", m, obj);
