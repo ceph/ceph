@@ -29,7 +29,6 @@
 #
 # Some important environment variables:
 #
-#  - PTL_TOOL_GITHUB_USER (your github username)
 #  - PTL_TOOL_GITHUB_TOKEN (your github Personal access token, or what is stored in ~/.github_token)
 #  - PTL_TOOL_REDMINE_USER (your redmine username)
 #  - PTL_TOOL_REDMINE_API_KEY (your redmine api key, or what is stored in ~/redmine_key)
@@ -189,7 +188,6 @@ BASE_REMOTE_URL = os.getenv("PTL_TOOL_BASE_REMOTE_URL", f"https://github.com/{BA
 CI_REPO = os.getenv("PTL_TOOL_CI_REPO", "ceph-ci")
 CI_REMOTE_URL = os.getenv("PTL_TOOL_CI_REMOTE_URL", f"git@github.com:{BASE_PROJECT}/{CI_REPO}.git")
 GITDIR = os.getenv("PTL_TOOL_GITDIR", ".")
-GITHUB_USER = os.getenv("PTL_TOOL_GITHUB_USER", os.getenv("PTL_TOOL_USER", getuser()))
 GITHUB_TOKEN = None
 try:
     with open(expanduser("~/.github_token")) as f:
@@ -239,7 +237,13 @@ BZ_MATCH = re.compile("(.*https?://bugzilla.redhat.com/.*)")
 TRACKER_MATCH = re.compile("(.*https?://tracker.ceph.com/.*)")
 
 def gitauth():
-    return (GITHUB_USER, GITHUB_TOKEN)
+    class GitHubBearerAuth(requests.auth.AuthBase):
+        def __call__(self, r):
+            if GITHUB_TOKEN:
+                r.headers['Authorization'] = f'Bearer {GITHUB_TOKEN}'
+            r.headers['Accept'] = 'application/vnd.github.v3+json'
+            return r
+    return GitHubBearerAuth()
 
 def get(session, url, params=None, paging=True):
     if params is None:
