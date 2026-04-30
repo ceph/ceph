@@ -125,6 +125,49 @@ All MountTargets in a given zone share that zone's
 ``virtual_ip``. They are distinguished by Ganesha export
 pseudo-path, one per AccessPoint.
 
+Pseudo-path scheme
+------------------
+
+For an AccessPoint owned by account ``A`` with id ``ap-id``, the
+Ganesha export pseudo-path is::
+
+   /<account-id>/<ap-id>
+
+Both components are server-assigned: the account is bound to the
+authenticated principal at create time, and ``ap-id`` is generated
+by RGW. Caller-supplied AccessPoint *names* never appear in the
+pseudo-path — they live only in API responses for human
+identification. Server-assigned ids guarantee global uniqueness,
+which is what gives cross-account isolation under a shared VIP.
+
+The corresponding mount string is::
+
+   <virtual_ip>:/<account-id>/<ap-id>
+
+This is a deliberate divergence from the AWS EFS mount helper
+convention, in which the access point id is passed via the
+``-o accesspoint=fsap-...`` mount option and the wire-level NFS
+path is always ``/``. AWS achieves AP scoping via auth-layer
+signaling on the EFS server; we achieve it via server-assigned
+ids in the pseudo-path. Standard NFS clients work directly
+against this scheme without a custom mount helper.
+
+A future Ceph-side mount helper may translate::
+
+   mount -t ceph-nfs -o accesspoint=<name> /mnt
+
+into the underlying::
+
+   mount -t nfs4 <virtual_ip>:/<account-id>/<ap-id> /mnt
+
+for ergonomic parity with the EFS workflow. v1 documents the
+underlying form directly; the helper is a follow-on.
+
+The Ganesha-internal ``Export_Id`` (a ``uint16``) is unrelated to
+``ap-id`` and is bookkept by the reconciler — typically a
+per-zone monotonic counter or a hash of ``ap-id`` into the 16-bit
+space, with collision retry. It is never exposed to clients.
+
 Scoping summary
 ---------------
 
