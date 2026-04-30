@@ -359,7 +359,6 @@ def crush_setup(ctx, config):
               'osd', 'crush', 'tunables', profile])
     yield
 
-
 @contextlib.contextmanager
 def module_setup(ctx, config):
     cluster_name = config['cluster']

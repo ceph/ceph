@@ -1,0 +1,12 @@
+# Jerasure plugin with k=3, m=1
+overrides:
+  ceph:
+    pool-config:
+      ec_pool: true
+      erasure_code_profile:
+        name: jerasure31profile
+        plugin: jerasure
+        k: 3
+        m: 1
+        technique: reed_sol_van
+        crush-failure-domain: osd
