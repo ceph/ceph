@@ -2106,12 +2106,39 @@ Usage:
                             no_overwrite: bool = False,
                             inbuf: Optional[str] = None) -> HandleCommandResult:
         """Add a cluster gateway service (cephadm only)"""
-
-        spec = OAuth2ProxySpec(
-            placement=PlacementSpec.from_string(placement),
-            unmanaged=unmanaged,
-            https_address=https_address
+        missing_oauth2_proxy_config = (
+            'Missing required configuration for oauth2-proxy. Please provide a spec '
+            'file with required fields: provider_display_name, oidc_issuer_url, '
+            'client_id, client_secret.'
         )
+        if not inbuf or not inbuf.strip():
+            raise OrchestratorError(missing_oauth2_proxy_config)
+
+        try:
+            spec_data = yaml.safe_load(inbuf)
+        except (OSError, yaml.YAMLError):
+            raise OrchestratorValidationError('oauth2-proxy spec file must be valid YAML')
+
+        if not spec_data:
+            raise OrchestratorError(missing_oauth2_proxy_config)
+        if not isinstance(spec_data, dict):
+            raise OrchestratorValidationError(
+                'oauth2-proxy spec file must contain a single YAML object'
+            )
+
+        spec = ServiceSpec.from_json(spec_data)
+        if not isinstance(spec, OAuth2ProxySpec):
+            raise OrchestratorValidationError(
+                'oauth2-proxy spec file must define service_type: oauth2-proxy'
+            )
+
+        if https_address is not None:
+            spec.https_address = https_address
+        if placement is not None:
+            spec.placement = PlacementSpec.from_string(placement)
+        if unmanaged:
+            spec.unmanaged = unmanaged
+        spec.preview_only = dry_run
 
         spec.validate()  # force any validation exceptions to be caught correctly
 

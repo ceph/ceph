@@ -351,3 +351,74 @@ class TestApplyNvmeof:
         mock_remote.assert_called_once_with('nvmeof', 'create_pool_if_not_exists')
         mock_apply_misc.assert_called_once()
         assert res.retval == 0
+
+
+@mock.patch("orchestrator.module.OrchestratorCli._apply_misc")
+class TestApplyOAuth2Proxy:
+
+    def setup_method(self):
+        self.m = OrchestratorCli('orchestrator', 0, 0)
+
+    def test_missing_spec_raises_clear_error(self, mock_apply_misc):
+        res = self.m._apply_oauth2_proxy()
+
+        assert res.retval != 0
+        assert (
+            'Missing required configuration for oauth2-proxy. Please provide a spec file '
+            'with required fields: provider_display_name, oidc_issuer_url, client_id, '
+            'client_secret.'
+        ) in res.stderr
+        mock_apply_misc.assert_not_called()
+
+    def test_missing_required_fields_raises_combined_error(self, mock_apply_misc):
+        res = self.m._apply_oauth2_proxy(inbuf=textwrap.dedent("""
+            service_type: oauth2-proxy
+            spec:
+              oidc_issuer_url: "https://idp.example.com"
+              client_id: "oauth-client"
+              client_secret: "oauth-secret"
+            """).strip())
+
+        assert res.retval != 0
+        assert (
+            'Missing required fields for oauth2-proxy: provider_display_name.'
+        ) in res.stderr
+        mock_apply_misc.assert_not_called()
+
+    def test_valid_spec_is_applied(self, mock_apply_misc):
+        mock_apply_misc.return_value = HandleCommandResult(retval=0, stdout="Success")
+
+        res = self.m._apply_oauth2_proxy(inbuf=textwrap.dedent("""
+            service_type: oauth2-proxy
+            spec:
+              provider_display_name: "My OIDC Provider"
+              oidc_issuer_url: "https://idp.example.com"
+              client_id: "oauth-client"
+              client_secret: "oauth-secret"
+            """).strip())
+
+        assert res.retval == 0
+        mock_apply_misc.assert_called_once()
+
+
+@mock.patch("orchestrator.module.OrchestratorCli._apply_misc")
+class TestApplyOAuth2ProxyYaml:
+
+    def setup_method(self):
+        self.m = OrchestratorCli('orchestrator', 0, 0)
+
+    def test_apply_yaml_missing_required_fields(self, mock_apply_misc):
+        res = self.m.apply_misc(
+            inbuf=textwrap.dedent("""
+                service_type: oauth2-proxy
+                spec:
+                  oidc_issuer_url: "https://idp.example.com"
+                """).strip()
+        )
+
+        assert res.retval != 0
+        assert (
+            'Missing required fields for oauth2-proxy: '
+            'provider_display_name, client_id, client_secret.'
+        ) in res.stderr
+        mock_apply_misc.assert_not_called()

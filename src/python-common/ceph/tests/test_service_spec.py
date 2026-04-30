@@ -15,6 +15,7 @@ from ceph.deployment.service_spec import (
     IngressSpec,
     IscsiServiceSpec,
     NFSServiceSpec,
+    OAuth2ProxySpec,
     PlacementSpec,
     PrometheusSpec,
     RGWSpec,
@@ -73,6 +74,33 @@ def test_apply_grafana(spec: GrafanaSpec, raise_exception: bool, msg: str):
         with pytest.raises(SpecValidationError, match=msg):
             spec.validate()
     else:
+        spec.validate()
+
+
+@pytest.mark.parametrize(
+    "spec_kwargs, expected_missing",
+    [
+        ({}, 'provider_display_name, oidc_issuer_url, client_id, client_secret'),
+        (
+            {
+                'provider_display_name': 'My OIDC Provider',
+                'oidc_issuer_url': 'https://idp.example.com',
+            },
+            'client_id, client_secret',
+        ),
+        (
+            {
+                'provider_display_name': 'My OIDC Provider',
+                'oidc_issuer_url': 'https://idp.example.com',
+                'client_secret': 'secret',
+            },
+            'client_id',
+        ),
+    ])
+def test_oauth2_proxy_missing_required_fields(spec_kwargs, expected_missing):
+    spec = OAuth2ProxySpec(**spec_kwargs)
+    expected = f'Missing required fields for oauth2-proxy: {expected_missing}.'
+    with pytest.raises(SpecValidationError, match=re.escape(expected)):
         spec.validate()
 
 @pytest.mark.parametrize(

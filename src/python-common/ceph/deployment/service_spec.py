@@ -2774,6 +2774,22 @@ class OAuth2ProxySpec(ServiceSpec):
 
     def validate(self) -> None:
         super(OAuth2ProxySpec, self).validate()
+        required_values = {
+            'provider_display_name': self.provider_display_name,
+            'oidc_issuer_url': self.oidc_issuer_url,
+            'client_id': self.client_id,
+            'client_secret': self.client_secret,
+        }
+        missing_required_fields = [
+            field for field, value in required_values.items()
+            if value is None or (isinstance(value, str) and not value.strip())
+        ]
+        if missing_required_fields:
+            raise SpecValidationError(
+                'Missing required fields for oauth2-proxy: '
+                + ', '.join(missing_required_fields)
+                + '.'
+            )
         self._validate_non_empty_string(self.provider_display_name, "provider_display_name")
         self._validate_non_empty_string(self.client_id, "client_id")
         self._validate_non_empty_string(self.client_secret, "client_secret")
