@@ -389,6 +389,10 @@ add_ceph_unittest(unittest_split)
 add_executable(unittest_static_ptr test_static_ptr.cc)
 add_ceph_unittest(unittest_static_ptr)
 
+add_executable(unittest_stack_string_stream test_stack_string_stream.cc)
+add_ceph_unittest(unittest_stack_string_stream)
+target_link_libraries(unittest_stack_string_stream Boost::context)
+
 add_executable(unittest_hobject test_hobject.cc
   $<TARGET_OBJECTS:unit-main>)
 target_link_libraries(unittest_hobject global ceph-common)
