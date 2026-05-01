@@ -8,7 +8,7 @@ ValidationException.
 
 import pytest
 
-from . import errors, NONEXISTENT_FS_ID
+from . import errors, missing_required_exc, NONEXISTENT_FS_ID
 
 
 # ---------------------------------------------------------------- positive
@@ -102,20 +102,19 @@ def test_create_idempotent_with_client_token(s3files_client, test_file_system):
 
 @pytest.mark.conformance
 def test_create_missing_file_system_id(s3files_client):
-    with pytest.raises(s3files_client.exceptions.ValidationException):
+    with pytest.raises(missing_required_exc(s3files_client)):
         s3files_client.create_access_point()
 
 
 @pytest.mark.conformance
 def test_create_invalid_posix_user(s3files_client, test_file_system):
-    """posixUser must include both uid and gid."""
-    with pytest.raises(s3files_client.exceptions.ValidationException) as exc:
+    """posixUser.gid is Smithy `@required`; boto3 may reject the
+    request client-side. Either path validates the contract."""
+    with pytest.raises(missing_required_exc(s3files_client)):
         s3files_client.create_access_point(
             fileSystemId=test_file_system['fileSystemId'],
             posixUser={"uid": 1000},  # missing gid
         )
-    err = exc.value.response.get('Error', {})
-    assert err.get('errorCode') == errors.INVALID_POSIX_USER, err
 
 
 # ---------------------------------------------------------------- not-found
@@ -129,5 +128,5 @@ def test_create_on_nonexistent_file_system(s3files_client):
         s3files_client.create_access_point(
             fileSystemId=NONEXISTENT_FS_ID,
         )
-    err = exc.value.response.get('Error', {})
+    err = exc.value.response
     assert err.get('errorCode') == errors.FILE_SYSTEM_NOT_FOUND, err

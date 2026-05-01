@@ -29,7 +29,7 @@ def test_delete_nonexistent(s3files_client):
         s3files_client.delete_file_system(
             fileSystemId=NONEXISTENT_FS_ID
         )
-    err = exc.value.response.get('Error', {})
+    err = exc.value.response
     assert err.get('errorCode') == errors.FILE_SYSTEM_NOT_FOUND, err
 
 
@@ -44,7 +44,7 @@ def test_delete_with_children_rejected(s3files_client, test_file_system):
     try:
         with pytest.raises(s3files_client.exceptions.ConflictException) as exc:
             s3files_client.delete_file_system(fileSystemId=fs_id)
-        err = exc.value.response.get('Error', {})
+        err = exc.value.response
         assert err.get('errorCode') == errors.FILE_SYSTEM_HAS_CHILDREN, err
     finally:
         s3files_client.delete_access_point(accessPointId=ap['accessPointId'])

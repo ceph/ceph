@@ -7,7 +7,7 @@ ValidationException.
 
 import pytest
 
-from . import errors, NONEXISTENT_FS_ID, NONEXISTENT_AP_ID
+from . import errors, missing_required_exc, NONEXISTENT_FS_ID, NONEXISTENT_AP_ID
 
 
 @pytest.fixture(params=["test_file_system", "test_access_point"])
@@ -60,7 +60,7 @@ def test_tag_replaces_existing_value(s3files_client, taggable_arn):
 
 @pytest.mark.conformance
 def test_tag_missing_tags(s3files_client, taggable_arn):
-    with pytest.raises(s3files_client.exceptions.ValidationException):
+    with pytest.raises(missing_required_exc(s3files_client)):
         s3files_client.tag_resource(resourceId=taggable_arn)
 
 
@@ -74,7 +74,7 @@ def test_tag_on_nonexistent(s3files_client, bogus_id):
             resourceId=bogus_id,
             tags=[{"key": "k", "value": "v"}],
         )
-    err = exc.value.response.get('Error', {})
+    err = exc.value.response
     assert err.get('errorCode') in (
         errors.FILE_SYSTEM_NOT_FOUND,
         errors.ACCESS_POINT_NOT_FOUND,

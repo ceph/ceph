@@ -7,7 +7,7 @@ ValidationException.
 
 import pytest
 
-from . import errors, NONEXISTENT_FS_ID, NONEXISTENT_AP_ID
+from . import errors, missing_required_exc, NONEXISTENT_FS_ID, NONEXISTENT_AP_ID
 
 
 @pytest.fixture(params=["test_file_system", "test_access_point"])
@@ -57,7 +57,7 @@ def test_untag_idempotent_on_unknown_key(s3files_client, taggable_arn):
 
 @pytest.mark.conformance
 def test_untag_missing_tag_keys(s3files_client, taggable_arn):
-    with pytest.raises(s3files_client.exceptions.ValidationException):
+    with pytest.raises(missing_required_exc(s3files_client)):
         s3files_client.untag_resource(resourceId=taggable_arn)
 
 
@@ -71,7 +71,7 @@ def test_untag_on_nonexistent(s3files_client, bogus_id):
             resourceId=bogus_id,
             tagKeys=["any"],
         )
-    err = exc.value.response.get('Error', {})
+    err = exc.value.response
     assert err.get('errorCode') in (
         errors.FILE_SYSTEM_NOT_FOUND,
         errors.ACCESS_POINT_NOT_FOUND,

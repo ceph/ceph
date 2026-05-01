@@ -11,7 +11,7 @@ Note: subnetId carries a Ceph zone-id in this implementation
 
 import pytest
 
-from . import errors, NONEXISTENT_FS_ID
+from . import errors, missing_required_exc, NONEXISTENT_FS_ID
 
 
 # ---------------------------------------------------------------- positive
@@ -43,13 +43,13 @@ def test_create_minimum(
 
 @pytest.mark.conformance
 def test_create_missing_file_system_id(s3files_client, test_subnet_id):
-    with pytest.raises(s3files_client.exceptions.ValidationException):
+    with pytest.raises(missing_required_exc(s3files_client)):
         s3files_client.create_mount_target(subnetId=test_subnet_id)
 
 
 @pytest.mark.conformance
 def test_create_missing_subnet_id(s3files_client, test_file_system):
-    with pytest.raises(s3files_client.exceptions.ValidationException):
+    with pytest.raises(missing_required_exc(s3files_client)):
         s3files_client.create_mount_target(
             fileSystemId=test_file_system['fileSystemId'],
         )
@@ -67,7 +67,7 @@ def test_create_on_nonexistent_file_system(s3files_client, test_subnet_id):
             fileSystemId=NONEXISTENT_FS_ID,
             subnetId=test_subnet_id,
         )
-    err = exc.value.response.get('Error', {})
+    err = exc.value.response
     assert err.get('errorCode') == errors.FILE_SYSTEM_NOT_FOUND, err
 
 
@@ -95,7 +95,7 @@ def test_only_one_mount_target_per_file_system_per_zone(
                 fileSystemId=test_file_system['fileSystemId'],
                 subnetId=test_subnet_id,
             )
-        err = exc.value.response.get('Error', {})
+        err = exc.value.response
         assert err.get('errorCode') == errors.MOUNT_TARGET_ALREADY_IN_ZONE, err
     finally:
         s3files_client.delete_mount_target(

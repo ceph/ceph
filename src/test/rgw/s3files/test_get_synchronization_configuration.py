@@ -42,5 +42,5 @@ def test_get_on_nonexistent_file_system(s3files_client):
         s3files_client.get_synchronization_configuration(
             fileSystemId=NONEXISTENT_FS_ID,
         )
-    err = exc.value.response.get('Error', {})
+    err = exc.value.response
     assert err.get('errorCode') == errors.FILE_SYSTEM_NOT_FOUND, err

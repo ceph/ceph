@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-from . import errors, NONEXISTENT_FS_ID
+from . import errors, missing_required_exc, NONEXISTENT_FS_ID
 
 
 _VALID_POLICY = json.dumps({
@@ -51,7 +51,7 @@ def test_put_replaces_existing(s3files_client, test_file_system):
 
 @pytest.mark.conformance
 def test_put_missing_policy(s3files_client, test_file_system):
-    with pytest.raises(s3files_client.exceptions.ValidationException):
+    with pytest.raises(missing_required_exc(s3files_client)):
         s3files_client.put_file_system_policy(
             fileSystemId=test_file_system['fileSystemId'],
         )
@@ -65,7 +65,7 @@ def test_put_invalid_json(s3files_client, test_file_system):
             fileSystemId=test_file_system['fileSystemId'],
             policy="not-valid-json{",
         )
-    err = exc.value.response.get('Error', {})
+    err = exc.value.response
     assert err.get('errorCode') == errors.INVALID_POLICY_DOCUMENT, err
 
 
@@ -78,5 +78,5 @@ def test_put_on_nonexistent_file_system(s3files_client):
             fileSystemId=NONEXISTENT_FS_ID,
             policy=_VALID_POLICY,
         )
-    err = exc.value.response.get('Error', {})
+    err = exc.value.response
     assert err.get('errorCode') == errors.FILE_SYSTEM_NOT_FOUND, err

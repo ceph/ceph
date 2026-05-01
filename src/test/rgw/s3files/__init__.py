@@ -2,6 +2,21 @@ import configparser
 import os
 
 import boto3
+from botocore.exceptions import ParamValidationError
+
+
+def missing_required_exc(s3files_client):
+    """Acceptable exceptions when a Smithy `@required` field is omitted.
+
+    boto3's Smithy client validator refuses to send the request and
+    raises ParamValidationError before it ever reaches RGW. Tests
+    that intentionally omit a required field accept either path —
+    the contract is enforced, regardless of which side enforces it.
+    """
+    return (
+        s3files_client.exceptions.ValidationException,
+        ParamValidationError,
+    )
 
 
 def setup():

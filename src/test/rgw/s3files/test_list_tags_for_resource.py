@@ -50,7 +50,7 @@ def test_list_tags_on_nonexistent(s3files_client, bogus_id):
         s3files_client.exceptions.ResourceNotFoundException
     ) as exc:
         s3files_client.list_tags_for_resource(resourceId=bogus_id)
-    err = exc.value.response.get('Error', {})
+    err = exc.value.response
     assert err.get('errorCode') in (
         errors.FILE_SYSTEM_NOT_FOUND,
         errors.ACCESS_POINT_NOT_FOUND,

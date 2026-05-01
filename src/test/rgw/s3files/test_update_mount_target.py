@@ -10,7 +10,12 @@ the spec change but treats SGs as no-ops at the data plane.
 
 import pytest
 
-from . import errors, NONEXISTENT_MT_ID
+from . import errors, missing_required_exc, NONEXISTENT_MT_ID
+
+
+# SecurityGroup smithy constraint: ^sg-[0-9a-f]{8,40}$ (length 11..43).
+_SG_A = "sg-0000aaaa"
+_SG_B = "sg-0000bbbb"
 
 
 @pytest.mark.conformance
@@ -20,7 +25,7 @@ def test_update_security_groups(s3files_client, test_mount_target):
     mt_id = test_mount_target['mountTargetId']
     s3files_client.update_mount_target(
         mountTargetId=mt_id,
-        securityGroups=["sg-test-1", "sg-test-2"],
+        securityGroups=[_SG_A, _SG_B],
     )
     got = s3files_client.get_mount_target(mountTargetId=mt_id)
     assert got['status'] in ('AVAILABLE', 'UPDATING')
@@ -28,7 +33,7 @@ def test_update_security_groups(s3files_client, test_mount_target):
 
 @pytest.mark.conformance
 def test_update_missing_security_groups(s3files_client, test_mount_target):
-    with pytest.raises(s3files_client.exceptions.ValidationException):
+    with pytest.raises(missing_required_exc(s3files_client)):
         s3files_client.update_mount_target(
             mountTargetId=test_mount_target['mountTargetId'],
         )
@@ -41,7 +46,7 @@ def test_update_nonexistent(s3files_client):
     ) as exc:
         s3files_client.update_mount_target(
             mountTargetId=NONEXISTENT_MT_ID,
-            securityGroups=["sg-test"],
+            securityGroups=[_SG_A],
         )
-    err = exc.value.response.get('Error', {})
+    err = exc.value.response
     assert err.get('errorCode') == errors.MOUNT_TARGET_NOT_FOUND, err

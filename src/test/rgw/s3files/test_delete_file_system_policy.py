@@ -30,7 +30,7 @@ def test_put_then_delete(s3files_client, test_file_system):
         s3files_client.exceptions.ResourceNotFoundException
     ) as exc:
         s3files_client.get_file_system_policy(fileSystemId=fs_id)
-    err = exc.value.response.get('Error', {})
+    err = exc.value.response
     assert err.get('errorCode') == errors.POLICY_NOT_FOUND, err
 
 
@@ -43,7 +43,7 @@ def test_delete_no_policy_set(s3files_client, test_file_system):
         s3files_client.delete_file_system_policy(
             fileSystemId=test_file_system['fileSystemId'],
         )
-    err = exc.value.response.get('Error', {})
+    err = exc.value.response
     assert err.get('errorCode') == errors.POLICY_NOT_FOUND, err
 
 
@@ -55,5 +55,5 @@ def test_delete_on_nonexistent_file_system(s3files_client):
         s3files_client.delete_file_system_policy(
             fileSystemId=NONEXISTENT_FS_ID,
         )
-    err = exc.value.response.get('Error', {})
+    err = exc.value.response
     assert err.get('errorCode') == errors.FILE_SYSTEM_NOT_FOUND, err

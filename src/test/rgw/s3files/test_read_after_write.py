@@ -121,14 +121,14 @@ def test_mount_target_update_visible_to_get(
     """UpdateMountTarget(securityGroups=...) is visible to a
     subsequent GetMountTarget."""
     mt_id = test_mount_target['mountTargetId']
+    # Smithy: ^sg-[0-9a-f]{8,40}$
+    sgs = ["sg-0000aaa1", "sg-0000aaa2", "sg-0000aaa3"]
     s3files_client.update_mount_target(
         mountTargetId=mt_id,
-        securityGroups=["sg-raw-1", "sg-raw-2", "sg-raw-3"],
+        securityGroups=sgs,
     )
     got = s3files_client.get_mount_target(mountTargetId=mt_id)
-    assert set(got.get('securityGroups', [])) == {
-        "sg-raw-1", "sg-raw-2", "sg-raw-3",
-    }
+    assert set(got.get('securityGroups', [])) == set(sgs)
 
 
 # ---------------------------------------------------------------- Policy
@@ -148,8 +148,11 @@ def test_policy_replace_observable(s3files_client, test_file_system):
     s3files_client.put_file_system_policy(fileSystemId=fs_id, policy=p1)
     s3files_client.put_file_system_policy(fileSystemId=fs_id, policy=p2)
     got = s3files_client.get_file_system_policy(fileSystemId=fs_id)
-    assert json.loads(got['policy']) == json.loads(p2)
-    assert "A" not in got['policy']  # first statement gone
+    got_doc = json.loads(got['policy'])
+    assert got_doc == json.loads(p2)
+    sids = {st.get('Sid') for st in got_doc.get('Statement', [])}
+    assert "A" not in sids  # first statement gone
+    assert "B" in sids
 
 
 # ---------------------------------------------------------------- Sync
@@ -254,5 +257,5 @@ def test_delete_file_system_cleans_dependent_visibility(
         s3files_client.exceptions.ResourceNotFoundException
     ) as exc:
         s3files_client.list_access_points(fileSystemId=fs_id)
-    err = exc.value.response.get('Error', {})
+    err = exc.value.response
     assert err.get('errorCode') == errors.FILE_SYSTEM_NOT_FOUND, err
