@@ -714,15 +714,17 @@ Detailed op-by-op shapes (request/response fields, errors, paths,
 divergence notes) live in the companion document
 :doc:`s3_files_api_ops`.
 
-Configuration options (provisional)
------------------------------------
+Configuration options
+---------------------
 
-New ``rgw.yaml.in`` entries (names provisional):
+The ``rgw.yaml.in`` entries:
 
-* ``rgw_files_fdb_cluster_file`` — path to the FDB cluster file
-* ``rgw_files_fdb_prefix`` — top-level tuple prefix (default
-  ``("rgw","files","v1")``)
-* ``rgw_files_fdb_request_timeout_ms``
+* ``rgw_files_fdb_cluster_file`` — path to the FDB cluster file.
+  Empty disables the FDB backend (in-memory store fallback used
+  for development and testing).
+* ``rgw_files_fdb_prefix`` — comma-separated tuple prefix.
+  Default ``rgw,files,v1`` yields ``("rgw","files","v1")``.
+* ``rgw_files_fdb_request_timeout_ms`` — default 5000.
 
 Per-zone NFS service bindings and export defaults are **not**
 config knobs; they live in zone period config under

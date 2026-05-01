@@ -327,9 +327,56 @@ options:
                 any ``radosgw`` instance that is meant to
                 participate in a `multi-site <../multisite>`_
                 configuration.
+
+      .. note:: The ``files`` API (AWS S3 Files / EFS-shape
+                control plane) is opt-in and not in the default
+                list. Enabling it requires FoundationDB; see
+                :ref:`rgw-s3-files-api`.
   default: s3, s3website, swift, swift_auth, admin, sts, iam, notifications
   services:
   - rgw
+  with_legacy: true
+- name: rgw_files_fdb_cluster_file
+  type: str
+  level: advanced
+  desc: Path to the FoundationDB cluster file used by the S3 Files API.
+  long_desc: When the ``files`` entry is present in ``rgw_enable_apis``, RGW
+    connects to the realm-scoped FoundationDB cluster identified by this
+    cluster file to persist S3 Files API control-plane state. An empty value
+    disables the FDB backend; the in-memory store is used as a fallback for
+    development and testing.
+  default: ''
+  services:
+  - rgw
+  see_also:
+  - rgw_enable_apis
+  - rgw_files_fdb_prefix
+  - rgw_files_fdb_request_timeout_ms
+  with_legacy: true
+- name: rgw_files_fdb_prefix
+  type: str
+  level: advanced
+  desc: Top-level FDB tuple prefix for S3 Files API state.
+  long_desc: Encoded as a comma-separated list of tuple elements. The default
+    ``rgw,files,v1`` yields the FDB tuple ``("rgw", "files", "v1")``. Override
+    only when coordinating with other FDB-in-RGW consumers on a shared cluster.
+  default: 'rgw,files,v1'
+  services:
+  - rgw
+  see_also:
+  - rgw_enable_apis
+  - rgw_files_fdb_cluster_file
+  with_legacy: true
+- name: rgw_files_fdb_request_timeout_ms
+  type: int
+  level: advanced
+  desc: Maximum time in milliseconds for an FDB request issued by the S3 Files API.
+  default: 5000
+  services:
+  - rgw
+  see_also:
+  - rgw_enable_apis
+  - rgw_files_fdb_cluster_file
   with_legacy: true
 - name: rgw_cache_enabled
   type: bool
