@@ -11,6 +11,7 @@ from . import errors, assert_errorcode, NONEXISTENT_MT_ID
 
 
 @pytest.mark.conformance
+@pytest.mark.divergence  # depends on subnet-{zone_hex}
 def test_delete_existing(s3files_client, test_file_system, test_subnet_id):
     """Create + delete + assert subsequent get returns NotFound."""
     mt = s3files_client.create_mount_target(

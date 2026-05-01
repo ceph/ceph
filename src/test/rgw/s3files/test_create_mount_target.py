@@ -13,11 +13,17 @@ import pytest
 
 from . import errors, assert_errorcode, validation_excs, NONEXISTENT_FS_ID
 
+# Tests that *send* a `subnet-{zone_hex}` value depend on the Ceph
+# divergence and are double-marked `divergence` (see
+# test_ceph_divergences.py). Tests that only assert error responses
+# without needing a real subnet stay pure-conformance.
+
 
 # ---------------------------------------------------------------- positive
 
 
 @pytest.mark.conformance
+@pytest.mark.divergence  # asserts subnetId round-trip and availabilityZoneId
 def test_create_minimum(
     s3files_client, test_file_system, test_subnet_id, test_zone_id
 ):
@@ -59,6 +65,7 @@ def test_create_missing_subnet_id(s3files_client, test_file_system):
 
 
 @pytest.mark.conformance
+@pytest.mark.divergence  # passes a `subnet-{zone_hex}` value
 def test_create_on_nonexistent_file_system(s3files_client, test_subnet_id):
     with pytest.raises(
         s3files_client.exceptions.ResourceNotFoundException
@@ -74,6 +81,7 @@ def test_create_on_nonexistent_file_system(s3files_client, test_subnet_id):
 
 
 @pytest.mark.conformance
+@pytest.mark.divergence  # asserts MOUNT_TARGET_ALREADY_IN_ZONE on subnet-{zone}
 def test_only_one_mount_target_per_file_system_per_zone(
     s3files_client, test_file_system, test_subnet_id
 ):

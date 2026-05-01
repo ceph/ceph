@@ -115,6 +115,7 @@ def test_access_point_persists_posix_user_and_root_directory(
 
 
 @pytest.mark.read_after_write
+@pytest.mark.divergence  # uses test_mount_target (subnet-{zone_hex})
 def test_mount_target_update_visible_to_get(
     s3files_client, test_mount_target
 ):

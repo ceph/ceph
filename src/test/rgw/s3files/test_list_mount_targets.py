@@ -22,6 +22,7 @@ def test_list_returns_list_field(s3files_client):
 
 
 @pytest.mark.conformance
+@pytest.mark.divergence  # uses test_mount_target (subnet-{zone_hex})
 def test_list_filtered_by_file_system(s3files_client, test_mount_target):
     fs_id = test_mount_target['fileSystemId']
     mt_id = test_mount_target['mountTargetId']

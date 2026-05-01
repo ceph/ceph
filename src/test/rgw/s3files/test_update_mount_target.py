@@ -19,6 +19,7 @@ _SG_B = "sg-0000bbbb"
 
 
 @pytest.mark.conformance
+@pytest.mark.divergence  # uses test_mount_target (subnet-{zone_hex})
 def test_update_security_groups(s3files_client, test_mount_target):
     """Update succeeds; the request shape is exercised. RGW stores
     the new SG list on the spec but does not enforce it."""
@@ -32,6 +33,7 @@ def test_update_security_groups(s3files_client, test_mount_target):
 
 
 @pytest.mark.conformance
+@pytest.mark.divergence  # uses test_mount_target (subnet-{zone_hex})
 def test_update_missing_security_groups(s3files_client, test_mount_target):
     with pytest.raises(validation_excs(s3files_client)):
         s3files_client.update_mount_target(
