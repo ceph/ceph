@@ -1376,6 +1376,166 @@ void RGWDeleteMountTarget::send_response() {
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+// ListTagsForResource — GET /resource-tags/{resourceId}
+class RGWListTagsForResource : public RGWOp {
+ public:
+  explicit RGWListTagsForResource(std::string resource_id)
+    : resource_id_(std::move(resource_id)) {}
+
+  int verify_permission(optional_yield y) override { return 0; }
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "list_tags_for_resource"; }
+  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+
+ private:
+  std::string resource_id_;
+  std::optional<PagedResult<Tag>> result_;
+  std::optional<StoreError> err_;
+};
+
+void RGWListTagsForResource::execute(optional_yield y) {
+  s->format = RGWFormat::JSON;
+  ListOptions opts;
+  if (auto v = s->info.args.get("MaxResults"); !v.empty()) {
+    try { opts.max_results = std::stoi(v); } catch (...) {}
+  }
+  opts.next_token = s->info.args.get("NextToken");
+  auto r = rgw::s3files::default_store().list_tags_for_resource(
+      current_owner_account_id(s), strip_arn(resource_id_), opts);
+  if (!ok(r)) { err_ = error(r); op_ret = -ENOENT; return; }
+  result_ = take(std::move(r));
+  op_ret = 0;
+}
+
+void RGWListTagsForResource::send_response() {
+  if (err_) { send_store_error(s, this, *err_); return; }
+  s->err.http_ret = 200;
+  dump_errno(s, 200);
+  end_header(s, this, "application/json");
+  s->formatter->open_object_section("");
+  encode_tags(s->formatter, result_->items);
+  if (!result_->next_token.empty()) {
+    encode_json("nextToken", result_->next_token, s->formatter);
+  }
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+// TagResource — POST /resource-tags/{resourceId}
+class RGWTagResource : public RGWOp {
+ public:
+  explicit RGWTagResource(std::string resource_id)
+    : resource_id_(std::move(resource_id)) {}
+
+  int init_processing(optional_yield y) override;
+  int verify_permission(optional_yield y) override { return 0; }
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "tag_resource"; }
+  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+
+ private:
+  std::string resource_id_;
+  std::vector<Tag> tags_;
+  std::optional<StoreError> err_;
+};
+
+int RGWTagResource::init_processing(optional_yield y) {
+  s->format = RGWFormat::JSON;
+  const auto max = s->cct->_conf->rgw_max_put_param_size;
+  auto [rc, body] = rgw_rest_read_all_input(s, max);
+  if (rc < 0) return rc;
+  JSONParser parser;
+  if (!parser.parse(body.c_str(), body.length())) {
+    err_ = StoreError{
+        .kind = StoreError::Kind::InvalidArgument,
+        .error_code = std::string(ERR_INVALID_POLICY_DOCUMENT),
+        .message = "request body is not valid JSON",
+    };
+    return -EINVAL;
+  }
+  if (auto* arr = parser.find_obj("tags"); arr && arr->is_array()) {
+    for (const auto& tag_str : arr->get_array_elements()) {
+      JSONParser tp;
+      if (!tp.parse(tag_str.c_str(), tag_str.size())) continue;
+      tags_.push_back({json_string(&tp, "Key"), json_string(&tp, "Value")});
+    }
+  }
+  return 0;
+}
+
+void RGWTagResource::execute(optional_yield y) {
+  if (err_) { op_ret = -EINVAL; return; }
+  auto r = rgw::s3files::default_store().tag_resource(
+      current_owner_account_id(s), strip_arn(resource_id_), tags_);
+  if (!ok(r)) { err_ = error(r); op_ret = -ECANCELED; return; }
+  op_ret = 0;
+}
+
+void RGWTagResource::send_response() {
+  if (err_) { send_store_error(s, this, *err_); return; }
+  s->err.http_ret = 200;
+  dump_errno(s, 200);
+  end_header(s, this, "application/json");
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+// UntagResource — DELETE /resource-tags/{resourceId}?tagKeys=...
+class RGWUntagResource : public RGWOp {
+ public:
+  explicit RGWUntagResource(std::string resource_id)
+    : resource_id_(std::move(resource_id)) {}
+
+  int verify_permission(optional_yield y) override { return 0; }
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "untag_resource"; }
+  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
+
+ private:
+  std::string resource_id_;
+  std::optional<StoreError> err_;
+};
+
+void RGWUntagResource::execute(optional_yield y) {
+  s->format = RGWFormat::JSON;
+  // tagKeys is repeated as a query parameter per the Smithy
+  // @httpQuery binding. RGW's args bag handles multi-valued keys
+  // via repeated occurrences in the URI; collect them all.
+  std::vector<std::string> keys;
+  for (const auto& [k, v] : s->info.args.get_params()) {
+    if (k == "tagKeys" && !v.empty()) keys.push_back(v);
+  }
+  if (keys.empty()) {
+    err_ = StoreError{
+        .kind = StoreError::Kind::InvalidArgument,
+        .error_code = std::string(ERR_INVALID_TAG_KEY),
+        .message = "tagKeys query parameter is required",
+    };
+    op_ret = -EINVAL;
+    return;
+  }
+  auto r = rgw::s3files::default_store().untag_resource(
+      current_owner_account_id(s), strip_arn(resource_id_), keys);
+  if (!ok(r)) { err_ = error(r); op_ret = -ECANCELED; return; }
+  op_ret = 0;
+}
+
+void RGWUntagResource::send_response() {
+  if (err_) { send_store_error(s, this, *err_); return; }
+  s->err.http_ret = 200;
+  dump_errno(s, 200);
+  end_header(s, this, "application/json");
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------- handler
@@ -1415,7 +1575,9 @@ RGWOp* RGWHandler_REST_S3Files::op_get() {
     if (segs.size() == 1) return new RGWListMountTargets();
     if (segs.size() == 2) return new RGWGetMountTarget(std::string(segs[1]));
   }
-  // /resource-tags follows.
+  if (segs[0] == "resource-tags" && segs.size() == 2) {
+    return new RGWListTagsForResource(std::string(segs[1]));
+  }
   return nullptr;
 }
 
@@ -1445,7 +1607,11 @@ RGWOp* RGWHandler_REST_S3Files::op_put() {
 }
 
 RGWOp* RGWHandler_REST_S3Files::op_post() {
-  // /resource-tags/<id> → TagResource. Wired in a follow-on commit.
+  const auto segs = split_path(trim_leading_slashes(s->info.request_uri));
+  if (segs.empty()) return nullptr;
+  if (segs[0] == "resource-tags" && segs.size() == 2) {
+    return new RGWTagResource(std::string(segs[1]));
+  }
   return nullptr;
 }
 
@@ -1465,7 +1631,9 @@ RGWOp* RGWHandler_REST_S3Files::op_delete() {
   if (segs[0] == "mount-targets" && segs.size() == 2) {
     return new RGWDeleteMountTarget(std::string(segs[1]));
   }
-  // /resource-tags/<id> → UntagResource follows.
+  if (segs[0] == "resource-tags" && segs.size() == 2) {
+    return new RGWUntagResource(std::string(segs[1]));
+  }
   return nullptr;
 }
 
