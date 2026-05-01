@@ -68,8 +68,8 @@ def test_create_with_tags(s3files_client, test_file_system):
     resp = s3files_client.create_access_point(
         fileSystemId=test_file_system['fileSystemId'],
         tags=[
-            {"Key": "Name", "Value": "ap-test"},
-            {"Key": "tier", "Value": "ci"},
+            {"key": "Name", "value": "ap-test"},
+            {"key": "tier", "value": "ci"},
         ],
     )
     ap_id = resp['accessPointId']

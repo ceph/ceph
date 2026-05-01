@@ -17,7 +17,7 @@ def taggable_arn(request):
 
 
 def _tag_map(tags):
-    return {t['Key']: t['Value'] for t in tags}
+    return {t['key']: t['value'] for t in tags}
 
 
 @pytest.mark.conformance
@@ -25,8 +25,8 @@ def test_tag_adds_tags(s3files_client, taggable_arn):
     s3files_client.tag_resource(
         resourceId=taggable_arn,
         tags=[
-            {"Key": "env", "Value": "ci"},
-            {"Key": "owner", "Value": "test"},
+            {"key": "env", "value": "ci"},
+            {"key": "owner", "value": "test"},
         ],
     )
     got = _tag_map(
@@ -41,11 +41,11 @@ def test_tag_replaces_existing_value(s3files_client, taggable_arn):
     """A second TagResource with the same key replaces its value."""
     s3files_client.tag_resource(
         resourceId=taggable_arn,
-        tags=[{"Key": "env", "Value": "old"}],
+        tags=[{"key": "env", "value": "old"}],
     )
     s3files_client.tag_resource(
         resourceId=taggable_arn,
-        tags=[{"Key": "env", "Value": "new"}],
+        tags=[{"key": "env", "value": "new"}],
     )
     got = _tag_map(
         s3files_client.list_tags_for_resource(resourceId=taggable_arn)['tags']
@@ -67,7 +67,7 @@ def test_tag_on_nonexistent(s3files_client, bogus_id):
     ) as exc:
         s3files_client.tag_resource(
             resourceId=bogus_id,
-            tags=[{"Key": "k", "Value": "v"}],
+            tags=[{"key": "k", "value": "v"}],
         )
     err = exc.value.response.get('Error', {})
     assert err.get('errorCode') in (

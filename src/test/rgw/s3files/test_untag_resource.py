@@ -18,7 +18,7 @@ def taggable_arn(request):
 
 def _tag_keys(s3files_client, arn):
     return {
-        t['Key']
+        t['key']
         for t in s3files_client.list_tags_for_resource(resourceId=arn)['tags']
     }
 
@@ -28,8 +28,8 @@ def test_untag_removes_keys(s3files_client, taggable_arn):
     s3files_client.tag_resource(
         resourceId=taggable_arn,
         tags=[
-            {"Key": "a", "Value": "1"},
-            {"Key": "b", "Value": "2"},
+            {"key": "a", "value": "1"},
+            {"key": "b", "value": "2"},
         ],
     )
     s3files_client.untag_resource(

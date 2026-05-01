@@ -172,8 +172,8 @@ void encode_tags(ceph::Formatter* f, const std::vector<Tag>& tags) {
   f->open_array_section("tags");
   for (const auto& t : tags) {
     f->open_object_section("");
-    encode_json("Key",   t.key,   f);
-    encode_json("Value", t.value, f);
+    encode_json("key",   t.key,   f);
+    encode_json("value", t.value, f);
     f->close_section();
   }
   f->close_section();
@@ -441,8 +441,8 @@ int RGWCreateFileSystem::init_processing(optional_yield y) {
       JSONParser tag_parser;
       if (!tag_parser.parse(tag_str.c_str(), tag_str.size())) continue;
       Tag tag;
-      tag.key = json_string(&tag_parser, "Key");
-      tag.value = json_string(&tag_parser, "Value");
+      tag.key = json_string(&tag_parser, "key");
+      tag.value = json_string(&tag_parser, "value");
       req_.tags.push_back(std::move(tag));
     }
   }
@@ -934,7 +934,7 @@ int RGWCreateAccessPoint::init_processing(optional_yield y) {
     for (const auto& tag_str : tags->get_array_elements()) {
       JSONParser tp;
       if (!tp.parse(tag_str.c_str(), tag_str.size())) continue;
-      req_.tags.push_back({json_string(&tp, "Key"), json_string(&tp, "Value")});
+      req_.tags.push_back({json_string(&tp, "key"), json_string(&tp, "value")});
     }
   }
   return 0;
@@ -1471,7 +1471,7 @@ int RGWTagResource::init_processing(optional_yield y) {
     for (const auto& tag_str : arr->get_array_elements()) {
       JSONParser tp;
       if (!tp.parse(tag_str.c_str(), tag_str.size())) continue;
-      tags_.push_back({json_string(&tp, "Key"), json_string(&tp, "Value")});
+      tags_.push_back({json_string(&tp, "key"), json_string(&tp, "value")});
     }
   }
   return 0;

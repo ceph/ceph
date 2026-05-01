@@ -52,8 +52,8 @@ def test_create_with_tags(s3files_client, bucket_arn, shared_test_role):
         bucket=bucket_arn,
         roleArn=shared_test_role,
         tags=[
-            {"Key": "Name", "Value": "test-fs"},
-            {"Key": "env", "Value": "ci"},
+            {"key": "Name", "value": "test-fs"},
+            {"key": "env", "value": "ci"},
         ],
     )
     fs_id = resp['fileSystemId']

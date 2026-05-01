@@ -31,10 +31,10 @@ def test_list_tags_returns_list_field(s3files_client, taggable_arn):
 def test_list_tags_after_tag_resource(s3files_client, taggable_arn):
     s3files_client.tag_resource(
         resourceId=taggable_arn,
-        tags=[{"Key": "team", "Value": "infra"}],
+        tags=[{"key": "team", "value": "infra"}],
     )
     resp = s3files_client.list_tags_for_resource(resourceId=taggable_arn)
-    keys = {t['Key']: t['Value'] for t in resp['tags']}
+    keys = {t['key']: t['value'] for t in resp['tags']}
     assert keys.get('team') == 'infra'
 
 

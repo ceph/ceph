@@ -30,7 +30,7 @@ def test_file_system_create_get_list_consistency(
     created = s3files_client.create_file_system(
         bucket=bucket_arn,
         roleArn=shared_test_role,
-        tags=[{"Key": "Name", "Value": "raw-test-fs"}],
+        tags=[{"key": "Name", "value": "raw-test-fs"}],
     )
     fs_id = created['fileSystemId']
     try:
@@ -200,14 +200,14 @@ def test_tag_replace_then_untag_visible_to_list(
     """Tagging with the same key replaces; untag removes."""
     s3files_client.tag_resource(
         resourceId=taggable_arn,
-        tags=[{"Key": "phase", "Value": "v1"}],
+        tags=[{"key": "phase", "value": "v1"}],
     )
     s3files_client.tag_resource(
         resourceId=taggable_arn,
-        tags=[{"Key": "phase", "Value": "v2"}],
+        tags=[{"key": "phase", "value": "v2"}],
     )
     after_replace = {
-        t['Key']: t['Value']
+        t['key']: t['value']
         for t in s3files_client.list_tags_for_resource(
             resourceId=taggable_arn,
         )['tags']
@@ -216,7 +216,7 @@ def test_tag_replace_then_untag_visible_to_list(
 
     s3files_client.untag_resource(resourceId=taggable_arn, tagKeys=["phase"])
     after_untag = {
-        t['Key']
+        t['key']
         for t in s3files_client.list_tags_for_resource(
             resourceId=taggable_arn,
         )['tags']
