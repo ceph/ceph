@@ -179,6 +179,32 @@ bool valid_prefix(std::string_view s) {
   return s.empty() || s.back() == '/';
 }
 
+// Extract the bucket name from an `arn:aws:s3:::<bucket>` ARN.
+// Caller should have run valid_bucket_arn() first.
+std::string_view bucket_name_from_arn(std::string_view arn) {
+  constexpr std::string_view P = "arn:aws:s3:::";
+  return arn.substr(P.size());
+}
+
+// Extract `<account>` and `<role-name>` from
+// `arn:aws:iam::<account>:role/<role-name>`. Returns false if the
+// ARN doesn't parse; caller should have run valid_role_arn() first.
+bool parse_role_arn(std::string_view arn,
+                     std::string& account,
+                     std::string& role_name) {
+  constexpr std::string_view P = "arn:aws:iam::";
+  if (arn.size() <= P.size() || arn.substr(0, P.size()) != P) return false;
+  auto rest = arn.substr(P.size());
+  auto colon = rest.find(':');
+  if (colon == std::string_view::npos) return false;
+  account.assign(rest.substr(0, colon));
+  auto tail = rest.substr(colon + 1);
+  constexpr std::string_view R = "role/";
+  if (tail.size() <= R.size() || tail.substr(0, R.size()) != R) return false;
+  role_name.assign(tail.substr(R.size()));
+  return true;
+}
+
 // Parse a maxResults query arg into `out`. Returns false if the
 // arg is present but malformed or outside [min,max]. The Smithy
 // range trait is per-op (1..1000 for list-fs/aps/mts, 1..50 for
@@ -321,10 +347,17 @@ void encode_mount_target(ceph::Formatter* f, const MountTargetView& mt) {
   encode_json("ownerId",           mt.spec.owner_account_id,                f);
   encode_json("fileSystemId",      mt.spec.parent_filesystem_id,            f);
   // Encode the request-form subnetId (subnet-{zone}); the bare
-  // zone-id appears in availabilityZoneId per the design doc.
-  encode_json("subnetId",          "subnet-" + mt.spec.zone_id,             f);
-  encode_json("availabilityZoneId", mt.spec.zone_id,                        f);
-  encode_json("availabilityZoneName", mt.spec.zone_id,                      f);
+  // zone-id appears in availabilityZoneId per the design doc. The
+  // Smithy SubnetId pattern is hex-only, so strip hyphens from the
+  // canonical (UUID-form) zone-id when emitting it.
+  std::string zone_hex;
+  zone_hex.reserve(mt.spec.zone_id.size());
+  for (char c : mt.spec.zone_id) {
+    if (c != '-') zone_hex.push_back(c);
+  }
+  encode_json("subnetId",          "subnet-" + zone_hex,                    f);
+  encode_json("availabilityZoneId", zone_hex,                               f);
+  encode_json("availabilityZoneName", zone_hex,                             f);
   if (!mt.spec.ip_address_type.empty()) {
     encode_json("ipAddressType",   mt.spec.ip_address_type,                 f);
   }
@@ -554,6 +587,65 @@ void RGWCreateFileSystem::execute(optional_yield y) {
   if (err_) {
     op_ret = -EINVAL;
     return;
+  }
+  std::string tenant = s->user ? s->user->get_tenant() : std::string{};
+  // Verify the bucket exists in the local zone before binding it.
+  {
+    std::string bname{bucket_name_from_arn(req_.bucket_arn)};
+    std::unique_ptr<rgw::sal::Bucket> bucket;
+    int r = driver->load_bucket(this, rgw_bucket(tenant, bname), &bucket, y);
+    if (r == -ENOENT) {
+      err_ = StoreError{
+          .kind = StoreError::Kind::NotFound,
+          .error_code = std::string(ERR_BUCKET_NOT_FOUND),
+          .message = "bucket does not exist",
+      };
+      op_ret = -ENOENT;
+      return;
+    }
+    if (r < 0) {
+      err_ = StoreError{
+          .kind = StoreError::Kind::Internal,
+          .error_code = std::string(ERR_INTERNAL),
+          .message = "failed to look up bucket",
+      };
+      op_ret = r;
+      return;
+    }
+  }
+  // Verify the IAM role referenced by roleArn exists. We only
+  // confirm existence; assumption / delegation is deferred.
+  {
+    std::string account, role_name;
+    if (!parse_role_arn(req_.role_arn, account, role_name)) {
+      err_ = StoreError{
+          .kind = StoreError::Kind::InvalidArgument,
+          .error_code = std::string(ERR_INVALID_ROLE_ARN),
+          .message = "roleArn is not a valid IAM role ARN",
+      };
+      op_ret = -EINVAL;
+      return;
+    }
+    auto role = driver->get_role(role_name, tenant, rgw_account_id{account});
+    int r = role ? role->load_by_name(this, y) : -ENOENT;
+    if (r == -ENOENT) {
+      err_ = StoreError{
+          .kind = StoreError::Kind::NotFound,
+          .error_code = std::string(ERR_ROLE_NOT_FOUND),
+          .message = "IAM role does not exist",
+      };
+      op_ret = -ENOENT;
+      return;
+    }
+    if (r < 0) {
+      err_ = StoreError{
+          .kind = StoreError::Kind::Internal,
+          .error_code = std::string(ERR_INTERNAL),
+          .message = "failed to look up IAM role",
+      };
+      op_ret = r;
+      return;
+    }
   }
   auto result = rgw::s3files::default_store().create_file_system(req_);
   if (!ok(result)) {
@@ -1309,6 +1401,47 @@ int RGWCreateMountTarget::init_processing(optional_yield y) {
 
 void RGWCreateMountTarget::execute(optional_yield y) {
   if (err_) { op_ret = -EINVAL; return; }
+  // Verify the supplied zone-id (carried in `subnet-{zone_id}`)
+  // names a zone in the local zonegroup. AWS would have returned
+  // InvalidSubnetId.NotFound here.
+  //
+  // The Smithy SubnetId pattern is `^subnet-[0-9a-f]{8,40}$`, so
+  // zone-ids encoded into the wire form have any hyphens stripped
+  // (Ceph zone-ids are UUIDs with hyphens). Normalize both sides
+  // before comparing.
+  if (!req_.zone_id.empty()) {
+    auto strip_dashes = [](std::string_view in) {
+      std::string out;
+      out.reserve(in.size());
+      for (char c : in) {
+        if (c != '-') out.push_back(c);
+      }
+      return out;
+    };
+    const std::string want = strip_dashes(req_.zone_id);
+    auto& zg = driver->get_zone()->get_zonegroup();
+    std::list<std::string> zone_ids;
+    bool match = false;
+    if (zg.list_zones(zone_ids) >= 0) {
+      for (const auto& zid : zone_ids) {
+        if (strip_dashes(zid) == want) {
+          // Carry the canonical (dashed) form through to the store.
+          req_.zone_id = zid;
+          match = true;
+          break;
+        }
+      }
+    }
+    if (!match) {
+      err_ = StoreError{
+          .kind = StoreError::Kind::InvalidArgument,
+          .error_code = std::string(ERR_ZONE_NOT_IN_ZONEGROUP),
+          .message = "zone-id is not part of the local zonegroup",
+      };
+      op_ret = -EINVAL;
+      return;
+    }
+  }
   auto r = rgw::s3files::default_store().create_mount_target(req_);
   if (!ok(r)) { err_ = error(r); op_ret = -ECANCELED; return; }
   created_ = take(std::move(r));
