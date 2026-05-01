@@ -239,6 +239,82 @@ bool parse_sync_config(JSONObj* obj, SyncConfig& cfg, bool& has_version) {
   return true;
 }
 
+void encode_posix_user(ceph::Formatter* f, const PosixUser& pu) {
+  f->open_object_section("posixUser");
+  encode_json("uid", pu.uid, f);
+  encode_json("gid", pu.gid, f);
+  if (!pu.secondary_gids.empty()) {
+    f->open_array_section("secondaryGids");
+    for (auto g : pu.secondary_gids) {
+      f->dump_int("", g);
+    }
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void encode_root_directory(ceph::Formatter* f, const RootDirectory& rd) {
+  f->open_object_section("rootDirectory");
+  if (!rd.path.empty()) encode_json("path", rd.path, f);
+  if (rd.creation_permissions) {
+    f->open_object_section("creationPermissions");
+    encode_json("ownerUid",   rd.creation_permissions->owner_uid,   f);
+    encode_json("ownerGid",   rd.creation_permissions->owner_gid,   f);
+    encode_json("permissions", rd.creation_permissions->permissions, f);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void encode_access_point(ceph::Formatter* f, const AccessPointView& ap) {
+  encode_json("accessPointId",  ap.spec.id,                              f);
+  encode_json("accessPointArn", ap.spec.arn,                             f);
+  encode_json("fileSystemId",   ap.spec.parent_filesystem_id,            f);
+  encode_json("ownerId",        ap.spec.owner_account_id,                f);
+  if (!ap.spec.client_token.empty()) {
+    encode_json("clientToken",  ap.spec.client_token,                    f);
+  }
+  encode_json("status",         std::string(to_string(ap.status.state)), f);
+  if (ap.spec.posix_user)        encode_posix_user(f, *ap.spec.posix_user);
+  if (ap.spec.root_directory)    encode_root_directory(f, *ap.spec.root_directory);
+  if (auto n = ap.name(); n) encode_json("name", *n, f);
+  encode_tags(f, ap.spec.tags);
+}
+
+// Parse a JSON object representing a posixUser. Sets `out` and
+// returns true on success; on malformed input returns false and
+// leaves out partially populated.
+bool parse_posix_user(JSONObj* obj, PosixUser& out) {
+  if (!obj) return false;
+  try {
+    out.uid = std::stoll(json_string(obj, "uid"));
+    out.gid = std::stoll(json_string(obj, "gid"));
+  } catch (...) { return false; }
+  if (auto* sg = obj->find_obj("secondaryGids");
+      sg && sg->is_array()) {
+    for (const auto& s : sg->get_array_elements()) {
+      try { out.secondary_gids.push_back(std::stoll(s)); }
+      catch (...) { return false; }
+    }
+  }
+  return true;
+}
+
+bool parse_root_directory(JSONObj* obj, RootDirectory& out) {
+  if (!obj) return false;
+  out.path = json_string(obj, "path");
+  if (auto* cp = obj->find_obj("creationPermissions")) {
+    CreationPermissions p;
+    try {
+      p.owner_uid = std::stoll(json_string(cp, "ownerUid"));
+      p.owner_gid = std::stoll(json_string(cp, "ownerGid"));
+    } catch (...) { return false; }
+    p.permissions = json_string(cp, "permissions");
+    out.creation_permissions = std::move(p);
+  }
+  return true;
+}
+
 void encode_file_system(ceph::Formatter* f, const FileSystemView& fs) {
   encode_json("fileSystemId",  fs.spec.id,                              f);
   encode_json("fileSystemArn", fs.spec.arn,                             f);
@@ -741,6 +817,233 @@ void RGWGetSyncConfig::send_response() {
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+// CreateAccessPoint — PUT /access-points
+class RGWCreateAccessPoint : public RGWOp {
+ public:
+  RGWCreateAccessPoint() = default;
+
+  int init_processing(optional_yield y) override;
+  int verify_permission(optional_yield y) override { return 0; }
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "create_access_point"; }
+  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+
+ private:
+  CreateAccessPointRequest req_;
+  std::optional<AccessPointView> created_;
+  std::optional<StoreError> err_;
+};
+
+int RGWCreateAccessPoint::init_processing(optional_yield y) {
+  s->format = RGWFormat::JSON;
+  const auto max = s->cct->_conf->rgw_max_put_param_size;
+  auto [rc, body] = rgw_rest_read_all_input(s, max);
+  if (rc < 0) return rc;
+  JSONParser parser;
+  if (!parser.parse(body.c_str(), body.length())) {
+    err_ = StoreError{
+        .kind = StoreError::Kind::InvalidArgument,
+        .error_code = std::string(ERR_INVALID_POLICY_DOCUMENT),
+        .message = "request body is not valid JSON",
+    };
+    return -EINVAL;
+  }
+  req_.owner_account_id = current_owner_account_id(s);
+  req_.filesystem_id    = strip_arn(json_string(&parser, "fileSystemId"));
+  req_.client_token     = json_string(&parser, "clientToken");
+
+  if (auto* pu = parser.find_obj("posixUser"); pu) {
+    PosixUser p;
+    if (!parse_posix_user(pu, p)) {
+      err_ = StoreError{
+          .kind = StoreError::Kind::InvalidArgument,
+          .error_code = std::string(ERR_INVALID_POSIX_USER),
+          .message = "posixUser missing required fields",
+      };
+      return -EINVAL;
+    }
+    req_.posix_user = std::move(p);
+  }
+  if (auto* rd = parser.find_obj("rootDirectory"); rd) {
+    RootDirectory r;
+    if (!parse_root_directory(rd, r)) {
+      err_ = StoreError{
+          .kind = StoreError::Kind::InvalidArgument,
+          .error_code = std::string(ERR_INVALID_ROOT_DIRECTORY),
+          .message = "rootDirectory is malformed",
+      };
+      return -EINVAL;
+    }
+    req_.root_directory = std::move(r);
+  }
+  if (auto* tags = parser.find_obj("tags"); tags && tags->is_array()) {
+    for (const auto& tag_str : tags->get_array_elements()) {
+      JSONParser tp;
+      if (!tp.parse(tag_str.c_str(), tag_str.size())) continue;
+      req_.tags.push_back({json_string(&tp, "Key"), json_string(&tp, "Value")});
+    }
+  }
+  return 0;
+}
+
+void RGWCreateAccessPoint::execute(optional_yield y) {
+  if (err_) { op_ret = -EINVAL; return; }
+  auto r = rgw::s3files::default_store().create_access_point(req_);
+  if (!ok(r)) { err_ = error(r); op_ret = -ECANCELED; return; }
+  created_ = take(std::move(r));
+  op_ret = 0;
+}
+
+void RGWCreateAccessPoint::send_response() {
+  if (err_) { send_store_error(s, this, *err_); return; }
+  s->err.http_ret = 200;
+  dump_errno(s, 200);
+  end_header(s, this, "application/json");
+  s->formatter->open_object_section("");
+  encode_access_point(s->formatter, *created_);
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+// GetAccessPoint — GET /access-points/{accessPointId}
+class RGWGetAccessPoint : public RGWOp {
+ public:
+  explicit RGWGetAccessPoint(std::string ap_id) : ap_id_(std::move(ap_id)) {}
+
+  int verify_permission(optional_yield y) override { return 0; }
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "get_access_point"; }
+  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+
+ private:
+  std::string ap_id_;
+  std::optional<AccessPointView> view_;
+  std::optional<StoreError> err_;
+};
+
+void RGWGetAccessPoint::execute(optional_yield y) {
+  s->format = RGWFormat::JSON;
+  auto r = rgw::s3files::default_store().get_access_point(
+      current_owner_account_id(s), strip_arn(ap_id_));
+  if (!ok(r)) { err_ = error(r); op_ret = -ENOENT; return; }
+  view_ = take(std::move(r));
+  op_ret = 0;
+}
+
+void RGWGetAccessPoint::send_response() {
+  if (err_) { send_store_error(s, this, *err_); return; }
+  s->err.http_ret = 200;
+  dump_errno(s, 200);
+  end_header(s, this, "application/json");
+  s->formatter->open_object_section("");
+  encode_access_point(s->formatter, *view_);
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+// ListAccessPoints — GET /access-points?fileSystemId=...
+class RGWListAccessPoints : public RGWOp {
+ public:
+  RGWListAccessPoints() = default;
+
+  int verify_permission(optional_yield y) override { return 0; }
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "list_access_points"; }
+  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+
+ private:
+  std::optional<PagedResult<AccessPointView>> result_;
+  std::optional<StoreError> err_;
+};
+
+void RGWListAccessPoints::execute(optional_yield y) {
+  s->format = RGWFormat::JSON;
+  auto fs_id = s->info.args.get("fileSystemId");
+  if (fs_id.empty()) {
+    err_ = StoreError{
+        .kind = StoreError::Kind::InvalidArgument,
+        .error_code = std::string(ERR_INVALID_BUCKET_ARN),
+        .message = "fileSystemId query parameter is required",
+    };
+    op_ret = -EINVAL;
+    return;
+  }
+  ListOptions opts;
+  if (auto v = s->info.args.get("maxResults"); !v.empty()) {
+    try { opts.max_results = std::stoi(v); } catch (...) {}
+  }
+  opts.next_token = s->info.args.get("nextToken");
+
+  auto r = rgw::s3files::default_store().list_access_points(
+      current_owner_account_id(s), strip_arn(fs_id), opts);
+  if (!ok(r)) { err_ = error(r); op_ret = -EIO; return; }
+  result_ = take(std::move(r));
+  op_ret = 0;
+}
+
+void RGWListAccessPoints::send_response() {
+  if (err_) { send_store_error(s, this, *err_); return; }
+  s->err.http_ret = 200;
+  dump_errno(s, 200);
+  end_header(s, this, "application/json");
+  s->formatter->open_object_section("");
+  s->formatter->open_array_section("accessPoints");
+  for (const auto& ap : result_->items) {
+    s->formatter->open_object_section("");
+    encode_access_point(s->formatter, ap);
+    s->formatter->close_section();
+  }
+  s->formatter->close_section();
+  if (!result_->next_token.empty()) {
+    encode_json("nextToken", result_->next_token, s->formatter);
+  }
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+// DeleteAccessPoint — DELETE /access-points/{accessPointId}
+class RGWDeleteAccessPoint : public RGWOp {
+ public:
+  explicit RGWDeleteAccessPoint(std::string ap_id) : ap_id_(std::move(ap_id)) {}
+
+  int verify_permission(optional_yield y) override { return 0; }
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "delete_access_point"; }
+  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
+
+ private:
+  std::string ap_id_;
+  std::optional<StoreError> err_;
+};
+
+void RGWDeleteAccessPoint::execute(optional_yield y) {
+  s->format = RGWFormat::JSON;
+  auto r = rgw::s3files::default_store().delete_access_point(
+      current_owner_account_id(s), strip_arn(ap_id_));
+  if (!ok(r)) { err_ = error(r); op_ret = -ENOENT; return; }
+  op_ret = 0;
+}
+
+void RGWDeleteAccessPoint::send_response() {
+  if (err_) { send_store_error(s, this, *err_); return; }
+  s->err.http_ret = 204;
+  dump_errno(s, 204);
+  end_header(s, this, "application/json");
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------- handler
@@ -772,7 +1075,11 @@ RGWOp* RGWHandler_REST_S3Files::op_get() {
       return new RGWGetSyncConfig(std::string(segs[1]));
     }
   }
-  // /access-points, /mount-targets, /resource-tags follow.
+  if (segs[0] == "access-points") {
+    if (segs.size() == 1) return new RGWListAccessPoints();
+    if (segs.size() == 2) return new RGWGetAccessPoint(std::string(segs[1]));
+  }
+  // /mount-targets and /resource-tags follow.
   return nullptr;
 }
 
@@ -789,8 +1096,11 @@ RGWOp* RGWHandler_REST_S3Files::op_put() {
       return new RGWPutSyncConfig(std::string(segs[1]));
     }
   }
-  // /access-points (CreateAccessPoint), /mount-targets (CreateMountTarget),
-  // /mount-targets/<id> (UpdateMountTarget) follow.
+  if (segs[0] == "access-points" && segs.size() == 1) {
+    return new RGWCreateAccessPoint();
+  }
+  // /mount-targets (CreateMountTarget), /mount-targets/<id>
+  // (UpdateMountTarget) follow.
   return nullptr;
 }
 
@@ -809,8 +1119,10 @@ RGWOp* RGWHandler_REST_S3Files::op_delete() {
       return new RGWDeleteFileSystemPolicy(std::string(segs[1]));
     }
   }
-  // /access-points/<id>, /mount-targets/<id>, /resource-tags/<id>
-  // also follow.
+  if (segs[0] == "access-points" && segs.size() == 2) {
+    return new RGWDeleteAccessPoint(std::string(segs[1]));
+  }
+  // /mount-targets/<id>, /resource-tags/<id> follow.
   return nullptr;
 }
 
