@@ -542,7 +542,7 @@ FoundationDB layout
 Keys use the FDB tuple/directory convention. Top-level subspace
 proposed::
 
-   ("rgw", "files", "v1", ...)
+   ("rgw", "s3files", "v1", ...)
 
 This sits alongside other RGW FDB users (e.g.
 ``("rgw", "fdbd4n", ...)``) under a shared ``("rgw", ...)``
@@ -554,28 +554,28 @@ Resource keys
 
 ::
 
-   ("rgw","files","v1",zg,"fs",fs_id,"spec")
-   ("rgw","files","v1",zg,"fs",fs_id,"status")
-   ("rgw","files","v1",zg,"fs",fs_id,"status","zone",zone)
-   ("rgw","files","v1",zg,"fs",fs_id,"policy")
-   ("rgw","files","v1",zg,"fs",fs_id,"sync-config")
-   ("rgw","files","v1",zg,"fs",fs_id,"tags")
+   ("rgw","s3files","v1",zg,"fs",fs_id,"spec")
+   ("rgw","s3files","v1",zg,"fs",fs_id,"status")
+   ("rgw","s3files","v1",zg,"fs",fs_id,"status","zone",zone)
+   ("rgw","s3files","v1",zg,"fs",fs_id,"policy")
+   ("rgw","s3files","v1",zg,"fs",fs_id,"sync-config")
+   ("rgw","s3files","v1",zg,"fs",fs_id,"tags")
 
-   ("rgw","files","v1",zg,"ap",ap_id,"spec")
-   ("rgw","files","v1",zg,"ap",ap_id,"status")
-   ("rgw","files","v1",zg,"ap",ap_id,"status","zone",zone)
-   ("rgw","files","v1",zg,"ap",ap_id,"tags")
+   ("rgw","s3files","v1",zg,"ap",ap_id,"spec")
+   ("rgw","s3files","v1",zg,"ap",ap_id,"status")
+   ("rgw","s3files","v1",zg,"ap",ap_id,"status","zone",zone)
+   ("rgw","s3files","v1",zg,"ap",ap_id,"tags")
 
-   ("rgw","files","v1",zg,"zone",zone,"mt",mt_id,"spec")
-   ("rgw","files","v1",zg,"zone",zone,"mt",mt_id,"status")
+   ("rgw","s3files","v1",zg,"zone",zone,"mt",mt_id,"spec")
+   ("rgw","s3files","v1",zg,"zone",zone,"mt",mt_id,"status")
 
 Per-zone control keys
 ---------------------
 
 ::
 
-   ("rgw","files","v1",zg,"zone",zone,"wakeup")
-   ("rgw","files","v1",zg,"zone",zone,"reconcilers",host)
+   ("rgw","s3files","v1",zg,"zone",zone,"wakeup")
+   ("rgw","s3files","v1",zg,"zone",zone,"reconcilers",host)
 
 NFS endpoint information is **not** kept in FDB; it lives in zone
 period config under ``files_placement_services`` (see `Files
@@ -618,7 +618,7 @@ Reconciler liveness
 -------------------
 
 Each reconciler writes a heartbeat row at
-``("rgw","files","v1",zg,"zone",zone,"reconcilers",host)`` every
+``("rgw","s3files","v1",zg,"zone",zone,"reconcilers",host)`` every
 N seconds (default: 5). Stale rows are treated as offline. RGW
 sweeps stale rows lazily on read. This replaces the etcd-style
 lease pattern, since FDB has no native leases.
@@ -671,7 +671,7 @@ clears it after teardown.
 REST API surface
 ================
 
-Enabled via a new ``files`` entry in ``rgw_enable_apis`` (default
+Enabled via a new ``s3files`` entry in ``rgw_enable_apis`` (default
 ``off`` until stable). Routed through a new
 ``RGWRESTMgr_S3Files`` registered in
 ``rgw::AppMain::cond_init_apis()`` alongside the existing S3,
@@ -719,12 +719,12 @@ Configuration options
 
 The ``rgw.yaml.in`` entries:
 
-* ``rgw_files_fdb_cluster_file`` — path to the FDB cluster file.
+* ``rgw_s3files_fdb_cluster_file`` — path to the FDB cluster file.
   Empty disables the FDB backend (in-memory store fallback used
   for development and testing).
-* ``rgw_files_fdb_prefix`` — comma-separated tuple prefix.
-  Default ``rgw,files,v1`` yields ``("rgw","files","v1")``.
-* ``rgw_files_fdb_request_timeout_ms`` — default 5000.
+* ``rgw_s3files_fdb_prefix`` — comma-separated tuple prefix.
+  Default ``rgw,s3files,v1`` yields ``("rgw","s3files","v1")``.
+* ``rgw_s3files_fdb_request_timeout_ms`` — default 5000.
 
 Per-zone NFS service bindings and export defaults are **not**
 config knobs; they live in zone period config under
@@ -764,7 +764,7 @@ cephadm-managed service alongside the per-zone NFS cluster.
 Responsibilities (zone Z):
 
 * Watch
-  ``("rgw","files","v1",zg,"zone",Z,"wakeup")``.
+  ``("rgw","s3files","v1",zg,"zone",Z,"wakeup")``.
 * On fire, reconcile:
 
   - For each AccessPoint in the zonegroup, render the local
@@ -824,7 +824,7 @@ Coordination
   ``fdbd4n`` even though the two run against different FDB
   instances.
 * Tuple-prefix convention to be agreed across FDB-in-RGW
-  consumers; the ``("rgw","files","v1",...)`` shape proposed here
+  consumers; the ``("rgw","s3files","v1",...)`` shape proposed here
   assumes a peer prefix ``("rgw","fdbd4n",...)`` in the per-cluster
   FDB.
 * Schema-version policy (single global vs per-subsystem) to be

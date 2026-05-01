@@ -54,7 +54,7 @@ def test_boto3_has_s3files_client():
 def test_rgw_endpoint_reachable():
     """Confirms the configured RGW endpoint is reachable.
 
-    Until the `files` API is enabled in rgw_enable_apis and
+    Until the `s3files` API is enabled in rgw_enable_apis and
     handlers ship, this call will return an HTTP-level error
     (404, 501, etc.). Any ClientError is acceptable here — it
     proves the transport works. Only a connection-level failure

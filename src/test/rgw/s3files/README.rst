@@ -15,7 +15,7 @@ Prerequisites
 =============
 
 * Start the cluster using the ``vstart.sh`` script with RGW
-  enabled and the ``files`` entry present in
+  enabled and the ``s3files`` entry present in
   ``rgw_enable_apis``.
 * Ensure the RGW endpoint is accessible (default:
   ``http://localhost:8000``).
