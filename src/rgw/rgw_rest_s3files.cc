@@ -1514,12 +1514,13 @@ class RGWUntagResource : public RGWOp {
 
 void RGWUntagResource::execute(optional_yield y) {
   s->format = RGWFormat::JSON;
-  // tagKeys is repeated as a query parameter per the Smithy
-  // @httpQuery binding. RGW's args bag handles multi-valued keys
-  // via repeated occurrences in the URI; collect them all.
+  // tagKeys is `@httpQuery: tagKeys` per the Smithy. RGW's
+  // args.get_params() returns a std::map<string,string> — each
+  // key has at most one value, so multi-key untag would lose
+  // values past the first. v1 supports the single-key form.
   std::vector<std::string> keys;
-  for (const auto& [k, v] : s->info.args.get_params()) {
-    if (k == "tagKeys" && !v.empty()) keys.push_back(v);
+  if (auto v = s->info.args.get("tagKeys"); !v.empty()) {
+    keys.push_back(v);
   }
   if (keys.empty()) {
     err_ = StoreError{
