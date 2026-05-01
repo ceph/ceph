@@ -130,6 +130,10 @@ class CephadmUpgrade:
         'UPGRADE_OFFLINE_HOST'
     ]
 
+    # When upgrade_preflight_checks is enabled, only PGs that are active+clean
+    # are considered safe to proceed with an upgrade. Any other state will block.
+    UPGRADE_SAFE_PG_STATES = {'active', 'clean'}
+
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr = mgr
 
@@ -310,6 +314,64 @@ class CephadmUpgrade:
             r["tags"] = sorted(ls)
         return r
 
+    def _run_preflight_checks(self) -> Optional[str]:
+        """Validate cluster health before starting an upgrade.
+
+        Returns an error message if checks fail, or None if all pass.
+        """
+        errors: List[str] = []
+
+        # Check cluster health, ignoring muted checks
+        try:
+            health_data = json.loads(self.mgr.get('health')['json'])
+            if health_data.get('status') != 'HEALTH_OK':
+                muted = {m['code'] for m in health_data.get('mutes', [])}
+                active = sorted(c for c in health_data.get('checks', {}) if c not in muted)
+                if active:
+                    errors.append(
+                        f'Cluster health is {health_data["status"]}. '
+                        f'Active (non-muted) checks: {", ".join(active)}'
+                    )
+        except Exception as e:
+            errors.append(f'Failed to retrieve cluster health: {e}')
+
+        # Check that all OSDs are up+in
+        try:
+            osdmap = self.mgr.get('osd_map')
+            not_up_in = [
+                f'osd.{osd["osd"]} ({"up" if osd.get("up") else "down"}+'
+                f'{"in" if osd.get("in") else "out"})'
+                for osd in osdmap.get('osds', [])
+                if not (osd.get('up') and osd.get('in'))
+            ]
+            if not_up_in:
+                display = ', '.join(not_up_in[:10])
+                suffix = f' (and {len(not_up_in) - 10} more)' if len(not_up_in) > 10 else ''
+                errors.append(f'{len(not_up_in)} OSD(s) not up+in: {display}{suffix}')
+        except Exception as e:
+            errors.append(f'Failed to retrieve OSD map: {e}')
+
+        # Check PG states — only UPGRADE_SAFE_PG_STATES are allowed
+        try:
+            pg_summary = self.mgr.get('pg_summary')
+            unsafe_pgs: Dict[str, int] = {}
+            for states in pg_summary.get('by_pool', {}).values():
+                for state_name, count in states.items():
+                    for bad in set(state_name.split('+')) - self.UPGRADE_SAFE_PG_STATES:
+                        unsafe_pgs[bad] = unsafe_pgs.get(bad, 0) + count
+            if unsafe_pgs:
+                pg_details = ', '.join(f'{n} {s}' for s, n in sorted(unsafe_pgs.items()))
+                errors.append(f'PGs not in upgrade-safe state (active+clean): {pg_details}')
+        except Exception as e:
+            errors.append(f'Failed to retrieve PG summary: {e}')
+
+        if not errors:
+            return None
+        return ('Upgrade blocked by preflight checks:\n  - '
+                + '\n  - '.join(errors)
+                + '\n\nTo proceed with the upgrade despite these warnings, run:\n'
+                  '  ceph config set mgr mgr/cephadm/upgrade_preflight_checks false')
+
     def upgrade_start(self, image: str, version: str, daemon_types: Optional[List[str]] = None,
                       hosts: Optional[List[str]] = None, services: Optional[List[str]] = None, limit: Optional[int] = None) -> str:
         fail_fs_value = cast(bool, self.mgr.get_module_option_ex(
@@ -346,6 +408,11 @@ class CephadmUpgrade:
 
         if running_mgr_count < 2:
             raise OrchestratorError('Need at least 2 running mgr daemons for upgrade')
+
+        if self.mgr.upgrade_preflight_checks:
+            preflight_error = self._run_preflight_checks()
+            if preflight_error:
+                raise OrchestratorError(preflight_error)
 
         self.mgr.log.info('Upgrade: Started with target %s' % target_name)
         self.upgrade_state = UpgradeState(

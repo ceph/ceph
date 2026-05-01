@@ -505,6 +505,14 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             default='169.254.1.1',
             desc="Default IP address for RedFish API (OOB management)."
         ),
+        Option(
+            'upgrade_preflight_checks',
+            type='bool',
+            default=False,
+            desc='When enabled, ceph orch upgrade start runs preflight validation '
+                 'and blocks the upgrade if the cluster is not in a healthy state '
+                 '(health not OK, OSDs not up+in, PGs not active+clean).',
+        ),
     ]
     for image in DefaultImages:
         MODULE_OPTIONS.append(Option(image.key, default=image.image_ref, desc=image.desc))
@@ -611,6 +619,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.certificate_automated_rotation_enabled = False
             self.certificate_check_debug_mode = False
             self.certificate_check_period = 0
+            self.upgrade_preflight_checks = False
 
         self.notify(NotifyType.mon_map, None)
         self.config_notify()

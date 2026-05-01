@@ -479,3 +479,173 @@ def test_staggered_upgrade_validation(
     else:
         cephadm_module.upgrade._validate_upgrade_filters(
             'new_image_name', daemon_types, hosts, services)
+
+
+class TestPreflightChecks:
+    """Tests for the upgrade_preflight_checks feature."""
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_upgrade_starts_normally_when_preflight_disabled(self, cephadm_module: CephadmOrchestrator):
+        """When upgrade_preflight_checks=false, upgrades start normally (no blocking)."""
+        cephadm_module.upgrade_preflight_checks = False
+        with with_host(cephadm_module, 'test'):
+            with with_host(cephadm_module, 'test2'):
+                with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=2)), status_running=True):
+                    assert wait(cephadm_module, cephadm_module.upgrade_start(
+                        'image_id', None)) == 'Initiating upgrade to image_id'
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @mock.patch("cephadm.CephadmOrchestrator.get")
+    def test_upgrade_blocked_unhealthy_cluster(self, mock_get, cephadm_module: CephadmOrchestrator):
+        """When upgrade_preflight_checks=true, blocks if health is not HEALTH_OK."""
+        cephadm_module.upgrade_preflight_checks = True
+
+        def _get(key):
+            if key == 'health':
+                return {'json': json.dumps({
+                    'status': 'HEALTH_WARN',
+                    'checks': {
+                        'OSDMAP_FLAGS': {
+                            'severity': 'HEALTH_WARN',
+                            'summary': {'message': 'noout flag(s) set'},
+                        }
+                    },
+                    'mutes': [],
+                })}
+            elif key == 'osd_map':
+                return {'osds': [{'osd': 0, 'up': 1, 'in': 1}]}
+            elif key == 'pg_summary':
+                return {'by_pool': {'1': {'active+clean': 64}}}
+            return {}
+        mock_get.side_effect = _get
+
+        with with_host(cephadm_module, 'test'):
+            with with_host(cephadm_module, 'test2'):
+                with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=2)), status_running=True):
+                    with pytest.raises(OrchestratorError, match='preflight checks'):
+                        wait(cephadm_module, cephadm_module.upgrade_start('image_id', None))
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @mock.patch("cephadm.CephadmOrchestrator.get")
+    def test_upgrade_blocked_osd_not_up_in(self, mock_get, cephadm_module: CephadmOrchestrator):
+        """When upgrade_preflight_checks=true, blocks if any OSD is not up+in."""
+        cephadm_module.upgrade_preflight_checks = True
+
+        def _get(key):
+            if key == 'health':
+                return {'json': json.dumps({
+                    'status': 'HEALTH_OK',
+                    'checks': {},
+                    'mutes': [],
+                })}
+            elif key == 'osd_map':
+                return {'osds': [
+                    {'osd': 0, 'up': 1, 'in': 1},
+                    {'osd': 1, 'up': 0, 'in': 1},
+                    {'osd': 2, 'up': 1, 'in': 0},
+                ]}
+            elif key == 'pg_summary':
+                return {'by_pool': {'1': {'active+clean': 64}}}
+            return {}
+        mock_get.side_effect = _get
+
+        with with_host(cephadm_module, 'test'):
+            with with_host(cephadm_module, 'test2'):
+                with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=2)), status_running=True):
+                    with pytest.raises(OrchestratorError, match='OSD.*not up\\+in'):
+                        wait(cephadm_module, cephadm_module.upgrade_start('image_id', None))
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @mock.patch("cephadm.CephadmOrchestrator.get")
+    def test_upgrade_blocked_pgs_not_clean(self, mock_get, cephadm_module: CephadmOrchestrator):
+        """When upgrade_preflight_checks=true, blocks if PGs are not active+clean."""
+        cephadm_module.upgrade_preflight_checks = True
+
+        def _get(key):
+            if key == 'health':
+                return {'json': json.dumps({
+                    'status': 'HEALTH_OK',
+                    'checks': {},
+                    'mutes': [],
+                })}
+            elif key == 'osd_map':
+                return {'osds': [{'osd': 0, 'up': 1, 'in': 1}]}
+            elif key == 'pg_summary':
+                return {'by_pool': {
+                    '1': {
+                        'active+clean': 100,
+                        'active+degraded': 5,
+                        'active+recovering': 2,
+                    }
+                }}
+            return {}
+        mock_get.side_effect = _get
+
+        with with_host(cephadm_module, 'test'):
+            with with_host(cephadm_module, 'test2'):
+                with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=2)), status_running=True):
+                    with pytest.raises(OrchestratorError, match='PGs not in upgrade-safe state'):
+                        wait(cephadm_module, cephadm_module.upgrade_start('image_id', None))
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @mock.patch("cephadm.CephadmOrchestrator.get")
+    def test_upgrade_passes_preflight_healthy_cluster(self, mock_get, cephadm_module: CephadmOrchestrator):
+        """When upgrade_preflight_checks=true and cluster is healthy, upgrade starts."""
+        cephadm_module.upgrade_preflight_checks = True
+
+        def _get(key):
+            if key == 'health':
+                return {'json': json.dumps({
+                    'status': 'HEALTH_OK',
+                    'checks': {},
+                    'mutes': [],
+                })}
+            elif key == 'osd_map':
+                return {'osds': [
+                    {'osd': 0, 'up': 1, 'in': 1},
+                    {'osd': 1, 'up': 1, 'in': 1},
+                ]}
+            elif key == 'pg_summary':
+                return {'by_pool': {
+                    '1': {'active+clean': 128},
+                    '2': {'active+clean': 64},
+                }}
+            return {}
+        mock_get.side_effect = _get
+
+        with with_host(cephadm_module, 'test'):
+            with with_host(cephadm_module, 'test2'):
+                with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=2)), status_running=True):
+                    assert wait(cephadm_module, cephadm_module.upgrade_start(
+                        'image_id', None)) == 'Initiating upgrade to image_id'
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @mock.patch("cephadm.CephadmOrchestrator.get")
+    def test_upgrade_ignores_muted_health_checks(self, mock_get, cephadm_module: CephadmOrchestrator):
+        """Muted health checks should not block the upgrade."""
+        cephadm_module.upgrade_preflight_checks = True
+
+        def _get(key):
+            if key == 'health':
+                return {'json': json.dumps({
+                    'status': 'HEALTH_WARN',
+                    'checks': {
+                        'TOO_FEW_PGS': {
+                            'severity': 'HEALTH_WARN',
+                            'summary': {'message': 'too few PGs per OSD'},
+                        }
+                    },
+                    'mutes': [{'code': 'TOO_FEW_PGS'}],
+                })}
+            elif key == 'osd_map':
+                return {'osds': [{'osd': 0, 'up': 1, 'in': 1}]}
+            elif key == 'pg_summary':
+                return {'by_pool': {'1': {'active+clean': 32}}}
+            return {}
+        mock_get.side_effect = _get
+
+        with with_host(cephadm_module, 'test'):
+            with with_host(cephadm_module, 'test2'):
+                with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=2)), status_running=True):
+                    assert wait(cephadm_module, cephadm_module.upgrade_start(
+                        'image_id', None)) == 'Initiating upgrade to image_id'

@@ -78,6 +78,36 @@ online and that your cluster is healthy by running the following command:
 
    ceph -s
 
+
+Preflight Checks
+----------------
+
+An optional ``upgrade_preflight_checks`` flag can be enabled to automatically
+validate cluster health before starting an upgrade. When enabled, ``ceph orch
+upgrade start`` will fail immediately if:
+
+* Cluster health is not ``HEALTH_OK`` (ignoring muted checks)
+* Any OSD is not ``up+in``
+* Any PG is in a state other than exactly ``active+clean``
+
+To enable preflight checks:
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/cephadm/upgrade_preflight_checks true
+
+When preflight checks block an upgrade, the error message includes details
+about which checks failed and instructions to override:
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/cephadm/upgrade_preflight_checks false
+
+.. note::
+
+   This option is disabled by default. Muted health warnings (via
+   ``ceph health mute``) are ignored by the preflight checks.
+
 To upgrade to a specific release, run a command of the following form:
 
 .. prompt:: bash #
