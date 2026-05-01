@@ -1,0 +1,159 @@
+#!/usr/bin/env bash
+
+source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
+
+function run() {
+    local dir=$1
+    shift
+
+    export CEPH_MON_A="127.0.0.1:7159" # git grep '\<7159\>' : there must be only one
+    export CEPH_MON_B="127.0.0.1:7160" # git grep '\<7160\>' : there must be only one
+    export CEPH_MON_C="127.0.0.1:7161" # git grep '\<7161\>' : there must be only one
+    export CEPH_MON="$CEPH_MON_A,$CEPH_MON_B,$CEPH_MON_C"
+    export CEPH_ARGS
+    CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
+    CEPH_ARGS+="--mon-host=$CEPH_MON "
+    #
+    # Disable auto-class, so we can inject device class manually below
+    #
+    CEPH_ARGS+="--osd-class-update-on-start=false "
+
+    local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
+    for func in $funcs ; do
+        setup $dir || return 1
+        $func $dir || return 1
+        teardown $dir || return 1
+    done
+}
+
+# Test create-stretch-replicated fails when insufficient number of zones, hosts, and osds
+function TEST_stretch_replicated() {
+    local dir=$1
+    run_mon $dir a --public-addr=$CEPH_MON_A || return 1
+    run_mon $dir b --public-addr=$CEPH_MON_B || return 1
+    run_mon $dir c --public-addr=$CEPH_MON_C || return 1
+    run_osd $dir 0 || return 1
+    run_osd $dir 1 || return 1
+    run_osd $dir 2 || return 1
+    run_osd $dir 3 || return 1
+
+    ceph osd crush add-bucket dc1 datacenter
+    ceph osd crush add-bucket dc2 datacenter
+    ceph osd crush move dc1 root=default
+    ceph osd crush move dc2 root=default
+
+    ceph osd crush rule create-stretch-replicated 2>&1 | grep "Error EINVAL: zone dc1 has only 0 items of type host" || return 1
+
+    ceph osd crush add-bucket host1 host
+    ceph osd crush move host1 datacenter=dc1
+    ceph osd crush rule create-stretch-replicated 2>&1 | grep "Error EINVAL: zone dc1 has only 1 items of type host" || return 1
+
+    ceph osd crush add-bucket host2 host
+    ceph osd crush move host2 datacenter=dc1
+    ceph osd crush rule create-stretch-replicated 2>&1 | grep "Error EINVAL: zone dc1 does not have 2 hosts with at least one OSD" || return 1
+
+    ceph osd crush set osd.0 1.0 host=host1
+    ceph osd crush rule create-stretch-replicated 2>&1 | grep "Error EINVAL: zone dc1 does not have 2 hosts with at least one OSD" || return 1
+
+    ceph osd crush set osd.1 1.0 host=host2
+    ceph osd crush rule create-stretch-replicated 2>&1 | grep "Error EINVAL: zone dc2 has only 0 items of type host" || return 1
+
+    ceph osd crush add-bucket host3 host
+    ceph osd crush move host3 datacenter=dc2
+    ceph osd crush rule create-stretch-replicated 2>&1 | grep "Error EINVAL: zone dc2 has only 1 items of type host" || return 1
+
+    ceph osd crush add-bucket host4 host
+    ceph osd crush move host4 datacenter=dc2
+    ceph osd crush rule create-stretch-replicated 2>&1 | grep "Error EINVAL: zone dc2 does not have 2 hosts with at least one OSD" || return 1
+
+
+    ceph osd crush set osd.2 1.0 host=host3
+    ceph osd crush rule create-stretch-replicated 2>&1 | grep "Error EINVAL: zone dc2 does not have 2 hosts with at least one OSD" || return 1
+
+    ceph osd crush set osd.3 1.0 host=host4
+
+    ceph osd crush rule create-stretch-replicated || return 1
+
+    ceph osd crush rule dump stretch_replica_rule | jq '.steps[1].op' | grep "choose_firstn" || return 1
+    ceph osd crush rule dump stretch_replica_rule | jq '.steps[1].num' | grep "0" || return 1
+    ceph osd crush rule dump stretch_replica_rule | jq '.steps[1].type' | grep "datacenter" || return 1
+
+    ceph osd crush rule dump stretch_replica_rule | jq '.steps[2].op' | grep "chooseleaf_firstn" || return 1
+    ceph osd crush rule dump stretch_replica_rule | jq '.steps[2].num' | grep "2" || return 1
+    ceph osd crush rule dump stretch_replica_rule | jq '.steps[2].type' | grep "host" || return 1
+}
+
+# Test create-erasure fails when insufficient number of zones, hosts, and osds
+function TEST_stretch_ec() {
+    local dir=$1
+    run_mon $dir a --public-addr=$CEPH_MON_A || return 1
+    run_mon $dir b --public-addr=$CEPH_MON_B || return 1
+    run_mon $dir c --public-addr=$CEPH_MON_C || return 1
+    run_osd $dir 0 || return 1
+    run_osd $dir 1 || return 1
+    run_osd $dir 2 || return 1
+    run_osd $dir 3 || return 1
+    run_osd $dir 4 || return 1
+    run_osd $dir 5 || return 1
+
+    ceph osd crush add-bucket dc1 datacenter
+    ceph osd crush add-bucket dc2 datacenter
+    ceph osd crush move dc1 root=default
+    ceph osd crush move dc2 root=default
+
+    ceph osd erasure-code-profile set stretch_ec_profile plugin=jerasure k=2 m=1 crush-num-osd-failure-domains=2
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc1 has only 0 items of type host" || return 1
+
+    ceph osd crush add-bucket host1 host
+    ceph osd crush move host1 datacenter=dc1
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc1 has only 1 items of type host" || return 1
+
+    ceph osd crush add-bucket host2 host
+    ceph osd crush move host2 datacenter=dc1
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc1 has only 2 items of type host" || return 1
+
+    ceph osd crush add-bucket host3 host
+    ceph osd crush move host3 datacenter=dc1
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc1 does not have 3 hosts with at least one OSD" || return 1
+
+    ceph osd crush set osd.0 1.0 host=host1
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc1 does not have 3 hosts with at least one OSD" || return 1
+
+    ceph osd crush set osd.1 1.0 host=host2
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc1 does not have 3 hosts with at least one OSD" || return 1
+
+    ceph osd crush set osd.2 1.0 host=host3
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc2 has only 0 items of type host" || return 1
+
+    ceph osd crush add-bucket host4 host
+    ceph osd crush move host4 datacenter=dc2
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc2 has only 1 items of type host" || return 1
+
+    ceph osd crush add-bucket host5 host
+    ceph osd crush move host5 datacenter=dc2
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc2 has only 2 items of type host" || return 1
+
+    ceph osd crush add-bucket host6 host
+    ceph osd crush move host6 datacenter=dc2
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc2 does not have 3 hosts with at least one OSD" || return 1
+
+    ceph osd crush set osd.3 1.0 host=host4
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc2 does not have 3 hosts with at least one OSD" || return 1
+
+    ceph osd crush set osd.4 1.0 host=host5
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2 2>&1 | grep "Error EINVAL: zone dc2 does not have 3 hosts with at least one OSD" || return 1
+
+    ceph osd crush set osd.5 1.0 host=host6
+
+    ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2 || return 1
+
+    ceph osd crush rule dump stretch_erasurecode_rule | jq '.steps[3].op' | grep "choose_firstn" || return 1
+    ceph osd crush rule dump stretch_erasurecode_rule | jq '.steps[3].num' | grep "0" || return 1
+    ceph osd crush rule dump stretch_erasurecode_rule | jq '.steps[3].type' | grep "datacenter" || return 1
+
+    ceph osd crush rule dump stretch_erasurecode_rule | jq '.steps[4].op' | grep "chooseleaf_indep" || return 1
+    ceph osd crush rule dump stretch_erasurecode_rule | jq '.steps[4].num' | grep "3" || return 1
+    ceph osd crush rule dump stretch_erasurecode_rule | jq '.steps[4].type' | grep "host" || return 1
+}
+
+main crush-stretch "$@"
