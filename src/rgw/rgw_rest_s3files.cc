@@ -221,10 +221,16 @@ std::vector<std::string_view> split_path(std::string_view path) {
 // Strip the optional ARN form on a Smithy ResourceId / FileSystemId
 // / AccessPointId path component, returning the bare server-assigned
 // id. ARNs always end with the bare id after the last slash.
+//
+// Boto3 substitutes ARN values into non-greedy `{fileSystemId}` URL
+// labels with full %-encoding (`:` -> `%3A`, `/` -> `%2F`), so the
+// path component arrives URL-encoded. URL-decode first, then take
+// the tail after the final `/`.
 std::string strip_arn(std::string_view in) {
-  auto pos = in.rfind('/');
-  if (pos == std::string_view::npos) return std::string(in);
-  return std::string(in.substr(pos + 1));
+  std::string decoded = url_decode(in);
+  auto pos = decoded.rfind('/');
+  if (pos == std::string::npos) return decoded;
+  return decoded.substr(pos + 1);
 }
 
 // ---- account / owner -----------------------------------------
