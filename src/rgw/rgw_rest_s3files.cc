@@ -416,7 +416,7 @@ int RGWCreateFileSystem::init_processing(optional_yield y) {
 
   // Body was pre-read in RGWRESTMgr_S3Files::get_handler so the
   // sigv4 PayloadHash arg is set before authorize() runs.
-  const ceph::bufferlist& body = body_;
+  ceph::bufferlist& body = body_;
   JSONParser parser;
   if (!parser.parse(body.c_str(), body.length())) {
     err_ = StoreError{
@@ -652,7 +652,7 @@ int RGWPutFileSystemPolicy::init_processing(optional_yield y) {
   s->format = RGWFormat::JSON;
   // Body was pre-read in RGWRESTMgr_S3Files::get_handler so the
   // sigv4 PayloadHash arg is set before authorize() runs.
-  const ceph::bufferlist& body = body_;
+  ceph::bufferlist& body = body_;
   JSONParser parser;
   if (!parser.parse(body.c_str(), body.length())) {
     err_ = StoreError{
@@ -786,7 +786,7 @@ int RGWPutSyncConfig::init_processing(optional_yield y) {
   s->format = RGWFormat::JSON;
   // Body was pre-read in RGWRESTMgr_S3Files::get_handler so the
   // sigv4 PayloadHash arg is set before authorize() runs.
-  const ceph::bufferlist& body = body_;
+  ceph::bufferlist& body = body_;
   JSONParser parser;
   if (!parser.parse(body.c_str(), body.length())) {
     err_ = StoreError{
@@ -892,7 +892,7 @@ int RGWCreateAccessPoint::init_processing(optional_yield y) {
   s->format = RGWFormat::JSON;
   // Body was pre-read in RGWRESTMgr_S3Files::get_handler so the
   // sigv4 PayloadHash arg is set before authorize() runs.
-  const ceph::bufferlist& body = body_;
+  ceph::bufferlist& body = body_;
   JSONParser parser;
   if (!parser.parse(body.c_str(), body.length())) {
     err_ = StoreError{
@@ -1120,7 +1120,7 @@ int RGWCreateMountTarget::init_processing(optional_yield y) {
   s->format = RGWFormat::JSON;
   // Body was pre-read in RGWRESTMgr_S3Files::get_handler so the
   // sigv4 PayloadHash arg is set before authorize() runs.
-  const ceph::bufferlist& body = body_;
+  ceph::bufferlist& body = body_;
   JSONParser parser;
   if (!parser.parse(body.c_str(), body.length())) {
     err_ = StoreError{
@@ -1304,7 +1304,7 @@ int RGWUpdateMountTarget::init_processing(optional_yield y) {
   s->format = RGWFormat::JSON;
   // Body was pre-read in RGWRESTMgr_S3Files::get_handler so the
   // sigv4 PayloadHash arg is set before authorize() runs.
-  const ceph::bufferlist& body = body_;
+  ceph::bufferlist& body = body_;
   JSONParser parser;
   if (!parser.parse(body.c_str(), body.length())) {
     err_ = StoreError{
@@ -1457,7 +1457,7 @@ int RGWTagResource::init_processing(optional_yield y) {
   s->format = RGWFormat::JSON;
   // Body was pre-read in RGWRESTMgr_S3Files::get_handler so the
   // sigv4 PayloadHash arg is set before authorize() runs.
-  const ceph::bufferlist& body = body_;
+  ceph::bufferlist& body = body_;
   JSONParser parser;
   if (!parser.parse(body.c_str(), body.length())) {
     err_ = StoreError{
