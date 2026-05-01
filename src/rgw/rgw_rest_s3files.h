@@ -26,9 +26,10 @@
 //   /mount-targets
 //   /resource-tags
 //
-// This skeleton wires the manager and dialect (RGW_REST_S3FILES)
-// through to the request pipeline. Per-op handlers land in
-// follow-on commits and use rgw::file_state::Store as the data
+// Per-op handlers are wired in opto the framework via op_put /
+// op_get / op_post / op_delete on RGWHandler_REST_S3Files. Each
+// dispatches by HTTP method + URI path to a concrete RGWOp
+// subclass that interacts with the rgw::file_state::Store data
 // layer.
 
 #pragma once
@@ -37,7 +38,25 @@
 #include "rgw_rest.h"
 #include "rgw_sal_fwd.h"
 
+#include "file_state/store.h"
+
 class DoutPrefixProvider;
+
+namespace rgw::s3files {
+
+// Process-wide default Store used by the REST handlers.
+//
+// v1 returns a singleton MemoryStore; FdbStore replaces this
+// once PR ceph/ceph#65535 lands and rgw_s3files_fdb_cluster_file
+// is configured. Tests may swap the store before init via
+// set_default_store().
+rgw::file_state::Store& default_store();
+
+// Set the default Store. Intended for tests; not thread-safe
+// against concurrent default_store() calls.
+void set_default_store(rgw::file_state::Store* store);
+
+}  // namespace rgw::s3files
 
 class RGWHandler_REST_S3Files : public RGWHandler_REST {
   const rgw::auth::StrategyRegistry& auth_registry;
@@ -55,10 +74,11 @@ class RGWHandler_REST_S3Files : public RGWHandler_REST {
   int authorize(const DoutPrefixProvider* dpp, optional_yield y) override;
   int postauth_init(optional_yield) override { return 0; }
 
-  // Per-op handlers are wired in subsequent commits. The base
-  // class returns nullptr by default, which yields a 405 / 404
-  // response for any method on any path — matching "API enabled
-  // but no operations registered yet".
+  // Per-method dispatch by URI path. Methods inspect
+  // s->info.request_uri (relative to the registered prefix) and
+  // return the matching RGWOp, or nullptr to fall through to
+  // the framework's default 405/404 handling.
+  RGWOp* op_put() override;
 };
 
 class RGWRESTMgr_S3Files : public RGWRESTMgr {
