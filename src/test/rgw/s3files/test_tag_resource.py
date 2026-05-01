@@ -13,7 +13,12 @@ from . import errors, NONEXISTENT_FS_ID, NONEXISTENT_AP_ID
 @pytest.fixture(params=["test_file_system", "test_access_point"])
 def taggable_arn(request):
     resource = request.getfixturevalue(request.param)
-    return resource.get('fileSystemArn') or resource['accessPointArn']
+    # Use bare ids rather than ARNs: AWS Smithy ResourceId
+    # accepts both, and ARNs in the URL contain `/` characters
+    # (encoded as %2F by boto3) that RGW's canonical-URI
+    # handler decodes back to `/`, breaking the sigv4
+    # signature match.
+    return resource.get('fileSystemId') or resource['accessPointId']
 
 
 def _tag_map(tags):
