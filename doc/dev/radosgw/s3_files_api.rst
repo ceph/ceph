@@ -838,6 +838,199 @@ Coordination
   updates pulled from ``aws/api-models-aws`` per the workflow in
   ``src/rgw/spec/aws/README.md``.
 
+Conformance test strategy
+=========================
+
+The boto3 + pytest suite under ``src/test/rgw/s3files/`` exists
+to keep the implementation honest against the vendored Smithy
+model. It runs in two modes against the same code, distinguished
+by an environment variable, and three orthogonal pytest markers
+that describe what each test exercises rather than what target
+it expects.
+
+Run modes
+---------
+
+* ``S3FILES_TESTS_MODE=rgw`` (default): tests assert both the
+  Smithy-modeled exception class and the RGW-defined
+  ``errorCode`` string from ``src/test/rgw/s3files/errors.py``.
+* ``S3FILES_TESTS_MODE=aws``: tests assert only the typed
+  exception. The Smithy spec types ``errorCode`` as a non-empty
+  string but doesn't fix the value — AWS does not publish
+  theirs, so the value-level asserts cannot be portable.
+
+The mode toggle lives in ``assert_errorcode()`` in
+``src/test/rgw/s3files/__init__.py``; tests pass an expected
+errorCode (or set of acceptable errorCodes) and the helper
+no-ops the value check in AWS mode.
+
+Pytest markers
+--------------
+
+* ``conformance`` — per-op AWS-shape tests. The Smithy model is
+  the contract; assertions check shape, errors, and
+  spec-defined behavior.
+* ``divergence`` — exercises an intentional Ceph deviation. Tests
+  in ``test_ceph_divergences.py`` carry only this mark; tests
+  that *use* a divergence-dependent fixture
+  (e.g. ``test_subnet_id`` carrying a Ceph zone-id rather than an
+  EC2 subnet-id) carry both ``conformance`` and ``divergence``.
+* ``read_after_write`` — multi-op state-transition tests across
+  a sequence of mutations and reads, catching persistence
+  failures that single-op shape conformance alone would miss.
+* ``smoke`` — endpoint reachability / boto3 version sanity.
+
+The matrix that matters in practice:
+
+* Full local suite: ``pytest`` (no mark filter) — every test runs.
+* AWS-portable subset: ``S3FILES_TESTS_MODE=aws pytest -m
+  'conformance and not divergence'`` — drops Ceph-specific
+  tests AND skips RGW-defined errorCode value checks.
+
+Per-op file conventions
+-----------------------
+
+Each operation has a single ``test_<op_name>.py`` file. Inside,
+tests are grouped under five comment-banner sections in this
+order:
+
+1. *positive* — minimum valid request, optional fields,
+   idempotency
+2. *validation* — Smithy ``@required`` / ``@length`` /
+   ``@pattern`` / ``@range`` violations
+3. *not-found* — typed ``ResourceNotFoundException`` per
+   missing resource
+4. *conflict* — typed ``ConflictException`` per Smithy-declared
+   conflict
+5. *(optional)* per-op extras (e.g., pagination on list ops,
+   force-deletion on delete ops)
+
+Positive tests round-trip every Smithy-modeled output member.
+A test that creates a resource re-Gets it and value-compares
+the create response against the Get response field-for-field;
+list ops compare each entry against the per-id Get response.
+ARNs are matched against their Smithy ``@pattern`` regex.
+
+Tests that exercise a Smithy trait that boto3's client
+validator already enforces (``@required`` on a missing field,
+``@length`` on an empty list, ``@pattern`` on a malformed
+string, ``@range`` on an out-of-bounds integer) accept either
+``ValidationException`` (server-side) or ``ParamValidationError``
+(client-side) via the ``validation_excs()`` helper. The
+contract is enforced regardless of which side enforces it; a
+future raw-HTTP test layer will exercise the server-side path
+independently of boto3.
+
+Audit log
+---------
+
+This section captures past audit waves so a future audit can
+diff against the current state and pick up where the previous
+one stopped.
+
+**2026-05 audit and remediation.** Independent review of the
+suite asked two questions: *did we weaken any test to make RGW
+pass*, and *would the same suite pass against real AWS S3 Files*.
+Findings:
+
+* The ``errorCode`` value asserts were RGW-specific and would
+  fail against AWS for ~40 tests.
+* ~26 mount-target tests depended on the Ceph
+  ``subnet-{zone_hex}`` reinterpretation of the ``subnetId``
+  field but were tagged only ``conformance``.
+* Many positive-path tests checked only field presence
+  (``'field' in resp``) rather than value-comparing against the
+  request input or against a follow-up Get.
+* Several Smithy-modeled errorCodes
+  (``INVALID_PREFIX``, ``INVALID_SYNC_RULES``,
+  ``INVALID_MAX_RESULTS``) had constants in ``errors.py`` but no
+  test asserted them.
+* No List op exercised pagination via ``nextToken``.
+* ``ListFileSystems(bucket=...)`` filter had no test.
+
+Remediation landed in five focused commits on
+``mmgaggle/wip-rgw-s3-files-api-design``:
+
+* ``2315331d80a`` — ``assert_errorcode()`` helper + AWS run mode;
+  ``missing_required_exc`` renamed to ``validation_excs`` with a
+  scope-accurate docstring.
+* ``608a86154c2`` — dual-mark Ceph subnet-divergence tests so the
+  AWS-portable subset cleanly excludes them.
+* ``674d2f28f79`` — positive-path round-trip tightening: ARN
+  format checks, full posixUser / rootDirectory / 3-tag
+  round-trip via Get, list-entry-vs-Get value compare.
+* ``627683e9cc6`` — pagination + bucket-filter coverage; fixed
+  two real bugs surfaced by the new tests:
+
+  * ``MemoryStore::list_*`` ignored ``ListOptions`` entirely
+    (every call returned every entry). Fixed via a generic
+    ``apply_pagination()`` helper.
+  * RGW capped ``maxResults`` at 1000 for ``ListFileSystems``
+    and ``ListMountTargets``; the Smithy ``@range`` is 1..100
+    for both. Fixed.
+
+Passing counts after the wave: 123/123 conformance +
+read_after_write + divergence; 27/27 MemoryStore gtests;
+94/123 in AWS-portable mode (29 deselected by
+``not divergence``).
+
+Known gaps (deferred, not blocking the wave):
+
+* ``ServiceQuotaExceededException`` paths
+  (``TOO_MANY_FILE_SYSTEMS`` etc.) are untested; would require
+  setting a quota knob first.
+* ``ThrottlingException`` is untestable without rate-limit
+  injection.
+* ``DeleteFileSystem(forceDeletion=true)`` is in the Smithy
+  input shape but the handler doesn't honor it yet — feature
+  gap, not a test gap.
+* Server-side validation of Smithy traits that boto3 also
+  validates (``@required``, ``@length``, ``@pattern``,
+  ``@range``) is exercised only through boto3 today; a
+  raw-HTTP layer would let us assert the server-side path
+  independently. Same for the documentation-only
+  "tag key can't start with ``aws:``" rule, which Smithy
+  cannot express.
+
+Future audit waves should append a similar entry rather than
+edit prior ones — the goal is a forward-only diff so a reader
+can see what changed and when.
+
+How to add a conformance test
+-----------------------------
+
+For an existing operation:
+
+1. Open ``test_<op_name>.py``. Add the test under the matching
+   comment-banner section.
+2. For positive tests, value-compare the create/update response
+   against a follow-up Get (or, on List ops, against the per-id
+   Get) for every Smithy-modeled output member. ``'field' in
+   resp`` checks are not enough.
+3. For error tests, catch the typed exception declared on the
+   Smithy operation (``ValidationException``,
+   ``ResourceNotFoundException``, etc.). Use
+   ``assert_errorcode(exc.value, errors.X)`` rather than reading
+   ``errorCode`` directly so the test stays AWS-portable.
+4. For traits boto3 enforces client-side (``@required``,
+   ``@length``, ``@pattern``, ``@range``), wrap the assertion in
+   ``pytest.raises(validation_excs(s3files_client))`` so the
+   test passes whether the violation is caught client- or
+   server-side.
+5. If the test depends on a Ceph-specific fixture
+   (``test_subnet_id``, ``test_mount_target``), add
+   ``@pytest.mark.divergence`` next to ``@pytest.mark.conformance``.
+6. Add or extend a ``read_after_write`` test if the new
+   operation touches state observable from a different op.
+
+For a new errorCode value:
+
+1. Add the constant to ``src/rgw/rgw_s3files_errors.h`` (the
+   C++ source of truth).
+2. Mirror it in ``src/test/rgw/s3files/errors.py``.
+3. Reference it in at least one test via
+   ``assert_errorcode(exc.value, errors.NEW_CODE)``.
+
 Open questions
 ==============
 
