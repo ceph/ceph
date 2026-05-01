@@ -807,6 +807,42 @@ TEST_P(
   run_recovery_and_verify_callbacks(obj_name, recovery_target_shard, pattern_p1);
 }
 
+/**
+ * Test rollback after a sequence of blocked full-stripe and chunk writes.
+ * This is a similar scenario to the previous test, but we force the shard
+ * to do a sync, rather than async recovery at the end.
+ * Recreate for tracker https://tracker.ceph.com/issues/75962
+ */
+TEST_P(
+  TestECFailoverWithPeering,
+  RollbackAfterMixedBlockedWritesWithOSDFailure3
+) {
+  if (m < 2) {
+    GTEST_SKIP() << "RollbackAfterMixedBlockedWritesWithOSDFailure requires m >= 2";
+  }
+  set_config("osd_async_recovery_min_cost", "0");
+
+  const int blocked_shard = k + 1;
+  const int recovery_target_shard = 1;
+  const std::string obj_name = "test_mixed_blocked_writes";
+  const size_t full_stripe_size = stripe_unit * k;
+  const std::string pattern_p1(full_stripe_size, 'A');
+  mark_osd_down(recovery_target_shard);
+  create_and_write_verify(obj_name, pattern_p1);
+  mark_osd_up(recovery_target_shard);
+  create_and_write_verify("dummy", pattern_p1);
+  suspend_primary_to_osd(blocked_shard);
+  int result = write_attribute(obj_name, "test_attr", "value2", false);
+  ASSERT_EQ(-EINPROGRESS, result);
+  mark_osd_down(2);
+  unsuspend_primary_to_osd(blocked_shard);
+  event_loop->run_until_idle();
+
+  run_recovery_and_verify_callbacks(obj_name, recovery_target_shard, pattern_p1);
+
+  set_config("osd_async_recovery_min_cost", "100");
+}
+
 // ---------------------------------------------------------------------------
 // Instantiate TestECFailoverWithPeering with EC configurations
 // ---------------------------------------------------------------------------

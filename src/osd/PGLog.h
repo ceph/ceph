@@ -1165,18 +1165,26 @@ protected:
         last = i->version;
       }
     }
-    if (entries.empty()) {
+    if (!prior_version_opt) {
       ldpp_dout(dpp, 10) << __func__ << ": no non-ERROR entries" << dendl;
       return;
     }
 
+    bool object_not_in_store = false;
+
     ceph_assert(prior_version_opt);
-    const eversion_t prior_version = *prior_version_opt;
-    const eversion_t first_divergent_update = entries.begin()->version;
-    const eversion_t last_divergent_update = entries.rbegin()->version;
-    const bool object_not_in_store =
-      !missing.is_missing(hoid) &&
-      entries.rbegin()->is_delete();
+    eversion_t prior_version = *prior_version_opt;
+    eversion_t first_divergent_update;
+    eversion_t last_divergent_update;
+
+    if (!entries.empty()) {
+      first_divergent_update = entries.begin()->version;
+      last_divergent_update = entries.rbegin()->version;
+      object_not_in_store =
+        !missing.is_missing(hoid) &&
+        entries.rbegin()->is_delete();
+    }
+
     ldpp_dout(dpp, 10) << __func__ << ": hoid " << " object_not_in_store: "
                        << object_not_in_store << dendl;
     ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
@@ -1186,7 +1194,7 @@ protected:
 		       << dendl;
 
     auto objiter = log.objects.find(hoid);
-    if (objiter != log.objects.end() &&
+    if (objiter != log.objects.end() && !entries.empty() &&
 	objiter->second->version >= first_divergent_update) {
       /// Case 1)
       ldpp_dout(dpp, 10) << __func__ << ": more recent entry found: "
@@ -1226,7 +1234,7 @@ protected:
 
     ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
 		       <<" has no more recent entries in log" << dendl;
-    if (prior_version == eversion_t() || entries.front().is_clone()) {
+    if (prior_version == eversion_t() || (!entries.empty() && entries.front().is_clone())) {
       /// Case 2)
       ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
 			 << " prior_version or op type indicates creation,"

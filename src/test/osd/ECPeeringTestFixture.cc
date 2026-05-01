@@ -674,8 +674,28 @@ void ECPeeringTestFixture::run_parallel_recovery_and_verify_callbacks(
 
       ASSERT_EQ(target_missing_item, missing_item) << "Missing on shard and primary should match";
 
-
-      std::cout << "  OSD " << target_osd << " is a peer and has object " << obj_names[i] << " in peer_missing" << std::endl;
+      // Read the OI directly from the primary's store to get the authoritative version
+      // This avoids relying on potentially stale cached data in the OBC
+      ObjectStore::CollectionHandle primary_ch = chs[primary_shard];
+      ASSERT_TRUE(primary_ch) << "Primary shard " << primary_shard << " must have a valid collection handle";
+      
+      ghobject_t primary_ghoid(hoid, ghobject_t::NO_GEN, shard_id_t(primary_shard));
+      ceph::buffer::ptr oi_ptr;
+      int r = store->getattr(primary_ch, primary_ghoid, OI_ATTR, oi_ptr);
+      ASSERT_GE(r, 0) << "Failed to read OI_ATTR from primary store for " << obj_names[i];
+      
+      bufferlist oi_bl;
+      oi_bl.append(oi_ptr);
+      object_info_t oi;
+      auto p = oi_bl.cbegin();
+      oi.decode(p);
+      
+      std::cout << "  OSD " << target_osd << " is a peer and has object " << obj_names[i]
+                << " in peer_missing (OI version from primary store: " << oi.version << ")" << std::endl;
+      
+      // Verify the missing item's need version matches what we read from the store
+      ASSERT_EQ(missing_item.need, oi.version)
+        << "Missing item need version should match OI version from primary store for " << obj_names[i];
     }
 
     missing_items.push_back(missing_item);
