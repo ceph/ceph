@@ -178,6 +178,67 @@ void encode_tags(ceph::Formatter* f, const std::vector<Tag>& tags) {
   f->close_section();
 }
 
+void encode_sync_config(ceph::Formatter* f, const SyncConfig& cfg) {
+  encode_json("latestVersionNumber", cfg.latest_version_number, f);
+  f->open_array_section("importDataRules");
+  for (const auto& r : cfg.import_rules) {
+    f->open_object_section("");
+    encode_json("prefix",       r.prefix,         f);
+    encode_json("trigger",      r.trigger,        f);
+    encode_json("sizeLessThan", r.size_less_than, f);
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("expirationDataRules");
+  for (const auto& r : cfg.expiration_rules) {
+    f->open_object_section("");
+    encode_json("daysAfterLastAccess", r.days_after_last_access, f);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+bool parse_sync_config(JSONObj* obj, SyncConfig& cfg, bool& has_version) {
+  has_version = false;
+  if (!obj) return false;
+  if (auto* v = obj->find_obj("latestVersionNumber")) {
+    try {
+      cfg.latest_version_number = std::stoll(v->get_data());
+      has_version = true;
+    } catch (...) {
+      return false;
+    }
+  }
+  if (auto* arr = obj->find_obj("importDataRules");
+      arr && arr->is_array()) {
+    for (const auto& es : arr->get_array_elements()) {
+      JSONParser p;
+      if (!p.parse(es.c_str(), es.size())) return false;
+      ImportDataRule r;
+      r.prefix = json_string(&p, "prefix");
+      r.trigger = json_string(&p, "trigger");
+      try {
+        r.size_less_than = std::stoll(json_string(&p, "sizeLessThan"));
+      } catch (...) { return false; }
+      cfg.import_rules.push_back(std::move(r));
+    }
+  }
+  if (auto* arr = obj->find_obj("expirationDataRules");
+      arr && arr->is_array()) {
+    for (const auto& es : arr->get_array_elements()) {
+      JSONParser p;
+      if (!p.parse(es.c_str(), es.size())) return false;
+      ExpirationDataRule r;
+      try {
+        r.days_after_last_access = std::stoi(
+            json_string(&p, "daysAfterLastAccess"));
+      } catch (...) { return false; }
+      cfg.expiration_rules.push_back(std::move(r));
+    }
+  }
+  return true;
+}
+
 void encode_file_system(ceph::Formatter* f, const FileSystemView& fs) {
   encode_json("fileSystemId",  fs.spec.id,                              f);
   encode_json("fileSystemArn", fs.spec.arn,                             f);
@@ -442,6 +503,244 @@ void RGWDeleteFileSystem::send_response() {
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+// PutFileSystemPolicy — PUT /file-systems/{id}/policy
+class RGWPutFileSystemPolicy : public RGWOp {
+ public:
+  explicit RGWPutFileSystemPolicy(std::string fs_id)
+    : fs_id_(std::move(fs_id)) {}
+
+  int init_processing(optional_yield y) override;
+  int verify_permission(optional_yield y) override { return 0; }
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "put_file_system_policy"; }
+  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+
+ private:
+  std::string fs_id_;
+  std::string policy_;
+  std::optional<StoreError> err_;
+};
+
+int RGWPutFileSystemPolicy::init_processing(optional_yield y) {
+  s->format = RGWFormat::JSON;
+  const auto max = s->cct->_conf->rgw_max_put_param_size;
+  auto [rc, body] = rgw_rest_read_all_input(s, max);
+  if (rc < 0) return rc;
+  JSONParser parser;
+  if (!parser.parse(body.c_str(), body.length())) {
+    err_ = StoreError{
+        .kind = StoreError::Kind::InvalidArgument,
+        .error_code = std::string(ERR_INVALID_POLICY_DOCUMENT),
+        .message = "request body is not valid JSON",
+    };
+    return -EINVAL;
+  }
+  policy_ = json_string(&parser, "policy");
+  return 0;
+}
+
+void RGWPutFileSystemPolicy::execute(optional_yield y) {
+  if (err_) { op_ret = -EINVAL; return; }
+  auto r = rgw::s3files::default_store().put_file_system_policy(
+      current_owner_account_id(s), strip_arn(fs_id_), policy_);
+  if (!ok(r)) { err_ = error(r); op_ret = -ECANCELED; return; }
+  op_ret = 0;
+}
+
+void RGWPutFileSystemPolicy::send_response() {
+  if (err_) { send_store_error(s, this, *err_); return; }
+  s->err.http_ret = 200;
+  dump_errno(s, 200);
+  end_header(s, this, "application/json");
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+// GetFileSystemPolicy — GET /file-systems/{id}/policy
+class RGWGetFileSystemPolicy : public RGWOp {
+ public:
+  explicit RGWGetFileSystemPolicy(std::string fs_id)
+    : fs_id_(std::move(fs_id)) {}
+
+  int verify_permission(optional_yield y) override { return 0; }
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "get_file_system_policy"; }
+  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+
+ private:
+  std::string fs_id_;
+  std::string policy_;
+  std::optional<StoreError> err_;
+};
+
+void RGWGetFileSystemPolicy::execute(optional_yield y) {
+  s->format = RGWFormat::JSON;
+  auto r = rgw::s3files::default_store().get_file_system_policy(
+      current_owner_account_id(s), strip_arn(fs_id_));
+  if (!ok(r)) { err_ = error(r); op_ret = -ENOENT; return; }
+  policy_ = take(std::move(r));
+  op_ret = 0;
+}
+
+void RGWGetFileSystemPolicy::send_response() {
+  if (err_) { send_store_error(s, this, *err_); return; }
+  s->err.http_ret = 200;
+  dump_errno(s, 200);
+  end_header(s, this, "application/json");
+  s->formatter->open_object_section("");
+  encode_json("fileSystemId", strip_arn(fs_id_), s->formatter);
+  encode_json("policy",       policy_,           s->formatter);
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+// DeleteFileSystemPolicy — DELETE /file-systems/{id}/policy
+class RGWDeleteFileSystemPolicy : public RGWOp {
+ public:
+  explicit RGWDeleteFileSystemPolicy(std::string fs_id)
+    : fs_id_(std::move(fs_id)) {}
+
+  int verify_permission(optional_yield y) override { return 0; }
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "delete_file_system_policy"; }
+  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
+
+ private:
+  std::string fs_id_;
+  std::optional<StoreError> err_;
+};
+
+void RGWDeleteFileSystemPolicy::execute(optional_yield y) {
+  s->format = RGWFormat::JSON;
+  auto r = rgw::s3files::default_store().delete_file_system_policy(
+      current_owner_account_id(s), strip_arn(fs_id_));
+  if (!ok(r)) { err_ = error(r); op_ret = -ENOENT; return; }
+  op_ret = 0;
+}
+
+void RGWDeleteFileSystemPolicy::send_response() {
+  if (err_) { send_store_error(s, this, *err_); return; }
+  s->err.http_ret = 204;
+  dump_errno(s, 204);
+  end_header(s, this, "application/json");
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+// PutSynchronizationConfiguration — PUT /file-systems/{id}/synchronization-configuration
+class RGWPutSyncConfig : public RGWOp {
+ public:
+  explicit RGWPutSyncConfig(std::string fs_id) : fs_id_(std::move(fs_id)) {}
+
+  int init_processing(optional_yield y) override;
+  int verify_permission(optional_yield y) override { return 0; }
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "put_synchronization_configuration"; }
+  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+
+ private:
+  std::string fs_id_;
+  SyncConfig cfg_;
+  bool has_expected_version_ = false;
+  std::int64_t expected_version_ = 0;
+  std::optional<StoreError> err_;
+};
+
+int RGWPutSyncConfig::init_processing(optional_yield y) {
+  s->format = RGWFormat::JSON;
+  const auto max = s->cct->_conf->rgw_max_put_param_size;
+  auto [rc, body] = rgw_rest_read_all_input(s, max);
+  if (rc < 0) return rc;
+  JSONParser parser;
+  if (!parser.parse(body.c_str(), body.length())) {
+    err_ = StoreError{
+        .kind = StoreError::Kind::InvalidArgument,
+        .error_code = std::string(ERR_INVALID_POLICY_DOCUMENT),
+        .message = "request body is not valid JSON",
+    };
+    return -EINVAL;
+  }
+  if (!parse_sync_config(&parser, cfg_, has_expected_version_)) {
+    err_ = StoreError{
+        .kind = StoreError::Kind::InvalidArgument,
+        .error_code = std::string(ERR_INVALID_POLICY_DOCUMENT),
+        .message = "synchronization configuration body is malformed",
+    };
+    return -EINVAL;
+  }
+  if (has_expected_version_) {
+    expected_version_ = cfg_.latest_version_number;
+  }
+  return 0;
+}
+
+void RGWPutSyncConfig::execute(optional_yield y) {
+  if (err_) { op_ret = -EINVAL; return; }
+  std::optional<std::int64_t> ev;
+  if (has_expected_version_) ev = expected_version_;
+  auto r = rgw::s3files::default_store().put_synchronization_configuration(
+      current_owner_account_id(s), strip_arn(fs_id_), cfg_, ev);
+  if (!ok(r)) { err_ = error(r); op_ret = -ECANCELED; return; }
+  op_ret = 0;
+}
+
+void RGWPutSyncConfig::send_response() {
+  if (err_) { send_store_error(s, this, *err_); return; }
+  s->err.http_ret = 200;
+  dump_errno(s, 200);
+  end_header(s, this, "application/json");
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+// GetSynchronizationConfiguration — GET /file-systems/{id}/synchronization-configuration
+class RGWGetSyncConfig : public RGWOp {
+ public:
+  explicit RGWGetSyncConfig(std::string fs_id) : fs_id_(std::move(fs_id)) {}
+
+  int verify_permission(optional_yield y) override { return 0; }
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "get_synchronization_configuration"; }
+  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+
+ private:
+  std::string fs_id_;
+  std::optional<SyncConfig> cfg_;
+  std::optional<StoreError> err_;
+};
+
+void RGWGetSyncConfig::execute(optional_yield y) {
+  s->format = RGWFormat::JSON;
+  auto r = rgw::s3files::default_store().get_synchronization_configuration(
+      current_owner_account_id(s), strip_arn(fs_id_));
+  if (!ok(r)) { err_ = error(r); op_ret = -ENOENT; return; }
+  cfg_ = take(std::move(r));
+  op_ret = 0;
+}
+
+void RGWGetSyncConfig::send_response() {
+  if (err_) { send_store_error(s, this, *err_); return; }
+  s->err.http_ret = 200;
+  dump_errno(s, 200);
+  end_header(s, this, "application/json");
+  s->formatter->open_object_section("");
+  encode_sync_config(s->formatter, *cfg_);
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------- handler
@@ -463,13 +762,17 @@ RGWOp* RGWHandler_REST_S3Files::op_get() {
   const auto segs = split_path(trim_leading_slashes(s->info.request_uri));
   if (segs.empty()) return nullptr;
 
-  // /file-systems[/<id>[/policy|/synchronization-configuration]]
   if (segs[0] == "file-systems") {
     if (segs.size() == 1) return new RGWListFileSystems();
     if (segs.size() == 2) return new RGWGetFileSystem(std::string(segs[1]));
-    // /file-systems/<id>/policy and /synchronization-configuration
-    // are wired in follow-on commits.
+    if (segs.size() == 3 && segs[2] == "policy") {
+      return new RGWGetFileSystemPolicy(std::string(segs[1]));
+    }
+    if (segs.size() == 3 && segs[2] == "synchronization-configuration") {
+      return new RGWGetSyncConfig(std::string(segs[1]));
+    }
   }
+  // /access-points, /mount-targets, /resource-tags follow.
   return nullptr;
 }
 
@@ -477,12 +780,17 @@ RGWOp* RGWHandler_REST_S3Files::op_put() {
   const auto segs = split_path(trim_leading_slashes(s->info.request_uri));
   if (segs.empty()) return nullptr;
 
-  if (segs[0] == "file-systems" && segs.size() == 1) {
-    return new RGWCreateFileSystem();
+  if (segs[0] == "file-systems") {
+    if (segs.size() == 1) return new RGWCreateFileSystem();
+    if (segs.size() == 3 && segs[2] == "policy") {
+      return new RGWPutFileSystemPolicy(std::string(segs[1]));
+    }
+    if (segs.size() == 3 && segs[2] == "synchronization-configuration") {
+      return new RGWPutSyncConfig(std::string(segs[1]));
+    }
   }
-
-  // /access-points, /mount-targets, /file-systems/<id>/{policy,sync},
-  // /mount-targets/<id> (UpdateMountTarget) wire in follow-on commits.
+  // /access-points (CreateAccessPoint), /mount-targets (CreateMountTarget),
+  // /mount-targets/<id> (UpdateMountTarget) follow.
   return nullptr;
 }
 
@@ -497,7 +805,9 @@ RGWOp* RGWHandler_REST_S3Files::op_delete() {
 
   if (segs[0] == "file-systems") {
     if (segs.size() == 2) return new RGWDeleteFileSystem(std::string(segs[1]));
-    // /file-systems/<id>/policy → DeleteFileSystemPolicy: follow-on
+    if (segs.size() == 3 && segs[2] == "policy") {
+      return new RGWDeleteFileSystemPolicy(std::string(segs[1]));
+    }
   }
   // /access-points/<id>, /mount-targets/<id>, /resource-tags/<id>
   // also follow.
