@@ -111,14 +111,14 @@ void send_store_error(req_state* s, RGWOp* op, const StoreError& err) {
 
 // ---- JSON read helpers ----------------------------------------
 
-std::string json_string(const JSONObj* obj, std::string_view name) {
+std::string json_string(JSONObj* obj, std::string_view name) {
   if (!obj) return {};
   JSONObj* f = obj->find_obj(std::string(name));
   if (!f) return {};
   return f->get_data();
 }
 
-bool json_bool(const JSONObj* obj, std::string_view name) {
+bool json_bool(JSONObj* obj, std::string_view name) {
   if (!obj) return false;
   JSONObj* f = obj->find_obj(std::string(name));
   if (!f) return false;
