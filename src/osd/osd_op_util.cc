@@ -66,13 +66,24 @@ bool OpInfo::may_read_data() const {
   return check_rmw(CEPH_OSD_RMW_FLAG_READ_DATA);
 }
 
+bool OpInfo::may_read_data_for_ec() const
+{
+  return check_rmw(CEPH_OSD_RMW_FLAG_CLASS_READ_DATA);
+}
+
 void OpInfo::set_rmw_flags(int flags) {
   rmw_flags |= flags;
 }
 
 void OpInfo::set_read() { set_rmw_flags(CEPH_OSD_RMW_FLAG_READ); }
 void OpInfo::set_write() { set_rmw_flags(CEPH_OSD_RMW_FLAG_WRITE); }
-void OpInfo::set_class_read() { set_rmw_flags(CEPH_OSD_RMW_FLAG_CLASS_READ); }
+void OpInfo::set_class_read(const bool is_erasure) {
+  int flags = CEPH_OSD_RMW_FLAG_CLASS_READ;
+  if (is_erasure) {
+    flags |= CEPH_OSD_RMW_FLAG_CLASS_READ_DATA;
+  }
+  set_rmw_flags(flags); 
+}
 void OpInfo::set_class_write() { set_rmw_flags(CEPH_OSD_RMW_FLAG_CLASS_WRITE); }
 void OpInfo::set_pg_op() { set_rmw_flags(CEPH_OSD_RMW_FLAG_PGOP); }
 void OpInfo::set_cache() { set_rmw_flags(CEPH_OSD_RMW_FLAG_CACHE); }
@@ -202,8 +213,10 @@ int OpInfo::set_from_op(
 	is_write = flags & CLS_METHOD_WR;
         bool is_promote = flags & CLS_METHOD_PROMOTE;
 
-	if (is_read)
-	  set_class_read();
+	if (is_read) {
+	  const bool is_erasure = pool && pool->is_erasure();
+	  set_class_read(is_erasure);
+	}
 	if (is_write)
 	  set_class_write();
         if (is_promote)

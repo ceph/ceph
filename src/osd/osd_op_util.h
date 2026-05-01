@@ -48,6 +48,7 @@ public:
   bool check_rmw(int flag) const ;
   bool may_read() const;
   bool may_read_data() const;
+  bool may_read_data_for_ec() const;
   bool may_write() const;
   bool may_cache() const;
   bool rwordered_forced() const;
@@ -64,7 +65,7 @@ public:
   void set_read();
   void set_write();
   void set_cache();
-  void set_class_read();
+  void set_class_read(bool is_erasure);
   void set_class_write();
   void set_pg_op();
   void set_promote();
