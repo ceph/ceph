@@ -739,11 +739,11 @@ void RGWListFileSystems::execute(optional_yield y) {
   s->format = RGWFormat::JSON;
   ListOptions opts;
   if (!parse_max_results(s->info.args.get("maxResults"),
-                          opts.max_results, /*max=*/1000)) {
+                          opts.max_results, /*max=*/100)) {
     err_ = StoreError{
         .kind = StoreError::Kind::InvalidArgument,
         .error_code = std::string(ERR_INVALID_MAX_RESULTS),
-        .message = "maxResults must be in 1..1000",
+        .message = "maxResults must be in 1..100",
     };
     op_ret = -EINVAL;
     return;
@@ -1520,11 +1520,11 @@ void RGWListMountTargets::execute(optional_yield y) {
   s->format = RGWFormat::JSON;
   ListOptions opts;
   if (!parse_max_results(s->info.args.get("maxResults"),
-                          opts.max_results, /*max=*/1000)) {
+                          opts.max_results, /*max=*/100)) {
     err_ = StoreError{
         .kind = StoreError::Kind::InvalidArgument,
         .error_code = std::string(ERR_INVALID_MAX_RESULTS),
-        .message = "maxResults must be in 1..1000",
+        .message = "maxResults must be in 1..100",
     };
     op_ret = -EINVAL;
     return;

@@ -11,7 +11,7 @@ the calling account.
 
 import pytest
 
-from . import errors, assert_errorcode, NONEXISTENT_FS_ID
+from . import errors, assert_errorcode, validation_excs, NONEXISTENT_FS_ID
 
 
 @pytest.mark.conformance
@@ -44,6 +44,6 @@ def test_list_filtered_by_nonexistent_file_system(s3files_client):
 
 @pytest.mark.conformance
 def test_list_max_results_out_of_range(s3files_client):
-    """Smithy range is 1..100."""
-    with pytest.raises(s3files_client.exceptions.ValidationException):
+    """Smithy `@range` is 1..100. Either side may catch."""
+    with pytest.raises(validation_excs(s3files_client)):
         s3files_client.list_mount_targets(maxResults=10000)

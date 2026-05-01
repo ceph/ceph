@@ -163,12 +163,13 @@ def test_create_invalid_role_arn(s3files_client, bucket_arn):
 @pytest.mark.conformance
 def test_create_invalid_prefix(s3files_client, bucket_arn, shared_test_role):
     """prefix must match Smithy pattern ^(|.*/)$ — must end in '/'."""
-    with pytest.raises(s3files_client.exceptions.ValidationException):
+    with pytest.raises(s3files_client.exceptions.ValidationException) as exc:
         s3files_client.create_file_system(
             bucket=bucket_arn,
             roleArn=shared_test_role,
             prefix="data",  # missing trailing slash
         )
+    assert_errorcode(exc.value, errors.INVALID_PREFIX)
 
 
 # ---------------------------------------------------------------- not-found

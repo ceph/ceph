@@ -111,7 +111,7 @@ def test_put_too_many_expiration_rules_rejected(
     s3files_client, test_file_system
 ):
     """Smithy length 1..1 — exactly one expiration rule allowed."""
-    with pytest.raises(s3files_client.exceptions.ValidationException):
+    with pytest.raises(s3files_client.exceptions.ValidationException) as exc:
         s3files_client.put_synchronization_configuration(
             fileSystemId=test_file_system['fileSystemId'],
             importDataRules=_MIN_IMPORT_RULES,
@@ -120,12 +120,13 @@ def test_put_too_many_expiration_rules_rejected(
                 {"daysAfterLastAccess": 60},
             ],
         )
+    assert_errorcode(exc.value, errors.INVALID_SYNC_RULES)
 
 
 @pytest.mark.conformance
 def test_put_invalid_trigger_rejected(s3files_client, test_file_system):
     """ImportTrigger is an enum: ON_DIRECTORY_FIRST_ACCESS or ON_FILE_ACCESS."""
-    with pytest.raises(s3files_client.exceptions.ValidationException):
+    with pytest.raises(s3files_client.exceptions.ValidationException) as exc:
         s3files_client.put_synchronization_configuration(
             fileSystemId=test_file_system['fileSystemId'],
             importDataRules=[{
@@ -135,17 +136,19 @@ def test_put_invalid_trigger_rejected(s3files_client, test_file_system):
             }],
             expirationDataRules=_MIN_EXPIRATION_RULES,
         )
+    assert_errorcode(exc.value, errors.INVALID_SYNC_RULES)
 
 
 @pytest.mark.conformance
 def test_put_days_out_of_range(s3files_client, test_file_system):
     """daysAfterLastAccess range is 1..365."""
-    with pytest.raises(s3files_client.exceptions.ValidationException):
+    with pytest.raises(s3files_client.exceptions.ValidationException) as exc:
         s3files_client.put_synchronization_configuration(
             fileSystemId=test_file_system['fileSystemId'],
             importDataRules=_MIN_IMPORT_RULES,
             expirationDataRules=[{"daysAfterLastAccess": 1000}],
         )
+    assert_errorcode(exc.value, errors.INVALID_SYNC_RULES)
 
 
 @pytest.mark.conformance

@@ -59,8 +59,10 @@ def test_list_nonexistent_file_system(s3files_client):
 
 @pytest.mark.conformance
 def test_list_max_results_out_of_range(s3files_client, test_file_system):
-    """Smithy range is 1..1000."""
-    with pytest.raises(s3files_client.exceptions.ValidationException):
+    """Smithy `@range` is 1..1000. Either side may catch the
+    violation: boto3 enforces the trait client-side, RGW also
+    enforces server-side."""
+    with pytest.raises(validation_excs(s3files_client)):
         s3files_client.list_access_points(
             fileSystemId=test_file_system['fileSystemId'],
             maxResults=10000,

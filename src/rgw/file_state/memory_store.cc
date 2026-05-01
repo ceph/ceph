@@ -35,6 +35,38 @@ std::int64_t now_unix_seconds() {
       system_clock::now().time_since_epoch()).count();
 }
 
+// Apply ListOptions {max_results, next_token} to an already-collected
+// + sorted vector of items. Returns a PagedResult containing at most
+// `max_results` items, with `next_token` set to the id of the last
+// item in the page when more items remain.
+//
+// `id_of` extracts the sort key / token from an item; the same key
+// is used for ordering and for the next-token boundary, so callers
+// must hand in a vector already sorted ascending by id_of.
+template <typename T, typename IdFn>
+PagedResult<T> apply_pagination(
+    std::vector<T>&& sorted, const ListOptions& opts, IdFn id_of) {
+  PagedResult<T> out;
+  // start_after: skip past entries whose id_of(item) <= next_token.
+  auto it = sorted.begin();
+  if (!opts.next_token.empty()) {
+    it = std::upper_bound(
+        sorted.begin(), sorted.end(), opts.next_token,
+        [&](const std::string& tok, const T& item) {
+          return tok < id_of(item);
+        });
+  }
+  const std::int32_t cap = opts.max_results > 0 ? opts.max_results : 100;
+  for (; it != sorted.end() && static_cast<std::int32_t>(out.items.size()) < cap;
+       ++it) {
+    out.items.push_back(std::move(*it));
+  }
+  if (it != sorted.end() && !out.items.empty()) {
+    out.next_token = std::string(id_of(out.items.back()));
+  }
+  return out;
+}
+
 StoreError not_found(std::string_view code, std::string message) {
   return StoreError{
       .kind = StoreError::Kind::NotFound,
@@ -169,15 +201,18 @@ StoreResult<FileSystemView> MemoryStore::get_file_system(
 
 StoreResult<PagedResult<FileSystemView>> MemoryStore::list_file_systems(
     std::string_view account_id, const ListOptions& opts) {
-  (void)opts;  // pagination not implemented in MemoryStore
   std::lock_guard lock(mu_);
-  PagedResult<FileSystemView> out;
+  std::vector<FileSystemView> all;
   for (const auto& [_, rec] : file_systems_) {
     if (rec.spec.owner_account_id == account_id) {
-      out.items.push_back(FileSystemView{rec.spec, rec.status});
+      all.push_back(FileSystemView{rec.spec, rec.status});
     }
   }
-  return out;
+  std::sort(all.begin(), all.end(), [](const auto& a, const auto& b) {
+    return a.spec.id < b.spec.id;
+  });
+  return apply_pagination(std::move(all), opts,
+      [](const FileSystemView& v) { return v.spec.id; });
 }
 
 StoreResult<Unit> MemoryStore::delete_file_system(
@@ -380,7 +415,6 @@ StoreResult<AccessPointView> MemoryStore::get_access_point(
 StoreResult<PagedResult<AccessPointView>> MemoryStore::list_access_points(
     std::string_view account_id, std::string_view filesystem_id,
     const ListOptions& opts) {
-  (void)opts;
   std::lock_guard lock(mu_);
 
   // The parent FS must exist.
@@ -390,14 +424,18 @@ StoreResult<PagedResult<AccessPointView>> MemoryStore::list_access_points(
     return not_found(ERR_FILE_SYSTEM_NOT_FOUND, "file system not found");
   }
 
-  PagedResult<AccessPointView> out;
+  std::vector<AccessPointView> all;
   for (const auto& [_, rec] : access_points_) {
     if (rec.spec.parent_filesystem_id == filesystem_id &&
         rec.spec.owner_account_id == account_id) {
-      out.items.push_back(AccessPointView{rec.spec, rec.status});
+      all.push_back(AccessPointView{rec.spec, rec.status});
     }
   }
-  return out;
+  std::sort(all.begin(), all.end(), [](const auto& a, const auto& b) {
+    return a.spec.id < b.spec.id;
+  });
+  return apply_pagination(std::move(all), opts,
+      [](const AccessPointView& v) { return v.spec.id; });
 }
 
 StoreResult<Unit> MemoryStore::delete_access_point(
@@ -479,7 +517,6 @@ StoreResult<PagedResult<MountTargetView>> MemoryStore::list_mount_targets(
     std::optional<std::string_view> filesystem_id,
     std::optional<std::string_view> access_point_id,
     const ListOptions& opts) {
-  (void)opts;
   std::lock_guard lock(mu_);
 
   // Resolve the filter target. If filesystem_id is supplied, that FS
@@ -507,15 +544,19 @@ StoreResult<PagedResult<MountTargetView>> MemoryStore::list_mount_targets(
     required_fs_id = ap_it->second.spec.parent_filesystem_id;
   }
 
-  PagedResult<MountTargetView> out;
+  std::vector<MountTargetView> all;
   for (const auto& [_, rec] : mount_targets_) {
     if (rec.spec.owner_account_id != account_id) continue;
     if (required_fs_id && rec.spec.parent_filesystem_id != *required_fs_id) {
       continue;
     }
-    out.items.push_back(MountTargetView{rec.spec, rec.status});
+    all.push_back(MountTargetView{rec.spec, rec.status});
   }
-  return out;
+  std::sort(all.begin(), all.end(), [](const auto& a, const auto& b) {
+    return a.spec.id < b.spec.id;
+  });
+  return apply_pagination(std::move(all), opts,
+      [](const MountTargetView& v) { return v.spec.id; });
 }
 
 StoreResult<MountTargetView> MemoryStore::update_mount_target(
@@ -564,15 +605,17 @@ std::vector<Tag>* MemoryStore::tags_target(
 StoreResult<PagedResult<Tag>> MemoryStore::list_tags_for_resource(
     std::string_view account_id, std::string_view resource_id,
     const ListOptions& opts) {
-  (void)opts;
   std::lock_guard lock(mu_);
   std::vector<Tag>* tags = tags_target(account_id, resource_id);
   if (!tags) {
     return not_found(ERR_FILE_SYSTEM_NOT_FOUND, "resource not found");
   }
-  PagedResult<Tag> out;
-  out.items = *tags;
-  return out;
+  std::vector<Tag> all = *tags;
+  std::sort(all.begin(), all.end(), [](const Tag& a, const Tag& b) {
+    return a.key < b.key;
+  });
+  return apply_pagination(std::move(all), opts,
+      [](const Tag& t) { return t.key; });
 }
 
 StoreResult<Unit> MemoryStore::tag_resource(

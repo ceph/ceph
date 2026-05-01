@@ -11,7 +11,10 @@ parametrizes over both resource types.
 
 import pytest
 
-from . import errors, assert_errorcode, NONEXISTENT_FS_ID, NONEXISTENT_AP_ID
+from . import (
+    errors, assert_errorcode, validation_excs,
+    NONEXISTENT_FS_ID, NONEXISTENT_AP_ID,
+)
 
 
 @pytest.fixture(params=["test_file_system", "test_access_point"])
@@ -55,8 +58,8 @@ def test_list_tags_on_nonexistent(s3files_client, bogus_id):
 
 @pytest.mark.conformance
 def test_list_tags_max_results_out_of_range(s3files_client, taggable_arn):
-    """Smithy range is 1..50."""
-    with pytest.raises(s3files_client.exceptions.ValidationException):
+    """Smithy `@range` is 1..50. Either side may catch."""
+    with pytest.raises(validation_excs(s3files_client)):
         s3files_client.list_tags_for_resource(
             resourceId=taggable_arn,
             maxResults=10000,
