@@ -21,8 +21,9 @@ _SG_B = "sg-0000bbbb"
 @pytest.mark.conformance
 @pytest.mark.divergence  # uses test_mount_target (subnet-{zone_hex})
 def test_update_security_groups(s3files_client, test_mount_target):
-    """Update succeeds; the request shape is exercised. RGW stores
-    the new SG list on the spec but does not enforce it."""
+    """Update succeeds and the new SG list is observable on Get.
+    RGW stores the spec change but does not enforce SGs at the
+    data plane (see test_ceph_divergences.py)."""
     mt_id = test_mount_target['mountTargetId']
     s3files_client.update_mount_target(
         mountTargetId=mt_id,
@@ -30,6 +31,7 @@ def test_update_security_groups(s3files_client, test_mount_target):
     )
     got = s3files_client.get_mount_target(mountTargetId=mt_id)
     assert got['status'] in ('AVAILABLE', 'UPDATING')
+    assert set(got.get('securityGroups', [])) == {_SG_A, _SG_B}
 
 
 @pytest.mark.conformance

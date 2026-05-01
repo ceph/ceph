@@ -23,16 +23,18 @@ def test_list_includes_created(s3files_client, test_file_system):
 
 
 @pytest.mark.conformance
-def test_list_entries_have_required_fields(
-    s3files_client, test_file_system
-):
-    """Each list entry carries the same fields as GetFileSystem."""
+def test_list_entries_match_get(s3files_client, test_file_system):
+    """Each list entry has the same Smithy-modeled fields as the
+    corresponding Get response, with matching values. The
+    `FileSystemDescription` shape is shared between Get and List."""
     fs_id = test_file_system['fileSystemId']
-    resp = s3files_client.list_file_systems()
-    entry = next(
-        (fs for fs in resp['fileSystems'] if fs['fileSystemId'] == fs_id),
+    got = s3files_client.get_file_system(fileSystemId=fs_id)
+    listed = next(
+        (fs for fs in s3files_client.list_file_systems()['fileSystems']
+         if fs['fileSystemId'] == fs_id),
         None,
     )
-    assert entry is not None
-    for field in ('fileSystemArn', 'bucket', 'status', 'ownerId'):
-        assert field in entry, f"missing {field} in list entry: {entry}"
+    assert listed is not None
+    for field in ('fileSystemArn', 'bucket', 'roleArn',
+                  'status', 'ownerId', 'creationTime'):
+        assert listed.get(field) == got.get(field), field

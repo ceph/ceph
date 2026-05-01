@@ -7,9 +7,18 @@ InternalServerException, ResourceNotFoundException,
 ServiceQuotaExceededException, ValidationException.
 """
 
+import re
+
 import pytest
 
 from . import errors, assert_errorcode, validation_excs
+
+
+# Smithy: `^(arn:aws[-a-z]*:s3files:[0-9a-z-:]+:file-system/fs-[0-9a-f]{17,40})$`
+_FS_ARN_RE = re.compile(
+    r'^arn:aws[-a-z]*:s3files:[0-9a-z-:]+:file-system/fs-[0-9a-f]{17,40}$'
+)
+_FS_ID_RE = re.compile(r'^fs-[0-9a-f]{17,40}$')
 
 
 # ---------------------------------------------------------------- positive
@@ -17,49 +26,75 @@ from . import errors, assert_errorcode, validation_excs
 
 @pytest.mark.conformance
 def test_create_minimum(s3files_client, bucket_arn, shared_test_role):
-    """Minimum valid request: bucket + roleArn."""
+    """Minimum valid request: bucket + roleArn. The Smithy-declared
+    output shape is fully exercised: ids match the Smithy patterns,
+    the ARN encodes the id, and the new FS is observable via Get."""
     resp = s3files_client.create_file_system(
         bucket=bucket_arn,
         roleArn=shared_test_role,
     )
+    fs_id = resp['fileSystemId']
     try:
-        assert 'fileSystemId' in resp
-        assert 'fileSystemArn' in resp
+        assert _FS_ID_RE.match(fs_id), fs_id
+        assert _FS_ARN_RE.match(resp['fileSystemArn']), resp['fileSystemArn']
+        # ARN's resource component is separated from account by `:`
+        assert resp['fileSystemArn'].endswith(f":file-system/{fs_id}")
         assert resp['bucket'] == bucket_arn
         assert resp['roleArn'] == shared_test_role
         assert resp['status'] in ('CREATING', 'AVAILABLE')
+        assert 'creationTime' in resp
+        assert resp.get('ownerId'), resp
+        # Re-Get and value-compare every output member.
+        got = s3files_client.get_file_system(fileSystemId=fs_id)
+        for field in ('fileSystemId', 'fileSystemArn', 'bucket',
+                      'roleArn', 'ownerId', 'creationTime'):
+            assert got[field] == resp[field], field
     finally:
-        s3files_client.delete_file_system(fileSystemId=resp['fileSystemId'])
+        s3files_client.delete_file_system(fileSystemId=fs_id)
 
 
 @pytest.mark.conformance
 def test_create_with_prefix(s3files_client, bucket_arn, shared_test_role):
+    """prefix round-trips through both the create response and Get."""
     resp = s3files_client.create_file_system(
         bucket=bucket_arn,
         roleArn=shared_test_role,
         prefix="data/",
     )
+    fs_id = resp['fileSystemId']
     try:
         assert resp['prefix'] == "data/"
+        got = s3files_client.get_file_system(fileSystemId=fs_id)
+        assert got['prefix'] == "data/"
     finally:
-        s3files_client.delete_file_system(fileSystemId=resp['fileSystemId'])
+        s3files_client.delete_file_system(fileSystemId=fs_id)
 
 
 @pytest.mark.conformance
 def test_create_with_tags(s3files_client, bucket_arn, shared_test_role):
-    """tags are accepted; the `Name` tag drives the response `name`."""
+    """All tags round-trip via list_tags_for_resource. The `Name`
+    tag also drives the response `name` field."""
+    in_tags = [
+        {"key": "Name", "value": "test-fs"},
+        {"key": "env", "value": "ci"},
+        {"key": "tier", "value": "gold"},
+    ]
     resp = s3files_client.create_file_system(
         bucket=bucket_arn,
         roleArn=shared_test_role,
-        tags=[
-            {"key": "Name", "value": "test-fs"},
-            {"key": "env", "value": "ci"},
-        ],
+        tags=in_tags,
     )
     fs_id = resp['fileSystemId']
     try:
         got = s3files_client.get_file_system(fileSystemId=fs_id)
         assert got.get('name') == 'test-fs'
+        listed = s3files_client.list_tags_for_resource(resourceId=fs_id)
+        out = {t['key']: t['value'] for t in listed['tags']}
+        # Every input tag must appear with its supplied value.
+        for t in in_tags:
+            assert out.get(t['key']) == t['value'], (
+                f"tag {t['key']!r} not persisted: out={out}"
+            )
     finally:
         s3files_client.delete_file_system(fileSystemId=fs_id)
 

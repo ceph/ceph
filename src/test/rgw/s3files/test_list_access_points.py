@@ -21,12 +21,22 @@ def test_list_empty_for_new_file_system(s3files_client, test_file_system):
 
 
 @pytest.mark.conformance
-def test_list_includes_created(s3files_client, test_access_point):
+def test_list_entries_match_get(s3files_client, test_access_point):
+    """Each list entry carries the same `AccessPointDescription`
+    fields as the per-id Get response, with matching values."""
     fs_id = test_access_point['fileSystemId']
     ap_id = test_access_point['accessPointId']
-    resp = s3files_client.list_access_points(fileSystemId=fs_id)
-    ids = {ap['accessPointId'] for ap in resp['accessPoints']}
-    assert ap_id in ids
+    got = s3files_client.get_access_point(accessPointId=ap_id)
+    listed = next(
+        (ap for ap in s3files_client.list_access_points(
+            fileSystemId=fs_id,
+        )['accessPoints'] if ap['accessPointId'] == ap_id),
+        None,
+    )
+    assert listed is not None
+    for field in ('accessPointArn', 'fileSystemId',
+                  'status', 'ownerId'):
+        assert listed.get(field) == got.get(field), field
 
 
 @pytest.mark.conformance
