@@ -7,7 +7,7 @@ ValidationException.
 
 import pytest
 
-from . import errors, NONEXISTENT_MT_ID
+from . import errors, assert_errorcode, NONEXISTENT_MT_ID
 
 
 @pytest.mark.conformance
@@ -29,5 +29,4 @@ def test_get_nonexistent(s3files_client):
         s3files_client.exceptions.ResourceNotFoundException
     ) as exc:
         s3files_client.get_mount_target(mountTargetId=NONEXISTENT_MT_ID)
-    err = exc.value.response
-    assert err.get('errorCode') == errors.MOUNT_TARGET_NOT_FOUND, err
+    assert_errorcode(exc.value, errors.MOUNT_TARGET_NOT_FOUND)

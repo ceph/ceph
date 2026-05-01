@@ -8,7 +8,7 @@ ValidationException.
 
 import pytest
 
-from . import errors, missing_required_exc, NONEXISTENT_FS_ID
+from . import errors, assert_errorcode, validation_excs, NONEXISTENT_FS_ID
 
 
 # ---------------------------------------------------------------- positive
@@ -102,7 +102,7 @@ def test_create_idempotent_with_client_token(s3files_client, test_file_system):
 
 @pytest.mark.conformance
 def test_create_missing_file_system_id(s3files_client):
-    with pytest.raises(missing_required_exc(s3files_client)):
+    with pytest.raises(validation_excs(s3files_client)):
         s3files_client.create_access_point()
 
 
@@ -110,7 +110,7 @@ def test_create_missing_file_system_id(s3files_client):
 def test_create_invalid_posix_user(s3files_client, test_file_system):
     """posixUser.gid is Smithy `@required`; boto3 may reject the
     request client-side. Either path validates the contract."""
-    with pytest.raises(missing_required_exc(s3files_client)):
+    with pytest.raises(validation_excs(s3files_client)):
         s3files_client.create_access_point(
             fileSystemId=test_file_system['fileSystemId'],
             posixUser={"uid": 1000},  # missing gid
@@ -128,5 +128,4 @@ def test_create_on_nonexistent_file_system(s3files_client):
         s3files_client.create_access_point(
             fileSystemId=NONEXISTENT_FS_ID,
         )
-    err = exc.value.response
-    assert err.get('errorCode') == errors.FILE_SYSTEM_NOT_FOUND, err
+    assert_errorcode(exc.value, errors.FILE_SYSTEM_NOT_FOUND)

@@ -5,18 +5,63 @@ import boto3
 from botocore.exceptions import ParamValidationError
 
 
-def missing_required_exc(s3files_client):
-    """Acceptable exceptions when a Smithy `@required` field is omitted.
+def validation_excs(s3files_client):
+    """Acceptable exceptions for a Smithy-trait violation that can
+    be caught either client-side or server-side.
 
-    boto3's Smithy client validator refuses to send the request and
-    raises ParamValidationError before it ever reaches RGW. Tests
-    that intentionally omit a required field accept either path —
-    the contract is enforced, regardless of which side enforces it.
+    boto3's Smithy client validator enforces `@required`,
+    `@length`, `@pattern`, and `@range` traits before sending the
+    request, raising ParamValidationError. RGW also enforces the
+    same traits on the wire, raising ValidationException. Tests
+    that exercise one of these traits accept either path — the
+    contract is enforced, regardless of which side enforces it.
+
+    A future raw-HTTP test would bypass boto3's validator and
+    verify the server-side path independently; that is tracked
+    in the coverage-gap task.
     """
     return (
         s3files_client.exceptions.ValidationException,
         ParamValidationError,
     )
+
+
+# Test mode: which target are we exercising?
+#
+# - "rgw" (default): asserts both the typed exception AND the
+#   RGW-defined errorCode string from errors.py.
+# - "aws": asserts only the typed exception. The Smithy spec types
+#   `errorCode` as a non-empty string but doesn't fix the value;
+#   AWS does not publish theirs. Running against real AWS S3 Files
+#   needs the value-level asserts to be skipped.
+def _test_mode():
+    return os.environ.get('S3FILES_TESTS_MODE', 'rgw').lower()
+
+
+def assert_errorcode(exc_value, expected):
+    """Assert that the exception carries an `errorCode` (or one of
+    a set of acceptable values) per the Smithy contract, but only
+    when running against RGW.
+
+    `expected` is either a string or an iterable of acceptable
+    strings. In AWS mode the assertion is a no-op (the typed
+    exception was already enforced by `pytest.raises`).
+    """
+    if _test_mode() != 'rgw':
+        return
+    err = exc_value.response
+    actual = err.get('errorCode')
+    if isinstance(expected, str):
+        assert actual == expected, (
+            f"expected errorCode={expected!r}, got {actual!r} "
+            f"in response: {err}"
+        )
+    else:
+        expected_set = set(expected)
+        assert actual in expected_set, (
+            f"expected errorCode in {sorted(expected_set)}, "
+            f"got {actual!r} in response: {err}"
+        )
 
 
 def setup():

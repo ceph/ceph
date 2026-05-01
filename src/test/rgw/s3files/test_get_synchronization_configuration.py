@@ -7,7 +7,7 @@ InternalServerException.
 
 import pytest
 
-from . import errors, NONEXISTENT_FS_ID
+from . import errors, assert_errorcode, NONEXISTENT_FS_ID
 
 
 _MIN_IMPORT_RULES = [
@@ -42,5 +42,4 @@ def test_get_on_nonexistent_file_system(s3files_client):
         s3files_client.get_synchronization_configuration(
             fileSystemId=NONEXISTENT_FS_ID,
         )
-    err = exc.value.response
-    assert err.get('errorCode') == errors.FILE_SYSTEM_NOT_FOUND, err
+    assert_errorcode(exc.value, errors.FILE_SYSTEM_NOT_FOUND)

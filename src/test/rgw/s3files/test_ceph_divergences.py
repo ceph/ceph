@@ -12,7 +12,7 @@ each divergence.
 
 import pytest
 
-from . import errors, make_subnet_id
+from . import errors, assert_errorcode, make_subnet_id
 
 
 @pytest.mark.divergence
@@ -49,11 +49,7 @@ def test_subnet_id_unknown_zone_rejected(
             fileSystemId=test_file_system['fileSystemId'],
             subnetId=bogus,
         )
-    err = exc.value.response
-    assert err.get('errorCode') in (
-        errors.INVALID_ZONE_ID,
-        errors.ZONE_NOT_IN_ZONEGROUP,
-    ), err
+    assert_errorcode(exc.value, (errors.INVALID_ZONE_ID, errors.ZONE_NOT_IN_ZONEGROUP))
 
 
 @pytest.mark.divergence
@@ -126,8 +122,7 @@ def test_role_arn_must_reference_ceph_iam_role(s3files_client, bucket_arn):
             bucket=bucket_arn,
             roleArn=fake_arn,
         )
-    err = exc.value.response
-    assert err.get('errorCode') == errors.ROLE_NOT_FOUND, err
+    assert_errorcode(exc.value, errors.ROLE_NOT_FOUND)
 
 
 @pytest.mark.divergence

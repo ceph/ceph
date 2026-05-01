@@ -15,7 +15,7 @@ import json
 
 import pytest
 
-from . import errors
+from . import errors, assert_errorcode
 
 
 # ---------------------------------------------------------------- FileSystem
@@ -257,5 +257,4 @@ def test_delete_file_system_cleans_dependent_visibility(
         s3files_client.exceptions.ResourceNotFoundException
     ) as exc:
         s3files_client.list_access_points(fileSystemId=fs_id)
-    err = exc.value.response
-    assert err.get('errorCode') == errors.FILE_SYSTEM_NOT_FOUND, err
+    assert_errorcode(exc.value, errors.FILE_SYSTEM_NOT_FOUND)

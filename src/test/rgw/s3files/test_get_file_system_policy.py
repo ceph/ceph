@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-from . import errors, NONEXISTENT_FS_ID
+from . import errors, assert_errorcode, NONEXISTENT_FS_ID
 
 
 @pytest.mark.conformance
@@ -21,8 +21,7 @@ def test_get_no_policy_set(s3files_client, test_file_system):
         s3files_client.get_file_system_policy(
             fileSystemId=test_file_system['fileSystemId'],
         )
-    err = exc.value.response
-    assert err.get('errorCode') == errors.POLICY_NOT_FOUND, err
+    assert_errorcode(exc.value, errors.POLICY_NOT_FOUND)
 
 
 @pytest.mark.conformance
@@ -47,5 +46,4 @@ def test_get_on_nonexistent_file_system(s3files_client):
         s3files_client.get_file_system_policy(
             fileSystemId=NONEXISTENT_FS_ID,
         )
-    err = exc.value.response
-    assert err.get('errorCode') == errors.FILE_SYSTEM_NOT_FOUND, err
+    assert_errorcode(exc.value, errors.FILE_SYSTEM_NOT_FOUND)

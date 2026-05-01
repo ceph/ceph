@@ -10,7 +10,7 @@ the spec change but treats SGs as no-ops at the data plane.
 
 import pytest
 
-from . import errors, missing_required_exc, NONEXISTENT_MT_ID
+from . import errors, assert_errorcode, validation_excs, NONEXISTENT_MT_ID
 
 
 # SecurityGroup smithy constraint: ^sg-[0-9a-f]{8,40}$ (length 11..43).
@@ -33,7 +33,7 @@ def test_update_security_groups(s3files_client, test_mount_target):
 
 @pytest.mark.conformance
 def test_update_missing_security_groups(s3files_client, test_mount_target):
-    with pytest.raises(missing_required_exc(s3files_client)):
+    with pytest.raises(validation_excs(s3files_client)):
         s3files_client.update_mount_target(
             mountTargetId=test_mount_target['mountTargetId'],
         )
@@ -48,5 +48,4 @@ def test_update_nonexistent(s3files_client):
             mountTargetId=NONEXISTENT_MT_ID,
             securityGroups=[_SG_A],
         )
-    err = exc.value.response
-    assert err.get('errorCode') == errors.MOUNT_TARGET_NOT_FOUND, err
+    assert_errorcode(exc.value, errors.MOUNT_TARGET_NOT_FOUND)

@@ -12,7 +12,7 @@ behavior.
 
 import pytest
 
-from . import errors, missing_required_exc, NONEXISTENT_FS_ID
+from . import errors, assert_errorcode, validation_excs, NONEXISTENT_FS_ID
 
 
 _MIN_IMPORT_RULES = [
@@ -78,7 +78,7 @@ def test_put_optimistic_concurrency_mismatch(s3files_client, test_file_system):
 
 @pytest.mark.conformance
 def test_put_missing_import_rules(s3files_client, test_file_system):
-    with pytest.raises(missing_required_exc(s3files_client)):
+    with pytest.raises(validation_excs(s3files_client)):
         s3files_client.put_synchronization_configuration(
             fileSystemId=test_file_system['fileSystemId'],
             expirationDataRules=_MIN_EXPIRATION_RULES,
@@ -87,7 +87,7 @@ def test_put_missing_import_rules(s3files_client, test_file_system):
 
 @pytest.mark.conformance
 def test_put_missing_expiration_rules(s3files_client, test_file_system):
-    with pytest.raises(missing_required_exc(s3files_client)):
+    with pytest.raises(validation_excs(s3files_client)):
         s3files_client.put_synchronization_configuration(
             fileSystemId=test_file_system['fileSystemId'],
             importDataRules=_MIN_IMPORT_RULES,
@@ -98,7 +98,7 @@ def test_put_missing_expiration_rules(s3files_client, test_file_system):
 def test_put_empty_import_rules_rejected(s3files_client, test_file_system):
     """Smithy length 1..10 — empty list is invalid (boto3 rejects
     client-side via the @length trait)."""
-    with pytest.raises(missing_required_exc(s3files_client)):
+    with pytest.raises(validation_excs(s3files_client)):
         s3files_client.put_synchronization_configuration(
             fileSystemId=test_file_system['fileSystemId'],
             importDataRules=[],
@@ -158,5 +158,4 @@ def test_put_on_nonexistent_file_system(s3files_client):
             importDataRules=_MIN_IMPORT_RULES,
             expirationDataRules=_MIN_EXPIRATION_RULES,
         )
-    err = exc.value.response
-    assert err.get('errorCode') == errors.FILE_SYSTEM_NOT_FOUND, err
+    assert_errorcode(exc.value, errors.FILE_SYSTEM_NOT_FOUND)

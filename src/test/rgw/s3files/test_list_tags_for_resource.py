@@ -11,7 +11,7 @@ parametrizes over both resource types.
 
 import pytest
 
-from . import errors, NONEXISTENT_FS_ID, NONEXISTENT_AP_ID
+from . import errors, assert_errorcode, NONEXISTENT_FS_ID, NONEXISTENT_AP_ID
 
 
 @pytest.fixture(params=["test_file_system", "test_access_point"])
@@ -50,11 +50,7 @@ def test_list_tags_on_nonexistent(s3files_client, bogus_id):
         s3files_client.exceptions.ResourceNotFoundException
     ) as exc:
         s3files_client.list_tags_for_resource(resourceId=bogus_id)
-    err = exc.value.response
-    assert err.get('errorCode') in (
-        errors.FILE_SYSTEM_NOT_FOUND,
-        errors.ACCESS_POINT_NOT_FOUND,
-    ), err
+    assert_errorcode(exc.value, (errors.FILE_SYSTEM_NOT_FOUND, errors.ACCESS_POINT_NOT_FOUND))
 
 
 @pytest.mark.conformance

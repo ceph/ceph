@@ -9,7 +9,7 @@ ServiceQuotaExceededException, ValidationException.
 
 import pytest
 
-from . import errors, missing_required_exc
+from . import errors, assert_errorcode, validation_excs
 
 
 # ---------------------------------------------------------------- positive
@@ -92,14 +92,14 @@ def test_create_idempotent_with_client_token(
 @pytest.mark.conformance
 def test_create_missing_bucket(s3files_client, shared_test_role):
     """Required field `bucket` missing → ValidationException."""
-    with pytest.raises(missing_required_exc(s3files_client)):
+    with pytest.raises(validation_excs(s3files_client)):
         s3files_client.create_file_system(roleArn=shared_test_role)
 
 
 @pytest.mark.conformance
 def test_create_missing_role_arn(s3files_client, bucket_arn):
     """Required field `roleArn` missing → ValidationException."""
-    with pytest.raises(missing_required_exc(s3files_client)):
+    with pytest.raises(validation_excs(s3files_client)):
         s3files_client.create_file_system(bucket=bucket_arn)
 
 
@@ -111,8 +111,7 @@ def test_create_invalid_bucket_arn(s3files_client, shared_test_role):
             bucket="not-an-arn",
             roleArn=shared_test_role,
         )
-    err = exc.value.response
-    assert err.get('errorCode') == errors.INVALID_BUCKET_ARN, err
+    assert_errorcode(exc.value, errors.INVALID_BUCKET_ARN)
 
 
 @pytest.mark.conformance
@@ -123,8 +122,7 @@ def test_create_invalid_role_arn(s3files_client, bucket_arn):
             bucket=bucket_arn,
             roleArn="not-an-arn",
         )
-    err = exc.value.response
-    assert err.get('errorCode') == errors.INVALID_ROLE_ARN, err
+    assert_errorcode(exc.value, errors.INVALID_ROLE_ARN)
 
 
 @pytest.mark.conformance
@@ -151,8 +149,7 @@ def test_create_bucket_not_found(s3files_client, shared_test_role):
             bucket="arn:aws:s3:::no-such-bucket-here-9z9z9z",
             roleArn=shared_test_role,
         )
-    err = exc.value.response
-    assert err.get('errorCode') == errors.BUCKET_NOT_FOUND, err
+    assert_errorcode(exc.value, errors.BUCKET_NOT_FOUND)
 
 
 @pytest.mark.conformance
@@ -165,8 +162,7 @@ def test_create_role_not_found(s3files_client, bucket_arn):
             bucket=bucket_arn,
             roleArn="arn:aws:iam::000000000000:role/no-such-role-9z9z9z",
         )
-    err = exc.value.response
-    assert err.get('errorCode') == errors.ROLE_NOT_FOUND, err
+    assert_errorcode(exc.value, errors.ROLE_NOT_FOUND)
 
 
 # ---------------------------------------------------------------- conflict
@@ -189,7 +185,6 @@ def test_create_bucket_already_in_use(
                 bucket=bucket_arn,
                 roleArn=shared_test_role,
             )
-        err = exc.value.response
-        assert err.get('errorCode') == errors.BUCKET_ALREADY_IN_USE, err
+        assert_errorcode(exc.value, errors.BUCKET_ALREADY_IN_USE)
     finally:
         s3files_client.delete_file_system(fileSystemId=first['fileSystemId'])

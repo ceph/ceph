@@ -11,7 +11,7 @@ the calling account.
 
 import pytest
 
-from . import errors, NONEXISTENT_FS_ID
+from . import errors, assert_errorcode, NONEXISTENT_FS_ID
 
 
 @pytest.mark.conformance
@@ -38,8 +38,7 @@ def test_list_filtered_by_nonexistent_file_system(s3files_client):
         s3files_client.list_mount_targets(
             fileSystemId=NONEXISTENT_FS_ID,
         )
-    err = exc.value.response
-    assert err.get('errorCode') == errors.FILE_SYSTEM_NOT_FOUND, err
+    assert_errorcode(exc.value, errors.FILE_SYSTEM_NOT_FOUND)
 
 
 @pytest.mark.conformance

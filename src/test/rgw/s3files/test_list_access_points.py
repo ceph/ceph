@@ -7,7 +7,7 @@ ValidationException.
 
 import pytest
 
-from . import errors, missing_required_exc, NONEXISTENT_FS_ID
+from . import errors, assert_errorcode, validation_excs, NONEXISTENT_FS_ID
 
 
 @pytest.mark.conformance
@@ -32,7 +32,7 @@ def test_list_includes_created(s3files_client, test_access_point):
 @pytest.mark.conformance
 def test_list_missing_file_system_id(s3files_client):
     """fileSystemId is required (httpQuery=fileSystemId)."""
-    with pytest.raises(missing_required_exc(s3files_client)):
+    with pytest.raises(validation_excs(s3files_client)):
         s3files_client.list_access_points()
 
 
@@ -44,8 +44,7 @@ def test_list_nonexistent_file_system(s3files_client):
         s3files_client.list_access_points(
             fileSystemId=NONEXISTENT_FS_ID,
         )
-    err = exc.value.response
-    assert err.get('errorCode') == errors.FILE_SYSTEM_NOT_FOUND, err
+    assert_errorcode(exc.value, errors.FILE_SYSTEM_NOT_FOUND)
 
 
 @pytest.mark.conformance
