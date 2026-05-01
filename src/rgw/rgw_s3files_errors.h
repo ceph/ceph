@@ -33,6 +33,8 @@ inline constexpr std::string_view ERR_INVALID_POLICY_DOCUMENT         = "INVALID
 inline constexpr std::string_view ERR_INVALID_TAG_KEY                 = "INVALID_TAG_KEY";
 inline constexpr std::string_view ERR_INVALID_TAG_VALUE               = "INVALID_TAG_VALUE";
 inline constexpr std::string_view ERR_BUCKET_CONFIGURATION_WARNING    = "BUCKET_CONFIGURATION_WARNING";
+inline constexpr std::string_view ERR_INVALID_MAX_RESULTS             = "INVALID_MAX_RESULTS";
+inline constexpr std::string_view ERR_INVALID_SYNC_RULES              = "INVALID_SYNC_RULES";
 
 // Not-found (HTTP 404, ResourceNotFoundException)
 inline constexpr std::string_view ERR_BUCKET_NOT_FOUND                = "BUCKET_NOT_FOUND";

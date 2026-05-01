@@ -17,6 +17,7 @@
 
 #include <atomic>
 #include <cstring>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -95,19 +96,31 @@ std::string_view exception_type_for(StoreError::Kind kind) {
 
 void send_store_error(req_state* s, RGWOp* op, const StoreError& err) {
   const auto status = http_status_for(err.kind);
+  // Build the body up front so we can declare its length and bypass
+  // the framework's default error envelope. end_header(...) auto-emits
+  // a `{"Code","Message","RequestId","HostId"}` body whenever
+  // s->is_err() is true, which both clobbers the restJson1 shape we
+  // need and pre-sets content-length to its own envelope size.
+  JSONFormatter body(false);
+  body.open_object_section("");
+  encode_json("__type", std::string(exception_type_for(err.kind)), &body);
+  encode_json("errorCode", err.error_code, &body);
+  if (!err.message.empty()) {
+    encode_json("message", err.message, &body);
+  }
+  body.close_section();
+
+  std::stringstream ss;
+  body.flush(ss);
+  std::string out = ss.str();
+
   s->err.http_ret = status;
   dump_errno(s, status);
-  end_header(s, op, "application/json");
-
-  s->formatter->open_object_section("");
-  encode_json("__type", std::string(exception_type_for(err.kind)),
-              s->formatter);
-  encode_json("errorCode", err.error_code, s->formatter);
-  if (!err.message.empty()) {
-    encode_json("message", err.message, s->formatter);
+  end_header(s, op, "application/json", out.size(),
+             /*force_content_type=*/true, /*force_no_error=*/true);
+  if (!out.empty()) {
+    dump_body(s, out);
   }
-  s->formatter->close_section();
-  rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
 // ---- JSON read helpers ----------------------------------------
@@ -124,6 +137,63 @@ bool json_bool(JSONObj* obj, std::string_view name) {
   JSONObj* f = obj->find_obj(std::string(name));
   if (!f) return false;
   return f->get_data() == "true" || f->get_data() == "1";
+}
+
+// ---- field validators ----------------------------------------
+//
+// Server-side checks for Smithy patterns/ranges that boto3's
+// client-side validator does NOT enforce (notably regex patterns
+// on optional fields and integer @range traits). All return
+// true on valid; on failure the caller emits ValidationException
+// with the appropriate errorCode.
+
+bool valid_bucket_arn(std::string_view s) {
+  // Smithy: arn:aws:s3:::<bucket>
+  constexpr std::string_view P = "arn:aws:s3:::";
+  if (s.size() <= P.size() || s.substr(0, P.size()) != P) return false;
+  std::string_view name = s.substr(P.size());
+  if (name.empty() || name.find('/') != std::string_view::npos) return false;
+  return true;
+}
+
+bool valid_role_arn(std::string_view s) {
+  // Smithy: arn:aws:iam::<acct>:role/<name> (acct may be empty in some forms;
+  // we accept any ":<digits>:role/<name>" form).
+  constexpr std::string_view P = "arn:aws:iam::";
+  if (s.size() <= P.size() || s.substr(0, P.size()) != P) return false;
+  auto rest = s.substr(P.size());
+  auto colon = rest.find(':');
+  if (colon == std::string_view::npos) return false;
+  auto acct = rest.substr(0, colon);
+  for (char c : acct) {
+    if (c < '0' || c > '9') return false;
+  }
+  auto tail = rest.substr(colon + 1);
+  constexpr std::string_view R = "role/";
+  if (tail.size() <= R.size() || tail.substr(0, R.size()) != R) return false;
+  return !tail.substr(R.size()).empty();
+}
+
+bool valid_prefix(std::string_view s) {
+  // Smithy: ^(|.*/)$ — empty or ending in '/'
+  return s.empty() || s.back() == '/';
+}
+
+// Parse a maxResults query arg into `out`. Returns false if the
+// arg is present but malformed or outside [min,max]. The Smithy
+// range trait is per-op (1..1000 for list-fs/aps/mts, 1..50 for
+// list-tags); the caller passes max.
+bool parse_max_results(std::string_view raw, int& out, int max) {
+  if (raw.empty()) return true;
+  int v = 0;
+  try {
+    size_t pos = 0;
+    v = std::stoi(std::string(raw), &pos);
+    if (pos != raw.size()) return false;
+  } catch (...) { return false; }
+  if (v < 1 || v > max) return false;
+  out = v;
+  return true;
 }
 
 // ---- path -----------------------------------------------------
@@ -424,7 +494,7 @@ int RGWCreateFileSystem::init_processing(optional_yield y) {
         .error_code = std::string(ERR_INVALID_POLICY_DOCUMENT),
         .message = "request body is not valid JSON",
     };
-    return -EINVAL;
+    return 0;
   }
 
   req_.owner_account_id = current_owner_account_id(s);
@@ -434,6 +504,31 @@ int RGWCreateFileSystem::init_processing(optional_yield y) {
   req_.kms_key_id = json_string(&parser, "kmsKeyId");
   req_.client_token = json_string(&parser, "clientToken");
   req_.accept_bucket_warning = json_bool(&parser, "acceptBucketWarning");
+
+  if (!valid_bucket_arn(req_.bucket_arn)) {
+    err_ = StoreError{
+        .kind = StoreError::Kind::InvalidArgument,
+        .error_code = std::string(ERR_INVALID_BUCKET_ARN),
+        .message = "bucket is not a valid S3 ARN",
+    };
+    return 0;
+  }
+  if (!valid_role_arn(req_.role_arn)) {
+    err_ = StoreError{
+        .kind = StoreError::Kind::InvalidArgument,
+        .error_code = std::string(ERR_INVALID_ROLE_ARN),
+        .message = "roleArn is not a valid IAM role ARN",
+    };
+    return 0;
+  }
+  if (!valid_prefix(req_.prefix)) {
+    err_ = StoreError{
+        .kind = StoreError::Kind::InvalidArgument,
+        .error_code = std::string(ERR_INVALID_PREFIX),
+        .message = "prefix must be empty or end in '/'",
+    };
+    return 0;
+  }
 
   if (JSONObj* tags = parser.find_obj("tags");
       tags && tags->is_array()) {
@@ -545,8 +640,15 @@ class RGWListFileSystems : public RGWOp {
 void RGWListFileSystems::execute(optional_yield y) {
   s->format = RGWFormat::JSON;
   ListOptions opts;
-  if (auto v = s->info.args.get("maxResults"); !v.empty()) {
-    try { opts.max_results = std::stoi(v); } catch (...) {}
+  if (!parse_max_results(s->info.args.get("maxResults"),
+                          opts.max_results, /*max=*/1000)) {
+    err_ = StoreError{
+        .kind = StoreError::Kind::InvalidArgument,
+        .error_code = std::string(ERR_INVALID_MAX_RESULTS),
+        .message = "maxResults must be in 1..1000",
+    };
+    op_ret = -EINVAL;
+    return;
   }
   opts.next_token = s->info.args.get("nextToken");
 
@@ -660,7 +762,7 @@ int RGWPutFileSystemPolicy::init_processing(optional_yield y) {
         .error_code = std::string(ERR_INVALID_POLICY_DOCUMENT),
         .message = "request body is not valid JSON",
     };
-    return -EINVAL;
+    return 0;
   }
   policy_ = json_string(&parser, "policy");
   return 0;
@@ -794,7 +896,7 @@ int RGWPutSyncConfig::init_processing(optional_yield y) {
         .error_code = std::string(ERR_INVALID_POLICY_DOCUMENT),
         .message = "request body is not valid JSON",
     };
-    return -EINVAL;
+    return 0;
   }
   if (!parse_sync_config(&parser, cfg_, has_expected_version_)) {
     err_ = StoreError{
@@ -802,7 +904,45 @@ int RGWPutSyncConfig::init_processing(optional_yield y) {
         .error_code = std::string(ERR_INVALID_POLICY_DOCUMENT),
         .message = "synchronization configuration body is malformed",
     };
-    return -EINVAL;
+    return 0;
+  }
+  // Smithy length/range traits.
+  if (cfg_.import_rules.empty() || cfg_.import_rules.size() > 10) {
+    err_ = StoreError{
+        .kind = StoreError::Kind::InvalidArgument,
+        .error_code = std::string(ERR_INVALID_SYNC_RULES),
+        .message = "importDataRules length must be 1..10",
+    };
+    return 0;
+  }
+  if (cfg_.expiration_rules.size() != 1) {
+    err_ = StoreError{
+        .kind = StoreError::Kind::InvalidArgument,
+        .error_code = std::string(ERR_INVALID_SYNC_RULES),
+        .message = "expirationDataRules must contain exactly one rule",
+    };
+    return 0;
+  }
+  for (const auto& r : cfg_.import_rules) {
+    if (r.trigger != "ON_DIRECTORY_FIRST_ACCESS" &&
+        r.trigger != "ON_FILE_ACCESS") {
+      err_ = StoreError{
+          .kind = StoreError::Kind::InvalidArgument,
+          .error_code = std::string(ERR_INVALID_SYNC_RULES),
+          .message = "importDataRules.trigger is not a valid enum value",
+      };
+      return 0;
+    }
+  }
+  for (const auto& r : cfg_.expiration_rules) {
+    if (r.days_after_last_access < 1 || r.days_after_last_access > 365) {
+      err_ = StoreError{
+          .kind = StoreError::Kind::InvalidArgument,
+          .error_code = std::string(ERR_INVALID_SYNC_RULES),
+          .message = "expirationDataRules.daysAfterLastAccess must be in 1..365",
+      };
+      return 0;
+    }
   }
   if (has_expected_version_) {
     expected_version_ = cfg_.latest_version_number;
@@ -900,7 +1040,7 @@ int RGWCreateAccessPoint::init_processing(optional_yield y) {
         .error_code = std::string(ERR_INVALID_POLICY_DOCUMENT),
         .message = "request body is not valid JSON",
     };
-    return -EINVAL;
+    return 0;
   }
   req_.owner_account_id = current_owner_account_id(s);
   req_.filesystem_id    = strip_arn(json_string(&parser, "fileSystemId"));
@@ -914,7 +1054,7 @@ int RGWCreateAccessPoint::init_processing(optional_yield y) {
           .error_code = std::string(ERR_INVALID_POSIX_USER),
           .message = "posixUser missing required fields",
       };
-      return -EINVAL;
+      return 0;
     }
     req_.posix_user = std::move(p);
   }
@@ -926,7 +1066,7 @@ int RGWCreateAccessPoint::init_processing(optional_yield y) {
           .error_code = std::string(ERR_INVALID_ROOT_DIRECTORY),
           .message = "rootDirectory is malformed",
       };
-      return -EINVAL;
+      return 0;
     }
     req_.root_directory = std::move(r);
   }
@@ -1029,8 +1169,15 @@ void RGWListAccessPoints::execute(optional_yield y) {
     return;
   }
   ListOptions opts;
-  if (auto v = s->info.args.get("maxResults"); !v.empty()) {
-    try { opts.max_results = std::stoi(v); } catch (...) {}
+  if (!parse_max_results(s->info.args.get("maxResults"),
+                          opts.max_results, /*max=*/1000)) {
+    err_ = StoreError{
+        .kind = StoreError::Kind::InvalidArgument,
+        .error_code = std::string(ERR_INVALID_MAX_RESULTS),
+        .message = "maxResults must be in 1..1000",
+    };
+    op_ret = -EINVAL;
+    return;
   }
   opts.next_token = s->info.args.get("nextToken");
 
@@ -1128,7 +1275,7 @@ int RGWCreateMountTarget::init_processing(optional_yield y) {
         .error_code = std::string(ERR_INVALID_POLICY_DOCUMENT),
         .message = "request body is not valid JSON",
     };
-    return -EINVAL;
+    return 0;
   }
   req_.owner_account_id = current_owner_account_id(s);
   req_.filesystem_id    = strip_arn(json_string(&parser, "fileSystemId"));
@@ -1233,8 +1380,15 @@ class RGWListMountTargets : public RGWOp {
 void RGWListMountTargets::execute(optional_yield y) {
   s->format = RGWFormat::JSON;
   ListOptions opts;
-  if (auto v = s->info.args.get("maxResults"); !v.empty()) {
-    try { opts.max_results = std::stoi(v); } catch (...) {}
+  if (!parse_max_results(s->info.args.get("maxResults"),
+                          opts.max_results, /*max=*/1000)) {
+    err_ = StoreError{
+        .kind = StoreError::Kind::InvalidArgument,
+        .error_code = std::string(ERR_INVALID_MAX_RESULTS),
+        .message = "maxResults must be in 1..1000",
+    };
+    op_ret = -EINVAL;
+    return;
   }
   opts.next_token = s->info.args.get("nextToken");
 
@@ -1312,7 +1466,7 @@ int RGWUpdateMountTarget::init_processing(optional_yield y) {
         .error_code = std::string(ERR_INVALID_POLICY_DOCUMENT),
         .message = "request body is not valid JSON",
     };
-    return -EINVAL;
+    return 0;
   }
   req_.id = mt_id_;
   if (auto* sgs = parser.find_obj("securityGroups");
@@ -1406,8 +1560,15 @@ class RGWListTagsForResource : public RGWOp {
 void RGWListTagsForResource::execute(optional_yield y) {
   s->format = RGWFormat::JSON;
   ListOptions opts;
-  if (auto v = s->info.args.get("MaxResults"); !v.empty()) {
-    try { opts.max_results = std::stoi(v); } catch (...) {}
+  if (!parse_max_results(s->info.args.get("MaxResults"),
+                          opts.max_results, /*max=*/50)) {
+    err_ = StoreError{
+        .kind = StoreError::Kind::InvalidArgument,
+        .error_code = std::string(ERR_INVALID_MAX_RESULTS),
+        .message = "MaxResults must be in 1..50",
+    };
+    op_ret = -EINVAL;
+    return;
   }
   opts.next_token = s->info.args.get("NextToken");
   auto r = rgw::s3files::default_store().list_tags_for_resource(
@@ -1465,7 +1626,7 @@ int RGWTagResource::init_processing(optional_yield y) {
         .error_code = std::string(ERR_INVALID_POLICY_DOCUMENT),
         .message = "request body is not valid JSON",
     };
-    return -EINVAL;
+    return 0;
   }
   if (auto* arr = parser.find_obj("tags"); arr && arr->is_array()) {
     for (const auto& tag_str : arr->get_array_elements()) {
