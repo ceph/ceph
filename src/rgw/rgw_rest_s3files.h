@@ -60,12 +60,20 @@ void set_default_store(rgw::file_state::Store* store);
 
 class RGWHandler_REST_S3Files : public RGWHandler_REST {
   const rgw::auth::StrategyRegistry& auth_registry;
+  // Body pre-read in RGWRESTMgr_S3Files::get_handler so the
+  // `PayloadHash` argument is set before sigv4 verification (the
+  // restJson1 service signs with service=s3files, and the
+  // canonical-request body hash isn't on a wire header). Ops that
+  // need the body grab it from here.
+  ceph::bufferlist body_;
 
  public:
-  explicit RGWHandler_REST_S3Files(
-      const rgw::auth::StrategyRegistry& auth_registry)
+  RGWHandler_REST_S3Files(
+      const rgw::auth::StrategyRegistry& auth_registry,
+      ceph::bufferlist body)
     : RGWHandler_REST(),
-      auth_registry(auth_registry) {}
+      auth_registry(auth_registry),
+      body_(std::move(body)) {}
   ~RGWHandler_REST_S3Files() override = default;
 
   int init(rgw::sal::Driver* driver,

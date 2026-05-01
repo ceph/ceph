@@ -16,6 +16,7 @@
 #include "rgw_rest_s3files.h"
 
 #include <atomic>
+#include <cstring>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -392,7 +393,7 @@ namespace {
 // Smithy: com.amazonaws.s3files#CreateFileSystem.
 class RGWCreateFileSystem : public RGWOp {
  public:
-  RGWCreateFileSystem() = default;
+  explicit RGWCreateFileSystem(ceph::bufferlist body) : body_(std::move(body)) {}
 
   int init_processing(optional_yield y) override;
   int verify_permission(optional_yield y) override { return 0; }
@@ -400,22 +401,22 @@ class RGWCreateFileSystem : public RGWOp {
   void send_response() override;
 
   const char* name() const override { return "create_file_system"; }
-  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  RGWOpType get_type() override { return RGW_OP_S3FILES_CREATE_FILE_SYSTEM; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 
  private:
   CreateFileSystemRequest req_;
   std::optional<FileSystemView> created_;
   std::optional<StoreError> err_;
+  ceph::bufferlist body_;
 };
 
 int RGWCreateFileSystem::init_processing(optional_yield y) {
   s->format = RGWFormat::JSON;
 
-  const auto max = s->cct->_conf->rgw_max_put_param_size;
-  auto [rc, body] = rgw_rest_read_all_input(s, max);
-  if (rc < 0) return rc;
-
+  // Body was pre-read in RGWRESTMgr_S3Files::get_handler so the
+  // sigv4 PayloadHash arg is set before authorize() runs.
+  const ceph::bufferlist& body = body_;
   JSONParser parser;
   if (!parser.parse(body.c_str(), body.length())) {
     err_ = StoreError{
@@ -487,7 +488,7 @@ class RGWGetFileSystem : public RGWOp {
   void send_response() override;
 
   const char* name() const override { return "get_file_system"; }
-  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  RGWOpType get_type() override { return RGW_OP_S3FILES_GET_FILE_SYSTEM; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 
  private:
@@ -533,7 +534,7 @@ class RGWListFileSystems : public RGWOp {
   void send_response() override;
 
   const char* name() const override { return "list_file_systems"; }
-  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  RGWOpType get_type() override { return RGW_OP_S3FILES_LIST_FILE_SYSTEMS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 
  private:
@@ -593,7 +594,7 @@ class RGWDeleteFileSystem : public RGWOp {
   void send_response() override;
 
   const char* name() const override { return "delete_file_system"; }
-  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  RGWOpType get_type() override { return RGW_OP_S3FILES_DELETE_FILE_SYSTEM; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
 
  private:
@@ -628,8 +629,8 @@ void RGWDeleteFileSystem::send_response() {
 // PutFileSystemPolicy — PUT /file-systems/{id}/policy
 class RGWPutFileSystemPolicy : public RGWOp {
  public:
-  explicit RGWPutFileSystemPolicy(std::string fs_id)
-    : fs_id_(std::move(fs_id)) {}
+  RGWPutFileSystemPolicy(std::string fs_id, ceph::bufferlist body)
+    : fs_id_(std::move(fs_id)), body_(std::move(body)) {}
 
   int init_processing(optional_yield y) override;
   int verify_permission(optional_yield y) override { return 0; }
@@ -637,20 +638,21 @@ class RGWPutFileSystemPolicy : public RGWOp {
   void send_response() override;
 
   const char* name() const override { return "put_file_system_policy"; }
-  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  RGWOpType get_type() override { return RGW_OP_S3FILES_PUT_FILE_SYSTEM_POLICY; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 
  private:
   std::string fs_id_;
   std::string policy_;
   std::optional<StoreError> err_;
+  ceph::bufferlist body_;
 };
 
 int RGWPutFileSystemPolicy::init_processing(optional_yield y) {
   s->format = RGWFormat::JSON;
-  const auto max = s->cct->_conf->rgw_max_put_param_size;
-  auto [rc, body] = rgw_rest_read_all_input(s, max);
-  if (rc < 0) return rc;
+  // Body was pre-read in RGWRESTMgr_S3Files::get_handler so the
+  // sigv4 PayloadHash arg is set before authorize() runs.
+  const ceph::bufferlist& body = body_;
   JSONParser parser;
   if (!parser.parse(body.c_str(), body.length())) {
     err_ = StoreError{
@@ -691,7 +693,7 @@ class RGWGetFileSystemPolicy : public RGWOp {
   void send_response() override;
 
   const char* name() const override { return "get_file_system_policy"; }
-  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  RGWOpType get_type() override { return RGW_OP_S3FILES_GET_FILE_SYSTEM_POLICY; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 
  private:
@@ -732,7 +734,7 @@ class RGWDeleteFileSystemPolicy : public RGWOp {
   void send_response() override;
 
   const char* name() const override { return "delete_file_system_policy"; }
-  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  RGWOpType get_type() override { return RGW_OP_S3FILES_DELETE_FILE_SYSTEM_POLICY; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
 
  private:
@@ -759,7 +761,8 @@ void RGWDeleteFileSystemPolicy::send_response() {
 // PutSynchronizationConfiguration — PUT /file-systems/{id}/synchronization-configuration
 class RGWPutSyncConfig : public RGWOp {
  public:
-  explicit RGWPutSyncConfig(std::string fs_id) : fs_id_(std::move(fs_id)) {}
+  RGWPutSyncConfig(std::string fs_id, ceph::bufferlist body)
+    : fs_id_(std::move(fs_id)), body_(std::move(body)) {}
 
   int init_processing(optional_yield y) override;
   int verify_permission(optional_yield y) override { return 0; }
@@ -767,7 +770,7 @@ class RGWPutSyncConfig : public RGWOp {
   void send_response() override;
 
   const char* name() const override { return "put_synchronization_configuration"; }
-  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  RGWOpType get_type() override { return RGW_OP_S3FILES_PUT_SYNCHRONIZATION_CONFIGURATION; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 
  private:
@@ -776,13 +779,14 @@ class RGWPutSyncConfig : public RGWOp {
   bool has_expected_version_ = false;
   std::int64_t expected_version_ = 0;
   std::optional<StoreError> err_;
+  ceph::bufferlist body_;
 };
 
 int RGWPutSyncConfig::init_processing(optional_yield y) {
   s->format = RGWFormat::JSON;
-  const auto max = s->cct->_conf->rgw_max_put_param_size;
-  auto [rc, body] = rgw_rest_read_all_input(s, max);
-  if (rc < 0) return rc;
+  // Body was pre-read in RGWRESTMgr_S3Files::get_handler so the
+  // sigv4 PayloadHash arg is set before authorize() runs.
+  const ceph::bufferlist& body = body_;
   JSONParser parser;
   if (!parser.parse(body.c_str(), body.length())) {
     err_ = StoreError{
@@ -834,7 +838,7 @@ class RGWGetSyncConfig : public RGWOp {
   void send_response() override;
 
   const char* name() const override { return "get_synchronization_configuration"; }
-  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  RGWOpType get_type() override { return RGW_OP_S3FILES_GET_SYNCHRONIZATION_CONFIGURATION; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 
  private:
@@ -866,7 +870,7 @@ void RGWGetSyncConfig::send_response() {
 // CreateAccessPoint — PUT /access-points
 class RGWCreateAccessPoint : public RGWOp {
  public:
-  RGWCreateAccessPoint() = default;
+  explicit RGWCreateAccessPoint(ceph::bufferlist body) : body_(std::move(body)) {}
 
   int init_processing(optional_yield y) override;
   int verify_permission(optional_yield y) override { return 0; }
@@ -874,20 +878,21 @@ class RGWCreateAccessPoint : public RGWOp {
   void send_response() override;
 
   const char* name() const override { return "create_access_point"; }
-  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  RGWOpType get_type() override { return RGW_OP_S3FILES_CREATE_ACCESS_POINT; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 
  private:
   CreateAccessPointRequest req_;
   std::optional<AccessPointView> created_;
   std::optional<StoreError> err_;
+  ceph::bufferlist body_;
 };
 
 int RGWCreateAccessPoint::init_processing(optional_yield y) {
   s->format = RGWFormat::JSON;
-  const auto max = s->cct->_conf->rgw_max_put_param_size;
-  auto [rc, body] = rgw_rest_read_all_input(s, max);
-  if (rc < 0) return rc;
+  // Body was pre-read in RGWRESTMgr_S3Files::get_handler so the
+  // sigv4 PayloadHash arg is set before authorize() runs.
+  const ceph::bufferlist& body = body_;
   JSONParser parser;
   if (!parser.parse(body.c_str(), body.length())) {
     err_ = StoreError{
@@ -964,7 +969,7 @@ class RGWGetAccessPoint : public RGWOp {
   void send_response() override;
 
   const char* name() const override { return "get_access_point"; }
-  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  RGWOpType get_type() override { return RGW_OP_S3FILES_GET_ACCESS_POINT; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 
  private:
@@ -1003,7 +1008,7 @@ class RGWListAccessPoints : public RGWOp {
   void send_response() override;
 
   const char* name() const override { return "list_access_points"; }
-  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  RGWOpType get_type() override { return RGW_OP_S3FILES_LIST_ACCESS_POINTS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 
  private:
@@ -1066,7 +1071,7 @@ class RGWDeleteAccessPoint : public RGWOp {
   void send_response() override;
 
   const char* name() const override { return "delete_access_point"; }
-  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  RGWOpType get_type() override { return RGW_OP_S3FILES_DELETE_ACCESS_POINT; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
 
  private:
@@ -1093,7 +1098,7 @@ void RGWDeleteAccessPoint::send_response() {
 // CreateMountTarget — PUT /mount-targets
 class RGWCreateMountTarget : public RGWOp {
  public:
-  RGWCreateMountTarget() = default;
+  explicit RGWCreateMountTarget(ceph::bufferlist body) : body_(std::move(body)) {}
 
   int init_processing(optional_yield y) override;
   int verify_permission(optional_yield y) override { return 0; }
@@ -1101,20 +1106,21 @@ class RGWCreateMountTarget : public RGWOp {
   void send_response() override;
 
   const char* name() const override { return "create_mount_target"; }
-  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  RGWOpType get_type() override { return RGW_OP_S3FILES_CREATE_MOUNT_TARGET; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 
  private:
   CreateMountTargetRequest req_;
   std::optional<MountTargetView> created_;
   std::optional<StoreError> err_;
+  ceph::bufferlist body_;
 };
 
 int RGWCreateMountTarget::init_processing(optional_yield y) {
   s->format = RGWFormat::JSON;
-  const auto max = s->cct->_conf->rgw_max_put_param_size;
-  auto [rc, body] = rgw_rest_read_all_input(s, max);
-  if (rc < 0) return rc;
+  // Body was pre-read in RGWRESTMgr_S3Files::get_handler so the
+  // sigv4 PayloadHash arg is set before authorize() runs.
+  const ceph::bufferlist& body = body_;
   JSONParser parser;
   if (!parser.parse(body.c_str(), body.length())) {
     err_ = StoreError{
@@ -1177,7 +1183,7 @@ class RGWGetMountTarget : public RGWOp {
   void send_response() override;
 
   const char* name() const override { return "get_mount_target"; }
-  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  RGWOpType get_type() override { return RGW_OP_S3FILES_GET_MOUNT_TARGET; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 
  private:
@@ -1216,7 +1222,7 @@ class RGWListMountTargets : public RGWOp {
   void send_response() override;
 
   const char* name() const override { return "list_mount_targets"; }
-  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  RGWOpType get_type() override { return RGW_OP_S3FILES_LIST_MOUNT_TARGETS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 
  private:
@@ -1274,8 +1280,8 @@ void RGWListMountTargets::send_response() {
 // UpdateMountTarget — PUT /mount-targets/{mountTargetId}
 class RGWUpdateMountTarget : public RGWOp {
  public:
-  explicit RGWUpdateMountTarget(std::string mt_id)
-    : mt_id_(std::move(mt_id)) {}
+  RGWUpdateMountTarget(std::string mt_id, ceph::bufferlist body)
+    : mt_id_(std::move(mt_id)), body_(std::move(body)) {}
 
   int init_processing(optional_yield y) override;
   int verify_permission(optional_yield y) override { return 0; }
@@ -1283,7 +1289,7 @@ class RGWUpdateMountTarget : public RGWOp {
   void send_response() override;
 
   const char* name() const override { return "update_mount_target"; }
-  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  RGWOpType get_type() override { return RGW_OP_S3FILES_UPDATE_MOUNT_TARGET; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 
  private:
@@ -1291,13 +1297,14 @@ class RGWUpdateMountTarget : public RGWOp {
   UpdateMountTargetRequest req_;
   std::optional<MountTargetView> updated_;
   std::optional<StoreError> err_;
+  ceph::bufferlist body_;
 };
 
 int RGWUpdateMountTarget::init_processing(optional_yield y) {
   s->format = RGWFormat::JSON;
-  const auto max = s->cct->_conf->rgw_max_put_param_size;
-  auto [rc, body] = rgw_rest_read_all_input(s, max);
-  if (rc < 0) return rc;
+  // Body was pre-read in RGWRESTMgr_S3Files::get_handler so the
+  // sigv4 PayloadHash arg is set before authorize() runs.
+  const ceph::bufferlist& body = body_;
   JSONParser parser;
   if (!parser.parse(body.c_str(), body.length())) {
     err_ = StoreError{
@@ -1352,7 +1359,7 @@ class RGWDeleteMountTarget : public RGWOp {
   void send_response() override;
 
   const char* name() const override { return "delete_mount_target"; }
-  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  RGWOpType get_type() override { return RGW_OP_S3FILES_DELETE_MOUNT_TARGET; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
 
  private:
@@ -1387,7 +1394,7 @@ class RGWListTagsForResource : public RGWOp {
   void send_response() override;
 
   const char* name() const override { return "list_tags_for_resource"; }
-  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  RGWOpType get_type() override { return RGW_OP_S3FILES_LIST_TAGS_FOR_RESOURCE; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 
  private:
@@ -1427,8 +1434,8 @@ void RGWListTagsForResource::send_response() {
 // TagResource — POST /resource-tags/{resourceId}
 class RGWTagResource : public RGWOp {
  public:
-  explicit RGWTagResource(std::string resource_id)
-    : resource_id_(std::move(resource_id)) {}
+  RGWTagResource(std::string resource_id, ceph::bufferlist body)
+    : resource_id_(std::move(resource_id)), body_(std::move(body)) {}
 
   int init_processing(optional_yield y) override;
   int verify_permission(optional_yield y) override { return 0; }
@@ -1436,20 +1443,21 @@ class RGWTagResource : public RGWOp {
   void send_response() override;
 
   const char* name() const override { return "tag_resource"; }
-  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  RGWOpType get_type() override { return RGW_OP_S3FILES_TAG_RESOURCE; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 
  private:
   std::string resource_id_;
   std::vector<Tag> tags_;
   std::optional<StoreError> err_;
+  ceph::bufferlist body_;
 };
 
 int RGWTagResource::init_processing(optional_yield y) {
   s->format = RGWFormat::JSON;
-  const auto max = s->cct->_conf->rgw_max_put_param_size;
-  auto [rc, body] = rgw_rest_read_all_input(s, max);
-  if (rc < 0) return rc;
+  // Body was pre-read in RGWRESTMgr_S3Files::get_handler so the
+  // sigv4 PayloadHash arg is set before authorize() runs.
+  const ceph::bufferlist& body = body_;
   JSONParser parser;
   if (!parser.parse(body.c_str(), body.length())) {
     err_ = StoreError{
@@ -1496,7 +1504,7 @@ class RGWUntagResource : public RGWOp {
   void send_response() override;
 
   const char* name() const override { return "untag_resource"; }
-  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  RGWOpType get_type() override { return RGW_OP_S3FILES_UNTAG_RESOURCE; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
 
  private:
@@ -1556,37 +1564,7 @@ int RGWHandler_REST_S3Files::init(
 
 int RGWHandler_REST_S3Files::authorize(
     const DoutPrefixProvider* dpp, optional_yield y) {
-  // TEMPORARY: pending #11. AWS signs s3files requests with
-  // service=s3files in the credential scope; RGW_Auth_S3 currently
-  // computes a different canonical-request hash for that, so the
-  // signatures don't match. Wire proper service-aware sigv4 in #11.
-  //
-  // For now, look up the user by access key from the Authorization
-  // header so handler logic gets the right account_id without
-  // verifying the signature. This is **not** safe for production —
-  // gated on rgw_s3files_skip_auth (default true today; flip to
-  // false once #11 lands).
-  std::string_view auth = s->info.env->get("HTTP_AUTHORIZATION", "");
-  // Authorization: AWS4-HMAC-SHA256 Credential=<access-key>/...
-  constexpr std::string_view kPrefix = "Credential=";
-  auto pos = auth.find(kPrefix);
-  if (pos == std::string_view::npos) {
-    return -EACCES;
-  }
-  auth.remove_prefix(pos + kPrefix.size());
-  auto slash = auth.find('/');
-  if (slash == std::string_view::npos) {
-    return -EACCES;
-  }
-  std::string access_key{auth.substr(0, slash)};
-
-  std::unique_ptr<rgw::sal::User> u;
-  int rc = driver->get_user_by_access_key(dpp, access_key, y, &u);
-  if (rc < 0) {
-    return rc;
-  }
-  s->user = std::move(u);
-  return 0;
+  return RGW_Auth_S3::authorize(dpp, driver, auth_registry, s, y);
 }
 
 RGWOp* RGWHandler_REST_S3Files::op_get() {
@@ -1622,21 +1600,21 @@ RGWOp* RGWHandler_REST_S3Files::op_put() {
   if (segs.empty()) return nullptr;
 
   if (segs[0] == "file-systems") {
-    if (segs.size() == 1) return new RGWCreateFileSystem();
+    if (segs.size() == 1) return new RGWCreateFileSystem(std::move(body_));
     if (segs.size() == 3 && segs[2] == "policy") {
-      return new RGWPutFileSystemPolicy(std::string(segs[1]));
+      return new RGWPutFileSystemPolicy(std::string(segs[1]), std::move(body_));
     }
     if (segs.size() == 3 && segs[2] == "synchronization-configuration") {
-      return new RGWPutSyncConfig(std::string(segs[1]));
+      return new RGWPutSyncConfig(std::string(segs[1]), std::move(body_));
     }
   }
   if (segs[0] == "access-points" && segs.size() == 1) {
-    return new RGWCreateAccessPoint();
+    return new RGWCreateAccessPoint(std::move(body_));
   }
   if (segs[0] == "mount-targets") {
-    if (segs.size() == 1) return new RGWCreateMountTarget();
+    if (segs.size() == 1) return new RGWCreateMountTarget(std::move(body_));
     if (segs.size() == 2) {
-      return new RGWUpdateMountTarget(std::string(segs[1]));
+      return new RGWUpdateMountTarget(std::string(segs[1]), std::move(body_));
     }
   }
   return nullptr;
@@ -1646,7 +1624,7 @@ RGWOp* RGWHandler_REST_S3Files::op_post() {
   const auto segs = split_path(trim_leading_slashes(s->info.request_uri));
   if (segs.empty()) return nullptr;
   if (segs[0] == "resource-tags" && segs.size() == 2) {
-    return new RGWTagResource(std::string(segs[1]));
+    return new RGWTagResource(std::string(segs[1]), std::move(body_));
   }
   return nullptr;
 }
@@ -1680,5 +1658,29 @@ RGWHandler_REST* RGWRESTMgr_S3Files::get_handler(
     req_state* const s,
     const rgw::auth::StrategyRegistry& auth_registry,
     const std::string& frontend_prefix) {
-  return new RGWHandler_REST_S3Files(auth_registry);
+  // restJson1 services sign with service=s3files; their canonical
+  // request includes the SHA256 of the body, but RGW's auth path
+  // doesn't read it from a wire header. Pre-read here and stuff
+  // the hash into args as `PayloadHash` (consumed by the auth
+  // engine when is_non_s3_op() returns true for our op types).
+  // The body is then handed off to the per-op handler so it
+  // doesn't have to re-read it.
+  ceph::bufferlist body;
+  if (s->info.method &&
+      (std::strcmp(s->info.method, "PUT") == 0 ||
+       std::strcmp(s->info.method, "POST") == 0)) {
+    const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+    int rc;
+    std::tie(rc, body) =
+        rgw_rest_read_all_input(s, max_size, /*allow_chunked=*/false);
+    if (rc < 0) {
+      return nullptr;
+    }
+    if (!s->info.args.exists("PayloadHash")) {
+      const auto payload_hash =
+          rgw::auth::s3::calc_v4_payload_hash(body.to_str());
+      s->info.args.append("PayloadHash", payload_hash);
+    }
+  }
+  return new RGWHandler_REST_S3Files(auth_registry, std::move(body));
 }
