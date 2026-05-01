@@ -1518,11 +1518,6 @@ void RGWUntagResource::execute(optional_yield y) {
   // args.get_params() returns a std::map<string,string> — each
   // key has at most one value, so multi-key untag would lose
   // values past the first. v1 supports the single-key form.
-  ldpp_dout(this, 10) << "untag args dump: ";
-  for (const auto& [k, v] : s->info.args.get_params()) {
-    *_dout << " [" << k << "=" << v << "]";
-  }
-  *_dout << dendl;
   std::vector<std::string> keys;
   if (auto v = s->info.args.get("tagKeys"); !v.empty()) {
     keys.push_back(v);
@@ -1671,6 +1666,15 @@ RGWHandler_REST* RGWRESTMgr_S3Files::get_handler(
   // engine when is_non_s3_op() returns true for our op types).
   // The body is then handed off to the per-op handler so it
   // doesn't have to re-read it.
+  // S3 and Swift handlers each call args.set+args.parse from their
+  // own init_from_header to populate s->info.args from the query
+  // string. The framework doesn't do it for us, so the args bag is
+  // empty by default — and our ops would never see query params
+  // like `?tagKeys=...`. Parse the query string here, before we
+  // append PayloadHash (set() clears val_map).
+  s->info.args.set(s->info.request_params);
+  s->info.args.parse(s);
+
   // Set PayloadHash for every method, including GET/DELETE: the
   // client signs with SHA256("") for empty bodies, so the server
   // needs the same hash to construct the matching canonical
