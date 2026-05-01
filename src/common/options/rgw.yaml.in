@@ -342,10 +342,9 @@ options:
   desc: Path to the FoundationDB cluster file used by the S3 Files API.
   long_desc: When the ``s3files`` entry is present in ``rgw_enable_apis``, RGW
     connects to the realm-scoped FoundationDB cluster identified by this
-    cluster file to persist S3 Files API control-plane state. An empty value
-    disables the FDB backend; the in-memory store is used as a fallback for
+    cluster file to persist S3 Files API control-plane state. Unset disables
+    the FDB backend; the in-memory store is used as a fallback for
     development and testing.
-  default: ''
   services:
   - rgw
   see_also:
