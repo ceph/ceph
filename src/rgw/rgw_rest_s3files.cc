@@ -1545,6 +1545,12 @@ int RGWHandler_REST_S3Files::init(
   s->dialect = "s3files";
   s->prot_flags = RGW_REST_S3FILES;
   s->format = RGWFormat::JSON;
+  // The framework's formatter setup runs before handler init for
+  // S3-style requests and won't have allocated one for restJson1.
+  // Force a JSONFormatter so send_response() can write into it.
+  if (!s->formatter) {
+    s->formatter = new JSONFormatter(false /*pretty*/);
+  }
   return RGWHandler_REST::init(driver, s, cio);
 }
 
