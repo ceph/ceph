@@ -1518,6 +1518,11 @@ void RGWUntagResource::execute(optional_yield y) {
   // args.get_params() returns a std::map<string,string> — each
   // key has at most one value, so multi-key untag would lose
   // values past the first. v1 supports the single-key form.
+  ldpp_dout(this, 10) << "untag args dump: ";
+  for (const auto& [k, v] : s->info.args.get_params()) {
+    *_dout << " [" << k << "=" << v << "]";
+  }
+  *_dout << dendl;
   std::vector<std::string> keys;
   if (auto v = s->info.args.get("tagKeys"); !v.empty()) {
     keys.push_back(v);
