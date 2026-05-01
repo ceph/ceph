@@ -128,6 +128,7 @@ set(librgw_common_srcs
   rgw_perf_counters.cc
   rgw_rest_oidc_provider.cc
   rgw_rest_iam.cc
+  rgw_rest_s3files.cc
   rgw_object_lock.cc
   rgw_kms.cc
   rgw_kmip_client.cc

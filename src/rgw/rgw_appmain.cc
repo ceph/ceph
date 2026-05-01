@@ -34,6 +34,7 @@
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
 #include "rgw_rest_swift.h"
+#include "rgw_rest_s3files.h"
 #include "rgw_rest_admin.h"
 #include "rgw_rest_info.h"
 #include "rgw_rest_usage.h"
@@ -356,6 +357,20 @@ void rgw::AppMain::cond_init_apis()
 
     if (apis_map.count("zero")) {
       rest.register_resource("zero", new rgw::RESTMgr_Zero());
+    }
+
+    // S3 Files API control plane (AWS shape, restJson1). Registers
+    // at the four top-level URL prefixes the AWS Smithy model
+    // declares on its operations. Per-op handlers ship in
+    // follow-on commits; the manager skeleton is registered here
+    // so the dialect is recognized end-to-end.
+    if (apis_map.count("s3files") > 0) {
+      for (const std::string_view prefix : {"file-systems", "access-points",
+                                            "mount-targets", "resource-tags"}) {
+        rest.register_resource(std::string(prefix),
+            set_logging(rest_filter(env.driver, RGW_REST_S3FILES,
+                                     new RGWRESTMgr_S3Files)));
+      }
     }
   } /* have_http_frontend */
 } /* init_apis */
