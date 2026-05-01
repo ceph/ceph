@@ -239,6 +239,52 @@ bool parse_sync_config(JSONObj* obj, SyncConfig& cfg, bool& has_version) {
   return true;
 }
 
+void encode_mount_target(ceph::Formatter* f, const MountTargetView& mt) {
+  encode_json("mountTargetId",     mt.spec.id,                              f);
+  encode_json("ownerId",           mt.spec.owner_account_id,                f);
+  encode_json("fileSystemId",      mt.spec.parent_filesystem_id,            f);
+  // Encode the request-form subnetId (subnet-{zone}); the bare
+  // zone-id appears in availabilityZoneId per the design doc.
+  encode_json("subnetId",          "subnet-" + mt.spec.zone_id,             f);
+  encode_json("availabilityZoneId", mt.spec.zone_id,                        f);
+  encode_json("availabilityZoneName", mt.spec.zone_id,                      f);
+  if (!mt.spec.ip_address_type.empty()) {
+    encode_json("ipAddressType",   mt.spec.ip_address_type,                 f);
+  }
+  if (!mt.status.ipv4_address.empty()) {
+    encode_json("ipv4Address",     mt.status.ipv4_address,                  f);
+  }
+  if (!mt.status.ipv6_address.empty()) {
+    encode_json("ipv6Address",     mt.status.ipv6_address,                  f);
+  }
+  if (!mt.status.network_interface_id.empty()) {
+    encode_json("networkInterfaceId", mt.status.network_interface_id,       f);
+  }
+  if (!mt.status.vpc_id.empty()) {
+    encode_json("vpcId",           mt.status.vpc_id,                        f);
+  }
+  if (!mt.spec.security_groups.empty()) {
+    f->open_array_section("securityGroups");
+    for (const auto& sg : mt.spec.security_groups) f->dump_string("", sg);
+    f->close_section();
+  }
+  encode_json("status",            std::string(to_string(mt.status.state)), f);
+  if (!mt.status.status_message.empty()) {
+    encode_json("statusMessage",   mt.status.status_message,                f);
+  }
+}
+
+// Decode the AWS subnet-id form (`subnet-{zone}`) to the bare
+// Ceph zone-id. Returns nullopt if the prefix is missing.
+std::optional<std::string> zone_from_subnet_id(std::string_view sid) {
+  constexpr std::string_view kPrefix = "subnet-";
+  if (sid.size() <= kPrefix.size() ||
+      sid.substr(0, kPrefix.size()) != kPrefix) {
+    return std::nullopt;
+  }
+  return std::string(sid.substr(kPrefix.size()));
+}
+
 void encode_posix_user(ceph::Formatter* f, const PosixUser& pu) {
   f->open_object_section("posixUser");
   encode_json("uid", pu.uid, f);
@@ -1044,6 +1090,292 @@ void RGWDeleteAccessPoint::send_response() {
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+// CreateMountTarget — PUT /mount-targets
+class RGWCreateMountTarget : public RGWOp {
+ public:
+  RGWCreateMountTarget() = default;
+
+  int init_processing(optional_yield y) override;
+  int verify_permission(optional_yield y) override { return 0; }
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "create_mount_target"; }
+  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+
+ private:
+  CreateMountTargetRequest req_;
+  std::optional<MountTargetView> created_;
+  std::optional<StoreError> err_;
+};
+
+int RGWCreateMountTarget::init_processing(optional_yield y) {
+  s->format = RGWFormat::JSON;
+  const auto max = s->cct->_conf->rgw_max_put_param_size;
+  auto [rc, body] = rgw_rest_read_all_input(s, max);
+  if (rc < 0) return rc;
+  JSONParser parser;
+  if (!parser.parse(body.c_str(), body.length())) {
+    err_ = StoreError{
+        .kind = StoreError::Kind::InvalidArgument,
+        .error_code = std::string(ERR_INVALID_POLICY_DOCUMENT),
+        .message = "request body is not valid JSON",
+    };
+    return -EINVAL;
+  }
+  req_.owner_account_id = current_owner_account_id(s);
+  req_.filesystem_id    = strip_arn(json_string(&parser, "fileSystemId"));
+  if (auto z = zone_from_subnet_id(json_string(&parser, "subnetId")); z) {
+    req_.zone_id = *z;
+  }
+  req_.ip_address_type = json_string(&parser, "ipAddressType");
+  // ipv4Address / ipv6Address are accepted and silently ignored
+  // per the design doc; security groups are stored but not
+  // enforced.
+  if (auto* sgs = parser.find_obj("securityGroups");
+      sgs && sgs->is_array()) {
+    for (const auto& v : sgs->get_array_elements()) {
+      // get_array_elements yields the JSON-encoded form, including
+      // surrounding quotes for strings; strip them.
+      std::string sg = v;
+      if (sg.size() >= 2 && sg.front() == '"' && sg.back() == '"') {
+        sg = sg.substr(1, sg.size() - 2);
+      }
+      req_.security_groups.push_back(std::move(sg));
+    }
+  }
+  return 0;
+}
+
+void RGWCreateMountTarget::execute(optional_yield y) {
+  if (err_) { op_ret = -EINVAL; return; }
+  auto r = rgw::s3files::default_store().create_mount_target(req_);
+  if (!ok(r)) { err_ = error(r); op_ret = -ECANCELED; return; }
+  created_ = take(std::move(r));
+  op_ret = 0;
+}
+
+void RGWCreateMountTarget::send_response() {
+  if (err_) { send_store_error(s, this, *err_); return; }
+  s->err.http_ret = 200;
+  dump_errno(s, 200);
+  end_header(s, this, "application/json");
+  s->formatter->open_object_section("");
+  encode_mount_target(s->formatter, *created_);
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+// GetMountTarget — GET /mount-targets/{mountTargetId}
+class RGWGetMountTarget : public RGWOp {
+ public:
+  explicit RGWGetMountTarget(std::string mt_id) : mt_id_(std::move(mt_id)) {}
+
+  int verify_permission(optional_yield y) override { return 0; }
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "get_mount_target"; }
+  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+
+ private:
+  std::string mt_id_;
+  std::optional<MountTargetView> view_;
+  std::optional<StoreError> err_;
+};
+
+void RGWGetMountTarget::execute(optional_yield y) {
+  s->format = RGWFormat::JSON;
+  auto r = rgw::s3files::default_store().get_mount_target(
+      current_owner_account_id(s), mt_id_);
+  if (!ok(r)) { err_ = error(r); op_ret = -ENOENT; return; }
+  view_ = take(std::move(r));
+  op_ret = 0;
+}
+
+void RGWGetMountTarget::send_response() {
+  if (err_) { send_store_error(s, this, *err_); return; }
+  s->err.http_ret = 200;
+  dump_errno(s, 200);
+  end_header(s, this, "application/json");
+  s->formatter->open_object_section("");
+  encode_mount_target(s->formatter, *view_);
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+// ListMountTargets — GET /mount-targets[?fileSystemId=...&accessPointId=...]
+class RGWListMountTargets : public RGWOp {
+ public:
+  RGWListMountTargets() = default;
+
+  int verify_permission(optional_yield y) override { return 0; }
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "list_mount_targets"; }
+  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+
+ private:
+  std::optional<PagedResult<MountTargetView>> result_;
+  std::optional<StoreError> err_;
+};
+
+void RGWListMountTargets::execute(optional_yield y) {
+  s->format = RGWFormat::JSON;
+  ListOptions opts;
+  if (auto v = s->info.args.get("maxResults"); !v.empty()) {
+    try { opts.max_results = std::stoi(v); } catch (...) {}
+  }
+  opts.next_token = s->info.args.get("nextToken");
+
+  std::optional<std::string> fs_filter;
+  std::optional<std::string> ap_filter;
+  if (auto v = s->info.args.get("fileSystemId"); !v.empty()) {
+    fs_filter = strip_arn(v);
+  }
+  if (auto v = s->info.args.get("accessPointId"); !v.empty()) {
+    ap_filter = strip_arn(v);
+  }
+
+  auto r = rgw::s3files::default_store().list_mount_targets(
+      current_owner_account_id(s),
+      fs_filter ? std::optional<std::string_view>{*fs_filter} : std::nullopt,
+      ap_filter ? std::optional<std::string_view>{*ap_filter} : std::nullopt,
+      opts);
+  if (!ok(r)) { err_ = error(r); op_ret = -EIO; return; }
+  result_ = take(std::move(r));
+  op_ret = 0;
+}
+
+void RGWListMountTargets::send_response() {
+  if (err_) { send_store_error(s, this, *err_); return; }
+  s->err.http_ret = 200;
+  dump_errno(s, 200);
+  end_header(s, this, "application/json");
+  s->formatter->open_object_section("");
+  s->formatter->open_array_section("mountTargets");
+  for (const auto& mt : result_->items) {
+    s->formatter->open_object_section("");
+    encode_mount_target(s->formatter, mt);
+    s->formatter->close_section();
+  }
+  s->formatter->close_section();
+  if (!result_->next_token.empty()) {
+    encode_json("nextToken", result_->next_token, s->formatter);
+  }
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+// UpdateMountTarget — PUT /mount-targets/{mountTargetId}
+class RGWUpdateMountTarget : public RGWOp {
+ public:
+  explicit RGWUpdateMountTarget(std::string mt_id)
+    : mt_id_(std::move(mt_id)) {}
+
+  int init_processing(optional_yield y) override;
+  int verify_permission(optional_yield y) override { return 0; }
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "update_mount_target"; }
+  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+
+ private:
+  std::string mt_id_;
+  UpdateMountTargetRequest req_;
+  std::optional<MountTargetView> updated_;
+  std::optional<StoreError> err_;
+};
+
+int RGWUpdateMountTarget::init_processing(optional_yield y) {
+  s->format = RGWFormat::JSON;
+  const auto max = s->cct->_conf->rgw_max_put_param_size;
+  auto [rc, body] = rgw_rest_read_all_input(s, max);
+  if (rc < 0) return rc;
+  JSONParser parser;
+  if (!parser.parse(body.c_str(), body.length())) {
+    err_ = StoreError{
+        .kind = StoreError::Kind::InvalidArgument,
+        .error_code = std::string(ERR_INVALID_POLICY_DOCUMENT),
+        .message = "request body is not valid JSON",
+    };
+    return -EINVAL;
+  }
+  req_.id = mt_id_;
+  if (auto* sgs = parser.find_obj("securityGroups");
+      sgs && sgs->is_array()) {
+    for (const auto& v : sgs->get_array_elements()) {
+      std::string sg = v;
+      if (sg.size() >= 2 && sg.front() == '"' && sg.back() == '"') {
+        sg = sg.substr(1, sg.size() - 2);
+      }
+      req_.security_groups.push_back(std::move(sg));
+    }
+  }
+  return 0;
+}
+
+void RGWUpdateMountTarget::execute(optional_yield y) {
+  if (err_) { op_ret = -EINVAL; return; }
+  auto r = rgw::s3files::default_store().update_mount_target(
+      current_owner_account_id(s), req_);
+  if (!ok(r)) { err_ = error(r); op_ret = -ECANCELED; return; }
+  updated_ = take(std::move(r));
+  op_ret = 0;
+}
+
+void RGWUpdateMountTarget::send_response() {
+  if (err_) { send_store_error(s, this, *err_); return; }
+  s->err.http_ret = 200;
+  dump_errno(s, 200);
+  end_header(s, this, "application/json");
+  s->formatter->open_object_section("");
+  encode_mount_target(s->formatter, *updated_);
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+// DeleteMountTarget — DELETE /mount-targets/{mountTargetId}
+class RGWDeleteMountTarget : public RGWOp {
+ public:
+  explicit RGWDeleteMountTarget(std::string mt_id)
+    : mt_id_(std::move(mt_id)) {}
+
+  int verify_permission(optional_yield y) override { return 0; }
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "delete_mount_target"; }
+  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
+
+ private:
+  std::string mt_id_;
+  std::optional<StoreError> err_;
+};
+
+void RGWDeleteMountTarget::execute(optional_yield y) {
+  s->format = RGWFormat::JSON;
+  auto r = rgw::s3files::default_store().delete_mount_target(
+      current_owner_account_id(s), mt_id_);
+  if (!ok(r)) { err_ = error(r); op_ret = -ENOENT; return; }
+  op_ret = 0;
+}
+
+void RGWDeleteMountTarget::send_response() {
+  if (err_) { send_store_error(s, this, *err_); return; }
+  s->err.http_ret = 204;
+  dump_errno(s, 204);
+  end_header(s, this, "application/json");
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------- handler
@@ -1079,7 +1411,11 @@ RGWOp* RGWHandler_REST_S3Files::op_get() {
     if (segs.size() == 1) return new RGWListAccessPoints();
     if (segs.size() == 2) return new RGWGetAccessPoint(std::string(segs[1]));
   }
-  // /mount-targets and /resource-tags follow.
+  if (segs[0] == "mount-targets") {
+    if (segs.size() == 1) return new RGWListMountTargets();
+    if (segs.size() == 2) return new RGWGetMountTarget(std::string(segs[1]));
+  }
+  // /resource-tags follows.
   return nullptr;
 }
 
@@ -1099,8 +1435,12 @@ RGWOp* RGWHandler_REST_S3Files::op_put() {
   if (segs[0] == "access-points" && segs.size() == 1) {
     return new RGWCreateAccessPoint();
   }
-  // /mount-targets (CreateMountTarget), /mount-targets/<id>
-  // (UpdateMountTarget) follow.
+  if (segs[0] == "mount-targets") {
+    if (segs.size() == 1) return new RGWCreateMountTarget();
+    if (segs.size() == 2) {
+      return new RGWUpdateMountTarget(std::string(segs[1]));
+    }
+  }
   return nullptr;
 }
 
@@ -1122,7 +1462,10 @@ RGWOp* RGWHandler_REST_S3Files::op_delete() {
   if (segs[0] == "access-points" && segs.size() == 2) {
     return new RGWDeleteAccessPoint(std::string(segs[1]));
   }
-  // /mount-targets/<id>, /resource-tags/<id> follow.
+  if (segs[0] == "mount-targets" && segs.size() == 2) {
+    return new RGWDeleteMountTarget(std::string(segs[1]));
+  }
+  // /resource-tags/<id> → UntagResource follows.
   return nullptr;
 }
 
