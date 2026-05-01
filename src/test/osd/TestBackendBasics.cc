@@ -343,7 +343,7 @@ TEST_P(TestBackendBasics, DirectRead) {
     
     // Perform sync read with EC_DIRECT_READ flag
     // Read the entire stripe - we expect only this shard's data back
-    int read_result = ec_switch->objects_read_sync(
+    int read_result = ec_switch->objects_read_local(
       hoid,
       0,                                    // offset
       stripe_width,                         // length (full stripe)

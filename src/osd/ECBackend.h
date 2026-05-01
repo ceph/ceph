@@ -28,6 +28,7 @@
 #include "erasure-code/ErasureCodeInterface.h"
 #include "include/buffer.h"
 #include "osd/scrubber/scrub_backend.h"
+#include "Coroutines.h"
 
 /* This file is soon going to be replaced (before next release), so we are going
  * to simply ignore all deprecated warnings.
@@ -131,12 +132,20 @@ class ECBackend : public ECCommon {
     );
 
   int objects_read_sync(
-      const hobject_t &hoid,
-      uint64_t off,
-      uint64_t len,
-      uint32_t op_flags,
-      ceph::buffer::list *bl
-    );
+    const hobject_t &hoid,
+    uint64_t object_size,
+    const std::list<std::pair<ec_align_t,
+    std::pair<ceph::buffer::list*, Context*>>> &to_read,
+    CoroHandles coro
+  );
+
+  int objects_read_local(
+    const hobject_t &hoid,
+    uint64_t off,
+    uint64_t len,
+    uint32_t op_flags,
+    ceph::buffer::list *bl
+  );
 
   std::pair<uint64_t, uint64_t> extent_to_shard_extent(uint64_t off, uint64_t len);
 
