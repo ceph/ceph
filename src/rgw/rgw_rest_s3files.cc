@@ -1665,6 +1665,11 @@ RGWHandler_REST* RGWRESTMgr_S3Files::get_handler(
   // engine when is_non_s3_op() returns true for our op types).
   // The body is then handed off to the per-op handler so it
   // doesn't have to re-read it.
+  // Set PayloadHash for every method, including GET/DELETE: the
+  // client signs with SHA256("") for empty bodies, so the server
+  // needs the same hash to construct the matching canonical
+  // request. The body-read itself still only happens for
+  // body-bearing methods.
   ceph::bufferlist body;
   if (s->info.method &&
       (std::strcmp(s->info.method, "PUT") == 0 ||
@@ -1676,11 +1681,11 @@ RGWHandler_REST* RGWRESTMgr_S3Files::get_handler(
     if (rc < 0) {
       return nullptr;
     }
-    if (!s->info.args.exists("PayloadHash")) {
-      const auto payload_hash =
-          rgw::auth::s3::calc_v4_payload_hash(body.to_str());
-      s->info.args.append("PayloadHash", payload_hash);
-    }
+  }
+  if (!s->info.args.exists("PayloadHash")) {
+    const auto payload_hash =
+        rgw::auth::s3::calc_v4_payload_hash(body.to_str());
+    s->info.args.append("PayloadHash", payload_hash);
   }
   return new RGWHandler_REST_S3Files(auth_registry, std::move(body));
 }
