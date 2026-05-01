@@ -75,10 +75,14 @@ class RGWHandler_REST_S3Files : public RGWHandler_REST {
   int postauth_init(optional_yield) override { return 0; }
 
   // Per-method dispatch by URI path. Methods inspect
-  // s->info.request_uri (relative to the registered prefix) and
-  // return the matching RGWOp, or nullptr to fall through to
-  // the framework's default 405/404 handling.
+  // s->info.request_uri and return the matching RGWOp, or
+  // nullptr to fall through to the framework's default 405/404
+  // handling. Each method's body documents which paths it
+  // recognizes.
+  RGWOp* op_get() override;
   RGWOp* op_put() override;
+  RGWOp* op_post() override;
+  RGWOp* op_delete() override;
 };
 
 class RGWRESTMgr_S3Files : public RGWRESTMgr {

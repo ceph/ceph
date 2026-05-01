@@ -18,6 +18,7 @@
 #include <atomic>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "common/ceph_json.h"
 #include "common/dout.h"
@@ -65,8 +66,8 @@ namespace {
 
 using namespace rgw::s3files;  // ERR_* errorCode constants
 
-// Map a StoreError kind to the corresponding HTTP status code per
-// the AWS Smithy `@httpError` traits.
+// ---- error -> HTTP/JSON ---------------------------------------
+
 int http_status_for(StoreError::Kind kind) {
   switch (kind) {
     case StoreError::Kind::InvalidArgument: return 400;
@@ -79,8 +80,6 @@ int http_status_for(StoreError::Kind kind) {
   return 500;
 }
 
-// Map a StoreError kind to the AWS Smithy exception shape name.
-// Used as the `__type` discriminator in the restJson1 error envelope.
 std::string_view exception_type_for(StoreError::Kind kind) {
   switch (kind) {
     case StoreError::Kind::InvalidArgument: return "ValidationException";
@@ -93,8 +92,25 @@ std::string_view exception_type_for(StoreError::Kind kind) {
   return "InternalServerException";
 }
 
-// Extract a string field from a parsed JSON object; returns empty
-// string if absent.
+void send_store_error(req_state* s, RGWOp* op, const StoreError& err) {
+  const auto status = http_status_for(err.kind);
+  s->err.http_ret = status;
+  dump_errno(s, status);
+  end_header(s, op, "application/json");
+
+  s->formatter->open_object_section("");
+  encode_json("__type", std::string(exception_type_for(err.kind)),
+              s->formatter);
+  encode_json("errorCode", err.error_code, s->formatter);
+  if (!err.message.empty()) {
+    encode_json("message", err.message, s->formatter);
+  }
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+// ---- JSON read helpers ----------------------------------------
+
 std::string json_string(const JSONObj* obj, std::string_view name) {
   if (!obj) return {};
   JSONObj* f = obj->find_obj(std::string(name));
@@ -109,24 +125,94 @@ bool json_bool(const JSONObj* obj, std::string_view name) {
   return f->get_data() == "true" || f->get_data() == "1";
 }
 
+// ---- path -----------------------------------------------------
+
+std::string_view trim_leading_slashes(std::string_view path) {
+  while (!path.empty() && path.front() == '/') path.remove_prefix(1);
+  return path;
+}
+
+std::vector<std::string_view> split_path(std::string_view path) {
+  std::vector<std::string_view> out;
+  size_t i = 0;
+  while (i <= path.size()) {
+    size_t j = path.find('/', i);
+    if (j == std::string_view::npos) {
+      if (i < path.size()) out.push_back(path.substr(i));
+      break;
+    }
+    if (j > i) out.push_back(path.substr(i, j - i));
+    i = j + 1;
+  }
+  return out;
+}
+
+// Strip the optional ARN form on a Smithy ResourceId / FileSystemId
+// / AccessPointId path component, returning the bare server-assigned
+// id. ARNs always end with the bare id after the last slash.
+std::string strip_arn(std::string_view in) {
+  auto pos = in.rfind('/');
+  if (pos == std::string_view::npos) return std::string(in);
+  return std::string(in.substr(pos + 1));
+}
+
+// ---- account / owner -----------------------------------------
+
+std::string current_owner_account_id(const req_state* s) {
+  // Placeholder until #11 wires proper account-scoped IAM. Today
+  // this returns the request's user-id which doubles as the
+  // account-id under the test config.
+  return s->user ? s->user->get_id().to_str() : std::string{};
+}
+
+// ---- response encoders ----------------------------------------
+
+void encode_tags(ceph::Formatter* f, const std::vector<Tag>& tags) {
+  f->open_array_section("tags");
+  for (const auto& t : tags) {
+    f->open_object_section("");
+    encode_json("Key",   t.key,   f);
+    encode_json("Value", t.value, f);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void encode_file_system(ceph::Formatter* f, const FileSystemView& fs) {
+  encode_json("fileSystemId",  fs.spec.id,                              f);
+  encode_json("fileSystemArn", fs.spec.arn,                             f);
+  encode_json("ownerId",       fs.spec.owner_account_id,                f);
+  encode_json("bucket",        fs.spec.bucket_arn,                      f);
+  encode_json("prefix",        fs.spec.prefix,                          f);
+  encode_json("roleArn",       fs.spec.role_arn,                        f);
+  if (!fs.spec.kms_key_id.empty()) {
+    encode_json("kmsKeyId",    fs.spec.kms_key_id,                      f);
+  }
+  if (!fs.spec.client_token.empty()) {
+    encode_json("clientToken", fs.spec.client_token,                    f);
+  }
+  encode_json("status",        std::string(to_string(fs.status.state)), f);
+  encode_json("creationTime",  fs.spec.creation_time_unix_seconds,      f);
+  if (auto n = fs.name(); n) {
+    encode_json("name",        *n,                                      f);
+  }
+  encode_tags(f, fs.spec.tags);
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------- ops
-
 namespace {
 
 // CreateFileSystem — PUT /file-systems
 //
 // Smithy: com.amazonaws.s3files#CreateFileSystem.
-// Required: bucket, roleArn. Optional: prefix, kmsKeyId,
-// clientToken, tags, acceptBucketWarning. Response: 201 with the
-// created FileSystem fields.
 class RGWCreateFileSystem : public RGWOp {
  public:
   RGWCreateFileSystem() = default;
 
   int init_processing(optional_yield y) override;
-  int verify_permission(optional_yield y) override { return 0; }  // #11 wires IAM
+  int verify_permission(optional_yield y) override { return 0; }
   void execute(optional_yield y) override;
   void send_response() override;
 
@@ -141,15 +227,11 @@ class RGWCreateFileSystem : public RGWOp {
 };
 
 int RGWCreateFileSystem::init_processing(optional_yield y) {
-  // Force JSON formatting for the response.
   s->format = RGWFormat::JSON;
 
-  // Read the JSON body.
   const auto max = s->cct->_conf->rgw_max_put_param_size;
   auto [rc, body] = rgw_rest_read_all_input(s, max);
-  if (rc < 0) {
-    return rc;
-  }
+  if (rc < 0) return rc;
 
   JSONParser parser;
   if (!parser.parse(body.c_str(), body.length())) {
@@ -161,7 +243,7 @@ int RGWCreateFileSystem::init_processing(optional_yield y) {
     return -EINVAL;
   }
 
-  req_.owner_account_id = s->user ? s->user->get_id().to_str() : std::string{};
+  req_.owner_account_id = current_owner_account_id(s);
   req_.bucket_arn = json_string(&parser, "bucket");
   req_.prefix = json_string(&parser, "prefix");
   req_.role_arn = json_string(&parser, "roleArn");
@@ -169,22 +251,17 @@ int RGWCreateFileSystem::init_processing(optional_yield y) {
   req_.client_token = json_string(&parser, "clientToken");
   req_.accept_bucket_warning = json_bool(&parser, "acceptBucketWarning");
 
-  // tags: array of { Key, Value } objects. Use the existing
-  // get_array_elements() + re-parse idiom (see rgw_rest_sts.cc).
   if (JSONObj* tags = parser.find_obj("tags");
       tags && tags->is_array()) {
     for (const auto& tag_str : tags->get_array_elements()) {
       JSONParser tag_parser;
-      if (!tag_parser.parse(tag_str.c_str(), tag_str.size())) {
-        continue;
-      }
+      if (!tag_parser.parse(tag_str.c_str(), tag_str.size())) continue;
       Tag tag;
       tag.key = json_string(&tag_parser, "Key");
       tag.value = json_string(&tag_parser, "Value");
       req_.tags.push_back(std::move(tag));
     }
   }
-
   return 0;
 }
 
@@ -196,7 +273,7 @@ void RGWCreateFileSystem::execute(optional_yield y) {
   auto result = rgw::s3files::default_store().create_file_system(req_);
   if (!ok(result)) {
     err_ = error(result);
-    op_ret = -ECANCELED;  // surface a non-zero code; send_response handles the body
+    op_ret = -ECANCELED;
     return;
   }
   created_ = take(std::move(result));
@@ -205,59 +282,163 @@ void RGWCreateFileSystem::execute(optional_yield y) {
 
 void RGWCreateFileSystem::send_response() {
   if (err_) {
-    const auto status = http_status_for(err_->kind);
-    s->err.http_ret = status;
-    dump_errno(s, status);
-    end_header(s, this, "application/json");
-
-    s->formatter->open_object_section("");
-    encode_json("__type", std::string(exception_type_for(err_->kind)),
-                s->formatter);
-    encode_json("errorCode", err_->error_code, s->formatter);
-    if (!err_->message.empty()) {
-      encode_json("message", err_->message, s->formatter);
-    }
-    s->formatter->close_section();
-    rgw_flush_formatter_and_reset(s, s->formatter);
+    send_store_error(s, this, *err_);
     return;
   }
-
-  // 201 Created with the FileSystem JSON.
-  const auto& fs = *created_;
   s->err.http_ret = 201;
   dump_errno(s, 201);
   end_header(s, this, "application/json");
-
   s->formatter->open_object_section("");
-  encode_json("fileSystemId",   fs.spec.id,                   s->formatter);
-  encode_json("fileSystemArn",  fs.spec.arn,                  s->formatter);
-  encode_json("ownerId",        fs.spec.owner_account_id,     s->formatter);
-  encode_json("bucket",         fs.spec.bucket_arn,           s->formatter);
-  encode_json("prefix",         fs.spec.prefix,               s->formatter);
-  encode_json("roleArn",        fs.spec.role_arn,             s->formatter);
-  if (!fs.spec.kms_key_id.empty()) {
-    encode_json("kmsKeyId",     fs.spec.kms_key_id,           s->formatter);
+  encode_file_system(s->formatter, *created_);
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+// GetFileSystem — GET /file-systems/{fileSystemId}
+class RGWGetFileSystem : public RGWOp {
+ public:
+  explicit RGWGetFileSystem(std::string fs_id) : fs_id_(std::move(fs_id)) {}
+
+  int verify_permission(optional_yield y) override { return 0; }
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "get_file_system"; }
+  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+
+ private:
+  std::string fs_id_;
+  std::optional<FileSystemView> view_;
+  std::optional<StoreError> err_;
+};
+
+void RGWGetFileSystem::execute(optional_yield y) {
+  s->format = RGWFormat::JSON;
+  auto result = rgw::s3files::default_store().get_file_system(
+      current_owner_account_id(s), strip_arn(fs_id_));
+  if (!ok(result)) {
+    err_ = error(result);
+    op_ret = -ENOENT;
+    return;
   }
-  if (!fs.spec.client_token.empty()) {
-    encode_json("clientToken",  fs.spec.client_token,         s->formatter);
+  view_ = take(std::move(result));
+  op_ret = 0;
+}
+
+void RGWGetFileSystem::send_response() {
+  if (err_) {
+    send_store_error(s, this, *err_);
+    return;
   }
-  encode_json("status",
-              std::string(to_string(fs.status.state)),        s->formatter);
-  encode_json("creationTime",   fs.spec.creation_time_unix_seconds,
-              s->formatter);
-  if (auto n = fs.name(); n) {
-    encode_json("name",         *n,                           s->formatter);
+  s->err.http_ret = 200;
+  dump_errno(s, 200);
+  end_header(s, this, "application/json");
+  s->formatter->open_object_section("");
+  encode_file_system(s->formatter, *view_);
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+// ListFileSystems — GET /file-systems
+class RGWListFileSystems : public RGWOp {
+ public:
+  RGWListFileSystems() = default;
+
+  int verify_permission(optional_yield y) override { return 0; }
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "list_file_systems"; }
+  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+
+ private:
+  std::optional<PagedResult<FileSystemView>> result_;
+  std::optional<StoreError> err_;
+};
+
+void RGWListFileSystems::execute(optional_yield y) {
+  s->format = RGWFormat::JSON;
+  ListOptions opts;
+  if (auto v = s->info.args.get("maxResults"); !v.empty()) {
+    try { opts.max_results = std::stoi(v); } catch (...) {}
   }
-  s->formatter->open_array_section("tags");
-  for (const auto& t : fs.spec.tags) {
+  opts.next_token = s->info.args.get("nextToken");
+
+  auto r = rgw::s3files::default_store().list_file_systems(
+      current_owner_account_id(s), opts);
+  if (!ok(r)) {
+    err_ = error(r);
+    op_ret = -EIO;
+    return;
+  }
+  result_ = take(std::move(r));
+  op_ret = 0;
+}
+
+void RGWListFileSystems::send_response() {
+  if (err_) {
+    send_store_error(s, this, *err_);
+    return;
+  }
+  s->err.http_ret = 200;
+  dump_errno(s, 200);
+  end_header(s, this, "application/json");
+  s->formatter->open_object_section("");
+  s->formatter->open_array_section("fileSystems");
+  for (const auto& fs : result_->items) {
     s->formatter->open_object_section("");
-    encode_json("Key",   t.key,   s->formatter);
-    encode_json("Value", t.value, s->formatter);
+    encode_file_system(s->formatter, fs);
     s->formatter->close_section();
   }
   s->formatter->close_section();
+  if (!result_->next_token.empty()) {
+    encode_json("nextToken", result_->next_token, s->formatter);
+  }
   s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
 
+// DeleteFileSystem — DELETE /file-systems/{fileSystemId}
+class RGWDeleteFileSystem : public RGWOp {
+ public:
+  explicit RGWDeleteFileSystem(std::string fs_id) : fs_id_(std::move(fs_id)) {}
+
+  int verify_permission(optional_yield y) override { return 0; }
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "delete_file_system"; }
+  RGWOpType get_type() override { return RGW_OP_UNKNOWN; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
+
+ private:
+  std::string fs_id_;
+  std::optional<StoreError> err_;
+};
+
+void RGWDeleteFileSystem::execute(optional_yield y) {
+  s->format = RGWFormat::JSON;
+  auto r = rgw::s3files::default_store().delete_file_system(
+      current_owner_account_id(s), strip_arn(fs_id_));
+  if (!ok(r)) {
+    err_ = error(r);
+    op_ret = -ENOENT;
+    return;
+  }
+  op_ret = 0;
+}
+
+void RGWDeleteFileSystem::send_response() {
+  if (err_) {
+    send_store_error(s, this, *err_);
+    return;
+  }
+  // 204 No Content per the AWS Smithy http trait.
+  s->err.http_ret = 204;
+  dump_errno(s, 204);
+  end_header(s, this, "application/json");
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
@@ -278,24 +459,48 @@ int RGWHandler_REST_S3Files::authorize(
   return RGW_Auth_S3::authorize(dpp, driver, auth_registry, s, y);
 }
 
+RGWOp* RGWHandler_REST_S3Files::op_get() {
+  const auto segs = split_path(trim_leading_slashes(s->info.request_uri));
+  if (segs.empty()) return nullptr;
+
+  // /file-systems[/<id>[/policy|/synchronization-configuration]]
+  if (segs[0] == "file-systems") {
+    if (segs.size() == 1) return new RGWListFileSystems();
+    if (segs.size() == 2) return new RGWGetFileSystem(std::string(segs[1]));
+    // /file-systems/<id>/policy and /synchronization-configuration
+    // are wired in follow-on commits.
+  }
+  return nullptr;
+}
+
 RGWOp* RGWHandler_REST_S3Files::op_put() {
-  // The manager is registered at one of the four top-level prefixes
-  // (file-systems, access-points, mount-targets, resource-tags); the
-  // request_uri here is the full path including that prefix.
-  const auto& uri = s->info.request_uri;
+  const auto segs = split_path(trim_leading_slashes(s->info.request_uri));
+  if (segs.empty()) return nullptr;
 
-  // Strip leading slash and any frontend prefix for matching.
-  std::string_view path = uri;
-  while (!path.empty() && path.front() == '/') path.remove_prefix(1);
-
-  // PUT /file-systems → CreateFileSystem
-  if (path == "file-systems") {
+  if (segs[0] == "file-systems" && segs.size() == 1) {
     return new RGWCreateFileSystem();
   }
 
-  // Other PUT routes (PutFileSystemPolicy, PutSynchronizationConfiguration,
-  // CreateAccessPoint, CreateMountTarget, UpdateMountTarget) are wired in
-  // follow-on commits.
+  // /access-points, /mount-targets, /file-systems/<id>/{policy,sync},
+  // /mount-targets/<id> (UpdateMountTarget) wire in follow-on commits.
+  return nullptr;
+}
+
+RGWOp* RGWHandler_REST_S3Files::op_post() {
+  // /resource-tags/<id> → TagResource. Wired in a follow-on commit.
+  return nullptr;
+}
+
+RGWOp* RGWHandler_REST_S3Files::op_delete() {
+  const auto segs = split_path(trim_leading_slashes(s->info.request_uri));
+  if (segs.empty()) return nullptr;
+
+  if (segs[0] == "file-systems") {
+    if (segs.size() == 2) return new RGWDeleteFileSystem(std::string(segs[1]));
+    // /file-systems/<id>/policy → DeleteFileSystemPolicy: follow-on
+  }
+  // /access-points/<id>, /mount-targets/<id>, /resource-tags/<id>
+  // also follow.
   return nullptr;
 }
 
