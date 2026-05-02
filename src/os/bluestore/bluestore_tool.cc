@@ -1069,6 +1069,12 @@ int main(int argc, char **argv)
   } else if (action == "bluefs-super-dump") {
     super_dump(cct.get(), path, devs);
   } else if (action == "bluefs-bdev-new-db" || action == "bluefs-bdev-new-wal") {
+    if (!vm.count("yes-i-really-really-mean-it")) {
+      cerr << action << " is a dangerous operation which could cause data loss, "
+           << "please confirm with --yes-i-really-really-mean-it option"
+           << std::endl;
+      exit(EXIT_FAILURE);
+    }
     map<string, int> cur_devs_map;
     bool need_db = action == "bluefs-bdev-new-db";
 
@@ -1138,6 +1144,12 @@ int main(int argc, char **argv)
     }
     return r;
   } else if (action == "bluefs-bdev-migrate") {
+    if (!vm.count("yes-i-really-really-mean-it")) {
+      cerr << action << " is a dangerous operation which could cause data loss, "
+           << "please confirm with --yes-i-really-really-mean-it option"
+           << std::endl;
+      exit(EXIT_FAILURE);
+    }
     map<string, int> cur_devs_map;
     set<int> src_dev_ids;
     map<string, int> src_devs;
