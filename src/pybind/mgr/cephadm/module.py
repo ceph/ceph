@@ -200,6 +200,23 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             desc='Seconds for which to cache host facts data',
         ),
         Option(
+            'allow_lo_routes',
+            type='bool',
+            default=False,
+            desc='If true, cephadm list-networks is run with --allow-lo-routes so '
+            'loopback (lo) routes are included in host network facts; if false, '
+            'they are omitted (default).',
+        ),
+        Option(
+            'allow_bgp_routes',
+            type='bool',
+            default=False,
+            desc='If true, cephadm list-networks is run with --allow-bgp-routes so '
+            'BGP routes from ``ip route ls proto bgp`` and '
+            '``ip -6 route ls proto bgp`` are merged into host network facts; if '
+            'false (default), only the main IPv4 and IPv6 tables are used.',
+        ),
+        Option(
             'host_check_interval',
             type='secs',
             default=10 * 60,
@@ -543,6 +560,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.device_cache_timeout = 0
             self.daemon_cache_timeout = 0
             self.facts_cache_timeout = 0
+            self.allow_lo_routes = False
+            self.allow_bgp_routes = False
             self.host_check_interval = 0
             self.stray_daemon_check_interval = 0
             self.max_count_per_host = 0

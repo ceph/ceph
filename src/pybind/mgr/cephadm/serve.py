@@ -438,9 +438,20 @@ class CephadmServe:
 
     def _refresh_host_networks(self, host: str) -> Optional[str]:
         try:
+            list_net_args: List[str] = []
+            if self.mgr.allow_lo_routes:
+                list_net_args.append('--allow-lo-routes')
+            if self.mgr.allow_bgp_routes:
+                list_net_args.append('--allow-bgp-routes')
             with self.mgr.async_timeout_handler(host, 'cephadm list-networks'):
                 networks = self.mgr.wait_async(self._run_cephadm_json(
-                    host, 'mon', 'list-networks', [], no_fsid=True, log_output=self.mgr.log_refresh_metadata))
+                    host,
+                    'mon',
+                    'list-networks',
+                    list_net_args,
+                    no_fsid=True,
+                    log_output=self.mgr.log_refresh_metadata,
+                ))
         except OrchestratorError as e:
             return str(e)
 

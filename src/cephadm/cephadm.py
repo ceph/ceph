@@ -5019,6 +5019,18 @@ def _get_parser():
 
     parser_list_networks = subparsers.add_parser(
         'list-networks', help='list IP networks')
+    parser_list_networks.add_argument(
+        '--allow-lo-routes',
+        action='store_true',
+        default=False,
+        help='Reserved for future filtering of loopback-related routes',
+    )
+    parser_list_networks.add_argument(
+        '--allow-bgp-routes',
+        action='store_true',
+        default=False,
+        help='Reserved for future filtering of BGP-derived routes',
+    )
     parser_list_networks.set_defaults(func=command_list_networks)
 
     parser_list_rdma = subparsers.add_parser(
