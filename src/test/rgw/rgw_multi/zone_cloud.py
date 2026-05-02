@@ -1,6 +1,7 @@
 import json
 import requests.compat
 import logging
+import pytest
 
 import boto
 import boto.s3.connection
@@ -10,7 +11,6 @@ import datetime
 
 import re
 
-from nose.tools import eq_ as eq
 from itertools import zip_longest # type: ignore
 from urllib.parse import urlparse
 
@@ -29,30 +29,30 @@ def unquote(s):
     return s
 
 def check_object_eq(k1, k2, check_extra = True):
-    assert k1
-    assert k2
+    assert k1 is not None, "Expected key is missing"
+    assert k2 is not None, "Result key is missing"
     log.debug('comparing key name=%s', k1.name)
-    eq(k1.name, k2.name)
-    eq(k1.metadata, k2.metadata)
-    # eq(k1.cache_control, k2.cache_control)
-    eq(k1.content_type, k2.content_type)
-    eq(k1.content_encoding, k2.content_encoding)
-    eq(k1.content_disposition, k2.content_disposition)
-    eq(k1.content_language, k2.content_language)
+    assert k1.name == k2.name
+    assert k1.metadata == k2.metadata
+    # assert(k1.cache_control, k2.cache_control)
+    assert k1.content_type == k2.content_type
+    assert k1.content_encoding == k2.content_encoding
+    assert k1.content_disposition == k2.content_disposition
+    assert k1.content_language == k2.content_language
 
-    eq(unquote(k1.etag), unquote(k2.etag))
+    assert unquote(k1.etag) == unquote(k2.etag)
 
     mtime1 = dateutil.parser.parse(k1.last_modified)
     mtime2 = dateutil.parser.parse(k2.last_modified)
     log.debug('k1.last_modified=%s k2.last_modified=%s', k1.last_modified, k2.last_modified)
     assert abs((mtime1 - mtime2).total_seconds()) < 1 # handle different time resolution
     # if check_extra:
-        # eq(k1.owner.id, k2.owner.id)
-        # eq(k1.owner.display_name, k2.owner.display_name)
-    # eq(k1.storage_class, k2.storage_class)
-    eq(k1.size, k2.size)
-    eq(get_key_ver(k1), get_key_ver(k2))
-    # eq(k1.encrypted, k2.encrypted)
+        # assert(k1.owner.id, k2.owner.id)
+        # assert(k1.owner.display_name, k2.owner.display_name)
+    # assert(k1.storage_class, k2.storage_class)
+    assert k1.size == k2.size
+    assert get_key_ver(k1) == get_key_ver(k2)
+    # assert(k1.encrypted, k2.encrypted)
 
 def make_request(conn, method, bucket, key, query_args, headers):
     result = conn.make_request(method, bucket=bucket, key=key, query_args=query_args, headers=headers)
@@ -272,7 +272,7 @@ class CloudZone(Zone):
             assert False
 
         def check_bucket_eq(self, zone_conn, bucket_name):
-            assert(zone_conn.zone.tier_type() == "rados")
+            assert zone_conn.zone.tier_type() == "rados"
 
             log.info('comparing bucket=%s zones={%s, %s}', bucket_name, self.name, self.name)
             b1 = self.get_bucket(bucket_name)
