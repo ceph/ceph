@@ -899,7 +899,7 @@ TEST(TestRGWLuaBackground, Start)
 constexpr auto wait_time = std::chrono::milliseconds(100);
 
 template<typename T>
-const T& get_table_value(const TestBackground& b, const std::string& index) {
+T get_table_value(const TestBackground& b, const std::string& index) {
   try {
     return std::get<T>(b.get_table_value(index));
   } catch (std::bad_variant_access const& ex) {

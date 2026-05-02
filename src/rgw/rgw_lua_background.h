@@ -3,21 +3,22 @@
 #include "rgw_common.h"
 #include <string>
 #include <set>
-#include <unordered_map>
 #include <variant>
 #include <shared_mutex>
+#include <mutex>
 #include <boost/lockfree/queue.hpp>
 #include "rgw_lua_utils.h"
 #include "rgw_realm_reloader.h"
+#include <tbb/concurrent_hash_map.h>
 
 namespace rgw::lua {
 
 //Interval between each execution of the script is set to 5 seconds
 constexpr const int INIT_EXECUTE_INTERVAL = 5;
 
-//Writeable meta table named RGW with mutex protection
+//Writeable meta table named RGW
 using BackgroundMapValue = std::variant<std::string, long long int, double, bool>;
-using BackgroundMap  = std::unordered_map<std::string, BackgroundMapValue>;
+using BackgroundMap = tbb::concurrent_hash_map<std::string, BackgroundMapValue>;
 
 struct RGWTable : EmptyMetaTable {
 
@@ -29,40 +30,33 @@ struct RGWTable : EmptyMetaTable {
   static int IndexClosure(lua_State* L) {
     std::ignore = table_name_upvalue(L);
     const auto map = reinterpret_cast<BackgroundMap*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
-    auto& mtx = *reinterpret_cast<std::mutex*>(lua_touserdata(L, lua_upvalueindex(THIRD_UPVAL)));
     const char* index = luaL_checkstring(L, 2);
 
     if (strcasecmp(index, INCREMENT) == 0) {
       lua_pushlightuserdata(L, map);
-      lua_pushlightuserdata(L, &mtx);
       lua_pushboolean(L, false /*increment*/);
-      lua_pushcclosure(L, increment_by, THREE_UPVALS);
+      lua_pushcclosure(L, increment_by, TWO_UPVALS);
       return ONE_RETURNVAL;
     } 
     if (strcasecmp(index, DECREMENT) == 0) {
       lua_pushlightuserdata(L, map);
-      lua_pushlightuserdata(L, &mtx);
       lua_pushboolean(L, true /*decrement*/);
-      lua_pushcclosure(L, increment_by, THREE_UPVALS);
+      lua_pushcclosure(L, increment_by, TWO_UPVALS);
       return ONE_RETURNVAL;
     }
 
-    std::lock_guard l(mtx);
+    BackgroundMap::const_accessor accessor;
 
-    const auto it = map->find(std::string(index));
-    if (it == map->end()) {
-      lua_pushnil(L);
+    if (map->find(accessor, std::string(index))) {
+      std::visit([L](auto&& value) { pushvalue(L, value); }, accessor->second);
     } else {
-      std::visit([L](auto&& value) { pushvalue(L, value); }, it->second);
+      lua_pushnil(L);
     }
     return ONE_RETURNVAL;
   }
 
   static int LenClosure(lua_State* L) {
     const auto map = reinterpret_cast<BackgroundMap*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
-    auto& mtx = *reinterpret_cast<std::mutex*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
-
-    std::lock_guard l(mtx);
 
     lua_pushinteger(L, map->size());
 
@@ -79,8 +73,6 @@ struct RGWTable : EmptyMetaTable {
         return luaL_error(L, "increment/decrement are reserved function names for RGW");
     }
 
-    std::unique_lock l(mtx);
-
     size_t len;
     BackgroundMapValue value;
     const int value_type = lua_type(L, 3);
@@ -88,9 +80,18 @@ struct RGWTable : EmptyMetaTable {
     switch (value_type) {
       case LUA_TNIL:
         // erase the element. since in lua: "t[index] = nil" is removing the entry at "t[index]"
-        if (const auto it = map->find(index); it != map->end()) {
-          // index was found
-          update_erased_iterator<BackgroundMap>(L, name, it, map->erase(it));
+        {
+          std::lock_guard l(mtx);
+          const std::string key = std::string(index);
+          for (auto it = map->begin(); it != map->end(); ++it) {
+            if (it->first == key) {
+              auto next_it = it;
+              ++next_it;
+              update_erased_iterator<BackgroundMap>(L, name, it, next_it);
+              map->erase(key);
+              break;
+            }
+          }
         }
         return NO_RETURNVAL;
       case LUA_TBOOLEAN:
@@ -113,7 +114,6 @@ struct RGWTable : EmptyMetaTable {
         break;
       }
       default:
-        l.unlock();
         return luaL_error(L, "unsupported value type for RGW table");
     }
 
@@ -121,10 +121,11 @@ struct RGWTable : EmptyMetaTable {
       > MAX_LUA_VALUE_SIZE) {
       return luaL_error(L, "Lua maximum size of entry limit exceeded");
     } else if (map->size() > MAX_LUA_KEY_ENTRIES) {
-      l.unlock();
       return luaL_error(L, "Lua max number of entries limit exceeded");
     } else {
-      map->insert_or_assign(index, value);
+      BackgroundMap::accessor accessor;
+      map->insert(accessor, std::string(index));
+      accessor->second = value;
     }
 
     return NO_RETURNVAL;
@@ -176,11 +177,13 @@ private:
   void start();
   void shutdown();
   void create_background_metatable(lua_State* L);
-  const BackgroundMapValue& get_table_value(const std::string& key) const;
+  BackgroundMapValue get_table_value(const std::string& key) const;
+
   template<typename T>
   void put_table_value(const std::string& key, T value) {
-    std::unique_lock cond_lock(table_mutex);
-    rgw_map[key] = value;
+    BackgroundMap::accessor accessor;
+    rgw_map.insert(accessor, key);
+    accessor->second = value;
   }
 
   // update the manager after 
