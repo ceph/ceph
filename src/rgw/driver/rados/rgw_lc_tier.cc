@@ -4,6 +4,8 @@
 #include <string.h>
 #include <iostream>
 #include <map>
+#include <thread>
+#include <chrono>
 
 #include "common/XMLFormatter.h"
 #include <common/errno.h>
@@ -24,6 +26,42 @@
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
+
+/* ---------------------------------------------------------------------------
+ * Cloud-tier remote endpoint retry / backoff constants.
+ *
+ * When an S3-compatible remote endpoint returns 503 SlowDown (-EBUSY) it is
+ * a retryable signal per the S3 spec.  We back off exponentially so we do
+ * not hammer the endpoint and worsen the throttling situation.
+ *
+ * TODO: expose these as Ceph config options
+ *   rgw_cloud_tier_retry_limit     (default 8)
+ *   rgw_cloud_tier_retry_delay_ms  (initial delay, default 500)
+ *   rgw_cloud_tier_retry_max_ms    (cap, default 30000)
+ * ---------------------------------------------------------------------------
+ */
+static constexpr int    CLOUD_TIER_503_RETRY_LIMIT    = 8;
+static constexpr int    CLOUD_TIER_503_INITIAL_DELAY_MS = 500;
+static constexpr int    CLOUD_TIER_503_MAX_DELAY_MS   = 30000;
+
+/**
+ * cloud_tier_backoff_sleep - sleep with exponential backoff + jitter.
+ *
+ * @attempt  zero-based retry attempt number
+ * @returns  delay that was actually slept (milliseconds), for logging
+ */
+static int cloud_tier_backoff_sleep(int attempt)
+{
+  int delay_ms = CLOUD_TIER_503_INITIAL_DELAY_MS * (1 << attempt);
+  if (delay_ms > CLOUD_TIER_503_MAX_DELAY_MS) {
+    delay_ms = CLOUD_TIER_503_MAX_DELAY_MS;
+  }
+  /* Add up to 10 % jitter to avoid thundering-herd when multiple LC
+   * workers are all backing off at the same time. */
+  delay_ms += rand() % (delay_ms / 10 + 1);
+  std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+  return delay_ms;
+}
 
 struct rgw_lc_multipart_part_info {
   int part_num{0};
@@ -282,14 +320,39 @@ int rgw_cloud_tier_restore_object(RGWLCCloudTierCtx& tier_ctx,
   if (!in_progress) { // first time. Send RESTORE req.
 
     rgw_obj dest_obj(dest_bucket, rgw_obj_key(target_obj_name));
-    ret = cloud_tier_restore(tier_ctx.dpp, tier_ctx.conn, dest_obj, days, glacier_params, tier_ctx.y);
 
-    ldpp_dout(tier_ctx.dpp, 20) << __func__ << "Restoring object=" << target_obj_name << "returned ret = " << ret << dendl;
+    /* Retry the RESTORE request if the remote endpoint returns 503 SlowDown
+     * (-EBUSY).  Any other error is treated as fatal and propagated
+     * immediately. */
+    for (int restore_attempt = 0; ; ++restore_attempt) {
+      ret = cloud_tier_restore(tier_ctx.dpp, tier_ctx.conn, dest_obj, days,
+                               glacier_params, tier_ctx.y);
 
-    if (ret < 0 ) {
-      ldpp_dout(tier_ctx.dpp, -1) << __func__ << "ERROR: failed to restore object=" << dest_obj << "; ret = " << ret << dendl;
-      return ret;
+      ldpp_dout(tier_ctx.dpp, 20) << __func__
+          << " Restoring object=" << target_obj_name
+          << " returned ret=" << ret << dendl;
+
+      if (ret == 0) {
+        break; // success
+      }
+
+      if (ret != -EBUSY || restore_attempt >= CLOUD_TIER_503_RETRY_LIMIT - 1) {
+        ldpp_dout(tier_ctx.dpp, -1) << __func__
+            << " ERROR: failed to restore object=" << dest_obj
+            << "; ret=" << ret
+            << " (attempts=" << restore_attempt + 1 << ")" << dendl;
+        return ret;
+      }
+
+      int waited_ms = cloud_tier_backoff_sleep(restore_attempt);
+      ldpp_dout(tier_ctx.dpp, 1) << __func__
+          << " remote endpoint returned 503 SlowDown for restore of object="
+          << target_obj_name
+          << "; retrying after " << waited_ms << "ms"
+          << " (attempt " << restore_attempt + 1
+          << "/" << CLOUD_TIER_503_RETRY_LIMIT << ")" << dendl;
     }
+
     in_progress = true;
   }
 
@@ -354,7 +417,19 @@ int rgw_cloud_tier_get_object(RGWLCCloudTierCtx& tier_ctx, bool head,
 
   ldpp_dout(tier_ctx.dpp, 20) << __func__ << "(): fetching object from cloud bucket:" << dest_bucket << ", object: " << target_obj_name << dendl;
 
+  /* Two independent retry budgets:
+   *
+   *  NUM_ENPOINT_IOERROR_RETRIES – transient I/O errors (-EIO), tight loop,
+   *    no sleep (pre-existing behaviour, preserved).
+   *
+   *  CLOUD_TIER_503_RETRY_LIMIT  – remote endpoint rate-limiting (-EBUSY,
+   *    HTTP 503 SlowDown), exponential backoff with jitter (new behaviour).
+   *
+   * The 503 attempt counter is separate so that a burst of I/O errors does
+   * not consume the slower, more expensive 503 retry budget.
+   */
   static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
+  int slowdown_attempts = 0;
   for (int tries = 0; tries < NUM_ENPOINT_IOERROR_RETRIES; tries++) {
     ret = tier_ctx.conn.get_obj(tier_ctx.dpp, dest_obj, req_params, true /* send */, &in_req);
     if (ret < 0) {
@@ -369,7 +444,22 @@ int rgw_cloud_tier_get_object(RGWLCCloudTierCtx& tier_ctx, bool head,
     ret = tier_ctx.conn.complete_request(tier_ctx.dpp, in_req, &etag, pset_mtime, nullptr, nullptr, &headers, tier_ctx.y);
     if (ret < 0) {
       if (ret == -EIO && tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
-        ldpp_dout(tier_ctx.dpp, 20) << __func__  << "(): failed to fetch object from remote. retries=" << tries << dendl;
+        ldpp_dout(tier_ctx.dpp, 20) << __func__
+            << "(): transient I/O error fetching object from remote;"
+            << " tries=" << tries << dendl;
+        continue;
+      }
+      if (ret == -EBUSY && slowdown_attempts < CLOUD_TIER_503_RETRY_LIMIT - 1) {
+        /* Remote endpoint returned 503 SlowDown — back off and retry. */
+        int waited_ms = cloud_tier_backoff_sleep(slowdown_attempts);
+        ldpp_dout(tier_ctx.dpp, 1) << __func__
+            << "(): remote endpoint returned 503 SlowDown for object="
+            << target_obj_name
+            << "; retrying after " << waited_ms << "ms"
+            << " (slowdown attempt " << slowdown_attempts + 1
+            << "/" << CLOUD_TIER_503_RETRY_LIMIT << ")" << dendl;
+        ++slowdown_attempts;
+        tries = 0; /* reset the I/O-error budget for the fresh attempt */
         continue;
       }
       return ret;
@@ -1516,10 +1606,23 @@ static int cloud_tier_create_bucket(RGWLCCloudTierCtx& tier_ctx) {
     bl.append(ss.str());
   }
 
-  ret = tier_ctx.conn.send_resource(tier_ctx.dpp, "PUT", resource, nullptr, nullptr,
-                                    out_bl, &bl, nullptr, tier_ctx.y);
-
-  if (ret < 0 ) {
+  /* Retry bucket creation on 503 SlowDown (-EBUSY) from remote endpoint. */
+  for (int cb_attempt = 0; ; ++cb_attempt) {
+    out_bl.clear();
+    ret = tier_ctx.conn.send_resource(tier_ctx.dpp, "PUT", resource, nullptr, nullptr,
+                                      out_bl, &bl, nullptr, tier_ctx.y);
+    if (ret != -EBUSY || cb_attempt >= CLOUD_TIER_503_RETRY_LIMIT - 1) {
+      break;
+    }
+    int waited_ms = cloud_tier_backoff_sleep(cb_attempt);
+    ldpp_dout(tier_ctx.dpp, 1) << __func__
+        << " remote endpoint returned 503 SlowDown for create_bucket="
+        << tier_ctx.target_bucket_name
+        << "; retrying after " << waited_ms << "ms"
+        << " (attempt " << cb_attempt + 1
+        << "/" << CLOUD_TIER_503_RETRY_LIMIT << ")" << dendl;
+  }
+  if (ret < 0) {
     ldpp_dout(tier_ctx.dpp, 0) << "create target bucket : " << tier_ctx.target_bucket_name << " returned ret:" << ret << dendl;
   }
   if (out_bl.length() > 0) {
