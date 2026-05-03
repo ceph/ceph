@@ -19,7 +19,6 @@
 
 // ShardDpp implementation
 std::ostream& ECPeeringTestFixture::ShardDpp::gen_prefix(std::ostream& out) const {
-  out << "shard " << shard << ": ";
   if (fixture->shard_peering_states.contains(shard)) {
     PeeringState *ps = fixture->shard_peering_states[shard].get();
     out << *ps;
