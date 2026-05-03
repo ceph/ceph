@@ -27,6 +27,16 @@ options:
   - startup
   min: 0
   max: 32
+- name: crimson_memory
+  type: size
+  level: advanced
+  default: 0
+  desc: Total memory to use for the seastar allocator per OSD.
+  long_desc: Total memory to use for the seastar allocator per OSD.
+             Maps to seastar's --memory flag. 0 means use seastar's default
+             (all available memory minus a reserve).
+  flags:
+  - startup
 
 # Reactor options:
 
