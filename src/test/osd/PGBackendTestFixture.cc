@@ -25,6 +25,12 @@
 #include "messages/MOSDPGPush.h"
 #include "messages/MOSDPGPushReply.h"
 
+void PGBackendTestFixture::initialize_scrub_infra()
+{
+  scrub_listener = TestScrubBackend::create_scrub_listener(spgid, osdmap);
+  snap_reader = TestScrubBackend::create_snap_reader();
+}
+
 void PGBackendTestFixture::setup_ec_pool()
 {
   CephContext *cct = g_ceph_context;
@@ -903,4 +909,163 @@ object_info_t PGBackendTestFixture::read_shard_object_info(
   object_info_t oi;
   oi.decode(p);
   return oi;
+}
+
+
+bool PGBackendTestFixture::scrub_object(const std::string& obj_name)
+{
+  hobject_t hoid = make_test_object(obj_name);
+
+  int total_shards = k + m;
+  std::map<pg_shard_t, ScrubMap> scrub_maps;
+
+  for (int shard = 0; shard < total_shards; ++shard) {
+    pg_shard_t pg_shard(shard, shard_id_t(shard));
+    ScrubMap& smap = scrub_maps[pg_shard];
+
+    auto backend_it = backends.find(shard);
+    if (backend_it == backends.end()) {
+      std::cerr << "ERROR: Backend for shard " << shard << " does not exist" << std::endl;
+      return true;
+    }
+    PGBackend* backend = backend_it->second.get();
+    if (!backend) {
+      std::cerr << "ERROR: Backend pointer for shard " << shard << " is null" << std::endl;
+      return true;
+    }
+
+    ScrubMapBuilder pos;
+    pos.ls.push_back(hoid);
+    pos.pos = 0;
+    pos.deep = true;
+
+    const Scrub::ScrubCounterSet& counters = Scrub::io_counters_ec;
+
+    int r = backend->be_scan_list(counters, smap, pos);
+    while (r == -EINPROGRESS) {
+      r = backend->be_scan_list(counters, smap, pos);
+    }
+
+    if (r != 0) {
+      std::cerr << "ERROR: be_scan_list failed for shard " << shard << ": " << cpp_strerror(r) << std::endl;
+      return true;
+    }
+
+    if (!smap.objects.contains(hoid)) {
+      std::cerr << "ERROR: Object not in scrub map for shard " << shard << std::endl;
+      return true;
+    }
+  }
+
+  if (!scrub_listener || !snap_reader) {
+    initialize_scrub_infra();
+  }
+
+  ceph_assert(scrub_listener);
+  ceph_assert(snap_reader);
+
+  MockPGBackendListener* primary_listener = get_primary_listener();
+  if (!primary_listener) {
+    std::cerr << "ERROR: No primary listener found" << std::endl;
+    return true;
+  }
+  int primary_shard = primary_listener->pg_whoami.osd;
+
+  PGBackend* primary_backend = get_primary_backend();
+  if (!primary_backend) {
+    std::cerr << "ERROR: No primary backend found" << std::endl;
+    return true;
+  }
+
+  const pg_pool_t* pool_info = osdmap->get_pg_pool(pool_id);
+  ceph_assert(pool_info != nullptr);
+
+  MockPgScrubBeListener pg_scrub_listener(primary_backend);
+  pg_scrub_listener.pool = std::make_shared<PGPool>(
+    osdmap, pool_id, *pool_info, "test_pool");
+  pg_scrub_listener.primary = primary_shard;
+  pg_scrub_listener.info.pgid = spgid;
+
+  std::set<pg_shard_t> acting_set;
+  for (int i = 0; i < k + m; ++i) {
+    acting_set.insert(pg_shard_t(i, shard_id_t(i)));
+  }
+
+  TestScrubBackend scrub_backend(*scrub_listener, pg_scrub_listener,
+                                 pg_shard_t(primary_shard, shard_id_t(primary_shard)),
+                                 false, scrub_level_t::deep, acting_set);
+
+  scrub_backend.new_chunk();
+
+  for (const auto& [pg_shard, smap] : scrub_maps) {
+    scrub_backend.insert_faked_smap(pg_shard, smap);
+  }
+
+  auto result = scrub_backend.scrub_compare_maps(false, *snap_reader);
+
+  return !result.inconsistent_objs.empty();
+}
+
+
+bufferlist PGBackendTestFixture::create_random_buffer(size_t size)
+{
+  bufferlist bl;
+
+  if (size == 0) {
+    return bl;
+  }
+
+  ceph::buffer::ptr bp(size);
+
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_int_distribution<unsigned char> dis(0, 255);
+
+  for (size_t i = 0; i < size; ++i) {
+    bp[i] = dis(gen);
+  }
+
+  bl.append(std::move(bp));
+  return bl;
+}
+
+void PGBackendTestFixture::corrupt_shard_data(const hobject_t& obj, pg_shard_t shard)
+{
+  auto ch_it = chs.find(shard.osd);
+  if (ch_it == chs.end()) {
+    std::cerr << "ERROR: No collection handle for shard " << shard.osd << std::endl;
+    return;
+  }
+
+  ghobject_t ghoid(obj, ghobject_t::NO_GEN, shard.shard);
+
+  struct stat st;
+  int r = store->stat(ch_it->second, ghoid, &st);
+  if (r < 0) {
+    std::cerr << "ERROR: Failed to stat object on shard " << shard.osd
+              << ": " << cpp_strerror(r) << std::endl;
+    return;
+  }
+
+  uint64_t size = st.st_size;
+  if (size == 0) {
+    std::cerr << "WARNING: Object has zero size on shard " << shard.osd << std::endl;
+    return;
+  }
+
+  bufferlist zero_bl;
+  zero_bl.append_zero(size);
+
+  ObjectStore::Transaction t;
+  t.write(ch_it->second->cid, ghoid, 0, size, zero_bl);
+
+  r = store->queue_transaction(ch_it->second, std::move(t));
+  if (r < 0) {
+    std::cerr << "ERROR: Failed to corrupt object on shard " << shard.osd
+              << ": " << cpp_strerror(r) << std::endl;
+    return;
+  }
+
+  std::cout << "Corrupted shard " << shard.osd << " data for object " << obj
+            << " (wrote " << size << " bytes of zeros)" << std::endl;
 }
