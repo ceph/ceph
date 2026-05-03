@@ -35,6 +35,7 @@ class Log : private Thread
 {
 public:
   using Thread::is_started;
+  using prefix_hook_t = const char* (*)();
 
   Log(const SubsystemMap *s);
   ~Log() override;
@@ -80,6 +81,9 @@ public:
   /// induce a segv on the next log event
   void inject_segv();
   void reset_segv();
+
+  /// set a hook to get the log prefix (replaces thread ID in log output)
+  static void set_prefix_hook(prefix_hook_t hook);
 
 protected:
   using EntryVector = std::vector<ConcreteEntry>;

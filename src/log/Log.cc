@@ -40,12 +40,20 @@ namespace logging {
 
 static OnExitManager exit_callbacks;
 
+// Static hook for getting log prefix (set by tests)
+static Log::prefix_hook_t prefix_hook = nullptr;
+
 static void log_on_exit(void *p)
 {
   Log *l = *(Log **)p;
   if (l)
     l->flush();
   delete (Log **)p;// Delete allocated pointer (not Log object, the pointer only!)
+}
+
+void Log::set_prefix_hook(prefix_hook_t hook)
+{
+  prefix_hook = hook;
 }
 
 Log::Log(const SubsystemMap *s)
@@ -409,7 +417,15 @@ void Log::_flush(EntryVector& t, bool crash)
         used += (std::size_t)snprintf(pos + used, allocated - used, "%6ld> ", -(--len));
       }
       used += (std::size_t)append_time(stamp, pos + used, allocated - used);
-      used += (std::size_t)snprintf(pos + used, allocated - used, " %lx %2d ", (unsigned long)thread, prio);
+      
+      // In tests, replace thread ID with custom prefix (e.g., "osd.X" or "harness")
+      const char* prefix = prefix_hook ? prefix_hook() : nullptr;
+      if (prefix) {
+        used += (std::size_t)snprintf(pos + used, allocated - used, " %s %2d ", prefix, prio);
+      } else {
+        used += (std::size_t)snprintf(pos + used, allocated - used, " %lx %2d ", (unsigned long)thread, prio);
+      }
+      
       memcpy(pos + used, str.data(), str.size());
       used += str.size();
       pos[used] = '\0';
