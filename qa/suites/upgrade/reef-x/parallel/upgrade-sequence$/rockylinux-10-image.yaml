@@ -1,4 +1,4 @@
-# renamed tasks: to upgrade-sequence:
+
 upgrade-sequence:
    sequential:
    - print: "**** done start upgrade, wait"
