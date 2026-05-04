@@ -26,12 +26,14 @@ export class ContextComponent implements OnInit, OnDestroy {
   private rgwUserUrlPrefix = '/rgw/user';
   private rgwBuckerUrlPrefix = '/rgw/bucket';
   private rgwAccountsUrlPrefix = '/rgw/accounts';
+  private rgwMultisiteSyncPolicyPrefix = '/rgw/multisite/sync-policy';
   permissions: Permissions;
   featureToggleMap$: FeatureTogglesMap$;
   isRgwRoute =
     document.location.href.includes(this.rgwUserUrlPrefix) ||
     document.location.href.includes(this.rgwBuckerUrlPrefix) ||
-    document.location.href.includes(this.rgwAccountsUrlPrefix);
+    document.location.href.includes(this.rgwAccountsUrlPrefix) ||
+    document.location.href.includes(this.rgwMultisiteSyncPolicyPrefix);
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -53,7 +55,8 @@ export class ContextComponent implements OnInit, OnDestroy {
             (this.isRgwRoute = [
               this.rgwBuckerUrlPrefix,
               this.rgwUserUrlPrefix,
-              this.rgwAccountsUrlPrefix
+              this.rgwAccountsUrlPrefix,
+              this.rgwMultisiteSyncPolicyPrefix
             ].some((urlPrefix) => this.router.url.startsWith(urlPrefix)))
         )
     );
