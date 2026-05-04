@@ -149,19 +149,24 @@ NONEXISTENT_AP_ID = "fsap-" + "0" * 32
 NONEXISTENT_MT_ID = "fsmt-" + "0" * 32
 
 
-def make_client(service_name):
+def make_client(service_name, *, access_key=None, secret_key=None):
     """Construct a boto3 client of the given service against the
-    configured RGW endpoint, using the configured credentials.
+    configured RGW endpoint.
+
+    By default uses the credentials from the test config (the
+    account-root user). Pass `access_key` and `secret_key` to use
+    a different principal — for example a non-root IAM user
+    minted within a test to exercise least-privilege policies.
 
     Examples:
         make_client('s3files')
-        make_client('s3')
         make_client('iam')
+        make_client('s3files', access_key=ak, secret_key=sk)
     """
     return boto3.client(
         service_name,
         endpoint_url=get_endpoint_url(),
-        aws_access_key_id=get_access_key(),
-        aws_secret_access_key=get_secret_key(),
+        aws_access_key_id=access_key or get_access_key(),
+        aws_secret_access_key=secret_key or get_secret_key(),
         region_name='default',
     )

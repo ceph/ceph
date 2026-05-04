@@ -16,7 +16,10 @@ import string
 import pytest
 from botocore.exceptions import ClientError
 
-from . import setup, make_client, get_user_id, get_zone_id, make_subnet_id
+from . import (
+    setup, make_client,
+    get_user_id, get_zone_id, make_subnet_id,
+)
 
 log = logging.getLogger(__name__)
 
@@ -198,3 +201,62 @@ def test_mount_target(s3files_client, test_file_system, test_subnet_id):
             resp['mountTargetId'],
             exc_info=True,
         )
+
+
+# ---------------------------------------------------------------- IAM-scoped client
+
+
+@pytest.fixture(scope="function")
+def make_scoped_client(iam_client):
+    """Factory: mint a fresh non-root IAM user inside the configured
+    account, attach the supplied inline policy, and return a boto3
+    s3files client signed with that user's access key.
+
+    The factory is itself a function — call it as
+    `make_scoped_client(policy_doc)` (where `policy_doc` is a
+    dict in the standard IAM policy-document shape) and use the
+    returned client to make API calls under least-privilege.
+
+    Bootstrap relies entirely on the IAM API, not radosgw-admin:
+    `iam:CreateUser` → `iam:CreateAccessKey` →
+    `iam:PutUserPolicy`. The same fixture should run unchanged
+    against a real AWS account given suitable account-root creds.
+
+    All users created during one test are torn down on fixture
+    exit regardless of which test branch ran.
+    """
+    created = []  # list of (user_name, access_key_id, policy_name)
+
+    def _factory(policy_doc):
+        user_name = f"s3files-perm-{_rand_suffix()}"
+        iam_client.create_user(UserName=user_name)
+        ak = iam_client.create_access_key(UserName=user_name)['AccessKey']
+        policy_name = "s3files-perm-test"
+        iam_client.put_user_policy(
+            UserName=user_name,
+            PolicyName=policy_name,
+            PolicyDocument=json.dumps(policy_doc),
+        )
+        created.append((user_name, ak['AccessKeyId'], policy_name))
+        return make_client(
+            's3files',
+            access_key=ak['AccessKeyId'],
+            secret_key=ak['SecretAccessKey'],
+        )
+
+    yield _factory
+
+    for user_name, ak_id, policy_name in created:
+        for op, kwargs in (
+            (iam_client.delete_user_policy,
+             {'UserName': user_name, 'PolicyName': policy_name}),
+            (iam_client.delete_access_key,
+             {'UserName': user_name, 'AccessKeyId': ak_id}),
+            (iam_client.delete_user,
+             {'UserName': user_name}),
+        ):
+            try:
+                op(**kwargs)
+            except ClientError:
+                log.warning("teardown step failed for %s: %s",
+                            user_name, op.__name__, exc_info=True)
