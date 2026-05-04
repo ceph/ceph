@@ -15,6 +15,7 @@
 
 #include "Monitor.h"
 
+#include <algorithm>
 #include <iomanip> // for std::setw()
 #include <iterator>
 #include <sstream>
@@ -2518,7 +2519,8 @@ void Monitor::finish_election()
 		     leader);
     return;
   }
-  do_stretch_mode_election_work();
+  // Check for stretch mode failures after election
+  maybe_go_degraded_stretch_mode();
 }
 
 void Monitor::_apply_compatset_features(CompatSet &new_features)
@@ -6917,46 +6919,14 @@ void Monitor::try_disable_stretch_mode()
     stretch_bucket_divider.clear();
     degraded_stretch_mode = false;
     recovering_stretch_mode = false;
-  }
-
-}
-
-void Monitor::do_stretch_mode_election_work()
-{
-  dout(20) << __func__ << dendl;
-  if (!is_stretch_mode() ||
-      !is_leader()) return;
-  dout(20) << "checking for degraded stretch mode" << dendl;
-  map<string, set<string>> old_dead_buckets;
-  old_dead_buckets.swap(dead_mon_buckets);
-  up_mon_buckets.clear();
-  // identify if we've lost a CRUSH bucket, request OSDMonitor check for death
-  map<string,set<string>> down_mon_buckets;
-  for (unsigned i = 0; i < monmap->size(); ++i) {
-    const auto &mi = monmap->mon_info[monmap->get_name(i)];
-    auto ci = mi.crush_loc.find(stretch_bucket_divider);
-    ceph_assert(ci != mi.crush_loc.end());
-    if (quorum.count(i)) {
-      up_mon_buckets.insert(ci->second);
-    } else {
-      down_mon_buckets[ci->second].insert(mi.name);
-    }
-  }
-  dout(20) << "prior dead_mon_buckets: " << old_dead_buckets
-	   << "; down_mon_buckets: " << down_mon_buckets
-	   << "; up_mon_buckets: " << up_mon_buckets << dendl;
-  for (const auto& di : down_mon_buckets) {
-    if (!up_mon_buckets.count(di.first)) {
-      dead_mon_buckets[di.first] = di.second;
-    }
-  }
-  dout(20) << "new dead_mon_buckets " << dead_mon_buckets << dendl;
-
-  if (dead_mon_buckets != old_dead_buckets &&
-      dead_mon_buckets.size() >= old_dead_buckets.size()) {
-    maybe_go_degraded_stretch_mode();
+    dead_osd_buckets.clear();
+    up_osd_buckets.clear();
+    dead_mon_buckets.clear();
+    up_mon_buckets.clear();
   }
 }
+
+
 
 struct CMonGoDegraded : public Context {
   Monitor *m;
@@ -6985,9 +6955,16 @@ void Monitor::go_recovery_stretch_mode()
   if (is_recovering_stretch_mode()) return;
   dout(20) << "dead_mon_buckets.size(): " << dead_mon_buckets.size() << dendl;
   dout(20) << "dead_mon_buckets: " << dead_mon_buckets << dendl;
+  dout(20) << "dead_osd_buckets.size(): " << dead_osd_buckets.size() << dendl;
+  dout(20) << "dead_osd_buckets: " << dead_osd_buckets << dendl;
   if (dead_mon_buckets.size()) {
     ceph_assert( 0 == "how did we try and do stretch recovery while we have dead monitor buckets?");
     // we can't recover if we are missing monitors in a zone!
+    return;
+  }
+  if (dead_osd_buckets.size()) {
+    dout(20) << "cannot recover yet, still have dead OSD buckets" << dendl;
+    // we can't recover if we still have zones with all OSDs down!
     return;
   }
   
@@ -7013,62 +6990,148 @@ void Monitor::set_recovery_stretch_mode()
   osdmon()->set_recovery_stretch_mode();
 }
 
+void Monitor::populate_dead_mon_buckets(
+  const MonMap& monmap,
+  const set<int>& quorum,
+  const string& stretch_bucket_divider,
+  map<string, set<string>>& dead_mon_buckets,
+  set<string>& up_mon_buckets)
+{
+  dead_mon_buckets.clear();
+  up_mon_buckets.clear();
+  
+  // Get tiebreaker zone to filter it out
+  ceph_assert(monmap.contains(monmap.tiebreaker_mon));
+  const auto &tiebreaker_mi = monmap.mon_info.at(monmap.tiebreaker_mon);
+  auto tiebreaker_ci = tiebreaker_mi.crush_loc.find(stretch_bucket_divider);
+  ceph_assert(tiebreaker_ci != tiebreaker_mi.crush_loc.end());
+  string tiebreaker_zone = tiebreaker_ci->second;
+
+  // if mon in quorum then it's up, otherwise it's down
+  map<string, set<string>> bucket_to_down_mons;
+  for (unsigned i = 0; i < monmap.size(); ++i) {
+    const auto &mi = monmap.mon_info.at(monmap.get_name(i));
+    auto ci = mi.crush_loc.find(stretch_bucket_divider);
+    if (quorum.count(i)) {
+      up_mon_buckets.insert(ci->second);
+    } else {
+      bucket_to_down_mons[ci->second].insert(mi.name);
+    }
+  }
+  // Only track dead buckets for non-tiebreaker zones
+  for (const auto& [bucket_name, mons] : bucket_to_down_mons) {
+    if (!up_mon_buckets.count(bucket_name) && bucket_name != tiebreaker_zone) {
+      dead_mon_buckets[bucket_name] = mons;
+    }
+  }
+}
+
+void Monitor::populate_dead_osd_buckets(
+  const OSDMap& osdmap,
+  std::set<std::string>& dead_osd_buckets,
+  std::set<std::string>& up_osd_buckets)
+{
+  dead_osd_buckets.clear();
+  up_osd_buckets.clear();
+  vector<int> subtrees;
+  int32_t stretch_divider_id = osdmap.stretch_mode_bucket;
+  osdmap.crush->get_subtree_of_type(stretch_divider_id, &subtrees);
+  set<int> down_cache;
+  for (int bucket_id : subtrees) {
+    if (osdmap.subtree_is_down(bucket_id, &down_cache)) {
+      string bucket_name = osdmap.crush->get_item_name(bucket_id);
+      dead_osd_buckets.insert(bucket_name);
+    } else {
+      string bucket_name = osdmap.crush->get_item_name(bucket_id);
+      up_osd_buckets.insert(bucket_name);
+    }
+  }
+}
+
+void Monitor::compute_dead_zones_and_mons(
+  const map<string, set<string>>& dead_mon_buckets,
+  const set<string>& dead_osd_buckets,
+  set<string>& matched_down_mons,
+  set<string>& dead_zones)
+{
+  matched_down_mons.clear();
+  dead_zones.clear();
+  
+  // Collect all down monitors
+  for (const auto& [zone, mons] : dead_mon_buckets) {
+    matched_down_mons.insert(mons.begin(), mons.end());
+  }
+  
+  // Compute union of dead zones (zones with dead monitors OR dead OSDs)
+  for (const auto& [zone, mons] : dead_mon_buckets) {
+    dead_zones.insert(zone);
+  }
+  dead_zones.insert(dead_osd_buckets.begin(), dead_osd_buckets.end());
+}
+
 void Monitor::maybe_go_degraded_stretch_mode()
 {
   dout(20) << __func__ << dendl;
   if (!is_stretch_mode()) return;
   if (is_degraded_stretch_mode()) return;
   if (!is_leader()) return;
-  if (dead_mon_buckets.empty()) return;
   if (!osdmon()->is_readable()) {
     osdmon()->wait_for_readable_ctx(new CMonGoDegraded(this));
     return;
   }
-  ceph_assert(monmap->contains(monmap->tiebreaker_mon));
-  // filter out the tiebreaker zone and check if remaining sites are down by OSDs too
-  const auto &mi = monmap->mon_info[monmap->tiebreaker_mon];
-  auto ci = mi.crush_loc.find(stretch_bucket_divider);
-  map<string, set<string>> filtered_dead_buckets = dead_mon_buckets;
-  filtered_dead_buckets.erase(ci->second);
 
-  set<int> matched_down_buckets;
-  set<string> matched_down_mons;
-  bool dead = osdmon()->check_for_dead_crush_zones(filtered_dead_buckets,
-						   &matched_down_buckets,
-						   &matched_down_mons);
-  if (dead) {
-    if (!osdmon()->is_writeable()) {
-      dout(20) << "osdmon is not writeable" << dendl;
-      osdmon()->wait_for_writeable_ctx(new CMonGoDegraded(this));
-      return;
-    }
-    if (!monmon()->is_writeable()) {
-      dout(20) << "monmon is not writeable" << dendl;
-      monmon()->wait_for_writeable_ctx(new CMonGoDegraded(this));
-      return;
-    }
-    trigger_degraded_stretch_mode(matched_down_mons, matched_down_buckets);
+  // Check for zone failures in Monitors and OSDs, disregarding tiebreaker.
+  populate_dead_mon_buckets(*monmap, quorum, stretch_bucket_divider,
+                            dead_mon_buckets, up_mon_buckets);
+  dout(20) << "dead_mon_buckets: " << dead_mon_buckets
+           << "; up_mon_buckets: " << up_mon_buckets << dendl;
+
+  populate_dead_osd_buckets(osdmon()->osdmap,
+    dead_osd_buckets, up_osd_buckets);
+  dout(20) << "dead_osd_buckets: " << dead_osd_buckets
+           << "; up_osd_buckets: " << up_osd_buckets << dendl;
+
+  // Early return if no failures detected
+  if (dead_mon_buckets.empty() && dead_osd_buckets.empty()) return;
+  
+  // Compute degraded stretch mode parameters
+  set<string> dead_mons;
+  set<string> dead_zones;
+  compute_dead_zones_and_mons(dead_mon_buckets, dead_osd_buckets,
+                              dead_mons, dead_zones);
+  
+  // Trigger degraded mode if any zone has all monitors down OR all OSDs down
+  if (!osdmon()->is_writeable()) {
+    dout(20) << "osdmon is not writeable" << dendl;
+    osdmon()->wait_for_writeable_ctx(new CMonGoDegraded(this));
+    return;
   }
+  if (!monmon()->is_writeable()) {
+    dout(20) << "monmon is not writeable" << dendl;
+    monmon()->wait_for_writeable_ctx(new CMonGoDegraded(this));
+    return;
+  }
+  // Use dead_osd_buckets directly (already zone names)
+  trigger_degraded_stretch_mode(dead_mons, dead_zones);
 }
 
 void Monitor::trigger_degraded_stretch_mode(const set<string>& dead_mons,
-					    const set<int>& dead_buckets)
+					    const set<string>& dead_zones)
 {
   dout(20) << __func__ << dendl;
   if (!is_stretch_mode()) return;
   ceph_assert(osdmon()->is_writeable());
   ceph_assert(monmon()->is_writeable());
 
-  // figure out which OSD zone(s) remains alive by removing
-  // tiebreaker mon from up_mon_buckets
-  set<string> live_zones = up_mon_buckets;
-  ceph_assert(monmap->contains(monmap->tiebreaker_mon));
-  const auto &mi = monmap->mon_info[monmap->tiebreaker_mon];
-  auto ci = mi.crush_loc.find(stretch_bucket_divider);
-  live_zones.erase(ci->second);
+  // Compute live zones as the intersection of zones with live monitors AND live OSDs
+  set<string> live_zones;
+  std::set_intersection(up_mon_buckets.begin(), up_mon_buckets.end(),
+                        up_osd_buckets.begin(), up_osd_buckets.end(),
+                        std::inserter(live_zones, live_zones.begin()));
+  
   ceph_assert(live_zones.size() == 1); // only support 2 zones right now
   
-  osdmon()->trigger_degraded_stretch_mode(dead_buckets, live_zones);
+  osdmon()->trigger_degraded_stretch_mode(dead_zones, live_zones);
   monmon()->trigger_degraded_stretch_mode(dead_mons);
   set_degraded_stretch_mode();
 }

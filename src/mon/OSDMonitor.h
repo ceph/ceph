@@ -867,18 +867,10 @@ public:
           int *errcode,
           const std::string& crush_rule);
   /**
-   * Check the input dead_buckets mapping (buckets->dead monitors) to see
-   * if the OSDs are also down. If so, fill in really_down_buckets and
-   * really_down_mons and return true; else return false.
-   */
-  bool check_for_dead_crush_zones(const std::map<std::string,std::set<std::string>>& dead_buckets,
-				  std::set<int> *really_down_buckets,
-				  std::set<std::string> *really_down_mons);
-  /**
-   * Set degraded mode in the OSDMap, adding the given dead buckets to the dead set
+   * Set degraded mode in the OSDMap, adding the given dead zones to the dead set
    * and using the live_zones (should presently be size 1)
    */
-  void trigger_degraded_stretch_mode(const std::set<int>& dead_buckets,
+  void trigger_degraded_stretch_mode(const std::set<std::string>& dead_zones,
 				     const std::set<std::string>& live_zones);
   /**
    * This is just to maintain stretch_recovery_triggered; below

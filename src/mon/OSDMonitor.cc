@@ -15698,38 +15698,7 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
   return;
 }
 
-bool OSDMonitor::check_for_dead_crush_zones(const map<string,set<string>>& dead_buckets,
-					    set<int> *really_down_buckets,
-					    set<string> *really_down_mons)
-{
-  dout(20) << __func__ << " with dead mon zones " << dead_buckets << dendl;
-  ceph_assert(is_readable());
-  if (dead_buckets.empty()) return false;
-  set<int> down_cache;
-  bool really_down = false;
-  for (auto dbi : dead_buckets) {
-    const string& bucket_name = dbi.first;
-    if (!osdmap.crush->name_exists(bucket_name)) {
-      dout(10) << "CRUSH bucket " << bucket_name << " does not exist" << dendl;
-      continue;
-    }
-    int bucket_id = osdmap.crush->get_item_id(bucket_name);
-    dout(20) << "Checking " << bucket_name << " id " << bucket_id
-	     << " to see if OSDs are also down" << dendl;
-    bool subtree_down = osdmap.subtree_is_down(bucket_id, &down_cache);
-    if (subtree_down) {
-      dout(20) << "subtree is down!" << dendl;
-      really_down = true;
-      really_down_buckets->insert(bucket_id);
-      really_down_mons->insert(dbi.second.begin(), dbi.second.end());
-    }
-  }
-  dout(10) << "We determined CRUSH buckets " << *really_down_buckets
-	   << " and mons " << *really_down_mons << " are really down" << dendl;
-  return really_down;
-}
-
-void OSDMonitor::trigger_degraded_stretch_mode(const set<int>& dead_buckets,
+void OSDMonitor::trigger_degraded_stretch_mode(const set<std::string>& dead_zones,
 					       const set<string>& live_zones)
 {
   dout(20) << __func__ << dendl;
@@ -15738,7 +15707,7 @@ void OSDMonitor::trigger_degraded_stretch_mode(const set<int>& dead_buckets,
   pending_inc.change_stretch_mode = true;
   pending_inc.stretch_mode_enabled = osdmap.stretch_mode_enabled;
   pending_inc.new_stretch_bucket_count = osdmap.stretch_bucket_count;
-  int new_site_count = osdmap.stretch_bucket_count - dead_buckets.size();
+  int new_site_count = osdmap.stretch_bucket_count - dead_zones.size();
   ceph_assert(new_site_count == 1); // stretch count 2!
   pending_inc.new_degraded_stretch_mode = new_site_count;
   pending_inc.new_recovering_stretch_mode = 0;

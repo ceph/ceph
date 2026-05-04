@@ -263,9 +263,10 @@ private:
   bool degraded_stretch_mode{false};
   bool recovering_stretch_mode{false};
   std::string stretch_bucket_divider;
-  std::map<std::string, std::set<std::string>> dead_mon_buckets; // bucket->mon ranks, locations with no live mons
-  std::set<std::string> up_mon_buckets; // locations with a live mon
-  void do_stretch_mode_election_work();
+  std::map<std::string, std::set<std::string>> dead_mon_buckets; // Map of zones to dead monitors
+  std::set<std::string> up_mon_buckets; // Zones with a live MONs
+  std::set<std::string> dead_osd_buckets; // Zones wih dead OSDs
+  std::set<std::string> up_osd_buckets; // Zones with live OSDs
 
   bool session_stretch_allowed(MonSession *s, MonOpRequestRef& op);
   void disconnect_disallowed_stretch_sessions();
@@ -274,6 +275,7 @@ private:
   std::map<std::string,std::string> crush_loc;
   bool need_set_crush_loc{false};
 public:
+
   bool is_stretch_mode() { return stretch_mode_engaged; }
   bool is_degraded_stretch_mode() { return degraded_stretch_mode; }
   bool is_recovering_stretch_mode() { return recovering_stretch_mode; }
@@ -294,7 +296,7 @@ public:
   void try_disable_stretch_mode();
   void maybe_go_degraded_stretch_mode();
   void trigger_degraded_stretch_mode(const std::set<std::string>& dead_mons,
-				     const std::set<int>& dead_buckets);
+				     const std::set<std::string>& dead_buckets);
   void set_degraded_stretch_mode();
   void go_recovery_stretch_mode();
   void set_recovery_stretch_mode();
@@ -302,6 +304,25 @@ public:
   void set_healthy_stretch_mode();
   void enable_stretch_mode();
   void set_mon_crush_location(const std::string& loc);
+
+  // Helper functions for unit testing stretch mode failure detection
+  static void populate_dead_mon_buckets(
+    const MonMap& monmap,
+    const std::set<int>& quorum,
+    const std::string& stretch_bucket_divider,
+    std::map<std::string, std::set<std::string>>& dead_mon_buckets,
+    std::set<std::string>& up_mon_buckets);
+
+  static void populate_dead_osd_buckets(
+    const OSDMap& osdmap,
+    std::set<std::string>& dead_osd_buckets,
+    std::set<std::string>& up_osd_buckets);
+
+  static void compute_dead_zones_and_mons(
+    const std::map<std::string, std::set<std::string>>& dead_mon_buckets,
+    const std::set<std::string>& dead_osd_buckets,
+    std::set<std::string>& matched_down_mons,
+    std::set<std::string>& dead_zones);
 
   
 private:
