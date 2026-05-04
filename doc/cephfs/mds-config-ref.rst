@@ -57,6 +57,7 @@
 .. confval:: mds_kill_mdstable_at
 .. confval:: mds_kill_export_at
 .. confval:: mds_kill_import_at
+.. confval:: mds_kill_ino_prealloc_at
 .. confval:: mds_kill_link_at
 .. confval:: mds_kill_rename_at
 .. confval:: mds_inject_skip_replaying_inotable
