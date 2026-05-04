@@ -157,8 +157,12 @@ bool valid_bucket_arn(std::string_view s) {
 }
 
 bool valid_role_arn(std::string_view s) {
-  // Smithy: arn:aws:iam::<acct>:role/<name> (acct may be empty in some forms;
-  // we accept any ":<digits>:role/<name>" form).
+  // Smithy: arn:aws:iam::<acct>:role/<name>. The account segment
+  // is empty for the legacy non-account user case and alphanumeric
+  // for RGW accounts (e.g. `RGW65713045997841677`); AWS itself
+  // uses 12-digit numeric ids. Accept any alphanumeric account
+  // (including empty) — invalid ARN shapes still fail the prefix
+  // and `role/` checks below.
   constexpr std::string_view P = "arn:aws:iam::";
   if (s.size() <= P.size() || s.substr(0, P.size()) != P) return false;
   auto rest = s.substr(P.size());
@@ -166,7 +170,10 @@ bool valid_role_arn(std::string_view s) {
   if (colon == std::string_view::npos) return false;
   auto acct = rest.substr(0, colon);
   for (char c : acct) {
-    if (c < '0' || c > '9') return false;
+    bool ok = (c >= '0' && c <= '9') ||
+              (c >= 'a' && c <= 'z') ||
+              (c >= 'A' && c <= 'Z');
+    if (!ok) return false;
   }
   auto tail = rest.substr(colon + 1);
   constexpr std::string_view R = "role/";
