@@ -1,8 +1,10 @@
 import logging
 
+from io import BytesIO
 from teuthology import misc as teuthology
 from teuthology.task import Task
 from teuthology.packaging import remove_package
+from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 
@@ -12,7 +14,7 @@ class Redis(Task):
         super(Redis, self).__init__(ctx, config)
         self.log = log
         log.info('Redis Task: __INIT__ ')
-        
+
         clients = ['client.{id}'.format(id=id_)
                    for id_ in teuthology.all_roles_of_type(self.ctx.cluster, 'client')]
         self.all_clients = []
@@ -45,21 +47,79 @@ class Redis(Task):
         for client in self.all_clients:
             self.remove_redis_package(client)
 
+    def valkey_install_for_debian(self):
+        try:
+            for client in self.all_clients:
+                # Taken from https://www.percona.com/blog/new-valkey-packages-by-percona/
+                self.ctx.cluster.only(client).run(
+                    args=[
+                        'curl',
+                        '-O',
+                        'https://repo.percona.com/apt/percona-release_latest.generic_all.deb'
+                    ],
+                )
+                self.ctx.cluster.only(client).run(
+                    args=[
+                        'sudo',
+                        'apt',
+                        'install',
+                        'gnupg2',
+                        'lsb-release',
+                        './percona-release_latest.generic_all.deb',
+                        '-y'
+                    ],
+                )
+                self.ctx.cluster.only(client).run(
+                    args=[
+                        'sudo',
+                        'percona-release',
+                        'enable',
+                        'valkey',
+                        'testing'
+                    ],
+                )
+                self.ctx.cluster.only(client).run(
+                    args=[
+                        'sudo',
+                        'apt',
+                        'update'
+                    ],
+                )
+                self.ctx.cluster.only(client).run(
+                    args=[
+                        'sudo',
+                        'apt',
+                        'install',
+                        'valkey',
+                        '-y'
+                    ],
+                )
+    
+        except Exception as err:
+            log.debug('Redis Task: Error installing valkey package')
+            log.debug(err)
+            raise
+
     def redis_startup(self):
         try:
             for client in self.all_clients:
                 self.ctx.cluster.only(client).run(
                     args=[
                         'sudo',
-                        'redis-server',
+                        'valkey-server',
                         '--daemonize',
                         'yes'
                         ],
                     )
     
+
+        except FileNotFoundError:
+            self.valkey_install_for_debian()
+
         except Exception as err:
             log.debug('Redis Task: Error starting up a Redis server')
             log.debug(err)
+            raise
 
     def redis_shutdown(self):
         try:
@@ -67,7 +127,7 @@ class Redis(Task):
                 self.ctx.cluster.only(client).run(
                     args=[
                         'sudo',
-                        'redis-cli',
+                        'valkey-cli',
                         'shutdown',
                         ],
                     )
@@ -78,6 +138,6 @@ class Redis(Task):
 
     def remove_redis_package(self, client):
         (remote,) = self.ctx.cluster.only(client).remotes.keys()
-        remove_package('redis', remote)
+        remove_package('valkey', remote)
 
 task = Redis
