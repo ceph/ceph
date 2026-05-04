@@ -1,0 +1,133 @@
+name: Backport Audit
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, unlabeled]
+    branches:
+      - 'feature/ptl-ci-test'
+  issue_comment:
+    types: [created]
+
+jobs:
+  router:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run_audit: ${{ steps.decide.outputs.run_audit }}
+    steps:
+      - id: decide
+        name: Determine Action
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const eventName = context.eventName;
+            const payload = context.payload;
+            
+            // Trigger via Comment Override
+            if (eventName === 'issue_comment') {
+              if (payload.comment.body.trim().startsWith('/audit retest')) {
+                core.setOutput('run_audit', 'true');
+              } else {
+                core.setOutput('run_audit', 'false');
+              }
+              return;
+            }
+
+            const hasFailLabel = payload.pull_request?.labels.some(l => l.name === 'releng-audit-fail');
+
+            // On Push: Run audit unless it's already in a failed state
+            if (eventName === 'pull_request_target' && payload.action === 'synchronize') {
+              if (hasFailLabel) {
+                core.setFailed("PR is currently in a failed audit state. Remove the releng-audit-fail label to re-run.");
+                core.setOutput('run_audit', 'false');
+                return;
+              }
+              core.setOutput('run_audit', 'true');
+              return;
+            }
+
+            // Trigger via Label Removal
+            if (eventName === 'pull_request_target' && payload.action === 'unlabeled' && payload.label.name === 'releng-audit-fail') {
+              core.setOutput('run_audit', 'true');
+              return;
+            }
+
+            // Initial PR Creation
+            if (eventName === 'pull_request_target' && payload.action === 'opened') {
+              core.setOutput('run_audit', 'true');
+              return;
+            }
+
+            core.setOutput('run_audit', 'false');
+
+  audit:
+    needs: router
+    if: needs.router.outputs.should_run_audit == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Trusted Base Repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: pip install GitPython python-redmine requests
+
+      - name: Run PTL Audit
+        env:
+          PTL_TOOL_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PTL_TOOL_REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY }}
+        run: |
+          python src/script/ptl-tool.py --ci-mode --audit --audit-label releng-audit-pass,releng-audit-fail ${{ github.event.pull_request.number || github.event.issue.number }}
+
+  override:
+    if: github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/audit override')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Team Membership and Override
+        uses: actions/github-script@v6
+        env:
+          ORG_TOKEN: ${{ secrets.ORG_READ_PAT }} 
+        with:
+          script: |
+            const username = context.payload.comment.user.login;
+            try {
+              const { data } = await github.rest.teams.getMembershipForUserInOrg({
+                org: 'ceph',
+                team_slug: 'ceph-release-manager',
+                username: username
+              });
+              
+              if (data.state === 'active') {
+                const { data: pr } = await github.rest.pulls.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: context.issue.number
+                });
+                
+                // Note: The context here must match whatever checkname GitHub Actions uses
+                await github.rest.repos.createCommitStatus({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  sha: pr.head.sha,
+                  state: 'success',
+                  context: 'audit / audit', 
+                  description: `Audit Override Applied by @${username}`
+                });
+
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body: `✅ **Audit Override Applied** by @${username}.`
+                });
+              } else {
+                core.setFailed("User is not an active member of ceph-release-manager.");
+              }
+            } catch (error) {
+              core.setFailed(`Authorization failed: ${error.message}`);
+            }
