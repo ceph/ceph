@@ -20,6 +20,7 @@ For general object store configuration, refer to the following:
    :maxdepth: 1
 
    Storage devices <storage-devices>
+   BlueStore RocksDB cache <../bluestore/rocksdb-config>
    ceph-conf
 
 
