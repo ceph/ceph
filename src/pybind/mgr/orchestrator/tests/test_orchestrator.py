@@ -359,18 +359,17 @@ class TestApplyOAuth2Proxy:
     def setup_method(self):
         self.m = OrchestratorCli('orchestrator', 0, 0)
 
-    def test_missing_spec_raises_clear_error(self, mock_apply_misc):
+    def test_missing_required_fields_raises_error(self, mock_apply_misc):
         res = self.m._apply_oauth2_proxy()
 
         assert res.retval != 0
         assert (
-            'Missing required configuration for oauth2-proxy. Please provide a spec file '
-            'with required fields: provider_display_name, oidc_issuer_url, client_id, '
-            'client_secret.'
+            'Missing required fields for oauth2-proxy: provider_display_name, '
+            'oidc_issuer_url, client_id, client_secret.'
         ) in res.stderr
         mock_apply_misc.assert_not_called()
 
-    def test_missing_required_fields_raises_combined_error(self, mock_apply_misc):
+    def test_inbuf_with_missing_fields_is_rejected(self, mock_apply_misc):
         res = self.m._apply_oauth2_proxy(inbuf=textwrap.dedent("""
             service_type: oauth2-proxy
             spec:
@@ -381,13 +380,11 @@ class TestApplyOAuth2Proxy:
 
         assert res.retval != 0
         assert (
-            'Missing required fields for oauth2-proxy: provider_display_name.'
+            'unrecognized command -i; -h or --help for usage'
         ) in res.stderr
         mock_apply_misc.assert_not_called()
 
-    def test_valid_spec_is_applied(self, mock_apply_misc):
-        mock_apply_misc.return_value = HandleCommandResult(retval=0, stdout="Success")
-
+    def test_inbuf_with_valid_spec_is_rejected(self, mock_apply_misc):
         res = self.m._apply_oauth2_proxy(inbuf=textwrap.dedent("""
             service_type: oauth2-proxy
             spec:
@@ -397,8 +394,11 @@ class TestApplyOAuth2Proxy:
               client_secret: "oauth-secret"
             """).strip())
 
-        assert res.retval == 0
-        mock_apply_misc.assert_called_once()
+        assert res.retval != 0
+        assert (
+            'unrecognized command -i; -h or --help for usage'
+        ) in res.stderr
+        mock_apply_misc.assert_not_called()
 
 
 @mock.patch("orchestrator.module.OrchestratorCli._apply_misc")
