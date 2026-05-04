@@ -11,19 +11,59 @@
  * 
  * Copyright IBM Corp. 2026
  */
-#ifndef CEPH_MSG_ASYNC_SMC_SMCSOCKET_CHECKER_H
-#define CEPH_MSG_ASYNC_SMC_SMCSOCKET_CHECKER_H
+#pragma once
 
-#include "smc_socket_checker_base.h"
+#include <memory>
 
-#ifdef __linux__
-  // Linux implementation using netlink
-  #include "smc_socket_checker_linux.h"
-  using SmcSocketChecker = SmcSocketCheckerLinux;
-#else
-  // No-op implementation for non-Linux platforms
-  #include "smc_socket_checker_noop.h"
-  using SmcSocketChecker = SmcSocketCheckerNoop;
+#if defined(AF_SMC)
+  #include <sys/socket.h>
+
+  #include "smctools_common.h"
+  #include "libnetlink.h"
 #endif
 
-#endif /* CEPH_MSG_ASYNC_SMC_SMCSOCKET_CHECKER_H */
+struct SmcSocketStats {
+  int total_sockets;
+  int fallback_count;
+
+  SmcSocketStats() : total_sockets(0), fallback_count(0) {}
+
+  void reset() {
+    total_sockets = 0;
+    fallback_count = 0;
+  }
+};
+
+/**
+ * @brief Linux implementation of SMC Socket Checker
+ * 
+ * This class provides Linux-specific functionality to check SMC socket
+ * connections using netlink, identify fallback connections, and gather
+ * statistics about SMC usage.
+ */
+class SmcSocketChecker {
+public:
+  SmcSocketChecker() noexcept;
+  ~SmcSocketChecker();
+
+  SmcSocketChecker(SmcSocketChecker&& other) noexcept;
+  SmcSocketChecker& operator=(SmcSocketChecker&& other) noexcept;
+
+  int updateStatistics();
+  const SmcSocketStats& getStatistics() const;
+  void resetStatistics();
+
+private:
+#if defined(AF_SMC)
+  /**
+   * @brief Process a single socket from netlink message
+   * 
+   * @param nlh Pointer to netlink message header
+   */
+  void processSocket(struct nlmsghdr *nlh);
+
+  std::unique_ptr<NetlinkHandler> m_netlinkHandler;
+#endif
+
+  SmcSocketStats m_stats;
+};

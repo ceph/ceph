@@ -35,7 +35,6 @@
 #include "include/buffer.h"
 #include "msg/Connection.h"
 #include "msg/Messenger.h"
-#include "smc/smc_socket_checker.h"
 
 #include "Event.h"
 #include "Stack.h"
@@ -231,7 +230,6 @@ private:
   std::function<void(char *, ssize_t)> readCallback;
   std::optional<unsigned> pendingReadLen;
   char *read_buffer;
-  SmcSocketChecker smcChecker; 
 
  public:
   // used by eventcallback

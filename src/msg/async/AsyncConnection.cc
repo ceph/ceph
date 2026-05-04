@@ -816,12 +816,6 @@ void AsyncConnection::tick(uint64_t id)
       last_tick_id = center->create_time_event(inactive_timeout_us, tick_handler);
     }
   }
-
-  // update the SMC socket status: active/fallback
-  smcChecker.updateStatistics();
-  SmcSocketStats stats = smcChecker.getStatistics();
-  logger->set(l_msgr_smc_connections, stats.total_sockets);
-  logger->set(l_msgr_smc_connection_fallbacks, stats.fallback_count);
 }
 
 void AsyncConnection::dump(Formatter *f, bool tcp_info) {

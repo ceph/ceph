@@ -9,8 +9,7 @@
  * Author(s): Ursula Braun (ubraun@linux.ibm.com)
  * Author(s): Aliaksei Makarau <aliaksei.makarau@ibm.com>
  */
-#ifndef CEPH_MSG_ASYNC_SMC_SMCTOOLS_COMMON_H
-#define CEPH_MSG_ASYNC_SMC_SMCTOOLS_COMMON_H
+#pragma once
 
 #include <net/if.h>
 #include <linux/types.h>
@@ -112,5 +111,3 @@ struct smc_diag_fallback {
   __u32 reason;
   __u32 peer_diagnosis;
 };
-
-#endif /* CEPH_MSG_ASYNC_SMC_SMCTOOLS_COMMON_H */

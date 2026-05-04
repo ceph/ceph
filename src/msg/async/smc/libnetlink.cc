@@ -36,7 +36,7 @@ NetlinkHandler::~NetlinkHandler() {
   close();
 }
 
-NetlinkHandler::NetlinkHandler(NetlinkHandler&& other) noexcept 
+NetlinkHandler::NetlinkHandler(NetlinkHandler&& other) noexcept
   : m_handle(other.m_handle), m_isOpen(other.m_isOpen) {
   other.m_handle.fd = -1;
   other.m_isOpen = false;
@@ -55,7 +55,7 @@ NetlinkHandler& NetlinkHandler::operator=(NetlinkHandler&& other) noexcept {
 
 int NetlinkHandler::open() {
   if (m_isOpen) {
-    return 0; // Already open
+    return EXIT_SUCCESS; // Already open
   }
 
   socklen_t addr_len;
@@ -64,53 +64,53 @@ int NetlinkHandler::open() {
 
   m_handle.fd = socket(AF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_SOCK_DIAG);
   if (m_handle.fd < 0) {
-    return EXIT_FAILURE;
+    return -errno;
   }
 
-  if (setsockopt(m_handle.fd, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf)) < 0) {
+  if (::setsockopt(m_handle.fd, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf)) < 0) {
     ::close(m_handle.fd);
     m_handle.fd = -1;
-    return EXIT_FAILURE;
+    return -errno;
   }
 
-  if (setsockopt(m_handle.fd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf)) < 0) {
+  if (::setsockopt(m_handle.fd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf)) < 0) {
     ::close(m_handle.fd);
     m_handle.fd = -1;
-    return EXIT_FAILURE;
+    return -errno;
   }
 
   memset(&m_handle.local, 0, sizeof(m_handle.local));
   m_handle.local.nl_family = AF_NETLINK;
   m_handle.local.nl_groups = 0;
 
-  if (bind(m_handle.fd, (struct sockaddr *)&m_handle.local, sizeof(m_handle.local)) < 0) {
+  if (::bind(m_handle.fd, (struct sockaddr *)&m_handle.local, sizeof(m_handle.local)) < 0) {
     ::close(m_handle.fd);
     m_handle.fd = -1;
-    return EXIT_FAILURE;
+    return -errno;
   }
 
   addr_len = sizeof(m_handle.local);
-  if (getsockname(m_handle.fd, (struct sockaddr *)&m_handle.local, &addr_len) < 0) {
+  if (::getsockname(m_handle.fd, (struct sockaddr *)&m_handle.local, &addr_len) < 0) {
     ::close(m_handle.fd);
     m_handle.fd = -1;
-    return EXIT_FAILURE;
+    return -errno;
   }
 
   if (addr_len != sizeof(m_handle.local)) {
     ::close(m_handle.fd);
     m_handle.fd = -1;
-    return EXIT_FAILURE;
+    return -errno;
   }
 
   if (m_handle.local.nl_family != AF_NETLINK) {
     ::close(m_handle.fd);
     m_handle.fd = -1;
-    return EXIT_FAILURE;
+    return -errno;
   }
 
   m_handle.seq = time(NULL);
   m_isOpen = true;
-  return 0;
+  return EXIT_SUCCESS;
 }
 
 void NetlinkHandler::close() {
@@ -152,10 +152,10 @@ again:
   if (msglen < 0) {
     if (errno == EINTR || errno == EAGAIN)
       goto again;
-    return EXIT_FAILURE;
+    return -errno;
   }
   if (msglen == 0) {
-      return EXIT_FAILURE;
+      return -errno;
   }
 
   while (NLMSG_OK(h, static_cast<__u32>(msglen))) {
@@ -195,12 +195,12 @@ int NetlinkHandler::sendDiagRequest(unsigned char cmd) {
   memset(&req.r, 0, sizeof(req.r));
   req.r.diag_family = PF_SMC;
 
-  iov[0] = (struct iovec){
+  iov[0] = (struct iovec) {
     .iov_base = &req,
     .iov_len = sizeof(req)
   };
 
-  msg = (struct msghdr){
+  msg = (struct msghdr) {
     .msg_name = (void *)&nladdr,
     .msg_namelen = sizeof(nladdr),
     .msg_iov = iov,
@@ -209,11 +209,11 @@ int NetlinkHandler::sendDiagRequest(unsigned char cmd) {
 
   req.r.diag_ext = cmd;
 
-  if (sendmsg(m_handle.fd, &msg, 0) < 0) {
-    return EXIT_FAILURE;
+  if (::sendmsg(m_handle.fd, &msg, 0) < 0) {
+    return -errno;
   }
 
-  return 0;
+  return EXIT_SUCCESS;
 }
 
 int NetlinkHandler::getFd() const {

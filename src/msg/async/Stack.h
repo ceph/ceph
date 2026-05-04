@@ -225,9 +225,6 @@ enum {
   l_msgr_recv_encrypted_bytes,
   l_msgr_send_encrypted_bytes,
 
-  l_msgr_smc_connections,
-  l_msgr_smc_connection_fallbacks,
-
   l_msgr_last,
 };
 
@@ -238,6 +235,14 @@ enum {
   l_msgr_connection_idle_timeouts,
 
   l_msgr_labeled_last,
+};
+
+// Perf counters for SMC stats
+enum {
+  l_msgr_smc_first = l_msgr_labeled_last + 1,  // Use different range from worker counters
+  l_msgr_smc_connections,
+  l_msgr_smc_connection_fallbacks,
+  l_msgr_smc_last,
 };
 
 class Worker {
@@ -285,9 +290,6 @@ class Worker {
 
     plb.add_u64_counter(l_msgr_recv_encrypted_bytes, "msgr_recv_encrypted_bytes", "Network received encrypted bytes", NULL, 0, unit_t(UNIT_BYTES));
     plb.add_u64_counter(l_msgr_send_encrypted_bytes, "msgr_send_encrypted_bytes", "Network sent encrypted bytes", NULL, 0, unit_t(UNIT_BYTES));
-
-    plb.add_u64_counter(l_msgr_smc_connections, "msgr_smc_connections", "Active SMC connection number");
-    plb.add_u64_counter(l_msgr_smc_connection_fallbacks, "msgr_smc_connection_fallbacks", "Fallbacked SMC connection number");
 
     perf_logger = plb.create_perf_counters();
     cct->get_perfcounters_collection()->add(perf_logger);
@@ -362,6 +364,7 @@ class Worker {
 class NetworkStack {
   ceph::spinlock pool_spin;
   bool started = false;
+  PerfCounters *smc_perf_counters = nullptr;
 
   std::function<void ()> add_thread(Worker* w);
 
@@ -382,6 +385,10 @@ class NetworkStack {
   NetworkStack(const NetworkStack &) = delete;
   NetworkStack& operator=(const NetworkStack &) = delete;
   virtual ~NetworkStack() {
+    if (smc_perf_counters) {
+      cct->get_perfcounters_collection()->remove(smc_perf_counters);
+      delete smc_perf_counters;
+    }
     for (auto &&w : workers)
       delete w;
   }
@@ -415,6 +422,10 @@ class NetworkStack {
 
   virtual bool is_ready() { return true; };
   virtual void ready() { };
+
+  PerfCounters *get_smc_perf_counters() {
+    return smc_perf_counters;
+  }
 };
 
 #endif //CEPH_MSG_ASYNC_STACK_H

@@ -45,11 +45,13 @@ if(HAVE_RDMA)
 endif()
 
 # SMC socket status: active/fallback
+list(APPEND msg_srcs
+  async/smc/smc_socket_checker.cc)
+
 if(LINUX)
   find_package(nl REQUIRED genl)
   list(APPEND msg_srcs
-    async/smc/libnetlink.cc
-    async/smc/smc_socket_checker_linux.cc)
+    async/smc/libnetlink.cc)
 endif(LINUX)
 
 add_library(common-msg-objs OBJECT ${msg_srcs})

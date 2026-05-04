@@ -10,8 +10,7 @@
  *
  * Userspace program for SMC Information display
  */
-#ifndef CEPH_MSG_ASYNC_SMC_LIBNETLINK_H
-#define CEPH_MSG_ASYNC_SMC_LIBNETLINK_H
+#pragma once
 
 #include <linux/sock_diag.h>
 #include <linux/rtnetlink.h>
@@ -109,5 +108,3 @@ private:
  * @param len Length of data to parse
  */
 void parse_rtattr(struct rtattr *tb[], int max, struct rtattr *rta, int len);
-
-#endif /* CEPH_MSG_ASYNC_SMC_LIBNETLINK_H */
