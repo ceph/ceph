@@ -36,14 +36,20 @@ s3()      { aws --endpoint-url "$ENDPOINT" s3       "$@"; }
 s3files() { aws --endpoint-url "$ENDPOINT" s3files  "$@"; }
 iam()     { aws --endpoint-url "$ENDPOINT" iam      "$@"; }
 
-banner() { printf "\n\033[1;36m== %s ==\033[0m\n" "$1"; }
+# Lead with `\033[0m` so a stray escape code from a preceding
+# command (notably the AWS CLI's own colored stderr) can't leave
+# the terminal in a state that swallows our color.
+banner() { printf "\n\033[0m\033[1;36m== %s ==\033[0m\n" "$1"; }
 expect_fail() {
-  # Run the rest of the line and expect a non-zero exit. Print the
-  # failure (which is the point — we want to see the error envelope).
+  # Run the rest of the line and expect a non-zero exit — the error
+  # envelope IS the point of a negative test, so we print it. Mark
+  # the success path explicitly so a reader doesn't mistake the
+  # AWS CLI's red `[ERROR]` for a real test failure.
   if "$@" 2>&1; then
     echo "EXPECTED FAILURE BUT SUCCEEDED: $*" >&2
     return 1
   fi
+  printf "\033[0m\033[1;32m✓ rejected as expected\033[0m\n"
   return 0
 }
 
