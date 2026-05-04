@@ -8,6 +8,7 @@
 #include "rgw_process_env.h"
 #include "common/async/yield_context.h"
 #include "rgw_arn.h"
+#include "rgw_s3vector_background.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -71,6 +72,9 @@ private:
     std::unique_ptr<rgw::sal::VectorBucket> bucket;
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
+      if(op_ret == -ENOENT) {
+        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+      }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
@@ -264,6 +268,9 @@ private:
     std::unique_ptr<rgw::sal::VectorBucket> bucket;
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
+      if (op_ret == -ENOENT) {
+        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+      }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
@@ -321,6 +328,9 @@ private:
     std::unique_ptr<rgw::sal::VectorBucket> bucket;
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
+      if (op_ret == -ENOENT) {
+        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+      }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
@@ -361,6 +371,9 @@ private:
     std::unique_ptr<rgw::sal::VectorBucket> bucket;
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
+      if (op_ret == -ENOENT) {
+        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+      }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
@@ -396,6 +409,9 @@ private:
     std::unique_ptr<rgw::sal::VectorBucket> bucket;
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
+      if (op_ret == -ENOENT) {
+        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+      }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
@@ -432,6 +448,9 @@ private:
     std::unique_ptr<rgw::sal::VectorBucket> bucket;
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
+      if (op_ret == -ENOENT) {
+        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+      }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
@@ -486,6 +505,9 @@ private:
     std::unique_ptr<rgw::sal::VectorBucket> bucket;
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
+      if (op_ret == -ENOENT) {
+        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+      }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
@@ -646,6 +668,9 @@ private:
     const rgw_bucket bucket_id(s->bucket_tenant, configuration.vector_bucket_name);
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
+      if (op_ret == -ENOENT) {
+        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+      }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
     }
   }
@@ -700,6 +725,9 @@ private:
     std::unique_ptr<rgw::sal::VectorBucket> bucket;
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
+      if (op_ret == -ENOENT) {
+        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+      }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
@@ -754,6 +782,9 @@ private:
     std::unique_ptr<rgw::sal::VectorBucket> bucket;
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
+      if (op_ret == -ENOENT) {
+        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+      }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
@@ -814,6 +845,9 @@ private:
     std::unique_ptr<rgw::sal::VectorBucket> bucket;
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
+      if (op_ret == -ENOENT) {
+        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+      }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
@@ -849,6 +883,9 @@ private:
     std::unique_ptr<rgw::sal::VectorBucket> bucket;
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
+      if (op_ret == -ENOENT) {
+        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+      }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
@@ -884,6 +921,9 @@ private:
     std::unique_ptr<rgw::sal::VectorBucket> bucket;
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
+      if (op_ret == -ENOENT) {
+        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+      }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
@@ -920,6 +960,9 @@ private:
     std::unique_ptr<rgw::sal::VectorBucket> bucket;
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
+      if (op_ret == -ENOENT) {
+        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+      }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
@@ -995,5 +1038,4 @@ RGWOp* RGWHandler_REST_s3Vector::op_post() {
     return new RGWS3VectorQueryVectors(std::move(bl_post_body));
   return nullptr;
 }
-
 
