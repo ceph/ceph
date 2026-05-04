@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "file_state/change_feed.h"
+#include "file_state/dbus_ganesha_sink.h"
 #include "file_state/desired_export.h"
 #include "file_state/ganesha_sink.h"
 #include "file_state/memory_store.h"
@@ -10,6 +11,9 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <thread>
 
 #include <gtest/gtest.h>
@@ -908,4 +912,210 @@ TEST(Reconciler, StopIsIdempotentAndSafe) {
   r.start();
   r.stop();
   r.stop();              // double stop
+}
+
+// =================================================================
+// DbusGaneshaSink
+// =================================================================
+
+namespace {
+
+// Records every dbus-send invocation; returns success by default
+// and a fake `uint16 NNNN` reply for AddExport so the parser
+// has something to chew on.
+class RecordingInvoker {
+ public:
+  std::vector<std::vector<std::string>> calls;
+  std::uint16_t next_id = 1234;
+
+  DbusGaneshaSink::DbusResult operator()(
+      const std::vector<std::string>& argv) {
+    calls.push_back(argv);
+    DbusGaneshaSink::DbusResult r;
+    r.exit_status = 0;
+    // The sink doesn't actually consume AddExport's reply for
+    // anything (it assigns its own export_id), so the stdout
+    // contents don't matter for behavior. Keep it realistic
+    // anyway in case future tests parse it.
+    bool is_add = std::any_of(argv.begin(), argv.end(),
+        [](const std::string& s){ return s.find("AddExport") != std::string::npos; });
+    if (is_add) {
+      r.stdout_text =
+          "method return time=0 sender=:1.0 -> destination=...\n"
+          "   uint16 " + std::to_string(next_id++) + "\n"
+          "   string \"Export added\"\n";
+    }
+    return r;
+  }
+};
+
+DbusGaneshaSink::Config minimum_dbus_cfg(const std::string& dir) {
+  DbusGaneshaSink::Config c;
+  c.export_config_dir = dir;
+  c.rgw_endpoint = "http://127.0.0.1:8000";
+  c.rgw_user_id = "testid";
+  c.rgw_access_key = "ak";
+  c.rgw_secret_key = "sk";
+  return c;
+}
+
+DesiredExport sample_export(std::string_view fs = "fs-AAA",
+                             std::string_view ap = "ap-BBB",
+                             std::string_view mt = "mt-CCC") {
+  DesiredExport e;
+  e.fs_id = std::string(fs);
+  e.ap_id = std::string(ap);
+  e.mt_id = std::string(mt);
+  e.bucket_arn = "arn:aws:s3:::demo-bucket";
+  e.composed_prefix = "data/team-a/";
+  e.role_arn = "arn:aws:iam::123:role/r";
+  e.owner_account_id = "123";
+  e.zone_id = "zone1";
+  return e;
+}
+
+class TmpDir {
+ public:
+  TmpDir() {
+    char tmpl[] = "/tmp/s3files-test-XXXXXX";
+    char* d = mkdtemp(tmpl);
+    if (d) path_ = d;
+  }
+  ~TmpDir() {
+    if (!path_.empty()) {
+      std::error_code ec;
+      std::filesystem::remove_all(path_, ec);
+    }
+  }
+  const std::string& path() const { return path_; }
+ private:
+  std::string path_;
+};
+
+}  // namespace
+
+TEST(DbusGaneshaSink, Apply_Add_NewExport_CallsAddExportAndWritesFile) {
+  TmpDir td;
+  RecordingInvoker rec;
+  DbusGaneshaSink sink(minimum_dbus_cfg(td.path()),
+                        std::ref(rec));
+  sink.apply({sample_export()});
+
+  ASSERT_EQ(rec.calls.size(), 1u);
+  // The single dbus-send call should be AddExport.
+  bool found_add = false;
+  for (const auto& s : rec.calls[0]) {
+    if (s.find("AddExport") != std::string::npos) found_add = true;
+  }
+  EXPECT_TRUE(found_add) << "expected AddExport in dbus-send args";
+
+  // A config file should be on disk.
+  auto id = sink.export_id_for("fs-AAA", "ap-BBB", "mt-CCC");
+  ASSERT_TRUE(id.has_value());
+  std::string path = td.path() + "/" + std::to_string(*id) + ".conf";
+  EXPECT_TRUE(std::filesystem::exists(path));
+}
+
+TEST(DbusGaneshaSink, Apply_Idempotent_NoChange_NoExtraCalls) {
+  TmpDir td;
+  RecordingInvoker rec;
+  DbusGaneshaSink sink(minimum_dbus_cfg(td.path()),
+                        std::ref(rec));
+  auto e = sample_export();
+  sink.apply({e});
+  std::size_t after_first = rec.calls.size();
+  sink.apply({e});
+  // Second apply with identical desired set: no Add/Update/Remove
+  // should fire.
+  EXPECT_EQ(rec.calls.size(), after_first);
+}
+
+TEST(DbusGaneshaSink, Apply_Update_ChangedExport_CallsUpdateExport) {
+  TmpDir td;
+  RecordingInvoker rec;
+  DbusGaneshaSink sink(minimum_dbus_cfg(td.path()),
+                        std::ref(rec));
+  auto e = sample_export();
+  sink.apply({e});
+  std::size_t after_first = rec.calls.size();
+
+  // Mutate something the FSAL would care about.
+  e.composed_prefix = "data/team-b/";
+  sink.apply({e});
+
+  ASSERT_GT(rec.calls.size(), after_first);
+  bool found_update = false;
+  for (std::size_t i = after_first; i < rec.calls.size(); ++i) {
+    for (const auto& s : rec.calls[i]) {
+      if (s.find("UpdateExport") != std::string::npos) found_update = true;
+    }
+  }
+  EXPECT_TRUE(found_update);
+}
+
+TEST(DbusGaneshaSink, Apply_Remove_DroppedExport_CallsRemoveExport) {
+  TmpDir td;
+  RecordingInvoker rec;
+  DbusGaneshaSink sink(minimum_dbus_cfg(td.path()),
+                        std::ref(rec));
+  sink.apply({sample_export()});
+  std::size_t after_first = rec.calls.size();
+  sink.apply({});  // drop it
+
+  ASSERT_GT(rec.calls.size(), after_first);
+  bool found_remove = false;
+  for (std::size_t i = after_first; i < rec.calls.size(); ++i) {
+    for (const auto& s : rec.calls[i]) {
+      if (s.find("RemoveExport") != std::string::npos) found_remove = true;
+    }
+  }
+  EXPECT_TRUE(found_remove);
+}
+
+TEST(DbusGaneshaSink, Render_BlockContainsExpectedFields) {
+  TmpDir td;
+  RecordingInvoker rec;
+  DbusGaneshaSink sink(minimum_dbus_cfg(td.path()),
+                        std::ref(rec));
+  auto e = sample_export();
+  e.posix_user = PosixUser{2000, 2000, {}};
+  sink.apply({e});
+
+  auto id = sink.export_id_for("fs-AAA", "ap-BBB", "mt-CCC");
+  ASSERT_TRUE(id.has_value());
+  std::ifstream f(td.path() + "/" + std::to_string(*id) + ".conf");
+  std::string body((std::istreambuf_iterator<char>(f)),
+                    std::istreambuf_iterator<char>());
+
+  // Smoke-check: the rendered EXPORT block must reference the
+  // identity inputs and the FSAL credentials.
+  EXPECT_NE(body.find("Export_ID = " + std::to_string(*id)), std::string::npos);
+  EXPECT_NE(body.find("data/team-a/"), std::string::npos);
+  EXPECT_NE(body.find("Pseudo = \"/fs-AAA/ap-BBB\""), std::string::npos);
+  EXPECT_NE(body.find("Anonymous_Uid = 2000"), std::string::npos);
+  EXPECT_NE(body.find("Name = RGW"), std::string::npos);
+  EXPECT_NE(body.find("bucket = \"demo-bucket\""), std::string::npos);
+  EXPECT_NE(body.find("User_ID = \"testid\""), std::string::npos);
+  // The role ARN appears in the auto-generated comment so future
+  // tooling can wire AssumeRole without re-deriving the binding.
+  EXPECT_NE(body.find("roleArn=arn:aws:iam::123:role/r"),
+            std::string::npos);
+}
+
+TEST(DbusGaneshaSink, ExportIds_AreUniquePerTuple) {
+  TmpDir td;
+  RecordingInvoker rec;
+  DbusGaneshaSink sink(minimum_dbus_cfg(td.path()),
+                        std::ref(rec));
+  sink.apply({sample_export("fs-1", "ap-1", "mt-1"),
+              sample_export("fs-1", "ap-2", "mt-1"),
+              sample_export("fs-1", "ap-1", "mt-2")});
+
+  auto a = sink.export_id_for("fs-1", "ap-1", "mt-1");
+  auto b = sink.export_id_for("fs-1", "ap-2", "mt-1");
+  auto c = sink.export_id_for("fs-1", "ap-1", "mt-2");
+  ASSERT_TRUE(a && b && c);
+  EXPECT_NE(*a, *b);
+  EXPECT_NE(*a, *c);
+  EXPECT_NE(*b, *c);
 }

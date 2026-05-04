@@ -130,6 +130,7 @@ set(librgw_common_srcs
   rgw_rest_iam.cc
   rgw_rest_s3files.cc
   file_state/change_feed.cc
+  file_state/dbus_ganesha_sink.cc
   file_state/desired_export.cc
   file_state/ganesha_sink.cc
   file_state/memory_store.cc
