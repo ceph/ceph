@@ -55,7 +55,7 @@ class MemoryStore : public Store {
   //
   // At most one callback at a time. Pass `nullptr` to clear.
   // Reads (Get/List) do not fire.
-  void set_on_change(std::function<void()> cb);
+  void set_on_change(std::function<void()> cb) override;
 
   // FileSystem ------------------------------------------------------
 

@@ -31,7 +31,10 @@
 #include "rgw_iam_policy.h"
 #include "rgw_op.h"
 #include "rgw_s3files_errors.h"
+#include "file_state/change_feed.h"
+#include "file_state/dbus_ganesha_sink.h"
 #include "file_state/memory_store.h"
+#include "file_state/reconciler.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -60,6 +63,82 @@ rgw::file_state::Store& default_store() {
 
 void set_default_store(rgw::file_state::Store* store) {
   g_store.store(store, std::memory_order_release);
+}
+
+// =================================================================
+// ReconcilerHarness
+// =================================================================
+
+struct ReconcilerHarness::Impl {
+  rgw::file_state::Store& store;
+  rgw::file_state::InProcessChangeFeed feed;
+  rgw::file_state::DbusGaneshaSink sink;
+  rgw::file_state::Reconciler reconciler;
+
+  Impl(rgw::file_state::Store& s,
+       rgw::file_state::DbusGaneshaSink::Config sink_cfg,
+       rgw::file_state::ReconcilerConfig recon_cfg)
+      : store(s),
+        sink(std::move(sink_cfg)),
+        reconciler(store, feed, sink, recon_cfg) {}
+};
+
+namespace {
+
+rgw::file_state::DbusGaneshaSink::Config make_sink_config(CephContext* cct) {
+  rgw::file_state::DbusGaneshaSink::Config c;
+  c.export_config_dir =
+      cct->_conf.get_val<std::string>("rgw_s3files_ganesha_export_dir");
+  c.rgw_endpoint =
+      cct->_conf.get_val<std::string>("rgw_s3files_fsal_rgw_endpoint");
+  c.rgw_user_id =
+      cct->_conf.get_val<std::string>("rgw_s3files_fsal_rgw_user_id");
+  c.rgw_access_key =
+      cct->_conf.get_val<std::string>("rgw_s3files_fsal_rgw_access_key");
+  c.rgw_secret_key =
+      cct->_conf.get_val<std::string>("rgw_s3files_fsal_rgw_secret_key");
+  c.dbus_dest =
+      cct->_conf.get_val<std::string>("rgw_s3files_ganesha_dbus_dest");
+  c.dbus_object =
+      cct->_conf.get_val<std::string>("rgw_s3files_ganesha_dbus_object");
+  c.dbus_iface =
+      cct->_conf.get_val<std::string>("rgw_s3files_ganesha_dbus_iface");
+  c.system_bus =
+      cct->_conf.get_val<bool>("rgw_s3files_ganesha_use_system_bus");
+  return c;
+}
+
+rgw::file_state::ReconcilerConfig make_reconciler_config(CephContext* cct) {
+  rgw::file_state::ReconcilerConfig c;
+  const auto secs =
+      cct->_conf.get_val<int64_t>("rgw_s3files_reconciler_safety_net_interval_s");
+  c.safety_net_interval = std::chrono::seconds(secs);
+  return c;
+}
+
+}  // namespace
+
+ReconcilerHarness::ReconcilerHarness(rgw::file_state::Store& store,
+                                       CephContext* cct)
+    : impl_(std::make_unique<Impl>(store, make_sink_config(cct),
+                                    make_reconciler_config(cct))) {
+  // Wire the store's on-change hook to fire the in-process
+  // change feed. Store::set_on_change is a no-op for backends
+  // with a native watch path (RadosStore, FdbStore); MemoryStore
+  // overrides to actually invoke the callback after each
+  // committed mutation.
+  impl_->store.set_on_change([feed = &impl_->feed]{ feed->fire(); });
+
+  impl_->reconciler.start();
+}
+
+ReconcilerHarness::~ReconcilerHarness() {
+  // ~Reconciler stops the worker thread; clearing the on-change
+  // hook beforehand prevents a late mutation from racing with
+  // tear-down.
+  if (impl_) {
+    impl_->store.set_on_change(nullptr);
+  }
 }
 
 }  // namespace rgw::s3files

@@ -26,6 +26,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -426,6 +427,17 @@ class Store {
   virtual std::vector<FileSystemView> scan_file_systems() = 0;
   virtual std::vector<AccessPointView> scan_access_points() = 0;
   virtual std::vector<MountTargetView> scan_mount_targets() = 0;
+
+  // Register a callback to fire after every successful mutation
+  // — used by in-process change-feed wiring (typically with
+  // MemoryStore + InProcessChangeFeed, where the reconciler
+  // lives in the same process). Backends that have native
+  // change-feed mechanisms (RADOS watch/notify, FDB watches)
+  // ignore this hook; it's an opt-in extension for stores that
+  // don't carry their own out-of-band notification path.
+  //
+  // Default: no-op. MemoryStore overrides.
+  virtual void set_on_change(std::function<void()> /*cb*/) {}
 };
 
 }  // namespace rgw::file_state

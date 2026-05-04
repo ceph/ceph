@@ -33,6 +33,7 @@
 #endif
 #include "rgw_dmclock_scheduler_ctx.h"
 #include "rgw_ratelimit.h"
+#include "rgw_rest_s3files.h"  // for rgw::s3files::ReconcilerHarness
 
 
 class RGWPauser : public RGWRealmReloader::Pauser {
@@ -91,6 +92,7 @@ class AppMain {
   std::unique_ptr<RGWRealmWatcher> realm_watcher;
   std::unique_ptr<RGWPauser> rgw_pauser;
   std::unique_ptr<sal::ConfigStore> cfgstore;
+  std::unique_ptr<rgw::s3files::ReconcilerHarness> s3files_reconciler;
   SiteConfig site;
   const DoutPrefixProvider* dpp;
   RGWProcessEnv env;

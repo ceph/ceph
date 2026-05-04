@@ -371,6 +371,18 @@ void rgw::AppMain::cond_init_apis()
             set_logging(rest_filter(env.driver, RGW_REST_S3FILES,
                                      new RGWRESTMgr_S3Files)));
       }
+      // Optionally start the in-process reconciler that converges
+      // a colocated nfs-ganesha export set against control-plane
+      // state. Off by default; opt-in via
+      // rgw_s3files_reconciler_enabled when this RGW is paired
+      // with a Ganesha. Harness ownership lives on AppMain so
+      // shutdown order is "reset reconciler before driver".
+      auto* cct = env.driver->ctx();
+      if (cct->_conf.get_val<bool>("rgw_s3files_reconciler_enabled")) {
+        s3files_reconciler =
+            std::make_unique<rgw::s3files::ReconcilerHarness>(
+                rgw::s3files::default_store(), cct);
+      }
     }
   } /* have_http_frontend */
 } /* init_apis */
@@ -650,6 +662,10 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
   if (lua_background) {
     lua_background->shutdown();
   }
+
+  // Stop the s3files reconciler before the driver tears down so
+  // any in-flight Ganesha apply() finishes cleanly.
+  s3files_reconciler.reset();
 
   env.driver->shutdown();
   // Do this before closing storage so requests don't try to call into
