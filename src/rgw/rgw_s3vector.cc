@@ -1489,6 +1489,10 @@ namespace rgw::s3vector {
       lancedb_free_string(error_message);
     }
     lancedb_table_free(table);
+    if (result == LANCEDB_SUCCESS) {
+    // upon deleting vectors, it needs to verify whether to re-build the index
+      notify_index_update(dpp, configuration.vector_bucket_name, configuration.index_name);
+    }
     return lancedb_error_to_errno(result);
   }
 

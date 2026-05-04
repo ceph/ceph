@@ -1029,3 +1029,145 @@ def test_query_vectors_with_distance():
     # cleanup
     _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
 
+
+@pytest.mark.vector_test
+def test_background_index_rebuild():
+    """Test that vector index is rebuilt in the background when unindexed rows exceed threshold.
+    The default threshold is 256 rows. We insert 300 vectors and wait for the background
+    manager to detect the threshold breach and build the vector index."""
+    dimension = 32
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    index_name = 'rebuild-test-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name, dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # insert 300 vectors in batches (exceeds default threshold of 256)
+    batch_size = 100
+    total_vectors = 300
+    for batch_start in range(0, total_vectors, batch_size):
+        batch_end = min(batch_start + batch_size, total_vectors)
+        vectors = generate_vectors(batch_end - batch_start, dimension)
+        # offset keys to avoid duplicates across batches
+        for i, v in enumerate(vectors):
+            v['key'] = f'vec-{batch_start + i}'
+        result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # wait for background manager to process (stats_interval + build time)
+    log.info('waiting for background index rebuild...')
+    time.sleep(45)
+
+    # verify query still works after rebuild
+    top_k = 5
+    query_vector = generate_data(dimension, 42)
+    result = conn.query_vectors(vectorBucketName=bucket_name, indexName=index_name, queryVector=query_vector, topK=top_k)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == top_k
+    # the closest match should be the vector at index 42
+    assert 'vec-42' in [v['key'] for v in result['vectors']]
+
+    # verify we can get specific vectors
+    verify_get_vectors(conn, bucket_name, index_name, ['vec-0', 'vec-100', 'vec-299'], expected_dimension=dimension)
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+@pytest.mark.vector_test
+def test_delete_vectors_triggers_rebuild():
+    """Test that delete_vectors triggers the background rebuild notification.
+    Insert vectors above threshold, wait for initial build, then delete and re-insert
+    to trigger a second rebuild cycle."""
+    dimension = 32
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    index_name = 'delete-rebuild-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name, dataType='float32', dimension=dimension, distanceMetric='cosine')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # insert 300 vectors
+    vectors = generate_vectors(300, dimension)
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # wait for initial rebuild
+    log.info('waiting for initial index rebuild...')
+    time.sleep(45)
+
+    # delete vectors in small batches to avoid deep OR-chain in LanceDB SQL planner
+    delete_batch_size = 20
+    for batch_start in range(0, 100, delete_batch_size):
+        keys_to_delete = [f'vec-{i}' for i in range(batch_start, batch_start + delete_batch_size)]
+        result = conn.delete_vectors(vectorBucketName=bucket_name, indexName=index_name, keys=keys_to_delete)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # insert new vectors to trigger another rebuild notification
+    new_vectors = []
+    for i in range(300, 600):
+        new_vectors.append({
+            'key': f'vec-{i}',
+            'data': generate_data(dimension, i)
+        })
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=new_vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # wait for rebuild after modifications
+    log.info('waiting for rebuild after delete + insert...')
+    time.sleep(45)
+
+    # verify queries work correctly with the updated index
+    top_k = 5
+    query_vector = generate_data(dimension, 500)
+    result = conn.query_vectors(vectorBucketName=bucket_name, indexName=index_name, queryVector=query_vector, topK=top_k)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == top_k
+
+    # verify deleted vectors are gone
+    result = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name, keys=['vec-0', 'vec-50'])
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == 0
+
+    # verify new vectors are present
+    verify_get_vectors(conn, bucket_name, index_name, ['vec-300', 'vec-400', 'vec-500'], expected_dimension=dimension)
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+@pytest.mark.vector_test
+def test_below_threshold_no_rebuild():
+    """Test that inserting fewer vectors than the threshold does not trigger a rebuild.
+    Queries should still work via brute-force search (no vector index needed)."""
+    dimension = 16
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    index_name = 'no-rebuild-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name, dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # insert only 100 vectors (below default threshold of 256)
+    vectors = generate_vectors(100, dimension)
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # short wait — not long enough for a full rebuild cycle
+    time.sleep(5)
+
+    # queries should work via brute-force (no vector index)
+    top_k = 5
+    query_vector = generate_data(dimension, 42)
+    result = conn.query_vectors(vectorBucketName=bucket_name, indexName=index_name, queryVector=query_vector, topK=top_k)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == top_k
+    assert 'vec-42' in [v['key'] for v in result['vectors']]
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
