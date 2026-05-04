@@ -129,6 +129,7 @@ set(librgw_common_srcs
   rgw_rest_oidc_provider.cc
   rgw_rest_iam.cc
   rgw_rest_s3files.cc
+  file_state/change_feed.cc
   file_state/memory_store.cc
   rgw_object_lock.cc
   rgw_kms.cc

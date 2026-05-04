@@ -1,9 +1,11 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include "file_state/change_feed.h"
 #include "file_state/memory_store.h"
 #include "rgw_s3files_errors.h"
 
+#include <atomic>
 #include <gtest/gtest.h>
 
 using namespace rgw::file_state;
@@ -478,4 +480,117 @@ TEST(MemoryStore, Tagging_NotFound) {
   auto r = s.tag_resource(kAccount, "fs-doesnotexist", {{"k", "v"}});
   ASSERT_FALSE(ok(r));
   EXPECT_EQ(error(r).kind, StoreError::Kind::NotFound);
+}
+
+// =================================================================
+// ChangeFeed
+// =================================================================
+
+TEST(ChangeFeed, InProcess_FiresAllSubscribers) {
+  InProcessChangeFeed feed;
+  std::atomic<int> a{0}, b{0};
+  feed.subscribe([&]{ a++; });
+  feed.subscribe([&]{ b++; });
+  feed.fire();
+  feed.fire();
+  EXPECT_EQ(a.load(), 2);
+  EXPECT_EQ(b.load(), 2);
+}
+
+TEST(ChangeFeed, InProcess_UnsubscribeStopsCallback) {
+  InProcessChangeFeed feed;
+  std::atomic<int> a{0}, b{0};
+  auto h_a = feed.subscribe([&]{ a++; });
+  feed.subscribe([&]{ b++; });
+  feed.fire();
+  feed.unsubscribe(h_a);
+  feed.fire();
+  EXPECT_EQ(a.load(), 1);
+  EXPECT_EQ(b.load(), 2);
+}
+
+TEST(ChangeFeed, Noop_NeverFires) {
+  NoopChangeFeed feed;
+  std::atomic<int> n{0};
+  feed.subscribe([&]{ n++; });  // accepted but never invoked
+  // No fire() — interface has none. The reconciler relies on the
+  // safety-net timer when paired with NoopChangeFeed.
+  EXPECT_EQ(n.load(), 0);
+}
+
+// =================================================================
+// MemoryStore + ChangeFeed wiring
+// =================================================================
+
+TEST(MemoryStore, OnChange_FiresAfterMutation) {
+  MemoryStore s;
+  std::atomic<int> n{0};
+  s.set_on_change([&]{ n++; });
+
+  // Mutations fire.
+  auto r = s.create_file_system(minimum_fs_req());
+  ASSERT_TRUE(ok(r));
+  EXPECT_EQ(n.load(), 1);
+
+  s.tag_resource(kAccount, value(r).spec.id, {{"k", "v"}});
+  EXPECT_EQ(n.load(), 2);
+
+  s.delete_file_system(kAccount, value(r).spec.id);
+  EXPECT_EQ(n.load(), 3);
+}
+
+TEST(MemoryStore, OnChange_DoesNotFireOnReads) {
+  MemoryStore s;
+  auto r = s.create_file_system(minimum_fs_req());
+  ASSERT_TRUE(ok(r));
+
+  // Wire the callback only AFTER the create so we can count
+  // reads in isolation.
+  std::atomic<int> n{0};
+  s.set_on_change([&]{ n++; });
+
+  s.get_file_system(kAccount, value(r).spec.id);
+  ListOptions opts;
+  s.list_file_systems(kAccount, opts);
+  EXPECT_EQ(n.load(), 0);
+
+  s.delete_file_system(kAccount, value(r).spec.id);  // mutation
+  EXPECT_EQ(n.load(), 1);
+}
+
+TEST(MemoryStore, OnChange_DoesNotFireOnFailedMutation) {
+  MemoryStore s;
+  std::atomic<int> n{0};
+  s.set_on_change([&]{ n++; });
+
+  // Invalid request: missing required field. Should not fire.
+  CreateFileSystemRequest bad;
+  bad.owner_account_id = kAccount;
+  // bucket_arn intentionally empty
+  bad.role_arn = kRole;
+  auto r = s.create_file_system(bad);
+  ASSERT_FALSE(ok(r));
+  EXPECT_EQ(n.load(), 0);
+}
+
+TEST(MemoryStore, OnChange_FiresThroughInProcessFeed) {
+  // The classic wiring: a feed subscribes, MemoryStore fires
+  // through it, downstream observer wakes.
+  MemoryStore s;
+  InProcessChangeFeed feed;
+  s.set_on_change([&feed]{ feed.fire(); });
+
+  std::atomic<int> reconciler_wakeups{0};
+  feed.subscribe([&]{ reconciler_wakeups++; });
+
+  auto r1 = s.create_file_system(minimum_fs_req());
+  ASSERT_TRUE(ok(r1));
+  CreateAccessPointRequest apreq;
+  apreq.owner_account_id = kAccount;
+  apreq.filesystem_id = value(r1).spec.id;
+  auto r2 = s.create_access_point(apreq);
+  ASSERT_TRUE(ok(r2));
+  s.delete_access_point(kAccount, value(r2).spec.id);
+
+  EXPECT_EQ(reconciler_wakeups.load(), 3);
 }

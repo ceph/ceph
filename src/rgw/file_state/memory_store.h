@@ -28,6 +28,7 @@
 #pragma once
 
 #include <atomic>
+#include <functional>
 #include <map>
 #include <mutex>
 #include <string>
@@ -44,6 +45,17 @@ class MemoryStore : public Store {
 
   MemoryStore(const MemoryStore&) = delete;
   MemoryStore& operator=(const MemoryStore&) = delete;
+
+  // Register a callback to fire after every successful mutation
+  // (create/update/delete/tag/policy/sync-config). Used by the
+  // in-process ChangeFeed to wake the reconciler with sub-second
+  // latency. The callback runs on the mutating handler's thread,
+  // so it should be cheap — typically just nudging a bus or
+  // condvar that the reconciler is waiting on.
+  //
+  // At most one callback at a time. Pass `nullptr` to clear.
+  // Reads (Get/List) do not fire.
+  void set_on_change(std::function<void()> cb);
 
   // FileSystem ------------------------------------------------------
 
@@ -197,6 +209,31 @@ class MemoryStore : public Store {
   // `account_id`. Caller must hold `mu_`.
   std::vector<Tag>* tags_target(
       std::string_view account_id, std::string_view resource_id);
+
+  // RAII helper for firing the on-change callback after a
+  // mutation commits. Construct this BEFORE the lock_guard in a
+  // mutator. On scope exit, destruction order (lock first,
+  // then notifier) ensures the callback runs after the mutex
+  // is released, so the subscriber can safely re-enter the
+  // store. Notify only fires if commit() is called — early
+  // returns / errors leave it as a no-op.
+  class ChangeNotify {
+   public:
+    explicit ChangeNotify(MemoryStore& s) : store_(s) {}
+    ~ChangeNotify() {
+      if (committed_ && store_.on_change_) {
+        store_.on_change_();
+      }
+    }
+    void commit() { committed_ = true; }
+    ChangeNotify(const ChangeNotify&) = delete;
+    ChangeNotify& operator=(const ChangeNotify&) = delete;
+   private:
+    MemoryStore& store_;
+    bool committed_ = false;
+  };
+
+  std::function<void()> on_change_;
 };
 
 }  // namespace rgw::file_state

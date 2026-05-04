@@ -313,6 +313,7 @@ target_link_libraries(unittest_rgw_arn ${rgw_libs})
 # rather than depending on rgw_libs.
 add_executable(unittest_rgw_file_state_memory_store
   test_file_state_memory_store.cc
+  ${CMAKE_SOURCE_DIR}/src/rgw/file_state/change_feed.cc
   ${CMAKE_SOURCE_DIR}/src/rgw/file_state/memory_store.cc)
 add_ceph_unittest(unittest_rgw_file_state_memory_store)
 target_include_directories(unittest_rgw_file_state_memory_store

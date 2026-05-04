@@ -95,6 +95,11 @@ StoreError invalid(std::string_view code, std::string message) {
 
 MemoryStore::MemoryStore() : id_counter_(0) {}
 
+void MemoryStore::set_on_change(std::function<void()> cb) {
+  std::lock_guard lock(mu_);
+  on_change_ = std::move(cb);
+}
+
 std::string MemoryStore::make_id(std::string_view prefix) {
   std::uint64_t n = id_counter_.fetch_add(1, std::memory_order_relaxed) + 1;
   char buf[33];
@@ -139,6 +144,7 @@ StoreResult<FileSystemView> MemoryStore::create_file_system(
     return invalid(ERR_INVALID_ROLE_ARN, "roleArn is required");
   }
 
+  ChangeNotify notify(*this);  // fires after lock releases, only if commit()ed
   std::lock_guard lock(mu_);
 
   // Idempotency by client_token.
@@ -185,6 +191,7 @@ StoreResult<FileSystemView> MemoryStore::create_file_system(
 
   std::string id = rec.spec.id;
   auto [it, _] = file_systems_.emplace(id, std::move(rec));
+  notify.commit();
   return FileSystemView{it->second.spec, it->second.status};
 }
 
@@ -217,6 +224,7 @@ StoreResult<PagedResult<FileSystemView>> MemoryStore::list_file_systems(
 
 StoreResult<Unit> MemoryStore::delete_file_system(
     std::string_view account_id, std::string_view filesystem_id) {
+  ChangeNotify notify(*this);
   std::lock_guard lock(mu_);
   auto it = file_systems_.find(std::string(filesystem_id));
   if (it == file_systems_.end() ||
@@ -244,6 +252,7 @@ StoreResult<Unit> MemoryStore::delete_file_system(
         {it->second.spec.owner_account_id, it->second.spec.client_token});
   }
   file_systems_.erase(it);
+  notify.commit();
   return Unit{};
 }
 
@@ -254,6 +263,7 @@ StoreResult<Unit> MemoryStore::delete_file_system(
 StoreResult<Unit> MemoryStore::put_file_system_policy(
     std::string_view account_id, std::string_view filesystem_id,
     std::string_view policy_json) {
+  ChangeNotify notify(*this);
   std::lock_guard lock(mu_);
   auto it = file_systems_.find(std::string(filesystem_id));
   if (it == file_systems_.end() ||
@@ -266,6 +276,7 @@ StoreResult<Unit> MemoryStore::put_file_system_policy(
                     "policy must be a JSON object");
   }
   it->second.policy = std::string(policy_json);
+  notify.commit();
   return Unit{};
 }
 
@@ -285,6 +296,7 @@ StoreResult<std::string> MemoryStore::get_file_system_policy(
 
 StoreResult<Unit> MemoryStore::delete_file_system_policy(
     std::string_view account_id, std::string_view filesystem_id) {
+  ChangeNotify notify(*this);
   std::lock_guard lock(mu_);
   auto it = file_systems_.find(std::string(filesystem_id));
   if (it == file_systems_.end() ||
@@ -295,6 +307,7 @@ StoreResult<Unit> MemoryStore::delete_file_system_policy(
     return not_found(ERR_POLICY_NOT_FOUND, "no policy set");
   }
   it->second.policy.reset();
+  notify.commit();
   return Unit{};
 }
 
@@ -305,6 +318,7 @@ StoreResult<Unit> MemoryStore::delete_file_system_policy(
 StoreResult<Unit> MemoryStore::put_synchronization_configuration(
     std::string_view account_id, std::string_view filesystem_id,
     const SyncConfig& cfg, std::optional<std::int64_t> expected_version) {
+  ChangeNotify notify(*this);
   std::lock_guard lock(mu_);
   auto it = file_systems_.find(std::string(filesystem_id));
   if (it == file_systems_.end() ||
@@ -323,6 +337,7 @@ StoreResult<Unit> MemoryStore::put_synchronization_configuration(
   SyncConfig stored = cfg;
   stored.latest_version_number = current_version + 1;
   it->second.sync_config = std::move(stored);
+  notify.commit();
   return Unit{};
 }
 
@@ -358,6 +373,7 @@ StoreResult<AccessPointView> MemoryStore::create_access_point(
     }
   }
 
+  ChangeNotify notify(*this);
   std::lock_guard lock(mu_);
 
   // Verify parent FS exists and belongs to caller.
@@ -398,6 +414,7 @@ StoreResult<AccessPointView> MemoryStore::create_access_point(
 
   std::string id = rec.spec.id;
   auto [it, _] = access_points_.emplace(id, std::move(rec));
+  notify.commit();
   return AccessPointView{it->second.spec, it->second.status};
 }
 
@@ -440,6 +457,7 @@ StoreResult<PagedResult<AccessPointView>> MemoryStore::list_access_points(
 
 StoreResult<Unit> MemoryStore::delete_access_point(
     std::string_view account_id, std::string_view access_point_id) {
+  ChangeNotify notify(*this);
   std::lock_guard lock(mu_);
   auto it = access_points_.find(std::string(access_point_id));
   if (it == access_points_.end() ||
@@ -451,6 +469,7 @@ StoreResult<Unit> MemoryStore::delete_access_point(
         {it->second.spec.owner_account_id, it->second.spec.client_token});
   }
   access_points_.erase(it);
+  notify.commit();
   return Unit{};
 }
 
@@ -467,6 +486,7 @@ StoreResult<MountTargetView> MemoryStore::create_mount_target(
     return invalid(ERR_INVALID_ZONE_ID, "zone_id (subnetId) is required");
   }
 
+  ChangeNotify notify(*this);
   std::lock_guard lock(mu_);
 
   auto fs_it = file_systems_.find(req.filesystem_id);
@@ -498,6 +518,7 @@ StoreResult<MountTargetView> MemoryStore::create_mount_target(
 
   std::string id = rec.spec.id;
   auto [it, _] = mount_targets_.emplace(id, std::move(rec));
+  notify.commit();
   return MountTargetView{it->second.spec, it->second.status};
 }
 
@@ -561,6 +582,7 @@ StoreResult<PagedResult<MountTargetView>> MemoryStore::list_mount_targets(
 
 StoreResult<MountTargetView> MemoryStore::update_mount_target(
     std::string_view account_id, const UpdateMountTargetRequest& req) {
+  ChangeNotify notify(*this);
   std::lock_guard lock(mu_);
   auto it = mount_targets_.find(req.id);
   if (it == mount_targets_.end() ||
@@ -568,11 +590,13 @@ StoreResult<MountTargetView> MemoryStore::update_mount_target(
     return not_found(ERR_MOUNT_TARGET_NOT_FOUND, "mount target not found");
   }
   it->second.spec.security_groups = req.security_groups;
+  notify.commit();
   return MountTargetView{it->second.spec, it->second.status};
 }
 
 StoreResult<Unit> MemoryStore::delete_mount_target(
     std::string_view account_id, std::string_view mount_target_id) {
+  ChangeNotify notify(*this);
   std::lock_guard lock(mu_);
   auto it = mount_targets_.find(std::string(mount_target_id));
   if (it == mount_targets_.end() ||
@@ -580,6 +604,7 @@ StoreResult<Unit> MemoryStore::delete_mount_target(
     return not_found(ERR_MOUNT_TARGET_NOT_FOUND, "mount target not found");
   }
   mount_targets_.erase(it);
+  notify.commit();
   return Unit{};
 }
 
@@ -621,6 +646,7 @@ StoreResult<PagedResult<Tag>> MemoryStore::list_tags_for_resource(
 StoreResult<Unit> MemoryStore::tag_resource(
     std::string_view account_id, std::string_view resource_id,
     const std::vector<Tag>& tags) {
+  ChangeNotify notify(*this);
   std::lock_guard lock(mu_);
   std::vector<Tag>* existing = tags_target(account_id, resource_id);
   if (!existing) {
@@ -635,12 +661,14 @@ StoreResult<Unit> MemoryStore::tag_resource(
       existing->push_back(t);
     }
   }
+  notify.commit();
   return Unit{};
 }
 
 StoreResult<Unit> MemoryStore::untag_resource(
     std::string_view account_id, std::string_view resource_id,
     const std::vector<std::string>& tag_keys) {
+  ChangeNotify notify(*this);
   std::lock_guard lock(mu_);
   std::vector<Tag>* existing = tags_target(account_id, resource_id);
   if (!existing) {
@@ -653,6 +681,7 @@ StoreResult<Unit> MemoryStore::untag_resource(
                                           t.key) != tag_keys.end();
                       }),
       existing->end());
+  notify.commit();
   return Unit{};
 }
 
