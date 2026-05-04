@@ -5,7 +5,7 @@ mydir=`dirname $0`
 python3 -m venv $mydir
 source $mydir/bin/activate
 pip install pip --upgrade
-pip install redis
+pip install valkey
 pip install configobj
 pip install boto3
 
