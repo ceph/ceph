@@ -685,4 +685,38 @@ StoreResult<Unit> MemoryStore::untag_resource(
   return Unit{};
 }
 
+// =================================================================
+// Admin / reconciler scans
+// =================================================================
+
+std::vector<FileSystemView> MemoryStore::scan_file_systems() {
+  std::lock_guard lock(mu_);
+  std::vector<FileSystemView> out;
+  out.reserve(file_systems_.size());
+  for (const auto& [_, rec] : file_systems_) {
+    out.push_back(FileSystemView{rec.spec, rec.status});
+  }
+  return out;
+}
+
+std::vector<AccessPointView> MemoryStore::scan_access_points() {
+  std::lock_guard lock(mu_);
+  std::vector<AccessPointView> out;
+  out.reserve(access_points_.size());
+  for (const auto& [_, rec] : access_points_) {
+    out.push_back(AccessPointView{rec.spec, rec.status});
+  }
+  return out;
+}
+
+std::vector<MountTargetView> MemoryStore::scan_mount_targets() {
+  std::lock_guard lock(mu_);
+  std::vector<MountTargetView> out;
+  out.reserve(mount_targets_.size());
+  for (const auto& [_, rec] : mount_targets_) {
+    out.push_back(MountTargetView{rec.spec, rec.status});
+  }
+  return out;
+}
+
 }  // namespace rgw::file_state

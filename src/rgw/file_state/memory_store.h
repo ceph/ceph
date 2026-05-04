@@ -159,6 +159,11 @@ class MemoryStore : public Store {
       std::string_view resource_id,
       const std::vector<std::string>& tag_keys) override;
 
+  // Reconciler scans (cross-account; no notify firing).
+  std::vector<FileSystemView> scan_file_systems() override;
+  std::vector<AccessPointView> scan_access_points() override;
+  std::vector<MountTargetView> scan_mount_targets() override;
+
  private:
   struct FileSystemRecord {
     FileSystemSpec spec;

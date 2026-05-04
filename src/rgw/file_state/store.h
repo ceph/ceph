@@ -405,6 +405,27 @@ class Store {
       std::string_view account_id,
       std::string_view resource_id,
       const std::vector<std::string>& tag_keys) = 0;
+
+  // ---- admin / reconciler scan ------------------------------
+  //
+  // Read every record in the store, regardless of owner. These
+  // methods exist for the reconciler — which composes the
+  // desired Ganesha export set across all accounts known to
+  // the store — and should NOT be invoked from request-scoped
+  // handler code (which is always account-scoped).
+  //
+  // Implementations are expected to return a consistent
+  // snapshot: each scan_* method completes against state as it
+  // existed at some point during the call. There is no
+  // cross-method snapshot guarantee — the reconciler always
+  // runs the three scans back to back and must tolerate
+  // momentary inconsistencies (a FS that's about to gain an AP
+  // shows up before the AP does). The safety-net timer + post-
+  // mutation change-feed signal converge any lag.
+
+  virtual std::vector<FileSystemView> scan_file_systems() = 0;
+  virtual std::vector<AccessPointView> scan_access_points() = 0;
+  virtual std::vector<MountTargetView> scan_mount_targets() = 0;
 };
 
 }  // namespace rgw::file_state
