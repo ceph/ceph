@@ -2780,6 +2780,9 @@ void PeerReplayer::peer_status(Formatter *f) {
       f->open_object_section("last_synced_snap");
       f->dump_unsigned("id", (*sync_stat.last_synced_snap).first);
       f->dump_string("name", (*sync_stat.last_synced_snap).second);
+      if (sync_stat.last_sync_crawl_duration) {
+        f->dump_string("crawl_duration", format_time(*sync_stat.last_sync_crawl_duration));
+      }
       if (sync_stat.last_sync_duration) {
         f->dump_string("sync_duration", format_time(*sync_stat.last_sync_duration));
         f->dump_stream("sync_time_stamp") << sync_stat.last_synced;

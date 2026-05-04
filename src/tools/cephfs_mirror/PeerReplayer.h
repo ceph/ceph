@@ -384,6 +384,7 @@ private:
     uint64_t renamed_snap_count = 0;
     monotime last_synced = clock::zero();
     boost::optional<double> last_sync_duration;
+    boost::optional<double> last_sync_crawl_duration;
     boost::optional<uint64_t> last_sync_bytes; //last sync bytes for display in status
     boost::optional<uint64_t> last_sync_files; //last num of sync files for display in status
     uint64_t sync_bytes = 0; //sync bytes counter, independently for each directory sync.
@@ -495,6 +496,7 @@ private:
     auto &sync_stat = m_snap_sync_stats.at(dir_root);
     sync_stat.last_synced = clock::now();
     sync_stat.last_sync_duration = duration;
+    sync_stat.last_sync_crawl_duration = sync_stat.crawl_duration;
     sync_stat.last_sync_bytes = sync_stat.sync_bytes;
     sync_stat.last_sync_files = sync_stat.sync_files;
     ++sync_stat.synced_snap_count;
