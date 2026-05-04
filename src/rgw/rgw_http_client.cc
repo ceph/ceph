@@ -890,10 +890,16 @@ void RGWHTTPManager::unlink_request(rgw_http_req_data *req_data)
 
 void RGWHTTPManager::manage_pending_requests()
 {
+  std::list<set_state> changes;
+  {
+    std::lock_guard l{reqs_change_state_lock};
+    changes.swap(reqs_change_state);
+  }
+
   reqs_lock.lock_shared();
   if (max_threaded_req == num_reqs &&
       unregistered_reqs.empty() &&
-      reqs_change_state.empty()) {
+      changes.empty()) {
     reqs_lock.unlock_shared();
     return;
   }
@@ -901,11 +907,8 @@ void RGWHTTPManager::manage_pending_requests()
 
   std::unique_lock wl{reqs_lock};
 
-  if (!reqs_change_state.empty()) {
-    for (auto siter : reqs_change_state) {
-      _set_req_state(siter);
-    }
-    reqs_change_state.clear();
+  for (auto& siter : changes) {
+    _set_req_state(siter);
   }
 
   if (!unregistered_reqs.empty()) {
@@ -1045,7 +1048,10 @@ int RGWHTTPManager::set_request_state(RGWHTTPClient *client, RGWHTTPRequestSetSt
     bitmask |= CURLPAUSE_RECV;
   }
 
-  reqs_change_state.push_back(set_state(req_data, bitmask));
+  {
+    std::lock_guard l{reqs_change_state_lock};
+    reqs_change_state.push_back(set_state(req_data, bitmask));
+  }
   int ret = signal_thread();
   if (ret < 0) {
     return ret;
