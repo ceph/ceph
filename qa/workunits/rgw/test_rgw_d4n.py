@@ -23,7 +23,7 @@ import logging as log
 from configobj import ConfigObj
 import botocore
 import boto3
-import redis
+import valkey as redis
 import subprocess
 import os
 import hashlib

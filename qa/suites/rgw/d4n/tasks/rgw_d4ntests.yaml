@@ -2,8 +2,8 @@ tasks:
 - install:
     # extra packages added for the rgw-d4ntests task
     extra_system_packages:
-      deb: ['s3cmd', 'redis']
-      rpm: ['s3cmd', 'redis']
+      deb: ['s3cmd'] # valkey not available by default
+      rpm: ['s3cmd', 'valkey']
 - ceph:
 - redis:
     client.0:
