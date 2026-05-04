@@ -14361,6 +14361,9 @@ paths:
                 bucket_name:
                   default: ''
                   type: string
+                daemon_name:
+                  default: ''
+                  type: string
                 destination_zone:
                   type: string
                 flow_id:
@@ -14441,6 +14444,11 @@ paths:
         name: bucket_name
         schema:
           type: string
+      - default: ''
+        in: query
+        name: daemon_name
+        schema:
+          type: string
       responses:
         '202':
           content:
@@ -14475,6 +14483,9 @@ paths:
             schema:
               properties:
                 bucket_name:
+                  default: ''
+                  type: string
+                daemon_name:
                   default: ''
                   type: string
                 destination_bucket:
@@ -14556,6 +14567,11 @@ paths:
         name: bucket_name
         schema:
           type: string
+      - default: ''
+        in: query
+        name: daemon_name
+        schema:
+          type: string
       responses:
         '202':
           content:
@@ -14599,6 +14615,11 @@ paths:
         name: all_policy
         schema:
           type: string
+      - default: ''
+        in: query
+        name: daemon_name
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -14628,6 +14649,9 @@ paths:
             schema:
               properties:
                 bucket_name:
+                  default: ''
+                  type: string
+                daemon_name:
                   default: ''
                   type: string
                 group_id:
@@ -14671,6 +14695,9 @@ paths:
             schema:
               properties:
                 bucket_name:
+                  default: ''
+                  type: string
+                daemon_name:
                   default: ''
                   type: string
                 group_id:
@@ -14719,6 +14746,11 @@ paths:
         name: bucket_name
         schema:
           type: string
+      - default: ''
+        in: query
+        name: daemon_name
+        schema:
+          type: string
       responses:
         '202':
           content:
@@ -14754,6 +14786,11 @@ paths:
       - default: ''
         in: query
         name: bucket_name
+        schema:
+          type: string
+      - default: ''
+        in: query
+        name: daemon_name
         schema:
           type: string
       responses:
