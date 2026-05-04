@@ -49,6 +49,23 @@ Run a subset by marker::
    S3FILES_TESTS_CONF=s3files_tests.conf tox -- -m divergence
    S3FILES_TESTS_CONF=s3files_tests.conf tox -- -m read_after_write
 
+Interactive walkthrough
+=======================
+
+For an interactive tour of the API by hand — useful for exploring
+shapes, error envelopes, or smoke-checking a fresh cluster — see
+``walkthrough.sh``. It exercises the full Smithy operation surface
+(create / get / list / update / delete / tag / policy / sync /
+mount-target / pagination) via the AWS CLI, with a handful of
+representative negative cases. Sections are independent enough to
+copy-paste individually.
+
+::
+
+   ZONE_ID=$(./bin/radosgw-admin zonegroup get \
+     | python3 -c 'import json,sys; print(json.load(sys.stdin)["zones"][0]["id"].replace("-",""))') \
+   ./walkthrough.sh
+
 Test Coverage
 =============
 
