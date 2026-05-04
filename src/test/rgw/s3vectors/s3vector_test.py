@@ -78,8 +78,7 @@ def connection(service_name='s3vectors'):
             endpoint_url=scheme+hostname+':'+str(port_no),
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
-            region_name=get_config_zonegroup(),
-            config=config)
+            region_name=get_config_zonegroup())
 
     return client
 
@@ -103,8 +102,7 @@ def connection2(service_name='s3vectors'):
             endpoint_url=scheme+hostname+':'+str(port_no),
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
-            region_name=get_config_zonegroup(),
-            config=config)
+            region_name=get_config_zonegroup())
 
     return client
 

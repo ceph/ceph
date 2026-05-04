@@ -428,6 +428,15 @@ namespace rgw::s3vector {
     return metric;
   }
 
+  LanceDBDistanceType to_lancedb_distance(DistanceMetric metric) {
+    switch (metric) {
+      case DistanceMetric::COSINE: return LANCEDB_DISTANCE_COSINE;
+      case DistanceMetric::EUCLIDEAN:
+      case DistanceMetric::UNKNOWN: return LANCEDB_DISTANCE_L2;
+    }
+    return LANCEDB_DISTANCE_L2;
+  }
+
   void create_index_t::dump(ceph::Formatter* f) const {
     f->open_object_section("");
     ::encode_json("dataType", data_type, f);
@@ -476,9 +485,7 @@ namespace rgw::s3vector {
     f->close_section();
   }
 
-  static constexpr const char* data_field = "data";
-  static const std::string data_field_str{data_field};;
-  static constexpr const char* key_field = "key";
+  static const std::string data_field_str{data_field};
   static const std::string key_field_str{key_field};;
   static constexpr const char* metadata_field = "metadata";
   static const std::string metadata_field_str{metadata_field};;
@@ -841,6 +848,59 @@ namespace rgw::s3vector {
     }
 
     reply.creation_time = get_table_creation_time(table, dpp);
+    lancedb_table_free(table);
+    lancedb_connection_free(conn);
+    return 0;
+  }
+
+  // get index stats
+
+  void get_index_stats_t::dump(ceph::Formatter* f) const {
+    f->open_object_section("");
+    ::encode_json("indexName", index_name, f);
+    ::encode_json("vectorBucketName", vector_bucket_name, f);
+    f->close_section();
+  }
+
+  void get_index_stats_t::decode_json(JSONObj* obj) {
+    decode_index_name(vector_bucket_name, index_name, obj);
+  }
+
+  void get_index_stats_reply_t::dump(ceph::Formatter* f) const {
+    f->open_object_section("");
+    f->open_object_section("indexStats");
+    ::encode_json("numIndexedRows", num_indexed_rows, f);
+    ::encode_json("numUnindexedRows", num_unindexed_rows, f);
+    ::encode_json("numIndices", num_indices, f);
+    f->close_section();
+    f->close_section();
+  }
+
+  int get_index_stats(const get_index_stats_t& configuration, DoutPrefixProvider* dpp, optional_yield y, get_index_stats_reply_t& reply) {
+    log_configuration(dpp, "GetIndexStats", configuration);
+    auto table_handle = open_table_with_session_handle(dpp, configuration.vector_bucket_name, configuration.index_name);
+    if (!table_handle) {
+      return -ENOENT;
+    }
+    LanceDBTable* table = table_handle.table;
+    LanceDBConnection* conn = table_handle.conn_handle.conn;
+
+    char* error_message = nullptr;
+    LanceDBIndexStats stats = {};
+    if (const auto err = lancedb_table_index_stats(table, "data_idx", &stats, &error_message);
+        err == LANCEDB_SUCCESS) {
+      reply.num_indexed_rows = stats.num_indexed_rows;
+      reply.num_unindexed_rows = stats.num_unindexed_rows;
+      reply.num_indices = stats.num_indices;
+    } else {
+      if (error_message) {
+        lancedb_free_string(error_message);
+      }
+      reply.num_indexed_rows = 0;
+      reply.num_unindexed_rows = lancedb_table_count_rows(table);
+      reply.num_indices = 0;
+    }
+
     lancedb_table_free(table);
     lancedb_connection_free(conn);
     return 0;
@@ -1997,6 +2057,10 @@ namespace rgw::s3vector {
     }
     lancedb_table_free(table);
     lancedb_connection_free(conn);
+    if (result == LANCEDB_SUCCESS) {
+    // upon deleting vectors, it needs to verify whether to re-build the index
+      notify_index_update(dpp, configuration.vector_bucket_name, configuration.index_name);
+    }
     return lancedb_error_to_errno(result);
   }
 

@@ -746,8 +746,9 @@ int RadosVectorBucket::create(const DoutPrefixProvider* dpp,
 
   int ret = store->getRados()->create_vector_bucket(
       dpp, y, key, params.owner, params.zonegroup_id,
-      params.placement_rule, params.attrs,
-      params.quota, params.creation_time, &bucket_version, info);
+      params.placement_rule, params.zone_placement, params.attrs,
+      params.index_type, params.quota, params.creation_time,
+      &bucket_version, info);
 
   bool existed = false;
   if (ret == -EEXIST) {

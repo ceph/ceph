@@ -4860,3 +4860,70 @@ options:
   desc: When not empty, this value is returned as a response header Access-Control-Expose-Headers.
   services:
   - rgw
+# s3vector background index rebuild options
+- name: rgw_s3vector_index_unindexed_threshold
+  type: uint
+  level: advanced
+  desc: Number of unindexed rows that triggers a background vector index rebuild
+  long_desc: When the number of unindexed rows in a LanceDB table exceeds this
+    threshold, the background manager will rebuild the vector index. IVF-based
+    index types require a minimum of 256 vectors. Set to 0 to disable automatic
+    rebuilds.
+  default: 256
+  min: 0
+  services:
+  - rgw
+- name: rgw_s3vector_index_stats_interval
+  type: uint
+  level: advanced
+  desc: Minimum interval in seconds between index stats checks for a given table
+  long_desc: Controls how often the background manager calls
+    lancedb_table_index_stats for a particular table. This rate-limits the
+    overhead of reading the LanceDB manifest during bursts of put-vector and
+    delete-vector operations.
+  default: 30
+  min: 1
+  services:
+  - rgw
+- name: rgw_s3vector_index_build_lease_seconds
+  type: uint
+  level: advanced
+  desc: Maximum expected duration of a vector index build in seconds
+  long_desc: If a build has been in progress for longer than this value, the
+    background manager considers it crashed and resets the build state. This
+    acts as a lease for crash recovery. Must be long enough to cover the
+    largest expected index build.
+  default: 600
+  min: 60
+  services:
+  - rgw
+- name: rgw_s3vector_index_lock_ttl_seconds
+  type: uint
+  level: advanced
+  desc: TTL in seconds for the S3 distributed lock object used during index rebuild
+  long_desc: If the lock object age exceeds this value, it is considered stale
+    and can be reclaimed by another RGW instance. Should be greater than
+    rgw_s3vector_index_build_lease_seconds to avoid premature lock reclamation.
+  default: 900
+  min: 60
+  services:
+  - rgw
+- name: rgw_s3vector_index_type
+  type: str
+  level: advanced
+  desc: LanceDB vector index type used for background index builds
+  long_desc: Controls which vector index algorithm LanceDB uses when rebuilding
+    indexes. Valid values are auto (lets LanceDB choose based on dataset size),
+    ivf_pq (IVF with product quantization, good balance of speed and memory),
+    ivf_hnsw_pq (IVF with HNSW graph and PQ, optimized for IO-bound workloads),
+    ivf_hnsw_sq (IVF with HNSW graph and scalar quantization, higher recall),
+    ivf_flat (IVF without compression, highest recall but most memory).
+  default: auto
+  enum_values:
+  - auto
+  - ivf_pq
+  - ivf_hnsw_pq
+  - ivf_hnsw_sq
+  - ivf_flat
+  services:
+  - rgw

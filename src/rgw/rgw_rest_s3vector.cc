@@ -6,6 +6,7 @@
 #include "rgw_rest_s3.h"
 #include "rgw_s3vector.h"
 #include "rgw_process_env.h"
+#include "rgw_zone.h"
 #include "common/async/yield_context.h"
 #include "common/ceph_json.h"
 #include "rgw_arn.h"
@@ -191,9 +192,12 @@ private:
     rgw::sal::VectorBucket::CreateParams createparams;
     createparams.owner = s->user->get_id();
     createparams.zonegroup_id = zonegroup.id;
-    // vector buckets are indexless
     createparams.index_type = rgw::BucketIndexType::Indexless;
     createparams.placement_rule.storage_class = s->info.storage_class;
+// note: without the placement-rule and zone-placement setting it not possible to use conditional-write (put-object)
+    createparams.placement_rule.name = "default-placement";
+    createparams.zone_placement = rgw::find_zone_placement(
+        this, s->penv.site->get_zone_params(), createparams.placement_rule);
     if (!driver->is_meta_master()) {
       // apply bucket creation on the master zone first
       JSONParser jp;
@@ -798,6 +802,58 @@ private:
   }
 };
 
+class RGWS3VectorGetIndexStats : public RGWS3VectorBase {
+  rgw::s3vector::get_index_stats_t configuration;
+  rgw::s3vector::get_index_stats_reply_t reply;
+public:
+  explicit RGWS3VectorGetIndexStats(bufferlist&& data) : RGWS3VectorBase(std::move(data)) {}
+private:
+  int verify_permission(optional_yield y) override {
+    return 0;
+  }
+
+  const char* name() const override { return "s3vector_get_index_stats"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.S3VECTOR.GetIndexStats", s->info.method); }
+  RGWOpType get_type() override { return RGW_OP_S3VECTOR_GET_INDEX_STATS; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+
+  int init_processing(optional_yield y) override {
+    return do_init_processing(configuration, y);
+  }
+
+  void execute(optional_yield y) override {
+    const rgw_bucket bucket_id(s->bucket_tenant, configuration.vector_bucket_name);
+    std::unique_ptr<rgw::sal::VectorBucket> bucket;
+    op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
+    if (op_ret < 0) {
+      if (op_ret == -ENOENT) {
+        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+      }
+      ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
+      return;
+    }
+    op_ret = rgw::s3vector::get_index_stats(configuration, this, y, reply);
+  }
+
+  void send_response() override {
+    if (op_ret) {
+      set_req_state_err(s, op_ret);
+    }
+    dump_errno(s);
+    end_header(s, this, "application/json");
+
+    if (op_ret < 0) {
+      return;
+    }
+
+    dump_start(s);
+
+    const auto f = s->formatter;
+    reply.dump(f);
+    rgw_flush_formatter_and_reset(s, f);
+  }
+};
+
 class RGWS3VectorListIndexes : public RGWS3VectorBase {
   rgw::s3vector::list_indexes_t configuration;
   rgw::s3vector::list_indexes_reply_t reply;
@@ -1083,6 +1139,8 @@ RGWOp* RGWHandler_REST_s3Vector::op_post() {
     return new RGWS3VectorDeleteVectorBucketPolicy(std::move(bl_post_body));
   if (op_name == "GetIndex")
     return new RGWS3VectorGetIndex(std::move(bl_post_body));
+  if (op_name == "GetIndexStats")
+    return new RGWS3VectorGetIndexStats(std::move(bl_post_body));
   if (op_name == "GetVectors")
     return new RGWS3VectorGetVectors(std::move(bl_post_body));
   if (op_name == "GetVectorBucket")
