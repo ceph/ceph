@@ -3,12 +3,14 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 
 namespace rgw::sal {
   class Driver;
 }
 class DoutPrefixProvider;
+struct LanceDBSession;
 
 namespace rgw::s3vector {
   bool init(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver);
@@ -19,5 +21,11 @@ namespace rgw::s3vector {
   bool notify_index_update(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& index_name);
   // update whenever a index is removed
   bool notify_index_remove(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& index_name);
+  // get LanceDB session for a bucket, returns nullptr if session doesn't exist or manager is not initialized
+  std::shared_ptr<const LanceDBSession> get_session(const DoutPrefixProvider* dpp, const std::string& bucket_name);
+  // notify manager for session creation
+  bool notify_session_create(const DoutPrefixProvider* dpp, const std::string& bucket_name);
+  // notify manager for session deletion
+  bool notify_session_delete(const DoutPrefixProvider* dpp, const std::string& bucket_name);
 }
 
