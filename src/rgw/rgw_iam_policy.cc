@@ -245,6 +245,10 @@ static const actpair actpairs[] =
  { "s3files:TagResource", s3filesTagResource},
  { "s3files:UntagResource", s3filesUntagResource},
  { "s3files:ListTagsForResource", s3filesListTagsForResource},
+ // Mount-auth (data-plane) actions; see doc/dev/radosgw/s3_files_api.rst.
+ { "s3files:ClientMount", s3filesClientMount},
+ { "s3files:ClientWrite", s3filesClientWrite},
+ { "s3files:ClientRootAccess", s3filesClientRootAccess},
 };
 
 struct PolicyParser;
@@ -1823,6 +1827,12 @@ const char* action_bit_string(uint64_t action) {
     return "s3files:UntagResource";
   case s3filesListTagsForResource:
     return "s3files:ListTagsForResource";
+  case s3filesClientMount:
+    return "s3files:ClientMount";
+  case s3filesClientWrite:
+    return "s3files:ClientWrite";
+  case s3filesClientRootAccess:
+    return "s3files:ClientRootAccess";
   }
   return "s3Invalid";
 }

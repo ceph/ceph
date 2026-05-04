@@ -730,6 +730,190 @@ Per-zone NFS service bindings and export defaults are **not**
 config knobs; they live in zone period config under
 ``files_placement_services`` (see `Files placements`_).
 
+Mount-auth and role assumption
+==============================
+
+The control-plane API gates *who can manage Files API resources*.
+The actual *data-plane* access decision — "can this NFS client
+read or write these objects through this AccessPoint?" — happens
+at mount time, evaluated by the Ganesha RGW FSAL. This section
+documents the contract between the layers so a future contributor
+can implement them without re-deriving the model.
+
+Two policy AND-terms
+--------------------
+
+A successful NFS data-plane operation requires two separate
+authorization steps to allow:
+
+1. **Mount-auth (NFS-layer).** At the NFS mount handshake, before
+   any export becomes usable to a client, the FSAL evaluates the
+   mounting principal's permission against the s3files action
+   namespace, AND-ing identity-based and resource-based policies:
+
+   * **Principal IAM** — does the calling identity have the
+     relevant ``s3files:Client*`` action on the FS / AccessPoint
+     ARN?
+   * **FileSystem resource policy** — what does the FS owner
+     allow via ``PutFileSystemPolicy``?
+   * (Bucket policy on the underlying S3 bucket is *not*
+     evaluated at this step — it doesn't speak NFS-layer
+     concepts. See term 2.)
+
+   If either source denies, the mount fails and no NFS session
+   opens.
+
+2. **S3-layer (per-object).** Once mounted, every NFS read /
+   write turns into one or more ``s3:GetObject`` / ``PutObject``
+   / ``DeleteObject`` / ``ListBucket`` calls against the bucket.
+   These go through the standard S3 IAM evaluation (role IAM ∩
+   bucket policy). The FSAL doesn't need to know how this works
+   — it just performs the S3 call as the assumed role and
+   surfaces the S3 result back to NFS.
+
+Mount-auth action namespace
+---------------------------
+
+Three actions, mirroring the EFS shape so operators authoring
+mount policies don't have to relearn semantics:
+
+* ``s3files:ClientMount`` — required to mount, **and** implies
+  read access (no separate ``ClientRead`` action; the NFS read
+  path is satisfied by ``ClientMount`` alone).
+* ``s3files:ClientWrite`` — additive on ``ClientMount``; permits
+  NFS write / modify ops (``write``, ``create``, ``mkdir``,
+  ``unlink``, ``rename``, ``setattr``).
+* ``s3files:ClientRootAccess`` — additive; bypasses the
+  AccessPoint's ``posixUser`` squash (the principal can operate
+  as any uid/gid). Does *not* alter the S3-layer permission set
+  — it's NFS-layer uid mapping only.
+
+These are registered in ``rgw_iam_policy.h`` /
+``rgw_iam_policy.cc`` so policies can be authored against them
+today, even though the mount-auth handshake that *invokes* the
+evaluation is deferred to the FSAL workstream.
+
+Resource ARN shape::
+
+    arn:aws:s3files:<region>:<account>:file-system/fs-XXX
+    arn:aws:s3files:<region>:<account>:file-system/fs-XXX/access-point/fsap-YYY
+
+A tight policy looks like::
+
+    {"Effect": "Allow",
+     "Action": ["s3files:ClientMount", "s3files:ClientWrite"],
+     "Resource": "arn:aws:s3files::*:file-system/fs-XXX/access-point/fsap-YYY"}
+
+Role assumption: where the s3files-layer meets the S3-layer
+------------------------------------------------------------
+
+Every FileSystem carries a customer-supplied ``roleArn`` set at
+``CreateFileSystem`` time. This role is the data plane's
+maximum capability declaration on the underlying bucket — the
+FSAL assumes it (per mount session) and uses the resulting temp
+credentials to perform all S3 operations on behalf of NFS
+clients of that FS.
+
+The trust principal on the role must be the s3files data plane.
+For Ceph this is the synthetic service principal
+``s3files.ceph.io``::
+
+    {"Version": "2012-10-17",
+     "Statement": [{"Effect": "Allow",
+                    "Principal": {"Service": "s3files.ceph.io"},
+                    "Action": "sts:AssumeRole"}]}
+
+The role's permission policy is the customer's choice and lives
+outside the s3files API surface — the FSAL inherits whatever
+the customer configured. AWS's pattern: usually a permissive
+``s3:GetObject``/``PutObject``/``DeleteObject``/``ListBucket``
+on the bucket+prefix scope.
+
+Per-mount-session narrowing
+---------------------------
+
+An auto-role-per-AccessPoint pattern was considered and
+rejected: AWS doesn't auto-create per-AP roles, and the FSAL
+already has the context (AP scope + mounting principal) to
+narrow the per-session capability via a synthesized session
+policy passed to ``sts:AssumeRole``. The synthesis goes::
+
+    granted = mount-auth(principal, FS resource policy, principal IAM)
+            ⊆ {ClientMount, ClientWrite, ClientRootAccess}
+
+    composed_prefix = fs_spec.prefix + ap_spec.rootDirectory.path
+                      (with leading slash on rootDirectory stripped)
+
+    session_policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            ClientMount in granted ?
+              {"Effect": "Allow",
+               "Action": ["s3:GetObject"],
+               "Resource":
+                 "arn:aws:s3:::<bucket>/<composed_prefix>*"} : skip,
+            ClientMount in granted ?
+              {"Effect": "Allow",
+               "Action": "s3:ListBucket",
+               "Resource": "arn:aws:s3:::<bucket>",
+               "Condition":
+                 {"StringLike":
+                    {"s3:prefix": ["<composed_prefix>*"]}}} : skip,
+            ClientWrite in granted ?
+              {"Effect": "Allow",
+               "Action": ["s3:PutObject", "s3:DeleteObject"],
+               "Resource":
+                 "arn:aws:s3:::<bucket>/<composed_prefix>*"} : skip,
+        ],
+    }
+
+(``ClientRootAccess`` doesn't appear here — it's NFS-layer uid
+mapping, not an S3-layer capability.)
+
+The effective S3 capability for the session is the
+intersection of (role permission policy ∩ session policy ∩
+bucket policy). Different principals mounting the same AP get
+different session policies; the role itself is unchanged.
+
+Layered responsibilities
+------------------------
+
+Translating the model into where each piece of work lives:
+
+* **Control plane (this document, this codebase).** Persist FS
+  state including ``roleArn``. Register
+  ``s3files:Client{Mount,Write,RootAccess}`` so policies can
+  reference them. Gate the 21 control-plane operations with
+  ``s3files:*`` IAM checks (already in place).
+* **Reflection layer (FdbStore).** FS / AP / MT spec records
+  land in FDB; the FS record carries ``roleArn`` so the
+  reconciler can read it.
+* **Reconciler service.** Reads (FS, AP, MT) tuples from FDB,
+  renders one Ganesha export per tuple. The export config
+  carries: bucket, ``composed_prefix``, ``posixUser``,
+  ``roleArn``, network endpoint. Signals Ganesha to reload.
+* **Data plane (Ganesha + RGW FSAL — separate codebase).** Per
+  mount session: authenticate principal, evaluate the two AND
+  terms above, synthesize the session policy, call
+  ``sts:AssumeRole`` on the export's ``roleArn``, use the temp
+  creds for all S3 ops in the session.
+
+Nothing in the s3files control plane synthesizes session
+policies — that's the FSAL's job at mount handshake time.
+
+Why no per-AP role
+------------------
+
+An earlier draft of this design proposed auto-creating an
+immutable, service-linked IAM role per AccessPoint to declare
+the AP's data-plane capability. After thinking through the
+session-policy mechanism above, that pattern is unnecessary:
+AWS's S3 Files doesn't do it, the per-session narrowing already
+gives precisely the capability scoping the AP ought to have,
+and a per-AP role would just be a stable structure shadowed by
+the actual narrowing in session policy. Recording this here so
+a future contributor doesn't repeat the exploration.
+
 Error codes
 ===========
 

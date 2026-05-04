@@ -240,6 +240,15 @@ enum {
   s3filesTagResource,
   s3filesUntagResource,
   s3filesListTagsForResource,
+  // Mount-auth actions, evaluated by the data plane (Ganesha
+  // RGW FSAL) at NFS mount handshake time, not by the s3files
+  // control-plane handlers. Modeled after the EFS shape:
+  // ClientMount implies read; ClientWrite is additive on
+  // ClientMount; ClientRootAccess bypasses the AccessPoint's
+  // posixUser squash. See doc/dev/radosgw/s3_files_api.rst.
+  s3filesClientMount,
+  s3filesClientWrite,
+  s3filesClientRootAccess,
   s3filesAll,
 
   allCount
