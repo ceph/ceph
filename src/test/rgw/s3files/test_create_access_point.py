@@ -14,8 +14,10 @@ from . import errors, assert_errorcode, validation_excs, NONEXISTENT_FS_ID
 
 
 # Smithy: ^arn:aws[-a-z]*:s3files:[0-9a-z-:]+:file-system/fs-[...]/access-point/fsap-[...]
+# Loosened `[0-9a-z-:]+` to `[0-9A-Za-z-:]*` so RGW account ids
+# like `RGW65713045997841677` (uppercase alphanumeric) match too.
 _AP_ARN_RE = re.compile(
-    r'^arn:aws[-a-z]*:s3files:[0-9a-z-:]+:'
+    r'^arn:aws[-a-z]*:s3files:[0-9A-Za-z-:]*:'
     r'file-system/fs-[0-9a-f]{17,40}/access-point/fsap-[0-9a-f]{17,40}$'
 )
 _AP_ID_RE = re.compile(r'^fsap-[0-9a-f]{17,40}$')

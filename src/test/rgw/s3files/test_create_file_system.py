@@ -14,9 +14,14 @@ import pytest
 from . import errors, assert_errorcode, validation_excs
 
 
-# Smithy: `^(arn:aws[-a-z]*:s3files:[0-9a-z-:]+:file-system/fs-[0-9a-f]{17,40})$`
+# Smithy: `^(arn:aws[-a-z]*:s3files:[0-9a-z-:]+:file-system/fs-[0-9a-f]{17,40})$`.
+# We loosen `[0-9a-z-:]+` to `[0-9A-Za-z-:]*` so the regex also
+# accepts RGW account ids like `RGW65713045997841677` (uppercase
+# alphanumeric). The Smithy pattern was written against AWS's
+# 12-digit numeric account ids; the rest of the structure is
+# unchanged.
 _FS_ARN_RE = re.compile(
-    r'^arn:aws[-a-z]*:s3files:[0-9a-z-:]+:file-system/fs-[0-9a-f]{17,40}$'
+    r'^arn:aws[-a-z]*:s3files:[0-9A-Za-z-:]*:file-system/fs-[0-9a-f]{17,40}$'
 )
 _FS_ID_RE = re.compile(r'^fs-[0-9a-f]{17,40}$')
 

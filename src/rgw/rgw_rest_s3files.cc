@@ -25,8 +25,10 @@
 #include "common/ceph_json.h"
 #include "common/dout.h"
 
+#include "rgw_arn.h"
 #include "rgw_auth_s3.h"
 #include "rgw_common.h"
+#include "rgw_iam_policy.h"
 #include "rgw_op.h"
 #include "rgw_s3files_errors.h"
 #include "file_state/memory_store.h"
@@ -269,10 +271,52 @@ std::string strip_arn(std::string_view in) {
 // ---- account / owner -----------------------------------------
 
 std::string current_owner_account_id(const req_state* s) {
-  // Placeholder until #11 wires proper account-scoped IAM. Today
-  // this returns the request's user-id which doubles as the
-  // account-id under the test config.
-  return s->user ? s->user->get_id().to_str() : std::string{};
+  // Prefer the account-id when the user is bound to a Ceph IAM
+  // account; fall back to the user-id for legacy non-account
+  // users so existing test fixtures continue to work. The
+  // returned value drives ownerId on response shapes and the
+  // store-side scoping key for resource lookups.
+  if (s && s->user) {
+    const auto& info = s->user->get_info();
+    if (!info.account_id.empty()) {
+      return info.account_id;
+    }
+    return s->user->get_id().to_str();
+  }
+  return {};
+}
+
+// ---- IAM permission ------------------------------------------
+
+// Build an `arn:aws:s3files::<account>:<resource>` ARN for the
+// calling account and call verify_user_permission with the
+// supplied IAM action constant. The caller passes the resource
+// portion (e.g. `file-system/fs-...`, `access-point/fsap-...`,
+// `mount-target/fsmt-...`, or `*` for collection / no-target
+// ops). Account-root users bypass policy evaluation; everyone
+// else must have an attached policy whose Action matches the
+// constant AND whose Resource matches this ARN.
+int verify_s3files_perm(const DoutPrefixProvider* dpp,
+                         req_state* s, std::uint64_t action,
+                         std::string_view resource) {
+  rgw::ARN res(rgw::Partition::aws, rgw::Service::s3files,
+               /*region=*/"", current_owner_account_id(s),
+               std::string(resource));
+  if (!::verify_user_permission(dpp, s, res, action)) {
+    return -EACCES;
+  }
+  return 0;
+}
+
+// Build the resource portion of an ARN for a Tag/Untag/ListTags
+// op given a Smithy ResourceId (which may be a FileSystemId,
+// AccessPointId, or their ARN form). FS ids start with `fs-`;
+// access-point ids with `fsap-`.
+std::string tag_resource_for(std::string_view resource_id) {
+  std::string bare = strip_arn(resource_id);
+  if (bare.starts_with("fsap-")) return "access-point/" + bare;
+  if (bare.starts_with("fs-"))   return "file-system/"  + bare;
+  return bare;  // shouldn't happen post-Smithy validation
 }
 
 // ---- response encoders ----------------------------------------
@@ -512,7 +556,10 @@ class RGWCreateFileSystem : public RGWOp {
   explicit RGWCreateFileSystem(ceph::bufferlist body) : body_(std::move(body)) {}
 
   int init_processing(optional_yield y) override;
-  int verify_permission(optional_yield y) override { return 0; }
+  int verify_permission(optional_yield y) override {
+    return verify_s3files_perm(this, s,
+        rgw::IAM::s3filesCreateFileSystem, "*");
+  }
   void execute(optional_yield y) override;
   void send_response() override;
 
@@ -683,7 +730,11 @@ class RGWGetFileSystem : public RGWOp {
  public:
   explicit RGWGetFileSystem(std::string fs_id) : fs_id_(std::move(fs_id)) {}
 
-  int verify_permission(optional_yield y) override { return 0; }
+  int verify_permission(optional_yield y) override {
+    return verify_s3files_perm(this, s,
+        rgw::IAM::s3filesGetFileSystem,
+        "file-system/" + strip_arn(fs_id_));
+  }
   void execute(optional_yield y) override;
   void send_response() override;
 
@@ -729,7 +780,10 @@ class RGWListFileSystems : public RGWOp {
  public:
   RGWListFileSystems() = default;
 
-  int verify_permission(optional_yield y) override { return 0; }
+  int verify_permission(optional_yield y) override {
+    return verify_s3files_perm(this, s,
+        rgw::IAM::s3filesListFileSystems, "*");
+  }
   void execute(optional_yield y) override;
   void send_response() override;
 
@@ -796,7 +850,11 @@ class RGWDeleteFileSystem : public RGWOp {
  public:
   explicit RGWDeleteFileSystem(std::string fs_id) : fs_id_(std::move(fs_id)) {}
 
-  int verify_permission(optional_yield y) override { return 0; }
+  int verify_permission(optional_yield y) override {
+    return verify_s3files_perm(this, s,
+        rgw::IAM::s3filesDeleteFileSystem,
+        "file-system/" + strip_arn(fs_id_));
+  }
   void execute(optional_yield y) override;
   void send_response() override;
 
@@ -840,7 +898,11 @@ class RGWPutFileSystemPolicy : public RGWOp {
     : fs_id_(std::move(fs_id)), body_(std::move(body)) {}
 
   int init_processing(optional_yield y) override;
-  int verify_permission(optional_yield y) override { return 0; }
+  int verify_permission(optional_yield y) override {
+    return verify_s3files_perm(this, s,
+        rgw::IAM::s3filesPutFileSystemPolicy,
+        "file-system/" + strip_arn(fs_id_));
+  }
   void execute(optional_yield y) override;
   void send_response() override;
 
@@ -895,7 +957,11 @@ class RGWGetFileSystemPolicy : public RGWOp {
   explicit RGWGetFileSystemPolicy(std::string fs_id)
     : fs_id_(std::move(fs_id)) {}
 
-  int verify_permission(optional_yield y) override { return 0; }
+  int verify_permission(optional_yield y) override {
+    return verify_s3files_perm(this, s,
+        rgw::IAM::s3filesGetFileSystemPolicy,
+        "file-system/" + strip_arn(fs_id_));
+  }
   void execute(optional_yield y) override;
   void send_response() override;
 
@@ -936,7 +1002,11 @@ class RGWDeleteFileSystemPolicy : public RGWOp {
   explicit RGWDeleteFileSystemPolicy(std::string fs_id)
     : fs_id_(std::move(fs_id)) {}
 
-  int verify_permission(optional_yield y) override { return 0; }
+  int verify_permission(optional_yield y) override {
+    return verify_s3files_perm(this, s,
+        rgw::IAM::s3filesDeleteFileSystemPolicy,
+        "file-system/" + strip_arn(fs_id_));
+  }
   void execute(optional_yield y) override;
   void send_response() override;
 
@@ -972,7 +1042,11 @@ class RGWPutSyncConfig : public RGWOp {
     : fs_id_(std::move(fs_id)), body_(std::move(body)) {}
 
   int init_processing(optional_yield y) override;
-  int verify_permission(optional_yield y) override { return 0; }
+  int verify_permission(optional_yield y) override {
+    return verify_s3files_perm(this, s,
+        rgw::IAM::s3filesPutSynchronizationConfiguration,
+        "file-system/" + strip_arn(fs_id_));
+  }
   void execute(optional_yield y) override;
   void send_response() override;
 
@@ -1078,7 +1152,11 @@ class RGWGetSyncConfig : public RGWOp {
  public:
   explicit RGWGetSyncConfig(std::string fs_id) : fs_id_(std::move(fs_id)) {}
 
-  int verify_permission(optional_yield y) override { return 0; }
+  int verify_permission(optional_yield y) override {
+    return verify_s3files_perm(this, s,
+        rgw::IAM::s3filesGetSynchronizationConfiguration,
+        "file-system/" + strip_arn(fs_id_));
+  }
   void execute(optional_yield y) override;
   void send_response() override;
 
@@ -1118,7 +1196,13 @@ class RGWCreateAccessPoint : public RGWOp {
   explicit RGWCreateAccessPoint(ceph::bufferlist body) : body_(std::move(body)) {}
 
   int init_processing(optional_yield y) override;
-  int verify_permission(optional_yield y) override { return 0; }
+  int verify_permission(optional_yield y) override {
+    // init_processing has already populated req_.filesystem_id;
+    // permission to create an AP is checked against the parent FS.
+    return verify_s3files_perm(this, s,
+        rgw::IAM::s3filesCreateAccessPoint,
+        "file-system/" + strip_arn(req_.filesystem_id));
+  }
   void execute(optional_yield y) override;
   void send_response() override;
 
@@ -1209,7 +1293,11 @@ class RGWGetAccessPoint : public RGWOp {
  public:
   explicit RGWGetAccessPoint(std::string ap_id) : ap_id_(std::move(ap_id)) {}
 
-  int verify_permission(optional_yield y) override { return 0; }
+  int verify_permission(optional_yield y) override {
+    return verify_s3files_perm(this, s,
+        rgw::IAM::s3filesGetAccessPoint,
+        "access-point/" + strip_arn(ap_id_));
+  }
   void execute(optional_yield y) override;
   void send_response() override;
 
@@ -1248,7 +1336,14 @@ class RGWListAccessPoints : public RGWOp {
  public:
   RGWListAccessPoints() = default;
 
-  int verify_permission(optional_yield y) override { return 0; }
+  int verify_permission(optional_yield y) override {
+    // ListAccessPoints requires fileSystemId via @httpQuery; the
+    // resource is the AP collection scoped to that FS.
+    auto fs = strip_arn(s->info.args.get("fileSystemId"));
+    return verify_s3files_perm(this, s,
+        rgw::IAM::s3filesListAccessPoints,
+        "file-system/" + fs + "/access-point/*");
+  }
   void execute(optional_yield y) override;
   void send_response() override;
 
@@ -1318,7 +1413,11 @@ class RGWDeleteAccessPoint : public RGWOp {
  public:
   explicit RGWDeleteAccessPoint(std::string ap_id) : ap_id_(std::move(ap_id)) {}
 
-  int verify_permission(optional_yield y) override { return 0; }
+  int verify_permission(optional_yield y) override {
+    return verify_s3files_perm(this, s,
+        rgw::IAM::s3filesDeleteAccessPoint,
+        "access-point/" + strip_arn(ap_id_));
+  }
   void execute(optional_yield y) override;
   void send_response() override;
 
@@ -1353,7 +1452,13 @@ class RGWCreateMountTarget : public RGWOp {
   explicit RGWCreateMountTarget(ceph::bufferlist body) : body_(std::move(body)) {}
 
   int init_processing(optional_yield y) override;
-  int verify_permission(optional_yield y) override { return 0; }
+  int verify_permission(optional_yield y) override {
+    // init_processing has already populated req_.filesystem_id;
+    // permission to create an MT is checked against the parent FS.
+    return verify_s3files_perm(this, s,
+        rgw::IAM::s3filesCreateMountTarget,
+        "file-system/" + strip_arn(req_.filesystem_id));
+  }
   void execute(optional_yield y) override;
   void send_response() override;
 
@@ -1471,7 +1576,11 @@ class RGWGetMountTarget : public RGWOp {
  public:
   explicit RGWGetMountTarget(std::string mt_id) : mt_id_(std::move(mt_id)) {}
 
-  int verify_permission(optional_yield y) override { return 0; }
+  int verify_permission(optional_yield y) override {
+    return verify_s3files_perm(this, s,
+        rgw::IAM::s3filesGetMountTarget,
+        "mount-target/" + strip_arn(mt_id_));
+  }
   void execute(optional_yield y) override;
   void send_response() override;
 
@@ -1510,7 +1619,16 @@ class RGWListMountTargets : public RGWOp {
  public:
   RGWListMountTargets() = default;
 
-  int verify_permission(optional_yield y) override { return 0; }
+  int verify_permission(optional_yield y) override {
+    // Optional fileSystemId / accessPointId filters narrow the
+    // resource ARN; with no filter the request is account-wide.
+    std::string resource = "*";
+    if (auto v = s->info.args.get("fileSystemId"); !v.empty()) {
+      resource = "file-system/" + strip_arn(v) + "/mount-target/*";
+    }
+    return verify_s3files_perm(this, s,
+        rgw::IAM::s3filesListMountTargets, resource);
+  }
   void execute(optional_yield y) override;
   void send_response() override;
 
@@ -1584,7 +1702,11 @@ class RGWUpdateMountTarget : public RGWOp {
     : mt_id_(std::move(mt_id)), body_(std::move(body)) {}
 
   int init_processing(optional_yield y) override;
-  int verify_permission(optional_yield y) override { return 0; }
+  int verify_permission(optional_yield y) override {
+    return verify_s3files_perm(this, s,
+        rgw::IAM::s3filesUpdateMountTarget,
+        "mount-target/" + strip_arn(mt_id_));
+  }
   void execute(optional_yield y) override;
   void send_response() override;
 
@@ -1654,7 +1776,11 @@ class RGWDeleteMountTarget : public RGWOp {
   explicit RGWDeleteMountTarget(std::string mt_id)
     : mt_id_(std::move(mt_id)) {}
 
-  int verify_permission(optional_yield y) override { return 0; }
+  int verify_permission(optional_yield y) override {
+    return verify_s3files_perm(this, s,
+        rgw::IAM::s3filesDeleteMountTarget,
+        "mount-target/" + strip_arn(mt_id_));
+  }
   void execute(optional_yield y) override;
   void send_response() override;
 
@@ -1689,7 +1815,11 @@ class RGWListTagsForResource : public RGWOp {
   explicit RGWListTagsForResource(std::string resource_id)
     : resource_id_(std::move(resource_id)) {}
 
-  int verify_permission(optional_yield y) override { return 0; }
+  int verify_permission(optional_yield y) override {
+    return verify_s3files_perm(this, s,
+        rgw::IAM::s3filesListTagsForResource,
+        tag_resource_for(resource_id_));
+  }
   void execute(optional_yield y) override;
   void send_response() override;
 
@@ -1745,7 +1875,11 @@ class RGWTagResource : public RGWOp {
     : resource_id_(std::move(resource_id)), body_(std::move(body)) {}
 
   int init_processing(optional_yield y) override;
-  int verify_permission(optional_yield y) override { return 0; }
+  int verify_permission(optional_yield y) override {
+    return verify_s3files_perm(this, s,
+        rgw::IAM::s3filesTagResource,
+        tag_resource_for(resource_id_));
+  }
   void execute(optional_yield y) override;
   void send_response() override;
 
@@ -1806,7 +1940,11 @@ class RGWUntagResource : public RGWOp {
   explicit RGWUntagResource(std::string resource_id)
     : resource_id_(std::move(resource_id)) {}
 
-  int verify_permission(optional_yield y) override { return 0; }
+  int verify_permission(optional_yield y) override {
+    return verify_s3files_perm(this, s,
+        rgw::IAM::s3filesUntagResource,
+        tag_resource_for(resource_id_));
+  }
   void execute(optional_yield y) override;
   void send_response() override;
 
