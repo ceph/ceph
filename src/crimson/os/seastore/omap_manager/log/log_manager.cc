@@ -61,6 +61,14 @@ LogManager::omap_set_keys(
   DEBUGT("enter kv size {}", t, _kvs.size());
   assert(log_root.get_type() == omap_type_t::LOG);
 
+  // FIXME
+  lognode_delta_t delta;
+  delta.base_lognode_laddr = log_root.addr;
+  delta.op = lognode_delta_t::op_t::INSERT;
+  encode(kvs, delta.buffer);
+  t.add_lognode_delta(std::move(delta));
+  co_return;
+
   auto kvs = std::move(_kvs);
   auto ext = co_await log_load_extent<LogNode>(
     t, log_root.addr, BEGIN_KEY, END_KEY);
@@ -759,6 +767,15 @@ LogManager::omap_rm_keys(
 
     bool continuous = is_continuous_fixed_width(key_set);
     if (continuous) {
+      // FIXME
+      lognode_delta_t delta;
+      delta.base_lognode_laddr = log_root.addr;
+      delta.op = lognode_delta_t::op_t::DELETE;
+      auto pair = std::make_pair(*key_set.begin(), *key_set.rbegin());
+      encode(pair, delta.buffer);
+      t.add_lognode_delta(std::move(delta));
+      co_return;
+
       // fast path
       co_await remove_kvs(
 	t, addr,
@@ -767,6 +784,15 @@ LogManager::omap_rm_keys(
 	nullptr);
     } else {
       for (auto& p : key_set) {
+	// FIXME
+	lognode_delta_t delta;
+	delta.base_lognode_laddr = log_root.addr;
+	delta.op = lognode_delta_t::op_t::DELETE;
+	auto pair = std::make_pair(p, p);
+	encode(pair, delta.buffer);
+	t.add_lognode_delta(std::move(delta));
+	co_return;
+
 	co_await remove_kv(t, log_root.addr, p, nullptr);
       }
     }
@@ -787,6 +813,16 @@ LogManager::omap_rm_key_range(
   LOG_PREFIX(LogManager::omap_rm_key_range);
   DEBUGT("first={}, last={}", t, first, last);
   assert(log_root.get_type() == omap_type_t::LOG);
+
+  // FIXME
+  lognode_delta_t delta;
+  delta.base_lognode_laddr = log_root.addr;
+  delta.op = lognode_delta_t::op_t::DELETE;
+  auto p = std::make_pair(first, last);
+  encode(p, delta.buffer);
+  t.add_lognode_delta(std::move(delta));
+  co_return;
+
   co_await remove_kvs(t, log_root.addr, first, last, nullptr);
   // for dup list
   co_await remove_kvs(t, 
