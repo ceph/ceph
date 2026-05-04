@@ -254,19 +254,19 @@ struct ObjectDataBlock : crimson::os::seastore::LogicalChildNode {
   explicit ObjectDataBlock(extent_len_t length)
     : LogicalChildNode(length) {}
 
-  void do_on_state_commit() final {
+  void do_on_state_commit() final override {
     auto &prior = static_cast<ObjectDataBlock&>(*get_prior_instance());
     prior.delta = std::move(delta);
     prior.modified_region = std::move(modified_region);
     prior.cached_overwrites = std::move(cached_overwrites);
   }
 
-  CachedExtentRef duplicate_for_write(Transaction&) final {
+  CachedExtentRef duplicate_for_write(Transaction&) final override {
     return CachedExtentRef(new ObjectDataBlock(*this, share_buffer_t{}));
   };
 
   static constexpr extent_types_t TYPE = extent_types_t::OBJECT_DATA_BLOCK;
-  extent_types_t get_type() const final {
+  extent_types_t get_type() const final override {
     return TYPE;
   }
 
@@ -278,11 +278,11 @@ struct ObjectDataBlock : crimson::os::seastore::LogicalChildNode {
     modified_region.union_insert(offset, bl.length());
   }
 
-  ceph::bufferlist get_delta() final;
+  ceph::bufferlist get_delta() final override;
 
-  void apply_delta(const ceph::bufferlist &bl) final;
+  void apply_delta(const ceph::bufferlist &bl) final override;
 
-  std::optional<modified_region_t> get_modified_region() final {
+  std::optional<modified_region_t> get_modified_region() final override {
     if (modified_region.empty()) {
       return std::nullopt;
     }
@@ -290,11 +290,11 @@ struct ObjectDataBlock : crimson::os::seastore::LogicalChildNode {
       modified_region.range_end() - modified_region.range_start()};
   }
 
-  void clear_modified_region() final {
+  void clear_modified_region() final override {
     modified_region.clear();
   }
 
-  void prepare_commit(Transaction &t) final {
+  void prepare_commit(Transaction &t) final override {
     if (is_rewrite_transaction(t.get_src())) {
       return;
     }
@@ -311,7 +311,7 @@ struct ObjectDataBlock : crimson::os::seastore::LogicalChildNode {
     }
   }
 
-  void logical_on_delta_write() final {
+  void logical_on_delta_write() final override {
     delta.clear();
   }
 

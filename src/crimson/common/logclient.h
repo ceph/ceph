@@ -68,7 +68,7 @@ public:
   OstreamTemp debug() {
     return OstreamTemp(CLOG_DEBUG, this);
   }
-  void debug(std::stringstream &s) final {
+  void debug(std::stringstream &s) final override {
     do_log(CLOG_DEBUG, s);
   }
   /**
@@ -88,28 +88,28 @@ public:
         ceph_abort();
     }
   }
-  OstreamTemp info() final {
+  OstreamTemp info() final override {
     return OstreamTemp(CLOG_INFO, this);
   }
-  void info(std::stringstream &s) final {
+  void info(std::stringstream &s) final override {
     do_log(CLOG_INFO, s);
   }
-  OstreamTemp warn() final {
+  OstreamTemp warn() final override {
     return OstreamTemp(CLOG_WARN, this);
   }
-  void warn(std::stringstream &s) final {
+  void warn(std::stringstream &s) final override {
     do_log(CLOG_WARN, s);
   }
-  OstreamTemp error() final {
+  OstreamTemp error() final override {
     return OstreamTemp(CLOG_ERROR, this);
   }
-  void error(std::stringstream &s) final {
+  void error(std::stringstream &s) final override {
     do_log(CLOG_ERROR, s);
   }
-  OstreamTemp sec() final {
+  OstreamTemp sec() final override {
     return OstreamTemp(CLOG_SEC, this);
   }
-  void sec(std::stringstream &s) final {
+  void sec(std::stringstream &s) final override {
     do_log(CLOG_SEC, s);
   }
 
@@ -163,8 +163,8 @@ public:
 		     uuid_d &fsid,
 		     std::string &host);
 
-  void do_log(clog_type prio, std::stringstream& ss) final;
-  void do_log(clog_type prio, const std::string& s) final;
+  void do_log(clog_type prio, std::stringstream& ss) final override;
+  void do_log(clog_type prio, const std::string& s) final override;
 
 private:
   LogClient *parent;

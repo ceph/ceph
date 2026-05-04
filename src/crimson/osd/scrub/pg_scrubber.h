@@ -103,35 +103,35 @@ public:
     const hobject_t &hoid);
 
 private:
-  DoutPrefixProvider &get_dpp() final { return dpp; }
+  DoutPrefixProvider &get_dpp() final override { return dpp; }
 
-  void notify_scrub_start(bool deep) final;
-  void notify_scrub_end(bool deep) final;
+  void notify_scrub_start(bool deep) final override;
+  void notify_scrub_end(bool deep) final override;
 
-  const std::set<pg_shard_t> &get_ids_to_scrub() const final;
+  const std::set<pg_shard_t> &get_ids_to_scrub() const final override;
 
-  chunk_validation_policy_t get_policy() const final;
+  chunk_validation_policy_t get_policy() const final override;
 
-  void request_range(const hobject_t &start) final;
-  void reserve_range(const hobject_t &start, const hobject_t &end) final;
-  void release_range() final;
+  void request_range(const hobject_t &start) final override;
+  void reserve_range(const hobject_t &start, const hobject_t &end) final override;
+  void release_range() final override;
   void scan_range(
     pg_shard_t target,
     eversion_t version,
     bool deep,
     const hobject_t &start,
-    const hobject_t &end) final;
-  bool await_update(const eversion_t &version) final;
+    const hobject_t &end) final override;
+  bool await_update(const eversion_t &version) final override;
   void generate_and_submit_chunk_result(
     const hobject_t &begin,
     const hobject_t &end,
-    bool deep) final;
+    bool deep) final override;
   void emit_chunk_result(
     const request_range_result_t &range,
-    chunk_result_t &&result) final;
+    chunk_result_t &&result) final override;
   void emit_scrub_result(
     bool deep,
-    object_stat_sum_t scrub_stats) final;
+    object_stat_sum_t scrub_stats) final override;
 };
 
 };

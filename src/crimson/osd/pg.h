@@ -192,7 +192,7 @@ public:
     ObjectContextRef obc,
     bool is_delete,
     ceph::os::Transaction *t
-    ) final {
+    ) final override {
     std::ignore = get_recovery_handler()->on_local_recover(
       oid, recovery_info, is_delete, *t);
   }
@@ -200,21 +200,21 @@ public:
     const hobject_t &oid,
     const object_stat_sum_t &stat_diff,
     bool is_delete
-    ) final {
+    ) final override {
     get_recovery_handler()->on_global_recover(
       oid, stat_diff, is_delete);
   }
   void on_peer_recover(
     pg_shard_t peer,
     const hobject_t &oid,
-    const ObjectRecoveryInfo &recovery_info) final {
+    const ObjectRecoveryInfo &recovery_info) final override {
     get_recovery_handler()->on_peer_recover(peer, oid, recovery_info);
   }
   void on_failed_pull(
     const std::set<pg_shard_t> &from,
     const hobject_t &soid,
     const eversion_t &v
-    ) final {
+    ) final override {
     get_recovery_handler()->on_failed_recover(from, soid, v);
   }
 
@@ -222,37 +222,37 @@ public:
     return get_peering_state().is_repair();
   }
 
-  bool check_failsafe_full() final {
+  bool check_failsafe_full() final override {
     // not implemented yet
     return false;
   }
 
-  epoch_t get_last_peering_reset_epoch() const final {
+  epoch_t get_last_peering_reset_epoch() const final override {
     return get_last_peering_reset();
   }
 
-  pg_shard_t primary_shard() const final {
+  pg_shard_t primary_shard() const final override {
     return get_primary();
   }
-  bool pgb_is_primary() const final {
+  bool pgb_is_primary() const final override {
     return is_primary();
   }
 
   hobject_t get_temp_recovery_object(
     const hobject_t& target,
-    eversion_t version) final {
+    eversion_t version) final override {
     return get_recovery_handler()->get_temp_recovery_object(target, version);
   }
-  void inc_osd_stat_repaired() final {
+  void inc_osd_stat_repaired() final override {
     std::ignore = shard_services.inc_osd_stat_repaired();
   }
   // ECListener ends
 
-  const pg_shard_t& get_pg_whoami() const final {
+  const pg_shard_t& get_pg_whoami() const final override {
     return pg_whoami;
   }
 
-  const spg_t& get_pgid() const final {
+  const spg_t& get_pgid() const final override {
     return pgid;
   }
 
@@ -266,7 +266,7 @@ public:
     return *backend;
   }
   // EpochSource
-  epoch_t get_osdmap_epoch() const final {
+  epoch_t get_osdmap_epoch() const final override {
     return peering_state.get_osdmap_epoch();
   }
 
@@ -278,18 +278,18 @@ public:
     return peering_state.get_pg_committed_to();
   }
 
-  const pg_info_t& get_info() const final {
+  const pg_info_t& get_info() const final override {
     return peering_state.get_info();
   }
 
   // DoutPrefixProvider
-  std::ostream& gen_prefix(std::ostream& out) const final {
+  std::ostream& gen_prefix(std::ostream& out) const final override {
     return out << *this;
   }
-  crimson::common::CephContext *get_cct() const final {
+  crimson::common::CephContext *get_cct() const final override {
     return shard_services.get_cct();
   }
-  unsigned get_subsys() const final {
+  unsigned get_subsys() const final override {
     return ceph_subsys_osd;
   }
 
@@ -306,9 +306,9 @@ public:
     bool dirty_info,
     bool dirty_big_info,
     bool need_write_epoch,
-    ceph::os::Transaction &t) final;
+    ceph::os::Transaction &t) final override;
 
-  uint64_t get_snap_trimq_size() const final {
+  uint64_t get_snap_trimq_size() const final override {
     return std::size(snap_trimq);
   }
 
@@ -348,7 +348,7 @@ public:
 
   void send_cluster_message(
     int osd, MessageURef m,
-    epoch_t epoch, bool share_map_update=false) final {
+    epoch_t epoch, bool share_map_update=false) final override {
     LOG_PREFIX(PG::send_cluster_message);
     SUBDEBUGDPP(
       osd, "message {} to {} share_map_update {}",
@@ -364,23 +364,23 @@ public:
     std::ignore = shard_services.send_to_osd(osd, std::move(m), epoch);
   }
 
-  void send_pg_created(pg_t pgid) final {
+  void send_pg_created(pg_t pgid) final override {
     LOG_PREFIX(PG::send_pg_created);
     SUBDEBUGDPP(osd, "pgid {}", *this, pgid);
     shard_services.send_pg_created(orderer, pgid);
   }
 
-  bool try_flush_or_schedule_async() final;
+  bool try_flush_or_schedule_async() final override;
 
   void start_flush_on_transaction(
-    ceph::os::Transaction &t) final {
+    ceph::os::Transaction &t) final override {
     t.register_on_commit(
       new LambdaContext([this](int r){
 	peering_state.complete_flush();
     }));
   }
 
-  void on_flushed() final {
+  void on_flushed() final override {
     // will be needed for unblocking IO operations/peering
   }
 
@@ -398,16 +398,16 @@ public:
 
   void schedule_event_after(
     PGPeeringEventRef event,
-    float delay) final {
+    float delay) final override {
     start_peering_event_operation(std::move(*event), delay);
   }
-  std::vector<pg_shard_t> get_replica_recovery_order() const final {
+  std::vector<pg_shard_t> get_replica_recovery_order() const final override {
     return peering_state.get_replica_recovery_order();
   }
   void request_local_background_io_reservation(
     unsigned priority,
     PGPeeringEventURef on_grant,
-    PGPeeringEventURef on_preempt) final {
+    PGPeeringEventURef on_preempt) final override {
     LOG_PREFIX(PG::request_local_background_io_reservation);
     SUBDEBUGDPP(
       osd, "priority {} on_grant {} on_preempt {}",
@@ -427,7 +427,7 @@ public:
   }
 
   void update_local_background_io_priority(
-    unsigned priority) final {
+    unsigned priority) final override {
     LOG_PREFIX(PG::update_local_background_io_priority);
     SUBDEBUGDPP(osd, "priority {}", *this, priority);
     shard_services.local_update_priority(
@@ -436,7 +436,7 @@ public:
       priority);
   }
 
-  void cancel_local_background_io_reservation() final {
+  void cancel_local_background_io_reservation() final override {
     LOG_PREFIX(PG::cancel_local_background_io_reservation);
     SUBDEBUGDPP(osd, "", *this);
     shard_services.local_cancel_reservation(
@@ -447,7 +447,7 @@ public:
   void request_remote_recovery_reservation(
     unsigned priority,
     PGPeeringEventURef on_grant,
-    PGPeeringEventURef on_preempt) final {
+    PGPeeringEventURef on_preempt) final override {
     LOG_PREFIX(PG::request_remote_recovery_reservation);
     SUBDEBUGDPP(
       osd, "priority {} on_grant {} on_preempt {}",
@@ -466,7 +466,7 @@ public:
     );
   }
 
-  void cancel_remote_recovery_reservation() final {
+  void cancel_remote_recovery_reservation() final override {
     LOG_PREFIX(PG::cancel_remote_recovery_reservation);
     SUBDEBUGDPP(osd, "", *this);
     shard_services.remote_cancel_reservation(orderer, pgid);
@@ -474,7 +474,7 @@ public:
 
   void schedule_event_on_commit(
     ceph::os::Transaction &t,
-    PGPeeringEventRef on_commit) final {
+    PGPeeringEventRef on_commit) final override {
     LOG_PREFIX(PG::schedule_event_on_commit);
     SUBDEBUGDPP(osd, "on_commit {}", *this, on_commit->get_desc());
 
@@ -485,26 +485,26 @@ public:
 	}));
   }
 
-  void update_heartbeat_peers(std::set<int> peers) final {
+  void update_heartbeat_peers(std::set<int> peers) final override {
     // Not needed yet
   }
-  void set_probe_targets(const std::set<pg_shard_t> &probe_set) final {
+  void set_probe_targets(const std::set<pg_shard_t> &probe_set) final override {
     // Not needed yet
   }
-  void clear_probe_targets() final {
+  void clear_probe_targets() final override {
     // Not needed yet
   }
-  void queue_want_pg_temp(const std::vector<int> &wanted) final {
+  void queue_want_pg_temp(const std::vector<int> &wanted) final override {
     LOG_PREFIX(PG::queue_want_pg_temp);
     SUBDEBUGDPP(osd, "wanted {}", *this, wanted);
     shard_services.queue_want_pg_temp(orderer, pgid.pgid, wanted);
   }
-  void clear_want_pg_temp() final {
+  void clear_want_pg_temp() final override {
     LOG_PREFIX(PG::clear_want_pg_temp);
     SUBDEBUGDPP(osd, "", *this);
     shard_services.remove_want_pg_temp(orderer, pgid.pgid);
   }
-  void check_recovery_sources(const OSDMapRef& newmap) final {
+  void check_recovery_sources(const OSDMapRef& newmap) final override {
     LOG_PREFIX(PG::check_recovery_sources);
     recovery_backend->for_each_recovery_waiter(
       [newmap, FNAME, this](auto &, auto &waiter) {
@@ -520,83 +520,83 @@ public:
         }
       });
   }
-  void check_blocklisted_watchers() final;
-  void clear_primary_state() final {
+  void check_blocklisted_watchers() final override;
+  void clear_primary_state() final override {
     recovery_finisher = nullptr;
     projected_log = PGLog::IndexedLog();
   }
 
   void queue_check_readable(epoch_t last_peering_reset,
-			    ceph::timespan delay) final;
-  void recheck_readable() final;
+			    ceph::timespan delay) final override;
+  void recheck_readable() final override;
 
-  unsigned get_target_pg_log_entries() const final;
+  unsigned get_target_pg_log_entries() const final override;
 
   void init_collection_pool_opts();
   void on_pool_change();
-  void on_role_change() final {
+  void on_role_change() final override {
     // Not needed yet
   }
-  void on_change(ceph::os::Transaction &t) final;
-  void on_activate(interval_set<snapid_t> to_trim) final;
-  void on_replica_activate() final;
-  void on_activate_complete() final;
-  void on_new_interval() final {
+  void on_change(ceph::os::Transaction &t) final override;
+  void on_activate(interval_set<snapid_t> to_trim) final override;
+  void on_replica_activate() final override;
+  void on_activate_complete() final override;
+  void on_new_interval() final override {
     recovery_finisher = nullptr;
   }
-  Context *on_clean() final;
-  void on_activate_committed() final {
+  Context *on_clean() final override;
+  void on_activate_committed() final override {
     if (!is_primary()) {
       wait_for_active_blocker.unblock();
     }
   }
-  void on_active_exit() final {
+  void on_active_exit() final override {
     // Not needed yet
   }
 
-  void on_removal(ceph::os::Transaction &t) final;
+  void on_removal(ceph::os::Transaction &t) final override;
 
   void clear_log_entry_maps();
 
   std::pair<ghobject_t, bool>
-  do_delete_work(ceph::os::Transaction &t, ghobject_t _next) final;
+  do_delete_work(ceph::os::Transaction &t, ghobject_t _next) final override;
 
   // merge/split not ready
-  void clear_ready_to_merge() final {}
-  void set_not_ready_to_merge_target(pg_t pgid, pg_t src) final {}
-  void set_not_ready_to_merge_source(pg_t pgid) final {}
-  void set_ready_to_merge_target(eversion_t lu, epoch_t les, epoch_t lec) final {}
-  void set_ready_to_merge_source(eversion_t lu) final {}
+  void clear_ready_to_merge() final override {}
+  void set_not_ready_to_merge_target(pg_t pgid, pg_t src) final override {}
+  void set_not_ready_to_merge_source(pg_t pgid) final override {}
+  void set_ready_to_merge_target(eversion_t lu, epoch_t les, epoch_t lec) final override {}
+  void set_ready_to_merge_source(eversion_t lu) final override {}
 
-  void on_active_actmap() final;
-  void on_active_advmap(const OSDMapRef &osdmap) final;
+  void on_active_actmap() final override;
+  void on_active_advmap(const OSDMapRef &osdmap) final override;
 
-  epoch_t cluster_osdmap_trim_lower_bound() final {
+  epoch_t cluster_osdmap_trim_lower_bound() final override {
     return shard_services.get_osdmap_tlb();
   }
 
-  void on_backfill_reserved() final {
+  void on_backfill_reserved() final override {
     recovery_handler->on_backfill_reserved();
   }
-  void on_backfill_suspended() final {
+  void on_backfill_suspended() final override {
     recovery_handler->backfill_suspended();
   }
 
-  void on_recovery_cancelled() final {
+  void on_recovery_cancelled() final override {
     cancel_pglog_based_recovery_op();
   }
 
-  void on_recovery_reserved() final {
+  void on_recovery_reserved() final override {
     recovery_handler->start_pglogbased_recovery();
   }
 
 
   bool try_reserve_recovery_space(
-    int64_t primary_num_bytes, int64_t local_num_bytes) final {
+    int64_t primary_num_bytes, int64_t local_num_bytes) final override {
     // TODO
     return true;
   }
-  void unreserve_recovery_space() final {}
+  void unreserve_recovery_space() final override {}
 
   void remove_maybe_snapmapped_object(
     ceph::os::Transaction &t,
@@ -627,45 +627,45 @@ public:
       ) override;
   };
   PGLog::LogEntryHandlerRef get_log_handler(
-    ceph::os::Transaction &t) final {
+    ceph::os::Transaction &t) final override {
     return std::make_unique<PG::PGLogEntryHandler>(this, &t);
   }
 
-  void rebuild_missing_set_with_deletes(PGLog &pglog) final {
+  void rebuild_missing_set_with_deletes(PGLog &pglog) final override {
     ceph_assert(0 == "Impossible for crimson");
   }
 
-  PerfCounters &get_peering_perf() final {
+  PerfCounters &get_peering_perf() final override {
     return shard_services.get_recoverystate_perf_logger();
   }
-  PerfCounters &get_perf_logger() final {
+  PerfCounters &get_perf_logger() final override {
     return shard_services.get_perf_logger();
   }
 
-  void log_state_enter(const char *state) final;
+  void log_state_enter(const char *state) final override;
   void log_state_exit(
     const char *state_name, utime_t enter_time,
-    uint64_t events, utime_t event_dur) final;
+    uint64_t events, utime_t event_dur) final override;
 
-  void dump_recovery_info(Formatter *f) const final {
+  void dump_recovery_info(Formatter *f) const final override {
   }
 
-  OstreamTemp get_clog_info() final {
+  OstreamTemp get_clog_info() final override {
     // not needed yet: replace with not a stub (needs to be wired up to monc)
     return OstreamTemp(CLOG_INFO, nullptr);
   }
-  OstreamTemp get_clog_debug() final {
+  OstreamTemp get_clog_debug() final override {
     // not needed yet: replace with not a stub (needs to be wired up to monc)
     return OstreamTemp(CLOG_DEBUG, nullptr);
   }
-  OstreamTemp get_clog_error() final {
+  OstreamTemp get_clog_error() final override {
     // not needed yet: replace with not a stub (needs to be wired up to monc)
     return OstreamTemp(CLOG_ERROR, nullptr);
   }
 
-  ceph::signedspan get_mnow() const final;
-  HeartbeatStampsRef get_hb_stamps(int peer) final;
-  void schedule_renew_lease(epoch_t plr, ceph::timespan delay) final;
+  ceph::signedspan get_mnow() const final override;
+  HeartbeatStampsRef get_hb_stamps(int peer) final override;
+  void schedule_renew_lease(epoch_t plr, ceph::timespan delay) final override;
 
 
   // Utility
@@ -675,19 +675,19 @@ public:
   bool is_active_clean() const {
     return peering_state.is_active() && peering_state.is_clean();
   }
-  bool is_primary() const final {
+  bool is_primary() const final override {
     return peering_state.is_primary();
   }
   bool is_nonprimary() const {
     return peering_state.is_nonprimary();
   }
-  bool is_peered() const final {
+  bool is_peered() const final override {
     return peering_state.is_peered();
   }
-  bool is_recovering() const final {
+  bool is_recovering() const final override {
     return peering_state.is_recovering();
   }
-  bool is_backfilling() const final {
+  bool is_backfilling() const final override {
     return peering_state.is_backfilling();
   }
   uint64_t get_last_user_version() const {
@@ -921,10 +921,10 @@ public:
     return eversion_t(get_osdmap_epoch(),
 		      projected_last_update.version + 1);
   }
-  ShardServices& get_shard_services() final {
+  ShardServices& get_shard_services() final override {
     return shard_services;
   }
-  DoutPrefixProvider* get_dpp() final {
+  DoutPrefixProvider* get_dpp() final override {
     return this;
   }
   seastar::future<> stop();
@@ -960,7 +960,7 @@ public:
 
   scrub::PGScrubber scrubber;
 
-  void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) final;
+  void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) final override;
 
   ObjectContextRegistry obc_registry;
   ObjectContextLoader obc_loader;
@@ -970,12 +970,12 @@ private:
   SnapMapper snap_mapper;
 public:
   // PeeringListener
-  void publish_stats_to_osd() final;
-  void clear_publish_stats() final;
+  void publish_stats_to_osd() final override;
+  void clear_publish_stats() final override;
   pg_stat_t get_stats() const;
   void apply_stats(
     const hobject_t &soid,
-    const object_stat_sum_t &delta_stats) final;
+    const object_stat_sum_t &delta_stats) final override;
 
 private:
   std::optional<pg_stat_t> pg_stats;
@@ -998,19 +998,19 @@ public:
   void get_dynamic_perf_stats(DynamicPerfStats *stats) {
     std::swap(dp_stats, *stats);
   }
-  OSDriver &get_osdriver() final {
+  OSDriver &get_osdriver() final override {
     return osdriver;
   }
-  SnapMapper &get_snap_mapper() final {
+  SnapMapper &get_snap_mapper() final override {
     return snap_mapper;
   }
-  RecoveryBackend* get_recovery_backend() final {
+  RecoveryBackend* get_recovery_backend() final override {
     return recovery_backend.get();
   }
-  PGRecovery* get_recovery_handler() final {
+  PGRecovery* get_recovery_handler() final override {
     return recovery_handler.get();
   }
-  PeeringState& get_peering_state() final {
+  PeeringState& get_peering_state() final override {
     return peering_state;
   }
   const PeeringState& get_peering_state() const {
@@ -1025,14 +1025,14 @@ public:
   hobject_t get_last_backfill_started() const {
     return get_backfill_state().get_last_backfill_started();
   }
-  bool has_reset_since(epoch_t epoch) const final {
+  bool has_reset_since(epoch_t epoch) const final override {
     return peering_state.pg_has_reset_since(epoch);
   }
 
   const pg_missing_tracker_t& get_local_missing() const {
     return peering_state.get_pg_log().get_missing();
   }
-  epoch_t get_last_peering_reset() const final {
+  epoch_t get_last_peering_reset() const final override {
     return peering_state.get_last_peering_reset();
   }
   const std::set<pg_shard_t> &get_acting_recovery_backfill() const {
@@ -1045,7 +1045,7 @@ public:
     return peering_state.is_backfill_target(osd);
   }
   // it's also ECListener's method
-  void begin_peer_recover(pg_shard_t peer, const hobject_t oid) final {
+  void begin_peer_recover(pg_shard_t peer, const hobject_t oid) final override {
     peering_state.begin_peer_recover(peer, oid);
   }
   uint64_t min_peer_features() const {
@@ -1122,8 +1122,8 @@ public:
     return can_discard_replica_op(m, m.get_map_epoch());
   }
 
-  void set_pglog_based_recovery_op(PglogBasedRecovery *op) final;
-  void reset_pglog_based_recovery_op() final;
+  void set_pglog_based_recovery_op(PglogBasedRecovery *op) final override;
+  void reset_pglog_based_recovery_op() final override;
   void cancel_pglog_based_recovery_op();
 
 private:
@@ -1166,11 +1166,11 @@ private:
   bool can_discard_replica_op(const Message& m, epoch_t m_map_epoch) const;
   bool can_discard_op(const MOSDOp& m) const;
   void context_registry_on_change();
-  bool is_missing_object(const hobject_t& soid) const final {
+  bool is_missing_object(const hobject_t& soid) const final override {
     return get_local_missing().is_missing(soid);
   }
   bool is_unreadable_object(const hobject_t &oid,
-			    eversion_t* v = 0) const final {
+			    eversion_t* v = 0) const final override {
     return is_missing_object(oid) ||
       !peering_state.get_missing_loc().readable_with_acting(
 	oid, get_actingset(), v);

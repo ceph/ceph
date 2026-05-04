@@ -38,10 +38,10 @@ public:
 	    bool allows_ecoverwrites,
 	    DoutPrefixProvider &dpp,
 	    ECListener &eclistener);
-  seastar::future<> stop() final {
+  seastar::future<> stop() final override {
     return seastar::now();
   }
-  void on_actingset_changed(bool same_primary) final {}
+  void on_actingset_changed(bool same_primary) final override {}
 
   write_iertr::future<> handle_rep_write_op(
     Ref<MOSDECSubOpWrite>,
@@ -54,7 +54,7 @@ public:
 
   PGBackend::get_attr_ierrorator::future<ceph::bufferlist> getxattr(
     const hobject_t& soid,
-    std::string&& key) const final;
+    std::string&& key) const final override;
 
 private:
   friend class ECRecoveryBackend;
@@ -64,7 +64,7 @@ private:
         uint64_t object_size,
         uint64_t off,
         uint64_t len,
-        uint32_t flags) final;
+        uint32_t flags) final override;
   rep_op_fut_t
   submit_transaction(const std::set<pg_shard_t> &pg_shards,
 		     crimson::osd::ObjectContextRef&& obc,
@@ -72,9 +72,9 @@ private:
 		     ceph::os::Transaction&& txn,
 		     osd_op_params_t&& req,
 		     epoch_t min_epoch, epoch_t max_epoch,
-		     std::vector<pg_log_entry_t>&& log_entries) final;
+		     std::vector<pg_log_entry_t>&& log_entries) final override;
   seastar::future<> request_committed(const osd_reqid_t& reqid,
-				       const eversion_t& version) final {
+				       const eversion_t& version) final override {
     return seastar::now();
   }
 

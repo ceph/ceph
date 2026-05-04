@@ -47,8 +47,8 @@ public:
     PeeringCtx &&rctx, bool do_init);
   ~PGAdvanceMap();
 
-  void print(std::ostream &) const final;
-  void dump_detail(ceph::Formatter *f) const final;
+  void print(std::ostream &) const final override;
+  void dump_detail(ceph::Formatter *f) const final override;
   seastar::future<> start();
   PipelineHandle &get_handle() { return handle; }
 

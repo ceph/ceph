@@ -43,7 +43,7 @@ public:
 
     seastar::shared_promise<epoch_t> promise;
 
-    void dump_detail(Formatter *f) const final;
+    void dump_detail(Formatter *f) const final override;
   };
   using Blocker = OSDMapBlocker;
 

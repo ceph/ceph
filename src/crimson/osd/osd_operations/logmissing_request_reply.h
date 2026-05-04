@@ -29,8 +29,8 @@ public:
   static constexpr OperationTypeCode type = OperationTypeCode::logmissing_request_reply;
   LogMissingRequestReply(crimson::net::ConnectionRef&&, Ref<MOSDPGUpdateLogMissingReply>&&);
 
-  void print(std::ostream &) const final;
-  void dump_detail(ceph::Formatter* f) const final;
+  void print(std::ostream &) const override;
+  void dump_detail(ceph::Formatter* f) const override;
 
   static constexpr bool can_create() { return false; }
   spg_t get_pgid() const {

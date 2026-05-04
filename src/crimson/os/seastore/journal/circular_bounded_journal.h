@@ -59,21 +59,21 @@ public:
       JournalTrimmer &trimmer, RBMDevice* device, const std::string &path);
   ~CircularBoundedJournal() {}
 
-  JournalTrimmer &get_trimmer() final {
+  JournalTrimmer &get_trimmer() final override {
     return trimmer;
   }
 
-  writer_stats_t get_writer_stats() const final {
+  writer_stats_t get_writer_stats() const final override {
     return record_submitter.get_stats();
   }
 
-  open_for_mkfs_ret open_for_mkfs() final;
+  open_for_mkfs_ret open_for_mkfs() final override;
 
-  open_for_mount_ret open_for_mount() final;
+  open_for_mount_ret open_for_mount() final override;
 
-  close_ertr::future<> close() final;
+  close_ertr::future<> close() final override;
 
-  backend_type_t get_type() final {
+  backend_type_t get_type() final override {
     return backend_type_t::RANDOM_BLOCK;
   }
 
@@ -82,16 +82,16 @@ public:
     OrderingHandle &handle,
     transaction_type_t t_src,
     on_submission_func_t &&on_submission
-  ) final;
+  ) final override;
 
   seastar::future<> flush(
     OrderingHandle &handle
-  ) final {
+  ) final override {
     // TODO
     return seastar::now();
   }
 
-  replay_ret replay(delta_handler_t &&delta_handler) final;
+  replay_ret replay(delta_handler_t &&delta_handler) final override;
 
   rbm_abs_addr get_rbm_addr(journal_seq_t seq) const {
     return convert_paddr_to_abs_addr(seq.offset);
@@ -120,7 +120,7 @@ public:
     return cjs.get_alloc_tail();
   }
 
-  void set_write_pipeline(WritePipeline *_write_pipeline) final {
+  void set_write_pipeline(WritePipeline *_write_pipeline) final override {
     write_pipeline = _write_pipeline;
   }
 
@@ -165,23 +165,23 @@ public:
     cursor.seq.segment_seq += 1;
   }
 
-  void initialize_cursor(scan_valid_records_cursor& cursor) final {
+  void initialize_cursor(scan_valid_records_cursor& cursor) final override {
     cursor.block_size = get_block_size();
   };
 
   Journal::replay_ret replay_segment(
     cbj_delta_handler_t &handler, scan_valid_records_cursor& cursor);
 
-  read_ret read(paddr_t start, size_t len) final;
+  read_ret read(paddr_t start, size_t len) final override;
 
   bool is_record_segment_seq_invalid(scan_valid_records_cursor &cursor,
-    record_group_header_t &h) final;
+    record_group_header_t &h) final override;
 
-  int64_t get_segment_end_offset(paddr_t addr) final {
+  int64_t get_segment_end_offset(paddr_t addr) final override {
     return get_journal_end();
   }
 
-  bool is_checksum_needed() final {
+  bool is_checksum_needed() final override {
     return cjs.is_checksum_needed();
   }
 

@@ -112,7 +112,7 @@ public:
   IOHandler(ChainedDispatchers &,
             SocketConnection &);
 
-  ~IOHandler() final;
+  ~IOHandler();
 
   IOHandler(const IOHandler &) = delete;
   IOHandler(IOHandler &&) = delete;
@@ -123,35 +123,35 @@ public:
  * as ConnectionHandler
  */
 public:
-  seastar::shard_id get_shard_id() const final {
+  seastar::shard_id get_shard_id() const override {
     return shard_states->get_shard_id();
   }
 
-  bool is_connected() const final {
+  bool is_connected() const override {
     ceph_assert_always(seastar::this_shard_id() == get_shard_id());
     return protocol_is_connected;
   }
 
-  seastar::future<> send(MessageURef msg) final;
+  seastar::future<> send(MessageURef msg) override;
 
-  seastar::future<> send_keepalive() final;
+  seastar::future<> send_keepalive() override;
 
-  clock_t::time_point get_last_keepalive() const final {
+  clock_t::time_point get_last_keepalive() const override {
     ceph_assert_always(seastar::this_shard_id() == get_shard_id());
     return last_keepalive;
   }
 
-  clock_t::time_point get_last_keepalive_ack() const final {
+  clock_t::time_point get_last_keepalive_ack() const override {
     ceph_assert_always(seastar::this_shard_id() == get_shard_id());
     return last_keepalive_ack;
   }
 
-  void set_last_keepalive_ack(clock_t::time_point when) final {
+  void set_last_keepalive_ack(clock_t::time_point when) override {
     ceph_assert_always(seastar::this_shard_id() == get_shard_id());
     last_keepalive_ack = when;
   }
 
-  void mark_down() final;
+  void mark_down() override;
 
 /*
  * as IOHandler to be called by ProtocolV2 handshake

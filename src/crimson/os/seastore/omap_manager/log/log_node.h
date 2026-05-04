@@ -781,7 +781,7 @@ struct LogNode
   }
   ~LogNode() {}
 
-  CachedExtentRef duplicate_for_write(Transaction&) final {
+  CachedExtentRef duplicate_for_write(Transaction&) final override {
     assert(delta_buffer.empty());
     return CachedExtentRef(new LogNode(*this));
   }
@@ -916,7 +916,7 @@ struct LogNode
     const std::optional<std::string> &last,
     std::map<std::string, bufferlist> &kvs);
 
-  std::ostream &print_detail_l(std::ostream &out) const final;
+  std::ostream &print_detail_l(std::ostream &out) const final override;
 
   laddr_t get_dup_tail_addr() const {
     if (is_mutation_pending() || is_exist_mutation_pending()) {
@@ -988,14 +988,14 @@ struct LogNode
     }
   }
 
-  void logical_on_delta_write() final {
+  void logical_on_delta_write() final override {
     update_delta();
     set_reserved_len(0);
     set_reserved_size(0);
   }
 
   // TODO: consistent view in a transaction
-  void prepare_commit(Transaction &t) final {
+  void prepare_commit(Transaction &t) final override {
     if (is_rewrite_transaction(t.get_src())) {
       return;
     }
@@ -1007,7 +1007,7 @@ struct LogNode
     }
   }
 
-  void on_fully_loaded() final {
+  void on_fully_loaded() final override {
     this->set_layout_buf(this->get_bptr().c_str(), this->get_bptr().length());
   }
 

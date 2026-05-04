@@ -87,12 +87,12 @@ public:
     evt(std::forward<Args>(args)...)
   {}
 
-  bool requires_pg() const final {
+  bool requires_pg() const final override {
     return evt.requires_pg;
   }
 
-  void print(std::ostream &) const final;
-  void dump_detail(ceph::Formatter* f) const final;
+  void print(std::ostream &) const final override;
+  void dump_detail(ceph::Formatter* f) const final override;
   seastar::future<> with_pg(
     ShardServices &shard_services, Ref<PG> pg);
 };
@@ -104,7 +104,7 @@ protected:
   // must be after conn due to ConnectionPipeline's life-time
   PipelineHandle handle;
 
-  void on_pg_absent(ShardServices &) final;
+  void on_pg_absent(ShardServices &) final override;
   PeeringEvent::interruptible_future<> complete_rctx(
     ShardServices &shard_services,
     Ref<PG> pg) override;

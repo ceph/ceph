@@ -122,31 +122,31 @@ public:
       : pimpl(pimpl), conn(conn) {
     }
 
-    osd_reqid_t get_reqid() const final {
+    osd_reqid_t get_reqid() const override {
       return pimpl->get_reqid();
     }
-    bool has_flag(uint32_t flag) const final {
+    bool has_flag(uint32_t flag) const override {
       return pimpl->has_flag(flag);
     }
-    utime_t get_mtime() const final {
+    utime_t get_mtime() const override {
       return pimpl->get_mtime();
     };
-    epoch_t get_map_epoch() const final {
+    epoch_t get_map_epoch() const override {
       return pimpl->get_map_epoch();
     }
-    entity_inst_t get_orig_source_inst() const final {
+    entity_inst_t get_orig_source_inst() const override {
       // We can't get the origin source address from the message
       // since (In Crimson) the connection is maintained
       // outside of the Message.
       return entity_inst_t(get_source(), conn->get_peer_addr());
     }
-    entity_name_t get_source() const final {
+    entity_name_t get_source() const override {
       return pimpl->get_source();
     }
-    uint64_t get_features() const final {
+    uint64_t get_features() const override {
       return pimpl->get_features();
     }
-    snapid_t get_snapid() const final {
+    snapid_t get_snapid() const override {
       return pimpl->get_snapid();
     }
   };
@@ -499,7 +499,7 @@ auto OpsExecuter::with_effect_on_obc(
          effect_func(std::move(effect_func)),
          obc(std::move(obc)) {
     }
-    seastar::future<> execute(Ref<PG> pg) final {
+    seastar::future<> execute(Ref<PG> pg) override {
       return std::move(effect_func)(std::move(ctx),
                                     std::move(obc),
                                     std::move(pg));

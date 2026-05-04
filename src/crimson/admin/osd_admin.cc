@@ -57,7 +57,7 @@ public:
   {}
   seastar::future<tell_result_t> call(const cmdmap_t&,
 				      std::string_view format,
-				      ceph::bufferlist&& input) const final
+				      ceph::bufferlist&& input) const final override
   {
     LOG_PREFIX(AdminSocketHook::OsdStatusHook);
     DEBUG("");
@@ -86,7 +86,7 @@ public:
   {}
   seastar::future<tell_result_t> call(const cmdmap_t&,
 				      std::string_view format,
-				      ceph::bufferlist&& input) const final
+				      ceph::bufferlist&& input) const final override
   {
     LOG_PREFIX(AdminSocketHook::SendBeaconHook);
     DEBUG("");
@@ -120,7 +120,7 @@ public:
   {}
   seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
               std::string_view format,
-              ceph::bufferlist&& input) const final
+              ceph::bufferlist&& input) const final override
   {
     LOG_PREFIX(AdminSocketHook::RunOSDBenchHook::call);
     DEBUG("");
@@ -209,7 +209,7 @@ public:
   {}
   seastar::future<tell_result_t> call(const cmdmap_t&,
 				      std::string_view format,
-				      ceph::bufferlist&&) const final
+				      ceph::bufferlist&&) const final override
   {
     LOG_PREFIX(AdminSocketHook::FlushPgStatsHook);
     DEBUG("");
@@ -236,7 +236,7 @@ public:
   {}
   seastar::future<tell_result_t> call(const cmdmap_t&,
                                       std::string_view format,
-                                      ceph::bufferlist&& input) const final
+                                      ceph::bufferlist&& input) const override
   {
     LOG_PREFIX(AdminSocketHook::DumpPGStateHistory);
     DEBUG("");
@@ -274,7 +274,7 @@ public:
   {}
   seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
                                       std::string_view format,
-                                      ceph::bufferlist&& input) const final
+                                      ceph::bufferlist&& input) const override
   {
     LOG_PREFIX(AdminSocketHook::DumpPerfCountersHook);
     DEBUG("");
@@ -308,7 +308,7 @@ public:
   {}
   seastar::future<tell_result_t> call(const cmdmap_t&,
 				      std::string_view format,
-				      ceph::bufferlist&& input) const final
+				      ceph::bufferlist&& input) const final override
   {
     LOG_PREFIX(AdminSocketHook::AssertAlwaysHook);
     DEBUG("");
@@ -334,7 +334,7 @@ public:
   {}
   seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
                                       std::string_view format,
-                                      ceph::bufferlist&& input) const final
+                                      ceph::bufferlist&& input) const final override
   {
     LOG_PREFIX(AdminSocketHook::DumpMetricsHook);
     DEBUG("");
@@ -432,7 +432,7 @@ public:
 
   seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
 				      std::string_view format,
-				      ceph::bufferlist&& input) const final
+				      ceph::bufferlist&& input) const final override
   {
     LOG_PREFIX(AdminSocketHook::InjectDataErrorHook);
     DEBUG("");
@@ -476,7 +476,7 @@ public:
 
   seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
 				      std::string_view format,
-				      ceph::bufferlist&& input) const final
+				      ceph::bufferlist&& input) const final override
   {
     LOG_PREFIX(AdminSocketHook::InjectMDataErrorHook);
     DEBUG("");
@@ -516,7 +516,7 @@ public:
   {}
   seastar::future<tell_result_t> call(const cmdmap_t&,
 				      std::string_view format,
-				      ceph::bufferlist&& input) const final
+				      ceph::bufferlist&& input) const final override
   {
     LOG_PREFIX(AdminSocketHook::DumpInFlightOpsHook);
     DEBUG("");
@@ -547,7 +547,7 @@ public:
   {}
   seastar::future<tell_result_t> call(const cmdmap_t&,
 				      std::string_view format,
-				      ceph::bufferlist&& input) const final
+				      ceph::bufferlist&& input) const final override
   {
     LOG_PREFIX(AdminSocketHook::DumpHistoricOpsHook);
     DEBUG("");
@@ -573,7 +573,7 @@ public:
   {}
   seastar::future<tell_result_t> call(const cmdmap_t&,
 				      std::string_view format,
-				      ceph::bufferlist&& input) const final
+				      ceph::bufferlist&& input) const final override
   {
     LOG_PREFIX(AdminSocketHook::DumpSlowestHistoricOpsHook);
     DEBUG("");
@@ -598,7 +598,7 @@ public:
   {}
   seastar::future<tell_result_t> call(const cmdmap_t&,
 				      std::string_view format,
-				      ceph::bufferlist&& input) const final
+				      ceph::bufferlist&& input) const final override
   {
     LOG_PREFIX(AdminSocketHook::DumpRecoveryReservationsHook);
     DEBUG("");
@@ -628,7 +628,7 @@ public:
   {}
   seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
                                       std::string_view format,
-                                      ceph::bufferlist&& input) const final
+                                      ceph::bufferlist&& input) const override
   {
     LOG_PREFIX(AdminSocketHook::DumpReactorBackendHook);
     DEBUG("");
@@ -649,7 +649,7 @@ public:
   {}
   seastar::future<tell_result_t> call(const cmdmap_t&,
                                      std::string_view format,
-                                     ceph::bufferlist&& input) const final
+                                     ceph::bufferlist&& input) const final override
   {
     LOG_PREFIX(AdminSocketHook::StoreShardNumsHook);
     DEBUG("");

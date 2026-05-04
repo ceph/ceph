@@ -31,39 +31,39 @@ public:
       JournalTrimmer &trimmer);
   ~SegmentedJournal() {}
 
-  JournalTrimmer &get_trimmer() final {
+  JournalTrimmer &get_trimmer() final override {
     return trimmer;
   }
 
-  writer_stats_t get_writer_stats() const final {
+  writer_stats_t get_writer_stats() const final override {
     return record_submitter.get_stats();
   }
 
-  open_for_mkfs_ret open_for_mkfs() final;
+  open_for_mkfs_ret open_for_mkfs() final override;
 
-  open_for_mount_ret open_for_mount() final;
+  open_for_mount_ret open_for_mount() final override;
 
-  close_ertr::future<> close() final;
+  close_ertr::future<> close() final override;
 
   submit_record_ertr::future<> submit_record(
     record_t &&record,
     OrderingHandle &handle,
     transaction_type_t t_src,
-    on_submission_func_t &&on_submission) final;
+    on_submission_func_t &&on_submission) final override;
 
-  seastar::future<> flush(OrderingHandle &handle) final;
+  seastar::future<> flush(OrderingHandle &handle) final override;
 
-  replay_ret replay(delta_handler_t &&delta_handler) final;
+  replay_ret replay(delta_handler_t &&delta_handler) final override;
 
-  void set_write_pipeline(WritePipeline *_write_pipeline) final {
+  void set_write_pipeline(WritePipeline *_write_pipeline) final override {
     write_pipeline = _write_pipeline;
   }
 
-  backend_type_t get_type() final {
+  backend_type_t get_type() final override {
     return backend_type_t::SEGMENTED;
   }
 
-  bool is_checksum_needed() final {
+  bool is_checksum_needed() final override {
     // segmented journal always requires checksum
     return true;
   }

@@ -37,37 +37,37 @@ public:
     }
   }
 
-  void on_invalidated(Transaction&) final {
+  void on_invalidated(Transaction&) final override {
     this->lba_child_node_t::on_invalidated();
   }
 
-  CachedExtentRef duplicate_for_write(Transaction&) final {
+  CachedExtentRef duplicate_for_write(Transaction&) final override {
     ceph_abort_msg("Should never happen for a placeholder");
     return CachedExtentRef();
   }
 
-  ceph::bufferlist get_delta() final {
+  ceph::bufferlist get_delta() final override {
     ceph_abort_msg("Should never happen for a placeholder");
     return ceph::bufferlist();
   }
 
   static constexpr extent_types_t TYPE = extent_types_t::RETIRED_PLACEHOLDER;
-  extent_types_t get_type() const final {
+  extent_types_t get_type() const final override {
     return TYPE;
   }
 
   void apply_delta_and_adjust_crc(
-    paddr_t base, const ceph::bufferlist &bl) final {
+    paddr_t base, const ceph::bufferlist &bl) final override {
     ceph_abort_msg("Should never happen for a placeholder");
   }
 
-  void on_rewrite(Transaction &, CachedExtent&, extent_len_t) final {}
+  void on_rewrite(Transaction &, CachedExtent&, extent_len_t) final override {}
 
-  std::ostream &print_detail(std::ostream &out) const final {
+  std::ostream &print_detail(std::ostream &out) const final override {
     return out << ", RetiredExtentPlaceholder";
   }
 
-  void on_delta_write(paddr_t record_block_offset) final {
+  void on_delta_write(paddr_t record_block_offset) final override {
     ceph_abort_msg("Should never happen for a placeholder");
   }
 
@@ -105,7 +105,7 @@ public:
 
   virtual void lcn_on_invalidated(Transaction &t) {}
 
-  void on_invalidated(Transaction &t) final {
+  void on_invalidated(Transaction &t) final override {
     this->lba_child_node_t::on_invalidated();
     lcn_on_invalidated(t);
   }
@@ -128,7 +128,7 @@ public:
     return (get_laddr() + get_length()).checked_to_laddr();
   }
 protected:
-  void on_replace_prior(Transaction &t) final {
+  void on_replace_prior(Transaction &t) final override {
     assert(is_seen_by_users());
     if (!is_rewrite_transaction(t.get_src())) {
       lba_child_node_t::on_replace_prior();
@@ -136,7 +136,7 @@ protected:
     do_on_replace_prior(t);
   }
   virtual void do_on_replace_prior(Transaction &t) {}
-  void on_data_commit() final {
+  void on_data_commit() final override {
     ceph_abort("impossible");
   }
 };

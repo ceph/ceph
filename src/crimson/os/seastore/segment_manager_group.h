@@ -126,16 +126,16 @@ private:
     return device_ids.count(id) >= 1;
   }
 
-  void initialize_cursor(scan_valid_records_cursor &cursor) final;
+  void initialize_cursor(scan_valid_records_cursor &cursor) final override;
 
-  read_ret read(paddr_t start, size_t len) final;
+  read_ret read(paddr_t start, size_t len) final override;
 
   bool is_record_segment_seq_invalid(scan_valid_records_cursor &cursor,
-    record_group_header_t &header) final {
+    record_group_header_t &header) final override {
     return false;
   }
 
-  int64_t get_segment_end_offset(paddr_t addr) final {
+  int64_t get_segment_end_offset(paddr_t addr) final override {
     auto& seg_addr = addr.as_seg_paddr();
     auto& segment_manager = *segment_managers[seg_addr.get_segment_id().device_id()];
     return static_cast<int64_t>(segment_manager.get_segment_size());

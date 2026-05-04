@@ -533,7 +533,7 @@ public:
 
   CachedExtentRef peek_extent_viewable_by_trans(
     Transaction &t,
-    CachedExtentRef extent) final
+    CachedExtentRef extent) final override
   {
     assert(extent);
     auto ext = extent->maybe_get_transactional_view(t);
@@ -543,7 +543,7 @@ public:
 
   get_extent_iertr::future<> maybe_wait_accessible(
     Transaction &t,
-    CachedExtent &extent) final {
+    CachedExtent &extent) final override {
     // as of now, only lba tree nodes can go in here,
     // so it must be fully loaded.
     assert(extent.is_valid());
@@ -612,7 +612,7 @@ public:
   get_extent_iertr::future<CachedExtentRef>
   get_extent_viewable_by_trans(
     Transaction &t,
-    CachedExtentRef extent) final
+    CachedExtentRef extent) final override
   {
     assert(extent->is_valid());
 
@@ -945,10 +945,10 @@ private:
     struct callable_wrapper final : callable_i {
       Func func;
       callable_wrapper(Func &&func) : func(std::forward<Func>(func)) {}
-      void operator()(CachedExtent &extent) final {
+      void operator()(CachedExtent &extent) override {
 	return func(extent);
       }
-      ~callable_wrapper() final = default;
+      ~callable_wrapper() = default;
     };
   public:
     std::unique_ptr<callable_i> wrapped;

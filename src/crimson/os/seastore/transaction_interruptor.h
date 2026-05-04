@@ -18,7 +18,7 @@ namespace crimson::os::seastore {
 struct TransactionConflictCondition {
   class transaction_conflict final : public std::exception {
   public:
-    const char* what() const noexcept final {
+    const char* what() const noexcept override {
       return "transaction conflict detected";
     }
   };

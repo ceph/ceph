@@ -17,7 +17,7 @@ class interruption : public std::exception
 
 class system_shutdown_exception final : public interruption{
 public:
-  const char* what() const noexcept final {
+  const char* what() const noexcept override {
     return "system shutting down";
   }
 };
@@ -25,7 +25,7 @@ public:
 class actingset_changed final : public interruption {
 public:
   actingset_changed(bool sp) : still_primary(sp) {}
-  const char* what() const noexcept final {
+  const char* what() const noexcept override {
     return "acting set changed";
   }
   bool is_primary() const {

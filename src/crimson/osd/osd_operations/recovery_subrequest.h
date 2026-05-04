@@ -26,12 +26,12 @@ public:
     Ref<MOSDFastDispatchOp>&& m)
     : RemoteOperation(std::move(conn)), m(m) {}
 
-  void print(std::ostream& out) const final
+  void print(std::ostream& out) const override
   {
     out << *m;
   }
 
-  void dump_detail(Formatter *f) const final
+  void dump_detail(Formatter *f) const override
   {
   }
 

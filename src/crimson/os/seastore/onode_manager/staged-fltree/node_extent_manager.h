@@ -46,7 +46,7 @@ class NodeExtent : public LogicalChildNode {
     return NodeExtentMutable(get_bptr().c_str(), get_length());
   }
 
-  std::ostream& print_detail_l(std::ostream& out) const final {
+  std::ostream& print_detail_l(std::ostream& out) const final override {
     return out << ", fltree_header=" << get_header();
   }
 

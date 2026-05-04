@@ -63,12 +63,12 @@ public:
   AvlAllocator(bool detailed) :
     detailed(detailed) {}
   std::optional<interval_set<rbm_abs_addr>> alloc_extent(
-    size_t size) final;
+    size_t size) final override;
   std::optional<interval_set<rbm_abs_addr>> alloc_extents(
-    size_t size) final;
+    size_t size) final override;
 
-  void free_extent(rbm_abs_addr addr, size_t size) final;
-  void mark_extent_used(rbm_abs_addr addr, size_t size) final;
+  void free_extent(rbm_abs_addr addr, size_t size) final override;
+  void mark_extent_used(rbm_abs_addr addr, size_t size) final override;
   void init(rbm_abs_addr addr, size_t size, size_t b_size);
 
   struct dispose_rs {
@@ -94,17 +94,17 @@ public:
     base_addr = 0;
   }
 
-  uint64_t get_available_size() const final {
+  uint64_t get_available_size() const final override {
     return available_size;
   }
 
-  uint64_t get_max_alloc_size() const final {
+  uint64_t get_max_alloc_size() const final override {
     return max_alloc_size;
   }
 
   bool is_free_extent(rbm_abs_addr start, size_t size);
 
-  void complete_allocation(rbm_abs_addr start, size_t size) final {
+  void complete_allocation(rbm_abs_addr start, size_t size) final override {
     if (detailed) {
       assert(reserved_extent_tracker.contains(start, size));
       reserved_extent_tracker.erase(start, size);
@@ -118,7 +118,7 @@ public:
     return false;
   }
 
-  rbm_extent_state_t get_extent_state(rbm_abs_addr addr, size_t size) final {
+  rbm_extent_state_t get_extent_state(rbm_abs_addr addr, size_t size) final override {
     if (is_reserved_extent(addr, size)) {
       return rbm_extent_state_t::RESERVED;
     } else if (is_free_extent(addr, size)) {

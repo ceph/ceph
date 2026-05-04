@@ -214,8 +214,8 @@ public:
     crimson::net::ConnectionRef, Ref<MOSDOp> &&m);
   ~ClientRequest();
 
-  void print(std::ostream &) const final;
-  void dump_detail(Formatter *f) const final;
+  void print(std::ostream &) const override;
+  void dump_detail(Formatter *f) const override;
 
   static constexpr bool can_create() { return false; }
   spg_t get_pgid() const {

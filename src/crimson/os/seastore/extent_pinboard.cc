@@ -288,15 +288,15 @@ public:
     return lru.get_capacity_bytes();
   }
 
-  std::size_t get_current_size_bytes() const final {
+  std::size_t get_current_size_bytes() const final override {
     return lru.get_current_size_bytes();
   }
 
-  std::size_t get_current_num_extents() const final {
+  std::size_t get_current_num_extents() const final override {
     return lru.get_current_num_extents();
   }
 
-  void register_metrics(store_index_t store_index) final {
+  void register_metrics(store_index_t store_index) final override {
     namespace sm = seastar::metrics;
     metrics.add_group(
       "cache",
@@ -334,11 +334,11 @@ public:
   void get_stats(
     cache_stats_t &stats,
     bool report_detail,
-    double seconds) const final {
+    double seconds) const final override {
     lru.get_stats("LRU", stats, report_detail, seconds);
   }
 
-  void remove(CachedExtent &extent) final {
+  void remove(CachedExtent &extent) final override {
     if (extent.is_linked_to_list()) {
       lru.remove(extent);
     }
@@ -348,7 +348,7 @@ public:
     CachedExtent &extent,
     const Transaction::src_t* p_src,
     extent_len_t /*load_start*/,
-    extent_len_t /*load_length*/) final {
+    extent_len_t /*load_length*/) final override {
     if (extent.is_linked_to_list()) {
       lru.move_to_top(extent, p_src);
       hit++;
@@ -361,13 +361,13 @@ public:
   void increase_cached_size(
     CachedExtent &extent,
     extent_len_t increased_length,
-    const Transaction::src_t* p_src) final {
+    const Transaction::src_t* p_src) final override {
     if (extent.is_linked_to_list()) {
       lru.increase_cached_size(extent, increased_length, p_src);
     }
   }
 
-  void clear() final {
+  void clear() final override {
     lru.clear();
   }
 
@@ -501,22 +501,22 @@ public:
     return warm_in.get_capacity_bytes() + hot.get_capacity_bytes();
   }
 
-  std::size_t get_current_size_bytes() const final {
+  std::size_t get_current_size_bytes() const final override {
     return warm_in.get_current_size_bytes() + hot.get_current_size_bytes();
   }
 
-  std::size_t get_current_num_extents() const final {
+  std::size_t get_current_num_extents() const final override {
     return warm_in.get_current_num_extents() + hot.get_current_num_extents();
   }
 
-  void register_metrics(store_index_t store_index) final;
+  void register_metrics(store_index_t store_index) final override;
 
   void get_stats(
     cache_stats_t &stats,
     bool report_detail,
-    double seconds) const final;
+    double seconds) const final override;
 
-  void remove(CachedExtent &extent) final {
+  void remove(CachedExtent &extent) final override {
     auto s = extent.get_2q_state();
     if (extent.is_linked_to_list()) {
       if (s == extent_2q_state_t::WarmIn) {
@@ -535,7 +535,7 @@ public:
     CachedExtent &extent,
     const Transaction::src_t* p_src,
     extent_len_t load_start,
-    extent_len_t load_length) final {
+    extent_len_t load_length) final override {
     auto state = extent.get_2q_state();
     auto type = extent.get_type();
     if (extent.is_linked_to_list()) {
@@ -595,7 +595,7 @@ public:
   void increase_cached_size(
     CachedExtent &extent,
     extent_len_t increased_length,
-    const Transaction::src_t* p_src) final {
+    const Transaction::src_t* p_src) final override {
     if (extent.is_linked_to_list()) {
       auto state = extent.get_2q_state();
       if (state == extent_2q_state_t::WarmIn) {
@@ -611,7 +611,7 @@ public:
     }
   }
 
-  void clear() final {
+  void clear() final override {
     LOG_PREFIX(ExtentPinboardTwoQ::clear);
     INFO("close with warm_in: {}({}B), traced by warm_out: {}({}B), hot: {}({}B)",
 	 warm_in.get_current_num_extents(), warm_in.get_current_size_bytes(),

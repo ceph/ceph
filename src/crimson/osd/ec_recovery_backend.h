@@ -38,13 +38,13 @@ public:
 
   interruptible_future<> handle_recovery_op(
     Ref<MOSDFastDispatchOp> m,
-    crimson::net::ConnectionXcoreRef conn) final;
+    crimson::net::ConnectionXcoreRef conn) final override;
 
   interruptible_future<> recover_object(
     const hobject_t& soid,
-    eversion_t need) final;
+    eversion_t need) final override;
 
-  seastar::future<> on_stop() final {
+  seastar::future<> on_stop() final override {
     return seastar::now();
   }
 
@@ -58,7 +58,7 @@ private:
 
   void maybe_load_obc(
     const std::map<std::string, ceph::bufferlist, std::less<>>& raw_attrs,
-    RecoveryOp &op) final;
+    RecoveryOp &op) final override;
 
   interruptible_future<> handle_push_reply(
     Ref<MOSDPGPushReply> m);

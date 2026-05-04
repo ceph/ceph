@@ -56,7 +56,7 @@ public:
       alien_done(done) {
   }
 
-  void finish(int) final {
+  void finish(int) override {
     std::ignore = seastar::alien::submit_to(alien, cpuid,
         [&_alien_done=this->alien_done] {
       _alien_done.set_value();

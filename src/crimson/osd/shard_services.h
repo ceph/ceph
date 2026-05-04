@@ -353,10 +353,10 @@ private:
   epoch_t up_thru_wanted = 0;
   seastar::future<> send_alive(epoch_t want);
 
-  std::vector<std::string> get_tracked_keys() const noexcept final;
+  std::vector<std::string> get_tracked_keys() const noexcept final override;
   void handle_conf_change(
     const ConfigProxy& conf,
-    const std::set <std::string> &changed) final;
+    const std::set <std::string> &changed) final override;
 
   seastar::future<local_cached_map_t> get_local_map(epoch_t e);
   seastar::future<std::unique_ptr<OSDMap>> load_map(epoch_t e);
@@ -631,9 +631,9 @@ public:
   }
 
   // OSDMapService
-  cached_map_t get_map() const final { return local_state.get_osdmap(); }
-  epoch_t get_up_epoch() const final { return local_state.up_epoch; }
-  seastar::future<cached_map_t> get_map(epoch_t e) final {
+  cached_map_t get_map() const final override { return local_state.get_osdmap(); }
+  epoch_t get_up_epoch() const final override { return local_state.up_epoch; }
+  seastar::future<cached_map_t> get_map(epoch_t e) final override {
     return with_singleton(
       [](auto &sstate, epoch_t e) {
 	return sstate.get_local_map(
