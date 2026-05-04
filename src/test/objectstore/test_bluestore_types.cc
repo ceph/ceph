@@ -1332,6 +1332,56 @@ TEST(ExtentMap, reshard_failure) {
   }
 }
 
+
+TEST(ExtentMap, reshard_split_creates_empty_blob) {
+  BlueStore store(g_ceph_context, "", 4096);
+  std::unique_ptr<BlueStore::OnodeCacheShard> oc(
+    BlueStore::OnodeCacheShard::create(g_ceph_context, "lru", NULL));
+  std::unique_ptr<BlueStore::BufferCacheShard> bc(
+    BlueStore::BufferCacheShard::create(&store, "lru", NULL));
+
+  {
+    auto coll = ceph::make_ref<BlueStore::Collection>(&store, oc.get(), bc.get(), coll_t());
+    BlueStore::Onode onode(coll.get(), ghobject_t(), "");
+    // csum block size = 1K, full blob length covered with csum
+    size_t csum_order = 14;
+    int csum_type = Checksummer::CSUM_CRC32C;
+
+    {
+
+      BlueStore::ExtentMap& em = onode.extent_map;
+      BlueStore::BlobRef bb1(coll->new_blob());
+      {
+      auto& dbb = bb1->dirty_blob();
+      dbb.allocated_test(bluestore_pextent_t(0x12345000,0x4000));
+      dbb.allocated_test(bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET,0xc000));
+      dbb.init_csum(csum_type, csum_order, 0x10000);
+      em.set_lextent(coll, 0, 0, 0x4000, bb1, nullptr);
+      }
+      std::cout << "start:" << std::endl;
+      std::cout << onode.print(42) << std::endl;
+
+      BlueStore::ExtentMap::ReshardPlan rp;
+      rp.new_shard_info.emplace_back(0, 0);
+      rp.new_shard_info.emplace_back(0x4000, 0);
+      rp.new_shard_info.emplace_back(0xf000, 0);
+      rp.shard_index_begin = 0;
+      rp.shard_index_end = 2;
+      rp.spanning_scan_begin = 0; // doesn't matter
+      rp.spanning_scan_end =  0; // doesn't matter
+
+      em.request_reshard(0, 0x10000);
+      em.reshard_action(rp, nullptr, nullptr);
+      std::cout << "resharded:" << std::endl;
+      std::cout << onode.print(42) << std::endl;
+      for(auto& bi : em.spanning_blob_map) {
+        EXPECT_NE(bi.second->get_blob().get_ondisk_size(), 0);
+      }
+    }
+  }
+}
+
+
 class BlueStoreFixture :
   virtual public ::testing::Test,
   virtual public ::testing::WithParamInterface<std::vector<int>>
