@@ -207,9 +207,11 @@ Session::Session(my_context ctx)
   // it gets exported when Session ends. PrimaryActive itself outlives the
   // scrub session, so a span pushed there would stay unexported for too long.
   context<ScrubMachine>().push_span(
-      fmt::format("{}_primary_PrimaryActive", pg_id.pgid));
+      fmt::format("{}_primary_PrimaryActive", pg_id.pgid),
+      tracing::scrubber::ROLE_PRIMARY);
   context<ScrubMachine>().push_span(
-      fmt::format("{}_primary_PrimaryActive/Session", pg_id.pgid));
+      fmt::format("{}_primary_PrimaryActive/Session", pg_id.pgid),
+      tracing::scrubber::ROLE_PRIMARY);
 }
 
 Session::~Session()
@@ -285,9 +287,10 @@ ReservingReplicas::ReservingReplicas(my_context ctx)
     // can't transit directly from here
     post_event(RemotesReserved{});
   }
-
   context<ScrubMachine>().push_span(
-      fmt::format("{}_primary_PrimaryActive/Session/ReservingReplicas", pg_id.pgid));
+      fmt::format(
+          "{}_primary_PrimaryActive/Session/ReservingReplicas", pg_id.pgid),
+      tracing::scrubber::ROLE_PRIMARY);
 }
 
 ReservingReplicas::~ReservingReplicas()
@@ -354,9 +357,10 @@ ActiveScrubbing::ActiveScrubbing(my_context ctx)
       << fmt::format("{} {} starts", pg_id.pgid, scrbr->get_op_mode_text());
 
   scrbr->on_init();
-
   context<ScrubMachine>().push_span(
-      fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing", pg_id.pgid));
+      fmt::format(
+          "{}_primary_PrimaryActive/Session/ActiveScrubbing", pg_id.pgid),
+      tracing::scrubber::ROLE_PRIMARY);
 }
 
 /**
@@ -402,7 +406,10 @@ RangeBlocked::RangeBlocked(my_context ctx)
   dout(10) << "-- state -->> Session/Act/RangeBlocked" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   machine.push_span(
-      fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing/RangeBlocked", pg_id.pgid));
+      fmt::format(
+          "{}_primary_PrimaryActive/Session/ActiveScrubbing/RangeBlocked",
+          pg_id.pgid),
+      tracing::scrubber::ROLE_PRIMARY);
 
   auto grace = scrbr->get_range_blocked_grace();
   if (grace == ceph::timespan{}) {
@@ -459,9 +466,11 @@ PendingTimer::PendingTimer(my_context ctx)
 {
   dout(10) << "-- state -->> Session/Act/PendingTimer" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-
   machine.push_span(
-      fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing/PendingTimer", pg_id.pgid));
+      fmt::format(
+          "{}_primary_PrimaryActive/Session/ActiveScrubbing/PendingTimer",
+          pg_id.pgid),
+      tracing::scrubber::ROLE_PRIMARY);
 
   auto sleep_time = scrbr->get_scrub_sleep_time();
   if (sleep_time.count()) {
@@ -517,7 +526,10 @@ NewChunk::NewChunk(my_context ctx)
   //  range to become available.
   scrbr->select_range_n_notify();
   machine.push_span(
-      fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing/NewChunk", pg_id.pgid));
+      fmt::format(
+          "{}_primary_PrimaryActive/Session/ActiveScrubbing/NewChunk",
+          pg_id.pgid),
+      tracing::scrubber::ROLE_PRIMARY);
 }
 
 sc::result NewChunk::react(const SelectedChunkFree&)
@@ -543,7 +555,10 @@ WaitPushes::WaitPushes(my_context ctx)
   DECLARE_LOCALS;
   dout(10) << " -- state -->> Session/Act/WaitPushes" << dendl;
   machine.push_span(
-      fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing/WaitPushes", pg_id.pgid));
+      fmt::format(
+          "{}_primary_PrimaryActive/Session/ActiveScrubbing/WaitPushes",
+          pg_id.pgid),
+      tracing::scrubber::ROLE_PRIMARY);
   post_event(ActivePushesUpd{});
 }
 
@@ -579,7 +594,10 @@ WaitLastUpdate::WaitLastUpdate(my_context ctx)
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << " -- state -->> Session/Act/WaitLastUpdate" << dendl;
   machine.push_span(
-      fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing/WaitLastUpdate", pg_id.pgid));
+      fmt::format(
+          "{}_primary_PrimaryActive/Session/ActiveScrubbing/WaitLastUpdate",
+          pg_id.pgid),
+      tracing::scrubber::ROLE_PRIMARY);
   post_event(UpdatesApplied{});
 }
 
@@ -619,13 +637,13 @@ sc::result WaitLastUpdate::react(const InternalAllUpdates&)
   dout(10) << "WaitLastUpdate::react(const InternalAllUpdates&)" << dendl;
 
   auto& span = context<ScrubMachine>().current_span();
-  bool span_valid = span && span->IsRecording();
   auto ctx = span ? span->GetContext() : jspan_context{false, false};
-  dout(10) << "WaitLastUpdate::react: propagating trace to replicas"
-	   << " current_span_recording=" << span_valid
-	   << " ctx_valid=" << ctx.IsValid()
-	   << " stack_depth=" << context<ScrubMachine>().m_span_stack.size()
-	   << dendl;
+  dout(10) << fmt::format(
+                  "WaitLastUpdate::react: propagating trace to replicas"
+                  " current_span_recording={}, ctx_valid={}, stack_depth={}",
+                  span && span->IsRecording(), ctx.IsValid(),
+                  context<ScrubMachine>().m_span_stack.size())
+           << dendl;
 
   scrbr->get_replicas_maps(scrbr->get_preemptor().is_preemptable(), ctx);
   return transit<BuildMap>();
@@ -644,7 +662,10 @@ BuildMap::BuildMap(my_context ctx)
   // no need to check for an epoch change, as all possible flows that brought
   // us here have a check_interval() verification of their final event.
   machine.push_span(
-      fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing/BuildMap", pg_id.pgid));
+      fmt::format(
+          "{}_primary_PrimaryActive/Session/ActiveScrubbing/BuildMap",
+          pg_id.pgid),
+      tracing::scrubber::ROLE_PRIMARY);
 
   if (scrbr->get_preemptor().was_preempted()) {
 
@@ -695,7 +716,10 @@ DrainReplMaps::DrainReplMaps(my_context ctx)
   dout(10) << "-- state -->> Session/Act/DrainReplMaps" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   machine.push_span(
-      fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing/DrainReplMaps", pg_id.pgid));
+      fmt::format(
+          "{}_primary_PrimaryActive/Session/ActiveScrubbing/DrainReplMaps",
+          pg_id.pgid),
+      tracing::scrubber::ROLE_PRIMARY);
   // we may have got all maps already. Send the event that will make us check.
   post_event(GotReplicas{});
 }
@@ -730,7 +754,10 @@ WaitReplicas::WaitReplicas(my_context ctx)
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << "-- state -->> Session/Act/WaitReplicas" << dendl;
   machine.push_span(
-      fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing/WaitReplicas", pg_id.pgid));
+      fmt::format(
+          "{}_primary_PrimaryActive/Session/ActiveScrubbing/WaitReplicas",
+          pg_id.pgid),
+      tracing::scrubber::ROLE_PRIMARY);
   post_event(GotReplicas{});
 }
 
@@ -797,9 +824,11 @@ WaitDigestUpdate::WaitDigestUpdate(my_context ctx)
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << "-- state -->> Session/Act/WaitDigestUpdate" << dendl;
-
   machine.push_span(
-      fmt::format("{}_primary_PrimaryActive/Session/ActiveScrubbing/WaitDigestUpdate", pg_id.pgid));
+      fmt::format(
+          "{}_primary_PrimaryActive/Session/ActiveScrubbing/WaitDigestUpdate",
+          pg_id.pgid),
+      tracing::scrubber::ROLE_PRIMARY);
 
   // perform an initial check: maybe we already
   // have all the updates we need:
@@ -847,6 +876,7 @@ sc::result WaitDigestUpdate::react(const ScrubFinished&)
 
 ScrubMachine::ScrubMachine(PG* pg, ScrubMachineListener* pg_scrub, jspan_ptr root_span)
     : m_pg_id{pg->pg_id}
+    , m_pg_id_str{stringify(pg->pg_id.pgid)}
     , m_scrbr{pg_scrub}
 {
   // Save the root span's context so we can parent future spans to it.
@@ -854,11 +884,16 @@ ScrubMachine::ScrubMachine(PG* pg, ScrubMachineListener* pg_scrub, jspan_ptr roo
   // shared_ptr goes out of scope, ensuring it gets exported promptly.
   if (root_span && root_span->IsRecording()) {
     m_root_ctx = root_span->GetContext();
-    dout(10) << "ScrubMachine::ctor pg=" << m_pg_id
-	     << " root_ctx valid=" << m_root_ctx.IsValid() << dendl;
+    dout(10) << fmt::format(
+                    "ScrubMachine::ctor pg={} root_ctx valid={}", m_pg_id,
+                    m_root_ctx.IsValid())
+             << dendl;
   } else {
-    dout(10) << "ScrubMachine::ctor pg=" << m_pg_id
-	     << " root_span is null or not recording" << dendl;
+    dout(10)
+        << fmt::format(
+               "ScrubMachine::ctor pg={} root_span is null or not recording",
+               m_pg_id)
+        << dendl;
   }
 }
 
@@ -871,7 +906,8 @@ const jspan_ptr& ScrubMachine::current_span() const
   return m_span_stack.empty() ? empty_jspan_ptr : m_span_stack.back();
 }
 
-void ScrubMachine::push_span(const std::string& label)
+const jspan_ptr&
+ScrubMachine::push_span(const std::string& label, const char* role)
 {
   jspan_ptr span;
   if (!m_span_stack.empty()) {
@@ -880,17 +916,40 @@ void ScrubMachine::push_span(const std::string& label)
   } else {
     span = tracing::scrubber::tracer.add_span(label, m_root_ctx);
   }
-  bool span_recording = span && span->IsRecording();
-  dout(10) << "push_span: " << label
-	   << " stack_depth=" << m_span_stack.size()
-	   << " new_span_recording=" << span_recording << dendl;
+  dout(20) << fmt::format(
+                  "push_span: {}, stack_depth={}, new_span_recording={}", label,
+                  m_span_stack.size(), span && span->IsRecording())
+           << dendl;
+  span->SetAttribute(tracing::scrubber::PG_ID, m_pg_id_str);
+  span->SetAttribute(tracing::scrubber::PG_ROLE, role);
   m_span_stack.push_back(std::move(span));
+  return m_span_stack.back();
+}
+
+const jspan_ptr&
+ScrubMachine::push_span(
+    const std::string& label,
+    const jspan_context& parent_ctx,
+    const char* role)
+{
+  auto span = tracing::scrubber::tracer.add_span(label, parent_ctx);
+  dout(20) << fmt::format(
+                  "push_span(ctx): {}, parent_ctx_valid={}, stack_depth={}, "
+                  "new_span_recording={}",
+                  label, parent_ctx.IsValid(), m_span_stack.size(),
+                  span && span->IsRecording())
+           << dendl;
+  span->SetAttribute(tracing::scrubber::PG_ID, m_pg_id_str);
+  span->SetAttribute(tracing::scrubber::PG_ROLE, role);
+  m_span_stack.push_back(std::move(span));
+  return m_span_stack.back();
 }
 
 void ScrubMachine::pop_span()
 {
   if (!m_span_stack.empty()) {
-    dout(10) << "pop_span: stack_depth=" << m_span_stack.size() << dendl;
+    dout(20) << fmt::format("pop_span: stack_depth={}", m_span_stack.size())
+             << dendl;
     m_span_stack.pop_back();
   } else {
     dout(5) << "pop_span: WARNING stack already empty!" << dendl;
@@ -899,7 +958,8 @@ void ScrubMachine::pop_span()
 
 void ScrubMachine::clear_spans()
 {
-  dout(10) << "clear_spans: clearing " << m_span_stack.size() << " spans" << dendl;
+  dout(20) << fmt::format("clear_spans: clearing {} spans", m_span_stack.size())
+           << dendl;
   m_span_stack.clear();
 }
 
@@ -1150,6 +1210,11 @@ ReplicaActiveOp::ReplicaActiveOp(my_context ctx)
 {
   dout(10) << "-- state -->> ReplicaActive/ReplicaActiveOp" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  // Use the trace context propagated from the primary via MOSDRepScrub so that
+  // replica spans are linked under the same trace as the primary.
+  machine.push_span(
+      fmt::format("{}_replica_ReplicaActive/ReplicaActiveOp", pg_id.pgid),
+      machine.m_replica_parent_ctx, tracing::scrubber::ROLE_REPLICA);
   scrbr->on_replica_init();
 }
 
@@ -1198,7 +1263,10 @@ ReplicaWaitUpdates::ReplicaWaitUpdates(my_context ctx)
   dout(10) << "-- state -->> ReplicaActive/ReplicaActiveOp/ReplicaWaitUpdates"
 	   << dendl;
   machine.push_span(
-      fmt::format("{}_replica_ReplicaActive/ReplicaActiveOp/ReplicaWaitUpdates", pg_id.pgid));   
+      fmt::format(
+          "{}_replica_ReplicaActive/ReplicaActiveOp/ReplicaWaitUpdates",
+          pg_id.pgid),
+      tracing::scrubber::ROLE_REPLICA);
 }
 
 ReplicaWaitUpdates::~ReplicaWaitUpdates()
@@ -1236,7 +1304,10 @@ ReplicaBuildingMap::ReplicaBuildingMap(my_context ctx)
   dout(10) << "-- state -->> ReplicaActive/ReplicaActiveOp/ReplicaBuildingMap"
 	   << dendl;
   machine.push_span(
-      fmt::format("{}_replica_ReplicaActive/ReplicaActiveOp/ReplicaBuildingMap", pg_id.pgid));
+      fmt::format(
+          "{}_replica_ReplicaActive/ReplicaActiveOp/ReplicaBuildingMap",
+          pg_id.pgid),
+      tracing::scrubber::ROLE_REPLICA);
   post_event(SchedReplica{});
 }
 
