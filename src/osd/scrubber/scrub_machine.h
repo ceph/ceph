@@ -29,6 +29,9 @@
 #include "scrub_machine_lstnr.h"
 #include "scrub_reservations.h"
 
+#include "common/tracer.h"
+
+
 /// a wrapper that sets the FSM state description used by the
 /// PgScrubber
 /// \todo consider using the full NamedState as in Peering
@@ -291,7 +294,7 @@ class ScrubMachine : public ScrubFsmIf, public sc::state_machine<ScrubMachine, N
  public:
   friend class PgScrubber;
 
-  explicit ScrubMachine(PG* pg, ScrubMachineListener* pg_scrub);
+  explicit ScrubMachine(PG* pg, ScrubMachineListener* pg_scrub, jspan_ptr root_span);
   virtual ~ScrubMachine();
 
   spg_t m_pg_id;
