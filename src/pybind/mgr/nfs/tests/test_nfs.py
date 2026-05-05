@@ -357,7 +357,7 @@ QOS_BLOCK {
                 mock.patch('nfs.ganesha_conf.check_fs', return_value=True), \
                 mock.patch('nfs.export.ExportMgr._create_user_key',
                            return_value='thekeyforclientabc'), \
-                mock.patch('nfs.export.cephfs_path_is_dir'):
+                mock.patch('nfs.export.ExportMgr.cephfs_path_is_dir'):
 
             rados.open_ioctx.return_value.__enter__.return_value = self.io_mock
             rados.open_ioctx.return_value.__exit__ = mock.Mock(return_value=None)
