@@ -95,6 +95,11 @@ add_executable(ceph_test_rados_api_cls
 target_link_libraries(ceph_test_rados_api_cls
   librados ${UNITTEST_LIBS} radostest-cxx)
 
+add_executable(ceph_test_rados_api_ec_pool_create_pp
+  ec_pool_create_cxx.cc)
+target_link_libraries(ceph_test_rados_api_ec_pool_create_pp
+  librados ${UNITTEST_LIBS} radostest-cxx)
+
 add_executable(ceph_test_rados_api_misc
   misc.cc
   $<TARGET_OBJECTS:unit-main>)

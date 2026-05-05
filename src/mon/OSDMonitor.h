@@ -499,7 +499,7 @@ private:
 			std::ostream *ss);
   int crush_rule_create_replica(const std::string &name,
 				const std::string &root,
-        int num_zones,
+        int64_t num_zones,
         int num_replica_per_zone,
         const std::string &zone_failure_domain,
         const std::string &osd_failure_domain,
@@ -508,7 +508,7 @@ private:
         int *rule,
 				std::ostream *ss);
   int crush_rule_create_erasure(const std::string &name,
-        int num_zones,
+        int64_t num_zones,
 				const std::string &profile,
 				int *rule,
 				std::ostream *ss);
@@ -520,26 +520,30 @@ private:
 		       std::ostream *ss) const;
   int prepare_pool_crush_rule(const unsigned pool_type,
             const std::string &pool_name,
-			      const std::string &erasure_code_profile,
-			      const std::string &rule_name,
-            int num_zones,
+            const std::string &erasure_code_profile,
+            const std::string &rule_name,
+            int64_t num_zones,
             const std::string &root,
             int num_replica_per_zone,
             const std::string &zone_failure_domain,
             const std::string &osd_failure_domain,
             const std::string &device_class,
-			      int *crush_rule,
-			      std::ostream *ss);
+            int *crush_rule,
+            std::ostream *ss);
   bool erasure_code_profile_in_use(
     const mempool::osdmap::map<int64_t, pg_pool_t> &pools,
     const std::string &profile,
     std::ostream *ss);
+  bool should_remove_ec_profile(const int64_t pool,
+                                const std::string &profile,
+                                std::ostream *ss);
   int parse_erasure_code_profile(const std::vector<std::string> &erasure_code_profile,
 				 std::map<std::string,std::string> *erasure_code_profile_map,
 				 std::ostream *ss);
   int prepare_pool_size(const unsigned pool_type,
 			const std::string &erasure_code_profile,
                         uint8_t repl_size,
+			int64_t num_zones,
 			unsigned *size, unsigned *min_size,
 			std::ostream *ss);
   int prepare_pool_stripe_width(const unsigned pool_type,
@@ -558,18 +562,18 @@ private:
 		       const uint64_t target_size_bytes,
 		       const float target_size_ratio,
 		       const std::string &erasure_code_profile,
-           int num_zones,
-           const std::string &root,
-           int num_replica_per_zone,
-           const std::string &zone_failure_domain,
-           const std::string &osd_failure_domain,
-           const std::string &device_class,
+		       const std::string &root,
+		       int num_replica_per_zone,
+		       const std::string &zone_failure_domain,
+		       const std::string &osd_failure_domain,
+		       const std::string &device_class,
                        const unsigned pool_type,
                        const uint64_t expected_num_objects,
                        FastReadType fast_read,
 		       std::string pg_autoscale_mode,
 		       bool bulk,
 		       bool crimson,
+                       int64_t num_zones,
 		       std::ostream *ss);
   int prepare_new_pool(MonOpRequestRef op);
 

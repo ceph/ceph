@@ -62,7 +62,9 @@ void PGBackendTestFixture::setup_ec_pool()
   // This will properly calculate up_osd_features
   osdmap->apply_incremental(inc);
 
-  pg_pool_t pool = OSDMapTestHelpers::create_ec_pool(k, m, stripe_unit * k, pool_flags, pool_id, num_zones);
+  // create_ec_pool expects num_zones >= 1, so default 0 to 1
+  int zones = (num_zones > 0) ? num_zones : 1;
+  pg_pool_t pool = OSDMapTestHelpers::create_ec_pool(k, m, stripe_unit * k, pool_flags, pool_id, zones);
   OSDMapTestHelpers::add_pool(osdmap, pool_id, pool);
 
   pgid = pg_t(0, pool_id);
