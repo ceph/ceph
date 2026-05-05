@@ -14,8 +14,9 @@
 
 #include "crypto/isa-l/isal_crypto_accel.h"
 
-#include "crypto/isa-l/isa-l_crypto/include/aes_cbc.h"
-#include "crypto/isa-l/isa-l_crypto/include/aes_gcm.h"
+#include "isa-l_crypto/aes_cbc.h"
+#include "isa-l_crypto/aes_gcm.h"
+#include "isa-l_crypto/aes_keyexp.h"
 #include "include/compat.h"  // for ceph_memzero_s
 #include <cstdint>
 #include <cstring>
@@ -28,11 +29,11 @@ bool ISALCryptoAccel::cbc_encrypt(unsigned char* out, const unsigned char* in, s
   if (unlikely((size % AES_256_IVSIZE) != 0)) {
     return false;
   }
-  alignas(16) struct cbc_key_data keys_blk;
-  aes_cbc_precomp(const_cast<unsigned char*>(&key[0]), AES_256_KEYSIZE, &keys_blk);
-  aes_cbc_enc_256(const_cast<unsigned char*>(in),
-                  const_cast<unsigned char*>(&iv[0]), keys_blk.enc_keys, out, size);
-  return true;
+  alignas(16) struct isal_cbc_key_data keys_blk;
+  if (isal_aes_keyexp_256(&key[0], keys_blk.enc_keys, keys_blk.dec_keys) != 0) {
+    return false;
+  }
+  return isal_aes_cbc_enc_256(in, &iv[0], keys_blk.enc_keys, out, size) == 0;
 }
 bool ISALCryptoAccel::cbc_decrypt(unsigned char* out, const unsigned char* in, size_t size,
                              const unsigned char (&iv)[AES_256_IVSIZE],
@@ -42,10 +43,11 @@ bool ISALCryptoAccel::cbc_decrypt(unsigned char* out, const unsigned char* in, s
   if (unlikely((size % AES_256_IVSIZE) != 0)) {
     return false;
   }
-  alignas(16) struct cbc_key_data keys_blk;
-  aes_cbc_precomp(const_cast<unsigned char*>(&key[0]), AES_256_KEYSIZE, &keys_blk);
-  aes_cbc_dec_256(const_cast<unsigned char*>(in), const_cast<unsigned char*>(&iv[0]), keys_blk.dec_keys, out, size);
-  return true;
+  alignas(16) struct isal_cbc_key_data keys_blk;
+  if (isal_aes_keyexp_256(&key[0], keys_blk.enc_keys, keys_blk.dec_keys) != 0) {
+    return false;
+  }
+  return isal_aes_cbc_dec_256(in, &iv[0], keys_blk.dec_keys, out, size) == 0;
 }
 
 /*
@@ -62,12 +64,12 @@ static inline bool ct_memeq(const unsigned char* a, const unsigned char* b, size
 }
 
 /*
- * Thread-local GCM key cache to avoid re-running aes_gcm_pre_256() for
+ * Thread-local GCM key cache to avoid re-running isal_aes_gcm_pre_256() for
  * repeated keys. Key material is securely wiped on thread exit.
  */
 struct gcm_key_cache_t {
   unsigned char last_key[CryptoAccel::AES_256_KEYSIZE];
-  alignas(16) gcm_key_data cached_gkey;
+  alignas(16) isal_gcm_key_data cached_gkey;
 
   ~gcm_key_cache_t() {
     ceph_memzero_s(last_key, sizeof(last_key), sizeof(last_key));
@@ -75,7 +77,7 @@ struct gcm_key_cache_t {
   }
 };
 
-static inline const gcm_key_data* get_cached_gcm_key(const unsigned char* key)
+static inline const isal_gcm_key_data* get_cached_gcm_key(const unsigned char* key)
 {
   static thread_local std::unique_ptr<gcm_key_cache_t> cache;
 
@@ -83,7 +85,7 @@ static inline const gcm_key_data* get_cached_gcm_key(const unsigned char* key)
     cache = std::make_unique<gcm_key_cache_t>();
 
   if (!ct_memeq(cache->last_key, key, CryptoAccel::AES_256_KEYSIZE)) {
-    aes_gcm_pre_256(key, &cache->cached_gkey);
+    isal_aes_gcm_pre_256(key, &cache->cached_gkey);
     memcpy(cache->last_key, key, CryptoAccel::AES_256_KEYSIZE);
   }
 
@@ -101,10 +103,10 @@ bool ISALCryptoAccel::gcm_encrypt(unsigned char* out, const unsigned char* in, s
     return false;
   }
 
-  const gcm_key_data* gkey = get_cached_gcm_key(&key[0]);
-  alignas(16) struct gcm_context_data gctx;
+  const isal_gcm_key_data* gkey = get_cached_gcm_key(&key[0]);
+  alignas(16) struct isal_gcm_context_data gctx;
 
-  aes_gcm_enc_256(gkey, &gctx,
+  isal_aes_gcm_enc_256(gkey, &gctx,
                   reinterpret_cast<uint8_t*>(out),
                   reinterpret_cast<const uint8_t*>(in),
                   static_cast<uint64_t>(size),
@@ -127,11 +129,11 @@ bool ISALCryptoAccel::gcm_decrypt(unsigned char* out, const unsigned char* in, s
     return false;
   }
 
-  const gcm_key_data* gkey = get_cached_gcm_key(&key[0]);
-  alignas(16) struct gcm_context_data gctx;
+  const isal_gcm_key_data* gkey = get_cached_gcm_key(&key[0]);
+  alignas(16) struct isal_gcm_context_data gctx;
 
   unsigned char computed_tag[AES_GCM_TAGSIZE];
-  aes_gcm_dec_256(gkey, &gctx,
+  isal_aes_gcm_dec_256(gkey, &gctx,
                   reinterpret_cast<uint8_t*>(out),
                   reinterpret_cast<const uint8_t*>(in),
                   static_cast<uint64_t>(size),
