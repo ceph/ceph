@@ -299,6 +299,30 @@ class ScrubMachine : public ScrubFsmIf, public sc::state_machine<ScrubMachine, N
 
   spg_t m_pg_id;
   ScrubMachineListener* m_scrbr;
+
+  /// span stack for tracing - mirrors the state machine nesting.
+  /// Each state constructor pushes a span, each destructor pops it.
+  std::vector<jspan_ptr> m_span_stack;
+
+  /// saved context from the root span created in PgScrubber ctor.
+  /// The root span itself ends promptly (so it gets exported), but its
+  /// context stays valid and serves as the parent when the stack is empty.
+  jspan_context m_root_ctx{false, false};
+
+  /// return the current (topmost) span, or an empty jspan_ptr if the stack is empty
+  const jspan_ptr& current_span() const;
+
+  /// push a new span as a child of the current top-of-stack span,
+  /// or as a child of the root context if the stack is empty.
+  void push_span(const std::string& label);
+
+  /// pop and end the topmost span
+  void pop_span();
+
+  /// end all active spans (used by RESET states)
+  void clear_spans();
+
+
   std::ostream& gen_prefix(std::ostream& out) const;
 
   void assert_not_in_session() const final;
@@ -599,7 +623,7 @@ struct Session : sc::state<Session, PrimaryActive, ReservingReplicas>,
 
 struct ReservingReplicas : sc::state<ReservingReplicas, Session>, NamedSimply {
   explicit ReservingReplicas(my_context ctx);
-  ~ReservingReplicas() = default;
+  ~ReservingReplicas();
   using reactions = mpl::list<
       sc::custom_reaction<ReplicaGrant>,
       sc::custom_reaction<ReplicaReject>,
@@ -648,6 +672,7 @@ struct ActiveScrubbing
 
 struct RangeBlocked : sc::state<RangeBlocked, ActiveScrubbing>, NamedSimply {
   explicit RangeBlocked(my_context ctx);
+  ~RangeBlocked();
   using reactions = mpl::list<
     sc::custom_reaction<RangeBlockedAlarm>,
     sc::transition<Unblocked, PendingTimer>>;
@@ -667,6 +692,7 @@ struct RangeBlocked : sc::state<RangeBlocked, ActiveScrubbing>, NamedSimply {
 struct PendingTimer : sc::state<PendingTimer, ActiveScrubbing>, NamedSimply {
 
   explicit PendingTimer(my_context ctx);
+  ~PendingTimer();
 
   using reactions = mpl::list<
     sc::transition<InternalSchedScrub, NewChunk>,
@@ -680,6 +706,7 @@ struct PendingTimer : sc::state<PendingTimer, ActiveScrubbing>, NamedSimply {
 struct NewChunk : sc::state<NewChunk, ActiveScrubbing>, NamedSimply {
 
   explicit NewChunk(my_context ctx);
+  ~NewChunk();
 
   using reactions = mpl::list<sc::transition<ChunkIsBusy, RangeBlocked>,
 			      sc::custom_reaction<SelectedChunkFree>>;
@@ -699,6 +726,7 @@ struct NewChunk : sc::state<NewChunk, ActiveScrubbing>, NamedSimply {
 struct WaitPushes : sc::state<WaitPushes, ActiveScrubbing>, NamedSimply {
 
   explicit WaitPushes(my_context ctx);
+  ~WaitPushes();
 
   using reactions = mpl::list<sc::custom_reaction<ActivePushesUpd>>;
 
@@ -709,6 +737,7 @@ struct WaitLastUpdate : sc::state<WaitLastUpdate, ActiveScrubbing>,
 			NamedSimply {
 
   explicit WaitLastUpdate(my_context ctx);
+  ~WaitLastUpdate();
 
   void on_new_updates(const UpdatesApplied&);
 
@@ -723,6 +752,7 @@ struct WaitLastUpdate : sc::state<WaitLastUpdate, ActiveScrubbing>,
 
 struct BuildMap : sc::state<BuildMap, ActiveScrubbing>, NamedSimply {
   explicit BuildMap(my_context ctx);
+  ~BuildMap();
 
   // possible error scenarios:
   // - an error reported by the backend will cause the scrubber to
@@ -745,6 +775,7 @@ struct BuildMap : sc::state<BuildMap, ActiveScrubbing>, NamedSimply {
  */
 struct DrainReplMaps : sc::state<DrainReplMaps, ActiveScrubbing>, NamedSimply {
   explicit DrainReplMaps(my_context ctx);
+  ~DrainReplMaps();
 
   using reactions =
     // all replicas are accounted for:
@@ -755,6 +786,7 @@ struct DrainReplMaps : sc::state<DrainReplMaps, ActiveScrubbing>, NamedSimply {
 
 struct WaitReplicas : sc::state<WaitReplicas, ActiveScrubbing>, NamedSimply {
   explicit WaitReplicas(my_context ctx);
+  ~WaitReplicas();
 
   using reactions = mpl::list<
     // all replicas are accounted for:
@@ -769,6 +801,7 @@ struct WaitReplicas : sc::state<WaitReplicas, ActiveScrubbing>, NamedSimply {
 struct WaitDigestUpdate : sc::state<WaitDigestUpdate, ActiveScrubbing>,
 			  NamedSimply {
   explicit WaitDigestUpdate(my_context ctx);
+  ~WaitDigestUpdate();
 
   using reactions = mpl::list<sc::custom_reaction<DigestUpdate>,
 			      sc::custom_reaction<ScrubFinished>,
@@ -948,7 +981,7 @@ struct ReplicaActive : sc::state<ReplicaActive, ScrubMachine, ReplicaIdle>,
 
 struct ReplicaIdle : sc::state<ReplicaIdle, ReplicaActive>, NamedSimply {
   explicit ReplicaIdle(my_context ctx);
-  ~ReplicaIdle() = default;
+  ~ReplicaIdle();
   using reactions = mpl::list<sc::custom_reaction<StartReplica>>;
 
   sc::result react(const StartReplica& ev);
@@ -1000,6 +1033,7 @@ struct ReplicaActiveOp
 struct ReplicaWaitUpdates : sc::state<ReplicaWaitUpdates, ReplicaActiveOp>,
 			    NamedSimply {
   explicit ReplicaWaitUpdates(my_context ctx);
+  ~ReplicaWaitUpdates();
   using reactions = mpl::list<sc::custom_reaction<ReplicaPushesUpd>>;
 
   sc::result react(const ReplicaPushesUpd&);
@@ -1008,6 +1042,7 @@ struct ReplicaWaitUpdates : sc::state<ReplicaWaitUpdates, ReplicaActiveOp>,
 struct ReplicaBuildingMap : sc::state<ReplicaBuildingMap, ReplicaActiveOp>,
 			    NamedSimply {
   explicit ReplicaBuildingMap(my_context ctx);
+  ~ReplicaBuildingMap();
   using reactions = mpl::list<sc::custom_reaction<SchedReplica>>;
 
   sc::result react(const SchedReplica&);
