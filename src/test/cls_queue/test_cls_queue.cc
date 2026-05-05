@@ -351,7 +351,6 @@ TEST_P(TestClsQueue, EnqueueDequeue)
 
   auto consume_count = 0U;
   std::thread consumer([this, &queue_name, &consume_count, &done] {
-          librados::ObjectWriteOperation op;
           const auto max_elements = 42;
           const std::string marker;
           bool truncated = false;
@@ -361,6 +360,7 @@ TEST_P(TestClsQueue, EnqueueDequeue)
             const auto ret = cls_queue_list_entries(ioctx, queue_name, marker, max_elements, entries, &truncated, end_marker);
             ASSERT_EQ(0, ret);
             consume_count += entries.size();
+            librados::ObjectWriteOperation op;
             cls_queue_remove_entries(op, end_marker);
             ASSERT_EQ(0, ioctx.operate(queue_name, &op));
           }
@@ -410,7 +410,6 @@ TEST_P(TestClsQueue, QueueFullDequeue)
 
   auto consume_count = 0;
   std::thread consumer([this, &queue_name, &consume_count, &done] {
-          librados::ObjectWriteOperation op;
           const auto max_elements = 42;
           std::string marker;
           bool truncated = false;
@@ -420,6 +419,7 @@ TEST_P(TestClsQueue, QueueFullDequeue)
             auto ret = cls_queue_list_entries(ioctx, queue_name, marker, max_elements, entries, &truncated, end_marker);
             ASSERT_EQ(0, ret);
             consume_count += entries.size();
+            librados::ObjectWriteOperation op;
             cls_queue_remove_entries(op, end_marker);
             ASSERT_EQ(0, ioctx.operate(queue_name, &op));
           }
@@ -454,7 +454,6 @@ TEST_P(TestClsQueue, MultiProducer)
 
   auto consume_count = 0U;
   std::thread consumer([this, &queue_name, &consume_count, &producer_count] {
-          librados::ObjectWriteOperation op;
           const auto max_elements = 42;
           const std::string marker;
           bool truncated = false;
@@ -464,6 +463,7 @@ TEST_P(TestClsQueue, MultiProducer)
             const auto ret = cls_queue_list_entries(ioctx, queue_name, marker, max_elements, entries, &truncated, end_marker);
             ASSERT_EQ(0, ret);
             consume_count += entries.size();
+            librados::ObjectWriteOperation op;
             cls_queue_remove_entries(op, end_marker);
             ASSERT_EQ(0, ioctx.operate(queue_name, &op));
           }
@@ -500,7 +500,6 @@ TEST_P(TestClsQueue, MultiConsumer)
   std::vector<std::thread> consumers(10);
   for (auto& c : consumers) {
     c = std::thread([this, &queue_name, &consume_count, &done, &list_and_remove_lock] {
-          librados::ObjectWriteOperation op;
           const auto max_elements = 42;
           const std::string marker;
           bool truncated = false;
@@ -511,6 +510,7 @@ TEST_P(TestClsQueue, MultiConsumer)
             const auto ret = cls_queue_list_entries(ioctx, queue_name, marker, max_elements, entries, &truncated, end_marker);
             ASSERT_EQ(0, ret);
             consume_count += entries.size();
+            librados::ObjectWriteOperation op;
             cls_queue_remove_entries(op, end_marker);
             ASSERT_EQ(0, ioctx.operate(queue_name, &op));
           }
@@ -545,7 +545,6 @@ TEST_P(TestClsQueue, NoLockMultiConsumer)
   std::vector<std::thread> consumers(5);
   for (auto& c : consumers) {
     c = std::thread([this, &queue_name, &done] {
-          librados::ObjectWriteOperation op;
           const auto max_elements = 42;
           const std::string marker;
           bool truncated = false;
@@ -554,6 +553,7 @@ TEST_P(TestClsQueue, NoLockMultiConsumer)
           while (!done || truncated) {
             const auto ret = cls_queue_list_entries(ioctx, queue_name, marker, max_elements, entries, &truncated, end_marker);
             ASSERT_EQ(0, ret);
+            librados::ObjectWriteOperation op;
             cls_queue_remove_entries(op, end_marker);
             ASSERT_EQ(0, ioctx.operate(queue_name, &op));
           }
