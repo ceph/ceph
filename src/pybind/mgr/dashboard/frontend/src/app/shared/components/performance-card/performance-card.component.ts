@@ -8,7 +8,7 @@ import {
   computed,
   Input
 } from '@angular/core';
-import { Icons, IconSize } from '~/app/shared/enum/icons.enum';
+import { EMPTY_STATE_IMAGE, Icons, IconSize } from '~/app/shared/enum/icons.enum';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import {
   METRIC_UNIT_MAP,
@@ -18,7 +18,7 @@ import {
 } from '~/app/shared/models/performance-data';
 import { PerformanceCardService } from '../../api/performance-card.service';
 import { DropdownModule, GridModule, LayoutModule, ListItem } from 'carbon-components-angular';
-import { of, Subject, Subscription } from 'rxjs';
+import { Subject, Subscription } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { ProductiveCardComponent } from '../productive-card/productive-card.component';
 import { CommonModule } from '@angular/common';
@@ -44,7 +44,8 @@ import { EmptyStateComponent } from '../empty-state/empty-state.component';
   encapsulation: ViewEncapsulation.None
 })
 export class PerformanceCardComponent implements OnInit, OnDestroy {
-  @Input() emptyStateText: string | null = '';
+  @Input() prometheusEmptyState: boolean = false;
+  @Input() storageEmptyState: boolean = false;
 
   chartDataSignal = signal<PerformanceData | null>(null);
   chartDataLengthSignal = computed(() => {
@@ -55,6 +56,7 @@ export class PerformanceCardComponent implements OnInit, OnDestroy {
   metricUnitMap = METRIC_UNIT_MAP;
   icons = Icons;
   iconSize = IconSize;
+  emptyState = EMPTY_STATE_IMAGE;
 
   private destroy$ = new Subject<void>();
 
@@ -95,8 +97,13 @@ export class PerformanceCardComponent implements OnInit, OnDestroy {
 
     this.chartSub?.unsubscribe();
 
-    this.chartSub = this.prometheusService
-      .withPrometheusEnabled(this.performanceCardService.getChartData(time))
+    if (this.storageEmptyState || this.prometheusEmptyState) {
+      this.chartDataSignal.set(null);
+      return;
+    }
+
+    this.chartSub = this.performanceCardService
+      .getChartData(time)
       .pipe(takeUntil(this.destroy$))
       .subscribe((data) => {
         this.chartDataSignal.set(data);

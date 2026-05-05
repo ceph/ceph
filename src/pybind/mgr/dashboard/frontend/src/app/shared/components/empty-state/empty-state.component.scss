@@ -5,17 +5,21 @@
   flex-direction: column;
   justify-content: flex-end;
   gap: var(--cds-spacing-05);
-  margin-top: 283px;
   padding: var(--cds-spacing-05) var(--cds-spacing-05) var(--cds-spacing-07) var(--cds-spacing-05);
   width: 264px;
   margin-left: var(--cds-spacing-05);
+  margin-top: 267px; // 283px -16px;
 
   img {
     width: 80px !important;
     height: 80px !important;
   }
 
-  span {
+  &-text {
     color: var(--cds-text-secondary);
+  }
+
+  &-title {
+    margin-top: 140px; // 156px - 16px
   }
 }
