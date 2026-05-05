@@ -1,28 +1,14 @@
 <cds-tile class="productive-card"
           [ngClass]="{'productive-card--shadow': applyShadow}"
           [cdsLayer]="0">
-  @if(!emptyStateText) {
   <div class="productive-card-header">
     <ng-container *ngTemplateOutlet="headerTemplate"></ng-container>
   </div>
-  }
   <section class="productive-card-section cds--type-body-compact-01"
            [ngClass]="{'productive-card-section--footer': footerTemplate}">
-    @if(emptyStateText) {
-    <div class="productive-card-empty-state">
-      <img src="assets/locked.png"
-           [alt]="emptyStateText"/>
-      <span class="cds--type-label-01"
-            i18n>
-        {{ emptyStateText }}
-      </span>
-    </div>
-    }
-    @else {
     <ng-content></ng-content>
-    }
   </section>
-  @if(!!footerTemplate && !emptyStateText) {
+  @if(!!footerTemplate) {
   <footer class="productive-card-footer">
     <ng-container *ngTemplateOutlet="footerTemplate"></ng-container>
   </footer>

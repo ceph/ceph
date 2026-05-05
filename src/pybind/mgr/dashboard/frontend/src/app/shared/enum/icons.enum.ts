@@ -170,5 +170,6 @@ export const ICON_TYPE = {
 
 export const EMPTY_STATE_IMAGE = {
   default: 'assets/empty-state.png',
-  search: 'assets/empty-state-search.png'
+  search: 'assets/empty-state-search.png',
+  locked: 'assets/locked.png'
 } as const;

@@ -1,4 +1,5 @@
 import { Component, Input } from '@angular/core';
+import { EMPTY_STATE_IMAGE } from '../../enum/icons.enum';
 
 @Component({
   selector: 'cd-empty-state',
@@ -7,6 +8,7 @@ import { Component, Input } from '@angular/core';
   styleUrl: './empty-state.component.scss'
 })
 export class EmptyStateComponent {
-  /* Optional: Custom empty state text, when empty state is displyed*/
-  @Input() emptyStateText: string | null = '';
+  @Input() text: string | null = '';
+  @Input() title: string | null = '';
+  @Input() imgSrc: string = EMPTY_STATE_IMAGE.default;
 }

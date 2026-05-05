@@ -7,7 +7,7 @@
   <ng-template #header>
     <h2 class="cds--type-heading-compact-02"
         i18n>Performance</h2>
-     @if(!emptyStateText) {
+     @if(!prometheusEmptyState && !storageEmptyState) {
     <div cdsStack="horizontal"
          gap="2">
       <cd-time-picker
@@ -18,9 +18,18 @@
     </div>
     }
   </ng-template>
-  @if(emptyStateText) {
-    <cd-empty-state [emptyStateText]="emptyStateText"></cd-empty-state>
-  } @else {
+  @if(storageEmptyState) {
+    <cd-empty-state
+      text="You must have storage configured to access this capability."
+      i18n-text></cd-empty-state>
+  }
+  @else if(prometheusEmptyState) {
+    <cd-empty-state
+      text="You must have Prometheus configured to access this capability."
+      i18n-text
+      [imgSrc]="emptyState.locked"></cd-empty-state>
+  }
+  @else {
   <div cdsGrid
        [narrow]="true"
        [condensed]="false"

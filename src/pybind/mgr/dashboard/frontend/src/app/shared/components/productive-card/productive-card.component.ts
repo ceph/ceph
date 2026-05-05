@@ -24,9 +24,6 @@ export class ProductiveCardComponent {
   /* Optional: Applies a tinted-colored background to card */
   @Input() applyShadow: boolean = false;
 
-  /* Optional: Custom empty state text, when empty state is displyed*/
-  @Input() emptyStateText: string | null = '';
-
   /* Optional: Header action template, appears alongwith title in top-right corner */
   @ContentChild('header', {
     read: TemplateRef

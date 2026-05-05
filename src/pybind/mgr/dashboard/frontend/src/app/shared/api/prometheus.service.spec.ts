@@ -6,23 +6,13 @@ import { AlertmanagerNotification } from '../models/prometheus-alerts';
 import { PrometheusService } from './prometheus.service';
 import { SettingsService } from './settings.service';
 import moment from 'moment';
-import { of } from 'rxjs';
-import { MgrModuleService } from './mgr-module.service';
 
 describe('PrometheusService', () => {
   let service: PrometheusService;
   let httpTesting: HttpTestingController;
 
-  const mockMgrModuleService = {
-    list: jest.fn(() => of([])) // no modules enabled
-  };
-
   configureTestBed({
-    providers: [
-      PrometheusService,
-      SettingsService,
-      { provide: MgrModuleService, useValue: mockMgrModuleService }
-    ],
+    providers: [PrometheusService, SettingsService],
     imports: [HttpClientTestingModule]
   });
 

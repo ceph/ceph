@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { PerformanceCardComponent } from './performance-card.component';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { EMPTY, of } from 'rxjs';
+import { of } from 'rxjs';
 import { PrometheusService } from '../../api/prometheus.service';
 import { PerformanceCardService } from '../../api/performance-card.service';
 import { PerformanceData } from '../../models/performance-data';
@@ -13,7 +13,6 @@ import { Permissions } from '../../models/permissions';
 describe('PerformanceCardComponent', () => {
   let component: PerformanceCardComponent;
   let fixture: ComponentFixture<PerformanceCardComponent>;
-  let prometheusService: PrometheusService;
 
   const mockChartData: PerformanceData = {
     iops: [{ timestamp: new Date(), values: { 'Read IOPS': 100, 'Write IOPS': 50 } }],
@@ -25,8 +24,7 @@ describe('PerformanceCardComponent', () => {
 
   beforeEach(async () => {
     const prometheusServiceMock = {
-      lastHourDateObject: { start: 1000, end: 2000, step: 14 },
-      withPrometheusEnabled: jest.fn((source$) => source$)
+      lastHourDateObject: { start: 1000, end: 2000, step: 14 }
     };
 
     const performanceCardServiceMock = {
@@ -71,7 +69,6 @@ describe('PerformanceCardComponent', () => {
 
     fixture = TestBed.createComponent(PerformanceCardComponent);
     component = fixture.componentInstance;
-    prometheusService = TestBed.inject(PrometheusService);
   });
 
   it('should create', () => {
@@ -94,17 +91,18 @@ describe('PerformanceCardComponent', () => {
     expect(component.chartDataSignal()).toEqual(mockChartData);
   }));
 
-  it('should set emptyStateText when prometheus is enabled', fakeAsync(() => {
+  it('should not load chart data when no storage', fakeAsync(() => {
+    component.storageEmptyState = true;
     const time = { start: 1000, end: 2000, step: 14 };
     component.loadCharts(time);
 
     tick();
-    expect(component.emptyStateText).toBe('');
+
+    expect(component.chartDataSignal()).toBeNull();
   }));
 
   it('should not load chart data when prometheus is disabled', fakeAsync(() => {
-    (prometheusService.withPrometheusEnabled as jest.Mock).mockReturnValue(EMPTY);
-
+    component.prometheusEmptyState = true;
     const time = { start: 1000, end: 2000, step: 14 };
     component.loadCharts(time);
 

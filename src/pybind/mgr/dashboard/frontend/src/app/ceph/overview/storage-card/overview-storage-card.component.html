@@ -57,7 +57,23 @@
   </div>
   }
   @else {
-    <cd-empty-state [emptyStateText]="storageEmptyState"></cd-empty-state>
+    <cd-empty-state
+      text="You can view capacity usage and related metrics here once you add storage."
+      title="Storage is not configured yet"
+      i18n-title
+      i18n-text>
+      <button
+        cdsButton="primary"
+        i18n
+        size="sm"
+        [routerLink]="['/add-storage']"
+        >
+        Add storage
+        <cd-icon
+          type="add"
+          class="cds--btn__icon"></cd-icon>
+      </button>
+    </cd-empty-state>
   }
   <!-- CAPACITY BREAKDOWN CHART -->
   @if (!prometheusEmptyState && !storageEmptyState) {

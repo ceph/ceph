@@ -104,21 +104,12 @@ export class OverviewComponent {
   );
 
   readonly storageEmptyState$ = this.hasNoOSDs$.pipe(startWith(false)).pipe(
-    map((hasNoOSDs) => {
-      if (hasNoOSDs) {
-        return $localize`You can view capacity usage and related metrics here once you add storage.`;
-      }
-      return '';
-    }),
+    map((hasNoOSDs) => hasNoOSDs),
     shareReplay({ bufferSize: 1, refCount: true })
   );
 
   readonly prometheusEmptyState$ = this.isPromethuesConfigured$.pipe(
-    map((isPromethuesConfigured) =>
-      isPromethuesConfigured
-        ? ''
-        : $localize`You must have Prometheus configured to access this capability.`
-    ),
+    map((isPromethuesConfigured) => !isPromethuesConfigured),
     shareReplay({ bufferSize: 1, refCount: true })
   );
 
