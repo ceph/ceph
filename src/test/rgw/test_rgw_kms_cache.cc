@@ -8,6 +8,7 @@
 #include <global/global_context.h>
 #include <global/global_init.h>
 #include <gtest/gtest.h>
+#include <rgw_crypt.h>
 
 #include <boost/asio/cancellation_signal.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -349,6 +350,37 @@ TEST_F(TestSSEKMSWithTestingKMS, TestRuntimeEnableDisable) {
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::hit)), 0);
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::miss)), 0);
   EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::size)), 0);
+}
+
+TEST_F(TestSSEKMSWithTestingKMS, KeyselCollisionAfterClearCache) {
+  cct->_conf.set_val("rgw_crypt_s3_kms_cache_enabled", "true");
+  auto attrs_A = attrs;
+  auto attrs_B = attrs;
+  set_attr(attrs_B, RGW_ATTR_CRYPT_KEYSEL,
+      "\x3a\xa8\x16\xc2\x48\x0e\xb4\x3e\x9b\xff\xab\x7b\xfc\xc2\xc7\xfd"
+      "\x3a\xa8\x16\xc2\x48\x0e\xb4\x3e\x9b\xff\xab\x7b\xfc\xc2\xc7\xfd");
+
+  std::string out_A1;
+  ASSERT_EQ(reconstitute_actual_key_from_kms(
+                &no_dpp, attrs_A, uut, null_yield, out_A1),
+      0);
+  EXPECT_EQ(out_A1, std::string(32, '*'));
+
+  uut->clear_cache();
+  EXPECT_EQ(cache_perf->get(static_cast<int>(webcache::Metric::size)), 0);
+
+  std::string out_B1;
+  ASSERT_EQ(reconstitute_actual_key_from_kms(
+                &no_dpp, attrs_B, uut, null_yield, out_B1),
+      0);
+  EXPECT_EQ(out_B1, std::string(32, '+'));
+
+  std::string out_A2;
+  ASSERT_EQ(reconstitute_actual_key_from_kms(
+                &no_dpp, attrs_A, uut, null_yield, out_A2),
+      0);
+  EXPECT_EQ(out_A2, out_A1);
+  EXPECT_NE(out_A2, out_B1);
 }
 
 int main(int argc, char** argv) {
