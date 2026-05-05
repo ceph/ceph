@@ -626,6 +626,8 @@ Each reactor thread can host multiple store shards. Alternatively, few reactors 
 For example, for an OSD that had 3 reactor threads (seastar::smp::count: 3) set during mkfs.
 After changing the reactor thread count to 5 and restarting the cluster, the mounted store shards will look like:
 
+::
+
   Reactors thread 0 -> Store Shard: 0
   Reactors thread 1 -> Store Shard: 1
   Reactors thread 2 -> Store Shard: 2
@@ -633,12 +635,19 @@ After changing the reactor thread count to 5 and restarting the cluster, the mou
   Reactors thread 4 -> Store Shard: 1 (forwarded)
 
 When changing to seastar::smp::count: 2:
+
+::
+
   Reactors thread 0 -> Store Shard: 0, 2
   Reactors thread 1 -> Store Shard: 1
+
 
 using ./bin/ceph daemon osd.0 dump_store_shards to check store assignment.
 See the following example outputs from running dump_store_shards with the above scenarios:
 **first start with 3 reactors**:
+
+::
+
   ./bin/ceph daemon osd.0 dump_store_shards
   *** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH ***
   {
@@ -659,7 +668,11 @@ See the following example outputs from running dump_store_shards with the above 
     }
   }
 
+
 **second restart with 2 reactors**:
+
+::
+
   ./bin/ceph daemon osd.0 dump_store_shards
   *** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH ***
   {
@@ -694,7 +707,11 @@ See the following example outputs from running dump_store_shards with the above 
     }
   }
 
+
 **third restart with 5 reactors**:
+
+::
+
   ./bin/ceph daemon osd.0 dump_store_shards
   *** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH ***
   {
@@ -743,6 +760,7 @@ See the following example outputs from running dump_store_shards with the above 
         }
     }
   }
+
 
 Next Steps
 ==========
