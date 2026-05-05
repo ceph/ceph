@@ -14232,7 +14232,30 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EPERM;
       goto reply_no_propose;
     }
+
+    const pg_pool_t *current_pool = osdmap.get_pg_pool(pool);
+
+    // If the current pool is a current migration src or is a src in a cascade then set the target to its target pool
+    // If the current pool is a target already or not in a migration then do nothing
+    if (current_pool->is_migrating()) {
+      // even if the current pool is not in a migration still set it to the migration src so it can be checked and deleted later
+      pool = current_pool->migration_target.has_value() ?
+                 current_pool->migration_target.value() : pool;
+    }
+    // Delete all pools in cascade (pointing to target), This will inclued the current pool if it is a src pointing to this target
+    for (const auto& [pool_id, other_pool] : osdmap.get_pools()) {
+      if (other_pool.migration_target.has_value() &&
+          other_pool.migration_target.value() == pool) {
+        err = _prepare_remove_pool(pool_id, &ss, force_no_fake);
+        if (err < 0) {
+          goto reply_no_propose;
+        }
+          }
+    }
+
+    //This will delete the src if one was set or will just delete the pool passed in
     err = _prepare_remove_pool(pool, &ss, force_no_fake);
+
     if (err == -EAGAIN) {
       goto wait;
     }
