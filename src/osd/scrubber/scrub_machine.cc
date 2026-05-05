@@ -739,7 +739,7 @@ sc::result WaitDigestUpdate::react(const ScrubFinished&)
   return transit<PrimaryIdle>();
 }
 
-ScrubMachine::ScrubMachine(PG* pg, ScrubMachineListener* pg_scrub)
+ScrubMachine::ScrubMachine(PG* pg, ScrubMachineListener* pg_scrub, jspan_ptr root_span)
     : m_pg_id{pg->pg_id}
     , m_scrbr{pg_scrub}
 {}
