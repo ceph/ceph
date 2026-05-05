@@ -3371,11 +3371,12 @@ options:
 - name: rgw_crypt_kmip_worker_threads
   type: int
   level: advanced
-  desc: parallel KMIP client worker threads for SSE-S3 (each runs its own connection pool)
+  desc: parallel KMIP client worker threads for SSE-S3
   long_desc: >
     Requests are queued and processed concurrently up to this many workers.
-    Each worker may open one or more TLS sessions to the KMIP server; size this
-    for KMIP server limits and RGW load. Minimum 1, maximum 32.
+    Each worker keeps at most one cached TLS sessions to the KMIP server,
+    reused across requests until idle longer than 5 seconds. Set this as per
+    KMIP server limits and RGW load. Minimum 1, maximum 32
   default: 1
   min: 1
   max: 32
