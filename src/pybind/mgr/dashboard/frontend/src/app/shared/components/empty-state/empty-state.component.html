@@ -1,8 +1,15 @@
-<div class="empty-state">
-  <img src="assets/locked.png"
-       [alt]="emptyStateText"/>
-  <span class="cds--type-label-01"
-        i18n>
-    {{ emptyStateText }}
-  </span>
+<div
+  class="empty-state"
+  [class.empty-state-title]="title">
+  <img
+    src="{{ imgSrc }}"
+    [alt]="text"/>
+  @if(title) {
+  <p class="cds--type-body-compact-02 cds-mb-0">{{title}}</p>
+  }
+  <p class="cds--type-label-01 empty-state-text"
+     i18n>
+    {{ text }}
+  </p>
+  <ng-content></ng-content>
 </div>

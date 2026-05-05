@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import { EMPTY, Observable, Subject, Subscription, forkJoin, of, timer } from 'rxjs';
+import { Observable, Subject, Subscription, forkJoin, of, timer } from 'rxjs';
 import { catchError, map, switchMap } from 'rxjs/operators';
 
 import { AlertmanagerSilence } from '../models/alertmanager-silence';
@@ -12,7 +12,6 @@ import {
   PrometheusRuleGroup
 } from '../models/prometheus-alerts';
 import moment from 'moment';
-import { MgrModuleService } from './mgr-module.service';
 
 export type PromethuesGaugeMetricResult = {
   metric: Record<string, string>; // metric metadata
@@ -23,8 +22,6 @@ export type PromqlGuageMetric = {
   resultType: 'vector';
   result: PromethuesGaugeMetricResult[];
 };
-
-const PROMETHEUS_MODULE = 'prometheus';
 
 @Injectable({
   providedIn: 'root'
@@ -45,7 +42,7 @@ export class PrometheusService {
   private settings: Record<string, string | undefined> = {};
   updatedChrtData = new Subject<any>();
 
-  constructor(private http: HttpClient, private mgrModuleService: MgrModuleService) {}
+  constructor(private http: HttpClient) {}
 
   unsubscribe() {
     if (this.timerGetPrometheusDataSub) {
@@ -71,25 +68,6 @@ export class PrometheusService {
     this.disableSetting(this.settingsKey.prometheus);
   }
 
-  withPrometheusEnabled<T>(
-    source$: Observable<T>,
-    fallback$: Observable<T> = EMPTY
-  ): Observable<T> {
-    return this.isPrometheusModuleEnabled().pipe(
-      switchMap((enabled) => (enabled ? source$ : fallback$)),
-      catchError(() => fallback$)
-    );
-  }
-
-  isPrometheusModuleEnabled(): Observable<boolean> {
-    return this.mgrModuleService.list().pipe(
-      map((modules) =>
-        modules.some((module) => module.name === PROMETHEUS_MODULE && module.enabled)
-      ),
-      catchError(() => of(false))
-    );
-  }
-
   isPrometheusUsable(): Observable<boolean> {
     return this.isSettingConfigured(this.settingsKey.prometheus).pipe(
       map((isConfigured) => isConfigured),
@@ -103,10 +81,8 @@ export class PrometheusService {
   }
 
   isAlertmanagerUsable(): Observable<boolean> {
-    return this.isPrometheusModuleEnabled().pipe(
-      switchMap((enabled) =>
-        enabled ? this.isSettingConfigured(this.settingsKey.alertmanager) : of(false)
-      ),
+    return this.isSettingConfigured(this.settingsKey.alertmanager).pipe(
+      map((isConfigured) => isConfigured),
       catchError(() => of(false))
     );
   }
