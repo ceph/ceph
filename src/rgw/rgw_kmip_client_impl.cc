@@ -29,7 +29,7 @@ extern "C" {
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-static enum kmip_version protocol_version = KMIP_1_0;
+static enum kmip_version protocol_version = KMIP_1_4;
 
 static void kmip_bio_set_socket_io_timeout(BIO *bio, int seconds)
 {
@@ -74,13 +74,8 @@ struct RGWKmipHandle {
 struct RGWKmipWorker: public Thread {
   RGWKMIPManagerImpl &m;
   const int worker_id;
-  RGWKmipWorker(RGWKMIPManagerImpl& m, int wid)
-    : m(m), worker_id(wid) {}
+  RGWKmipWorker(RGWKMIPManagerImpl& m, int wid) : m(m), worker_id(wid) {}
   void *entry() override;
-  void signal() {
-    std::lock_guard l{m.lock};
-    m.cond.notify_all();
-  }
 };
 
 struct RGWKmipWorkerPool {
@@ -94,12 +89,12 @@ RGWKMIPManagerImpl::RGWKMIPManagerImpl(CephContext *cct)
 RGWKMIPManagerImpl::~RGWKMIPManagerImpl() = default;
 
 /*
- * Tear down KMIP + TLS in dependency order:
- * 1) release encode buffer and KMIP context
- * 2) SSL_shutdown (best-effort close_notify) while SSL is still wired to the BIO
- * 3) BIO_free_all frees SSL and closes the TCP fd
- * 4) SSL_CTX last
- */
+* Tear down KMIP + TLS in dependency order:
+* 1) release encode buffer and KMIP context
+* 2) SSL_shutdown (best-effort close_notify) while SSL is still wired to the BIO
+* 3) BIO_free_all frees SSL and closes the TCP fd
+* 4) SSL_CTX last
+*/
 static void
 kmip_free_handle_stuff(RGWKmipHandle *kmip)
 {
@@ -114,7 +109,7 @@ kmip_free_handle_stuff(RGWKmipHandle *kmip)
   if (kmip->ssl) {
     int rc = SSL_shutdown(kmip->ssl);
     if (rc == 0)
-    (void)SSL_shutdown(kmip->ssl);
+      (void)SSL_shutdown(kmip->ssl);
   }
   if (kmip->bio) {
     BIO_free_all(kmip->bio);
@@ -205,7 +200,7 @@ RGWKmipHandleBuilder::build() const
   int failed = 1;
   RGWKmipHandle *r = new RGWKmipHandle();
   TextString *up = 0;
-	size_t ns;
+  size_t ns;
 
   r->ctx = SSL_CTX_new(TLS_client_method());
   if (!r->ctx) {
@@ -240,6 +235,7 @@ RGWKmipHandleBuilder::build() const
     ERR_print_errors_ceph(cct);
     goto Done;
   }
+
   r->bio = BIO_new_ssl_connect(r->ctx);
   if (!r->bio) {
     lderr(cct) << "BIO_new_ssl_connect failed" << dendl;
@@ -259,7 +255,7 @@ RGWKmipHandleBuilder::build() const
 
   {
     int64_t sec = cct->_conf->rgw_crypt_kmip_socket_io_timeout_sec;
-    if (sec <= 0) {
+    if (sec < 0) {
       sec = 0;
     } else if (sec > 300) {
       sec = 300;
@@ -267,23 +263,23 @@ RGWKmipHandleBuilder::build() const
     kmip_bio_set_socket_io_timeout(r->bio, static_cast<int>(sec));
   }
 
-  // setup kmip
 
+  // setup kmip
   kmip_init(r->kmip_ctx, NULL, 0, protocol_version);
-	r->need_to_free_kmip = 1;
-	r->buffer_blocks = 1;
-	r->buffer_block_size = 1024;
-	r->encoding = static_cast<uint8*>(r->kmip_ctx->calloc_func(
+  r->need_to_free_kmip = 1;
+  r->buffer_blocks = 1;
+  r->buffer_block_size = 1024;
+  r->encoding = static_cast<uint8*>(r->kmip_ctx->calloc_func(
     r->kmip_ctx->state, r->buffer_blocks, r->buffer_block_size));
-	if (!r->encoding) {
-		lderr(cct) << "kmip buffer alloc failed: "
+  if (!r->encoding) {
+    lderr(cct) << "kmip buffer alloc failed: "
       << r->buffer_blocks <<
       " * " << r->buffer_block_size << dendl;
-		goto Done;
-	}
-	ns = r->buffer_blocks * r->buffer_block_size;
-	kmip_set_buffer(r->kmip_ctx, r->encoding, ns);
-	r->buffer_total_size = ns;
+    goto Done;
+  }
+  ns = r->buffer_blocks * r->buffer_block_size;
+  kmip_set_buffer(r->kmip_ctx, r->encoding, ns);
+  r->buffer_total_size = ns;
 
   up = r->textstrings;
   if (username) {
@@ -315,137 +311,108 @@ Done:
   return r;
 }
 
-struct RGWKmipHandles : public Thread {
+/*
+* Per-worker persistent KMIP connection.
+*
+* Each KMIP worker thread owns one RGWKmipHandles instance. It caches at most
+* one RGWKmipHandle (TLS connection + libkmip context) so subsequent ops on
+* the same worker can skip the TLS handshake.
+*
+* Since each RGWKmipHandles is only ever accessed by its owning worker
+* thread, no synchronization is required.
+*
+* If the cached connection has been idle longer than MAXIDLE seconds it is
+* dropped on the next get_kmip_handle() call (lazy eviction).
+*/
+struct RGWKmipHandles {
   CephContext *cct;
-  ceph::mutex cleaner_lock = ceph::make_mutex("RGWKmipHandles::cleaner_lock");
-  std::vector<RGWKmipHandle*> saved_kmip;
-  int cleaner_shutdown;
-  bool cleaner_active = false;
-  ceph::condition_variable cleaner_cond;
-  RGWKmipHandles(CephContext *cct) :
-    cct(cct), cleaner_shutdown{0} {
-  }
+  RGWKmipHandle* cached_kmip = nullptr;
+  RGWKmipHandles(CephContext *cct) : cct(cct) {}
+  ~RGWKmipHandles() { flush_kmip_handles(); }
   RGWKmipHandle* get_kmip_handle();
   void release_kmip_handle_now(RGWKmipHandle* kmip);
   void release_kmip_handle(RGWKmipHandle* kmip);
   void flush_kmip_handles();
+  /* Drop the cached connection if it's been idle ≥ MAXIDLE seconds.
+   * Called proactively from the worker's idle loop so the server doesn't
+   * see a half-dead long-lived connection. Lazy-equivalent of the same
+   * check at the top of get_kmip_handle(). */
+  void evict_if_stale();
   int do_one_entry(RGWKMIPTransceiver &element);
-  void* entry();
-  void start();
-  void stop();
 };
+
+#define MAXIDLE 5
+
+void
+RGWKmipHandles::evict_if_stale()
+{
+  if (cached_kmip &&
+    mono_clock::now() - cached_kmip->lastuse >= std::chrono::seconds(MAXIDLE)) {
+    kmip_free_handle_stuff(cached_kmip);
+    delete cached_kmip;
+    cached_kmip = nullptr;
+  }
+}
 
 RGWKmipHandle*
 RGWKmipHandles::get_kmip_handle()
 {
-  RGWKmipHandle* kmip = 0;
+  RGWKmipHandle* kmip = nullptr;
+
+  evict_if_stale();
+
+  if (cached_kmip) {
+    RGWKmipHandle* kmip = cached_kmip;
+    cached_kmip = nullptr;
+    return kmip;
+  }
+
   const char *hostaddr = cct->_conf->rgw_crypt_kmip_addr.c_str();
-  {
-    std::lock_guard lock{cleaner_lock};
-    if (!saved_kmip.empty()) {
-      kmip = *saved_kmip.begin();
-      saved_kmip.erase(saved_kmip.begin());
-    }
+  if (!hostaddr) {
+    return nullptr;
   }
-  if (!kmip && hostaddr) {
-    char *hosttemp = strdup(hostaddr);
-    char *port = strchr(hosttemp, ':');
-    if (port)
-      *port++ = 0;
-    kmip = RGWKmipHandleBuilder{cct}
-      .set_clientcert(cct->_conf->rgw_crypt_kmip_client_cert)
-      .set_clientkey(cct->_conf->rgw_crypt_kmip_client_key)
-      .set_capath(cct->_conf->rgw_crypt_kmip_ca_path)
-      .set_host(hosttemp)
-      .set_portstring(port ? port : "5696")
-      .set_username(cct->_conf->rgw_crypt_kmip_username)
-      .set_password(cct->_conf->rgw_crypt_kmip_password)
-      .build();
+
+  char *hosttemp = strdup(hostaddr);
+  char *port = strchr(hosttemp, ':');
+  if (port)
+    *port++ = 0;
+  kmip = RGWKmipHandleBuilder{cct}
+    .set_clientcert(cct->_conf->rgw_crypt_kmip_client_cert)
+    .set_clientkey(cct->_conf->rgw_crypt_kmip_client_key)
+    .set_capath(cct->_conf->rgw_crypt_kmip_ca_path)
+    .set_host(hosttemp)
+    .set_portstring(port ? port : "5696")
+    .set_username(cct->_conf->rgw_crypt_kmip_username)
+    .set_password(cct->_conf->rgw_crypt_kmip_password)
+    .build();
     free(hosttemp);
-  }
   return kmip;
 }
 
 void
 RGWKmipHandles::release_kmip_handle_now(RGWKmipHandle* kmip)
 {
+  if (!kmip) return;
   kmip_free_handle_stuff(kmip);
   delete kmip;
 }
 
-#define MAXIDLE 5
 void
 RGWKmipHandles::release_kmip_handle(RGWKmipHandle* kmip)
 {
-  if (cleaner_shutdown) {
-    release_kmip_handle_now(kmip);
-  } else {
-    std::lock_guard lock{cleaner_lock};
-    kmip->lastuse = mono_clock::now();
-    saved_kmip.insert(saved_kmip.begin(), 1, kmip);
-  }
-}
-
-void*
-RGWKmipHandles::entry()
-{
-  RGWKmipHandle* kmip;
-  std::unique_lock lock{cleaner_lock};
-
-  for (;;) {
-    if (cleaner_shutdown) {
-      if (saved_kmip.empty())
-	break;
-    } else {
-      cleaner_cond.wait_for(lock, std::chrono::seconds(MAXIDLE));
-    }
-    mono_time now = mono_clock::now();
-    while (!saved_kmip.empty()) {
-      auto cend = saved_kmip.end();
-      --cend;
-      kmip = *cend;
-      if (!cleaner_shutdown && now - kmip->lastuse
-	  < std::chrono::seconds(MAXIDLE))
-	break;
-      saved_kmip.erase(cend);
-      release_kmip_handle_now(kmip);
-    }
-  }
-  return nullptr;
-}
-
-void
-RGWKmipHandles::start()
-{
-  std::lock_guard lock{cleaner_lock};
-  if (!cleaner_active) {
-    cleaner_active = true;
-    this->create("KMIPcleaner");  // len<16!!!
-  }
-}
-
-void
-RGWKmipHandles::stop()
-{
-  std::unique_lock lock{cleaner_lock};
-  cleaner_shutdown = 1;
-  cleaner_cond.notify_all();
-  if (cleaner_active) {
-    lock.unlock();
-    this->join();
-    cleaner_active = false;
-  }
+  if (!kmip) return;
+  kmip->lastuse = mono_clock::now();
+  cached_kmip = kmip;
 }
 
 void
 RGWKmipHandles::flush_kmip_handles()
 {
-  stop();
-  join();
-  if (!saved_kmip.empty()) {
-    ldout(cct, 0) << "ERROR: " << __func__ << " failed final cleanup" << dendl;
+  if (cached_kmip) {
+    kmip_free_handle_stuff(cached_kmip);
+    delete cached_kmip;
+    cached_kmip = nullptr;
   }
-  saved_kmip.shrink_to_fit();
 }
 
 int
@@ -510,6 +477,33 @@ RGWKmipHandles::do_one_entry(RGWKMIPTransceiver &element)
 {
   auto h = get_kmip_handle();
   std::unique_lock l{element.lock};
+
+  if (!h) {
+    element.ret = -ERR_SERVICE_UNAVAILABLE;
+    element.done = true;
+    element.cond.notify_all();
+    return element.ret;
+  }
+
+  int custom = element.execute(h->kmip_ctx, h->bio);
+  if (custom != 0) {
+    // Positive = success, negative = error
+    // Convert positive to 0 for Ceph convention
+    element.ret = (custom > 0) ? 0 : custom;
+    element.done = true;
+    element.cond.notify_all();
+    /* kmip_bio_*_with_context functions allocate and free their own internal
+    * buffer, leaving ctx->buffer == NULL.  Restore the handle's encoding
+    * buffer before returning it to the pool so the next operation can reuse
+    * this TLS connection without a fresh handshake. */
+    kmip_set_buffer(h->kmip_ctx, h->encoding, h->buffer_total_size);
+    if (custom > 0)
+      release_kmip_handle(h);   // success: pool the connection for reuse
+    else
+      release_kmip_handle_now(h); // error: drop it (may be in bad state)
+    return element.ret;
+  }
+
   Attribute a[8], *ap;
   TextString nvalue[1], uvalue[1];
   Name nattr[1];
@@ -539,10 +533,6 @@ RGWKmipHandles::do_one_entry(RGWKMIPTransceiver &element)
   enum result_status rs;
   ResponseBatchItem *req;
 
-  if (!h) {
-    element.ret = -ERR_SERVICE_UNAVAILABLE;
-    return element.ret;
-  }
   memset(a, 0, sizeof *a);
   for (i = 0; i < (int)(sizeof a/sizeof *a); ++i)
     kmip_init_attribute(a+i);
@@ -593,6 +583,11 @@ RGWKmipHandles::do_one_entry(RGWKMIPTransceiver &element)
   kmip_init_request_batch_item(rbi);
   memset(u, 0, sizeof *u);
   rbi->request_payload = u;
+  if (element.operation == RGWKMIPTransceiver::LOCATE) {
+    ldout(cct, 10) << "LOCATE attributes: count=" << (ap - a)
+                  << " name_len="
+                  << (element.name ? strlen(element.name) : 0) << dendl;
+  }
   switch(element.operation) {
   case RGWKMIPTransceiver::CREATE:
     memset(ta, 0, sizeof *ta);
@@ -601,8 +596,18 @@ RGWKmipHandles::do_one_entry(RGWKMIPTransceiver &element)
     u->create_req->object_type = KMIP_OBJTYPE_SYMMETRIC_KEY;
     u->create_req->template_attribute = ta;
     rbi->operation = KMIP_OP_CREATE;
+    //rbi->request_payload = u->create_req;
     what = "create";
     break;
+
+  case RGWKMIPTransceiver::ENCRYPT:
+  case RGWKMIPTransceiver::DECRYPT:
+    /* Custom execute() already ran above; generic batch path is invalid. */
+    lderr(cct) << "KMIP ENCRYPT/DECRYPT reached generic batch path (internal error) op="
+              << element.operation << dendl;
+    element.ret = -EINVAL;
+    goto Done;
+
   case RGWKMIPTransceiver::GET:
     if (element.unique_id)
       u->get_req->unique_identifier = uvalue;
@@ -644,8 +649,8 @@ RGWKmipHandles::do_one_entry(RGWKMIPTransceiver &element)
     h->encoding = static_cast<uint8*>(h->kmip_ctx->calloc_func(h->kmip_ctx->state, h->buffer_blocks, h->buffer_block_size));
     if (!h->encoding) {
       lderr(cct) << "kmip buffer alloc failed: "
-	<< h->buffer_blocks
-	<< " * " << h->buffer_block_size << dendl;
+                << h->buffer_blocks
+                << " * " << h->buffer_block_size << dendl;
       element.ret = -ENOMEM;
       goto Done;
     }
@@ -710,9 +715,9 @@ RGWKmipHandles::do_one_entry(RGWKMIPTransceiver &element)
       LocateResponsePayload *pld = (LocateResponsePayload *)req->response_payload;
       char **list = static_cast<char **>(malloc(sizeof (char*) * (1 + pld->unique_identifiers_count)));
       for (i = 0; i < pld->unique_identifiers_count; ++i) {
-	list[i] = static_cast<char *>(malloc(pld->unique_identifiers[i].size+1));
-	memcpy(list[i], pld->unique_identifiers[i].value, pld->unique_identifiers[i].size);
-	list[i][pld->unique_identifiers[i].size] = 0;
+  list[i] = static_cast<char *>(malloc(pld->unique_identifiers[i].size+1));
+  memcpy(list[i], pld->unique_identifiers[i].value, pld->unique_identifiers[i].size);
+  list[i][pld->unique_identifiers[i].size] = 0;
       }
       list[i] = 0;
       element.outlist->strings = list;
@@ -724,16 +729,16 @@ RGWKmipHandles::do_one_entry(RGWKMIPTransceiver &element)
       memcpy(element.out, pld->unique_identifier->value, pld->unique_identifier->size);
       element.out[pld->unique_identifier->size] = 0;
       if (pld->object_type != KMIP_OBJTYPE_SYMMETRIC_KEY) {
-	lderr(cct) << "get: expected symmetric key got " << pld->object_type << dendl;
-	element.ret = -EINVAL;
-	goto Done;
+  lderr(cct) << "get: expected symmetric key got " << pld->object_type << dendl;
+  element.ret = -EINVAL;
+  goto Done;
       }
       KeyBlock *kp = static_cast<SymmetricKey *>(pld->object)->key_block;
       ByteString *bp;
       if (kp->key_format_type != KMIP_KEYFORMAT_RAW) {
-	lderr(cct) << "get: expected raw key format got  " << kp->key_format_type << dendl;
-	element.ret = -EINVAL;
-	goto Done;
+  lderr(cct) << "get: expected raw key format got  " << kp->key_format_type << dendl;
+  element.ret = -EINVAL;
+  goto Done;
       }
       KeyValue *kv = static_cast<KeyValue *>(kp->key_value);
       bp  = static_cast<ByteString*>(kv->key_material);
@@ -770,7 +775,7 @@ Done:
     kmip_free_response_message(h->kmip_ctx, resp_m);
   element.done = true;
   element.cond.notify_all();
-  release_kmip_handle(h);
+  release_kmip_handle_now(h);
   return element.ret;
 }
 
@@ -780,10 +785,16 @@ RGWKmipWorker::entry()
   std::unique_lock entry_lock{m.lock};
   ldout(m.cct, 10) << "kmip_worker[" << worker_id << "] start" << dendl;
   RGWKmipHandles handles{m.cct};
-  handles.start();
   while (!m.going_down) {
     if (m.requests.empty()) {
       m.cond.wait_for(entry_lock, std::chrono::seconds(MAXIDLE));
+      /* If we woke from the timeout (still no work), proactively drop a
+       * cached TLS connection that's been idle past MAXIDLE.  Lazy eviction
+       * in get_kmip_handle() alone wouldn't fire until a fresh request shows
+       * up, so possibly never, on idle workers. */
+      if (m.requests.empty()) {
+        handles.evict_if_stale();
+      }
       continue;
     }
     auto iter = m.requests.begin();
@@ -794,6 +805,7 @@ RGWKmipWorker::entry()
     entry_lock.unlock();
     (void) handles.do_one_entry(node->details);
     delete node;
+    entry_lock.lock();
   }
   for (;;) {
     if (m.requests.empty()) break;
@@ -807,7 +819,6 @@ RGWKmipWorker::entry()
     node->details.cond.notify_all();
     delete node;
   }
-  handles.stop();
   ldout(m.cct, 10) << "kmip_worker[" << worker_id << "] finish" << dendl;
   return nullptr;
 }
