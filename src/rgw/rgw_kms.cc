@@ -1223,6 +1223,15 @@ int reconstitute_actual_key_from_kms(
       cache_key_id = string_cat_reserve(
           key_id, "T", calc_hash_sha256(wrapped_key).to_str());
     }
+  } else if (RGW_SSE_KMS_BACKEND_TESTING == kms_backend) {
+    // The testing backend uses keysel to derive per-object keys with
+    // the same keyid.
+    const std::string key_selector =
+        get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYSEL);
+    if (!key_selector.empty()) {
+      cache_key_id = string_cat_reserve(
+          key_id, "S", calc_hash_sha256(key_selector).to_str());
+    }
   }
 
   const auto fetch = [&](std::string& out_secret) -> int {
