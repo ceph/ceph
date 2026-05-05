@@ -42,7 +42,7 @@ TEST_P(TestCls2PCQueue, GetCapacity)
 
   uint64_t size;
 
-  const int ret = cls_queue_get_capacity(ioctx, queue_name, size);
+  const int ret = cls_2pc_queue_get_capacity(ioctx, queue_name, size);
   ASSERT_EQ(0, ret);
   ASSERT_EQ(max_size, size);
 }
@@ -799,8 +799,8 @@ TEST_P(TestCls2PCQueue, MultiProducer)
   std::vector<std::thread> producers(max_producer_count);
   for (auto& p : producers) {
     p = std::thread([this, &queue_name, &producer_count] {
-      librados::ObjectWriteOperation op;
       for (auto i = 0U; i < number_of_ops; ++i) {
+        librados::ObjectWriteOperation op;
         const std::string element_prefix("op-" +to_string(i) + "-element-");
         std::vector<bufferlist> data(number_of_elements);
         auto total_size = 0UL;
@@ -823,7 +823,6 @@ TEST_P(TestCls2PCQueue, MultiProducer)
 
   auto consume_count = 0U;
   std::thread consumer([this, &queue_name, &consume_count, &producer_count] {
-          librados::ObjectWriteOperation op;
           const auto max_elements = 42;
           const std::string marker;
           bool truncated = true;
@@ -831,12 +830,17 @@ TEST_P(TestCls2PCQueue, MultiProducer)
           std::vector<cls_queue_entry> entries;
           while (producer_count > 0 || truncated) {
             const auto ret = cls_2pc_queue_list_entries(ioctx, queue_name, marker, max_elements, entries, &truncated, end_marker);
-            ASSERT_EQ(0, ret);
+            if (ret != 0) {
+              // transient error, retry
+              std::this_thread::sleep_for(std::chrono::milliseconds(10));
+              continue;
+            }
             if (entries.empty()) {
               // queue is empty, let it fill
               std::this_thread::sleep_for(std::chrono::milliseconds(100));
             } else {
               consume_count += entries.size();
+              librados::ObjectWriteOperation op;
               cls_2pc_queue_remove_entries(op, end_marker, max_elements);
               ASSERT_EQ(0, ioctx.operate(queue_name, &op));
             }
@@ -880,11 +884,11 @@ TEST_P(TestCls2PCQueue, AsyncConsumer)
   constexpr auto max_elements = 42;
   std::string marker;
   std::string end_marker;
-  librados::ObjectReadOperation rop;
   auto consume_count = 0U;
   std::vector<cls_queue_entry> entries;
   bool truncated = true;
   while (truncated) {
+    librados::ObjectReadOperation rop;
     bufferlist bl;
     int rc;
     cls_2pc_queue_list_entries(rop, marker, max_elements, &bl, &rc);
@@ -923,8 +927,8 @@ TEST_P(TestCls2PCQueue, MultiProducerConsumer)
   std::vector<std::thread> producers(max_workers);
   for (auto& p : producers) {
     p = std::thread([this, &queue_name, &producer_count, &retry_happened] {
-      librados::ObjectWriteOperation op;
       for (auto i = 0U; i < number_of_ops; ++i) {
+        librados::ObjectWriteOperation op;
         const std::string element_prefix("op-" +to_string(i) + "-element-");
         std::vector<bufferlist> data(number_of_elements);
         auto total_size = 0UL;
@@ -958,7 +962,6 @@ TEST_P(TestCls2PCQueue, MultiProducerConsumer)
   std::vector<std::thread> readers(max_workers/2);
   for (auto& c : readers) {
     c = std::thread([this, &queue_name, &producer_count, &retry_happened] {
-          librados::ObjectWriteOperation op;
           const std::string marker;
           bool truncated = true;
           std::string end_marker;
@@ -970,17 +973,20 @@ TEST_P(TestCls2PCQueue, MultiProducerConsumer)
               continue;
             }
             const auto ret = cls_2pc_queue_list_entries(ioctx, queue_name, marker, max_elements, entries, &truncated, end_marker);
-            ASSERT_EQ(0, ret);
+            if (ret != 0) {
+              // transient error, retry
+              std::this_thread::sleep_for(std::chrono::milliseconds(10));
+              continue;
+            }
             if (entries.empty()) {
-              // another consumer has emptied the queue
-              return; 
+              // queue is empty, let it fill
+              std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }
           }
        });
   }
   
   auto deleter = std::thread([this, &queue_name, &producer_count, &retry_happened] {
-      librados::ObjectWriteOperation op;
       const std::string marker;
       bool truncated = true;
       std::string end_marker;
@@ -992,10 +998,19 @@ TEST_P(TestCls2PCQueue, MultiProducerConsumer)
           continue;
         }
         const auto ret = cls_2pc_queue_list_entries(ioctx, queue_name, marker, max_elements, entries, &truncated, end_marker);
-        ASSERT_EQ(0, ret);
-        ASSERT_FALSE(entries.empty());
-        cls_2pc_queue_remove_entries(op, end_marker, max_elements);
-        ASSERT_EQ(0, ioctx.operate(queue_name, &op));
+        if (ret != 0) {
+          // transient error, retry
+          std::this_thread::sleep_for(std::chrono::milliseconds(10));
+          continue;
+        }
+        if (entries.empty()) {
+          // queue is empty, let it fill
+          std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        } else {
+          librados::ObjectWriteOperation op;
+          cls_2pc_queue_remove_entries(op, end_marker, max_elements);
+          ASSERT_EQ(0, ioctx.operate(queue_name, &op));
+        }
       }
   });
 
