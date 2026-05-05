@@ -1191,6 +1191,9 @@ COMMAND("osd pool create "
 	"name=pg_num_min,type=CephInt,range=0,req=false "
 	"name=pg_num_max,type=CephInt,range=0,req=false "
 	"name=autoscale_mode,type=CephChoices,strings=on|off|warn,req=false "
+	"name=k,type=CephInt,range=2,req=false "
+	"name=m,type=CephInt,range=1,req=false "
+	"name=num_zones,type=CephInt,range=1,req=false "
 	"name=bulk,type=CephBool,req=false "
 	"name=target_size_bytes,type=CephInt,range=0,req=false "
 	"name=target_size_ratio,type=CephFloat,range=0.0,req=false "
@@ -1285,6 +1288,7 @@ COMMAND("osd pool get "
           "|target_size_ratio"
           "|use_gmt_hitset"
           "|write_fadvise_dontneed",
+          "|num_zones",
 	"get pool parameter <var>", "osd", "r")
 COMMAND("osd pool set "
 	"name=pool,type=CephPoolname "
