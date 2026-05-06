@@ -69,6 +69,10 @@ class SQLiteDB : public DB, virtual public DBOp {
     int ListAllBuckets(const DoutPrefixProvider *dpp, DBOpParams *params) override;
     int ListAllUsers(const DoutPrefixProvider *dpp, DBOpParams *params) override;
     int ListAllObjects(const DoutPrefixProvider *dpp, DBOpParams *params) override;
+    int list_user_ids(const DoutPrefixProvider* dpp,
+              const std::string& marker, int max,
+              std::list<std::string>& ids,
+              bool* truncated) override;
 };
 
 class SQLObjectOp : public ObjectOp {
