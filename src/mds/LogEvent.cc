@@ -44,6 +44,10 @@
 #include "events/ESegment.h"
 #include "events/ELid.h"
 
+#include "events/EQuarantineStart.h"
+#include "events/EQuarantineFinish.h"
+#include "events/EQuarantineCancel.h"
+
 #define dout_context g_ceph_context
 
 
@@ -209,6 +213,15 @@ std::unique_ptr<LogEvent> LogEvent::decode_event(bufferlist::const_iterator& p, 
     break;
   case EVENT_LID:
     le = std::make_unique<ELid>();
+    break;
+  case EVENT_QUARANTINESTART:
+    le = std::make_unique<EQuarantineStart>();
+    break;
+  case EVENT_QUARANTINEFINISH:
+    le = std::make_unique<EQuarantineFinish>();
+    break;
+  case EVENT_QUARANTINECANCEL:
+    le = std::make_unique<EQuarantineCancel>();
     break;
   default:
     generic_dout(0) << "uh oh, unknown log event type " << type << " length " << length << dendl;
