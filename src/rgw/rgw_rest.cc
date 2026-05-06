@@ -736,7 +736,12 @@ void abort_early(req_state *s, RGWOp* op, int err_no,
        *   x-amz-error-detail-Key: foo
        */
       end_header(s, op, NULL, error_content.size(), false, true);
-      RESTFUL_IO(s)->send_body(error_content.c_str(), error_content.size());
+      try {
+        RESTFUL_IO(s)->send_body(error_content.c_str(), error_content.size());
+      } catch (rgw::io::Exception& e) {
+        ldpp_dout(s, 0) << "ERROR: abort_early: send_body() returned err="
+                        << e.what() << dendl;
+      }
     } else {
       end_header(s, op);
     }
