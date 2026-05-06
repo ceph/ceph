@@ -7828,6 +7828,7 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
 			 cct->_conf.get_val<bool>("osd_pool_default_crimson"),
 			 force_create,
 			 std::nullopt,
+			 false, // enable_ec_optimizations
 			 &ss);
 
   if (ret < 0) {
@@ -8495,6 +8496,7 @@ int OSDMonitor::prepare_new_pool(string& name,
 				 bool crimson,
                  bool force_create,
 				 const std::optional<int64_t> source_pool_id,
+				 bool enable_ec_optimizations,
 				 ostream *ss)
 {
   if (crimson && pg_autoscale_mode.empty()) {
@@ -8768,6 +8770,14 @@ int OSDMonitor::prepare_new_pool(string& name,
       (pool_type == pg_pool_t::TYPE_REPLICATED ||
        (pi->allows_ecoptimizations() && !crimson))) {
     pi->set_flag(pg_pool_t::FLAG_OMAP);
+  }
+
+  if (enable_ec_optimizations) {
+    // User requested EC optimizations via command line
+    if (auto r = enable_pool_ec_optimizations(*pi, true); !r) {
+      *ss << r.error().message;
+      return r.error().error;
+    }
   }
 
   if (source_pool_id) {
@@ -9504,7 +9514,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       // Pools with allow_ec_optimizations set store pg_temp in a different
       // order to change the primary selection algorithm without breaking
       // old clients. Modify any existing pg_temp for the pool now.
-      // This is only needed when switching on optimisations after creation.
+      // This is only needed when switching on optimizations after creation.
       for (auto pg_temp = osdmap.pg_temp->begin();
            pg_temp != osdmap.pg_temp->end();
            ++pg_temp) {
@@ -14447,12 +14457,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       cct->_conf.get_val<bool>("osd_pool_default_crimson");
     bool force_create = false;
     cmd_getval(cmdmap, "force_pg_limit", force_create);
+
+    bool enable_ec_optimizations = cmd_getval_or<bool>(cmdmap, "enable_ec_optimizations", false);
+
     err = prepare_new_pool(poolstr,
-			   -1, // default crush rule
-			   rule_name,
-			   pg_num, pgp_num, pg_num_min, pg_num_max,
+                           -1, // default crush rule
+                           rule_name,
+                           pg_num, pgp_num, pg_num_min, pg_num_max,
                            repl_size, target_size_bytes, target_size_ratio,
-			   erasure_code_profile, pool_type,
+                           erasure_code_profile, pool_type,
                            (uint64_t)expected_num_objects,
                            fast_read,
 			   pg_autoscale_mode,
@@ -14460,6 +14473,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 			   crimson,
                force_create,
 			   source_pool_id,
+			   enable_ec_optimizations,
 			   &ss);
     if (err < 0) {
       switch(err) {
