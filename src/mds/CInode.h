@@ -65,6 +65,7 @@ class EMetaBlob;
 class MClientCaps;
 struct MutationImpl;
 struct MDRequestImpl;
+class MDSAuthCaps;
 typedef boost::intrusive_ptr<MutationImpl> MutationRef;
 typedef boost::intrusive_ptr<MDRequestImpl> MDRequestRef;
 
@@ -527,6 +528,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 				bool xattr = false, bool snap = false);
 
   void pop_and_dirty_projected_inode(LogSegmentRef const& ls, const MutationRef& mut);
+  void pop_and_apply_projected_inode(const MutationRef& mut);
 
   version_t get_projected_version() const {
     if (projected_nodes.empty())
@@ -680,9 +682,25 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   bool is_symlink() const { return get_inode()->is_symlink(); }
   bool is_dir() const     { return get_inode()->is_dir(); }
   bool is_quiesced() const;
+  bool is_quarantined() const;
+  bool is_under_quarantine() const;
+  bool is_being_quarantined() const {
+    return (quarantine_op == QUARANTINE_ADD);
+  }
   bool will_block_for_quiesce(const MDRequestRef& mdr);
 
   bool is_head() const { return last == CEPH_NOSNAP; }
+
+  void set_being_quarantined(unsigned qtine_op) {
+     quarantine_op = qtine_op;
+  }
+
+  void clear_being_quarantined() {
+    quarantine_op = QUARANTINE_NONE;
+  }
+
+  // set remote inode
+  void set_remote_ino(inodeno_t ino) { _get_inode()->remote_ino = ino; }
 
   // note: this overloads MDSCacheObject
   bool is_ambiguous_auth() const {
@@ -896,6 +914,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   bool multiple_nonstale_caps();
 
   int get_caps_quiesce_mask() const;
+  int get_caps_quarantine_mask(bool has_qtine_auth_caps) const;
 
   bool is_any_caps() { return !client_caps.empty(); }
   bool is_any_nonstale_caps() { return count_nonstale_caps(); }
@@ -935,8 +954,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   // caps allowed
   int get_caps_liked() const;
   int get_caps_allowed_ever() const;
-  int get_caps_allowed_by_type(int type) const;
-  int get_caps_careful() const;
+  int get_caps_allowed_by_type(bool has_qtine_auth_caps, int type) const;
+  int get_caps_careful(bool has_qtine_auth_caps) const;
   int get_xlocker_mask(client_t client) const;
   int get_caps_allowed_for_client(Session *s, Capability *cap,
 				  const mempool_inode *file_i) const;
@@ -1272,6 +1291,8 @@ private:
   std::unique_ptr<scrub_info_t> scrub_infop;
   bool dirty_remote_dirfrag_scrubbed = false;
   /** @} Scrubbing and fsck */
+
+  unsigned quarantine_op = QUARANTINE_NONE;
 };
 
 std::ostream& operator<<(std::ostream& out, const CInode& in);
