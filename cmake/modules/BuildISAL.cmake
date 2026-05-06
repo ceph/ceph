@@ -36,10 +36,12 @@ function(build_isal)
   ExternalProject_Add(isal_ext
     SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/isa-l"
     CONFIGURE_COMMAND ./autogen.sh COMMAND ${configure_cmd}
-    BUILD_COMMAND ${NO_DESTDIR_COMMAND} make -j3
+    BUILD_COMMAND ${NO_DESTDIR_COMMAND} make -j3 libisal.la
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS ${isal_LIBRARY}
-    INSTALL_COMMAND ${NO_DESTDIR_COMMAND} make install
+    INSTALL_COMMAND ${NO_DESTDIR_COMMAND} make install-libLTLIBRARIES
+                                          install-pkgincludeHEADERS
+                                          install-nobase_includeHEADERS
     UPDATE_COMMAND ""
     LOG_CONFIGURE ON
     LOG_BUILD ON
