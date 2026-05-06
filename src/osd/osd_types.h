@@ -2333,6 +2333,7 @@ struct pg_stat_t {
   utime_t last_active;  // state & PG_STATE_ACTIVE
   utime_t last_peered;  // state & PG_STATE_ACTIVE || state & PG_STATE_PEERED
   utime_t last_clean;   // state & PG_STATE_CLEAN
+  utime_t last_degraded; // state & (PG_STATE_DEGRADED | PG_STATE_UNDERSIZED)
   utime_t last_unstale; // (state & PG_STATE_STALE) == 0
   utime_t last_undegraded; // (state & PG_STATE_DEGRADED) == 0
   utime_t last_fullsized; // (state & PG_STATE_UNDERSIZED) == 0

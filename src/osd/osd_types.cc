@@ -2947,6 +2947,7 @@ void pg_stat_t::dump(Formatter *f) const
   f->dump_stream("last_active") << last_active;
   f->dump_stream("last_peered") << last_peered;
   f->dump_stream("last_clean") << last_clean;
+  f->dump_stream("last_degraded") << last_degraded;
   f->dump_stream("last_became_active") << last_became_active;
   f->dump_stream("last_became_peered") << last_became_peered;
   f->dump_stream("last_unstale") << last_unstale;
@@ -3094,7 +3095,7 @@ bool operator==(const pg_scrubbing_status_t& l, const pg_scrubbing_status_t& r)
 
 void pg_stat_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(30, 22, bl);
+  ENCODE_START(31, 22, bl);
   encode(version, bl);
   encode(reported_seq, bl);
   encode(reported_epoch, bl);
@@ -3157,6 +3158,7 @@ void pg_stat_t::encode(ceph::buffer::list &bl) const
   encode(scrub_sched_status.m_osd_to_respond, bl);
   encode(scrub_sched_status.m_ordinal_of_requested_replica, bl);
   encode(scrub_sched_status.m_num_to_reserve, bl);
+  encode(last_degraded, bl);
 
   ENCODE_FINISH(bl);
 }
@@ -3165,7 +3167,7 @@ void pg_stat_t::decode(ceph::buffer::list::const_iterator &bl)
 {
   bool tmp;
   uint32_t old_state;
-  DECODE_START(30, bl);
+  DECODE_START(31, bl);
   decode(version, bl);
   decode(reported_seq, bl);
   decode(reported_epoch, bl);
@@ -3267,6 +3269,11 @@ void pg_stat_t::decode(ceph::buffer::list::const_iterator &bl)
     } else {
       scrub_sched_status.m_num_to_reserve = 0;
     }
+    if (struct_v >= 31) {
+      decode(last_degraded, bl);
+    } else {
+      last_degraded = last_clean;
+    }
   }
   DECODE_FINISH(bl);
 }
@@ -3290,6 +3297,7 @@ list<pg_stat_t> pg_stat_t::generate_test_instances()
   a.last_unstale = utime_t(1002, 5);
   a.last_undegraded = utime_t(1002, 7);
   a.last_fullsized = utime_t(1002, 8);
+  a.last_degraded = utime_t(1002, 9);
   a.log_start = eversion_t(1, 4);
   a.ondisk_log_start = eversion_t(1, 5);
   a.created = 6;
@@ -3328,6 +3336,7 @@ list<pg_stat_t> pg_stat_t::generate_test_instances()
   a.acting_primary = 124;
   a.blocked_by.push_back(155);
   a.blocked_by.push_back(156);
+  a.last_degraded = utime_t(1005, 1);
   o.push_back(pg_stat_t(a));
 
   return o;
@@ -3387,7 +3396,8 @@ bool operator==(const pg_stat_t& l, const pg_stat_t& r)
     l.objects_scrubbed == r.objects_scrubbed &&
     l.scrub_duration == r.scrub_duration &&
     l.objects_trimmed == r.objects_trimmed &&
-    l.snaptrim_duration == r.snaptrim_duration;
+    l.snaptrim_duration == r.snaptrim_duration &&
+    l.last_degraded == r.last_degraded;
 }
 
 // -- store_statfs_t --

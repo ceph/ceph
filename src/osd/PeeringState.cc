@@ -4498,6 +4498,17 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
     if ((info.stats.state & PG_STATE_UNDERSIZED) == 0)
       info.stats.last_fullsized = now;
 
+    // check if the PG is vulnerable
+    if (info.stats.state & (PG_STATE_DEGRADED|PG_STATE_UNDERSIZED)) {
+      // set last_degraded only if we are entering a new
+      // failure state and if it's older than last_clean
+      if (info.stats.last_degraded <= info.stats.last_clean) {
+        info.stats.last_degraded = now;
+      }
+    }
+    // update pre_publish so the change is sent immediately
+    pre_publish.last_degraded = info.stats.last_degraded;
+
     psdout(15) << "publish_stats_to_osd " << pre_publish.reported_epoch
 	       << ":" << pre_publish.reported_seq << dendl;
     return std::make_optional(std::move(pre_publish));

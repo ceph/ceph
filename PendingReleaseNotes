@@ -115,6 +115,12 @@
   invalidates entries when underlying cluster maps are updated. The cache is enabled
   by default. The previous `mgr_ttl_cache_expire_seconds` configuration option has
   been removed and replaced with `mgr_map_cache_enabled` (default: true).
+* The ``last_degraded`` timestamp is added to the ``pg_stat_t`` structure to
+  track the initial point of redundancy loss when a PG enters an undersized or
+  degraded state. This timestamp is latched until the PG returns to a clean
+  state and a subsequent redundancy loss occurs. Used in conjunction with
+  ``last_clean``, the ``last_degraded`` timestamp enables the calculation of
+  data vulnerability and durability scores.
 
 >=20.0.0
 
