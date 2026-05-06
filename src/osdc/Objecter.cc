@@ -3042,19 +3042,47 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
       if (!tpi->is_migration_target()) {
         // pool migration has finished
         migrated = true;
-      } else if (pi->has_pg_migrated(actual_pgid)) {
-        // PG has finished migration
-        migrated = true;
-      } else if (pi->is_pg_migrating(actual_pgid)) {
-        // PG is migrating - check watermark
-        const auto& iter = pool_migration_watermarks.find(actual_pgid);
-        if (iter != pool_migration_watermarks.end()) {
-          if (t->get_hobj(pgid) < iter->second) {
-            // object has been migrated
-            migrated = true;
+      } else {
+        if (*tpi->migration_src != t->target_oloc.pool) {
+          ldout(cct,30) << __func__ << "  BILL cascaded migration" << dendl;
+          // cascaded pool migration, redirect to latest source pool
+          // first, then work out the state of this migration
+          const pg_pool_t *spi = osdmap->get_pg_pool(*tpi->migration_src);
+          if (!spi) {
+            t->osd = -1;
+            return RECALC_OP_TARGET_POOL_DNE;
           }
+          if (spi->has_flag(pg_pool_t::FLAG_EIO)) {
+            return RECALC_OP_TARGET_POOL_EIO;
+          }
+          t->target_oloc.pool = *tpi->migration_src;
+          pi = spi;
+          pg_num = pi->get_pg_num();
+          pg_num_mask = pi->get_pg_num_mask();
+          // Recalculate pgid for the target pool
+          int ret = osdmap->object_locator_to_pg(t->target_oid, t->target_oloc,
+                                                 pgid);
+          if (ret == -ENOENT) {
+            t->osd = -1;
+            return RECALC_OP_TARGET_POOL_DNE;
+          }
+          actual_ps = ceph_stable_mod(pgid.ps(), pg_num, pg_num_mask);
+          actual_pgid = pg_t(actual_ps, pgid.pool());
         }
-      } // else: PG has not started migration
+        if (pi->has_pg_migrated(actual_pgid)) {
+          // PG has finished migration
+          migrated = true;
+        } else if (pi->is_pg_migrating(actual_pgid)) {
+          // PG is migrating - check watermark
+          const auto& iter = pool_migration_watermarks.find(actual_pgid);
+          if (iter != pool_migration_watermarks.end()) {
+            if (t->get_hobj(pgid) < iter->second) {
+              // object has been migrated
+              migrated = true;
+            }
+          }
+        } // else: PG has not started migration
+      }
       if (migrated) {
         t->target_oloc.pool = *pi->migration_target;
         pi = tpi;
