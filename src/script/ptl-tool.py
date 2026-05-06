@@ -436,11 +436,11 @@ def format_parity_row_md(left_sha, left_msg, right_sha, right_msg, is_missing=Fa
     if is_extra:
         right_col = "**<<<< EXTRA IN BACKPORT >>>>**"
     else:
-        right_prefix_clean = right_prefix.strip()
-        prefix = f"**{right_prefix_clean}** " if right_prefix_clean else ""
-        right_col = f"{prefix}{right_sha} {right_msg}"
+        right_col = f"{right_sha} {right_msg}"
 
-    return f"| {left_col} | {right_col} |"
+    source_pr = f"**{right_prefix.strip()}**" if right_prefix.strip() else ""
+
+    return f"| {left_col} | {source_pr} | {right_col} |"
 
 def make_pipe(content, fds_to_close, threads):
     """
@@ -693,8 +693,8 @@ class CommitParityCheck(BaseAuditCheck):
             visualizer_lines.append("COMMIT PARITY VISUALIZER")
             visualizer_lines.append("=" * 80)
             
-            visualizer_md_lines.append(f"| BACKPORT PR #{pr} | SOURCE PR / STATUS |")
-            visualizer_md_lines.append("|---|---|")
+            visualizer_md_lines.append(f"| BACKPORT PR #{pr} | SOURCE PR | SOURCE STATUS |")
+            visualizer_md_lines.append("|---|---|---|")
     
             bp_to_source = {}
             for pr_name, commit_list in pr_mapping.items():

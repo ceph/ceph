@@ -2,7 +2,7 @@ Submitting Patches to Ceph - Backports
 ======================================
 
 Most likely you're reading this because you intend to submit a GitHub pull
-request ("PR") targeting one of the stable branches ("nautilus", etc.) at
+request ("PR") targeting one of the stable branches ("tentacle", etc.) at
 https://github.com/ceph/ceph.
 
 Before you open that PR, please read this entire document or, at the very least,
@@ -15,6 +15,8 @@ the following two sections: `General principles`_ and `Cherry-picking rules`_.
 
 General principles
 ------------------
+
+.. note:: There are many automations that exist for backports. If you read nothing else in this document, please read `ceph-backport`_ section for automating backport creation.
 
 To help the people who will review your backport, please state either in the
 backport PR, or in the backport tracker issue, or in the ``main`` branch tracker issue:
@@ -36,11 +38,14 @@ ages, the importance of following these general principles rises.
 Cherry-picking rules
 --------------------
 
+**Note: These rules are strictly enforced by the `releng-audit` GitHub Actions CI. Failure to adhere to them will block your PR.**
+
 The following rules, which have been codified from "best practices" developed
 over years of backporting, apply to the actual backport implementation:
 
 * all fixes should land in ``main`` first
 * commits to stable branches should be cherry-picked from ``main``
+* if a commit is entirely specific to the backport and *not* cherry-picked from ``main``, its commit message summary must begin with the target branch name (e.g., ``squid: fix compilation issue``).
 * before starting to cherry-pick a set of commits from ``main``, grep the ``main`` git history for the SHA1 of each ``main`` commit (using ``git log --grep``) to check for follow-up fixes. Include any follow-up fixes found in the set of commits to be cherry-picked.
 * when backporting a ``main`` PR to a stable branch, double-check that the backport PR contains cherry-picks of all of the ``main`` PR's commits. If any commit needs to be omitted, declare and explain this in the PR.
 * cherry-picks must be done using ``git cherry-pick -x``
@@ -111,9 +116,16 @@ the tracker issue. For example, if the PR number is 99999::
 
     Pull request ID: 99999
 
-Once the ``main`` PR has been merged, after checking that the change really needs
-to be backported and the Backport field has been populated, change the ``main``
-branch tracker issue's ``Status`` field to "Pending Backport".
+In general, you should stop here with manually managing the state of the
+tracker tickets. If the ``Pull request ID`` field of the ``main`` tracker is
+up-to-date, the ``redmine-upkeep`` Github CI will automatically detect a merge
+and move your tracker to the ``Pending backport`` state as long as the
+``Backport`` field has release branches in it. Otherwise the ticket will be
+moved to ``Resolved``.
+
+However, if that CI fails to run for whatever reason, you may manually correct
+the ticket by setting the ``main`` branch tracker issue's ``Status`` field to
+"Pending Backport"::
 
     Status: Pending Backport
 
@@ -121,39 +133,27 @@ If you do not have sufficient permissions to modify any field of the tracker
 issue, just add a comment describing what changes you would like to make.
 Someone with permissions will make the necessary modifications on your behalf.
 
-Authors of pull requests are responsible for creating associated backport pull
-requests. As long as you have sufficient permissions at
-https://tracker.ceph.com, you can `create Backport tracker issues` and `stage
-backports`_ yourself. Read these linked sections to learn how to create
-backport tracker issues and how to stage backports: 
-
 .. _`create backport tracker issues`:
 .. _`backport tracker issue`:
 
 Creating Backport tracker issues
 --------------------------------
 
-To track backporting efforts, "backport tracker issues" can be created from
-a parent "``main`` branch tracker issue". The ``main`` branch tracker issue is described in the
-previous section, `Tracker workflow`_. This section focuses the backport tracker
-issue.
+To track backporting efforts, "backport tracker issues" can be created from a
+parent ``main`` branch tracker issue. The ``main`` branch tracker issue is
+described in the previous section, `Tracker workflow`_. This section focuses
+the backport tracker issue.
 
-Once the entire `Tracker workflow`_ has been completed for the ``main`` branch tracker issue,
-issues can be created in the backport tracker issue for tracking the backporting work.
-
-Under ordinary circumstances, the developer who merges the ``main`` PR will flag
-the ``main`` branch tracker issue for backport by changing the Status to "Pending
-Backport". 
-
-You might be tempted to forge ahead and create the backport issues yourself.
-Please don't do that - it is difficult (bordering on impossible) to get all the
-fields correct when creating backport issues manually, and why even try when
-there is a script that gets it right every time? Setting up the script requires
-a small up-front time investment. Once that is done, creating backport issues
-becomes trivial.
+When a ``main`` branch tracker issue is in the ``Pending Backport`` state,
+another Github CI running ``backport-create-issue`` will trigger and create the
+backport tickets to be associated with the ``main`` tracker. This workflow will
+auto-populate the required metadata for the tracker tickets to track the
+backports.
 
 The backport-create-issue script
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. warning:: It is discouraged to run this script yourself. However, sometimes CI checks fail to run, so please review for those circumstances.
 
 The script used to create backport issues is located at
 ``src/script/backport-create-issue`` in the ``main`` branch. Though there might be
@@ -178,21 +178,21 @@ dependency, `python-redmine`_, can be obtained from PyPi::
 
 Then, try to run the script::
 
-    backport-create-issue --help
+    python3 -c "$(git show main:src/script/backport-create-issue)" --help
 
 This should produce a usage message.
 
 Finally, run the script to actually create the Backport issues.
 For example, if the tracker issue number is 55555::
 
-    backport-create-issue --user <tracker_username> --password <tracker_password> 55555
+    python3 -c "$(git show main:src/script/backport-create-issue)" --user <tracker_username> --password <tracker_password> 55555
 
 The script needs to know your https://tracker.ceph.com credentials in order to
 authenticate to Redmine. In lieu of providing your literal username and password
 on the command line, you could also obtain a REST API key ("My account" -> "API
 access key"), put it in ``~/.redmine_key`` and run the script like so::
 
-    backport-create-issue 55555
+    python3 -c "$(git show main:src/script/backport-create-issue)" 55555
 
 
 .. _`stage backports`:
@@ -212,6 +212,8 @@ oversight). You might even forget to update the `backport tracker issue`_.
 In the past, much time was lost, and much frustration caused, by the necessity
 of staging backports manually. Now, fortunately, there is a script available
 which automates the process and takes away most of the guesswork.
+
+.. _`ceph-backport`:
 
 The ceph-backport.sh script
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -294,13 +296,23 @@ For a quick reference on CLI, that contains above information, you can run::
 
     ceph-backport.sh --usage
 
+Milestones and Labels
+"""""""""""""""""""""
+
+The ``ceph-backport.sh`` script automates the process of setting the Milestone
+tag to the stable release the backport PR is targeting. 
+
+PR labels (such as component labels) are added automatically by automations;
+the backport author does not need to do anything manually.
+
+
 Conflict resolution
 ^^^^^^^^^^^^^^^^^^^
 
-If git reports conflicts, the script will abort to allow you to resolve the
-conflicts manually.
+**Automated Conflict Simulation:** The `releng-audit` CI will perform a dry-run of the cherry-pick and compare the resulting tree to your PR. If you make *any* manual changes (even to fix a bug introduced by the backport), you **must** document it in the ``Conflicts:`` block. If a legitimate manual resolution is flagged as an unapproved deviation, any user with "maintain" or "admin" rights on the repository, or a member of the ``@ceph/ceph-release-manager`` team, must comment ``/audit override`` or manually apply the ``releng-audit-override`` label on the PR to bypass the simulation check.
 
-Once the conflicts are resolved, complete the cherry-pick ::
+If git reports conflicts, the script will abort to allow you to resolve the
+conflicts manually. Once the conflicts are resolved, complete the cherry-pick ::
 
     git cherry-pick --continue
 
@@ -312,6 +324,7 @@ apply cleanly, you will need to uncomment the entire "Conflicts" section
 of the commit message before committing the cherry-pick. You can also
 include commentary on what the conflicts were and how you resolved
 them. For example::
+
 
     Conflicts:
             src/foo/bar.cc
@@ -347,17 +360,40 @@ original commit message.
 If you use `ceph-backport.sh` for your backport creation (which is recommended),
 read up at the end of `The ceph-backport.sh script`_ on how to continue from here.
 
-Labelling of backport PRs
--------------------------
+Automated Audit Workflow
+------------------------
 
-Once the backport PR is open, the first order of business is to set the
-Milestone tag to the stable release the backport PR is targeting. For example,
-if the PR is targeting "nautilus", set the Milestone tag to "nautilus".
+Once your backport PR is open, it will be automatically audited by the `releng-audit` GitHub Actions CI. This workflow enforces backport rules and ensures consistency between GitHub and Redmine.
 
-Next, check which component label was applied to the ``main`` PR corresponding to
-this backport, and double-check that that label is applied to the backport PR as
-well. For example, if the ``main`` PR carries the component label "core", the
-backport PR should also get that label.
+The audit performs the following checks:
+
+* **Merge Conflict:** Verifies that the PR can merge cleanly into the target base branch without git conflicts.
+* **Commit Parity:** Ensures all commits from the original ``main`` PR(s) are present in the backport. It flags missing commits, unmerged cherry-picks, or invalid commit message formats.
+* **Conflict Simulation:** Dry-runs the cherry-pick sequence to dynamically verify conflict resolutions. It will fail if there are undocumented or unapproved deviations from a clean cherry-pick.
+* **Redmine Linkage:** Checks that the backport PR is properly linked to its Redmine backport tracker, and that the original ``main`` PR is correctly linked to the parent tracker ticket.
+
+**Addressing Failures (PR Author Workflow):**
+
+If the audit fails, the CI bot will post a review detailing the issues and apply the ``releng-audit-fail`` label. 
+
+* **Fix the issues:** Address the failures as guided by the bot's review (e.g., fix Redmine tracker links, rebase your branch, fix commit messages, or adjust the code to match upstream patches).
+* **Retest:** When you are ready for a new audit, **remove the ``releng-audit-fail`` label** or comment ``/audit retest`` on the PR. 
+* **Note:** You cannot manually apply the ``releng-audit-pass`` or ``releng-audit-fail`` labels; they are strictly managed by the CI bot and your manual changes to them will be rejected.
+
+**Bypassing the Audit (Component Lead / Release Manager Workflow):**
+
+In some cases, the audit may flag a legitimate manual conflict resolution or an intentional deviation in the code.
+
+* If a deviation is intentional, documented in the commit message, and approved, authorized users (repository admins/maintainers or members of the ``@ceph/ceph-release-manager`` team) can bypass the check.
+* To apply the bypass, comment ``/audit override`` on the PR or manually apply the ``releng-audit-override`` label.
+
+**Audit Labels Explained:**
+
+* ``releng-audit-pass``: Applied automatically by the bot when all checks pass.
+* ``releng-audit-fail``: Applied automatically by the bot when checks fail. Removing this label triggers a new audit.
+* ``releng-audit-override``: Applied manually by authorized leads/managers to override an audit failure.
+
+The bot will leave a failing CI check if a backport PR does not have either ``releng-audit-pass`` or ``releng-audit-override``.
 
 .. _`backport PR reviewing`:
 .. _`backport PR testing`:
@@ -368,6 +404,8 @@ Reviewing, testing, and merging of backport PRs
 
 Once your backport PR is open, it will be reviewed and tested. When the PR has
 been reviewed and tested, it will be merged.
+
+* **Prerequisite:** The PR must have the ``releng-audit-pass`` or ``releng-audit-override`` label applied before it is eligible for merging.
 
 If you would like to facilitate this process, you can solicit reviews and run
 integration tests on the PR. In this case, add comments to the PR describing the
