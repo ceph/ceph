@@ -329,7 +329,7 @@ auto RGWRESTConn::forward(const DoutPrefixProvider *dpp, const rgw_owner& uid,
     auto result = req.forward_request(dpp, key, info, max_response, inbl, outbl, y);
     if (result) {
       return result;
-    } else if (result.error() != -EIO) {
+    } else if (result.error() != -ERR_SERVICE_UNAVAILABLE) {
       return result;
     }
     set_endpoint_unconnectable(endpoint);
@@ -360,7 +360,7 @@ auto RGWRESTConn::forward_iam(const DoutPrefixProvider *dpp, const req_info& inf
     auto result = req.forward_request(dpp, key, info, max_response, inbl, outbl, y, service);
     if (result) {
       return result;
-    } else if (result.error() != -EIO) {
+    } else if (result.error() != -ERR_SERVICE_UNAVAILABLE) {
       return result;
     }
     set_endpoint_unconnectable(endpoint);
@@ -415,7 +415,7 @@ int RGWRESTConn::complete_request(const DoutPrefixProvider* dpp,
                                   real_time *mtime, optional_yield y)
 {
   int ret = req->complete_request(dpp, y, &etag, mtime);
-  if (ret == -EIO) {
+  if (ret == -ERR_INTERNAL_ERROR) {
     ldout(cct, 5) << __func__ << ": complete_request() returned ret=" << ret << dendl;
     set_endpoint_unconnectable(req->get_endpoint());
   }
@@ -578,7 +578,7 @@ int RGWRESTConn::complete_request(const DoutPrefixProvider* dpp,
                                   optional_yield y)
 {
   int ret = req->complete_request(dpp, y, etag, mtime, psize, pattrs, pheaders);
-  if (ret == -EIO) {
+  if (ret == -ERR_INTERNAL_ERROR) {
     ldout(cct, 5) << __func__ << ": complete_request() returned ret=" << ret << dendl;
     set_endpoint_unconnectable(req->get_endpoint());
   }
@@ -629,7 +629,7 @@ int RGWRESTConn::get_resource(const DoutPrefixProvider *dpp,
     }
 
     ret = req.complete_request(dpp, y);
-    if (ret == -EIO) {
+    if (ret == -ERR_INTERNAL_ERROR) {
       set_endpoint_unconnectable(endpoint);
       if (tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
         ldpp_dout(dpp, 20) << __func__  << "(): failed to get resource. retries=" << tries << dendl;
@@ -683,7 +683,7 @@ int RGWRESTConn::send_resource(const DoutPrefixProvider *dpp, const std::string&
     }
 
     ret = req.complete_request(dpp, y);
-    if (ret == -EIO) {
+    if (ret == -ERR_INTERNAL_ERROR) {
       set_endpoint_unconnectable(endpoint);
       if (tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
         ldpp_dout(dpp, 20) << __func__  << "(): failed to send resource. retries=" << tries << dendl;
@@ -742,7 +742,7 @@ int RGWRESTReadResource::read(const DoutPrefixProvider *dpp, optional_yield y)
   }
 
   ret = req.complete_request(dpp, y);
-  if (ret == -EIO) {
+  if (ret == -ERR_INTERNAL_ERROR) {
     conn->set_endpoint_unconnectable(req.get_endpoint());
     ldpp_dout(dpp, 20) << __func__ << ": complete_request() returned ret=" << ret << dendl;
   }
@@ -809,7 +809,7 @@ int RGWRESTSendResource::send(const DoutPrefixProvider *dpp, bufferlist& outbl, 
   }
 
   ret = req.complete_request(dpp, y);
-  if (ret == -EIO) {
+  if (ret == -ERR_INTERNAL_ERROR) {
     conn->set_endpoint_unconnectable(req.get_endpoint());
     ldpp_dout(dpp, 20) << __func__ << ": complete_request() returned ret=" << ret << dendl;
   }
