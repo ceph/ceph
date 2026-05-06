@@ -10071,21 +10071,17 @@ void PrimaryLogPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
                 kick_object_context_blocked(cobc);
       });
       ctx->at_version = get_next_version();
-      bool log_transaction = false; // BILL:FIXME: Delete this once testing complete
       if (cop->results.started_temp_obj) {
-        dout(10) << __func__ << " BILL deleting partial temp object "
-                 << cop->results.temp_oid << dendl; // BILL:FIXME remove BILL once created in testing
+        dout(10) << __func__ << " deleting partial temp object "
+                 << cop->results.temp_oid << dendl;
         ObjectContextRef tempobc = get_object_context(cop->results.temp_oid, true);
         ctx->op_t->remove(cop->results.temp_oid);
-        log_transaction = true;
+        ctx->op_t->add_obc(tempobc);
       }
       if (add_trim_to_ctx(ctx.get(), oid, oid.snap, cobc, head_obc) < 0) {
         // Trim failed - cluster error logged
         close_op_ctx(ctx.release());
       } else {
-        if (log_transaction) {
-          dout(10) << __func__ << " BILL " << *(ctx->op_t.get()) << dendl;
-        }
         simple_opc_submit(std::move(ctx));
         return;
       }
