@@ -29,7 +29,9 @@
   * PrimaryLogPG to allow this to be tested.
   */
 
+#include <chrono>
 #include <memory>
+#include <thread>
 #include <gtest/gtest.h>
 #include "test/osd/MockConnection.h"
 #include "test/osd/MockECRecPred.h"
@@ -1185,6 +1187,15 @@ protected:
     }
   }
 
+  // Helper - call prepare_stats_for_publish on an OSD, discarding the result.
+  // Passing nullopt forces the publish branch unconditionally (no last-known
+  // stat to compare against), which is what we need to drive the latch logic.
+  void call_prepare_stats(int osd)
+  {
+    get_ps(osd)->prepare_stats_for_publish(
+      std::nullopt, object_stat_collection_t());
+  }
+
   // ============================================================================
   // GTest - Setup and Teardown
   // ============================================================================
@@ -2179,6 +2190,337 @@ TEST_F(PeeringStateTest, Issue74218) {
   verify_no_missing_or_unfound(acting[3], 3, true);
   verify_log_state(acting[3], expected2, expected2, expected2, eversion_t());
   verify_logs();
+}
+
+// ============================================================================
+// Rebuild Stats Perf Counter Tests
+//
+// These tests exercise the latch logic in prepare_stats_for_publish() that
+// feeds rs_pg_rebuild_duration, rs_pg_rebuild_max_secs, and
+// rs_pg_rebuild_min_secs.
+// Design notes:
+//   - call_prepare_stats(osd) passes nullopt so the publish branch always
+//     runs, which is needed to drive the latch even when stats are unchanged.
+//   - A 10 ms sleep between the latch call and the clean call ensures
+//     rebuild_dur.to_msec() > 0 so the record is committed.
+//   - rebuild_secs = (uint64_t)rebuild_dur.sec(), so sub-second rebuilds
+//     leave pg_rebuild_max_secs and pg_rebuild_min_secs at 0.  Those gauges
+//     are verified only for their mutual ordering (min <= max); absolute
+//     values are verified via pg_rebuild_duration.sum which is in nanoseconds.
+// ============================================================================
+
+// One complete failure+recovery cycle does the following:
+// - Swaps acting[slot] from old_osd to new_osd.
+// - Peers, latches (via call_prepare_stats while degraded).
+// - Sleeps sleep_ms to guarantee non-zero rebuild duration.
+// - Recovers, verifies clean, calls prepare_stats to commit the record.
+//
+// Acting set BEFORE call: [..., old_osd, ...] at position slot.
+// Acting set AFTER call:  [..., new_osd, ...] at position slot.
+// The old_osd PeeringState is left in osd_peeringstate (may go stale).
+
+// ============================================================================
+// Test 1: Primary OSD records all four counters after a recovery event.
+// ============================================================================
+TEST_F(PeeringStateTest, RebuildStatsLatchAndCount) {
+  dout(0) << "== RebuildStatsLatchAndCount ==" << dendl;
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  eversion_t v = test_append_log_entry();
+  test_peering();
+  verify_all_active_clean(v, eversion_t());
+
+  // Stamp last_clean on the primary so new_failure detection works later.
+  call_prepare_stats(acting_primary);
+
+  PerfCounters *perf = get_listener(acting_primary)->recoverystate_perf;
+
+  // Introduce a missing replica: swap acting[1] from OSD 1 to OSD 9.
+  // OSD 9 starts fresh and needs the log entry recovered to it.
+  modify_up_acting(1, 9);
+  test_create_peering_state(9, 1);
+  test_init(9);
+  test_event_initialize(9);
+  test_peering();
+  // PG is now active+recovering+degraded on the primary.
+
+  // Latch: first prepare_stats call while vulnerable.
+  // The state-change block sets info.stats.last_change = now and
+  // rebuild_start_time = last_change inside the latch branch.
+  call_prepare_stats(acting_primary);
+
+  // Sleep so that rebuild_dur.to_msec() > 0 when the record fires.
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  // Drive the PG back to active+clean.
+  test_begin_peer_recover(9, 1);
+  test_on_peer_recover(9, 1, v);
+  test_recover_got(9, v);
+  test_object_recovered();
+  test_event_all_replicas_recovered();
+  verify_all_active_clean(v, eversion_t());
+
+  // Record: prepare_stats while clean fires the else branch, commits record.
+  call_prepare_stats(acting_primary);
+
+  // pg_rebuild_duration: at least one sample with a positive nanosecond sum.
+  auto [sum_ns, count] = perf->get_tavg_ns(rs_pg_rebuild_duration);
+  EXPECT_GE(count, 1u);
+  EXPECT_GT(sum_ns, 0u);
+
+  // max/min gauges track whole seconds; sub-second rebuilds leave both at 0.
+  // The key invariant is that min never exceeds max.
+  EXPECT_LE(perf->get(rs_pg_rebuild_min_secs), perf->get(rs_pg_rebuild_max_secs));
+}
+
+// ============================================================================
+// Test 2: A replica OSD never records anything, even when the PG is degraded.
+// ============================================================================
+TEST_F(PeeringStateTest, RebuildStatsReplicaSkips) {
+  dout(0) << "== RebuildStatsReplicaSkips ==" << dendl;
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  eversion_t v = test_append_log_entry();
+  test_peering();
+  verify_all_active_clean(v, eversion_t());
+
+  call_prepare_stats(acting_primary);
+
+  modify_up_acting(1, 9);
+  test_create_peering_state(9, 1);
+  test_init(9);
+  test_event_initialize(9);
+  test_peering();
+
+  // OSD 9 is the recovering replica. prepare_stats_for_publish() is only
+  // called by the primary.
+  PerfCounters *replica_perf = get_listener(9)->recoverystate_perf;
+
+  // Drive the primary through the full latch+record cycle.
+  call_prepare_stats(acting_primary);   // latch fires on primary
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  test_begin_peer_recover(9, 1);
+  test_on_peer_recover(9, 1, v);
+  test_recover_got(9, v);
+  test_object_recovered();
+  test_event_all_replicas_recovered();
+  verify_all_active_clean(v, eversion_t());
+
+  call_prepare_stats(acting_primary);   // record fires on primary
+
+  // All rebuild counters on the replica must remain at their initial values.
+  EXPECT_EQ(replica_perf->get(rs_pg_rebuild_max_secs), 0u);
+  EXPECT_EQ(replica_perf->get(rs_pg_rebuild_min_secs), 0u);
+  auto [sum_ns, count] =
+    replica_perf->get_tavg_ns(rs_pg_rebuild_duration);
+  EXPECT_EQ(count, 0u);
+  EXPECT_EQ(sum_ns, 0u);
+
+  // Primary must have recorded the event (sanity-check the other side).
+  auto [primary_sum_ns, primary_count] =
+    get_listener(acting_primary)->recoverystate_perf->get_tavg_ns(rs_pg_rebuild_duration);
+  EXPECT_GE(primary_count, 1u);
+}
+
+// ============================================================================
+// Test 3: A second prepare_stats call while still vulnerable does not
+// overwrite the already-latched start time or double-record the event.
+// ============================================================================
+TEST_F(PeeringStateTest, RebuildStatsNoDoubleLatch) {
+  dout(0) << "== RebuildStatsNoDoubleLatch ==" << dendl;
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  eversion_t v = test_append_log_entry();
+  test_peering();
+  verify_all_active_clean(v, eversion_t());
+
+  call_prepare_stats(acting_primary);
+
+  modify_up_acting(1, 9);
+  test_create_peering_state(9, 1);
+  test_init(9);
+  test_event_initialize(9);
+  test_peering();
+
+  PerfCounters *perf = get_listener(acting_primary)->recoverystate_perf;
+
+  // First vulnerable call — latch fires (rebuild_start_time set).
+  call_prepare_stats(acting_primary);
+
+  // Second vulnerable call while still degraded. The latch is guarded by
+  // rebuild_start_time == utime_t(), which is now false, so the start
+  // time is not overwritten and no record is emitted.
+  call_prepare_stats(acting_primary);
+
+  // Nothing recorded yet (PG still degraded): duration avgcount must be 0.
+  {
+    auto [sum_ns, count] = perf->get_tavg_ns(rs_pg_rebuild_duration);
+    EXPECT_EQ(count, 0u);
+  }
+
+  // Now complete the recovery and verify exactly one event is recorded.
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  test_begin_peer_recover(9, 1);
+  test_on_peer_recover(9, 1, v);
+  test_recover_got(9, v);
+  test_object_recovered();
+  test_event_all_replicas_recovered();
+  verify_all_active_clean(v, eversion_t());
+  call_prepare_stats(acting_primary);
+
+  {
+    auto [sum_ns, count] = perf->get_tavg_ns(rs_pg_rebuild_duration);
+    EXPECT_EQ(count, 1u);
+  }
+}
+
+// ============================================================================
+// Test 4: Two sequential failure+recovery cycles accumulate independently.
+//
+// Cycle 1: acting[1] = 9   (OSD 1 -> OSD 9)
+// Cycle 2: acting[2] = 8   (OSD 2 -> OSD 8, while OSD 9 stays in slot 1)
+//
+// Using distinct slots avoids having to bring OSD 9 stale mid-test while
+// still exercising two independent latch+record sequences on the same primary.
+// ============================================================================
+TEST_F(PeeringStateTest, RebuildStatsCountAccumulates) {
+  dout(0) << "== RebuildStatsCountAccumulates ==" << dendl;
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  eversion_t v = test_append_log_entry();
+  test_peering();
+  verify_all_active_clean(v, eversion_t());
+
+  PerfCounters *perf = get_listener(acting_primary)->recoverystate_perf;
+
+  // ---- Cycle 1: replace acting[1] with OSD 9 ----
+  call_prepare_stats(acting_primary);     // stamp last_clean
+
+  modify_up_acting(1, 9);
+  test_create_peering_state(9, 1);
+  test_init(9);
+  test_event_initialize(9);
+  test_peering();
+  // active+recovering: OSD 9 needs recovery.
+
+  call_prepare_stats(acting_primary);     // latch fires
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  test_begin_peer_recover(9, 1);
+  test_on_peer_recover(9, 1, v);
+  test_recover_got(9, v);
+  test_object_recovered();
+  test_event_all_replicas_recovered();
+  verify_all_active_clean(v, eversion_t());
+  // Flush share_pg_info messages queued by cycle 1's Clean so they are
+  // delivered to the current replicas now, not stale during cycle 2.
+  dispatch_all();
+  call_prepare_stats(acting_primary);     // record fires
+
+  {
+    auto [sum_ns, count] = perf->get_tavg_ns(rs_pg_rebuild_duration);
+    EXPECT_EQ(count, 1u);
+  }
+
+  // ---- Cycle 2: replace acting[2] with OSD 8 ----
+  // OSD 9 remains in slot 1; OSD 8 joins as a fresh replica at slot 2.
+  call_prepare_stats(acting_primary);     // stamp last_clean for cycle 2
+
+  modify_up_acting(2, 8);
+  test_create_peering_state(8, 2);
+  test_init(8);
+  test_event_initialize(8);
+  test_peering();
+  // active+recovering: OSD 8 needs the object recovered to it.
+
+  call_prepare_stats(acting_primary);     // second latch fires
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  test_begin_peer_recover(8, 2);
+  test_on_peer_recover(8, 2, v);
+  test_recover_got(8, v);
+  test_object_recovered();
+  test_event_all_replicas_recovered();
+  verify_all_active_clean(v, eversion_t());
+  call_prepare_stats(acting_primary);     // second record fires
+
+  // Both events must appear in the duration avgcount.
+  auto [sum_ns, count] = perf->get_tavg_ns(rs_pg_rebuild_duration);
+  EXPECT_EQ(count, 2u);
+  EXPECT_GT(sum_ns, 0u);
+
+  // min <= max invariant must hold across both events.
+  EXPECT_LE(perf->get(rs_pg_rebuild_min_secs), perf->get(rs_pg_rebuild_max_secs));
+}
+
+// ============================================================================
+// Test 5: Latch is discarded when the OSD loses its primary role mid-rebuild.
+//
+// If a new interval begins while rebuild_start_time is set and the OSD
+// transitions from primary to stray, clear_primary_state() must discard the
+// stale latch so no spurious rebuild event is emitted for a recovery that the
+// OSD no longer owns.
+// ============================================================================
+TEST_F(PeeringStateTest, RebuildStatsLatchClearedOnRoleChange) {
+  dout(0) << "== RebuildStatsLatchClearedOnRoleChange ==" << dendl;
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  eversion_t v = test_append_log_entry();
+  test_peering();
+  verify_all_active_clean(v, eversion_t());
+
+  // Record last_clean so the new_failure guard inside the latch is satisfied.
+  call_prepare_stats(acting_primary);        // acting_primary = OSD 0
+
+  // --- Phase 1: degrade the PG while OSD 0 is still primary. ---
+  // Replace acting[1] (OSD 1) with OSD 9; OSD 9 needs recovery.
+  modify_up_acting(1, 9);
+  test_create_peering_state(9, 1);
+  test_init(9);
+  test_event_initialize(9);
+  test_peering();
+  // PG is now active+recovering+degraded; OSD 0 remains primary.
+
+  PerfCounters *perf_osd0 = get_listener(0)->recoverystate_perf;
+
+  // Latch: first prepare_stats call while vulnerable sets rebuild_start_time
+  // on OSD 0.
+  call_prepare_stats(acting_primary);
+  ASSERT_NE(get_ps(0)->get_rebuild_start_time(), utime_t())
+      << "latch must be set before role change";
+
+  // --- Phase 2: change the primary before recovery completes. ---
+  // Swap acting[0] from OSD 0 to OSD 7. OSD 0 leaves the acting set
+  // entirely and becomes a stray; OSD 7 takes over as primary.
+  modify_up_acting(0, 7);
+  acting_primary = 7;
+  up_primary = 7;
+  test_create_peering_state(7, 0);
+  test_init(7);
+  test_event_initialize(7);
+
+  // advance_map on OSD 0: the new acting set excludes OSD 0, so
+  // should_restart_peering()->start_peering_interval()->clear_primary_state()
+  // resets the three latch variables.
+  test_event_advance_map();
+
+  // --- Phase 3: verify latch is cleared on the old primary. ---
+  EXPECT_EQ(get_ps(0)->get_rebuild_start_time(), utime_t());
+  EXPECT_EQ(get_ps(0)->get_rebuild_base_recovered(), 0);
+  EXPECT_FALSE(get_ps(0)->get_rebuild_had_redundancy_loss());
+
+  // No rebuild record must have been emitted: the latch was discarded, not
+  // fired. A spurious emission here would record a duration spanning a
+  // recovery that OSD 0 did not complete.
+  auto [sum_ns, count] = perf_osd0->get_tavg_ns(rs_pg_rebuild_duration);
+  EXPECT_EQ(count, 0u);
+  EXPECT_EQ(sum_ns,  0u);
 }
 
 // ============================================================================

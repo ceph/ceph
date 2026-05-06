@@ -542,6 +542,15 @@ PerfCounters *build_recoverystate_perf(CephContext *cct) {
   rs_perf.add_u64_counter(rs_update_stats_invalidated, "update_stats_invalidated", "Number of times pg stats received invalidations during stats updates");
   rs_perf.add_u64_counter(rs_append_log_stats_invalidated, "append_log_stats_invalidated", "Number of times pg stats received invalidations when appending new log entries");
   rs_perf.add_u64_counter(rs_merge_log_stats_invalidated, "merge_log_stats_invalidated", "Number of times pg stats received invalidations during merging of log entries");
+  rs_perf.add_time_avg(rs_pg_rebuild_duration, "pg_rebuild_duration",
+    "Average PG rebuild duration on this OSD (primary role only)",
+    NULL, PerfCountersBuilder::PRIO_USEFUL);
+  rs_perf.add_u64(rs_pg_rebuild_max_secs, "pg_rebuild_max_secs",
+    "Max PG rebuild duration seen on this OSD in seconds (primary role only)",
+    NULL, PerfCountersBuilder::PRIO_USEFUL);
+  rs_perf.add_u64(rs_pg_rebuild_min_secs, "pg_rebuild_min_secs",
+    "Min PG rebuild duration seen on this OSD in seconds (primary role only)",
+    NULL, PerfCountersBuilder::PRIO_USEFUL);
 
   return rs_perf.create_perf_counters();
 }
