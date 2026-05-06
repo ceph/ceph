@@ -967,9 +967,9 @@ public:
 
     new_attrs["x-amz-meta-rgwx-source-mtime"] = buf;
     new_attrs["x-amz-meta-rgwx-source-etag"] = src_properties.etag;
-    new_attrs["x-amz-meta-rgwx-source-key"] = rest_obj.key.name;
+    new_attrs["x-amz-meta-rgwx-source-key"] = url_encode(rest_obj.key.name);
     if (!rest_obj.key.instance.empty()) {
-      new_attrs["x-amz-meta-rgwx-source-version-id"] = rest_obj.key.instance;
+      new_attrs["x-amz-meta-rgwx-source-version-id"] = url_encode(rest_obj.key.instance);
     }
   }
 
