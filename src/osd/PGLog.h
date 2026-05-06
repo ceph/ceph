@@ -1102,11 +1102,11 @@ protected:
     const DoutPrefixProvider *dpp        ///< [in] logging provider
     ) {
     ldpp_dout(dpp, 20) << __func__ << ": merging hoid " << hoid
-		       << " entries: " << orig_entries << dendl;
+                       << " entries: " << orig_entries << dendl;
 
     if (hoid > info.last_backfill) {
       ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid << " after last_backfill"
-			 << dendl;
+                         << dendl;
       return;
     }
 
@@ -1118,8 +1118,8 @@ protected:
     bool seen_non_error = false;
     std::optional<eversion_t> prior_version_opt;
     for (auto i = orig_entries.begin();
-	 i != orig_entries.end();
-	 ++i) {
+         i != orig_entries.end();
+         ++i) {
       // all entries are on hoid
       ceph_assert(i->soid == hoid);
       // did not see error entries before this entry and this entry is not error
@@ -1129,7 +1129,7 @@ protected:
         // see a non error entry now
         seen_non_error = true;
       }
-      
+
       // No need to check the first entry since it prior_version is unavailable
       // in the std::list
       // No need to check if the prior_version is the minimal version
@@ -1137,16 +1137,16 @@ protected:
       // entries are not its prior version
       if (i != orig_entries.begin() && i->prior_version != eversion_t() &&
           ! first_non_error) {
-	// in increasing order of version
-	ceph_assert(i->version > last);
-	// prior_version correct (unless it is an ERROR entry)
-	if (ec_optimizations_enabled) {
-	  // With partial writes prior_verson may be > last because of
-	  // skipped log entries
-	  ceph_assert(i->prior_version >= last || i->is_error());
-	} else {
-	  ceph_assert(i->prior_version == last || i->is_error());
-	}
+        // in increasing order of version
+        ceph_assert(i->version > last);
+        // prior_version correct (unless it is an ERROR entry)
+        if (ec_optimizations_enabled) {
+          // With partial writes prior_verson may be > last because of
+          // skipped log entries
+          ceph_assert(i->prior_version >= last || i->is_error());
+        } else {
+          ceph_assert(i->prior_version == last || i->is_error());
+        }
       }
       if (i->is_error()) {
         ldpp_dout(dpp, 20) << __func__ << ": ignoring " << *i << dendl;
@@ -1188,67 +1188,67 @@ protected:
     ldpp_dout(dpp, 10) << __func__ << ": hoid " << " object_not_in_store: "
                        << object_not_in_store << dendl;
     ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
-		       << " prior_version: " << prior_version
-		       << " first_divergent_update: " << first_divergent_update
-		       << " last_divergent_update: " << last_divergent_update
-		       << dendl;
+                       << " prior_version: " << prior_version
+                       << " first_divergent_update: " << first_divergent_update
+                       << " last_divergent_update: " << last_divergent_update
+                       << dendl;
 
     auto objiter = log.objects.find(hoid);
     if (objiter != log.objects.end() && !entries.empty() &&
-	objiter->second->version >= first_divergent_update) {
+        objiter->second->version >= first_divergent_update) {
       /// Case 1)
       ldpp_dout(dpp, 10) << __func__ << ": more recent entry found: "
-			 << *objiter->second << ", already merged" << dendl;
+                         << *objiter->second << ", already merged" << dendl;
 
       ceph_assert(objiter->second->version > last_divergent_update);
 
       // ensure missing has been updated appropriately
       if (objiter->second->is_update() ||
-	  (missing.may_include_deletes && objiter->second->is_delete())) {
-	if (ec_optimizations_enabled) {
-	  // relax the assert for partial writes. The log may not contain any
-	  // updates for this object, in which case the object will not be in
-	  // the missing list. If it is in the missing list, then the need version
-	  // had better be higher or equal to the log version
-	  ceph_assert(!missing.is_missing(hoid) ||
-		      missing.get_items().at(hoid).need >= objiter->second->version);
-	} else {
-	  ceph_assert(missing.is_missing(hoid) &&
-		      missing.get_items().at(hoid).need == objiter->second->version);
-	}
+          (missing.may_include_deletes && objiter->second->is_delete())) {
+        if (ec_optimizations_enabled) {
+          // relax the assert for partial writes. The log may not contain any
+          // updates for this object, in which case the object will not be in
+          // the missing list. If it is in the missing list, then the need version
+          // had better be higher or equal to the log version
+          ceph_assert(!missing.is_missing(hoid) ||
+                      missing.get_items().at(hoid).need >= objiter->second->version);
+        } else {
+          ceph_assert(missing.is_missing(hoid) &&
+                      missing.get_items().at(hoid).need == objiter->second->version);
+        }
       } else {
-	ceph_assert(!missing.is_missing(hoid));
+        ceph_assert(!missing.is_missing(hoid));
       }
       missing.revise_have(hoid, eversion_t());
       missing.mark_fully_dirty(hoid);
       if (rollbacker) {
-	if (!object_not_in_store) {
-	  rollbacker->remove(hoid);
-	}
-	for (auto &&i: entries) {
-	  rollbacker->trim(i);
-	}
+        if (!object_not_in_store) {
+          rollbacker->remove(hoid);
+        }
+        for (auto &&i: entries) {
+          rollbacker->trim(i);
+        }
       }
       return;
     }
 
     ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
-		       <<" has no more recent entries in log" << dendl;
+                       << " has no more recent entries in log" << dendl;
     if (prior_version == eversion_t() || (!entries.empty() && entries.front().is_clone())) {
       /// Case 2)
       ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
-			 << " prior_version or op type indicates creation,"
-			 << " deleting"
-			 << dendl;
+                         << " prior_version or op type indicates creation,"
+                         << " deleting"
+                         << dendl;
       if (missing.is_missing(hoid))
-	missing.rm(missing.get_items().find(hoid));
+        missing.rm(missing.get_items().find(hoid));
       if (rollbacker) {
-	if (!object_not_in_store) {
-	  rollbacker->remove(hoid);
-	}
-	for (auto &&i: entries) {
-	  rollbacker->trim(i);
-	}
+        if (!object_not_in_store) {
+          rollbacker->remove(hoid);
+        }
+        for (auto &&i: entries) {
+          rollbacker->trim(i);
+        }
       }
       return;
     }
@@ -1256,38 +1256,38 @@ protected:
     if (missing.is_missing(hoid)) {
       /// Case 3)
       ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
-			 << " missing, " << missing.get_items().at(hoid)
-			 << " adjusting" << dendl;
+                         << " missing, " << missing.get_items().at(hoid)
+                         << " adjusting" << dendl;
 
       if (missing.get_items().at(hoid).have == prior_version) {
-	ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
-			   << " missing.have is prior_version " << prior_version
-			   << " removing from missing" << dendl;
-	missing.rm(missing.get_items().find(hoid));
+        ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
+                           << " missing.have is prior_version " << prior_version
+                           << " removing from missing" << dendl;
+        missing.rm(missing.get_items().find(hoid));
       } else {
-	ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
-			   << " missing.have is " << missing.get_items().at(hoid).have
-			   << ", adjusting" << dendl;
-	missing.revise_need(hoid, prior_version, false);
-	if (prior_version <= info.log_tail) {
-	  ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
-			     << " prior_version " << prior_version
-			     << " <= info.log_tail "
-			     << info.log_tail << dendl;
-	}
+        ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
+                           << " missing.have is " << missing.get_items().at(hoid).have
+                           << ", adjusting" << dendl;
+        missing.revise_need(hoid, prior_version, false);
+        if (prior_version <= info.log_tail) {
+          ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
+                             << " prior_version " << prior_version
+                             << " <= info.log_tail "
+                             << info.log_tail << dendl;
+        }
       }
       if (rollbacker) {
-	for (auto &&i: entries) {
-	  rollbacker->trim(i);
-	}
+        for (auto &&i: entries) {
+          rollbacker->trim(i);
+        }
       }
       return;
     }
 
     ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
-		       << " must be rolled back or recovered,"
-		       << " attempting to rollback"
-		       << dendl;
+                       << " must be rolled back or recovered,"
+                       << " attempting to rollback"
+                       << dendl;
     bool can_rollback = true;
     // We are going to make an important decision based on the
     // olog_can_rollback_to value we have received, better known it.
@@ -1297,42 +1297,42 @@ protected:
     /// Distinguish between 4) and 5)
     for (auto i = entries.rbegin(); i != entries.rend(); ++i) {
       if (!i->can_rollback() || i->version <= olog_can_rollback_to) {
-	ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid << " cannot rollback "
-			   << *i << dendl;
-	can_rollback = false;
-	break;
+        ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid << " cannot rollback "
+                           << *i << dendl;
+        can_rollback = false;
+        break;
       }
     }
 
     if (can_rollback) {
       /// Case 4)
       for (auto i = entries.rbegin(); i != entries.rend(); ++i) {
-	ceph_assert(i->can_rollback() && i->version > olog_can_rollback_to);
-	ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
-			   << " rolling back " << *i << dendl;
-	if (rollbacker)
-	  rollbacker->rollback(*i);
+        ceph_assert(i->can_rollback() && i->version > olog_can_rollback_to);
+        ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
+                           << " rolling back " << *i << dendl;
+        if (rollbacker)
+          rollbacker->rollback(*i);
       }
       ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
-			 << " rolled back" << dendl;
+                         << " rolled back" << dendl;
       return;
     } else {
       /// Case 5)
       ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid << " cannot roll back, "
-			 << "removing and adding to missing" << dendl;
+                         << "removing and adding to missing" << dendl;
       if (rollbacker) {
-	if (!object_not_in_store)
-	  rollbacker->remove(hoid);
-	for (auto &&i: entries) {
-	  rollbacker->trim(i);
-	}
+        if (!object_not_in_store)
+          rollbacker->remove(hoid);
+        for (auto &&i: entries) {
+          rollbacker->trim(i);
+        }
       }
       missing.add(hoid, prior_version, eversion_t(), false);
       if (prior_version <= info.log_tail) {
-	ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
-			   << " prior_version " << prior_version
-			   << " <= info.log_tail "
-			   << info.log_tail << dendl;
+        ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
+                           << " prior_version " << prior_version
+                           << " <= info.log_tail "
+                           << info.log_tail << dendl;
       }
     }
   }
