@@ -16719,26 +16719,25 @@ uint32_t BlueStore::_do_write_small_with_maybe_blob_reuse(
                    << tail_pad << std::dec << " of mutable " << *b << dendl;
 
           if (!g_conf()->bluestore_debug_omit_block_device_write) {
-          if (b_len < prefer_deferred_size) {
-              dout(20) << __func__ << " deferring small 0x" << std::hex
+	    if (b_len < prefer_deferred_size) {
+	      dout(20) << __func__ << " deferring small 0x" << std::hex
 		       << b_len << std::dec << " unused write via deferred" << dendl;
-              bluestore_deferred_op_t *op = _get_deferred_op(txc, bl.length());
-              op->op = bluestore_deferred_op_t::OP_WRITE;
-              b->get_blob().map(
-		b_off, b_len,
-                                [&](uint64_t offset, uint64_t length) {
-                                  op->extents.emplace_back(bluestore_pextent_t(offset, length));
-                                  return 0;
-                                });
-              op->data = bl;
-          } else {
-              b->get_blob().map_bl(
-                  b_off, bl,
+	      bluestore_deferred_op_t *op = _get_deferred_op(txc, bl.length());
+	      op->op = bluestore_deferred_op_t::OP_WRITE;
+	      b->get_blob().map(
+	        b_off, b_len,
+		[&](uint64_t offset, uint64_t length) {
+		  op->extents.emplace_back(bluestore_pextent_t(offset, length));
+		  return 0;
+		});
+	      op->data = bl;
+	    } else {
+	      b->get_blob().map_bl(
+		b_off, bl,
 		[&](uint64_t offset, bufferlist& t) {
-                    bdev->aio_write(offset, t,
-				  &txc->ioc, wctx->buffered);
-                  });
-          }
+		  bdev->aio_write(offset, t, &txc->ioc, wctx->buffered);
+		});
+	    }
           }
           b->dirty_blob().calc_csum(b_off, bl);
           dout(20) << __func__ << "  lex old " << *ep << dendl;
@@ -16810,19 +16809,19 @@ uint32_t BlueStore::_do_write_small_with_maybe_blob_reuse(
           b->dirty_blob().calc_csum(b_off, bl);
 
           if (!g_conf()->bluestore_debug_omit_block_device_write) {
-          bluestore_deferred_op_t *op = _get_deferred_op(txc, bl.length());
-          op->op = bluestore_deferred_op_t::OP_WRITE;
-          int r = b->get_blob().map(
-              b_off, b_len,
+	    bluestore_deferred_op_t *op = _get_deferred_op(txc, bl.length());
+	    op->op = bluestore_deferred_op_t::OP_WRITE;
+	    int r = b->get_blob().map(
+	      b_off, b_len,
 	      [&](uint64_t offset, uint64_t length) {
-                op->extents.emplace_back(bluestore_pextent_t(offset, length));
-                return 0;
-              });
-          ceph_assert(r == 0);
-          op->data = std::move(bl);
-          dout(20) << __func__ << "  deferred write 0x" << std::hex << b_off
-                   << "~" << b_len << std::dec << " of mutable " << *b << " at "
-                   << op->extents << dendl;
+		op->extents.emplace_back(bluestore_pextent_t(offset, length));
+		return 0;
+	      });
+	    ceph_assert(r == 0);
+	    op->data = std::move(bl);
+	    dout(20) << __func__ << "  deferred write 0x" << std::hex << b_off
+		     << "~" << b_len << std::dec << " of mutable " << *b << " at "
+		     << op->extents << dendl;
           }
 
           Extent *le = o->extent_map.set_lextent(c, offset, offset - bstart, length,
@@ -16838,7 +16837,7 @@ uint32_t BlueStore::_do_write_small_with_maybe_blob_reuse(
 			      offset0 - bstart,
 			      &alloc_len)) {
 	  ceph_assert(alloc_len == min_alloc_size); // expecting data always
-					       // fit into reused blob
+						    // fit into reused blob
 	  // Need to check for pending writes desiring to
 	  // reuse the same pextent. The rationale is that during GC two chunks
 	  // from garbage blobs(compressed?) can share logical space within the same
@@ -16901,7 +16900,7 @@ uint32_t BlueStore::_do_write_small_with_maybe_blob_reuse(
                             offset0 - bstart,
                             &alloc_len)) {
 	ceph_assert(alloc_len == min_alloc_size); // expecting data always
-					     // fit into reused blob
+						  // fit into reused blob
 	// Need to check for pending writes desiring to
 	// reuse the same pextent. The rationale is that during GC two chunks
 	// from garbage blobs(compressed?) can share logical space within the same
