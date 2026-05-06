@@ -256,6 +256,9 @@ enum {
   rs_waitupthru_latency,
   rs_notrecovering_latency,
   rs_stats_invalidated,
+  rs_pg_rebuild_duration,
+  rs_pg_rebuild_max_secs,
+  rs_pg_rebuild_min_secs,
   rs_last,
 };
 
