@@ -753,8 +753,6 @@ public:
     mempool::osd_pglog::vector<std::pair<osd_reqid_t, version_t> > extra_reqids;
     mempool::osd_pglog::map<uint32_t, int> extra_reqid_return_codes;
 
-    hobject_t new_temp_oid, discard_temp_oid;  ///< temp objects we should start/stop tracking
-
     std::list<std::function<void()>> on_applied;
     std::list<std::function<void()>> on_committed;
     std::list<std::function<void()>> on_finish;
