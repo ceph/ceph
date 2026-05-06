@@ -186,8 +186,9 @@ public:
   // -- file i/o --
   version_t issue_file_data_version(CInode *in);
   Capability* issue_new_caps(CInode *in, int mode, const MDRequestRef& mdr, SnapRealm *conrealm);
-  int get_allowed_caps(CInode *in, Capability *cap, int &all_allowed,
-                       int &loner_allowed, int &xlocker_allowed);
+  int get_allowed_caps(bool has_qtine_auth_caps, CInode *in, Capability *cap,
+                       int (&all_allowed)[2], int (&loner_allowed)[2],
+                       int (&xlocker_allowed)[2]);
   int issue_caps(CInode *in, Capability *only_cap=0);
   void issue_caps_set(std::set<CInode*>& inset);
   void issue_truncate(CInode *in);
