@@ -527,6 +527,27 @@ def task(ctx, config):
     log.debug("config is {}".format(config))
     log.debug("client list is {}".format(clients))
 
+    log.debug("Creating config for coredump")
+    for client in clients:
+        ctx.cluster.only(client).run(args=['sudo', 'mkdir', '-p', '/etc/systemd/coredump.conf.d'])
+        ctx.cluster.only(client).run(args=['sudo', 'touch', '/etc/systemd/coredump.conf.d/99-enlarge.conf'])
+        (remote,) = ctx.cluster.only(client).remotes.keys()
+        conf = '''[Coredump]
+        ProcessSizeMax=64G
+        ExternalSizeMax=64G'''
+        remote.sudo_write_file('/etc/systemd/coredump.conf.d/99-enlarge.conf', conf)
+        ctx.cluster.only(client).run(args=['sudo', 'cat', '/etc/systemd/coredump.conf.d/99-enlarge.conf'])
+        '''
+        ctx.cluster.only(client).run(
+            args=[
+                'sudo',
+                'echo', 
+                run.Raw('"[Coredump] \nProcessSizeMax=64G \nExternalSizeMax=64G"'),
+                run.Raw('>'),
+                '/etc/systemd/coredump.conf.d/99-enlarge.conf',
+        ])
+        '''
+
     ctx.rgw.role_endpoints = assign_endpoints(ctx, config, default_cert)
 
     subtasks = [
