@@ -130,6 +130,7 @@
 #include "messages/MClientSnap.h"
 #include "messages/MClientQuota.h"
 #include "messages/MClientMetrics.h"
+#include "messages/MQuarantineDisable.h"
 
 #include "messages/MMDSPeerRequest.h"
 #include "messages/MMDSQuiesceDbListing.h"
@@ -150,6 +151,8 @@
 #include "messages/MMDSSnapUpdate.h"
 #include "messages/MMDSScrub.h"
 #include "messages/MMDSScrubStats.h"
+#include "messages/MMDSQuarantine.h"
+#include "messages/MMDSQuarantineReply.h"
 
 #include "messages/MDirUpdate.h"
 #include "messages/MDiscover.h"
@@ -725,6 +728,10 @@ Message *decode_message(CephContext *cct,
     m = make_message<MClientMetrics>();
     break;
 
+  case CEPH_MSG_CLIENT_QUARANTINE_DISABLE:
+    m = make_message<MQuarantineDisable>();
+    break;
+
     // mds
   case MSG_MDS_PEER_REQUEST:
     m = make_message<MMDSPeerRequest>();
@@ -798,6 +805,13 @@ Message *decode_message(CephContext *cct,
 
   case MSG_MDS_SCRUB_STATS:
     m = make_message<MMDSScrubStats>();
+    break;
+
+  case MSG_MDS_QUARANTINEDIR:
+    m = make_message<MMDSQuarantine>();
+    break;
+  case MSG_MDS_QUARANTINEDIR_REPLY:
+    m = make_message<MMDSQuarantineReply>();
     break;
 
   case MSG_MDS_EXPORTDIRDISCOVER:
