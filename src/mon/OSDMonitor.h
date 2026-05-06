@@ -538,23 +538,24 @@ private:
   uint32_t get_osd_num_by_crush(int crush_rule);
   int check_pg_num(int64_t pool, int pg_num, int size, int crush_rule, std::ostream* ss);
   int prepare_new_pool(std::string& name,
-		       int crush_rule,
-		       const std::string &crush_rule_name,
+                       int crush_rule,
+                       const std::string &crush_rule_name,
                        unsigned pg_num, unsigned pgp_num,
-		       unsigned pg_num_min,
-		       unsigned pg_num_max,
+                       unsigned pg_num_min,
+                       unsigned pg_num_max,
                        uint64_t repl_size,
-		       const uint64_t target_size_bytes,
-		       const float target_size_ratio,
-		       const std::string &erasure_code_profile,
+                       const uint64_t target_size_bytes,
+                       const float target_size_ratio,
+                       const std::string &erasure_code_profile,
                        const unsigned pool_type,
                        const uint64_t expected_num_objects,
                        FastReadType fast_read,
-		       std::string pg_autoscale_mode,
-		       bool bulk,
-		       bool crimson,
-		       const std::optional<int64_t> source_pool_id,
-		       std::ostream *ss);
+                       std::string pg_autoscale_mode,
+                       bool bulk,
+                       bool crimson,
+                       const std::optional<int64_t> source_pool_id,
+                       bool enable_ec_optimizations,
+                       std::ostream *ss);
   int prepare_new_pool(MonOpRequestRef op);
 
   void set_pool_flags(int64_t pool_id, uint64_t flags);
