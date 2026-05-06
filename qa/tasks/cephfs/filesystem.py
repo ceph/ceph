@@ -1385,6 +1385,40 @@ class FilesystemBase(MDSClusterBase):
         kwargs.pop('status', None) # not useful
         return self.json_asok(list(args), 'mds', mds_id, **kwargs)
 
+    def quarantine_enable(self, path, mds_id=None):
+        """Enable quarantine on the given subvolume root path.
+
+        Returns the parsed JSON result dict with keys:
+            return_code (int), operation (str), status (str), error (str, on failure)
+
+        Raises RuntimeError if the command fails.
+        """
+        try:
+            result = self.mds_asok(["quarantine", "enable", path], mds_id=mds_id)
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"Quarantine enable failed (non-JSON response): {e}")
+        if (result is None or result.get("status") != "successful" or
+                result.get("return_code", 0) != 0):
+            raise RuntimeError(f"Quarantine enable failed: {result}")
+        return result
+
+    def quarantine_disable(self, path, mds_id=None):
+        """Disable quarantine on the given subvolume root path.
+
+        Returns the parsed JSON result dict with keys:
+            return_code (int), operation (str), status (str), error (str, on failure)
+
+        Raises RuntimeError if the command fails.
+        """
+        try:
+            result = self.mds_asok(["quarantine", "disable", path], mds_id=mds_id)
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"Quarantine disable failed (non-JSON response): {e}")
+        if (result is None or result.get("status") != "successful" or
+                result.get("return_code", 0) != 0):
+            raise RuntimeError(f"Quarantine disable failed: {result}")
+        return result
+
     def mds_tell(self, *args, mds_id=None, **kwargs):
         if mds_id is None:
             return self.rank_tell(*args, **kwargs)

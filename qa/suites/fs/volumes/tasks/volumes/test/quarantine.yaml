@@ -1,0 +1,14 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - slow request
+      - quarantine
+tasks:
+  - cephfs_test_runner:
+      fail_on_skip: false
+      modules:
+        - tasks.cephfs.test_quarantine.TestQuarantineBasic
+        - tasks.cephfs.test_quarantine.TestQuarantineSnapshot
+        - tasks.cephfs.test_quarantine.TestQuarantineAuthCaps
+        - tasks.cephfs.test_quarantine.TestQuarantineSubvolumeOps
+        - tasks.cephfs.test_quarantine.TestQuarantineMultipleSubvolumes
