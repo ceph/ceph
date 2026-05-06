@@ -14,6 +14,7 @@
  */
 
 #include "rgw_datalog.h"
+#include "rgw_log_backing.h"
 
 #include <string_view>
 
@@ -184,6 +185,99 @@ protected:
     datalog->semaphores[datalog->choose_oid(bg.shard)].insert(bg.get_key());
   }
 
+  // Per-zone helpers (friendship doesn't inherit, so derived classes
+  // must use these base-class methods to access private members)
+  void add_to_zone_semaphores(const rgw_zone_id& zone, const BucketGen& bg) {
+    std::unique_lock l(datalog->lock);
+    auto it = datalog->zone_logs.find(zone);
+    if (it != datalog->zone_logs.end()) {
+      it->second.semaphores[datalog->choose_oid(bg.shard)].insert(bg.get_key());
+    }
+  }
+
+  auto zone_sem_set_oid(const rgw_zone_id& zone, const BucketGen& bg) {
+    return datalog->get_sem_set_oid(zone, datalog->choose_oid(bg.shard));
+  }
+
+  void set_legacy_writes_disabled(bool val) {
+    datalog->legacy_writes_disabled_ = val;
+  }
+
+  // Set target zone IDs for per-zone datalog testing (accesses private
+  // member via DataLogTestBase friendship with RGWDataChangesLog)
+  static void set_target_zone_ids(RGWDataChangesLog& dl,
+                                 std::vector<rgw_zone_id> ids) {
+    dl.target_zone_ids_ = std::move(ids);
+  }
+
+  // Initialize per-zone backends in a test coroutine context.
+  // Unlike the production init_zone_backends() which uses
+  // async::use_blocked (and would deadlock inside a coroutine on the
+  // same executor), this version uses co_await directly.
+  static asio::awaitable<void>
+  init_test_zone_backends(const DoutPrefixProvider* dpp_,
+                         RGWDataChangesLog& dl) {
+    auto defbacking = to_log_type(
+      dl.cct->_conf.get_val<std::string>("rgw_default_data_log_backing"));
+    ceph_assert(defbacking);
+    for (const auto& zone_id : dl.target_zone_ids_) {
+      auto zone_bes = co_await logback_generations::init<DataLogBackends>(
+       dpp_, *dl.rados, dl.metadata_log_oid(zone_id), dl.loc,
+       [&dl, zone_id](uint64_t gen_id, int shard) {
+         return dl.get_oid(zone_id, gen_id, shard);
+       }, dl.num_shards, *defbacking, dl, zone_id);
+      ZoneLog zlog;
+      zlog.zone_id = zone_id;
+      zlog.bes = std::move(zone_bes);
+      zlog.semaphores.resize(dl.num_shards);
+      dl.zone_logs.emplace(zone_id, std::move(zlog));
+    }
+  }
+
+  asio::awaitable<bc::flat_map<std::string, uint64_t>>
+  read_all_zone_sems(const rgw_zone_id& zone) {
+    bc::flat_map<std::string, uint64_t> all_sems;
+    for (auto i = 0; i < datalog->num_shards; ++i) {
+      std::string cursor;
+      do {
+       try {
+         co_await rados().execute(
+           datalog->get_sem_set_oid(zone, i), datalog->loc,
+           neorados::ReadOp{}.exec(ss::list(datalog->sem_max_keys, cursor,
+                                            &all_sems, &cursor)),
+           nullptr, asio::use_awaitable);
+       } catch (const sys::system_error& e) {
+         if (e.code() == sys::errc::no_such_file_or_directory) {
+           break;
+         } else {
+           throw;
+         }
+       }
+      } while (!cursor.empty());
+    }
+    co_return std::move(all_sems);
+  }
+
+  asio::awaitable<bc::flat_map<BucketGen, uint64_t>>
+  read_all_zone_log(const DoutPrefixProvider* dpp, const rgw_zone_id& zone) {
+    bc::flat_map<BucketGen, uint64_t> all_keys;
+    for (auto shard = 0; shard < datalog->num_shards; ++shard) {
+      std::string marker;
+      bool truncated = true;
+      while (truncated) {
+       auto [entries, outmarker, trunc] =
+         co_await datalog->list_entries(dpp, zone, shard, 1'000, marker);
+       truncated = trunc;
+       marker = std::move(outmarker);
+       for (const auto& entry : entries) {
+         auto key = fmt::format("{}:{}", entry.entry.key, entry.entry.gen);
+         all_keys[BucketGen{key}] += 1;
+       }
+      }
+    }
+    co_return std::move(all_keys);
+  }
+
 public:
 
   /// \brief Create RADOS handle and pool for the test
@@ -211,7 +305,8 @@ private:
   asio::awaitable<std::unique_ptr<RGWDataChangesLog>> create_datalog() override {
     auto datalog = std::make_unique<RGWDataChangesLog>(rados().cct(), true,
 						       rados());
-    co_await datalog->start(dpp(), rgw_pool(pool_name()), false, true, false);
+    co_await datalog->start(dpp(), rgw_pool(pool_name()),
+                           false, true, false);
     co_return std::move(datalog);
   }
 };
@@ -221,7 +316,8 @@ private:
   asio::awaitable<std::unique_ptr<RGWDataChangesLog>> create_datalog() override {
     auto datalog = std::make_unique<RGWDataChangesLog>(rados().cct(), true,
 						       rados());
-    co_await datalog->start(dpp(), rgw_pool(pool_name()), false, false, false);
+    co_await datalog->start(dpp(), rgw_pool(pool_name()),
+                           false, false, false);
     co_return std::move(datalog);
   }
 };
@@ -233,7 +329,8 @@ private:
     // can test iterated increment/decrement/list code.
     auto datalog = std::make_unique<RGWDataChangesLog>(rados().cct(), true,
 						       rados(), 1, 7);
-    co_await datalog->start(dpp(), rgw_pool(pool_name()), false, true, false);
+    co_await datalog->start(dpp(), rgw_pool(pool_name()),
+                           false, true, false);
     co_return std::move(datalog);
   }
 };
@@ -467,5 +564,302 @@ CORO_TEST_F(DataLogBulky, BulkySemaphoresRecovery, DataLogBulky) {
   for (const auto& bg : bulky) {
     EXPECT_TRUE(log_entries.contains(bg));
   }
+  co_return;
+}
+
+// --- Multi-zone datalog tests ---
+
+static const rgw_zone_id zone_a{"zone-a-id"};
+static const rgw_zone_id zone_b{"zone-b-id"};
+
+class DataLogMultiZone : public DataLogTestBase {
+private:
+  asio::awaitable<std::unique_ptr<RGWDataChangesLog>> create_datalog() override {
+    auto datalog = std::make_unique<RGWDataChangesLog>(rados().cct(), true,
+                                                      rados());
+    set_target_zone_ids(*datalog, {zone_a, zone_b});
+    co_await datalog->start(dpp(), rgw_pool(pool_name()),
+                           false, true, false);
+    co_await init_test_zone_backends(dpp(), *datalog);
+    co_return std::move(datalog);
+  }
+
+  asio::awaitable<void> CoSetUp() override {
+    co_await DataLogTestBase::CoSetUp();
+    // Enable per-zone writes (feature enabled = legacy writes disabled)
+    set_legacy_writes_disabled(true);
+  }
+};
+
+// Verify that get_zone_ids() returns the configured zones
+CORO_TEST_F(DataLogMultiZone, ZoneIds, DataLogMultiZone) {
+  auto ids = datalog->get_zone_ids();
+  ASSERT_EQ(2u, ids.size());
+  // map iteration order is sorted by key
+  std::sort(ids.begin(), ids.end(),
+           [](const auto& a, const auto& b) { return a.id < b.id; });
+  EXPECT_EQ(zone_a, ids[0]);
+  EXPECT_EQ(zone_b, ids[1]);
+  co_return;
+}
+
+// Verify add_entry writes to per-zone backends only (not legacy) when
+// the per_zone_datalog feature is enabled.
+CORO_TEST_F(DataLogMultiZone, PerZoneWriteOnly, DataLogMultiZone) {
+  for (const auto& bg : ref) {
+    co_await add_entry(dpp(), bg);
+    co_await add_entry(dpp(), bg);
+  }
+  co_await renew_entries(dpp());
+
+  // Legacy log should be empty (feature enabled = legacy writes disabled)
+  auto legacy_entries = co_await read_all_log(dpp());
+  EXPECT_TRUE(legacy_entries.empty())
+    << "Legacy log should be empty when per_zone_datalog is enabled";
+
+  // Verify zone_a log has entries
+  auto zone_a_entries = co_await read_all_zone_log(dpp(), zone_a);
+  for (const auto& bg : ref) {
+    EXPECT_TRUE(zone_a_entries.contains(bg))
+      << "Zone A log missing entry for " << bg;
+  }
+
+  // Verify zone_b log has entries
+  auto zone_b_entries = co_await read_all_zone_log(dpp(), zone_b);
+  for (const auto& bg : ref) {
+    EXPECT_TRUE(zone_b_entries.contains(bg))
+      << "Zone B log missing entry for " << bg;
+  }
+  co_return;
+}
+
+// Verify that semaphores are created for per-zone backends only
+// (legacy writes are disabled in DataLogMultiZone)
+CORO_TEST_F(DataLogMultiZone, PerZoneSemaphores, DataLogMultiZone) {
+  for (const auto& bg : ref) {
+    co_await add_entry(dpp(), bg);
+    co_await add_entry(dpp(), bg);
+    co_await add_entry(dpp(), bg);
+  }
+
+  // Legacy semaphores should be empty (legacy writes disabled)
+  auto legacy_sems = co_await read_all_sems_all_shards();
+  EXPECT_TRUE(legacy_sems.empty())
+    << "Legacy semaphores should be empty when legacy writes are disabled";
+
+  // Per-zone semaphores should be populated
+  auto zone_a_sems = co_await read_all_zone_sems(zone_a);
+  for (const auto& bg : ref) {
+    EXPECT_TRUE(zone_a_sems.contains(bg.get_key()))
+      << "Zone A semaphore missing for " << bg;
+    EXPECT_EQ(1, zone_a_sems[bg.get_key()]);
+  }
+
+  auto zone_b_sems = co_await read_all_zone_sems(zone_b);
+  for (const auto& bg : ref) {
+    EXPECT_TRUE(zone_b_sems.contains(bg.get_key()))
+      << "Zone B semaphore missing for " << bg;
+    EXPECT_EQ(1, zone_b_sems[bg.get_key()]);
+  }
+
+  // After renew, per-zone semaphores should be cleared
+  co_await renew_entries(dpp());
+  legacy_sems = co_await read_all_sems_all_shards();
+  EXPECT_TRUE(legacy_sems.empty());
+  zone_a_sems = co_await read_all_zone_sems(zone_a);
+  EXPECT_TRUE(zone_a_sems.empty());
+  zone_b_sems = co_await read_all_zone_sems(zone_b);
+  EXPECT_TRUE(zone_b_sems.empty());
+  co_return;
+}
+
+// Verify per-zone list_entries returns zone-specific entries
+CORO_TEST_F(DataLogMultiZone, PerZoneListEntries, DataLogMultiZone) {
+  for (const auto& bg : ref) {
+    co_await add_entry(dpp(), bg);
+    co_await add_entry(dpp(), bg);
+  }
+  co_await renew_entries(dpp());
+
+  // Each zone should have entries for all ref entries
+  for (const auto& zone : {zone_a, zone_b}) {
+    auto entries = co_await read_all_zone_log(dpp(), zone);
+    EXPECT_EQ(ref.size(), entries.size())
+      << "Zone " << zone << " has wrong number of entries";
+    for (const auto& bg : ref) {
+      EXPECT_TRUE(entries.contains(bg))
+       << "Zone " << zone << " missing entry for " << bg;
+    }
+  }
+  co_return;
+}
+
+// Verify per-zone trim only affects the specified zone
+CORO_TEST_F(DataLogMultiZone, PerZoneTrimIndependent, DataLogMultiZone) {
+  for (const auto& bg : ref) {
+    co_await add_entry(dpp(), bg);
+    co_await add_entry(dpp(), bg);
+  }
+  co_await renew_entries(dpp());
+
+  // Get the current marker for zone_a shard 0
+  auto zone_a_info = co_await datalog->get_info(dpp(), zone_a, 0);
+  if (!zone_a_info.marker.empty()) {
+    // Trim zone_a shard 0 up to its current marker
+    co_await datalog->trim_entries(dpp(), zone_a, 0, zone_a_info.marker);
+  }
+
+  // Zone_a shard 0 should be trimmed (list returns empty or fewer entries)
+  auto [zone_a_entries, zone_a_marker, zone_a_trunc] =
+    co_await datalog->list_entries(dpp(), zone_a, 0, 1'000, {});
+
+  // Zone_b should still have all entries (untouched by zone_a trim)
+  auto zone_b_entries = co_await read_all_zone_log(dpp(), zone_b);
+  for (const auto& bg : ref) {
+    EXPECT_TRUE(zone_b_entries.contains(bg))
+      << "Zone B should still have entry for " << bg << " after zone A trim";
+  }
+
+  // Legacy writes are disabled in DataLogMultiZone, so legacy log should
+  // remain empty and be unaffected by per-zone trims
+  auto legacy_entries = co_await read_all_log(dpp());
+  EXPECT_TRUE(legacy_entries.empty())
+    << "Legacy datalog should remain empty when legacy writes are disabled";
+  co_return;
+}
+
+// Verify per-zone get_info works
+CORO_TEST_F(DataLogMultiZone, PerZoneGetInfo, DataLogMultiZone) {
+  for (const auto& bg : ref) {
+    co_await add_entry(dpp(), bg);
+    co_await add_entry(dpp(), bg);
+  }
+  co_await renew_entries(dpp());
+
+  // get_info for each zone should return valid info
+  for (const auto& zone : {zone_a, zone_b}) {
+    bool found_nonempty = false;
+    for (auto i = 0; i < datalog->num_shards; ++i) {
+      auto info = co_await datalog->get_info(dpp(), zone, i);
+      if (!info.marker.empty()) {
+       found_nonempty = true;
+      }
+    }
+    EXPECT_TRUE(found_nonempty)
+      << "Zone " << zone << " should have at least one non-empty shard";
+  }
+  co_return;
+}
+
+// Verify per-zone recovery works
+CORO_TEST_F(DataLogMultiZone, PerZoneRecovery, DataLogMultiZone) {
+  // Manually add semaphores to per-zone sem_sets (simulating crash)
+  for (const auto& bg : ref) {
+    co_await rados().execute(zone_sem_set_oid(zone_a, bg), loc(),
+                            WriteOp{}.exec(ss::increment(bg.get_key())),
+                            asio::use_awaitable);
+    co_await rados().execute(zone_sem_set_oid(zone_b, bg), loc(),
+                            WriteOp{}.exec(ss::increment(bg.get_key())),
+                            asio::use_awaitable);
+    // Also add to legacy sem_set for completeness
+    co_await rados().execute(sem_set_oid(bg), loc(),
+                            WriteOp{}.exec(ss::increment(bg.get_key())),
+                            asio::use_awaitable);
+  }
+
+  co_await recover(dpp());
+
+  // All semaphores should be cleared after recovery
+  auto legacy_sems = co_await read_all_sems_all_shards();
+  EXPECT_TRUE(legacy_sems.empty()) << "Legacy semaphores not cleared";
+
+  auto zone_a_sems = co_await read_all_zone_sems(zone_a);
+  EXPECT_TRUE(zone_a_sems.empty()) << "Zone A semaphores not cleared";
+
+  auto zone_b_sems = co_await read_all_zone_sems(zone_b);
+  EXPECT_TRUE(zone_b_sems.empty()) << "Zone B semaphores not cleared";
+
+  // All backends should have recovered entries
+  auto legacy_entries = co_await read_all_log(dpp());
+  for (const auto& bg : ref) {
+    EXPECT_TRUE(legacy_entries.contains(bg))
+      << "Legacy missing recovered entry for " << bg;
+  }
+
+  auto zone_a_entries = co_await read_all_zone_log(dpp(), zone_a);
+  for (const auto& bg : ref) {
+    EXPECT_TRUE(zone_a_entries.contains(bg))
+      << "Zone A missing recovered entry for " << bg;
+  }
+
+  auto zone_b_entries = co_await read_all_zone_log(dpp(), zone_b);
+  for (const auto& bg : ref) {
+    EXPECT_TRUE(zone_b_entries.contains(bg))
+      << "Zone B missing recovered entry for " << bg;
+  }
+  co_return;
+}
+
+// --- Legacy writes disabled tests ---
+
+class DataLogLegacyDisabled : public DataLogTestBase {
+private:
+  asio::awaitable<std::unique_ptr<RGWDataChangesLog>> create_datalog() override {
+    auto datalog = std::make_unique<RGWDataChangesLog>(rados().cct(), true,
+                                                      rados());
+    set_target_zone_ids(*datalog, {zone_a, zone_b});
+    co_await datalog->start(dpp(), rgw_pool(pool_name()),
+                           false, true, false);
+    co_await init_test_zone_backends(dpp(), *datalog);
+    co_return std::move(datalog);
+  }
+
+  // Called after base CoSetUp creates the datalog
+  asio::awaitable<void> CoSetUp() override {
+    co_await DataLogTestBase::CoSetUp();
+    // Simulate per_zone_datalog feature enabled
+    set_legacy_writes_disabled(true);
+  }
+};
+
+// When legacy writes are disabled, entries should only appear in per-zone logs
+CORO_TEST_F(DataLogLegacyDisabled, NoLegacyWrites, DataLogLegacyDisabled) {
+  for (const auto& bg : ref) {
+    co_await add_entry(dpp(), bg);
+    co_await add_entry(dpp(), bg);
+  }
+  co_await renew_entries(dpp());
+
+  // Legacy log should be empty (no writes)
+  auto legacy_entries = co_await read_all_log(dpp());
+  EXPECT_TRUE(legacy_entries.empty())
+    << "Legacy log should be empty when legacy writes are disabled";
+
+  // Per-zone logs should still have entries
+  auto zone_a_entries = co_await read_all_zone_log(dpp(), zone_a);
+  for (const auto& bg : ref) {
+    EXPECT_TRUE(zone_a_entries.contains(bg))
+      << "Zone A should have entry for " << bg;
+  }
+
+  auto zone_b_entries = co_await read_all_zone_log(dpp(), zone_b);
+  for (const auto& bg : ref) {
+    EXPECT_TRUE(zone_b_entries.contains(bg))
+      << "Zone B should have entry for " << bg;
+  }
+  co_return;
+}
+
+// Verify invalid zone_id throws
+CORO_TEST_F(DataLogMultiZone, InvalidZoneThrows, DataLogMultiZone) {
+  rgw_zone_id bad_zone{"nonexistent-zone"};
+  bool caught = false;
+  try {
+    co_await datalog->list_entries(dpp(), bad_zone, 0, 100, {});
+  } catch (const sys::system_error& e) {
+    caught = true;
+    EXPECT_EQ(ENOENT, e.code().value());
+  }
+  EXPECT_TRUE(caught) << "Expected ENOENT for invalid zone_id";
   co_return;
 }
