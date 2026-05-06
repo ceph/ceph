@@ -565,6 +565,16 @@ void MDSDaemon::set_up_admin_socket()
       asok_hook,
       "submit queries to the local QuiesceDbManager");
   ceph_assert(r == 0);
+  r = admin_socket->register_command("quarantine enable "
+                                     "name=path,type=CephString,req=true",
+                                     asok_hook,
+                                     "submit queries to the QuarantineManager");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("quarantine disable "
+                                     "name=path,type=CephString,req=true",
+                                     asok_hook,
+                                     "submit queries to the QuarantineManager");
+  ceph_assert(r == 0);
   r = admin_socket->register_command(
     "heap " \
     "name=heapcmd,type=CephChoices,strings="				\

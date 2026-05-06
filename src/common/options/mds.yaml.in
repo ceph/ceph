@@ -1812,3 +1812,43 @@ options:
   min: 30
   services:
   - mds
+- name: mds_qtine_timeout
+  type: secs
+  level: advanced
+  desc: seconds to wait to fail the quarantine operation
+  long_desc: After this duration, the quarantine add/del operation will be assumed as failed and in-flight caps revoke ops will be cancelled and system state will be restored as before the op started.
+  default: 30
+  min: 30
+  services:
+  - mds
+- name: mds_max_inflight_qtine_ops
+  type: size
+  level: advanced
+  desc: Threshold for number of inodes that can be quarantined
+  default: 512_K
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_cache_qtine_sleep
+  type: millisecs
+  level: advanced
+  desc: Sleep time for requests after passing the quarantine threshold
+  default: 200
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_qtine_replica_timeout
+  type: secs
+  level: advanced
+  desc: Timeout for quarantine replica coordination replies
+  long_desc: Maximum time to wait for replica MDS nodes to reply during quarantine
+    operations. If replies are not received within this timeout, the operation
+    fails with ETIMEDOUT.
+  default: 60
+  min: 5
+  services:
+  - mds
+  flags:
+  - runtime
