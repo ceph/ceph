@@ -1,10 +1,6 @@
 # Tests for cephadm_invoker.py - secure wrapper for executing cephadm commands
 #
 import hashlib
-import io
-import os
-import sys
-import tempfile
 from pathlib import Path
 from unittest import mock
 import pytest
@@ -25,9 +21,7 @@ class TestInvoker:
         monkeypatch.setattr('sys.argv', ['cephadm_invoker.py', 'run', str(test_file), 'ls'])
 
         with mock.patch('os.execve') as mock_execve:
-            with pytest.raises(SystemExit) as exc_info:
-                invoker.main()
-            assert exc_info.value.code == 0
+            assert invoker.main() == 0
             mock_execve.assert_called_once()
 
     def test_run_command_hash_mismatch(self, monkeypatch, tmp_path):
@@ -36,21 +30,17 @@ class TestInvoker:
         wrong_hash = 'wronghash123'
         test_file = tmp_path / f'cephadm.{wrong_hash}'
         test_file.write_bytes(content)
-        
+
         monkeypatch.setattr('sys.argv', ['cephadm_invoker.py', 'run', str(test_file), 'ls'])
-        
-        with pytest.raises(SystemExit) as exc_info:
-            invoker.main()
-        assert exc_info.value.code == 2
+
+        assert invoker.main() == 2
 
     def test_run_command_nonexistent(self, monkeypatch, tmp_path):
         """Test 'run' command with nonexistent binary."""
         nonexistent = tmp_path / 'nonexistent'
         monkeypatch.setattr('sys.argv', ['cephadm_invoker.py', 'run', str(nonexistent), 'ls'])
-        
-        with pytest.raises(SystemExit) as exc_info:
-            invoker.main()
-        assert exc_info.value.code == 1
+
+        assert invoker.main() == 1
 
     def test_deploy_command_success(self, monkeypatch, tmp_path):
         """Test 'deploy_binary' command."""
@@ -73,14 +63,14 @@ class TestInvoker:
         """Test 'deploy_binary' with nonexistent temp file."""
         temp_file = tmp_path / 'nonexistent'
         final_path = tmp_path / 'cephadm'
-        
+
         monkeypatch.setattr('sys.argv', [
             'cephadm_invoker.py',
             'deploy_binary',
             str(temp_file),
             str(final_path)
         ])
-        
+
         result = invoker.main()
         assert result == 1
 
@@ -88,13 +78,13 @@ class TestInvoker:
         """Test 'check_binary' command when file exists."""
         test_file = tmp_path / 'test_file'
         test_file.write_text('content')
-        
+
         monkeypatch.setattr('sys.argv', [
-            'cephadm_invoker.py', 
+            'cephadm_invoker.py',
             'check_binary',
             str(test_file)
         ])
-        
+
         result = invoker.main()
         assert result == 0
 

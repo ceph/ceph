@@ -127,7 +127,7 @@ def execute_cephadm(fd: int, args: List[str]) -> None:
         sys.exit(1)
 
 
-def verify_and_execute_cephadm_binary(binary_path: str, cephadm_args: List[str]) -> None:
+def verify_and_execute_cephadm_binary(binary_path: str, cephadm_args: List[str]) -> int:
     """
     verify, and execute cephadm binary with hash validation.
     """
@@ -136,7 +136,7 @@ def verify_and_execute_cephadm_binary(binary_path: str, cephadm_args: List[str])
         expected_hash = extract_hash_from_path(binary_path)
         if not expected_hash:
             logger.error('Could not extract hash from binary path: %s', binary_path)
-            sys.exit(1)
+            return 1
 
         fh = open(binary_path, 'rb')
 
@@ -145,11 +145,11 @@ def verify_and_execute_cephadm_binary(binary_path: str, cephadm_args: List[str])
             # Disable CLOEXEC so the FD stays open across exec
             disable_cloexec(fh)
             execute_cephadm(fh.fileno(), [binary_path] + cephadm_args)
-            sys.exit(0)
+            return 0
 
         if actual_hash is None:
             logger.error('Failed to read or hash binary at: %s', binary_path)
-            sys.exit(2)
+            return 2
         else:
             # Hash mismatch - backup the corrupted binary
             logger.error('Binary hash mismatch at: %s', binary_path)
@@ -165,11 +165,11 @@ def verify_and_execute_cephadm_binary(binary_path: str, cephadm_args: List[str])
                 logger.error('Could not backup corrupted binary: %s', e)
 
             logger.info('Returning exit code 2 to trigger binary redeployment')
-            sys.exit(2)
+            return 2
 
     except (IOError, OSError) as e:
         logger.error('Error opening cephadm binary at %s: %s', binary_path, e)
-        sys.exit(2)
+        return 2
     finally:
         if fh is not None:
             try:
@@ -182,8 +182,8 @@ def command_run(args: argparse.Namespace) -> int:
     """
     Run cephadm binary with arguments after hash verification.
     """
-    verify_and_execute_cephadm_binary(args.binary, args.args)
-    return 0
+    ret = verify_and_execute_cephadm_binary(args.binary, args.args)
+    return ret
 
 
 def command_deploy_binary(args: argparse.Namespace) -> int:

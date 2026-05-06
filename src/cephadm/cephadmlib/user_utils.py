@@ -16,23 +16,13 @@ from .packagers import create_packager
 logger = logging.getLogger()
 
 
-def validate_user_exists(username: str) -> Tuple[int, int, str]:
-    """Validate that a user exists and return their uid, gid, and home directory.
-    Args:
-        username: The username to validate
-    Returns:
-        Tuple of (uid, gid, home_directory)
-    Raises:
-        Error: If the user does not exist
-    """
+def validate_user_exists(username: str) -> bool:
+    """Validate that a user exists"""
     try:
-        pwd_entry = pwd.getpwnam(username)
-        return pwd_entry.pw_uid, pwd_entry.pw_gid, pwd_entry.pw_dir
+        pwd.getpwnam(username)
+        return True
     except KeyError:
-        raise Error(
-            f'User {username} does not exist on this host. '
-            f'Please create the user first: useradd -m -s /bin/bash {username}'
-        )
+        return False
 
 
 def setup_sudoers(
@@ -103,7 +93,11 @@ def setup_ssh_user(
     logger.info('Setting up SSH user %s on this host', username)
 
     # Validate user exists (will raise Error if not)
-    validate_user_exists(username)
+    if not validate_user_exists(username):
+        raise Error(
+            f'User {username} does not exist on this host. '
+            f'Please create the user first: useradd -m -s /bin/bash {username}'
+        )
 
     # Setup sudoers (skip for root user)
     if username != 'root':

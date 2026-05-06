@@ -4876,10 +4876,8 @@ def command_prepare_host_sudo_hardening(ctx: CephadmContext) -> int:
     cephadm_version = ctx.cephadm_version if hasattr(ctx, 'cephadm_version') else None
 
     has_failures = False
-    try:
-        validate_user_exists(user)
-    except Exception as e:
-        logger.exception('User %s does not exists. err: %s', user, e)
+    if not validate_user_exists(user):
+        logger.error('User %s does not exists on this host.', user)
         return 1
     # Step 1: Authorize SSH public key for the user
     if ssh_pub_key:
