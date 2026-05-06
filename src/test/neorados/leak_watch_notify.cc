@@ -15,7 +15,8 @@
 #include <iostream>
 #include <optional>
 
-#include <boost/asio.hpp>
+#include <boost/asio/io_context.hpp>
+
 #include <boost/system/error_code.hpp>
 
 #include "include/neorados/RADOS.hpp"
