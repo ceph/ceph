@@ -22,6 +22,25 @@ class TestBatch(object):
         with pytest.raises(SystemExit):
             batch.Batch(argv=['--osd-ids', '1', 'foo']).main()
 
+    def test_batch_dmcrypt_open_opts_accepts_cryptsetup_style_value(self):
+        b = batch.Batch([
+            '--dmcrypt-open-opts', '--persistent --debug-json',
+        ])
+        assert b.args.dmcrypt_open_opts == '--persistent --debug-json'
+        assert b.args.dmcrypt_format_opts is None
+
+    def test_batch_dmcrypt_format_opts_accepts_cryptsetup_style_value(self):
+        b = batch.Batch([
+            '--dmcrypt-format-opts', '--foo bar',
+        ])
+        assert b.args.dmcrypt_format_opts == '--foo bar'
+        assert b.args.dmcrypt_open_opts is None
+
+    def test_batch_dmcrypt_opts_default_none(self):
+        b = batch.Batch([])
+        assert b.args.dmcrypt_open_opts is None
+        assert b.args.dmcrypt_format_opts is None
+
     def test_disjoint_device_lists(self, mock_device_generator: Callable) -> None:
         device1 = mock_device_generator(used_by_ceph=False, available=True, abspath='/dev/sda')
         device2 = mock_device_generator(used_by_ceph=False, available=True, abspath='/dev/sdb')
