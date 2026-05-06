@@ -46,6 +46,10 @@
 #define EVENT_SEGMENT      100
 #define EVENT_LID          101
 
+#define EVENT_QUARANTINESTART     200
+#define EVENT_QUARANTINEFINISH    201
+#define EVENT_QUARANTINECANCEL    202
+
 
 #include "include/buffer_fwd.h"
 #include "include/utime.h"
