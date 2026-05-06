@@ -657,7 +657,7 @@ class PrometheusService(CephadmService):
 
         self.configure_alerts(r)
 
-        return r, self.get_dependencies(self.mgr)
+        return r, self.get_dependencies(self.mgr, spec=spec)
 
     @classmethod
     def get_dependencies(cls, mgr: "CephadmOrchestrator",
