@@ -96,6 +96,8 @@ class JournalTool : public MDSUtility
     // executed on all ranks.
     bool can_execute_for_all_ranks(const std::string &mode,
                                    const std::string &command);
+
+    bool rados_connected{false};
   public:
     static void usage();
 
@@ -106,5 +108,8 @@ class JournalTool : public MDSUtility
           std::make_unique<ProgressTracker>("Journal processing");
     }
     int main(std::vector<const char*> &argv);
+
+    int connect_rados();
+    librados::Rados& get_rados_handle();
 };
 
