@@ -2,22 +2,16 @@
 // No css variable to apply css to modal div.
 // This is needed to set the width of tearsheet as per carbon standards.
 .cds--modal-container.cds--modal-container--lg {
-  position: fixed;
-
-  // 88px from top
-  inset-block-start: 88px;
-
-  // Fill remaining viewport height
   block-size: calc(100vh - 88px);
-  max-block-size: calc(100vh - 88px);
-
-  // 64px margins left & right
-  inset-inline-start: 64px;
-  inset-inline-end: 64px;
-  inline-size: auto;
-  max-inline-size: none;
   display: flex;
   flex-direction: column;
+  inline-size: auto;
+  inset-block-start: 88px;
+  inset-inline-end: 64px;
+  inset-inline-start: 64px;
+  max-block-size: calc(100vh - 88px);
+  max-inline-size: none;
+  position: fixed;
 
   // Keep header from shrinking; body row must be allowed to shrink below content height
   // so inner .tearsheet-content can scroll (default min-height: auto prevents this).
@@ -29,28 +23,28 @@
 // Global Carbon override sets .cds--modal-scroll-content to max-height: 70vh.
 // For tearsheets this causes content area to shrink and footer to float up.
 .cds--modal-container.cds--modal-container--lg .cds--modal-scroll-content {
-  max-height: none;
-  height: 100%;
   flex: 1 1 auto;
+  height: 100%;
+  max-height: none;
   min-height: 0;
 }
 
 .cds--modal-container.cds--modal-container--sm {
-  inset-block-start: 88px;
   block-size: 50vh;
-  max-block-size: 50vh;
-  inset-inline-start: 35%;
-  inset-inline-end: 35%;
   inline-size: auto;
+  inset-block-start: 88px;
+  inset-inline-end: 35%;
+  inset-inline-start: 35%;
+  max-block-size: 50vh;
   max-inline-size: none;
 }
 
 // FULL TEARSHEET
 .tearsheet--full {
   height: 100%;
-  width: 100%;
   margin: 0;
   padding: 0;
+  width: 100%;
 }
 
 .tearsheet-cols--full {
@@ -60,8 +54,8 @@
 
 // HEADER
 .tearsheet-header {
-  fill: var(--cds-icon-primary);
   background-color: var(--cds-background);
+  fill: var(--cds-icon-primary);
   padding: var(--cds-spacing-06) var(--cds-spacing-07);
 
   &-title {
@@ -69,76 +63,76 @@
   }
 
   &-description {
-    margin-top: var(--cds-spacing-04);
     color: var(--cds-text-secondary);
+    margin-top: var(--cds-spacing-04);
   }
 
   &--full {
-    position: sticky;
     padding: 0 0 var(--cds-spacing-05) var(--cds-spacing-07);
+    position: sticky;
   }
 }
 
 // BODY
 .tearsheet-body {
+  height: 100%;
   margin: 0;
   padding: 0;
-  height: 100%;
 }
 
 // Wide tearsheet: body is a flex child of .cds--modal-container--lg; must shrink so
 // .tearsheet-content scrolls and the footer stays in view on tall steps (e.g. Review).
 .cds--modal-container.cds--modal-container--lg > .tearsheet-body {
   flex: 1 1 auto;
-  min-height: 0;
-  min-block-size: 0;
   height: auto;
+  min-block-size: 0;
+  min-height: 0;
 }
 
 .tearsheet-left-influencer {
   background-color: var(--cds-background);
-  padding: var(--cds-spacing-06) var(--cds-spacing-07);
+  margin: 0;
+  min-block-size: 0;
+  min-height: 0;
   overflow-block: auto;
   overflow-y: auto;
-  margin: 0;
-  min-height: 0;
-  min-block-size: 0;
+  padding: var(--cds-spacing-06) var(--cds-spacing-07);
 }
 
 .tearsheet-right-influencer {
   background-color: var(--cds-background);
-  padding: var(--cds-spacing-05) var(--cds-spacing-05);
   border-inline-start: 1px solid var(--cds-border-subtle-01);
-  min-inline-size: 0;
   min-block-size: 0;
+  min-inline-size: 0;
+  padding: var(--cds-spacing-05) var(--cds-spacing-05);
 }
 
 // Two-column body (main content + right influencer): bound the inner grid so
 // nested form rows and dividers stay in the left column (host access step).
 .tearsheet-main > .cds--css-grid {
   flex: 1 1 auto;
-  min-height: 0;
-  min-block-size: 0;
   inline-size: 100%;
+  min-block-size: 0;
+  min-height: 0;
 }
 
 .tearsheet-main > .cds--css-grid > .tearsheet-content {
-  min-width: 0;
-  min-inline-size: 0;
-  min-height: 0;
-  min-block-size: 0;
   max-block-size: none;
+  min-block-size: 0;
+  min-height: 0;
+  min-inline-size: 0;
+  min-width: 0;
   overflow-x: hidden;
   overflow-y: auto;
 }
 
 .tearsheet-main {
-  margin: 0;
-  height: 100%;
-  min-height: 0;
-  min-block-size: 0;
   display: flex;
   flex-direction: column;
+  height: 100%;
+  margin: 0;
+  min-block-size: 0;
+  min-height: 0;
 
   > div {
     flex: 1;
@@ -146,11 +140,11 @@
 }
 
 .tearsheet-content {
-  max-block-size: 39.7rem;
   background-color: var(--cds-layer-01);
   margin: 0;
-  padding: var(--cds-spacing-06) var(--cds-spacing-07);
+  max-block-size: 39.7rem;
   overflow-y: auto;
+  padding: var(--cds-spacing-06) var(--cds-spacing-07);
 
   &--full {
     padding-left: 0;
@@ -161,8 +155,8 @@
 // make content fill the available modal height so footer stays pinned.
 .tearsheet-main > .tearsheet-content {
   flex: 1 1 auto;
-  min-height: 0;
   max-block-size: none;
+  min-height: 0;
 }
 
 //FOOTER
@@ -176,8 +170,8 @@
   }
 
   &--full {
-    position: sticky;
     bottom: 0;
+    position: sticky;
   }
 }
 
