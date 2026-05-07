@@ -5745,6 +5745,11 @@ uint64_t RocksDBBlueFSVolumeSelector::get_effective_extra() const {
 uint8_t RocksDBBlueFSVolumeSelector::select_prefer_bdev(void* h) {
   ceph_assert(h != nullptr);
   uint64_t hint = reinterpret_cast<uint64_t>(h);
+  if (g_ceph_context->_conf->bluefs_debug_force_slow) {
+    if (hint != LEVEL_LOG) {
+      return BlueFS::BDEV_SLOW;
+    }
+  }
   uint8_t res;
   switch (hint) {
   case LEVEL_SLOW:

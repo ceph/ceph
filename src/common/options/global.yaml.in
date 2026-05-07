@@ -4414,6 +4414,16 @@ options:
   flags:
   - runtime
   with_legacy: true
+- name: bluefs_debug_force_slow
+  type: bool
+  level: dev
+  desc: For testing. Force BlueFS to allocate files on slow device.
+  long_desc: When enabled, the RocksDBBlueFSVolumeSelector will ignore normal
+    placement policy and redirect allocations to slow device.
+  default: false
+  flags:
+  - runtime
+  with_legacy: true
 - name: bluestore_bluefs
   type: bool
   level: dev
