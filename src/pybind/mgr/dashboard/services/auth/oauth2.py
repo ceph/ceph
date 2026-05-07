@@ -130,7 +130,8 @@ class OAuth2(SSOAuth):
             raise cherrypy.HTTPError()
         try:
             user = mgr.ACCESS_CTRL_DB.create_user(
-                jwt_payload['sub'], None, jwt_payload.get('name', None), jwt_payload.get('email', None))
+                jwt_payload['sub'], None,
+                jwt_payload.get('name', None), jwt_payload.get('email', None))
         except UserAlreadyExists:
             logger.debug("User already exists")
             user = mgr.ACCESS_CTRL_DB.get_user(jwt_payload['sub'])
@@ -156,7 +157,7 @@ class OAuth2(SSOAuth):
             payload = decode_jwt_segment(token.split(".")[1])
             return time.time() > payload.get('exp', 0)
         except Exception:
-            return True
+            raise cherrypy.HTTPError(500, 'Failed to verify session')
 
     @classmethod
     def get_token_iss(cls, token=''):
