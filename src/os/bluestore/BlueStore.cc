@@ -997,7 +997,7 @@ void BlueStore::GarbageCollector::process_protrusive_extents(
     Blob* b = b_it->first;
     BlobInfo& bi = b_it->second;
     if (bi.referenced_bytes == 0) {
-      uint64_t len_on_disk = b_it->first->get_blob().get_ondisk_length();
+      uint64_t len_on_disk = b_it->first->get_blob().get_ondisk_capacity();
       int64_t blob_expected_for_release =
         round_up_to(len_on_disk, min_alloc_size) / min_alloc_size;
 
@@ -2935,7 +2935,7 @@ void BlueStore::Blob::split(Collection *coll, uint32_t blob_offset, Blob *r)
 void BlueStore::Blob::maybe_prune_tail() {
   if (get_blob().can_prune_tail()) {
     dirty_blob().prune_tail();
-    used_in_blob.prune_tail(get_blob().get_ondisk_length());
+    used_in_blob.prune_tail(get_blob().get_ondisk_capacity());
     dout(20) << __func__ << " pruned tail, now " << get_blob() << dendl;
   }
 }
@@ -12786,7 +12786,7 @@ int BlueStore::_prepare_read_ioc(
       compressed_blob_bls->push_back(bufferlist());
       bufferlist& bl = compressed_blob_bls->back();
       auto r = bptr->get_blob().map(
-        0, bptr->get_blob().get_ondisk_length(),
+        0, bptr->get_blob().get_ondisk_size(),
         [&](uint64_t offset, uint64_t length) {
           int r = bdev->aio_read(offset, length, &bl, ioc);
           if (r < 0)
@@ -16443,7 +16443,7 @@ void BlueStore::_do_write_small(
 
         // direct write into unused blocks of an existing mutable blob?
         if ((b_off % chunk_size == 0 && b_len % chunk_size == 0) &&
-            b->get_blob().get_ondisk_length() >= b_off + b_len &&
+            b->get_blob().get_ondisk_capacity() >= b_off + b_len &&
             b->get_blob().is_unused(b_off, b_len) &&
             b->get_blob().is_allocated(b_off, b_len)) {
           _buffer_cache_write(txc, o, offset, bl,
@@ -16492,7 +16492,7 @@ void BlueStore::_do_write_small(
 	uint64_t head_read = p2phase(b_off, chunk_size);
 	uint64_t tail_read = p2nphase(b_off + b_len, chunk_size);
 	if ((head_read || tail_read) &&
-	    (b->get_blob().get_ondisk_length() >= b_off + b_len + tail_read) &&
+	    (b->get_blob().get_ondisk_capacity() >= b_off + b_len + tail_read) &&
 	    head_read + tail_read < min_alloc_size) {
 	  b_off -= head_read;
 	  b_len += head_read + tail_read;
@@ -16502,7 +16502,7 @@ void BlueStore::_do_write_small(
 	}
 
 	// chunk-aligned deferred overwrite?
-	if (b->get_blob().get_ondisk_length() >= b_off + b_len &&
+	if (b->get_blob().get_ondisk_capacity() >= b_off + b_len &&
 	    b_off % chunk_size == 0 &&
 	    b_len % chunk_size == 0 &&
 	    b->get_blob().is_allocated(b_off, b_len)) {
@@ -16745,7 +16745,7 @@ bool BlueStore::BigDeferredWriteContext::can_defer(
     off = offset;
     b_off = offset - ep->blob_start();
     uint64_t chunk_size = blob.get_chunk_size(block_size);
-    uint64_t ondisk = blob.get_ondisk_length();
+    uint64_t ondisk = blob.get_ondisk_capacity();
     used = std::min(l, ondisk - b_off);
 
     // will read some data to fill out the chunk?
@@ -18077,7 +18077,7 @@ int BlueStore::_do_remove(
 	sb->loaded &&
 	maybe_unshared_blobs.count(sb)) {
       if (b.is_compressed()) {
-	expect[sb].get(0, b.get_ondisk_length());
+	expect[sb].get(0, b.get_ondisk_size());
       } else {
 	// todo: it seems to be an overkill to go through map()
 	b.map(e.blob_offset, e.length, [&](uint64_t off, uint64_t len) {
