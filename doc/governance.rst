@@ -47,8 +47,8 @@ Current Members
 ^^^^^^^^^^^^^^^
 
 * Dan van der Ster <dan.vanderster@clyso.com>
-* Patrick Donnelly <pdonnell@ibm.com>
 * Neha Ojha <nojha@redhat.com>
+* Patrick Donnelly <pdonnell@ibm.com>
 
 .. _csc:
 
