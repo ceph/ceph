@@ -18,7 +18,7 @@ Key principles
 Bodies
 ------
 
-Ceph Executive Council
+Chair or Co-Chairs 
 ======================
 
 Responsibilities
@@ -33,13 +33,12 @@ Responsibilities
 Membership
 ----------
 
- * 3 people
+ * Up to 3 people
  * Elected by the steering committee
  * Candidates self-nominate or are nominated by other members
  * Discussion of how roles/responsibilities may be delegated
  * Ranked-choice vote by the steering committee
- * 2 year terms, with one member being elected in even years, and the
-   other two in odd years
+ * Term lengths for the Chair and Co-Chair positions are one year
  * Members may resign at any time, and the steering committee may vote
    to appoint a replacement for the rest of their term
  * members must involve >1 employer
@@ -48,7 +47,7 @@ Current Members
 ^^^^^^^^^^^^^^^
 
 * Dan van der Ster <dan.vanderster@clyso.com>
-* Josh Durgin <jdurgin@redhat.com>
+* Patrick Donnelly <pdonnell@ibm.com>
 * Neha Ojha <nojha@redhat.com>
 
 .. _csc:
@@ -96,12 +95,10 @@ Current Members
  * Haomai Wang <haomai@xsky.com>
  * Igor Fedotov <igor.fedotov@croit.io>
  * Ilya Dryomov <idryomov@redhat.com>
- * Jeff Layton <jlayton@redhat.com>
  * Joseph Mundackal <jmundackal@bloomberg.net>
  * Josh Durgin <jdurgin@redhat.com>
  * João Eduardo Luis <joao@clyso.com>
- * Ken Dreyer <kdreyer@redhat.com>
- * Laura Flores <lflores@redhat.com>
+ * Laura Flores <lflores@ibm.com>
  * Mark Nelson <mark.nelson@clyso.com>
  * Matan Breizman <mbreizma@redhat.com>
  * Matt Benjamin <mbenjami@redhat.com>
@@ -110,12 +107,11 @@ Current Members
  * Neha Ojha <nojha@redhat.com>
  * Patrick Donnelly <pdonnell@ibm.com>
  * Radoslaw Zarzynski <rzarzyns@redhat.com>
- * Sam Just <sjust@redhat.com>
  * Venky Shankar <vshankar@redhat.com>
  * Vikhyat Umrao <vikhyat@ibm.com>
  * Xie Xingguo <xie.xingguo@zte.com.cn>
  * Yaarit Hatuka <yhatuka@ibm.com>
- * Yehuda Sadeh <yehuda@redhat.com>
+ * Yehuda Sadeh <yehudasa@gmail.com>
  * Yingxin Cheng <yingxin.cheng@intel.com>
  * Yuri Weinstein <yweinste@redhat.com>
  * Zac Dover <zac.dover@proton.me>
