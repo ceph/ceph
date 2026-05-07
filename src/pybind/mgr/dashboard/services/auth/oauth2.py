@@ -2,6 +2,7 @@
 import importlib
 import json
 import logging
+import time
 from typing import Dict, List
 from urllib.parse import quote
 
@@ -145,6 +146,14 @@ class OAuth2(SSOAuth):
             cherrypy.request.user = None
         except AttributeError:
             raise cherrypy.HTTPError()
+
+    @classmethod
+    def is_token_expired(cls, token: str) -> bool:
+        try:
+            payload = decode_jwt_segment(token.split(".")[1])
+            return time.time() > payload.get('exp', 0)
+        except Exception:
+            return True
 
     @classmethod
     def get_token_iss(cls, token=''):
