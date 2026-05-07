@@ -3910,6 +3910,11 @@ void BlueStore::ExtentMap::reshard_action(
 			   << std::hex << bstart1 << " blob_offset 0x"
 			   << blob_offset << std::dec << " " << *b << dendl;
 		  b = split_blob(b, blob_offset, sh.shard_info->offset);
+                  if (b->get_blob().get_ondisk_size() == 0) {
+                    // The blob b is empty; there are no extents that can reference it.
+                    // It will be deleted as soon as it gets out of scope.
+                    break;
+                  }
 		  // switch b to the new right-hand side, in case it
 		  // *also* has to get split.
 		  bstart1 = sh.shard_info->offset;
