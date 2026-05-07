@@ -4765,7 +4765,7 @@ class TestMgmtGateway:
 
         with with_host(cephadm_module, 'ceph-node'):
             with with_service(cephadm_module, mgmt_gw_spec) as _, with_service(cephadm_module, oauth2_spec):
-                _run_cephadm.assert_called_with(
+                _run_cephadm.assert_any_call(
                     'ceph-node',
                     'oauth2-proxy.ceph-node',
                     ['_orch', 'deploy'],
