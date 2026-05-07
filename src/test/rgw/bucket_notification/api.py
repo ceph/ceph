@@ -491,6 +491,11 @@ def ceph_admin(args, cluster='noname', **kwargs):
     cmd = [test_path + 'test-rgw-call.sh', 'call_ceph', cluster] + args
     return bash(cmd, **kwargs)
 
+def rados_admin(args, cluster='noname', **kwargs):
+    """ rados command """
+    cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_rados', cluster] + args
+    return bash(cmd, **kwargs)
+
 def delete_all_topics(conn, tenant, cluster):
     """ delete all topics """
     if tenant == '':
@@ -516,5 +521,5 @@ def set_rgw_config_option(option, value, cluster='noname'):
     """ change a config option """
     log.info(f'Setting {option} to {value} in cluster {cluster}')
     ceph_admin(['config', 'set', 'client.rgw', option, str(value)], cluster)
-    sleep(1)
+    sleep(5)
 

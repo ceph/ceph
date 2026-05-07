@@ -39,6 +39,7 @@ from .api import PSTopicS3, \
     delete_all_topics, \
     put_object_tagging, \
     admin, \
+    rados_admin, \
     set_rgw_config_option, \
     bash, \
     S3Connection, \
@@ -5773,14 +5774,35 @@ def test_topic_migration_to_an_account():
         if account_id is not None:
             admin(["account", "rm", "--account-id", account_id], get_config_cluster())
 
-def persistent_notification_shard_config_change(endpoint_type, conn, new_num_shards, old_num_shards=11): 
+
+def get_notif_pool(cluster):
+    """ get the notif pool name and namespace from zone config """
+    result, status = admin(['zone', 'get'], cluster)
+    assert status == 0
+    zone_info = json.loads(result)
+    notif_pool = zone_info['notif_pool']
+    # pool format is "pool_name:namespace"
+    pool, namespace = notif_pool.rsplit(':', 1)
+    return pool, namespace
+
+
+def get_topic_shard_count(topic_name, cluster):
+    """ count the number of shard objects for a persistent topic in the notif pool """
+    pool, namespace = get_notif_pool(cluster)
+    queue_prefix = ':' + topic_name
+    result, status = rados_admin(['ls', '-p', pool, '-N', namespace], cluster)
+    assert status == 0
+    return sum(1 for obj in result.splitlines()
+               if obj == queue_prefix or obj.startswith(queue_prefix + '.'))
+
+
+def persistent_notification_shard_config_change(endpoint_type, conn, new_num_shards, old_num_shards):
     """ test persistent notification shard config change """
     """ test to check if notifications work when config value for determining num_shards is changed..."""
-    
+
     default_num_shards = 11
     cluster = get_config_cluster()
-    if (old_num_shards != default_num_shards):
-        set_rgw_config_option('rgw_bucket_persistent_notif_num_shards', old_num_shards, cluster)
+    set_rgw_config_option('rgw_bucket_persistent_notif_num_shards', old_num_shards, cluster)
 
     bucket_name = gen_bucket_name()
     bucket = conn.create_bucket(bucket_name)
@@ -5811,6 +5833,10 @@ def persistent_notification_shard_config_change(endpoint_type, conn, new_num_sha
     topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
     topic_arn = topic_conf.set_config()
 
+    shard_count = get_topic_shard_count(topic_name, cluster)
+    assert shard_count == old_num_shards, \
+        f'expected {old_num_shards} shards after topic creation, got {shard_count}'
+
     # create notification
     notif_1 = bucket_name +  '_notif_1'
     topic_conf_list = [{'Id': notif_1, 'TopicArn': topic_arn,
@@ -5831,6 +5857,9 @@ def persistent_notification_shard_config_change(endpoint_type, conn, new_num_sha
     ## create objects in the bucket (async)
     expected_keys = []
     create_object_and_verify_events(bucket, 'bar', topic_name, receiver, expected_keys, deletions=True)
+    shard_count = get_topic_shard_count(topic_name, cluster)
+    assert shard_count == old_num_shards, \
+        f'expected {old_num_shards} shards after config change (no resharding), got {shard_count}'
 
     # cleanup
     receiver.close(task)
@@ -5840,8 +5869,7 @@ def persistent_notification_shard_config_change(endpoint_type, conn, new_num_sha
     conn.delete_bucket(bucket_name)
 
     ##revert config value for num_shards to default
-    if (new_num_shards != default_num_shards):
-        set_rgw_config_option('rgw_bucket_persistent_notif_num_shards', default_num_shards, cluster)
+    set_rgw_config_option('rgw_bucket_persistent_notif_num_shards', default_num_shards, cluster)
 
 
 def create_object_and_verify_events(bucket, key_name, topic_name, receiver, expected_keys, deletions=False):
