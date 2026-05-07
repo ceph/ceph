@@ -7454,7 +7454,7 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
   int ret = 0;
   ret = prepare_new_pool(m->name, m->crush_rule, rule_name,
 			 0, 0, 0, 0, 0, 0, 0.0,
-			 erasure_code_profile,
+			 erasure_code_profile, 1, "", 1, "", "", "",
 			 pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, {}, bulk,
 			 cct->_conf.get_val<bool>("osd_pool_default_crimson"),
 			 &ss);
@@ -7574,41 +7574,43 @@ int OSDMonitor::crush_rule_create_replica(const string &name,
                const string &osd_failure_domain,
                const string &device_class,
                bool force,
+               int *rule,
 					     ostream *ss)
 {
   if (osdmap.crush->rule_exists(name)) {
     // The name is uniquely associated to a ruleid and the rule it contains
       // From the user point of view, the rule is more meaningfull.
+      *rule = osdmap.crush->get_rule_id(name);
       return -EEXIST;
+  }
+  CrushWrapper newcrush = _get_pending_crush();
+
+  if (newcrush.rule_exists(name)) {
+    // The name is uniquely associated to a ruleid and the rule it contains
+    // From the user point of view, the rule is more meaningfull.
+    *rule = newcrush.get_rule_id(name);
+    return -EALREADY;
+  } else {
+    int ruleno;
+    if (num_zones > 1) {
+      ruleno = newcrush.add_simple_stretch_rule(
+      name, root, zone_failure_domain, osd_failure_domain, num_zones, num_replica_per_zone, device_class,
+      "firstn", pg_pool_t::TYPE_REPLICATED, force, ss);
+    } else {
+      ruleno = newcrush.add_simple_rule(
+      name, root, osd_failure_domain, device_class,
+      "firstn", pg_pool_t::TYPE_REPLICATED, ss);
     }
 
-    CrushWrapper newcrush = _get_pending_crush();
-
-    if (newcrush.rule_exists(name)) {
-      // The name is uniquely associated to a ruleid and the rule it contains
-      // From the user point of view, the rule is more meaningfull.
-      return -EALREADY;
-    } else {
-      int ruleno;
-      if (num_zones > 1) {
-        ruleno = newcrush.add_simple_stretch_rule(
-        name, root, zone_failure_domain, osd_failure_domain, num_zones, num_replica_per_zone, device_class,
-        "firstn", pg_pool_t::TYPE_REPLICATED, force, ss);
-      }
-      else {
-        ruleno = newcrush.add_simple_rule(
-        name, root, osd_failure_domain, device_class,
-        "firstn", pg_pool_t::TYPE_REPLICATED, ss);
-      }
-      if (ruleno < 0) {
+    if (ruleno < 0) {
         return ruleno;
-      }
-
-      pending_inc.crush.clear();
-      newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
-      return ruleno;
+    }
+    
+    *rule = ruleno;
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
+    return 0;
   }
-  return 0;
 }
 
 int OSDMonitor::crush_rule_create_erasure(const string &name,
@@ -7971,8 +7973,15 @@ int OSDMonitor::get_replicated_stretch_crush_rule()
 }
 
 int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
+          const string &pool_name,
 					const string &erasure_code_profile,
 					const string &rule_name,
+          int num_zones,
+          const string &root,
+          int num_replica_per_zone,
+          const string &zone_failure_domain,
+          const string &osd_failure_domain,
+          const string &device_class,
 					int *crush_rule,
 					ostream *ss)
 {
@@ -7985,8 +7994,27 @@ int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
 	  if (osdmap.stretch_mode_enabled) {
 	    *crush_rule = get_replicated_stretch_crush_rule();
 	  } else {
-	    // Use default rule
-	    *crush_rule = osdmap.crush->get_osd_pool_default_crush_replicated_rule(cct);
+      if(num_zones > 1) {
+        int err = crush_rule_create_replica(pool_name, root, num_zones, num_replica_per_zone, zone_failure_domain, osd_failure_domain, device_class, false, crush_rule, ss);
+        switch (err) {
+        case -EALREADY:
+          dout(20) << "prepare_pool_crush_rule: rule "
+            << rule_name << " try again" << dendl;
+          // fall through
+        case 0:
+          // need to wait for the crush rule to be proposed before proceeding
+          err = -EAGAIN;
+          break;
+        case -EEXIST:
+          err = 0;
+          break;
+        }
+        return err;
+      }
+	    else {
+        // Use default rule
+        *crush_rule = osdmap.crush->get_osd_pool_default_crush_replicated_rule(cct);
+      }
 	  }
 	  if (*crush_rule < 0) {
 	    // Errors may happen e.g. if no valid rule is available
@@ -8165,6 +8193,12 @@ int OSDMonitor::prepare_new_pool(string& name,
 				 const uint64_t target_size_bytes,
 				 const float target_size_ratio,
 				 const string &erasure_code_profile,
+         int num_zones,
+         const string &root,
+         int num_replica_per_zone,
+         const string &zone_failure_domain,
+         const string &osd_failure_domain,
+         const string &device_class,
                                  const unsigned pool_type,
                                  const uint64_t expected_num_objects,
                                  FastReadType fast_read,
@@ -8230,8 +8264,8 @@ int OSDMonitor::prepare_new_pool(string& name,
     return -EINVAL;
   }
   int r;
-  r = prepare_pool_crush_rule(pool_type, erasure_code_profile,
-				 crush_rule_name, &crush_rule, ss);
+  r = prepare_pool_crush_rule(pool_type, name, erasure_code_profile,
+				 crush_rule_name, num_zones, root, num_replica_per_zone, zone_failure_domain, osd_failure_domain, device_class, &crush_rule, ss);
   if (r) {
     dout(10) << "prepare_pool_crush_rule returns " << r << dendl;
     return r;
@@ -11804,7 +11838,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     cmd_getval(cmdmap, "type", type);
     cmd_getval(cmdmap, "class", device_class);
 
-    err = crush_rule_create_replica(name, root, 1, 1, "", type, device_class, false, &ss);
+    int rule;
+    err = crush_rule_create_replica(name, root, 1, 1, "", type, device_class, false, &rule, &ss);
     if (err < 0) {
       switch(err) {
       case -EEXIST: // return immediately
@@ -11828,7 +11863,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     return true;
 
   } else if (prefix == "osd crush rule create-stretch-replicated") {
-    string name = cmd_getval_or<string>(cmdmap, "rule_name", "stretch_rule");
+    string name = cmd_getval_or<string>(cmdmap, "rule_name", "stretch_replica_rule");
     string root = cmd_getval_or<string>(cmdmap, "root", "default");
     int num_zones = cmd_getval_or<int64_t>(cmdmap, "zones", 2);
     int num_replica_per_zone = cmd_getval_or<int64_t>(cmdmap, "num_replica_per_zone", 2);
@@ -11838,8 +11873,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     cmd_getval(cmdmap, "force", force);
     string device_class;
     cmd_getval(cmdmap, "class", device_class);
-
-    err = crush_rule_create_replica(name, root, num_zones, num_replica_per_zone, zone_failure_domain, osd_failure_domain, device_class, force, &ss);
+    
+    int rule;
+    err = crush_rule_create_replica(name, root, num_zones, num_replica_per_zone, zone_failure_domain, osd_failure_domain, device_class, force, &rule, &ss);
     if (err < 0) {
       switch(err) {
       case -EEXIST: // return immediately
@@ -14048,12 +14084,19 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     bool crimson = cmd_getval_or<bool>(cmdmap, "crimson", false) ||
       cct->_conf.get_val<bool>("osd_pool_default_crimson");
 
+    int num_zones = cmd_getval_or<int64_t>(cmdmap, "zones", 1);
+    string root = cmd_getval_or<string>(cmdmap, "root", "default");
+    int num_replica_per_zone = cmd_getval_or<int64_t>(cmdmap, "num_replica_per_zone", 2);
+    string zone_failure_domain = cmd_getval_or<string>(cmdmap, "zone_failure_domain", "datacenter");
+    string osd_failure_domain = cmd_getval_or<string>(cmdmap, "osd_failure_domain", "host");
+    string device_class;
+    cmd_getval(cmdmap, "class", device_class);
     err = prepare_new_pool(poolstr,
 			   -1, // default crush rule
 			   rule_name,
 			   pg_num, pgp_num, pg_num_min, pg_num_max,
                            repl_size, target_size_bytes, target_size_ratio,
-			   erasure_code_profile, pool_type,
+			   erasure_code_profile, num_zones, root, num_replica_per_zone, zone_failure_domain, osd_failure_domain, device_class, pool_type,
                            (uint64_t)expected_num_objects,
                            fast_read,
 			   pg_autoscale_mode,

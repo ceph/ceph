@@ -505,6 +505,7 @@ private:
         const std::string &osd_failure_domain,
         const std::string &device_class,
         bool force,
+        int *rule,
 				std::ostream *ss);
   int crush_rule_create_erasure(const std::string &name,
 				const std::string &profile,
@@ -517,8 +518,15 @@ private:
 		       ceph::ErasureCodeInterfaceRef *erasure_code,
 		       std::ostream *ss) const;
   int prepare_pool_crush_rule(const unsigned pool_type,
+            const std::string &pool_name,
 			      const std::string &erasure_code_profile,
 			      const std::string &rule_name,
+            int num_zones,
+            const std::string &root,
+            int num_replica_per_zone,
+            const std::string &zone_failure_domain,
+            const std::string &osd_failure_domain,
+            const std::string &device_class,
 			      int *crush_rule,
 			      std::ostream *ss);
   bool erasure_code_profile_in_use(
@@ -549,6 +557,12 @@ private:
 		       const uint64_t target_size_bytes,
 		       const float target_size_ratio,
 		       const std::string &erasure_code_profile,
+           int num_zones,
+           const std::string &root,
+           int num_replica_per_zone,
+           const std::string &zone_failure_domain,
+           const std::string &osd_failure_domain,
+           const std::string &device_class,
                        const unsigned pool_type,
                        const uint64_t expected_num_objects,
                        FastReadType fast_read,
