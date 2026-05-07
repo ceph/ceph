@@ -4245,7 +4245,7 @@ bool OSDMonitor::preprocess_pg_migrated_pool(MonOpRequestRef op)
   op->mark_osdmon_event(__func__);
   auto m = op->get_req<MOSDPGMigratedPool>();
   dout(10) << __func__ << " " << *m << dendl;
-  const pg_pool_t *pi;
+  pg_pool_t pi;
   auto session = op->get_session();
   if (!session) {
     dout(10) << __func__ << ": no monitor session!" << dendl;
@@ -4256,19 +4256,22 @@ bool OSDMonitor::preprocess_pg_migrated_pool(MonOpRequestRef op)
          << "with insufficient privileges " << session->caps << dendl;
     goto ignore;
   }
-  pi = osdmap.get_pg_pool(m->pgid.pool());
-  if (!pi) {
+  if (pending_inc.new_pools.count(m->pgid.pool())) {
+    pi = pending_inc.new_pools[m->pgid.pool()];
+  } else if (!osdmap.have_pg_pool(m->pgid.pool())) {
     // Raced with pool delete
     dout(20) << __func__ << " pool for " << m->pgid << " dne" << dendl;
     goto ignore;
+  } else {
+    pi = *osdmap.get_pg_pool(m->pgid.pool());
   }
-  if (pi->get_pg_num() <= m->pgid.ps()) {
+  if (pi.get_pg_num() <= m->pgid.ps()) {
     // Duplicated message
-    dout(20) << __func__ << " pg_num " << pi->get_pg_num() << " already < " << m->pgid << dendl;
+    dout(20) << __func__ << " pg_num " << pi.get_pg_num() << " already < " << m->pgid << dendl;
     goto ignore;
   }
-  if (!pi->migrating_pgs.contains(m->pgid) ||
-      (pi->migration_target != m->migration_target)) {
+  if (!pi.migrating_pgs.contains(m->pgid) ||
+      (pi.migration_target != m->migration_target)) {
     // Duplicated message
     dout(20) << __func__ << " pg_num " << m->pgid << " is not migrating to " << m->migration_target << dendl;
     goto ignore;
