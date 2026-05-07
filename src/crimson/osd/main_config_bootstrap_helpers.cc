@@ -22,6 +22,8 @@
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Messenger.h"
 
+#include <fmt/ranges.h>
+
 #include <fcntl.h>
 #include <sys/wait.h>
 
@@ -134,7 +136,8 @@ std::optional<std::string> get_option_value(const SeastarOption& option) {
       break;
     }
     default:
-      logger().warn("get_option_value: {} has unknown type", option.option_name);
+      logger().warn("get_option_value: {} has unknown type {}", option.option_name,
+                    static_cast<int>(option.value_type));
       return std::nullopt;
   }
   return std::nullopt;
@@ -213,7 +216,14 @@ _get_early_config(
 	  std::end(early_args));
 
         for (const auto& option : seastar_options) {
-          auto option_value = get_option_value(option);
+          std::optional<std::string> option_value;
+          try {
+            option_value = get_option_value(option);
+          } catch (const std::exception& e) {
+            logger().error("get_option_value failed for {} (config_key={}): {}",
+                           option.option_name, option.config_key, e.what());
+            throw;
+          }
           if (option_value) {
             logger().info("configure {} with value: {}", option.option_name, option_value);
             ret.early_args.emplace_back(option.option_name);
@@ -258,10 +268,13 @@ _get_early_config(
 	                 "set only using crimson_cpu_set");
 	  ceph_abort();
 	}
+	logger().info("get_early_config: early_args: {}",
+	              fmt::join(ret.early_args, " "));
 	return 0;
       });
     });
-  if (r < 0) {
+  if (r != 0) {
+    logger().error("get_early_config: bootstrap app.run() returned {}", r);
     return tl::unexpected(r);
   }
   return ret;
