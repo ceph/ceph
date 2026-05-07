@@ -139,7 +139,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_NO_SUCH_PUBLIC_ACCESS_BLOCK_CONFIGURATION, {404, "NoSuchPublicAccessBlockConfiguration"}},
     { ERR_ACCOUNT_EXISTS, {409, "AccountAlreadyExists"}},
     { ERR_RESTORE_ALREADY_IN_PROGRESS, {409, "RestoreAlreadyInProgress"}},
-    { ECANCELED, {409, "ConcurrentModification"}},
+    { ERR_CONCURRENT_MODIFICATION, {409, "ConcurrentModification"}},
     { EDQUOT, {507, "InsufficientCapacity"}},
     { ENOSPC, {507, "InsufficientCapacity"}},
     { ERR_ACLS_NOT_SUPPORTED, {400, "AccessControlListNotSupported"}},
@@ -2884,7 +2884,7 @@ void RGWUserInfo::dump(Formatter *f) const
     encode_json("admin", (bool)admin, f);
   }
   encode_json("default_placement", default_placement.name, f);
-  encode_json("default_storage_class", default_placement.storage_class, f);
+  encode_json("default_storage_class", default_placement.get_storage_class(), f);
   encode_json("placement_tags", placement_tags, f);
   encode_json("bucket_quota", quota.bucket_quota, f);
   encode_json("user_quota", quota.user_quota, f);

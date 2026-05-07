@@ -33,9 +33,11 @@
     <div [cdsStack]="compact? 'horizontal' : 'vertical'">
       @for (b of vm.badges; track b.key; let last = $last) {
       <span
-        class="overview-alerts-card-badge"
-        [class.overview-alerts-card-badge-with-border--right]="!last && compact"
-        [class.overview-alerts-card-badge-with-border--bottom]="!compact">
+        class="overview-alerts-card-badge cds-pr-4"
+        [class.cds-mr-4]="!last && compact"
+        [class.border-subtle-right]="!last && compact"
+        [class.overview-alerts-card-badge--compact]="!compact"
+        [class.border-subtle-bottom]="!compact">
         <a
           cdsLink
           [routerLink]="['/monitoring/active-alerts']"

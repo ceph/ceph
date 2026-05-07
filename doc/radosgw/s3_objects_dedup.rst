@@ -108,19 +108,21 @@ matches. If they are, we proceed with the deduplication:
 - Copy the manifest from the source to the target.
 - Remove all tail objects on the target.
 
-
 Split Head Mode
 ===============
 
-Dedup code can split the head object into 2 objects
+The dedup code can split a head object into 2 objects:
 
-- one with attributes and no data and
+- one with attributes and no data, and
 - a new tail object with only data.
 
-The new tail object will be deduped, unlike the head objects, which cannot
+The new tail object will be deduped, unlike head objects, which cannot
 be deduplicated.
-This feature is only enabled for RGW objects without existing tail objects
-(in other words, objects sized 4 MB or less).
+
+:confval:`rgw_dedup_split_obj_head` (default: true). Setting
+this option to ``false`` disables split-head entirely.
+
+.. confval:: rgw_dedup_split_obj_head
 
 
 Memory Usage

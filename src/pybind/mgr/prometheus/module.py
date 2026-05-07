@@ -1940,6 +1940,16 @@ class Module(MgrModule, OrchestratorClientMixin):
                 self.log.debug("Orchestrator not available")
                 return
 
+            try:
+                if not self.remote('smb', 'db_ready'):
+                    self.log.debug(
+                        "SMB DB not ready, skipping SMB metadata collection"
+                    )
+                    return
+            except Exception as e:
+                self.log.debug(f"SMB DB readiness check failed: {str(e)}")
+                return
+
             smb_version = ""
 
             try:

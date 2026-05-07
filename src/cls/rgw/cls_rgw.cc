@@ -1399,7 +1399,9 @@ static int read_olh(cls_method_context_t hctx,cls_rgw_obj_key& obj_key, rgw_buck
 static void update_olh_log(rgw_bucket_olh_entry& olh_data_entry, OLHLogOp op, const string& op_tag,
                            cls_rgw_obj_key& key, bool delete_marker, uint64_t epoch)
 {
-  vector<rgw_bucket_olh_log_entry>& log = olh_data_entry.pending_log[olh_data_entry.epoch];
+  CLS_LOG(20, "%s: op=%d op_tag=%s key=%s epoch=%lu", __func__,
+          op, op_tag.c_str(), key.to_string().c_str(), epoch);
+  vector<rgw_bucket_olh_log_entry>& log = olh_data_entry.pending_log[epoch];
   rgw_bucket_olh_log_entry log_entry;
   log_entry.epoch = epoch;
   log_entry.op = op;
@@ -1544,7 +1546,7 @@ public:
 
   int write(uint64_t epoch, bool current, rgw_bucket_dir_header& header) {
     if (instance_entry.versioned_epoch > 0) {
-      CLS_LOG(20, "%s: instance_entry.versioned_epoch=%d epoch=%d", __func__, (int)instance_entry.versioned_epoch, (int)epoch);
+      CLS_LOG(20, "%s: instance_entry.versioned_epoch=%lu epoch=%lu", __func__, instance_entry.versioned_epoch, epoch);
       /* this instance has a previous list entry, remove that entry */
       int ret = unlink_list_entry(header);
       if (ret < 0) {
@@ -1641,19 +1643,26 @@ public:
    * This timestamp is then used later on to guard against OLH updates for add/remove instance ops that happened *before*
    * the latest op that updated the OLH entry.
    * @param candidate_epoch - this is provided (> 0) in the case when a remote epoch is coming in as the result of multisite sync;
+   * @param replace - true to replace the epoch if larger than the old one;
    */
-  bool start_modify (uint64_t candidate_epoch) {
+  bool start_modify (uint64_t candidate_epoch, bool replace = true) {
     // only update the olh.epoch if it is newer than the current one.
     if (candidate_epoch < olh_data_entry.epoch) {
       return false; /* olh cannot be modified, old epoch */
     }
 
-    olh_data_entry.epoch = candidate_epoch;
+    if (replace) {
+      olh_data_entry.epoch = candidate_epoch;
+    }
     return true;
   }
 
   uint64_t get_epoch() {
     return olh_data_entry.epoch;
+  }
+
+  void set_epoch(uint64_t epoch) {
+    olh_data_entry.epoch = epoch;
   }
 
   rgw_bucket_olh_entry& get_entry() {
@@ -1725,7 +1734,8 @@ static int convert_plain_entry_to_versioned(cls_method_context_t hctx,
                                             cls_rgw_obj_key& key,
                                             bool demote_current,
                                             bool instance_only,
-                                            rgw_bucket_dir_header& header)
+                                            rgw_bucket_dir_header& header,
+                                            uint64_t& versioned_epoch)
 {
   if (!key.instance.empty()) {
     return -EINVAL;
@@ -1741,7 +1751,8 @@ static int convert_plain_entry_to_versioned(cls_method_context_t hctx,
       return ret;
     }
 
-    entry.versioned_epoch = 1; /* converted entries are always 1 */
+    entry.versioned_epoch = versioned_epoch =
+          duration_cast<std::chrono::nanoseconds>(entry.meta.mtime.time_since_epoch()).count();
     entry.flags |= rgw_bucket_dir_entry::FLAG_VER;
 
     if (demote_current) {
@@ -1803,6 +1814,9 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     return -EINVAL;
   }
 
+  CLS_LOG(20, "%s: op_tag=%s key=%s olh_epoch=%lu", __func__,
+          op.op_tag.c_str(), op.key.to_string().c_str(), op.olh_epoch);
+
   struct rgw_bucket_dir_header header;
   int rc = read_bucket_header(hctx, &header);
   if (rc < 0) {
@@ -1837,6 +1851,16 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     return ret;
   }
 
+  /* read olh */
+  BIOLHEntry olh(hctx, op.key);
+  bool olh_found = false;
+  ret = olh.init(&olh_found);
+  if (ret < 0) {
+    return ret;
+  }
+
+  uint64_t now_epoch = duration_cast<std::chrono::nanoseconds>(real_clock::now().time_since_epoch()).count();
+
   if (existed && !real_clock::is_zero(op.unmod_since)) {
     timespec mtime = ceph::real_clock::to_timespec(obj.mtime());
     timespec unmod = ceph::real_clock::to_timespec(op.unmod_since);
@@ -1845,7 +1869,13 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
       unmod.tv_nsec = 0;
     }
     if (mtime >= unmod) {
-      return 0; /* no need tof set error, we just return 0 and avoid
+      olh.update_log(CLS_RGW_OLH_OP_STALE, op.op_tag, op.key, false, now_epoch);
+      ret = olh.write(header);
+      if (ret < 0) {
+        CLS_LOG(0, "ERROR: failed to update olh ret=%d", ret);
+        return ret;
+      }
+      return 0; /* no need to set error, we just return 0 and avoid
 		 * writing to the bi log */
     }
   }
@@ -1888,19 +1918,10 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     obj.init_as_delete_marker(op.meta);
   }
 
-  /* read olh */
-  BIOLHEntry olh(hctx, op.key);
-  bool olh_found = false;
-  ret = olh.init(&olh_found);
-  if (ret < 0) {
-    return ret;
-  }
-
   const uint64_t prev_epoch = olh.get_epoch();
 
   // op.olh_epoch is provided (> 0) in the case when a remote epoch is coming in as the result of multisite sync;
-  uint64_t candidate_epoch = op.olh_epoch ? op.olh_epoch :
-    duration_cast<std::chrono::nanoseconds>(obj.mtime().time_since_epoch()).count();
+  uint64_t candidate_epoch = op.olh_epoch ? op.olh_epoch : now_epoch;
   if (olh.start_modify(candidate_epoch)) {
     // promote this version to current if it's a newer epoch, or if it matches the
     // current epoch and sorts after the current instance
@@ -1940,21 +1961,22 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     } else {
       bool instance_only = (op.key.instance.empty() && op.delete_marker);
       cls_rgw_obj_key key(op.key.name);
-      ret = convert_plain_entry_to_versioned(hctx, key, promote, instance_only, header);
+      uint64_t versioned_epoch = candidate_epoch;
+      ret = convert_plain_entry_to_versioned(hctx, key, promote, instance_only, header, versioned_epoch);
       if (ret < 0) {
         CLS_LOG(0, "ERROR: convert_plain_entry_to_versioned ret=%d", ret);
         return ret;
       }
       olh.set_tag(op.olh_tag);
       if (op.key.instance.empty()) {
-        obj.set_epoch(1);
+        obj.set_epoch(versioned_epoch);
       }
     }
 
     /* update the olh log */
-    olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, op.key, op.delete_marker);
+    olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, op.key, op.delete_marker, now_epoch);
     if (removing) {
-      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false);
+      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, now_epoch);
     }
 
     if (promote) {
@@ -1969,8 +1991,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     }
 
     ret = olh.write(header);
-  }
-  else {
+  } else {
     ret = obj.write(candidate_epoch, false, header);
     if (ret < 0) {
       return ret;
@@ -1980,9 +2001,11 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     // the epoch is already stale compared to the current - so no point in applying it;
 
     if (removing) {
-      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, candidate_epoch);
-      ret = olh.write(header);
+      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, now_epoch);
+    } else {
+      olh.update_log(CLS_RGW_OLH_OP_STALE, op.op_tag, op.key, false, now_epoch);
     }
+    ret = olh.write(header);
   }
 
   if (ret < 0) {
@@ -2038,6 +2061,9 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     return -EINVAL;
   }
 
+  CLS_LOG(20, "%s: op_tag=%s key=%s olh_epoch=%lu", __func__,
+          op.op_tag.c_str(), op.key.to_string().c_str(), op.olh_epoch);
+
   cls_rgw_obj_key dest_key = op.key;
 
   struct rgw_bucket_dir_header header;
@@ -2070,10 +2096,14 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     return ret;
   }
 
+  uint64_t now_epoch = duration_cast<std::chrono::nanoseconds>(real_clock::now().time_since_epoch()).count();
+  uint64_t candidate_epoch = op.olh_epoch ? op.olh_epoch : now_epoch;
+
   if (!olh_found) {
     bool instance_only = false;
     cls_rgw_obj_key key(dest_key.name);
-    ret = convert_plain_entry_to_versioned(hctx, key, true, instance_only, header);
+    uint64_t versioned_epoch = candidate_epoch - 1;
+    ret = convert_plain_entry_to_versioned(hctx, key, true, instance_only, header, versioned_epoch);
     if (ret < 0) {
       CLS_LOG(0, "ERROR: convert_plain_entry_to_versioned ret=%d", ret);
       return ret;
@@ -2081,13 +2111,11 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     olh.update(dest_key, false);
     olh.set_tag(op.olh_tag);
 
-    obj.set_epoch(1);
+    obj.set_epoch(versioned_epoch);
   }
 
   // op.olh_epoch is provided (> 0) in the case when a remote epoch is coming in as the result of multisite sync;
-  uint64_t candidate_epoch = op.olh_epoch ? op.olh_epoch :
-    duration_cast<std::chrono::nanoseconds>(real_clock::now().time_since_epoch()).count();
-  if (olh.start_modify(candidate_epoch)) {
+  if (olh.start_modify(candidate_epoch, false)) {
     rgw_bucket_olh_entry &olh_entry = olh.get_entry();
     cls_rgw_obj_key &olh_key = olh_entry.key;
     CLS_LOG(20, "%s: updating olh log: existing olh entry: %s[%s] (delete_marker=%d)", __func__,
@@ -2105,7 +2133,14 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
 
       if (found) {
         BIVerObjEntry next(hctx, next_key);
-        ret = next.write(olh.get_epoch(), true, header);
+        ret = next.init();
+        if (ret < 0) {
+          CLS_LOG(0, "ERROR: next.init() returned ret=%d", ret);
+          return ret;
+        }
+
+        uint64_t next_epoch = next.get_dir_entry().versioned_epoch;
+        ret = next.write(next_epoch, true, header);
         if (ret < 0) {
           CLS_LOG(0, "ERROR: next.write() returned ret=%d", ret);
           return ret;
@@ -2115,21 +2150,28 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
                 next_key.name.c_str(), next_key.instance.c_str(), (int) next.is_delete_marker());
 
         olh.update(next_key, next.is_delete_marker());
-        olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, next_key, next.is_delete_marker());
+        olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, next_key, next.is_delete_marker(), now_epoch);
+        // use the next entry's versioned_epoch in the olh entry since it's the new head now
+        olh.set_epoch(next_epoch);
       } else {
         // next_key is empty, but we need to preserve its name in case this entry
         // gets resharded, because this key is used for hash placement
         next_key.name = dest_key.name;
         olh.update(next_key, false);
-        olh.update_log(CLS_RGW_OLH_OP_UNLINK_OLH, op.op_tag, next_key, false);
+        if (olh.get_epoch() == 0) {
+          olh.set_epoch(candidate_epoch);
+        }
+        olh.update_log(CLS_RGW_OLH_OP_UNLINK_OLH, op.op_tag, next_key, false, now_epoch);
         olh.set_exists(false);
         olh.set_pending_removal(true);
       }
     }
 
     if (!obj.is_delete_marker()) {
-      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false);
+      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, now_epoch);
     } else {
+      olh.update_log(CLS_RGW_OLH_OP_STALE, op.op_tag, op.key, true, now_epoch);
+
       /* this is a delete marker, it's our responsibility to remove its
        * instance entry */
       ret = obj.unlink(header, op.key);
@@ -2150,10 +2192,17 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     }
 
     if (obj.is_delete_marker()) {
-      return 0;
+      olh.update_log(CLS_RGW_OLH_OP_STALE, op.op_tag, op.key, true, now_epoch);
+
+      ret = olh.write(header);
+      if (ret < 0) {
+        CLS_LOG(0, "ERROR: failed to update olh ret=%d", ret);
+      }
+
+      return ret;
     }
 
-    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, candidate_epoch);
+    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, now_epoch);
   }
 
   ret = olh.write(header);
@@ -2231,6 +2280,19 @@ static int rgw_bucket_read_olh_log(cls_method_context_t hctx, bufferlist *in, bu
       op_ret.log[iter->first] = iter->second;
     }
     op_ret.is_truncated = (iter != log.end());
+  }
+
+  // this is for backward compatibility
+  if (!op.get_stales) {
+    auto iter = op_ret.log.begin();
+    while (iter != op_ret.log.end()) {
+      std::erase_if(iter->second, [](const auto& e) { return e.op == CLS_RGW_OLH_OP_STALE; });
+      if (iter->second.empty()) {
+        iter = op_ret.log.erase(iter);
+      } else {
+        ++iter;
+      }
+    }
   }
 
   encode(op_ret, *out);
@@ -5291,81 +5353,86 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_guard_bucket_resharding;
   cls_method_handle_t h_rgw_get_bucket_resharding;
 
-  cls_register(RGW_CLASS, &h_class);
 
-  /* bucket index */
-  cls_register_cxx_method(h_class, RGW_BUCKET_INIT_INDEX, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_init_index, &h_rgw_bucket_init_index);
-  cls_register_cxx_method(h_class, RGW_BUCKET_INIT_INDEX2, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_init_index, &h_rgw_bucket_init_index);
-  cls_register_cxx_method(h_class, RGW_BUCKET_SET_TAG_TIMEOUT, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_set_tag_timeout, &h_rgw_bucket_set_tag_timeout);
-  cls_register_cxx_method(h_class, RGW_BUCKET_LIST, CLS_METHOD_RD, rgw_bucket_list, &h_rgw_bucket_list);
-  cls_register_cxx_method(h_class, RGW_BUCKET_CHECK_INDEX, CLS_METHOD_RD, rgw_bucket_check_index, &h_rgw_bucket_check_index);
-  cls_register_cxx_method(h_class, RGW_BUCKET_REBUILD_INDEX, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_rebuild_index, &h_rgw_bucket_rebuild_index);
-  cls_register_cxx_method(h_class, RGW_BUCKET_UPDATE_STATS, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_update_stats, &h_rgw_bucket_update_stats);
-  cls_register_cxx_method(h_class, RGW_BUCKET_PREPARE_OP, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_prepare_op, &h_rgw_bucket_prepare_op);
-  cls_register_cxx_method(h_class, RGW_BUCKET_COMPLETE_OP, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_complete_op, &h_rgw_bucket_complete_op);
-  cls_register_cxx_method(h_class, RGW_BUCKET_LINK_OLH, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_link_olh, &h_rgw_bucket_link_olh);
-  cls_register_cxx_method(h_class, RGW_BUCKET_UNLINK_INSTANCE, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_unlink_instance, &h_rgw_bucket_unlink_instance_op);
-  cls_register_cxx_method(h_class, RGW_BUCKET_READ_OLH_LOG, CLS_METHOD_RD, rgw_bucket_read_olh_log, &h_rgw_bucket_read_olh_log);
-  cls_register_cxx_method(h_class, RGW_BUCKET_TRIM_OLH_LOG, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_trim_olh_log, &h_rgw_bucket_trim_olh_log);
-  cls_register_cxx_method(h_class, RGW_BUCKET_CLEAR_OLH, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_clear_olh, &h_rgw_bucket_clear_olh);
+  using namespace cls::rgw;
 
-  cls_register_cxx_method(h_class, RGW_OBJ_REMOVE, CLS_METHOD_RD | CLS_METHOD_WR, rgw_obj_remove, &h_rgw_obj_remove);
-  cls_register_cxx_method(h_class, RGW_OBJ_STORE_PG_VER, CLS_METHOD_WR, rgw_obj_store_pg_ver, &h_rgw_obj_store_pg_ver);
-  cls_register_cxx_method(h_class, RGW_OBJ_CHECK_ATTRS_PREFIX, CLS_METHOD_RD, rgw_obj_check_attrs_prefix, &h_rgw_obj_check_attrs_prefix);
-  cls_register_cxx_method(h_class, RGW_OBJ_CHECK_MTIME, CLS_METHOD_RD, rgw_obj_check_mtime, &h_rgw_obj_check_mtime);
+  cls_register(ClassId::name, &h_class);
 
-  cls_register_cxx_method(h_class, RGW_BI_GET, CLS_METHOD_RD, rgw_bi_get_op, &h_rgw_bi_get_op);
-  cls_register_cxx_method(h_class, RGW_BI_PUT, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_put_op, &h_rgw_bi_put_op);
-  cls_register_cxx_method(h_class, RGW_BI_PUT_ENTRIES, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_put_entries, &h_rgw_bi_put_entries_op);
-  cls_register_cxx_method(h_class, RGW_BI_LIST, CLS_METHOD_RD, rgw_bi_list_op, &h_rgw_bi_list_op);
-  cls_register_cxx_method(h_class, RGW_RESHARD_LOG_TRIM, CLS_METHOD_RD | CLS_METHOD_WR, rgw_reshard_log_trim_op, &h_rgw_reshard_log_trim_op);
+  ClassRegistrar<ClassId> cls(h_class);
 
-  cls_register_cxx_method(h_class, RGW_BI_LOG_LIST, CLS_METHOD_RD, rgw_bi_log_list, &h_rgw_bi_log_list_op);
-  cls_register_cxx_method(h_class, RGW_BI_LOG_TRIM, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_log_trim, &h_rgw_bi_log_trim_op);
-  cls_register_cxx_method(h_class, RGW_DIR_SUGGEST_CHANGES, CLS_METHOD_RD | CLS_METHOD_WR, rgw_dir_suggest_changes, &h_rgw_dir_suggest_changes);
+  using namespace method;
 
-  cls_register_cxx_method(h_class, RGW_BI_LOG_RESYNC, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_log_resync, &h_rgw_bi_log_resync_op);
-  cls_register_cxx_method(h_class, RGW_BI_LOG_STOP, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_log_stop, &h_rgw_bi_log_stop_op);
+  // Bucket Index
+  cls.register_cxx_method(bucket_init_index, rgw_bucket_init_index, &h_rgw_bucket_init_index);
+  cls.register_cxx_method(bucket_init_index2, rgw_bucket_init_index, &h_rgw_bucket_init_index);
+  cls.register_cxx_method(bucket_set_tag_timeout, rgw_bucket_set_tag_timeout, &h_rgw_bucket_set_tag_timeout);
+  cls.register_cxx_method(bucket_list, rgw_bucket_list, &h_rgw_bucket_list);
+  cls.register_cxx_method(bucket_check_index, rgw_bucket_check_index, &h_rgw_bucket_check_index);
+  cls.register_cxx_method(bucket_rebuild_index, rgw_bucket_rebuild_index, &h_rgw_bucket_rebuild_index);
+  cls.register_cxx_method(bucket_update_stats, rgw_bucket_update_stats, &h_rgw_bucket_update_stats);
+  cls.register_cxx_method(bucket_prepare_op, rgw_bucket_prepare_op, &h_rgw_bucket_prepare_op);
+  cls.register_cxx_method(bucket_complete_op, rgw_bucket_complete_op, &h_rgw_bucket_complete_op);
+  cls.register_cxx_method(bucket_link_olh, rgw_bucket_link_olh, &h_rgw_bucket_link_olh);
+  cls.register_cxx_method(bucket_unlink_instance, rgw_bucket_unlink_instance, &h_rgw_bucket_unlink_instance_op);
+  cls.register_cxx_method(bucket_read_olh_log, rgw_bucket_read_olh_log, &h_rgw_bucket_read_olh_log);
+  cls.register_cxx_method(bucket_trim_olh_log, rgw_bucket_trim_olh_log, &h_rgw_bucket_trim_olh_log);
+  cls.register_cxx_method(bucket_clear_olh, rgw_bucket_clear_olh, &h_rgw_bucket_clear_olh);
 
-  /* usage logging */
-  cls_register_cxx_method(h_class, RGW_USER_USAGE_LOG_ADD, CLS_METHOD_RD | CLS_METHOD_WR, rgw_user_usage_log_add, &h_rgw_user_usage_log_add);
-  cls_register_cxx_method(h_class, RGW_USER_USAGE_LOG_READ, CLS_METHOD_RD, rgw_user_usage_log_read, &h_rgw_user_usage_log_read);
-  cls_register_cxx_method(h_class, RGW_USER_USAGE_LOG_TRIM, CLS_METHOD_RD | CLS_METHOD_WR, rgw_user_usage_log_trim, &h_rgw_user_usage_log_trim);
-  cls_register_cxx_method(h_class, RGW_USAGE_LOG_CLEAR, CLS_METHOD_WR, rgw_usage_log_clear, &h_rgw_usage_log_clear);
+  // Object
+  cls.register_cxx_method(obj_remove, rgw_obj_remove, &h_rgw_obj_remove);
+  cls.register_cxx_method(obj_store_pg_ver, rgw_obj_store_pg_ver, &h_rgw_obj_store_pg_ver);
+  cls.register_cxx_method(obj_check_attrs_prefix, rgw_obj_check_attrs_prefix, &h_rgw_obj_check_attrs_prefix);
+  cls.register_cxx_method(obj_check_mtime, rgw_obj_check_mtime, &h_rgw_obj_check_mtime);
 
-  /* garbage collection */
-  cls_register_cxx_method(h_class, RGW_GC_SET_ENTRY, CLS_METHOD_RD | CLS_METHOD_WR, rgw_cls_gc_set_entry, &h_rgw_gc_set_entry);
-  cls_register_cxx_method(h_class, RGW_GC_DEFER_ENTRY, CLS_METHOD_RD | CLS_METHOD_WR, rgw_cls_gc_defer_entry, &h_rgw_gc_defer_entry);
-  cls_register_cxx_method(h_class, RGW_GC_LIST, CLS_METHOD_RD, rgw_cls_gc_list, &h_rgw_gc_list);
-  cls_register_cxx_method(h_class, RGW_GC_REMOVE, CLS_METHOD_RD | CLS_METHOD_WR, rgw_cls_gc_remove, &h_rgw_gc_remove);
+  // Bucket Index (BI) / Resharding
+  cls.register_cxx_method(bi_get, rgw_bi_get_op, &h_rgw_bi_get_op);
+  cls.register_cxx_method(bi_put, rgw_bi_put_op, &h_rgw_bi_put_op);
+  cls.register_cxx_method(bi_put_entries, rgw_bi_put_entries, &h_rgw_bi_put_entries_op);
+  cls.register_cxx_method(bi_list, rgw_bi_list_op, &h_rgw_bi_list_op);
+  cls.register_cxx_method(reshard_log_trim, rgw_reshard_log_trim_op, &h_rgw_reshard_log_trim_op);
 
-  /* lifecycle bucket list */
-  cls_register_cxx_method(h_class, RGW_LC_GET_ENTRY, CLS_METHOD_RD, rgw_cls_lc_get_entry, &h_rgw_lc_get_entry);
-  cls_register_cxx_method(h_class, RGW_LC_SET_ENTRY, CLS_METHOD_RD | CLS_METHOD_WR, rgw_cls_lc_set_entry, &h_rgw_lc_set_entry);
-  cls_register_cxx_method(h_class, RGW_LC_RM_ENTRY, CLS_METHOD_RD | CLS_METHOD_WR, rgw_cls_lc_rm_entry, &h_rgw_lc_rm_entry);
-  cls_register_cxx_method(h_class, RGW_LC_GET_NEXT_ENTRY, CLS_METHOD_RD, rgw_cls_lc_get_next_entry, &h_rgw_lc_get_next_entry);
-  cls_register_cxx_method(h_class, RGW_LC_PUT_HEAD, CLS_METHOD_RD| CLS_METHOD_WR, rgw_cls_lc_put_head, &h_rgw_lc_put_head);
-  cls_register_cxx_method(h_class, RGW_LC_GET_HEAD, CLS_METHOD_RD, rgw_cls_lc_get_head, &h_rgw_lc_get_head);
-  cls_register_cxx_method(h_class, RGW_LC_LIST_ENTRIES, CLS_METHOD_RD, rgw_cls_lc_list_entries, &h_rgw_lc_list_entries);
+  cls.register_cxx_method(bi_log_list, rgw_bi_log_list, &h_rgw_bi_log_list_op);
+  cls.register_cxx_method(bi_log_trim, rgw_bi_log_trim, &h_rgw_bi_log_trim_op);
+  cls.register_cxx_method(dir_suggest_changes, rgw_dir_suggest_changes, &h_rgw_dir_suggest_changes);
 
-  /* multipart */
-  cls_register_cxx_method(h_class, RGW_MP_UPLOAD_PART_INFO_UPDATE, CLS_METHOD_RD | CLS_METHOD_WR, rgw_mp_upload_part_info_update, &h_rgw_mp_upload_part_info_update);
+  cls.register_cxx_method(bi_log_resync, rgw_bi_log_resync, &h_rgw_bi_log_resync_op);
+  cls.register_cxx_method(bi_log_stop, rgw_bi_log_stop, &h_rgw_bi_log_stop_op);
 
-  /* resharding */
-  cls_register_cxx_method(h_class, RGW_RESHARD_ADD, CLS_METHOD_RD | CLS_METHOD_WR, rgw_reshard_add, &h_rgw_reshard_add);
-  cls_register_cxx_method(h_class, RGW_RESHARD_LIST, CLS_METHOD_RD, rgw_reshard_list, &h_rgw_reshard_list);
-  cls_register_cxx_method(h_class, RGW_RESHARD_GET, CLS_METHOD_RD,rgw_reshard_get, &h_rgw_reshard_get);
-  cls_register_cxx_method(h_class, RGW_RESHARD_REMOVE, CLS_METHOD_RD | CLS_METHOD_WR, rgw_reshard_remove, &h_rgw_reshard_remove);
+  // Usage Logging
+  cls.register_cxx_method(user_usage_log_add, rgw_user_usage_log_add, &h_rgw_user_usage_log_add);
+  cls.register_cxx_method(user_usage_log_read, rgw_user_usage_log_read, &h_rgw_user_usage_log_read);
+  cls.register_cxx_method(user_usage_log_trim, rgw_user_usage_log_trim, &h_rgw_user_usage_log_trim);
+  cls.register_cxx_method(usage_log_clear, rgw_usage_log_clear, &h_rgw_usage_log_clear);
 
-  /* resharding attribute  */
-  cls_register_cxx_method(h_class, RGW_SET_BUCKET_RESHARDING, CLS_METHOD_RD | CLS_METHOD_WR,
-			  rgw_set_bucket_resharding, &h_rgw_set_bucket_resharding);
-  cls_register_cxx_method(h_class, RGW_CLEAR_BUCKET_RESHARDING, CLS_METHOD_RD | CLS_METHOD_WR,
-			  rgw_clear_bucket_resharding, &h_rgw_clear_bucket_resharding);
-  cls_register_cxx_method(h_class, RGW_GUARD_BUCKET_RESHARDING, CLS_METHOD_RD ,
-			  rgw_guard_bucket_resharding, &h_rgw_guard_bucket_resharding);
-  cls_register_cxx_method(h_class, RGW_GET_BUCKET_RESHARDING, CLS_METHOD_RD ,
-			  rgw_get_bucket_resharding, &h_rgw_get_bucket_resharding);
+  // Garbage Collection
+  cls.register_cxx_method(gc_set_entry, rgw_cls_gc_set_entry, &h_rgw_gc_set_entry);
+  cls.register_cxx_method(method::gc_defer_entry, rgw_cls_gc_defer_entry, &h_rgw_gc_defer_entry);
+  cls.register_cxx_method(gc_list, rgw_cls_gc_list, &h_rgw_gc_list);
+  cls.register_cxx_method(method::gc_remove, rgw_cls_gc_remove, &h_rgw_gc_remove);
+
+  // Lifecycle Bucket List
+  cls.register_cxx_method(lc_get_entry, rgw_cls_lc_get_entry, &h_rgw_lc_get_entry);
+  cls.register_cxx_method(lc_set_entry, rgw_cls_lc_set_entry, &h_rgw_lc_set_entry);
+  cls.register_cxx_method(lc_rm_entry, rgw_cls_lc_rm_entry, &h_rgw_lc_rm_entry);
+  cls.register_cxx_method(lc_get_next_entry, rgw_cls_lc_get_next_entry, &h_rgw_lc_get_next_entry);
+  cls.register_cxx_method(lc_put_head, rgw_cls_lc_put_head, &h_rgw_lc_put_head);
+  cls.register_cxx_method(lc_get_head, rgw_cls_lc_get_head, &h_rgw_lc_get_head);
+  cls.register_cxx_method(lc_list_entries, rgw_cls_lc_list_entries, &h_rgw_lc_list_entries);
+
+  // Multipart
+  cls.register_cxx_method(mp_upload_part_info_update, rgw_mp_upload_part_info_update, &h_rgw_mp_upload_part_info_update);
+
+  // Resharding
+  cls.register_cxx_method(reshard_add, rgw_reshard_add, &h_rgw_reshard_add);
+  cls.register_cxx_method(reshard_list, rgw_reshard_list, &h_rgw_reshard_list);
+  cls.register_cxx_method(reshard_get, rgw_reshard_get, &h_rgw_reshard_get);
+  cls.register_cxx_method(reshard_remove, rgw_reshard_remove, &h_rgw_reshard_remove);
+
+  // Resharding Attribute
+  cls.register_cxx_method(set_bucket_resharding, rgw_set_bucket_resharding, &h_rgw_set_bucket_resharding);
+  cls.register_cxx_method(clear_bucket_resharding, rgw_clear_bucket_resharding, &h_rgw_clear_bucket_resharding);
+  cls.register_cxx_method(method::guard_bucket_resharding, rgw_guard_bucket_resharding, &h_rgw_guard_bucket_resharding);
+  cls.register_cxx_method(get_bucket_resharding, rgw_get_bucket_resharding, &h_rgw_get_bucket_resharding);
 
   return;
 }

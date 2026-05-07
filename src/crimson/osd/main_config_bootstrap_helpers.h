@@ -35,8 +35,18 @@ struct early_config_t {
   std::string conf_file_list;
   CephInitParameters init_params{CEPH_ENTITY_TYPE_OSD};
 
-  /// Returned vector must not outlive in
-  auto to_ptr_vector(const std::vector<std::string> &in) {
+  std::vector<const char *> get_early_args() {
+    return to_ptr_vector(early_args);
+  }
+
+  std::vector<const char *> get_ceph_args() {
+    return to_ptr_vector(ceph_args);
+  }
+
+private:
+  /// Returned pointers are valid only as long as \p in is alive.
+  static std::vector<const char *> to_ptr_vector(
+    const std::vector<std::string> &in) {
     std::vector<const char *> ret;
     ret.reserve(in.size());
     std::transform(
@@ -46,13 +56,7 @@ struct early_config_t {
     return ret;
   }
 
-  std::vector<const char *> get_early_args() {
-    return to_ptr_vector(early_args);
-  }
-
-  std::vector<const char *> get_ceph_args() {
-    return to_ptr_vector(ceph_args);
-  }
+public:
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);

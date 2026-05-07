@@ -44,6 +44,10 @@ command:
 
    ceph features
 
+See :ref:`require_min_compat_client` for what the
+``set-require-min-compat-client`` command does and how to choose an
+appropriate release argument.
+
 Balancer Module
 ---------------
 
@@ -66,9 +70,9 @@ Upmap entries are updated with an offline optimizer that is built into the
 
    .. prompt:: bash $
 
-      osdmaptool om --upmap out.txt [--upmap-pool <pool>] \ 
-      [--upmap-max <max-optimizations>] \ 
-      [--upmap-deviation <max-deviation>] \ 
+      osdmaptool om --upmap out.txt [--upmap-pool <pool>] \
+      [--upmap-max <max-optimizations>] \
+      [--upmap-deviation <max-deviation>] \
       [--upmap-active]
 
    It is highly recommended that optimization be done for each pool

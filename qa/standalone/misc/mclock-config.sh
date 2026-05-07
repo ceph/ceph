@@ -46,9 +46,10 @@ function TEST_profile_builtin_to_custom() {
     local mclock_profile=$(ceph config get osd.0 osd_mclock_profile)
     test "$mclock_profile" = "balanced" || return 1
 
+    local osd0=$(get_asok_path osd.0)
     # Verify the running mClock profile
     mclock_profile=$(CEPH_ARGS='' ceph --format=json daemon \
-      $(get_asok_path osd.0) config get osd_mclock_profile |\
+      $osd0 config get osd_mclock_profile |\
       jq .osd_mclock_profile)
     mclock_profile=$(eval echo $mclock_profile)
     test "$mclock_profile" = "high_recovery_ops" || return 1
@@ -57,14 +58,14 @@ function TEST_profile_builtin_to_custom() {
     ceph tell osd.0 config set osd_mclock_profile custom || return 1
 
     # Verify that the mclock profile is set to 'custom' on the OSDs
-    mclock_profile=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path \
-      osd.0) config get osd_mclock_profile | jq .osd_mclock_profile)
+    mclock_profile=$(CEPH_ARGS='' ceph --format=json daemon $osd0 \
+      config get osd_mclock_profile | jq .osd_mclock_profile)
     mclock_profile=$(eval echo $mclock_profile)
     test "$mclock_profile" = "custom" || return 1
 
     # Change a mclock config param and confirm the change
-    local client_res=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path \
-      osd.0) config get osd_mclock_scheduler_client_res | \
+    local client_res=$(CEPH_ARGS='' ceph --format=json daemon $osd0 \
+      config get osd_mclock_scheduler_client_res | \
       jq .osd_mclock_scheduler_client_res | bc)
     echo "client_res = $client_res"
     local client_res_new=$(echo "$client_res + 0.1" | bc -l)
@@ -79,8 +80,8 @@ function TEST_profile_builtin_to_custom() {
       return 1
     fi
     # Check value in the in-memory 'values' map
-    res=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path \
-      osd.0) config get osd_mclock_scheduler_client_res | \
+    res=$(CEPH_ARGS='' ceph --format=json daemon $osd0 \
+      config get osd_mclock_scheduler_client_res | \
       jq .osd_mclock_scheduler_client_res | bc)
     if (( $(echo "$res != $client_res_new" | bc -l) )); then
       return 1
@@ -102,9 +103,10 @@ function TEST_profile_custom_to_builtin() {
     def_mclock_profile=$(ceph config get osd.0 osd_mclock_profile)
     test "$def_mclock_profile" = "balanced" || return 1
 
+    local osd0=$(get_asok_path osd.0)
     # Verify the running mClock profile
     local orig_mclock_profile=$(CEPH_ARGS='' ceph --format=json daemon \
-      $(get_asok_path osd.0) config get osd_mclock_profile |\
+      $osd0 config get osd_mclock_profile |\
       jq .osd_mclock_profile)
     orig_mclock_profile=$(eval echo $orig_mclock_profile)
     test $orig_mclock_profile = "high_recovery_ops" || return 1
@@ -114,15 +116,15 @@ function TEST_profile_custom_to_builtin() {
 
     # Verify that the mclock profile is set to 'custom' on the OSDs
     local mclock_profile=$(CEPH_ARGS='' ceph --format=json daemon \
-      $(get_asok_path osd.0) config get osd_mclock_profile | \
+      $osd0 config get osd_mclock_profile | \
       jq .osd_mclock_profile)
     mclock_profile=$(eval echo $mclock_profile)
     test $mclock_profile = "custom" || return 1
 
     # Save the original client reservations allocated to the OSDs
     local client_res
-    client_res=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path \
-      osd.0) config get osd_mclock_scheduler_client_res | \
+    client_res=$(CEPH_ARGS='' ceph --format=json daemon $osd0 \
+      config get osd_mclock_scheduler_client_res | \
       jq .osd_mclock_scheduler_client_res | bc)
     echo "Original client_res for osd.0 = $client_res"
 
@@ -138,8 +140,8 @@ function TEST_profile_custom_to_builtin() {
       return 1
     fi
     # Check value in the in-memory 'values' map
-    res=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path \
-      osd.0) config get osd_mclock_scheduler_client_res | \
+    res=$(CEPH_ARGS='' ceph --format=json daemon $osd0 \
+      config get osd_mclock_scheduler_client_res | \
       jq .osd_mclock_scheduler_client_res | bc)
     if (( $(echo "$res != $client_res_new" | bc -l) )); then
       return 1
@@ -154,7 +156,7 @@ function TEST_profile_custom_to_builtin() {
     ceph tell osd.0 config set osd_mclock_profile $orig_mclock_profile || return 1
     # Verify that the mclock profile is set back to the original on the OSD
     eval mclock_profile=$(CEPH_ARGS='' ceph --format=json daemon \
-      $(get_asok_path osd.0) config get osd_mclock_profile | \
+      $osd0 config get osd_mclock_profile | \
       jq .osd_mclock_profile)
     #mclock_profile=$(ceph config get osd.0 osd_mclock_profile)
     test "$mclock_profile" = "$orig_mclock_profile" || return 1
@@ -167,8 +169,8 @@ function TEST_profile_custom_to_builtin() {
       return 1
     fi
     # Check value in the in-memory 'values' map
-    res=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path \
-      osd.0) config get osd_mclock_scheduler_client_res | \
+    res=$(CEPH_ARGS='' ceph --format=json daemon $osd0 \
+      config get osd_mclock_scheduler_client_res | \
       jq .osd_mclock_scheduler_client_res | bc)
     if (( $(echo "$res != $client_res_new" | bc -l) )); then
       return 1
@@ -188,8 +190,8 @@ function TEST_profile_custom_to_builtin() {
     fi
 
     # Check value in the in-memory 'values' map
-    res=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path \
-      osd.0) config get osd_mclock_scheduler_client_res | \
+    res=$(CEPH_ARGS='' ceph --format=json daemon $osd0 \
+      config get osd_mclock_scheduler_client_res | \
       jq .osd_mclock_scheduler_client_res | bc)
     if (( $(echo "$res != $client_res" | bc -l) )); then
       return 1
@@ -206,7 +208,8 @@ function TEST_recovery_limit_adjustment_mclock() {
     run_mgr $dir x || return 1
 
     run_osd $dir 0 --osd_op_queue=mclock_scheduler || return 1
-    local recoveries=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+    local osd0=$(get_asok_path osd.0)
+    local recoveries=$(CEPH_ARGS='' ceph --format=json daemon $osd0 \
         config get osd_recovery_max_active)
     # Get default value
     echo "$recoveries" | grep --quiet 'osd_recovery_max_active' || return 1
@@ -216,7 +219,7 @@ function TEST_recovery_limit_adjustment_mclock() {
     # limit is retained at its default value.
     ceph config set osd.0 osd_recovery_max_active 10 || return 1
     sleep 2 # Allow time for change to take effect
-    local max_recoveries=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+    local max_recoveries=$(CEPH_ARGS='' ceph --format=json daemon $osd0 \
         config get osd_recovery_max_active)
     test "$max_recoveries" = "$recoveries" || return 1
 
@@ -225,7 +228,7 @@ function TEST_recovery_limit_adjustment_mclock() {
     ceph config set osd.0 osd_mclock_override_recovery_settings true || return 1
     ceph config set osd.0 osd_recovery_max_active 10 || return 1
     sleep 2 # Allow time for change to take effect
-    max_recoveries=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+    max_recoveries=$(CEPH_ARGS='' ceph --format=json daemon $osd0 \
         config get osd_recovery_max_active)
     test "$max_recoveries" = '{"osd_recovery_max_active":"10"}' || return 1
 
@@ -240,7 +243,8 @@ function TEST_backfill_limit_adjustment_mclock() {
     run_mgr $dir x || return 1
 
     run_osd $dir 0 --osd_op_queue=mclock_scheduler || return 1
-    local backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+    local osd0=$(get_asok_path osd.0)
+    local backfills=$(CEPH_ARGS='' ceph --format=json daemon $osd0 \
         config get osd_max_backfills | jq .osd_max_backfills | bc)
     # Get default value
     echo "osd_max_backfills: $backfills" || return 1
@@ -250,15 +254,15 @@ function TEST_backfill_limit_adjustment_mclock() {
     # limit is retained at its default value.
     ceph config set osd.0 osd_max_backfills 20 || return 1
     sleep 2 # Allow time for change to take effect
-    local max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+    local max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $osd0 \
         config get osd_max_backfills | jq .osd_max_backfills | bc)
     test $max_backfills = $backfills || return 1
 
     # Verify local and async reserver settings are not changed
-    max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+    max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $osd0 \
         dump_recovery_reservations | jq .local_reservations.max_allowed | bc)
     test $max_backfills = $backfills || return 1
-    max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+    max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $osd0 \
         dump_recovery_reservations | jq .remote_reservations.max_allowed | bc)
     test $max_backfills = $backfills || return 1
 
@@ -267,15 +271,15 @@ function TEST_backfill_limit_adjustment_mclock() {
     ceph config set osd.0 osd_mclock_override_recovery_settings true || return 1
     ceph config set osd.0 osd_max_backfills 20 || return 1
     sleep 2 # Allow time for change to take effect
-    max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+    max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $osd0 \
         config get osd_max_backfills | jq .osd_max_backfills | bc)
     test $max_backfills = 20 || return 1
 
     # Verify local and async reserver settings are changed
-    max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+    max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $osd0 \
         dump_recovery_reservations | jq .local_reservations.max_allowed | bc)
     test $max_backfills = 20 || return 1
-    max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+    max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $osd0 \
         dump_recovery_reservations | jq .remote_reservations.max_allowed | bc)
     test $max_backfills = 20 || return 1
 
@@ -286,15 +290,15 @@ function TEST_backfill_limit_adjustment_mclock() {
     wait_for_osd down 0 || return 1
     activate_osd $dir 0 --osd-op-queue=mclock_scheduler || return 1
 
-    max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+    max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $osd0 \
         config get osd_max_backfills | jq .osd_max_backfills | bc)
     test $max_backfills = 20 || return 1
 
     # Verify local and async reserver settings are changed
-    max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+    max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $osd0 \
         dump_recovery_reservations | jq .local_reservations.max_allowed | bc)
     test $max_backfills = 20 || return 1
-    max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+    max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $osd0 \
         dump_recovery_reservations | jq .remote_reservations.max_allowed | bc)
     test $max_backfills = 20 || return 1
 

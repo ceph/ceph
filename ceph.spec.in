@@ -207,7 +207,7 @@ Epoch:		2
 %global _epoch_prefix %{?epoch:%{epoch}:}
 
 Summary:	User space components of the Ceph file system
-License:	LGPL-2.1 and LGPL-3.0 and CC-BY-SA-3.0 and GPL-2.0 and BSL-1.0 and BSD-3-Clause and MIT
+License:	LGPL-2.1-or-later AND LGPL-3.0-only AND CC-BY-SA-3.0 AND GPL-2.0-only AND BSL-1.0 AND BSD-2-Clause AND BSD-3-Clause AND MIT
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
@@ -311,7 +311,7 @@ BuildRequires:  yaml-cpp-devel >= 0.6
 BuildRequires:  librabbitmq-devel
 %endif
 %if 0%{with kafka_endpoint}
-BuildRequires:  librdkafka-devel
+BuildRequires:  librdkafka-devel >= 1.1.0
 %endif
 %if 0%{with lua_packages}
 Requires:  lua-devel
@@ -437,7 +437,7 @@ BuildRequires:	lz4-devel >= 1.7
 %if 0%{with make_check}
 BuildRequires:	golang
 %if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
-BuildRequires:	golang-github-prometheus
+BuildRequires:	/usr/bin/promtool
 BuildRequires:	libtool-ltdl-devel
 BuildRequires:	xmlsec1
 BuildRequires:	xmlsec1-devel
@@ -1785,6 +1785,7 @@ exit 0
 %{_bindir}/cephfs-data-scan
 %{_bindir}/cephfs-journal-tool
 %{_bindir}/cephfs-table-tool
+%{_bindir}/cephfs-tool
 %{_bindir}/crushdiff
 %{_bindir}/rados
 %{_bindir}/radosgw-admin
@@ -2154,7 +2155,7 @@ fi
 
 %files -n ceph-exporter
 %{_bindir}/ceph-exporter
-%{_unitdir}/ceph-exporter.service
+%{_unitdir}/ceph-exporter@.service
 
 %files -n rbd-fuse
 %{_bindir}/rbd-fuse
@@ -2459,6 +2460,8 @@ fi
 %{_includedir}/rados/librados_fwd.hpp
 %{_includedir}/rados/page.h
 %{_includedir}/rados/rados_types.hpp
+%{_includedir}/rados/cls_flags.hpp
+%{_includedir}/rados/cls_traits.hpp
 
 %files -n python%{python3_pkgversion}-rados
 %{python3_sitearch}/rados.cpython*.so
@@ -2612,7 +2615,6 @@ fi
 %{_bindir}/ceph_perf_msgr_client
 %{_bindir}/ceph_perf_msgr_server
 %{_bindir}/ceph_psim
-%{_bindir}/ceph_radosacl
 %{_bindir}/ceph_rgw_jsonparser
 %{_bindir}/ceph_rgw_multiparser
 %{_bindir}/ceph_scratchtool

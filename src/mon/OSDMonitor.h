@@ -31,8 +31,6 @@
 #include "include/encoding.h"
 #include "common/simple_cache.hpp"
 #include "common/PriorityCache.h"
-#include "msg/Messenger.h"
-#include "common/prime.h"
 
 #include "osd/OSDMap.h"
 #include "osd/OSDMapMapping.h"

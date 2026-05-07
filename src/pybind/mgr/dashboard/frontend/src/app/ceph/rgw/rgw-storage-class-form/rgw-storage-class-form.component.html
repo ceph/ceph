@@ -101,7 +101,7 @@
       </div>
       @if( isTierMatch(TIER_TYPE.LOCAL )){
         <ng-container *ngTemplateOutlet="storageClassField"></ng-container>
-        <div class="form-item">
+        <div class="form-item clipboard">
         <cd-alert-panel type="info"
                         [showTitle]="false"
                         spacingClass="mb-2"
@@ -628,18 +628,24 @@
   <cds-text-label labelInputID="storage_class"
                   i18n
                   [disabled]="editing"
-                  [invalid]="storageClassForm.controls.storage_class.invalid && storageClassForm.controls.storage_class.dirty"
+                  [invalid]="storageClass.isInvalid"
                   [invalidText]="storageClassError"
                   >Name
     <input cdsText
+           cdValidate
+           #storageClass="cdValidate"
            type="text"
            id="storage_class"
            formControlName="storage_class"
-           [invalid]="storageClassForm.showError('storage_class', formDir, 'required')"/>
+           [invalid]="storageClass.isInvalid"/>
   </cds-text-label>
   <ng-template #storageClassError>
+    @if (storageClassForm.showError('storage_class', formDir, 'required')) {
     <span class="invalid-feedback"
-          *ngIf="storageClassForm.showError('storage_class', formDir, 'required')"
           i18n>This field is required.</span>
+    } @else if (storageClassForm.showError('storage_class', formDir, 'uniqueName')) {
+    <span class="invalid-feedback"
+          i18n>The Storage Class name is already in use.</span>
+    }
   </ng-template>
 </ng-template>

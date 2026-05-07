@@ -169,7 +169,8 @@ export const ICON_TYPE = {
   checkMarkOutline: 'checkmark--outline',
   arrowUpRight: ' arrow--up-right',
   inProgress: 'in-progress',
-  arrowDown: 'arrow--down'
+  arrowDown: 'arrow--down',
+  destroy: 'close'
 } as const;
 
 export const EMPTY_STATE_IMAGE = {

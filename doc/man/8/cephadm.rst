@@ -13,7 +13,7 @@ Synopsis
 |               [--log-dir LOG_DIR] [--logrotate-dir LOGROTATE_DIR]
 |               [--unit-dir UNIT_DIR] [--verbose] [--timeout TIMEOUT]
 |               [--retry RETRY] [--no-container-init]
-|               {version,pull,inspect-image,ls,list-networks,adopt,rm-daemon,rm-cluster,run,shell,enter,ceph-volume,unit,logs,bootstrap,deploy,check-host,prepare-host,add-repo,rm-repo,install,list-images,update-osd-service}
+|               {version,pull,inspect-image,ls,list-networks,list-rdma,adopt,rm-daemon,rm-cluster,run,shell,enter,ceph-volume,unit,logs,bootstrap,deploy,check-host,prepare-host,add-repo,rm-repo,install,list-images,update-osd-service}
 |               ...
 
 
@@ -24,6 +24,8 @@ Synopsis
 | **cephadm** **ls** [-h] [--no-detail] [--legacy-dir LEGACY_DIR]
 
 | **cephadm** **list-networks**
+
+| **cephadm** **list-rdma**
 
 | **cephadm** **adopt** [-h] --name NAME --style STYLE [--cluster CLUSTER]
 |                       [--legacy-dir LEGACY_DIR] [--config-json CONFIG_JSON]
@@ -347,6 +349,10 @@ list-networks
 
 list IP networks
 
+list-rdma
+---------
+
+list RDMA devices and their netdev interfaces
 
 ls
 --

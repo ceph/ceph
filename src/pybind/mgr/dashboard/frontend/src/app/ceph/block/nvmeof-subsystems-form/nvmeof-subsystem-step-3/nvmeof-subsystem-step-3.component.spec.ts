@@ -57,6 +57,19 @@ describe('NvmeofSubsystemsStepThreeComponent', () => {
     });
 
     describe('form initialization', () => {
+      beforeEach(() => {
+        fixture = TestBed.createComponent(NvmeofSubsystemsStepThreeComponent);
+        component = fixture.componentInstance;
+
+        component.stepTwoValue = {
+          hostType: 'specific',
+          addedHosts: ['nqn.2001-07.com.ceph:1776805137618']
+        } as any;
+
+        fixture.detectChanges();
+        form = component.formGroup;
+      });
+
       it('should initialize form with default values', () => {
         expect(form).toBeTruthy();
         expect(form.get('authType')?.value).toBe(AUTHENTICATION.Unidirectional);

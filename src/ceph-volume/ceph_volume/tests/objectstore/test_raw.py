@@ -92,6 +92,34 @@ class TestRaw:
         assert self.raw_bs.prepare_osd_req.mock_calls == [call(tmpfs=True)]
         assert self.raw_bs.osd_mkfs.called
         assert self.raw_bs.prepare_dmcrypt.called
+        m_generate_uuid.assert_called_once()
+
+    @patch('ceph_volume.objectstore.raw.nvme_utils.preformat', return_value=False)
+    @patch('ceph_volume.objectstore.raw.prepare_utils.create_id')
+    @patch('ceph_volume.objectstore.raw.system.generate_uuid')
+    def test_prepare_uses_external_osd_fsid(self,
+                                            m_generate_uuid,
+                                            m_create_id,
+                                            m_nvme_preformat,
+                                            is_root,
+                                            factory):
+        external = '824f7edf-371f-4b75-9231-4ab62a32d5c0'
+        m_create_id.return_value = MagicMock()
+        args = factory(crush_device_class=None, no_tmpfs=True, osd_fsid=external)
+        args.data = '/dev/sdx'
+        self.raw_bs.args = args
+        self.raw_bs.osd_fsid = getattr(args, 'osd_fsid', '')
+        self.raw_bs.block_device_path = args.data
+        self.raw_bs.prepare_dmcrypt = MagicMock()
+        self.raw_bs.prepare_osd_req = MagicMock()
+        self.raw_bs.osd_mkfs = MagicMock()
+        self.raw_bs.secrets = {}
+        self.raw_bs.encrypted = False
+        self.raw_bs.prepare()
+        m_generate_uuid.assert_not_called()
+        m_create_id.assert_called_once()
+        assert m_create_id.call_args[0][0] == external
+        assert self.raw_bs.osd_fsid == external
 
     @patch('ceph_volume.objectstore.raw.nvme_utils.preformat', return_value=True)
     @patch('ceph_volume.objectstore.raw.prepare_utils.create_id')

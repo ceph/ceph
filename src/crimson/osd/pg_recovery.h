@@ -136,6 +136,9 @@ private:
     const pg_shard_t& target,
     const hobject_t& obj,
     const eversion_t& v) final;
+  void send_recovery_deletes(
+    const hobject_t& obj,
+    const std::vector<pg_shard_t>& peers) final;
   void maybe_flush() final;
   void update_peers_last_backfill(
     const hobject_t& new_last_backfill) final;

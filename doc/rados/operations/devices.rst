@@ -27,7 +27,7 @@ the following forms:
    ceph device ls-by-daemon <daemon>
    ceph device ls-by-host <host>
 
-To see information about the location of an specific device and about how the
+To see information about the location of a specific device and about how the
 device is being consumed, run a command of the following form:
 
 .. prompt:: bash $

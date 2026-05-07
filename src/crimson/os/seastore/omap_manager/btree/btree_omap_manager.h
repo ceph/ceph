@@ -72,22 +72,22 @@ public:
   omap_get_value_ret omap_get_value(
     const omap_root_t &omap_root,
     Transaction &t,
-    const std::string &key) final;
+    std::string key) final;
 
   omap_set_key_ret omap_set_key(
     omap_root_t &omap_root,
     Transaction &t,
-    const std::string &key, const ceph::bufferlist &value) final;
+    std::string key, ceph::bufferlist value) final;
 
   omap_set_keys_ret omap_set_keys(
     omap_root_t &omap_root,
     Transaction &t,
-    std::map<std::string, ceph::bufferlist>&& keys) final;
+    std::map<std::string, ceph::bufferlist> keys) final;
 
   omap_rm_key_ret omap_rm_key(
     omap_root_t &omap_root,
     Transaction &t,
-    const std::string &key) final;
+    std::string key) final;
 
   omap_rm_key_range_ret omap_rm_key_range(
     omap_root_t &omap_root,
@@ -115,7 +115,7 @@ public:
   omap_rm_keys_ret omap_rm_keys(
     omap_root_t &omap_root,
     Transaction &t,
-    std::set<std::string>& keys) final;
+    std::set<std::string> keys) final;
 };
 using BtreeOMapManagerRef = std::unique_ptr<BtreeOMapManager>;
 

@@ -779,7 +779,6 @@ class TestMgmtGateway:
                                          oidc_issuer_url= "http://192.168.10.10:8888/dex"
                                          redirect_url= "{redirect_url}"
 
-                                         ssl_insecure_skip_verify=true
 
                                          # following configuration is needed to avoid getting Forbidden
                                          # when using chrome like browsers as they handle 3rd party cookies

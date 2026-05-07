@@ -27,6 +27,16 @@ leak:^PyMem_Calloc
 leak:^PyUnicode_New
 # python3.9, 3.10, 3.11
 leak:^PyMem_Malloc
+leak:^PyDict_Copy
+leak:^_PyObject_GC_NewVar
+# Catch unsymbolised interpreter frames in both the standalone
+# /usr/bin/python3.10 binary (used by the bin/ceph wrapper) and the
+# /lib/.../libpython3.10.so.1.0 embedded by C++ unittests such as
+# unittest_mgr_pyformatter / unittest_mgr_pyutil.  Not all CPython
+# 3.10 internal helpers are exported in .dynsym, so function-name
+# matches above don't cover everything; this substring-matches the
+# module path in the stack frame.  Remove when CI moves to >= 3.12.
+leak:python3.10
 # python3.12 doesn't leak anything
 # python3.13
 leak:^PyModule_ExecDef

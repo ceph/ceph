@@ -19,6 +19,8 @@ releases:
   tentacle:
     target_eol: 2027-11-18
     releases:
+      - version: 20.2.1
+        released: 2026-04-06
       - version: 20.2.0
         released: 2025-11-18
 

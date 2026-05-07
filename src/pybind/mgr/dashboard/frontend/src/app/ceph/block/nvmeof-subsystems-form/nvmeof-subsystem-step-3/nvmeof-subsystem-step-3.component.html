@@ -91,7 +91,8 @@
           <p class="cds--type-label-01 text-helper"
              i18n>{{formGroup.get('authType').value === AUTHENTICATION.Bidirectional ? 'All fields are required.' : 'Optional fields.'}}</p>
         </div>
-        @for (hostDchapKeyItem of hostDchapKeyList.controls; track hostDchapKeyItem.get('host_nqn')?.value; let i = $index) {
+        @if (hostDchapKeyList.controls.length) {
+        @for (hostDchapKeyItem of hostDchapKeyList.controls; track $index; let i = $index) {
         <div [formGroupName]="i">
           <cds-text-label
             class="cds-mb-3"
@@ -116,6 +117,11 @@
                    [invalid]="hostKey.isInvalid">
           </cds-text-label>
         </div>
+        }
+        } @else {
+        <p
+          class="cds--type-label-01 text-helper"
+          i18ns>No hosts selected.</p>
         }
       </div>
     </div>

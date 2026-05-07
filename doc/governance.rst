@@ -108,13 +108,13 @@ Current Members
  * Matan Breizman <mbreizma@redhat.com>
  * Matt Benjamin <mbenjami@redhat.com>
  * Mike Perez <miperez@redhat.com>
- * Myoungwon Oh <myoungwon.oh@samsung.com>
+ * Myoungwon Oh <ohmyoungwon@gmail.com>
  * Neha Ojha <nojha@redhat.com>
  * Patrick Donnelly <pdonnell@ibm.com>
  * Radoslaw Zarzynski <rzarzyns@redhat.com>
  * Sam Just <sjust@redhat.com>
  * Venky Shankar <vshankar@redhat.com>
- * Vikhyat Umrao <vikhyat@redhat.com>
+ * Vikhyat Umrao <vikhyat@ibm.com>
  * Xie Xingguo <xie.xingguo@zte.com.cn>
  * Yaarit Hatuka <yhatuka@ibm.com>
  * Yehuda Sadeh <yehuda@redhat.com>

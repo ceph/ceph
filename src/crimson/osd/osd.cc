@@ -711,7 +711,12 @@ seastar::future<> OSD::_send_boot()
   // See OSDMonitor::preprocess_boot, prevents boot without allow_crimson
   // OSDMap flag
   m->metadata["osd_type"] = "crimson";
-  return monc->send_message(std::move(m));
+
+  auto [ret, type] = co_await store.read_meta("type");
+  if (ret == 0) {
+    m->metadata["osd_objectstore"] = type;
+  }
+  co_return co_await monc->send_message(std::move(m));
 }
 
 seastar::future<> OSD::_add_device_class()
@@ -826,10 +831,17 @@ seastar::future<> OSD::start_asok_admin()
     asok->register_command(make_asok_hook<InjectDataErrorHook>(get_shard_services()));
     asok->register_command(make_asok_hook<InjectMDataErrorHook>(get_shard_services()));
     // PG commands
+    asok->register_command(make_asok_hook<pg::PGOldFormCommand>(*this));
     asok->register_command(make_asok_hook<pg::QueryCommand>(*this));
+    asok->register_command(make_asok_hook<pg::LogCommand>(*this));
+    asok->register_command(make_asok_hook<pg::ListUnfoundCommand>(*this));
     asok->register_command(make_asok_hook<pg::MarkUnfoundLostCommand>(*this));
-    asok->register_command(make_asok_hook<pg::ScrubCommand<true>>(*this));
-    asok->register_command(make_asok_hook<pg::ScrubCommand<false>>(*this));
+    asok->register_command(make_asok_hook<pg::ScrubCommand<true>>(*this,
+                                                                  std::string_view{"deep_scrub"}));
+    asok->register_command(make_asok_hook<pg::ScrubCommand<true>>(*this,
+                                                                  std::string_view{"deep-scrub"}));
+    asok->register_command(make_asok_hook<pg::ScrubCommand<false>>(*this,
+                                                                   std::string_view{"scrub"}));
     // ops commands
     asok->register_command(
       make_asok_hook<DumpInFlightOpsHook>(

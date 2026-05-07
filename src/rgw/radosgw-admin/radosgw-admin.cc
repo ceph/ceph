@@ -135,7 +135,7 @@ inline int posix_errortrans(int r)
  return ERR_NO_SUCH_BUCKET == r ? ENOENT : r;
 }
 
-static const std::string LUA_CONTEXT_LIST("prerequest, postrequest, background, getdata, putdata");
+static const std::string LUA_CONTEXT_LIST("prerequest, postauth, postrequest, background, getdata, putdata");
 
 void usage()
 {
@@ -201,13 +201,14 @@ void usage()
   cout << "  object rm                        remove object; include --yes-i-really-mean-it to force removal from bucket index\n";
   cout << "  object put                       put object\n";
   cout << "  object stat                      stat an object for its metadata\n";
+  cout << "  object manifest                  display the manifest of an object, producing a list of RADOS objects containing the data\n";
   cout << "  object unlink                    unlink object from bucket index\n";
   cout << "  object rewrite                   rewrite the specified object\n";
   cout << "  object reindex                   reindex the object(s) indicated by --bucket and either --object or --objects-file\n";
   cout << "  objects expire                   run expired objects cleanup\n";
   cout << "  objects expire-stale list        list stale expired objects (caused by reshard)\n";
   cout << "  objects expire-stale rm          remove stale expired objects\n";
-  cout << "  period rm                        remove a period\n";
+  cout << "  period delete                    remove a period\n";
   cout << "  period get                       get period info\n";
   cout << "  period get-current               get current period info\n";
   cout << "  period pull                      pull a period\n";
@@ -258,7 +259,7 @@ void usage()
   cout << "  zonegroup placement rm           remove a placement target from a zonegroup\n";
   cout << "  zonegroup placement default      set a zonegroup's default placement target\n";
   cout << "  zone create                      create a new zone\n";
-  cout << "  zone rm                          remove a zone\n";
+  cout << "  zone delete                      remove a zone\n";
   cout << "  zone get                         show zone cluster params\n";
   cout << "  zone modify                      modify an existing zone\n";
   cout << "  zone set                         set zone cluster params (requires infile)\n";
@@ -459,7 +460,8 @@ void usage()
   cout << "   --bucket-index-max-shards         override a zone/zonegroup's default bucket index shard count\n";
   cout << "   --fix                             besides checking bucket index, will also fix it\n";
   cout << "   --check-objects                   bucket check: rebuilds bucket index according to actual objects state\n";
-  cout << "   --format=<format>                 specify output format for certain operations: xml, json\n";
+  cout << "   --format=<format>                 specify output format for certain operations: xml, json (default: json)\n";
+  cout << "   --pretty-format                   enable pretty formatting for json/xml output\n";
   cout << "   --purge-data                      when specified, user removal will also purge all the\n";
   cout << "                                     user data\n";
   cout << "   --purge-keys                      when specified, subuser removal will also purge all the\n";
@@ -551,7 +553,11 @@ void usage()
   cout << "                                 additionally rados objects for incomplete multipart uploads will not be output\n";
   cout << "\nBucket list objects options:\n";
   cout << "   --max-entries                 max number of entries listed (default 1000)\n";
-  cout << "   --marker                      the marker used to specify on which entry the listing begins, default none (i.e., very first entry)\n";
+  cout << "   --marker                      object name marker to specify where listing begins (default: start from beginning)\n";
+  cout << "                                 requires ordered listing (do not use with --allow-unordered)\n";
+  cout << "   --object-version              for versioned buckets: specify the version/instance ID to start from\n";
+  cout << "                                 use together with --marker to paginate through versioned buckets\n";
+  cout << "                                 example: --marker=obj1 --object-version=abc123def456\n";
   cout << "   --show-restore-stats          if the flag is in present it will show restores stats in the bucket stats command\n";
   cout << "\n";
   generic_client_usage();
@@ -2123,11 +2129,25 @@ static int commit_period(rgw::sal::ConfigStore* cfgstore,
         << cpp_strerror(ret) << std::endl;
     return ret;
   }
+
+  ret = cfgstore->update_latest_epoch(dpp(), null_yield, period.get_id(), period.get_epoch());
+  if (ret == -EEXIST) {
+    // already have this epoch (or a more recent one)
+    cerr << "already have epoch >= " << period.get_epoch()
+        << " for period " << period.get_id() << std::endl;
+    return 0;
+  }
+  if (ret < 0) {
+    cerr << "Error updating latest epoch for period " << period.get_id() << ": " << cpp_strerror(ret) << std::endl;
+    return ret;
+  }
+
   ret = rgw::reflect_period(dpp(), null_yield, cfgstore, period);
   if (ret < 0) {
     cerr << "Error updating local objects: " << cpp_strerror(ret) << std::endl;
     return ret;
   }
+
   (void) cfgstore->realm_notify_new_period(dpp(), null_yield, period);
   return ret;
 }
@@ -2242,6 +2262,19 @@ static int do_period_pull(rgw::sal::ConfigStore* cfgstore,
   if (ret < 0) {
     cerr << "Error storing period " << period->get_id() << ": " << cpp_strerror(ret) << std::endl;
   }
+
+  ret = cfgstore->update_latest_epoch(dpp(), null_yield, period->get_id(), period->get_epoch());
+  if (ret == -EEXIST) {
+    // already have this epoch (or a more recent one)
+    cerr << "already have epoch >= " << period->get_epoch()
+        << " for period " << period->get_id() << std::endl;
+    return 0;
+  }
+  if (ret < 0) {
+    cerr << "Error updating latest epoch for period " << period->get_id() << ": " << cpp_strerror(ret) << std::endl;
+    return ret;
+  }
+
   return 0;
 }
 
@@ -7597,7 +7630,7 @@ int main(int argc, const char **argv)
         bucket_op.max_entries = max_entries;
       else
         bucket_op.max_entries = 0; /* for backward compatibility */
-      RGWBucketAdminOp::info(driver, bucket_op, stream_flusher, null_yield, dpp());
+      RGWBucketAdminOp::info(driver, *site, bucket_op, stream_flusher, null_yield, dpp());
     } else {
       int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
       if (ret < 0) {
@@ -7625,7 +7658,14 @@ int main(int argc, const char **argv)
 
       params.prefix = prefix;
       params.delim = delim;
-      params.marker = rgw_obj_key(marker);
+      // Support pagination for versioned buckets using --marker and --object-version
+      // For versioned buckets: use both --marker (name) and --object-version (instance)
+      // For non-versioned buckets: use only --marker (name)
+      if (!object_version.empty()) {
+        params.marker = rgw_obj_key(marker, object_version);
+      } else {
+        params.marker = rgw_obj_key(marker);
+      }
       params.ns = ns;
       params.enforce_ns = false;
       params.list_versions = true;
@@ -7720,7 +7760,7 @@ int main(int argc, const char **argv)
       bucket_op.max_entries = 0; /* for backward compatibility */
     bucket_op.set_restore_stats(bool(show_restore_stats));
 
-    int r = RGWBucketAdminOp::info(driver, bucket_op, stream_flusher, null_yield, dpp());
+    int r = RGWBucketAdminOp::info(driver, *site, bucket_op, stream_flusher, null_yield, dpp());
     if (r < 0) {
       cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
       return posix_errortrans(-r);

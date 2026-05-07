@@ -14,6 +14,7 @@ tasks:
 
 - cephadm:
     image: quay.io/ceph/ceph:v20.2.0
+    compiled_cephadm_branch: tentacle 
 
 - nvmeof:
     installer: host.a

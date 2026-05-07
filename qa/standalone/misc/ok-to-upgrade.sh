@@ -94,9 +94,13 @@ function TEST_ok_to_upgrade_replicated_pool() {
     local exp_osds_upgradable=2
     local crush_bucket=$(ceph osd tree | grep host | awk '{ print $4 }')
     local res=$(ceph osd ok-to-upgrade $crush_bucket $ceph_version --format=json)
-    # Specifying hostname as the crush bucket with a 3x replicated pool on 10 OSDs
-    # and with the default 'mgr_osd_upgrade_check_convergence_factor' would result
-    # in 4 OSDs being reported as upgradable.
+    # Specifying hostname as the crush bucket with a 3x replicated pool on 10
+    # OSDs, with the default 'mgr_osd_upgrade_check_convergence_factor' and
+    # with min_size=1 should result in at least 2 OSDs being reported as
+    # upgradable. But it is very likely that more than 2 OSDs could be found
+    # due to the way PGs are spread out across the replicas. The same is true
+    # with min_size=2. Therefore, the check for upgradable OSDs considers this
+    # and verifies that at least the expected minimum OSDs are returned.
     test $(echo $res | jq '.all_osds_upgraded') = false || return 1
     test $(echo $res | jq '.ok_to_upgrade') = true || return 1
     local num_osds_upgradable=$(echo $res | jq '.osds_ok_to_upgrade | length' | bc)
@@ -104,18 +108,39 @@ function TEST_ok_to_upgrade_replicated_pool() {
     local num_osds_upgraded=$(echo $res | jq '.osds_upgraded | length' | bc)
     test $num_osds_upgraded -eq 0 || return 1
 
-    # Test for upgradability with min_size=1, 1 OSD to upgrade and max=3.
-    # This tests the functionality of the 'max' parameter and checks the
-    # logic to find more OSDs in the crush bucket.
-    local max=2
-    exp_osds_upgradable=2
-    crush_bucket="osd.0"
+    # Test the same command as above, but exercise the 'max' parameter.
+    # Only the 'max' specified number of OSDs from the crush bucket must be returned.
+    local max=1
+    exp_osds_upgradable=1
+    # Test command with terse syntax which tests type inferencing
     res=$(ceph osd ok-to-upgrade $crush_bucket $ceph_version $max --format=json)
     test $(echo $res | jq '.all_osds_upgraded') = false || return 1
     test $(echo $res | jq '.ok_to_upgrade') = true || return 1
     num_osds_upgradable=$(echo $res | jq '.osds_ok_to_upgrade | length' | bc)
+    test $num_osds_upgradable -eq $exp_osds_upgradable || return 1
+    num_osds_upgraded=$(echo $res | jq '.osds_upgraded | length' | bc)
+    test $num_osds_upgraded -eq 0 || return 1
+
+    # Test same command above with verbose syntax
+    res=$(ceph osd ok-to-upgrade --crush_bucket $crush_bucket \
+        --ceph_version $ceph_version --max $max --format=json)
+    test $(echo $res | jq '.all_osds_upgraded') = false || return 1
+    test $(echo $res | jq '.ok_to_upgrade') = true || return 1
+    num_osds_upgradable=$(echo $res | jq '.osds_ok_to_upgrade | length' | bc)
+    test $num_osds_upgradable -eq $exp_osds_upgradable || return 1
+    num_osds_upgraded=$(echo $res | jq '.osds_upgraded | length' | bc)
+    test $num_osds_upgraded -eq 0 || return 1
+
+    # Test for upgradability with min_size=1 and 1 OSD to upgrade. The outcome
+    # must be the specified osd as the command limits the search within the
+    # provided crush bucket.
+    exp_osds_upgradable=1
+    crush_bucket="osd.0"
+    res=$(ceph osd ok-to-upgrade $crush_bucket $ceph_version --format=json)
+    test $(echo $res | jq '.all_osds_upgraded') = false || return 1
+    test $(echo $res | jq '.ok_to_upgrade') = true || return 1
+    num_osds_upgradable=$(echo $res | jq '.osds_ok_to_upgrade | length' | bc)
     test $exp_osds_upgradable = $num_osds_upgradable || return 1
-    test $max = $num_osds_upgradable || return 1
     num_osds_upgraded=$(echo $res | jq '.osds_upgraded | length' | bc)
     test $num_osds_upgraded -eq 0 || return 1
 
@@ -197,17 +222,39 @@ function TEST_ok_to_upgrade_erasure_pool() {
     local num_osds_upgraded=$(echo $res | jq '.osds_upgraded | length' | bc)
     test $num_osds_upgraded -eq 0 || return 1
 
-    # Test for upgradability with min_size=1, 1 OSD to upgrade and max=3.
-    # This tests the functionality of the 'max' parameter and also checks
-    # the logic to find more OSDs in the crush bucket.
-    local max=3
-    crush_bucket="osd.0"
+    # Test the same command as above, but exercise the 'max' parameter.
+    # Only the 'max' specified number of OSDs from the crush bucket must be returned.
+    local max=1
+    exp_osds_upgradable=1
+    # Test command with terse syntax which tests type inferencing
     res=$(ceph osd ok-to-upgrade $crush_bucket $ceph_version $max --format=json)
     test $(echo $res | jq '.all_osds_upgraded') = false || return 1
     test $(echo $res | jq '.ok_to_upgrade') = true || return 1
     num_osds_upgradable=$(echo $res | jq '.osds_ok_to_upgrade | length' | bc)
+    test $num_osds_upgradable -eq $exp_osds_upgradable || return 1
+    num_osds_upgraded=$(echo $res | jq '.osds_upgraded | length' | bc)
+    test $num_osds_upgraded -eq 0 || return 1
+
+    # Test command above with verbose syntax
+    res=$(ceph osd ok-to-upgrade --crush_bucket $crush_bucket \
+        --ceph_version $ceph_version --max $max --format=json)
+    test $(echo $res | jq '.all_osds_upgraded') = false || return 1
+    test $(echo $res | jq '.ok_to_upgrade') = true || return 1
+    num_osds_upgradable=$(echo $res | jq '.osds_ok_to_upgrade | length' | bc)
+    test $num_osds_upgradable -eq $exp_osds_upgradable || return 1
+    num_osds_upgraded=$(echo $res | jq '.osds_upgraded | length' | bc)
+    test $num_osds_upgraded -eq 0 || return 1
+
+    # Test for upgradability with min_size=5 and 1 OSD to upgrade. The outcome
+    # must be the specified osd as the command limits the search within the
+    # provided crush bucket.
+    exp_osds_upgradable=1
+    crush_bucket="osd.0"
+    res=$(ceph osd ok-to-upgrade $crush_bucket $ceph_version --format=json)
+    test $(echo $res | jq '.all_osds_upgraded') = false || return 1
+    test $(echo $res | jq '.ok_to_upgrade') = true || return 1
+    num_osds_upgradable=$(echo $res | jq '.osds_ok_to_upgrade | length' | bc)
     test $exp_osds_upgradable = $num_osds_upgradable || return 1
-    test $max = $num_osds_upgradable || return 1
     num_osds_upgraded=$(echo $res | jq '.osds_upgraded | length' | bc)
     test $num_osds_upgraded -eq 0 || return 1
 

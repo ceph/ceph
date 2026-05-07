@@ -27,74 +27,6 @@ struct alloc_paddr_result {
   extent_len_t len;
 };
 
-struct rbm_shard_info_t {
-  std::size_t size = 0;
-  uint64_t start_offset = 0;
-
-  DENC(rbm_shard_info_t, v, p) {
-    DENC_START(1, 1, p);
-    denc(v.size, p);
-    denc(v.start_offset, p);
-    DENC_FINISH(p);
-  }
-};
-
-enum class rbm_feature_t : uint64_t {
-  RBM_NVME_END_TO_END_PROTECTION = 1,
-};
-
-struct rbm_superblock_t {
-  size_t size = 0;
-  size_t block_size = 0;
-  uint64_t feature = 0;
-  uint64_t journal_size = 0;
-  checksum_t crc = 0;
-  device_config_t config;
-  uint32_t shard_num = 0;
-  // Must be assigned if ent-to-end-data-protection features is enabled
-  uint32_t nvme_block_size = 0;
-  std::vector<rbm_shard_info_t> shard_infos;
-
-  DENC(rbm_superblock_t, v, p) {
-    DENC_START(1, 1, p);
-    denc(v.size, p);
-    denc(v.block_size, p);
-    denc(v.feature, p);
-
-    denc(v.journal_size, p);
-    denc(v.crc, p);
-    denc(v.config, p);
-    denc(v.shard_num, p);
-    denc(v.nvme_block_size, p);
-    denc(v.shard_infos, p);
-    DENC_FINISH(p);
-  }
-
-  void validate() const {
-    ceph_assert(block_size > 0);
-    for (unsigned int i = 0; i < seastar::smp::count; i ++) {
-      ceph_assert(shard_infos[i].size > block_size &&
-                  shard_infos[i].size % block_size == 0);
-      ceph_assert_always(shard_infos[i].size <= DEVICE_OFF_MAX);
-      ceph_assert(journal_size > 0 &&
-                  journal_size % block_size == 0);
-      ceph_assert(shard_infos[i].start_offset < size &&
-		  shard_infos[i].start_offset % block_size == 0);
-    }
-    ceph_assert(config.spec.magic != 0);
-    ceph_assert(get_default_backend_of_device(config.spec.dtype) ==
-		backend_type_t::RANDOM_BLOCK);
-    ceph_assert(config.spec.id <= DEVICE_ID_MAX_VALID);
-  }
-
-  bool is_end_to_end_data_protection() const {
-    return (feature & (uint64_t)rbm_feature_t::RBM_NVME_END_TO_END_PROTECTION);
-  }
-  void set_end_to_end_data_protection() {
-    feature |= (uint64_t)rbm_feature_t::RBM_NVME_END_TO_END_PROTECTION;
-  }
-};
-
 enum class rbm_extent_state_t {
   FREE,		// not allocated
   RESERVED,	// extent is reserved by alloc_new_extent, but is not persistent
@@ -184,18 +116,6 @@ namespace random_block_device {
 seastar::future<std::unique_ptr<random_block_device::RBMDevice>> 
   get_rb_device(const std::string &device);
 
-std::ostream &operator<<(std::ostream &out, const rbm_superblock_t &header);
-std::ostream &operator<<(std::ostream &out, const rbm_shard_info_t &shard);
+std::ostream &operator<<(std::ostream &out, const rbm_extent_state_t &state);
 }
 
-WRITE_CLASS_DENC_BOUNDED(
-  crimson::os::seastore::rbm_shard_info_t
-)
-WRITE_CLASS_DENC_BOUNDED(
-  crimson::os::seastore::rbm_superblock_t
-)
-
-#if FMT_VERSION >= 90000
-template<> struct fmt::formatter<crimson::os::seastore::rbm_superblock_t> : fmt::ostream_formatter {};
-template<> struct fmt::formatter<crimson::os::seastore::rbm_shard_info_t> : fmt::ostream_formatter {};
-#endif

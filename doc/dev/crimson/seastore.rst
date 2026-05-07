@@ -299,6 +299,30 @@ separated into **Segmented** and **RBM** backend types as follows:
   *Interface:* ``RBMDevice``
 
 
+Device Hardware
+---------------
+
+The following table maps each device_type_t enum value to
+the physical hardware it represents and the backend implementation it uses.
+
+
++------------------------------------------+---------------------------+------------------------+
+| Device Type                              | Physical Hardware         | Backend                |
++==========================================+===========================+========================+
+| ``HDD``                                  | Spinning disk             | **Segmented**          |
++------------------------------------------+---------------------------+------------------------+
+| ``SSD``                                  | Conventional SSD / NVMe   | **Segmented**          |
++------------------------------------------+---------------------------+------------------------+
+| ``ZBD``                                  | ZNS SSD or SMR HDD        | **Segmented**          |
++------------------------------------------+---------------------------+------------------------+
+| ``RANDOM_BLOCK_SSD``                     | NVMe                      | **Random Block (RBM)** |
++------------------------------------------+---------------------------+------------------------+
+| ``EPHEMERAL_COLD`` / ``EPHEMERAL_MAIN``  | In-memory (test)          | **Segmented**          |
++------------------------------------------+---------------------------+------------------------+
+| ``RANDOM_BLOCK_EPHEMERAL``               | In-memory (test)          | **Random Block (RBM)** |
++------------------------------------------+---------------------------+------------------------+
+
+
 .. _journal:
 
 Journal
@@ -638,7 +662,8 @@ When changing to seastar::smp::count: 2:
 
 using ./bin/ceph daemon osd.0 dump_store_shards to check store assignment.
 See the following example outputs from running dump_store_shards with the above scenarios:
-**first start with 3 reactors**:
+**first start with 3 reactors**::
+
   ./bin/ceph daemon osd.0 dump_store_shards
   *** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH ***
   {
@@ -659,7 +684,8 @@ See the following example outputs from running dump_store_shards with the above 
     }
   }
 
-**second restart with 2 reactors**:
+**second restart with 2 reactors**::
+
   ./bin/ceph daemon osd.0 dump_store_shards
   *** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH ***
   {
@@ -694,7 +720,8 @@ See the following example outputs from running dump_store_shards with the above 
     }
   }
 
-**third restart with 5 reactors**:
+**third restart with 5 reactors**::
+
   ./bin/ceph daemon osd.0 dump_store_shards
   *** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH ***
   {
@@ -743,6 +770,166 @@ See the following example outputs from running dump_store_shards with the above 
         }
     }
   }
+
+Physical Layout, and the common device header
+=============================================
+
+A device on-disk format starts with a 60-byte prefix:
+
+* 23 bytes of magic: same size as BlueStore devices, but the magic string is ``CRIMSON_DEVICE``.
+* 37 bytes of nulls (the corresponding field in Classic devices is the UUID).
+
+
+Internally, all devices use a common superblock layout, ``device_superblock_t``.
+The per-shard layout information is stored in ``device_shard_info_t``, which contains
+the union of all fields relevant to each device type.
+They also share a single ``device_config_t`` for device identity and metadata.
+
+
+.. list-table:: ``device_superblock_t``
+   :header-rows: 1
+   :widths: 15 20 20 20 25
+
+   * - Field
+     - Type
+     - HDD/SSD
+     - ZNS/SMR
+     - RBM (NVMe)
+   * - ``version``
+     - ``uint8_t``
+     - 1
+     - 1
+     - 1
+   * - ``shard_num``
+     - ``uint``
+     - number of shards
+     - number of shards
+     - number of shards
+   * - ``segment_size``
+     - ``size_t``
+     - logical segment size (bytes)
+     - logical segment size (bytes)
+     - 0 (unused)
+   * - ``block_size``
+     - ``size_t``
+     - filesystem block size
+     - filesystem block size
+     - filesystem block size
+   * - ``config``
+     - ``device_config_t``
+     - device identity/meta
+     - device identity/meta
+     - device identity/meta
+   * - ``total_size``
+     - ``size_t``
+     - 0 (unused)
+     - 0 (unused)
+     - total device capacity (bytes)
+   * - ``journal_size``
+     - ``uint64_t``
+     - 0 (unused)
+     - 0 (unused)
+     - journal area size (bytes)
+   * - ``segment_capacity``
+     - ``size_t``
+     - 0 (unused)
+     - usable bytes/segment
+     - 0 (unused)
+   * - ``zones_per_segment``
+     - ``size_t``
+     - 0 (unused)
+     - zones per logical segment
+     - 0 (unused)
+   * - ``zone_size``
+     - ``size_t``
+     - 0 (unused)
+     - physical zone size (bytes)
+     - 0 (unused)
+   * - ``zone_capacity``
+     - ``size_t``
+     - 0 (unused)
+     - usable bytes per zone
+     - 0 (unused)
+   * - ``shard_infos``
+     - ``vector<device_shard_info_t>``
+     - one entry per shard
+     - one entry per shard
+     - one entry per shard
+   * - ``crc``
+     - ``checksum_t``
+     - 0 (unused)
+     - 0 (unused)
+     - CRC of serialized superblock
+   * - ``feature``
+     - ``uint64_t``
+     - 0 (unused)
+     - 0 (unused)
+     - ``NVME_END_TO_END_PROTECTION`` bit
+   * - ``nvme_block_size``
+     - ``uint32_t``
+     - 0 (unused)
+     - 0 (unused)
+     - NVMe logical block size (E2E protection)
+
+|
+
+.. list-table:: ``device_config_t``
+   :header-rows: 1
+   :widths: 20 25 55
+
+   * - Field
+     - Type
+     - Description
+   * - ``major_dev``
+     - ``bool``
+     - whether this is the primary device
+   * - ``spec``
+     - ``device_spec_t``
+     - magic number, device type (``device_type_t``), and device id
+   * - ``meta``
+     - ``seastore_meta_t``
+     - seastore filesystem id (``uuid_d``)
+   * - ``secondary_devices``
+     - ``secondary_device_set_t``
+     - map of secondary device ids to their ``device_spec_t``
+
+|
+
+.. list-table:: ``device_shard_info_t``
+   :header-rows: 1
+   :widths: 15 20 20 20 25
+
+   * - Field
+     - Type
+     - HDD/SSD
+     - ZNS/SMR
+     - RBM (NVMe)
+   * - ``size``
+     - ``size_t``
+     - usable shard size (bytes)
+     - usable shard size (bytes)
+     - usable shard size (bytes)
+   * - ``segments``
+     - ``size_t``
+     - number of segments
+     - number of segments
+     - 0 (unused)
+   * - ``first_segment_offset``
+     - ``uint64_t``
+     - byte offset of first segment
+     - byte offset of first segment
+     - 0 (unused)
+   * - ``tracker_offset``
+     - ``uint64_t``
+     - byte offset of segment-state tracker
+     - 0 (unused)
+     - 0 (unused)
+   * - ``start_offset``
+     - ``uint64_t``
+     - 0 (unused)
+     - 0 (unused)
+     - byte offset of shard start
+
 
 Next Steps
 ==========

@@ -234,7 +234,6 @@ if(HAVE_INTEL)
   if(HAVE_NASM_X64)
     set(CMAKE_ASM_FLAGS "-i ${PROJECT_SOURCE_DIR}/src/isa-l/include/ ${CMAKE_ASM_FLAGS}")
     list(APPEND crc32_srcs
-      ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc32_iscsi_00.asm
       ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc32_iscsi_01.asm
       crc32c_intel_fast_zero_asm.s)
   endif(HAVE_NASM_X64)
@@ -255,8 +254,11 @@ elseif(HAVE_S390X)
     crc32c_s390x.c
     crc32c_s390x_le-vx.S
   )
-elseif(HAVE_RISCV_ZVBC)
-  list(APPEND crc32_srcs crc32c_riscv.c)
+elseif(HAVE_RISCV_ZVBC OR HAVE_RISCV_ZBC)
+  list(APPEND crc32_srcs
+    crc32c_riscv.c
+    crc32c_riscv_zbc_asm.S
+  )
 endif(HAVE_INTEL)
 
 add_library(crc32 OBJECT ${crc32_srcs})
@@ -267,6 +269,12 @@ if(HAVE_ARMV8_CRC)
 endif()
 if(HAVE_RISCV)
   set_target_properties(crc32 PROPERTIES COMPILE_FLAGS "${CMAKE_C_FLAGS} ${SIMD_COMPILE_FLAGS}")
+  if(HAVE_RISCV_ZBC)
+    target_compile_definitions(crc32 PRIVATE HAVE_RISCV_ZBC)
+  endif()
+  if(HAVE_RISCV_ZVBC)
+    target_compile_definitions(crc32 PRIVATE HAVE_RISCV_ZVBC)
+  endif()
 endif()
 target_link_libraries(crc32
   arch)

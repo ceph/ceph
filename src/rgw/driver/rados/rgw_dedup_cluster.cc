@@ -973,7 +973,6 @@ namespace rgw::dedup {
     Formatter::ObjectSection section{*fmt, "dedup_ratio_estimate"};
     fmt->dump_unsigned("s3_bytes_before", s3_bytes_before);
     fmt->dump_unsigned("s3_bytes_after", s3_bytes_after);
-    fmt->dump_unsigned("dup_head_bytes", md5_stats_sum.dup_head_bytes_estimate);
 
     if (s3_bytes_before > s3_bytes_after && s3_bytes_after) {
       double dedup_ratio = (double)s3_bytes_before/s3_bytes_after;
@@ -997,7 +996,6 @@ namespace rgw::dedup {
     Formatter::ObjectSection section{*fmt, "dedup_ratio_actual"};
     fmt->dump_unsigned("s3_bytes_before", s3_bytes_before);
     fmt->dump_unsigned("s3_bytes_after", s3_bytes_after);
-    fmt->dump_unsigned("dup_head_bytes", md5_stats_sum.dup_head_bytes);
     if (s3_bytes_before > s3_bytes_after && s3_bytes_after) {
       double dedup_ratio = (double)s3_bytes_before/s3_bytes_after;
       fmt->dump_float("dedup_ratio", dedup_ratio);

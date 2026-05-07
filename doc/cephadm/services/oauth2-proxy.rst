@@ -118,6 +118,7 @@ A non-exhaustive list of important limitations for the `oauth2-proxy` service fo
 
 * High-availability configurations for `oauth2-proxy` itself are not supported.
 * Proper configuration of the IDP and OAuth2 parameters is crucial to avoid authentication failures. Misconfigurations can lead to access issues.
+* IDP must include the jti claim in the issued JWT token because the Ceph Dashboard relies on this value to verify the token's validity.
 
 
 Container images

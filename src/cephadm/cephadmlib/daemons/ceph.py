@@ -197,6 +197,20 @@ class Ceph(ContainerDaemonForm):
         )
         mounts.update(cm)
 
+        if self.identity.daemon_type == 'rgw':
+            config_json = fetch_configs(ctx) or {}
+            d3n_cache = config_json.get('d3n_cache')
+
+            if d3n_cache:
+                if not isinstance(d3n_cache, dict):
+                    raise Error(
+                        f'Invalid d3n_cache config: expected dict got {type(d3n_cache).__name__}'
+                    )
+
+                cache_path = d3n_cache.get('cache_path')
+                if cache_path and isinstance(cache_path, str):
+                    mounts[cache_path] = f'{cache_path}:z'
+
     def setup_qat_args(self, ctx: CephadmContext, args: List[str]) -> None:
         try:
             out, _, _ = call_throws(ctx, ['ls', '-1', '/dev/vfio/devices'])

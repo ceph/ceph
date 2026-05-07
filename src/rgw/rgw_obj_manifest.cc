@@ -207,7 +207,7 @@ void RGWObjManifest::obj_iterator::update_location()
 }
 
 void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_stripe,
-                                           uint64_t ofs, string *override_prefix, rgw_obj_select *location) const
+                                           uint64_t ofs, const string *override_prefix, rgw_obj_select *location) const
 {
   rgw_obj loc;
 

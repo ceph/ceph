@@ -6,11 +6,13 @@ from requests.exceptions import RequestException
 
 from .model import Feedback
 
-class config:
-    url = 'tracker.ceph.com'
-    port = 443
+DEFAULT_TRACKER_URL = 'tracker.ceph.com'
+
 
 class CephTrackerClient():
+
+    def __init__(self, tracker_url: str = DEFAULT_TRACKER_URL):
+        self.tracker_url = tracker_url
 
     def list_issues(self):
         '''
@@ -20,7 +22,7 @@ class CephTrackerClient():
             'Content-Type': 'application/json',
         }
         response = requests.get(
-            f'https://{config.url}/issues.json', headers=headers)
+            f'https://{self.tracker_url}/issues.json', headers=headers)
         if not response.ok:
             if response.status_code == 404:
                 raise FileNotFoundError
@@ -40,7 +42,7 @@ class CephTrackerClient():
             raise Exception("Ceph Tracker API Key not set")
         data = json.dumps(feedback.as_dict())
         response = requests.post(
-            f'https://{config.url}/projects/{feedback.project_id}/issues.json',
+            f'https://{self.tracker_url}/projects/{feedback.project_id}/issues.json',
             headers=headers, data=data)
         if not response.ok:
             if response.status_code == 401:

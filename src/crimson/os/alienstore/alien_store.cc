@@ -530,11 +530,7 @@ AlienStore::read_meta(const std::string& key)
     return tp->submit([key, this] {
       std::string value;
       int r = store->read_meta(key, &value);
-      if (r > 0) {
-        value.resize(r);
-        boost::algorithm::trim_right_if(value,
-          [] (unsigned char c) {return isspace(c);});
-      } else {
+      if (r < 0) {
         value.clear();
       }
       return std::make_pair(r, value);

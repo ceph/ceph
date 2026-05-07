@@ -17,7 +17,7 @@ import {
 } from '~/app/shared/models/performance-data';
 import { PerformanceCardService } from '../../api/performance-card.service';
 import { DropdownModule, GridModule, LayoutModule, ListItem } from 'carbon-components-angular';
-import { Subject, Subscription } from 'rxjs';
+import { of, Subject, Subscription } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { ProductiveCardComponent } from '../productive-card/productive-card.component';
 import { CommonModule } from '@angular/common';
@@ -25,6 +25,7 @@ import { TimePickerComponent } from '../time-picker/time-picker.component';
 import { AreaChartComponent } from '../area-chart/area-chart.component';
 import { MgrModuleService } from '../../api/mgr-module.service';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { AuthStorageService } from '../../services/auth-storage.service';
 
 @Component({
   selector: 'cd-performance-card',
@@ -82,14 +83,21 @@ export class PerformanceCardComponent implements OnInit, OnDestroy {
     }
   ];
 
+  role: string = '';
+
   private prometheusService = inject(PrometheusService);
   private performanceCardService = inject(PerformanceCardService);
   private mgrModuleService = inject(MgrModuleService);
+  private readonly authStorageService = inject(AuthStorageService);
 
   time = { ...this.prometheusService.lastHourDateObject };
   private chartSub?: Subscription;
 
-  readonly list = toSignal(this.mgrModuleService.list(), { initialValue: [] });
+  private readonly permissions = this.authStorageService.getPermissions();
+
+  readonly list = this.permissions?.configOpt?.read
+    ? toSignal(this.mgrModuleService.list(), { initialValue: [] })
+    : toSignal(of([]), { initialValue: [] });
 
   ngOnInit() {
     this.loadCharts(this.time);
@@ -104,24 +112,29 @@ export class PerformanceCardComponent implements OnInit, OnDestroy {
       .getChartData(time)
       .pipe(takeUntil(this.destroy$))
       .subscribe((data) => {
-        this.chartDataSignal.set(data);
-        this.prometheusService.ifPrometheusConfigured(
-          () => {
-            let enabled$ = this.list().filter((a) => a.name === 'prometheus')[0].enabled;
-            if (enabled$) {
-              this.chartDataSignal.set(data);
-              this.emptyStateKey.set('');
-            } else if (!enabled$) {
-              this.emptyStateKey.set('prometheusDisabled');
-            } else {
-              this.emptyStateKey.set('storageNotAvailable');
-            }
-          },
-          () => {
-            this.emptyStateKey.set('prometheusNotAvailable');
-          }
-        );
+        if (this.permissions?.configOpt?.read) {
+          this.followEmptyStateMsgCheck(data);
+        } else {
+          this.skipEmptyStateMsgCheck(data);
+        }
       });
+  }
+
+  followEmptyStateMsgCheck(data: PerformanceData) {
+    let enabled$ = this.list().filter((a) => a.name === 'prometheus')[0].enabled;
+    this.chartDataSignal.set(data);
+    if (enabled$) {
+      this.emptyStateKey.set('');
+    } else if (!enabled$) {
+      this.emptyStateKey.set('prometheusDisabled');
+    } else {
+      this.emptyStateKey.set('storageNotAvailable');
+    }
+  }
+
+  skipEmptyStateMsgCheck(data: PerformanceData) {
+    this.chartDataSignal.set(data);
+    this.emptyStateKey.set('');
   }
 
   ngOnDestroy(): void {

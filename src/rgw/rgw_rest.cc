@@ -718,6 +718,10 @@ void abort_early(req_state *s, RGWOp* op, int err_no,
     }
 
     dump_errno(s);
+    if (err_no == -ERR_RATE_LIMITED && s->ratelimit_retry_after > 0) {
+      dump_header(s, "Retry-After",
+                  static_cast<long long>(s->ratelimit_retry_after));
+    }
     dump_bucket_from_state(s);
     if (err_no == -ERR_PERMANENT_REDIRECT || err_no == -ERR_WEBSITE_REDIRECT) {
       string dest_uri;

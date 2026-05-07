@@ -512,7 +512,6 @@ struct FixedKVInternalNode
   }
 
   void merge_content_to_pending_versions(Transaction &t) {
-    ceph_assert(is_rewrite_transaction(t.get_src()));
     this->for_each_copy_dest_set(t, [this, &t](auto &copy_dests) {
       this->merge_content_to(t, copy_dests.dests_by_key);
     });

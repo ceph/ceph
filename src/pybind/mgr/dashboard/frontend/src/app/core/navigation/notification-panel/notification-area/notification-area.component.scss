@@ -85,6 +85,10 @@
   align-items: flex-start;
   position: relative;
 
+  > cd-icon {
+    margin-top: -$spacing-03;
+  }
+
   .notification-close {
     position: absolute;
     right: 0;

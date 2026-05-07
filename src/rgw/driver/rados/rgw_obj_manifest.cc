@@ -181,13 +181,13 @@ int RGWObjManifest::append_explicit(const DoutPrefixProvider *dpp, RGWObjManifes
   return 0;
 }
 
-bool RGWObjManifest::get_rule(uint64_t ofs, RGWObjManifestRule *rule)
+bool RGWObjManifest::get_rule(uint64_t ofs, RGWObjManifestRule *rule) const
 {
   if (rules.empty()) {
     return false;
   }
 
-  map<uint64_t, RGWObjManifestRule>::iterator iter = rules.upper_bound(ofs);
+  map<uint64_t, RGWObjManifestRule>::const_iterator iter = rules.upper_bound(ofs);
   if (iter != rules.begin()) {
     --iter;
   }

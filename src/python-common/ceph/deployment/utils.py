@@ -1,6 +1,6 @@
 import ipaddress
 import socket
-from typing import Tuple, Optional, Any
+from typing import Tuple, Optional, Any, List
 from urllib.parse import urlparse
 from ceph.deployment.hostspec import SpecValidationError
 from numbers import Number
@@ -176,3 +176,18 @@ def verify_enum(field: Any, field_name: str, allowed: list) -> None:
         if field.lower() not in allowed_lower:
             raise SpecValidationError(
                            f'Invalid {field_name}. Valid values are: {", ".join(allowed)}')
+
+
+def validate_port(port: Optional[int], field_name: str = 'port') -> None:
+    if port is not None and not (1 <= port <= 65535):
+        raise SpecValidationError(
+            f'Invalid {field_name}: {port}. Must be between 1 and 65535.'
+        )
+
+
+def validate_unique_ports(ports: List[int]) -> None:
+    """Raise SpecValidationError if any port is used more than once"""
+    if len(ports) != len(set(ports)):
+        raise SpecValidationError(
+            'Invalid port: Duplicate ports are not allowed'
+        )

@@ -17,6 +17,10 @@
   padding-top: layout.$spacing-03;
 }
 
+.cds-pr-4 {
+  padding-right: layout.$spacing-04;
+}
+
 .cds-pr-8 {
   padding-right: layout.$spacing-08;
 }
@@ -24,6 +28,10 @@
 // MARGINS
 .cds-m-0 {
   margin: 0;
+}
+
+.cds-m-1 {
+  margin: layout.$spacing-01;
 }
 
 .cds-mb-0 {
@@ -54,12 +62,16 @@
   margin-bottom: layout.$spacing-06;
 }
 
-.cds-mt-3 {
-  margin-top: layout.$spacing-03;
-}
-
 .cds-mt-1 {
   margin-top: layout.$spacing-01;
+}
+
+.cds-mt-2 {
+  margin-top: layout.$spacing-02;
+}
+
+.cds-mt-3 {
+  margin-top: layout.$spacing-03;
 }
 
 .cds-mt-4 {
@@ -96,6 +108,10 @@
 
 .cds-mr-3 {
   margin-right: layout.$spacing-03;
+}
+
+.cds-mr-4 {
+  margin-right: layout.$spacing-04;
 }
 
 .cds-mr-5 {

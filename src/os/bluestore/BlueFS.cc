@@ -3796,6 +3796,7 @@ int BlueFS::_flush_and_sync_log_jump_D(uint64_t jump_to)
 
   dout(10) << __func__ << " jumping log offset from 0x" << std::hex
 	   << log.writer->pos << " -> 0x" << jump_to << std::dec << dendl;
+  ceph_assert(log.writer->pos <= jump_to);
   log.writer->pos = jump_to;
   vselector->sub_usage(log.writer->file->vselector_hint, log.writer->file->fnode.size);
   log.writer->file->fnode.size = jump_to;
@@ -3850,6 +3851,17 @@ ceph::bufferlist BlueFS::FileWriter::flush_buffer(
     // The alternative approach would be to place the entire tail and
     // padding on a dedicated, 4 KB long memory chunk. This shouldn't
     // trigger the rebuild while still being less expensive.
+    if (file->envelope_mode() &&
+      buffer.get_append_buffer_unused_tail_length() < tail + File::envelope_t::head_size()) {
+      // Envelope mode header must completely fit in single buffer::ptr,
+      // otherwise append_hole() will allocate new unaligned buffer.
+      // |4K  ......... ~6k ........  8K-1 | 8K .............................. 12K|
+      // <-----tail----><00000000000000000> <-----buffer_unused_tail_length------->
+      // <------to-be-flushed-to-disk-----> <----------tail-----------><env::head_size>
+      // Clearing the buffer is a way to force buffer_appender to allocate fresh
+      // pages. The size is min 2 * super.block_size so header will fit.
+      buffer.clear();
+    }
     buffer_appender.substr_of(bl, bl.length() - padding_len - tail, tail);
     buffer.splice(buffer.length() - tail, tail, &tail_block);
   } else {
@@ -4117,6 +4129,9 @@ void BlueFS::append_try_flush(FileWriter *h, const char* buf, size_t len)/*_WF_L
     std::unique_lock hl(h->lock);
     if (h->file->envelope_mode() && h->get_buffer_length() == 0) {
       h->envelope_head_filler = h->append_hole(File::envelope_t::head_size());
+      uint32_t pos1 = h->get_effective_write_pos() - File::envelope_t::head_size();
+      uint32_t pos2 = reinterpret_cast<uintptr_t>(h->envelope_head_filler.c_str());
+      ceph_assert(p2aligned(pos1 ^ pos2, CEPH_PAGE_SIZE));
     }
     size_t max_size = 1ull << 30; // cap to 1GB
     while (len > 0) {
@@ -4720,7 +4735,7 @@ int BlueFS::open_for_write(
 
 BlueFS::FileWriter *BlueFS::_create_writer(FileRef f)
 {
-  FileWriter *w = new FileWriter(f);
+  FileWriter *w = new FileWriter(f, super.block_size);
   for (unsigned i = 0; i < MAX_BDEV; ++i) {
     if (bdev[i]) {
       w->iocv[i] = new IOContext(cct, NULL);
@@ -4783,10 +4798,11 @@ bool BlueFS::debug_get_is_dev_dirty(FileWriter *h, uint8_t dev)
 }
 
 void BlueFS::collect_alerts(osd_alert_list_t& alerts) {
-  if (bdev[BDEV_DB]) {
+  if (bdev[BDEV_DB] &&
+    (!is_shared_alloc(BDEV_DB) /*BlueStore is collecting alerts for its bdev*/) ) {
     bdev[BDEV_DB]->collect_alerts(alerts, "DB");
   }
-  if (bdev[BDEV_WAL]) {
+  if (bdev[BDEV_WAL] /*WAL is never shared*/) {
     bdev[BDEV_WAL]->collect_alerts(alerts, "WAL");
   }
   _update_logger_stats(); // just to have it updated more frequently
@@ -5410,6 +5426,27 @@ void FitToFastVolumeSelector::get_paths(const std::string& base, paths& res) con
   res.emplace_back(base, 1);  // size of the last db_path has no effect
 }
 
+uint64_t RocksDBBlueFSVolumeSelector::get_effective_extra() const {
+  // considering statically available db space vs.
+  // - observed maximums on DB dev for DB/WAL/UNSORTED data
+  // - observed maximum spillovers
+
+  // max db usage we potentially observed
+  uint64_t max_db_use = 0;
+  max_db_use += per_level_per_dev_max.at(BlueFS::BDEV_DB, LEVEL_LOG - LEVEL_FIRST);
+  max_db_use += per_level_per_dev_max.at(BlueFS::BDEV_DB, LEVEL_WAL - LEVEL_FIRST);
+  max_db_use += per_level_per_dev_max.at(BlueFS::BDEV_DB, LEVEL_DB - LEVEL_FIRST);
+  // this could go to db hence using it in the estimation
+  max_db_use += per_level_per_dev_max.at(BlueFS::BDEV_SLOW, LEVEL_DB - LEVEL_FIRST);
+
+  auto db_total = l_totals[LEVEL_DB - LEVEL_FIRST];
+  uint64_t avail = std::min(
+    db_avail4slow,
+    max_db_use < db_total ? db_total - max_db_use : 0);
+
+  return avail;
+}
+
 uint8_t RocksDBBlueFSVolumeSelector::select_prefer_bdev(void* h) {
   ceph_assert(h != nullptr);
   uint64_t hint = reinterpret_cast<uint64_t>(h);
@@ -5418,21 +5455,8 @@ uint8_t RocksDBBlueFSVolumeSelector::select_prefer_bdev(void* h) {
   case LEVEL_SLOW:
     res = BlueFS::BDEV_SLOW;
     if (db_avail4slow > 0) {
-      // considering statically available db space vs.
-      // - observed maximums on DB dev for DB/WAL/UNSORTED data
-      // - observed maximum spillovers
-      uint64_t max_db_use = 0; // max db usage we potentially observed
-      max_db_use += per_level_per_dev_max.at(BlueFS::BDEV_DB, LEVEL_LOG - LEVEL_FIRST);
-      max_db_use += per_level_per_dev_max.at(BlueFS::BDEV_DB, LEVEL_WAL - LEVEL_FIRST);
-      max_db_use += per_level_per_dev_max.at(BlueFS::BDEV_DB, LEVEL_DB - LEVEL_FIRST);
-      // this could go to db hence using it in the estimation
-      max_db_use += per_level_per_dev_max.at(BlueFS::BDEV_SLOW, LEVEL_DB - LEVEL_FIRST);
 
-      auto db_total = l_totals[LEVEL_DB - LEVEL_FIRST];
-      uint64_t avail = std::min(
-	db_avail4slow,
-	max_db_use < db_total ? db_total - max_db_use : 0);
-
+      auto avail = get_effective_extra();
       // considering current DB dev usage for SLOW data
       if (avail > per_level_per_dev_usage.at(BlueFS::BDEV_DB, LEVEL_SLOW - LEVEL_FIRST)) {
 	res = BlueFS::BDEV_DB;
@@ -5489,8 +5513,9 @@ void RocksDBBlueFSVolumeSelector::dump(ostream& sout) {
   auto max_y = per_level_per_dev_usage.get_max_y();
 
   sout << "RocksDBBlueFSVolumeSelector " << std::endl;
-  sout << ">>Settings<<"
-    << " extra=" << byte_u_t(db_avail4slow)
+  sout << ">>Parameters<<"
+    << " effective extra=" << byte_u_t(get_effective_extra())
+    << " max extra=" << byte_u_t(db_avail4slow)
     << ", extra level=" << extra_level
     << ", l0_size=" << byte_u_t(level0_size)
     << ", l_base=" << byte_u_t(level_base)

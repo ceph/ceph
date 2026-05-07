@@ -7,6 +7,7 @@
 #include "include/types.h"
 #include "include/lru.h"
 #include "include/Context.h"
+#include "include/object.h"
 #include "include/xlist.h"
 #include "include/common_fwd.h"
 

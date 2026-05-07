@@ -1763,3 +1763,26 @@ TEST_F(ConditionTest, StringNotLikeLogic)
     EXPECT_TRUE(stringNotLike.eval({{key, "public/document.pdf"}}));
   }
 }
+
+TEST_F(ConditionTest, Null)
+{
+  const std::string key = "s3:prefix";
+
+  {
+    // "Null": {"s3:prefix": "true"}
+    Condition isNull{TokenID::Null, key.data(), key.size(), false};
+    isNull.vals.push_back("true");
+
+    EXPECT_TRUE(isNull.eval({}));
+    EXPECT_FALSE(isNull.eval({{key, "admin/config.txt"}}));
+  }
+
+  {
+    // "Null": {"s3:prefix": "false"}
+    Condition notNull{TokenID::Null, key.data(), key.size(), false};
+    notNull.vals.push_back("false");
+
+    EXPECT_FALSE(notNull.eval({}));
+    EXPECT_TRUE(notNull.eval({{key, "admin/config.txt"}}));
+  }
+}

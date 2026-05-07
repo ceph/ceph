@@ -678,6 +678,12 @@ then the ``GET`` action will fail. After "user A" has completed this 1 GB
 operation, RGW blocks the user's requests for up to two accumulation intervals. After this
 time has elapsed, "user A" will be able to send ``GET`` requests again.
 
+Rate-limited requests receive an HTTP ``503`` response with the S3 error code
+``SlowDown``, matching the AWS S3 behavior. The response includes a
+``Retry-After`` header with the estimated number of seconds until the rate-limit
+window allows the next request through, computed from the current token-bucket
+state. Load balancers or reverse proxies can be configured to map the ``503``
+with ``Retry-After`` to ``429 Too Many Requests`` if clients require it.
 
 - **Bucket:** The ``--bucket`` option allows you to specify a rate limit for a
   bucket.

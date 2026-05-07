@@ -29,6 +29,7 @@ overrides:
       - osds down
       - osd down
       - OBJECT_UNFOUND
+      - OSD_HOST_DOWN
 tasks:
 - install:
     branch: tentacle

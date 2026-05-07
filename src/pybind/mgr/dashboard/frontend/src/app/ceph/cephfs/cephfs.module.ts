@@ -49,6 +49,7 @@ import {
   PlaceholderModule,
   RadioModule,
   SelectModule,
+  TagModule,
   TimePickerModule,
   TilesModule,
   TreeviewModule,
@@ -98,6 +99,7 @@ import { CephfsMirroringEntityComponent } from './cephfs-mirroring-entity/cephfs
     TabsModule,
     RadioModule,
     TilesModule,
+    TagModule,
     NotificationModule
   ],
   declarations: [

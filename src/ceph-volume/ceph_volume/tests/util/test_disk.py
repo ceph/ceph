@@ -1,3 +1,4 @@
+import errno
 import pytest
 import stat
 from typing import Any, Callable, ClassVar, Optional
@@ -410,6 +411,40 @@ class TestGetBlockDevsSysfs(object):
 
         assert disk.get_block_devs_sysfs(device='sr0') == []
 
+    def test_ram_device_is_skipped(self, fake_filesystem):
+        fake_filesystem.create_file('/dev/ram0')
+        fake_filesystem.create_dir('/sys/dev/block')
+        fake_filesystem.create_dir('/sys/block/ram0/holders')
+
+        assert disk.get_block_devs_sysfs(device='ram0') == []
+
+    def test_ram_device_partitions_are_skipped(self, fake_filesystem):
+        fake_filesystem.create_file('/dev/ram0')
+        fake_filesystem.create_dir('/sys/dev/block')
+        fake_filesystem.create_dir('/sys/block/ram0/holders')
+
+        # If ram0 is skipped, skip its partition ram0p1 too.
+        with patch('ceph_volume.util.disk.get_partitions', MagicMock(return_value={"ram0p1": "ram0"})):
+            assert disk.get_block_devs_sysfs(device='ram0') == []
+
+    def test_ram_devices_are_skipped_in_full_scan(self, fake_filesystem):
+        # Common inventory path: scan /sys/block and include partitions.
+        fake_filesystem.create_dir('/sys/dev/block')
+
+        fake_filesystem.create_file('/dev/ram0')
+        fake_filesystem.create_dir('/sys/block/ram0/holders')
+
+        fake_filesystem.create_file('/dev/sda')
+        fake_filesystem.create_dir('/sys/block/sda/holders')
+
+        with patch('ceph_volume.util.disk.get_partitions', MagicMock(return_value={"ram0p1": "ram0"})):
+            result = disk.get_block_devs_sysfs()
+
+        paths = [row[0] for row in result]
+        assert '/dev/sda' in paths
+        assert '/dev/ram0' not in paths
+        assert '/dev/ram0p1' not in paths
+
     def test_regular_device_is_not_skipped(self, fake_filesystem):
         # normal disk should still be reported.
         fake_filesystem.create_file('/dev/sda')
@@ -644,6 +679,91 @@ class TestHasBlueStoreLabel(object):
         device_path = '/var/lib/ceph/osd/ceph-0'
         fake_filesystem.create_dir(device_path)
         assert not disk.has_bluestore_label(device_path)
+
+    def test_bluestore_label_at_replica_offset(self):
+        class _FakeBlockDev:
+            def __init__(self, label_offset):
+                self._label_offset = label_offset
+                self._pos = 0
+
+            def seek(self, offset, whence=0):
+                if whence != 0:
+                    raise NotImplementedError
+                self._pos = offset
+                return offset
+
+            def read(self, n):
+                buf_start = self._pos
+                self._pos += n
+                sig = disk.BLUESTORE_BDEV_LABEL_SIGNATURE
+                if buf_start == self._label_offset:
+                    return sig[:n] + (b'\x00' * max(0, n - len(sig)))
+                return b'\x00' * n
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return None
+
+        for off in disk.BLUESTORE_BDEV_LABEL_OFFSETS[1:3]:
+            with patch('builtins.open', lambda *a, **k: _FakeBlockDev(off)):
+                assert disk.has_bluestore_label('/dev/fake'), off
+
+    def test_bluestore_label_non_seekable_returns_false(self):
+        class _NonSeekable:
+            def seek(self, offset, whence=0):
+                raise OSError(errno.EINVAL, 'Invalid argument')
+
+            def read(self, n):
+                return b'\x00' * n
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return None
+
+        with patch('builtins.open', lambda *a, **k: _NonSeekable()):
+            assert not disk.has_bluestore_label('/dev/fake')
+
+    def test_bluestore_label_non_seekable_fallback_read_matches(self):
+        class _NonSeekableWithLabelAtStart:
+            def seek(self, offset, whence=0):
+                raise OSError(errno.EINVAL, 'Invalid argument')
+
+            def read(self, n):
+                return disk.BLUESTORE_BDEV_LABEL_SIGNATURE[:n] + (
+                    b'\x00' * max(0, n - len(disk.BLUESTORE_BDEV_LABEL_SIGNATURE))
+                )
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return None
+
+        with patch('builtins.open', lambda *a, **k: _NonSeekableWithLabelAtStart()):
+            assert disk.has_bluestore_label('/dev/fake')
+
+    def test_bluestore_label_io_error_propagates(self):
+        class _EIOOnSeek:
+            def seek(self, offset, whence=0):
+                raise OSError(errno.EIO, 'Input/output error')
+
+            def read(self, n):
+                return b'\x00' * n
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return None
+
+        with patch('builtins.open', lambda *a, **k: _EIOOnSeek()):
+            with pytest.raises(OSError) as excinfo:
+                disk.has_bluestore_label('/dev/fake')
+            assert excinfo.value.errno == errno.EIO
 
 
 class TestBlockSysFs(TestCase):

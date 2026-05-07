@@ -12,12 +12,14 @@ from ceph.deployment.service_spec import (
     CustomContainerSpec,
     GrafanaSpec,
     HostPlacementSpec,
+    IngressSpec,
     IscsiServiceSpec,
     NFSServiceSpec,
     PlacementSpec,
     PrometheusSpec,
     RGWSpec,
     ServiceSpec,
+    YamlLiteralString,
 )
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import SpecValidationError
@@ -551,6 +553,61 @@ def test_alertmanager_spec_2():
     assert 'default_webhook_urls' in spec.user_data.keys()
 
 
+def test_nfs_spec_rdma_default():
+    """NFS spec without RDMA: enable_rdma is False, get_port_start returns 2 ports."""
+    spec = NFSServiceSpec(service_id='mynfs', placement=PlacementSpec(count=1))
+    assert spec.enable_rdma is False
+    assert spec.rdma_port is None
+    assert spec.get_port_start() == [2049, 9587, 31311]
+    assert spec.get_colocation_port_fields() == ['data_port', 'monitoring_port', 'cluster_qos_port']
+
+
+def test_nfs_spec_rdma_enabled():
+    """NFS spec with enable_rdma: get_port_start returns 3 ports, default rdma_port 20049."""
+    spec = NFSServiceSpec(
+        service_id='mynfs',
+        placement=PlacementSpec(count=1),
+        enable_rdma=True,
+    )
+    assert spec.enable_rdma is True
+    assert spec.rdma_port is None
+    assert spec.get_port_start() == [2049, 9587, 31311, 20049]
+    assert spec.get_colocation_port_fields() == ['data_port', 'monitoring_port', 'cluster_qos_port', 'rdma_port']
+
+
+def test_nfs_spec_rdma_custom_port():
+    """NFS spec with enable_rdma and custom rdma_port."""
+    spec = NFSServiceSpec(
+        service_id='mynfs',
+        placement=PlacementSpec(count=1),
+        port=3049,
+        monitoring_port=9588,
+        enable_rdma=True,
+        rdma_port=20050,
+    )
+    assert spec.enable_rdma is True
+    assert spec.rdma_port == 20050
+    assert spec.get_port_start() == [3049, 9588, 31311, 20050]
+
+
+def test_nfs_spec_from_json_rdma():
+    """NFS spec enable_rdma and rdma_port roundtrip via from_json/to_json."""
+    data = {
+        'service_id': 'mynfs',
+        'service_type': 'nfs',
+        'placement': {'count': 1},
+        'spec': {
+            'enable_rdma': True,
+            'rdma_port': 1234,
+        },
+    }
+    spec = NFSServiceSpec.from_json(data)
+    assert spec.enable_rdma is True
+    assert spec.rdma_port == 1234
+    out = spec.to_json()
+    assert out.get('spec', {}).get('enable_rdma') is True
+    assert out.get('spec', {}).get('rdma_port') == 1234
+
 
 def test_repr():
     val = """ServiceSpec.from_json(yaml.safe_load('''service_type: crash
@@ -732,6 +789,57 @@ spec:
     assert spec.virtual_ip == "192.168.20.1/24"
     assert spec.frontend_port == 8080
     assert spec.monitor_port == 8081
+
+
+def test_ingress_spec_haproxy_peer_communication_port():
+    """NFS ingress reserves peer port 1024 by default; custom value overrides."""
+    nfs_ingress = IngressSpec(
+        service_type='ingress',
+        service_id='nfs.foo',
+        backend_service='nfs.foo',
+        frontend_port=2049,
+        monitor_port=9049,
+        virtual_ip='192.168.1.1/24',
+    )
+    assert nfs_ingress.get_port_start() == [2049, 9049, 1024]
+
+    nfs_custom = IngressSpec(
+        service_type='ingress',
+        service_id='nfs.foo',
+        backend_service='nfs.foo',
+        frontend_port=2049,
+        monitor_port=9049,
+        virtual_ip='192.168.1.1/24',
+        haproxy_peer_communication_port=5000,
+    )
+    assert nfs_custom.get_port_start() == [2049, 9049, 5000]
+
+    rgw_ingress = IngressSpec(
+        service_type='ingress',
+        service_id='rgw.foo',
+        backend_service='rgw.foo',
+        frontend_port=8080,
+        monitor_port=8081,
+        virtual_ip='192.168.1.1/24',
+    )
+    assert rgw_ingress.get_port_start() == [8080, 8081]
+
+    yaml_str = """service_type: ingress
+service_id: nfs.foo
+placement:
+  hosts:
+    - host1
+spec:
+  virtual_ip: 192.168.20.1/24
+  backend_service: nfs.foo
+  frontend_port: 2049
+  monitor_port: 9049
+  haproxy_peer_communication_port: 5000
+"""
+    loaded = ServiceSpec.from_json(yaml.safe_load(yaml_str))
+    assert isinstance(loaded, IngressSpec)
+    assert loaded.haproxy_peer_communication_port == 5000
+    assert loaded.get_port_start() == [2049, 9049, 5000]
 
 
 @pytest.mark.parametrize("y, error_match", [
@@ -1422,3 +1530,37 @@ def test_non_osd_services_do_not_get_default_termination_if_not_provided(spec_da
 
     spec_section = j.get('spec', {})
     assert 'termination_grace_period_seconds' not in spec_section
+
+def test_yaml_literal_string_class_represents_multiline_strings_as_literal():
+    multiline_string = "test1\ntest2\n"
+    dumped = yaml.dump(YamlLiteralString(multiline_string))
+
+    assert dumped.startswith('|')
+
+def test_yaml_representer_can_handle_multiline_strings_for_export():
+    spec_data = """
+service_type: iscsi
+service_id: iscsi
+placement:
+  label: iscsi
+spec:
+  pool: testpool
+  ssl_cert: |
+    -----BEGIN CERTIFICATE-----
+    FILLERFILLERFILLERFILLERFILLERFILLERFILLERFILLERFILLERFILLER
+    FILLERFILLERFILLERFILLERFILLERFILLERFILLERFILLERFILLERFILLER
+    -----END CERTIFICATE-----
+  ssl_key: |
+    -----BEGIN PRIVATE KEY-----
+    FILLERFILLERFILLERFILLERFILLERFILLERFILLERFILLERFILLERFILLER
+    FILLERFILLERFILLERFILLERFILLERFILLERFILLERFILLERFILLERFILLER
+    -----END PRIVATE KEY-----
+"""
+
+    data = yaml.safe_load(spec_data)
+    spec_obj = ServiceSpec.from_json(data)
+
+    dumped = yaml.dump(spec_obj, default_flow_style=False)
+
+    assert 'ssl_cert: |' in dumped
+    assert 'ssl_key: |' in dumped

@@ -106,6 +106,10 @@
             i18n-helperText>Encryption configuration
             <textarea cdsTextArea
                       id="cdsInput"
+                      cdValidate
+                      #encryptionConfig="cdValidate"
+                      [invalid]="encryptionConfig.invalid"
+                      [invalidText]="encryptionConfigError"
                       formControlName="encryptionConfig"
                       cols="100"
                       rows="4">
@@ -113,8 +117,12 @@
           </cds-textarea-label>
         </div>
       </div>
+      <ng-template #encryptionConfigError>
+        <span *ngIf="groupForm.controls.encryptionConfig.hasError('required')"
+              class="invalid-feedback"
+              i18n>This field is required.</span>
+      </ng-template>
       }
-
       <!-- Target Nodes Selection -->
       <div
         cdsRow
@@ -151,5 +159,3 @@
     </div>
   </div>
 </form>
-
-

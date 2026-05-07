@@ -3,15 +3,15 @@
 ``migrate``
 ===========
 
-Moves BlueFS data from source volume(s) to the target one, source volumes
+Moves BlueFS data from source volume(s) to the target one. Source volumes
 (except the main, i.e. data or block one) are removed on success.
 
-LVM volumes are permitted for Target only, both already attached or new one.
+LVM volumes are permitted for target only, both already attached or new one.
 
 In the latter case it is attached to the OSD replacing one of the source
 devices.
 
-Following replacement rules apply (in the order of precedence, stop
+Following replacement rules apply (in the order of precedence; stop
 on the first match):
 
     - if source list has DB volume - target device replaces it.

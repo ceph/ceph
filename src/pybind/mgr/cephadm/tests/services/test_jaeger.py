@@ -1,5 +1,6 @@
+import contextlib
 import json
-from unittest.mock import patch
+from unittest.mock import patch, ANY
 
 from cephadm.module import CephadmOrchestrator
 from ceph.deployment.service_spec import TracingSpec
@@ -185,3 +186,18 @@ class TestJaeger:
                         error_ok=True,
                         use_current_daemon_image=False,
                     )
+
+
+def test_jaeger_agent_choose_next_action(cephadm_module, mock_cephadm):
+    jaeger_spec = TracingSpec(service_type="jaeger-agent")
+    coll_spec = TracingSpec(service_type="jaeger-collector")
+    es_spec = TracingSpec(service_type="elasticsearch")
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(with_host(cephadm_module, "test"))
+        stack.enter_context(with_service(cephadm_module, jaeger_spec))
+        stack.enter_context(with_service(cephadm_module, es_spec))
+        stack.enter_context(with_service(cephadm_module, coll_spec))
+        # manually invoke _check_daemons to trigger a call to
+        # _daemon_action so we can check what action was chosen
+        mock_cephadm.serve(cephadm_module)._check_daemons()
+        mock_cephadm._daemon_action.assert_called_with(ANY, action="redeploy")

@@ -478,7 +478,10 @@ TEST_F(TestClsRbd, create)
                                   123));
 
   bufferlist inbl, outbl;
-  ASSERT_EQ(-EINVAL, ioctx.exec(oid, "rbd", "create", inbl, outbl));
+  int rval;
+  librados::ObjectWriteOperation write_operation;
+  write_operation.exec(cls::rbd::method::create, inbl, &outbl, &rval);
+  ASSERT_EQ(-EINVAL, ioctx.operate("myobject", &write_operation));
 
   ioctx.close();
 }

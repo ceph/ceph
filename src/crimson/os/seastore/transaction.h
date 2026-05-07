@@ -572,7 +572,7 @@ public:
     ool_write_stats = {};
     rewrite_stats = {};
     conflicted = false;
-    need_wait_rewrite = false;
+    need_wait_visibility = false;
     assert(backref_entries.empty());
     if (!has_reset) {
       has_reset = true;
@@ -690,7 +690,8 @@ public:
   }
 
   btree_cursor_stats_t cursor_stats;
-  bool need_wait_rewrite = false;
+
+ bool need_wait_visibility = false;
 
 private:
   friend class Cache;
@@ -782,7 +783,7 @@ private:
 
     // step 2: attach extent to transaction to become visible
     assert(!read_set.count(ref->get_paddr(), extent_cmp_t{}));
-    [[maybe_unused]] auto [iter, inserted] = read_set.insert(*it);
+    [[maybe_unused]] auto [_, inserted] = read_set.insert(*it);
     assert(inserted);
   }
 
@@ -801,7 +802,7 @@ private:
     }
 
     // step 2: attach extent to transaction to become visible
-    [[maybe_unused]] auto [iter, inserted] = read_set.insert(read_items.back());
+    [[maybe_unused]] auto [_, inserted] = read_set.insert(read_items.back());
     assert(inserted);
 
     // added

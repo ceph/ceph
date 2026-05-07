@@ -43,16 +43,6 @@ Ceph clusters using Ansible.
   and dashboard integration introduced in Nautilus and Octopus are not
   available in Ceph clusters deployed by means of ceph-ansible.
 
-
-`ceph-deploy <https://docs.ceph.com/projects/ceph-deploy/en/latest/>`_ is a
-tool that can be used to quickly deploy clusters. It is deprecated.
-
-  .. IMPORTANT::
-
-   ceph-deploy is not actively maintained. It is not tested on versions of Ceph
-   newer than Nautilus. It does not support RHEL8, CentOS 8, or newer operating
-   systems.
-
 `ceph-salt <https://github.com/ceph/ceph-salt>`_ installs Ceph using Salt and cephadm.
 
 `jaas.ai/ceph-mon <https://jaas.ai/ceph-mon>`_ installs Ceph using Juju.

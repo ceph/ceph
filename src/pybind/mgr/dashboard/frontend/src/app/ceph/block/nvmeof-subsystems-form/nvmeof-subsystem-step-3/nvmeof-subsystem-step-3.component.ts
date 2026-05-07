@@ -50,8 +50,6 @@ export class NvmeofSubsystemsStepThreeComponent implements OnInit, TearsheetStep
       hosts.forEach((nqn) => {
         currentList.push(this.createHostDhchapKeyFormGroup(nqn, existing.get(nqn) ?? null));
       });
-    } else {
-      currentList.push(this.createHostDhchapKeyFormGroup('', null));
     }
   }
 

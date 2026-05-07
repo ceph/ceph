@@ -33,7 +33,7 @@ int cmp_vals(librados::ObjectReadOperation& op,
 
   bufferlist in;
   encode(call, in);
-  op.exec("cmpomap", "cmp_vals", in);
+  op.exec(method::cmp_vals, in);
   return 0;
 }
 
@@ -52,7 +52,7 @@ int cmp_set_vals(librados::ObjectWriteOperation& op,
 
   bufferlist in;
   encode(call, in);
-  op.exec("cmpomap", "cmp_set_vals", in);
+  op.exec(method::cmp_set_vals, in);
   return 0;
 }
 
@@ -69,7 +69,7 @@ int cmp_rm_keys(librados::ObjectWriteOperation& op,
 
   bufferlist in;
   encode(call, in);
-  op.exec("cmpomap", "cmp_rm_keys", in);
+  op.exec(method::cmp_rm_keys, in);
   return 0;
 }
 

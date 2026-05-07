@@ -65,6 +65,7 @@ public:
   ReadResult(const struct iovec *iov, int iov_count);
   ReadResult(ceph::bufferlist *bl);
   ReadResult(Extents* extent_map, ceph::bufferlist* bl);
+  ReadResult(ReadExtents* read_extents);
 
   void set_image_extents(const Extents& image_extents);
 
@@ -106,11 +107,21 @@ private:
     }
   };
 
+  struct ChildObject {
+    ReadExtents* read_extents;
+    uint64_t overlap_bytes = 0;
+
+    ChildObject(ReadExtents* read_extents)
+      : read_extents(read_extents) {
+    }
+  };
+
   typedef std::variant<std::monostate,
 		       Linear,
 		       Vector,
 		       Bufferlist,
-		       SparseBufferlist> Buffer;
+		       SparseBufferlist,
+		       ChildObject> Buffer;
   struct SetImageExtentsVisitor;
   struct AssembleResultVisitor;
 

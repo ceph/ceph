@@ -33,6 +33,10 @@ struct ReadResult::SetImageExtentsVisitor {
     sbl.image_extents = image_extents;
   }
 
+  void operator()(ChildObject &child_object) const {
+    child_object.overlap_bytes = util::get_extents_length(image_extents);
+  }
+
   template <typename T>
   void operator()(T &t) const {
   }
@@ -91,40 +95,49 @@ struct ReadResult::AssembleResultVisitor {
     auto buffer_extents_length = destriper.assemble_result(
       cct, &buffer_extent_map, sparse_bufferlist.bl);
 
-    ldout(cct, 20) << "image_extents="
-                   << sparse_bufferlist.image_extents << ", "
-                   << "buffer_extent_map=" << buffer_extent_map << dendl;
+    ldout(cct, 20) << "buffer_extent_map=" << buffer_extent_map << dendl;
 
     sparse_bufferlist.extent_map->clear();
     sparse_bufferlist.extent_map->reserve(buffer_extent_map.size());
 
-    // The extent-map is logically addressed by buffer-extents not image- or
-    // object-extents. Translate this address mapping to image-extent
-    // logical addressing since it's tied to an image-extent read
+    // buffer_extent_map is logically addressed by buffer extents not
+    // image or object extents. Translate buffer offsets (always 0-based)
+    // into image offsets since the buffer is tied to an image read.
     uint64_t buffer_offset = 0;
     auto bem_it = buffer_extent_map.begin();
     for (auto [image_offset, image_length] : sparse_bufferlist.image_extents) {
+      bool found_buffer_extent = false;
       while (bem_it != buffer_extent_map.end()) {
         auto [buffer_extent_offset, buffer_extent_length] = *bem_it;
 
         if (buffer_offset + image_length <= buffer_extent_offset) {
-          // skip any image extent that is not included in the results
+          // no more buffer extents for the current image extent,
+          // current buffer extent belongs to the next image extent
           break;
         }
 
-        // current buffer-extent should be within the current image-extent
+        // current buffer extent should be within the current image extent
         ceph_assert(buffer_offset <= buffer_extent_offset &&
                     buffer_offset + image_length >=
                       buffer_extent_offset + buffer_extent_length);
+        found_buffer_extent = true;
+
         auto image_extent_offset =
           image_offset + (buffer_extent_offset - buffer_offset);
         ldout(cct, 20) << "mapping buffer extent " << buffer_extent_offset
                        << "~" << buffer_extent_length << " to image extent "
                        << image_extent_offset << "~" << buffer_extent_length
+                       << " for " << image_offset << "~" << image_length
                        << dendl;
         sparse_bufferlist.extent_map->emplace_back(
           image_extent_offset, buffer_extent_length);
         ++bem_it;
+      }
+
+      // skip any image extent that is not included in the results
+      if (!found_buffer_extent) {
+        ldout(cct, 20) << "no buffer extents for image extent "
+                       << image_offset << "~" << image_length << dendl;
       }
 
       buffer_offset += image_length;
@@ -136,6 +149,71 @@ struct ReadResult::AssembleResultVisitor {
                    << " extents of total " << sparse_bufferlist.bl->length()
                    << " bytes to bl "
                    << reinterpret_cast<void*>(sparse_bufferlist.bl) << dendl;
+  }
+
+  void operator()(ChildObject &child_object) const {
+    bufferlist bl;
+    ExtentMap buffer_extent_map;
+    uint64_t buffer_extents_length = destriper.assemble_result(
+      cct, &buffer_extent_map, &bl);
+
+    ldout(cct, 20) << "buffer_extent_map=" << buffer_extent_map << dendl;
+
+    // buffer_extent_map is logically addressed by buffer extents not
+    // image or object extents. Translate buffer offsets (always 0-based)
+    // into object offsets since the buffer is tied to an object read
+    // (in child image, see read_parent()).
+    uint64_t child_buffer_offset = 0;
+    auto bem_it = buffer_extent_map.begin();
+    for (auto& read_extent : *child_object.read_extents) {
+      read_extent.bl.clear();
+      read_extent.extent_map.clear();
+
+      bool found_buffer_extent = false;
+      while (bem_it != buffer_extent_map.end()) {
+        auto [buffer_extent_offset, buffer_extent_length] = *bem_it;
+
+        if (child_buffer_offset + read_extent.length <= buffer_extent_offset) {
+          // no more buffer extents for the current object extent,
+          // current buffer extent belongs to the next object extent
+          break;
+        }
+
+        // current buffer extent should be within the current object extent
+        ceph_assert(child_buffer_offset <= buffer_extent_offset &&
+                    child_buffer_offset + read_extent.length >=
+                      buffer_extent_offset + buffer_extent_length);
+        found_buffer_extent = true;
+
+        uint64_t object_extent_offset =
+          read_extent.offset + (buffer_extent_offset - child_buffer_offset);
+        ldout(cct, 20) << "mapping buffer extent " << buffer_extent_offset
+                       << "~" << buffer_extent_length << " to object extent "
+                       << object_extent_offset << "~" << buffer_extent_length
+                       << " for " << read_extent.offset << "~"
+                       << read_extent.length << dendl;
+        bl.splice(0, buffer_extent_length, &read_extent.bl);
+        read_extent.extent_map.emplace_back(object_extent_offset,
+                                            buffer_extent_length);
+        ++bem_it;
+      }
+
+      // skip any object extent that is not included in the results
+      if (!found_buffer_extent) {
+        ldout(cct, 20) << "no buffer extents for object extent "
+                       << read_extent.offset << "~" << read_extent.length
+                       << dendl;
+      }
+
+      child_buffer_offset += read_extent.length;
+    }
+    ceph_assert(bl.length() == 0);
+    ceph_assert(child_buffer_offset >= buffer_extents_length);
+    ceph_assert(child_object.overlap_bytes == buffer_extents_length);
+    ceph_assert(bem_it == buffer_extent_map.end());
+
+    ldout(cct, 20) << "planted result in " << *child_object.read_extents
+                   << dendl;
   }
 };
 
@@ -242,6 +320,10 @@ ReadResult::ReadResult(ceph::bufferlist *bl)
 
 ReadResult::ReadResult(Extents* extent_map, ceph::bufferlist* bl)
   : m_buffer(SparseBufferlist(extent_map, bl)) {
+}
+
+ReadResult::ReadResult(ReadExtents* read_extents)
+  : m_buffer(ChildObject(read_extents)) {
 }
 
 void ReadResult::set_image_extents(const Extents& image_extents) {

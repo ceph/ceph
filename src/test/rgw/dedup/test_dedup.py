@@ -51,10 +51,6 @@ class Dedup_Stats:
     duplicate_obj : int = 0
     deduped_obj_bytes : int = 0
     non_default_storage_class_objs_bytes : int = 0
-    potential_singleton_obj : int = 0
-    potential_unique_obj : int = 0
-    potential_duplicate_obj : int = 0
-    potential_dedup_space : int = 0
 
 @dataclass
 class Dedup_Ratio:
@@ -280,9 +276,8 @@ def create_buckets(conn, max_copies_count):
 OUT_DIR="/tmp/dedup/"
 KB=(1024)
 MB=(1024*KB)
-POTENTIAL_OBJ_SIZE=(64*KB)
 DEDUP_MIN_OBJ_SIZE=(64*KB)
-SPLIT_HEAD_SIZE=(4*MB)
+SPLIT_HEAD=True
 RADOS_OBJ_SIZE=(4*MB)
 # The default multipart threshold size for S3cmd is 15 MB.
 MULTIPART_SIZE=(15*MB)
@@ -638,17 +633,16 @@ def calc_head_size(obj_size, config):
 def calc_dedupable_space(obj_size, config):
     on_disk_byte_size = calc_on_disk_byte_size(obj_size)
 
-    threshold = config.multipart_threshold
     # Objects with size bigger than MULTIPART_SIZE are uploaded as multi-part
     # multi-part objects got a zero size Head objects
-    if obj_size >= threshold:
+    if obj_size >= config.multipart_threshold:
         dedupable_space = on_disk_byte_size
-    elif obj_size > SPLIT_HEAD_SIZE:
-        dedupable_space = on_disk_byte_size - RADOS_OBJ_SIZE
-    elif obj_size >= DEDUP_MIN_OBJ_SIZE:
+    elif obj_size < DEDUP_MIN_OBJ_SIZE:
+        dedupable_space = 0
+    elif SPLIT_HEAD:
         dedupable_space = on_disk_byte_size
     else:
-        dedupable_space = 0
+        dedupable_space = (on_disk_byte_size - min(on_disk_byte_size, RADOS_OBJ_SIZE))
 
     log.debug("obj_size=%.2f MiB, dedupable_space=%.2f MiB",
               float(obj_size)/MB, float(dedupable_space)/MB)
@@ -659,7 +653,7 @@ def calc_split_objs_count(obj_size, num_copies, config):
     threshold = config.multipart_threshold
     on_disk_byte_size = calc_on_disk_byte_size(obj_size)
 
-    if num_copies < 2 or on_disk_byte_size > SPLIT_HEAD_SIZE or obj_size >= threshold:
+    if num_copies < 2 or not SPLIT_HEAD or obj_size >= threshold:
         return 0
 
     if on_disk_byte_size < DEDUP_MIN_OBJ_SIZE:
@@ -680,15 +674,6 @@ def calc_expected_stats(dedup_stats, obj_size, num_copies, config):
     if on_disk_byte_size < DEDUP_MIN_OBJ_SIZE and threshold > DEDUP_MIN_OBJ_SIZE:
         dedup_stats.skip_too_small += num_copies
         dedup_stats.skip_too_small_bytes += (on_disk_byte_size * num_copies)
-
-        if on_disk_byte_size >= POTENTIAL_OBJ_SIZE:
-            if num_copies == 1:
-                dedup_stats.potential_singleton_obj += 1
-            else:
-                dedup_stats.potential_unique_obj += 1
-                dedup_stats.potential_duplicate_obj += dups_count
-                dedup_stats.potential_dedup_space += (on_disk_byte_size * dups_count)
-
         return
 
     dedup_stats.total_processed_objects += num_copies
@@ -1399,12 +1384,6 @@ def read_dedup_stats(dry_run):
         dedup_stats.duplicate_obj = main['Duplicate Obj']
         dedup_stats.dedup_bytes_estimate = main['Dedup Bytes Estimate']
 
-        potential = md5_stats['Potential Dedup']
-        dedup_stats.potential_singleton_obj = potential['Singleton Obj (64KB-4MB)']
-        dedup_stats.potential_unique_obj = potential['Unique Obj (64KB-4MB)']
-        dedup_stats.potential_duplicate_obj = potential['Duplicate Obj (64KB-4MB)']
-        dedup_stats.potential_dedup_space = potential['Dedup Bytes Estimate (64KB-4MB)']
-
     dedup_work_was_completed=jstats['completed']
     if dedup_work_was_completed:
         dedup_ratio_estimate=read_dedup_ratio(jstats, 'dedup_ratio_estimate')
@@ -1486,11 +1465,6 @@ def exec_dedup(expected_dedup_stats, dry_run, verify_stats=True, post_dedup_size
     if verify_stats == False:
         return ret
 
-    if dedup_stats.potential_unique_obj or expected_dedup_stats.potential_unique_obj:
-        log.debug("potential_unique_obj= %d / %d ", dedup_stats.potential_unique_obj,
-                  expected_dedup_stats.potential_unique_obj)
-
-
     #dedup_stats.set_hash = dedup_stats.invalid_hash
     if dedup_stats != expected_dedup_stats:
         log.debug("==================================================")
@@ -1512,14 +1486,6 @@ def prepare_test():
         assert(0)
 
     os.mkdir(OUT_DIR)
-
-#-------------------------------------------------------------------------------
-def copy_potential_stats(new_dedup_stats, dedup_stats):
-    new_dedup_stats.potential_singleton_obj = dedup_stats.potential_singleton_obj
-    new_dedup_stats.potential_unique_obj    = dedup_stats.potential_unique_obj
-    new_dedup_stats.potential_duplicate_obj = dedup_stats.potential_duplicate_obj
-    new_dedup_stats.potential_dedup_space   = dedup_stats.potential_dedup_space
-
 
 #-------------------------------------------------------------------------------
 def small_single_part_objs_dedup(conn, bucket_name, dry_run):
@@ -1547,8 +1513,6 @@ def small_single_part_objs_dedup(conn, bucket_name, dry_run):
 
         # expected stats for small objects - all zeros except for skip_too_small
         small_objs_dedup_stats = Dedup_Stats()
-        #small_objs_dedup_stats.loaded_objects=dedup_stats.loaded_objects
-        copy_potential_stats(small_objs_dedup_stats, dedup_stats)
         small_objs_dedup_stats.size_before_dedup = dedup_stats.size_before_dedup
         small_objs_dedup_stats.skip_too_small_bytes=dedup_stats.size_before_dedup
         small_objs_dedup_stats.skip_too_small = s3_objects_total
@@ -1897,6 +1861,8 @@ def test_dedup_with_versions():
     min_size=1*KB
     max_size=MULTIPART_SIZE*2
     success=False
+    # Declare the variable with a type hint
+    conn: BaseClient
     try:
         conn=get_single_connection()
         conn.create_bucket(Bucket=bucket_name)
@@ -2415,8 +2381,6 @@ def test_dedup_small_with_tenants():
 
         # expected stats for small objects - all zeros except for skip_too_small
         small_objs_dedup_stats = Dedup_Stats()
-        #small_objs_dedup_stats.loaded_objects=dedup_stats.loaded_objects
-        copy_potential_stats(small_objs_dedup_stats, dedup_stats)
         small_objs_dedup_stats.size_before_dedup=dedup_stats.size_before_dedup
         small_objs_dedup_stats.skip_too_small_bytes=dedup_stats.size_before_dedup
         small_objs_dedup_stats.skip_too_small=s3_objects_total
@@ -3320,7 +3284,6 @@ def test_dedup_dry_small_with_tenants():
 
         # expected stats for small objects - all zeros except for skip_too_small
         small_objs_dedup_stats = Dedup_Stats()
-        copy_potential_stats(small_objs_dedup_stats, dedup_stats)
         small_objs_dedup_stats.size_before_dedup=dedup_stats.size_before_dedup
         small_objs_dedup_stats.skip_too_small_bytes=dedup_stats.size_before_dedup
         small_objs_dedup_stats.skip_too_small=s3_objects_total
@@ -3693,3 +3656,4 @@ def test_dedup_identical_copies_multipart_small():
     force_clean=True
     log.info("test_dedup_identical_copies_multipart:full test")
     __test_dedup_identical_copies(files, config, dry_run, verify, force_clean)
+

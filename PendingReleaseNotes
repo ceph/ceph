@@ -1,14 +1,26 @@
+* librados/neorados: The C++ APIs for executing Ceph Class (CLS) methods
+  have undergone a breaking change to enforce compile-time type safety, replacing
+  legacy string-based parameters with strongly-typed ClsMethod structs. C++
+  developers must update their method calls to use these new structs, which ensure
+  read/write semantics are correctly applied.
+
 * ceph-volume: Raw BlueStore OSD preparation now pre-formats NVMe devices and
   skips the slower BlueStore discard phase,reducing mkfs time on
   very large namespaces.
 * RGW: Bucket Logging suppports creating log buckets in EC pools.
   Implicit logging object commits are now performed asynchronously.
+* RGW: radosgw-admin bucket list now supports pagination for versioned buckets by using
+  both --marker and --object-version options together (e.g., ``--marker=obj1 --object-version=abc123``).
+  This enables proper pagination through versioned bucket listings without duplicates or
+  infinite loops. For non-versioned buckets, use only --marker as before (backward compatible).
 * RGW: OpenSSL engine support is deprecated in favor of provider support.
   - Removed the `openssl_engine_opts` configuration option. OpenSSL engine configuration in string format is no longer supported.
   - Added the `openssl_conf` configuration option for loading specified providers as default providers.
     Configuration file syntax follows the OpenSSL standard (see https://github.com/openssl/openssl/blob/master/doc/man5/config.pod).
     If the default provider is required when also using custom providers,
     it must be explicitly loaded in the configuration file or code (see https://github.com/openssl/openssl/blob/master/README-PROVIDERS.md).
+* RGW: Fixed bucket notification events so the 'x_amz_request_id' in NotificationEvent now matches the 'x_amz_request_id' returned by the corresponding S3 operation.
+
 
 * DASHBOARD: Removed the older landing page which was deprecated in Quincy.
   Admins can no longer enable the older, deprecated landing page layout by
@@ -64,7 +76,13 @@
 * RBD: Mirror snapshot creation and trash purge schedules are now automatically
   staggered when no explicit "start-time" is specified. This reduces scheduling
   spikes and distributes work more evenly over time.
-
+* RBD: Introduced a new ``RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT`` policy for
+  ``rbd_lock_acquire()``. This is a low-level interface intended to allow
+  a peer to grab exclusive lock manually for short periods of time with other
+  peers pausing their activity and waiting for the lock to be released rather
+  than instantly aborting I/O and returning an error. It's possible to switch
+  from ``RBD_LOCK_MODE_EXCLUSIVE`` to ``RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT``
+  policy and vice versa even if the lock is already held.
 * OSD: A health warning is reported when BlueFS usage exceeds the
   configured ratio of the main OSD data device size. This warning is
   informational and can be muted with:

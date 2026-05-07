@@ -192,25 +192,28 @@ def setup_logging_target(s3_client, log_bucket, source_bucket=None):
         return False
 
 
-def enable_bucket_logging(s3_client, source_bucket, log_bucket, prefix=None):
+def enable_bucket_logging(s3_client, source_bucket, log_bucket, prefix=None, logging_type='Standard'):
     """Enable logging on source bucket pointing to log bucket. Returns success status."""
     if prefix is None:
         prefix = f'{source_bucket}/'
     try:
+        logging_enabled = {
+            'TargetBucket': log_bucket,
+            'TargetPrefix': prefix
+                        }
+        if logging_type == 'Journal':
+            logging_enabled['LoggingType'] = 'Journal'
         s3_client.put_bucket_logging(Bucket=source_bucket, BucketLoggingStatus={
-            'LoggingEnabled': {
-                'TargetBucket': log_bucket,
-                'TargetPrefix': prefix
-            }
+            'LoggingEnabled': logging_enabled
         })
-        log.debug(f"Enabled logging on {source_bucket} -> {log_bucket} with prefix '{prefix}'")
+        log.debug(f"Enabled {logging_type} logging on {source_bucket} -> {log_bucket} with prefix '{prefix}'")
         return True
     except ClientError as e:
         log.error(f"Error enabling bucket logging: {e}")
         return False
 
 
-def create_bucket_with_logging(s3_client, source_bucket, log_bucket):
+def create_bucket_with_logging(s3_client, source_bucket, log_bucket, logging_type='Standard'):
     """Create source/log buckets and enable logging. Returns success status."""
     try:
         s3_client.create_bucket(Bucket=source_bucket)
@@ -221,10 +224,10 @@ def create_bucket_with_logging(s3_client, source_bucket, log_bucket):
 
     if not setup_logging_target(s3_client, log_bucket, source_bucket):
         return False
-    return enable_bucket_logging(s3_client, source_bucket, log_bucket)
+    return enable_bucket_logging(s3_client, source_bucket, log_bucket, logging_type=logging_type)
 
 
-def setup_multi_source_logging(s3_client, source_bucket_1, source_bucket_2, log_bucket):
+def setup_multi_source_logging(s3_client, source_bucket_1, source_bucket_2, log_bucket, logging_type='Standard'):
     """Create two source buckets logging to the same log bucket. Returns success status."""
     try:
         s3_client.create_bucket(Bucket=log_bucket)
@@ -237,13 +240,16 @@ def setup_multi_source_logging(s3_client, source_bucket_1, source_bucket_2, log_
         s3_client.create_bucket(Bucket=source_bucket_2)
 
         for src in [source_bucket_1, source_bucket_2]:
+            logging_enabled = {
+                'TargetBucket': log_bucket,
+                'TargetPrefix': f'{src}/'
+            }
+            if logging_type == 'Journal':
+                logging_enabled['LoggingType'] = 'Journal'
             s3_client.put_bucket_logging(
                 Bucket=src,
                 BucketLoggingStatus={
-                    'LoggingEnabled': {
-                        'TargetBucket': log_bucket,
-                        'TargetPrefix': f'{src}/'
-                    }
+                    'LoggingEnabled': logging_enabled
                 }
             )
 
@@ -272,7 +278,7 @@ def cleanup_bucket(s3_client, bucket_name):
 #####################
 
 @pytest.mark.basic_test
-def test_bucket_logging_list(s3_client):
+def test_bucket_logging_list(s3_client, logging_type):
     """Test radosgw-admin bucket logging list command.
 
     Note: the 'list' command returns pending commit objects — log objects that have
@@ -287,7 +293,7 @@ def test_bucket_logging_list(s3_client):
     log_bucket = gen_bucket_name("log")
 
     try:
-        assert create_bucket_with_logging(s3_client, source_bucket, log_bucket)
+        assert create_bucket_with_logging(s3_client, source_bucket, log_bucket, logging_type)
 
         upload_test_objects(s3_client, source_bucket)
 
@@ -304,13 +310,13 @@ def test_bucket_logging_list(s3_client):
 
 
 @pytest.mark.basic_test
-def test_bucket_logging_info_source(s3_client):
+def test_bucket_logging_info_source(s3_client, logging_type):
     """Test radosgw-admin bucket logging info on source bucket."""
     source_bucket = gen_bucket_name("source")
     log_bucket = gen_bucket_name("log")
 
     try:
-        assert create_bucket_with_logging(s3_client, source_bucket, log_bucket)
+        assert create_bucket_with_logging(s3_client, source_bucket, log_bucket, logging_type)
 
         output, ret = admin(['bucket', 'logging', 'info', '--bucket', source_bucket])
 
@@ -327,13 +333,13 @@ def test_bucket_logging_info_source(s3_client):
 
 
 @pytest.mark.basic_test
-def test_bucket_logging_info_log(s3_client):
+def test_bucket_logging_info_log(s3_client, logging_type):
     """Test radosgw-admin bucket logging info on log bucket."""
     source_bucket = gen_bucket_name("source")
     log_bucket = gen_bucket_name("log")
 
     try:
-        assert create_bucket_with_logging(s3_client, source_bucket, log_bucket)
+        assert create_bucket_with_logging(s3_client, source_bucket, log_bucket, logging_type)
 
         output, ret = admin(['bucket', 'logging', 'info', '--bucket', log_bucket])
 
@@ -348,13 +354,13 @@ def test_bucket_logging_info_log(s3_client):
 
 
 @pytest.mark.basic_test
-def test_bucket_logging_flush(s3_client):
+def test_bucket_logging_flush(s3_client, logging_type):
     """Test radosgw-admin bucket logging flush command."""
     source_bucket = gen_bucket_name("source")
     log_bucket = gen_bucket_name("log")
 
     try:
-        assert create_bucket_with_logging(s3_client, source_bucket, log_bucket)
+        assert create_bucket_with_logging(s3_client, source_bucket, log_bucket, logging_type)
 
         upload_test_objects(s3_client, source_bucket)
 
@@ -377,13 +383,13 @@ def test_bucket_logging_flush(s3_client):
 
 
 @pytest.mark.basic_test
-def test_cleanup_on_log_bucket_delete(s3_client):
+def test_cleanup_on_log_bucket_delete(s3_client, logging_type):
     """Test that temp log objects are deleted when log bucket is deleted."""
     source_bucket = gen_bucket_name("cleanup-source")
     log_bucket = gen_bucket_name("cleanup-log")
 
     try:
-        assert create_bucket_with_logging(s3_client, source_bucket, log_bucket)
+        assert create_bucket_with_logging(s3_client, source_bucket, log_bucket, logging_type)
 
         log_bucket_id = get_bucket_id(log_bucket)
         assert log_bucket_id is not None, f"Failed to get bucket ID for {log_bucket}"
@@ -408,13 +414,13 @@ def test_cleanup_on_log_bucket_delete(s3_client):
 
 
 @pytest.mark.basic_test
-def test_cleanup_on_logging_disable(s3_client):
+def test_cleanup_on_logging_disable(s3_client, logging_type):
     """Test that disabling logging flushes pending logs to the log bucket."""
     source_bucket = gen_bucket_name("disable-source")
     log_bucket = gen_bucket_name("disable-log")
 
     try:
-        assert create_bucket_with_logging(s3_client, source_bucket, log_bucket)
+        assert create_bucket_with_logging(s3_client, source_bucket, log_bucket, logging_type)
 
         upload_test_objects(s3_client, source_bucket)
 
@@ -438,22 +444,19 @@ def test_cleanup_on_logging_disable(s3_client):
 
 @pytest.mark.skip(reason="https://tracker.ceph.com/issues/75295")
 @pytest.mark.basic_test
-def test_cleanup_on_logging_config_change(s3_client):
+def test_cleanup_on_logging_config_change(s3_client, logging_type):
     """Test that changing logging target bucket implicitly flushes pending records to the old bucket."""
     source_bucket = gen_bucket_name("config-change-source")
     log_bucket_1 = gen_bucket_name("config-change-log1")
     log_bucket_2 = gen_bucket_name("config-change-log2")
 
     try:
-        assert create_bucket_with_logging(s3_client, source_bucket, log_bucket_1)
+        assert create_bucket_with_logging(s3_client, source_bucket, log_bucket_1, logging_type)
 
         upload_test_objects(s3_client, source_bucket)
 
         assert setup_logging_target(s3_client, log_bucket_2, source_bucket)
-
-        s3_client.put_bucket_logging(Bucket=source_bucket, BucketLoggingStatus={
-            'LoggingEnabled': {'TargetBucket': log_bucket_2, 'TargetPrefix': f'{source_bucket}/'}
-        })
+        assert enable_bucket_logging(s3_client, source_bucket, log_bucket_2, logging_type=logging_type)
         time.sleep(2)
 
         output, ret = admin(['bucket', 'logging', 'info', '--bucket', source_bucket])
@@ -474,13 +477,13 @@ def test_cleanup_on_logging_config_change(s3_client):
 
 
 @pytest.mark.basic_test
-def test_cleanup_on_source_bucket_delete(s3_client):
+def test_cleanup_on_source_bucket_delete(s3_client, logging_type):
     """Test that deleting source bucket flushes pending logs."""
     source_bucket = gen_bucket_name("src-delete-source")
     log_bucket = gen_bucket_name("src-delete-log")
 
     try:
-        assert create_bucket_with_logging(s3_client, source_bucket, log_bucket)
+        assert create_bucket_with_logging(s3_client, source_bucket, log_bucket, logging_type)
 
         upload_test_objects(s3_client, source_bucket)
 
@@ -505,14 +508,14 @@ def test_cleanup_on_source_bucket_delete(s3_client):
 
 
 @pytest.mark.basic_test
-def test_bucket_logging_info_log_multiple_sources(s3_client):
+def test_bucket_logging_info_log_multiple_sources(s3_client, logging_type):
     """Test that multiple source buckets can log to the same log bucket."""
     source_bucket_1 = gen_bucket_name("multi-source1")
     source_bucket_2 = gen_bucket_name("multi-source2")
     log_bucket = gen_bucket_name("multi-log")
 
     try:
-        assert setup_multi_source_logging(s3_client, source_bucket_1, source_bucket_2, log_bucket)
+        assert setup_multi_source_logging(s3_client, source_bucket_1, source_bucket_2, log_bucket, logging_type)
 
         output, ret = admin(['bucket', 'logging', 'info', '--bucket', log_bucket])
 
@@ -529,14 +532,14 @@ def test_bucket_logging_info_log_multiple_sources(s3_client):
 
 
 @pytest.mark.basic_test
-def test_multiple_sources_disable_one(s3_client):
+def test_multiple_sources_disable_one(s3_client, logging_type):
     """Test that disabling one source does not affect the other source's logging."""
     source_bucket_1 = gen_bucket_name("disable-one-src1")
     source_bucket_2 = gen_bucket_name("disable-one-src2")
     log_bucket = gen_bucket_name("disable-one-log")
 
     try:
-        assert setup_multi_source_logging(s3_client, source_bucket_1, source_bucket_2, log_bucket)
+        assert setup_multi_source_logging(s3_client, source_bucket_1, source_bucket_2, log_bucket, logging_type)
 
         s3_client.put_bucket_logging(Bucket=source_bucket_1, BucketLoggingStatus={})
 
@@ -570,13 +573,13 @@ def test_multiple_sources_disable_one(s3_client):
 
 
 @pytest.mark.basic_test
-def test_logging_info_after_disable(s3_client):
+def test_logging_info_after_disable(s3_client, logging_type):
     """Verify that bucket logging info returns empty for source after logging is disabled."""
     source_bucket = gen_bucket_name("info-disable-src")
     log_bucket = gen_bucket_name("info-disable-log")
 
     try:
-        assert create_bucket_with_logging(s3_client, source_bucket, log_bucket)
+        assert create_bucket_with_logging(s3_client, source_bucket, log_bucket, logging_type)
 
         output, ret = admin(['bucket', 'logging', 'info', '--bucket', source_bucket])
         assert ret == 0
@@ -596,13 +599,13 @@ def test_logging_info_after_disable(s3_client):
 
 
 @pytest.mark.basic_test
-def test_logging_info_after_source_delete(s3_client):
+def test_logging_info_after_source_delete(s3_client, logging_type):
     """Verify that bucket logging info on deleted source returns error."""
     source_bucket = gen_bucket_name("info-delete-src")
     log_bucket = gen_bucket_name("info-delete-log")
 
     try:
-        assert create_bucket_with_logging(s3_client, source_bucket, log_bucket)
+        assert create_bucket_with_logging(s3_client, source_bucket, log_bucket, logging_type)
 
         output, ret = admin(['bucket', 'logging', 'info', '--bucket', source_bucket])
         assert ret == 0
@@ -622,13 +625,13 @@ def test_logging_info_after_source_delete(s3_client):
 
 
 @pytest.mark.basic_test
-def test_flush_empty_creates_empty_object(s3_client):
+def test_flush_empty_creates_empty_object(s3_client, logging_type):
     """Test that flushing with no pending data creates a size-zero committed log object."""
     source_bucket = gen_bucket_name("empty-flush-src")
     log_bucket = gen_bucket_name("empty-flush-log")
 
     try:
-        assert create_bucket_with_logging(s3_client, source_bucket, log_bucket)
+        assert create_bucket_with_logging(s3_client, source_bucket, log_bucket, logging_type)
 
         output, ret = admin(['bucket', 'logging', 'flush', '--bucket', source_bucket])
         assert ret == 0, f"Flush failed with return code {ret}"
@@ -648,7 +651,7 @@ def test_flush_empty_creates_empty_object(s3_client):
 
 
 @pytest.mark.basic_test
-def test_logging_config_update_prefix(s3_client):
+def test_logging_config_update_prefix(s3_client, logging_type):
     """Test that updating logging prefix is reflected in config and log objects."""
     source_bucket = gen_bucket_name("update-prefix-src")
     log_bucket = gen_bucket_name("update-prefix-log")
@@ -657,16 +660,14 @@ def test_logging_config_update_prefix(s3_client):
     new_prefix = "new-prefix/"
 
     try:
-        assert create_bucket_with_logging(s3_client, source_bucket, log_bucket)
+        assert create_bucket_with_logging(s3_client, source_bucket, log_bucket, logging_type)
 
         output, ret = admin(['bucket', 'logging', 'info', '--bucket', source_bucket])
         assert ret == 0
         assert output.strip()
         assert parse_logging_config(output)['targetPrefix'] == old_prefix
 
-        s3_client.put_bucket_logging(Bucket=source_bucket, BucketLoggingStatus={
-            'LoggingEnabled': {'TargetBucket': log_bucket, 'TargetPrefix': new_prefix}
-        })
+        assert enable_bucket_logging(s3_client, source_bucket, log_bucket, prefix=new_prefix, logging_type=logging_type)
 
         output, ret = admin(['bucket', 'logging', 'info', '--bucket', source_bucket])
         assert ret == 0
@@ -679,26 +680,29 @@ def test_logging_config_update_prefix(s3_client):
 
 
 @pytest.mark.basic_test
-def test_logging_config_change_key_format(s3_client):
+def test_logging_config_change_key_format(s3_client, logging_type):
     """Test that changing obj_key_format implicitly flushes pending records to the same log bucket."""
     source_bucket = gen_bucket_name("format-change-src")
     log_bucket = gen_bucket_name("format-change-log")
 
     try:
-        assert create_bucket_with_logging(s3_client, source_bucket, log_bucket)
+        assert create_bucket_with_logging(s3_client, source_bucket, log_bucket, logging_type)
 
         upload_test_objects(s3_client, source_bucket)
 
-        s3_client.put_bucket_logging(Bucket=source_bucket, BucketLoggingStatus={
-            'LoggingEnabled': {
-                'TargetBucket': log_bucket,
-                'TargetPrefix': f'{source_bucket}/',
-                'TargetObjectKeyFormat': {
-                    'PartitionedPrefix': {
-                        'PartitionDateSource': 'DeliveryTime'
-                    }
+        logging_enabled = {
+            'TargetBucket': log_bucket,
+            'TargetPrefix': f'{source_bucket}/',
+            'TargetObjectKeyFormat': {
+                'PartitionedPrefix': {
+                    'PartitionDateSource': 'DeliveryTime'
                 }
             }
+        }
+        if logging_type == 'Journal':
+            logging_enabled['LoggingType'] = 'Journal'
+        s3_client.put_bucket_logging(Bucket=source_bucket, BucketLoggingStatus={
+            'LoggingEnabled': logging_enabled
         })
         time.sleep(2)
 

@@ -6,6 +6,7 @@ from ceph_volume.api import lvm as api
 from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.util import encryption as encryption_utils
 from ceph_volume.util import system, disk
+from ceph_volume.util import nvme as nvme_utils
 from ceph_volume.systemd import systemctl
 from ceph_volume.devices.lvm.common import rollback_osd
 from ceph_volume.devices.lvm.listing import direct_report
@@ -82,6 +83,10 @@ class Lvm(BaseObjectStore):
 
         device = self.args.data
         if disk.is_partition(device) or disk.is_device(device):
+            if device_type == 'block' and self.objectstore == 'bluestore':
+                # NVMe preformat already discards, skip mkfs discard.
+                if nvme_utils.preformat(device):
+                    self.skip_mkfs_discard = True
             # we must create a vg, and then a single lv
             lv_name_prefix = "osd-{}".format(device_type)
             kwargs = {
@@ -317,7 +322,8 @@ class Lvm(BaseObjectStore):
             if is_encrypted:
                 encryption_utils.luks_open(dmcrypt_secret,
                                            device_lv.__dict__['lv_path'],
-                                           device_uuid)
+                                           device_uuid,
+                                           with_tpm=self.with_tpm)
                 return '/dev/mapper/%s' % device_uuid
             return device_lv.__dict__['lv_path']
 
@@ -327,7 +333,8 @@ class Lvm(BaseObjectStore):
             if is_encrypted:
                 encryption_utils.luks_open(dmcrypt_secret,
                                            physical_device,
-                                           device_uuid)
+                                           device_uuid,
+                                           with_tpm=self.with_tpm)
                 return '/dev/mapper/%s' % device_uuid
             return physical_device
 

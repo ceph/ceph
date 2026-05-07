@@ -23,7 +23,7 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { getFsalFromRoute, getPathfromFsal } from '../utils';
-import { SUPPORTED_FSAL } from '../models/nfs.fsal';
+import { RGW_USER_EXPORT_PATH, SUPPORTED_FSAL } from '../models/nfs.fsal';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 
@@ -113,7 +113,9 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
         `/${prefix}/nfs/edit/${getNfsUri()}`,
         {
           rgw_export_type:
-            this.fsal === SUPPORTED_FSAL.RGW && !_.isEmpty(this.selection?.first()?.path)
+            this.fsal === SUPPORTED_FSAL.RGW &&
+            !_.isEmpty(this.selection?.first()?.path) &&
+            this.selection?.first()?.path !== RGW_USER_EXPORT_PATH
               ? RgwExportType.BUCKET
               : RgwExportType.USER
         }

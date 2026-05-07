@@ -3329,11 +3329,11 @@ void PGMap::get_health_checks(
       } else if (asum.first == "DB_DEVICE_STALLED_READ_ALERT") {
         summary += " experiencing stalled read in db device of BlueFS";
       } else if (asum.first.find("_DISCARD_QUEUE") != std::string::npos) {
-	for (auto str : asum.second.second) {
-	  summary += str;
-	}
+        summary += " experiencing slow discard operations";
       } else if (asum.first == "BLUESTORE_FREE_FRAGMENTATION") {
         summary += " experiencing high free space fragmentation of BlueStore";
+      } else if (asum.first == "EXTBLKDEV") {
+        summary += " reporting problems with ExtBlkDev plugin";
       }
 
       auto& d = checks->add(asum.first, HEALTH_WARN, summary, asum.second.first);

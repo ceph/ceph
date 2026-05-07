@@ -1,7 +1,7 @@
 import functools
 import logging
 import stat
-from typing import List, Tuple, TYPE_CHECKING
+from typing import List, Optional, Tuple, Any, TYPE_CHECKING
 
 from object_format import ErrorResponseBase
 import orchestrator
@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 EXPORT_PREFIX: str = "export-"
 CONF_PREFIX: str = "conf-nfs."
 USER_CONF_PREFIX: str = "userconf-nfs."
+QOS_CONF_PREFIX: str = "qosconf-nfs."
 
 log = logging.getLogger(__name__)
 
@@ -57,8 +58,13 @@ def conf_obj_name(cluster_id: str) -> str:
 
 
 def user_conf_obj_name(cluster_id: str) -> str:
-    """Returna a rados object name for the user config."""
+    """Return a rados object name for the user config."""
     return f"{USER_CONF_PREFIX}{cluster_id}"
+
+
+def qos_conf_obj_name(cluster_id: str) -> str:
+    """Return a rados object name for the qos config."""
+    return f"{QOS_CONF_PREFIX}{cluster_id}"
 
 
 def available_clusters(mgr: 'Module') -> List[str]:
@@ -81,6 +87,22 @@ def available_clusters(mgr: 'Module') -> List[str]:
             if cluster.spec.service_id]
 
 
+def get_nfs_spec_for_cluster(mgr: 'Module', cluster_id: str) -> Optional[Any]:
+    """Return the NFS service spec for the given cluster_id, or None if not found."""
+    try:
+        completion = mgr.describe_service(service_type='nfs')
+        orchestrator.raise_if_exception(completion)
+        if completion.result:
+            for svc in completion.result:
+                if getattr(svc.spec, 'service_id', None) == cluster_id:
+                    return svc.spec
+    except NoOrchestrator:
+        log.debug("No orchestrator configured")
+    except Exception:
+        log.debug("Failed to get NFS spec for cluster %s", cluster_id)
+    return None
+
+
 def nfs_rados_configs(rados: 'Rados', nfs_pool: str = POOL_NAME) -> List[str]:
     """Return a list of all the namespaces in the nfs_pool where nfs
     configuration objects are found. The namespaces also correspond
@@ -96,8 +118,7 @@ def nfs_rados_configs(rados: 'Rados', nfs_pool: str = POOL_NAME) -> List[str]:
                     ns.append(obj.nspace)
     except ObjectNotFound:
         log.debug("Failed to open pool %s", nfs_pool)
-    finally:
-        return ns
+    return ns
 
 
 def restart_nfs_service(mgr: 'Module', cluster_id: str) -> None:

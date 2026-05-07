@@ -40,6 +40,11 @@ ceph_test_librgw_file_nfsns ${K} --dirs1 --verbose
 echo "phase 1.3"
 ceph_test_librgw_file_nfsns ${K} --hier1 --dirs1 --delete --verbose
 
+# common-prefix anti-regression test
+echo "phase 1.4"
+ceph_test_librgw_file_cpref ${K} --create
+ceph_test_librgw_file_cpref ${K} # crashed w/unfixed cp_ref assignment
+
 # bulk create/delete buckets
 echo "phase 2.1"
 ceph_test_librgw_file_cd ${K} --create --multi --verbose

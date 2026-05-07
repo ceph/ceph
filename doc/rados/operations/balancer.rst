@@ -57,7 +57,7 @@ of the following form:
 
       ceph config set mgr target_max_misplaced_ratio .03   # 3%
 
-A larger value may increase the speed of cluster balancing / convergence
+A larger value may increase the speed of cluster balancing/convergence
 at the potential cost of greater impact on client operations.
 
 There is a separate setting ``upmap_max_deviation`` for how uniform the
@@ -67,7 +67,7 @@ which means that if a given OSD's PG replicas vary by five or fewer above or
 below the cluster's average, it will be considered sufficiently balanced.
 
 
-This value of PG replicas / shards (as distinct from logical PGs) is reported
+This value of PG replicas/shards (as distinct from logical PGs) is reported
 by the ``ceph osd df`` command under the ``PGS`` column and the variance
 above or below the average under the ``VAR`` column.  It may seem desirable
 to specify a perfect or nearly perfect distribution by setting a very low
@@ -76,13 +76,13 @@ individual pools have fewer PGs configured than is ideal.  An excessively
 low value for this setting may result in the balancer shuffling data
 forever as it endeavors to meet an impossible expectation.
 
-That said, clusters with multiple CRUSH device classes and / or OSDs that
+That said, clusters with multiple CRUSH device classes and/or OSDs that
 differ in capacity will benefit from a smaller value.  In this situation
 run a command of the following form:
 
   .. prompt:: bash $
 
-     ceph config set mgr mgr/balancer/upmap_max_deviation   1
+     ceph config set mgr mgr/balancer/upmap_max_deviation 1
 
 This value is reasonable and safe for most clusters.  Note that this is
 an absolute integer number of PGs, not a percentage.
@@ -176,8 +176,8 @@ There are four supported balancer modes:
    placement calculation. These ``pg-upmap-primary`` entries provide fine-grained
    control over primary PG mappings. This mode optimizes the placement of individual
    primary PGs in order to achieve balanced reads, or primary PGs, in a cluster.
-   In ``read`` mode, upmap behavior is not excercised, so this mode is best for
-   uses cases in which only read balancing is desired.
+   In ``read`` mode, upmap behavior is not exercised, so this mode is best for
+   use cases in which only read balancing is desired.
 
    To use ``pg-upmap-primary``, all clients must be Reef or newer. For more
    details about client compatibility, see :ref:`read_balancer`.

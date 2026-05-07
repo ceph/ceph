@@ -169,8 +169,8 @@ export class NvmeofGatewayNodeAddModalComponent extends CdForm implements OnInit
 
     const { status, ...modifiedSpec } = this.serviceSpec;
 
-    if ('events' in modifiedSpec) {
-      delete (modifiedSpec as any).events;
+    if (modifiedSpec.events) {
+      delete modifiedSpec.events;
     }
 
     if (modifiedSpec.placement) {
@@ -180,7 +180,7 @@ export class NvmeofGatewayNodeAddModalComponent extends CdForm implements OnInit
     }
 
     if ('locations' in modifiedSpec.placement) {
-      delete (modifiedSpec.placement as any).locations;
+      delete modifiedSpec.placement.locations;
     }
 
     modifiedSpec.placement.hosts = newHosts;

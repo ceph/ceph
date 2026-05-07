@@ -38,6 +38,7 @@ class BaseObjectStore:
         self.block_device_path: str = ''
         self.dmcrypt_key: str = encryption_utils.create_dmcrypt_key()
         self.with_tpm: int = int(getattr(self.args, 'with_tpm', False))
+        self.tpm2_pcrs: str = getattr(self.args, 'tpm2_pcrs', '7')
         self.method: str = ''
         self.osd_path: str = ''
         self.key: Optional[str] = None
@@ -168,6 +169,8 @@ class BaseObjectStore:
         # set bdev_enable_discard = false
         if self.skip_mkfs_discard and self.objectstore == 'bluestore':
             self.osd_mkfs_cmd.extend(['--bdev-enable-discard', 'false'])
+        if getattr(self.args, 'crush_device_class', None) == 'fcm' and self.objectstore == 'bluestore':
+            self.osd_mkfs_cmd.extend(['--set-keepcaps', 'true'])
         if self.cephx_secret is not None:
             self.osd_mkfs_cmd.extend(['--keyfile', '-'])
 
@@ -230,6 +233,7 @@ class BaseObjectStore:
         """
         Enrolls a device with TPM2 (Trusted Platform Module 2.0) using systemd-cryptenroll.
         This method creates a temporary file to store the dmcrypt key and uses it to enroll the device.
+        PCR selection follows `--tpm2-pcrs` on the ceph-volume CLI (`self.tpm2_pcrs`, default is "7").
 
         Args:
             device (str): The device path to be enrolled with TPM2.
@@ -243,7 +247,7 @@ class BaseObjectStore:
                 temp_file_name: str = temp_file.name.replace('/rootfs', '', 1)
                 cmd: List[str] = ['systemd-cryptenroll', '--tpm2-device=auto',
                                   device, '--unlock-key-file', temp_file_name,
-                                  '--tpm2-pcrs', '9+12', '--wipe-slot', 'tpm2']
+                                  '--tpm2-pcrs', self.tpm2_pcrs, '--wipe-slot', 'tpm2']
                 process.call(cmd, run_on_host=True, show_command=True)
 
     def add_label(self, key: str,

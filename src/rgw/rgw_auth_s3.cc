@@ -1760,7 +1760,10 @@ void get_aws_version_and_auth_type(const req_state* s, string& aws_version, stri
       aws_version = "SigV2";
     }
   } else {
-    if (!s->info.args.get("x-amz-credential").empty()) {
+    // Expires is characteristic of the older Signature Version 2,
+    //  while X-Amz-Expires is used in Signature Version 4 (SigV4)
+    if (!s->info.args.get("x-amz-expires").empty() ||
+        !s->info.args.get("Expires").empty()) {
       auth_type = "QueryString";
       if (s->info.args.get("x-amz-algorithm") == AWS4_HMAC_SHA256_STR) {
       /* AWS v4 */

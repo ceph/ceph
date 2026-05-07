@@ -382,8 +382,6 @@ namespace rgw::dedup {
     this->ingress_corrupted_etag += other.ingress_corrupted_etag;
     this->ingress_skip_too_small_bytes += other.ingress_skip_too_small_bytes;
     this->ingress_skip_too_small += other.ingress_skip_too_small;
-    this->ingress_skip_too_small_64KB_bytes += other.ingress_skip_too_small_64KB_bytes;
-    this->ingress_skip_too_small_64KB += other.ingress_skip_too_small_64KB;
 
     return *this;
   }
@@ -440,13 +438,6 @@ namespace rgw::dedup {
                          this->ingress_skip_too_small);
         f->dump_unsigned("Ingress skip: too small bytes",
                          this->ingress_skip_too_small_bytes);
-
-        if(this->ingress_skip_too_small_64KB) {
-          f->dump_unsigned("Ingress skip: 64KB<=size<=4MB Obj",
-                           this->ingress_skip_too_small_64KB);
-          f->dump_unsigned("Ingress skip: 64KB<=size<=4MB Bytes",
-                           this->ingress_skip_too_small_64KB_bytes);
-        }
       }
     }
 
@@ -499,9 +490,6 @@ namespace rgw::dedup {
     encode(w.ingress_skip_too_small_bytes, bl);
     encode(w.ingress_skip_too_small, bl);
 
-    encode(w.ingress_skip_too_small_64KB_bytes, bl);
-    encode(w.ingress_skip_too_small_64KB, bl);
-
     encode(w.duration, bl);
     ENCODE_FINISH(bl);
   }
@@ -528,8 +516,6 @@ namespace rgw::dedup {
     decode(w.ingress_corrupted_etag, bl);
     decode(w.ingress_skip_too_small_bytes, bl);
     decode(w.ingress_skip_too_small, bl);
-    decode(w.ingress_skip_too_small_64KB_bytes, bl);
-    decode(w.ingress_skip_too_small_64KB, bl);
 
     decode(w.duration, bl);
     DECODE_FINISH(bl);
@@ -538,7 +524,6 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   md5_stats_t& md5_stats_t::operator+=(const md5_stats_t& other)
   {
-    this->small_objs_stat               += other.small_objs_stat;
     this->big_objs_stat                 += other.big_objs_stat;
     this->ingress_slabs                 += other.ingress_slabs;
     this->ingress_failed_load_bucket    += other.ingress_failed_load_bucket;
@@ -551,6 +536,8 @@ namespace rgw::dedup {
     this->ingress_skip_compressed       += other.ingress_skip_compressed;
     this->ingress_skip_compressed_bytes += other.ingress_skip_compressed_bytes;
     this->ingress_skip_changed_objs     += other.ingress_skip_changed_objs;
+    this->ingress_skip_explicit_objs    += other.ingress_skip_explicit_objs;
+    this->ingress_skip_alibaba          += other.ingress_skip_alibaba;
     this->shared_manifest_dedup_bytes   += other.shared_manifest_dedup_bytes;
 
     this->skipped_shared_manifest += other.skipped_shared_manifest;
@@ -591,10 +578,8 @@ namespace rgw::dedup {
     this->set_shared_manifest_src += other.set_shared_manifest_src;
     this->loaded_objects          += other.loaded_objects;
     this->processed_objects       += other.processed_objects;
-    this->dup_head_bytes_estimate += other.dup_head_bytes_estimate;
     this->deduped_objects         += other.deduped_objects;
     this->deduped_objects_bytes   += other.deduped_objects_bytes;
-    this->dup_head_bytes          += other.dup_head_bytes;
 
     this->failed_dedup            += other.failed_dedup;
     this->md_throttle_sleep_events    += other.md_throttle_sleep_events;
@@ -628,7 +613,6 @@ namespace rgw::dedup {
       f->dump_unsigned("Set Shared-Manifest SRC", this->set_shared_manifest_src);
       f->dump_unsigned("Deduped Obj (this cycle)", this->deduped_objects);
       f->dump_unsigned("Deduped Bytes(this cycle)", this->deduped_objects_bytes);
-      f->dump_unsigned("Dup head bytes (not dedup)", this->dup_head_bytes);
       f->dump_unsigned("Already Deduped bytes (prev cycles)",
                        this->shared_manifest_dedup_bytes);
 
@@ -637,21 +621,6 @@ namespace rgw::dedup {
       f->dump_unsigned("Unique Obj", ds.unique_count);
       f->dump_unsigned("Duplicate Obj", ds.duplicate_count);
       f->dump_unsigned("Dedup Bytes Estimate", ds.dedup_bytes_estimate);
-    }
-
-    // Potential Dedup Section:
-    // What could be gained by allowing dedup for smaller objects (64KB-4MB)
-    // Space wasted because of duplicated head-object (4MB)
-    {
-      Formatter::ObjectSection potential(*f, "Potential Dedup");
-      const dedup_stats_t &ds = this->small_objs_stat;
-      f->dump_unsigned("Singleton Obj (64KB-4MB)", ds.singleton_count);
-      f->dump_unsigned("Unique Obj (64KB-4MB)", ds.unique_count);
-      f->dump_unsigned("Duplicate Obj (64KB-4MB)", ds.duplicate_count);
-      f->dump_unsigned("Dedup Bytes Estimate (64KB-4MB)", ds.dedup_bytes_estimate);
-      f->dump_unsigned("Duplicated Head Bytes Estimate",
-                       this->dup_head_bytes_estimate);
-      f->dump_unsigned("Duplicated Head Bytes", this->dup_head_bytes);
     }
 
     {
@@ -725,6 +694,12 @@ namespace rgw::dedup {
       }
       if (this->ingress_skip_changed_objs) {
         f->dump_unsigned("Skipped Changed Object", this->ingress_skip_changed_objs);
+      }
+      if (this->ingress_skip_explicit_objs) {
+        f->dump_unsigned("Skipped Explicit Objs", this->ingress_skip_explicit_objs);
+      }
+      if (this->ingress_skip_alibaba) {
+        f->dump_unsigned("Skipped Alibaba Cloud OSS", this->ingress_skip_alibaba);
       }
     }
 
@@ -814,7 +789,6 @@ namespace rgw::dedup {
   {
     ENCODE_START(1, 1, bl);
 
-    encode(m.small_objs_stat, bl);
     encode(m.big_objs_stat, bl);
     encode(m.ingress_slabs, bl);
     encode(m.ingress_failed_load_bucket, bl);
@@ -827,6 +801,8 @@ namespace rgw::dedup {
     encode(m.ingress_skip_compressed, bl);
     encode(m.ingress_skip_compressed_bytes, bl);
     encode(m.ingress_skip_changed_objs, bl);
+    encode(m.ingress_skip_explicit_objs, bl);
+    encode(m.ingress_skip_alibaba, bl);
     encode(m.shared_manifest_dedup_bytes, bl);
 
     encode(m.skipped_shared_manifest, bl);
@@ -867,10 +843,8 @@ namespace rgw::dedup {
 
     encode(m.loaded_objects, bl);
     encode(m.processed_objects, bl);
-    encode(m.dup_head_bytes_estimate, bl);
     encode(m.deduped_objects, bl);
     encode(m.deduped_objects_bytes, bl);
-    encode(m.dup_head_bytes, bl);
     encode(m.failed_dedup, bl);
     encode(m.md_throttle_sleep_events, bl);
     encode(m.md_throttle_sleep_time_usec, bl);
@@ -885,7 +859,6 @@ namespace rgw::dedup {
   void decode(md5_stats_t& m, ceph::bufferlist::const_iterator& bl)
   {
     DECODE_START(1, bl);
-    decode(m.small_objs_stat, bl);
     decode(m.big_objs_stat, bl);
     decode(m.ingress_slabs, bl);
     decode(m.ingress_failed_load_bucket, bl);
@@ -898,6 +871,8 @@ namespace rgw::dedup {
     decode(m.ingress_skip_compressed, bl);
     decode(m.ingress_skip_compressed_bytes, bl);
     decode(m.ingress_skip_changed_objs, bl);
+    decode(m.ingress_skip_explicit_objs, bl);
+    decode(m.ingress_skip_alibaba, bl);
     decode(m.shared_manifest_dedup_bytes, bl);
 
     decode(m.skipped_shared_manifest, bl);
@@ -938,10 +913,8 @@ namespace rgw::dedup {
 
     decode(m.loaded_objects, bl);
     decode(m.processed_objects, bl);
-    decode(m.dup_head_bytes_estimate, bl);
     decode(m.deduped_objects, bl);
     decode(m.deduped_objects_bytes, bl);
-    decode(m.dup_head_bytes, bl);
     decode(m.failed_dedup, bl);
     decode(m.md_throttle_sleep_events, bl);
     decode(m.md_throttle_sleep_time_usec, bl);

@@ -134,6 +134,7 @@ void PGScrubber::notify_scrub_end(bool deep)
     pg.peering_state.state_clear(PG_STATE_DEEP_SCRUB);
   }
   pg.publish_stats_to_osd();
+  pg.kick_snap_trim();
 }
 
 const std::set<pg_shard_t> &PGScrubber::get_ids_to_scrub() const

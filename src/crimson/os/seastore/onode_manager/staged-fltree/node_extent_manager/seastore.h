@@ -57,7 +57,7 @@ class SeastoreNodeExtent final: public NodeExtent {
  protected:
   NodeExtentRef mutate(context_t, DeltaRecorderURef&&) override;
 
-  void do_on_state_commit() final {
+  void do_on_state_commit() override {
     auto &prior = static_cast<SeastoreNodeExtent&>(*get_prior_instance());
     prior.recorder = std::move(recorder);
   }

@@ -37,42 +37,42 @@ public:
     seastar::future<struct stat> stat(
       CollectionRef c,
       const ghobject_t& oid,
-      uint32_t op_flags = 0) final;
+      uint32_t op_flags = 0) override final;
 
     base_errorator::future<bool> exists(
       CollectionRef ch,
       const ghobject_t& oid,
-      uint32_t op_flags = 0) final;
+      uint32_t op_flags = 0) override final;
 
     read_errorator::future<ceph::bufferlist> read(
       CollectionRef c,
       const ghobject_t& oid,
       uint64_t offset,
       size_t len,
-      uint32_t op_flags = 0) final;
+      uint32_t op_flags = 0) override final;
 
     read_errorator::future<ceph::bufferlist> readv(
       CollectionRef c,
       const ghobject_t& oid,
       interval_set<uint64_t>& m,
-      uint32_t op_flags = 0) final;
+      uint32_t op_flags = 0) override final;
 
     get_attr_errorator::future<ceph::bufferlist> get_attr(
       CollectionRef c,
       const ghobject_t& oid,
       std::string_view name,
-      uint32_t op_flags = 0) const final;
+      uint32_t op_flags = 0) const override final;
 
     get_attrs_ertr::future<attrs_t> get_attrs(
       CollectionRef c,
       const ghobject_t& oid,
-      uint32_t op_flags = 0) final;
+      uint32_t op_flags = 0) override final;
 
     read_errorator::future<omap_values_t> omap_get_values(
       CollectionRef c,
       const ghobject_t& oid,
       const omap_keys_t& keys,
-      uint32_t op_flags = 0) final;
+      uint32_t op_flags = 0) override final;
 
     read_errorator::future<ObjectStore::omap_iter_ret_t> omap_iterate(
       CollectionRef c,
@@ -81,12 +81,12 @@ public:
       omap_iterate_cb_t callback,
       uint32_t op_flags = 0,
       omap_iterate_conf_t on_conflict = nullptr
-    ) final;
+    ) override final;
 
     get_attr_errorator::future<ceph::bufferlist> omap_get_header(
       CollectionRef c,
       const ghobject_t& oid,
-      uint32_t op_flags = 0) final;
+      uint32_t op_flags = 0) override final;
 
     seastar::future<std::tuple<std::vector<ghobject_t>, ghobject_t>>
     list_objects(
@@ -94,19 +94,19 @@ public:
       const ghobject_t& start,
       const ghobject_t& end,
       uint64_t limit,
-      uint32_t op_flags = 0) const final;
+      uint32_t op_flags = 0) const override final;
 
-    seastar::future<CollectionRef> create_new_collection(const coll_t& cid) final;
+    seastar::future<CollectionRef> create_new_collection(const coll_t& cid) override final;
 
-    seastar::future<CollectionRef> open_collection(const coll_t& cid) final;
+    seastar::future<CollectionRef> open_collection(const coll_t& cid) override final;
 
     seastar::future<> set_collection_opts(
       CollectionRef c,
-      const pool_opts_t& opts) final;
+      const pool_opts_t& opts) override final;
 
     seastar::future<> do_transaction_no_callbacks(
       CollectionRef ch,
-      ceph::os::Transaction&& txn) final;
+      ceph::os::Transaction&& txn) override final;
 
     read_errorator::future<std::map<uint64_t, uint64_t>>
     fiemap(
@@ -114,9 +114,9 @@ public:
       const ghobject_t& oid,
       uint64_t off,
       uint64_t len,
-      uint32_t op_flags) final;
+      uint32_t op_flags) override final;
 
-    unsigned get_max_attr_name_length() const final;
+    unsigned get_max_attr_name_length() const override final;
 
   public:
     // only exposed to CyanStore
@@ -195,28 +195,28 @@ public:
   };
 
   CyanStore(const std::string& path);
-  ~CyanStore() final;
+  ~CyanStore() override;
 
-  seastar::future<uint32_t> start() final;
+  seastar::future<uint32_t> start() override;
 
-  seastar::future<> stop() final;
+  seastar::future<> stop() override;
 
-  mount_ertr::future<> mount() final;
+  mount_ertr::future<> mount() override;
 
-  seastar::future<> umount() final;
+  seastar::future<> umount() override;
 
-  mkfs_ertr::future<> mkfs(uuid_d new_osd_fsid) final;
+  mkfs_ertr::future<> mkfs(uuid_d new_osd_fsid) override;
 
-  seastar::future<store_statfs_t> stat() const final;
+  seastar::future<store_statfs_t> stat() const override;
 
-  seastar::future<store_statfs_t> pool_statfs(int64_t pool_id) const final;
+  seastar::future<store_statfs_t> pool_statfs(int64_t pool_id) const override;
 
-  uuid_d get_fsid() const final;
+  uuid_d get_fsid() const override;
 
   seastar::future<> write_meta(const std::string& key,
-		  const std::string& value) final;
+		  const std::string& value) override;
 
-  BackendStore get_backend_store(store_index_t store_index) final {
+  BackendStore get_backend_store(store_index_t store_index) override {
     assert(!shard_stores.local().mshard_stores.empty());
     if (store_index != NULL_STORE_INDEX) {
       assert(store_index < shard_stores.local().mshard_stores.size());
@@ -230,7 +230,7 @@ public:
     }
   }
 
-  FuturizedStore::Shard& get_sharded_store(store_index_t store_index = 0) final
+  FuturizedStore::Shard& get_sharded_store(store_index_t store_index = 0) override
   {
     assert(store_index < shard_stores.local().mshard_stores.size());
     auto &shard_store = *(shard_stores.local().mshard_stores[store_index]);
@@ -239,11 +239,11 @@ public:
   }
 
   seastar::future<std::tuple<int, std::string>>
-  read_meta(const std::string& key) final;
+  read_meta(const std::string& key) override;
 
-  seastar::future<std::vector<coll_core_t>> list_collections() final;
+  seastar::future<std::vector<coll_core_t>> list_collections() override;
 
-  seastar::future<std::string> get_default_device_class() final;
+  seastar::future<std::string> get_default_device_class() override;
 
   seastar::future<> get_shard_nums();
 

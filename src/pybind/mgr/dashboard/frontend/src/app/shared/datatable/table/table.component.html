@@ -467,13 +467,22 @@
       <div cdsCol
            [columnNumbers]="{sm:1}"
            class="cds-p-0 cds-pt-3">
-        <button cdsButton="ghost"
-                size="sm"
-                id="cell-inline-save-btn"
-                type="button"
-                (click)="saveCellItem(row, column?.prop)">
+        <div cdsRow>
+        <cds-icon-button kind="tertiary"
+                         size="sm"
+                         id="cell-inline-save-btn"
+                         type="button"
+                         (click)="saveCellItem(row, column?.prop)">
           <cd-icon type="check"></cd-icon>
-        </button>
+        </cds-icon-button>
+        <cds-icon-button kind="ghost"
+                         size="sm"
+                         id="cell-inline-cancel-btn"
+                         type="button"
+                         (click)="cancelCellEdit(row[identifier], column?.prop)">
+          <cd-icon type="destroy"></cd-icon>
+        </cds-icon-button>
+        </div>
       </div>
     </div>
   </form>
@@ -486,12 +495,12 @@
     <div cdsCol
          [columnNumbers]="{lg: 5}"
          class="edit-btn">
-      <button cdsButton="ghost"
-              size="sm"
-              id="cell-inline-edit-btn"
-              (click)="editCellItem(row[identifier], column, value)">
+      <cds-icon-button kind="ghost"
+                       size="sm"
+                       id="cell-inline-edit-btn"
+                       (click)="editCellItem(row[identifier], column, value)">
         <cd-icon type="edit"></cd-icon>
-      </button>
+      </cds-icon-button>
     </div>
   </div>
   }

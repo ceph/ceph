@@ -166,6 +166,56 @@ previous example. Set three CTDB public address values and a custom placement:
         --placement="3 label:smb"
 
 
+Update Cluster QoS
+++++++++++++++++++
+
+.. prompt:: bash #
+
+   ceph smb cluster update cephfs qos <cluster_id> [--read-iops-limit=<int>] [--write-iops-limit=<int>] [--read-bw-limit=<str>] [--write-bw-limit=<str>] [--read-burst-mult=<int>] [--write-burst-mult=<int>]
+
+Update Quality of Service (QoS) settings for all CephFS-backed shares within a cluster. This command applies the same per-share QoS limits to every share in the specified cluster that has CephFS storage configured. This is particularly useful for clusters with many shares that require uniform QoS policies.
+
+Options: See :ref:`qos-parameters` for detailed descriptions of all QoS parameters.
+
+Examples:
+
+Apply the same IOPS limits to all shares in a cluster:
+
+.. prompt:: bash #
+
+   ceph smb cluster update cephfs qos prod \
+     --read-iops-limit=1000 \
+     --write-iops-limit=500
+
+Apply bandwidth limits with human-readable units to all shares:
+
+.. prompt:: bash #
+
+   ceph smb cluster update cephfs qos prod \
+     --read-bw-limit="10M" \
+     --write-bw-limit="5M"
+
+Apply QoS limits with burst multipliers to all shares:
+
+.. prompt:: bash #
+
+   ceph smb cluster update cephfs qos prod \
+     --read-iops-limit=100 \
+     --write-iops-limit=200 \
+     --read-burst-mult=20 \
+     --write-burst-mult=15
+
+Disable QoS for all shares in a cluster:
+
+.. prompt:: bash #
+
+   ceph smb cluster update cephfs qos prod \
+     --read-iops-limit=0 \
+     --write-iops-limit=0 \
+     --read-bw-limit=0 \
+     --write-bw-limit=0
+
+
 Remove Cluster
 ++++++++++++++
 
@@ -262,16 +312,14 @@ Create a read-only share at a custom path in the CephFS volume:
     ceph smb share create test1 plans cephfs \
         --path=/qbranch/top/secret/plans --readonly
 
-Update Share QoS
-++++++++++++++++
 
-.. prompt:: bash #
+.. _qos-parameters:
 
-   ceph smb share update cephfs qos <cluster_id> <share_id> [--read-iops-limit=<int>] [--write-iops-limit=<int>] [--read-bw-limit=<str>] [--write-bw-limit=<str>] [--read-burst-mult=<int>] [--write-burst-mult=<int>]
+QoS Parameters
+++++++++++++++
 
-Update Quality of Service (QoS) settings for a CephFS-backed share. This allows administrators to apply per-share rate limits on SMB input/output (I/O) operations, specifically limits on IOPS (Input/Output Operations per Second) and bandwidth (in bytes per second) for both read and write operations. Additionally, burst multipliers can be configured to allow temporary bursts above the configured limits.
-
-Options:
+The following Quality of Service (QoS) parameters are available for CephFS-backed shares.
+All parameters are optional and can be used independently.
 
 read_iops_limit
     Optional integer. Maximum number of read operations per second (0 = disabled).
@@ -325,6 +373,18 @@ larger bursts but may temporarily consume more resources.
 .. note::
    The burst multiplier only affects short-term spikes. The long-term average
    throughput remains limited by your configured IOPS and bandwidth limits.
+
+
+Update Share QoS
+++++++++++++++++
+
+.. prompt:: bash #
+
+   ceph smb share update cephfs qos <cluster_id> <share_id> [--read-iops-limit=<int>] [--write-iops-limit=<int>] [--read-bw-limit=<str>] [--write-bw-limit=<str>] [--read-burst-mult=<int>] [--write-burst-mult=<int>]
+
+Update Quality of Service (QoS) settings for a CephFS-backed share. This allows administrators to apply per-share rate limits on SMB input/output (I/O) operations, specifically limits on IOPS (Input/Output Operations per Second) and bandwidth (in bytes per second) for both read and write operations. Additionally, burst multipliers can be configured to allow temporary bursts above the configured limits.
+
+Options: See :ref:`qos-parameters` for detailed descriptions of all QoS parameters.
 
 Examples:
 
@@ -765,7 +825,7 @@ keybridge
         kmip_ca_cert
             Optional object. Required for type ``kmip``.
             The fields are described in :ref:`tls source fields<tls-source-fields>`.
-   peer_policy
+    peer_policy
         Optional, one of ``restricted`` or ``unrestricted``.
         Used to control what processes the keybridge server will permit
         for access. This option is meant for testing and development only.

@@ -1153,7 +1153,8 @@ TEST(pg_missing_t, add_next_event)
     missing.add_next_event(e, pg_pool_t(), shard_id_t());
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_EQ(eversion_t(), missing.get_items().at(oid).have);
-    EXPECT_EQ(oid, missing.get_rmissing().at(e.version));
+    ASSERT_EQ(1u, missing.get_rmissing().count(e.version));
+    EXPECT_EQ(oid, missing.get_rmissing().begin()->second);
     EXPECT_EQ(1U, missing.num_missing());
     EXPECT_EQ(1U, missing.get_rmissing().size());
 
@@ -1178,7 +1179,8 @@ TEST(pg_missing_t, add_next_event)
     missing.add_next_event(e, pg_pool_t(), shard_id_t());
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_EQ(eversion_t(), missing.get_items().at(oid).have);
-    EXPECT_EQ(oid, missing.get_rmissing().at(e.version));
+    ASSERT_EQ(1u, missing.get_rmissing().count(e.version));
+    EXPECT_EQ(oid, missing.get_rmissing().begin()->second);
     EXPECT_EQ(1U, missing.num_missing());
     EXPECT_EQ(1U, missing.get_rmissing().size());
 
@@ -1203,7 +1205,8 @@ TEST(pg_missing_t, add_next_event)
     missing.add_next_event(e, pg_pool_t(), shard_id_t());
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_EQ(eversion_t(), missing.get_items().at(oid).have);
-    EXPECT_EQ(oid, missing.get_rmissing().at(e.version));
+    ASSERT_EQ(1u, missing.get_rmissing().count(e.version));
+    EXPECT_EQ(oid, missing.get_rmissing().begin()->second);
     EXPECT_EQ(1U, missing.num_missing());
     EXPECT_EQ(1U, missing.get_rmissing().size());
 
@@ -1230,7 +1233,8 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_EQ(prior_version, missing.get_items().at(oid).have);
     EXPECT_EQ(version, missing.get_items().at(oid).need);
-    EXPECT_EQ(oid, missing.get_rmissing().at(e.version));
+    ASSERT_EQ(1u, missing.get_rmissing().count(e.version));
+    EXPECT_EQ(oid, missing.get_rmissing().begin()->second);
     EXPECT_EQ(1U, missing.num_missing());
     EXPECT_EQ(1U, missing.get_rmissing().size());
   }
@@ -1255,7 +1259,8 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_TRUE(missing.get_items().at(oid).is_delete());
     EXPECT_EQ(prior_version, missing.get_items().at(oid).have);
     EXPECT_EQ(version, missing.get_items().at(oid).need);
-    EXPECT_EQ(oid, missing.get_rmissing().at(e.version));
+    ASSERT_EQ(1u, missing.get_rmissing().count(e.version));
+    EXPECT_EQ(oid, missing.get_rmissing().begin()->second);
     EXPECT_EQ(1U, missing.num_missing());
     EXPECT_EQ(1U, missing.get_rmissing().size());
   }
@@ -1282,7 +1287,8 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_TRUE(missing.get_items().at(oid).is_delete());
     EXPECT_EQ(prior_version, missing.get_items().at(oid).have);
     EXPECT_EQ(e.version, missing.get_items().at(oid).need);
-    EXPECT_EQ(oid, missing.get_rmissing().at(e.version));
+    ASSERT_EQ(1u, missing.get_rmissing().count(e.version));
+    EXPECT_EQ(oid, missing.get_rmissing().begin()->second);
     EXPECT_EQ(1U, missing.num_missing());
     EXPECT_EQ(1U, missing.get_rmissing().size());
   }
@@ -1458,6 +1464,361 @@ TEST(pg_missing_t, is_missing_any_head_or_clone_of)
   EXPECT_TRUE(missing2.is_missing_any_head_or_clone_of(head_oid));
   EXPECT_TRUE(missing2.is_missing(clone_oid));
   EXPECT_TRUE(missing2.is_missing_any_head_or_clone_of(clone_oid));
+}
+
+// Helper function to check consistency between missing and rmissing maps
+// This verifies the bidirectional map invariant
+static void check_pg_missing_consistency(const pg_missing_t& missing) {
+  const auto& items = missing.get_items();
+  const auto& rmissing = missing.get_rmissing();
+  
+  // Check 1: Every entry in rmissing must exist in missing
+  for (const auto& [version, oid] : rmissing) {
+    auto it = items.find(oid);
+    ASSERT_NE(it, items.end()) 
+      << "rmissing contains oid " << oid << " at version " << version 
+      << " but it's not in missing map";
+    ASSERT_EQ(it->second.need, version)
+      << "rmissing has version " << version << " for oid " << oid
+      << " but missing has version " << it->second.need;
+  }
+  
+  // Check 2: Every entry in missing must exist in rmissing
+  for (const auto& [oid, item] : items) {
+    bool found = false;
+    auto range = rmissing.equal_range(item.need);
+    for (auto it = range.first; it != range.second; ++it) {
+      if (it->second == oid) {
+        found = true;
+        break;
+      }
+    }
+    ASSERT_TRUE(found)
+      << "missing contains oid " << oid << " with version " << item.need
+      << " but it's not in rmissing";
+  }
+  
+  // Check 3: Size consistency
+  ASSERT_EQ(items.size(), rmissing.size())
+    << "missing has " << items.size() << " entries but rmissing has " 
+    << rmissing.size() << " entries";
+}
+
+TEST(pg_missing_t, consistency_empty)
+{
+  pg_missing_t missing;
+  check_pg_missing_consistency(missing);
+  EXPECT_EQ(0U, missing.num_missing());
+  EXPECT_EQ(0U, missing.get_rmissing().size());
+}
+
+TEST(pg_missing_t, consistency_single_add)
+{
+  hobject_t oid(object_t("obj1"), "key", 123, 456, 0, "");
+  pg_missing_t missing;
+  eversion_t need(10, 5);
+  eversion_t have(5, 3);
+  
+  missing.add(oid, need, have, false);
+  check_pg_missing_consistency(missing);
+  
+  EXPECT_EQ(1U, missing.num_missing());
+  EXPECT_EQ(1U, missing.get_rmissing().size());
+  EXPECT_TRUE(missing.is_missing(oid));
+}
+
+TEST(pg_missing_t, consistency_multiple_inserts_same_oid_version)
+{
+  // Test: Multiple inserts of same {oid, version} should be idempotent
+  hobject_t oid(object_t("obj1"), "key", 123, 456, 0, "");
+  pg_missing_t missing;
+  eversion_t need(10, 5);
+  eversion_t have(5, 3);
+  
+  // First add
+  missing.add(oid, need, have, false);
+  check_pg_missing_consistency(missing);
+  EXPECT_EQ(1U, missing.num_missing());
+  
+  // Second add of same oid/version - should replace, not duplicate
+  missing.add(oid, need, have, false);
+  check_pg_missing_consistency(missing);
+  EXPECT_EQ(1U, missing.num_missing());
+  EXPECT_EQ(1U, missing.get_rmissing().size());
+  
+  // Third add with different have version
+  eversion_t new_have(6, 4);
+  missing.add(oid, need, new_have, false);
+  check_pg_missing_consistency(missing);
+  EXPECT_EQ(1U, missing.num_missing());
+  EXPECT_EQ(1U, missing.get_rmissing().size());
+  EXPECT_EQ(new_have, missing.get_items().at(oid).have);
+}
+
+TEST(pg_missing_t, consistency_same_version_multiple_oids)
+{
+  // Test: Multiple OIDs can share the same version (multimap behavior)
+  pg_missing_t missing;
+  eversion_t shared_version(10, 5);
+  
+  hobject_t oid1(object_t("obj1"), "key", 123, 456, 0, "");
+  hobject_t oid2(object_t("obj2"), "key", 789, 012, 0, "");
+  hobject_t oid3(object_t("obj3"), "key", 345, 678, 0, "");
+  
+  missing.add(oid1, shared_version, eversion_t(), false);
+  check_pg_missing_consistency(missing);
+  EXPECT_EQ(1U, missing.num_missing());
+  
+  missing.add(oid2, shared_version, eversion_t(), false);
+  check_pg_missing_consistency(missing);
+  EXPECT_EQ(2U, missing.num_missing());
+  
+  missing.add(oid3, shared_version, eversion_t(), false);
+  check_pg_missing_consistency(missing);
+  EXPECT_EQ(3U, missing.num_missing());
+  
+  // Verify rmissing has 3 entries for the same version
+  EXPECT_EQ(3U, missing.get_rmissing().count(shared_version));
+  EXPECT_EQ(3U, missing.get_rmissing().size());
+  
+  // Verify all three OIDs are in missing
+  EXPECT_TRUE(missing.is_missing(oid1));
+  EXPECT_TRUE(missing.is_missing(oid2));
+  EXPECT_TRUE(missing.is_missing(oid3));
+}
+
+TEST(pg_missing_t, consistency_add_and_remove)
+{
+  pg_missing_t missing;
+  hobject_t oid1(object_t("obj1"), "key", 123, 456, 0, "");
+  hobject_t oid2(object_t("obj2"), "key", 789, 012, 0, "");
+  eversion_t need1(10, 5);
+  eversion_t need2(12, 7);
+  
+  // Add two objects
+  missing.add(oid1, need1, eversion_t(), false);
+  missing.add(oid2, need2, eversion_t(), false);
+  check_pg_missing_consistency(missing);
+  EXPECT_EQ(2U, missing.num_missing());
+  
+  // Remove first object
+  missing.rm(oid1, need1);
+  check_pg_missing_consistency(missing);
+  EXPECT_EQ(1U, missing.num_missing());
+  EXPECT_FALSE(missing.is_missing(oid1));
+  EXPECT_TRUE(missing.is_missing(oid2));
+  
+  // Remove second object
+  missing.rm(oid2, need2);
+  check_pg_missing_consistency(missing);
+  EXPECT_EQ(0U, missing.num_missing());
+  EXPECT_FALSE(missing.is_missing(oid2));
+}
+
+TEST(pg_missing_t, consistency_revise_need)
+{
+  hobject_t oid(object_t("obj1"), "key", 123, 456, 0, "");
+  pg_missing_t missing;
+  eversion_t need1(10, 5);
+  eversion_t need2(15, 8);
+  
+  // Add with initial need
+  missing.add(oid, need1, eversion_t(), false);
+  check_pg_missing_consistency(missing);
+  EXPECT_EQ(need1, missing.get_items().at(oid).need);
+  
+  // Revise need to a different version
+  missing.revise_need(oid, need2, false);
+  check_pg_missing_consistency(missing);
+  EXPECT_EQ(1U, missing.num_missing());
+  EXPECT_EQ(need2, missing.get_items().at(oid).need);
+  
+  // Verify old version is not in rmissing
+  EXPECT_EQ(0U, missing.get_rmissing().count(need1));
+  // Verify new version is in rmissing
+  EXPECT_EQ(1U, missing.get_rmissing().count(need2));
+}
+
+TEST(pg_missing_t, consistency_complex_sequence)
+{
+  // Complex test: multiple versions, adds, removes, and revisions
+  pg_missing_t missing;
+  eversion_t shared_v(10, 5);
+  eversion_t v1(11, 6);
+  eversion_t v2(12, 7);
+  eversion_t v3(13, 8);
+  
+  hobject_t oid1(object_t("obj1"), "key", 100, 200, 0, "");
+  hobject_t oid2(object_t("obj2"), "key", 300, 400, 0, "");
+  hobject_t oid3(object_t("obj3"), "key", 500, 600, 0, "");
+  hobject_t oid4(object_t("obj4"), "key", 700, 800, 0, "");
+  
+  // Step 1: Add three objects with same version
+  missing.add(oid1, shared_v, eversion_t(), false);
+  missing.add(oid2, shared_v, eversion_t(), false);
+  missing.add(oid3, shared_v, eversion_t(), false);
+  check_pg_missing_consistency(missing);
+  EXPECT_EQ(3U, missing.num_missing());
+  EXPECT_EQ(3U, missing.get_rmissing().count(shared_v));
+  
+  // Step 2: Revise one to a different version
+  missing.revise_need(oid2, v1, false);
+  check_pg_missing_consistency(missing);
+  EXPECT_EQ(3U, missing.num_missing());
+  EXPECT_EQ(2U, missing.get_rmissing().count(shared_v));
+  EXPECT_EQ(1U, missing.get_rmissing().count(v1));
+  
+  // Step 3: Add another object with yet another version
+  missing.add(oid4, v2, eversion_t(), false);
+  check_pg_missing_consistency(missing);
+  EXPECT_EQ(4U, missing.num_missing());
+  
+  // Step 4: Remove one of the objects with shared version
+  missing.rm(oid1, shared_v);
+  check_pg_missing_consistency(missing);
+  EXPECT_EQ(3U, missing.num_missing());
+  EXPECT_EQ(1U, missing.get_rmissing().count(shared_v));
+  EXPECT_FALSE(missing.is_missing(oid1));
+  
+  // Step 5: Revise the remaining shared_v object to v3
+  missing.revise_need(oid3, v3, false);
+  check_pg_missing_consistency(missing);
+  EXPECT_EQ(3U, missing.num_missing());
+  EXPECT_EQ(0U, missing.get_rmissing().count(shared_v));
+  EXPECT_EQ(1U, missing.get_rmissing().count(v3));
+  
+  // Step 6: Remove all remaining
+  missing.rm(oid2, v1);
+  missing.rm(oid3, v3);
+  missing.rm(oid4, v2);
+  check_pg_missing_consistency(missing);
+  EXPECT_EQ(0U, missing.num_missing());
+  EXPECT_EQ(0U, missing.get_rmissing().size());
+}
+
+TEST(pg_missing_t, consistency_got_removes_correctly)
+{
+  hobject_t oid(object_t("obj1"), "key", 123, 456, 0, "");
+  pg_missing_t missing;
+  eversion_t need(10, 5);
+  
+  missing.add(oid, need, eversion_t(), false);
+  check_pg_missing_consistency(missing);
+  EXPECT_EQ(1U, missing.num_missing());
+  
+  // got() should remove the entry
+  missing.got(oid, need);
+  check_pg_missing_consistency(missing);
+  EXPECT_EQ(0U, missing.num_missing());
+  EXPECT_FALSE(missing.is_missing(oid));
+}
+
+TEST(pg_missing_t, consistency_multiple_versions_interleaved)
+{
+  // Test adding and removing with multiple versions interleaved
+  pg_missing_t missing;
+  
+  hobject_t oid1(object_t("obj1"), "key", 100, 200, 0, "");
+  hobject_t oid2(object_t("obj2"), "key", 300, 400, 0, "");
+  hobject_t oid3(object_t("obj3"), "key", 500, 600, 0, "");
+  
+  eversion_t v1(10, 1);
+  eversion_t v2(10, 2);
+  eversion_t v3(10, 3);
+  eversion_t v4(10, 4);
+  
+  // Add with different versions
+  missing.add(oid1, v1, eversion_t(), false);
+  check_pg_missing_consistency(missing);
+  
+  missing.add(oid2, v3, eversion_t(), false);
+  check_pg_missing_consistency(missing);
+  
+  missing.add(oid3, v2, eversion_t(), false);
+  check_pg_missing_consistency(missing);
+  EXPECT_EQ(3U, missing.num_missing());
+  
+  // Revise to create version collisions
+  missing.revise_need(oid1, v4, false);
+  check_pg_missing_consistency(missing);
+  
+  missing.revise_need(oid3, v4, false);
+  check_pg_missing_consistency(missing);
+  
+  // Now oid1 and oid3 share v4, oid2 has v3
+  EXPECT_EQ(2U, missing.get_rmissing().count(v4));
+  EXPECT_EQ(1U, missing.get_rmissing().count(v3));
+  EXPECT_EQ(0U, missing.get_rmissing().count(v1));
+  EXPECT_EQ(0U, missing.get_rmissing().count(v2));
+  
+  // Remove one with shared version
+  missing.rm(oid1, v4);
+  check_pg_missing_consistency(missing);
+  EXPECT_EQ(2U, missing.num_missing());
+  EXPECT_EQ(1U, missing.get_rmissing().count(v4));
+}
+
+TEST(pg_missing_t, consistency_claim_operation)
+{
+  hobject_t oid1(object_t("obj1"), "key", 123, 456, 0, "");
+  hobject_t oid2(object_t("obj2"), "key", 789, 012, 0, "");
+  
+  pg_missing_t missing1;
+  missing1.add(oid1, eversion_t(10, 5), eversion_t(), false);
+  missing1.add(oid2, eversion_t(12, 7), eversion_t(), false);
+  check_pg_missing_consistency(missing1);
+  EXPECT_EQ(2U, missing1.num_missing());
+  
+  pg_missing_t missing2;
+  missing2.claim(std::move(missing1));
+  check_pg_missing_consistency(missing2);
+  EXPECT_EQ(2U, missing2.num_missing());
+  EXPECT_TRUE(missing2.is_missing(oid1));
+  EXPECT_TRUE(missing2.is_missing(oid2));
+}
+
+TEST(pg_missing_t, consistency_edge_case_same_oid_different_versions)
+{
+  // Edge case: repeatedly updating the same OID to different versions
+  hobject_t oid(object_t("obj1"), "key", 123, 456, 0, "");
+  pg_missing_t missing;
+  
+  for (int i = 1; i <= 10; ++i) {
+    eversion_t v(10, i);
+    missing.revise_need(oid, v, false);
+    check_pg_missing_consistency(missing);
+    EXPECT_EQ(1U, missing.num_missing());
+    EXPECT_EQ(1U, missing.get_rmissing().size());
+    EXPECT_EQ(v, missing.get_items().at(oid).need);
+  }
+}
+
+TEST(pg_missing_t, consistency_stress_many_objects_same_version)
+{
+  // Stress test: many objects with the same version
+  pg_missing_t missing;
+  eversion_t shared_v(100, 50);
+  std::vector<hobject_t> oids;
+  
+  const int num_objects = 100;
+  for (int i = 0; i < num_objects; ++i) {
+    hobject_t oid(object_t("obj" + std::to_string(i)), "key", i, i * 2, 0, "");
+    oids.push_back(oid);
+    missing.add(oid, shared_v, eversion_t(), false);
+  }
+  
+  check_pg_missing_consistency(missing);
+  EXPECT_EQ(num_objects, missing.num_missing());
+  EXPECT_EQ(num_objects, missing.get_rmissing().count(shared_v));
+  
+  // Remove half of them
+  for (int i = 0; i < num_objects / 2; ++i) {
+    missing.rm(oids[i], shared_v);
+  }
+  
+  check_pg_missing_consistency(missing);
+  EXPECT_EQ(num_objects / 2, missing.num_missing());
+  EXPECT_EQ(num_objects / 2, missing.get_rmissing().count(shared_v));
 }
 
 TEST(pg_pool_t_test, get_pg_num_divisor) {

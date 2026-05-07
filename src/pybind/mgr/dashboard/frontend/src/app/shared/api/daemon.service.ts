@@ -14,18 +14,18 @@ export class DaemonService {
 
   constructor(private http: HttpClient) {}
 
-  action(daemonName: string, actionType: string) {
-    return this.http.put(
-      `${this.url}/${daemonName}`,
-      {
-        action: actionType,
-        container_image: null
-      },
-      {
-        headers: { Accept: 'application/vnd.ceph.api.v0.1+json' },
-        observe: 'response'
-      }
-    );
+  action(daemonName: string, actionType: string, force?: boolean) {
+    const body: Record<string, string | boolean | null> = {
+      action: actionType,
+      container_image: null
+    };
+    if (force !== undefined) {
+      body['force'] = force;
+    }
+    return this.http.put(`${this.url}/${daemonName}`, body, {
+      headers: { Accept: 'application/vnd.ceph.api.v0.1+json' },
+      observe: 'response'
+    });
   }
 
   list(daemonTypes: string[]): Observable<Daemon[]> {

@@ -72,6 +72,7 @@
   }
 
   <!-- Authentication details -->
+  @if (hostType === HOST_TYPE.SPECIFIC) {
   <div cdsCol
        [columnNumbers]="{sm: 4, md: 8, lg: 12}"
        class="cds-mt-7">
@@ -113,4 +114,5 @@
        i18n>No keys added</p>
     }
   </div>
+  }
 </div>

@@ -80,7 +80,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   resource: string;
   serviceTypes: string[] = [];
   serviceIds: string[] = [];
-  selectedLabels: string[] = [];
   selectedHosts: string[] = [];
   labels: string[];
   labelClick = new Subject<string>();
@@ -657,7 +656,10 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       ],
       https_address: [null, [CdValidators.oauthAddressTest()]],
       redirect_url: [null],
-      allowlist_domains: [null]
+      scope: [null],
+      email_domains: [null],
+      allowlist_domains: [null],
+      ssl_insecure_skip_verify: [false]
     });
   }
 
@@ -744,8 +746,17 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               : (placementValue = 'hosts');
             this.serviceForm.get('placement').setValue(placementValue);
             this.serviceForm.get('count').setValue(response[0]['placement']['count']);
-            if (response[0]?.placement[placementValue]) {
-              this.serviceForm.get(placementValue).setValue(response[0]?.placement[placementValue]);
+            if (placementValue === 'hosts' && response[0]?.placement?.hosts) {
+              this.serviceForm.get('hosts').setValue(
+                response[0].placement.hosts.map((host: string) => ({
+                  content: host,
+                  selected: true
+                }))
+              );
+            } else if (placementValue === 'label' && response[0]?.placement?.label) {
+              this.serviceForm
+                .get('label')
+                .setValue({ content: response[0].placement.label, selected: true });
             }
           }
           switch (this.serviceType) {
@@ -915,7 +926,10 @@ export class ServiceFormComponent extends CdForm implements OnInit {
                 'client_secret',
                 'oidc_issuer_url',
                 'redirect_url',
-                'allowlist_domains'
+                'scope',
+                'email_domains',
+                'allowlist_domains',
+                'ssl_insecure_skip_verify'
               ];
               oauth2SpecKeys.forEach((key) => {
                 this.serviceForm.get(key).setValue(response[0].spec[key]);
@@ -924,6 +938,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
                 this.serviceForm.get('ssl_cert').setValue(response[0].spec?.ssl_cert);
                 this.serviceForm.get('ssl_key').setValue(response[0].spec?.ssl_key);
               }
+              break;
+            default:
+              this.serviceForm.get('service_id').setValue(this.serviceName);
           }
         });
     }
@@ -1355,9 +1372,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           }
           break;
         case 'label':
-          serviceSpec['placement']['label'] = values['label']
-            .filter((label: { content: string; selected: boolean }) => label.selected)
-            .map((label: { content: string }) => label.content);
+          if (!_.isEmpty(values['label'])) {
+            serviceSpec['placement']['label'] = values['label']?.content;
+          }
           break;
       }
       if (_.isNumber(values['count']) && values['count'] > 0) {
@@ -1433,6 +1450,12 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           serviceSpec['oidc_issuer_url'] = values['oidc_issuer_url']?.trim();
           serviceSpec['https_address'] = values['https_address']?.trim();
           serviceSpec['redirect_url'] = values['redirect_url']?.trim();
+          serviceSpec['scope'] = values['scope']?.join(' ');
+          if (values['email_domains']) {
+            serviceSpec['email_domains'] = values['email_domains']?.map((emailDomain: string) => {
+              return emailDomain.trim();
+            });
+          }
           if (values['allowlist_domains']) {
             serviceSpec['allowlist_domains'] = values['allowlist_domains']?.map(
               (allowlistDomain: string) => {
@@ -1440,6 +1463,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               }
             );
           }
+          serviceSpec['ssl_insecure_skip_verify'] = values['ssl_insecure_skip_verify'];
           if (values['ssl']) {
             this.applySslCertificateConfig(serviceSpec, values);
           }
@@ -1499,9 +1523,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     });
   }
 
-  multiSelector(event: any, field: 'label' | 'hosts') {
-    if (field === 'hosts') this.selectedHosts = event.map((host: any) => host.content);
-    else this.selectedLabels = event.map((label: any) => label.content);
+  multiSelector(event: any) {
+    this.selectedHosts = event.map((host: any) => host.content);
   }
 
   get isPrefixedNamedService(): boolean {

@@ -60,8 +60,7 @@ public:
             features ? BEACON_VERSION_ENHANCED : BEACON_VERSION_LEGACY},
       gw_id(gw_id_), gw_pool(gw_pool_), gw_group(gw_group_), subsystems(subsystems_),
       availability(availability_), last_osd_epoch(last_osd_epoch_),
-      last_gwmap_epoch(last_gwmap_epoch_), sequence(sequence_),
-      affected_features(features)
+      last_gwmap_epoch(last_gwmap_epoch_), sequence(sequence_)
   {
     set_priority(CEPH_MSG_PRIO_HIGH);
   }
@@ -100,13 +99,14 @@ public:
     encode(gw_id, payload);
     encode(gw_pool, payload);
     encode(gw_group, payload);
-    encode(subsystems, payload, affected_features);
+    encode(subsystems, payload);
     encode((uint32_t)availability, payload);
     encode(last_osd_epoch, payload);
     encode(last_gwmap_epoch, payload);
     // Only encode sequence for enhanced beacons (version >= 2)
     if (get_header().version >= 2) {
       encode(sequence, payload);
+      encode_beacon_change_descriptors(subsystems, payload);
     }
   }
 
@@ -127,6 +127,7 @@ public:
     // Only decode sequence for enhanced beacons (version >= 2)
     if (get_header().version >= 2 && !p.end()) {
       decode(sequence, p);
+      decode_beacon_change_descriptors(subsystems, p);
     } else {
       sequence = 0;  // Legacy beacons don't have sequence field
     }

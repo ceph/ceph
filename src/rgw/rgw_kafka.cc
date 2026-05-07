@@ -76,8 +76,10 @@ connection_id_t::connection_id_t(
     const std::string& _password,
     const boost::optional<const std::string&>& _ca_location,
     const boost::optional<const std::string&>& _mechanism,
-    bool _ssl)
-    : broker(_broker), user(_user), password(_password), ssl(_ssl) {
+    bool _ssl,
+    bool _verify_ssl)
+    : broker(_broker), user(_user), password(_password), ssl(_ssl),
+      verify_ssl(_verify_ssl) {
   if (_ca_location.has_value()) {
     ca_location = _ca_location.get();
   }
@@ -91,7 +93,8 @@ connection_id_t::connection_id_t(
 bool operator==(const connection_id_t& lhs, const connection_id_t& rhs) {
   return lhs.broker == rhs.broker && lhs.user == rhs.user &&
          lhs.password == rhs.password && lhs.ca_location == rhs.ca_location &&
-         lhs.mechanism == rhs.mechanism && lhs.ssl == rhs.ssl;
+         lhs.mechanism == rhs.mechanism && lhs.ssl == rhs.ssl &&
+         lhs.verify_ssl == rhs.verify_ssl;
 }
 
 struct connection_id_hasher {
@@ -103,6 +106,7 @@ struct connection_id_hasher {
     boost::hash_combine(h, k.ca_location);
     boost::hash_combine(h, k.mechanism);
     boost::hash_combine(h, k.ssl);
+    boost::hash_combine(h, k.verify_ssl);
     return h;
   }
 };
@@ -159,7 +163,7 @@ struct connection_t {
   CallbackList callbacks;
   const std::string broker;
   const bool use_ssl;
-  const bool verify_ssl; // TODO currently ignored, not supported in librdkafka v0.11.6
+  const bool verify_ssl;
   const boost::optional<std::string> ca_location;
   const std::string user;
   const std::string password;
@@ -286,9 +290,22 @@ bool new_producer(connection_t* conn) {
   // however, testing with librdkafka v1.6.1 did not expire the message in that case. hence, a value of zero is changed to 1ms
   constexpr std::uint64_t min_message_timeout = 1;
   const auto message_timeout = std::max(min_message_timeout, conn->cct->_conf->rgw_kafka_message_timeout);
+  const auto batch_size = conn->cct->_conf->rgw_kafka_max_batch_size;
+  ldout(conn->cct, 1) << "Kafka connect: broker=" << conn->broker
+      << " use_ssl=" << conn->use_ssl
+      << " user=" << conn->user
+      << " message_timeout=" << message_timeout
+      << " batch_size=" << batch_size << dendl;
+
   if (rd_kafka_conf_set(conf.get(), "message.timeout.ms", 
         std::to_string(message_timeout).c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
 
+  if (batch_size > 0) {
+    if (rd_kafka_conf_set(conf.get(), "batch.size",
+        std::to_string(batch_size).c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+    if (rd_kafka_conf_set(conf.get(), "message.max.bytes",
+        std::to_string(batch_size).c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+  }
   // get list of brokers based on the bootstrap broker
   if (rd_kafka_conf_set(conf.get(), "bootstrap.servers", conn->broker.c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
 
@@ -319,8 +336,11 @@ bool new_producer(connection_t* conn) {
     } else {
       ldout(conn->cct, 20) << "Kafka connect: using default CA location" << dendl;
     }
-    // Note: when librdkafka.1.0 is available the following line could be uncommented instead of the callback setting call
-    // if (rd_kafka_conf_set(conn->conf, "enable.ssl.certificate.verification", "0", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+    if (rd_kafka_conf_set(conf.get(), "enable.ssl.certificate.verification",
+                          conn->verify_ssl ? "true" : "false",
+                          errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+      goto conf_error;
+    }
 
     ldout(conn->cct, 20) << "Kafka connect: successfully configured security" << dendl;
   } else if (!conn->user.empty()) {
@@ -644,7 +664,7 @@ public:
     }
 
     connection_id_t tmp_id(broker_list, user, password, ca_location, mechanism,
-                           use_ssl);
+                           use_ssl, verify_ssl);
     std::lock_guard lock(connections_lock);
     const auto it = connections.find(tmp_id);
     // note that ssl vs. non-ssl connection to the same host are two separate connections

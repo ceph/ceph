@@ -345,6 +345,98 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             [cluster], password_filter_out=password_filter
         ).one()
 
+    @SMBCLICommand('cluster update cephfs qos', perm='rw')
+    def cluster_update_qos(
+        self,
+        cluster_id: str,
+        read_iops_limit: Optional[int] = None,
+        write_iops_limit: Optional[int] = None,
+        read_bw_limit: Optional[str] = None,
+        write_bw_limit: Optional[str] = None,
+        read_burst_mult: Optional[int] = None,
+        write_burst_mult: Optional[int] = None,
+    ) -> Simplified:
+        """Update QoS settings for all CephFS shares in a cluster"""
+        try:
+            shares = self._handler.matching_resources(
+                [f'ceph.smb.share.{cluster_id}']
+            )
+
+            active_shares = [
+                s for s in shares if isinstance(s, resources.Share)
+            ]
+
+            if not active_shares:
+                raise ValueError(f"No shares found for cluster {cluster_id}")
+
+            shares_to_update: List[resources.SMBResource] = []
+            unchanged_shares = []
+
+            for share in active_shares:
+                if not share.cephfs:
+                    unchanged_shares.append(share.share_id)
+                    continue
+
+                try:
+                    updated_cephfs = share.cephfs.update_qos(
+                        read_iops_limit=read_iops_limit,
+                        write_iops_limit=write_iops_limit,
+                        read_bw_limit=read_bw_limit,
+                        write_bw_limit=write_bw_limit,
+                        read_burst_mult=read_burst_mult,
+                        write_burst_mult=write_burst_mult,
+                    )
+
+                    if updated_cephfs != share.cephfs:
+                        updated_share = replace(share, cephfs=updated_cephfs)
+                        shares_to_update.append(updated_share)
+                    else:
+                        unchanged_shares.append(share.share_id)
+
+                except ValueError as e:
+                    raise ValueError(
+                        f"Error updating share {share.share_id}: {str(e)}"
+                    )
+
+            if not shares_to_update:
+                return {
+                    "cluster_id": cluster_id,
+                    "message": "No shares required QoS updates",
+                    "unchanged_shares": unchanged_shares,
+                    "total_shares": len(active_shares),
+                }
+
+            result_group = self._apply_res(shares_to_update)
+
+            successful_updates = []
+            failed_updates = []
+
+            for result in result_group:
+                if result.success and hasattr(result.src, 'share_id'):
+                    successful_updates.append(result.src.share_id)
+                elif hasattr(result.src, 'share_id'):
+                    failed_updates.append(
+                        {"share_id": result.src.share_id, "error": result.msg}
+                    )
+
+            return {
+                "cluster_id": cluster_id,
+                "successful_updates": successful_updates,
+                "failed_updates": failed_updates,
+                "unchanged_shares": unchanged_shares,
+                "total_shares": len(active_shares),
+                "success": len(failed_updates) == 0,
+            }
+
+        except resources.InvalidResourceError as err:
+            return {
+                "success": False,
+                "error": str(err),
+                "resource": err.resource_data,
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     @SMBCLICommand('share ls', perm='r')
     def share_ls(self, cluster_id: str) -> List[str]:
         """List smb shares in a cluster by ID"""

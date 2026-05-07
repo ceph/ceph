@@ -63,21 +63,21 @@ struct OMapNode : LogicalChildNode {
   using get_value_ret = OMapManager::omap_get_value_ret;
   virtual get_value_ret get_value(
     omap_context_t oc,
-    const std::string &key) = 0;
+    std::string key) = 0;
 
   using insert_iertr = base_iertr::extend<
     crimson::ct_error::value_too_large>;
   using insert_ret = insert_iertr::future<mutation_result_t>;
   virtual insert_ret insert(
     omap_context_t oc,
-    const std::string &key,
-    const ceph::bufferlist &value) = 0;
+    std::string key,
+    ceph::bufferlist value) = 0;
 
   using rm_key_iertr = base_iertr;
   using rm_key_ret = rm_key_iertr::future<mutation_result_t>;
   virtual rm_key_ret rm_key(
     omap_context_t oc,
-    const std::string &key) = 0;
+    std::string key) = 0;
 
   using rm_key_range_iertr = base_iertr;
   using rm_key_range_ret = rm_key_range_iertr::future<mutation_result_t>;

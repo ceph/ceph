@@ -2648,7 +2648,6 @@ void Monitor::apply_monmap_to_compatset_features()
     ceph_assert(ceph::features::mon::get_persistent().contains_all(
            ceph::features::mon::FEATURE_NVMEOF_BEACON_DIFF));
     // this feature should only ever be set if the quorum supports it.
-    ceph_assert(HAVE_FEATURE(quorum_con_features, NVMEOF_BEACON_DIFF));
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_NVMEOF_BEACON_DIFF);
   }
 
@@ -2716,12 +2715,6 @@ void Monitor::calc_quorum_requirements()
 	ceph::features::mon::FEATURE_NAUTILUS)) {
     required_features |= CEPH_FEATUREMASK_SERVER_NAUTILUS |
       CEPH_FEATUREMASK_CEPHX_V2;
-  }
-
-  // Release-independent features
-  if (monmap->get_required_features().contains_all(
-	ceph::features::mon::FEATURE_NVMEOF_BEACON_DIFF)) {
-    required_features |= CEPH_FEATUREMASK_NVMEOF_BEACON_DIFF;
   }
 
   dout(10) << __func__ << " required_features " << required_features << dendl;

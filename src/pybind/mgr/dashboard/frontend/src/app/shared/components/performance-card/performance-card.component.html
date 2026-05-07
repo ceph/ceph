@@ -11,9 +11,10 @@
       <div cdsStack="horizontal"
            gap="2">
         <cd-time-picker
-          [dropdwonSize]="'sm'"
-          [label]="'Time Span'"
+          dropdownSize="sm"
+          label="Time Span"
           (selectedTime)="loadCharts($event)"
+          i18n-label
         ></cd-time-picker>
       </div>
     </ng-template>
@@ -31,7 +32,8 @@
             chartTitle="IOPS"
             [chartKey]="performanceTypes?.IOPS"
             [dataUnit]="metricUnitMap?.iops"
-            [rawData]="chartDataSignal()?.iops">
+            [rawData]="chartDataSignal()?.iops"
+            [decimals]="0">
           </cd-area-chart>
         </div>
         <div cdsCol
@@ -41,7 +43,8 @@
             chartTitle="Latency"
             [chartKey]="performanceTypes?.Latency"
             [dataUnit]="metricUnitMap?.latency"
-            [rawData]="chartDataSignal()?.latency">
+            [rawData]="chartDataSignal()?.latency"
+            [decimals]="2">
           </cd-area-chart>
         </div>
         <div cdsCol
@@ -51,7 +54,8 @@
             chartTitle="Throughput"
             [chartKey]="performanceTypes?.Throughput"
             [dataUnit]="metricUnitMap?.throughput"
-            [rawData]="chartDataSignal()?.throughput">
+            [rawData]="chartDataSignal()?.throughput"
+            [decimals]="2">
           </cd-area-chart>
         </div>
       </div>

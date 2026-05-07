@@ -1,3 +1,4 @@
+import errno
 import logging
 import os
 import re
@@ -11,6 +12,16 @@ from typing import Dict, List, Any, Union, Optional
 
 
 logger = logging.getLogger(__name__)
+
+_ONE_GIB = 1024 * 1024 * 1024
+BLUESTORE_BDEV_LABEL_OFFSETS = (
+    0,
+    _ONE_GIB,
+    10 * _ONE_GIB,
+    100 * _ONE_GIB,
+    1000 * _ONE_GIB,
+)
+BLUESTORE_BDEV_LABEL_SIGNATURE = b'bluestore block device'
 
 
 # The blkid CLI tool has some oddities which prevents having one common call
@@ -722,6 +733,10 @@ def get_block_devs_sysfs(_sys_block_path: str = '/sys/block', _sys_dev_block_pat
         # These are not physical disks and are not valid OSD targets, so skip them.
         if get_file_contents(os.path.join(_sys_block_path, dev, 'device/type'), '').strip() == '5':
             continue
+        # Skip kernel RAM disks (/dev/ram*); these are not valid OSD targets.
+        # Only matches 'ram' + digits (ram0, ram1, etc.).
+        if dev.startswith('ram') and dev[3:].isdigit():
+            continue
         type_: str = 'disk'
         holders: List[str] = os.listdir(os.path.join(_sys_block_path, dev, 'holders'))
         if holder_inner_loop():
@@ -743,6 +758,10 @@ def get_block_devs_sysfs(_sys_block_path: str = '/sys/block', _sys_dev_block_pat
     # Next, look for devices that _are_ partitions
     partitions: Dict[str, str] = get_partitions()
     for partition in partitions.keys():
+        # Skip partitions that belong to kernel RAM disks (/dev/ram*).
+        parent = partitions[partition]
+        if parent.startswith('ram') and parent[3:].isdigit():
+            continue
         name = kname = os.path.join("/dev", partition)
         result.append([name, kname, "part", partitions[partition]])
     return sorted(result, key=lambda x: x[0])
@@ -876,21 +895,30 @@ def get_devices(_sys_block_path='/sys/block', device=''):
     return device_facts
 
 def has_bluestore_label(device_path: str) -> bool:
-    isBluestore = False
-    bluestoreDiskSignature = 'bluestore block device' # 22 bytes long
-
-    # throws OSError on failure
     logger.info("opening device {} to check for BlueStore label".format(device_path))
+    sig_len = len(BLUESTORE_BDEV_LABEL_SIGNATURE)
     try:
         with open(device_path, "rb") as fd:
-            # read first 22 bytes looking for bluestore disk signature
-            signature = fd.read(22)
-            if signature.decode('ascii', 'replace') == bluestoreDiskSignature:
-                isBluestore = True
+            for position in BLUESTORE_BDEV_LABEL_OFFSETS:
+                try:
+                    fd.seek(position)
+                except OSError as exc:
+                    err = exc.errno
+                    if err is None or err not in (
+                        errno.EINVAL,
+                        errno.ESPIPE,
+                        errno.ENOTTY,
+                    ):
+                        raise
+                    if position != 0:
+                        continue
+                signature = fd.read(sig_len)
+                if signature == BLUESTORE_BDEV_LABEL_SIGNATURE:
+                    return True
     except IsADirectoryError:
         logger.info(f'{device_path} is a directory, skipping.')
 
-    return isBluestore
+    return False
 
 def has_seastore_label(device_path: str) -> bool:
     is_seastore = False

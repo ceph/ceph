@@ -193,17 +193,6 @@ target_link_libraries(ceph_omapbench
   ceph-common
   Boost::program_options)
 
-if(WITH_KVS)
-  # ceph_kvstorebench
-  set(kvstorebench_srcs
-    kv_store_bench.cc
-    ${CMAKE_SOURCE_DIR}/src/key_value_store/kv_flat_btree_async.cc
-    )
-  add_executable(ceph_kvstorebench ${kvstorebench_srcs})
-  target_link_libraries(ceph_kvstorebench librados global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
-  install(TARGETS ceph_kvstorebench DESTINATION bin)
-endif(WITH_KVS)
-
 if(NOT WIN32)
   # ceph_objectstore_bench
   add_executable(ceph_objectstore_bench objectstore_bench.cc)
@@ -322,6 +311,7 @@ install(TARGETS ceph_test_librgw_file DESTINATION ${CMAKE_INSTALL_BINDIR})
 add_dependencies(ceph_test_librgw_file
   ceph_test_librgw_file_cd
   ceph_test_librgw_file_gp
+  ceph_test_librgw_file_cpref
   ceph_test_librgw_file_rename
   ceph_test_librgw_file_nfsns
   ceph_test_librgw_file_aw
@@ -354,6 +344,20 @@ target_link_libraries(ceph_test_librgw_file_gp
   ${ALLOC_LIBS}
   )
 install(TARGETS ceph_test_librgw_file_gp DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+# ceph_test_librgw_file_cpref (a special case common-prefix enumeration test)
+add_executable(ceph_test_librgw_file_cpref
+  librgw_file_cpref.cc
+  )
+target_link_libraries(ceph_test_librgw_file_cpref
+  rgw
+  librados
+  ceph-common
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  ${ALLOC_LIBS}
+  )
+install(TARGETS ceph_test_librgw_file_cpref DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # ceph_test_librgw_file_nfsns (nfs namespace tests)
 add_executable(ceph_test_librgw_file_nfsns
@@ -632,7 +636,7 @@ if (WITH_BLUESTORE)
   add_dependencies(tests ceph_test_bluefs)
 endif()
 if (WITH_CEPHFS)
-  add_dependencies(tests ceph-mds)
+  add_dependencies(tests ceph-mds cephfs-tool)
 endif()
 if(WITH_MGR)
   add_dependencies(tests ceph-mgr)

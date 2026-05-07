@@ -1030,6 +1030,80 @@ def test_cmd_share_update_qos(tmodule):
     assert updated_share.cephfs.qos.write_burst_mult == 15  # Default
 
 
+def test_cmd_cluster_update_qos(tmodule):
+    cluster = _cluster(
+        cluster_id='qoscluster',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+
+    share1 = smb.resources.Share(
+        cluster_id='qoscluster',
+        share_id='share1',
+        name='Share One',
+        cephfs=smb.resources.CephFSStorage(
+            volume='cephfs',
+            path='/share1',
+        ),
+    )
+    share2 = smb.resources.Share(
+        cluster_id='qoscluster',
+        share_id='share2',
+        name='Share Two',
+        cephfs=smb.resources.CephFSStorage(
+            volume='cephfs',
+            path='/share2',
+        ),
+    )
+    share3 = smb.resources.Share(
+        cluster_id='qoscluster',
+        share_id='share3',
+        name='Share Three',
+        cephfs=smb.resources.CephFSStorage(
+            volume='cephfs',
+            path='/share3',
+        ),
+    )
+
+    rg = tmodule._handler.apply([cluster, share1, share2, share3])
+    assert rg.success, rg.to_simplified()
+
+    res, body, status = tmodule.cluster_update_qos.command(
+        cluster_id='qoscluster',
+        read_iops_limit=100,
+        write_iops_limit=200,
+        read_bw_limit="1048576",
+        write_bw_limit="2097152",
+        read_burst_mult=20,
+        write_burst_mult=15,
+    )
+    assert res == 0
+    bdata = json.loads(body)
+    assert bdata['success']
+    assert bdata['cluster_id'] == 'qoscluster'
+    assert bdata['total_shares'] == 3
+    assert len(bdata['successful_updates']) == 3
+    assert len(bdata['failed_updates']) == 0
+
+    for share_id in ['share1', 'share2', 'share3']:
+        updated_shares = tmodule._handler.matching_resources(
+            [f'ceph.smb.share.qoscluster.{share_id}']
+        )
+        assert len(updated_shares) == 1
+        updated_share = updated_shares[0]
+        assert updated_share.cephfs.qos is not None
+        assert updated_share.cephfs.qos.read_iops_limit == 100
+        assert updated_share.cephfs.qos.write_iops_limit == 200
+        assert updated_share.cephfs.qos.read_bw_limit == "1048576"
+        assert updated_share.cephfs.qos.write_bw_limit == "2097152"
+        assert updated_share.cephfs.qos.read_burst_mult == 20
+        assert updated_share.cephfs.qos.write_burst_mult == 15
+
+
 def _keybridge_example():
     return [
         {

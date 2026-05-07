@@ -123,11 +123,6 @@ constexpr device_id_t DEVICE_ID_SEGMENTED_MIN = 0;
 constexpr device_id_t DEVICE_ID_RANDOM_BLOCK_MIN = 
   1 << (std::numeric_limits<device_id_t>::digits - 1);
 
-// TODO this Signature is only applicable for segment devices(SSD/HDD) not
-// for other two devices like ZBD/RANDOM_BLOCK_SSD
-constexpr const char SEASTORE_SUPERBLOCK_SIGN[] = "seastore block device\n";
-constexpr std::size_t SEASTORE_SUPERBLOCK_SIGN_LEN = sizeof(SEASTORE_SUPERBLOCK_SIGN) - 1;
-
 struct device_id_printer_t {
   device_id_t id;
 };
@@ -2281,6 +2276,34 @@ constexpr bool is_modify_transaction(transaction_type_t type) {
   return (type == transaction_type_t::MUTATE ||
       is_background_transaction(type));
 }
+
+/**
+ * should_use_no_conflict_publish()
+ *
+ * Returns true when this (transaction source, extent type) pair should take
+ * the no-conflict publish path (i.e avoid invalidate-and-retry and use the
+ * committer + visibility hand-off).
+ *
+ * Currently true for:
+ *  - rewrite (background) transactions, for any non-root extent
+ *
+ *  To be expanded to:
+ *  - user (txn_manager) transactions that mutate LBA nodes
+ *  - Onode/Omap nodes
+ */
+constexpr bool should_use_no_conflict_publish(transaction_type_t txn_type,
+                                              extent_types_t ext_type) {
+  // keep classic handling for ROOT
+  if (is_root_type(ext_type)) {
+    return false;
+  }
+
+  // TODO: Extend this as support grows (e.g. Onode/OMAP nodes).
+  //       is_user_transaction(txn_type) && is_lba_node(ext_type)
+
+  return is_rewrite_transaction(txn_type);
+}
+
 
 // Note: It is possible to statically introduce structs for OOL, which must be
 // more efficient, but that requires to specialize the RecordSubmitter as well.

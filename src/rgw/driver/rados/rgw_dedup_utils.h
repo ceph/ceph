@@ -198,9 +198,6 @@ namespace rgw::dedup {
     uint64_t ingress_skip_too_small_bytes = 0;
     uint64_t ingress_skip_too_small = 0;
 
-    uint64_t ingress_skip_too_small_64KB_bytes = 0;
-    uint64_t ingress_skip_too_small_64KB = 0;
-
     utime_t  duration = {0, 0};
   };
   std::ostream& operator<<(std::ostream &out, const worker_stats_t &s);
@@ -212,7 +209,6 @@ namespace rgw::dedup {
     md5_stats_t& operator +=(const md5_stats_t& other);
     void dump(Formatter *f) const;
 
-    dedup_stats_t small_objs_stat;
     dedup_stats_t big_objs_stat;
     uint64_t ingress_slabs = 0;
     uint64_t ingress_failed_load_bucket = 0;
@@ -225,6 +221,8 @@ namespace rgw::dedup {
     uint64_t ingress_skip_compressed = 0;
     uint64_t ingress_skip_compressed_bytes = 0;
     uint64_t ingress_skip_changed_objs = 0;
+    uint64_t ingress_skip_explicit_objs = 0;
+    uint64_t ingress_skip_alibaba = 0;
 
     uint64_t shared_manifest_dedup_bytes = 0;
     uint64_t skipped_shared_manifest = 0;
@@ -265,11 +263,9 @@ namespace rgw::dedup {
     uint64_t loaded_objects = 0;
     uint64_t processed_objects = 0;
     // counter is using on-disk size affected by block-size
-    uint64_t dup_head_bytes_estimate = 0; //duplicate_head_bytes
     uint64_t deduped_objects = 0;
     // counter is using s3 byte size disregarding the on-disk size affected by block-size
     uint64_t deduped_objects_bytes = 0;
-    uint64_t dup_head_bytes = 0;
     uint64_t failed_dedup = 0;
     uint64_t md_throttle_sleep_events = 0;
     uint64_t md_throttle_sleep_time_usec = 0;
@@ -368,7 +364,7 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   static inline uint64_t calc_deduped_bytes(uint32_t head_obj_size,
                                             uint32_t min_obj_size_for_dedup,
-                                            uint32_t max_obj_size_for_split,
+                                            bool     split_head,
                                             uint16_t num_parts,
                                             uint64_t size_bytes)
   {
@@ -376,18 +372,16 @@ namespace rgw::dedup {
       // multipart objects with an empty head i.e. we achive full dedup
       return size_bytes;
     }
+    else if (size_bytes < min_obj_size_for_dedup) {
+      return 0;
+    }
+    else if (split_head) {
+      // Head is splitted into an empty obj and a new tail enabling a full dedup
+      return size_bytes;
+    }
     else {
-      // reduce the head size
-      if (size_bytes > max_obj_size_for_split) {
-        return size_bytes - head_obj_size;
-      }
-      else if (size_bytes >= min_obj_size_for_dedup) {
-        // Head is splitted into an empty obj and a new tail enabling a full dedup
-        return size_bytes;
-      }
-      else {
-        return 0;
-      }
+      // reduce the head size which is not dedup
+      return size_bytes - std::min(size_bytes, (uint64_t)head_obj_size);
     }
   }
 

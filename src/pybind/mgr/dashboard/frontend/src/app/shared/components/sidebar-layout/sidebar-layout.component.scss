@@ -2,6 +2,13 @@
 @use '@carbon/colors';
 @use '@carbon/layout';
 
+.sidebar-layout--full {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
 .sidebar-layout-container {
   min-height: calc(100vh - (vv.$navbar-height + layout.rem(55px)));
   padding-right: var(--cds-spacing-07);

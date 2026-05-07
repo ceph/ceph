@@ -1754,28 +1754,14 @@ void PrimaryLogPG::release_object_locks(
 
   if (!to_req.empty()) {
     // requeue at front of scrub blocking queue if we are blocked by scrub
-    for (auto &&p: to_req) {
+    for (auto&& p : to_req) {
       if (m_scrubber->write_blocked_by_scrub(p.first->obs.oi.soid.get_head())) {
         for (auto& op : p.second) {
           op->mark_delayed("waiting for scrub");
         }
-
-	waiting_for_scrub.splice(
-	  waiting_for_scrub.begin(),
-	  p.second,
-	  p.second.begin(),
-	  p.second.end());
-      } else if (is_laggy()) {
-        for (auto& op : p.second) {
-          op->mark_delayed("waiting for readable");
-        }
-	waiting_for_readable.splice(
-	  waiting_for_readable.begin(),
-	  p.second,
-	  p.second.begin(),
-	  p.second.end());
+        waiting_for_scrub.splice(waiting_for_scrub.begin(), p.second);
       } else {
-	requeue_ops(p.second);
+        requeue_ops(p.second);
       }
     }
   }
@@ -13534,8 +13520,7 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
   int skipped = 0;
 
   PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
-  map<eversion_t, hobject_t>::const_iterator p =
-    missing.get_rmissing().lower_bound(eversion_t(0, recovery_state.get_pg_log().get_log().last_requested));
+  auto p = missing.get_rmissing().lower_bound(eversion_t(0, recovery_state.get_pg_log().get_log().last_requested));
   while (p != missing.get_rmissing().end()) {
     handle.reset_tp_timeout();
     hobject_t soid;
@@ -13844,7 +13829,7 @@ uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
 
     // oldest first!
     const pg_missing_t &m(pm->second);
-    for (map<eversion_t, hobject_t>::const_iterator p = m.get_rmissing().begin();
+    for (auto p = m.get_rmissing().begin();
 	 p != m.get_rmissing().end() && started < max;
 	   ++p) {
       handle.reset_tp_timeout();

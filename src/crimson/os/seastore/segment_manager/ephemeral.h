@@ -54,12 +54,12 @@ class EphemeralSegment final : public Segment {
 public:
   EphemeralSegment(EphemeralSegmentManager &manager, segment_id_t id);
 
-  segment_id_t get_segment_id() const final { return id; }
-  segment_off_t get_write_capacity() const final;
-  segment_off_t get_write_ptr() const final { return write_pointer; }
-  close_ertr::future<> close() final;
-  write_ertr::future<> write(segment_off_t offset, ceph::bufferlist bl) final;
-  write_ertr::future<> advance_wp(segment_off_t offset) final;
+  segment_id_t get_segment_id() const override { return id; }
+  segment_off_t get_write_capacity() const override;
+  segment_off_t get_write_ptr() const override { return write_pointer; }
+  close_ertr::future<> close() override;
+  write_ertr::future<> write(segment_off_t offset, ceph::bufferlist bl) override;
+  write_ertr::future<> advance_wp(segment_off_t offset) override;
 
   ~EphemeralSegment() {}
 };
@@ -71,7 +71,7 @@ class EphemeralSegmentManager final : public SegmentManager {
   const ephemeral_config_t config;
   std::optional<device_config_t> device_config;
 
-  device_type_t get_device_type() const final {
+  device_type_t get_device_type() const override {
     assert(device_config);
     return device_config->spec.dtype;
   }
@@ -97,51 +97,55 @@ public:
 
   ~EphemeralSegmentManager();
 
-  close_ertr::future<> close() final {
+  close_ertr::future<> close() override {
     return close_ertr::now();
   }
 
-  device_id_t get_device_id() const final {
+  device_id_t get_device_id() const override {
     assert(device_config);
     return device_config->spec.id;
   }
 
-  mount_ret mount() final {
+  mount_ret mount() override {
     return mount_ertr::now();
   }
 
-  mkfs_ret mkfs(device_config_t) final;
+  mkfs_ret mkfs(device_config_t) override;
 
-  open_ertr::future<SegmentRef> open(segment_id_t id) final;
+  open_ertr::future<SegmentRef> open(segment_id_t id) override;
 
-  release_ertr::future<> release(segment_id_t id) final;
+  release_ertr::future<> release(segment_id_t id) override;
 
   read_ertr::future<> read(
     paddr_t addr,
     size_t len,
-    ceph::bufferptr &out) final;
+    ceph::bufferptr &out) override;
 
-  size_t get_available_size() const final {
+  read_ertr::future<> readv(
+    paddr_t addr,
+    std::vector<bufferptr> ptr) override;
+
+  size_t get_available_size() const override {
     return config.size;
   }
-  extent_len_t get_block_size() const final {
+  extent_len_t get_block_size() const override {
     return config.block_size;
   }
-  segment_off_t get_segment_size() const final {
+  segment_off_t get_segment_size() const override {
     return config.segment_size;
   }
 
-  const seastore_meta_t &get_meta() const final {
+  const seastore_meta_t &get_meta() const override {
     assert(device_config);
     return device_config->meta;
   }
 
-  secondary_device_set_t& get_secondary_devices() final {
+  secondary_device_set_t& get_secondary_devices() override {
     assert(device_config);
     return device_config->secondary_devices;
   }
 
-  magic_t get_magic() const final {
+  magic_t get_magic() const override {
     return device_config->spec.magic;
   }
 

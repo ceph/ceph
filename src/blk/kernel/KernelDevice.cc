@@ -294,12 +294,6 @@ int KernelDevice::open(const string& p)
       support_discard = blkdev_buffered.support_discard();
       optimal_io_size = blkdev_buffered.get_optimal_io_size();
       this->devname = devname;
-      // check if any extended block device plugin recognizes this device
-      // detect_vdo has moved into the VDO plugin
-      int rc = extblkdev::detect_device(cct, devname, ebd_impl);
-      if (rc != 0) {
-	dout(20) << __func__ << " no plugin volume maps to " << devname << dendl;
-      }
     }
   }
 
@@ -477,7 +471,16 @@ int KernelDevice::get_ebd_state(ExtBlkDevState &state) const
   return -ENOENT;
 }
 
-int KernelDevice::get_ebd_id(std::string& id) const {
+int KernelDevice::detect_ebd(std::string& id)
+{
+  // check if any extended block device plugin recognizes this device
+  // detect_vdo has moved into the VDO plugin
+  if (!ebd_impl) {
+    int rc = extblkdev::detect_device(cct, devname, ebd_impl);
+    if (rc != 0) {
+      dout(20) << __func__ << " no plugin volume maps to " << devname << dendl;
+    }
+  }
   if (ebd_impl) {
     return ebd_impl->get_plugin_id(id);
   }
@@ -917,6 +920,14 @@ bool KernelDevice::try_discard(interval_set<uint64_t> &to_release,
     logger->inc(l_blk_kernel_device_discard_op, to_release.num_intervals());
   }
   return false;
+}
+
+void KernelDevice::collect_alerts(osd_alert_list_t& alerts, const std::string& device_name)
+{
+  BlockDevice::collect_alerts(alerts, device_name);
+  if (ebd_impl) {
+    ebd_impl->collect_alerts(alerts);
+  }
 }
 
 void KernelDevice::_aio_log_start(

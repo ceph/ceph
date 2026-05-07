@@ -111,8 +111,9 @@ export class ConfigurationFormComponent extends CdForm implements OnInit {
 
     if (this.response.value) {
       this.response.value.forEach((value) => {
-        // Check value type. If it's a boolean value we need to convert it because otherwise we
-        // would use the string representation. That would cause issues for e.g. checkboxes.
+        if (!this.availSections.includes(value.section)) {
+          return;
+        }
         let sectionValue = null;
         if (value.value === 'true') {
           sectionValue = true;

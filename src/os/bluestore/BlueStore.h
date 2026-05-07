@@ -241,6 +241,14 @@ enum {
   l_bluestore_slow_committed_kv_count,
   l_bluestore_slow_read_onode_meta_count,
   l_bluestore_slow_read_wait_aio_count,
+  l_bluestore_slow_op_normal_count,
+  l_bluestore_slow_op_scrub_count,
+  //****************************************
+
+  // Fragmentation tracking
+  //****************************************
+  l_bluestore_runtime_frag_lat,
+  l_bluestore_static_frag_lat,
   //****************************************
   l_bluestore_last
 };
@@ -1450,6 +1458,8 @@ public:
 
     void finish_write(TransContext* txc, uint32_t offset, uint32_t length);
 
+    int get_fragmentation_score();
+
     struct printer : public BlueStore::printer {
       const Onode &onode;
       uint16_t mode;
@@ -1679,6 +1689,11 @@ public:
 
     ContextQueue *commit_queue;
     std::unique_ptr<Estimator> estimator;
+
+    std::atomic<uint64_t> runtime_frag_count{0};
+    std::atomic<uint64_t> runtime_read_samples{0};
+    std::atomic<uint64_t> static_frag_score{0};
+    std::atomic<uint64_t> object_read_samples{0};
 
     OnodeCacheShard* get_onode_cache() const {
       return onode_space.cache;
@@ -2352,6 +2367,8 @@ private:
   BlockDevice *bdev = nullptr;
   std::string freelist_type;
   FreelistManager *fm = nullptr;
+
+  std::string ebd_health_alert; ///< used to report ExtBlkDev plugin problem up the health chain
 
   Allocator *alloc = nullptr;   ///< allocator consumed by BlueStore
   bluefs_shared_alloc_context_t shared_alloc; ///< consumed by BlueFS (may be == alloc)
@@ -3300,6 +3317,10 @@ private:
     bool* csum_error,
     ceph::buffer::list& bl);
 
+  void _measure_runtime_frag(Collection *c, const blobs2read_t& blobs2read);
+
+  void _measure_static_frag(Collection *c, const OnodeRef& o);
+
   int _do_read(
     Collection *c,
     OnodeRef& o,
@@ -3577,7 +3598,21 @@ public:
     const char* info = "",
     int idx2 = l_bluestore_first);
 
+  inline void log_latency_scrub(const char* name,
+    int idx,
+    const ceph::timespan& l,
+    double lat_threshold,
+    const char* info = "",
+    int idx2 = l_bluestore_first);
+
   inline void log_latency_fn(const char* name,
+    int idx,
+    const ceph::timespan& lat,
+    double lat_threshold,
+    std::function<std::string (const ceph::timespan& lat)> fn,
+    int idx2 = l_bluestore_first);
+
+  inline void log_latency_fn_scrub(const char* name,
     int idx,
     const ceph::timespan& lat,
     double lat_threshold,
@@ -3616,10 +3651,13 @@ private:
   std::string no_per_pg_omap_alert;
   std::string disk_size_mismatch_alert;
   std::string spurious_read_errors_alert;
-  std::queue <ceph::mono_clock::time_point> slow_op_event_queue;
+  std::queue <std::pair<ceph::mono_clock::time_point, bool>> slow_op_event_queue;
+  size_t slow_op_event_count = 0;
+  size_t slow_scrub_op_event_count = 0;
 
-  size_t _trim_slow_op_event_queue(ceph::mono_clock::time_point cur_time);
+  std::pair<size_t, size_t> _trim_slow_op_event_queue(ceph::mono_clock::time_point cur_time);
   void _add_slow_op_event();
+  void _add_slow_scrub_op_event();
   void _log_alerts(osd_alert_list_t& alerts);
   bool _set_compression_alert(bool cmode, const char* s) {
     std::lock_guard l(qlock);

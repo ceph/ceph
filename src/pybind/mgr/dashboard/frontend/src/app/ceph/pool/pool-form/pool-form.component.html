@@ -15,6 +15,11 @@
         class="form-header"
       >
         {{ action | titlecase }} {{ resource | upperFirst }}
+      @if (isStretchMode) {
+      <cd-help-text>
+        Stretch cluster is enabled. Only replicated pool type is supported in Stretch mode.
+      </cd-help-text>
+      }
       </div>
       <!-- Name -->
       <div
@@ -93,6 +98,32 @@
           >
             Pool type
           </legend>
+          @if (isStretchMode) {
+          <cds-tooltip
+            description="In stretch mode, only replicated pool type is supported."
+            placement="right"
+            [highContrast]="true"
+            [caret]="true"
+          >
+            <cds-radio-group
+              formControlName="poolType"
+              cdRequiredField="Pool type"
+              data-testid="pool-type-select"
+            >
+              @for (poolType of data.poolTypes; track poolType) {
+              <cds-radio
+                [value]="poolType"
+                [id]="poolType"
+                [disabled]="isStretchMode && !editing && poolType === 'erasure'"
+                (change)="data.erasureInfo = false; data.crushInfo = false;"
+                i18n
+              >
+                {{ poolType | upperFirst }}
+              </cds-radio>
+              }
+            </cds-radio-group>
+          </cds-tooltip>
+          } @else {
           <cds-radio-group
             formControlName="poolType"
             cdRequiredField="Pool type"
@@ -102,6 +133,7 @@
             <cds-radio
               [value]="poolType"
               [id]="poolType"
+              [disabled]="isStretchMode && !editing && poolType === 'erasure'"
               (change)="data.erasureInfo = false; data.crushInfo = false;"
               i18n
             >
@@ -109,6 +141,7 @@
             </cds-radio>
             }
           </cds-radio-group>
+          }
           @if (form.showError('poolType', formDir, 'required')) {
           <span
             class="cds--form-requirement invalid-feedback"
@@ -236,32 +269,21 @@
             </cds-number>
             <ng-template #sizeError>
               @if (form.showError('size', formDir)) {
-              <span class="invalid-feedback">
-                <ul class="list-inline">
-                  <li
-                    i18n
-                  >
-                    Minimum: {{ getMinSize() }}
-                  </li>
-                  <li
-                    i18n
-                  >
-                    Maximum: {{ getMaxSize() }}
-                  </li>
-                </ul>
-              </span>
-              }
-              @if (form.showError('size', formDir)) {
               <span
                 class="invalid-feedback"
                 i18n
               >
-                The size specified is out of range. A value from {{ getMinSize() }} to
-                {{ getMaxSize() }} is usable.
+                Invalid input. Replicated size must be between {{ getMinSize() }} and
+                {{ getMaxSize() }}.
               </span>
               }
             </ng-template>
             <ng-template #sizeWarning>
+              @if (isStretchMode) {
+              <span i18n>
+                The replicated size value is predefined for stretch cluster
+              </span>
+              }
               @if (form.getValue('size') === 1) {
               <span
                 class="text-warning-dark"
@@ -383,7 +405,6 @@
           >
             <cds-select
               formControlName="erasureProfile"
-              (change)="erasureProfileChange()"
               label="Erasure code profile"
               i18n-label
               [helperText]="'Policy used for compression algorithm'"
@@ -621,20 +642,31 @@
             [columnNumbers]="{ lg: 13 }"
           >
             <cds-select
+              cdValidate
+              #crushRuleRef="cdValidate"
               formControlName="crushRule"
               label="Crush ruleset"
               i18n-label
               id="crushRule"
+              [invalid]="crushRuleRef.isInvalid"
+              [invalidText]="crushRuleError"
             >
-              <option [value]="null"
-                      i18n>-- Select a crush rule --
-              </option>
               @for (rule of current.rules; track rule.rule_name) {
               <option [value]="rule.rule_name">
                 {{ rule.rule_name }}
               </option>
               }
             </cds-select>
+            <ng-template #crushRuleError>
+              @if (form.showError('crushRule', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+              >
+                This field is required!
+              </span>
+              }
+            </ng-template>
           </div>
           } @else {
           <div cdsCol>

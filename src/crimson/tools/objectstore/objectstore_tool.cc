@@ -26,6 +26,11 @@ seastar::future<> StoreTool::stop()
   co_return;
 }
 
+seastar::future<> StoreTool::do_gc()
+{
+  co_await store->do_gc();
+}
+
 seastar::future<std::vector<crimson::os::coll_core_t>> StoreTool::list_pgs()
 {
   co_return co_await store->list_collections();

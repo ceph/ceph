@@ -155,7 +155,13 @@ class to_ceph_volume(object):
                 cmds[i] += " --data-allocate-fraction {}".format(self.spec.data_allocate_fraction)
 
             if self.osd_id_claims:
-                cmds[i] += " --osd-ids {}".format(" ".join(self.osd_id_claims))
+                if self.spec.method == 'raw':
+                    # raw prepare expects --osd-id (singular) for each device
+                    if i < len(self.osd_id_claims):
+                        cmds[i] += " --osd-id {}".format(self.osd_id_claims[i])
+                else:
+                    # lvm batch expects --osd-ids (plural) with all ids
+                    cmds[i] += " --osd-ids {}".format(" ".join(self.osd_id_claims))
 
             if self.spec.method != 'raw':
                 cmds[i] += " --yes"

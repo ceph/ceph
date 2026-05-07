@@ -408,6 +408,8 @@ def _extract_target_func(
 
 
 class CLICommandBase(object):
+    COMMANDS: Dict[str, 'CLICommandBase'] = {}
+
     def __init__(self,
                  prefix: str,
                  perm: str = 'rw',
@@ -557,6 +559,22 @@ class CLICommandBase(object):
         return type(name, (cls,), {
             'COMMANDS': {},
         })
+
+
+class Command(CLICommandBase):
+    """Backward-compatible shim for modules that use Command(prefix, handler=func)"""
+    def __init__(self, prefix: str, perm: str = 'rw', poll: bool = False,
+                 handler: Optional[Callable] = None, **kwargs: Any):
+        super().__init__(prefix, perm, poll)
+        if handler is not None:
+            self._register_handler(handler)
+
+
+# Backward-compatible alias: the mgr daemon binary imports CLICommand by name
+CLICommand = CLICommandBase
+# Backward-compatible aliases for built-in modules that import these names
+CLIReadCommand = CLICommandBase.Read
+CLIWriteCommand = CLICommandBase.Write
 
 
 def CLICheckNonemptyFileInput(desc: str) -> Callable[[HandlerFuncType], HandlerFuncType]:

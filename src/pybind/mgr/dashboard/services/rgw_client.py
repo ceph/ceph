@@ -599,8 +599,12 @@ class RgwClient(RestClient):
         """
         # pylint: disable=unused-argument
         result = request()
-        if 'Status' not in result:
-            result['Status'] = 'Suspended'
+        if not isinstance(result, dict):
+            result = {}
+        # RGW omits Status when versioning has never been configured (CLI/radosgw-admin
+        # reports "off"). That must not be shown as "Suspended", which means versioning was enabled
+        if not result.get('Status'):
+            result['Status'] = 'Off'
         if 'MfaDelete' not in result:
             result['MfaDelete'] = 'Disabled'
         return result
@@ -1114,7 +1118,7 @@ class RgwClient(RestClient):
         return retention_period_days, retention_period_years
 
     @RestClient.api_put('/{bucket_name}?replication')
-    def set_bucket_replication(self, bucket_name, replication: bool, request=None):
+    def set_bucket_replication(self, bucket_name, request=None):
         # pGenerate the minimum replication configuration
         # required for enabling the replication
         root = ET.Element('ReplicationConfiguration',
@@ -1127,7 +1131,7 @@ class RgwClient(RestClient):
         rule_id.text = _SYNC_PIPE_ID
 
         status = ET.SubElement(rule, 'Status')
-        status.text = 'Enabled' if replication else 'Disabled'
+        status.text = 'Enabled'
 
         filter_elem = ET.SubElement(rule, 'Filter')
         prefix = ET.SubElement(filter_elem, 'Prefix')
@@ -1157,6 +1161,19 @@ class RgwClient(RestClient):
                 if content.get('Code') == 'ReplicationConfigurationNotFoundError':
                     return None
             raise e
+
+    @RestClient.api_delete('/{bucket_name}?replication')
+    def delete_bucket_replication(self, bucket_name, request=None):
+        # pylint: disable=unused-argument
+        try:
+            request()
+        except RequestException as e:
+            if e.content:
+                content = json_str_to_object(e.content)
+                if content.get('Code') == 'ReplicationConfigurationNotFoundError':
+                    return None
+            raise DashboardException(msg=str(e), component='rgw')
+        return None
 
     @RestClient.api_post('?Action=CreateTopic&Name={name}')
     def create_topic(self, request=None, name: str = '',
@@ -1332,11 +1349,12 @@ class RgwMultisiteAutomation:
 
     def setup_multisite_replication(self, realm_name: str, zonegroup_name: str,
                                     zonegroup_endpoints: str, zone_name: str,
-                                    tier_type: str, zone_endpoints: str,
-                                    username: str, cluster_fsid: Optional[str] = None,
+                                    zone_endpoints: str, username: str,
+                                    cluster_fsid: Optional[str] = None,
                                     replication_zone_name: Optional[str] = None,
                                     cluster_details: Optional[str] = None,
-                                    selectedRealmName: Optional[str] = None):
+                                    selectedRealmName: Optional[str] = None,
+                                    secondary_tier_type: Optional[str] = None):
 
         logger.info("Starting multisite replication setup")
 
@@ -1355,13 +1373,12 @@ class RgwMultisiteAutomation:
         if not selectedRealmName:
             self.create_realm_and_zonegroup(
                 realm_name, zonegroup_name, zone_name, zonegroup_ip_url, username)
-            self.create_zone_and_user(zone_name, tier_type, zonegroup_name, username,
-                                      zone_ip_url)
+            self.create_zone_and_user(zone_name, zonegroup_name, username, zone_ip_url)
             self.restart_daemons()
 
         return self.export_and_import_realm(
             realm_name, zonegroup_name, cluster_fsid, replication_zone_name,
-            cluster_details_dict, selectedRealmName, username
+            cluster_details_dict, selectedRealmName, username, secondary_tier_type
         )
 
     def get_updated_endpoints(self, endpoints: str, orch: OrchClient) -> list[str]:
@@ -1391,14 +1408,13 @@ class RgwMultisiteAutomation:
             self.update_progress("Failed to create realm or zonegroup", 'fail', str(e))
             raise
 
-    def create_zone_and_user(self, zone: str, tier_type: str, zg: str, username: str,
+    def create_zone_and_user(self, zone: str, zg: str, username: str,
                              zone_url: str):
         try:
             rgw_multisite_instance = RgwMultisite()
             if rgw_multisite_instance.create_zone(zone_name=zone, zonegroup_name=zg, default=True,
                                                   master=True, endpoints=zone_url,
-                                                  access_key=None, secret_key=None,
-                                                  tier_type=tier_type):
+                                                  access_key=None, secret_key=None):
                 self.progress_done += 1
                 user_details = rgw_multisite_instance.create_system_user(username, zone)
                 keys = user_details.get('keys', [{}])[0]
@@ -1408,7 +1424,7 @@ class RgwMultisiteAutomation:
                     rgw_multisite_instance.modify_zone(
                         zone_name=zone, zonegroup_name=zg, default='true',
                         master='true', endpoints=zone_url, access_key=access_key,
-                        secret_key=secret_key, tier_type=tier_type)
+                        secret_key=secret_key)
                 else:
                     raise DashboardException("Access key or secret key is missing",
                                              component='rgw', http_status_code=500)
@@ -1433,7 +1449,7 @@ class RgwMultisiteAutomation:
     def export_and_import_realm(self, realm: str, zg: str,
                                 fsid: Optional[str], rep_zone: Optional[str],
                                 details_dict: dict, selectedRealm: Optional[str],
-                                username: str):
+                                username: str, secondary_tier_type: Optional[str] = None):
         try:
             realm_token_info = CephService.get_realm_tokens()
             if fsid and realm_token_info and rep_zone and details_dict:
@@ -1443,7 +1459,8 @@ class RgwMultisiteAutomation:
                             configuration, and establishing the target zone"
                 )
                 self.import_realm_token_to_cluster(fsid, realm, zg, realm_token_info, username,
-                                                   rep_zone, details_dict, selectedRealm)
+                                                   rep_zone, details_dict, selectedRealm,
+                                                   secondary_tier_type)
             else:
                 self.update_progress("Realm Export Token fetched successfully", 'complete')
             logger.info("Multisite replication setup completed")
@@ -1456,7 +1473,8 @@ class RgwMultisiteAutomation:
 
     def import_realm_token_to_cluster(self, cluster_fsid, realm_name, zonegroup_name,
                                       realm_token_info, username, replication_zone_name,
-                                      cluster_details, selectedRealmName):
+                                      cluster_details, selectedRealmName,
+                                      secondary_tier_type=None):
         try:
             if selectedRealmName:
                 rgw_service_manager = RgwServiceManager()
@@ -1473,7 +1491,7 @@ class RgwMultisiteAutomation:
 
             token_import_response = self._import_realm_token(
                 cluster_url, cluster_token, realm_export_token,
-                replication_zone_name)
+                replication_zone_name, secondary_tier_type)
 
             self.progress_done += 1
             self.update_progress(
@@ -1582,7 +1600,8 @@ class RgwMultisiteAutomation:
                                                     token=cluster_token)
         logger.info("setting config response: %s", config_info)
 
-    def _import_realm_token(self, cluster_url, cluster_token, realm_token, zone_name):
+    def _import_realm_token(self, cluster_url, cluster_token, realm_token, zone_name,
+                            secondary_tier_type=None):
         multi_cluster_instance = MultiCluster()
         # pylint: disable=protected-access
         available_port = multi_cluster_instance._proxy(
@@ -1594,6 +1613,8 @@ class RgwMultisiteAutomation:
             'port': available_port,
             'placement_spec': {"placement": {}}
         }
+        if secondary_tier_type:
+            payload['tier_type'] = secondary_tier_type
         # pylint: disable=protected-access
         token_import_response = multi_cluster_instance._proxy(
             method='POST', base_url=cluster_url, path='api/rgw/realm/import_realm_token',
@@ -1772,8 +1793,7 @@ class RgwRateLimit:
 
 class RgwMultisite:
     def migrate_to_multisite(self, realm_name: str, zonegroup_name: str, zone_name: str,
-                             zonegroup_endpoints: str, zone_endpoints: str, username: str,
-                             tier_type: str):
+                             zonegroup_endpoints: str, zone_endpoints: str, username: str):
         rgw_realm_create_cmd = ['realm', 'create', '--rgw-realm', realm_name, '--default']
         try:
             exit_code, _, err = mgr.send_rgwadmin_command(rgw_realm_create_cmd, False)
@@ -1849,8 +1869,7 @@ class RgwMultisite:
                                      default='true', master='true',
                                      endpoints=zone_endpoints,
                                      access_key=keys['access_key'],
-                                     secret_key=keys['secret_key'],
-                                     tier_type=tier_type)
+                                     secret_key=keys['secret_key'])
                 else:
                     raise DashboardException(msg='Access key or secret key is missing',
                                              http_status_code=500, component='rgw')
@@ -2391,7 +2410,8 @@ class RgwMultisite:
             raise DashboardException(error, http_status_code=500, component='rgw')
 
     def create_zone(self, zone_name, zonegroup_name, default, master, endpoints, access_key,
-                    secret_key, tier_type):
+                    secret_key, tier_type: Optional[str] = None, sync_from: Optional[str] = None,
+                    sync_from_all: Optional[str] = None):
         rgw_zone_create_cmd = ['zone', 'create']
         cmd_create_zone_options = ['--rgw-zone', zone_name]
         if zonegroup_name != 'null':
@@ -2410,9 +2430,15 @@ class RgwMultisite:
         if secret_key is not None:
             cmd_create_zone_options.append('--secret')
             cmd_create_zone_options.append(secret_key)
-        if tier_type:
+        if tier_type is not None:
             cmd_create_zone_options.append('--tier-type')
             cmd_create_zone_options.append(tier_type)
+        if sync_from is not None:
+            cmd_create_zone_options.append('--sync-from')
+            cmd_create_zone_options.append(sync_from)
+        if sync_from_all is not None:
+            cmd_create_zone_options.append('--sync-from-all')
+            cmd_create_zone_options.append(str(sync_from_all).lower())
         rgw_zone_create_cmd += cmd_create_zone_options
         try:
             exit_code, out, err = mgr.send_rgwadmin_command(rgw_zone_create_cmd)
@@ -2434,7 +2460,9 @@ class RgwMultisite:
         return '', ''
 
     def modify_zone(self, zone_name: str, zonegroup_name: str, default: str, master: str,
-                    endpoints: str, access_key: str, secret_key: str, tier_type: str):
+                    endpoints: str, access_key: str, secret_key: str,
+                    tier_type: Optional[str] = None, sync_from: Optional[str] = None,
+                    sync_from_all: Optional[str] = None):
         rgw_zone_modify_cmd = ['zone', 'modify', '--rgw-zonegroup',
                                zonegroup_name, '--rgw-zone', zone_name]
         if endpoints:
@@ -2453,6 +2481,14 @@ class RgwMultisite:
         if tier_type is not None:
             rgw_zone_modify_cmd.append('--tier-type')
             rgw_zone_modify_cmd.append(tier_type)
+        if sync_from_all is not None:
+            rgw_zone_modify_cmd.append('--sync-from-all')
+            rgw_zone_modify_cmd.append(str(sync_from_all).lower())
+        if sync_from is not None:
+            sync_from_all_enabled = (
+                sync_from_all is not None and str(sync_from_all).lower() == 'true')
+            sync_from_option = '--sync-from-rm' if sync_from_all_enabled else '--sync-from'
+            rgw_zone_modify_cmd.extend([sync_from_option, sync_from])
         try:
             exit_code, _, err = mgr.send_rgwadmin_command(rgw_zone_modify_cmd)
             if exit_code > 0:
@@ -2528,7 +2564,8 @@ class RgwMultisite:
                   master: str = '', endpoints: str = '', access_key: str = '', secret_key: str = '',
                   placement_target: str = '', data_pool: str = '', index_pool: str = '',
                   data_extra_pool: str = '', storage_class: str = '', data_pool_class: str = '',
-                  compression: str = '', tier_type: str = ''):
+                  compression: str = '', tier_type: str = '', sync_from: str = '',
+                  sync_from_all: str = ''):
         if new_zone_name != zone_name:
             rgw_zone_rename_cmd = ['zone', 'rename', '--rgw-zone',
                                    zone_name, '--zone-new-name', new_zone_name]
@@ -2542,7 +2579,7 @@ class RgwMultisite:
                 raise DashboardException(error, http_status_code=500, component='rgw')
             self.update_period()
         self.modify_zone(new_zone_name, zonegroup_name, default, master, endpoints, access_key,
-                         secret_key, tier_type)
+                         secret_key, tier_type, sync_from, sync_from_all)
 
         if placement_target:
             self.add_placement_targets_storage_class_zone(
@@ -3017,6 +3054,31 @@ class RgwMultisite:
                               destination_bucket='*')
         # period update --commit
         self.update_period()
+
+    @staticmethod
+    def _is_not_found_sync_policy_error(error: DashboardException) -> bool:
+        message = str(error).lower()
+        not_found_markers = ['not found', 'no such', 'does not exist']
+        return any(marker in message for marker in not_found_markers)
+
+    def remove_dashboard_admin_sync_group(self, zonegroup_name: str = ''):
+        if not self.policy_group_exists(_SYNC_GROUP_ID, zonegroup_name):
+            return
+
+        try:
+            self.remove_sync_pipe(_SYNC_GROUP_ID, _SYNC_PIPE_ID)
+        except DashboardException as error:
+            if not self._is_not_found_sync_policy_error(error):
+                raise
+
+        try:
+            self.remove_sync_flow(_SYNC_GROUP_ID, _SYNC_FLOW_ID,
+                                  SyncFlowTypes.symmetrical.value)
+        except DashboardException as error:
+            if not self._is_not_found_sync_policy_error(error):
+                raise
+
+        self.remove_sync_policy_group(_SYNC_GROUP_ID, update_period=True)
 
     def policy_group_exists(self, group_name: str, zonegroup_name: str):
         try:

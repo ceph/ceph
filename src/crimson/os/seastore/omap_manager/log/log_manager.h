@@ -71,14 +71,14 @@ public:
    * @param _kvs   Batch of keys to set
    */
   omap_set_keys_ret omap_set_keys(omap_root_t &log_root,
-    Transaction &t, std::map<std::string, ceph::bufferlist>&& _kvs) final;
+    Transaction &t, std::map<std::string, ceph::bufferlist> kvs) final;
 
   // see omap_set_keys
   omap_set_key_ret omap_set_key(
     omap_root_t &log_root,
     Transaction &t,
-    const std::string &key,
-    const ceph::bufferlist &value) final;
+    std::string key,
+    ceph::bufferlist value) final;
 
   /**
    * omap_get_value
@@ -92,7 +92,7 @@ public:
    */
   omap_get_value_ret
   omap_get_value(const omap_root_t &log_root, Transaction &t,
-    const std::string &key) final;
+    std::string key) final;
 
   /**
    * omap_list
@@ -151,13 +151,13 @@ public:
   omap_rm_key_ret omap_rm_key(
     omap_root_t &log_root,
     Transaction &t,
-    const std::string &key) final;
+    std::string key) final;
 
 
   omap_rm_keys_ret omap_rm_keys(
     omap_root_t &omap_root,
     Transaction &t,
-    std::set<std::string>& keys) final;
+    std::set<std::string> keys) final;
 
   /**
    * omap_clear

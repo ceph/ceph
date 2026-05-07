@@ -675,7 +675,8 @@ void BinnedLRUCache::SetupPerfCounters()
   int l_last = l_first + 1 + stat_cnt;
   PerfCountersBuilder b(cct, std::string("rocksdb-cache-") + name, l_first, l_last);
   for (uint32_t j = l_capacity; j <= l_misses; j++) {
-    b.add_u64(1 + j, ShardStats::stat_name[j], ShardStats::stat_descr[j]);
+    b.add_u64(1 + j, ShardStats::stat_name[j], ShardStats::stat_descr[j],
+      nullptr, PerfCountersBuilder::PRIO_USEFUL);
   }
   perfstats = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(perfstats);

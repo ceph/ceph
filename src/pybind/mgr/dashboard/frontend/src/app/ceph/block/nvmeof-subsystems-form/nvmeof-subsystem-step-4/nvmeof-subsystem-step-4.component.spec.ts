@@ -54,6 +54,11 @@ describe('NvmeofSubsystemsStepFourComponent', () => {
   });
 
   it('should return correct auth type label', () => {
+    component.hostDchapKeyCount = 0;
+    expect(component.authTypeLabel).toContain('No authentication');
+
+    component.hostDchapKeyCount = 2;
+
     component.authType = AUTHENTICATION.Bidirectional;
     expect(component.authTypeLabel).toContain('Bidirectional');
 

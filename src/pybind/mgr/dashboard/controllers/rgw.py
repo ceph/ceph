@@ -119,29 +119,30 @@ class RgwMultisiteStatus(RESTController):
     @allow_empty_body
     # pylint: disable=W0102,W0613
     def migrate(self, daemon_name=None, realm_name=None, zonegroup_name=None, zone_name=None,
-                zonegroup_endpoints=None, zone_endpoints=None, username=None, tier_type=None):
+                zonegroup_endpoints=None, zone_endpoints=None, username=None):
         multisite_instance = RgwMultisite()
         result = multisite_instance.migrate_to_multisite(realm_name, zonegroup_name,
                                                          zone_name, zonegroup_endpoints,
-                                                         zone_endpoints, username, tier_type)
+                                                         zone_endpoints, username)
         return result
 
     @RESTController.Collection(method='POST', path='/multisite-replications')
     @allow_empty_body
     # pylint: disable=W0102,W0613
     def setup_multisite_replication(self, daemon_name=None, realm_name=None, zonegroup_name=None,
-                                    zonegroup_endpoints=None, zone_name=None, tier_type=None,
+                                    zonegroup_endpoints=None, zone_name=None,
                                     zone_endpoints=None, username=None, cluster_fsid=None,
                                     replication_zone_name=None, cluster_details=None,
-                                    selectedRealmName=None):
+                                    selectedRealmName=None, secondary_tier_type=None):
         multisite_instance = RgwMultisiteAutomation()
         result = multisite_instance.setup_multisite_replication(realm_name, zonegroup_name,
                                                                 zonegroup_endpoints, zone_name,
-                                                                tier_type, zone_endpoints,
+                                                                zone_endpoints,
                                                                 username, cluster_fsid,
                                                                 replication_zone_name,
                                                                 cluster_details,
-                                                                selectedRealmName)
+                                                                selectedRealmName,
+                                                                secondary_tier_type)
         return result
 
     @RESTController.Collection(method='PUT', path='/setup-rgw-credentials')
@@ -508,17 +509,41 @@ class RgwBucket(RgwRESTController):
             return None
 
         rgw_client = RgwClient.instance(owner, daemon_name)
-        zonegroup_name = RgwClient.admin_instance(daemon_name=daemon_name).get_default_zonegroup()
 
-        policy_exists = multisite.policy_group_exists(_SYNC_GROUP_ID, zonegroup_name)
-        if replication and not policy_exists:
-            multisite.create_dashboard_admin_sync_group(zonegroup_name=zonegroup_name)
+        if replication:
+            zonegroup_name = RgwClient.admin_instance(
+                daemon_name=daemon_name).get_default_zonegroup()
+            policy_exists = multisite.policy_group_exists(_SYNC_GROUP_ID, zonegroup_name)
+            if not policy_exists:
+                multisite.create_dashboard_admin_sync_group(zonegroup_name=zonegroup_name)
+            return rgw_client.set_bucket_replication(bucket_name)
 
-        return rgw_client.set_bucket_replication(bucket_name, replication)
+        return rgw_client.delete_bucket_replication(bucket_name)
 
     def _get_replication(self, bucket_name: str, owner, daemon_name):
+        multisite = RgwMultisite()
         rgw_client = RgwClient.instance(owner, daemon_name)
-        return rgw_client.get_bucket_replication(bucket_name)
+        replication_config = rgw_client.get_bucket_replication(bucket_name)
+
+        # Check if there's a valid S3 replication config with actual rules
+        replication_rules_configured = bool(replication_config and replication_config.get('Rule'))
+
+        # Check for sync policies
+        sync_policy_active = False
+        try:
+            sync_policy = multisite.get_sync_policy(bucket_name=bucket_name)
+            # Check if there are sync policy groups with 'enabled' status
+            groups = sync_policy.get('groups', [])
+            sync_policy_active = any(g.get('status', '').lower() == 'enabled' for g in groups)
+        except (RequestException, DashboardException):
+            # Silently ignore errors from sync policy check
+            pass
+
+        return {
+            'sync_policy_active': sync_policy_active,
+            'replication_rules_configured': replication_rules_configured,
+            'policy': replication_config if replication_config else {}
+        }
 
     @staticmethod
     def strip_tenant_from_bucket_name(bucket_name):
@@ -1385,9 +1410,10 @@ class RgwRealm(RESTController):
     @UpdatePermission
     @allow_empty_body
     # pylint: disable=W0613
-    def import_realm_token(self, realm_token, zone_name, port, placement_spec=None):
+    def import_realm_token(self, realm_token, zone_name, port, placement_spec=None, tier_type=None):
         try:
-            result = CephService.import_realm_token(realm_token, zone_name, port, placement_spec)
+            result = CephService.import_realm_token(realm_token, zone_name, port, placement_spec,
+                                                    tier_type)
             return result
         except NoRgwDaemonsException as e:
             raise DashboardException(e, http_status_code=404, component='rgw')
@@ -1490,11 +1516,13 @@ class RgwZone(RESTController):
     @allow_empty_body
     # pylint: disable=W0613
     def create(self, zone_name, zonegroup_name=None, default=False, master=False,
-               zone_endpoints=None, access_key=None, secret_key=None, tier_type=''):
+               zone_endpoints=None, access_key=None, secret_key=None, tier_type='',
+               sync_from: str = '', sync_from_all: str = ''):
         multisite_instance = RgwMultisite()
         result = multisite_instance.create_zone(zone_name, zonegroup_name, default,
                                                 master, zone_endpoints, access_key,
-                                                secret_key, tier_type)
+                                                secret_key, tier_type, sync_from,
+                                                sync_from_all)
         return result
 
     @allow_empty_body
@@ -1539,13 +1567,14 @@ class RgwZone(RESTController):
             master: str = '', zone_endpoints: str = '', access_key: str = '', secret_key: str = '',
             placement_target: str = '', data_pool: str = '', index_pool: str = '',
             data_extra_pool: str = '', storage_class: str = '', data_pool_class: str = '',
-            compression: str = '', tier_type: str = ''):
+            compression: str = '', tier_type: str = '', sync_from: str = '',
+            sync_from_all: str = ''):
         multisite_instance = RgwMultisite()
         result = multisite_instance.edit_zone(zone_name, new_zone_name, zonegroup_name, default,
                                               master, zone_endpoints, access_key, secret_key,
                                               placement_target, data_pool, index_pool,
                                               data_extra_pool, storage_class, data_pool_class,
-                                              compression, tier_type)
+                                              compression, tier_type, sync_from, sync_from_all)
         return result
 
     @Endpoint()

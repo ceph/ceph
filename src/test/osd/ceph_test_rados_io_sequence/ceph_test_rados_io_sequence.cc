@@ -55,6 +55,8 @@ using SingleFailedWriteOp = ceph::io_exerciser::SingleFailedWriteOp;
 using DoubleFailedWriteOp = ceph::io_exerciser::DoubleFailedWriteOp;
 using TripleFailedWriteOp = ceph::io_exerciser::TripleFailedWriteOp;
 
+using GenerationType = ceph::io_exerciser::data_generation::GenerationType;
+
 namespace {
 struct Size {};
 void validate(boost::any& v, const std::vector<std::string>& values,
@@ -222,9 +224,28 @@ po::options_description get_options_description() {
       " may be removed. at a later date. Disabled by default if ec optimized")(
       "dont_delete_objects",
       "Stops the IO exerciser from deleting the object it was running the test "
-      "against once the test finishes. Does not affect interactive mode");
+      "against once the test finishes. Does not affect interactive mode")(
+      "data_generation_type", po::value<std::string>(),
+      "Data generation type to use for write IOs. Default is HeaderedSeededRandom");
 
   return desc;
+}
+
+GenerationType parse_data_generation_type(po::variables_map& vm) {
+  if (!vm.contains("data_generation_type")) {
+    // Default value
+    return GenerationType::HeaderedSeededRandom;
+  }
+
+  std::string data_generation_type = vm["data_generation_type"].as<std::string>();
+  if (data_generation_type == "HeaderedSeededRandom") {
+    return GenerationType::HeaderedSeededRandom;
+  } else if (data_generation_type == "SeededRandom") {
+    return GenerationType::SeededRandom;
+  } else {
+    throw std::invalid_argument(
+      fmt::format("Unrecognised data generation type: {}", data_generation_type));
+  }
 }
 
 int parse_io_seq_options(po::variables_map& vm, int argc, char** argv) {
@@ -1039,9 +1060,11 @@ ceph::io_sequence::tester::TestObject::TestObject(
     SelectObjectSize& sos, SelectNumThreads& snt, SelectSeqRange& ssr,
     std::mt19937_64& rng, ceph::mutex& lock,
     ceph::condition_variable& cond, bool dryrun, bool verbose,
-    std::optional<int> seqseed, bool testrecovery, bool checkconsistency, bool delete_objects)
-    : rng(rng), verbose(verbose), seqseed(seqseed), testrecovery(testrecovery), checkconsistency(checkconsistency),
-      delete_objects(delete_objects) {
+    std::optional<int> seqseed, bool testrecovery, bool checkconsistency,
+    bool delete_objects, GenerationType data_generation_type)
+    : rng(rng), verbose(verbose), seqseed(seqseed), testrecovery(testrecovery),
+      checkconsistency(checkconsistency), delete_objects(delete_objects),
+      data_generation_type(data_generation_type) {
   if (dryrun) {
     int model_seed = rng();
     exerciser_model = std::make_unique<ceph::io_exerciser::ObjectModel>(
@@ -1067,7 +1090,7 @@ ceph::io_sequence::tester::TestObject::TestObject(
     exerciser_model = std::make_unique<ceph::io_exerciser::RadosIo>(
         rados, asio, pool, primary_oid, secondary_oid, sbs.select(), model_seed,
         threads, lock, cond, spo.is_replicated_pool(),
-        spo.get_allow_pool_ec_optimizations(), seq, delete_objects);
+        spo.get_allow_pool_ec_optimizations(), data_generation_type, seq, delete_objects);
     dout(0) << "= " << primary_oid << " pool=" << pool << " threads=" << threads
             << " blocksize=" << exerciser_model->get_block_size() << " ="
             << dendl;
@@ -1169,6 +1192,8 @@ ceph::io_sequence::tester::TestRunner::TestRunner(
   verbose = vm.contains("verbose");
   dryrun = vm.contains("dryrun");
   delete_objects = !vm.contains("dont_delete_objects");
+
+  data_generation_type = parse_data_generation_type(vm);
 
   seqseed = std::nullopt;
   if (vm.contains("seqseed")) {
@@ -1337,7 +1362,8 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
         rados, asio, pool, primary_object_name, secondary_object_name, sbs.select(), model_seed,
         1,  // 1 thread
         lock, cond, spo.is_replicated_pool(),
-        spo.get_allow_pool_ec_optimizations());
+        spo.get_allow_pool_ec_optimizations(),
+        data_generation_type);
   }
 
   while (!done) {
@@ -1493,7 +1519,8 @@ bool ceph::io_sequence::tester::TestRunner::run_automated_test() {
       test_objects.push_back(
           std::make_shared<ceph::io_sequence::tester::TestObject>(
               primary_name, secondary_name, rados, asio, sbs, spo, sos, snt, ssr, rng, lock, cond,
-              dryrun, verbose, seqseed, testrecovery, checkconsistency, delete_objects));
+              dryrun, verbose, seqseed, testrecovery, checkconsistency,
+              delete_objects, data_generation_type));
     }
     catch (const std::runtime_error &e) {
       std::cerr << "Error: " << e.what() << std::endl;

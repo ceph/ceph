@@ -17,6 +17,8 @@ enum {
   l_poll,
   l_poll_err,
 
+  l_lock,
+
   l_last,
 };
 

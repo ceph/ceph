@@ -78,15 +78,10 @@ OpsExecuter::call_ierrorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
   }
 
   const auto flags = method->get_flags();
-  if (!obc->obs.exists && (flags & CLS_METHOD_WR) == 0) {
-    return crimson::ct_error::enoent::make();
-  }
 
-#if 0
   if (flags & CLS_METHOD_WR) {
-    ctx->user_modify = true;
+    check_init_op_params(modified_by::user);
   }
-#endif
 
   logger().debug("calling method {}.{}, num_read={}, num_write={}",
                  cname, mname, num_read, num_write);

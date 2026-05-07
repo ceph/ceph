@@ -3,13 +3,14 @@ function(build_isal)
   set(isal_BINARY_DIR ${CMAKE_BINARY_DIR}/src/isa-l)
   set(isal_INSTALL_DIR ${isal_BINARY_DIR}/install)
   set(isal_INCLUDE_DIR "${isal_INSTALL_DIR}/include")
-  set(isal_LIBRARY "${isal_INSTALL_DIR}/lib/libisal.a")
+  set(isal_LIBRARY_DIR "${isal_INSTALL_DIR}/lib")
+  set(isal_LIBRARY "${isal_LIBRARY_DIR}/libisal.a")
 
   # this include directory won't exist until the install step, but the
   # imported targets need it early for INTERFACE_INCLUDE_DIRECTORIES
   file(MAKE_DIRECTORY "${isal_INCLUDE_DIR}")
 
-  set(configure_cmd env CC=${CMAKE_C_COMPILER} ./configure --prefix=${isal_INSTALL_DIR})
+  set(configure_cmd env CC=${CMAKE_C_COMPILER} ./configure --prefix=${isal_INSTALL_DIR} --libdir=${isal_LIBRARY_DIR})
   # build a static library with -fPIC that we can link into crypto/compressor plugins
   list(APPEND configure_cmd --with-pic --enable-static --disable-shared)
 
@@ -17,9 +18,19 @@ function(build_isal)
   # because it messes with the internal install paths of arrow's bundled deps
   set(NO_DESTDIR_COMMAND ${CMAKE_COMMAND} -E env --unset=DESTDIR)
 
+  set(arm_cflags "")
   if(CMAKE_C_COMPILER_ID MATCHES "Clang" AND HAVE_ARMV8_SIMD)
-    list(APPEND configure_cmd CFLAGS=-no-integrated-as)
+    list(APPEND arm_cflags "-no-integrated-as")
   endif()
+  # isa-l 2.32.0 requires SVE assembly support
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64")
+    list(APPEND arm_cflags "-Wa,-march=armv8-a+sve")
+  endif()
+  if(arm_cflags)
+    string(REPLACE ";" " " arm_cflags_str "${arm_cflags}")
+    list(APPEND configure_cmd "CFLAGS=${arm_cflags_string}")
+  endif()
+  
 
   include(ExternalProject)
   ExternalProject_Add(isal_ext

@@ -432,10 +432,11 @@ public:
     std::array<IOContext*,MAX_BDEV> iocv; ///< for each bdev
     std::array<bool, MAX_BDEV> dirty_devs;
 
-    FileWriter(FileRef f)
-      : file(std::move(f)),
-       buffer_appender(buffer.get_page_aligned_appender(
-                         g_conf()->bluefs_alloc_size / CEPH_PAGE_SIZE)), envelope_head_filler() {
+    FileWriter(FileRef f, unsigned super_block_size)
+      : file(std::move(f))
+      , buffer_appender(buffer.get_page_aligned_appender(
+        std::max<uint64_t>(g_conf()->bluefs_alloc_size, 2 * super_block_size) / CEPH_PAGE_SIZE))
+      , envelope_head_filler() {
       ++file->num_writers;
       iocv.fill(nullptr);
       dirty_devs.fill(false);
@@ -479,6 +480,10 @@ public:
     }
 
     bufferlist::contiguous_filler append_hole(uint64_t len) {
+      if (buffer.get_append_buffer_unused_tail_length() < len) {
+        ceph_assert(buffer.length() == 0);
+        buffer_appender.refill();
+      }
       return buffer.append_hole(len);
     }
 
@@ -1147,12 +1152,27 @@ public:
     }
   }
 
-  uint64_t get_available_extra() const {
-    return db_avail4slow;
-  }
+  // Returns a static value (based on disk layout and store's settings)
+  // of the first RocksDB level which doesn't fully fit into "fast" volume.
+  // So with the selector's help data belonging to this level could be 
+  // [partially] allocated at that volume if get_*_extra() methods below
+  // indicate non-zero values. 
   uint64_t get_extra_level() const {
     return extra_level;
   }
+  // Returns a static value (based on disk layout and store's settings)
+  // of the extra space at DB volume which
+  // this volume selector permits for using by data from "slow" levels.
+  // Takes both maximum historical observations and store's settings
+  // into account
+  uint64_t get_max_extra() const {
+    return db_avail4slow;
+  }
+  // Calculates the effective amount of extra space at "fast" volume which
+  // this volume selector permits for using by data from "slow" levels.
+  // Takes both the maximum historical observations and the value from 
+  // get_max_extra() into account to get the final result.
+  uint64_t get_effective_extra() const;
   void* get_hint_for_log() const override {
     return  reinterpret_cast<void*>(LEVEL_LOG);
   }

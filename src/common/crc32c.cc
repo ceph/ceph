@@ -43,10 +43,17 @@ ceph_crc32c_func_t ceph_choose_crc32(void)
   if (ceph_arch_ppc_crc32) {
     return ceph_crc32c_ppc;
   }
-#elif defined(__riscv) && defined(HAVE_RISCV_ZVBC)
-  if (ceph_arch_riscv_zbc && ceph_arch_riscv_zvbc) {
+#elif defined(__riscv)
+# if defined(HAVE_RISCV_ZVBC)
+  if (ceph_arch_riscv_zvbc) {
     return ceph_crc32c_riscv;
   }
+# endif
+# if defined(HAVE_RISCV_ZBC)
+  if (ceph_arch_riscv_zbc) {
+    return ceph_crc32c_riscv_zbc;
+  }
+# endif
 #elif defined(__s390__)
   if (ceph_arch_s390x_crc32) {
     return ceph_crc32c_s390x;

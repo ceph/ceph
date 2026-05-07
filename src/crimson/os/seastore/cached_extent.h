@@ -655,7 +655,7 @@ public:
 
   /// Returns true iff extent is stable and not io-pending
   bool is_stable_ready() const {
-    return is_stable() && (!is_pending_io() || io_wait->rewriting);
+    return is_stable() && (!is_pending_io() || io_wait->stable_view);
   }
 
   /// Returns true if extent can not be mutated,
@@ -963,15 +963,22 @@ private:
   std::optional<paddr_t> prior_poffset = std::nullopt;
 
   struct io_wait_t {
-    seastar::shared_promise<> pr;
-    extent_state_t from_state;
-    bool rewriting = false;
+    seastar::shared_promise<> pr;  /// completes when the I/O finishes
+    extent_state_t from_state;     /// state before entering the wait
+
+    /**
+      * If true, treat the extent as "stable-ready" for visibility checks
+      * even while I/O is pending. Used by:
+      *  See: stage_visibility_handoff()
+      */
+    bool stable_view = false;
   };
+
   std::optional<io_wait_t> io_wait;
 
-  void set_io_wait(extent_state_t new_state, bool rewriting) {
+  void set_io_wait(extent_state_t new_state, bool stable_view) {
     ceph_assert(!io_wait);
-    io_wait.emplace(seastar::shared_promise<>(), state, rewriting);
+    io_wait.emplace(seastar::shared_promise<>(), state, stable_view);
     state = new_state;
     assert(is_data_stable());
   }

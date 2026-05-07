@@ -211,9 +211,9 @@ following:
 
 .. describe:: [expected-num-objects]
 
-   The expected number of RADOS objects for this pool. By setting this value and
+   The expected number of RADOS objects for this pool. By setting this value,
    you arrange for PG splitting to occur at the time of pool creation and
-   avoid the latency impact that accompanies runtime folder splitting.
+   avoid the latency impact that accompanies runtime PG splitting.
 
    :Type: Integer
    :Required: No.
@@ -454,7 +454,7 @@ You may set values for the following keys:
 
 .. describe:: allow_ec_optimizations
    
-   :Description: Enables performance and capacity optimizations for an erasure-coded pool. These optimizations were designed for CephFS and RBD workloads; RGW workloads with signficant numbers of small objects or with small random access reads of objects will also benefit. RGW workloads with large sequential read and writes will see little benefit. For more details, see :ref:`rados_ops_erasure_coding_optimizations`:
+   :Description: Enables performance and capacity optimizations for an erasure-coded pool. These optimizations were designed for CephFS and RBD workloads; RGW workloads with significant numbers of small objects or with small random access reads of objects will also benefit. RGW workloads with large sequential read and writes will see little benefit. For more details, see :ref:`rados_ops_erasure_coding_optimizations`.
    :Type: Boolean
 
    .. versionadded:: 20.2.0
@@ -778,7 +778,7 @@ To set values for a stretch pool, run a command of the following form:
 
    ceph osd pool stretch set {pool-name} {peering_crush_bucket_count} {peering_crush_bucket_target} {peering_crush_bucket_barrier} {crush_rule} {size} {min_size} [--yes-i-really-mean-it]
 
-Here are the break downs of the arguments:
+Here are the breakdowns of the arguments:
 
 .. describe:: {pool-name}
 
@@ -789,7 +789,7 @@ Here are the break downs of the arguments:
 
 .. describe:: {peering_crush_bucket_count}
 
-   This value is used along with ``peering_crush_bucket_barrier`` to determined whether the set of
+   This value is used along with ``peering_crush_bucket_barrier`` to determine whether the set of
    OSDs in the chosen acting set can peer with each other, based on the number of distinct
    buckets there are in the acting set.
 
@@ -895,7 +895,7 @@ To show values for a stretch pool, run a command of the following form:
 
    ceph osd pool stretch show {pool-name}
 
-Here are the break downs of the argument:
+Here are the breakdowns of the argument:
 
 .. describe:: {pool-name}
 

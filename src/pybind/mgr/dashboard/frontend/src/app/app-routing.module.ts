@@ -320,7 +320,7 @@ const routes: Routes = [
           },
           {
             path: 'alerts',
-            data: { breadcrumbs: 'Alerts' },
+            data: { breadcrumbs: 'Alert Rules' },
             component: RulesListComponent
           },
           {

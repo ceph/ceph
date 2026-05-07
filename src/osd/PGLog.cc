@@ -305,7 +305,7 @@ void PGLog::proc_replica_log(
     omissing,
     nullptr,
     ec_optimizations_enabled,
-    to.shard,
+    from.shard,
     this);
 
   if (lu < oinfo.last_update) {

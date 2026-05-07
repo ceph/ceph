@@ -8,7 +8,7 @@ preparing, activating, and creating OSDs.
 
 It deviates from ``ceph-disk`` by not interacting or relying on the udev rules
 that come installed for Ceph. These rules allow automatic detection of
-previously setup devices that are in turn fed into ``ceph-disk`` to activate
+previously set up devices that are in turn fed into ``ceph-disk`` to activate
 them.
 
 .. _ceph-disk-replaced:
@@ -16,7 +16,7 @@ them.
 Replacing ``ceph-disk``
 -----------------------
 The ``ceph-disk`` tool was created at a time when the project was required to
-support many different types of init systems (upstart, sysvinit, etc...) while
+support many different types of init systems (upstart, sysvinit, etc.) while
 being able to discover devices. This caused the tool to concentrate initially
 (and exclusively afterwards) on GPT partitions. Specifically on GPT GUIDs,
 which were used to label devices in a unique way to answer questions like:
@@ -35,7 +35,7 @@ a node.
 It was hard to debug, or even replicate these problems given the asynchronous
 behavior of ``UDEV``.
 
-Since the world-view of ``ceph-disk`` had to be GPT partitions exclusively, it meant
+Since the worldview of ``ceph-disk`` had to be GPT partitions exclusively, it meant
 that it couldn't work with other technologies like LVM, or similar device
 mapper devices. It was ultimately decided to create something modular, starting
 with LVM support, and the ability to expand on other technologies as needed.
@@ -66,13 +66,13 @@ Modularity
 there are going to be lots of ways that people provision the hardware devices
 that we need to consider. There are already two: legacy ceph-disk devices that
 are still in use and have GPT partitions (handled by :ref:`ceph-volume-simple`),
-and lvm. SPDK devices where we manage NVMe devices directly from userspace are
+and LVM. SPDK devices where we manage NVMe devices directly from userspace are
 on the immediate horizon, where LVM won't work there since the kernel isn't
 involved at all.
 
 ``ceph-volume lvm``
 -------------------
-By making use of :term:`LVM tags`, the :ref:`ceph-volume-lvm` sub-command is
+By making use of :term:`LVM tags`, the :ref:`ceph-volume-lvm` subcommand is
 able to store and later re-discover and query devices associated with OSDs so
 that they can later be activated.
 

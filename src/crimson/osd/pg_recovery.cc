@@ -15,6 +15,7 @@
 #include "crimson/osd/pg_backend.h"
 #include "crimson/osd/pg_recovery.h"
 
+#include "messages/MOSDPGRecoveryDelete.h"
 #include "osd/osd_types.h"
 #include "osd/PeeringState.h"
 
@@ -82,15 +83,24 @@ PGRecovery::start_recovery_ops(
   ceph_assert(!pg->is_backfilling());
 
   if (!pg->get_peering_state().needs_recovery()) {
+    /* Clear PG_STATE_RECOVERING before posting recovery completion events
+     * to prevent race condition with DeferRecovery. 
+     * See https://tracker.ceph.com/issues/73314.
+     *
+     * This matches the Classic OSD approach in PrimaryLogPG::start_recovery_ops().
+     * When DeferRecovery arrives, it checks !state_test(PG_STATE_RECOVERING)
+     * and discards itself if the flag is already clear, preventing the crash
+     * that occurs when AllReplicasRecovered arrives at NotRecovering state. */
+    pg->get_peering_state().state_clear(PG_STATE_RECOVERING);
+    pg->get_peering_state().state_clear(PG_STATE_FORCED_RECOVERY);
+
     if (pg->get_peering_state().needs_backfill()) {
+      DEBUGDPP("recovery done, queuing backfill", *pg->get_dpp());
       request_backfill();
     } else {
+      DEBUGDPP("recovery done, no backfill", *pg->get_dpp());
       all_replicas_recovered();
     }
-    /* TODO: this is racy -- it's possible for a DeferRecovery
-     * event to be processed between this call and when the
-     * async RequestBackfill or AllReplicasRecovered events
-     * are processed --  see https://tracker.ceph.com/issues/71267 */
     pg->reset_pglog_based_recovery_op();
     co_return seastar::stop_iteration::yes;
   }
@@ -123,8 +133,8 @@ size_t PGRecovery::start_primary_recovery_ops(
   unsigned started = 0;
   int skipped = 0;
 
-  map<eversion_t, hobject_t>::const_iterator p =
-    missing.get_rmissing().lower_bound(eversion_t(0, pg->get_peering_state().get_pg_log().get_log().last_requested));
+  auto p = missing.get_rmissing().lower_bound(
+    eversion_t(0, pg->get_peering_state().get_pg_log().get_log().last_requested));
   while (started < max_to_start && p != missing.get_rmissing().end()) {
     // TODO: chain futures here to enable yielding to scheduler?
     hobject_t soid;
@@ -334,9 +344,11 @@ RecoveryBackend::interruptible_future<> PGRecovery::prep_object_replica_deletes(
       trigger,
       pg->get_recovery_backend()->push_delete(soid, need).then_interruptible(
 	[=, this] {
-	object_stat_sum_t stat_diff;
-	stat_diff.num_objects_recovered = 1;
-	on_global_recover(soid, stat_diff, true);
+        if (pg->get_peering_state().get_pg_log().get_missing().is_missing(soid)) {
+          object_stat_sum_t stat_diff;
+          stat_diff.num_objects_recovered = 1;
+          on_global_recover(soid, stat_diff, true);
+        }
 	return seastar::make_ready_future<>();
       })
     );
@@ -574,6 +586,33 @@ void PGRecovery::enqueue_drop(
   req->ls.emplace_back(obj, v);
 }
 
+void PGRecovery::send_recovery_deletes(
+  const hobject_t& obj,
+  const std::vector<pg_shard_t>& peers)
+{
+  LOG_PREFIX(PGRecovery::send_recovery_deletes);
+  DEBUGDPP("obj={}", *pg->get_dpp(), obj);
+  if (!pg->get_recovery_backend()->is_recovering(obj)) {
+    DEBUGDPP("obj={} is not recovering, exiting early", *pg->get_dpp(), obj); 
+    return;
+  }
+  auto& peering_state = pg->get_peering_state();
+  epoch_t min_epoch = pg->get_last_peering_reset();
+  auto& recovering = pg->get_recovery_backend()->get_recovering(obj);
+  for (const auto& peer : peers) {
+    pg_missing_item item;
+    if (peering_state.get_peer_missing(peer).is_missing(obj, &item)) {
+      std::ignore = recovering.wait_for_pushes(peer);
+      spg_t target_pg(pg->get_pgid().pgid, peer.shard);
+      auto msg = crimson::make_message<MOSDPGRecoveryDelete>(
+        pg->get_pg_whoami(), target_pg, pg->get_osdmap_epoch(), min_epoch);
+      msg->objects.push_back(std::make_pair(obj, item.need));
+      std::ignore = pg->get_shard_services().send_to_osd(
+        peer.osd, std::move(msg), pg->get_osdmap_epoch());
+    }
+  }
+}
+
 void PGRecovery::maybe_flush()
 {
   for (auto& [target, req] : backfill_drop_requests) {
@@ -658,7 +697,7 @@ void PGRecovery::request_backfill()
 void PGRecovery::all_replicas_recovered()
 {
   LOG_PREFIX(PGRecovery::all_replicas_recovered);
-  DEBUGDPP("", *pg->get_dpp());
+  DEBUGDPP("posting AllReplicasRecovered event", *pg->get_dpp());
   start_peering_event_operation_listener(PeeringState::AllReplicasRecovered());
 }
 

@@ -4680,6 +4680,11 @@ void Client::_flush_range(Inode *in, int64_t offset, uint64_t size)
     return;
   }
 
+  if (size == 0) {
+    ldout(cct, 10) << "zero size flush is not supported by OSD" << dendl;
+    return;
+  }
+
   C_SaferCond onflush("Client::_flush_range flock");
   bool ret = objectcacher->file_flush(&in->oset, &in->layout, in->snaprealm->get_snap_context(),
 				      offset, size, &onflush);
@@ -11554,6 +11559,20 @@ int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl,
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
 
+  ldout(cct, 10) << __func__ << " " << f->inode.get() << " " << offset << "~"
+                 << size << dendl;
+
+  if ((f->mode & CEPH_FILE_MODE_RD) == 0 && !read_for_write)
+    return -EBADF;
+
+  // zero bytes read is not supported by osd
+  if (size == 0) {
+    if (onfinish) {
+      onfinish->complete(0);
+    }
+    return 0;
+  }
+
   int want, have = 0;
   bool movepos = false;
   std::unique_ptr<Context> iofinish = nullptr;
@@ -11565,10 +11584,6 @@ int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl,
   utime_t start = mono_clock_now();
   CRF_iofinish *crf_iofinish = nullptr;
 
-  ldout(cct, 10) << __func__ << " " << *in << " " << offset << "~" << size << dendl;
-
-  if ((f->mode & CEPH_FILE_MODE_RD) == 0 && !read_for_write)
-    return -EBADF;
   //bool lazy = f->mode == CEPH_FILE_MODE_LAZY;
 
   if (offset < 0) {
@@ -11686,18 +11701,6 @@ retry:
     // branch below but in a non-blocking fashion. The code in _read_sync
     // is duplicated and modified and exists in
     // C_Read_Sync_NonBlocking::finish().
-
-    // trim read based on file size?
-    if (size == 0) {
-      // zero byte read requested -- therefore just release managed
-      // pointers and complete the C_Read_Finisher immediately with 0 bytes
-      Context *iof = iofinish.release();
-      crf.release();
-      iof->complete(0);
-
-      // Signal async completion
-      return 0;
-    }
 
     C_Read_Sync_NonBlocking *crsa =
       new C_Read_Sync_NonBlocking(this, iofinish.release(), f, in, f->pos,
@@ -11966,6 +11969,10 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
 		       bool *checkeof)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
+  if (len == 0) {
+    // zero byte read is not supported by OSD
+    return 0;
+  }
 
   Inode *in = f->inode.get();
 

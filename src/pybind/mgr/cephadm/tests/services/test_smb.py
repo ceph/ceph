@@ -1,12 +1,12 @@
 import json
 from unittest.mock import patch
 
-from cephadm.services.smb import SMBSpec
+from cephadm.services.smb import SMBSpec, SMBExternalCephCluster
 from cephadm.module import CephadmOrchestrator
 from cephadm.tests.fixtures import with_host, with_service, async_side_effect
 
 
-_SAMBA_METRICS_IMAGE = 'quay.io/samba.org/samba-metrics:devbuilds-centos-amd64'
+_SAMBA_METRICS_IMAGE = 'quay.io/samba.org/samba-metrics:devbuilds-centos-any'
 
 
 class TestSMB:
@@ -148,3 +148,35 @@ class TestSMB:
                     error_ok=True,
                     use_current_daemon_image=False,
                 )
+
+
+def test_smb_get_dependencies(cephadm_module):
+    from cephadm.services.smb import SMBService
+
+    spec = SMBSpec(
+        cluster_id='foxtrot',
+        features=['domain'],
+        config_uri='rados://.smb/foxtrot/config2.json',
+        join_sources=[
+            'rados:mon-config-key:smb/config/foxtrot/join2.json',
+        ],
+        include_ceph_users=[
+            'client.smb.fs.cephfs.share1',
+            'client.smb.fs.cephfs.share2',
+            'client.smb.fs.fs2.share3',
+        ],
+        ceph_cluster_configs=[
+            SMBExternalCephCluster(
+                alias="exo",
+                fsid='cf05db31-3d4e-4ffd-85ad-753434d5add1',
+                mon_host='[v2:192.168.76.200:3300/0,v1:192.168.76.200:6789/0]',
+                user='client.smb.remote1',
+                key='AQBAAK9ptYayIRAAQ1Bcpti9yMvX2Gl0KMmc4Q=='
+            )
+        ]
+    )
+
+    deps = SMBService.get_dependencies(cephadm_module, spec, spec.service_type)
+    assert deps == [
+        'smb+meta:ceph_cluster_config.exo=sha256:859b001f76df4d184b858b9c3e323ca8ff85a311414d0405f4484d17aa481ef3'
+    ]

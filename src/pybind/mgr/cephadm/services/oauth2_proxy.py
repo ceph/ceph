@@ -64,10 +64,12 @@ class OAuth2ProxyService(CephadmService):
         svc_spec = cast(OAuth2ProxySpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         allowlist_domains = copy(svc_spec.allowlist_domains) or []
         allowlist_domains += self.get_service_ips_and_hosts('mgmt-gateway')
+        email_domains = copy(svc_spec.email_domains) or []
         context = {
             'spec': svc_spec,
             'cookie_secret': svc_spec.cookie_secret,
             'allowlist_domains': allowlist_domains,
+            'email_domains': email_domains,
             'redirect_url': svc_spec.redirect_url or self.get_redirect_url()
         }
 

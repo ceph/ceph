@@ -359,6 +359,7 @@ inline constexpr const char* RGW_REST_STS_XMLNS =
 #define ERR_BUSY_RESHARDING      2300 // also in cls_rgw_types.h, don't change!
 #define ERR_NO_SUCH_ENTITY       2301
 #define ERR_LIMIT_EXCEEDED       2302
+#define ERR_CONCURRENT_MODIFICATION 2303
 
 // STS Errors
 #define ERR_PACKED_POLICY_TOO_LARGE 2400
@@ -1310,6 +1311,7 @@ struct req_state : DoutPrefixProvider {
   std::shared_ptr<RateLimiter> ratelimit_data;
   RGWRateLimitInfo user_ratelimit;
   RGWRateLimitInfo bucket_ratelimit;
+  int64_t ratelimit_retry_after{0};
   std::string ratelimit_bucket_marker;
   std::string ratelimit_user_name;
   bool content_started{false};
@@ -1334,6 +1336,7 @@ struct req_state : DoutPrefixProvider {
 
   std::string bucket_tenant;
   std::string bucket_name;
+  rgw_obj_key object_key; // requested object name and version id
 
   /* bucket is only created in rgw_build_bucket_policies() and should never be
    * overwritten */
@@ -1341,6 +1344,7 @@ struct req_state : DoutPrefixProvider {
   std::unique_ptr<rgw::sal::Object> object;
   std::string src_tenant_name;
   std::string src_bucket_name;
+  rgw_obj_key src_object_key; // requested source object name and version id
   std::unique_ptr<rgw::sal::Object> src_object;
   ACLOwner bucket_owner;
   // Resource owner for the authenticated identity, initialized in authorize()

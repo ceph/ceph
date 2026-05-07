@@ -1197,7 +1197,7 @@ __public int32_t ceph_add_fscrypt_key(struct ceph_mount_info *cmount,
 	req.user = user;
 	req.kid = FSCRYPT_KEY_IDENTIFIER_SIZE;
 
-	CEPH_BUFF_ADD(req, key_data, key_len);
+	CEPH_DATA_ADD(req, key, key_data, key_len);
 
 	CEPH_BUFF_ADD(ans, kid, FSCRYPT_KEY_IDENTIFIER_SIZE);
 
@@ -1211,9 +1211,8 @@ __public int32_t ceph_remove_fscrypt_key(struct ceph_mount_info *cmount,
 	CEPH_REQ(ceph_remove_fscrypt_key, req, 1, ans, 1);
 
 	req.user = user;
-	req.arg = sizeof(struct fscrypt_remove_key_arg);
 
-	CEPH_BUFF_ADD(req, arg, sizeof(struct fscrypt_remove_key_arg));
+	CEPH_DATA_ADD(req, arg, arg, sizeof(struct fscrypt_remove_key_arg));
 
 	CEPH_BUFF_ADD(ans, arg, sizeof(struct fscrypt_remove_key_arg));
 
@@ -1225,9 +1224,7 @@ __public int32_t ceph_get_fscrypt_key_status(
 {
 	CEPH_REQ(ceph_get_fscrypt_key_status, req, 1, ans, 1);
 
-	req.arg = sizeof(struct fscrypt_get_key_status_arg);
-
-	CEPH_BUFF_ADD(req, arg, sizeof(struct fscrypt_get_key_status_arg));
+	CEPH_DATA_ADD(req, arg, arg, sizeof(struct fscrypt_get_key_status_arg));
 
 	CEPH_BUFF_ADD(ans, arg, sizeof(struct fscrypt_get_key_status_arg));
 
@@ -1241,9 +1238,8 @@ __public int32_t ceph_ll_set_fscrypt_policy_v2(
 	CEPH_REQ(ceph_ll_set_fscrypt_policy_v2, req, 1, ans, 0);
 
 	req.inode = ptr_value(in);
-	req.policy = sizeof(struct fscrypt_policy_v2);
 
-	CEPH_BUFF_ADD(req, policy, sizeof(struct fscrypt_policy_v2));
+	CEPH_DATA_ADD(req, policy, policy, sizeof(struct fscrypt_policy_v2));
 
 	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_SET_FSCRYPT_POLICY_V2, req,
 			    ans);

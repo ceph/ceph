@@ -95,12 +95,6 @@ void inode_t<Allocator>::dump(ceph::Formatter *f) const
 
   f->dump_stream("last_scrub_stamp") << last_scrub_stamp;
   f->dump_unsigned("last_scrub_version", last_scrub_version);
-  f->dump_unsigned("remote_ino", remote_ino);
-  f->open_array_section("referent_inodes");
-  for (const auto &ri : referent_inodes) {
-    f->dump_unsigned("referent_inode", ri);
-  }
-  f->close_section();
 }
 
 inline void vinodeno_t::dump(ceph::Formatter *f) const {

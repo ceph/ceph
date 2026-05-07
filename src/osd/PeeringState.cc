@@ -6361,6 +6361,7 @@ boost::statechart::result
 PeeringState::Recovering::react(const AllReplicasRecovered &evt)
 {
   DECLARE_LOCALS;
+  psdout(10) << "handling AllReplicasRecovered" << dendl;
   ps->state_clear(PG_STATE_FORCED_RECOVERY);
   release_reservations();
   pl->cancel_local_background_io_reservation();
@@ -6409,6 +6410,8 @@ PeeringState::Recovering::react(const DeferRecovery &evt)
       ps->get_osdmap_epoch(),
       DoRecovery()),
     evt.delay);
+  psdout(10) << "DeferRecovery: transitioning to NotRecovering, "
+	     << "any pending AllReplicasRecovered will be lost" << dendl;
   return transit<NotRecovering>();
 }
 
@@ -6444,6 +6447,8 @@ PeeringState::Recovered::Recovered(my_context ctx)
 
   DECLARE_LOCALS;
 
+  psdout(10) << "Recovered::Recovered: entering Recovered state" << dendl;
+
   ceph_assert(!ps->needs_recovery());
 
   // if we finished backfill, all acting are active; recheck if
@@ -6467,6 +6472,8 @@ PeeringState::Recovered::Recovered(my_context ctx)
   if (context< Active >().all_replicas_activated  &&
       ps->async_recovery_targets.empty())
     post_event(GoClean());
+
+  psdout(10) << "Recovered::Recovered: exiting Recovered constructor" << dendl;
 }
 
 void PeeringState::Recovered::exit()

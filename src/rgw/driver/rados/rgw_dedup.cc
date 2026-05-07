@@ -413,12 +413,10 @@ namespace rgw::dedup {
   {
     d_head_object_size = cct->_conf->rgw_max_chunk_size;
     d_min_obj_size_for_dedup = cct->_conf->rgw_dedup_min_obj_size_for_dedup;
-
-    // limit split head to objects without tail
-    d_max_obj_size_for_split = d_head_object_size;
+    d_split_head = cct->_conf->rgw_dedup_split_obj_head;
     ldpp_dout(dpp, 10) << "Config Vals::d_head_object_size=" << d_head_object_size
                        << "::d_min_obj_size_for_dedup=" << d_min_obj_size_for_dedup
-                       << "::d_max_obj_size_for_split=" << d_max_obj_size_for_split
+                       << "::d_split_head=" << d_split_head
                        << dendl;
 
     int ret = init_rados_access_handles(false);
@@ -435,11 +433,8 @@ namespace rgw::dedup {
   //------------------------------------------------------------------------------
   uint64_t Background::__calc_deduped_bytes(uint16_t num_parts, uint64_t size_bytes)
   {
-    return calc_deduped_bytes(d_head_object_size,
-                              d_min_obj_size_for_dedup,
-                              d_max_obj_size_for_split,
-                              num_parts,
-                              size_bytes);
+    return calc_deduped_bytes(d_head_object_size, d_min_obj_size_for_dedup,
+                              d_split_head, num_parts, size_bytes);
   }
 
   //---------------------------------------------------------------------------
@@ -495,8 +490,7 @@ namespace rgw::dedup {
                        << p_rec->s.md5_low << std::dec << dendl;
 
     int ret = p_table->add_entry(&key, block_id, rec_id, has_shared_manifest,
-                                 &p_stats->small_objs_stat, &p_stats->big_objs_stat,
-                                 &p_stats->dup_head_bytes_estimate);
+                                 &p_stats->big_objs_stat);
     if (ret == 0) {
       p_stats->loaded_objects ++;
       ldpp_dout(dpp, 20) << __func__ << "::" << p_rec->bucket_name << "/"
@@ -544,15 +538,14 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  static int get_ioctx_internal(const DoutPrefixProvider* const dpp,
-                                rgw::sal::Driver* driver,
-                                rgw::sal::RadosStore* store,
-                                const std::string &obj_name,
-                                const std::string &instance,
-                                const rgw_bucket &rb,
-                                librados::IoCtx *p_ioctx /*OUT*/,
-                                std::string *p_oid /*OUT*/)
+  static inline int get_ioctx(const DoutPrefixProvider* const dpp,
+                              rgw::sal::Driver* driver,
+                              rgw::sal::RadosStore* store,
+                              const disk_record_t *p_rec,
+                              librados::IoCtx *p_ioctx /*OUT*/,
+                              std::string *p_oid /*OUT*/)
   {
+    rgw_bucket rb{p_rec->tenant_name, p_rec->bucket_name, p_rec->bucket_id};
     unique_ptr<rgw::sal::Bucket> bucket;
     {
       int ret = driver->load_bucket(dpp, rb, &bucket, null_yield);
@@ -564,44 +557,12 @@ namespace rgw::dedup {
     }
 
     string dummy_locator;
-    const rgw_obj_index_key key(obj_name, instance);
+    const rgw_obj_index_key key(p_rec->obj_name, p_rec->instance);
     rgw_obj obj(bucket->get_key(), key);
     get_obj_bucket_and_oid_loc(obj, *p_oid, dummy_locator);
     RGWBucketInfo& bucket_info = bucket->get_info();
     return store->get_obj_head_ioctx(dpp, bucket_info, obj, p_ioctx);
-  }
 
-  //---------------------------------------------------------------------------
-  static inline int get_ioctx(const DoutPrefixProvider* const dpp,
-                              rgw::sal::Driver* driver,
-                              rgw::sal::RadosStore* store,
-                              const disk_record_t *p_rec,
-                              librados::IoCtx *p_ioctx /*OUT*/,
-                              std::string *p_oid /*OUT*/)
-  {
-    rgw_bucket b{p_rec->tenant_name, p_rec->bucket_name, p_rec->bucket_id};
-    return get_ioctx_internal(dpp, driver, store, p_rec->obj_name, p_rec->instance,
-                              b, p_ioctx, p_oid);
-  }
-
-  //---------------------------------------------------------------------------
-  static inline std::string generate_split_head_tail_name(const RGWObjManifest &manifest)
-  {
-    static constexpr std::string_view shadow_string(RGW_OBJ_NS_SHADOW);
-    std::string_view suffix = "0";
-    const std::string &prefix = manifest.get_prefix();
-
-    std::string tail_name;
-    tail_name.reserve(shadow_string.size() + prefix.size() + suffix.size() + 1);
-    // TBD:
-    // it is unclear when RGW code pads with "_" before the shadow string
-    // It won't change correctness, but might look weird
-    //tail_name.append("_");
-    tail_name.append(shadow_string);
-    tail_name.append("_");
-    tail_name.append(prefix);
-    tail_name.append(suffix);
-    return tail_name;
   }
 
   //---------------------------------------------------------------------------
@@ -611,29 +572,25 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int Background::get_tail_ioctx(const disk_record_t *p_rec,
-                                 const RGWObjManifest &manifest,
-                                 const std::string &tail_name,
-                                 md5_stats_t *p_stats /*IN-OUT*/,
-                                 librados::IoCtx *p_ioctx /*OUT*/,
-                                 std::string *p_oid /*OUT*/)
+  static int get_first_tail_obj_params(const DoutPrefixProvider *dpp,
+                                       RGWRados *rados,
+                                       const RGWObjManifest &manifest,
+                                       librados::IoCtx *p_tail_ioctx, /*OUT*/
+                                       std::string *p_tail_oid /*OUT*/)
   {
-    const rgw_bucket_placement &tail_placement = manifest.get_tail_placement();
-    // Tail placement_rule was fixed before committed to SLAB, if looks bad -> abort
-    if (unlikely(invalid_tail_placement(tail_placement))) {
-      p_stats->split_head_no_tail_placement++;
-      ldpp_dout(dpp, 1) << __func__ << "::invalid_tail_placement -> abort" << dendl;
-      return -EINVAL;
-    }
-
-    const rgw_bucket& bucket = tail_placement.bucket;
-    // tail objects might be on another storage_class/pool, need another ioctx
-    int ret = get_ioctx_internal(dpp, driver, store, tail_name, p_rec->instance,
-                                 bucket, p_ioctx, p_oid);
-    if (unlikely(ret != 0)) {
-      ldpp_dout(dpp, 1) << __func__ << "::ERR: failed get_ioctx_internal()" << dendl;
+    auto p = manifest.obj_begin(dpp);
+    const rgw_obj_select& os = p.get_location();
+    rgw_raw_obj raw_obj = os.get_raw_obj(rados);
+    rgw_rados_ref obj;
+    int ret = rgw_get_rados_ref(dpp, rados->get_rados_handle(), raw_obj, &obj);
+    if (ret < 0) {
+      ldpp_dout(dpp, 1) << __func__ << "::failed rgw_get_rados_ref() for oid="
+                        << raw_obj.oid << ", err is " << cpp_strerror(-ret) << dendl;
       return ret;
     }
+
+    *p_tail_ioctx = obj.ioctx;
+    *p_tail_oid   = raw_obj.oid;
 
     return 0;
   }
@@ -641,13 +598,11 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   void Background::remove_created_tail_object(const disk_record_t *p_rec,
                                               const RGWObjManifest &manifest,
-                                              const std::string &tail_name,
                                               md5_stats_t *p_stats /*IN-OUT*/)
   {
     librados::IoCtx tail_ioctx;
     std::string tail_oid;
-    int ret = get_tail_ioctx(p_rec, manifest, tail_name, p_stats, &tail_ioctx,
-                             &tail_oid);
+    int ret = get_first_tail_obj_params(dpp, rados, manifest, &tail_ioctx, &tail_oid);
     if (unlikely(ret != 0)) {
       return;
     }
@@ -665,10 +620,41 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  inline bool Background::should_split_head(uint64_t head_size, uint64_t obj_size)
+  inline bool Background::should_split_head(const RGWObjManifest& manifest)
   {
-    // Don't split RGW objects with existing tail-objects
-    return (head_size > 0 && head_size == obj_size);
+    // Split-head is only applicable for single-part objects with a non-empty head.
+    // To avoid issues with manifests created via append (specifically for Alibaba Cloud OSS),
+    //    we should disable split-head whenever the manifest contains an override_prefix in the rules.
+    //    We also reject manifests with multiple rules which are exclusively an
+    //    artifact of the OSS AppendObject operation.
+    // The head_size should either represent the full object or be equal to the stripe_max_size.
+
+    bool     success   = false;
+    uint64_t head_size = manifest.get_head_size();
+    uint64_t obj_size  = manifest.get_obj_size();
+    RGWObjManifestRule rule;
+    if (manifest.get_rule(0, &rule)) {
+      success = (d_split_head        && // split-head was not disabled from yaml
+                 rule.part_size == 0 && // not a multi-part object
+                 head_size > 0       && // non-empty head
+                 !manifest.has_explicit_objs()    && // not an explicit manifest
+                 rule.override_prefix.empty()     && // not Alibaba Cloud OSS
+                 manifest.get_rules().size() == 1 && // not Alibaba Cloud OSS
+                 (head_size == rule.stripe_max_size || head_size == obj_size));
+
+      if (unlikely(!success)) {
+        ldpp_dout(dpp, 20) << __func__ << "::ERR::d_split_head=" << d_split_head
+                           << "::obj_size=" << obj_size
+                           << "::head_size=" << head_size
+                           << "::rule.part_size=" << rule.part_size
+                           << "::rule.stripe_max_size=" << rule.stripe_max_size
+                           << "::rule.override_prefix=" << rule.override_prefix
+                           << "::rule.override_prefix.empty()=" << rule.override_prefix.empty()
+                           << dendl;
+      }
+    } // don't split head if can't get rule
+
+    return success;
   }
 
   //---------------------------------------------------------------------------
@@ -806,14 +792,14 @@ namespace rgw::dedup {
       cls_refcount_get(op, ref_tag, true);
       d_ctl.metadata_access_throttle.acquire();
       ldpp_dout(dpp, 20) << __func__ << "::inc ref-count on tail object: "
-                         << raw_obj.oid << "::" << obj.obj.oid << dendl;
+                         << obj.obj.oid << "::" << raw_obj.to_str() << dendl;
       rgw::AioResultList completed = aio->get(obj.obj,
                                               rgw::Aio::librados_op(obj.ioctx, std::move(op), null_yield),
                                               cost, id);
       ret = rgw::check_for_errors(completed);
       all_results.splice(all_results.end(), completed);
       if (ret < 0) {
-        ldpp_dout(dpp, 1) << __func__ << "::ERROR: failed to copy obj=" << obj
+        ldpp_dout(dpp, 1) << __func__ << "::ERR: failed refcount_get() obj=" << obj
                           << ", ret=" << ret << " err is " << cpp_strerror(-ret) << dendl;
         break;
       }
@@ -965,7 +951,6 @@ namespace rgw::dedup {
                                const RGWObjManifest         &src_manifest,
                                const RGWObjManifest         &tgt_manifest,
                                md5_stats_t                  *p_stats,
-                               const std::string            &tail_name,
                                const dedup_table_t::value_t *p_src_val)
   {
     const uint64_t src_head_size = src_manifest.get_head_size();
@@ -990,7 +975,7 @@ namespace rgw::dedup {
     if (unlikely(ret != 0)) {
       ldpp_dout(dpp, 1) << __func__ << "::ERR: failed TGT get_ioctx()" << dendl;
       if (p_src_rec->s.flags.is_split_head()) {
-        remove_created_tail_object(p_src_rec, src_manifest, tail_name, p_stats);
+        remove_created_tail_object(p_src_rec, src_manifest, p_stats);
       }
       return ret;
     }
@@ -1001,7 +986,7 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 5) << __func__ << "::abort! src_head_size=" << src_head_size
                         << "::tgt_head_size=" << tgt_head_size << dendl;
       if (p_src_rec->s.flags.is_split_head()) {
-        remove_created_tail_object(p_src_rec, src_manifest, tail_name, p_stats);
+        remove_created_tail_object(p_src_rec, src_manifest, p_stats);
       }
       // TBD: can we create a test case (requires control over head-object-size)??
       return -ECANCELED;
@@ -1013,7 +998,7 @@ namespace rgw::dedup {
     ret = inc_ref_count_by_manifest(ref_tag, src_oid, src_manifest);
     if (unlikely(ret != 0)) {
       if (p_src_rec->s.flags.is_split_head()) {
-        remove_created_tail_object(p_src_rec, src_manifest, tail_name, p_stats);
+        remove_created_tail_object(p_src_rec, src_manifest, p_stats);
       }
       return ret;
     }
@@ -1053,7 +1038,7 @@ namespace rgw::dedup {
                           << src_oid << "), err is " << cpp_strerror(-ret)<<dendl;
         rollback_ref_by_manifest(ref_tag, src_oid, src_manifest);
         if (p_src_rec->s.flags.is_split_head()) {
-          remove_created_tail_object(p_src_rec, src_manifest, tail_name, p_stats);
+          remove_created_tail_object(p_src_rec, src_manifest, p_stats);
         }
         return ret;
       }
@@ -1235,8 +1220,29 @@ namespace rgw::dedup {
                            << "::ERROR: unable to decode manifest" << dendl;
         return -EINVAL;
       }
-      need_to_split_head = should_split_head(manifest.get_head_size(),
-                                             p_rec->s.obj_bytes_size);
+
+      if (unlikely(manifest.has_explicit_objs())) {
+        // we don't support dedup of explicit_objs manifest
+        p_stats->ingress_skip_explicit_objs++;
+        ldpp_dout(dpp, 20)  << __func__ << "::explicit_objs can't be dedup" << dendl;
+        return -ENOTSUP;
+      }
+
+      RGWObjManifestRule rule;
+      if (!manifest.get_rule(0, &rule)                              ||
+          // if not a multi-part must have exactly 1 rule
+          (rule.part_size == 0 && manifest.get_rules().size() != 1) ||
+          !rule.override_prefix.empty()) {
+        // we don't support dedup of Alibaba Cloud OSS using AppendObject API
+        p_stats->ingress_skip_alibaba++;
+        ldpp_dout(dpp, 10)  << __func__ << "::Alibaba Cloud OSS can't be dedup"
+                            << "::rules.size()=" << manifest.get_rules().size()
+                            << "::get_rule ret=" << manifest.get_rule(0, &rule)
+                            << "::override_prefix=" << rule.override_prefix << dendl;
+        return -ENOTSUP;
+      }
+
+      need_to_split_head = should_split_head(manifest);
 
       // force explicit tail_placement as the dedup could be on another bucket
       const rgw_bucket_placement& tail_placement = manifest.get_tail_placement();
@@ -1501,6 +1507,11 @@ namespace rgw::dedup {
     p_rec->s.flags.clear();
     ret = add_obj_attrs_to_record(p_rec, attrs, p_stats);
     if (unlikely(ret != 0)) {
+      // don't trace errors for unsupported manifest
+      if (ret == -ENOTSUP) {
+        return 0;
+      }
+
       ldpp_dout(dpp, 5) << __func__ << "::ERR: failed add_obj_attrs_to_record() ret="
                         << ret << "::" << cpp_strerror(-ret) << dendl;
       return ret;
@@ -1640,39 +1651,36 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  static void build_and_set_explicit_manifest(const DoutPrefixProvider *dpp,
-                                              const rgw_bucket *p_bucket,
-                                              const std::string &tail_name,
-                                              RGWObjManifest *p_manifest)
+  static int set_manifest_for_split_head(const DoutPrefixProvider *const dpp,
+                                         RGWObjManifest *p_manifest /*IN-OUT*/)
   {
-    uint64_t obj_size = p_manifest->get_obj_size();
-    ceph_assert(obj_size == p_manifest->get_head_size());
-
-    const rgw_obj &head_obj = p_manifest->get_obj();
-    const rgw_obj_key &head_key = head_obj.key;
-    rgw_obj_key tail_key(tail_name, head_key.instance, head_key.ns);
-    rgw_obj tail_obj(*p_bucket, tail_key);
-
-    RGWObjManifestPart tail_part;
-    tail_part.loc     = tail_obj;
-    tail_part.loc_ofs = 0;
-    tail_part.size    = obj_size;
-
-    std::map<uint64_t, RGWObjManifestPart> objs_map;
-    objs_map[0] = tail_part;
-
+    // Set head-size to zero in the manifest with start_ofs set to zero
+    // This means no data is stored in the head-object and the first tail-object
+    //      holds the first data byte
+    uint64_t tail_ofs = 0;
     p_manifest->set_head_size(0);
     p_manifest->set_max_head_size(0);
-    p_manifest->set_prefix("");
-    p_manifest->clear_rules();
-    p_manifest->set_explicit(obj_size, objs_map);
+    RGWObjManifestRule rule;
+    if (p_manifest->get_rule(0, &rule)) {
+      ldpp_dout(dpp, 20) << "OLD Rule::start_part_num="<< rule.start_part_num
+                         << "::start_ofs=" << rule.start_ofs
+                         << "::part_size=" << rule.part_size
+                         << "::stripe_max_size=" << rule.stripe_max_size
+                         << "::override_prefix=" << rule.override_prefix << dendl;
+      p_manifest->clear_rules();
+      p_manifest->set_trivial_rule(tail_ofs, rule.stripe_max_size);
+      return 0;
+    }
+    else {
+      // No Rules, probably explicit_objs - should never happen (was checked before)
+      return -ENOENT;
+    }
   }
 
   //---------------------------------------------------------------------------
   int Background::split_head_object(disk_record_t *p_src_rec, // IN-OUT PARAM
                                     RGWObjManifest &src_manifest, // IN/OUT PARAM
                                     const disk_record_t *p_tgt_rec,
-                                    std::string *p_tail_name /*OUT*/,
                                     md5_stats_t *p_stats /* IN-OUT */)
   {
     ldpp_dout(dpp, 20) << __func__ << "::" << p_src_rec->obj_name << "::"
@@ -1719,11 +1727,14 @@ namespace rgw::dedup {
       }
     }
 
-    *p_tail_name = generate_split_head_tail_name(src_manifest);
+    ret = set_manifest_for_split_head(dpp, &src_manifest);
+    if (unlikely(ret != 0)) {
+      return ret;
+    }
+
     librados::IoCtx tail_ioctx;
     std::string tail_oid;
-    ret = get_tail_ioctx(p_src_rec, src_manifest, *p_tail_name, p_stats,
-                         &tail_ioctx, &tail_oid);
+    ret = get_first_tail_obj_params(dpp, rados, src_manifest, &tail_ioctx, &tail_oid);
     if (unlikely(ret != 0)) {
       return ret;
     }
@@ -1762,8 +1773,6 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 20) << __func__ << "::wrote tail obj:" << tail_oid << "::ret="
                          << ret << dendl;
     }
-    const rgw_bucket *p_bucket = &(src_manifest.get_tail_placement().bucket);
-    build_and_set_explicit_manifest(dpp, p_bucket, *p_tail_name, &src_manifest);
 
     bufferlist manifest_bl;
     encode(src_manifest, manifest_bl);
@@ -1779,7 +1788,6 @@ namespace rgw::dedup {
                                              RGWObjManifest &src_manifest,
                                              const RGWObjManifest &tgt_manifest,
                                              const dedup_table_t::value_t *p_src_val,
-                                             std::string *p_tail_name /*OUT*/,
                                              md5_stats_t *p_stats)
   {
     int ret = 0;
@@ -1822,9 +1830,8 @@ namespace rgw::dedup {
     // we might still need to split-head here when hash is valid
     // can happen if we failed compare before (md5-collison) and stored the src hash
     // in the obj-attributes
-    uint64_t head_size = src_manifest.get_head_size();
-    if (should_split_head(head_size, src_manifest.get_obj_size())) {
-      ret = split_head_object(p_src_rec, src_manifest, p_tgt_rec, p_tail_name, p_stats);
+    if (should_split_head(src_manifest)) {
+      ret = split_head_object(p_src_rec, src_manifest, p_tgt_rec, p_stats);
       // compare_strong_hash() is called internally by split_head_object()
       return (ret == 0);
     }
@@ -2052,9 +2059,9 @@ namespace rgw::dedup {
     if (unlikely(has_shared_tail_objects(dpp, rados, p_src_rec, p_tgt_rec, src_manifest, tgt_manifest, p_stats))) {
       return 0;
     }
-    std::string tail_name;
+
     bool success = check_and_set_strong_hash(p_src_rec, p_tgt_rec, src_manifest,
-                                             tgt_manifest, &src_val, &tail_name, p_stats);
+                                             tgt_manifest, &src_val, p_stats);
     if (unlikely(!success)) {
       if (p_src_rec->s.flags.hash_calculated() && !src_val.has_valid_hash()) {
         // set hash attributes on head objects to save calc next time
@@ -2073,7 +2080,7 @@ namespace rgw::dedup {
     }
 
     ret = dedup_object(p_src_rec, p_tgt_rec, src_manifest, tgt_manifest, p_stats,
-                       tail_name, &src_val);
+                       &src_val);
     if (ret == 0) {
       ldpp_dout(dpp, 20) << __func__ << "::dedup success " << p_src_rec->obj_name << dendl;
       p_stats->deduped_objects++;
@@ -2082,12 +2089,6 @@ namespace rgw::dedup {
         ldpp_dout(dpp, 20) << __func__ <<"::TGT-Split: dedup_bytes="
                            << ondisk_byte_size << dendl;
         p_stats->split_head_dedup_bytes += ondisk_byte_size;
-      }
-      else if (p_tgt_rec->s.num_parts == 0 &&
-               // if we don't split head it will be duplicated
-               p_tgt_rec->s.obj_bytes_size > d_head_object_size) {
-        // single part objects duplicate the head object when dedup is used
-        p_stats->dup_head_bytes += d_head_object_size;
       }
 
       // mark the SRC object as a providor of a shared manifest
@@ -2287,7 +2288,6 @@ namespace rgw::dedup {
 
     // ceph store full blocks so need to round up and multiply by block_size
     uint64_t ondisk_byte_size = calc_on_disk_byte_size(entry.meta.size);
-    // count all objects including too small and non default storage_class objs
     p_worker_stats->ingress_obj++;
     p_worker_stats->ingress_obj_bytes += ondisk_byte_size;
 
@@ -2309,17 +2309,11 @@ namespace rgw::dedup {
 
     if (ondisk_byte_size < d_min_obj_size_for_dedup) {
       if (parsed_etag.num_parts == 0) {
-        // dedup only useful for objects bigger than 4MB
+        // dedup is only applied to objects larger than the configured minimum size
+        // `rgw_dedup_min_obj_size_for_dedup`
         p_worker_stats->ingress_skip_too_small++;
         p_worker_stats->ingress_skip_too_small_bytes += ondisk_byte_size;
-
-        if (ondisk_byte_size >= 64*1024) {
-          p_worker_stats->ingress_skip_too_small_64KB++;
-          p_worker_stats->ingress_skip_too_small_64KB_bytes += ondisk_byte_size;
-        }
-        else {
-          return 0;
-        }
+        return 0;
       }
       else {
         // multipart objects are always good candidates for dedup
@@ -2531,8 +2525,6 @@ namespace rgw::dedup {
                        << "::total_count="      << obj_count_in_shard
                        << "::loaded_objects="   << p_stats->loaded_objects
                        << p_stats->big_objs_stat << dendl;
-    ldpp_dout(dpp, 10) << __func__ << "::small objs::"
-                       << p_stats->small_objs_stat << dendl;
   }
 
   //---------------------------------------------------------------------------
@@ -2557,7 +2549,7 @@ namespace rgw::dedup {
         return -ECANCELED;
       }
     }
-    p_table->count_duplicates(&p_stats->small_objs_stat, &p_stats->big_objs_stat);
+    p_table->count_duplicates(&p_stats->big_objs_stat);
     display_table_stat_counters(dpp, p_stats);
 
     ldpp_dout(dpp, 10) << __func__ << "::MD5 Loop::" << d_ctl.dedup_type << dendl;
@@ -2839,7 +2831,7 @@ namespace rgw::dedup {
     md5_stats_t md5_stats;
     //DEDUP_DYN_ALLOC
     dedup_table_t table(dpp, d_head_object_size, d_min_obj_size_for_dedup,
-                        d_max_obj_size_for_split, raw_mem, raw_mem_size);
+                        d_split_head, raw_mem, raw_mem_size);
     int ret = objects_dedup_single_md5_shard(&table, md5_shard, &md5_stats, num_work_shards);
     if (ret == 0) {
       md5_stats.duration = ceph_clock_now() - start_time;

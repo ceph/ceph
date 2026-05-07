@@ -544,7 +544,7 @@ TransactionManager::do_submit_transaction(
     tref.get_handle().enter(write_pipeline.prepare)
   );
 
-  while (tref.need_wait_rewrite) {
+  while (tref.need_wait_visibility) {
     co_await trans_intr::make_interruptible(seastar::yield());
   }
   if (trim_alloc_to && *trim_alloc_to != JOURNAL_SEQ_NULL) {

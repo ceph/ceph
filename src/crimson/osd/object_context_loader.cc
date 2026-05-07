@@ -158,32 +158,17 @@ ObjectContextLoader::load_obc(
   PGBackend::load_metadata_iertr::future<PGBackend::loaded_object_md_t::ref> _md)
 {
   LOG_PREFIX(ObjectContextLoader::load_obc);
-  return std::move(_md)
-    .safe_then_interruptible(
-      [FNAME, this, obc=std::move(obc)](auto md)
-      -> load_obc_ertr::future<> {
-	const hobject_t& oid = md->os.oi.soid;
-	DEBUGDPP("loaded obs {} for {}", dpp, md->os.oi, oid);
-	if (oid.is_head()) {
-	  if (!md->ssc) {
-	    ERRORDPP("oid {} missing snapsetcontext", dpp, oid);
-	    return crimson::ct_error::object_corrupted::make();
-	  }
-	  obc->set_head_state(std::move(md->os),
-			      std::move(md->ssc));
-	} else {
-	  // we load and set the ssc only for head obc.
-	  // For clones, the head's ssc will be referenced later.
-	  // See set_clone_ssc
-	  obc->set_clone_state(std::move(md->os));
-	}
-	obc->attr_cache = std::move(md->attr_cache);
-	DEBUGDPP("loaded obc {} for {}", dpp, obc->obs.oi, obc->obs.oi.soid);
-	return seastar::now();
-      });
+  auto md = co_await std::move(_md);
+  if (md->os.oi.soid.is_head() && !md->ssc) {
+	  ERRORDPP("oid {} missing snapsetcontext",
+               dpp, md->os.oi.soid);
+	  co_await load_obc_iertr::future<>(
+          crimson::ct_error::object_corrupted::make());
+  }
+  load_obc(obc, std::move(md));
 }
 
-ObjectContextLoader::load_obc_iertr::future<>
+void
 ObjectContextLoader::load_obc(
   ObjectContextRef obc,
   PGBackend::loaded_object_md_t::ref md)
@@ -192,10 +177,7 @@ ObjectContextLoader::load_obc(
   LOG_PREFIX(ObjectContextLoader::load_obc);
   DEBUGDPP("loaded obs {} for {}", dpp, md->os.oi, oid);
   if (oid.is_head()) {
-    if (!md->ssc) {
-      ERRORDPP("oid {} missing snapsetcontext", dpp, oid);
-      return crimson::ct_error::object_corrupted::make();
-    }
+    ceph_assert(md->ssc);
     obc->set_head_state(std::move(md->os),
 		      std::move(md->ssc));
   } else {
@@ -206,7 +188,6 @@ ObjectContextLoader::load_obc(
   }
   obc->attr_cache = std::move(md->attr_cache);
   DEBUGDPP("loaded obc {} for {}", dpp, obc->obs.oi, obc->obs.oi.soid);
-  return seastar::now();
 }
 
 void ObjectContextLoader::notify_on_change(bool is_primary)

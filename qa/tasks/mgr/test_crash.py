@@ -106,3 +106,22 @@ class TestCrash(MgrTestCase):
             'crash', 'ls',
         )
         self.assertNotIn(self.oldest_crashid, retstr)
+
+    def test_info_nonexistent(self):
+        rc = self.mgr_cluster.mon_manager.raw_cluster_cmd_result(
+            'crash', 'info', 'does-not-exist',
+        )
+        self.assertNotEqual(0, rc)
+
+    def test_post_malformed(self):
+        rc = self.mgr_cluster.mon_manager.raw_cluster_cmd_result(
+            'crash', 'post', '-i', '-',
+            stdin='{"not_a_valid_crash": true}',
+        )
+        self.assertNotEqual(0, rc)
+
+    def test_archive_nonexistent(self):
+        rc = self.mgr_cluster.mon_manager.raw_cluster_cmd_result(
+            'crash', 'archive', 'does-not-exist',
+        )
+        self.assertNotEqual(0, rc)

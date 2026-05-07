@@ -9,7 +9,7 @@ you can profile Ceph's CPU usage. See `Installing Oprofile`_ for details.
 Initializing oprofile
 =====================
 
-``oprofile`` must be initalized the first time it is used. Locate the
+``oprofile`` must be initialized the first time it is used. Locate the
 ``vmlinux`` image that corresponds to the kernel you are running:
 
 .. prompt:: bash $

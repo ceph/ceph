@@ -9,11 +9,15 @@
 
 # For Orchestrator related PRs
 /src/cephadm                                    @ceph/orchestrators
+/src/cephadm/cephadmlib/daemons/smb.py          @ceph/orchestrators @ceph/smb
 /src/pybind/mgr/orchestrator                    @ceph/orchestrators
 /src/pybind/mgr/rook                            @ceph/orchestrators
 /src/pybind/mgr/cephadm                         @ceph/orchestrators
+/src/pybind/mgr/cephadm/services/smb.py         @ceph/orchestrators @ceph/smb
 /src/pybind/mgr/test_orchestrator               @ceph/orchestrators
+/src/pybind/mgr/smb                             @ceph/orchestrators @ceph/smb
 /src/python-common                              @ceph/orchestrators
+/src/python-common/ceph/smb                     @ceph/orchestrators @ceph/smb
 /qa/workunits/cephadm                           @ceph/orchestrators
 /qa/tasks/cephadm.py                            @ceph/orchestrators
 /qa/tasks/cephadm_cases                         @ceph/orchestrators
@@ -181,3 +185,19 @@ README*                                         @ceph/doc-writers
 /src/test/cls_version                           @ceph/rgw
 /src/test/rgw                                   @ceph/rgw
 /src/test/test_rgw*                             @ceph/rgw
+
+# build scripts and tools
+/ceph.spec.in                                   @ceph/build-sig
+/container                                      @ceph/build-sig
+/debian                                         @ceph/build-sig
+/do_cmake.sh                                    @ceph/build-sig
+/install-deps.sh                                @ceph/build-sig
+/make-debs.sh                                   @ceph/build-sig
+/make-srpm.sh                                   @ceph/build-sig
+/run-make-check.sh                              @ceph/build-sig
+/src/script/build-with-container.py             @ceph/build-sig
+/src/script/buildcontainer-setup.sh             @ceph/build-sig
+/src/script/run-make.sh                         @ceph/build-sig
+
+# cephfs proxy
+/src/libcephfs_proxy                            @ceph/smb

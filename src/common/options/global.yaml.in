@@ -930,7 +930,7 @@ options:
   level: advanced
   desc: Messenger implementation to use for network communication
   fmt_desc: Transport type used by Async Messenger. Can be ``async+posix``,
-    ``async+dpdk`` or ``async+rdma``. Posix uses standard TCP/IP networking and is
+    ``async+dpdk``, ``async+rdma``, or ``async+smc``. Posix uses standard TCP/IP networking and is
     default. Other transports may be experimental and support may be limited.
   default: async+posix
   flags:
@@ -4684,9 +4684,9 @@ options:
 - name: bluestore_prefer_deferred_size
   type: size
   level: advanced
-  desc: Writes smaller than this size will be written to the journal and then asynchronously
-    written to the device.  This can be beneficial when using rotational media where
-    seeks are expensive, and is helpful both with and without solid state journal/wal
+  desc: Writes smaller than this size will be written to the WAL and then asynchronously
+    written to the block (slow) device.  This can be beneficial when using rotational media where
+    seeks are expensive, and is helpful both with and without SSD WAL.
     devices.
   default: 0
   flags:
@@ -4705,7 +4705,7 @@ options:
 - name: bluestore_prefer_deferred_size_ssd
   type: size
   level: advanced
-  desc: Default bluestore_prefer_deferred_size for non-rotational (solid state) media
+  desc: Default bluestore_prefer_deferred_size for non-rotational (SSD) media
   default: 0
   see_also:
   - bluestore_prefer_deferred_size
@@ -4850,6 +4850,35 @@ options:
   flags:
   - runtime
   with_legacy: true
+- name: bluestore_frag_runtime
+  type: bool
+  level: advanced
+  desc: Enable tracking of runtime object fragmentation during reads.
+  long_desc: When enabled, BlueStore measures runtime object fragmentation
+    by counting how many physical extents are accessed for a read operation.
+    Higher values indicate more fragmented object data and potential
+    performance impact. The collected metric reflects runtime access patterns
+    rather than static object layout.
+  default: false
+  flags:
+  - runtime
+  with_legacy: true
+  see_also:
+  - bluestore_frag_static
+- name: bluestore_frag_static
+  type: bool
+  level: advanced
+  desc: Enable tracking of static object fragmentation during scrub
+  long_desc: When enabled, BlueStore measures static object fragmentation during
+    scrub by counting the number of disjoint physical extents that make up object's
+    on-disk layout. The collection-level static fragmentation score is computed as
+    the sum of the fragmentation scores of objects visited during the scrub process.
+  default: false
+  flags:
+  - runtime
+  with_legacy: true
+  see_also:
+  - bluestore_frag_runtime
 # Specifies minimum expected amount of saved allocation units
 # per single blob to enable compressed blobs garbage collection
 - name: bluestore_gc_enable_blob_threshold
@@ -5672,6 +5701,14 @@ options:
   see_also:
   - bluestore_slow_ops_warn_lifetime
   - osd_op_complaint_time
+- name: bluestore_slow_scrub_ops_warn_threshold
+  type: uint
+  level: advanced
+  desc: Set the minimum number of BlueStore slow scrub ops before raising a health warning
+  default: 1
+  with_legacy: true
+  see_also:
+  - bluestore_slow_ops_warn_threshold
 - name: bluestore_fsck_error_on_no_per_pool_omap
   type: bool
   level: advanced
@@ -5700,6 +5737,12 @@ options:
   type: float
   level: advanced
   desc: Log a BlueStore operation if it is slower than this age (seconds)
+  default: 5
+  with_legacy: true
+- name: bluestore_log_scrub_op_age
+  type: float
+  level: advanced
+  desc: Log a BlueStore Scrub operation if it is slower than this age (seconds)
   default: 5
   with_legacy: true
 - name: bluestore_log_omap_iterator_age

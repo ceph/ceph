@@ -15,6 +15,7 @@
 
 #include <fcntl.h>
 #include <glob.h>
+#include <kv/KeyValueDB.h>
 #include <stdio.h>
 #include <string.h>
 #include <iostream>
@@ -203,21 +204,40 @@ protected:
 
 #ifdef WITH_BLUESTORE
 
-class MultiLabelTest : public StoreTestDeferredSetup {
-  public:
-  std::string get_data_dir() {
-    return data_dir;
-  }
+
+class CheckedUmount: public StoreTestDeferredSetup {
+public:
   bool mounted = false;
-  int mount() {
+  virtual int mount() {
     int r = store->mount();
     if (r == 0) mounted = true;
     return r;
   }
-  void umount() {
+  virtual void umount() {
     ASSERT_TRUE(mounted);
     store->umount();
     mounted = false;
+  }
+
+protected:
+  void DeferredSetup() {
+    StoreTest::SetUp();
+    mounted = true;
+  }
+  void TearDown() override {
+    if (mounted) {
+      store->umount();
+    }
+    StoreTest::RemoveTestObjectStore();
+    store = nullptr;
+    StoreTest::TearDown();
+  }
+};
+
+class MultiLabelTest : public CheckedUmount {
+  public:
+  std::string get_data_dir() {
+    return data_dir;
   }
   bool bdev_supports_label() {
     BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
@@ -256,21 +276,95 @@ class MultiLabelTest : public StoreTestDeferredSetup {
     bdev->close();
     return r;
   }
-  protected:
-  void DeferredSetup() {
-    StoreTest::SetUp();
-    mounted = true;
-  }
-  void TearDown() override {
-    if (mounted) {
-      store->umount();
-    }
-    StoreTest::RemoveTestObjectStore();
-    store = nullptr;
-    StoreTest::TearDown();
-  }
 };
 
+class CorruptedOnodesTest : public CheckedUmount {
+public:
+  std::string get_data_dir() {
+    return data_dir;
+  }
+  int mount() override {
+    int r = store->mount();
+    if (r == 0) mounted = true;
+    return r;
+  }
+  void umount() override {
+    ASSERT_TRUE(mounted);
+    store->umount();
+    mounted = false;
+  }
+
+  int write_object(
+    coll_t cid,
+    ObjectStore::CollectionHandle ch,
+    ghobject_t hoid,
+    size_t size)
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    bl.append(std::string(size, 'x'));
+    t.write(cid, hoid, 0, bl.length(), bl);
+    int r = queue_transaction(store, ch, std::move(t));
+    return r;
+  }
+
+  coll_t cid;
+  ObjectStore::CollectionHandle ch;
+
+  void prepare_store()
+  {
+    static constexpr uint64_t _1G = uint64_t(1024)*1024*1024;
+    static constexpr uint64_t _1M = uint64_t(1) * 1024 * 1024;
+    SetVal(g_conf(), "bluestore_block_size", stringify(101 * _1G).c_str());
+    g_conf().apply_changes(nullptr);
+    DeferredSetup();
+
+    cid = coll_t(spg_t(pg_t(1, 222), shard_id_t::NO_SHARD));
+
+    ghobject_t hoid1(hobject_t(sobject_t("aaaa_Object 1", CEPH_NOSNAP), "", 1, 222, ""));
+    ghobject_t hoid_special(hobject_t(sobject_t("my_special_object", CEPH_NOSNAP), "", 1, 222, ""));
+    ghobject_t hoid2(hobject_t(sobject_t("zzzz_Object 2", CEPH_NOSNAP), "", 1, 222, ""));
+    //set hashes to have special object in the middle
+    hoid1.hobj.       set_hash(0x00000000); //0
+    hoid_special.hobj.set_hash(0x80000000); //1
+    hoid2.hobj.       set_hash(0x40000000); //2
+
+    ch = store->create_new_collection(cid);
+    {
+      ObjectStore::Transaction t;
+      t.create_collection(cid, 0);
+      int r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+
+    write_object(cid, ch, hoid1, 4 * _1M);
+    write_object(cid, ch, hoid_special, 4 * _1M);
+    write_object(cid, ch, hoid2, 4 * _1M);
+
+    ch.reset();
+    umount();
+  }
+
+  void cleanup_store()
+  {
+    ghobject_t hoid1(hobject_t(sobject_t("aaaa_Object 1", CEPH_NOSNAP),"", 1, 222,""));
+    ghobject_t hoid_special(hobject_t(sobject_t("my_special_object", CEPH_NOSNAP),"", 1, 222,""));
+    ghobject_t hoid2(hobject_t(sobject_t("zzzz_Object 2", CEPH_NOSNAP),"", 1, 222,""));
+    mount();
+    ch = store->open_collection(cid);
+    {
+      ObjectStore::Transaction t;
+      t.remove(cid, hoid1);
+      t.remove(cid, hoid_special);
+      t.remove(cid, hoid2);
+      t.remove_collection(cid);
+      int r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    ch.reset();
+    umount();
+  }
+};
 #endif // WITH_BLUESTORE
 
 class StoreTestSpecificAUSize : public StoreTestDeferredSetup {
@@ -7256,6 +7350,12 @@ INSTANTIATE_TEST_SUITE_P(
   ::testing::Values(
     "bluestore"));
 
+INSTANTIATE_TEST_SUITE_P(
+  BlueStore,
+  CorruptedOnodesTest,
+  ::testing::Values("bluestore")
+);
+
 #endif // WITH_BLUESTORE
 
 struct deferred_test_t {
@@ -11363,6 +11463,138 @@ TEST_P(MultiLabelTest, UpgradeToMultiLabelCollisionWithObjects) {
   auto it = label.meta.find("epoch");
   ASSERT_NE(it, label.meta.end());
   ASSERT_EQ(label.meta["multi"], "yes");
+}
+
+TEST_P(CorruptedOnodesTest, Recover_TolerateMissingHeadShard)
+{
+  SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
+  prepare_store();
+
+  mount();
+  BlueStore* bs = dynamic_cast<BlueStore*>(store.get());
+  ceph_assert(bs);
+  KeyValueDB* pdb = bs->get_kv();
+  KeyValueDB::Iterator it = pdb->get_iterator("O");
+  it->seek_to_first();
+  while (it->valid()) {
+    if (it->key().contains("my_special_object") &&
+    it->key().ends_with("o")) {
+      //delete main key for the object
+      auto trans = pdb->get_transaction();
+      trans->rm_single_key("O", it->key());
+      pdb->submit_transaction_sync(trans);
+      break;
+    }
+    it->next();
+  }
+  it.reset();
+  umount();
+
+  SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "1");
+  g_conf().apply_changes(nullptr);
+  cleanup_store();
+}
+
+TEST_P(CorruptedOnodesTest, Fsck_FixMissingHeadShard)
+{
+  SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
+  prepare_store();
+
+  mount();
+  BlueStore* bs = dynamic_cast<BlueStore*>(store.get());
+  ceph_assert(bs);
+  KeyValueDB* pdb = bs->get_kv();
+  KeyValueDB::Iterator it = pdb->get_iterator("O");
+  it->seek_to_first();
+  while (it->valid()) {
+    if (it->key().contains("my_special_object") &&
+    it->key().ends_with("o")) {
+      //delete main key for the object
+      auto trans = pdb->get_transaction();
+      trans->rm_single_key("O", it->key());
+      pdb->submit_transaction_sync(trans);
+      break;
+    }
+    it->next();
+  }
+  it.reset();
+  umount();
+
+  ASSERT_GT(store->fsck(false), 8); // I observe 11, so 8 seems safe
+  ASSERT_EQ(store->repair(false), 0);
+  ASSERT_EQ(store->fsck(false), 0);
+
+  cleanup_store();
+}
+
+TEST_P(CorruptedOnodesTest, Fsck_FixExtraShard)
+{
+  SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
+  prepare_store();
+  mount();
+  BlueStore* bs = dynamic_cast<BlueStore*>(store.get());
+  ceph_assert(bs);
+  KeyValueDB* pdb = bs->get_kv();
+  KeyValueDB::Iterator it = pdb->get_iterator("O");
+  it->seek_to_first();
+  while (it->valid()) {
+    if (it->key().contains("my_special_object") &&
+        it->key().ends_with("x")) {
+      //duplicate shard into offset +1
+      auto trans = pdb->get_transaction();
+      std::string new_key = it->key();
+      new_key[new_key.size() - 2] = '\001';
+      trans->set("O", new_key, it->value());
+      pdb->submit_transaction_sync(trans);
+      break;
+    }
+    it->next();
+  }
+  it.reset();
+  umount();
+
+  ASSERT_EQ(store->fsck(false), 1);
+  ASSERT_EQ(store->repair(false), 0);
+  ASSERT_EQ(store->fsck(false), 0);
+
+  cleanup_store();
+}
+
+TEST_P(CorruptedOnodesTest, Fsck_Fix3ExtraShards) {
+  SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
+  prepare_store();
+
+  mount();
+  BlueStore* bs = dynamic_cast<BlueStore*>(store.get());
+  ceph_assert(bs);
+  KeyValueDB* pdb = bs->get_kv();
+  KeyValueDB::Iterator it = pdb->get_iterator("O");
+  it->seek_to_first();
+  while (it->valid()) {
+    if (it->key().contains("my_special_object") &&
+        it->key().ends_with("x")) {
+      //duplicate shard into offset +1
+      auto trans = pdb->get_transaction();
+      std::string new_key = it->key();
+      new_key[new_key.size() - 2] = '\001';
+      trans->set("O", new_key, it->value());
+      new_key[new_key.size() - 2] = '\002';
+      trans->set("O", new_key, it->value());
+      new_key[new_key.size() - 2] = '\003';
+      trans->set("O", new_key, it->value());
+      pdb->submit_transaction_sync(trans);
+      break;
+    }
+    it->next();
+  }
+  it.reset();
+  umount();
+
+  ASSERT_EQ(store->fsck(false), 3);
+  ASSERT_EQ(store->repair(false), 0);
+  ASSERT_EQ(store->fsck(false), 0);
+
+  cleanup_store();
 }
 
 #endif // WITH_BLUESTORE

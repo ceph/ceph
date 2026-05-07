@@ -227,15 +227,15 @@ class CephfsConnectionPool(object):
 
     def cleanup_connections(self) -> None:
         with self.lock:
-            logger.info("scanning for idle connections..")
+            logger.debug("scanning for idle connections...")
             idle_conns = []
             for fs_name, connections in self.connections.items():
                 logger.debug(f'fs_name ({fs_name}) connections ({connections})')
                 for connection in connections:
                     if connection.is_connection_idle(CephfsConnectionPool.CONNECTION_IDLE_INTERVAL):
                         idle_conns.append((fs_name, connection))
-            logger.info(f'cleaning up connections: {idle_conns}')
             for idle_conn in idle_conns:
+                logger.info(f'cleaning up connection: {idle_conn}')
                 self._del_connection(idle_conn[0], idle_conn[1])
 
     def get_fs_handle(self, fs_name: str) -> "cephfs.LibCephFS":
@@ -438,6 +438,28 @@ class CephFSEarmarkResolver:
             return parsed.top == top_level_scope
         except EarmarkParseError:
             return False
+
+
+class NvmeofMetadataPoolHelper:
+    def __init__(self, mgr: "MgrModule") -> None:
+        self.mgr = mgr
+
+    def is_module_enabled(self, module: str) -> bool:
+        mgr_map = self.mgr.get('mgr_map')
+        return (
+            module in mgr_map.get('modules', [])
+            or module in mgr_map.get('always_on_modules', {}).get(self.mgr.release_name, [])
+        )
+
+    def create_pool_if_needed(self) -> None:
+        from orchestrator import OrchestratorError
+
+        if not self.is_module_enabled('nvmeof'):
+            raise OrchestratorError(
+                'NVMe-oF support requires the nvmeof manager module to be enabled before proceeding. '
+                'Enable it with: ceph mgr module enable nvmeof'
+            )
+        self.mgr.remote('nvmeof', 'create_pool_if_not_exists')
 
 
 @contextlib.contextmanager

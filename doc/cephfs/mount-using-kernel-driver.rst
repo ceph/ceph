@@ -35,6 +35,8 @@ command:
 
    stat /sbin/mount.ceph
 
+.. _cephfs_which_kernel_version:
+
 Which Kernel Version?
 ---------------------
 

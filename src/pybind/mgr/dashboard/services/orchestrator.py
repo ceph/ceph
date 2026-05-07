@@ -164,8 +164,9 @@ class OsdManager(ResourceManager):
 
 class DaemonManager(ResourceManager):
     @wait_api_result
-    def action(self, daemon_name='', action='', image=None):
-        return self.api.daemon_action(daemon_name=daemon_name, action=action, image=image)
+    def action(self, daemon_name='', action='', image=None, force=False):
+        return self.api.daemon_action(daemon_name=daemon_name, action=action, image=image,
+                                      force=force)
 
 
 class UpgradeManager(ResourceManager):

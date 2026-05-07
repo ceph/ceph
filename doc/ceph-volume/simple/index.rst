@@ -27,6 +27,6 @@ The scanning will infer everything that ``ceph-volume`` needs to start the OSD,
 so that when activation is needed, the OSD can start normally without getting
 interference from ``ceph-disk``.
 
-As part of the activation process the systemd units for ``ceph-disk`` in charge
-of reacting to ``udev`` events, are linked to ``/dev/null`` so that they are
+As part of the activation process, the systemd units for ``ceph-disk`` in charge
+of reacting to ``udev`` events are linked to ``/dev/null`` so that they are
 fully inactive.

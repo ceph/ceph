@@ -301,6 +301,9 @@
 /* Define if you have RISC-V ZVBC extension */
 #cmakedefine HAVE_RISCV_ZVBC 1
 
+/* Define if you have RISC-V ZBC extension */
+#cmakedefine HAVE_RISCV_ZBC 1
+
 /* Define if you have struct stat.st_mtimespec.tv_nsec */
 #cmakedefine HAVE_STAT_ST_MTIMESPEC_TV_NSEC
 

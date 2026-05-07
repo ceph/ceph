@@ -109,16 +109,34 @@ export class NvmeofInitiatorsFormComponent implements OnInit {
   }
 
   onSubmit(payload: InitiatorsFormPayload) {
-    this.isSubmitLoading = true;
     const taskUrl = `nvmeof/initiator/add`;
-    const hostKeyList = payload.hostDchapKeyList || [];
-    const addedHosts = payload.addedHosts || [];
+    const hostKeyList = (payload.hostDchapKeyList || []).filter((host) => !!host?.host_nqn?.trim());
+    const addedHosts = (payload.addedHosts || []).filter((host) => !!host?.trim());
     const hosts =
       payload.hostType === HOST_TYPE.SPECIFIC
         ? hostKeyList.length
           ? hostKeyList
           : addedHosts.map((host_nqn: string) => ({ host_nqn, dhchap_key: '' }))
         : [];
+
+    if (payload.hostType === HOST_TYPE.SPECIFIC && hosts.length === 0) {
+      const hostStepIndex = Math.max(
+        this.tearsheet?.getStepIndexByLabel(STEP_LABELS.HOSTS) ?? 0,
+        0
+      );
+      const hostStepForm = this.tearsheet?.stepContents?.toArray()?.[hostStepIndex]?.stepComponent
+        ?.formGroup;
+
+      hostStepForm?.markAllAsTouched();
+      hostStepForm?.get('hostname')?.markAsTouched();
+      hostStepForm?.get('hostname')?.updateValueAndValidity({ emitEvent: true });
+      if (this.tearsheet) {
+        this.tearsheet.currentStep = hostStepIndex;
+      }
+      return;
+    }
+
+    this.isSubmitLoading = true;
 
     const request: SubsystemInitiatorRequest = {
       allow_all: payload.hostType === HOST_TYPE.ALL,

@@ -67,7 +67,22 @@ class CBT(Task):
 
         if system_type == 'rpm':
             install_cmd = ['sudo', 'yum', '-y', 'install']
-            cbt_depends = ['librbd-devel', 'pdsh', 'pdsh-rcmd-ssh','perf']
+            cbt_depends = ['librbd-devel', 'perf']
+
+            # pdsh is not available in the repos for el10, use el9 version which works fine
+            os_version = misc.get_distro_version(self.ctx)
+            os_major_version = int(os_version.split('.')[0])
+            if os_major_version >= 10:
+                self.log.info('Installing pdsh from el9 repo into el10 system')
+                pdsh_base = 'https://dl.fedoraproject.org/pub/epel/9/Everything/x86_64/Packages/p'
+                self.first_mon.run(args=[
+                    'sudo', 'yum', '-y', 'install',
+                    f'{pdsh_base}/pdsh-2.34-7.el9.x86_64.rpm',
+                    f'{pdsh_base}/pdsh-rcmd-ssh-2.34-7.el9.x86_64.rpm',
+                ])
+            else:
+                cbt_depends += ['pdsh', 'pdsh-rcmd-ssh']
+
             self.log.info('Installing collectl')
             collectl_location = "https://sourceforge.net/projects/collectl/files/collectl/collectl-4.3.1/collectl-4.3.1.src.tar.gz/download"
             self.first_mon.run(

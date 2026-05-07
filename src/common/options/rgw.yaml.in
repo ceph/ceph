@@ -81,6 +81,18 @@ options:
   default: false
   services:
   - rgw
+- name: rgw_dedup_split_obj_head
+  type: bool
+  level: advanced
+  desc: Enables the split-head functionality
+  long_desc: Dedup code can split head object into two objects -
+             one with attributes and no data and a new tail-object with only data.
+             The new-tail object will be deduped (unlike the head objects which
+             can't be deduplicated)
+  default: true
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_dedup_min_obj_size_for_dedup
   type: size
   level: advanced
@@ -4374,6 +4386,17 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: rgw_relaxed_topic_names
+  type: bool
+  level: advanced
+  desc: RGW enable relaxed topic names
+  long_desc: RGW enable relaxed topic names to allow changing existing topics
+    that were created before validation rules were implemented. This also allows re-creating
+    topics that were deleted, but match names that are already used externally (e.g. in Kafka)
+  default: false
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_lua_max_memory_per_state
   type: uint
   level: advanced
@@ -4475,6 +4498,17 @@ options:
   long_desc: Delivery error occurs when the message timeout is exceeded.
     Value must be greater than zero, if set to zero, a value of 1 millisecond will be used.
   default: 5000
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_kafka_max_batch_size
+  type: uint
+  level: advanced
+  desc: This is the maximum size in bytes of a batch of messages sent to kafka
+  long_desc: This is the maximum size in bytes of a batch of messages sent to kafka. Messages will be sent
+    in batches to improve performance, and this option sets the maximum size of those batches.
+    If set to zero, the value is not set and the default batch size will be used.
+  default: 0
   services:
   - rgw
   with_legacy: true

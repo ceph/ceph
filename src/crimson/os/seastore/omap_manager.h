@@ -75,7 +75,7 @@ public:
   virtual omap_get_value_ret omap_get_value(
     const omap_root_t &omap_root,
     Transaction &t,
-    const std::string &key) = 0;
+    std::string key) = 0;
 
   /**
    * set key value mapping in omap
@@ -91,15 +91,15 @@ public:
   virtual omap_set_key_ret omap_set_key(
     omap_root_t &omap_root,
     Transaction &t,
-    const std::string &key,
-    const ceph::bufferlist &value) = 0;
+    std::string key,
+    ceph::bufferlist value) = 0;
 
   using omap_set_keys_iertr = omap_set_key_iertr;
   using omap_set_keys_ret = omap_set_keys_iertr::future<>;
   virtual omap_set_keys_ret omap_set_keys(
     omap_root_t &omap_root,
     Transaction &t,
-    std::map<std::string, ceph::bufferlist>&& keys) = 0;
+    std::map<std::string, ceph::bufferlist> keys) = 0;
 
   /**
    * remove key value mapping in omap tree
@@ -113,14 +113,14 @@ public:
   virtual omap_rm_key_ret omap_rm_key(
     omap_root_t &omap_root,
     Transaction &t,
-    const std::string &key) = 0;
+    std::string key) = 0;
 
   using omap_rm_keys_iertr = base_iertr;
   using omap_rm_keys_ret = omap_rm_keys_iertr::future<>;
   virtual omap_rm_keys_ret omap_rm_keys(
     omap_root_t& root,
     Transaction& t,
-    std::set<std::string>& keys) = 0;
+    std::set<std::string> keys) = 0;
 
   /**
    * omap_iterate

@@ -890,6 +890,10 @@ struct error_code;
 	bl.obtain_contiguous_space(0);
       }
 
+      void refill() {
+        _refill(min_alloc);
+      }
+
       void append(const char* buf, size_t entire_len) {
 	 _append_common(entire_len,
 			[buf, this] (const size_t chunk_len) mutable {

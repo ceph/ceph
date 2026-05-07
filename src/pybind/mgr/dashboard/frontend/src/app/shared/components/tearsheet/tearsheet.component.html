@@ -10,7 +10,7 @@
        [columnNumbers]="{'lg': 16, 'md': 16, 'sm': 16}">
     <!-- Tearsheet Header -->
     <header
-      class="tearsheet-header tearsheet-header--full">
+      class="tearsheet-header tearsheet-header--full border-subtle-block-end">
       <h4 class="cds--type-heading-04 tearsheet-header-title">
         {{title}}
       </h4>
@@ -25,7 +25,7 @@
       <!-- Tearsheet Influencer-->
       <div cdsCol
            [columnNumbers]="{'lg': 3, 'md': 3, 'sm': 3}"
-           class="tearsheet-left-influencer">
+           class="tearsheet-left-influencer border-subtle-inline-end">
         <cds-progress-indicator
           orientation="vertical"
           [steps]="steps"
@@ -44,7 +44,7 @@
         </ng-container>
         </div>
         <!-- Tearsheet Footer -->
-        <cds-modal-footer class="tearsheet-footer tearsheet-footer--full">
+        <cds-modal-footer class="tearsheet-footer tearsheet-footer--full border-subtle-top">
           <button cdsButton="ghost"
                   class="tearsheet-footer-cancel"
                   (click)="closeTearsheet()"
@@ -83,7 +83,7 @@
   (overlaySelected)="closeTearsheet()">
   <!-- Tearsheet Header -->
   <header
-    class="tearsheet-header">
+    class="tearsheet-header border-subtle-block-end">
     <h4 cdsModalHeaderHeading
         class="cds--type-heading-04 tearsheet-header-title">
         {{title}}
@@ -101,7 +101,7 @@
     @if (steps.length > 1) {
     <div cdsCol
          [columnNumbers]="{lg: 3, md: 3, sm: 3}"
-         class="tearsheet-left-influencer">
+         class="tearsheet-left-influencer border-subtle-inline-end">
       <cds-progress-indicator
         orientation="vertical"
         [steps]="steps"
@@ -142,7 +142,7 @@
       </div>
       }
       <!-- Tearsheet Footer -->
-      <cds-modal-footer class="tearsheet-footer">
+      <cds-modal-footer class="tearsheet-footer border-subtle-top">
         <button cdsButton="ghost"
                 (click)="closeTearsheet()"
                 size="xl"

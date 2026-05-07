@@ -140,6 +140,9 @@ def install_kafka(ctx, config):
             ctx.cluster.only(client).run(
                 args=['rm', '-rf', '{tdir}'.format(tdir=kafka_dir)],
             )
+            ctx.cluster.only(client).run(
+                args=['rm', '-rf', '{tdir}/{doc}'.format(tdir=teuthology.get_testdir(ctx),doc=kafka_file)],
+            )
 
 
 @contextlib.contextmanager
@@ -302,6 +305,8 @@ def task(ctx,config):
         config = all_clients
     if isinstance(config, list):
         config = dict.fromkeys(config)
+
+    ctx.kafka_dir = get_kafka_dir(ctx, config)
 
     log.debug('Kafka config is %s', config)
 

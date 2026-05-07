@@ -238,6 +238,8 @@ public:
         assert(parent->is_valid());
         assert(parent->get_node_meta().is_parent_of(child_meta));
         assert(parent->is_viewable_by_trans(c.trans).first);
+        std::ignore = c;
+        std::ignore = this;
         auto iter = parent->upper_bound(child_meta.begin);
         assert(iter != parent->begin());
         --iter;
@@ -562,6 +564,7 @@ public:
         "ret.leaf.pos {}",
         c.trans,
         ret.leaf.pos);
+      std::ignore = min_depth;
 #ifndef NDEBUG
       if (min_depth == 1) {
         ret.assert_valid();
@@ -1711,6 +1714,7 @@ private:
         [[maybe_unused]] auto &cnode = (typename internal_node_t::base_t &)*child;
         assert(cnode.get_node_meta().begin == node_iter.get_key());
         assert(cnode.get_node_meta().end > node_iter.get_key());
+        std::ignore = node_iter;
         return on_found(child->template cast<internal_node_t>());
       });
     }
@@ -1782,6 +1786,7 @@ private:
         [[maybe_unused]] auto &cnode = (typename internal_node_t::base_t &)*child;
         assert(cnode.get_node_meta().begin == node_iter.get_key());
         assert(cnode.get_node_meta().end > node_iter.get_key());
+        std::ignore = node_iter;
         return on_found(child->template cast<leaf_node_t>());
       });
     }
@@ -2346,6 +2351,8 @@ private:
           *parent_pos.node,
           donor_iter.get_offset(),
           *child);
+        std::ignore = donor_is_left;
+        std::ignore = pos;
         [[maybe_unused]] auto &node = (typename internal_node_t::base_t&)*child;
         assert(donor_is_left ?
           node.get_node_meta().end == pos.node->get_node_meta().begin :

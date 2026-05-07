@@ -34,7 +34,6 @@ $grid-breakpoints: (
 @import './src/styles/ceph-custom/forms';
 @import './src/styles/ceph-custom/grid';
 @import './src/styles/ceph-custom/icons';
-@import './src/styles/ceph-custom/navs';
 @import './src/styles/ceph-custom/toast';
 @import './src/styles/ceph-custom/spacings';
 
@@ -219,7 +218,31 @@ input:-webkit-autofill:active {
 .cds--progress-bar__bar {
   background-color: var(--cds-primary);
 }
-
+// Carbon borders
 .border-subtle {
   border: 1px solid var(--cds-border-subtle);
+}
+
+.border-subtle-bottom {
+  border-bottom: 1px solid var(--cds-border-subtle);
+}
+
+.border-subtle-top {
+  border-top: 1px solid var(--cds-border-subtle);
+}
+
+.border-subtle-right {
+  border-right: 1px solid var(--cds-border-subtle);
+}
+
+.border-subtle-block-end {
+  border-block-end: 1px solid var(--cds-border-subtle-01);
+}
+
+.border-subtle-inline-end {
+  border-inline-end: 1px solid var(--cds-border-subtle-01);
+}
+
+.popover {
+  --bs-popover-zindex: 9999;
 }

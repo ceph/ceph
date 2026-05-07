@@ -11,6 +11,8 @@
 #include "common/sctp_crc32.h"
 #include "common/likely.h"
 
+#if defined(HAVE_RISCV_ZVBC)
+
 // CRC32C  polynomial constants
 #define CRC32C_CONST_0     0xdd45aab8U
 #define CRC32C_CONST_1     0x493c7d27U
@@ -186,3 +188,34 @@ uint32_t ceph_crc32c_riscv(uint32_t crc, unsigned char const *buf, unsigned len)
     }
     return result;
 }
+
+#endif
+
+#if defined(HAVE_RISCV_ZBC)
+
+/* External assembly function implementing CRC32C with carryless multiply */
+extern uint32_t crc32c_zbc(unsigned char const *buf, unsigned len, uint32_t crc);
+
+uint32_t ceph_crc32c_riscv_zbc(uint32_t crc, unsigned char const *buf, unsigned len) {
+    if (!buf) {
+            return ceph_crc32c_sctp(crc, NULL, len);
+    }
+
+    if (len == 0) {
+            return crc;
+    }
+
+    /*
+     * For len < 16, the fold pipeline is never entered. Instead, the assembly
+     * degrades to per-chunk barrett_reduce (via crc32_refl_excess), which
+     * may not outperform the sctp table lookup on all RISC-V microarchitectures.
+     * 16 is the minimum chunk size for the fold-1 path (one 128-bit load pair).
+     */
+    if (len < 16) {
+            return ceph_crc32c_sctp(crc, buf, len);
+    }
+
+    return crc32c_zbc(buf, len, crc);
+}
+
+#endif

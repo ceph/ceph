@@ -168,7 +168,7 @@ vstart_runner.py primarily does three things -
           argument is replaced with the path to binary file.
 
 Running Workunits Using vstart_environment.sh
---------------------------------------------
+---------------------------------------------
 
 Code can be tested by building Ceph locally from source, starting a vstart
 cluster, and running any suite against it.

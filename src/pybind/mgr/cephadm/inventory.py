@@ -842,7 +842,9 @@ class HostCache():
                 self.devices[host] += self.load_host_devices(host)
                 self.networks[host] = j.get('networks_and_interfaces', {})
                 self.osdspec_previews[host] = j.get('osdspec_previews', {})
-                self.last_client_files[host] = j.get('last_client_files', {})
+                self.last_client_files[host] = {
+                    path: tuple(v) for path, v in j.get('last_client_files', {}).items()
+                }
                 for name, ts in j.get('osdspec_last_applied', {}).items():
                     self.osdspec_last_applied[host][name] = str_to_datetime(ts)
 
@@ -949,6 +951,14 @@ class HostCache():
     ) -> None:
         self.networks[host] = nets
         self.last_network_update[host] = datetime_now()
+
+    def get_interface_for_ip(self, host: str, ip: str) -> Optional[str]:
+        """Return the network interface name that has the given IP on host, or None."""
+        for _subnet, ifaces in self.networks.get(host, {}).items():
+            for iface, ips in ifaces.items():
+                if ip in ips:
+                    return iface
+        return None
 
     def update_daemon_config_deps(self, host: str, name: str, deps: List[str], stamp: datetime.datetime) -> None:
         self.daemon_config_deps[host][name] = {
@@ -1331,7 +1341,7 @@ class HostCache():
             if host in self.mgr.offline_hosts:
                 dd.status = orchestrator.DaemonDescriptionStatus.error
                 dd.status_desc = 'host is offline'
-            elif self.mgr.inventory._inventory[host].get("status", "").lower() == "maintenance":
+            elif self.mgr.inventory._inventory.get(host, {}).get("status", "").lower() == "maintenance":
                 # We do not refresh daemons on hosts in maintenance mode, so stored daemon statuses
                 # could be wrong. We must assume maintenance is working and daemons are stopped
                 dd.status = orchestrator.DaemonDescriptionStatus.stopped

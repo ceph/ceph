@@ -55,13 +55,12 @@ LogManager::initialize_omap(Transaction &t, laddr_t hint, omap_type_t omap_type)
 LogManager::omap_set_keys_ret
 LogManager::omap_set_keys(
   omap_root_t &log_root,
-  Transaction &t, std::map<std::string, ceph::bufferlist>&& _kvs) 
+  Transaction &t, std::map<std::string, ceph::bufferlist> kvs)
 {
   LOG_PREFIX(LogManager::omap_set_keys);
-  DEBUGT("enter kv size {}", t, _kvs.size());
+  DEBUGT("enter kv size {}", t, kvs.size());
   assert(log_root.get_type() == omap_type_t::LOG);
 
-  auto kvs = std::move(_kvs);
   auto ext = co_await log_load_extent<LogNode>(
     t, log_root.addr, BEGIN_KEY, END_KEY);
   ceph_assert(ext);
@@ -242,7 +241,7 @@ LogManager::omap_set_key_ret
 LogManager::omap_set_key(
   omap_root_t &log_root,
   Transaction &t,
-  const std::string &key, const ceph::bufferlist &value) 
+  std::string key, ceph::bufferlist value)
 {
   LOG_PREFIX(LogManager::omap_set_key);
   DEBUGT("enter k={}", t, key);
@@ -401,7 +400,7 @@ LogManager::log_load_extent(
 
 LogManager::omap_get_value_ret
 LogManager::omap_get_value(
-  const omap_root_t &log_root, Transaction &t, const std::string &key)
+  const omap_root_t &log_root, Transaction &t, std::string key)
 {
   LOG_PREFIX(LogManager::omap_get_value);
   DEBUGT("key={}", t, key);
@@ -673,7 +672,7 @@ LogManager::omap_rm_key_ret
 LogManager::omap_rm_key(
   omap_root_t &log_root,
   Transaction &t,
-  const std::string &key)
+  std::string key)
 {
   LOG_PREFIX(LogManager::omap_rm_key);
   DEBUGT("key={}", t, key);
@@ -734,7 +733,7 @@ LogManager::omap_rm_keys_ret
 LogManager::omap_rm_keys(
   omap_root_t& log_root,
   Transaction& t,
-  std::set<std::string>& keys)
+  std::set<std::string> keys)
 {
   LOG_PREFIX(LogManager::omap_rm_keys);
   DEBUGT("key size={}", t, keys.size());

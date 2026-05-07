@@ -14,6 +14,7 @@ if(WITH_MGR)
     ClusterState.cc
     DaemonHealthMetricCollector.cc
     DaemonKey.cc
+    DaemonPerfCounters.cc
     DaemonServer.cc
     DaemonState.cc
     Gil.cc
@@ -25,6 +26,7 @@ if(WITH_MGR)
     OSDPerfMetricCollector.cc
     MDSPerfMetricTypes.cc
     MDSPerfMetricCollector.cc
+    PerfCounterInstance.cc
     PyFormatter.cc
     PyUtil.cc
     PyModule.cc

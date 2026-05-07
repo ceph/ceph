@@ -144,23 +144,42 @@
 # Look for check failures?
 
 import argparse
-import codecs
 import datetime
 from getpass import getuser
-import git # https://github.com/gitpython-developers/gitpython
 import itertools
 import json
 import logging
 import os
 import re
-try:
-    from redminelib import Redmine  # https://pypi.org/project/python-redmine/
-except ModuleNotFoundError:
-    Redmine = None
-import requests
 import signal
 import sys
 import textwrap
+
+MISSING_DEPS = []
+
+try:
+    import git # https://github.com/gitpython-developers/gitpython
+except ImportError:
+    MISSING_DEPS.append("GitPython")
+
+try:
+    from redminelib import Redmine  # https://pypi.org/project/python-redmine/
+except ImportError:
+    Redmine = None
+    MISSING_DEPS.append("python-redmine")
+
+try:
+    import requests
+except ImportError:
+    MISSING_DEPS.append("requests")
+
+if MISSING_DEPS:
+    print("ERROR: Missing required dependencies: " + ", ".join(MISSING_DEPS), file=sys.stderr)
+    print("\nPlease set up a virtual environment and install the dependencies by following these steps:", file=sys.stderr)
+    print("  1. Create a virtual environment: python3 -m venv ~/ptl-venv", file=sys.stderr)
+    print("  2. Activate it:                  source ~/ptl-venv/bin/activate", file=sys.stderr)
+    print("  3. Install dependencies:         pip install GitPython python-redmine requests\n", file=sys.stderr)
+    sys.exit(1)
 
 from os.path import expanduser
 
@@ -208,24 +227,13 @@ log.addHandler(logging.StreamHandler())
 log.setLevel(logging.INFO)
 
 # find containing git dir
-git_dir = GITDIR
-max_levels = 6
-while not os.path.exists(git_dir + '/.git'):
-    git_dir += '/..'
-    max_levels -= 1
-    if max_levels < 0:
-        break
+try:
+    git_dir = git.Repo(GITDIR, search_parent_directories=True).working_tree_dir
+except (git.NoSuchPathError, git.InvalidGitRepositoryError) as e:
+    raise SystemExit(f"error: not a git repository: {GITDIR}") from e
 
 CONTRIBUTORS = {}
 NEW_CONTRIBUTORS = {}
-with codecs.open(git_dir + "/.githubmap", encoding='utf-8') as f:
-    comment = re.compile(r"\s*#")
-    patt = re.compile(r"([\w-]+)\s+(.*)")
-    for line in f:
-        if comment.match(line):
-            continue
-        m = patt.match(line)
-        CONTRIBUTORS[m.group(1)] = m.group(2)
 
 BZ_MATCH = re.compile("(.*https?://bugzilla.redhat.com/.*)")
 TRACKER_MATCH = re.compile("(.*https?://tracker.ceph.com/.*)")
@@ -343,6 +351,21 @@ def build_branch(args):
         get(session, endpoint, paging=False)
 
     G = git.Repo(args.git)
+
+    try:
+        log.info("Fetching .githubmap from %s main branch", BASE_REMOTE_URL)
+        G.git.fetch(BASE_REMOTE_URL, "main")
+        githubmap_content = G.git.show("FETCH_HEAD:.githubmap")
+        comment = re.compile(r"\s*#")
+        patt = re.compile(r"([\w-]+)\s+(.*)")
+        for line in githubmap_content.splitlines():
+            if comment.match(line):
+                continue
+            m = patt.match(line)
+            if m:
+                CONTRIBUTORS[m.group(1)] = m.group(2)
+    except git.exc.GitCommandError as e:
+        raise SystemExit(f"Could not fetch .githubmap from {BASE_REMOTE_URL}:main:\n{e}")
 
     if args.create_qa or args.update_qa:
         log.info("connecting to %s", REDMINE_ENDPOINT)
@@ -486,7 +509,7 @@ def build_branch(args):
             G.head.reference = G.create_head(branch, force=True)
             log.info("Checked out branch {branch}".format(branch=branch))
 
-        if created_branch:
+        if created_branch and not args.no_tag:
             # tag it for future reference.
             tag_name = "testing/%s" % branch
             tag = git.refs.tag.Tag.create(G, tag_name)
@@ -495,7 +518,8 @@ def build_branch(args):
     do_qa = args.create_qa or args.update_qa
     if args.push_ci or (not args.no_push_ci and do_qa):
         G.git.push(CI_REMOTE_URL, branch) # for shaman
-        G.git.push(CI_REMOTE_URL, tag.name) # for archival
+        if created_branch and not args.no_tag:
+            G.git.push(CI_REMOTE_URL, tag.name) # for archival
 
     if args.create_qa or args.update_qa:
         if not created_branch:
@@ -522,7 +546,10 @@ def build_branch(args):
         if args.qa_tags:
             custom_fields.append({'id': REDMINE_CUSTOM_FIELD_ID_QA_TAGS, 'value': args.qa_tags})
 
-        origin_url = f'{BASE_PROJECT}/{CI_REPO}/commits/{tag.name}'
+        if not args.no_tag:
+            origin_url = f'{BASE_PROJECT}/{CI_REPO}/commits/{tag.name}'
+        else:
+            origin_url = f'{BASE_PROJECT}/{CI_REPO}/commits/{branch}'
         custom_fields.append({'id': REDMINE_CUSTOM_FIELD_ID_GIT_BRANCH, 'value': origin_url})
 
         issue_kwargs = {
@@ -618,6 +645,7 @@ def main():
     group.add_argument('--branch-release', dest='branch_release', action='store', help='release name to embed in branch (for shaman)')
     group.add_argument('--merge-branch-name', dest='merge_branch_name', action='store', default=False, help='name of the branch for merge messages')
     group.add_argument('--no-credits', dest='credits', action='store_false', help='skip indication search (Reviewed-by, etc.)')
+    group.add_argument('--no-tag', dest='no_tag', action='store_true', help='do not create a tag of the branch')
     group.add_argument('--stop-at-built', dest='stop_at_built', action='store_true', help='stop execution when branch is built')
 
     group = parser.add_argument_group('Build Control Options')
@@ -638,8 +666,17 @@ def main():
     group.add_argument('--no-push-ci', dest='no_push_ci', action='store_true', help='don\'t push branch to ceph-ci repo (when making QA tickets)')
     group.add_argument('--push-ci', dest='push_ci', action='store_true', help='push branch and tag to CI repository (even when not making QA tickets)')
 
+    def parse_pr(value):
+        m = re.search(r'/pull/(\d+)', value)
+        if m:
+            return int(m.group(1))
+        try:
+            return int(value)
+        except ValueError:
+            raise argparse.ArgumentTypeError(f"Invalid PR format: {value}")
+
     group = parser.add_argument_group('PRs to Merge')
-    group.add_argument('prs', metavar="PRs...", type=int, nargs='*', help='Pull Requests to Merge')
+    group.add_argument('prs', metavar="PRs...", type=parse_pr, nargs='*', help='Pull Requests to Merge (numbers or URLs)')
 
     args = parser.parse_args(argv)
 
@@ -653,9 +690,21 @@ def main():
     if args.debug_build:
         args.flavors.add('debug')
 
-    if (args.create_qa or args.update_qa) and Redmine is None:
-        log.error("redmine library is not available so cannot create qa tracker ticket")
+    if not GITHUB_TOKEN:
+        log.error("Missing GitHub Personal Access Token.")
+        log.error("Please create a file at ~/.github_token containing your token,")
+        log.error("or set the PTL_TOOL_GITHUB_TOKEN environment variable.")
         sys.exit(1)
+
+    if args.create_qa or args.update_qa:
+        if Redmine is None:
+            log.error("redmine library is not available so cannot create qa tracker ticket")
+            sys.exit(1)
+        if not REDMINE_API_KEY:
+            log.error("Missing Redmine API Key. Required for creating/updating QA tickets.")
+            log.error("Please create a file at ~/.redmine_key containing your API key,")
+            log.error("or set the PTL_TOOL_REDMINE_API_KEY environment variable.")
+            sys.exit(1)
 
     return build_branch(args)
 

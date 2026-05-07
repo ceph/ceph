@@ -81,6 +81,7 @@ target_link_libraries(unittest_ecbackend osd global)
 add_executable(unittest_ecutil
         TestECUtil.cc
         $<TARGET_OBJECTS:unit-main>
+        $<TARGET_OBJECTS:erasure_code_objs>
 )
 add_ceph_unittest(unittest_ecutil)
 target_link_libraries(unittest_ecutil osd global)
@@ -113,9 +114,44 @@ target_link_libraries(unittest_pglog osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBR
 # unittest_peeringstate
 add_executable(unittest_peeringstate
   TestPeeringState.cc
+  $<TARGET_OBJECTS:pg_backend_test_fixture>
+  $<TARGET_OBJECTS:ec_peering_test_fixture>
   )
 add_ceph_unittest(unittest_peeringstate)
 target_link_libraries(unittest_peeringstate osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
+# pg_backend_test_fixture: object library for PGBackendTestFixture implementation
+add_library(pg_backend_test_fixture OBJECT
+  PGBackendTestFixture.cc
+)
+target_link_libraries(pg_backend_test_fixture osd os global GTest::GTest)
+
+# ec_peering_test_fixture: object library for ECPeeringTestFixture implementation
+add_library(ec_peering_test_fixture OBJECT
+  ECPeeringTestFixture.cc
+  MockPeeringListener.cc
+)
+target_link_libraries(ec_peering_test_fixture osd os global GTest::GTest)
+
+# unittest_backend_basics (replaces unittest_ecbasics + unittest_replicatedbasics)
+add_executable(unittest_backend_basics
+  TestBackendBasics.cc
+  $<TARGET_OBJECTS:unit-main>
+  $<TARGET_OBJECTS:pg_backend_test_fixture>
+  )
+add_ceph_unittest(unittest_backend_basics)
+target_link_libraries(unittest_backend_basics osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
+add_dependencies(unittest_backend_basics ec_isa ec_jerasure)
+# unittest_ecfailover_with_peering
+add_executable(unittest_ecfailover_with_peering
+  TestECFailoverWithPeering.cc
+  $<TARGET_OBJECTS:unit-main>
+  $<TARGET_OBJECTS:store_test_fixture>
+  $<TARGET_OBJECTS:pg_backend_test_fixture>
+  $<TARGET_OBJECTS:ec_peering_test_fixture>
+  )
+add_ceph_unittest(unittest_ecfailover_with_peering)
+target_link_libraries(unittest_ecfailover_with_peering osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
+add_dependencies(unittest_ecfailover_with_peering ec_isa ec_jerasure)
 # unittest_hitset
 add_executable(unittest_hitset
   hitset.cc
@@ -177,4 +213,47 @@ add_executable(unittest_mclock_scheduler
 add_ceph_unittest(unittest_mclock_scheduler)
 target_link_libraries(unittest_mclock_scheduler
   global osd dmclock os
+)
+
+# osd_unittests: custom target that builds and runs all OSD unit tests
+# Not including unittest_osdmap, as it is slow. It is tested elsewhere.
+set(OSD_UNITTESTS
+  unittest_backend_basics
+  unittest_ec_transaction
+  unittest_ec_transaction_l
+  unittest_ecbackend
+  unittest_ecbackend_l
+  unittest_ecfailover_with_peering
+  unittest_ecutil
+  unittest_extent_cache
+  unittest_extent_cache_l
+  unittest_hitset
+  unittest_mclock_scheduler
+  unittest_osd_osdcap
+  unittest_osd_types
+  unittest_osdscrub
+  unittest_peeringstate
+  unittest_pg_transaction
+  unittest_pglog
+  unittest_scrubber_be
+)
+
+# osd_unittests: build all OSD unit tests and run them via ctest.
+# This is for development convenience only, it is not used as part of make
+# check.
+# Using ctest ensures:
+#   - All tests run even if one fails (--no-tests-on-failure continues)
+#   - Output is shown for failing tests (--output-on-failure)
+#   - Adding a new test only requires adding it to OSD_UNITTESTS above
+#   - Excludes unittest_osdmap because it is relatively slow.
+string(JOIN "|" OSD_UNITTEST_REGEX ${OSD_UNITTESTS})
+add_custom_target(osd_unittests
+  DEPENDS ${OSD_UNITTESTS}
+  COMMAND ${CMAKE_CTEST_COMMAND}
+    --test-dir ${CMAKE_BINARY_DIR}
+    -R "^(${OSD_UNITTEST_REGEX})$"
+    --output-on-failure
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+  COMMENT "Building and running all OSD unit tests via ctest"
+  VERBATIM
 )

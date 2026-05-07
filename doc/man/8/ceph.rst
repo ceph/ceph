@@ -1133,12 +1133,10 @@ of the Ceph version string. The version string format is similar to the value of
 ``ceph_version_short`` key seen in the output of the ``ceph osd metadata <id>``
 command where ``id`` is the OSD number.
 
-When ``--max <num>`` is provided, up to <num> OSD IDs found either within the
-provided CRUSH bucket or across the CRUSH hierarchy that can be stopped for
-upgrade simultaneously will be returned. This logic can for example be triggered
-by specifying a single starting OSD and a max number. The search then spans both
-within and across the CRUSH hierarchy and additional OSDs are drawn from those
-locations.
+When ``--max <num>`` is provided, the command returns up to ``<num>`` OSD IDs
+from the specified CRUSH bucket that can be safely stopped for simultaneous
+upgrade. This is useful when only a subset of OSDs within the bucket needs to be
+upgraded for performance or other reasons.
 
 The command automatically determines a safe set of OSDs to upgrade found in the
 provided CRUSH bucket. If not all OSDs in the CRUSH bucket can be upgraded
@@ -1151,10 +1149,10 @@ of more iterations and time to find the set. The converse is true if a lower
 convergence factor is used. A lower value should be used only if the command is
 sluggish to respond.
 
-It must be noted that this command leverages the underlying logic of the
-``ok-to-stop`` command. The key difference is that ``ok-to-upgrade`` command
-operates strictly on the OSDs found in the CRUSH bucket and considers adjacent
-CRUSH locations if necessary to satisfy the ``--max`` criteria.
+Note that this command leverages the underlying logic of the ``ok-to-stop``
+command. The key difference is that the ``ok-to-upgrade`` command operates
+strictly on the OSDs within the CRUSH bucket and, if possible, meets the
+``--max`` criteria when specified.
 
 Usage::
 

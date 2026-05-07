@@ -35,6 +35,7 @@
 #include <map>
 #include <ostream>
 #include <memory>
+#include "osd/osd_types.h"
 #ifdef __linux__
 #include <sys/capability.h>
 #else
@@ -112,6 +113,14 @@ namespace ceph {
      * @return 0 on success or a negative errno on error.
      */
     virtual int get_plugin_id(std::string& id_str) = 0;
+
+    /**
+     * Retrieve alerts from the plugin, if any.
+     * This function is used to give plugin a way to signal health warnings.
+     *
+     * @param [out] alerts append warnings here.
+     */
+    virtual void collect_alerts(osd_alert_list_t& alerts) {}
   };
 
   typedef std::shared_ptr<ExtBlkDevInterface> ExtBlkDevInterfaceRef;

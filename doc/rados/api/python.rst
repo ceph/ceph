@@ -16,7 +16,7 @@ Getting Started
 ===============
 
 You can create your own Ceph client using Python. The following tutorial will
-show you how to import the Ceph Python module, connect to a Ceph cluster,  and
+show you how to import the Ceph Python module, connect to a Ceph cluster, and
 perform object operations as a ``client.admin`` user.
 
 .. note:: To use the Ceph Python bindings, you must have access to a
@@ -165,7 +165,7 @@ Input/Output Context
 Reading from and writing to the Ceph Storage Cluster requires an input/output
 context (ioctx). You can create an ioctx with the ``open_ioctx()`` or
 ``open_ioctx2()`` method of the ``Rados`` class. The ``ioctx_name`` parameter
-is the name of the  pool and ``pool_id`` is the ID of the pool you wish to use.
+is the name of the pool and ``pool_id`` is the ID of the pool you wish to use.
 
 .. code-block:: python
    :linenos:
@@ -215,7 +215,7 @@ from the cluster. You may also remove objects from the cluster. For example:
 	ioctx.remove_object("hw")
 
 
-Writing and Reading XATTRS
+Writing and Reading XATTRs
 --------------------------
 
 Once you create an object, you can write extended attributes (XATTRs) to

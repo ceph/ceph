@@ -8,11 +8,12 @@ import { MgrModuleService } from '../../api/mgr-module.service';
 import { PerformanceData } from '../../models/performance-data';
 import { DatePipe } from '@angular/common';
 import { NumberFormatterService } from '../../services/number-formatter.service';
+import { AuthStorageService } from '../../services/auth-storage.service';
+import { Permissions } from '../../models/permissions';
 
 describe('PerformanceCardComponent', () => {
   let component: PerformanceCardComponent;
   let fixture: ComponentFixture<PerformanceCardComponent>;
-  let prometheusService: PrometheusService;
   let performanceCardService: PerformanceCardService;
   let mgrModuleService: MgrModuleService;
 
@@ -64,6 +65,10 @@ describe('PerformanceCardComponent', () => {
       transform: jest.fn().mockReturnValue('01 Jan, 00:00:00')
     };
 
+    const authStorageServiceMock = {
+      getPermissions: jest.fn().mockReturnValue(new Permissions({ 'config-opt': ['read'] }))
+    };
+
     await TestBed.configureTestingModule({
       imports: [HttpClientTestingModule, PerformanceCardComponent],
       providers: [
@@ -71,13 +76,13 @@ describe('PerformanceCardComponent', () => {
         { provide: PerformanceCardService, useValue: performanceCardServiceMock },
         { provide: MgrModuleService, useValue: mgrModuleServiceMock },
         { provide: NumberFormatterService, useValue: numberFormatterMock },
-        { provide: DatePipe, useValue: datePipeMock }
+        { provide: DatePipe, useValue: datePipeMock },
+        { provide: AuthStorageService, useValue: authStorageServiceMock }
       ]
     }).compileComponents();
 
     fixture = TestBed.createComponent(PerformanceCardComponent);
     component = fixture.componentInstance;
-    prometheusService = TestBed.inject(PrometheusService);
     performanceCardService = TestBed.inject(PerformanceCardService);
     mgrModuleService = TestBed.inject(MgrModuleService);
   });
@@ -156,18 +161,18 @@ describe('PerformanceCardComponent', () => {
     flush();
   }));
 
-  it('should set emptyStateKey when prometheus is not configured', fakeAsync(() => {
-    (prometheusService.ifPrometheusConfigured as jest.Mock).mockImplementation((_fn, elseFn) => {
-      if (elseFn) {
-        elseFn();
-      }
-    });
+  it('should set emptyStateKey to empty string when user lacks configOpt read', fakeAsync(() => {
+    const auth = TestBed.inject(AuthStorageService);
+    (auth.getPermissions as jest.Mock).mockReturnValue(new Permissions({}));
+
+    fixture = TestBed.createComponent(PerformanceCardComponent);
+    component = fixture.componentInstance;
 
     const time = { start: 1000, end: 2000, step: 14 };
     component.loadCharts(time);
 
     tick();
-    expect(component.emptyStateKey()).toBe('prometheusNotAvailable');
+    expect(component.emptyStateKey()).toBe('');
   }));
 
   it('should cleanup subscriptions on ngOnDestroy', () => {

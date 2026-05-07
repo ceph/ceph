@@ -10,6 +10,8 @@ using std::vector;
 using librados::IoCtx;
 using librados::bufferlist;
 
+using namespace cls::lua;
+
 namespace cls_lua_client {
   /*
    * Currently the return code and return bufferlist are not wrapped in a
@@ -31,7 +33,7 @@ namespace cls_lua_client {
 
     librados::ObjectWriteOperation wop;
     int rval;
-    wop.exec("lua", "eval_bufferlist", inbl, &output, &rval);
+    wop.exec(method::eval_bufferlist, inbl, &output, &rval);
     return ioctx.operate(oid, &wop);
   }
 }

@@ -334,7 +334,10 @@ class TestApplyNvmeof:
         res = self.m._apply_nvmeof(pool=".nvmeof", group="mygroup")
 
         assert res.retval != 0
-        assert "nvmeof module must be enabled to use .nvmeof pool" in res.stderr
+        assert (
+            "NVMe-oF support requires the nvmeof manager module to be enabled before proceeding. "
+            "Enable it with: ceph mgr module enable nvmeof"
+        ) in res.stderr
         mock_remote.assert_not_called()
         mock_apply_misc.assert_not_called()
 

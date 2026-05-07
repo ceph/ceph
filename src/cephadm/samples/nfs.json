@@ -3,6 +3,10 @@
     "namespace" : "nfs-ns",
     "files": {
         "ganesha.conf": [
+            "NFS_CORE_PARAM {",
+            "        allow_set_io_flusher_fail = true;",
+            "}",
+            "",
             "RADOS_URLS {",
             "        userid = admin;",
             "}",

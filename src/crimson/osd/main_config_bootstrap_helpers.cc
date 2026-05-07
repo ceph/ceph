@@ -21,9 +21,9 @@
 #include "crimson/common/perf_counters_collection.h"
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Messenger.h"
-#include "crimson/osd/main_config_bootstrap_helpers.h"
 
-#include <sys/wait.h> // for waitpid()
+#include <fcntl.h>
+#include <sys/wait.h>
 
 using namespace std::literals;
 using crimson::common::local_conf;
@@ -86,12 +86,11 @@ seastar::future<> populate_config_from_mon()
 }
 
 struct SeastarOption {
-  std::string option_name;  // Command-line option name
-  std::string config_key;   // Configuration key
-  Option::type_t value_type ;   // Type of configuration value
+  std::string option_name;
+  std::string config_key;
+  Option::type_t value_type;
 };
 
-// Define a list of Seastar options
 const std::vector<SeastarOption> seastar_options = {
   {"--task-quota-ms", "crimson_reactor_task_quota_ms", Option::TYPE_FLOAT},
   {"--io-latency-goal-ms", "crimson_reactor_io_latency_goal_ms", Option::TYPE_FLOAT},
@@ -100,7 +99,6 @@ const std::vector<SeastarOption> seastar_options = {
   {"--reactor-backend", "crimson_reactor_backend", Option::TYPE_STR}
 };
 
-// Function to get the option value as a string
 std::optional<std::string> get_option_value(const SeastarOption& option) {
   switch (option.value_type) {
     case Option::TYPE_FLOAT: {
@@ -227,13 +225,12 @@ _get_early_config(int argc, const char *argv[])
 	                     " or crimson_cpu_num must be set");
 	      ceph_abort();
 	    }
-	    std::string smp = fmt::format("{}", reactor_num);
 	    ret.early_args.emplace_back("--smp");
-	    ret.early_args.emplace_back(smp);
+	    ret.early_args.emplace_back(fmt::format("{}", reactor_num));
 	    ret.early_args.emplace_back("--thread-affinity");
 	    ret.early_args.emplace_back("0");
 	    logger().info("get_early_config: set --thread-affinity 0 --smp {}",
-	                  smp);
+	                  reactor_num);
 
 	  }
 	} else {
@@ -290,7 +287,7 @@ get_early_config(int argc, const char *argv[])
     exit(0);
   }
   int pipes[2];
-  int r = pipe2(pipes, 0);
+  int r = pipe2(pipes, O_CLOEXEC);
   if (r < 0) {
     std::cerr << "get_early_config: failed to create pipes: "
 	      << -errno << std::endl;
@@ -339,8 +336,7 @@ get_early_config(int argc, const char *argv[])
     int status;
     waitpid(worker, &status, 0);
 
-    // One of the parameters was taged as exit(0) in the child process
-    // so we need to check if we should exit here
+    // child exited via exit(0) for early-exit paths (e.g. --help, --version)
     if (!have_data && WIFEXITED(status) && WEXITSTATUS(status) == 0) {
       exit(0);
     }

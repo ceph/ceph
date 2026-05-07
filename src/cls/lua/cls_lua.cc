@@ -1044,11 +1044,10 @@ CLS_INIT(lua)
   cls_method_handle_t h_eval_json;
   cls_method_handle_t h_eval_bufferlist;
 
-  cls_register("lua", &h_class);
+  using namespace cls::lua;
+  cls_register(ClassId::name, &h_class);
+  ClassRegistrar<ClassId> cls(h_class);
 
-  cls_register_cxx_method(h_class, "eval_json",
-      CLS_METHOD_RD | CLS_METHOD_WR, eval_json, &h_eval_json);
-
-  cls_register_cxx_method(h_class, "eval_bufferlist",
-      CLS_METHOD_RD | CLS_METHOD_WR, eval_bufferlist, &h_eval_bufferlist);
+  cls.register_cxx_method(method::eval_json,       eval_json,       &h_eval_json);
+  cls.register_cxx_method(method::eval_bufferlist, eval_bufferlist, &h_eval_bufferlist);
 }

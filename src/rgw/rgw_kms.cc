@@ -288,6 +288,7 @@ protected:
     if (postdata.length()) {
       secret_req.set_post_data(postdata);
       secret_req.set_send_length(postdata.length());
+      secret_req.append_header("Content-Type", "application/json");
     }
 
     if (!vault_token.empty()) {

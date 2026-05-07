@@ -492,7 +492,7 @@ void ExtentCommitter::_share_prior_data_to_pending_versions()
 }
 
 void CachedExtent::new_committer(Transaction &t) {
-  ceph_assert(is_rewrite_transaction(t.get_src()));
+  ceph_assert(should_use_no_conflict_publish(t.get_src(), this->get_type()));
   ceph_assert(!committer);
   committer = new ExtentCommitter(*this, t);
   assert(prior_instance);
@@ -506,7 +506,7 @@ void ExtentCommitter::block_trans(Transaction &t) {
   for (auto &item : prior.read_transactions) {
     TRACET("blocking trans {} for rewriting {}",
       t, item.t->get_trans_id(), *item.ref);
-    item.t->need_wait_rewrite = true;
+    item.t->need_wait_visibility = true;
   }
 }
 
@@ -516,7 +516,7 @@ void ExtentCommitter::unblock_trans(Transaction &t) {
   for (auto &item : prior.read_transactions) {
     TRACET("unblocking trans {} for rewriting {}",
       t, item.t->get_trans_id(), *item.ref);
-    item.t->need_wait_rewrite = false;
+    item.t->need_wait_visibility = false;
   }
 }
 

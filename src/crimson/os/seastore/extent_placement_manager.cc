@@ -699,6 +699,30 @@ ExtentPlacementManager::BackgroundProcess::run_until_halt()
 }
 
 seastar::future<>
+ExtentPlacementManager::BackgroundProcess::run_cleaner_until_done()
+{
+  LOG_PREFIX(BackgroundProcess::run_cleaner_until_done);
+  ceph_assert(state == state_t::HALT);
+  assert(!is_running());
+  INFO("started...");
+  return seastar::do_until(
+    [this] {
+      return !main_cleaner->should_clean_space();
+    },
+    [this] {
+      return main_cleaner->clean_space(
+      ).handle_error(
+        crimson::ct_error::assert_all{
+          "run_cleaner_until_done encountered error in clean_space"
+        }
+      );
+    }
+  ).finally([FNAME] {
+    INFO("finished");
+  });
+}
+
+seastar::future<>
 ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
     io_usage_t usage)
 {

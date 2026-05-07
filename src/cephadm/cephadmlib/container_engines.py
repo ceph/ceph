@@ -14,7 +14,7 @@ from .constants import (
     MIN_PODMAN_VERSION,
     PIDS_LIMIT_UNLIMITED_PODMAN_VERSION,
 )
-from .data_utils import with_units_to_int
+from ceph.utils import with_units_to_int
 from .exceptions import Error
 
 

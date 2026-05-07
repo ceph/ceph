@@ -39,6 +39,7 @@ from .api import PSTopicS3, \
     delete_all_topics, \
     put_object_tagging, \
     admin, \
+    ceph_admin, \
     set_rgw_config_option, \
     bash, \
     S3Connection, \
@@ -902,6 +903,46 @@ def test_topic():
 
     # get topic list, make sure it is empty
     list_topics(0, tenant)
+
+
+@pytest.mark.manual_test
+def test_topic_name():
+    """ test topic name validation """
+    conn = connection()
+    # make sure there are no leftover topics
+    delete_all_topics(conn, '', get_config_cluster())
+
+    zonegroup = get_config_zonegroup()
+    bucket_name = gen_bucket_name()
+    invalid_topic_name = bucket_name + '+' + TOPIC_SUFFIX
+    rgw_client = f'client.rgw.{get_config_port()}'
+
+    # fail to create topic
+    endpoint_address = 'http://127.0.0.1:7001/'
+    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+    topic_conf = PSTopicS3(conn, invalid_topic_name, zonegroup, endpoint_args=endpoint_args)
+    pytest.raises(Exception, topic_conf.set_config)
+
+    # relax topic name validation
+    set_rgw_config_option(rgw_client, 'rgw_relaxed_topic_names', 'true', get_config_cluster())
+    # create topic
+    expected_arn = 'arn:aws:sns:' + zonegroup + '::' + invalid_topic_name
+    topic_arn = topic_conf.set_config()
+    assert topic_arn == expected_arn
+
+    set_rgw_config_option(rgw_client, 'rgw_relaxed_topic_names', 'false', get_config_cluster())
+
+    # get topic (should be possible regardless of the relaxed topic name setting)
+    parsed_result = get_topic(invalid_topic_name)
+    assert parsed_result['arn'] == expected_arn
+
+    # delete topic
+    status = topic_conf.del_config()
+    assert status == 200
+
+    # maks sure that empty topic names are invalid regardless of flag
+    empty_topic_conf = PSTopicS3(conn, "", zonegroup, endpoint_args=endpoint_args)
+    pytest.raises(Exception, empty_topic_conf.set_config)
 
 
 @pytest.mark.basic_test
@@ -3583,7 +3624,7 @@ def test_persistent_topic_configs_max_retries():
     persistent_topic_configs(persistency_time, config_dict)
 
 @pytest.mark.manual_test
-def test_persistent_notificationback():
+def test_persistent_notification_pushback():
     """ test pushing persistent notification pushback """
     conn = connection()
     zonegroup = get_config_zonegroup()
@@ -3663,6 +3704,27 @@ def test_persistent_notificationback():
     http_server.close()
 
 
+def verify_idleness(port, sleep_time, max_time):
+    set_rgw_config_option('client.rgw', 'rgw_kafka_connection_idle', max_time, get_config_cluster())
+    is_idle = False
+    start_time = time.time()
+    while not is_idle:
+        time.sleep(sleep_time)
+        cmd = "ss -tnp | grep {} | grep radosgw".format(port)
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
+        out = proc.communicate()[0]
+        if len(out) == 0:
+            is_idle = True
+        else:
+            log.info("radosgw<->kafka connection is not idle: %s", out.decode('utf-8'))
+            time_diff = time.time() - start_time
+            if time_diff > max_time + sleep_time:
+                assert False, "radosgw<->kafka connection is still not idle after {}s".format(time_diff)
+
+    # set the original idle time
+    set_rgw_config_option('client.rgw', 'rgw_kafka_connection_idle', 300, get_config_cluster())
+
+
 @pytest.mark.kafka_test
 def test_notification_kafka_idle_behaviour():
     """ test pushing kafka notification idle behaviour check """
@@ -3735,19 +3797,7 @@ def test_notification_kafka_idle_behaviour():
     time.sleep(5)
     receiver.verify_s3_events(keys, exact_match=True, deletions=True, etags=etags)
 
-    is_idle = False
-
-    while not is_idle:
-        print('waiting for 10sec for checking idleness')
-        time.sleep(10)
-        cmd = "ss -tnp | grep 9092 | grep radosgw"
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
-        out = proc.communicate()[0]
-        if len(out) == 0:
-            is_idle = True
-        else:
-            print("radosgw<->kafka connection is not idle")
-            print(out.decode('utf-8'))
+    verify_idleness(9092, 10, 30)
 
     # do the process of uploading an object and checking for notification again
     number_of_objects = 10
@@ -4599,7 +4649,8 @@ def test_topic_no_permissions():
     conn2.delete_bucket(bucket_name)
 
 
-def kafka_security(security_type, mechanism='PLAIN', use_topic_attrs_for_creds=False):
+def kafka_security(security_type, mechanism='PLAIN', use_topic_attrs_for_creds=False,
+                   verify_ssl=True, include_ca_location=True):
     """ test pushing kafka notification securly to master """
     # Setup SCRAM users if needed
     if mechanism.startswith('SCRAM'):
@@ -4630,12 +4681,19 @@ def kafka_security(security_type, mechanism='PLAIN', use_topic_attrs_for_creds=F
         endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&use-ssl=false&mechanism='+mechanism
     elif security_type == 'SASL_SSL':
         KAFKA_DIR = os.environ['KAFKA_DIR']
-        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&use-ssl=true&ca-location='+KAFKA_DIR+'/y-ca.crt&mechanism='+mechanism
+        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&use-ssl=true&mechanism='+mechanism
+        if include_ca_location:
+            endpoint_args += '&ca-location='+KAFKA_DIR+'/y-ca.crt'
         if use_topic_attrs_for_creds:
             endpoint_args += '&user-name=alice&password=alice-secret'
     else:
         KAFKA_DIR = os.environ['KAFKA_DIR']
-        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&use-ssl=true&ca-location='+KAFKA_DIR+'/y-ca.crt'
+        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&use-ssl=true'
+        if include_ca_location:
+            endpoint_args += '&ca-location='+KAFKA_DIR+'/y-ca.crt'
+
+    if security_type in ('SSL', 'SASL_SSL') and not verify_ssl:
+        endpoint_args += '&verify-ssl=false'
 
     topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
 
@@ -4699,6 +4757,11 @@ def kafka_security(security_type, mechanism='PLAIN', use_topic_attrs_for_creds=F
 @pytest.mark.kafka_security_test
 def test_notification_kafka_security_ssl():
     kafka_security('SSL')
+
+
+@pytest.mark.kafka_security_test
+def test_notification_kafka_security_ssl_skip_verification_without_ca():
+    kafka_security('SSL', verify_ssl=False, include_ca_location=False)
 
 
 @pytest.mark.kafka_security_test
@@ -5843,3 +5906,227 @@ def test_persistent_sharded_topic_config_change_kafka():
     new_num_shards = random.randint(2, 10)
     default_num_shards = 11
     persistent_notification_shard_config_change('kafka', conn, new_num_shards, default_num_shards)
+
+
+@pytest.mark.basic_test
+def test_ps_s3_x_amz_request_id_on_master():
+    """ test that the x-amz-request-id in the notification event matches
+    the x-amz-request-id returned in the S3 put_object and delete_object responses.
+    Uses a persistent topic with a wrong endpoint so events stay in the queue,
+    then uses 'topic dump' to inspect the event entries. """
+    conn = connection()
+    zonegroup = get_config_zonegroup()
+
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # create s3 topic with a wrong endpoint so events are queued and not delivered
+    endpoint_address = 'http://WrongHost:1234'
+    endpoint_args = 'push-endpoint=' + endpoint_address + '&persistent=true'
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+
+    # create s3 notification for creation and deletion events
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{
+        'Id': notification_name,
+        'TopicArn': topic_arn,
+        'Events': ['s3:ObjectCreated:*', 's3:ObjectRemoved:*']
+    }]
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    _, status = s3_notification_conf.set_config()
+    assert status // 100 == 2
+
+    # use boto3 client for S3 operations to capture x-amz-request-id from responses
+    client = boto3.client(
+        's3',
+        endpoint_url='http://' + conn.host + ':' + str(conn.port),
+        aws_access_key_id=conn.aws_access_key_id,
+        aws_secret_access_key=conn.aws_secret_access_key,
+    )
+
+    # put object and capture x-amz-request-id from the response
+    key_name = 'test_request_id_key'
+    put_response = client.put_object(Bucket=bucket_name, Key=key_name, Body=b'hello world')
+    put_request_id = put_response['ResponseMetadata']['HTTPHeaders'].get('x-amz-request-id', '')
+    assert put_request_id, "put_object response missing x-amz-request-id"
+
+    # delete object and capture x-amz-request-id from the response
+    delete_response = client.delete_object(Bucket=bucket_name, Key=key_name)
+    delete_request_id = delete_response['ResponseMetadata']['HTTPHeaders'].get('x-amz-request-id', '')
+    assert delete_request_id, "delete_object response missing x-amz-request-id"
+
+    # the put and delete request ids should be different
+    assert put_request_id != delete_request_id
+
+    # wait for events to be queued
+    time.sleep(5)
+
+    # dump the persistent topic entries and verify x-amz-request-id
+    result = admin(['topic', 'dump', '--topic', topic_name], get_config_cluster())
+    assert result[1] == 0
+    parsed_result = json.loads(result[0])
+    assert len(parsed_result) == 2
+
+    # find creation and deletion events from the dump
+    # note: topic dump eventName does not have the 's3:' prefix
+    creation_event = None
+    deletion_event = None
+    for entry in parsed_result:
+        event = entry['entry']['event']
+        if event['eventName'].startswith('ObjectCreated'):
+            creation_event = event
+        elif event['eventName'].startswith('ObjectRemoved'):
+            deletion_event = event
+
+    assert creation_event is not None, "creation event not found in topic dump"
+    assert deletion_event is not None, "deletion event not found in topic dump"
+
+    # verify creation event x-amz-request-id matches the put_object response
+    assert creation_event['responseElements']['x-amz-request-id'] == put_request_id
+
+    # verify deletion event x-amz-request-id matches the delete_object response
+    assert deletion_event['responseElements']['x-amz-request-id'] == delete_request_id
+
+    # cleanup
+    s3_notification_conf.del_config()
+    topic_conf.del_config()
+    conn.delete_bucket(bucket_name)
+
+
+def kafka_batch_size(match_batch_size):
+    kafka_dir = os.environ.get('KAFKA_DIR')
+    if not kafka_dir:
+        pytest.skip('KAFKA_DIR environment variable is not set')
+
+    conn = connection()
+    zonegroup = get_config_zonegroup()
+
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    host = get_ip()
+    wrong_port = 1234
+    right_port = 9092
+    max_batch_size = 4096
+
+    # start kafka receiver
+    task, receiver = create_kafka_receiver_thread(topic_name)
+    task.start()
+    verify_kafka_receiver(receiver)
+
+    kafka_configs = os.path.join(kafka_dir, 'bin/kafka-configs.sh')
+    result = subprocess.run(
+        [kafka_configs,
+         '--bootstrap-server', host + ':' + str(right_port),
+         '--entity-type', 'topics',
+         '--entity-name', topic_name,
+         '--alter',
+         '--add-config', 'max.message.bytes={}'.format(max_batch_size*2)],
+        capture_output=True, text=True, timeout=15, check=False
+    )
+    assert result.returncode == 0
+
+    # create RGW topic with wrong port so messages queue up
+    # set retry to 1 second so that messge retry is not too fast
+    endpoint_address = 'kafka://' + host + ':' + str(wrong_port)
+    endpoint_args = 'push-endpoint=' + endpoint_address + '&kafka-ack-level=broker&persistent=true' + \
+                        '&retry_sleep_duration=1'
+
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+
+    # create notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn,
+                        'Events': []
+                        }]
+
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert status/100 == 2
+
+    # upload 100 objects to the bucket
+    number_of_objects = 100
+    client_threads = []
+    for i in range(number_of_objects):
+        key = bucket.new_key('key-' + str(i))
+        content = str(os.urandom(1024))
+        thr = threading.Thread(target=set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads]
+
+    # make sure that any existing connection becomes idle and is being deleted
+    verify_idleness(right_port, 2, 30)
+
+    if match_batch_size:
+        # set rgw_kafka_max_batch_size using the daemon-specific entity name
+        rgw_client = 'client.rgw.{}'.format(get_config_port())
+        set_rgw_config_option(rgw_client, 'rgw_kafka_max_batch_size', max_batch_size, get_config_cluster())
+        # verify config is set in mon store
+        result = ceph_admin(['config', 'get', rgw_client, 'rgw_kafka_max_batch_size'], get_config_cluster())
+        assert result[1] == 0, 'failed to get config from mon store'
+        actual_value = result[0].strip().split('\n')[-1]
+        assert actual_value == str(max_batch_size), \
+            'rgw_kafka_max_batch_size not set in mon store: got {} expected {}'.format(actual_value, max_batch_size)
+        # wait for config to propagate from monitor to RGW daemon
+        time.sleep(10)
+
+    # fix the topic to point to correct broker
+    endpoint_address = 'kafka://' + host + ':' + str(right_port)
+    endpoint_args = 'push-endpoint=' + endpoint_address + '&kafka-ack-level=broker&persistent=true'
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+
+    if match_batch_size:
+        # the queue should drain because batch size config matches the broker limit
+        wait_for_queue_to_drain(topic_name)
+        # verify events received
+        keys = list(bucket.list())
+        receiver.verify_s3_events(keys, exact_match=True, deletions=False)
+    else:
+        # wait and verify that the queue does NOT fully drain
+        # without the batch size config, batched messages exceed max.message.bytes
+        time.sleep(30)
+        result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
+        assert result[1] == 0
+        parsed_result = json.loads(result[0])
+        assert parsed_result['Topic Stats']['Entries'] > 0, \
+            'queue should not drain without batch size config'
+
+    # cleanup
+    if match_batch_size:
+        rgw_client = 'client.rgw.{}'.format(get_config_port())
+        set_rgw_config_option(rgw_client, 'rgw_kafka_max_batch_size', 0, get_config_cluster())
+    kafka_topics = os.path.join(kafka_dir, 'bin/kafka-topics.sh')
+    subprocess.run(
+        [kafka_topics,
+         '--delete', '--topic', topic_name,
+         '--bootstrap-server', host + ':' + str(right_port)],
+        capture_output=True, text=True, timeout=15, check=False
+    )
+    s3_notification_conf.del_config()
+    topic_conf.del_config()
+    # delete objects before deleting the bucket
+    delete_all_objects(conn, bucket_name)
+    conn.delete_bucket(bucket_name)
+    if match_batch_size:
+        receiver.close(task)
+
+
+@pytest.mark.manual_test
+def test_kafka_batch_size():
+    """ test that setting rgw_kafka_max_batch_size limits the batch size sent to kafka """
+    kafka_batch_size(match_batch_size=True)
+
+
+@pytest.mark.manual_test
+def test_kafka_batch_size_mismatch():
+    """ test that without rgw_kafka_max_batch_size, batched messages exceed the broker limit """
+    kafka_batch_size(match_batch_size=False)
+

@@ -32,8 +32,7 @@ export class RgwMultisiteService {
         zone_name: zone.name,
         zonegroup_endpoints: zonegroup.endpoints,
         zone_endpoints: zone.endpoints,
-        username: username,
-        tier_type: zone.tier_type
+        username: username
       });
       return this.http.put(`${this.uiUrl}/migrate`, null, { params: params });
     });
@@ -91,11 +90,11 @@ export class RgwMultisiteService {
     zonegroupName: string,
     zonegroupEndpoints: string,
     zoneName: string,
-    tierType: string,
     zoneEndpoints: string,
     username: string,
     cluster?: string,
     replicationZoneName?: string,
+    secondaryTierType?: string,
     clusterDetailsArray?: any,
     selectedRealmName?: string
   ) {
@@ -104,7 +103,6 @@ export class RgwMultisiteService {
       .set('zonegroup_name', zonegroupName)
       .set('zonegroup_endpoints', zonegroupEndpoints)
       .set('zone_name', zoneName)
-      .set('tier_type', tierType)
       .set('zone_endpoints', zoneEndpoints)
       .set('username', username);
 
@@ -122,6 +120,10 @@ export class RgwMultisiteService {
 
     if (selectedRealmName) {
       params = params.set('selectedRealmName', selectedRealmName);
+    }
+
+    if (secondaryTierType) {
+      params = params.set('secondary_tier_type', secondaryTierType);
     }
 
     return this.http.post(`${this.uiUrl}/multisite-replications`, null, { params: params });

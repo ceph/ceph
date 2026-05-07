@@ -299,6 +299,8 @@ the following ``mon`` configuration:
 .. confval:: mon_fsmap_prune_threshold
 
 
+.. _cephfs_required_client_features:
+
 Required Client Features
 ------------------------
 
