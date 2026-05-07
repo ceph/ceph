@@ -766,6 +766,10 @@ public:
     return std::make_pair(shard_id_t(shard.id % k_plus_m), shard.id / k_plus_m);
   }
 
+  shard_id_t get_abs_shard(shard_id_t rel_shard, int zone) const {
+    return shard_id_t(rel_shard.id + zone * get_k_plus_m());
+  }
+
   shard_id_set zones_or(shard_id_set in) const {
     shard_id_set out;
     shard_id_set mask;
