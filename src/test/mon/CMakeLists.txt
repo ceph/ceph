@@ -88,3 +88,10 @@ add_executable(unittest_mon_election
   )
 add_ceph_unittest(unittest_mon_election)
 target_link_libraries(unittest_mon_election mon global)
+
+#unittest_maybe_go_degraded_stretch_mode
+add_executable(unittest_maybe_go_degraded_stretch_mode
+  test_maybe_go_degraded_stretch_mode.cc
+  )
+add_ceph_unittest(unittest_maybe_go_degraded_stretch_mode)
+target_link_libraries(unittest_maybe_go_degraded_stretch_mode mon global)
