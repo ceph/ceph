@@ -230,6 +230,9 @@ TokenEngine::get_acl_strategy(const TokenEngine::token_envelope_t& token) const
         if (r.is_admin) {
           /* System scope reader defeats project-level permissions. */
           perm |= RGW_OP_TYPE_READ;
+        } else {
+          /* Project scope reader grants read within the project. */
+          perm |= RGW_PERM_READ;
         }
       }
     }
@@ -258,6 +261,8 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
 
       /* Let's suppose that having an admin role implies also a regular one. */
       plain.insert(std::end(plain), std::begin(admin), std::end(admin));
+      /* A reader role also implies a regular one. */
+      plain.insert(std::end(plain), std::begin(reader), std::end(reader));
     }
 
     std::vector<std::string> plain;
@@ -698,6 +703,9 @@ EC2Engine::get_acl_strategy(const EC2Engine::token_envelope_t& token) const
         if (r.is_admin) {
           /* System scope reader defeats project-level permissions. */
           perm |= RGW_OP_TYPE_READ;
+        } else {
+          /* Project scope reader grants read within the project. */
+          perm |= RGW_PERM_READ;
         }
       }
     }
@@ -761,13 +769,17 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
     explicit RolesCacher(CephContext* const cct) {
       get_str_vec(cct->_conf->rgw_keystone_accepted_roles, plain);
       get_str_vec(cct->_conf->rgw_keystone_accepted_admin_roles, admin);
+      get_str_vec(cct->_conf->rgw_keystone_accepted_reader_roles, reader);
 
       /* Let's suppose that having an admin role implies also a regular one. */
       plain.insert(std::end(plain), std::begin(admin), std::end(admin));
+      /* A reader role also implies a regular one. */
+      plain.insert(std::end(plain), std::begin(reader), std::end(reader));
     }
 
     std::vector<std::string> plain;
     std::vector<std::string> admin;
+    std::vector<std::string> reader;
   } accepted_roles(cct);
 
   /* When we handle a HTTP OPTIONS call we must ignore the signature */
@@ -793,6 +805,8 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
                   << " expired: " << t->get_expires() << dendl;
     return result_t::deny();
   }
+
+  t->update_roles(accepted_roles.admin, accepted_roles.reader);
 
   /* check if we have a valid role */
   bool found = false;

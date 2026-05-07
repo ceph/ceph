@@ -222,3 +222,28 @@ The following ACL grant formats are supported for cross-API access:
 
 - **Wildcard grants**: Standard Swift wildcards (``project_id:*``,
   ``*:user_id``) are supported for both Swift and S3 access.
+
+Reader Roles
+------------
+
+The ``rgw keystone accepted reader roles`` option lists Keystone roles that
+grant implicit read access. The behavior depends on whether the user also
+holds an admin role:
+
+- **System-scope reader** (role is in both ``rgw keystone accepted reader roles``
+  and ``rgw keystone accepted admin roles``): The user gets unconditional read
+  access across all projects, bypassing ACLs entirely.
+
+- **Project-scope reader** (role is in ``rgw keystone accepted reader roles``
+  only): The user gets implicit read access to resources within their own
+  Keystone project. Write operations are denied unless separately granted
+  via ACLs.
+
+This option defaults to empty. No reader behavior is enabled unless the
+operator explicitly configures it::
+
+   rgw keystone accepted reader roles = reader
+
+Users whose only Keystone role is a reader role do not need to be
+separately listed in ``rgw keystone accepted roles``; the reader role
+configuration is sufficient for authentication.
