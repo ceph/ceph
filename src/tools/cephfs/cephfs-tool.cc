@@ -170,6 +170,7 @@ struct BenchConfig {
   string perf_dump_path;
   string client_oc;
   string client_oc_size;
+  int msgr_workers;
   bool show_progress;
   int progress_interval;
 };
@@ -215,7 +216,16 @@ int setup_mount(struct ceph_mount_info **cmount, const BenchConfig& config, std:
     }
   }
 
-  // 1c. Apply client_oc_size override
+  // 1c. Apply ms_async_op_threads override
+  if (config.msgr_workers > 0) {
+    string workers_str = std::to_string(config.msgr_workers);
+    if (int rc = ceph_conf_set(*cmount, "ms_async_op_threads", workers_str.c_str()); rc < 0) {
+      out_stream << "Failed to set ms_async_op_threads option: " << strerror(-rc) << endl;
+      return cleanup_on_fail(rc);
+    }
+  }
+
+  // 1d. Apply client_oc_size override
   if (!config.client_oc_size.empty()) {
     uint64_t oc_size = parse_size(config.client_oc_size);
     string oc_size_str = std::to_string(oc_size);
@@ -758,6 +768,13 @@ int do_bench(BenchConfig& config) {
         json_formatter->dump_string("client_oc_size", buf);
       }
     }
+    if (config.msgr_workers > 0) {
+      char buf[128];
+      int rc = ceph_conf_get(shared_cmount, "ms_async_op_threads", buf, sizeof(buf));
+      if (rc >= 0) {
+        json_formatter->dump_string("ms_async_op_threads", buf);
+      }
+    }
     json_formatter->close_section(); // configuration
     json_formatter->open_array_section("iterations");
   }
@@ -783,6 +800,13 @@ int do_bench(BenchConfig& config) {
     int rc = ceph_conf_get(shared_cmount, "client_oc_size", buf, sizeof(buf));
     if (rc >= 0) {
       cout << "  client_oc_size: " << buf << std::endl;
+    }
+  }
+  if (config.msgr_workers > 0) {
+    char buf[128];
+    int rc = ceph_conf_get(shared_cmount, "ms_async_op_threads", buf, sizeof(buf));
+    if (rc >= 0) {
+      cout << "  ms_async_op_threads: " << buf << std::endl;
     }
   }
 
@@ -1094,7 +1118,8 @@ int main(int argc, char **argv) {
     ("uid", po::value<int>(&config.uid)->default_value(-1), "User ID to mount as")
     ("gid", po::value<int>(&config.gid)->default_value(-1), "Group ID to mount as")
     ("client-oc", po::value<string>(&config.client_oc), "Set the 'client_oc' option (0|1)")
-    ("client-oc-size", po::value<string>(&config.client_oc_size), "Set the 'client_oc_size' option");
+    ("client-oc-size", po::value<string>(&config.client_oc_size), "Set the 'client_oc_size' option")
+    ("msgr-workers", po::value<int>(&config.msgr_workers)->default_value(0), "Set the 'ms_async_op_threads' option (1-24, 0 = use default)");
 
   // Group 2: Benchmark Options
   po::options_description bench("Benchmark Options (used with 'bench' command)");
@@ -1166,6 +1191,11 @@ int main(int argc, char **argv) {
 
     if (config.progress_interval < 1 || config.progress_interval > 100) {
       cerr << "Error: progress-interval must be between 1 and 100\n";
+      return 1;
+    }
+
+    if (config.msgr_workers != 0 && (config.msgr_workers < 1 || config.msgr_workers > 24)) {
+      cerr << "Error: msgr-workers must be between 1 and 24\n";
       return 1;
     }
 
