@@ -130,13 +130,16 @@ class OAuth2(SSOAuth):
             raise cherrypy.HTTPError()
         try:
             user = mgr.ACCESS_CTRL_DB.create_user(
-                jwt_payload['sub'], None, jwt_payload['name'], jwt_payload['email'])
+                jwt_payload['sub'], None, jwt_payload.get('name', None), jwt_payload.get('email', None))
         except UserAlreadyExists:
             logger.debug("User already exists")
             user = mgr.ACCESS_CTRL_DB.get_user(jwt_payload['sub'])
+        except KeyError as e:
+            raise cherrypy.HTTPError(500, f'Invalid token payload: {e}')
+
         user.set_roles(cls.get_user_roles())
         # set user last update to token time issued
-        user.last_update = jwt_payload['iat']
+        user.last_update = jwt_payload.get('iat', 0)
         cherrypy.request.user = user
 
     @classmethod
