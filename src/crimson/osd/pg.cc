@@ -1701,7 +1701,8 @@ void PG::on_change(ceph::os::Transaction &t) {
   // is save and in time.
   peering_state.state_clear(PG_STATE_SNAPTRIM);
   peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
-  snap_mapper.reset_backend();
+  auto _t = osdriver.get_transaction(&t);
+  snap_mapper.flush_and_reset_backend(&_t);
   reset_pglog_based_recovery_op();
 }
 
