@@ -15436,8 +15436,8 @@ void PrimaryLogPG::pool_migration_source_start_delete(hobject_t oid)
   } else {
     // Copy completed out of order - wait for earlier copy to complete.
     // Check that the watermark object is being migrated
-    ceph_assert(pool_migrations_in_flight.contains(pool_migration_watermark));
     dout(20) << __func__ << " pool migration " << oid << " waiting for " << pool_migration_watermark << dendl;
+    ceph_assert(pool_migrations_in_flight.contains(pool_migration_watermark));
   }
 
 }
@@ -15842,6 +15842,7 @@ uint64_t PrimaryLogPG::recover_pool_migration(
     recovering.insert(make_pair(soid, obc));
     pool_migrations_in_flight.insert(soid);
     int flags = CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION;
+    flags |= CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE;
     flags |= CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION_HAS_RES;
     if (soid.is_head() && obc->ssc->snapset.seq != 0) {
       dout(20) << __func__ << " " << soid << " has clones" << dendl;
