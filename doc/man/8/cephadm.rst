@@ -13,7 +13,7 @@ Synopsis
 |             [--log-dir LOG_DIR] [--logrotate-dir LOGROTATE_DIR]
 |             [--unit-dir UNIT_DIR] [--verbose] [--timeout TIMEOUT]
 |             [--retry RETRY] [--no-container-init]
-|             {version,pull,inspect-image,ls,list-networks,list-rdma,adopt,rm-daemon,rm-cluster,run,shell,enter,ceph-volume,unit,logs,bootstrap,deploy,check-host,prepare-host,prepare-host-sudo-hardening,setup-ssh-user,add-repo,rm-repo,install,list-images,update-osd-service}
+|             {version,pull,inspect-image,ls,list-networks,list-rdma,adopt,rm-daemon,rm-cluster,run,shell,enter,ceph-volume,unit,logs,bootstrap,deploy,check-host,check-online,prepare-host,prepare-host-sudo-hardening,setup-ssh-user,add-repo,rm-repo,install,list-images,update-osd-service}
 |               ...
 
 
@@ -89,6 +89,8 @@ Synopsis
 |                        [--tcp-ports TCP_PORTS] [--reconfig] [--allow-ptrace]
 
 | **cephadm** **check-host** [-h] [--expect-hostname EXPECT_HOSTNAME]
+
+| **cephadm** **check-online**
 
 | **cephadm** **prepare-host**
 
@@ -287,6 +289,15 @@ check host configuration to be suitable for a Ceph cluster.
 Arguments:
 
 * [--expect-hostname EXPECT_HOSTNAME] Check that hostname matches an expected value
+
+
+check-online
+------------
+
+check that the host is online by running ``true`` locally.
+
+This command is primarily intended for cephadm internals (for example, the
+offline host watcher), rather than direct operator workflows.
 
 
 deploy

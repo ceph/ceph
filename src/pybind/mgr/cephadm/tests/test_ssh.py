@@ -21,6 +21,7 @@ from ceph.deployment.hostspec import HostSpec
 from cephadm import CephadmOrchestrator
 from cephadm.serve import CephadmServe
 from cephadm.tests.fixtures import with_host, wait, async_side_effect
+from cephadm.utils import cephadmNoImage
 from orchestrator import OrchestratorError
 
 
@@ -111,3 +112,17 @@ def test_remote_command():
         '-rf',
         '/tmp/blat',
     ]
+
+
+@mock.patch("cephadm.offline_watcher.CephadmServe._run_cephadm")
+def test_offline_watcher_uses_cephadm_check_online(run_cephadm, cephadm_module):
+    run_cephadm.side_effect = async_side_effect(([''], [''], 0))
+
+    with with_host(cephadm_module, 'test'):
+        run_cephadm.reset_mock()
+        cephadm_module.offline_watcher.check_host('test')
+
+    run_cephadm.assert_called_once_with(
+        'test', cephadmNoImage, 'check-online', [],
+        no_fsid=True, log_output=cephadm_module.log_refresh_metadata
+    )
