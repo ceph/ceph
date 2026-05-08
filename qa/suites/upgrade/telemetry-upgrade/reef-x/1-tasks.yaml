@@ -18,6 +18,8 @@ overrides:
       - do not have an application enabled
       - is down
       - Telemetry requires re-opt-in
+      - noscrub
+      - nodeep-scrub
 tasks:
 - install:
     branch: reef
