@@ -319,6 +319,8 @@ private:
     bool m_datasync_error = false;
     int m_datasync_errno = 0;
     bool m_backoff = false;
+    boost::optional<monotime> m_first_dataq_push_time;
+    bool m_datasync_queue_wait_reported = false;
   };
 
   class RemoteSync : public SyncMechanism {
@@ -385,6 +387,7 @@ private:
     monotime last_synced = clock::zero();
     boost::optional<double> last_sync_duration;
     boost::optional<double> last_sync_crawl_duration;
+    boost::optional<double> last_sync_datasync_queue_wait_duration;
     boost::optional<uint64_t> last_sync_bytes; //last sync bytes for display in status
     boost::optional<uint64_t> last_sync_files; //last num of sync files for display in status
     uint64_t sync_bytes = 0; //sync bytes counter, independently for each directory sync.
@@ -407,6 +410,8 @@ private:
     uint64_t discovered_delta_bytes = 0; //discovered delta bytes counter, independently for each directory sync.
     uint64_t blockdiff_sync_bytes = 0; //actual bytes synced using SnapDiff/blockdiff counter
     double blockdiff_time_sec = 0.0; //actual sync time using SnapDiff/blockdiff counter
+    boost::optional<double> datasync_queue_wait_duration; // first data_q push to first pop (final)
+    boost::optional<monotime> datasync_queue_wait_start_time; // until first pop; for in-progress display
   };
 
   void _inc_failed_count(const std::string &dir_root) {
@@ -455,6 +460,8 @@ private:
     sync_stat.discovered_delta_bytes = 0;
     sync_stat.blockdiff_sync_bytes = 0;
     sync_stat.blockdiff_time_sec = 0.0;
+    sync_stat.datasync_queue_wait_duration = boost::none;
+    sync_stat.datasync_queue_wait_start_time = boost::none;
   }
   void _set_last_synced_snap(const std::string &dir_root, uint64_t snap_id,
                             const std::string &snap_name) {
@@ -497,6 +504,9 @@ private:
     sync_stat.last_synced = clock::now();
     sync_stat.last_sync_duration = duration;
     sync_stat.last_sync_crawl_duration = sync_stat.crawl_duration;
+    //For empty snapshot sync, datasync_queue_wait_duration is 0
+    sync_stat.last_sync_datasync_queue_wait_duration =
+      sync_stat.datasync_queue_wait_duration.value_or(0.0);
     sync_stat.last_sync_bytes = sync_stat.sync_bytes;
     sync_stat.last_sync_files = sync_stat.sync_files;
     ++sync_stat.synced_snap_count;
@@ -512,6 +522,21 @@ private:
     auto &sync_stat = m_snap_sync_stats.at(dir_root);
     sync_stat.crawl_finished = state;
     sync_stat.crawl_duration = seconds;
+  }
+  void set_datasync_queue_wait_start_time(const std::string &dir_root, monotime t) {
+    std::scoped_lock locker(m_lock);
+    auto &sync_stat = m_snap_sync_stats.at(dir_root);
+    if (!sync_stat.datasync_queue_wait_start_time && !sync_stat.datasync_queue_wait_duration) {
+      sync_stat.datasync_queue_wait_start_time = t;
+    }
+  }
+  void set_datasync_queue_wait_duration(const std::string &dir_root, double seconds) {
+    std::scoped_lock locker(m_lock);
+    auto &sync_stat = m_snap_sync_stats.at(dir_root);
+    if (!sync_stat.datasync_queue_wait_duration) {
+      sync_stat.datasync_queue_wait_duration = seconds;
+      sync_stat.datasync_queue_wait_start_time = boost::none;
+    }
   }
   void set_blockdiff_metrics(const std::string &dir_root, const uint64_t bd_syncbytes, const double bd_time) {
     std::scoped_lock locker(m_lock);

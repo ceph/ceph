@@ -1353,10 +1353,17 @@ PeerReplayer::SyncMechanism::~SyncMechanism() {
 void PeerReplayer::SyncMechanism::push_dataq_entry(SyncEntry e) {
   dout(10) << ": snapshot data replayer dataq pushed" << " syncm=" << this
 	   << " epath=" << e.epath << dendl;
-  m_peer_replayer.inc_total_bytes_files(std::string(m_dir_root), e.stx.stx_size);
+  const uint64_t entry_bytes = e.stx.stx_size;
   std::unique_lock lock(sdq_lock);
+  if (!m_first_dataq_push_time) {
+    m_first_dataq_push_time = clock::now();
+    m_peer_replayer.set_datasync_queue_wait_start_time(std::string(m_dir_root),
+                                                       *m_first_dataq_push_time);
+  }
   m_sync_dataq.push(std::move(e));
   sdq_cv.notify_all();
+  lock.unlock();
+  m_peer_replayer.inc_total_bytes_files(std::string(m_dir_root), entry_bytes);
 }
 
 bool PeerReplayer::SyncMechanism::pop_dataq_entry(SyncEntry &out_entry) {
@@ -1402,6 +1409,12 @@ bool PeerReplayer::SyncMechanism::pop_dataq_entry(SyncEntry &out_entry) {
     return false; // no more work
   }
 
+  if (!m_datasync_queue_wait_reported && m_first_dataq_push_time) {
+    sec_duration dq_wait{0};
+    dq_wait = sec_duration(clock::now() - *m_first_dataq_push_time);
+    m_peer_replayer.set_datasync_queue_wait_duration(std::string(m_dir_root), dq_wait.count());
+    m_datasync_queue_wait_reported = true;
+  }
   out_entry = std::move(m_sync_dataq.front());
   m_sync_dataq.pop();
   dout(10) << ": snapshot data replayer dataq popped" << " syncm=" << this
@@ -2749,6 +2762,22 @@ void PeerReplayer::peer_status(Formatter *f) {
         f->dump_string("duration", format_time(crawl_duration_till_now.count()));
       }
       f->close_section(); //crawl
+      if (sync_stat.datasync_queue_wait_duration ||
+          sync_stat.datasync_queue_wait_start_time) {
+        f->open_object_section("datasync_queue_wait");
+        if (sync_stat.datasync_queue_wait_duration) {
+          f->dump_string("state", "completed");
+          f->dump_string("duration",
+                         format_time(*sync_stat.datasync_queue_wait_duration));
+        } else {
+          f->dump_string("state", "waiting");
+          auto cur_time = clock::now();
+          sec_duration dq_wait{0};
+          dq_wait = sec_duration(cur_time - *sync_stat.datasync_queue_wait_start_time);
+          f->dump_string("duration", format_time(dq_wait.count()));
+        }
+        f->close_section();
+      }
       f->open_object_section("bytes");
       f->dump_string("sync_bytes", format_bytes(sync_stat.sync_bytes));
       f->dump_string("total_bytes", format_bytes(sync_stat.total_bytes));
@@ -2782,6 +2811,10 @@ void PeerReplayer::peer_status(Formatter *f) {
       f->dump_string("name", (*sync_stat.last_synced_snap).second);
       if (sync_stat.last_sync_crawl_duration) {
         f->dump_string("crawl_duration", format_time(*sync_stat.last_sync_crawl_duration));
+      }
+      if (sync_stat.last_sync_datasync_queue_wait_duration) {
+        f->dump_string("datasync_queue_wait_duration",
+                       format_time(*sync_stat.last_sync_datasync_queue_wait_duration));
       }
       if (sync_stat.last_sync_duration) {
         f->dump_string("sync_duration", format_time(*sync_stat.last_sync_duration));
