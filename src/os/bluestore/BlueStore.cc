@@ -3590,9 +3590,14 @@ BlueStore::ExtentMap::reshard_decision(uint32_t segment_size) {
 	   << needs_reshard_end << ") segment 0x" << segment_size << std::dec
 	   << " of " << onode->onode.extent_map_shards.size()
 	   << " shards on " << onode->oid << dendl;
-  for (auto& p : spanning_blob_map) {
-    dout(20) << __func__ << "   spanning blob " << p.first << " " << *p.second
-	     << dendl;
+  const int span_blob_log_level = 20;
+  if (cct->_conf->subsys.should_gather<ceph_subsys_bluestore, span_blob_log_level>()) {
+    for (auto& p : spanning_blob_map) {
+      dout(span_blob_log_level) << __func__
+                                << "   spanning blob "
+                                << p.first << " " << *p.second
+	                        << dendl;
+    }
   }
   // determine shard index range
   unsigned shard_index_begin = 0, shard_index_end = 0;
