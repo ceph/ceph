@@ -21,10 +21,15 @@
               deployed, the version of Ceph, the distribution of the hosts and other parameters which help the project
               to gain a better understanding of the way Ceph is used. The data is sent secured to {{ sendToUrl }} and
               {{ sendToDeviceUrl }} (device report).</p>
-            <div *ngIf="moduleEnabled">
-              The plugin is already <b>enabled</b>. Click <b>Deactivate</b> to disable it.&nbsp;
+            <div *ngIf="moduleEnabled"
+                 class="module-enabled-info">
+              <p i18n>
+                The plugin is already <b>enabled</b>. Deactivate it to disable telemetry data
+                submission.
+              </p>
               <button type="button"
-                      class="btn btn-light"
+                      cdsButton="secondary"
+                      size="sm"
                       (click)="disableModule('The Telemetry module has been disabled successfully.')"
                       i18n>Deactivate</button>
             </div>
@@ -242,13 +247,13 @@
               can activate the automatic submission of your data.</p>
           </div>
           <div class="card-footer">
-            <div class="button-group text-right">
+            <cds-button-set>
               <button type="button"
-                      class="btn btn-light"
+                      cdsButton="primary"
                       (click)="next()">
                 <ng-container>{{ actionLabels.NEXT }}</ng-container>
               </button>
-            </div>
+            </cds-button-set>
           </div>
         </div>
       </form>
