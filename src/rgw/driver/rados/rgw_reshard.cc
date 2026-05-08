@@ -804,10 +804,11 @@ static int commit_target_layout(rgw::sal::RadosStore* store,
   layout.target_index = std::nullopt;
   layout.resharding = rgw::BucketReshardState::None;
 
-  // add the new log generation, preserving the bilog backend type.
-  // FIFO-backed buckets keep FIFO after reshard; in_index records which
-  // index generation's writes this log generation covers.
-  if (is_fifo) {
+  // add the new log generation. InIndex buckets are upgraded to FIFO on reshard
+  // unless the config has been explicitly set to 'inindex' to opt out
+  const bool want_fifo =
+    (store->ctx()->_conf.get_val<std::string>("rgw_default_bucket_bilog_type") == "fifo");
+  if (is_fifo || (want_fifo && store->svc()->zone->need_to_log_data())) {
     layout.logs.push_back(fifo_log_layout_from_index(next_log_gen, layout.current_index));
   } else {
     layout.logs.push_back(log_layout_from_index(next_log_gen, layout.current_index));
@@ -888,10 +889,7 @@ static int commit_reshard(rgw::sal::RadosStore* store,
       prev.current_index.layout.type == rgw::BucketIndexType::Normal) {
     // write a datalog entry for each shard of the previous index. triggering
     // sync on the old shards will force them to detect the end-of-log for that
-    // generation, and eventually transition to the next.
-    // this works for both InIndex and FIFO-backed buckets: the shard count
-    // comes from the index normal layout (same for both types), and
-    // datalog::add_entry only uses the log generation number.
+    // generation, and eventually transition to the next
     for (uint32_t shard_id = 0; shard_id < rgw::num_shards(prev.current_index.layout.normal); ++shard_id) {
       // This null_yield can stay, for now, since we're in our own thread
       ret = store->svc()->datalog_rados->add_entry(dpp, bucket_info, prev.logs.back(), shard_id,
