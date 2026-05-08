@@ -1005,6 +1005,70 @@ TEST(Blob, split) {
     ASSERT_EQ(0x1000u, R.get_blob().get_extents().front().length);
     ASSERT_EQ(0x1000u, R.get_referenced_bytes());
   }
+  {
+    // Check if we prune 'invalid' tails for resulting blobs
+
+    size_t l1 = 0x1000;
+    size_t l2 = 0x2000;
+    size_t l3 = 0x1000;
+    size_t l4 = 0x4000;
+    size_t csum_order = 12;
+    int csum_type = Checksummer::CSUM_CRC32C;
+    size_t csum_chunk = (1u << csum_order);
+    size_t csum_val_size = Checksummer::get_csum_value_size(csum_type);
+    auto make_blob = [&](BlueStore::BlobRef b) {
+      b->dirty_blob().allocated_test(bluestore_pextent_t(0x2000, l1));
+      b->dirty_blob().allocated_test(bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, l2));
+      b->dirty_blob().allocated_test(bluestore_pextent_t(0x12000, l3));
+      b->dirty_blob().allocated_test(bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, l4));
+      // csum block size = 1K, full blob length covered with csum
+      b->dirty_blob().init_csum(csum_type, csum_order, l1 + l2 + l3 + l4);
+      b->get_ref(coll.get(), 0, l1);
+      b->get_ref(coll.get(), l1 + l2, l3);
+      return b;
+    };
+    {
+      BlueStore::BlobRef L = coll->new_blob();
+      BlueStore::BlobRef R = coll->new_blob();
+      make_blob(L);
+      L->split(coll.get(), l1, R.get());
+
+      // L blob verification
+      ASSERT_EQ(l1, L->get_blob().get_logical_length());
+      ASSERT_EQ(l1 / csum_chunk * csum_val_size, L->get_blob().csum_data.length());
+      ASSERT_EQ(1u, L->get_blob().get_extents().size());
+      ASSERT_EQ(0x2000u, L->get_blob().get_extents().front().offset);
+      ASSERT_EQ(l1, L->get_blob().get_extents().front().length);
+      ASSERT_EQ(l1, L->get_referenced_bytes());
+      // R blob verification
+      ASSERT_EQ(l2 + l3, R->get_blob().get_logical_length());
+      ASSERT_EQ((l2 + l3) / csum_chunk * csum_val_size, R->get_blob().csum_data.length());
+      ASSERT_EQ(2u, R->get_blob().get_extents().size());
+      ASSERT_EQ(0x12000u, R->get_blob().get_extents().back().offset);
+      ASSERT_EQ(l3, R->get_blob().get_extents().back().length);
+      ASSERT_EQ(l3, R->get_referenced_bytes());
+    }
+    {
+      BlueStore::BlobRef L = coll->new_blob();
+      BlueStore::BlobRef R = coll->new_blob();
+      make_blob(L);
+      L->split(coll.get(), l1 + l2, R.get());
+      // L blob verification
+      ASSERT_EQ(l1, L->get_blob().get_logical_length());
+      ASSERT_EQ(l1 / csum_chunk * csum_val_size, L->get_blob().csum_data.length());
+      ASSERT_EQ(1u, L->get_blob().get_extents().size());
+      ASSERT_EQ(0x2000u, L->get_blob().get_extents().front().offset);
+      ASSERT_EQ(l1, L->get_blob().get_extents().front().length);
+      ASSERT_EQ(l1, L->get_referenced_bytes());
+      // R blob verification
+      ASSERT_EQ(l3, R->get_blob().get_logical_length());
+      ASSERT_EQ(l3 / csum_chunk * csum_val_size, R->get_blob().csum_data.length());
+      ASSERT_EQ(1u, R->get_blob().get_extents().size());
+      ASSERT_EQ(0x12000u, R->get_blob().get_extents().front().offset);
+      ASSERT_EQ(l3, R->get_blob().get_extents().front().length);
+      ASSERT_EQ(l3, R->get_referenced_bytes());
+    }
+  }
 }
 
 TEST(Blob, legacy_decode) {
