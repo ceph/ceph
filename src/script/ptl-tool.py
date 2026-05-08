@@ -592,13 +592,7 @@ class CommitParityCheck(BaseAuditCheck):
     def name(self) -> str:
         return "Commit Parity"
 
-    def run(self, ctx: AuditContext) -> None:
-        """
-        Analyzes the local Git DAG to ensure all commits from the original main PRs 
-        are present in the backport PR.
-        """
-        G, session, pr, pr_commits, base, report, args = ctx.G, ctx.session, ctx.pr, ctx.pr_commits, ctx.base, ctx.report, ctx.args
-        log.info("Verifying commit parity with original PR(s) locally...")
+    def _validate_formats(self, pr_commits, base):
         bp_cherry_picks = []
         invalid_format_commits = []
         cp_regex = re.compile(r"\(cherry picked from commit ([0-9a-f]{7,40})\)")
@@ -607,13 +601,14 @@ class CommitParityCheck(BaseAuditCheck):
             is_cherry_pick = bool(m)
             if not is_cherry_pick and not commit.summary.startswith(f"{base}:"):
                 invalid_format_commits.append(commit)
-    
+
             if is_cherry_pick:
                 bp_cherry_picks.append((commit, m.group(1)))
-        
+        return bp_cherry_picks, invalid_format_commits, cp_regex
+
+    def _map_upstream_commits(self, G, bp_cherry_picks):
         missing_commits = []
         found_prs = set()
-        bp_orig_shas = set(orig_sha for _, orig_sha in bp_cherry_picks)
         analyzed_merges = set()
         pr_mapping = {}
         bp_commits_mapped = set()
@@ -626,7 +621,7 @@ class CommitParityCheck(BaseAuditCheck):
                 break
             except git.exc.GitCommandError:
                 pass
-    
+
         if valid_ref:
             for commit, orig_sha in bp_cherry_picks:
                 try:
@@ -640,7 +635,7 @@ class CommitParityCheck(BaseAuditCheck):
                         if c in first_parent_set:
                             merge_sha = c
                             break
-    
+
                     if merge_sha and merge_sha not in analyzed_merges:
                         analyzed_merges.add(merge_sha)
                         # Extract the original PR commits using merge parents (merge^1..merge^2)
@@ -652,7 +647,7 @@ class CommitParityCheck(BaseAuditCheck):
                         pr_name = f"PR #{m_pr.group(1)}" if m_pr else f"Merge {merge_sha[:8]}"
                         found_prs.add(pr_name)
                         pr_mapping[pr_name] = []
-    
+
                         for o_commit_sha in orig_pr_commits:
                             o_summary = G.commit(o_commit_sha).summary
                             bp_match = next((c for c, o_sha in bp_cherry_picks if o_commit_sha.startswith(o_sha)), None)
@@ -672,7 +667,7 @@ class CommitParityCheck(BaseAuditCheck):
                     log.debug(f"Local DAG traversal skipped/failed for {orig_sha[:8]}")
         else:
             log.warning("Could not find local main/upstream ref to perform DAG parity check.")
-    
+
         if found_prs:
             log.info(f"Original PRs identified in this backport: {', '.join(sorted(list(found_prs)))}")
             if len(found_prs) > 1:
@@ -681,20 +676,30 @@ class CommitParityCheck(BaseAuditCheck):
                 print("Normally we expect exactly one main PR per backport.")
                 print("Detected: " + ", ".join(sorted(list(found_prs))))
                 print("="*80 + "\033[0m")
-    
-        # Print Visualizer UI
+
+        return {
+            'found_prs': found_prs,
+            'pr_mapping': pr_mapping,
+            'bp_commits_mapped': bp_commits_mapped,
+            'missing_commits': missing_commits,
+            'analyzed_merges': analyzed_merges,
+            'valid_ref': valid_ref
+        }
+
+    def _generate_visualizer(self, pr_commits, pr, pr_mapping, missing_commits):
         visualizer_text = ""
         visualizer_lines = []
         visualizer_md_table = ""
         visualizer_md_lines = []
-        if found_prs or pr_commits:
+        
+        if pr_mapping or pr_commits:
             visualizer_lines.append("=" * 80)
             visualizer_lines.append("COMMIT PARITY VISUALIZER")
             visualizer_lines.append("=" * 80)
             
             visualizer_md_lines.append(f"| BACKPORT PR #{pr} | SOURCE PR | SOURCE STATUS |")
             visualizer_md_lines.append("|---|---|---|")
-    
+
             bp_to_source = {}
             for pr_name, commit_list in pr_mapping.items():
                 for item in commit_list:
@@ -710,13 +715,10 @@ class CommitParityCheck(BaseAuditCheck):
             visualizer_lines.append(f"BACKPORT PR #{pr}".ljust(47) + "SOURCE PR / STATUS")
             visualizer_lines.append("-" * 80)
             
-            # Print all backport commits exactly in chronological order
             current_pr = None
             for bp_c in pr_commits:
                 if bp_c.hexsha in bp_to_source:
                     pr_name, item = bp_to_source[bp_c.hexsha]
-                    
-                    # If PR block changes, flush the missing commits for the previous block
                     if current_pr is not None and pr_name != current_pr:
                         if current_pr in unprinted_missing:
                             for m_sha, m_summary in unprinted_missing[current_pr]:
@@ -724,7 +726,7 @@ class CommitParityCheck(BaseAuditCheck):
                                 visualizer_lines.append(format_parity_row(None, None, m_sha, m_summary, is_missing=True, right_prefix=prefix))
                                 visualizer_md_lines.append(format_parity_row_md(None, None, m_sha, m_summary, is_missing=True, right_prefix=prefix))
                             del unprinted_missing[current_pr]
-                        visualizer_lines.append("") # Add visual grouping space between different PRs
+                        visualizer_lines.append("")
                         
                     prefix = f"{pr_name} " if pr_name != current_pr else " " * (len(pr_name) + 1)
                     current_pr = pr_name
@@ -739,11 +741,10 @@ class CommitParityCheck(BaseAuditCheck):
                                 visualizer_md_lines.append(format_parity_row_md(None, None, m_sha, m_summary, is_missing=True, right_prefix=prefix))
                             del unprinted_missing[current_pr]
                         visualizer_lines.append("")
-                    current_pr = None # Reset so the next PR prints its name
+                    current_pr = None
                     visualizer_lines.append(format_parity_row(bp_c.hexsha, bp_c.summary, None, None, is_extra=True))
                     visualizer_md_lines.append(format_parity_row_md(bp_c.hexsha, bp_c.summary, None, None, is_extra=True))
             
-            # Flush any remaining missing commits for the last processed PR block
             if current_pr is not None and current_pr in unprinted_missing:
                 for m_sha, m_summary in unprinted_missing[current_pr]:
                     prefix = " " * (len(current_pr) + 1)
@@ -751,7 +752,6 @@ class CommitParityCheck(BaseAuditCheck):
                     visualizer_md_lines.append(format_parity_row_md(None, None, m_sha, m_summary, is_missing=True, right_prefix=prefix))
                 del unprinted_missing[current_pr]
                 
-            # Flush any missing commits for PRs that had NO commits successfully mapped
             for pr_name, missing_list in unprinted_missing.items():
                 visualizer_lines.append("")
                 first = True
@@ -765,169 +765,184 @@ class CommitParityCheck(BaseAuditCheck):
             
             visualizer_text = "\n".join(visualizer_lines)
             visualizer_md_table = "\n".join(visualizer_md_lines)
-            print(visualizer_text)
-
-            if visualizer_md_table:
-                report.set_visualizer(visualizer_md_table)
-    
-        visualizer_clean = re.sub(r'\033\[[0-9;]*m', '', visualizer_text) if visualizer_text else ""
-    
-        if invalid_format_commits:
-            if args.ci_mode:
-                md_text = f"### Automated Backport Parity Review - Invalid Commit Format\n\n"
-                md_text += f"The following commits have an invalid format. Backport commits must either include a standard `(cherry picked from commit ...)` line or start with the target branch name (e.g., `{base}:`).\n\n"
-                for commit in invalid_format_commits:
-                    md_text += f"* `{commit.hexsha[:8]}` {commit.summary}\n"
-                md_text += "\n[Be familiar with the rules and guidelines for writing backports.](https://github.com/ceph/ceph/blob/main/SubmittingPatches-backports.rst)\n\n"
-                report.add("Invalid Commit Format", md_text)
-            else:
-                log.error(f"Found {len(invalid_format_commits)} commit(s) with an invalid format. Must be cherry-pick or start with '{base}:'")
-                md_text = f"### Automated Backport Parity Review - Invalid Commit Format\n\n"
-                md_text += f"The following commits have an invalid format. Backport commits must either include a standard `(cherry picked from commit ...)` line or start with the target branch name (e.g., `{base}:`).\n\n"
-                for commit in invalid_format_commits:
-                    log.error(f"  {commit.hexsha[:8]} {commit.summary}")
-                    md_text += f"* `{commit.hexsha[:8]}` {commit.summary}\n"
-                md_text += "\n[Be familiar with the rules and guidelines for writing backports.](https://github.com/ceph/ceph/blob/main/SubmittingPatches-backports.rst)\n\n"
-                
-                while True:
-                    ans = input("Do you want to allow these commits anyway? [p/m/r/o/q] (p=proceed, m=skip to merge, r=add to review, o=open PR in browser, q=quit) ").strip().lower()
-                    if ans == 'o':
-                        url = f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/pull/{pr}"
-                        open_in_browser([url])
-                        print(f"Opened {url} in browser.")
-                    elif ans == 'm':
-                        raise SkipToMerge()
-                    elif ans == 'r':
-                        report.add("Invalid Commit Format", md_text)
-                        report.record_failure()
-                        break
-                    elif ans == 'q':
-                        sys.exit(1)
-                    elif ans == 'p':
-                        break
-                    else:
-                        print("Invalid choice. Please enter p, m, r, o, or q.")
-
-        extra_commits = [c for c in pr_commits if c.hexsha not in bp_commits_mapped]
-    
-        unmerged_cps = [c for c in extra_commits if cp_regex.search(c.message)]
-        if valid_ref and unmerged_cps:
-            md_text = "### Automated Backport Parity Review - Unmerged Commits Detected\n\n"
-            md_text += "This backport contains cherry-picks of commits that do not appear to be merged into the `main` branch (could not find an associated merge commit or PR). Backports should only contain commits that have already been merged upstream.\n\n"
-            md_text += "#### Unmerged Cherry-Picks\n"
-            for c in unmerged_cps:
-                orig_sha = cp_regex.search(c.message).group(1)
-                md_text += f"* Backport commit {c.hexsha[:8]} cherry-picks {orig_sha[:8]}\n"
-    
-            md_text += "\n"
-            md_text += "[Be familiar with the rules and guidelines for writing backports.](https://github.com/ceph/ceph/blob/main/SubmittingPatches-backports.rst)\n\n"
-                
-            if args.ci_mode:
-                report.add("Unmerged Cherry-Picks", md_text)
-            else:
-                while True:
-                    ans = input("Unmerged cherry-picks detected! [p]roceed, [m] skip to merge, [o]pen browser to investigate, [r]eview PR (add to review), [q]uit: ").strip().lower()
-                    if ans == 'p':
-                        break
-                    elif ans == 'm':
-                        raise SkipToMerge()
-                    elif ans == 'q':
-                        log.error("Rejecting PR due to unmerged cherry-picks.")
-                        sys.exit(1)
-                    elif ans == 'r':
-                        report.add("Unmerged Cherry-Picks", md_text)
-                        report.record_failure()
-                        break
-                    elif ans == 'o':
-                        bp_pr_url = f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/pull/{pr}"
-                        urls_to_open = [bp_pr_url]
-                        for c in unmerged_cps:
-                            orig_sha = cp_regex.search(c.message).group(1)
-                            urls_to_open.append(f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/commit/{orig_sha}")
-                            urls_to_open.append(f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/commit/{c.hexsha}")
-                        open_in_browser(urls_to_open)
-                        print("Opened URLs in browser.")
-                    else:
-                        print("Invalid choice. Please enter p, m, o, r, or q.")
-    
-        if missing_commits or extra_commits:
-            # Generate markdown comment draft
-            md_text = f"### Automated Backport Parity Review\n\n"
-            if len(found_prs) > 1:
-                md_text += f":warning: **Multiple Original PRs Detected:** {', '.join(sorted(list(found_prs)))}\n\n"
-            md_text += "Discrepancies detected between the backport PR and the original source PR(s)."
-            md_text += " Please see the Commit Parity Visualizer below.\n\n"
-    
-            if args.ci_mode:
-                report.add("Parity Mismatch", md_text)
-            else:
-                while True:
-                    ans = input("Parity mismatch! [p]roceed, [m] skip to merge, [o]pen browser to investigate, [r]eview PR (add to review), [q]uit: ").strip().lower()
-                    if ans == 'p':
-                        break
-                    elif ans == 'm':
-                        raise SkipToMerge()
-                    elif ans == 'q':
-                        log.error("Rejecting PR due to incomplete backport.")
-                        sys.exit(1)
-                    elif ans == 'r':
-                        report.add("Parity Mismatch", md_text)
-                        report.record_failure()
-                        break
-                    elif ans == 'o':
-                        # Open the backport PR first in a new window
-                        bp_pr_url = f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/pull/{pr}"
-                        urls_to_open = [bp_pr_url]
-    
-                        for pr_name, o_sha, o_summary, m_sha in missing_commits:
-                            m_pr = re.search(r'#(\d+)', pr_name)
-                            if m_pr:
-                                urls_to_open.append(f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/pull/{m_pr.group(1)}")
-                            urls_to_open.append(f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/commit/{m_sha}")
-                            urls_to_open.append(f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/commit/{o_sha}")
-                        
-                        for c in extra_commits:
-                            urls_to_open.append(f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/commit/{c.hexsha}")
-                            
-                        open_in_browser(urls_to_open)
-                        print("Opened URLs in browser.")
-                    else:
-                        print("Invalid choice. Please enter p, m, o, r, or q.")
-        elif analyzed_merges:
-            print("\033[92mCommit parity check passed! All upstream commits from identified PRs are present.\033[0m")
             
-            if len(found_prs) > 1:
-                md_text = f"### Automated Backport Parity Review - Multiple PRs Detected\n\n"
-                md_text += f"This backport appears to pull commits from multiple `main` PRs including: {', '.join(sorted(list(found_prs)))}.\n\n"
-                md_text += "This must be explicitly documented in the backport PR description. Furthermore, each backport tracker ticket associated with these `main` PRs must be linked to this PR.\n\n"
-                
-                if args.ci_mode:
-                    report.add("Multiple Source PRs", md_text)
+        return visualizer_text, visualizer_md_table
+
+    def _handle_invalid_formats(self, ctx, invalid_format_commits):
+        if ctx.args.ci_mode:
+            md_text = f"### Automated Backport Parity Review - Invalid Commit Format\n\n"
+            md_text += f"The following commits have an invalid format. Backport commits must either include a standard `(cherry picked from commit ...)` line or start with the target branch name (e.g., `{ctx.base}:`).\n\n"
+            for commit in invalid_format_commits:
+                md_text += f"* `{commit.hexsha[:8]}` {commit.summary}\n"
+            md_text += "\n[Be familiar with the rules and guidelines for writing backports.](https://github.com/ceph/ceph/blob/main/SubmittingPatches-backports.rst)\n\n"
+            ctx.report.add("Invalid Commit Format", md_text)
+        else:
+            log.error(f"Found {len(invalid_format_commits)} commit(s) with an invalid format. Must be cherry-pick or start with '{ctx.base}:'")
+            md_text = f"### Automated Backport Parity Review - Invalid Commit Format\n\n"
+            md_text += f"The following commits have an invalid format. Backport commits must either include a standard `(cherry picked from commit ...)` line or start with the target branch name (e.g., `{ctx.base}:`).\n\n"
+            for commit in invalid_format_commits:
+                log.error(f"  {commit.hexsha[:8]} {commit.summary}")
+                md_text += f"* `{commit.hexsha[:8]}` {commit.summary}\n"
+            md_text += "\n[Be familiar with the rules and guidelines for writing backports.](https://github.com/ceph/ceph/blob/main/SubmittingPatches-backports.rst)\n\n"
+            
+            while True:
+                ans = input("Do you want to allow these commits anyway? [p/m/r/o/q] (p=proceed, m=skip to merge, r=add to review, o=open PR in browser, q=quit) ").strip().lower()
+                if ans == 'o':
+                    url = f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/pull/{ctx.pr}"
+                    open_in_browser([url])
+                    print(f"Opened {url} in browser.")
+                elif ans == 'm':
+                    raise SkipToMerge()
+                elif ans == 'r':
+                    ctx.report.add("Invalid Commit Format", md_text)
+                    ctx.report.record_failure()
+                    break
+                elif ans == 'q':
+                    sys.exit(1)
+                elif ans == 'p':
+                    break
                 else:
-                    while True:
-                        ans = input("Multiple original PRs detected! Do you want to add a review requesting documentation? [p/r/m/o] (p=proceed/ignore, r=add to review, m=skip to merge, o=open PRs in browser): ").strip().lower()
-                        if ans == 'o':
-                            url = f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/pull/{pr}"
-                            urls_to_open = [url]
-                            for pr_str in found_prs:
-                                m_pr = re.search(r'#(\d+)', pr_str)
-                                if m_pr:
-                                    urls_to_open.append(f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/pull/{m_pr.group(1)}")
-                            open_in_browser(urls_to_open)
-                            print("Opened URLs in browser.")
-                        elif ans == 'r':
-                            report.add("Multiple Source PRs", md_text)
-                            report.record_failure()
-                            break
-                        elif ans == 'm':
-                            raise SkipToMerge()
-                        elif ans == 'p':
-                            break
-                        else:
-                            print("Invalid choice. Please enter p, r, m, or o.")
-    
-            ctx.visualizer_md_table = visualizer_md_table
-            ctx.found_prs = found_prs
+                    print("Invalid choice. Please enter p, m, r, o, or q.")
+
+    def _handle_unmerged_commits(self, ctx, unmerged_cps, cp_regex):
+        md_text = "### Automated Backport Parity Review - Unmerged Commits Detected\n\n"
+        md_text += "This backport contains cherry-picks of commits that do not appear to be merged into the `main` branch (could not find an associated merge commit or PR). Backports should only contain commits that have already been merged upstream.\n\n"
+        md_text += "#### Unmerged Cherry-Picks\n"
+        for c in unmerged_cps:
+            orig_sha = cp_regex.search(c.message).group(1)
+            md_text += f"* Backport commit {c.hexsha[:8]} cherry-picks {orig_sha[:8]}\n"
+
+        md_text += "\n[Be familiar with the rules and guidelines for writing backports.](https://github.com/ceph/ceph/blob/main/SubmittingPatches-backports.rst)\n\n"
+            
+        if ctx.args.ci_mode:
+            ctx.report.add("Unmerged Cherry-Picks", md_text)
+        else:
+            while True:
+                ans = input("Unmerged cherry-picks detected! [p]roceed, [m] skip to merge, [o]pen browser to investigate, [r]eview PR (add to review), [q]uit: ").strip().lower()
+                if ans == 'p':
+                    break
+                elif ans == 'm':
+                    raise SkipToMerge()
+                elif ans == 'q':
+                    log.error("Rejecting PR due to unmerged cherry-picks.")
+                    sys.exit(1)
+                elif ans == 'r':
+                    ctx.report.add("Unmerged Cherry-Picks", md_text)
+                    ctx.report.record_failure()
+                    break
+                elif ans == 'o':
+                    bp_pr_url = f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/pull/{ctx.pr}"
+                    urls_to_open = [bp_pr_url]
+                    for c in unmerged_cps:
+                        orig_sha = cp_regex.search(c.message).group(1)
+                        urls_to_open.append(f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/commit/{orig_sha}")
+                        urls_to_open.append(f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/commit/{c.hexsha}")
+                    open_in_browser(urls_to_open)
+                    print("Opened URLs in browser.")
+                else:
+                    print("Invalid choice. Please enter p, m, o, r, or q.")
+
+    def _handle_parity_mismatch(self, ctx, missing_commits, extra_commits, found_prs):
+        md_text = f"### Automated Backport Parity Review\n\n"
+        if len(found_prs) > 1:
+            md_text += f":warning: **Multiple Original PRs Detected:** {', '.join(sorted(list(found_prs)))}\n\n"
+        md_text += "Discrepancies detected between the backport PR and the original source PR(s)."
+        md_text += " Please see the Commit Parity Visualizer below.\n\n"
+
+        if ctx.args.ci_mode:
+            ctx.report.add("Parity Mismatch", md_text)
+        else:
+            while True:
+                ans = input("Parity mismatch! [p]roceed, [m] skip to merge, [o]pen browser to investigate, [r]eview PR (add to review), [q]uit: ").strip().lower()
+                if ans == 'p':
+                    break
+                elif ans == 'm':
+                    raise SkipToMerge()
+                elif ans == 'q':
+                    log.error("Rejecting PR due to incomplete backport.")
+                    sys.exit(1)
+                elif ans == 'r':
+                    ctx.report.add("Parity Mismatch", md_text)
+                    ctx.report.record_failure()
+                    break
+                elif ans == 'o':
+                    bp_pr_url = f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/pull/{ctx.pr}"
+                    urls_to_open = [bp_pr_url]
+                    for pr_name, o_sha, o_summary, m_sha in missing_commits:
+                        m_pr = re.search(r'#(\d+)', pr_name)
+                        if m_pr:
+                            urls_to_open.append(f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/pull/{m_pr.group(1)}")
+                        urls_to_open.append(f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/commit/{m_sha}")
+                        urls_to_open.append(f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/commit/{o_sha}")
+                    for c in extra_commits:
+                        urls_to_open.append(f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/commit/{c.hexsha}")
+                    open_in_browser(urls_to_open)
+                    print("Opened URLs in browser.")
+                else:
+                    print("Invalid choice. Please enter p, m, o, r, or q.")
+
+    def _handle_multiple_prs(self, ctx, found_prs):
+        md_text = f"### Automated Backport Parity Review - Multiple PRs Detected\n\n"
+        md_text += f"This backport appears to pull commits from multiple `main` PRs including: {', '.join(sorted(list(found_prs)))}.\n\n"
+        md_text += "This must be explicitly documented in the backport PR description. Furthermore, each backport tracker ticket associated with these `main` PRs must be linked to this PR.\n\n"
+        
+        if ctx.args.ci_mode:
+            ctx.report.add("Multiple Source PRs", md_text)
+        else:
+            while True:
+                ans = input("Multiple original PRs detected! Do you want to add a review requesting documentation? [p/r/m/o] (p=proceed/ignore, r=add to review, m=skip to merge, o=open PRs in browser): ").strip().lower()
+                if ans == 'o':
+                    url = f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/pull/{ctx.pr}"
+                    urls_to_open = [url]
+                    for pr_str in found_prs:
+                        m_pr = re.search(r'#(\d+)', pr_str)
+                        if m_pr:
+                            urls_to_open.append(f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/pull/{m_pr.group(1)}")
+                    open_in_browser(urls_to_open)
+                    print("Opened URLs in browser.")
+                elif ans == 'r':
+                    ctx.report.add("Multiple Source PRs", md_text)
+                    ctx.report.record_failure()
+                    break
+                elif ans == 'm':
+                    raise SkipToMerge()
+                elif ans == 'p':
+                    break
+                else:
+                    print("Invalid choice. Please enter p, r, m, or o.")
+
+    def run(self, ctx: AuditContext) -> None:
+        log.info("Verifying commit parity with original PR(s) locally...")
+        
+        bp_cherry_picks, invalid_format_commits, cp_regex = self._validate_formats(ctx.pr_commits, ctx.base)
+        
+        mapping = self._map_upstream_commits(ctx.G, bp_cherry_picks)
+        
+        vis_text, vis_md = self._generate_visualizer(ctx.pr_commits, ctx.pr, mapping['pr_mapping'], mapping['missing_commits'])
+        
+        if vis_text:
+            print(vis_text)
+        if vis_md:
+            ctx.report.set_visualizer(vis_md)
+
+        if invalid_format_commits:
+            self._handle_invalid_formats(ctx, invalid_format_commits)
+
+        extra_commits = [c for c in ctx.pr_commits if c.hexsha not in mapping['bp_commits_mapped']]
+        unmerged_cps = [c for c in extra_commits if cp_regex.search(c.message)]
+        
+        if mapping['valid_ref'] and unmerged_cps:
+            self._handle_unmerged_commits(ctx, unmerged_cps, cp_regex)
+
+        if mapping['missing_commits'] or extra_commits:
+            self._handle_parity_mismatch(ctx, mapping['missing_commits'], extra_commits, mapping['found_prs'])
+        elif mapping['analyzed_merges']:
+            print("\033[92mCommit parity check passed! All upstream commits from identified PRs are present.\033[0m")
+            if len(mapping['found_prs']) > 1:
+                self._handle_multiple_prs(ctx, mapping['found_prs'])
+
+        ctx.visualizer_md_table = vis_md
+        ctx.found_prs = mapping['found_prs']
 
 class ConflictSimulationCheck(BaseAuditCheck):
     @property
