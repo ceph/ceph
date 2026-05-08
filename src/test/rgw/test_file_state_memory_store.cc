@@ -1095,7 +1095,7 @@ TEST(DbusGaneshaSink, Render_BlockContainsExpectedFields) {
   EXPECT_NE(body.find("Anonymous_Uid = 2000"), std::string::npos);
   EXPECT_NE(body.find("Name = RGW"), std::string::npos);
   EXPECT_NE(body.find("bucket = \"demo-bucket\""), std::string::npos);
-  EXPECT_NE(body.find("User_ID = \"testid\""), std::string::npos);
+  EXPECT_NE(body.find("User_Id = \"testid\""), std::string::npos);
   // The role ARN appears in the auto-generated comment so future
   // tooling can wire AssumeRole without re-deriving the binding.
   EXPECT_NE(body.find("roleArn=arn:aws:iam::123:role/r"),

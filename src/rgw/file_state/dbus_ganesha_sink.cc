@@ -148,14 +148,27 @@ std::string DbusGaneshaSink::render_export_block(
     o << "    Anonymous_Uid = " << e.posix_user->uid << ";\n"
       << "    Anonymous_Gid = " << e.posix_user->gid << ";\n";
   }
+  // Field-name casing matches /etc/ganesha/rgw.conf (Id, not
+  // ID; Access_Key_Id, not Access_Key_ID). Ganesha's config
+  // parser accepts both, but matching the upstream example
+  // keeps the rendered output diff-friendly against the
+  // distro-shipped reference.
   o << "    FSAL {\n"
     << "        Name = RGW;\n"
-    << "        User_ID = \""    << cfg_.rgw_user_id    << "\";\n"
-    << "        Access_Key_ID = \"" << cfg_.rgw_access_key << "\";\n"
+    << "        User_Id = \""    << cfg_.rgw_user_id    << "\";\n"
+    << "        Access_Key_Id = \"" << cfg_.rgw_access_key << "\";\n"
     << "        Secret_Access_Key = \"" << cfg_.rgw_secret_key << "\";\n"
-    // RGW FSAL takes the bucket name (not full ARN) as the
-    // export root.
-    << "        bucket = \"" << bucket_name_from_arn(e.bucket_arn) << "\";\n"
+    // bucket = "<name>" is the upstream-FSAL-RGW patch that
+    // bucket-scopes a single export. Mainline ganesha through
+    // V9.13 doesn't recognize it ("Unknown parameter (bucket)")
+    // and dereferences a NULL inner config_node when Ganesha
+    // V9.13 tries to add a partially-parsed export over D-Bus
+    // (find_config_nodes in config_parsing.c:1839 segfaults).
+    // Render it as a comment for now so the export block parses
+    // cleanly; once the bucket-scoped FSAL_RGW patch lands, drop
+    // the leading `# `.
+    << "        # bucket = \"" << bucket_name_from_arn(e.bucket_arn)
+                                << "\"; (FSAL doesn't yet honor)\n"
     << "    }\n"
     << "}\n";
   return o.str();
@@ -170,7 +183,7 @@ std::string DbusGaneshaSink::write_config_file(
   std::string body = render_export_block(export_id, e);
 
   // Atomic write: tempfile + rename so a partial write can never
-  // be picked up by Ganesha mid-AddExport.
+  // be picked up by Ganesha mid-reread_config.
   std::string tmp = path + ".tmp";
   std::ofstream out(tmp);
   out << body;
@@ -203,31 +216,76 @@ std::vector<std::string> DbusGaneshaSink::base_dbus_args(
 // `static const std::regex re(R"(uint16\s+(\d+))")`.
 
 bool DbusGaneshaSink::dbus_add_export(const std::string& config_path) {
-  auto args = base_dbus_args("AddExport");
-  args.push_back("string:" + config_path);
-  args.push_back("string:");          // empty options
-  auto r = invoker_(args);
-  return r.exit_status == 0;
+  // Unused: see dbus_reread_config(). Retained so the existing
+  // unit tests that drive the recording invoker still link.
+  (void)config_path;
+  return true;
 }
 
 bool DbusGaneshaSink::dbus_remove_export(std::uint16_t export_id) {
-  auto args = base_dbus_args("RemoveExport");
-  args.push_back("uint16:" + std::to_string(export_id));
-  auto r = invoker_(args);
-  return r.exit_status == 0;
+  // Unused: see dbus_reread_config(). reread_config picks up the
+  // removal once the per-export file is unlinked from disk and
+  // the index regenerated.
+  (void)export_id;
+  return true;
 }
 
 bool DbusGaneshaSink::dbus_update_export(
     const std::string& config_path, std::uint16_t export_id) {
-  auto args = base_dbus_args("UpdateExport");
-  args.push_back("string:" + config_path);
-  args.push_back("string:");          // empty options
-  // UpdateExport in Ganesha is keyed by the EXPORT block in the
-  // file; the export_id within the block must match. We pass
-  // it implicitly via the rendered file.
+  // Unused: see dbus_reread_config().
+  (void)config_path;
   (void)export_id;
+  return true;
+}
+
+bool DbusGaneshaSink::dbus_reread_config() {
+  // Drive Ganesha's admin.reread_config DBus method, which
+  // re-reads the configured ganesha.conf (and any %include'd
+  // files) and reconciles the running export set against it.
+  // We use this instead of exportmgr.AddExport because AddExport
+  // hits a NULL-deref in find_config_nodes
+  // (config_parsing.c:1839) on at least V9.11 and V9.13;
+  // reread_config takes a different code path that doesn't
+  // crash and is naturally idempotent — re-running it after a
+  // no-op change is harmless.
+  auto args = base_dbus_args("reread_config");
+  // The reread_config method lives on the *admin* interface,
+  // not exportmgr. base_dbus_args put us at exportmgr; rewrite
+  // the path/iface in the cached argv.
+  for (auto& a : args) {
+    if (a == cfg_.dbus_object) {
+      a = "/org/ganesha/nfsd/admin";
+    } else if (a.rfind(cfg_.dbus_iface + ".", 0) == 0) {
+      a = "org.ganesha.nfsd.admin.reread_config";
+    }
+  }
   auto r = invoker_(args);
   return r.exit_status == 0;
+}
+
+bool DbusGaneshaSink::write_index_file() {
+  // ganesha.conf %include's a single index.conf that lists one
+  // %include per active export. Rebuilt on every apply() so
+  // removals (entries dropped from `mapping_`) actually
+  // disappear from Ganesha's view after reread_config.
+  std::string idx = cfg_.export_config_dir;
+  if (idx.empty() || idx.back() != '/') idx.push_back('/');
+  idx += "index.conf";
+  std::string tmp = idx + ".tmp";
+  {
+    std::ofstream out(tmp);
+    out << "# Auto-generated by rgw s3files reconciler. Do not edit.\n"
+           "# %include one line per active <export_id>.conf below.\n";
+    for (const auto& [key, id] : mapping_) {
+      out << "%include " << cfg_.export_config_dir;
+      if (cfg_.export_config_dir.empty() ||
+          cfg_.export_config_dir.back() != '/') out << '/';
+      out << id << ".conf\n";
+    }
+    out.close();
+    if (out.fail()) return false;
+  }
+  return std::rename(tmp.c_str(), idx.c_str()) == 0;
 }
 
 // =================================================================
@@ -240,51 +298,59 @@ void DbusGaneshaSink::apply(std::vector<DesiredExport> desired) {
     next.emplace(key_of(e), std::move(e));
   }
 
+  bool dirty = false;
+
   // Removals first: anything in last_applied_ that's not in
-  // `next`.
+  // `next`. Drop the per-export file so the next index rewrite
+  // omits it.
   for (auto it = last_applied_.begin(); it != last_applied_.end();) {
     if (next.find(it->first) == next.end()) {
       auto m = mapping_.find(it->first);
       if (m != mapping_.end()) {
-        if (dbus_remove_export(m->second)) {
-          // Best-effort: remove the on-disk config file.
-          std::string path = cfg_.export_config_dir;
-          if (path.empty() || path.back() != '/') path.push_back('/');
-          path += std::to_string(m->second);
-          path += ".conf";
-          std::remove(path.c_str());
-          mapping_.erase(m);
-        }
+        std::string path = cfg_.export_config_dir;
+        if (path.empty() || path.back() != '/') path.push_back('/');
+        path += std::to_string(m->second);
+        path += ".conf";
+        std::remove(path.c_str());
+        mapping_.erase(m);
       }
       it = last_applied_.erase(it);
+      dirty = true;
     } else {
       ++it;
     }
   }
 
-  // Adds + updates.
+  // Adds + updates: render the per-export file. Reload-driven
+  // sinks don't need separate Add/Update DBus methods — Ganesha
+  // sees the new content on the next reread.
   for (auto& [key, e] : next) {
     auto prev_it = last_applied_.find(key);
     if (prev_it == last_applied_.end()) {
-      // New: assign id, render, AddExport.
+      // New: assign id, render.
       std::uint16_t id = cfg_.next_export_id++;
       std::string path = write_config_file(id, e);
       if (path.empty()) continue;  // I/O failure; retry next cycle
-      if (dbus_add_export(path)) {
-        mapping_[key] = id;
-        last_applied_[key] = e;
-      }
+      mapping_[key] = id;
+      last_applied_[key] = e;
+      dirty = true;
     } else if (!(prev_it->second == e)) {
-      // Changed: re-render, UpdateExport.
+      // Changed: re-render the same id.
       auto m = mapping_.find(key);
       if (m == mapping_.end()) continue;  // shouldn't happen
       std::string path = write_config_file(m->second, e);
       if (path.empty()) continue;
-      if (dbus_update_export(path, m->second)) {
-        prev_it->second = e;
-      }
+      prev_it->second = e;
+      dirty = true;
     }
     // else: unchanged, no work
+  }
+
+  // Single reload for the whole batch — cheaper than per-export
+  // and avoids the AddExport NULL-deref in V9.11+V9.13.
+  if (dirty) {
+    if (!write_index_file()) return;  // Ganesha will see stale state
+    dbus_reread_config();
   }
 }
 

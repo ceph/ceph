@@ -127,12 +127,23 @@ class DbusGaneshaSink : public GaneshaSink {
       std::uint16_t export_id, const DesiredExport& e);
 
   // D-Bus method calls. Each returns true on success.
+  // The Add/Remove/Update calls are no-op stubs because Ganesha
+  // V9.11+V9.13's exportmgr.AddExport hits a NULL-deref in
+  // find_config_nodes (config_parsing.c:1839); we drive
+  // admin.reread_config instead, which doesn't crash.
   bool dbus_add_export(const std::string& config_path);
   bool dbus_remove_export(std::uint16_t export_id);
   bool dbus_update_export(
       const std::string& config_path, std::uint16_t export_id);
+  bool dbus_reread_config();
 
-  // dbus-send arg builder shared by all three calls.
+  // Maintain index.conf — a single file ganesha.conf %include's.
+  // Listing one %include per active export lets reread_config
+  // reconcile the running export set without any per-export
+  // method calls.
+  bool write_index_file();
+
+  // dbus-send arg builder shared by all the calls.
   std::vector<std::string> base_dbus_args(
       const std::string& method) const;
 
