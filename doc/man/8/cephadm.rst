@@ -13,7 +13,7 @@ Synopsis
 |             [--log-dir LOG_DIR] [--logrotate-dir LOGROTATE_DIR]
 |             [--unit-dir UNIT_DIR] [--verbose] [--timeout TIMEOUT]
 |             [--retry RETRY] [--no-container-init]
-|             {version,pull,inspect-image,ls,list-networks,list-rdma,adopt,rm-daemon,rm-cluster,run,shell,enter,ceph-volume,unit,logs,bootstrap,deploy,check-host,prepare-host,prepare-host-sudo-hardening,setup-ssh-user,add-repo,rm-repo,install,list-images,update-osd-service,exec}
+|             {version,pull,inspect-image,ls,list-networks,list-rdma,adopt,rm-daemon,rm-cluster,run,shell,enter,ceph-volume,unit,logs,bootstrap,deploy,check-host,prepare-host,prepare-host-sudo-hardening,setup-ssh-user,add-repo,rm-repo,install,list-images,update-osd-service}
 |               ...
 
 
@@ -418,22 +418,6 @@ prepare a host for cephadm use
 Arguments:
 
 * [--expect-hostname EXPECT_HOSTNAME] Set hostname
-
-
-exec
-----
-
-Execute a shell command on a cluster host::
-
-    cephadm exec -- ls -la
-
-Positional arguments:
-
-* [command]               command to execute
-
-Arguments:
-
-* [--timeout TIMEOUT]     timeout in seconds (default: None)
 
 
 prepare-host-sudo-hardening

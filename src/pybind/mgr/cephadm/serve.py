@@ -1400,7 +1400,7 @@ class CephadmServe:
                 continue
             self.log.info(f'Removing {host}:{path}')
             cmd = ssh.RemoteCommand(ssh.Executables.RM, ['-f', path])
-            self.mgr.ssh.check_execute_cephadm_exec(host, cmd)
+            self.mgr.ssh.check_execute_command(host, cmd)
             updated_files = True
             self.mgr.cache.removed_client_file(host, path)
         if updated_files:
@@ -1918,45 +1918,7 @@ class CephadmServe:
                 host, self.mgr.cephadm_binary_path, self.mgr._cephadm, addr=addr)
         else:
             await self.mgr.ssh._write_remote_file(host, self.mgr.cephadm_binary_path,
-                                                  self.mgr._cephadm, addr=addr, mode=0o744,
-                                                  bypass_cephadm_exec=True)
-
-    async def run_cephadm_exec(self,
-                               host: str,
-                               cmd: List[str],
-                               addr: Optional[str] = None,
-                               stdin: Optional[str] = None,
-                               log_output: Optional[bool] = True,
-                               timeout: Optional[int] = None,
-                               ) -> Tuple[str, str, int]:
-        """
-        Execute a bash command on the remote host via 'cephadm exec --command <bash command>'
-        """
-        self.log.debug(f"run_cephadm_exec: Executing command on {host}: {cmd}")
-
-        exec_args = ['--command'] + cmd
-        try:
-            out, err, code = await self._run_cephadm(
-                host=host,
-                entity=cephadmNoImage,
-                command='exec',
-                args=exec_args,
-                addr=addr,
-                stdin=stdin,
-                no_fsid=True,  # exec doesn't need fsid
-                error_ok=True,  # We'll handle errors at a higher level
-                log_output=log_output,
-                timeout=timeout
-            )
-            stdout = out[0] if out else ''
-            stderr = err[0] if err else ''
-            if log_output:
-                self.log.debug(f"run_cephadm_exec result: code={code}, stdout={stdout}, stderr={stderr}")
-            return stdout, stderr, code
-
-        except Exception as e:
-            self.log.exception(f"Error executing command via cephadm exec on {host}: {e}")
-            return '', str(e), 1
+                                                  self.mgr._cephadm, addr=addr, mode=0o744)
 
     def _retry_failed_operations(self) -> None:
         self.log.debug('_retry_failed_operations')
