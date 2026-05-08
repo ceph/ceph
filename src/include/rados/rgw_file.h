@@ -30,7 +30,10 @@ extern "C" {
 #define LIBRGW_FILE_VER_MINOR 3
 #define LIBRGW_FILE_VER_EXTRA 0 /* 1.3.0: rgw_mount3 + rgw_set_credentials
 				 *        accept STS-issued temporary creds
-				 *        (access_key + secret + session_token)
+				 *        (access_key + secret + session_token);
+				 *        rgw_assume_role exposes sts:AssumeRole
+				 *        so callers can mint temp creds
+				 *        in-process.
 				 * 1.2.1: change in rgw_readdir2 signature */
 
 #define LIBRGW_FILE_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
@@ -164,6 +167,46 @@ int rgw_mount3(librgw_t rgw, const char *uid, const char *key,
 int rgw_set_credentials(struct rgw_fs *rgw_fs, const char *uid,
                         const char *key, const char *secret,
                         const char *session_token, uint32_t flags);
+
+/*
+ * Mint short-lived credentials by assuming a role, using the supplied
+ * permanent (bootstrap) credentials as the principal.  Equivalent in
+ * effect to calling sts:AssumeRole over HTTP, but stays inside the
+ * process so the caller doesn't need libcurl / SigV4 / XML.
+ *
+ * The bootstrap user's permanent access_key/secret are validated, then
+ * the role's trust policy is evaluated against the bootstrap principal
+ * (mirroring the REST RGWREST_STS::verify_permission check).  On
+ * success `out` is filled with the issued AccessKeyId / SecretAccessKey
+ * / SessionToken / Expiration (ISO 8601 UTC).
+ *
+ * `duration_seconds` is clamped server-side to the role's
+ * MaxSessionDuration; pass 0 to use the role's default (typically
+ * 3600).
+ *
+ * Returns 0 on success.  Common failures:
+ *   -EINVAL  bad inputs / bootstrap key not found / mismatched secret
+ *   -ENOENT  role ARN doesn't resolve
+ *   -EPERM   trust policy denied the bootstrap principal
+ */
+struct rgw_sts_credentials {
+  char access_key_id[64];
+  char secret_access_key[96];
+  char session_token[8192];
+  char expiration[64];   /* ISO 8601 UTC string */
+};
+
+#define RGW_ASSUME_ROLE_FLAG_NONE   0x0000
+
+int rgw_assume_role(librgw_t rgw,
+                    const char *bootstrap_uid,
+                    const char *bootstrap_access_key,
+                    const char *bootstrap_secret,
+                    const char *role_arn,
+                    const char *role_session_name,
+                    uint32_t duration_seconds,
+                    struct rgw_sts_credentials *out,
+                    uint32_t flags);
 
 /*
  register invalidate callbacks

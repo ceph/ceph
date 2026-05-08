@@ -2216,6 +2216,123 @@ int rgw_set_credentials(struct rgw_fs *rgw_fs, const char *uid,
                              uid, acc_key, sec_key, session_token);
 }
 
+int rgw_assume_role(librgw_t rgw,
+                    const char *bootstrap_uid,
+                    const char *bootstrap_access_key,
+                    const char *bootstrap_secret,
+                    const char *role_arn,
+                    const char *role_session_name,
+                    uint32_t duration_seconds,
+                    struct rgw_sts_credentials *out,
+                    uint32_t flags)
+{
+  if (!rgw || !out || !role_arn || !role_session_name ||
+      !bootstrap_access_key || !bootstrap_secret) {
+    return -EINVAL;
+  }
+  CephContext* cct = static_cast<CephContext*>(rgw);
+  rgw::sal::Driver* driver = g_rgwlib->get_driver();
+  const DoutPrefix dp(cct, dout_subsys, "rgw assume_role: ");
+
+  /* 1. Authenticate the bootstrap user. */
+  std::unique_ptr<rgw::sal::User> user;
+  int ret = driver->get_user_by_access_key(&dp, bootstrap_access_key,
+                                           null_yield, &user);
+  if (ret < 0) {
+    ldpp_dout(&dp, 0) << "ERROR: bootstrap access key not found" << dendl;
+    return -EINVAL;
+  }
+  RGWAccessKey* k = user->get_info().get_key(bootstrap_access_key);
+  if (!k || k->key != bootstrap_secret) {
+    ldpp_dout(&dp, 0) << "ERROR: bootstrap secret does not match" << dendl;
+    return -EINVAL;
+  }
+  if (user->get_info().suspended) {
+    return -ERR_USER_SUSPENDED;
+  }
+
+  /* 2. Build a LocalApplier for the bootstrap principal. STSService
+   * uses the identity to evaluate the role's trust policy. */
+  std::optional<RGWAccountInfo> account;
+  std::vector<rgw::IAM::Policy> policies;
+  ret = rgw::auth::load_account_and_policies(&dp, null_yield, driver,
+                                             user->get_info(),
+                                             user->get_attrs(),
+                                             account, policies);
+  if (ret < 0) {
+    ldpp_dout(&dp, 0) << "ERROR: load_account_and_policies failed: "
+                      << cpp_strerror(ret) << dendl;
+    return ret;
+  }
+
+  rgw::auth::LocalApplier applier(
+      cct, user->clone(), account, policies,
+      rgw::auth::LocalApplier::NO_SUBUSER,
+      std::nullopt, /* perm_mask */
+      bootstrap_access_key);
+
+  /* 3. Look up the role and evaluate its trust policy against the
+   * bootstrap principal. Mirrors RGWREST_STS::verify_permission for
+   * the AssumeRole case. */
+  rgw_user uid_obj = user->get_info().user_id;
+  STS::STSService sts(cct, driver, uid_obj, &applier);
+  auto [role_ret, role] = sts.getRoleInfo(&dp, role_arn, null_yield);
+  if (role_ret < 0) {
+    ldpp_dout(&dp, 0) << "ERROR: getRoleInfo failed: " << cpp_strerror(role_ret)
+                      << dendl;
+    return role_ret == -ERR_NO_ROLE_FOUND ? -ENOENT : role_ret;
+  }
+
+  try {
+    /* Trust policy is not restricted to the principal's tenant. */
+    const std::string* policy_tenant = nullptr;
+    const rgw::IAM::Policy trust_policy(cct, policy_tenant,
+                                        role->get_assume_role_policy(), false);
+
+    /* Build a minimal env for IAM evaluation. The trust policy
+     * typically only checks Principal; without an HTTP request we
+     * have no Conditions to satisfy beyond what the principal carries
+     * itself. */
+    rgw::IAM::Environment env;
+    auto eff = trust_policy.eval(env, applier, rgw::IAM::stsAssumeRole,
+                                 boost::none);
+    if (eff != rgw::IAM::Effect::Allow) {
+      ldpp_dout(&dp, 0) << "ERROR: role trust policy denied bootstrap "
+                          "principal" << dendl;
+      return -EPERM;
+    }
+  } catch (rgw::IAM::PolicyParseException& e) {
+    ldpp_dout(&dp, 0) << "ERROR: failed to parse role trust policy: "
+                      << e.what() << dendl;
+    return -EPERM;
+  }
+
+  /* 4. Build the AssumeRoleRequest and call STSService. */
+  std::string duration_str = duration_seconds == 0
+                                 ? std::string()
+                                 : std::to_string(duration_seconds);
+  STS::AssumeRoleRequest req(cct, duration_str, /*externalId=*/"",
+                             /*policy=*/"", role_arn, role_session_name,
+                             /*serialNumber=*/"", /*tokenCode=*/"");
+  STS::AssumeRoleResponse resp = sts.assumeRole(&dp, req, null_yield);
+  if (resp.retCode < 0) {
+    ldpp_dout(&dp, 0) << "ERROR: STSService::assumeRole failed: "
+                      << cpp_strerror(resp.retCode) << dendl;
+    return resp.retCode;
+  }
+
+  /* 5. Copy issued credentials out. */
+  std::snprintf(out->access_key_id, sizeof(out->access_key_id), "%s",
+                resp.creds.getAccessKeyId().c_str());
+  std::snprintf(out->secret_access_key, sizeof(out->secret_access_key), "%s",
+                resp.creds.getSecretAccessKey().c_str());
+  std::snprintf(out->session_token, sizeof(out->session_token), "%s",
+                resp.creds.getSessionToken().c_str());
+  std::snprintf(out->expiration, sizeof(out->expiration), "%s",
+                resp.creds.getExpiration().c_str());
+  return 0;
+}
+
 /*
  register invalidate callbacks
 */
