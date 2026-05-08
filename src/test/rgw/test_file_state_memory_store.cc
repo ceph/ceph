@@ -1090,11 +1090,14 @@ TEST(DbusGaneshaSink, Render_BlockContainsExpectedFields) {
   // Smoke-check: the rendered EXPORT block must reference the
   // identity inputs and the FSAL credentials.
   EXPECT_NE(body.find("Export_ID = " + std::to_string(*id)), std::string::npos);
-  EXPECT_NE(body.find("data/team-a/"), std::string::npos);
+  // FSAL_RGW Path encodes both bucket and prefix:
+  // "/<bucket>[/<prefix>]". Asserting the full path catches both
+  // the bucket name and the prefix composition in one shot.
+  EXPECT_NE(body.find("Path = \"/demo-bucket/data/team-a/\""),
+            std::string::npos);
   EXPECT_NE(body.find("Pseudo = \"/fs-AAA/ap-BBB\""), std::string::npos);
   EXPECT_NE(body.find("Anonymous_Uid = 2000"), std::string::npos);
   EXPECT_NE(body.find("Name = RGW"), std::string::npos);
-  EXPECT_NE(body.find("bucket = \"demo-bucket\""), std::string::npos);
   EXPECT_NE(body.find("User_Id = \"testid\""), std::string::npos);
   // The role ARN appears in the auto-generated comment so future
   // tooling can wire AssumeRole without re-deriving the binding.

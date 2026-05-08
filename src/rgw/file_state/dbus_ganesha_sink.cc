@@ -116,6 +116,28 @@ std::string bucket_name_from_arn(std::string_view arn) {
   return std::string(arn);
 }
 
+// Compose the FSAL_RGW Path field. The bucket-rooted FSAL_RGW
+// patch (in our nfs-ganesha tree) parses Path as
+// "/<bucket>[/<prefix>]" and rgw_mount2's at the bucket root —
+// works for both legacy users and RGW account-root users (the
+// latter can't list buckets via the user namespace, so the
+// previous "/" path form was unusable for accounts).
+//
+//   no prefix  -> "/<bucket>"
+//   prefix     -> "/<bucket>/<prefix>"  (no trailing slash; FSAL
+//                                        normalizes internally)
+std::string compose_fsal_path(std::string_view bucket_arn,
+                              std::string_view composed_prefix) {
+  std::string bucket = bucket_name_from_arn(bucket_arn);
+  std::string path = "/";
+  path += bucket;
+  if (!composed_prefix.empty()) {
+    if (composed_prefix.front() != '/') path.push_back('/');
+    path.append(composed_prefix);
+  }
+  return path;
+}
+
 }  // namespace
 
 std::string DbusGaneshaSink::render_export_block(
@@ -128,7 +150,9 @@ std::string DbusGaneshaSink::render_export_block(
     << " (assumed per-session post-mount-auth)\n"
     << "EXPORT {\n"
     << "    Export_ID = " << export_id << ";\n"
-    << "    Path = \"/" << e.composed_prefix << "\";\n"
+    << "    Path = \"" << compose_fsal_path(e.bucket_arn,
+                                            e.composed_prefix)
+    << "\";\n"
     // Pseudo path is what NFS clients actually mount. Keep it
     // human-readable: /<fs_id>/<ap_id>. Stable across reconciler
     // runs for a given (fs, ap) pair.
@@ -153,22 +177,17 @@ std::string DbusGaneshaSink::render_export_block(
   // parser accepts both, but matching the upstream example
   // keeps the rendered output diff-friendly against the
   // distro-shipped reference.
+  // User_Id may be a legacy RGW user or an RGW account-root user
+  // (e.g. "demoroot"). For account-root, only the access/secret
+  // keys authenticate; User_Id is just the displayed root owner.
+  // The bucket-rooted Path above is what makes account-owned
+  // buckets visible — accounts don't own buckets at the user
+  // namespace level, so a Path = "/" form would list nothing.
   o << "    FSAL {\n"
     << "        Name = RGW;\n"
     << "        User_Id = \""    << cfg_.rgw_user_id    << "\";\n"
     << "        Access_Key_Id = \"" << cfg_.rgw_access_key << "\";\n"
     << "        Secret_Access_Key = \"" << cfg_.rgw_secret_key << "\";\n"
-    // bucket = "<name>" is the upstream-FSAL-RGW patch that
-    // bucket-scopes a single export. Mainline ganesha through
-    // V9.13 doesn't recognize it ("Unknown parameter (bucket)")
-    // and dereferences a NULL inner config_node when Ganesha
-    // V9.13 tries to add a partially-parsed export over D-Bus
-    // (find_config_nodes in config_parsing.c:1839 segfaults).
-    // Render it as a comment for now so the export block parses
-    // cleanly; once the bucket-scoped FSAL_RGW patch lands, drop
-    // the leading `# `.
-    << "        # bucket = \"" << bucket_name_from_arn(e.bucket_arn)
-                                << "\"; (FSAL doesn't yet honor)\n"
     << "    }\n"
     << "}\n";
   return o.str();
