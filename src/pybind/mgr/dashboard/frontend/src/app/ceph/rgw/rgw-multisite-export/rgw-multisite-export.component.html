@@ -22,8 +22,11 @@
           @if (!tokenValid) {
           <cd-alert-panel
             type="warning"
-            i18n
           >
+            <div i18n>
+              Realm token is not available for export on this zone. Use the master zone to export a
+              valid token.
+            </div>
             @for (realminfo of realms; track realminfo) {
             <div>
               <b>{{ realminfo.realm }}</b> - {{ realminfo.token }}
