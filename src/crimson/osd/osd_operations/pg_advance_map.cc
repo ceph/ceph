@@ -35,7 +35,6 @@ void PGAdvanceMap::print(std::ostream &lhs) const
 {
   lhs << "PGAdvanceMap("
       << "pg=" << pg->get_pgid()
-      << " from=" << (from ? *from : -1)
       << " to=" << to;
   if (do_init) {
     lhs << " do_init";
@@ -47,9 +46,6 @@ void PGAdvanceMap::dump_detail(Formatter *f) const
 {
   f->open_object_section("PGAdvanceMap");
   f->dump_stream("pgid") << pg->get_pgid();
-  if (from) {
-    f->dump_int("from", *from);
-  }
   f->dump_int("to", to);
   f->dump_bool("do_init", do_init);
   f->close_section();
@@ -77,23 +73,13 @@ seastar::future<> PGAdvanceMap::start()
       return seastar::now();
     }
 
-    /*
-     * PGAdvanceMap is scheduled at pg creation and when
-     * broadcasting new osdmaps to pgs. We are not able to serialize
-     * between the two different PGAdvanceMap callers since a new pg
-     * will get advanced to the latest osdmap at it's creation.
-     * As a result, we may need to adjust the PGAdvance operation
-     * 'from' epoch.
-     * See: https://tracker.ceph.com/issues/61744
-     */
-    from = pg->get_osdmap_epoch();
+    epoch_t from = pg->get_osdmap_epoch();
     if (do_init) {
       pg->handle_initialize(rctx);
       pg->handle_activate_map(rctx);
     }
-    ceph_assert(std::cmp_less_equal(*from, to));
     return seastar::do_for_each(
-      boost::make_counting_iterator(*from + 1),
+      boost::make_counting_iterator(from + 1),
       boost::make_counting_iterator(to + 1),
       [this, FNAME](epoch_t next_epoch) {
 	DEBUG("{}: start: getting map {}",
