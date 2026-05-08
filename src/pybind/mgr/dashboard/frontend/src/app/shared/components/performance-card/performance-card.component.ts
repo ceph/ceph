@@ -125,7 +125,7 @@ export class PerformanceCardComponent implements OnInit, OnDestroy {
     this.selectedStorageType = event.item.value;
     this.loadCharts(this.time);
   }
-  
+
   followEmptyStateMsgCheck(data: PerformanceData) {
     let enabled$ = this.list().filter((a) => a.name === 'prometheus')[0].enabled;
     this.chartDataSignal.set(data);
