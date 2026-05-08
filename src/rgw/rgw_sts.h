@@ -189,6 +189,52 @@ struct SessionToken {
 };
 WRITE_CLASS_ENCODER(SessionToken)
 
+/* Decrypt and decode a base64-encoded STS session token using the
+ * cluster's rgw_sts_key.  Returns 0 on success, a negative POSIX errno
+ * on failure (-EINVAL on bad encoding/missing key, -EPERM on decrypt
+ * failure).  Used by the REST STSEngine and by librgw to validate STS
+ * credentials at mount time without going through the REST auth path.
+ */
+int decode_session_token(const DoutPrefixProvider* dpp,
+                         CephContext* cct,
+                         std::string_view session_token,
+                         SessionToken& out);
+
+/* Components needed to construct an STS-derived Identity.  Populated by
+ * resolve_session() based on the token's acct_type:
+ *   - TYPE_ROLE:      role + t_attrs are populated.
+ *   - TYPE_RGW/ROOT/NONE: user, account, policies are populated.
+ *   - TYPE_KEYSTONE/LDAP: nothing is populated; caller uses get_creds_info
+ *                         on the token directly with a RemoteApplier.
+ */
+struct ResolvedSession {
+  /* Role-based session (token.acct_type == TYPE_ROLE). */
+  rgw::auth::RoleApplier::Role role;
+  rgw::auth::RoleApplier::TokenAttrs t_attrs;
+
+  /* Local-user session (token.acct_type in TYPE_RGW/ROOT/NONE). */
+  std::unique_ptr<rgw::sal::User> user;
+  std::optional<RGWAccountInfo> account;
+  std::vector<rgw::IAM::Policy> policies;
+};
+
+/* Resolve an STS session token into the components needed by either
+ * RoleApplier or LocalApplier.  Caller must have already decoded the
+ * token (see decode_session_token) and verified expiry.  The token is
+ * taken by const-ref; resolve_session copies the few small string/vector
+ * fields it needs.  Returns 0 on success.  Negative on failure: -EPERM
+ * if the role lookup fails or the referenced user can't be loaded;
+ * -EPERM also if the local-user case has an empty user_id.  For
+ * TYPE_KEYSTONE/LDAP this is a noop returning 0; the caller should build
+ * a RemoteApplier from the token directly.
+ */
+int resolve_session(const DoutPrefixProvider* dpp,
+                    CephContext* cct,
+                    rgw::sal::Driver* driver,
+                    optional_yield y,
+                    const SessionToken& token,
+                    ResolvedSession& out);
+
 class Credentials {
   static constexpr int MAX_ACCESS_KEY_LEN = 20;
   static constexpr int MAX_SECRET_KEY_LEN = 40;
