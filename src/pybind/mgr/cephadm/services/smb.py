@@ -16,6 +16,12 @@ from typing import (
 )
 
 from mgr_module import HandleCommandResult
+from cephadm.tlsobject_types import TLSObjectScope, TLSCredentials, EMPTY_TLS_CREDENTIALS
+from ceph.smb.constants import (
+    KEYBRIDGE, 
+    REMOTE_CONTROL,
+    FEATURES,
+)
 
 from ceph.deployment.service_spec import (
     SMBExternalCephCluster,
@@ -145,14 +151,22 @@ class SMBService(CephService):
         )
         return daemon_spec
 
+    def _feature_tls_filename(self, feature: str) -> Optional[str]:
+        return {
+                KEYBRIDGE: "keybridge",
+                REMOTE_CONTROL: "remote_control"
+            }.get(feature)
+
     def generate_config(
         self, daemon_spec: CephadmDaemonDeploySpec
     ) -> Tuple[Dict[str, Any], List[str]]:
         logger.debug('smb generate_config')
         assert self.TYPE == daemon_spec.daemon_type
+        super().register_for_certificates(daemon_spec)
         smb_spec = cast(
             SMBSpec, self.mgr.spec_store[daemon_spec.service_name].spec
         )
+        ssl_certificates = smb_spec.ssl_certificates or {}
         config_blobs: Dict[str, Any] = {}
 
         config_blobs['cluster_id'] = smb_spec.cluster_id
@@ -181,40 +195,30 @@ class SMBService(CephService):
         config_blobs['service_ports'] = smb_spec.service_ports()
         if smb_spec.bind_addrs:
             config_blobs['bind_networks'] = smb_spec.bind_networks()
-        if 'remote-control' in smb_spec.features:
-            files = config_blobs.setdefault('files', {})
-            _add_cfg(
-                files,
-                'remote_control.ssl.crt',
-                self._cert_or_uri(smb_spec.remote_control_ssl_cert),
-            )
-            _add_cfg(
-                files,
-                'remote_control.ssl.key',
-                self._cert_or_uri(smb_spec.remote_control_ssl_key),
-            )
-            _add_cfg(
-                files,
-                'remote_control.ca.crt',
-                self._cert_or_uri(smb_spec.remote_control_ca_cert),
-            )
-        if 'keybridge' in smb_spec.features:
-            files = config_blobs.setdefault('files', {})
-            _add_cfg(
-                files,
-                'keybridge.ssl.crt',
-                self._cert_or_uri(smb_spec.keybridge_kmip_ssl_cert),
-            )
-            _add_cfg(
-                files,
-                'keybridge.ssl.key',
-                self._cert_or_uri(smb_spec.keybridge_kmip_ssl_key),
-            )
-            _add_cfg(
-                files,
-                'keybridge.ca.crt',
-                self._cert_or_uri(smb_spec.keybridge_kmip_ca_cert),
-            )
+        if smb_spec.ssl_certificates and 'ssl' in smb_spec.ssl_certificates:
+            self.get_certificates(daemon_spec, ca_cert_required=True)
+        for support_feature in smb_spec.features:
+            feature = self._feature_tls_filename(support_feature)
+            if feature is not None:
+                feature_creds = self.get_certificates(daemon_spec, ca_cert_required=True, feature=feature)
+                if feature_creds.cert and feature_creds.key:
+                    files = config_blobs.setdefault('files', {})
+                    _add_cfg(
+                        files,
+                        f'{feature}.ssl.crt',
+                        self._cert_or_uri(feature_creds.cert),
+
+                    )
+                    _add_cfg(
+                        files,
+                        f'{feature}.ssl.key',
+                        self._cert_or_uri(feature_creds.key),
+                    )
+                    _add_cfg(
+                        files,
+                        f'{feature}.ca.crt',
+                        self._cert_or_uri(feature_creds.ca_cert),
+                    )
         for ext_cluster in smb_spec.ceph_cluster_configs or []:
             files = config_blobs.setdefault('files', {})
             c_name = f'{ext_cluster.alias}.ceph.conf'
