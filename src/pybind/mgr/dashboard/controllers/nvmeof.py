@@ -326,8 +326,6 @@ else:
         @empty_response
         @NvmeofCLICommand(
             "nvmeof subsystem add_network", model.RequestStatus,
-            success_message_template=("Adding network mask {network_mask} for subsystem "
-                                      "{nqn}: Successful")
         )
         @EndpointDoc(
             "Add subsystem network mask",
@@ -354,8 +352,6 @@ else:
         @empty_response
         @NvmeofCLICommand(
             "nvmeof subsystem del_network", model.RequestStatus,
-            success_message_template=("Deleting network mask {network_mask} for subsystem "
-                                      "{nqn}: Successful")
         )
         @EndpointDoc(
             "Delete subsystem network mask",
