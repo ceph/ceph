@@ -884,13 +884,13 @@ class CommitParityCheck(BaseAuditCheck):
     def _handle_multiple_prs(self, ctx, found_prs):
         md_text = f"### Automated Backport Parity Review - Multiple PRs Detected\n\n"
         md_text += f"This backport appears to pull commits from multiple `main` PRs including: {', '.join(sorted(list(found_prs)))}.\n\n"
-        md_text += "This must be explicitly documented in the backport PR description. Furthermore, each backport tracker ticket associated with these `main` PRs must be linked to this PR.\n\n"
+        md_text += "This must be made explicit in the backport PR description. Furthermore, each backport tracker ticket associated with these `main` PRs must be linked to this PR.\n\n"
         
         if ctx.args.ci_mode:
             ctx.report.add("Multiple Source PRs", md_text)
         else:
             while True:
-                ans = input("Multiple original PRs detected! Do you want to add a review requesting documentation? [p/r/m/o] (p=proceed/ignore, r=add to review, m=skip to merge, o=open PRs in browser): ").strip().lower()
+                ans = input("Multiple original PRs detected! Do you want to add a review requesting justification? [p/r/m/o] (p=proceed/ignore, r=add to review, m=skip to merge, o=open PRs in browser): ").strip().lower()
                 if ans == 'o':
                     url = f"https://github.com/{BASE_PROJECT}/{BASE_REPO}/pull/{ctx.pr}"
                     urls_to_open = [url]
@@ -1165,7 +1165,7 @@ class ConflictSimulationCheck(BaseAuditCheck):
                         elif ans == 'p':
                             pass # Already applied backport commit
                         elif ans == 'r':
-                            log.error("Rejecting PR due to undocumented/unapproved change. Adding to draft review...")
+                            log.error("Rejecting PR due to unjustified/unapproved change. Adding to draft review...")
                             diff_text = diff if 'diff' in locals() else "No range diff available."
                             
                             md_text = """
@@ -1174,7 +1174,7 @@ class ConflictSimulationCheck(BaseAuditCheck):
                             A conflict or unapproved deviation was detected during the simulation of this backport. The code in this PR does not match a clean cherry-pick of the upstream commits.
                             
                             **How to proceed:**
-                            * **Authors (Genuine Conflicts):** If this is a genuine conflict requiring manual resolution, ensure your resolution is correct. You **must** document the conflict in the commit message (e.g., leave the standard Git `Conflicts:` block intact) and include an explanation for changes.
+                            * **Authors (Genuine Conflicts):** If this is a genuine conflict requiring manual resolution, ensure your resolution is correct. You **must** explain the conflict resolution in the commit message (e.g., leave the standard Git `Conflicts:` block intact) and include an explanation for changes.
                             * **Authors (Need Help?):** Reach out to the Component Lead for technical guidance on complex code conflicts.
                             * **Component Leads (Review):** Please review the Range Diff below to verify the author's manual conflict resolution is correct for this release branch. If the deviation is intentional, documented, and approved then the component lead or @ceph/ceph-release-manager can bypass this check by commenting `/audit override`.
 
