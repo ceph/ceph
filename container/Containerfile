@@ -180,6 +180,9 @@ RUN set -euo pipefail; \
     source /etc/ceph-distro.env; \
     if [ "$MAJOR" -le 9 ]; then \
         echo "python3-saml" >> packages.txt; \
+    fi ; \
+    if [ "$MAJOR" -ge 10 ]; then \
+        echo "python3-ceph-smb-ctl" >> packages.txt; \
     fi
 
 # NFS-Ganesha
