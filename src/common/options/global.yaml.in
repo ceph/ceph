@@ -1375,6 +1375,13 @@ options:
   desc: Hexdump message to debug log on message send
   default: false
   with_legacy: true
+- name: ms_inject_drop_mon_forward_msgs
+  type: float
+  level: dev
+  desc: Inject drop of forwarded mon messages with given probability (0=disabled, 1=drop all)
+  default: 0
+  min: 0
+  max: 1
 - name: ms_dump_corrupt_message_level
   type: int
   level: advanced
@@ -2310,6 +2317,13 @@ options:
   level: advanced
   default: 3
   with_legacy: true
+# how many mons connections are we keeping in the aux list
+- name: mon_aux_list_connections
+  type: uint
+  level: advanced
+  default: 0
+  min: 0
+  with_legacy: false
 - name: mon_client_target_rank
   type: int
   level: advanced

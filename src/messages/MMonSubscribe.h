@@ -39,6 +39,10 @@ public:
   std::map<std::string, ceph_mon_subscribe_item> what;
 
   MMonSubscribe() : Message{CEPH_MSG_MON_SUBSCRIBE, HEAD_VERSION, COMPAT_VERSION} { }
+  MMonSubscribe(std::string hname, std::map<std::string, ceph_mon_subscribe_item> w)
+    : Message{CEPH_MSG_MON_SUBSCRIBE, HEAD_VERSION, COMPAT_VERSION},
+      hostname(std::move(hname)), what(std::move(w)) {
+  }
 private:
   ~MMonSubscribe() final {}
 

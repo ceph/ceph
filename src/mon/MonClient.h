@@ -32,6 +32,7 @@
 #include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/post.hpp>
 
+#include "include/types.h"
 #include "msg/Messenger.h"
 
 #include "MonMap.h"
@@ -45,13 +46,13 @@
 
 #include "auth/AuthClient.h"
 #include "auth/AuthServer.h"
+#include "auth/AuthClientHandler.h"
 
 class MMonMap;
 class MConfig;
 class MMonGetVersionReply;
 class MMonCommandAck;
 class LogClient;
-class AuthClientHandler;
 class AuthRegistry;
 class KeyRing;
 class RotatingKeyRing;
@@ -61,7 +62,8 @@ public:
   MonConnection(CephContext *cct,
 		ConnectionRef conn,
 		uint64_t global_id,
-		AuthRegistry *auth_registry);
+		AuthRegistry *auth_registry,
+                std::string mon_name);
   ~MonConnection();
   MonConnection(MonConnection&& rhs) = default;
   MonConnection& operator=(MonConnection&&) = default;
@@ -83,6 +85,10 @@ public:
   }
   std::unique_ptr<AuthClientHandler>& get_auth() {
     return auth;
+  }
+
+  std::string get_mon_name() const {
+    return mon_name;
   }
 
   int get_auth_request(
@@ -145,8 +151,59 @@ private:
   MessageRef pending_tell_command;
 
   AuthRegistry *auth_registry;
+  std::string mon_name;
 };
 
+class MonClientQuorum {
+private:
+  CephContext *cct;
+  std::set<int> agreed_quorum;
+  mutable ceph::mutex quorum_lock = ceph::make_mutex("MonClientQuorum");
+  std::map<entity_addrvec_t, std::pair<version_t, std::set<int>>> quorums;
+
+  void recalc_agreed_quorum();
+
+public:
+
+  MonClientQuorum(CephContext *cct_ = nullptr) : cct(cct_) {}
+
+  void set_cct(CephContext *cct_) { cct = cct_; }
+
+  bool in_quorum(const int rank) const {
+    std::lock_guard l{quorum_lock};
+    // first time connection
+    if (quorums.empty()) {
+      return true;
+    }
+    return agreed_quorum.count(rank) > 0;
+  }
+  bool empty() const {
+    std::lock_guard l{quorum_lock};
+    return quorums.empty();
+  }
+  void add_quorum(const entity_addrvec_t& addrs,
+      const version_t epoch,
+      const std::set<int>& quorum) {
+    std::lock_guard l{quorum_lock};
+    if (quorum.empty()) {
+      quorums.erase(addrs);
+      recalc_agreed_quorum();
+      return;
+    }
+    quorums[addrs] = std::make_pair(epoch, quorum);
+    recalc_agreed_quorum();
+  }
+
+  std::set<int> get_agreed_quorum() const {
+    std::lock_guard l{quorum_lock};
+    return agreed_quorum;
+  }
+
+  std::map<entity_addrvec_t, std::pair<version_t, std::set<int>>> get_quorums() const {
+    std::lock_guard l{quorum_lock};
+    return quorums;
+  }
+};
 
 struct MonClientPinger : public Dispatcher,
 			 public AuthClient {
@@ -248,6 +305,71 @@ struct MonClientPinger : public Dispatcher,
   }
 };
 
+enum class ConnectionStatus {
+  UNKNOWN,          // Initial state
+  HEALTHY,          // Responding and in quorum
+  OUT_OF_QUORUM,    // Responding but not in quorum
+  UNRESPONSIVE      // Not responding
+};
+
+// Class for individual auxiliary connections
+class AuxConnection {
+public:
+  AuxConnection(const std::string& name, std::unique_ptr<MonConnection> connection_ptr)
+    : mon_name(name), conn_ptr(std::move(connection_ptr)), status(ConnectionStatus::UNKNOWN) {}
+
+  AuxConnection(AuxConnection&&) = default;
+  AuxConnection& operator=(AuxConnection&&) = default;
+  AuxConnection(const AuxConnection&) = delete;
+  AuxConnection& operator=(const AuxConnection&) = delete;
+
+  void set_status(ConnectionStatus new_status) { status = new_status; }
+
+  bool is_con(Connection *c) const {
+    return conn_ptr->is_con(c);
+  }
+
+  int handle_auth_done(
+    AuthConnectionMeta *auth_meta,
+    uint64_t global_id,
+    const ceph::buffer::list& bl,
+    CryptoKey *session_key,
+    std::string *connection_secret) {
+    return conn_ptr->handle_auth_done(auth_meta, global_id, bl, session_key, connection_secret);
+  }
+
+  int get_auth_request(
+    uint32_t *method,
+    std::vector<uint32_t> *preferred_modes,
+    ceph::buffer::list *out,
+    const EntityName& entity_name,
+    uint32_t want_keys,
+    RotatingKeyRing* keyring) {
+    return conn_ptr->get_auth_request(method, preferred_modes, out, entity_name, want_keys, keyring);
+  }
+
+  int handle_auth_reply_more(
+    AuthConnectionMeta *auth_meta,
+    const ceph::buffer::list& bl,
+    ceph::buffer::list *reply) {
+    return conn_ptr->handle_auth_reply_more(auth_meta, bl, reply);
+  }
+
+  bool empty() const {
+    return !conn_ptr;
+  }
+
+
+  void send_subscribe(epoch_t start_epoch);
+
+private:
+  std::string mon_name;
+  std::unique_ptr<MonConnection> conn_ptr;
+  ConnectionStatus status;            // Status of the connection
+  MonSub sub;
+};
+
+
 const boost::system::error_category& monc_category() noexcept;
 
 enum class monc_errc {
@@ -296,11 +418,13 @@ public:
   std::map<std::string,std::string> config_mgr;
 
 private:
+  MonClientQuorum quorum;
   Messenger *messenger;
 
   std::unique_ptr<MonConnection> active_con;
   std::map<entity_addrvec_t, MonConnection> pending_cons;
   std::set<unsigned> tried;
+  std::map<entity_addrvec_t, AuxConnection> aux_list;
 
   EntityName entity_name;
 
@@ -324,6 +448,7 @@ private:
   bool ms_handle_refused(Connection *con) override { return false; }
 
   void handle_monmap(MMonMap *m);
+  void handle_quorum_not_active(MMonMap *m);
   void handle_config(MConfig *m);
 
   void handle_auth(MAuthReply *m);
@@ -384,6 +509,17 @@ private:
       }
     }
     return pending_cons.end();
+  }
+
+  void _erase_pending_cons(const entity_addrvec_t &addr) {
+    pending_cons.erase(addr);
+  }
+
+  void _add_aux_connection(const entity_addrvec_t& addr, std::unique_ptr<MonConnection> mc) {
+    if (aux_list.find(addr) == aux_list.end()) {
+      auto name = mc->get_mon_name();
+      aux_list.emplace(addr, AuxConnection(name, std::move(mc)));
+    }
   }
 
 public:

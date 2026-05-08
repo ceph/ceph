@@ -549,9 +549,16 @@ void Elector::ping_check(int peer)
   utime_t now = ceph_clock_now();
   utime_t& acked_ping = peer_acked_ping[peer];
   utime_t& newest_ping = peer_sent_ping[peer];
-  if (!acked_ping.is_zero() && acked_ping < now - ping_timeout) {
-    dout(20) << "peer " << peer << " has not acked a ping in "
-       << now - acked_ping << " seconds" << dendl;
+  utime_t timeout_adjusted;
+  timeout_adjusted.set_from_double(ping_timeout);  // Convert seconds to utime_t
+  dout(20) << __func__ << " peer: " << peer << " now: " << now
+    << " acked_ping: " << acked_ping << " newest_ping: " << newest_ping
+    << " ping_timeout: " << ping_timeout << " now - ping_timeout: "
+    << now - timeout_adjusted << dendl;
+  if (!acked_ping.is_zero() && acked_ping < now - timeout_adjusted) {
+    dout(20) << __func__ << " peer " << peer << " didn't acked ping for "
+      << ping_timeout << " seconds" << dendl;
+    mon->check_quorum_subs_and_send_updates();
     peer_tracker.report_dead_connection(peer, now - acked_ping);
     acked_ping = now;
     begin_dead_ping(peer);
@@ -580,7 +587,8 @@ void Elector::ping_check(int peer)
 
 void Elector::begin_dead_ping(int peer)
 {
-  dout(20) << __func__ << " to peer " << peer << dendl;  
+  dout(20) << __func__ << " to peer " << peer << " current dead_pinging: "
+    << dead_pinging << dendl;
   if (dead_pinging.count(peer)) {
     dout(20) << peer << " already in dead_pinging ... return" << dendl;
     return;
