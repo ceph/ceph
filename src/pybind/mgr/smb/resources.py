@@ -19,6 +19,7 @@ from ceph.smb.constants import (
     BURST_MULT_MIN,
     BYTES_LIMIT_MAX,
     IOPS_LIMIT_MAX,
+    KEYBRIDGE,
     REMOTE_CONTROL,
     REMOTE_CONTROL_LOCAL,
 )
@@ -967,6 +968,15 @@ class Cluster(_RBase):
         if not self.keybridge:
             return False
         return self.keybridge.is_enabled
+
+    def is_feature_enabled(self, feature: str) -> bool:
+        """Return true if the specified SMB feature is enabled for this
+        cluster.
+        """
+        return {
+            REMOTE_CONTROL: self.remote_control_is_enabled,
+            KEYBRIDGE: self.keybridge_is_enabled,
+        }[feature]
 
     def is_clustered(self) -> bool:
         """Return true if smbd instance should use (CTDB) clustering."""
