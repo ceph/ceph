@@ -247,14 +247,74 @@ namespace rgw {
       /* FIXME: remove this after switching all handlers to the new
        * authentication infrastructure. */
       if (! s->auth.identity) {
-        auto result = rgw::auth::transform_old_authinfo(
-            op, null_yield, env.driver, s->user.get());
-        if (!result) {
-          ret = result.error();
-          abort_req(s, op, ret);
-          goto done;
+        if (req->sts_state && req->sts_state->active) {
+          /* This RGWLibFS was mounted with STS-issued temporary
+           * credentials.  Build the right Identity (Local/Role/Remote)
+           * from the cached components rather than going through
+           * transform_old_authinfo, which does not understand STS.
+           * Per-request expiry check: reject if the cached token has
+           * expired since the mount. */
+          if (req->sts_state->expiration != real_time{} &&
+              real_clock::now() >= req->sts_state->expiration) {
+            ldpp_dout(s, 0) << "ERROR: STS session expired" << dendl;
+            ret = -ERR_EXPIRED_TOKEN;
+            abort_req(s, op, ret);
+            goto done;
+          }
+
+          const auto& tok = req->sts_state->decoded;
+          const auto& res = req->sts_state->resolved;
+          std::unique_ptr<rgw::auth::IdentityApplier> applier;
+          if (tok.acct_type == TYPE_ROLE) {
+            applier = std::make_unique<rgw::auth::RoleApplier>(
+                cct, env.driver, res.role, res.t_attrs);
+          } else if (tok.acct_type == TYPE_KEYSTONE ||
+                     tok.acct_type == TYPE_LDAP) {
+            /* Remote-auth STS tokens (keystone/ldap) aren't expected via
+             * librgw; fall back so the existing path can complain. */
+            auto result = rgw::auth::transform_old_authinfo(
+                op, null_yield, env.driver, s->user.get());
+            if (!result) {
+              ret = result.error();
+              abort_req(s, op, ret);
+              goto done;
+            }
+            s->auth.identity = std::move(result).value();
+          } else {
+            /* TYPE_RGW / TYPE_ROOT / TYPE_NONE: build a LocalApplier
+             * that mirrors what STSEngine builds in the REST path. */
+            std::optional<RGWAccountInfo> account = res.account;
+            std::vector<rgw::IAM::Policy> policies = res.policies;
+            std::unique_ptr<rgw::sal::User> usr = s->user->clone();
+            applier = std::make_unique<rgw::auth::LocalApplier>(
+                cct, std::move(usr), std::move(account), std::move(policies),
+                rgw::auth::LocalApplier::NO_SUBUSER, tok.perm_mask,
+                std::string(tok.access_key_id));
+          }
+          if (applier) {
+            /* Mirror what rgw::auth::Strategy::apply does in the REST
+             * path: refresh s->user from the applier's account info,
+             * propagate perm_mask, let the applier push its identity
+             * policies into s->iam_identity_policies, and set s->owner.
+             * Without modify_request_state, RoleApplier-derived role
+             * policies never reach the IAM evaluator and listing is
+             * denied. */
+            s->user = applier->load_acct_info(op);
+            s->perm_mask = applier->get_perm_mask();
+            applier->modify_request_state(op, s);
+            s->auth.identity = std::move(applier);
+            s->owner = s->auth.identity->get_aclowner();
+          }
+        } else {
+          auto result = rgw::auth::transform_old_authinfo(
+              op, null_yield, env.driver, s->user.get());
+          if (!result) {
+            ret = result.error();
+            abort_req(s, op, ret);
+            goto done;
+          }
+          s->auth.identity = std::move(result).value();
         }
-	s->auth.identity = std::move(result).value();
       }
 
       ldpp_dout(s, 2) << "reading op permissions" << dendl;

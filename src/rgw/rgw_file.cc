@@ -95,6 +95,50 @@ namespace rgw {
     return (rgw_exposed_attrs.find(k) != rgw_exposed_attrs.end());
   }
 
+  int RGWLibFS::execute_req(RGWLibRequest* req)
+  {
+    req->set_sts_state(&sts_state);
+    return g_rgwlib->get_fe()->execute_req(req);
+  }
+
+  int RGWLibFS::set_credentials(const DoutPrefixProvider* dpp,
+                                rgw::sal::Driver* driver,
+                                const char* new_uid,
+                                const char* new_key,
+                                const char* new_secret,
+                                const char* new_session_token)
+  {
+    /* Snapshot the prior state so we can roll back if re-auth fails.
+     * After this point we mutate uid/key/sts_state and then call
+     * authorize(); on failure we restore the snapshot.
+     */
+    std::string saved_uid = uid;
+    RGWAccessKey saved_key = key;
+    STSAuthState saved_sts_state = std::move(sts_state);
+
+    if (new_uid) uid = new_uid;
+    if (new_key) key.id = new_key;
+    if (new_secret) key.key = new_secret;
+
+    /* Reset STS state and seed with the new session token (if any).
+     * authorize() reads sts_state.session_token and re-populates the
+     * decoded/resolved fields. */
+    sts_state = STSAuthState{};
+    if (new_session_token && *new_session_token) {
+      sts_state.session_token.assign(new_session_token);
+    }
+
+    int rc = authorize(dpp, driver);
+    if (rc != 0) {
+      /* Roll back. */
+      uid = std::move(saved_uid);
+      key = std::move(saved_key);
+      sts_state = std::move(saved_sts_state);
+      return rc;
+    }
+    return 0;
+  }
+
   LookupFHResult RGWLibFS::stat_bucket(RGWFileHandle* parent, const char *path,
 				       RGWLibFS::BucketStats& bs,
 				       uint32_t flags)
@@ -103,7 +147,7 @@ namespace rgw {
     std::string bucket_name{path};
     RGWStatBucketRequest req(cct, user->clone(), bucket_name, bs);
 
-    int rc = g_rgwlib->get_fe()->execute_req(&req);
+    int rc = execute_req(&req);
     if ((rc == 0) &&
 	(req.get_ret() == 0) &&
 	(req.matched())) {
@@ -196,7 +240,7 @@ namespace rgw {
 	RGWStatObjRequest req(cct, user->clone(),
 			      parent->bucket_name(), obj_path,
 			      RGWStatObjRequest::FLAG_NONE);
-	int rc = g_rgwlib->get_fe()->execute_req(&req);
+	int rc = execute_req(&req);
 	if ((rc == 0) &&
 	    (req.get_ret() == 0)) {
 	  fhr = lookup_fh(parent, path, RGWFileHandle::FLAG_CREATE);
@@ -230,7 +274,7 @@ namespace rgw {
 	RGWStatObjRequest req(cct, user->clone(),
 			      parent->bucket_name(), obj_path,
 			      RGWStatObjRequest::FLAG_NONE);
-	int rc = g_rgwlib->get_fe()->execute_req(&req);
+	int rc = execute_req(&req);
 	if ((rc == 0) &&
 	    (req.get_ret() == 0)) {
 	  fhr = lookup_fh(parent, path, RGWFileHandle::FLAG_DIRECTORY);
@@ -259,7 +303,7 @@ namespace rgw {
 	std::string object_name{path};
 	RGWStatLeafRequest req(cct, user->clone(),
 			       parent, object_name);
-	int rc = g_rgwlib->get_fe()->execute_req(&req);
+	int rc = execute_req(&req);
 	if ((rc == 0) &&
 	    (req.get_ret() == 0)) {
 	  if (req.matched) {
@@ -312,7 +356,7 @@ namespace rgw {
 
     RGWReadRequest req(get_context(), user->clone(), rgw_fh, offset, length, buffer);
 
-    int rc = g_rgwlib->get_fe()->execute_req(&req);
+    int rc = execute_req(&req);
     if ((rc == 0) &&
         ((rc = req.get_ret()) == 0)) {
       lock_guard guard(rgw_fh->mtx);
@@ -334,7 +378,7 @@ namespace rgw {
 
     RGWReadRequest req(get_context(), user->clone(), rgw_fh, offset, length, buffer);
 
-    int rc = g_rgwlib->get_fe()->execute_req(&req);
+    int rc = execute_req(&req);
     if ((rc == 0) &&
         ((rc = req.get_ret()) == 0)) {
       lock_guard guard(rgw_fh->mtx);
@@ -391,14 +435,14 @@ namespace rgw {
 	/* delete object w/key "<bucket>/" (uxattrs), if any */
 	string oname{"/"};
 	RGWDeleteObjRequest req(cct, user->clone(), bkt_fh->bucket_name(), oname);
-	rc = g_rgwlib->get_fe()->execute_req(&req);
+	rc = execute_req(&req);
 	/* don't care if ENOENT */
 	unref(bkt_fh);
       }
 
       string bname{name};
       RGWDeleteBucketRequest req(cct, user->clone(), bname);
-      rc = g_rgwlib->get_fe()->execute_req(&req);
+      rc = execute_req(&req);
       if (! rc) {
 	rc = req.get_ret();
       }
@@ -434,7 +478,7 @@ namespace rgw {
 	oname += "/";
       }
       RGWDeleteObjRequest req(cct, user->clone(), parent->bucket_name(), oname);
-      rc = g_rgwlib->get_fe()->execute_req(&req);
+      rc = execute_req(&req);
       if (! rc) {
 	rc = req.get_ret();
       }
@@ -512,7 +556,7 @@ namespace rgw {
       case 0:
       {
 	RGWCopyObjRequest req(cct, user->clone(), src_fh, dst_fh, src_name, dst_name);
-	int rc = g_rgwlib->get_fe()->execute_req(&req);
+	int rc = execute_req(&req);
 	if ((rc != 0) ||
 	    ((rc = req.get_ret()) != 0)) {
 	  ldout(get_context(), 1)
@@ -638,7 +682,7 @@ namespace rgw {
       req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
       req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
 
-      rc = g_rgwlib->get_fe()->execute_req(&req);
+      rc = execute_req(&req);
       rc2 = req.get_ret();
     } else {
       /* create an object representing the directory */
@@ -664,7 +708,7 @@ namespace rgw {
       req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
       req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
 
-      rc = g_rgwlib->get_fe()->execute_req(&req);
+      rc = execute_req(&req);
       rc2 = req.get_ret();
     }
 
@@ -720,7 +764,7 @@ namespace rgw {
     RGWPutObjRequest req(cct, user->clone(), parent->bucket_name(), obj_name, bl);
     MkObjResult mkr{nullptr, -EINVAL};
 
-    rc = g_rgwlib->get_fe()->execute_req(&req);
+    rc = execute_req(&req);
     rc2 = req.get_ret();
 
     if ((rc == 0) &&
@@ -835,7 +879,7 @@ namespace rgw {
     req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
     req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
 
-    rc = g_rgwlib->get_fe()->execute_req(&req);
+    rc = execute_req(&req);
     rc2 = req.get_ret();
     if (! ((rc == 0) &&
         (rc2 == 0))) {
@@ -918,7 +962,7 @@ namespace rgw {
     req.emplace_attr(RGW_ATTR_ETAG, std::move(etag));
     req.emplace_attr(RGW_ATTR_ACL, std::move(acls));
 
-    rc = g_rgwlib->get_fe()->execute_req(&req);
+    rc = execute_req(&req);
     rc2 = req.get_ret();
 
     if (rc == -ENOENT) {
@@ -932,7 +976,7 @@ namespace rgw {
       req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
       req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
 
-      rc = g_rgwlib->get_fe()->execute_req(&req);
+      rc = execute_req(&req);
       rc2 = req.get_ret();
     }
 
@@ -1004,7 +1048,7 @@ namespace rgw {
       }
     }
 
-    rc = g_rgwlib->get_fe()->execute_req(&req);
+    rc = execute_req(&req);
     rc2 = req.get_ret();
     rc3 = ((rc == 0) && (rc2 == 0)) ? 0 : -EIO;
 
@@ -1063,7 +1107,7 @@ namespace rgw {
 
     RGWGetAttrsRequest req(cct, user->clone(), rgw_fh->bucket_name(), obj_name);
 
-    rc = g_rgwlib->get_fe()->execute_req(&req);
+    rc = execute_req(&req);
     rc2 = req.get_ret();
     rc3 = ((rc == 0) && (rc2 == 0)) ? 0 : -EIO;
 
@@ -1133,7 +1177,7 @@ namespace rgw {
       return -EINVAL;
     }
 
-    rc = g_rgwlib->get_fe()->execute_req(&req);
+    rc = execute_req(&req);
     rc2 = req.get_ret();
 
     return (((rc == 0) && (rc2 == 0)) ? 0 : -EIO);
@@ -1169,7 +1213,7 @@ namespace rgw {
       return -EINVAL;
     }
 
-    rc = g_rgwlib->get_fe()->execute_req(&req);
+    rc = execute_req(&req);
     rc2 = req.get_ret();
 
     return (((rc == 0) && (rc2 == 0)) ? 0 : -EIO);
@@ -1200,7 +1244,7 @@ namespace rgw {
     req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
     req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
 
-    rc = g_rgwlib->get_fe()->execute_req(&req);
+    rc = execute_req(&req);
     rc2 = req.get_ret();
 
     if ((rc != 0) || (rc2 != 0)) {
@@ -1528,7 +1572,7 @@ namespace rgw {
     RGWRMdirCheck req(fs->get_context(),
 		      g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
 		      this);
-    int rc = g_rgwlib->get_fe()->execute_req(&req);
+    int rc = fs->execute_req(&req);
     if (! rc) {
       return req.valid && req.has_children;
     }
@@ -1583,7 +1627,7 @@ namespace rgw {
     if (is_root()) {
       RGWListBucketsRequest req(cct, fs->user->clone(),
 				this, rcb, cb_arg, offset);
-      rc = g_rgwlib->get_fe()->execute_req(&req);
+      rc = fs->execute_req(&req);
       if (! rc) {
 	(void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now); /* !LOCKED */
 	lock_guard guard(mtx);
@@ -1596,7 +1640,7 @@ namespace rgw {
     } else {
       RGWReaddirRequest req(cct, fs->user->clone(),
 			    this, rcb, cb_arg, offset);
-      rc = g_rgwlib->get_fe()->execute_req(&req);
+      rc = fs->execute_req(&req);
       if (! rc) {
 	(void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now); /* !LOCKED */
 	lock_guard guard(mtx);
@@ -1668,6 +1712,7 @@ namespace rgw {
 	new RGWWriteRequest(g_rgwlib->get_driver(), penv,
 			    g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
 			    this, bucket_name(), object_name);
+      f->write_req->set_sts_state(&fs->sts_state);
       rc = g_rgwlib->get_fe()->start_req(f->write_req);
       if (rc < 0) {
 	lsubdout(fs->get_context(), rgw, 5)
@@ -2111,29 +2156,36 @@ int rgw_mount2(librgw_t rgw, const char *uid, const char *acc_key,
                const char *sec_key, const char *root, struct rgw_fs **rgw_fs,
                uint32_t flags)
 {
+  /* rgw_mount2 == rgw_mount3 with no session_token. */
+  return rgw_mount3(rgw, uid, acc_key, sec_key, nullptr, root, rgw_fs, flags);
+}
+
+int rgw_mount3(librgw_t rgw, const char *uid, const char *acc_key,
+               const char *sec_key, const char *session_token,
+               const char *root, struct rgw_fs **rgw_fs,
+               uint32_t flags)
+{
   int rc = 0;
 
   /* if the config has no value for path/root, choose "/" */
-  RGWLibFS* new_fs{nullptr};
-  if(root &&
-     (!strcmp(root, ""))) {
-    /* stash access data for "mount" */
-    new_fs = new RGWLibFS(
-      static_cast<CephContext*>(rgw), uid, acc_key, sec_key, "/");
-  }
-  else {
-    /* stash access data for "mount" */
-    new_fs = new RGWLibFS(
-      static_cast<CephContext*>(rgw), uid, acc_key, sec_key, root);
-  }
+  const char* effective_root = (root && *root) ? root : "/";
+
+  RGWLibFS* new_fs = new RGWLibFS(
+      static_cast<CephContext*>(rgw), uid, acc_key, sec_key,
+      effective_root, session_token);
 
   ceph_assert(new_fs); /* should we be using ceph_assert? */
 
-  const DoutPrefix dp(g_rgwlib->get_driver()->ctx(), dout_subsys, "rgw mount2: ");
+  const DoutPrefix dp(g_rgwlib->get_driver()->ctx(), dout_subsys, "rgw mount3: ");
   rc = new_fs->authorize(&dp, g_rgwlib->get_driver());
   if (rc != 0) {
     delete new_fs;
-    return -EINVAL;
+    /* Preserve the more specific errno from authorize() (e.g.
+     * -ERR_EXPIRED_TOKEN, -EPERM) for STS callers; older rgw_mount/2
+     * callers only saw -EINVAL but those paths feed authorize() return
+     * codes that are mostly already -EINVAL/-ERR_USER_SUSPENDED.
+     */
+    return rc;
   }
 
   /* register fs for shared gc */
@@ -2148,6 +2200,20 @@ int rgw_mount2(librgw_t rgw, const char *uid, const char *acc_key,
   *rgw_fs = fs;
 
   return 0;
+}
+
+int rgw_set_credentials(struct rgw_fs *rgw_fs, const char *uid,
+                        const char *acc_key, const char *sec_key,
+                        const char *session_token, uint32_t flags)
+{
+  if (!rgw_fs || !rgw_fs->fs_private) {
+    return -EINVAL;
+  }
+  RGWLibFS* fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
+  const DoutPrefix dp(g_rgwlib->get_driver()->ctx(), dout_subsys,
+                      "rgw set_credentials: ");
+  return fs->set_credentials(&dp, g_rgwlib->get_driver(),
+                             uid, acc_key, sec_key, session_token);
 }
 
 /*
@@ -2184,7 +2250,7 @@ int rgw_statfs(struct rgw_fs *rgw_fs,
   RGWGetClusterStatReq req(fs->get_context(),
 			   g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
 			   stats);
-  int rc = g_rgwlib->get_fe()->execute_req(&req);
+  int rc = fs->execute_req(&req);
   if (rc < 0) {
     lderr(fs->get_context()) << "ERROR: getting total cluster usage"
                              << cpp_strerror(-rc) << dendl;
@@ -2687,7 +2753,7 @@ int rgw_readv(struct rgw_fs *rgw_fs,
 		      bl);
   req.do_hexdump = false;
 
-  rc = g_rgwlib->get_fe()->execute_req(&req);
+  rc = fs->execute_req(&req);
 
   if (! rc) {
     RGWReadV* rdv = static_cast<RGWReadV*>(
@@ -2750,7 +2816,7 @@ int rgw_writev(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
   RGWPutObjRequest req(cct, g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
 		       rgw_fh->bucket_name(), oname, bl);
 
-  int rc = g_rgwlib->get_fe()->execute_req(&req);
+  int rc = fs->execute_req(&req);
 
   /* XXX update size (in request) */
 

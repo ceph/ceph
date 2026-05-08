@@ -10,6 +10,7 @@
 #include "rgw_rest.h"
 #include "rgw_request.h"
 #include "rgw_ldap.h"
+#include "rgw_sts.h"
 #include "include/ceph_assert.h"
 #include "rgw_main.h"
 
@@ -18,6 +19,21 @@ class OpsLogSink;
 namespace rgw {
 
   class RGWLibFrontend;
+
+  /* Cached STS-derived auth state for an RGWLibFS that was mounted with
+   * temporary credentials.  Populated by RGWLibFS::authorize when
+   * session_token is non-empty; consulted per-request by RGWLibProcess
+   * to build the right Identity (Local/Role/Remote) from the cached
+   * components.  active=false means the FS was mounted with permanent
+   * credentials and the existing transform_old_authinfo path is used.
+   */
+  struct STSAuthState {
+    bool active = false;
+    std::string session_token;        /* the base64 token, kept for refresh */
+    STS::SessionToken decoded;        /* decoded payload (perm_mask, acct_type, ...) */
+    STS::ResolvedSession resolved;    /* role / user / account / policies */
+    real_time expiration;             /* parsed from decoded.expiration */
+  };
 
   class RGWLib : public DoutPrefixProvider {
     boost::intrusive_ptr<CephContext> cct;
@@ -125,6 +141,16 @@ namespace rgw {
     std::unique_ptr<rgw::sal::User> tuser; // Don't use this.  It's empty except during init.
   public:
     CephContext* cct;
+
+    /* If non-null, points to the STSAuthState owned by the RGWLibFS that
+     * issued this request.  When sts_state->active is true, RGWLibProcess
+     * builds s->auth.identity from the cached components instead of
+     * calling transform_old_authinfo.  Lifetime: the RGWLibFS outlives
+     * any in-flight request because the FS holds requests via execute_req
+     * and is unmounted only after they complete. */
+    const STSAuthState* sts_state = nullptr;
+
+    void set_sts_state(const STSAuthState* s) { sts_state = s; }
 
     /* unambiguously return req_state */
     inline req_state* get_state() { return this->RGWRequest::s; }

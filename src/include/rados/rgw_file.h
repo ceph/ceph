@@ -27,9 +27,11 @@ extern "C" {
 #endif
 
 #define LIBRGW_FILE_VER_MAJOR 1
-#define LIBRGW_FILE_VER_MINOR 2
-#define LIBRGW_FILE_VER_EXTRA 1 /* version number needs to advance to
-				 * match change in rgw_raddir2 signature */
+#define LIBRGW_FILE_VER_MINOR 3
+#define LIBRGW_FILE_VER_EXTRA 0 /* 1.3.0: rgw_mount3 + rgw_set_credentials
+				 *        accept STS-issued temporary creds
+				 *        (access_key + secret + session_token)
+				 * 1.2.1: change in rgw_readdir2 signature */
 
 #define LIBRGW_FILE_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 #define LIBRGW_FILE_VERSION_CODE LIBRGW_FILE_VERSION(LIBRGW_FILE_VER_MAJOR, LIBRGW_FILE_VER_MINOR, LIBRGW_FILE_VER_EXTRA)
@@ -133,6 +135,35 @@ int rgw_mount(librgw_t rgw, const char *uid, const char *key,
 int rgw_mount2(librgw_t rgw, const char *uid, const char *key,
                const char *secret, const char *root, struct rgw_fs **rgw_fs,
                uint32_t flags);
+
+/*
+ * Mount with optional STS-issued temporary credentials.  When
+ * `session_token` is non-NULL and non-empty, the (key, secret) pair must
+ * be the AccessKeyId/SecretAccessKey returned by AssumeRole/
+ * GetSessionToken/AssumeRoleWithWebIdentity, and the session_token is
+ * the base64-encoded SessionToken from the same response.  RGW decodes
+ * and validates the token at mount time and uses the role/user identity
+ * embedded in it for subsequent requests.
+ *
+ * When `session_token` is NULL or "", behaves exactly like rgw_mount2.
+ */
+int rgw_mount3(librgw_t rgw, const char *uid, const char *key,
+               const char *secret, const char *session_token,
+               const char *root, struct rgw_fs **rgw_fs,
+               uint32_t flags);
+
+/*
+ * Replace the credentials on an already-mounted rgw_fs without
+ * unmounting.  Intended for rotating STS-issued temporary credentials
+ * before they expire (the FSAL_RGW caller assumes the role periodically
+ * and calls this with fresh creds).  Re-runs internal authorization;
+ * returns -EPERM / -EINVAL on failure (existing creds remain in effect).
+ */
+#define RGW_SET_CREDENTIALS_FLAG_NONE   0x0000
+
+int rgw_set_credentials(struct rgw_fs *rgw_fs, const char *uid,
+                        const char *key, const char *secret,
+                        const char *session_token, uint32_t flags);
 
 /*
  register invalidate callbacks
