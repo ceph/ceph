@@ -1,0 +1,16 @@
+.card-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.module-enabled-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+
+  p {
+    margin-bottom: 0;
+  }
+}
