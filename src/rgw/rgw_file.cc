@@ -1581,7 +1581,7 @@ namespace rgw {
     }
 
     if (is_root()) {
-      RGWListBucketsRequest req(cct, g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
+      RGWListBucketsRequest req(cct, fs->user->clone(),
 				this, rcb, cb_arg, offset);
       rc = g_rgwlib->get_fe()->execute_req(&req);
       if (! rc) {
@@ -1594,7 +1594,7 @@ namespace rgw {
 	*eof = req.eof();
       }
     } else {
-      RGWReaddirRequest req(cct, g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
+      RGWReaddirRequest req(cct, fs->user->clone(),
 			    this, rcb, cb_arg, offset);
       rc = g_rgwlib->get_fe()->execute_req(&req);
       if (! rc) {
