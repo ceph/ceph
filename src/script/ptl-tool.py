@@ -262,7 +262,7 @@ class AuditReport:
                     payload['event'] = 'COMMENT'
 
                 endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/pulls/{pr}/reviews"
-                session.post(endpoint, auth=gitauth(), json=payload)
+                session.post(endpoint, auth=GithubBearerAuth(), json=payload)
 
 
 def parse_audit_labels(value):
@@ -277,14 +277,12 @@ def parse_audit_labels(value):
         return AuditLabels(queue=parts[0], passed=parts[1], failed=parts[2])
     raise argparse.ArgumentTypeError("Audit labels must be 'queue', 'passed,failed', or 'queue,passed,failed'")
 
-def gitauth():
-    class GitHubBearerAuth(requests.auth.AuthBase):
-        def __call__(self, r):
-            if GITHUB_TOKEN:
-                r.headers['Authorization'] = f'Bearer {GITHUB_TOKEN}'
-            r.headers['Accept'] = 'application/vnd.github.v3+json'
-            return r
-    return GitHubBearerAuth()
+class GithubBearerAuth(requests.auth.AuthBase):
+    def __call__(self, r):
+        if GITHUB_TOKEN:
+            r.headers['Authorization'] = f'Bearer {GITHUB_TOKEN}'
+        r.headers['Accept'] = 'application/vnd.github.v3+json'
+        return r
 
 _PR_CACHE = {}
 def get_pr_info(session, pr):
@@ -305,8 +303,9 @@ def get(session, url, params=None, paging=True):
     params['per_page'] = 100
 
     log.debug(f"Fetching {url}")
-    response = session.get(url, auth=gitauth(), params=params)
+    response = session.get(url, auth=GithubBearerAuth(), params=params)
     log.debug(f"Response = {response}; links = {response.headers.get('link', '')}")
+
     if response.status_code != 200:
         log.error(f"Failed to fetch {url}: {response}")
         sys.exit(1)
@@ -319,7 +318,7 @@ def get(session, url, params=None, paging=True):
             log.debug(f"Fetching {url}")
             new_params = dict(params)
             new_params.update({'page': page})
-            response = session.get(url, auth=gitauth(), params=new_params)
+            response = session.get(url, auth=GithubBearerAuth(), params=new_params)
             log.debug(f"Response = {response}; links = {response.headers.get('link', '')}")
             if response.status_code != 200:
                 log.error(f"Failed to fetch {url}: {response}")
@@ -564,7 +563,7 @@ def post_draft_review(session, pr, initial_text, base=None):
             elif confirm in ('r', 'c'):
                 event = 'REQUEST_CHANGES' if confirm == 'r' else 'COMMENT'
                 endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/pulls/{pr}/reviews"
-                r = session.post(endpoint, auth=gitauth(), json={'body': final_text, 'event': event})
+                r = session.post(endpoint, auth=GithubBearerAuth(), json={'body': final_text, 'event': event})
                 if r.status_code in (200, 201):
                     log.info(f"Successfully posted {event} to PR #{pr}")
                     return confirm
@@ -1580,7 +1579,7 @@ def manage_qa_tracker(args, R, session, branch, prs, tag, qa_tracker_description
                 log.info(f"[DRY RUN] Would post comment to added PR #{pr}: {body}")
             else:
                 endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{pr}/comments"
-                r = session.post(endpoint, auth=gitauth(), data=json.dumps({'body':body}))
+                r = session.post(endpoint, auth=GithubBearerAuth(), data=json.dumps({'body':body}))
                 if r.status_code == 201:
                     log.info(f"Successfully posted added comment to PR #{pr}")
                 else:
@@ -1592,7 +1591,7 @@ def manage_qa_tracker(args, R, session, branch, prs, tag, qa_tracker_description
                 log.info(f"[DRY RUN] Would post comment to removed PR #{pr}: {body}")
             else:
                 endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{pr}/comments"
-                r = session.post(endpoint, auth=gitauth(), data=json.dumps({'body':body}))
+                r = session.post(endpoint, auth=GithubBearerAuth(), data=json.dumps({'body':body}))
                 if r.status_code == 201:
                     log.info(f"Successfully posted removed comment to PR #{pr}")
                 else:
@@ -1620,7 +1619,7 @@ def manage_qa_tracker(args, R, session, branch, prs, tag, qa_tracker_description
                 log.info(f"[DRY RUN] Would post comment to PR #{pr}: {body}")
             else:
                 endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{pr}/comments"
-                r = session.post(endpoint, auth=gitauth(), data=json.dumps({'body':body}))
+                r = session.post(endpoint, auth=GithubBearerAuth(), data=json.dumps({'body':body}))
                 if r.status_code == 201:
                     log.info(f"Successfully posted comment to PR #{pr}")
                 else:
@@ -1780,7 +1779,7 @@ def build_branch(args):
                     if args.dry_run:
                         log.info(f"[DRY RUN] Would remove label {audit.queue} from PR #{pr}")
                     else:
-                        req = session.delete(f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{pr}/labels/{audit.queue}", auth=gitauth())
+                        req = session.delete(f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{pr}/labels/{audit.queue}", auth=GithubBearerAuth())
                         if req.status_code in (200, 204):
                             log.info(f"Removed label {audit.queue} from PR #{pr}")
                         else:
@@ -1791,7 +1790,7 @@ def build_branch(args):
                     if args.dry_run:
                         log.info(f"[DRY RUN] Would add label {target_label} to PR #{pr}")
                     else:
-                        req = session.post(f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{pr}/labels", data=json.dumps([target_label]), auth=gitauth())
+                        req = session.post(f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{pr}/labels", data=json.dumps([target_label]), auth=GithubBearerAuth())
                         if req.status_code == 200:
                             log.info(f"Added label {target_label} to PR #{pr}")
                         else:
@@ -1832,7 +1831,7 @@ def build_branch(args):
             if args.dry_run:
                 log.info(f"[DRY RUN] Would label PR #{pr} with {label}")
             else:
-                req = session.post("https://api.github.com/repos/{project}/{repo}/issues/{pr}/labels".format(pr=pr, project=BASE_PROJECT, repo=BASE_REPO), data=json.dumps([label]), auth=gitauth())
+                req = session.post("https://api.github.com/repos/{project}/{repo}/issues/{pr}/labels".format(pr=pr, project=BASE_PROJECT, repo=BASE_REPO), data=json.dumps([label]), auth=GithubBearerAuth())
                 if req.status_code != 200:
                     log.error("PR #%d could not be labeled %s: %s" % (pr, label, req))
                     sys.exit(1)
