@@ -15,6 +15,7 @@
 #include <filesystem>
 #include <fstream>
 #include <thread>
+#include <unordered_map>
 
 #include <gtest/gtest.h>
 
@@ -670,6 +671,67 @@ class StubBootstrapResolver : public BootstrapResolver {
 // fine for all tests below.
 StubBootstrapResolver boot_;
 
+// Build a complete (FS, AP, MT) tuple owned by `account_id`. Used by
+// multi-account tests where make_full_tuple's hardcoded kAccount
+// would collapse two accounts into one.
+FullTuple make_full_tuple_for_account(MemoryStore& s,
+                                       std::string_view account_id,
+                                       std::string_view bucket,
+                                       std::string_view role,
+                                       std::string_view zone) {
+  CreateFileSystemRequest fsreq;
+  fsreq.owner_account_id = std::string(account_id);
+  fsreq.bucket_arn = std::string(bucket);
+  fsreq.role_arn = std::string(role);
+  fsreq.prefix = "fsp/";
+  auto fs = s.create_file_system(fsreq);
+  if (!ok(fs)) return {};
+
+  CreateAccessPointRequest apreq;
+  apreq.owner_account_id = std::string(account_id);
+  apreq.filesystem_id = value(fs).spec.id;
+  apreq.posix_user = PosixUser{1000, 1000, {}};
+  auto ap = s.create_access_point(apreq);
+  if (!ok(ap)) return {};
+
+  CreateMountTargetRequest mtreq;
+  mtreq.owner_account_id = std::string(account_id);
+  mtreq.filesystem_id = value(fs).spec.id;
+  mtreq.zone_id = std::string(zone);
+  auto mt = s.create_mount_target(mtreq);
+  if (!ok(mt)) return {};
+
+  return {value(fs).spec.id, value(ap).spec.id, value(mt).spec.id};
+}
+
+// Resolver that returns different bootstrap creds per account and
+// counts how many times each account is resolved.  Accounts not in
+// the map yield std::nullopt so the resolution-failure path is also
+// exercised.
+class MultiAccountStubResolver : public BootstrapResolver {
+ public:
+  explicit MultiAccountStubResolver(
+      std::unordered_map<std::string, BootstrapCredentials> creds)
+      : creds_(std::move(creds)) {}
+
+  std::optional<BootstrapCredentials> resolve(
+      const std::string& account_id) override {
+    ++calls_[account_id];
+    auto it = creds_.find(account_id);
+    if (it == creds_.end()) return std::nullopt;
+    return it->second;
+  }
+
+  int calls_for(const std::string& account_id) const {
+    auto it = calls_.find(account_id);
+    return it == calls_.end() ? 0 : it->second;
+  }
+
+ private:
+  std::unordered_map<std::string, BootstrapCredentials> creds_;
+  std::unordered_map<std::string, int> calls_;
+};
+
 }  // namespace
 
 TEST(ComposeExports, EmptyStoreYieldsEmpty) {
@@ -771,6 +833,143 @@ TEST(ComposeExports, OrphanedMt_Skipped) {
   // Actually simpler: just verify post-delete_ap, the
   // exports list is empty (no AP → no export).
   EXPECT_TRUE(compose_exports(s, boot_).empty());
+}
+
+// -----------------------------------------------------------------
+// Multi-account isolation
+//
+// The reconciler resolves bootstrap credentials per FS owner and
+// renders one DesiredExport per (FS, AP, MT) tuple. These tests
+// guard the property that an account's identifiers, role ARN, and
+// bootstrap credentials never appear in another account's exports
+// -- the in-memory side of tenant isolation.  The runtime side
+// (trust-policy denial when account A tries to AssumeRole on
+// account B's role) is enforced by RGW's STSService and exercised
+// in the librgw / end-to-end suites.
+// -----------------------------------------------------------------
+
+TEST(ComposeExports, MultiAccount_BootstrapResolvedPerAccount) {
+  // Two FSes owned by two different accounts. Each rendered
+  // DesiredExport must carry its own account's bootstrap
+  // credentials and role ARN -- a leak here would let one tenant's
+  // NFS export AssumeRole as another tenant's principal.
+  MemoryStore s;
+  constexpr std::string_view kAcctA = "111111111111";
+  constexpr std::string_view kAcctB = "222222222222";
+  auto ta = make_full_tuple_for_account(
+      s, kAcctA, "arn:aws:s3:::bucket-a",
+      "arn:aws:iam::111111111111:role/role-a",
+      "00000000000000000000000000000001");
+  auto tb = make_full_tuple_for_account(
+      s, kAcctB, "arn:aws:s3:::bucket-b",
+      "arn:aws:iam::222222222222:role/role-b",
+      "00000000000000000000000000000002");
+  ASSERT_FALSE(ta.fs_id.empty());
+  ASSERT_FALSE(tb.fs_id.empty());
+
+  MultiAccountStubResolver resolver({
+      {std::string(kAcctA),
+       BootstrapCredentials{"root-a", "AKIA-A", "SECRET-A"}},
+      {std::string(kAcctB),
+       BootstrapCredentials{"root-b", "AKIA-B", "SECRET-B"}},
+  });
+
+  auto exports = compose_exports(s, resolver);
+  ASSERT_EQ(exports.size(), 2u);
+
+  // compose_exports sorts by (fs_id, ap_id, mt_id); we don't know
+  // which fs_id sorted first, so look up by owner_account_id.
+  const DesiredExport* a = nullptr;
+  const DesiredExport* b = nullptr;
+  for (const auto& e : exports) {
+    if (e.owner_account_id == kAcctA) a = &e;
+    if (e.owner_account_id == kAcctB) b = &e;
+  }
+  ASSERT_NE(a, nullptr);
+  ASSERT_NE(b, nullptr);
+
+  EXPECT_EQ(a->bootstrap_user_id,    "root-a");
+  EXPECT_EQ(a->bootstrap_access_key, "AKIA-A");
+  EXPECT_EQ(a->bootstrap_secret_key, "SECRET-A");
+  EXPECT_EQ(b->bootstrap_user_id,    "root-b");
+  EXPECT_EQ(b->bootstrap_access_key, "AKIA-B");
+  EXPECT_EQ(b->bootstrap_secret_key, "SECRET-B");
+
+  // role_arn pairing: a swap here would silently mount one
+  // tenant's bucket under another tenant's role.
+  EXPECT_EQ(a->role_arn, "arn:aws:iam::111111111111:role/role-a");
+  EXPECT_EQ(b->role_arn, "arn:aws:iam::222222222222:role/role-b");
+}
+
+TEST(ComposeExports, MultiAccount_ResolverFailureSkipsOnlyAffectedAccount) {
+  // If bootstrap resolution fails for one account (e.g. its root
+  // user has no access keys), only that account's exports drop --
+  // the other account's exports still render. A blanket-fail
+  // would over-shrink the desired set and tear down healthy
+  // mounts.
+  MemoryStore s;
+  constexpr std::string_view kAcctA = "111111111111";
+  constexpr std::string_view kAcctB = "222222222222";
+  make_full_tuple_for_account(s, kAcctA, "arn:aws:s3:::bucket-a",
+      "arn:aws:iam::111111111111:role/role-a",
+      "00000000000000000000000000000001");
+  auto tb = make_full_tuple_for_account(s, kAcctB, "arn:aws:s3:::bucket-b",
+      "arn:aws:iam::222222222222:role/role-b",
+      "00000000000000000000000000000002");
+  ASSERT_FALSE(tb.fs_id.empty());
+
+  // Only account B has known creds; A is intentionally absent
+  // from the resolver map (simulates "no usable root key").
+  MultiAccountStubResolver resolver({
+      {std::string(kAcctB),
+       BootstrapCredentials{"root-b", "AKIA-B", "SECRET-B"}},
+  });
+
+  auto exports = compose_exports(s, resolver);
+  ASSERT_EQ(exports.size(), 1u);
+  EXPECT_EQ(exports[0].owner_account_id, kAcctB);
+  EXPECT_EQ(exports[0].bootstrap_user_id, "root-b");
+}
+
+TEST(ComposeExports, MultiAccount_ResolverCachedPerComposeCall) {
+  // compose_exports caches resolutions by owner_account_id within
+  // a single call so we don't hammer SAL's account-listing path
+  // once per export. Two FSes per account, two accounts -> 4
+  // exports but only 2 resolve calls per compose. (Two FSes
+  // can't share a bucket, hence the per-FS bucket suffix.)
+  MemoryStore s;
+  constexpr std::string_view kAcctA = "111111111111";
+  constexpr std::string_view kAcctB = "222222222222";
+  make_full_tuple_for_account(s, kAcctA, "arn:aws:s3:::bucket-a1",
+      "arn:aws:iam::111111111111:role/role-a",
+      "00000000000000000000000000000001");
+  make_full_tuple_for_account(s, kAcctA, "arn:aws:s3:::bucket-a2",
+      "arn:aws:iam::111111111111:role/role-a",
+      "00000000000000000000000000000002");
+  make_full_tuple_for_account(s, kAcctB, "arn:aws:s3:::bucket-b1",
+      "arn:aws:iam::222222222222:role/role-b",
+      "00000000000000000000000000000003");
+  make_full_tuple_for_account(s, kAcctB, "arn:aws:s3:::bucket-b2",
+      "arn:aws:iam::222222222222:role/role-b",
+      "00000000000000000000000000000004");
+
+  MultiAccountStubResolver resolver({
+      {std::string(kAcctA),
+       BootstrapCredentials{"root-a", "AKIA-A", "SECRET-A"}},
+      {std::string(kAcctB),
+       BootstrapCredentials{"root-b", "AKIA-B", "SECRET-B"}},
+  });
+
+  auto exports = compose_exports(s, resolver);
+  EXPECT_EQ(exports.size(), 4u);
+  EXPECT_EQ(resolver.calls_for(std::string(kAcctA)), 1);
+  EXPECT_EQ(resolver.calls_for(std::string(kAcctB)), 1);
+
+  // The cache is per-call: a second compose re-resolves once
+  // per account (so 2 each, not 1 or 4).
+  (void)compose_exports(s, resolver);
+  EXPECT_EQ(resolver.calls_for(std::string(kAcctA)), 2);
+  EXPECT_EQ(resolver.calls_for(std::string(kAcctB)), 2);
 }
 
 // =================================================================
@@ -1134,6 +1333,77 @@ TEST(DbusGaneshaSink, Render_BlockContainsExpectedFields) {
   // we always emit something <=64 by construction.
   EXPECT_NE(body.find("Role_Session_Name = \"ganesha-AAA-ap-BBB\""),
             std::string::npos);
+}
+
+TEST(DbusGaneshaSink, Render_MultiAccount_NoCrossContamination) {
+  // When two exports for two different accounts coexist, each
+  // rendered .conf must reference only its own account's bucket,
+  // role, user_id, and bootstrap credentials.  Catches regressions
+  // where a per-export field gets accidentally hoisted into a
+  // sink-level template, or where the (fs_id, ap_id, mt_id) ->
+  // export_id map collides across accounts.
+  TmpDir td;
+  RecordingInvoker rec;
+  DbusGaneshaSink sink(minimum_dbus_cfg(td.path()),
+                        std::ref(rec));
+
+  DesiredExport ea = sample_export("fs-A", "ap-A", "mt-A");
+  ea.bucket_arn = "arn:aws:s3:::bucket-a";
+  ea.composed_prefix = "data-a/";
+  ea.role_arn = "arn:aws:iam::111111111111:role/role-a";
+  ea.owner_account_id = "111111111111";
+  ea.bootstrap_user_id = "root-a";
+  ea.bootstrap_access_key = "AKIA-AAAAAAAA";
+  ea.bootstrap_secret_key = "SECRET-AAAAAAAA";
+
+  DesiredExport eb = sample_export("fs-B", "ap-B", "mt-B");
+  eb.bucket_arn = "arn:aws:s3:::bucket-b";
+  eb.composed_prefix = "data-b/";
+  eb.role_arn = "arn:aws:iam::222222222222:role/role-b";
+  eb.owner_account_id = "222222222222";
+  eb.bootstrap_user_id = "root-b";
+  eb.bootstrap_access_key = "AKIA-BBBBBBBB";
+  eb.bootstrap_secret_key = "SECRET-BBBBBBBB";
+
+  sink.apply({ea, eb});
+
+  auto id_a = sink.export_id_for("fs-A", "ap-A", "mt-A");
+  auto id_b = sink.export_id_for("fs-B", "ap-B", "mt-B");
+  ASSERT_TRUE(id_a.has_value());
+  ASSERT_TRUE(id_b.has_value());
+  ASSERT_NE(*id_a, *id_b);
+
+  auto read_file = [](const std::string& p) {
+    std::ifstream f(p);
+    return std::string((std::istreambuf_iterator<char>(f)),
+                        std::istreambuf_iterator<char>());
+  };
+  std::string body_a =
+      read_file(td.path() + "/" + std::to_string(*id_a) + ".conf");
+  std::string body_b =
+      read_file(td.path() + "/" + std::to_string(*id_b) + ".conf");
+
+  // Account A's export: contains A's identifiers, none of B's.
+  EXPECT_NE(body_a.find("AKIA-AAAAAAAA"), std::string::npos);
+  EXPECT_NE(body_a.find("SECRET-AAAAAAAA"), std::string::npos);
+  EXPECT_NE(body_a.find("role-a"), std::string::npos);
+  EXPECT_NE(body_a.find("bucket-a"), std::string::npos);
+  EXPECT_EQ(body_a.find("AKIA-BBBBBBBB"), std::string::npos);
+  EXPECT_EQ(body_a.find("SECRET-BBBBBBBB"), std::string::npos);
+  EXPECT_EQ(body_a.find("role-b"), std::string::npos);
+  EXPECT_EQ(body_a.find("root-b"), std::string::npos);
+  EXPECT_EQ(body_a.find("bucket-b"), std::string::npos);
+
+  // Account B's export: contains B's identifiers, none of A's.
+  EXPECT_NE(body_b.find("AKIA-BBBBBBBB"), std::string::npos);
+  EXPECT_NE(body_b.find("SECRET-BBBBBBBB"), std::string::npos);
+  EXPECT_NE(body_b.find("role-b"), std::string::npos);
+  EXPECT_NE(body_b.find("bucket-b"), std::string::npos);
+  EXPECT_EQ(body_b.find("AKIA-AAAAAAAA"), std::string::npos);
+  EXPECT_EQ(body_b.find("SECRET-AAAAAAAA"), std::string::npos);
+  EXPECT_EQ(body_b.find("role-a"), std::string::npos);
+  EXPECT_EQ(body_b.find("root-a"), std::string::npos);
+  EXPECT_EQ(body_b.find("bucket-a"), std::string::npos);
 }
 
 TEST(DbusGaneshaSink, ExportIds_AreUniquePerTuple) {
