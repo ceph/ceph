@@ -1191,13 +1191,9 @@ class ConflictSimulationCheck(BaseAuditCheck):
                             
                             md_text += f"#### Range Diff\n<details><summary>Click to expand</summary>\n\n```diff\n{diff_text}\n```\n</details>\n\n"
                             
-                            if args.ci_mode:
-                                report.add("Conflict/Deviation", md_text)
-                                continue
-    
                             report.add("Conflict/Deviation", md_text)
                             report.record_failure()
-                            break
+                            continue
                 else:
                     log.info(f"Applying branch-specific commit {commit.hexsha[:8]} ...")
                     wt_repo.git(c=SANDBOX_CFG).cherry_pick("--allow-empty", commit.hexsha)
