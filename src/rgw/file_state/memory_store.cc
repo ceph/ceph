@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <random>
 
 #include "rgw_s3files_errors.h"
 
@@ -93,7 +94,7 @@ StoreError invalid(std::string_view code, std::string message) {
 
 }  // namespace
 
-MemoryStore::MemoryStore() : id_counter_(0) {}
+MemoryStore::MemoryStore() = default;
 
 void MemoryStore::set_on_change(std::function<void()> cb) {
   std::lock_guard lock(mu_);
@@ -101,11 +102,19 @@ void MemoryStore::set_on_change(std::function<void()> cb) {
 }
 
 std::string MemoryStore::make_id(std::string_view prefix) {
-  std::uint64_t n = id_counter_.fetch_add(1, std::memory_order_relaxed) + 1;
-  char buf[33];
-  // 32-char hex, low 64 bits zero-padded; high 64 bits all zero.
-  std::snprintf(buf, sizeof(buf), "%016llx%016llx",
-                0ULL, static_cast<unsigned long long>(n));
+  // AWS EFS-style resource id: `<prefix><17 random hex chars>`
+  // (e.g. "fs-0123456789abcdef0").  17 hex = 68 bits of entropy,
+  // which is plenty for global uniqueness within an account.
+  // A thread-local PRNG seeded from random_device keeps this
+  // self-contained -- the file_state library doesn't need to
+  // drag in libcommon for uuid_d.
+  static thread_local std::mt19937_64 rng{std::random_device{}()};
+  const std::uint64_t lo = rng();
+  const std::uint64_t hi = rng() & 0xfu;
+  char buf[18];
+  std::snprintf(buf, sizeof(buf), "%016llx%llx",
+                static_cast<unsigned long long>(lo),
+                static_cast<unsigned long long>(hi));
   return std::string(prefix) + buf;
 }
 

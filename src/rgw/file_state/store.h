@@ -148,7 +148,7 @@ struct RootDirectory {
 // ---------------------------------------------------------------- FileSystem
 
 struct FileSystemSpec {
-  std::string id;                 // server-assigned, e.g. "fs-<32-hex>"
+  std::string id;                 // server-assigned, e.g. "fs-<17-hex>"
   std::string arn;                // server-assigned
   std::string owner_account_id;
   std::string bucket_arn;
@@ -193,7 +193,7 @@ struct CreateFileSystemRequest {
 // ---------------------------------------------------------------- AccessPoint
 
 struct AccessPointSpec {
-  std::string id;                 // server-assigned, e.g. "fsap-<32-hex>"
+  std::string id;                 // server-assigned, e.g. "fsap-<17-hex>"
   std::string arn;
   std::string parent_filesystem_id;
   std::string owner_account_id;
@@ -229,7 +229,7 @@ struct CreateAccessPointRequest {
 // ---------------------------------------------------------------- MountTarget
 
 struct MountTargetSpec {
-  std::string id;                 // server-assigned, e.g. "fsmt-<32-hex>"
+  std::string id;                 // server-assigned, e.g. "fsmt-<17-hex>"
   std::string parent_filesystem_id;
   std::string owner_account_id;
   std::string zone_id;            // decoded from subnetId at the API layer

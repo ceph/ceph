@@ -27,7 +27,6 @@
 
 #pragma once
 
-#include <atomic>
 #include <functional>
 #include <map>
 #include <mutex>
@@ -194,9 +193,8 @@ class MemoryStore : public Store {
   std::map<std::pair<std::string, std::string>, std::string>
       ap_client_tokens_;
 
-  // ID generation: monotonically incrementing 64-bit counter,
-  // formatted as 32 hex chars to match the AWS Smithy patterns.
-  std::atomic<std::uint64_t> id_counter_;
+  // ID generation: AWS EFS-style 17-char random hex (e.g.
+  // "fs-0123456789abcdef0"), seeded from uuid_d for entropy.
   std::string make_id(std::string_view prefix);
 
   // ARN format mirrors AWS:

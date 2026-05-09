@@ -196,11 +196,12 @@ std::string DbusGaneshaSink::render_export_block(
     // Role_Session_Name embeds (fs, ap) so AssumeRole audit logs
     // and the cached SessionToken's role_session field tie back
     // to a specific access point.  AWS caps RoleSessionName at 64
-    // chars (^[\w+=,.@-]{2,64}$).  fs- and fsap- IDs together can
-    // exceed that, so we drop the typed prefixes and trim each
-    // half to fit within budget.  The trailing portion of each
-    // ID carries the most entropy for UUID-like ids, so we keep
-    // the suffix.
+    // chars (^[\w+=,.@-]{2,64}$).  Today's AWS-style 17-char ids
+    // produce names like "ganesha-<17>-<17>" = 43 chars, which
+    // fits with room to spare; the truncation logic below is kept
+    // as a guard against future id-format growth.  We drop the
+    // typed prefixes and keep the suffix of each id, since a
+    // longer-than-budget id's entropy lives in the trailing bits.
     constexpr size_t kMaxSessionLen = 64;
     constexpr std::string_view kPrefix = "ganesha-";
     auto strip = [](std::string_view s, std::string_view p)
