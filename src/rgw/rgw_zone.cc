@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <optional>
+#include <iterator>
 #include <boost/algorithm/string.hpp>
 
 #include "common/errno.h"
@@ -1038,8 +1039,8 @@ int add_zone_to_group(const DoutPrefixProvider* dpp, RGWZoneGroup& zonegroup,
   }
 
   // add/remove supported features
-  zone.supported_features.insert(enable_features.begin(),
-                                 enable_features.end());
+  std::copy(enable_features.begin(), enable_features.end(),
+            std::inserter(zone.supported_features, zone.supported_features.end()));
 
   for (const auto& feature : disable_features) {
     if (zonegroup.enabled_features.contains(feature)) {
