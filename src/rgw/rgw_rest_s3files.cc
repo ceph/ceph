@@ -24,6 +24,7 @@
 
 #include "common/ceph_json.h"
 #include "common/dout.h"
+#include "common/errno.h"
 
 #include "rgw_arn.h"
 #include "rgw_auth_s3.h"
@@ -69,18 +70,80 @@ void set_default_store(rgw::file_state::Store* store) {
 // ReconcilerHarness
 // =================================================================
 
+// Driver-backed BootstrapResolver: given an FS owner account-id,
+// list the account's users, find the TYPE_ROOT user, and return its
+// first access key as the bootstrap credential pair. The reconciler
+// caches the result per account for the lifetime of one
+// compose_exports call, so we don't pay the listing cost per export.
+//
+// Anything missing (account gone, root user gone, no access key) is
+// returned as std::nullopt; the FS exports for that account are
+// silently skipped at compose_exports time.  Logged once per resolve
+// at level 1 so misconfig is visible without spamming.
+class AccountRootBootstrapResolver
+    : public rgw::file_state::BootstrapResolver {
+ public:
+  AccountRootBootstrapResolver(rgw::sal::Driver* driver, CephContext* cct)
+      : driver_(driver), cct_(cct) {}
+
+  std::optional<rgw::file_state::BootstrapCredentials> resolve(
+      const std::string& account_id) override {
+    const DoutPrefix dpp(cct_, dout_subsys, "s3files bootstrap: ");
+    if (!driver_ || account_id.empty()) {
+      return std::nullopt;
+    }
+    rgw::sal::UserList listing;
+    constexpr uint32_t kMaxUsersPerPage = 1000;
+    int ret = driver_->list_account_users(&dpp, null_yield, account_id,
+                                          /*tenant=*/"",
+                                          /*path_prefix=*/"",
+                                          /*marker=*/"",
+                                          kMaxUsersPerPage, listing);
+    if (ret < 0) {
+      ldpp_dout(&dpp, 1) << "ERROR: list_account_users(" << account_id
+                         << ") failed: " << cpp_strerror(ret) << dendl;
+      return std::nullopt;
+    }
+    for (const auto& user_info : listing.users) {
+      if (user_info.type != TYPE_ROOT) continue;
+      const auto& keys = user_info.access_keys;
+      if (keys.empty()) {
+        ldpp_dout(&dpp, 1) << "ERROR: account " << account_id
+                           << " root user has no access keys" << dendl;
+        return std::nullopt;
+      }
+      const auto& [key_id, key] = *keys.begin();
+      rgw::file_state::BootstrapCredentials c;
+      c.user_id = user_info.user_id.to_str();
+      c.access_key = key_id;
+      c.secret_key = key.key;
+      return c;
+    }
+    ldpp_dout(&dpp, 1) << "ERROR: account " << account_id
+                       << " has no root user" << dendl;
+    return std::nullopt;
+  }
+
+ private:
+  rgw::sal::Driver* driver_;
+  CephContext* cct_;
+};
+
 struct ReconcilerHarness::Impl {
   rgw::file_state::Store& store;
   rgw::file_state::InProcessChangeFeed feed;
   rgw::file_state::DbusGaneshaSink sink;
+  AccountRootBootstrapResolver bootstrap;
   rgw::file_state::Reconciler reconciler;
 
   Impl(rgw::file_state::Store& s,
+       rgw::sal::Driver* driver, CephContext* cct,
        rgw::file_state::DbusGaneshaSink::Config sink_cfg,
        rgw::file_state::ReconcilerConfig recon_cfg)
       : store(s),
         sink(std::move(sink_cfg)),
-        reconciler(store, feed, sink, recon_cfg) {}
+        bootstrap(driver, cct),
+        reconciler(store, feed, sink, bootstrap, recon_cfg) {}
 };
 
 namespace {
@@ -91,12 +154,6 @@ rgw::file_state::DbusGaneshaSink::Config make_sink_config(CephContext* cct) {
       cct->_conf.get_val<std::string>("rgw_s3files_ganesha_export_dir");
   c.rgw_endpoint =
       cct->_conf.get_val<std::string>("rgw_s3files_fsal_rgw_endpoint");
-  c.rgw_user_id =
-      cct->_conf.get_val<std::string>("rgw_s3files_fsal_rgw_user_id");
-  c.rgw_access_key =
-      cct->_conf.get_val<std::string>("rgw_s3files_fsal_rgw_access_key");
-  c.rgw_secret_key =
-      cct->_conf.get_val<std::string>("rgw_s3files_fsal_rgw_secret_key");
   c.dbus_dest =
       cct->_conf.get_val<std::string>("rgw_s3files_ganesha_dbus_dest");
   c.dbus_object =
@@ -119,8 +176,10 @@ rgw::file_state::ReconcilerConfig make_reconciler_config(CephContext* cct) {
 }  // namespace
 
 ReconcilerHarness::ReconcilerHarness(rgw::file_state::Store& store,
+                                       rgw::sal::Driver* driver,
                                        CephContext* cct)
-    : impl_(std::make_unique<Impl>(store, make_sink_config(cct),
+    : impl_(std::make_unique<Impl>(store, driver, cct,
+                                    make_sink_config(cct),
                                     make_reconciler_config(cct))) {
   // Wire the store's on-change hook to fire the in-process
   // change feed. Store::set_on_change is a no-op for backends

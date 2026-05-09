@@ -68,10 +68,13 @@ struct ReconcilerConfig {
 
 class Reconciler {
  public:
-  // The reconciler does not take ownership of `store`,
-  // `feed`, or `sink` — the caller must guarantee they outlive
-  // the Reconciler instance.
+  // The reconciler does not take ownership of `store`, `feed`,
+  // `sink`, or `bootstrap` — the caller must guarantee they
+  // outlive the Reconciler instance.  `bootstrap` resolves an
+  // FS owner account-id into the credentials FSAL_RGW will use
+  // to call sts:AssumeRole at create_export time.
   Reconciler(Store& store, ChangeFeed& feed, GaneshaSink& sink,
+             BootstrapResolver& bootstrap,
              ReconcilerConfig cfg = {});
   ~Reconciler();
 
@@ -103,6 +106,7 @@ class Reconciler {
   Store& store_;
   ChangeFeed& feed_;
   GaneshaSink& sink_;
+  BootstrapResolver& bootstrap_;
   ReconcilerConfig cfg_;
 
   ChangeFeed::Handle sub_handle_{0};

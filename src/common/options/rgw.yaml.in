@@ -448,33 +448,10 @@ options:
   level: advanced
   desc: RGW endpoint URL the Ganesha RGW FSAL uses for object-layer access.
   long_desc: Ganesha's RGW FSAL contacts an RGW instance for S3 reads
-    and writes on behalf of NFS clients. Until the mount-auth handshake
-    + per-session sts:AssumeRole pathway is built, the FSAL uses this
-    static endpoint + the configured static credentials below.
-  services:
-  - rgw
-  see_also:
-  - rgw_s3files_fsal_rgw_user_id
-  with_legacy: true
-- name: rgw_s3files_fsal_rgw_user_id
-  type: str
-  level: advanced
-  desc: RGW user-id the Ganesha RGW FSAL signs S3 requests as. Static
-    until per-session role assumption is built.
-  services:
-  - rgw
-  with_legacy: true
-- name: rgw_s3files_fsal_rgw_access_key
-  type: str
-  level: advanced
-  desc: RGW access key the FSAL signs with.
-  services:
-  - rgw
-  with_legacy: true
-- name: rgw_s3files_fsal_rgw_secret_key
-  type: str
-  level: advanced
-  desc: RGW secret key the FSAL signs with.
+    and writes on behalf of NFS clients.  Bootstrap credentials are no
+    longer configured globally -- the reconciler resolves them per
+    export from the file system's owner account, and the FSAL calls
+    sts:AssumeRole on each create_export.
   services:
   - rgw
   with_legacy: true

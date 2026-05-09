@@ -64,6 +64,17 @@ struct DesiredExport {
   // exported metadata for debugging).
   std::string owner_account_id;
 
+  // Bootstrap credentials for sts:AssumeRole, scoped to this FS's
+  // owner account. The FSAL authenticates as this principal, calls
+  // AssumeRole against role_arn, and uses the issued session token
+  // for librgw operations -- the bootstrap creds are never handed
+  // to librgw. Populated by compose_exports via the
+  // BootstrapResolver; an empty user_id means resolution failed
+  // and the export should be skipped at render time.
+  std::string bootstrap_user_id;
+  std::string bootstrap_access_key;
+  std::string bootstrap_secret_key;
+
   // The AccessPoint's POSIX squash identity, if any. When the
   // mounting principal lacks ClientRootAccess, NFS ops are
   // mapped to this uid/gid.
@@ -94,6 +105,27 @@ struct DesiredExport {
 // means scan every account the store knows about. (For RGW v1
 // the s3files API is account-scoped at request time so this is
 // usually omitted in production code paths.)
-std::vector<DesiredExport> compose_exports(Store& store);
+// Resolves an FS owner account-id into bootstrap credentials. Used by
+// compose_exports to populate per-export bootstrap fields, replacing
+// the legacy single-static-user knobs.  Production wires this to a
+// driver-backed resolver that loads the account's root user and reads
+// its first access key; tests can mock it.
+struct BootstrapCredentials {
+  std::string user_id;
+  std::string access_key;
+  std::string secret_key;
+};
+
+class BootstrapResolver {
+ public:
+  virtual ~BootstrapResolver() = default;
+  // Returns std::nullopt when the account has no usable root-user
+  // access key (FS exports for that account are then skipped).
+  virtual std::optional<BootstrapCredentials> resolve(
+      const std::string& account_id) = 0;
+};
+
+std::vector<DesiredExport> compose_exports(Store& store,
+                                           BootstrapResolver& bootstrap);
 
 }  // namespace rgw::file_state

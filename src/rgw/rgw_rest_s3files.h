@@ -68,7 +68,9 @@ void set_default_store(rgw::file_state::Store* store);
 // rgw_s3files_reconciler_enabled is true.
 class ReconcilerHarness {
  public:
-  ReconcilerHarness(rgw::file_state::Store& store, CephContext* cct);
+  ReconcilerHarness(rgw::file_state::Store& store,
+                     rgw::sal::Driver* driver,
+                     CephContext* cct);
   ~ReconcilerHarness();
   ReconcilerHarness(const ReconcilerHarness&) = delete;
   ReconcilerHarness& operator=(const ReconcilerHarness&) = delete;

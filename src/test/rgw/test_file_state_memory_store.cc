@@ -653,18 +653,35 @@ FullTuple make_full_tuple(MemoryStore& s,
   return {value(fs).spec.id, value(ap).spec.id, value(mt).spec.id};
 }
 
+// Stub resolver used by every test that calls compose_exports() or
+// constructs a Reconciler.  Returns one fixed credential pair for any
+// non-empty account-id; an empty account-id yields nullopt so we
+// exercise the resolution-failed path too.
+class StubBootstrapResolver : public BootstrapResolver {
+ public:
+  std::optional<BootstrapCredentials> resolve(
+      const std::string& account_id) override {
+    if (account_id.empty()) return std::nullopt;
+    return BootstrapCredentials{"testid", "ak", "sk"};
+  }
+};
+
+// File-scope instance: stateless, so a single shared instance is
+// fine for all tests below.
+StubBootstrapResolver boot_;
+
 }  // namespace
 
 TEST(ComposeExports, EmptyStoreYieldsEmpty) {
   MemoryStore s;
-  EXPECT_TRUE(compose_exports(s).empty());
+  EXPECT_TRUE(compose_exports(s, boot_).empty());
 }
 
 TEST(ComposeExports, FsAlone_NoAp_YieldsNothing) {
   MemoryStore s;
   auto fs = s.create_file_system(minimum_fs_req());
   ASSERT_TRUE(ok(fs));
-  EXPECT_TRUE(compose_exports(s).empty());
+  EXPECT_TRUE(compose_exports(s, boot_).empty());
 }
 
 TEST(ComposeExports, FsAndApButNoMt_YieldsNothing) {
@@ -676,7 +693,7 @@ TEST(ComposeExports, FsAndApButNoMt_YieldsNothing) {
   apreq.filesystem_id = value(fs).spec.id;
   auto ap = s.create_access_point(apreq);
   ASSERT_TRUE(ok(ap));
-  EXPECT_TRUE(compose_exports(s).empty());
+  EXPECT_TRUE(compose_exports(s, boot_).empty());
 }
 
 TEST(ComposeExports, FullTuple_YieldsOneExport) {
@@ -684,7 +701,7 @@ TEST(ComposeExports, FullTuple_YieldsOneExport) {
   auto t = make_full_tuple(s);
   ASSERT_FALSE(t.fs_id.empty());
 
-  auto exports = compose_exports(s);
+  auto exports = compose_exports(s, boot_);
   ASSERT_EQ(exports.size(), 1u);
   const auto& e = exports[0];
   EXPECT_EQ(e.fs_id, t.fs_id);
@@ -704,7 +721,7 @@ TEST(ComposeExports, ComposesPrefixWithRootDirectory) {
   // FS prefix + AP rootDirectory `/scoped/team-a` should yield
   // composed prefix `fsp/scoped/team-a/`.
   make_full_tuple(s, kBucket, kZone, "/scoped/team-a");
-  auto exports = compose_exports(s);
+  auto exports = compose_exports(s, boot_);
   ASSERT_EQ(exports.size(), 1u);
   EXPECT_EQ(exports[0].composed_prefix, "fsp/scoped/team-a/");
 }
@@ -730,7 +747,7 @@ TEST(ComposeExports, MultipleApsCrossWithMt) {
   auto mt = s.create_mount_target(mtreq);
   ASSERT_TRUE(ok(mt));
 
-  auto exports = compose_exports(s);
+  auto exports = compose_exports(s, boot_);
   EXPECT_EQ(exports.size(), 2u);
 }
 
@@ -753,7 +770,7 @@ TEST(ComposeExports, OrphanedMt_Skipped) {
   // explicitly to leave just the FS.
   // Actually simpler: just verify post-delete_ap, the
   // exports list is empty (no AP → no export).
-  EXPECT_TRUE(compose_exports(s).empty());
+  EXPECT_TRUE(compose_exports(s, boot_).empty());
 }
 
 // =================================================================
@@ -764,7 +781,7 @@ TEST(Reconciler, ReconcileOnce_EmptyStore_AppliesEmptySet) {
   MemoryStore s;
   NoopChangeFeed feed;
   RecordingGaneshaSink sink;
-  Reconciler r(s, feed, sink);
+  Reconciler r(s, feed, sink, boot_);
   r.reconcile_once();
   ASSERT_EQ(sink.call_count(), 1u);
   EXPECT_TRUE(sink.last().empty());
@@ -777,7 +794,7 @@ TEST(Reconciler, ReconcileOnce_FullStore_AppliesExpectedSet) {
 
   NoopChangeFeed feed;
   RecordingGaneshaSink sink;
-  Reconciler r(s, feed, sink);
+  Reconciler r(s, feed, sink, boot_);
   r.reconcile_once();
   ASSERT_EQ(sink.call_count(), 1u);
   ASSERT_EQ(sink.last().size(), 1u);
@@ -794,7 +811,7 @@ TEST(Reconciler, Start_RunsInitialReconcileWithoutChanges) {
   RecordingGaneshaSink sink;
   // Long safety-net timer so we observe just the start-time
   // initial reconcile, not a periodic one.
-  Reconciler r(s, feed, sink, ReconcilerConfig{
+  Reconciler r(s, feed, sink, boot_, ReconcilerConfig{
       .safety_net_interval = std::chrono::seconds(60),
   });
   r.start();
@@ -815,7 +832,7 @@ TEST(Reconciler, FeedSignal_TriggersReconcile) {
   // Wire the store to the feed.
   s.set_on_change([&feed]{ feed.fire(); });
 
-  Reconciler r(s, feed, sink, ReconcilerConfig{
+  Reconciler r(s, feed, sink, boot_, ReconcilerConfig{
       .safety_net_interval = std::chrono::seconds(60),
   });
   r.start();
@@ -844,7 +861,7 @@ TEST(Reconciler, BurstOfChanges_CoalescesIntoFewerApplies) {
   RecordingGaneshaSink sink;
   s.set_on_change([&feed]{ feed.fire(); });
 
-  Reconciler r(s, feed, sink, ReconcilerConfig{
+  Reconciler r(s, feed, sink, boot_, ReconcilerConfig{
       .safety_net_interval = std::chrono::seconds(60),
   });
   r.start();
@@ -877,7 +894,7 @@ TEST(Reconciler, Idempotent_NoStateChange_StillSafeToReconcile) {
   make_full_tuple(s);
   NoopChangeFeed feed;
   RecordingGaneshaSink sink;
-  Reconciler r(s, feed, sink);
+  Reconciler r(s, feed, sink, boot_);
   r.reconcile_once();
   r.reconcile_once();
   r.reconcile_once();
@@ -891,7 +908,7 @@ TEST(Reconciler, SafetyNetTimer_FiresEvenWithoutChanges) {
   NoopChangeFeed feed;
   RecordingGaneshaSink sink;
   // Tiny safety-net interval so the test doesn't hang.
-  Reconciler r(s, feed, sink, ReconcilerConfig{
+  Reconciler r(s, feed, sink, boot_, ReconcilerConfig{
       .safety_net_interval = std::chrono::milliseconds(50),
   });
   r.start();
@@ -907,7 +924,7 @@ TEST(Reconciler, StopIsIdempotentAndSafe) {
   MemoryStore s;
   NoopChangeFeed feed;
   RecordingGaneshaSink sink;
-  Reconciler r(s, feed, sink);
+  Reconciler r(s, feed, sink, boot_);
   r.stop();              // never started
   r.start();
   r.stop();
@@ -953,9 +970,6 @@ DbusGaneshaSink::Config minimum_dbus_cfg(const std::string& dir) {
   DbusGaneshaSink::Config c;
   c.export_config_dir = dir;
   c.rgw_endpoint = "http://127.0.0.1:8000";
-  c.rgw_user_id = "testid";
-  c.rgw_access_key = "ak";
-  c.rgw_secret_key = "sk";
   return c;
 }
 
@@ -970,9 +984,16 @@ DesiredExport sample_export(std::string_view fs = "fs-AAA",
   e.composed_prefix = "data/team-a/";
   e.role_arn = "arn:aws:iam::123:role/r";
   e.owner_account_id = "123";
+  e.bootstrap_user_id = "testid";
+  e.bootstrap_access_key = "ak";
+  e.bootstrap_secret_key = "sk";
   e.zone_id = "zone1";
   return e;
 }
+
+// (StubBootstrapResolver and `boot_` are defined in the prior
+// anonymous namespace and are visible here through the rest of the
+// translation unit.)
 
 class TmpDir {
  public:
@@ -994,7 +1015,7 @@ class TmpDir {
 
 }  // namespace
 
-TEST(DbusGaneshaSink, Apply_Add_NewExport_CallsAddExportAndWritesFile) {
+TEST(DbusGaneshaSink, Apply_Add_NewExport_TriggersReloadAndWritesFile) {
   TmpDir td;
   RecordingInvoker rec;
   DbusGaneshaSink sink(minimum_dbus_cfg(td.path()),
@@ -1002,12 +1023,14 @@ TEST(DbusGaneshaSink, Apply_Add_NewExport_CallsAddExportAndWritesFile) {
   sink.apply({sample_export()});
 
   ASSERT_EQ(rec.calls.size(), 1u);
-  // The single dbus-send call should be AddExport.
-  bool found_add = false;
+  // DbusGaneshaSink uses admin.reread_config rather than per-export
+  // AddExport (the latter NULL-derefs in V9.11/V9.13 -- see comment
+  // in dbus_reread_config()), so we look for that instead.
+  bool found_reload = false;
   for (const auto& s : rec.calls[0]) {
-    if (s.find("AddExport") != std::string::npos) found_add = true;
+    if (s.find("reread_config") != std::string::npos) found_reload = true;
   }
-  EXPECT_TRUE(found_add) << "expected AddExport in dbus-send args";
+  EXPECT_TRUE(found_reload) << "expected reread_config in dbus-send args";
 
   // A config file should be on disk.
   auto id = sink.export_id_for("fs-AAA", "ap-BBB", "mt-CCC");
@@ -1030,7 +1053,7 @@ TEST(DbusGaneshaSink, Apply_Idempotent_NoChange_NoExtraCalls) {
   EXPECT_EQ(rec.calls.size(), after_first);
 }
 
-TEST(DbusGaneshaSink, Apply_Update_ChangedExport_CallsUpdateExport) {
+TEST(DbusGaneshaSink, Apply_Update_ChangedExport_TriggersReload) {
   TmpDir td;
   RecordingInvoker rec;
   DbusGaneshaSink sink(minimum_dbus_cfg(td.path()),
@@ -1044,16 +1067,16 @@ TEST(DbusGaneshaSink, Apply_Update_ChangedExport_CallsUpdateExport) {
   sink.apply({e});
 
   ASSERT_GT(rec.calls.size(), after_first);
-  bool found_update = false;
+  bool found_reload = false;
   for (std::size_t i = after_first; i < rec.calls.size(); ++i) {
     for (const auto& s : rec.calls[i]) {
-      if (s.find("UpdateExport") != std::string::npos) found_update = true;
+      if (s.find("reread_config") != std::string::npos) found_reload = true;
     }
   }
-  EXPECT_TRUE(found_update);
+  EXPECT_TRUE(found_reload);
 }
 
-TEST(DbusGaneshaSink, Apply_Remove_DroppedExport_CallsRemoveExport) {
+TEST(DbusGaneshaSink, Apply_Remove_DroppedExport_TriggersReload) {
   TmpDir td;
   RecordingInvoker rec;
   DbusGaneshaSink sink(minimum_dbus_cfg(td.path()),
@@ -1063,13 +1086,13 @@ TEST(DbusGaneshaSink, Apply_Remove_DroppedExport_CallsRemoveExport) {
   sink.apply({});  // drop it
 
   ASSERT_GT(rec.calls.size(), after_first);
-  bool found_remove = false;
+  bool found_reload = false;
   for (std::size_t i = after_first; i < rec.calls.size(); ++i) {
     for (const auto& s : rec.calls[i]) {
-      if (s.find("RemoveExport") != std::string::npos) found_remove = true;
+      if (s.find("reread_config") != std::string::npos) found_reload = true;
     }
   }
-  EXPECT_TRUE(found_remove);
+  EXPECT_TRUE(found_reload);
 }
 
 TEST(DbusGaneshaSink, Render_BlockContainsExpectedFields) {
@@ -1099,9 +1122,17 @@ TEST(DbusGaneshaSink, Render_BlockContainsExpectedFields) {
   EXPECT_NE(body.find("Anonymous_Uid = 2000"), std::string::npos);
   EXPECT_NE(body.find("Name = RGW"), std::string::npos);
   EXPECT_NE(body.find("User_Id = \"testid\""), std::string::npos);
-  // The role ARN appears in the auto-generated comment so future
-  // tooling can wire AssumeRole without re-deriving the binding.
-  EXPECT_NE(body.find("roleArn=arn:aws:iam::123:role/r"),
+  // Role_Arn from the FileSystem record is rendered into the FSAL
+  // block so FSAL_RGW assumes it at create_export. Role_Session_Name
+  // embeds the (fs, ap) tuple so AssumeRole audit logs tie back to
+  // a specific access point.
+  EXPECT_NE(body.find("Role_Arn = \"arn:aws:iam::123:role/r\""),
+            std::string::npos);
+  // Session name strips fs-/fsap- prefixes (these test IDs are
+  // already short, so nothing is truncated) and joins the
+  // remainder with a dash.  AWS caps RoleSessionName at 64 chars;
+  // we always emit something <=64 by construction.
+  EXPECT_NE(body.find("Role_Session_Name = \"ganesha-AAA-ap-BBB\""),
             std::string::npos);
 }
 

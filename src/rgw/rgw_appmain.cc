@@ -381,7 +381,7 @@ void rgw::AppMain::cond_init_apis()
       if (cct->_conf.get_val<bool>("rgw_s3files_reconciler_enabled")) {
         s3files_reconciler =
             std::make_unique<rgw::s3files::ReconcilerHarness>(
-                rgw::s3files::default_store(), cct);
+                rgw::s3files::default_store(), env.driver, cct);
       }
     }
   } /* have_http_frontend */

@@ -43,7 +43,8 @@ std::string compose_prefix(std::string_view fs_prefix,
 
 }  // namespace
 
-std::vector<DesiredExport> compose_exports(Store& store) {
+std::vector<DesiredExport> compose_exports(Store& store,
+                                           BootstrapResolver& bootstrap) {
   // Read all three resource types. No cross-method consistency
   // is required: any inconsistency is repaired by the next
   // reconciliation cycle, and the safety-net timer guarantees
@@ -68,6 +69,14 @@ std::vector<DesiredExport> compose_exports(Store& store) {
     aps_by_fs[ap.spec.parent_filesystem_id].push_back(&ap.spec);
   }
 
+  // Cache bootstrap creds per owner account so we hit the resolver
+  // once per account, not once per export.  std::optional models
+  // "resolution attempted, returned nothing"; we still cache the
+  // miss so a misconfigured account doesn't get hammered every
+  // reconciliation cycle within a single compose_exports call.
+  std::unordered_map<std::string, std::optional<BootstrapCredentials>>
+      bootstrap_cache;
+
   std::vector<DesiredExport> out;
   // For each MountTarget, find its parent FS and every AP under
   // that FS; emit one DesiredExport per (FS, AP, MT) triple. A
@@ -84,6 +93,20 @@ std::vector<DesiredExport> compose_exports(Store& store) {
     const auto aps_it = aps_by_fs.find(fs.id);
     if (aps_it == aps_by_fs.end()) continue;
 
+    /* Resolve bootstrap creds for the FS's owner account once. */
+    auto cache_it = bootstrap_cache.find(fs.owner_account_id);
+    if (cache_it == bootstrap_cache.end()) {
+      cache_it = bootstrap_cache.emplace(
+          fs.owner_account_id,
+          bootstrap.resolve(fs.owner_account_id)).first;
+    }
+    const auto& creds = cache_it->second;
+    if (!creds) {
+      /* Skip exports we can't bootstrap. The reconciler logs at
+       * its own layer; here we just don't render. */
+      continue;
+    }
+
     for (const AccessPointSpec* ap : aps_it->second) {
       DesiredExport e;
       e.fs_id = fs.id;
@@ -95,6 +118,9 @@ std::vector<DesiredExport> compose_exports(Store& store) {
           ap->root_directory ? ap->root_directory->path : "");
       e.role_arn = fs.role_arn;
       e.owner_account_id = fs.owner_account_id;
+      e.bootstrap_user_id = creds->user_id;
+      e.bootstrap_access_key = creds->access_key;
+      e.bootstrap_secret_key = creds->secret_key;
       e.posix_user = ap->posix_user;
       e.zone_id = mt.spec.zone_id;
       e.ipv4_address = mt.status.ipv4_address;

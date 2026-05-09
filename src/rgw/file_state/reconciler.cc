@@ -21,9 +21,10 @@
 
 namespace rgw::file_state {
 
-Reconciler::Reconciler(Store& store, ChangeFeed& feed,
-                        GaneshaSink& sink, ReconcilerConfig cfg)
-    : store_(store), feed_(feed), sink_(sink), cfg_(cfg) {}
+Reconciler::Reconciler(Store& store, ChangeFeed& feed, GaneshaSink& sink,
+                        BootstrapResolver& bootstrap, ReconcilerConfig cfg)
+    : store_(store), feed_(feed), sink_(sink), bootstrap_(bootstrap),
+      cfg_(cfg) {}
 
 Reconciler::~Reconciler() {
   stop();
@@ -76,7 +77,7 @@ void Reconciler::stop() {
 void Reconciler::reconcile_once() {
   // Pure synchronous: read store, hand to sink. Used by tests
   // and from the worker loop.
-  sink_.apply(compose_exports(store_));
+  sink_.apply(compose_exports(store_, bootstrap_));
 }
 
 void Reconciler::worker_loop() {
