@@ -23,7 +23,7 @@ one 4KiB physical blocks on the disk):
 
 ::
 
-   [shard:8][pool:8][crush:32][zero:16]
+   [ec_shard:8][pool:8][crush:32][zero:16]
 
 Each pair of square brackets represents a property stored within the
 laddr integer. Each property contains a name and the number of bits it
@@ -38,7 +38,7 @@ This laddr layout and conflict policy has some problems:
    temporary recovery data by convention, which causes normal object
    data to be mixed with temporary recovery data, and when the pool id
    is larger than 255, data from different pools are mixed together.
-#. The shard field is long; we are unlikely to use more than 128
+#. The ec_shard field is long; we are unlikely to use more than 128
    shards for EC.
 #. The snap info is missing; when taking a snapshot for an onode,
    their hint will be the same, which causes the inefficient cloning
@@ -97,9 +97,9 @@ The definition of this property is:
 
 ::
 
-   [shard:6][pool:12][reverse_hash:32][local_object_id:26]
+   [ec_shard:6][pool:12][reverse_hash:32][local_object_id:26]
 
-The shard, pool, and reverse hash come from the information of the
+The ec_shard, pool, and reverse hash come from the information of the
 RADOS object. The local object id is a random number to identify a
 unique object within seastore. Two different RADOS objects should
 never share the same reverse hash and local object id within a pool,
@@ -118,15 +118,15 @@ There are two special rules for global metadata logical extents:
    ghobject, its hint is derived from the first slot of the ghobject
    it stores, then the local object id and local clone id (see below)
    should be zero. The RADOS object data should not use this prefix
-   either. NOTE: It's possible that shard, pool, and hash are zero; we
-   allow them to mix with RootBlock and CollectionNode.
+   either. NOTE: It's possible that ec_shard, pool, and hash are zero;
+   we allow them to mix with RootBlock and CollectionNode.
 
-For a pool which happens to contain 65k pgs, this layout would allow:
+For a pool which happens to contain 64k pgs, this layout would allow:
 
 -  2\ :sup:`12`\ =4096 pools per cluster
 -  2\ :sup:`6`-1=63 shards per pool for EC
 -  2\ :sup:`16`\ =65536 pgs per pool and OSD (Objects in a pg share a
-   ``reverse_hash`` prefix. With 65k pgs, that prefix would be the
+   ``reverse_hash`` prefix. With 64k pgs, that prefix would be the
    first 16 bits of ``reverse_hash``.)
 -  2\ :sup:`42`\ =4T objects per pg (the remaining 16 bits of hash +
    26 bits object id)
@@ -156,7 +156,7 @@ bits must not be all 1.
 The indirect mapping of clone objects can only store the local clone
 id of its intermediate key; see ``pladdr_t::build_laddr()``.
 
-The remaining 28 bits are used to represent the address of concrete
+The remaining 27 bits are used to represent the address of concrete
 data extents. Each address represents one 4KiB block on disk.
 
 ``is_metadata`` is true indicates the remaining bits represent the
@@ -193,10 +193,32 @@ Upgrade
 
 This bit is reserved for layout updates.
 
-If the layout of laddr changes in the future, this bit will be used to
-transition addresses from the old layout to the new layout.
+upgrade is a 1-bit selector for layout updates migrations. The bit stores the
+active laddr layout version. During a layout upgrade, mappings are migrated using
+the active bit (upgrade=0 or upgrade=1), allowing the old and new layouts to coexist.
+On subsequent upgrades, the bit may be toggled again or returned to 0
+after the upgrade finishes.
 
-TODO: Implement fsck process to support layout upgrades.
+TODO: fsck/tooling must support scanning and migrating all mappings
+between upgrades.
+             //create tracker after PR merged/ready.
+
+Multi-push Recovery
+-------------------
+
+If an object's recovery/backfill needs multiple pushes, we need to create
+a temp-recovering object for it. Since the temp-recovering object may do
+clone_range and share some of its range with the object that's being re-
+covered and indirect mappings' keys should share their prefixes with their
+direct counterparts, we mandate that the temp-recovering object must have
+the same object prefixes, except for the ``pool`` fields, with the objects
+they are recovering.
+
+This is done with the newly added ``ceph::os::Transaction::OP_TOUCH_TEMP``,
+which create a temp object with the same object prefix as the passed target
+object.
+
+The ``pool`` field of the created temp object is still the id of the temp pool.
 
 Summary
 -------
@@ -211,12 +233,12 @@ Summary
 
    ::
 
-      [upgrade:1][shard:6][pool:12][reverse_hash:32][zero:26][offset:51]
+      [upgrade:1][ec_shard:6][pool:12][reverse_hash:32][zero:26][offset:51]
 
 -  For RADOS extents (OMapInnerNode, OmapLeafNode, and ObjectDataBlock):
 
    ::
 
-      [upgrade:1][shard:6][pool:12][reverse_hash:32][local_object_id:26][local_clone_id:23][is_metadata:1][blocks:27]
+      [upgrade:1][ec_shard:6][pool:12][reverse_hash:32][local_object_id:26][local_clone_id:23][is_metadata:1][blocks:27]
 
    local object id is non-zero.
