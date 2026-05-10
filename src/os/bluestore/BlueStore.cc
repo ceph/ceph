@@ -9637,7 +9637,7 @@ int BlueStore::_mount()
     auto was_per_pool_omap = per_pool_omap;
 
     dout(1) << __func__ << " quick-fix on mount" << dendl;
-    _fsck_on_open(FSCK_SHALLOW, true);
+    _fsck_on_open(FSCK_SHALLOW, true, nullptr);
 
     //set again as hopefully it has been fixed
     if (was_per_pool_omap != OMAP_PER_PG) {
@@ -10970,7 +10970,7 @@ Detection stage (in processing order):
     (can be merged with the step above if misreferences were dectected)
   - Apply StatFS update
 */
-int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
+int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair, bluestore_stats_t *store_stats)
 {
   dout(5) << __func__
     << (repair ? " repair" : " check")
@@ -11023,7 +11023,7 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
   if (r < 0) {
     return r;
   }
-  return _fsck_on_open(depth, repair);
+  return _fsck_on_open(depth, repair, store_stats);
 }
 
 int BlueStore::revert_wal_to_plain() {
@@ -11038,7 +11038,7 @@ int BlueStore::revert_wal_to_plain() {
   return r;
 }
 
-int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
+int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair, bluestore_stats_t *store_stats)
 {
   uint64_t sb_hash_size = uint64_t(
     cct->_conf.get_val<Option::size_t>("osd_memory_target") *
@@ -11906,6 +11906,16 @@ out_scan:
 	  << repaired << " repaired, "
 	  << (errors + warnings - (int)repaired) << " remaining in "
 	  << duration << " seconds" << dendl;
+  if (store_stats) {
+    store_stats->num_objects = num_objects;
+    store_stats->num_sharded_objects = num_sharded_objects;
+    store_stats->num_extents = num_extents;
+    store_stats->num_blobs = num_blobs;
+    store_stats->num_spanning_blobs = num_spanning_blobs;
+    store_stats->num_shared_blobs = num_shared_blobs;
+    store_stats->warnings_found = warnings;
+    store_stats->errors_found = errors;
+  }
 
   // In non-repair mode we should return error count only as
   // it indicates if store status is OK.
