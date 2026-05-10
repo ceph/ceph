@@ -39,6 +39,25 @@ combines the upmap balancer with the read balancer so that both writes
 and reads are optimized. ``read`` mode can be used when only read optimization
 is desired. For more details, see :ref:`read_balancer`.
 
+Limitation: count-based balancing vs. size-based balancing
+----------------------------------------------------------
+
+Ceph's built-in balancer optimizes only by **PG shard count**, not by the
+actual size of the data stored in each PG.
+
+This can result in clusters whose OSDs are balanced by PG shard count,
+but very imbalanced by stored Bytes.
+At the pool level, this can cause a pool's ``%USED`` (from ``ceph df``)
+to be much higher than the cluster's ``%RAW USED``, because the
+pool's fullest OSD (which determines the pool's available space) may be
+disproportionately loaded with large PGs.
+
+Alternative balancer implementations can help in such situations:
+
+* `jj-balancer <https://github.com/TheJJ/ceph-balancer>`_
+  performs balancing based on actual data size rather than PG count,
+  which can achieve more uniform space utilization.
+
 Throttling
 ----------
 
