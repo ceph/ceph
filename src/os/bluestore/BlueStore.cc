@@ -18221,7 +18221,8 @@ int BlueStore::_do_remove(
 {
   set<SharedBlob*> maybe_unshared_blobs;
   bool is_gen = !o->oid.is_no_gen();
-  _do_truncate(txc, c, o, 0, is_gen ? &maybe_unshared_blobs : nullptr);
+  bool is_snap = o->oid.hobj.is_snap();
+  _do_truncate(txc, c, o, 0, (is_gen || is_snap) ? &maybe_unshared_blobs : nullptr);
   if (o->onode.has_omap()) {
     o->flush();
     _do_omap_clear(txc, o);
@@ -18243,7 +18244,7 @@ int BlueStore::_do_remove(
   o->onode = bluestore_onode_t();
   _debug_obj_on_delete(o->oid);
 
-  if (!is_gen || maybe_unshared_blobs.empty()) {
+  if (maybe_unshared_blobs.empty()) {
     return 0;
   }
 
@@ -18251,12 +18252,18 @@ int BlueStore::_do_remove(
   dout(10) << __func__ << " gen and maybe_unshared_blobs "
 	   << maybe_unshared_blobs << dendl;
   ghobject_t nogen = o->oid;
-  nogen.generation = ghobject_t::NO_GEN;
+  if (is_gen)
+    nogen.generation = ghobject_t::NO_GEN;
+  else if (is_snap)
+    nogen.hobj.snap = CEPH_NOSNAP;
   OnodeRef h = c->get_onode(nogen, false);
 
   if (!h || !h->exists) {
     return 0;
   }
+
+  //Populate the extent map structure from DB; required for shared blob processing below.
+  h->extent_map.fault_range(db, 0, h->onode.size);
   // Set maybe_unshared_blobs contains those shared blobs that have all nref=1.
   // Is .head object is using all those segments?
   // If it is using all, then no one else can use the shared blob,
