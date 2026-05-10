@@ -1008,6 +1008,7 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
   cmd_getval(cmdmap, "prefix", prefix);
   if (prefix == "auth add" ||
       prefix == "auth rotate" ||
+      prefix == "auth rotate-pending" ||
       prefix == "auth dump-keys" ||
       prefix == "auth wipe-rotating-service-keys" ||
       prefix == "auth del" ||
@@ -1724,6 +1725,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 						   get_last_committed() + 1));
     return true;
   } else if ((prefix == "auth get-or-create-pending" ||
+	      prefix == "auth rotate-pending" ||
 	      prefix == "auth clear-pending" ||
 	      prefix == "auth commit-pending")) {
     if (mon.monmap->min_mon_release < ceph_release_t::quincy) {
@@ -1760,10 +1762,19 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       }
     }
 
-    if (prefix == "auth get-or-create-pending") {
+    if (prefix == "auth get-or-create-pending" ||
+        prefix == "auth rotate-pending") {
       KeyRing kr;
       bool exists = false;
       if (!entity_auth.pending_key.empty()) {
+	if (cmdmap.count("key_type") &&
+	    (int)entity_auth.pending_key.get_type() != key_type) {
+	  ss << "entity " << entity << " already has a pending key of type "
+	     << CryptoManager::get_key_type_name(entity_auth.pending_key.get_type())
+	     << "; run `auth clear-pending` first";
+	  err = -EEXIST;
+	  goto done;
+	}
 	kr.add(entity, entity_auth.key, entity_auth.pending_key);
 	err = 0;
 	exists = true;
@@ -2083,6 +2094,8 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     }
 
     entity_auth.key.create(g_ceph_context, key_type);
+    // a full rotation supersedes any pending key
+    entity_auth.pending_key.clear();
 
     KeyServerData::Incremental auth_inc;
     auth_inc.op = KeyServerData::AUTH_INC_ADD;
