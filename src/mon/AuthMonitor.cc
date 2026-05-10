@@ -1008,6 +1008,7 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
   cmd_getval(cmdmap, "prefix", prefix);
   if (prefix == "auth add" ||
       prefix == "auth rotate" ||
+      prefix == "auth rotate-pending" ||
       prefix == "auth dump-keys" ||
       prefix == "auth wipe-rotating-service-keys" ||
       prefix == "auth del" ||
@@ -1724,6 +1725,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 						   get_last_committed() + 1));
     return true;
   } else if ((prefix == "auth get-or-create-pending" ||
+	      prefix == "auth rotate-pending" ||
 	      prefix == "auth clear-pending" ||
 	      prefix == "auth commit-pending")) {
     if (mon.monmap->min_mon_release < ceph_release_t::quincy) {
@@ -1760,7 +1762,8 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       }
     }
 
-    if (prefix == "auth get-or-create-pending") {
+    if (prefix == "auth get-or-create-pending" ||
+        prefix == "auth rotate-pending") {
       KeyRing kr;
       bool exists = false;
       if (!entity_auth.pending_key.empty()) {
@@ -2082,7 +2085,36 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       goto done;
     }
 
-    entity_auth.key.create(g_ceph_context, key_type);
+    // is there an uncommitted pending_key already queued for this entity?
+    // mon.get_auth() above only sees committed state, so a fast retry before
+    // the first rotate's proposal commits would otherwise race past the
+    // pending_key.empty() check below and queue a second, competing
+    // AUTH_INC_ADD -- orphaning whichever key the loser reply carried.
+    for (auto& p : pending_auth) {
+      if (p.inc_type == AUTH_DATA) {
+        KeyServerData::Incremental auth_inc;
+        auto q = p.auth_data.cbegin();
+        decode(auth_inc, q);
+        if (auth_inc.op == KeyServerData::AUTH_INC_ADD &&
+            auth_inc.name == entity) {
+          wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
+                                                get_last_committed() + 1));
+          return true;
+        }
+      }
+    }
+
+    if (!entity_auth.pending_key.empty()) {
+      // idempotent: a retry after a lost reply must not orphan a pending
+      // key the client may have already received and started using
+      EntityAuth reply_auth = entity_auth;
+      reply_auth.key = reply_auth.pending_key;
+      reply_auth.pending_key.clear();
+      _encode_auth(entity, reply_auth, rdata, f.get());
+      err = 0;
+      goto done;
+    }
+    entity_auth.pending_key.create(g_ceph_context, key_type);
 
     KeyServerData::Incremental auth_inc;
     auth_inc.op = KeyServerData::AUTH_INC_ADD;
@@ -2090,7 +2122,9 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     auth_inc.auth = entity_auth;
     push_cephx_inc(auth_inc);
 
-    _encode_auth(entity, entity_auth, rdata, f.get());
+    auth_inc.auth.key = auth_inc.auth.pending_key;
+    auth_inc.auth.pending_key.clear();
+    _encode_auth(entity, auth_inc.auth, rdata, f.get());
     wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs, rdata,
                                               get_last_committed() + 1));
     return true;
