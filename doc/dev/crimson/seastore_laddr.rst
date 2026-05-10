@@ -198,6 +198,23 @@ transition addresses from the old layout to the new layout.
 
 TODO: Implement fsck process to support layout upgrades.
 
+Multi-push Recovery
+-------------------
+
+If an object's recovery/backfill needs multiple pushes, we need to create
+a temp-recovering object for it. Since the temp-recovering object may do
+clone_range and share some of its range with the object that's being re-
+covered and indirect mappings' keys should share their prefixes with their
+direct counterparts, we mandate that the temp-recovering object must have
+the same object prefixes, except for the ``pool`` fields, with the objects
+they are recovering.
+
+This is done with the newly added ``ceph::os::Transaction::OP_TOUCH_TEMP``,
+which create a temp object with the same object prefix as the passed target
+object.
+
+The ``pool`` field of the created temp object is still the id of the temp pool.
+
 Summary
 -------
 
