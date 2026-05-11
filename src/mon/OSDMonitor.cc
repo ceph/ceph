@@ -21,6 +21,7 @@
 #include <boost/algorithm/string.hpp>
 #include <experimental/iterator>
 #include <locale>
+#include <iomanip>  // for std::quoted
 #include <sstream>
 
 #include "mon/OSDMonitor.h"
