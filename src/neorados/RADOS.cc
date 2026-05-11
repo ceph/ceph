@@ -903,15 +903,20 @@ void RADOS::Builder::build_(asio::io_context& ioctx,
   }
   common_init_finish(cct.get());
 
-  RADOS::make_with_cct(std::move(cct), ioctx, std::move(c));
+  RADOS::make_with_cct_(
+      std::move(cct), ioctx, std::move(c), objecter_admin_socket_name);
 }
 
-void RADOS::make_with_cct_(boost::intrusive_ptr<CephContext> cct,
-			   asio::io_context& ioctx,
-			   BuildComp c) {
+void
+RADOS::make_with_cct_(
+    boost::intrusive_ptr<CephContext> cct,
+    asio::io_context& ioctx,
+    BuildComp c,
+    const std::optional<std::string>& objecter_admin_socket_name)
+{
   try {
-    auto r = std::make_shared<detail::NeoClient>(
-      std::make_unique<detail::RADOS>(ioctx, std::move(cct)));
+    auto r = std::make_shared<detail::NeoClient>(std::make_unique<detail::RADOS>(
+        ioctx, std::move(cct), objecter_admin_socket_name));
     r->objecter->wait_for_osd_map([c = std::move(c),
                                    r = std::move(r)]() mutable {
       asio::dispatch(

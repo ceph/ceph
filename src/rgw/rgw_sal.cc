@@ -82,7 +82,10 @@ extern rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next, boost::asio::io_co
 
 #ifdef WITH_RADOSGW_RADOS
 extern std::optional<neorados::RADOS>
-make_neorados(CephContext* cct, boost::asio::io_context& io_context);
+make_neorados(
+    CephContext* cct,
+    boost::asio::io_context& io_context,
+    std::optional<std::string> objecter_admin_socket_name);
 #endif
 
 rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider* dpp,
