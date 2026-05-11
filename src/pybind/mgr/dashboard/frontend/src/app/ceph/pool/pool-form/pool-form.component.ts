@@ -115,6 +115,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
   currentConfigurationValues: { [configKey: string]: any } = {};
   action: string;
   resource: string;
+  submitAction: string;
   icons = Icons;
   pgAutoscaleModes: string[];
   crushUsage: string[] = undefined; // Will only be set if a rule is used by some pool
@@ -153,6 +154,9 @@ export class PoolFormComponent extends CdForm implements OnInit {
     this.editing = this.router.url.startsWith(`/pool/${URLVerbs.EDIT}`);
     this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
     this.resource = $localize`pool`;
+    this.submitAction = this.editing
+      ? this.actionLabels.SAVE_CHANGES
+      : `${this.action} ${_.upperFirst(this.resource)}`;
     this.authenticate();
     this.createForm();
   }
