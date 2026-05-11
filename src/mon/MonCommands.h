@@ -792,7 +792,8 @@ COMMAND("osd crush rule create-stretch-replicated "
 	"osd", "rw")
 COMMAND("osd crush rule create-erasure "
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] "
-	"name=profile,type=CephString,req=false,goodchars=[A-Za-z0-9-_.=]",
+	"name=profile,type=CephString,req=false,goodchars=[A-Za-z0-9-_.=] "
+	"name=zones,type=CephInt,range=0,req=false",
 	"create crush rule <name> for erasure coded pool created with <profile> (default default)",
 	"osd", "rw")
 COMMAND("osd crush rule rm "
