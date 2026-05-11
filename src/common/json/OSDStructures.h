@@ -93,7 +93,6 @@ struct OSDECProfileGetReply {
   int crush_num_osd_failure_domains;
   int crush_osds_per_failure_domain;
   std::string crush_root;
-  int num_zones;
   std::string plugin;
   int k;
   int m;

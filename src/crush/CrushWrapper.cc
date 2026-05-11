@@ -319,7 +319,6 @@ int CrushWrapper::rename_rule(const string& srcname,
   return 0;
 }
 
-
 void CrushWrapper::find_takes(set<int> *roots) const
 {
   for (unsigned i=0; i<crush->max_rules; i++) {

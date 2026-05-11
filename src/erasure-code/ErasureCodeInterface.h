@@ -224,6 +224,13 @@ namespace ceph {
      */
     virtual int create_rule(const std::string &name,
 			    CrushWrapper &crush,
+			    std::ostream *ss) const {
+      return create_rule(name, 1, crush, ss);
+    }
+
+    virtual int create_rule(const std::string &name,
+			    int num_zones,
+			    CrushWrapper &crush,
 			    std::ostream *ss) const = 0;
 
     /**
