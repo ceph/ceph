@@ -110,7 +110,13 @@ int WebTokenEngine::load_provider(const DoutPrefixProvider* dpp, optional_yield 
     idp_url.erase(pos, 7);
   }
 
-  return driver->load_oidc_provider(dpp, y, tenant, idp_url, info, nullptr);
+  int r = driver->load_oidc_provider(dpp, y, tenant, idp_url, info, nullptr);
+  if (r == -ENOENT && tenant != global_oidc_id) {
+    ldpp_dout(dpp, 20) << "no OIDC provider found for tenant '" << tenant
+        << "' and url '" << idp_url << "', trying global" << dendl;
+    r = driver->load_oidc_provider(dpp, y, global_oidc_id, idp_url, info, nullptr);
+  }
+  return r;
 }
 
 bool
