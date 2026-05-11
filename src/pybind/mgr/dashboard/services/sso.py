@@ -95,8 +95,15 @@ def load_sso_db():
     mgr.SSO_DB = SsoDB.load()  # type: ignore
 
 
-@DBCLICommand.Write("dashboard sso enable oauth2")
-def enable_sso(_, roles_path: Optional[str] = None):
+@DBCLICommand.Write("dashboard sso enable oauth2 "
+                     "name=roles_path,type=CephString,req=false "
+                     "name=email_attr,type=CephString,req=false "
+                     "name=scope,type=CephString,req=false "
+                     "name=allowed_domains,type=CephString,req=false")
+def enable_sso(_, roles_path: Optional[str] = None,
+               email_attr: Optional[str] = None,
+               scope: Optional[str] = None,
+               allowed_domains: Optional[str] = None):
     mgr.SSO_DB.protocol = AuthType.OAUTH2
     if jmespath and roles_path:
         try:
@@ -104,6 +111,12 @@ def enable_sso(_, roles_path: Optional[str] = None):
             mgr.SSO_DB.config.roles_path = roles_path
         except (JMESPathError, SyntaxError):
             return HandleCommandResult(stdout='Syntax invalid for "roles_path"')
+    if email_attr:
+        mgr.SSO_DB.config.email_attr = email_attr
+    if scope:
+        mgr.SSO_DB.config.scope = scope
+    if allowed_domains:
+        mgr.SSO_DB.config.allowed_domains = allowed_domains
     mgr.SSO_DB.save()
     mgr.set_module_option('sso_oauth2', True)
     return HandleCommandResult(stdout='SSO is "enabled" with "OAuth2" protocol.')
@@ -128,6 +141,11 @@ SSO_COMMANDS = [
     {
         'cmd': 'dashboard sso show saml2',
         'desc': 'Show SAML2 configuration',
+        'perm': 'r'
+    },
+    {
+        'cmd': 'dashboard sso show oauth2',
+        'desc': 'Show OAuth2 configuration',
         'perm': 'r'
     },
     {
@@ -157,6 +175,7 @@ def handle_sso_command(cmd):
                              'dashboard sso disable',
                              'dashboard sso status',
                              'dashboard sso show saml2',
+                             'dashboard sso show oauth2',
                              'dashboard sso setup saml2']:
         return -errno.ENOSYS, '', ''
 
@@ -185,6 +204,9 @@ def handle_sso_command(cmd):
         return 0, 'SSO is "disabled".', ''
 
     if cmd['prefix'] == 'dashboard sso show saml2':
+        return 0, json.dumps(mgr.SSO_DB.config.to_dict()), ''
+
+    if cmd['prefix'] == 'dashboard sso show oauth2':
         return 0, json.dumps(mgr.SSO_DB.config.to_dict()), ''
 
     if cmd['prefix'] == 'dashboard sso setup saml2':
