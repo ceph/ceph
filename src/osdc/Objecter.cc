@@ -416,13 +416,16 @@ void Objecter::init()
 
   m_request_state_hook = new RequestStateHook(this);
   auto admin_socket = cct->get_admin_socket();
-  int ret = admin_socket->register_command("objecter_requests",
-					   m_request_state_hook,
-					   "show in-progress osd requests");
 
-  /* Don't warn on EEXIST, happens if multiple ceph clients
-   * are instantiated from one process */
-  if (ret < 0 && ret != -EEXIST) {
+  std::string cmd_name = "objecter_requests";
+  if (!m_admin_socket_name.empty()) {
+    cmd_name += ".";
+    cmd_name += m_admin_socket_name;
+  }
+  int ret = admin_socket->register_command(
+      cmd_name, m_request_state_hook, "show in-progress osd requests");
+
+  if (ret < 0) {
     lderr(cct) << "error registering admin socket command: "
 	       << cpp_strerror(ret) << dendl;
   }
@@ -5458,8 +5461,10 @@ Objecter::OSDSession::~OSDSession()
 
 Objecter::Objecter(CephContext *cct,
 		   Messenger *m, MonClient *mc,
-		   asio::io_context& service) :
-  Dispatcher(cct), messenger(m), monc(mc), service(service)
+		   asio::io_context& service,
+		   std::string_view admin_socket_name) :
+  Dispatcher(cct), messenger(m), monc(mc), service(service),
+  m_admin_socket_name(admin_socket_name)
 {
   mon_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
   osd_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_osd_op_timeout");
