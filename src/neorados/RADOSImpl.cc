@@ -44,7 +44,7 @@ RADOS::RADOS(boost::asio::io_context& ioctx,
 
   objecter = std::make_unique<Objecter>(cct.get(), messenger.get(), &monclient,
 					ioctx,
-					objecter_admin_socket_name.value_or(""));
+					objecter_admin_socket_name.value_or("NeoRados"));
 
   objecter->set_balanced_budget();
   monclient.set_messenger(messenger.get());
