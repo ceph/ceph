@@ -403,10 +403,12 @@
                                    (changes)="getDirtyConfigurationValues = $event"></cd-rbd-configuration-form>
       </cd-form-advanced-fieldset>
 
-      <cd-form-button-panel (submitActionEvent)="submit()"
-                            [form]="formDir"
-                            [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
-                            wrappingClass="text-right"></cd-form-button-panel>
+      <cd-form-button-panel
+        (submitActionEvent)="submit()"
+        [form]="formDir"
+        [submitText]="submitAction"
+        wrappingClass="text-right"
+      ></cd-form-button-panel>
 
     </form>
   </ng-container>

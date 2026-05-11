@@ -70,6 +70,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   serviceForm: CdFormGroup;
   action: string;
   resource: string;
+  submitAction: string;
   serviceTypes: string[] = [];
   serviceIds: string[] = [];
   selectedHosts: string[] = [];
@@ -625,6 +626,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   ngOnInit(): void {
     this.open = true;
     this.action = this.actionLabels.CREATE;
+    this.submitAction = `${this.action} ${this.resource}`;
     this.resolveRoute();
 
     this.cephServiceService
@@ -663,6 +665,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
 
     if (this.editing) {
       this.action = this.actionLabels.EDIT;
+      this.submitAction = this.actionLabels.SAVE_CHANGES;
       this.disableForEditing(this.serviceType);
       this.cephServiceService
         .list(new HttpParams({ fromObject: { limit: -1, offset: 0 } }), this.serviceName)

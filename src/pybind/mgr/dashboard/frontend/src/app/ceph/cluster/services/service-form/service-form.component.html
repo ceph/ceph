@@ -1396,10 +1396,13 @@
       }
     </form>
   </section>
-  <cd-form-button-panel (submitActionEvent)="onSubmit()"
-                        [form]="serviceForm"
-                        [submitText]="(action | titlecase) + ' ' + (resource)"
-                        [modalForm]="true"></cd-form-button-panel>
+  <cd-form-button-panel
+    (submitActionEvent)="onSubmit()"
+    [form]="serviceForm"
+    [submitText]="submitAction"
+    [modalForm]="true"
+  ></cd-form-button-panel>
+
 </cds-modal>
 
 <ng-template #cipherListLink>
