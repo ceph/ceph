@@ -138,11 +138,13 @@ def check_fs(mgr: 'Module', fs_name: str) -> bool:
     return fs_name in [fs['mdsmap']['fs_name'] for fs in fs_map['filesystems']]
 
 
+@functools.lru_cache(maxsize=1)
+def cephfs_client_for_mgr(mgr: 'Module') -> CephfsClient:
+    return CephfsClient(mgr)
+
+
 def cephfs_path_is_dir(mgr: 'Module', fs: str, path: str) -> None:
-    @functools.lru_cache(maxsize=1)
-    def _get_cephfs_client() -> CephfsClient:
-        return CephfsClient(mgr)
-    cephfs_client = _get_cephfs_client()
+    cephfs_client = cephfs_client_for_mgr(mgr)
 
     with open_filesystem(cephfs_client, fs) as fs_handle:
         stx = fs_handle.statx(path.encode('utf-8'), cephfs.CEPH_STATX_MODE,
