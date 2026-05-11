@@ -110,7 +110,17 @@ int WebTokenEngine::load_provider(const DoutPrefixProvider* dpp, optional_yield 
     idp_url.erase(pos, 7);
   }
 
-  return driver->load_oidc_provider(dpp, y, tenant, idp_url, info, nullptr);
+  int r = driver->load_oidc_provider(dpp, y, tenant, idp_url, info, nullptr);
+  // Global providers are account-scoped only: fall back only when the role's
+  // tenant is a valid account id. Legacy tenant-based roles must not be able
+  // to consume global providers.
+  if (r == -ENOENT && tenant != global_oidc_id &&
+      rgw::account::validate_id(tenant)) {
+    ldpp_dout(dpp, 20) << "no OIDC provider found for tenant '" << tenant
+        << "' and url '" << idp_url << "', trying global" << dendl;
+    r = driver->load_oidc_provider(dpp, y, global_oidc_id, idp_url, info, nullptr);
+  }
+  return r;
 }
 
 bool
