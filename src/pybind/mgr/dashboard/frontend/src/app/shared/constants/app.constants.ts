@@ -165,6 +165,7 @@ export class ActionLabelsI18n {
   SETUP_MULTISITE_REPLICATION: string;
   NFS_EXPORT: string;
   VIEW: string;
+  SAVE_CHANGES: string;
   constructor() {
     /* Create a new item */
     this.CREATE = $localize`Create`;
@@ -257,6 +258,7 @@ export class ActionLabelsI18n {
 
     this.NFS_EXPORT = $localize`Create NFS Export`;
     this.VIEW = $localize`View`;
+    this.SAVE_CHANGES = $localize`Save changes`;
   }
 }
 

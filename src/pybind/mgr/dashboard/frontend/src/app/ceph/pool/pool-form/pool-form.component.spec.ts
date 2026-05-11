@@ -175,6 +175,23 @@ describe('PoolFormComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  describe('submit label', () => {
+    it('should set submit label to Create Pool in create mode', () => {
+      expect(component.submitAction).toBe('Create Pool');
+    });
+
+    it('should set submit label to Save changes in edit mode', () => {
+      fixture.destroy();
+      Object.defineProperty(router, 'url', {
+        get: () => '/pool/edit/somePoolName',
+        configurable: true
+      });
+      setUpPoolComponent();
+
+      expect(component.submitAction).toBe('Save changes');
+    });
+  });
+
   describe('throws error for not allowed users', () => {
     const expectError = (redirected: boolean) => {
       navigationSpy.calls.reset();
