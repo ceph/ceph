@@ -273,6 +273,15 @@ namespace rgw::s3vector {
     return metric;
   }
 
+  LanceDBDistanceType to_lancedb_distance(DistanceMetric metric) {
+    switch (metric) {
+      case DistanceMetric::COSINE: return LANCEDB_DISTANCE_COSINE;
+      case DistanceMetric::EUCLIDEAN:
+      case DistanceMetric::UNKNOWN: return LANCEDB_DISTANCE_L2;
+    }
+    ceph_abort_msg("unhandled DistanceMetric value");
+  }
+
   void create_index_t::dump(ceph::Formatter* f) const {
     f->open_object_section("");
     ::encode_json("dataType", data_type, f);
@@ -319,9 +328,7 @@ namespace rgw::s3vector {
     f->close_section();
   }
 
-  static constexpr const char* data_field = "data";
-  static const std::string data_field_str{data_field};;
-  static constexpr const char* key_field = "key";
+  static const std::string data_field_str{data_field};
   static const std::string key_field_str{key_field};;
   static constexpr const char* distance_field = "_distance";
   static const std::string distance_field_str{distance_field};;

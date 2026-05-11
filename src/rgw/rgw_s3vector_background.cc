@@ -11,7 +11,7 @@
 #include <boost/context/protected_fixedsize_stack.hpp>
 #include "common/ceph_time.h"
 #include "common/dout.h"
-#include "common/hostname.h"
+#include "common/random_string.h"
 #include <chrono>
 #include <charconv>
 #include <fmt/format.h>
@@ -19,9 +19,11 @@
 #include <future>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include "rgw_sal.h"
 #include "rgw_common.h"
 #include "rgw_acl.h"
+#include "common/ceph_json.h"
 #include "rgw_s3vector.h"
 #include "lancedb.h"
 
@@ -36,8 +38,6 @@ static constexpr const char* build_state_metadata_key = "s3v_index_state";
 static constexpr const char* lock_key_prefix = ".s3v-lock-";
 static constexpr const char* lock_key_suffix = ".lock";
 
-// vector data column name used for vector index
-static constexpr const char* vector_data_column = "data";
 
 struct build_state_t {
   bool build_in_progress = false;
@@ -45,60 +45,37 @@ struct build_state_t {
   int64_t build_lease_seconds = 600;
   std::string builder_id;
 
-  bool is_lease_expired() const {
-    if (!build_in_progress || build_started_at == 0) return true;
-    auto now = std::chrono::duration_cast<std::chrono::seconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
-    return (now - build_started_at) > build_lease_seconds;
+  void dump(ceph::Formatter *f) const {
+    encode_json("build_in_progress", build_in_progress, f);
+    encode_json("build_started_at", build_started_at, f);
+    encode_json("build_lease_seconds", build_lease_seconds, f);
+    encode_json("builder_id", builder_id, f);
   }
 
-  std::string to_json() const {
-    return fmt::format(
-        R"({{"build_in_progress":{},"build_started_at":{},"build_lease_seconds":{},"builder_id":"{}"}})",
-        build_in_progress ? "true" : "false",
-        build_started_at,
-        build_lease_seconds,
-        builder_id);
+  void decode_json(JSONObj *obj) {
+    JSONDecoder::decode_json("build_in_progress", build_in_progress, obj);
+    JSONDecoder::decode_json("build_started_at", build_started_at, obj);
+    JSONDecoder::decode_json("build_lease_seconds", build_lease_seconds, obj);
+    JSONDecoder::decode_json("builder_id", builder_id, obj);
   }
 
-  static build_state_t from_json(const std::string& json_str) {
-    build_state_t state;
-    // simple field extraction without a JSON library
-    auto extract_bool = [&](const char* key) -> bool {
-      auto pos = json_str.find(key);
-      if (pos == std::string::npos) return false;
-      pos = json_str.find(':', pos);
-      if (pos == std::string::npos) return false;
-      return json_str.find("true", pos) < json_str.find(',', pos);
-    };
-    auto extract_int64 = [&](const char* key) -> int64_t {
-      auto pos = json_str.find(key);
-      if (pos == std::string::npos) return 0;
-      pos = json_str.find(':', pos);
-      if (pos == std::string::npos) return 0;
-      ++pos;
-      while (pos < json_str.size() && json_str[pos] == ' ') ++pos;
-      int64_t val = 0;
-      std::from_chars(json_str.data() + pos,
-                      json_str.data() + json_str.size(), val);
-      return val;
-    };
-    auto extract_string = [&](const char* key) -> std::string {
-      auto pos = json_str.find(key);
-      if (pos == std::string::npos) return {};
-      pos = json_str.find('"', pos + strlen(key) + 2); // skip key + ":
-      if (pos == std::string::npos) return {};
-      ++pos; // skip opening quote
-      auto end = json_str.find('"', pos);
-      if (end == std::string::npos) return {};
-      return json_str.substr(pos, end - pos);
-    };
+  std::string to_json_str() const {
+    JSONFormatter f;
+    f.open_object_section("");
+    dump(&f);
+    f.close_section();
+    std::ostringstream oss;
+    f.flush(oss);
+    return oss.str();
+  }
 
-    state.build_in_progress = extract_bool("build_in_progress");
-    state.build_started_at = extract_int64("build_started_at");
-    state.build_lease_seconds = extract_int64("build_lease_seconds");
-    state.builder_id = extract_string("builder_id");
-    return state;
+  bool from_json_str(const char* str) {
+    JSONParser parser;
+    if (!parser.parse(str, strlen(str))) {
+      return false;
+    }
+    decode_json(&parser);
+    return true;
   }
 };
 
@@ -133,6 +110,7 @@ private:
   std::vector<std::thread> workers;
   rgw::sal::Driver* const driver;
   std::unordered_map<table_name_t, ceph::coarse_real_time, boost::hash<table_name_t>> tables;
+  std::unordered_set<table_name_t, boost::hash<table_name_t>> active_builds;
   MessageQueue messages;
   static constexpr auto idle_sleep = std::chrono::milliseconds(1000); // 1s
 
@@ -202,7 +180,7 @@ private:
   // Build state management via LanceDB table metadata
   // ============================================================================
 
-  build_state_t read_build_state(const LanceDBTable* table) {
+  int read_build_state(const LanceDBTable* table, build_state_t& state) {
     const char* key = build_state_metadata_key;
     char** keys_out = nullptr;
     char** values_out = nullptr;
@@ -212,22 +190,21 @@ private:
     if (const auto result = lancedb_table_get_metadata(
             table, &key, 1, &keys_out, &values_out, &count, &error_message);
         result != LANCEDB_SUCCESS) {
-      ldpp_dout(this, 5) << "WARNING: failed to read build state from table metadata: "
+      ldpp_dout(this, 1) << "ERROR: failed to read build state from table metadata: "
           << (error_message ? error_message : "unknown") << dendl;
       lancedb_free_string(error_message);
-      return {};
+      return -EIO;
     }
 
-    build_state_t state;
     if (count > 0 && values_out[0]) {
-      state = build_state_t::from_json(values_out[0]);
+      state.from_json_str(values_out[0]);
     }
     lancedb_free_metadata(keys_out, values_out, count);
-    return state;
+    return 0;
   }
 
   int write_build_state(const LanceDBTable* table, const build_state_t& state) {
-    const std::string json_str = state.to_json();
+    const std::string json_str = state.to_json_str();
     const char* key = build_state_metadata_key;
     const char* value = json_str.c_str();
     char* error_message = nullptr;
@@ -307,18 +284,6 @@ private:
   }
 
   // ============================================================================
-  // Distance metric conversion
-  // ============================================================================
-
-  static LanceDBDistanceType to_lancedb_distance(DistanceMetric metric) {
-    switch (metric) {
-      case DistanceMetric::COSINE: return LANCEDB_DISTANCE_COSINE;
-      case DistanceMetric::EUCLIDEAN: return LANCEDB_DISTANCE_L2;
-      default: return LANCEDB_DISTANCE_L2;
-    }
-  }
-
-  // ============================================================================
   // Distributed lock via S3 conditional write (SAL)
   // ============================================================================
 
@@ -326,24 +291,36 @@ private:
     return std::string(lock_key_prefix) + index_name + lock_key_suffix;
   }
 
-  std::string make_lock_body() {
-    auto now = std::chrono::duration_cast<std::chrono::seconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
-    return fmt::format(R"({{"builder_id":"{}","timestamp":{}}})",
-        builder_id(), now);
+  std::string generate_lock_token() {
+    //returns a random 32-character alphanumeric string as the lock token, to enable owenrship verification during release and prevent deleting another instance's lock.
+    char buf[33];
+    gen_rand_alphanumeric(cct, buf, sizeof(buf) - 1);
+    buf[32] = '\0';
+    return std::string(buf, 32);
   }
 
-  std::string builder_id() {
-    return fmt::format("{}-{}", ceph_get_short_hostname(), getpid());
+  std::string make_lock_body(const std::string& token) {
+    auto now = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    return fmt::format(R"({{"token":"{}","timestamp":{}}})", token, now);
   }
 
   int64_t parse_lock_timestamp(const std::string& body) {
     auto pos = body.find("\"timestamp\":");
     if (pos == std::string::npos) return 0;
-    pos += 12; // length of "\"timestamp\":"
+    pos += 12;
     int64_t ts = 0;
     std::from_chars(body.data() + pos, body.data() + body.size(), ts);
     return ts;
+  }
+
+  std::string parse_lock_token(const std::string& body) {
+    auto pos = body.find("\"token\":\"");
+    if (pos == std::string::npos) return {};
+    pos += 9; // length of "\"token\":\""
+    auto end = body.find('"', pos);
+    if (end == std::string::npos) return {};
+    return body.substr(pos, end - pos);
   }
 
   // load the vector bucket as a regular Bucket for lock object operations.
@@ -365,9 +342,13 @@ private:
     return 0;
   }
 
-  // PUT lock object with if-none-match="*" (fails if already exists)
+  // ---- low-level lock object operations ----
+
+  // PUT lock object with if-none-match="*" (conditional create).
+  // exactly one concurrent caller succeeds, others get -ERR_PRECONDITION_FAILED.
   int put_lock_object(const std::string& vector_bucket_name,
                       const std::string& lock_key,
+                      const std::string& token,
                       optional_yield y) {
     std::unique_ptr<rgw::sal::Bucket> bucket;
     int ret = load_bucket_for_lock(vector_bucket_name, bucket, y);
@@ -383,13 +364,12 @@ private:
     ret = writer->prepare(y);
     if (ret < 0) return ret;
 
-    std::string body = make_lock_body();
+    std::string body = make_lock_body(token);
     bufferlist bl;
     bl.append(body);
     ret = writer->process(std::move(bl), 0);
     if (ret < 0) return ret;
 
-    // flush
     ret = writer->process({}, body.size());
     if (ret < 0) return ret;
 
@@ -411,88 +391,180 @@ private:
     return ret;
   }
 
-  // DELETE lock object
+  // DELETE lock object with conditional if_match (ETag).
+  // if etag is non-empty, only deletes if the object's current ETag matches —
+  // prevents deleting a lock that was reclaimed by another instance.
+  // if etag is empty, performs unconditional delete.
   int delete_lock_object(const std::string& vector_bucket_name,
                          const std::string& lock_key,
+                         const std::string& etag,
                          optional_yield y) {
     std::unique_ptr<rgw::sal::Bucket> bucket;
     int ret = load_bucket_for_lock(vector_bucket_name, bucket, y);
     if (ret < 0) return ret;
 
     auto obj = bucket->get_object({lock_key});
-    return obj->delete_object(this, y, 0, nullptr, nullptr);
+    auto del_op = obj->get_delete_op();
+    if (!etag.empty()) {
+      del_op->params.if_match = etag.c_str();
+    }
+    return del_op->delete_obj(this, y, 0);
   }
 
-  // GET lock object body
-  std::pair<int, std::string> get_lock_object(const std::string& vector_bucket_name,
-                                              const std::string& lock_key,
-                                              optional_yield y) {
+  // GET lock object body and ETag.
+  // returns {error_code, body, etag}. the ETag is used for conditional delete.
+  struct lock_read_result {
+    int ret = -1;
+    std::string body;
+    std::string etag;
+  };
+
+  lock_read_result get_lock_object(const std::string& vector_bucket_name,
+                                   const std::string& lock_key,
+                                   optional_yield y) {
     std::unique_ptr<rgw::sal::Bucket> bucket;
     int ret = load_bucket_for_lock(vector_bucket_name, bucket, y);
-    if (ret < 0) return {ret, {}};
+    if (ret < 0) return {ret, {}, {}};
 
     auto obj = bucket->get_object({lock_key});
     auto read_op = obj->get_read_op();
     ret = read_op->prepare(y, this);
-    if (ret < 0) return {ret, {}};
+    if (ret < 0) return {ret, {}, {}};
 
     bufferlist bl;
-    ret = read_op->read(0, obj->get_size() - 1, bl, y, this);
-    if (ret < 0) return {ret, {}};
-    return {0, bl.to_str()};
-  }
-
-  // Check if lock is stale and reclaim it
-  bool check_stale_and_reclaim(const std::string& bucket_name,
-                               const std::string& lock_key,
-                               optional_yield y) {
-    auto [ret, body] = get_lock_object(bucket_name, lock_key, y);
-    if (ret < 0) return false;
-
-    int64_t lock_ts = parse_lock_timestamp(body);
-    if (lock_ts == 0) return false;
-
-    auto now = std::chrono::duration_cast<std::chrono::seconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
-    int64_t lock_ttl = cct->_conf.get_val<uint64_t>("rgw_s3vector_index_lock_ttl_seconds");
-    int64_t age = now - lock_ts;
-
-    if (age < lock_ttl) {
-      return false; // lock is still fresh
+    const auto size = obj->get_size();
+    if (size > 0) {
+      ret = read_op->read(0, size - 1, bl, y, this);
+      if (ret < 0) return {ret, {}, {}};
     }
 
-    ldpp_dout(this, 5) << "INFO: reclaiming stale lock (age=" << age
-        << "s, ttl=" << lock_ttl << "s)" << dendl;
-    delete_lock_object(bucket_name, lock_key, y);
-    return put_lock_object(bucket_name, lock_key, y) == 0;
+    bufferlist etag_bl;
+    ret = read_op->get_attr(this, RGW_ATTR_ETAG, etag_bl, y);
+    std::string etag = (ret >= 0) ? etag_bl.to_str() : std::string{};
+
+    return {0, bl.to_str(), std::move(etag)};
   }
 
-  // try to acquire the distributed lock (non-blocking)
-  bool try_acquire_lock(const std::string& bucket_name,
-                        const std::string& index_name,
-                        optional_yield y) {
+  // ---- high-level lock protocol ----
+
+  // Distributed lock acquisition protocol using S3 conditional operations.
+  //
+  // Step 1 — GET: read the existing lock object (body + ETag).
+  //   - if no lock exists (ENOENT): proceed to step 3 (no lock to clear).
+  //   - if lock exists and is fresh (age < TTL): return empty (build in progress).
+  //   - if lock exists and is stale (age >= TTL): proceed to step 2.
+  //
+  // Step 2 — conditional DELETE (if_match=ETag from step 1):
+  //   delete the stale lock only if its ETag still matches what we read.
+  //   race condition: multiple instances may detect the same stale lock.
+  //   - DELETE succeeds: we removed the stale lock. proceed to step 3.
+  //   - ENOENT: another reclaimer already deleted it, but no new lock exists
+  //     yet. proceed to step 3 to compete for the new lock.
+  //   - PRECONDITION_FAILED: the lock was already reclaimed by another instance
+  //     (D) which created a fresh lock with a different ETag. D holds the lock.
+  //     return empty — no point attempting the PUT.
+  //
+  // Step 3 — conditional PUT (if_nomatch="*"):
+  //   create the lock object with a fresh random token. RADOS exclusive-create
+  //   guarantees exactly one concurrent caller succeeds.
+  //   - if PUT succeeds: lock acquired, return the token.
+  //   - if PUT fails (PRECONDITION_FAILED): another instance won, return empty.
+  //
+  // note: the lock TTL must exceed the maximum expected build duration.
+  // if the build takes longer, the lock appears stale and another instance may
+  // reclaim it. the release_lock token check prevents the original builder from
+  // deleting the new holder's lock. a future improvement is to add a heartbeat
+  // that refreshes the timestamp during long builds.
+  std::string try_acquire_lock(const std::string& bucket_name,
+                               const std::string& index_name,
+                               optional_yield y) {
     const std::string lock_key = make_lock_key(index_name);
-    int ret = put_lock_object(bucket_name, lock_key, y);
+
+    // step 1: read existing lock
+    auto lock_info = get_lock_object(bucket_name, lock_key, y);
+    if (lock_info.ret == 0) {
+      int64_t lock_ts = parse_lock_timestamp(lock_info.body);
+      auto now = std::chrono::duration_cast<std::chrono::seconds>(
+          std::chrono::system_clock::now().time_since_epoch()).count();
+      int64_t lock_ttl = cct->_conf.get_val<uint64_t>("rgw_s3vector_index_lock_ttl_seconds");
+      int64_t age = now - lock_ts;
+
+   //NOTE: (TODO) if the lock is stale, we could consider refreshing it (update timestamp), to protect against clock skew and transient delays that could cause false staleness detections.
+      if (lock_ts > 0 && age < lock_ttl) {
+        ldpp_dout(this, 5) << "INFO: lock held for " << bucket_name << "." << index_name
+            << " by " << parse_lock_token(lock_info.body)
+            << " (age=" << age << "s)" << dendl;
+        return {};
+      }
+
+      // step 2: stale lock — conditional delete using ETag from step 1
+      ldpp_dout(this, 5) << "INFO: deleting stale lock for " << bucket_name
+          << "." << index_name << " (age=" << age << "s, ttl=" << lock_ttl << "s)" << dendl;
+      int del_ret = delete_lock_object(bucket_name, lock_key, lock_info.etag, y);
+      if (del_ret == -ERR_PRECONDITION_FAILED) {
+        ldpp_dout(this, 5) << "INFO: stale lock for " << bucket_name << "." << index_name
+            << " was already reclaimed by another instance" << dendl;
+        return {};
+      }
+    }
+
+    // step 3: conditional create — only one caller wins
+    std::string token = generate_lock_token();
+    int ret = put_lock_object(bucket_name, lock_key, token, y);
     if (ret == 0) {
-      return true; // lock acquired
+      ldpp_dout(this, 5) << "INFO: acquired lock for " << bucket_name
+          << "." << index_name << " token=" << token << dendl;
+      return token;
     }
 
     if (ret == -ERR_PRECONDITION_FAILED) {
-      // lock exists — check if it's stale
-      return check_stale_and_reclaim(bucket_name, lock_key, y);
+      ldpp_dout(this, 5) << "INFO: lock acquired by another instance for "
+          << bucket_name << "." << index_name << dendl;
+    } else {
+      ldpp_dout(this, 1) << "ERROR: failed to acquire lock for " << bucket_name
+          << "." << index_name << " ret=" << ret << dendl;
     }
-
-    ldpp_dout(this, 1) << "ERROR: failed to acquire lock for " << bucket_name
-        << "." << index_name << " ret=" << ret << dendl;
-    return false;
+    return {};
   }
 
+  // Release the lock only if we still own it.
+  //
+  // Step 1 — GET: read the lock body and ETag.
+  // Step 2 — token check: if the token doesn't match ours, another instance
+  //   reclaimed the lock (e.g., our build exceeded the TTL). skip the delete.
+  // Step 3 — conditional DELETE (if_match=ETag from step 1): delete only if the
+  //   lock hasn't been replaced since we read it. this closes the TOCTOU window
+  //   between the GET and DELETE — if another instance reclaimed the lock between
+  //   our GET and DELETE, the ETag changed and the DELETE fails safely.
+  //
+  // note: in the normal case (build completes within TTL), no other instance
+  // touches the lock, so the token check and conditional DELETE are redundant
+  // safety. they matter only when the build exceeds TTL.
   void release_lock(const std::string& bucket_name,
                     const std::string& index_name,
+                    const std::string& token,
                     optional_yield y) {
     const std::string lock_key = make_lock_key(index_name);
-    int ret = delete_lock_object(bucket_name, lock_key, y);
-    if (ret < 0 && ret != -ENOENT) {
+
+    // step 1: read lock
+    auto lock_info = get_lock_object(bucket_name, lock_key, y);
+    if (lock_info.ret < 0) return;
+
+    // step 2: verify ownership
+    std::string lock_token = parse_lock_token(lock_info.body);
+    if (lock_token != token) {
+      ldpp_dout(this, 5) << "WARNING: lock for " << bucket_name << "." << index_name
+          << " owned by another instance (ours=" << token
+          << ", current=" << lock_token << "), not releasing" << dendl;
+      return;
+    }
+
+    // step 3: conditional delete using ETag from step 1
+    int ret = delete_lock_object(bucket_name, lock_key, lock_info.etag, y);
+    if (ret == -ERR_PRECONDITION_FAILED) {
+      ldpp_dout(this, 5) << "INFO: lock for " << bucket_name << "." << index_name
+          << " was reclaimed between read and delete, not releasing" << dendl;
+    } else if (ret < 0 && ret != -ENOENT) {
       ldpp_dout(this, 1) << "ERROR: failed to release lock for " << bucket_name
           << "." << index_name << " ret=" << ret << dendl;
     }
@@ -512,14 +584,15 @@ private:
     vec_config.accelerator = nullptr;  // CPU
     vec_config.replace = 1;            // replace existing index
 
-    const char* columns[] = {vector_data_column};
+    const char* columns[] = {data_field};
     char* error_message = nullptr;
 
     const LanceDBError result = lancedb_table_create_vector_index(
         table, columns, 1, LANCEDB_INDEX_AUTO, &vec_config, &error_message);
 
     if (result != LANCEDB_SUCCESS) {
-      ldpp_dout(this, 1) << "ERROR: vector index build failed: "
+      ldpp_dout(this, 0) << "ERROR: lancedb_table_create_vector_index failed"
+          << " (error_code=" << result << "): "
           << (error_message ? error_message : "unknown") << dendl;
       lancedb_free_string(error_message);
       return -EIO;
@@ -535,7 +608,16 @@ private:
     const auto& bucket_name = table_name.first;
     const auto& index_name = table_name.second;
 
-    // step 1: read config
+    // step 1: check if this RGW is already building this table (cheapest check).
+    // prevents the local background loop from seeing its own lock as stale
+    // and reclaiming it when the build takes longer than the lock TTL.
+    if (active_builds.count(table_name)) {
+      ldpp_dout(this, 5) << "INFO: this RGW is already building "
+          << bucket_name << "." << index_name << ", skipping" << dendl;
+      return 0;
+    }
+
+    // step 2: read config
     const uint64_t threshold = cct->_conf.get_val<uint64_t>("rgw_s3vector_index_unindexed_threshold");
     if (threshold == 0) {
       ldpp_dout(this, 20) << "INFO: automatic index rebuild disabled for "
@@ -543,7 +625,7 @@ private:
       return 0;
     }
 
-    // step 2: open table
+    // step 3: open table
     LanceDBConnection* conn = s3vector::connect(this, bucket_name);
     if (!conn) {
       ldpp_dout(this, 5) << "WARNING: cannot connect to database for "
@@ -568,7 +650,7 @@ private:
       }
     } table_guard{table, conn};
 
-    // step 3: get index stats
+    // step 4: get index stats
     auto stats_result = get_vector_index_stats(table);
     if (!stats_result.ok) {
       ldpp_dout(this, 1) << "ERROR: failed to get index stats for "
@@ -586,52 +668,50 @@ private:
       ldpp_dout(this, 20) << "INFO: " << bucket_name << "." << index_name
           << " below threshold (" << stats.num_unindexed_rows
           << " < " << threshold << "), skipping rebuild" << dendl;
-      return 0;
+      return 1; // below threshold — recheck on next notification
     }
 
-    // step 4: try to acquire distributed lock
+    // step 5: try to acquire distributed lock (S3 conditional write)
     optional_yield y(yield);
-    if (!try_acquire_lock(bucket_name, index_name, y)) {
+    std::string lock_token = try_acquire_lock(bucket_name, index_name, y);
+    if (lock_token.empty()) {
       ldpp_dout(this, 5) << "INFO: lock held by another process for "
           << bucket_name << "." << index_name << ", skipping rebuild" << dendl;
       return 0;
     }
 
-    // scope guard for lock release
+    // track locally that this RGW is building this table
+    active_builds.insert(table_name);
+
+    // scope guard: release the distributed lock and remove from active builds
     struct lock_guard_t {
       Manager* mgr;
+      const table_name_t& table_name;
       const std::string& bucket_name;
       const std::string& index_name;
+      const std::string& token;
       optional_yield y;
       ~lock_guard_t() {
-        mgr->release_lock(bucket_name, index_name, y);
+        mgr->active_builds.erase(table_name);
+        mgr->release_lock(bucket_name, index_name, token, y);
       }
-    } lock_guard{this, bucket_name, index_name, y};
+    } lock_guard{this, table_name, bucket_name, index_name, lock_token, y};
 
-    // step 5: read build state from table metadata (double-check after lock)
-    build_state_t state = read_build_state(table);
-    if (state.build_in_progress) {
-      if (!state.is_lease_expired()) {
-        ldpp_dout(this, 5) << "INFO: build already in progress for "
-            << bucket_name << "." << index_name
-            << " by " << state.builder_id
-            << " (started at " << state.build_started_at << "), skipping" << dendl;
-        return 0;
-      }
-      ldpp_dout(this, 5) << "INFO: detected stale build for "
-          << bucket_name << "." << index_name
-          << " by " << state.builder_id
-          << " (lease expired), resetting state" << dendl;
-    }
-
-    // step 6: mark build started
-    const uint64_t build_lease = cct->_conf.get_val<uint64_t>("rgw_s3vector_index_build_lease_seconds");
+    // step 6: record build state in table metadata (observability, not a decision gate).
+    // the distributed lock (step 5) controls mutual exclusion.
+    // metadata records who is building and when, for diagnostics and monitoring.
+    build_state_t state;
     state.build_in_progress = true;
     state.build_started_at = std::chrono::duration_cast<std::chrono::seconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
-    state.build_lease_seconds = build_lease;
-    state.builder_id = builder_id();
-    write_build_state(table, state);
+    state.build_lease_seconds = cct->_conf.get_val<uint64_t>("rgw_s3vector_index_build_lease_seconds");
+    state.builder_id = lock_token;
+    if (int ret = write_build_state(table, state); ret < 0) {
+      ldpp_dout(this, 1) << "ERROR: failed to record build state for "
+          << bucket_name << "." << index_name
+          << ", aborting rebuild (ret=" << ret << ")" << dendl;
+      return ret;
+    }
 
     // step 7: get distance metric for index config
     DistanceMetric metric = s3vector::get_table_distance_metric(table, this);
@@ -645,11 +725,18 @@ private:
 
     int build_ret = run_vector_index_build(table, distance_type);
 
-    // step 9: mark build complete (always, even on failure)
-    state = read_build_state(table);
-    state.build_in_progress = false;
-    state.build_started_at = 0;
-    write_build_state(table, state);
+    // step 9: mark build complete in table metadata
+    build_state_t post_state;
+    if (int ret = read_build_state(table, post_state); ret < 0) {
+      ldpp_dout(this, 1) << "WARNING: failed to read build state after build for "
+          << bucket_name << "." << index_name << dendl;
+    }
+    post_state.build_in_progress = false;
+    post_state.build_started_at = 0;
+    if (int ret = write_build_state(table, post_state); ret < 0) {
+      ldpp_dout(this, 1) << "WARNING: failed to clear build state for "
+          << bucket_name << "." << index_name << dendl;
+    }
 
     if (build_ret == 0) {
       auto post_stats = get_vector_index_stats(table);
@@ -714,8 +801,11 @@ private:
         boost::asio::spawn(make_strand(io_context), std::allocator_arg, make_stack_allocator(),
             [this, token = std::move(token), table_name](boost::asio::yield_context yield) {
           const int rc = process_table(table_name, yield);
-          if (rc < 0) {
-            ldpp_dout(this, 1) << "ERROR: failed to process table: " << table_name.first << "." << table_name.second << " with error code: " << rc << dendl;
+          if (rc != 0) {
+            // rc < 0: error, rc > 0: below threshold — allow recheck on next notification
+            if (rc < 0) {
+              ldpp_dout(this, 1) << "ERROR: failed to process table: " << table_name.first << "." << table_name.second << " with error code: " << rc << dendl;
+            }
             const uint64_t stats_interval_ms =
                 cct->_conf.get_val<uint64_t>("rgw_s3vector_index_stats_interval") * 1000;
             tables[table_name] = ceph::coarse_real_clock::now() - std::chrono::milliseconds(stats_interval_ms);
