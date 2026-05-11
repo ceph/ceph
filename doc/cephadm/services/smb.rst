@@ -73,14 +73,17 @@ Here's an example SMB service specification with TLS/SSL configuration:
        certificate_source: inline
        ssl_cert: |
          -----BEGIN CERTIFICATE-----
+         ...
          -----END CERTIFICATE-----
 
        ssl_key: |
          -----BEGIN PRIVATE KEY-----
+         ...
          -----END PRIVATE KEY-----
 
        ssl_ca_cert: |
          -----BEGIN CERTIFICATE-----
+         ...
          -----END CERTIFICATE-----
 
 This example configures an SMB service with TLS encryption enabled using
