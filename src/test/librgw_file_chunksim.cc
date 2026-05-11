@@ -19,6 +19,7 @@
 #include <iostream>
 #include <fstream>
 #include <stack>
+#include <unordered_set>
 
 #include "include/rados/librgw.h"
 #include "include/rados/rgw_file.h"
@@ -202,8 +203,17 @@ namespace {
 
     uint32_t drain() {
       uint32_t drain_cnt{0};
+      std::unordered_set<RGWFileHandle*> evicted;
       for (auto &chunk : active_chunks) {
-        chunk->clear(true /* evict */);
+	for (auto &obj : chunk->dirents) {
+	  if (evicted.insert(obj.rgw_fh).second) {
+	    static_cast<RGWLibFS*>(fs->fs_private)->release_evict(obj.rgw_fh);
+	  } else {
+	    rgw_fh_rele(fs, obj.fh, 0);
+	  }
+	}
+	chunk->dirents.clear();
+	chunk->num_entries = 0;
         delete (chunk);
 	drain_cnt++;
       }
