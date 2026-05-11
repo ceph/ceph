@@ -14023,14 +14023,19 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     }
 
-    int64_t default_pg_num = (source_pool) ? source_pool->get_pg_num() : 0;
-    int64_t default_pg_num_min = (source_pool) ? source_pool->get_pg_num_min() : 0;
-    int64_t default_pg_num_max = (source_pool) ? source_pool->get_pg_num_max() : 0;
-    int64_t default_pgp_num = (source_pool) ? source_pool->get_pgp_num() : default_pg_num;
-    int64_t pg_num = cmd_getval_or<int64_t>(cmdmap, "pg_num", default_pg_num);
-    int64_t pg_num_min = cmd_getval_or<int64_t>(cmdmap, "pg_num_min", default_pg_num_min);
-    int64_t pg_num_max = cmd_getval_or<int64_t>(cmdmap, "pg_num_max", default_pg_num_max);
-    int64_t pgp_num = cmd_getval_or<int64_t>(cmdmap, "pgp_num", default_pgp_num);
+    auto pg_num = cmd_getval_or<int64_t>(cmdmap, "pg_num", 0);
+    auto pg_num_min = cmd_getval_or<int64_t>(cmdmap, "pg_num_min", 0);
+    auto pg_num_max = cmd_getval_or<int64_t>(cmdmap, "pg_num_max", 0);
+    auto pgp_num = cmd_getval_or<int64_t>(cmdmap, "pgp_num", pg_num);
+
+    bool pg_fields_set = (pg_num != 0) || (pg_num_min != 0) || (pg_num_max != 0) || (pgp_num != 0);
+    if (source_pool && !pg_fields_set) {
+      // Inherit from source only if none of the PG fields are set
+      pg_num = source_pool->get_pg_num();
+      pg_num_min = source_pool->get_pg_num_min();
+      pg_num_max = source_pool->get_pg_num_max();
+      pgp_num = pg_num;
+    }
 
     string default_type_str = (source_pool) ?
       string(source_pool->get_type_name()) : g_conf().get_val<string>("osd_pool_default_type");
