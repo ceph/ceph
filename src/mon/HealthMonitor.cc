@@ -39,7 +39,6 @@
 #include "common/debug.h"
 #include "common/Formatter.h"
 #include "common/prime.h"
-#include "crush/CrushWrapper.h"
 
 #include "crush/CrushWrapper.h"
 
