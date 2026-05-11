@@ -46,9 +46,8 @@
 #include "include/str_list.h"
 #include "include/stringify.h"
 #include "include/util.h" // for dump_services()
-#include "mds/cephfs_features.h"
-#include "mds/mdstypes.h"
 #include "mds/cephfs_features.h" // for CEPHFS_FEATURE_*
+#include "mds/mdstypes.h"
 #include "Session.h"
 
 using namespace TOPNSPC::common;
