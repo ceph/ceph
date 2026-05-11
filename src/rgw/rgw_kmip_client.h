@@ -41,6 +41,7 @@ public:
   } outkey[1] = {0, 0};
   // end must free
   int ret;
+  int worker_id = -1;  // set by worker that processed this request; -1 if unprocessed
   std::atomic<bool> done{false};
   ceph::mutex lock = ceph::make_mutex("rgw_kmip_req::lock");
   ceph::condition_variable cond;
@@ -88,7 +89,8 @@ public:
    */
   int execute_fn(const DoutPrefixProvider* dpp,
                  optional_yield y,
-                 std::function<int(KMIP*, BIO*)> op_fn);
+                 std::function<int(KMIP*, BIO*)> op_fn,
+                 int* worker_id_out = nullptr);
 };
 
 extern RGWKMIPManager *rgw_kmip_manager;

@@ -1430,12 +1430,13 @@ int create_sse_s3_bucket_key(const DoutPrefixProvider *dpp,
 
 int remove_sse_s3_bucket_key(const DoutPrefixProvider *dpp,
                              const std::string& bucket_key,
-                             optional_yield y)
+                             optional_yield y,
+                             int* worker_id_out)
 {
   CephContext* cct = dpp->get_cct();
   SseS3Context kctx { cct };
   const std::string kms_backend { kctx.backend() };
-  
+
   if (kms_backend == RGW_SSE_KMS_BACKEND_KMIP) {
     RGWKmipSSES3* kmip_backend = get_kmip_sse_s3_backend(cct);
     if (!kmip_backend) {
@@ -1443,7 +1444,7 @@ int remove_sse_s3_bucket_key(const DoutPrefixProvider *dpp,
       return -EIO;
     }
 
-    return kmip_backend->destroy_bucket_key(dpp, bucket_key, y);
+    return kmip_backend->destroy_bucket_key(dpp, bucket_key, y, worker_id_out);
   }
 
   if (kms_backend == RGW_SSE_KMS_BACKEND_VAULT) {
