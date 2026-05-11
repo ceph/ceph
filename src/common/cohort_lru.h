@@ -212,8 +212,9 @@ namespace cohort {
 	return true;
       } /* ref */
 
-      void
-      unref(Object* o, uint32_t flags) {
+      void unref(Object *o, uint32_t flags) {
+        uint32_t check_refcnt = o->lru_refcnt;
+	ceph_assert(check_refcnt > 0);
 	uint32_t refcnt = --(o->lru_refcnt);
 	Object* tdo = nullptr;
 	if (unlikely(refcnt == 0 /* last ref */)) {
@@ -228,8 +229,8 @@ namespace cohort {
 	      } else {
                 lane.q.erase(it);
 	      }
-              tdo = o;
-	    } /* is-linked */
+            } /* is-linked */
+	    tdo = o;
 	  }
 	  lane.lock.unlock();
 	} else if (unlikely(refcnt == SENTINEL_REFCNT)) {
