@@ -1082,10 +1082,10 @@
                   class="invalid-feedback"
                   i18n
                   >The value does not match the pattern:
-                  <strong
-                    >Must be in hexadecimal and length must be multiple of 2 with min value = 10 and
-                    max value = 64.</strong
-                  ></span
+                  <strong>
+                    Must be in hexadecimal and length must be multiple of 2 with min value = 10 and
+                    max value = 64.
+                  </strong></span
                 >
               }
             </ng-template>
@@ -2062,7 +2062,7 @@
   <cd-form-button-panel
     (submitActionEvent)="onSubmit()"
     [form]="serviceForm"
-    [submitText]="(action | titlecase) + ' ' + resource"
+    [submitText]="submitAction"
     [modalForm]="true"
   ></cd-form-button-panel>
 </cds-modal>

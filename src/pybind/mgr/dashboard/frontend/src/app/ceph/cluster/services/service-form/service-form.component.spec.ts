@@ -254,7 +254,7 @@ describe('ServiceFormComponent', () => {
           placement: {},
           unmanaged: false,
           rgw_frontend_port: 1234,
-          rgw_frontend_ssl_certificate: '',
+          certificate_source: 'cephadm-signed',
           ssl: true
         });
       });
@@ -378,8 +378,7 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
           api_user: 'user',
           api_password: 'password',
           api_secure: true,
-          ssl_cert: '',
-          ssl_key: '',
+          certificate_source: 'cephadm-signed',
           trusted_ip_list: ['172.16.0.5', '192.1.1.10']
         });
       });
@@ -512,6 +511,7 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
       it('should submit nvmeof with mTLS', () => {
         formHelper.setValue('enable_mtls', true);
         formHelper.setValue('pool', 'rbd');
+        formHelper.setValue('certificateType', component.CertificateType.external);
         formHelper.setValue('root_ca_cert', 'root_ca_cert');
         formHelper.setValue('client_cert', 'client_cert');
         formHelper.setValue('client_key', 'client_key');

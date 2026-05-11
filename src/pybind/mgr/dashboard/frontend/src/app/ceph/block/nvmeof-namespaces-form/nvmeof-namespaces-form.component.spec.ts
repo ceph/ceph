@@ -195,7 +195,7 @@ describe('NvmeofNamespacesFormComponent', () => {
       component.onSubmit();
 
       const request = (nvmeofService.createNamespace as jasmine.Spy).calls.mostRecent().args[1];
-      expect(request.block_size).toBeUndefined();
+      expect(request.block_size).toBe(10);
     });
 
     describe('RADOS namespace field', () => {

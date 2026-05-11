@@ -8,7 +8,7 @@ import { NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
 import { ListItem } from 'carbon-components-angular';
 import _ from 'lodash';
 import { forkJoin, Observable, Subject, Subscription } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { distinctUntilChanged, filter, map } from 'rxjs/operators';
 import { Pool } from '~/app/ceph/pool/pool';
 import { CreateRgwServiceEntitiesComponent } from '~/app/ceph/rgw/create-rgw-service-entities/create-rgw-service-entities.component';
 import { RgwRealm, RgwZonegroup, RgwZone, RgwEntities } from '~/app/ceph/rgw/models/rgw-multisite';
@@ -36,6 +36,7 @@ import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Host } from '~/app/shared/models/host.interface';
 import {
+  CephServiceCertificate,
   CephServiceSpec,
   CertificateType,
   QatOptions,
@@ -80,6 +81,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   serviceForm: CdFormGroup;
   action: string;
   resource: string;
+  submitAction: string;
   serviceTypes: string[] = [];
   serviceIds: string[] = [];
   selectedHosts: string[] = [];
@@ -98,6 +100,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   realmList: RgwRealm[] = [];
   zonegroupList: RgwZonegroup[] = [];
   zoneList: RgwZone[] = [];
+  filteredZonegroupList: RgwZonegroup[] = [];
+  filteredZoneList: RgwZone[] = [];
   defaultZonegroup: RgwZonegroup;
   showRealmCreationForm = false;
   defaultsInfo: { defaultRealmName: string; defaultZonegroupName: string; defaultZoneName: string };
@@ -117,6 +121,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   }));
   showMgmtGatewayMessage: boolean = false;
   showCertSourceChangeWarning: boolean = false;
+  showRgwRealmChangedInfo: boolean = false;
   rgwModuleEnabled = false;
   qatCompressionOptions = [
     { value: QatOptions.hw, label: 'Hardware' },
@@ -125,8 +130,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   ];
   open: boolean = false;
   hostsAndLabels$: Observable<{ hosts: { content: string }[]; labels: { content: string }[] }>;
-  currentCertificate: { has_certificate?: boolean } | null = null;
-  currentSpecCertificateSource: string | null = null;
+  currentCertificate: CephServiceCertificate = null;
+  currentSpecCertificateSource: string = null;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -693,6 +698,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   ngOnInit(): void {
     this.open = true;
     this.action = this.actionLabels.CREATE;
+    this.submitAction = `${this.action} ${this.resource}`;
     this.resolveRoute();
     this.getRgwModuleStatus();
     this.mgrModuleService.updateCompleted$.subscribe(() => this.getRgwModuleStatus());
@@ -734,6 +740,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
 
     if (this.editing) {
       this.action = this.actionLabels.EDIT;
+      this.submitAction = this.actionLabels.SAVE_CHANGES;
       this.disableForEditing(this.serviceType);
       this.cephServiceService
         .list(new HttpParams({ fromObject: { limit: -1, offset: 0 } }), this.serviceName)
@@ -742,6 +749,15 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           formKeys.forEach((keys) => {
             this.serviceForm.get(keys).setValue(response[0][keys]);
           });
+          // change is made because on editing mds service, a new service was created with mds.mds.service
+          // For non-prefixed services (mgr, mon, etc.), if service_id is empty,
+          // set it to the full service name
+          if (!response[0]['service_id'] && !this.isPrefixedNamedService) {
+            this.serviceForm.get('service_id').setValue(this.serviceName);
+          }
+
+          // Disable fields AFTER setting values to ensure the view updates properly
+          this.disableForEditing(this.serviceType);
           if (response[0].certificate) {
             this.currentCertificate = response[0].certificate;
           }
@@ -971,7 +987,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               }
               break;
             default:
-              this.serviceForm.get('service_id').setValue(this.serviceName);
+              // No special handling needed for other service types (mds, nfs, etc.)
+              // service_id is already correctly set from API response at line 749
+              break;
           }
         });
     }
@@ -1114,11 +1132,17 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           this.defaultZoneId
         );
         if (!this.editing) {
-          this.serviceForm.get('realm_name').setValue(this.defaultsInfo['defaultRealmName']);
-          this.serviceForm
-            .get('zonegroup_name')
-            .setValue(this.defaultsInfo['defaultZonegroupName']);
-          this.serviceForm.get('zone_name').setValue(this.defaultsInfo['defaultZoneName']);
+          this.filteredZonegroupList = [...this.zonegroupList];
+          this.filteredZoneList = [...this.zoneList];
+          setTimeout(() => {
+            this.rgwInitializing = true;
+            this.serviceForm.get('realm_name').setValue(this.defaultsInfo['defaultRealmName']);
+            this.serviceForm
+              .get('zonegroup_name')
+              .setValue(this.defaultsInfo['defaultZonegroupName']);
+            this.serviceForm.get('zone_name').setValue(this.defaultsInfo['defaultZoneName']);
+            this.rgwInitializing = false;
+          });
         } else {
           if (realm_name && !this.realmNames.includes(realm_name)) {
             const realm = new RgwRealm();
@@ -1139,9 +1163,28 @@ export class ServiceFormComponent extends CdForm implements OnInit {
             zonegroup_name = 'default';
             zone_name = 'default';
           }
-          this.serviceForm.get('realm_name').setValue(realm_name);
-          this.serviceForm.get('zonegroup_name').setValue(zonegroup_name);
-          this.serviceForm.get('zone_name').setValue(zone_name);
+          this.originalRgwRealm = realm_name ?? null;
+          this.originalRgwZonegroup = zonegroup_name ?? null;
+          this.originalRgwZone = zone_name ?? null;
+          this.filteredZonegroupList = realm_name
+            ? this.zonegroupList.filter((zg) => {
+                const realm = this.realmList.find((r) => r.name === realm_name);
+                return realm ? zg.realm_id === realm.id : true;
+              })
+            : [...this.zonegroupList];
+          const selectedZonegroup = this.zonegroupList.find((zg) => zg.name === zonegroup_name);
+          this.filteredZoneList = selectedZonegroup?.zones?.length
+            ? this.zoneList.filter((z) =>
+                selectedZonegroup.zones.some((zgz) => zgz.name === z.name)
+              )
+            : [...this.zoneList];
+          setTimeout(() => {
+            this.rgwInitializing = true;
+            this.serviceForm.get('realm_name').setValue(realm_name);
+            this.serviceForm.get('zonegroup_name').setValue(zonegroup_name);
+            this.serviceForm.get('zone_name').setValue(zone_name);
+            this.rgwInitializing = false;
+          });
         }
         if (qat) {
           this.serviceForm.get(`qat.compression`)?.setValue(qat['compression']);
@@ -1152,6 +1195,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           this.showRealmCreationForm = false;
         }
         this.updateRgwControlStates();
+        this.subscribeToRgwSelectionChanges();
       },
       (_error) => {
         const defaultZone = new RgwZone();
@@ -1163,6 +1207,87 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         this.updateRgwControlStates();
       }
     );
+  }
+
+  private rgwSelectionSubscribed = false;
+  private rgwInitializing = false;
+  private originalRgwRealm: string | null = null;
+  private originalRgwZonegroup: string | null = null;
+  private originalRgwZone: string | null = null;
+
+  private subscribeToRgwSelectionChanges(): void {
+    if (this.rgwSelectionSubscribed) {
+      return;
+    }
+    this.rgwSelectionSubscribed = true;
+
+    this.serviceForm
+      .get('realm_name')
+      .valueChanges.pipe(distinctUntilChanged())
+      .subscribe((realmName: string) => {
+        const realm = this.realmList.find((r) => r.name === realmName);
+        if (realm) {
+          this.filteredZonegroupList = this.zonegroupList.filter((zg) => zg.realm_id === realm.id);
+        } else {
+          this.filteredZonegroupList = [...this.zonegroupList];
+        }
+        if (this.rgwInitializing) {
+          return;
+        }
+        this.filteredZoneList = [];
+        this.updateRgwControlStates();
+        const firstZonegroup = this.filteredZonegroupList[0]?.name ?? null;
+        setTimeout(() => {
+          this.serviceForm.get('zonegroup_name').setValue(firstZonegroup);
+          this.serviceForm.get('zone_name').setValue(null);
+        });
+      });
+
+    this.serviceForm
+      .get('zonegroup_name')
+      .valueChanges.pipe(
+        distinctUntilChanged(),
+        filter((v) => !!v)
+      )
+      .subscribe((zonegroupName: string) => {
+        const zonegroup = this.zonegroupList.find((zg) => zg.name === zonegroupName);
+        if (zonegroup?.zones?.length) {
+          this.filteredZoneList = this.zoneList.filter((z) =>
+            zonegroup.zones.some((zgz) => zgz.name === z.name)
+          );
+        } else {
+          this.filteredZoneList = [...this.zoneList];
+        }
+        this.updateRgwControlStates();
+        // During initial population the caller's setTimeout sets zone_name explicitly.
+        // For user-driven changes, auto-select the first available zone.
+        if (!this.rgwInitializing) {
+          const firstZone = this.filteredZoneList[0]?.name ?? null;
+          setTimeout(() => {
+            this.serviceForm.get('zone_name').setValue(firstZone);
+          });
+        }
+      });
+
+    // Re-evaluate the banner whenever zone_name settles on a value.
+    this.serviceForm
+      .get('zone_name')
+      .valueChanges.pipe(distinctUntilChanged())
+      .subscribe(() => {
+        if (!this.rgwInitializing) {
+          this.updateRgwRealmChangedInfo();
+        }
+      });
+  }
+
+  private updateRgwRealmChangedInfo(): void {
+    const realm = this.serviceForm.get('realm_name').value;
+    const zonegroup = this.serviceForm.get('zonegroup_name').value;
+    const zone = this.serviceForm.get('zone_name').value;
+    this.showRgwRealmChangedInfo =
+      realm !== this.originalRgwRealm ||
+      zonegroup !== this.originalRgwZonegroup ||
+      zone !== this.originalRgwZone;
   }
 
   setNvmeServiceId() {
@@ -1219,9 +1344,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   }
 
   private updateRgwPlacementControlsState(): void {
-    this.toggleFormControlState('realm_name', this.editing || this.realmList.length === 0);
-    this.toggleFormControlState('zonegroup_name', this.editing || this.zonegroupList.length === 0);
-    this.toggleFormControlState('zone_name', this.editing || this.zoneList.length === 0);
+    this.toggleFormControlState('realm_name', this.realmList.length === 0);
+    this.toggleFormControlState('zonegroup_name', this.zonegroupList.length === 0);
+    this.toggleFormControlState('zone_name', this.zoneList.length === 0);
   }
 
   private updateGrafanaPasswordControlState(
@@ -1276,19 +1401,19 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     const zonegroupControl = this.serviceForm.get('zonegroup_name');
     const zoneControl = this.serviceForm.get('zone_name');
 
-    if (this.editing || this.realmList.length === 0) {
+    if (this.realmList.length === 0) {
       realmControl.disable({ emitEvent: false });
     } else {
       realmControl.enable({ emitEvent: false });
     }
 
-    if (this.editing || this.zonegroupList.length === 0) {
+    if (this.filteredZonegroupList.length === 0) {
       zonegroupControl.disable({ emitEvent: false });
     } else {
       zonegroupControl.enable({ emitEvent: false });
     }
 
-    if (this.editing || this.zoneList.length === 0) {
+    if (this.filteredZoneList.length === 0) {
       zoneControl.disable({ emitEvent: false });
     } else {
       zoneControl.enable({ emitEvent: false });

@@ -21,6 +21,7 @@ export interface CephServiceSpec {
   service_id: string;
   unmanaged: boolean;
   status: CephServiceStatus;
+  certificate?: CephServiceCertificate;
   spec: CephServiceAdditionalSpec;
   placement: CephServicePlacement;
 }
@@ -64,6 +65,10 @@ export interface CephServiceAdditionalSpec {
   features: string[];
   config_uri: string;
   custom_dns: string[];
+  custom_sans?: string[];
+  certificate_source?: string;
+  zonegroup_hostnames?: string[];
+  wildcard_enabled?: boolean;
   join_sources: string[];
   include_ceph_users: string[];
   https_address: string;
@@ -74,6 +79,23 @@ export interface CephServiceAdditionalSpec {
   enable_auth: boolean;
   encryption_key?: string;
   qat: QatSepcs;
+}
+
+export type CephServiceCertificateStatus =
+  | 'valid'
+  | 'expiring'
+  | 'expired'
+  | 'not_configured'
+  | 'invalid';
+
+export interface CephServiceCertificate {
+  has_certificate: boolean;
+  cert_name: string;
+  expiry_date: Date | string;
+  days_to_expiration: number;
+  status: CephServiceCertificateStatus | string;
+  signed_by?: string;
+  issuer?: string;
 }
 
 export interface CephServicePlacement {
@@ -97,3 +119,12 @@ export enum CertificateType {
   internal = 'internal',
   external = 'external'
 }
+
+export const CERTIFICATE_STATUS_ICON_MAP = {
+  valid: 'success',
+  expiring: 'warning',
+  expired: 'danger',
+  not_configured: 'warning',
+  invalid: 'danger',
+  default: 'warning'
+} as const;
