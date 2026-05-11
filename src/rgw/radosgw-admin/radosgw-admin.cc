@@ -86,6 +86,7 @@ extern "C" {
 #include "rgw_sal_config.h"
 #include "rgw_data_access.h"
 #include "rgw_account.h"
+#include "rgw_oidc_provider.h"
 #include "rgw_bucket_logging.h"
 #include "rgw_dedup_cluster.h"
 #include "rgw_dedup_filter.h"
@@ -339,6 +340,11 @@ void usage()
   cout << "  role policy detach               detach a managed policy\n";
   cout << "  role policy list attached        list attached managed policies\n";
   cout << "  role update                      update max_session_duration of a role\n";
+  cout << "  oidc-provider create             create an OIDC provider (global if no --account-id)\n";
+  cout << "  oidc-provider modify             update thumbprints and/or client-ids of an OIDC provider\n";
+  cout << "  oidc-provider get                get an OIDC provider\n";
+  cout << "  oidc-provider delete             delete an OIDC provider\n";
+  cout << "  oidc-provider list               list OIDC providers\n";
   cout << "  reshard add                      schedule a resharding of a bucket\n";
   cout << "  reshard list                     list all bucket resharding or scheduled to be resharded\n";
   cout << "  reshard status                   read bucket resharding status\n";
@@ -547,6 +553,10 @@ void usage()
   cout << "   --path-prefix                 path prefix for filtering roles\n";
   cout << "   --description                 Role description\n";
   cout << "   --policy-arn                  ARN of a managed policy\n";
+  cout << "\nOIDC Provider options:\n";
+  cout << "   --provider-url                URL of the OIDC provider\n";
+  cout << "   --client-ids                  comma-separated list of client IDs\n";
+  cout << "   --thumbprints                 comma-separated list of thumbprints\n";
 #ifdef WITH_RADOSGW_RADOS
   cout << "\nMFA options:\n";
 #endif
@@ -953,6 +963,11 @@ enum class OPT {
   ROLE_POLICY_DETACH,
   ROLE_POLICY_LIST_ATTACHED,
   ROLE_UPDATE,
+  OIDC_PROVIDER_CREATE,
+  OIDC_PROVIDER_MODIFY,
+  OIDC_PROVIDER_GET,
+  OIDC_PROVIDER_DELETE,
+  OIDC_PROVIDER_LIST,
 #ifdef WITH_RADOSGW_RADOS
   RESHARD_ADD,
   RESHARD_LIST,
@@ -1253,6 +1268,11 @@ static SimpleCmd::Commands all_cmds = {
   { "role policy detach", OPT::ROLE_POLICY_DETACH },
   { "role policy list attached", OPT::ROLE_POLICY_LIST_ATTACHED },
   { "role update", OPT::ROLE_UPDATE },
+  { "oidc-provider create", OPT::OIDC_PROVIDER_CREATE },
+  { "oidc-provider modify", OPT::OIDC_PROVIDER_MODIFY },
+  { "oidc-provider get", OPT::OIDC_PROVIDER_GET },
+  { "oidc-provider delete", OPT::OIDC_PROVIDER_DELETE },
+  { "oidc-provider list", OPT::OIDC_PROVIDER_LIST },
 #ifdef WITH_RADOSGW_RADOS
   { "reshard bucket", OPT::BUCKET_RESHARD },
   { "reshard add", OPT::RESHARD_ADD },
@@ -3771,6 +3791,7 @@ int main(int argc, const char **argv)
   std::optional<string> opt_zonegroup_name, opt_zonegroup_id;
   std::string api_name;
   std::string role_name, path, assume_role_doc, policy_name, perm_policy_doc, path_prefix, max_session_duration;
+  std::string provider_url, client_ids_str, thumbprints_str;
   std::string description;
   std::string policy_arn;
   std::string redirect_zone;
@@ -4548,6 +4569,12 @@ int main(int argc, const char **argv)
       policy_arn = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-session-duration", (char*)NULL)) {
       max_session_duration = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--provider-url", (char*)NULL)) {
+      provider_url = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--client-ids", (char*)NULL)) {
+      client_ids_str = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--thumbprints", (char*)NULL)) {
+      thumbprints_str = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--description", (char*)NULL)) {
       description = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--totp-serial", (char*)NULL)) {
@@ -4861,6 +4888,8 @@ int main(int argc, const char **argv)
 #endif
 			 OPT::ROLE_GET,
 			 OPT::ROLE_LIST,
+			 OPT::OIDC_PROVIDER_GET,
+			 OPT::OIDC_PROVIDER_LIST,
 			 OPT::ROLE_POLICY_LIST,
 			 OPT::ROLE_POLICY_GET,
 			 OPT::ROLE_POLICY_LIST_ATTACHED,
@@ -4976,6 +5005,11 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT::ROLE_POLICY_DETACH
                           && opt_cmd != OPT::ROLE_POLICY_LIST_ATTACHED
                           && opt_cmd != OPT::ROLE_UPDATE
+                          && opt_cmd != OPT::OIDC_PROVIDER_CREATE
+                          && opt_cmd != OPT::OIDC_PROVIDER_MODIFY
+                          && opt_cmd != OPT::OIDC_PROVIDER_GET
+                          && opt_cmd != OPT::OIDC_PROVIDER_DELETE
+                          && opt_cmd != OPT::OIDC_PROVIDER_LIST
 #ifdef WITH_RADOSGW_RADOS
                           && opt_cmd != OPT::RESHARD_ADD
                           && opt_cmd != OPT::RESHARD_CANCEL
@@ -7036,6 +7070,8 @@ int main(int argc, const char **argv)
 #endif
                                         OPT::CAPS_ADD, OPT::CAPS_RM,
                                         OPT::ROLE_CREATE, OPT::ROLE_DELETE,
+                                        OPT::OIDC_PROVIDER_CREATE, OPT::OIDC_PROVIDER_MODIFY,
+                                        OPT::OIDC_PROVIDER_DELETE,
                                         OPT::ROLE_POLICY_PUT, OPT::ROLE_POLICY_DELETE,
                                         OPT::ROLE_POLICY_ATTACH, OPT::ROLE_POLICY_DETACH,
                                         OPT::USER_POLICY_ATTACH, OPT::USER_POLICY_DETACH,
@@ -7179,6 +7215,19 @@ int main(int argc, const char **argv)
   std::string err_msg;
 
   bool output_user_info = true;
+
+  // Helper: resolve OIDC scope from --account-id or global fallback.
+  // Returns negative error code if --tenant is used (not supported for OIDC).
+  auto resolve_oidc_tenant = [&]() -> std::pair<int, std::string> {
+    if (!tenant.empty()) {
+      cerr << "ERROR: --tenant is not supported for OIDC providers. "
+           << "Use --account-id for account-scoped providers, "
+           << "or omit for global providers." << std::endl;
+      return {-EINVAL, {}};
+    }
+    if (!account_id.empty()) return {0, account_id};
+    return {0, std::string(global_oidc_id)};
+  };
 
   switch (opt_cmd) {
   case OPT::USER_INFO:
@@ -7518,6 +7567,150 @@ int main(int argc, const char **argv)
         }
         formatter->close_section(); // result
       }
+      formatter->flush(cout);
+      return 0;
+    }
+  case OPT::OIDC_PROVIDER_CREATE:
+    {
+      if (provider_url.empty()) {
+        cerr << "ERROR: --provider-url is required" << std::endl;
+        return EINVAL;
+      }
+
+      const auto [oidc_ret, oidc_tenant] = resolve_oidc_tenant();
+      if (oidc_ret < 0) return -oidc_ret;
+
+      RGWOIDCProviderInfo info;
+      info.provider_url = provider_url;
+      info.tenant = oidc_tenant;
+      info.creation_date = format_creation_date(ceph::real_clock::now());
+
+      // parse comma-separated client IDs
+      if (!client_ids_str.empty()) {
+        get_str_vec(client_ids_str, ",", info.client_ids);
+      }
+      // parse comma-separated thumbprints
+      if (!thumbprints_str.empty()) {
+        get_str_vec(thumbprints_str, ",", info.thumbprints);
+      }
+
+      ret = driver->store_oidc_provider(dpp(), null_yield, info,
+                                        /*exclusive=*/true, nullptr);
+      if (ret < 0) {
+        cerr << "ERROR: failed to create OIDC provider: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      encode_json("oidc_provider", info, formatter.get());
+      formatter->flush(cout);
+      return 0;
+    }
+  case OPT::OIDC_PROVIDER_MODIFY:
+    {
+      if (provider_url.empty()) {
+        cerr << "ERROR: --provider-url is required" << std::endl;
+        return EINVAL;
+      }
+
+      if (client_ids_str.empty() && thumbprints_str.empty()) {
+        cerr << "ERROR: at least one of --client-ids or --thumbprints is required" << std::endl;
+        return EINVAL;
+      }
+
+      const auto [oidc_ret, oidc_tenant] = resolve_oidc_tenant();
+      if (oidc_ret < 0) return -oidc_ret;
+
+      RGWOIDCProviderInfo info;
+      RGWObjVersionTracker objv_tracker;
+      ret = driver->load_oidc_provider(dpp(), null_yield, oidc_tenant,
+                                       url_remove_prefix(provider_url),
+                                       info, &objv_tracker);
+      if (ret < 0) {
+        cerr << "ERROR: failed to load OIDC provider: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      if (!client_ids_str.empty()) {
+        info.client_ids.clear();
+        get_str_vec(client_ids_str, ",", info.client_ids);
+      }
+      if (!thumbprints_str.empty()) {
+        info.thumbprints.clear();
+        get_str_vec(thumbprints_str, ",", info.thumbprints);
+      }
+
+      constexpr bool exclusive = false;
+      ret = driver->store_oidc_provider(dpp(), null_yield, info,
+                                        exclusive, &objv_tracker);
+      if (ret < 0) {
+        cerr << "ERROR: failed to modify OIDC provider: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      encode_json("oidc_provider", info, formatter.get());
+      formatter->flush(cout);
+      return 0;
+    }
+  case OPT::OIDC_PROVIDER_GET:
+    {
+      if (provider_url.empty()) {
+        cerr << "ERROR: --provider-url is required" << std::endl;
+        return EINVAL;
+      }
+
+      const auto [oidc_ret, oidc_tenant] = resolve_oidc_tenant();
+      if (oidc_ret < 0) return -oidc_ret;
+
+      RGWOIDCProviderInfo info;
+      ret = driver->load_oidc_provider(dpp(), null_yield, oidc_tenant,
+                                       url_remove_prefix(provider_url),
+                                       info, nullptr);
+      if (ret < 0) {
+        cerr << "ERROR: failed to get OIDC provider: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      encode_json("oidc_provider", info, formatter.get());
+      formatter->flush(cout);
+      return 0;
+    }
+  case OPT::OIDC_PROVIDER_DELETE:
+    {
+      if (provider_url.empty()) {
+        cerr << "ERROR: --provider-url is required" << std::endl;
+        return EINVAL;
+      }
+
+      const auto [oidc_ret, oidc_tenant] = resolve_oidc_tenant();
+      if (oidc_ret < 0) return -oidc_ret;
+
+      ret = driver->delete_oidc_provider(dpp(), null_yield, oidc_tenant,
+                                         url_remove_prefix(provider_url));
+      if (ret < 0) {
+        cerr << "ERROR: failed to delete OIDC provider: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      cout << "OIDC provider successfully deleted" << std::endl;
+      return 0;
+    }
+  case OPT::OIDC_PROVIDER_LIST:
+    {
+      const auto [oidc_ret, oidc_tenant] = resolve_oidc_tenant();
+      if (oidc_ret < 0) return -oidc_ret;
+
+      std::vector<RGWOIDCProviderInfo> providers;
+      ret = driver->get_oidc_providers(dpp(), null_yield, oidc_tenant, providers);
+      if (ret < 0) {
+        cerr << "ERROR: failed to list OIDC providers: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      formatter->open_array_section("oidc_providers");
+      for (const auto& p : providers) {
+        encode_json("oidc_provider", p, formatter.get());
+      }
+      formatter->close_section();
       formatter->flush(cout);
       return 0;
     }
