@@ -122,6 +122,8 @@ void Cache::register_metrics(store_index_t store_index)
   last_dirty_io_by_src_ext = {};
   last_trim_rewrites = {};
   last_reclaim_rewrites = {};
+  last_promote_rewrites = {};;
+  last_demote_rewrites = {};
   last_access = {};
   last_cache_absent_by_src = {};
   last_access_by_src_ext = {};
@@ -761,6 +763,34 @@ void Cache::register_metrics(store_index_t store_index)
         "version_sum_reclaim",
         stats.reclaim_rewrites.dirty_version,
         sm::description("sum of the version from rewrite-reclaim extents"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_counter(
+        "version_count_promote",
+        [this] {
+          return stats.promote_rewrites.get_num_rewrites();
+        },
+        sm::description("total number of rewrite-promote extents"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_counter(
+        "version_sum_promote",
+        stats.promote_rewrites.dirty_version,
+        sm::description("sum of the version from rewrite-promote extents"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_counter(
+        "version_count_demote",
+        [this] {
+          return stats.demote_rewrites.get_num_rewrites();
+        },
+        sm::description("total number of rewrite-demote extents"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_counter(
+        "version_sum_demote",
+        stats.demote_rewrites.dirty_version,
+        sm::description("sum of the version from rewrite-demote extents"),
         {sm::label_instance("shard_store_index", std::to_string(store_index))}
       ),
     }
@@ -1963,6 +1993,10 @@ record_t Cache::prepare_record(
   } else if (trans_src == Transaction::src_t::CLEANER_MAIN ||
              trans_src == Transaction::src_t::CLEANER_COLD) {
     stats.reclaim_rewrites.add(rewrite_stats);
+  } else if (trans_src == Transaction::src_t::PROMOTE) {
+    stats.promote_rewrites.add(rewrite_stats);
+  } else if (trans_src == Transaction::src_t::DEMOTE) {
+    stats.demote_rewrites.add(rewrite_stats);
   } else {
     assert(rewrite_stats.is_clear());
   }
@@ -2860,6 +2894,10 @@ cache_stats_t Cache::get_stats(
     _trim_rewrites.minus(last_trim_rewrites);
     rewrite_stats_t _reclaim_rewrites = stats.reclaim_rewrites;
     _reclaim_rewrites.minus(last_reclaim_rewrites);
+    rewrite_stats_t _promote_rewrites = stats.promote_rewrites;
+    _promote_rewrites.minus(last_promote_rewrites);
+    rewrite_stats_t _demote_rewrites = stats.demote_rewrites;
+    _demote_rewrites.minus(last_demote_rewrites);
     oss << "\nrewrite trim ndirty="
         << fmt::format(dfmt, _trim_rewrites.num_n_dirty/seconds)
         << "ps, dirty="
@@ -2871,7 +2909,19 @@ cache_stats_t Cache::get_stats(
         << "ps, dirty="
         << fmt::format(dfmt, _reclaim_rewrites.num_dirty/seconds)
         << "ps, dversion="
-        << fmt::format(dfmt, _reclaim_rewrites.get_avg_version());
+        << fmt::format(dfmt, _reclaim_rewrites.get_avg_version())
+        << "; promote ndirty="
+        << fmt::format(dfmt, _promote_rewrites.num_n_dirty/seconds)
+        << "ps, dirty="
+        << fmt::format(dfmt, _promote_rewrites.num_dirty/seconds)
+        << "ps, dversion="
+        << fmt::format(dfmt, _promote_rewrites.get_avg_version())
+        << "; demote ndirty="
+        << fmt::format(dfmt, _demote_rewrites.num_n_dirty/seconds)
+        << "ps, dirty="
+        << fmt::format(dfmt, _demote_rewrites.num_dirty/seconds)
+        << "ps, dversion="
+        << fmt::format(dfmt, _demote_rewrites.get_avg_version());
 
     oss << "\ncache total"
         << cache_size_stats_t{extents_index.get_bytes(), extents_index.size()};
@@ -2930,6 +2980,8 @@ cache_stats_t Cache::get_stats(
     last_dirty_io_by_src_ext = stats.dirty_io_by_src_ext;
     last_trim_rewrites = stats.trim_rewrites;
     last_reclaim_rewrites = stats.reclaim_rewrites;
+    last_promote_rewrites = stats.promote_rewrites;
+    last_demote_rewrites = stats.demote_rewrites;
     last_cache_absent_by_src = stats.cache_absent_by_src;
     last_access_by_src_ext = stats.access_by_src_ext;
   }

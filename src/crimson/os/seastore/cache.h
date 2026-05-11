@@ -1901,6 +1901,8 @@ private:
 
     rewrite_stats_t trim_rewrites;
     rewrite_stats_t reclaim_rewrites;
+    rewrite_stats_t promote_rewrites;
+    rewrite_stats_t demote_rewrites;
   } stats;
 
   mutable dirty_io_stats_t last_dirty_io;
@@ -1908,6 +1910,8 @@ private:
     last_dirty_io_by_src_ext;
   mutable rewrite_stats_t last_trim_rewrites;
   mutable rewrite_stats_t last_reclaim_rewrites;
+  mutable rewrite_stats_t last_promote_rewrites;
+  mutable rewrite_stats_t last_demote_rewrites;
   mutable cache_access_stats_t last_access;
   mutable counter_by_src_t<uint64_t> last_cache_absent_by_src;
   mutable counter_by_src_t<counter_by_extent_t<cache_access_stats_t> >
