@@ -129,7 +129,6 @@ void OSDECProfileGetReply::dump(Formatter* f) const {
   encode_json("crush-osds-per-failure-domain", crush_osds_per_failure_domain,
               f);
   encode_json("crush-root", crush_root, f);
-  encode_json("num-zones", num_zones, f);
   encode_json("plugin", plugin, f);
   encode_json("k", k, f);
   encode_json("m", m, f);
@@ -155,7 +154,6 @@ void OSDECProfileGetReply::decode_json(JSONObj* obj) {
   JSONDecoder::decode_json("crush-osds-per-failure-domain",
                            crush_osds_per_failure_domain, obj);
   JSONDecoder::decode_json("crush-root", crush_root, obj);
-  JSONDecoder::decode_json("num-zones", num_zones, obj);
   JSONDecoder::decode_json("plugin", plugin, obj);
   JSONDecoder::decode_json("k", k, obj);
   JSONDecoder::decode_json("m", m, obj);

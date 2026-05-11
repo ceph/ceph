@@ -42,7 +42,6 @@ class ErasureCode : public ErasureCodeInterface {
   std::string rule_device_class;
   int rule_osds_per_failure_domain = -1;
   int rule_num_osd_failure_domains = -1;
-  int rule_num_zones = -1;
 
   ~ErasureCode() override {
   }
@@ -53,7 +52,9 @@ class ErasureCode : public ErasureCodeInterface {
     return _profile;
   }
 
+  using ErasureCodeInterface::create_rule;
   int create_rule(const std::string &name,
+                  int num_zones,
                   CrushWrapper &crush,
                   std::ostream *ss) const override;
 

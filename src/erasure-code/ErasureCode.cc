@@ -76,9 +76,6 @@ int ErasureCode::init(
   err |= to_int("crush-osds-per-failure-domain", profile,
 		&rule_osds_per_failure_domain,
 		"0", ss);
-  err |= to_int("num_zones", profile,
-		&rule_num_zones,
-		"0", ss);
   err |= to_string("crush-device-class", profile,
 		   &rule_device_class,
 		   "", ss);
@@ -90,10 +87,11 @@ int ErasureCode::init(
 
 int ErasureCode::create_rule(
   const std::string &name,
+  int num_zones,
   CrushWrapper &crush,
   std::ostream *ss) const
 {
-  if (rule_num_zones > 1) {
+  if (num_zones > 1) {
     unsigned int k = get_data_chunk_count();
     unsigned int m = get_chunk_count() - k;
     return crush.add_simple_stretch_rule(
@@ -101,7 +99,7 @@ int ErasureCode::create_rule(
       rule_root,
       rule_zone_failure_domain,
       rule_osd_failure_domain,
-      rule_num_zones,
+      num_zones,
       k + m,
       rule_device_class,
       "indep",
