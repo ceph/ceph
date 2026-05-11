@@ -62,7 +62,8 @@ int create_sse_s3_bucket_key(const DoutPrefixProvider *dpp,
 
 int remove_sse_s3_bucket_key(const DoutPrefixProvider *dpp,
                              const std::string& actual_key,
-                             optional_yield y);
+                             optional_yield y,
+                             int* worker_id_out = nullptr);
 
 /**
  * SecretEngine Interface
