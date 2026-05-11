@@ -13,7 +13,7 @@ extern "C" {
  * 2 (for the length of secret) +
  * 256 (for the secret key, allowing for aES-256 with room)
  */
-#define MAX_RAW_SECRET_LEN ((size_t)(2 + 8 + 2 + 256))
+#define MAX_RAW_SECRET_LEN (2 + 8 + 2 + 256)
 
 /* Max length of base64 encoded secret. 4/3 original size (rounded up) */
 #define MAX_SECRET_LEN ((MAX_RAW_SECRET_LEN + (3 - 1)) * 4 / 3)
