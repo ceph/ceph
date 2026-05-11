@@ -13,7 +13,7 @@ Synopsis
 |             [--log-dir LOG_DIR] [--logrotate-dir LOGROTATE_DIR]
 |             [--unit-dir UNIT_DIR] [--verbose] [--timeout TIMEOUT]
 |             [--retry RETRY] [--no-container-init]
-|             {version,pull,inspect-image,ls,list-networks,list-rdma,adopt,rm-daemon,rm-cluster,remove-file,run,shell,enter,ceph-volume,unit,logs,bootstrap,deploy,check-host,check-online,prepare-host,prepare-host-sudo-hardening,setup-ssh-user,add-repo,rm-repo,install,list-images,update-osd-service}
+|             {version,pull,inspect-image,ls,list-networks,list-rdma,adopt,rm-daemon,rm-cluster,remove-file,sysctl-dir,run,shell,enter,ceph-volume,unit,logs,bootstrap,deploy,check-host,check-online,prepare-host,prepare-host-sudo-hardening,setup-ssh-user,add-repo,rm-repo,install,list-images,update-osd-service}
 |               ...
 
 
@@ -93,6 +93,8 @@ Synopsis
 | **cephadm** **check-online**
 
 | **cephadm** **remove-file** [-h] [--fsid FSID] --path PATH
+
+| **cephadm** **sysctl-dir** [-h] [--fsid FSID] (--list | --apply-system)
 
 | **cephadm** **prepare-host**
 
@@ -313,6 +315,18 @@ Arguments:
 
 * [--fsid FSID]   cluster FSID (passed automatically when invoked by the orchestrator)
 * --path PATH     absolute path of the file to remove (required)
+
+
+sysctl-dir
+----------
+
+List basenames under ``/etc/sysctl.d`` or run ``sysctl --system`` on the local host.
+
+Arguments:
+
+* [--fsid FSID]      cluster FSID (passed automatically when invoked by the orchestrator)
+* --list             print one directory entry per line (sorted)
+* --apply-system     reload sysctl settings from all configuration paths
 
 
 deploy

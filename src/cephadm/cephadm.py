@@ -4666,6 +4666,25 @@ def command_remove_file(ctx: CephadmContext) -> int:
     return 0
 
 
+def command_sysctl_dir(ctx: CephadmContext) -> int:
+    """List basenames under sysctl.d or run sysctl --system"""
+    action = ctx.sysctl_dir_action
+    sysctl_dir = Path(SYSCTL_DIR)
+    if action == 'list':
+        if not sysctl_dir.is_dir():
+            raise Error(f'Not a directory: {SYSCTL_DIR}')
+        for name in sorted(p.name for p in sysctl_dir.iterdir()):
+            print(name)
+        return 0
+    if action == 'apply_system':
+        _out, _err, code = call(
+            ctx, ['sysctl', '--system'], verbosity=CallVerbosity.DEBUG)
+        if code:
+            raise Error(f'sysctl --system failed with code {code}: {_err}')
+        return 0
+    raise Error('sysctl-dir: no action specified')
+
+
 ##################################
 
 
@@ -5731,6 +5750,28 @@ def _get_parser():
         required=True,
         dest='remove_file_path',
         help='absolute path of the file to remove')
+
+    parser_sysctl_dir = subparsers.add_parser(
+        'sysctl-dir',
+        help='list entries in sysctl.d or run sysctl --system')
+    parser_sysctl_dir.set_defaults(func=command_sysctl_dir)
+    parser_sysctl_dir.add_argument(
+        '--fsid',
+        help='cluster FSID')
+    _sysctl_dir_action = parser_sysctl_dir.add_mutually_exclusive_group(
+        required=True)
+    _sysctl_dir_action.add_argument(
+        '--list',
+        dest='sysctl_dir_action',
+        action='store_const',
+        const='list',
+        help=f'print one basename per line from {SYSCTL_DIR}')
+    _sysctl_dir_action.add_argument(
+        '--apply-system',
+        dest='sysctl_dir_action',
+        action='store_const',
+        const='apply_system',
+        help='reload sysctl settings from all config paths (sysctl --system)')
 
     parser_maintenance = subparsers.add_parser(
         'host-maintenance', help='Manage the maintenance state of a host')
