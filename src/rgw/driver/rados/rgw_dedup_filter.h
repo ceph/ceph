@@ -18,6 +18,7 @@
 #include "include/encoding.h"
 #include <string>
 #include <unordered_set>
+#include <vector>
 
 namespace rgw::dedup {
 
@@ -43,7 +44,7 @@ namespace rgw::dedup {
                    const std::string& deny_sc_file,
                    const DoutPrefixProvider* dpp);
 
-    // Returns 0 on success, errno if construction failed.
+    // Returns 0 on success, negative errno if construction failed.
     int errcode() const { return d_errcode; }
 
     // Returns true if any filter dimension is active.
@@ -67,7 +68,7 @@ namespace rgw::dedup {
 
   private:
     // Read filter file: one name per line, '#' starts a comment, whitespace trimmed
-    // On success returns 0 and populates name_set; on error returns errno code.
+    // On success returns 0 and populates name_set; on error returns negative errno.
     static int read_filter_file(const std::string& path,
                                 std::unordered_set<std::string>& name_set,
                                 int (*validator)(const std::string&),

@@ -2307,9 +2307,10 @@ def test_copy_after_dedup():
     # create files in range [8MB, 32MB] aligned on RADOS_OBJ_SIZE
     gen_files_in_range(files, num_files, 8*MB, 32*MB)
 
-    bucket_cp= gen_bucket_name()
+    bucket_cp=gen_bucket_name()
     bucket_names=[]
     conns=[]
+    conn=None
     try:
         conn = get_single_connection()
         conn.create_bucket(Bucket=bucket_cp)
@@ -2359,9 +2360,15 @@ def test_copy_after_dedup():
 
     finally:
         # cleanup must be executed even after a failure
-        delete_bucket_with_all_objects(bucket_cp, conn)
-        if len(bucket_names) > 0:
-            cleanup_all_buckets(bucket_names, conns)
+        if conn:
+            delete_bucket_with_all_objects(bucket_cp, conn)
+            if len(bucket_names) > 0:
+                cleanup_all_buckets(bucket_names, conns)
+
+            result = admin(['gc', 'process', '--include-all'])
+            assert result[1] == 0
+        else:
+            cleanup_local()
 
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test

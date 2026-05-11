@@ -9396,7 +9396,7 @@ next:
       else {
 	cerr << "ERROR: Failed reading stat counters" << std::endl;
       }
-      return ret;
+      return -ret;
     }
 
     if (opt_cmd == OPT::DEDUP_THROTTLE) {
@@ -9407,7 +9407,7 @@ next:
 
       if (throttle_stat) {
 	encode(throttle_msg, urgent_msg_bl);
-	return cluster::dedup_control_bl(store, dpp(), urgent_msg, urgent_msg_bl);
+	return -cluster::dedup_control_bl(store, dpp(), urgent_msg, urgent_msg_bl);
       }
 
       if (unlikely(!have_max_bucket_index_ops && !have_max_metadata_ops)) {
@@ -9428,7 +9428,7 @@ next:
       }
 
       encode(throttle_msg, urgent_msg_bl);
-      return cluster::dedup_control_bl(store, dpp(), urgent_msg, urgent_msg_bl);
+      return -cluster::dedup_control_bl(store, dpp(), urgent_msg, urgent_msg_bl);
     }
 
     if (opt_cmd == OPT::DEDUP_ABORT  ||
@@ -9444,7 +9444,7 @@ next:
       else {
 	urgent_msg = URGENT_MSG_RESUME;
       }
-      return cluster::dedup_control(store, dpp(), urgent_msg);
+      return -cluster::dedup_control(store, dpp(), urgent_msg);
     }
 
     if (opt_cmd == OPT::DEDUP_EXEC || opt_cmd == OPT::DEDUP_ESTIMATE) {
@@ -9473,12 +9473,14 @@ next:
       int filter_err = dedup_filter.errcode();
       if (filter_err != 0) {
 	cerr << "ERROR: failed to build dedup filter: "
-             << cpp_strerror(filter_err) << std::endl;
-	return filter_err;
+             << cpp_strerror(-filter_err) << std::endl;
+	return -filter_err;
       }
 
       int ret = cluster::dedup_restart_scan(store, dedup_type, dpp(),
 					    dedup_filter.is_active() ? &dedup_filter : nullptr);
+      // reverse negative errno codes
+      ret = -ret;
       if (ret == 0) {
 	std::cout << "Dedup was restarted successfully" << std::endl;
       }

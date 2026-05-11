@@ -21,6 +21,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <algorithm>
 
 #define dout_subsys ceph_subsys_rgw_dedup
 
@@ -83,7 +84,7 @@ namespace rgw::dedup {
     std::ifstream f(path);
     if (!f.is_open()) {
       ldpp_dout(dpp, 1) << __func__ << ":: failed to open filter file: " << path << dendl;
-      return ENOENT;
+      return -ENOENT;
     }
 
     std::string line;
@@ -115,7 +116,7 @@ namespace rgw::dedup {
         else {
           ldpp_dout(dpp, 1) << __func__ << "::" << path << "::" << line_num
                             << "::invalid name '" << name << "'" << dendl;
-          return EINVAL;
+          return -EINVAL;
         }
       }
     }
@@ -135,14 +136,14 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 1) << __func__
                         << ":: --allow-bucket-list and --deny-bucket-list are mutually exclusive"
                         << dendl;
-      d_errcode = EINVAL;
+      d_errcode = -EINVAL;
       return;
     }
     if (!allow_sc_file.empty() && !deny_sc_file.empty()) {
       ldpp_dout(dpp, 1) << __func__
                         << ":: --allow-storage-class-list and --deny-storage-class-list are mutually exclusive"
                         << dendl;
-      d_errcode = EINVAL;
+      d_errcode = -EINVAL;
       return;
     }
 
