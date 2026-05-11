@@ -13,7 +13,7 @@ Synopsis
 |             [--log-dir LOG_DIR] [--logrotate-dir LOGROTATE_DIR]
 |             [--unit-dir UNIT_DIR] [--verbose] [--timeout TIMEOUT]
 |             [--retry RETRY] [--no-container-init]
-|             {version,pull,inspect-image,ls,list-networks,list-rdma,adopt,rm-daemon,rm-cluster,run,shell,enter,ceph-volume,unit,logs,bootstrap,deploy,check-host,check-online,prepare-host,prepare-host-sudo-hardening,setup-ssh-user,add-repo,rm-repo,install,list-images,update-osd-service}
+|             {version,pull,inspect-image,ls,list-networks,list-rdma,adopt,rm-daemon,rm-cluster,remove-file,run,shell,enter,ceph-volume,unit,logs,bootstrap,deploy,check-host,check-online,prepare-host,prepare-host-sudo-hardening,setup-ssh-user,add-repo,rm-repo,install,list-images,update-osd-service}
 |               ...
 
 
@@ -91,6 +91,8 @@ Synopsis
 | **cephadm** **check-host** [-h] [--expect-hostname EXPECT_HOSTNAME]
 
 | **cephadm** **check-online**
+
+| **cephadm** **remove-file** [-h] [--fsid FSID] --path PATH
 
 | **cephadm** **prepare-host**
 
@@ -298,6 +300,19 @@ check that the host is online by running ``true`` locally.
 
 This command is primarily intended for cephadm internals (for example, the
 offline host watcher), rather than direct operator workflows.
+
+
+remove-file
+-----------
+
+Remove a regular file on the local host. Missing paths are ignored.
+Refuses directories and symbolic links, only plain files are
+removed.
+
+Arguments:
+
+* [--fsid FSID]   cluster FSID (passed automatically when invoked by the orchestrator)
+* --path PATH     absolute path of the file to remove (required)
 
 
 deploy

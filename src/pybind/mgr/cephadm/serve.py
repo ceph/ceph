@@ -1399,8 +1399,9 @@ class CephadmServe:
             if path == '/etc/ceph/ceph.conf':
                 continue
             self.log.info(f'Removing {host}:{path}')
-            cmd = ssh.RemoteCommand(ssh.Executables.RM, ['-f', path])
-            self.mgr.ssh.check_execute_command(host, cmd)
+            with self.mgr.async_timeout_handler(host, f'cephadm remove-file ({path})'):
+                self.mgr.wait_async(self._run_cephadm(
+                    host, cephadmNoImage, 'remove-file', ['--path', path]))
             updated_files = True
             self.mgr.cache.removed_client_file(host, path)
         if updated_files:

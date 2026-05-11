@@ -106,6 +106,44 @@ class TestCephAdm(object):
         _attempt_bind.side_effect = os_error
         assert port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
 
+    def test_command_remove_file(self, cephadm_fs):
+        rm_path = '/tmp/cephadm-remove-file-test'
+        cephadm_fs.create_file(rm_path, contents='x')
+        with with_cephadm_ctx(
+            ['remove-file', '--fsid', '00000000-0000-0000-0000-0000deadbeef', '--path', rm_path]
+        ) as ctx:
+            assert _cephadm.command_remove_file(ctx) == 0
+        assert not cephadm_fs.exists(rm_path)
+
+    def test_command_remove_file_missing_ok(self, cephadm_fs):
+        missing = '/tmp/cephadm-remove-file-missing'
+        with with_cephadm_ctx(
+            ['remove-file', '--fsid', '00000000-0000-0000-0000-0000deadbeef', '--path', missing]
+        ) as ctx:
+            assert _cephadm.command_remove_file(ctx) == 0
+
+    def test_command_remove_file_refuses_directory(self, cephadm_fs):
+        dpath = '/tmp/cephadm-remove-file-isdir'
+        cephadm_fs.create_dir(dpath)
+        with with_cephadm_ctx(
+            ['remove-file', '--fsid', '00000000-0000-0000-0000-0000deadbeef', '--path', dpath]
+        ) as ctx:
+            with pytest.raises(_cephadm.Error, match='Can not remove non-regular file'):
+                _cephadm.command_remove_file(ctx)
+        assert cephadm_fs.exists(dpath)
+
+    def test_command_remove_file_refuses_symlink(self, cephadm_fs):
+        target = '/tmp/cephadm-remove-file-symtarget'
+        link = '/tmp/cephadm-remove-file-symlink'
+        cephadm_fs.create_file(target, contents='x')
+        cephadm_fs.create_symlink(link, target)
+        with with_cephadm_ctx(
+            ['remove-file', '--fsid', '00000000-0000-0000-0000-0000deadbeef', '--path', link]
+        ) as ctx:
+            with pytest.raises(_cephadm.Error, match='Can not remove non-regular file'):
+                _cephadm.command_remove_file(ctx)
+        assert cephadm_fs.exists(link)
+
     @mock.patch('cephadm.socket.socket.bind')
     @mock.patch('cephadm.logger')
     def test_port_in_use_special_cases(self, _logger, _bind):

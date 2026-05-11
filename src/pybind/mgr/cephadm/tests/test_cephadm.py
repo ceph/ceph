@@ -15,7 +15,7 @@ from cephadm.inventory import (
 )
 from cephadm.services.osd import OSD, OSDRemovalQueue, OsdIdClaims
 from cephadm.services.nvmeof import NvmeofService
-from cephadm.utils import SpecialHostLabels
+from cephadm.utils import SpecialHostLabels, cephadmNoImage
 
 try:
     from typing import List
@@ -2345,6 +2345,20 @@ class TestCephadm(object):
         # having been raised
         CephadmServe(cephadm_module)._write_client_files({}, 'host2')
         CephadmServe(cephadm_module)._write_client_files({}, 'host3')
+
+    @mock.patch('cephadm.serve.CephadmServe._run_cephadm', new_callable=mock.AsyncMock)
+    def test_write_client_files_remove_calls_cephadm_remove_file(self, _run_cephadm, cephadm_module):
+        _run_cephadm.return_value = ([''], [''], 0)
+        cephadm_module.inventory.add_host(HostSpec('host1', '10.0.0.1'))
+        cephadm_module.cache.prime_empty_host('host1')
+        stale = '/var/lib/ceph/fsid/config/foo.keyring'
+        cephadm_module.cache.update_client_file('host1', stale, 'digest', 0o600, 0, 0)
+        CephadmServe(cephadm_module)._write_client_files({'host1': {}}, 'host1')
+        _run_cephadm.assert_called_once()
+        pos_args = _run_cephadm.call_args[0]
+        # Bound method mock: call_args do not include self.
+        assert pos_args[0:4] == ('host1', cephadmNoImage, 'remove-file', ['--path', stale])
+        assert stale not in cephadm_module.cache.get_host_client_files('host1')
 
     @mock.patch('cephadm.CephadmOrchestrator.mon_command')
     @mock.patch("cephadm.inventory.HostCache.get_host_client_files")

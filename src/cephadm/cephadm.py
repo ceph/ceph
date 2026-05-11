@@ -4643,6 +4643,29 @@ def command_gather_facts(ctx: CephadmContext) -> None:
     print(host.dump())
 
 
+def command_remove_file(ctx: CephadmContext) -> int:
+    """Remove a regular file on the host
+    """
+    norm = Path(os.path.normpath(str(Path(ctx.remove_file_path).expanduser())))
+
+    if not norm.is_absolute():
+        raise Error(f'Can not remove non-absolute path: {norm}')
+    try:
+        if not norm.exists():
+            return 0
+        # Refuse symlinks explicitly because is_file() follows them
+        if norm.is_symlink() or not norm.is_file():
+            raise Error(f'Can not remove non-regular file: {norm}')
+
+        norm.unlink()
+
+    except FileNotFoundError:
+        return 0
+    except OSError as e:
+        raise Error(f'failed to remove {norm}: {e}')
+    return 0
+
+
 ##################################
 
 
@@ -5697,6 +5720,18 @@ def _get_parser():
         'gather-facts', help='gather and return host related information (JSON format)')
     parser_gather_facts.set_defaults(func=command_gather_facts)
 
+    parser_remove_file = subparsers.add_parser(
+        'remove-file', help='remove a file on the host')
+    parser_remove_file.set_defaults(func=command_remove_file)
+    parser_remove_file.add_argument(
+        '--fsid',
+        help='cluster FSID')
+    parser_remove_file.add_argument(
+        '--path',
+        required=True,
+        dest='remove_file_path',
+        help='absolute path of the file to remove')
+
     parser_maintenance = subparsers.add_parser(
         'host-maintenance', help='Manage the maintenance state of a host')
     parser_maintenance.add_argument(
@@ -5845,7 +5880,7 @@ def main() -> None:
                     command_add_repo,
                     command_rm_repo,
                     command_install,
-                    command_bootstrap
+                    command_bootstrap,
                 ]:
             check_container_engine(ctx)
         # command handler
