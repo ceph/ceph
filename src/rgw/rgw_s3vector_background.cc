@@ -217,7 +217,6 @@ private:
       lancedb_free_string(error_message);
       return -EIO;
     }
->>>>>>> 08f3a7a1fa8 (Background vector-index rebuild for S3 Vector tables. When put-vector or delete-vector operations cause the number of unindexed rows to exceed a configurable)
     return 0;
   }
 
