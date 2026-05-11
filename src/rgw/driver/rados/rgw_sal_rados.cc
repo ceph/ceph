@@ -6047,7 +6047,7 @@ void* newRadosStore(void* io_context_, CephContext* cct)
 {
   auto& io_context = *static_cast<boost::asio::io_context*>(io_context_);
   ceph_assert(!io_context.stopped());
-  auto neorados = make_neorados(cct, io_context);
+  auto neorados = make_neorados(cct, io_context, "RadosStore");
   if (!neorados || !*neorados) {
     return nullptr;
   }

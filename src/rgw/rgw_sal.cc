@@ -140,7 +140,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
   }
 #ifdef WITH_RADOSGW_RADOS
   else if (cfg.store_name.compare("d3n") == 0) {
-    auto neorados = make_neorados(cct, io_context);
+    auto neorados = make_neorados(cct, io_context, "RadosStore");
     if (!neorados) {
       return nullptr;
     }
