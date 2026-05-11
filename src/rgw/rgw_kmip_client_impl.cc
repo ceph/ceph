@@ -802,6 +802,7 @@ RGWKmipWorker::entry()
     m.requests.erase(iter);
     ldout(m.cct, 10) << "kmip_worker[" << worker_id << "] remaining queue depth "
                     << m.requests.size() << dendl;
+    node->details.worker_id = worker_id;
     entry_lock.unlock();
     (void) handles.do_one_entry(node->details);
     delete node;

@@ -36,7 +36,8 @@ public:
 
   int destroy_bucket_key(const DoutPrefixProvider* dpp,
                          const std::string& kek_id,
-                         optional_yield y);
+                         optional_yield y,
+                         int* worker_id_out = nullptr);
 
   int generate_and_wrap_dek(const DoutPrefixProvider* dpp,
                             const std::string& kek_id,

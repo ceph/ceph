@@ -81,7 +81,8 @@ RGWKMIPTransceiver::~RGWKMIPTransceiver()
 int
 RGWKMIPManager::execute_fn(const DoutPrefixProvider* dpp,
                             optional_yield y,
-                            std::function<int(KMIP*, BIO*)> op_fn)
+                            std::function<int(KMIP*, BIO*)> op_fn,
+                            int* worker_id_out)
 {
   /* Virtual-dispatch wrapper for transceivers that need ops more complex
    * than the legacy fixed-schema path (LOCATE/GET/DESTROY). The op enum
@@ -101,7 +102,9 @@ RGWKMIPManager::execute_fn(const DoutPrefixProvider* dpp,
   LambdaTransceiver op(cct, std::move(op_fn));
   int r = add_request(&op);
   if (r < 0) return r;
-  return op.wait(dpp, y);
+  int rc = op.wait(dpp, y);
+  if (worker_id_out) *worker_id_out = op.worker_id;
+  return rc;
 }
 
 void

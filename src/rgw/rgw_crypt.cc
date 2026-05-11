@@ -1873,13 +1873,16 @@ static int get_sse_s3_bucket_key(req_state *s, optional_yield y,
       // Someone else committed a KEK. Destroy our orphan, adopt theirs.
       std::string winner_id = it->second.to_str();
       if (winner_id != key_id) {
-        ldpp_dout(s, 5) << "Lost KEK race; destroying our orphan KEK "
+        int worker_id = -1;
+        int cleanup_res = remove_sse_s3_bucket_key(s, key_id, y, &worker_id);
+        ldpp_dout(s, 5) << "kmip_worker[" << worker_id << "] "
+                        << "Lost KEK race; destroying our orphan KEK "
                            "(id_len=" << key_id.length()
                         << ") and adopting winner (id_len="
                         << winner_id.length() << ")" << dendl;
-        int cleanup_res = remove_sse_s3_bucket_key(s, key_id, y);
         if (cleanup_res != 0) {
-          ldpp_dout(s, 0) << "WARN: failed to destroy orphan KEK after losing "
+          ldpp_dout(s, 0) << "kmip_worker[" << worker_id << "] "
+                          << "WARN: failed to destroy orphan KEK after losing "
                              "race (id_len=" << key_id.length()
                           << "); manual cleanup may be required" << dendl;
         }
