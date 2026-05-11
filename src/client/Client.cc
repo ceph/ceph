@@ -8660,9 +8660,9 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 
       if (cct->_conf->client_oc)
         r = objectcacher->file_read_ex(&in->oset, &in->layout, in->snapid,
-                                       read_start, target_len, &bl, 0, &holes, io_finish.get());
+                                       read_start, FSCRYPT_BLOCK_SIZE, &bl, 0, &holes, io_finish.get());
       else
-        filer->read_trunc(in->ino, &in->layout, in->snapid, read_start, 4096, &bl, 0,
+        filer->read_trunc(in->ino, &in->layout, in->snapid, read_start, FSCRYPT_BLOCK_SIZE, &bl, 0,
                           in->truncate_size, in->truncate_seq, io_finish.get());
 
       if (r == 0) {
@@ -8681,6 +8681,16 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       }
 
       put_cap_ref(in, CEPH_CAP_FILE_RD);
+
+      // if we are holding any buffered _dirty_ data for this inode,
+      // preemptively fsync/flush this data at this time and drop caps. This
+      // is needed when the mds writes last block.
+      if (issued & (CEPH_CAP_FILE_BUFFER)) {
+        r = _fsync(in, false);
+        if (r < 0) {
+          return r;
+        }
+      }
 
       header.ver = 1;
       header.compat = 1;
