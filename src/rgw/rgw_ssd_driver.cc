@@ -507,7 +507,7 @@ void SSDDriver::restore_bucket_objects(const DoutPrefixProvider* dpp,
 {
     for (auto const& object_dir : efs::directory_iterator{bucket_path}) {
         if (!object_dir.is_directory()) continue;
-        std::string object_name = object_dir.path().filename();
+        std::string object_name = url_decode(object_dir.path().filename().string());
         restore_object_files(dpp, object_dir.path(), bucket_id, object_name, obj_func, block_func);
     }
 }
@@ -528,8 +528,7 @@ int SSDDriver::restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataC
 
     for (auto const& bucket_dir : efs::directory_iterator{cache_location}) {
         if (!bucket_dir.is_directory()) continue;
-        
-        std::string bucket_id = bucket_dir.path().filename();
+        std::string bucket_id = url_decode(bucket_dir.path().filename().string());
         restore_bucket_objects(dpp, bucket_dir.path(), bucket_id, obj_func, block_func);
     }
 
