@@ -80,12 +80,17 @@ The dedup estimate process skips the following RGW objects:
 - Objects with different RGW storage classes.
 
 The full dedup process skips all of the above and additionally skips
-**compressed** and **user-encrypted** objects.
+**user-encrypted** objects.  Server-side **compressed** objects can
+optionally be skipped by setting :confval:`rgw_dedup_skip_compressed`.
 
 The minimum RGW object size to be deduplicated is controlled by the following
 configuration option:
 
 .. confval:: rgw_dedup_min_obj_size_for_dedup
+
+Compressed objects are deduplicated by default.  To skip them:
+
+.. confval:: rgw_dedup_skip_compressed
 
 
 Estimate Processing
@@ -131,16 +136,31 @@ leaving only dedup candidates.
 
 Next, it iterates through these dedup candidate objects, reading their complete
 information from the object metadata, a per-object RADOS operation. During
-this step, **compressed** and **user-encrypted** objects are removed from
-consideration.
+this step, **user-encrypted** objects are removed from consideration.
 
-Following this, we calculate a cryptographically strong hash of candidate
-object data. This involves a full-object read, which is a resource-intensive
-operation. The hash ensures that dedup candidates are indeed perfect
-matches. If they are, we proceed with deduplication:
+At this point, the dedup candidates are objects whose MD5 hash and size are
+identical -- the likelihood of a false positive is vanishingly small for
+naturally occurring data. To provide a cryptographic guarantee and guard
+against crafted MD5 collisions ensuring that dedup candidates are indeed perfect
+matches, we calculate a strong hash (Blake3) over the
+full object data. This requires reading the entire object, with cost
+proportional to object size -- but the potential dedup savings also grow with
+size, and at this stage deduplication is almost certain to succeed.
+
+For compressed objects the hash is calculated on the uncompressed data -- each
+compression block is decompressed on-the-fly and fed to the hasher, so memory
+usage stays bounded regardless of object size. This adds CPU cost for
+decompression, though at this stage deduplication is almost certain to succeed
+and the savings will justify the overhead. To skip compressed objects entirely,
+set ``rgw_dedup_skip_compressed = true`` in the configuration.
+
+If the objects' strong hash matches, we proceed with the deduplication:
 
 - Increment the reference count on the source tail objects one by one.
 - Copy the manifest from the source to the target.
+- Mirror the compression attribute (``RGW_ATTR_COMPRESSION``) from source to
+  target: if the source is compressed the attribute is copied to the target;
+  if the source is uncompressed the attribute is removed from the target.
 - Remove all tail objects on the target.
 
 Split Head Mode

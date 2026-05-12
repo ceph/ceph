@@ -42,6 +42,8 @@
 #include "fmt/ranges.h"
 #include "osd/osd_types.h"
 #include "common/ceph_crypto.h"
+#include "rgw_compression_types.h"
+#include "compressor/Compressor.h"
 
 #include <filesystem>
 #include <algorithm>
@@ -82,6 +84,38 @@ static constexpr auto dout_subsys = ceph_subsys_rgw_dedup;
 namespace rgw::dedup {
   static inline constexpr unsigned MAX_STORAGE_CLASS_IDX = 128;
   using storage_class_idx_t = uint8_t;
+
+  // Derive accounted_size from object-head attributes the same way the
+  // write-path computes it (see RGWRados::Object::Write::_do_write_meta):
+  //   compressed   -> RGWCompressionInfo::orig_size  (stable, not patched)
+  //   uncompressed -> physical object size
+  // We cannot use p_obj->get_accounted_size() because the stat path patches
+  // it via the manifest (set_head / get_obj_size).
+  static int64_t derive_head_accounted_size(const DoutPrefixProvider *dpp,
+                                             const bufferlist &compression_bl,
+                                             uint64_t obj_size,
+                                             std::string *p_compression_type = nullptr)
+  {
+    if (compression_bl.length() > 0) {
+      RGWCompressionInfo cs_info;
+      auto bl_iter = compression_bl.cbegin();
+      try {
+        decode(cs_info, bl_iter);
+      } catch (buffer::error&) {
+        ldpp_dout(dpp, 5) << __func__
+                          << "::ERR: failed to decode compression info" << dendl;
+        return -EINVAL;
+      }
+      if (p_compression_type) {
+        *p_compression_type = cs_info.compression_type;
+      }
+      return cs_info.orig_size;
+    }
+    if (p_compression_type) {
+      *p_compression_type = "none";
+    }
+    return obj_size;
+  }
 
   //---------------------------------------------------------------------------
   [[maybe_unused]] static int print_manifest(CephContext              *cct,
@@ -383,6 +417,19 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
+  const std::string& Background::get_placement_compression_type(
+                                   const rgw_placement_rule &rule)
+  {
+    auto it = d_placement_compression_type.find(rule.name);
+    if (it != d_placement_compression_type.end()) {
+      return it->second;
+    }
+    const std::string& comp_type = store->svc()->zone->get_zone_params().get_compression_type(rule);
+    auto result = d_placement_compression_type.emplace(rule.name, comp_type);
+    return result.first->second;
+  }
+
+  //---------------------------------------------------------------------------
   int Background::init_rados_access_handles(bool init_pool)
   {
     store = dynamic_cast<rgw::sal::RadosStore*>(driver);
@@ -414,9 +461,11 @@ namespace rgw::dedup {
     d_head_object_size = cct->_conf->rgw_max_chunk_size;
     d_min_obj_size_for_dedup = cct->_conf->rgw_dedup_min_obj_size_for_dedup;
     d_split_head = cct->_conf->rgw_dedup_split_obj_head;
+    d_skip_compressed = cct->_conf->rgw_dedup_skip_compressed;
     ldpp_dout(dpp, 10) << "Config Vals::d_head_object_size=" << d_head_object_size
                        << "::d_min_obj_size_for_dedup=" << d_min_obj_size_for_dedup
                        << "::d_split_head=" << d_split_head
+                       << "::d_skip_compressed=" << d_skip_compressed
                        << dendl;
 
     int ret = init_rados_access_handles(false);
@@ -490,7 +539,7 @@ namespace rgw::dedup {
                        << p_rec->s.md5_low << std::dec << dendl;
 
     int ret = p_table->add_entry(&key, block_id, rec_id, has_shared_manifest,
-                                 &p_stats->big_objs_stat);
+                                 COMPRESSION_MATCH_NONE, &p_stats->big_objs_stat);
     if (ret == 0) {
       p_stats->loaded_objects ++;
       ldpp_dout(dpp, 20) << __func__ << "::" << p_rec->bucket_name << "/"
@@ -1016,6 +1065,14 @@ namespace rgw::dedup {
       {
         bufferlist src_hash_bl;
         init_cmp_pairs(dpp, p_src_rec, etag_bl, src_hash_bl, &src_op);
+        // CAS on compression only when SRC is uncompressed (cheap empty-bl compare).
+        // A compressed object's compression state is assumed immutable: RGW never
+        // strips or rewrites RGW_ATTR_COMPRESSION on an existing object, so there
+        // is no need to CAS on a potentially large compression attribute.
+        if (p_src_rec->compression_bl.length() == 0) {
+          src_op.cmpxattr(RGW_ATTR_COMPRESSION, CEPH_OSD_CMPXATTR_OP_EQ,
+                          p_src_rec->compression_bl);
+        }
         src_op.setxattr(RGW_ATTR_SHARE_MANIFEST, manifest_hash_bl);
         if (p_src_rec->s.flags.hash_calculated() && !p_src_val->has_valid_hash()){
           src_op.setxattr(RGW_ATTR_BLAKE3, src_hash_bl);
@@ -1044,6 +1101,11 @@ namespace rgw::dedup {
       }
     }
 
+    // Set RGW_ATTR_COMPRESSION on TGT unconditionally from SRC state.
+    // TGT now shares SRC's tail objects so its compression state must match.
+    bool src_compressed = (p_src_rec->compression_bl.length() > 0);
+    bool tgt_compressed = (p_tgt_rec->compression_bl.length() > 0);
+
     librados::ObjectWriteOperation tgt_op;
     {
       bufferlist tgt_hash_bl;
@@ -1056,6 +1118,18 @@ namespace rgw::dedup {
         tgt_op.setxattr(RGW_ATTR_BLAKE3, tgt_hash_bl);
         ldpp_dout(dpp, 20) << __func__ <<"::Set TGT Strong Hash in CLS"<< dendl;
         p_stats->set_hash_attrs++;
+      }
+
+      if (src_compressed) {
+        tgt_op.setxattr(RGW_ATTR_COMPRESSION, p_src_rec->compression_bl);
+        if (!tgt_compressed) {
+          p_stats->set_compression_on_tgt++;
+        }
+      } else {
+        tgt_op.rmxattr(RGW_ATTR_COMPRESSION);
+        if (tgt_compressed) {
+          p_stats->clear_compression_on_tgt++;
+        }
       }
     }
 
@@ -1079,55 +1153,186 @@ namespace rgw::dedup {
     // free tail objects based on TGT manifest
     free_tail_objs_by_manifest(ref_tag, tgt_oid, tgt_manifest);
 
-    // do we need to set compression on the head object or is it set on tail?
-    // RGW_ATTR_COMPRESSION
     return ret;
   }
+
+  //---------------------------------------------------------------------------
+  // Decompress each compression block on-the-fly and feed decompressed data
+  // to the blake3 hasher. The compressed stream is fed incrementally via
+  // feed_compressed_data(); once a full compression block is available it is
+  // decompressed and hashed immediately so memory stays bounded.
+  struct streaming_decompressor_t {
+    CompressorRef compressor;
+    RGWCompressionInfo cs_info;  // owned copy
+    blake3_hasher *hmac;
+    const DoutPrefixProvider *dpp;
+
+    bufferlist pending;         // partial compressed block accumulated so far
+    uint64_t   raw_ofs  = 0;   // running offset in compressed stream
+    size_t     blk_idx  = 0;   // next compression block to process
+
+    streaming_decompressor_t(CompressorRef _comp,
+                             RGWCompressionInfo &&_cs,
+                             blake3_hasher *_hmac,
+                             const DoutPrefixProvider *_dpp)
+      : compressor(std::move(_comp)), cs_info(std::move(_cs)),
+        hmac(_hmac), dpp(_dpp) {}
+
+    int feed_compressed_data(bufferlist &bl) {
+      uint64_t len = bl.length();
+      pending.claim_append(bl);
+      raw_ofs += len;
+      return drain_ready_blocks();
+    }
+
+    int drain_ready_blocks() {
+      while (blk_idx < cs_info.blocks.size()) {
+        const auto &block = cs_info.blocks[blk_idx];
+        uint64_t block_end = block.new_ofs + block.len;
+        if (raw_ofs < block_end) {
+          break; // not enough data yet for this block
+        }
+        bufferlist compressed_bl, decompressed_bl;
+        uint64_t local_ofs = block.new_ofs - (raw_ofs - pending.length());
+        pending.begin(local_ofs).copy(block.len, compressed_bl);
+        int ret = compressor->decompress(compressed_bl, decompressed_bl,
+                                         cs_info.compressor_message);
+        if (ret < 0) {
+          ldpp_dout(dpp, 1) << "streaming_decompressor_t::ERR: decompression"
+                               " failed, ret=" << ret << dendl;
+          return ret;
+        }
+        for (const auto& bptr : decompressed_bl.buffers()) {
+          blake3_hasher_update(hmac,
+            (const unsigned char *)bptr.c_str(), bptr.length());
+        }
+        blk_idx++;
+      }
+      // discard data that has been fully consumed by all processed blocks
+      if (blk_idx > 0) {
+        uint64_t consumed_end = cs_info.blocks[blk_idx - 1].new_ofs +
+                                cs_info.blocks[blk_idx - 1].len;
+        uint64_t pending_start = raw_ofs - pending.length();
+        if (consumed_end > pending_start) {
+          uint64_t trim = consumed_end - pending_start;
+          if (trim <= pending.length()) {
+            pending.splice(0, trim);
+          }
+        }
+      }
+      return 0;
+    }
+
+    int finish() {
+      int ret = drain_ready_blocks();
+      if (ret < 0) return ret;
+      if (blk_idx != cs_info.blocks.size()) {
+        ldpp_dout(dpp, 1) << "streaming_decompressor_t::ERR: not all blocks"
+                             " decompressed, processed=" << blk_idx
+                          << " total=" << cs_info.blocks.size() << dendl;
+        return -EIO;
+      }
+      return 0;
+    }
+  };
 
   //---------------------------------------------------------------------------
   int Background::calc_object_blake3(const RGWObjManifest &manifest,
                                      disk_record_t *p_rec,
                                      uint8_t *p_hash,
-                                     blake3_hasher *p_pre_calc_hmac)
+                                     bufferlist *p_head_bl)
   {
-    ldpp_dout(dpp, 20) << __func__ << "::p_rec->obj_name=" << p_rec->obj_name << dendl;
+    bool is_compressed = false;
+    RGWCompressionInfo cs_info;
+    CompressorRef compressor;
 
-    blake3_hasher _hmac, *p_hmac = nullptr;
-    if (!p_pre_calc_hmac) {
-      blake3_hasher_init(&_hmac);
-      p_hmac = &_hmac;
+    if (p_rec->compression_bl.length() > 0) {
+      try {
+        auto bl_iter = p_rec->compression_bl.cbegin();
+        decode(cs_info, bl_iter);
+        if (cs_info.compression_type != "none" && !cs_info.blocks.empty()) {
+          is_compressed = true;
+          compressor = Compressor::create(cct, cs_info.compression_type);
+          if (!compressor) {
+            ldpp_dout(dpp, 1) << __func__ << "::ERR: Cannot load compressor of type "
+                              << cs_info.compression_type << dendl;
+            return -EIO;
+          }
+        }
+      } catch (buffer::error&) {
+        ldpp_dout(dpp, 1) << __func__
+                          << "::ERR: failed RGWCompressionInfo decode" << dendl;
+        return -EINVAL;
+      }
     }
-    else {
-      p_hmac = p_pre_calc_hmac;
+
+    ldpp_dout(dpp, 20) << __func__ << "::p_rec->obj_name=" << p_rec->obj_name
+                       << "::compressed=" << is_compressed << dendl;
+
+    blake3_hasher hmac;
+    blake3_hasher_init(&hmac);
+    blake3_hasher *p_hmac = &hmac;
+
+    std::unique_ptr<streaming_decompressor_t> decompressor;
+    if (compressor) {
+      decompressor = std::make_unique<streaming_decompressor_t>(
+        compressor, std::move(cs_info), p_hmac, dpp);
+      if (p_head_bl && p_head_bl->length() > 0) {
+        // copy before feeding: feed_compressed_data() uses claim_append()
+        // which would empty the caller's bufferlist; split_head_object()
+        // needs p_head_bl intact to write the new tail object afterwards
+        bufferlist head_copy;
+        head_copy.append(*p_head_bl);
+        int ret = decompressor->feed_compressed_data(head_copy);
+        if (ret < 0) return ret;
+      }
+    } else if (p_head_bl && p_head_bl->length() > 0) {
+      for (const auto& bptr : p_head_bl->buffers()) {
+        blake3_hasher_update(p_hmac,
+          (const unsigned char *)bptr.c_str(), bptr.length());
+      }
     }
 
     for (auto p = manifest.obj_begin(dpp); p != manifest.obj_end(dpp); ++p) {
       uint64_t offset = p.get_stripe_ofs();
       const rgw_obj_select& os = p.get_location();
-      if (offset > 0 || !p_pre_calc_hmac) {
-        rgw_raw_obj raw_obj = os.get_raw_obj(rados);
-        rgw_rados_ref obj;
-        int ret = rgw_get_rados_ref(dpp, rados_handle, raw_obj, &obj);
-        if (ret < 0) {
-          ldpp_dout(dpp, 1) << __func__ << "::failed rgw_get_rados_ref() for oid="
-                            << raw_obj.oid << ", err is " << cpp_strerror(-ret) << dendl;
-          return ret;
-        }
+      // skip head stripe when head data was already provided
+      if (offset == 0 && p_head_bl) {
+        continue;
+      }
+      rgw_raw_obj raw_obj = os.get_raw_obj(rados);
+      rgw_rados_ref obj;
+      int ret = rgw_get_rados_ref(dpp, rados_handle, raw_obj, &obj);
+      if (ret < 0) {
+        ldpp_dout(dpp, 1) << __func__ << "::failed rgw_get_rados_ref() for oid="
+                          << raw_obj.oid << ", err is " << cpp_strerror(-ret) << dendl;
+        return ret;
+      }
 
-        librados::IoCtx ioctx = obj.ioctx;
-        bufferlist bl;
-        // read full object
-        ret = ioctx.read(raw_obj.oid, bl, 0, 0);
-        if (unlikely(ret <= 0)) {
-          ldpp_dout(dpp, 1) << __func__ << "::ERR: failed to read oid "
-                            << raw_obj.oid  << ", err is " << cpp_strerror(-ret) << dendl;
-          return ret;
-        }
+      librados::IoCtx ioctx = obj.ioctx;
+      bufferlist bl;
+      ret = ioctx.read(raw_obj.oid, bl, 0, 0);
+      if (unlikely(ret <= 0)) {
+        ldpp_dout(dpp, 1) << __func__ << "::ERR: failed to read oid "
+                          << raw_obj.oid  << ", err is " << cpp_strerror(-ret) << dendl;
+        return ret;
+      }
+      if (decompressor) {
+        ret = decompressor->feed_compressed_data(bl);
+        if (ret < 0) return ret;
+      } else {
         for (const auto& bptr : bl.buffers()) {
-          blake3_hasher_update(p_hmac, (const unsigned char *)bptr.c_str(), bptr.length());
+          blake3_hasher_update(p_hmac,
+            (const unsigned char *)bptr.c_str(), bptr.length());
         }
       }
     }
+
+    if (decompressor) {
+      int ret = decompressor->finish();
+      if (ret < 0) return ret;
+    }
+
     blake3_hasher_finalize(p_hmac, p_hash, BLAKE3_OUT_LEN);
     p_rec->s.flags.set_hash_calculated();
     p_rec->s.flags.set_has_valid_hash();
@@ -1184,7 +1389,8 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   int Background::add_obj_attrs_to_record(disk_record_t         *p_rec,
                                           const rgw::sal::Attrs &attrs,
-                                          md5_stats_t           *p_stats) /*IN-OUT*/
+                                          rgw_placement_rule    *p_tail_rule, /*OUT*/
+                                          md5_stats_t           *p_stats      /*IN-OUT*/)
   {
     // if TAIL_TAG exists -> use it as ref-tag, eitherwise take ID_TAG
     auto itr = attrs.find(RGW_ATTR_TAIL_TAG);
@@ -1254,6 +1460,9 @@ namespace rgw::dedup {
         p_rec->manifest_bl = bl;
       }
       p_rec->s.manifest_len = p_rec->manifest_bl.length();
+      if (p_tail_rule) {
+        *p_tail_rule = manifest.get_tail_placement().placement_rule;
+      }
     }
     else {
       ldpp_dout(dpp, 5)  << __func__ << "::ERROR: no manifest" << dendl;
@@ -1447,16 +1656,40 @@ namespace rgw::dedup {
       return 0;
     }
 
-    // TBD-Future: We should be able to support RGW_ATTR_COMPRESSION when all copies are compressed
-    if (attrs.find(RGW_ATTR_COMPRESSION) != attrs.end()) {
-      p_stats->ingress_skip_compressed++;
-      p_stats->ingress_skip_compressed_bytes += ondisk_byte_size;
-      ldpp_dout(dpp, 20) <<__func__ << "::Skipping compressed object "
-                         << p_rec->obj_name << dendl;
-      return 0;
+    {
+      auto comp_itr = attrs.find(RGW_ATTR_COMPRESSION);
+      if (comp_itr != attrs.end()) {
+        if (d_skip_compressed) {
+          p_stats->ingress_skip_compressed++;
+          p_stats->ingress_skip_compressed_bytes += ondisk_byte_size;
+          ldpp_dout(dpp, 20) <<__func__ << "::Skipping compressed object "
+                             << p_rec->obj_name << dendl;
+          return 0;
+        }
+        p_rec->compression_bl = comp_itr->second;
+        p_rec->s.compression_bl_len = p_rec->compression_bl.length();
+        p_stats->ingress_compressed++;
+        p_stats->ingress_compressed_bytes += ondisk_byte_size;
+        ldpp_dout(dpp, 20) <<__func__ << "::compressed object "
+                           << p_rec->obj_name << dendl;
+      } else {
+        p_rec->compression_bl.clear();
+        p_rec->s.compression_bl_len = 0;
+      }
     }
 
-    // extract ETAG and Size and compare with values taken from the bucket-index
+    std::string obj_compression_type;
+    int64_t head_accounted_size = derive_head_accounted_size(dpp, p_rec->compression_bl,
+                                                             p_obj->get_size(),
+                                                             &obj_compression_type);
+    if (unlikely(head_accounted_size < 0)) {
+      ldpp_dout(dpp, 5) << __func__
+                        << "::ERR: derive_head_accounted_size failed for "
+                        << p_rec->obj_name << dendl;
+      return head_accounted_size;
+    }
+
+    // extract ETAG and compare with values taken from the bucket-index
     parsed_etag_t parsed_etag;
     auto itr = attrs.find(RGW_ATTR_ETAG);
     if (itr != attrs.end()) {
@@ -1492,11 +1725,14 @@ namespace rgw::dedup {
 
     // no need to check for remap success as we compare keys bellow
     sc_idx = remapper->remap(storage_class, dpp, &p_stats->failed_map_overflow);
+    // Cross-check etag, num_parts, storage_class and size from object-head
+    // against bucket-index.  head_accounted_size was derived above from the
+    // compression attr (orig_size) or physical size - matching the write-path
+    // logic, so it is safe to compare against the bucket-index value.
     key_t key_from_obj(parsed_etag.md5_high, parsed_etag.md5_low,
-                       byte_size_to_disk_blocks(p_obj->get_size()),
+                       byte_size_to_disk_blocks(head_accounted_size),
                        parsed_etag.num_parts, sc_idx);
-    if (unlikely(key_from_obj != key_from_bucket_index ||
-                 p_rec->s.obj_bytes_size != p_obj->get_size())) {
+    if (unlikely(key_from_obj != key_from_bucket_index)) {
       ldpp_dout(dpp, 15) <<__func__ << "::Skipping changed object "
                          << p_rec->obj_name << dendl;
       p_stats->ingress_skip_changed_objs++;
@@ -1505,7 +1741,8 @@ namespace rgw::dedup {
 
     // reset flags
     p_rec->s.flags.clear();
-    ret = add_obj_attrs_to_record(p_rec, attrs, p_stats);
+    rgw_placement_rule tail_rule;
+    ret = add_obj_attrs_to_record(p_rec, attrs, &tail_rule, p_stats);
     if (unlikely(ret != 0)) {
       // don't trace errors for unsupported manifest
       if (ret == -ENOTSUP) {
@@ -1515,6 +1752,15 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 5) << __func__ << "::ERR: failed add_obj_attrs_to_record() ret="
                         << ret << "::" << cpp_strerror(-ret) << dendl;
       return ret;
+    }
+
+    // Determine how well this object's compression state matches the placement
+    const auto& placement_comp_type = get_placement_compression_type(tail_rule);
+    compression_match_level_t comp_match = COMPRESSION_MATCH_NONE;
+    if (obj_compression_type == placement_comp_type) {
+      comp_match = COMPRESSION_MATCH_EXACT;
+    } else if (obj_compression_type != "none" && placement_comp_type != "none") {
+      comp_match = COMPRESSION_MATCH_PARTIAL;
     }
 
     disk_block_seq_t::record_info_t rec_info;
@@ -1530,7 +1776,8 @@ namespace rgw::dedup {
                           << "::shared_manifest="
                           << p_rec->s.flags.has_shared_manifest() << dendl;
       p_table->update_entry(&key_from_bucket_index, rec_info.block_id,
-                            rec_info.rec_id, p_rec->s.flags.has_shared_manifest());
+                            rec_info.rec_id, p_rec->s.flags.has_shared_manifest(),
+                            comp_match);
     }
     else {
       ldpp_dout(dpp, 5) << __func__ << "::ERR: Failed p_disk->add_record()"<< dendl;
@@ -1592,6 +1839,10 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
+  // RGW_ATTR_BLAKE3 and RGW_ATTR_MANIFEST are calculated and written to the
+  // object-head during STEP_REMOVE_DUPLICATES (and never updated into the
+  // disk-record since we only write records in bulk).
+  // All other attributes are valid on both SRC and TGT at this point.
   static int read_hash_and_manifest(const DoutPrefixProvider *const dpp,
                                     rgw::sal::Driver *driver,
                                     rgw::sal::RadosStore *store,
@@ -1709,14 +1960,8 @@ namespace rgw::dedup {
     if (!p_src_rec->s.flags.has_valid_hash()) {
       ldpp_dout(dpp, 20) << __func__ << "::calc BLK3 for SRC "
                          << p_src_rec->obj_name << dendl;
-      blake3_hasher hmac;
-      blake3_hasher_init(&hmac);
-      for (const auto& bptr : bl.buffers()) {
-        blake3_hasher_update(&hmac, (const unsigned char *)bptr.c_str(),
-                             bptr.length());
-      }
       uint8_t *p_hash = (uint8_t*)p_src_rec->s.hash;
-      ret = calc_object_blake3(src_manifest, p_src_rec, p_hash, &hmac);
+      ret = calc_object_blake3(src_manifest, p_src_rec, p_hash, &bl);
       if (unlikely(ret != 0)) {
         return ret;
       }
@@ -1797,7 +2042,6 @@ namespace rgw::dedup {
                          << p_tgt_rec->obj_name << dendl;
       ret = calc_object_blake3(tgt_manifest, p_tgt_rec, (uint8_t*)p_tgt_rec->s.hash);
       if (unlikely(ret != 0)) {
-        // Don't run dedup without a valid strong hash
         return false;
       }
     }
@@ -2085,6 +2329,9 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 20) << __func__ << "::dedup success " << p_src_rec->obj_name << dendl;
       p_stats->deduped_objects++;
       p_stats->deduped_objects_bytes += dedupable_objects_bytes;
+      if (p_src_rec->compression_bl.length() > 0 && p_tgt_rec->compression_bl.length() > 0) {
+        p_stats->deduped_compressed_objects++;
+      }
       if (p_tgt_rec->s.flags.is_split_head()) {
         ldpp_dout(dpp, 20) << __func__ <<"::TGT-Split: dedup_bytes="
                            << ondisk_byte_size << dendl;
@@ -2287,7 +2534,9 @@ namespace rgw::dedup {
     }
 
     // ceph store full blocks so need to round up and multiply by block_size
-    uint64_t ondisk_byte_size = calc_on_disk_byte_size(entry.meta.size);
+    // use accounted_size which is the logical (uncompressed) size
+    // this ensures compressed and uncompressed copies of the same data match
+    uint64_t ondisk_byte_size = calc_on_disk_byte_size(entry.meta.accounted_size);
     p_worker_stats->ingress_obj++;
     p_worker_stats->ingress_obj_bytes += ondisk_byte_size;
 
@@ -2335,7 +2584,7 @@ namespace rgw::dedup {
 
     return add_disk_rec_from_bucket_idx(disk_arr, p_bucket, &parsed_etag,
                                         entry.key.name, entry.key.instance,
-                                        entry.meta.size, storage_class);
+                                        entry.meta.accounted_size, storage_class);
   }
 
   //---------------------------------------------------------------------------
@@ -3496,6 +3745,7 @@ namespace rgw::dedup {
           ldpp_dout(dpp, 1) << __func__ << "::failed setup()" << dendl;
           return;
         }
+        d_placement_compression_type.clear();
         const rgw_pool& dedup_pool = store->svc()->zone->get_zone_params().dedup_pool;
         int64_t pool_id = rados_handle->pool_lookup(dedup_pool.name.c_str());
         if (pool_id < 0) {

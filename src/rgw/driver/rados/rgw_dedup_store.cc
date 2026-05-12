@@ -57,17 +57,19 @@ namespace rgw::dedup {
     this->tenant_name       = p_bucket->get_tenant();
     this->s.tenant_name_len = this->tenant_name.length();
     this->instance          = instance;
+
     this->s.instance_len    = instance.length();
     this->stor_class        = storage_class;
     this->s.stor_class_len  = storage_class.length();
-
-    this->s.ref_tag_len     = 0;
-    this->s.manifest_len    = 0;
+    this->s.ref_tag_len        = 0;
+    this->s.manifest_len       = 0;
+    this->s.compression_bl_len = 0;
 
     this->s.shared_manifest = 0;
     memset(this->s.hash, 0, sizeof(this->s.hash));
     this->ref_tag           = "";
     this->manifest_bl.clear();
+    this->compression_bl.clear();
   }
 
   //---------------------------------------------------------------------------
@@ -93,8 +95,10 @@ namespace rgw::dedup {
     this->s.tenant_name_len = CEPHTOH_16(p_rec->s.tenant_name_len);
     this->s.instance_len    = CEPHTOH_16(p_rec->s.instance_len);
     this->s.stor_class_len  = CEPHTOH_16(p_rec->s.stor_class_len);
-    this->s.ref_tag_len     = CEPHTOH_16(p_rec->s.ref_tag_len);
-    this->s.manifest_len    = CEPHTOH_16(p_rec->s.manifest_len);
+
+    this->s.ref_tag_len        = CEPHTOH_16(p_rec->s.ref_tag_len);
+    this->s.manifest_len       = CEPHTOH_16(p_rec->s.manifest_len);
+    this->s.compression_bl_len = CEPHTOH_16(p_rec->s.compression_bl_len);
 
     const char *p = buff + sizeof(this->s);
     this->obj_name = std::string(p, this->s.obj_name_len);
@@ -130,6 +134,11 @@ namespace rgw::dedup {
       p += p_rec->s.ref_tag_len;
 
       this->manifest_bl.append(p, this->s.manifest_len);
+      p += this->s.manifest_len;
+
+      if (this->s.compression_bl_len > 0) {
+        this->compression_bl.append(p, this->s.compression_bl_len);
+      }
     }
   }
 
@@ -152,8 +161,10 @@ namespace rgw::dedup {
     p_rec->s.tenant_name_len = HTOCEPH_16(this->tenant_name.length());
     p_rec->s.instance_len    = HTOCEPH_16(this->instance.length());
     p_rec->s.stor_class_len  = HTOCEPH_16(this->stor_class.length());
-    p_rec->s.ref_tag_len     = HTOCEPH_16(this->ref_tag.length());
-    p_rec->s.manifest_len    = HTOCEPH_16(this->manifest_bl.length());
+
+    p_rec->s.ref_tag_len        = HTOCEPH_16(this->ref_tag.length());
+    p_rec->s.manifest_len       = HTOCEPH_16(this->manifest_bl.length());
+    p_rec->s.compression_bl_len = HTOCEPH_16(this->compression_bl.length());
     char *p = buff + sizeof(this->s);
     unsigned len = this->obj_name.length();
     std::memcpy(p, this->obj_name.data(), len);
@@ -198,6 +209,13 @@ namespace rgw::dedup {
       const char *p_manifest = const_cast<disk_record_t*>(this)->manifest_bl.c_str();
       std::memcpy(p, p_manifest, len);
       p += len;
+
+      len = this->compression_bl.length();
+      if (len > 0) {
+        const char *p_comp = const_cast<disk_record_t*>(this)->compression_bl.c_str();
+        std::memcpy(p, p_comp, len);
+        p += len;
+      }
     }
     return (p - buff);
   }
@@ -213,7 +231,8 @@ namespace rgw::dedup {
             this->instance.length() +
             this->stor_class.length() +
             this->ref_tag.length() +
-            this->manifest_bl.length());
+            this->manifest_bl.length() +
+            this->compression_bl.length());
   }
 
   //---------------------------------------------------------------------------
@@ -278,6 +297,9 @@ namespace rgw::dedup {
       stream << "Dedicated Manifest Object\n";
     }
     stream << "Manifest len=" << rec.s.manifest_len << "\n";
+    if (rec.s.compression_bl_len) {
+      stream << "Compression len=" << rec.s.compression_bl_len << "\n";
+    }
     return stream;
   }
 

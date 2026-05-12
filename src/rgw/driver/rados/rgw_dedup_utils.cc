@@ -554,6 +554,8 @@ namespace rgw::dedup {
     this->ingress_corrupted_obj_attrs   += other.ingress_corrupted_obj_attrs;
     this->ingress_skip_encrypted        += other.ingress_skip_encrypted;
     this->ingress_skip_encrypted_bytes  += other.ingress_skip_encrypted_bytes;
+    this->ingress_compressed            += other.ingress_compressed;
+    this->ingress_compressed_bytes      += other.ingress_compressed_bytes;
     this->ingress_skip_compressed       += other.ingress_skip_compressed;
     this->ingress_skip_compressed_bytes += other.ingress_skip_compressed_bytes;
     this->ingress_skip_changed_objs     += other.ingress_skip_changed_objs;
@@ -596,17 +598,21 @@ namespace rgw::dedup {
     this->split_head_tgt          += other.split_head_tgt;
     this->split_head_dedup_bytes  += other.split_head_dedup_bytes;
 
+    this->set_compression_on_tgt     += other.set_compression_on_tgt;
+    this->clear_compression_on_tgt   += other.clear_compression_on_tgt;
+    this->deduped_compressed_objects += other.deduped_compressed_objects;
+
     this->set_shared_manifest_src += other.set_shared_manifest_src;
     this->loaded_objects          += other.loaded_objects;
     this->processed_objects       += other.processed_objects;
     this->deduped_objects         += other.deduped_objects;
     this->deduped_objects_bytes   += other.deduped_objects_bytes;
 
-    this->failed_dedup            += other.failed_dedup;
+    this->failed_dedup                += other.failed_dedup;
     this->md_throttle_sleep_events    += other.md_throttle_sleep_events;
     this->md_throttle_sleep_time_usec += other.md_throttle_sleep_time_usec;
-    this->failed_table_load       += other.failed_table_load;
-    this->failed_map_overflow     += other.failed_map_overflow;
+    this->failed_table_load           += other.failed_table_load;
+    this->failed_map_overflow         += other.failed_map_overflow;
     return *this;
   }
 
@@ -689,6 +695,19 @@ namespace rgw::dedup {
       }
       if (this->split_head_dedup_bytes) {
         f->dump_unsigned("Split-Head Dedup-Bytes", this->split_head_dedup_bytes);
+      }
+      if (this->ingress_compressed) {
+        f->dump_unsigned("Compressed objs", this->ingress_compressed);
+        f->dump_unsigned("Compressed Bytes", this->ingress_compressed_bytes);
+      }
+      if (this->set_compression_on_tgt) {
+        f->dump_unsigned("Set Compression on TGT", this->set_compression_on_tgt);
+      }
+      if (this->clear_compression_on_tgt) {
+        f->dump_unsigned("Clear Compression on TGT", this->clear_compression_on_tgt);
+      }
+      if (this->deduped_compressed_objects) {
+        f->dump_unsigned("Deduped Compressed objs", this->deduped_compressed_objects);
       }
     }
 
@@ -819,6 +838,8 @@ namespace rgw::dedup {
     encode(m.ingress_corrupted_obj_attrs, bl);
     encode(m.ingress_skip_encrypted, bl);
     encode(m.ingress_skip_encrypted_bytes, bl);
+    encode(m.ingress_compressed, bl);
+    encode(m.ingress_compressed_bytes, bl);
     encode(m.ingress_skip_compressed, bl);
     encode(m.ingress_skip_compressed_bytes, bl);
     encode(m.ingress_skip_changed_objs, bl);
@@ -860,6 +881,9 @@ namespace rgw::dedup {
     encode(m.split_head_src, bl);
     encode(m.split_head_tgt, bl);
     encode(m.split_head_dedup_bytes, bl);
+    encode(m.set_compression_on_tgt, bl);
+    encode(m.clear_compression_on_tgt, bl);
+    encode(m.deduped_compressed_objects, bl);
     encode(m.set_shared_manifest_src, bl);
 
     encode(m.loaded_objects, bl);
@@ -889,6 +913,8 @@ namespace rgw::dedup {
     decode(m.ingress_corrupted_obj_attrs, bl);
     decode(m.ingress_skip_encrypted, bl);
     decode(m.ingress_skip_encrypted_bytes, bl);
+    decode(m.ingress_compressed, bl);
+    decode(m.ingress_compressed_bytes, bl);
     decode(m.ingress_skip_compressed, bl);
     decode(m.ingress_skip_compressed_bytes, bl);
     decode(m.ingress_skip_changed_objs, bl);
@@ -930,6 +956,9 @@ namespace rgw::dedup {
     decode(m.split_head_src, bl);
     decode(m.split_head_tgt, bl);
     decode(m.split_head_dedup_bytes, bl);
+    decode(m.set_compression_on_tgt, bl);
+    decode(m.clear_compression_on_tgt, bl);
+    decode(m.deduped_compressed_objects, bl);
     decode(m.set_shared_manifest_src, bl);
 
     decode(m.loaded_objects, bl);

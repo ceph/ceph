@@ -221,6 +221,8 @@ namespace rgw::dedup {
     uint64_t ingress_corrupted_obj_attrs = 0;
     uint64_t ingress_skip_encrypted = 0;
     uint64_t ingress_skip_encrypted_bytes = 0;
+    uint64_t ingress_compressed = 0;
+    uint64_t ingress_compressed_bytes = 0;
     uint64_t ingress_skip_compressed = 0;
     uint64_t ingress_skip_compressed_bytes = 0;
     uint64_t ingress_skip_changed_objs = 0;
@@ -262,6 +264,9 @@ namespace rgw::dedup {
     uint64_t split_head_src = 0;
     uint64_t split_head_tgt = 0;
     uint64_t split_head_dedup_bytes = 0;
+    uint64_t set_compression_on_tgt = 0;
+    uint64_t clear_compression_on_tgt = 0;
+    uint64_t deduped_compressed_objects = 0;
     uint64_t set_shared_manifest_src = 0;
     uint64_t loaded_objects = 0;
     uint64_t processed_objects = 0;

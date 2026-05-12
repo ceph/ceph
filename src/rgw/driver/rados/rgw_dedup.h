@@ -191,7 +191,7 @@ namespace rgw::dedup {
     int calc_object_blake3(const RGWObjManifest &manifest,
                            disk_record_t *p_rec,
                            uint8_t *p_hash,
-                           blake3_hasher *p_pre_calc_hmac = nullptr);
+                           bufferlist *p_head_bl = nullptr);
     int split_head_object(disk_record_t *p_src_rec,     // IN/OUT PARAM
                           RGWObjManifest &src_manifest, // IN/OUT PARAM
                           const disk_record_t *p_tgt_rec,
@@ -199,7 +199,8 @@ namespace rgw::dedup {
 
     int add_obj_attrs_to_record(disk_record_t         *p_rec,
                                 const rgw::sal::Attrs &attrs,
-                                md5_stats_t           *p_stats); /* IN-OUT */
+                                rgw_placement_rule    *p_tail_rule,
+                                md5_stats_t           *p_stats/* IN-OUT */);
 
     int read_object_attribute(dedup_table_t    *p_table,
                               disk_record_t    *p_rec,
@@ -240,6 +241,7 @@ namespace rgw::dedup {
 #endif
     int  remove_slabs(unsigned worker_id, unsigned md5_shard, uint32_t slab_count);
     int  init_rados_access_handles(bool init_pool);
+    const std::string& get_placement_compression_type(const rgw_placement_rule &rule);
 
     // private data members
     rgw::sal::Driver* driver = nullptr;
@@ -258,7 +260,11 @@ namespace rgw::dedup {
 
     uint32_t d_min_obj_size_for_dedup = (64ULL * 1024);
     bool     d_split_head             = true;
+    bool     d_skip_compressed        = false;
     uint32_t d_head_object_size       = (4ULL * 1024 * 1024);
+
+    // per-cycle cache: placement rule -> compression type string
+    std::unordered_map<std::string, std::string> d_placement_compression_type;
     control_t d_ctl;
     dedup_filter_t d_filter;
     uint64_t d_watch_handle = 0;
