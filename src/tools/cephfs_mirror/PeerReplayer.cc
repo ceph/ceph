@@ -87,18 +87,6 @@ namespace {
 
 const std::string PEER_CONFIG_KEY_PREFIX = "cephfs/mirror/peer";
 
-std::string snapshot_dir_path(CephContext *cct, const std::string &path) {
-  return path + "/" + cct->_conf->client_snapdir;
-}
-
-std::string snapshot_path(const std::string &snap_dir, const std::string &snap_name) {
-  return snap_dir + "/" + snap_name;
-}
-
-std::string snapshot_path(CephContext *cct, const std::string &path, const std::string &snap_name) {
-  return path + "/" + cct->_conf->client_snapdir + "/" + snap_name;
-}
-
 std::string entry_path(const std::string &dir, const std::string &name) {
   return dir + "/" + name;
 }
