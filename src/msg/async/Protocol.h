@@ -10,6 +10,7 @@
 #include "AsyncConnection.h"
 #include "include/buffer.h"
 #include "include/msgr.h"
+#include "msg/MessageRef.h"
 
 /*
  * Continuation Helper Classes
@@ -17,6 +18,8 @@
 
 #include <memory>
 #include <tuple>
+
+class AsyncConnection;
 
 template <class C>
 class Ct {
