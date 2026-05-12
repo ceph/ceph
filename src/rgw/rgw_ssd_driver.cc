@@ -248,16 +248,19 @@ int SSDDriver::restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataC
         cache_location.pop_back();
     }
     for (auto const& dir_entry : efs::directory_iterator{partition_info.location}) {
-        std::string bucket_id, object_name;
+        //bucket_id, version and object_name are all url encoded in the file path
+        std::string bucket_id, bucket_id_enc, object_name, object_name_enc;
         if (dir_entry.is_directory()) {
             ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): Is directory, path: " << dir_entry.path() << dendl;
             ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): File Name: " << dir_entry.path().filename() << dendl;
-            bucket_id = dir_entry.path().filename();
+            bucket_id_enc = dir_entry.path().filename();
+            bucket_id = url_decode(bucket_id_enc);
             for (auto const& sub_dir_entry : efs::directory_iterator{dir_entry.path()}) {
                 if (sub_dir_entry.is_directory()) {
                     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): Is directory, path: " << sub_dir_entry.path() << dendl;
                     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): File Name: " << sub_dir_entry.path().filename() << dendl;
-                    object_name = sub_dir_entry.path().filename();
+                    object_name_enc = sub_dir_entry.path().filename();
+                    object_name = url_decode(object_name_enc);
                     for (auto const& file_entry : efs::directory_iterator{sub_dir_entry.path()}) {
                         try {
                             if (file_entry.is_regular_file()) {
@@ -287,10 +290,12 @@ int SSDDriver::restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataC
                                 }
 
                                 if (parts.size() == 1 || parts.size() == 3) {
-				    std::string version = url_decode(parts[0]);
+                    std::string version_enc = parts[0];
+				    std::string version = url_decode(version_enc);
 				    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): version: " << version << dendl;
 
-				    std::string key = url_encode(bucket_id, true) + CACHE_DELIM + url_encode(version, true) + CACHE_DELIM + url_encode(object_name, true);
+                    //key in in-memory data structures is the same as the key in the cache backend
+				    std::string key = bucket_id_enc + CACHE_DELIM + version_enc + CACHE_DELIM + object_name_enc;
 				    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): key: " << key << dendl;
 
 				    uint64_t len = 0, offset = 0;
@@ -397,6 +402,7 @@ int SSDDriver::restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataC
 					    if (attrs.find(RGW_CACHE_ATTR_OBJECT_NS) != attrs.end()) {
 						obj_key.ns = attrs[RGW_CACHE_ATTR_OBJECT_NS].to_str();
 					    }
+                        ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): rgw_obj_key: " << obj_key.get_oid() << dendl;
 					    bool deleteMarker = false;
 					offset = std::stoull(parts[1]);
 					ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): offset: " << offset << dendl;
@@ -425,7 +431,9 @@ int SSDDriver::restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataC
 											ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): bucket_name: " << bucket_name << dendl;
 										}
 										block_func(dpp, key, offset, len, version, dirty, user, bucket_name, null_yield, localWeightStr);
-                    obj_func(dpp, key, version, deleteMarker, bucket_id, obj_key, instance, null_yield, invalidStr);
+                    if (dirty) {
+                        obj_func(dpp, key, version, deleteMarker, bucket_id, obj_key, instance, null_yield, invalidStr);
+                    }
 					parsed = true;
 				    } 
 				    if (!parsed) {
