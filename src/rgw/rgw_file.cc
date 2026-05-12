@@ -30,6 +30,8 @@
 
 #include "services/svc_zone.h"
 
+#include <fmt/format.h>
+
 #include <atomic>
 
 #define dout_subsys ceph_subsys_rgw
@@ -2322,14 +2324,18 @@ int rgw_assume_role(librgw_t rgw,
   }
 
   /* 5. Copy issued credentials out. */
-  std::snprintf(out->access_key_id, sizeof(out->access_key_id), "%s",
-                resp.creds.getAccessKeyId().c_str());
-  std::snprintf(out->secret_access_key, sizeof(out->secret_access_key), "%s",
-                resp.creds.getSecretAccessKey().c_str());
-  std::snprintf(out->session_token, sizeof(out->session_token), "%s",
-                resp.creds.getSessionToken().c_str());
-  std::snprintf(out->expiration, sizeof(out->expiration), "%s",
-                resp.creds.getExpiration().c_str());
+  auto copy_to = [](char* dst, size_t cap, std::string_view src) {
+    auto r = fmt::format_to_n(dst, cap - 1, "{}", src);
+    *r.out = '\0';
+  };
+  copy_to(out->access_key_id,     sizeof(out->access_key_id),
+          resp.creds.getAccessKeyId());
+  copy_to(out->secret_access_key, sizeof(out->secret_access_key),
+          resp.creds.getSecretAccessKey());
+  copy_to(out->session_token,     sizeof(out->session_token),
+          resp.creds.getSessionToken());
+  copy_to(out->expiration,        sizeof(out->expiration),
+          resp.creds.getExpiration());
   return 0;
 }
 
