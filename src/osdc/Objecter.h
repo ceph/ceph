@@ -16,6 +16,7 @@
 #ifndef CEPH_OBJECTER_H
 #define CEPH_OBJECTER_H
 
+#include <deque>
 #include <list>
 #include <map>
 #include <mutex>
@@ -1840,9 +1841,14 @@ private:
   void update_crush_location();
 
   class RequestStateHook;
+  class SessionStrandHook;
 
   RequestStateHook *m_request_state_hook = nullptr;
   std::string m_admin_socket_name;
+  SessionStrandHook *m_session_strand_hook = nullptr;
+
+public:
+  void dump_session_strands(ceph::Formatter *f);
 
 public:
   /*** track pending operations ***/
@@ -2509,6 +2515,23 @@ public:
     // that.
     std::shared_mutex lock;
     boost::asio::strand<boost::asio::io_context::executor_type> strand;
+
+    std::mutex strand_track_lock;
+    std::deque<MessageRef> queued_messages;
+
+    void track_enqueue(const MessageRef& m) {
+      std::lock_guard l(strand_track_lock);
+      queued_messages.push_back(m);
+    }
+
+    void track_dequeue(const MessageRef& m) {
+      std::lock_guard l(strand_track_lock);
+      if (!queued_messages.empty()) {
+        auto const& _m = queued_messages.front();
+        ceph_assert(_m == m);
+        queued_messages.pop_front();
+      }
+    }
 
     int incarnation;
     ConnectionRef con;
