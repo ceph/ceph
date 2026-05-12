@@ -113,7 +113,7 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
           this.monAllowPoolDelete = monSection.value === 'true' ? true : false;
         }
       });
-    } else if (this.permissions.pool.read) {
+    } else if (this.permissions.pool?.read) {
       /*
      `monAllowPoolDelete` will always be `false`,
       because no read permissions for reading config settings.
