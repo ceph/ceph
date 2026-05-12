@@ -68,12 +68,6 @@ class DbusGaneshaSink : public GaneshaSink {
     // else should be placing config files here.
     std::string export_config_dir;
 
-    // RGW endpoint URL (e.g. "http://127.0.0.1:8000") used by
-    // Ganesha's RGW FSAL.  The FSAL identity is no longer
-    // configured here — bootstrap credentials are resolved per
-    // export from the FS owner account at compose_exports time.
-    std::string rgw_endpoint;
-
     // D-Bus addressing. Defaults match upstream Ganesha's
     // standard system-bus shape; rare deployments override.
     std::string dbus_dest = "org.ganesha.nfsd";

@@ -152,8 +152,6 @@ rgw::file_state::DbusGaneshaSink::Config make_sink_config(CephContext* cct) {
   rgw::file_state::DbusGaneshaSink::Config c;
   c.export_config_dir =
       cct->_conf.get_val<std::string>("rgw_s3files_ganesha_export_dir");
-  c.rgw_endpoint =
-      cct->_conf.get_val<std::string>("rgw_s3files_fsal_rgw_endpoint");
   c.dbus_dest =
       cct->_conf.get_val<std::string>("rgw_s3files_ganesha_dbus_dest");
   c.dbus_object =

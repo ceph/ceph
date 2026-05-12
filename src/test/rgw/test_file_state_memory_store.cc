@@ -1168,7 +1168,6 @@ class RecordingInvoker {
 DbusGaneshaSink::Config minimum_dbus_cfg(const std::string& dir) {
   DbusGaneshaSink::Config c;
   c.export_config_dir = dir;
-  c.rgw_endpoint = "http://127.0.0.1:8000";
   return c;
 }
 
