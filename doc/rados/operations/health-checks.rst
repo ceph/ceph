@@ -474,6 +474,37 @@ The warning should resolve immediately.
 .. note:: cephadm and Rook should automate this process for you.
 
 
+.. _auth-pending-key-not-committed:
+
+AUTH_PENDING_KEY_NOT_COMMITTED
+_______________________________
+
+``ceph auth rotate`` (and ``ceph auth get-or-create-pending``) generate a new,
+uncommitted key for an entity: both the old and the new key are accepted for
+authentication until ``ceph auth commit-pending`` promotes the new key, or
+``ceph auth clear-pending`` aborts the rotation. This warning means a pending
+key has been left uncommitted longer than :confval:`mon_auth_pending_key_ttl`,
+which usually indicates an interrupted rotation (for example, a client or
+automation tool that rotated the key but never finished the second step).
+
+.. prompt:: bash $
+
+    ceph health detail
+
+outputs
+
+::
+
+    [WRN] AUTH_PENDING_KEY_NOT_COMMITTED: 1 auth entities have an uncommitted pending key
+    entity client.admin2 has had an uncommitted pending key for 90000.000000
+
+The threshold before this warning is raised can be tuned with:
+
+.. prompt:: bash $
+
+    ceph config set mon mon_auth_pending_key_ttl 1_day
+
+
 .. _auth-insecure-client-key-type:
 
 AUTH_INSECURE_CLIENT_KEY_TYPE
