@@ -8,6 +8,7 @@ from mgr_module import Option
 from mgr_util import CLIWarning
 
 from ..cli import DBCLICommand
+from ..controllers import nvmeof  # noqa # pylint: disable=unused-import
 from ..controllers.cephfs import CephFS
 from ..controllers.iscsi import Iscsi, IscsiTarget
 from ..controllers.nfs import NFSGaneshaExports, NFSGaneshaUi
@@ -28,6 +29,7 @@ class Features(Enum):
     RGW = 'rgw'
     NFS = 'nfs'
     DASHBOARD = 'dashboard'
+    NVMEOF = 'nvmeof'
 
     # if we want to add any custom warning message when enabling a feature
     # we can add it here as key-value pair in warn_msg.
@@ -152,7 +154,8 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
             "cephfs": (bool, ''),
             "rgw": (bool, ''),
             "nfs": (bool, ''),
-            "dashboard": (bool, '')
+            "dashboard": (bool, ''),
+            "nvmeof": (bool, ''),
         }
 
         @APIRouter('/feature_toggles')

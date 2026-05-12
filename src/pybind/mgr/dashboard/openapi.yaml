@@ -7028,6 +7028,9 @@ paths:
                   nfs:
                     description: ''
                     type: boolean
+                  nvmeof:
+                    description: ''
+                    type: boolean
                   rbd:
                     description: ''
                     type: boolean
@@ -7042,6 +7045,7 @@ paths:
                 - rgw
                 - nfs
                 - dashboard
+                - nvmeof
                 type: object
             application/vnd.ceph.api.v1.0+json:
               schema:
@@ -7059,6 +7063,9 @@ paths:
                     description: ''
                     type: boolean
                   nfs:
+                    description: ''
+                    type: boolean
+                  nvmeof:
                     description: ''
                     type: boolean
                   rbd:
