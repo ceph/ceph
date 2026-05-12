@@ -3657,3 +3657,119 @@ def test_dedup_identical_copies_multipart_small():
     log.info("test_dedup_identical_copies_multipart:full test")
     __test_dedup_identical_copies(files, config, dry_run, verify, force_clean)
 
+
+#-------------------------------------------------------------------------------
+# Dedup Bucket Policy tests (PUT/GET/DELETE via radosgw-admin)
+#-------------------------------------------------------------------------------
+
+def dedup_policy_get(bucket_name):
+    """Get the dedup policy for a bucket via radosgw-admin."""
+    result = admin(['dedup', 'policy', 'get', '--bucket', bucket_name])
+    return result
+
+def dedup_policy_set(bucket_name, policy):
+    """Set the dedup policy for a bucket via radosgw-admin."""
+    result = admin(['dedup', 'policy', 'set', '--bucket', bucket_name,
+                    '--dedup-policy', policy])
+    return result
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_bucket_policy_set_get_deny():
+    """Set dedup policy to deny, verify GET returns deny."""
+    conn = get_single_connection()
+    bucket_name = gen_bucket_name()
+    try:
+        conn.create_bucket(Bucket=bucket_name)
+
+        result = dedup_policy_set(bucket_name, 'deny')
+        assert result[1] == 0, f"dedup policy set deny failed: {result[0]}"
+
+        result = dedup_policy_get(bucket_name)
+        assert result[1] == 0, f"dedup policy get failed: {result[0]}"
+        jresult = json.loads(result[0])
+        assert jresult['status'] == 'deny', f"Expected deny, got {jresult}"
+    finally:
+        delete_bucket_with_all_objects(bucket_name, conn)
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_bucket_policy_set_get_allow():
+    """Set dedup policy to allow, verify GET returns allow."""
+    conn = get_single_connection()
+    bucket_name = gen_bucket_name()
+    try:
+        conn.create_bucket(Bucket=bucket_name)
+
+        result = dedup_policy_set(bucket_name, 'allow')
+        assert result[1] == 0, f"dedup policy set allow failed: {result[0]}"
+
+        result = dedup_policy_get(bucket_name)
+        assert result[1] == 0, f"dedup policy get failed: {result[0]}"
+        jresult = json.loads(result[0])
+        assert jresult['status'] == 'allow', f"Expected allow, got {jresult}"
+    finally:
+        delete_bucket_with_all_objects(bucket_name, conn)
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_bucket_policy_default_no_policy():
+    """GET on a bucket with no policy set should report default (no policy)."""
+    conn = get_single_connection()
+    bucket_name = gen_bucket_name()
+    try:
+        conn.create_bucket(Bucket=bucket_name)
+
+        result = dedup_policy_get(bucket_name)
+        assert result[1] == 0, f"dedup policy get failed: {result[0]}"
+        assert 'dedup allowed' in result[0].lower() or 'No dedup policy' in result[0], \
+            f"Expected default (no policy) message, got: {result[0]}"
+    finally:
+        delete_bucket_with_all_objects(bucket_name, conn)
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_bucket_policy_overwrite():
+    """Set deny, then overwrite with allow, verify GET returns allow."""
+    conn = get_single_connection()
+    bucket_name = gen_bucket_name()
+    try:
+        conn.create_bucket(Bucket=bucket_name)
+
+        result = dedup_policy_set(bucket_name, 'deny')
+        assert result[1] == 0
+
+        result = dedup_policy_set(bucket_name, 'allow')
+        assert result[1] == 0
+
+        result = dedup_policy_get(bucket_name)
+        assert result[1] == 0
+        jresult = json.loads(result[0])
+        assert jresult['status'] == 'allow', f"Expected allow after overwrite, got {jresult}"
+    finally:
+        delete_bucket_with_all_objects(bucket_name, conn)
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_bucket_policy_invalid_value():
+    """Setting an invalid policy value should fail."""
+    conn = get_single_connection()
+    bucket_name = gen_bucket_name()
+    try:
+        conn.create_bucket(Bucket=bucket_name)
+
+        result = dedup_policy_set(bucket_name, 'invalid_value')
+        assert result[1] != 0, "Expected failure for invalid policy value"
+    finally:
+        delete_bucket_with_all_objects(bucket_name, conn)
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_bucket_policy_missing_bucket():
+    """Setting dedup policy without --bucket should fail."""
+    result = admin(['dedup', 'policy', 'set', '--dedup-policy', 'deny'])
+    assert result[1] != 0, "Expected failure when --bucket is missing"
+
+    result = admin(['dedup', 'policy', 'get'])
+    assert result[1] != 0, "Expected failure when --bucket is missing"
+

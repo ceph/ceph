@@ -4427,6 +4427,44 @@ void RGWDeleteBucketEncryption_ObjStore_S3::send_response()
   end_header(s);
 }
 
+void RGWPutBucketDedupPolicy_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s);
+}
+
+void RGWGetBucketDedupPolicy_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    if (op_ret == -ENOENT)
+      s->err.message = "The dedup policy configuration was not found";
+    set_req_state_err(s, op_ret);
+  }
+
+  dump_errno(s);
+  end_header(s, this, to_mime_type(s->format));
+  dump_start(s);
+
+  if (!op_ret) {
+    dedup_policy.dump_xml(s->formatter);
+    rgw_flush_formatter_and_reset(s, s->formatter);
+  }
+}
+
+void RGWDeleteBucketDedupPolicy_ObjStore_S3::send_response()
+{
+  if (op_ret == 0) {
+    op_ret = STATUS_NO_CONTENT;
+  }
+
+  set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s);
+}
+
 int RGWPutBucketOwnershipControls_ObjStore_S3::get_params(optional_yield y)
 {
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
@@ -5350,6 +5388,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
     return new RGWGetBucketPublicAccessBlock_ObjStore_S3;
   } else if (is_bucket_encryption_op()) {
     return new RGWGetBucketEncryption_ObjStore_S3;
+  } else if (is_dedup_policy_op()) {
+    return new RGWGetBucketDedupPolicy_ObjStore_S3;
   } else if (is_bucket_ownership_op()) {
     return new RGWGetBucketOwnershipControls_ObjStore_S3;
   }
@@ -5410,6 +5450,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
     return new RGWPutBucketPublicAccessBlock_ObjStore_S3;
   } else if (is_bucket_encryption_op()) {
     return new RGWPutBucketEncryption_ObjStore_S3;
+  } else if (is_dedup_policy_op()) {
+    return new RGWPutBucketDedupPolicy_ObjStore_S3;
   } else if (is_bucket_ownership_op()) {
     return new RGWPutBucketOwnershipControls_ObjStore_S3;
   }
@@ -5437,6 +5479,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
     return new RGWDeleteBucketPublicAccessBlock;
   } else if (is_bucket_encryption_op()) {
     return new RGWDeleteBucketEncryption_ObjStore_S3;
+  } else if (is_dedup_policy_op()) {
+    return new RGWDeleteBucketDedupPolicy_ObjStore_S3;
   } else if (is_bucket_ownership_op()) {
     return new RGWDeleteBucketOwnershipControls_ObjStore_S3;
   }

@@ -382,6 +382,7 @@ namespace rgw::dedup {
     this->ingress_corrupted_etag += other.ingress_corrupted_etag;
     this->ingress_skip_too_small_bytes += other.ingress_skip_too_small_bytes;
     this->ingress_skip_too_small += other.ingress_skip_too_small;
+    this->ingress_skip_dedup_policy += other.ingress_skip_dedup_policy;
 
     return *this;
   }
@@ -439,6 +440,10 @@ namespace rgw::dedup {
         f->dump_unsigned("Ingress skip: too small bytes",
                          this->ingress_skip_too_small_bytes);
       }
+      if (this->ingress_skip_dedup_policy) {
+        f->dump_unsigned("Ingress skip: dedup policy denied",
+                         this->ingress_skip_dedup_policy);
+      }
     }
 
     {
@@ -466,7 +471,7 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   void encode(const worker_stats_t& w, ceph::bufferlist& bl)
   {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(w.ingress_obj, bl);
     encode(w.ingress_obj_bytes, bl);
     encode(w.egress_records, bl);
@@ -491,13 +496,16 @@ namespace rgw::dedup {
     encode(w.ingress_skip_too_small, bl);
 
     encode(w.duration, bl);
+
+    // v2: dedup bucket policy
+    encode(w.ingress_skip_dedup_policy, bl);
     ENCODE_FINISH(bl);
   }
 
   //---------------------------------------------------------------------------
   void decode(worker_stats_t& w, ceph::bufferlist::const_iterator& bl)
   {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(w.ingress_obj, bl);
     decode(w.ingress_obj_bytes, bl);
     decode(w.egress_records, bl);
@@ -518,6 +526,10 @@ namespace rgw::dedup {
     decode(w.ingress_skip_too_small, bl);
 
     decode(w.duration, bl);
+
+    if (struct_v >= 2) {
+      decode(w.ingress_skip_dedup_policy, bl);
+    }
     DECODE_FINISH(bl);
   }
 

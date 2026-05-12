@@ -82,6 +82,7 @@ extern "C" {
 #include "rgw_account.h"
 #include "rgw_bucket_logging.h"
 #include "rgw_dedup_cluster.h"
+#include "rgw_dedup_policy.h"
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
 #include "services/svc_bilog_rados.h"
@@ -163,6 +164,8 @@ void usage()
   cout << "  dedup pause                      Pause dedup\n";
   cout << "  dedup resume                     Resume paused dedup\n";
   cout << "  dedup throttle                   Throttle dedup execution\n";
+  cout << "  dedup policy get                 Get per-bucket dedup policy\n";
+  cout << "  dedup policy set                 Set per-bucket dedup policy (--dedup-policy=allow|deny)\n";
   cout << "  subuser create                   create a new subuser\n" ;
   cout << "  subuser modify                   modify subuser\n";
   cout << "  subuser rm                       remove subuser\n";
@@ -780,6 +783,8 @@ enum class OPT {
   DEDUP_PAUSE,
   DEDUP_RESUME,
   DEDUP_THROTTLE,
+  DEDUP_POLICY_GET,
+  DEDUP_POLICY_SET,
   GC_LIST,
   GC_PROCESS,
   LC_LIST,
@@ -1038,6 +1043,8 @@ static SimpleCmd::Commands all_cmds = {
   { "dedup pause", OPT::DEDUP_PAUSE },
   { "dedup resume", OPT::DEDUP_RESUME },
   { "dedup throttle", OPT::DEDUP_THROTTLE },
+  { "dedup policy get", OPT::DEDUP_POLICY_GET },
+  { "dedup policy set", OPT::DEDUP_POLICY_SET },
   { "gc list", OPT::GC_LIST },
   { "gc process", OPT::GC_PROCESS },
   { "lc list", OPT::LC_LIST },
@@ -3806,6 +3813,8 @@ int main(int argc, const char **argv)
   uint64_t orphan_stale_secs = (24 * 3600);
   int detail = false;
 
+  std::string dedup_policy_str;
+
   std::string val;
   std::ostringstream errs;
   string err;
@@ -4112,6 +4121,8 @@ int main(int argc, const char **argv)
 	return EINVAL;
       }
       have_max_metadata_ops = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--dedup-policy", (char*)NULL)) {
+      dedup_policy_str = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--date", "--time", (char*)NULL)) {
       date = val;
       if (end_date.empty())
@@ -9349,6 +9360,73 @@ next:
       }
       RGWBucketAdminOp::remove_bucket(driver, *site, bucket_op, null_yield, dpp(), bypass_gc, false, false);
     }
+  }
+
+  if (opt_cmd == OPT::DEDUP_POLICY_GET ||
+      opt_cmd == OPT::DEDUP_POLICY_SET) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: --bucket is required for dedup policy commands" << std::endl;
+      return EINVAL;
+    }
+
+    std::unique_ptr<rgw::sal::Bucket> bucket;
+    int r = driver->load_bucket(dpp(), rgw_bucket(tenant, bucket_name),
+                                &bucket, null_yield);
+    if (r < 0) {
+      cerr << "could not get bucket info for bucket=" << bucket_name
+           << ": " << cpp_strerror(-r) << std::endl;
+      return -r;
+    }
+
+    if (opt_cmd == OPT::DEDUP_POLICY_GET) {
+      auto iter = bucket->get_attrs().find(RGW_ATTR_DEDUP_POLICY);
+      if (iter == bucket->get_attrs().end()) {
+        cout << "No dedup policy set on bucket " << bucket_name
+             << " (default: dedup allowed)" << std::endl;
+        return 0;
+      }
+      RGWBucketDedupPolicy policy;
+      try {
+        auto bl_iter = iter->second.cbegin();
+        policy.decode(bl_iter);
+      } catch (const buffer::error& e) {
+        cerr << "ERROR: failed to decode dedup policy" << std::endl;
+        return EIO;
+      }
+      formatter->open_object_section("dedup_policy");
+      const char* status_str = (policy.status == RGWBucketDedupPolicy::DISABLED) ? "deny" : "allow";
+      formatter->dump_string("status", status_str);
+      formatter->close_section();
+      formatter->flush(cout);
+    } else {
+      if (dedup_policy_str.empty()) {
+        cerr << "ERROR: --dedup-policy=allow|deny is required" << std::endl;
+        return EINVAL;
+      }
+
+      RGWBucketDedupPolicy policy;
+      if (dedup_policy_str == "allow") {
+        policy.status = RGWBucketDedupPolicy::ENABLED;
+      } else if (dedup_policy_str == "deny") {
+        policy.status = RGWBucketDedupPolicy::DISABLED;
+      } else {
+        cerr << "ERROR: --dedup-policy must be 'allow' or 'deny'" << std::endl;
+        return EINVAL;
+      }
+
+      bufferlist bl;
+      policy.encode(bl);
+      rgw::sal::Attrs attr;
+      attr[RGW_ATTR_DEDUP_POLICY] = bl;
+      r = bucket->merge_and_store_attrs(dpp(), attr, null_yield);
+      if (r < 0) {
+        cerr << "ERROR: failed writing dedup policy: " << cpp_strerror(-r) << std::endl;
+        return -r;
+      }
+      cout << "Dedup policy set to '" << dedup_policy_str
+           << "' on bucket " << bucket_name << std::endl;
+    }
+    return 0;
   }
 
   if (opt_cmd == OPT::DEDUP_STATS    ||

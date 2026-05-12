@@ -434,6 +434,24 @@ public:
   ~RGWDeleteBucketEncryption_ObjStore() override {}
 };
 
+class RGWGetBucketDedupPolicy_ObjStore : public RGWGetBucketDedupPolicy {
+public:
+  RGWGetBucketDedupPolicy_ObjStore() {}
+  ~RGWGetBucketDedupPolicy_ObjStore() override {}
+};
+
+class RGWPutBucketDedupPolicy_ObjStore : public RGWPutBucketDedupPolicy {
+public:
+  RGWPutBucketDedupPolicy_ObjStore() {}
+  ~RGWPutBucketDedupPolicy_ObjStore() override {}
+};
+
+class RGWDeleteBucketDedupPolicy_ObjStore : public RGWDeleteBucketDedupPolicy {
+public:
+  RGWDeleteBucketDedupPolicy_ObjStore() {}
+  ~RGWDeleteBucketDedupPolicy_ObjStore() override {}
+};
+
 class RGWGetBucketOwnershipControls_ObjStore : public RGWGetBucketOwnershipControls {};
 
 class RGWPutBucketOwnershipControls_ObjStore : public RGWPutBucketOwnershipControls {};

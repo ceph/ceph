@@ -139,6 +139,7 @@ set(librgw_common_srcs
   rgw_lua.cc
   rgw_lua_data_filter.cc
   rgw_bucket_encryption.cc
+  rgw_dedup_policy.cc
   rgw_tracer.cc
   rgw_lua_background.cc
   rgw_data_access.cc

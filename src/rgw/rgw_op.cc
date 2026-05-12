@@ -10047,6 +10047,135 @@ void RGWDeleteBucketEncryption::execute(optional_yield y)
   }, y);
 }
 
+// RGWPutBucketDedupPolicy
+int RGWPutBucketDedupPolicy::get_params(optional_yield y)
+{
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  std::tie(op_ret, data) = read_all_input(s, max_size, false);
+  return op_ret;
+}
+
+int RGWPutBucketDedupPolicy::verify_permission(optional_yield y)
+{
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketDedupPolicy)) {
+    return -EACCES;
+  }
+  return 0;
+}
+
+void RGWPutBucketDedupPolicy::execute(optional_yield y)
+{
+  RGWXMLDecoder::XMLParser parser;
+  if (!parser.init()) {
+    ldpp_dout(this, 0) << "ERROR: failed to initialize XML parser" << dendl;
+    op_ret = -EINVAL;
+    return;
+  }
+  op_ret = get_params(y);
+  if (op_ret < 0) {
+    return;
+  }
+  if (!parser.parse(data.c_str(), data.length(), 1)) {
+    ldpp_dout(this, 0) << "ERROR: malformed XML" << dendl;
+    op_ret = -ERR_MALFORMED_XML;
+    return;
+  }
+
+  XMLObj *config_obj = parser.find_first("DedupConfiguration");
+  if (!config_obj) {
+    ldpp_dout(this, 0) << "ERROR: missing DedupConfiguration element" << dendl;
+    op_ret = -ERR_MALFORMED_XML;
+    return;
+  }
+  XMLObj *status_obj = config_obj->find_first("Status");
+  if (!status_obj) {
+    ldpp_dout(this, 0) << "ERROR: missing Status element" << dendl;
+    op_ret = -ERR_MALFORMED_XML;
+    return;
+  }
+  const std::string& status_str = status_obj->get_data();
+
+  RGWBucketDedupPolicy::Status policy_status;
+  if (!RGWBucketDedupPolicy::decode_xml_status(status_str, policy_status)) {
+    ldpp_dout(this, 0) << "ERROR: invalid DedupConfiguration Status: "
+                       << status_str << dendl;
+    op_ret = -ERR_MALFORMED_XML;
+    return;
+  }
+  dedup_policy.status = policy_status;
+
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
+                                         &data, nullptr, s->info, s->err, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 20) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
+  }
+
+  bufferlist conf_bl;
+  dedup_policy.encode(conf_bl);
+  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y, &conf_bl] {
+    rgw::sal::Attrs attrs = s->bucket->get_attrs();
+    attrs[RGW_ATTR_DEDUP_POLICY] = conf_bl;
+    return s->bucket->merge_and_store_attrs(this, attrs, y);
+  }, y);
+}
+
+// RGWGetBucketDedupPolicy
+int RGWGetBucketDedupPolicy::verify_permission(optional_yield y)
+{
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3GetBucketDedupPolicy)) {
+    return -EACCES;
+  }
+  return 0;
+}
+
+void RGWGetBucketDedupPolicy::execute(optional_yield y)
+{
+  const auto& attrs = s->bucket_attrs;
+  if (auto aiter = attrs.find(RGW_ATTR_DEDUP_POLICY);
+      aiter == attrs.end()) {
+    ldpp_dout(this, 20) << "no dedup policy for bucket=" << s->bucket_name << dendl;
+    op_ret = -ENOENT;
+    s->err.message = "The dedup policy configuration was not found";
+    return;
+  } else {
+    bufferlist::const_iterator iter{&aiter->second};
+    try {
+      dedup_policy.decode(iter);
+    } catch (const buffer::error& e) {
+      ldpp_dout(this, 0) << __func__ << " decode dedup_policy failed" << dendl;
+      op_ret = -EIO;
+      return;
+    }
+  }
+}
+
+// RGWDeleteBucketDedupPolicy
+int RGWDeleteBucketDedupPolicy::verify_permission(optional_yield y)
+{
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketDedupPolicy)) {
+    return -EACCES;
+  }
+  return 0;
+}
+
+void RGWDeleteBucketDedupPolicy::execute(optional_yield y)
+{
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
+                                         nullptr, nullptr, s->info, s->err, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
+  }
+
+  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y] {
+    rgw::sal::Attrs& attrs = s->bucket->get_attrs();
+    attrs.erase(RGW_ATTR_DEDUP_POLICY);
+    op_ret = s->bucket->put_info(this, false, real_time(), y);
+    return op_ret;
+  }, y);
+}
+
 int RGWPutBucketOwnershipControls::verify_permission(optional_yield y)
 {
   if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketOwnershipControls)) {

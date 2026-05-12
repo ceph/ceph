@@ -464,6 +464,30 @@ public:
   void send_response() override;
 };
 
+class RGWGetBucketDedupPolicy_ObjStore_S3 : public RGWGetBucketDedupPolicy_ObjStore {
+public:
+  RGWGetBucketDedupPolicy_ObjStore_S3() {}
+  ~RGWGetBucketDedupPolicy_ObjStore_S3() override {}
+
+  void send_response() override;
+};
+
+class RGWPutBucketDedupPolicy_ObjStore_S3 : public RGWPutBucketDedupPolicy_ObjStore {
+public:
+  RGWPutBucketDedupPolicy_ObjStore_S3() {}
+  ~RGWPutBucketDedupPolicy_ObjStore_S3() override {}
+
+  void send_response() override;
+};
+
+class RGWDeleteBucketDedupPolicy_ObjStore_S3 : public RGWDeleteBucketDedupPolicy_ObjStore {
+public:
+  RGWDeleteBucketDedupPolicy_ObjStore_S3() {}
+  ~RGWDeleteBucketDedupPolicy_ObjStore_S3() override {}
+
+  void send_response() override;
+};
+
 class RGWGetBucketOwnershipControls_ObjStore_S3 : public RGWGetBucketOwnershipControls_ObjStore {
  public:
   void send_response() override;
@@ -764,6 +788,9 @@ protected:
   }
   bool is_bucket_encryption_op() {
     return s->info.args.exists("encryption");
+  }
+  bool is_dedup_policy_op() {
+    return s->info.args.exists("dedup-policy");
   }
   bool is_bucket_ownership_op() const {
     return s->info.args.exists("ownershipControls");

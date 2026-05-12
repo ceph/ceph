@@ -34,6 +34,76 @@ Admin Commands
    Displays dedup throttle setting.
 
 
+Dedup Bucket Policy
+===================
+
+A per-bucket dedup policy allows bucket owners to control whether the dedup
+background worker is permitted to deduplicate objects in their bucket.
+
+Impact on User Operations
+-------------------------
+
+The dedup bucket policy is a **control-plane-only** setting. It only affects the
+dedup background worker and has **no impact on normal S3 data-plane operations**.
+PutObject, GetObject, DeleteObject, ListBucket, multipart uploads, and all other
+S3 operations continue to work exactly as before, regardless of the dedup policy
+setting.
+
+Setting the policy to ``Disabled`` does not block, throttle, or alter any user
+read/write operations on the bucket. The only observable effect is that the dedup
+daemon will skip the bucket during its ingress scan, meaning duplicate tail
+objects in that bucket will not be deduplicated.
+
+Setting the policy to ``Enabled`` (or removing it) does not change user-facing
+behavior -- it simply allows the dedup daemon to process the bucket normally.
+
+S3 API
+------
+
+The dedup policy is managed via the ``?dedup-policy`` subresource on a bucket:
+
+- ``PUT /<bucket>?dedup-policy`` -- Set the dedup policy. Request body:
+
+  .. code-block:: xml
+
+     <DedupConfiguration>
+       <Status>Enabled|Disabled</Status>
+     </DedupConfiguration>
+
+  ``Enabled`` means dedup is allowed. ``Disabled`` means dedup is denied.
+
+- ``GET /<bucket>?dedup-policy`` -- Get the current dedup policy. Returns the
+  XML document above, or a ``404`` if no policy has been set.
+
+- ``DELETE /<bucket>?dedup-policy`` -- Remove the dedup policy. Returns the
+  bucket to its default behavior (dedup allowed).
+
+IAM Actions
+-----------
+
+Access to the dedup policy API is controlled by two IAM actions:
+
+- ``s3:GetBucketDedupPolicy`` -- Required to read the dedup policy.
+- ``s3:PutBucketDedupPolicy`` -- Required to set or delete the dedup policy.
+
+Admin Commands
+--------------
+
+The dedup policy can also be managed via ``radosgw-admin``:
+
+- ``radosgw-admin dedup policy get --bucket=<name>``:
+  Display the dedup policy for the given bucket.
+
+- ``radosgw-admin dedup policy set --bucket=<name> --dedup-policy=allow|deny``:
+  Set the dedup policy. ``allow`` permits dedup, ``deny`` blocks it.
+
+Default Behavior
+----------------
+
+If no dedup policy is set on a bucket (the default), dedup is **allowed**.
+This preserves backward compatibility with existing deployments.
+
+
 Skipped Objects
 ===============
 
