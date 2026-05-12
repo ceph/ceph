@@ -122,6 +122,7 @@ void ECBackend::handle_recovery_push(
   recovery_backend.handle_recovery_push(op, m, is_repair);
 
   if (op.after_progress.data_complete &&
+    op.after_progress.omap_complete &&
     !(get_parent()->pgb_is_primary()) &&
     get_parent()->pg_is_remote_backfilling()) {
     struct stat st;
@@ -571,8 +572,133 @@ void ECBackend::handle_sub_read(
       reply->attrs_read.erase(*i);
       reply->buffers_read.erase(*i);
       reply->errors[*i] = r;
+      continue;
+    }
+
+    if (!op.omap_headers_to_read.contains(*i)) {
+      continue;
+    }
+
+    if (!get_parent()->get_pool().supports_omap()) {
+      continue;
+    }
+
+    // During recovery, if the OI attribute isn't accessible, we speculatively
+    // say that we want to read omap data.
+    // Now we have access to the OI attribute so we can determine if omap data
+    // should be read or not.
+    auto oi_iter = reply->attrs_read[*i].find(OI_ATTR);
+    if (oi_iter == reply->attrs_read[*i].end()) {
+      continue;
+    }
+
+    try {
+      object_info_t oi;
+      auto p = oi_iter->second.cbegin();
+      decode(oi, p);
+      if (!oi.is_omap()) {
+        reply->omaps_complete[*i] = true;
+        dout(20) << __func__ << ": object " << *i
+                 << " has no omap flag, skipping omap read" << dendl;
+      } else {
+        dout(20) << __func__ << ": object " << *i
+                 << " has omap flag set" << dendl;
+      }
+    } catch (ceph::buffer::error& e) {
+      lgeneric_derr(cct) << __func__ << ": failed to decode OI for " << *i
+              << ": " << e.what() << dendl;
+      get_parent()->clog_warn() << "corrupt object info attribute for " << *i;
+      reply->errors[*i] = -EIO;
+      continue;
     }
   }
+
+  if (get_parent()->get_pool().supports_omap()) {
+    for (set<hobject_t>::iterator i = op.omap_headers_to_read.begin();
+         i != op.omap_headers_to_read.end();
+         ++i) {
+      dout(20) << __func__ << ": fulfilling omap header request on "
+               << *i << dendl;
+      if (reply->errors.contains(*i)) {
+        continue;
+      }
+
+      // Skip if attrs already proved omap processing is complete.
+      if (reply->omaps_complete.contains(*i) && reply->omaps_complete[*i]) {
+        dout(20) << __func__ << ": skipping omap header read for " << *i
+                 << " (no omap flag)" << dendl;
+        continue;
+      }
+
+      int r = switcher->store->omap_get_header(
+        switcher->ch,
+        ghobject_t(*i, ghobject_t::NO_GEN, shard),
+        &reply->omap_headers_read[*i], false);
+      if (r < 0) {
+        reply->attrs_read.erase(*i);
+        reply->omap_headers_read.erase(*i);
+        reply->buffers_read.erase(*i);
+        reply->errors[*i] = r;
+      }
+    }
+
+    for (auto const& [hoid, read_from] : op.omap_read_from) {
+      auto const&[start_key, max_bytes] = read_from;
+      dout(20) << __func__ << ": fulfilling omap read request on " << hoid
+              << " from key " << start_key << dendl;
+
+      if (reply->errors.contains(hoid))
+        continue;
+
+      // Skip if attrs already proved omap processing is complete.
+      if (reply->omaps_complete.contains(hoid) && reply->omaps_complete[hoid]) {
+        dout(20) << __func__ << ": skipping omap entries read for " << hoid
+                 << " (no omap flag)" << dendl;
+        continue;
+      }
+
+      std::map<std::string, ceph::buffer::list> current_batch;
+      reply->omaps_complete[hoid] = false;
+
+      uint64_t available = max_bytes;
+      const auto result = switcher->store->omap_iterate(
+        switcher->ch,
+        ghobject_t(hoid, ghobject_t::NO_GEN, shard),
+        ObjectStore::omap_iter_seek_t{
+        .seek_position = start_key,
+        .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND
+        },
+        [max_entries=cct->_conf->osd_recovery_max_omap_entries_per_chunk, &available, &current_batch]
+        (std::string_view key, std::string_view value) {
+          const auto num_new_bytes = key.size() + value.size();
+          if (auto cur_num_entries = current_batch.size(); cur_num_entries > 0) {
+            if (max_entries > 0 && cur_num_entries >= max_entries) {
+              return ObjectStore::omap_iter_ret_t::STOP;
+            }
+            if (num_new_bytes >= available) {
+              return ObjectStore::omap_iter_ret_t::STOP;
+            }
+          }
+          bufferlist val_bl;
+          val_bl.append(value);
+          current_batch.insert(make_pair(key, val_bl));
+          available -= std::min(available, num_new_bytes);
+          return ObjectStore::omap_iter_ret_t::NEXT;
+        });
+
+      if (result < 0) {
+        reply->attrs_read.erase(hoid);
+        reply->omap_headers_read.erase(hoid);
+        reply->buffers_read.erase(hoid);
+        reply->errors[hoid] = result;
+        current_batch.clear();
+      } else if (result == 0) {
+        reply->omaps_complete[hoid] = true;
+      }
+      reply->omap_entries_read[hoid] = std::move(current_batch);
+    }
+  }
+
   reply->from = get_parent()->whoami_shard();
   reply->tid = op.tid;
 }
@@ -688,7 +814,7 @@ void ECBackend::handle_sub_read_reply(
     }
   }
   for (auto &&[hoid, attr]: op.attrs_read) {
-    ceph_assert(!op.errors.count(hoid));
+    ceph_assert(!op.errors.contains(hoid));
     // if read error better not have sent an attribute
     if (!rop.to_read.contains(hoid)) {
       // We canceled this read! @see filter_read_op
@@ -700,6 +826,49 @@ void ECBackend::handle_sub_read_reply(
     }
     rop.complete.at(hoid).attrs.emplace();
     (*(rop.complete.at(hoid).attrs)).swap(attr);
+  }
+  if (get_parent()->get_pool().supports_omap()) {
+    for (auto &&[hoid, header]: op.omap_headers_read) {
+      ceph_assert(!op.errors.contains(hoid));
+      // if read error better not have sent an attribute
+      if (!rop.to_read.contains(hoid)) {
+        // We canceled this read! @see filter_read_op
+        dout(20) << __func__ << " to_read skipping" << dendl;
+        continue;
+      }
+      if (!rop.complete.contains(hoid)) {
+        rop.complete.emplace(hoid, &sinfo);
+      }
+      rop.complete.at(hoid).omap_header.emplace();
+      (*(rop.complete.at(hoid).omap_header)).swap(header);
+    }
+    for (auto &&[hoid, entries]: op.omap_entries_read) {
+      ceph_assert(!op.errors.contains(hoid));
+      // if read error better not have sent any entries
+      if (!rop.to_read.contains(hoid)) {
+        // We canceled this read! @see filter_read_op
+        dout(20) << __func__ << " to_read skipping" << dendl;
+        continue;
+      }
+      if (!rop.complete.contains(hoid)) {
+        rop.complete.emplace(hoid, &sinfo);
+      }
+      rop.complete.at(hoid).omap_entries.emplace();
+      (*(rop.complete.at(hoid).omap_entries)).swap(entries);
+    }
+    for (auto &&[hoid, omap_complete]: op.omaps_complete) {
+      ceph_assert(!op.errors.contains(hoid));
+      // if read error better not have sent any entries
+      if (!rop.to_read.contains(hoid)) {
+        // We canceled this read! @see filter_read_op
+        dout(20) << __func__ << " to_read skipping" << dendl;
+        continue;
+      }
+      if (!rop.complete.contains(hoid)) {
+        rop.complete.emplace(hoid, &sinfo);
+      }
+      rop.complete.at(hoid).omap_complete = omap_complete;
+    }
   }
   for (auto &&[hoid, err]: op.errors) {
     if (!rop.complete.contains(hoid)) {
@@ -747,7 +916,13 @@ void ECBackend::handle_sub_read_reply(
       }
 
       int err = -EIO; // If attributes needed but not read.
-      if (!rop.to_read.at(oid).want_attrs || rop.complete.at(oid).attrs) {
+      const auto& to_read = rop.to_read.at(oid);
+      const auto& complete = rop.complete.at(oid);
+      bool attrs_satisfied = !to_read.want_attrs || complete.attrs;
+      bool omap_satisfied  = !get_parent()->get_pool().supports_omap() 
+                             || (!to_read.want_omap_header && !to_read.want_omap_keys)
+                             || (complete.omap_header && complete.omap_complete);
+      if (attrs_satisfied && omap_satisfied) {
         err = ec_impl->minimum_to_decode(want_to_read, have, dummy_minimum,
                                                     nullptr);
       }
@@ -800,6 +975,7 @@ void ECBackend::handle_sub_read_reply(
         // uncompleted objects
         rop.to_read.at(oid).shard_reads.clear();
         rop.to_read.at(oid).want_attrs = false;
+        rop.to_read.at(oid).want_omap_header = false;
         ++is_complete;
       }
     }
