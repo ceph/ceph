@@ -511,6 +511,32 @@ CORO_TEST_F(neocls_log, trim_loop_empty_log_by_marker, NeoRadosTest)
 }
 
 
+CORO_TEST_F(neocls_log, trim_loop_all_entries_by_time, NeoRadosTest)
+{
+  co_await create_obj(oid);
+  auto start_time = real_clock::now();
+  co_await generate_log(rados(), oid, pool(), 10, start_time, true,
+			asio::use_awaitable);
+
+  auto end_time = start_time + 100s;
+  co_await neorados::cls::log::trim(
+    rados(), oid, pool(), real_time{}, end_time, asio::use_awaitable);
+
+  std::vector<l::entry> entries{neorados::cls::log::max_list_entries};
+  std::span<l::entry> result;
+  co_await list(rados(), oid, pool(), entries, &result, asio::use_awaitable);
+  EXPECT_EQ(0u, result.size());
+}
+
+CORO_TEST_F(neocls_log, trim_loop_empty_log_by_time, NeoRadosTest)
+{
+  co_await create_obj(oid);
+
+  auto end_time = real_clock::now() + 100s;
+  co_await neorados::cls::log::trim(
+    rados(), oid, pool(), real_time{}, end_time, asio::use_awaitable);
+}
+
 #if 0 // Disable until we get rid of GCC11
 TEST(neocls_log_bare, lambdata)
 {
