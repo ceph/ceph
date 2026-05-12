@@ -10,7 +10,7 @@ from cephadm.ssh import HostConnectionError
 from cephadm.utils import ContainerInspectInfo
 from orchestrator import OrchestratorError, DaemonDescription
 from .fixtures import _run_cephadm, wait, with_host, with_service, \
-    receive_agent_metadata, async_side_effect
+    with_cephadm_module, receive_agent_metadata, async_side_effect
 
 from typing import List, Tuple, Optional
 
@@ -34,6 +34,54 @@ def test_upgrade_start(cephadm_module: CephadmOrchestrator):
 
                 assert wait(cephadm_module, cephadm_module.upgrade_stop()
                             ) == 'Stopped upgrade to image_id'
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_upgrade_start_preflight_disabled_by_default():
+    with with_cephadm_module() as m:
+        # Provide non-OK health and broken OSD/PG state; preflight is disabled by default so this must not block.
+        m.mock_store_set('_ceph_get', 'health', {
+            'json': json.dumps({
+                'status': 'HEALTH_WARN',
+                'checks': {
+                    'SOME_WARN': {'muted': False},
+                },
+            }),
+        })
+        m.mock_store_set('_ceph_get', 'osd_map', {
+            'osds': [{'osd': 0, 'up': 0, 'in': 0}],
+        })
+        m.mock_store_set('_ceph_get', 'pg_dump', {
+            'pg_stats': [{'pgid': '1.0', 'state': 'active+undersized', 'up': [0], 'acting': [0]}],
+        })
+        with with_host(m, 'test'):
+            with with_host(m, 'test2'):
+                with with_service(m, ServiceSpec('mgr', placement=PlacementSpec(count=2)), status_running=True):
+                    assert wait(m, m.upgrade_start('image_id', None)) == 'Initiating upgrade to image_id'
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_upgrade_start_preflight_enabled_blocks():
+    with with_cephadm_module(module_options={'upgrade_preflight_checks': True}) as m:
+        m.mock_store_set('_ceph_get', 'health', {
+            'json': json.dumps({
+                'status': 'HEALTH_WARN',
+                'checks': {
+                    'SOME_WARN': {'muted': False},
+                },
+            }),
+        })
+        m.mock_store_set('_ceph_get', 'osd_map', {
+            'osds': [{'osd': 0, 'up': 0, 'in': 0}],
+        })
+        m.mock_store_set('_ceph_get', 'pg_dump', {
+            'pg_stats': [{'pgid': '1.0', 'state': 'active+undersized', 'up': [0], 'acting': [0]}],
+        })
+        with with_host(m, 'test'):
+            with with_host(m, 'test2'):
+                with with_service(m, ServiceSpec('mgr', placement=PlacementSpec(count=2)), status_running=True):
+                    with pytest.raises(OrchestratorError, match=r'Upgrade blocked by pre-upgrade checks'):
+                        wait(m, m.upgrade_start('image_id', None))
 
 
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))

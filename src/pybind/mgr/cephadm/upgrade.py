@@ -2,7 +2,7 @@ import json
 import logging
 import time
 import uuid
-from typing import TYPE_CHECKING, Optional, Dict, List, Tuple, Any, cast
+from typing import TYPE_CHECKING, Optional, Dict, List, Tuple, Any, cast, Set
 from cephadm.services.service_registry import service_registry
 
 import orchestrator
@@ -123,6 +123,7 @@ class UpgradeState:
 class CephadmUpgrade:
     UPGRADE_ERRORS = [
         'UPGRADE_NO_STANDBY_MGR',
+        'UPGRADE_PREFLIGHT_CHECK_FAILED',
         'UPGRADE_FAILED_PULL',
         'UPGRADE_REDEPLOY_DAEMON',
         'UPGRADE_BAD_TARGET_VERSION',
@@ -139,6 +140,205 @@ class CephadmUpgrade:
         else:
             self.upgrade_state = None
         self.upgrade_info_str: str = ''
+
+    def _pg_state_ok_for_upgrade(self, state: str) -> bool:
+        # We treat any PG as ok if it contains active+clean and does not have
+        # any of the known bad flags.
+        state_parts = [t for t in (state or '').split('+') if t]
+        if 'active' not in state_parts or 'clean' not in state_parts:
+            return False
+
+        for t in state_parts:
+            # Anything related to recovery/backfill or reduced durability blocks upgrades.
+            if (
+                t in {'degraded', 'undersized', 'recovering', 'remapped', 'stale', 'incomplete', 'peering'}
+                or t.startswith('recovery')  # Handles recovery_* cases (ex: recovery_wait, recovery_toofull, recovery_unfound)
+                or t.startswith('backfill')
+            ):
+                return False
+        return True
+
+    def _pre_upgrade_check_cluster_health(self) -> List[str]:
+        """
+        Return any health-related reasons to block an upgrade.
+
+        # Ignore muted checks and our preflight warning, so upgrades aren’t blocked by non-essential alerts.
+        """
+        health_data = self.mgr.get('health')
+        if not isinstance(health_data, dict):
+            raise OrchestratorError(
+                f'Upgrade blocked: unexpected health payload '
+                f'(expected dict, got {type(health_data)})'
+            )
+
+        if 'json' in health_data:
+            raw = health_data.get('json')
+            if not isinstance(raw, str):
+                # `get('health')` normally returns {'json': '<string>'}
+                raise OrchestratorError(
+                    f'Upgrade blocked: unexpected health json payload '
+                    f'(expected str, got {type(raw)})'
+                )
+            try:
+                health = json.loads(raw)
+            except (TypeError, ValueError) as e:
+                raise OrchestratorError(f'Upgrade blocked: unable to determine cluster health: {e}')
+        else:
+            health = health_data
+
+        if not isinstance(health, dict):
+            raise OrchestratorError(
+                f'Upgrade blocked: unexpected decoded health payload '
+                f'(expected dict, got {type(health)})'
+            )
+
+        health_status = health.get('status')
+        if not isinstance(health_status, str) or not health_status:
+            raise OrchestratorError('Upgrade blocked: unable to determine cluster health status')
+        if health_status == 'HEALTH_OK':
+            return []
+
+        # Health can be WARN/ERR just because of muted checks or our own preflight warning.
+        # Don't block on those, or we might end up blocking on the warning we just set.
+        checks = health.get('checks')
+        if isinstance(checks, dict):
+            unmuted = [
+                check_id for check_id, info in checks.items()
+                if check_id != 'UPGRADE_PREFLIGHT_CHECK_FAILED'
+                and not (isinstance(info, dict) and info.get('muted'))
+            ]
+            if not unmuted:
+                return []
+            # If there are any blocking check IDs, show up to 5 of them in the error to help diagnose.
+            shown = ', '.join(sorted(unmuted)[:5])
+            if len(unmuted) > 5:
+                shown += ', ...'
+            return [f'cluster health is {health_status} (expected HEALTH_OK): {shown}']
+
+        return [f'cluster health is {health_status} (expected HEALTH_OK)']
+
+    def _pre_upgrade_check_osds(self) -> List[str]:
+        # Upgrade only when everything is up+in.
+        osd_map = self.mgr.get('osd_map')
+        if not isinstance(osd_map, dict):
+            raise OrchestratorError(
+                f'Upgrade blocked: unexpected osd_map payload '
+                f'(expected dict, got {type(osd_map)})'
+            )
+
+        down_osds: List[int] = []
+        out_osds: List[int] = []
+        for o in osd_map.get('osds', []):
+            osd_id = o.get('osd')
+            if osd_id is None:
+                continue
+            # Track any OSDs that are currently down or out.
+            # If fields are missing/unexpected, treat the OSD as not OK.
+            if o.get('up', 0) != 1:
+                down_osds.append(int(osd_id))
+            if o.get('in', 0) != 1:
+                out_osds.append(int(osd_id))
+
+        if not down_osds and not out_osds:
+            return []
+
+        msg = 'osds must be up+in'
+        if down_osds:
+            msg += f' (down: {",".join(map(str, sorted(down_osds)))})'
+        if out_osds:
+            msg += f' (out: {",".join(map(str, sorted(out_osds)))})'
+        return [msg]
+
+    def _pre_upgrade_check_pgs_state(self) -> Tuple[List[str], List[str], Set[int]]:
+        pg_dump = self.mgr.get('pg_dump')
+        if not isinstance(pg_dump, dict):
+            raise OrchestratorError(
+                f'Upgrade blocked: unexpected pg_dump payload '
+                f'(expected dict, got {type(pg_dump)})'
+            )
+        pg_stats = pg_dump.get('pg_stats', []) or []
+        if not isinstance(pg_stats, list):
+            raise OrchestratorError(
+                f'Upgrade blocked: unexpected pg_stats payload '
+                f'(expected list, got {type(pg_stats)})'
+            )
+
+        bad_pgs: List[Dict[str, Any]] = []
+        suspect_osds: Set[int] = set()
+        for pg in pg_stats:
+            state = str(pg.get('state') or '')
+            if self._pg_state_ok_for_upgrade(state):
+                continue
+            bad_pgs.append(pg)
+
+            up = pg.get('up') or []
+            acting = pg.get('acting') or []
+            try:
+                # If "up" and "acting" are not the same set, there could be an OSD problem to look into.
+                up_set = {int(x) for x in up if isinstance(x, int) or str(x).lstrip('-').isdigit()}
+                acting_set = {int(x) for x in acting if isinstance(x, int) or str(x).lstrip('-').isdigit()}
+            except (TypeError, ValueError):
+                continue
+            for osd in (up_set ^ acting_set):
+                suspect_osds.add(osd)
+
+        if not bad_pgs:
+            return ([], [], suspect_osds)
+
+        errors = [f'{len(bad_pgs)} PG(s) not in an upgrade safe state']
+        detail: List[str] = []
+        sample = bad_pgs[:10]
+        for pg in sample:
+            pgid = pg.get('pgid', '<unknown>')
+            state = pg.get('state', '<unknown>')
+            up = pg.get('up', [])
+            acting = pg.get('acting', [])
+            detail.append(f'pg {pgid} state={state} up={up} acting={acting}')
+        if len(bad_pgs) > len(sample):
+            detail.append(
+                f'... and {len(bad_pgs) - len(sample)} more PG(s) not shown; '
+                f'use "ceph pg dump_stuck unclean" to see the full list'
+            )
+
+        return (errors, detail, suspect_osds)
+
+    def _pre_upgrade_validate_cluster(self) -> None:
+        """
+        Pre-upgrade validation:
+        - Cluster health must be HEALTH_OK
+        - All OSDs must be up+in
+        - All PGs must be in an upgrade safe state (active+clean, without any bad flags)
+        """
+        # Preflight checks are optional (disabled by default). If they are disabled,
+        # don't block the upgrade and clear any stale warning from earlier runs.
+        if not self.mgr.get_module_option('upgrade_preflight_checks'):
+            self.mgr.remove_health_warning('UPGRADE_PREFLIGHT_CHECK_FAILED')
+            return
+        # Gather errors and details from each pre-upgrade check and summarize them together for a clear report.
+        health_errors = self._pre_upgrade_check_cluster_health()
+        osd_errors = self._pre_upgrade_check_osds()
+        pg_errors, detail, suspect_osds = self._pre_upgrade_check_pgs_state()
+        errors = health_errors + osd_errors + pg_errors
+
+        if not errors:
+            self.mgr.remove_health_warning('UPGRADE_PREFLIGHT_CHECK_FAILED')
+            return
+
+        # Show a health warning so it is visible in `ceph -s` and `ceph health detail`
+        summary = 'Upgrade blocked by pre-upgrade checks'
+        detail_lines = [f'- {e}' for e in errors]
+        if suspect_osds:
+            detail_lines.append(
+                f'- suspect osds from PG up/acting mismatch: {",".join(map(str, sorted(suspect_osds)))}'
+            )
+        detail_lines.extend(detail)
+        detail_lines.append('Fix the above and re-run the upgrade.')
+        detail_lines.append(
+            'Useful commands: ceph health detail; ceph osd stat; ceph pg stat; ceph pg dump_stuck unclean'
+        )
+        self.mgr.set_health_warning('UPGRADE_PREFLIGHT_CHECK_FAILED', summary, 1, detail_lines)
+
+        raise OrchestratorError(f'{summary}: ' + '; '.join(errors))
 
     @property
     def target_image(self) -> str:
@@ -346,6 +546,8 @@ class CephadmUpgrade:
 
         if running_mgr_count < 2:
             raise OrchestratorError('Need at least 2 running mgr daemons for upgrade')
+
+        self._pre_upgrade_validate_cluster()
 
         self.mgr.log.info('Upgrade: Started with target %s' % target_name)
         self.upgrade_state = UpgradeState(

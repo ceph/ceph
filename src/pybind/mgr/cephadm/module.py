@@ -335,6 +335,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             desc='Automatically convert image tags to image digest to ensure that all daemons use the same image'
         ),
         Option(
+            'upgrade_preflight_checks',
+            type='bool',
+            default=False,
+            desc='Enable pre-upgrade validation (health/OSDs/PGs) before starting an upgrade',
+        ),
+        Option(
             'config_checks_enabled',
             type='bool',
             default=False,
