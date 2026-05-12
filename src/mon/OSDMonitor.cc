@@ -15746,6 +15746,71 @@ void OSDMonitor::try_disable_stretch_mode(stringstream& ss,
   return;
 }
 
+void OSDMonitor::validate_stretch_mode_pools(
+    const CrushWrapper& crush,
+    const mempool::osdmap::map<int64_t, string>& pool_names,
+    const mempool::osdmap::map<int64_t, pg_pool_t>& pools,
+    stringstream& ss,
+    bool *okay,
+    int *errcode,
+    const string& new_crush_rule)
+{
+  *okay = false;
+  
+  // Validate CRUSH rule exists
+  int new_crush_rule_result = crush.get_rule_id(new_crush_rule);
+  if (new_crush_rule_result < 0) {
+    ss << "unrecognized crush rule " << new_crush_rule;
+    *errcode = new_crush_rule_result;
+    return;
+  }
+  
+  __u8 new_rule = static_cast<__u8>(new_crush_rule_result);
+  int crush_rule_type = crush.get_rule_type(new_rule);
+  if (crush_rule_type < 0) {
+    ss << "unable to get type for crush rule " << new_crush_rule;
+    *errcode = -EINVAL;
+    return;
+  }
+
+  // Validate each pool
+  for (const auto& pooli : pools) {
+    int64_t poolid = pooli.first;
+    const pg_pool_t& p = pooli.second;
+    
+    // Validate that pool type matches crush rule type
+    if (p.is_replicated() && crush_rule_type != pg_pool_t::TYPE_REPLICATED) {
+      ss << "pool '" << pool_names.at(poolid) << "' is replicated but crush rule '"
+         << new_crush_rule << "' is not a replicated rule";
+      *errcode = -EINVAL;
+      return;
+    }
+    if (p.is_erasure() && crush_rule_type != pg_pool_t::TYPE_ERASURE) {
+      ss << "pool '" << pool_names.at(poolid) << "' is erasure-coded but crush rule '"
+         << new_crush_rule << "' is not an erasure-coded rule";
+      *errcode = -EINVAL;
+      return;
+    }
+
+    // For replicated pools, validate size/min_size to start out with the default values
+    if (p.is_replicated()) {
+      uint8_t default_size = g_conf().get_val<uint64_t>("osd_pool_default_size");
+      if ((p.get_size() != default_size ||
+           (p.get_min_size() != g_conf().get_osd_pool_default_min_size(default_size))) &&
+          (p.get_crush_rule() != new_rule)) {
+        ss << "we currently require stretch mode pools start out with the"
+           " default size/min_size, which '" << pool_names.at(poolid) << "' does not";
+        *errcode = -EINVAL;
+        return;
+      }
+    }
+    // else for erasure-coded pools size validation happens through the EC profile
+  }
+
+  *okay = true;
+  *errcode = 0;
+}
+
 void OSDMonitor::try_enable_stretch_mode_pools(stringstream& ss, bool *okay,
 					       int *errcode,
 					       set<pg_pool_t*>* pools,
@@ -15756,31 +15821,19 @@ void OSDMonitor::try_enable_stretch_mode_pools(stringstream& ss, bool *okay,
    * are replicated pools with default size/min_size.
    */
   dout(20) << __func__ << dendl;
-  *okay = false;
-  int new_crush_rule_result = osdmap.crush->get_rule_id(new_crush_rule);
-  if (new_crush_rule_result < 0) {
-    ss << "unrecognized crush rule " << new_crush_rule_result;
-    *errcode = new_crush_rule_result;
+  
+  // Validate stretch mode pools
+  validate_stretch_mode_pools(*osdmap.crush, osdmap.pool_name, osdmap.pools,
+                              ss, okay, errcode, new_crush_rule);
+  
+  if (!*okay) {
     return;
   }
-  __u8 new_rule = static_cast<__u8>(new_crush_rule_result);
+  
+  // Populate the pools after validation passed
   for (const auto& pooli : osdmap.pools) {
     int64_t poolid = pooli.first;
     const pg_pool_t *p = &pooli.second;
-    if (!p->is_replicated()) {
-      ss << "stretched pools must be replicated; '" << osdmap.pool_name[poolid] << "' is erasure-coded";
-      *errcode = -EINVAL;
-      return;
-    }
-    uint8_t default_size = g_conf().get_val<uint64_t>("osd_pool_default_size");
-    if ((p->get_size() != default_size ||
-	 (p->get_min_size() != g_conf().get_osd_pool_default_min_size(default_size))) &&
-	(p->get_crush_rule() != new_rule)) {
-      ss << "we currently require stretch mode pools start out with the"
-	" default size/min_size, which '" << osdmap.pool_name[poolid] << "' does not";
-      *errcode = -EINVAL;
-      return;
-    }
     pg_pool_t *pp = pending_inc.get_new_pool(poolid, p);
     // TODO: The part where we unconditionally copy the pools into pending_inc is bad
     // the attempt may fail and then we have these pool updates...but they won't do anything
@@ -15859,8 +15912,14 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
       pool->peering_crush_bucket_target = bucket_count;
       pool->peering_crush_bucket_barrier = dividing_id;
       pool->peering_crush_mandatory_member = CRUSH_ITEM_NONE;
-      pool->size = g_conf().get_val<uint64_t>("mon_stretch_pool_size");
-      pool->min_size = g_conf().get_val<uint64_t>("mon_stretch_pool_min_size");
+
+      // Set size/min_size for replicated pools
+      if (pool->is_replicated()) {
+        pool->size = g_conf().get_val<uint64_t>("mon_stretch_pool_size");
+        pool->min_size = g_conf().get_val<uint64_t>("mon_stretch_pool_min_size");
+      }
+      // else for erasure-coded pools, size is determined by the erasure code profile
+
     }
     pending_inc.change_stretch_mode = true;
     pending_inc.stretch_mode_enabled = true;

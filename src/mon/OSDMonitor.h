@@ -839,6 +839,26 @@ public:
 				     int *errcode,
 				     std::set<pg_pool_t*>* pools,
 				     const std::string& new_crush_rule);
+
+  /**
+   * Static helper for validating pools for stretch mode.
+   * Extracted for testability - can be called from unit tests.
+   * @param crush: CrushWrapper to validate rule against
+   * @param pool_names: Map of pool IDs to names (for error messages)
+   * @param pools: Map of pool IDs to pool objects to validate
+   * @param ss: stringstream for error messages
+   * @param okay: Set to true if validation passes
+   * @param errcode: Set to error code if validation fails
+   * @param new_crush_rule: Name of the CRUSH rule to validate
+   */
+  static void validate_stretch_mode_pools(
+      const CrushWrapper& crush,
+      const mempool::osdmap::map<int64_t, std::string>& pool_names,
+      const mempool::osdmap::map<int64_t, pg_pool_t>& pools,
+      std::stringstream& ss,
+      bool *okay,
+      int *errcode,
+      const std::string& new_crush_rule);
   /**
    * Check validity of inputs and OSD/CRUSH state to
    * engage stretch mode. Designed to be used with
