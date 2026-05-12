@@ -69,7 +69,7 @@ class PerShardState {
 #define assert_core() ceph_assert(seastar::this_shard_id() == core);
 
   const int whoami;
-  crimson::os::BackendStore b_store;
+  crimson::os::FuturizedStore &f_store;
   crimson::common::CephContext cct;
 
   OSDState &osd_state;
@@ -506,9 +506,10 @@ public:
   FORWARD_TO_OSD_SINGLETON(send_to_osd)
 
   crimson::os::BackendStore get_store(store_index_t store_index) {
-    auto store = local_state.b_store;
-    store.store_index = store_index;
-    return store;
+    return crimson::os::BackendStore{
+      local_state.f_store.get_sharded_store(store_index),
+      local_state.f_store.get_storage_shard_count()
+    };
   }
 
   struct shard_stats_t {

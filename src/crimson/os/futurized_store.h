@@ -27,9 +27,6 @@ namespace crimson::os {
 class FuturizedCollection;
 class FuturizedStore;
 
-// scaffolding
-using BackendStore = RelayStore;
-
 class FuturizedStore {
 public:
   class Shard {
@@ -259,11 +256,10 @@ protected:
 
 
 struct RelayStore {
-  FuturizedStore &f_store;  // indicate alienstore/seastore/cyanstore, not shard store
-  store_shard_t shard_id;       // indicate on which core it should run
-  store_index_t store_index;    // indicate which shard store on this core
-  RelayStore(FuturizedStore &f_store, store_shard_t shard_id, store_index_t store_index)
-    : f_store(f_store), shard_id(shard_id), store_index(store_index) {}
+  FuturizedStore::Shard &shard;
+  uint32_t shard_count;
+  RelayStore(FuturizedStore::Shard &shard, uint32_t shard_count)
+    : shard(shard), shard_count(shard_count) {}
 
   static seastar::future<> with_store_do_transaction(
     RelayStore  store,
@@ -275,16 +271,15 @@ struct RelayStore {
 
   static RelayStore get_backend_store(FuturizedStore &f_store, store_index_t store_index)
   {
-    auto this_id = seastar::this_shard_id();
-    auto store_shard_nums = f_store.get_storage_shard_count();
-    if (this_id < store_shard_nums) {
-      return RelayStore(f_store, this_id, store_index);
-    } else {
-      auto shard_id = this_id % store_shard_nums;
-      return RelayStore(f_store, shard_id, store_index);
-    }
+    return RelayStore {
+      f_store.get_sharded_store(store_index),
+      f_store.get_storage_shard_count()
+    };
   }
 };
+
+// scaffolding
+using BackendStore = RelayStore;
 
 template<auto MemberFunc, typename... Args>
 auto RelayStore::with_store(RelayStore store, Args&&... args)
@@ -295,21 +290,21 @@ auto RelayStore::with_store(RelayStore store, Args&&... args)
   constexpr bool is_seastar_future = seastar::is_future<raw_return_type>::value && !is_errorator;
   constexpr bool is_plain = !is_errorator && !is_seastar_future;
   const auto original_core = seastar::this_shard_id();
-  if (store.shard_id == seastar::this_shard_id() || store.shard_id == GLOBAL_STORE) {
+  const auto store_shard_id = original_core % store.shard_count;
+  if (store_shard_id == seastar::this_shard_id() || store_shard_id == GLOBAL_STORE) {
     if constexpr (is_plain) {
       return seastar::make_ready_future<raw_return_type>(
-        (store.f_store.get_sharded_store(store.store_index).*MemberFunc)(std::forward<Args>(args)...));
+        (store.shard.*MemberFunc)(std::forward<Args>(args)...));
     } else {
-      return (store.f_store.get_sharded_store(store.store_index).*MemberFunc)(std::forward<Args>(args)...);
+      return (store.shard.*MemberFunc)(std::forward<Args>(args)...);
     }
   } else {
     if constexpr (is_errorator) {
       auto fut = seastar::smp::submit_to(
-        store.shard_id,
+        store_shard_id,
         [store, args=std::make_tuple(std::forward<Args>(args)...)]() mutable {
           return std::apply([store](auto&&... args) {
-            return (store.f_store.get_sharded_store(store.store_index).*MemberFunc)(
-              std::forward<decltype(args)>(args)...).to_base();
+            return (store.shard.*MemberFunc)(std::forward<decltype(args)>(args)...).to_base();
           }, std::move(args));
         }).then([original_core] (auto&& result) {
           return seastar::smp::submit_to(original_core,
@@ -320,10 +315,10 @@ auto RelayStore::with_store(RelayStore store, Args&&... args)
       return raw_return_type(std::move(fut));
     } else {
       auto fut = seastar::smp::submit_to(
-        store.shard_id,
+        store_shard_id,
         [store, args=std::make_tuple(std::forward<Args>(args)...)]() mutable {
         return std::apply([store](auto&&... args) {
-          return (store.f_store.get_sharded_store(store.store_index).*MemberFunc)(
+          return (store.shard.*MemberFunc)(
             std::forward<decltype(args)>(args)...);
         }, std::move(args));
       });

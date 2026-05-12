@@ -40,7 +40,7 @@ PerShardState::PerShardState(
   crimson::os::FuturizedStore &store,
   OSDState &osd_state)
   : whoami(whoami),
-    b_store(crimson::os::BackendStore::get_backend_store(store, NULL_STORE_INDEX)),
+    f_store(store),
     osd_state(osd_state),
     osdmap_gate("PerShardState::osdmap_gate"),
     perf(perf), recoverystate_perf(recoverystate_perf),
