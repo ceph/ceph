@@ -11,21 +11,19 @@
  * 
  */
 
-#include <array>
-#include <sstream>
-#include <limits>
-#include <fcntl.h>
-
-#include <openssl/aes.h>
-#include <openssl/core_names.h>
 
 #include "Crypto.h"
 
 #include "include/ceph_assert.h"
+#include "include/ceph_fs.h"
+#include "include/compat.h"
+
 #include "common/Clock.h"
+#include "common/Formatter.h"
 #include "common/armor.h"
 #include "common/ceph_context.h"
 #include "common/ceph_crypto.h"
+#include "common/debug.h"
 #include "common/hex.h"
 #include "common/safe_io.h"
 #include "include/ceph_fs.h"
@@ -36,6 +34,14 @@
 #include <errno.h>
 
 #include <boost/endian/conversion.hpp>
+#include <openssl/aes.h>
+#include <openssl/core_names.h>
+
+#include <array>
+#include <errno.h>
+#include <fcntl.h>
+#include <limits>
+#include <sstream>
 
 #define dout_subsys ceph_subsys_auth
 
@@ -995,8 +1001,8 @@ void CryptoKey::decode(bufferlist::const_iterator& bl)
 void CryptoKey::dump(Formatter *f) const
 {
   f->dump_int("type", type);
+  f->dump_string("type_str", CryptoManager::get_key_type_name(type));
   f->dump_stream("created") << created;
-  f->dump_int("secret.length", secret.length());
 }
 
 std::list<CryptoKey> CryptoKey::generate_test_instances()
