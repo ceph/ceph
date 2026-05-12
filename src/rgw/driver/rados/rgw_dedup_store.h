@@ -197,10 +197,11 @@ namespace rgw::dedup {
       uint16_t      stor_class_len;
       uint16_t      ref_tag_len;
       uint16_t      manifest_len;
+      uint16_t      compression_bl_len;
 
       uint8_t       rec_version;     // allows changing record format
       record_flags_t flags;           // 1 Byte flags
-      uint8_t       pad[6];
+      uint8_t       pad[4];
     }s;
     std::string obj_name;
     // TBD: find pool name making it easier to get ioctx
@@ -211,6 +212,7 @@ namespace rgw::dedup {
     std::string instance;
     std::string stor_class;
     bufferlist  manifest_bl;
+    bufferlist  compression_bl;
   };
   static_assert(BLAKE3_OUT_LEN == sizeof(disk_record_t::packed_rec_t::hash));
   static_assert(sizeof(disk_record_t::packed_rec_t) == sizeof(uint64_t)*12);

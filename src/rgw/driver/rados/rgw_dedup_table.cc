@@ -133,13 +133,47 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
+  static bool should_replace(const dedup_table_t::value_t &val,
+                             bool new_shared_manifest,
+                             compression_match_level_t new_comp_match)
+  {
+    // The first pass (STEP_BUILD_TABLE) sets block_id/rec_id to invalid values
+    // and leaves compression_rank at NONE (no attrs available yet).
+    // The second pass (STEP_READ_ATTRIBUTES) calls update_entry() with valid
+    // block_id/rec_id and the real compression_rank / shared_manifest.
+    // Replace rules:
+    //   - shared_manifest in table: locked, never replace
+    //   - new has shared_manifest: always replace (first time seeing it)
+    //   - table rank is NONE: always replace (first valid update from second pass)
+    //   - table rank is PARTIAL, new is EXACT: upgrade
+    //   - otherwise: keep existing SRC (first good candidate wins)
+    bool should_replace = false;
+    if (val.has_shared_manifest()) {
+      // never replace a shared_manifest SRC
+    } else if (new_shared_manifest) {
+      should_replace = true;
+    } else {
+      compression_match_level_t table_comp_match = val.compression_rank();
+      if (table_comp_match == COMPRESSION_MATCH_NONE) {
+        should_replace = true;
+      }
+      else if (table_comp_match == COMPRESSION_MATCH_PARTIAL && new_comp_match == COMPRESSION_MATCH_EXACT) {
+        should_replace = true;
+      }
+    }
+
+    return should_replace;
+  }
+
+  //---------------------------------------------------------------------------
   int dedup_table_t::add_entry(key_t *p_key,
                                disk_block_id_t block_id,
                                record_id_t rec_id,
-                               bool shared_manifest,
+                               bool new_shared_manifest,
+                               compression_match_level_t new_comp_match,
                                dedup_stats_t *p_dedup_stats)
   {
-    value_t new_val(block_id, rec_id, shared_manifest);
+    value_t new_val(block_id, rec_id, new_shared_manifest, new_comp_match);
     uint32_t idx = find_entry(p_key);
     value_t &val = hash_tab[idx].val;
     if (!val.is_occupied()) {
@@ -163,9 +197,9 @@ namespace rgw::dedup {
       if (val.count < std::numeric_limits<std::uint16_t>::max()) {
         val.count ++;
       }
-      if (!val.has_shared_manifest() && shared_manifest) {
-        // replace value!
-        ldpp_dout(dpp, 20) << __func__ << "::Replace with shared_manifest::["
+
+      if (should_replace(val, new_shared_manifest, new_comp_match)) {
+        ldpp_dout(dpp, 20) << __func__ << "::Replace SRC::["
                            << val.block_idx << "/" << (int)val.rec_id << "] -> ["
                            << block_id << "/" << (int)rec_id << "]" << dendl;
         new_val.count = val.count;
@@ -181,25 +215,20 @@ namespace rgw::dedup {
   void dedup_table_t::update_entry(key_t *p_key,
                                    disk_block_id_t block_id,
                                    record_id_t rec_id,
-                                   bool shared_manifest)
+                                   bool new_shared_manifest,
+                                   compression_match_level_t new_comp_match)
   {
     uint32_t idx = find_entry(p_key);
     ceph_assert(hash_tab[idx].key == *p_key);
     value_t &val = hash_tab[idx].val;
     ceph_assert(val.is_occupied());
 
-    // need to overwrite the block_idx/rec_id from the first pass
-    // unless already set with shared_manifest with the correct block-id/rec-id
-    // We only set the shared_manifest flag on the second pass where we
-    // got valid block-id/rec-id
-    if (!val.has_shared_manifest()) {
-      // replace value!
-      value_t new_val(block_id, rec_id, shared_manifest);
+    if (should_replace(val, new_shared_manifest, new_comp_match)) {
+      value_t new_val(block_id, rec_id, new_shared_manifest, new_comp_match);
       new_val.count = val.count;
       ldpp_dout(dpp, 20) << __func__ << "::Replaced table entry::["
                          << val.block_idx << "/" << (int)val.rec_id << "] -> ["
                          << block_id << "/" << (int)rec_id << "]" << dendl;
-
       val = new_val;
     }
   }
