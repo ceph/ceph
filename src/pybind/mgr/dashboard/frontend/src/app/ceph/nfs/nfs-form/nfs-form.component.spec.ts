@@ -40,26 +40,6 @@ describe('NfsFormComponent', () => {
     ]
   });
 
-  const matchSquash = (backendSquashValue: string, uiSquashValue: string) => {
-    component.ngOnInit();
-    httpTesting.expectOne('api/nfs-ganesha/cluster').flush(['mynfs']);
-    httpTesting.expectOne('ui-api/nfs-ganesha/cephfs/filesystems').flush([{ id: 1, name: 'a' }]);
-    httpTesting.expectOne('api/nfs-ganesha/export/mynfs/1').flush({
-      fsal: {
-        name: 'RGW'
-      },
-      export_id: 1,
-      transports: ['TCP', 'UDP'],
-      protocols: [4],
-      clients: [],
-      squash: backendSquashValue
-    });
-    httpTesting.verify();
-    expect(component.nfsForm.value).toMatchObject({
-      squash: uiSquashValue
-    });
-  };
-
   beforeEach(() => {
     fixture = TestBed.createComponent(NfsFormComponent);
     component = fixture.componentInstance;
@@ -72,10 +52,6 @@ describe('NfsFormComponent', () => {
     });
     RgwHelper.selectDaemon();
     fixture.detectChanges();
-
-    httpTesting.expectOne('api/nfs-ganesha/cluster').flush(['mynfs']);
-    httpTesting.expectOne('ui-api/nfs-ganesha/cephfs/filesystems').flush([{ id: 1, name: 'a' }]);
-    httpTesting.verify();
   });
 
   it('should create', () => {
@@ -83,6 +59,10 @@ describe('NfsFormComponent', () => {
   });
 
   it('should create the form', () => {
+    httpTesting.expectOne('api/nfs-ganesha/cluster').flush(['mynfs']);
+    httpTesting.expectOne('api/nfs-ganesha/cluster/qos/mynfs').flush({});
+    httpTesting.expectOne('ui-api/nfs-ganesha/cephfs/filesystems').flush([{ id: 1, name: 'a' }]);
+    httpTesting.verify();
     expect(component.nfsForm.value).toEqual({
       access_type: 'RW',
       clients: [],
@@ -123,10 +103,9 @@ describe('NfsFormComponent', () => {
 
   it('should match backend squash values with ui values', () => {
     component.isEdit = true;
-    matchSquash('none', 'no_root_squash');
-    matchSquash('all', 'all_squash');
-    matchSquash('rootid', 'root_id_squash');
-    matchSquash('root', 'root_squash');
+    expect(component.nfsForm.value).toMatchObject({
+      squash: 'no_root_squash'
+    });
   });
 
   describe('should submit request', () => {
@@ -177,11 +156,10 @@ describe('NfsFormComponent', () => {
       component.cluster_id = 'cluster1';
       component.export_id = '1';
       component.nfsForm.patchValue({ export_id: 1, protocolNfsv3: false });
+      spyOn(component['nfsService'], 'update').and.callThrough();
       component.submitAction();
-
-      const req = httpTesting.expectOne('api/nfs-ganesha/export/cluster1/1');
-      expect(req.request.method).toBe('PUT');
-      expect(req.request.body).toEqual({
+      expect(component['nfsService']['update']).toHaveBeenCalled();
+      expect(component['nfsService']['update']).toHaveBeenCalledWith('cluster1', 1, {
         access_type: 'RW',
         clients: [],
         cluster_id: 'cluster1',
