@@ -2505,9 +2505,16 @@ int CrushWrapper::add_simple_stretch_rule_at(
   }
 
   int steps = 4;
+  if (mode == "indep") {
+    steps = 6;
+  }
   crush_rule *rule = crush_make_rule(steps, rule_type);
   ceph_assert(rule);
   int step = 0;
+  if (mode == "indep") {
+    crush_rule_set_step(rule, step++, CRUSH_RULE_SET_CHOOSELEAF_TRIES, 5, 0);
+    crush_rule_set_step(rule, step++, CRUSH_RULE_SET_CHOOSE_TRIES, 100, 0);
+  }
   crush_rule_set_step(rule, step++, CRUSH_RULE_TAKE, root, 0);
   crush_rule_set_step(
     rule, step++,
@@ -2516,7 +2523,7 @@ int CrushWrapper::add_simple_stretch_rule_at(
     zone_type);
   crush_rule_set_step(
       rule, step++,
-      CRUSH_RULE_CHOOSELEAF_FIRSTN,
+      mode == "firstn" ? CRUSH_RULE_CHOOSELEAF_FIRSTN : CRUSH_RULE_CHOOSELEAF_INDEP,
       num_replica_per_zone,
       osd_type);
   crush_rule_set_step(rule, step++, CRUSH_RULE_EMIT, 0, 0);
