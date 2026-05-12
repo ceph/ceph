@@ -1387,7 +1387,7 @@ int D4NFilterObject::set_head_block_dir_entry(const DoutPrefixProvider* dpp, opt
   std::string user_id, display_name;
   ACLOwner owner = policy.get_owner();
   rgw_user user = std::get<rgw_user>(owner.id);
-  ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << "(): INFO: user_d: " << user.to_str() << dendl;
+  ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << "(): INFO: user_id: " << user.to_str() << dendl;
   ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << "(): INFO: display_name: " << owner.display_name << dendl;
   user_id = user.to_str();
   display_name = owner.display_name;

@@ -595,6 +595,9 @@ class D4NFilterObject : public FilterObject {
 								  uint8_t op, optional_yield y);
 };
 
+/* Prefix provider to be used when spawning a new coroutine for
+ * async remote ops (PUT, GET)
+ */
 class D4NFilterDPP : public DoutPrefixProvider {
   CephContext* cct;
   std::string prefix;
@@ -603,7 +606,7 @@ public:
   CephContext* get_cct() const override { return cct; }
   unsigned get_subsys() const override { return ceph_subsys_rgw; }
   std::ostream& gen_prefix(std::ostream& out) const override {
-    out << "write_to_remote_cache: ";
+    out << prefix << ": ";
     return out;
   }
 };
