@@ -473,6 +473,48 @@ CORO_TEST_F(neocls_log, trim_by_marker, NeoRadosTest)
   }
 }
 
+// Test the neorados::trim() loop function (use_awaitable overloads) to verify
+// it terminates. Before any fix in neorados/cls/log.h, the use_awaitable_t
+// overloads had the try-catch for ENODATA inside the for(;;) loop, causing
+// the loop to never exit in certain cluster configs and this CPU hogging.
+CORO_TEST_F(neocls_log, trim_loop_all_entries_by_marker, NeoRadosTest)
+{
+  co_await create_obj(oid);
+  auto start_time = real_clock::now();
+
+  // write 10 cls_log entries into the object
+  co_await generate_log(rados(), oid, pool(), 10, start_time, true,
+			asio::use_awaitable);
+
+  // call trim() loop function. Without a fix, this never returns
+  // because of where the try-catch sits relative to the for(;;)
+  co_await neorados::cls::log::trim(
+    rados(), oid, pool(),
+    std::string_view{neorados::cls::log::begin_marker},
+    std::string_view{neorados::cls::log::end_marker},
+    asio::use_awaitable);
+
+  // Verify all entries are gone
+  std::vector<l::entry> entries{neorados::cls::log::max_list_entries};
+  std::span<l::entry> result;
+  co_await list(rados(), oid, pool(), entries, &result, asio::use_awaitable);
+  EXPECT_EQ(0u, result.size());
+}
+
+CORO_TEST_F(neocls_log, trim_loop_empty_log_by_marker, NeoRadosTest)
+{
+  co_await create_obj(oid);
+
+  // Trim an empty log object. With the bug, cls_log_trim returns ENODATA,
+  // which is caught and swallowed inside the for(;;), looping forever.
+  co_await neorados::cls::log::trim(
+    rados(), oid, pool(),
+    std::string_view{neorados::cls::log::begin_marker},
+    std::string_view{neorados::cls::log::end_marker},
+    asio::use_awaitable);
+}
+
+
 #if 0 // Disable until we get rid of GCC11
 TEST(neocls_log_bare, lambdata)
 {
