@@ -5438,7 +5438,7 @@ namespace {
     PG_AUTOSCALE_MODE, PG_NUM_MIN, TARGET_SIZE_BYTES, TARGET_SIZE_RATIO,
     PG_AUTOSCALE_BIAS, DEDUP_TIER, DEDUP_CHUNK_ALGORITHM, 
     DEDUP_CDC_CHUNK_SIZE, POOL_EIO, BULK, PG_NUM_MAX, READ_RATIO,
-    EC_OPTIMIZATIONS };
+    EC_OPTIMIZATIONS, SUPPORTS_OMAP };
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -6244,7 +6244,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"dedup_cdc_chunk_size", DEDUP_CDC_CHUNK_SIZE},
       {"bulk", BULK},
       {"read_ratio", READ_RATIO},
-      {"allow_ec_optimizations", EC_OPTIMIZATIONS}
+      {"allow_ec_optimizations", EC_OPTIMIZATIONS},
+      {"supports_omap", SUPPORTS_OMAP}
     };
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
@@ -6508,6 +6509,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    f->dump_bool("allow_ec_optimizations",
 			 p->has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS));
 	    break;
+          case SUPPORTS_OMAP:
+            f->dump_bool("supports_omap", p->supports_omap());
+            break;
 	}
       }
       f->close_section();
@@ -6684,6 +6688,10 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	      (p->has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS) ? "true" : "false") <<
 	      "\n";
 	    break;
+          case SUPPORTS_OMAP:
+            ss << "supports_omap: " <<
+              (p->supports_omap() ? "true" : "false") << "\n";
+            break;
 	}
 	rdata.append(ss.str());
 	ss.str("");
@@ -8277,6 +8285,10 @@ int OSDMonitor::prepare_new_pool(string& name,
   if (crimson) {
     pi->set_flag(pg_pool_t::FLAG_CRIMSON);
   }
+  if (pool_type == pg_pool_t::TYPE_REPLICATED
+      && osdmap.require_osd_release >= ceph_release_t::umbrella) {
+    pi->set_flag(pg_pool_t::FLAG_OMAP);
+  }
 
   pi->size = size;
   pi->min_size = min_size;
@@ -9028,6 +9040,22 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
           pending_inc.new_pg_temp[pg_temp->first] = mempool::osdmap::vector<int>(new_pg_temp.begin(), new_pg_temp.end());
         }
       }
+    }
+  } else if (var == "supports_omap") {
+    if ((val == "true") && osdmap.require_osd_release < ceph_release_t::umbrella) {
+      ss << "supports_omap cannot be enabled until require_osd_release is set to umbrella or later";
+      return -EPERM;
+    }
+    if ((val == "false") && (p.has_flag(pg_pool_t::FLAG_OMAP))) {
+      ss << "supports_omap cannot be disabled once enabled";
+      return -EINVAL;
+    }
+    if ((val == "true") && p.is_erasure()) {
+      ss << "supports_omap cannot be enabled in ec pools";
+      return -EINVAL;
+    }
+    if (val == "true") {
+      p.flags |= pg_pool_t::FLAG_OMAP;
     }
   } else if (var == "target_max_objects") {
     if (interr.length()) {
@@ -12278,6 +12306,18 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       ss << "require_osd_release cannot be lowered once it has been set";
       err = -EPERM;
       goto reply_no_propose;
+    }
+    if (rel >= ceph_release_t::umbrella) {
+      // Initialise FLAG_OMAP for every pool
+      for (auto& [pool_id, pool] : osdmap.get_pools()) {
+        if (!pool.has_flag(pg_pool_t::FLAG_OMAP) && pool.is_replicated()) {
+          pg_pool_t p = pool;
+          p.flags |= pg_pool_t::FLAG_OMAP;
+          pending_inc.new_pools[pool_id] = p;
+          dout(10) << __func__ << " replicated pool " << pool_id
+                   << " has OMAP support auto-enabled" << dendl;
+        }
+      }
     }
     pending_inc.new_require_osd_release = rel;
     goto update;
