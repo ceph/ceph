@@ -717,14 +717,13 @@ divergence notes) live in the companion document
 Configuration options
 ---------------------
 
-The ``rgw.yaml.in`` entries:
-
-* ``rgw_s3files_fdb_cluster_file`` — path to the FDB cluster file.
-  Empty disables the FDB backend (in-memory store fallback used
-  for development and testing).
-* ``rgw_s3files_fdb_prefix`` — comma-separated tuple prefix.
-  Default ``rgw,s3files,v1`` yields ``("rgw","s3files","v1")``.
-* ``rgw_s3files_fdb_request_timeout_ms`` — default 5000.
+FDB connection options (cluster file, tuple prefix, request
+timeout) are deferred to the FDB-integration PR
+(``ceph/ceph#65535``) and will be defined as generic
+``rgw_fdb_*`` knobs shared across s3files, the index layer, realm
+metadata, and d4n — not as s3files-specific entries. Until that
+lands, the s3files API uses an in-memory store; ``s3files`` is
+opt-in via ``rgw_enable_apis``.
 
 Per-zone NFS service bindings and export defaults are **not**
 config knobs; they live in zone period config under

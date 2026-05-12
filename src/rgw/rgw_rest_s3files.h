@@ -48,10 +48,10 @@ namespace rgw::s3files {
 
 // Process-wide default Store used by the REST handlers.
 //
-// v1 returns a singleton MemoryStore; FdbStore replaces this
-// once PR ceph/ceph#65535 lands and rgw_s3files_fdb_cluster_file
-// is configured. Tests may swap the store before init via
-// set_default_store().
+// v1 returns a singleton MemoryStore; an FDB-backed store will
+// replace this once PR ceph/ceph#65535 lands a shared FDB client
+// and generic rgw_fdb_* configuration. Tests may swap the store
+// before init via set_default_store().
 rgw::file_state::Store& default_store();
 
 // Set the default Store. Intended for tests; not thread-safe
