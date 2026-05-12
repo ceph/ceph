@@ -462,8 +462,8 @@ trim(RADOS& r, Object oid, IOContext ioc,
       if (e.code() != no_message_available) {
 	throw;
       }
+      co_return;
     }
-  co_return;
 }
 
 /// \brief Trim entries from the log
