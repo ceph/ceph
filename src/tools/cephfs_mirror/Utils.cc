@@ -162,5 +162,18 @@ int mount(RadosRef cluster, const Filesystem &filesystem, bool cross_check_fscid
   return 0;
 }
 
+std::string snapshot_dir_path(CephContext *cct, const std::string &dir_root) {
+  return dir_root + "/" + cct->_conf->client_snapdir;
+}
+
+std::string snapshot_path(const std::string &snap_dir, const std::string &snap_name) {
+  return snap_dir + "/" + snap_name;
+}
+
+std::string snapshot_path(CephContext *cct, const std::string &dir_root,
+                          const std::string &snap_name) {
+  return snapshot_dir_path(cct, dir_root) + "/" + snap_name;
+}
+
 } // namespace mirror
 } // namespace cephfs
