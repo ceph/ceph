@@ -1220,8 +1220,7 @@ Open questions
 
 * Tuple-prefix convention agreed with ``fdbd4n``?
 * Schema-version policy: global, or per-subsystem?
-* Value encoding: zpp_bits (matches fdbd4n) or JSON
-  (operator-readable)?
+* Value encoding: zpp_bits (matches fdbd4n) or something else?
 * Realm FDB deployment shape — operator-deployed standalone, or
   hosted on one Ceph cluster's mgr?
 * ``DeleteFileSystem`` cascade semantics: refuse if children
