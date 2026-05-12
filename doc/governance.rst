@@ -99,8 +99,8 @@ Current Members
  * Joseph Mundackal <jmundackal@bloomberg.net>
  * Josh Durgin <jdurgin@redhat.com>
  * João Eduardo Luis <joao@clyso.com>
- * Ken Dreyer <kdreyer@redhat.com>
  * Laura Flores <lflores@redhat.com>
+ * Mark Nelson <mark.nelson@clyso.com>
  * Matan Breizman <mbreizma@redhat.com>
  * Matt Benjamin <mbenjami@redhat.com>
  * Mike Perez <miperez@redhat.com>
