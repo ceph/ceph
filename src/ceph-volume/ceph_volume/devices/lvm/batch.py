@@ -90,6 +90,17 @@ def get_physical_fast_allocs(devices: List[device.Device], type_: str, fast_slot
                 if requested_size <= abs_size:
                     abs_size = requested_size
                     relative_size = int(abs_size) / dev_size
+                elif (int(requested_size) > 0 and
+                      (int(requested_size) - int(abs_size)) / int(requested_size) <= 0.01):
+                    # Tolerance: if the requested size overshoots what can be
+                    # fulfilled by <= 1% (e.g. 1GiB vs 1023.3MiB lost to PE
+                    # alignment), silently scale down to abs_size instead of
+                    # failing the whole batch.
+                    mlogger.info(
+                        '{} was requested for {}, fulfilling with {} (within 1 percent tolerance)'.format(
+                            requested_size, '{}_size'.format(type_), abs_size,
+                        ))
+                    relative_size = int(abs_size) / dev_size
                 else:
                     mlogger.error(
                         '{} was requested for {}, but only {} can be fulfilled'.format(
