@@ -274,6 +274,18 @@ void Objecter::update_crush_location()
 /*
  * initialize only internal data structures, don't initiate cluster interaction
  */
+class Objecter::SessionStrandHook : public AdminSocketHook {
+  Objecter *m_objecter;
+public:
+  explicit SessionStrandHook(Objecter *objecter) : m_objecter(objecter) {}
+  int call(std::string_view command, const cmdmap_t& cmdmap,
+	   const bufferlist&, Formatter *f,
+	   std::ostream& ss, cb::list& out) override {
+    m_objecter->dump_session_strands(f);
+    return 0;
+  }
+};
+
 void Objecter::init()
 {
   ceph_assert(!initialized);
@@ -427,6 +439,16 @@ void Objecter::init()
 	       << cpp_strerror(ret) << dendl;
   }
 
+  m_session_strand_hook = new SessionStrandHook(this);
+  ret = admin_socket->register_command("objecter_session_strands",
+				       m_session_strand_hook,
+				       "dump queued messages in per-OSD session strands");
+
+  if (ret < 0 && ret != -EEXIST) {
+    lderr(cct) << "error registering admin socket command: "
+	       << cpp_strerror(ret) << dendl;
+  }
+
   update_crush_location();
 
   cct->_conf.add_observer(this);
@@ -575,6 +597,13 @@ void Objecter::shutdown()
     admin_socket->unregister_commands(m_request_state_hook);
     delete m_request_state_hook;
     m_request_state_hook = NULL;
+  }
+
+  if (m_session_strand_hook) {
+    auto admin_socket = cct->get_admin_socket();
+    admin_socket->unregister_commands(m_session_strand_hook);
+    delete m_session_strand_hook;
+    m_session_strand_hook = NULL;
   }
 }
 
@@ -1042,63 +1071,71 @@ void Objecter::_do_watch_notify(boost::intrusive_ptr<LingerOp> info,
   info->finished_async();
 }
 
-Dispatcher::dispatch_result_t Objecter::ms_dispatch2(const MessageRef &m)
+Dispatcher::dispatch_result_t Objecter::ms_dispatch2(const MessageRef& m)
 {
   ldout(cct, 10) << __func__ << " " << cct << " " << *m << dendl;
   switch (m->get_type()) {
   case CEPH_MSG_OSD_OPREPLY: {
-    cref_t<MOSDOpReply> msg = ref_cast<MOSDOpReply>(m);
-    auto priv = msg->get_connection()->get_priv();
+    auto priv = m->get_connection()->get_priv();
     auto s = static_cast<OSDSession*>(priv.get());
     if (s) {
-      boost::asio::dispatch(s->strand, [this, msg = std::move(msg)]() {
+      s->track_enqueue(m);
+      boost::asio::dispatch(s->strand, [this, priv, s, m]() {
+        cref_t<MOSDOpReply> msg = ref_cast<MOSDOpReply>(m);
+        s->track_dequeue(m);
         handle_osd_op_reply(std::move(msg));
       });
     } else {
-      handle_osd_op_reply(std::move(msg));
+      handle_osd_op_reply(ref_cast<MOSDOpReply>(m));
     }
     return Dispatcher::HANDLED();
   }
 
   case CEPH_MSG_OSD_BACKOFF: {
-    cref_t<MOSDBackoff> msg = ref_cast<MOSDBackoff>(m);
-    auto priv = msg->get_connection()->get_priv();
+    auto priv = m->get_connection()->get_priv();
     auto s = static_cast<OSDSession*>(priv.get());
     if (s) {
-      boost::asio::dispatch(s->strand, [this, msg = std::move(msg)]() {
+      s->track_enqueue(m);
+      boost::asio::dispatch(s->strand, [this, priv, s, m]() {
+        cref_t<MOSDBackoff> msg = ref_cast<MOSDBackoff>(m);
+        s->track_dequeue(m);
         handle_osd_backoff(std::move(msg));
       });
     } else {
-      handle_osd_backoff(std::move(msg));
+      handle_osd_backoff(ref_cast<MOSDBackoff>(m));
     }
     return Dispatcher::HANDLED();
   }
 
   case CEPH_MSG_WATCH_NOTIFY: {
-    cref_t<MWatchNotify> msg = ref_cast<MWatchNotify>(m);
-    auto priv = msg->get_connection()->get_priv();
+    auto priv = m->get_connection()->get_priv();
     auto s = static_cast<OSDSession*>(priv.get());
     if (s) {
-      boost::asio::dispatch(s->strand, [this, msg = std::move(msg)]() {
+      s->track_enqueue(m);
+      boost::asio::dispatch(s->strand, [this, priv, s, m]() {
+        cref_t<MWatchNotify> msg = ref_cast<MWatchNotify>(m);
+        s->track_dequeue(m);
         handle_watch_notify(std::move(msg));
       });
     } else {
-      handle_watch_notify(std::move(msg));
+      handle_watch_notify(ref_cast<MWatchNotify>(m));
     }
     return Dispatcher::HANDLED();
   }
 
   case MSG_COMMAND_REPLY:
     if (m->get_source().type() == CEPH_ENTITY_TYPE_OSD) {
-      cref_t<MCommandReply> msg = ref_cast<MCommandReply>(m);
-      auto priv = msg->get_connection()->get_priv();
+      auto priv = m->get_connection()->get_priv();
       auto s = static_cast<OSDSession*>(priv.get());
       if (s) {
-       boost::asio::dispatch(s->strand, [this, msg = std::move(msg)]() {
+        s->track_enqueue(m);
+        boost::asio::dispatch(s->strand, [this, priv, s, m]() {
+          cref_t<MCommandReply> msg = ref_cast<MCommandReply>(m);
+          s->track_dequeue(m);
           handle_command_reply(std::move(msg));
         });
       } else {
-        handle_command_reply(std::move(msg));
+        handle_command_reply(ref_cast<MCommandReply>(m));
       }
       return Dispatcher::HANDLED();
     } else {
@@ -5195,6 +5232,25 @@ int Objecter::RequestStateHook::call(std::string_view command,
   shared_lock rl(m_objecter->rwlock);
   m_objecter->dump_requests(f);
   return 0;
+}
+
+void Objecter::dump_session_strands(Formatter *f) {
+  shared_lock rl(rwlock);
+  f->open_array_section("osd_sessions");
+  for (const auto& [osd, s] : osd_sessions) {
+    f->open_object_section("session");
+    f->dump_int("osd", osd);
+    std::lock_guard l(s->strand_track_lock);
+    f->open_array_section("queued_messages");
+    for (const auto& msg : s->queued_messages) {
+      CachedStackStringStream css;
+      *css << *msg;
+      f->dump_string("message", css->strv());
+    }
+    f->close_section(); // queued_messages
+    f->close_section(); // session
+  }
+  f->close_section(); // osd_sessions
 }
 
 void Objecter::blocklist_self(bool set)
