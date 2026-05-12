@@ -84,6 +84,8 @@ struct Invoker<void> {
   }
 };
 
+// handler wrapper that clears the handler's associated cancellation slot
+// before invoking it
 template <typename Handler>
 struct AsyncHandler {
   Handler handler;
@@ -92,6 +94,10 @@ struct AsyncHandler {
 
   template <typename ...Args>
   void operator()(unique_aio_completion_ptr aio_completion, Args&& ...args) {
+    // the cancellation handler refers to the AioCompletion, so needs to be
+    // cleared before the AioCompletion is destroyed
+    auto slot = boost::asio::get_associated_cancellation_slot(handler);
+    slot.clear();
     aio_completion.reset();
     std::move(handler)(std::forward<Args>(args)...);
   }
@@ -135,7 +141,6 @@ struct AsyncOp : Invoker<Result> {
     auto p = std::unique_ptr<Completion>{static_cast<Completion*>(arg)};
     // move result out of Completion memory being freed
     auto op = std::move(p->user_data);
-    op.slot.clear(); // clear our cancellation handler
     // access AioCompletionImpl directly to avoid locking
     const librados::AioCompletionImpl* pc = op.aio_completion->pc;
     const int ret = pc->rval;
