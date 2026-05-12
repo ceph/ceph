@@ -1400,6 +1400,13 @@ namespace rgw {
 
     RGWUserInfo* get_user() { return &user->get_info(); }
 
+    /* RGWLibRequest moves an owned User into req_state; mint a
+     * fresh clone per request rather than reconstructing from
+     * user_id (which loses account_id; see 405f51d505). */
+    std::unique_ptr<rgw::sal::User> cloned_user() const {
+      return user->clone();
+    }
+
     void update_user(const DoutPrefixProvider *dpp) {
       (void) g_rgwlib->get_driver()->get_user_by_access_key(dpp, key.id, null_yield, &user);
     }

@@ -1571,9 +1571,7 @@ namespace rgw {
     if (unlikely(! is_dir()))
       return false;
 
-    RGWRMdirCheck req(fs->get_context(),
-		      g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
-		      this);
+    RGWRMdirCheck req(fs->get_context(), fs->cloned_user(), this);
     int rc = fs->execute_req(&req);
     if (! rc) {
       return req.valid && req.has_children;
@@ -1627,7 +1625,7 @@ namespace rgw {
     }
 
     if (is_root()) {
-      RGWListBucketsRequest req(cct, fs->user->clone(),
+      RGWListBucketsRequest req(cct, fs->cloned_user(),
 				this, rcb, cb_arg, offset);
       rc = fs->execute_req(&req);
       if (! rc) {
@@ -1640,7 +1638,7 @@ namespace rgw {
 	*eof = req.eof();
       }
     } else {
-      RGWReaddirRequest req(cct, fs->user->clone(),
+      RGWReaddirRequest req(cct, fs->cloned_user(),
 			    this, rcb, cb_arg, offset);
       rc = fs->execute_req(&req);
       if (! rc) {
@@ -1712,7 +1710,7 @@ namespace rgw {
       std::string object_name = relative_object_name();
       f->write_req =
 	new RGWWriteRequest(g_rgwlib->get_driver(), penv,
-			    g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
+			    fs->cloned_user(),
 			    this, bucket_name(), object_name);
       f->write_req->set_sts_state(&fs->sts_state);
       rc = g_rgwlib->get_fe()->start_req(f->write_req);
@@ -2370,9 +2368,7 @@ int rgw_statfs(struct rgw_fs *rgw_fs,
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   struct rados_cluster_stat_t stats;
 
-  RGWGetClusterStatReq req(fs->get_context(),
-			   g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
-			   stats);
+  RGWGetClusterStatReq req(fs->get_context(), fs->cloned_user(), stats);
   int rc = fs->execute_req(&req);
   if (rc < 0) {
     lderr(fs->get_context()) << "ERROR: getting total cluster usage"
@@ -2936,7 +2932,7 @@ int rgw_writev(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
   }
 
   std::string oname = rgw_fh->relative_object_name();
-  RGWPutObjRequest req(cct, g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
+  RGWPutObjRequest req(cct, fs->cloned_user(),
 		       rgw_fh->bucket_name(), oname, bl);
 
   int rc = fs->execute_req(&req);
