@@ -403,6 +403,46 @@ class TestBatch(object):
         assert len(fast) == 1
         assert fast[0][0] == fast_dev.path
 
+    def test_get_physical_fast_allocs_tolerance_within_1_percent(self, factory,
+                                                                 conf_ceph_stub,
+                                                                 mock_device_generator):
+        # When requested_size overshoots the achievable abs_size by <=1%
+        # (e.g. PE alignment rounding 1 GiB down to ~1023.3 MiB), the
+        # allocator must scale down to abs_size silently instead of calling
+        # exit(1).
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        # 20 GiB / 20 slots = 1 GiB abs_size; request 1 GiB + 100 KiB → ~0.01%
+        vg_size = 21474836480
+        fast_dev = mock_device_generator()
+        fast_dev.vg_size = [vg_size]
+        fast_dev.vg_free = [vg_size]
+        requested = disk.Size(b=int(vg_size / 20) + 100 * 1024)
+        args = factory(block_db_slots=20, block_db_size=requested,
+                       devices=['/dev/data'])
+        fast = batch.get_physical_fast_allocs([fast_dev], 'block_db',
+                                              20, 1, args)
+        assert len(fast) == 1
+        # abs_size is the achievable size, not the over-requested one
+        assert fast[0][2] == disk.Size(b=int(vg_size / 20))
+
+    def test_get_physical_fast_allocs_tolerance_over_1_percent(self, factory,
+                                                               conf_ceph_stub,
+                                                               mock_device_generator):
+        # Over the 1% threshold still aborts via exit(1).
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        vg_size = 21474836480
+        fast_dev = mock_device_generator()
+        fast_dev.vg_size = [vg_size]
+        fast_dev.vg_free = [vg_size]
+        # Request 2 GiB on a 1 GiB slot — ~100% overshoot.
+        requested = disk.Size(b=int(vg_size / 20) * 2)
+        args = factory(block_db_slots=20, block_db_size=requested,
+                       devices=['/dev/data'])
+        with pytest.raises(SystemExit) as err:
+            batch.get_physical_fast_allocs([fast_dev], 'block_db',
+                                           20, 1, args)
+        assert err.value.code == 1
+
     def test_get_lvm_osds_return_len(self, factory,
                                      mock_lv_device_generator,
                                      conf_ceph_stub,
