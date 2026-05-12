@@ -48,8 +48,8 @@ Current Members
 ^^^^^^^^^^^^^^^
 
 * Dan van der Ster <dan.vanderster@clyso.com>
-* Josh Durgin <jdurgin@redhat.com>
 * Neha Ojha <nojha@redhat.com>
+* Patrick Donnelly <pdonnell@ibm.com>
 
 .. _csc:
 
@@ -96,13 +96,11 @@ Current Members
  * Haomai Wang <haomai@xsky.com>
  * Igor Fedotov <igor.fedotov@croit.io>
  * Ilya Dryomov <idryomov@redhat.com>
- * Jeff Layton <jlayton@redhat.com>
  * Joseph Mundackal <jmundackal@bloomberg.net>
  * Josh Durgin <jdurgin@redhat.com>
  * João Eduardo Luis <joao@clyso.com>
  * Ken Dreyer <kdreyer@redhat.com>
  * Laura Flores <lflores@redhat.com>
- * Mark Nelson <mark.nelson@clyso.com>
  * Matan Breizman <mbreizma@redhat.com>
  * Matt Benjamin <mbenjami@redhat.com>
  * Mike Perez <miperez@redhat.com>
