@@ -59,7 +59,6 @@ PGPeeringPipeline &PGAdvanceMap::peering_pp(PG &pg)
 seastar::future<> PGAdvanceMap::start()
 {
   LOG_PREFIX(PGAdvanceMap::start);
-  using cached_map_t = OSDMapService::cached_map_t;
 
   DEBUG("{}: start", *this);
   auto exit_handle = seastar::defer([FNAME, thiz = IRef{this}] {
@@ -112,7 +111,6 @@ seastar::future<> PGAdvanceMap::check_for_splits(
     cached_map_t next_map)
 {
   LOG_PREFIX(PGAdvanceMap::check_for_splits);
-  using cached_map_t = OSDMapService::cached_map_t;
   cached_map_t old_map = co_await shard_services.get_map(old_epoch);
   if (!old_map->have_pg_pool(pg->get_pgid().pool())) {
     DEBUG("{} pool doesn't exist in epoch {}", pg->get_pgid(),
