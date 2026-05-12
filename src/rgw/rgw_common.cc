@@ -2166,7 +2166,8 @@ bool RGWUserCaps::is_valid_cap_type(const string& tp)
                                     "oidc-provider",
                                     "user-info-without-keys",
                                     "ratelimit",
-                                    "accounts"};
+                                    "accounts",
+                                    "dedup"};
 
   for (unsigned int i = 0; i < sizeof(cap_type) / sizeof(char *); ++i) {
     if (tp.compare(cap_type[i]) == 0) {

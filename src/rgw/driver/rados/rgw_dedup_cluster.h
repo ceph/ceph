@@ -96,7 +96,8 @@ namespace rgw::dedup {
     static int   dedup_control_bl(rgw::sal::RadosStore *store,
                                   const DoutPrefixProvider *dpp,
                                   urgent_msg_t urgent_msg,
-                                  bufferlist urgent_msg_bl);
+                                  bufferlist urgent_msg_bl,
+                                  Formatter *fmt = nullptr);
     static int   dedup_control(rgw::sal::RadosStore *store,
                                const DoutPrefixProvider *dpp,
                                urgent_msg_t urgent_msg);

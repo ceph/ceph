@@ -1212,12 +1212,31 @@ namespace rgw::dedup {
     }
   }
 
+  static void report_throttle_state(const struct rgw::dedup::control_t &ctl,
+                                    Formatter *fmt)
+  {
+    Formatter::ObjectSection section{*fmt, "throttle"};
+    fmt->dump_bool("bucket_index_throttle_enabled",
+                   !ctl.bucket_index_throttle.is_disabled());
+    if (!ctl.bucket_index_throttle.is_disabled()) {
+      fmt->dump_unsigned("bucket_index_throttle",
+                         ctl.bucket_index_throttle.get_max_calls_per_second());
+    }
+    fmt->dump_bool("metadata_throttle_enabled",
+                   !ctl.metadata_access_throttle.is_disabled());
+    if (!ctl.metadata_access_throttle.is_disabled()) {
+      fmt->dump_unsigned("metadata_throttle",
+                         ctl.metadata_access_throttle.get_max_calls_per_second());
+    }
+  }
+
   //---------------------------------------------------------------------------
   // command-line called from radosgw-admin.cc
   int cluster::dedup_control_bl(rgw::sal::RadosStore *store,
                                 const DoutPrefixProvider *dpp,
                                 urgent_msg_t urgent_msg,
-                                bufferlist urgent_msg_bl)
+                                bufferlist urgent_msg_bl,
+                                Formatter *fmt)
   {
     librados::IoCtx ctl_ioctx;
     int ret = get_control_ioctx(store, dpp, ctl_ioctx);
@@ -1244,6 +1263,7 @@ namespace rgw::dedup {
       return -EAGAIN;
     }
 
+    bool throttle_reported = false;
     for (auto& ack : acks) {
       try {
         ldpp_dout(dpp, 20) << __func__ << "::ACK: notifier_id=" << ack.notifier_id
@@ -1253,8 +1273,14 @@ namespace rgw::dedup {
         struct rgw::dedup::control_t ctl;
         decode(ctl, iter);
         ldpp_dout(dpp, 10) << __func__ << "::++ACK::ctl=" << ctl << "::ret=" << ret << dendl;
-        if (urgent_msg == URGENT_MSG_THROTTLE) {
-          report_throttle_state(ctl);
+        if (urgent_msg == URGENT_MSG_THROTTLE && !throttle_reported) {
+          // report only once
+          if (fmt) {
+            report_throttle_state(ctl, fmt);
+          } else {
+            report_throttle_state(ctl);
+          }
+          throttle_reported = true;
         }
       } catch (buffer::error& err) {
         ldpp_dout(dpp, 1) << __func__ << "::failed decoding notify acks" << dendl;
