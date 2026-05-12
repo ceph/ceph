@@ -162,9 +162,24 @@ class DriveSelection(object):
 
             # break on this condition.
             if self._limit_reached(device_filter, devices, disk.path):
-                logger.debug("Ignoring disk {}. Limit reached".format(
-                    disk.path))
-                break
+                # Check if this device has an existing OSD for this spec.
+                # If so, we still want to include it (don't break) as it will
+                # be needed for the ceph-volume lvm batch command.
+                is_existing_osd_for_spec = False
+                if disk.ceph_device_lvm and disk.lvs:
+                    for lv in disk.lvs:
+                        if 'osdspec_affinity' in lv.keys():
+                            if lv['osdspec_affinity'] == str(self.spec.service_id):
+                                is_existing_osd_for_spec = True
+                                break
+
+                if not is_existing_osd_for_spec:
+                    logger.debug("Ignoring disk {}. Limit reached".format(
+                        disk.path))
+                    continue
+                # else: fall through to include this device even though the
+                # limit is reached — existing-OSD-for-spec devices are
+                # already accounted for via existing_daemons.
 
             if disk in devices:
                 continue
