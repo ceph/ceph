@@ -357,6 +357,17 @@
   read-only fsck, gated by the new ``bluestore_accept_corrupted_onode_recovery``
   option (``never`` or ``read-only``, default ``read-only``); mount, repair, and
   ``ceph-bluestore-tool trim`` still abort.
+* cephx: ``auth rotate`` now keeps the old key valid until ``ceph auth commit-pending <entity>``
+  is called, preventing clients from being permanently locked out if the rotate reply is lost in transit.
+* cephx: a new ``AUTH_PENDING_KEY_NOT_COMMITTED`` health warning is raised when
+  a key rotated via ``ceph auth rotate-pending`` (or ``auth get-or-create-pending``) is
+  left uncommitted for longer than ``mon_auth_pending_key_ttl`` (default 1 day),
+  and ``mgr/cephadm`` now calls ``auth commit-pending`` once a daemon has been
+  redeployed with its rotated key, instead of leaving the rotation half-finished.
+* cephx: a new ``ceph auth rotate-pending <entity>`` command generates or
+  retrieves an entity's pending key idempotently, unlike ``auth rotate`` which
+  always mints a fresh one. ``mgr/cephadm`` now uses it so a retried rotation
+  can't orphan a key a daemon has already been redeployed with.
 
 >=20.0.0
 
