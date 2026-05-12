@@ -1,5 +1,11 @@
 @use '@carbon/styles/scss/theme';
 
+cd-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cds-spacing-03);
+}
+
 /*
 !important required to override the parent component's carbon css.
 

@@ -200,10 +200,11 @@
                [class.overview-health-card-tab-content-item]="!isLast"
                [class.border-subtle-right]="!isLast">
             <span class="overview-health-card-icon-and-text">
-              <cd-icon [type]="vm?.[item.key]?.severity"></cd-icon>
-              <span class="cds--type-body-compact-01">
-                {{ item.label }}
-              </span>
+              <cd-icon [type]="vm?.[item.key]?.severity">
+                <span class="cds--type-body-compact-01">
+                  {{ item.label }}
+                </span>
+              </cd-icon>
             </span>
             <p class="cds--type-label-01 cds-mt-3 cds-mb-0 overview-health-card-secondary-text">
               {{ vm?.[item.key]?.value }}
@@ -229,10 +230,11 @@
             @for (row of section; track row.key) {
             <div class="overview-health-card-hardware-row">
               <span class="overview-health-card-icon-and-text">
-                <cd-icon [type]="row.key"></cd-icon>
-                <span class="cds--type-body-compact-01">
-                  {{ row.label }}
-                </span>
+                <cd-icon [type]="row.key">
+                  <span class="cds--type-body-compact-01">
+                    {{ row.label }}
+                  </span>
+                </cd-icon>
               </span>
 
               <span class="overview-health-card-hardware-status">
@@ -262,10 +264,11 @@
       <div class="overview-health-card-tab-content overview-health-card-tab-content-item-row">
         <div>
           <span class="overview-health-card-icon-and-text">
-            <cd-icon [type]="vm?.resiliencyHealth?.icon"></cd-icon>
-            <span class="cds--type-body-compact-01">
-              {{vm?.resiliencyHealth?.title}}
-            </span>
+            <cd-icon [type]="vm?.resiliencyHealth?.icon">
+              <span class="cds--type-body-compact-01">
+                {{vm?.resiliencyHealth?.title}}
+              </span>
+            </cd-icon>
           </span>
           <p class="overview-health-card-secondary-text cds--type-label-01">
             {{vm?.resiliencyHealth?.description}}</p>

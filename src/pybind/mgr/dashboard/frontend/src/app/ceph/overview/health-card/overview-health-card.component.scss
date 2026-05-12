@@ -64,12 +64,6 @@
     margin-left: var(--cds-spacing-04);
   }
 
-  &-icon-and-text {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--cds-spacing-03);
-  }
-
   &-hardware-sections {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
