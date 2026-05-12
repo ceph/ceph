@@ -77,6 +77,14 @@ def get_physical_fast_allocs(devices: List[device.Device], type_: str, fast_slot
             # way
             abs_size = disk.Size(b=int(dev_size / slots_for_vg))
             free_size = dev.vg_free[0]
+            # When a fast device VG is partially used (e.g. one OSD's DB/WAL
+            # is still live while its partner is being replaced), slots_for_vg
+            # can undercount the true slot capacity, making abs_size larger
+            # than free_size so the while loop never fires.  Fall back to
+            # dividing the actual free space by the number of slots we still
+            # want to allocate.
+            if abs_size > free_size and fast_slots_per_device > 0:
+                abs_size = disk.Size(b=int(free_size / fast_slots_per_device))
             relative_size = int(abs_size) / dev_size
             if requested_size:
                 if requested_size <= abs_size:
@@ -90,9 +98,17 @@ def get_physical_fast_allocs(devices: List[device.Device], type_: str, fast_slot
                             abs_size,
                         ))
                     exit(1)
-            while abs_size <= free_size and len(ret) < new_osds and occupied_slots < fast_slots_per_device:
+            # Track new allocations separately from pre-existing ones.
+            # fast_slots_per_device caps how many *new* slots this batch may
+            # add per device (distribution); requested_slots caps the *total*
+            # occupancy a device may carry (the spec's db_slots).
+            new_slots = 0
+            while (abs_size <= free_size
+                   and len(ret) < new_osds
+                   and new_slots < fast_slots_per_device
+                   and occupied_slots + new_slots < requested_slots):
                 free_size -= abs_size.b
-                occupied_slots += 1
+                new_slots += 1
                 ret.append((dev.path, relative_size, abs_size, requested_slots))
     return ret
 
