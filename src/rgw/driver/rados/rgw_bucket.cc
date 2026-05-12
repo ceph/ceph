@@ -1628,7 +1628,7 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
   // - are not indexless
   const bool local_zonegroup = (site.get_zonegroup().id == bucket_info.zonegroup);
   const bool has_index = local_zonegroup &&
-      index.layout.type == rgw::BucketIndexType::Normal;
+      index.layout.type == rgw::BucketIndexType::Hashed;
 
   std::string bucket_ver, master_ver;
   std::string max_marker;
@@ -1669,7 +1669,7 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
   ::encode_json("owner", bucket_info.owner, formatter);
 
   if (has_index) {
-    formatter->dump_int("num_shards", index.layout.normal.num_shards);
+    formatter->dump_int("num_shards", num_shards(index.layout));
     formatter->dump_string("ver", bucket_ver);
     formatter->dump_string("master_ver", master_ver);
     formatter->dump_string("max_marker", max_marker);
@@ -3062,7 +3062,8 @@ int init_default_bucket_layout(CephContext *cct, rgw::BucketLayout& layout,
         ": suggested number of initial shards for buckets with ordered bucket "
         "indexes currently ignored" << dendl;
     }
-    ordered_layout.num_shards = rgw::rados::OrderedBIndexer::get_initial_shard_count();
+    ordered_layout.num_shards =
+                  rgw::rados::OrderedBIndexer::get_default_initial_shard_count();
 
     layout.current_index.layout.specs = ordered_layout;
   } else {

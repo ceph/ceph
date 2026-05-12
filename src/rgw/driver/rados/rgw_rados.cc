@@ -1037,7 +1037,7 @@ void RGWIndexCompletionManager::process()
         /* this null_yield can stay for now since we're in our own
          * thread */
         std::ignore = add_datalog_entry(&dpp, store->svc.datalog_rados,
-                                        bucket_info, bs.shard_id,
+                                        bucket_info, *bs.shard_ident,
                                         null_yield);
         /* if there is an error we can ignore it, as a) there's
          * nothing we can do and b) it's already logged in
@@ -1975,8 +1975,7 @@ int RGWRados::Bucket::List::list_objects(const DoutPrefixProvider *dpp, int64_t 
                                          optional_yield y)
 {
   auto bindexer =
-    rgw::rados::BIndexer::create_unique(target->store->cct, dpp,
-                                        target->bucket_info);
+    rgw::rados::BIndexer::create_unique(target->store, dpp, target->bucket_info);
 
   if (bindexer->entries_ordered_by_shard() || params.allow_unordered) {
     return list_objects_by_shard(dpp, max, result, common_prefixes,
@@ -2617,13 +2616,12 @@ int RGWRados::create_bucket(const DoutPrefixProvider* dpp,
       info.quota = *quota;
     }
 
+    auto bindexer = rgw::rados::BIndexer::create_unique(cct, dpp, info);
     std::map<std::string, bufferlist> binfo_map_entries;
 
     if (zone_placement) {
-#warning "init_index here"
       ret = svc.bi->init_index(dpp, y,
-			       info,
-			       info.layout.current_index,
+                               bindexer,
 			       &binfo_map_entries);
       if (ret < 0) {
         return ret;
@@ -3032,7 +3030,7 @@ int RGWRados::BucketShard::init(const rgw_bucket& _bucket,
                                                  *bucket_info_p,
                                                  obj.get_hash_object(),
                                                  &bucket_obj,
-                                                 shard_ident.get());
+                                                 shard_ident);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: open_bucket_index_shard() returned ret=" << ret << dendl;
     return ret;
@@ -3054,7 +3052,7 @@ int RGWRados::BucketShard::init(const DoutPrefixProvider *dpp,
                                                          bucket_info,
 							 obj.get_hash_object(),
 							 &bucket_obj,
-							 shard_ident.get());
+							 shard_ident);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: open_bucket_index_shard() returned ret=" << ret << dendl;
     return ret;
@@ -3062,16 +3060,6 @@ int RGWRados::BucketShard::init(const DoutPrefixProvider *dpp,
   ldpp_dout(dpp, 20) << " bucket index object: " << bucket_obj << dendl;
 
   return 0;
-}
-
-int RGWRados::BucketShard::init(const DoutPrefixProvider *dpp,
-				const RGWBucketInfo& bucket_info,
-                                const rgw::bucket_index_layout_generation& layout_gen,
-                                rgw::BIShardIndex shard_idx,
-				optional_yield y)
-{
-  rgw::HashedShardIdent shard_ident(shard_idx);
-  return init(dpp, bucket_info, layout_gen, shard_ident, y);
 }
 
 int RGWRados::BucketShard::init(const DoutPrefixProvider *dpp,
@@ -4303,12 +4291,13 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
   }
 
   rgw_rados_ref bucket_ref;
+  std::unique_ptr<rgw::BIShardIdent> shard_ident; // don't need; will ignore
   ret = svc.bi_rados->open_bucket_index_shard(dpp,
                                               svc.bucket_sobj,
 					      bucket_info,
 					      head_obj.get_hash_object(), 
 					      &bucket_ref, 
-					      nullptr);
+					      shard_ident);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to determine bucket index shard"
                       << dendl;
@@ -10342,6 +10331,9 @@ int RGWRados::try_refresh_bucket_info(RGWBucketInfo& info,
 				      .set_refresh_version(rv));
 }
 
+// for omap_entries, if it's nullptr erase omap, if it's
+// no_change_attrs_omap(), leave alone, and if it's anything else,
+// write those entries
 int RGWRados::put_bucket_instance_info(RGWBucketInfo& info, bool exclusive,
 				       real_time mtime,
 				       const map<string, bufferlist>* pattrs,
@@ -10706,11 +10698,13 @@ int RGWRados::bi_list(BucketShard& bs,
 }
 
 int RGWRados::bi_list(const DoutPrefixProvider *dpp,
-		      const RGWBucketInfo& bucket_info, int shard_id, const string& obj_name_filter, const string& marker, uint32_t max,
+		      const RGWBucketInfo& bucket_info, int shard_idx, const string& obj_name_filter, const string& marker, uint32_t max,
 		      list<rgw_cls_bi_entry> *entries, bool *is_truncated, bool reshardlog, optional_yield y)
 {
   BucketShard bs(this);
 
+  // OBI: temporary work around
+  auto shard_id = rgw::HashedShardIdent(shard_idx);
   int ret = bs.init(dpp, bucket_info,
 		    bucket_info.layout.current_index,
 		    shard_id, y);
@@ -11286,8 +11280,6 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
 					RGWBucketListNameFilter force_check_filter)
 {
   const bool bitx = cct->_conf->rgw_bucket_index_transaction_instrumentation;
-  constexpr uint32_t min_req_num_entries = 5;
-  constexpr uint32_t max_req_num_entries = 1005;
 
   ldout_bitx(bitx, dpp, 10) << "ENTERING " << __func__ << ": " << bucket_info.bucket <<
     " start_after=\"" << start_after <<
@@ -11624,6 +11616,7 @@ int RGWRados::remove_objs_from_index(const DoutPrefixProvider *dpp,
   for (const auto& entry_key : entry_key_list) {
     const rgw_obj_key obj_key(entry_key);
     const uint32_t shard = [&obj_key, num_shards]() -> uint32_t {
+      // OBI: need to convert this over to BIShardIdent
       int32_t temp = RGWSI_BucketIndex_RADOS::bucket_shard_index(obj_key, num_shards);
       return (-1 == temp) ? 0 : (uint32_t) temp;
     }();
@@ -11995,6 +11988,7 @@ int RGWRados::get_target_shard_id(const rgw::bucket_index_hashed_layout& layout,
           *shard_id = -1;
         }
       } else {
+        // OBI: need to convert this over to BIShardIdent
         uint32_t sid = svc.bi_rados->bucket_shard_index(obj_key, layout.num_shards);
         if (shard_id) {
           *shard_id = (int)sid;

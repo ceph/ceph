@@ -192,6 +192,14 @@ int RGWSI_SysObj::Obj::OmapOp::del(const DoutPrefixProvider *dpp, const std::str
   return svc->omap_del(dpp, obj, key, y);
 }
 
+int RGWSI_SysObj::Obj::OmapOp::clear(const DoutPrefixProvider *dpp, optional_yield y)
+{
+  RGWSI_SysObj_Core *svc = source.core_svc;
+  rgw_raw_obj& obj = source.obj;
+
+  return svc->omap_clear(dpp, obj, y);
+}
+
 int RGWSI_SysObj::Obj::WNOp::notify(const DoutPrefixProvider *dpp, bufferlist& bl, uint64_t timeout_ms,
                                     bufferlist *pbl, optional_yield y)
 {

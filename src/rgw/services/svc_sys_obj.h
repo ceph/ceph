@@ -180,6 +180,8 @@ public:
               const std::map<std::string, bufferlist>& m,
               optional_yield y);
       int del(const DoutPrefixProvider *dpp, const std::string& key, optional_yield y);
+
+      int clear(const DoutPrefixProvider *dpp, optional_yield y);
     };
 
     struct WNOp {

@@ -177,4 +177,8 @@ public:
                            optional_yield y,
                            const DoutPrefixProvider *dpp);
 
+  int clear_bucket_info_map(const std::string& bucket_key,
+                            optional_yield y,
+                            const DoutPrefixProvider *dpp);
+
 }; // class RGWSI_Bucket_SObj

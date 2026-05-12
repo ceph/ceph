@@ -25,6 +25,7 @@
 
 class RGWReshard;
 
+namespace rgw { namespace rados { class BIndexer; }}
 
 class BucketReshardManager;
 namespace rgw { namespace sal {
@@ -89,14 +90,17 @@ class RGWBucketReshard {
                         int& shard, const DoutPrefixProvider *dpp);
   int reshard_process(const rgw::bucket_index_layout_generation& current,
                       int& max_entries,
+                      std::unique_ptr<rgw::rados::BIndexer>& source_bindexer,
                       BucketReshardManager& target_shards_mgr,
+                      std::unique_ptr<rgw::rados::BIndexer>& target_bindexer,
                       bool verbose_json_out,
                       std::ostream *out,
                       Formatter *formatter, rgw::BucketReshardState reshard_stage,
                       const DoutPrefixProvider *dpp, optional_yield y);
 
   int do_reshard(const rgw::bucket_index_layout_generation& current,
-                 const rgw::bucket_index_layout_generation& target,
+                 rgw::bucket_index_layout_generation& target,
+                 std::unique_ptr<rgw::rados::BIndexer>& target_bindexer,
                  int max_entries, bool support_logrecord,
                  bool verbose,
                  std::ostream *os,
@@ -111,7 +115,7 @@ public:
 		   const RGWBucketInfo& _bucket_info,
 		   const std::map<std::string, bufferlist>& _bucket_attrs,
 		   RGWBucketReshardLock* _outer_reshard_lock);
-  int execute(int num_shards,
+  int execute(uint32_t num_shards,
 	      const std::optional<rgw::BucketIndexType> bindex_type,
 	      ReshardFaultInjector& f,
               int max_op_entries, const cls_rgw_reshard_initiator initiator,

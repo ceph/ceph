@@ -689,16 +689,22 @@ public:
     int init(const DoutPrefixProvider *dpp,
 	     const RGWBucketInfo& bucket_info,
 	     const rgw::bucket_index_layout_generation& layout_gen,
-	     rgw::BIShardIndex _shard_idx,
-	     optional_yield y);
-    int init(const DoutPrefixProvider *dpp,
-	     const RGWBucketInfo& bucket_info,
-	     const rgw::bucket_index_layout_generation& layout_gen,
 	     const rgw::BIShardIdent& _shard_ident,
 	     optional_yield y);
     int init(const DoutPrefixProvider *dpp,
              rgw::rados::BIndexer::ShardIterator& shard_it,
              optional_yield y);
+
+    // OBI: deprecated; keep until we're fully using BIShardIdent
+    // rather than numeric indexes
+    int init(const DoutPrefixProvider *dpp,
+	     const RGWBucketInfo& bucket_info,
+	     const rgw::bucket_index_layout_generation& layout_gen,
+	     rgw::BIShardIndex shard_idx,
+	     optional_yield y) {
+      rgw::HashedShardIdent converted_shard_ident(shard_idx);
+      return init(dpp, bucket_info, layout_gen, converted_shard_ident, y);
+    }
 
     friend std::ostream& operator<<(std::ostream& out, const BucketShard& bs) {
       out << "BucketShard:{ bucket=" << bs.bucket <<
@@ -1519,6 +1525,9 @@ public:
       std::map<RGWObjCategory, RGWStorageStats>& stats, std::string *max_marker, bool* syncstopped = NULL);
   int get_bucket_stats_async(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, boost::intrusive_ptr<rgw::sal::ReadStatsCB> cb);
 
+// for omap_entries, if it's nullptr erase omap, if it's
+// no_change_attrs_omap(), leave alone, and if it's anything else,
+// write those entries
   int put_bucket_instance_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime,
 			       const std::map<std::string, bufferlist>* pattrs,
 			       const std::map<std::string, bufferlist>* omap_entries,

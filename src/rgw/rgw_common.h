@@ -1164,9 +1164,6 @@ struct RGWBucketInfo {
 
   bool empty_sync_policy() const;
 
-  bool is_indexless() const {
-    return rgw::is_layout_indexless(layout.current_index);
-  }
   const rgw::bucket_index_layout_generation& get_current_index() const {
     return layout.current_index;
   }
@@ -1189,6 +1186,18 @@ struct RGWBucketInfo {
 
   rgw::BucketIndexType get_current_bucket_index_type() const {
     return layout.current_index.layout.type;
+  }
+
+  bool is_indexless() const {
+    return rgw::is_layout_indexless(layout.current_index);
+  }
+
+  bool uses_hashed_index() const {
+    return get_current_bucket_index_type() == rgw::BucketIndexType::Hashed;
+  }
+
+  bool uses_ordered_index() const {
+    return get_current_bucket_index_type() == rgw::BucketIndexType::Ordered;
   }
 
   const rgw::LayoutVariant& get_current_layout_variant() const {

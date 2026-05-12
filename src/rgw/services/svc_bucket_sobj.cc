@@ -593,7 +593,6 @@ int RGWSI_Bucket_SObj::read_bucket_info_map(const std::string& bucket_meta_key,
   const rgw_pool& pool = svc.zone->get_zone_params().domain_root;
   const std::string oid = instance_meta_key_to_oid(bucket_meta_key);
   bufferlist bl;
-  RGWObjVersionTracker objv;
 
   int ret = rgw_read_system_obj_map(dpp, svc.sysobj, pool, oid,
                                     after, prefix, count, default_key,
@@ -601,6 +600,24 @@ int RGWSI_Bucket_SObj::read_bucket_info_map(const std::string& bucket_meta_key,
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
       "(): rgw_read_system_obj_map returned " << ret << dendl;
+  }
+
+  return ret;
+}
+
+
+int RGWSI_Bucket_SObj::clear_bucket_info_map(const std::string& bucket_meta_key,
+                                             optional_yield y,
+                                             const DoutPrefixProvider* dpp)
+{
+  const rgw_pool& pool = svc.zone->get_zone_params().domain_root;
+  const std::string oid = instance_meta_key_to_oid(bucket_meta_key);
+  bufferlist bl;
+
+  int ret = rgw_clear_system_obj_map(dpp, svc.sysobj, pool, oid, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
+      "(): rgw_clear_system_obj_map returned " << ret << dendl;
   }
 
   return ret;

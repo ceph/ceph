@@ -9,6 +9,7 @@
 #include "svc_bi_rados.h"
 #include "svc_bilog_rados.h"
 #include "svc_zone.h"
+#include "svc_bucket_sobj.h"
 
 #include "rgw_asio_thread.h"
 #include "rgw_zone.h"
@@ -143,32 +144,6 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index(const DoutPrefixProvider *dpp,
   return 0;
 } // open_bucket_index
 
-#if 0
-void RGWSI_BucketIndex_RADOS::get_bucket_index_object(
-    const std::string& bucket_oid_base,
-    const rgw::LayoutVariant& specs,
-    uint64_t gen_id, int shard_id,
-    std::string* bucket_obj)
-{
-#warning need bucket_info here
-  auto bindexer = rgw::rados::BIndexer::create_unique(cct, specs);
-  bindexer->get_bucket_index_object(bucket_oid_base, gen_id, shard_id, bucket_obj);
-}
-
-int RGWSI_BucketIndex_RADOS::get_bucket_index_object(
-    const std::string& bucket_oid_base,
-    const rgw::LayoutVariant& specs,
-    uint64_t gen_id,
-    const std::string& obj_key,
-    std::string* bucket_obj,
-    int* shard_id)
-{
-#warning need bucket_info here
-  auto bindexer = rgw::rados::BIndexer::create_unique(cct, specs);
-  return bindexer->get_bucket_index_object(bucket_oid_base, gen_id, obj_key,
-					   bucket_obj, shard_id);
-}
-#endif
 
 int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(
   const DoutPrefixProvider *dpp,
@@ -176,14 +151,10 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(
   const RGWBucketInfo& bucket_info,
   const string& obj_key,
   rgw_rados_ref* bucket_ref,
-  rgw::BIShardIdent* shard_id)
+  std::unique_ptr<rgw::BIShardIdent>& shard_ident)
 {
-#warning "TRACE 127"
-  auto bindexer =
-    rgw::rados::BIndexer::create_unique(cct, dpp, bucket_info);
-
-  bindexer->get_bucket_index_object(obj_key,
-                                    &bucket_ref->obj.oid, shard_id);
+  auto bindexer = rgw::rados::BIndexer::create_unique(cct, dpp, bucket_info);
+  bindexer->get_bucket_index_object(obj_key, &bucket_ref->obj.oid, shard_ident);
 
   int ret = open_bucket_index_pool(dpp, bucket_info, &bucket_ref->ioctx);
   if (ret < 0) {
@@ -202,25 +173,21 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(
   const rgw::BIShardIdent& shard_ident,
   rgw_rados_ref* bucket_obj)
 {
-#warning "OBI: for now force this to be a HashedBucketIndex"
-  try {
-    auto hashed_shard_ident = dynamic_cast<const rgw::HashedShardIdent&>(shard_ident);
-    int32_t shard_idx = hashed_shard_ident.get_index();
-
-    int ret = open_bucket_index_pool(dpp, bucket_info, &bucket_obj->ioctx);
-    if (ret < 0) {
-      ldpp_dout(dpp, 20) << __func__ << ": open_bucket_index_pool() returned " <<
-        ret << dendl;
-      return ret;
-    }
-
-    auto bindexer = rgw::rados::BIndexer::create_unique(cct, dpp, bucket_info);
-    bindexer->get_bucket_index_object(layout_gen.gen, shard_idx, &bucket_obj->obj.oid);
-
-    return 0;
-  } catch (const std::bad_cast& b) {
-    return -EINVAL;
+  int ret = open_bucket_index_pool(dpp, bucket_info, &bucket_obj->ioctx);
+  if (ret < 0) {
+    ldpp_dout(dpp, 20) << __func__ << ": open_bucket_index_pool() returned " <<
+      ret << dendl;
+    return ret;
   }
+
+  auto bindexer = rgw::rados::BIndexer::create_unique(cct, dpp, bucket_info, layout_gen);
+  ret = bindexer->get_bucket_index_object(layout_gen.gen, shard_ident, &bucket_obj->obj.oid);
+  if (ret < 0) {
+    ldpp_dout(dpp, 20) << __func__ << ": get_bucket_index_object returned " <<
+      ret << dendl;
+  }
+
+  return ret;
 }
 
 int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(
@@ -381,23 +348,23 @@ struct IndexInitWriter : rgwrados::shard_io::RadosRevertibleWriter {
 
 int RGWSI_BucketIndex_RADOS::init_index(const DoutPrefixProvider *dpp,
                                         optional_yield y,
-                                        const RGWBucketInfo& bucket_info,
-                                        const rgw::bucket_index_layout_generation& idx_layout,
+                                        std::unique_ptr<rgw::rados::BIndexer>& bindexer,
 					std::map<std::string, bufferlist>* binfo_map_data,
                                         bool judge_support_logrecord)
 {
+  const RGWBucketInfo& bucket_info = bindexer->get_bucket_info();
+  const rgw::bucket_index_layout_generation& idx_layout = bindexer->get_layout_gen();
+
   librados::IoCtx index_pool;
   int r = open_bucket_index_pool(dpp, bucket_info, &index_pool);
   if (r < 0) {
     return r;
   }
 
-  auto bindexer =
-    rgw::rados::BIndexer::create_unique(cct, dpp, bucket_info, idx_layout);
-
   std::map<int, std::string> shard_oids;
   std::map<int, bufferlist> per_shard_data;
-  bindexer->get_initial_bucket_index_objects(shard_oids, per_shard_data, binfo_map_data);
+  bindexer->get_initial_bucket_index_objects(idx_layout.gen, rgw::num_shards(idx_layout),
+                                             shard_oids, per_shard_data, binfo_map_data);
 
   const size_t max_aio = cct->_conf->rgw_bucket_index_max_aio;
   boost::system::error_code ec;
@@ -425,7 +392,7 @@ int RGWSI_BucketIndex_RADOS::init_index(const DoutPrefixProvider *dpp,
   }
 
   return ceph::from_error_code(ec);
-}
+} // init_index
 
 struct IndexCleanWriter : rgwrados::shard_io::RadosWriter {
   IndexCleanWriter(const DoutPrefixProvider& dpp,
@@ -449,32 +416,30 @@ struct IndexCleanWriter : rgwrados::shard_io::RadosWriter {
   }
 };
 
+#if 1 // OBI: depcrecate??
 int RGWSI_BucketIndex_RADOS::clean_index(const DoutPrefixProvider *dpp,
                                          optional_yield y,
                                          const RGWBucketInfo& bucket_info,
                                          const rgw::bucket_index_layout_generation& idx_layout)
 {
-  if (idx_layout.layout.type != rgw::BucketIndexType::Hashed) {
-    return 0;
-  }
+  auto bindexer =
+    rgw::rados::BIndexer::create_unique(cct, dpp, bucket_info, idx_layout);
+  return clean_index(dpp, y, bindexer);
+}
+#endif
 
+int RGWSI_BucketIndex_RADOS::clean_index(const DoutPrefixProvider *dpp,
+                                         optional_yield y,
+                                         std::unique_ptr<rgw::rados::BIndexer>& bindexer)
+{
   librados::IoCtx index_pool;
-
-  std::string dir_oid = dir_oid_prefix;
-  int r = open_bucket_index_pool(dpp, bucket_info, &index_pool);
+  int r = open_bucket_index_pool(dpp, bindexer->get_bucket_info(), &index_pool);
   if (r < 0) {
     return r;
   }
 
-  dir_oid.append(bucket_info.bucket.bucket_id);
-
   std::map<int, std::string> bucket_objs;
-  auto bindexer =
-    rgw::rados::BIndexer::create_unique(cct, dpp, bucket_info);
   bindexer->get_bucket_index_objects(rgw::rados::BIndexer::BI_ALL_SHARDS,
-#if 0
-				     idx_layout.gen,
-#endif
 				     &bucket_objs);
 
   const size_t max_aio = cct->_conf->rgw_bucket_index_max_aio;
@@ -495,8 +460,19 @@ int RGWSI_BucketIndex_RADOS::clean_index(const DoutPrefixProvider *dpp,
     rgwrados::shard_io::async_writes(writer, bucket_objs, max_aio,
                                      ceph::async::use_blocked[ec]);
   }
-  return ceph::from_error_code(ec);
-}
+
+  r = ceph::from_error_code(ec);
+  if (r < 0) {
+    return r;
+  }
+
+  // if index being cleaned was ordered, we need to clear the omap too
+  if (bindexer->get_index_type() == rgw::BucketIndexType::Ordered) {
+    r = svc.bucket_sobj->clear_bucket_info_map(bindexer->get_bucket_info().bucket.get_key(), y, dpp);
+  }
+
+  return r;
+} // RGWSI_BucketIndex_RADOS::clean_index
 
 int RGWSI_BucketIndex_RADOS::read_stats(const DoutPrefixProvider *dpp,
                                         const RGWBucketInfo& bucket_info,
@@ -985,19 +961,10 @@ int RGWSI_BucketIndex_RADOS::handle_overwrite(const DoutPrefixProvider *dpp,
   return ret;
 }
 
-
-int32_t RGWSI_BucketIndex_RADOS::bucket_shard_index(const std::string& key,
-						    int num_shards)
-{
 // OBI: this should be converted into returning an index object name
 // and be based on index type
-  return rgw::rados::HashedBIndexer::get_shard_index(key, num_shards);
-}
-
-
 int32_t RGWSI_BucketIndex_RADOS::bucket_shard_index(const rgw_obj_key& obj_key,
 						    int num_shards)
 {
-#warning "OBI: this should be converted into returning an index object name and be based on index type"
   return rgw::rados::HashedBIndexer::get_shard_index(obj_key, num_shards);
 }

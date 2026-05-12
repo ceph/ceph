@@ -2749,6 +2749,7 @@ bool RadosObject::is_sync_completed(const DoutPrefixProvider* dpp,
   bool truncated;
   list<rgw_bi_log_entry> entries;
 
+  // OBI: need to convert this over to BIShardIdent
   const int shard_id = RGWSI_BucketIndex_RADOS::bucket_shard_index(get_key(), shard_count);
 
   int ret = store->svc()->bilog_rados->log_list(dpp, y, bucket_info, log_layout, shard_id,
@@ -4643,7 +4644,7 @@ static void renewal(const DoutPrefixProvider* dpp,
                     rgw::sal::MPSerializer& serializer,
                     librados::IoCtx& ioctx,
                     const std::string& oid,
-                    rados::cls::lock::Lock lock,
+                    ::rados::cls::lock::Lock lock,
                     auto& timer,
                     ceph::timespan dur,
                     boost::asio::yield_context yield)

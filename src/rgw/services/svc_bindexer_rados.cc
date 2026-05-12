@@ -18,6 +18,8 @@
 #include "services/svc_bi_rados.h"
 #include "services/svc_bucket_sobj.h"
 #include "svc_bindexer_rados.h"
+#include "driver/rados/rgw_rados.h"
+#include "driver/rados/rgw_sal_rados.h"
 
 // OBI: remove once things stabilize
 #if 1
@@ -60,22 +62,97 @@ void BIndexer::throw_unimplemented(const std::string& type_name,
 BIndexer* BIndexer::create(CephContext* cct,
 			   const DoutPrefixProvider* dpp,
 			   const RGWBucketInfo& bucket_info,
-			   const LayoutVariant& layout) {
-  const auto* nl = std::get_if<bucket_index_hashed_layout>(&layout);
+			   const bucket_index_layout_generation& idx_gen)
+{
+  const auto* nl = std::get_if<bucket_index_hashed_layout>(&idx_gen.layout.specs);
   if (nl) {
-    return new HashedBIndexer(cct, dpp, bucket_info, *nl);
+    auto result = new HashedBIndexer(cct, dpp, bucket_info, idx_gen);
+    return result;
   }
 
-  const auto* ol = std::get_if<bucket_index_ordered_layout>(&layout);
+  const auto* ol = std::get_if<bucket_index_ordered_layout>(&idx_gen.layout.specs);
   if (ol) {
-    return new OrderedBIndexer(cct, dpp, bucket_info, *ol);
+    auto result = new OrderedBIndexer(cct, dpp, bucket_info, idx_gen);
+    return result;
   }
 
   return nullptr;
 }
 
+BIndexer* BIndexer::create(RGWRados* rados,
+			   const DoutPrefixProvider* dpp,
+			   const RGWBucketInfo& bucket_info,
+			   const bucket_index_layout_generation& idx_gen) {
+  return create(rados->ctx(), dpp, bucket_info, idx_gen);
+}
+
+BIndexer* BIndexer::create(rgw::sal::RadosStore* store,
+			   const DoutPrefixProvider* dpp,
+			   const RGWBucketInfo& bucket_info,
+			   const bucket_index_layout_generation& idx_gen) {
+  return create(store->getRados()->ctx(), dpp, bucket_info, idx_gen);
+}
+
+std::unique_ptr<BIndexer> BIndexer::create_unique(RGWRados* rados,
+						  const DoutPrefixProvider* dpp,
+						  const RGWBucketInfo& info) {
+  return create_unique(rados->ctx(), dpp, info);
+}
+
+std::unique_ptr<BIndexer> BIndexer::create_unique(rgw::sal::RadosStore* store,
+						  const DoutPrefixProvider* dpp,
+						  const RGWBucketInfo& info) {
+  return create_unique(store->getRados()->ctx(), dpp, info);
+}
+
+std::unique_ptr<BIndexer> BIndexer::create_unique(RGWRados* rados,
+						  const DoutPrefixProvider* dpp,
+						  const RGWBucketInfo& info,
+						  const bucket_index_layout_generation& idx_layout) {
+  return create_unique(rados->ctx(), dpp, info, idx_layout);
+}
+
+std::unique_ptr<BIndexer> BIndexer::create_unique(rgw::sal::RadosStore* store,
+						  const DoutPrefixProvider* dpp,
+						  const RGWBucketInfo& info,
+						  const bucket_index_layout_generation& idx_layout) {
+  return create_unique(store->getRados()->ctx(), dpp, info, idx_layout);
+}
+
+std::string BIndexer::calc_preprefix(const std::string& prefix) {
+  if (prefix.empty()) {
+    return prefix;
+  }
+
+  const char last = prefix[prefix.size() - 1];
+  const std::string new_ending{ char(last - 1), '\xFF' };
+  std::string result = prefix;
+  result.replace(result.end() - 1, result.end(), new_ending);
+  return result;
+}
+
+
+std::ostream& operator<<(std::ostream& o, const BIndexer& b) {
+    return o << b.to_string();
+  }
+
+std::ostream& operator<<(std::ostream& o, const std::unique_ptr<BIndexer>& b) {
+  if (b) {
+    return o << b->to_string();
+  } else {
+    return o << "std::unique_ptr<BIndexer> has no managed object";
+  }
+}
+
 
 /******************** HashedBIndexer ********************/
+
+std::string HashedBIndexer::to_string() const {
+  std::stringstream ss;
+  ss << "HashedBIndexer: { bucket: " << bucket_info.bucket <<
+    ", layout: { " << layout_gen << " } }";
+  return ss.str();
+}
 
 BIndexer::ShardIterator HashedBIndexer::create_shard_iterator() const {
   return ShardIterator(new HashedShardIterator(*this));
@@ -84,8 +161,7 @@ BIndexer::ShardIterator HashedBIndexer::create_shard_iterator() const {
 BIndexer::ShardIterator HashedBIndexer::create_shard_iterator(
   const std::string& start_at) const
 {
-  BIShardIndex index;
-  shard_of(start_at, &index);
+  BIShardIndex index = get_shard_index(start_at, get_actual_num_shards());
   return ShardIterator(new HashedShardIterator(*this, index));
 }
 
@@ -115,20 +191,6 @@ std::string HashedBIndexer::index_shard_oid(
 std::string HashedBIndexer::index_shard_oid(uint32_t shard_id) const
 {
   return index_shard_oid(get_bucket_oid_base(), shard_id, layout_gen.gen);
-}
-
-std::unique_ptr<BIShardIdent> HashedBIndexer::shard_of(const std::string& obj_key) const {
-  return std::make_unique<HashedShardIdent>(
-    get_shard_index(obj_key, get_actual_num_shards()));
-}
-
-std::unique_ptr<BIShardIdent> HashedBIndexer::shard_of(const rgw_obj_key& obj_key) const {
-  return std::make_unique<HashedShardIdent>(
-    get_shard_index(obj_key, get_actual_num_shards()));
-}
-
-void HashedBIndexer::shard_of(const std::string& obj_key, BIShardIndex* index) const {
-  get_shard_index(obj_key, get_actual_num_shards());
 }
 
 int HashedBIndexer::get_bucket_index_objects(
@@ -180,94 +242,83 @@ void HashedBIndexer::get_bucket_instance_ids(
 int HashedBIndexer::get_bucket_index_object(
   const std::string& obj_key,
   std::string* bucket_obj,
-  BIShardIndex* shard_index) const
+  std::unique_ptr<BIShardIdent>& shard_id) const
 {
   std::string bucket_oid_base = dir_oid_prefix;
   bucket_oid_base.append(bucket_info.bucket.bucket_id);
   const auto gen_id = layout_gen.gen;
+  int32_t shard_idx = -1;
 
-  if (! layout.num_shards) {
+  if (! num_shards(layout_gen)) {
     // by default with no sharding, we use the bucket oid as itself
-    *bucket_obj = bucket_oid_base;
-    if (shard_index) {
-      *shard_index = -1;
-    }
-  } else {
-    uint32_t sid = get_shard_index(obj_key, layout.num_shards);
     if (bucket_obj) {
-      *bucket_obj = index_shard_oid(bucket_oid_base, sid, gen_id);
+      *bucket_obj = bucket_oid_base;
     }
-    if (shard_index) {
-      *shard_index = int(sid);
+
+    shard_idx = -1;
+  } else {
+    shard_idx = get_shard_index(obj_key, num_shards(layout_gen));
+
+    if (bucket_obj) {
+      *bucket_obj = index_shard_oid(bucket_oid_base, shard_idx, gen_id);
     }
   }
 
+  shard_id.reset(new HashedShardIdent(shard_idx));
+
   return 0;
 }
-
 
 int HashedBIndexer::get_bucket_index_object(
-  const std::string& obj_key,
-  std::string* bucket_obj,
-  BIShardIdent* shard_id) const
-{
-  BIShardIndex index;
-
-  int ret = get_bucket_index_object(obj_key, bucket_obj, &index);
-  if (ret < 0) {
-    return ret;
-  }
-
-  *shard_id = HashedShardIdent(index);
-  return 0;
-}
-
-
-int HashedBIndexer::get_bucket_index_object(
-  const std::string& obj_key,
-  std::string* bucket_obj,
-  std::unique_ptr<BIShardIdent>& shard_id) const
-{
-  BIShardIndex index;
-
-  int ret = get_bucket_index_object(obj_key, bucket_obj, &index);
-  if (ret < 0) {
-    return ret;
-  }
-
-  shard_id = std::make_unique<HashedShardIdent>(index);
-  return 0;
-}
-
-
-void HashedBIndexer::get_bucket_index_object(
   uint64_t gen_id,
-  BIShardIndex shard_id,
+  const BIShardIdent& shard_ident,
   std::string* bucket_obj) const
 {
+  if (shard_ident.get_type() != BIShardIdent::Type::HashedIdent) {
+    return -EINVAL;
+  }
+
   const std::string oid_base = get_bucket_oid_base();
-  *bucket_obj = index_shard_oid(oid_base, shard_id, gen_id);
+  const auto& hashed_ident = dynamic_cast<const HashedShardIdent&>(shard_ident);
+  *bucket_obj = index_shard_oid(oid_base, hashed_ident.get_index(), gen_id);
+
+  return 0;
 }
 
+
 void HashedBIndexer::get_initial_bucket_index_objects(
+  uint64_t gen,
+  BIShardCount num_shards,
   std::map<int, std::string>& shard_oids,
   std::map<int, bufferlist>& per_shard_data,
-  std::map<std::string, bufferlist>* binfo_map_data) const
+  std::map<std::string, bufferlist>* binfo_map_data)
 {
   const std::string bucket_oid_base = get_bucket_oid_base();
-  const BIShardIndex shard_count = num_shards(layout_gen);
 
-  const auto gen_id = layout_gen.gen;
-
-  for (BIShardIndex i = 0; i < shard_count; ++i) {
-    shard_oids.emplace(
-      std::make_pair(int(i), index_shard_oid(bucket_oid_base, i, gen_id)));
+  for (BIShardIndex i = 0; i < num_shards; ++i) {
+    shard_oids.emplace(std::make_pair(int(i),
+				      index_shard_oid(bucket_oid_base, i, gen)));
   }
 }
 
+int HashedBIndexer::get_shard_idents(std::vector<std::unique_ptr<BIShardIdent>>& result) const {
+  for (uint32_t i = 0; i < get_actual_num_shards(); ++i) {
+    result.push_back(std::make_unique<HashedShardIdent>(i));
+  }
+  return 0;
+}
 
 /******************** OrderedBIndexer ********************/
 
+
+std::string OrderedBIndexer::to_string() const {
+  std::stringstream ss;
+  ss << "OrderedBIndexer: { bucket: " << bucket_info.bucket <<
+    ", layout: { " << layout_gen <<
+    " }, initial_layout:" << (bool(initial_layout) ? "exists" : "empty") <<
+    " }";
+  return ss.str();
+}
 
 BIndexer::ShardIterator OrderedBIndexer::create_shard_iterator() const {
   try {
@@ -315,53 +366,61 @@ std::string OrderedBIndexer::index_shard_oid(
   return index_shard_oid(get_bucket_oid_base(), shard_ident, layout_gen.gen);
 }
 
-std::unique_ptr<BIShardIdent> OrderedBIndexer::shard_of(const std::string& obj_key) const {
-  UNIMPLEMENTED();
-  return std::make_unique<OrderedShardIdent>(64000);
-}
-
-std::unique_ptr<BIShardIdent> OrderedBIndexer::shard_of(const rgw_obj_key& obj_key) const {
-  UNIMPLEMENTED();
-  return std::make_unique<OrderedShardIdent>(64000);
-}
-
-const std::vector<std::pair<std::string, NestedIndex>>&
-OrderedBIndexer::get_initial_shard_data()
+// The default ordered shard layout. The shard with an empty-string
+// cut-off is the last shard
+const OrderedBIndexer::InitialLayout OrderedBIndexer::default_initial_layout =
 {
-  // initially we'll create 3 shards, the first designed to capture
-  // names that begin with "/", the seconds with upper-case letters,
-  // and the third for for the rest, which includes lower-case letters
-  // and non-ASCII. Please note that all entries in a shard are LESS
-  // THAN the cut-off. The shard with an empty-string cut-off is the
-  // last shard
-  static const std::vector<std::pair<std::string, NestedIndex>> fixed_data =
-  {
-#if 0
-      { "_", { 0 + STARTING_INDEX_ID } },
-      { "~", { 1 + STARTING_INDEX_ID, 7 } },
-      { "", { 2 + STARTING_INDEX_ID, 13, 17 } }
-#else
-      { "C", { -5 + STARTING_INDEX_ID } },
-      { "E", { 0 + STARTING_INDEX_ID, 2 } },
-      { "J", { 0 + STARTING_INDEX_ID, 99 } },
-      { "_", { 1 + STARTING_INDEX_ID, 8 } },
-      { "e", { 1 + STARTING_INDEX_ID, 8, 1, 2, 4 } },
-      { "i", { 1 + STARTING_INDEX_ID, 99 } },
-      { "q", { 2 + STARTING_INDEX_ID } },
-      { "~", { 2 + STARTING_INDEX_ID, 7 } },
-      { "Æ", { 7 + STARTING_INDEX_ID, 12 } },
-      { "Ü", { 50 + STARTING_INDEX_ID } },
-      { "", { 51 + STARTING_INDEX_ID, 13, 17 } }
-#endif
-    };
-  return fixed_data;
+  // OBI: we should make this better so there's no room for error
+  // (mismatching keys, out of order keys, out of order indexes)
+  { ".", ShardLayout( ".", { 0 + STARTING_INDEX_ID } ) },
+  { "A", ShardLayout( "A", { 1 + STARTING_INDEX_ID } ) },
+  { "E", ShardLayout( "E", { 2 + STARTING_INDEX_ID } ) },
+  { "U", ShardLayout( "U", { 3 + STARTING_INDEX_ID } ) },
+  { "a", ShardLayout( "a", { 4 + STARTING_INDEX_ID } ) },
+  { "e", ShardLayout( "e", { 5 + STARTING_INDEX_ID } ) },
+  { "u", ShardLayout( "u", { 6 + STARTING_INDEX_ID } ) },
+  { "À", ShardLayout( "À", { 7 + STARTING_INDEX_ID } ) },
+  { "É", ShardLayout( "É", { 8 + STARTING_INDEX_ID } ) },
+  { "Ü", ShardLayout( "Ü", { 9 + STARTING_INDEX_ID } ) },
+  { "à", ShardLayout( "à", { 10 + STARTING_INDEX_ID } ) },
+  { "é", ShardLayout( "é", { 11 + STARTING_INDEX_ID } ) },
+  { "ü", ShardLayout( "ü", { 12 + STARTING_INDEX_ID } ) },
+  { "",  ShardLayout( "",  { 13 + STARTING_INDEX_ID } ) }
+};
+
+// OBI: does this need to return anything?
+const OrderedBIndexer::InitialLayout& OrderedBIndexer::make_initial_layout()
+{
+  initial_layout = default_initial_layout;
+  bucket_index_ordered_layout newspec{ (uint32_t) default_initial_layout.size() };
+  layout_gen.layout.specs = newspec;
+  return *initial_layout;
+}
+
+void OrderedBIndexer::set_initial_layout(const OrderedBIndexer::InitialLayout& layout) {
+  // OBI: try to protect from having too few shards; is this good?
+  if (layout.size() <= default_initial_layout.size() / 2) {
+    // use our default layout if there are too few shards in this layout
+    std::ignore = make_initial_layout();
+    return;
+  }
+
+  initial_layout = layout;
+  bucket_index_ordered_layout newspec{ (uint32_t) layout.size() };
+  layout_gen.layout.specs = newspec;
 }
 
 void OrderedBIndexer::get_initial_bucket_index_objects(
+    uint64_t gen,
+    BIShardCount num_shards,
     std::map<int, std::string>& shard_oids,
     std::map<int, bufferlist>& per_shard_data,
-    std::map<std::string, bufferlist>* binfo_map_data) const
+    std::map<std::string, bufferlist>* binfo_map_data)
 {
+  if (! initial_layout) {
+    std::ignore = make_initial_layout();
+  }
+
   const std::string bucket_oid_base = get_bucket_oid_base();
 
   const auto gen_id = layout_gen.gen;
@@ -369,10 +428,10 @@ void OrderedBIndexer::get_initial_bucket_index_objects(
   const auto& fixed_data = get_initial_shard_data();
 
   if (binfo_map_data) {
-    for (const auto& p : fixed_data) {
+    for (const auto& p : *fixed_data) {
       rgw_ordered_bi_omap_value v;
       v.split = p.first;
-      v.shard_ident = p.second;
+      v.shard_ident = p.second.index_id;
       bufferlist bl;
       v.encode(bl);
       const std::string key = OMAP_KEY_PREFIX + v.split;
@@ -384,12 +443,12 @@ void OrderedBIndexer::get_initial_bucket_index_objects(
 
   std::vector<rgw_ordered_bi_shard_data> per_shard;
   NestedIndex prev_ident = empty_index;
-  for (const auto& p : fixed_data) {
+  for (const auto& p : *fixed_data) {
     rgw_ordered_bi_shard_data d;
     d.split = p.first;
-    d.shard_ident = p.second;
+    d.shard_ident = p.second.index_id;
     d.prev_shard_ident = prev_ident;
-    prev_ident = p.second;
+    prev_ident = p.second.index_id;
     per_shard.push_back(d);
   }
 
@@ -412,122 +471,86 @@ void OrderedBIndexer::get_initial_bucket_index_objects(
   }
 }
 
-#warning "ERIC work on this NEXT"
 int OrderedBIndexer::get_bucket_index_object(
   const std::string& obj_key,
   std::string* bucket_obj,
-  BIShardIndex* shard_index) const
-{
-#warning "TRACE 127"
-  UNIMPLEMENTED();
-  return -1;
-}
-
-int OrderedBIndexer::get_bucket_index_object(
-  const std::string& obj_key,
-  std::string* bucket_obj,
-  BIShardIdent* shard_id) const
+  std::unique_ptr<BIShardIdent>& shard_ident) const
 {
   const std::string oid_base = get_bucket_oid_base();
-  const auto gen_id = layout_gen.gen;
+  const auto& gen_id = layout_gen.gen;
 
-  std::map<std::string, bufferlist> results;
+  NestedIndex index;
 
-  const std::string prefixed_key = OMAP_KEY_PREFIX + obj_key;
-  int r = bucket_sobj->read_bucket_info_map(bucket_info.bucket.get_key(),
-					    prefixed_key, OMAP_KEY_PREFIX, 1, &OMAP_KEY_PREFIX,
-					    &results, nullptr, null_yield, dpp);
-  if (r < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
-      ": call to read_bucket_info_map returned " << r << dendl;
-    return r;
+  if (initial_layout) {
+    auto it = initial_layout->upper_bound(obj_key);
+    if (it == initial_layout->end()) {
+      it = initial_layout->find("");
+      if (it == initial_layout->upper_bound(obj_key)) {
+	ldpp_dout(dpp, 0) << "INTERNAL ERROR: " << __func__ <<
+	  ": received initial_layout exists but does not have an entry keyed by "
+	  "the empty string" << dendl;
+	return -ENOENT;
+      }
+    }
+    index = it->second.index_id;
+  } else {
+    std::map<std::string, bufferlist> results;
+
+    const std::string prefixed_key = OMAP_KEY_PREFIX + obj_key;
+    int r = bucket_sobj->read_bucket_info_map(bucket_info.bucket.get_key(),
+					      prefixed_key, OMAP_KEY_PREFIX, 1, &OMAP_KEY_PREFIX,
+					      &results, nullptr, null_yield, dpp);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
+	": call to read_bucket_info_map returned " << r << dendl;
+      return r;
+    }
+
+    if (results.empty()) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
+	": no map results to determine shard" << dendl;
+      return -ENOENT;
+    }
+
+    if (results.size() > 1) {
+      ldpp_dout(dpp, 0) << "INTERNAL ERROR: " << __func__ <<
+	": received more map results than requested" << dendl;
+      throw std::logic_error("expected 1 result, but got " +
+			     std::to_string(results.size()));
+    }
+
+    rgw_ordered_bi_omap_value value;
+    auto it = results.cbegin()->second.cbegin();
+    value.decode(it);
+
+    index = value.shard_ident;
   }
-
-  if (results.empty()) {
-    ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
-      ": no map results to determine shard" << dendl;
-    return -ENOENT;
-  }
-
-  if (results.size() > 1) {
-    ldpp_dout(dpp, 0) << "INTERNAL ERROR: " << __func__ <<
-      ": received more map results than requested" << dendl;
-    throw std::logic_error("expected 1 result, but got " +
-			   std::to_string(results.size()));
-  }
-
-  rgw_ordered_bi_omap_value value;
-  auto it = results.cbegin()->second.cbegin();
-  value.decode(it);
 
   if (bucket_obj) {
-    *bucket_obj = index_shard_oid(oid_base, value.shard_ident, gen_id);
+    *bucket_obj = index_shard_oid(oid_base, index, gen_id);
   }
 
-  if (shard_id) {
-    *shard_id = OrderedShardIdent(std::move(value.shard_ident));
-  }
+  shard_ident.reset(new OrderedShardIdent(std::move(index)));
 
   return 0;
 }
 
 int OrderedBIndexer::get_bucket_index_object(
-  const std::string& obj_key,
-  std::string* bucket_obj,
-  std::unique_ptr<BIShardIdent>& shard_id) const
-{
-  const std::string oid_base = get_bucket_oid_base();
-  const auto gen_id = layout_gen.gen;
-  static const std::string default_key = "";
-
-  std::map<std::string, bufferlist> results;
-
-  const std::string prefixed_key = OMAP_KEY_PREFIX + obj_key;
-  int r =
-    bucket_sobj->read_bucket_info_map(bucket_info.bucket.get_key(),
-				      prefixed_key, OMAP_KEY_PREFIX, 1, &default_key,
-				      &results, nullptr,
-				      null_yield, dpp);
-  if (r < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
-      ": call to read_bucket_info_map returned " << r << dendl;
-    return r;
-  }
-
-  if (results.empty()) {
-    ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
-      ": no map results to determine shard" << dendl;
-    return -ENOENT;
-  }
-
-  if (results.size() > 1) {
-    ldpp_dout(dpp, 0) << "INTERNAL ERROR: " << __func__ <<
-      ": received more map results than requested" << dendl;
-    throw std::logic_error("expected 1 result, but got " +
-			   std::to_string(results.size()));
-  }
-
-  rgw_ordered_bi_omap_value value;
-  auto it = results.cbegin()->second.cbegin();
-  value.decode(it);
-
-  if (bucket_obj) {
-    *bucket_obj = index_shard_oid(oid_base, value.shard_ident, gen_id);
-  }
-
-#warning "is this implemented correctly?"
-  shard_id.reset(new OrderedShardIdent(value.shard_ident));
-
-  return 0;
-}
-
-void OrderedBIndexer::get_bucket_index_object(
   uint64_t gen_id,
-  BIShardIndex shard_id,
+  const BIShardIdent& shard_ident,
   std::string* bucket_obj) const
 {
-  UNIMPLEMENTED();
+  if (shard_ident.get_type() != BIShardIdent::Type::OrderedIdent) {
+    return -EINVAL;
+  }
+
+  const std::string oid_base = get_bucket_oid_base();
+  const auto& ordered_ident = dynamic_cast<const OrderedShardIdent&>(shard_ident);
+  *bucket_obj = index_shard_oid(oid_base, ordered_ident.get_indices(), gen_id);
+
+  return 0;
 }
+
 
 // OBI: priority to work on
 void OrderedBIndexer::get_bucket_instance_ids(
@@ -550,9 +573,56 @@ int OrderedBIndexer::get_bucket_index_objects(
     UNIMPLEMENTED();
     // (*shard_oids)[shard_index] = index_shard_oid(oid_base, shard_index, gen_id);
   } else {
-    std::string marker = "";
+    std::string marker = calc_preprefix(OMAP_KEY_PREFIX);
     bool more = true;
     BIShardIndex counter = 0;
+    std::string saved_final_oid;
+    constexpr uint64_t batch_size = 1000;
+
+    while (more) {
+      std::map<std::string, bufferlist> results;
+      // note: the following does not update the marker
+      int r = bucket_sobj->read_bucket_info_map(bucket_info.bucket.get_key(),
+						marker, OMAP_KEY_PREFIX, batch_size, &OMAP_KEY_PREFIX,
+						&results, &more, null_yield, dpp);
+      if (r < 0) {
+	ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
+	  ": call to read_bucket_info_map returned " << r << dendl;
+	return r;
+      }
+
+      for (const auto& i : results) {
+	rgw_ordered_bi_omap_value value;
+	auto it = i.second.cbegin();
+	value.decode(it);
+	const std::string oid = index_shard_oid(oid_base, value.shard_ident, gen_id);
+	if (i.first == OMAP_KEY_PREFIX) {
+	  saved_final_oid = oid;
+	} else {
+	  (*shard_oids)[counter++] = oid;
+	}
+      }
+
+      if (more) {
+	marker = results.crbegin()->first;
+      }
+    } // while
+
+    if (! saved_final_oid.empty()) {
+      (*shard_oids)[counter++] = saved_final_oid;
+    }
+  }
+  return 0;
+}
+
+int OrderedBIndexer::get_shard_idents(std::vector<std::unique_ptr<BIShardIdent>>& result) const {
+  if (initial_layout) {
+    for (const auto& i : *initial_layout) {
+      result.push_back(std::make_unique<OrderedShardIdent>(i.second.index_id));
+    }
+  } else {
+    std::string marker = "";
+    bool more = true;
     while (more) {
       std::map<std::string, bufferlist> results;
       int r = bucket_sobj->read_bucket_info_map(bucket_info.bucket.get_key(),
@@ -568,13 +638,14 @@ int OrderedBIndexer::get_bucket_index_objects(
 	rgw_ordered_bi_omap_value value;
 	auto it = i.second.cbegin();
 	value.decode(it);
-	const std::string oid = index_shard_oid(oid_base, value.shard_ident, gen_id);
-	(*shard_oids)[counter++] = oid;
+	result.push_back(std::make_unique<OrderedShardIdent>(std::move(value.shard_ident)));
       }
     } // while
-  }
+  } // if
+
   return 0;
 }
+
 
 bool HashedBIndexer::HashedShardIterator::valid() const {
   return index < (BIShardIndex) bindexer.get_actual_num_shards();
@@ -765,8 +836,7 @@ int OrderedBIndexer::OrderedShardIterator::load_batch(
     // set up a "marker" that will guarantee we get the last shard,
     // which is keyed by just OMAP_KEY_PREFIX; this is because
     // read_bucket_info gets entries starting *after* the marker
-    std::string preprefix = OMAP_KEY_PREFIX;
-    preprefix.replace(preprefix.end() - 1, preprefix.end(), "-");
+    std::string preprefix = calc_preprefix(OMAP_KEY_PREFIX);
 
     r = bindexer.bucket_sobj->read_bucket_info_map(bindexer.bucket_info.bucket.get_key(),
 						   preprefix,
@@ -826,5 +896,18 @@ std::ostream& operator<<(std::ostream& out,
 
   return out;
 }
+
+std::ostream& operator<<(std::ostream& out, const OrderedBIndexer::InitialLayout& layout)
+{
+  out << "InitialLayout:{ ";
+  for (const auto& i : layout) {
+    out << i.first << ":{ " << i.second.split_point <<
+      ", " << i.second.index_id << " }, ";
+  }
+  out << " }";
+
+  return out;
+}
+
 
 } // namespace rgw::rados

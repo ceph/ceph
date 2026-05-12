@@ -128,6 +128,12 @@ int rgw_read_system_obj_map(const DoutPrefixProvider *dpp,
                             bool* more,
                             optional_yield y);
 
+int rgw_clear_system_obj_map(const DoutPrefixProvider *dpp,
+                            RGWSI_SysObj* svc_sysobj,
+                            const rgw_pool& pool,
+                            const std::string& oid,
+                            optional_yield y);
+
 std::string_view rgw_find_mime_by_ext(std::string_view ext);
 
 void rgw_filter_attrset(std::map<std::string, bufferlist>& unfiltered_attrset, const std::string& check_prefix,

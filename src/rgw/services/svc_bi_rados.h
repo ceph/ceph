@@ -53,19 +53,6 @@ class RGWSI_BucketIndex_RADOS : public RGWSI_BucketIndex
                              librados::IoCtx* index_pool,
                              std::string *bucket_oid_base);
 
-#if 0
-  // return the index oid for the given shard id
-  void get_bucket_index_object(const std::string& bucket_oid_base,
-                               const rgw::LayoutVariant& specs,
-                               uint64_t gen_id, int shard_id,
-                               std::string* bucket_obj);
-  // return the index oid and shard id for the given object name
-  int get_bucket_index_object(const std::string& bucket_oid_base,
-                              const rgw::LayoutVariant& specs,
-                              uint64_t gen_id, const std::string& obj_key,
-                              std::string* bucket_obj, int* shard_id);
-#endif
-
 public:
 
   int cls_bucket_head(const DoutPrefixProvider *dpp,
@@ -102,19 +89,23 @@ public:
     return rgw_shard_id(key, max_shards);
   }
 
-  static int32_t bucket_shard_index(const std::string& key,
-				    int num_shards);
+// OBI: this should be converted into returning an index object name
+// and be based on index type
   static int32_t bucket_shard_index(const rgw_obj_key& obj_key,
 				    int num_shards);
 
   int init_index(const DoutPrefixProvider *dpp, optional_yield y,
-                 const RGWBucketInfo& bucket_info,
-                 const rgw::bucket_index_layout_generation& idx_layout,
+                 std::unique_ptr<rgw::rados::BIndexer>& bindexer,
 		 std::map<std::string, bufferlist>* binfo_map_data,
                  bool judge_support_logrecord = false) override;
+
+#if 1 // OBI deprecate??
   int clean_index(const DoutPrefixProvider *dpp, optional_yield y,
                   const RGWBucketInfo& bucket_info,
                   const rgw::bucket_index_layout_generation& idx_layout) override;
+#endif
+  int clean_index(const DoutPrefixProvider *dpp, optional_yield y,
+                  std::unique_ptr<rgw::rados::BIndexer>& bindexer) override;
 
   /* RADOS specific */
 
@@ -161,7 +152,7 @@ public:
                               const RGWBucketInfo& bucket_info,
                               const std::string& obj_key,
                               rgw_rados_ref* bucket_obj,
-                              rgw::BIShardIdent* shard_ident);
+                              std::unique_ptr<rgw::BIShardIdent>& shard_ident);
   int open_bucket_index_shard(const DoutPrefixProvider *dpp,
                               const RGWBucketInfo& bucket_info,
                               const rgw::bucket_index_layout_generation& layout_gen,

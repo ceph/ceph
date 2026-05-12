@@ -497,6 +497,23 @@ int RGWSI_SysObj_Core::omap_del(const DoutPrefixProvider *dpp, const rgw_raw_obj
   return r;
 }
 
+int RGWSI_SysObj_Core::omap_clear(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, optional_yield y)
+{
+  rgw_rados_ref rados_obj;
+  int r = get_rados_obj(dpp, zone_svc, obj, &rados_obj);
+  if (r < 0) {
+    ldpp_dout(dpp, 20) << "get_rados_obj() on obj=" << obj << " returned " << r << dendl;
+    return r;
+  }
+
+  librados::ObjectWriteOperation op;
+
+  op.omap_clear();
+
+  r = rados_obj.operate(dpp, std::move(op), y);
+  return r;
+}
+
 int RGWSI_SysObj_Core::notify(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, bufferlist& bl,
                               uint64_t timeout_ms, bufferlist *pbl,
                               optional_yield y)

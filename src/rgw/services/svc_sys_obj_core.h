@@ -111,6 +111,7 @@ protected:
                        optional_yield y);
   virtual int omap_del(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, const std::string& key,
                        optional_yield y);
+  virtual int omap_clear(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, optional_yield y);
 
   virtual int notify(const DoutPrefixProvider *dpp, 
                      const rgw_raw_obj& obj, bufferlist& bl,

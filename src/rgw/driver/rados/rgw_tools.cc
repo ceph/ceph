@@ -150,10 +150,16 @@ std::map<std::string, bufferlist>* no_change_attrs_omap() {
   return &no_change;
 }
 
-int rgw_put_system_obj(const DoutPrefixProvider *dpp, RGWSI_SysObj* svc_sysobj,
-                       const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
-                       RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y,
-		       const map<string, bufferlist>* pattrs,
+int rgw_put_system_obj(const DoutPrefixProvider *dpp,
+                       RGWSI_SysObj* svc_sysobj,
+                       const rgw_pool& pool,
+                       const string& oid,
+                       bufferlist& data,
+                       bool exclusive,
+                       RGWObjVersionTracker *objv_tracker,
+                       real_time set_mtime,
+                       optional_yield y,
+		       const std::map<std::string, bufferlist>* pattrs,
 		       const std::map<std::string, bufferlist>* omap_entries)
 {
   map<string,bufferlist> no_attrs;
@@ -166,27 +172,49 @@ int rgw_put_system_obj(const DoutPrefixProvider *dpp, RGWSI_SysObj* svc_sysobj,
   RGWSI_SysObj::Obj sysobj = svc_sysobj->get_obj(obj);
   int ret;
 
-  if (pattrs != no_change_attrs()) {
+  if (pattrs != no_change_attrs_omap() && omap_entries != no_change_attrs_omap()) {
+    // we're re-writing everything from scratch, so we'll call write
+    // (rewrites everything) and then add omap vals
     ret = sysobj.wop()
       .set_objv_tracker(objv_tracker)
       .set_exclusive(exclusive)
       .set_mtime(set_mtime)
       .set_attrs(*pattrs)
-      .write(dpp, data, y);
-  } else {
-    ret = sysobj.wop()
-      .set_objv_tracker(objv_tracker)
-      .set_exclusive(exclusive)
-      .set_mtime(set_mtime)
-      .write_data(dpp, data, y);
+      .write(dpp, data, y); // inherently clears omap
+
+    if (ret < 0) {
+      return ret;
+    }
+
+    if (omap_entries) {
+      return sysobj.omap().set(dpp, *omap_entries, y);
+    }
+
+    return 0;
   }
 
-  if (ret || !omap_entries) {
+  ret = sysobj.wop()
+    .set_objv_tracker(objv_tracker)
+    .set_exclusive(exclusive)
+    .set_mtime(set_mtime)
+    .write_data(dpp, data, y);
+  if (ret < 0) {
     return ret;
   }
 
-#warning "update wop to allow omap entries to be added, overwritten, or cleared?"
-  return  sysobj.omap().set(dpp, *omap_entries, y);
+  if (pattrs != no_change_attrs_omap()) {
+    return sysobj.wop().set_attrs(*pattrs).write_attrs(dpp, y);
+  }
+
+  if (! omap_entries) {
+    // nullptr indicates erase
+    return sysobj.omap().clear(dpp, y);
+  } else if (omap_entries != no_change_attrs_omap()) {
+    // add entries
+    return sysobj.omap().set(dpp, *omap_entries, y);
+  }
+
+  return 0;
 }
 
 int rgw_stat_system_obj(const DoutPrefixProvider *dpp, RGWSI_SysObj* svc_sysobj,
@@ -220,6 +248,18 @@ int rgw_read_system_obj_map(const DoutPrefixProvider *dpp,
   auto sysobj = svc_sysobj->get_obj(obj);
   return sysobj.omap().get_vals(dpp, after, prefix, count, default_key,
                                 results, more, y);
+}
+
+
+int rgw_clear_system_obj_map(const DoutPrefixProvider *dpp,
+                            RGWSI_SysObj* svc_sysobj,
+                            const rgw_pool& pool,
+                            const std::string& oid,
+                            optional_yield y)
+{
+  rgw_raw_obj obj(pool, oid);
+  auto sysobj = svc_sysobj->get_obj(obj);
+  return sysobj.omap().clear(dpp, y);
 }
 
 

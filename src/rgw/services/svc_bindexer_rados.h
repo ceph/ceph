@@ -23,6 +23,7 @@
 #pragma once
 
 
+#include <ostream>
 #include "rgw_bucket_layout.h"
 
 
@@ -67,7 +68,7 @@ protected:
   CephContext* cct;
   const DoutPrefixProvider* dpp;
   const RGWBucketInfo& bucket_info;
-  const bucket_index_layout_generation& layout_gen;
+  bucket_index_layout_generation layout_gen;
 
   std::string get_bucket_oid_base() const {
     std::string bucket_oid_base = dir_oid_prefix;
@@ -80,6 +81,8 @@ protected:
   void throw_unimplemented(const std::string& type_name,
 			   const char* func_name,
 			   const char* msg = nullptr) const;
+
+  static std::string calc_preprefix(const std::string& prefix);
 
 public:
 
@@ -97,7 +100,7 @@ public:
   BIndexer(CephContext* _cct,
 	   const DoutPrefixProvider* _dpp,
 	   const RGWBucketInfo& _bucket_info,
-	   const bucket_index_layout_generation _layout_gen) :
+	   const bucket_index_layout_generation& _layout_gen) :
     cct(_cct),
     dpp(_dpp),
     bucket_info(_bucket_info),
@@ -117,66 +120,25 @@ public:
     return layout_gen;
   }
 
-  virtual bool entries_ordered_by_shard() const = 0;
-
   virtual BucketIndexType get_index_type() const = 0;
+  virtual bool entries_ordered_by_shard() const = 0;
+  virtual bool may_support_log_record() const = 0;
 
   virtual uint32_t get_actual_num_shards() const = 0;
   virtual uint32_t get_stored_num_shards() const = 0;
 
-  virtual std::unique_ptr<BIShardIdent> shard_of(
-    const std::string& obj_key) const = 0;
-  virtual std::unique_ptr<BIShardIdent> shard_of(
-    const rgw_obj_key& obj_key) const = 0;
-
-
-#if 1 // we want to deprecate this
   virtual int get_bucket_index_object(
     const std::string& obj_key,
     std::string* bucket_obj,
-    BIShardIndex* shard_index) const
-  {
-    UNIMPLEMENTED();
-    return -1;
-  }
-#endif
+    std::unique_ptr<BIShardIdent>& shard_ident) const = 0;
 
   virtual int get_bucket_index_object(
-    const std::string& obj_key,
-    std::string* bucket_obj,
-    BIShardIdent* shard_ident) const
-  {
-    UNIMPLEMENTED();
-    return -1;
-  }
-
-  virtual int get_bucket_index_object(
-    const std::string& obj_key,
-    std::string* bucket_obj,
-    std::unique_ptr<BIShardIdent>& shard_ident) const
-  {
-    UNIMPLEMENTED();
-    return -1;
-  }
-
-#if 0
-  virtual int get_bucket_index_object(
-    const std::string& bucket_oid_base,
     uint64_t gen_id,
-    const std::string& obj_key,
-    std::string* bucket_index_obj) const
-  {
-    UNIMPLEMENTED();
-    return -1;
-  }
-#endif
-
-  virtual void get_bucket_index_object(
-    uint64_t gen_id,
-    BIShardIndex shard_idx,
+    const BIShardIdent& shard_ident,
     std::string* bucket_obj) const
   {
     UNIMPLEMENTED();
+    return -EINVAL;
   }
 
   // retrieve specific shard or all shards if shard_index is -1
@@ -200,9 +162,11 @@ public:
    * have data in it, so do not clear before adding key/value pairs
    */
   virtual void get_initial_bucket_index_objects(
+    uint64_t gen,
+    BIShardCount num_shards,
     std::map<int, std::string>& shard_oids,
     std::map<int, bufferlist>& per_shard_data,
-    std::map<std::string, bufferlist>* binfo_map_data) const
+    std::map<std::string, bufferlist>* binfo_map_data)
   {
     UNIMPLEMENTED();
   }
@@ -215,56 +179,86 @@ public:
     UNIMPLEMENTED();
   }
 
-#if 0
-  static std::unique_ptr<BIndexer> create_unique(CephContext* cct, const LayoutVariant& layout) {
-    return std::unique_ptr<BIndexer>(create(cct, layout));
+  virtual int get_shard_idents(std::vector<std::unique_ptr<BIShardIdent>>& result) const
+  {
+    UNIMPLEMENTED();
+    return 0;
   }
-#endif
+
+  // create_unique
 
   static std::unique_ptr<BIndexer> create_unique(CephContext* cct,
 						 const DoutPrefixProvider* dpp,
 						 const RGWBucketInfo& info)
   {
     return std::unique_ptr<BIndexer>(create(cct, dpp,
-					    info, info.get_current_layout_variant()));
+					    info, info.layout.current_index));
   }
 
+  // supply the layout generation in case we want the bindexer to,
+  // say, use the target rather than the current layout generation
   static std::unique_ptr<BIndexer> create_unique(CephContext* cct,
 						 const DoutPrefixProvider* dpp,
 						 const RGWBucketInfo& info,
-						 LayoutVariant& layout)
-  {
-    return std::unique_ptr<BIndexer>(create(cct, dpp, info, layout));
+						 const bucket_index_layout_generation& idx_layout) {
+    return std::unique_ptr<BIndexer>(create(cct, dpp, info, idx_layout));
   }
 
-#if 0
-  static std::shared_ptr<BIndexer> create_shared(CephContext* cct, const LayoutVariant& layout) {
-    return std::shared_ptr<BIndexer>(create(cct, layout));
-  }
-#endif
+  // convenience versions
+
+  static std::unique_ptr<BIndexer> create_unique(RGWRados* rados,
+						 const DoutPrefixProvider* dpp,
+						 const RGWBucketInfo& info);
+  static std::unique_ptr<BIndexer> create_unique(rgw::sal::RadosStore* store,
+						 const DoutPrefixProvider* dpp,
+						 const RGWBucketInfo& info);
+  static std::unique_ptr<BIndexer> create_unique(RGWRados* rados,
+						 const DoutPrefixProvider* dpp,
+						 const RGWBucketInfo& info,
+						 const bucket_index_layout_generation& idx_layout);
+  static std::unique_ptr<BIndexer> create_unique(rgw::sal::RadosStore* store,
+						 const DoutPrefixProvider* dpp,
+						 const RGWBucketInfo& info,
+						 const bucket_index_layout_generation& idx_layout);
+
+  // create_shared
 
   static std::shared_ptr<BIndexer> create_shared(CephContext* cct,
 						 const DoutPrefixProvider* dpp,
-						 const RGWBucketInfo& info)
-  {
+						 const RGWBucketInfo& info) {
     return std::shared_ptr<BIndexer>(create(cct, dpp,
-					    info, info.get_current_layout_variant()));
+					    info, info.layout.current_index));
   }
 
+  // supply the layout generation in case we want the bindexer to,
+  // say, use the target rather than the current layout generation
   static std::shared_ptr<BIndexer> create_shared(CephContext* cct,
 						 const DoutPrefixProvider* dpp,
 						 const RGWBucketInfo& info,
-						 const LayoutVariant& layout)
-  {
-    return std::shared_ptr<BIndexer>(create(cct, dpp, info, layout));
+						 const bucket_index_layout_generation& idx_layout) {
+    return std::shared_ptr<BIndexer>(create(cct, dpp, info, idx_layout));
   }
-
-  protected:
 
   static BIndexer* create(CephContext* cct,
 			  const DoutPrefixProvider* dpp,
 			  const RGWBucketInfo& bucket_info,
-			  const LayoutVariant& layout);
+			  const bucket_index_layout_generation& idx_gen);
+
+  // convenience versions
+
+  static BIndexer* create(RGWRados* rados,
+			  const DoutPrefixProvider* dpp,
+			  const RGWBucketInfo& bucket_info,
+			  const bucket_index_layout_generation& idx_gen);
+
+  static BIndexer* create(rgw::sal::RadosStore* store,
+			  const DoutPrefixProvider* dpp,
+			  const RGWBucketInfo& bucket_info,
+			  const bucket_index_layout_generation& idx_gen);
+
+  virtual std::string to_string() const = 0;
+
+protected:
 
   class InteriorShardIterator {
   public:
@@ -320,23 +314,30 @@ public:
 }; // class BIndexer
 
 
+std::ostream& operator<<(std::ostream&, const BIndexer&);
+std::ostream& operator<<(std::ostream&, const std::unique_ptr<BIndexer>&);
+
+
 class HashedBIndexer : public BIndexer {
 
   friend RGWSI_BucketIndex_RADOS;
-
-protected:
-
-  bucket_index_hashed_layout layout;
 
 public:
 
   HashedBIndexer(CephContext* cct,
 		 const DoutPrefixProvider* dpp,
-		 const RGWBucketInfo& bucket_info,
-		 const bucket_index_hashed_layout& _layout) :
-    BIndexer(cct, dpp, bucket_info),
-    layout(_layout)
+		 const RGWBucketInfo& bucket_info) :
+    BIndexer(cct, dpp, bucket_info)
   { }
+
+  HashedBIndexer(CephContext* cct,
+		 const DoutPrefixProvider* dpp,
+		 const RGWBucketInfo& bucket_info,
+		 const bucket_index_layout_generation& layout_gen) :
+    BIndexer(cct, dpp, bucket_info, layout_gen)
+  { }
+
+  std::string to_string() const override;
 
   ShardIterator create_shard_iterator() const override;
   ShardIterator create_shard_iterator(const std::string& start_at) const override;
@@ -349,25 +350,23 @@ public:
     return false;
   }
 
+  bool may_support_log_record() const override {
+    // might support based on various factors
+    return true;
+  }
+
   uint32_t get_actual_num_shards() const override {
-    if (layout.num_shards == 0) {
+    auto result = get_stored_num_shards();
+    if (0 == result) {
       return 1;
     } else {
-      return layout.num_shards;
+      return result;
     }
   }
 
   uint32_t get_stored_num_shards() const override {
-    return layout.num_shards;
+    return num_shards(layout_gen);
   }
-
-  std::unique_ptr<BIShardIdent> shard_of(
-    const std::string& obj_key) const override;
-  std::unique_ptr<BIShardIdent> shard_of(
-    const rgw_obj_key& obj_key) const override;
-
-  // convenience method
-  void shard_of(const std::string& obj_key, BIShardIndex* index) const;
 
   static std::string index_shard_oid(
     const std::string& bucket_oid_base,
@@ -388,31 +387,24 @@ public:
   int get_bucket_index_object(
     const std::string& obj_key,
     std::string* bucket_obj,
-    BIShardIndex* shard_index) const override;
-
-  int get_bucket_index_object(
-    const std::string& obj_key,
-    std::string* bucket_obj,
-    BIShardIdent* shard_ident) const override;
-
-  int get_bucket_index_object(
-    const std::string& obj_key,
-    std::string* bucket_obj,
     std::unique_ptr<BIShardIdent>& shard_ident) const override;
 
-  void get_bucket_index_object(
+  int get_bucket_index_object(
     uint64_t gen_id,
-    BIShardIndex shard_id,
+    const BIShardIdent& shard_ident,
     std::string* bucket_obj) const override;
 
-  void get_bucket_instance_ids(
+    void get_bucket_instance_ids(
     int num_shards,
     BIShardIndex shard_index,
     std::map<int, std::string>* result) const override;
 
+  int get_shard_idents(std::vector<std::unique_ptr<BIShardIdent>>&) const override;
+
+
 protected:
 
-  static int32_t get_shard_index(const std::string& key,
+  static BIShardIndex get_shard_index(const std::string& key,
 				 int num_shards)
   {
     uint32_t sid = ceph_str_hash_linux(key.c_str(), key.size());
@@ -420,8 +412,8 @@ protected:
     return rgw_shards_mod(sid2, num_shards);
   }
 
-  static int32_t get_shard_index(const rgw_obj_key& obj_key,
-				 int num_shards)
+  static BIShardIndex get_shard_index(const rgw_obj_key& obj_key,
+				      int num_shards)
   {
     std::string sharding_key;
     if (obj_key.ns == RGW_OBJ_NS_MULTIPART) {
@@ -436,9 +428,11 @@ protected:
   }
 
   void get_initial_bucket_index_objects(
+    uint64_t gen,
+    BIShardCount num_shards,
     std::map<int, std::string>& shard_oids,
     std::map<int, bufferlist>& per_shard_data,
-    std::map<std::string, bufferlist>* binfo_map_data) const override;
+    std::map<std::string, bufferlist>* binfo_map_data) override;
 
 public:
 
@@ -479,22 +473,46 @@ class OrderedBIndexer : public BIndexer {
 
   friend RGWSI_BucketIndex_RADOS;
 
+public:
+
+  struct ShardLayout {
+    const std::string split_point;
+    const NestedIndex index_id;
+
+    ShardLayout(const std::string& _split_point,
+		const NestedIndex& _index_id) :
+      split_point(_split_point),
+      index_id(_index_id)
+    { }
+  };
+
+  using InitialLayout = std::map<std::string, ShardLayout>;
+
 protected:
 
-  static constexpr int STARTING_INDEX_ID = 64000;
   static constexpr std::string OMAP_KEY_PREFIX = std::string(RGW_ATTR_OBI1_KEY_PREFIX);
+  static const InitialLayout default_initial_layout;
 
-  bucket_index_ordered_layout layout;
+  std::optional<InitialLayout> initial_layout;
 
 public:
+
+  static constexpr int STARTING_INDEX_ID = 64000;
+
+  OrderedBIndexer(CephContext* cct,
+		  const DoutPrefixProvider* dpp,
+		  const RGWBucketInfo& bucket_info) :
+    BIndexer(cct, dpp, bucket_info)
+  { }
 
   OrderedBIndexer(CephContext* cct,
 		  const DoutPrefixProvider* dpp,
 		  const RGWBucketInfo& bucket_info,
-		  const bucket_index_ordered_layout& _layout) :
-    BIndexer(cct, dpp, bucket_info),
-    layout(_layout)
+		  const bucket_index_layout_generation& layout_gen) :
+    BIndexer(cct, dpp, bucket_info, layout_gen)
   { }
+
+  std::string to_string() const override;
 
   ShardIterator create_shard_iterator() const override;
   ShardIterator create_shard_iterator(const std::string& start_at) const override;
@@ -507,12 +525,17 @@ public:
     return true;
   }
 
+  bool may_support_log_record() const override {
+    // currently does not support
+    return false;
+  }
+
   uint32_t get_actual_num_shards() const override {
-    return layout.num_shards;
+    return get_stored_num_shards();
   }
 
   uint32_t get_stored_num_shards() const override {
-    return layout.num_shards;
+    return num_shards(layout_gen);
   }
 
   static std::string index_shard_oid(
@@ -527,19 +550,24 @@ public:
   std::string index_shard_oid(
     const NestedIndex& index_hierarchy) const;
 
-  std::unique_ptr<BIShardIdent> shard_of(const std::string& obj_key) const override;
-  std::unique_ptr<BIShardIdent> shard_of(const rgw_obj_key& obj_key) const override;
-
-  static const std::vector<std::pair<std::string, NestedIndex>>& get_initial_shard_data();
-
-  static uint32_t get_initial_shard_count() {
-    return get_initial_shard_data().size();
+  const std::optional<InitialLayout>& get_initial_shard_data() const {
+    return initial_layout;
   }
 
+  static uint32_t get_default_initial_shard_count() {
+    return default_initial_layout.size();
+  }
+
+  const InitialLayout& make_initial_layout();
+
+  void set_initial_layout(const InitialLayout& layout);
+
   void get_initial_bucket_index_objects(
+    uint64_t gen,
+    BIShardCount num_shards,
     std::map<int, std::string>& shard_oids,
     std::map<int, bufferlist>& per_shard_data,
-    std::map<std::string, bufferlist>* binfo_map_data) const override;
+    std::map<std::string, bufferlist>* binfo_map_data) override;
 
   // retrieve specific shard or all shards if shard_index is -1
   int get_bucket_index_objects(
@@ -549,21 +577,11 @@ public:
   int get_bucket_index_object(
     const std::string& obj_key,
     std::string* bucket_obj,
-    BIShardIndex* shard_index) const override;
-
-  int get_bucket_index_object(
-    const std::string& obj_key,
-    std::string* bucket_obj,
-    BIShardIdent* shard_id) const override;
-
-  int get_bucket_index_object(
-    const std::string& obj_key,
-    std::string* bucket_obj,
     std::unique_ptr<BIShardIdent>& shard_ident) const;
 
-  void get_bucket_index_object(
+  int get_bucket_index_object(
     uint64_t gen_id,
-    BIShardIndex shard_id,
+    const BIShardIdent& shard_ident,
     std::string* bucket_obj) const override;
 
   void get_bucket_instance_ids(
@@ -571,6 +589,7 @@ public:
     BIShardIndex shard_index,
     std::map<int, std::string>* result) const override;
 
+  int get_shard_idents(std::vector<std::unique_ptr<BIShardIdent>>&) const override;
 
   class OrderedShardIterator : public InteriorShardIterator{
 
@@ -635,6 +654,9 @@ public:
   }; // class OrderedShardIterator
 
 }; // class OrderedBIndexer
+
+std::ostream& operator<<(std::ostream&, const OrderedBIndexer::InitialLayout&);
+
 
 } // namespace rados
 } // namespace rgw

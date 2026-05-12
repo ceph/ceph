@@ -38,6 +38,9 @@ using NestedIndex = std::vector<int32_t>;
 // be different that the BIShardId for some sharding schemes
 using BIShardIndex = int32_t;
 
+// same as BIShardIndex, but named differently to avoid confusion in code
+using BIShardCount = BIShardIndex;
+
 // virtual base class since bucket index shard identifiers can vary
 // depending on sharding scheme
 class BIShardIdent {
@@ -479,24 +482,24 @@ void encode_json_impl(const char *name, const BucketLayout& l, ceph::Formatter *
 void decode_json_obj(BucketLayout& l, JSONObj *obj);
 
 
-inline BIShardIndex num_shards(const bucket_index_hashed_layout& index) {
+inline BIShardCount num_shards(const bucket_index_hashed_layout& index) {
   // old buckets used num_shards=0 to mean 1
   return index.num_shards > 0 ? index.num_shards : 1;
 }
-inline BIShardIndex num_shards(const bucket_index_ordered_layout& index) {
+inline BIShardCount num_shards(const bucket_index_ordered_layout& index) {
   return index.num_shards;
 }
-inline BIShardIndex num_shards(const LayoutVariant& index) {
+inline BIShardCount num_shards(const LayoutVariant& index) {
   return std::visit([](const auto& arg) -> uint32_t { return num_shards(arg); }, index);
 }
-inline BIShardIndex num_shards(const bucket_index_layout& index) {
+inline BIShardCount num_shards(const bucket_index_layout& index) {
   return num_shards(index.specs);
 }
-inline BIShardIndex num_shards(const bucket_index_layout_generation& index) {
+inline BIShardCount num_shards(const bucket_index_layout_generation& index) {
   return num_shards(index.layout);
 }
 
-inline BIShardIndex current_num_shards(const BucketLayout& layout) {
+inline BIShardCount current_num_shards(const BucketLayout& layout) {
   return num_shards(layout.current_index);
 }
 inline bool is_layout_indexless(const bucket_index_layout_generation& layout) {
