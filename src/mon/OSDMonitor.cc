@@ -9046,10 +9046,13 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << "supports_omap cannot be enabled until require_osd_release is set to umbrella or later";
       return -EPERM;
     }
+    // Disabling omap support will leave omap data in RocksDB which cannot be cleaned up
+    // It will also break any services that depend on this pool to store metadata
     if ((val == "false") && (p.has_flag(pg_pool_t::FLAG_OMAP))) {
       ss << "supports_omap cannot be disabled once enabled";
       return -EINVAL;
     }
+    // This restriction is temporary until omap support is well tested in Fast EC pools
     if ((val == "true") && p.is_erasure()) {
       ss << "supports_omap cannot be enabled in ec pools";
       return -EINVAL;
@@ -12308,7 +12311,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
     if (rel >= ceph_release_t::umbrella) {
-      // Initialise FLAG_OMAP for every pool
+      // Auto-enable omap support for replicated pools
       for (auto& [pool_id, pool] : osdmap.get_pools()) {
         if (!pool.has_flag(pg_pool_t::FLAG_OMAP) && pool.is_replicated()) {
           pg_pool_t p = pool;
