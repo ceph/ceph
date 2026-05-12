@@ -474,9 +474,7 @@ CORO_TEST_F(neocls_log, trim_by_marker, NeoRadosTest)
 }
 
 // Test the neorados::trim() loop function (use_awaitable overloads) to verify
-// it terminates. Before any fix in neorados/cls/log.h, the use_awaitable_t
-// overloads had the try-catch for ENODATA inside the for(;;) loop, causing
-// the loop to never exit in certain cluster configs and this CPU hogging.
+// it terminates.
 CORO_TEST_F(neocls_log, trim_loop_all_entries_by_marker, NeoRadosTest)
 {
   co_await create_obj(oid);
@@ -486,8 +484,7 @@ CORO_TEST_F(neocls_log, trim_loop_all_entries_by_marker, NeoRadosTest)
   co_await generate_log(rados(), oid, pool(), 10, start_time, true,
 			asio::use_awaitable);
 
-  // call trim() loop function. Without a fix, this never returns
-  // because of where the try-catch sits relative to the for(;;)
+  // call trim() loop function.
   co_await neorados::cls::log::trim(
     rados(), oid, pool(),
     std::string_view{neorados::cls::log::begin_marker},
