@@ -282,29 +282,30 @@ struct RelayStore {
 using BackendStore = RelayStore;
 
 template<auto MemberFunc, typename... Args>
-auto RelayStore::with_store(RelayStore store, Args&&... args)
+auto RelayStore::with_store(RelayStore self, Args&&... args)
 {
+  auto& shard = self.shard;
   using raw_return_type = decltype((std::declval<crimson::os::FuturizedStore::Shard>().*MemberFunc)(std::forward<Args>(args)...));
 
   constexpr bool is_errorator = is_errorated_future_v<raw_return_type>;
   constexpr bool is_seastar_future = seastar::is_future<raw_return_type>::value && !is_errorator;
   constexpr bool is_plain = !is_errorator && !is_seastar_future;
   const auto original_core = seastar::this_shard_id();
-  const auto store_shard_id = original_core % store.shard_count;
+  const auto store_shard_id = original_core % self.shard_count;
   if (store_shard_id == seastar::this_shard_id() || store_shard_id == GLOBAL_STORE) {
     if constexpr (is_plain) {
       return seastar::make_ready_future<raw_return_type>(
-        (store.shard.*MemberFunc)(std::forward<Args>(args)...));
+        (shard.*MemberFunc)(std::forward<Args>(args)...));
     } else {
-      return (store.shard.*MemberFunc)(std::forward<Args>(args)...);
+      return (shard.*MemberFunc)(std::forward<Args>(args)...);
     }
   } else {
     if constexpr (is_errorator) {
       auto fut = seastar::smp::submit_to(
         store_shard_id,
-        [store, args=std::make_tuple(std::forward<Args>(args)...)]() mutable {
-          return std::apply([store](auto&&... args) {
-            return (store.shard.*MemberFunc)(std::forward<decltype(args)>(args)...).to_base();
+        [&shard, args=std::make_tuple(std::forward<Args>(args)...)]() mutable {
+          return std::apply([&shard](auto&&... args) {
+            return (shard.*MemberFunc)(std::forward<decltype(args)>(args)...).to_base();
           }, std::move(args));
         }).then([original_core] (auto&& result) {
           return seastar::smp::submit_to(original_core,
@@ -316,9 +317,9 @@ auto RelayStore::with_store(RelayStore store, Args&&... args)
     } else {
       auto fut = seastar::smp::submit_to(
         store_shard_id,
-        [store, args=std::make_tuple(std::forward<Args>(args)...)]() mutable {
-        return std::apply([store](auto&&... args) {
-          return (store.shard.*MemberFunc)(
+        [&shard, args=std::make_tuple(std::forward<Args>(args)...)]() mutable {
+        return std::apply([&shard](auto&&... args) {
+          return (shard.*MemberFunc)(
             std::forward<decltype(args)>(args)...);
         }, std::move(args));
       });
