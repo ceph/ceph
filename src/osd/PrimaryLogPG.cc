@@ -2358,7 +2358,6 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
 	   << " flags " << ceph_osd_flag_string(m->get_flags())
 	   << dendl;
 
-
   // missing object?
   if (is_unreadable_object(head)) {
     if (!is_primary() && is_missing_any_head_or_clone_of(head)) {
@@ -13959,10 +13958,22 @@ void PrimaryLogPG::_on_activate_committed(HBHandle *handle)
     waiting_for_flush.swap(waiting_for_peered);
   }
 
-  pool_migrations_in_flight.clear();
+  // If migration copy-from ops from the previous interval are still draining
+  // (any active quiesce), re-initialise the migration interval but keep
+  // pool_migrations_in_flight intact so the outstanding ops can drain.
+  // recover_pool_migration() stays blocked while quiescing, so no new copy
+  // work or reservation request happens until the drain completes.
+  // handle_pool_migration_quiesce_complete() will resume or suspend migration.
+  if (pool_migration_quiesce_reason != PoolMigrationQuiesceReason::NONE) {
+    dout(10) << __func__ << " quiesce active (reason "
+             << (int)pool_migration_quiesce_reason << "), preserving "
+             << pool_migrations_in_flight.size()
+             << " in-flight migration(s) while re-initialising interval" << dendl;
+  } else {
+    pool_migrations_in_flight.clear();
+    pool_migration_head_copy_in_flight.clear();
+  }
   pool_migration_clones_in_flight.clear();
-  pool_migration_reservations_granted = false;
-  pool_migration_waiting_for_reservations = false;
   new_pool_migration_interval_in_flight = false;
 
   if (pool.info.is_pg_migrating(info.pgid.pgid)) {
@@ -14021,6 +14032,18 @@ void PrimaryLogPG::_on_activate_committed(HBHandle *handle)
     update_migration_watermark(hobject_t());
   }
   last_pool_migration_started = pool_migration_watermark;
+
+  // In-flight ops may have drained during teardown (no C_Migrate will fire to
+  // end the quiesce), so complete it here now the interval is re-scanned. Not
+  // gated on is_primary(): this also runs on a replica, which must clear the
+  // quiesce reason rather than leave it pinned.
+  if (pool_migration_quiesce_reason != PoolMigrationQuiesceReason::NONE &&
+      pool_migrations_in_flight.empty()) {
+    dout(10) << __func__ << " quiesce (reason "
+             << (int)pool_migration_quiesce_reason
+             << ") already drained during teardown, completing" << dendl;
+    handle_pool_migration_quiesce_complete();
+  }
 }
 
 void PrimaryLogPG::on_activate_committed(HBHandle *handle)
@@ -14122,9 +14145,27 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
     }
   }
 
-  // Clear quiescing state on epoch change - new epoch means fresh start
-  pool_migration_quiesce_reason = PoolMigrationQuiesceReason::NONE;
-  pool_migration_quiesce_error_code = 0;
+  // Check for any in-flight pool migration copy-from ops that we need to quiesce.
+  if (!pool_migrations_in_flight.empty()) {
+    // Only set NEW_INTERVAL if not already quiescing (NONE) or already in
+    // NEW_INTERVAL quiesce. An in-progress FATAL_ERROR, RETRY_NEEDED or
+    // SUSPEND_NEEDED quiesce must be preserved.
+    if (pool_migration_quiesce_reason == PoolMigrationQuiesceReason::NONE ||
+        pool_migration_quiesce_reason == PoolMigrationQuiesceReason::NEW_INTERVAL) {
+      dout(10) << __func__ << " on_change quiescing, " << pool_migrations_in_flight.size()
+               << " migrations in flight" << dendl;
+      pool_migration_quiesce_reason = PoolMigrationQuiesceReason::NEW_INTERVAL;
+      pool_migration_quiesce_error_code = 0;
+    } else {
+      dout(10) << __func__ << " on_change preserving in-progress quiesce (reason="
+               << (int)pool_migration_quiesce_reason << ") while "
+               << pool_migrations_in_flight.size() << " migration(s) drain" << dendl;
+    }
+  } else {
+    pool_migration_quiesce_reason = PoolMigrationQuiesceReason::NONE;
+    pool_migration_quiesce_error_code = 0;
+  }
+  pool_migration_quiesce_last_started_reset = false;
 
   if (hit_set && hit_set->insert_count() == 0) {
     dout(20) << " discarding empty hit_set" << dendl;
@@ -14292,7 +14333,36 @@ void PrimaryLogPG::_clear_recovery_state()
     backfills_in_flight.erase(i++);
   }
 
-  pool_migrations_in_flight.clear();
+  // Preserve in-flight ops for on_change() quiesce drain. Drop any ops from the
+  // set that don't have an outstanding C_Migrate or source delete callback,
+  // so that we don't stall the quiesce. When the set is empty there is nothing
+  // to preserve or clear.
+  if (!pool_migrations_in_flight.empty()) {
+    for (auto it = pool_migrations_in_flight.begin();
+         it != pool_migrations_in_flight.end(); ) {
+      auto cit = pool_migration_clones_in_flight.find(*it);
+      const bool head_awaiting_clone_copies =
+        cit != pool_migration_clones_in_flight.end() && cit->second > 0;
+      if (pool_migration_head_copy_in_flight.count(*it)) {
+        // This head's own COPY_HEAD op is still outstanding; its C_Migrate
+        // callback will drain it during the quiesce. Keep it.
+        ++it;
+      } else if (pool_migration_source_delete_pending_lock.count(*it) ||
+                 head_awaiting_clone_copies) {
+        // A deferred source-delete waiting for a lock/watermark, or a
+        // head whose own copy has already completed and is only waiting for its
+        // clones to be copied. Drop it.
+        dout(10) << __func__ << " dropping deferred migration " << *it
+                 << " with no outstanding op from in-flight set" << dendl;
+        it = pool_migrations_in_flight.erase(it);
+      } else {
+        ++it;
+      }
+    }
+    dout(10) << __func__ << " preserving " << pool_migrations_in_flight.size()
+             << " in-flight migration(s) with outstanding ops for quiesce drain"
+             << dendl;
+  }
   pool_migration_clones_in_flight.clear();
   pool_migration_source_delete_pending_lock.clear();
 
@@ -14305,7 +14375,6 @@ void PrimaryLogPG::_clear_recovery_state()
       requeue_ops(blocked_ops);
     }
   }
-  ceph_assert(pool_migrations_in_flight.empty());
   ceph_assert(backfills_in_flight.empty());
   pending_backfill_updates.clear();
   ceph_assert(recovering.empty());
@@ -15793,6 +15862,8 @@ struct C_Migrate : public Context {
   {}
   void finish(int r) override {
     if (r == -ECANCELED)
+      // The op was cancelled, which only happens when the Objecter/OSD is
+      // shutting down and the PG is being torn down.
       return;
     std::scoped_lock l{*pg};
     pg->pool_migration_head_copy_in_flight.erase(oid);
@@ -15811,13 +15882,22 @@ struct C_Migrate : public Context {
       r = -EIO;  // Treat as failure to trigger cleanup path
     }
 
-    if (r < 0 && !pg->handle_pool_migration_copy_failure(oid, r)) {
+    if (r < 0) {
+      pg->handle_pool_migration_copy_failure(oid, r);
       if (oid.is_snap()) {
         // Abandon migrating head object as well
         auto head = oid.get_head();
         pg->pgbackend->cancel_recovery_op(head);
         pg->recovering.erase(head);
         pg->pool_migrations_in_flight.erase(head);
+        // handle_pool_migration_copy_failure already checked for quiesce
+        // completion, but it ran before we removed the head here.  Check
+        // again now that the set may be empty.
+        if (pg->pool_migration_quiesce_reason !=
+            PrimaryLogPG::PoolMigrationQuiesceReason::NONE &&
+            pg->pool_migrations_in_flight.empty()) {
+          pg->handle_pool_migration_quiesce_complete();
+        }
       }
     } else if (action == COPY_DELETE_NEXT) {
       // Object copied to target pool, now delete from source pool
@@ -15957,6 +16037,20 @@ bool PrimaryLogPG::pool_migration_source_delete(hobject_t oid)
               if (last_peering_reset != get_last_peering_reset()) {
                 dout(20) << __func__ << " cb->lpr " << last_peering_reset <<
                             " current lpr " << get_last_peering_reset() << dendl;
+                // The interval changed while this source delete was
+                // outstanding. recovering state is already torn down, so skip
+                // the normal on_global_recover path, but still drop the object
+                // from the in-flight set or a quiesce could never drain.
+                // Bookkeeping only: do NOT drive the quiesce state machine here
+                // - we run mid-teardown from apply_and_flush_repops(), before
+                // _on_activate_committed() has re-scanned the interval. The
+                // quiesce is completed later in the correct context, by
+                // _on_activate_committed() (if already drained) or C_Migrate::
+                // finish() (for copies still in flight).
+                if (pool_migrations_in_flight.erase(oid)) {
+                  dout(10) << __func__ << " removed post-reset source delete of "
+                           << oid << " from in-flight set" << dendl;
+                }
                 return;
               }
               auto i = recovering.find(oid);
@@ -16125,27 +16219,56 @@ void PrimaryLogPG::handle_pool_migration_quiesce_complete()
   // Reset quiesce state
   pool_migration_quiesce_reason = PoolMigrationQuiesceReason::NONE;
   pool_migration_quiesce_error_code = 0;
+  pool_migration_quiesce_last_started_reset = false;
+  pool_migration_clones_in_flight.clear();
+  pool_migration_head_copy_in_flight.clear();
 
-  if (reason == PoolMigrationQuiesceReason::RETRY_NEEDED) {
-    // Retryable error - request new reservation and resume
-    dout(10) << __func__ << " requesting new reservation for retry" << dendl;
-    if (pool_migration_target_pg) {
-      // Migration will resume when reservation is granted
-      pool_migration_request_target_reservation();
-    }
-  } else if (reason == PoolMigrationQuiesceReason::FATAL_ERROR) {
-    // Fatal error - stop migration
-    if (error_code == -ENOENT) {
-      dout(10) << __func__ << " signaling unfound" << dendl;
-      stop_pool_migration_unfound();
-    } else {
-      dout(10) << __func__ << " signaling error " << cpp_strerror(error_code) << dendl;
-      stop_pool_migration_error(error_code);
-    }
+  switch (reason) {
+    case PoolMigrationQuiesceReason::NONE:
+      // Should not happen
+      dout(1) << __func__ << " Quiescing with reason NONE" << dendl;
+      break;
+    case PoolMigrationQuiesceReason::RETRY_NEEDED:
+      // Retryable error - request new reservation and resume
+      dout(10) << __func__ << " requesting new reservation for retry" << dendl;
+      if (pool_migration_target_pg) {
+        // Migration will resume when reservation is granted
+        pool_migration_reservations_granted_source = false;
+        pool_migration_request_target_reservation();
+      }
+      break;
+    case PoolMigrationQuiesceReason::FATAL_ERROR:
+      // Fatal error - stop migration
+      if (error_code == -ENOENT) {
+        dout(10) << __func__ << " signaling unfound" << dendl;
+        stop_pool_migration_unfound();
+      } else {
+        dout(10) << __func__ << " signaling error " << cpp_strerror(error_code) << dendl;
+        stop_pool_migration_error(error_code);
+      }
+      break;
+    case PoolMigrationQuiesceReason::SUSPEND_NEEDED:
+      // The drain erased the in-flight copies without advancing the watermark,
+      // so rewind last_pool_migration_started to the watermark.
+      // RETRY_NEEDED does this at the failure site and NEW_INTERVAL via
+      // _on_activate_committed(); SUSPEND is the only resuming path that must
+      // do it here.
+      last_pool_migration_started = pool_migration_watermark;
+      dout(10) << __func__ << " drain complete, completing suspension" << dendl;
+      on_pool_migration_source_suspended();
+      break;
+    case PoolMigrationQuiesceReason::NEW_INTERVAL:
+      // The in-flight ops from the previous interval have drained. The
+      // interval was already re-scanned in _on_activate_committed(), so just
+      // queue_recovery to request reservations and restart migration.
+      dout(10) << __func__ << " new interval drain complete, restarting migration" << dendl;
+      pool_migration_reservations_granted_source = false;
+      queue_recovery();
+      break;
   }
 }
 
-bool PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r)
+void PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r)
 {
   dout(10) << __func__ << " " << oid << " failed with " << r << dendl;
 
@@ -16204,8 +16327,11 @@ bool PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r)
       dout(20) << __func__ << " flushed pending delete for " << pending_oid << dendl;
     }
   } else {
-    // Already quiescing - this is expected as in-flight operations drain
-    // Check if we need to upgrade from retry to fatal error
+    // Already quiescing - this is expected as in-flight operations drain.
+    // Check if we need to upgrade from retry to fatal error. NEW_INTERVAL and
+    // SUSPEND_NEEDED are deliberately NOT upgraded here: while either is active,
+    // C_Migrate::finish rewrites every completion to -EIO before calling this,
+    // so is_fatal is never true for those reasons.
     if (pool_migration_quiesce_reason == PoolMigrationQuiesceReason::RETRY_NEEDED && is_fatal) {
       dout(10) << __func__ << " upgrading quiesce reason from RETRY_NEEDED to FATAL_ERROR "
                << "due to fatal error " << cpp_strerror(r) << dendl;
@@ -16246,7 +16372,6 @@ bool PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r)
     recovering.erase(i);
     finish_recovery_op(oid);
   }
-  return false;
 }
 
 /**
@@ -16331,6 +16456,8 @@ uint64_t PrimaryLogPG::recover_pool_migration(
   dout(10) << __func__ << " (" << max << ")"
            << " last_pool_migration_started " << last_pool_migration_started
            << (new_pool_migration_interval ? " new_pool_migration_interval":"")
+           << (pool_migration_quiesce_reason != PoolMigrationQuiesceReason::NONE ?
+               " quiescing":"")
            << dendl;
 
   // If quiescing, don't start any new migration work
