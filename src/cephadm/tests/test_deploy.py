@@ -329,6 +329,42 @@ def test_deploy_a_monitoring_container(cephadm_fs, funkypatch):
         assert (si.st_uid, si.st_gid) == (8765, 8765)
 
 
+def test_deploy_prometheus_overrides_web_external_url(cephadm_fs, funkypatch):
+    # Reverse-proxy users (tracker #76438) need the rendered Prometheus
+    # cmdline to carry their --web.external-url and not cephadm's internal
+    # one, otherwise Prometheus refuses to start with "flag cannot be repeated".
+    mocks = _common_patches(funkypatch)
+    _get_ip_addresses = funkypatch.patch('cephadmlib.net_utils.get_ip_addresses')
+    _get_ip_addresses.return_value = (['10.10.10.10'], [])
+    fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
+    public_url = 'https://prom.example.com/prometheus'
+    with with_cephadm_ctx([]) as ctx:
+        ctx.container_engine = mock_podman()
+        ctx.fsid = fsid
+        ctx.name = 'prometheus.fire'
+        ctx.image = 'quay.io/titans/prometheus:latest'
+        ctx.reconfig = False
+        ctx.config_blobs = {
+            'config': 'XXXXXXX',
+            'keyring': 'YYYYYY',
+            'files': {
+                'prometheus.yml': 'bettercallherc',
+            },
+            'ip_to_bind_to': '1.2.3.4',
+        }
+        ctx.extra_entrypoint_args = [
+            f'--web.external-url={public_url}',
+        ]
+        _cephadm._common_deploy(ctx)
+
+    basedir = pathlib.Path(f'/var/lib/ceph/{fsid}/prometheus.fire')
+    with open(basedir / 'unit.run') as f:
+        runline = f.read().splitlines()[-1]
+    assert f'--web.external-url={public_url}' in runline
+    assert '--web.external-url=http://10.10.10.10:9095' not in runline
+    assert runline.count('--web.external-url') == 1
+
+
 def test_deploy_a_tracing_container(cephadm_fs, funkypatch):
     mocks = _common_patches(funkypatch)
     _firewalld = mocks['Firewalld']

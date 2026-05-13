@@ -992,3 +992,84 @@ def test_enable_shared_namespaces():
         '--uts=container:c001d00d',
         '--network=container:badd33d5',
     ]
+
+
+class TestEntrypointFlagOverride:
+    """Cover the helpers that let extra_entrypoint_args replace
+    cephadm-injected entrypoint flags (tracker #76438, Prometheus
+    --web.external-url override for reverse-proxy deployments)."""
+
+    def test_flag_name_long_form(self):
+        from cephadmlib.deployment_utils import _entrypoint_flag_name
+        assert _entrypoint_flag_name('--web.external-url=http://x') == '--web.external-url'
+        assert _entrypoint_flag_name('--web.external-url http://x') == '--web.external-url'
+        assert _entrypoint_flag_name('--web.external-url\thttp://x') == '--web.external-url'
+        assert _entrypoint_flag_name('--config.file=/foo') == '--config.file'
+
+    def test_flag_name_bare(self):
+        from cephadmlib.deployment_utils import _entrypoint_flag_name
+        assert _entrypoint_flag_name('--dry-run') == '--dry-run'
+
+    def test_flag_name_non_flag(self):
+        from cephadmlib.deployment_utils import _entrypoint_flag_name
+        assert _entrypoint_flag_name('positional') is None
+        assert _entrypoint_flag_name('-short') is None  # only -- is recognized
+        assert _entrypoint_flag_name('') is None
+
+    def test_drop_overridden_replaces_built_in(self):
+        from cephadmlib.deployment_utils import _drop_overridden_flags
+        built_in = [
+            '--config.file=/etc/prometheus/prometheus.yml',
+            '--storage.tsdb.path=/prometheus',
+            '--web.listen-address=1.2.3.4:9095',
+            '--web.external-url=http://internal:9095',
+        ]
+        overrides = ['--web.external-url=https://prom.example.com']
+        kept = _drop_overridden_flags(built_in, overrides)
+        assert '--web.external-url=http://internal:9095' not in kept
+        assert '--config.file=/etc/prometheus/prometheus.yml' in kept
+        assert '--storage.tsdb.path=/prometheus' in kept
+        assert '--web.listen-address=1.2.3.4:9095' in kept
+
+    def test_drop_overridden_keeps_multi_value_built_ins(self):
+        # alertmanager appends one --cluster.peer per peer; treating
+        # those as overridable would silently wipe the cephadm-managed
+        # peer set when the user only wants to add a peer. Multi-instance
+        # cephadm flags are kept; extras still extend afterwards.
+        from cephadmlib.deployment_utils import _drop_overridden_flags
+        built_in = ['--cluster.peer=a', '--cluster.peer=b', '--config.file=/x']
+        overrides = ['--cluster.peer=c']
+        assert _drop_overridden_flags(built_in, overrides) == built_in
+
+    def test_drop_overridden_mixes_multi_and_single(self):
+        # Single-instance --web.external-url is dropped on collision; the
+        # multi-instance --cluster.peer flags are left alone.
+        from cephadmlib.deployment_utils import _drop_overridden_flags
+        built_in = [
+            '--cluster.peer=a',
+            '--cluster.peer=b',
+            '--web.external-url=http://internal:9095',
+        ]
+        overrides = [
+            '--cluster.peer=c',
+            '--web.external-url=https://prom.example.com',
+        ]
+        kept = _drop_overridden_flags(built_in, overrides)
+        assert kept == ['--cluster.peer=a', '--cluster.peer=b']
+
+    def test_drop_overridden_no_overrides_is_noop(self):
+        from cephadmlib.deployment_utils import _drop_overridden_flags
+        built_in = ['--a=1', '--b=2']
+        assert _drop_overridden_flags(built_in, []) == built_in
+        # positional-only overrides are ignored (no flag name to match)
+        assert _drop_overridden_flags(built_in, ['positional']) == built_in
+
+    def test_drop_overridden_handles_space_separated_form(self):
+        from cephadmlib.deployment_utils import _drop_overridden_flags
+        built_in = ['--web.external-url=http://internal']
+        # user wrote `--web.external-url http://prom.example.com` as two list
+        # items, which list.extend keeps as one string per item; supporting
+        # the single-string-with-space form keeps it safe either way.
+        overrides = ['--web.external-url https://prom.example.com']
+        kept = _drop_overridden_flags(built_in, overrides)
+        assert kept == []
