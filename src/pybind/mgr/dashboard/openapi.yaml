@@ -9753,6 +9753,11 @@ paths:
                 max_namespaces:
                   description: Maximum number of namespaces
                   type: integer
+                network_mask:
+                  description: Network mask to automatically create listeners
+                  items:
+                    type: string
+                  type: array
                 no_group_append:
                   default: false
                   description: Do not append gateway group name to the NQN
@@ -9760,6 +9765,13 @@ paths:
                 nqn:
                   description: NVMeoF subsystem NQN
                   type: string
+                port:
+                  description: Port to use for the created listeners
+                  type: integer
+                secure_listeners:
+                  default: false
+                  description: Make all the auto-listeners for this subsystem secure
+                  type: boolean
                 serial_number:
                   description: Subsystem serial number
                   type: string
