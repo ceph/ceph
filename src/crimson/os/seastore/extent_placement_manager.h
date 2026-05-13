@@ -689,8 +689,9 @@ public:
 
   bool is_pure_rbm() const {
     return get_main_backend_type() == backend_type_t::RANDOM_BLOCK &&
-      // as of now, cold tier can only be segmented.
-      !background_process.has_cold_tier();
+      (!background_process.has_cold_tier() ||
+       (background_process.get_cold_tier_backend_type() ==
+        backend_type_t::RANDOM_BLOCK));
   }
 
   bool has_cold_tier() const {
@@ -943,6 +944,11 @@ private:
 
     bool has_cold_tier() const {
       return cold_cleaner.get() != nullptr;
+    }
+
+    backend_type_t get_cold_tier_backend_type() const {
+      assert(cold_cleaner);
+      return cold_cleaner->get_backend_type();
     }
 
     bool is_cold_device(device_id_t id) const {

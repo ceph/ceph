@@ -702,7 +702,7 @@ private:
   }
 
   bool can_drop_backref() const {
-    return get_backend_type() == backend_type_t::RANDOM_BLOCK;
+    return !tail_include_alloc;
   }
 
   bool should_trim_alloc() const {
