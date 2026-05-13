@@ -1207,6 +1207,12 @@ namespace rgw::s3vector {
 
     unsigned int num_rows = 0;
     for (const auto& vector : configuration.vectors) {
+      // key validation
+      if (vector.key.empty()) {
+        ldpp_dout(dpp, 5) << "WARNING: s3vector skipping vector with empty key" << dendl;
+        continue;
+      }
+      // data validation
       if (!vector.data) {
         ldpp_dout(dpp, 5) << "WARNING: s3vector skipping vector with no data" << dendl;
         continue;
@@ -1217,118 +1223,111 @@ namespace rgw::s3vector {
           ". skip vector with key: " << vector.key << dendl;
         continue;
       }
-      if (vector.key.empty()) {
-        ldpp_dout(dpp, 5) << "WARNING: s3vector skipping vector with empty key" << dendl;
+      // metadata validation
+      const bool has_metadata = !vector.metadata.empty();
+      JSONParser parser;
+      if (has_metadata && !parser.parse(vector.metadata.c_str(), vector.metadata.size())) {
+        ldpp_dout(dpp, 5) << "WARNING: s3vector failed to parse metadata JSON for key: " << vector.key << dendl;
         continue;
       }
-      // key column
+      // add key column
       key_builder.Append(vector.key).ok();
-      // data column
+      // add data column
       auto list_builder = static_cast<arrow::FloatBuilder*>(data_builder.value_builder());
       for (const auto & value : vector.data.value()) {
         list_builder->Append(value).ok();
       }
       data_builder.Append().ok();
-      // metadata column
-      if (!vector.metadata.empty()) {
+      // add metadata column
+      if (has_metadata) {
         metadata_builder.Append(vector.metadata).ok();
       } else {
         metadata_builder.AppendNull().ok();
       }
-
-      // parse metadata JSON and populate filterable columns
-      bool all_null = true;
-      if (!filterable_builders.empty() && !vector.metadata.empty()) {
-        JSONParser parser;
-        if (parser.parse(vector.metadata.c_str(), vector.metadata.size())) {
-          all_null = false;
-          for (auto& fb : filterable_builders) {
-            bool is_list_type = false;
-            switch (fb.type) {
-              case FilterableMetadataType::STRING:
-              case FilterableMetadataType::NUMBER:
-              case FilterableMetadataType::BOOLEAN:
-                break;
-              case FilterableMetadataType::STRING_LIST:
-              case FilterableMetadataType::NUMBER_LIST:
-              case FilterableMetadataType::BOOLEAN_LIST:
-                is_list_type = true;
-                break;
-            }
-            std::vector<std::string> values;
-            std::string value_str;
-            try {
-              if (is_list_type) {
-                JSONDecoder::decode_json(fb.name.c_str(), values, &parser);
-              } else {
-                JSONDecoder::decode_json(fb.name.c_str(), value_str, &parser);
-              }
-            } catch (const JSONDecoder::err& e) {
-              ldpp_dout(dpp, 5) << "WARNING: s3vector failed to decode metadata field '" <<
-                fb.name << "' for key: " << vector.key << ". error: " << e.what() << dendl;
-            }
-            if (values.empty() && value_str.empty()) {
-              // either failed to decode or field doesn't exist, in both cases we append null
-              fb.builder->AppendNull().ok();
-              continue;
-            }
-            switch (fb.type) {
-              case FilterableMetadataType::STRING:
-                static_cast<arrow::StringBuilder*>(fb.builder.get())->Append(value_str).ok();
-                break;
-              case FilterableMetadataType::NUMBER:
-                try {
-                  static_cast<arrow::DoubleBuilder*>(fb.builder.get())->Append(std::stod(value_str)).ok();
-                } catch (const std::logic_error&) {
-                  fb.builder->AppendNull().ok();
-                }
-                break;
-              case FilterableMetadataType::BOOLEAN: {
-                const bool bval = (value_str == "true" || value_str == "1");
-                static_cast<arrow::BooleanBuilder*>(fb.builder.get())->Append(bval).ok();
-                break;
-              }
-              case FilterableMetadataType::STRING_LIST: {
-                auto* list_builder = static_cast<arrow::ListBuilder*>(fb.builder.get());
-                auto* value_builder = static_cast<arrow::StringBuilder*>(list_builder->value_builder());
-                list_builder->Append().ok();
-                for (const auto& v : values) {
-                  value_builder->Append(v).ok();
-                }
-                break;
-              }
-              case FilterableMetadataType::NUMBER_LIST: {
-                auto* list_builder = static_cast<arrow::ListBuilder*>(fb.builder.get());
-                auto* value_builder = static_cast<arrow::DoubleBuilder*>(list_builder->value_builder());
-                list_builder->Append().ok();
-                for (const auto& v : values) {
-                  try {
-                    value_builder->Append(std::stod(v)).ok();
-                  } catch (const std::logic_error&) {
-                    value_builder->AppendNull().ok();
-                  }
-                }
-                break;
-              }
-              case FilterableMetadataType::BOOLEAN_LIST: {
-                auto* list_builder = static_cast<arrow::ListBuilder*>(fb.builder.get());
-                auto* value_builder = static_cast<arrow::BooleanBuilder*>(list_builder->value_builder());
-                list_builder->Append().ok();
-                for (const auto& v : values) {
-                  value_builder->Append(v == "true" || v == "1").ok();
-                }
-                break;
-              }
-            }
-          }
-        } else {
-          ldpp_dout(dpp, 5) << "WARNING: s3vector failed to parse metadata JSON for key: " << vector.key << dendl;
-        }
-      }
-
-      if (all_null) {
+      // add filterable columns
+      if (!filterable_builders.empty() && !has_metadata) {
         for (auto& fb : filterable_builders) {
           fb.builder->AppendNull().ok();
+        }
+      } else if (has_metadata && !filterable_builders.empty()) {
+        for (auto& fb : filterable_builders) {
+          bool is_list_type = false;
+          switch (fb.type) {
+            case FilterableMetadataType::STRING:
+            case FilterableMetadataType::NUMBER:
+            case FilterableMetadataType::BOOLEAN:
+              break;
+            case FilterableMetadataType::STRING_LIST:
+            case FilterableMetadataType::NUMBER_LIST:
+            case FilterableMetadataType::BOOLEAN_LIST:
+              is_list_type = true;
+              break;
+          }
+          std::vector<std::string> values;
+          std::string value_str;
+          try {
+            if (is_list_type) {
+              JSONDecoder::decode_json(fb.name.c_str(), values, &parser);
+            } else {
+              JSONDecoder::decode_json(fb.name.c_str(), value_str, &parser);
+            }
+          } catch (const JSONDecoder::err& e) {
+            ldpp_dout(dpp, 5) << "WARNING: s3vector failed to decode metadata field '" <<
+              fb.name << "' for key: " << vector.key << ". error: " << e.what() << dendl;
+          }
+          if (values.empty() && value_str.empty()) {
+            // either failed to decode or field doesn't exist, in both cases we append null
+            fb.builder->AppendNull().ok();
+            continue;
+          }
+          switch (fb.type) {
+            case FilterableMetadataType::STRING:
+              static_cast<arrow::StringBuilder*>(fb.builder.get())->Append(value_str).ok();
+              break;
+            case FilterableMetadataType::NUMBER:
+              try {
+                static_cast<arrow::DoubleBuilder*>(fb.builder.get())->Append(std::stod(value_str)).ok();
+              } catch (const std::logic_error&) {
+                fb.builder->AppendNull().ok();
+              }
+              break;
+            case FilterableMetadataType::BOOLEAN: {
+              const bool bval = (value_str == "true" || value_str == "1");
+              static_cast<arrow::BooleanBuilder*>(fb.builder.get())->Append(bval).ok();
+              break;
+            }
+            case FilterableMetadataType::STRING_LIST: {
+              auto* list_builder = static_cast<arrow::ListBuilder*>(fb.builder.get());
+              auto* value_builder = static_cast<arrow::StringBuilder*>(list_builder->value_builder());
+              list_builder->Append().ok();
+              for (const auto& v : values) {
+                value_builder->Append(v).ok();
+              }
+              break;
+            }
+            case FilterableMetadataType::NUMBER_LIST: {
+              auto* list_builder = static_cast<arrow::ListBuilder*>(fb.builder.get());
+              auto* value_builder = static_cast<arrow::DoubleBuilder*>(list_builder->value_builder());
+              list_builder->Append().ok();
+              for (const auto& v : values) {
+                try {
+                  value_builder->Append(std::stod(v)).ok();
+                } catch (const std::logic_error&) {
+                  value_builder->AppendNull().ok();
+                }
+              }
+              break;
+            }
+            case FilterableMetadataType::BOOLEAN_LIST: {
+              auto* list_builder = static_cast<arrow::ListBuilder*>(fb.builder.get());
+              auto* value_builder = static_cast<arrow::BooleanBuilder*>(list_builder->value_builder());
+              list_builder->Append().ok();
+              for (const auto& v : values) {
+                value_builder->Append(v == "true" || v == "1").ok();
+              }
+              break;
+            }
+          }
         }
       }
       ++num_rows;
@@ -1354,8 +1353,8 @@ namespace rgw::s3vector {
 
     auto record_batch = arrow::RecordBatch::Make(*schema, num_rows, arrays);
     ldpp_dout(dpp, 20) << "INFO: s3vector created record batch with " << num_rows << " rows" << dendl;
-    struct ArrowArray c_array;
-    struct ArrowSchema c_schema;
+    struct ArrowArray c_array = {};
+    struct ArrowSchema c_schema = {};
     if (const auto status = arrow::ExportRecordBatch(*record_batch, &c_array, &c_schema); !status.ok()) {
       ldpp_dout(dpp, 1) << "ERROR: s3vector failed to export record batch to C ABI: " << status.ToString() << dendl;
       if (c_schema.release) c_schema.release(&c_schema);

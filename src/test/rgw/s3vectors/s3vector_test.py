@@ -1438,3 +1438,237 @@ def test_query_vectors_with_metadata():
     # cleanup
     _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
 
+
+@pytest.mark.vector_test
+def test_put_vectors_malformed_metadata():
+    """Test that vectors with malformed JSON metadata are skipped."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 8
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                               dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # all vectors have malformed metadata - put should fail
+    bad_vectors = [
+        {
+            'key': f'bad-{i}',
+            'data': generate_data(dimension, i),
+            'metadata': '{"info": {"value": "missing end quote}}'
+        }
+        for i in range(3)
+    ]
+    pytest.raises(conn.exceptions.ClientError, conn.put_vectors,
+                  vectorBucketName=bucket_name, indexName=index_name, vectors=bad_vectors)
+
+    # verify no vectors were inserted
+    result = conn.list_vectors(vectorBucketName=bucket_name, indexName=index_name, maxResults=100)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result.get('vectors', [])) == 0
+
+    # mix of good and bad metadata - only good ones should be inserted
+    good_vectors = [
+        {
+            'key': f'good-{i}',
+            'data': generate_data(dimension, i),
+            'metadata': json.dumps({'info': f'value-{i}'})
+        }
+        for i in range(3)
+    ]
+    mixed_vectors = good_vectors + bad_vectors
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=mixed_vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    result = conn.list_vectors(vectorBucketName=bucket_name, indexName=index_name, maxResults=100)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    inserted_keys = [v['key'] for v in result.get('vectors', [])]
+    assert len(inserted_keys) == 3, f"expected 3 vectors but got {len(inserted_keys)}"
+    for i in range(3):
+        assert f'good-{i}' in inserted_keys
+        assert f'bad-{i}' not in inserted_keys
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+@pytest.mark.vector_test
+def test_put_vectors_missing_filterable_fields():
+    """Test that vectors with missing filterable metadata fields are inserted with nulls."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 4
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    filterable_keys = [
+        {'name': 'genre', 'type': 'String'},
+        {'name': 'year', 'type': 'Number'},
+        {'name': 'popular', 'type': 'Boolean'}
+    ]
+    result = conn.create_index(
+        vectorBucketName=bucket_name, indexName=index_name,
+        dataType='float32', dimension=dimension, distanceMetric='euclidean',
+        metadataConfiguration={'filterableMetadataKeys': filterable_keys})
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = [
+        {
+            'key': 'all-fields',
+            'data': generate_data(dimension, 0),
+            'metadata': json.dumps({'genre': 'rock', 'year': 2000, 'popular': True})
+        },
+        {
+            'key': 'some-fields',
+            'data': generate_data(dimension, 1),
+            'metadata': json.dumps({'genre': 'jazz'})
+        },
+        {
+            'key': 'no-filterable-fields',
+            'data': generate_data(dimension, 2),
+            'metadata': json.dumps({'artist': 'someone'})
+        },
+        {
+            'key': 'no-metadata',
+            'data': generate_data(dimension, 3),
+        },
+    ]
+
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    all_keys = [v['key'] for v in vectors]
+    result = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                             keys=all_keys, returnMetadata=True)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == 4
+
+    by_key = {v['key']: v for v in result['vectors']}
+
+    md = json.loads(by_key['all-fields']['metadata'])
+    assert md['genre'] == 'rock'
+    assert md['year'] == 2000
+    assert md['popular'] is True
+
+    md = json.loads(by_key['some-fields']['metadata'])
+    assert md['genre'] == 'jazz'
+    assert 'year' not in md
+    assert 'popular' not in md
+
+    md = json.loads(by_key['no-filterable-fields']['metadata'])
+    assert 'genre' not in md
+    assert md['artist'] == 'someone'
+    assert 'year' not in md
+    assert 'popular' not in md
+
+    assert 'metadata' not in by_key['no-metadata']
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+@pytest.mark.vector_test
+def test_put_vectors_invalid_filterable_types():
+    """Test that vectors with wrong types for filterable fields are handled gracefully.
+    Includes scalar/list mismatches: list value for a scalar field, scalar value for a list field."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 4
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    filterable_keys = [
+        {'name': 'genre'}, # default to String type
+        {'name': 'year', 'type': 'Number'},
+        {'name': 'popular', 'type': 'Boolean'},
+        {'name': 'tags', 'type': 'StringList'},
+        {'name': 'scores', 'type': 'NumberList'},
+    ]
+    result = conn.create_index(
+        vectorBucketName=bucket_name, indexName=index_name,
+        dataType='float32', dimension=dimension, distanceMetric='euclidean',
+        metadataConfiguration={'filterableMetadataKeys': filterable_keys})
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = [
+        {
+            'key': 'correct-types',
+            'data': generate_data(dimension, 0),
+            'metadata': json.dumps({
+                'genre': 'rock', 'year': 2000, 'popular': True,
+                'tags': ['a', 'b'], 'scores': [1.0, 2.0]
+            })
+        },
+        {
+            'key': 'string-for-number',
+            'data': generate_data(dimension, 1),
+            'metadata': json.dumps({
+                'genre': 'jazz', 'year': 'not-a-number', 'popular': False,
+                'tags': ['c'], 'scores': [3.0]
+            })
+        },
+        {
+            'key': 'number-for-string',
+            'data': generate_data(dimension, 2),
+            'metadata': json.dumps({
+                'genre': 12345, 'year': 2002, 'popular': True,
+                'tags': ['d'], 'scores': [4.0]
+            })
+        },
+        {
+            'key': 'string-for-boolean',
+            'data': generate_data(dimension, 3),
+            'metadata': json.dumps({
+                'genre': 'pop', 'year': 2003, 'popular': 'yes',
+                'tags': ['e'], 'scores': [5.0]
+            })
+        },
+        {
+            'key': 'list-for-scalar',
+            'data': generate_data(dimension, 4),
+            'metadata': json.dumps({
+                'genre': ['rock', 'pop'], 'year': [2004, 2005], 'popular': [True, False],
+                'tags': ['f'], 'scores': [6.0]
+            })
+        },
+        {
+            'key': 'scalar-for-list',
+            'data': generate_data(dimension, 5),
+            'metadata': json.dumps({
+                'genre': 'folk', 'year': 2005, 'popular': True,
+                'tags': 'single-tag', 'scores': 7.0
+            })
+        },
+    ]
+
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    all_keys = [v['key'] for v in vectors]
+    result = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                             keys=all_keys, returnMetadata=True)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == len(vectors)
+
+    by_key = {v['key']: v for v in result['vectors']}
+
+    md = json.loads(by_key['correct-types']['metadata'])
+    assert md['genre'] == 'rock'
+    assert md['year'] == 2000
+    assert md['popular'] is True
+    assert md['tags'] == ['a', 'b']
+    assert md['scores'] == [1.0, 2.0]
+
+    # all vectors should be retrievable - metadata is stored as-is
+    for key in all_keys:
+        assert key in by_key, f"{key} should be present"
+        assert 'metadata' in by_key[key], f"{key} should have metadata"
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
