@@ -7,6 +7,13 @@ export interface CephServiceStatus {
   created: Date;
 }
 
+export enum DaemonAction {
+  START = 'start',
+  STOP = 'stop',
+  RESTART = 'restart',
+  REDEPLOY = 'redeploy'
+}
+
 // This will become handy when creating arbitrary services
 export interface CephServiceSpec {
   service_name: string;

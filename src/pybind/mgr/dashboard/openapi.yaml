@@ -5267,6 +5267,11 @@ paths:
                   type: string
                 container_image:
                   type: string
+                force:
+                  default: false
+                  description: When true, force stops/restarts (bypasses ok-to-stop
+                    warnings; e.g. RGW, NFS, SMB, NVMe-oF, monitoring daemons).
+                  type: boolean
               type: object
       responses:
         '200':
