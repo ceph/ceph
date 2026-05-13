@@ -303,10 +303,8 @@ auto RelayStore::with_store(RelayStore self, Args&&... args)
     if constexpr (is_errorator) {
       auto fut = seastar::smp::submit_to(
         store_shard_id,
-        [&shard, args=std::make_tuple(std::forward<Args>(args)...)]() mutable {
-          return std::apply([&shard](auto&&... args) {
-            return (shard.*MemberFunc)(std::forward<decltype(args)>(args)...).to_base();
-          }, std::move(args));
+        [&shard, ...args=std::forward<Args>(args)] mutable {
+          return (shard.*MemberFunc)(std::forward<Args>(args)...).to_base();
         }).then([original_core] (auto&& result) {
           return seastar::smp::submit_to(original_core,
             [result = std::forward<decltype(result)>(result)]() mutable {
@@ -317,11 +315,8 @@ auto RelayStore::with_store(RelayStore self, Args&&... args)
     } else {
       auto fut = seastar::smp::submit_to(
         store_shard_id,
-        [&shard, args=std::make_tuple(std::forward<Args>(args)...)]() mutable {
-        return std::apply([&shard](auto&&... args) {
-          return (shard.*MemberFunc)(
-            std::forward<decltype(args)>(args)...);
-        }, std::move(args));
+        [&shard, ...args=std::forward<Args>(args)] mutable {
+          return (shard.*MemberFunc)(std::forward<decltype(args)>(args)...);
       });
       if constexpr (std::is_same_v<raw_return_type, seastar::future<>>) {
         return fut.then([original_core] {
