@@ -531,6 +531,13 @@ void PrimaryLogPG::on_global_recover(
       requeue_ops(degraded_object_entry->second);
       waiting_for_degraded_object.erase(degraded_object_entry);
     }
+
+    // Check if quiescing and all migrations have drained
+    if (quiescing_for_unfound && pool_migrations_in_flight.empty()) {
+      dout(10) << __func__ << " quiescing complete, all migrations drained, signaling unfound" << dendl;
+      quiescing_for_unfound = false;
+      stop_pool_migration_unfound();
+    }
   }
 
   recovering.erase(i);
@@ -13670,6 +13677,9 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
     coro_op_in_flight = false;
   }
 
+  // Clear quiescing flag on epoch change - new epoch means fresh start
+  quiescing_for_unfound = false;
+
   if (hit_set && hit_set->insert_count() == 0) {
     dout(20) << " discarding empty hit_set" << dendl;
     hit_set_clear();
@@ -15334,6 +15344,13 @@ struct C_Migrate : public Context {
       // successfully migrated
       r = 0;
     }
+
+    // If quiescing, treat all completions as failures to drain the queue
+    if (pg->quiescing_for_unfound && r >= 0) {
+      ldpp_dout(pg, 10) << "C_Migrate::finish quiescing mode, treating success as failure for " << oid << dendl;
+      r = -EIO;  // Treat as failure to trigger cleanup path
+    }
+
     if (r < 0) {
       // Problem migrating the object
       pg->handle_pool_migration_copy_failure(oid, r);
@@ -15578,13 +15595,12 @@ void PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r)
 {
   dout(10) << __func__ << " " << oid << " failed with " << r << dendl;
 
-  // Remove from in-flight tracking
-  pool_migrations_in_flight.erase(oid); // BILL: FIXME This isn't good enough - it can leave I/O hung
-
   // Check error type and take appropriate action
-  if (r == -EBUSY) {
-    // Target doesn't have reservations or is busy
-    // Schedule reservation request and retry
+  if (r == -EAGAIN || r == -EBUSY) {
+    // Target doesn't have reservations or is busy - this is retryable
+    // Remove from in-flight tracking and retry
+    pool_migrations_in_flight.erase(oid);
+
     dout(10) << "copy_from failed due to no reservation, requesting reservation" << dendl;
 
     // Request reservation from target PG and let the reservation system handle retry
@@ -15592,18 +15608,62 @@ void PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r)
       pool_migration_request_target_reservation();
     }
 
-  } else if (r == -ENOENT) {
-    // Source object not found - this is an unfound object situation
-    dout(10) << "copy_from failed due to unfound object" << dendl;
-    stop_pool_migration_unfound();
-
   } else {
-    // Other errors - log and stop migration
-    dout(1) << "copy_from failed with unexpected error " << r << dendl;
-    stop_pool_migration_unfound();
+    if ( r == -ENONET ) {
+    // Fatal error - enter quiesce mode to drain in-flight operations
+    // Note: ENOENT here means unfound (removed snaps already filtered in C_Migrate::finish)
+    dout(10) << "copy_from failed with ENOENT (unfound), stopping migration" << dendl;
+    } else {
+    // Other fatal errors (EIO, EPERM, etc.) - these are I/O or system errors, not unfound
+    dout(1) << "copy_from failed with fatal error " << cpp_strerror(r)
+            << ", stopping migration" << dendl;
+    }
+
+    // Set quiescing flag to prevent new migration work from starting
+    // "quiescing_for_unfound" is a slight misnomer as this may also be triggered by
+    // miscellaneous fatal errors
+    if (!quiescing_for_unfound) {
+      dout(10) << __func__ << " entering quiesce mode for fatal error, draining "
+               << pool_migrations_in_flight.size() << " in-flight migrations and "
+               << pool_migration_source_delete_pending_lock.size() << " pending deletes" << dendl;
+      quiescing_for_unfound = true;
+
+      // Flush all pending delete operations waiting for locks
+      // These are blocked waiting for earlier migrations and need cleanup
+      while (!pool_migration_source_delete_pending_lock.empty()) {
+        hobject_t pending_oid = *pool_migration_source_delete_pending_lock.begin();
+        pool_migration_source_delete_pending_lock.erase(pool_migration_source_delete_pending_lock.begin());
+
+        // Clean up recovering state for pending deletes
+        auto i = recovering.find(pending_oid);
+        if (i != recovering.end()) {
+          recovering.erase(i);
+          finish_recovery_op(pending_oid);
+        }
+        dout(20) << __func__ << " flushed pending delete for " << pending_oid << dendl;
+      }
+    }
+
+    // Remove the failed object from in-flight tracking
+    pool_migrations_in_flight.erase(oid);
+
+    // Check if all in-flight migrations have drained
+    if (pool_migrations_in_flight.empty()) {
+      quiescing_for_unfound = false;
+      if ( r == -ENOENT ) {
+        dout(10) << __func__ << " all migrations drained, signaling unfound" << dendl;
+        stop_pool_migration_unfound();
+      } else {
+        dout(10) << __func__ << " all migrations drained, signaling error " << cpp_strerror(r) << dendl;
+        stop_pool_migration_error(r);
+      }
+    } else {
+      dout(10) << __func__ << " waiting for " << pool_migrations_in_flight.size()
+               << " in-flight migrations to complete before signaling unfound" << dendl;
+    }
   }
 
-  // Clean up recovering state
+  // Clean up recovering state for the failed object
   // Must remove from recovering and call finish_recovery_op to balance start_recovery_op
   auto i = recovering.find(oid);
   if (i != recovering.end()) {
@@ -15694,7 +15754,15 @@ uint64_t PrimaryLogPG::recover_pool_migration(
   dout(10) << __func__ << " (" << max << ")"
            << " last_pool_migration_started " << last_pool_migration_started
            << (new_pool_migration_interval ? " new_pool_migration_interval":"")
+           << (quiescing_for_unfound ? " quiescing_for_unfound":"")
            << dendl;
+
+  // If quiescing, don't start any new migration work
+  // Allow pending lock retries to continue so they can be cleaned up
+  if (quiescing_for_unfound) {
+    dout(10) << __func__ << " quiescing for unfound, skipping new migration work" << dendl;
+    return 0;
+  }
 
   unsigned ops = 0;
 
@@ -15951,6 +16019,16 @@ void PrimaryLogPG::stop_pool_migration_revoked()
         get_osdmap_epoch(),
         get_osdmap_epoch(),
         PeeringState::PoolMigrationStoppedRevoked())));
+}
+
+void PrimaryLogPG::stop_pool_migration_error(int error_code)
+{
+  queue_peering_event(
+    PGPeeringEventRef(
+      std::make_shared<PGPeeringEvent>(
+        get_osdmap_epoch(),
+        get_osdmap_epoch(),
+        PeeringState::PoolMigrationStoppedError(error_code))));
 }
 
 void PrimaryLogPG::on_pool_migration_source_reserved() {

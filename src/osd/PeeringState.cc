@@ -6160,6 +6160,17 @@ PeeringState::MigratingSource::react(const PoolMigrationStoppedRevoked &)
   return transit<WaitLocalPoolMigrationReserved>();
 }
 
+boost::statechart::result
+PeeringState::MigratingSource::react(const PoolMigrationStoppedError &evt)
+{
+  DECLARE_LOCALS;
+  psdout(1) << "migration stopped due to I/O error " << evt.error_code << dendl;
+  ps->state_set(PG_STATE_MIGRATION_ERROR);
+  ps->state_clear(PG_STATE_MIGRATING);
+  suspend_migration();
+  return transit<NotMigrating>();
+}
+
 void PeeringState::MigratingSource::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
