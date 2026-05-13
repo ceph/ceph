@@ -1226,6 +1226,8 @@ std::string pg_state_string(uint64_t state)
     *css << "migration_toofull+";
   if (state & PG_STATE_MIGRATION_UNFOUND)
     *css << "migration_unfound+";
+  if (state & PG_STATE_MIGRATION_ERROR)
+    *css << "migration_error+";
   auto ret = css->str();
   if (ret.length() > 0)
     ret.resize(ret.length() - 1);
@@ -1311,6 +1313,8 @@ std::optional<uint64_t> pg_string_state(const std::string& state)
     type = PG_STATE_MIGRATION_TOOFULL;
   else if (state == "migration_unfound")
     type = PG_STATE_MIGRATION_UNFOUND;
+  else if (state == "migration_error")
+    type = PG_STATE_MIGRATION_ERROR;
   else if (state == "unknown")
     type = 0;
   else
