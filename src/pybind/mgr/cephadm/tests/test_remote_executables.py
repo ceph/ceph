@@ -106,6 +106,8 @@ def _names(node):
         return [f"<BinaryOp: {_names(node.left)} {_names(node.op)} {_names(node.right)}"]
     if isinstance(node, ast.BoolOp):
         return [f"<BoolOp: {node.op} {[_names(v) for v in node.values]}>"]
+    if isinstance(node, ast.Dict):
+        return [f"<Dict: {ast.dump(node)}>"]
     if (
         isinstance(node, ast.Add)
         or isinstance(node, ast.Sub)
