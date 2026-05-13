@@ -91,6 +91,9 @@
 #ifdef WITH_RADOSGW_D4N
 #include "driver/d4n/rgw_sal_d4n.h"
 #endif
+#ifdef D4N_USE_FDB_SINK
+#include "driver/fdbd4n/rgw_sal_fdbd4n.h"
+#endif
 
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
@@ -2625,6 +2628,11 @@ void RGWGetObj::execute(optional_yield y)
     dynamic_cast<rgw::sal::D4NFilterObject*>(s->object.get())->set_cache_request();
   }
 #endif
+#ifdef FDB_USE_D4N_SINK
+  if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST") && (g_conf().get_val<std::string>("rgw_filter") == "fdbd4n")) {
+    dynamic_cast<rgw::sal::FDBD4NFilterObject*>(s->object.get())->set_cache_request();
+  }
+#endif
 
   op_ret = read_op->prepare(s->yield, this);
   version_id = s->object->get_instance();
@@ -3495,6 +3503,11 @@ void RGWListBucket::execute(optional_yield y)
 #ifdef WITH_RADOSGW_D4N
   if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST") && (g_conf().get_val<std::string>("rgw_filter") == "d4n")) {
     dynamic_cast<rgw::sal::D4NFilterBucket*>(s->bucket.get())->set_cache_request();
+  }
+#endif
+#ifdef D4N_USE_FDB_SINK
+  if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST") && (g_conf().get_val<std::string>("rgw_filter") == "fdbd4n")) {
+    dynamic_cast<rgw::sal::FDBD4NFilterBucket*>(s->bucket.get())->set_cache_request();
   }
 #endif
 
@@ -4718,6 +4731,11 @@ void RGWPutObj::execute(optional_yield y)
     dynamic_cast<rgw::sal::D4NFilterWriter*>(processor.get())->set_cache_request();
   }
 #endif
+#ifdef D4N_USE_RGW_SINK
+  if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST") && (g_conf().get_val<std::string>("rgw_filter") == "fdbd4n")) {
+    dynamic_cast<rgw::sal::FDBD4NFilterWriter*>(processor.get())->set_cache_request();
+  }
+#endif
 
   op_ret = processor->prepare(s->yield);
   if (op_ret < 0) {
@@ -5840,6 +5858,11 @@ void RGWDeleteObj::execute(optional_yield y)
       del_op->params.if_match = if_match;
 #ifdef WITH_RADOSGW_D4N
       if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST") && (g_conf().get_val<std::string>("rgw_filter") == "d4n")) {
+		dynamic_cast<rgw::sal::D4NFilterObject*>(s->object.get())->set_cache_request();
+      }
+#endif
+#ifdef D4N_USE_FDB_SINK
+      if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST") && (g_conf().get_val<std::string>("rgw_filter") == "fdbd4n")) {
 		dynamic_cast<rgw::sal::D4NFilterObject*>(s->object.get())->set_cache_request();
       }
 #endif

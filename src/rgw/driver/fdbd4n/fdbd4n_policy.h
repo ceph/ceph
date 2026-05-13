@@ -6,12 +6,12 @@
 #include <boost/heap/fibonacci_heap.hpp>
 #include <boost/system/detail/errc.hpp>
 
-#include "d4n_directory.h"
-#include "rgw_sal_d4n.h"
+#include "fdbd4n_directory.h"
+#include "rgw_sal_fdbd4n.h"
 
 #include "rgw_cache_driver.h"
 
-namespace rgw { namespace d4n {
+namespace rgw::fdbd4n {
 
 namespace asio = boost::asio;
 namespace sys = boost::system;
@@ -276,4 +276,4 @@ class PolicyDriver {
     std::string get_policy_name() { return policyName; }
 };
 
-} } // namespace rgw::d4n
+} // namespace rgw::fdbd4n

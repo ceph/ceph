@@ -1,3 +1,18 @@
+#
+# Helper for adding RGW tests built with Catch2:
+# Note: to define a test that does not use Catch2::main(), use:
+#   add_catch2_test_rgw(my_test_name NO_CATCH2_MAIN)
+# ...your test should be in a file called "test_<my_test_name>.cc (ex. "test_foo.cc")
+# and the output will be called "unittest_my_test_name".
+#
+function(add_catch2_test_rgw test_name)
+add_catch2_test(${test_name}
+ ${ARGV1}
+ EXTRA_LIBS rgw_common ${rgw_libs}
+ EXTRA_INCS ${rgw_incs}
+ EXTRA_INCS "SYSTEM PRIVATE ${CMAKE_SOURCE_DIR}/src/rgw")
+endfunction()
+
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   # amqp mock library
   set(amqp_mock_src
@@ -24,8 +39,9 @@ if(WITH_RADOSGW_D4N)
 add_executable(ceph_test_rgw_d4n_filter
   test_d4n_filter.cc
   )
-target_include_directories(ceph_test_rgw_d4n_filter
-  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/d4n")
+target_include_directories(ceph_test_rgw_d4n_filter SYSTEM PRIVATE 
+	"${CMAKE_SOURCE_DIR}/src/rgw/driver/d4n"
+	"${CMAKE_SOURCE_DIR}/src/rgw/driver")
 target_link_libraries(ceph_test_rgw_d4n_filter PRIVATE
   rgw_common
   librados
@@ -39,8 +55,9 @@ install(TARGETS ceph_test_rgw_d4n_filter DESTINATION ${CMAKE_INSTALL_BINDIR})
 add_executable(ceph_test_rgw_d4n_directory
   test_d4n_directory.cc
   )
-target_include_directories(ceph_test_rgw_d4n_directory
-  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/d4n")
+target_include_directories(ceph_test_rgw_d4n_directory SYSTEM PRIVATE 
+	"${CMAKE_SOURCE_DIR}/src/rgw/driver/d4n"
+	"${CMAKE_SOURCE_DIR}/src/rgw/driver")
 target_link_libraries(ceph_test_rgw_d4n_directory PRIVATE
   rgw_common
   librados
@@ -54,8 +71,9 @@ install(TARGETS ceph_test_rgw_d4n_directory DESTINATION ${CMAKE_INSTALL_BINDIR})
 add_executable(ceph_test_rgw_d4n_policy
   test_d4n_policy.cc
   )
-target_include_directories(ceph_test_rgw_d4n_policy
-  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/")
+target_include_directories(ceph_test_rgw_d4n_policy SYSTEM PRIVATE 
+	"${CMAKE_SOURCE_DIR}/src/rgw/"
+	"${CMAKE_SOURCE_DIR}/src/rgw/driver")
 target_link_libraries(ceph_test_rgw_d4n_policy PRIVATE
   rgw_common
   librados
@@ -69,8 +87,9 @@ install(TARGETS ceph_test_rgw_d4n_policy DESTINATION ${CMAKE_INSTALL_BINDIR})
 add_executable(ceph_test_rgw_redis_driver
   test_redis_driver.cc
   )
-target_include_directories(ceph_test_rgw_redis_driver
-  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/")
+target_include_directories(ceph_test_rgw_redis_driver SYSTEM PRIVATE 
+	"${CMAKE_SOURCE_DIR}/src/rgw/"
+	"${CMAKE_SOURCE_DIR}/src/rgw/driver")
 target_link_libraries(ceph_test_rgw_redis_driver PRIVATE
   rgw_common
   librados
@@ -84,8 +103,10 @@ install(TARGETS ceph_test_rgw_redis_driver DESTINATION ${CMAKE_INSTALL_BINDIR})
 add_executable(ceph_test_rgw_ssd_driver
   test_ssd_driver.cc
   )
-target_include_directories(ceph_test_rgw_ssd_driver
-  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/")
+target_include_directories(ceph_test_rgw_ssd_driver SYSTEM PRIVATE 
+	"${CMAKE_SOURCE_DIR}/src/rgw/"
+	"${CMAKE_SOURCE_DIR}/src/rgw/driver/")
+
 target_link_libraries(ceph_test_rgw_ssd_driver PRIVATE
   rgw_common
   librados
@@ -426,22 +447,6 @@ target_link_libraries(ceph_test_datalog
 install(TARGETS ceph_test_datalog DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
-#
-# Helper for adding RGW tests built with Catch2:
-# Note: to define a test that does not use Catch2::main(), use:
-#   add_catch2_test_rgw(my_test_name NO_CATCH2_MAIN)
-# ...your test should be in a file called "test_<my_test_name>.cc (ex. "test_foo.cc")
-# and the output will be called "unittest_my_test_name".
-#
-function(add_catch2_test_rgw test_name)
-add_catch2_test(${test_name}
- ${ARGV1}
- EXTRA_LIBS rgw_common ${rgw_libs}
- EXTRA_INCS "SYSTEM PRIVATE ${CMAKE_SOURCE_DIR}/src/rgw")
-endfunction()
-
-add_catch2_test_rgw(rgw_hex)
-
 add_executable(unittest_rgw_async_utils test_rgw_async_utils.cc)
 add_ceph_unittest(unittest_rgw_async_utils)
 target_link_libraries(unittest_rgw_async_utils ${rgw_libs} ${UNITTEST_LIBS})
@@ -449,3 +454,11 @@ target_link_libraries(unittest_rgw_async_utils ${rgw_libs} ${UNITTEST_LIBS})
 add_executable(unittest_rgw_tag test_rgw_tag.cc)
 add_ceph_unittest(unittest_rgw_tag)
 target_link_libraries(unittest_rgw_tag ${rgw_libs} ${UNITTEST_LIBS})
+
+if(WITH_RADOSGW_FDB)
+ list(APPEND rgw_incs "${CMAKE_BINARY_DIR}/_deps/zpp_bits-src/")
+ add_catch2_test_rgw(rgw_hex)
+ add_catch2_test_rgw(fdb NO_CATCH2_MAIN)
+ add_catch2_test_rgw(fdb_ceph NO_CATCH2_MAIN)
+endif()
+

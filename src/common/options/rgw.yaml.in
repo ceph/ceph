@@ -4102,7 +4102,7 @@ options:
   type: str
   level: advanced
   desc: experimental Option to set a filter
-  long_desc: defaults to none. Other valid values are base and d4n (both experimental).
+  long_desc: defaults to none. Other valid values are base, d4n, and fdbd4n (all experimental).
   default: none
   services:
   - rgw
@@ -4110,6 +4110,7 @@ options:
   - none
   - base
   - d4n
+  - fdbd4n
 - name: dbstore_db_dir
   type: str
   level: advanced
