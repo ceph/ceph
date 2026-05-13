@@ -589,6 +589,15 @@ class TestNFS:
                 assert "NFS_RDMA_Port" not in ganesha_conf
 
 
+def test_nfs_placement_count_per_host_rejected():
+    spec = NFSServiceSpec(
+        service_id='mynfs',
+        placement=PlacementSpec(hosts=['h1'], count_per_host=1),
+    )
+    with pytest.raises(SpecValidationError, match="count_per_host.*not supported"):
+        spec.validate()
+
+
 def test_nfs_colocation_ports_validation():
     """Test validation of colocation_ports in NFSServiceSpec"""
     # Valid case: correct number of colocation_ports (count=3, need 2 additional)
