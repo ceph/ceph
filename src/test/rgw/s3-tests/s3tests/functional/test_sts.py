@@ -31,6 +31,7 @@ from email.header import decode_header
 from . import(
     configfile,
     setup_teardown,
+    get_iam_root_client,
     get_iam_client,
     get_sts_client,
     get_client,
@@ -49,7 +50,10 @@ from . import(
     get_iam_secret_key,
     get_sub,
     get_azp,
-    get_user_token
+    get_user_token,
+    get_tenant_iam_client,
+    get_tenant_aws_access_key,
+    get_tenant_aws_secret_key,
     )
 
 log = logging.getLogger(__name__)
@@ -71,7 +75,7 @@ def put_role_policy(iam_client,rolename,policyname,role_policy):
     role_err=None
     role_response = None
     if policyname is None:
-        policyname=get_parameter_name() 
+        policyname=get_parameter_name()
     try:
         role_response = iam_client.put_role_policy(RoleName=rolename,PolicyName=policyname,PolicyDocument=role_policy)
     except ClientError as e:
@@ -158,14 +162,14 @@ def test_get_session_token():
     sts_client=get_sts_client()
     sts_user_id=get_alt_user_id()
     default_endpoint=get_config_endpoint()
-    
+
     user_policy = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Deny\",\"Action\":\"s3:*\",\"Resource\":[\"*\"],\"Condition\":{\"BoolIfExists\":{\"sts:authentication\":\"false\"}}},{\"Effect\":\"Allow\",\"Action\":\"sts:GetSessionToken\",\"Resource\":\"*\",\"Condition\":{\"BoolIfExists\":{\"sts:authentication\":\"false\"}}}]}"
     (resp_err,resp,policy_name)=put_user_policy(iam_client,sts_user_id,None,user_policy)
     assert resp['ResponseMetadata']['HTTPStatusCode'] == 200
-    
+
     response=sts_client.get_session_token()
     assert response['ResponseMetadata']['HTTPStatusCode'] == 200
-    
+
     s3_client=boto3.client('s3',
                 aws_access_key_id = response['Credentials']['AccessKeyId'],
 		aws_secret_access_key = response['Credentials']['SecretAccessKey'],
@@ -184,29 +188,29 @@ def test_get_session_token():
 @pytest.mark.test_of_sts
 @pytest.mark.fails_on_dbstore
 def test_assume_role_allow():
-    iam_client=get_iam_client()    
+    iam_client=get_iam_client()
     sts_client=get_sts_client()
     sts_user_id=get_alt_user_id()
     default_endpoint=get_config_endpoint()
     role_session_name=get_parameter_name()
-    
+
     policy_document = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"arn:aws:iam:::user/"+sts_user_id+"\"]},\"Action\":[\"sts:AssumeRole\"]}]}"
     (role_error,role_response,general_role_name)=create_role(iam_client,'/',None,policy_document,None,None,None)
     if role_response:
         assert role_response['Role']['Arn'] == 'arn:aws:iam:::role/'+general_role_name+''
     else:
         assert False, role_error
-    
+
     role_policy = "{\"Version\":\"2012-10-17\",\"Statement\":{\"Effect\":\"Allow\",\"Action\":\"s3:*\",\"Resource\":\"arn:aws:s3:::*\"}}"
     (role_err,response)=put_role_policy(iam_client,general_role_name,None,role_policy)
     if response:
         assert response['ResponseMetadata']['HTTPStatusCode'] == 200
     else:
         assert False, role_err
-    
+
     resp=sts_client.assume_role(RoleArn=role_response['Role']['Arn'],RoleSessionName=role_session_name)
     assert resp['ResponseMetadata']['HTTPStatusCode'] == 200
-    
+
     s3_client = boto3.client('s3',
 		aws_access_key_id = resp['Credentials']['AccessKeyId'],
 		aws_secret_access_key = resp['Credentials']['SecretAccessKey'],
@@ -224,29 +228,29 @@ def test_assume_role_allow():
 @pytest.mark.fails_on_dbstore
 def test_assume_role_deny():
     s3bucket_error=None
-    iam_client=get_iam_client()    
+    iam_client=get_iam_client()
     sts_client=get_sts_client()
     sts_user_id=get_alt_user_id()
     default_endpoint=get_config_endpoint()
     role_session_name=get_parameter_name()
-    
+
     policy_document = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"arn:aws:iam:::user/"+sts_user_id+"\"]},\"Action\":[\"sts:AssumeRole\"]}]}"
     (role_error,role_response,general_role_name)=create_role(iam_client,'/',None,policy_document,None,None,None)
     if role_response:
         assert role_response['Role']['Arn'] == 'arn:aws:iam:::role/'+general_role_name+''
     else:
         assert False, role_error
-    
+
     role_policy = "{\"Version\":\"2012-10-17\",\"Statement\":{\"Effect\":\"Deny\",\"Action\":\"s3:*\",\"Resource\":\"arn:aws:s3:::*\"}}"
     (role_err,response)=put_role_policy(iam_client,general_role_name,None,role_policy)
     if response:
         assert response['ResponseMetadata']['HTTPStatusCode'] == 200
     else:
         assert False, role_err
-    
+
     resp=sts_client.assume_role(RoleArn=role_response['Role']['Arn'],RoleSessionName=role_session_name)
     assert resp['ResponseMetadata']['HTTPStatusCode'] == 200
-    
+
     s3_client = boto3.client('s3',
 		aws_access_key_id = resp['Credentials']['AccessKeyId'],
 		aws_secret_access_key = resp['Credentials']['SecretAccessKey'],
@@ -264,30 +268,30 @@ def test_assume_role_deny():
 @pytest.mark.test_of_sts
 @pytest.mark.fails_on_dbstore
 def test_assume_role_creds_expiry():
-    iam_client=get_iam_client()    
+    iam_client=get_iam_client()
     sts_client=get_sts_client()
     sts_user_id=get_alt_user_id()
     default_endpoint=get_config_endpoint()
     role_session_name=get_parameter_name()
-    
+
     policy_document = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"arn:aws:iam:::user/"+sts_user_id+"\"]},\"Action\":[\"sts:AssumeRole\"]}]}"
     (role_error,role_response,general_role_name)=create_role(iam_client,'/',None,policy_document,None,None,None)
     if role_response:
         assert role_response['Role']['Arn'] == 'arn:aws:iam:::role/'+general_role_name+''
     else:
         assert False, role_error
-    
+
     role_policy = "{\"Version\":\"2012-10-17\",\"Statement\":{\"Effect\":\"Allow\",\"Action\":\"s3:*\",\"Resource\":\"arn:aws:s3:::*\"}}"
     (role_err,response)=put_role_policy(iam_client,general_role_name,None,role_policy)
     if response:
         assert response['ResponseMetadata']['HTTPStatusCode'] == 200
     else:
         assert False, role_err
-    
+
     resp=sts_client.assume_role(RoleArn=role_response['Role']['Arn'],RoleSessionName=role_session_name,DurationSeconds=900)
     assert resp['ResponseMetadata']['HTTPStatusCode'] == 200
     time.sleep(900)
-    
+
     s3_client = boto3.client('s3',
 		aws_access_key_id = resp['Credentials']['AccessKeyId'],
 		aws_secret_access_key = resp['Credentials']['SecretAccessKey'],
@@ -398,7 +402,7 @@ def test_assume_role_allow_head_nonexistent():
 @pytest.mark.fails_on_dbstore
 def test_assume_role_with_web_identity():
     check_webidentity()
-    iam_client=get_iam_client()    
+    iam_client=get_iam_client()
     sts_client=get_sts_client()
     default_endpoint=get_config_endpoint()
     role_session_name=get_parameter_name()
@@ -406,28 +410,28 @@ def test_assume_role_with_web_identity():
     aud=get_aud()
     token=get_token()
     realm=get_realm_name()
-    
+
     oidc_response = iam_client.create_open_id_connect_provider(
     Url='http://localhost:8080/auth/realms/{}'.format(realm),
     ThumbprintList=[
         thumbprint,
     ],
     )
-    
+
     policy_document = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Federated\":[\""+oidc_response["OpenIDConnectProviderArn"]+"\"]},\"Action\":[\"sts:AssumeRoleWithWebIdentity\"],\"Condition\":{\"StringEquals\":{\"localhost:8080/auth/realms/"+realm+":app_id\":\""+aud+"\"}}}]}"
     (role_error,role_response,general_role_name)=create_role(iam_client,'/',None,policy_document,None,None,None)
     assert role_response['Role']['Arn'] == 'arn:aws:iam:::role/'+general_role_name+''
-    
+
     role_policy = "{\"Version\":\"2012-10-17\",\"Statement\":{\"Effect\":\"Allow\",\"Action\":\"s3:*\",\"Resource\":\"arn:aws:s3:::*\"}}"
     (role_err,response)=put_role_policy(iam_client,general_role_name,None,role_policy)
     if response:
         assert response['ResponseMetadata']['HTTPStatusCode'] == 200
     else:
         assert False, role_err
-    
+
     resp=sts_client.assume_role_with_web_identity(RoleArn=role_response['Role']['Arn'],RoleSessionName=role_session_name,WebIdentityToken=token)
     assert resp['ResponseMetadata']['HTTPStatusCode'] == 200
-    
+
     s3_client = boto3.client('s3',
 		aws_access_key_id = resp['Credentials']['AccessKeyId'],
 		aws_secret_access_key = resp['Credentials']['SecretAccessKey'],
@@ -440,7 +444,7 @@ def test_assume_role_with_web_identity():
     assert s3bucket['ResponseMetadata']['HTTPStatusCode'] == 200
     bkt = s3_client.delete_bucket(Bucket=bucket_name)
     assert bkt['ResponseMetadata']['HTTPStatusCode'] == 204
-    
+
     oidc_remove=iam_client.delete_open_id_connect_provider(
     OpenIDConnectProviderArn=oidc_response["OpenIDConnectProviderArn"]
     )
@@ -2070,4 +2074,253 @@ def test_assume_role_with_web_identity_role_resource_tag():
 
     oidc_remove=iam_client.delete_open_id_connect_provider(
     OpenIDConnectProviderArn=oidc_response["OpenIDConnectProviderArn"]
+    )
+
+@pytest.mark.webidentity_test
+@pytest.mark.fails_on_dbstore
+def test_assume_role_with_global_oidc_provider_local_override():
+    """Test global OIDC provider fallback and account-level precedence.
+
+    Requires a global OIDC provider to be pre-created by the test task
+    (qa/tasks/s3tests.py) via 'radosgw-admin oidc-provider create' with
+    the correct thumbprint and client_ids.
+
+    Phase 1: No account-level provider exists.
+      AssumeRoleWithWebIdentity should SUCCEED via global fallback.
+
+    Phase 2: Create account-level provider with WRONG client_id.
+      AssumeRoleWithWebIdentity should FAIL, proving account-level
+      takes precedence over global (client_id mismatch always validated).
+
+    Phase 3: Delete account-level provider.
+      AssumeRoleWithWebIdentity should SUCCEED again via global fallback.
+    """
+    check_webidentity()
+    iam_client=get_iam_root_client()
+    sts_client=get_sts_client()
+    default_endpoint=get_config_endpoint()
+    role_session_name=get_parameter_name()
+    thumbprint=get_thumbprint()
+    aud=get_aud()
+    token=get_token()
+    realm=get_realm_name()
+    sub=get_sub()
+
+    idp_url = 'localhost:8080/auth/realms/' + realm
+
+    # Use bare URL as the Federated principal for global OIDC providers
+    policy_document = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Federated\":[\""+idp_url+"\"]},\"Action\":[\"sts:AssumeRoleWithWebIdentity\"],\"Condition\":{\"StringEquals\":{\""+idp_url+":sub\":\""+sub+"\"}}}]}"
+    (role_error,role_response,general_role_name)=create_role(iam_client,'/',None,policy_document,None,None,None)
+    assert role_response['Role']['Arn'] == 'arn:aws:iam::RGW11111111111111111:role/'+general_role_name+''
+
+    role_policy = "{\"Version\":\"2012-10-17\",\"Statement\":{\"Effect\":\"Allow\",\"Action\":\"s3:*\",\"Resource\":\"arn:aws:s3:::*\"}}"
+    (role_err,response)=put_role_policy(iam_client,general_role_name,None,role_policy)
+    if response:
+        assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+    else:
+        assert False, role_err
+
+    # Phase 1: No account-level provider — should SUCCEED via global fallback
+    resp=sts_client.assume_role_with_web_identity(RoleArn=role_response['Role']['Arn'],RoleSessionName=role_session_name,WebIdentityToken=token)
+    assert resp['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # Verify temp credentials work for S3 operations
+    s3_client = boto3.client('s3',
+		aws_access_key_id = resp['Credentials']['AccessKeyId'],
+		aws_secret_access_key = resp['Credentials']['SecretAccessKey'],
+		aws_session_token = resp['Credentials']['SessionToken'],
+		endpoint_url=default_endpoint,
+		region_name='',
+		)
+    bucket_name = get_new_bucket_name()
+    s3bucket = s3_client.create_bucket(Bucket=bucket_name)
+    assert s3bucket['ResponseMetadata']['HTTPStatusCode'] == 200
+    bkt = s3_client.delete_bucket(Bucket=bucket_name)
+    assert bkt['ResponseMetadata']['HTTPStatusCode'] == 204
+
+    # Phase 2: Create account-level provider with WRONG client_id (same URL as global)
+    # client_id is always validated against the JWT's aud/azp claim regardless of TLS
+    oidc_response = iam_client.create_open_id_connect_provider(
+    Url='http://localhost:8080/auth/realms/{}'.format(realm),
+    ThumbprintList=[
+        thumbprint,
+    ],
+    ClientIDList=[
+        'wrong_client_id',
+    ],
+    )
+
+    # Should FAIL — account-level has wrong client_id, proving it takes precedence over global
+    token=get_token()
+    try:
+        resp=sts_client.assume_role_with_web_identity(RoleArn=role_response['Role']['Arn'],RoleSessionName=role_session_name,WebIdentityToken=token)
+        assert False, "Expected failure due to wrong client_id in account-level provider"
+    except ClientError as e:
+        assert e.response['Error']['Code'] in ('AccessDenied', 'InvalidIdentityToken')
+
+    # Phase 3: Delete account-level provider, fallback should resume
+    iam_client.delete_open_id_connect_provider(
+    OpenIDConnectProviderArn=oidc_response["OpenIDConnectProviderArn"]
+    )
+
+    token=get_token()
+    resp=sts_client.assume_role_with_web_identity(RoleArn=role_response['Role']['Arn'],RoleSessionName=role_session_name,WebIdentityToken=token)
+    assert resp['ResponseMetadata']['HTTPStatusCode'] == 200
+
+@pytest.mark.webidentity_test
+@pytest.mark.fails_on_dbstore
+def test_assume_role_with_global_oidc_trust_policy_scope():
+    """Test trust policy principal matching with global and account-scoped providers.
+
+    Requires a global OIDC provider to be pre-created by the test task.
+
+    Case 1: Bare URL in trust policy + global provider → SUCCEED
+    Case 2: Mismatched tenant ARN in trust policy + global provider → FAIL
+    Case 3: Account-scoped ARN in trust policy + account provider → SUCCEED
+    Case 4: Bare URL in trust policy + account provider → FAIL
+      (bare URL sets account=".global", which doesn't match account-scoped provider)
+    """
+    check_webidentity()
+    iam_client=get_iam_root_client()
+    sts_client=get_sts_client()
+    default_endpoint=get_config_endpoint()
+    role_session_name=get_parameter_name()
+    thumbprint=get_thumbprint()
+    aud=get_aud()
+    token=get_token()
+    realm=get_realm_name()
+    sub=get_sub()
+
+    idp_url = 'localhost:8080/auth/realms/' + realm
+    oidc_arn = 'arn:aws:iam::RGW11111111111111111:oidc-provider/' + idp_url
+
+    role_policy = "{\"Version\":\"2012-10-17\",\"Statement\":{\"Effect\":\"Allow\",\"Action\":\"s3:*\",\"Resource\":\"arn:aws:s3:::*\"}}"
+
+    # Case 1: Bare URL in trust policy + global provider → SUCCEED
+    policy_bare_url = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Federated\":[\""+idp_url+"\"]},\"Action\":[\"sts:AssumeRoleWithWebIdentity\"],\"Condition\":{\"StringEquals\":{\""+idp_url+":sub\":\""+sub+"\"}}}]}"
+    (role_error,role_response_1,role_name_1)=create_role(iam_client,'/',None,policy_bare_url,None,None,None)
+    assert role_response_1['Role']['Arn'] == 'arn:aws:iam::RGW11111111111111111:role/'+role_name_1
+
+    (role_err,response)=put_role_policy(iam_client,role_name_1,None,role_policy)
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    resp=sts_client.assume_role_with_web_identity(RoleArn=role_response_1['Role']['Arn'],RoleSessionName=role_session_name,WebIdentityToken=token)
+    assert resp['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # Case 2: Mismatched tenant ARN in trust policy + global provider → FAIL
+    wrong_arn = 'arn:aws:iam::wrongTenant:oidc-provider/' + idp_url
+    policy_wrong_tenant = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Federated\":[\""+wrong_arn+"\"]},\"Action\":[\"sts:AssumeRoleWithWebIdentity\"],\"Condition\":{\"StringEquals\":{\""+idp_url+":sub\":\""+sub+"\"}}}]}"
+    (role_error,role_response_2,role_name_2)=create_role(iam_client,'/',None,policy_wrong_tenant,None,None,None)
+    assert role_response_2['Role']['Arn'] == 'arn:aws:iam::RGW11111111111111111:role/'+role_name_2
+
+    (role_err,response)=put_role_policy(iam_client,role_name_2,None,role_policy)
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    token=get_token()
+    try:
+        resp=sts_client.assume_role_with_web_identity(RoleArn=role_response_2['Role']['Arn'],RoleSessionName=role_session_name,WebIdentityToken=token)
+        assert False, "Expected failure: mismatched tenant ARN in trust policy with global provider"
+    except ClientError as e:
+        assert e.response['Error']['Code'] in ('AccessDenied', 'InvalidIdentityToken')
+
+    # Case 3: Create account-level provider, ARN trust policy → SUCCEED
+    oidc_response = iam_client.create_open_id_connect_provider(
+        Url='http://localhost:8080/auth/realms/{}'.format(realm),
+        ThumbprintList=[thumbprint],
+        ClientIDList=[aud],
+    )
+
+    policy_scoped_arn = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Federated\":[\""+oidc_arn+"\"]},\"Action\":[\"sts:AssumeRoleWithWebIdentity\"],\"Condition\":{\"StringEquals\":{\""+idp_url+":sub\":\""+sub+"\"}}}]}"
+    (role_error,role_response_3,role_name_3)=create_role(iam_client,'/',None,policy_scoped_arn,None,None,None)
+    assert role_response_3['Role']['Arn'] == 'arn:aws:iam::RGW11111111111111111:role/'+role_name_3
+
+    (role_err,response)=put_role_policy(iam_client,role_name_3,None,role_policy)
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    token=get_token()
+    resp=sts_client.assume_role_with_web_identity(RoleArn=role_response_3['Role']['Arn'],RoleSessionName=role_session_name,WebIdentityToken=token)
+    assert resp['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # Case 4: Bare URL trust policy + account provider → FAIL
+    # Bare URL sets account=".global" in the principal, which won't match
+    # the account-scoped provider (is_global_oidc=false, role_tenant="")
+    token=get_token()
+    try:
+        resp=sts_client.assume_role_with_web_identity(RoleArn=role_response_1['Role']['Arn'],RoleSessionName=role_session_name,WebIdentityToken=token)
+        assert False, "Expected failure: bare URL in trust policy with account-scoped provider"
+    except ClientError as e:
+        assert e.response['Error']['Code'] in ('AccessDenied', 'InvalidIdentityToken')
+
+    # Cleanup
+    iam_client.delete_open_id_connect_provider(
+        OpenIDConnectProviderArn=oidc_response["OpenIDConnectProviderArn"]
+    )
+
+@pytest.mark.webidentity_test
+@pytest.mark.fails_on_dbstore
+def test_assume_role_with_web_identity_uid_based_non_account_user():
+    """AssumeRoleWithWebIdentity for a uid-based non-account user (empty tenant).
+
+    Uses the [s3 tenant] user (testid), whose tenant is empty and who has no
+    account. The OIDC provider and role are created under that same empty
+    tenant, so ARNs come back as arn:aws:iam:::role/... and
+    arn:aws:iam:::oidc-provider/... (no tenant or account slot).
+
+    Verifies the non-account, uid-based STS flow end-to-end: create provider,
+    create role with trust policy referencing the empty-tenant provider,
+    assume role with a Keycloak-issued JWT, and use the temp credentials to
+    create/delete a bucket.
+    """
+    check_webidentity()
+    iam_client=get_iam_client()
+    sts_client=get_sts_client()
+    default_endpoint=get_config_endpoint()
+    role_session_name=get_parameter_name()
+    thumbprint=get_thumbprint()
+    aud=get_aud()
+    realm=get_realm_name()
+    sub=get_sub()
+
+    idp_url = 'localhost:8080/auth/realms/' + realm
+    oidc_arn = 'arn:aws:iam:::oidc-provider/' + idp_url
+
+    oidc_response = iam_client.create_open_id_connect_provider(
+        Url='http://' + idp_url,
+        ThumbprintList=[thumbprint],
+        ClientIDList=[aud],
+    )
+    assert oidc_response['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    policy_document = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Federated\":[\""+oidc_arn+"\"]},\"Action\":[\"sts:AssumeRoleWithWebIdentity\"],\"Condition\":{\"StringEquals\":{\""+idp_url+":sub\":\""+sub+"\"}}}]}"
+    (role_error,role_response,role_name)=create_role(iam_client,'/',None,policy_document,None,None,None)
+    assert role_response is not None, role_error
+    assert role_response['Role']['Arn'] == 'arn:aws:iam:::role/'+role_name
+
+    role_policy = "{\"Version\":\"2012-10-17\",\"Statement\":{\"Effect\":\"Allow\",\"Action\":\"s3:*\",\"Resource\":\"arn:aws:s3:::*\"}}"
+    policy_name = get_parameter_name()
+    (role_err,response)=put_role_policy(iam_client,role_name,policy_name,role_policy)
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    token=get_token()
+    resp=sts_client.assume_role_with_web_identity(RoleArn=role_response['Role']['Arn'],RoleSessionName=role_session_name,WebIdentityToken=token)
+    assert resp['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    s3_client = boto3.client('s3',
+        aws_access_key_id = resp['Credentials']['AccessKeyId'],
+        aws_secret_access_key = resp['Credentials']['SecretAccessKey'],
+        aws_session_token = resp['Credentials']['SessionToken'],
+        endpoint_url=default_endpoint,
+        region_name='',
+    )
+    bucket_name = get_new_bucket_name()
+    s3bucket = s3_client.create_bucket(Bucket=bucket_name)
+    assert s3bucket['ResponseMetadata']['HTTPStatusCode'] == 200
+    bkt = s3_client.delete_bucket(Bucket=bucket_name)
+    assert bkt['ResponseMetadata']['HTTPStatusCode'] == 204
+
+    # Cleanup
+    iam_client.delete_role_policy(RoleName=role_name, PolicyName=policy_name)
+    iam_client.delete_role(RoleName=role_name)
+    iam_client.delete_open_id_connect_provider(
+        OpenIDConnectProviderArn=oidc_response["OpenIDConnectProviderArn"]
     )

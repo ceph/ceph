@@ -244,9 +244,59 @@ def create_users(ctx, config, s3tests_conf):
         conf['webidentity'].setdefault('thumbprint',os.environ['THUMBPRINT'])
         conf['webidentity'].setdefault('KC_REALM',os.environ['KC_REALM'])
 
+    # Create a global OIDC provider for fallback tests
+    global_oidc_created = False
+    if "TOKEN" in os.environ:
+        for client in config.keys():
+            cluster_name, daemon_type, client_id = teuthology.split_role(client)
+            client_with_id = daemon_type + '.' + client_id
+            realm_name = os.environ.get('KC_REALM', '')
+            thumbprint = os.environ.get('THUMBPRINT', '')
+            aud = os.environ.get('AUD', '')
+            if realm_name and thumbprint:
+                ctx.cluster.only(client).run(
+                    args=[
+                        'adjust-ulimits',
+                        'ceph-coverage',
+                        '{tdir}/archive/coverage'.format(tdir=testdir),
+                        'radosgw-admin',
+                        '-n', client_with_id,
+                        '--cluster', cluster_name,
+                        'oidc-provider', 'create',
+                        '--provider-url',
+                        'http://localhost:8080/auth/realms/{}'.format(realm_name),
+                        '--thumbprints', thumbprint,
+                        '--client-ids', aud,
+                    ],
+                )
+                global_oidc_created = True
+            break  # only need to create once on one client
+
     try:
         yield
     finally:
+        # Delete global OIDC provider if we created one
+        if global_oidc_created:
+            for client in config.keys():
+                cluster_name, daemon_type, client_id = teuthology.split_role(client)
+                client_with_id = daemon_type + '.' + client_id
+                realm_name = os.environ.get('KC_REALM', '')
+                if realm_name:
+                    ctx.cluster.only(client).run(
+                        args=[
+                            'adjust-ulimits',
+                            'ceph-coverage',
+                            '{tdir}/archive/coverage'.format(tdir=testdir),
+                            'radosgw-admin',
+                            '-n', client_with_id,
+                            '--cluster', cluster_name,
+                            'oidc-provider', 'delete',
+                            '--provider-url',
+                            'http://localhost:8080/auth/realms/{}'.format(realm_name),
+                        ],
+                        check_status=False,
+                    )
+                break
         for client in config.keys():
             for section, user in users.items():
                 # don't need to delete keystone users
