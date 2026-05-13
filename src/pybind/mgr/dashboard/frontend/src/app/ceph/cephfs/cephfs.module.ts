@@ -46,6 +46,7 @@ import {
   NumberModule,
   PlaceholderModule,
   SelectModule,
+  TagModule,
   TimePickerModule,
   TreeviewModule,
   TabsModule
@@ -86,7 +87,8 @@ import Trash from '@carbon/icons/es/trash-can/32';
     ComboBoxModule,
     IconModule,
     BaseChartDirective,
-    TabsModule
+    TabsModule,
+    TagModule
   ],
   declarations: [
     CephfsDetailComponent,
