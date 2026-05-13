@@ -32,6 +32,8 @@ overrides:
     - cache pools at or near target size
     - filesystem is degraded
     - OBJECT_MISPLACED
+    - noscrub
+    - nodeep-scrub
     ### ref: https://tracker.ceph.com/issues/40251
     #removed see ^ - failed to encode map
 

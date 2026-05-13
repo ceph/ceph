@@ -10,6 +10,8 @@ overrides:
       - overall HEALTH_
       - \(MON_DOWN\)
       - \(MGR_DOWN\)
+      - noscrub
+      - nodeep-scrub
       ### ref: https://tracker.ceph.com/issues/40251
       #removed see ^ - failed to encode map
     conf:

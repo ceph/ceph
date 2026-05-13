@@ -19,6 +19,8 @@ overrides:
       - \(MGR_DOWN\)
       - slow request
       - \(MON_MSGR2_NOT_ENABLED\)
+      - noscrub
+      - nodeep-scrub
     conf:
       global:
         enable experimental unrecoverable data corrupting features: "*"
