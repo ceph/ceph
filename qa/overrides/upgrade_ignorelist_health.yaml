@@ -20,3 +20,6 @@ overrides:
       - nodeep-scrub
       - running out of quota
       - pool\(s\) full
+      - MDS_INSUFFICIENT_STANDBY
+      - insufficient standby
+      - have.*want.*more
