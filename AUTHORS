@@ -1,10 +1,10 @@
-Maintainer
-----------
-Sage Weil <sage@redhat.com>
+Creator
+-------
+Ceph was created by Sage Weil.
 
 Component Technical Leads
 -------------------------
-For a full list of CTLs and maintainers visit: http://ceph.com/team/
+For a full list of Ceph team leads and maintainers visit: https://docs.ceph.com/en/latest/governance
 
 Contributors
 ------------
@@ -12,6 +12,3 @@ For a complete contributor list:
 
   git shortlog -sn
 
-For more friendly contributor stats, see:
-
-  http://metrics.ceph.com

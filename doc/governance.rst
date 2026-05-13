@@ -4,7 +4,8 @@
  Governance
 ============
 
-The Ceph open source community is guided by a few different groups.
+The Ceph open source community is guided by several groups, each with their
+own duties.
 
 Key principles
 ==============
@@ -33,16 +34,16 @@ Responsibilities
 Membership
 ----------
 
- * 3 people
+ * Three people
  * Elected by the steering committee
  * Candidates self-nominate or are nominated by other members
  * Discussion of how roles/responsibilities may be delegated
  * Ranked-choice vote by the steering committee
- * 2 year terms, with one member being elected in even years, and the
+ * Two-year terms, with one member being elected in even years, and the
    other two in odd years
  * Members may resign at any time, and the steering committee may vote
    to appoint a replacement for the rest of their term
- * members must involve >1 employer
+ * Members must not all be employed by the same company / organization
 
 Current Members
 ^^^^^^^^^^^^^^^
@@ -73,8 +74,7 @@ Membership
    supermajority vote
  * Anyone may attend steering committee meetings as a non-voting participant
  * Existing Ceph Leadership Team members are grandfathered in
- * Membership reflected by an email list and on the Ceph website and
-   docs
+ * Membership reflected by an email list, private Slack channel, and on the Ceph websites
 
 .. note:: A "supermajority" is a 2/3 majority of votes on a particular item
           in an election. Abstaining does not bias a vote.
@@ -96,21 +96,17 @@ Current Members
  * Haomai Wang <haomai@xsky.com>
  * Igor Fedotov <igor.fedotov@croit.io>
  * Ilya Dryomov <idryomov@redhat.com>
- * Jeff Layton <jlayton@redhat.com>
  * Joseph Mundackal <jmundackal@bloomberg.net>
  * Josh Durgin <jdurgin@redhat.com>
  * João Eduardo Luis <joao@clyso.com>
- * Ken Dreyer <kdreyer@redhat.com>
  * Laura Flores <lflores@redhat.com>
  * Mark Nelson <mark.nelson@clyso.com>
  * Matan Breizman <mbreizma@redhat.com>
  * Matt Benjamin <mbenjami@redhat.com>
- * Mike Perez <miperez@redhat.com>
  * Myoungwon Oh <ohmyoungwon@gmail.com>
  * Neha Ojha <nojha@redhat.com>
  * Patrick Donnelly <pdonnell@ibm.com>
  * Radoslaw Zarzynski <rzarzyns@redhat.com>
- * Sam Just <sjust@redhat.com>
  * Venky Shankar <vshankar@redhat.com>
  * Vikhyat Umrao <vikhyat@ibm.com>
  * Xie Xingguo <xie.xingguo@zte.com.cn>
@@ -118,29 +114,9 @@ Current Members
  * Yehuda Sadeh <yehuda@redhat.com>
  * Yingxin Cheng <yingxin.cheng@intel.com>
  * Yuri Weinstein <yweinste@redhat.com>
- * Zac Dover <zac.dover@proton.me>
-
-.. _ctl:
-
-Component Team Leads
-====================
-
-Responsibilities
-----------------
-
- * Manage a `component team`_ in Ceph
- * Ensure PRs are reviewed and merged
- * Ensure severe bug fixes are backported
- * Run standups
- * Bug triage, scrubs
- * etc.
-
-Team leads are selected by the executive council, generally based on
-the recommendation by team members and outgoing lead.  Periodic
-rotation of lead responsibility among team members is encouraged.
 
 The Ceph Foundation
--------------------
+===================
 
 The Ceph Foundation is organized as a directed fund under the Linux
 Foundation and is tasked with supporting the Ceph project community

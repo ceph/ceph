@@ -118,6 +118,7 @@ about Ceph, see our `Architecture`_ section.
    governance
    Technical Charter <technical-charter>
    foundation
+   Component Leads <component-leads>
    ceph-volume/index
    crimson/crimson
    releases/general
