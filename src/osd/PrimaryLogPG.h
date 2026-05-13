@@ -1226,14 +1226,18 @@ protected:
 
   /// Reason for quiescing pool migration operations
   enum class PoolMigrationQuiesceReason {
-    NONE,         // Not quiescing
-    FATAL_ERROR,  // Fatal error (ENOENT, EIO, etc.) - stop migration
-    RETRY_NEEDED  // Retryable error (EBUSY) - retry after drain
+    NONE,           // Not quiescing
+    FATAL_ERROR,    // Fatal error (ENOENT, EIO, etc.) - stop migration
+    RETRY_NEEDED,   // Retryable error (EBUSY) - retry after drain
+    SUSPEND_NEEDED, // Suspension requested - drain any in-flight migrations first
+    NEW_INTERVAL    // Source PG re-peered - drain any in-flight migrations before restarting
   };
   /// Current quiesce state for pool migration
   PoolMigrationQuiesceReason pool_migration_quiesce_reason = PoolMigrationQuiesceReason::NONE;
   /// Error code that triggered quiesce (for logging and decision making)
   int pool_migration_quiesce_error_code = 0;
+  /// Flag to track if last_pool_migration_started has been reset during quiesce
+  bool pool_migration_quiesce_last_started_reset = false;
 
   /// objects waiting for lock retry to delete source after successful copy_from
   std::set<hobject_t> pool_migration_source_delete_pending_lock;
@@ -1257,13 +1261,6 @@ protected:
   {
     return next_pool_migration(std::nullopt);
   }
-  void update_migration_watermark(const hobject_t &watermark) override
-  {
-    pool_migration_watermark = watermark;
-  }
-  std::optional<hobject_t> consider_updating_migration_watermark(std::set<hobject_t> &deleted) override;
-
-  hobject_t earliest_pool_migration();
   void update_migration_watermark(const hobject_t &watermark) override
   {
     pool_migration_watermark = watermark;
@@ -1484,11 +1481,9 @@ protected:
   void stop_pool_migration_toofull();
   void stop_pool_migration_revoked();
   void stop_pool_migration_error(int error_code);
-  void on_pool_migration_source_starting() override;
   void on_pool_migration_source_suspended() override;
   void on_pool_migration_target_reserved() override;
   void on_pool_migration_target_suspended(bool toofull) override;
-  void on_pool_migration_source_reserved() override;
 
   // -- copyfrom --
   std::map<hobject_t, CopyOpRef> copy_ops;
@@ -1720,7 +1715,7 @@ public:
   int start_cls_gather(OpContext *ctx, std::map<std::string, bufferlist> *src_objs, const std::string& pool,
 		       const char *cls, const char *method, bufferlist& inbl);
 
-  bool handle_pool_migration_copy_failure(hobject_t oid, int r);
+  void handle_pool_migration_copy_failure(hobject_t oid, int r);
   void handle_pool_migration_quiesce_complete();
 
   void pool_migration_source_start_delete_head(hobject_t oid);
