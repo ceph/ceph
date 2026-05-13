@@ -105,6 +105,29 @@ def task(ctx, config):
 
         mounts[id_] = kernel_mount
 
+        key_type = client_config.get('key_type', 'aes')
+        if key_type == 'aes':
+            log.info("Configuring cluster to allow insecure 'aes' cipher for kclient...")
+            try:
+                remote.run(args=['sudo', 'ceph', 'health', 'mute', 'AUTH_INSECURE_CLIENT_KEY_TYPE', '--sticky'])
+                remote.run(args=['sudo', 'ceph', 'health', 'mute', 'AUTH_INSECURE_KEYS_ALLOWED', '--sticky'])
+                remote.run(args=['sudo', 'ceph', 'health', 'mute', 'AUTH_INSECURE_KEYS_CREATABLE', '--sticky'])
+                remote.run(args=['sudo', 'ceph', 'mon', 'set', 'auth_allowed_ciphers', 'aes,aes256k'])
+                remote.run(args=['sudo', 'ceph', 'config', 'set', 'mon', 'mon_auth_allow_insecure_key', 'true'])
+            except CommandFailedError as e:
+                log.warning(f"Failed to set cluster configs for legacy aes key: {e}")
+
+        # Ensure the client key is generated with the desired cipher type
+        keyring_path = f'/etc/ceph/ceph.client.{id_}.keyring'
+        log.info(f"Generating key for {entity} with key-type {key_type} at {keyring_path}")
+        remote.run(
+            args=[
+                'sudo', 'ceph', 'auth', 'rotate', entity,
+                f'--key-type={key_type}',
+                '-o', keyring_path
+            ]
+        )
+
         if client_config.get('debug', False):
             remote.run(args=["sudo", "bash", "-c", "echo 'module ceph +p' > /sys/kernel/debug/dynamic_debug/control"])
             remote.run(args=["sudo", "bash", "-c", "echo 'module libceph +p' > /sys/kernel/debug/dynamic_debug/control"])
