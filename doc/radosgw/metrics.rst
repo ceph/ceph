@@ -191,6 +191,90 @@ Cache sizing can depend on a number of factors. These factors include:
 
 To help calculate the Ceph Object Gateway's memory usage of a cache, it should be noted that each cache entry, encompassing all of the op metrics, is 1360 bytes. This is an estimate and subject to change if metrics are added or removed from the op metrics list.
 
+Usage Metrics
+=============
+
+The Ceph Object Gateway can track per-bucket storage usage metrics (bytes stored and object count) and expose them via labeled perf counters.
+Unlike op metrics, usage metrics are backed by a persistent LMDB cache, so they survive RGW restarts.
+
+Enabling Usage Metrics
+----------------------
+
+Usage metrics are disabled by default. To enable them:
+
+.. prompt:: bash #
+
+   ceph config set client.rgw rgw_enable_usage_perf_counters true
+   ceph config set client.rgw rgw_usage_cache_path /var/lib/ceph/radosgw/usage_cache.mdb
+
+After setting the config, restart the RGW service to apply the changes
+
+Background Refresh
+------------------
+
+Usage metrics are not updated in the I/O path.
+A background thread periodically syncs statistics from RADOS (the source of truth) at the interval defined by :confval:`rgw_usage_stats_refresh_interval`.
+
+Viewing Usage Metrics
+---------------------
+
+Usage metrics are labeled perf counters and do **not** appear in ``perf dump``. They must be queried using ``counter dump``::
+
+.. prompt:: bash #
+
+   ceph --admin-daemon <asok> counter dump | jq '.rgw_bucket_usage'
+Example output::
+  
+  "rgw_bucket_usage": [
+        {
+            "labels": {
+                "bucket": "bucket1",
+                "owner": "testuser",
+                "tenant": ""
+            },
+            "counters": {
+                "bytes": 5242880,
+                "objects": 1
+            }
+        },
+        {
+            "labels": {
+                "bucket": "bucket2",
+                "owner": "testuser",
+                "tenant": ""
+            },
+            "counters": {
+                "bytes": 10485760,
+                "objects": 1
+            }
+        }
+    ]
+
+The ``rgw_bucket_usage`` section contains one entry per bucket with the
+following labels:
+
+.. list-table:: Ceph Object Gateway Op Metrics
+   :widths: 25 75
+   :header-rows: 1
+
+  * - Label
+    - Description
+  * - bucket
+    - Name of the bucket
+  * - owner
+    - User ID of the bucket owner
+  * - tenant
+    - Tenant of the bucket owner (empty string if no tenant)
+
+Per-User Usage
+--------------
+
+There is no separate per-user counter. Per-user totals are derived by aggregating ``rgw_bucket_usage`` across all buckets belonging to a user.
+
+In Prometheus, per-user aggregation is done via PromQL::
+
+  sum by (owner)(rgw_bucket_usage_bytes)
+
 Sending Metrics to Prometheus
 =============================
 
