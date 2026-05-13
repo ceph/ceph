@@ -26,7 +26,7 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FixtureHelper, FormHelper, Mocks } from '~/testing/unit-test-helper';
-import { Pool } from '../pool';
+import { Pool, PoolType } from '../pool';
 import { PoolModule } from '../pool.module';
 import { PoolFormComponent } from './pool-form.component';
 
@@ -228,8 +228,8 @@ describe('PoolFormComponent', () => {
       expect(form.valid).toBeFalsy();
       // With default poolType 'replicated', expect 'name' required.
       ['name'].forEach((name) => formHelper.expectError(name, 'required'));
-      // For replicated type with multiple crush rules, 'crushRule' is required.
-      formHelper.expectError('crushRule', 'required');
+      // crushRule is auto-selected when replicated rules exist, so it is valid.
+      formHelper.expectValid('crushRule');
       // Other fields are valid by default.
       ['size', 'erasureProfile', 'ecOverwrites'].forEach((name) => formHelper.expectValid(name));
       expect(component.form.get('compression').valid).toBeTruthy();
@@ -249,13 +249,18 @@ describe('PoolFormComponent', () => {
     });
 
     it('validates poolType', () => {
-      // Default is 'replicated' now, so just verify switching remains valid
+      // Default is replicated; the control is not empty, so there is no required error.
+      formHelper.expectValid('poolType');
+      expect(form.getValue('poolType')).toBe(PoolType.REPLICATED);
       formHelper.expectValidChange('poolType', 'erasure');
       formHelper.expectValidChange('poolType', 'replicated');
     });
 
     it('validates that pgNum is required creation mode', () => {
-      formHelper.setValue('pgNum', '');
+      // After getInfo(), pgCalc() fills pgNum automatically; clear and mark dirty so
+      // auto-calc does not overwrite empty (see poolTypeChange / pgCalc guards).
+      formHelper.setValue('pgNum', '', true);
+      fixture.detectChanges();
       formHelper.expectError(form.get('pgNum'), 'required');
     });
 
@@ -279,10 +284,13 @@ describe('PoolFormComponent', () => {
       expect(form.valid).toBeTruthy();
     });
 
-    it('validates crushRule with multiple crush rules', () => {
+    it('auto-selects `crushRule` with multiple crush rules', () => {
       formHelper.expectValidChange('poolType', 'replicated');
       form.get('crushRule').updateValueAndValidity();
-      formHelper.expectError('crushRule', 'required'); // As multiple rules exist
+      expect(form.getValue('crushRule')).toEqual(
+        component.info.crush_rules_replicated[0].rule_name
+      );
+      formHelper.expectValid('crushRule');
     });
 
     it('validates crushRule with no crush rules', () => {
@@ -513,10 +521,22 @@ describe('PoolFormComponent', () => {
         expect(control.disabled).toBe(true);
       });
 
-      it('does not select the first rule if more than one exist', () => {
+      it('selects the first rule if `replicated_rule` does not exist', () => {
         formHelper.setValue('poolType', 'replicated');
         const control = form.get('crushRule');
-        expect(control.value).toEqual(null);
+        expect(control.value).toEqual(component.info.crush_rules_replicated[0].rule_name);
+        expect(control.disabled).toBe(false);
+      });
+
+      it('selects `replicated_rule` by default when available', () => {
+        infoReturn.crush_rules_replicated = [
+          Mocks.getCrushRule({ id: 0, name: 'rep1', type: 'replicated' }),
+          Mocks.getCrushRule({ id: 1, name: 'replicated_rule', type: 'replicated' }),
+          Mocks.getCrushRule({ id: 2, name: 'rep2', type: 'replicated' })
+        ];
+        setUpPoolComponent();
+        const control = form.get('crushRule');
+        expect(control.value).toEqual('replicated_rule');
         expect(control.disabled).toBe(false);
       });
 
@@ -546,6 +566,7 @@ describe('PoolFormComponent', () => {
     });
 
     it('returns 1 as minimum and 3 as maximum if no crush rule is available', () => {
+      component.selectedCrushRule = undefined;
       expect(component.getMinSize()).toBe(1);
       expect(component.getMaxSize()).toBe(3);
     });
@@ -746,7 +767,7 @@ describe('PoolFormComponent', () => {
       });
 
       const getValidCase = () => ({
-        type: 'replicated',
+        type: PoolType.REPLICATED,
         osds: OSDS,
         size: 4,
         ecp: {
@@ -777,7 +798,7 @@ describe('PoolFormComponent', () => {
         form.get('pgNum').markAsPristine();
         fixture.detectChanges();
 
-        if (type === 'replicated') {
+        if (type === PoolType.REPLICATED) {
           // Set a valid crush rule for replicated pools
           if (
             component.info.crush_rules_replicated &&
@@ -791,7 +812,7 @@ describe('PoolFormComponent', () => {
           // Explicitly call pgCalc() to ensure calculation happens with new values
           component['pgCalc']();
           fixture.detectChanges();
-        } else if (type === 'erasure') {
+        } else if (type === PoolType.ERASURE) {
           // For erasure code, initialize an ECP with the given k/m values
           if (ecp) {
             component['initEcp']([
@@ -814,7 +835,7 @@ describe('PoolFormComponent', () => {
 
       // TODO: These tests have state pollution from parent beforeEach that sets invalid crushRule
       it.skip('does not change anything if type is not valid', () => {
-        const test = getValidCase();
+        const test: Record<string, any> = getValidCase();
         test.type = '';
         test.expected = PGS;
         testPgCalc(test);
@@ -823,7 +844,7 @@ describe('PoolFormComponent', () => {
       it.skip('does not change anything if ecp is not valid', () => {
         const test = getValidCase();
         test.expected = PGS;
-        test.type = 'erasure';
+        test.type = PoolType.ERASURE;
         test.ecp = null;
         testPgCalc(test);
       });
@@ -851,14 +872,14 @@ describe('PoolFormComponent', () => {
       it('calculates erasure code values even if selection is disabled', () => {
         component['initEcp']([{ k: 2, m: 2, name: 'bla', plugin: '', technique: '' }]);
         const test = getValidCase();
-        test.type = 'erasure';
+        test.type = PoolType.ERASURE;
         testPgCalc(test);
         expect(form.get('erasureProfile').disabled).toBeTruthy();
       });
 
       it('calculates some erasure code values', () => {
         const test = getValidCase();
-        test.type = 'erasure';
+        test.type = PoolType.ERASURE;
         testPgCalc(test);
         test.osds = 16;
         test.ecp.m = 5;

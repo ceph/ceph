@@ -308,6 +308,7 @@ describe('PoolListComponent', () => {
     const getPoolData = (o: object) => [
       _.merge(
         _.merge(Mocks.getPool('a', 0), {
+          application_metadata: ['Block'],
           cdIsBinary: true,
           pg_status: '',
           stats: {
