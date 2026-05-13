@@ -284,56 +284,9 @@ using BackendStore = RelayStore;
 template<auto MemberFunc, typename... Args>
 auto RelayStore::with_store(RelayStore self, Args&&... args)
 {
-  auto& shard = self.shard;
-  using raw_return_type = decltype((std::declval<crimson::os::FuturizedStore::Shard>().*MemberFunc)(std::forward<Args>(args)...));
-
-  constexpr bool is_errorator = is_errorated_future_v<raw_return_type>;
-  constexpr bool is_seastar_future = seastar::is_future<raw_return_type>::value && !is_errorator;
-  constexpr bool is_plain = !is_errorator && !is_seastar_future;
-  const auto original_core = seastar::this_shard_id();
-  const auto store_shard_id = original_core % self.shard_count;
-  if (store_shard_id == seastar::this_shard_id() || store_shard_id == GLOBAL_STORE) {
-    if constexpr (is_plain) {
-      return seastar::make_ready_future<raw_return_type>(
-        (shard.*MemberFunc)(std::forward<Args>(args)...));
-    } else {
-      return (shard.*MemberFunc)(std::forward<Args>(args)...);
-    }
-  } else {
-    if constexpr (is_errorator) {
-      auto fut = seastar::smp::submit_to(
-        store_shard_id,
-        [&shard, ...args=std::forward<Args>(args)] mutable {
-          return (shard.*MemberFunc)(std::forward<Args>(args)...).to_base();
-        }).then([original_core] (auto&& result) {
-          return seastar::smp::submit_to(original_core,
-            [result = std::forward<decltype(result)>(result)]() mutable {
-              return std::forward<decltype(result)>(result);
-          });
-        });
-      return raw_return_type(std::move(fut));
-    } else {
-      auto fut = seastar::smp::submit_to(
-        store_shard_id,
-        [&shard, ...args=std::forward<Args>(args)] mutable {
-          return (shard.*MemberFunc)(std::forward<decltype(args)>(args)...);
-      });
-      if constexpr (std::is_same_v<raw_return_type, seastar::future<>>) {
-        return fut.then([original_core] {
-          return seastar::smp::submit_to(original_core, [] {
-            return seastar::make_ready_future<>();
-          });
-        });
-      } else {
-        return fut.then([original_core](auto&& result) {
-          return seastar::smp::submit_to(original_core,
-            [result = std::forward<decltype(result)>(result)]() mutable {
-              return std::forward<decltype(result)>(result);
-          });
-        });
-      }
-    }
-  }
+  // TODO: drop this method and revert all users to interacting with
+  // object store by calling methods instead of `with_store<>()`.
+  return (self.shard.*MemberFunc)(std::forward<Args>(args)...);
 }
 
 // scaffolding routers to future RelayStore
