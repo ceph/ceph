@@ -297,6 +297,11 @@ if(COMPILER_SUPPORTS_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION)
     HAVE_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION)
 endif()
 
+find_package(TBB REQUIRED)
+if(TBB_FOUND)
+  target_link_libraries(rgw_common PRIVATE TBB::tbb)
+endif()
+
 target_link_libraries(rgw_common
   PRIVATE
     legacy-option-headers

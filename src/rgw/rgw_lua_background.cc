@@ -15,8 +15,7 @@ const char* RGWTable::DECREMENT = "decrement";
 
 int RGWTable::increment_by(lua_State* L) {
   const auto map = reinterpret_cast<BackgroundMap*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
-  auto& mtx = *reinterpret_cast<std::mutex*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
-  auto decrement = lua_toboolean(L, lua_upvalueindex(THIRD_UPVAL));
+  auto decrement = lua_toboolean(L, lua_upvalueindex(SECOND_UPVAL));
 
   const auto args = lua_gettop(L);
   const auto index = luaL_checkstring(L, 1);
@@ -34,11 +33,9 @@ int RGWTable::increment_by(lua_State* L) {
     }
   }
 
-  std::unique_lock l(mtx);
-
-  const auto it = map->find(std::string(index));
-  if (it != map->end()) {
-    auto& value = it->second;
+  BackgroundMap::accessor accessor;
+  if (map->find(accessor, std::string(index))) {
+    auto& value = accessor->second;
     if (std::holds_alternative<double>(value) && std::holds_alternative<double>(inc_by)) {
       value = std::get<double>(value) + std::get<double>(inc_by);
     } else if (std::holds_alternative<long long int>(value) && std::holds_alternative<long long int>(inc_by)) {
@@ -48,7 +45,7 @@ int RGWTable::increment_by(lua_State* L) {
     } else if (std::holds_alternative<long long int>(value) && std::holds_alternative<double>(inc_by)) {
       value = static_cast<double>(std::get<long long int>(value)) + std::get<double>(inc_by);
     } else {
-      mtx.unlock();
+      accessor.release();
       return luaL_error(L, "can increment only numeric values");
     }
   }
@@ -141,13 +138,12 @@ std::unique_ptr<lua_state_guard> Background::initialize_lguard_state() {
 
 const BackgroundMapValue Background::empty_table_value;
 
-const BackgroundMapValue& Background::get_table_value(const std::string& key) const {
-  std::unique_lock cond_lock(table_mutex);
-  const auto it = rgw_map.find(key);
-  if (it == rgw_map.end()) {
-    return empty_table_value;
+BackgroundMapValue Background::get_table_value(const std::string& key) const {
+  BackgroundMap::const_accessor accessor;
+  if (rgw_map.find(accessor, key)) {
+      return accessor->second;
   }
-  return it->second;
+  return empty_table_value;
 }
 
 //(1) Loads the script from the object if not paused

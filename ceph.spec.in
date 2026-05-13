@@ -304,6 +304,7 @@ BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
 BuildRequires:	nasm
 BuildRequires:	lua-devel
+BuildRequires:	tbb-devel
 BuildRequires:  lmdb-devel
 %if 0%{with crimson} || 0%{with jaeger}
 BuildRequires:  yaml-cpp-devel >= 0.6
