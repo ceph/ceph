@@ -67,6 +67,9 @@ seastar::future<> PGAdvanceMap::start()
 
   DEBUG("{}: start", *this);
 
+  return pg->get_shard_services().with_sg(
+    pg->get_shard_services().get_sg_peering(),
+    [this, FNAME]() mutable -> seastar::future<> {
   IRef ref = this;
   return enter_stage<>(
     peering_pp(*pg).process
@@ -125,6 +128,7 @@ seastar::future<> PGAdvanceMap::start()
     DEBUG("{}: exit", *this);
     handle.exit();
   });
+ });
 }
 
 seastar::future<> PGAdvanceMap::check_for_splits(

@@ -281,7 +281,8 @@ options:
 	--osds-per-host: populate crush_location as each host holds the specified number of osds if set
 	--require-osd-and-client-version: if supplied, do set-require-min-compat-client and require-osd-release to specified value
 	--use-crush-tunables: if supplied, set tunables to specified value
-	--reactor-backend: configre seastar reactor backend options like io_uring or linux-aio
+       --reactor-backend: configre seastar reactor backend options like io_uring or linux-aio
+       --io-properties-file: Provide a path to seastar io properties YAML file
 \n
 EOF
 
@@ -619,6 +620,10 @@ case $1 in
         ;;
     --reactor-backend)
         crimson_reactor_backend=$2
+        shift
+        ;;
+    --io-properties-file)
+        crimson_io_properties_file=$2
         shift
         ;;
     --crimson-alien-num-threads)
@@ -1264,6 +1269,10 @@ start_osd() {
         if [ -n "$crimson_reactor_backend" ]; then
             echo "$CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_reactor_backend $crimson_reactor_backend"
             $CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_reactor_backend $crimson_reactor_backend
+        fi
+	if [ -n "$crimson_io_properties_file" ]; then
+            echo "$CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_io_properties_file $crimson_io_properties_file"
+            $CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_io_properties_file $crimson_io_properties_file
         fi
     fi
 	if [ "$new" -eq 1 -o $inc_osd_num -gt 0 ]; then

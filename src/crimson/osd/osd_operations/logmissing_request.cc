@@ -68,7 +68,9 @@ seastar::future<> LogMissingRequest::with_pg(
 {
   LOG_PREFIX(LogMissingRequest::with_pg);
   DEBUGI("{}: LogMissingRequest::with_pg", *this);
-
+  return shard_services.with_sg(
+    shard_services.get_sg_client(),
+    [this, pg=std::move(pg)]() mutable -> seastar::future<> {
   IRef ref = this;
   return interruptor::with_interruption([this, pg] {
     LOG_PREFIX(LogMissingRequest::with_pg);
@@ -93,6 +95,7 @@ seastar::future<> LogMissingRequest::with_pg(
     logger().debug("{}: exit", *this);
     handle.exit();
   });
+    });
 }
 
 }

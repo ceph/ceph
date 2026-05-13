@@ -78,6 +78,9 @@ seastar::future<> PGPCTRequest::with_pg(
   LOG_PREFIX(PGPCTRequest::with_pg);
   DEBUGDPP("{}", *pgref, *this);
 
+  return shard_services.with_sg(
+    shard_services.get_sg_client(),
+    [FNAME, this, pgref=std::move(pgref)]() mutable -> seastar::future<> {
   PG &pg = *pgref;
   IRef ref = this;
   return interruptor::with_interruption([this, &pg] {
@@ -90,6 +93,7 @@ seastar::future<> PGPCTRequest::with_pg(
       return handle.complete(
       ).then([ref=std::move(ref), pgref=std::move(pgref)] {});
     });
+  });
 }
 
 }
