@@ -13780,7 +13780,8 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
   // should have been cleared above by finishing all of the degraded objects
   ceph_assert(objects_blocked_on_degraded_snap.empty());
 
-  // clear pool migration reservations
+  // clear pool migration state
+  pool_migration_blocked_writes.clear();
   dout(20) << __func__ << " on_change, cancelling remote recovery reservation" << dendl;
   cancel_remote_recovery_reservation();
   if (pool_migration_reservations_granted_target) {
