@@ -1716,7 +1716,12 @@ options:
   level: advanced
   desc: Number of shards for usage log.
   long_desc: The number of RADOS objects that RGW will use in order to store the usage
-    log data.
+    log data. All RGW daemons and radosgw-admin commands must use the same value
+    for this option. If values differ, writes and reads/clears will target
+    different objects, causing usage data to appear empty or not be cleared.
+    Use ``ceph config set global rgw_usage_max_shards <N>`` to ensure consistency
+    across the cluster. Alternatively, ``radosgw-admin`` supports the
+    ``--rgw-usage-max-shards`` command-line parameter.
   fmt_desc: The maximum number of shards for usage logging.
   default: 32
   services:
