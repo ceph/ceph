@@ -865,8 +865,9 @@ class OSD:
         # and we should not need it in any case where this class
         # has been serialized and deserialized. The from_json function also
         # requires an instance of the class to explicitly be passed back in
-        self.__dict__.update({'remove_util': None})
-        return self.__dict__
+        state = self.__dict__.copy()
+        state['rm_util'] = None
+        return state
 
 
 class OSDRemovalQueue(object):
