@@ -4702,6 +4702,8 @@ void PeeringState::append_log(
   }
   psdout(10) << "append_log " << pg_log.get_log() << " " << logv << dendl;
 
+  bool invalidate_pwlc = false;
+
   PGLog::LogEntryHandlerRef handler{pl->get_log_handler(t)};
   if (!transaction_applied) {
      /* We must be a backfill or async recovery peer, so it's ok if we apply
@@ -4714,17 +4716,7 @@ void PeeringState::append_log(
       * object is deleted before we can _merge_object_divergent_entries().
       */
     pg_log.skip_rollforward(&info, handler.get());
-    /* Invalidate pwlc for this shard until the next interval when
-     * it will be updated with the pwlc from another shard
-     */
-    for (auto & [shard, versionrange] :
-	   info.partial_writes_last_complete) {
-      auto & [fromversion, toversion] = versionrange;
-      fromversion.epoch = 0;
-      fromversion.version = eversion_t::max().version;
-      toversion = fromversion;
-    }
-    info.partial_writes_last_complete_epoch = 0;
+    invalidate_pwlc = true;
   }
 
   for (auto p = logv.begin(); p != logv.end(); ++p) {
@@ -4733,9 +4725,12 @@ void PeeringState::append_log(
     /* We don't want to leave the rollforward artifacts around
      * here past last_backfill.  It's ok for the same reason as
      * above */
-    if (transaction_applied &&
-	p->soid > info.last_backfill) {
+    if (transaction_applied && !is_acting(pg_whoami)) {
+      psdout(20) << __func__
+             << ": rolling forward because of backfill/async_recovery, soid="
+             << p->soid << " entry=" << *p << dendl;
       pg_log.roll_forward(&info, handler.get());
+      invalidate_pwlc = true;
     }
   }
   if (transaction_applied && roll_forward_to > pg_log.get_can_rollback_to()) {
@@ -4744,6 +4739,20 @@ void PeeringState::append_log(
       &info,
       handler.get());
     last_rollback_info_trimmed_to_applied = roll_forward_to;
+  }
+
+  if (invalidate_pwlc) {
+    /* Invalidate pwlc for this shard until the next interval when
+     * it will be updated with the pwlc from another shard
+     */
+    for (auto & [shard, versionrange] :
+           info.partial_writes_last_complete) {
+      auto & [fromversion, toversion] = versionrange;
+      fromversion.epoch = 0;
+      fromversion.version = eversion_t::max().version;
+      toversion = fromversion;
+    }
+    info.partial_writes_last_complete_epoch = 0;
   }
 
   psdout(10) << "approx pg log length =  "
