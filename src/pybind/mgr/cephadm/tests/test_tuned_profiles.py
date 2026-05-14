@@ -174,13 +174,13 @@ class TestTunedProfiles:
         assert _run_cephadm.call_count == 2
 
     @mock.patch('cephadm.tuned_profiles.TunedProfileUtils._sysctl_dir_apply_system')
-    @mock.patch('cephadm.ssh.SSHManager.write_remote_file')
-    def test_write_tuned_profiles(self, _write_remote_file, _sysctl_dir_apply_system):
+    @mock.patch('cephadm.serve.CephadmServe._deploy_file_via_cephadm', new_callable=mock.AsyncMock)
+    def test_write_tuned_profiles(self, _deploy_file_via_cephadm, _sysctl_dir_apply_system):
         profiles = {'p1': self.tspec1, 'p2': self.tspec2, 'p3': self.tspec3}
         # for this test we will use host "a" and have it so host_needs_tuned_profile_update
         # returns True for p2 and False for p1 (see FakeCache class). So we should see
         # one write for p2 and sysctl-dir --apply-system via cephadm.
-        _write_remote_file.return_value = 'success'
+        _deploy_file_via_cephadm.return_value = None
         mgr = FakeMgr(['a', 'b', 'c'],
                       ['a', 'b', 'c'],
                       [],
@@ -188,7 +188,7 @@ class TestTunedProfiles:
         tp = TunedProfileUtils(mgr)
         tp._write_tuned_profiles('a', self.profiles_to_calls(tp, [self.tspec1, self.tspec2]))
         _sysctl_dir_apply_system.assert_called_once_with('a')
-        _write_remote_file.assert_called_with(
+        _deploy_file_via_cephadm.assert_called_with(
             'a', f'{SYSCTL_DIR}/p2-cephadm-tuned-profile.conf', tp._profile_to_str(self.tspec2).encode('utf-8'))
 
     def test_dont_write_to_unreachable_hosts(self):

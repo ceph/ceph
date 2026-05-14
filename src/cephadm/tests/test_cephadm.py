@@ -144,6 +144,47 @@ class TestCephAdm(object):
                 _cephadm.command_remove_file(ctx)
         assert cephadm_fs.exists(link)
 
+    def test_command_deploy_file(self, cephadm_fs):
+        import io
+        fsid = '00000000-0000-0000-0000-0000deadbeef'
+        dest = '/etc/ceph/kube.conf'
+        cephadm_fs.create_dir('/etc/ceph')
+        content = b'hello\xff'
+        stdin_mock = mock.Mock()
+        stdin_mock.buffer = io.BytesIO(content)
+        with mock.patch('sys.stdin', stdin_mock):
+            with with_cephadm_ctx(
+                ['deploy-file', '--fsid', fsid, '--path', dest, '--mode', '600']
+            ) as ctx:
+                assert _cephadm.command_deploy_file(ctx) == 0
+        assert cephadm_fs.exists(dest)
+        with open(dest, 'rb') as f:
+            assert f.read() == content
+
+    def test_command_deploy_file_rejects_relative_path(self, cephadm_fs):
+        import io
+        stdin_mock = mock.Mock()
+        stdin_mock.buffer = io.BytesIO(b'x')
+        with mock.patch('sys.stdin', stdin_mock):
+            with with_cephadm_ctx(
+                ['deploy-file', '--fsid', '00000000-0000-0000-0000-0000deadbeef',
+                 '--path', 'relative/path.conf']
+            ) as ctx:
+                with pytest.raises(_cephadm.Error, match='absolute path'):
+                    _cephadm.command_deploy_file(ctx)
+
+    def test_command_deploy_file_uid_gid_together(self, cephadm_fs):
+        import io
+        stdin_mock = mock.Mock()
+        stdin_mock.buffer = io.BytesIO(b'x')
+        with mock.patch('sys.stdin', stdin_mock):
+            with with_cephadm_ctx(
+                ['deploy-file', '--fsid', '00000000-0000-0000-0000-0000deadbeef',
+                 '--path', '/etc/ceph/a', '--uid', '0']
+            ) as ctx:
+                with pytest.raises(_cephadm.Error, match='together'):
+                    _cephadm.command_deploy_file(ctx)
+
     def test_command_sysctl_dir_list(self, cephadm_fs, capsys):
         from cephadmlib.constants import SYSCTL_DIR
         cephadm_fs.create_dir(SYSCTL_DIR)

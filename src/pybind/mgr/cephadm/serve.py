@@ -1392,7 +1392,9 @@ class CephadmServe:
                 if match:
                     continue
             self.log.info(f'Updating {host}:{path}')
-            self.mgr.ssh.write_remote_file(host, path, content, mode, uid, gid)
+            with self.mgr.async_timeout_handler(host, f'cephadm deploy-file ({path})'):
+                self.mgr.wait_async(self._deploy_file_via_cephadm(
+                    host, path, content, mode, uid, gid))
             self.mgr.cache.update_client_file(host, path, digest, mode, uid, gid)
             updated_files = True
         for path in old_files.keys():
@@ -1695,7 +1697,7 @@ class CephadmServe:
                            command: Union[str, List[str]],
                            args: List[str],
                            addr: Optional[str] = "",
-                           stdin: Optional[str] = "",
+                           stdin: Optional[Union[str, bytes]] = "",
                            no_fsid: Optional[bool] = False,
                            error_ok: Optional[bool] = False,
                            image: Optional[str] = "",
@@ -1783,7 +1785,10 @@ class CephadmServe:
             # agent has cephadm binary as an extra file which is
             # therefore passed over stdin. Even for debug logs it's too much
             if stdin and 'agent' not in str(entity):
-                self.log.debug('stdin: %s' % stdin)
+                if isinstance(stdin, bytes):
+                    self.log.debug('stdin: <binary len %d>', len(stdin))
+                else:
+                    self.log.debug('stdin: %s', stdin)
 
             # If SSH hardening is enabled, call invoker directly without which python
             if self.mgr.sudo_hardening and self.mgr.invoker_path:
@@ -1909,6 +1914,31 @@ class CephadmServe:
         if code:
             return f"Host {host} failed to login to all registries"
         return None
+
+    async def _deploy_file_via_cephadm(
+        self,
+        host: str,
+        path: str,
+        content: bytes,
+        mode: Optional[int] = None,
+        uid: Optional[int] = None,
+        gid: Optional[int] = None,
+        addr: Optional[str] = None,
+    ) -> None:
+        """Write a host file using ``cephadm deploy-file`` (stdin = raw file bytes)."""
+        args: List[str] = ['--path', path]
+        if mode is not None:
+            args.extend(['--mode', oct(mode)[2:]])
+        if uid is not None and gid is not None:
+            args.extend(['--uid', str(uid), '--gid', str(gid)])
+        await self._run_cephadm(
+            host,
+            cephadmNoImage,
+            'deploy-file',
+            args,
+            stdin=content,
+            addr=addr or '',
+        )
 
     async def _deploy_cephadm_binary(self, host: str, addr: Optional[str] = None) -> None:
         # Use tee (from coreutils) to create a copy of cephadm on the target machine

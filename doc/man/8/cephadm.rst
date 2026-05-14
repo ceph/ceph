@@ -13,7 +13,7 @@ Synopsis
 |             [--log-dir LOG_DIR] [--logrotate-dir LOGROTATE_DIR]
 |             [--unit-dir UNIT_DIR] [--verbose] [--timeout TIMEOUT]
 |             [--retry RETRY] [--no-container-init]
-|             {version,pull,inspect-image,ls,list-networks,list-rdma,adopt,rm-daemon,rm-cluster,remove-file,sysctl-dir,run,shell,enter,ceph-volume,unit,logs,bootstrap,deploy,check-host,check-online,prepare-host,prepare-host-sudo-hardening,setup-ssh-user,add-repo,rm-repo,install,list-images,update-osd-service}
+|             {version,pull,inspect-image,ls,list-networks,list-rdma,adopt,rm-daemon,rm-cluster,remove-file,deploy-file,sysctl-dir,run,shell,enter,ceph-volume,unit,logs,bootstrap,deploy,check-host,check-online,prepare-host,prepare-host-sudo-hardening,setup-ssh-user,add-repo,rm-repo,install,list-images,update-osd-service}
 |               ...
 
 
@@ -93,6 +93,9 @@ Synopsis
 | **cephadm** **check-online**
 
 | **cephadm** **remove-file** [-h] [--fsid FSID] --path PATH
+
+| **cephadm** **deploy-file** [-h] [--fsid FSID] --path PATH [--mode MODE]
+|                          [--uid UID] [--gid GID]
 
 | **cephadm** **sysctl-dir** [-h] [--fsid FSID] (--list | --apply-system)
 
@@ -315,6 +318,21 @@ Arguments:
 
 * [--fsid FSID]   cluster FSID (passed automatically when invoked by the orchestrator)
 * --path PATH     absolute path of the file to remove (required)
+
+
+deploy-file
+-----------
+
+Write or replace a file on the local host. The **entire file body** is read from
+**standard input** as raw bytes (no encoding or line-ending translation).
+
+Arguments:
+
+* [--fsid FSID]   cluster FSID (passed automatically when invoked by the orchestrator)
+* --path PATH     absolute destination path for the file (required)
+* [--mode MODE]   octal file mode (for example ``644`` or ``0644``)
+* [--uid UID]    numeric owner user id (**must** be given together with ``--gid``)
+* [--gid GID]    numeric owner group id (**must** be given together with ``--uid``)
 
 
 sysctl-dir

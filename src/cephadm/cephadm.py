@@ -4666,6 +4666,33 @@ def command_remove_file(ctx: CephadmContext) -> int:
     return 0
 
 
+@infer_fsid
+def command_deploy_file(ctx: CephadmContext) -> int:
+    """Write or replace a host file from raw stdin bytes (for mgr-driven config sync)."""
+    dest = Path(ctx.deploy_file_path).expanduser()
+    if not dest.is_absolute():
+        raise Error(f'deploy-file: destination must be an absolute path: {dest}')
+
+    uid = ctx.deploy_file_uid
+    gid = ctx.deploy_file_gid
+    if (uid is None) != (gid is None):
+        raise Error('deploy-file: --uid and --gid must be given together')
+
+    owner = (uid, gid) if uid is not None and gid is not None else None
+    perms = None
+    if ctx.deploy_file_mode is not None:
+        perms = int(str(ctx.deploy_file_mode), 8)
+
+    dest.parent.mkdir(parents=True, mode=0o755, exist_ok=True)
+    try:
+        with write_new(dest, owner=owner, perms=perms, binary=True) as fh:
+            fh.write(sys.stdin.buffer.read())
+    except Exception as e:
+        logger.exception('deploy-file: Failed to write file, exception: %s', e)
+        raise
+    return 0
+
+
 def command_sysctl_dir(ctx: CephadmContext) -> int:
     """List basenames under sysctl.d or run sysctl --system"""
     action = ctx.sysctl_dir_action
@@ -5750,6 +5777,36 @@ def _get_parser():
         required=True,
         dest='remove_file_path',
         help='absolute path of the file to remove')
+
+    parser_deploy_file = subparsers.add_parser(
+        'deploy-file',
+        help='write or replace a host file from stdin (raw bytes)')
+    parser_deploy_file.set_defaults(func=command_deploy_file)
+    parser_deploy_file.add_argument(
+        '--fsid',
+        help='cluster FSID')
+    parser_deploy_file.add_argument(
+        '--path',
+        required=True,
+        dest='deploy_file_path',
+        help='absolute destination path for the file')
+    parser_deploy_file.add_argument(
+        '--mode',
+        dest='deploy_file_mode',
+        default=None,
+        help='octal mode for the file (e.g. 644 or 0644)')
+    parser_deploy_file.add_argument(
+        '--uid',
+        type=int,
+        dest='deploy_file_uid',
+        default=None,
+        help='numeric owner uid (requires --gid)')
+    parser_deploy_file.add_argument(
+        '--gid',
+        type=int,
+        dest='deploy_file_gid',
+        default=None,
+        help='numeric owner gid (requires --uid)')
 
     parser_sysctl_dir = subparsers.add_parser(
         'sysctl-dir',

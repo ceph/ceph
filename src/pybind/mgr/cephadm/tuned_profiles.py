@@ -120,8 +120,12 @@ class TunedProfileUtils():
             for profile_name, content in p.items():
                 if self.mgr.cache.host_needs_tuned_profile_update(host, profile_name):
                     logger.info(f'Writing tuned profile {profile_name} to host {host}')
-                    profile_filename: str = f'{SYSCTL_DIR}/{profile_name}-cephadm-tuned-profile.conf'
-                    self.mgr.ssh.write_remote_file(host, profile_filename, content.encode('utf-8'))
+                    profile_filename: str = (
+                        f'{SYSCTL_DIR}/{profile_name}-cephadm-tuned-profile.conf')
+                    with self.mgr.async_timeout_handler(host, f'cephadm deploy-file ({profile_filename})'):
+                        self.mgr.wait_async(
+                            CephadmServe(self.mgr)._deploy_file_via_cephadm(
+                                host, profile_filename, content.encode('utf-8')))
                     updated = True
         if updated:
             self._sysctl_dir_apply_system(host)
