@@ -27,9 +27,9 @@ For each new major (alphabetical) release, you must create one ``ceph-release`` 
 Summarized build process
 ========================
 
-1. QE finishes testing and finds a stopping point.  That commit is pushed to the ``$release-release`` branch in ceph.git (e.g., ``squid-release``).  This allows work to continue in the working ``$release`` branch without having to freeze it during the release process.
-2. The Ceph Council approves and notifies the "Build Lead".
-3. The "Build Lead" starts the `Jenkins multijob <https://jenkins.ceph.com/view/all/job/ceph>`_, which triggers all builds.
+1. QE finishes testing and finds a stopping point. The working ``$release`` branch (e.g., ``squid``) is then frozen to ensure that upgrade tests are QA'ing the actual code planned to ship.
+2. The Ceph Release Manager (CRM) approves the release.
+3. The CRM or deputy starts the `Jenkins multijob <https://jenkins.ceph.com/view/all/job/ceph>`_, which triggers all builds.
 4. Packages are pushed to chacra.ceph.com.
 5. Packages are pulled from chacra.ceph.com to the Signer VM.
 6. Packages are signed.
@@ -47,12 +47,12 @@ A hotfix release has a couple differences.
 1. Check out the most recent tag. For example, if we're releasing a hotfix on top of 19.2.1, ``git checkout -f -B squid-release tags/v19.2.1``.
 2. ``git cherry-pick -x`` the necessary hotfix commits (Note: only "cherry-pick" must be used).
 3. ``git push -f origin squid-release``.
-4. Verify the commits in the ``$release-release`` branch:
+4. Verify the commits in the hotfix branch:
 
    1. To check against the previous point release (if we are making 19.2.2, this would be 19.2.1), run ``git log --pretty=oneline --no-merges tags/v19.2.1..origin/squid-release``. Verify that the commits produced are exactly what we want in the next point release.
-   2. To check against the RC in the "ceph-ci" repo (``ceph-ci`` in this example), run ``git log --pretty=oneline --no-merges origin/squid-release...ceph-ci/squid-release``. There should be no output produced if the ``$release-release`` branch in the ceph repo is identical to the RC in ``ceph-ci``. Note the use of git `triple dot notation <https://git-scm.com/book/en/v2/Git-Tools-Revision-Selection>`_, which shows any commit discrepencies between both references.
-5. Notify the "Build Lead" to start the build.
-6. The "Build Lead" should set ``RELEASE_TYPE=HOTFIX`` instead of ``STABLE``.
+   2. To check against the RC in the "ceph-ci" repo (``ceph-ci`` in this example), run ``git log --pretty=oneline --no-merges origin/squid-release...ceph-ci/squid-release``. There should be no output produced if the hotfix branch in the ceph repo is identical to the RC in ``ceph-ci``. Note the use of git `triple dot notation <https://git-scm.com/book/en/v2/Git-Tools-Revision-Selection>`_, which shows any commit discrepencies between both references.
+5. Notify the CRM to start the build.
+6. The CRM should set ``RELEASE_TYPE=HOTFIX`` instead of ``STABLE``.
 
 Security Release Process Deviation
 ----------------------------------
@@ -60,15 +60,15 @@ Security Release Process Deviation
 A security/CVE release is similar to a hotfix release with two differences:
 
     1. The fix should be pushed to the `ceph-private <https://github.com/ceph/ceph-private>`_ repo instead of ceph.git (requires GitHub Admin Role).
-    2. The tags (e.g., v19.2.3) must be manually pushed to ceph.git by the "Build Lead."
+    2. The tags (e.g., v19.2.3) must be manually pushed to ceph.git by the CRM.
 
 1. Check out the most recent tag. For example, if we're releasing a security fix on top of 19.2.2, ``git checkout -f -B squid-release origin/v19.2.2``
 2. ``git cherry-pick -x`` the necessary security fix commits
 3. ``git remote add security git@github.com:ceph/ceph-private.git``
 4. ``git push -f security squid-release``
-5. Notify the "Build Lead" to start the build.
-6. The "Build Lead" should set ``RELEASE_TYPE=SECURITY`` instead of ``STABLE``.
-7. Finally, the `ceph-tag <https://github.com/ceph/ceph-build/blob/main/ansible/roles/ceph-release/tasks/push.yml>`_ steps need to be manually run by the "Build Lead" as close to the Announcement time as possible::
+5. Notify the CRM to start the build.
+6. The CRM should set ``RELEASE_TYPE=SECURITY`` instead of ``STABLE``.
+7. Finally, the `ceph-tag <https://github.com/ceph/ceph-build/blob/main/ansible/roles/ceph-release/tasks/push.yml>`_ steps need to be manually run by the CRM as close to the Announcement time as possible::
 
     # Example using squid pretending 19.2.3 is the security release version
     # Add the ceph-releases repo (also requires GitHub Admin Role). The `ceph-setup <https://jenkins.ceph.com/job/ceph-setup>`_ job will have already created and pushed the tag to ceph-releases.git.
@@ -83,9 +83,11 @@ A security/CVE release is similar to a hotfix release with two differences:
 1. Preparing the release branch
 ===============================
 
-Once QE has determined a stopping point in the working (e.g., ``squid``) branch, that commit should be pushed to the corresponding ``squid-release`` branch.
+Once QE has determined a stopping point in the working (e.g., ``squid``)
+branch, the branch is frozen and the **Ceph Release Manager** is notified that
+the release branch is ready.
 
-Notify the "Build Lead" that the release branch is ready.
+Notify the CRM that the release branch is ready.
 
 2. Starting the build
 =====================

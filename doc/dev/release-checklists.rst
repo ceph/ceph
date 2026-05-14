@@ -7,7 +7,7 @@ Dev Kickoff
 
 These steps should be taken when starting a new major release, just after
 the previous release has been tagged (vX.2.0) and that tag has been merged
-back into master.
+back into ``main``.
 
 X is the release we are just starting development on.  X-1 is the one
 that was just released (X-1).2.0.
