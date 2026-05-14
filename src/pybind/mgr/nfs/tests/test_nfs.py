@@ -6,6 +6,7 @@ from typing import Optional, Tuple, Iterator, List, Any
 from contextlib import contextmanager
 from unittest import mock
 from unittest.mock import MagicMock
+import mgr_util
 from mgr_module import MgrModule, NFS_POOL_NAME
 
 from rados import ObjectNotFound
@@ -14,6 +15,7 @@ from ceph.deployment.service_spec import NFSServiceSpec
 from ceph.utils import with_units_to_int, bytes_to_human
 from nfs import Module
 from nfs.export import ExportMgr, normalize_path
+from nfs.utils import cephfs_client_for_mgr
 from nfs.ganesha_conf import GaneshaConfParser, Export
 from nfs.qos_conf import (
     RawBlock,
@@ -1826,3 +1828,30 @@ def test_ganesha_validate_access_type():
         _validate_access_type(ok)
     with pytest.raises(NFSInvalidOperation):
         _validate_access_type("any")
+
+
+class TestCephfsClientForMgr:
+    @pytest.fixture(autouse=True)
+    def clear_cephfs_client_cache(self):
+        cephfs_client_for_mgr.cache_clear()
+        yield
+        cephfs_client_for_mgr.cache_clear()
+
+    def test_cephfs_client_for_mgr_returns_same_instance(self):
+        mgr = MagicMock()
+        with mock.patch('nfs.utils.CephfsClient') as mock_cephfs_cls:
+            mock_cephfs_cls.return_value = MagicMock()
+            first = cephfs_client_for_mgr(mgr)
+            second = cephfs_client_for_mgr(mgr)
+            assert first is second
+            mock_cephfs_cls.assert_called_once_with(mgr)
+
+    def test_multiple_earmark_resolvers_share_cached_cephfs_client(self):
+        mgr = MagicMock()
+        with mock.patch('nfs.utils.CephfsClient') as mock_cephfs_cls:
+            mock_cephfs_cls.return_value = MagicMock()
+            cached = cephfs_client_for_mgr(mgr)
+            r1 = mgr_util.CephFSEarmarkResolver(mgr=mgr, client=cached)
+            r2 = mgr_util.CephFSEarmarkResolver(mgr=mgr, client=cephfs_client_for_mgr(mgr))
+            assert r1._cephfs_client is r2._cephfs_client
+            mock_cephfs_cls.assert_called_once_with(mgr)
