@@ -258,7 +258,7 @@ jobs:
         if: steps.router.outputs.run_audit == 'true'
         env:
           PTL_TOOL_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PTL_TOOL_REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY }}
+          PTL_TOOL_REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY_BACKPORT_BOT }}
           PTL_TOOL_BASE_PROJECT: ${{ github.repository_owner }}
           PTL_TOOL_BASE_REPO: ${{ github.event.repository.name }}
         run: |
