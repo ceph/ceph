@@ -851,7 +851,8 @@ public:
 			       const std::string& dividing_bucket,
 			       uint32_t bucket_count,
 			       const std::set<pg_pool_t*>& pools,
-			       const std::string& new_crush_rule);
+			       const std::string& new_crush_rule,
+			       CrushWrapper& crush);
   /**
   *
   * Set all stretch mode values of all pools back to pre-stretch mode values.
