@@ -773,8 +773,9 @@ remote_control
     uses port 54445. The port can be configured using the ``custom_ports``
     parameter in the cluster resource. If the service is enabled and any of the
     ``cert``, ``key``, or ``ca_cert`` fields are not populated mTLS will be
-    disabled and the service will operate in a read-only mode. Running the
-    service with mTLS disabled is not recommended.
+    disabled. Running the service with mTLS disabled is not recommended.
+    Consult the :ref:`SMB Remote Control <smb-remote-control>` section for
+    more details about the remote-control server and how to access it.
     Fields:
 
     enabled
@@ -1526,3 +1527,148 @@ at the prompt. Refer to the `smbclient documentation`_ for more details.
 
 .. _smbclient documentation:
    https://www.samba.org/samba/docs/current/man-html/smbclient.1.html
+
+.. _smb-remote-control:
+
+SMB Remote Control
+==================
+
+Ceph's SMB Service offers an optional sidecar service called remote-control
+(sometimes abbreviated as ``remotectl``). This service offers the ability to
+directly interact with the containerized Samba daemons through a gRPC based
+interface. You can view status, settings, or make limited changes without going
+through additional layers of orchestration.
+
+The remote-control service is provided as part of the Samba containers
+deployed by cephadm and the code is available as part of the `sambacc project`_.
+
+.. _sambacc project: https://github.com/samba-in-kubernetes/sambacc
+
+There are two main methods of connecting to the remote-control service:
+
+1. Over the network using an mTLS enabled TCP connection
+2. On the Ceph cluster node running one or more smb services
+
+To configure the system for TCP & mTLS connections the parameters ``cert``,
+``key``, and ``ca_cert`` should be provided under the ``remote_control``
+settings block. Providing these credential references automatically enables the
+service.
+
+To configure the system for local unix socket access, specify
+``locally_enabled: true`` under the ``remote_control`` settings block.  When
+deployed as part of a Ceph cluster this mode requires the client to pass ceph
+user and key information as part of the gRPC headers.
+
+You can enable both TCP & mTLS connection and unix socket connections at the
+same time.
+
+In addition to these main methods one can also enable remote-control but
+disable mTLS support. Note that doing so is highly risky as any gRPC client can
+view and make changes using remote-control. This option exists for development
+and debugging purposes and should only be used in controlled environments.
+To enable this mode supply no tls credential options but set ``enabled: true``
+when configuring the ``remote_control`` settings in the cluster.
+
+
+Accessing Remote Control as an API
+----------------------------------
+
+One of the use cases for the remote-control sidecar service is to provide an
+interface for a control-plane outside of the Ceph cluster to directly operate
+on processes running inside the Samba containers. In many cases we expect this
+to be implemented by the client control-plane using a binding to the gRPC API.
+
+One can generate gRPC bindings for a number of languages, including C/C++, Go,
+Python, and Java. Providing detailed documentation for creating a binding for
+your application is out of scope for this document. The main `grpc.io`_ website
+provides detailed documentation and tutorials for getting started with gRPC. To
+generate bindings for the remote-control sidecar service the `sambacc project`_
+provides a `.proto file`_ that describes the available API and can be used to
+generate bindings.
+
+The remote-control gRPC server also supports "gRPC reflection" that allows
+dynamic bindings instead of generating them ahead of time. Refer to the `gRPC
+reflection`_ documentation and the related documentation for your language on
+how to make use of reflection.
+
+.. _grpc.io: https://grpc.io
+
+.. _gRPC reflection: https://grpc.io/docs/guides/reflection/
+
+.. _.proto file: https://github.com/samba-in-kubernetes/sambacc/blob/master/sambacc/grpc/protobufs/control.proto
+
+Accessing Remote Control using grpcurl
+--------------------------------------
+
+The remote-control API can be accessed on the command line using the `grpcurl`_
+tool. This tool is described as "like cURL, but for gRPC" on the project's
+GitHub page. This tool is meant for general gRPC use and can either be
+configured to use the .proto file or gRPC reflection to "learn" the APIs
+available on the server. Similarly, the tool supports command line options
+for TLS credentials, optional arguments (as JSON) and the server and API to
+call. Please refer to the grpcurl site for documentation.
+
+An example using grpcurl:
+
+.. prompt:: bash #
+
+   grpcurl -cacert ~/certs/ca.crt -cert ~/certs/client1.crt  -key ~/certs/client1.key -d '{"ip_address": "192.168.76.145"}' 192.168.76.200:54445  SambaControl/KillClientConnection
+
+This example demonstrates making a TCP & mTLS based connection to the server
+running at ``192.168.76.200:54445`` and calling the ``KillClientConnection``
+API with the arguments specifying a client with IP Address ``192.168.76.145``.
+This instructs the ``smbd`` server to terminate any established connection it
+has to a client with that IP Address.
+
+.. _grpcurl: https://github.com/fullstorydev/grpcurl
+
+Accessing Remote Control using ceph-smb-ctl
+-------------------------------------------
+
+In addition to general gRPC clients, the Ceph project now provides a more
+specific client for the remote-control service called ``ceph-smb-ctl``.  This
+client is available as part of the container images provided by the Ceph
+project. It can be invoked using the ``cephadm shell`` command on a Ceph
+cluster node that is running smb services. It will automatically use the unix
+sockets by default.  If more than one smb service is running on the same node
+the ``--cluster`` option may be used to distinguish which smb cluster to
+connect to.
+
+This tool is primarily meant as a tool for Ceph administrators to perform
+diagnostics and debugging activities for the SMB on Ceph service. The
+various APIs are represented by commands that can be listed using the ``--help``
+option. These commands include but are not limited to:
+
+* ``info`` - Get basic server info
+* ``status`` - Report on Samba smbd server status
+* ``close-share`` - Block I/O to certain clients by share name
+* ``kill-client-connection`` - Terminate a client connection by IP Address
+* ``config-dump`` - Dump configuration data
+* ``get-debug-level`` - Get the current debug level of an smb subsystem
+* ``set-debug-level`` - Set the debug level of an smb subsystem
+
+For example:
+
+.. prompt:: bash #
+
+   cephadm shell ceph-smb-ctl status
+
+Reports on the status of the smb services in a JSON representation.
+
+.. prompt:: bash #
+
+   cephadm shell ceph-smb-ctl kill-client-connection 192.168.76.145
+
+Demonstrates the use of ``ceph-smb-ctl`` to request smbd terminate any
+established connection it has to the client with IP Address 192.168.76.145.
+
+In addition to operating on the local smb server instance it can also
+use TCP & mTLS to connect to a remote sidecar server. Note that making
+the appropriate TLS credentials available on the node is up to you.
+
+.. prompt:: bash #
+
+   cephadm shell -v /path/to/my/certs:/c ceph-smb-ctl --address 192.168.76.202:54445  --tls-cert=/c/edfu.crt --tls-key=/c/edfu.key --tls-ca-cert=/c/ca/ca.crt  config-dump samba
+
+This example will remotely fetch and print the samba-level configuration from
+a sidecar service listening on the specified address and port.
