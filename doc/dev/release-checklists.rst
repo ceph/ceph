@@ -42,6 +42,7 @@ Github Actions
 ~~~~~~~~~~~~~~
 
 - [x] .github/workflows/redmine-upkeep.yml add release branch to pull_request_target trigger
+- [x] .github/workflows/releng-audit.yml add release branch to pull_request_target trigger
 
 Scripts
 ~~~~~~~
