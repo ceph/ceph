@@ -1035,8 +1035,9 @@ COMMAND("osd rm-pg-upmap-primary "
 	"name=pgid,type=CephPgid ",
 	"clear pg primary setting for <pgid>",
         "osd", "rw")
-COMMAND("osd rm-pg-upmap-primary-all ",
-        "clear all pg primary entries (developers only)",
+COMMAND("osd rm-pg-upmap-primary-all "
+        "name=pool,type=CephPoolname,req=false",
+        "clear all pg primary entries, or all entries for pool <pool> (developers only)",
         "osd", "rw")
 COMMAND("osd primary-temp "
 	"name=pgid,type=CephPgid "
