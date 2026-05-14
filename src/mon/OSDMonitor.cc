@@ -13308,8 +13308,20 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     case OP_RM_PG_UPMAP_PRIMARY_ALL:
       {
-	osdmap.rm_all_upmap_prims(cct, &pending_inc);
-	ss << "cleared all pg_upmap_primary mappings";
+        string pool_name;
+        if (cmd_getval(cmdmap, "pool", pool_name)) {
+          auto pool_id = osdmap.lookup_pg_pool_name(pool_name);
+          if (pool_id < 0) {
+            err = -EINVAL;
+            ss << "unrecognized pool name '" << pool_name << "'";
+            goto reply_no_propose;
+          }
+          osdmap.rm_all_upmap_prims(cct, &pending_inc, pool_id);
+          ss << "cleared all pg_upmap_primary mappings for pool '" << pool_name << "'";
+        } else {
+          osdmap.rm_all_upmap_prims(cct, &pending_inc);
+          ss << "cleared all pg_upmap_primary mappings";
+        }
       }
       break;
 
