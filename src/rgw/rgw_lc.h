@@ -31,6 +31,9 @@ static std::string lc_index_lock_name = "lc_process";
 
 extern const char* LC_STATUS[];
 
+// Forward declaration
+struct LCBatchCounters;
+
 typedef enum {
   lc_uninitial = 0,
   lc_processing,
@@ -675,7 +678,8 @@ public:
 				  const std::multimap<std::string, lc_op>& prefix_map,
 				  ceph::async::spawn_throttle& workpool,
 				  boost::asio::yield_context yield,
-				  LCWorker* worker, time_t stop_at, bool once);
+				  LCWorker* worker, LCBatchCounters* batch_counters,
+				  time_t stop_at, bool once);
 };
 
 namespace rgw::lc {

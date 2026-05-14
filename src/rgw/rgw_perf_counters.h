@@ -96,6 +96,22 @@ enum {
   l_rgw_topic_last
 };
 
+enum {
+  l_rgw_lc_per_bucket_first = 18000,
+
+  l_rgw_lc_per_bucket_start_time,
+  l_rgw_lc_per_bucket_end_time,
+  l_rgw_lc_per_bucket_obj_scanned,
+  l_rgw_lc_per_bucket_obj_pending,
+  l_rgw_lc_per_bucket_obj_expired,
+  l_rgw_lc_per_bucket_obj_noncur_expired,
+  l_rgw_lc_per_bucket_obj_dm_expired,
+  l_rgw_lc_per_bucket_obj_transitioned,
+  l_rgw_lc_per_bucket_obj_mpu_aborted,
+
+  l_rgw_lc_per_bucket_last
+};
+
 namespace rgw::op_counters {
 
 struct CountersContainer {
@@ -129,3 +145,10 @@ public:
 };
 
 } // namespace rgw::persistent_topic_counters
+
+namespace rgw::lc_counters {
+
+std::shared_ptr<PerfCounters> get(const std::string& bucket_name,
+                                  const std::string& tenant);
+
+} // namespace rgw::lc_counters
