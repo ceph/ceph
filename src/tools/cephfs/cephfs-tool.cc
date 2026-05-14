@@ -46,6 +46,10 @@
 
 #include "cls/journal/cls_journal_types.h"
 
+#ifdef CEPH_LOCKSTAT
+#include "common/lockstat.h"
+#endif    
+
 using std::cerr;
 using std::cout;
 using std::endl;
@@ -173,6 +177,10 @@ struct BenchConfig {
   int msgr_workers;
   bool show_progress;
   int progress_interval;
+#ifdef CEPH_LOCKSTAT
+  string lockstat_dump_path;
+  uint64_t lockstat_threshold_ns;
+#endif
 };
 
 struct ThreadStats {
@@ -620,6 +628,38 @@ execute_perf_dump(struct ceph_mount_info* cmount, const string& output_path)
   }
 }
 
+#ifdef CEPH_LOCKSTAT
+// Helper function to dump lockstat data to a file with iteration and phase suffix
+void dump_lockstat_data(const string& base_path, int iteration, const string& phase) {
+  if (base_path.empty()) {
+    return;
+  }
+
+  // Create filename with iteration and phase: base_iter1_write.json
+  string output_path = base_path;
+  size_t dot_pos = output_path.find_last_of('.');
+  string extension = "";
+  if (dot_pos != string::npos) {
+    extension = output_path.substr(dot_pos);
+    output_path = output_path.substr(0, dot_pos);
+  }
+  output_path += "_iter" + std::to_string(iteration) + "_" + phase + extension;
+
+  std::ofstream ofs(output_path);
+  if (!ofs.is_open()) {
+    cerr << "Error: Could not open " << output_path << " for writing lockstat data." << endl;
+    return;
+  }
+
+  ceph::JSONFormatter formatter(true);
+  ceph::lockstat_detail::LockStatEntry::dump_formatted(&formatter);
+  formatter.flush(ofs);
+  ofs.close();
+
+  cout << "Lockstat data dumped to " << output_path << endl;
+}
+#endif
+
 // Worker function for Cleanup (Unlink) phase
 void bench_cleanup_worker(int thread_id,
                           int files_to_clean,
@@ -726,6 +766,20 @@ int do_bench(BenchConfig& config) {
     cerr << "Error: block-size cannot exceed 2GB due to API limitations." << endl;
     return 1;
   }
+
+#ifdef CEPH_LOCKSTAT
+  // Start lockstat collection if enabled
+  if (!config.lockstat_dump_path.empty()) {
+    auto threshold_ns = std::chrono::nanoseconds(config.lockstat_threshold_ns);
+    auto threshold = std::chrono::duration_cast<ceph::lockstat_detail::lockstat_clock::duration>(threshold_ns);
+    int rc = ceph::lockstat_detail::LockStatEntry::start(threshold);
+    if (rc != 0) {
+      cerr << "Warning: Failed to start lockstat collection: " << strerror(rc) << endl;
+    } else {
+      cout << "Lockstat collection started with threshold " << config.lockstat_threshold_ns << " ns" << endl;
+    }
+  }
+#endif
 
   // Create Main Mount
   struct ceph_mount_info *shared_cmount = NULL;
@@ -836,6 +890,13 @@ int do_bench(BenchConfig& config) {
 
     // --- WRITE PHASE ---
     cout << "Starting Write Phase..." << std::endl;
+
+#ifdef CEPH_LOCKSTAT
+    // Reset lockstat data before write phase
+    if (!config.lockstat_dump_path.empty()) {
+      ceph::lockstat_detail::LockStatEntry::reset_data();
+    }
+#endif
     std::vector<std::thread> threads;
     for (auto& s : write_stats) {
       s.bytes_transferred = 0;
@@ -915,6 +976,13 @@ int do_bench(BenchConfig& config) {
       json_formatter->close_section(); // write
     }
 
+#ifdef CEPH_LOCKSTAT
+    // Dump lockstat data after write phase
+    if (!config.lockstat_dump_path.empty()) {
+      dump_lockstat_data(config.lockstat_dump_path, iter, "write");
+    }
+#endif
+
     // --- REMOUNT / CACHE CLEAR ---
     if (!config.per_thread_mount) {
       if (int rc = ceph_unmount(shared_cmount); rc < 0) {
@@ -930,6 +998,14 @@ int do_bench(BenchConfig& config) {
 
     // --- READ PHASE ---
     cout << "Starting Read Phase..." << std::endl;
+
+#ifdef CEPH_LOCKSTAT
+    // Reset lockstat data before read phase
+    if (!config.lockstat_dump_path.empty()) {
+      ceph::lockstat_detail::LockStatEntry::reset_data();
+    }
+#endif
+
     threads.clear();
     std::vector<ThreadStats> read_stats(config.num_threads);
     thread_outputs = std::vector<std::stringstream>(config.num_threads);
@@ -1003,6 +1079,13 @@ int do_bench(BenchConfig& config) {
       json_formatter->close_section(); // read
       json_formatter->close_section(); // iteration
     }
+
+#ifdef CEPH_LOCKSTAT
+    // Dump lockstat data after read phase
+    if (!config.lockstat_dump_path.empty()) {
+      dump_lockstat_data(config.lockstat_dump_path, iter, "read");
+    }
+#endif
 
     // Cleanup for next iteration
     if (iter < config.iterations) {
@@ -1139,7 +1222,12 @@ int main(int argc, char **argv) {
     ("duration", po::value<int>(&config.duration)->default_value(0), "Limit each phase to N seconds (0 = no limit)")
     ("perf-dump", po::value<string>(&config.perf_dump_path), "File to dump performance counters to")
     ("progress", po::bool_switch(&config.show_progress), "Show progress and current bandwidth during benchmark")
-    ("progress-interval", po::value<int>(&config.progress_interval)->default_value(10), "Progress update interval in percent (1-100)");
+    ("progress-interval", po::value<int>(&config.progress_interval)->default_value(10), "Progress update interval in percent (1-100)")
+#ifdef CEPH_LOCKSTAT
+    ("lockstat-dump", po::value<string>(&config.lockstat_dump_path), "Base path for lockstat output files (iteration and phase will be appended)")
+    ("lockstat-threshold", po::value<uint64_t>(&config.lockstat_threshold_ns)->default_value(0), "Lockstat threshold in nanoseconds (0 = collect all)")
+#endif
+    ;
 
   // Hidden positional option for the sub-command
   po::options_description hidden("Hidden options");
