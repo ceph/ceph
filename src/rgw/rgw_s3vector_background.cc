@@ -57,7 +57,7 @@ private:
   struct LanceDBSessionDeleter {
     void operator()(LanceDBSession* session) const {
       if(session) {
-      lancedb_session_free(session);
+        lancedb_session_free(session);
       }
     }
   };
