@@ -7,6 +7,12 @@
   behavior is controlled by the new ``mgr_stats_period_autotune`` (default:
   ``true``) and ``mgr_stats_period_autotune_queue_threshold`` (default: ``100``)
   config options.
+* MON: Each monitor now reports four new perf counters covering its data
+  directory: ``data_disk_total_bytes``, ``data_disk_avail_bytes``,
+  ``data_disk_avail_percent``, and ``db_total_bytes`` (estimated on-disk size
+  of the key/value store). They surface automatically as ``ceph_mon_*``
+  Prometheus metrics via the ``prometheus`` mgr module and ``ceph-exporter``,
+  enabling trending of mon DB growth and filesystem free space.
 >=20.0.2
 
 * RGW: For `radosgw-admin account rm`, the `--purge-data` option previously applied only
