@@ -370,6 +370,7 @@ private:
 
 class RGWS3VectorPutVectors : public RGWS3VectorBase {
   rgw::s3vector::put_vectors_t configuration;
+  std::vector<rgw::s3vector::validation_error_t> validation_errors;
 public:
   explicit RGWS3VectorPutVectors(bufferlist&& data) : RGWS3VectorBase(std::move(data)) {}
 private:
@@ -399,7 +400,42 @@ private:
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::put_vectors(configuration, this, y);
+    op_ret = rgw::s3vector::put_vectors(configuration, this, y, validation_errors);
+  }
+
+  void send_response() override {
+    if (op_ret < 0 && !validation_errors.empty()) {
+      s->err.http_ret = 400;
+      s->err.err_code = "ValidationException";
+      s->err.message = "The requested action isn't valid.";
+      set_req_state_err(s, op_ret);
+      dump_errno(s);
+      JSONFormatter f;
+      f.open_object_section("");
+      ::encode_json("code", std::string("ValidationException"), &f);
+      ::encode_json("message", std::string("The requested action isn't valid."), &f);
+      f.open_array_section("fieldList");
+      for (const auto& err : validation_errors) {
+        f.open_object_section("");
+        ::encode_json("path", err.path, &f);
+        ::encode_json("message", err.message, &f);
+        f.close_section();
+      }
+      f.close_section(); // fieldList
+      f.close_section(); // root
+      std::stringstream ss;
+      f.flush(ss);
+      const auto body = ss.str();
+      // force_no_error=true to suppress the standard error body from end_header
+      end_header(s, this, "application/json", body.size(), false, true);
+      dump_body(s, body);
+      return;
+    }
+    if (op_ret) {
+      set_req_state_err(s, op_ret);
+    }
+    dump_errno(s);
+    end_header(s, this, "application/json");
   }
 };
 

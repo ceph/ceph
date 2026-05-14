@@ -1117,7 +1117,7 @@ namespace rgw::s3vector {
     }
   }
 
-  int put_vectors(const put_vectors_t& configuration, DoutPrefixProvider* dpp, optional_yield y) {
+  int put_vectors(const put_vectors_t& configuration, DoutPrefixProvider* dpp, optional_yield y, std::vector<validation_error_t>& errors) {
     log_configuration(dpp, "PutVectors", configuration);
     LanceDBTable* table = open_table(dpp, configuration.vector_bucket_name, configuration.index_name);
     if (!table) {
@@ -1206,50 +1206,60 @@ namespace rgw::s3vector {
     }
 
     unsigned int num_rows = 0;
-    for (const auto& vector : configuration.vectors) {
-      // key validation
+    for (size_t vi = 0; vi < configuration.vectors.size(); ++vi) {
+      const auto& vector = configuration.vectors[vi];
+      // validate key
       if (vector.key.empty()) {
-        ldpp_dout(dpp, 5) << "WARNING: s3vector skipping vector with empty key" << dendl;
+        ldpp_dout(dpp, 1) << "ERROR: s3vector vector with empty key at index " << vi << dendl;
+        errors.push_back({fmt::format("vectors[{}].key", vi), "must not be empty"});
         continue;
       }
-      // data validation
+      // validate data
       if (!vector.data) {
-        ldpp_dout(dpp, 5) << "WARNING: s3vector skipping vector with no data" << dendl;
+        ldpp_dout(dpp, 1) << "ERROR: s3vector vector with no data, key: " << vector.key << dendl;
+        errors.push_back({fmt::format("vectors[{}].data", vi), "missing data"});
         continue;
       }
+      // validate data dimension
       if (vector.data->size() != dimension) {
-        ldpp_dout(dpp, 5) << "WARNING: s3vector vector dimension mismatch, expected "
-          << dimension << " got " << vector.data->size() <<
-          ". skip vector with key: " << vector.key << dendl;
+        ldpp_dout(dpp, 1) << "ERROR: s3vector vector dimension mismatch, expected "
+          << dimension << " got " << vector.data->size() << " for key: " << vector.key << dendl;
+        errors.push_back({fmt::format("vectors[{}].data", vi),
+          fmt::format("expected dimension {} but got {}", dimension, vector.data->size())});
         continue;
       }
-      // metadata validation
+      // validate metadata JSON if exists
       const bool has_metadata = !vector.metadata.empty();
       JSONParser parser;
       if (has_metadata && !parser.parse(vector.metadata.c_str(), vector.metadata.size())) {
-        ldpp_dout(dpp, 5) << "WARNING: s3vector failed to parse metadata JSON for key: " << vector.key << dendl;
+        ldpp_dout(dpp, 1) << "ERROR: s3vector invalid metadata JSON for key: " << vector.key << dendl;
+        errors.push_back({fmt::format("vectors[{}].metadata", vi), "invalid JSON"});
         continue;
       }
-      // add key column
+      // add key
       key_builder.Append(vector.key).ok();
-      // add data column
-      auto list_builder = static_cast<arrow::FloatBuilder*>(data_builder.value_builder());
-      for (const auto & value : vector.data.value()) {
-        list_builder->Append(value).ok();
+      // add data
+      auto* float_list_builder = static_cast<arrow::FloatBuilder*>(data_builder.value_builder());
+      for (const auto& value : vector.data.value()) {
+        float_list_builder->Append(value).ok();
       }
       data_builder.Append().ok();
-      // add metadata column
+      // add metadata
       if (has_metadata) {
         metadata_builder.Append(vector.metadata).ok();
       } else {
         metadata_builder.AppendNull().ok();
       }
-      // add filterable columns
+      // add filterable metadata columns
       if (!filterable_builders.empty() && !has_metadata) {
+        // no metadata, all filterable columns will be null
         for (auto& fb : filterable_builders) {
           fb.builder->AppendNull().ok();
         }
-      } else if (has_metadata && !filterable_builders.empty()) {
+        ++num_rows;
+        continue;
+      }
+      if (has_metadata && !filterable_builders.empty()) {
         for (auto& fb : filterable_builders) {
           bool is_list_type = false;
           switch (fb.type) {
@@ -1263,39 +1273,56 @@ namespace rgw::s3vector {
               is_list_type = true;
               break;
           }
+          auto* field_obj = parser.find_obj(fb.name);
+          if (!field_obj) {
+            // column name does not exist in the metadata JSON, append null
+            fb.builder->AppendNull().ok();
+            continue;
+          }
+          if (is_list_type != field_obj->is_array()) {
+            // column/field type mismatch with JSON value type
+            errors.push_back({fmt::format("vectors[{}].metadata.{}", vi, fb.name), "invalid type"});
+            continue;
+          }
           std::vector<std::string> values;
           std::string value_str;
           try {
             if (is_list_type) {
-              JSONDecoder::decode_json(fb.name.c_str(), values, &parser);
+              decode_json_obj(values, field_obj);
             } else {
-              JSONDecoder::decode_json(fb.name.c_str(), value_str, &parser);
+              decode_json_obj(value_str, field_obj);
             }
           } catch (const JSONDecoder::err& e) {
-            ldpp_dout(dpp, 5) << "WARNING: s3vector failed to decode metadata field '" <<
-              fb.name << "' for key: " << vector.key << ". error: " << e.what() << dendl;
-          }
-          if (values.empty() && value_str.empty()) {
-            // either failed to decode or field doesn't exist, in both cases we append null
-            fb.builder->AppendNull().ok();
+            ldpp_dout(dpp, 1) << "ERROR: s3vector failed to decode metadata field '"
+              << fb.name << "' for key: " << vector.key << ". error: " << e.what() << dendl;
+            errors.push_back({fmt::format("vectors[{}].metadata.{}", vi, fb.name), "invalid type"});
             continue;
           }
           switch (fb.type) {
             case FilterableMetadataType::STRING:
+              // anything can go into a string column
               static_cast<arrow::StringBuilder*>(fb.builder.get())->Append(value_str).ok();
               break;
             case FilterableMetadataType::NUMBER:
               try {
                 static_cast<arrow::DoubleBuilder*>(fb.builder.get())->Append(std::stod(value_str)).ok();
               } catch (const std::logic_error&) {
-                fb.builder->AppendNull().ok();
+                ldpp_dout(dpp, 1) << "ERROR: s3vector filterable metadata field '"
+                  << fb.name << "' for key: " << vector.key << " expected number but got: " << value_str << dendl;
+                errors.push_back({fmt::format("vectors[{}].metadata.{}", vi, fb.name), "expected number"});
               }
               break;
-            case FilterableMetadataType::BOOLEAN: {
-              const bool bval = (value_str == "true" || value_str == "1");
-              static_cast<arrow::BooleanBuilder*>(fb.builder.get())->Append(bval).ok();
+            case FilterableMetadataType::BOOLEAN:
+              if (value_str == "true") {
+                static_cast<arrow::BooleanBuilder*>(fb.builder.get())->Append(true).ok();
+              } else if (value_str == "false") {
+                static_cast<arrow::BooleanBuilder*>(fb.builder.get())->Append(false).ok();
+              } else {
+                ldpp_dout(dpp, 1) << "ERROR: s3vector filterable metadata field '"
+                  << fb.name << "' for key: " << vector.key << " expected boolean but got: " << value_str << dendl;
+                errors.push_back({fmt::format("vectors[{}].metadata.{}", vi, fb.name), "expected boolean"});
+              }
               break;
-            }
             case FilterableMetadataType::STRING_LIST: {
               auto* list_builder = static_cast<arrow::ListBuilder*>(fb.builder.get());
               auto* value_builder = static_cast<arrow::StringBuilder*>(list_builder->value_builder());
@@ -1313,7 +1340,10 @@ namespace rgw::s3vector {
                 try {
                   value_builder->Append(std::stod(v)).ok();
                 } catch (const std::logic_error&) {
-                  value_builder->AppendNull().ok();
+                  ldpp_dout(dpp, 1) << "ERROR: s3vector filterable metadata field '"
+                    << fb.name << "' for key: " << vector.key << " expected number in list but got: " << v << dendl;
+                  errors.push_back({fmt::format("vectors[{}].metadata.{}", vi, fb.name), "expected number"});
+                  break;
                 }
               }
               break;
@@ -1323,7 +1353,16 @@ namespace rgw::s3vector {
               auto* value_builder = static_cast<arrow::BooleanBuilder*>(list_builder->value_builder());
               list_builder->Append().ok();
               for (const auto& v : values) {
-                value_builder->Append(v == "true" || v == "1").ok();
+                if (v == "true") {
+                  value_builder->Append(true).ok();
+                } else if (v == "false") {
+                  value_builder->Append(false).ok();
+                } else {
+                  ldpp_dout(dpp, 1) << "ERROR: s3vector filterable metadata field '"
+                    << fb.name << "' for key: " << vector.key << " expected boolean in list but got: " << v << dendl;
+                  errors.push_back({fmt::format("vectors[{}].metadata.{}", vi, fb.name), "expected boolean"});
+                  break;
+                }
               }
               break;
             }
@@ -1333,8 +1372,7 @@ namespace rgw::s3vector {
       ++num_rows;
     }
 
-    if (num_rows == 0) {
-      ldpp_dout(dpp, 1) << "ERROR: s3vector no valid vectors to insert" << dendl;
+    if (!errors.empty()) {
       lancedb_table_free(table);
       return -EINVAL;
     }
