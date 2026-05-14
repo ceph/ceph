@@ -11,28 +11,31 @@ on:
     types: [created]
 
 jobs:
-  router:
+  audit:
+    name: Backport Audit
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
       issues: write
       statuses: write
-    outputs:
-      should_run_audit: ${{ steps.decide.outputs.run_audit }}
-    env:
-      ORG_TOKEN: ${{ secrets.ORG_READ_PAT }}
     steps:
-      - id: decide
-        name: Determine Action
+      - id: router
+        name: Evaluate Workflow Routing & Overrides
         uses: actions/github-script@v8
+        env:
+          ORG_TOKEN: ${{ secrets.ORG_READ_PAT }}
         with:
           script: |
             const eventName = context.eventName;
             const payload = context.payload;
+            const actor = context.actor;
+            const isBot = actor === 'github-actions[bot]' || actor === 'github-actions';
             
             core.info(`[Router] Evaluating event: ${eventName}, action: ${payload.action || 'N/A'}`);
 
-            // Trigger via Comment Override
+            // ==========================================
+            // 1. HANDLE ISSUE COMMENTS (/audit commands)
+            // ==========================================
             if (eventName === 'issue_comment') {
               core.info('[Router] Processing issue_comment event.');
               if (!payload.issue.pull_request) {
@@ -40,43 +43,88 @@ jobs:
                 core.setOutput('run_audit', 'false');
                 return;
               }
-              if (payload.comment.body.trim().startsWith('/audit retest')) {
+              
+              const commentBody = payload.comment.body.trim();
+              
+              if (commentBody.startsWith('/audit retest')) {
                 core.info('[Router] Detected /audit retest command. Triggering audit.');
                 core.setOutput('run_audit', 'true');
-              } else {
-                core.info('[Router] Comment is not an audit command. Skipping.');
+                return;
+              } 
+              
+              if (commentBody.startsWith('/audit override')) {
+                core.info(`[Router] Validating if user @${actor} is authorized to apply override.`);
+                let isAuthorized = false;
+                try {
+                  const { data: permData } = await github.rest.repos.getCollaboratorPermissionLevel({
+                    owner: context.repo.owner, repo: context.repo.repo, username: actor
+                  });
+                  if (permData.permission === 'admin' || permData.permission === 'maintain') isAuthorized = true;
+                } catch (e) { 
+                  core.info(`[Router] Failed to fetch repo permissions: ${e.message}`); 
+                }
+
+                if (!isAuthorized && context.repo.owner === 'ceph' && process.env.ORG_TOKEN) {
+                  try {
+                    const orgOctokit = github.getOctokit(process.env.ORG_TOKEN);
+                    const { data: teamData } = await orgOctokit.rest.teams.getMembershipForUserInOrg({
+                      org: 'ceph', team_slug: 'ceph-release-manager', username: actor
+                    });
+                    isAuthorized = (teamData.state === 'active');
+                  } catch (e) { 
+                    core.info(`[Router] Failed to fetch org team membership: ${e.message}`); 
+                  }
+                }
+                
+                if (isAuthorized) {
+                  core.info(`[Router] User @${actor} is authorized. Applying override and stripping fail label.`);
+                  await github.rest.issues.addLabels({
+                    owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, labels: ['releng-audit-override']
+                  });
+                  try {
+                    await github.rest.issues.removeLabel({
+                      owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: 'releng-audit-fail'
+                    });
+                  } catch (e) {}
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number,
+                    body: `✅ **Audit Override Applied** by @${actor}.`
+                  });
+                } else {
+                  core.info(`[Router] User @${actor} NOT authorized. Removing override label.`);
+                  core.setFailed(`User @${actor} is not authorized to override audits.`);
+                }
                 core.setOutput('run_audit', 'false');
+                return;
               }
+
+              core.info('[Router] Comment is not an audit command. Skipping.');
+              core.setOutput('run_audit', 'false');
               return;
             }
 
+            // ==========================================
+            // 2. HANDLE PR EVENTS
+            // ==========================================
             const hasFailLabel = payload.pull_request?.labels.some(l => l.name === 'releng-audit-fail');
             const hasPassLabel = payload.pull_request?.labels.some(l => l.name === 'releng-audit-pass');
             const hasOverrideLabel = payload.pull_request?.labels.some(l => l.name === 'releng-audit-override');
 
             core.info(`[Router] Current labels - Fail: ${hasFailLabel}, Pass: ${hasPassLabel}, Override: ${hasOverrideLabel}`);
 
-            // On Push: Run audit unless it's already in a failed state
+            // --- SYNCHRONIZE (New Commits) ---
             if (eventName === 'pull_request_target' && payload.action === 'synchronize') {
               core.info('[Router] Processing synchronize event (new commits).');
-              // Strip the override label if present, as new commits invalidate previous approvals
               if (hasOverrideLabel) {
                 core.info('[Router] PR had override label. Removing it because of new commits.');
                 try {
-                  await github.rest.issues.removeLabel({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    issue_number: context.issue.number,
-                    name: 'releng-audit-override'
-                  });
+                  await github.rest.issues.removeLabel({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: 'releng-audit-override' });
                   await github.rest.issues.createComment({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    issue_number: context.issue.number,
-                    body: '⚠️ **Audit Override Removed**\n\nNew commits were pushed to this PR, so the previous `releng-audit-override` has been removed. If this PR still requires an override, please request a new review and have an authorized user relabel the PR.'
+                    owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number,
+                    body: '⚠️ **Audit Override Removed**\n\nNew commits were pushed to this PR, so the previous `releng-audit-override` has been removed.'
                   });
-                } catch (error) {
-                  core.info(`[Router] Failed to remove override label: ${error.message}`);
+                } catch (e) {
+                  core.info(`[Router] Failed to remove override label: ${e.message}`);
                 }
               }
 
@@ -87,18 +135,12 @@ jobs:
                 return;
               }
 
-              // Strip the pass label on new commits so the PR reflects a pending state
               if (hasPassLabel) {
                 core.info('[Router] Removing pass label so PR reflects pending state.');
-                try {
-                  await github.rest.issues.removeLabel({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    issue_number: context.issue.number,
-                    name: 'releng-audit-pass'
-                  });
-                } catch (error) {
-                  core.info(`[Router] Failed to remove pass label: ${error.message}`);
+                try { 
+                  await github.rest.issues.removeLabel({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: 'releng-audit-pass' }); 
+                } catch (e) {
+                  core.info(`[Router] Failed to remove pass label: ${e.message}`);
                 }
               }
 
@@ -107,123 +149,74 @@ jobs:
               return;
             }
 
-            // Trigger via Label Removal
+            // --- UNLABELED ---
             if (eventName === 'pull_request_target' && payload.action === 'unlabeled') {
               const removedLabel = payload.label.name;
               core.info(`[Router] Processing unlabeled event for label: ${removedLabel}`);
-              if (removedLabel === 'releng-audit-fail' || removedLabel === 'releng-audit-pass' || removedLabel === 'releng-audit-override') {
-                if (context.actor === 'github-actions[bot]' || context.actor === 'github-actions') {
+              if (['releng-audit-fail', 'releng-audit-pass', 'releng-audit-override'].includes(removedLabel)) {
+                if (isBot) {
                   core.info(`[Router] Label ${removedLabel} removed by bot. Skipping audit trigger.`);
                   core.setOutput('run_audit', 'false');
                   return;
                 }
-
-                // If PR already has override, prevent manual unlabeling of 'fail' from triggering a fresh audit.
                 if (hasOverrideLabel && removedLabel === 'releng-audit-fail') {
-                  core.info(`[Router] PR has releng-audit-override. Ignoring manual removal of releng-audit-fail to prevent race conditions.`);
+                  core.info(`[Router] PR has releng-audit-override but removed releng-audit-fail. Skipping audit.`);
                   core.setOutput('run_audit', 'false');
                   return;
                 }
                 
                 core.info(`[Router] User @${context.actor} removed ${removedLabel}. Stripping other state labels and triggering fresh audit.`);
-                try {
-                  await github.rest.issues.removeLabel({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: 'releng-audit-fail' });
-                } catch (e) {}
-                try {
-                  await github.rest.issues.removeLabel({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: 'releng-audit-pass' });
-                } catch (e) {}
-                
+                try { await github.rest.issues.removeLabel({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: 'releng-audit-fail' }); } catch (e) {}
+                try { await github.rest.issues.removeLabel({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: 'releng-audit-pass' }); } catch (e) {}
                 core.setOutput('run_audit', 'true');
                 return;
               }
             }
 
-            // Enforce permissions on manual label additions
+            // --- LABELED ---
             if (eventName === 'pull_request_target' && payload.action === 'labeled') {
               const labelName = payload.label.name;
-              const actor = context.actor;
-              const isBot = actor === 'github-actions[bot]' || actor === 'github-actions';
               core.info(`[Router] Processing labeled event for label: ${labelName} by actor: ${actor}`);
-
-              // 1. Strictly block humans from applying machine labels
-              if (labelName === 'releng-audit-pass' || labelName === 'releng-audit-fail') {
-                if (!isBot) {
-                  core.warning(`[Router] User @${actor} cannot manually apply ${labelName}. Stripping labels and forcing audit.`);
-                  
-                  try {
-                    await github.rest.issues.removeLabel({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: 'releng-audit-fail' });
-                  } catch (e) {}
-                  try {
-                    await github.rest.issues.removeLabel({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: 'releng-audit-pass' });
-                  } catch (e) {}
-                  
-                  core.setOutput('run_audit', 'true');
-                  return;
-                }
+              
+              // Block humans from applying machine labels
+              if (!isBot && (labelName === 'releng-audit-pass' || labelName === 'releng-audit-fail')) {
+                core.warning(`[Router] User @${actor} cannot manually apply ${labelName}. Stripping labels and forcing audit.`);
+                try { await github.rest.issues.removeLabel({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: 'releng-audit-fail' }); } catch (e) {}
+                try { await github.rest.issues.removeLabel({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: 'releng-audit-pass' }); } catch (e) {}
+                core.setOutput('run_audit', 'true');
+                return;
               }
 
-              // 2. Enforce authorization for the override label
+              // Enforce permissions for manual override label application
               if (labelName === 'releng-audit-override') {
                 if (!isBot) {
                   core.info(`[Router] Validating if user @${actor} is authorized to apply override.`);
                   let isAuthorized = false;
                   try {
-                    const { data: permData } = await github.rest.repos.getCollaboratorPermissionLevel({
-                      owner: context.repo.owner,
-                      repo: context.repo.repo,
-                      username: actor
-                    });
-                    if (permData.permission === 'admin' || permData.permission === 'maintain') {
-                      isAuthorized = true;
-                    }
-                  } catch (error) {
-                    core.info(`[Router] Failed to fetch repo permissions: ${error.message}`);
+                    const { data: permData } = await github.rest.repos.getCollaboratorPermissionLevel({ owner: context.repo.owner, repo: context.repo.repo, username: actor });
+                    if (permData.permission === 'admin' || permData.permission === 'maintain') isAuthorized = true;
+                  } catch (e) {
+                    core.info(`[Router] Failed to fetch repo permissions: ${e.message}`);
                   }
 
                   if (!isAuthorized && context.repo.owner === 'ceph' && process.env.ORG_TOKEN) {
                     try {
                       const orgOctokit = github.getOctokit(process.env.ORG_TOKEN);
-                      const { data: teamData } = await orgOctokit.rest.teams.getMembershipForUserInOrg({
-                        org: 'ceph',
-                        team_slug: 'ceph-release-manager',
-                        username: actor
-                      });
+                      const { data: teamData } = await orgOctokit.rest.teams.getMembershipForUserInOrg({ org: 'ceph', team_slug: 'ceph-release-manager', username: actor });
                       isAuthorized = (teamData.state === 'active');
-                    } catch (error) {
-                      core.info(`[Router] Failed to fetch org team membership: ${error.message}`);
+                    } catch (e) {
+                      core.info(`[Router] Failed to fetch org team membership: ${e.message}`);
                     }
                   }
 
                   if (!isAuthorized) {
                     core.info(`[Router] User @${actor} NOT authorized. Removing override label.`);
-                    await github.rest.issues.removeLabel({
-                      owner: context.repo.owner,
-                      repo: context.repo.repo,
-                      issue_number: context.issue.number,
-                      name: labelName
-                    });
+                    await github.rest.issues.removeLabel({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: labelName });
                     core.setFailed(`User @${actor} is not authorized to override audits.`);
-                    core.setOutput('run_audit', 'false');
-                    return;
                   } else {
                     core.info(`[Router] User @${actor} is authorized. Stripping fail/pass labels to visually unblock PR.`);
-                    // Authorized: Strip the failure label so the PR is visually unblocked
-                    try {
-                      await github.rest.issues.removeLabel({
-                        owner: context.repo.owner,
-                        repo: context.repo.repo,
-                        issue_number: context.issue.number,
-                        name: 'releng-audit-fail'
-                      });
-                    } catch (e) {}
-                    try {
-                      await github.rest.issues.removeLabel({
-                        owner: context.repo.owner,
-                        repo: context.repo.repo,
-                        issue_number: context.issue.number,
-                        name: 'releng-audit-pass'
-                      });
-                    } catch (e) {}
+                    try { await github.rest.issues.removeLabel({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: 'releng-audit-fail' }); } catch (e) {}
+                    try { await github.rest.issues.removeLabel({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: 'releng-audit-pass' }); } catch (e) {}
                   }
                 } else {
                   core.info(`[Router] Bot applied ${labelName}. Permitted.`);
@@ -235,7 +228,7 @@ jobs:
               return;
             }
 
-            // Initial PR Creation or Reopen
+            // --- OPENED / REOPENED ---
             if (eventName === 'pull_request_target' && (payload.action === 'opened' || payload.action === 'reopened')) {
               core.info(`[Router] PR ${payload.action}. Triggering audit.`);
               core.setOutput('run_audit', 'true');
@@ -245,109 +238,39 @@ jobs:
             core.info('[Router] Event did not match any trigger criteria. Skipping audit.');
             core.setOutput('run_audit', 'false');
 
-  audit:
-    needs: router
-    if: needs.router.outputs.should_run_audit == 'true'
-    runs-on: ubuntu-latest
-    steps:
       - name: Checkout Trusted Base Repository
+        if: steps.router.outputs.run_audit == 'true'
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
           
       - name: Setup Python
+        if: steps.router.outputs.run_audit == 'true'
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
       - name: Install Dependencies
+        if: steps.router.outputs.run_audit == 'true'
         run: pip install GitPython python-redmine requests
 
       - name: Run PTL Audit
+        if: steps.router.outputs.run_audit == 'true'
         env:
           PTL_TOOL_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PTL_TOOL_REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY }}
           PTL_TOOL_BASE_PROJECT: ${{ github.repository_owner }}
           PTL_TOOL_BASE_REPO: ${{ github.event.repository.name }}
         run: |
-          # Note: --audit-label is now implied by --ci-mode
-          python src/script/ptl-tool.py --debug --ci-mode --audit ${{ github.event.pull_request.number || github.event.issue.number }}
+          PR_NUMBER="${{ github.event.pull_request.number || github.event.issue.number }}"
+          echo "Fetching latest labels for PR $PR_NUMBER to check for late-applied overrides..."
+          LABELS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/issues/$PR_NUMBER/labels" | jq -r '.[].name')
+          
+          if echo "$LABELS" | grep -q "releng-audit-override"; then
+            echo "PR has releng-audit-override. Skipping audit execution to prevent reapplying releng-audit-fail."
+            exit 0
+          fi
 
-  override:
-    if: github.event_name == 'issue_comment' && github.event.issue.pull_request && startsWith(github.event.comment.body, '/audit override')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check Team Membership and Override
-        uses: actions/github-script@v8
-        env:
-          ORG_TOKEN: ${{ secrets.ORG_READ_PAT }} 
-        with:
-          script: |
-            const username = context.payload.comment.user.login;
-            try {
-              let isAuthorized = false;
-              
-              // 1. Check if the user has admin or maintain rights on the repository
-              try {
-                const { data: permData } = await github.rest.repos.getCollaboratorPermissionLevel({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  username: username
-                });
-                if (permData.permission === 'admin' || permData.permission === 'maintain') {
-                  isAuthorized = true;
-                }
-              } catch (error) {
-                console.log(`Could not fetch repo permissions: ${error.message}`);
-              }
+          python src/script/ptl-tool.py --debug --ci-mode --audit $PR_NUMBER
 
-              // 2. If not authorized by repo permissions, check for ceph-release-manager team membership
-              if (!isAuthorized && context.repo.owner === 'ceph' && process.env.ORG_TOKEN) {
-                try {
-                  const orgOctokit = github.getOctokit(process.env.ORG_TOKEN);
-                  const { data: teamData } = await orgOctokit.rest.teams.getMembershipForUserInOrg({
-                    org: 'ceph',
-                    team_slug: 'ceph-release-manager',
-                    username: username
-                  });
-                  isAuthorized = (teamData.state === 'active');
-                } catch (error) {
-                  console.log(`Could not fetch team membership: ${error.message}`);
-                }
-              }
-              
-              if (isAuthorized) {
-                const { data: pr } = await github.rest.pulls.get({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  pull_number: context.issue.number
-                });
-                
-                await github.rest.issues.addLabels({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: context.issue.number,
-                  labels: ['releng-audit-override']
-                });
-
-                try {
-                  await github.rest.issues.removeLabel({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    issue_number: context.issue.number,
-                    name: 'releng-audit-fail'
-                  });
-                } catch (e) {}
-
-                await github.rest.issues.createComment({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: context.issue.number,
-                  body: `✅ **Audit Override Applied** by @${username}.`
-                });
-              } else {
-                core.setFailed(`User @${username} is not authorized to override audits (requires repo maintainer/admin or ceph-release-manager team).`);
-              }
-            } catch (error) {
-              core.setFailed(`Authorization failed: ${error.message}`);
-            }
