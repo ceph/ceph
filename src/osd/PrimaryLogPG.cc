@@ -15460,21 +15460,21 @@ bool PrimaryLogPG::pool_migration_source_delete(hobject_t oid)
   // Lock acquired successfully - remove from pending set
   pool_migration_source_delete_pending_lock.erase(oid);
 
+  epoch_t last_peering_reset = get_last_peering_reset();
   ctx->register_on_finish(
-            [this, oid]() {
+            [this, oid, last_peering_reset]() {
               dout(20) << __func__ << " pool migration finished migrating " << oid << dendl;
-              auto i = recovering.find(oid);
-              if (i != recovering.end()) {
-                // Normal case, object is in recovery list
-                object_stat_sum_t stat_diff;
-                new_pool_migration_interval_in_flight = false;
-                on_global_recover(oid, stat_diff, false);
-              } else {
-                // Object was removed from the recovering list when OSD went down/up?
-                dout(20) << __func__ << " object not in recovering" << dendl;
-                new_pool_migration_interval_in_flight = false;
-                pool_migrations_in_flight.erase(oid);
+              // Only process if PG hasn't been reset since we started this operation
+              if (last_peering_reset != get_last_peering_reset()) {
+                dout(20) << __func__ << " cb->lpr " << last_peering_reset <<
+                            " current lpr " << get_last_peering_reset() << dendl;
+                return;
               }
+              auto i = recovering.find(oid);
+              ceph_assert(i != recovering.end());
+              object_stat_sum_t stat_diff;
+              new_pool_migration_interval_in_flight = false;
+              on_global_recover(oid, stat_diff, false);
               while (!pool_migration_source_delete_pending_lock.empty()) {
                 hobject_t oid = *pool_migration_source_delete_pending_lock.begin();
                 if (oid != pool_migration_watermark) {
