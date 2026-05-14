@@ -1343,11 +1343,12 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
   }
   reclaim_state->advance(config.reclaim_bytes_per_cycle);
 
-  DEBUG("reclaiming {} {}~{}",
-        rewrite_gen_printer_t{reclaim_state->generation},
-        reclaim_state->start_pos,
-        reclaim_state->end_pos);
   double pavail_ratio = get_projected_available_ratio();
+  INFO("reclaiming {} {}~{}, projected_avail_ratio={}",
+       rewrite_gen_printer_t{reclaim_state->generation},
+       reclaim_state->start_pos,
+       reclaim_state->end_pos,
+       pavail_ratio);
   sea_time_point start = seastar::lowres_system_clock::now();
 
   // Backref-tree doesn't support tree-read during tree-updates with parallel
@@ -1415,8 +1416,8 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
       ).safe_then([this, FNAME, pavail_ratio, start, &reclaimed, &runs] {
         stats.reclaiming_bytes += reclaimed;
         auto d = seastar::lowres_system_clock::now() - start;
-        DEBUG("duration: {}, pavail_ratio before: {}, repeats: {}",
-              d, pavail_ratio, runs);
+        INFO("reclaim_cycle_done duration: {}, pavail_ratio before: {}, repeats: {}",
+             d, pavail_ratio, runs);
         if (reclaim_state->is_complete()) {
           auto segment_to_release = reclaim_state->get_segment_id();
           INFO("reclaim finish {}, reclaimed alive/total={}",
