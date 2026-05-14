@@ -195,24 +195,31 @@ class NFSService(CephService):
 
         if spec.enable_rdma:
             from cephadm.serve import CephadmServe
-            rdma_devices = self.mgr.wait_async(
-                CephadmServe(self.mgr).get_rdma_devices(host))
-            if not rdma_devices:
-                raise OrchestratorError(
-                    f'NFS RDMA is enabled but host {host} has no RDMA devices. '
-                    "Run 'cephadm list-rdma' on the host to verify RDMA is available."
+            # During a cluster upgrade, prepare_create run on the asyncio
+            # event-loop thread; a nested wait_async(cephadm list-rdma) there would
+            # block the loop. Skip the check while upgrade_state is set.
+            if self.mgr.upgrade.upgrade_state is not None:
+                self.mgr.log.info('NFS: RDMA list-rdma skipped (cluster upgrade in progress)')
+            else:
+                rdma_devices = self.mgr.wait_async(
+                    CephadmServe(self.mgr).get_rdma_devices(host)
                 )
-            if bind_addr:
-                bind_ip = bind_addr.split('/')[0]
-                iface = self.mgr.cache.get_interface_for_ip(host, bind_ip)
-                rdma_netdevs = {d.get('netdev', '') for d in rdma_devices}
-                if iface and iface not in rdma_netdevs:
+                if not rdma_devices:
                     raise OrchestratorError(
-                        f'NFS RDMA is enabled with bind address {bind_addr} on host {host}, '
-                        f'but interface {iface} (for this IP) is not RDMA-capable. '
-                        f'RDMA netdevs on host: {sorted(rdma_netdevs)}. '
-                        "Use an IP on an RDMA-capable interface or run 'rdma link show' on the host."
+                        f'NFS RDMA is enabled but host {host} has no RDMA devices. '
+                        "Run 'cephadm list-rdma' on the host to verify RDMA is available."
                     )
+                if bind_addr:
+                    bind_ip = bind_addr.split('/')[0]
+                    iface = self.mgr.cache.get_interface_for_ip(host, bind_ip)
+                    rdma_netdevs = {d.get('netdev', '') for d in rdma_devices}
+                    if iface and iface not in rdma_netdevs:
+                        raise OrchestratorError(
+                            f'NFS RDMA is enabled with bind address {bind_addr} on host {host}, '
+                            f'but interface {iface} (for this IP) is not RDMA-capable. '
+                            f'RDMA netdevs on host: {sorted(rdma_netdevs)}. '
+                            "Use an IP on an RDMA-capable interface or run 'rdma link show' on the host."
+                        )
 
         if monitoring_ip:
             daemon_spec.port_ips.update({str(monitoring_port): monitoring_ip})

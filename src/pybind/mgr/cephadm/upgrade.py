@@ -743,6 +743,7 @@ class CephadmUpgrade:
                 })
                 return False
             except Exception as e:
+                logger.exception('Upgrade: unexpected exception during _do_upgrade')
                 self._fail_upgrade('UPGRADE_EXCEPTION', {
                     'severity': 'error',
                     'summary': 'Upgrade: failed due to an unexpected exception',
@@ -1118,6 +1119,7 @@ class CephadmUpgrade:
         try:
             j = json.loads(out)
         except Exception:
+            logger.exception('Upgrade: failed to parse quorum_status JSON: %s', out)
             raise OrchestratorError('failed to parse quorum status')
 
         mons = [m['name'] for m in j['monmap']['mons']]
@@ -1401,6 +1403,11 @@ class CephadmUpgrade:
                 )
                 self.mgr.cache.metadata_up_to_date[d.hostname] = False
             except Exception as e:
+                logger.exception(
+                    'Upgrade: %s daemon %s on host %s failed',
+                    action.lower(),
+                    d.name(),
+                    d.hostname)
                 self._fail_upgrade('UPGRADE_REDEPLOY_DAEMON', {
                     'severity': 'warning',
                     'summary': f'{action} daemon {d.name()} on host {d.hostname} failed.',
