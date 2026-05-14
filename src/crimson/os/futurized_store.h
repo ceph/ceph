@@ -199,7 +199,7 @@ public:
       uint64_t len,
       uint32_t op_flags = 0) = 0;
 
-    virtual unsigned get_max_attr_name_length() const = 0;
+    virtual seastar::future<unsigned> get_max_attr_name_length() const = 0;
   };
 
 public:

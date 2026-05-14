@@ -118,7 +118,7 @@ public:
       uint64_t len,
       uint32_t op_flags) override final;
 
-    unsigned get_max_attr_name_length() const override final;
+    seastar::future<unsigned> get_max_attr_name_length() const override final;
 
   public:
     // only exposed to CyanStore

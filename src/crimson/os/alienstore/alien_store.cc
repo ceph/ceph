@@ -580,10 +580,10 @@ seastar::future<store_statfs_t> AlienStore::pool_statfs(int64_t pool_id) const
   });
 }
 
-unsigned AlienStore::get_max_attr_name_length() const
+seastar::future<unsigned> AlienStore::get_max_attr_name_length() const
 {
   logger().info("{}", __func__);
-  return 256;
+  return seastar::make_ready_future<unsigned>(256);
 }
 
 seastar::future<struct stat> AlienStore::stat(

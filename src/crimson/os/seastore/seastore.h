@@ -181,8 +181,8 @@ public:
       uint64_t len,
       uint32_t op_flags = 0) override final;
 
-    unsigned get_max_attr_name_length() const override final {
-      return 256;
+    seastar::future<unsigned> get_max_attr_name_length() const override final {
+      return seastar::make_ready_future<unsigned>(256);
     }
 
     omap_root_t select_log_omap_root(Onode& onode) const;

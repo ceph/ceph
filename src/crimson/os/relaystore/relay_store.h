@@ -212,7 +212,7 @@ public:
       return with_store<&base_t::fiemap>(c, oid, off, len, op_flags);
     }
 
-    unsigned get_max_attr_name_length() const final
+    seastar::future<unsigned> get_max_attr_name_length() const final
     {
       return with_store<&base_t::get_max_attr_name_length>();
     }

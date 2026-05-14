@@ -101,7 +101,7 @@ public:
   uuid_d get_fsid() const override;
   seastar::future<store_statfs_t> stat() const override;
   seastar::future<store_statfs_t> pool_statfs(int64_t pool_id) const override;
-  unsigned get_max_attr_name_length() const override;
+  seastar::future<unsigned> get_max_attr_name_length() const override;
   seastar::future<struct stat> stat(
     CollectionRef,
     const ghobject_t&,

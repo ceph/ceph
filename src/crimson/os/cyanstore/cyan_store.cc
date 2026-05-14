@@ -1059,10 +1059,10 @@ uuid_d CyanStore::get_fsid() const
   return osd_fsid;
 }
 
-unsigned CyanStore::Shard::get_max_attr_name_length() const
+seastar::future<unsigned> CyanStore::Shard::get_max_attr_name_length() const
 {
   // arbitrary limitation exactly like in the case of MemStore.
-  return 256;
+  return seastar::make_ready_future<unsigned>(256);
 }
 
 CyanStore::Shard::read_errorator::future<std::map<uint64_t, uint64_t>>
