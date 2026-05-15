@@ -31,6 +31,31 @@ jobs:
             const actor = context.actor;
             const isBot = actor === 'github-actions[bot]' || actor === 'github-actions';
             
+            async function checkAuthorization(username) {
+              let authorized = false;
+              try {
+                const { data: permData } = await github.rest.repos.getCollaboratorPermissionLevel({
+                  owner: context.repo.owner, repo: context.repo.repo, username: username
+                });
+                authorized = (permData.permission === 'admin' || permData.permission === 'maintain')
+              } catch (e) { 
+                core.info(`[Router] Failed to fetch repo permissions: ${e.message}`); 
+              }
+
+              if (!authorized && context.repo.owner === 'ceph' && process.env.ORG_TOKEN) {
+                try {
+                  const orgOctokit = github.getOctokit(process.env.ORG_TOKEN);
+                  const { data: teamData } = await orgOctokit.rest.teams.getMembershipForUserInOrg({
+                    org: 'ceph', team_slug: 'ceph-release-manager', username: username
+                  });
+                  authorized = (teamData.state === 'active');
+                } catch (e) { 
+                  core.info(`[Router] Failed to fetch org team membership: ${e.message}`); 
+                }
+              }
+              return authorized;
+            }
+
             core.info(`[Router] Evaluating event: ${eventName}, action: ${payload.action || 'N/A'}`);
 
             // ==========================================
@@ -54,27 +79,7 @@ jobs:
               
               if (commentBody.startsWith('/audit override')) {
                 core.info(`[Router] Validating if user @${actor} is authorized to apply override.`);
-                let isAuthorized = false;
-                try {
-                  const { data: permData } = await github.rest.repos.getCollaboratorPermissionLevel({
-                    owner: context.repo.owner, repo: context.repo.repo, username: actor
-                  });
-                  if (permData.permission === 'admin' || permData.permission === 'maintain') isAuthorized = true;
-                } catch (e) { 
-                  core.info(`[Router] Failed to fetch repo permissions: ${e.message}`); 
-                }
-
-                if (!isAuthorized && context.repo.owner === 'ceph' && process.env.ORG_TOKEN) {
-                  try {
-                    const orgOctokit = github.getOctokit(process.env.ORG_TOKEN);
-                    const { data: teamData } = await orgOctokit.rest.teams.getMembershipForUserInOrg({
-                      org: 'ceph', team_slug: 'ceph-release-manager', username: actor
-                    });
-                    isAuthorized = (teamData.state === 'active');
-                  } catch (e) { 
-                    core.info(`[Router] Failed to fetch org team membership: ${e.message}`); 
-                  }
-                }
+                const isAuthorized = await checkAuthorization(actor);
                 
                 if (isAuthorized) {
                   core.info(`[Router] User @${actor} is authorized. Applying override and stripping fail label.`);
@@ -198,23 +203,7 @@ jobs:
               if (labelName === 'releng-audit-override') {
                 if (!isBot) {
                   core.info(`[Router] Validating if user @${actor} is authorized to apply override.`);
-                  let isAuthorized = false;
-                  try {
-                    const { data: permData } = await github.rest.repos.getCollaboratorPermissionLevel({ owner: context.repo.owner, repo: context.repo.repo, username: actor });
-                    if (permData.permission === 'admin' || permData.permission === 'maintain') isAuthorized = true;
-                  } catch (e) {
-                    core.info(`[Router] Failed to fetch repo permissions: ${e.message}`);
-                  }
-
-                  if (!isAuthorized && context.repo.owner === 'ceph' && process.env.ORG_TOKEN) {
-                    try {
-                      const orgOctokit = github.getOctokit(process.env.ORG_TOKEN);
-                      const { data: teamData } = await orgOctokit.rest.teams.getMembershipForUserInOrg({ org: 'ceph', team_slug: 'ceph-release-manager', username: actor });
-                      isAuthorized = (teamData.state === 'active');
-                    } catch (e) {
-                      core.info(`[Router] Failed to fetch org team membership: ${e.message}`);
-                    }
-                  }
+                  const isAuthorized = await checkAuthorization(actor);
 
                   if (!isAuthorized) {
                     core.info(`[Router] User @${actor} NOT authorized. Removing override label.`);
