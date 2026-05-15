@@ -10,6 +10,11 @@ on:
   issue_comment:
     types: [created]
 
+# Group concurrency by PR/Issue number to serialize executions and prevent race conditions
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: false
+
 jobs:
   audit:
     name: Backport Audit
