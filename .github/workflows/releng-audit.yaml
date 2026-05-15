@@ -227,6 +227,20 @@ jobs:
             // --- OPENED / REOPENED ---
             if (eventName === 'pull_request_target' && (payload.action === 'opened' || payload.action === 'reopened')) {
               core.info(`[Router] PR ${payload.action}. Triggering audit.`);
+              
+              if (payload.action === 'reopened' && hasOverrideLabel) {
+                core.info('[Router] PR had override label. Removing it on reopen.');
+                try {
+                  await github.rest.issues.removeLabel({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: 'releng-audit-override' });
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number,
+                    body: '⚠️ **Audit Override Removed**\n\nThis PR was reopened, so the previous `releng-audit-override` has been removed.'
+                  });
+                } catch (e) {
+                  core.info(`[Router] Failed to remove override label: ${e.message}`);
+                }
+              }
+
               core.setOutput('run_audit', 'true');
               return;
             }
