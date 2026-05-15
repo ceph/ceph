@@ -1955,7 +1955,7 @@ int BlueFS::migrate_file(
 {
   vector<byte> buf;
   bool buffered = cct->_conf->bluefs_buffered_io;
-  bufferlist bl;
+  constexpr uint64_t MIGRATION_CHUNK = 128ull << 20;
   mempool::bluefs::vector<bluefs_extent_t> old_fnode_extents;
   bluefs_fnode_t new_fnode;
 
@@ -1976,48 +1976,72 @@ int BlueFS::migrate_file(
 
   old_fnode_extents = file_ref->fnode.extents;
 
-  for (const auto &old_ext : old_fnode_extents) {
-    buf.resize(old_ext.length);
-    int r = _bdev_read_random(old_ext.bdev,
-      old_ext.offset,
-      old_ext.length,
-      (char*)&buf.at(0),
-      buffered);
-    if (r != 0) {
-      derr << __func__ << " failed to read 0x" << std::hex
-           << old_ext.offset << "~" << old_ext.length << std::dec
-           << " from " << (int)old_ext.bdev << dendl;
-      return -EIO;
+  dout(10) << __func__
+          << " start ino " << file_ref->fnode.ino
+          << " size 0x" << std::hex << file_ref->fnode.size
+          << std::dec
+          << " from_bdev " << from_bdev
+          << " to_bdev " << to_bdev
+          << dendl;
+
+  auto it = old_fnode_extents.begin();
+
+  while (it != old_fnode_extents.end()) {
+    bufferlist bl;
+    uint64_t batch = 0;
+    while (it != old_fnode_extents.end() &&
+      (batch == 0 || batch + it->length <= MIGRATION_CHUNK)) {
+
+      buf.resize(it->length);
+      int r = _bdev_read_random(it->bdev,
+        it->offset,
+        it->length,
+        (char*)&buf.at(0),
+        buffered);
+      if (r != 0) {
+        derr << __func__ << " failed to read 0x" << std::hex
+            << it->offset << "~" << it->length << std::dec
+            << " from " << (int)it->bdev << dendl;
+        return -EIO;
+      }
+      bl.append((char*)&buf[0], it->length);
+      batch += it->length;
+      ++it;
     }
-    bl.append((char*)&buf[0], old_ext.length);
-  }
+    bluefs_fnode_t chunk_fnode;
+    auto r = _allocate(to_bdev, bl.length(), 0,
+      &chunk_fnode, nullptr, 0, false);
+    if (r < 0) {
+      dout(10) << __func__ << " unable to allocate len 0x" << std::hex
+          << bl.length() << std::dec << " from " << (int)to_bdev
+          << ": " << cpp_strerror(r) << dendl;
+      return -ENOSPC;
+    }
 
-  auto r = _allocate(to_bdev, bl.length(), 0,
-    &new_fnode, nullptr, 0, false);
-  if (r < 0) {
-    dout(10) << __func__ << " unable to allocate len 0x" << std::hex
-        << bl.length() << std::dec << " from " << (int)to_bdev
-        << ": " << cpp_strerror(r) << dendl;
-    return -ENOSPC;
-  }
+    uint64_t off = 0;
+    for (auto& i : chunk_fnode.extents) {
+      bufferlist cur;
+      uint64_t cur_len = std::min<uint64_t>(i.length, bl.length() - off);
+      ceph_assert(cur_len > 0);
+      cur.substr_of(bl, off, cur_len);
+      int w = bdev[to_bdev]->write(i.offset, cur, buffered);
+      ceph_assert(w == 0);
+      off += cur_len;
+      vselector->add_usage(file_ref->vselector_hint, i);
+    }
 
-  uint64_t off = 0;
-  for (auto& i : new_fnode.extents) {
-    bufferlist cur;
-    uint64_t cur_len = std::min<uint64_t>(i.length, bl.length() - off);
-    ceph_assert(cur_len > 0);
-    cur.substr_of(bl, off, cur_len);
-    int w = bdev[to_bdev]->write(i.offset, cur, buffered);
-    ceph_assert(w == 0);
-    off += cur_len;
-    vselector->add_usage(file_ref->vselector_hint, i);
+    for (auto& ext : chunk_fnode.extents) {
+      new_fnode.append_extent(ext);
+    }
   }
+  new_fnode.recalc_allocated();
 
   file_ref->fnode.swap_extents(new_fnode);
   l.unlock();
 
   {
     std::lock_guard ll(log.lock);
+    std::lock_guard l(file_ref->lock);
     log.t.op_file_update(file_ref->fnode);
   }
 
@@ -2036,6 +2060,14 @@ int BlueFS::migrate_file(
   for (auto& [bdev, vec] : releases) {
     alloc[bdev]->release(vec);
   }
+
+  dout(10) << __func__
+          << " done ino " << file_ref->fnode.ino
+          << " migrated 0x" << std::hex << file_ref->fnode.allocated
+          << std::dec
+          << " from_bdev " << from_bdev
+          << " to_bdev " << to_bdev
+          << dendl;
 
   return 0;
 }
