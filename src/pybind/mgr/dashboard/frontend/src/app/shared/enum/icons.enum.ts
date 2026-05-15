@@ -29,6 +29,7 @@ export enum Icons {
   expand = 'maximize', // Expand cluster
   user = 'user', // User, Initiators
   users = 'user--multiple', // Users, Groups
+  replicate = 'replicate', // replicate
   share = 'share', // share
   key = 'password', // S3 Keys, Swift Keys, Authentication
   warning = 'warning--alt--filled', // Notification warning
@@ -175,7 +176,9 @@ export const ICON_TYPE = {
   rightArrow: 'caret--right',
   locked: 'locked',
   cloudMonitoring: 'cloud--monitoring',
-  trash: 'trash-can'
+  trash: 'trash-can',
+  replicate: 'replicate',
+  share: 'share'
 } as const;
 
 export const EMPTY_STATE_IMAGE = {
