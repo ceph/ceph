@@ -310,6 +310,134 @@ public:
   // OSD state manipulation methods
   
   /**
+   * Add a new OSD to the OSDMap.
+   * This initializes all necessary structures for the OSD but does NOT mark it as up.
+   * Use mark_osd_up() after this to bring the OSD online.
+   * Creates a new epoch.
+   *
+   * @param osdmap The OSDMap to modify
+   * @param osd_id The OSD ID to add
+   */
+  static void add_osd(OSDMap& osdmap, int osd_id)
+  {
+    // Expand max_osd if needed
+    if (osd_id >= osdmap.get_max_osd()) {
+      osdmap.set_max_osd(osd_id + 1);
+    }
+    
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    inc.fsid = osdmap.get_fsid();
+    
+    // Mark OSD as existing but down initially
+    inc.new_state[osd_id] = CEPH_OSD_EXISTS;
+    inc.new_weight[osd_id] = CEPH_OSD_IN;
+    
+    // Set default xinfo features for new OSD
+    osd_xinfo_t xinfo;
+    xinfo.features = CEPH_FEATUREMASK_SERVER_NAUTILUS |
+                     CEPH_FEATUREMASK_SERVER_OCTOPUS |
+                     CEPH_FEATUREMASK_SERVER_QUINCY;
+    inc.new_xinfo[osd_id] = xinfo;
+    
+    // Add the OSD to CRUSH
+    osdmap.crush->set_item_name(osd_id, "osd." + std::to_string(osd_id));
+    
+    osdmap.apply_incremental(inc);
+    
+    // Finalize CRUSH map after adding new OSD
+    osdmap.crush->finalize();
+  }
+  
+  static void add_osd(std::shared_ptr<OSDMap> osdmap, int osd_id)
+  {
+    add_osd(*osdmap, osd_id);
+  }
+  /**
+   * Add an OSD to a specific shard position in a PG's acting set.
+   * This uses pg_upmap to override CRUSH placement.
+   * 
+   * @param osdmap The OSDMap to modify
+   * @param pgid The PG to modify
+   * @param osd_id The OSD to add
+   * @param shard_pos The shard position (0-based) where the OSD should be placed
+   */
+  static void add_osd_to_acting_set(
+    OSDMap& osdmap,
+    pg_t pgid,
+    int osd_id,
+    int shard_pos)
+  {
+    // Get current acting set
+    std::vector<int> acting;
+    int primary;
+    osdmap.pg_to_acting_osds(pgid, &acting, &primary);
+    
+    // Ensure acting set is large enough
+    if (shard_pos >= static_cast<int>(acting.size())) {
+      // Extend acting set if needed
+      acting.resize(shard_pos + 1, CRUSH_ITEM_NONE);
+    }
+    
+    // Replace the OSD at the specified shard position
+    acting[shard_pos] = osd_id;
+    
+    // Apply using pg_upmap
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    inc.fsid = osdmap.get_fsid();
+    inc.new_pg_upmap[pgid] = mempool::osdmap::vector<int32_t>(
+      acting.begin(), acting.end());
+    
+    osdmap.apply_incremental(inc);
+  }
+
+  static void add_osd_to_acting_set(
+    std::shared_ptr<OSDMap> osdmap,
+    pg_t pgid,
+    int osd_id,
+    int shard_pos)
+  {
+    add_osd_to_acting_set(*osdmap, pgid, osd_id, shard_pos);
+  }
+  
+  /**
+   * Add a new OSD, mark it up, add it to a PG's acting set, and finalize CRUSH.
+   * This is a convenience wrapper that combines add_osd(), mark_osd_up(),
+   * add_osd_to_acting_set(), and CRUSH finalization.
+   *
+   * @param osdmap The OSDMap to modify
+   * @param osd_id The new OSD ID to add
+   * @param pgid The PG to add the OSD to
+   * @param shard_pos The shard position (0-based) where the OSD should be placed
+   */
+  static void new_osd_up(
+    OSDMap& osdmap,
+    int osd_id,
+    pg_t pgid,
+    int shard_pos)
+  {
+    // Add the new OSD to the OSDMap (creates structures, OSD is down)
+    add_osd(osdmap, osd_id);
+    
+    // Mark the new OSD as up
+    mark_osd_up(osdmap, osd_id);
+    
+    // Add the new OSD to the specified shard position in the acting set
+    add_osd_to_acting_set(osdmap, pgid, osd_id, shard_pos);
+    
+    // Finalize CRUSH map
+    osdmap.crush->finalize();
+  }
+
+  static void new_osd_up(
+    std::shared_ptr<OSDMap> osdmap,
+    int osd_id,
+    pg_t pgid,
+    int shard_pos)
+  {
+    new_osd_up(*osdmap, osd_id, pgid, shard_pos);
+  }
+  
+  /**
    * Mark an OSD as down (exists but not UP) in the OSDMap.
    * Creates a new epoch.
    *
