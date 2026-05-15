@@ -969,6 +969,8 @@ class ConflictSimulationCheck(BaseAuditCheck):
             cp_regex = re.compile(r"\(cherry picked from commit ([0-9a-f]{7,40})\)")
             auto_approve_conflicts = False
             first_conflict = True
+            
+            recorded_deviations = []
     
             for commit in pr_commits:
                 if len(commit.parents) > 1:
@@ -1165,38 +1167,56 @@ class ConflictSimulationCheck(BaseAuditCheck):
                         elif ans == 'p':
                             pass # Already applied backport commit
                         elif ans == 'r':
-                            log.error("Rejecting PR due to unjustified/unapproved change. Adding to draft review...")
+                            log.error(f"Rejecting PR due to unjustified/unapproved change in {commit.hexsha[:8]}. Adding to draft review...")
                             diff_text = diff if 'diff' in locals() else "No range diff available."
                             
-                            md_text = """
-                            ### Automated Backport Parity Review - Backport Deviation Alert
-                            
-                            A conflict or unapproved deviation was detected during the simulation of this backport. The code in this PR does not match a clean cherry-pick of the upstream commits.
-                            
-                            **How to proceed:**
-                            * **Authors (Genuine Conflicts):** If this is a genuine conflict requiring manual resolution, ensure your resolution is correct. You **must** explain the conflict resolution in the commit message (e.g., leave the standard Git `Conflicts:` block intact) and include an explanation for changes.
-                            * **Authors (Need Help?):** Reach out to the Component Lead for technical guidance on complex code conflicts.
-                            * **Component Leads (Review):** Please review the Range Diff below to verify the author's manual conflict resolution is correct for this release branch. If the deviation is intentional, documented, and approved then the component lead or @ceph/ceph-release-manager can bypass this check by commenting `/audit override`.
-
-                            [Be familiar with the rules and guidelines for writing backports.](https://github.com/ceph/ceph/blob/main/SubmittingPatches-backports.rst)
-                            
-                            #### Affected File(s)
-                            """
-                            md_text = textwrap.dedent(md_text)
-                            for f_name in unmerged:
-                                f_hash = hashlib.sha256(f_name.encode('utf-8')).hexdigest()
-                                md_text += f"* `{f_name}`\n"
-                                md_text += f"  * Original: https://github.com/{BASE_PROJECT}/{BASE_REPO}/commit/{c.hexsha}#diff-{f_hash}\n"
-                                md_text += f"  * Backport: https://github.com/{BASE_PROJECT}/{BASE_REPO}/commit/{commit.hexsha}#diff-{f_hash}\n"
-                            
-                            md_text += f"#### Range Diff\n<details><summary>Click to expand</summary>\n\n```diff\n{diff_text}\n```\n</details>\n\n"
-                            
-                            report.add("Conflict/Deviation", md_text)
+                            recorded_deviations.append({
+                                'orig_sha': c.hexsha,
+                                'bp_sha': commit.hexsha,
+                                'unmerged': unmerged,
+                                'diff_text': diff_text
+                            })
                             report.record_failure()
                             continue
                 else:
                     log.info(f"Applying branch-specific commit {commit.hexsha[:8]} ...")
                     wt_repo.git(c=SANDBOX_CFG).cherry_pick("--allow-empty", commit.hexsha)
+            
+            if recorded_deviations:
+                md_text = """
+                ### Automated Backport Parity Review - Backport Deviation Alert
+                
+                A conflict or unapproved deviation was detected during the simulation of this backport. The code in this PR does not match a clean cherry-pick of the upstream commits.
+                
+                """
+                md_text = textwrap.dedent(md_text)
+                
+                for dev in recorded_deviations:
+                    md_text += f"#### Deviation in Backport `{dev['bp_sha'][:8]}` (cherry-pick of `{dev['orig_sha'][:8]}`)\n\n"
+                    
+                    if dev['unmerged']:
+                        md_text += "**Affected File(s)**\n"
+                        for f_name in dev['unmerged']:
+                            f_hash = hashlib.sha256(f_name.encode('utf-8')).hexdigest()
+                            md_text += f"* `{f_name}`\n"
+                            md_text += f"  * Original: https://github.com/{BASE_PROJECT}/{BASE_REPO}/commit/{dev['orig_sha']}#diff-{f_hash}\n"
+                            md_text += f"  * Backport: https://github.com/{BASE_PROJECT}/{BASE_REPO}/commit/{dev['bp_sha']}#diff-{f_hash}\n"
+                        md_text += "\n"
+                        
+                    md_text += f"**Range Diff**\n<details><summary>Click to expand</summary>\n\n```diff\n{dev['diff_text']}\n```\n</details>\n\n"
+
+                footer = """
+                **How to proceed:**
+                * **Authors (Genuine Conflicts):** If this is a genuine conflict requiring manual resolution, ensure your resolution is correct. You **must** explain the conflict resolution in the commit message (e.g., leave the standard Git `Conflicts:` block intact) and include an explanation for changes.
+                * **Authors (Need Help?):** Reach out to the Component Lead for technical guidance on complex code conflicts.
+                * **Component Leads (Review):** Please review the Range Diff(s) above to verify the author's manual conflict resolution is correct for this release branch. If the deviation is intentional, documented, and approved then the component lead or @ceph/ceph-release-manager can bypass this check by commenting `/audit override`.
+
+                [Be familiar with the rules and guidelines for writing backports.](https://github.com/ceph/ceph/blob/main/SubmittingPatches-backports.rst)
+                """
+                md_text += textwrap.dedent(footer)
+                
+                report.add("Conflict/Deviation", md_text)
+
             log.info("Verification of backport cherry-pick for PR #%d is complete.", pr)
         finally:
             log.info("Removing temporary worktree `%s'", wt_dir)
