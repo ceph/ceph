@@ -20,15 +20,17 @@
 #include <random>
 #include <sstream>
 #include <iomanip>
+#include <utility>
 #include <gtest/gtest.h>
 #include "common/errno.h"
 #include "test/osd/MockErasureCode.h"
 #include "test/osd/MockPGBackendListener.h"
 #include "test/osd/EventLoop.h"
 #include "test/osd/MockMessenger.h"
+#include "test/osd/OsdTestFixture.h"
+#include "test/osd/MockStore.h"
 #include "common/TrackedOp.h"
 #include "os/memstore/MemStore.h"
-#include "test/osd/MockStore.h"
 #include "osd/ECSwitch.h"
 #include "osd/ECExtentCache.h"
 #include "osd/ReplicatedBackend.h"
@@ -62,37 +64,18 @@ protected:
   // Default includes both OVERWRITES and OPTIMIZATIONS flags.
   uint64_t pool_flags = pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS;
   
-  std::unique_ptr<MockStore> store;
-  std::string data_dir;
-  ObjectStore::CollectionHandle ch;
-  coll_t coll;
-  
   std::shared_ptr<OSDMap> osdmap;
   std::unique_ptr<EventLoop> event_loop;
   std::unique_ptr<MockMessenger> messenger;
   
-  std::map<int, std::unique_ptr<MockPGBackendListener>> listeners;
-  std::map<int, std::unique_ptr<PGBackend>> backends;
-  std::map<int, coll_t> colls;
-  std::map<int, ObjectStore::CollectionHandle> chs;
-  
-  /// Persistent OBC storage - emulates PrimaryLogPG's object_contexts LRU.
-  /// Keyed by hobject_t, values are shared_ptr so the same OBC is reused
-  /// across sequential operations on the same object. This is critical for
-  /// EC attr_cache continuity.
-  std::map<int, std::map<hobject_t, ObjectContextRef>> object_contexts;
-  /// Track outstanding writes per object. When this reaches 0, we can safely
-  /// clear attr_cache (as there are no in-flight writes that might have stale
-  /// cached OI data).
-  std::map<hobject_t, int> outstanding_writes;
-
+  // Per-OSD test fixtures
+  std::map<int, std::unique_ptr<OsdTestFixture>> osd_fixtures;
   // OpTracker for wrapping messages in OpRequestRef
   std::shared_ptr<OpTracker> op_tracker;
 // Scrub infrastructure - initialized once and reused across scrub operations
   std::unique_ptr<MockScrubBeListener> scrub_listener;
   std::unique_ptr<MockSnapMapReader> snap_reader;
   ceph::ErasureCodeInterfaceRef ec_impl;
-  std::map<int, std::unique_ptr<ECExtentCache::LRU>> lrus;
   int k = 4;  // data chunks
   int m = 2;  // coding chunks
   uint64_t stripe_unit = 4096;  // aka chunk_size
@@ -113,6 +96,7 @@ protected:
   // Version counter for auto-generating versions in write* functions
   // The epoch comes from osdmap, this tracks the second version number
   uint64_t next_version = 1;
+
   
   
   
@@ -121,15 +105,6 @@ protected:
 public:
   explicit PGBackendTestFixture(PoolType type = EC) : pool_type(type)
   {
-    std::random_device rd;
-    std::mt19937_64 gen(rd());
-    std::uniform_int_distribution<uint64_t> dis;
-    uint64_t random_num = dis(gen);
-    
-    std::ostringstream oss;
-    oss << "memstore_test_" << std::hex << std::setfill('0') << std::setw(16) << random_num;
-    data_dir = oss.str();
-    
     ceph_assert(stripe_unit % 4096 == 0);
     ceph_assert(stripe_unit != 0);
   }
@@ -141,18 +116,6 @@ public:
   
   void SetUp() override {
     ceph::logging::Log::set_prefix_hook(&EventLoop::get_log_prefix);
-    int r = ::mkdir(data_dir.c_str(), 0777);
-    if (r < 0) {
-      r = -errno;
-      std::cerr << __func__ << ": unable to create " << data_dir << ": " << cpp_strerror(r) << std::endl;
-    }
-    ASSERT_EQ(0, r);
-    
-    // Create MockMemStore - contexts are stolen by MockPGBackendListener, so we don't need manual_finisher
-    store.reset(new MockStore(g_ceph_context, data_dir));
-    ASSERT_TRUE(store);
-    ASSERT_EQ(0, store->mkfs());
-    ASSERT_EQ(0, store->mount());
     
     g_conf().set_safe_to_start_threads();
     
@@ -190,26 +153,11 @@ public:
       op_tracker.reset();
     }
 
-    backends.clear();
-    object_contexts.clear();
-    outstanding_writes.clear();
-
+    // Clear OSD fixtures (which contain backends, listeners, LRUs, collections, stores, etc.)
+    // Note: object_contexts and outstanding_writes are now per-PG and will be cleaned up when TestPG is destroyed
+    osd_fixtures.clear();
     if (pool_type == EC) {
-      lrus.clear();
       ec_impl.reset();
-    }
-
-    listeners.clear();
-    chs.clear();
-    colls.clear();
-    
-    if (ch) {
-      ch.reset();
-    }
-
-    if (store) {
-      store->umount();
-      store.reset();
     }
 
     cleanup_data_dir();
@@ -222,6 +170,14 @@ private:
   void cleanup_data_dir();
 
 protected:
+  /**
+   * Should TestPGs be created upfront during setup?
+   *
+   * Returns true for base class (TestBackendBasics) which doesn't use peering.
+   * Returns false for ECPeeringTestFixture which creates TestPGs lazily
+   * in response to OSD map publication via event_advance_map().
+   */
+  virtual bool should_create_test_pgs_upfront() const { return true; }
   void initialize_scrub_infra();
 
 public:
@@ -251,24 +207,188 @@ public:
     return min_size;
   }
   
-  // Get the primary listener and backend by checking which listener reports itself as primary
-  virtual MockPGBackendListener* get_primary_listener() {
-    for (auto& [instance, listener] : listeners) {
-      if (listener && listener->pgb_is_primary()) {
-        return listener.get();
-      }
+  // Helper methods to access OsdTestFixture data
+  OsdTestFixture* get_osd_fixture(int osd) {
+    auto it = osd_fixtures.find(osd);
+    if (it != osd_fixtures.end()) {
+      return it->second.get();
     }
     return nullptr;
   }
   
-  virtual PGBackend* get_primary_backend() {
-    for (auto& [instance, listener] : listeners) {
-      if (listener && listener->pgb_is_primary()) {
-        auto it = backends.find(instance);
-        return (it != backends.end()) ? it->second.get() : nullptr;
-      }
+  /**
+   * Get the TestPG from the current EventLoop context.
+   * This is the preferred method for most code paths as it uses the
+   * context automatically set by MockMessenger when routing messages.
+   *
+   * @return Pointer to TestPG from EventLoop context, or nullptr if not set
+   */
+  TestPG* get_test_pg() {
+    auto rc = EventLoop::get_current_test_pg();
+    ceph_assert(rc);
+    return rc;
+  }
+  
+  /**
+   * Get the TestPG for a given spg_t on the current OSD.
+   * Uses the OSD from EventLoop context.
+   *
+   * @param spgid The spg_t identifying the PG
+   * @return Pointer to TestPG, or nullptr if not found or no current OSD
+   */
+  TestPG* get_test_pg(const spg_t& spgid) {
+    int osd = EventLoop::get_current_executing_osd();
+    if (osd < 0) {
+      return nullptr;
+    }
+    return get_test_pg(osd, spgid);
+  }
+  
+  /**
+   * Get the TestPG for a given OSD and spg_t.
+   * This is the most general accessor that can retrieve any TestPG.
+   *
+   * @param osd The OSD number
+   * @param spgid The spg_t identifying the PG
+   * @return Pointer to TestPG, or nullptr if not found
+   */
+  TestPG* get_test_pg(int osd, const spg_t& spgid) {
+    auto* osd_fixture = get_osd_fixture(osd);
+    if (osd_fixture && osd_fixture->has_pg(spgid)) {
+      return osd_fixture->get_pg(spgid);
     }
     return nullptr;
+  }
+  
+  /**
+   * Get the TestPG for a given OSD and shard number.
+   * This is a convenience overload that constructs the spg_t from the shard.
+   *
+   * @param osd The OSD number
+   * @param shard The shard number
+   * @return Pointer to TestPG, or nullptr if not found
+   */
+  TestPG* get_test_pg(int osd, int shard) {
+    spg_t spgid(pgid, shard_id_t(shard));
+    return get_test_pg(osd, spgid);
+  }
+  
+  /**
+   * Get the TestPG for a given pg_shard_t.
+   * This is a convenience overload that extracts OSD and shard from pg_shard_t.
+   *
+   * @param pg_shard The pg_shard_t containing OSD and shard
+   * @return Pointer to TestPG, or nullptr if not found
+   */
+  TestPG* get_test_pg(const pg_shard_t& pg_shard) {
+    spg_t spgid(pgid, pg_shard.shard);
+    return get_test_pg(pg_shard.osd, spgid);
+  }
+  
+  /**
+   * Run a lambda with a specific OSD and TestPG context.
+   * This is a convenience wrapper around EventLoop::run_in_pg() that
+   * automatically looks up the TestPG from the OSD and spg_t.
+   *
+   * @param osd The OSD number to set as current
+   * @param spgid The spg_t identifying the PG
+   * @param callback The lambda to execute with the context set
+   */
+  template<typename Func>
+  void run_in_pg(int osd, const spg_t& spgid, Func&& callback) {
+    TestPG* test_pg = get_test_pg(osd, spgid);
+    ceph_assert(test_pg != nullptr);
+    event_loop->run_in_pg(osd, test_pg, std::forward<Func>(callback));
+  }
+  
+  /**
+   * Get the primary TestPG using OSDMap to determine the primary OSD and shard.
+   * This properly handles the mapping from OSD to shard for EC pools.
+   *
+   * @return Pointer to primary TestPG, or nullptr if not found
+   */
+  TestPG* get_primary_test_pg() {
+    int primary_osd;
+    spg_t primary_spgid;
+    if (!osdmap->get_primary_shard(pgid, &primary_osd, &primary_spgid)) {
+      return nullptr;
+    }
+    return get_test_pg(primary_osd, primary_spgid);
+  }
+  
+  /**
+   * Get the spg_t for a given OSD by looking up its position in the acting set.
+   * This properly maps OSD number to shard for EC pools.
+   *
+   * @param osd The OSD number
+   * @param out_spgid Output parameter for the spg_t
+   * @return true if the OSD is in the acting set, false otherwise
+   */
+  bool get_spg_for_osd(int osd, spg_t *out_spgid) const {
+    std::vector<int> acting;
+    int primary;
+    osdmap->pg_to_acting_osds(pgid, &acting, &primary);
+    
+    if (pool_type == EC) {
+      // For EC pools, find the OSD's position in the acting set (that's the shard)
+      for (size_t i = 0; i < acting.size(); ++i) {
+        if (acting[i] == osd) {
+          *out_spgid = spg_t(pgid, shard_id_t(i));
+          return true;
+        }
+      }
+      return false;
+    } else {
+      // For replicated pools, all OSDs use NO_SHARD
+      *out_spgid = spg_t(pgid, shard_id_t::NO_SHARD);
+      return true;
+    }
+  }
+  
+  /**
+   * Get the TestPG for a given OSD by looking up its shard in the acting set.
+   * This properly handles the OSD->shard mapping for EC pools.
+   * NOTE: This only works if the OSD is currently in the acting set.
+   *
+   * @param osd The OSD number
+   * @return Pointer to TestPG, or nullptr if not found or not in acting set
+   */
+  TestPG* get_first_test_pg_for_osd(int osd) {
+    spg_t spgid;
+    auto fixture = get_osd_fixture(osd);
+    ceph_assert(fixture);
+    // If this assert fails it means this test is doing more complex things
+    // than this function can cope with.  Find a different method which does
+    // not assume that each OSD has a single PG.
+    ceph_assert(fixture->pgs.size() == 1);
+    return fixture->pgs.begin()->second.get();
+  }
+  
+  TestPG* get_test_pg_by_shard(int shard) {
+    std::vector<int> acting;
+    int acting_primary; // ignored
+    osdmap->pg_to_acting_osds(pgid, &acting, &acting_primary);
+    ceph_assert(shard >= 0);
+    ceph_assert(std::cmp_less(shard, acting.size()));
+    int osd = acting.at(shard);
+    if (osd == CRUSH_ITEM_NONE) {
+      return nullptr;
+    }
+    spg_t spg(pgid, shard_id_t(shard));
+    return get_test_pg(osd, spg);
+  }
+  
+  // Get the primary listener and backend by checking which listener reports itself as primary
+  virtual MockPGBackendListener* get_primary_listener() {
+    TestPG* test_pg = get_primary_test_pg();
+    ceph_assert(test_pg);
+    return test_pg->get_backend_listener();
+  }
+  
+  virtual PGBackend* get_primary_backend() {
+    TestPG* test_pg = get_primary_test_pg();
+    ceph_assert(test_pg);
+    return test_pg->get_backend();
   }
   
   hobject_t make_test_object(const std::string& name) const {
@@ -338,7 +458,7 @@ public:
     bool can_create,
     const std::map<std::string, ceph::buffer::list, std::less<>> *attrs = nullptr);
   
-  int do_transaction_and_complete(
+  void do_transaction(
     const hobject_t& hoid,
     PGTransactionUPtr pg_t,
     const object_stat_sum_t& delta_stats,
@@ -348,21 +468,28 @@ public:
   
   // Helper functions that perform the actual write logic
   // Must be called within event loop context on the primary OSD
-  int do_create_and_write_impl(
+  // These take completion tracking variables by reference from the caller
+  void do_create_and_write_impl(
     const std::string& obj_name,
-    const std::string& data);
+    const std::string& data,
+    bool& completed,
+    int& result);
   
-  int do_write_impl(
+  void do_write_impl(
     const std::string& obj_name,
     uint64_t offset,
     const std::string& data,
-    uint64_t object_size);
+    uint64_t object_size,
+    bool& completed,
+    int& result);
   
-  int do_write_attribute_impl(
+  void do_write_attribute_impl(
     const std::string& obj_name,
     const std::string& attr_name,
     const std::string& attr_value,
-    bool force_all_shards);
+    bool force_all_shards,
+    bool& completed,
+    int& result);
   
   virtual int create_and_write(
     const std::string& obj_name,

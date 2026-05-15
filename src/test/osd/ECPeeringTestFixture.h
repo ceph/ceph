@@ -37,21 +37,15 @@ class ECPeeringTestFixture;
  */
 class ECPeeringTestFixture : public PGBackendTestFixture {
 protected:
-  std::map<int, std::unique_ptr<PeeringState>> shard_peering_states;
-  std::map<int, std::unique_ptr<PeeringCtx>> shard_peering_ctxs;
-  std::map<int, std::unique_ptr<MockPeeringListener>> shard_peering_listeners;
-  
   class ShardDpp : public NoDoutPrefix {
   public:
     ECPeeringTestFixture *fixture;
-    int shard;
-    
-    ShardDpp(CephContext *cct, ECPeeringTestFixture *f, int s)
-      : NoDoutPrefix(cct, ceph_subsys_osd), fixture(f), shard(s) {}
+    TestPG *test_pg;  // Direct pointer to the TestPG this DPP belongs to
+    ShardDpp(CephContext *cct, ECPeeringTestFixture *f, TestPG *tp)
+      : NoDoutPrefix(cct, ceph_subsys_osd), fixture(f), test_pg(tp) {}
     
     std::ostream& gen_prefix(std::ostream& out) const override;
   };
-  std::map<int, std::unique_ptr<ShardDpp>> shard_dpps;
   
   IsPGRecoverablePredicate *get_is_recoverable_predicate();
   IsPGReadablePredicate *get_is_readable_predicate();
@@ -63,12 +57,18 @@ public:
   
   void SetUp() override;
   void TearDown() override;
+
+  PeeringState* get_peering_state() {
+    return get_test_pg()->get_peering_state();
+  }
   
-  PeeringState* create_peering_state(int shard);
+  PeeringCtx* get_peering_ctx() {
+    return get_test_pg()->get_peering_ctx();
+  }
   
-  PeeringState* get_peering_state(int shard);
-  PeeringCtx* get_peering_ctx(int shard);
-  MockPeeringListener* get_peering_listener(int shard);
+  MockPeeringListener* get_peering_listener() {
+    return get_test_pg()->get_peering_listener();
+  }
   
   /**
    * Query the OSDMap to determine which shard is the primary.
@@ -82,8 +82,9 @@ public:
   MockPGBackendListener* get_primary_listener() override;
   PGBackend* get_primary_backend() override;
   
-  void init_peering(bool dne = false);
+  void init_peering(TestPG *test_pg);
   void event_initialize();
+  void advance_map_impl();
   void event_advance_map();
   void event_activate_map();
   
@@ -94,7 +95,35 @@ public:
    * @param value The value to set
    */
   void set_config(const std::string& option, const std::string& value);
+  
+  /**
+   * ensure_osd_fixture_exists - Create OSD fixture if it doesn't exist
+   *
+   * This is called in response to OSDMap updates to create fixtures for
+   * OSDs that are in the acting set but don't have fixtures yet.
+   *
+   * @param osd The OSD number to ensure exists
+   */
+  void ensure_osd_fixture_exists(int osd);
+  
+  /**
+   * ensure_test_pg_exists - Create TestPG if it doesn't exist
+   *
+   * This is called in response to OSDMap updates to create TestPGs for
+   * OSDs that are in the acting set but don't have TestPGs yet.
+   *
+   * @param osd The OSD number
+   * @param shard The shard number
+   */
+  void ensure_test_pg_exists(pg_shard_t pg_whoami);
 
+protected:
+  /**
+   * Override to defer TestPG creation until OSD map publication.
+   * TestPGs will be created lazily in event_advance_map() via ensure_test_pg_exists().
+   */
+  bool should_create_test_pgs_upfront() const override { return false; }
+  
 private:
   /**
    * dispatch_buffered_messages - Check for and dispatch any buffered messages
@@ -116,8 +145,6 @@ public:
   void new_epoch_loop();
   bool new_epoch(bool if_required = false);
 
-  void run_first_peering();
-  
   // OSDMap manipulation helpers - these create a new epoch and trigger peering
   
   /**
@@ -155,7 +182,7 @@ public:
   bool all_shards_active();
   
   // In EC pools, only the primary tracks PG_STATE_CLEAN.
-  bool all_shards_clean();
+  bool primary_is_clean();
   
   std::string get_state_name(int shard);
 
@@ -213,45 +240,42 @@ public:
   void inject_read_error_for_shard(const std::string& obj_name, int shard, int error_code);
 
   /**
-   * run_recovery_and_verify_callbacks - Run recovery for an object and verify callbacks
+   * run_recovery - Run recovery for an object
    *
    * This helper function encapsulates the complete EC recovery flow:
-   * 1. Verifies the object is in the peer's missing set
+   * 1. Verifies consistency of missing sets
    * 2. Runs the recovery operation
-   * 3. Verifies all recovery callbacks were invoked correctly
-   * 4. Verifies PeeringState was updated correctly
    *
    * @param obj_name The name of the object to recover
-   * @param removed_osd The OSD that was down and needs recovery
+   * @param recover_primary If true, recover to primary; if false, recover to peers
    * @param expected_data The expected data content after recovery
    */
-  void run_recovery_and_verify_callbacks(
+  void run_recovery(
     const std::string& obj_name,
-    int removed_osd,
+    bool recover_primary,
     const std::string& expected_data);
 
   /**
-   * run_parallel_recovery_and_verify_callbacks - Run parallel recovery for multiple objects
+   * run_parallel_recovery - Run parallel recovery for multiple objects
    *
    * This helper function recovers multiple objects in parallel within a single recovery
-   * operation. This is the key difference from run_recovery_and_verify_callbacks which
-   * recovers objects sequentially (one at a time).
+   * operation. This is the key difference from run_recovery which recovers objects
+   * sequentially (one at a time).
    *
    * The parallel recovery flow:
    * 1. Calls recover_object() for ALL objects first (queues them)
    * 2. Calls run_recovery_op() ONCE to process all queued recoveries together
-   * 3. Verifies callbacks and data for all objects
    *
    * This reproduces Bug 75432 where multiple objects in a single operation can cause
    * assertion failures when some complete while others need resend.
    *
    * @param obj_names Vector of object names to recover in parallel
-   * @param target_osd The OSD that was down and needs recovery
+   * @param recover_primary If true, recover to primary; if false, recover to peers
    * @param expected_data Vector of expected data content (must match obj_names size)
    */
-  void run_parallel_recovery_and_verify_callbacks(
+  void run_parallel_recovery(
     const std::vector<std::string>& obj_names,
-    int target_osd,
+    bool recover_primary,
     const std::vector<std::string>& expected_data);
 
 private:
@@ -259,10 +283,16 @@ private:
    * Implementation function for parallel recovery that runs within event loop context.
    * This is called by the public wrapper function after scheduling on the primary OSD.
    */
-  void do_run_parallel_recovery_and_verify_callbacks_impl(
+  void do_run_parallel_recovery_impl(
     const std::vector<std::string>& obj_names,
-    int target_osd,
+    bool recover_primary,
     const std::vector<std::string>& expected_data,
     int instance);
+  
+  /**
+   * Helper to check recovery completion and queue appropriate events.
+   * This mimics what PrimaryLogPG::start_recovery_ops() does when recovery completes.
+   */
+  void check_recovery_completion_impl(int osd_id);
 };
 

@@ -74,7 +74,6 @@ void PGBackendTestFixture::setup_ec_pool()
   OSDMapTestHelpers::add_pool(osdmap, pool_id, pool);
 
   pgid = pg_t(0, pool_id);
-  spgid = spg_t(pgid, shard_id_t(0));
 
   std::vector<int> acting;
   for (int i = 0; i < num_osds; i++) {
@@ -116,59 +115,83 @@ void PGBackendTestFixture::setup_ec_pool()
     }
   }
 
-  ObjectStore::Transaction t;
+  // Create per-OSD stores and fixtures
   for (int i = 0; i < num_osds; i++) {
+    // Create OsdTestFixture for this OSD
+    auto osd_fixture = std::make_unique<OsdTestFixture>(i);
+    
+    // Create a new store for this OSD
+    osd_fixture->store = MockStore::create(g_ceph_context, i);
+    ASSERT_TRUE(osd_fixture->store);
+    osd_fixture->data_dir = osd_fixture->store->get_path();
+    
+    // Create collection for this shard
     spg_t shard_spgid(pgid, shard_id_t(i));
     coll_t shard_coll(shard_spgid);
-    auto shard_ch = store->create_new_collection(shard_coll);
+    auto shard_ch = osd_fixture->store->create_new_collection(shard_coll);
+    
+    ObjectStore::Transaction t;
     t.create_collection(shard_coll, 0);
+    ASSERT_EQ(osd_fixture->store->queue_transaction(shard_ch, std::move(t)), 0);
 
-    colls[i] = shard_coll;
-    chs[i] = shard_ch;
-
-    if (i == 0) {
-      ch = shard_ch;
-      coll = shard_coll;
-    }
+    osd_fixture->coll = shard_coll;
+    osd_fixture->ch = shard_ch;
+    
+    // Create extent cache LRU for this OSD
+    osd_fixture->lru = std::make_unique<ECExtentCache::LRU>(1024 * 1024 * 100);
+    
+    osd_fixtures[i] = std::move(osd_fixture);
   }
-
-  ASSERT_EQ(store->queue_transaction(ch, std::move(t)), 0);
 
   const pg_pool_t* pool_ptr = OSDMapTestHelpers::get_pool(osdmap, pool_id);
   ceph_assert(pool_ptr != nullptr);
 
-  for (int i = 0; i < num_osds; i++) {
-    auto shard_listener = std::make_unique<MockPGBackendListener>(
-      osdmap, pool_id, dpp.get(), pg_shard_t(i, shard_id_t(i)));
+  // Only create TestPGs upfront if the derived class wants it
+  // (e.g., TestBackendBasics which doesn't use peering)
+  // ECPeeringTestFixture overrides this to return false and creates
+  // TestPGs lazily in response to OSD map publication
+  if (should_create_test_pgs_upfront()) {
+    for (int i = 0; i < num_osds; i++) {
+      auto* osd_fixture = osd_fixtures[i].get();
+      spg_t shard_spgid(pgid, shard_id_t(i));
+      pg_shard_t pg_whoami(i, shard_id_t(i));
+      
+      // Create TestPG for this OSD
+      TestPG* test_pg = osd_fixture->create_pg(shard_spgid, pg_whoami);
+      
+      // Create backend listener
+      auto shard_listener = std::make_unique<MockPGBackendListener>(
+        osdmap, pool_id, dpp.get(), pg_whoami);
 
-    // Initialize the listener's own info.pgid so OSDMap queries work
-    shard_listener->info.pgid = spg_t(pgid, shard_id_t(i));
+      // Initialize the listener's own info.pgid so OSDMap queries work
+      shard_listener->info.pgid = shard_spgid;
 
-    for (int j = 0; j < num_osds; j++) {
-      shard_listener->shardset.insert(pg_shard_t(j, shard_id_t(j)));
-      shard_listener->acting_recovery_backfill_shard_id_set.insert(shard_id_t(j));
+      for (int j = 0; j < num_osds; j++) {
+        shard_listener->shardset.insert(pg_shard_t(j, shard_id_t(j)));
+        shard_listener->acting_recovery_backfill_shard_id_set.insert(shard_id_t(j));
 
-      // Initialize shard_info for each shard - required by EC backend
-      pg_info_t shard_pg_info;
-      shard_pg_info.pgid = spg_t(pgid, shard_id_t(j));
-      shard_listener->shard_info[pg_shard_t(j, shard_id_t(j))] = shard_pg_info;
+        // Initialize shard_info for each shard - required by EC backend
+        pg_info_t shard_pg_info;
+        shard_pg_info.pgid = spg_t(pgid, shard_id_t(j));
+        shard_listener->shard_info[pg_shard_t(j, shard_id_t(j))] = shard_pg_info;
 
-      // Initialize shard_missing for each shard - required by EC backend
-      pg_missing_t shard_missing;
-      shard_listener->shard_missing[pg_shard_t(j, shard_id_t(j))] = shard_missing;
+        // Initialize shard_missing for each shard - required by EC backend
+        pg_missing_t shard_missing;
+        shard_listener->shard_missing[pg_shard_t(j, shard_id_t(j))] = shard_missing;
+      }
+
+      shard_listener->set_store(osd_fixture->store.get(), osd_fixture->ch);
+      shard_listener->set_event_loop(event_loop.get());
+
+      // Create EC backend
+      auto shard_ec_switch = std::make_unique<ECSwitch>(
+        shard_listener.get(), osd_fixture->coll, osd_fixture->ch, osd_fixture->store.get(),
+        cct, ec_impl, stripe_unit * k, *osd_fixture->lru);
+
+      // Store in TestPG
+      test_pg->backend_listener = std::move(shard_listener);
+      test_pg->backend = std::move(shard_ec_switch);
     }
-
-    shard_listener->set_store(store.get(), chs[i]);
-    shard_listener->set_event_loop(event_loop.get());
-
-    auto shard_lru = std::make_unique<ECExtentCache::LRU>(1024 * 1024 * 100);
-    auto shard_ec_switch = std::make_unique<ECSwitch>(
-      shard_listener.get(), colls[i], chs[i], store.get(),
-      cct, ec_impl, stripe_unit * k, *shard_lru);
-
-    listeners[i] = std::move(shard_listener);
-    lrus[i] = std::move(shard_lru);
-    backends[i] = std::move(shard_ec_switch);
   }
 
   // Create MockMessenger and register a single handler that routes to backends
@@ -176,13 +199,22 @@ void PGBackendTestFixture::setup_ec_pool()
   
   // Set up epoch getter for MockMessenger to enable epoch-based message filtering
   messenger->set_epoch_getter([this](int osd) -> epoch_t {
-    // Get the epoch from the listener's osdmap
-    auto it = listeners.find(osd);
-    if (it != listeners.end()) {
-      return it->second->pgb_get_osdmap_epoch();
+    // Get the epoch from the OSD fixture's backend listener
+    auto* osd_fixture = get_osd_fixture(osd);
+    if (osd_fixture) {
+      // FIXME: Assumes osd == shard in current test harness
+      TestPG* test_pg = get_test_pg(osd, osd);
+      if (test_pg && test_pg->has_backend()) {
+        return test_pg->get_backend_listener()->pgb_get_osdmap_epoch();
+      }
     }
     // If listener doesn't exist yet, use the test fixture's osdmap
     return osdmap->get_epoch();
+  });
+  
+  // Set TestPG getter - MockMessenger extracts spg_t and calls this to look up TestPG
+  messenger->set_test_pg_getter([this](int osd, spg_t spgid) -> TestPG* {
+    return get_test_pg(osd, spgid);
   });
   
   // Create an OpTracker for wrapping messages in OpRequestRef
@@ -194,15 +226,15 @@ void PGBackendTestFixture::setup_ec_pool()
   auto make_backend_handler = [this]<typename MsgType>(int msg_type) {
     messenger->register_typed_handler<MsgType>(msg_type,
       [this](int from_osd, int to_osd, boost::intrusive_ptr<MsgType> m) -> bool {
-        auto it = backends.find(to_osd);
-        ceph_assert(it != backends.end());
+        TestPG* test_pg = get_test_pg();
+        ceph_assert(test_pg != nullptr && test_pg->has_backend());
         // OpRequest stores Message* and put()s in its destructor.  Use
         // m.detach() to transfer the +1 refcount to the raw pointer
         // OpRequest takes ownership of, so the lifetime balances without
         // any explicit refcount manipulation.
         OpRequestRef op =
             this->op_tracker->create_request<OpRequest, Message*>(m.detach());
-        return it->second->_handle_message(op);
+        return test_pg->get_backend()->_handle_message(op);
       });
   };
 
@@ -214,8 +246,15 @@ void PGBackendTestFixture::setup_ec_pool()
   make_backend_handler.template operator()<MOSDPGPush>(MSG_OSD_PG_PUSH);
   make_backend_handler.template operator()<MOSDPGPushReply>(MSG_OSD_PG_PUSH_REPLY);
 
-  for (int i = 0; i < num_osds; i++) {
-    listeners[i]->set_messenger(messenger.get());
+  // Set messenger on all TestPGs that were created upfront
+  // (ECPeeringTestFixture will set messenger when TestPGs are created lazily)
+  if (should_create_test_pgs_upfront()) {
+    for (int i = 0; i < num_osds; i++) {
+      TestPG* test_pg = get_first_test_pg_for_osd(i);
+      if (test_pg && test_pg->has_backend()) {
+        test_pg->get_backend_listener()->set_messenger(messenger.get());
+      }
+    }
   }
 }
 
@@ -242,7 +281,6 @@ void PGBackendTestFixture::setup_replicated_pool()
   osdmap->crush->finalize();
 
   pgid = pg_t(0, pool_id);
-  spgid = spg_t(pgid, shard_id_t::NO_SHARD);
   
   // Set up pg_temp to define the acting set with OSD 0 as primary
   std::vector<int> acting;
@@ -252,32 +290,45 @@ void PGBackendTestFixture::setup_replicated_pool()
   OSDMapTestHelpers::set_pg_acting(osdmap, pgid, acting);
   OSDMapTestHelpers::set_pg_acting_primary(osdmap, pgid, 0);
 
-  ObjectStore::Transaction t;
   spg_t replica_spgid(pgid, shard_id_t::NO_SHARD);
-  coll_t replica_coll(replica_spgid);
-  auto replica_ch = store->create_new_collection(replica_coll);
-  t.create_collection(replica_coll, 0);
-
-  ASSERT_EQ(store->queue_transaction(replica_ch, std::move(t)), 0);
-
-  // All replicas share the same collection
+  
+  // Create per-OSD stores and fixtures
   for (int i = 0; i < num_replicas; i++) {
-    colls[i] = replica_coll;
-    chs[i] = replica_ch;
+    auto osd_fixture = std::make_unique<OsdTestFixture>(i);
+    
+    // Create a new store for this OSD
+    osd_fixture->store = MockStore::create(g_ceph_context, i);
+    ASSERT_TRUE(osd_fixture->store);
+    osd_fixture->data_dir = osd_fixture->store->get_path();
+    
+    // Create collection for this replica
+    coll_t replica_coll(replica_spgid);
+    auto replica_ch = osd_fixture->store->create_new_collection(replica_coll);
+    
+    ObjectStore::Transaction t;
+    t.create_collection(replica_coll, 0);
+    ASSERT_EQ(osd_fixture->store->queue_transaction(replica_ch, std::move(t)), 0);
+    
+    osd_fixture->coll = replica_coll;
+    osd_fixture->ch = replica_ch;
+    osd_fixtures[i] = std::move(osd_fixture);
   }
-
-  ch = replica_ch;
-  coll = replica_coll;
 
   const pg_pool_t* pool_ptr = OSDMapTestHelpers::get_pool(osdmap, pool_id);
   ceph_assert(pool_ptr != nullptr);
 
   for (int i = 0; i < num_replicas; i++) {
+    auto* osd_fixture = osd_fixtures[i].get();
+    pg_shard_t pg_whoami(i, shard_id_t::NO_SHARD);
+    
+    // Create TestPG for this OSD
+    TestPG* test_pg = osd_fixture->create_pg(replica_spgid, pg_whoami);
+    
     auto replica_listener = std::make_unique<MockPGBackendListener>(
-      osdmap, pool_id, dpp.get(), pg_shard_t(i, shard_id_t::NO_SHARD));
+      osdmap, pool_id, dpp.get(), pg_whoami);
 
     // Initialize the listener's own info.pgid so OSDMap queries work
-    replica_listener->info.pgid = spg_t(pgid, shard_id_t::NO_SHARD);
+    replica_listener->info.pgid = replica_spgid;
 
     // For replicated pools, use NO_SHARD for all replicas
     for (int j = 0; j < num_replicas; j++) {
@@ -285,7 +336,7 @@ void PGBackendTestFixture::setup_replicated_pool()
 
       // Initialize shard_info for each replica - required by backend
       pg_info_t replica_pg_info;
-      replica_pg_info.pgid = spg_t(pgid, shard_id_t::NO_SHARD);
+      replica_pg_info.pgid = replica_spgid;
       replica_listener->shard_info[pg_shard_t(j, shard_id_t::NO_SHARD)] = replica_pg_info;
 
       // Initialize shard_missing for each replica - required by backend
@@ -293,14 +344,14 @@ void PGBackendTestFixture::setup_replicated_pool()
       replica_listener->shard_missing[pg_shard_t(j, shard_id_t::NO_SHARD)] = replica_missing;
     }
 
-    replica_listener->set_store(store.get(), chs[i]);
+    replica_listener->set_store(osd_fixture->store.get(), osd_fixture->ch);
     replica_listener->set_event_loop(event_loop.get());
 
     auto replica_backend = std::make_unique<ReplicatedBackend>(
-      replica_listener.get(), colls[i], chs[i], store.get(), cct);
+      replica_listener.get(), osd_fixture->coll, osd_fixture->ch, osd_fixture->store.get(), cct);
 
-    listeners[i] = std::move(replica_listener);
-    backends[i] = std::move(replica_backend);
+    test_pg->backend_listener = std::move(replica_listener);
+    test_pg->backend = std::move(replica_backend);
   }
 
   // Create MockMessenger and register a single handler that routes to backends
@@ -308,13 +359,17 @@ void PGBackendTestFixture::setup_replicated_pool()
   
   // Set up epoch getter for MockMessenger to enable epoch-based message filtering
   messenger->set_epoch_getter([this](int osd) -> epoch_t {
-    // Get the epoch from the listener's osdmap
-    auto it = listeners.find(osd);
-    if (it != listeners.end()) {
-      return it->second->pgb_get_osdmap_epoch();
+    auto test_pg = get_test_pg();
+    if (test_pg->has_backend()) {
+      return test_pg->get_backend_listener()->pgb_get_osdmap_epoch();
     }
     // If listener doesn't exist yet, use the test fixture's osdmap
     return osdmap->get_epoch();
+  });
+  
+  // Set TestPG getter - MockMessenger extracts spg_t and calls this to look up TestPG
+  messenger->set_test_pg_getter([this](int osd, spg_t spgid) -> TestPG* {
+    return get_test_pg(osd, spgid);
   });
   
   // Create an OpTracker for wrapping messages in OpRequestRef
@@ -326,26 +381,26 @@ void PGBackendTestFixture::setup_replicated_pool()
   auto make_backend_handler = [this]<typename MsgType>(int msg_type) {
     messenger->register_typed_handler<MsgType>(msg_type,
       [this](int from_osd, int to_osd, boost::intrusive_ptr<MsgType> m) -> bool {
-        auto it = backends.find(to_osd);
-        ceph_assert(it != backends.end());
-        // See setup_ec_pool() above: detach to transfer the +1 refcount to
-        // the raw pointer OpRequest will take ownership of.
+        TestPG* test_pg = get_test_pg();
         OpRequestRef op =
             this->op_tracker->create_request<OpRequest, Message*>(m.detach());
-        return it->second->_handle_message(op);
+        return test_pg->get_backend()->_handle_message(op);
       });
   };
 
   // Register typed handlers for replicated backend message types
   make_backend_handler.template operator()<MOSDRepOp>(MSG_OSD_REPOP);
   make_backend_handler.template operator()<MOSDRepOpReply>(MSG_OSD_REPOPREPLY);
-
+  
   for (int i = 0; i < num_replicas; i++) {
-    listeners[i]->set_messenger(messenger.get());
+    TestPG* test_pg = get_first_test_pg_for_osd(i);
+    if (test_pg && test_pg->has_backend()) {
+      test_pg->get_backend_listener()->set_messenger(messenger.get());
+    }
   }
 }
 
-int PGBackendTestFixture::do_transaction_and_complete(
+void PGBackendTestFixture::do_transaction(
   const hobject_t& hoid,
   PGTransactionUPtr pg_t,
   const object_stat_sum_t& delta_stats,
@@ -357,11 +412,7 @@ int PGBackendTestFixture::do_transaction_and_complete(
   eversion_t pg_committed_to(0, 0);
   std::optional<pg_hit_set_history_t> hset_history;
 
-  bool completed = false;
-  int completion_result = -1;
-  Context *on_complete = new LambdaContext([&completed, &completion_result, on_write_complete](int r) {
-    completed = true;
-    completion_result = r;
+  Context *on_complete = new LambdaContext([on_write_complete](int r) {
     // Call the write-specific completion lambda if provided
     if (on_write_complete) {
       on_write_complete(r);
@@ -387,21 +438,15 @@ int PGBackendTestFixture::do_transaction_and_complete(
     reqid,
     OpRequestRef()
   );
-
-  event_loop->run_until_idle();
-
-  if (!completed) {
-    completion_result = -EINPROGRESS;
-  }
-
-  return completion_result;
 }
 
 // Helper function that performs the actual write logic
 // Must be called within event loop context on the primary OSD
-int PGBackendTestFixture::do_create_and_write_impl(
+void PGBackendTestFixture::do_create_and_write_impl(
   const std::string& obj_name,
-  const std::string& data)
+  const std::string& data,
+  bool& completed,
+  int& result)
 {
   // Auto-generate version
   eversion_t at_version = get_next_version();
@@ -419,7 +464,7 @@ int PGBackendTestFixture::do_create_and_write_impl(
   // with the new OI from PGTransaction::attr_updates during the transaction.
 
   // Track outstanding write
-  outstanding_writes[hoid]++;
+  get_test_pg()->outstanding_writes[hoid]++;
 
   bufferlist bl;
   bl.append(data);
@@ -470,20 +515,24 @@ int PGBackendTestFixture::do_create_and_write_impl(
   entry.prior_version = eversion_t(0, 0);
   log_entries.push_back(entry);
 
+  // Capture TestPG pointer before creating lambda
+  TestPG* test_pg = get_test_pg();
+  
   // Create completion lambda for write-specific cleanup
-  auto write_complete = [this, hoid, obc](int r) {
+  // Capture completed and result by reference from caller
+  auto write_complete = [test_pg, hoid, obc, &completed, &result](int r) {
     // Note: we do NOT update obc->obs after completion — it was already
     // updated above before submit, matching PrimaryLogPG behavior.
     // ECTransaction::attr_updates() will have updated attr_cache[OI_ATTR]
     // to the new encoded OI during the transaction.
 
     // Decrement outstanding writes counter
-    if (outstanding_writes[hoid] > 0) {
-      outstanding_writes[hoid]--;
+    if (test_pg->outstanding_writes[hoid] > 0) {
+      test_pg->outstanding_writes[hoid]--;
       // Clean up the counter if it reaches 0, but don't clear attr_cache here.
       // The attr_cache will be cleared on on_change() events.
-      if (outstanding_writes[hoid] == 0) {
-        outstanding_writes.erase(hoid);
+      if (test_pg->outstanding_writes[hoid] == 0) {
+        test_pg->outstanding_writes.erase(hoid);
       }
     }
 
@@ -494,14 +543,16 @@ int PGBackendTestFixture::do_create_and_write_impl(
       obc->obs.oi = object_info_t(hoid);
       obc->obs.exists = false;
       obc->attr_cache.clear();
-      outstanding_writes.erase(hoid);
+      test_pg->outstanding_writes.erase(hoid);
     }
+    
+    // Mark as completed and store result
+    completed = true;
+    result = r;
   };
 
-  int result = do_transaction_and_complete(
+  do_transaction(
     hoid, std::move(pg_t), delta_stats, at_version, std::move(log_entries), write_complete);
-
-  return result;
 }
 
 // Public interface that schedules the write on the primary OSD
@@ -509,46 +560,59 @@ int PGBackendTestFixture::create_and_write(
   const std::string& obj_name,
   const std::string& data)
 {
-  // Get the primary OSD from the OSDMap
-  int primary_osd = osdmap->get_pg_acting_primary(pgid);
-  ceph_assert(primary_osd >= 0);
+  // Get the primary TestPG directly
+  TestPG* primary_test_pg = get_primary_test_pg();
+  if (!primary_test_pg) {
+    return -EINVAL;
+  }
   
-  int result = -1;
-  event_loop->schedule_transaction(primary_osd, [this, &result, obj_name, data]() {
-    result = do_create_and_write_impl(obj_name, data);
+  int primary_osd = primary_test_pg->pg_whoami.osd;
+  
+  bool completed = false;
+  int result = -EINPROGRESS;
+  
+  event_loop->run_in_pg(primary_osd, primary_test_pg, [this, &completed, &result, obj_name, data]() {
+    // Call the impl function which will set up the completion callback
+    // The callback will update 'completed' and 'result' when it fires
+    do_create_and_write_impl(obj_name, data, completed, result);
   });
+  
+  // Run the event loop to complete the transaction
+  // The completion callback will update 'completed' and 'result'
   event_loop->run_until_idle();
   
-  return result;
+  // Return the result from the completion callback
+  return completed ? result : -EINPROGRESS;
 }
 
 void PGBackendTestFixture::set_object_context(
   const hobject_t& hoid,
   ObjectContextRef obc)
 {
-  int osd = event_loop->get_current_executing_osd();
-  ceph_assert(osd != -1);
-  object_contexts[osd][hoid] = obc;
+  TestPG* test_pg = get_test_pg();
+  ceph_assert(test_pg != nullptr);
+  test_pg->object_contexts[hoid] = obc;
 }
 
 void PGBackendTestFixture::clear_object_contexts()
 {
-  int osd = event_loop->get_current_executing_osd();
-  ceph_assert(osd != -1);
-  object_contexts[osd].clear();
+  TestPG* test_pg = get_test_pg();
+  ceph_assert(test_pg != nullptr);
+  test_pg->object_contexts.clear();
 }
+
 
 ObjectContextRef PGBackendTestFixture::get_object_context(
   const hobject_t& hoid,
   bool can_create,
   const std::map<std::string, ceph::buffer::list, std::less<>> *attrs)
 {
-  int osd = event_loop->get_current_executing_osd();
-  ceph_assert(osd != -1);
+  TestPG* test_pg = get_test_pg();
+  ceph_assert(test_pg != nullptr);
   
   // Check cache first (matches PrimaryLogPG::get_object_context line 11968)
-  auto it = object_contexts[osd].find(hoid);
-  if (it != object_contexts[osd].end()) {
+  auto it = test_pg->object_contexts.find(hoid);
+  if (it != test_pg->object_contexts.end()) {
     return it->second;
   }
 
@@ -612,11 +676,13 @@ ObjectContextRef PGBackendTestFixture::get_object_context(
 }
 
 // Helper function for write implementation
-int PGBackendTestFixture::do_write_impl(
+void PGBackendTestFixture::do_write_impl(
   const std::string& obj_name,
   uint64_t offset,
   const std::string& data,
-  uint64_t object_size)
+  uint64_t object_size,
+  bool& completed,
+  int& result)
 {
   hobject_t hoid = make_test_object(obj_name);
   PGTransactionUPtr pg_t = std::make_unique<PGTransaction>();
@@ -625,7 +691,7 @@ int PGBackendTestFixture::do_write_impl(
   pg_t->obc_map[hoid] = obc;
 
   // Track outstanding write
-  outstanding_writes[hoid]++;
+  get_test_pg()->outstanding_writes[hoid]++;
 
   bufferlist bl;
   bl.append(data);
@@ -670,15 +736,19 @@ int PGBackendTestFixture::do_write_impl(
   entry.prior_version = prior_version;
   log_entries.push_back(entry);
 
+  // Capture TestPG pointer before creating lambda
+  TestPG* test_pg = get_test_pg();
+  
   // Create completion lambda for write-specific cleanup
-  auto write_complete = [this, hoid, obc, prior_version, object_size](int r) {
+  // Capture completed and result by reference from caller
+  auto write_complete = [test_pg, hoid, obc, prior_version, object_size, &completed, &result](int r) {
     // Decrement outstanding writes counter
-    if (outstanding_writes[hoid] > 0) {
-      outstanding_writes[hoid]--;
+    if (test_pg->outstanding_writes[hoid] > 0) {
+      test_pg->outstanding_writes[hoid]--;
       // Clean up the counter if it reaches 0, but don't clear attr_cache here.
       // The attr_cache will be cleared on on_change() events.
-      if (outstanding_writes[hoid] == 0) {
-        outstanding_writes.erase(hoid);
+      if (test_pg->outstanding_writes[hoid] == 0) {
+        test_pg->outstanding_writes.erase(hoid);
       }
     }
 
@@ -687,14 +757,16 @@ int PGBackendTestFixture::do_write_impl(
       obc->obs.oi.version = prior_version;
       obc->obs.oi.size = object_size;
       obc->attr_cache.clear();
-      outstanding_writes.erase(hoid);
+      test_pg->outstanding_writes.erase(hoid);
     }
+    
+    // Mark as completed and store result
+    completed = true;
+    result = r;
   };
 
-  int result = do_transaction_and_complete(
+  do_transaction(
     hoid, std::move(pg_t), delta_stats, at_version, std::move(log_entries), write_complete);
-
-  return result;
 }
 
 // Public interface that schedules the write on the primary OSD
@@ -704,18 +776,28 @@ int PGBackendTestFixture::write(
   const std::string& data,
   uint64_t object_size)
 {
-  // Get the primary OSD from the OSDMap
-  int primary_osd = osdmap->get_pg_acting_primary(pgid);
-  ceph_assert(primary_osd >= 0);
+  // Get the primary TestPG directly
+  TestPG* primary_test_pg = get_primary_test_pg();
+  if (!primary_test_pg) {
+    return -EINVAL;
+  }
   
-  int result = -1;
-  event_loop->schedule_transaction(primary_osd, [this, &result, obj_name, offset, data, object_size]() {
-    result = do_write_impl(obj_name, offset, data, object_size);
+  int primary_osd = primary_test_pg->pg_whoami.osd;
+  
+  bool completed = false;
+  int result = -EINPROGRESS;
+  
+  event_loop->run_in_pg(primary_osd, primary_test_pg, [this, &completed, &result, obj_name, offset, data, object_size]() {
+    do_write_impl(obj_name, offset, data, object_size, completed, result);
   });
+  
+  // Run the event loop to complete the transaction
+  // The completion callback will update 'completed' and 'result'
   event_loop->run_until_idle();
   
-  return result;
+  return completed ? result : -EINPROGRESS;
 }
+
 
 int PGBackendTestFixture::read_object(
   const std::string& obj_name,
@@ -805,7 +887,6 @@ void PGBackendTestFixture::create_and_write_verify(
   int result = create_and_write(obj_name, data);
 
   ASSERT_GE(result, 0) << "Write should complete successfully";
-
   // Always verify - tests should only use this helper when success is expected
   verify_object(obj_name, data, 0, data.length());
 }
@@ -869,25 +950,45 @@ void PGBackendTestFixture::update_osdmap(
   // Step 1: Update the osdmap reference first
   osdmap = new_osdmap;
 
-  // Step 2: Update the osdmap in all listeners
-  for (auto& [instance, list] : listeners) {
-    if (list) {
-      list->osdmap = new_osdmap;
+  // Step 2: Update the osdmap and pool in all backend listeners
+  // Use get_test_pg_by_instance() to access all OSDs, including those that
+  // may have been removed from the acting set
+  for (auto& [osd, osd_fixture] : osd_fixtures) {
+    
+    for (auto &[spg, test_pg] : osd_fixture->pgs)
+    if (test_pg->has_backend()) {
+      test_pg->get_backend_listener()->osdmap = new_osdmap;
+      // Update the pool to point to the new OSDMap's pool object
+      // This is critical because ECBackend's stripe_info_t holds a pointer to
+      // the pg_pool_t inside MockPGBackendListener::pool.info. When we use
+      // deepish_copy_from() to create a new OSDMap, pool objects are at new
+      // addresses. Calling pool.update() copies the new pool info into the
+      // existing pool.info member, keeping its address stable.
+      test_pg->get_backend_listener()->pool.update(new_osdmap);
     }
   }
 
-  // Step 3: Clear outstanding writes. FIXME: This belongs in the pg
-  outstanding_writes.clear();
+  // Step 3: Clear outstanding writes for all PGs
+  // Note: outstanding_writes is now per-PG, so we clear it for each PG
+  for (auto& [osd, osd_fixture] : osd_fixtures) {
+    for (auto& [spgid, test_pg] : osd_fixture->pgs) {
+      test_pg->outstanding_writes.clear();
+    }
+  }
 
   // Step 4: Schedule on_change() calls as event loop actions
   // This allows them to be delayed and processed after the new epoch
-  for (auto& [instance, be] : backends) {
-    if (be) {
-      PGBackend* backend_ptr = be.get();
-      event_loop->schedule_peering_event(instance, [this, backend_ptr]() {
-        backend_ptr->on_change();
-        clear_object_contexts();
-      });
+  // Iterate over all PGs in all OSDs to handle on_change() for each
+  for (auto& [osd, osd_fixture] : osd_fixtures) {
+    for (auto& [spgid, test_pg] : osd_fixture->pgs) {
+      if (test_pg->has_backend()) {
+        PGBackend* backend_ptr = test_pg->get_backend();
+        // Schedule peering event with TestPG context so get_test_pg() works
+        event_loop->schedule_peering_event(osd, test_pg.get(), [this, backend_ptr]() {
+          backend_ptr->on_change();
+          clear_object_contexts();
+        });
+      }
     }
   }
   event_loop->run_until_idle();
@@ -895,20 +996,24 @@ void PGBackendTestFixture::update_osdmap(
 
 void PGBackendTestFixture::cleanup_data_dir()
 {
-  // Only clean up if the directory exists and hasn't been cleaned already
-  if (!data_dir.empty() && std::filesystem::exists(data_dir)) {
-    std::error_code ec;
-    std::filesystem::remove_all(data_dir, ec);
-    // Silently ignore errors during cleanup - we tried our best
+  // Clean up per-OSD data directories
+  for (auto& [osd_id, osd_fixture] : osd_fixtures) {
+    if (!osd_fixture->data_dir.empty() && std::filesystem::exists(osd_fixture->data_dir)) {
+      std::error_code ec;
+      std::filesystem::remove_all(osd_fixture->data_dir, ec);
+      // Silently ignore errors during cleanup - we tried our best
+    }
   }
 }
 
 // Helper function for write_attribute implementation
-int PGBackendTestFixture::do_write_attribute_impl(
+void PGBackendTestFixture::do_write_attribute_impl(
   const std::string& obj_name,
   const std::string& attr_name,
   const std::string& attr_value,
-  bool force_all_shards)
+  bool force_all_shards,
+  bool& completed,
+  int& result)
 {
   hobject_t hoid = make_test_object(obj_name);
   PGTransactionUPtr pg_t = std::make_unique<PGTransaction>();
@@ -916,7 +1021,7 @@ int PGBackendTestFixture::do_write_attribute_impl(
   ObjectContextRef obc = get_object_context(hoid, false);
   pg_t->obc_map[hoid] = obc;
   
-  outstanding_writes[hoid]++;
+  get_test_pg()->outstanding_writes[hoid]++;
   
   eversion_t prior_version = obc->obs.oi.version;
   eversion_t at_version = get_next_version();
@@ -949,19 +1054,27 @@ int PGBackendTestFixture::do_write_attribute_impl(
   
   object_stat_sum_t delta_stats;
   
-  auto write_complete = [this, hoid, obc, prior_version](int r) {
-    if (outstanding_writes[hoid] > 0) {
-      outstanding_writes[hoid]--;
-      if (outstanding_writes[hoid] == 0) {
-        outstanding_writes.erase(hoid);
+  // Capture TestPG pointer before creating lambda
+  TestPG* test_pg = get_test_pg();
+  
+  // Capture completed and result by reference from caller
+  auto write_complete = [test_pg, hoid, obc, prior_version, &completed, &result](int r) {
+    if (test_pg->outstanding_writes[hoid] > 0) {
+      test_pg->outstanding_writes[hoid]--;
+      if (test_pg->outstanding_writes[hoid] == 0) {
+        test_pg->outstanding_writes.erase(hoid);
       }
     }
     
     if (r != 0 && r != -EINPROGRESS) {
       obc->obs.oi.version = prior_version;
       obc->attr_cache.clear();
-      outstanding_writes.erase(hoid);
+      test_pg->outstanding_writes.erase(hoid);
     }
+    
+    // Mark as completed and store result
+    completed = true;
+    result = r;
   };
   
   // Control first_write_in_interval to simulate different write patterns
@@ -972,10 +1085,8 @@ int PGBackendTestFixture::do_write_attribute_impl(
     }
   }
   
-  int result = do_transaction_and_complete(
+  do_transaction(
     hoid, std::move(pg_t), delta_stats, at_version, std::move(log_entries), write_complete);
-  
-  return result;
 }
 
 // Public interface that schedules the write on the primary OSD
@@ -985,18 +1096,28 @@ int PGBackendTestFixture::write_attribute(
   const std::string& attr_value,
   bool force_all_shards)
 {
-  // Get the primary OSD from the OSDMap
-  int primary_osd = osdmap->get_pg_acting_primary(pgid);
-  ceph_assert(primary_osd >= 0);
+  // Get the primary TestPG directly
+  TestPG* primary_test_pg = get_primary_test_pg();
+  if (!primary_test_pg) {
+    return -EINVAL;
+  }
   
-  int result = -1;
-  event_loop->schedule_transaction(primary_osd, [this, &result, obj_name, attr_name, attr_value, force_all_shards]() {
-    result = do_write_attribute_impl(obj_name, attr_name, attr_value, force_all_shards);
+  int primary_osd = primary_test_pg->pg_whoami.osd;
+  
+  bool completed = false;
+  int result = -EINPROGRESS;
+  
+  event_loop->run_in_pg(primary_osd, primary_test_pg, [this, &completed, &result, obj_name, attr_name, attr_value, force_all_shards]() {
+    do_write_attribute_impl(obj_name, attr_name, attr_value, force_all_shards, completed, result);
   });
+  
+  // Run the event loop to complete the transaction
+  // The completion callback will update 'completed' and 'result'
   event_loop->run_until_idle();
   
-  return result;
+  return completed ? result : -EINPROGRESS;
 }
+
 
 object_info_t PGBackendTestFixture::read_shard_object_info(
   const std::string& obj_name,
@@ -1005,16 +1126,16 @@ object_info_t PGBackendTestFixture::read_shard_object_info(
   hobject_t hoid = make_test_object(obj_name);
   ghobject_t ghoid(hoid, ghobject_t::NO_GEN, shard_id_t(shard));
   
-  auto ch_it = chs.find(shard);
-  if (ch_it == chs.end()) {
-    std::cerr << "ERROR: No collection handle for shard " << shard << std::endl;
+  OsdTestFixture* osd_fixture = get_osd_fixture(shard);
+  if (!osd_fixture || !osd_fixture->ch || !osd_fixture->store) {
+    std::cerr << "ERROR: No collection handle or store for shard " << shard << std::endl;
     return object_info_t(hoid);
   }
   
   ceph::buffer::ptr value_ptr;
-  int r = store->getattr(ch_it->second, ghoid, OI_ATTR, value_ptr);
+  int r = osd_fixture->store->getattr(osd_fixture->ch, ghoid, OI_ATTR, value_ptr);
   if (r < 0) {
-    std::cerr << "ERROR: Failed to read OI_ATTR from shard " << shard 
+    std::cerr << "ERROR: Failed to read OI_ATTR from shard " << shard
               << ": " << cpp_strerror(r) << std::endl;
     return object_info_t(hoid);
   }
@@ -1035,42 +1156,51 @@ bool PGBackendTestFixture::scrub_object(const std::string& obj_name)
   int total_shards = k + m;
   std::map<pg_shard_t, ScrubMap> scrub_maps;
 
+  // Scan each shard within its PG context using run_in_pg
   for (int shard = 0; shard < total_shards; ++shard) {
-    pg_shard_t pg_shard(shard, shard_id_t(shard));
+    TestPG* test_pg = get_test_pg_by_shard(shard);
+    if (!test_pg) {
+      std::cerr << "ERROR: TestPG for shard " << shard << " does not exist" << std::endl;
+      return true;
+    }
+    
+    int osd = test_pg->pg_whoami.osd;
+    pg_shard_t pg_shard(osd, shard_id_t(shard));
     ScrubMap& smap = scrub_maps[pg_shard];
+    
+    // Execute be_scan_list within the PG context for this shard
+    event_loop->run_in_pg(osd, test_pg, [&]() {
+      PGBackend* backend = test_pg->get_backend();
+      if (!backend) {
+        std::cerr << "ERROR: Backend pointer for shard " << shard << " is null" << std::endl;
+        return;
+      }
 
-    auto backend_it = backends.find(shard);
-    if (backend_it == backends.end()) {
-      std::cerr << "ERROR: Backend for shard " << shard << " does not exist" << std::endl;
-      return true;
-    }
-    PGBackend* backend = backend_it->second.get();
-    if (!backend) {
-      std::cerr << "ERROR: Backend pointer for shard " << shard << " is null" << std::endl;
-      return true;
-    }
+      ScrubMapBuilder pos;
+      pos.ls.push_back(hoid);
+      pos.pos = 0;
+      pos.deep = true;
 
-    ScrubMapBuilder pos;
-    pos.ls.push_back(hoid);
-    pos.pos = 0;
-    pos.deep = true;
+      const Scrub::ScrubCounterSet& counters = Scrub::io_counters_ec;
 
-    const Scrub::ScrubCounterSet& counters = Scrub::io_counters_ec;
+      int r = backend->be_scan_list(counters, smap, pos);
+      while (r == -EINPROGRESS) {
+        r = backend->be_scan_list(counters, smap, pos);
+      }
 
-    int r = backend->be_scan_list(counters, smap, pos);
-    while (r == -EINPROGRESS) {
-      r = backend->be_scan_list(counters, smap, pos);
-    }
+      if (r != 0) {
+        std::cerr << "ERROR: be_scan_list failed for shard " << shard << ": " << cpp_strerror(r) << std::endl;
+        return;
+      }
 
-    if (r != 0) {
-      std::cerr << "ERROR: be_scan_list failed for shard " << shard << ": " << cpp_strerror(r) << std::endl;
-      return true;
-    }
-
-    if (!smap.objects.contains(hoid)) {
-      std::cerr << "ERROR: Object not in scrub map for shard " << shard << std::endl;
-      return true;
-    }
+      if (!smap.objects.contains(hoid)) {
+        std::cerr << "ERROR: Object not in scrub map for shard " << shard << std::endl;
+        return;
+      }
+    });
+    
+    // Run event loop to complete any pending operations for this shard
+    event_loop->run_until_idle();
   }
 
   if (!scrub_listener || !snap_reader) {
@@ -1147,16 +1277,22 @@ bufferlist PGBackendTestFixture::create_random_buffer(size_t size)
 
 void PGBackendTestFixture::corrupt_shard_data(const hobject_t& obj, pg_shard_t shard)
 {
-  auto ch_it = chs.find(shard.osd);
-  if (ch_it == chs.end()) {
-    std::cerr << "ERROR: No collection handle for shard " << shard.osd << std::endl;
+  auto fixture_it = osd_fixtures.find(shard.osd);
+  if (fixture_it == osd_fixtures.end()) {
+    std::cerr << "ERROR: No fixture for shard " << shard.osd << std::endl;
+    return;
+  }
+  
+  auto& fixture = fixture_it->second;
+  if (!fixture->store || !fixture->ch) {
+    std::cerr << "ERROR: No store or collection handle for shard " << shard.osd << std::endl;
     return;
   }
 
   ghobject_t ghoid(obj, ghobject_t::NO_GEN, shard.shard);
 
   struct stat st;
-  int r = store->stat(ch_it->second, ghoid, &st);
+  int r = fixture->store->stat(fixture->ch, ghoid, &st);
   if (r < 0) {
     std::cerr << "ERROR: Failed to stat object on shard " << shard.osd
               << ": " << cpp_strerror(r) << std::endl;
@@ -1173,9 +1309,9 @@ void PGBackendTestFixture::corrupt_shard_data(const hobject_t& obj, pg_shard_t s
   zero_bl.append_zero(size);
 
   ObjectStore::Transaction t;
-  t.write(ch_it->second->cid, ghoid, 0, size, zero_bl);
+  t.write(fixture->ch->cid, ghoid, 0, size, zero_bl);
 
-  r = store->queue_transaction(ch_it->second, std::move(t));
+  r = fixture->store->queue_transaction(fixture->ch, std::move(t));
   if (r < 0) {
     std::cerr << "ERROR: Failed to corrupt object on shard " << shard.osd
               << ": " << cpp_strerror(r) << std::endl;
