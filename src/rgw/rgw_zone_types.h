@@ -558,6 +558,7 @@ struct RGWZoneGroupPlacementTierS3 {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+  void dump_mask_keys(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(RGWZoneGroupPlacementTierS3)

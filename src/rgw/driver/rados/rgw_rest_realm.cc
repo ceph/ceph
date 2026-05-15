@@ -3,6 +3,8 @@
 
 #include <optional>
 #include "common/errno.h"
+#include "common/ceph_json.h"
+#include "common/XMLFormatter.h"
 #include "rgw_rest_realm.h"
 #include "rgw_rest_s3.h"
 #include "rgw_rest_config.h"
@@ -53,10 +55,55 @@ void RGWOp_Period_Base::send_response()
   flusher.flush();
 }
 
+// Handler to mask tier S3 secrets for display (works with both JSON and XML Formatter)
+class TierS3KeysHandler : public JSONEncodeFilter::Handler<RGWZoneGroupPlacementTierS3> {
+  void encode_json(const char *name, const void *pval, ceph::Formatter *f) const override {
+    auto tier = static_cast<const RGWZoneGroupPlacementTierS3 *>(pval);
+    f->open_object_section(name);
+    tier->dump_mask_keys(f);
+    f->close_section();
+  }
+};
+
+// JSON Formatter that masks tier S3 secrets for display
+class JSONFormatter_TierS3Keys : public JSONFormatter {
+  TierS3KeysHandler tier_s3_handler;
+  JSONEncodeFilter encode_filter;
+public:
+  JSONFormatter_TierS3Keys(bool pretty) : JSONFormatter(pretty) {
+    encode_filter.register_type(&tier_s3_handler);
+  }
+  void *get_external_feature_handler(const std::string& feature) override {
+    if (feature != "JSONEncodeFilter") {
+      return nullptr;
+    }
+    return &encode_filter;
+  }
+};
+
+// XML Formatter that masks tier S3 secrets for display
+class XMLFormatter_TierS3Keys : public ceph::XMLFormatter {
+  TierS3KeysHandler tier_s3_handler;
+  JSONEncodeFilter encode_filter;
+public:
+  XMLFormatter_TierS3Keys(bool pretty) : ceph::XMLFormatter(pretty) {
+    encode_filter.register_type(&tier_s3_handler);
+  }
+  void *get_external_feature_handler(const std::string& feature) override {
+    if (feature != "JSONEncodeFilter") {
+      return nullptr;
+    }
+    return &encode_filter;
+  }
+};
+
 // GET /admin/realm/period
 class RGWOp_Period_Get : public RGWOp_Period_Base {
+  bool mask_secrets = false;
+
  public:
   void execute(optional_yield y) override;
+  void send_response() override;
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("zone", RGW_CAP_READ);
   }
@@ -73,10 +120,50 @@ void RGWOp_Period_Get::execute(optional_yield y)
   RESTArgs::get_string(s, "realm_id", realm_id, &realm_id);
   RESTArgs::get_string(s, "period_id", period_id, &period_id);
   RESTArgs::get_uint32(s, "epoch", 0, &epoch);
+  RESTArgs::get_bool(s, "mask_secrets", true, &mask_secrets);
 
   op_ret = s->penv.cfgstore->read_period(this, y, period_id, std::nullopt, period);
   if (op_ret < 0)
     ldpp_dout(this, 5) << "failed to read period" << dendl;
+}
+
+void RGWOp_Period_Get::send_response()
+{
+  set_req_state_err(s, op_ret, error_stream.str());
+  dump_errno(s);
+
+  if (op_ret < 0) {
+    if (!s->err.message.empty()) {
+      ldpp_dout(this, 4) << "Request failed with " << op_ret
+          << ": " << s->err.message << dendl;
+    }
+    end_header(s);
+    return;
+  }
+
+  Formatter *original_formatter = s->formatter;
+  std::unique_ptr<Formatter> tier_formatter;
+
+  // Apply secret masking for both JSON and XML formats
+  if (mask_secrets) {
+    if (s->format == RGWFormat::XML) {
+      tier_formatter = std::make_unique<XMLFormatter_TierS3Keys>(false);
+    } else {
+      tier_formatter = std::make_unique<JSONFormatter_TierS3Keys>(false);
+    }
+    s->formatter = tier_formatter.get();
+    flusher.init(s, this);  // Re-init flusher with new formatter
+  }
+
+  encode_json("period", period, s->formatter);
+  end_header(s, NULL, "application/json", s->formatter->get_len());
+  flusher.flush();
+
+  if (mask_secrets) {
+    // Restore original formatter
+    s->formatter = original_formatter;
+    flusher.init(s, this);
+  }
 }
 
 // POST /admin/realm/period

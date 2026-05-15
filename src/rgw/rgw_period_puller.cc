@@ -40,6 +40,7 @@ int pull_period(const DoutPrefixProvider *dpp, RGWRESTConn* conn, const std::str
   auto& params = info.args.get_params();
   params["realm_id"] = realm_id;
   params["period_id"] = period_id;
+  params["mask_secrets"] = "false";
 
   bufferlist data;
 #define MAX_REST_RESPONSE (128 * 1024)
