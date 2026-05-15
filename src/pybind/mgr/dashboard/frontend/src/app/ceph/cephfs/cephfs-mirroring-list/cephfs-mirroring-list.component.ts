@@ -1,18 +1,14 @@
-import { Component, ViewChild, OnInit } from '@angular/core';
+import { Component, OnInit, ViewChild, ViewEncapsulation } from '@angular/core';
 import { BehaviorSubject, Observable, of } from 'rxjs';
 import { catchError, switchMap } from 'rxjs/operators';
-import { TableComponent } from '~/app/shared/datatable/table/table.component';
+
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
-import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
-import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
-import { CdTableAction } from '~/app/shared/models/cd-table-action';
-import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Daemon, MirroringRow } from '~/app/shared/models/cephfs.model';
-import { Icons } from '~/app/shared/enum/icons.enum';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { Permission } from '~/app/shared/models/permissions';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
 
 export const MIRRORING_PATH = 'cephfs/mirroring';
 @Component({
@@ -20,24 +16,21 @@ export const MIRRORING_PATH = 'cephfs/mirroring';
   templateUrl: './cephfs-mirroring-list.component.html',
   styleUrls: ['./cephfs-mirroring-list.component.scss'],
   standalone: false,
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(MIRRORING_PATH) }]
+  encapsulation: ViewEncapsulation.None
 })
 export class CephfsMirroringListComponent implements OnInit {
   @ViewChild('table', { static: true }) table: TableComponent;
 
   columns: CdTableColumn[];
-  selection = new CdTableSelection();
+  isPrepareModalOpen = false;
   subject$ = new BehaviorSubject<MirroringRow[]>([]);
   daemonStatus$: Observable<MirroringRow[]>;
   context: CdTableFetchDataContext;
-  tableActions: CdTableAction[];
   permission: Permission;
 
   constructor(
-    public actionLabels: ActionLabelsI18n,
     private authStorageService: AuthStorageService,
-    private cephfsService: CephfsService,
-    private urlBuilder: URLBuilderService
+    private cephfsService: CephfsService
   ) {
     this.permission = this.authStorageService.getPermissions().cephfs;
   }
@@ -55,15 +48,6 @@ export class CephfsMirroringListComponent implements OnInit {
       { name: $localize`Snapshot directories`, prop: 'directory_count', flexGrow: 1 }
     ];
 
-    const createAction: CdTableAction = {
-      permission: 'create',
-      icon: Icons.add,
-      routerLink: () => this.urlBuilder.getCreate(),
-      name: this.actionLabels.CREATE,
-      canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
-    };
-
-    this.tableActions = [createAction];
     this.daemonStatus$ = this.subject$.pipe(
       switchMap(() =>
         this.cephfsService.listDaemonStatus()?.pipe(
@@ -113,7 +97,19 @@ export class CephfsMirroringListComponent implements OnInit {
     this.subject$.next([]);
   }
 
-  updateSelection(selection: CdTableSelection) {
-    this.selection = selection;
+  openPrepareToReceive() {
+    this.isPrepareModalOpen = true;
+  }
+
+  closePrepareModal() {
+    this.isPrepareModalOpen = false;
+    this.loadDaemonStatus();
+  }
+
+  onTokenGenerated(_response: any) {
+    this.loadDaemonStatus();
+  }
+
+  updateSelection(_selection: any) {
   }
 }
