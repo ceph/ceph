@@ -44,26 +44,21 @@ Release Cycle
     Developer          CDS                                  CDS 
     Summit              |                                    |
                         |                                    |
-development         |                                    |
-release             |
-v19.0.0             ...         |
-v20.0.0
+    development         |                                    |
+    release             | v19.0.0                ...         | v20.0.0
                    --v--^----^--v---^------^--v-     ---v----^----^---  2024       
-                     |
-|             |         |
-    stable         reef         |
-|      squid
-    release        v18.2.0      |
-|      v19.2.0
-                                |
-|          
-    point                    quincy        reef
-    release                  v17.2.7       v18.2.1
+                     |          |             |         |
+    stable         reef         |             |       squid
+    release        v18.2.0      |             |       v19.2.0
+                                |             |
+    point                    quincy          reef
+    release                  v17.2.7         v18.2.1
 
 
 A new stable release (quincy, reef, squid ...) is published at the same
 frequency. Every release (quincy, reef, squid...) is a `Long Term Stable (LTS)
 <../../releases>`_.  See `Understanding the release cycle
+<../../releases#understanding-the-release-cycle>`_ for more information.
 
 
 Merging bug fixes or features
