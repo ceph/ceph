@@ -180,10 +180,17 @@ jobs:
               
               // Block humans from applying machine labels
               if (!isBot && (labelName === 'releng-audit-pass' || labelName === 'releng-audit-fail')) {
-                core.warning(`[Router] User @${actor} cannot manually apply ${labelName}. Stripping labels and forcing audit.`);
+                core.warning(`[Router] User @${actor} cannot manually apply ${labelName}.`);
                 try { await github.rest.issues.removeLabel({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: 'releng-audit-fail' }); } catch (e) {}
                 try { await github.rest.issues.removeLabel({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: 'releng-audit-pass' }); } catch (e) {}
-                core.setOutput('run_audit', 'true');
+
+                if (hasOverrideLabel) {
+                  core.info(`[Router] override label applied, skipping audit.`);
+                  core.setOutput('run_audit', 'false');
+                } else {
+                  core.info(`[Router] forcing audit.`);
+                  core.setOutput('run_audit', 'true');
+                }
                 return;
               }
 
