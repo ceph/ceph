@@ -3652,36 +3652,32 @@ bool RocksDBStore::get_sharding(std::string& sharding) {
 // If high is a direct successor to low, return "".
 static string key_between(const string& low, const string& high)
 {
-  string result;
   ceph_assert(low.compare(high) < 0);
-  size_t same = 0;
-  while (same < std::min(low.length(), high.length()) &&
-         low[same] == high[same]) {
-    same++;
-  }
-  if (same == low.length()) {
-    //
-    size_t i = same;
-    while (i < high.length() && high[i] == '\0') {
-      i++;
-    }
-    if (i == high.length()) {
+
+  const auto [divergent_low_it, divergent_high_it] =
+    std::mismatch(low.begin(), low.end(), high.begin(), high.end());
+  if (divergent_low_it == low.end()) {
+    const auto non_zero_it = std::find_if(divergent_high_it, high.end(), [](char c) {
+      return c != '\0';
+    });
+    if (non_zero_it == high.end()) {
       // special case that "high"="len00..000"; halfway formula does not work
-      if (i == same + 1) {
+      size_t zero_count = std::distance(divergent_high_it, non_zero_it);
+      if (zero_count == 1) {
         // just "high" = "len0", no key in-between
         return string();
-      } else {
-        // add half zeros
-        result = low;
-        result.append(string((same + 1 - i) / 2, '\0'));
-        return result;
       }
+      // Add roughly half the trailing zeros.
+      return low + string((zero_count + 1) / 2, '\0');
     }
   }
-  const std::string &shorter = low.length() < high.length() ? low : high;
-  const std::string &longer = low.length() < high.length() ? high : low;
 
-  result = shorter;
+  size_t same = std::distance(low.begin(), divergent_low_it);
+  const bool low_is_shorter = low.length() < high.length();
+  const std::string& shorter = low_is_shorter ? low : high;
+  const std::string& longer = low_is_shorter ? high : low;
+
+  string result = shorter;
   result.resize(longer.length() + 1);
   uint16_t carry = 0;
   // "+"
@@ -3693,15 +3689,15 @@ static string key_between(const string& low, const string& high)
     result[i + 1] = v;
   }
   result[same] = carry;
-  //  ">>1"
+  // ">>1"
   for (size_t i = same; i < longer.length(); i++) {
-    uint16_t v =
-        ((uint16_t)(uint8_t)result[i] << 8) | (uint16_t)(uint8_t)result[i + 1];
+    uint16_t v = ((uint16_t)(uint8_t)result[i] << 8) |
+                 (uint16_t)(uint8_t)result[i + 1];
     result[i] = v >> 1;
   }
   result[longer.length()] = (uint8_t)result[longer.length()] >> 7;
   return result;
-};
+}
 
 void RocksDBStore::util_divide_key_range(
   const string& prefix,
@@ -3712,18 +3708,20 @@ void RocksDBStore::util_divide_key_range(
   float accepted_variance,
   vector<keyrange_t>& chunks)
 {
+  ceph_assert(chunk_count > 0);
+  ceph_assert(min_chunk_size > 0);
+  ceph_assert(accepted_variance >= 0.0f);
   dout(10) << __func__ << " chunks=" << chunk_count
     << " start=" << pretty_binary_string(starting_key)
     << " end=" << pretty_binary_string(guardrail_key) << dendl;
   chunks.clear();
-  map<uint64_t, string> cs_map;
   string key_from, key_to;
   auto db_it = get_iterator(prefix);
   db_it->lower_bound(starting_key);
-  if (!db_it) return; //empty range
+  if (!db_it->valid()) return; //empty range
   key_from = db_it->key();
   db_it->lower_bound(guardrail_key);
-  if (!db_it->valid()) {
+  if (!db_it->valid() || guardrail_key.empty()) {
     db_it->seek_to_last();
     ceph_assert(db_it->valid());
     key_to = db_it->key();
@@ -3732,98 +3730,108 @@ void RocksDBStore::util_divide_key_range(
     key_to = db_it->key();
     if (key_to <= key_from) return;
   }
-  uint64_t full_size = estimate_range_size(prefix, key_from, key_to);
-  cs_map[0] = key_from;
-  cs_map[full_size] = key_to;
-  uint64_t target_chunk_size = full_size / chunk_count;
-  uint64_t chunk_min = target_chunk_size * (1 - accepted_variance);
-  uint64_t chunk_max = target_chunk_size * (1 + accepted_variance);
-  if (full_size <= chunk_max) {
-    chunks.emplace_back(key_from, key_to);
-    return;
-  }
-  if (target_chunk_size < chunk_min) {
-    chunk_count = std::min<uint64_t>(chunk_count, full_size / chunk_min + 1);
-    target_chunk_size = full_size / chunk_count;
-    chunk_min = target_chunk_size * (1 - accepted_variance);
-    chunk_max = target_chunk_size * (1 + accepted_variance);
+  // Using set as map; allows for named "first"="key" and "second"="size".
+  struct probe_t {
+    string key;
+    int64_t size;
+    struct compare {
+      bool operator()(const probe_t& l, const probe_t& r) const {
+        return l.key < r.key;
+      }
+    };
+  };
+  set<probe_t, probe_t::compare> db_samples;
+  int64_t full_size = estimate_range_size(prefix, key_from, key_to);
+  db_samples.emplace(key_from, 0);
+  db_samples.emplace(key_to, full_size);
+
+  if (full_size / chunk_count < min_chunk_size) {
+    chunk_count = full_size / min_chunk_size + 1;
   }
   dout(10) << __func__ << " chunks=" << chunk_count
     << " key_from=" << pretty_binary_string(key_from)
     << " key_to=" << pretty_binary_string(key_to) << dendl;
 
-  ceph_assert(chunk_count >= 2);
-  dout(20) << "target_chunk_size=" << target_chunk_size
-    << " chunk_min=" << chunk_min << " chunk_max=" << chunk_max << dendl;
   // Algorithm idea:
-  // Have a mapping MAP with elements: estimated_db_size[key_from .. x] -> x.
-  // Keep bisecting [key_from .. key_to].
-  // When MAP[last] - MAP[current_candidate] is in acceptable range for chunk size
-  //   emit the range and move forward.
-  auto it = cs_map.begin();
-  uint64_t cs_anchor = it->first;
-  string cs_key = it->second;
+  // Have a scan over database with keys mapping to value of
+  //   estimate_range_size between key_from and respective key.
+  // The initial range will be successively scanned by bisecting key ranges.
+  // When scanned point is smaller than desired chunk incorporate it;
+  //   when it is larger attempt to bisect and reevaluate.
+  // Once chunk is large enough, emit it and start with next one.
+  // Extra care is taken to protect against RocksDB providing non-monotonic size estimate.
+  auto base = db_samples.begin();
   uint32_t bisect_actions = 0;
-  while(true) {
-    ceph_assert(it != cs_map.end());
-    it++;
-    ceph_assert(cs_map.end() != it);
-    dout(20) << "trying   " << it->first << " " << pretty_binary_string(it->second) << dendl;
-    if (it->first - cs_anchor > chunk_max) {
-      if (bisect_actions == 100) {
-        chunks.clear();
-        chunks.emplace_back(key_from, key_to);
-        return;
-      }
-      bisect_actions++;
-      // it is too far, need to roll back and divide
-      auto key_e = it->second;
-      it--;
-      auto key_b = it->second;
-      auto imagined_key = key_between(key_b, key_e);
-      dout(20) << pretty_binary_string(key_b) << "..." << pretty_binary_string(key_e)
-        << "-> midpoint=" << pretty_binary_string(imagined_key) << dendl;
-      ceph_assert( key_b < imagined_key);
-      ceph_assert(imagined_key < key_e);
-      db_it->upper_bound(imagined_key);
-      ceph_assert(db_it->valid());
-      auto real_key = db_it->key();
-      if (real_key == key_e) {
-        db_it->prev();
-        real_key = db_it->key();
-      }
-      uint64_t cs_size = estimate_range_size(prefix, key_from, real_key);
-      if (cs_size > it->first) {
-        cs_map[cs_size] = real_key;
-        dout(20) << "newpoint " << cs_size << " " << pretty_binary_string(real_key) << dendl;
-        ceph_assert(key_b < real_key);
-        ceph_assert(real_key <= key_e);
-        continue;
-      } else {
-        // this seems to be limit for precision, no reason to attempt biseciton further
-        // fell out and emit region
-      }
-    } else if (it->first - cs_anchor < chunk_min) {
-      continue;
-    }
-
-    bisect_actions = 0;
-    // we are satisfied enough
-    chunks.emplace_back(cs_key, it->second);
-    dout(10) << "produced chunk size=" << it->first - cs_anchor << " "
-      << pretty_binary_string(cs_key) << " " << pretty_binary_string(it->second) << dendl;
-    if (chunks.size() == chunk_count - 1) {
-      chunks.emplace_back(it->second, key_to);
-      dout(10) << "produced chunk size=" << full_size - it->first << " "
-        << pretty_binary_string(it->second) << " " << pretty_binary_string(key_to) << dendl;
-      break;
-    }
-    cs_anchor = it->first;
-    cs_key = it->second;
-    target_chunk_size = (full_size - cs_anchor) / (chunk_count - chunks.size());
-    chunk_min = target_chunk_size * (1 - accepted_variance);
-    chunk_max = target_chunk_size * (1 + accepted_variance);
+  while(chunks.size() < chunk_count - 1 && // Loop until we get enough chunks, except last.
+        base != db_samples.end() &&        // Extra stop if we just incorporated end() into last range.
+        full_size > base->size)            // And protection against non-monotonic RocksDB size estimation.
+  {
+    // Calculate targets
+    int64_t target_chunk_size = (full_size - base->size) / (chunk_count - chunks.size());
+    int64_t chunk_min = target_chunk_size * (1 - accepted_variance);
+    int64_t chunk_max = target_chunk_size * (1 + accepted_variance);
     dout(20) << "target_chunk_size=" << target_chunk_size
       << " chunk_min=" << chunk_min << " chunk_max=" << chunk_max << dendl;
+    auto curr = base;
+    while(curr->size - base->size < chunk_min) {
+      auto next = curr; next++;
+      if (next == db_samples.end()) {
+        // This should not happen: end()->size == full_size and base->size were
+        // used to calculate chunk_target, chunk_min and chunk_max.
+        // But if it happens, just abruptly finish.
+        goto emit_and_exit;
+      }
+      dout(20) << "trying   " << next->size << " " << pretty_binary_string(next->key) << dendl;
+      if (next->size - base->size < chunk_max) {
+        curr++; //just take it
+      } else {
+        // split
+        if (bisect_actions == 100) {
+          goto emit_and_exit;
+        }
+        bisect_actions++;
+        // it is too far, need to roll back and divide
+        auto key_b = curr->key;
+        auto key_e = next->key;
+        auto imagined_key = key_between(key_b, key_e);
+        dout(20) << pretty_binary_string(key_b) << "..." << pretty_binary_string(key_e)
+          << "-> midpoint=" << pretty_binary_string(imagined_key) << dendl;
+        if (imagined_key.empty()) {
+          // Very very unlikely: key_e is direct successor of key_b.
+          curr++;
+          continue;
+        }
+        ceph_assert(key_b < imagined_key && imagined_key < key_e);
+        db_it->upper_bound(imagined_key);
+        ceph_assert(db_it->valid());
+        auto real_key = db_it->key();
+        if (real_key == key_e) {
+          // It means there is nothing between imagined_key and key_e.
+          // Go back one key so next bisect can be better.
+          db_it->prev();
+          real_key = db_it->key();
+          if (key_b == real_key) {
+            // It means we cannot hope to narrow the gap between key_b and key_e.
+            // Take the range.
+            curr++;
+            continue;
+          }
+        }
+        ceph_assert(key_b < real_key && real_key < key_e);
+        uint64_t cs_size = estimate_range_size(prefix, key_from, real_key);
+        dout(20) << "newpoint " << cs_size << " " << pretty_binary_string(real_key) << dendl;
+        db_samples.emplace(real_key, cs_size);
+      }
+    }
+    //emit chunk
+    bisect_actions = 0;
+    chunks.emplace_back(base->key, curr->key);
+    dout(10) << "produced chunk size=" << curr->size - base->size << " "
+      << pretty_binary_string(base->key) << " " << pretty_binary_string(curr->key) << dendl;
+    base = curr;
   }
+  emit_and_exit:
+  chunks.emplace_back(base->key, key_to);
+  dout(10) << "produced chunk size=" << full_size - base->size << " "
+    << pretty_binary_string(base->key) << " " << pretty_binary_string(key_to) << dendl;
 }
