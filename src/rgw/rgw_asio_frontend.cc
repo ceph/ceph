@@ -1037,6 +1037,21 @@ int AsioFrontend::ssl_reload() {
     }
   }
 
+  std::optional<string> ciphersuites = conf->get_val("ssl_ciphersuites");
+  if (ciphersuites) {
+    if (!cert) {
+      lderr(ctx()) << "no ssl_certificate configured for ssl_ciphersuites" << dendl;
+      return -EINVAL;
+    }
+
+    int r = SSL_CTX_set_ciphersuites(ssl_ctx->native_handle(), ciphersuites->c_str());
+    if (r == 0) {
+      lderr(ctx()) << "no cipher could be selected from ssl_ciphersuites: "
+                   << *ciphersuites << dendl;
+      return -EINVAL;
+    }
+  }
+
   bool key_is_cert = false;
   bool have_cert = false;
   if (cert) {
