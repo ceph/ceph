@@ -1,5 +1,6 @@
 import json
 import boto
+import boto.s3.user # For UserJSONEncoder
 
 def append_attr_value(d, attr, attrv):
     if attrv and len(str(attrv)) > 0:
