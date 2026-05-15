@@ -59,6 +59,25 @@ get_phy_tree_root<
   crimson::os::seastore::lba::LBABtree>(root_t &r);
 
 template <>
+CachedExtentRef get_phy_tree_root_node_sync<
+  crimson::os::seastore::lba::LBABtree>(
+  const RootBlockRef &root_block, op_context_t c)
+{
+  auto lba_root = root_block->lba_root_node;
+  if (!lba_root) {
+    ceph_assert(root_block->is_pending());
+    auto &prior = static_cast<RootBlock&>(*root_block->get_prior_instance());
+    lba_root = prior.lba_root_node;
+  } else {
+    ceph_assert(lba_root->is_initial_pending()
+      == root_block->is_pending());
+  }
+  ceph_assert(lba_root);
+  auto ret = c.cache.peek_extent_viewable_by_trans(c.trans, lba_root);
+  return ret;
+}
+
+template <>
 const get_phy_tree_root_node_ret get_phy_tree_root_node<
   crimson::os::seastore::lba::LBABtree>(
   const RootBlockRef &root_block, op_context_t c)
@@ -935,7 +954,7 @@ BtreeLBAManager::_update_mapping(
     );
     co_return iter.get_cursor(c);
   } else {
-    iter = co_await btree.update(
+    iter = btree.update(
       c,
       iter,
       ret,
@@ -1108,6 +1127,29 @@ BtreeLBAManager::remap_mappings(
   co_return ret;
 }
 
+void BtreeLBAManager::update_paddr_sync(
+  Transaction &t,
+  laddr_t laddr,
+  paddr_t paddr)
+{
+  LOG_PREFIX(BtreeLBAManager::update_mapping);
+  DEBUGT("laddr={}, paddr={}", t, laddr, paddr);
+  auto c = get_context(t);
+  auto btree = get_btree_sync<LBABtree>(c);
+  auto iter = btree.lower_bound_sync(c, laddr);
+  auto cursor = iter.get_cursor(c);
+  btree.update(
+    c,
+    std::move(iter),
+    lba_map_val_t{
+      cursor->get_length(),
+      pladdr_t{std::move(paddr)},
+      cursor->get_refcount(),
+      cursor->get_checksum(),
+      cursor->get_extent_type()},
+    nullptr);
+}
+
 BtreeLBAManager::move_mapping_ret
 BtreeLBAManager::_copy_mapping(
   op_context_t c,
@@ -1128,6 +1170,8 @@ BtreeLBAManager::_copy_mapping(
   move_mapping_ret_t ret{std::move(src), std::move(dest)};
   auto &cursor = *ret.dest;
   auto iter = btree.make_partial_iter(c, cursor);
+  auto &scursor = *ret.src;
+  auto src_iter = btree.make_partial_iter(c, scursor);
   if (!iter.is_end()) {
     assert(iter.get_key() >= dest_laddr + ret.src->get_length());
   }
@@ -1139,16 +1183,17 @@ BtreeLBAManager::_copy_mapping(
   } else {
     addr = ret.src->get_paddr();
   }
-  auto [niter, inserted] = co_await btree.insert(
+  c.trans.new_lba_key_copied(
+    ret.src->get_key(),
+    dest_laddr,
+    [this](Transaction &t, laddr_t laddr, paddr_t paddr) {
+      update_paddr_sync(t, laddr, paddr);
+    });
+  auto [niter, inserted] = co_await btree.copy(
       c,
       std::move(iter),
       dest_laddr,
-      lba_map_val_t{
-	ret.src->get_length(),
-        std::move(addr),
-	EXTENT_DEFAULT_REF_COUNT,
-	ret.src->is_indirect() ? 0 : ret.src->get_checksum(),
-	ret.src->get_extent_type()},
+      std::move(src_iter),
       extent ? extent : get_reserved_ptr<LBALeafNode, laddr_t>());
   ceph_assert(inserted);
   ret.dest = niter.get_cursor(c);

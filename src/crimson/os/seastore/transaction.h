@@ -646,8 +646,34 @@ public:
 
   btree_cursor_stats_t cursor_stats;
 
- bool need_wait_visibility = false;
+  bool need_wait_visibility = false;
 
+  using update_copied_lba_key_func_t =
+    std::function<void (Transaction&, laddr_t, paddr_t)>;
+  void new_lba_key_copied(
+    laddr_t src,
+    laddr_t dest,
+    update_copied_lba_key_func_t &&func) {
+    copied_lba_keys.emplace(src, dest);
+    if (!update_copied_lba_key) {
+      update_copied_lba_key = std::move(func);
+    }
+  }
+  void maybe_sync_copied_lba_key(laddr_t laddr, paddr_t paddr) {
+    if (likely(copied_lba_keys.empty())) {
+      return;
+    }
+    assert(update_copied_lba_key);
+    auto it = copied_lba_keys.find(laddr);
+    if (it == copied_lba_keys.end()) {
+      return;
+    }
+    laddr_t key = it->second;
+    update_copied_lba_key(*this, key, paddr);
+  }
+  RootBlockRef peek_root() {
+    return root;
+  }
 private:
   friend class Cache;
   friend Ref make_test_transaction();
@@ -869,6 +895,9 @@ private:
   backref_entry_refs_t backref_entries;
 
   cache_hint_t cache_hint = CACHE_HINT_TOUCH;
+
+  std::map<laddr_t, laddr_t> copied_lba_keys;
+  std::function<void (Transaction&, laddr_t, paddr_t)> update_copied_lba_key;
 };
 using TransactionRef = Transaction::Ref;
 

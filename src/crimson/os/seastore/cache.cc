@@ -2038,6 +2038,9 @@ void Cache::complete_commit(
       if (is_lba_backref_node(i->get_type())) {
         committer.commit_data();
       }
+      if (i->is_logical()) {
+        committer.maybe_sync_copied_lba_key();
+      }
       touch_extent_fully(prior, &t_src, t.get_cache_hint());
       committer.sync_version();
       committer.unblock_trans(t);

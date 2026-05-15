@@ -388,6 +388,19 @@ private:
     LogicalChildNode *extent);
 
   /**
+   * update_paddr_sync
+   *
+   * This is basically for updating the paddr of the mapping
+   * that has been copied by the transaction t and modified
+   * by some background rewrite transaction.
+   */
+  void update_paddr_sync(
+    Transaction &t,
+    laddr_t laddr,
+    paddr_t paddr);
+
+
+  /**
    * _update_mapping
    *
    * Updates mapping, removes if f returns nullopt
