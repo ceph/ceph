@@ -43,7 +43,7 @@ const jestConfig = {
   testMatch: ['**/*.spec.ts'],
   testRunner: 'jest-jasmine2',
   testEnvironmentOptions: {
-    detectOpenHandles: false
+    detectOpenHandles: true
   }
 };
 module.exports = jestConfig;
