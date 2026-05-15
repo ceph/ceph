@@ -38,12 +38,13 @@ seastar::future<> RelayStore::with_store_do_transaction(
   FuturizedStore::Shard::CollectionRef ch,
   ceph::os::Transaction&& txn)
 {
+  auto& shard = self.shard;
   std::unique_ptr<Context> on_commit(
     ceph::os::Transaction::collect_all_contexts(txn));
   const auto original_core = seastar::this_shard_id();
   const auto store_shard_id = original_core % self.shard_count;
   if (store_shard_id == original_core || store_shard_id == GLOBAL_STORE) {
-    return self.shard.do_transaction_no_callbacks(
+    return shard.do_transaction_no_callbacks(
       std::move(ch), std::move(txn)
     ).then([on_commit=std::move(on_commit)]() mutable {
       auto c = on_commit.release();
@@ -53,8 +54,8 @@ seastar::future<> RelayStore::with_store_do_transaction(
   } else {
     return seastar::smp::submit_to(
       store_shard_id,
-      [self, ch=std::move(ch), txn=std::move(txn)]() mutable {
-      return self.shard.do_transaction_no_callbacks(
+      [&shard, ch=std::move(ch), txn=std::move(txn)]() mutable {
+      return shard.do_transaction_no_callbacks(
         std::move(ch), std::move(txn));
     }).then([original_core, on_commit=std::move(on_commit)]() mutable {
       return seastar::smp::submit_to(original_core, [on_commit=std::move(on_commit)]() mutable {
