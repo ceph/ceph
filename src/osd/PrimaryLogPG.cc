@@ -15967,6 +15967,8 @@ void PrimaryLogPG::on_pool_migration_target_suspended(bool toofull)
 {
   dout(20) << __func__ << " toofull=" << toofull << dendl;
 
+  pool_migration_reservations_granted_target = false;
+
   if (!pending_pool_migration_reservation_ops.empty()) {
     int result = toofull ? -ENOSPC : -ECANCELED;
     for (auto& op : pending_pool_migration_reservation_ops) {
