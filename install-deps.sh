@@ -155,9 +155,31 @@ function install_pkg_on_ubuntu {
     if test -n "$missing_pkgs"; then
         local shaman_url="https://shaman.ceph.com/api/repos/${project}/master/${sha1}/ubuntu/${codename}/repo"
         ci_debug "Downloading $shaman_url ... "
-        $SUDO curl --silent --fail --write-out "%{http_code}" --location $shaman_url --output /etc/apt/sources.list.d/$project.list
-        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y -o Acquire::Languages=none -o Acquire::Translation=none || true
-        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install --allow-unauthenticated -y $missing_pkgs
+
+        local http_code
+        http_code=$($SUDO curl --silent --write-out "%{http_code}" \
+            --location "$shaman_url" \
+            --output /etc/apt/sources.list.d/$project.list)
+
+        if [ "$http_code" != "200" ]; then
+            echo "ERROR: shaman returned HTTP $http_code for $shaman_url" >&2
+            $SUDO rm -f /etc/apt/sources.list.d/$project.list
+            return 1
+        fi
+
+        # Guard against a 200 that still contains an error body (e.g. a proxy
+        # returning HTML with status 200, or shaman quirks).
+        if ! $SUDO grep -qE '^(deb |Types: )' /etc/apt/sources.list.d/$project.list; then
+            echo "ERROR: $project.list doesn't look like a valid apt sources file:" >&2
+            $SUDO cat /etc/apt/sources.list.d/$project.list >&2
+            $SUDO rm -f /etc/apt/sources.list.d/$project.list
+            return 1
+        fi
+
+        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y \
+            -o Acquire::Languages=none -o Acquire::Translation=none || true
+        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install \
+            --allow-unauthenticated -y $missing_pkgs
     fi
 }
 
