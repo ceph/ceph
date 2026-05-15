@@ -22,3 +22,4 @@ overrides:
       - MDS_INSUFFICIENT_STANDBY
       - insufficient standby
       - have.*want.*more
+      - is offline because no MDS is active for it
