@@ -15722,10 +15722,20 @@ uint64_t PrimaryLogPG::recover_pool_migration(
 
   while (ops < max) {
     if (last_pool_migration_started.is_max()) {
-      // Finished pool migration
+      // Started all objects
       if (!pool_migrations_in_flight.empty()) {
         // but still waiting for in flight migrations
         *work_started = true;
+        return ops;
+      }
+
+      if (!pool_migration_watermark.is_max()) {
+        // Started but haven't finished all objects
+        // and nothing in flight, so ops have failed! Need to retry
+        dout(20) << __func__ << " resetting last_pool_migration_started from "
+                 << last_pool_migration_started << " to " << pool_migration_watermark
+                 << " to retry failed objects" << dendl;
+        last_pool_migration_started = pool_migration_watermark;
         return ops;
       }
 
