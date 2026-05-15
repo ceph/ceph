@@ -40,7 +40,7 @@
           <span i18n>This field is required.</span>
         </ng-template>
         <ng-template #fsHelper>
-          <span i18n>Filesystem you want to configure for mirroring. Each filesystem can have one mirror relationship.</span>
+          <span i18n>Filesystem you want to  replicate data from to the destination cluster.</span>
         </ng-template>
       </div>
 
@@ -54,7 +54,8 @@
                     id="secureToken"
                     formControlName="token"
                     rows="5"
-                    placeholder="Enter secure token"
+                    cols="80"
+                    placeholder="Paste the token generated on the destination cluster."
                     i18n-placeholder
                     [invalid]="setupForm.controls['token'].invalid && setupForm.controls['token'].touched"></textarea>
         </cds-textarea-label>
@@ -62,7 +63,12 @@
           <span i18n>Paste the token generated from the destination cluster that will receive the replicated data.</span>
         </ng-template>
         <ng-template #tokenError>
-          <span i18n>This field is required.</span>
+          @if (setupForm.controls['token'].hasError('required')) {
+            <span i18n>This field is required.</span>
+          }
+          @if (setupForm.controls['token'].hasError('invalidToken')) {
+            <span i18n>Invalid token. Please enter a valid base64 bootstrap token.</span>
+          }
         </ng-template>
       </div>
     </form>

@@ -1,5 +1,5 @@
 import { Component, OnInit, Input, Output, EventEmitter, inject } from '@angular/core';
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { AbstractControl, FormBuilder, FormGroup, ValidationErrors, Validators } from '@angular/forms';
 import { concat, of } from 'rxjs';
 import { catchError, last } from 'rxjs/operators';
 
@@ -27,10 +27,25 @@ export class CephfsSetupMirroringComponent implements OnInit {
   private taskWrapper = inject(TaskWrapperService);
   private fb = inject(FormBuilder);
 
+  private validateBase64Token = (control: AbstractControl): ValidationErrors | null => {
+    const value = (control.value || '').replace(/\s/g, '');
+    if (!value) return null;
+    if (!/^[A-Za-z0-9+/]+=*$/.test(value)) {
+      return { invalidToken: true };
+    }
+    try {
+      const decoded = atob(value);
+      JSON.parse(decoded);
+    } catch {
+      return { invalidToken: true };
+    }
+    return null;
+  };
+
   constructor() {
     this.setupForm = this.fb.group({
       filesystem: ['', Validators.required],
-      token: ['', Validators.required]
+      token: ['', [Validators.required, this.validateBase64Token]]
     });
   }
 
@@ -56,13 +71,8 @@ export class CephfsSetupMirroringComponent implements OnInit {
           return of(null);
         })
       ),
-      this.cephfsService.createBootstrapPeer(filesystem, token.trim())
+      this.cephfsService.createBootstrapPeer(filesystem, token.replace(/\s/g, ''))
     ).pipe(last());
-
-    const finishHandler = () => {
-      this.isSubmitting = false;
-      this.mirroringSetup.emit({ filesystem });
-    };
 
     const taskObs = this.taskWrapper.wrapTaskAroundCall({
       task: new FinishedTask('mirroring/setup', {
@@ -70,7 +80,15 @@ export class CephfsSetupMirroringComponent implements OnInit {
       }),
       call: apiActionsObs
     });
-    taskObs.subscribe({ error: finishHandler, complete: finishHandler });
+    taskObs.subscribe({
+      error: () => {
+        this.isSubmitting = false;
+      },
+      complete: () => {
+        this.isSubmitting = false;
+        this.mirroringSetup.emit({ filesystem });
+      }
+    });
   }
 
   onCancel(): void {

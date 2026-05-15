@@ -131,6 +131,15 @@ import { CephfsSetupMirroringComponent } from './cephfs-setup-mirroring/cephfs-s
 })
 export class CephfsModule {
   constructor(private iconService: IconService) {
-    this.iconService.registerAll([AddIcon, LaunchIcon, Close, Trash]);
+    this.iconService.registerAll([
+      AddIcon,
+      LaunchIcon,
+      Close,
+      Trash,
+      ReplicateIcon,
+      ReplicateIcon24,
+      ShareIcon,
+      ShareIcon24
+    ]);
   }
 }
