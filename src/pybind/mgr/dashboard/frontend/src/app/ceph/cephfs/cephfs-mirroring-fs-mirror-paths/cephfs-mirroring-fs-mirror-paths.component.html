@@ -1,0 +1,303 @@
+<main class="cephfs-mirroring-fs-mirror-paths">
+  <cd-table
+    [data]="mirrorPaths"
+    [columns]="columns"
+    columnMode="flex"
+    selectionType="single"
+    [hasDetails]="false"
+    (updateSelection)="onSelectionChange($event)"
+    [toolHeader]="true"
+    [searchableObjects]="true">
+
+    <!-- Sync Status Template -->
+    <ng-template
+      #syncStatusTpl
+      let-row="data.row">
+      <div class="d-flex align-items-center">
+        <svg
+          [cdsIcon]="getSyncStatusIcon(row.syncStatus)"
+          [size]="icons.size16"
+          class="me-2"></svg>
+        <span>{{ row.syncStatus | titlecase }}</span>
+      </div>
+    </ng-template>
+
+    <!-- Files Synced Template -->
+    <ng-template
+      #filesSyncedTpl
+      let-row="data.row">
+      <span>{{ row.filesSynced }} / {{ row.totalFiles }}</span>
+    </ng-template>
+
+    <!-- Bytes Synced Template -->
+    <ng-template
+      #bytesSyncedTpl
+      let-row="data.row">
+      <span>{{ formatBytes(row.bytesSynced) }} / {{ formatBytes(row.totalBytes) }}</span>
+    </ng-template>
+  </cd-table>
+
+  <!-- Side Panel -->
+  <cd-side-panel
+    *ngIf="selectedPath"
+    [expanded]="sidePanelOpen"
+    [headerText]="selectedPath.path"
+    size="lg"
+    (closed)="closeSidePanel()">
+
+    <div class="panel-content">
+      <cds-tabs
+        type="line"
+        [followFocus]="true"
+        [cacheActive]="false">
+
+        <!-- Details Tab -->
+        <cds-tab
+          heading="Details"
+          i18n-heading>
+          <div class="cds-p-4">
+            <!-- Row 1: 3 columns -->
+            <div cdsGrid
+                 [condensed]="true"
+                 class="cds-mb-5">
+              <div cdsCol
+                   [columnNumbers]="{lg: 5, md: 8}">
+                <p class="cds--type-label-01 cds-mb-2"
+                   i18n>Sync Status</p>
+                <div class="d-flex align-items-center">
+                  <svg
+                    [cdsIcon]="getSyncStatusIcon(selectedPath.syncStatus)"
+                    [size]="icons.size16"
+                    class="me-2"></svg>
+                  <span class="cds--type-body-01">{{ selectedPath.syncStatus | titlecase }}</span>
+                </div>
+              </div>
+              <div cdsCol
+                   [columnNumbers]="{lg: 5, md: 8}">
+                <p class="cds--type-label-01 cds-mb-2"
+                   i18n>Priority Mode</p>
+                <p class="cds--type-body-01 cds-mb-0">{{ selectedPath.priorityMode }}</p>
+              </div>
+              <div cdsCol
+                   [columnNumbers]="{lg: 6, md: 8}">
+                <p class="cds--type-label-01 cds-mb-2"
+                   i18n>Last Sync Snapshot</p>
+                <p class="cds--type-body-01 cds-mb-0">{{ selectedPath.lastSyncSnapshot }}</p>
+              </div>
+            </div>
+
+            <!-- Row 2: 3 columns -->
+            <div cdsGrid
+                 [condensed]="true"
+                 class="cds-mb-5">
+              <div cdsCol
+                   [columnNumbers]="{lg: 5, md: 8}">
+                <p class="cds--type-label-01 cds-mb-2"
+                   i18n>Current Sync Snapshot</p>
+                <p class="cds--type-body-01 cds-mb-0">{{ selectedPath.currentSyncSnapshot }}</p>
+              </div>
+              <div cdsCol
+                   [columnNumbers]="{lg: 5, md: 8}">
+                <p class="cds--type-label-01 cds-mb-2"
+                   i18n>ETA</p>
+                <p class="cds--type-body-01 cds-mb-0">{{ selectedPath.eta }}</p>
+              </div>
+              <div cdsCol
+                   [columnNumbers]="{lg: 6, md: 8}">
+                <p class="cds--type-label-01 cds-mb-2"
+                   i18n>Last Sync Time</p>
+                <p class="cds--type-body-01 cds-mb-0">{{ selectedPath.lastSyncTime }}</p>
+              </div>
+            </div>
+
+            <!-- Row 3: Full width progress -->
+            <div class="cds-mb-5">
+              <p class="cds--type-label-01 cds-mb-3"
+                 i18n>Current Sync Progress</p>
+              <cds-progress-bar
+                [max]="100"
+                [value]="selectedPath.syncProgress"
+                status="active"
+                type="inline"
+                size="small">
+              </cds-progress-bar>
+              <p class="cds--type-helper-text-01 cds-mt-2 cds-mb-0">
+                {{ selectedPath.syncProgress }}% synced
+              </p>
+            </div>
+
+            <!-- Row 4: 3 columns -->
+            <div cdsGrid
+                 [condensed]="true"
+                 class="cds-mb-5">
+              <div cdsCol
+                   [columnNumbers]="{lg: 5, md: 8}">
+                <p class="cds--type-label-01 cds-mb-2"
+                   i18n>Files Synced</p>
+                <p class="cds--type-body-01 cds-mb-0">
+                  {{ selectedPath.filesSynced }} / {{ selectedPath.totalFiles }}
+                </p>
+              </div>
+              <div cdsCol
+                   [columnNumbers]="{lg: 5, md: 8}">
+                <p class="cds--type-label-01 cds-mb-2"
+                   i18n>Bytes Synced</p>
+                <p class="cds--type-body-01 cds-mb-0">
+                  {{ formatBytes(selectedPath.bytesSynced) }} / {{ formatBytes(selectedPath.totalBytes) }}
+                </p>
+              </div>
+              <div cdsCol
+                   [columnNumbers]="{lg: 6, md: 8}">
+                <p class="cds--type-label-01 cds-mb-2"
+                   i18n>Snapshots Synced</p>
+                <p class="cds--type-body-01 cds-mb-0">{{ selectedPath.snapshotsSynced }}</p>
+              </div>
+            </div>
+
+            <!-- Row 5: 2 columns -->
+            <div cdsGrid
+                 [condensed]="true"
+                 class="cds-mb-5">
+              <div cdsCol
+                   [columnNumbers]="{lg: 5, md: 8}">
+                <p class="cds--type-label-01 cds-mb-2"
+                   i18n>Snapshots Deleted</p>
+                <p class="cds--type-body-01 cds-mb-0">{{ selectedPath.snapshotsDeleted }}</p>
+              </div>
+              <div cdsCol
+                   [columnNumbers]="{lg: 5, md: 8}">
+                <p class="cds--type-label-01 cds-mb-2"
+                   i18n>Snapshots Renamed</p>
+                <p class="cds--type-body-01 cds-mb-0">{{ selectedPath.snapshotsRenamed }}</p>
+              </div>
+            </div>
+
+            <!-- Failure Reason -->
+            <div
+              *ngIf="selectedPath.failureReason"
+              class="cds-mb-5">
+              <p class="cds--type-label-01 cds-mb-2"
+                 i18n>Failure Reason</p>
+              <div class="d-flex align-items-start cds-p-3 error-notification">
+                <svg
+                  [cdsIcon]="icons.danger"
+                  [size]="icons.size16"
+                  class="me-2 flex-shrink-0"></svg>
+                <span class="cds--type-body-01">{{ selectedPath.failureReason }}</span>
+              </div>
+            </div>
+          </div>
+        </cds-tab>
+
+        <!-- Checkpoint Tab -->
+        <cds-tab
+          heading="Checkpoint"
+          i18n-heading>
+          <div class="cds-p-4">
+            <div
+              *ngFor="let checkpoint of selectedPath.checkpoints"
+              class="checkpoint-card cds-mb-4">
+              <div class="d-flex justify-content-between align-items-center cds-mb-3">
+                <div class="d-flex align-items-center">
+                  <svg
+                    [cdsIcon]="getCheckpointStatusIcon(checkpoint.status)"
+                    [size]="icons.size16"
+                    class="me-2"></svg>
+                  <span class="cds--type-body-compact-01">{{ checkpoint.id }}</span>
+                </div>
+                <span class="checkpoint-badge checkpoint-badge--{{ checkpoint.status }}">
+                  {{ checkpoint.status | titlecase }}
+                </span>
+              </div>
+              <div cdsGrid
+                   [condensed]="true">
+                <div cdsCol
+                     [columnNumbers]="{lg: 8, md: 8}">
+                  <p class="cds--type-label-01 cds-mb-1"
+                     i18n>Timestamp</p>
+                  <p class="cds--type-body-compact-01 cds-mb-0">
+                    {{ formatTimestamp(checkpoint.timestamp) }}
+                  </p>
+                </div>
+                <div
+                  cdsCol
+                  [columnNumbers]="{lg: 8, md: 8}"
+                  *ngIf="checkpoint.backlog !== undefined">
+                  <p class="cds--type-label-01 cds-mb-1"
+                     i18n>Backlog</p>
+                  <p class="cds--type-body-compact-01 cds-mb-0">
+                    {{ checkpoint.backlog }} snapshots
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div
+              *ngIf="selectedPath.checkpoints.length === 0"
+              class="empty-state cds-p-5 text-center">
+              <svg
+                [cdsIcon]="icons.emptySearch"
+                [size]="icons.size32"
+                class="cds-mb-3"></svg>
+              <p class="cds--type-body-01 cds-mb-0"
+                 i18n>No checkpoints available</p>
+            </div>
+          </div>
+        </cds-tab>
+
+        <!-- Schedule Policy Tab -->
+        <cds-tab
+          heading="Schedule Policy"
+          i18n-heading>
+          <div class="cds-p-4">
+            <div class="d-flex justify-content-between align-items-center cds-mb-4 cds-pb-4 border-bottom">
+              <h5 class="cds--type-heading-compact-01 cds-mb-0">
+                {{ selectedPath.schedulePolicy.name }}
+              </h5>
+              <span
+                class="policy-badge"
+                [class.policy-badge--enabled]="selectedPath.schedulePolicy.enabled">
+                <svg
+                  [cdsIcon]="selectedPath.schedulePolicy.enabled ? icons.success : icons.circleDash"
+                  [size]="icons.size16"
+                  class="me-1"></svg>
+                {{ selectedPath.schedulePolicy.enabled ? 'Enabled' : 'Disabled' }}
+              </span>
+            </div>
+
+            <div class="cds-mb-5">
+              <p class="cds--type-label-01 cds-mb-2"
+                 i18n>Schedule</p>
+              <code class="cds--type-code-01 cds-p-2 d-inline-block cds-mb-2">
+                {{ selectedPath.schedulePolicy.schedule }}
+              </code>
+              <p class="cds--type-helper-text-01 cds-mb-0">
+                {{ formatSchedule(selectedPath.schedulePolicy.schedule) }}
+              </p>
+            </div>
+
+            <div cdsGrid
+                 [condensed]="true">
+              <div cdsCol
+                   [columnNumbers]="{lg: 8, md: 8}">
+                <p class="cds--type-label-01 cds-mb-2"
+                   i18n>Last Run</p>
+                <p class="cds--type-body-01 cds-mb-0">
+                  {{ formatTimestamp(selectedPath.schedulePolicy.lastRun) }}
+                </p>
+              </div>
+              <div cdsCol
+                   [columnNumbers]="{lg: 8, md: 8}">
+                <p class="cds--type-label-01 cds-mb-2"
+                   i18n>Next Run</p>
+                <p class="cds--type-body-01 cds-mb-0">
+                  {{ selectedPath.schedulePolicy.nextRun === 'N/A' ? 'N/A' : formatTimestamp(selectedPath.schedulePolicy.nextRun) }}
+                </p>
+              </div>
+            </div>
+          </div>
+        </cds-tab>
+      </cds-tabs>
+    </div>
+  </cd-side-panel>
+</main>

@@ -33,6 +33,10 @@ import { CephfsMountDetailsComponent } from './cephfs-mount-details/cephfs-mount
 import { CephfsAuthModalComponent } from './cephfs-auth-modal/cephfs-auth-modal.component';
 import { CephfsMirroringListComponent } from './cephfs-mirroring-list/cephfs-mirroring-list.component';
 import { CephfsMirroringErrorComponent } from './cephfs-mirroring-error/cephfs-mirroring-error.component';
+import { CephfsMirroringFsTabsComponent } from './cephfs-mirroring-fs-tabs/cephfs-mirroring-fs-tabs.component';
+import { CephfsMirroringFsOverviewComponent } from './cephfs-mirroring-fs-overview/cephfs-mirroring-fs-overview.component';
+import { CephfsMirroringFsMirrorPathsComponent } from './cephfs-mirroring-fs-mirror-paths/cephfs-mirroring-fs-mirror-paths.component';
+import { CephfsMirroringFsSchedulesComponent } from './cephfs-mirroring-fs-schedules/cephfs-mirroring-fs-schedules.component';
 import {
   ButtonModule,
   CheckboxModule,
@@ -49,6 +53,7 @@ import {
   ModalModule,
   NumberModule,
   PlaceholderModule,
+  ProgressBarModule,
   RadioModule,
   SelectModule,
   TagModule,
@@ -63,10 +68,10 @@ import AddIcon from '@carbon/icons/es/add/32';
 import LaunchIcon from '@carbon/icons/es/launch/32';
 import Close from '@carbon/icons/es/close/32';
 import Trash from '@carbon/icons/es/trash-can/32';
-import Renew16 from '@carbon/icons/es/renew/16';
-import { CephfsMirroringWizardComponent } from './cephfs-mirroring-wizard/cephfs-mirroring-wizard.component';
-import { CephfsFilesystemSelectorComponent } from './cephfs-filesystem-selector/cephfs-filesystem-selector.component';
-import { CephfsMirroringEntityComponent } from './cephfs-mirroring-entity/cephfs-mirroring-entity.component';
+import ReplicateIcon from '@carbon/icons/es/replicate/32';
+import ReplicateIcon24 from '@carbon/icons/es/replicate/24';
+import ShareIcon from '@carbon/icons/es/share/32';
+import ShareIcon24 from '@carbon/icons/es/share/24';
 
 @NgModule({
   imports: [
@@ -90,6 +95,7 @@ import { CephfsMirroringEntityComponent } from './cephfs-mirroring-entity/cephfs
     DropdownModule,
     ModalModule,
     PlaceholderModule,
+    ProgressBarModule,
     DatePickerModule,
     TimePickerModule,
     ButtonModule,
@@ -127,15 +133,25 @@ import { CephfsMirroringEntityComponent } from './cephfs-mirroring-entity/cephfs
     CephfsMountDetailsComponent,
     CephfsAuthModalComponent,
     CephfsMirroringListComponent,
-    CephfsMirroringWizardComponent,
-    CephfsFilesystemSelectorComponent,
     CephfsMirroringErrorComponent,
-    CephfsMirroringEntityComponent
+    CephfsMirroringFsTabsComponent,
+    CephfsMirroringFsOverviewComponent,
+    CephfsMirroringFsMirrorPathsComponent,
+    CephfsMirroringFsSchedulesComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())]
 })
 export class CephfsModule {
   constructor(private iconService: IconService) {
-    this.iconService.registerAll([AddIcon, LaunchIcon, Close, Trash, Renew16]);
+    this.iconService.registerAll([
+      AddIcon,
+      LaunchIcon,
+      Close,
+      Trash,
+      ReplicateIcon,
+      ReplicateIcon24,
+      ShareIcon,
+      ShareIcon24
+    ]);
   }
 }
