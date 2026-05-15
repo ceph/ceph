@@ -71,6 +71,30 @@ enum TestOpType {
   TEST_OP_TIER_EVICT
 };
 
+class LogHelper {
+public:
+  bool timestamp;
+  ceph::mutex cout_lock = ceph::make_mutex("Cout Lock");
+
+  std::string timestamp_string() {
+    if (timestamp) {
+      ceph::logging::log_clock clock;
+      clock.coarsen();
+      auto t = clock.now();
+      constexpr int buflen = 128;
+      char buf[buflen];
+      ceph::logging::append_time(t, buf, buflen);
+      return std::string(buf) + " ";
+    }
+    return std::string();
+  }
+
+  std::ostream &cout_prefix() {
+    std::lock_guard l(cout_lock);
+    return std::cout << timestamp_string();
+  }
+};
+
 class TestWatchContext : public librados::WatchCtx2 {
   TestWatchContext(const TestWatchContext&);
 public:
@@ -80,11 +104,12 @@ public:
   ceph::mutex lock = ceph::make_mutex("watch lock");
   librados::IoCtx& io_ctx;
   const std::string oid;
-  TestWatchContext(librados::IoCtx& io_ctx, const std::string oid) : io_ctx(io_ctx), oid(oid) {}
+  LogHelper& context;
+  TestWatchContext(librados::IoCtx& io_ctx, const std::string oid, LogHelper& context) : io_ctx(io_ctx), oid(oid), context(context) {}
   void handle_notify(uint64_t notify_id, uint64_t cookie,
 		     uint64_t notifier_id,
 		     bufferlist &bl) override {
-    std::cout << "watch handle_notify oid=" << oid << " notify_id=" << notify_id
+    context.cout_prefix() << "watch handle_notify oid=" << oid << " notify_id=" << notify_id
               << " cookie=" << cookie << " notifier_id=" << notifier_id << std::endl;
     std::lock_guard l{lock};
     waiting = false;
@@ -94,7 +119,7 @@ public:
   }
   void handle_error(uint64_t cookie, int err) override {
     std::lock_guard l{lock};
-    std::cout << "watch handle_error oid=" << oid << " err=" << err << std::endl;
+    context.cout_prefix() << "watch handle_error oid=" << oid << " err=" << err << std::endl;
   }
   void start() {
     std::lock_guard l{lock};
@@ -164,10 +189,9 @@ public:
   virtual TestOp *next(RadosTestContext &context) = 0;
 };
 
-class RadosTestContext {
+class RadosTestContext : public LogHelper {
 public:
   ceph::mutex state_lock = ceph::make_mutex("Context Lock");
-  ceph::mutex cout_lock = ceph::make_mutex("Cout Lock");
   ceph::condition_variable wait_cond;
   // snap => {oid => desc}
   std::map<int, std::map<std::string,ObjectDesc> > pool_obj_cont;
@@ -209,7 +233,6 @@ public:
   bool enable_dedup;
   std::string chunk_algo;
   std::string chunk_size;
-  bool timestamp;
   const bool migrate_pool;
   const int migration_interval;
   std::optional<int> migration_pg_num;
@@ -227,7 +250,7 @@ public:
 		   bool write_fadvise_dontneed,
 		   const std::string &low_tier_pool_name,
 		   bool enable_dedup,
-		   bool timestamp,
+		   bool _timestamp,
 		   std::string chunk_algo,
 		   std::string chunk_size,
 		   size_t max_attr_len,
@@ -257,13 +280,13 @@ public:
     enable_dedup(enable_dedup),
     chunk_algo(chunk_algo),
     chunk_size(chunk_size),
-    timestamp(timestamp),
     migrate_pool(migrate_pool),
     migration_interval(migration_interval),
     migration_pg_num(migration_pg_num),
     initial_migration_delay(initial_migration_delay)
     {
-  }
+      timestamp = _timestamp;
+    }
 
   int init()
   {
@@ -428,7 +451,7 @@ public:
 
   TestWatchContext *watch(const std::string &oid) {
     ceph_assert(!watches.count(oid));
-    return (watches[oid] = new TestWatchContext(io_ctx, prefix+oid));
+    return (watches[oid] = new TestWatchContext(io_ctx, prefix+oid, *this));
   }
 
   void unwatch(const std::string &oid) {
@@ -846,25 +869,6 @@ public:
       }
       std::this_thread::sleep_for(std::chrono::seconds(sleep_duration));
     }
-  }
-
- public:
-  std::string timestamp_string() {
-    if (timestamp) {
-      ceph::logging::log_clock clock;
-      clock.coarsen();
-      auto t = clock.now();
-      constexpr int buflen = 128;
-      char buf[buflen];
-      ceph::logging::append_time(t, buf, buflen);
-      return std::string(buf) + " ";
-    }
-    return std::string();
-  }
-
-  std::ostream &cout_prefix() {
-    std::lock_guard l(cout_lock);
-    return std::cout << timestamp_string();
   }
 };
 
@@ -1650,9 +1654,9 @@ public:
     if (ctx) {
       ceph_assert(old_value.exists);
       TestAlarm alarm;
-      std::cerr << num << ":  about to start" << std::endl;
+      context->cout_prefix() << num << ":  about to start" << std::endl;
       ctx->start();
-      std::cerr << num << ":  started" << std::endl;
+      context->cout_prefix() << num << ":  started" << std::endl;
       bufferlist bl;
       context->io_ctx.set_notify_timeout(600);
       int r = context->io_ctx.notify2(context->prefix+oid, bl, 0, NULL);
@@ -1660,7 +1664,7 @@ public:
 	std::cerr << "r is " << r << std::endl;
 	ceph_abort();
       }
-      std::cerr << num << ":  notified, waiting" << std::endl;
+      context->cout_prefix() << num << ":  notified, waiting" << std::endl;
       ctx->wait();
     }
     state_locker.lock();
