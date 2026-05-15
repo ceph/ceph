@@ -1,9 +1,9 @@
+import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
 
 import { CephfsMirroringListComponent } from './cephfs-mirroring-list.component';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
-import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { Daemon, MirroringRow } from '~/app/shared/models/cephfs.model';
 
 describe('CephfsMirroringListComponent', () => {
@@ -19,7 +19,8 @@ describe('CephfsMirroringListComponent', () => {
 
     await TestBed.configureTestingModule({
       declarations: [CephfsMirroringListComponent],
-      providers: [ActionLabelsI18n, { provide: CephfsService, useValue: cephfsServiceMock }]
+      providers: [{ provide: CephfsService, useValue: cephfsServiceMock }],
+      schemas: [NO_ERRORS_SCHEMA]
     }).compileComponents();
 
     fixture = TestBed.createComponent(CephfsMirroringListComponent);
@@ -29,14 +30,15 @@ describe('CephfsMirroringListComponent', () => {
   it('should initialize columns correctly on ngOnInit', () => {
     component.ngOnInit();
 
-    expect(component.columns.length).toBe(5);
-    expect(component.columns[0].prop).toBe('remote_cluster_name');
+    expect(component.columns.length).toBe(6);
+    expect(component.columns[0].prop).toBe('local_fs_name');
   });
 
-  it('should call loadDaemonStatus inside ngOnInit', () => {
-    const loadSpy = jest.spyOn(component, 'loadDaemonStatus');
-    component.ngOnInit();
-    expect(loadSpy).toHaveBeenCalledTimes(1);
+  it('should fetch daemon status when loadDaemonStatus() is called', () => {
+    cephfsServiceMock.listDaemonStatus.mockReturnValue(of([]));
+    component.daemonStatus$.subscribe();
+    component.loadDaemonStatus();
+    expect(cephfsServiceMock.listDaemonStatus).toHaveBeenCalledTimes(1);
   });
 
   it('should map daemon status to MirroringRow[] correctly', () => {

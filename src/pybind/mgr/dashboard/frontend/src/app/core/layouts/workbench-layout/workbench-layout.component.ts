@@ -30,6 +30,7 @@ export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
   private subs = new Subscription();
   permissions: Permissions;
   pageHeaderTitle: string | null = null;
+  pageHeaderSubtitle: string | null = null;
   pageHeaderDescription: string | null = null;
   enabledFeature$: Observable<FeatureTogglesMap>;
 
@@ -91,8 +92,10 @@ export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
       route = route.firstChild;
     }
     const pageHeader = route?.routeConfig?.data?.['pageHeader'] as
-      { title?: string; description?: string } | undefined;
+      | { title?: string; subtitle?: string; description?: string }
+      | undefined;
     this.pageHeaderTitle = pageHeader?.title ?? null;
+    this.pageHeaderSubtitle = pageHeader?.subtitle ?? null;
     this.pageHeaderDescription = pageHeader?.description ?? null;
   }
 

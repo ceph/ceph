@@ -1,19 +1,69 @@
-@if (daemonStatus$ | async; as daemonStatus) {
+<div cdsStack="vertical"
+     gap="5"
+     class="cds-mt-6">
+  <h4 class="cds--type-heading-03"
+      i18n>Jump in</h4>
+  <div cdsGrid
+       [narrow]="true">
+    <div cdsRow
+         class="jump-in-row">
+      <div cdsCol
+           [columnNumbers]="{lg: 4, md: 4, sm: 4}">
+        <cds-clickable-tile>
+          <div cdsStack="vertical"
+               gap="5">
+            <p class="cds--type-heading-compact-01"
+               i18n>Set up mirroring</p>
+            <p class="cds--type-body-compact-01"
+               i18n>
+              Configure mirroring for a filesystem by importing a token from a peer cluster and adding paths to replicate.
+            </p>
+            <div [cdsStack]="'horizontal'">
+              <cd-icon type="replicate"
+                       size="24"
+                       class="cds-ml-1 cds-mr-12"></cd-icon>
+              <span class="cds--text-right">&rarr;</span>
+            </div>
+          </div>
+        </cds-clickable-tile>
+      </div>
+      <div cdsCol
+           [columnNumbers]="{lg: 4, md: 4, sm: 4}">
+        <cds-clickable-tile>
+          <div cdsStack="vertical"
+               gap="5">
+            <p class="cds--type-heading-compact-01"
+               i18n>Prepare to receive</p>
+            <p class="cds--type-body-compact-01"
+               i18n>
+              Generate a bootstrap token for a filesystem to allow a peer cluster to replicate data to it.
+            </p>
+            <div [cdsStack]="'horizontal'">
+              <cd-icon type="share"
+                       size="24"
+                       class="cds-ml-3 cds-mr-12"></cd-icon>
+              <span class="cds--text-right">&rarr;</span>
+            </div>
+          </div>
+        </cds-clickable-tile>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Mirrored filesystems table -->
+<section class="cds-mt-6">
+  <h3 class="cds--type-heading-03 cds-mb-3"
+      i18n>Mirrored filesystems</h3>
   <cd-table
     #table
-    [data]="daemonStatus"
+    [data]="daemonStatus$ | async"
     [columns]="columns"
     columnMode="flex"
     selectionType="single"
-    (updateSelection)="updateSelection($event)"
     (fetchData)="loadDaemonStatus()"
+    (updateSelection)="updateSelection($event)"
   >
-    <cd-table-actions
-      class="table-actions"
-      [permission]="permission"
-      [selection]="selection"
-      [tableActions]="tableActions"
-    >
-    </cd-table-actions>
   </cd-table>
-}
+</section>
+
