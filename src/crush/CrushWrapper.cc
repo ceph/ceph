@@ -319,6 +319,7 @@ int CrushWrapper::rename_rule(const string& srcname,
   return 0;
 }
 
+
 void CrushWrapper::find_takes(set<int> *roots) const
 {
   for (unsigned i=0; i<crush->max_rules; i++) {
@@ -2485,14 +2486,19 @@ int CrushWrapper::add_simple_stretch_rule_at(
                << " items of type " << osd_failure_domain_name << " (minimum" << num_replica_per_zone << ")";
         return -EINVAL;
       }
+      int valid_osd_failure_domains = 0;
       for (auto osd_failure_domain : osd_failure_domains) {
         std::vector<int> osds;
         get_children_of_type(osd_failure_domain, 0, &osds, false);
-        if (osds.empty()) {
-          if (err)
-            *err << osd_failure_domain_name << " " << get_item_name(osd_failure_domain) << " has no OSDs";
-          return -EINVAL;
+        if (!osds.empty()) {
+          ++valid_osd_failure_domains;
         }
+      }
+      if (valid_osd_failure_domains < num_replica_per_zone) {
+        if (err)
+          *err << "zone " << get_item_name(child) << " does not have " << num_replica_per_zone
+               << " " << osd_failure_domain_name << "s with at least one OSD";
+        return -EINVAL;
       }
     }
   }
