@@ -77,15 +77,15 @@ Kafka Security Tests
    **Important:** If you face any initialization failures, replace ``localhost`` in both ``listeners`` and ``advertised.listeners`` with your Kafka broker's actual hostname or IP address.
    For example, if your Kafka broker runs on host ``kafka-server.example.com`` or IP ``192.168.1.100``, use::
 
-   listeners=PLAINTEXT://192.168.1.100:9092,SSL://192.168.1.100:9093,SASL_SSL://192.168.1.100:9094,SASL_PLAINTEXT://192.168.1.100:9095
-   advertised.listeners=PLAINTEXT://192.168.1.100:9092,SSL://192.168.1.100:9093,SASL_SSL://192.168.1.100:9094,SASL_PLAINTEXT://192.168.1.100:9095
+   listeners=PLAINTEXT://192.168.1.100:9092,SSL://192.168.1.100:9093,SASL_SSL://192.168.1.100:9094,SASL_PLAINTEXT://192.168.1.100:9095,MTLS://192.168.1.100:9096
+   advertised.listeners=PLAINTEXT://192.168.1.100:9092,SSL://192.168.1.100:9093,SASL_SSL://192.168.1.100:9094,SASL_PLAINTEXT://192.168.1.100:9095,MTLS://192.168.1.100:9096
 
    If both ``listeners`` and ``advertised.listeners`` do not match, the broker cannot connect to itself, causing initialization failures.
 
-        # All listeners
-        listeners=PLAINTEXT://localhost:9092,SSL://localhost:9093,SASL_SSL://localhost:9094,SASL_PLAINTEXT://localhost:9095
-        advertised.listeners=PLAINTEXT://localhost:9092,SSL://localhost:9093,SASL_SSL://localhost:9094,SASL_PLAINTEXT://localhost:9095
-        listener.security.protocol.map=PLAINTEXT:PLAINTEXT,SSL:SSL,SASL_SSL:SASL_SSL,SASL_PLAINTEXT:SASL_PLAINTEXT
+        # All listeners (including MTLS on port 9096)
+        listeners=PLAINTEXT://localhost:9092,SSL://localhost:9093,SASL_SSL://localhost:9094,SASL_PLAINTEXT://localhost:9095,MTLS://localhost:9096
+        advertised.listeners=PLAINTEXT://localhost:9092,SSL://localhost:9093,SASL_SSL://localhost:9094,SASL_PLAINTEXT://localhost:9095,MTLS://localhost:9096
+        listener.security.protocol.map=PLAINTEXT:PLAINTEXT,SSL:SSL,SASL_SSL:SASL_SSL,SASL_PLAINTEXT:SASL_PLAINTEXT,MTLS:SSL
 
         # SSL configuration matching the kafka-security.sh script
         ssl.keystore.location=./server.keystore.jks
@@ -93,6 +93,19 @@ Kafka Security Tests
         ssl.key.password=mypassword
         ssl.truststore.location=./server.truststore.jks
         ssl.truststore.password=mypassword
+
+        # Allow optional client certificates on the main SSL listener (port 9093).
+        # Use "requested" so that plain SSL tests (without client certs) still work,
+        # while mTLS tests use a separate listener with ssl.client.auth=required.
+        ssl.client.auth=requested
+
+        # mTLS listener: requires client certificate authentication
+        listener.name.mtls.ssl.client.auth=required
+        listener.name.mtls.ssl.keystore.location=./server.keystore.jks
+        listener.name.mtls.ssl.keystore.password=mypassword
+        listener.name.mtls.ssl.key.password=mypassword
+        listener.name.mtls.ssl.truststore.location=./server.truststore.jks
+        listener.name.mtls.ssl.truststore.password=mypassword
 
         # SASL mechanisms
         sasl.enabled.mechanisms=PLAIN,SCRAM-SHA-256,SCRAM-SHA-512
