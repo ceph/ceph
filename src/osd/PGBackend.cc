@@ -671,11 +671,30 @@ void PGBackend::rollback_setattrs(
     }
   }
   if (only_oi) {
-    t->setattr(
-      coll,
-      ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-      OI_ATTR,
-      to_set[OI_ATTR]);
+    object_info_t oi;
+    auto p = to_set[OI_ATTR].cbegin();
+    decode(oi, p);
+
+    shard_id_t my_shard = get_parent()->whoami_shard().shard;
+    if (oi.shard_versions.contains(my_shard) && oi.shard_versions.at(my_shard) != oi.version) {
+      oi.version = oi.shard_versions.at(my_shard);
+      oi.shard_versions.clear();
+      
+      bufferlist bl;
+      encode(oi, bl, get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
+      
+      t->setattr(
+        coll,
+        ghobject_t(hoid, ghobject_t::NO_GEN, my_shard),
+        OI_ATTR,
+        bl);
+    } else {
+      t->setattr(
+        coll,
+        ghobject_t(hoid, ghobject_t::NO_GEN, my_shard),
+        OI_ATTR,
+        to_set[OI_ATTR]);
+    }
   } else {
     t->setattrs(
       coll,
