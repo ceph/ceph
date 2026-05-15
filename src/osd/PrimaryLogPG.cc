@@ -8419,7 +8419,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  // Verify target has reservations for pool migration
 	  if (!recovery_state.is_migrating()) {
 	    dout(10) << "copy_from with pool migration flag but target is not in migrating state" << dendl;
-	    result = -EAGAIN;  // Tell source to retry after getting reservations
+	    result = -EBUSY;  // Tell source to retry after getting reservations
 	    break;
 	  }
 	  dout(20) << "copy_from for pool migration with reservations, proceeding" << dendl;
@@ -15582,7 +15582,7 @@ void PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r)
   pool_migrations_in_flight.erase(oid); // BILL: FIXME This isn't good enough - it can leave I/O hung
 
   // Check error type and take appropriate action
-  if (r == -EAGAIN || r == -EBUSY) {
+  if (r == -EBUSY) {
     // Target doesn't have reservations or is busy
     // Schedule reservation request and retry
     dout(10) << "copy_from failed due to no reservation, requesting reservation" << dendl;
