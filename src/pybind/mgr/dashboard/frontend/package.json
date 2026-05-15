@@ -152,8 +152,5 @@
   },
   "cypress-cucumber-preprocessor": {
     "stepDefinitions": "cypress/e2e/common"
-  },
-  "optionalDependencies": {
-    "@rollup/rollup-linux-arm64-gnu": "4.22.4"
   }
 }
