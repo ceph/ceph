@@ -447,7 +447,30 @@ public:
   ObjectContextRef get_obc(
     const hobject_t &hoid,
     const std::map<std::string, ceph::buffer::list, std::less<>> &attrs) override {
-    return ObjectContextRef();
+    // This is called by the backend during recovery to create an OBC from attributes.
+    // Create a minimal OBC with the provided attributes.
+    ObjectContextRef obc = std::make_shared<ObjectContext>();
+    
+    // Decode object_info from attributes
+    auto it_oi = attrs.find(OI_ATTR);
+    if (it_oi != attrs.end()) {
+      try {
+        bufferlist::const_iterator bliter = it_oi->second.begin();
+        decode(obc->obs.oi, bliter);
+        obc->obs.exists = true;
+      } catch (...) {
+        obc->obs.oi = object_info_t(hoid);
+        obc->obs.exists = false;
+      }
+    } else {
+      obc->obs.oi = object_info_t(hoid);
+      obc->obs.exists = false;
+    }
+    
+    obc->ssc = nullptr;
+    obc->attr_cache = attrs;
+    
+    return obc;
   }
 
   bool try_lock_for_read(
