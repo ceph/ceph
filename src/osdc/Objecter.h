@@ -2592,11 +2592,6 @@ public:
   friend class CB_DoWatchError;
 public:
 
-  bool is_valid_watch(LingerOp* op) {
-    std::shared_lock l(rwlock);
-    return linger_ops_set.contains(op);
-  }
-
   template<typename CT>
   auto linger_callback_flush(CT&& ct) {
     auto consigned = boost::asio::consign(
@@ -3216,8 +3211,9 @@ public:
   }
 
   // caller owns a ref
-  LingerOp *linger_register(const object_t& oid, const object_locator_t& oloc,
-			    int flags);
+  auto linger_register(const object_t& oid, const object_locator_t& oloc,
+		       int flags)
+      -> boost::intrusive_ptr<LingerOp>;
   ceph_tid_t linger_watch(LingerOp *info,
 			  ObjectOperation& op,
 			  const SnapContext& snapc, ceph::real_time mtime,
@@ -3252,6 +3248,14 @@ public:
 	       boost::system::error_code> linger_check(LingerOp *info);
   void linger_cancel(LingerOp *info);  // releases a reference
   void _linger_cancel(LingerOp *info);
+
+  // return the LingerOp associated with the given cookie.
+  // may return nullptr if the cookie is no longer valid
+  boost::intrusive_ptr<LingerOp> linger_by_cookie(uint64_t cookie);
+ private:
+  // internal version that expects the caller to hold rwlock
+  boost::intrusive_ptr<LingerOp> _linger_by_cookie(uint64_t cookie);
+ public:
 
   void _do_watch_notify(boost::intrusive_ptr<LingerOp> info,
                         boost::intrusive_ptr<MWatchNotify> m);

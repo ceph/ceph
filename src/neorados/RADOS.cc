@@ -1396,7 +1396,7 @@ class Notifier : public async::service_list_base_hook {
   };
 
   asio::io_context::executor_type ex;
-  Objecter::LingerOp* linger_op;
+  boost::intrusive_ptr<Objecter::LingerOp> linger_op;
   // Zero for unbounded. I would not recommend this.
   const uint32_t capacity;
 
@@ -1408,21 +1408,31 @@ class Notifier : public async::service_list_base_hook {
   std::shared_ptr<detail::Client> neoref;
 
   void service_shutdown() {
-    if (neoref) {
-      neoref = nullptr;
-    }
-    if (linger_op) {
-      linger_op->put();
-    }
+    // Ensure neorados object and operation live to the end of the
+    // function.
+    auto localop = std::move(linger_op);
+    [[maybe_unused]] auto localneo = std::move(neoref);
     std::unique_lock l(m);
     handlers.clear();
+    l.unlock();
+    if (localop) {
+      // We are being taken down and will execute no more
+      // handlers. Call `linger_cancel` to clean up properly in
+      // Objecter. (It doesn't call out to the OSD or anything.)
+      //
+      // Removal and decrement are guarded by `linger_op->canceled`
+      // so there's no risk of an underflow.
+      localop->objecter->linger_cancel(localop.get());
+    }
+    // The Notifier object is freed by the `linger_cancel` above.
   }
 
 public:
 
-  Notifier(asio::io_context::executor_type ex, Objecter::LingerOp* linger_op,
+  Notifier(asio::io_context::executor_type ex,
+	   boost::intrusive_ptr<Objecter::LingerOp> linger_op,
 	   uint32_t capacity, std::shared_ptr<detail::Client> neoref)
-    : ex(ex), linger_op(linger_op), capacity(capacity),
+    : ex(ex), linger_op(std::move(linger_op)), capacity(capacity),
       svc(asio::use_service<async::service<Notifier>>(
 	    asio::query(ex, boost::asio::execution::context))),
       neoref(std::move(neoref)) {
@@ -1486,7 +1496,9 @@ public:
     } else if (capacity && notifications.size() >= capacity) {
       // We are allowed one over, so the client knows where in the
       // sequence of notifications we started losing data.
-      notifications.push({errc::notification_overflow, {}});
+      if (notifications.size() == capacity) {
+        notifications.push({errc::notification_overflow, {}});
+      }
     } else {
       notifications.push({{},
 			  Notification{
@@ -1537,12 +1549,12 @@ void RADOS::watch_(Object o, IOContext _ioc,
   auto e = asio::prefer(get_executor(),
 			asio::execution::outstanding_work.tracked);
   impl->objecter->linger_watch(
-    linger_op, op, ioc->snapc, ceph::real_clock::now(), bl,
+    linger_op.get(), op, ioc->snapc, ceph::real_clock::now(), bl,
     asio::bind_executor(
       std::move(e),
       [c = std::move(c), cookie, linger_op](bs::error_code e, cb::list) mutable {
 	if (e) {
-	  linger_op->objecter->linger_cancel(linger_op);
+	  linger_op->objecter->linger_cancel(linger_op.get());
 	  cookie = 0;
 	}
 	asio::dispatch(asio::append(std::move(c), e, cookie));
@@ -1571,13 +1583,13 @@ void RADOS::watch_(Object o, IOContext _ioc, WatchComp c,
   auto e = asio::prefer(get_executor(),
 			asio::execution::outstanding_work.tracked);
   impl->objecter->linger_watch(
-    linger_op, op, ioc->snapc, ceph::real_clock::now(), bl,
+    linger_op.get(), op, ioc->snapc, ceph::real_clock::now(), bl,
     asio::bind_executor(
       std::move(e),
       [c = std::move(c), cookie, linger_op](bs::error_code e, cb::list) mutable {
 	if (e) {
 	  linger_op->user_data.reset();
-	  linger_op->objecter->linger_cancel(linger_op);
+	  linger_op->objecter->linger_cancel(linger_op.get());
 	  cookie = 0;
 	}
 	asio::dispatch(asio::append(std::move(c), e, cookie));
@@ -1585,8 +1597,8 @@ void RADOS::watch_(Object o, IOContext _ioc, WatchComp c,
 }
 
 void RADOS::next_notification_(uint64_t cookie, NextNotificationComp c) {
-  Objecter::LingerOp* linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
-  if (!impl->objecter->is_valid_watch(linger_op)) {
+  boost::intrusive_ptr linger_op = impl->objecter->linger_by_cookie(cookie);
+  if (!linger_op) {
     dispatch(asio::append(std::move(c),
 			  bs::error_code(ENOTCONN, bs::generic_category()),
 			  Notification{}));
@@ -1626,9 +1638,9 @@ void RADOS::notify_ack_(Object o, IOContext _ioc,
 
 tl::expected<ceph::timespan, bs::error_code> RADOS::check_watch(uint64_t cookie)
 {
-  auto linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
-  if (impl->objecter->is_valid_watch(linger_op)) {
-    return impl->objecter->linger_check(linger_op);
+  boost::intrusive_ptr linger_op = impl->objecter->linger_by_cookie(cookie);
+  if (linger_op) {
+    return impl->objecter->linger_check(linger_op.get());
   } else {
     return tl::unexpected(bs::error_code(ENOTCONN, bs::generic_category()));
   }
@@ -1639,7 +1651,12 @@ void RADOS::unwatch_(uint64_t cookie, IOContext _ioc,
 {
   auto ioc = reinterpret_cast<const IOContextImpl*>(&_ioc.impl);
 
-  Objecter::LingerOp *linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
+  boost::intrusive_ptr linger_op = impl->objecter->linger_by_cookie(cookie);
+  if (!linger_op) {
+    dispatch(asio::append(std::move(c),
+			  bs::error_code(ENOTCONN, bs::generic_category())));
+    return;
+  }
 
   ObjectOperation op;
   op.watch(cookie, CEPH_OSD_WATCH_OP_UNWATCH);
@@ -1652,7 +1669,7 @@ void RADOS::unwatch_(uint64_t cookie, IOContext _ioc,
 			   [objecter = impl->objecter,
 			    linger_op, c = std::move(c)]
 			   (bs::error_code ec) mutable {
-			     objecter->linger_cancel(linger_op);
+			     objecter->linger_cancel(linger_op.get());
 			     asio::dispatch(asio::append(std::move(c), ec));
 			   }));
 }
@@ -1668,20 +1685,21 @@ struct NotifyHandler : std::enable_shared_from_this<NotifyHandler> {
   asio::io_context& ioc;
   asio::strand<asio::io_context::executor_type> strand;
   Objecter* objecter;
-  Objecter::LingerOp* op;
+  boost::intrusive_ptr<Objecter::LingerOp> op;
   RADOS::NotifyComp c;
 
   bool acked = false;
   bool finished = false;
   bs::error_code res;
   bufferlist rbl;
+  bool cleaned = false;
 
   NotifyHandler(asio::io_context& ioc,
 		Objecter* objecter,
-		Objecter::LingerOp* op,
+		boost::intrusive_ptr<Objecter::LingerOp> op,
 		RADOS::NotifyComp c)
     : ioc(ioc), strand(asio::make_strand(ioc)),
-      objecter(objecter), op(op), c(std::move(c)) {}
+      objecter(objecter), op(std::move(op)), c(std::move(c)) {}
 
   // Use bind or a lambda to pass this in.
   void handle_ack(bs::error_code ec,
@@ -1709,18 +1727,27 @@ struct NotifyHandler : std::enable_shared_from_this<NotifyHandler> {
 
   // Should be called from strand.
   void maybe_cleanup(bs::error_code ec) {
+    if (cleaned) {
+      return;
+    }
     if (!res && ec)
       res = ec;
     if ((acked && finished) || res) {
-      objecter->linger_cancel(op);
+      cleaned = true;
+      objecter->linger_cancel(op.get());
       ceph_assert(c);
       bc::flat_map<std::pair<uint64_t, uint64_t>, buffer::list> reply_map;
       bc::flat_set<std::pair<uint64_t, uint64_t>> missed_set;
-      auto p = rbl.cbegin();
-      decode(reply_map, p);
-      decode(missed_set, p);
-      asio::dispatch(asio::append(std::move(c), res, std::move(reply_map),
-				  std::move(missed_set)));
+      if (rbl.length() > 0) try {
+          auto p = rbl.cbegin();
+          decode(reply_map, p);
+          decode(missed_set, p);
+      } catch (const std::exception&) {
+        // Swallowing the decode error.
+      }
+      asio::dispatch(
+          asio::append(
+              std::move(c), res, std::move(reply_map), std::move(missed_set)));
     }
   }
 };
@@ -1754,7 +1781,7 @@ void RADOS::notify_(Object o, IOContext _ioc, bufferlist bl,
     bl, &inbl);
 
   impl->objecter->linger_notify(
-    linger_op, rd, ioc->snap_seq, inbl,
+    linger_op.get(), rd, ioc->snap_seq, inbl,
     asio::bind_executor(
       e,
       [cb](bs::error_code ec, ceph::bufferlist bl) mutable {
