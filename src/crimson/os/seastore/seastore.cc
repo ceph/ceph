@@ -32,6 +32,7 @@
 #include "crimson/os/seastore/onode_manager.h"
 #include "crimson/os/seastore/object_data_handler.h"
 #include "crimson/os/seastore/omap_manager/log/log_manager.h"
+#include "crimson/os/seastore/seastore_perf_counters.h"
 
 using crimson::common::local_conf;
 
@@ -148,6 +149,14 @@ SeaStore::Shard::Shard(
   device = &(dev->get_sharded_device(store_index));
 
   register_metrics(store_index);
+
+#ifdef WITH_SEASTORE_WAF_COUNTERS
+  if (store_active) {
+    waf_logger = build_seastore_waf_logger(&waf_cct);
+    waf_log_timer.set_callback([this] { log_waf_stats(); });
+    waf_log_timer.arm_periodic(std::chrono::seconds(10));
+  }
+#endif
 }
 
 SeaStore::SeaStore(
@@ -731,8 +740,18 @@ seastar::future<> SeaStore::report_stats()
         report_detail = true;
         seconds = mshard_store->reset_report_interval();
       }
+      auto dev_stats = mshard_store->get_device_stats(report_detail, seconds);
+#ifdef WITH_SEASTORE_WAF_COUNTERS
+      if (auto* waf = mshard_store->get_waf_logger(); waf != nullptr) {
+        // total_bytes here is the physical-write delta since the last
+        // get_device_stats call, summed across journal + all ool/main
+        // tier writers (data/metadata/GC rewrites). Add it to the
+        // monotonic WAF device_written counter.
+        waf->inc(l_seastore_bytes_device_written, dev_stats.total_bytes);
+      }
+#endif
       shard_device_stats[seastar::this_shard_id() + seastar::smp::count * mshard_store->get_store_index()] =
-        mshard_store->get_device_stats(report_detail, seconds);
+        std::move(dev_stats);
       shard_io_stats[seastar::this_shard_id() + seastar::smp::count * mshard_store->get_store_index()] =
         mshard_store->get_io_stats(report_detail, seconds);
       shard_cache_stats[seastar::this_shard_id() + seastar::smp::count * mshard_store->get_store_index()] =
@@ -1693,6 +1712,11 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
       DEBUGT("completed all {} ops for cid={}",
              t, total_ops, ctx.ch->get_cid());
       co_await transaction_manager->submit_transaction(*ctx.transaction);
+#ifdef WITH_SEASTORE_WAF_COUNTERS
+      if (waf_logger) {
+        waf_logger->inc(l_seastore_bytes_user_written, ctx.user_written_bytes);
+      }
+#endif
     })
   ).handle_error(
     crimson::ct_error::all_same_way([FNAME, &ctx](auto e) {
@@ -2151,6 +2175,14 @@ SeaStore::Shard::_write(
   ceph::bufferlist &&_bl,
   uint32_t fadvise_flags)
 {
+#ifdef WITH_SEASTORE_WAF_COUNTERS
+  // WAF accounting: count the user-visible payload size before any
+  // journal/metadata overhead.  Counting len (not bl.length()) keeps
+  // the byte total exact even on partial-tail writes where the
+  // underlying bufferlist may be smaller than len after splice.
+  ctx.user_written_bytes += len;
+#endif
+
   const auto &object_size = onode.get_layout().size;
   if (offset + len > object_size) {
     onode.update_onode_size(
@@ -2713,6 +2745,40 @@ device_stats_t SeaStore::Shard::get_device_stats(
   }
   return transaction_manager->get_device_stats(report_detail, seconds);
 }
+
+#ifdef WITH_SEASTORE_WAF_COUNTERS
+void SeaStore::Shard::update_waf_device_written_counter()
+{
+  if (!store_active || !waf_logger) {
+    return;
+  }
+  // Sample with report_detail=false / seconds=0 so this is cheap and
+  // does not emit the periodic INFO line that report_stats triggers.
+  auto dev_stats = transaction_manager->get_device_stats(false, 0);
+  waf_logger->inc(l_seastore_bytes_device_written, dev_stats.total_bytes);
+}
+
+void SeaStore::Shard::log_waf_stats()
+{
+  if (!waf_logger) {
+    return;
+  }
+  // Refresh device_written so the log reflects the most recent writes
+  // even when report_stats hasn't fired yet (or isn't running, e.g. in
+  // single-shard unit tests).
+  update_waf_device_written_counter();
+
+  const uint64_t u = waf_logger->get(l_seastore_bytes_user_written);
+  const uint64_t d = waf_logger->get(l_seastore_bytes_device_written);
+  const double waf = (u > 0)
+      ? static_cast<double>(d) / static_cast<double>(u)
+      : 0.0;
+
+  LOG_PREFIX(SeaStore::Shard::log_waf_stats);
+  INFO("[WAF] osd.{} user_written={} device_written={} waf={:.3f}",
+       store_index, u, d, waf);
+}
+#endif  // WITH_SEASTORE_WAF_COUNTERS
 
 shard_stats_t SeaStore::Shard::get_io_stats(
     bool report_detail, double seconds) const

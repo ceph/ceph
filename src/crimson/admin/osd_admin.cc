@@ -264,13 +264,21 @@ template std::unique_ptr<AdminSocketHook> make_asok_hook<DumpPGStateHistory>(
   const crimson::osd::PGShardManager &);
 
 //dump the contents of perfcounters in osd and store
+//
+// Two prefixes are registered for the same dump path:
+//   - "perfcounters_dump" — crimson's existing single-word command
+//   - "perf dump"          — the legacy two-word command also recognised
+//                            by classic ceph daemons; required so that
+//                            tooling and docs that say
+//                            `ceph daemon ... perf dump seastore_waf`
+//                            keep working against crimson.
 class DumpPerfCountersHook final: public AdminSocketHook {
 public:
-  explicit DumpPerfCountersHook() :
-    AdminSocketHook{"perfcounters_dump",
+  explicit DumpPerfCountersHook(std::string_view prefix) :
+    AdminSocketHook{prefix,
                     "name=logger,type=CephString,req=false "
                     "name=counter,type=CephString,req=false",
-                    "dump perfcounters in osd and store"}
+                    "dump perfcounters in osd and store (filter by logger / counter name)"}
   {}
   seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
                                       std::string_view format,
@@ -291,7 +299,8 @@ public:
     co_return std::move(f);
   }
 };
-template std::unique_ptr<AdminSocketHook> make_asok_hook<DumpPerfCountersHook>();
+template std::unique_ptr<AdminSocketHook> make_asok_hook<DumpPerfCountersHook>(const char*&);
+template std::unique_ptr<AdminSocketHook> make_asok_hook<DumpPerfCountersHook>(std::string_view&&);
 
 
 

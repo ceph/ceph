@@ -2,6 +2,16 @@ set(crimson_seastore_srcs
   cached_extent.cc
   lba_mapping.cc
   seastore_types.cc
+  )
+
+# seastore_perf_counters.cc only exists for the WAF instrumentation
+# in Part 3 and is gated by WITH_SEASTORE_WAF_COUNTERS so a Release
+# build emits no WAF symbols.
+if(WITH_SEASTORE_WAF_COUNTERS)
+  list(APPEND crimson_seastore_srcs seastore_perf_counters.cc)
+endif()
+
+list(APPEND crimson_seastore_srcs
   segment_manager.cc
   segment_manager/ephemeral.cc
   segment_manager/block.cc
@@ -58,6 +68,7 @@ set(crimson_seastore_srcs
   ../../../test/crimson/seastore/test_block.cc
   ${PROJECT_SOURCE_DIR}/src/os/Transaction.cc
 	)
+
 
 CMAKE_DEPENDENT_OPTION(WITH_ZNS "enable Linux ZNS support" OFF
   "CMAKE_SYSTEM_NAME STREQUAL Linux" OFF)

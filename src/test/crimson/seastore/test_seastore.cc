@@ -11,7 +11,10 @@
 
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/seastore/seastore.h"
+#include "crimson/os/seastore/seastore_perf_counters.h"
 #include "crimson/os/seastore/onode.h"
+
+#include "common/perf_counters.h"
 
 #include "common/strtol.h" // for ritoa()
 
@@ -2075,6 +2078,103 @@ TEST_P(seastore_test_t, pgmeta_io)
     }
   });
 }
+
+#ifdef WITH_SEASTORE_WAF_COUNTERS
+// WAF perf counter regression tests — see crimson/os/seastore/seastore_perf_counters.{h,cc}.
+//
+// Compiled in only when the WAF instrumentation is built (Debug builds
+// by default; see WITH_SEASTORE_WAF_COUNTERS). Without the flag, these
+// tests would reference symbols (get_waf_logger, l_seastore_bytes_*)
+// that aren't compiled into crimson-seastore.
+//
+// The two assertions per the spec:
+//   1. user_written advances by exactly the requested write length
+//      (4 KiB synthetic write -> +4096).
+//   2. After the transaction commits and we re-sample the device-stats
+//      delta, device_written strictly exceeds user_written for the same
+//      write — i.e. WAF > 1, since journal/metadata overhead is non-zero.
+//
+// Implementation notes:
+//   - sharded_seastore is FuturizedStore::Shard*, but the concrete type
+//     is SeaStore::Shard, so we down-cast to reach get_waf_logger() and
+//     update_waf_device_written_counter().
+//   - We sample baselines (not zero) because earlier set-up transactions
+//     (collection create) already emit some device writes.
+TEST_P(seastore_test_t, waf_user_written_exact)
+{
+  run_async([this] {
+    auto* shard_impl =
+      dynamic_cast<crimson::os::seastore::SeaStore::Shard*>(sharded_seastore);
+    ASSERT_NE(shard_impl, nullptr);
+    auto* waf = shard_impl->get_waf_logger();
+    ASSERT_NE(waf, nullptr);
+
+    constexpr size_t WRITE_LEN = 4096;
+
+    const uint64_t baseline_user =
+      waf->get(crimson::os::seastore::l_seastore_bytes_user_written);
+
+    auto& test_obj = get_object(make_oid(0));
+    bufferlist bl;
+    bl.append(std::string(WRITE_LEN, 'a'));
+    {
+      CTransaction t;
+      test_obj.touch(t);
+      t.write(test_obj.cid, test_obj.oid, /*offset=*/0, WRITE_LEN, bl);
+      sharded_seastore->do_transaction(coll, std::move(t)).get();
+    }
+
+    const uint64_t after_user =
+      waf->get(crimson::os::seastore::l_seastore_bytes_user_written);
+    EXPECT_EQ(after_user - baseline_user, WRITE_LEN)
+      << "user_written must advance by exactly the requested write length";
+  });
+}
+
+TEST_P(seastore_test_t, waf_device_exceeds_user_after_flush)
+{
+  run_async([this] {
+    auto* shard_impl =
+      dynamic_cast<crimson::os::seastore::SeaStore::Shard*>(sharded_seastore);
+    ASSERT_NE(shard_impl, nullptr);
+    auto* waf = shard_impl->get_waf_logger();
+    ASSERT_NE(waf, nullptr);
+
+    // Drain any device-stats accumulated by set-up so the next sample
+    // window only contains the test's own writes.
+    shard_impl->update_waf_device_written_counter();
+    const uint64_t baseline_user =
+      waf->get(crimson::os::seastore::l_seastore_bytes_user_written);
+    const uint64_t baseline_dev =
+      waf->get(crimson::os::seastore::l_seastore_bytes_device_written);
+
+    constexpr size_t WRITE_LEN = 4096;
+    auto& test_obj = get_object(make_oid(0));
+    bufferlist bl;
+    bl.append(std::string(WRITE_LEN, 'b'));
+    {
+      CTransaction t;
+      test_obj.touch(t);
+      t.write(test_obj.cid, test_obj.oid, /*offset=*/0, WRITE_LEN, bl);
+      sharded_seastore->do_transaction(coll, std::move(t)).get();
+    }
+    // Force a sync of the device-bytes counter so the post-flush state is
+    // visible without waiting for report_stats / WAF timer.
+    shard_impl->update_waf_device_written_counter();
+
+    const uint64_t user_delta =
+      waf->get(crimson::os::seastore::l_seastore_bytes_user_written) - baseline_user;
+    const uint64_t dev_delta =
+      waf->get(crimson::os::seastore::l_seastore_bytes_device_written) - baseline_dev;
+
+    EXPECT_EQ(user_delta, WRITE_LEN);
+    EXPECT_GT(dev_delta, user_delta)
+      << "device_written must strictly exceed user_written after journal flush "
+      << "(WAF > 1) — journal record + metadata overhead is non-zero. "
+      << "user_delta=" << user_delta << " dev_delta=" << dev_delta;
+  });
+}
+#endif  // WITH_SEASTORE_WAF_COUNTERS
 
 INSTANTIATE_TEST_SUITE_P(
   seastore_test,

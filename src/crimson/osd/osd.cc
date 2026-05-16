@@ -827,7 +827,16 @@ seastar::future<> OSD::start_asok_admin()
     asok->register_command(
       make_asok_hook<DumpPGStateHistory>(std::as_const(pg_shard_manager)));
     asok->register_command(make_asok_hook<DumpMetricsHook>());
-    asok->register_command(make_asok_hook<DumpPerfCountersHook>());
+    asok->register_command(
+      make_asok_hook<DumpPerfCountersHook>(std::string_view{"perfcounters_dump"}));
+    // NOTE: a two-word "perf dump" alias was tried here as a courtesy
+    // for users coming from classic ceph asok docs/scripts, but the
+    // crimson admin-socket parser doesn't dispatch space-containing
+    // prefixes the same way the legacy daemon does — adding the alias
+    // wedges the parser into a tight line_consumer loop that starves
+    // the existing `perfcounters_dump` hook. Stick with the
+    // single-word command name; document the substitution in the
+    // user-facing handoff.
     asok->register_command(make_asok_hook<InjectDataErrorHook>(get_shard_services()));
     asok->register_command(make_asok_hook<InjectMDataErrorHook>(get_shard_services()));
     // PG commands

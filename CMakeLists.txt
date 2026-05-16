@@ -253,6 +253,26 @@ endif()
 
 option(WITH_CRIMSON "Build Crimson components" OFF)
 
+# SeaStore Write Amplification perf-counter instrumentation. The
+# counters live on the hot write path; we want them on by default in
+# debug builds (where they pair with the [WAF] periodic log line and
+# the qa/standalone/crimson/waf_bench harness) but off in release
+# builds to avoid any runtime cost. The option only makes sense when
+# WITH_CRIMSON is enabled (the counter code only exists inside
+# crimson's seastore objectstore). The user can still override the
+# default explicitly with -DWITH_SEASTORE_WAF_COUNTERS=ON/OFF in any
+# build type.
+if(WITH_CRIMSON AND CMAKE_BUILD_TYPE STREQUAL "Debug")
+  set(_waf_counters_default ON)
+else()
+  set(_waf_counters_default OFF)
+endif()
+option(WITH_SEASTORE_WAF_COUNTERS
+  "Enable SeaStore Write Amplification perf counters"
+  ${_waf_counters_default})
+unset(_waf_counters_default)
+message(STATUS "WITH_SEASTORE_WAF_COUNTERS is ${WITH_SEASTORE_WAF_COUNTERS}")
+
 if(WITH_BLUESTORE OR WITH_CRIMSON)
   if(LINUX)
     find_package(aio)

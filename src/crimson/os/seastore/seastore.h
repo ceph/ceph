@@ -13,6 +13,7 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/metrics_types.hh>
+#include <seastar/core/timer.hh>
 
 #include "include/uuid.h"
 
@@ -21,6 +22,9 @@
 #include "crimson/common/smp_helpers.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
+
+#include "common/ceph_context.h"
+#include "crimson/common/perf_counters_collection.h"
 
 #include "crimson/os/seastore/device.h"
 #include "crimson/os/seastore/transaction.h"
@@ -221,6 +225,23 @@ public:
 
     cache_stats_t get_cache_stats(bool report_detail, double seconds) const;
 
+#ifdef WITH_SEASTORE_WAF_COUNTERS
+    // WAF perf counters — see seastore_perf_counters.h.  device_written
+    // is updated by sampling get_device_stats deltas (single hook covers
+    // journal, ool/metadata, GC rewrites, and replay-driven writes that
+    // re-enter the writer paths).  user_written is updated inline from
+    // _write.  Returns nullptr on inactive shards.
+    PerfCounters* get_waf_logger() const {
+      return waf_logger.get();
+    }
+
+    // Sample the underlying device-stats delta and add it to the WAF
+    // device_written counter.  Idempotent only with respect to the
+    // already-consumed cumulative — each call advances the internal
+    // last_stats marker, so subsequent calls return only the new delta.
+    void update_waf_device_written_counter();
+#endif  // WITH_SEASTORE_WAF_COUNTERS
+
     unsigned int get_store_index() const {
       return store_index;
     }
@@ -246,9 +267,16 @@ public:
       ceph::os::Transaction::iterator iter;
       std::chrono::steady_clock::time_point begin_timestamp = std::chrono::steady_clock::now();
 
+#ifdef WITH_SEASTORE_WAF_COUNTERS
+      uint64_t user_written_bytes = 0;
+#endif
+
       void reset_preserve_handle(TransactionManager &tm) {
         tm.reset_transaction_preserve_handle(*transaction);
         iter = ext_transaction.begin();
+#ifdef WITH_SEASTORE_WAF_COUNTERS
+        user_written_bytes = 0;
+#endif
       }
     };
 
@@ -544,6 +572,19 @@ public:
 
     seastar::metrics::metric_group metrics;
     void register_metrics(store_index_t store_index);
+
+#ifdef WITH_SEASTORE_WAF_COUNTERS
+    // WAF perf counters — registered into this shard's local
+    // PerfCountersCollection. waf_cct only exists to satisfy
+    // PerfCountersBuilder; ownership of the cct stays here.
+    crimson::common::CephContext waf_cct;
+    PerfCountersRef waf_logger;
+
+    // Periodic [WAF] log line emitter — see log_waf_stats().
+    // The timer is RAII-cancelled by ~Shard.
+    seastar::timer<seastar::lowres_clock> waf_log_timer;
+    void log_waf_stats();
+#endif  // WITH_SEASTORE_WAF_COUNTERS
 
     mutable shard_stats_t shard_stats;
     mutable seastar::lowres_clock::time_point last_tp =
