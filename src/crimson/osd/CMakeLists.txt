@@ -69,6 +69,7 @@ if(HAS_VTA)
   set_source_files_properties(main.cc
     PROPERTIES COMPILE_FLAGS -fno-var-tracking-assignments)
 endif()
+target_compile_options(crimson-osd PRIVATE -fno-omit-frame-pointer)
 target_link_libraries(crimson-osd
   legacy-option-headers
   crimson-admin
