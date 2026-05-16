@@ -1,0 +1,47 @@
+# waf_bench.fio — fio job file for the seastore Write Amplification benchmark.
+#
+# Driven by run_waf_bench.sh, which sets the env vars referenced below.
+# fio supports ${VAR} expansion from the environment but NOT the
+# ${VAR:-default} shell idiom, so the launcher script is responsible for
+# exporting every variable referenced here before invocation.
+#
+# We use the `rados` ioengine rather than the spec's `rbd` ioengine
+# because crimson currently rejects librbd image creation with
+# EOPNOTSUPP (error 95 from librbd::image::CreateRequest::handle_
+# add_image_to_directory). Both ioengines drive 4 KiB random writes
+# through the OSDs, which is what the WAF benchmark actually needs;
+# rados just writes pool objects directly instead of going through an
+# rbd image. If/when crimson grows rbd support, switch back by setting
+# `ioengine=rbd` and re-adding `rbdname=${WAF_IMAGE}`.
+
+[global]
+ioengine=rados
+clientname=${WAF_CLIENT}
+pool=${WAF_POOL}
+conf=${WAF_CONF}
+rw=randwrite
+bs=4k
+iodepth=64
+# numjobs typically equals NUM_OSDS so each OSD takes roughly one
+# writer's worth of load.
+numjobs=${WAF_NUM_JOBS}
+runtime=${WAF_RUNTIME}
+time_based=1
+# fio rados engine maps one fio "file" to one rados object. Each
+# object's addressable range is size/nrfiles bytes; crimson seastore
+# aborts (object_data_handler.cc: ceph_assert(size <= max_object_size))
+# when a single rados object exceeds seastore_default_max_object_size
+# (16 MiB default). The launcher script validates per-object size and
+# errors out before invocation if WAF_SIZE/WAF_NRFILES would exceed
+# the cap.
+nrfiles=${WAF_NRFILES}
+# 1 s sample windows; the per-job logs are what waf_plot.py consumes
+# for an optional WAF-over-time chart.
+log_avg_msec=1000
+write_bw_log=fio_write_bw
+write_iops_log=fio_write_iops
+write_lat_log=fio_write_lat
+per_job_logs=1
+
+[waf-write]
+size=${WAF_SIZE}
