@@ -32,10 +32,14 @@ seastar::future<crimson::os::seastore::SegmentManagerRef>
 SegmentManager::get_segment_manager(
   const std::string &device, device_type_t dtype)
 {
+  std::string dev_path = crimson::common::local_conf().get_val<std::string>("seastore_device_path");
+  if (dev_path.empty()) {
+    dev_path = device + "/block";
+  }
 #ifdef HAVE_ZNS
   LOG_PREFIX(SegmentManager::get_segment_manager);
   auto file = co_await seastar::open_file_dma(
-	device + "/block",
+	dev_path,
 	seastar::open_flags::rw);
   ceph_assert(file);
   uint32_t nr_zones = 0;
@@ -43,10 +47,10 @@ SegmentManager::get_segment_manager(
   ceph_assert(ret == 0);
   INFO("Found {} zones.", nr_zones);
   if (nr_zones != 0) {
-    co_return std::make_unique<segment_manager::zbd::ZBDSegmentManager>(device + "/block");
+    co_return std::make_unique<segment_manager::zbd::ZBDSegmentManager>(dev_path);
   }
 #endif
-  co_return std::make_unique<segment_manager::block::BlockSegmentManager>(device + "/block", dtype);
+  co_return std::make_unique<segment_manager::block::BlockSegmentManager>(dev_path, dtype);
 }
 
 } // namespace crimson::os::seastore

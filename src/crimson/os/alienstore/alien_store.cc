@@ -108,10 +108,13 @@ seastar::future<uint32_t> AlienStore::start()
   */
   std::optional<seastar::resource::cpuset> alien_thread_cpu_cores;
 
-  if (std::string conf_cpu_cores =
-        get_conf<std::string>("crimson_bluestore_cpu_set");
-      !conf_cpu_cores.empty()) {
-    logger().debug("{} using crimson_bluestore_cpu_set", __func__);
+  std::string conf_cpu_cores = get_conf<std::string>("crimson_alien_thread_cpu_cores");
+  if (conf_cpu_cores.empty()) {
+    conf_cpu_cores = get_conf<std::string>("crimson_bluestore_cpu_set");
+  }
+
+  if (!conf_cpu_cores.empty()) {
+    logger().debug("{} using CPU set for alien threads: {}", __func__, conf_cpu_cores);
     alien_thread_cpu_cores =
       seastar::resource::parse_cpuset(conf_cpu_cores);
   }

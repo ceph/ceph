@@ -304,6 +304,17 @@ open_device_ret open_device(
       seastar::open_flags::rw | seastar::open_flags::dsync
     ).then([stat, &path, FNAME](auto file) mutable {
       return file.size().then([stat, file, &path, FNAME](auto size) mutable {
+        if (size == 0) {
+            // Block device size detection fallback
+            int fd = ::open(path.c_str(), O_RDONLY);
+            if (fd >= 0) {
+                uint64_t bytes = 0;
+                if (::ioctl(fd, BLKGETSIZE64, &bytes) >= 0) {
+                    size = bytes;
+                }
+                ::close(fd);
+            }
+        }
         stat.size = size;
         // Use Seastar's DMA alignment requirement instead of stat's block_size
         // to ensure writes are properly aligned for optimal performance

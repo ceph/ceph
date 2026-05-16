@@ -12,10 +12,14 @@ seastar::future<random_block_device::RBMDeviceRef>
 get_rb_device(
   const std::string &device)
 {
+  std::string dev_path = crimson::common::local_conf().get_val<std::string>("seastore_device_path");
+  if (dev_path.empty()) {
+    dev_path = device + "/block";
+  }
   return seastar::make_ready_future<random_block_device::RBMDeviceRef>(
     std::make_unique<
       random_block_device::nvme::NVMeBlockDevice
-    >(device + "/block"));
+    >(dev_path));
 }
 
 }
