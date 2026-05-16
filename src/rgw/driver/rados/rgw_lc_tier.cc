@@ -6,13 +6,13 @@
 #include <chrono>
 #include <iostream>
 #include <map>
-#include <random>
 #include <thread>
 
 #include <boost/asio/steady_timer.hpp>
 
 #include "common/XMLFormatter.h"
 #include <common/errno.h>
+#include "include/random.h"
 #include "rgw_lc.h"
 #include "rgw_lc_tier.h"
 #include "rgw_string.h"
@@ -38,7 +38,6 @@ int retry_on_busy(optional_yield y, const DoutPrefixProvider *dpp,
   const int max_attempts = cct->_conf.get_val<int64_t>("rgw_cloud_tier_retry_limit");
   const int64_t initial_ms = cct->_conf.get_val<int64_t>("rgw_cloud_tier_retry_delay_ms");
   const int64_t max_ms = cct->_conf.get_val<int64_t>("rgw_cloud_tier_retry_max_ms");
-  thread_local std::mt19937 rng{std::random_device{}()};
 
   int ret = 0;
   for (int i = 0; i < max_attempts; i++) {
@@ -46,7 +45,7 @@ int retry_on_busy(optional_yield y, const DoutPrefixProvider *dpp,
     if (ret != -EBUSY || i == max_attempts - 1) return ret;
 
     int64_t base = std::min(initial_ms << std::min(i, 30), max_ms);
-    int delay_ms = base - std::uniform_int_distribution<int>(0, base / 10)(rng);
+    int delay_ms = base - ceph::util::generate_random_number<int>(0, base / 10);
 
     ldpp_dout(dpp, 1) << op_name << ": -EBUSY, attempt " << (i + 1) << "/"
                       << max_attempts << "; retrying after " << delay_ms
