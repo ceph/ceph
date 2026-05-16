@@ -31,6 +31,11 @@ from .dir_map.load import load_dir_map, load_instances
 from .dir_map.update import UpdateDirMapRequest, UpdateInstanceRequest
 from .dir_map.policy import Policy
 from .dir_map.state_transition import ActionType
+from .checkpoint import (
+    Checkpoint,
+    checkpoint_from_snap,
+    is_checkpointed,
+)
 
 log = logging.getLogger(__name__)
 
@@ -304,6 +309,7 @@ class FSSnapshotMirror:
         self.lock = threading.Lock()
         self.refresh_pool_policy()
         self.local_fs = CephfsClient(mgr)
+        self.checkpoint = Checkpoint(self._client_snapdir)
 
     def notify(self, notify_type: NotifyType):
         log.debug(f'got notify type {notify_type}')
@@ -992,3 +998,142 @@ class FSSnapshotMirror:
                     return 0, json.dumps(daemons), ''
         except MirrorException as me:
             return me.args[0], '', me.args[1]
+
+    def _validate_checkpoint_dir(self, fs_name, dir_path):
+        """Validate filesystem and mirrored directory; return normalized dir path."""
+        if not self.filesystem_exist(fs_name):
+            raise MirrorException(-errno.ENOENT, f'filesystem {fs_name} does not exist')
+
+        fspolicy = self.pool_policy.get(fs_name, None)
+        if not fspolicy:
+            raise MirrorException(-errno.EINVAL, f'filesystem {fs_name} is not mirrored')
+
+        dir_path = norm_path(dir_path)
+        if not dir_path:
+            raise MirrorException(-errno.EINVAL, 'directory path is required')
+
+        lookup_info = fspolicy.policy.lookup(dir_path)
+        if not lookup_info:
+            raise MirrorException(-errno.ENOENT, f'directory {dir_path} is not tracked')
+
+        if lookup_info['purging']:
+            raise MirrorException(-errno.EINVAL, f'directory {dir_path} is under removal')
+
+        return dir_path
+
+    def _client_snapdir(self):
+        return self.mgr.get_foreign_ceph_option('client', 'client_snapdir')
+
+    def checkpoint_add(self, fs_name, dir_path, snap_name):
+        """Add a checkpoint for a snapshot via snapshot metadata on the primary filesystem."""
+        try:
+            with self.lock:
+                dir_path = self._validate_checkpoint_dir(fs_name, dir_path)
+
+            with open_filesystem(self.local_fs, fs_name) as fsh:
+                info = self.checkpoint.snap_info(fsh, dir_path, snap_name)
+                self.checkpoint.write_metadata(fsh, dir_path, snap_name, info)
+
+            result = {
+                'status': 'success',
+                'message': f'checkpoint added for snapshot {snap_name}',
+                'dir_root': dir_path,
+                'snap_id': info['id'],
+                'snap_name': snap_name,
+                'checkpoint_status': 'created',
+            }
+            return 0, json.dumps(result), ''
+        except MirrorException as me:
+            return me.args[0], '', me.args[1]
+        except cephfs.Error as e:
+            return -e.errno, '', f'failed to add checkpoint: {e}'
+        except Exception as e:
+            log.error(f'failed to add checkpoint: {e}')
+            return -errno.EINVAL, '', f'failed to add checkpoint: {str(e)}'
+
+    def checkpoint_remove(self, fs_name, dir_path, snap_name):
+        """Remove a checkpoint from a snapshot via snapshot metadata on the primary filesystem."""
+        try:
+            with self.lock:
+                dir_path = self._validate_checkpoint_dir(fs_name, dir_path)
+
+            with open_filesystem(self.local_fs, fs_name) as fsh:
+                info = self.checkpoint.snap_info(fsh, dir_path, snap_name)
+                self.checkpoint.remove_metadata(fsh, dir_path, snap_name, info)
+
+            result = {
+                'status': 'success',
+                'message': f'checkpoint removed for snapshot {snap_name}',
+                'dir_root': dir_path,
+                'snap_name': snap_name,
+            }
+            return 0, json.dumps(result), ''
+        except MirrorException as me:
+            return me.args[0], '', me.args[1]
+        except cephfs.Error as e:
+            return -e.errno, '', f'failed to remove checkpoint: {e}'
+        except Exception as e:
+            log.error(f'failed to remove checkpoint: {e}')
+            return -errno.EINVAL, '', f'failed to remove checkpoint: {str(e)}'
+
+    def checkpoint_ls(self, fs_name, dir_path, format='json'):
+        """List all checkpoints for a directory from snapshot metadata on the primary filesystem."""
+        try:
+            with self.lock:
+                dir_path = self._validate_checkpoint_dir(fs_name, dir_path)
+
+            checkpoints = []
+            with open_filesystem(self.local_fs, fs_name) as fsh:
+                for snap_name in self.checkpoint.list_directory_snapshots(fsh, dir_path):
+                    try:
+                        info = self.checkpoint.snap_info(fsh, dir_path, snap_name)
+                    except MirrorException as me:
+                        log.warning(
+                            f'failed to get snapshot info for {snap_name!r} '
+                            f'under {dir_path}: {me.args[1]}')
+                        continue
+                    md = info.get('metadata', {})
+                    if is_checkpointed(md):
+                        checkpoints.append(
+                            checkpoint_from_snap(info['id'], snap_name, md))
+
+            checkpoints.sort(key=lambda cp: cp['snap_id'])
+            result = {'dir_root': dir_path, 'checkpoints': checkpoints}
+
+            if format == 'json-pretty':
+                return 0, json.dumps(result, indent=2), ''
+            return 0, json.dumps(result), ''
+        except MirrorException as me:
+            return me.args[0], '', me.args[1]
+        except cephfs.Error as e:
+            return -e.errno, '', f'failed to list checkpoints: {e}'
+        except Exception as e:
+            log.error(f'failed to list checkpoints: {e}')
+            return -errno.EINVAL, '', f'failed to list checkpoints: {str(e)}'
+
+    def checkpoint_now(self, fs_name, dir_path):
+        """Create a checkpoint on the latest snapshot via snapshot metadata."""
+        try:
+            with self.lock:
+                dir_path = self._validate_checkpoint_dir(fs_name, dir_path)
+
+            with open_filesystem(self.local_fs, fs_name) as fsh:
+                snap_name, info = self.checkpoint.get_latest_snap(fsh, dir_path)
+                self.checkpoint.write_metadata(fsh, dir_path, snap_name, info)
+
+            result = {
+                'status': 'success',
+                'message': 'checkpoint created on latest snapshot',
+                'dir_root': dir_path,
+                'snap_id': info['id'],
+                'snap_name': snap_name,
+                'checkpoint_status': 'created',
+            }
+            return 0, json.dumps(result), ''
+        except MirrorException as me:
+            return me.args[0], '', me.args[1]
+        except cephfs.Error as e:
+            return -e.errno, '', f'failed to create checkpoint: {e}'
+        except Exception as e:
+            log.error(f'failed to create checkpoint: {e}')
+            return -errno.EINVAL, '', f'failed to create checkpoint: {str(e)}'
