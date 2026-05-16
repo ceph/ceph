@@ -668,6 +668,7 @@ if(WITH_BREAKPAD)
 endif()
 
 add_library(common STATIC ${ceph_common_objs})
+target_compile_options(common PRIVATE -fno-omit-frame-pointer)
 target_link_libraries(common
   ${ceph_common_deps}
   legacy-option-headers)
