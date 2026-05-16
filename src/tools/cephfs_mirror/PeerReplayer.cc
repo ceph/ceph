@@ -1373,6 +1373,105 @@ int PeerReplayer::build_snap_map(const std::string &dir_root,
   return rv;
 }
 
+void PeerReplayer::checkpoint_sync_complete(const std::string &dir_root,
+                                            uint64_t synced_snap_id,
+                                            const std::string &snap_name) {
+  dout(10) << ": dir_root=" << dir_root << " synced_snap_id=" << synced_snap_id
+           << " snap_name=" << snap_name << dendl;
+
+  // Read snapshot metadata
+  auto snap_path = snapshot_path(m_cct, dir_root, snap_name);
+  std::map<std::string, std::string> snap_metadata;
+  int r = read_snap_metadata(m_local_mount, snap_path, &snap_metadata);
+  if (r < 0) {
+    derr << ": failed to read snap metadata for snap_name=" << snap_name
+         << " dir_root=" << dir_root << ": " << cpp_strerror(r) << dendl;
+    return;
+  }
+
+  // Check if this snapshot has a checkpoint
+  if (!has_checkpoint(snap_metadata)) {
+    dout(10) << ": no checkpoint for snap_id=" << synced_snap_id << dendl;
+    return;
+  }
+
+  // Read checkpoint info
+  CheckpointInfo info = read_checkpoint_metadata(synced_snap_id, snap_name, snap_metadata);
+
+  // Skip if already complete
+  if (info.status == CheckpointStatus::COMPLETE) {
+    dout(10) << ": checkpoint already complete for snap_id=" << synced_snap_id << dendl;
+    return;
+  }
+
+  // Update status to COMPLETE
+  info.status = CheckpointStatus::COMPLETE;
+  info.updated_at = ceph_clock_now();
+  info.error_msg.clear();
+
+  r = write_checkpoint_metadata(m_cct, m_local_mount, dir_root, snap_name, snap_metadata, info);
+  if (r < 0) {
+    derr << ": failed to mark checkpoint completed for snap_id=" << synced_snap_id
+         << " snap_name=" << snap_name << " dir_root=" << dir_root
+         << ": " << cpp_strerror(r) << dendl;
+    return;
+  }
+
+  dout(10) << ": marked checkpoint completed for snap_id=" << synced_snap_id
+           << " snap_name=" << snap_name << dendl;
+}
+
+void PeerReplayer::checkpoint_sync_failed(const std::string &dir_root,
+                                          uint64_t snap_id,
+                                          const std::string &snap_name,
+                                          int err) {
+  dout(10) << ": dir_root=" << dir_root << " snap_id=" << snap_id
+           << " snap_name=" << snap_name << " err=" << err
+           << " (" << cpp_strerror(err) << ")" << dendl;
+
+  // Read snapshot metadata
+  auto snap_path = snapshot_path(m_cct, dir_root, snap_name);
+  std::map<std::string, std::string> snap_metadata;
+  int r = read_snap_metadata(m_local_mount, snap_path, &snap_metadata);
+  if (r < 0) {
+    derr << ": failed to read snap metadata for snap_name=" << snap_name
+         << " dir_root=" << dir_root << ": " << cpp_strerror(r) << dendl;
+    return;
+  }
+
+  // Check if this snapshot has a checkpoint
+  if (!has_checkpoint(snap_metadata)) {
+    dout(10) << ": no checkpoint for snap_id=" << snap_id << dendl;
+    return;
+  }
+
+  // Read checkpoint info
+  CheckpointInfo info = read_checkpoint_metadata(snap_id, snap_name, snap_metadata);
+
+  // Only update if it's in CREATED or FAILED status (to update error message)
+  if (info.status != CheckpointStatus::CREATED && info.status != CheckpointStatus::FAILED) {
+    dout(10) << ": checkpoint not in CREATED or FAILED status, current status="
+             << checkpoint_status_to_string(info.status) << dendl;
+    return;
+  }
+
+  // Update status to FAILED with sync error message
+  info.status = CheckpointStatus::FAILED;
+  info.updated_at = ceph_clock_now();
+  info.error_msg = string("snapshot synchronization failed: ") + cpp_strerror(err);
+
+  r = write_checkpoint_metadata(m_cct, m_local_mount, dir_root, snap_name, snap_metadata, info);
+  if (r < 0) {
+    derr << ": failed to mark checkpoint failed for snap_id=" << snap_id
+         << " snap_name=" << snap_name << " dir_root=" << dir_root
+         << ": " << cpp_strerror(r) << dendl;
+    return;
+  }
+
+  dout(10) << ": marked checkpoint failed for snap_id=" << snap_id
+           << " snap_name=" << snap_name << dendl;
+}
+
 int PeerReplayer::propagate_snap_deletes(const std::string &dir_root,
                                          const std::set<std::string> &snaps) {
   dout(5) << ": dir_root=" << dir_root << ", deleted snapshots=" << snaps << dendl;
@@ -3058,6 +3157,7 @@ int PeerReplayer::do_sync_snaps(const std::string &dir_root) {
     if (r < 0) {
       derr << ": failed to synchronize dir_root=" << dir_root
            << ", snapshot=" << it->second << dendl;
+      checkpoint_sync_failed(dir_root, it->first, it->second, r);
       clear_current_syncing_snap(dir_root);
       return r;
     }
@@ -3076,6 +3176,7 @@ int PeerReplayer::do_sync_snaps(const std::string &dir_root) {
 
     set_last_synced_stat(dir_root, it->first, it->second, duration);
     persist_dir_sync_stat(dir_root);
+    checkpoint_sync_complete(dir_root, it->first, it->second);
     if (--snaps_per_cycle == 0) {
       break;
     }
