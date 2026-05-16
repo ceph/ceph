@@ -396,6 +396,18 @@ public:
 
   void set_primary_device(Device *device);
 
+  bool is_full() const {
+    return background_process.is_full();
+  }
+
+  void maybe_wake_background() {
+    background_process.maybe_wake_background();
+  }
+
+  seastar::future<> wait_background() {
+    return background_process.wait_background();
+  }
+
   void set_extent_callback(ExtentCallbackInterface *cb) {
     background_process.set_extent_callback(cb);
   }
@@ -1086,9 +1098,11 @@ private:
       return !trimmer || !main_cleaner;
     }
 
-  protected:
-    state_t get_state() const final {
-      return state;
+    bool is_full() const {
+      if (has_cold_tier()) {
+        return cold_cleaner->get_alive_ratio() >= 0.99;
+      }
+      return main_cleaner->get_alive_ratio() >= 0.99;
     }
 
     void maybe_wake_background() final {
@@ -1098,6 +1112,18 @@ private:
       if (background_should_run()) {
         do_wake_background();
       }
+    }
+
+    seastar::future<> wait_background() {
+      if (!blocking_io) {
+        blocking_io = seastar::shared_promise<>();
+      }
+      return blocking_io->get_shared_future();
+    }
+
+  protected:
+    state_t get_state() const final {
+      return state;
     }
 
     void maybe_wake_blocked_io() final;
@@ -1348,7 +1374,7 @@ private:
 
     std::optional<seastar::future<>> process_join;
     std::optional<seastar::promise<>> blocking_background;
-    std::optional<seastar::promise<>> blocking_io;
+    std::optional<seastar::shared_promise<>> blocking_io;
     // Set by maybe_wake_blocked_io() whenever it actually unblocks a
     // user IO; consumed by run() to yield exactly once on that edge,
     // giving the woken continuation a chance to retry the reservation

@@ -1285,6 +1285,8 @@ public:
 
   virtual bool should_clean_space() const = 0;
 
+  virtual double get_alive_ratio() const = 0;
+
   using clean_space_ertr = base_ertr;
   using clean_space_ret = clean_space_ertr::future<>;
   virtual clean_space_ret clean_space() = 0;
@@ -1663,7 +1665,7 @@ private:
     if (segments.get_unavailable_bytes() == 0) return 0;
     return (double)get_unavailable_unused_bytes() / (double)segments.get_unavailable_bytes();
   }
-  double get_alive_ratio() const {
+  double get_alive_ratio() const final {
     return stats.used_bytes / (double)segments.get_total_bytes();
   }
 
@@ -1837,6 +1839,10 @@ public:
     st.allocated = get_journal_bytes() + stats.used_bytes;
     st.data_stored = get_journal_bytes() + stats.used_bytes;
     return st;
+  }
+
+  double get_alive_ratio() const final {
+    return stats.used_bytes / (double)get_total_bytes();
   }
 
   void print(std::ostream &, bool is_detailed) const final;

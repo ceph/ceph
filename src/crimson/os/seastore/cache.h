@@ -742,6 +742,10 @@ public:
     }
   }
 
+  ExtentPlacementManager& get_epm() {
+    return epm;
+  }
+
   extent_len_t get_block_size() const {
     return epm.get_block_size();
   }
@@ -1189,8 +1193,13 @@ public:
               t, T::TYPE, length, opt.hint, rewrite_gen_printer_t{opt.gen});
     auto result = epm.alloc_new_non_data_extent(t, T::TYPE, length, opt);
     if (!result) {
-      SUBERRORT(seastore_cache, "insufficient space", t);
-      std::rethrow_exception(crimson::ct_error::enospc::exception_ptr());
+      if (epm.is_full()) {
+        SUBERRORT(seastore_cache, "insufficient space", t);
+        std::rethrow_exception(crimson::ct_error::enospc::exception_ptr());
+      } else {
+        SUBERRORT(seastore_cache, "insufficient space, wait for demoting", t);
+        std::rethrow_exception(crimson::ct_error::eagain::exception_ptr());
+      }
     }
     auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(result->bp));
     assert(is_rewrite_generation(
@@ -1226,8 +1235,13 @@ public:
               t, T::TYPE, length, opt.hint, rewrite_gen_printer_t{opt.gen});
     auto results = epm.alloc_new_data_extents(t, T::TYPE, length, opt);
     if (results.empty()) {
-      SUBERRORT(seastore_cache, "insufficient space", t);
-      std::rethrow_exception(crimson::ct_error::enospc::exception_ptr());
+      if (epm.is_full()) {
+        SUBERRORT(seastore_cache, "insufficient space", t);
+        std::rethrow_exception(crimson::ct_error::enospc::exception_ptr());
+      } else {
+        SUBERRORT(seastore_cache, "insufficient space, wait for demoting", t);
+        std::rethrow_exception(crimson::ct_error::eagain::exception_ptr());
+      }
     }
     std::vector<TCachedExtentRef<T>> extents;
     for (auto &result : results) {

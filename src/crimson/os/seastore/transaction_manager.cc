@@ -887,15 +887,24 @@ TransactionManager::rewrite_logical_extent(
   if (get_extent_category(extent->get_type()) == data_category_t::METADATA) {
     assert(extent->is_fully_loaded());
     cache->retire_extent(t, extent);
-    auto nextent = cache->alloc_new_non_data_extent_by_type(
-      t,
-      extent->get_type(),
-      extent->get_length(),
-      extent->get_user_hint(),
-      // get target rewrite generation
-      extent->get_rewrite_generation(),
-      paddr_hint,
-      is_tracked)->cast<LogicalChildNode>();
+    LogicalChildNodeRef nextent;
+    while (!nextent) {
+      try {
+        nextent = cache->alloc_new_non_data_extent_by_type(
+          t,
+          extent->get_type(),
+          extent->get_length(),
+          extent->get_user_hint(),
+          // get target rewrite generation
+          extent->get_rewrite_generation(),
+          paddr_hint,
+          is_tracked)->cast<LogicalChildNode>();
+      } catch (crimson::ct_error::eagain&) {}
+      if (!nextent) {
+        epm->maybe_wake_background();
+        co_await trans_intr::make_interruptible(epm->wait_background());
+      }
+    }
     assert(nextent->get_write_policy() != write_policy_t::WRITE_THROUGH);
     nextent->rewrite(t, *extent, 0);
 
@@ -935,20 +944,29 @@ TransactionManager::rewrite_logical_extent(
       t, std::move(extent), 0, length);
     assert(extent->is_fully_loaded());
     cache->retire_extent(t, extent);
-    auto extents = cache->alloc_new_data_extents_by_type(
-      t,
-      extent->get_type(),
-      extent->get_length(),
-      {
-        extent->get_user_hint(),
-        // get target rewrite generation
-        extent->get_rewrite_generation(),
-        is_tracked,
-        paddr_hint,
-        // WRITH_THROUGH is only effective for client io, so
-        // always set the write policy to WRITE_BACK here
-        write_policy_t::WRITE_BACK
-      });
+    std::vector<CachedExtentRef> extents;
+    while (extents.empty()) {
+      try {
+        extents = cache->alloc_new_data_extents_by_type(
+          t,
+          extent->get_type(),
+          extent->get_length(),
+          {
+            extent->get_user_hint(),
+            // get target rewrite generation
+            extent->get_rewrite_generation(),
+            is_tracked,
+            paddr_hint,
+            // WRITH_THROUGH is only effective for client io, so
+            // always set the write policy to WRITE_BACK here
+            write_policy_t::WRITE_BACK
+          });
+      } catch (crimson::ct_error::eagain&) {}
+      if (extents.empty()) {
+        epm->maybe_wake_background();
+        co_await trans_intr::make_interruptible(epm->wait_background());
+      }
+    }
     extent_len_t off = 0;
     auto left = extent->get_length();
     extent_ref_count_t refcount = 0;
@@ -1239,17 +1257,26 @@ TransactionManager::promote_extent(
   cache->retire_extent(t, extent);
 
   if (get_extent_category(extent->get_type()) == data_category_t::DATA) {
-    auto promoted_raw_extents = cache->alloc_new_data_extents_by_type(
-      t,
-      orig_ext->get_type(),
-      orig_ext->get_length(),
-      {
-        placement_hint_t::HOT,
-        INIT_GENERATION,
-        true,
-        P_ADDR_NULL,
-        write_policy_t::WRITE_BACK
-      });
+    std::vector<CachedExtentRef> promoted_raw_extents;
+    while (promoted_raw_extents.empty()) {
+      try {
+        promoted_raw_extents = cache->alloc_new_data_extents_by_type(
+          t,
+          orig_ext->get_type(),
+          orig_ext->get_length(),
+          {
+            placement_hint_t::HOT,
+            INIT_GENERATION,
+            true,
+            P_ADDR_NULL,
+            write_policy_t::WRITE_BACK
+          });
+      } catch (crimson::ct_error::eagain&) {}
+      if (promoted_raw_extents.empty()) {
+        epm->maybe_wake_background();
+        co_await trans_intr::make_interruptible(epm->wait_background());
+      }
+    }
     t.touch_laddr_prefix(orig_ext->get_laddr().get_object_prefix());
 
     promoted_extents.reserve(promoted_raw_extents.size());
@@ -1289,14 +1316,23 @@ TransactionManager::promote_extent(
     }
     ceph_assert(offset == orig_length);
   } else {
-    auto promoted_extent = cache->alloc_new_non_data_extent_by_type(
-      t,
-      orig_ext->get_type(),
-      orig_ext->get_length(),
-      placement_hint_t::HOT,
-      INIT_GENERATION,
-      P_ADDR_NULL,
-      true);
+    CachedExtentRef promoted_extent;
+    while (!promoted_extent) {
+      try {
+        promoted_extent = cache->alloc_new_non_data_extent_by_type(
+          t,
+          orig_ext->get_type(),
+          orig_ext->get_length(),
+          placement_hint_t::HOT,
+          INIT_GENERATION,
+          P_ADDR_NULL,
+          true);
+      } catch (crimson::ct_error::eagain&) {}
+      if (!promoted_extent) {
+        epm->maybe_wake_background();
+        co_await trans_intr::make_interruptible(epm->wait_background());
+      }
+    }
     auto lext = promoted_extent->cast<LogicalChildNode>();
     lext->set_laddr(orig_ext->get_laddr());
     lext->rewrite(t, *orig_ext, 0);

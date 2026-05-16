@@ -173,7 +173,12 @@ BtreeLBAManager::mkfs(
   auto croot = co_await cache.get_root(t);
   assert(croot);
   assert(croot->is_mutation_pending());
-  croot->get_root().lba_root = LBABtree::mkfs(croot, get_context(t));
+  croot->get_root().lba_root =
+    co_await LBABtree::mkfs(croot, get_context(t)
+    ).handle_error_interruptible(
+      mkfs_iertr::pass_further{},
+      crimson::ct_error::assert_all("unexpected error")
+    );
 }
 
 /**

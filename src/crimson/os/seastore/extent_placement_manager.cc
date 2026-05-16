@@ -821,14 +821,14 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
     // IO blocked -> needs cleaner -> cleaner sleeping -> nothing runs -> deadlock.
     // Kick the background so it can free space and call maybe_wake_blocked_io().
     auto arm_blocking_io_and_wake = [this] {
-      blocking_io = seastar::promise<>();
+      blocking_io = seastar::shared_promise<>();
       do_wake_background();
     };
     arm_blocking_io_and_wake();
     // we just blocked this IO, now wait until
     // maybe_wake_blocked_io will set value to blocking_io
     do {
-      co_await blocking_io->get_future();
+      co_await blocking_io->get_shared_future();
       ceph_assert(!blocking_io);
       auto res = try_reserve_io(usage);
       if (res.is_successful()) {
