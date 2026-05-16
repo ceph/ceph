@@ -574,21 +574,27 @@ public:
     LOG_PREFIX(TransactionManager::alloc_non_data_extent);
     SUBDEBUGT(seastore_tm, "{} hint {}~0x{:x} phint={} ...",
               t, T::TYPE, laddr_hint, len, placement_hint);
-    auto ext = cache->alloc_new_non_data_extent<T>(
-      t, len, {placement_hint, INIT_GENERATION});
+    TCachedExtentRef<T> ext;
+    while (!ext) {
+      try {
+        ext = cache->alloc_new_non_data_extent<T>(
+          t, len, {placement_hint, INIT_GENERATION});
+      } catch(crimson::ct_error::eagain&) {}
+      if (!ext) {
+        epm->maybe_wake_background();
+        co_await trans_intr::make_interruptible(epm->wait_background());
+      }
+    }
     // user must initialize the logical extent themselves.
     assert(is_user_transaction(t.get_src()));
     ext->set_seen_by_users();
-    return lba_manager->alloc_extent(
+    co_await lba_manager->alloc_extent(
       t,
       laddr_hint,
       *ext,
-      EXTENT_DEFAULT_REF_COUNT
-    ).si_then([ext=std::move(ext), &t, FNAME](auto &&) mutable {
-      SUBDEBUGT(seastore_tm, "allocated {}", t, *ext);
-      return alloc_extent_iertr::make_ready_future<TCachedExtentRef<T>>(
-	std::move(ext));
-    });
+      EXTENT_DEFAULT_REF_COUNT);
+    SUBDEBUGT(seastore_tm, "allocated {}", t, *ext);
+    co_return ext;
   }
 
   /**
@@ -612,12 +618,21 @@ public:
     LOG_PREFIX(TransactionManager::alloc_data_extents);
     SUBDEBUGT(seastore_tm, "{} hint {}~0x{:x} phint={} ...",
               t, T::TYPE, laddr_hint, len, placement_hint);
-    auto exts = cache->alloc_new_data_extents<T>(
-      t, len,
-      {
-        placement_hint, INIT_GENERATION, false, P_ADDR_NULL,
-        epm->get_write_policy(T::TYPE, len)
-      });
+    std::vector<TCachedExtentRef<T>> exts;
+    while (exts.empty()) {
+      try {
+        exts = cache->alloc_new_data_extents<T>(
+          t, len,
+          {
+            placement_hint, INIT_GENERATION, false, P_ADDR_NULL,
+            epm->get_write_policy(T::TYPE, len)
+          });
+      } catch (crimson::ct_error::eagain&) {}
+      if (exts.empty()) {
+        epm->maybe_wake_background();
+        co_await trans_intr::make_interruptible(epm->wait_background());
+      }
+    }
     // user must initialize the logical extent themselves
     assert(is_user_transaction(t.get_src()));
     for (auto& ext : exts) {

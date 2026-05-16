@@ -794,7 +794,6 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
   if (!is_ready()) {
     co_return;
   }
-  ceph_assert(!blocking_io);
   // The pipeline configuration prevents another IO from entering
   // prepare until the prior one exits and clears this.
   ++stats.io_count;
@@ -824,15 +823,16 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
     // IO blocked -> needs cleaner -> cleaner sleeping -> nothing runs -> deadlock.
     // Kick the background so it can free space and call maybe_wake_blocked_io().
     auto arm_blocking_io_and_wake = [this] {
-      blocking_io = seastar::promise<>();
+      if (!blocking_io) {
+        blocking_io = seastar::shared_promise<>();
+      }
       do_wake_background();
     };
     arm_blocking_io_and_wake();
     // we just blocked this IO, now wait until
     // maybe_wake_blocked_io will set value to blocking_io
-    do {
-      co_await blocking_io->get_future();
-      ceph_assert(!blocking_io);
+    while (true) {
+      co_await blocking_io->get_shared_future();
       auto res = try_reserve_io(usage);
       if (res.is_successful()) {
         DEBUG("unblocked");
@@ -842,6 +842,7 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
         auto duration = end_time - begin_time;
         stats.io_blocked_time += std::chrono::duration_cast<
         std::chrono::milliseconds>(duration).count();
+        break;
       } else {
         DEBUG("blocked again: inline={}, main={}, cold={}, usage={}",
               res.reserve_inline_success,
@@ -857,7 +858,7 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
         }
         arm_blocking_io_and_wake();
       }
-    } while (blocking_io);
+    }
   }
 }
 

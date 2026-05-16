@@ -231,12 +231,12 @@ struct lba_btree_test : btree_test_base {
   LBAManager::mkfs_ret test_structure_setup(Transaction &t) final {
     return cache->get_root(
       t
-    ).si_then([this, &t](RootBlockRef croot) {
+    ).si_then([this, &t](RootBlockRef croot) -> LBAManager::mkfs_ret {
       auto mut_croot = cache->duplicate_for_write(
 	t, croot
       )->cast<RootBlock>();
       mut_croot->root.lba_root =
-	LBABtree::mkfs(mut_croot, get_op_context(t));
+	co_await LBABtree::mkfs(mut_croot, get_op_context(t));
     });
   }
 

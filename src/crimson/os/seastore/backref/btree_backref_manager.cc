@@ -72,16 +72,16 @@ BtreeBackrefManager::mkfs(
 {
   LOG_PREFIX(BtreeBackrefManager::mkfs);
   INFOT("start", t);
-  return cache.get_root(t).si_then([this, &t](auto croot) {
-    assert(croot->is_mutation_pending());
-    croot->get_root().backref_root = BackrefBtree::mkfs(croot, get_context(t));
-    return mkfs_iertr::now();
-  }).handle_error_interruptible(
-    mkfs_iertr::pass_further{},
-    crimson::ct_error::assert_all(
-      "Invalid error in BtreeBackrefManager::mkfs"
-    )
-  );
+
+  auto croot = co_await cache.get_root(t);
+  croot->get_root().backref_root =
+    co_await BackrefBtree::mkfs(croot, get_context(t)
+    ).handle_error_interruptible(
+      mkfs_iertr::pass_further{},
+      crimson::ct_error::assert_all(
+        "Invalid error in BtreeBackrefManager::mkfs"
+      )
+    );
 }
 
 BtreeBackrefManager::get_mapping_ret
