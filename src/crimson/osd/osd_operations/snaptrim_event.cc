@@ -28,6 +28,13 @@ namespace crimson {
       return {};
     }
   };
+
+  template <>
+  struct EventBackendRegistry<osd::SnapTrimInitiate> {
+    static std::tuple<> get_backends() {
+      return {};
+    }
+  };
 }
 
 namespace crimson::osd {
@@ -464,6 +471,25 @@ void SnapTrimObjSubEvent::dump_detail(Formatter *f) const
   f->open_object_section("SnapTrimObjSubEvent");
   f->dump_stream("coid") << coid;
   f->close_section();
+}
+
+void SnapTrimInitiate::print(std::ostream &lhs) const
+{
+  fmt::print(lhs, "SnapTrimInitiate(pgid={})", pg->get_pgid());
+}
+
+void SnapTrimInitiate::dump_detail(Formatter *f) const
+{
+  Formatter::ObjectSection section(*f, "SnapTrimInitiate");
+  f->dump_stream("pgid") << pg->get_pgid();
+}
+
+seastar::future<> SnapTrimInitiate::start()
+{
+  logger().debug("{}: start", *this);
+  pg->initiate_snap_trim();
+  logger().debug("{}: complete", *this);
+  co_return;
 }
 
 } // namespace crimson::osd
