@@ -141,3 +141,34 @@ class Module(MgrModule):
         """Get snapshot mirror metrics for a filesystem (optional mirrored directory and peer)"""
         return self.fs_snapshot_mirror.metrics_status(fs_name, mirrored_dir_path,
                                                       peer_uuid)
+
+    @MirroringCLICommand.Write('fs snapshot mirror checkpoint add')
+    def snapshot_mirror_checkpoint_add(self,
+                                       fs_name: str,
+                                       path: str,
+                                       snap_name: str):
+        """Add a checkpoint for a snapshot"""
+        return self.fs_snapshot_mirror.checkpoint_add(fs_name, path, snap_name)
+
+    @MirroringCLICommand.Write('fs snapshot mirror checkpoint remove')
+    def snapshot_mirror_checkpoint_remove(self,
+                                          fs_name: str,
+                                          path: str,
+                                          snap_name: str):
+        """Remove a checkpoint from a snapshot"""
+        return self.fs_snapshot_mirror.checkpoint_remove(fs_name, path, snap_name)
+
+    @MirroringCLICommand.Read('fs snapshot mirror checkpoint ls')
+    def snapshot_mirror_checkpoint_ls(self,
+                                       fs_name: str,
+                                       path: str,
+                                       format: str = 'json'):
+        """List all checkpoints for a directory"""
+        return self.fs_snapshot_mirror.checkpoint_ls(fs_name, path, format)
+
+    @MirroringCLICommand.Write('fs snapshot mirror checkpoint now')
+    def snapshot_mirror_checkpoint_now(self,
+                                       fs_name: str,
+                                       path: str):
+        """Create a checkpoint on the latest snapshot"""
+        return self.fs_snapshot_mirror.checkpoint_now(fs_name, path)
