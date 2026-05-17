@@ -121,6 +121,13 @@ import CheckMarkOutline16 from '@carbon/icons/es/checkmark--outline/16';
 import ArrowUpRight16 from '@carbon/icons/es/arrow--up-right/16';
 import InProgress16 from '@carbon/icons/es/in-progress/16';
 import ArrowDown16 from '@carbon/icons/es/arrow--down/16';
+import Launch16 from '@carbon/icons/es/launch/16';
+import Cube16 from '@carbon/icons/es/cube/16';
+import ChevronLeft16 from '@carbon/icons/es/chevron--left/16';
+import ChevronRight16 from '@carbon/icons/es/chevron--right/16';
+import CaretLeft16 from '@carbon/icons/es/caret--left/16';
+import CaretRight16 from '@carbon/icons/es/caret--right/16';
+import Locked16 from '@carbon/icons/es/locked/16';
 
 import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.component';
 import { PageHeaderComponent } from './page-header/page-header.component';
@@ -301,7 +308,14 @@ export class ComponentsModule {
       CheckMarkOutline16,
       ArrowUpRight16,
       InProgress16,
-      ArrowDown16
+      ArrowDown16,
+      Launch16,
+      Cube16,
+      ChevronLeft16,
+      ChevronRight16,
+      CaretLeft16,
+      CaretRight16,
+      Locked16
     ]);
   }
 }

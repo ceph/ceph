@@ -55,8 +55,3 @@ cd-about {
     @extend .col-8;
   }
 }
-
-// All '.fa' icons will have fixed width
-.fa {
-  @extend .fa-fw;
-}

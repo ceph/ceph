@@ -1,0 +1,228 @@
+- Generating browser application bundles (phase: setup)...
+[1m[33m    TypeScript compiler options "target" and "useDefineForClassFields" are set to "ES2022" and "false" respectively by the Angular CLI. To control ECMA version and features use the Browserslist configuration. For more information, see https://angular.dev/tools/cli/build#configuring-browser-compatibility[39m[22m
+[1m[33m    NOTE: You can set the "target" to "ES2022" in the project's tsconfig to remove this warning.[39m[22m
+[1m[33m[7m[1m[36m NX [39m[33m[22m[1m[27m Falling back to ts-node for local typescript execution. This may be a little slower.[39m[22m
+[1m[33m  - To fix this, ensure @swc-node/register and @swc/core have been installed[39m[22m
+[1m[33mCould not find a version for "@rollup/rollup-linux-arm64-gnu" in the root "package.json" when collecting shared packages for the Module Federation setup. The package will not be shared.[39m[22m
+[1m[33mCould not find a version for "brace-expansion" in the root "package.json" when collecting shared packages for the Module Federation setup. The package will not be shared.[39m[22m
+[1m[33mCould not find a version for "@jest/globals" in the root "package.json" when collecting shared packages for the Module Federation setup. The package will not be shared.[39m[22m
+[1m[33mCould not find a version for "lodash.merge" in the root "package.json" when collecting shared packages for the Module Federation setup. The package will not be shared.[39m[22m
+(node:2312321) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/frontend-carbon/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/ajax/package.json' of './index.js'. Please either fix that or report it to the module author
+(Use `node-22 --trace-deprecation ...` to show where the warning was created)
+(node:2312321) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/frontend-carbon/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/fetch/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:2312321) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/frontend-carbon/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/internal-compatibility/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:2312321) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/frontend-carbon/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/operators/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:2312321) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/frontend-carbon/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/testing/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:2312321) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/frontend-carbon/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/webSocket/package.json' of './index.js'. Please either fix that or report it to the module author
+[36m[ Module Federation Manifest Plugin ][39m Manifest will use absolute path resolution via its host at runtime, reason: publicPath='auto'
+(node:2312321) [DEP0180] DeprecationWarning: fs.Stats constructor is deprecated.
+(Use `node-22 --trace-deprecation ...` to show where the warning was created)
+[32m✔[39m Browser application bundle generation complete.
+[32m✔[39m Browser application bundle generation complete.
+[1m[33m[39m[22m
+[1m[33m[0m[36m./src/styles.scss[39m[33m[0m - [0m[33mWarning: [39m[33m[0mModule Warning (from ./node_modules/sass-loader/dist/cjs.js):[39m[22m
+[1m[33mDeprecation Warning on line 5, column 8 of file:///home/afreenmisbah/repos/forks/dev/frontend-carbon/src/pybind/mgr/dashboard/frontend/src/styles.scss:5:8:[39m[22m
+[1m[33mSass @import rules are deprecated and will be removed in Dart Sass 3.0.0.[39m[22m
+[1m[33m[39m[22m
+[1m[33mMore info and automated migrator: https://sass-lang.com/d/import[39m[22m
+[1m[33m[39m[22m
+[1m[33m5 | @import './src/styles/carbon-defaults.scss';[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[33msrc/styles.scss 6:9  root stylesheet[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[36m./src/styles.scss[39m[33m[0m - [0m[33mWarning: [39m[33m[0mModule Warning (from ./node_modules/sass-loader/dist/cjs.js):[39m[22m
+[1m[33mDeprecation Warning on line 22, column 8 of file:///home/afreenmisbah/repos/forks/dev/frontend-carbon/src/pybind/mgr/dashboard/frontend/src/styles.scss:22:8:[39m[22m
+[1m[33mSass @import rules are deprecated and will be removed in Dart Sass 3.0.0.[39m[22m
+[1m[33m[39m[22m
+[1m[33mMore info and automated migrator: https://sass-lang.com/d/import[39m[22m
+[1m[33m[39m[22m
+[1m[33m22 | @import 'bootstrap/scss/bootstrap';[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[33msrc/styles.scss 23:9  root stylesheet[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[36m./src/styles.scss[39m[33m[0m - [0m[33mWarning: [39m[33m[0mModule Warning (from ./node_modules/sass-loader/dist/cjs.js):[39m[22m
+[1m[33mDeprecation Warning on line 23, column 8 of file:///home/afreenmisbah/repos/forks/dev/frontend-carbon/src/pybind/mgr/dashboard/frontend/src/styles.scss:23:8:[39m[22m
+[1m[33mSass @import rules are deprecated and will be removed in Dart Sass 3.0.0.[39m[22m
+[1m[33m[39m[22m
+[1m[33mMore info and automated migrator: https://sass-lang.com/d/import[39m[22m
+[1m[33m[39m[22m
+[1m[33m23 | @import 'app/ceph/rgw/rgw-overview-dashboard/rgw-overview-card-popover.scss';[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[33msrc/styles.scss 24:9  root stylesheet[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[36m./src/styles.scss[39m[33m[0m - [0m[33mWarning: [39m[33m[0mModule Warning (from ./node_modules/sass-loader/dist/cjs.js):[39m[22m
+[1m[33mDeprecation Warning on line 24, column 8 of file:///home/afreenmisbah/repos/forks/dev/frontend-carbon/src/pybind/mgr/dashboard/frontend/src/styles.scss:24:8:[39m[22m
+[1m[33mSass @import rules are deprecated and will be removed in Dart Sass 3.0.0.[39m[22m
+[1m[33m[39m[22m
+[1m[33mMore info and automated migrator: https://sass-lang.com/d/import[39m[22m
+[1m[33m[39m[22m[1m[33m[39m[22m
+[1m[33m24 | @import './src/styles/bootstrap-extends';[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[33msrc/styles.scss 25:9  root stylesheet[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[36m./src/styles.scss[39m[33m[0m - [0m[33mWarning: [39m[33m[0mModule Warning (from ./node_modules/sass-loader/dist/cjs.js):[39m[22m
+[1m[33mDeprecation Warning on line 25, column 8 of file:///home/afreenmisbah/repos/forks/dev/frontend-carbon/src/pybind/mgr/dashboard/frontend/src/styles.scss:25:8:[39m[22m
+[1m[33mSass @import rules are deprecated and will be removed in Dart Sass 3.0.0.[39m[22m
+[1m[33m[39m[22m
+[1m[33mMore info and automated migrator: https://sass-lang.com/d/import[39m[22m
+[1m[33m[39m[22m
+[1m[33m25 | @import './src/styles/ceph-custom/basics';[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[33msrc/styles.scss 26:9  root stylesheet[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[36m./src/styles.scss[39m[33m[0m - [0m[33mWarning: [39m[33m[0mModule Warning (from ./node_modules/sass-loader/dist/cjs.js):[39m[22m
+[1m[33mDeprecation Warning on line 79, column 16 of file:///home/afreenmisbah/repos/forks/dev/frontend-carbon/src/pybind/mgr/dashboard/frontend/src/styles.scss:79:16:[39m[22m
+[1m[33mGlobal built-in functions are deprecated and will be removed in Dart Sass 3.0.0.[39m[22m
+[1m[33mUse color.adjust instead.[39m[22m
+[1m[33m[39m[22m
+[1m[33mMore info and automated migrator: https://sass-lang.com/d/import[39m[22m
+[1m[33m[39m[22m
+[1m[33m79 |     background: darken($success, 15%);[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[33msrc/styles.scss 80:17  root stylesheet[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[36m./src/styles.scss[39m[33m[0m - [0m[33mWarning: [39m[33m[0mModule Warning (from ./node_modules/sass-loader/dist/cjs.js):[39m[22m
+[1m[33mDeprecation Warning on line 79, column 16 of file:///home/afreenmisbah/repos/forks/dev/frontend-carbon/src/pybind/mgr/dashboard/frontend/src/styles.scss:79:16:[39m[22m
+[1m[33mdarken() is deprecated. Suggestions:[39m[22m
+[1m[33m[39m[22m
+[1m[33mcolor.scale($color, $lightness: -55.4347826087%)[39m[22m
+[1m[33mcolor.adjust($color, $lightness: -15%)[39m[22m
+[1m[33m[39m[22m
+[1m[33mMore info: https://sass-lang.com/d/color-functions[39m[22m
+[1m[33m[39m[22m
+[1m[33m79 |     background: darken($success, 15%);[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[33msrc/styles.scss 80:17  root stylesheet[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[36m./src/styles.scss[39m[33m[0m - [0m[33mWarning: [39m[33m[0mModule Warning (from ./node_modules/sass-loader/dist/cjs.js):[39m[22m
+[1m[33m7 repetitive deprecation warnings omitted.[39m[22m
+[1m[33mRun in verbose mode to see all warnings.[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[36m./src/app/core/auth/login-password-form/login-password-form.component.sc[39m[22m[1m[33mss?ngResource[39m[33m[0m - [0m[33mWarning: [39m[33m[0mModule Warning (from ./node_modules/sass-loader/dist/cjs.js):[39m[22m
+[1m[33mDeprecation Warning on line 3, column 17 of file:///home/afreenmisbah/repos/forks/dev/frontend-carbon/src/pybind/mgr/dashboard/frontend/src/app/core/auth/login-password-form/login-password-form.component.scss:3:17:[39m[22m
+[1m[33mGlobal built-in functions are deprecated and will be removed in Dart Sass 3.0.0.[39m[22m
+[1m[33mUse color.adjust instead.[39m[22m
+[1m[33m[39m[22m
+[1m[33mMore info and automated migrator: https://sass-lang.com/d/import[39m[22m
+[1m[33m[39m[22m
+[1m[33m3 | $dark-secondary: darken(vv.$secondary, 4%);[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[33msrc/app/core/auth/login-password-form/login-password-form.component.scss 4:18  root stylesheet[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[36m./src/app/core/auth/login-password-form/login-password-form.component.scss?ngResource[39m[33m[0m - [0m[33mWarning: [39m[33m[0mModule Warning (from ./node_modules/sass-loader/dist/cjs.js):[39m[22m
+[1m[33mDeprecation Warning on line 3, column 17 of file:///home/afreenmisbah/repos/forks/dev/frontend-carbon/src/pybind/mgr/dashboard/frontend/src/app/core/auth/login-password-form/login-password-form.component.scss:3:17:[39m[22m
+[1m[33mdarken() is deprecated. Suggestions:[39m[22m
+[1m[33m[39m[22m
+[1m[33mcolor.scale($color, $lightness: -15.9375%)[39m[22m
+[1m[33mcolor.adjust($color, $lightness: -4%)[39m[22m
+[1m[33m[39m[22m
+[1m[33mMore info: https://sass-lang.com/d/color-functions[39m[22m
+[1m[33m[39m[22m
+[1m[33m3 | $dark-secondary: darken(vv.$secondary, 4%);[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[33msrc/app/core/auth/login-password-form/login-password-form.component.scss 4:18  root stylesheet[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[36m./src/app/core/auth/login/login.component.scss?ngResource[39m[33m[0m - [0m[33mWarning: [39m[33m[0mModule Warning (from ./node_modules/sass-loader/dist/cjs.js):[39m[22m
+[1m[33mDeprecation Warning on line 3, column 17 of file:///home/afreenmisbah/repos/forks/dev/frontend-carbon/src/pybind/mgr/dashboard/frontend/src/app/core/auth/login/login.component.scss:3:17:[39m[22m
+[1m[33mGlobal built-in functions are deprecated and will be removed in Dart Sass 3.0.0.[39m[22m
+[1m[33mUse color.adjust instead.[39m[22m
+[1m[33m[39m[22m
+[1m[33mMore info and automated migrator: https://sass-lang.com/d/import[39m[22m
+[1m[33m[39m[22m
+[1m[33m3 | $dark-secondary: darken(vv.$secondary, 4%);[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[33msrc/app/core/auth/login/login.component.scs[39m[22m[1m[33ms 4:18  root stylesheet[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[36m./src/app/core/auth/login/login.component.scss?ngResource[39m[33m[0m - [0m[33mWarning: [39m[33m[0mModule Warning (from ./node_modules/sass-loader/dist/cjs.js):[39m[22m
+[1m[33mDeprecation Warning on line 3, column 17 of file:///home/afreenmisbah/repos/forks/dev/frontend-carbon/src/pybind/mgr/dashboard/frontend/src/app/core/auth/login/login.component.scss:3:17:[39m[22m
+[1m[33mdarken() is deprecated. Suggestions:[39m[22m
+[1m[33m[39m[22m
+[1m[33mcolor.scale($color, $lightness: -15.9375%)[39m[22m
+[1m[33mcolor.adjust($color, $lightness: -4%)[39m[22m
+[1m[33m[39m[22m
+[1m[33mMore info: https://sass-lang.com/d/color-functions[39m[22m
+[1m[33m[39m[22m
+[1m[33m3 | $dark-secondary: darken(vv.$secondary, 4%);[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[33msrc/app/core/auth/login/login.component.scss 4:18  root stylesheet[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[36m./src/app/shared/components/telemetry-notification/telemetry-notification.component.scss?ngResource[39m[33m[0m - [0m[33mWarning: [39m[33m[0mModule Warning (from ./node_modules/sass-loader/dist/cjs.js):[39m[22m
+[1m[33mDeprecation Warning on line 20, column 9 of file:///home/afreenmisbah/repos/forks/dev/frontend-carbon/src/pybind/mgr/dashboard/frontend/src/app/shared/components/telemetry-notification/telemetry-notification.component.scss:20:9:[39m[22m
+[1m[33mGlobal built-in functions are deprecated and will be removed in Dart Sass 3.0.0.[39m[22m
+[1m[33mUse color.adjust instead.[39m[22m
+[1m[33m[39m[22m
+[1m[33mMore info and automated migrator: https://sass-lang.com/d/import[39m[22m
+[1m[33m[39m[22m
+[1m[33m20 |   color: darken(vv.$primary, 10);[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[33msrc/app/shared/components/telemetry-notification/telemetry-notification.component.scss 21:10  root stylesheet[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[36m./src/app/shared/components/telemetry-notification/telemetry-notification.component.scss?ngResource[39m[33m[0m - [0m[33mWarning: [39m[33m[0mModule Warning (from ./node_modules/sass-loader/dist/cjs.js):[39m[22m
+[1m[33mDeprecation Warning on line 20, column 9 of file:///home/afreenmisbah/repos/forks/dev/frontend-carbon/src/pybind/mgr/dashboard/frontend/src/app/shared/components/telemetry-notification/telemetry-notification.component.scss:20:9:[39m[22m
+[1m[33mdarken() is deprecated. Suggestions:[39m[22m
+[1m[33m[39m[22m
+[1m[33mcolor.scale($color, $lightness: -28.4916201117%)[39m[22m
+[1m[33mcolor.adjust($color, $lightness: -10%)[39m[22m
+[1m[33m[39m[22m[1m[33m[39m[22m
+[1m[33mMore info: https://sass-lang.com/d/color-functions[39m[22m
+[1m[33m[39m[22m
+[1m[33m20 |   color: darken(vv.$primary, 10);[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[33msrc/app/shared/components/telemetry-notification/telemetry-notification.component.scss 21:10  root stylesheet[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/frontend-carbon/src/pybind/mgr/dashboard/frontend/node_modules/carbon-components-angular/fesm2020/carbon-components-angular-datepicker.mjs depends on 'flatpickr/dist/l10n/index'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/frontend-carbon/src/pybind/mgr/dashboard/frontend/node_modules/carbon-components-angular/fesm2020/carbon-components-angular-datepicker.mjs depends on 'flatpickr/dist/plugins/rangePlugin'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/frontend-carbon/src/pybind/mgr/dashboard/frontend/src/app/core/navigation/api-docs/api-docs.component.ts depends on 'swagger-ui-dist/swagger-ui-bundle'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/frontend-carbon/src/pybind/mgr/dashboard/frontend/src/app/shared/components/area-chart/area-chart.component.ts depends on 'lodash.merge'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0mundefined depends on 'moment'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0mundefined depends on 'validator'. CommonJS [39m[22m[1m[33mor AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0mundefined depends on 'xml2js'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/block/iscsi-target-details/iscsi-target-details.component.ts[0m:[93m100[0m:[93m51[0m - [91merror[0m[90m TS2339: [0mProperty 'spin' does not exist on type 'typeof Icons'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m100[0m             ? [Icons.size24, Icons.spinner, Icons.spin][39m[22m
+[1m[31m[7m   [0m [91m                                                  ~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
