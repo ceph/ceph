@@ -123,6 +123,9 @@ static void create_or_get_ceph_context(struct ceph_msgr_options *o)
 
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf.apply_changes(NULL);
+  /* Account bufferlist CRC cache hits/misses so the copy baseline can
+   * quantify CRC-scan recomputation. */
+  ceph::buffer::track_cached_crc(true);
   g_dummy_auth = new DummyAuthClientServer(g_ceph_context);
   g_dummy_auth->auth_registry.refresh_config();
 }
@@ -139,6 +142,25 @@ static void put_ceph_context(void)
     ostr << ">>>>>>>>>>>>> PERFCOUNTERS BEGIN <<<<<<<<<<<<" << std::endl;
     f->flush(ostr);
     ostr << ">>>>>>>>>>>>>  PERFCOUNTERS END  <<<<<<<<<<<<" << std::endl;
+
+    /* Histograms (e.g. msgr_send_iov_segments) are excluded from the
+     * regular dump_formatted path and need an explicit call. */
+    g_ceph_context->get_perfcounters_collection()->dump_formatted_histograms(
+	f, false);
+    ostr << ">>>>>>>>>>>>> PERF HISTOGRAMS BEGIN <<<<<<<<<<<<" << std::endl;
+    f->flush(ostr);
+    ostr << ">>>>>>>>>>>>>  PERF HISTOGRAMS END  <<<<<<<<<<<<" << std::endl;
+
+    /* Bufferlist CRC cache accounting. These are process-global
+     * atomics, not perfcounters, so emit them alongside. */
+    ostr << ">>>>>>>>>>>>> BUFFER CRC CACHE BEGIN <<<<<<<<<<<<" << std::endl;
+    ostr << "buffer_cached_crc: "
+	 << ceph::buffer::get_cached_crc() << std::endl;
+    ostr << "buffer_cached_crc_adjusted: "
+	 << ceph::buffer::get_cached_crc_adjusted() << std::endl;
+    ostr << "buffer_missed_crc: "
+	 << ceph::buffer::get_missed_crc() << std::endl;
+    ostr << ">>>>>>>>>>>>>  BUFFER CRC CACHE END  <<<<<<<<<<<<" << std::endl;
 
     delete f;
     delete g_dummy_auth;

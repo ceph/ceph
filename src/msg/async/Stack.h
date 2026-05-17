@@ -225,6 +225,19 @@ enum {
   l_msgr_recv_encrypted_bytes,
   l_msgr_send_encrypted_bytes,
 
+  // copy / zero-copy accounting on the send path.
+  // _copied and _iov_segments are driven today (every send is a
+  // copying send); the zerocopy_* counters are registered here but
+  // stay zero until the MSG_ZEROCOPY send path lands.
+  l_msgr_send_bytes_copied,
+  l_msgr_send_bytes_zerocopy,
+  l_msgr_send_iov_segments,
+  l_msgr_zerocopy_submitted,
+  l_msgr_zerocopy_completed,
+  l_msgr_zerocopy_force_dropped,
+  l_msgr_zerocopy_fallback,
+  l_msgr_zerocopy_pinned_bytes,
+
   l_msgr_last,
 };
 
@@ -282,6 +295,45 @@ class Worker {
 
     plb.add_u64_counter(l_msgr_recv_encrypted_bytes, "msgr_recv_encrypted_bytes", "Network received encrypted bytes", NULL, 0, unit_t(UNIT_BYTES));
     plb.add_u64_counter(l_msgr_send_encrypted_bytes, "msgr_send_encrypted_bytes", "Network sent encrypted bytes", NULL, 0, unit_t(UNIT_BYTES));
+
+    plb.add_u64_counter(l_msgr_send_bytes_copied, "msgr_send_bytes_copied",
+                        "Network sent bytes that passed through a kernel copy",
+                        NULL, 0, unit_t(UNIT_BYTES));
+    plb.add_u64_counter(l_msgr_send_bytes_zerocopy, "msgr_send_bytes_zerocopy",
+                        "Network sent bytes via zero-copy",
+                        NULL, 0, unit_t(UNIT_BYTES));
+    PerfHistogramCommon::axis_config_d msgr_send_iov_segs_x_axis{
+      "iovec segments",                ///< scatter/gather segment count
+      PerfHistogramCommon::SCALE_LOG2, ///< covers 1 .. >IOV_MAX
+      0,                               ///< start at 0
+      1,                               ///< quantization unit
+      14,                              ///< top bucket starts at 2048
+    };
+    PerfHistogramCommon::axis_config_d msgr_send_iov_bytes_y_axis{
+      "sent bytes (bytes)",
+      PerfHistogramCommon::SCALE_LOG2, ///< logarithmic byte scale
+      0,                               ///< start at 0
+      4096,                            ///< quantization unit
+      13,                              ///< enough to cover 4+M sends
+    };
+    plb.add_u64_counter_histogram(
+      l_msgr_send_iov_segments, "msgr_send_iov_segments",
+      msgr_send_iov_segs_x_axis, msgr_send_iov_bytes_y_axis,
+      "Histogram of pending iovec segment count vs. bytes drained per socket write");
+    plb.add_u64_counter(l_msgr_zerocopy_submitted, "msgr_zerocopy_submitted",
+                        "Zero-copy sends submitted (pins created)");
+    plb.add_u64_counter(l_msgr_zerocopy_completed, "msgr_zerocopy_completed",
+                        "Zero-copy pins retired by a kernel completion");
+    plb.add_u64_counter(l_msgr_zerocopy_force_dropped,
+                        "msgr_zerocopy_force_dropped",
+                        "Zero-copy pins abandoned at close (abortive); "
+                        "submitted == completed + force_dropped, and a "
+                        "non-zero value means completions were not arriving");
+    plb.add_u64_counter(l_msgr_zerocopy_fallback, "msgr_zerocopy_fallback",
+                        "Zero-copy requested but degraded to a copy "
+                        "(ENOBUFS or kernel-side copy)");
+    plb.add_u64(l_msgr_zerocopy_pinned_bytes, "msgr_zerocopy_pinned_bytes",
+                "Bytes currently pinned awaiting zero-copy completion");
 
     perf_logger = plb.create_perf_counters();
     cct->get_perfcounters_collection()->add(perf_logger);

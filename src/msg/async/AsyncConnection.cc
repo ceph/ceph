@@ -341,12 +341,22 @@ ssize_t AsyncConnection::_try_send(bool more)
   // network block would make ::send return EAGAIN, that would make here looks
   // like do not call cs.send() and r = 0
   ssize_t r = 0;
+  // Capture the scatter/gather vector size before cs.send(), which
+  // splices the sent prefix off outgoing_bl.
+  const unsigned iov_segs = outgoing_bl.get_num_buffers();
   if (likely(!inject_network_congestion())) {
     r = cs.send(outgoing_bl, more);
   }
   if (r < 0) {
     ldout(async_msgr->cct, 1) << __func__ << " send error: " << cpp_strerror(r) << dendl;
     return r;
+  }
+  if (r > 0) {
+    // Today every byte handed to the socket passes through a kernel
+    // copy; the MSG_ZEROCOPY send path will split this between
+    // _copied and _zerocopy.
+    logger->inc(l_msgr_send_bytes_copied, r);
+    logger->hinc(l_msgr_send_iov_segments, iov_segs, r);
   }
 
   ldout(async_msgr->cct, 10) << __func__ << " sent bytes " << r
