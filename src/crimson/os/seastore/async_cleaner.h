@@ -1446,6 +1446,18 @@ public:
 
   clean_space_ret clean_space() final;
 
+  // Predicate for the autotune override: returns true when greedy's pick frees
+  // significantly more space than the formula's pick.
+  // See doc/dev/crimson/seastore.rst#cleaner-gc-autotune.
+  static bool should_override_to_greedy(
+      double picked_free, double greedy_free, double ratio) {
+    // Guard against picked_free near zero (1/1024 of a segment): the ratio
+    // comparison is meaningless against a near-zero denominator.
+    constexpr double kMinPickedFreeForRatio = 1.0 / 1024.0;
+    return picked_free >= kMinPickedFreeForRatio &&
+           greedy_free >= ratio * picked_free;
+  }
+
   const std::set<device_id_t>& get_device_ids() const final {
     return sm_group->get_device_ids();
   }
