@@ -4,9 +4,9 @@
         [ngClass]="{ 'mt-3': status === 'in-progress' && isPaused }"
         *ngIf="!value || actionName === 'upgrading'">
       <i *ngIf="status === 'in-progress' && isPaused; else spinningIcon"
-         [ngClass]="[icons.large, icons.spinner]"></i>
+         [ngClass]="[icons.size24, icons.spinner]"></i>
       <ng-template #spinningIcon>
-        <i [ngClass]="[icons.large, icons.spin, icons.spinner]"></i>
+        <i [ngClass]="[icons.size24, icons.spin, icons.spinner]"></i>
       </ng-template>
     </h3>
 

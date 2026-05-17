@@ -7,7 +7,7 @@
         <div class="row">
           <div class="col-sm-6 col-lg-6 tree-container">
             <i *ngIf="loadingIndicator"
-               [ngClass]="[icons.large, icons.spinner, icons.spin]"></i>
+               [ngClass]="[icons.size24, icons.spinner, icons.spin]"></i>
             <cds-tree-view #tree
                            [isMultiSelect]="false"
                            (select)="onNodeSelected($event)">

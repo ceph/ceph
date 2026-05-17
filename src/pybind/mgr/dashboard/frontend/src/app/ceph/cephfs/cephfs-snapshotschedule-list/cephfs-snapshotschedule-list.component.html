@@ -23,7 +23,7 @@
   <span
   *ngIf="row.active; else inactiveStatusTpl">
     <i
-      [ngClass]="[icons.success, icons.large]"
+      [ngClass]="[icons.success, icons.size24]"
       ngbTooltip="{{ row.pathForSelection?.split?.('@')?.[0] }} is active"
       class="text-success"
     ></i>
@@ -31,7 +31,7 @@
 
   <ng-template #inactiveStatusTpl>
     <i
-      [ngClass]="[icons.warning, icons.large]"
+      [ngClass]="[icons.warning, icons.size24]"
       class="text-warning"
       ngbTooltip="{{ row.pathForSelection?.split?.('@')?.[0] }} has been deactivated"
     ></i>
