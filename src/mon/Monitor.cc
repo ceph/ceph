@@ -2996,6 +2996,10 @@ void Monitor::log_health(
   const auto min_log_period = g_conf().get_val<int64_t>(
       "mon_health_log_update_period");
   for (auto& p : updated.checks) {
+    if (healthmon()->is_muted(p.first)) {
+      continue;
+    }
+
     auto q = previous.checks.find(p.first);
     bool logged = false;
     if (q == previous.checks.end()) {
@@ -5985,6 +5989,11 @@ void Monitor::tick()
 
       for (const auto &i : health.checks) {
         const std::string &code = i.first;
+
+        if (healthmon()->is_muted(code)) {
+          continue;
+        }
+
         const std::string &summary = i.second.summary;
         const health_status_t severity = i.second.severity;
 
