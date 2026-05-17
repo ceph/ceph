@@ -1433,8 +1433,16 @@ public:
       return false;
     }
     auto aratio = segments.get_available_ratio();
+    auto projected_aratio = get_projected_available_ratio();
     auto rratio = get_reclaim_ratio();
+    // Wake the cleaner whenever in-flight IO would (or did) trip the
+    // block threshold. should_block_io_on_clean() uses the projected
+    // ratio, so if we only checked the actual ratio here the cleaner
+    // could sleep while client IO sits blocked on reservation, with
+    // nothing to free space and unblock it. Including the projected
+    // ratio makes the cleaner trigger proactively in that window.
     return (
+      (projected_aratio < config.available_ratio_hard_limit) ||
       (aratio < config.available_ratio_hard_limit) ||
       ((aratio < config.available_ratio_gc_max) &&
        (rratio > config.reclaim_ratio_gc_threshold))
