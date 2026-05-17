@@ -84,7 +84,6 @@ export enum Icons {
   externalUrl = 'launch', // links to external page
   nfsExport = 'server--rack', // NFS export
   launch = 'launch',
-  parentChild = 'parent-child',
   dataTable = 'data-table',
   idea = 'idea',
   userAccessLocked = 'user--access-locked', // User access locked

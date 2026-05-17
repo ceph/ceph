@@ -48,7 +48,6 @@ import PasswordIcon from '@carbon/icons/es/password/16';
 import ArrowDownIcon from '@carbon/icons/es/arrow--down/16';
 import ProgressBarRoundIcon from '@carbon/icons/es/progress-bar--round/32';
 import ToolsIcon from '@carbon/icons/es/tools/32';
-import ParentChild from '@carbon/icons/es/parent-child/20';
 import UserAccessLocked from '@carbon/icons/es/user--access-locked/16';
 
 @NgModule({
@@ -105,7 +104,6 @@ export class PoolModule {
       ArrowDownIcon,
       ProgressBarRoundIcon,
       ToolsIcon,
-      ParentChild,
       UserAccessLocked,
       LockedIcon,
       UnlockedIcon

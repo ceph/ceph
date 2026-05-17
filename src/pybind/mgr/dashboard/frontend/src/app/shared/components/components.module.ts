@@ -128,6 +128,9 @@ import ChevronRight16 from '@carbon/icons/es/chevron--right/16';
 import CaretLeft16 from '@carbon/icons/es/caret--left/16';
 import CaretRight16 from '@carbon/icons/es/caret--right/16';
 import Locked16 from '@carbon/icons/es/locked/16';
+import WebServicesCluster20 from '@carbon/icons/es/web-services--cluster/20';
+import WebServicesCluster32 from '@carbon/icons/es/web-services--cluster/32';
+
 
 import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.component';
 import { PageHeaderComponent } from './page-header/page-header.component';
@@ -315,7 +318,9 @@ export class ComponentsModule {
       ChevronRight16,
       CaretLeft16,
       CaretRight16,
-      Locked16
+      Locked16,
+      WebServicesCluster20,
+      WebServicesCluster32
     ]);
   }
 }
