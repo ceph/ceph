@@ -10,7 +10,6 @@ import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { Daemon } from '~/app/shared/models/daemon.interface';
 import { Permission } from '~/app/shared/models/permissions';
 import { UpgradeInfoInterface } from '~/app/shared/models/upgrade.interface';
-import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { SummaryService } from '~/app/shared/services/summary.service';
 import { ExecutingTask } from '~/app/shared/models/executing-task';
@@ -31,7 +30,6 @@ export class UpgradeComponent implements OnInit, OnDestroy {
   healthData$: Observable<any>;
   daemons$: Observable<Daemon[]>;
   fsid$: Observable<any>;
-  modalRef: NgbModalRef;
   upgradableVersions: string[];
   errorMessage: string;
   executingTasks: ExecutingTask;
@@ -109,7 +107,7 @@ export class UpgradeComponent implements OnInit, OnDestroy {
   }
 
   startUpgradeModal() {
-    this.modalRef = this.upgradeService.startUpgradeModal();
+    this.upgradeService.startUpgradeModal();
   }
 
   fetchStatus() {
