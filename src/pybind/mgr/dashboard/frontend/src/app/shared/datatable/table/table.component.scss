@@ -110,3 +110,9 @@ tr:hover .edit-btn {
 .table-tag {
   white-space: nowrap;
 }
+
+.filter-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
