@@ -1760,6 +1760,23 @@ segment_id_t SegmentCleaner::get_next_reclaim_segment() const
   } else {
     bound_time = NULL_TIME;
   }
+  // Auto-tune: in the same pass we also track what the GREEDY rule
+  // (lowest util / highest dead-byte fraction) would have picked.
+  // The configured formula may weight age (COST_BENEFIT, BENEFIT),
+  // which is the right call when age predicts dead-byte accumulation
+  // (journaling / LIFO workloads). Under random-write at high alive_
+  // ratio it mis-selects: dead bytes spread uniformly across segments,
+  // age stops predicting deadness, yet the formula still picks high-
+  // util old segments over low-util fresh ones. Observed: a 0.94-util
+  // pick frees ~4 MB of a 64 MB segment vs ~20 MB for a 0.68-util pick.
+  //
+  // Tracking the greedy candidate alongside is essentially free — we
+  // already iterate every segment to find the formula's max-score one.
+  // After the pass we override only if greedy's choice would free at
+  // least kAutoTuneGreedyOverrideRatio times as much net space as the
+  // formula's choice.
+  segment_id_t greedy_id = NULL_SEG_ID;
+  double greedy_min_util = 1.0;
   for (auto& [_id, segment_info] : segments) {
     if (segment_info.is_closed() &&
         (trimmer == nullptr ||
@@ -1769,6 +1786,36 @@ segment_id_t SegmentCleaner::get_next_reclaim_segment() const
         id = _id;
         max_benefit_cost = benefit_cost;
       }
+      double util = calc_utilization(_id);
+      if (util < greedy_min_util) {
+        greedy_id = _id;
+        greedy_min_util = util;
+      }
+    }
+  }
+  // The threshold (2.0) is the smallest factor that meaningfully
+  // captures the failure regime (where the formula picks a segment
+  // freeing several times less than the lowest-util available) while
+  // staying well clear of the small fluctuations that occur in normal
+  // operation. At low alive_ratio there are many low-util candidates
+  // and the formula's age-preferred one rarely differs from greedy's
+  // by more than ~30% in net-free; the override does not fire and
+  // age weighting is preserved. At high alive_ratio with non-uniform
+  // utilisation the gap routinely exceeds 3-5x and the override
+  // takes effect, picking the segment that releases the most space.
+  static constexpr double kAutoTuneGreedyOverrideRatio = 2.0;
+  if (gc_formula != gc_formula_t::GREEDY &&
+      id != NULL_SEG_ID && greedy_id != NULL_SEG_ID && id != greedy_id) {
+    double picked_util = calc_utilization(id);
+    double picked_free = 1.0 - picked_util;
+    double greedy_free = 1.0 - greedy_min_util;
+    if (greedy_free >= kAutoTuneGreedyOverrideRatio * picked_free) {
+      DEBUG("auto-tune: formula picked seg {} (util {:.3f}, free {:.3f}),"
+            " overriding with greedy seg {} (util {:.3f}, free {:.3f})",
+            id, picked_util, picked_free,
+            greedy_id, greedy_min_util, greedy_free);
+      id = greedy_id;
+      max_benefit_cost = greedy_free;
     }
   }
   if (id != NULL_SEG_ID) {
