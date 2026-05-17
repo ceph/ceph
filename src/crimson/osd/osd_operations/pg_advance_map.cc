@@ -71,6 +71,9 @@ seastar::future<> PGAdvanceMap::start()
   // pg may have been deleted while this op was queued; see PG::do_delete_work.
   if (pg->is_deleted()) {
     DEBUG("{}: pg is deleted, skipping advance", *this);
+    co_await pg->complete_rctx(std::move(rctx));
+    co_await handle.complete();
+    exit_handle.cancel();
     co_return;
   }
 
