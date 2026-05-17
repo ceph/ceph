@@ -97,7 +97,7 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
       target: {
         expanded: _.join(
           this.selectedItem.cdExecuting
-            ? [Icons.size24, Icons.spinner, Icons.spin]
+            ? [Icons.size24, Icons.spinner]
             : [Icons.size24, Icons.bullseye],
           ' '
         )

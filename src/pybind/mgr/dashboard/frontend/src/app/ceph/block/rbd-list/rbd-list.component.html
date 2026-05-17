@@ -102,8 +102,7 @@
              let-column="data.column"
              let-value="data.value"
              let-row="data.row">
-  <i [ngClass]="[icons.spinner, icons.spin]"
-     *ngIf="row.cdExecuting"></i>
+  <cds-inline-loading *ngIf="row.cdExecuting"></cds-inline-loading>
     <span [ngClass]="column?.customTemplateConfig?.valueClass">
     {{ value }}
   </span>
