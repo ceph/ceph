@@ -88,6 +88,11 @@ private:
   bool check_leader_health();
   bool check_member_health();
   bool check_mutes();
+
+public:
+  bool is_muted(const std::string& code) const {
+    return mutes.count(code) > 0;
+  }
 };
 
 #endif // CEPH_HEALTH_MONITOR_H
