@@ -1433,9 +1433,12 @@ public:
       return false;
     }
     auto aratio = segments.get_available_ratio();
+    auto projected_aratio = get_projected_available_ratio();
     auto rratio = get_reclaim_ratio();
+    // should_block_io_on_clean() uses projected ratio; mirror that here so the
+    // cleaner wakes whenever IO would block, not only when actual space is low.
     return (
-      (aratio < config.available_ratio_hard_limit) ||
+      (projected_aratio < config.available_ratio_hard_limit) ||
       ((aratio < config.available_ratio_gc_max) &&
        (rratio > config.reclaim_ratio_gc_threshold))
     );

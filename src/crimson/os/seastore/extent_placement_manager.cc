@@ -755,8 +755,14 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
     ++stats.io_blocked_count;
     stats.io_blocked_sum += stats.io_blocking_num;
 
-    blocking_io = seastar::promise<>();
     auto begin_time = seastar::lowres_system_clock::now();
+    // IO blocked -> needs cleaner -> cleaner sleeping -> nothing runs -> deadlock.
+    // Kick the background so it can free space and call maybe_wake_blocked_io().
+    auto arm_blocking_io_and_wake = [this] {
+      blocking_io = seastar::promise<>();
+      do_wake_background();
+    };
+    arm_blocking_io_and_wake();
     // we just blocked this IO, now wait until
     // maybe_wake_blocked_io will set value to blocking_io
     do {
@@ -784,7 +790,7 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
           if (!res.cleaner_result.is_successful()) {
           ++stats.io_retried_blocked_count_clean;
         }
-        blocking_io = seastar::promise<>();
+        arm_blocking_io_and_wake();
       }
     } while (blocking_io);
   }
