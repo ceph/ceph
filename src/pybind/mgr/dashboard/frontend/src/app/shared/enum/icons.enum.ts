@@ -96,6 +96,11 @@ export enum Icons {
   ibmCloudBareMetalServer = 'ibm-cloud--bare-metal-server',
   ibmCloudDedicatedHost = 'ibm-cloud--dedicated-host',
   clusterIcon = 'web-services--cluster',
+  /* Icon sizes */
+  size16 = '16',
+  size20 = '20',
+  size24 = '24',
+  size32 = '32',
   /* Icons - Use IconSize enum for sizing instead of these deprecated values */
   notification = 'notification',
   error = 'error--filled',
