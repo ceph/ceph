@@ -44,6 +44,10 @@ struct ceph_msgr_options {
   const char *hostname;
   const char *conffile;
   enum ceph_msgr_type ms_type;
+  /* Split the send payload into N non-owning bufferptrs to mimic
+   * RGW-multipart / EC scatter. */
+  unsigned int payload_frags;
+  unsigned int payload_frag_unalign;
 };
 
 class FioDispatcher;
@@ -504,11 +508,44 @@ static void fio_ceph_msgr_io_u_free(struct thread_data *td, struct io_u *io_u)
 static enum fio_q_status ceph_msgr_sender_queue(struct thread_data *td,
 						struct io_u *io_u)
 {
+  struct ceph_msgr_options *o = (decltype(o))td->eo;
   struct ceph_msgr_data *data;
   struct ceph_msgr_io *io;
 
-  bufferlist buflist = bufferlist::static_from_mem(
-    (char *)io_u->buf, io_u->buflen);
+  char *buf = (char *)io_u->buf;
+  const size_t total = io_u->buflen;
+  unsigned nfrags = o->payload_frags;
+
+  bufferlist buflist;
+  if (nfrags <= 1 || total < nfrags) {
+    /* Single contiguous non-owning ptr (original behavior). */
+    buflist = bufferlist::static_from_mem(buf, total);
+  } else {
+    /* N non-owning ptrs carved from io_u->buf, summing to total. No
+     * allocation or memcpy of payload — only small raw_static wrappers,
+     * exactly as static_from_mem does for the single-ptr case. */
+    const size_t base = total / nfrags;
+    /* Skew the first boundary so subsequent ptr starts are not
+     * page-aligned, mimicking odd RGW part sizes. Only applied when
+     * the fragments are big enough to give the skew back: otherwise
+     * the first fragment borrows more than the rest have to spare and
+     * the last length underflows. */
+    const size_t skew =
+      (o->payload_frag_unalign && base + (total % nfrags) >= 17) ? 17 : 0;
+    size_t off = 0;
+    for (unsigned i = 0; i < nfrags; i++) {
+      size_t len;
+      if (i == nfrags - 1)
+        len = total - off;                 /* last absorbs remainder */
+      else
+        len = base + (i == 0 ? skew : 0);
+      ceph_assert(off + len <= total);
+      buflist.push_back(ceph::buffer::ptr_node::create(
+        ceph::buffer::create_static(len, buf + off)));
+      off += len;
+    }
+    ceph_assert(off == total);
+  }
 
   io = (decltype(io))io_u->engine_data;
   data = (decltype(data))td->io_ops_data;
@@ -692,6 +729,26 @@ static std::vector<fio_option> options {
     o.type  = FIO_OPT_STR_STORE;
     o.off1  = offsetof(struct ceph_msgr_options, conffile);
     o.help  = "Path to CEPH configuration file";
+  }),
+  make_option([] (fio_option& o) {
+    o.name   = "payload_frags";
+    o.lname  = "Payload fragment count";
+    o.type   = FIO_OPT_INT;
+    o.off1   = offsetof(struct ceph_msgr_options, payload_frags);
+    o.help   = "Split each send payload into N non-owning bufferptrs "
+               "(0/1 = single contiguous ptr) to mimic RGW-multipart / "
+               "EC scatter";
+    o.def    = "0";
+    o.minval = 0;
+  }),
+  make_option([] (fio_option& o) {
+    o.name  = "payload_frag_unalign";
+    o.lname = "Skew fragment boundaries off page alignment";
+    o.type  = FIO_OPT_BOOL;
+    o.off1  = offsetof(struct ceph_msgr_options, payload_frag_unalign);
+    o.help  = "When set, offset fragment boundaries so ptrs are not "
+              "page-aligned";
+    o.def   = "0";
   }),
   {} /* Last NULL */
 };
