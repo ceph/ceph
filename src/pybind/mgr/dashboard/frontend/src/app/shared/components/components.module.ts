@@ -87,7 +87,6 @@ import { VerticalNavigationComponent } from './vertical-navigation/vertical-navi
 import { CardGroupComponent } from './card-group/card-group.component';
 import { HelpTextComponent } from './help-text/help-text.component';
 import { FormAdvancedFieldsetComponent } from './form-advanced-fieldset/form-advanced-fieldset.component';
-import { UpgradableComponent } from './upgradable/upgradable.component';
 import { ProgressComponent } from './progress/progress.component';
 import { SidePanelComponent } from './side-panel/side-panel.component';
 import { ChartsModule } from '@carbon/charts-angular';
@@ -217,7 +216,6 @@ import { NumberWithUnitComponent } from './number-with-unit/number-with-unit.com
     CardGroupComponent,
     HelpTextComponent,
     FormAdvancedFieldsetComponent,
-    UpgradableComponent,
     ProgressComponent,
     SidePanelComponent,
     IconComponent,
@@ -265,7 +263,6 @@ import { NumberWithUnitComponent } from './number-with-unit/number-with-unit.com
     CardGroupComponent,
     HelpTextComponent,
     FormAdvancedFieldsetComponent,
-    UpgradableComponent,
     ProgressComponent,
     SidePanelComponent,
     IconComponent,

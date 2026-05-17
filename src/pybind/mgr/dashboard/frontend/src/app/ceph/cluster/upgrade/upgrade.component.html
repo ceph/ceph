@@ -57,7 +57,7 @@
                     i18n>Cluster Status</span>
               <ng-container *ngIf="healthData.health?.status !== 'HEALTH_OK'; else healthOk">
                 <a class="cds--link cds--type-body-compact-01"
-                   routerLink="/dashboard"
+                   routerLink="/overview"
                    [ngStyle]="healthData.health.status | healthColor">
                   {{ healthData.health.status | healthLabel | titlecase }}
                   <i class="fa fa-exclamation-triangle"></i>

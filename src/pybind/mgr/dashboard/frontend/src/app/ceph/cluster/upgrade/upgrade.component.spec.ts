@@ -96,9 +96,7 @@ describe('UpgradeComponent', () => {
   it('should load the view once check for upgrade is done', () => {
     component.ngOnInit();
     fixture.detectChanges();
-    const upgradeSection = fixture.debugElement.nativeElement.querySelector(
-      '#newVersionAvailable'
-    );
+    const upgradeSection = fixture.debugElement.nativeElement.querySelector('#newVersionAvailable');
     expect(upgradeSection).not.toBeNull();
   });
 

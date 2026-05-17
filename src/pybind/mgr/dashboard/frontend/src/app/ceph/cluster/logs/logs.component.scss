@@ -11,7 +11,7 @@
 
     // Custom scrollbar styling for better Carbon integration
     &::-webkit-scrollbar {
-      width: 8px;
+      width: var(--cds-spacing-03);
     }
 
     &::-webkit-scrollbar-track {
