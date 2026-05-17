@@ -812,6 +812,11 @@ ExtentPlacementManager::BackgroundProcess::maybe_wake_blocked_io()
     DEBUG("");
     blocking_io->set_value();
     blocking_io = std::nullopt;
+    // Remember that we just woke a blocked IO; run() yields once on
+    // this edge so the woken continuation has a chance to retry the
+    // reservation before the cleaner spins another cycle and consumes
+    // the projected_avail headroom we just freed.
+    pending_user_io_wake = true;
   }
 }
 
@@ -823,6 +828,17 @@ ExtentPlacementManager::BackgroundProcess::run()
     if (background_should_run()) {
       log_state("run(background)");
       co_await do_background_cycle();
+      // Yield only on the wake edge — when the just-finished cycle
+      // (or its predecessors) actually unblocked a user IO via
+      // maybe_wake_blocked_io(). That lets the woken continuation
+      // slot in and retry try_reserve_io() before the cleaner
+      // re-consumes the projected_avail headroom. Yielding on every
+      // iteration just because blocking_io is set would needlessly
+      // add a scheduling boundary per cycle under sustained pressure.
+      if (pending_user_io_wake) {
+        pending_user_io_wake = false;
+        co_await seastar::yield();
+      }
     } else {
       log_state("run(block)");
       assert(!blocking_background);
