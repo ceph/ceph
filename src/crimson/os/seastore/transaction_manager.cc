@@ -827,7 +827,6 @@ TransactionManager::get_extents_if_live(
     DEBUGT("{} {}~0x{:x} {} is cached and alive -- {}",
 	   t, type, laddr, len, paddr, *extent);
     assert(extent->get_length() == len);
-    std::list<CachedExtentRef> res;
     res.emplace_back(std::move(extent));
   } else if (is_logical_type(type)) {
     auto pin_list = co_await lba_manager->get_cursors(
