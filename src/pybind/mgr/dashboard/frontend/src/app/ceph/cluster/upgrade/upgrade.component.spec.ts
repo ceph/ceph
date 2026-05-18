@@ -96,10 +96,8 @@ describe('UpgradeComponent', () => {
   it('should load the view once check for upgrade is done', () => {
     component.ngOnInit();
     fixture.detectChanges();
-    const firstCellSpan = fixture.debugElement.nativeElement.querySelector(
-      'cd-card[cardTitle="New Version"] .card-title'
-    );
-    expect(firstCellSpan.textContent).toContain('New Version');
+    const upgradeSection = fixture.debugElement.nativeElement.querySelector('#newVersionAvailable');
+    expect(upgradeSection).not.toBeNull();
   });
 
   it('should show button to Upgrade if a new version is available', () => {
@@ -183,7 +181,7 @@ describe('UpgradeComponent', () => {
     expect(loading.textContent).toContain('Failed to retrieve');
   });
 
-  it('should show popover when health warning is present', () => {
+  it('should show warning icon when health warning is present', () => {
     const healthPayload: Record<string, any> = {
       health: {
         status: 'HEALTH_WARN',
@@ -210,13 +208,13 @@ describe('UpgradeComponent', () => {
     component.ngOnInit();
     fixture.detectChanges();
 
-    const popover = fixture.debugElement.nativeElement.querySelector(
-      '.info-card-content-clickable'
+    const warningIcon = fixture.debugElement.nativeElement.querySelector(
+      '#clusterStatus .fa-exclamation-triangle'
     );
-    expect(popover).not.toBeNull();
+    expect(warningIcon).not.toBeNull();
   });
 
-  it('should not show popover when health warning is not present', () => {
+  it('should not show warning icon when health is OK', () => {
     const healthPayload: Record<string, any> = {
       health: {
         status: 'HEALTH_OK'
@@ -225,9 +223,9 @@ describe('UpgradeComponent', () => {
     getHealthSpy.and.returnValue(of(healthPayload));
     component.ngOnInit();
     fixture.detectChanges();
-    const popover = fixture.debugElement.nativeElement.querySelector(
-      '.info-card-content-clickable'
+    const warningIcon = fixture.debugElement.nativeElement.querySelector(
+      '#clusterStatus .fa-exclamation-triangle'
     );
-    expect(popover).toBeNull();
+    expect(warningIcon).toBeNull();
   });
 });
