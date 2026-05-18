@@ -47,6 +47,7 @@
 #include "include/ceph_features.h"
 #include "include/ceph_fs_encoder.h"
 #include "mds/cephfs_features.h"
+#include "mds/mdstypes.h" // for feature_bitset_t
 #include "messages/MMDSOp.h"
 
 #include <sys/types.h>
