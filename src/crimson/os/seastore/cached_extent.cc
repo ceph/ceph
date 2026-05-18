@@ -537,4 +537,48 @@ void CachedExtent::new_committer(Transaction &t) {
   prior_instance->committer = committer;
 }
 
+void ExtentCommitter::commit_shadow_demote(Transaction &t) {
+  LOG_PREFIX(ExtentCommitter::commit_shadow_demote);
+  assert(t.get_src() == transaction_type_t::DEMOTE);
+  auto &prior = *extent.prior_instance->template cast<LogicalChildNode>();
+  auto shadow = prior.get_shadow();
+  assert(shadow);
+  for (auto &trans_view : prior.retired_transactions) {
+    assert(trans_view.t != nullptr);
+    auto view_tid = trans_view.t->get_trans_id();
+    if (view_tid == t.get_trans_id()) {
+      continue;
+    }
+    TRACET("removing shadow {} from retired_set of t.{}", t, *shadow, view_tid);
+    [[maybe_unused]] bool removed =
+      trans_view.t->remove_from_retired_set(*shadow);
+    assert(removed);
+    trans_view.t->remove_shadow_from_write_set(
+      shadow->get_paddr(), shadow->get_length());
+  }
+}
+
+void ExtentCommitter::commit_shadow_promote(Transaction &t) {
+  LOG_PREFIX(ExtentCommitter::commit_shadow_promote);
+  assert(t.get_src() == transaction_type_t::PROMOTE);
+  assert(extent.is_logical());
+  auto &lprior = static_cast<LogicalChildNode&>(*extent.prior_instance);
+  ceph_assert(lprior.get_pin_state() == extent_pin_state_t::Promoting);
+  auto &lext = static_cast<LogicalChildNode&>(extent);
+  auto shadow = lext.get_shadow();
+  assert(shadow);
+  assert(shadow->is_shadow_extent());
+  lprior.set_shadow(shadow);
+  for (auto &trans_view : lprior.retired_transactions) {
+    assert(trans_view.t != nullptr);
+    auto view_tid = trans_view.t->get_trans_id();
+    if (view_tid == t.get_trans_id()) {
+      continue;
+    }
+    TRACET("adding shadow {} from t.{}", t, *shadow, view_tid);
+    trans_view.t->add_absent_to_retired_set(shadow);
+  }
+  lprior.set_pin_state(extent_pin_state_t::Fresh);
+}
+
 }

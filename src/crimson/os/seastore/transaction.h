@@ -364,6 +364,21 @@ public:
     }
   }
 
+  bool remove_from_retired_set(CachedExtent &ext) {
+    auto it = retired_set.find(ext.get_paddr());
+    if (it == retired_set.end()) {
+      return false;
+    }
+    auto &extent = it->extent;
+    if (extent->get_paddr() != ext.get_paddr()) {
+      return false;
+    } else {
+      assert(ext.get_length() == extent->get_length());
+      retired_set.erase(it);
+      return true;
+    }
+  }
+
   std::pair<bool, bool> pre_stable_extent_paddr_mod(
     read_set_item_t<Transaction> &item)
   {
@@ -430,6 +445,24 @@ public:
       }
       mextent.set_paddr(new_paddr + off);
       write_set.insert(mextent);
+    }
+  }
+  void remove_shadow_from_write_set(
+    const paddr_t &shadow_paddr, extent_len_t len) {
+    std::vector<CachedExtent*> exts;
+    for (auto [bottom, top] = write_set.get_overlap(shadow_paddr, len);
+         bottom != top;
+         bottom++) {
+      auto &mextent = *bottom;
+      if (mextent.is_initial_pending()) {
+        assert(!mextent.is_shadow_extent());
+        continue;
+      }
+      assert(mextent.is_shadow_extent() && mextent.is_exist_clean());
+      exts.emplace_back(&mextent);
+    }
+    for (auto i :exts) {
+      write_set.erase(*i);
     }
   }
 

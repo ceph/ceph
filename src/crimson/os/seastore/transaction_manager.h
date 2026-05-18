@@ -113,7 +113,8 @@ public:
    */
   base_iertr::future<LogicalChildNodeRef> relocate_logical_extent(
     Transaction &t,
-    LBAMapping mapping);
+    LBAMapping mapping,
+    laddr_t new_laddr);
 
   base_iertr::future<LogicalChildNodeRef> relocate_shadow_extent(
     Transaction &t,
@@ -1592,7 +1593,7 @@ private:
           SUBTRACET(seastore_tm, "retire extent place holder...", t);
           auto &child_pos = ret.get_child_pos();
           auto laddr = pin.get_key();
-          std::ignore = cache->retire_absent_extent_addr_by_type(
+          auto ext = cache->retire_absent_extent_addr_by_type(
             t, laddr, pin.get_val(), original_len, pin.get_extent_type(),
             [&child_pos, laddr](auto &extent) mutable {
               auto lextent = extent.template cast<LogicalChildNode>();
@@ -1602,17 +1603,19 @@ private:
               child_pos.link_child(lextent.get());
               lextent->set_laddr(laddr);
             }
-          );
+          )->template cast<LogicalChildNode>();
           if (pin.has_shadow_val()) {
             cache->retire_absent_extent_addr_by_type(
               t, pin.get_key(), pin.get_shadow_val(),
               original_len, pin.get_extent_type(),
-              [laddr](auto &extent) {
+              [laddr, ext](auto &extent) {
                 auto lextent = extent.template cast<LogicalChildNode>();
                 assert(extent.is_logical());
                 assert(!lextent->has_laddr());
                 assert(!extent.has_been_invalidated());
                 lextent->set_laddr(laddr);
+                extent.set_shadow_extent(true);
+                ext->set_shadow(lextent);
               }
             );
           }
@@ -1640,6 +1643,26 @@ private:
         SUBTRACET(seastore_tm, "retire extent...", t);
         assert(extent->is_seen_by_users());
         cache->retire_extent(t, extent);
+        if (pin.has_shadow_val()) {
+          if (auto shadow = extent->get_shadow()) {
+            cache->retire_extent(t, shadow);
+          } else {
+            auto laddr = pin.get_key();
+            cache->retire_absent_extent_addr_by_type(
+              t, laddr, pin.get_shadow_val(),
+              original_len, pin.get_extent_type(),
+              [laddr, extent](auto &ext) {
+                auto lextent = ext.template cast<LogicalChildNode>();
+                assert(ext.is_logical());
+                assert(!lextent->has_laddr());
+                assert(!ext.has_been_invalidated());
+                lextent->set_laddr(laddr);
+                ext.set_shadow_extent(true);
+                extent->set_shadow(lextent);
+              }
+            );
+          }
+        }
       }
       for (auto &remap : remaps) {
         auto remap_offset = remap.offset;
@@ -1675,6 +1698,10 @@ private:
             remap_len,
             std::nullopt);
           cold_ext->set_shadow_extent(true);
+          auto &lremapped = static_cast<
+            LogicalChildNode&>(*remapped_extent);
+          auto lcold_ext = cold_ext->template cast<LogicalChildNode>();
+          lremapped.set_shadow(lcold_ext);
         }
         // user must initialize the logical extent themselves.
         remapped_extent->set_seen_by_users();

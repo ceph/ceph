@@ -299,6 +299,8 @@ public:
   void commit_and_share_paddr();
 
   void maybe_sync_copied_lba_key();
+  void commit_shadow_demote(Transaction&);
+  void commit_shadow_promote(Transaction&);
 private:
   // the rewritten extent
   CachedExtent &extent;
