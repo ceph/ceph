@@ -4820,17 +4820,50 @@ int RGWCompleteMultipart_ObjStore_S3::get_params(optional_yield y)
   return do_aws4_auth_completion();
 }
 
-void RGWCompleteMultipart_ObjStore_S3::send_response()
+void RGWCompleteMultipart_ObjStore_S3::send_response_begin()
 {
-  if (op_ret)
-    set_req_state_err(s, op_ret);
+  // Called before upload->complete() runs: send 200 OK headers immediately so
+  // the client knows the request was accepted, matching AWS S3 behaviour.
   dump_errno(s);
   dump_header_if_nonempty(s, "x-amz-version-id", version_id);
   for (auto &it : crypt_http_responses)
     dump_header(s, it.first, it.second);
-  end_header(s, this, to_mime_type(s->format));
+  // Use chunked transfer encoding: we don't know the final body length yet,
+  // and we need to be able to flush whitespace bytes before the body is ready.
+  end_header(s, this, to_mime_type(s->format), CHUNKED_TRANSFER_ENCODING);
+  // Emit the XML declaration before any keepalive whitespace so the full
+  // reassembled body is valid XML (<?xml ...> must be at byte 0).
+  dump_start(s);
+  rgw_flush_formatter_and_reset(s, s->formatter);
+  sent_header = true;
+}
+
+void RGWCompleteMultipart_ObjStore_S3::send_keepalive()
+{
+  // Send a raw whitespace byte to keep the connection alive while
+  // upload->complete() runs. This matches AWS S3's behaviour.
+  ldpp_dout(this, 20) << "CompleteMultipart: sending keepalive whitespace" << dendl;
+  dump_body(s, " ");
+}
+
+void RGWCompleteMultipart_ObjStore_S3::send_response()
+{
+  if (!sent_header) {
+    // Normal error path: headers not yet sent because an error occurred before
+    // we started the expensive upload->complete() work.
+    if (op_ret)
+      set_req_state_err(s, op_ret);
+    dump_errno(s);
+    dump_header_if_nonempty(s, "x-amz-version-id", version_id);
+    for (auto &it : crypt_http_responses)
+      dump_header(s, it.first, it.second);
+    end_header(s, this, to_mime_type(s->format));
+  }
+
   if (op_ret == 0) {
-    dump_start(s);
+    if (!sent_header) {
+      dump_start(s);
+    }
     s->formatter->open_object_section_in_ns("CompleteMultipartUploadResult", XMLNS_AWS_S3);
     std::string base_uri = compute_domain_uri(s);
     if (!s->bucket_tenant.empty()) {
@@ -4857,6 +4890,19 @@ void RGWCompleteMultipart_ObjStore_S3::send_response()
       s->formatter->dump_string(cksum->element_name(), *armored_cksum);
       s->formatter->dump_string("ChecksumType", std::get<1>(cksum_type));
     }
+    s->formatter->close_section();
+    rgw_flush_formatter_and_reset(s, s->formatter);
+  } else if (sent_header) {
+    // 200 OK was already sent but upload->complete() failed. Embed an error in
+    // the response body — this matches AWS S3 behaviour where the response
+    // header has already been committed.
+    // dump_start() was already called in send_response_begin().
+    s->formatter->open_object_section("Error");
+    s->formatter->dump_string("Code", s->err.err_code);
+    s->formatter->dump_string("Message",
+                              s->err.message.empty() ? cpp_strerror(-op_ret)
+                                                     : s->err.message);
+    s->formatter->dump_string("RequestId", s->req_id);
     s->formatter->close_section();
     rgw_flush_formatter_and_reset(s, s->formatter);
   }

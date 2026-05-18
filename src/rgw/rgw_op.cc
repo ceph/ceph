@@ -12,6 +12,7 @@
 #include <unistd.h>
 
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
 #include <fmt/format.h>
@@ -7789,10 +7790,58 @@ void RGWCompleteMultipart::execute(optional_yield y)
     return;
   }
 
-  op_ret =
-    upload->complete(this, y, s->cct, parts->parts, remove_objs, accounted_size,
-                     compressed, cs_info, ofs, s->req_id, s->owner, olh_epoch,
-                     s->object.get(), processed_prefixes, if_match, if_nomatch);
+  // Send 200 OK headers now. We're committed to running the expensive
+  // upload->complete() call. This matches AWS S3's behaviour of sending the
+  // response header immediately and then streaming whitespace keepalives.
+  send_response_begin();
+
+  // no coroutine (no beast), no whitespace keepalives.
+  if (!y) {
+    op_ret = upload->complete(this, y, s->cct, parts->parts,
+                     remove_objs, accounted_size, compressed, cs_info, ofs,
+                     s->req_id, s->owner, olh_epoch, s->object.get(),
+                     processed_prefixes, if_match, if_nomatch);
+  } else {
+    // Spawn upload->complete() and send keepalive whitespace from the main
+    // coroutine while it runs. Socket writes must happen on the main coroutine
+    // because beast's ClientIO::send_body() suspends using its yield context.
+    std::atomic<bool> complete_done{false};
+    int complete_ret = 0;
+
+    auto executor = y.get_yield_context().get_executor();
+    boost::asio::steady_timer keepalive_timer(executor);
+
+    boost::asio::spawn(executor,
+      [&](boost::asio::yield_context yield) {
+        complete_ret =
+          upload->complete(this, optional_yield{yield}, s->cct, parts->parts,
+                           remove_objs, accounted_size, compressed, cs_info, ofs,
+                           s->req_id, s->owner, olh_epoch, s->object.get(),
+                           processed_prefixes, if_match, if_nomatch);
+        complete_done.store(true, std::memory_order_release);
+        keepalive_timer.cancel();
+      },
+      [](std::exception_ptr eptr) {
+        if (eptr) std::rethrow_exception(eptr);
+      });
+
+    // Send keepalives from the main coroutine (which owns the socket).
+    // The spawned coroutine cancels the timer when done, so we wake immediately.
+    {
+      constexpr auto keepalive_interval = std::chrono::seconds(5);
+      while (!complete_done.load(std::memory_order_acquire)) {
+        keepalive_timer.expires_after(keepalive_interval);
+        boost::system::error_code ec;
+        keepalive_timer.async_wait(y.get_yield_context()[ec]);
+        if (!complete_done.load(std::memory_order_acquire)) {
+          send_keepalive();
+        }
+      }
+    }
+
+    op_ret = complete_ret;
+  }
+
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: upload complete failed ret=" << op_ret << dendl;
     return;
