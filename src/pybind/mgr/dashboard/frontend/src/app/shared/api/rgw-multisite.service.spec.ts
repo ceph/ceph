@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { RgwMultisiteService } from './rgw-multisite.service';
 import { BlockUIModule } from 'ng-block-ui';
-import { ToastrModule } from 'ngx-toastr';
+
 import { SharedModule } from '../shared.module';
 
 const mockSyncPolicyData: any = [
@@ -28,12 +28,7 @@ describe('RgwMultisiteService', () => {
 
   configureTestBed({
     providers: [RgwMultisiteService],
-    imports: [
-      HttpClientTestingModule,
-      BlockUIModule.forRoot(),
-      ToastrModule.forRoot(),
-      SharedModule
-    ]
+    imports: [HttpClientTestingModule, BlockUIModule.forRoot(), SharedModule]
   });
 
   beforeEach(() => {

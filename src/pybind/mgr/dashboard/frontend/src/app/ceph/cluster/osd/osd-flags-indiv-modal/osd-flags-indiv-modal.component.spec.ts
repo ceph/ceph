@@ -4,7 +4,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ModalService, TooltipModule } from 'carbon-components-angular';
-import { ToastrModule } from 'ngx-toastr';
+
 import { of as observableOf } from 'rxjs';
 
 import { OsdService } from '~/app/shared/api/osd.service';
@@ -26,7 +26,6 @@ describe('OsdFlagsIndivModalComponent', () => {
       HttpClientTestingModule,
       ReactiveFormsModule,
       SharedModule,
-      ToastrModule.forRoot(),
       TooltipModule,
       RouterTestingModule
     ],

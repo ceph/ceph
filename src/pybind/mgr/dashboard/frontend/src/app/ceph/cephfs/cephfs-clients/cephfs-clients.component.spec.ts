@@ -2,8 +2,6 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
-import { ToastrModule } from 'ngx-toastr';
-
 import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
 import { ViewCacheStatus } from '~/app/shared/enum/view-cache-status.enum';
@@ -16,12 +14,7 @@ describe('CephfsClientsComponent', () => {
   let fixture: ComponentFixture<CephfsClientsComponent>;
 
   configureTestBed({
-    imports: [
-      BrowserAnimationsModule,
-      ToastrModule.forRoot(),
-      SharedModule,
-      HttpClientTestingModule
-    ],
+    imports: [BrowserAnimationsModule, SharedModule, HttpClientTestingModule],
     declarations: [CephfsClientsComponent]
   });
 

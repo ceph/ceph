@@ -8,7 +8,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal, NgbModalModule, NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
-import { ToastrModule } from 'ngx-toastr';
+
 import { Observable, of } from 'rxjs';
 
 import { DashboardNotFoundError } from '~/app/core/error/error';
@@ -135,7 +135,6 @@ describe('PoolFormComponent', () => {
       BrowserAnimationsModule,
       HttpClientTestingModule,
       RouterTestingModule.withRoutes(routes),
-      ToastrModule.forRoot(),
       NgbNavModule,
       PoolModule,
       SharedModule,
