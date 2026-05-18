@@ -757,6 +757,24 @@ class MonitorDBStore
     return db->backup(g_conf().get_val<std::string>("mon_backup_path"), full);
   }
 
+  /// @brief Restores a backup with given version from backup_path
+  /// @param cct ceph context
+  /// @param path path to database location
+  /// @param backup_path path to backup location
+  /// @param version version of the backup to restore
+  /// @return true on success
+  static bool restore_backup(CephContext *cct, const std::string &path, const std::string &backup_path, std::optional<uint32_t> version) {
+    std::string kv_type;
+    int r = read_meta_path("kv_backend", &kv_type, &path);
+    if (r < 0) {
+        // Some proper error reporting would be nice
+        return false;
+    }
+    std::string store_path = get_store_path(path);
+
+    return KeyValueDB::restore_backup(cct, kv_type, store_path, backup_path, version);
+  }
+
   void compact() {
     db->compact();
   }

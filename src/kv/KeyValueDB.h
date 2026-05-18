@@ -426,6 +426,9 @@ public:
   /// look like a successful backup
   virtual BackupStats backup(const std::string& path, bool full) { return BackupStats{.error = true}; }
 
+  /// restore from backup the specified backup version
+  static bool restore_backup(CephContext *cct, const std::string &type, const std::string &path, const std::string &backup_location, std::optional<uint32_t> version);
+
   /// compact the underlying store
   virtual void compact() {}
 

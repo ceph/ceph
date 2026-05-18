@@ -217,6 +217,7 @@ public:
   }
 
   KeyValueDB::BackupStats backup(const std::string& path, bool full) override;
+  static bool restore_backup(CephContext *cct, const std::string &path, const std::string &backup_location, std::optional<uint32_t> version);
 
   void compact() override;
 

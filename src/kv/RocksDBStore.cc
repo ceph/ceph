@@ -22,6 +22,7 @@
 #include "rocksdb/utilities/convenience.h"
 #include "rocksdb/utilities/table_properties_collectors.h"
 #include "rocksdb/merge_operator.h"
+#include "rocksdb/util/stderr_logger.h"
 
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/perf_counters.h"
@@ -2120,6 +2121,37 @@ KeyValueDB::BackupStats RocksDBStore::backup(const std::string& path, bool full)
   return rv;
 }
 
+bool RocksDBStore::restore_backup(CephContext *cct, const std::string& path, const std::string& backup_path, std::optional<uint32_t> version)
+{
+  rocksdb::StderrLogger logger = rocksdb::StderrLogger();
+  rocksdb::BackupEngineOptions engine_options = rocksdb::BackupEngineOptions(backup_path);
+  engine_options.info_log = &logger;
+
+  rocksdb::BackupEngineReadOnly* backup_engine_raw = nullptr;
+  rocksdb::Status s = rocksdb::BackupEngineReadOnly::Open(
+    rocksdb::Env::Default(),
+    engine_options,
+    &backup_engine_raw);
+  std::unique_ptr<rocksdb::BackupEngineReadOnly> backup_engine{backup_engine_raw};
+  const rocksdb::RestoreOptions options = rocksdb::RestoreOptions();
+  if (!s.ok()) {
+    derr << __func__ << "can't open backup folder: " << s.ToString() << dendl;
+    return false;
+  }
+  if (!version) {
+    derr << "restore last valid backup" << dendl;
+    s = backup_engine->RestoreDBFromLatestBackup(
+        options,
+        path,
+        path);
+  } else {
+    s = backup_engine->RestoreDBFromBackup(options, *version, path, path);
+  }
+  if (!s.ok()) {
+    derr << "Error when restoring backup: " << s.ToString() << dendl;
+  }
+  return s.ok();
+}
 
 void RocksDBStore::compact()
 {
