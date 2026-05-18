@@ -123,6 +123,12 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/mds/MDSAuthCaps.cc
   ${PROJECT_SOURCE_DIR}/src/msg/msg_types.cc
   ${PROJECT_SOURCE_DIR}/src/msg/Message.cc
+  ${PROJECT_SOURCE_DIR}/src/messages/MClientReply.cc
+  ${PROJECT_SOURCE_DIR}/src/messages/MClientRequest.cc
+  ${PROJECT_SOURCE_DIR}/src/messages/MClientSession.cc
+  ${PROJECT_SOURCE_DIR}/src/messages/MClientSnap.cc
+  ${PROJECT_SOURCE_DIR}/src/messages/MMonCommand.cc
+  ${PROJECT_SOURCE_DIR}/src/messages/MMonCommandAck.cc
   ${PROJECT_SOURCE_DIR}/src/mon/PGMap.cc
   ${PROJECT_SOURCE_DIR}/src/mon/MgrMap.cc
   ${PROJECT_SOURCE_DIR}/src/mon/MonCap.cc
