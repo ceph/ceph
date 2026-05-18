@@ -220,6 +220,7 @@ public:
   KeyValueDB::BackupStats backup(const std::string& path, bool full) override;
   struct KeyValueDB::BackupCleanupStats backup_cleanup(const std::string& path, uint64_t keep_last, uint64_t keep_hourly, uint64_t keep_daily);
   static bool restore_backup(CephContext *cct, const std::string &path, const std::string &backup_location, std::optional<uint32_t> version);
+  static std::vector<BackupStats> list_backups(CephContext *cct, const std::string& backup_location);
 
   void compact() override;
 

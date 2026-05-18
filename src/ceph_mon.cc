@@ -232,6 +232,8 @@ static void usage()
        << "        restore the backup from location and exit\n"
        << "  --backup-version <version>\n"
        << "        defaults to -1, which is the last valid backup\n"
+       << "  --list-backups <directory>\n"
+       << "        list available backups\n"
        << std::endl;
   generic_server_usage();
 }
@@ -270,7 +272,7 @@ int main(int argc, const char **argv)
   bool compact = false;
   bool force_sync = false;
   bool yes_really = false;
-  std::string osdmapfn, inject_monmap, extract_monmap, crush_loc, restore_backup_location;
+  std::string osdmapfn, inject_monmap, extract_monmap, crush_loc, restore_backup_location, list_backup_location;
   std::optional<uint32_t> restore_backup_version;
 
   auto args = argv_to_vec(argc, argv);
@@ -344,6 +346,8 @@ int main(int argc, const char **argv)
       extract_monmap = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--set-crush-location", (char*)NULL)) {
       crush_loc = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--list-backups", (char*)NULL)) {
+      list_backup_location = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--restore-backup", (char*)NULL)) {
       restore_backup_location = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--backup-version", (char*)NULL)) {
@@ -377,6 +381,20 @@ int main(int argc, const char **argv)
   if (g_conf()->name.get_id().empty()) {
     cerr << "must specify id (--id <id> or --name mon.<id>)" << std::endl;
     exit(1);
+  }
+
+  // -- list backups --
+  if (list_backup_location.length()) {
+    cerr << "list backup from location '" << list_backup_location << "'" << std::endl << std::endl;
+    std::vector<KeyValueDB::BackupStats> backup_infos = MonitorDBStore::list_backups(cct.get(), g_conf()->mon_data, list_backup_location);
+    cerr << "ID:\tTime:\t\t\t\tSize:" << std::endl;
+    for (const auto& bi : backup_infos)
+    {
+      cerr << bi.id
+           << "\t"; bi.timestamp.asctime(cerr)
+           << "\t" << bi.size << " bytes" << std::endl;
+    }
+    exit(0);
   }
 
   // -- restore backup --

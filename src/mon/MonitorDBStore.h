@@ -767,6 +767,22 @@ class MonitorDBStore
       g_conf().get_val<uint64_t>("mon_backup_keep_daily"));
   }
 
+  /// @brief List all backup versions
+  /// @param cct ceph context
+  /// @param path path to database location
+  /// @param backup_path path to backup location
+  /// @return vector of BackupStats
+  static std::vector<KeyValueDB::BackupStats> list_backups(CephContext *cct, const std::string &path, const std::string &backup_path) {
+    std::string kv_type;
+    int r = read_meta_path("kv_backend", &kv_type, &path);
+    if (r < 0) {
+        // Some proper error reporting would be nice
+        return std::vector<KeyValueDB::BackupStats>();
+    }
+
+    return KeyValueDB::list_backups(cct, kv_type, backup_path);
+  }
+
   /// @brief Restores a backup with given version from backup_path
   /// @param cct ceph context
   /// @param path path to database location

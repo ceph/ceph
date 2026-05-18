@@ -30,6 +30,15 @@ bool KeyValueDB::restore_backup(CephContext *cct,
   return false;
 }
 
+std::vector<KeyValueDB::BackupStats> KeyValueDB::list_backups(
+  CephContext *cct, const std::string &type, const std::string &backup_location)
+{
+  if (type == "rocksdb") {
+    return RocksDBStore::list_backups(cct, backup_location);
+  }
+  return std::vector<BackupStats>();
+}
+
 int KeyValueDB::test_init(const string& type, const string& dir)
 {
   if (type == "rocksdb") {

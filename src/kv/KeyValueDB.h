@@ -442,6 +442,8 @@ public:
   /// restore from backup the specified backup version
   static bool restore_backup(CephContext *cct, const std::string &type, const std::string &path, const std::string &backup_location, std::optional<uint32_t> version);
 
+  static std::vector<BackupStats> list_backups(CephContext *cct, const std::string &type, const std::string &backup_location);
+
   /// compact the underlying store
   virtual void compact() {}
 
