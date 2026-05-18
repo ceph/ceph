@@ -1071,7 +1071,7 @@ void Objecter::_do_watch_notify(boost::intrusive_ptr<LingerOp> info,
   info->finished_async();
 }
 
-Dispatcher::dispatch_result_t Objecter::ms_dispatch2(const MessageRef& m)
+void Objecter::ms_fast_dispatch2(const MessageRef& m)
 {
   ldout(cct, 10) << __func__ << " " << cct << " " << *m << dendl;
   switch (m->get_type()) {
@@ -1088,8 +1088,33 @@ Dispatcher::dispatch_result_t Objecter::ms_dispatch2(const MessageRef& m)
     } else {
       handle_osd_op_reply(ref_cast<MOSDOpReply>(m));
     }
-    return Dispatcher::HANDLED();
+    return;
   }
+
+  case CEPH_MSG_WATCH_NOTIFY: {
+    auto priv = m->get_connection()->get_priv();
+    auto s = static_cast<OSDSession*>(priv.get());
+    if (s) {
+      s->track_enqueue(m);
+      boost::asio::dispatch(s->strand, [this, priv, s, m]() {
+        cref_t<MWatchNotify> msg = ref_cast<MWatchNotify>(m);
+        s->track_dequeue(m);
+        handle_watch_notify(std::move(msg));
+      });
+    } else {
+      handle_watch_notify(ref_cast<MWatchNotify>(m));
+    }
+    return;
+  }
+  default: ceph_abort("should be unreachable"); break;
+  }
+}
+
+Dispatcher::dispatch_result_t Objecter::ms_dispatch2(const MessageRef& m)
+{
+  ldout(cct, 10) << __func__ << " " << cct << " " << *m << dendl;
+  switch (m->get_type()) {
+  case CEPH_MSG_OSD_OPREPLY: ceph_abort("should be fast dispatched"); break;
 
   case CEPH_MSG_OSD_BACKOFF: {
     auto priv = m->get_connection()->get_priv();
@@ -1107,21 +1132,7 @@ Dispatcher::dispatch_result_t Objecter::ms_dispatch2(const MessageRef& m)
     return Dispatcher::HANDLED();
   }
 
-  case CEPH_MSG_WATCH_NOTIFY: {
-    auto priv = m->get_connection()->get_priv();
-    auto s = static_cast<OSDSession*>(priv.get());
-    if (s) {
-      s->track_enqueue(m);
-      boost::asio::dispatch(s->strand, [this, priv, s, m]() {
-        cref_t<MWatchNotify> msg = ref_cast<MWatchNotify>(m);
-        s->track_dequeue(m);
-        handle_watch_notify(std::move(msg));
-      });
-    } else {
-      handle_watch_notify(ref_cast<MWatchNotify>(m));
-    }
-    return Dispatcher::HANDLED();
-  }
+  case CEPH_MSG_WATCH_NOTIFY: ceph_abort("should be fast dispatched"); break;
 
   case MSG_COMMAND_REPLY:
     if (m->get_source().type() == CEPH_ENTITY_TYPE_OSD) {
@@ -1166,8 +1177,9 @@ Dispatcher::dispatch_result_t Objecter::ms_dispatch2(const MessageRef& m)
     return Dispatcher::ACKNOWLEDGED();
 
   default:
-    return Dispatcher::UNHANDLED();
+    break;
   }
+  return Dispatcher::UNHANDLED();
 }
 
 void Objecter::_scan_requests(
