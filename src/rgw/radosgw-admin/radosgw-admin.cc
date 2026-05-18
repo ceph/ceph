@@ -10,6 +10,7 @@
 #include <sstream>
 #include <optional>
 #include <iostream>
+#include <CLI/CLI.hpp>
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/use_awaitable.hpp>

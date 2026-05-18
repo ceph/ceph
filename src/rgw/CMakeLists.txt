@@ -557,6 +557,8 @@ target_link_libraries(radosgw-admin
   global ${LIB_RESOLV}
   OATH::OATH
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
+target_include_directories(radosgw-admin SYSTEM
+  PRIVATE "${CMAKE_SOURCE_DIR}/src/CLI11/include")
 endif()
 
 # this is unsatisfying and hopefully temporary; ARROW should not be

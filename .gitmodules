@@ -85,3 +85,6 @@
 [submodule "src/lss"]
 	path = src/lss
 	url = https://chromium.googlesource.com/linux-syscall-support
+[submodule "src/CLI11"]
+	path = src/CLI11
+	url = https://github.com/CLIUtils/CLI11.git
