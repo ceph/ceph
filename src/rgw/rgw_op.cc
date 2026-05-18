@@ -1153,12 +1153,18 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
       s->object->set_instance("");
     }
 
-    // If no versionId was passed in the request on a versioned bucket,
-    // resolve the current version via the OLH before anything else keys
-    // off s->object's instance. Without this, restore/read-through paths
-    // can end up writing to the null-version slot even when a real
-    // current version exists.
-    if (s->bucket->versioned() && s->info.args.get("versionId").empty()) {
+    // If no versionId was passed and this object was transitioned with
+    // retain_current_version=true, the cloud-tier stub is at the OLH's
+    // real-instance target (the retained original head), not the
+    // null-version slot. Resolve the current version via the OLH so
+    // restore/read-through paths write to the right instance.
+    //
+    // When retain_current_version=false (default), the stub is at the
+    // null-version slot already, so the URL's empty instance points at
+    // the right object; the OLH read would just return "" or a delete
+    // marker. Skip it.
+    if (s->bucket->versioned() && s->info.args.get("versionId").empty() &&
+        tier_config.tier_placement.retain_current_version) {
       std::string resolved;
       op_ret = s->object->get_current_version(dpp, y, resolved);
       if (op_ret < 0) {
