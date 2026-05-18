@@ -3,7 +3,7 @@
 
 /*
  * Test stretch mode logic in MonmapMonitor
- * 
+ *
  * Tests tiebreaker validation, auto-selection, and stretch mode enablement
  * for monitor-side stretch cluster configuration.
  */
@@ -13,6 +13,7 @@
 #include "mon/MonmapMonitor.h"
 #include "mon/Monitor.h"
 #include "mon/Paxos.h"
+#include "mon/mon_types.h"
 #include "crush/CrushWrapper.h"
 #include "common/ceph_context.h"
 #include "global/global_init.h"
@@ -29,7 +30,7 @@ protected:
   unique_ptr<CephContext> cct;
   MonMap monmap;
   CrushWrapper crush;
-  
+
   void SetUp() override {
     vector<const char*> args;
     cct.reset(new CephContext(CEPH_ENTITY_TYPE_MON));
@@ -39,7 +40,7 @@ protected:
   void setup_basic_monmap_5mons() {
     // Create 5 monitors: a, b (zone1), c, d (zone2), e (zone3)
     monmap.strategy = MonMap::CONNECTIVITY;
-    
+
     entity_addrvec_t addrs_a;
     entity_addr_t addr_a;
     addr_a.parse("127.0.0.1:6789");
@@ -80,25 +81,25 @@ protected:
     // Create a CRUSH map with two zones (zone1, zone2)
     crush.create();
     crush.set_max_devices(10);
-    
+
     // Set up type hierarchy: root (type 10) > zone (type 8) > host (type 1) > osd (type 0)
     crush.set_type_name(10, "root");
     crush.set_type_name(8, "zone");
     crush.set_type_name(1, "host");
     crush.set_type_name(0, "osd");
-    
+
     // Insert OSDs into zone1 and zone2
     // This will automatically create the zone buckets and make them valid subtrees
     map<string,string> loc_zone1;
     loc_zone1["root"] = "default";
     loc_zone1["zone"] = "zone1";
     loc_zone1["host"] = "host1";
-    
+
     map<string,string> loc_zone2;
     loc_zone2["root"] = "default";
     loc_zone2["zone"] = "zone2";
     loc_zone2["host"] = "host2";
-    
+
     // Insert a few OSDs in each zone to make them valid subtrees
     crush.insert_item(cct.get(), 0, 1.0, "osd.0", loc_zone1);
     crush.insert_item(cct.get(), 1, 1.0, "osd.1", loc_zone1);
@@ -109,35 +110,35 @@ protected:
   void setup_monmap_bad_tiebreaker_in_zone1() {
     // Create 5 monitors where 'e' is in zone1 (same as a, b)
     monmap.strategy = MonMap::CONNECTIVITY;
-    
+
     entity_addrvec_t addrs_a;
     entity_addr_t addr_a;
     addr_a.parse("127.0.0.1:6789");
     addrs_a.v.push_back(addr_a);
     monmap.add("a", addrs_a);
     monmap.mon_info["a"].crush_loc["zone"] = "zone1";
-    
+
     entity_addrvec_t addrs_b;
     entity_addr_t addr_b;
     addr_b.parse("127.0.0.2:6789");
     addrs_b.v.push_back(addr_b);
     monmap.add("b", addrs_b);
     monmap.mon_info["b"].crush_loc["zone"] = "zone1";
-    
+
     entity_addrvec_t addrs_c;
     entity_addr_t addr_c;
     addr_c.parse("127.0.0.3:6789");
     addrs_c.v.push_back(addr_c);
     monmap.add("c", addrs_c);
     monmap.mon_info["c"].crush_loc["zone"] = "zone2";
-    
+
     entity_addrvec_t addrs_d;
     entity_addr_t addr_d;
     addr_d.parse("127.0.0.4:6789");
     addrs_d.v.push_back(addr_d);
     monmap.add("d", addrs_d);
     monmap.mon_info["d"].crush_loc["zone"] = "zone2";
-    
+
     entity_addrvec_t addrs_e;
     entity_addr_t addr_e;
     addr_e.parse("127.0.0.5:6789");
@@ -149,42 +150,42 @@ protected:
   void setup_monmap_multiple_tiebreakers() {
     // Create 6 monitors with 2 in zone3 (e and f)
     monmap.strategy = MonMap::CONNECTIVITY;
-    
+
     entity_addrvec_t addrs_a;
     entity_addr_t addr_a;
     addr_a.parse("127.0.0.1:6789");
     addrs_a.v.push_back(addr_a);
     monmap.add("a", addrs_a);
     monmap.mon_info["a"].crush_loc["zone"] = "zone1";
-    
+
     entity_addrvec_t addrs_b;
     entity_addr_t addr_b;
     addr_b.parse("127.0.0.2:6789");
     addrs_b.v.push_back(addr_b);
     monmap.add("b", addrs_b);
     monmap.mon_info["b"].crush_loc["zone"] = "zone1";
-    
+
     entity_addrvec_t addrs_c;
     entity_addr_t addr_c;
     addr_c.parse("127.0.0.3:6789");
     addrs_c.v.push_back(addr_c);
     monmap.add("c", addrs_c);
     monmap.mon_info["c"].crush_loc["zone"] = "zone2";
-    
+
     entity_addrvec_t addrs_d;
     entity_addr_t addr_d;
     addr_d.parse("127.0.0.4:6789");
     addrs_d.v.push_back(addr_d);
     monmap.add("d", addrs_d);
     monmap.mon_info["d"].crush_loc["zone"] = "zone2";
-    
+
     entity_addrvec_t addrs_e;
     entity_addr_t addr_e;
     addr_e.parse("127.0.0.5:6789");
     addrs_e.v.push_back(addr_e);
     monmap.add("e", addrs_e);
     monmap.mon_info["e"].crush_loc["zone"] = "zone3";
-    
+
     entity_addrvec_t addrs_f;
     entity_addr_t addr_f;
     addr_f.parse("127.0.0.6:6789");
@@ -252,26 +253,26 @@ protected:
 TEST_F(MonmapMonitorStretchTest, ExplicitTiebreakerSuccess) {
   setup_basic_monmap_5mons();
   setup_crush_two_zones();
-  
+
   stringstream ss;
   bool okay = false;
   int errcode = 0;
-  
+
   // Test validation phase (commit=false)
   MonmapMonitor::validate_and_enable_stretch_mode(
       monmap, monmap, ss, &okay, &errcode, false, "e", "zone", crush);
-  
+
   EXPECT_TRUE(okay) << "Validation failed: " << ss.str();
   EXPECT_EQ(errcode, 0);
-  EXPECT_FALSE(monmap.stretch_mode_enabled) 
+  EXPECT_FALSE(monmap.stretch_mode_enabled)
     << "Should not be enabled in validation phase";
-  
+
   // Test commit phase (commit=true)
   ss.str("");
   okay = false;
   MonmapMonitor::validate_and_enable_stretch_mode(
       monmap, monmap, ss, &okay, &errcode, true, "e", "zone", crush);
-  
+
   EXPECT_TRUE(okay) << "Commit failed: " << ss.str();
   EXPECT_EQ(errcode, 0);
   EXPECT_TRUE(monmap.stretch_mode_enabled);
@@ -283,28 +284,28 @@ TEST_F(MonmapMonitorStretchTest, ExplicitTiebreakerSuccess) {
 TEST_F(MonmapMonitorStretchTest, AutoSelectTiebreakerSuccess) {
   setup_basic_monmap_5mons();
   setup_crush_two_zones();
-  
+
   stringstream ss;
   bool okay = false;
   int errcode = 0;
-  
+
   // Test with empty tiebreaker_mon string (triggers auto-selection)
   MonmapMonitor::validate_and_enable_stretch_mode(
       monmap, monmap, ss, &okay, &errcode, false, "", "zone", crush);
-  
+
   EXPECT_TRUE(okay) << "Auto-selection validation failed: " << ss.str();
   EXPECT_EQ(errcode, 0);
-  
+
   // Commit with auto-selection
   ss.str("");
   okay = false;
   MonmapMonitor::validate_and_enable_stretch_mode(
       monmap, monmap, ss, &okay, &errcode, true, "", "zone", crush);
-  
+
   EXPECT_TRUE(okay) << "Auto-selection commit failed: " << ss.str();
   EXPECT_EQ(errcode, 0);
   EXPECT_TRUE(monmap.stretch_mode_enabled);
-  EXPECT_EQ(monmap.tiebreaker_mon, "e") 
+  EXPECT_EQ(monmap.tiebreaker_mon, "e")
     << "Should auto-select 'e' as tiebreaker";
   EXPECT_TRUE(monmap.disallowed_leaders.count("e"));
 }
@@ -313,33 +314,33 @@ TEST_F(MonmapMonitorStretchTest, AutoSelectTiebreakerSuccess) {
 TEST_F(MonmapMonitorStretchTest, StrategyAutoChangedToConnectivity) {
   setup_basic_monmap_5mons();
   setup_crush_two_zones();
-  
+
   // Start with classic strategy
   monmap.strategy = MonMap::CLASSIC;
-  
+
   stringstream ss;
   bool okay = false;
   int errcode = 0;
-  
+
   // Validation phase should succeed and prepare strategy change
   MonmapMonitor::validate_and_enable_stretch_mode(
       monmap, monmap, ss, &okay, &errcode, false, "e", "zone", crush);
-  
+
   EXPECT_TRUE(okay) << "Validation should succeed: " << ss.str();
   EXPECT_EQ(errcode, 0);
-  EXPECT_FALSE(monmap.stretch_mode_enabled) 
+  EXPECT_FALSE(monmap.stretch_mode_enabled)
     << "Should not be enabled in validation phase";
-  
+
   // Commit phase should enable stretch mode and change strategy
   ss.str("");
   okay = false;
   MonmapMonitor::validate_and_enable_stretch_mode(
       monmap, monmap, ss, &okay, &errcode, true, "e", "zone", crush);
-  
+
   EXPECT_TRUE(okay) << "Commit should succeed: " << ss.str();
   EXPECT_EQ(errcode, 0);
   EXPECT_TRUE(monmap.stretch_mode_enabled);
-  EXPECT_EQ(monmap.strategy, MonMap::CONNECTIVITY) 
+  EXPECT_EQ(monmap.strategy, MonMap::CONNECTIVITY)
     << "Strategy should be changed to CONNECTIVITY";
   EXPECT_EQ(monmap.tiebreaker_mon, "e");
   EXPECT_TRUE(monmap.disallowed_leaders.count("e"));
@@ -349,19 +350,19 @@ TEST_F(MonmapMonitorStretchTest, StrategyAutoChangedToConnectivity) {
 TEST_F(MonmapMonitorStretchTest, AutoSelectFailTiebreakerInDataZone) {
   setup_monmap_bad_tiebreaker_in_zone1(); // 'e' is in zone1, not zone3
   setup_crush_two_zones();
-  
+
   stringstream ss;
   bool okay = false;
   int errcode = 0;
-  
+
   // Try auto-selection - should fail because 'e' is in zone1
   MonmapMonitor::validate_and_enable_stretch_mode(
       monmap, monmap, ss, &okay, &errcode, false, "", "zone", crush);
-  
+
   EXPECT_FALSE(okay) << "Should fail when no tiebreaker in third zone";
   EXPECT_EQ(errcode, -EINVAL);
   EXPECT_FALSE(monmap.stretch_mode_enabled);
-  
+
   string error_msg = ss.str();
   EXPECT_TRUE(error_msg.find("Could not auto-select a tiebreaker monitor") != string::npos)
     << "Error message: " << error_msg;
@@ -373,15 +374,15 @@ TEST_F(MonmapMonitorStretchTest, AutoSelectFailTiebreakerInDataZone) {
 TEST_F(MonmapMonitorStretchTest, ExplicitTiebreakerInDataZoneFails) {
   setup_monmap_bad_tiebreaker_in_zone1();
   setup_crush_two_zones();
-  
+
   stringstream ss;
   bool okay = false;
   int errcode = 0;
-  
+
   // Explicitly specify 'e' which is in zone1 (a data zone)
   MonmapMonitor::validate_and_enable_stretch_mode(
       monmap, monmap, ss, &okay, &errcode, false, "e", "zone", crush);
-  
+
   EXPECT_FALSE(okay) << "Should fail when tiebreaker is in data zone";
   EXPECT_EQ(errcode, -EINVAL);
   EXPECT_FALSE(monmap.stretch_mode_enabled);
@@ -395,19 +396,19 @@ TEST_F(MonmapMonitorStretchTest, ExplicitTiebreakerInDataZoneFails) {
 TEST_F(MonmapMonitorStretchTest, AutoSelectFailMultipleTiebreakers) {
   setup_monmap_multiple_tiebreakers(); // Both 'e' and 'f' are in zone3
   setup_crush_two_zones();
-  
+
   stringstream ss;
   bool okay = false;
   int errcode = 0;
-  
+
   // Try auto-selection - should fail with multiple candidates
   MonmapMonitor::validate_and_enable_stretch_mode(
       monmap, monmap, ss, &okay, &errcode, false, "", "zone", crush);
-  
+
   EXPECT_FALSE(okay) << "Should fail with multiple tiebreaker candidates";
   EXPECT_EQ(errcode, -EINVAL);
   EXPECT_FALSE(monmap.stretch_mode_enabled);
-  
+
   string error_msg = ss.str();
   EXPECT_TRUE(error_msg.find("Could not auto-select") != string::npos)
     << "Error message: " << error_msg;
@@ -420,18 +421,18 @@ TEST_F(MonmapMonitorStretchTest, AutoSelectFailMultipleTiebreakers) {
 TEST_F(MonmapMonitorStretchTest, NonExistentTiebreakerFails) {
   setup_basic_monmap_5mons();
   setup_crush_two_zones();
-  
+
   stringstream ss;
   bool okay = false;
   int errcode = 0;
-  
+
   // Specify a monitor that doesn't exist
   MonmapMonitor::validate_and_enable_stretch_mode(
       monmap, monmap, ss, &okay, &errcode, false, "nonexistent", "zone", crush);
-  
+
   EXPECT_FALSE(okay) << "Should fail with non-existent monitor";
   EXPECT_EQ(errcode, -ENOENT);
-  
+
   string error_msg = ss.str();
   EXPECT_TRUE(error_msg.find("does not seem to exist") != string::npos)
     << "Error message: " << error_msg;
@@ -516,6 +517,60 @@ TEST_F(MonmapMonitorStretchTest, OneMonitorPerZoneAutoSelectSucceeds) {
   EXPECT_EQ(errcode, 0);
   EXPECT_TRUE(monmap.stretch_mode_enabled);
   EXPECT_EQ(monmap.tiebreaker_mon, "e") << "Should auto-select 'e' as tiebreaker";
+}
+
+// Test ensure_connectivity_strategy function
+TEST_F(MonmapMonitorStretchTest, EnsureConnectivityStrategy) {
+  setup_basic_monmap_5mons();
+
+  MonMap test_map;
+  test_map.strategy = MonMap::CLASSIC;
+  stringstream ss;
+
+  // Test case 1: Successfully switch from CLASSIC to CONNECTIVITY
+  // with full monitor feature support
+  {
+    mon_feature_t features;
+    features = ceph::features::mon::get_supported();
+
+    bool changed = MonmapMonitor::ensure_connectivity_strategy(test_map, features, ss);
+
+    EXPECT_TRUE(changed) << "Should switch from CLASSIC to CONNECTIVITY";
+    EXPECT_EQ(test_map.strategy, MonMap::CONNECTIVITY);
+    EXPECT_TRUE(ss.str().empty()) << "Should have no error message";
+  }
+
+  // Test case 2: Already using CONNECTIVITY - no change needed
+  {
+    ss.str("");
+    test_map.strategy = MonMap::CONNECTIVITY;
+
+    bool changed = MonmapMonitor::ensure_connectivity_strategy(test_map,
+        ceph::features::mon::get_supported(), ss);
+
+    EXPECT_FALSE(changed) << "Should not change when already CONNECTIVITY";
+    EXPECT_EQ(test_map.strategy, MonMap::CONNECTIVITY);
+    EXPECT_TRUE(ss.str().empty()) << "Should have no error message";
+  }
+
+  // Test case 3: Missing FEATURE_PINGING support - should fail
+  {
+    ss.str("");
+    test_map.strategy = MonMap::CLASSIC;
+
+    // Create features without FEATURE_PINGING
+    mon_feature_t limited_features;
+    // Don't add FEATURE_PINGING
+
+    bool changed = MonmapMonitor::ensure_connectivity_strategy(test_map,
+        limited_features, ss);
+
+    EXPECT_FALSE(changed) << "Should not change without FEATURE_PINGING support";
+    EXPECT_EQ(test_map.strategy, MonMap::CLASSIC) << "Strategy should remain CLASSIC";
+    EXPECT_FALSE(ss.str().empty()) << "Should have error message";
+    EXPECT_NE(ss.str().find("Not all monitors support CONNECTIVITY"), string::npos)
+        << "Error should mention monitor support requirement";
+  }
 }
 
 int main(int argc, char **argv) {
