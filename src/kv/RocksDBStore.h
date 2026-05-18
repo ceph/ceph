@@ -21,6 +21,7 @@
 #include "rocksdb/statistics.h"
 #include "rocksdb/table.h"
 #include "rocksdb/db.h"
+#include "rocksdb/utilities/backup_engine.h"
 #include "kv/rocksdb_cache/BinnedLRUCache.h"
 #include <errno.h>
 #include "common/errno.h"
@@ -115,11 +116,14 @@ public:
 		 uint32_t hash_l, uint32_t hash_h)
       : name(name), shard_cnt(shard_cnt), options(options), hash_l(hash_l), hash_h(hash_h) {}
   };
+
 private:
   friend std::ostream& operator<<(std::ostream& out, const ColumnFamily& cf);
 
   bool must_close_default_cf = false;
   rocksdb::ColumnFamilyHandle *default_cf = nullptr;
+  // serialize backup_engine operations; concurrent ones are problematic
+  ceph::mutex backup_lock = ceph::make_mutex("RocksDBStore::Backup");
 
   /// column families in use, name->handles
   struct prefix_shards {
@@ -211,6 +215,8 @@ public:
   uint64_t get_delete_range_threshold() const {
     return cct->_conf.get_val<uint64_t>("rocksdb_delete_range_threshold");
   }
+
+  KeyValueDB::BackupStats backup(const std::string& path, bool full) override;
 
   void compact() override;
 

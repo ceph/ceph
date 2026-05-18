@@ -1584,3 +1584,7 @@ COMMAND_WITH_FLAG("dump_ops_in_flight",
             "show the ops currently in flight",
             "mon", "r",
             FLAG(TELL))
+COMMAND_WITH_FLAG("backup",
+            "backups mon database",
+            "mon", "rwx",
+            FLAG(TELL))

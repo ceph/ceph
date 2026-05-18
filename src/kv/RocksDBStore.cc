@@ -18,6 +18,7 @@
 #include "rocksdb/slice.h"
 #include "rocksdb/cache.h"
 #include "rocksdb/filter_policy.h"
+#include "rocksdb/utilities/backup_engine.h"
 #include "rocksdb/utilities/convenience.h"
 #include "rocksdb/utilities/table_properties_collectors.h"
 #include "rocksdb/merge_operator.h"
@@ -26,6 +27,8 @@
 #include "common/perf_counters.h"
 #include "common/PriorityCache.h"
 #include "common/strtol.h"
+#include "common/safe_io.h"
+#include "common/errno.h"
 #include "include/common_fwd.h"
 #include "include/scope_guard.h"
 #include "include/str_list.h"
@@ -69,6 +72,7 @@ static const char* sharding_def_dir = "sharding";
 static const char* sharding_def_file = "sharding/def";
 static const char* sharding_recreate = "sharding/recreate_columns";
 static const char* resharding_column_lock = "reshardingXcommencingXlocked";
+
 
 static bufferlist to_bufferlist(rocksdb::Slice in) {
   bufferlist bl;
@@ -2046,6 +2050,77 @@ int RocksDBStore::split_key(rocksdb::Slice in, string_view *prefix, string_view 
   return 0;
 }
 
+static std::unique_ptr<rocksdb::BackupEngine> open_backup_engine(
+  const rocksdb::BackupEngineOptions& options, rocksdb::Status& s)
+{
+  rocksdb::BackupEngine* engine = nullptr;
+  s = rocksdb::BackupEngine::Open(options, rocksdb::Env::Default(), &engine);
+  return std::unique_ptr<rocksdb::BackupEngine>{engine};
+}
+
+KeyValueDB::BackupStats RocksDBStore::backup(const std::string& path, bool full)
+{
+  ldout(cct, 20) << __func__ << " start backup action" << dendl;
+  std::lock_guard backup_locker{backup_lock};
+  rocksdb::BackupEngineOptions engine_options = rocksdb::BackupEngineOptions(path);
+  engine_options.share_table_files = !full;
+  engine_options.sync = true;
+
+  rocksdb::Status s;
+  auto backup_engine = open_backup_engine(engine_options, s);
+
+  KeyValueDB::BackupStats rv;
+  if (!backup_engine || !s.ok()) {
+    ldout(cct, 0) << __func__ << "can't create backup_engine: " << s.ToString() << dendl;
+    rv.msg = s.ToString();
+    rv.error = true;
+    return rv;
+  }
+
+  rocksdb::BackupID new_backup;
+  rocksdb::BackupInfo new_backup_info;
+  rocksdb::CreateBackupOptions new_backup_options = rocksdb::CreateBackupOptions();
+  new_backup_options.flush_before_backup = true;
+
+  s = backup_engine->CreateNewBackupWithMetadata(new_backup_options, db, "", &new_backup);
+
+  rv.timestamp = ceph_clock_now();
+  rv.msg = s.ToString();
+
+  if (!s.ok()) {
+    ldout(cct, 0) << __func__ << "can't create backup: " << s.ToString() << dendl;
+    rv.error = true;
+    return rv;
+  } else {
+    ldout(cct, 10) << __func__ << "created backup successfully: " << s.ToString() << dendl;
+    rv.msg = s.ToString();
+  }
+  s = backup_engine->GetBackupInfo(new_backup, &new_backup_info);
+  if (!s.ok()) {
+    ldout(cct, 0) << __func__ << "can't get backup info: " << s.ToString() << dendl;
+    rv.error = true;
+    rv.msg = s.ToString();
+    return rv;
+  }
+  rv.id = new_backup_info.backup_id;
+  rv.size = new_backup_info.size;
+  rv.number_files = new_backup_info.number_files;
+
+  if (full) {
+    // record the id of the last full backup
+    std::string id_str = std::to_string(new_backup_info.backup_id);
+    int r = safe_write_file(path.c_str(), "last_full",
+                            id_str.c_str(), id_str.size(), 0644);
+    if (r < 0) {
+      ldout(cct, 1) << __func__ << " failed to write last_full marker: "
+                    << cpp_strerror(r) << dendl;
+    }
+  }
+
+  return rv;
+}
+
+
 void RocksDBStore::compact()
 {
   dout(2) << __func__ << " starting" << dendl;
@@ -3356,7 +3431,7 @@ int RocksDBStore::prepare_for_reshard(const std::string& new_sharding,
 	   << full_name << dendl;
       return -EINVAL;
     }
-    dout(10) << "created column " << full_name << " handle = " << (void*)cf << dendl; 
+    dout(10) << "created column " << full_name << " handle = " << (void*)cf << dendl;
     existing_columns.push_back(full_name);
     handles.push_back(cf);
   }

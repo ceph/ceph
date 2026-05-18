@@ -65,6 +65,20 @@ class MonitorDBStore
     return path;
   }
 
+  // returns the database store path
+  static std::string get_store_path(std::string path) {
+    int pos = 0;
+    for (auto rit = path.rbegin(); rit != path.rend(); ++rit, ++pos) {
+      if (*rit != '/') {
+	      break;
+      }
+    }
+    std::ostringstream os;
+    os << path.substr(0, path.size() - pos) << "/store.db";
+    std::string full_path = os.str();
+    return full_path;
+  }
+
   std::shared_ptr<PriorityCache::PriCache> get_priority_cache() const {
     return db->get_priority_cache();
   }
@@ -631,14 +645,7 @@ class MonitorDBStore
   }
 
   void _open(const std::string& kv_type) {
-    int pos = 0;
-    for (auto rit = path.rbegin(); rit != path.rend(); ++rit, ++pos) {
-      if (*rit != '/')
-	break;
-    }
-    std::ostringstream os;
-    os << path.substr(0, path.size() - pos) << "/store.db";
-    std::string full_path = os.str();
+    std::string full_path = get_store_path(path);
 
     KeyValueDB *db_ptr = KeyValueDB::create(g_ceph_context,
 					    kv_type,
@@ -741,6 +748,13 @@ class MonitorDBStore
     io_work.stop();
     is_open = false;
     db.reset(NULL);
+  }
+
+  /// @brief Creates a backup of the database
+  /// @param full whether to force a full backup
+  /// @return backup statistics
+  KeyValueDB::BackupStats backup(bool full = false) {
+    return db->backup(g_conf().get_val<std::string>("mon_backup_path"), full);
   }
 
   void compact() {

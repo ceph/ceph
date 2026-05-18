@@ -13,6 +13,7 @@
 #include <string_view>
 #include <boost/scoped_ptr.hpp>
 #include "include/encoding.h"
+#include "include/utime.h"
 #include "common/Formatter.h"
 #include "common/perf_counters.h"
 #include "common/PriorityCache.h"
@@ -24,6 +25,15 @@
  */
 class KeyValueDB {
 public:
+  struct BackupStats {
+    bool error;
+    uint64_t id;
+    utime_t timestamp;
+    std::string msg;
+    uint64_t size;
+    uint64_t number_files;
+  };
+
   class TransactionImpl {
   public:
     // amount of ops included
@@ -112,8 +122,8 @@ public:
     }
 
     /// Remove Single Key which exists and was not overwritten.
-    /// This API is only related to performance optimization, and should only be 
-    /// re-implemented by log-insert-merge tree based keyvalue stores(such as RocksDB). 
+    /// This API is only related to performance optimization, and should only be
+    /// re-implemented by log-insert-merge tree based keyvalue stores(such as RocksDB).
     /// If a key is overwritten (by calling set multiple times), then the result
     /// of calling rm_single_key on this key is undefined.
     virtual void rm_single_key(
@@ -410,6 +420,11 @@ public:
 				       const std::string& key_prefix) {
     return 0;
   }
+
+  /// creates a kv database backup in directory path
+  /// the default reports failure: a backend without backup support must not
+  /// look like a successful backup
+  virtual BackupStats backup(const std::string& path, bool full) { return BackupStats{.error = true}; }
 
   /// compact the underlying store
   virtual void compact() {}
