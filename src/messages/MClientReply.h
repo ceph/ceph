@@ -17,6 +17,15 @@
 #ifndef CEPH_MCLIENTREPLY_H
 #define CEPH_MCLIENTREPLY_H
 
+#include <list>
+#include <map>
+#include <ostream>
+#include <set>
+#include <string>
+#include <vector>
+
+#include "MMDSOp.h"
+
 #include "include/errorcode32.h"
 #include "include/fs_types.h"
 #include "include/mempool.h"
@@ -24,8 +33,13 @@
 
 #include "msg/Message.h"
 #include "include/ceph_features.h"
+#include "include/cephfs/types.h" // for frag_info_t, nest_info_t, optmetadata_client_t, quota_info_t, vinodeno_t
+#include "include/container_ios.h"
+#include "include/frag.h" // for frag_t, fragtree_t
+#include "include/interval_set.h"
 #include "common/errno.h"
 #include "common/strescape.h"
+#include "mds/mdstypes.h" // for CDIR_AUTH_PARENT
 
 /***
  *
