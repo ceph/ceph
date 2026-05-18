@@ -981,6 +981,7 @@ int AuthMonitor::import_keyring(KeyRing& keyring)
     int err = add_entity(p->first, p->second);
     ceph_assert(err == 0);
   }
+  mon.set_should_backup();
   return 0;
 }
 
@@ -1080,6 +1081,7 @@ int AuthMonitor::add_entity(
   dout(10) << " add auth entity " << auth_inc.name << dendl;
   dout(30) << "    " << auth_inc.auth << dendl;
   push_cephx_inc(auth_inc);
+  mon.set_should_backup();
   return 0;
 }
 
@@ -1445,6 +1447,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     err = 0;
     wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
+    mon.set_should_backup();
     return true;
   } else if (prefix == "auth add" && !entity_name.empty()) {
     /* expected behavior:
@@ -1819,6 +1822,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 
       err = _update_caps(entity, newcaps, op, ss, ds, &rdata, f.get());
       if (err == 0) {
+        mon.set_should_backup();
 	return true;
       } else {
 	goto done;
@@ -1827,6 +1831,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 
     err = _create_entity(entity, newcaps, op, ss, ds, &rdata, f.get());
     if (err == 0) {
+      mon.set_should_backup();
       return true;
     } else {
       goto done;
@@ -1851,6 +1856,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 
     wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
+    mon.set_should_backup();
     return true;
   } else if (prefix == "auth rotate") {
     if (entity_name.empty()) {

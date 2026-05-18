@@ -1179,6 +1179,16 @@ options:
   - mon
   flags:
   - no_mon_update
+- name: mon_auto_backup
+  type: bool
+  level: advanced
+  desc: automatically trigger backups on important database changes
+  default: false
+  services:
+  - mon
+  flags:
+  - runtime
+  with_legacy: true
 - name: mon_backup_always_full
   type: bool
   level: advanced

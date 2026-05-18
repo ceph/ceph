@@ -1014,6 +1014,7 @@ private:
   OpTracker op_tracker;
 
   std::unique_ptr<MonitorBackupManager> backup_manager;
+  bool mon_backup_requested = false;
 
  public:
   Monitor(CephContext *cct_, std::string nm, MonitorDBStore *s,
@@ -1060,6 +1061,10 @@ private:
 		       std::ostream& err,
 		       std::ostream& out);
 
+  // Notify monitor that it should create a new database backup
+  void set_should_backup() {
+    mon_backup_requested = true;
+  }
   // Execute mon database backup
   int backup(bool full = false);
 

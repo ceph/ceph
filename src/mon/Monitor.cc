@@ -6171,6 +6171,11 @@ void Monitor::tick()
     prepare_new_fingerprint(t);
     paxos->trigger_propose();
   }
+  // trigger backup if required
+  if (mon_backup_requested && g_conf()->mon_auto_backup) {
+      backup();
+      mon_backup_requested = false;
+  }
   backup_manager->tick();
 
   mgr_client.update_daemon_health(get_health_metrics());
