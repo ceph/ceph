@@ -4,6 +4,7 @@
 #include "messages/MLog.h"
 #include "messages/MLogAck.h"
 #include "messages/MMonGetVersion.h"
+#include "msg/MessageFmt.h"
 #include "crimson/net/Messenger.h"
 #include "crimson/mon/MonClient.h"
 #include "mon/MonMap.h"
