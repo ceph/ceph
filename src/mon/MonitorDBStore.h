@@ -14,6 +14,8 @@
 #ifndef CEPH_MONITOR_DB_STORE_H
 #define CEPH_MONITOR_DB_STORE_H
 
+#include <algorithm>
+#include <filesystem>
 #include <set>
 #include <map>
 #include <string>
@@ -32,6 +34,7 @@
 #include "common/Clock.h"
 #include "common/debug.h"
 #include "common/safe_io.h"
+#include "common/strtol.h"
 #include "common/blkdev.h"
 #include "common/PriorityCache.h"
 #include "common/version.h"
@@ -63,6 +66,11 @@ class MonitorDBStore
 
   std::string get_path() {
     return path;
+  }
+
+  // returns the database store path
+  static std::string get_store_path(const std::string& path) {
+    return (std::filesystem::path(path) / "store.db").string();
   }
 
   std::shared_ptr<PriorityCache::PriCache> get_priority_cache() const {
@@ -631,14 +639,7 @@ class MonitorDBStore
   }
 
   void _open(const std::string& kv_type) {
-    int pos = 0;
-    for (auto rit = path.rbegin(); rit != path.rend(); ++rit, ++pos) {
-      if (*rit != '/')
-	break;
-    }
-    std::ostringstream os;
-    os << path.substr(0, path.size() - pos) << "/store.db";
-    std::string full_path = os.str();
+    std::string full_path = get_store_path(path);
 
     KeyValueDB *db_ptr = KeyValueDB::create(g_ceph_context,
 					    kv_type,
@@ -691,7 +692,7 @@ class MonitorDBStore
     if (r < 0)
       return r;
 
-    // Monitors are few in number, so the resource cost of exposing 
+    // Monitors are few in number, so the resource cost of exposing
     // very detailed stats is low: ramp up the priority of all the
     // KV store's perf counters.  Do this after open, because backend may
     // not have constructed PerfCounters earlier.
@@ -743,6 +744,200 @@ class MonitorDBStore
     db.reset(NULL);
   }
 
+  /// @brief Creates a backup of the database under mon_backup_path.
+  /// @return stats describing the created backup
+  KeyValueDB::BackupStats backup() {
+    auto backup_path = g_conf().get_val<std::string>("mon_backup_path");
+    auto stats = db->backup(backup_path);
+    if (!stats.error) {
+      // Stash the mon keyring alongside the rocksdb backup, keyed by
+      // backup id, so a restore of an older version is paired with the
+      // keyring of that vintage. The [mon.] secret can rotate; using a
+      // single fixed filename would break authentication after restore.
+      std::error_code ec;
+      auto dest = backup_path + "/keyring." + std::to_string(stats.id);
+      std::filesystem::copy_file(
+        path + "/keyring", dest,
+        std::filesystem::copy_options::overwrite_existing, ec);
+      if (!ec) {
+        std::filesystem::permissions(dest,
+          std::filesystem::perms::owner_read | std::filesystem::perms::owner_write,
+          std::filesystem::perm_options::replace, ec);
+      }
+      if (ec) {
+        // Best-effort: a rocksdb backup without a stashed keyring is still
+        // valid; the operator can supply a keyring out-of-band on restore.
+        derr << __func__ << " failed to stash keyring at "
+             << dest << ": " << ec.message() << dendl;
+      }
+    }
+    return stats;
+  }
+
+  /// @brief Remove old backups in mon_backup_path according to the retention config.
+  /// @return stats describing what was kept, deleted, and freed
+  KeyValueDB::BackupCleanupStats backup_cleanup() {
+    auto backup_path = g_conf().get_val<std::string>("mon_backup_path");
+    auto stats = db->backup_cleanup(
+      backup_path,
+      g_conf().get_val<uint64_t>("mon_backup_keep_last"),
+      g_conf().get_val<uint64_t>("mon_backup_keep_hourly"),
+      g_conf().get_val<uint64_t>("mon_backup_keep_daily"));
+    if (stats.error) {
+      return stats;
+    }
+    // Remove keyring.<id> files for backup ids the kv layer just dropped.
+    std::string kv_type;
+    if (read_meta("kv_backend", &kv_type) < 0 || kv_type.empty()) {
+      kv_type = "rocksdb";
+    }
+    std::set<uint64_t> surviving;
+    auto remaining = KeyValueDB::list_backups(g_ceph_context, kv_type, backup_path);
+    if (!remaining) {
+      return stats;
+    }
+    for (const auto& b : *remaining) {
+      surviving.insert(b.id);
+    }
+    std::error_code ec;
+    for (auto it = std::filesystem::directory_iterator(backup_path, ec);
+         it != std::filesystem::directory_iterator();
+         it.increment(ec)) {
+      auto name = it->path().filename().string();
+      if (name.compare(0, 8, "keyring.") != 0) {
+        continue;
+      }
+      std::string idstr = name.substr(8);
+      std::string parse_err;
+      long long id = strict_strtoll(idstr.c_str(), 10, &parse_err);
+      if (!parse_err.empty() || id < 0) {
+        continue;
+      }
+      if (surviving.count(static_cast<uint64_t>(id))) {
+        continue;
+      }
+      std::error_code rm_ec;
+      std::filesystem::remove(it->path(), rm_ec);
+    }
+    return stats;
+  }
+
+  /// @brief List all backup versions at backup_path.
+  /// @param cct ceph context
+  /// @param path path to the local mon data dir (used to discover the kv backend)
+  /// @param backup_path path to the backup location
+  /// @return list of BackupStats, one per backup
+  static std::optional<std::vector<KeyValueDB::BackupStats>> list_backups(
+    CephContext *cct, const std::string &path, const std::string &backup_path) {
+    std::string kv_type;
+    int r = read_meta_path("kv_backend", &kv_type, path);
+    if (r < 0 || kv_type.empty()) {
+      // Disaster recovery: mon_data may be empty or absent. We only ship
+      // a rocksdb kv backend today, so default to it for enumeration.
+      kv_type = "rocksdb";
+    }
+    return KeyValueDB::list_backups(cct, kv_type, backup_path);
+  }
+
+
+  /// @brief Restore the backup with the given version from backup_path into path.
+  /// @param cct ceph context
+  /// @param path path to the local mon data dir to restore into
+  /// @param backup_path path to the backup location
+  /// @param version version of the backup to restore (nullopt for latest)
+  /// @return true on success
+  static bool restore_backup(CephContext *cct, const std::string &path,
+                             const std::string &backup_path,
+                             const std::optional<uint32_t> &version) {
+    std::string kv_type;
+    int r = read_meta_path("kv_backend", &kv_type, path);
+    if (r < 0 || kv_type.empty()) {
+      // Disaster recovery: mon_data is empty or freshly initialized, so
+      // there is no kv_backend marker. Default to rocksdb and stamp the
+      // file back so the subsequent open() finds it.
+      kv_type = "rocksdb";
+      std::error_code ec;
+      std::filesystem::create_directories(path, ec);
+      if (ec) {
+        lderr(cct) << __func__ << " failed to create " << path
+                   << ": " << ec.message() << dendl;
+        return false;
+      }
+      std::filesystem::permissions(path,
+        std::filesystem::perms::owner_all,
+        std::filesystem::perm_options::replace, ec);
+      const std::string v = kv_type + "\n";
+      if (safe_write_file(path.c_str(), "kv_backend",
+                          v.c_str(), v.length(), 0600) < 0) {
+        lderr(cct) << __func__ << " failed to write kv_backend in "
+                   << path << dendl;
+        return false;
+      }
+    }
+    std::string store_path = get_store_path(path);
+
+    // Resolve "latest" up front so we know which versioned keyring to
+    // rehydrate alongside the rocksdb restore. Pick by BackupEngine id
+    // (monotonic per rocksdb) rather than timestamp, so a clock skew
+    // between backups cannot make the default restore pick a stale one.
+    uint32_t resolved_version;
+    if (version) {
+      resolved_version = *version;
+    } else {
+      auto backups = KeyValueDB::list_backups(cct, kv_type, backup_path);
+      if (!backups || backups->empty()) {
+        lderr(cct) << __func__ << " no backups found at " << backup_path << dendl;
+        return false;
+      }
+      resolved_version = std::max_element(
+        backups->begin(), backups->end(),
+        [](const auto& a, const auto& b) { return a.id < b.id; })->id;
+    }
+
+    if (!KeyValueDB::restore_backup(cct, kv_type, store_path, backup_path,
+                                    resolved_version)) {
+      return false;
+    }
+
+    // Rehydrate the matching keyring (skipped silently if the operator
+    // keeps the keyring out-of-band).
+    std::error_code ec;
+    auto keyring_src = backup_path + "/keyring." + std::to_string(resolved_version);
+    if (std::filesystem::exists(keyring_src, ec)) {
+      std::filesystem::copy_file(
+        keyring_src,
+        path + "/keyring",
+        std::filesystem::copy_options::overwrite_existing,
+        ec);
+      if (ec) {
+        lderr(cct) << __func__ << " failed to restore keyring from "
+                   << keyring_src << ": " << ec.message() << dendl;
+        return false;
+      }
+    }
+
+    // The mon store holds auth, config-key and dm-crypt secrets;
+    // tighten everything we just restored to owner-only.
+    std::filesystem::permissions(path,
+      std::filesystem::perms::owner_all,
+      std::filesystem::perm_options::replace, ec);
+    for (auto it = std::filesystem::recursive_directory_iterator(path, ec);
+         it != std::filesystem::recursive_directory_iterator();
+         it.increment(ec)) {
+      std::error_code ec_chmod;
+      auto perms = it->is_directory(ec_chmod)
+        ? std::filesystem::perms::owner_all
+        : (std::filesystem::perms::owner_read | std::filesystem::perms::owner_write);
+      std::filesystem::permissions(it->path(), perms,
+        std::filesystem::perm_options::replace, ec_chmod);
+      if (ec_chmod) {
+        lderr(cct) << __func__ << " failed to chmod " << it->path()
+                   << ": " << ec_chmod.message() << dendl;
+      }
+    }
+    return true;
+  }
+
   void compact() {
     db->compact();
   }
@@ -788,7 +983,7 @@ class MonitorDBStore
   /**
    * read_meta - read a simple configuration key out-of-band
    *
-   * Read a simple key value to an unopened/mounted store.
+   * Read a simple key value from an unopened/unmounted store.
    *
    * Trailing whitespace is stripped off.
    *
@@ -798,6 +993,24 @@ class MonitorDBStore
    */
   int read_meta(const std::string& key,
 		std::string *value) const {
+    return read_meta_path(key, value, path);
+  }
+
+  /**
+   * read_meta_path - read a simple configuration key out-of-band
+   *
+   * Read a simple key value from a specified path store.
+   *
+   * Trailing whitespace is stripped off.
+   *
+   * @param key key name
+   * @param value pointer to value string
+   * @param path path to directory
+   * @returns 0 for success, or an error code
+   */
+  static int read_meta_path(const std::string& key,
+                            std::string *value,
+                            const std::string& path) {
     char buf[4096];
     int r = safe_read_file(path.c_str(), key.c_str(),
 			   buf, sizeof(buf));
