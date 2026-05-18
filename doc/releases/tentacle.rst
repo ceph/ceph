@@ -70,6 +70,8 @@ Configuration Changes
 
 * ``nvmeof_mon_client_tick_period``: The default beacon tick interval has been lowered from 2 seconds to 1 second.
 
+* ``rgw_override_return_storage_class``: New advanced RGW option that overrides the storage class value reported in read responses (HEAD/GET object headers and ListObjects output). When set, all storage class values returned to clients are replaced with the configured string, regardless of the actual storage class stored in object metadata. Useful for hiding internal or automatic storage class names from S3 clients.
+
 
 Changelog
 ---------
