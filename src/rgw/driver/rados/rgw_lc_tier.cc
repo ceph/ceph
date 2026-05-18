@@ -42,7 +42,12 @@ int retry_on_busy(optional_yield y, const DoutPrefixProvider *dpp,
   int ret = 0;
   for (int i = 0; i < max_attempts; i++) {
     ret = op();
-    if (ret != -EBUSY || i == max_attempts - 1) return ret;
+    if (ret != -EBUSY) return ret;
+    if (i == max_attempts - 1) {
+      ldpp_dout(dpp, 0) << op_name << ": exhausted " << max_attempts
+                        << " -EBUSY retries, giving up" << dendl;
+      return ret;
+    }
 
     int64_t base = std::min(initial_ms << std::min(i, 30), max_ms);
     int delay_ms = base - ceph::util::generate_random_number<int>(0, base / 10);
@@ -1029,6 +1034,8 @@ static int cloud_tier_send_multipart_part(RGWLCCloudTierCtx& tier_ctx,
 
   end = part_info.ofs + part_info.size - 1;
   std::shared_ptr<RGWLCCloudStreamPut> writef;
+  // per-part retry: the outer retry restarts from part 1 since upload state
+  // doesn't persist which parts have been sent
   ret = retry_on_busy(tier_ctx.y, tier_ctx.dpp, tier_ctx.cct, __func__, [&]() {
     auto rf = std::make_shared<RGWLCStreamRead>(tier_ctx.cct, tier_ctx.dpp,
           tier_ctx.obj, tier_ctx.o.meta.mtime, tier_ctx.y);
@@ -1156,6 +1163,7 @@ static int cloud_tier_abort_multipart(const DoutPrefixProvider *dpp,
       out_bl, &bl, nullptr, y);
 
 
+  if (ret == -EBUSY) return ret;
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to abort multipart upload for dest object=" << dest_obj << " (ret=" << ret << ")" << dendl;
     return ret;
@@ -1191,6 +1199,7 @@ static int cloud_tier_init_multipart(const DoutPrefixProvider *dpp,
   ret = dest_conn.send_resource(dpp, "POST", resource, params, &attrs,
       out_bl, &bl, nullptr, y);
 
+  if (ret == -EBUSY) return ret;
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to initialize multipart upload for dest object=" << dest_obj << dendl;
     return ret;
@@ -1318,7 +1327,9 @@ static int cloud_tier_abort_multipart_upload(RGWLCCloudTierCtx& tier_ctx,
       const std::string& upload_id) {
   int ret;
 
-  ret = cloud_tier_abort_multipart(tier_ctx.dpp, tier_ctx.conn, dest_obj, upload_id, tier_ctx.y);
+  ret = retry_on_busy(tier_ctx.y, tier_ctx.dpp, tier_ctx.cct, __func__, [&]() {
+    return cloud_tier_abort_multipart(tier_ctx.dpp, tier_ctx.conn, dest_obj, upload_id, tier_ctx.y);
+  });
 
   if (ret < 0) {
     ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to abort multipart upload dest obj=" << dest_obj << " upload_id=" << upload_id << " ret=" << ret << dendl;
@@ -1603,8 +1614,10 @@ static int do_cloud_tier_transfer_object(RGWLCCloudTierCtx& tier_ctx, std::set<s
   if (!tier_ctx.target_bucket_created) {
     // not in cache; check if bucket exists on remote
     ret = cloud_tier_bucket_exists(tier_ctx);
+    if (ret == -EBUSY) return ret;
     if (ret == -ENOENT) {
       ret = cloud_tier_create_bucket(tier_ctx);
+      if (ret == -EBUSY) return ret;
       if (ret < 0) {
         ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to create target bucket on the cloud endpoint ret=" << ret << dendl;
         return ret;
