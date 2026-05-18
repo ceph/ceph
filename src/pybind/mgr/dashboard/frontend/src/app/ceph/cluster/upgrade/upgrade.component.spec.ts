@@ -203,7 +203,7 @@ describe('UpgradeComponent', () => {
     fixture.detectChanges();
 
     const warningIcon = fixture.debugElement.nativeElement.querySelector(
-      '#clusterStatus .fa-exclamation-triangle'
+      '#clusterStatus cd-icon[type="warning"]'
     );
     expect(warningIcon).not.toBeNull();
   });
@@ -218,7 +218,7 @@ describe('UpgradeComponent', () => {
     component.ngOnInit();
     fixture.detectChanges();
     const warningIcon = fixture.debugElement.nativeElement.querySelector(
-      '#clusterStatus .fa-exclamation-triangle'
+      '#clusterStatus cd-icon[type="warning"]'
     );
     expect(warningIcon).toBeNull();
   });

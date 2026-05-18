@@ -45,7 +45,7 @@ import {
   LayerModule,
   ThemeModule
 } from 'carbon-components-angular';
-import EditIcon from '@carbon/icons/es/edit/20';
+import EditIcon from '@carbon/icons/es/edit/16';
 import CodeIcon from '@carbon/icons/es/code/16';
 import { MotdComponent } from '~/app/shared/components/motd/motd.component';
 import { DirectivesModule } from '../directives/directives.module';
@@ -108,6 +108,7 @@ import DataCenter16 from '@carbon/icons/es/data--center/16';
 import Upgrade16 from '@carbon/icons/es/upgrade/16';
 import Close16 from '@carbon/icons/es/close/16';
 import WarningAltFilled16 from '@carbon/icons/es/warning--alt--filled/16';
+import WarningAltFilled32 from '@carbon/icons/es/warning--alt--filled/32';
 import Help16 from '@carbon/icons/es/help/16';
 import IncidentReporter16 from '@carbon/icons/es/incident-reporter/16';
 import IbmStreamSets16 from '@carbon/icons/es/ibm--streamsets/16';
@@ -130,7 +131,6 @@ import CaretRight16 from '@carbon/icons/es/caret--right/16';
 import Locked16 from '@carbon/icons/es/locked/16';
 import WebServicesCluster20 from '@carbon/icons/es/web-services--cluster/20';
 import WebServicesCluster32 from '@carbon/icons/es/web-services--cluster/32';
-
 
 import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.component';
 import { PageHeaderComponent } from './page-header/page-header.component';
@@ -299,6 +299,7 @@ export class ComponentsModule {
       DataCenter16,
       Upgrade16,
       WarningAltFilled16,
+      WarningAltFilled32,
       Help16,
       IncidentReporter16,
       IbmStreamSets16,
