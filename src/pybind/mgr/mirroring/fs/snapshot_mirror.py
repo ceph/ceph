@@ -20,10 +20,9 @@ from .blocklist import blocklist
 from .notify import Notifier, InstanceWatcher
 from .utils import INSTANCE_ID_PREFIX, MIRROR_OBJECT_NAME, Finisher, \
     AsyncOpTracker, get_metadata_pool, norm_path, connect_to_filesystem, \
-    disconnect_from_filesystem, sync_stat_omap_key
+    disconnect_from_filesystem
+from .metrics.cache import SyncStatCache
 from .metrics import load as metrics_load
-from .metrics.format import format_and_order_sync_stat_for_display, \
-    format_peer_status_metrics
 from .exception import MirrorException
 from .dir_map.create import create_mirror_object
 from .dir_map.load import load_dir_map, load_instances
@@ -290,6 +289,7 @@ class FSSnapshotMirror:
         self.pool_policy = {}
         self.fs_map = self.mgr.get('fs_map')
         self.lock = threading.Lock()
+        self.sync_stat_cache = SyncStatCache()
         self.refresh_pool_policy()
         self.local_fs = CephfsClient(mgr)
 
@@ -782,24 +782,25 @@ class FSSnapshotMirror:
                                               f'filesystem {filesystem}')
                     peers = {peer_uuid: peers[peer_uuid]}
 
-                ioctx = metrics_load.open_metadata_ioctx(
-                    self.rados, self.fs_map, filesystem)
-                if mirrored_dir_path:
-                    dir_path = norm_path(mirrored_dir_path)
-                    keys = [sync_stat_omap_key(filesystem, peer, dir_path)
-                            for peer in peers]
-                    omap_stats = metrics_load.load_sync_stat_by_keys(ioctx, keys)
-                    metrics = {}
-                    for peer in peers:
-                        omap_key = sync_stat_omap_key(filesystem, peer, dir_path)
-                        if omap_key in omap_stats:
-                            format_peer_status_metrics(
-                                metrics, dir_path, peer,
-                                format_and_order_sync_stat_for_display(
-                                    omap_stats[omap_key]))
+                metrics = self.sync_stat_cache.try_get(
+                    filesystem, mirrored_dir_path, peer_uuid, peers)
+                if metrics is None:
+                    log.debug('sync stat metrics for filesystem %s (dir=%s, peer=%s) '
+                              'loaded from omap',
+                              filesystem, mirrored_dir_path or '*',
+                              peer_uuid or '*')
+                    ioctx = metrics_load.open_metadata_ioctx(
+                        self.rados, self.fs_map, filesystem)
+                    metrics, complete, dir_path = metrics_load.fetch_sync_stat_metrics(
+                        ioctx, filesystem, peers, mirrored_dir_path, peer_uuid)
+                    self.sync_stat_cache.store(
+                        filesystem, metrics, complete, peer_uuid, dir_path)
                 else:
-                    metrics = metrics_load.load_sync_stat_metrics(
-                        ioctx, filesystem, peer_uuid)
+                    log.debug('sync stat metrics for filesystem %s (dir=%s, peer=%s) '
+                              'served from cache',
+                              filesystem, mirrored_dir_path or '*',
+                              peer_uuid or '*')
+
                 return 0, json.dumps({'metrics': metrics}, indent=4), ''
         except MirrorException as me:
             return me.args[0], '', me.args[1]

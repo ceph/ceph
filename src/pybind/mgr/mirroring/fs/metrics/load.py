@@ -12,7 +12,9 @@ from ..utils import (
     SYNC_STAT_KEY_PREFIX,
     decode_sync_stat_val,
     get_metadata_pool,
+    norm_path,
     parse_sync_stat_omap_key,
+    sync_stat_omap_key,
 )
 from .format import format_and_order_sync_stat_for_display, format_peer_status_metrics
 
@@ -93,3 +95,22 @@ def load_sync_stat_metrics(ioctx, filesystem, peer_uuid=None):
         log.error(f'failed to read sync stat omap: {e}')
         raise MirrorException(-e.errno, 'failed to read sync stat omap')
     return metrics
+
+
+def fetch_sync_stat_metrics(ioctx, filesystem, peers, mirrored_dir_path, peer_uuid):
+    if mirrored_dir_path:
+        dir_path = norm_path(mirrored_dir_path)
+        keys = [sync_stat_omap_key(filesystem, peer, dir_path) for peer in peers]
+        omap_stats = load_sync_stat_by_keys(ioctx, keys)
+        metrics: Dict[str, Any] = {}
+        for peer in peers:
+            omap_key = sync_stat_omap_key(filesystem, peer, dir_path)
+            stat = omap_stats.get(omap_key)
+            if stat is not None:
+                format_peer_status_metrics(
+                    metrics, dir_path, peer,
+                    format_and_order_sync_stat_for_display(stat))
+        return metrics, False, dir_path
+
+    metrics = load_sync_stat_metrics(ioctx, filesystem, peer_uuid)
+    return metrics, True, None
