@@ -11,9 +11,7 @@ describe('Create Cluster Review page', () => {
     onboarding.navigateTo();
     onboarding.onboarding();
 
-    cy.get('cd-wizard').within(() => {
-      cy.get('button').contains('Review').click();
-    });
+    onboarding.selectStep('Review');
   });
 
   describe('fields check', () => {

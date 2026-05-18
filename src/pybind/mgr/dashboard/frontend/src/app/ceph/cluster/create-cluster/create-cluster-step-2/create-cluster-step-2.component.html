@@ -1,0 +1,25 @@
+<div cdsGrid
+     [useCssGrid]="true"
+     [narrow]="true"
+     [fullWidth]="true">
+  <div cdsCol
+       [columnNumbers]="{sm: 4, md: 8, lg: 16}">
+
+    <h4 i18n>Create OSDs</h4>
+
+    <div>
+      <cd-osd-form [hideTitle]="true"
+                   [hideSubmitBtn]="true"
+                   (emitDriveGroup)="setDriveGroup($event)"
+                   (emitDeploymentOption)="setDeploymentOptions($event)"
+                   (emitMode)="setDeploymentMode($event)"></cd-osd-form>
+    </div>
+
+    <button cdsButton="secondary"
+            class="cds-mt-4"
+            id="skipStepBtn"
+            (click)="onSkip()"
+            aria-label="Skip this step"
+            i18n>Skip</button>
+  </div>
+</div>

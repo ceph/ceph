@@ -51,6 +51,32 @@
   width: 100%;
   margin: 0;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+
+  .tearsheet-cols--full {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .tearsheet-body {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .tearsheet-main {
+    min-height: 0;
+  }
+
+  .tearsheet-content--full {
+    flex: 1 1 auto;
+    min-height: 0;
+    min-block-size: 0;
+    max-block-size: none;
+  }
 }
 
 .tearsheet-cols--full {

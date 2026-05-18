@@ -23,6 +23,8 @@ import { ConfirmationModalComponent } from '../confirmation-modal/confirmation-m
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subject } from 'rxjs';
 
+export type TearsheetOverflowScroll = 'auto' | 'hidden' | 'visible' | 'scroll';
+
 /**
 <cd-tearsheet
     [steps]="steps"
@@ -66,7 +68,9 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   @Input() size: 'xs' | 'sm' | 'md' | 'lg' = 'lg';
   @Input() submitButtonLabel: string = $localize`Create`;
   @Input() submitButtonLoadingLabel: string = $localize`Creating`;
-  @Input() isSubmitLoading: boolean = true;
+  @Input() isSubmitLoading: boolean = false;
+  /** When set, applies `overflow` on the tearsheet content area; omit to use stylesheet defaults. */
+  @Input() overflowScroll?: TearsheetOverflowScroll;
 
   @Output() submitRequested = new EventEmitter<void>();
   @Output() closeRequested = new EventEmitter<void>();
@@ -85,6 +89,13 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
 
   get showRightInfluencer(): boolean {
     return this.stepContents?.toArray()[this.currentStep]?.showRightInfluencer;
+  }
+
+  get contentOverflowStyle(): { overflow: TearsheetOverflowScroll } | null {
+    if (!this.overflowScroll) {
+      return null;
+    }
+    return { overflow: this.overflowScroll };
   }
 
   getStepValue<T = any>(index: number): T | null {
@@ -171,12 +182,12 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
 
   getMergedPayload(): any {
     return this.stepContents.toArray().reduce((acc, wrapper) => {
-      const stepFormValue = wrapper.stepComponent.formGroup.value;
+      const stepFormValue = wrapper.stepComponent?.formGroup?.value;
       return { ...acc, ...stepFormValue };
     }, {});
   }
 
-  handleSubmit() {
+  onSubmit() {
     this.stepContents?.forEach((wrapper, index) => {
       const form = wrapper.stepComponent?.formGroup;
       if (!form) return;

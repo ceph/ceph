@@ -9,7 +9,19 @@ export class OnboardingHelper extends PageHelper {
   onboarding() {
     cy.get('cd-create-cluster').should('contain.text', 'Welcome to Ceph Dashboard');
     cy.get('[aria-label="Add Storage"]').first().click({ force: true });
-    cy.get('cd-wizard').should('exist');
+    cy.get('cd-tearsheet').should('exist');
+  }
+
+  selectStep(stepLabel: string) {
+    cy.get('cd-tearsheet cds-progress-indicator').contains(stepLabel).click();
+  }
+
+  clickNext() {
+    cy.get('cd-tearsheet').contains('button', 'Next').click();
+  }
+
+  submitStorage() {
+    cy.get('cd-tearsheet .tearsheet-footer-submit').click();
   }
 
   doSkip() {
