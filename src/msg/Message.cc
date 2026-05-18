@@ -246,6 +246,10 @@ Message::~Message() {
     completion_hook->complete(0);
 }
 
+void Message::print(std::ostream& out) const {
+  out << get_type_name() << " magic: " << magic;
+}
+
 void Message::encode(uint64_t features, int crcflags, bool skip_header_crc)
 {
   // encode and copy out of *m
@@ -1080,6 +1084,13 @@ void Message::encode_otel_trace(ceph::bufferlist &bl, uint64_t features) const
 void Message::decode_otel_trace(ceph::bufferlist::const_iterator &p, bool create)
 {
   tracing::decode(otel_trace, p);
+}
+
+std::ostream& operator<<(std::ostream& out, const Message& m) {
+  m.print(out);
+  if (m.get_header().version)
+    out << " v" << m.get_header().version;
+  return out;
 }
 
 // This routine is not used for ordinary messages, but only when encapsulating a message

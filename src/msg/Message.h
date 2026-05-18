@@ -18,7 +18,7 @@
 
 #include <concepts>
 #include <cstdlib>
-#include <ostream>
+#include <iosfwd>
 #include <string_view>
 
 #include <boost/intrusive/list.hpp>
@@ -524,10 +524,7 @@ public:
   virtual void decode_payload() = 0;
   virtual void encode_payload(uint64_t features) = 0;
   virtual std::string_view get_type_name() const = 0;
-  virtual void print(std::ostream& out) const {
-    out << get_type_name() << " magic: " << magic;
-  }
-
+  virtual void print(std::ostream& out) const;
   virtual void dump(ceph::Formatter *f) const;
 
   void encode(uint64_t features, int crcflags, bool skip_header_crc = false);
@@ -551,12 +548,7 @@ extern Message *decode_message(CephContext *cct,
                                ceph::buffer::list& middle,
                                ceph::buffer::list& data,
                                Message::ConnectionRef conn);
-inline std::ostream& operator<<(std::ostream& out, const Message& m) {
-  m.print(out);
-  if (m.get_header().version)
-    out << " v" << m.get_header().version;
-  return out;
-}
+std::ostream& operator<<(std::ostream& out, const Message& m);
 
 extern void encode_message(Message *m, uint64_t features, ceph::buffer::list& bl);
 extern Message *decode_message(CephContext *cct, int crcflags,
