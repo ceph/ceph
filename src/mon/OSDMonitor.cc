@@ -14075,9 +14075,18 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
 
+    // Only inherit type-specific parameters when pool types match
+    bool types_match = source_pool && (static_cast<unsigned>(pool_type) == source_pool->get_type());
+
     int64_t default_expected_num_objects = (source_pool) ? source_pool->expected_num_objects : 0;
-    string default_profile = (source_pool) ? source_pool->erasure_code_profile : "";
-    string default_rule_name = (source_pool) ? osdmap.crush->get_rule_name(source_pool->get_crush_rule()) : "";
+    
+    // Only inherit erasure code profile if creating an erasure-coded pool from an erasure-coded source 
+    string default_profile = (types_match && pool_type == pg_pool_t::TYPE_ERASURE) ?
+                             source_pool->erasure_code_profile : "";
+    
+    // Only inherit CRUSH rule if pool types match, otherwise use system defaults
+    string default_rule_name = (types_match) ?
+                               osdmap.crush->get_rule_name(source_pool->get_crush_rule()) : "";
 
     bool implicit_rule_creation = false;
     int64_t expected_num_objects = default_expected_num_objects;
@@ -14122,7 +14131,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     } else {
       //NOTE:for replicated pool,cmd_map will put rule_name to erasure_code_profile field
       //     and put expected_num_objects to rule field
-      if (erasure_code_profile != "") { // cmd is from CLI
+      // However, when using --migrate-from-pool, we should skip this CLI remapping
+      // to avoid conflicts with inherited parameters
+      if (erasure_code_profile != "" && !source_pool) { // cmd is from CLI and NOT migrating
         if (rule_name != "") {
           string interr;
           expected_num_objects = strict_strtoll(rule_name.c_str(), 10, &interr);
@@ -14133,9 +14144,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
           }
         }
         rule_name = erasure_code_profile;
-      } else { // cmd is well-formed
+      } else { // cmd is well-formed or using --migrate-from-pool
         expected_num_objects =
-	  cmd_getval_or<int64_t>(cmdmap, "expected_num_objects", default_expected_num_objects);
+   cmd_getval_or<int64_t>(cmdmap, "expected_num_objects", default_expected_num_objects);
       }
     }
 
