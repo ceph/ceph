@@ -537,6 +537,12 @@ set(libcommon_files
   common/frag.cc
   common/tracer.cc
   log/Log.cc
+  messages/MClientReply.cc
+  messages/MClientRequest.cc
+  messages/MClientSession.cc
+  messages/MClientSnap.cc
+  messages/MMonCommand.cc
+  messages/MMonCommandAck.cc
   mon/MonCap.cc
   mon/MonClient.cc
   mon/MonMap.cc
