@@ -164,6 +164,14 @@ public:
     bool is_reader;
     void decode_json(JSONObj *obj);
   };
+  
+  class AccessRule {
+  public:
+    std::string service;
+    std::string method;
+    std::string path;
+    void decode_json(JSONObj *obj);
+  };
 
   class User {
   public:
@@ -187,6 +195,7 @@ public:
   User user;
   std::list<Role> roles;
   std::optional<ApplicationCredential> app_cred;
+  std::vector<AccessRule> access_rules;
 
   void decode(JSONObj* obj);
 
@@ -203,6 +212,7 @@ public:
   const std::string& get_user_id() const {return user.id;};
   const std::string& get_user_name() const {return user.name;};
   bool has_role(const std::string& r) const;
+  const std::vector<AccessRule>& get_access_rules() const { return access_rules; }
   bool expired() const {
     const uint64_t now = ceph_clock_now().sec();
     return std::cmp_greater_equal(now, get_expires());

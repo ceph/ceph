@@ -439,6 +439,11 @@ RGW
     * S3 API support for cross-tenant names such as `Bucket='tenant:bucketname'`
     * STS Lite and `sts:GetSessionToken`.
 
+ * Added support for Keystone application credential access rules for
+   Swift; new options rgw_keystone_verify_access_rules (default: true) and
+   rgw_keystone_accepted_service_types (default: object-store, swift) control
+   enforcement behavior.
+
 Cephadm
 -------
 
