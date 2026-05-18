@@ -6,7 +6,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
-import { ToastrModule } from 'ngx-toastr';
+
 import { of as observableOf, throwError } from 'rxjs';
 
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
@@ -39,7 +39,6 @@ describe('RgwUserFormComponent', () => {
       ReactiveFormsModule,
       RouterTestingModule,
       SharedModule,
-      ToastrModule.forRoot(),
       NgbTooltipModule,
       PipesModule,
       CheckboxModule,

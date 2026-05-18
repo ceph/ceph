@@ -5,7 +5,7 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { ToastrModule } from 'ngx-toastr';
+
 import {
   CheckboxModule,
   ComboBoxModule,
@@ -28,7 +28,6 @@ describe('SmbShareFormComponent', () => {
         HttpClientTestingModule,
         RouterTestingModule,
         ReactiveFormsModule,
-        ToastrModule.forRoot(),
         GridModule,
         InputModule,
         SelectModule,

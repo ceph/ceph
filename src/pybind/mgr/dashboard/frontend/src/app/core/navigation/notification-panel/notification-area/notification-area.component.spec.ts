@@ -10,7 +10,6 @@ import { NotificationType } from '../../../../shared/enum/notification-type.enum
 import { SharedModule } from '../../../../shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-
 describe('NotificationAreaComponent', () => {
   let component: NotificationAreaComponent;
   let fixture: ComponentFixture<NotificationAreaComponent>;

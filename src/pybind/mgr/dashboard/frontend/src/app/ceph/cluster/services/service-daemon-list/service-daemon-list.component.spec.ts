@@ -4,7 +4,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import _ from 'lodash';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
-import { ToastrModule } from 'ngx-toastr';
+
 import { Observable, of } from 'rxjs';
 
 import { CephModule } from '~/app/ceph/ceph.module';
@@ -136,14 +136,7 @@ describe('ServiceDaemonListComponent', () => {
   };
 
   configureTestBed({
-    imports: [
-      HttpClientTestingModule,
-      CephModule,
-      CoreModule,
-      PipesModule,
-      SharedModule,
-      ToastrModule.forRoot()
-    ]
+    imports: [HttpClientTestingModule, CephModule, CoreModule, PipesModule, SharedModule]
   });
 
   beforeEach(() => {

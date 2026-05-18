@@ -1,7 +1,7 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { DebugElement } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ToastrModule } from 'ngx-toastr';
+
 import { SharedModule } from '~/app/shared/shared.module';
 
 import { RgwMultisiteDetailsComponent } from './rgw-multisite-details.component';
@@ -16,13 +16,7 @@ describe('RgwMultisiteDetailsComponent', () => {
 
   configureTestBed({
     declarations: [RgwMultisiteDetailsComponent],
-    imports: [
-      HttpClientTestingModule,
-      SharedModule,
-      ToastrModule.forRoot(),
-      RouterTestingModule,
-      NgbNavModule
-    ],
+    imports: [HttpClientTestingModule, SharedModule, RouterTestingModule, NgbNavModule],
     providers: [NgbActiveModal]
   });
 

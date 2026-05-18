@@ -4,7 +4,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
+
 import { of } from 'rxjs';
 
 import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
@@ -43,7 +43,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
   };
 
   configureTestBed({
-    imports: [HttpClientTestingModule, RouterTestingModule, ToastrModule.forRoot(), PoolModule],
+    imports: [HttpClientTestingModule, RouterTestingModule, PoolModule],
     providers: [ErasureCodeProfileService, NgbActiveModal]
   });
 

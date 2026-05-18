@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
 
 import { NgbDatepickerModule, NgbNavModule, NgbTimepickerModule } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
+
 import { of } from 'rxjs';
 
 import { LogsService } from '~/app/shared/api/logs.service';
@@ -24,8 +24,7 @@ describe('LogsComponent', () => {
       SharedModule,
       FormsModule,
       NgbDatepickerModule,
-      NgbTimepickerModule,
-      ToastrModule.forRoot()
+      NgbTimepickerModule
     ],
     declarations: [LogsComponent]
   });

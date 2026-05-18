@@ -7,7 +7,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
-import { ToastrModule } from 'ngx-toastr';
+
 import { EMPTY, of } from 'rxjs';
 
 import { CephModule } from '~/app/ceph/ceph.module';
@@ -99,7 +99,6 @@ describe('OsdListComponent', () => {
       BrowserAnimationsModule,
       HttpClientTestingModule,
       PerformanceCounterModule,
-      ToastrModule.forRoot(),
       CephModule,
       ReactiveFormsModule,
       NgbDropdownModule,

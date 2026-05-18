@@ -4,8 +4,6 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastrModule } from 'ngx-toastr';
-
 import { AuthService } from '~/app/shared/api/auth.service';
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
@@ -30,7 +28,6 @@ describe('LoginPasswordFormComponent', () => {
       RouterTestingModule,
       ReactiveFormsModule,
       ComponentsModule,
-      ToastrModule.forRoot(),
       SharedModule
     ],
     declarations: [LoginPasswordFormComponent]
