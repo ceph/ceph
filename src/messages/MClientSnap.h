@@ -16,7 +16,15 @@
 #ifndef CEPH_MCLIENTSNAP_H
 #define CEPH_MCLIENTSNAP_H
 
+#include <ostream>
+#include <vector>
+
 #include "msg/Message.h"
+
+#include "include/buffer.h"
+#include "include/ceph_fs.h" // for ceph_mds_snap_head
+#include "include/ceph_fs_encoder.h"
+#include "include/fs_types.h" // for inodeno_t
 
 class MClientSnap final : public SafeMessage {
 public:
