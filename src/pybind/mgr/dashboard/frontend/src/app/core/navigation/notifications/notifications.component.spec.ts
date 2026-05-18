@@ -2,8 +2,6 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastrModule } from 'ngx-toastr';
-
 import { CdNotification, CdNotificationConfig } from '~/app/shared/models/cd-notification';
 import { ExecutingTask } from '~/app/shared/models/executing-task';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -30,7 +28,7 @@ describe('NotificationsComponent', () => {
   };
 
   configureTestBed({
-    imports: [HttpClientTestingModule, SharedModule, ToastrModule.forRoot(), RouterTestingModule],
+    imports: [HttpClientTestingModule, SharedModule, RouterTestingModule],
     declarations: [NotificationsComponent],
     providers: [{ provide: NotificationService, useValue: notificationServiceMock }]
   });

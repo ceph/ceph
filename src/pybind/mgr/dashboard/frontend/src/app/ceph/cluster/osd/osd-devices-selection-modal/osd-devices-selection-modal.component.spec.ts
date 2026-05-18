@@ -5,7 +5,6 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
 
 import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
 import { InventoryDevicesComponent } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-devices.component';
@@ -34,8 +33,7 @@ describe('OsdDevicesSelectionModalComponent', () => {
       HttpClientTestingModule,
       SharedModule,
       ReactiveFormsModule,
-      RouterTestingModule,
-      ToastrModule.forRoot()
+      RouterTestingModule
     ],
     providers: [NgbActiveModal],
     declarations: [OsdDevicesSelectionModalComponent, InventoryDevicesComponent]

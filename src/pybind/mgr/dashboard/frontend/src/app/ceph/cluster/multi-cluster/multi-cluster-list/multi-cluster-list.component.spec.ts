@@ -1,6 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ToastrModule } from 'ngx-toastr';
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 
 import { MultiClusterListComponent } from './multi-cluster-list.component';
@@ -15,7 +14,7 @@ describe('MultiClusterListComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [HttpClientTestingModule, ToastrModule.forRoot(), NgbNavModule, SharedModule],
+      imports: [HttpClientTestingModule, NgbNavModule, SharedModule],
       declarations: [MultiClusterListComponent],
       providers: [CdDatePipe, TableActionsComponent, { provide: ActivatedRoute, useValue: {} }]
     }).compileComponents();

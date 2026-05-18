@@ -1,7 +1,6 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { fakeAsync, TestBed, tick, flush } from '@angular/core/testing';
 
-import { ToastrModule, ToastrService } from 'ngx-toastr';
 import { of, throwError } from 'rxjs';
 
 import { configureTestBed, PrometheusHelper } from '~/testing/unit-test-helper';
@@ -23,19 +22,9 @@ describe('PrometheusNotificationService', () => {
   let shown: CdNotificationConfig[];
   let getNotificationSinceMock: Function;
 
-  const toastFakeService = {
-    error: () => true,
-    info: () => true,
-    success: () => true
-  };
-
   configureTestBed({
-    imports: [ToastrModule.forRoot(), SharedModule, HttpClientTestingModule],
-    providers: [
-      PrometheusNotificationService,
-      PrometheusAlertFormatter,
-      { provide: ToastrService, useValue: toastFakeService }
-    ]
+    imports: [SharedModule, HttpClientTestingModule],
+    providers: [PrometheusNotificationService, PrometheusAlertFormatter]
   });
 
   beforeEach(() => {

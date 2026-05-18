@@ -4,7 +4,7 @@ import { of } from 'rxjs';
 
 import { CephfsSubvolumeFormComponent } from './cephfs-subvolume-form.component';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
+
 import { SharedModule } from '~/app/shared/shared.module';
 import { RouterTestingModule } from '@angular/router/testing';
 import { ReactiveFormsModule } from '@angular/forms';
@@ -25,7 +25,6 @@ describe('CephfsSubvolumeFormComponent', () => {
     providers: [NgbActiveModal],
     imports: [
       SharedModule,
-      ToastrModule.forRoot(),
       ReactiveFormsModule,
       HttpClientTestingModule,
       RouterTestingModule,

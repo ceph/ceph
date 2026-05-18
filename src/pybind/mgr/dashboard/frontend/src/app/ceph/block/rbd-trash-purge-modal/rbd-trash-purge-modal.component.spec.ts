@@ -8,7 +8,6 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
 
 import { Permission } from '~/app/shared/models/permissions';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -27,7 +26,6 @@ describe('RbdTrashPurgeModalComponent', () => {
       HttpClientTestingModule,
       ReactiveFormsModule,
       SharedModule,
-      ToastrModule.forRoot(),
       RouterTestingModule,
       ModalModule,
       SelectModule

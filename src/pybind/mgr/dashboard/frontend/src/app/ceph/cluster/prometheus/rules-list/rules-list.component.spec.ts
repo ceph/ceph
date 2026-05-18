@@ -3,7 +3,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
 
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { SettingsService } from '~/app/shared/api/settings.service';
@@ -18,13 +17,7 @@ describe('RulesListComponent', () => {
 
   configureTestBed({
     declarations: [RulesListComponent, PrometheusTabsComponent],
-    imports: [
-      HttpClientTestingModule,
-      SharedModule,
-      NgbNavModule,
-      RouterTestingModule,
-      ToastrModule.forRoot()
-    ],
+    imports: [HttpClientTestingModule, SharedModule, NgbNavModule, RouterTestingModule],
     providers: [PrometheusService, SettingsService]
   });
 

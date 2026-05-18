@@ -2,7 +2,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { CephfsSubvolumeGroupComponent } from './cephfs-subvolume-group.component';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ToastrModule } from 'ngx-toastr';
 import { RouterTestingModule } from '@angular/router/testing';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
@@ -13,7 +12,7 @@ describe('CephfsSubvolumeGroupComponent', () => {
 
   configureTestBed({
     declarations: [CephfsSubvolumeGroupComponent],
-    imports: [HttpClientTestingModule, SharedModule, ToastrModule.forRoot(), RouterTestingModule]
+    imports: [HttpClientTestingModule, SharedModule, RouterTestingModule]
   });
 
   beforeEach(() => {

@@ -6,7 +6,7 @@ import { Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
+
 import { of } from 'rxjs';
 
 import { RoleService } from '~/app/shared/api/role.service';
@@ -49,7 +49,6 @@ describe('UserFormComponent', () => {
       HttpClientTestingModule,
       ReactiveFormsModule,
       ComponentsModule,
-      ToastrModule.forRoot(),
       SharedModule,
       NgbPopoverModule
     ],

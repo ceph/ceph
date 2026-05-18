@@ -5,7 +5,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
+
 import { BehaviorSubject, of } from 'rxjs';
 
 import { RbdService } from '~/app/shared/api/rbd.service';
@@ -39,7 +39,6 @@ describe('RbdListComponent', () => {
       SharedModule,
       NgbNavModule,
       NgbTooltipModule,
-      ToastrModule.forRoot(),
       RouterTestingModule,
       HttpClientTestingModule
     ],

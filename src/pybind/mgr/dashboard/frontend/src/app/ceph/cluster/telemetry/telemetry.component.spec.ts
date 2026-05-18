@@ -5,7 +5,7 @@ import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import _ from 'lodash';
-import { ToastrModule } from 'ngx-toastr';
+
 import { of as observableOf } from 'rxjs';
 
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
@@ -46,13 +46,7 @@ describe('TelemetryComponent', () => {
 
   configureTestBed({
     declarations: [TelemetryComponent],
-    imports: [
-      HttpClientTestingModule,
-      ReactiveFormsModule,
-      RouterTestingModule,
-      SharedModule,
-      ToastrModule.forRoot()
-    ]
+    imports: [HttpClientTestingModule, ReactiveFormsModule, RouterTestingModule, SharedModule]
   });
 
   describe('configForm', () => {

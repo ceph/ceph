@@ -3,8 +3,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastrModule } from 'ngx-toastr';
-
 import { ConfigFormModel } from '~/app/shared/components/config-option/config-option.model';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
@@ -15,13 +13,7 @@ describe('ConfigurationFormComponent', () => {
   let fixture: ComponentFixture<ConfigurationFormComponent>;
 
   configureTestBed({
-    imports: [
-      HttpClientTestingModule,
-      ReactiveFormsModule,
-      RouterTestingModule,
-      ToastrModule.forRoot(),
-      SharedModule
-    ],
+    imports: [HttpClientTestingModule, ReactiveFormsModule, RouterTestingModule, SharedModule],
     declarations: [ConfigurationFormComponent]
   });
 

@@ -4,7 +4,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
+
 import { throwError } from 'rxjs';
 
 import { FeedbackService } from '~/app/shared/api/feedback.service';
@@ -26,7 +26,6 @@ describe('FeedbackComponent', () => {
       HttpClientTestingModule,
       RouterTestingModule,
       ReactiveFormsModule,
-      ToastrModule.forRoot(),
       SharedModule,
       SelectModule
     ],

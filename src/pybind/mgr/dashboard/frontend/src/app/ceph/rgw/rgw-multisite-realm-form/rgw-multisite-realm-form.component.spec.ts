@@ -6,7 +6,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { of as observableOf } from 'rxjs';
-import { ToastrModule } from 'ngx-toastr';
+
 import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -27,7 +27,6 @@ describe('RgwMultisiteRealmFormComponent', () => {
       ReactiveFormsModule,
       RouterTestingModule,
       HttpClientTestingModule,
-      ToastrModule.forRoot(),
       ModalModule,
       InputModule,
       CheckboxModule

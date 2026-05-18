@@ -4,7 +4,6 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
 
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -16,13 +15,7 @@ describe('RbdNamespaceFormModalComponent', () => {
   let fixture: ComponentFixture<RbdNamespaceFormModalComponent>;
 
   configureTestBed({
-    imports: [
-      ReactiveFormsModule,
-      ComponentsModule,
-      HttpClientTestingModule,
-      ToastrModule.forRoot(),
-      RouterTestingModule
-    ],
+    imports: [ReactiveFormsModule, ComponentsModule, HttpClientTestingModule, RouterTestingModule],
     declarations: [RbdNamespaceFormModalComponent],
     providers: [NgbActiveModal, AuthStorageService]
   });
