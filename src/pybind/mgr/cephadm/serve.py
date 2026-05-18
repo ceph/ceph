@@ -1225,6 +1225,7 @@ class CephadmServe:
                     spec,
                     curr_deps=deps,
                     last_deps=last_deps,
+                    daemon=dd,
                 )
                 if _step.action is not _scheduled_action:
                     self.log.info(

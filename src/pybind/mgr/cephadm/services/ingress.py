@@ -605,6 +605,7 @@ class IngressService(CephService):
         spec: Optional[ServiceSpec],
         curr_deps: List[str],
         last_deps: List[str],
+        daemon: Optional[DaemonDescription] = None,
     ) -> utils.NextDaemonStep:
         """Given the scheduled_action, service spec, daemon_type, and
         current and previous dependency lists return the next action that
@@ -614,6 +615,20 @@ class IngressService(CephService):
             scheduled_action, daemon_type, spec, curr_deps, last_deps
         )
         action = step.action
+        # keepalived is not systemd-enabled; when stopped, redeploy rewrites
+        # the unit and container so the serve loop can start the daemon again.
+        if (
+            daemon_type == 'keepalived'
+            and action is utils.Action.RECONFIG
+            and daemon is not None
+            and daemon.status == DaemonDescriptionStatus.stopped
+        ):
+            logger.debug(
+                'Redeploy wanted %s: keepalived deps changed (daemon stopped)',
+                spec.service_name() if spec else daemon_type,
+            )
+            return utils.NextDaemonStep(utils.Action.REDEPLOY)
+
         if (
             action is not utils.Action.REDEPLOY
             and daemon_type == 'haproxy'

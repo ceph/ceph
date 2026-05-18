@@ -2,6 +2,7 @@ from dataclasses import replace
 from typing import List, cast, Optional, TYPE_CHECKING
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec
 from ceph.deployment.service_spec import TracingSpec, ServiceSpec
+from orchestrator import DaemonDescription
 from .service_registry import register_cephadm_service
 from mgr_util import build_url
 from cephadm import utils
@@ -58,6 +59,7 @@ class JaegerAgentService(CephadmService):
         spec: Optional[ServiceSpec],
         curr_deps: List[str],
         last_deps: List[str],
+        daemon: Optional[DaemonDescription] = None,
     ) -> utils.NextDaemonStep:
         """Given the scheduled_action, service spec, daemon_type, and
         current and previous dependency lists return the next action that
