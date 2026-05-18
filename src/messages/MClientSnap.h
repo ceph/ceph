@@ -16,14 +16,13 @@
 #ifndef CEPH_MCLIENTSNAP_H
 #define CEPH_MCLIENTSNAP_H
 
-#include <ostream>
+#include <iosfwd>
 #include <vector>
 
 #include "msg/Message.h"
 
 #include "include/buffer.h"
 #include "include/ceph_fs.h" // for ceph_mds_snap_head
-#include "include/ceph_fs_encoder.h"
 #include "include/fs_types.h" // for inodeno_t
 
 class MClientSnap final : public SafeMessage {
@@ -45,33 +44,11 @@ protected:
 
 public:  
   std::string_view get_type_name() const override { return "client_snap"; }
-  void print(std::ostream& out) const override {
-    out << "client_snap(" << ceph_snap_op_name(head.op);
-    if (head.split)
-      out << " split=" << inodeno_t(head.split);
-    out << " tracelen=" << bl.length();
-    out << ")";
-  }
+  void print(std::ostream& out) const override;
 
-  void encode_payload(uint64_t features) override {
-    using ceph::encode;
-    head.num_split_inos = split_inos.size();
-    head.num_split_realms = split_realms.size();
-    head.trace_len = bl.length();
-    encode(head, payload);
-    ceph::encode_nohead(split_inos, payload);
-    ceph::encode_nohead(split_realms, payload);
-    ceph::encode_nohead(bl, payload);
-  }
-  void decode_payload() override {
-    using ceph::decode;
-    auto p = payload.cbegin();
-    decode(head, p);
-    ceph::decode_nohead(head.num_split_inos, split_inos, p);
-    ceph::decode_nohead(head.num_split_realms, split_realms, p);
-    ceph::decode_nohead(head.trace_len, bl, p);
-    ceph_assert(p.end());
-  }
+  void encode_payload(uint64_t features) override;
+  void decode_payload() override;
+
 private:
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
