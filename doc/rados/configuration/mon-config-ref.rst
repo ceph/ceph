@@ -600,6 +600,361 @@ is far outweighed by the number of accidental pool (and thus data) deletions it 
 
 For more information about the pool flags see :ref:`Pool values <setpoolvalues>`.
 
+Monitor backup
+==============
+
+In normal operation, Monitor backups are not required: surviving members
+of the Monitor quorum re-sync new or replaced Monitors automatically,
+and the Monitor store can be largely rebuilt from the OSDs after total
+quorum loss (see :ref:`mon-store-recovery-using-osds`).
+
+However, ``mon-store-recovery-using-osds`` only recovers state that the
+OSDs can report: osdmap history, auth keys associated with running
+OSDs, and similar. Some Monitor state has no copy outside the Monitor
+store and is unrecoverable if all Monitors are lost:
+
+* **Encryption keys for dm-crypt OSDs** are stored only in the
+  Monitor's ``config-key`` store under
+  ``dm-crypt/osd/<osd-uuid>/luks``. Without these keys the underlying
+  block devices cannot be unlocked, even when the OSD daemons and data
+  are physically intact.
+* **Cephadm orchestrator state** under ``mgr/cephadm/*`` in the
+  ``config-key`` store, including host inventory, daemon placement
+  specs, and service definitions.
+* **Config-key entries** populated by users or third-party tooling via
+  ``ceph config-key set``.
+* **Dashboard and manager module state** persisted to the
+  ``config-key`` store.
+
+A Monitor backup lets an operator restore this state if all running
+Monitors are lost. It is most valuable for clusters that use
+dm-crypt-encrypted OSDs or that depend heavily on cephadm-managed
+deployment state, where loss of the Monitor store would be a
+protracted data-availability incident rather than a recoverable inconvenience.
+
+Monitor backups complement, but do not replace, the existing Monitor
+recovery procedures. They are not a means of "undoing" cluster-level
+operations such as pool deletion or CRUSH changes: once OSDs have
+observed and acted on a newer osdmap, restoring an older Monitor store
+does not roll back the OSD-side effects.
+
+The Ceph Monitor uses the native RocksDB ``BackupEngine`` to create
+consistent snapshots of its store, which can be copied elsewhere
+without downtime.
+
+When :confval:`mon_backup_interval` is set, a backup is triggered every
+N seconds. Pair it with :confval:`mon_backup_cleanup_interval`; if only
+the backup interval is set, backups accumulate indefinitely because
+retention is only applied during cleanup.
+
+Backups share table files (``.sst``) within the backup directory: each
+new backup only copies SSTables that the running database has produced
+since the previous backup. Restoring any individual backup version is
+independent of the others, but the on-disk files for every version
+live in a single shared tree under ``mon_backup_path``.
+
+Layout of the backup directory
+------------------------------
+
+A backup path managed by the RocksDB ``BackupEngine`` contains three
+top-level directories plus a per-version copy of the Monitor keyring::
+
+   /path/to/backups/
+   ├── meta/
+   │   ├── 1
+   │   ├── 2
+   │   └── 3
+   ├── private/
+   │   ├── 1/
+   │   ├── 2/
+   │   └── 3/
+   ├── shared_checksum/
+   │   ├── 000007.sst
+   │   ├── 000010.sst
+   │   └── ...
+   ├── keyring.1
+   ├── keyring.2
+   └── keyring.3
+
+* ``meta/<N>`` is a metadata file describing logical backup version
+  ``N``.
+* ``private/<N>/`` contains files unique to backup ``N`` (RocksDB
+  descriptors and other per-version state).
+* ``shared_checksum/`` contains SSTables shared across backup
+  versions. A single SSTable in this directory may belong to several
+  versions; the BackupEngine deletes a file from here only when no
+  remaining backup references it.
+* ``keyring.<N>`` is a copy of ``$mon_data/keyring`` taken at the time
+  of backup ``N``. The Monitor needs this key to authenticate at
+  startup, and it is not stored inside the RocksDB database; restoring
+  version ``N`` copies the matching ``keyring.<N>`` back into
+  ``$mon_data`` so an older snapshot is paired with the keyring of its
+  vintage. Cleanup removes ``keyring.<N>`` files whose backup version
+  has been pruned.
+
+  Stashing the keyring is **best effort**: if the copy fails (for
+  example, permission denied on the backup directory or out of space
+  after the RocksDB snapshot completed), the backup is still recorded
+  as successful and the RocksDB data remains usable. On restore, a
+  missing ``keyring.<N>`` is silently skipped, and the operator must
+  supply the Monitor keyring out-of-band before starting the daemon.
+
+.. warning::
+
+   The backup directory contains the ``[mon.]`` private key. Treat
+   it with the same access controls as ``$mon_data`` itself; a
+   complete backup is sufficient material to impersonate a Monitor
+   in the cluster.
+
+Do not delete a ``private/<N>/`` directory or files under
+``shared_checksum/`` by hand: removing a referenced shared file
+corrupts every backup that points to it. Use ``backup_cleanup`` or
+the configured retention parameters to remove old versions so the
+BackupEngine can release shared files safely.
+
+If the Monitor cluster fails and you need to copy a backup elsewhere,
+copy the entire ``/path/to/backups/`` directory. Copying only
+``private/<N>/`` is not sufficient; the version's SSTables live in
+``shared_checksum/``.
+
+
+The :confval:`mon_backup_cleanup_interval` specifies the interval for
+backup cleanup. The cleanup algorithm keeps the last
+``mon_backup_keep_last`` backups. It then collects hourly
+``mon_backup_keep_hourly`` and daily ``mon_backup_keep_daily``
+versions, retaining the newest backup in each time window.
+
+You can trigger ``backup`` and ``backup_cleanup`` through any running
+Monitor's admin socket.
+
+.. prompt:: bash #
+
+   ceph --admin-daemon .../mon.asok backup
+
+.. prompt:: bash #
+
+   ceph --admin-daemon .../mon.asok backup_cleanup
+
+The following metrics related to the monitor backup process are
+tracked by ``ceph-mon``.
+
+.. list-table:: Ceph Monitor Backup Metrics
+   :widths: 30 12 58
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * - ``backup_running``
+     - Gauge
+     - ``1`` while a backup is in progress, ``0`` otherwise
+   * - ``backup_started``
+     - Counter
+     - Backup attempts (includes attempts rejected at the :confval:`mon_backup_min_avail` pre-flight check)
+   * - ``backup_success``
+     - Counter
+     - Backups completed by the ``BackupEngine``
+   * - ``backup_failed``
+     - Counter
+     - Failed backup attempts (pre-flight or ``BackupEngine``)
+   * - ``backup_duration``
+     - Average
+     - Backup wall-clock time
+   * - ``backup_last_success``
+     - Gauge
+     - UTC timestamp of the most recent successful backup, or ``0`` if none
+   * - ``backup_last_success_id``
+     - Gauge
+     - ``BackupEngine`` version ID of the most recent successful backup (the value passed to ``--restore-backup --backup-version``)
+   * - ``backup_last_failed``
+     - Gauge
+     - UTC timestamp of the most recent failed attempt, or ``0`` if none
+   * - ``backup_last_size``
+     - Gauge
+     - Payload size in bytes of the most recent attempt (may be partial on failure)
+   * - ``backup_last_files``
+     - Gauge
+     - File count of the most recent attempt (may be partial on failure)
+   * - ``backup_cleanup_started``
+     - Counter
+     - Cleanup invocations
+   * - ``backup_cleanup_running``
+     - Gauge
+     - ``1`` while a cleanup is in progress, ``0`` otherwise
+   * - ``backup_cleanup_success``
+     - Counter
+     - Cleanup passes completed without error
+   * - ``backup_cleanup_failed``
+     - Counter
+     - Failed cleanup passes
+   * - ``backup_cleanup_duration``
+     - Average
+     - Cleanup wall-clock time
+   * - ``backup_cleanup_kept``
+     - Gauge
+     - Backups retained by the most recent cleanup pass
+   * - ``backup_cleanup_deleted``
+     - Gauge
+     - Backups removed by the most recent cleanup pass
+   * - ``backup_cleanup_freed``
+     - Gauge
+     - Bytes released by the most recent cleanup pass (overstated when shared backups are in use, because the ``BackupEngine`` payload sum ignores file sharing)
+   * - ``backup_cleanup_size``
+     - Gauge
+     - Bytes retained by the most recent cleanup pass (same sharing caveat as ``backup_cleanup_freed``)
+
+The ``backup_started``/``backup_success``/``backup_failed`` and
+``backup_cleanup_started``/``backup_cleanup_success``/``backup_cleanup_failed``
+counters are monotonic and accumulate for the lifetime of the
+``ceph-mon`` process. The ``backup_last_*`` fields and the four
+cleanup result gauges (``backup_cleanup_kept``, ``backup_cleanup_deleted``,
+``backup_cleanup_freed``, ``backup_cleanup_size``) describe only the
+most recent invocation and are overwritten on every pass.
+
+To retrieve backup metrics from a running monitor's admin socket:
+
+.. prompt:: bash #
+
+   ceph --admin-daemon .../mon.asok perf dump | jq '.["mon"] | with_entries(select(.key | startswith("backup_")))'
+
+.. code-block:: json
+
+   {
+     "backup_running": 0,
+     "backup_started": 2,
+     "backup_success": 2,
+     "backup_failed": 0,
+     "backup_duration": {
+       "avgcount": 2,
+       "sum": 0.149076498,
+       "avgtime": 0.074538249
+     },
+     "backup_last_success": 1722001989.849262,
+     "backup_last_success_id": 3,
+     "backup_last_failed": 0,
+     "backup_last_size": 3924677,
+     "backup_last_files": 6,
+     "backup_cleanup_started": 1,
+     "backup_cleanup_running": 0,
+     "backup_cleanup_success": 1,
+     "backup_cleanup_failed": 0,
+     "backup_cleanup_size": 86144,
+     "backup_cleanup_kept": 1,
+     "backup_cleanup_duration": {
+       "avgcount": 1,
+       "sum": 0.002031246,
+       "avgtime": 0.002031246
+     },
+     "backup_cleanup_freed": 0,
+     "backup_cleanup_deleted": 0
+   }
+
+Monitor Backup Metric Usage Examples
+------------------------------------
+
+The following examples show how to use the monitor backup performance
+counters. PromQL examples assume that the ``ceph-exporter`` is being
+scraped by Prometheus. Admin-socket examples use ``ceph daemon``
+directly against a specific ``ceph-mon`` daemon.
+
+``backup_last_success`` (gauge, Unix epoch seconds)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The timestamp when the most recent successful backup completed. ``0``
+means no successful backup has occurred since the mon started.
+
+* Age of the most recent successful backup, per mon:
+
+  .. code-block:: promql
+
+      time() - mon_backup_last_success
+
+* Detect a stalled backup schedule (no success in over 2 hours; adjust
+  the threshold to roughly 2× your :confval:`mon_backup_interval`):
+
+  .. code-block:: promql
+
+      time() - mon_backup_last_success > 7200 and mon_backup_last_success > 0
+
+``backup_failed`` (counter)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Cumulative count of failed backup attempts (pre-flight or
+``BackupEngine``) since the mon started.
+
+* Backup failures per mon in the last hour:
+
+  .. code-block:: promql
+
+      increase(mon_backup_failed[1h])
+
+* Alert when any mon has logged a backup failure recently:
+
+  .. code-block:: promql
+
+      increase(mon_backup_failed[15m]) > 0
+
+``backup_last_size`` (gauge, bytes)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Payload size in bytes of the most recent backup attempt.
+
+* Backup size trend across all mons:
+
+  .. code-block:: promql
+
+      mon_backup_last_size
+
+* Live size check for a single mon via admin socket:
+
+  .. code-block:: bash
+
+      ceph daemon mon.<id> perf dump | jq '.mon.backup_last_size'
+
+``backup_cleanup_kept`` (gauge)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Number of backups retained by the most recent cleanup pass.
+
+* Mons whose retention has grown beyond an expected ceiling:
+
+  .. code-block:: promql
+
+      mon_backup_cleanup_kept > 100
+
+``backup_cleanup_freed`` (gauge, bytes)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Bytes released by the most recent cleanup pass. Overstated when shared
+backups are in use.
+
+* Bytes reclaimed by the latest cleanup, per mon:
+
+  .. code-block:: promql
+
+      mon_backup_cleanup_freed
+
+* Total bytes released by the most recent cleanup across all mons:
+
+  .. code-block:: promql
+
+      sum(mon_backup_cleanup_freed)
+
+Monitor Backup Configuration Options
+------------------------------------
+
+The following options control monitor backup behavior. All are
+runtime-tunable.
+
+.. confval:: mon_backup_path
+.. confval:: mon_backup_min_avail
+.. confval:: mon_backup_keep_last
+.. confval:: mon_backup_keep_hourly
+.. confval:: mon_backup_keep_daily
+.. confval:: mon_backup_interval
+.. confval:: mon_backup_cleanup_interval
+
+
 Miscellaneous
 =============
 
