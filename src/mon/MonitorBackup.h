@@ -38,10 +38,13 @@ class MonitorBackupManager : public Thread {
 
   bool m_do_backup{false};
   bool m_do_backup_full{false};
+  bool m_do_cleanup{false};
   uint64_t m_last_job_id{0};
+  shared_ptr<KeyValueDB::BackupCleanupStats> m_last_cleanup;
   shared_ptr<KeyValueDB::BackupStats> m_last_backup;
 
   void do_backup(bool full);
+  void do_cleanup();
   bool check_free_space();
 protected:
   void *entry() override;
@@ -80,8 +83,22 @@ public:
     return rv;
   }
 
+  /// Start a new backup cleanup
+  uint64_t cleanup() {
+    m_lock.lock();
+    m_do_cleanup = true;
+    uint64_t rv = ++m_last_job_id;
+    m_lock.unlock();
+    m_wakeup.Put();
+    return rv;
+  }
+
   shared_ptr<KeyValueDB::BackupStats> last_backup_info() {
     return m_last_backup;
+  }
+
+  shared_ptr<KeyValueDB::BackupCleanupStats> last_cleanup_info() {
+    return m_last_cleanup;
   }
 };
 

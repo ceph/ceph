@@ -111,6 +111,15 @@ enum {
   l_mon_backup_last_failed,
   l_mon_backup_last_size,
   l_mon_backup_last_files,
+  l_mon_backup_cleanup_started,
+  l_mon_backup_cleanup_running,
+  l_mon_backup_cleanup_success,
+  l_mon_backup_cleanup_failed,
+  l_mon_backup_cleanup_size,
+  l_mon_backup_cleanup_kept,
+  l_mon_backup_cleanup_duration,
+  l_mon_backup_cleanup_freed,
+  l_mon_backup_cleanup_deleted,
   l_mon_last,
 };
 
@@ -1067,6 +1076,7 @@ private:
   }
   // Execute mon database backup
   int backup(bool full = false);
+  int backup_cleanup();
 
 private:
   // don't allow copying

@@ -28,8 +28,10 @@ void *MonitorBackupManager::entry() {
         }
 
         KeyValueDB::BackupStats *stats = m_last_backup.get();
+        KeyValueDB::BackupCleanupStats *cleanup_stats = m_last_cleanup.get();
         auto now = ceph_clock_now();
         uint64_t interval = m_cct->_conf.get_val<uint64_t>("mon_backup_interval");
+        uint64_t cleanup_interval = m_cct->_conf.get_val<uint64_t>("mon_backup_cleanup_interval");
         bool start_backup = false;
         bool start_backup_full = false;
 
@@ -44,12 +46,28 @@ void *MonitorBackupManager::entry() {
         }
 
         m_lock.lock();
+
+        bool start_cleanup = m_do_cleanup;
+        if (!cleanup_stats && cleanup_interval > 0) {
+            start_cleanup = true;
+        } else if (cleanup_stats && cleanup_interval > 0) {
+            if ((now - cleanup_stats->timestamp) > (cleanup_interval * 60)) {
+                dout(10) << " trigger timed backup cleanup " << dendl;
+                start_cleanup = true;
+            }
+        }
+
         start_backup |= m_do_backup;
         start_backup_full |= m_do_backup_full;
+
+        m_do_cleanup = false;
         m_do_backup = false;
         m_do_backup_full = false;
         m_lock.unlock();
 
+        if (start_cleanup) {
+            do_cleanup();
+        }
         if (start_backup) {
             do_backup(start_backup_full);
         }
@@ -60,6 +78,31 @@ void MonitorBackupManager::stop() {
     m_manager_stop = true;
     m_wakeup.Put();
     join();
+}
+
+void MonitorBackupManager::do_cleanup() {
+    if (!mon || !mon->store || !mon->logger) {
+        return;
+    }
+    dout(5) << "start backup cleanup" << dendl;
+    auto start = ceph_clock_now();
+    mon->logger->set(l_mon_backup_cleanup_running, 1);
+    KeyValueDB::BackupCleanupStats stats = mon->store->backup_cleanup();
+    mon->logger->set(l_mon_backup_cleanup_size, stats.size);
+    mon->logger->set(l_mon_backup_cleanup_kept, stats.kept);
+    mon->logger->set(l_mon_backup_cleanup_freed, stats.freed);
+    mon->logger->set(l_mon_backup_cleanup_deleted, stats.deleted);
+    if (stats.error) {
+        mon->logger->inc(l_mon_backup_cleanup_failed);
+    } else {
+        mon->logger->inc(l_mon_backup_cleanup_success);
+    }
+    shared_ptr<KeyValueDB::BackupCleanupStats> ptr = std::make_shared<KeyValueDB::BackupCleanupStats>(stats);
+    m_last_cleanup.swap(ptr);
+    auto end = ceph_clock_now();
+    utime_t duration = end - start;
+    mon->logger->tinc(l_mon_backup_cleanup_duration, duration);
+    mon->logger->set(l_mon_backup_cleanup_running, 0);
 }
 
 /***

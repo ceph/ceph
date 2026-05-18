@@ -25,6 +25,16 @@
  */
 class KeyValueDB {
 public:
+  struct BackupCleanupStats {
+    bool error;
+    utime_t timestamp;
+    uint32_t corrupted;
+    uint32_t deleted;
+    uint32_t kept;
+    uint64_t size;
+    uint64_t freed;
+  };
+
   struct BackupStats {
     bool error;
     uint64_t id;
@@ -425,6 +435,9 @@ public:
   /// the default reports failure: a backend without backup support must not
   /// look like a successful backup
   virtual BackupStats backup(const std::string& path, bool full) { return BackupStats{.error = true}; }
+
+  /// cleanup old backups
+  virtual BackupCleanupStats backup_cleanup(const std::string& path, uint64_t keep_last, uint64_t keep_hourly, uint64_t keep_daily) { return BackupCleanupStats{.error = true}; }
 
   /// restore from backup the specified backup version
   static bool restore_backup(CephContext *cct, const std::string &type, const std::string &path, const std::string &backup_location, std::optional<uint32_t> version);

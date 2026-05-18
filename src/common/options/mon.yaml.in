@@ -1205,10 +1205,47 @@ options:
   default: 5
   services:
   - mon
+- name: mon_backup_keep_last
+  type: uint
+  level: advanced
+  desc: keep last N backups
+  fmt_desc: keep the last backups of the monitor database
+  default: 6
+  services:
+  - mon
+  flags:
+  - no_mon_update
+- name: mon_backup_keep_hourly
+  type: uint
+  level: advanced
+  desc: number of hourly backups
+  default: 5
+  services:
+  - mon
+  flags:
+  - no_mon_update
+- name: mon_backup_keep_daily
+  type: uint
+  level: advanced
+  desc: number of daily backups
+  fmt_desc: Keep a one backup of every specified days
+  default: 7
+  services:
+  - mon
+  flags:
+  - no_mon_update
 - name: mon_backup_interval
   type: uint
   level: advanced
   desc: automatic backups every N minutes
+  services:
+  - mon
+  flags:
+  - no_mon_update
+- name: mon_backup_cleanup_interval
+  type: uint
+  level: advanced
+  desc: trigger backup cleanup every specified minutes
   services:
   - mon
   flags:

@@ -757,6 +757,16 @@ class MonitorDBStore
     return db->backup(g_conf().get_val<std::string>("mon_backup_path"), full);
   }
 
+  /// @brief Cleanup old backups
+  /// @return backup cleanup statistics
+  KeyValueDB::BackupCleanupStats backup_cleanup() {
+    return db->backup_cleanup(
+      g_conf().get_val<std::string>("mon_backup_path"),
+      g_conf().get_val<uint64_t>("mon_backup_keep_last"),
+      g_conf().get_val<uint64_t>("mon_backup_keep_hourly"),
+      g_conf().get_val<uint64_t>("mon_backup_keep_daily"));
+  }
+
   /// @brief Restores a backup with given version from backup_path
   /// @param cct ceph context
   /// @param path path to database location

@@ -151,6 +151,7 @@ private:
   int do_open(std::ostream &out, bool create_if_missing, bool open_readonly,
 	      const std::string& cfs="");
   int load_rocksdb_options(bool create_if_missing, rocksdb::Options& opt);
+  void remove_corrupted_backups(rocksdb::BackupEngine *engine, KeyValueDB::BackupCleanupStats *result);
 public:
   static bool parse_sharding_def(const std::string_view text_def,
 				std::vector<ColumnFamily>& sharding_def,
@@ -217,6 +218,7 @@ public:
   }
 
   KeyValueDB::BackupStats backup(const std::string& path, bool full) override;
+  struct KeyValueDB::BackupCleanupStats backup_cleanup(const std::string& path, uint64_t keep_last, uint64_t keep_hourly, uint64_t keep_daily);
   static bool restore_backup(CephContext *cct, const std::string &path, const std::string &backup_location, std::optional<uint32_t> version);
 
   void compact() override;

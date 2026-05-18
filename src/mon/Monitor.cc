@@ -553,6 +553,8 @@ will start to track new ops received afterwards.";
   } else if (command == "backup") {
     // externally requested backups are always full ones
     r = backup(true);
+  } else if (command == "backup_cleanup") {
+    r = backup_cleanup();
   } else {
     ceph_abort_msg("bad AdminSocket command binding");
   }
@@ -594,6 +596,26 @@ int Monitor::backup(bool full)
     dout(1) << "failed to queue job" << dendl;
     return -EIO;
   }
+}
+
+int Monitor::backup_cleanup()
+{
+  if (!backup_manager) {
+    dout(1) << "backup manager not started" << dendl;
+    return -EIO;
+  }
+  dout(1) << "triggering backup_cleanup" << dendl;
+  logger->inc(l_mon_backup_cleanup_started);
+  std::string backup_path = g_conf().get_val<string>("mon_backup_path");
+  if (backup_path.empty()) {
+    dout(1) << "backup_cleanup failed: no backup_path configured" << dendl;
+    logger->inc(l_mon_backup_cleanup_failed);
+    return -ENOTDIR;
+  }
+  uint32_t jobid = backup_manager->cleanup();
+  dout(1) << "queues backup cleanup job "
+            << jobid << dendl;
+  return jobid > 0 ? 0 : -EIO;
 }
 
 void Monitor::handle_signal(int signum)
@@ -872,6 +894,24 @@ int Monitor::preinit()
     pcb.add_u64(l_mon_backup_last_size, "backup_last_size", "Last backup size",
         nullptr, PerfCountersBuilder::PRIO_INTERESTING);
     pcb.add_u64(l_mon_backup_last_files, "backup_last_files", "Last backup file numbers",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64_counter(l_mon_backup_cleanup_started, "backup_cleanup_started", "Mon backup cleanup started",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64(l_mon_backup_cleanup_running, "backup_cleanup_running", "Mon backup cleanup is running",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64_counter(l_mon_backup_cleanup_success, "backup_cleanup_success", "Mon backup cleanup finished successfully",
+        nullptr, PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64_counter(l_mon_backup_cleanup_failed, "backup_cleanup_failed", "Mon backup cleanup failed",
+        nullptr, PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64(l_mon_backup_cleanup_size, "backup_cleanup_size", "Size of backups removed",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64(l_mon_backup_cleanup_kept, "backup_cleanup_kept", "Number of backups kept after cleanup",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_time_avg(l_mon_backup_cleanup_duration, "backup_cleanup_duration", "Mon backup cleanup duration",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64(l_mon_backup_cleanup_freed, "backup_cleanup_freed", "Mon backup cleanup freed size in bytes",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64(l_mon_backup_cleanup_deleted, "backup_cleanup_deleted", "Mon backup cleanup deleted backups",
         nullptr, PerfCountersBuilder::PRIO_INTERESTING);
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
