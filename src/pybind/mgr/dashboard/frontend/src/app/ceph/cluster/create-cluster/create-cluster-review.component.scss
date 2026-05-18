@@ -1,5 +1,7 @@
-cd-hosts {
-  ::ng-deep .nav {
-    display: none;
-  }
+.nav {
+  display: none;
+}
+
+.cds--row {
+  margin-inline: 0 !important;
 }

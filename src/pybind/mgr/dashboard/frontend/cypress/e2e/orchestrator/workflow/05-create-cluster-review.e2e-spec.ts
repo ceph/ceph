@@ -14,9 +14,7 @@ describe('Create Cluster Review page', () => {
     createCluster.navigateTo();
     createCluster.createCluster();
 
-    cy.get('cd-wizard').within(() => {
-      cy.get('button').contains('Review').click();
-    });
+    onboarding.selectStep('Review');
   });
 
   describe('fields check', () => {

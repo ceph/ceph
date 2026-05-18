@@ -1,0 +1,15 @@
+<div cdsGrid
+     [useCssGrid]="true"
+     [narrow]="true"
+     [fullWidth]="true">
+  <div cdsCol
+       [columnNumbers]="{sm: 4, md: 8, lg: 16}">
+
+    <h4 18n>Create Services</h4>
+
+    <cd-services [hasDetails]="false"
+                [hiddenServices]="['mon', 'mgr', 'crash', 'agent']"
+                [hiddenColumns]="['status.running', 'status.size', 'status.last_refresh']"
+                [routedModal]="false"></cd-services>
+  </div>
+</div>

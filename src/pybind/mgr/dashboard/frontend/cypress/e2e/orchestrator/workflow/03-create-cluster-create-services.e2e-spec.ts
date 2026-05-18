@@ -20,9 +20,7 @@ describe('Create cluster create services page', () => {
     createCluster.navigateTo();
     createCluster.createCluster();
 
-    cy.get('cd-wizard').within(() => {
-      cy.get('button').contains('Create Services').click();
-    });
+    onboardingPage.selectStep('Create Services');
   });
 
   it('should check if title contains Create Services', () => {
