@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
+
 import { of } from 'rxjs';
 
 import { CrushRuleService } from '~/app/shared/api/crush-rule.service';
@@ -65,7 +65,7 @@ describe('CrushRuleFormComponent', () => {
   };
 
   configureTestBed({
-    imports: [HttpClientTestingModule, RouterTestingModule, ToastrModule.forRoot(), PoolModule],
+    imports: [HttpClientTestingModule, RouterTestingModule, PoolModule],
     providers: [CrushRuleService, NgbActiveModal]
   });
 

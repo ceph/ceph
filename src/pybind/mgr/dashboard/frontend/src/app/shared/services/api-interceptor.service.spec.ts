@@ -3,8 +3,6 @@ import { HttpClientTestingModule, HttpTestingController } from '@angular/common/
 import { fakeAsync, TestBed, tick, flush } from '@angular/core/testing';
 import { Router } from '@angular/router';
 
-import { ToastrService } from 'ngx-toastr';
-
 import { AppModule } from '~/app/app.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { NotificationType } from '../enum/notification-type.enum';
@@ -70,7 +68,6 @@ describe('ApiInterceptorService', () => {
     providers: [
       NotificationService,
       {
-        provide: ToastrService,
         useValue: {
           error: () => true
         }

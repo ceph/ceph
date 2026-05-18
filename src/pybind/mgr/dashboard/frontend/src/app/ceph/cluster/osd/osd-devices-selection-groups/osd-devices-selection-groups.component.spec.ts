@@ -4,8 +4,6 @@ import { FormsModule } from '@angular/forms';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastrModule } from 'ngx-toastr';
-
 import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
 import { InventoryDevicesComponent } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-devices.component';
 import { SharedModule } from '~/app/shared/shared.module';
@@ -35,7 +33,6 @@ describe('OsdDevicesSelectionGroupsComponent', () => {
       FormsModule,
       HttpClientTestingModule,
       SharedModule,
-      ToastrModule.forRoot(),
       RouterTestingModule
     ],
     declarations: [OsdDevicesSelectionGroupsComponent, InventoryDevicesComponent]
