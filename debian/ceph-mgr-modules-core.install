@@ -1,5 +1,6 @@
 usr/share/ceph/mgr/alerts
 usr/share/ceph/mgr/balancer
+usr/share/ceph/mgr/cli_api
 usr/share/ceph/mgr/crash
 usr/share/ceph/mgr/devicehealth
 usr/share/ceph/mgr/influx
