@@ -3,7 +3,6 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastrModule } from 'ngx-toastr';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
 import { SharedModule } from '~/app/shared/shared.module';
@@ -24,8 +23,7 @@ describe('NvmeofSubsystemsStepFourComponent', () => {
         ReactiveFormsModule,
         RouterTestingModule,
         SharedModule,
-        GridModule,
-        ToastrModule.forRoot()
+        GridModule
       ]
     }).compileComponents();
 

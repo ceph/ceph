@@ -2,7 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { NgbAlertModule } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
+
 import { of } from 'rxjs';
 
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
@@ -42,13 +42,7 @@ describe('TelemetryActivationNotificationComponent', () => {
 
   configureTestBed({
     declarations: [TelemetryNotificationComponent, AlertPanelComponent],
-    imports: [
-      NgbAlertModule,
-      HttpClientTestingModule,
-      ToastrModule.forRoot(),
-      PipesModule,
-      BlockUIModule.forRoot()
-    ],
+    imports: [NgbAlertModule, HttpClientTestingModule, PipesModule, BlockUIModule.forRoot()],
     providers: [MgrModuleService, UserService]
   });
 

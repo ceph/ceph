@@ -5,7 +5,6 @@ import { configureTestBed, PermissionHelper } from '~/testing/unit-test-helper';
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { of } from 'rxjs';
-import { ToastrModule } from 'ngx-toastr';
 
 class MockRgwBucketService {
   listNotification = jest.fn((bucket: string) => of([{ bucket, notifications: [] }]));
@@ -19,7 +18,7 @@ describe('RgwBucketNotificationListComponent', () => {
 
   configureTestBed({
     declarations: [RgwBucketNotificationListComponent],
-    imports: [ComponentsModule, HttpClientTestingModule, ToastrModule.forRoot()],
+    imports: [ComponentsModule, HttpClientTestingModule],
     providers: [
       { provide: 'bucket', useValue: { bucket: 'bucket1', owner: 'dashboard' } },
       { provide: RgwBucketService, useClass: MockRgwBucketService }

@@ -6,7 +6,6 @@ import { of } from 'rxjs';
 
 import { NvmeSubsystemViewComponent } from './nvme-subsystem-view.component';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-
 describe('NvmeSubsystemViewComponent', () => {
   let component: NvmeSubsystemViewComponent;
   let fixture: ComponentFixture<NvmeSubsystemViewComponent>;
