@@ -63,7 +63,7 @@
 #include "common/admin_socket.h"
 #include "kv/KeyValueDB.h"
 #ifdef WITH_CPUTRACE
-#include "common/cputrace.h"
+struct cpucounter_group;
 #endif
 
 #ifdef WITH_BLKIN
