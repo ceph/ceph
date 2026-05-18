@@ -1,0 +1,47 @@
+# Messenger send-shape model — EC read, R1 "single-shard / client-side
+# scatter" (companion to ceph-messenger-ec-r2.fio).
+#
+# Models the MOSDOpReply the primary OSD sends back to RGW for an EC
+# object read, under a client-side-scatter config:
+#
+#   profile 6+2, stripe_unit 1M  =>  stripe_width = k*stripe_unit = 6M
+#   rgw_obj_stripe_size = rgw_max_chunk_size = 6M   (full-stripe writes)
+#   rgw_get_obj_max_req_size = 1M  (= stripe_unit = chunk_size)
+#
+# With rgw_get_obj_max_req_size = stripe_unit, RGW issues independent
+# 1M read ops; each maps to ONE data shard (Fast EC single-shard path,
+# no primary horizontal gather). The reply to RGW is therefore a single
+# ~1M contiguous payload — a near-single-ptr send. This is the BASELINE
+# the horizontal-gather case (R2) is compared against.
+#
+# What this measures: the l_msgr_send_iov_segments histogram on the
+# sender Worker should sit in the low (single-ptr) bucket. The
+# client->server send is used as the data-bearing carrier since that is
+# the only payload-bearing direction in this engine; the iovec shape is
+# what is being modeled.
+#
+# Not a verify job and not an EC cluster — a send-path shape proxy.
+
+[global]
+bs=1m
+size=4g
+iodepth=128
+
+ioengine=libfio_ceph_messenger.so
+#ceph_conf_file=ceph-messenger.conf
+
+hostname=127.0.0.1
+port=5555
+
+ms_type=async+posix
+
+# R1: one 1M region per op == one EC shard == one contiguous ptr.
+payload_frags=0
+
+[client]
+receiver=0
+rw=write
+
+[server]
+receiver=1
+rw=read
