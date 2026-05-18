@@ -77,7 +77,6 @@ set(librgw_common_srcs
   rgw_object_ownership.cc
   rgw_period.cc
   rgw_realm.cc
-  rgw_sync.cc
   rgw_sync_policy.cc
   rgw_notify_event_type.cc
   rgw_period_history.cc
