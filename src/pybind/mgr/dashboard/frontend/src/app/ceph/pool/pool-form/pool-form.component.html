@@ -364,7 +364,7 @@
         </ng-template>
       </div>
       <!-- Mirroring -->
-      @if (data.applications.selected.includes('rbd')) {
+      @if ((permissions?.rbdMirroring?.create || (editing && permissions?.rbdMirroring?.update)) && data.applications.selected.includes('rbd')) {
       <div
         class="form-item"
         cdsRow

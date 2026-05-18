@@ -87,7 +87,8 @@ describe('PoolListComponent', () => {
     beforeEach(() => {
       configOptRead = true;
       spyOn(TestBed.inject(AuthStorageService), 'getPermissions').and.callFake(() => ({
-        configOpt: { read: configOptRead }
+        configOpt: { read: configOptRead },
+        pool: { read: true }
       }));
       configurationService = TestBed.inject(ConfigurationService);
     });
@@ -138,7 +139,7 @@ describe('PoolListComponent', () => {
       configOptRead = false;
       fixture = TestBed.createComponent(PoolListComponent);
       component = fixture.componentInstance;
-      expect(component.monAllowPoolDelete).toBe(false);
+      expect(component.monAllowPoolDelete).toBe(true);
     });
   });
 
