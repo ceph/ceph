@@ -65,6 +65,10 @@
 #include "BlueAdmin.h"
 #include "extblkdev/ExtBlkDevPlugin.h"
 
+#ifdef WITH_CPUTRACE
+#include "common/cputrace.h"
+#endif
+
 #if defined(WITH_LTTNG)
 #define TRACEPOINT_DEFINE
 #define TRACEPOINT_PROBE_DYNAMIC_LINKAGE
