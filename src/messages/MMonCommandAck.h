@@ -16,6 +16,7 @@
 #ifndef CEPH_MMONCOMMANDACK_H
 #define CEPH_MMONCOMMANDACK_H
 
+#include "common/cmdparse.h" // for cmdmap_from_json()
 #include "include/errorcode32.h"
 #include "messages/PaxosServiceMessage.h"
 #include "include/container_ios.h"

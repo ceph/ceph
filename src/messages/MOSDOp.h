@@ -19,13 +19,18 @@
 
 #include <atomic>
 #include <cstdint>
+#include <ostream>
 #include <vector>
 
 #include "MOSDFastDispatchOp.h"
+#include "include/buffer.h"
 #include "include/ceph_features.h"
 #include "include/ceph_fs.h" // for CEPH_MSG_OSD_OP
+#include "include/object.h" // for snapid_t
 #include "include/rados_encoder.h"
+#include "include/utime.h"
 #include "common/hobject.h"
+#include "osd/osd_types.h" // for osd_reqid_t, spg_t
 
 /*
  * OSD op
