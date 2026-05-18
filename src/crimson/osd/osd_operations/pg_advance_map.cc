@@ -295,11 +295,21 @@ seastar::future<PGAdvanceMap::merge_result_t> PGAdvanceMap::merge_pg(
   if (pg->pgid.is_merge_source(old_pg_num,
                                new_pg_num,
                                &parent)) {
+    parent.is_split(new_pg_num, old_pg_num, &merge_sources);
+    if (!co_await shard_services.seastore_merge_shards_ok(
+          parent, merge_sources)) {
+      co_return merge_result_t{};
+    }
     co_return merge_result_t{merge_role_t::Source, parent};
   } else if (pg->pgid.is_merge_target(old_pg_num,
                                        new_pg_num)) {
     DEBUG("Target PG {} identified. Waiting for sources...", pg->get_pgid());
     pg->pgid.is_split(new_pg_num, old_pg_num, &merge_sources);
+
+    if (!co_await shard_services.seastore_merge_shards_ok(
+          pg->get_pgid(), merge_sources)) {
+      co_return merge_result_t{};
+    }
     // Block until all source PGs (potentially from other shards) arrive
     // on this PG's rendezvous
     auto sources = co_await pg->collect_merge_sources(merge_sources.size());

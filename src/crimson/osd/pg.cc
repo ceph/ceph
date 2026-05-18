@@ -1690,10 +1690,7 @@ seastar::future<> PG::stop()
     clear_ready_to_merge();
   }
 
-  // Wake any coroutine parked in collect_merge_sources() so shutdown
-  // doesn't hang waiting for sources that will never arrive.
-  merge_rendezvous.arrivals.broken();
-  merge_rendezvous.sources.clear();
+  reset_merge_rendezvous();
 
   cancel_local_background_io_reservation();
   cancel_remote_recovery_reservation();
@@ -2079,6 +2076,14 @@ PG::collect_merge_sources(std::size_t n)
   auto sources = std::move(merge_rendezvous.sources);
   merge_rendezvous.sources.clear();
   co_return sources;
+}
+
+void PG::reset_merge_rendezvous()
+{
+  // Unblock any waiter in collect_merge_sources() with broken(); then
+  // replace the semaphore so the next merge attempt starts at zero signals.
+  merge_rendezvous.arrivals.broken();
+  merge_rendezvous = merge_rendezvous_t{};
 }
 
 void PG::merge_from(

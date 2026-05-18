@@ -10,6 +10,7 @@
 #include "messages/MOSDPGCreated.h"
 #include "messages/MOSDPGTemp.h"
 #include "messages/MOSDPGReadyToMerge.h"
+#include "messages/MOSDPGStopMerge.h"
 
 #include "osd/osd_perf_counters.h"
 #include "osd/PeeringState.h"
@@ -146,6 +147,84 @@ seastar::future<> ShardServices::register_merge_source(
       target_pg->add_merge_source(
         source, birth_shard, std::move(foreign_pg));
     });
+}
+
+bool ShardServices::is_seastore_objectstore()
+{
+  return crimson::common::local_conf().get_val<std::string>(
+    "osd_objectstore") == "seastore";
+}
+
+seastar::future<> ShardServices::reset_target_merge_rendezvous(spg_t target)
+{
+  const core_id_t target_core = co_await get_pg_mapping(target);
+  co_await container().invoke_on(
+    target_core,
+    [target](ShardServices& target_svc) {
+      if (auto target_pg = target_svc.local_state.pg_map.get_pg(target)) {
+        target_pg->reset_merge_rendezvous();
+      }
+    });
+}
+
+seastar::future<> ShardServices::send_stop_pool_merge(pg_t source_pgid)
+{
+  co_await with_singleton(
+    [pool = source_pgid.pool(), source_pgid](OSDSingletonState& singleton) {
+      return singleton.send_stop_pool_pg_merge(pool, source_pgid);
+    });
+}
+
+seastar::future<> ShardServices::abort_seastore_cross_shard_merge(
+  spg_t target,
+  pg_t source_pgid,
+  const std::set<spg_t>* all_sources,
+  bool reset_target_rendezvous)
+{
+  if (all_sources) {
+    for (const auto& src : *all_sources) {
+      co_await clear_ready_to_merge(src.pgid);
+    }
+  } else {
+    co_await clear_ready_to_merge(source_pgid);
+  }
+  co_await clear_ready_to_merge(target.pgid);
+
+  // Ensure the monitor backs off before it can commit a pg_num decrement
+  // for this source.  "Stop merge" is permanent policy; "not ready" prevents
+  // an already-in-flight decrement decision from being committed.
+  co_await set_not_ready_to_merge_source(source_pgid);
+  co_await send_stop_pool_merge(source_pgid);
+  if (reset_target_rendezvous) {
+    co_await reset_target_merge_rendezvous(target);
+  }
+}
+
+
+seastar::future<bool> ShardServices::seastore_merge_shards_ok(
+  spg_t target,
+  const std::set<spg_t>& merge_sources)
+{
+  LOG_PREFIX(ShardServices::seastore_merge_shards_ok);
+  if (!is_seastore_objectstore()) {
+    co_return true;
+  }
+  const core_id_t target_core = co_await get_pg_mapping(target);
+  std::optional<pg_t> cross_shard_source;
+  for (const auto& src : merge_sources) {
+    if (co_await get_pg_mapping(src) != target_core) {
+      cross_shard_source = src.pgid;
+      break;
+    }
+  }
+  if (!cross_shard_source) {
+    co_return true;
+  }
+  DEBUG("seastore: target {} has a cross-shard merge source {}; stop pool merge",
+        target, *cross_shard_source);
+  co_await abort_seastore_cross_shard_merge(
+    target, *cross_shard_source, &merge_sources, true);
+  co_return false;
 }
 
 Ref<PG> PerShardState::get_pg(spg_t pgid)
@@ -479,9 +558,49 @@ void OSDSingletonState::clear_sent_ready_to_merge()
   sent_ready_to_merge_source.clear();
 }
 
+seastar::future<> OSDSingletonState::send_stop_pool_pg_merge(int64_t pool, pg_t pgid)
+{
+  LOG_PREFIX(OSDSingletonState::send_stop_pool_pg_merge);
+  const pg_pool_t *pi = osdmap->get_pg_pool(pool);
+  if (!pi || !pi->is_crimson()) {
+    co_return;
+  }
+  if (!pi->has_flag(pg_pool_t::FLAG_CRIMSON_ALLOW_PG_MERGE)) {
+    pools_merge_stopped_reported.insert(pool);
+    co_return;
+  }
+  // Claim the pool before co_await: otherwise concurrent callers can all pass
+  // the check and each send MOSDPGStopMerge while yielded on send_message().
+  if (!pools_merge_stopped_reported.insert(pool).second) {
+    co_return;
+  }
+  DEBUG("seastore: asking monitor to stop PG merge for pool {} (pg {})",
+        pool, pgid);
+  co_await monc.send_message(crimson::make_message<MOSDPGStopMerge>(
+    pool, pgid, MOSDPGStopMerge::REASON_CROSS_SHARD, osdmap->get_epoch()));
+}
+
+void OSDSingletonState::prune_pools_merge_stopped_reported()
+{
+  // send_stop_pool_pg_merge() inserts a pool after one MOSDPGStopMerge so we
+  // do not spam the mon on every cross-shard source/target pair.  Keep that
+  // entry while the map still has merge disabled; forget it if the pool
+  // disappears or crimson_allow_pg_merge is set again.
+  auto pool = pools_merge_stopped_reported.begin();
+  while (pool != pools_merge_stopped_reported.end()) {
+    const pg_pool_t *pi = osdmap->get_pg_pool(*pool);
+    if (!pi || pi->has_flag(pg_pool_t::FLAG_CRIMSON_ALLOW_PG_MERGE)) {
+      pool = pools_merge_stopped_reported.erase(pool);
+    } else {
+      ++pool;
+    }
+  }
+}
+
 void OSDSingletonState::prune_sent_ready_to_merge()
 {
   LOG_PREFIX(OSDSingletonState::prune_sent_ready_to_merge);
+  prune_pools_merge_stopped_reported();
   auto source = sent_ready_to_merge_source.begin();
   while (source != sent_ready_to_merge_source.end()) {
     if (!osdmap->pg_exists(*source)) {

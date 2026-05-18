@@ -101,6 +101,7 @@
 #include "messages/MOSDPGRecoveryDelete.h"
 #include "messages/MOSDPGRecoveryDeleteReply.h"
 #include "messages/MOSDPGReadyToMerge.h"
+#include "messages/MOSDPGStopMerge.h"
 
 #include "messages/MRemoveSnaps.h"
 
@@ -646,6 +647,9 @@ Message *decode_message(CephContext *cct,
     break;
   case MSG_OSD_PG_READY_TO_MERGE:
     m = make_message<MOSDPGReadyToMerge>();
+    break;
+  case MSG_OSD_PG_STOP_MERGE:
+    m = make_message<MOSDPGStopMerge>();
     break;
   case MSG_OSD_EC_WRITE:
     m = make_message<MOSDECSubOpWrite>();

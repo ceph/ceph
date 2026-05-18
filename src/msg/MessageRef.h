@@ -157,6 +157,7 @@ class MOSDPGPush;
 class MOSDPGPushReply;
 class MOSDPGQuery;
 class MOSDPGReadyToMerge;
+class MOSDPGStopMerge;
 class MOSDPGRecoveryDelete;
 class MOSDPGRecoveryDeleteReply;
 class MOSDPGRemove;

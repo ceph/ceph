@@ -378,6 +378,7 @@ private:
   std::set<pg_t> not_ready_to_merge_source;
   std::map<pg_t,pg_t> not_ready_to_merge_target;
   std::set<pg_t> sent_ready_to_merge_source;
+  std::set<int64_t> pools_merge_stopped_reported;
   seastar::future<> set_ready_to_merge_source(pg_t pgid,
                                  eversion_t version);
   seastar::future<> set_ready_to_merge_target(pg_t pgid,
@@ -388,7 +389,9 @@ private:
   seastar::future<> set_not_ready_to_merge_target(pg_t target, pg_t source);
   void clear_ready_to_merge(pg_t pgid);
   seastar::future<> send_ready_to_merge();
+  seastar::future<> send_stop_pool_pg_merge(int64_t pool, pg_t pgid);
   void clear_sent_ready_to_merge();
+  void prune_pools_merge_stopped_reported();
   void prune_sent_ready_to_merge();
 };
 
@@ -684,6 +687,14 @@ public:
   // local_shared_foreign_ptr it received.
   seastar::future<> register_merge_source(spg_t target, spg_t source);
 
+  static bool is_seastore_objectstore();
+
+  // True if every merge source is co-located on the target PG's shard
+  // (Seastore only). Uses the full sibling set so one source cannot commit
+  // while another would abort.
+  seastar::future<bool> seastore_merge_shards_ok(
+    spg_t target, const std::set<spg_t>& merge_sources);
+
   FORWARD_TO_OSD_SINGLETON(set_ready_to_merge_source)
   FORWARD_TO_OSD_SINGLETON(set_ready_to_merge_target)
   FORWARD_TO_OSD_SINGLETON(set_not_ready_to_merge_source)
@@ -853,6 +864,15 @@ public:
       },
       invoke_context_on_core(seastar::this_shard_id(), on_reserved));
   }
+
+private:
+  seastar::future<> reset_target_merge_rendezvous(spg_t target);
+  seastar::future<> send_stop_pool_merge(pg_t source_pgid);
+  seastar::future<> abort_seastore_cross_shard_merge(
+    spg_t target,
+    pg_t source_pgid,
+    const std::set<spg_t>* all_sources,
+    bool reset_target_rendezvous);
 
 #undef FORWARD_CONST
 #undef FORWARD
