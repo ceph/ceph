@@ -48,7 +48,7 @@
         </ng-template>
       </div>
 
-      <!-- RGW Export Type -->
+      <!-- RGW Share Type -->
       <div *ngIf="storageBackend === 'RGW' && !isEdit"
            class="form-item">
         <cds-select formControlName="rgw_export_type"
@@ -230,7 +230,7 @@
                 i18n>This field is required.</span>
           <span class="invalid-feedback"
                 *ngIf="nfsForm.get('path').hasError('isIsolatedSlash') && nfsForm.get('path').touched"
-                i18n>Export on CephFS volume "<code>/</code>" not allowed.</span>
+                i18n>Share on CephFS volume "<code>/</code>" not allowed.</span>
           <span class="invalid-feedback"
                 *ngIf="nfsForm.showError('path', formDir, 'pattern')"
                 i18n>Path need to start with a '/' and can be followed by a word</span>
@@ -315,8 +315,8 @@
                  [invalid]="nfsForm.controls.pseudo.invalid && (nfsForm.controls.pseudo.dirty)">
         </cds-text-label>
         <ng-template #pseudoHelper>
-          <span i18n>The position this export occupies in the Pseudo FS. It must be unique.</span><br/>
-          <span i18n>By using different Pseudo options, the same Path may be exported multiple times.</span>
+          <span i18n>The position this share occupies in the Pseudo FS. It must be unique.</span><br/>
+          <span i18n>By using different Pseudo options, the same Path may be shared multiple times.</span>
         </ng-template>
         <ng-template #pseudoError>
           <span class="invalid-feedback"
@@ -324,7 +324,7 @@
                 i18n>This field is required.</span>
           <span class="invalid-feedback"
                 *ngIf="nfsForm.showError('pseudo', formDir, 'pseudoAlreadyExists')"
-                i18n>The pseudo is already in use by another export.</span>
+                i18n>The pseudo is already in use by another share.</span>
           <span class="invalid-feedback"
                 *ngIf="nfsForm.showError('pseudo', formDir, 'pattern')"
                 i18n>Pseudo needs to start with a '/' and can't contain any of the following: &gt;, &lt;, |, &, ( or ).</span>
@@ -397,13 +397,13 @@
         </cds-select>
         <ng-template #squashHelper>
           <span *ngIf="nfsForm.getValue('squash') === 'root_squash'"
-                i18n>Maps the root user on the NFS client to an anonymous user/group with limited privileges. This prevents a root client user from having total control over the NFS export.</span>
+                i18n>Maps the root user on the NFS client to an anonymous user/group with limited privileges. This prevents a root client user from having total control over the NFS share.</span>
 
           <span *ngIf="nfsForm.getValue('squash') === 'root_id_squash'"
                 i18n>Maps the root user on the NFS client to an anonymous user/group with limited privileges, preventing root access but retaining non-root group privileges.</span>
 
           <span *ngIf="nfsForm.getValue('squash') === 'all_squash'"
-                i18n>Maps all users on the NFS client to an anonymous user/group with limited privileges, ensuring that no user has special privileges on the NFS export.</span>
+                i18n>Maps all users on the NFS client to an anonymous user/group with limited privileges, ensuring that no user has special privileges on the NFS share.</span>
 
           <span *ngIf="nfsForm.getValue('squash') === 'no_root_squash'"
                 i18n>Allows the root user on the NFS client to retain full root privileges on the NFS server, which may pose security risks.</span>
