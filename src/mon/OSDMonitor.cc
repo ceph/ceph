@@ -7982,6 +7982,23 @@ int OSDMonitor::get_replicated_stretch_crush_rule()
   return most_used_rule;
 }
 
+int OSDMonitor::handle_crush_rule_creation_result(int err, const string& rule_name)
+{
+  switch (err) {
+  case -EALREADY:
+    dout(20) << "prepare_pool_crush_rule: rule "
+             << rule_name << " try again" << dendl;
+    // fall through
+  case 0:
+    // need to wait for the crush rule to be proposed before proceeding
+    return -EAGAIN;
+  case -EEXIST:
+    return 0;
+  default:
+    return err;
+  }
+}
+
 int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
           const string &pool_name,
 					const string &erasure_code_profile,
@@ -7995,7 +8012,6 @@ int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
 					int *crush_rule,
 					ostream *ss)
 {
-
   if (*crush_rule < 0) {
     dout(20) << __func__
        << " pool_type " << pg_pool_t::get_type_name(pool_type)
@@ -8013,24 +8029,12 @@ int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
       {
 	if (rule_name == "") {
 	  if (osdmap.stretch_mode_enabled) {
-	    *crush_rule = get_replicated_stretch_crush_rule();
+	    int err = crush_rule_create_replica(pool_name, root, num_zones, num_replica_per_zone, zone_failure_domain, osd_failure_domain, device_class, false, crush_rule, ss);
+      return handle_crush_rule_creation_result(err, pool_name);
 	  } else {
       if(num_zones > 1) {
         int err = crush_rule_create_replica(pool_name, root, num_zones, num_replica_per_zone, zone_failure_domain, osd_failure_domain, device_class, false, crush_rule, ss);
-        switch (err) {
-        case -EALREADY:
-          dout(20) << "prepare_pool_crush_rule: rule "
-            << rule_name << " try again" << dendl;
-          // fall through
-        case 0:
-          // need to wait for the crush rule to be proposed before proceeding
-          err = -EAGAIN;
-          break;
-        case -EEXIST:
-          err = 0;
-          break;
-        }
-        return err;
+        return handle_crush_rule_creation_result(err, pool_name);
       }
 	    else {
         // Use default rule
@@ -8054,20 +8058,7 @@ int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
                  num_zones,
 					       erasure_code_profile,
 					       crush_rule, ss);
-	switch (err) {
-	case -EALREADY:
-	  dout(20) << "prepare_pool_crush_rule: rule "
-		   << rule_name << " try again" << dendl;
-	  // fall through
-	case 0:
-	  // need to wait for the crush rule to be proposed before proceeding
-	  err = -EAGAIN;
-	  break;
-	case -EEXIST:
-	  err = 0;
-	  break;
- 	}
-	return err;
+	return handle_crush_rule_creation_result(err, pool_name);
       }
       break;
     default:
@@ -8292,6 +8283,15 @@ int OSDMonitor::prepare_new_pool(string& name,
     dout(10) << "prepare_pool_crush_rule returns " << r << dendl;
     return r;
   }
+
+  if (osdmap.stretch_mode_enabled && num_zones > 1) {
+    r = validate_stretch_mode_new_pool(crush_rule, zone_failure_domain, ss);
+    if (r) {
+      dout(10) << "validate_stretch_mode_pool returns " << r << dendl;
+      return r;
+    }
+  }
+
   unsigned size, min_size;
   r = prepare_pool_size(pool_type, erasure_code_profile, repl_size,
                         &size, &min_size, ss);
@@ -15915,6 +15915,77 @@ void OSDMonitor::try_enable_stretch_mode_pools(stringstream& ss, bool *okay,
   }
   *okay = true;
   return;
+}
+
+void OSDMonitor::extract_sites_from_crush_rule(CrushWrapper& crush, set<int>& rule_sites, const set<int>& rule_roots, int dividing_id) {
+  for (int root : rule_roots) {
+    // Take root is above sites, walk down to find them (e.g., "take default")
+    vector<int> children;
+    crush.get_children_of_type(root, dividing_id, &children, false);
+    for (int child : children) {
+      int base_id;
+      int base_class;
+      crush.split_id_class(child, &base_id, &base_class);
+      rule_sites.insert(base_id);
+    }
+  }
+}
+
+int OSDMonitor::validate_stretch_mode_new_pool(int new_crush_rule, const string& zone_failure_domain, ostream *ss)
+{
+  CrushWrapper crush = _get_pending_crush();
+  int dividing_id = crush.get_type_id(zone_failure_domain);
+
+  // Get the take roots from the rule
+  set<int> rule_roots;
+  crush.find_takes_by_rule(new_crush_rule, &rule_roots);
+
+  if (rule_roots.empty()) {
+    if (ss) {
+      *ss << "CRUSH rule " << new_crush_rule << " has no take operations";
+    }
+    return -EINVAL;
+  }
+  if (dividing_id != osdmap.stretch_mode_bucket) {
+    if (ss) {
+      *ss << "CRUSH rule " << new_crush_rule << " is stretched across " << crush.get_type_name(dividing_id)
+          << " instead of " << crush.get_type_name(osdmap.stretch_mode_bucket);
+    }
+    return -EINVAL;
+  }
+  // For each take root, find all children at the dividing type level
+  set<int> rule_sites;
+  extract_sites_from_crush_rule(crush, rule_sites, rule_roots, dividing_id);
+  if (rule_sites.size() != osdmap.stretch_bucket_count) {
+    if (ss) {
+      *ss << "CRUSH rule " << new_crush_rule << " covers " << rule_sites.size()
+          << " " << crush.get_type_name(dividing_id) << " buckets, but stretch mode requires exactly " << osdmap.stretch_bucket_count;
+    }
+    return -EINVAL;
+  }
+
+  // Verify the sites match the expected stretch mode sites
+  // Pick any pool that is in stretch mode since all pools must be stretched across the same sites
+  for (const auto& [poolid, pool] : osdmap.pools) {
+    if (pool.is_stretch_pool()) {
+      int crush_rule = pool.crush_rule;
+      int existing_dividing_id = pool.peering_crush_bucket_barrier;
+      set<int> existing_rule_roots;
+      crush.find_takes_by_rule(crush_rule, &existing_rule_roots);
+      set<int> existing_rule_sites;
+      extract_sites_from_crush_rule(crush, existing_rule_sites, existing_rule_roots, existing_dividing_id);
+      if (existing_rule_sites != rule_sites) {
+        if (ss) {
+          *ss << "CRUSH rule " << new_crush_rule << " uses different "
+              << crush.get_type_name(dividing_id) << " buckets than configured for stretch mode";
+        }
+        return -EINVAL;
+      }
+      return 0;
+    }
+  }
+
+  return 0;
 }
 
 void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,

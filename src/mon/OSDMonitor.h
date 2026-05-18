@@ -748,6 +748,9 @@ public:
 		     int32_t* new_id);
   int prepare_command_osd_purge(MonOpRequestRef op, int32_t id, std::stringstream& ss);
   int prepare_command_osd_destroy(MonOpRequestRef op, int32_t id, std::stringstream& ss);
+
+  int handle_crush_rule_creation_result(int err, const std::string& rule_name);
+
   int _prepare_command_osd_crush_remove(
       CrushWrapper &newcrush,
       int32_t id,
@@ -897,6 +900,19 @@ public:
 			       const std::set<pg_pool_t*>& pools,
 			       const std::string& new_crush_rule,
 			       CrushWrapper& crush);
+
+  void extract_sites_from_crush_rule(CrushWrapper& crush, std::set<int> &rule_sites, const std::set<int> &rule_roots, int dividing_id);
+
+  /**
+   * Validate that a CRUSH rule is compatible with stretch mode.
+   * Checks that the rule's take roots map to the expected 2 sites.
+   * @param crush_rule The CRUSH rule ID to validate
+   * @param zone_failure_domain Failure domain that the pools stretch across
+   * @param ss Output stream for error messages
+   * @return 0 on success, negative error code on failure
+   */
+  int validate_stretch_mode_new_pool(int crush_rule, const std::string& zone_failure_domain, std::ostream *ss);
+
   /**
   *
   * Set all stretch mode values of all pools back to pre-stretch mode values.
