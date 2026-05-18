@@ -854,8 +854,47 @@ void ScrubBackend::setup_ec_digest_map(auth_selection_t& auth_selection,
             m_pg.get_ec_sinfo().get_chunk_size());
         b.copy_in(0, digest_length, crc_bytes);
 
-        this_chunk->m_ec_digest_map[srd.shard] = bufferlist{};
-        this_chunk->m_ec_digest_map.at(srd.shard).append(b);
+        // Convert absolute shard to relative shard for multi-zone EC
+        shard_id_t rel_shard = m_pg.get_ec_sinfo().get_rel_shard(srd.shard);
+
+        // Check if this relative shard already has a digest entry
+        if (this_chunk->m_ec_digest_map.contains(rel_shard)) {
+          // Compare the existing digest with the current one
+          const auto& existing_bl = this_chunk->m_ec_digest_map.at(rel_shard);
+          bool digests_match = true;
+          
+          if (existing_bl.length() >= digest_length) {
+            for (std::size_t i = 0; i < digest_length; i++) {
+              if (existing_bl[i] != b[i]) {
+                digests_match = false;
+                break;
+              }
+            }
+          } else {
+            digests_match = false;
+          }
+
+          if (!digests_match) {
+            // Digests don't match - this is a scrub error
+            auth_selection.digest_match = false;
+
+            bufferlist new_bl;
+            new_bl.append(b);
+            
+            dout(10) << fmt::format(
+                            "{}: {} - Conflicting CRCs for relative shard {}. "
+                            "Absolute shard {} has CRC {}, but another zone's "
+                            "shard already has CRC {}",
+                            __func__, ho, rel_shard, srd.shard,
+                            extract_crc_from_bufferlist(new_bl),
+                            extract_crc_from_bufferlist(existing_bl))
+                     << dendl;
+          }
+        } else {
+          // First time seeing this relative shard, add it to the map
+          this_chunk->m_ec_digest_map[rel_shard] = bufferlist{};
+          this_chunk->m_ec_digest_map.at(rel_shard).append(b);
+        }
       }
     }
 
@@ -1290,8 +1329,47 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
             m_pg.get_ec_sinfo().get_chunk_size());
         b.copy_in(0, length, crc_bytes);
 
-        digests[srd.shard] = bufferlist{};
-        digests[srd.shard].append(b);
+        // Convert absolute shard to relative shard for multi-zone EC
+        shard_id_t rel_shard = m_pg.get_ec_sinfo().get_rel_shard(srd.shard);
+
+        // Check if this relative shard already has a digest entry
+        if (digests.contains(rel_shard)) {
+          // Compare the existing digest with the current one
+          const auto& existing_bl = digests.at(rel_shard);
+          bool digests_match = true;
+          
+          if (existing_bl.length() >= length) {
+            for (std::size_t i = 0; i < length; i++) {
+              if (existing_bl[i] != b[i]) {
+                digests_match = false;
+                break;
+              }
+            }
+          } else {
+            digests_match = false;
+          }
+
+          if (!digests_match) {
+            // Digests don't match - this is a scrub error
+            auth_sel.digest_match = false;
+
+            bufferlist new_bl;
+            new_bl.append(b);
+            
+            dout(10) << fmt::format(
+                            "{}: {} - Conflicting CRCs for relative shard {}. "
+                            "Absolute shard {} has CRC {}, but another zone's "
+                            "shard already has CRC {}",
+                            __func__, ho, rel_shard, srd.shard,
+                            extract_crc_from_bufferlist(new_bl),
+                            extract_crc_from_bufferlist(existing_bl))
+                     << dendl;
+          }
+        } else {
+          // First time seeing this relative shard, add it to the map
+          digests[rel_shard] = bufferlist{};
+          digests[rel_shard].append(b);
+        }
       }
 
       dout(20) << fmt::format(
@@ -1567,7 +1645,10 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
     ceph_assert(can_attr != candidate.attrs.end());
     const bufferlist& can_bl = can_attr->second;
 
-    if (auth_oi.get_version_for_shard(shard.shard) == auth_oi.version) {
+    // For EC pools, convert absolute shard to relative shard (shard % (k+m))
+    shard_id_t rel_shard = m_is_replicated ? shard.shard : m_pg.get_ec_sinfo().get_rel_shard(shard.shard);
+
+    if (auth_oi.get_version_for_shard(rel_shard) == auth_oi.version) {
       // The expected version of the shard and the authoritative shard are the
       // same, so we can do a simple memcmp of the OI attr.
       auto auth_attr = auth.attrs.find(OI_ATTR);
@@ -1588,7 +1669,7 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
       // also check the size, as that is the only other piece of data that the
       // nonprimary OIs require.
       object_info_t oi(can_bl);
-      if (oi.version != auth_oi.get_version_for_shard(shard.shard) ||
+      if (oi.version != auth_oi.get_version_for_shard(rel_shard) ||
             oi.size != auth_oi.size) {
         fmt::format_to(std::back_inserter(out),
                        "{}object info version incorrect auth_oi={} candidate_oi={}",

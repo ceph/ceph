@@ -178,14 +178,22 @@ public:
     int k,
     int m,
     uint64_t stripe_width,
-    uint64_t flags)
+    uint64_t flags,
+    int64_t pool_id = 0,
+    int num_zones = 1)
   {
+    ceph_assert(num_zones > 0);
+
     pg_pool_t pool;
     pool.type = pg_pool_t::TYPE_ERASURE;
 
-    pool.size = k + m;
+    // size = num_zones * (k + m)
+    pool.size = num_zones * (k + m);
+    pool.opts.set(pool_opts_t::NUM_ZONES, num_zones);
     
-    pool.min_size = k;
+    // For multi-zone configurations, set min_size to allow up to m failures
+    // min_size = num_zones * (k+m) - m
+    pool.min_size = num_zones * (k + m) - m;
     pool.crush_rule = 0;
     pool.erasure_code_profile = "default";
     pool.stripe_width = stripe_width;
@@ -272,6 +280,33 @@ public:
     clear_pool_flag(*osdmap, pool_id, flag);
   }
 
+  /**
+   * Set the min_size for a pool.
+   * Creates a new epoch.
+   *
+   * @param osdmap The OSDMap to modify
+   * @param pool_id The pool ID
+   * @param new_min_size The new min_size value
+   */
+  static void set_pool_min_size(OSDMap& osdmap, int64_t pool_id, unsigned new_min_size)
+  {
+    const pg_pool_t* existing = osdmap.get_pg_pool(pool_id);
+    ceph_assert(existing != nullptr);
+
+    pg_pool_t updated = *existing;
+    updated.min_size = new_min_size;
+
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    inc.fsid = osdmap.get_fsid();
+    inc.new_pools[pool_id] = updated;
+    osdmap.apply_incremental(inc);
+  }
+
+  static void set_pool_min_size(std::shared_ptr<OSDMap> osdmap, int64_t pool_id, unsigned new_min_size)
+  {
+    set_pool_min_size(*osdmap, pool_id, new_min_size);
+  }
+
   // OSD state manipulation methods
   
   /**
@@ -312,12 +347,12 @@ public:
     OSDMap::Incremental inc(osdmap.get_epoch() + 1);
     inc.fsid = osdmap.get_fsid();
     inc.new_state[osd_id] = CEPH_OSD_EXISTS | CEPH_OSD_UP;
-    
+
     // Preserve xinfo features when marking OSD up
     // This is critical for peering to work correctly with feature checks
     const osd_xinfo_t& existing_xinfo = osdmap.get_xinfo(osd_id);
     inc.new_xinfo[osd_id] = existing_xinfo;
-    
+
     osdmap.apply_incremental(inc);
   }
   

@@ -497,6 +497,15 @@ private:
 			ceph::ErasureCodeProfile &profile,
 			bool force,
 			std::ostream *ss);
+  int crush_rule_create_replica(const std::string &name,
+				const std::string &root,
+        int num_zones,
+        int num_replica_per_zone,
+        const std::string &zone_failure_domain,
+        const std::string &osd_failure_domain,
+        const std::string &device_class,
+        bool force,
+				std::ostream *ss);
   int crush_rule_create_erasure(const std::string &name,
 				const std::string &profile,
 				int *rule,

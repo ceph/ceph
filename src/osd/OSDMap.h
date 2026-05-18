@@ -1374,9 +1374,6 @@ public:
   const std::vector<int> pgtemp_undo_primaryfirst(const pg_pool_t& pool,
 			   const pg_t pg,
 			   const std::vector<int>& acting) const;
-  const shard_id_t pgtemp_primaryfirst(const pg_pool_t& pool,
-				       const pg_t pg,
-				       const shard_id_t shard) const;
   shard_id_t pgtemp_undo_primaryfirst(const pg_pool_t& pool,
 					    const pg_t pg,
 					    const shard_id_t shard) const;

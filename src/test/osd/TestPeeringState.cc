@@ -558,6 +558,8 @@ protected:
     dpp[osd] = make_unique<DppHelper>(g_ceph_context, dout_subsys, this, osd, shard);
     spg_t spgid = spg_t(pg_t(0, pool_id), pg_whoami.shard);
     listeners[osd] = make_unique<MockPeeringListener>(osdmap, pool_id, get_dpp(osd), pg_whoami);
+    // Note: TestPeeringState doesn't use MockMessenger for cluster messages
+    // Cluster messages go directly into the messages map for manual dispatch
     get_listener(osd)->current_epoch = osdmap->get_epoch();
     unique_ptr<PeeringState> ps = make_unique<PeeringState>(
       g_ceph_context,

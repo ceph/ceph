@@ -408,6 +408,12 @@ public:
     data_misaligned_bl.swap(other.data_misaligned_bl);
   }
 
+  /// Remap all shard identifiers in this transaction's index tables
+  /// using extract()/reinsert. The op buffer and data buffers are
+  /// unaffected since they store indices, not identities.
+  /// Does NOT touch callbacks (on_applied, on_commit, on_applied_sync).
+  void remap_shard(shard_id_t new_shard);
+
   void _update_op(Op* op,
     std::vector<uint32_t> &cm,
     std::vector<uint32_t> &om) {
