@@ -7454,7 +7454,7 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
   int ret = 0;
   ret = prepare_new_pool(m->name, m->crush_rule, rule_name,
 			 0, 0, 0, 0, 0, 0, 0.0,
-			 erasure_code_profile,
+			 erasure_code_profile, 1, "", 1, "", "", "",
 			 pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, {}, bulk,
 			 cct->_conf.get_val<bool>("osd_pool_default_crimson"),
 			 &ss);
@@ -7566,7 +7566,55 @@ int OSDMonitor::normalize_profile(const string& profilename,
   return 0;
 }
 
+int OSDMonitor::crush_rule_create_replica(const string &name,
+					     const string &root,
+               int num_zones,
+               int num_replica_per_zone,
+               const string &zone_failure_domain,
+               const string &osd_failure_domain,
+               const string &device_class,
+               bool force,
+               int *rule,
+					     ostream *ss)
+{
+  if (osdmap.crush->rule_exists(name)) {
+    // The name is uniquely associated to a ruleid and the rule it contains
+      // From the user point of view, the rule is more meaningfull.
+      *rule = osdmap.crush->get_rule_id(name);
+      return -EEXIST;
+  }
+  CrushWrapper newcrush = _get_pending_crush();
+
+  if (newcrush.rule_exists(name)) {
+    // The name is uniquely associated to a ruleid and the rule it contains
+    // From the user point of view, the rule is more meaningfull.
+    *rule = newcrush.get_rule_id(name);
+    return -EALREADY;
+  } else {
+    int ruleno;
+    if (num_zones > 1) {
+      ruleno = newcrush.add_simple_stretch_rule(
+      name, root, zone_failure_domain, osd_failure_domain, num_zones, num_replica_per_zone, device_class,
+      "firstn", pg_pool_t::TYPE_REPLICATED, force, ss);
+    } else {
+      ruleno = newcrush.add_simple_rule(
+      name, root, osd_failure_domain, device_class,
+      "firstn", pg_pool_t::TYPE_REPLICATED, ss);
+    }
+
+    if (ruleno < 0) {
+        return ruleno;
+    }
+    
+    *rule = ruleno;
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
+    return 0;
+  }
+}
+
 int OSDMonitor::crush_rule_create_erasure(const string &name,
+               int num_zones,
 					     const string &profile,
 					     int *rule,
 					     ostream *ss)
@@ -7591,7 +7639,7 @@ int OSDMonitor::crush_rule_create_erasure(const string &name,
       return err;
     }
 
-    err = erasure_code->create_rule(name, newcrush, ss);
+    err = erasure_code->create_rule(name, num_zones, newcrush, ss);
     erasure_code.reset();
     if (err < 0)
       return err;
@@ -7800,18 +7848,33 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
   case pg_pool_t::TYPE_ERASURE:
     {
       if (osdmap.stretch_mode_enabled) {
-	*ss << "prepare_pool_size: we are in stretch mode; cannot create EC pools!";
-	return -EINVAL;
+ *ss << "prepare_pool_size: we are in stretch mode; cannot create EC pools!";
+ return -EINVAL;
       }
       ErasureCodeInterfaceRef erasure_code;
       err = get_erasure_code(erasure_code_profile, &erasure_code, ss);
       if (err == 0) {
-	*size = erasure_code->get_chunk_count();
-	*min_size =
-	  erasure_code->get_data_chunk_count() +
-	  std::min<int>(1, erasure_code->get_coding_chunk_count() - 1);
-	ceph_assert(*min_size <= *size);
-	ceph_assert(*min_size >= erasure_code->get_data_chunk_count());
+ unsigned base_size = erasure_code->get_chunk_count();
+ 
+ // Get num_zones from the EC profile, default to 1
+ ErasureCodeProfile profile = osdmap.get_erasure_code_profile(erasure_code_profile);
+ int num_zones = 1;
+ auto it = profile.find("num_zones");
+ if (it != profile.end()) {
+   std::string err_str;
+   num_zones = strict_strtol(it->second.c_str(), 10, &err_str);
+   if (!err_str.empty() || num_zones < 1) {
+     *ss << "invalid num_zones value in erasure code profile: " << it->second;
+     return -EINVAL;
+   }
+ }
+ 
+ *size = num_zones * base_size;
+ *min_size =
+   erasure_code->get_data_chunk_count() +
+   std::min<int>(1, erasure_code->get_coding_chunk_count() - 1);
+ ceph_assert(*min_size <= *size);
+ ceph_assert(*min_size >= erasure_code->get_data_chunk_count());
       }
     }
     break;
@@ -7911,8 +7974,15 @@ int OSDMonitor::get_replicated_stretch_crush_rule()
 }
 
 int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
+          const string &pool_name,
 					const string &erasure_code_profile,
 					const string &rule_name,
+          int num_zones,
+          const string &root,
+          int num_replica_per_zone,
+          const string &zone_failure_domain,
+          const string &osd_failure_domain,
+          const string &device_class,
 					int *crush_rule,
 					ostream *ss)
 {
@@ -7925,8 +7995,27 @@ int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
 	  if (osdmap.stretch_mode_enabled) {
 	    *crush_rule = get_replicated_stretch_crush_rule();
 	  } else {
-	    // Use default rule
-	    *crush_rule = osdmap.crush->get_osd_pool_default_crush_replicated_rule(cct);
+      if(num_zones > 1) {
+        int err = crush_rule_create_replica(pool_name, root, num_zones, num_replica_per_zone, zone_failure_domain, osd_failure_domain, device_class, false, crush_rule, ss);
+        switch (err) {
+        case -EALREADY:
+          dout(20) << "prepare_pool_crush_rule: rule "
+            << rule_name << " try again" << dendl;
+          // fall through
+        case 0:
+          // need to wait for the crush rule to be proposed before proceeding
+          err = -EAGAIN;
+          break;
+        case -EEXIST:
+          err = 0;
+          break;
+        }
+        return err;
+      }
+	    else {
+        // Use default rule
+        *crush_rule = osdmap.crush->get_osd_pool_default_crush_replicated_rule(cct);
+      }
 	  }
 	  if (*crush_rule < 0) {
 	    // Errors may happen e.g. if no valid rule is available
@@ -7942,6 +8031,7 @@ int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
     case pg_pool_t::TYPE_ERASURE:
       {
 	int err = crush_rule_create_erasure(rule_name,
+                 num_zones,
 					       erasure_code_profile,
 					       crush_rule, ss);
 	switch (err) {
@@ -8105,6 +8195,12 @@ int OSDMonitor::prepare_new_pool(string& name,
 				 const uint64_t target_size_bytes,
 				 const float target_size_ratio,
 				 const string &erasure_code_profile,
+         int num_zones,
+         const string &root,
+         int num_replica_per_zone,
+         const string &zone_failure_domain,
+         const string &osd_failure_domain,
+         const string &device_class,
                                  const unsigned pool_type,
                                  const uint64_t expected_num_objects,
                                  FastReadType fast_read,
@@ -8170,8 +8266,8 @@ int OSDMonitor::prepare_new_pool(string& name,
     return -EINVAL;
   }
   int r;
-  r = prepare_pool_crush_rule(pool_type, erasure_code_profile,
-				 crush_rule_name, &crush_rule, ss);
+  r = prepare_pool_crush_rule(pool_type, name, erasure_code_profile,
+				 crush_rule_name, num_zones, root, num_replica_per_zone, zone_failure_domain, osd_failure_domain, device_class, &crush_rule, ss);
   if (r) {
     dout(10) << "prepare_pool_crush_rule returns " << r << dendl;
     return r;
@@ -8332,6 +8428,20 @@ int OSDMonitor::prepare_new_pool(string& name,
 
   if (pool_type == pg_pool_t::TYPE_ERASURE) {
       pi->erasure_code_profile = erasure_code_profile;
+      
+      // Set NUM_ZONES from the EC profile
+      ErasureCodeProfile profile = osdmap.get_erasure_code_profile(erasure_code_profile);
+      auto it = profile.find("num_zones");
+      if (it != profile.end()) {
+        std::string err_str;
+        int num_zones = strict_strtol(it->second.c_str(), 10, &err_str);
+        if (err_str.empty() && num_zones >= 1) {
+          pi->opts.set(pool_opts_t::NUM_ZONES, static_cast<int64_t>(num_zones));
+        }
+      } else {
+        // Default to 1 if not specified
+        pi->opts.set(pool_opts_t::NUM_ZONES, static_cast<int64_t>(1));
+      }
   } else {
       pi->erasure_code_profile = "";
   }
@@ -8440,19 +8550,38 @@ int OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p,
       return -EINVAL;
     }
     // Restrict the set of shards that can be a primary to the 1st data
-    // raw_shard (raw_shard 0) and the coding parity raw_shards because§
+    // raw_shard (raw_shard 0) and the coding parity raw_shards because
     // the other shards (including local parity for LRC) may not have
     // up to date copies of xattrs including OI
+    // For multi-zone configurations, we need to mark non-primary shards
+    // across all zones: shard + (k+m)*zone for each zone
     p.nonprimary_shards.clear();
-    for (raw_shard_id_t raw_shard; raw_shard < k + m; ++raw_shard) {
+    
+    // Get num_zones from the EC profile, default to 1
+    ErasureCodeProfile profile = osdmap.get_erasure_code_profile(p.erasure_code_profile);
+    int num_zones = 1;
+    auto it = profile.find("num_zones");
+    if (it != profile.end()) {
+      std::string err_str;
+      num_zones = strict_strtol(it->second.c_str(), 10, &err_str);
+      if (!err_str.empty() || num_zones < 1) {
+        num_zones = 1;
+      }
+    }
+    
+    for (raw_shard_id_t raw_shard(0); raw_shard < k + m; ++raw_shard) {
       if (raw_shard > 0 && raw_shard < k) {
-	shard_id_t shard;
-	if (erasure_code->get_chunk_mapping().size() > raw_shard ) {
-	  shard = shard_id_t(erasure_code->get_chunk_mapping().at(int(raw_shard)));
-	} else {
-	  shard = shard_id_t(int(raw_shard));
-	}
-        p.nonprimary_shards.insert(shard);
+       shard_id_t rel_shard;
+       if (erasure_code->get_chunk_mapping().size() > static_cast<size_t>(int(raw_shard))) {
+         rel_shard = erasure_code->get_chunk_mapping().at(int(raw_shard));
+       } else {
+         rel_shard = shard_id_t(int8_t(raw_shard));
+       }
+       // Add this shard across all zones
+       for (int zone = 0; zone < num_zones; ++zone) {
+         shard_id_t shard = shard_id_t(int8_t(rel_shard) + (k + m) * zone);
+         p.nonprimary_shards.insert(shard);
+       }
       }
     }
     p.flags |= pg_pool_t::FLAG_EC_OPTIMIZATIONS;
@@ -9276,6 +9405,22 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
         ss << "read_ratio must be between 0 and 100";
         return -ERANGE;
       }
+    } else if (var == "num_zones") {
+      if (interr.length()) {
+        ss << "error parsing int value '" << val << "': " << interr;
+        return -EINVAL;
+      }
+      if (n < 0) {
+        ss << "num_zones must be non-negative";
+        return -EINVAL;
+      }
+      // For EC pools, validate that num_zones is compatible with pool
+      if (p.type == pg_pool_t::TYPE_ERASURE) {
+        if (n < 1) {
+          ss << "num_zones must be at least 1 for erasure coded pools";
+          return -EINVAL;
+        }
+      }
     }
 
     pool_opts_t::opt_desc_t desc = pool_opts_t::get_opt_desc(var);
@@ -9316,6 +9461,40 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     ss << "unrecognized variable '" << var << "'";
     return -EINVAL;
   }
+  
+  // For EC pools, adjust pool size when num_zones is set
+  if (var == "num_zones" && p.type == pg_pool_t::TYPE_ERASURE) {
+    int64_t num_zones = 0;
+    p.opts.get(pool_opts_t::NUM_ZONES, &num_zones);
+    
+    if (num_zones > 0) {
+      // Get the base EC pool size (k + m)
+      ErasureCodeInterfaceRef erasure_code;
+      stringstream tmp;
+      int err = get_erasure_code(p.erasure_code_profile, &erasure_code, &tmp);
+      if (err == 0) {
+        unsigned base_size = erasure_code->get_chunk_count();
+        unsigned new_size = num_zones * base_size;
+        
+        // Check if pool size is changing (increasing)
+        if (new_size > p.size) {
+          // Validate the new size with pg_num
+          int r = check_pg_num(pool, p.get_pg_num(), new_size, p.get_crush_rule(), &ss);
+          if (r < 0) {
+            return r;
+          }
+        }
+        
+        // Set pool size = num_zones * (k + m)
+        p.size = new_size;
+        ss << "; pool size adjusted to " << (int)p.size
+           << " (" << num_zones << " zones * " << base_size << " chunks)";
+      } else {
+        ss << "; warning: could not adjust pool size: " << tmp.str();
+      }
+    }
+  }
+  
   if (val != "unset") {
     ss << "set pool " << pool << " " << var << " to " << val;
   } else {
@@ -11661,33 +11840,61 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     cmd_getval(cmdmap, "type", type);
     cmd_getval(cmdmap, "class", device_class);
 
-    if (osdmap.crush->rule_exists(name)) {
-      // The name is uniquely associated to a ruleid and the rule it contains
-      // From the user point of view, the rule is more meaningfull.
-      ss << "rule " << name << " already exists";
-      err = 0;
-      goto reply_no_propose;
-    }
-
-    CrushWrapper newcrush = _get_pending_crush();
-
-    if (newcrush.rule_exists(name)) {
-      // The name is uniquely associated to a ruleid and the rule it contains
-      // From the user point of view, the rule is more meaningfull.
-      ss << "rule " << name << " already exists";
-      err = 0;
-    } else {
-      int ruleno = newcrush.add_simple_rule(
-	name, root, type, device_class,
-	"firstn", pg_pool_t::TYPE_REPLICATED, &ss);
-      if (ruleno < 0) {
-	err = ruleno;
+    int rule;
+    err = crush_rule_create_replica(name, root, 1, 1, "", type, device_class, false, &rule, &ss);
+    if (err < 0) {
+      switch(err) {
+      case -EEXIST: // return immediately
+	ss << "rule " << name << " already exists";
+	err = 0;
 	goto reply_no_propose;
+      case -EALREADY: // wait for pending to be proposed
+	ss << "rule " << name << " already exists";
+	err = 0;
+	break;
+      default: // non recoverable error
+ 	goto reply_no_propose;
       }
-
-      pending_inc.crush.clear();
-      newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
+    } else {
+      ss << "created rule " << name << " at " << err;
     }
+
+    getline(ss, rs);
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
+					      get_last_committed() + 1));
+    return true;
+
+  } else if (prefix == "osd crush rule create-stretch-replicated") {
+    string name = cmd_getval_or<string>(cmdmap, "rule_name", "stretch_replica_rule");
+    string root = cmd_getval_or<string>(cmdmap, "root", "default");
+    int num_zones = cmd_getval_or<int64_t>(cmdmap, "zones", 2);
+    int num_replica_per_zone = cmd_getval_or<int64_t>(cmdmap, "num_replica_per_zone", 2);
+    string zone_failure_domain = cmd_getval_or<string>(cmdmap, "zone_failure_domain", "datacenter");
+    string osd_failure_domain = cmd_getval_or<string>(cmdmap, "osd_failure_domain", "host");
+    bool force = false;
+    cmd_getval(cmdmap, "force", force);
+    string device_class;
+    cmd_getval(cmdmap, "class", device_class);
+
+    int rule;
+    err = crush_rule_create_replica(name, root, num_zones, num_replica_per_zone, zone_failure_domain, osd_failure_domain, device_class, force, &rule, &ss);
+    if (err < 0) {
+      switch(err) {
+      case -EEXIST: // return immediately
+	ss << "rule " << name << " already exists";
+	err = 0;
+	goto reply_no_propose;
+      case -EALREADY: // wait for pending to be proposed
+	ss << "rule " << name << " already exists";
+	err = 0;
+	break;
+      default: // non recoverable error
+ 	goto reply_no_propose;
+      }
+    } else {
+      ss << "created rule " << name << " at " << err;
+    }
+
     getline(ss, rs);
     wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
@@ -11848,8 +12055,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto wait;
     if (err)
       goto reply_no_propose;
-    string name, poolstr;
+    string name;
     cmd_getval(cmdmap, "name", name);
+    int num_zones = cmd_getval_or<int64_t>(cmdmap, "zones", 1);
     string profile;
     cmd_getval(cmdmap, "profile", profile);
     if (profile == "")
@@ -11878,7 +12086,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     int rule;
-    err = crush_rule_create_erasure(name, profile, &rule, &ss);
+    err = crush_rule_create_erasure(name, num_zones, profile, &rule, &ss);
     if (err < 0) {
       switch(err) {
       case -EEXIST: // return immediately
@@ -13879,12 +14087,19 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     bool crimson = cmd_getval_or<bool>(cmdmap, "crimson", false) ||
       cct->_conf.get_val<bool>("osd_pool_default_crimson");
 
+    int num_zones = cmd_getval_or<int64_t>(cmdmap, "zones", 1);
+    string root = cmd_getval_or<string>(cmdmap, "root", "default");
+    int num_replica_per_zone = cmd_getval_or<int64_t>(cmdmap, "num_replica_per_zone", 2);
+    string zone_failure_domain = cmd_getval_or<string>(cmdmap, "zone_failure_domain", "datacenter");
+    string osd_failure_domain = cmd_getval_or<string>(cmdmap, "osd_failure_domain", "host");
+    string device_class;
+    cmd_getval(cmdmap, "class", device_class);
     err = prepare_new_pool(poolstr,
 			   -1, // default crush rule
 			   rule_name,
 			   pg_num, pgp_num, pg_num_min, pg_num_max,
                            repl_size, target_size_bytes, target_size_ratio,
-			   erasure_code_profile, pool_type,
+			   erasure_code_profile, num_zones, root, num_replica_per_zone, zone_failure_domain, osd_failure_domain, device_class, pool_type,
                            (uint64_t)expected_num_objects,
                            fast_read,
 			   pg_autoscale_mode,
@@ -15577,6 +15792,71 @@ void OSDMonitor::try_disable_stretch_mode(stringstream& ss,
   return;
 }
 
+void OSDMonitor::validate_stretch_mode_pools(
+    const CrushWrapper& crush,
+    const mempool::osdmap::map<int64_t, string>& pool_names,
+    const mempool::osdmap::map<int64_t, pg_pool_t>& pools,
+    stringstream& ss,
+    bool *okay,
+    int *errcode,
+    const string& new_crush_rule)
+{
+  *okay = false;
+  
+  // Validate CRUSH rule exists
+  int new_crush_rule_result = crush.get_rule_id(new_crush_rule);
+  if (new_crush_rule_result < 0) {
+    ss << "unrecognized crush rule " << new_crush_rule;
+    *errcode = new_crush_rule_result;
+    return;
+  }
+  
+  __u8 new_rule = static_cast<__u8>(new_crush_rule_result);
+  int crush_rule_type = crush.get_rule_type(new_rule);
+  if (crush_rule_type < 0) {
+    ss << "unable to get type for crush rule " << new_crush_rule;
+    *errcode = -EINVAL;
+    return;
+  }
+
+  // Validate each pool
+  for (const auto& pooli : pools) {
+    int64_t poolid = pooli.first;
+    const pg_pool_t& p = pooli.second;
+    
+    // Validate that pool type matches crush rule type
+    if (p.is_replicated() && crush_rule_type != pg_pool_t::TYPE_REPLICATED) {
+      ss << "pool '" << pool_names.at(poolid) << "' is replicated but crush rule '"
+         << new_crush_rule << "' is not a replicated rule";
+      *errcode = -EINVAL;
+      return;
+    }
+    if (p.is_erasure() && crush_rule_type != pg_pool_t::TYPE_ERASURE) {
+      ss << "pool '" << pool_names.at(poolid) << "' is erasure-coded but crush rule '"
+         << new_crush_rule << "' is not an erasure-coded rule";
+      *errcode = -EINVAL;
+      return;
+    }
+
+    // For replicated pools, validate size/min_size to start out with the default values
+    if (p.is_replicated()) {
+      uint8_t default_size = g_conf().get_val<uint64_t>("osd_pool_default_size");
+      if ((p.get_size() != default_size ||
+           (p.get_min_size() != g_conf().get_osd_pool_default_min_size(default_size))) &&
+          (p.get_crush_rule() != new_rule)) {
+        ss << "we currently require stretch mode pools start out with the"
+           " default size/min_size, which '" << pool_names.at(poolid) << "' does not";
+        *errcode = -EINVAL;
+        return;
+      }
+    }
+    // else for erasure-coded pools size validation happens through the EC profile
+  }
+
+  *okay = true;
+  *errcode = 0;
+}
+
 void OSDMonitor::try_enable_stretch_mode_pools(stringstream& ss, bool *okay,
 					       int *errcode,
 					       set<pg_pool_t*>* pools,
@@ -15587,31 +15867,19 @@ void OSDMonitor::try_enable_stretch_mode_pools(stringstream& ss, bool *okay,
    * are replicated pools with default size/min_size.
    */
   dout(20) << __func__ << dendl;
-  *okay = false;
-  int new_crush_rule_result = osdmap.crush->get_rule_id(new_crush_rule);
-  if (new_crush_rule_result < 0) {
-    ss << "unrecognized crush rule " << new_crush_rule_result;
-    *errcode = new_crush_rule_result;
+  
+  // Validate stretch mode pools
+  validate_stretch_mode_pools(*osdmap.crush, osdmap.pool_name, osdmap.pools,
+                              ss, okay, errcode, new_crush_rule);
+  
+  if (!*okay) {
     return;
   }
-  __u8 new_rule = static_cast<__u8>(new_crush_rule_result);
+  
+  // Populate the pools after validation passed
   for (const auto& pooli : osdmap.pools) {
     int64_t poolid = pooli.first;
     const pg_pool_t *p = &pooli.second;
-    if (!p->is_replicated()) {
-      ss << "stretched pools must be replicated; '" << osdmap.pool_name[poolid] << "' is erasure-coded";
-      *errcode = -EINVAL;
-      return;
-    }
-    uint8_t default_size = g_conf().get_val<uint64_t>("osd_pool_default_size");
-    if ((p->get_size() != default_size ||
-	 (p->get_min_size() != g_conf().get_osd_pool_default_min_size(default_size))) &&
-	(p->get_crush_rule() != new_rule)) {
-      ss << "we currently require stretch mode pools start out with the"
-	" default size/min_size, which '" << osdmap.pool_name[poolid] << "' does not";
-      *errcode = -EINVAL;
-      return;
-    }
     pg_pool_t *pp = pending_inc.get_new_pool(poolid, p);
     // TODO: The part where we unconditionally copy the pools into pending_inc is bad
     // the attempt may fail and then we have these pool updates...but they won't do anything
@@ -15690,8 +15958,14 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
       pool->peering_crush_bucket_target = bucket_count;
       pool->peering_crush_bucket_barrier = dividing_id;
       pool->peering_crush_mandatory_member = CRUSH_ITEM_NONE;
-      pool->size = g_conf().get_val<uint64_t>("mon_stretch_pool_size");
-      pool->min_size = g_conf().get_val<uint64_t>("mon_stretch_pool_min_size");
+
+      // Set size/min_size for replicated pools
+      if (pool->is_replicated()) {
+        pool->size = g_conf().get_val<uint64_t>("mon_stretch_pool_size");
+        pool->min_size = g_conf().get_val<uint64_t>("mon_stretch_pool_min_size");
+      }
+      // else for erasure-coded pools, size is determined by the erasure code profile
+
     }
     pending_inc.change_stretch_mode = true;
     pending_inc.stretch_mode_enabled = true;

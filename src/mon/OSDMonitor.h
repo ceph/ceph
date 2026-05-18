@@ -497,7 +497,18 @@ private:
 			ceph::ErasureCodeProfile &profile,
 			bool force,
 			std::ostream *ss);
+  int crush_rule_create_replica(const std::string &name,
+				const std::string &root,
+        int num_zones,
+        int num_replica_per_zone,
+        const std::string &zone_failure_domain,
+        const std::string &osd_failure_domain,
+        const std::string &device_class,
+        bool force,
+        int *rule,
+				std::ostream *ss);
   int crush_rule_create_erasure(const std::string &name,
+        int num_zones,
 				const std::string &profile,
 				int *rule,
 				std::ostream *ss);
@@ -508,8 +519,15 @@ private:
 		       ceph::ErasureCodeInterfaceRef *erasure_code,
 		       std::ostream *ss) const;
   int prepare_pool_crush_rule(const unsigned pool_type,
+            const std::string &pool_name,
 			      const std::string &erasure_code_profile,
 			      const std::string &rule_name,
+            int num_zones,
+            const std::string &root,
+            int num_replica_per_zone,
+            const std::string &zone_failure_domain,
+            const std::string &osd_failure_domain,
+            const std::string &device_class,
 			      int *crush_rule,
 			      std::ostream *ss);
   bool erasure_code_profile_in_use(
@@ -540,6 +558,12 @@ private:
 		       const uint64_t target_size_bytes,
 		       const float target_size_ratio,
 		       const std::string &erasure_code_profile,
+           int num_zones,
+           const std::string &root,
+           int num_replica_per_zone,
+           const std::string &zone_failure_domain,
+           const std::string &osd_failure_domain,
+           const std::string &device_class,
                        const unsigned pool_type,
                        const uint64_t expected_num_objects,
                        FastReadType fast_read,
@@ -830,6 +854,26 @@ public:
 				     int *errcode,
 				     std::set<pg_pool_t*>* pools,
 				     const std::string& new_crush_rule);
+
+  /**
+   * Static helper for validating pools for stretch mode.
+   * Extracted for testability - can be called from unit tests.
+   * @param crush: CrushWrapper to validate rule against
+   * @param pool_names: Map of pool IDs to names (for error messages)
+   * @param pools: Map of pool IDs to pool objects to validate
+   * @param ss: stringstream for error messages
+   * @param okay: Set to true if validation passes
+   * @param errcode: Set to error code if validation fails
+   * @param new_crush_rule: Name of the CRUSH rule to validate
+   */
+  static void validate_stretch_mode_pools(
+      const CrushWrapper& crush,
+      const mempool::osdmap::map<int64_t, std::string>& pool_names,
+      const mempool::osdmap::map<int64_t, pg_pool_t>& pools,
+      std::stringstream& ss,
+      bool *okay,
+      int *errcode,
+      const std::string& new_crush_rule);
   /**
    * Check validity of inputs and OSD/CRUSH state to
    * engage stretch mode. Designed to be used with

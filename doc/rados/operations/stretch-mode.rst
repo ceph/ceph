@@ -337,10 +337,6 @@ Two Monitors must be run in each data center, plus a tiebreaker in a third
 will connect only to Monitors within the data center in which they are located.
 OSDs *DO NOT* connect to the tiebreaker monitor.
 
-Erasure-coded pools cannot be used with stretch mode. Attempts to use erasure
-coded pools with stretch mode will fail. Erasure coded pools cannot be created
-while in stretch mode. 
-
 To use stretch mode, you will need to create a CRUSH rule that provides two
 replicas in each data center. Ensure that there are four total replicas: two in
 each data center. If pools exist in the cluster that do not have the default
@@ -364,10 +360,6 @@ data centers has been restored. This reduces the potential for data loss.
                  step chooseleaf firstn 2 type host
                  step emit
       }
-
-In the future, stretch mode could support erasure-coded pools,
-enable deployments across more than two data centers,
-and accommodate multiple CRUSH device classes.
 
 Other commands
 ==============

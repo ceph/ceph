@@ -1454,6 +1454,137 @@ TEST_F(CrushWrapperTest, try_remap_rule) {
   }
 }
 
+TEST_F(CrushWrapperTest, stretch_replica) {
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
+  c->create();
+  c->set_type_name(0, "osd");
+  c->set_type_name(1, "host");
+  c->set_type_name(2, "datacenter");
+  c->set_type_name(3, "root");
+
+  int bno;
+  int r = c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_DEFAULT,
+                      3, 0, NULL, NULL, &bno);
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(-1, bno);
+  c->set_item_name(bno, "default");
+
+  ostringstream err;
+  map<string,string> loc;
+  int rule_id;
+  for (int i = 0; i < 3; ++i) {
+    loc["root"] = "default";
+    loc["datacenter"] = "a";
+    loc["host"] = "a" + to_string(i);
+    c->insert_item(cct, i, 1.0, "osd." + to_string(i), loc);
+    rule_id = c->add_simple_stretch_rule("stretch_rule", "default", "datacenter", "host", 2, 3, "", "firstn", pg_pool_t::TYPE_REPLICATED, false, &err);
+    ASSERT_EQ(rule_id, -EINVAL);
+  }
+  for (int i = 3; i < 5; ++i) {
+    loc["root"] = "default";
+    loc["datacenter"] = "b";
+    loc["host"] = "b" + to_string(i);
+    c->insert_item(cct, i, 1.0, "osd." + to_string(i), loc);
+    rule_id = c->add_simple_stretch_rule("stretch_rule", "default", "datacenter", "host", 2, 3, "", "firstn", pg_pool_t::TYPE_REPLICATED, false, &err);
+    ASSERT_EQ(rule_id, -EINVAL);
+  }
+
+  loc["datacenter"] = "b";
+  loc["host"] = "b5";
+  c->insert_item(cct, 5, 1.0, "osd.5", loc);
+
+  //Should pass now that 2 datacenters have 3 hosts each
+  rule_id = c->add_simple_stretch_rule("stretch_rule", "default", "datacenter", "host", 2, 3, "", "firstn", pg_pool_t::TYPE_REPLICATED, false, &err);
+  ASSERT_GE(rule_id, 0);
+
+  c->finalize();
+
+  std::vector<uint32_t> weight(c->get_max_devices(), 0x10000);
+  cout << c->get_max_devices() << std::endl;
+
+  for (int x = 0; x < 100; ++x) {
+    std::vector<int> out;
+    c->do_rule(rule_id, x, out, 6, weight, 0);
+    ASSERT_EQ(6, out.size());
+    int count_a = 0;
+    int count_b = 0;
+    for (auto osd : out) {
+      auto full_loc = c->get_full_location(osd);
+      if (full_loc["datacenter"] == "a") count_a++;
+      if (full_loc["datacenter"] == "b") count_b++;
+    }
+    ASSERT_EQ(3, count_a);
+    ASSERT_EQ(3, count_b);
+  }
+
+}
+
+TEST_F(CrushWrapperTest, stretch_ec) {
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
+  c->create();
+  c->set_type_name(0, "osd");
+  c->set_type_name(1, "host");
+  c->set_type_name(2, "datacenter");
+  c->set_type_name(3, "root");
+
+  int bno;
+  int r = c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_DEFAULT,
+                      3, 0, NULL, NULL, &bno);
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(-1, bno);
+  c->set_item_name(bno, "default");
+
+  ostringstream err;
+  map<string,string> loc;
+  int rule_id;
+  for (int i = 0; i < 3; ++i) {
+    loc["root"] = "default";
+    loc["datacenter"] = "a";
+    loc["host"] = "a" + to_string(i);
+    c->insert_item(cct, i, 1.0, "osd." + to_string(i), loc);
+    rule_id = c->add_simple_stretch_rule("stretch_rule", "default", "datacenter", "host", 2, 3, "", "indep", pg_pool_t::TYPE_ERASURE, false, &err);
+    ASSERT_EQ(rule_id, -EINVAL);
+  }
+  for (int i = 3; i < 5; ++i) {
+    loc["root"] = "default";
+    loc["datacenter"] = "b";
+    loc["host"] = "b" + to_string(i);
+    c->insert_item(cct, i, 1.0, "osd." + to_string(i), loc);
+    rule_id = c->add_simple_stretch_rule("stretch_rule", "default", "datacenter", "host", 2, 3, "", "indep", pg_pool_t::TYPE_ERASURE, false, &err);
+    ASSERT_EQ(rule_id, -EINVAL);
+  }
+
+  loc["datacenter"] = "b";
+  loc["host"] = "b5";
+  c->insert_item(cct, 5, 1.0, "osd.5", loc);
+
+  //Should pass now that 2 datacenters have 3 hosts each
+  rule_id = c->add_simple_stretch_rule("stretch_rule", "default", "datacenter", "host", 2, 3, "", "indep", pg_pool_t::TYPE_ERASURE, false, &err);
+  ASSERT_GE(rule_id, 0);
+
+  c->finalize();
+
+  std::vector<uint32_t> weight(c->get_max_devices(), 0x10000);
+  cout << c->get_max_devices() << std::endl;
+
+  for (int x = 0; x < 100; ++x) {
+    std::vector<int> out;
+    c->do_rule(rule_id, x, out, 6, weight, 0);
+    ASSERT_EQ(6, out.size());
+    int count_a = 0;
+    int count_b = 0;
+    for (auto osd : out) {
+      if (osd == CRUSH_ITEM_NONE) continue;
+      auto full_loc = c->get_full_location(osd);
+      if (full_loc["datacenter"] == "a") count_a++;
+      if (full_loc["datacenter"] == "b") count_b++;
+    }
+    ASSERT_EQ(3, count_a);
+    ASSERT_EQ(3, count_b);
+  }
+
+}
+
 // Local Variables:
 // compile-command: "cd ../../../build ; make -j4 unittest_crush_wrapper && valgrind --tool=memcheck bin/unittest_crush_wrapper"
 // End:

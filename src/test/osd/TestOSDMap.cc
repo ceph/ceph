@@ -3457,26 +3457,161 @@ TEST_F(OSDMapTest, pgtemp_primaryfirst) {
 	// non-primary shards last
 	ASSERT_TRUE(pool.is_nonprimary_shard(shard_id_t(encoded[osd])));
       }
-      std::cout << osd << " " << seed << " " << osdmap.pgtemp_primaryfirst(pool, pgid, shard_id_t(osd)) << std::endl;
-      // Encode and decode should be equivalent
-      ASSERT_EQ(osdmap.pgtemp_undo_primaryfirst(pool, pgid,
-		  osdmap.pgtemp_primaryfirst(pool, pgid, shard_id_t(osd))),
-		shard_id_t(osd));
-      // Shard 0 never changes, seed 62 is a special case because all the other
-      // shards are non-primary
-      if ((osd != 0) && (seed != 62)) {
-	// Encode should be different
-	ASSERT_NE(osdmap.pgtemp_primaryfirst(pool, pgid, shard_id_t(osd)),
-		  shard_id_t(osd));
-      } else {
-	// Encode should not change
-	ASSERT_EQ(osdmap.pgtemp_primaryfirst(pool, pgid, shard_id_t(osd)),
-		  shard_id_t(osd));
-      }
     }
     decoded = osdmap.pgtemp_undo_primaryfirst(pool, pgid, encoded);
     ASSERT_EQ(set, decoded);
   }
+}
+
+// Helper function to test primaryfirst mapping with pg_shard_t array
+// Takes an osdmap, pool configuration, and array of pg_shard_t
+// Verifies forward and reverse mapping consistency
+void test_primaryfirst_mapping(
+  OSDMap& osdmap,
+  pg_pool_t& pool,
+  pg_t pgid,
+  const vector<pg_shard_t>& shards)
+{
+  // Convert pg_shard_t array to vector<int> for forward mapping
+  vector<int> osd_vec;
+  for (const auto& shard : shards) {
+    osd_vec.push_back(shard.osd);
+  }
+
+  // Perform forward mapping using pgtemp_primaryfirst
+  vector<int> encoded = osdmap.pgtemp_primaryfirst(pool, osd_vec);
+  
+  // Verify pgtemp_undo_primaryfirst returns back to original map
+  vector<int> decoded = osdmap.pgtemp_undo_primaryfirst(pool, pgid, encoded);
+  ASSERT_EQ(osd_vec, decoded) << "Forward/reverse mapping mismatch for full vector";
+  
+  // Verify pgtemp_undo_primaryfirst (shard variation) does the correct thing for each shard
+  // For each position in the encoded array, verify undo returns the correct original shard
+  for (size_t i = 0; i < encoded.size(); i++) {
+    shard_id_t original_shard = osdmap.pgtemp_undo_primaryfirst(pool, pgid, shard_id_t(i));
+    // Verify the decoded OSD matches the original OSD at this shard position
+    ASSERT_LT(original_shard.id, osd_vec.size()) << "Decoded shard " << original_shard << " out of range";
+    ASSERT_EQ(encoded[i], osd_vec[original_shard.id])
+      << "OSD mismatch: encoded[" << i << "]=" << encoded[i]
+      << " but osd_vec[" << original_shard << "]=" << osd_vec[original_shard.id];
+  }
+}
+
+// Wrapper function that generates test patterns for given k, m, num_zones
+void test_primaryfirst_patterns(
+  OSDMap& osdmap,
+  pg_t pgid,
+  int k,
+  int m,
+  int num_zones)
+{
+  int total_shards = (k + m) * num_zones;
+  pg_pool_t pool;
+  pool.size = total_shards;
+  pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+  
+  // Set up pg_temp for this pool
+  OSDMap::Incremental pgtemp_map(osdmap.get_epoch() + 1);
+  vector<int> temp_osds;
+  for (int i = 0; i < total_shards; i++) {
+    temp_osds.push_back(i);
+  }
+  pgtemp_map.new_pg_temp[pgid] = mempool::osdmap::vector<int>(
+    temp_osds.begin(), temp_osds.end());
+  osdmap.apply_incremental(pgtemp_map);
+  
+  // Mark some shards as non-primary (data shards 1 through k-1 are non-primary)
+  for (int i = 1; i < k; i++) {
+    for (int z = 0; z < num_zones; z++) {
+      pool.nonprimary_shards.insert(shard_id_t(i + (k + m) * z));
+    }
+  }
+  
+  // Pattern 1: shard == osd (simple case)
+  {
+    vector<pg_shard_t> shards;
+    for (int i = 0; i < total_shards; i++) {
+      shards.push_back(pg_shard_t(i, shard_id_t(i)));
+    }
+    test_primaryfirst_mapping(osdmap, pool, pgid, shards);
+  }
+  
+  // Pattern 2: large OSDs that won't fit in an int8
+  {
+    vector<pg_shard_t> shards;
+    int base_osd = 1000 * num_zones; // Large OSD numbers
+    for (int i = 0; i < total_shards; i++) {
+      shards.push_back(pg_shard_t(base_osd + i, shard_id_t(i)));
+    }
+    test_primaryfirst_mapping(osdmap, pool, pgid, shards);
+  }
+  
+  // Pattern 3: Overlapping OSDs - shards 0,1 same OSD
+  {
+    vector<pg_shard_t> shards;
+    shards.push_back(pg_shard_t(100, shard_id_t(0)));
+    shards.push_back(pg_shard_t(100, shard_id_t(1))); // Same OSD as shard 0
+    for (int i = 2; i < total_shards; i++) {
+      shards.push_back(pg_shard_t(100 + i, shard_id_t(i)));
+    }
+    test_primaryfirst_mapping(osdmap, pool, pgid, shards);
+  }
+  
+  // Pattern 4: Overlapping OSDs - shards 0,k same OSD
+  if (k < total_shards) {
+    vector<pg_shard_t> shards;
+    shards.push_back(pg_shard_t(200, shard_id_t(0)));
+    for (int i = 1; i < k; i++) {
+      shards.push_back(pg_shard_t(200 + i, shard_id_t(i)));
+    }
+    shards.push_back(pg_shard_t(200, shard_id_t(k))); // Same OSD as shard 0
+    for (int i = k + 1; i < total_shards; i++) {
+      shards.push_back(pg_shard_t(200 + i, shard_id_t(i)));
+    }
+    test_primaryfirst_mapping(osdmap, pool, pgid, shards);
+  }
+  
+  // Pattern 5: Overlapping OSDs - shards 1,2 same OSD
+  if (total_shards > 2) {
+    vector<pg_shard_t> shards;
+    shards.push_back(pg_shard_t(300, shard_id_t(0)));
+    shards.push_back(pg_shard_t(301, shard_id_t(1)));
+    shards.push_back(pg_shard_t(301, shard_id_t(2))); // Same OSD as shard 1
+    for (int i = 3; i < total_shards; i++) {
+      shards.push_back(pg_shard_t(300 + i, shard_id_t(i)));
+    }
+    test_primaryfirst_mapping(osdmap, pool, pgid, shards);
+  }
+  
+  // Pattern 6: All shards same OSD
+  {
+    vector<pg_shard_t> shards;
+    for (int i = 0; i < total_shards; i++) {
+      shards.push_back(pg_shard_t(400, shard_id_t(i)));
+    }
+    test_primaryfirst_mapping(osdmap, pool, pgid, shards);
+  }
+}
+
+// Main test: test all combinations of k, m, num_zones
+TEST_F(OSDMapTest, pgtemp_primaryfirst_comprehensive) {
+  set_up_map();
+  
+  pg_t rawpg(0, my_ec_pool);
+  pg_t pgid = osdmap.raw_pg_to_pg(rawpg);
+  
+  // Test all combinations:
+  // k = 2 to 5 inclusive
+  // m = 1 to 3 inclusive  
+  // num_zones = 1 to 3 inclusive
+  for (int k = 2; k <= 5; k++) {
+    for (int m = 1; m <= 3; m++) {
+      for (int num_zones = 1; num_zones <= 3; num_zones++) {
+        std::cout << "Testing k=" << k << " m=" << m << " num_zones=" << num_zones << std::endl;
+        test_primaryfirst_patterns(osdmap, pgid, k, m, num_zones);
+      }
+    }
+}
 }
 
 INSTANTIATE_TEST_SUITE_P(

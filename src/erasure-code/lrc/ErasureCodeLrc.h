@@ -101,6 +101,7 @@ public:
 			 const shard_id_set &available,
 			 shard_id_set *minimum) override;
 
+  using ErasureCode::create_rule;
   int create_rule(const std::string &name,
 			     CrushWrapper &crush,
 			     std::ostream *ss) const override;

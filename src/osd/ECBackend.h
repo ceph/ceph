@@ -290,7 +290,7 @@ public:
     bool operator()(const std::set<pg_shard_t> &_have) const override {
       shard_id_set have;
       for (pg_shard_t p: _have) {
-        have.insert(p.shard);
+        have.insert(sinfo->get_rel_shard(p.shard));
       }
       std::unique_ptr<shard_id_map<std::vector<std::pair<int, int>>>>
           min_sub_chunks = nullptr;
