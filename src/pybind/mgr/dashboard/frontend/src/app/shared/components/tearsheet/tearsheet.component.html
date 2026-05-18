@@ -38,7 +38,8 @@
            [columnNumbers]="{'lg': 13, 'md': 13, 'sm': 13}"
            class="tearsheet-main">
         <!-- Tearsheet Content Area -->
-        <div class="tearsheet-content tearsheet-content--full">
+        <div class="tearsheet-content tearsheet-content--full"
+             [ngStyle]="contentOverflowStyle">
         <ng-container
           *ngTemplateOutlet="activeStepTemplate">
         </ng-container>
@@ -60,8 +61,22 @@
           @if (currentStep === lastStep) {
           <button cdsButton="primary"
                   size="xl"
+                  class="tearsheet-footer-submit"
+                  [disabled]="isSubmitLoading"
                   (click)="onSubmit()"
-                  i18n>{{submitButtonLabel}}</button>
+                  i18n>
+            @if (isSubmitLoading) {
+            <cds-loading
+              [isActive]="isSubmitLoading"
+              [overlay]="false"
+              size="sm">
+            </cds-loading>
+              {{submitButtonLoadingLabel}}...
+            }
+            @else {
+              {{submitButtonLabel}}
+            }
+          </button>
           }
           @else {
           <button cdsButton="primary"
@@ -124,7 +139,8 @@
         <div
           cdsCol
           class="tearsheet-content"
-          [columnNumbers]="{ lg: 10 }">
+          [columnNumbers]="{ lg: 10 }"
+          [ngStyle]="contentOverflowStyle">
           <ng-container *ngTemplateOutlet="activeStepTemplate"></ng-container>
         </div>
         <aside
@@ -137,7 +153,8 @@
       }
       @else {
       <!-- Tearsheet content without right influencer -->
-      <div class="tearsheet-content">
+      <div class="tearsheet-content"
+           [ngStyle]="contentOverflowStyle">
         <ng-container *ngTemplateOutlet="activeStepTemplate"></ng-container>
       </div>
       }
@@ -159,7 +176,7 @@
                 size="xl"
                 class="tearsheet-footer-submit"
                 [disabled]="isSubmitLoading"
-                (click)="handleSubmit()"
+                (click)="onSubmit()"
                 i18n>
           @if (isSubmitLoading) {
           <cds-loading

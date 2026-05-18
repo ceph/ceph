@@ -3,7 +3,7 @@ import { Component, ViewChild } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { SharedModule } from '../../shared.module';
 import { TearsheetStepComponent } from '../tearsheet-step/tearsheet-step.component';
-import { TearsheetComponent } from './tearsheet.component';
+import { TearsheetComponent, TearsheetOverflowScroll } from './tearsheet.component';
 import { ActivatedRoute } from '@angular/router';
 
 // Mock Component that uses tearsheet
@@ -13,6 +13,7 @@ import { ActivatedRoute } from '@angular/router';
       [steps]="steps"
       [title]="title"
       [description]="description"
+      [overflowScroll]="overflowScroll"
       (submitRequested)="onSubmit()"
     >
       <cd-tearsheet-step>
@@ -46,6 +47,7 @@ class MockHostComponent {
   ];
   title = 'Test Title';
   description = 'Test Description';
+  overflowScroll?: TearsheetOverflowScroll;
 
   onSubmit() {}
 
@@ -109,6 +111,27 @@ describe('TearsheetComponent', () => {
     const step1Content = hostFixture.debugElement.query(By.css('.step-1-content'));
     expect(step1Content).toBeTruthy();
     expect(step1Content.nativeElement.textContent).toContain('Step 1 Content');
+  });
+
+  describe('overflowScroll', () => {
+    it('should not set inline overflow when overflowScroll is unset', () => {
+      const content = hostFixture.debugElement.query(By.css('.tearsheet-content'));
+      expect(content.nativeElement.style.overflow).toBe('');
+    });
+
+    it('should apply overflow style when overflowScroll is set', () => {
+      hostComponent.overflowScroll = 'hidden';
+      hostFixture.detectChanges();
+      const content = hostFixture.debugElement.query(By.css('.tearsheet-content'));
+      expect(content.nativeElement.style.overflow).toBe('hidden');
+    });
+
+    it('should enable scrolling when overflowScroll is auto', () => {
+      hostComponent.overflowScroll = 'auto';
+      hostFixture.detectChanges();
+      const content = hostFixture.debugElement.query(By.css('.tearsheet-content'));
+      expect(content.nativeElement.style.overflow).toBe('auto');
+    });
   });
 
   it('should emit submitRequested event', () => {

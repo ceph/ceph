@@ -1,0 +1,15 @@
+<div cdsGrid
+     [useCssGrid]="true"
+     [narrow]="true"
+     [fullWidth]="true">
+    <div cdsCol
+         [columnNumbers]="{sm: 4, md: 8, lg: 16}">
+        <h4 i18n>Add Hosts</h4>
+
+        <cd-hosts [hiddenColumns]="['service_instances']"
+                [hideMaintenance]="true"
+                [hasTableDetails]="false"
+                [showGeneralActionsOnly]="true"
+                [showExpandClusterBtn]="false"></cd-hosts>
+    </div>
+</div>    
