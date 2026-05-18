@@ -1968,7 +1968,7 @@ options:
   desc: Maximum allowed queue size for gc
   long_desc: The maximum allowed size of each gc queue, and its value should not be
     greater than osd_max_object_size - 1K.
-  default: 134068_K
+  default: 131071_K
   services:
   - rgw
   see_also:
