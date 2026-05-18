@@ -41,10 +41,16 @@ class OfflineHostWatcher(threading.Thread):
     def check_host(self, host: str) -> None:
         if host not in self.mgr.offline_hosts:
             try:
-                with self.mgr.async_timeout_handler(host, 'cephadm check-online'):
-                    self.mgr.wait_async(CephadmServe(self.mgr)._run_cephadm(
-                        host, cephadmNoImage, 'check-online', [],
-                        no_fsid=True, log_output=self.mgr.log_refresh_metadata))
+                with self.mgr.async_timeout_handler(
+                        host, 'cephadm _orch check-online'):
+                    self.mgr.wait_async(
+                        CephadmServe(self.mgr)._run_cephadm(
+                            host,
+                            cephadmNoImage,
+                            ['_orch', 'check-online'],
+                            [],
+                            no_fsid=True,
+                            log_output=self.mgr.log_refresh_metadata))
             except Exception:
                 logger.debug(f'OfflineHostDetector: detected {host} to be offline')
                 # kick serve loop in case corrective action must be taken for offline host

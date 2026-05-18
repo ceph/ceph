@@ -13,7 +13,7 @@ Synopsis
 |             [--log-dir LOG_DIR] [--logrotate-dir LOGROTATE_DIR]
 |             [--unit-dir UNIT_DIR] [--verbose] [--timeout TIMEOUT]
 |             [--retry RETRY] [--no-container-init]
-|             {version,pull,inspect-image,ls,list-networks,list-rdma,adopt,rm-daemon,rm-cluster,remove-file,deploy-file,sysctl-dir,run,shell,enter,ceph-volume,unit,logs,bootstrap,deploy,check-host,check-online,prepare-host,prepare-host-sudo-hardening,setup-ssh-user,add-repo,rm-repo,install,list-images,update-osd-service}
+|             {version,pull,inspect-image,ls,list-networks,list-rdma,adopt,rm-daemon,rm-cluster,remove-file,deploy-file,run,shell,enter,ceph-volume,unit,logs,bootstrap,deploy,check-host,prepare-host,prepare-host-sudo-hardening,setup-ssh-user,add-repo,rm-repo,install,list-images,update-osd-service}
 |               ...
 
 
@@ -90,16 +90,18 @@ Synopsis
 
 | **cephadm** **check-host** [-h] [--expect-hostname EXPECT_HOSTNAME]
 
-| **cephadm** **check-online**
-
 | **cephadm** **remove-file** [-h] [--fsid FSID] --path PATH
 
 | **cephadm** **deploy-file** [-h] [--fsid FSID] --path PATH [--mode MODE]
 |                          [--uid UID] [--gid GID]
 
-| **cephadm** **sysctl-dir** [-h] [--fsid FSID] (--list | --apply-system)
-
 | **cephadm** **prepare-host**
+
+| **cephadm** **prepare-host-sudo-hardening** [-h] [--ssh-user SSH_USER]
+|                                          [--ssh-pub-key SSH_PUB_KEY]
+|                                          [--cephadm-version VERSION]
+
+| **cephadm** **setup-ssh-user** [-h] --ssh-user SSH_USER --ssh-pub-key SSH_PUB_KEY
 
 | **cephadm** **add-repo** [-h] [--release RELEASE] [--version VERSION]
 |                          [--dev DEV] [--dev-commit DEV_COMMIT]
@@ -298,25 +300,14 @@ Arguments:
 * [--expect-hostname EXPECT_HOSTNAME] Check that hostname matches an expected value
 
 
-check-online
-------------
-
-check that the host is online by running ``true`` locally.
-
-This command is primarily intended for cephadm internals (for example, the
-offline host watcher), rather than direct operator workflows.
-
-
 remove-file
 -----------
 
 Remove a regular file on the local host. Missing paths are ignored.
-Refuses directories and symbolic links, only plain files are
-removed.
 
 Arguments:
 
-* [--fsid FSID]   cluster FSID (passed automatically when invoked by the orchestrator)
+* [--fsid FSID]   cluster FSID
 * --path PATH     absolute path of the file to remove (required)
 
 
@@ -328,23 +319,11 @@ Write or replace a file on the local host. The **entire file body** is read from
 
 Arguments:
 
-* [--fsid FSID]   cluster FSID (passed automatically when invoked by the orchestrator)
+* [--fsid FSID]   cluster FSID
 * --path PATH     absolute destination path for the file (required)
 * [--mode MODE]   octal file mode (for example ``644`` or ``0644``)
 * [--uid UID]    numeric owner user id (**must** be given together with ``--gid``)
 * [--gid GID]    numeric owner group id (**must** be given together with ``--uid``)
-
-
-sysctl-dir
-----------
-
-List basenames under ``/etc/sysctl.d`` or run ``sysctl --system`` on the local host.
-
-Arguments:
-
-* [--fsid FSID]      cluster FSID (passed automatically when invoked by the orchestrator)
-* --list             print one directory entry per line (sorted)
-* --apply-system     reload sysctl settings from all configuration paths
 
 
 deploy

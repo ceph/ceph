@@ -191,7 +191,7 @@ class TestCephAdm(object):
         cephadm_fs.create_file(os.path.join(SYSCTL_DIR, 'c.conf'))
         cephadm_fs.create_file(os.path.join(SYSCTL_DIR, 'a.conf'))
         with with_cephadm_ctx(
-            ['sysctl-dir', '--fsid', '00000000-0000-0000-0000-0000deadbeef', '--list']
+            ['_orch', 'sysctl-dir', '--fsid', '00000000-0000-0000-0000-0000deadbeef', '--list']
         ) as ctx:
             assert _cephadm.command_sysctl_dir(ctx) == 0
         assert capsys.readouterr().out.splitlines() == ['a.conf', 'c.conf']
@@ -204,14 +204,14 @@ class TestCephAdm(object):
             shutil.rmtree(SYSCTL_DIR)
         assert not cephadm_fs.exists(SYSCTL_DIR)
         with with_cephadm_ctx(
-            ['sysctl-dir', '--fsid', '00000000-0000-0000-0000-0000deadbeef', '--list']
+            ['_orch', 'sysctl-dir', '--fsid', '00000000-0000-0000-0000-0000deadbeef', '--list']
         ) as ctx:
             with pytest.raises(_cephadm.Error, match='Not a directory'):
                 _cephadm.command_sysctl_dir(ctx)
 
     def test_command_sysctl_dir_apply_system(self, cephadm_fs):
         with with_cephadm_ctx(
-            ['sysctl-dir', '--fsid', '00000000-0000-0000-0000-0000deadbeef', '--apply-system']
+            ['_orch', 'sysctl-dir', '--fsid', '00000000-0000-0000-0000-0000deadbeef', '--apply-system']
         ) as ctx:
             assert _cephadm.command_sysctl_dir(ctx) == 0
 
@@ -219,7 +219,7 @@ class TestCephAdm(object):
         # Do not let with_cephadm_ctx re-patch cephadm.call back to success (exit 0).
         with mock.patch('cephadm.call', return_value=('out', 'sysctl failed', 1)):
             with with_cephadm_ctx(
-                ['sysctl-dir', '--fsid', '00000000-0000-0000-0000-0000deadbeef', '--apply-system'],
+                ['_orch', 'sysctl-dir', '--fsid', '00000000-0000-0000-0000-0000deadbeef', '--apply-system'],
                 mock_cephadm_call_fn=False,
             ) as ctx:
                 with pytest.raises(_cephadm.Error, match='sysctl --system failed'):

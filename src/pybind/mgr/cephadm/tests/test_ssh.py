@@ -123,6 +123,6 @@ def test_offline_watcher_uses_cephadm_check_online(run_cephadm, cephadm_module):
         cephadm_module.offline_watcher.check_host('test')
 
     run_cephadm.assert_called_once_with(
-        'test', cephadmNoImage, 'check-online', [],
+        'test', cephadmNoImage, ['_orch', 'check-online'], [],
         no_fsid=True, log_output=cephadm_module.log_refresh_metadata
     )

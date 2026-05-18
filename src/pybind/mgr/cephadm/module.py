@@ -1197,7 +1197,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def _setup_user_on_host(self, host: str, user: str, ssh_pub_key: str,
                             addr: Optional[str] = None) -> None:
         """
-        Setup sudoers and copy SSH key by calling cephadm setup-ssh-user command.
+        Setup sudoers and copy SSH key by calling cephadm setup-ssh-user.
         User must already exist on the host.
         For root user, only SSH key is copied (sudoers setup is skipped).
         """
@@ -1582,7 +1582,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         addr: Optional[str] = None
     ) -> Tuple[str, bool, str]:
         """
-        Prepare a host for sudo hardening by executing 'cephadm prepare-host-sudo-hardening' command.
+        Prepare a host for sudo hardening by executing cephadm prepare-host-sudo-hardening.
         """
         try:
             self.log.debug('Preparing host %s for sudo hardening...', host)
@@ -1591,7 +1591,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             with self.async_timeout_handler(host, 'cephadm prepare-host-sudo-hardening'):
                 out, err, code = self.wait_async(
                     CephadmServe(self)._run_cephadm(
-                        host, cephadmNoImage, 'prepare-host-sudo-hardening', cephadm_args,
+                        host,
+                        cephadmNoImage,
+                        'prepare-host-sudo-hardening',
+                        cephadm_args,
                         addr=addr, error_ok=True, no_fsid=True))
             if code:
                 error_msg = '\n'.join(err) if err else 'Unknown error'

@@ -5663,16 +5663,38 @@ def _get_parser():
         help='Configuration input source file',
     )
 
+    parser_check_online = subparsers_orch.add_parser(
+        'check-online', help='return true to indicate host is running')
+    parser_check_online.set_defaults(func=command_check_online)
+
+    parser_sysctl_dir = subparsers_orch.add_parser(
+        'sysctl-dir',
+        help='list entries in sysctl.d or run sysctl --system')
+    parser_sysctl_dir.set_defaults(func=command_sysctl_dir)
+    parser_sysctl_dir.add_argument(
+        '--fsid',
+        help='cluster FSID')
+    _sysctl_dir_action = parser_sysctl_dir.add_mutually_exclusive_group(
+        required=True)
+    _sysctl_dir_action.add_argument(
+        '--list',
+        dest='sysctl_dir_action',
+        action='store_const',
+        const='list',
+        help=f'print one basename per line from {SYSCTL_DIR}')
+    _sysctl_dir_action.add_argument(
+        '--apply-system',
+        dest='sysctl_dir_action',
+        action='store_const',
+        const='apply_system',
+        help='reload sysctl settings from all config paths (sysctl --system)')
+
     parser_check_host = subparsers.add_parser(
         'check-host', help='check host configuration')
     parser_check_host.set_defaults(func=command_check_host)
     parser_check_host.add_argument(
         '--expect-hostname',
         help='Check that hostname matches an expected value')
-
-    parser_check_online = subparsers.add_parser(
-        'check-online', help='return true to indicate host is running')
-    parser_check_online.set_defaults(func=command_check_online)
 
     parser_prepare_host = subparsers.add_parser(
         'prepare-host', help='prepare a host for cephadm use')
@@ -5807,28 +5829,6 @@ def _get_parser():
         dest='deploy_file_gid',
         default=None,
         help='numeric owner gid (requires --uid)')
-
-    parser_sysctl_dir = subparsers.add_parser(
-        'sysctl-dir',
-        help='list entries in sysctl.d or run sysctl --system')
-    parser_sysctl_dir.set_defaults(func=command_sysctl_dir)
-    parser_sysctl_dir.add_argument(
-        '--fsid',
-        help='cluster FSID')
-    _sysctl_dir_action = parser_sysctl_dir.add_mutually_exclusive_group(
-        required=True)
-    _sysctl_dir_action.add_argument(
-        '--list',
-        dest='sysctl_dir_action',
-        action='store_const',
-        const='list',
-        help=f'print one basename per line from {SYSCTL_DIR}')
-    _sysctl_dir_action.add_argument(
-        '--apply-system',
-        dest='sysctl_dir_action',
-        action='store_const',
-        const='apply_system',
-        help='reload sysctl settings from all config paths (sysctl --system)')
 
     parser_maintenance = subparsers.add_parser(
         'host-maintenance', help='Manage the maintenance state of a host')
@@ -5975,6 +5975,8 @@ def main() -> None:
                     command_check_host,
                     command_check_online,
                     command_prepare_host,
+                    command_setup_ssh_user,
+                    command_prepare_host_sudo_hardening,
                     command_add_repo,
                     command_rm_repo,
                     command_install,

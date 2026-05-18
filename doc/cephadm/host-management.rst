@@ -552,8 +552,7 @@ cephadm operations. Run a command of the following form:
    ceph cephadm set-user <user>
 
 The ``set-user`` command automatically configures the specified user on all cluster
-hosts by calling ``cephadm setup-ssh-user`` on each host. This command is available starting
-with the Umbrella release and includes the following:
+hosts by calling ``cephadm setup-ssh-user`` on each host. This command includes the following:
 
 - Setting up passwordless sudo access for non-root users
 - Authorizing the cluster's SSH public key for the user

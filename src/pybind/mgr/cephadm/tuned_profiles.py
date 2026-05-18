@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 SYSCTL_DIR = '/etc/sysctl.d'
 
-SYSCTL_DIR_CEPHADM_CMD = 'sysctl-dir'
+SYSCTL_DIR_CEPHADM_CMD = ['_orch', 'sysctl-dir']
 
 
 class TunedProfileUtils():
@@ -21,7 +21,7 @@ class TunedProfileUtils():
         self.mgr = mgr
 
     def _sysctl_dir_list(self, host: str) -> str:
-        with self.mgr.async_timeout_handler(host, 'cephadm sysctl-dir --list'):
+        with self.mgr.async_timeout_handler(host, 'cephadm _orch sysctl-dir --list'):
             out, _err, _code = self.mgr.wait_async(CephadmServe(self.mgr)._run_cephadm(
                 host,
                 cephadmNoImage,
@@ -32,7 +32,7 @@ class TunedProfileUtils():
         return ''.join(out)
 
     def _sysctl_dir_apply_system(self, host: str) -> None:
-        with self.mgr.async_timeout_handler(host, 'cephadm sysctl-dir --apply-system'):
+        with self.mgr.async_timeout_handler(host, 'cephadm _orch sysctl-dir --apply-system'):
             self.mgr.wait_async(CephadmServe(self.mgr)._run_cephadm(
                 host,
                 cephadmNoImage,
