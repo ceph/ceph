@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ViewEncapsulation } from '@angular/core';
 
 import _ from 'lodash';
 
@@ -13,7 +13,9 @@ import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
 @Component({
   selector: 'cd-create-cluster-review',
   templateUrl: './create-cluster-review.component.html',
-  styleUrls: ['./create-cluster-review.component.scss']
+  styleUrls: ['./create-cluster-review.component.scss'],
+  standalone: false,
+  encapsulation: ViewEncapsulation.None
 })
 export class CreateClusterReviewComponent implements OnInit {
   hosts: object[] = [];
