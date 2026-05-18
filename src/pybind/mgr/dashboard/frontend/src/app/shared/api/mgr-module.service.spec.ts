@@ -7,7 +7,7 @@ import { MgrModuleService } from './mgr-module.service';
 import { CdTableSelection } from '../models/cd-table-selection';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { MgrModuleListComponent } from '~/app/ceph/cluster/mgr-modules/mgr-module-list/mgr-module-list.component';
-import { ToastrModule } from 'ngx-toastr';
+
 import { SharedModule } from '../shared.module';
 import { BlockUIService } from 'ng-block-ui';
 import { SummaryService } from '../services/summary.service';
@@ -19,7 +19,7 @@ describe('MgrModuleService', () => {
 
   configureTestBed({
     declarations: [MgrModuleListComponent],
-    imports: [HttpClientTestingModule, SharedModule, ToastrModule.forRoot()],
+    imports: [HttpClientTestingModule, SharedModule],
     providers: [MgrModuleService]
   });
 
