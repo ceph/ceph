@@ -337,12 +337,12 @@ void PGBackend::rollback(
   t->append(vis.t);
 }
 
-struct Trimmer : public ObjectModDesc::Visitor {
+struct TrimmerPostRemove : public ObjectModDesc::Visitor {
   const hobject_t &soid;
   PGBackend *pg;
   ObjectStore::Transaction *t;
   const pg_log_entry_t &entry;
-  Trimmer(
+  TrimmerPostRemove(
     PGBackend *pg,
     ObjectStore::Transaction *t,
     const pg_log_entry_t &entry)
@@ -352,6 +352,11 @@ struct Trimmer : public ObjectModDesc::Visitor {
       soid,
       old_version,
       t);
+
+    if (pg->get_parent()->get_pool().allows_ecoptimizations()
+        && pg->get_parent()->get_pool().supports_omap()) {
+      pg->omap_trim_delete_from_journal(soid, old_version);
+    }
   }
   // try_rmobject defaults to rmobject
   void rollback_extents(
@@ -378,9 +383,19 @@ struct Trimmer : public ObjectModDesc::Visitor {
       }
     }
   }
+};
 
-  void ec_omap(bool clear_omap, std::optional<ceph::buffer::list> omap_header, 
-    std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &omap_updates) override {
+struct Trimmer : TrimmerPostRemove {
+  Trimmer(
+    PGBackend *pg,
+    ObjectStore::Transaction *t,
+    const pg_log_entry_t &entry)
+    : TrimmerPostRemove(pg, t, entry) {}
+  void ec_omap(bool clear_omap, std::optional<ceph::buffer::list> omap_header,
+    std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &omap_updates) override
+  {
+    ceph_assert(pg->get_parent()->get_pool().allows_ecoptimizations());
+    ceph_assert(pg->get_parent()->get_pool().supports_omap());
 
     auto shard = pg->get_parent()->whoami_shard().shard;
     spg_t spg = pg->get_parent()->whoami_spg_t();
@@ -473,6 +488,16 @@ void PGBackend::trim(
   if (!entry.can_rollback())
     return;
   Trimmer trimmer(this, t, entry);
+  entry.mod_desc.visit(&trimmer);
+}
+
+void PGBackend::trim_after_remove(
+  const pg_log_entry_t &entry,
+  ObjectStore::Transaction *t)
+{
+  if (!entry.can_rollback())
+    return;
+  TrimmerPostRemove trimmer(this, t, entry);
   entry.mod_desc.visit(&trimmer);
 }
 

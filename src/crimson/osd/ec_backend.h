@@ -67,12 +67,13 @@ private:
         uint32_t flags) final;
   rep_op_fut_t
   submit_transaction(const std::set<pg_shard_t> &pg_shards,
-		     crimson::osd::ObjectContextRef&& obc,
-		     crimson::osd::ObjectContextRef&& new_clone,
-		     ceph::os::Transaction&& txn,
-		     osd_op_params_t&& req,
-		     epoch_t min_epoch, epoch_t max_epoch,
-		     std::vector<pg_log_entry_t>&& log_entries) final;
+       crimson::osd::ObjectContextRef&& obc,
+       crimson::osd::ObjectContextRef&& new_clone,
+       ceph::os::Transaction&& txn,
+       osd_op_params_t&& req,
+       epoch_t min_epoch, epoch_t max_epoch,
+       std::vector<pg_log_entry_t>&& log_entries,
+       const PGLog &pg_log) final;
   seastar::future<> request_committed(const osd_reqid_t& reqid,
 				       const eversion_t& version) final {
     return seastar::now();

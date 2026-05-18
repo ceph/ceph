@@ -1052,7 +1052,8 @@ PG::submit_transaction(
       std::move(osd_op_p),
       peering_state.get_last_peering_reset(),
       map_epoch,
-      std::move(log_entries));
+      std::move(log_entries),
+      get_log());
   co_return std::make_tuple(
     std::move(submitted),
     std::move(all_completed)

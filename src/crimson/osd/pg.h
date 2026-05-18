@@ -623,6 +623,9 @@ public:
     void trim(const pg_log_entry_t &entry) override {
       // TODO
     }
+    void trim_after_remove(const pg_log_entry_t &entry) override {
+      // TODO
+    }
     void partial_write(pg_info_t *info,
                        eversion_t previous_version,
                        const pg_log_entry_t &entry

@@ -4533,6 +4533,7 @@ struct pg_log_entry_t {
     PROMOTE = 8,     // promoted object from another tier
     CLEAN = 9,       // mark an object clean
     ERROR = 10,      // write that returned an error
+    REPLACE = 11,    // replace (delete + recreate) operation
   };
   static const char *get_op_name(int op) {
     switch (op) {
@@ -4554,6 +4555,8 @@ struct pg_log_entry_t {
       return "clean";
     case ERROR:
       return "error";
+    case REPLACE:
+      return "replace";
     default:
       return "unknown";
     }
@@ -4610,11 +4613,12 @@ struct pg_log_entry_t {
   bool is_lost_delete() const { return op == LOST_DELETE; }
   bool is_lost_mark() const { return op == LOST_MARK; }
   bool is_error() const { return op == ERROR; }
+  bool is_replace() const { return op == REPLACE; }
 
   bool is_update() const {
     return
       is_clone() || is_modify() || is_promote() || is_clean() ||
-      is_lost_revert() || is_lost_mark();
+      is_lost_revert() || is_lost_mark() || is_replace();
   }
   bool is_delete() const {
     return op == DELETE || op == LOST_DELETE;
@@ -4642,7 +4646,7 @@ struct pg_log_entry_t {
 
   bool reqid_is_indexed() const {
     return reqid != osd_reqid_t() &&
-      (op == MODIFY || op == DELETE || op == ERROR);
+      (op == MODIFY || op == DELETE || op == ERROR || op == REPLACE);
   }
 
   void set_op_returns(const std::vector<OSDOp>& ops) {

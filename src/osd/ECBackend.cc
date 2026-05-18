@@ -422,6 +422,28 @@ void ECBackend::handle_sub_write(
   switcher->clear_temp_objs(op.temp_removed);
   dout(30) << __func__ << " missing before " <<
     get_parent()->get_log().get_missing().get_items() << dendl;
+
+  // Update EC omap journal on non-primary shards from log entries
+  // This ensures the journal has the correct generation info when transactions are applied
+  if (get_parent()->get_pool().supports_omap()) {
+    for (auto &&e: op.log_entries) {
+      if (e.is_delete() || e.is_lost_delete() || e.is_replace() || (e.is_clone() && !e.soid.is_snap())) {
+        if (!op.backfill_or_async_recovery) {
+          ec_omap_journal.append_delete(e.soid, e.version.version, e.is_lost_delete());
+          dout(20) << __func__ << " appending delete to journal: "
+                   << (e.is_clone() ? "clone" : "delete")
+                   << " " << e.soid << " version=" << e.version.version
+                   << " lost_delete=" << e.is_lost_delete() << dendl;
+        } else {
+          dout(20) << __func__ << " skipping journal append_delete during backfill/recovery: "
+                   << (e.is_clone() ? "clone" : "delete")
+                   << " " << e.soid << " version=" << e.version.version
+                   << " lost_delete=" << e.is_lost_delete() << dendl;
+        }
+      }
+    }
+  }
+
   // flag set to true during async recovery
   bool async = false;
   pg_missing_tracker_t pmissing = get_parent()->get_local_missing();
@@ -435,6 +457,16 @@ void ECBackend::handle_sub_write(
       dout(30) << " entry is_delete " << e.is_delete() << dendl;
     }
   }
+
+  dout(20) << __func__ << " log_operation: "
+           << "log_entries.size=" << op.log_entries.size()
+           << " updated_hit_set_history=" << (op.updated_hit_set_history ? "present" : "none")
+           << " trim_to=" << op.trim_to
+           << " roll_forward_to=" << op.pg_committed_to
+           << " pg_committed_to=" << op.pg_committed_to
+           << " transaction_applied=" << !op.backfill_or_async_recovery
+           << " async=" << async
+           << dendl;
   get_parent()->log_operation(
     std::move(op.log_entries),
     op.updated_hit_set_history,
@@ -630,10 +662,11 @@ void ECBackend::handle_sub_read(
         continue;
       }
 
-      int r = switcher->store->omap_get_header(
+      int r = omap_get_header(
         switcher->ch,
         ghobject_t(*i, ghobject_t::NO_GEN, shard),
-        &reply->omap_headers_read[*i], false);
+        &reply->omap_headers_read[*i], false,
+        switcher->store);
       if (r < 0) {
         reply->attrs_read.erase(*i);
         reply->omap_headers_read.erase(*i);
@@ -661,7 +694,7 @@ void ECBackend::handle_sub_read(
       reply->omaps_complete[hoid] = false;
 
       uint64_t available = max_bytes;
-      const auto result = switcher->store->omap_iterate(
+      const auto result = omap_iterate(
         switcher->ch,
         ghobject_t(hoid, ghobject_t::NO_GEN, shard),
         ObjectStore::omap_iter_seek_t{
@@ -684,7 +717,7 @@ void ECBackend::handle_sub_read(
           current_batch.insert(make_pair(key, val_bl));
           available -= std::min(available, num_new_bytes);
           return ObjectStore::omap_iter_ret_t::NEXT;
-        });
+        }, switcher->store);
 
       if (result < 0) {
         reply->attrs_read.erase(hoid);
@@ -1032,6 +1065,7 @@ void ECBackend::check_recovery_sources(const OSDMapRef &osdmap) {
 }
 
 void ECBackend::on_change() {
+  ec_omap_journal.clear_all();
   rmw_pipeline.on_change();
   read_pipeline.on_change();
   rmw_pipeline.on_change2();
@@ -1076,7 +1110,8 @@ struct ECClassicalOp : ECCommon::RMWPipeline::Op {
     shard_id_map<ObjectStore::Transaction> *transactions,
     DoutPrefixProvider *dpp,
     const OSDMapRef &osdmap,
-    bool& first_write_in_interval) final {
+    bool& first_write_in_interval,
+    ECOmapJournal &ec_omap_journal) final {
     ceph_assert(t);
     ECTransaction::generate_transactions(
       t.get(),
@@ -1092,7 +1127,9 @@ struct ECClassicalOp : ECCommon::RMWPipeline::Op {
       &temp_cleared,
       dpp,
       osdmap,
-      first_write_in_interval);
+      first_write_in_interval,
+      ec_omap_journal,
+      pipeline->get_parent()->get_log());
   }
 
   bool skip_transaction(
@@ -1605,6 +1642,10 @@ int ECBackend::omap_iterate (
   const OmapIterFunction &f, ///< [in] function to call for each key/value pair
   ObjectStore *store
 ) {
+  if (!get_parent()->get_pool().supports_omap()) {
+    return -EOPNOTSUPP;
+  }
+
   // Updates in update_map take priority over removed_ranges
   auto [update_map, removed_ranges] = ec_omap_journal.get_value_updates(oid.hobj);
 
@@ -1674,6 +1715,10 @@ int ECBackend::omap_get_values(
   std::map<std::string, ceph::buffer::list> *out, ///< [out] returned key/values
   ObjectStore *store
 ) {
+  if (!get_parent()->get_pool().supports_omap()) {
+    return -EOPNOTSUPP;
+  }
+
   auto [update_map, removed_ranges] = ec_omap_journal.get_value_updates(oid.hobj);
   
   set<string> keys_still_to_get;
@@ -1702,11 +1747,20 @@ int ECBackend::omap_get_header(
   const bool allow_eio, ///< [in] don't assert on eio
   ObjectStore *store
 ) {
+  if (!get_parent()->get_pool().supports_omap()) {
+    return -EOPNOTSUPP;
+  }
+
   std::optional<ceph::buffer::list> header_from_journal = ec_omap_journal.get_updated_header(oid.hobj);
   if (header_from_journal) {
     *header = *header_from_journal;
+    dout(20) << __func__ << ": oid=" << oid
+            << " from_journal=true header_size=" << header->length() << dendl;
   } else {
+    header->clear();
     store->omap_get_header(c_, oid, header, allow_eio);
+    dout(20) << __func__ << ": oid=" << oid
+            << " from_journal=false header_size=" << header->length() << dendl;
   }
   return 0;
 }
@@ -1718,6 +1772,10 @@ int ECBackend::omap_get(
   std::map<std::string, ceph::buffer::list> *out, /// < [out] Key to value map
   ObjectStore *store
 ) {
+  if (!get_parent()->get_pool().supports_omap()) {
+    return -EOPNOTSUPP;
+  }
+
   // Update map takes priority over removed_ranges
   auto [update_map, removed_ranges] = ec_omap_journal.get_value_updates(oid.hobj);
   const auto updated_header = ec_omap_journal.get_updated_header(oid.hobj);
@@ -1730,6 +1788,11 @@ int ECBackend::omap_get(
   // Update header if present
   if (updated_header) {
     *header = *updated_header;
+    dout(20) << __func__ << ": oid=" << oid
+            << " updated_header=true header_size=" << header->length() << dendl;
+  } else {
+    dout(20) << __func__ << ": oid=" << oid
+            << " updated_header=false header_size=" << header->length() << dendl;
   }
 
   // Remove keys in removed_ranges
@@ -1758,6 +1821,10 @@ int ECBackend::omap_check_keys(
   std::set<std::string> *out,         ///< [out] Subset of keys defined on oid
   ObjectStore *store
 ) {
+  if (!get_parent()->get_pool().supports_omap()) {
+    return -EOPNOTSUPP;
+  }
+
   // Update map takes priority over removed_ranges
   auto [update_map, removed_ranges] = ec_omap_journal.get_value_updates(oid.hobj);
   auto updated_header = ec_omap_journal.get_updated_header(oid.hobj);

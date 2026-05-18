@@ -697,6 +697,7 @@ public:
     bool ignore_cache;    ///< true if IGNORE_CACHE flag is std::set
     bool ignore_log_op_stats;  // don't log op stats
     bool update_log_only; ///< this is a write that returned an error - just record in pg log for dup detection
+    bool use_replace_op = false;  ///< use REPLACE op type instead of MODIFY/DELETE (set by finish_copyfrom)
     ObjectCleanRegions clean_regions;
 
     // side effects

@@ -590,7 +590,8 @@ struct ECCommon {
           shard_id_map<ceph::os::Transaction> *transactions,
           DoutPrefixProvider *dpp,
           const OSDMapRef &osdmap,
-          bool &first_write_in_interval) = 0;
+          bool &first_write_in_interval,
+          ECOmapJournal &ec_omap_journal) = 0;
 
       virtual bool skip_transaction(
           std::set<shard_id_t> &pending_roll_forward,

@@ -54,6 +54,10 @@ class MockPGLogEntryHandler : public PGLog::LogEntryHandler {
     lgeneric_dout(g_ceph_context, 0) << "MockPGLogEntryHandler::trim " << entry << dendl;
     backend->trim(entry, t);
   }
+  void trim_after_remove(const pg_log_entry_t &entry) override {
+    lgeneric_dout(g_ceph_context, 0) << "MockPGLogEntryHandler::trim_after_remove " << entry << dendl;
+    backend->trim_after_remove(entry, t);
+  }
   void partial_write(pg_info_t *info, eversion_t previous_version,
                       const pg_log_entry_t &entry
     ) override {

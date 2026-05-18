@@ -26,6 +26,7 @@
 
 struct hobject_t;
 struct ECListener;
+class PGLog;
 
 namespace ceph::os {
   class Transaction;
@@ -431,12 +432,13 @@ public:
 
   virtual rep_op_fut_t
   submit_transaction(const std::set<pg_shard_t> &pg_shards,
-		     crimson::osd::ObjectContextRef&& obc,
-		     crimson::osd::ObjectContextRef&& new_clone,
-		     ceph::os::Transaction&& txn,
-		     osd_op_params_t&& osd_op_p,
-		     epoch_t min_epoch, epoch_t max_epoch,
-		     std::vector<pg_log_entry_t>&& log_entries) = 0;
+       crimson::osd::ObjectContextRef&& obc,
+       crimson::osd::ObjectContextRef&& new_clone,
+       ceph::os::Transaction&& txn,
+       osd_op_params_t&& osd_op_p,
+       epoch_t min_epoch, epoch_t max_epoch,
+       std::vector<pg_log_entry_t>&& log_entries,
+       const PGLog &pg_log) = 0;
 
   virtual void got_rep_op_reply(const MOSDRepOpReply&) {}
   virtual seastar::future<> stop() = 0;
