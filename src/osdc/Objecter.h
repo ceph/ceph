@@ -2805,9 +2805,7 @@ private:
       return false;
     }
   }
-  void ms_fast_dispatch2(const MessageRef& m) override {
-    [[maybe_unused]] auto s = ms_dispatch2(m);
-  }
+  void ms_fast_dispatch2(const MessageRef& m) override;
 
   void handle_osd_op_reply(cref_t<MOSDOpReply> m);
   void handle_osd_backoff(cref_t<MOSDBackoff> m);
