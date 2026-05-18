@@ -83,7 +83,7 @@ namespace rgw::dedup {
   {
     std::ifstream f(path);
     if (!f.is_open()) {
-      ldpp_dout(dpp, 1) << __func__ << ":: failed to open filter file: " << path << dendl;
+      ldpp_dout(dpp, 1) << __func__ << "::Failed to open filter file: " << path << dendl;
       return -ENOENT;
     }
 
@@ -119,6 +119,12 @@ namespace rgw::dedup {
           return -EINVAL;
         }
       }
+    }
+
+    if (name_set.empty()) {
+      // we should have at least one valid filter
+      ldpp_dout(dpp, 1) << __func__ << "::No valid filter in file: " << path << dendl;
+      return -ENODATA;
     }
 
     return 0;

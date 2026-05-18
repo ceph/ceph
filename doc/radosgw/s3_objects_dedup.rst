@@ -54,7 +54,8 @@ The ``dedup estimate`` and ``dedup exec`` commands also accept filter options:
    Mutually exclusive with ``--allow-storage-class-list``.
 
 **File format:** One name per line. Lines starting with or containing ``#``
-are treated as comments. Whitespace is ignored.
+are treated as comments. Whitespace is ignored. The file must contain at least
+one valid name; an empty or all-comment file is rejected.
 
 
 Skipped Objects

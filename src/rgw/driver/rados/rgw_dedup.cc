@@ -3128,20 +3128,15 @@ namespace rgw::dedup {
       break;
     case URGENT_MSG_RESTART:
       if (!d_ctl.dedup_exec) {
-        // Decode optional filter (may not be present for older senders)
+        // Decode optional filter
         {
           bool has_filter = false;
-          try {
-            ceph::decode(has_filter, bl_iter);
-            if (has_filter) {
-              decode(d_filter, bl_iter);
-              ldpp_dout(dpp, 5) << __func__ << "::RESTART with filter" << dendl;
-            }
-            else {
-              d_filter = dedup_filter_t{};
-            }
-          } catch (buffer::error&) {
-            // older sender without filter - reset to no-filter
+          ceph::decode(has_filter, bl_iter);
+          if (has_filter) {
+            decode(d_filter, bl_iter);
+            ldpp_dout(dpp, 5) << __func__ << "::RESTART with filter" << dendl;
+          }
+          else {
             d_filter = dedup_filter_t{};
           }
         }

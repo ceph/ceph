@@ -3699,6 +3699,17 @@ def test_dedup_filter_bucket_list_parsing():
         result = admin(['dedup', 'estimate', '--allow-bucket-list',
                         '/nonexistent/bucket_list.txt'])
         assert result[1] != 0, "Expected failure for non-existent filter file"
+
+        # 3. Empty file
+        empty_file = OUT_DIR + "empty_buckets.txt"
+        with open(empty_file, "w") as f:
+            pass
+
+        result = admin(['dedup', 'estimate', '--allow-bucket-list', empty_file])
+        assert result[1] != 0, "Expected failure for empty filter file"
+
+        result = admin(['dedup', 'estimate', '--deny-bucket-list', empty_file])
+        assert result[1] != 0, "Expected failure for empty filter file"
     finally:
         cleanup_local()
 
@@ -3712,8 +3723,8 @@ def test_dedup_filter_storage_class_list_parsing():
     prepare_test()
     try:
         # 1. Mutual exclusivity: --allow-storage-class-list and --deny-storage-class-list together.
-        allow_file = OUT_DIR + "allow_storage_classs.txt"
-        deny_file  = OUT_DIR + "deny_storage_classs.txt"
+        allow_file = OUT_DIR + "allow_storage_class.txt"
+        deny_file  = OUT_DIR + "deny_storage_class.txt"
         write_filter_list_file(allow_file, ['STORAGECLASS1'])
         write_filter_list_file(deny_file,  ['STORAGECLASS2'])
         result = admin(['dedup', 'estimate',
@@ -3727,6 +3738,17 @@ def test_dedup_filter_storage_class_list_parsing():
         result = admin(['dedup', 'estimate', '--allow-storage-class-list',
                         '/nonexistent/storage_class_list.txt'])
         assert result[1] != 0, "Expected failure for non-existent filter file"
+
+        # 3. Empty file
+        empty_file = OUT_DIR + "empty_storage_class.txt"
+        with open(empty_file, "w") as f:
+            pass
+
+        result = admin(['dedup', 'estimate', '--allow-storage-class-list', empty_file])
+        assert result[1] != 0, "Expected failure for empty filter file"
+
+        result = admin(['dedup', 'estimate', '--deny-storage-class-list', empty_file])
+        assert result[1] != 0, "Expected failure for empty filter file"
     finally:
         cleanup_local()
 
@@ -3786,7 +3808,7 @@ def dedup_filter_allow_deny_storage_class_common(dry_run, filter_mode_allow):
     """
     prepare_test()
     config=default_config
-    filter_file = OUT_DIR + "deny_storage_classs.txt"
+    filter_file = OUT_DIR + "deny_storage_class.txt"
     bucket_name = gen_bucket_name()
     conn=get_single_connection()
     files=[]

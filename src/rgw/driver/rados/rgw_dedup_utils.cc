@@ -393,7 +393,9 @@ namespace rgw::dedup {
     // main section
     {
       Formatter::ObjectSection main(*f, "main");
-      f->dump_unsigned("Num Work-Shards", num_shards);
+      if (num_shards) {
+        f->dump_unsigned("Num Work-Shards", num_shards);
+      }
       f->dump_unsigned("Ingress Objs count", this->ingress_obj);
       f->dump_unsigned("Accum byte size Ingress Objs", this->ingress_obj_bytes);
       f->dump_unsigned("Egress Records count", this->egress_records);
@@ -442,10 +444,13 @@ namespace rgw::dedup {
                          this->ingress_skip_too_small_bytes);
       }
 
-      if (this->ingress_skip_filtered_bucket && num_shards) {
-        // buckets are scanned once per worker-shard
-        f->dump_unsigned("Ingress skip: filtered bucket",
-                         this->ingress_skip_filtered_bucket/num_shards);
+      if (this->ingress_skip_filtered_bucket) {
+        auto skip_filtered_count = this->ingress_skip_filtered_bucket;
+        if (num_shards) {
+          // buckets are scanned once per worker-shard
+          skip_filtered_count /= num_shards;
+        }
+        f->dump_unsigned("Ingress skip: filtered bucket", skip_filtered_count);
       }
       if (this->ingress_skip_filtered_storage_class) {
         f->dump_unsigned("Ingress skipped filtered storage class, num objects skipped",
@@ -468,7 +473,7 @@ namespace rgw::dedup {
   std::ostream& operator<<(std::ostream &out, const worker_stats_t &s)
   {
     JSONFormatter formatter(false);
-    s.dump(&formatter, 1);
+    s.dump(&formatter);
     std::stringstream sstream;
     formatter.flush(sstream);
     out << sstream.str();
