@@ -37,6 +37,7 @@
 #include "messages/MMonMap.h"
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
+#include "msg/MessageFmt.h"
 
 using std::string;
 using std::tuple;

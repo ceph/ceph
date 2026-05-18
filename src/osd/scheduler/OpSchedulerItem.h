@@ -27,6 +27,7 @@
 #include "osd/PGPeeringEvent.h"
 #include "common/mclock_common.h"
 #include "common/WorkQueue.h" // for class ThreadPool
+#include "msg/MessageFmt.h"
 
 
 class OSD;

@@ -20,6 +20,7 @@
 #include "messages/MOSDPGPCT.h"
 #include "messages/MOSDRepOpReply.h"
 #include "messages/MOSDOpReply.h"
+#include "msg/MessageFmt.h"
 #include "os/Transaction.h"
 #include "osd/ECCommon.h"
 #include "osd/osd_types.h"
