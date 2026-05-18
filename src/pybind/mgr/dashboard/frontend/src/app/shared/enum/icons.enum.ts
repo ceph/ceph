@@ -79,7 +79,7 @@ export enum Icons {
   eye = 'fa fa-eye', // Observability
   calendar = 'fa fa-calendar',
   externalUrl = 'fa fa-external-link', // links to external page
-  nfsExport = 'fa fa-server', // NFS export
+  nfsExport = 'fa fa-server', // NFS share
   launch = 'launch',
   parentChild = 'parent-child',
   dataTable = 'data-table',
