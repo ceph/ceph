@@ -1,30 +1,19 @@
 @use '@carbon/layout';
 
 .container-fluid {
-  align-items: flex-start;
-  display: flex;
   padding-left: 0;
+  padding-bottom: 0 !important;
   width: 100%;
-}
 
-cd-hosts {
-  ::ng-deep .nav {
-    display: none;
-  }
-}
-
-cd-osd-form {
-  ::ng-deep .card {
-    border: 0;
-  }
-
-  ::ng-deep .accordion {
-    margin-left: -1.5rem;
+  &-main {
+    align-items: flex-start;
+    display: flex;
   }
 }
 
 .storage-requirements-header {
   border-bottom: 0;
+  margin-top: var(--cds-spacing-10) !important;
 }
 
 .ceph-logo {
