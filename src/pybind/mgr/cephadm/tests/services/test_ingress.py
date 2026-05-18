@@ -16,6 +16,7 @@ from cephadm.tests.fixtures import with_host, with_service, async_side_effect
 from ceph.utils import datetime_now
 from orchestrator._interface import DaemonDescription, DaemonDescriptionStatus
 from orchestrator import HostSpec
+from cephadm import utils
 from cephadm.services.ingress import IngressService
 
 
@@ -1457,6 +1458,86 @@ class TestIngressService:
         )
         ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
         assert "Bind_addr = 10.10.2.20" in ganesha_conf
+
+
+def test_keepalived_choose_next_action_redeploy_on_deps_change_when_stopped():
+    mgr = MagicMock()
+    svc = IngressService(mgr)
+    spec = IngressSpec(
+        service_id='test',
+        backend_service='nfs.foo',
+        frontend_port=2049,
+        monitor_port=9049,
+        virtual_ip='192.168.122.100/24',
+        placement=PlacementSpec(hosts=['host1']),
+    )
+    daemon = DaemonDescription(
+        daemon_type='keepalived',
+        daemon_id='test',
+        hostname='host1',
+        service_name='ingress.test',
+        status=DaemonDescriptionStatus.stopped,
+    )
+    action = svc.choose_next_action(
+        utils.Action.NO_ACTION,
+        'keepalived',
+        spec,
+        curr_deps=['haproxy.test'],
+        last_deps=['haproxy.old'],
+        daemon=daemon,
+    )
+    assert action is utils.Action.REDEPLOY
+
+
+def test_keepalived_choose_next_action_reconfig_when_running():
+    mgr = MagicMock()
+    svc = IngressService(mgr)
+    spec = IngressSpec(
+        service_id='test',
+        backend_service='nfs.foo',
+        frontend_port=2049,
+        monitor_port=9049,
+        virtual_ip='192.168.122.100/24',
+        placement=PlacementSpec(hosts=['host1']),
+    )
+    daemon = DaemonDescription(
+        daemon_type='keepalived',
+        daemon_id='test',
+        hostname='host1',
+        service_name='ingress.test',
+        status=DaemonDescriptionStatus.running,
+    )
+    action = svc.choose_next_action(
+        utils.Action.NO_ACTION,
+        'keepalived',
+        spec,
+        curr_deps=['haproxy.test'],
+        last_deps=['haproxy.old'],
+        daemon=daemon,
+    )
+    assert action is utils.Action.RECONFIG
+
+
+def test_keepalived_choose_next_action_scheduled_when_deps_unchanged():
+    mgr = MagicMock()
+    svc = IngressService(mgr)
+    spec = IngressSpec(
+        service_id='test',
+        backend_service='nfs.foo',
+        frontend_port=2049,
+        monitor_port=9049,
+        virtual_ip='192.168.122.100/24',
+        placement=PlacementSpec(hosts=['host1']),
+    )
+    deps = ['haproxy.test']
+    action = svc.choose_next_action(
+        utils.Action.NO_ACTION,
+        'keepalived',
+        spec,
+        curr_deps=deps,
+        last_deps=deps,
+    )
+    assert action is utils.Action.NO_ACTION
 
 
 def test_keepalived_should_auto_start_colocated_haproxy():
