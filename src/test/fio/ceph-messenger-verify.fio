@@ -1,0 +1,68 @@
+# Messenger data-integrity gate for the ceph-msgr engine.
+#
+# This job round-trips the payload and the ENGINE self-checks it: with
+# verify_echo=1 the receiver echoes the bytes it actually received, and
+# the sender compares crc32c + length of the echo against a snapshot
+# taken just before send. A mismatch fails the io_u (EILSEQ) so fio
+# aborts the run.
+#
+# Why the engine self-checks instead of fio's verify=crc32c: fio's
+# verify is medium/offset-keyed (write a pattern to offset X, later
+# read offset X back from the medium), but this engine is a storageless
+# request/reply pipe keyed by an io_u pointer. fio-native verify
+# therefore fails even on a correct build (proven: "bad magic header
+# 0"). The engine-side crc compare needs no medium and directly
+# catches: corrupted bytes, truncation/partial send, and the zero-copy
+# defect class — a send buffer mutated/retired before the kernel
+# finished sending, or recycled by another in-flight request.
+#
+# verify_echo adds a full reply payload and a crc scan — this job is
+# NOT a throughput/bandwidth measurement. Use ceph-messenger.fio and
+# the EC R1/R2 variants for that.
+#
+# IMPORTANT: this job needs ms_crc_data=false (supplied by the
+# ceph_conf_file below). With the wire CRC on, a payload mutated after
+# the frame CRC was computed is rejected by the RECEIVER as a frame
+# error: no reply is generated, so the echo check never runs and the
+# job stalls rather than reporting a mismatch.
+#
+# Broken-build gate (env-gated, no rebuild): a correct build runs to
+# completion with err=0; running with CEPH_MSGR_VERIFY_ECHO_CORRUPT=1
+# must report a verify_echo MISMATCH and abort. See
+# src/test/fio/README.md (incl. the CRC-cache finding).
+
+[global]
+bs=4m
+# Must be well above iodepth*bs, or every io_u is used exactly once
+# and no buffer is ever reused. fio hands each io_u a disjoint slice
+# of one allocation, so reuse only happens across completions.
+size=8g
+iodepth=128
+iodepth_batch=32
+iomem=malloc
+
+ioengine=libfio_ceph_messenger.so
+# Required for the gate to report mismatches rather than stall; sets
+# ms_crc_data=false. Path is relative to the working directory.
+ceph_conf_file=ceph-messenger.conf
+
+hostname=127.0.0.1
+port=5555
+
+ms_type=async+posix
+
+# Round-trip + engine self-check.
+verify_echo=1
+
+# Fragment the payload (RGW-multipart / EC-scatter shape) so the gate
+# also exercises multi-segment iovec assembly and fragment boundaries.
+payload_frags=64
+#payload_frag_unalign=1
+
+[client]
+receiver=0
+rw=randwrite
+
+[server]
+receiver=1
+rw=read
