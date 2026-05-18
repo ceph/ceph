@@ -68,7 +68,6 @@
 
 #include "mon/MonClient.h"
 
-#include "messages/MOSDOp.h"
 #include "msg/Dispatcher.h"
 
 #include "osd/OSDMap.h"
@@ -89,6 +88,8 @@ template<typename T>
 struct EnumerationContext;
 template<typename t>
 struct CB_EnumerateReply;
+
+namespace _mosdop { template<typename V> class MOSDOp; }
 
 inline constexpr std::size_t osdc_opvec_len = 2;
 using osdc_opvec = boost::container::small_vector<OSDOp, osdc_opvec_len>;
