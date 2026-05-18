@@ -259,13 +259,14 @@ TransactionManager::ref_ret TransactionManager::remove(
         auto laddr = ref->get_laddr();
         cache->retire_absent_extent_addr_by_type(
           t, laddr, shadow_addr, length, ref->get_type(),
-          [laddr](auto &extent) {
+          [ref, laddr](auto &extent) {
             auto lextent = extent.template cast<LogicalChildNode>();
             assert(extent.is_logical());
             assert(!lextent->has_laddr());
             assert(!extent.has_been_invalidated());
             lextent->set_laddr(laddr);
             extent.set_shadow_extent(true);
+            ref->set_shadow(lextent);
           });
       }
     }
@@ -332,11 +333,32 @@ TransactionManager::_remove(
 	LogicalChildNode
 	>();
       ceph_assert(extent);
-      cache->retire_extent(t, std::move(extent));
+      cache->retire_extent(t, extent);
+      if (mapping.has_shadow_val()) {
+        if (auto shadow = extent->get_shadow(); shadow) {
+          cache->retire_extent(t, shadow);
+        } else {
+          auto laddr = mapping.get_intermediate_base();
+          std::ignore = cache->retire_absent_extent_addr_by_type(
+            t, laddr,
+            mapping.get_shadow_val(),
+            mapping.get_intermediate_length(),
+            mapping.get_extent_type(),
+            [extent, laddr](auto &ext) {
+              auto lextent = ext.template cast<LogicalChildNode>();
+              assert(ext.is_logical());
+              assert(!lextent->has_laddr());
+              assert(!ext.has_been_invalidated());
+              lextent->set_laddr(laddr);
+              ext.set_shadow_extent(true);
+              extent->set_shadow(lextent);
+            });
+        }
+      }
     } else {
       auto &child_pos = maybe_mapped_extent.get_child_pos();
       auto laddr = mapping.get_intermediate_base();
-      std::ignore = cache->retire_absent_extent_addr_by_type(
+      auto ext = cache->retire_absent_extent_addr_by_type(
 	t, laddr,
 	mapping.get_val(),
 	mapping.get_intermediate_length(),
@@ -349,13 +371,23 @@ TransactionManager::_remove(
           child_pos.link_child(lextent.get());
           lextent->set_laddr(laddr);
         }
-      );
-    }
-    if (mapping.has_shadow_val()) {
-      cache->retire_absent_extent_addr(
-        t, mapping.get_intermediate_base(),
-        mapping.get_shadow_val(),
-        mapping.get_intermediate_length());
+      )->template cast<LogicalChildNode>();
+      if (mapping.has_shadow_val()) {
+        std::ignore = cache->retire_absent_extent_addr_by_type(
+          t, mapping.get_intermediate_base(),
+          mapping.get_shadow_val(),
+          mapping.get_intermediate_length(),
+          mapping.get_extent_type(),
+          [laddr, ext](auto &extent) {
+            auto lextent = extent.template cast<LogicalChildNode>();
+            assert(extent.is_logical());
+            assert(!lextent->has_laddr());
+            assert(!extent.has_been_invalidated());
+            lextent->set_laddr(laddr);
+            extent.set_shadow_extent(true);
+            ext->set_shadow(lextent);
+          });
+      }
     }
   }
 
@@ -465,7 +497,7 @@ TransactionManager::refs_ret TransactionManager::remove(
 
 base_iertr::future<LogicalChildNodeRef>
 TransactionManager::relocate_logical_extent(
-  Transaction &t, LBAMapping mapping)
+  Transaction &t, LBAMapping mapping, laddr_t new_laddr)
 {
   LOG_PREFIX(TransactionManager::relocate_logical_extent);
   SUBDEBUGT(seastore_tm, "relocate {}", t, mapping);
@@ -476,7 +508,7 @@ TransactionManager::relocate_logical_extent(
   if (!v.has_child()) {
     auto &child_pos = v.get_child_pos();
     auto laddr = mapping.get_key();
-    std::ignore = cache->retire_absent_extent_addr_by_type(
+    auto extent = cache->retire_absent_extent_addr_by_type(
       t,
       laddr,
       mapping.get_val(),
@@ -490,29 +522,53 @@ TransactionManager::relocate_logical_extent(
         child_pos.link_child(lextent.get());
         lextent->set_laddr(laddr);
       }
-    );
-    co_return cache->alloc_remapped_extent_by_type(
-      t, mapping.get_extent_type(), mapping.get_key(),
-      mapping.get_val(), 0, mapping.get_length(), std::nullopt
     )->cast<LogicalChildNode>();
-  }
-
-  auto extent = co_await v.get_child_fut().si_then([](auto ext) {
-    return ext;
-  });
-
-  if (extent->is_stable()) {
-    cache->retire_extent(t, extent);
-    co_return cache->alloc_remapped_extent_by_type(
-      t, mapping.get_extent_type(), mapping.get_key(),
-      mapping.get_val(), 0, mapping.get_length(), std::nullopt
-    )->cast<LogicalChildNode>();
+    if (mapping.has_shadow_val()) {
+      std::ignore = cache->retire_absent_extent_addr_by_type(
+        t, laddr,
+        mapping.get_shadow_val(),
+        mapping.get_intermediate_length(),
+        mapping.get_extent_type(),
+        [extent, laddr](auto &ext) {
+          auto lextent = ext.template cast<LogicalChildNode>();
+          assert(ext.is_logical());
+          assert(!lextent->has_laddr());
+          assert(!ext.has_been_invalidated());
+          lextent->set_laddr(laddr);
+          ext.set_shadow_extent(true);
+          extent->set_shadow(lextent);
+        });
+    }
   } else {
-    //TODO: relocating logical extents doesn't support
-    //      mutation pending extents yet.
-    assert(extent->is_initial_pending() || extent->is_exist_clean());
-    co_return extent;
+    auto extent = co_await v.get_child_fut_as<LogicalChildNode>();
+
+    if (extent->is_stable()) {
+      cache->retire_extent(t, extent);
+    } else {
+      //TODO: relocating logical extents doesn't support
+      //      mutation pending extents yet.
+      assert(extent->is_initial_pending() || extent->is_exist_clean());
+      extent->set_laddr(new_laddr);
+      if (mapping.has_shadow_val()) {
+        assert(extent->get_shadow());
+        extent->get_shadow()->set_laddr(new_laddr);
+      }
+      co_return extent;
+    }
   }
+  auto remapped_extent = cache->alloc_remapped_extent_by_type(
+    t, mapping.get_extent_type(), new_laddr,
+    mapping.get_val(), 0, mapping.get_length(), std::nullopt
+  )->cast<LogicalChildNode>();
+  if (mapping.has_shadow_val()) {
+    auto remapped_shadow = cache->alloc_remapped_extent_by_type(
+      t, mapping.get_extent_type(), new_laddr,
+      mapping.get_shadow_val(), 0, mapping.get_length(), std::nullopt
+    )->cast<LogicalChildNode>();
+    remapped_shadow->set_shadow_extent(true);
+    remapped_extent->set_shadow(remapped_shadow);
+  }
+  co_return remapped_extent;
 }
 
 base_iertr::future<LogicalChildNodeRef>
@@ -525,8 +581,9 @@ TransactionManager::relocate_shadow_extent(
   assert(!mapping.is_zero_reserved());
   assert(mapping.is_viewable());
   assert(!mapping.is_indirect());
+  assert(t.get_src() == transaction_type_t::DEMOTE);
   auto v = get_extent_if_linked(t, *mapping.direct_cursor);
-  CachedExtentRef extent;
+  LogicalChildNodeRef extent;
   auto laddr = mapping.get_intermediate_base();
   if (!v.has_child()) {
     auto &child_pos = v.get_child_pos();
@@ -544,26 +601,35 @@ TransactionManager::relocate_shadow_extent(
         child_pos.link_child(lextent.get());
         lextent->set_laddr(laddr);
       }
-    );
+    )->template cast<LogicalChildNode>();
   } else {
-    auto extent = co_await std::move(v.get_child_fut());
+    extent = co_await std::move(v.get_child_fut());
     cache->retire_extent(t, extent);
   }
-  auto shadow_paddr = mapping.get_shadow_val();
-  std::ignore = cache->retire_absent_extent_addr_by_type(
-    t, laddr, shadow_paddr, mapping.get_length(), mapping.get_extent_type(),
-    [laddr](auto &ext) {
-      auto lextent = ext.template cast<LogicalChildNode>();
-      assert(ext.is_logical());
-      assert(!lextent->has_laddr());
-      assert(!ext.has_been_invalidated());
-      lextent->set_laddr(laddr);
-    }
-  );
-  co_return cache->alloc_remapped_extent_by_type(
+  if (auto shadow = extent->get_shadow(); shadow) {
+    cache->retire_extent(t, shadow);
+  } else {
+    auto shadow_paddr = mapping.get_shadow_val();
+    std::ignore = cache->retire_absent_extent_addr_by_type(
+      t, laddr, shadow_paddr, mapping.get_length(), mapping.get_extent_type(),
+      [laddr, extent](auto &ext) {
+        auto lextent = ext.template cast<LogicalChildNode>();
+        assert(ext.is_logical());
+        assert(!lextent->has_laddr());
+        assert(!ext.has_been_invalidated());
+        lextent->set_laddr(laddr);
+        ext.set_shadow_extent(true);
+        extent->set_shadow(lextent);
+      }
+    );
+  }
+  auto nextent =  cache->alloc_remapped_extent_by_type(
     t, mapping.get_extent_type(), laddr,
     mapping.get_shadow_val(), 0, mapping.get_length(), std::nullopt
   )->cast<LogicalChildNode>();
+  nextent->set_prior_instance(extent);
+  nextent->set_last_committed_crc(extent->get_last_committed_crc());
+  co_return nextent;
 }
 
 TransactionManager::submit_transaction_iertr::future<>
@@ -1048,7 +1114,6 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
            rewrite_gen_printer_t{target_generation},
            sea_time_point_printer_t{modify_time},
            *extent);
-    ceph_assert(!extent->is_pending_io());
   }
 
   assert(extent->is_valid() && !extent->is_initial_pending());
@@ -1202,9 +1267,9 @@ TransactionManager::move_region(
         dst = co_await dst.refresh();
       }
     } else if (!src.is_zero_reserved()) {
-      auto extent = co_await relocate_logical_extent(t, src);
       auto laddr = calc_dst_key();
-      extent->set_laddr(laddr);
+      auto extent = co_await relocate_logical_extent(t, src, laddr);
+      assert(extent->get_laddr() == laddr);
       auto ret = co_await lba_manager->move_direct_mapping(
         t, src.get_effective_cursor_ref(),
         laddr, dst.get_effective_cursor_ref(), *extent);
@@ -1311,6 +1376,8 @@ TransactionManager::promote_extent(
         slice_length,
         std::nullopt);
       remapped_cold_extent->set_shadow_extent(true);
+      auto lremapped = remapped_cold_extent->template cast<LogicalChildNode>();
+      lext->set_shadow(lremapped);
 
       offset += slice_length;
     }
@@ -1354,8 +1421,8 @@ TransactionManager::promote_extent(
       orig_ext->get_length(),
       std::nullopt);
     remapped_cold_extent->set_shadow_extent(true);
-
-    remapped_cold_extent->set_shadow_extent(true);
+    auto lremapped = remapped_cold_extent->template cast<LogicalChildNode>();
+    lext->set_shadow(lremapped);
   }
 
   auto cursor = co_await lba_manager->get_cursor(

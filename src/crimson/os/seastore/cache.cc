@@ -1801,7 +1801,7 @@ record_t Cache::prepare_record(
 
     if (i->is_exist_clean()) {
       assert(i->version == 0);
-      assert(!i->prior_instance);
+      assert(!i->prior_instance || t.get_src() == transaction_type_t::DEMOTE);
       // no set_io_wait(), skip complete_commit()
       assert(!i->is_pending_io());
       i->pending_for_transaction = TRANS_ID_NULL;
@@ -1812,13 +1812,22 @@ record_t Cache::prepare_record(
                      should_use_no_conflict_publish(t, i->get_type()));
     }
 
-    // exist mutation pending extents must be in t.mutated_block_list
-    add_extent(i);
-    const auto t_src = t.get_src();
-    if (i->is_stable_dirty()) {
-      add_to_dirty(i, &t_src);
+    assert(i->is_logical());
+    if (t.get_src() == transaction_type_t::DEMOTE) {
+      assert(!i->committer);
+      assert(!i->get_prior_instance()->committer);
+      i->new_committer(t);
+      assert(i->committer);
+      i->get_prior_instance()->committer = i->committer;
     } else {
-      touch_extent_fully(*i, &t_src, t.get_cache_hint());
+      // exist mutation pending extents must be in t.mutated_block_list
+      add_extent(i);
+      const auto t_src = t.get_src();
+      if (i->is_stable_dirty()) {
+        add_to_dirty(i, &t_src);
+      } else {
+        touch_extent_fully(*i, &t_src, t.get_cache_hint());
+      }
     }
 
     alloc_delta.alloc_blk_ranges.emplace_back(
@@ -2094,6 +2103,9 @@ void Cache::complete_commit(
       }
       if (i->is_logical()) {
         committer.maybe_sync_copied_lba_key();
+        if (t.get_src() == transaction_type_t::PROMOTE) {
+          committer.commit_shadow_promote(t);
+        }
       }
       touch_extent_fully(prior, &t_src, t.get_cache_hint());
       committer.sync_version();
@@ -2202,6 +2214,30 @@ void Cache::complete_commit(
       continue;
     }
     epm.mark_space_used(i->get_paddr(), i->get_length());
+    assert(i->is_logical());
+    auto t_src = t.get_src();
+    if (t.get_src() == transaction_type_t::DEMOTE) {
+      assert(i->committer);
+      auto &committer = *i->committer;
+      auto &prior = static_cast<LogicalChildNode&>(
+        *i->get_prior_instance());
+      ceph_assert(prior.is_valid());
+      TRACET("committing rewritten extent into "
+             "existing -- {}, prior={}",
+             t, *i, prior);
+      prior.pending_for_transaction = TRANS_ID_NULL;
+      if (auto shadow = prior.get_shadow(); shadow) {
+        committer.commit_shadow_demote(t);
+        prior.reset_shadow();
+      }
+      committer.commit_state();
+      committer.sync_checksum();
+      committer.commit_and_share_paddr();
+      touch_extent_fully(prior, &t_src, t.get_cache_hint());
+      committer.sync_version();
+      i->committer.reset();
+      prior.committer.reset();
+    }
   }
   for (auto &i: t.pre_alloc_list) {
     if (!i->is_valid()) {

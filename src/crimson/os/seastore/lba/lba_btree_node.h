@@ -324,6 +324,7 @@ struct LBALeafNode
     iterator &iter)
   {
     LOG_PREFIX(LBALeafNode::merge_content_to);
+    SUBTRACET(seastore_lba, "merging with {}", t, pending_version);
     std::map<laddr_t, pladdr_t> modified;
     auto it = pending_version.begin();
     while (it != pending_version.end() && iter != this->end()) {
@@ -345,14 +346,20 @@ struct LBALeafNode
         ceph_abort();
       }
       if (is_valid_child_ptr(child)) {
-        if ((child->_is_mutable() || child->_is_pending_io())) {
-          // skip the ones that the pending version is also modifying
+        if (// skip the ones that the pending version is also modifying
+           (child->_is_mutable() || child->_is_pending_io()) ||
+           // EXIST_CLEAN extents created by DEMOTE transactions also
+           // updates their paddrs, so they should also be skpped.
+           (pending_version.t->get_src() == transaction_type_t::DEMOTE)) {
+          SUBTRACET(seastore_lba, "skipping {}~{}", t, it->get_key(), it->get_val());
           it++;
           continue;
         } else {
           assert(child->_is_exist_clean() || child->_is_exist_mutation_pending());
         }
       }
+      SUBTRACET(seastore_lba, "examing v2: {}~{}, v1: {}~{}",
+        t, it->get_key(), it->get_val(), iter->get_key(), iter->get_val());
       auto pending_key = it->get_key();
       auto stable_key = iter->get_key();
       auto stable_end = stable_key + v1.len;
@@ -362,13 +369,21 @@ struct LBALeafNode
         if (pending_key != stable_key) {
           assert(v2.pladdr != v1.pladdr);
           assert(is_valid_child_ptr(child));
+          assert(child->_is_exist_clean());
         }
         if (v2.pladdr != v1.pladdr) {
           auto m_v2 = v2;
           auto off = pending_key.get_byte_distance<extent_len_t>(stable_key);
           auto paddr = v1.pladdr.get_paddr();
           paddr = paddr + off;
+          SUBTRACET(seastore_lba, "merging to {}, paddr: {} -> {}",
+            t, pending_version, m_v2.pladdr, paddr);
           m_v2.pladdr = paddr;
+          if (v1.shadow_paddr == P_ADDR_NULL) {
+            m_v2.shadow_paddr = P_ADDR_NULL;
+          } else {
+            m_v2.shadow_paddr = (v1.shadow_paddr + off);
+          }
           SUBTRACET(seastore_lba, "merging to {}, paddr: {} -> {}",
             t, pending_version, m_v2.pladdr, paddr);
           if (!is_valid_child_ptr(child)) {

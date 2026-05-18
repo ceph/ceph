@@ -1132,13 +1132,22 @@ BtreeLBAManager::update_mappings(
 	  return this->_update_mapping(
 	    c.trans,
 	    *cursor,
-	    [prev_addr, addr, len, checksum](
+	    [prev_addr, addr, len, checksum, extent, c](
 	      const lba_map_val_t &in) {
 	      lba_map_val_t ret = in;
 	      ceph_assert(in.pladdr.is_paddr());
-	      ceph_assert(in.pladdr.get_paddr() == prev_addr);
 	      ceph_assert(in.len == len);
-	      ret.pladdr = addr;
+	      if (likely(in.pladdr.get_paddr() == prev_addr)) {
+                ret.pladdr = addr;
+              } else {
+                // this can only happen when the extent is EXIST_CLEAN
+                // and is demoted onto the cold tier by a DEMOTE trans.
+                assert(in.shadow_paddr == P_ADDR_NULL);
+                assert(extent->is_exist_clean());
+                assert(extent->get_paddr() == in.pladdr.get_paddr());
+                assert(c.cache.is_on_cold_tier(extent->get_paddr()));
+                assert(!c.cache.is_on_cold_tier(prev_addr));
+              }
 	      ret.checksum = checksum;
 	      return ret;
 	    },
