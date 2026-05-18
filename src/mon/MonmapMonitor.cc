@@ -1497,6 +1497,48 @@ void MonmapMonitor::trigger_healthy_stretch_mode()
   propose_pending();
 }
 
+bool MonmapMonitor::ensure_connectivity_strategy(MonMap& pending_map,
+                                                const mon_feature_t& mon_features,
+                                                stringstream& ss)
+{
+  // If already using CONNECTIVITY, nothing to do
+  if (pending_map.strategy == MonMap::CONNECTIVITY) {
+    return false;
+  }
+
+  // Check if all monitors support CONNECTIVITY strategy
+  if (!mon_features.contains_all(ceph::features::mon::FEATURE_PINGING)) {
+    ss << "Not all monitors support CONNECTIVITY election strategy; please upgrade first!";
+    return false;
+  }
+
+  // Switch to CONNECTIVITY strategy
+  pending_map.strategy = MonMap::CONNECTIVITY;
+  pending_map.last_changed = ceph_clock_now();
+  return true;
+}
+
+bool MonmapMonitor::ensure_connectivity_strategy(stringstream& ss)
+{
+  dout(20) << __func__ << dendl;
+
+  bool changed = ensure_connectivity_strategy(pending_map,
+                                              mon.get_quorum_mon_features(),
+                                              ss);
+
+  if (changed) {
+    dout(10) << __func__ << " switching election strategy to CONNECTIVITY"
+            << " for per-pool stretch mode support" << dendl;
+    propose_pending();
+  } else if (pending_map.strategy == MonMap::CONNECTIVITY) {
+    dout(10) << __func__ << " already using CONNECTIVITY strategy" << dendl;
+  } else {
+    dout(10) << __func__ << " " << ss.str() << dendl;
+  }
+
+  return changed;
+}
+
 bool MonmapMonitor::preprocess_join(MonOpRequestRef op)
 {
   auto join = op->get_req<MMonJoin>();

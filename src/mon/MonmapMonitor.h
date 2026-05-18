@@ -29,6 +29,7 @@
 #include "PaxosService.h"
 #include "MonMap.h"
 #include "MonitorDBStore.h"
+#include "mon/mon_types.h"
 
 struct Subscription;
 
@@ -130,6 +131,24 @@ public:
    * down list to allow any non-tiebreaker mon to be the leader again.
    */
   void trigger_healthy_stretch_mode();
+  /**
+   * Ensure CONNECTIVITY election strategy is enabled (static version for testing).
+   * @param pending_map: MonMap to potentially modify
+   * @param mon_features: Monitor features to check for CONNECTIVITY support
+   * @param ss: stringstream for error messages
+   * @return true if changed pending_map, false otherwise
+   */
+  static bool ensure_connectivity_strategy(MonMap& pending_map,
+                                           const mon_feature_t& mon_features,
+                                           std::stringstream& ss);
+
+  /**
+   * Ensure CONNECTIVITY election strategy is enabled (instance version).
+   * Called by OSDMonitor when per-pool stretch mode is needed (num_zones > 1).
+   * @param ss: stringstream for error messages
+   * @return true if changed pending_map (needs proposal), false otherwise
+   */
+  bool ensure_connectivity_strategy(std::stringstream& ss);
 };
 
 

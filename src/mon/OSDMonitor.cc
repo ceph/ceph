@@ -26,6 +26,7 @@
 #include "mon/OSDMonitor.h"
 #include "mon/Monitor.h"
 #include "mon/MonMap.h"
+#include "mon/MonmapMonitor.h"
 #include "mon/MDSMonitor.h"
 #include "mon/MgrStatMonitor.h"
 #include "mon/AuthMonitor.h"
@@ -7593,6 +7594,14 @@ int OSDMonitor::crush_rule_create_replica(const string &name,
   } else {
     int ruleno;
     if (num_zones > 1) {
+      dout(20) << __func__ << " creating simple_stretch_rule " << name
+             << " root " << root
+             << " zone_failure_domain " << zone_failure_domain
+             << " osd_failure_domain " << osd_failure_domain
+             << " num_zones " << num_zones
+             << " num_replica_per_zone " << num_replica_per_zone
+             << " device_class " << device_class
+             << dendl;
       ruleno = newcrush.add_simple_stretch_rule(
       name, root, zone_failure_domain, osd_failure_domain, num_zones, num_replica_per_zone, device_class,
       "firstn", pg_pool_t::TYPE_REPLICATED, force, ss);
@@ -7988,6 +7997,17 @@ int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
 {
 
   if (*crush_rule < 0) {
+    dout(20) << __func__
+       << " pool_type " << pg_pool_t::get_type_name(pool_type)
+       << " pool " << pool_name
+       << " rule_name '" << rule_name << "'"
+       << " num_zones " << num_zones
+       << " root '" << root << "'"
+       << " num_replica_per_zone " << num_replica_per_zone
+       << " zone_failure_domain '" << zone_failure_domain << "'"
+       << " osd_failure_domain '" << osd_failure_domain << "'"
+       << " device_class '" << device_class << "'"
+       << dendl;
     switch (pool_type) {
     case pg_pool_t::TYPE_REPLICATED:
       {
@@ -8394,7 +8414,14 @@ int OSDMonitor::prepare_new_pool(string& name,
       pi->size = pi->size / 2; // only support 2 zones now
     }
   }
-
+  if (num_zones > 1 && !osdmap.stretch_mode_enabled) {
+    stringstream monmap_ss;
+    mon.monmon()->ensure_connectivity_strategy(monmap_ss);
+    if (!monmap_ss.str().empty()) {
+      *ss << monmap_ss.str();
+      return -ENOTSUP;
+    }
+  }
   if (auto m = pg_pool_t::get_pg_autoscale_mode_by_name(
         g_conf().get_val<string>("osd_pool_default_pg_autoscale_mode"));
       m != pg_pool_t::pg_autoscale_mode_t::UNKNOWN) {
