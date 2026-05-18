@@ -188,6 +188,8 @@ list<rgw_bucket_dir_entry_meta> rgw_bucket_dir_entry_meta::generate_test_instanc
   m.owner = "owner";
   m.owner_display_name = "display name";
   m.content_type = "content/type";
+  m.cksum_algo = 1;
+  m.cksum_flags = 1;
   o.push_back(std::move(m));
   o.emplace_back();
   return o;
@@ -209,6 +211,8 @@ void rgw_bucket_dir_entry_meta::dump(Formatter *f) const
   encode_json("accounted_size", accounted_size, f);
   encode_json("user_data", user_data, f);
   encode_json("appendable", appendable, f);
+  encode_json("cksum_algo", (unsigned)cksum_algo, f);
+  encode_json("cksum_flags", (unsigned)cksum_flags, f);
 }
 
 void rgw_bucket_dir_entry_meta::decode_json(JSONObj *obj) {
@@ -227,6 +231,10 @@ void rgw_bucket_dir_entry_meta::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("accounted_size", accounted_size, obj);
   JSONDecoder::decode_json("user_data", user_data, obj);
   JSONDecoder::decode_json("appendable", appendable, obj);
+  JSONDecoder::decode_json("cksum_algo", val, obj);
+  cksum_algo = (uint16_t)val;
+  JSONDecoder::decode_json("cksum_flags", val, obj);
+  cksum_flags = (uint8_t)val;
 }
 
 list<rgw_bucket_dir_entry> rgw_bucket_dir_entry::generate_test_instances()
