@@ -16,10 +16,24 @@
 #ifndef CEPH_MCLIENTSESSION_H
 #define CEPH_MCLIENTSESSION_H
 
+#include <limits.h> // for UINT64_MAX
+#include <string.h> // for memset()
+
+#include <cstdint>
+#include <map>
+#include <ostream>
+#include <string>
+#include <vector>
+
+#include "include/ceph_fs.h" // for ceph_mds_session_head
+#include "include/ceph_fs_encoder.h"
 #include "include/container_ios.h"
-#include "mds/MDSAuthCaps.h"
+#include "include/encoding.h"
+#include "include/types.h" // for ceph_tid_t, version_t
+#include "include/utime.h"
+#include "mds/MDSAuthCaps.h" // for MDSCapAuth
 #include "msg/Message.h"
-#include "mds/mdstypes.h"
+#include "mds/mdstypes.h" // for feature_bitset_t, metric_spec_t
 
 class MClientSession final : public SafeMessage {
 private:
