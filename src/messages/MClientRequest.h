@@ -55,6 +55,7 @@
 #include "common/strescape.h"
 
 #include "mds/cephfs_features.h"
+#include "mds/mdstypes.h" // for feature_bitset_t
 #include "mds/metareqid_t.h"
 
 #include "messages/MMDSOp.h"
