@@ -1,41 +1,56 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container class="modal-title"
-                i18n>Cluster-wide OSD Flags</ng-container>
+<cds-modal size="sm"
+           [open]="open"
+           [hasScrollingContent]="true"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        modal-primary-focus
+        i18n>Cluster-wide OSD Flags</h3>
+  </cds-modal-header>
 
-  <ng-container class="modal-content">
+  <div cdsModalContent>
     <form name="osdFlagsForm"
-          #formDir="ngForm"
           [formGroup]="osdFlagsForm"
-          novalidate
-          cdFormScope="osd">
-      <div class="modal-body osd-modal">
-        <div class="custom-control custom-checkbox"
-             *ngFor="let flag of flags; let last = last">
-          <input class="custom-control-input"
-                 type="checkbox"
-                 [checked]="flag.value"
-                 (change)="flag.value = !flag.value"
-                 [name]="flag.code"
-                 [id]="flag.code"
-                 [disabled]="flag.disabled">
-          <label class="custom-control-label"
-                 [for]="flag.code"
-                 ng-class="['tc_' + key]">
+          novalidate>
+      <div>
+        @for (flag of flags; track flag.code; let last = $last) {
+        <div>
+          <cds-checkbox
+            [checked]="flag.value"
+            (checkedChange)="flag.value = !flag.value"
+            [name]="flag.code"
+            [id]="flag.code"
+            [disabled]="flag.disabled"
+          >
             <strong>{{ flag.name }}</strong>
-            <br>
-            <span class="form-text text-muted">{{ flag.description }}</span>
-          </label>
-          <hr class="m-1"
-              *ngIf="!last">
-        </div>
-      </div>
 
-      <div class="modal-footer">
-        <cd-form-button-panel (submitActionEvent)="submitAction()"
-                              [form]="osdFlagsForm"
-                              [showSubmit]="permissions.osd.update"
-                              [submitText]="actionLabels.UPDATE"></cd-form-button-panel>
+            <div class="cds-mt-4">
+              <cd-help-text>{{ flag.description }}</cd-help-text>
+            </div>
+          </cds-checkbox>
+          @if (!last) {
+          <hr class="cds-m-2" />
+          }
+        </div>
+        }
       </div>
     </form>
-  </ng-container>
-</cd-modal>
+  </div>
+
+  <cds-modal-footer>
+    <cds-button-set>
+      <button cdsButton="secondary"
+              (click)="closeModal()"
+              i18n>
+        Cancel
+      </button>
+      @if (permissions.osd.update) {
+      <cd-submit-button
+        (submitAction)="submitAction()"
+        [form]="osdFlagsForm"
+        [submitText]="actionLabels.UPDATE">
+        {{ actionLabels.UPDATE }}</cd-submit-button>
+      }
+    </cds-button-set>
+  </cds-modal-footer>
+</cds-modal>
