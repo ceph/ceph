@@ -2518,18 +2518,19 @@ public:
     std::mutex strand_track_lock;
     std::deque<MessageRef> queued_messages;
 
-    void track_enqueue(const MessageRef& m) {
+    template <typename Callable>
+    void track_enqueue(const MessageRef& m, Callable&& f) {
       std::lock_guard l(strand_track_lock);
       queued_messages.push_back(m);
+      boost::asio::post(strand, std::forward<Callable>(f));
     }
 
     void track_dequeue(const MessageRef& m) {
       std::lock_guard l(strand_track_lock);
-      if (!queued_messages.empty()) {
-        auto const& _m = queued_messages.front();
-        ceph_assert(_m == m);
-        queued_messages.pop_front();
-      }
+      ceph_assert(!queued_messages.empty());
+      auto const& _m = queued_messages.front();
+      ceph_assert(_m == m);
+      queued_messages.pop_front();
     }
 
     int incarnation;

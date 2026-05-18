@@ -1079,8 +1079,7 @@ void Objecter::ms_fast_dispatch2(const MessageRef& m)
     auto priv = m->get_connection()->get_priv();
     auto s = static_cast<OSDSession*>(priv.get());
     if (s) {
-      s->track_enqueue(m);
-      boost::asio::post(s->strand, [this, priv, s, m]() {
+      s->track_enqueue(m, [this, priv, s, m]() {
         cref_t<MOSDOpReply> msg = ref_cast<MOSDOpReply>(m);
         s->track_dequeue(m);
         handle_osd_op_reply(std::move(msg));
@@ -1095,8 +1094,7 @@ void Objecter::ms_fast_dispatch2(const MessageRef& m)
     auto priv = m->get_connection()->get_priv();
     auto s = static_cast<OSDSession*>(priv.get());
     if (s) {
-      s->track_enqueue(m);
-      boost::asio::post(s->strand, [this, priv, s, m]() {
+      s->track_enqueue(m, [this, priv, s, m]() {
         cref_t<MWatchNotify> msg = ref_cast<MWatchNotify>(m);
         s->track_dequeue(m);
         handle_watch_notify(std::move(msg));
@@ -1120,8 +1118,7 @@ Dispatcher::dispatch_result_t Objecter::ms_dispatch2(const MessageRef& m)
     auto priv = m->get_connection()->get_priv();
     auto s = static_cast<OSDSession*>(priv.get());
     if (s) {
-      s->track_enqueue(m);
-      boost::asio::post(s->strand, [this, priv, s, m]() {
+      s->track_enqueue(m, [this, priv, s, m]() {
         cref_t<MOSDBackoff> msg = ref_cast<MOSDBackoff>(m);
         s->track_dequeue(m);
         handle_osd_backoff(std::move(msg));
@@ -1139,8 +1136,7 @@ Dispatcher::dispatch_result_t Objecter::ms_dispatch2(const MessageRef& m)
       auto priv = m->get_connection()->get_priv();
       auto s = static_cast<OSDSession*>(priv.get());
       if (s) {
-        s->track_enqueue(m);
-        boost::asio::post(s->strand, [this, priv, s, m]() {
+        s->track_enqueue(m, [this, priv, s, m]() {
           cref_t<MCommandReply> msg = ref_cast<MCommandReply>(m);
           s->track_dequeue(m);
           handle_command_reply(std::move(msg));
