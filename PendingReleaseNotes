@@ -1,3 +1,9 @@
+* Messenger: new ``ms_tcp_zerocopy`` option (default ``false``) makes the
+  async Posix stack send large plaintext payloads with ``MSG_ZEROCOPY``,
+  eliminating the kernel send copy. ``ms_tcp_zerocopy_min_size``
+  (default 16K) sets the per-send threshold. Only crc-mode connections
+  are eligible; secure mode already copies during encryption.
+
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
   this option could be changed at runtime, but changes had no effect on opened file

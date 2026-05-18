@@ -134,6 +134,25 @@ int NetHandler::set_socket_options(int sd, bool nodelay, int size)
     }
   }
 
+  // MSG_ZEROCOPY send opt-in (default off). Setting SO_ZEROCOPY
+  // alone changes nothing on the wire; it only takes effect once a
+  // send passes MSG_ZEROCOPY.
+  // Failure is non-fatal: the connection proceeds in the normal
+  // copying mode. Linux >= 4.14 only; absent from Ceph compat headers.
+#ifdef SO_ZEROCOPY
+  if (cct->_conf.get_val<bool>("ms_tcp_zerocopy")) {
+    int zc = 1;
+    if (::setsockopt(sd, SOL_SOCKET, SO_ZEROCOPY,
+                     (SOCKOPT_VAL_TYPE)&zc, sizeof(zc)) < 0) {
+      int e = ceph_sock_errno();
+      ldout(cct, 1) << "couldn't set SO_ZEROCOPY: " << cpp_strerror(e)
+                    << " (continuing without zero-copy send)" << dendl;
+    } else {
+      ldout(cct, 10) << "SO_ZEROCOPY enabled on socket " << sd << dendl;
+    }
+  }
+#endif
+
   // block ESIGPIPE
 #ifdef CEPH_USE_SO_NOSIGPIPE
   int val = 1;

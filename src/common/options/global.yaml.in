@@ -1126,6 +1126,38 @@ options:
   desc: Maximum amount of data to prefetch out of the socket receive buffer
   default: 64_K
   with_legacy: true
+- name: ms_tcp_zerocopy
+  type: bool
+  level: advanced
+  desc: Use MSG_ZEROCOPY for large plaintext sends on the Posix messenger stack
+  long_desc: When enabled, the Posix stack opts each TCP socket into
+   SO_ZEROCOPY at connect/accept and sends data segments at or above
+   ms_tcp_zerocopy_min_size with MSG_ZEROCOPY, eliminating the kernel
+   send copy. Only applies to crc-mode connections (secure mode already
+   copies during encryption) and only to connections established after
+   the option is set. Transparent fallback to a normal copying send on
+   ENOBUFS or when the kernel/socket does not support it. Disabled by
+   default; the benefit is only realized over a real NIC.
+  default: false
+  see_also:
+  - ms_tcp_zerocopy_min_size
+  with_legacy: true
+- name: ms_tcp_zerocopy_min_size
+  type: size
+  level: advanced
+  desc: Minimum per-send size to use MSG_ZEROCOPY (below this, send copies)
+  long_desc: MSG_ZEROCOPY pins user pages and incurs a per-send
+   completion notification; below this threshold the copy is cheaper
+   than the pinning plus notification overhead, so small sends (control
+   frames, small replies) always use the normal copying path. Only
+   consulted when ms_tcp_zerocopy is enabled. Very low values are
+   counterproductive - they pin control frames and handshake traffic
+   for no bandwidth gain.
+  default: 16_K
+  min: 1_K
+  see_also:
+  - ms_tcp_zerocopy
+  with_legacy: true
 - name: ms_initial_backoff
   type: float
   level: advanced
