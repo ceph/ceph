@@ -8335,7 +8335,9 @@ int OSDMonitor::prepare_new_pool(string& name,
   }
 
   if (mon.monmap->global_stretch_mode_enabled && num_zones > 1) {
-    r = validate_stretch_mode_new_pool(crush_rule, zone_failure_domain, ss);
+    CrushWrapper newcrush = _get_pending_crush();
+    r = validate_stretch_mode_new_pool(newcrush, crush_rule, osdmap.stretch_bucket_count, osdmap.stretch_mode_bucket, 
+      osdmap.pools, zone_failure_domain, ss);
     if (r) {
       dout(10) << "validate_stretch_mode_pool returns " << r << dendl;
       return r;
@@ -9770,12 +9772,51 @@ int OSDMonitor::prepare_command_pool_stretch_set(const cmdmap_t& cmdmap,
     return -EINVAL;
   }
 
+  // Validate the new crush rule is compatible with stretch mode
+  if (mon.monmap->global_stretch_mode_enabled) {
+    int r = validate_stretch_mode_new_pool(crush, crush_rule, osdmap.stretch_bucket_count, osdmap.stretch_mode_bucket, 
+      osdmap.pools, bucket_barrier_str, &ss);
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  if (p.is_erasure()) {
+    if (!p.has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
+      ss << "EC pool must have allow_ec_optimizations=true for stretch mode";
+      return -EINVAL;
+    }
+
+    ErasureCodeInterfaceRef erasure_code;
+    int err = get_erasure_code(p.erasure_code_profile, &erasure_code, &ss);
+    if (err == 0) {
+      unsigned base_size = erasure_code->get_chunk_count();
+      int expected_size = bucket_count * base_size;
+      int k = erasure_code->get_data_chunk_count();
+      if (pool_size != expected_size) {
+        ss << "For EC pool in stretch mode, size must be " << expected_size
+        << " (num_zones * (k+m) = num_zones * " << base_size << "), got " << pool_size;
+        return -EINVAL;
+      }
+      if (static_cast<__u8>(pool_min_size) < k || static_cast<__u8>(pool_min_size) > base_size) {
+         ss << "For EC pool in stretch mode, min_size must be between " << k
+            << " (k) and " << base_size << " (k+m), got " << pool_min_size;
+         return -EINVAL;
+      }
+    } else {
+      ss << "get_erasure_code() failed";
+      return -EINVAL;
+    }
+  }
+
   p.peering_crush_bucket_count = static_cast<uint32_t>(bucket_count);
   p.peering_crush_bucket_target = static_cast<uint32_t>(bucket_target);
   p.peering_crush_bucket_barrier = static_cast<uint32_t>(bucket_barrier);
   p.crush_rule = static_cast<__u8>(crush_rule);
   p.size = static_cast<__u8>(pool_size);
-  p.min_size = static_cast<__u8>(pool_min_size);
+  if (p.is_replicated()) {
+    p.min_size = static_cast<__u8>(pool_min_size);
+  }
   p.last_change = pending_inc.epoch;
   pending_inc.new_pools[pool] = p;
   ss << "pool " << pool_name << " stretch values are set successfully";
@@ -9802,7 +9843,7 @@ int OSDMonitor::prepare_command_pool_stretch_unset(const cmdmap_t& cmdmap,
   pg_pool_t p = *osdmap.get_pg_pool(pool);
   if (pending_inc.new_pools.count(pool))
     p = pending_inc.new_pools[pool];
-  
+
   // check if pool is a stretch pool
   if (!p.is_stretch_pool()) {
     ss << "pool " << pool_name << " is not a stretch pool";
@@ -12032,7 +12073,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd crush rule create-stretch-replicated") {
     string name = cmd_getval_or<string>(cmdmap, "rule_name", "stretch_replica_rule");
     string root = cmd_getval_or<string>(cmdmap, "root", "default");
-    int64_t num_zones = cmd_getval_or<int64_t>(cmdmap, "zones", 2);
+    int64_t num_zones = cmd_getval_or<int64_t>(cmdmap, "num_zones", 2);
     int num_replica_per_zone = cmd_getval_or<int64_t>(cmdmap, "num_replica_per_zone", 2);
     string zone_failure_domain = cmd_getval_or<string>(cmdmap, "zone_failure_domain", "datacenter");
     string osd_failure_domain = cmd_getval_or<string>(cmdmap, "osd_failure_domain", "host");
@@ -12222,7 +12263,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     string name;
     cmd_getval(cmdmap, "name", name);
-    int num_zones = cmd_getval_or<int64_t>(cmdmap, "zones", 1);
+    int num_zones = cmd_getval_or<int64_t>(cmdmap, "num_zones", 1);
     string profile;
     cmd_getval(cmdmap, "profile", profile);
     if (profile == "")
@@ -16218,9 +16259,9 @@ void OSDMonitor::extract_sites_from_crush_rule(CrushWrapper& crush, set<int>& ru
   }
 }
 
-int OSDMonitor::validate_stretch_mode_new_pool(int new_crush_rule, const string& zone_failure_domain, ostream *ss)
+int OSDMonitor::validate_stretch_mode_new_pool(CrushWrapper& crush, int new_crush_rule, int stretch_bucket_count, int stretch_mode_bucket, 
+  const mempool::osdmap::map<int64_t, pg_pool_t>& pools, const string& zone_failure_domain, ostream *ss)
 {
-  CrushWrapper crush = _get_pending_crush();
   int dividing_id = crush.get_type_id(zone_failure_domain);
 
   // Get the take roots from the rule
@@ -16233,27 +16274,26 @@ int OSDMonitor::validate_stretch_mode_new_pool(int new_crush_rule, const string&
     }
     return -EINVAL;
   }
-  if (dividing_id != osdmap.stretch_mode_bucket) {
+  if (dividing_id != stretch_mode_bucket) {
     if (ss) {
       *ss << "CRUSH rule " << new_crush_rule << " is stretched across " << crush.get_type_name(dividing_id)
-          << " instead of " << crush.get_type_name(osdmap.stretch_mode_bucket);
+          << " instead of " << crush.get_type_name(stretch_mode_bucket);
     }
     return -EINVAL;
   }
   // For each take root, find all children at the dividing type level
   set<int> rule_sites;
   extract_sites_from_crush_rule(crush, rule_sites, rule_roots, dividing_id);
-  if (rule_sites.size() != osdmap.stretch_bucket_count) {
+  if (int(rule_sites.size()) != stretch_bucket_count) {
     if (ss) {
       *ss << "CRUSH rule " << new_crush_rule << " covers " << rule_sites.size()
-          << " " << crush.get_type_name(dividing_id) << " buckets, but stretch mode requires exactly " << osdmap.stretch_bucket_count;
+          << " " << crush.get_type_name(dividing_id) << " buckets, but stretch mode requires exactly " << stretch_bucket_count;
     }
     return -EINVAL;
   }
 
   // Verify the sites match the expected stretch mode sites
-  // Pick any pool that is in stretch mode since all pools must be stretched across the same sites
-  for (const auto& [poolid, pool] : osdmap.pools) {
+  for (const auto& [poolid, pool] : pools) {
     if (pool.is_stretch_pool()) {
       int crush_rule = pool.crush_rule;
       int existing_dividing_id = pool.peering_crush_bucket_barrier;
@@ -16534,3 +16574,4 @@ void OSDMonitor::trigger_healthy_stretch_mode()
   }
   propose_pending();
 }
+
