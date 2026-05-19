@@ -595,7 +595,7 @@ public:
       sc->env->async_rados, sc->env->driver,
       { sc->env->svc->zone->get_zone_params().log_pool,
 	RGWDataSyncStatusManager::sync_status_oid(sc->source_zone) },
-      string(lock_name), lock_duration, caller, &sc->lcc);
+      string(lock_name), lock_duration, caller, &sc->lcc, sc->env->counters);
   }
 
   int operate(const DoutPrefixProvider *dpp) override {
@@ -2335,7 +2335,7 @@ public:
     lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados, driver,
                                             rgw_raw_obj(pool, status_oid),
                                             lock_name, lock_duration, this,
-					    &sc->lcc));
+					    &sc->lcc, sync_env->counters));
     lease_stack.reset(spawn(lease_cr.get(), false));
   }
 };
@@ -5873,7 +5873,7 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
 
         if (!bucket_lease_cr) {
           bucket_lease_cr.reset(new RGWContinuousLeaseCR(env->async_rados, env->driver, status_obj,
-                lock_name, lock_duration, this, &sc->lcc));
+                lock_name, lock_duration, this, &sc->lcc, env->counters));
           yield spawn(bucket_lease_cr.get(), false);
           while (!bucket_lease_cr->is_locked()) {
             if (bucket_lease_cr->is_done()) {
@@ -5941,7 +5941,7 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
         // different shards from duplicating the init and full sync
         if (!bucket_lease_cr) {
           bucket_lease_cr.reset(new RGWContinuousLeaseCR(env->async_rados, env->driver, status_obj,
-							 lock_name, lock_duration, this, &sc->lcc));
+							 lock_name, lock_duration, this, &sc->lcc, env->counters));
           yield spawn(bucket_lease_cr.get(), false);
           while (!bucket_lease_cr->is_locked()) {
             if (bucket_lease_cr->is_done()) {

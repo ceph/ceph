@@ -17,6 +17,7 @@
 
 #include "services/svc_sys_obj.h"
 #include "services/svc_bucket.h"
+#include "include/common_fwd.h"
 
 struct rgw_http_param_pair;
 class RGWRESTConn;
@@ -1507,20 +1508,30 @@ public:
 /// \warning This class is not thread safe. We do not use a mutex
 /// because all coroutines spawned by RGWDataSyncCR share a single thread.
 class LatencyMonitor {
-  ceph::timespan total;
-  std::uint64_t count = 0;
+  ceph::timespan avg{ceph::timespan::zero()};
+  bool initialized = false;
+  // Weight for new samples in running average. Recent samples matter
+  // most; after ~20 new samples a past spike decays to <4%.
+  // Example: if avg is poisoned at 30s but real latency is 0.1s,
+  // after 20 good samples the avg drops to ~1.2s (fully recovered).
+  static constexpr double alpha = 0.15;
 
 public:
 
   LatencyMonitor() = default;
   void add_latency(ceph::timespan latency) {
-    total += latency;
-    ++count;
+    if (!initialized) {
+      avg = latency;
+      initialized = true;
+    } else {
+      avg = ceph::timespan(
+        static_cast<ceph::timespan::rep>(
+          alpha * latency.count() + (1.0 - alpha) * avg.count()));
+    }
   }
 
   ceph::timespan avg_latency() {
-    using namespace std::literals;
-    return count == 0 ? 0s : total / count;
+    return avg;
   }
 };
 
@@ -1548,17 +1559,20 @@ class RGWContinuousLeaseCR : public RGWCoroutine {
   ceph::coarse_mono_time current_time;
 
   LatencyMonitor* latency;
+  PerfCounters* counters;
 
 public:
   RGWContinuousLeaseCR(RGWAsyncRadosProcessor* async_rados,
                        rgw::sal::RadosStore* _store,
                        rgw_raw_obj obj, std::string lock_name,
                        int interval, RGWCoroutine* caller,
-		       LatencyMonitor* const latency)
+                       LatencyMonitor* const latency,
+                       PerfCounters* counters = nullptr)
     : RGWCoroutine(_store->ctx()), async_rados(async_rados), store(_store),
       obj(std::move(obj)), lock_name(std::move(lock_name)),
       interval(interval), interval_tolerance(ceph::make_timespan(9*interval/10)),
-      ts_interval(ceph::make_timespan(interval)), caller(caller), latency(latency)
+      ts_interval(ceph::make_timespan(interval)), caller(caller), latency(latency),
+      counters(counters)
   {}
 
   virtual ~RGWContinuousLeaseCR() override;
