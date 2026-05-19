@@ -14,6 +14,7 @@
  */
 
 #include <bit>
+#include <iomanip>  // for std::fixed, std::setprecision
 #include <random>
 #include <utility>
 #include <memory>
