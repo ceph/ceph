@@ -32,12 +32,12 @@
 #  include <sched.h>
 #endif
 
-#include "common/Formatter.h"
 #include "include/ceph_assert.h"
 #include "include/compact_map.h"
 #include "include/compact_set.h"
 #include "include/compat.h"
 
+namespace ceph { class Formatter; }
 
 /*
 
@@ -215,10 +215,7 @@ struct stats_t {
   std::atomic<size_t> items = {0};
   std::atomic<size_t> bytes = {0};
 
-  void dump(ceph::Formatter *f) const {
-    f->dump_int("items", items);
-    f->dump_int("bytes", bytes);
-  }
+  void dump(ceph::Formatter *f) const;
 
   stats_t& operator+=(const stats_t& o) {
     items += o.items;
