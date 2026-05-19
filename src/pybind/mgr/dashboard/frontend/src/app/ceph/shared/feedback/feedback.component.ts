@@ -17,6 +17,9 @@ import { NotificationService } from '~/app/shared/services/notification.service'
   standalone: false
 })
 export class FeedbackComponent extends CdForm implements OnInit, OnDestroy {
+  private readonly MODULE_REFRESH_RETRY_ATTEMPTS = 5;
+  private readonly MODULE_REFRESH_RETRY_DELAY_MS = 1000;
+
   title = 'Feedback';
   projects: any = [
     'dashboard',
@@ -31,6 +34,9 @@ export class FeedbackComponent extends CdForm implements OnInit, OnDestroy {
   tracker: string[] = ['bug', 'feature'];
   api_key: string;
   keySub: Subscription;
+  moduleUpdateSub: Subscription;
+  moduleRefreshTimeoutId: number;
+  pendingModuleRefreshRetries = 0;
   submit: string;
   feedbackForm: CdFormGroup;
   isAPIKeySet = false;
@@ -48,16 +54,47 @@ export class FeedbackComponent extends CdForm implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.createForm();
+    this.refreshFeedbackModuleState(false);
+    this.moduleUpdateSub = this.mgrModuleService.updateCompleted$.subscribe(() => {
+      this.pendingModuleRefreshRetries = this.MODULE_REFRESH_RETRY_ATTEMPTS;
+      this.refreshFeedbackModuleState(true);
+    });
+  }
+
+  private stopModuleRefreshRetryState() {
+    this.pendingModuleRefreshRetries = 0;
+    if (this.moduleRefreshTimeoutId) {
+      clearTimeout(this.moduleRefreshTimeoutId);
+      this.moduleRefreshTimeoutId = null;
+    }
+  }
+
+  private refreshFeedbackModuleState(retryOnError: boolean) {
+    this.keySub?.unsubscribe();
     this.keySub = this.feedbackService.isKeyExist().subscribe({
       next: (data: boolean) => {
+        this.isFeedbackEnabled = true;
+        this.feedbackForm.enable();
+        this.stopModuleRefreshRetryState();
         this.isAPIKeySet = data;
         if (this.isAPIKeySet) {
           this.feedbackForm.get('api_key').clearValidators();
+        } else {
+          this.feedbackForm.get('api_key').setValidators(Validators.required);
         }
+        this.feedbackForm.get('api_key').updateValueAndValidity();
       },
       error: () => {
         this.isFeedbackEnabled = false;
         this.feedbackForm.disable();
+        if (retryOnError && this.pendingModuleRefreshRetries > 0) {
+          this.pendingModuleRefreshRetries--;
+          this.moduleRefreshTimeoutId = window.setTimeout(() => {
+            this.refreshFeedbackModuleState(true);
+          }, this.MODULE_REFRESH_RETRY_DELAY_MS);
+        } else {
+          this.stopModuleRefreshRetryState();
+        }
       }
     });
   }
@@ -73,7 +110,9 @@ export class FeedbackComponent extends CdForm implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    this.keySub.unsubscribe();
+    this.keySub?.unsubscribe();
+    this.moduleUpdateSub?.unsubscribe();
+    this.stopModuleRefreshRetryState();
   }
 
   onSubmit() {
