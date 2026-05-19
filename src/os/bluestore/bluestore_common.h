@@ -16,6 +16,10 @@
 #ifndef CEPH_OSD_BLUESTORE_COMMON_H
 #define CEPH_OSD_BLUESTORE_COMMON_H
 
+#include <cstdint>
+#include <string>
+#include <unordered_set>
+
 #include "include/byteorder.h" // for ceph_le64
 #include "include/intarith.h"
 #include "include/ceph_assert.h"
