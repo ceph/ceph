@@ -58,6 +58,11 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(PGMapDigest, pgmap_digest, pgmap);
 MEMPOOL_DEFINE_OBJECT_FACTORY(PGMap, pgmap, pgmap);
 MEMPOOL_DEFINE_OBJECT_FACTORY(PGMap::Incremental, pgmap_inc, pgmap);
 
+void PGMapDigest::pg_count::dump(ceph::Formatter *f) const {
+  f->dump_int("acting", acting);
+  f->dump_int("up_not_acting", up_not_acting);
+  f->dump_int("primary", primary);
+}
 
 // ---------------------
 // PGMapDigest
