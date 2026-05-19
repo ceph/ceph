@@ -72,7 +72,22 @@ TEST_F(TestMgr, ClusterState_Setters)
     ASSERT_EQ(sm.epoch, s_map.epoch);
   });
 
-  //After notify_osdmap, pgmap version should be incremented from 0
+  // With an empty OSD map, notify_osdmap produces no updates, so pg_map
+  // version stays at 0 (apply_incremental is skipped when pending_inc is empty)
+  cs->with_pgmap([&](const PGMap& pm) { ASSERT_EQ(pm.version, 0); });
+
+  // With a non-empty OSD map (pools added), notify_osdmap generates real
+  // updates and pg_map.version should be incremented to 1
+  OSDMap::Incremental inc(osd_map.get_epoch() + 1);
+  pg_pool_t pool;
+  pool.set_pg_num(2);
+  inc.new_pool_max = 1;
+  inc.new_pools.emplace(1, pool);
+  osd_map.apply_incremental(inc);
+
+  cs->with_osdmap_and_pgmap([&](const OSDMap& old_map, const PGMap& pg_map) {
+    cs->notify_osdmap(osd_map);
+  });
   cs->with_pgmap([&](const PGMap& pm) { ASSERT_EQ(pm.version, 1); });
 }
 
