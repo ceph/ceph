@@ -7804,7 +7804,6 @@ void RGWCompleteMultipart::execute(optional_yield y)
     // Spawn upload->complete() and send keepalive whitespace from the main
     // coroutine while it runs. Socket writes must happen on the main coroutine
     // because beast's ClientIO::send_body() suspends using its yield context.
-    std::atomic<bool> complete_done{false};
     int complete_ret = 0;
 
     auto executor = y.get_yield_context().get_executor();
@@ -7813,11 +7812,10 @@ void RGWCompleteMultipart::execute(optional_yield y)
     boost::asio::spawn(executor,
       [&](boost::asio::yield_context yield) {
         complete_ret =
-          upload->complete(this, optional_yield{yield}, s->cct, parts->parts,
+          upload->complete(this, yield, s->cct, parts->parts,
                            remove_objs, accounted_size, compressed, cs_info, ofs,
                            s->req_id, s->owner, olh_epoch, s->object.get(),
                            processed_prefixes, if_match, if_nomatch);
-        complete_done.store(true, std::memory_order_release);
         keepalive_timer.cancel();
       },
       [](std::exception_ptr eptr) {
@@ -7826,16 +7824,15 @@ void RGWCompleteMultipart::execute(optional_yield y)
 
     // Send keepalives from the main coroutine (which owns the socket).
     // The spawned coroutine cancels the timer when done, so we wake immediately.
-    {
+    for (;;) {
       constexpr auto keepalive_interval = std::chrono::seconds(5);
-      while (!complete_done.load(std::memory_order_acquire)) {
-        keepalive_timer.expires_after(keepalive_interval);
-        boost::system::error_code ec;
-        keepalive_timer.async_wait(y.get_yield_context()[ec]);
-        if (!complete_done.load(std::memory_order_acquire)) {
-          send_keepalive();
-        }
+      keepalive_timer.expires_after(keepalive_interval);
+      boost::system::error_code ec;
+      keepalive_timer.async_wait(y.get_yield_context()[ec]);
+      if (ec) {
+        break;
       }
+      send_keepalive();
     }
 
     op_ret = complete_ret;
