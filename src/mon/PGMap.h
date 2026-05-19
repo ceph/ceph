@@ -23,7 +23,6 @@
 #define CEPH_PGMAP_H
 
 #include "include/buffer.h"
-#include "include/ceph_fs.h" // for ceph_statfs
 #include "common/cmdparse.h" // for cmdmap_t
 #include "common/Formatter.h"
 #include "osd/osd_types.h"
@@ -37,6 +36,7 @@
 #include <sstream>
 #include <string>
 
+struct ceph_statfs;
 struct health_check_map_t;
 namespace ceph { class Formatter; }
 class TextTable;
