@@ -245,6 +245,7 @@ Depends: ceph-base (= ${binary:Version}),
          ${shlibs:Depends},
 Recommends: ceph-mgr-alerts,
             ceph-mgr-cephadm,
+            ceph-mgr-cli-api,
             ceph-mgr-dashboard,
             ceph-mgr-diskprediction-local,
             ceph-mgr-influx,
@@ -370,6 +371,19 @@ Description: cephadm orchestrator module for ceph-mgr
  This package contains the CEPHADM module for ceph-mgr's orchestration
  functionality, to allow ceph-mgr to perform orchestration functions
  over a standard SSH connection.
+
+Package: ceph-mgr-cli-api
+Architecture: all
+Depends: ceph-mgr (= ${binary:Version}),
+         ${misc:Depends},
+         ${python3:Depends},
+Description: CLI API module for ceph-mgr
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the CLI API module for ceph-mgr, which provides
+ a REST-like API for the Ceph command-line interface.
 
 Package: ceph-mgr-alerts
 Architecture: all
