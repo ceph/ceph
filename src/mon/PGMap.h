@@ -24,7 +24,6 @@
 
 #include "include/buffer.h"
 #include "common/cmdparse.h" // for cmdmap_t
-#include "common/Formatter.h"
 #include "osd/osd_types.h"
 #include "include/mempool.h"
 
@@ -79,11 +78,7 @@ public:
       decode(up_not_acting, p);
       decode(primary, p);
     }
-    void dump(ceph::Formatter *f) const {
-      f->dump_int("acting", acting);
-      f->dump_int("up_not_acting", up_not_acting);
-      f->dump_int("primary", primary);
-    }
+    void dump(ceph::Formatter *f) const;
     static std::list<pg_count> generate_test_instances() {
       std::list<pg_count> o;
       o.emplace_back();
