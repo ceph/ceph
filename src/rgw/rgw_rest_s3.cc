@@ -4902,7 +4902,7 @@ void RGWCompleteMultipart_ObjStore_S3::send_response()
     s->formatter->dump_string("Message",
                               s->err.message.empty() ? cpp_strerror(-op_ret)
                                                      : s->err.message);
-    s->formatter->dump_string("RequestId", s->req_id);
+    s->formatter->dump_string("RequestId", s->trans_id);
     s->formatter->close_section();
     rgw_flush_formatter_and_reset(s, s->formatter);
   }
