@@ -7790,11 +7790,6 @@ void RGWCompleteMultipart::execute(optional_yield y)
     return;
   }
 
-  // Send 200 OK headers now. We're committed to running the expensive
-  // upload->complete() call. This matches AWS S3's behaviour of sending the
-  // response header immediately and then streaming whitespace keepalives.
-  send_response_begin();
-
   // no coroutine (no beast), no whitespace keepalives.
   if (!y) {
     op_ret = upload->complete(this, y, s->cct, parts->parts,
@@ -7802,6 +7797,10 @@ void RGWCompleteMultipart::execute(optional_yield y)
                      s->req_id, s->owner, olh_epoch, s->object.get(),
                      processed_prefixes, if_match, if_nomatch);
   } else {
+    // Send 200 OK headers now. We're committed to running the expensive
+    // upload->complete() call. This matches AWS S3's behaviour of sending the
+    // response header immediately and then streaming whitespace keepalives.
+    send_response_begin();
     // Spawn upload->complete() and send keepalive whitespace from the main
     // coroutine while it runs. Socket writes must happen on the main coroutine
     // because beast's ClientIO::send_body() suspends using its yield context.
