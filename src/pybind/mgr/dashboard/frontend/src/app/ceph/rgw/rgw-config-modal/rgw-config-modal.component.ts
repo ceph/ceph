@@ -1,7 +1,8 @@
-import { Component, EventEmitter, OnInit, Output } from '@angular/core';
-import { AbstractControl, Validators } from '@angular/forms';
+import { Component, EventEmitter, OnDestroy, OnInit, Output } from '@angular/core';
+import { Validators } from '@angular/forms';
+import { Subscription } from 'rxjs';
 
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import { BaseModal } from 'carbon-components-angular';
 import _ from 'lodash';
 
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
@@ -25,8 +26,13 @@ import { KmipConfig, VaultConfig } from '~/app/shared/models/rgw-encryption-conf
   styleUrls: ['./rgw-config-modal.component.scss'],
   standalone: false
 })
-export class RgwConfigModalComponent implements OnInit {
+export class RgwConfigModalComponent extends BaseModal implements OnInit, OnDestroy {
   kmsProviders: string[];
+  selectedProviderByEncryptionType: Record<string, string> = {
+    [ENCRYPTION_TYPE.SSE_KMS]: KMS_PROVIDER.VAULT,
+    [ENCRYPTION_TYPE.SSE_S3]: KMS_PROVIDER.VAULT
+  };
+  private formSubscriptions = new Subscription();
 
   configForm: CdFormGroup;
 
@@ -44,11 +50,11 @@ export class RgwConfigModalComponent implements OnInit {
   KMS_PROVIDER = KMS_PROVIDER;
   constructor(
     private formBuilder: CdFormBuilder,
-    public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n,
     private rgwBucketService: RgwBucketService,
     private notificationService: NotificationService
   ) {
+    super();
     this.createForm();
   }
   ngOnInit(): void {
@@ -82,22 +88,38 @@ export class RgwConfigModalComponent implements OnInit {
             : this.selectedEncryptionConfigValues['client_key']
       };
       this.configForm.patchValue(patchValues);
+      this.selectedProviderByEncryptionType[patchValues.encryptionType] = patchValues.kms_provider;
       this.configForm.get('kms_provider').disable();
     }
-    this.checkKmsProviders();
+    this.formSubscriptions.add(
+      this.configForm.get('encryptionType').valueChanges.subscribe(() => this.syncKmsProviders())
+    );
+    this.formSubscriptions.add(
+      this.configForm.get('kms_provider').valueChanges.subscribe((provider) => {
+        const encryptionType = this.configForm.get('encryptionType').value;
+        if (!this.editing && provider) {
+          this.selectedProviderByEncryptionType[encryptionType] = provider;
+        }
+      })
+    );
+    this.syncKmsProviders();
   }
 
-  setKmsProvider() {
-    const selectedEncryptionType = this.configForm.get('encryptionType').value;
-    this.kmsProviders =
+  ngOnDestroy(): void {
+    this.formSubscriptions.unsubscribe();
+  }
+
+  private getProvidersForEncryptionType(selectedEncryptionType: string) {
+    return (
       selectedEncryptionType === ENCRYPTION_TYPE.SSE_KMS
         ? [KMS_PROVIDER.VAULT, KMS_PROVIDER.KMIP]
-        : [KMS_PROVIDER.VAULT];
+        : [KMS_PROVIDER.VAULT]
+    );
   }
-  checkKmsProviders() {
-    if (!this.editing) {
-      this.setKmsProvider();
-    }
+
+  syncKmsProviders() {
+    const selectedEncryptionType = this.configForm.get('encryptionType').value;
+    this.kmsProviders = this.getProvidersForEncryptionType(selectedEncryptionType);
 
     if (
       this.allEncryptionConfigValues &&
@@ -124,8 +146,13 @@ export class RgwConfigModalComponent implements OnInit {
       }
     }
     if (!this.editing) {
-      if (this.kmsProviders.length > 0) {
-        this.configForm.get('kms_provider').setValue(this.kmsProviders[0]);
+      const rememberedProvider = this.selectedProviderByEncryptionType[selectedEncryptionType];
+      const nextProvider = this.kmsProviders.includes(rememberedProvider)
+        ? rememberedProvider
+        : this.kmsProviders[0] || '';
+      this.configForm.get('kms_provider').setValue(nextProvider, { emitEvent: false });
+      if (nextProvider) {
+        this.selectedProviderByEncryptionType[selectedEncryptionType] = nextProvider;
       }
     }
   }
@@ -167,18 +194,6 @@ export class RgwConfigModalComponent implements OnInit {
       s3_key_template: [null],
       username: [''],
       password: ['']
-    });
-  }
-
-  fileUpload(files: FileList, controlName: string) {
-    const file: File = files[0];
-    const reader = new FileReader();
-    reader.addEventListener('load', () => {
-      const control: AbstractControl = this.configForm.get(controlName);
-      control.setValue(file);
-      control.markAsDirty();
-      control.markAsTouched();
-      control.updateValueAndValidity();
     });
   }
 
@@ -229,7 +244,7 @@ export class RgwConfigModalComponent implements OnInit {
         this.configForm.setErrors({ cdSubmitButton: true });
       },
       complete: () => {
-        this.activeModal.close();
+        this.closeModal();
         this.table?.refreshBtn();
       }
     });
