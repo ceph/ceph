@@ -1203,7 +1203,6 @@ static SimpleCmd::Commands all_cmds = {
   { "notification rm", OPT::PUBSUB_NOTIFICATION_RM },
   { "topic stats", OPT::PUBSUB_TOPIC_STATS },
   { "topic dump", OPT::PUBSUB_TOPIC_DUMP },
-  { "script put", OPT::SCRIPT_PUT },
   { "script get", OPT::SCRIPT_GET },
   { "script rm", OPT::SCRIPT_RM },
   { "script-package add", OPT::SCRIPT_PACKAGE_ADD },
@@ -3918,6 +3917,18 @@ int main(int argc, const char **argv)
   init_realm_param(cct.get(), zonegroup_id, opt_zonegroup_id, "rgw_zonegroup_id");
   init_realm_param(cct.get(), zone_id, opt_zone_id, "rgw_zone_id");
 
+  {
+    CLI::App app{"radosgw-admin"};
+    app.allow_extras();
+    auto* script = app.add_subcommand("script");
+    auto* put = script->add_subcommand("put");
+    put->add_option("--context", str_script_ctx);
+    app.parse(argc, argv);
+    if (put->parsed()) {
+      opt_cmd = OPT::SCRIPT_PUT;
+    }
+  }
+
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
@@ -4546,27 +4557,28 @@ int main(int argc, const char **argv)
 
     std::any _opt_cmd;
 
-    if (!cmd.find_command(args, &_opt_cmd, &extra_args, &err, &expected)) {
-      if (!expected.empty()) {
-        cerr << err << std::endl;
-        cerr << "Expected one of the following:" << std::endl;
-        for (auto& exp : expected) {
-          if (exp == "*" || exp == "[*]") {
-            continue;
+    if (opt_cmd == OPT::NO_CMD) {
+      if (!cmd.find_command(args, &_opt_cmd, &extra_args, &err, &expected)) {
+        if (!expected.empty()) {
+          cerr << err << std::endl;
+          cerr << "Expected one of the following:" << std::endl;
+          for (auto& exp : expected) {
+            if (exp == "*" || exp == "[*]") {
+              continue;
+            }
+            cerr << "  " << exp << std::endl;
           }
-          cerr << "  " << exp << std::endl;
+        } else {
+          cerr << "Command not found:";
+          for (auto& arg : args) {
+            cerr << " " << arg;
+          }
+          cerr << std::endl;
         }
-      } else {
-        cerr << "Command not found:";
-        for (auto& arg : args) {
-          cerr << " " << arg;
-        }
-        cerr << std::endl;
+        exit(1);
       }
-      exit(1);
+      opt_cmd = std::any_cast<OPT>(_opt_cmd);
     }
-
-    opt_cmd = std::any_cast<OPT>(_opt_cmd);
 
     /* some commands may have an optional extra param */
     if (!extra_args.empty()) {
