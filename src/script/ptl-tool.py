@@ -1773,8 +1773,7 @@ def build_branch(args):
         response = get_pr_info(session, pr)
         detected_base = response.get("base", {}).get("ref")
         if base and detected_base and detected_base != base:
-            log.error(f"Base mismatch! PR #{pr} targets '{detected_base}' but expected '{base}'.")
-            sys.exit(1)
+            log.warning(f"Base mismatch! PR #{pr} targets '{detected_base}' but expected '{base}'. Trusting provided --base.")
 
         remote_ref = "refs/pull/{pr}/head".format(pr=pr)
         remote_sha1 = response.get('head', {}).get('sha')
