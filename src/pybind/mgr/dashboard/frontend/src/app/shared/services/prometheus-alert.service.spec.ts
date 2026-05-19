@@ -1,7 +1,6 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
-import { ToastrModule } from 'ngx-toastr';
 import { Observable, of } from 'rxjs';
 
 import { configureTestBed, PrometheusHelper } from '~/testing/unit-test-helper';
@@ -22,7 +21,7 @@ describe('PrometheusAlertService', () => {
   let prometheus: PrometheusHelper;
 
   configureTestBed({
-    imports: [ToastrModule.forRoot(), SharedModule, HttpClientTestingModule],
+    imports: [SharedModule, HttpClientTestingModule],
     providers: [PrometheusAlertService, PrometheusAlertFormatter]
   });
 

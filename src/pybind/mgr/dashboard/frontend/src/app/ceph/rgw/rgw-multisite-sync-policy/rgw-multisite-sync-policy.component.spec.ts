@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RgwMultisiteSyncPolicyComponent } from './rgw-multisite-sync-policy.component';
 import { HttpClientModule } from '@angular/common/http';
 import { TitleCasePipe } from '@angular/common';
-import { ToastrModule } from 'ngx-toastr';
+
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { ModalModule } from 'carbon-components-angular';
 import { RgwMultisiteTabsComponent } from '../rgw-multisite-tabs/rgw-multisite-tabs.component';
@@ -22,14 +22,7 @@ describe('RgwMultisiteSyncPolicyComponent', () => {
         RgwMultisiteTabsComponent,
         RgwMultisiteSyncPolicyDetailsComponent
       ],
-      imports: [
-        HttpClientModule,
-        ToastrModule.forRoot(),
-        PipesModule,
-        ModalModule,
-        SharedModule,
-        RouterTestingModule
-      ],
+      imports: [HttpClientModule, PipesModule, ModalModule, SharedModule, RouterTestingModule],
       providers: [TitleCasePipe]
     }).compileComponents();
 

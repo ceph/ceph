@@ -5,7 +5,6 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ModalService } from 'carbon-components-angular';
 import _ from 'lodash';
-import { ToastrModule } from 'ngx-toastr';
 
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -26,13 +25,7 @@ describe('OsdFlagsModalComponent', () => {
   let httpTesting: HttpTestingController;
 
   configureTestBed({
-    imports: [
-      ReactiveFormsModule,
-      SharedModule,
-      HttpClientTestingModule,
-      RouterTestingModule,
-      ToastrModule.forRoot()
-    ],
+    imports: [ReactiveFormsModule, SharedModule, HttpClientTestingModule, RouterTestingModule],
     declarations: [OsdFlagsModalComponent],
     providers: [ModalService]
   });

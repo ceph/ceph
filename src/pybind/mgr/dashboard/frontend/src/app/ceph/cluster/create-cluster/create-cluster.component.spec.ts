@@ -3,8 +3,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastrModule } from 'ngx-toastr';
-
 import { CephModule } from '~/app/ceph/ceph.module';
 import { CoreModule } from '~/app/core/core.module';
 import { HostService } from '~/app/shared/api/host.service';
@@ -27,14 +25,7 @@ describe('CreateClusterComponent', () => {
   const projectConstants: typeof AppConstants = AppConstants;
 
   configureTestBed({
-    imports: [
-      HttpClientTestingModule,
-      RouterTestingModule,
-      ToastrModule.forRoot(),
-      SharedModule,
-      CoreModule,
-      CephModule
-    ]
+    imports: [HttpClientTestingModule, RouterTestingModule, SharedModule, CoreModule, CephModule]
   });
 
   beforeEach(() => {

@@ -6,8 +6,6 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastrModule } from 'ngx-toastr';
-
 describe('SmbClusterListComponent', () => {
   let component: SmbClusterListComponent;
   let fixture: ComponentFixture<SmbClusterListComponent>;
@@ -18,7 +16,6 @@ describe('SmbClusterListComponent', () => {
         BrowserAnimationsModule,
         SharedModule,
         HttpClientTestingModule,
-        ToastrModule.forRoot(),
         RouterTestingModule
       ],
       declarations: [SmbClusterListComponent]

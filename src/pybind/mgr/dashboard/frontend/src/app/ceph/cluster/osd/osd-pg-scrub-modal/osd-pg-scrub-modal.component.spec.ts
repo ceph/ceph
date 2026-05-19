@@ -5,7 +5,7 @@ import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
+
 import { of as observableOf } from 'rxjs';
 
 import { ConfigurationService } from '~/app/shared/api/configuration.service';
@@ -21,13 +21,7 @@ describe('OsdPgScrubModalComponent', () => {
   let configurationService: ConfigurationService;
 
   configureTestBed({
-    imports: [
-      HttpClientTestingModule,
-      ReactiveFormsModule,
-      RouterTestingModule,
-      SharedModule,
-      ToastrModule.forRoot()
-    ],
+    imports: [HttpClientTestingModule, ReactiveFormsModule, RouterTestingModule, SharedModule],
     declarations: [OsdPgScrubModalComponent],
     providers: [NgbActiveModal]
   });

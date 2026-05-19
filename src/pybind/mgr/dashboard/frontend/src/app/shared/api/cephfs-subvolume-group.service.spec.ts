@@ -3,7 +3,6 @@ import { TestBed } from '@angular/core/testing';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { CephfsSubvolumeGroupService } from './cephfs-subvolume-group.service';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-
 describe('CephfsSubvolumeGroupService', () => {
   let service: CephfsSubvolumeGroupService;
 

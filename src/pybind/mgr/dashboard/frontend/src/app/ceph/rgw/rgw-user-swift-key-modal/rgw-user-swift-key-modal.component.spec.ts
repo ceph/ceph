@@ -3,7 +3,6 @@ import { FormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
 
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
@@ -15,7 +14,7 @@ describe('RgwUserSwiftKeyModalComponent', () => {
 
   configureTestBed({
     declarations: [RgwUserSwiftKeyModalComponent],
-    imports: [ToastrModule.forRoot(), FormsModule, SharedModule, RouterTestingModule],
+    imports: [FormsModule, SharedModule, RouterTestingModule],
     providers: [NgbActiveModal]
   });
 
