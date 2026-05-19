@@ -13,6 +13,7 @@
  */
 
 #include <bit>
+#include <random>
 #include <utility>
 #include <memory>
 #include <unistd.h>
@@ -28,6 +29,7 @@
 #include <boost/random/uniform_real.hpp>
 
 #include "common/dout.h"
+#include "include/ceph_assert.h"
 #include "include/cpp-btree/btree_set.h"
 
 #include "BlueStore.h"
@@ -20602,22 +20604,40 @@ int BlueStore::read_allocation_from_onodes(SimpleBitmap *sbmap, read_alloc_stats
 //---------------------------------------------------------
 int BlueStore::reconstruct_allocations(SimpleBitmap *sbmap, read_alloc_stats_t &stats)
 {
-  // first set space used by superblock
-  auto super_length = std::max<uint64_t>(min_alloc_size, SUPER_RESERVED);
-  set_allocation_in_simple_bmap(sbmap, 0, super_length);
-  stats.extent_count++;
-
-  // then set all space taken by Objects
   int ret;
+  double chance = cct->_conf.get_val<double>("bluestore_debug_fast_recovery_compare_chance");
   if (cct->_conf.get_val<uint64_t>("bluestore_allocation_recovery_threads") == 0) {
-    ret = read_allocation_from_onodes(sbmap, stats);
-  } else {
-    ret = read_allocation_from_onodes_mt(sbmap, stats);
+    // do not compare if multithread is disabled
+    chance = 0;
   }
+  double roll = 0;
+  if (chance > 0) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<> dis(0.0, 1.0);
+    roll = dis(gen);
+  }
+
+  // first set all space taken by Objects
+  if (chance > 0 && chance > roll) {
+    ret = allocation_recover_and_compare(sbmap, stats);
+    ceph_assert((ret == 0) && "comparing allocator recovery failed");
+  } else {
+    if (cct->_conf.get_val<uint64_t>("bluestore_allocation_recovery_threads") == 0) {
+      ret = read_allocation_from_onodes(sbmap, stats);
+    } else {
+      ret = read_allocation_from_onodes_mt(sbmap, stats);
+    }
+  }
+
   if (ret < 0) {
     derr << "failed read_allocation_from_onodes()" << dendl;
     return ret;
   }
+  // then set space used by superblock
+  auto super_length = std::max<uint64_t>(min_alloc_size, SUPER_RESERVED);
+  set_allocation_in_simple_bmap(sbmap, 0, super_length);
+  stats.extent_count++;
 
   std::lock_guard l(vstatfs_lock);
   store_statfs_t s;
@@ -20887,11 +20907,22 @@ int BlueStore::compare_allocation_recovery_for_bluestore_tool()
   });
 
   SimpleBitmap old_bitmap(cct, (bdev->get_size()/ min_alloc_size));
+  read_alloc_stats_t old_stats = {};
+  ret = allocation_recover_and_compare(&old_bitmap, old_stats);
+  return ret;
+}
+
+int BlueStore::allocation_recover_and_compare(
+  SimpleBitmap *sbmap,
+  read_alloc_stats_t &stats)
+{
+  int ret = 0;
+  SimpleBitmap& old_bitmap = *sbmap;
+  read_alloc_stats_t& old_stats = stats;
   SimpleBitmap mt_bitmap(cct, (bdev->get_size()/ min_alloc_size));
+  read_alloc_stats_t mt_stats = {};
   utime_t start;
   utime_t duration;
-  read_alloc_stats_t old_stats = {};
-  read_alloc_stats_t mt_stats = {};
 
   if (cct->_conf.get_val<uint64_t>("bluestore_allocation_recovery_threads") != 0) {
     dout(0) << "New recovery start" << dendl;

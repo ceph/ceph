@@ -4091,6 +4091,8 @@ private:
     std::map<uint64_t, volatile_statfs> actual_pool_vstatfs;
     volatile_statfs actual_store_vstatfs;
   };
+  int allocation_recover_and_compare(SimpleBitmap *sbmap, read_alloc_stats_t &stats);
+
   class Decoder_AllocationsAndStatFS;
   class ExtentDecoderPartial : public ExtentMap::ExtentDecoder {
     BlueStore& store;
