@@ -16,6 +16,7 @@
 #include "common/TextTable.h"
 #include "global/global_context.h"
 #include "include/ceph_features.h"
+#include "include/ceph_fs.h" // for ceph_statfs
 #include "include/encoding_unordered_map.h"
 #include "include/encoding_vector.h"
 #include "include/health.h"
