@@ -1,8 +1,13 @@
 @use './src/styles/vendor/variables' as vv;
 
-.overview {
+.overview,
+.rgw-dashboard {
   margin: 0;
   padding: 0;
+
+  .breadcrumbs--padding {
+    padding-left: var(--cds-spacing-07);
+  }
 }
 
 .container-fluid {

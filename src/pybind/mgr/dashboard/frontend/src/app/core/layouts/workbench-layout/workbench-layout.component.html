@@ -6,7 +6,7 @@
       <!-- ALERTS BANNER     -->
       <!-- ************************ -->
       <div class="cd-alert-container"
-           [ngClass]="{'ms-4 me-4': (router.url == '/overview' || router.url == '/dashboard_3' || router.url == '/multi-cluster/overview'), 'm-3': (router.url == '/rgw/overview')}">
+           [ngClass]="{'ms-4 me-4': (router.url == '/overview' || router.url == '/dashboard_3' || router.url == '/multi-cluster/overview' || router.url == '/rgw/overview')}">
         @if (enabledFeature$ | async; as features) {
         <cd-pwd-expiration-notification></cd-pwd-expiration-notification>
         <cd-motd></cd-motd>

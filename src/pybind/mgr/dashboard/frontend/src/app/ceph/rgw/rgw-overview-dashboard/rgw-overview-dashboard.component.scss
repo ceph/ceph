@@ -1,19 +1,89 @@
-@use './src/styles/vendor/variables' as vv;
+.rgw-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  row-gap: var(--cds-spacing-06);
+  column-gap: var(--cds-spacing-07);
 
-hr {
-  margin-bottom: 2px;
-  margin-top: 2px;
+  &__item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--cds-spacing-02);
+  }
 }
 
-.list-group-item {
-  border: 0;
-}
+.multisite-sync {
+  &__loading {
+    display: flex;
+    justify-content: center;
+    padding: var(--cds-spacing-05);
+  }
 
-.align-replica-zones {
-  margin-left: auto;
-  margin-right: auto;
-  padding-left: 2em;
-  padding-right: 2em;
+  &__layout {
+    display: flex;
+    align-items: flex-start;
+  }
+
+  &__primary {
+    flex: 0 0 250px;
+    text-align: center;
+  }
+
+  &__primary-content {
+    border-inline-end: 1px solid var(--cds-border-subtle);
+    padding-inline-end: var(--cds-spacing-05);
+  }
+
+  &__section-title {
+    margin-block-end: var(--cds-spacing-05);
+
+    &--centered {
+      text-align: center;
+    }
+  }
+
+  &__source-zones {
+    flex: 1;
+    padding-inline-start: var(--cds-spacing-05);
+  }
+
+  &__zones-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: var(--cds-spacing-05);
+  }
+
+  &__zone-tile {
+    height: 100%;
+    padding-block-start: 0;
+  }
+
+  &__zone-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--cds-spacing-02);
+    margin-block-end: var(--cds-spacing-04);
+  }
+
+  &__sync-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  &__sync-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+
+    &--bordered {
+      border-inline-start: 1px solid var(--cds-border-subtle);
+    }
+  }
+
+  &__sync-title {
+    text-align: center;
+    margin-block-end: var(--cds-spacing-03);
+  }
 }
 
 ul {
@@ -21,12 +91,4 @@ ul {
   display: flex;
   flex-direction: column;
   list-style-type: none;
-}
-
-.align-primary-zone {
-  padding-left: 4em;
-}
-
-.border-left {
-  border-left: 1px solid vv.$chart-color-border;
 }
