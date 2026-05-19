@@ -1575,7 +1575,8 @@ class CephadmUpgrade:
                 logger.info('Upgrade: Updating %s.%s' %
                             (d.daemon_type, d.daemon_id))
 
-            daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(d)
+        for d in to_upgrade:
+            daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(d[0])
 
             try:
                 if daemon_spec.daemon_type in ['mds', 'osd']:
@@ -1584,10 +1585,10 @@ class CephadmUpgrade:
             except Exception as e:
                 self._fail_upgrade('UPGRADE_KEY_ROTATION', {
                     'severity': 'warning',
-                    'summary': f'Rotation of cephx key for daemon {d.name()} on host {d.hostname} failed.',
+                    'summary': f'Rotation of cephx key for daemon {d[0].name()} on host {d[0].hostname} failed.',
                     'count': 1,
                     'detail': [
-                        f'Upgrade daemon key rotation: {d.name()}: {e}'
+                        f'Upgrade daemon key rotation: {d[0].name()}: {e}'
                     ],
                 })
                 return
