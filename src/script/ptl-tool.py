@@ -1192,7 +1192,7 @@ class ConflictSimulationCheck(BaseAuditCheck):
                 md_text = textwrap.dedent(md_text)
                 
                 for dev in recorded_deviations:
-                    md_text += f"#### Deviation in Backport `{dev['bp_sha'][:8]}` (cherry-pick of `{dev['orig_sha'][:8]}`)\n\n"
+                    md_text += f"#### Deviation in Backport {dev['bp_sha'][:8]} (cherry-pick of {dev['orig_sha'][:8]})\n\n"
                     
                     if dev['unmerged']:
                         md_text += "**Affected File(s)**\n"
