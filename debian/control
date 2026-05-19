@@ -321,6 +321,39 @@ Description: ceph manager modules which are always enabled
  This package contains a set of core ceph-mgr modules which are always
  enabled.
 
+Package: ceph-mgr-modules-standard
+Architecture: all
+Depends: ceph-mgr-modules-core (= ${binary:Version}),
+         ceph-mgr-alerts (= ${binary:Version}),
+         ceph-mgr-influx (= ${binary:Version}),
+         ceph-mgr-insights (= ${binary:Version}),
+         ceph-mgr-iostat (= ${binary:Version}),
+         ceph-mgr-localpool (= ${binary:Version}),
+         ceph-mgr-mds-autoscaler (= ${binary:Version}),
+         ceph-mgr-mirroring (= ${binary:Version}),
+         ceph-mgr-nfs (= ${binary:Version}),
+         ceph-mgr-nvmeof (= ${binary:Version}),
+         ceph-mgr-osd-perf-query (= ${binary:Version}),
+         ceph-mgr-osd-support (= ${binary:Version}),
+         ceph-mgr-prometheus (= ${binary:Version}),
+         ceph-mgr-rgw (= ${binary:Version}),
+         ceph-mgr-selftest (= ${binary:Version}),
+         ceph-mgr-smb (= ${binary:Version}),
+         ceph-mgr-snap-schedule (= ${binary:Version}),
+         ceph-mgr-stats (= ${binary:Version}),
+         ceph-mgr-telegraf (= ${binary:Version}),
+         ceph-mgr-test-orchestrator (= ${binary:Version}),
+         ${misc:Depends},
+Description: Ceph Manager modules without heavy external dependencies
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This meta-package has no files of its own. It pulls in the full set of
+ ceph-mgr modules that were formerly shipped together in
+ ceph-mgr-modules-core, so that existing users or scripts that want the
+ complete standard module set can depend on a single package.
+
 Package: ceph-mgr-rook
 Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),

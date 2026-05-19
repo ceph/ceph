@@ -769,6 +769,38 @@ Recommends:	ceph-mgr-rook = %{_epoch_prefix}%{version}-%{release}
 ceph-mgr-modules-core provides a set of modules which are always
 enabled by ceph-mgr.
 
+%package mgr-modules-standard
+BuildArch:      noarch
+Summary:        Ceph Manager modules without heavy external dependencies
+%if 0%{?suse_version}
+Group:          System/Filesystems
+%endif
+Requires:       ceph-mgr-modules-core = %{_epoch_prefix}%{version}-%{release}
+Requires:       ceph-mgr-alerts = %{_epoch_prefix}%{version}-%{release}
+Requires:       ceph-mgr-influx = %{_epoch_prefix}%{version}-%{release}
+Requires:       ceph-mgr-insights = %{_epoch_prefix}%{version}-%{release}
+Requires:       ceph-mgr-iostat = %{_epoch_prefix}%{version}-%{release}
+Requires:       ceph-mgr-localpool = %{_epoch_prefix}%{version}-%{release}
+Requires:       ceph-mgr-mds-autoscaler = %{_epoch_prefix}%{version}-%{release}
+Requires:       ceph-mgr-mirroring = %{_epoch_prefix}%{version}-%{release}
+Requires:       ceph-mgr-nfs = %{_epoch_prefix}%{version}-%{release}
+Requires:       ceph-mgr-nvmeof = %{_epoch_prefix}%{version}-%{release}
+Requires:       ceph-mgr-osd-perf-query = %{_epoch_prefix}%{version}-%{release}
+Requires:       ceph-mgr-osd-support = %{_epoch_prefix}%{version}-%{release}
+Requires:       ceph-mgr-prometheus = %{_epoch_prefix}%{version}-%{release}
+Requires:       ceph-mgr-rgw = %{_epoch_prefix}%{version}-%{release}
+Requires:       ceph-mgr-selftest = %{_epoch_prefix}%{version}-%{release}
+Requires:       ceph-mgr-smb = %{_epoch_prefix}%{version}-%{release}
+Requires:       ceph-mgr-snap-schedule = %{_epoch_prefix}%{version}-%{release}
+Requires:       ceph-mgr-stats = %{_epoch_prefix}%{version}-%{release}
+Requires:       ceph-mgr-telegraf = %{_epoch_prefix}%{version}-%{release}
+Requires:       ceph-mgr-test-orchestrator = %{_epoch_prefix}%{version}-%{release}
+%description mgr-modules-standard
+ceph-mgr-modules-standard is a meta-package with no files of its own.
+It pulls in the full set of ceph-mgr modules that were formerly shipped
+together in ceph-mgr-modules-core, so that existing users or scripts
+that want the complete standard module set can depend on a single package.
+
 %package mgr-rook
 BuildArch:      noarch
 Summary:        Ceph Manager module for Rook-based orchestration
@@ -2268,6 +2300,8 @@ fi
 %{_datadir}/ceph/mgr/status
 %{_datadir}/ceph/mgr/telemetry
 %{_datadir}/ceph/mgr/volumes
+
+%files mgr-modules-standard
 
 %files mgr-alerts
 %{_datadir}/ceph/mgr/alerts
