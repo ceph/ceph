@@ -48,8 +48,6 @@ class TestEndPoint:
 
 
 class TestCommandListNetworks:
-    # fmt: off
-    # Keep table-style parametrization unchanged for reviewable diffs (see PR discussion).
     @pytest.mark.parametrize("test_input, expected", [
         (
             dedent("""
@@ -108,11 +106,9 @@ class TestCommandListNetworks:
             }
         ),
     ])
-    # fmt: on
     def test_parse_ipv4_route(self, test_input, expected):
         assert _parse_ipv4_route(test_input) == expected
 
-    # fmt: off
     @pytest.mark.parametrize("test_routes, test_ips, expected", [
         (
             dedent("""
@@ -240,8 +236,7 @@ class TestCommandListNetworks:
             ::1 dev lo proto kernel metric 256 pref medium
             fe80::/64 dev ceph-brx proto kernel metric 256 pref medium
             fe80::/64 dev brx.0 proto kernel metric 256 pref medium
-            default via fe80::327c:5e00:6487:71e0 dev enp3s0f1 proto ra metric 1024 expires 1790sec hoplimit 64 pref medium
-            """),
+            default via fe80::327c:5e00:6487:71e0 dev enp3s0f1 proto ra metric 1024 expires 1790sec hoplimit 64 pref medium            """),
             dedent("""
             1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 state UNKNOWN qlen 1000
                 inet6 ::1/128 scope host
@@ -264,7 +259,6 @@ class TestCommandListNetworks:
             }
         ),
     ])
-    # fmt: on
     def test_parse_ipv6_route(self, test_routes, test_ips, expected):
         assert _parse_ipv6_route(test_routes, test_ips) == expected
 
@@ -311,18 +305,8 @@ fe80000000000000505400fffe04c154 03 40 20 80     eth1
 
     @mock.patch('cephadmlib.host_facts.call_throws')
     @mock.patch('cephadmlib.host_facts.find_executable')
-    def test_command_list_networks(
-        self, _find_exe, _call_throws, cephadm_fs, capsys
-    ):
-        _call_throws.side_effect = [
-            (
-                '10.4.0.1 dev tun0 proto kernel scope link src 10.4.0.2 metric 50\n',
-                '',
-                '',
-            ),
-            ('', '', ''),
-            ('', '', ''),
-        ]
+    def test_command_list_networks(self, _find_exe, _call_throws, cephadm_fs, capsys):
+        _call_throws.return_value = ('10.4.0.1 dev tun0 proto kernel scope link src 10.4.0.2 metric 50\n', '', '')
         _find_exe.return_value = 'ip'
         with with_cephadm_ctx([]) as ctx:
             _cephadm.command_list_networks(ctx)

@@ -5023,13 +5023,13 @@ def _get_parser():
         '--allow-lo-routes',
         action='store_true',
         default=False,
-        help='Reserved for future filtering of loopback-related routes',
+        help='Include loopback (lo) routes in the listing (default: omit)',
     )
     parser_list_networks.add_argument(
         '--allow-bgp-routes',
         action='store_true',
         default=False,
-        help='Reserved for future filtering of BGP-derived routes',
+        help='Merge BGP routes from ip -j route ls proto bgp (default: omit)',
     )
     parser_list_networks.set_defaults(func=command_list_networks)
 

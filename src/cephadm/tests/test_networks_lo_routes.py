@@ -253,6 +253,43 @@ class TestLoopbackRouteParsing:
             '10.168.100.10/32': {'lo': {'10.168.100.10'}},
         }
 
+    def test_parse_ipv4_bgp_route_skips_default(self):
+        bgp_input = json.dumps(
+            [
+                {
+                    'dst': 'default',
+                    'protocol': 'bgp',
+                    'prefsrc': '192.168.100.11',
+                    'flags': [],
+                    'nexthops': [
+                        {
+                            'gateway': '169.254.0.1',
+                            'dev': 'ens1f0np0',
+                            'weight': 1,
+                            'flags': ['onlink'],
+                        },
+                    ],
+                },
+                {
+                    'dst': '192.168.100.5',
+                    'protocol': 'bgp',
+                    'prefsrc': '192.168.100.11',
+                    'flags': [],
+                    'nexthops': [
+                        {
+                            'gateway': '169.254.0.1',
+                            'dev': 'ens1f0np0',
+                            'weight': 1,
+                            'flags': ['onlink'],
+                        },
+                    ],
+                },
+            ]
+        )
+        assert _parse_ipv4_bgp_route(bgp_input) == {
+            '192.168.100.5/32': {'ens1f0np0': {'192.168.100.11'}},
+        }
+
     def test_parse_ipv4_bgp_route_lo_from_full_table(self):
         # ``ip -j route ls`` entry for ``10.10.10.10 dev lo proto bgp``.
         bgp_input = json.dumps(
