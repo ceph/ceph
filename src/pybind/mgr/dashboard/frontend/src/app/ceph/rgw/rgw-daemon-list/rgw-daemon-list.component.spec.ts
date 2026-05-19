@@ -4,7 +4,6 @@ import { By } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { of } from 'rxjs';
 
 import { PerformanceCounterModule } from '~/app/ceph/performance-counter/performance-counter.module';
@@ -14,7 +13,7 @@ import { RgwSiteService } from '~/app/shared/api/rgw-site.service';
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { SharedModule } from '~/app/shared/shared.module';
-import { configureTestBed, TabHelper } from '~/testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { RgwDaemonDetailsComponent } from '../rgw-daemon-details/rgw-daemon-details.component';
 import { RgwDaemonListComponent } from './rgw-daemon-list.component';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
@@ -40,10 +39,14 @@ describe('RgwDaemonListComponent', () => {
     port: 80
   };
 
+  const getCdsTabs = () => {
+    return fixture.debugElement.queryAll(By.css('cds-tab'));
+  };
+
   const expectTabsAndHeading = (length: number, heading: string) => {
-    const tabs = TabHelper.getTextContents(fixture);
+    const tabs = getCdsTabs();
     expect(tabs.length).toEqual(length);
-    expect(tabs[length - 1]).toEqual(heading);
+    expect(tabs[length - 1].attributes['heading']).toEqual(heading);
   };
 
   configureTestBed({
@@ -51,7 +54,6 @@ describe('RgwDaemonListComponent', () => {
     imports: [
       BrowserAnimationsModule,
       HttpClientTestingModule,
-      NgbNavModule,
       PerformanceCounterModule,
       SharedModule,
       RouterTestingModule

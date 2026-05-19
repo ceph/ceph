@@ -1,6 +1,15 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
 
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
+
+const MONITORING_PATH = 'monitoring';
+
+enum TABS {
+  activeAlerts = 'active-alerts',
+  silences = 'silences',
+  alerts = 'alerts'
+}
 
 @Component({
   selector: 'cd-prometheus-tabs',
@@ -8,6 +17,23 @@ import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.s
   styleUrls: ['./prometheus-tabs.component.scss'],
   standalone: false
 })
-export class PrometheusTabsComponent {
-  constructor(public prometheusAlertService: PrometheusAlertService) {}
+export class PrometheusTabsComponent implements OnInit {
+  selectedTab: TABS;
+  activeTab: TABS = TABS.activeAlerts;
+
+  constructor(public prometheusAlertService: PrometheusAlertService, private router: Router) {}
+
+  ngOnInit(): void {
+    const currentPath = this.router.url;
+    this.activeTab = Object.values(TABS).find((t) => currentPath.includes(t)) || TABS.activeAlerts;
+  }
+
+  onSelected(tab: TABS) {
+    this.selectedTab = tab;
+    this.router.navigate([`${MONITORING_PATH}/${tab}`]);
+  }
+
+  public get Tabs(): typeof TABS {
+    return TABS;
+  }
 }
