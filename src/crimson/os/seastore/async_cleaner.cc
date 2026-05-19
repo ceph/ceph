@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <cmath>
+
 #include <fmt/chrono.h>
 #include <seastar/core/metrics.hh>
 
@@ -1135,14 +1137,19 @@ void SegmentCleaner::maybe_adjust_thresholds()
       peak_open_segments_window, segments.get_num_open());
 
   // Only recompute hard_limit every 30s.
-  using namespace std::chrono_literals;
   LOG_PREFIX(SegmentCleaner::maybe_adjust_thresholds);
   auto now = seastar::lowres_clock::now();
-  if (adaptive_last_time != seastar::lowres_clock::time_point{} &&
-      now - adaptive_last_time < 30s) {
-    return;
+  double elapsed_sec = 0.0;
+  if (adaptive_last_time != seastar::lowres_clock::time_point{}) {
+    elapsed_sec = std::chrono::duration<double>(
+        now - adaptive_last_time).count();
+    if (elapsed_sec < 30.0) {
+      return;
+    }
   }
   adaptive_last_time = now;
+  double old_hard_limit = config.available_ratio_hard_limit;
+  double old_gc_max = config.available_ratio_gc_max;
 
   // Architectural floor: named writers (journal + hot/cold gens + metadata).
   auto hot = crimson::common::get_conf<uint64_t>(
@@ -1156,34 +1163,54 @@ void SegmentCleaner::maybe_adjust_thresholds()
     return;
   }
 
-  // hard_limit = (max(peak, named) + 1) * seg / total. "+1" is the minimum
+  double segment_ratio =
+      static_cast<double>(seg_size) /
+      static_cast<double>(total_bytes);
+
+  // hard_limit = (max(peak, named) + 1) * segment_ratio. "+1" is the minimum
   // safety unit: allow one more open segment than ever observed.
   std::size_t observed_peak =
       std::max<std::size_t>(peak_open_segments_window, named_writers);
   double new_hard_limit =
-      static_cast<double>(observed_peak + 1) *
-      static_cast<double>(seg_size) /
-      static_cast<double>(total_bytes);
+      static_cast<double>(observed_peak + 1) * segment_ratio;
 
   double crash_floor =
-      static_cast<double>(named_writers) *
-      static_cast<double>(seg_size) /
-      static_cast<double>(total_bytes);
+      static_cast<double>(named_writers) * segment_ratio;
   new_hard_limit = std::max(new_hard_limit, crash_floor);
 
-  // Keep gc_max strictly greater than hard_limit.
+  // Apply lazy decay covering elapsed time (allows gc_max to gradually fall
+  // when workload eases) so peaks fade even when the background process was
+  // idle and this hook went uncalled for many cycles.
+  if (elapsed_sec > 0.0) {
+    peak_projected_used_decayed *= std::pow(0.995, elapsed_sec / 30.0);
+  }
+
+  // gc_max decays halfway each window toward (hard_limit + recent peak burst).
+  double burst_floor_ratio =
+      peak_projected_used_decayed /
+      static_cast<double>(total_bytes);
+  double target_gc_max = new_hard_limit + burst_floor_ratio;
+  double decayed_gc_max =
+      (config.available_ratio_gc_max + target_gc_max) / 2.0;
+  config.available_ratio_gc_max = std::max(decayed_gc_max, target_gc_max);
   if (config.available_ratio_gc_max <= new_hard_limit) {
-    config.available_ratio_gc_max = new_hard_limit + 0.001;
+    config.available_ratio_gc_max = new_hard_limit + segment_ratio;
   }
   config.available_ratio_hard_limit = new_hard_limit;
 
-  INFO("[ADAPTIVE_GC] peak_open={} named={} hard_limit={:.4f} "
-       "gc_max={:.4f} crash_floor={:.4f}",
-       peak_open_segments_window, named_writers,
-       config.available_ratio_hard_limit,
-       config.available_ratio_gc_max, crash_floor);
+  if (old_hard_limit != new_hard_limit || old_gc_max != config.available_ratio_gc_max) {
+    INFO("[ADAPTIVE_GC] update: hard_limit {:.4f} -> {:.4f}, gc_max {:.4f} -> {:.4f} "
+         "(peak_open={} named={} peak_proj_decayed={:.0f} crash_floor={:.4f})",
+         old_hard_limit, new_hard_limit,
+         old_gc_max, config.available_ratio_gc_max,
+         peak_open_segments_window, named_writers,
+         peak_projected_used_decayed, crash_floor);
+  } else {
+    DEBUG("[ADAPTIVE_GC] no-op: hard_limit {:.4f}, gc_max {:.4f}",
+          old_hard_limit, old_gc_max);
+  }
 
-  // Reset window: record current open count as the new baseline.
+  // Reset per-window open-segment peak.
   peak_open_segments_window = segments.get_num_open();
 }
 
@@ -1883,6 +1910,11 @@ bool SegmentCleaner::try_reserve_projected_usage(std::size_t projected_usage)
 {
   assert(background_callback->is_ready());
   stats.projected_used_bytes += projected_usage;
+  // Update decayed peak; the slow decay in maybe_adjust_thresholds() lets old
+  // peaks fade so gc_max can eventually re-discover lower floors.
+  peak_projected_used_decayed = std::max(
+      peak_projected_used_decayed,
+      static_cast<double>(stats.projected_used_bytes));
   if (should_block_io_on_clean()) {
     stats.projected_used_bytes -= projected_usage;
     return false;

@@ -1669,6 +1669,11 @@ private:
   std::size_t peak_open_segments_window = 0;
   seastar::lowres_clock::time_point adaptive_last_time;
 
+  // Peak projected_used with slow exponential decay per adjust cycle. Decay
+  // 0.5% per 30s window = half-life ~1 hour: long enough not to forget peaks
+  // mid-workload, short enough to re-discover lower floors over time.
+  double peak_projected_used_decayed = 0.0;
+
   SegmentManagerGroupRef sm_group;
   BackrefManager &backref_manager;
 
