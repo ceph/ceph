@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { RgwConfigurationPageComponent } from './rgw-configuration-page.component';
-import { NgbActiveModal, NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { SharedModule } from '~/app/shared/shared.module';
 import { RgwModule } from '../rgw.module';
@@ -15,7 +15,7 @@ describe('RgwConfigurationPageComponent', () => {
     await TestBed.configureTestingModule({
       declarations: [RgwConfigurationPageComponent],
       providers: [NgbActiveModal],
-      imports: [HttpClientTestingModule, SharedModule, NgbNavModule, RgwModule, RouterTestingModule]
+      imports: [HttpClientTestingModule, SharedModule, RgwModule, RouterTestingModule]
     }).compileComponents();
 
     fixture = TestBed.createComponent(RgwConfigurationPageComponent);

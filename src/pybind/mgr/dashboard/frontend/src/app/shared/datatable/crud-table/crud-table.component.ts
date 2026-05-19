@@ -43,6 +43,7 @@ export class CRUDTableComponent implements OnInit {
   expandedRow: { [key: string]: any } = {};
   modalRef: BaseModal;
   tabs = {};
+  activeTabUrl: string;
   resource: string;
   modalState = {};
 
@@ -59,6 +60,11 @@ export class CRUDTableComponent implements OnInit {
     this.permissions = this.authStorageService.getPermissions();
   }
 
+  onTabSelected(url: string) {
+    this.activeTabUrl = url;
+    this.router.navigate([url]);
+  }
+
   ngOnInit() {
     /* The following should be simplified with a wrapper that
     converts .data to @Input args. For example:
@@ -67,6 +73,10 @@ export class CRUDTableComponent implements OnInit {
     this.activatedRoute.data.subscribe((data: any) => {
       const resource: string = data.resource;
       this.tabs = data.tabs;
+      if (data.tabs) {
+        this.activeTabUrl =
+          data.tabs.find((t: any) => this.router.url.startsWith(t.url))?.url || data.tabs[0]?.url;
+      }
       this.dataGatewayService
         .list(`ui-${resource}`)
         .subscribe((response: CrudMetadata) => this.processMeta(response));

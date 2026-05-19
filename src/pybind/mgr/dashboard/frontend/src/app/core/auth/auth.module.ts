@@ -32,7 +32,8 @@ import {
   SelectModule,
   UIShellModule,
   TimePickerModule,
-  ComboBoxModule
+  ComboBoxModule,
+  TabsModule
 } from 'carbon-components-angular';
 // Icons
 import ChevronDown from '@carbon/icons/es/chevron--down/16';
@@ -67,7 +68,8 @@ import EyeIcon from '@carbon/icons/es/view/16';
     IconModule,
     GridModule,
     InputModule,
-    ComboBoxModule
+    ComboBoxModule,
+    TabsModule
   ],
   declarations: [
     LoginComponent,

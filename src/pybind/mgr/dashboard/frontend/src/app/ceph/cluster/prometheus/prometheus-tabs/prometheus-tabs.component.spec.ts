@@ -1,20 +1,19 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
-
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { Permission } from '~/app/shared/models/permissions';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { PrometheusTabsComponent } from './prometheus-tabs.component';
+import { By } from '@angular/platform-browser';
 
 describe('PrometheusTabsComponent', () => {
   let component: PrometheusTabsComponent;
   let fixture: ComponentFixture<PrometheusTabsComponent>;
 
   configureTestBed({
-    imports: [RouterTestingModule, NgbNavModule],
+    imports: [RouterTestingModule],
     declarations: [PrometheusTabsComponent],
     providers: [
       { provide: PrometheusAlertService, useValue: { alerts: [] } },
@@ -39,7 +38,8 @@ describe('PrometheusTabsComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should show silences to users with read access', () => {
-    expect(component.prometheusPermissions.read).toBe(true);
+  it('should display three tabs when user has read permission', () => {
+    const tabs = fixture.debugElement.queryAll(By.css('cds-tab'));
+    expect(tabs.length).toBe(3);
   });
 });

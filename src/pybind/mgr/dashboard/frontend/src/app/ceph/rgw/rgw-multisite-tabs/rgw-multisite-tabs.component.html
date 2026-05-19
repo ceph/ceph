@@ -1,22 +1,20 @@
-<ul class="nav nav-tabs">
-  <li class="nav-item">
-    <a
-      class="nav-link"
-      routerLink="/rgw/multisite/configuration"
-      routerLinkActive="active"
-      ariaCurrentWhenActive="page"
-      i18n
-      >Configuration</a
-    >
-  </li>
-  <li class="nav-item">
-    <a
-      class="nav-link"
-      routerLink="//rgw/multisite/sync-policy"
-      routerLinkActive="active"
-      ariaCurrentWhenActive="page"
-      i18n
-      >Sync Policy</a
-    >
-  </li>
-</ul>
+<cds-tabs
+  type="contained"
+  followFocus="true"
+  isNavigation="true"
+  [cacheActive]="false">
+  <cds-tab
+    heading="Configuration"
+    i18n-heading
+    [tabIndex]="null"
+    [active]="activeTab === Tabs.configuration"
+    (selected)="onSelected(Tabs.configuration)">
+  </cds-tab>
+  <cds-tab
+    heading="Sync Policy"
+    i18n-heading
+    [tabIndex]="null"
+    [active]="activeTab === Tabs.syncPolicy"
+    (selected)="onSelected(Tabs.syncPolicy)">
+  </cds-tab>
+</cds-tabs>

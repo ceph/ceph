@@ -1,22 +1,20 @@
-<ul class="nav nav-tabs">
-  <li class="nav-item">
-    <a
-      class="nav-link"
-      routerLink="/block/iscsi/overview"
-      routerLinkActive="active"
-      ariaCurrentWhenActive="page"
-      i18n
-      >Overview</a
-    >
-  </li>
-  <li class="nav-item">
-    <a
-      class="nav-link"
-      routerLink="/block/iscsi/targets"
-      routerLinkActive="active"
-      ariaCurrentWhenActive="page"
-      i18n
-      >Targets</a
-    >
-  </li>
-</ul>
+<cds-tabs
+  type="contained"
+  followFocus="true"
+  isNavigation="true"
+  [cacheActive]="false">
+  <cds-tab
+    heading="Overview"
+    i18n-heading
+    [tabIndex]="null"
+    [active]="activeTab === Tabs.overview"
+    (selected)="onSelected(Tabs.overview)">
+  </cds-tab>
+  <cds-tab
+    heading="Targets"
+    i18n-heading
+    [tabIndex]="null"
+    [active]="activeTab === Tabs.targets"
+    (selected)="onSelected(Tabs.targets)">
+  </cds-tab>
+</cds-tabs>

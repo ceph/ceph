@@ -1,24 +1,27 @@
-<ul class="nav nav-tabs">
-  <li class="nav-item">
-    <a
-      class="nav-link"
-      routerLink="/rgw/user"
-      routerLinkActive="active"
-      ariaCurrentWhenActive="page"
-      [routerLinkActiveOptions]="{ exact: true }"
-      i18n
-      >Users</a
-    >
-  </li>
-  <li class="nav-item">
-    <a
-      class="nav-link"
-      routerLink="/rgw/accounts"
-      routerLinkActive="active"
-      ariaCurrentWhenActive="page"
-      [routerLinkActiveOptions]="{ exact: true }"
-      i18n
-      >Accounts</a
-    >
-  </li>
-</ul>
+<cds-tabs
+  type="contained"
+  followFocus="true"
+  isNavigation="true"
+  [cacheActive]="false">
+  <cds-tab
+    heading="Users"
+    i18n-heading
+    [tabIndex]="null"
+    [active]="activeTab === Tabs.user"
+    (selected)="onSelected(Tabs.user)">
+  </cds-tab>
+  <cds-tab
+    heading="Accounts"
+    i18n-heading
+    [tabIndex]="null"
+    [active]="activeTab === Tabs.accounts"
+    (selected)="onSelected(Tabs.accounts)">
+  </cds-tab>
+  <cds-tab
+    heading="Roles"
+    i18n-heading
+    [tabIndex]="null"
+    [active]="activeTab === Tabs.roles"
+    (selected)="onSelected(Tabs.roles)">
+  </cds-tab>
+</cds-tabs>

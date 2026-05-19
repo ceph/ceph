@@ -1,5 +1,12 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import {
+  ComponentFixture,
+  discardPeriodicTasks,
+  fakeAsync,
+  flush,
+  TestBed,
+  tick
+} from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
@@ -278,44 +285,58 @@ describe('OsdListComponent', () => {
   describe('show osd actions as defined', () => {
     const getOsdActions = () => {
       fixture.detectChanges();
+      tick();
+      fixture.detectChanges();
       return fixture.debugElement.query(By.css('#cluster-wide-actions')).componentInstance
         .dropDownActions;
     };
 
-    it('shows osd actions after osd-actions', () => {
+    it('shows osd actions after osd-actions', fakeAsync(() => {
+      fixture.detectChanges();
+      tick();
       fixture.detectChanges();
       expect(fixture.debugElement.query(By.css('#cluster-wide-actions'))).toBe(
         fixture.debugElement.queryAll(By.directive(TableActionsComponent))[1]
       );
-    });
+      flush();
+      discardPeriodicTasks();
+    }));
 
-    it('shows both osd actions', () => {
+    it('shows both osd actions', fakeAsync(() => {
       const osdActions = getOsdActions();
       expect(osdActions).toEqual(component.clusterWideActions);
       expect(osdActions.length).toBe(3);
-    });
+      flush();
+      discardPeriodicTasks();
+    }));
 
-    it('shows only "Flags" action', () => {
+    it('shows only "Flags" action', fakeAsync(() => {
       component.permissions.configOpt.read = false;
       const osdActions = getOsdActions();
       expect(osdActions[0].name).toBe('Flags');
       expect(osdActions.length).toBe(1);
-    });
+      flush();
+      discardPeriodicTasks();
+    }));
 
-    it('shows only "Recovery Priority" action', () => {
+    it('shows only "Recovery Priority" action', fakeAsync(() => {
       component.permissions.osd.read = false;
       const osdActions = getOsdActions();
       expect(osdActions[0].name).toBe('Recovery Priority');
       expect(osdActions[1].name).toBe('PG scrub');
       expect(osdActions.length).toBe(2);
-    });
+      flush();
+      discardPeriodicTasks();
+    }));
 
-    it('shows no osd actions', () => {
+    it('shows no osd actions', fakeAsync(() => {
       component.permissions.configOpt.read = false;
       component.permissions.osd.read = false;
       const osdActions = getOsdActions();
       expect(osdActions).toEqual([]);
-    });
+      flush();
+      discardPeriodicTasks();
+    }));
   });
 
   it('should test all TableActions combinations', () => {
@@ -447,9 +468,13 @@ describe('OsdListComponent', () => {
   });
 
   describe('test table actions in submenu', () => {
-    beforeEach(() => {
+    beforeEach(fakeAsync(() => {
       fixture.detectChanges();
-    });
+      tick();
+      fixture.detectChanges();
+      flush();
+      discardPeriodicTasks();
+    }));
 
     it('has all menu entries disabled except create', () => {
       const tableActionElement = fixture.debugElement.query(By.directive(TableActionsComponent));
@@ -567,7 +592,8 @@ describe('OsdListComponent', () => {
     ) => {
       OrchestratorHelper.mockStatus(orch, features);
       fixture.detectChanges();
-      await fixture.whenStable();
+      tick();
+      fixture.detectChanges();
 
       for (const test of tests) {
         if (test.selectRow) {
@@ -580,9 +606,11 @@ describe('OsdListComponent', () => {
           test.expectResults
         );
       }
+      flush();
+      discardPeriodicTasks();
     };
 
-    it('should have correct states when Orchestrator is enabled', async () => {
+    it('should have correct states when Orchestrator is enabled', fakeAsync(async () => {
       const tests = [
         {
           expectResults: {
@@ -619,9 +647,9 @@ describe('OsdListComponent', () => {
         OrchestratorFeature.OSD_GET_REMOVE_STATUS
       ];
       await testTableActions(true, features, tests);
-    });
+    }));
 
-    it('should have correct states when Orchestrator is disabled', async () => {
+    it('should have correct states when Orchestrator is disabled', fakeAsync(async () => {
       const resultNoOrchestrator = {
         disabled: true,
         disableDesc: orchService.disableMessages.noOrchestrator
@@ -642,9 +670,9 @@ describe('OsdListComponent', () => {
         }
       ];
       await testTableActions(false, [], tests);
-    });
+    }));
 
-    it('should have correct states when Orchestrator features are missing', async () => {
+    it('should have correct states when Orchestrator features are missing', fakeAsync(async () => {
       const resultMissingFeatures = {
         disabled: true,
         disableDesc: orchService.disableMessages.missingFeature
@@ -665,6 +693,6 @@ describe('OsdListComponent', () => {
         }
       ];
       await testTableActions(true, [], tests);
-    });
+    }));
   });
 });
