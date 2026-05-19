@@ -1245,6 +1245,9 @@ public:
 
   virtual std::size_t get_reclaim_size_per_cycle() const = 0;
 
+  // Periodic hook for adaptive threshold control. Default: no-op.
+  virtual void maybe_adjust_thresholds() {}
+
 #ifdef UNIT_TESTS_BUILT
   virtual void prefill_fragmented_devices() {}
 #endif
@@ -1458,6 +1461,8 @@ public:
            greedy_free >= ratio * picked_free;
   }
 
+  void maybe_adjust_thresholds() final;
+
   const std::set<device_id_t>& get_device_ids() const final {
     return sm_group->get_device_ids();
   }
@@ -1657,7 +1662,12 @@ private:
   store_index_t store_index;
   const bool detailed;
   const bool is_cold;
-  const config_t config;
+  // Mutated by maybe_adjust_thresholds(): hard_limit tracks observed open-segment peak.
+  config_t config;
+
+  // Adaptive state: peak open segments observed since last adjust.
+  std::size_t peak_open_segments_window = 0;
+  seastar::lowres_clock::time_point adaptive_last_time;
 
   SegmentManagerGroupRef sm_group;
   BackrefManager &backref_manager;

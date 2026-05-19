@@ -1128,6 +1128,65 @@ segment_id_t SegmentCleaner::allocate_segment(
   return NULL_SEG_ID;
 }
 
+void SegmentCleaner::maybe_adjust_thresholds()
+{
+  // Sample current open-segment count into the window peak each call.
+  peak_open_segments_window = std::max(
+      peak_open_segments_window, segments.get_num_open());
+
+  // Only recompute hard_limit every 30s.
+  using namespace std::chrono_literals;
+  LOG_PREFIX(SegmentCleaner::maybe_adjust_thresholds);
+  auto now = seastar::lowres_clock::now();
+  if (adaptive_last_time != seastar::lowres_clock::time_point{} &&
+      now - adaptive_last_time < 30s) {
+    return;
+  }
+  adaptive_last_time = now;
+
+  // Architectural floor: named writers (journal + hot/cold gens + metadata).
+  auto hot = crimson::common::get_conf<uint64_t>(
+      "seastore_hot_tier_generations");
+  auto cold = crimson::common::get_conf<uint64_t>(
+      "seastore_cold_tier_generations");
+  std::size_t named_writers = hot + cold + 2;
+  std::size_t seg_size = segments.get_segment_size();
+  std::size_t total_bytes = segments.get_total_bytes();
+  if (total_bytes == 0 || seg_size == 0) {
+    return;
+  }
+
+  // hard_limit = (max(peak, named) + 1) * seg / total. "+1" is the minimum
+  // safety unit: allow one more open segment than ever observed.
+  std::size_t observed_peak =
+      std::max<std::size_t>(peak_open_segments_window, named_writers);
+  double new_hard_limit =
+      static_cast<double>(observed_peak + 1) *
+      static_cast<double>(seg_size) /
+      static_cast<double>(total_bytes);
+
+  double crash_floor =
+      static_cast<double>(named_writers) *
+      static_cast<double>(seg_size) /
+      static_cast<double>(total_bytes);
+  new_hard_limit = std::max(new_hard_limit, crash_floor);
+
+  // Keep gc_max strictly greater than hard_limit.
+  if (config.available_ratio_gc_max <= new_hard_limit) {
+    config.available_ratio_gc_max = new_hard_limit + 0.001;
+  }
+  config.available_ratio_hard_limit = new_hard_limit;
+
+  INFO("[ADAPTIVE_GC] peak_open={} named={} hard_limit={:.4f} "
+       "gc_max={:.4f} crash_floor={:.4f}",
+       peak_open_segments_window, named_writers,
+       config.available_ratio_hard_limit,
+       config.available_ratio_gc_max, crash_floor);
+
+  // Reset window: record current open count as the new baseline.
+  peak_open_segments_window = segments.get_num_open();
+}
+
 void SegmentCleaner::close_segment(segment_id_t segment)
 {
   LOG_PREFIX(SegmentCleaner::close_segment);
@@ -1343,11 +1402,12 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
   }
   reclaim_state->advance(config.reclaim_bytes_per_cycle);
 
-  DEBUG("reclaiming {} {}~{}",
+  double pavail_ratio = get_projected_available_ratio();
+  DEBUG("reclaiming {} {}~{}, projected_avail_ratio={}",
         rewrite_gen_printer_t{reclaim_state->generation},
         reclaim_state->start_pos,
-        reclaim_state->end_pos);
-  double pavail_ratio = get_projected_available_ratio();
+        reclaim_state->end_pos,
+        pavail_ratio);
   sea_time_point start = seastar::lowres_system_clock::now();
 
   // Backref-tree doesn't support tree-read during tree-updates with parallel
