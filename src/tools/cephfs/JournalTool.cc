@@ -72,7 +72,9 @@ void JournalTool::usage()
     << "\n"
     << "Special options\n"
     << "  --alternate-pool <name>     Alternative metadata pool to target\n"
-    << "                              when using recover_dentries.\n";
+    << "                              when using recover_dentries.\n"
+    << "  --max-raw-size <bytes>      Maximum raw journal bytes to accumulate\n"
+    << "                              per batch during recover_dentries (default 6G).\n";
 
   generic_client_usage();
 }
@@ -454,6 +456,7 @@ int JournalTool::main_event(std::vector<const char*> &argv)
   }
 
   std::string output_path = "dump";
+  uint64_t max_raw_size = 6ULL << 30; // 6GB default
   while(arg != argv.end()) {
     std::string arg_str;
     if (ceph_argparse_witharg(argv, arg, &arg_str, "--path", (char*)NULL)) {
@@ -464,6 +467,14 @@ int JournalTool::main_event(std::vector<const char*> &argv)
       int r = rados.ioctx_create(arg_str.c_str(), output);
       ceph_assert(r == 0);
       other_pool = true;
+    } else if (ceph_argparse_witharg(argv, arg, &arg_str, "--max-raw-size",
+				     nullptr)) {
+      std::string parse_err;
+      max_raw_size = strict_strtoll(arg_str.c_str(), 0, &parse_err);
+      if (!parse_err.empty()) {
+        derr << "Invalid --max-raw-size value '" << arg_str << "': " << parse_err << dendl;
+        return -EINVAL;
+      }
     } else {
       cerr << "Unknown argument: '" << *arg << "'" << std::endl;
       return -EINVAL;
@@ -499,7 +510,8 @@ int JournalTool::main_event(std::vector<const char*> &argv)
     // start the progress tracker with the diff b/w write and expire position
     progress_tracker->start(js.header->write_pos - js.header->expire_pos);
 
-    constexpr uint64_t BATCH_SIZE = 6ULL << 30; // 6GB of raw journal data per batch
+    const uint64_t batch_size = max_raw_size;
+    std::cout << "Batch size: " << batch_size << " bytes" << std::endl;
     uint64_t batch_bytes = 0;
 
     auto flush_events = [&]() {
@@ -527,7 +539,7 @@ int JournalTool::main_event(std::vector<const char*> &argv)
       bool flushable = er.log_event
           // factor in mds_debug_subtrees conf
           && (er.log_event->get_type() == EVENT_SUBTREEMAP || er.log_event->get_type() == EVENT_SUBTREEMAP_TEST)
-          && batch_bytes >= BATCH_SIZE;
+          && batch_bytes >= batch_size;
       js.events.insert_or_assign(offset, std::move(er));
       if (flushable) {
         flush_events();
