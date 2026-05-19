@@ -1265,8 +1265,10 @@ PyObject* ActivePyModules::get_perf_schema_python(
 		<< dendl;
 	  }
 	}
-	f.close_section();  // close 'counters'
-	f.close_section();  // close 'counter object' section
+	if (!prev_key_name.empty()) {
+	  f.close_section();  // close 'counters'
+	  f.close_section();  // close 'counter object' section
+	}
       });
     }
   } else {
