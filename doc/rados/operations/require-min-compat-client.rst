@@ -106,18 +106,30 @@ Features gated by the flag
 Raising the flag does not enable any feature on its own. It authorizes the
 operator to run commands that would otherwise be rejected with an error
 like ``min_compat_client luminous < reef, which is required for
-pg-upmap-primary``:
+pg-upmap-primary``.
+
+The Linux kernel Ceph client (``krbd`` for RBD block devices, ``kcephfs``
+for CephFS) ships with the kernel, not with Ceph packages, so its version
+is independent of the cluster release. New OSD map features reach the
+kernel client only after they are implemented and merged upstream, which
+can lag the Ceph daemon release by months or years.
+
+The *Min kernel* column shows the minimum Linux kernel version required on
+kernel client hosts before the corresponding commands are used. If no
+kernel clients are present in the cluster, that column can be ignored.
 
 .. list-table::
    :header-rows: 1
-   :widths: 60 25
+   :widths: 40 20 25
 
    * - Command
      - Minimum release
+     - Min kernel
    * - | ``ceph osd primary-affinity``
        | ``ceph osd primary-temp``
        | ``ceph osd rm-primary-temp``
      - ``firefly``
+     - any
    * - | ``ceph osd pg-upmap``
        | ``ceph osd rm-pg-upmap``
        | ``ceph osd pg-upmap-items``
@@ -125,18 +137,35 @@ pg-upmap-primary``:
        | ``ceph osd crush weight-set``
        | balancer ``upmap`` mode
      - ``luminous``
+     - 4.13
    * - | ``ceph osd pg-upmap-primary``
        | ``ceph osd rm-pg-upmap-primary``
        | ``ceph osd rm-pg-upmap-primary-all``
        | balancer ``read`` mode
        | balancer ``upmap-read`` mode
      - ``reef``
+     - not yet implemented
 
-Note that adding CRUSH MSR rules is *not* gated at command time; however,
-once an MSR rule is in the map, the features-in-use floor rises to
-``squid`` (see the table above).
+.. warning::
+
+   ``pg-upmap-primary`` (``reef``) and CRUSH MSR rules (``squid``) are
+   not yet implemented in the kernel client.  Kernel clients that
+   encounter ``pg-upmap-primary`` entries will silently route I/O to
+   the wrong OSD, causing **I/O hangs** on the affected PGs.  Kernel
+   clients that encounter CRUSH MSR rules will fail to compute a PG
+   mapping, causing **I/O errors**.  Do not enable either feature while
+   kernel clients are present (use ``ceph features`` to check).  Note
+   that CRUSH MSR rules are added via ``osd setcrushmap`` and are
+   **not** gated by ``require_min_compat_client``, but they immediately
+   raise the features-in-use floor to ``squid``
+   (see `Lowering the flag`_).  To check whether either is active::
+
+      ceph osd dump | grep -E "pg_upmap_primary|msr"
+
+   See :ref:`read_balancer` for removal commands.
 
 See :ref:`upmap` and :ref:`read_balancer` for the operational procedures
 that depend on raising the flag. CephFS clients must satisfy both this
 flag and any per-filesystem :ref:`cephfs_required_client_features` on
-the file systems they mount.
+the file systems they mount. For CephFS-specific kernel version guidance,
+see :ref:`cephfs_which_kernel_version` and :doc:`/cephfs/kernel-features`.
