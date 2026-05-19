@@ -397,15 +397,68 @@ def test_create_index():
     result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name, dataType='float32', dimension=128, distanceMetric='euclidean')
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     assert result['indexArn'] == 'arn:aws:s3vectors:::bucket/{}/index/{}'.format(bucket_name, index_name)
-    # idempotent create with same definition should succeed
-    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name, dataType='float32', dimension=128, distanceMetric='euclidean')
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-    # create with different dimension should fail
-    pytest.raises(conn.exceptions.ClientError, conn.create_index,
-                  vectorBucketName=bucket_name, indexName=index_name, dataType='float32', dimension=64, distanceMetric='euclidean')
+    # create with same name should fail with ConflictException
+    with pytest.raises(conn.exceptions.ClientError) as exc_info:
+        conn.create_index(vectorBucketName=bucket_name, indexName=index_name, dataType='float32', dimension=128, distanceMetric='euclidean')
+    assert exc_info.value.response['Error']['Code'] == 'BucketAlreadyExists'
     # create an index on bucket that does not exist
     invalid_bucket_name = bucket_name + '-invalid'
     pytest.raises(conn.exceptions.ClientError, conn.create_index, vectorBucketName=invalid_bucket_name, indexName=index_name, dataType='float32', dimension=128, distanceMetric='euclidean')
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+@pytest.mark.index_test
+def test_create_index_invalid_filterable_keys():
+    """Test that invalid filterable metadata key names fail with ValidationException."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    common = dict(vectorBucketName=bucket_name, dataType='float32', dimension=4, distanceMetric='euclidean')
+
+    # duplicate field names
+    assert_create_index_validation_error(conn,
+        'metadataConfiguration.filterableMetadataKeys',
+        indexName='dup-fields',
+        metadataConfiguration={'filterableMetadataKeys': [
+            {'name': 'genre'}, {'name': 'genre'}
+        ]}, **common)
+
+    # reserved column name: key
+    assert_create_index_validation_error(conn,
+        'metadataConfiguration.filterableMetadataKeys',
+        indexName='reserved-key',
+        metadataConfiguration={'filterableMetadataKeys': [
+            {'name': 'key'}
+        ]}, **common)
+
+    # reserved column name: data
+    assert_create_index_validation_error(conn,
+        'metadataConfiguration.filterableMetadataKeys',
+        indexName='reserved-data',
+        metadataConfiguration={'filterableMetadataKeys': [
+            {'name': 'data'}
+        ]}, **common)
+
+    # reserved column name: metadata
+    assert_create_index_validation_error(conn,
+        'metadataConfiguration.filterableMetadataKeys',
+        indexName='reserved-metadata',
+        metadataConfiguration={'filterableMetadataKeys': [
+            {'name': 'metadata'}
+        ]}, **common)
+
+    # overlap between filterable and non-filterable keys
+    assert_create_index_validation_error(conn,
+        'metadataConfiguration.filterableMetadataKeys[0].name',
+        indexName='overlap-keys',
+        metadataConfiguration={
+            'nonFilterableMetadataKeys': ['genre', 'year'],
+            'filterableMetadataKeys': [{'name': 'genre'}]
+        }, **common)
+
     # cleanup
     _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
 
@@ -756,6 +809,29 @@ def assert_put_vectors_validation_error(conn, expected_paths, **kwargs):
     try:
         with pytest.raises(conn.exceptions.ClientError) as exc_info:
             conn.put_vectors(**kwargs)
+        assert exc_info.value.response['Error']['Code'] == 'ValidationException'
+        body = json.loads(captured['body'])
+        assert 'fieldList' in body, f"response should contain fieldList"
+        actual_paths = [entry['path'] for entry in body['fieldList']]
+        assert actual_paths == expected_paths, \
+            f"expected fieldList paths {expected_paths} but got {actual_paths}"
+    finally:
+        conn.meta.events.unregister(event, capture)
+
+
+def assert_create_index_validation_error(conn, expected_paths, **kwargs):
+    """Call create_index expecting a ValidationException, verify the fieldList paths.
+    expected_paths can be a single string or a list of strings."""
+    if isinstance(expected_paths, str):
+        expected_paths = [expected_paths]
+    captured = {}
+    def capture(**kw):
+        captured['body'] = kw['http_response'].content
+    event = 'after-call.s3vectors.CreateIndex'
+    conn.meta.events.register(event, capture)
+    try:
+        with pytest.raises(conn.exceptions.ClientError) as exc_info:
+            conn.create_index(**kwargs)
         assert exc_info.value.response['Error']['Code'] == 'ValidationException'
         body = json.loads(captured['body'])
         assert 'fieldList' in body, f"response should contain fieldList"

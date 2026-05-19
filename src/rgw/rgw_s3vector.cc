@@ -11,6 +11,7 @@
 #include <arrow/api.h>
 #include <arrow/c/bridge.h>
 #include <charconv>
+#include <set>
 #include "rgw_s3vector_background.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -25,6 +26,8 @@ namespace rgw::s3vector {
       case LANCEDB_INVALID_ARGUMENT:
       case LANCEDB_INVALID_TABLE_NAME:
       case LANCEDB_INVALID_INPUT:
+      case LANCEDB_SCHEMA:
+      case LANCEDB_ARROW:
         return -EINVAL;
       case LANCEDB_TABLE_NOT_FOUND:
       case LANCEDB_DATABASE_NOT_FOUND:
@@ -41,12 +44,10 @@ namespace rgw::s3vector {
       case LANCEDB_TIMEOUT:
         return -EBUSY;
       case LANCEDB_CREATE_DIR:
-      case LANCEDB_SCHEMA:
       case LANCEDB_RUNTIME:
       case LANCEDB_OBJECT_STORE:
       case LANCEDB_LANCE:
       case LANCEDB_HTTP:
-      case LANCEDB_ARROW:
       case LANCEDB_OTHER:
       case LANCEDB_UNKNOWN:
         return -EIO;
@@ -552,43 +553,28 @@ namespace rgw::s3vector {
     return 0;
   }
 
-  int create_index(const create_index_t& configuration, DoutPrefixProvider* dpp, optional_yield y) {
+  int create_index(const create_index_t& configuration, DoutPrefixProvider* dpp, optional_yield y, std::vector<validation_error_t>& errors) {
     log_configuration(dpp, "CreateIndex", configuration);
     LanceDBConnection* conn = connect(dpp, configuration.vector_bucket_name);
     if (!conn) {
       return -EIO;
     }
-    // if the table already exists, verify the schema matches
-    LanceDBTable* existing_table = lancedb_connection_open_table(conn, configuration.index_name.c_str());
-    if (existing_table) {
-      unsigned int existing_dimension = 0;
-      if (get_vector_dimension(configuration.index_name, existing_table, dpp, existing_dimension) < 0) {
-        lancedb_table_free(existing_table);
-        lancedb_connection_free(conn);
-        return -EEXIST;
+
+    if (!configuration.non_filterable_metadata_keys.empty() && !configuration.filterable_metadata_keys.empty()) {
+      std::set<std::string> nonfilterable_names(
+          configuration.non_filterable_metadata_keys.begin(),
+          configuration.non_filterable_metadata_keys.end());
+      for (unsigned int i = 0; i < configuration.filterable_metadata_keys.size(); ++i) {
+        const auto& name = configuration.filterable_metadata_keys[i].name;
+        if (nonfilterable_names.count(name)) {
+          errors.push_back({fmt::format("metadataConfiguration.filterableMetadataKeys[{}].name", i),
+              fmt::format("'{}' appears in both filterable and non-filterable metadata keys", name)});
+        }
       }
-      if (existing_dimension != configuration.dimension) {
-        ldpp_dout(dpp, 1) << "ERROR: s3vector index: " << configuration.index_name
-            << " already exists with dimension " << existing_dimension
-            << " but requested dimension " << configuration.dimension << dendl;
-        lancedb_table_free(existing_table);
+      if (!errors.empty()) {
         lancedb_connection_free(conn);
-        return -EEXIST;
+        return -EINVAL;
       }
-      const auto existing_metric = get_distance_metric(existing_table, dpp);
-      if (existing_metric != DistanceMetric::UNKNOWN && existing_metric != configuration.distance_metric) {
-        ldpp_dout(dpp, 1) << "ERROR: s3vector index: " << configuration.index_name
-            << " already exists with distance metric " << distance_metric_to_string(existing_metric)
-            << " but requested " << distance_metric_to_string(configuration.distance_metric) << dendl;
-        lancedb_table_free(existing_table);
-        lancedb_connection_free(conn);
-        return -EEXIST;
-      }
-      ldpp_dout(dpp, 10) << "INFO: s3vector index: " << configuration.index_name
-          << " already exists with matching schema, returning success" << dendl;
-      lancedb_table_free(existing_table);
-      lancedb_connection_free(conn);
-      return 0;
     }
 
     struct ArrowSchema c_schema;
@@ -596,12 +582,18 @@ namespace rgw::s3vector {
       lancedb_connection_free(conn);
       return ret;
     }
-    char* error_message;
+    char* error_message = nullptr;
     LanceDBTable* table = nullptr;
     if (const LanceDBError result = lancedb_table_create(conn, configuration.index_name.c_str(),
           reinterpret_cast<FFI_ArrowSchema*>(&c_schema),
           nullptr, &table, &error_message); result != LANCEDB_SUCCESS) {
-      ldpp_dout(dpp, 1) << "ERROR: s3vector creating index: " << configuration.index_name << ", error: " << error_message << dendl;
+      ldpp_dout(dpp, 1) << "ERROR: s3vector creating index: " << configuration.index_name << ", lancedb error code: " << result << ", error: " << error_message << dendl;
+      if (result == LANCEDB_SCHEMA || result == LANCEDB_INVALID_INPUT || result == LANCEDB_ARROW || result == LANCEDB_LANCE) {
+        errors.push_back({"metadataConfiguration.filterableMetadataKeys", error_message});
+        lancedb_free_string(error_message);
+        lancedb_connection_free(conn);
+        return -EINVAL;
+      }
       lancedb_free_string(error_message);
       lancedb_connection_free(conn);
       return lancedb_error_to_errno(result);

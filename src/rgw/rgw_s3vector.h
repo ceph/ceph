@@ -493,16 +493,16 @@ inline rgw::ARN vector_bucket_arn(const std::string& zonegroup, const std::strin
     );
 }
 
-int create_index(const create_index_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
-int create_vector_bucket(const create_vector_bucket_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
-int delete_index(const delete_index_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
-int delete_vector_bucket(const delete_vector_bucket_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
-int delete_vector_bucket_policy(const delete_vector_bucket_policy_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
 struct validation_error_t {
   std::string path;
   std::string message;
 };
 
+int create_index(const create_index_t& configuration, DoutPrefixProvider* dpp, optional_yield y, std::vector<validation_error_t>& errors);
+int create_vector_bucket(const create_vector_bucket_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
+int delete_index(const delete_index_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
+int delete_vector_bucket(const delete_vector_bucket_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
+int delete_vector_bucket_policy(const delete_vector_bucket_policy_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
 int put_vectors(const put_vectors_t& configuration, DoutPrefixProvider* dpp, optional_yield y, std::vector<validation_error_t>& errors);
 int get_vectors(const get_vectors_t& configuration, DoutPrefixProvider* dpp, optional_yield y, get_vectors_reply_t& reply);
 int list_vectors(const list_vectors_t& configuration, DoutPrefixProvider* dpp, optional_yield y, list_vectors_reply_t& reply);
