@@ -360,8 +360,7 @@
              let-value="data.value">
   <span *ngFor="let item of (value | array); last as last">
     <cds-tag [size]="'md'"
-             class="table-tag"
-             [ngClass]="(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.class) ? column.customTemplateConfig.map[item].class : (column?.customTemplateConfig?.class ? column.customTemplateConfig.class : 'tag-primary')"
+             [class]="'table-tag ' + ((column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.class) ? column.customTemplateConfig.map[item].class : (column?.customTemplateConfig?.class ? column.customTemplateConfig.class : 'tag-primary'))"
              *ngIf="(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.value) ? column.customTemplateConfig.map[item].value : column?.customTemplateConfig?.prefix ? column.customTemplateConfig.prefix + item : item">
       {{(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.value) ? column.customTemplateConfig.map[item].value : column?.customTemplateConfig?.prefix ? column.customTemplateConfig.prefix + item : item }}
     </cds-tag>
