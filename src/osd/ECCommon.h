@@ -101,12 +101,14 @@ struct ECCommon {
     extent_set extents;
     std::optional<std::vector<std::pair<int, int>>> subchunk;
     pg_shard_t pg_shard;
+    bool omap_source = false;
     bool operator==(const shard_read_t &other) const;
 
     void print(std::ostream &os) const {
       os << "shard_read_t(extents=[" << extents << "]"
           << ", subchunk=" << subchunk
           << ", pg_shard=" << pg_shard
+          << ", omap_source=" << omap_source
           << ")";
     }
   };
@@ -453,7 +455,20 @@ struct ECCommon {
         read_request_t &read_request,
         bool for_recovery,
         bool want_attrs,
-        bool want_omap_header);
+        bool want_omap_header,
+        bool want_omap_keys);
+
+    /**
+     * Ensures a primary-capable shard with clean omap is present in shard_reads.
+     *
+     * @param error_shards Optional set of shards with errors to exclude
+     * @return 0 on success, -EIO if no suitable shard found
+     */
+    int ensure_primary_shard_for_omap(
+        const hobject_t &hoid,
+        read_request_t &read_request,
+        bool for_recovery,
+        const std::optional<std::set<pg_shard_t>> &error_shards = std::nullopt);
 
     void get_all_avail_shards(
         const hobject_t &hoid,

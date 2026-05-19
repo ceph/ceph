@@ -360,8 +360,9 @@ int ECCommon::ReadPipeline::get_remaining_shards(
     read_request_t &read_request,
     const bool for_recovery,
     bool want_attrs,
-    bool want_omap_header) {
-  if (want_omap_header) {
+    bool want_omap_header,
+    bool want_omap_keys) {
+  if (want_omap_header || want_omap_keys) {
     ceph_assert(get_parent()->get_pool().supports_omap());
   }
   
@@ -385,9 +386,10 @@ int ECCommon::ReadPipeline::get_remaining_shards(
     return -EIO;
   }
 
-  bool need_attr_request = want_attrs || want_omap_header;
+  bool need_attr_request = want_attrs || want_omap_header || want_omap_keys;
   read_request.want_attrs = want_attrs;
   read_request.want_omap_header = want_omap_header;
+  read_request.want_omap_keys = want_omap_keys;
 
   // Rather than repeating whole read, we can remove everything we already have.
   for (auto iter = read_request.shard_reads.begin();
@@ -414,28 +416,83 @@ int ECCommon::ReadPipeline::get_remaining_shards(
   }
 
   if (need_attr_request) {
-    // This happens if we got an error from the shard where we were requesting
-    // the attributes from and the recovery does not require any non primary
-    // shards. The example seen in test was a 2+1 EC being recovered. shards 0
-    // and 2 were being requested and read as part of recovery. Shard was reading
-    // the attributes and failed. The recovery required shard 1, but that does
-    // not have valid attributes on it, so the attribute read failed.
-    // This is a pretty obscure case, so no need to optimise that much. Do an
-    // empty read!
-    shard_id_set have;
-    shard_id_map<pg_shard_t> pg_shards(sinfo.get_k_plus_m());
-    get_all_avail_shards(hoid, have, pg_shards, for_recovery, error_shards);
-    for (auto shard : have) {
-      if (!sinfo.is_nonprimary_shard(shard)) {
-        shard_read_t shard_read;
-        shard_read.pg_shard = pg_shards[shard];
-        read_request.shard_reads.insert(shard, shard_read_t());
-        break;
-      }
+    int r = ensure_primary_shard_for_omap(hoid, read_request, for_recovery, error_shards);
+    if (r != 0) {
+      return r;
     }
   }
 
+  if (read_request.shard_reads.empty()) {
+    dout(0) << __func__ << " no shards to read for " << hoid 
+            << " after filtering already-read extents" << dendl;
+    return -EIO;
+  }
+
   return 0;
+}
+
+int ECCommon::ReadPipeline::ensure_primary_shard_for_omap(
+    const hobject_t &hoid,
+    read_request_t &read_request,
+    const bool for_recovery,
+    const std::optional<std::set<pg_shard_t>> &error_shards) {
+  
+  if (!get_parent()->get_pool().supports_omap()) {
+    return 0;
+  }
+  if (!read_request.want_omap_header && !read_request.want_omap_keys) {
+    return 0;
+  }
+
+  // Check if there is already a suitable primary-capable shard in shard_reads
+  for (auto &[shard_id, shard_read] : read_request.shard_reads) {
+    if (!sinfo.is_nonprimary_shard(shard_id)) {
+      // Found a primary-capable shard, verify it has clean omap
+      if (for_recovery) {
+        const pg_missing_t &missing = get_parent()->get_shard_missing(shard_read.pg_shard);
+        auto miter = missing.get_items().find(hoid);
+        if (miter != missing.get_items().end() && miter->second.clean_regions.omap_is_dirty()) {
+          // This shard has dirty omap, keep looking
+          continue;
+        }
+      }
+      dout(20) << __func__ << ": existing shard " << shard_id
+               << " can handle omap read for " << hoid << dendl;
+      return 0;
+    }
+  }
+
+  // No suitable shard exists in shard_reads, need to add one
+  shard_id_set have;
+  shard_id_map<pg_shard_t> pg_shards(sinfo.get_k_plus_m());
+  get_all_avail_shards(hoid, have, pg_shards, for_recovery, error_shards);
+  for (auto shard : have) {
+    if (!sinfo.is_nonprimary_shard(shard)) {
+      // Check if this shard has clean omap
+      if (for_recovery) {
+        const pg_missing_t &missing = get_parent()->get_shard_missing(pg_shards[shard]);
+        auto miter = missing.get_items().find(hoid);
+        if (miter != missing.get_items().end() && miter->second.clean_regions.omap_is_dirty()) {
+          dout(20) << __func__ << ": skipping shard " << shard
+                   << " for " << hoid << " due to dirty omap" << dendl;
+          continue;
+        }
+      }
+      
+      // Found a suitable shard, add it to shard_reads
+      shard_read_t shard_read;
+      shard_read.pg_shard = pg_shards[shard];
+      read_request.shard_reads.insert(shard, shard_read);
+      dout(20) << __func__ << ": added shard " << shard
+               << " for omap read of " << hoid << dendl;
+      return 0;
+    }
+  }
+
+  // No suitable shard found
+  dout(0) << __func__ << " no primary-capable shard with clean omap available for "
+          << hoid << dendl;
+  return -EIO;
 }
 
 void ECCommon::ReadPipeline::start_read_op(
@@ -478,35 +535,44 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
     bool need_attrs = read_request.want_attrs;
     bool need_omap_header = read_request.want_omap_header;
     bool need_omap_keys = read_request.want_omap_keys;
-    if (need_omap_header || need_omap_keys) {
+    bool need_omap = need_omap_header || need_omap_keys;
+    if (need_omap) {
       ceph_assert(get_parent()->get_pool().supports_omap());
     }
 
     for (auto &&[shard, shard_read]: read_request.shard_reads) {
       if (need_attrs && !sinfo.is_nonprimary_shard(shard)) {
         messages[shard_read.pg_shard].attrs_to_read.insert(hoid);
+        reads_sent = true;
         need_attrs = false;
       }
-      if (need_omap_header && !sinfo.is_nonprimary_shard(shard)) {
-        messages[shard_read.pg_shard].omap_headers_to_read.insert(hoid);
+      if (need_omap && !sinfo.is_nonprimary_shard(shard)) {
+        if (need_omap_header) {
+          messages[shard_read.pg_shard].omap_headers_to_read.insert(hoid);
+          reads_sent = true;
+        }
+        if (need_omap_keys) {
+          messages[shard_read.pg_shard].omap_read_from.insert(
+            {hoid, {read_request.omap_read_from, read_request.omap_max_bytes}});
+          reads_sent = true;
+        }
+        shard_read.omap_source = true;
+        need_omap = false;
         need_omap_header = false;
-      }
-      if (need_omap_keys && !sinfo.is_nonprimary_shard(shard)) {
-        messages[shard_read.pg_shard].omap_read_from.insert(
-          {hoid, {read_request.omap_read_from, read_request.omap_max_bytes}});
         need_omap_keys = false;
       }
       if (shard_read.subchunk) {
         messages[shard_read.pg_shard].subchunks[hoid] = *shard_read.subchunk;
+        reads_sent = true;
       } else {
         static const std::vector default_sub_chunk = {make_pair(0, 1)};
         messages[shard_read.pg_shard].subchunks[hoid] = default_sub_chunk;
+        reads_sent = true;
       }
       rop.obj_to_source[hoid].insert(shard_read.pg_shard);
       rop.source_to_obj[shard_read.pg_shard].insert(hoid);
     }
     for (auto &[_, shard_read]: read_request.shard_reads) {
-      ceph_assert(!shard_read.extents.empty());
       rop.debug_log.emplace_back(ECUtil::READ_REQUEST, shard_read.pg_shard,
                                    shard_read.extents);
       for (auto &[start, len]: shard_read.extents) {
@@ -516,6 +582,7 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
       }
     }
     ceph_assert(!need_attrs);
+    ceph_assert(!need_omap);
     ceph_assert(!need_omap_header);
     ceph_assert(!need_omap_keys);
   }
@@ -803,11 +870,21 @@ int ECCommon::ReadPipeline::send_all_remaining_reads(
     dout(10) << __func__ << " want omap_header again" << dendl;
   }
 
+  // Check if we need to read omap_keys again
+  const bool want_omap_keys =
+      rop.to_read.at(hoid).want_omap_keys &&
+      (!rop.complete.at(hoid).omap_entries || rop.complete.at(hoid).omap_entries->empty());
+  if (want_omap_keys) {
+    ceph_assert(get_parent()->get_pool().supports_omap());
+    dout(10) << __func__ << " want omap_keys again" << dendl;
+  }
+
   read_request_t &read_request = rop.to_read.at(hoid);
   // reset the old shard reads, we are going to read them again.
   read_request.shard_reads.clear();
   return get_remaining_shards(hoid, rop.complete.at(hoid), read_request,
-                              rop.for_recovery, want_attrs, want_omap_header);
+                              rop.for_recovery, want_attrs, want_omap_header,
+                              want_omap_keys);
 }
 
 void ECCommon::ReadPipeline::kick_reads() {
@@ -825,7 +902,8 @@ bool ec_align_t::operator==(const ec_align_t &other) const {
 bool ECCommon::shard_read_t::operator==(const shard_read_t &other) const {
   return extents == other.extents &&
       subchunk == other.subchunk &&
-      pg_shard == other.pg_shard;
+      pg_shard == other.pg_shard &&
+      omap_source == other.omap_source;
 }
 
 bool ECCommon::read_request_t::operator==(const read_request_t &other) const {
@@ -1591,36 +1669,12 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
         recovery_ops.erase(op.hoid);
         return;
       }
-      if (get_parent()->get_pool().supports_omap()) {
-        shard_id_set have;
-        shard_id_map<pg_shard_t> pg_shards(sinfo.get_k_plus_m());
-        read_pipeline.get_all_avail_shards(op.hoid, have, pg_shards, true, {});
-        bool found_omap_shard = false;
-        for (const auto shard : have) {
-          if (!sinfo.is_nonprimary_shard(shard)) {
-            const pg_missing_t &missing = get_parent()->get_shard_missing(pg_shards[shard]);
-            auto miter = missing.get_items().find(op.hoid);
-            if (miter != missing.get_items().end() && miter->second.clean_regions.omap_is_dirty()) {
-              dout(20) << __func__ << ": skipping shard " << shard
-                       << " for " << op.hoid << " due to dirty omap" << dendl;
-              continue;
-            }
-            shard_read_t shard_read;
-            shard_read.pg_shard = pg_shards[shard];
-            read_request.shard_reads.insert(shard, shard_read);
-            found_omap_shard = true;
-            dout(10) << __func__ << ": selected shard " << shard
-                     << " for omap read of " << op.hoid << dendl;
-            break;
-          }
-        }
-        if (!found_omap_shard) {
-          dout(10) << __func__ << ": ERROR: no shard with clean omap found for "
-                  << op.hoid << ", canceling recovery" << dendl;
-          get_parent()->cancel_pull(op.hoid);
-          recovery_ops.erase(op.hoid);
-          return;
-        }
+      int r2 = read_pipeline.ensure_primary_shard_for_omap(
+        op.hoid, read_request, true, {});
+      if (r2 != 0) {
+        get_parent()->cancel_pull(op.hoid);
+        recovery_ops.erase(op.hoid);
+        return;
       }
       if (read_request.shard_reads.empty()) {
         ceph_assert(op.obc);

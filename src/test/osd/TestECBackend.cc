@@ -990,7 +990,7 @@ TEST(ECCommon, get_remaining_shards)
     ECCommon::read_result_t read_result(&s);
     read_result.errors.emplace(pg_shards[missing_shard], -EIO);
 
-    pipeline.get_remaining_shards(hoid, read_result, read_request, false, false, false);
+    pipeline.get_remaining_shards(hoid, read_result, read_request, false, false, false, false);
 
     ECCommon::read_request_t ref(
       to_read, ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::No,
@@ -1029,7 +1029,7 @@ TEST(ECCommon, get_remaining_shards)
     read_result.buffers_read.insert_in_shard(shard_id_t(0), chunk_size/2, bl);
     read_result.processed_read_requests[shard_id_t(0)].insert(chunk_size/2, bl.length());
 
-    pipeline.get_remaining_shards(hoid, read_result, read_request, false, false, false);
+    pipeline.get_remaining_shards(hoid, read_result, read_request, false, false, false, false);
 
     // The result should be a read request for the first 4k of shard 0, as that
     // is currently missing.

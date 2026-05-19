@@ -488,6 +488,82 @@ TEST_P(OmapTest, OmapClear) {
   ASSERT_TRUE(returned_keys.empty());
 }
 
+TEST_P(OmapTest, OmapPreservedAfterTruncateToZero) {
+  SKIP_IF_CRIMSON();
+  
+  const std::string oid = "test_omap_truncate_to_zero";
+  const std::string omap_header = "test_header_for_truncate";
+  bufferlist omap_header_bl;
+  encode(omap_header, omap_header_bl);
+  
+  // Create object with data and omap
+  auto omap_map = get_test_omap_data();
+  create_test_object_with_omap(oid, omap_map, omap_header_bl);
+  
+  // Verify initial state - object has data
+  bufferlist read_bl;
+  int ret = ioctx.read(oid, read_bl, 0, 0);
+  EXPECT_GT(read_bl.length(), 0);  // Object has data
+  
+  // Truncate object to zero
+  ObjectWriteOperation write_op;
+  write_op.truncate(0);
+  ret = ioctx.operate(oid, &write_op);
+  EXPECT_EQ(ret, 0);
+  
+  // Verification 1: Object data is truncated to zero
+  read_bl.clear();
+  ret = ioctx.read(oid, read_bl, 0, 0);
+  EXPECT_EQ(ret, 0);  // No data to read
+  EXPECT_EQ(read_bl.length(), 0);  // Zero length
+  
+  // Verification 2: Omap header is preserved
+  bufferlist result_header_bl;
+  int err = 0;
+  ObjectReadOperation read_op;
+  read_op.omap_get_header(&result_header_bl, &err);
+  ret = ioctx.operate(oid, &read_op, nullptr);
+  EXPECT_EQ(ret, 0);
+  EXPECT_EQ(err, 0);
+  
+  // Check if header bufferlist has data before decoding
+  ASSERT_GT(result_header_bl.length(), 0u)
+    << "Expected omap header to be preserved after truncate to zero, but header is empty";
+  
+  std::string result_header;
+  decode(result_header, result_header_bl);
+  EXPECT_EQ(result_header, omap_header)
+    << "Expected omap header '" << omap_header << "' but got '" << result_header << "'";
+  
+  // Verification 3: All omap keys are preserved
+  std::map<std::string, bufferlist> vals_read;
+  err = 0;
+  ObjectReadOperation read_op2;
+  read_op2.omap_get_vals2("", LONG_MAX, &vals_read, nullptr, &err);
+  ret = ioctx.operate(oid, &read_op2, nullptr);
+  EXPECT_EQ(ret, 0);
+  EXPECT_EQ(err, 0);
+  EXPECT_EQ(vals_read.size(), omap_map.size())
+    << "Expected " << omap_map.size() << " omap keys to be preserved after truncate to zero, but got " << vals_read.size();
+  
+  // Verify each key-value pair is preserved
+  for (const auto& [key, expected_bl] : omap_map) {
+    ASSERT_TRUE(vals_read.find(key) != vals_read.end())
+      << "Expected omap key '" << key << "' to be preserved after truncate to zero, but it is missing";
+    
+    // Check if value bufferlist has data before decoding
+    ASSERT_GT(vals_read[key].length(), 0u)
+      << "Expected omap value for key '" << key << "' to be preserved, but value is empty";
+    
+    std::string expected_val, actual_val;
+    decode(expected_val, expected_bl);
+    decode(actual_val, vals_read[key]);
+    EXPECT_EQ(actual_val, expected_val)
+      << "Expected omap value '" << expected_val << "' for key '" << key << "' but got '" << actual_val << "'";
+  }
+}
+
+
 TEST_P(OmapTest, OmapRecovery) {
   SKIP_IF_CRIMSON();
   turn_balancing_off();
