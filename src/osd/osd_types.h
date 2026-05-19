@@ -57,7 +57,7 @@
 #include "HitSet.h"
 #include "librados/ListObjectImpl.h"
 #include "pg_features.h"
-#include "ECTypes.h"
+#include "ECTypes.h" // for raw_shard_id_t
 
 class CrushWrapper;
 
