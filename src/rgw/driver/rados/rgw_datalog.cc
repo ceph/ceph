@@ -1183,7 +1183,7 @@ asio::awaitable<void> DataLogBackends::trim_entries(
     l.unlock();
     auto c = be->gen_id == target_gen ? cursor : be->max_marker();
     co_await be->trim(dpp, shard_id, c);
-    if (be->gen_id == target_gen)
+    if (be->gen_id == target_gen || be->gen_id >= head_gen)
       break;
     l.lock();
   };

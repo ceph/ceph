@@ -442,8 +442,6 @@ CORO_TEST_F(DataLogBulky, BulkyCycleRecovery, DataLogBulky) {
 }
 
 // trim_entries with max_marker() must not crash on a single-generation cluster.
-// Without the fix, the loop increment would call upper_bound(head_gen)->second,
-// dereferencing end() and causing a SIGSEGV.
 CORO_TEST_F(DataLogBulky, TrimWithMaxMarker, DataLogBulky) {
   for (const auto& bg : bulky) {
     co_await add_entry(dpp(), bg);
