@@ -33,6 +33,8 @@ overrides:
       - pg .* is stuck peering
       - OSD_HOST_DOWN
       - PG_DAMAGED
+      - CEPHADM_FAILED_DAEMON
+      - failed cephadm daemon
 tasks:
 - install:
     branch: squid

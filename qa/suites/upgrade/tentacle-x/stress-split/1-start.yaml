@@ -32,6 +32,8 @@ overrides:
       - OBJECT_UNFOUND
       - OSD_HOST_DOWN
       - PG_DAMAGED
+      - CEPHADM_FAILED_DAEMON
+      - failed cephadm daemon
 tasks:
 - install:
     branch: tentacle
