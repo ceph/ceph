@@ -3435,6 +3435,27 @@ options:
   - aes-256-cbc
   - aes-256-gcm
   with_legacy: true
+- name: rgw_crypt_aead_chunk_size
+  type: int
+  level: advanced
+  desc: Plaintext chunk size in bytes for AEAD (GCM) server-side encryption
+  long_desc: AEAD ciphers encrypt data in fixed-size chunks, each producing
+    chunk_size + 16 bytes on disk. 4 KiB (default) reduces work on small
+    ranged GETs; 64 KiB reduces per-chunk overhead and storage expansion.
+    Existing encrypted objects retain the chunk size recorded in
+    the rgw.crypt.prefetch-align xattr at upload time, regardless of
+    this setting. This value is read once at daemon startup.
+  default: 4096
+  enum_values:
+  - 4096
+  - 65536
+  services:
+  - rgw
+  see_also:
+  - rgw_crypt_sse_algorithm
+  flags:
+  - startup
+  with_legacy: true
 - name: rgw_crypt_sse_s3_backend
   type: str
   level: advanced

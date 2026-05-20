@@ -10392,7 +10392,8 @@ int get_decrypt_filter(
     } else if (!attrs.count(RGW_ATTR_COMPRESSION)) {
       uint64_t orig_size = 0;
       if (rgw_get_aead_original_size(s, attrs, &orig_size)) {
-        encrypted_total_size = aead_plaintext_to_encrypted_size(orig_size);
+        encrypted_total_size = aead_plaintext_to_encrypted_size(
+            orig_size, block_crypt->get_block_size());
       }
     }
   }
