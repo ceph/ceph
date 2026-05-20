@@ -172,7 +172,7 @@ namespace rgw::dedup {
 
   struct worker_stats_t {
     worker_stats_t& operator +=(const worker_stats_t& other);
-    void dump(Formatter *f) const;
+    void dump(Formatter *f, unsigned num_shards = 0) const;
 
     uint64_t ingress_obj = 0;
     uint64_t ingress_obj_bytes = 0;
@@ -197,6 +197,9 @@ namespace rgw::dedup {
 
     uint64_t ingress_skip_too_small_bytes = 0;
     uint64_t ingress_skip_too_small = 0;
+
+    uint64_t ingress_skip_filtered_bucket = 0;
+    uint64_t ingress_skip_filtered_storage_class = 0;
 
     utime_t  duration = {0, 0};
   };

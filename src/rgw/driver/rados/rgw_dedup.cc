@@ -2292,10 +2292,14 @@ namespace rgw::dedup {
     p_worker_stats->ingress_obj_bytes += ondisk_byte_size;
 
     // We limit dedup to objects from the same storage_class
-    // TBD-Future:
-    // Should we use a skip-list of storage_classes we should skip (like glacier) ?
     const std::string& storage_class =
       rgw_placement_rule::get_canonical_storage_class(entry.meta.storage_class);
+    if (!d_filter.allow_storage_class(storage_class)) {
+      ldpp_dout(dpp, 20) << __func__ << "::skip storage_class (filter): "
+                         << storage_class << dendl;
+      p_worker_stats->ingress_skip_filtered_storage_class++;
+      return 0;
+    }
     if (storage_class == RGW_STORAGE_CLASS_STANDARD) {
       p_worker_stats->default_storage_class_objs++;
       p_worker_stats->default_storage_class_objs_bytes += ondisk_byte_size;
@@ -2746,6 +2750,12 @@ namespace rgw::dedup {
             continue;
           }
           ldpp_dout(dpp, 20) <<__func__ << "::bucket=" << bucket << dendl;
+          if (!d_filter.allow_bucket(bucket.name)) {
+            ldpp_dout(dpp, 10) << __func__ << "::worker_id=" << worker_id
+                               << "::skip bucket (filter): " << bucket.name << dendl;
+            p_worker_stats->ingress_skip_filtered_bucket++;
+            continue;
+          }
           ret = ingress_bucket_objects_single_shard(disk_arr, bucket, worker_id,
                                                     num_work_shards, p_worker_stats);
           if (unlikely(ret != 0)) {
@@ -3118,6 +3128,18 @@ namespace rgw::dedup {
       break;
     case URGENT_MSG_RESTART:
       if (!d_ctl.dedup_exec) {
+        // Decode optional filter
+        {
+          bool has_filter = false;
+          ceph::decode(has_filter, bl_iter);
+          if (has_filter) {
+            decode(d_filter, bl_iter);
+            ldpp_dout(dpp, 5) << __func__ << "::RESTART with filter" << dendl;
+          }
+          else {
+            d_filter = dedup_filter_t{};
+          }
+        }
         d_ctl.remote_restart_req = true;
         d_cond.notify_all();
       }

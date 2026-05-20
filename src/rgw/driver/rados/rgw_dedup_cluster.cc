@@ -1056,7 +1056,7 @@ namespace rgw::dedup {
         collect_single_shard_stats(dpp, owner_map, sp_arr.data(), shard, &show_time, "WORKER");
       }
       Formatter::ObjectSection worker_stats(*fmt, "worker_stats");
-      wrk_stats_sum.dump(fmt);
+      wrk_stats_sum.dump(fmt, num_work_shards);
       show_incomplete_shards_fmt(has_incomplete_shards, num_work_shards, sp_arr.data(), fmt);
       md5_start_time = show_time_func_fmt(epoch.time, show_time, owner_map, fmt);
     }
@@ -1295,7 +1295,8 @@ namespace rgw::dedup {
   // command-line called from radosgw-admin.cc
   int cluster::dedup_restart_scan(rgw::sal::RadosStore *store,
                                   dedup_req_type_t dedup_type,
-                                  const DoutPrefixProvider *dpp)
+                                  const DoutPrefixProvider *dpp,
+                                  const dedup_filter_t *p_filter)
   {
     ldpp_dout(dpp, 1) << __func__ << "::dedup_type = " << dedup_type << dendl;
 
@@ -1337,7 +1338,30 @@ namespace rgw::dedup {
     ret = swap_epoch(store, dpp, &old_epoch, dedup_type, 0, 0);
     if (ret == 0) {
       ldpp_dout(dpp, 10) << __func__ << "::Epoch object was reset" << dendl;
-      return dedup_control(store, dpp, URGENT_MSG_RESTART);
+
+      // Build the RESTART bufferlist, optionally including the filter
+      bufferlist urgent_msg_bl;
+      ceph::encode(URGENT_MSG_RESTART, urgent_msg_bl);
+      bool has_filter = (p_filter != nullptr);
+      ceph::encode(has_filter, urgent_msg_bl);
+      if (has_filter) {
+        const auto& bucket_set = p_filter->get_bucket_filter();
+        ldpp_dout(dpp, 20) << __func__ << "::bucket_set.size()="
+                           << bucket_set.size() << dendl;
+        for (const auto& name : bucket_set) {
+          ldpp_dout(dpp, 20) << __func__ << "::bucket_set::" << name << dendl;
+        }
+
+        const auto& sc_vec = p_filter->get_storage_class_filter();
+        ldpp_dout(dpp, 20) << __func__ << "::sc_vec.size()="
+                           << sc_vec.size() << dendl;
+        for (const auto& name : sc_vec) {
+          ldpp_dout(dpp, 20) << __func__ << "::sc_vec::" << name << dendl;
+        }
+
+        encode(*p_filter, urgent_msg_bl);
+      }
+      return dedup_control_bl(store, dpp, URGENT_MSG_RESTART, urgent_msg_bl);
     }
     else {
       return ret;
