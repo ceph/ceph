@@ -35,18 +35,22 @@ class ESession : public LogEvent {
   // Client metadata stored during open
   client_metadata_t client_metadata;
 
+  // persist auth_name to allow journal recreated session to be reclaimed
+  EntityName auth_name;
+
  public:
   ESession() : LogEvent(EVENT_SESSION), open(false) { }
   ESession(const entity_inst_t& inst, bool o, version_t v,
-	   const client_metadata_t& cm) :
+	   const client_metadata_t& cm, EntityName auth_name_) :
     LogEvent(EVENT_SESSION),
     client_inst(inst), open(o), cmapv(v), inotablev(0),
-    client_metadata(cm) { }
+    client_metadata(cm), auth_name(auth_name_) { }
   ESession(const entity_inst_t& inst, bool o, version_t v,
 	   const interval_set<inodeno_t>& to_free, version_t iv,
-	   const interval_set<inodeno_t>& to_purge) :
+	   const interval_set<inodeno_t>& to_purge, EntityName auth_name_) :
     LogEvent(EVENT_SESSION), client_inst(inst), open(o), cmapv(v),
-    inos_to_free(to_free), inotablev(iv), inos_to_purge(to_purge) {}
+    inos_to_free(to_free), inotablev(iv), inos_to_purge(to_purge),
+    auth_name(auth_name_) {}
 
   void encode(bufferlist& bl, uint64_t features) const override;
   void decode(bufferlist::const_iterator& bl) override;
