@@ -770,6 +770,8 @@ Managing pools that are flagged with ``--bulk``
 ===============================================
 See :ref:`managing_bulk_flagged_pools`.
 
+.. _setting_values_for_a_stretch_pool:
+
 Setting values for a stretch pool
 =================================
 To set values for a stretch pool, run a command of the following form:
@@ -844,8 +846,6 @@ Here are the breakdowns of the arguments:
    
       :Type: Flag
       :Required: No.
-
-.. _setting_values_for_a_stretch_pool:
 
 Unsetting values for a stretch pool
 ===================================
