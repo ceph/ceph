@@ -15,6 +15,7 @@ target_link_libraries(radostest PUBLIC
 add_library(radostest-cxx STATIC
   testcase_cxx.cc
   test_cxx.cc
+  test_pool_types.cc
   $<TARGET_OBJECTS:radostest_shared>)
 target_link_libraries(radostest-cxx PUBLIC
   GTest::GTest

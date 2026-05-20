@@ -3,13 +3,20 @@
 
 #pragma once
 
+#include <chrono>
+#include <map>
 #include <string>
+#include <vector>
+
 #include "include/rados/librados.hpp"
 #include "test/librados/test_cxx.h"
 #include "gtest/gtest.h"
 
-namespace ceph {
-namespace test {
+namespace ceph::messaging::osd {
+struct OSDMapReply;
+}
+
+namespace ceph::test {
 
 // Pool type enumeration for parameterized tests
 enum class PoolType {
@@ -39,9 +46,9 @@ inline std::string create_pool_by_type(
     PoolType type) {
   switch (type) {
     case PoolType::REPLICATED:
-      return create_one_pool_pp(pool_name, cluster);
+      return create_pool_pp(pool_name, cluster);
     case PoolType::FAST_EC: {
-      std::string result = create_one_ec_pool_pp(pool_name, cluster, true);
+      std::string result = create_ec_pool_pp(pool_name, cluster, true);
       if (result != "") {
         return result;
       }
@@ -50,7 +57,7 @@ inline std::string create_pool_by_type(
       return result;
     }
     case PoolType::LEGACY_EC:
-      return create_one_ec_pool_pp(pool_name, cluster, false);
+      return create_ec_pool_pp(pool_name, cluster, false);
     default:
       return "Unknown pool type";
   }
@@ -63,10 +70,10 @@ inline int destroy_pool_by_type(
     PoolType type) {
   switch (type) {
     case PoolType::REPLICATED:
-      return destroy_one_pool_pp(pool_name, cluster);
+      return destroy_pool_pp(pool_name, cluster);
     case PoolType::FAST_EC:
     case PoolType::LEGACY_EC:
-      return destroy_one_ec_pool_pp(pool_name, cluster);
+      return destroy_ec_pool_pp(pool_name, cluster);
     default:
       return -EINVAL;
   }
@@ -77,21 +84,58 @@ inline int destroy_pool_by_type(
 class PoolTypeTestFixture : public ::testing::TestWithParam<PoolType> {
  protected:
   static librados::Rados rados;
+  static std::map<PoolType, std::string> pool_names;
   librados::IoCtx ioctx;
   std::string pool_name;
+  std::string nspace;
   PoolType pool_type;
 
-  void SetUp() override {
-    pool_type = GetParam();
-    pool_name = get_temp_pool_name();
-    ASSERT_EQ("", create_pool_by_type(pool_name, rados, pool_type));
-    ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+  static std::vector<PoolType> get_supported_pool_types() {
+    return {PoolType::REPLICATED, PoolType::FAST_EC};
   }
+
+  static std::string pool_name_prefix() {
+    return "pool_type_test_";
+  }
+
+  static void after_pool_create(PoolType type,
+                                const std::string& pool_name,
+                                librados::Rados& cluster) {
+  }
+
+  static void cleanup_namespace(librados::Rados& cluster,
+                                librados::IoCtx& ioctx,
+                                const std::string& ns);
+
+  void turn_balancing_off();
+  void turn_balancing_on();
   
-  void TearDown() override {
-    ioctx.close();
-    ASSERT_EQ(0, destroy_pool_by_type(pool_name, rados, pool_type));
-  }
+  int request_osd_map(
+      const std::string& oid,
+      ceph::messaging::osd::OSDMapReply* reply);
+  
+  int set_osd_upmap(
+      const std::string& pgid,
+      const std::vector<int>& up_osds);
+  
+  int wait_for_upmap(
+      const std::string& oid,
+      int desired_primary,
+      std::chrono::seconds timeout);
+  
+  void print_osd_map(const std::string& message, const std::vector<int>& osd_vec);
+  
+  void setup_and_trigger_recovery(
+      const std::string& oid,
+      int& new_primary,
+      std::chrono::seconds timeout = std::chrono::seconds(30));
+
+  static void SetUpTestSuite();
+  static void TearDownTestSuite();
+  void SetUp() override;
+  void TearDown() override;
+
+  bool balancing_disabled = false;
 };
 
 // Base class for EC-only tests
@@ -101,17 +145,8 @@ class ECOnlyTestFixture : public ::testing::Test {
   librados::IoCtx ioctx;
   std::string pool_name;
 
-  void SetUp() override {
-    pool_name = get_temp_pool_name();
-    ASSERT_EQ("", create_pool_by_type(pool_name, rados, PoolType::FAST_EC));
-    ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
-  }
-  
-  void TearDown() override {
-    ioctx.close();
-    ASSERT_EQ(0, destroy_pool_by_type(pool_name, rados, PoolType::FAST_EC));
-  }
+  void SetUp() override;
+  void TearDown() override;
 };
 
-} // namespace test
-} // namespace ceph
+} // namespace ceph::test
