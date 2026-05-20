@@ -22,6 +22,7 @@
 #include <string_view>
 
 #include "include/neorados/RADOS.hpp"
+#include "include/rados/librados_fwd.hpp"
 #include "driver/rados/rgw_service.h"
 #include "rgw_bucket_layout.h"
 
@@ -68,6 +69,14 @@ public:
                              int shard_id,
                              std::map<int, std::string> *markers,
                              optional_yield y) = 0;
+
+  // async FIFO shard trim via AioCompletion.
+  virtual int trim_shard(const DoutPrefixProvider* dpp,
+                         const RGWBucketInfo& bucket_info,
+                         const rgw::bucket_log_layout_generation& log_layout,
+                         int shard_id,
+                         std::string_view marker,
+                         librados::AioCompletion* c) { return 0; }
 };
 
 // In-index backend.
@@ -151,6 +160,13 @@ public:
                      int shard_id,
                      std::map<int, std::string> *markers,
                      optional_yield y) override;
+
+  int trim_shard(const DoutPrefixProvider* dpp,
+                 const RGWBucketInfo& bucket_info,
+                 const rgw::bucket_log_layout_generation& log_layout,
+                 int shard_id,
+                 std::string_view marker,
+                 librados::AioCompletion* c) override;
 };
 
 // BackendDispatcher: responsibility is to route calls to the correct
@@ -197,4 +213,11 @@ public:
                      int shard_id,
                      std::map<int, std::string> *markers,
                      optional_yield y) override;
+
+  int trim_shard(const DoutPrefixProvider* dpp,
+                 const RGWBucketInfo& bucket_info,
+                 const rgw::bucket_log_layout_generation& log_layout,
+                 int shard_id,
+                 std::string_view marker,
+                 librados::AioCompletion* c) override;
 };

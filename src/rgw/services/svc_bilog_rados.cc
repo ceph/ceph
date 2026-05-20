@@ -11,8 +11,10 @@
 #include "driver/rados/rgw_log_backing.h"
 #include "cls/rgw/cls_rgw_client.h"
 #include "common/async/blocked_completion.h"
+#include "common/async/librados_completion.h"
 
 #include <boost/asio/spawn.hpp>
+#include <boost/asio/co_spawn.hpp>
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -521,6 +523,34 @@ int RGWSI_BILog_RADOS_FIFO::log_trim(
   return ret;
 }
 
+int RGWSI_BILog_RADOS_FIFO::trim_shard(
+    const DoutPrefixProvider* dpp,
+    const RGWBucketInfo& bucket_info,
+    const rgw::bucket_log_layout_generation& log_layout,
+    int shard_id,
+    std::string_view marker,
+    librados::AioCompletion* c)
+{
+  librados::IoCtx log_ioctx;
+  const auto& zone_params = bi_->svc.zone->get_zone_params();
+  int r = rgw_init_ioctx(dpp, bi_->rados, zone_params.log_pool, log_ioctx,
+                         true, false);
+  if (r < 0) {
+    return r;
+  }
+  neorados::IOContext neo_loc(log_ioctx.get_id());
+  const std::string fifo_oid = bilog_fifo_oid(
+      bucket_info.bucket.bucket_id, log_layout.gen, shard_id);
+  auto lf = std::make_shared<LazyFIFO>(*rados_neo, fifo_oid, neo_loc);
+  asio::co_spawn(
+      rados_neo->get_executor(),
+      [lf, dpp, marker_str = std::string{marker}]() -> asio::awaitable<void> {
+        co_return co_await lf->trim(dpp, marker_str, false);
+      }(),
+      c);
+  return 0;
+}
+
 int RGWSI_BILog_RADOS_FIFO::log_list(
     const DoutPrefixProvider *dpp, optional_yield y,
     const RGWBucketInfo& bucket_info,
@@ -803,5 +833,17 @@ int RGWSI_BILog_RADOS_BackendDispatcher::get_log_status(
 {
   return get_backend(log_layout).get_log_status(dpp, bucket_info, log_layout,
                                                  shard_id, markers, y);
+}
+
+int RGWSI_BILog_RADOS_BackendDispatcher::trim_shard(
+    const DoutPrefixProvider* dpp,
+    const RGWBucketInfo& bucket_info,
+    const rgw::bucket_log_layout_generation& log_layout,
+    int shard_id,
+    std::string_view marker,
+    librados::AioCompletion* c)
+{
+  return backend_fifo.trim_shard(dpp, bucket_info, log_layout, shard_id,
+                                 marker, c);
 }
 
