@@ -19,18 +19,14 @@ function run() {
 function TEST_bluestore() {
     local dir=$1
 
-    local flimit=$(ulimit -n)
-    if [ $flimit -lt 1536 ]; then
-        echo "Low open file limit ($flimit), test may fail. Increase to 1536 or higher and retry if that happens."
-    fi
     export CEPH_MON="127.0.0.1:7146" # git grep '\<7146\>' : there must be only one
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
-    CEPH_ARGS+="--bluestore_block_size=2147483648 "
+    CEPH_ARGS+="--bluestore_block_size=2G "
     CEPH_ARGS+="--bluestore_block_db_create=true "
-    CEPH_ARGS+="--bluestore_block_db_size=1073741824 "
-    CEPH_ARGS+="--bluestore_block_wal_size=1073741824 "
+    CEPH_ARGS+="--bluestore_block_db_size=1G "
+    CEPH_ARGS+="--bluestore_block_wal_size=1G "
     CEPH_ARGS+="--bluestore_block_wal_create=true "
     CEPH_ARGS+="--bluestore_fsck_on_mount=true "
     #choosing randomly allocation from file
@@ -345,17 +341,13 @@ function TEST_bluestore() {
 function TEST_bluestore2() {
     local dir=$1
 
-    local flimit=$(ulimit -n)
-    if [ $flimit -lt 1536 ]; then
-        echo "Low open file limit ($flimit), test may fail. Increase to 1536 or higher and retry if that happens."
-    fi
     export CEPH_MON="127.0.0.1:7146" # git grep '\<7146\>' : there must be only one
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
-    CEPH_ARGS+="--bluestore_block_size=4294967296 "
+    CEPH_ARGS+="--bluestore_block_size=4G "
     CEPH_ARGS+="--bluestore_block_db_create=true "
-    CEPH_ARGS+="--bluestore_block_db_size=1073741824 "
+    CEPH_ARGS+="--bluestore_block_db_size=1G "
     CEPH_ARGS+="--bluestore_block_wal_create=false "
     CEPH_ARGS+="--bluestore_fsck_on_mount=true "
     CEPH_ARGS+="--osd_pool_default_size=1 "
@@ -411,17 +403,13 @@ function TEST_bluestore2() {
 function TEST_bluestore_expand() {
     local dir=$1
 
-    local flimit=$(ulimit -n)
-    if [ $flimit -lt 1536 ]; then
-        echo "Low open file limit ($flimit), test may fail. Increase to 1536 or higher and retry if that happens."
-    fi
     export CEPH_MON="127.0.0.1:7146" # git grep '\<7146\>' : there must be only one
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
-    CEPH_ARGS+="--bluestore_block_size=4294967296 "
+    CEPH_ARGS+="--bluestore_block_size=4G "
     CEPH_ARGS+="--bluestore_block_db_create=true "
-    CEPH_ARGS+="--bluestore_block_db_size=1073741824 "
+    CEPH_ARGS+="--bluestore_block_db_size=1G "
     CEPH_ARGS+="--bluestore_block_wal_create=false "
     CEPH_ARGS+="--bluestore_fsck_on_mount=true "
     CEPH_ARGS+="--osd_pool_default_size=1 "
