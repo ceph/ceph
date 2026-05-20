@@ -18,3 +18,9 @@ overrides:
       - \(MON_DOWN\)
       - noscrub
       - nodeep-scrub
+      - OSD_ROOT_DOWN
+      - osds down
+      - MDS_INSUFFICIENT_STANDBY
+      - insufficient standby
+      - have.*want.*more
+      - is offline because no MDS is active for it
