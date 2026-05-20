@@ -1668,10 +1668,10 @@ int RocksDBStore::submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Tra
 	static_cast<double>(rocksdb::get_perf_context()->write_delay_time)/1000000000);
     write_pre_and_post_process_time.set_from_double(
 	static_cast<double>(rocksdb::get_perf_context()->write_pre_and_post_process_time)/1000000000);
-    logger->tinc(l_rocksdb_write_memtable_time, write_memtable_time);
-    logger->tinc(l_rocksdb_write_delay_time, write_delay_time);
-    logger->tinc(l_rocksdb_write_wal_time, write_wal_time);
-    logger->tinc(l_rocksdb_write_pre_and_post_process_time, write_pre_and_post_process_time);
+    logger->tinc_with_max(l_rocksdb_write_memtable_time, write_memtable_time);
+    logger->tinc_with_max(l_rocksdb_write_delay_time, write_delay_time);
+    logger->tinc_with_max(l_rocksdb_write_wal_time, write_wal_time);
+    logger->tinc_with_max(l_rocksdb_write_pre_and_post_process_time, write_pre_and_post_process_time);
   }
 
   return s.ok() ? 0 : -1;
@@ -1686,7 +1686,7 @@ int RocksDBStore::submit_transaction(KeyValueDB::Transaction t)
   int result = submit_common(woptions, t);
 
   utime_t lat = ceph_clock_now() - start;
-  logger->tinc(l_rocksdb_submit_latency, lat);
+  logger->tinc_with_max(l_rocksdb_submit_latency, lat);
   
   return result;
 }
@@ -1701,7 +1701,7 @@ int RocksDBStore::submit_transaction_sync(KeyValueDB::Transaction t)
   int result = submit_common(woptions, t);
   
   utime_t lat = ceph_clock_now() - start;
-  logger->tinc(l_rocksdb_submit_sync_latency, lat);
+  logger->tinc_with_max(l_rocksdb_submit_sync_latency, lat);
 
   return result;
 }
@@ -1994,7 +1994,7 @@ int RocksDBStore::get(
     }
   }
   utime_t lat = ceph_clock_now() - start;
-  logger->tinc(l_rocksdb_get_latency, lat);
+  logger->tinc_with_max(l_rocksdb_get_latency, lat);
   return 0;
 }
 
@@ -2029,7 +2029,7 @@ int RocksDBStore::get(
     ceph_abort_msg(s.getState());
   }
   utime_t lat = ceph_clock_now() - start;
-  logger->tinc(l_rocksdb_get_latency, lat);
+  logger->tinc_with_max(l_rocksdb_get_latency, lat);
   return r;
 }
 
@@ -2066,7 +2066,7 @@ int RocksDBStore::get(
     ceph_abort_msg(s.getState());
   }
   utime_t lat = ceph_clock_now() - start;
-  logger->tinc(l_rocksdb_get_latency, lat);
+  logger->tinc_with_max(l_rocksdb_get_latency, lat);
   return r;
 }
 
