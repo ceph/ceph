@@ -31,6 +31,9 @@ overrides:
       - OBJECT_UNFOUND
       - OSD_HOST_DOWN
       - PG_DAMAGED
+      - POOL_FULL
+      - pool full
+      - pool\(s\) full
 tasks:
 - install:
     branch: tentacle
