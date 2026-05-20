@@ -614,6 +614,17 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_lc_dry_run
+  type: bool
+  level: advanced
+  desc: Enable dry-run mode for lifecycle processing - log what would be deleted without actually deleting
+  long_desc: When enabled, lifecycle processing will log all objects that match
+    expiration rules but will not actually delete them. Useful for testing LC rules
+    and debugging. Can be changed at runtime without RGW restart.
+  default: false
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_mp_lock_max_time
   type: int
   level: advanced

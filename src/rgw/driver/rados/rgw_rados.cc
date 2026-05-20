@@ -5649,7 +5649,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   uint64_t olh_epoch = 0; // read it from attrs fetched from cloud below
   rgw::putobj::AtomicObjectProcessor processor(aio.get(), this, dest_bucket_info, nullptr,
                                   owner, obj_ctx, dest_obj_bi, olh_epoch, tag, dpp, y, no_trace);
- 
+
   void (*progress_cb)(off_t, void *) = NULL;
   void *progress_data = NULL;
   bool cb_processed = false;
@@ -9437,7 +9437,7 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
                      << (entry.delete_marker ? "(delete)" : "") << dendl;
 
       if (link_epoch == entry.epoch)
-        ldpp_dout(dpp, 1) << "apply_olh_log epoch collision detected for " << entry.key
+        ldpp_dout(dpp, 1) << "apply_olh_log epoch collision detected for " << entry.key << "(" << entry.epoch << ")"
                           << "; incoming op: " << entry.op << "(" << entry.op_tag << ")" << dendl;
 
       switch (entry.op) {

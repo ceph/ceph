@@ -453,122 +453,6 @@ static bool should_list_unordered(const rgw::bucket_index_layout_generation& cur
   return current_index.layout.type == rgw::BucketIndexType::Normal
     && rgw::num_shards(current_index.layout.normal) > threshold;
 }
-class LCObjsLister {
-  rgw::sal::Driver* driver;
-  rgw::sal::Bucket* bucket;
-  rgw::sal::Bucket::ListParams list_params;
-  rgw::sal::Bucket::ListResults list_results;
-  string prefix;
-  vector<rgw_bucket_dir_entry>::iterator obj_iter;
-  rgw_bucket_dir_entry pre_obj;
-  uint64_t num_noncurrent{0};
-  int64_t delay_ms;
-
-public:
-  LCObjsLister(rgw::sal::Driver* _driver, rgw::sal::Bucket* _bucket) :
-      driver(_driver), bucket(_bucket) {
-    list_params.list_versions = bucket->versioned();
-
-    CephContext* cct = driver->ctx();
-    uint64_t threshold = cct->_conf.get_val<uint64_t>("rgw_lc_ordered_list_threshold");
-
-    const auto& current_index = bucket->get_info().layout.current_index;
-    list_params.allow_unordered = should_list_unordered(current_index, threshold);
-
-    delay_ms = driver->ctx()->_conf.get_val<int64_t>("rgw_lc_thread_delay");
-  }
-
-  void set_prefix(const string& p) {
-    prefix = p;
-    list_params.prefix = prefix;
-  }
-
-  int init(const DoutPrefixProvider *dpp, optional_yield y) {
-    return fetch(dpp, y);
-  }
-
-  int fetch(const DoutPrefixProvider *dpp, optional_yield y) {
-    CephContext* cct = dpp->get_cct();
-    int cnt = cct->_conf.get_val<uint64_t>("rgw_lc_list_cnt");
-    int ret = bucket->list(dpp, list_params, cnt, list_results, y);
-    if (ret < 0) {
-      return ret;
-    }
-
-    obj_iter = list_results.objs.begin();
-
-    return 0;
-  }
-
-  void delay(const DoutPrefixProvider* dpp) {
-    if (delay_ms) {
-      maybe_warn_about_blocking(dpp);
-      std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
-    }
-  }
-
-  bool get_obj(const DoutPrefixProvider *dpp, optional_yield y,
-	       rgw_bucket_dir_entry **obj,
-	       std::function<void(void)> fetch_barrier
-	       = []() { /* nada */}) {
-    if (obj_iter == list_results.objs.end()) {
-      if (!list_results.is_truncated) {
-        delay(dpp);
-        return false;
-      } else {
-	fetch_barrier();
-        list_params.marker = pre_obj.key;
-        int ret = fetch(dpp, y);
-        if (ret < 0) {
-          ldpp_dout(dpp, 0) << "ERROR: list_op returned ret=" << ret
-				 << dendl;
-          return false;
-        }
-      }
-      delay(dpp);
-    }
-
-    if (obj_iter->key.name == pre_obj.key.name) {
-      ++num_noncurrent;
-    } else {
-      num_noncurrent = 0; // XXX the first element must be current or a delete marker (?)
-    }
-
-    /* returning address of entry in objs */
-    *obj = &(*obj_iter);
-    return obj_iter != list_results.objs.end();
-  }
-
-  rgw_bucket_dir_entry get_prev_obj() {
-    return pre_obj;
-  }
-
-  void next() {
-    pre_obj = *obj_iter;
-    ++obj_iter;
-  }
-
-  boost::optional<std::string> next_key_name() {
-    if (obj_iter == list_results.objs.end()) {
-      return boost::none;
-    }
-    if ((obj_iter + 1) == list_results.objs.end()) {
-      /* At the last object in the current page */
-      if (list_results.is_truncated) {
-        /* More pages exist. Cannot determine if next object has same name
-         * without fetching next page. Return current object name to indicate
-         * uncertainty and prevent incorrect DM deletion at page boundaries. */
-        return obj_iter->key.name;
-      }
-      /* No more pages, definitively no next object */
-      return boost::none;
-    }
-
-    return ((obj_iter + 1)->key.name);
-  }
-
-  uint64_t get_num_noncurrent() { return num_noncurrent; }
-}; /* LCObjsLister */
 
 struct op_env {
 
@@ -735,6 +619,22 @@ static int remove_expired_obj(const DoutPrefixProvider* dpp,
   auto obj_key = o.key;
   auto& meta = o.meta;
   auto version_id = obj_key.instance; // deep copy, so not cleared below
+
+  /* DRY-RUN mode: log what would be deleted without actually deleting */
+  if (oc.cct->_conf->rgw_lc_dry_run) {
+    ldpp_dout(dpp, 5)
+        << "DRY-RUN: would delete "
+        << "bucket=" << oc.bucket->get_name() << " obj=" << o.key
+        /* event_types contains duplicate events with different prefixes
+         * (s3:ObjectLifecycle:* and s3:LifecycleExpiration:*) for
+         * backward compatibility; printing only the first */
+        << (!event_types.empty()
+                ? " rule=" + rgw::notify::to_string(event_types.front())
+                : "")
+        << " is_delete_marker=" << o.is_delete_marker() << " flags=" << o.flags
+        << dendl;
+    return 0;
+  }
 
   /* per discussion w/Daniel, Casey,and Eric, we *do need*
    * a new sal object handle, based on the following decision
@@ -1766,6 +1666,210 @@ int LCOpRule::process(rgw_bucket_dir_entry& o,
 
 }
 
+
+LCObjsLister::LCObjsLister(ILCBucketLister *_backend,
+                           bool list_versions,
+                           bool allow_unordered,
+                           int64_t delay,
+                           const DoutPrefixProvider *_dpp) :
+  backend(_backend), dpp(_dpp) {
+  list_params.list_versions = list_versions;
+  list_params.allow_unordered = allow_unordered;
+  delay_ms = delay;
+}
+
+int LCObjsLister::init(boost::asio::yield_context y) {
+  int res = fetch(y);
+  if (res < 0)
+    return  res;
+
+  obj_iter = skip_to_the_first_current(obj_iter, y);
+
+  return 0;
+}
+
+int LCObjsLister::fetch(boost::asio::yield_context y) {
+  if (!list_results.objs.empty()) {
+    list_params.marker = list_results.objs.back().key;
+  }
+  int ret = backend->list(list_params, PAGE_SIZE, list_results, y);
+  if (ret < 0)
+    return ret;
+
+  obj_iter = list_results.objs.begin();
+  ++page_index;
+  return 0;
+}
+
+void LCObjsLister::delay() {
+  if (delay_ms) {
+    maybe_warn_about_blocking(dpp);
+    std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));      
+  }
+}
+
+LCObjsLister::obj_iter_type LCObjsLister::skip_to_the_first_current(obj_iter_type from, boost::asio::yield_context y) {
+  if (list_results.objs.empty())
+    return list_results.objs.end();
+
+  // if the @from already pointing at the current just return it and increment the counter;
+  auto first = *from;
+  if (first.is_current()) {
+    num_noncurrent=0;
+    num_current = 1;
+    return from;
+  }
+
+  ldpp_dout(dpp, 20) << "LCObjsLister::next(): skipping " << from->key << " (newer than the current)" <<  dendl;
+
+  pre_obj = first;
+  num_noncurrent=1;
+  num_current=0;
+  ++from;
+  do {
+    for (auto i=from; i!=list_results.objs.end(); ++i) {
+      // are we still on the same object?
+      if (i->key.name==pre_obj.key.name) {
+        // are we now pointing at the current instance?
+        if (i->is_current() && num_current==0) {
+          num_current = 1;
+          // log the number of non-current elements newer than the current ;
+          ldpp_dout(dpp, 1) << "WARNING: bucket " << backend->get_bucket_key() << " "
+                            << "object " << i->key.name << ": found " << num_noncurrent
+                            << " version(s) newer than the current" << dendl;
+          return  i;
+        }
+        ++num_noncurrent;
+      } else {
+        // we have now advanced to a new object
+        if (i->is_current()) {
+          num_noncurrent = 0;
+          num_current = 1;
+          return i;
+        }
+        num_noncurrent = 1;
+        pre_obj = *i;
+      }
+      ldpp_dout(dpp, 1) << "WARNING: LCObjsLister::next(): skipping " << i->key << " (newer than the current)" <<  dendl;
+    }
+
+    // we reached the end of the current list results batch;
+    // need to fetch the next page and start over;
+    if (list_results.is_truncated && fetch(y)==0) {
+      // fetch() sets obj_iter to the beginning of the new results page
+      from = obj_iter;
+    } else {
+      break;
+    }
+  } while (true);
+
+  return list_results.objs.end();
+}
+
+bool LCObjsLister::get_obj(rgw_bucket_dir_entry *obj) const {
+  ceph_assert(obj!=nullptr);
+
+  /* returning address of entry in objs */
+  if (obj_iter != list_results.objs.end()) {
+    *obj = *obj_iter;
+    return  true;
+  }
+
+  return false;
+}
+
+bool LCObjsLister::next(boost::asio::yield_context y) {
+  if (obj_iter == list_results.objs.end())
+    return false;
+
+  pre_obj = *obj_iter++;
+  if (obj_iter == list_results.objs.end()) {
+    if (!list_results.is_truncated) {
+      delay();
+      return false;
+    } else {
+      int ret = fetch(y);
+      if (ret < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: list_op returned ret=" << ret << dendl;
+        return false;
+      }
+    }
+    delay();
+  }
+
+  if (obj_iter->key.name == pre_obj.key.name) {
+    if (!obj_iter->is_current())
+      ++num_noncurrent;
+    else {
+      // looks like we have multiple currents in a row;
+      obj_iter = skip_currents(obj_iter, y);
+    }
+  }
+  else
+    obj_iter = skip_to_the_first_current(obj_iter, y);
+
+  if (obj_iter != list_results.objs.end()) {
+    ldpp_dout(dpp, 20) << "LCObjsLister::next(): advanced to " << obj_iter->key << " at position " << get_entry_pos() << dendl;
+  }
+
+  return obj_iter != list_results.objs.end();
+}
+
+LCObjsLister::obj_iter_type LCObjsLister::skip_currents(obj_iter_type from, boost::asio::yield_context y) {
+  ceph_assert(from!=list_results.objs.end());
+
+  auto cur_obj = *from;
+  ceph_assert(cur_obj.is_current());
+  ldpp_dout(dpp, 20) << "LCObjsLister::next(): skipping " << from->key << " (multiple currents)" <<  dendl;
+  ++num_current;
+  auto i=from+1;
+  do {
+    for (; i!=list_results.objs.end(); ++i) {
+      if (cur_obj.key.name==i->key.name) {
+        if (i->is_current()) {
+          ++num_current;
+          ldpp_dout(dpp, 20) << "LCObjsLister::next(): skipping " << i->key << " (multiple currents)" <<  dendl;
+        }
+        else {
+          ++num_noncurrent;
+          return i;
+        }
+      }
+      else
+        return skip_to_the_first_current(i, y);
+    }
+
+    // we reached the end of the current list results batch;
+    // need to fetch the next page and start over;
+    if (list_results.is_truncated && fetch(y)==0) {
+      i = obj_iter;
+    } else {
+      break;
+    }
+  } while (true);
+
+  return i;
+}
+
+boost::optional<std::string> LCObjsLister::next_key_name() const {
+  if (obj_iter == list_results.objs.end()) {
+    return boost::none;
+  }
+  if ((obj_iter + 1) == list_results.objs.end()) {
+    /* At the last object in the current page */
+    if (list_results.is_truncated) {
+      /* More pages exist. Cannot determine if next object has same name
+       * without fetching next page. Return current object name to indicate
+       * uncertainty and prevent incorrect DM deletion at page boundaries. */
+      return obj_iter->key.name;
+    }
+    /* No more pages, definitely no next object */
+    return boost::none;
+  }
+
+  return ((obj_iter + 1)->key.name);
+}
+
 int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
 			     time_t stop_at, bool once,
 			     boost::asio::yield_context yield)
@@ -1925,7 +2029,16 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
       pre_marker = next_marker;
     }
 
-    LCObjsLister ol(driver, bucket.get());
+    rgw::sal::BucketLister bl(bucket.get(), this);
+    CephContext* cct = driver->ctx();
+    auto delay_ms = cct->_conf.get_val<int64_t>("rgw_lc_thread_delay");
+    uint64_t threshold = cct->_conf.get_val<uint64_t>("rgw_lc_ordered_list_threshold");
+    const auto& current_index = bucket->get_info().layout.current_index;
+    LCObjsLister ol(&bl, 
+      bucket->versioned(), 
+      should_list_unordered(current_index, threshold), 
+      delay_ms, 
+      this);
     ol.set_prefix(prefix_iter->first);
 
     std::vector<lc_op*> active_ops;
@@ -1946,7 +2059,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
       continue;
     }
 
-    ret = ol.init(this, yield);
+    ret = ol.init(yield);
     if (ret < 0) {
       if (ret == (-ENOENT))
         return 0;
@@ -1962,9 +2075,9 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
       rules.back().build(); // why can't ctor do it?
     }
 
-    rgw_bucket_dir_entry* o{nullptr};
-    for (auto offset = 0; ol.get_obj(this, yield, &o /* , fetch_barrier */); ++offset, ol.next()) {
-      const auto obj = *o;
+    rgw_bucket_dir_entry e;
+    for (auto offset = 0; ol.get_obj(&e); ++offset, ol.next(yield)) {
+      const auto obj = e;
 
       // Update all rules to capture current lister state before spawning
       for (auto& rule : rules) {
