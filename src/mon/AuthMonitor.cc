@@ -1866,7 +1866,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       goto done;
     }
 
-    entity_auth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
+    entity_auth.pending_key.create(g_ceph_context, CEPH_CRYPTO_AES);
 
     KeyServerData::Incremental auth_inc;
     auth_inc.op = KeyServerData::AUTH_INC_ADD;
@@ -1874,7 +1874,9 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     auth_inc.auth = entity_auth;
     push_cephx_inc(auth_inc);
 
-    _encode_auth(entity, entity_auth, rdata, f.get());
+    auth_inc.auth.key = auth_inc.auth.pending_key;
+    auth_inc.auth.pending_key.clear();
+    _encode_auth(entity, auth_inc.auth, rdata, f.get());
     wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs, rdata,
                                               get_last_committed() + 1));
     return true;

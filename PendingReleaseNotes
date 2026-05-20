@@ -92,6 +92,8 @@
   configured ratio of the main OSD data device size. This warning is
   informational and can be muted with:
   ``ceph health mute BLUESTORE_BLUEFS_OVERSIZED``
+* cephx: ``auth rotate`` now keeps the old key valid until ``ceph auth commit-pending <entity>``
+  is called, preventing clients from being permanently locked out if the rotate reply is lost in transit.
 
 >=20.0.0
 

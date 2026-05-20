@@ -620,15 +620,81 @@ function test_auth()
   env CEPH_KEYRING=keyring1 ceph -n client.admin2 auth rotate client.admin2 >> keyring3
   # only the key has changed:
   diff -au keyring1 keyring3 | grep -E '^[-+][^-+]' | expect_false grep -v key
-  # the key in keyring1 no longer works:
-  expect_false env CEPH_KEYRING=keyring1 ceph -n client.admin2 auth get client.admin2
+  # BEFORE commit: old key must still be valid (pending_key):
+  expect_true env CEPH_KEYRING=keyring1 ceph -n client.admin2 auth get client.admin2
+  # BEFORE commit: new key must also work
+  expect_true env CEPH_KEYRING=keyring3 ceph -n client.admin2 auth get client.admin2
+  # explicitly commit the rotation — promotes pending_key→key, invalidates old key atomically
+  ceph auth commit-pending client.admin2
   # the key in keyring3 should work:
   expect_true env CEPH_KEYRING=keyring3 ceph -n client.admin2 auth get client.admin2
+  # the key in keyring1 no longer works:
+  expect_false env CEPH_KEYRING=keyring1 ceph -n client.admin2 auth get client.admin2
   # now verify the key from `auth get` matches what rotate produced:
   expect_true ceph auth get client.admin2 >> keyring4
   expect_true diff -au keyring3 keyring4
   expect_true ceph auth rm client.admin2
   rm keyring[1234]
+
+  # regression test: auth rotate must not invalidate the old key until the client
+  # explicitly commits — guards against the lost-reply deadlock where a client whose
+  # connection was dropped right after rotate could never reconnect to recover
+  ceph auth get-or-create client.admin4 mon 'allow *'
+  ceph auth get client.admin4 >> keyring1
+  # rotate and discard the new keyring simulates the reply and connection both lost
+  env CEPH_KEYRING=keyring1 ceph -n client.admin4 auth rotate client.admin4 > /dev/null
+  # old key must still be valid: the client can reconnect and is not permanently locked out
+  expect_true env CEPH_KEYRING=keyring1 ceph -n client.admin4 auth get client.admin4
+  # the client can now recover: rotate again to get a fresh reply
+  env CEPH_KEYRING=keyring1 ceph -n client.admin4 auth rotate client.admin4 >> keyring2
+  # commit using the new key from the second rotate
+  ceph auth commit-pending client.admin4
+  # new key works, old key is gone
+  expect_true env CEPH_KEYRING=keyring2 ceph -n client.admin4 auth get client.admin4
+  expect_false env CEPH_KEYRING=keyring1 ceph -n client.admin4 auth get client.admin4
+  expect_true ceph auth rm client.admin4
+  rm keyring[12]
+
+  # test get-or-create-pending: explicit two-phase rotation
+  ceph auth get-or-create client.admin3 mon 'allow *'
+  ceph auth get client.admin3 >> keyring1
+  # generate a pending key
+  ceph auth get-or-create-pending client.admin3 >> keyring2
+  # calling it again returns the same result — it does not generate a fresh key each time
+  ceph auth get-or-create-pending client.admin3 >> keyring3
+  expect_true diff -au keyring2 keyring3
+  # auth get shows the pending key in the keyring
+  ceph auth get client.admin3 >> keyring4
+  expect_true grep "pending" keyring4
+  # old key still works before commit
+  expect_true env CEPH_KEYRING=keyring1 ceph -n client.admin3 auth get client.admin3
+  # commit the pending key: promotes pending_key -> active key, invalidates the old one
+  ceph auth commit-pending client.admin3
+  # old key no longer works
+  expect_false env CEPH_KEYRING=keyring1 ceph -n client.admin3 auth get client.admin3
+  # committing when there is no pending key is harmless
+  ceph auth commit-pending client.admin3
+  expect_true ceph auth rm client.admin3
+  rm keyring[1234]
+
+  # test clear-pending: abort a rotation before it commits
+  ceph auth get-or-create client.admin3 mon 'allow *'
+  ceph auth get client.admin3 >> keyring1
+  ceph auth get-or-create-pending client.admin3
+  # auth get shows the pending key
+  ceph auth get client.admin3 >> keyring2
+  expect_true grep "pending" keyring2
+  # cancel the rotation
+  ceph auth clear-pending client.admin3
+  # calling clear-pending again when nothing is pending is harmless
+  ceph auth clear-pending client.admin3
+  # auth get no longer shows a pending key
+  ceph auth get client.admin3 >> keyring3
+  expect_false grep "pending" keyring3
+  # original key still works — clear-pending did not touch it
+  expect_true env CEPH_KEYRING=keyring1 ceph -n client.admin3 auth get client.admin3
+  expect_true ceph auth rm client.admin3
+  rm keyring[123]
 
   # (almost) interactive mode
   echo -e 'auth add client.xx mon "allow *" osd "allow *"\n' | ceph

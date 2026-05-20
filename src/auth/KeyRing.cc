@@ -110,6 +110,15 @@ int KeyRing::set_modifier(const char *type,
       return -EINVAL;
     }
     set_key(name, key);
+  } else if (strcmp(type, "pending key") == 0) {
+    CryptoKey key;
+    string l(val);
+    try {
+      key.decode_base64(l);
+    } catch (const ceph::buffer::error& err) {
+      return -EINVAL;
+    }
+    set_pending_key(name, key);
   } else if (strncmp(type, "caps ", 5) == 0) {
     const char *caps_entity = type + 5;
     if (!*caps_entity)
