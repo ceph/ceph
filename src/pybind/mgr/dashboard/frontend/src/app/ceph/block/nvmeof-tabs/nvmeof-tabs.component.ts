@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, Input, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 
 const NVMEOF_PATH = 'block/nvmeof';
@@ -16,6 +16,8 @@ enum TABS {
   standalone: false
 })
 export class NvmeofTabsComponent implements OnInit {
+  @Input() showSetupCards = false;
+
   selectedTab: TABS;
   activeTab: TABS = TABS.gateways;
 

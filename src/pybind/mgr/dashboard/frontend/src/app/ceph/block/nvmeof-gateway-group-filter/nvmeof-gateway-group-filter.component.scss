@@ -1,0 +1,20 @@
+:host {
+  display: contents;
+}
+
+.nvmeof-gateway-group-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--cds-spacing-03);
+  margin-left: var(--cds-spacing-05);
+
+  &__label {
+    white-space: nowrap;
+    color: var(--cds-text-secondary);
+  }
+
+  &__combo {
+    min-inline-size: 14rem;
+    max-inline-size: 20rem;
+  }
+}

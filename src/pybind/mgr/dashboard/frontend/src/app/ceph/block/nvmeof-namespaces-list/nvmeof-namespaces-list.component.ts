@@ -18,7 +18,7 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { BehaviorSubject, Observable, of, Subject } from 'rxjs';
-import { catchError, map, switchMap, takeUntil } from 'rxjs/operators';
+import { catchError, map, shareReplay, switchMap, takeUntil } from 'rxjs/operators';
 
 const DEFAULT_PLACEHOLDER = $localize`Enter group name`;
 
@@ -164,6 +164,7 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
           catchError(() => of([]))
         );
       }),
+      shareReplay({ bufferSize: 1, refCount: true }),
       takeUntil(this.destroy$)
     );
   }

@@ -10,7 +10,7 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { NvmeofSubsystemsComponent } from './nvmeof-subsystems.component';
 import { NvmeofSubsystemsDetailsComponent } from '../nvmeof-subsystems-details/nvmeof-subsystems-details.component';
-import { ComboBoxModule, GridModule } from 'carbon-components-angular';
+import { NvmeofGatewayGroupFilterComponent } from '../nvmeof-gateway-group-filter/nvmeof-gateway-group-filter.component';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 
 const mockSubsystems = [
@@ -93,7 +93,12 @@ describe('NvmeofSubsystemsComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       declarations: [NvmeofSubsystemsComponent, NvmeofSubsystemsDetailsComponent],
-      imports: [HttpClientModule, RouterTestingModule, SharedModule, ComboBoxModule, GridModule],
+      imports: [
+        HttpClientModule,
+        RouterTestingModule,
+        SharedModule,
+        NvmeofGatewayGroupFilterComponent
+      ],
       providers: [
         { provide: NvmeofService, useClass: MockNvmeOfService },
         { provide: AuthStorageService, useClass: MockAuthStorageService },

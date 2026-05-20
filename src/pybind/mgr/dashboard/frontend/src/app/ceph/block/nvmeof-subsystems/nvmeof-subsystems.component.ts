@@ -22,7 +22,7 @@ import { NvmeofService, GroupsComboboxItem } from '~/app/shared/api/nvmeof.servi
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { BehaviorSubject, forkJoin, Observable, of, Subject } from 'rxjs';
-import { catchError, map, switchMap, takeUntil, tap } from 'rxjs/operators';
+import { catchError, map, shareReplay, switchMap, takeUntil, tap } from 'rxjs/operators';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 
 const BASE_URL = 'block/nvmeof/subsystems';
@@ -150,6 +150,7 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
       tap((subs) => {
         this.subsystems = subs;
       }),
+      shareReplay({ bufferSize: 1, refCount: true }),
       takeUntil(this.destroy$)
     );
   }

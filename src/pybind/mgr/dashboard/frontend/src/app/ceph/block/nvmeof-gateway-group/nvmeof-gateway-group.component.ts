@@ -1,7 +1,7 @@
 import { Component, OnInit, TemplateRef, ViewChild, ViewEncapsulation } from '@angular/core';
 import { Router } from '@angular/router';
 import { BehaviorSubject, forkJoin, Observable, of } from 'rxjs';
-import { catchError, map, switchMap } from 'rxjs/operators';
+import { catchError, map, shareReplay, switchMap } from 'rxjs/operators';
 import { GatewayGroup, NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { HostService } from '~/app/shared/api/host.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -171,7 +171,8 @@ export class NvmeofGatewayGroupComponent implements OnInit {
             return of([]);
           })
         )
-      )
+      ),
+      shareReplay({ bufferSize: 1, refCount: true })
     );
     this.checkNodesAvailability();
   }

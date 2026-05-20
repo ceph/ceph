@@ -1,6 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpClientModule } from '@angular/common/http';
-import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { of } from 'rxjs';
 import { take } from 'rxjs/operators';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -12,6 +11,7 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { NvmeofSubsystemsDetailsComponent } from '../nvmeof-subsystems-details/nvmeof-subsystems-details.component';
 import { NvmeofNamespacesListComponent } from './nvmeof-namespaces-list.component';
+import { NvmeofGatewayGroupFilterComponent } from '../nvmeof-gateway-group-filter/nvmeof-gateway-group-filter.component';
 
 const mockNamespaces = [
   {
@@ -65,14 +65,18 @@ describe('NvmeofNamespacesListComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       declarations: [NvmeofNamespacesListComponent, NvmeofSubsystemsDetailsComponent],
-      imports: [HttpClientModule, RouterTestingModule, SharedModule],
+      imports: [
+        HttpClientModule,
+        RouterTestingModule,
+        SharedModule,
+        NvmeofGatewayGroupFilterComponent
+      ],
       providers: [
         { provide: NvmeofService, useClass: MockNvmeOfService },
         { provide: AuthStorageService, useClass: MockAuthStorageService },
         { provide: ModalCdsService, useClass: MockModalCdsService },
         { provide: TaskWrapperService, useClass: MockTaskWrapperService }
-      ],
-      schemas: [CUSTOM_ELEMENTS_SCHEMA]
+      ]
     }).compileComponents();
 
     fixture = TestBed.createComponent(NvmeofNamespacesListComponent);

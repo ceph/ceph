@@ -1,4 +1,4 @@
-<cd-nvmeof-tabs></cd-nvmeof-tabs>
+<cd-nvmeof-tabs [showSetupCards]="(gatewayGroup$ | async)?.length === 0"></cd-nvmeof-tabs>
 
 <ng-container *ngIf="gatewayGroup$ | async as gateways">
   <cd-table

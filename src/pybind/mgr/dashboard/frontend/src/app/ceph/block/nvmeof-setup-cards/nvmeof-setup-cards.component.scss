@@ -1,0 +1,48 @@
+.nvmeof-setup-cards__columns {
+  display: flex;
+  align-items: stretch;
+  padding-bottom: var(--cds-spacing-05);
+}
+
+.nvmeof-setup-cards__column {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: var(--cds-spacing-03) var(--cds-spacing-05) var(--cds-spacing-05);
+  display: flex;
+  flex-direction: column;
+}
+
+.nvmeof-setup-cards__column-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: var(--cds-spacing-03);
+}
+
+.nvmeof-setup-cards__step-row {
+  display: flex;
+  align-items: center;
+  gap: var(--cds-spacing-03);
+}
+
+.nvmeof-setup-cards__info {
+  display: flex;
+  align-items: center;
+  margin-top: auto;
+  gap: var(--cds-spacing-03);
+}
+
+:host ::ng-deep .nvmeof-setup-cards {
+  &.productive-card .productive-card-header {
+    padding: var(--cds-spacing-03) var(--cds-spacing-05);
+    border-bottom: 1px solid var(--cds-border-subtle);
+  }
+
+  &.productive-card .productive-card-section {
+    padding: 0;
+  }
+
+  .productive-card-section {
+    padding: var(--cds-spacing-02);
+  }
+}

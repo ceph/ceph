@@ -1,10 +1,13 @@
 <fieldset>
-  <legend>
+  <legend class="cds-mb-5">
     <h1 class="cds--type-heading-03">NVMe over Fabrics (TCP)</h1>
-  <cd-help-text>Monitor and manage NVMe-over-TCP resources for high-performance block storage.</cd-help-text>
+  <cd-help-text>Monitor and manage NVMe-over-TCP resources for high-<br>performance block storage.</cd-help-text>
   </legend>
 </fieldset>
-<section>
+@if (showSetupCards) {
+<cd-nvmeof-setup-cards></cd-nvmeof-setup-cards>
+}
+<section class="cds-mt-5">
   <cds-tabs type="contained"
             followFocus="true"
             isNavigation="true"
