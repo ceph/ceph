@@ -25,7 +25,6 @@ using namespace crimson::osd::scrub;
 SET_SUBSYS(osd);
 #define CRIMSON_LOG_PREFIX(...) LOG_PREFIX(__VA_ARGS__)
 #define CRIMSON_DEBUG(...) DEBUG(__VA_ARGS__)
-#define CRIMSON_LOGGER (&m_pg->get_shard_services().get_perf_logger())
 #define CRIMSON_CLOG_ERROR() m_pg->get_clog_error()
 #define CRIMSON_CLOG_WARN() m_pg->get_clog_warn()
 #else
@@ -33,7 +32,6 @@ using namespace Scrub;
 #define CRIMSON_LOG_PREFIX(...)
 #undef CRIMSON_DEBUG
 #define CRIMSON_DEBUG(...) dout(10) << fmt::format(__VA_ARGS__) << dendl
-#define CRIMSON_LOGGER m_osds->logger
 #define CRIMSON_CLOG_ERROR() m_osds->clog->error()
 #define CRIMSON_CLOG_WARN() m_osds->clog->warn()
 #endif
@@ -56,12 +54,12 @@ namespace crimson::osd::scrub {
 ReplicaReservations::ReplicaReservations(
   PGScrubber& scrubber,
   reservation_nonce_t& nonce,
-  const ScrubCounterSet& pc)
+  const ScrubMetrics& sm)
   : m_scrubber{scrubber}
   , m_pg{&m_scrubber.get_pg()}
   , m_pgid{m_scrubber.get_pg_id().pgid}
   , m_last_request_sent_nonce{nonce}
-  , m_perf_indices{pc}
+  , m_metrics{sm}
 {
   CRIMSON_LOG_PREFIX("ReplicaReservations::ReplicaReservations");
   auto acting = m_pg->get_acting_shards();
@@ -71,16 +69,16 @@ ReplicaReservations::ReplicaReservations(
     [whoami = m_pg->get_pg_whoami()](const pg_shard_t& shard) {
       return shard != whoami;
     });
-    CRIMSON_LOGGER->set(
-      m_perf_indices.rsv_secondaries_num, m_sorted_secondaries.size());
+  // Set the number of secondaries in metrics
+  const_cast<ScrubMetrics&>(m_metrics).set_rsv_secondaries_num(m_sorted_secondaries.size());
 
-    m_next_to_request = m_sorted_secondaries.cbegin();
+  m_next_to_request = m_sorted_secondaries.cbegin();
   if (m_scrubber.is_reservation_required()) {
     m_process_started_at = ScrubClock::now();
     send_next_reservation_or_complete();
   } else {
     CRIMSON_DEBUG("high-priority scrub - no reservations needed");
-    CRIMSON_LOGGER->inc(m_perf_indices.rsv_skipped_cnt);
+    const_cast<ScrubMetrics&>(m_metrics).inc_rsv_skipped();
   }
 }
 #else
@@ -109,7 +107,7 @@ ReplicaReservations::ReplicaReservations(
       [whoami = m_pg->pg_whoami](const pg_shard_t& shard) {
 	return shard != whoami;
       });
-  CRIMSON_LOGGER->set(
+  m_osds->logger->set(
       m_perf_indices.rsv_secondaries_num, m_sorted_secondaries.size());
 
   m_next_to_request = m_sorted_secondaries.cbegin();
@@ -121,7 +119,7 @@ ReplicaReservations::ReplicaReservations(
     // for high-priority scrubs (i.e. - user-initiated), no reservations are
     // needed. Note: not perf-counted as either success or failure.
     CRIMSON_DEBUG("high-priority scrub - no reservations needed");
-    CRIMSON_LOGGER->inc(m_perf_indices.rsv_skipped_cnt);
+    m_osds->logger->inc(m_perf_indices.rsv_skipped_cnt);
   }
 }
 #endif
@@ -164,11 +162,19 @@ void ReplicaReservations::log_success_and_duration()
 {
   ceph_assert(m_process_started_at.has_value());
   auto logged_duration = ScrubClock::now() - m_process_started_at.value();
-  CRIMSON_LOGGER->tinc(m_perf_indices.rsv_successful_elapsed, logged_duration);
-  CRIMSON_LOGGER->inc(m_perf_indices.rsv_successful_cnt);
-  CRIMSON_LOGGER->hinc(
+#ifdef WITH_CRIMSON
+  // For Crimson, use metrics instead of perf counters
+  // inc_rsv_successful handles both count and elapsed time
+  auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(logged_duration).count();
+  const_cast<ScrubMetrics&>(m_metrics).inc_rsv_successful(elapsed_ms);
+  // Note: Seastar metrics don't use histograms like classic OSD perf counters
+#else
+  m_osds->logger->tinc(m_perf_indices.rsv_successful_elapsed, logged_duration);
+  m_osds->logger->inc(m_perf_indices.rsv_successful_cnt);
+  m_osds->logger->hinc(
       l_osd_scrub_reservation_dur_hist, std::ssize(m_sorted_secondaries),
       logged_duration.count());
+#endif
   m_process_started_at.reset();
 }
 
@@ -179,16 +185,31 @@ void ReplicaReservations::log_failure_and_duration(int failure_cause_counter)
     return;
   }
   auto logged_duration = ScrubClock::now() - m_process_started_at.value();
-  CRIMSON_LOGGER->tinc(m_perf_indices.rsv_failed_elapsed, logged_duration);
-  m_process_started_at.reset();
+#ifdef WITH_CRIMSON
+  // For Crimson, use metrics instead of perf counters
+  auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(logged_duration).count();
+  const_cast<ScrubMetrics&>(m_metrics).inc_rsv_failed(elapsed_ms);
+  // failure_cause_counter is handled separately by caller
+#else
+  m_osds->logger->tinc(m_perf_indices.rsv_failed_elapsed, logged_duration);
   // note: not counted into l_osd_scrub_reservation_dur_hist
-  CRIMSON_LOGGER->inc(failure_cause_counter);
+  m_osds->logger->inc(failure_cause_counter);
+#endif
+  m_process_started_at.reset();
 }
 
 ReplicaReservations::~ReplicaReservations()
 {
   release_all();
+#ifdef WITH_CRIMSON
+  // For Crimson, track aborted count separately
+  if (m_process_started_at.has_value()) {
+    log_failure_and_duration(0);  // log duration
+    const_cast<ScrubMetrics&>(m_metrics).inc_rsv_aborted();
+  }
+#else
   log_failure_and_duration(m_perf_indices.rsv_aborted_cnt);
+#endif
 }
 
 bool ReplicaReservations::is_reservation_response_relevant(
@@ -305,7 +326,12 @@ bool ReplicaReservations::handle_reserve_rejection(
     return false;
   }
 
+#ifdef WITH_CRIMSON
+  log_failure_and_duration(0);  // log duration
+  const_cast<ScrubMetrics&>(m_metrics).inc_rsv_rejected();
+#else
   log_failure_and_duration(m_perf_indices.rsv_rejected_cnt);
+#endif
 
   // we should never see a rejection carrying a valid
   // reservation nonce - arriving while we have no pending requests
