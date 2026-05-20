@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <bit>
+#include <cerrno>
 #include <string_view>
 
 #include <rgw/rgw_op.h>
@@ -14,6 +16,7 @@
 #include <rgw/rgw_rest_s3.h>
 #include "rgw_putobj.h"
 #include "common/async/yield_context.h"
+#include "include/encoding.h"
 
 struct rgw_crypt_src_identity {
   std::string bucket_id;
@@ -107,6 +110,12 @@ public:
    */
   virtual void set_part_number(uint32_t part_number,
                                std::string_view part_salt = {}) {}
+
+  /**
+   * Set the AEAD plaintext chunk size for size-expanding ciphers.
+   * Default is no-op; non-AEAD ciphers have a fixed block size.
+   */
+  virtual void set_chunk_size(size_t chunk_size) {}
 };
 
 static const size_t AES_256_KEYSIZE = 256 / 8;
@@ -144,15 +153,50 @@ inline bool is_cbc_mode(const std::string& mode) {
 }
 
 /**
+ * Read and validate the AEAD chunk size from RGW_ATTR_CRYPT_PREFETCH_ALIGN.
+ * Returns 0 on success and writes the chunk size to *chunk_size_out.
+ * Returns -EIO if the xattr is absent, truncated, or carries invalid values
+ * (range, power-of-two, or mismatched plaintext/encrypted block sizes).
+ */
+inline int aead_chunk_size_from_attrs(
+    const std::map<std::string, ceph::bufferlist>& attrs,
+    size_t* chunk_size_out)
+{
+  auto i = attrs.find(RGW_ATTR_CRYPT_PREFETCH_ALIGN);
+  if (i == attrs.end()) {
+    return -EIO;
+  }
+  using ceph::decode;
+  uint32_t plain_bs = 0;
+  uint32_t enc_bs = 0;
+  try {
+    auto p = i->second.cbegin();
+    decode(plain_bs, p);
+    decode(enc_bs, p);
+  } catch (const ceph::buffer::error&) {
+    return -EIO;
+  }
+  const size_t bs = plain_bs;
+  if (bs < 4096 || bs > (1u << 20) ||
+      !std::has_single_bit(bs) ||
+      enc_bs != bs + AEAD_TAG_SIZE) {
+    return -EIO;
+  }
+  *chunk_size_out = bs;
+  return 0;
+}
+
+/**
  * Convert encrypted size to plaintext size for AEAD modes.
- * Each AEAD_CHUNK_SIZE-byte plaintext chunk becomes AEAD_ENCRYPTED_CHUNK_SIZE bytes
- * (plaintext + AEAD_TAG_SIZE-byte auth tag).
+ * Each chunk_size-byte plaintext chunk becomes chunk_size + AEAD_TAG_SIZE bytes.
  * Pass dpp to enable warning logging for malformed data.
  */
 inline uint64_t aead_encrypted_to_plaintext_size(uint64_t encrypted_size,
+                                                  size_t chunk_size,
                                                   const DoutPrefixProvider* dpp = nullptr) {
-  uint64_t full_chunks = encrypted_size / AEAD_ENCRYPTED_CHUNK_SIZE;
-  uint64_t remainder = encrypted_size % AEAD_ENCRYPTED_CHUNK_SIZE;
+  const size_t enc_chunk = chunk_size + AEAD_TAG_SIZE;
+  uint64_t full_chunks = encrypted_size / enc_chunk;
+  uint64_t remainder = encrypted_size % enc_chunk;
 
   if (remainder > 0 && remainder <= AEAD_TAG_SIZE) {
     // Malformed: partial chunk has no ciphertext, only tag bytes
@@ -162,20 +206,21 @@ inline uint64_t aead_encrypted_to_plaintext_size(uint64_t encrypted_size,
           << " is <= tag size " << AEAD_TAG_SIZE
           << " - data may be corrupted" << dendl;
     }
-    return full_chunks * AEAD_CHUNK_SIZE;
+    return full_chunks * chunk_size;
   }
 
   uint64_t partial = (remainder > AEAD_TAG_SIZE) ? (remainder - AEAD_TAG_SIZE) : 0;
-  return full_chunks * AEAD_CHUNK_SIZE + partial;
+  return full_chunks * chunk_size + partial;
 }
 
 /**
  * Convert plaintext size to encrypted size for AEAD modes.
- * Each AEAD_CHUNK_SIZE-byte plaintext chunk becomes AEAD_ENCRYPTED_CHUNK_SIZE bytes.
+ * Each chunk_size-byte plaintext chunk becomes chunk_size + AEAD_TAG_SIZE bytes.
  */
-inline uint64_t aead_plaintext_to_encrypted_size(uint64_t plaintext_size) {
+inline uint64_t aead_plaintext_to_encrypted_size(uint64_t plaintext_size,
+                                                  size_t chunk_size) {
   if (plaintext_size == 0) return 0;
-  uint64_t num_chunks = (plaintext_size + AEAD_CHUNK_SIZE - 1) / AEAD_CHUNK_SIZE;
+  uint64_t num_chunks = (plaintext_size + chunk_size - 1) / chunk_size;
   return plaintext_size + (num_chunks * AEAD_TAG_SIZE);
 }
 
