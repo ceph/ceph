@@ -26,7 +26,7 @@ jobs:
     steps:
       - id: router
         name: Evaluate Workflow Routing & Overrides
-        uses: actions/github-script@v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           ORG_TOKEN: ${{ secrets.ORG_READ_PAT }}
         with:
@@ -49,7 +49,7 @@ jobs:
 
               if (!authorized && context.repo.owner === 'ceph' && process.env.ORG_TOKEN) {
                 try {
-                  const orgOctokit = github.getOctokit(process.env.ORG_TOKEN);
+                  const orgOctokit = getOctokit(process.env.ORG_TOKEN);
                   const { data: teamData } = await orgOctokit.rest.teams.getMembershipForUserInOrg({
                     org: 'ceph', team_slug: 'ceph-release-manager', username: username
                   });
@@ -255,15 +255,15 @@ jobs:
 
       - name: Checkout Trusted Base Repository
         if: steps.router.outputs.run_audit == 'true'
-        uses: actions/checkout@v3
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
           
       - name: Setup Python
         if: steps.router.outputs.run_audit == 'true'
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version: '3.10'
+          python-version: '3.13'
 
       - name: Install Dependencies
         if: steps.router.outputs.run_audit == 'true'
