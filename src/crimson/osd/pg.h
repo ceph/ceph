@@ -544,7 +544,11 @@ public:
   }
   Context *on_clean() final;
   void on_activate_committed() final {
-    if (!is_primary()) {
+    // As in on_activate_complete(): ActivateCommitted may have left
+    // the PG in PG_STATE_PEERED (acting_set_writeable() returned
+    // false) rather than PG_STATE_ACTIVE.  Only unblock when we
+    // actually became ACTIVE.
+    if (!is_primary() && peering_state.is_active()) {
       wait_for_active_blocker.unblock();
     }
   }
