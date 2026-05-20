@@ -9,6 +9,18 @@
   padding-left: layout.$spacing-06;
 }
 
+.cds-pl-8 {
+  padding-left: layout.$spacing-08;
+}
+
+.cds-pl-4 {
+  padding-left: layout.$spacing-04;
+}
+
+.cds-pl-0 {
+  padding-left: 0;
+}
+
 .cds-pt-2px {
   padding-top: 2px;
 }
@@ -17,8 +29,32 @@
   padding-top: layout.$spacing-03;
 }
 
+.cds-pt-4 {
+  padding-top: layout.$spacing-04;
+}
+
+.cds-pt-6 {
+  padding-top: layout.$spacing-06;
+}
+
+.cds-pb-3 {
+  padding-bottom: layout.$spacing-03;
+}
+
+.cds-pb-4 {
+  padding-bottom: layout.$spacing-04;
+}
+
+.cds-pb-6 {
+  padding-bottom: layout.$spacing-06;
+}
+
 .cds-pr-4 {
   padding-right: layout.$spacing-04;
+}
+
+.cds-pr-6 {
+  padding-right: layout.$spacing-06;
 }
 
 .cds-pr-8 {
@@ -116,8 +152,4 @@
 
 .cds-mr-5 {
   margin-right: layout.$spacing-05;
-}
-
-.cds-pt-6 {
-  padding-top: layout.$spacing-06;
 }
