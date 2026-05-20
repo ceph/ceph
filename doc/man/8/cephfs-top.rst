@@ -15,8 +15,8 @@ Synopsis
 Description
 ===========
 
-**cephfs-top** provides top(1) like functionality for Ceph Filesystem.
-Various client metrics are displayed and updated in realtime.
+**cephfs-top** provides top(1)-like functionality for Ceph Filesystem.
+Various client metrics are displayed and updated in real-time.
 
 Ceph Metadata Servers periodically send client metrics to Ceph Manager.
 ``Stats`` plugin in Ceph Manager provides an interface to fetch these metrics.
@@ -26,7 +26,7 @@ Options
 
 .. option:: --cluster
 
-   Cluster: Ceph cluster to connect. Defaults to ``ceph``.
+   Cluster: Ceph cluster to connect to. Defaults to ``ceph``.
 
 .. option:: --id
 
@@ -34,7 +34,7 @@ Options
 
 .. option:: --selftest
 
-   Perform a selftest. This mode performs a sanity check of ``stats`` module.
+   Perform a self-test. This mode performs a sanity check of ``stats`` module.
 
 .. option:: --conffile [CONFFILE]
 
@@ -127,7 +127,7 @@ Availability
 ============
 
 **cephfs-top** is part of Ceph, a massively scalable, open-source, distributed storage system. Please refer to the Ceph documentation at
-http://ceph.com/ for more information.
+https://ceph.com/ for more information.
 
 
 See also
