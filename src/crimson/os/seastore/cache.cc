@@ -95,31 +95,50 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
   return retire_extent_iertr::now();
 }
 
-CachedExtentRef Cache::retire_absent_extent_addr(
-  Transaction &t, laddr_t laddr, paddr_t paddr, extent_len_t length)
+CachedExtentRef Cache::retire_absent_extent_addr_by_type(
+  Transaction &t,
+  laddr_t laddr,
+  paddr_t addr,
+  extent_len_t length,
+  extent_types_t type,
+  extent_init_func_t &&extent_init_func)
 {
-  assert(paddr.is_absolute());
-
-  CachedExtentRef ext;
-#ifndef NDEBUG
-  auto result = t.get_extent(paddr, &ext);
-  assert(result != Transaction::get_extent_ret::PRESENT
-    && result != Transaction::get_extent_ret::RETIRED);
-  assert(!query_cache(paddr));
-#endif
-  LOG_PREFIX(Cache::retire_absent_extent_addr);
-  // add a new placeholder to Cache
-  ext = CachedExtent::make_cached_extent_ref<
-    RetiredExtentPlaceholder>(length);
-  ext->init(
-    CachedExtent::extent_state_t::CLEAN, paddr,
-    PLACEMENT_HINT_NULL, NULL_GENERATION, TRANS_ID_NULL);
-  static_cast<RetiredExtentPlaceholder&>(*ext).set_laddr(laddr);
-  DEBUGT("retire {}~0x{:x} as placeholder, add extent -- {}",
-	 t, paddr, length, *ext);
-  add_extent(ext);
-  t.add_absent_to_retired_set(ext);
-  return ext;
+  switch (type) {
+  case extent_types_t::ROOT_META:
+    return retire_absent_extent_addr<RootMetaBlock>(
+      t, laddr, addr, length, std::move(extent_init_func));
+  case extent_types_t::ONODE_BLOCK_STAGED:
+    return retire_absent_extent_addr<onode::SeastoreNodeExtent>(
+      t, laddr, addr, length, std::move(extent_init_func));
+  case extent_types_t::OMAP_INNER:
+    return retire_absent_extent_addr<omap_manager::OMapInnerNode>(
+      t, laddr, addr, length, std::move(extent_init_func));
+  case extent_types_t::OMAP_LEAF:
+    return retire_absent_extent_addr<omap_manager::OMapLeafNode>(
+      t, laddr, addr, length, std::move(extent_init_func));
+  case extent_types_t::COLL_BLOCK:
+    return retire_absent_extent_addr<collection_manager::CollectionNode>(
+      t, laddr, addr, length, std::move(extent_init_func));
+  case extent_types_t::TEST_BLOCK_PHYSICAL:
+    return retire_absent_extent_addr<TestBlockPhysical>(
+      t, laddr, addr, length, std::move(extent_init_func));
+  case extent_types_t::LOG_NODE:
+    return retire_absent_extent_addr<log_manager::LogNode>(
+      t, laddr, addr, length, std::move(extent_init_func));
+  case extent_types_t::OBJECT_DATA_BLOCK:
+    return retire_absent_extent_addr<ObjectDataBlock>(
+      t, laddr, addr, length, std::move(extent_init_func));
+  case extent_types_t::TEST_BLOCK:
+    return retire_absent_extent_addr<TestBlock>(
+      t, laddr, addr, length, std::move(extent_init_func));
+  case extent_types_t::NONE: {
+    ceph_assert(0 == "NONE is an invalid extent type");
+    return CachedExtentRef();
+  }
+  default:
+    ceph_assert(0 == "impossible");
+    return CachedExtentRef();
+  }
 }
 
 void Cache::dump_contents()

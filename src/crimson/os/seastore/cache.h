@@ -160,8 +160,22 @@ public:
   retire_extent_ret retire_extent_addr(
     Transaction &t, paddr_t addr, extent_len_t length);
 
-  CachedExtentRef retire_absent_extent_addr(
-    Transaction &t, laddr_t laddr, paddr_t addr, extent_len_t length);
+  template <typename T, typename Func>
+  TCachedExtentRef<T> retire_absent_extent_addr(
+    Transaction &t,
+    laddr_t laddr,
+    paddr_t paddr,
+    extent_len_t length,
+    Func &&extent_init_func) {
+    LOG_PREFIX(Cache::retire_absent_extent_addr);
+    SUBDEBUGT(seastore_cache, "retire {}~0x{:x} laddr={}",
+      t, paddr, length, laddr);
+    auto ext = alloc_absent_extent<T>(
+      t, paddr, length, 0, length, std::move(extent_init_func));
+    SUBDEBUGT(seastore_cache, "retire {}", t, *ext);
+    retire_extent(t, ext);
+    return ext;
+  }
 
   /**
    * get_root
@@ -392,41 +406,19 @@ public:
     extent_len_t partial_off,
     extent_len_t partial_len,
     Func &&extent_init_func) {
-    LOG_PREFIX(Cached::prepare_absent_extent);
-
-#ifndef NDEBUG
-    {
-      CachedExtentRef ret;
-      auto r = t.get_extent(offset, &ret);
-      if (r != Transaction::get_extent_ret::ABSENT) {
-	SUBERRORT(seastore_cache, "unexpected non-absent extent {}", t, *ret);
-	ceph_abort();
-      }
-    }
-#endif
-
-    SUBTRACET(seastore_cache, "{} {}~0x{:x}", t, T::TYPE, offset, length);
-    ceph_assert(!booting);
+    auto ret = alloc_absent_extent<T>(
+      t,
+      offset,
+      length,
+      partial_off,
+      partial_len,
+      std::forward<Func>(extent_init_func));
     const auto t_src = t.get_src();
-
-    // partial read
-    TCachedExtentRef<T> ret = CachedExtent::make_cached_extent_ref<T>(length);
-    ret->init(CachedExtent::extent_state_t::CLEAN,
-	      offset,
-	      PLACEMENT_HINT_NULL,
-	      NULL_GENERATION,
-	      TRANS_ID_NULL);
-    SUBDEBUGT(seastore_cache,
-	"{} {}~0x{:x} is absent, add extent and reading range 0x{:x}~0x{:x} ... -- {}",
-	t, T::TYPE, offset, length, partial_off, partial_len, *ret);
-    add_extent(ret);
-    extent_init_func(*ret);
     cache_access_stats_t& access_stats = get_by_ext(
       get_by_src(stats.access_by_src_ext, t_src),
       T::TYPE);
     ++access_stats.load_absent;
     ++stats.access.load_absent;
-    t.add_to_read_set(CachedExtentRef(ret));
     touch_extent_by_range(
       *ret, &t_src, t.get_cache_hint(),
       partial_off, partial_len);
@@ -830,6 +822,47 @@ private:
       return read_extent<T>(
         std::move(extent), partial_off, partial_len, p_src);
     }
+  }
+
+  /**
+   */
+  template <typename T, typename Func>
+  TCachedExtentRef<T> alloc_absent_extent(
+    Transaction &t,
+    paddr_t offset,
+    extent_len_t length,
+    extent_len_t partial_off,
+    extent_len_t partial_len,
+    Func &&extent_init_func) {
+    LOG_PREFIX(Cache::alloc_absent_extent);
+#ifndef NDEBUG
+    {
+      CachedExtentRef ret;
+      auto r = t.get_extent(offset, &ret);
+      if (r != Transaction::get_extent_ret::ABSENT) {
+	SUBERRORT(seastore_cache, "unexpected non-absent extent {}", t, *ret);
+	ceph_abort();
+      }
+    }
+#endif
+
+    SUBTRACET(seastore_cache, "{} {}~0x{:x}", t, T::TYPE, offset, length);
+    ceph_assert(!booting);
+
+    // partial read
+    TCachedExtentRef<T> ret = CachedExtent::make_cached_extent_ref<T>(length);
+    ret->init(CachedExtent::extent_state_t::CLEAN,
+	      offset,
+	      PLACEMENT_HINT_NULL,
+	      NULL_GENERATION,
+	      TRANS_ID_NULL);
+    SUBDEBUGT(seastore_cache,
+	"{} {}~0x{:x} is absent, add extent and reading range 0x{:x}~0x{:x} ... -- {}",
+	t, T::TYPE, offset, length, partial_off, partial_len, *ret);
+    add_extent(ret);
+    extent_init_func(*ret);
+    t.add_to_read_set(ret);
+    return ret;
   }
 
   /**
@@ -1305,6 +1338,19 @@ public:
     placement_hint_t hint, ///< [in] user hint
     rewrite_gen_t gen      ///< [in] rewrite generation
     );
+
+  /**
+   * retire_absent_extent_addr_by_type
+   *
+   * Construct a fresh extent, and add it to the retired_set of the transaction.
+   */
+  CachedExtentRef retire_absent_extent_addr_by_type(
+    Transaction &t,
+    laddr_t laddr,
+    paddr_t addr,
+    extent_len_t length,
+    extent_types_t type,
+    extent_init_func_t &&extent_init_func);
 
   /**
    * Allocates mutable buffer from extent_set on offset~len

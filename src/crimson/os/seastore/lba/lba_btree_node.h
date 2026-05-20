@@ -442,6 +442,12 @@ struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t, LBALeafNode> {
     return iter.get_val().refcount;
   }
 
+  extent_types_t get_extent_type() const {
+    assert(is_viewable());
+    assert(!is_end());
+    return iter.get_val().type;
+  }
+
   base_iertr::future<> refresh();
 private:
 

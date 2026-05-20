@@ -297,12 +297,23 @@ TransactionManager::_remove(
       ceph_assert(extent);
       cache->retire_extent(t, std::move(extent));
     } else {
-      auto retired_placeholder = cache->retire_absent_extent_addr(
-	t, mapping.get_intermediate_base(),
+      auto &child_pos = maybe_mapped_extent.get_child_pos();
+      auto laddr = mapping.get_intermediate_base();
+      std::ignore = cache->retire_absent_extent_addr_by_type(
+	t, laddr,
 	mapping.get_val(),
-	mapping.get_intermediate_length()
-      )->template cast<RetiredExtentPlaceholder>();
-      maybe_mapped_extent.get_child_pos().link_child(retired_placeholder.get());
+	mapping.get_intermediate_length(),
+        mapping.get_extent_type(),
+        [this, &child_pos, laddr, &t](auto &extent) mutable {
+          auto lextent = extent.template cast<LogicalChildNode>();
+          assert(extent.is_logical());
+          assert(!lextent->has_laddr());
+          assert(!extent.has_been_invalidated());
+          child_pos.link_child(lextent.get());
+          child_pos.invalidate_retired_placeholder(t, *cache, extent);
+          lextent->set_laddr(laddr);
+        }
+      );
     }
   }
 

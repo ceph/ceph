@@ -1410,10 +1410,20 @@ private:
           }
         } else {
           SUBTRACET(seastore_tm, "retire extent place holder...", t);
-          auto retired_placeholder = cache->retire_absent_extent_addr(
-            t, pin.get_key(), original_paddr, original_len
-          )->template cast<RetiredExtentPlaceholder>();
-	  ret.get_child_pos().link_child(retired_placeholder.get());
+          auto &child_pos = ret.get_child_pos();
+          auto laddr = pin.get_key();
+          std::ignore = cache->retire_absent_extent_addr_by_type(
+            t, laddr, original_paddr, original_len, pin.get_extent_type(),
+            [this, &child_pos, laddr, &t](auto &extent) mutable {
+              auto lextent = extent.template cast<LogicalChildNode>();
+              assert(extent.is_logical());
+              assert(!lextent->has_laddr());
+              assert(!extent.has_been_invalidated());
+              child_pos.link_child(lextent.get());
+              child_pos.invalidate_retired_placeholder(t, *cache, extent);
+              lextent->set_laddr(laddr);
+            }
+          );
         }
       }
 
