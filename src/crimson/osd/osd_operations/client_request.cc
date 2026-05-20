@@ -35,7 +35,9 @@ void ClientRequest::Orderer::requeue(Ref<PG> pg)
   for (auto req: to_requeue) {
     DEBUGDPP("requeueing {}", *pg, *req);
     req->reset_instance_handle();
-    std::ignore = req->with_pg_process(pg);
+  // Pass requeued flag to true to skip any scheduler to
+  // process the operation
+    std::ignore = req->with_pg_process(pg, true);
   }
 }
 
@@ -228,37 +230,59 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
 }
 
 seastar::future<> ClientRequest::with_pg_process(
-  Ref<PG> pgref)
+  Ref<PG> pgref, bool requeued)
 {
   ceph_assert_always(shard_services);
   LOG_PREFIX(ClientRequest::with_pg_process);
 
-  epoch_t same_interval_since = pgref->get_interval_start_epoch();
-  DEBUGDPP("{}: same_interval_since: {}", *pgref, *this, same_interval_since);
-  const auto this_instance_id = instance_id++;
-  OperationRef opref{this};
-  auto instance_handle = get_instance_handle();
-  auto &ihref = *instance_handle;
-  return interruptor::with_interruption(
-    [FNAME, this, pgref, this_instance_id, &ihref]() mutable {
-      return with_pg_process_interruptible(
-	pgref, this_instance_id, ihref
-      ).then_interruptible([FNAME, this, this_instance_id, pgref] {
-	DEBUGDPP("{}.{}: with_pg_process_interruptible complete,"
-		 " completing request",
-		 *pgref, *this, this_instance_id);
-	complete_request(*pgref);
-      });
-    }, [FNAME, this, this_instance_id, pgref](std::exception_ptr eptr) {
-      DEBUGDPP("{}.{}: interrupted due to {}",
-	       *pgref, *this, this_instance_id, eptr);
-    }, pgref, pgref->get_osdmap_epoch()).finally(
-      [this, FNAME, opref=std::move(opref), pgref,
-       this_instance_id, instance_handle=std::move(instance_handle), &ihref]() mutable {
-	DEBUGDPP("{}.{}: exit", *pgref, *this, this_instance_id);
-	return ihref.handle.complete(
-	).finally([instance_handle=std::move(instance_handle)] {});
+  auto do_work = [this, FNAME, pgref]() mutable {
+    epoch_t same_interval_since = pgref->get_interval_start_epoch();
+    DEBUGDPP("{}: same_interval_since: {}", *pgref, *this, same_interval_since);
+    const auto this_instance_id = instance_id++;
+    OperationRef opref{this};
+    auto instance_handle = get_instance_handle();
+    auto &ihref = *instance_handle;
+    return interruptor::with_interruption(
+      [FNAME, this, pgref, this_instance_id, &ihref]() mutable {
+        return with_pg_process_interruptible(
+	  pgref, this_instance_id, ihref
+        ).then_interruptible([FNAME, this, this_instance_id, pgref] {
+	  DEBUGDPP("{}.{}: with_pg_process_interruptible complete,"
+		   " completing request", *pgref, *this, this_instance_id);
+	  complete_request(*pgref);
+        });
+      }, [FNAME, this, this_instance_id, pgref](std::exception_ptr eptr) {
+        DEBUGDPP("{}.{}: interrupted due to {}",
+                 *pgref, *this, this_instance_id, eptr);
+      }, pgref, pgref->get_osdmap_epoch()).finally(
+        [this, FNAME, opref=std::move(opref), pgref,
+          this_instance_id, instance_handle=std::move(instance_handle), &ihref]() mutable {
+	  DEBUGDPP("{}.{}: exit", *pgref, *this, this_instance_id);
+	  return ihref.handle.complete(
+	  ).finally([instance_handle=std::move(instance_handle)] {});
+        });
+  };
+
+  auto op_queue = crimson::common::local_conf().get_val<std::string>("osd_op_queue");
+  if (op_queue == "mclock_scheduler" && !requeued) {
+    int cost  = std::max<uint64_t>(m->get_cost(), 1);
+    unsigned prio  = m->get_priority();
+    uint64_t owner = m->get_source().num();
+
+    DEBUGDPP("{}: mclock path cost={} prio={} owner={}",
+             *pgref, *this, cost, prio, owner);
+
+    return shard_services->get_throttle(
+      crimson::osd::scheduler::params_t{
+        cost, prio, owner, SchedulerClass::client
+      }
+    ).then([do_work=std::move(do_work)](auto releaser) mutable {
+      return do_work().finally(
+        [releaser=std::move(releaser)] {});
     });
+  } else {
+    return do_work();
+  }
 }
 
 seastar::future<> ClientRequest::with_pg(

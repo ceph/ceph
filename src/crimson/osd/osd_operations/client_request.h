@@ -231,7 +231,7 @@ public:
   interruptible_future<> with_pg_process_interruptible(
     Ref<PG> pgref, const unsigned instance_id, instance_handle_t &ihref);
 
-  seastar::future<> with_pg_process(Ref<PG> pg);
+  seastar::future<> with_pg_process(Ref<PG> pg, bool requeued = false);
 
 public:
   seastar::future<> with_pg(
