@@ -558,13 +558,39 @@ Requires:       which
 %if 0%{?weak_deps}
 Recommends:     podman >= 2.0.2
 %endif
+# Cephadm zipapp: CMake sets CEPHADM_BUNDLED_DEPENDENCIES to pip, rpm, or none
+# (see build / cmake block below):
+#  - with cephadm_bundling, with cephadm_pip_deps: pip at build, no stanzas here
+#  - with cephadm_bundling, without cephadm_pip_deps: build-time RPM deps only
+#  - without cephadm_bundling: unbundled cephadm, runtime Requires for yaml/jinja2
+# CentOS Storage SIG #75389 needs the unbundled branch (--without cephadm_bundling)
+# after dropping downstream patch 0036; pip-mode SIG builds are a separate SIG fix.
 %if 0%{with cephadm_bundling}
 %if 0%{without cephadm_pip_deps}
-BuildRequires: python3-jinja2 >= 2.10
-%endif
+# Zipapp built from system RPMs at build time; bundled zipapp is self-contained at runtime.
+# SUSE and RHEL/Fedora use different PyPI RPM names (Jinja2/PyYAML vs jinja2/pyyaml).
+%if 0%{?suse_version}
+BuildRequires: python%{python3_pkgversion}-Jinja2 >= 2.10
+BuildRequires: python%{python3_pkgversion}-PyYAML
 %else
-Requires: python3-jinja2 >= 2.10
+BuildRequires: python%{python3_pkgversion}-jinja2 >= 2.10
+BuildRequires: python%{python3_pkgversion}-pyyaml
 %endif
+%dnl suse/else: rpm bundle, distinct RPM names only (not duplicate stanzas)
+%endif
+%dnl end without cephadm_pip_deps (CEPHADM_BUNDLED_DEPENDENCIES=rpm)
+%else
+# Unbundled cephadm: host must provide yaml and jinja2 at runtime.
+%if 0%{?suse_version}
+Requires: python%{python3_pkgversion}-Jinja2 >= 2.10
+Requires: python%{python3_pkgversion}-PyYAML
+%else
+Requires: python%{python3_pkgversion}-jinja2 >= 2.10
+Requires: python%{python3_pkgversion}-pyyaml
+%endif
+%dnl suse/else: unbundled cephadm (CEPHADM_BUNDLED_DEPENDENCIES=none)
+%endif
+%dnl end with cephadm_bundling
 %description -n cephadm
 Utility to bootstrap a Ceph cluster and manage Ceph daemons deployed
 with systemd and podman.
