@@ -123,6 +123,14 @@ public:
     std::lock_guard l(lock);
     _foreach(notify);
   }
+  uint64_t get_free_extents(
+    uint64_t range_begin,
+    uint64_t range_end,
+    size_t max_count,
+    free_extent_vector_t* out) override
+  {
+    ceph_abort_msg("Btree2Allocator::get_free_extents not implemented");
+  }
   void shutdown() override {
     std::lock_guard l(lock);
     _shutdown();
