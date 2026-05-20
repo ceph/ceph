@@ -2,6 +2,9 @@
 Jerasure erasure code plugin
 ============================
 
+Note: Techniques other than ``reed_sol_van`` are deprecated. Support for deprecated techniques will be removed in
+the Vampire release.
+
 The *jerasure* plugin is a generic and flexible plugin. However,
 the *jerasure* library is no longer maintained and has not been
 updated to support modern CPU instructions that can improve
