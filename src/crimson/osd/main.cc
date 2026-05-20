@@ -159,17 +159,17 @@ int main(int argc, const char* argv[])
           DEBUG("initializing logger output");
           std::ofstream log_file_stream;
           if (auto log_file = local_conf()->log_file; !log_file.empty()) {
+            // seastar::logger::do_log() writes to _out from every shard's thread
+            // with no lock. std::cerr is safe because it is unbuffered; a buffered
+            // ofstream is not. Disable buffering so each write() is a single syscall,
+            // matching cerr's thread-safety guarantee.
+            log_file_stream.rdbuf()->pubsetbuf(nullptr, 0);
             log_file_stream.open(log_file, std::ios::app | std::ios::out);
             try {
               seastar::throw_system_error_on(log_file_stream.fail());
             } catch (const std::system_error& e) {
               ceph_abort_msg(fmt::format("unable to open log file: {}", e.what()));
             }
-            // seastar::logger::do_log() writes to _out from every shard's thread
-            // with no lock. std::cerr is safe because it is unbuffered; a buffered
-            // ofstream is not. Disable buffering so each write() is a single syscall,
-            // matching cerr's thread-safety guarantee.
-            log_file_stream.rdbuf()->pubsetbuf(nullptr, 0);
             logger().set_ostream(log_file_stream);
           }
           auto reset_logger = seastar::defer([] {
