@@ -508,7 +508,10 @@ void RGWOp_BILog_List::send_response_end() {
     if (next_log_layout) {
       s->formatter->open_object_section("next_log");
       encode_json("generation", next_log_layout->gen, s->formatter);
-      encode_json("num_shards", rgw::num_shards(next_log_layout->layout.in_index.layout), s->formatter);
+      uint32_t next_num = (next_log_layout->layout.type == rgw::BucketLogType::FIFO)
+          ? rgw::num_shards(next_log_layout->layout.fifo)
+          : rgw::num_shards(next_log_layout->layout.in_index.layout);
+      encode_json("num_shards", next_num, s->formatter);
       s->formatter->close_section(); // next_log
     }
 
@@ -556,20 +559,47 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
   }
 
   map<RGWObjCategory, RGWStorageStats> stats;
-  const auto& index = log_to_index_layout(logs.back());
+  const auto& last_log = logs.back();
+  const auto& index = log_to_index_layout(last_log);
 
-  int ret =  bucket->read_stats(s, y, index, shard_id, &bucket_ver, &master_ver, stats, &max_marker, &syncstopped);
+  int ret = bucket->read_stats(s, y, index, shard_id, &bucket_ver, &master_ver, stats, &max_marker, &syncstopped);
   if (ret < 0 && ret != -ENOENT) {
     op_ret = ret;
     return;
+  }
+
+  if (last_log.layout.type == rgw::BucketLogType::FIFO) {
+    auto rados_store = static_cast<rgw::sal::RadosStore*>(driver);
+    std::map<int, std::string> fifo_markers;
+    ret = rados_store->svc()->bilog_rados->get_log_status(
+        s, bucket->get_info(), last_log, shard_id, &fifo_markers, y);
+    if (ret < 0 && ret != -ENOENT) {
+      op_ret = ret;
+      return;
+    }
+    if (shard_id >= 0) {
+      auto it = fifo_markers.find(shard_id);
+      max_marker = (it != fifo_markers.end()) ? it->second : "";
+    } else {
+      BucketIndexShardsManager mgr;
+      const int n = rgw::num_shards(last_log.layout.fifo);
+      for (int sid = 0; sid < n; ++sid) {
+        auto it = fifo_markers.find(sid);
+        mgr.add(sid, it != fifo_markers.end() ? it->second : "");
+      }
+      mgr.to_string(&max_marker);
+    }
+    syncstopped = false;
   }
 
   oldest_gen = logs.front().gen;
   latest_gen = logs.back().gen;
 
   for (auto& log : logs) {
-      uint32_t num_shards = rgw::num_shards(log.layout.in_index.layout);
-      generations.push_back({log.gen, num_shards});
+    uint32_t num_shards = (log.layout.type == rgw::BucketLogType::FIFO)
+        ? rgw::num_shards(log.layout.fifo)
+        : rgw::num_shards(log.layout.in_index.layout);
+    generations.push_back({log.gen, num_shards});
   }
 }
 
