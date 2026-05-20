@@ -15608,6 +15608,10 @@ void PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r)
       pool_migration_request_target_reservation();
     }
 
+    // Reset last_pool_migration_started so that recover_pool_migration retries
+    // this object
+    last_pool_migration_started = oid;
+
   } else {
     if ( r == -ENONET ) {
     // Fatal error - enter quiesce mode to drain in-flight operations
