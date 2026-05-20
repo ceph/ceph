@@ -551,6 +551,37 @@ int RGWSI_BILog_RADOS_FIFO::trim_shard(
   return 0;
 }
 
+int RGWSI_BILog_RADOS_FIFO::remove_log_shards(
+    const DoutPrefixProvider* dpp,
+    const RGWBucketInfo& bucket_info,
+    const rgw::bucket_log_layout_generation& log_layout,
+    librados::AioCompletion* c)
+{
+  librados::IoCtx log_ioctx;
+  const auto& zone_params = bi_->svc.zone->get_zone_params();
+  int r = rgw_init_ioctx(dpp, bi_->rados, zone_params.log_pool, log_ioctx,
+                         true, false);
+  if (r < 0) {
+    return r;
+  }
+  neorados::IOContext neo_loc(log_ioctx.get_id());
+  const int n = static_cast<int>(rgw::num_shards(log_layout.layout.fifo));
+  asio::co_spawn(
+      rados_neo->get_executor(),
+      [neo = *rados_neo, neo_loc, dpp,
+       bucket_id = bucket_info.bucket.bucket_id,
+       gen = log_layout.gen, n]() -> asio::awaitable<void> {
+        co_return co_await log_remove(
+            dpp, neo, neo_loc, n,
+            [bucket_id, gen](int shard_id) {
+              return bilog_fifo_oid(bucket_id, gen, shard_id);
+            },
+            false);
+      }(),
+      c);
+  return 0;
+}
+
 int RGWSI_BILog_RADOS_FIFO::log_list(
     const DoutPrefixProvider *dpp, optional_yield y,
     const RGWBucketInfo& bucket_info,
@@ -845,5 +876,14 @@ int RGWSI_BILog_RADOS_BackendDispatcher::trim_shard(
 {
   return backend_fifo.trim_shard(dpp, bucket_info, log_layout, shard_id,
                                  marker, c);
+}
+
+int RGWSI_BILog_RADOS_BackendDispatcher::remove_log_shards(
+    const DoutPrefixProvider* dpp,
+    const RGWBucketInfo& bucket_info,
+    const rgw::bucket_log_layout_generation& log_layout,
+    librados::AioCompletion* c)
+{
+  return backend_fifo.remove_log_shards(dpp, bucket_info, log_layout, c);
 }
 

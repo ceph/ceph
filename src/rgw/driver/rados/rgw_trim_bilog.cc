@@ -482,6 +482,31 @@ class RGWFIFOBILogTrimShardCR : public RGWSimpleCoroutine {
   }
 };
 
+// remove all cls_fifo head + part objects for a retired FIFO bilog generation
+class RGWFIFOBILogRemoveShardsCR : public RGWSimpleCoroutine {
+  rgw::sal::RadosStore *store;
+  const RGWBucketInfo bucket_info;
+  const rgw::bucket_log_layout_generation log_layout;
+  boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
+ public:
+  RGWFIFOBILogRemoveShardsCR(rgw::sal::RadosStore* store,
+                              const RGWBucketInfo& bucket_info,
+                              const rgw::bucket_log_layout_generation& log_layout)
+    : RGWSimpleCoroutine(store->ctx()), store(store),
+      bucket_info(bucket_info), log_layout(log_layout) {}
+
+  int send_request(const DoutPrefixProvider *dpp) override {
+    cn = stack->create_completion_notifier();
+    return store->svc()->bilog_rados->remove_log_shards(
+        dpp, bucket_info, log_layout, cn->completion());
+  }
+  int request_complete() override {
+    int r = cn->completion()->get_return_value();
+    set_status() << "FIFO bilog remove shards complete. ret=" << r;
+    return r;
+  }
+};
+
 struct StatusShards {
   uint64_t generation = 0;
   std::vector<rgw_bucket_shard_sync_info> shards;
@@ -1092,6 +1117,17 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
 	ldpp_dout(dpp, 0) << "failed to remove bucket-index shards for retired generation: "
 			  << cpp_strerror(retcode) << dendl;
 	return set_cr_error(retcode);
+      }
+
+      // -ENOENT is tolerated for idempotency on re-runs.
+      if (clean_info->second.layout.type == rgw::BucketLogType::FIFO) {
+	yield call(new RGWFIFOBILogRemoveShardsCR(store, clean_info->first,
+						  clean_info->second));
+	if (retcode < 0 && retcode != -ENOENT) {
+	  ldpp_dout(dpp, 0) << "failed to remove FIFO log shards for retired generation: "
+			    << cpp_strerror(retcode) << dendl;
+	  return set_cr_error(retcode);
+	}
       }
 
       while (clean_info && retries < MAX_RETRIES) {
