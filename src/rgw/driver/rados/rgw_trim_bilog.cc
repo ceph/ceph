@@ -34,6 +34,7 @@
 
 #include "services/svc_zone.h"
 #include "services/svc_bilog_rados.h"
+#include "cls/rgw/cls_rgw_client.h"
 
 #include <boost/asio/yield.hpp>
 #include "include/ceph_assert.h"
@@ -448,6 +449,39 @@ class BucketCleanIndexCollectCR : public RGWShardCollectCR {
   }
 };
 
+// per-shard FIFO bilog trim coroutine.
+class RGWFIFOBILogTrimShardCR : public RGWSimpleCoroutine {
+  const DoutPrefixProvider *dpp;
+  rgw::sal::RadosStore *store;
+  const RGWBucketInfo& bucket_info;
+  const rgw::bucket_log_layout_generation log_layout;
+  const int shard_id;
+  const std::string marker;
+  boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
+ public:
+  RGWFIFOBILogTrimShardCR(const DoutPrefixProvider *dpp,
+                           rgw::sal::RadosStore* store,
+                           const RGWBucketInfo& bucket_info,
+                           const rgw::bucket_log_layout_generation& log_layout,
+                           int shard_id,
+                           std::string_view marker)
+    : RGWSimpleCoroutine(store->ctx()),
+      dpp(dpp), store(store), bucket_info(bucket_info),
+      log_layout(log_layout), shard_id(shard_id), marker(marker) {}
+
+  int send_request(const DoutPrefixProvider *dpp) override {
+    cn = stack->create_completion_notifier();
+    return store->svc()->bilog_rados->trim_shard(
+        dpp, bucket_info, log_layout, shard_id, marker, cn->completion());
+  }
+
+  int request_complete() override {
+    int r = cn->completion()->get_return_value();
+    set_status() << "FIFO bilog trim shard complete; ret=" << r;
+    return r;
+  }
+};
+
 struct StatusShards {
   uint64_t generation = 0;
   std::vector<rgw_bucket_shard_sync_info> shards;
@@ -628,7 +662,6 @@ class BucketTrimInstanceCR : public RGWCoroutine {
   int child_ret = 0;
   const DoutPrefixProvider *dpp;
   std::vector<StatusShards> peer_status; //< sync status for each peer
-  std::vector<std::string> min_markers; //< min marker per shard
 
   /// The log generation to trim
   rgw::bucket_log_layout_generation totrim;
@@ -803,6 +836,118 @@ inline int parse_decode_json<StatusShards>(
   return 0;
 }
 
+/// coroutine that trims all shards of an InIndex bilog generation.
+class TrimInIndexGenerationCR : public RGWCoroutine {
+  const DoutPrefixProvider *dpp;
+  rgw::sal::RadosStore* const store;
+  const RGWBucketInfo& bucket_info;
+  const rgw::bucket_log_layout_generation& totrim;
+  const std::vector<StatusShards>& peer_status;
+  std::vector<std::string> min_markers;
+
+ public:
+  TrimInIndexGenerationCR(const DoutPrefixProvider *dpp,
+                          rgw::sal::RadosStore* store,
+                          const RGWBucketInfo& bucket_info,
+                          const rgw::bucket_log_layout_generation& totrim,
+                          const std::vector<StatusShards>& peer_status)
+    : RGWCoroutine(store->ctx()), dpp(dpp), store(store),
+      bucket_info(bucket_info), totrim(totrim), peer_status(peer_status) {}
+
+  int operate(const DoutPrefixProvider *dpp) override {
+    reenter(this) {
+      min_markers.assign(std::max(1u, rgw::num_shards(totrim.layout.in_index)),
+                         RGWSyncLogTrimCR::max_marker);
+      retcode = take_min_status(cct, totrim.gen, peer_status.cbegin(),
+                                peer_status.cend(), &min_markers, dpp);
+      if (retcode < 0) {
+        ldpp_dout(dpp, 4) << "failed to correlate InIndex bucket sync status from peers" << dendl;
+        return set_cr_error(retcode);
+      }
+      ldpp_dout(dpp, 10) << "trimming InIndex bilogs for bucket=" << bucket_info.bucket
+                         << " markers=" << min_markers
+                         << ", shards=" << min_markers.size() << dendl;
+      yield call(new BucketTrimShardCollectCR(dpp, store, bucket_info,
+                                              totrim.layout.in_index, min_markers));
+      if (retcode == -ENOENT) {
+        retcode = 0; // not fatal: shard removed unexpectedly
+      }
+      if (retcode < 0) {
+        ldpp_dout(dpp, 4) << "failed to trim InIndex bilog shards: "
+                          << cpp_strerror(retcode) << dendl;
+        return set_cr_error(retcode);
+      }
+      return set_cr_done();
+    }
+    return 0;
+  }
+};
+
+class TrimFIFOGenerationCR : public RGWCoroutine {
+  const DoutPrefixProvider *dpp;
+  rgw::sal::RadosStore* const store;
+  const RGWBucketInfo& bucket_info;
+  const rgw::bucket_log_layout_generation& totrim;
+  const std::vector<StatusShards>& peer_status;
+  std::vector<std::string> min_markers;
+
+ public:
+  TrimFIFOGenerationCR(const DoutPrefixProvider *dpp,
+                       rgw::sal::RadosStore* store,
+                       const RGWBucketInfo& bucket_info,
+                       const rgw::bucket_log_layout_generation& totrim,
+                       const std::vector<StatusShards>& peer_status)
+    : RGWCoroutine(store->ctx()), dpp(dpp), store(store),
+      bucket_info(bucket_info), totrim(totrim), peer_status(peer_status) {}
+
+  int operate(const DoutPrefixProvider *dpp) override {
+    reenter(this) {
+      min_markers.assign(std::max(1u, rgw::num_shards(totrim.layout.fifo)),
+                         RGWSyncLogTrimCR::max_marker);
+      retcode = take_min_status(cct, totrim.gen, peer_status.cbegin(),
+                                peer_status.cend(), &min_markers, dpp);
+      if (retcode < 0) {
+        ldpp_dout(dpp, 4) << "failed to correlate FIFO bucket sync status from peers" << dendl;
+        return set_cr_error(retcode);
+      }
+      ldpp_dout(dpp, 10) << "trimming FIFO bilogs for bucket=" << bucket_info.bucket
+                         << " gen=" << totrim.gen
+                         << " markers=" << min_markers << dendl;
+      yield {
+        for (size_t i = 0; i < min_markers.size(); ++i) {
+          const auto& m = min_markers[i];
+          if (m.empty() || m == RGWSyncLogTrimCR::max_marker) {
+            continue;
+          }
+          ldpp_dout(dpp, 10) << "trimming FIFO bilog shard " << i
+              << " of " << bucket_info.bucket << " at marker " << m << dendl;
+          spawn(new RGWFIFOBILogTrimShardCR(dpp, store, bucket_info,
+                                             totrim, static_cast<int>(i), m),
+                false);
+        }
+      }
+      // -ENOENT means the shard was already trimmed/removed.
+      retcode = 0;
+      while (retcode == 0 && num_spawned() > 0) {
+        yield wait_for_child();
+        int r = 0;
+        collect_next(&r);
+        if (r < 0 && r != -ENOENT) {
+          retcode = r;
+        }
+      }
+      drain_all();
+      if (retcode < 0) {
+        ldpp_dout(dpp, 4) << "failed to trim FIFO bilog shards: "
+                          << cpp_strerror(retcode) << dendl;
+        return set_cr_error(retcode);
+      }
+      return set_cr_done();
+    }
+    return 0;
+  }
+};
+
 int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
 {
   reenter(this) {
@@ -934,20 +1079,21 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
     }
 
     if (clean_info) {
-      if (clean_info->second.layout.type != rgw::BucketLogType::InIndex) {
-	ldpp_dout(dpp, 0) << "Unable to convert log of unknown type "
-			  << clean_info->second.layout.type
-			  << " to rgw::bucket_index_layout_generation " << dendl;
+      if (clean_info->second.layout.type != rgw::BucketLogType::InIndex &&
+	  clean_info->second.layout.type != rgw::BucketLogType::FIFO) {
+	ldpp_dout(dpp, 0) << "Unable to clean log of unknown type "
+			  << clean_info->second.layout.type << dendl;
 	return set_cr_error(-EINVAL);
       }
 
       yield call(new BucketCleanIndexCollectCR(dpp, store, clean_info->first,
 					       clean_info->second.layout.in_index));
       if (retcode < 0) {
-	ldpp_dout(dpp, 0) << "failed to remove previous generation: "
+	ldpp_dout(dpp, 0) << "failed to remove bucket-index shards for retired generation: "
 			  << cpp_strerror(retcode) << dendl;
 	return set_cr_error(retcode);
       }
+
       while (clean_info && retries < MAX_RETRIES) {
 	yield call(new RGWPutBucketInstanceInfoCR(
 		     store->svc()->async_processor,
@@ -998,44 +1144,21 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
 	clean_info = std::nullopt;
       }
     } else {
-      if (totrim.layout.type != rgw::BucketLogType::InIndex) {
-       ldpp_dout(dpp, 0) << "Unable to convert log of unknown type "
-                         << totrim.layout.type
-                         << " to rgw::bucket_index_layout_generation " << dendl;
-       return set_cr_error(-EINVAL);
-      }
-      // To avoid hammering the OSD too hard, either trim old
-      // generations OR trim the current one.
-
-      // determine the minimum marker for each shard
-
-      // initialize each shard with the maximum marker, which is only used when
-      // there are no peers syncing from us
-      min_markers.assign(std::max(1u, rgw::num_shards(totrim.layout.in_index)),
-			 RGWSyncLogTrimCR::max_marker);
-
-      retcode = take_min_status(cct, totrim.gen, peer_status.cbegin(),
-				peer_status.cend(), &min_markers, dpp);
-      if (retcode < 0) {
-	ldpp_dout(dpp, 4) << "failed to correlate bucket sync status from peers" << dendl;
-	return set_cr_error(retcode);
-      }
-
-      // trim shards with a ShardCollectCR
-      ldpp_dout(dpp, 10) << "trimming bilogs for bucket=" << pbucket_info->bucket
-			 << " markers=" << min_markers << ", shards=" << min_markers.size() << dendl;
-      set_status("trimming bilog shards");
-      yield call(new BucketTrimShardCollectCR(dpp, store, *pbucket_info, totrim.layout.in_index,
-					      min_markers));
-      if (retcode == -ENOENT) {
-        // this is not a fatal error to retry, as the shard seems to not exist
-        // anymore. This can happen if the shard was removed unexpectedly.
-        // should be already logged by the BucketTrimShardCollectCR().
-        retcode = 0;
+      // no old generation to clean. trim the active generation instead.
+      if (totrim.layout.type == rgw::BucketLogType::InIndex) {
+	set_status("trimming InIndex bilog shards");
+	yield call(new TrimInIndexGenerationCR(dpp, store, *pbucket_info,
+					       totrim, peer_status));
+      } else if (totrim.layout.type == rgw::BucketLogType::FIFO) {
+	set_status("trimming FIFO bilog shards");
+	yield call(new TrimFIFOGenerationCR(dpp, store, *pbucket_info,
+					    totrim, peer_status));
+      } else {
+	ldpp_dout(dpp, 0) << "Unable to trim log of unknown type "
+			  << totrim.layout.type << dendl;
+	return set_cr_error(-EINVAL);
       }
       if (retcode < 0) {
-	ldpp_dout(dpp, 4) << "failed to trim bilog shards: "
-			  << cpp_strerror(retcode) << dendl;
 	return set_cr_error(retcode);
       }
     }
