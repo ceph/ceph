@@ -41,6 +41,9 @@
     </cds-table-toolbar-actions>
     <!-- end batch actions -->
     <cds-table-toolbar-content>
+      <!-- gateway group / custom filter slot -->
+      <ng-content select=".table-filter"></ng-content>
+      <!-- end custom filter slot -->
       <!-- search -->
       <cds-table-toolbar-search *ngIf="searchField"
                                 [expandable]="false"

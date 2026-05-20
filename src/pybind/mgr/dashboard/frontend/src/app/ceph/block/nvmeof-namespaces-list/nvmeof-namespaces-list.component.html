@@ -1,30 +1,8 @@
-<cd-nvmeof-tabs></cd-nvmeof-tabs>
-
-<div cdsGrid
-     [useCssGrid]="true"
-     [narrow]="true"
-     [fullWidth]="true">
-<div cdsCol
-     [columnNumbers]="{sm: 4, md: 8}">
-  <div class="cds-mt-3 form-item"
-       cdsRow>
-    <cds-combo-box
-        type="single"
-        label="Selected Gateway Group"
-        i18n-label
-        [placeholder]="gwGroupPlaceholder"
-        [items]="gwGroups"
-        (selected)="onGroupSelection($event)"
-        (clear)="onGroupClear()"
-        [disabled]="gwGroupsEmpty">
-      <cds-dropdown-list></cds-dropdown-list>
-    </cds-combo-box>
-  </div>
-</div>
-</div>
-
+<div class="nvmeof-content-layout">
+  <div class="nvmeof-content-main">
 <ng-container *ngIf="namespaces$ | async as namespaces">
   <cd-table [data]="namespaces"
+            [compactSearchField]="true"
             columnMode="flex"
             (fetchData)="fetchData()"
             [columns]="namespacesColumns"
@@ -37,6 +15,15 @@
             emptyStateMessage="Namespaces are storage volumes mapped to subsystems for host access. Create a namespace to start provisioning storage within a subsystem."
             i18n-emptyStateMessage>
 
+    <div class="table-filter">
+      <cd-nvmeof-gateway-group-filter [items]="gwGroups"
+                                      [placeholder]="gwGroupPlaceholder"
+                                      [disabled]="gwGroupsEmpty"
+                                      (selected)="onGroupSelection($event)"
+                                      (cleared)="onGroupClear()">
+      </cd-nvmeof-gateway-group-filter>
+    </div>
+
   <div class="table-actions">
     <cd-table-actions [permission]="permission"
                       [selection]="selection"
@@ -46,5 +33,7 @@
   </div>
 </cd-table>
 </ng-container>
+  </div>
+</div>
 
 <router-outlet name="modal"></router-outlet>
