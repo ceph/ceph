@@ -16,12 +16,19 @@
 #include <atomic>
 #include <functional>
 #include <ostream>
+#include <utility>
+#include <vector>
 #include "include/ceph_assert.h"
 #include "bluestore_types.h"
 #include "common/ceph_mutex.h"
 
 typedef interval_set<uint64_t> release_set_t;
 typedef release_set_t::value_type release_set_entry_t;
+
+// A batch of free extents as (offset, length) pairs, matching the
+// (offset, length) convention used by foreach()/notify throughout the
+// allocators. Returned via the out-param of Allocator::get_free_extents().
+typedef std::vector<bluestore_interval_t<uint64_t, uint64_t>> free_extent_vector_t;
 
 class Allocator {
 public:
@@ -61,6 +68,20 @@ public:
   virtual void dump() = 0;
   virtual void foreach(
     std::function<void(uint64_t offset, uint64_t length)> notify) = 0;
+
+  /*
+   * Returns a resume cursor:
+   *   - if the cursor is >= range_end, the window has been fully enumerated;
+   *   - otherwise the caller should call again with range_begin set to the
+   *     returned cursor to fetch the next batch.
+   *
+   * Preconditions: range_begin <= range_end and max_count > 0..
+   */
+  virtual uint64_t get_free_extents(
+    uint64_t range_begin,
+    uint64_t range_end,
+    size_t max_count,
+    free_extent_vector_t* out) = 0;
 
   virtual void init_add_free(uint64_t offset, uint64_t length) = 0;
   virtual void init_rm_free(uint64_t offset, uint64_t length) = 0;
