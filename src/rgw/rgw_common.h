@@ -201,6 +201,8 @@ using ceph::crypto::MD5;
 
 #define RGW_ATTR_BUCKET_NOTIFICATION RGW_ATTR_PREFIX "bucket-notification"
 
+#define RGW_ATTR_DEDUP_POLICY RGW_ATTR_PREFIX "dedup-policy"
+
 #define RGW_ATTR_INTERNAL_MTIME RGW_ATTR_PREFIX "rgw-internal-mtime"
 
 enum class RGWFormat : int8_t {

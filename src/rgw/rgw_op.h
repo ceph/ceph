@@ -55,6 +55,7 @@
 #include "cls/rgw/cls_rgw_client.h"
 #include "rgw_public_access.h"
 #include "rgw_bucket_encryption.h"
+#include "rgw_dedup_policy.h"
 #include "rgw_tracer.h"
 
 #include "include/ceph_assert.h"
@@ -1981,6 +1982,49 @@ public:
   const char* name() const override { return "delete_bucket_encryption"; }
   std::string canonical_name() const override { return fmt::format("REST.{}.ENCRYPTION", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_DELETE_BUCKET_ENCRYPTION; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+};
+
+class RGWPutBucketDedupPolicy : public RGWOp {
+protected:
+  RGWBucketDedupPolicy dedup_policy;
+  bufferlist data;
+public:
+  RGWPutBucketDedupPolicy() = default;
+  ~RGWPutBucketDedupPolicy() {}
+
+  int get_params(optional_yield y);
+  int verify_permission(optional_yield y) override;
+  void execute(optional_yield y) override;
+  const char* name() const override { return "put_bucket_dedup_policy"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.DEDUP_POLICY", s->info.method); }
+  RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_DEDUP_POLICY; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+};
+
+class RGWGetBucketDedupPolicy : public RGWOp {
+protected:
+  RGWBucketDedupPolicy dedup_policy;
+public:
+  RGWGetBucketDedupPolicy() {}
+
+  int verify_permission(optional_yield y) override;
+  void execute(optional_yield y) override;
+  const char* name() const override { return "get_bucket_dedup_policy"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.DEDUP_POLICY", s->info.method); }
+  RGWOpType get_type() override { return RGW_OP_GET_BUCKET_DEDUP_POLICY; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+};
+
+class RGWDeleteBucketDedupPolicy : public RGWOp {
+public:
+  RGWDeleteBucketDedupPolicy() {}
+
+  int verify_permission(optional_yield y) override;
+  void execute(optional_yield y) override;
+  const char* name() const override { return "delete_bucket_dedup_policy"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.DEDUP_POLICY", s->info.method); }
+  RGWOpType get_type() override { return RGW_OP_DELETE_BUCKET_DEDUP_POLICY; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
 

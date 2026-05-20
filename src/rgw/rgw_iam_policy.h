@@ -114,6 +114,8 @@ enum {
   s3DeleteBucketPublicAccessBlock,
   s3GetBucketEncryption,
   s3PutBucketEncryption,
+  s3GetBucketDedupPolicy,
+  s3PutBucketDedupPolicy,
   s3DescribeJob,
   s3GetObjectAttributes,
   s3GetObjectVersionAttributes,
@@ -304,6 +306,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3GetBucketObjectLockConfiguration:
   case s3GetBucketPublicAccessBlock:
   case s3GetBucketOwnershipControls:
+  case s3GetBucketDedupPolicy:
     return RGW_PERM_READ_ACP;
 
   case s3DeleteBucketPolicy:
@@ -328,6 +331,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3PutBucketObjectLockConfiguration:
   case s3PutBucketPublicAccessBlock:
   case s3PutBucketOwnershipControls:
+  case s3PutBucketDedupPolicy:
     return RGW_PERM_WRITE_ACP;
 
   case s3All:

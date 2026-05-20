@@ -42,6 +42,7 @@
 #include "fmt/ranges.h"
 #include "osd/osd_types.h"
 #include "common/ceph_crypto.h"
+#include "rgw_dedup_policy.h"
 
 #include <filesystem>
 #include <algorithm>
@@ -2479,6 +2480,28 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 1) << __func__ << "::ERROR: driver->load_bucket(): "
                         << cpp_strerror(-ret) << dendl;
       return ret;
+    }
+
+    // Check per-bucket dedup policy (control-plane only, no data-plane impact)
+    {
+      const auto& attrs = bucket->get_attrs();
+      auto it = attrs.find(RGW_ATTR_DEDUP_POLICY);
+      if (it != attrs.end()) {
+        RGWBucketDedupPolicy policy;
+        try {
+          auto bl_iter = it->second.cbegin();
+          policy.decode(bl_iter);
+        } catch (const buffer::error&) {
+          ldpp_dout(dpp, 1) << __func__ << "::failed to decode dedup policy for "
+                            << bucket_rec.name << dendl;
+        }
+        if (policy.is_dedup_denied()) {
+          ldpp_dout(dpp, 10) << __func__ << "::skip bucket (dedup policy denied): "
+                             << bucket_rec.name << dendl;
+          p_worker_stats->ingress_skip_dedup_policy++;
+          return 0;
+        }
+      }
     }
 
     const std::string bucket_id = bucket->get_key().get_key();

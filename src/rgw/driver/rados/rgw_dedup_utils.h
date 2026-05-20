@@ -198,6 +198,8 @@ namespace rgw::dedup {
     uint64_t ingress_skip_too_small_bytes = 0;
     uint64_t ingress_skip_too_small = 0;
 
+    uint64_t ingress_skip_dedup_policy = 0;
+
     utime_t  duration = {0, 0};
   };
   std::ostream& operator<<(std::ostream &out, const worker_stats_t &s);
