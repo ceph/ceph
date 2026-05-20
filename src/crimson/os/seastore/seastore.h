@@ -185,6 +185,12 @@ public:
       return 256;
     }
 
+    uint64_t get_max_object_size() const override final {
+      return std::min<uint64_t>(
+        crimson::common::local_conf()->osd_max_object_size,
+        max_object_size);
+    }
+
     omap_root_t select_log_omap_root(Onode& onode) const;
 
   // only exposed to SeaStore
