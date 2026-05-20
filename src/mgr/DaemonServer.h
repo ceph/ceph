@@ -20,6 +20,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -51,6 +52,7 @@ class MonClient;
 class CommandContext;
 struct OSDPerfMetricQuery;
 struct MDSPerfMetricQuery;
+class StatsAutotuner;
 
 
 struct offline_pg_report {
@@ -245,6 +247,7 @@ private:
   SafeTimer timer;
   Context *tick_event;
   void tick();
+  void maybe_adjust_stats_period();
   void schedule_tick_locked(double delay_sec);
 
   class OSDPerfMetricCollectorListener : public MetricListener {
@@ -307,7 +310,7 @@ private:
 private:
   // -- op tracking --
   OpTracker op_tracker;
-
+  std::unique_ptr<StatsAutotuner> stats_autotuner;
 public:
   int init(uint64_t gid, entity_addrvec_t client_addrs);
 
@@ -372,5 +375,88 @@ public:
                     std::ostream& ss);
 };
 
+class StatsAutotuner {
+private:
+  int64_t baseline_period;
+  int64_t changed_stats_period;
+  utime_t last_period_check;
+  
+  static constexpr int64_t MAX_PERIOD = 60;
+  static constexpr int64_t RECOVERY_THRESHOLD = 20;
+  static constexpr int64_t MIN_QUEUE_DEPTH = 5;
+  
+public:
+  explicit StatsAutotuner(int64_t baseline) 
+    : baseline_period(baseline), changed_stats_period(baseline) {}
+  
+  void set_baseline_period(int64_t period) { 
+    baseline_period = changed_stats_period = period; 
+  }
+
+  void record_our_change(int64_t new_period) {
+    changed_stats_period = new_period;  // We changed it
+  }
+
+  bool was_changed_by_user(int64_t current_period) const {
+    return changed_stats_period != current_period;
+  }
+  
+  bool should_check_now(utime_t now, double tick_period) {
+    if (now - last_period_check > tick_period * 5) {
+      last_period_check = now;
+      return true;
+    }
+    return false;
+  }
+
+
+  // Add enum reasons
+  enum class AdjustmentReason : uint8_t {
+    high_queue_depth = 0,
+    performance_recovered,
+    no_adjustment_needed
+  };
+  
+  struct AdjustmentResult {
+    int64_t new_period = 0;
+    AdjustmentReason reason_code = AdjustmentReason::no_adjustment_needed;
+
+    std::string_view reason_str() const {
+      switch (reason_code) {
+        case AdjustmentReason::high_queue_depth:
+          return "high_queue_depth";
+        case AdjustmentReason::performance_recovered:
+          return "performance_recovered";
+        case AdjustmentReason::no_adjustment_needed:
+          return "no_adjustment_needed";
+        default:
+          return "unknown_reason";
+      }
+    }
+  };
+
+  AdjustmentResult evaluate_adjustment(
+    int64_t queue_depth, 
+    int64_t current_period, 
+    int64_t queue_threshold) {
+
+    if (queue_depth > queue_threshold) {
+      int64_t increment = std::max(MIN_QUEUE_DEPTH, current_period / 4);
+      int64_t new_period = std::min(current_period + increment, MAX_PERIOD);
+      
+      if (new_period > current_period) {
+        return {new_period, AdjustmentReason::high_queue_depth};
+      }
+    } else if (current_period > baseline_period && queue_depth < RECOVERY_THRESHOLD) {
+      int64_t new_period = std::max(current_period / 2, baseline_period);
+      
+      if (new_period < current_period) {
+        return {new_period, AdjustmentReason::performance_recovered};
+      }
+    }
+    
+    return {current_period, AdjustmentReason::no_adjustment_needed};
+  }
+};
 #endif
 
