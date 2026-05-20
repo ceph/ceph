@@ -45,7 +45,7 @@ import {
   LayerModule,
   ThemeModule
 } from 'carbon-components-angular';
-import EditIcon from '@carbon/icons/es/edit/20';
+import EditIcon from '@carbon/icons/es/edit/16';
 import CodeIcon from '@carbon/icons/es/code/16';
 import { MotdComponent } from '~/app/shared/components/motd/motd.component';
 import { DirectivesModule } from '../directives/directives.module';
@@ -108,6 +108,7 @@ import DataCenter16 from '@carbon/icons/es/data--center/16';
 import Upgrade16 from '@carbon/icons/es/upgrade/16';
 import Close16 from '@carbon/icons/es/close/16';
 import WarningAltFilled16 from '@carbon/icons/es/warning--alt--filled/16';
+import WarningAltFilled32 from '@carbon/icons/es/warning--alt--filled/32';
 import Help16 from '@carbon/icons/es/help/16';
 import IncidentReporter16 from '@carbon/icons/es/incident-reporter/16';
 import IbmStreamSets16 from '@carbon/icons/es/ibm--streamsets/16';
@@ -121,6 +122,15 @@ import CheckMarkOutline16 from '@carbon/icons/es/checkmark--outline/16';
 import ArrowUpRight16 from '@carbon/icons/es/arrow--up-right/16';
 import InProgress16 from '@carbon/icons/es/in-progress/16';
 import ArrowDown16 from '@carbon/icons/es/arrow--down/16';
+import Launch16 from '@carbon/icons/es/launch/16';
+import Cube16 from '@carbon/icons/es/cube/16';
+import ChevronLeft16 from '@carbon/icons/es/chevron--left/16';
+import ChevronRight16 from '@carbon/icons/es/chevron--right/16';
+import CaretLeft16 from '@carbon/icons/es/caret--left/16';
+import CaretRight16 from '@carbon/icons/es/caret--right/16';
+import Locked16 from '@carbon/icons/es/locked/16';
+import WebServicesCluster20 from '@carbon/icons/es/web-services--cluster/20';
+import WebServicesCluster32 from '@carbon/icons/es/web-services--cluster/32';
 
 import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.component';
 import { PageHeaderComponent } from './page-header/page-header.component';
@@ -289,6 +299,7 @@ export class ComponentsModule {
       DataCenter16,
       Upgrade16,
       WarningAltFilled16,
+      WarningAltFilled32,
       Help16,
       IncidentReporter16,
       IbmStreamSets16,
@@ -301,7 +312,16 @@ export class ComponentsModule {
       CheckMarkOutline16,
       ArrowUpRight16,
       InProgress16,
-      ArrowDown16
+      ArrowDown16,
+      Launch16,
+      Cube16,
+      ChevronLeft16,
+      ChevronRight16,
+      CaretLeft16,
+      CaretRight16,
+      Locked16,
+      WebServicesCluster20,
+      WebServicesCluster32
     ]);
   }
 }

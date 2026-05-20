@@ -80,7 +80,7 @@ export class RgwZonegroupService {
     nodes['id'] = zonegroup.id;
     nodes['name'] = zonegroup.name;
     nodes['info'] = zonegroup;
-    nodes['icon'] = Icons.cubes;
+    nodes['icon'] = Icons.clusterIcon;
     nodes['is_master'] = zonegroup.is_master;
     nodes['parent'] = realm ? realm.name : '';
     nodes['is_default'] = zonegroup.id === defaultZonegroupId ? true : false;

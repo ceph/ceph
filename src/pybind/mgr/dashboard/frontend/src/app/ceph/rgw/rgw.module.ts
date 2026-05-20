@@ -98,7 +98,6 @@ import PasswordIcon from '@carbon/icons/es/password/16';
 import ArrowDownIcon from '@carbon/icons/es/arrow--down/16';
 import ProgressBarRoundIcon from '@carbon/icons/es/progress-bar--round/32';
 import ToolsIcon from '@carbon/icons/es/tools/32';
-import ParentChild from '@carbon/icons/es/parent-child/20';
 import UserAccessLocked from '@carbon/icons/es/user--access-locked/16';
 
 import { ProductiveCardComponent } from '~/app/shared/components/productive-card/productive-card.component';
@@ -120,6 +119,7 @@ import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.
 import { RgwTopicFormComponent } from './rgw-topic-form/rgw-topic-form.component';
 import { RgwBucketNotificationListComponent } from './rgw-bucket-notification-list/rgw-bucket-notification-list.component';
 import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notification-form.component';
+import { ComponentsModule } from '~/app/shared/components/components.module';
 
 @NgModule({
   imports: [
@@ -162,7 +162,8 @@ import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notifi
     TilesModule,
     ProductiveCardComponent,
     TimePickerComponent,
-    AreaChartComponent
+    AreaChartComponent,
+    ComponentsModule
   ],
   exports: [
     RgwDaemonDetailsComponent,
@@ -245,7 +246,6 @@ export class RgwModule {
       ArrowDownIcon,
       ProgressBarRoundIcon,
       ToolsIcon,
-      ParentChild,
       UserAccessLocked
     ]);
   }

@@ -42,8 +42,10 @@ import {
   GridModule,
   IconModule,
   IconService,
+  InlineLoadingModule,
   InputModule,
   LayoutModule,
+  LoadingModule,
   ModalModule,
   NumberModule,
   PlaceholderModule,
@@ -61,6 +63,7 @@ import AddIcon from '@carbon/icons/es/add/32';
 import LaunchIcon from '@carbon/icons/es/launch/32';
 import Close from '@carbon/icons/es/close/32';
 import Trash from '@carbon/icons/es/trash-can/32';
+import Renew16 from '@carbon/icons/es/renew/16';
 import { CephfsMirroringWizardComponent } from './cephfs-mirroring-wizard/cephfs-mirroring-wizard.component';
 import { CephfsFilesystemSelectorComponent } from './cephfs-filesystem-selector/cephfs-filesystem-selector.component';
 import { CephfsMirroringEntityComponent } from './cephfs-mirroring-entity/cephfs-mirroring-entity.component';
@@ -94,6 +97,8 @@ import { CephfsMirroringEntityComponent } from './cephfs-mirroring-entity/cephfs
     LayoutModule,
     ComboBoxModule,
     IconModule,
+    InlineLoadingModule,
+    LoadingModule,
     RadioModule,
     BaseChartDirective,
     TabsModule,
@@ -131,6 +136,6 @@ import { CephfsMirroringEntityComponent } from './cephfs-mirroring-entity/cephfs
 })
 export class CephfsModule {
   constructor(private iconService: IconService) {
-    this.iconService.registerAll([AddIcon, LaunchIcon, Close, Trash]);
+    this.iconService.registerAll([AddIcon, LaunchIcon, Close, Trash, Renew16]);
   }
 }

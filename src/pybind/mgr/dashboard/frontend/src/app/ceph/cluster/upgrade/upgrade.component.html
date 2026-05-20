@@ -33,7 +33,7 @@
                   <span class="cds--type-body-compact-01"
                         i18n
                         *ngIf="status.is_paused; else inProgress">
-                    <i [ngClass]="[icons.spinner]"></i>
+                    <cds-inline-loading></cds-inline-loading>
                     Upgrade is paused {{executingTasks?.progress}}%</span>
                   <a class="cds--link"
                      routerLink="/upgrade/progress"
@@ -43,7 +43,7 @@
                 <ng-template #inProgress>
                   <span class="cds--type-body-compact-01"
                         i18n>
-                    <i [ngClass]="[icons.spin, icons.spinner]"></i>
+                    <cds-inline-loading></cds-inline-loading>
                     Upgrading {{executingTasks?.progress}}%
                   </span>
                 </ng-template>
@@ -60,7 +60,7 @@
                    routerLink="/overview"
                    [ngStyle]="healthData.health.status | healthColor">
                   {{ healthData.health.status | healthLabel | titlecase }}
-                  <i class="fa fa-exclamation-triangle"></i>
+                  <cd-icon type="warning"></cd-icon>
                 </a>
               </ng-container>
               <ng-template #healthOk>
@@ -77,10 +77,9 @@
               <span class="cds--type-label-01"
                     i18n>MGR Count</span>
               <span class="cds--type-body-compact-01">
-                <i class="text-success"
-                   [ngClass]="[icons.success]"
-                   *ngIf="(healthData.mgr_map | mgrSummary)?.total > 1; else warningIcon">
-                </i>
+                <cd-icon type="success"
+                         *ngIf="(healthData.mgr_map | mgrSummary)?.total > 1; else warningIcon">
+                </cd-icon>
                 {{ (healthData.mgr_map | mgrSummary)?.total }}
               </span>
             </div>
@@ -103,12 +102,12 @@
               <ng-template #releaseImageError>
                 <span class="cds--type-body-compact-01"
                       *ngIf="!errorMessage; else showError">
-                  <i [ngClass]="[icons.spin, icons.spinner]"></i>
+                  <cds-inline-loading></cds-inline-loading>
                   <span i18n>Loading...</span>
                 </span>
                 <ng-template #showError>
                   <span class="cds--type-body-compact-01 text-danger">
-                    <i [ngClass]="[icons.danger]"></i>
+                    <cd-icon type="danger"></cd-icon>
                     <span i18n>Failed to fetch</span>
                   </span>
                 </ng-template>
@@ -125,12 +124,12 @@
               <ng-template #registryError>
                 <span class="cds--type-body-compact-01"
                       *ngIf="!errorMessage; else showRegistryError">
-                  <i [ngClass]="[icons.spin, icons.spinner]"></i>
+                  <cds-inline-loading></cds-inline-loading>
                   <span i18n>Loading...</span>
                 </span>
                 <ng-template #showRegistryError>
                   <span class="cds--type-body-compact-01 text-danger">
-                    <i [ngClass]="[icons.danger]"></i>
+                    <cd-icon type="danger"></cd-icon>
                     <span i18n>Failed to fetch</span>
                   </span>
                 </ng-template>
@@ -208,8 +207,7 @@
   <span class="cds--type-body-compact-01"
         id="no-upgrades-available"
         i18n>
-    <i [ngClass]="[icons.success]"
-       class="text-success"></i>
+    <cd-icon type="success"></cd-icon>
     Cluster is up-to-date
   </span>
   <a class="cds--link cds-mb-3"
@@ -218,10 +216,9 @@
 </ng-template>
 
 <ng-template #warningIcon>
-  <i class="text-warning"
-     [ngClass]="[icons.warning]"
-     title="To upgrade, you need minimum 2 mgr daemons.">
-  </i>
+  <cd-icon type="warning"
+           title="To upgrade, you need minimum 2 mgr daemons.">
+  </cd-icon>
 </ng-template>
 
 <ng-template #checkingForUpgradeStatus>
@@ -236,8 +233,18 @@
             aria-label="Upgrade now"
             [disabled]="true"
             i18n>Checking for upgrades
-      <i [ngClass]="[icons.spin, icons.spinner]"></i>
+      <cds-inline-loading></cds-inline-loading>
     </button>
+  </div>
+</ng-template>
+
+<ng-template #loadingDetails>
+  <div class="w-50"
+       *ngIf="!errorMessage; else upgradeInfoError">
+    <span class="text-info justify-content-center align-items-center"
+          i18n>Fetching registry information
+      <cds-inline-loading></cds-inline-loading>
+    </span>
   </div>
 </ng-template>
 
@@ -249,7 +256,7 @@
     <span class="cds--type-body-compact-01"
           id="upgrade-status-error"
           i18n>
-      <i [ngClass]="[icons.danger]"></i>
+      <cd-icon type="danger"></cd-icon>
       {{ errorMessage }}
     </span>
     <a class="cds--link cds-mb-3"
@@ -265,7 +272,7 @@
        class="cds-mt-3">
     <h5 class="cds--type-heading-compact-01"
         i18n>
-      <i [ngClass]="[icons.spin, icons.spinner]"></i>
+      <cds-inline-loading></cds-inline-loading>
       Upgrade in progress {{executingTasks?.progress}}%</h5>
     <a class="cds--link cds-mb-3"
        routerLink="/upgrade/progress"

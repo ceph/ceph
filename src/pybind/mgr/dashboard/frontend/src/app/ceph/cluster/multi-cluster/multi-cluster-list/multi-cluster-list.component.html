@@ -4,14 +4,14 @@
     <div class="row h-100 justify-content-center align-items-center">
       <div class="blank-page">
         <i class="mx-auto d-block"
-           [ngClass]="[icons.large, icons.wrench]">
+           [ngClass]="[icons.size24, icons.wrench]">
         </i>
       <div class="mt-4 text-center">
         <h4 class="mt-3">This cluster is already managed by cluster -
           <a target="_blank"
              [href]="managedByConfig['MANAGED_BY_CLUSTERS'][0]['url']">
             {{ managedByConfig['MANAGED_BY_CLUSTERS'][0]['fsid'] }}
-            <i class="fa fa-external-link"></i>
+            <cd-icon type="launch"></cd-icon>
           </a>
         </h4>
       </div>
@@ -62,7 +62,7 @@
   <a target="_blank"
      [href]="row.url">
       {{ row?.url?.endsWith('/') ? row?.url?.slice(0, -1) : row.url }}
-    <i class="fa fa-external-link"></i>
+    <cd-icon type="launch"></cd-icon>
   </a>
 </ng-template>
 

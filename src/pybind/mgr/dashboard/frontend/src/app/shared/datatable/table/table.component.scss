@@ -4,7 +4,6 @@
 
 @mixin row-details-icon {
   color: vv.$gray-900;
-  font-family: 'ForkAwesome', sans-serif;
   font-size: 1rem;
   line-height: 1;
 }
@@ -110,4 +109,10 @@ tr:hover .edit-btn {
 
 .table-tag {
   white-space: nowrap;
+}
+
+.filter-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
 }
