@@ -83,6 +83,19 @@ public:
     size_t max_count,
     free_extent_vector_t* out) = 0;
 
+  /*
+   * Weakly-consistent counterpart to foreach()
+   * 
+   * visit every free extent by driving get_free_extents() in bounded 
+   * batches over [0, device_size), so the allocator lock is only held 
+   * for one batch at a time instead of the whole walk. 
+   * 
+   * See get_free_extents() for the weak-consistency contract;
+   * use foreach() when an exact, consistent snapshot is required.
+   */
+  void foreach_interruptible(
+    std::function<void(uint64_t offset, uint64_t length)> notify);
+
   virtual void init_add_free(uint64_t offset, uint64_t length) = 0;
   virtual void init_rm_free(uint64_t offset, uint64_t length) = 0;
 
