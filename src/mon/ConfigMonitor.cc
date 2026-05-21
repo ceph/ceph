@@ -760,15 +760,18 @@ void ConfigMonitor::tick()
   if (!pending_cleanup.empty()) {
     changed = true;
   }
-  if (changed && mon.kvmon()->is_writeable()) {
-    paxos.plug();
-    encode_pending_to_kvmon();
-    mon.kvmon()->propose_pending();
-    paxos.unplug();
-    propose_pending();
+  if (mon.kvmon()->is_writeable()) {
+    if (_trim_config_history()) {
+      changed = true;
+    }
+    if (changed) {
+      paxos.plug();
+      encode_pending_to_kvmon();
+      mon.kvmon()->propose_pending();
+      paxos.unplug();
+      propose_pending();
+    } 
   }
-
-  _trim_config_history();
 }
 
 void ConfigMonitor::on_active()
@@ -987,16 +990,16 @@ void ConfigMonitor::check_all_subs()
   dout(10) << __func__ << " updated " << updated << " / " << total << dendl;
 }
 
-void ConfigMonitor::_trim_config_history() {
+bool ConfigMonitor::_trim_config_history() {
   dout(10) << __func__ << " trimming old config-history versions" << dendl;
 
   const string history_prefix = "config-history/";
   // key_re is used to match key entries in config-history list
   // example: config-history/100/+osd/host:dx-arsenalceph01rack02data-01/osd_memory_target"
-  const regex key_re(history_prefix + R"((\d+)/[+-]([^/]+/[^/]+))");
+  static const regex key_re(history_prefix + R"((\d+)/[+-]([^/]+(?:/[^/]+)+))");
   // marker_re is used to match the epoch marker entries in config-history list
   // example: config-history/100/
-  const regex marker_re(history_prefix + R"((\d+)/)");
+  static const regex marker_re(history_prefix + R"((\d+)/)");
 
   map<string, map<int, vector<string>>> config_versions;
   set<string> version_markers;
@@ -1016,11 +1019,11 @@ void ConfigMonitor::_trim_config_history() {
     iter->next();
   }
 
-  set<string> keys_to_delete;
+  vector<string> keys_to_delete;
   map<int, int> version_key_deletion_count;
 
   const size_t mon_config_history_size = g_conf()->mon_config_history_size;
-  const size_t max_entries_to_remove = 100; // num of records to be removed in a single tick
+  constexpr size_t max_entries_to_remove = 100; // num of records to be removed in a single tick
   size_t entries_removed = 0;
 
   auto should_stop = [&] {
@@ -1029,7 +1032,7 @@ void ConfigMonitor::_trim_config_history() {
 
   auto mark_for_deletion = [&](const string& key, int version) {
     dout(10) << __func__ << " removing old key: " << key << dendl;
-    keys_to_delete.insert(key);
+    keys_to_delete.push_back(key);
     version_key_deletion_count[version]++;
     ++entries_removed;
   };
@@ -1037,16 +1040,24 @@ void ConfigMonitor::_trim_config_history() {
   for (auto& [config_key, version_map] : config_versions) {
     if (version_map.size() <= mon_config_history_size) continue;
     size_t remove_count = version_map.size() - mon_config_history_size;
-    auto it = version_map.begin();
-
-    for (size_t i = 0; i < remove_count && it != version_map.end() && !should_stop(); ++i, ++it) {
-      int version = it->first;
-      for (const auto& key : it->second) {
-        mark_for_deletion(key, version);
-        if (should_stop()) break;
+    
+    size_t i = 0;
+    for (const auto& [version, keys] : version_map) {
+      if (i >= remove_count || should_stop()) {
+        break;
       }
+      for (const auto& key : keys) {
+        mark_for_deletion(key, version);
+        if (should_stop()) { 
+          break; 
+        }
+      }
+      ++i;
     }
-    if (should_stop()) break;
+
+    if (should_stop()) { 
+      break; 
+    }
   }
 
   for (const auto& marker : version_markers) {
@@ -1054,13 +1065,18 @@ void ConfigMonitor::_trim_config_history() {
       int version = stoi(m[1]);
       if (version_key_deletion_count.contains(version)) {
         dout(10) << __func__ << " removing version marker: " << marker << dendl;
-        keys_to_delete.insert(marker);
+        keys_to_delete.push_back(marker);
       }
     }
   }
 
-  for (const auto& key : keys_to_delete) {
-    mon.kvmon()->enqueue_rm(key);
+  if (!keys_to_delete.empty()) {
+    for (const auto& key : keys_to_delete) {
+      mon.kvmon()->enqueue_rm(key);
+    }
+    return true;
   }
-  mon.kvmon()->propose_pending();
+  
+  return false;
+  //  mon.kvmon()->propose_pending(); --> right, this should be removed
 }
