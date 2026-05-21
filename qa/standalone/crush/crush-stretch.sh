@@ -655,7 +655,7 @@ function TEST_stretch_diff_bucket_barrier() {
 
     ceph mon enable_stretch_mode a stretch_zone zone
 
-    ceph osd pool create pool_dc replicated --zone-failure-domain=datacenter --zones=2 --class=ssd 2>&1 | grep "Error EINVAL: CRUSH rule 2 uses different datacenter buckets than configured for stretch mode" || return 1
+    ceph osd pool create pool_dc replicated --zone-failure-domain=datacenter --zones=2 --class=ssd 2>&1 | grep "Error EINVAL: CRUSH rule 2 is stretched across datacenter instead of zone" || return 1
 }
 
 main crush-stretch "$@"
