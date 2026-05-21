@@ -154,12 +154,6 @@ public:
     t.add_present_to_retired_set(ref);
   }
 
-  /// Declare paddr retired in t
-  using retire_extent_iertr = base_iertr;
-  using retire_extent_ret = base_iertr::future<>;
-  retire_extent_ret retire_extent_addr(
-    Transaction &t, paddr_t addr, extent_len_t length);
-
   template <typename T, typename Func>
   TCachedExtentRef<T> retire_absent_extent_addr(
     Transaction &t,
