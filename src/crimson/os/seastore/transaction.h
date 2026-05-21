@@ -162,7 +162,7 @@ public:
       ref->set_invalid(*this);
       write_set.erase(*ref);
       assert(ref->prior_instance);
-      retired_set.emplace(ref->prior_instance, trans_id);
+      retired_set.emplace(ref->prior_instance, *this);
       assert(read_set.count(ref->prior_instance->get_paddr(), extent_cmp_t{}));
       ref->reset_prior_instance();
     } else {
@@ -171,7 +171,7 @@ public:
       // XXX: prevent double retire -- retired_set.count(ref->get_paddr()) == 0
       // If it's already in the set, insert here will be a noop,
       // which is what we want.
-      retired_set.emplace(ref, trans_id);
+      retired_set.emplace(ref, *this);
     }
   }
 
@@ -408,7 +408,7 @@ public:
     bool retired) {
     read_set.insert(item);
     if (retired) {
-      retired_set.emplace(item.ref, trans_id);
+      retired_set.emplace(item.ref, *this);
     }
   }
   void maybe_update_pending_paddr(

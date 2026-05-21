@@ -866,7 +866,7 @@ private:
 	      offset,
 	      PLACEMENT_HINT_NULL,
 	      NULL_GENERATION,
-	      TRANS_ID_NULL,
+	      nullptr,
 	      write_policy_t::WRITE_BACK);
     SUBDEBUGT(seastore_cache,
 	"{} {}~0x{:x} is absent, add extent and reading range 0x{:x}~0x{:x} ... -- {}",
@@ -906,7 +906,7 @@ private:
                 offset,
                 PLACEMENT_HINT_NULL,
                 NULL_GENERATION,
-		TRANS_ID_NULL,
+		nullptr,
 		write_policy_t::WRITE_BACK);
       SUBDEBUG(seastore_cache,
           "{} {}~0x{:x} is absent, add extent and reading range 0x{:x}~0x{:x} ... -- {}",
@@ -1209,7 +1209,7 @@ public:
               result->paddr,
               opt.hint,
               result->gen,
-	      t.get_trans_id(),
+	      &t,
 	      write_policy_t::WRITE_BACK);
     t.add_fresh_extent(ret);
     SUBDEBUGT(seastore_cache,
@@ -1253,7 +1253,7 @@ public:
                 result.paddr,
                 opt.hint,
                 result.gen,
-                t.get_trans_id(),
+                &t,
 		opt.write_policy);
       t.add_fresh_extent(ret);
       SUBDEBUGT(seastore_cache,
@@ -1296,7 +1296,7 @@ public:
 	      remap_paddr,
 	      PLACEMENT_HINT_NULL,
 	      NULL_GENERATION,
-              t.get_trans_id(),
+              &t,
 	      write_policy_t::WRITE_BACK);
 
     auto extent = ext->template cast<T>();

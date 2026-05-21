@@ -85,7 +85,7 @@ struct FixedKVNode : CachedExtent {
   void on_delta_write(paddr_t record_block_offset) final {
     // All in-memory relative addrs are necessarily record-relative
     assert(get_prior_instance());
-    assert(pending_for_transaction);
+    assert(t != nullptr);
     resolve_relative_addrs(record_block_offset);
   }
 
@@ -264,8 +264,9 @@ struct FixedKVInternalNode
     paddr_t addr,
     base_child_t* nextent) {
     LOG_PREFIX(FixedKVInternalNode::update);
+    assert(this->t != nullptr);
     SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, {}",
-      this->pending_for_transaction,
+      this->t->get_trans_id(),
       iter.get_offset(),
       (void*)nextent);
     this->update_child_ptr(iter.get_offset(), nextent);
@@ -281,8 +282,9 @@ struct FixedKVInternalNode
     paddr_t addr,
     base_child_t* nextent) {
     LOG_PREFIX(FixedKVInternalNode::insert);
+    assert(this->t != nullptr);
     SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, key {}, {}",
-      this->pending_for_transaction,
+      this->t->get_trans_id(),
       iter.get_offset(),
       pivot,
       (void*)nextent);
@@ -296,8 +298,9 @@ struct FixedKVInternalNode
 
   void remove(internal_const_iterator_t iter) {
     LOG_PREFIX(FixedKVInternalNode::remove);
+    assert(this->t != nullptr);
     SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, key {}",
-      this->pending_for_transaction,
+      this->t->get_trans_id(),
       iter.get_offset(),
       iter.get_key());
     this->remove_child_ptr(iter.get_offset());
@@ -312,8 +315,9 @@ struct FixedKVInternalNode
     paddr_t addr,
     base_child_t* nextent) {
     LOG_PREFIX(FixedKVInternalNode::replace);
+    assert(this->t != nullptr);
     SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, old key {}, key {}, {}",
-      this->pending_for_transaction,
+      this->t->get_trans_id(),
       iter.get_offset(),
       iter.get_key(),
       pivot,

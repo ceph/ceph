@@ -117,7 +117,7 @@ protected:
     auto pi = me.get_prior_instance();
     auto &prior = *pi->template cast<T>();
     ceph_assert(prior.parent_of_root);
-    ceph_assert(me.pending_for_transaction);
+    ceph_assert(me.t != nullptr);
     parent_of_root = prior.parent_of_root;
     TreeRootLinker<ParentT, T>::link_root(parent_of_root, &me);
     return;
@@ -441,7 +441,7 @@ public:
   // see Transaction::views
   struct copy_dests_t : trans_spec_view_t {
     std::set<TCachedExtentRef<T>, Comparator> dests_by_key;
-    copy_dests_t(Transaction &t) : trans_spec_view_t{t.get_trans_id()} {}
+    copy_dests_t(Transaction &t) : trans_spec_view_t(t) {}
     ~copy_dests_t() {
       LOG_PREFIX(~copy_dests_t);
       SUBTRACE(seastore_fixedkv_tree, "copy_dests_t destroyed");
@@ -480,8 +480,9 @@ protected:
       auto mut_iter = me.mutation_pending_extents.find(
 	t.get_trans_id(), trans_spec_view_t::cmp_t());
       assert(mut_iter != me.mutation_pending_extents.end());
-      assert(copy_dests_by_trans.find(t.get_trans_id()) ==
-	copy_dests_by_trans.end());
+      assert(copy_dests_by_trans.find(
+        t.get_trans_id(), trans_spec_view_t::cmp_t()) ==
+          copy_dests_by_trans.end());
       return static_cast<T*>(&(*mut_iter));
     }
     ceph_assert(hint == CachedExtent::viewable_state_t::stable_become_retired);
@@ -501,7 +502,8 @@ protected:
   template <typename Func>
   void for_each_copy_dest_set(Transaction &t, Func &&f) {
     for (auto &dests : copy_dests_by_trans) {
-      if (dests.pending_for_transaction == t.get_trans_id()) {
+      assert(dests.t != nullptr);
+      if (dests.t->get_trans_id() == t.get_trans_id()) {
         continue;
       }
       auto &copy_dests = static_cast<copy_dests_t&>(dests);
@@ -515,8 +517,11 @@ protected:
     auto tid = t.get_trans_id();
     auto iter = copy_dests_by_trans.lower_bound(
       tid, trans_spec_view_t::cmp_t());
+    if (iter != copy_dests_by_trans.end()) {
+      assert(iter->t != nullptr);
+    }
     if (iter == copy_dests_by_trans.end() ||
-	iter->pending_for_transaction != tid) {
+	iter->t->get_trans_id() != tid) {
       iter = copy_dests_by_trans.insert_before(
 	iter, t.add_transactional_view<copy_dests_t>(t));
     }
@@ -548,8 +553,9 @@ protected:
     auto &me = down_cast();
     LOG_PREFIX(ParentNode::remove_child_ptr);
     auto raw_children = children.data();
+    assert(me.t != nullptr);
     SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, total size {}, extent {}",
-      me.pending_for_transaction,
+      me.t->get_trans_id(),
       offset,
       me.get_size(),
       (void*)raw_children[offset]);

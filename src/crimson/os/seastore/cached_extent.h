@@ -141,32 +141,22 @@ template <typename T>
 using read_trans_set_t = typename read_set_item_t<T>::trans_set_t;
 
 struct trans_spec_view_t {
-  // if the extent is pending, contains the id of the owning transaction;
-  // TRANS_ID_NULL otherwise
-  transaction_id_t pending_for_transaction = TRANS_ID_NULL;
+  // if the extent is pending, this points to the transaction
+  Transaction *t = nullptr;
   trans_spec_view_t() = default;
-  trans_spec_view_t(transaction_id_t id) : pending_for_transaction(id) {}
+  trans_spec_view_t(Transaction &t);
   virtual ~trans_spec_view_t() = default;
 
   struct cmp_t {
     bool operator()(
       const trans_spec_view_t &lhs,
-      const trans_spec_view_t &rhs) const
-    {
-      return lhs.pending_for_transaction < rhs.pending_for_transaction;
-    }
+      const trans_spec_view_t &rhs) const;
     bool operator()(
       const transaction_id_t &lhs,
-      const trans_spec_view_t &rhs) const
-    {
-      return lhs < rhs.pending_for_transaction;
-    }
+      const trans_spec_view_t &rhs) const;
     bool operator()(
       const trans_spec_view_t &lhs,
-      const transaction_id_t &rhs) const
-    {
-      return lhs.pending_for_transaction < rhs;
-    }
+      const transaction_id_t &rhs) const;
   };
 
   using trans_view_hook_t =
@@ -362,13 +352,13 @@ public:
             paddr_t paddr,
             placement_hint_t hint,
             rewrite_gen_t gen,
-            transaction_id_t trans_id,
+            Transaction *trans,
             write_policy_t policy) {
     state = _state;
     set_paddr(paddr);
     user_hint = hint;
     rewrite_generation = gen;
-    pending_for_transaction = trans_id;
+    t = trans;
     write_policy = policy;
   }
 
@@ -522,38 +512,7 @@ public:
 
   friend std::ostream &operator<<(std::ostream &, extent_state_t);
   virtual std::ostream &print_detail(std::ostream &out) const { return out; }
-  std::ostream &print(std::ostream &out) const {
-    std::string prior_poffset_str = prior_poffset
-      ? fmt::format("{}", *prior_poffset)
-      : "nullopt";
-    out << "CachedExtent(addr=" << this
-	<< ", type=" << get_type()
-	<< ", trans=" << pending_for_transaction
-	<< ", version=" << version
-	<< ", dirty_from=" << dirty_from
-	<< ", modify_time=" << sea_time_point_printer_t{modify_time}
-	<< ", paddr=" << get_paddr()
-	<< ", prior_paddr=" << prior_poffset_str
-	<< std::hex << ", length=0x" << get_length()
-	<< ", loaded=0x" << get_loaded_length() << std::dec
-	<< ", state=" << state
-	<< ", pin_state=" << pin_state
-	<< ", last_committed_crc=" << last_committed_crc
-	<< ", refcount=" << use_count()
-	<< ", user_hint=" << user_hint
-	<< ", write_policy=" << write_policy
-	<< ", rewrite_gen=" << rewrite_gen_printer_t{rewrite_generation}
-	<< ", pending_io=";
-    if (is_pending_io()) {
-      out << io_wait->from_state;
-    } else {
-      out << "N/A";
-    }
-    if (is_valid() && is_fully_loaded() && !is_stable_clean_pending()) {
-      print_detail(out);
-    }
-    return out << ")";
-  }
+  std::ostream &print(std::ostream &out) const;
 
   /**
    * get_delta
@@ -852,9 +811,7 @@ public:
   }
 
   /// Returns true if the extent part of the open transaction
-  bool is_pending_in_trans(transaction_id_t id) const {
-    return is_pending() && pending_for_transaction == id;
-  }
+  bool is_pending_in_trans(transaction_id_t id) const;
 
   enum class viewable_state_t {
     stable,                // viewable
@@ -1331,8 +1288,8 @@ struct trans_retired_extent_link_t {
   // Otherwise, we have to search through each extent's "retired_transactions"
   // to remove the transaction
   trans_spec_view_t trans_view;
-  trans_retired_extent_link_t(CachedExtentRef extent, transaction_id_t id)
-    : extent(extent), trans_view{id}
+  trans_retired_extent_link_t(CachedExtentRef extent, Transaction &t)
+    : extent(extent), trans_view{t}
   {
     assert(extent->is_stable());
     extent->retired_transactions.insert(trans_view);
