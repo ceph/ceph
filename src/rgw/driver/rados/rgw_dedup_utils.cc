@@ -385,6 +385,13 @@ namespace rgw::dedup {
     this->ingress_skip_filtered_bucket += other.ingress_skip_filtered_bucket;
     this->ingress_skip_filtered_storage_class += other.ingress_skip_filtered_storage_class;
 
+    this->total_bidx_record_length += other.total_bidx_record_length;
+    // when aggragting stats from multiple shards we need to preserve the max logic
+    if (other.max_bidx_record_length > this->max_bidx_record_length) {
+      this->max_bidx_record_length = other.max_bidx_record_length;
+    }
+    this->failed_wrong_ver += other.failed_wrong_ver;
+
     return *this;
   }
   //---------------------------------------------------------------------------
@@ -401,6 +408,13 @@ namespace rgw::dedup {
       f->dump_unsigned("Egress Records count", this->egress_records);
       f->dump_unsigned("Egress Blocks count", this->egress_blocks);
       f->dump_unsigned("Egress Slabs count", this->egress_slabs);
+      if (this->egress_records) {
+        f->dump_unsigned("Max Bucket-Index Record Length", this->max_bidx_record_length);
+        if (this->egress_records) {
+          f->dump_unsigned("Avg Bucket-Index Record Length",
+                           this->total_bidx_record_length / this->egress_records);
+        }
+      }
       f->dump_unsigned("Single part obj count", this->single_part_objs);
       f->dump_unsigned("Multipart obj count", this->multipart_objs);
       if (this->small_multipart_obj) {
@@ -466,6 +480,9 @@ namespace rgw::dedup {
       if (this->ingress_corrupted_etag) {
         f->dump_unsigned("Corrupted ETAG", this->ingress_corrupted_etag);
       }
+      if (this->failed_wrong_ver) {
+        f->dump_unsigned("Failed Wrong Version", this->failed_wrong_ver);
+      }
     }
   }
 
@@ -509,6 +526,10 @@ namespace rgw::dedup {
     encode(w.ingress_skip_filtered_bucket, bl);
     encode(w.ingress_skip_filtered_storage_class, bl);
 
+    encode(w.max_bidx_record_length, bl);
+    encode(w.total_bidx_record_length, bl);
+    encode(w.failed_wrong_ver, bl);
+
     encode(w.duration, bl);
     ENCODE_FINISH(bl);
   }
@@ -537,6 +558,10 @@ namespace rgw::dedup {
     decode(w.ingress_skip_too_small, bl);
     decode(w.ingress_skip_filtered_bucket, bl);
     decode(w.ingress_skip_filtered_storage_class, bl);
+
+    decode(w.max_bidx_record_length, bl);
+    decode(w.total_bidx_record_length, bl);
+    decode(w.failed_wrong_ver, bl);
 
     decode(w.duration, bl);
     DECODE_FINISH(bl);
@@ -575,6 +600,8 @@ namespace rgw::dedup {
     this->failed_src_load         += other.failed_src_load;
     this->failed_rec_load         += other.failed_rec_load;
     this->failed_block_load       += other.failed_block_load;
+    this->failed_rec_overflow     += other.failed_rec_overflow;
+    this->failed_wrong_ver        += other.failed_wrong_ver;
 
     this->different_storage_class       += other.different_storage_class;
     this->invalid_hash_no_split_head    += other.invalid_hash_no_split_head;
@@ -613,6 +640,16 @@ namespace rgw::dedup {
     this->md_throttle_sleep_time_usec += other.md_throttle_sleep_time_usec;
     this->failed_table_load           += other.failed_table_load;
     this->failed_map_overflow         += other.failed_map_overflow;
+    this->remote_attrs_records        += other.remote_attrs_records;
+    this->failed_remote_attrs_fetch   += other.failed_remote_attrs_fetch;
+
+    this->total_attrs_record_length   += other.total_attrs_record_length;
+    // when aggragting stats from multiple shards we need to preserve the max logic
+    if (other.max_attrs_record_length > this->max_attrs_record_length) {
+      this->max_attrs_record_length = other.max_attrs_record_length;
+    }
+    this->write_slab_failure          += other.write_slab_failure;
+
     return *this;
   }
 
@@ -636,6 +673,13 @@ namespace rgw::dedup {
 
       f->dump_unsigned("Total processed objects", this->processed_objects);
       f->dump_unsigned("Loaded objects", this->loaded_objects);
+      if (this->processed_objects) {
+        f->dump_unsigned("Max Attrs Record Length", this->max_attrs_record_length);
+        if (this->processed_objects) {
+          f->dump_unsigned("Avg Attrs Record Length",
+                           this->total_attrs_record_length / this->processed_objects);
+        }
+      }
       f->dump_unsigned("Ingress Slabs", this->ingress_slabs);
       f->dump_unsigned("Set Shared-Manifest SRC", this->set_shared_manifest_src);
       f->dump_unsigned("Deduped Obj (this cycle)", this->deduped_objects);
@@ -663,6 +707,15 @@ namespace rgw::dedup {
       }
       if (this->failed_map_overflow) {
         f->dump_unsigned("Failed Remap Overflow", this->failed_map_overflow);
+      }
+      if (this->remote_attrs_records) {
+        f->dump_unsigned("Remote Attrs Records", this->remote_attrs_records);
+      }
+      if (this->failed_remote_attrs_fetch) {
+        f->dump_unsigned("Failed Remote Attrs Fetch", this->failed_remote_attrs_fetch);
+      }
+      if (this->write_slab_failure) {
+        f->dump_unsigned("Write SLAB failures", this->write_slab_failure);
       }
 
       f->dump_unsigned("Valid HASH attrs", this->valid_hash_attrs);
@@ -769,6 +822,12 @@ namespace rgw::dedup {
       if (this->failed_block_load) {
         f->dump_unsigned("Failed Block-Load ", this->failed_block_load);
       }
+      if (this->failed_rec_overflow) {
+        f->dump_unsigned("Failed Record Overflow", this->failed_rec_overflow);
+      }
+      if (this->failed_wrong_ver) {
+        f->dump_unsigned("Failed Wrong Version", this->failed_wrong_ver);
+      }
 
       if (this->illegal_rec_id) {
         f->dump_unsigned("Failed illegal_rec_id", this->illegal_rec_id );
@@ -859,6 +918,8 @@ namespace rgw::dedup {
     encode(m.failed_src_load, bl);
     encode(m.failed_rec_load, bl);
     encode(m.failed_block_load, bl);
+    encode(m.failed_rec_overflow, bl);
+    encode(m.failed_wrong_ver, bl);
 
     encode(m.different_storage_class, bl);
     encode(m.invalid_hash_no_split_head, bl);
@@ -895,6 +956,11 @@ namespace rgw::dedup {
     encode(m.md_throttle_sleep_time_usec, bl);
     encode(m.failed_table_load, bl);
     encode(m.failed_map_overflow, bl);
+    encode(m.remote_attrs_records, bl);
+    encode(m.failed_remote_attrs_fetch, bl);
+    encode(m.max_attrs_record_length, bl);
+    encode(m.total_attrs_record_length, bl);
+    encode(m.write_slab_failure, bl);
 
     encode(m.duration, bl);
     ENCODE_FINISH(bl);
@@ -934,6 +1000,8 @@ namespace rgw::dedup {
     decode(m.failed_src_load, bl);
     decode(m.failed_rec_load, bl);
     decode(m.failed_block_load, bl);
+    decode(m.failed_rec_overflow, bl);
+    decode(m.failed_wrong_ver, bl);
 
     decode(m.different_storage_class, bl);
     decode(m.invalid_hash_no_split_head, bl);
@@ -970,6 +1038,11 @@ namespace rgw::dedup {
     decode(m.md_throttle_sleep_time_usec, bl);
     decode(m.failed_table_load, bl);
     decode(m.failed_map_overflow, bl);
+    decode(m.remote_attrs_records, bl);
+    decode(m.failed_remote_attrs_fetch, bl);
+    decode(m.max_attrs_record_length, bl);
+    decode(m.total_attrs_record_length, bl);
+    decode(m.write_slab_failure, bl);
 
     decode(m.duration, bl);
     DECODE_FINISH(bl);
