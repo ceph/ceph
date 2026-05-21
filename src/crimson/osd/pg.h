@@ -912,8 +912,12 @@ private:
     bool needs_pause);
   /// Re-trigger snap trimming after scrub completion. Snap trimming is
   /// deferred while the PG is scrubbing; call this from notify_scrub_end()
-  /// to resume.
+  /// to resume. Spawns a SnapTrimInitiate operation to avoid nesting
+  /// interrupt conditions.
   void kick_snap_trim();
+  /// Initiate the snap trim loop with all state checks. Called from
+  /// SnapTrimInitiate and on_active_actmap().
+  void initiate_snap_trim();
 
 private:
   PG_OSDMapGate osdmap_gate;
@@ -1156,6 +1160,7 @@ private:
   friend class WatchTimeoutRequest;
   friend class SnapTrimEvent;
   friend class SnapTrimObjSubEvent;
+  friend class SnapTrimInitiate;
   friend ECBackend;
 private:
 
