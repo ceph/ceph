@@ -70,12 +70,52 @@ public:
     std::function<void(uint64_t offset, uint64_t length)> notify) = 0;
 
   /*
-   * Returns a resume cursor:
-   *   - if the cursor is >= range_end, the window has been fully enumerated;
-   *   - otherwise the caller should call again with range_begin set to the
-   *     returned cursor to fetch the next batch.
+   * Retrieves free extents from [range_begin, range_end) window. Up to max_count
+   * extents are to be retrieved. 
+   * 
+   * Returned value is a cursor to pass as range_begin to the next call:
+   *   - cursor >= range_end: the window is fully enumerated, stop.
+   *   - cursor < range_end: pass it as range_begin to resume. The cursor is a
+   *     valid resume point but is NOT guaranteed to land on a free extent; it
+   *     may point into allocated space. An extra call that returns zero extents
+   *     and advances cursor to range_end is possible when max_count is reached
+   *     exactly at the last free extent in the window.
    *
-   * Preconditions: range_begin <= range_end and max_count > 0..
+   * Unlike foreach(), which holds the allocator lock for the entire walk, this
+   * call takes the lock only for the duration of a single batch. The extents
+   * might not be gloablly consistent between each lock. 
+   *
+   * Note, when allocator is idle the batches received via foreach() and
+   * get_free_extents()  will give the same result.
+   *
+   * Consistency contract (read carefully):
+   *   - The result is NOT a point-in-time snapshot of all the extents present
+   *     on the disk. It's only a snapshot of the extents present in the range
+   *     given to the function. Each batch observes the allocator state as of
+   *     its own lock acquisition;
+   *   - Extents within a single batch are mutually consistent and returned in
+   *     ascending offset order, clipped to [range_begin, range_end).
+   *
+   * Therefore the union of all batches is an APPROXIMATION of the free space:
+   * off by at most the extents concurrently allocated/released during
+   * enumeration. 
+   *
+   * This is intended for statistical/best-effort consumers (e.g. fragmentation
+   * scoring, defrag planning, emergency discard). For an exact, consistent
+   * enumeration use foreach() instead.
+   *
+   * Caveats:
+   *   - *out is appended to, not cleared. The caller owns
+   *     preallocating/clearing/reusing. 
+  *   - max_count bounds extents per batch, not bytes; passing 0 means
+  *     unbounded for this call. A single returned extent may be arbitrarily
+  *     large (it is the clipped span of one free extent).
+   *   - The cursor is an opaque offset; do not assume it lands on a free
+   *     extent or even on a block boundary. Only the >= range_end termination
+   *     test is meaningful.
+   *
+   * Preconditions: 
+  *    - range_begin <= range_end.
    */
   virtual uint64_t get_free_extents(
     uint64_t range_begin,

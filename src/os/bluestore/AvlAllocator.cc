@@ -508,7 +508,6 @@ uint64_t AvlAllocator::get_free_extents(
     return range_end;
   }
 
-  // TODO: Naveen: Do we need a lock here ?
   std::lock_guard l(lock);
   auto it = range_tree.lower_bound(range_t{range_begin, range_begin},
 				   range_tree.key_comp());
