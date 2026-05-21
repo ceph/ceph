@@ -168,6 +168,18 @@
   [ $jobs -lt 1 ] && jobs=1 \
   echo $jobs )
 
+# $1==1: fresh install; $1==0: removal. Skip try-restart on upgrade ($1>1).
+%define ceph_mgr_module_scripts() \
+%post %1\
+if [ $1 -eq 1 ] ; then\
+    /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :\
+fi\
+\
+%postun %1\
+if [ $1 -eq 1 ] ; then\
+    /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :\
+fi
+
 %if 0%{?_smp_ncpus_max} == 0
 %if 0%{?__isa_bits} == 32
 # 32-bit builds can use 3G memory max, which is not enough even for -j2
@@ -1968,28 +1980,12 @@ fi
 %files mgr-dashboard
 %{_datadir}/ceph/mgr/dashboard
 
-%post mgr-dashboard
-if [ $1 -eq 1 ] ; then
-    /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
-fi
-
-%postun mgr-dashboard
-if [ $1 -eq 1 ] ; then
-    /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
-fi
+%ceph_mgr_module_scripts mgr-dashboard
 
 %files mgr-diskprediction-local
 %{_datadir}/ceph/mgr/diskprediction_local
 
-%post mgr-diskprediction-local
-if [ $1 -eq 1 ] ; then
-    /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
-fi
-
-%postun mgr-diskprediction-local
-if [ $1 -eq 1 ] ; then
-    /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
-fi
+%ceph_mgr_module_scripts mgr-diskprediction-local
 
 %files mgr-modules-core
 %dir %{_datadir}/ceph/mgr
@@ -2026,41 +2022,17 @@ fi
 %files mgr-rook
 %{_datadir}/ceph/mgr/rook
 
-%post mgr-rook
-if [ $1 -eq 1 ] ; then
-    /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
-fi
-
-%postun mgr-rook
-if [ $1 -eq 1 ] ; then
-    /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
-fi
+%ceph_mgr_module_scripts mgr-rook
 
 %files mgr-k8sevents
 %{_datadir}/ceph/mgr/k8sevents
 
-%post mgr-k8sevents
-if [ $1 -eq 1 ] ; then
-    /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
-fi
-
-%postun mgr-k8sevents
-if [ $1 -eq 1 ] ; then
-    /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
-fi
+%ceph_mgr_module_scripts mgr-k8sevents
 
 %files mgr-cephadm
 %{_datadir}/ceph/mgr/cephadm
 
-%post mgr-cephadm
-if [ $1 -eq 1 ] ; then
-    /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
-fi
-
-%postun mgr-cephadm
-if [ $1 -eq 1 ] ; then
-    /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
-fi
+%ceph_mgr_module_scripts mgr-cephadm
 
 %files mon
 %{_bindir}/ceph-mon
