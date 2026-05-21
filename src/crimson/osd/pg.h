@@ -1246,6 +1246,9 @@ private:
   std::map<ceph_tid_t, log_update_t> log_entry_update_waiting_on;
   // snap trimming
   interval_set<snapid_t> snap_trimq;
+
+  std::optional<hobject_t> consider_updating_migration_watermark(
+    std::set<hobject_t> &deleted) override;
 };
 
 struct PG::do_osd_ops_params_t {
