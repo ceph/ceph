@@ -201,6 +201,11 @@ namespace rgw::dedup {
     uint64_t ingress_skip_filtered_bucket = 0;
     uint64_t ingress_skip_filtered_storage_class = 0;
 
+    uint64_t max_bidx_record_length = 0;
+    uint64_t total_bidx_record_length = 0;
+
+    uint64_t failed_wrong_ver = 0;
+
     utime_t  duration = {0, 0};
   };
   std::ostream& operator<<(std::ostream &out, const worker_stats_t &s);
@@ -242,6 +247,8 @@ namespace rgw::dedup {
     uint64_t failed_src_load = 0;
     uint64_t failed_rec_load = 0;
     uint64_t failed_block_load = 0;
+    uint64_t failed_rec_overflow = 0;
+    uint64_t failed_wrong_ver = 0;
 
     uint64_t different_storage_class = 0;
     uint64_t invalid_hash_no_split_head = 0;
@@ -279,6 +286,11 @@ namespace rgw::dedup {
     uint64_t md_throttle_sleep_time_usec = 0;
     uint64_t failed_table_load = 0;
     uint64_t failed_map_overflow = 0;
+    uint64_t remote_attrs_records = 0;
+    uint64_t failed_remote_attrs_fetch = 0;
+    uint64_t max_attrs_record_length = 0;
+    uint64_t total_attrs_record_length = 0;
+    uint64_t write_slab_failure = 0;
     utime_t  duration = {0, 0};
   };
   std::ostream &operator<<(std::ostream &out, const md5_stats_t &s);

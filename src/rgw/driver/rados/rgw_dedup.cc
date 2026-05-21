@@ -493,11 +493,18 @@ namespace rgw::dedup {
                                                const std::string      &obj_name,
                                                const std::string      &instance,
                                                uint64_t                obj_size,
-                                               const std::string      &storage_class)
+                                               const std::string      &storage_class,
+                                               worker_stats_t         *p_worker_stats)
   {
     disk_record_t rec(p_bucket, obj_name, p_parsed_etag, instance, obj_size, storage_class);
     // First pass using only ETAG and size taken from bucket-index
     rec.s.flags.set_fastlane();
+
+    size_t rec_len = rec.length();
+    if (rec_len > p_worker_stats->max_bidx_record_length) {
+      p_worker_stats->max_bidx_record_length = rec_len;
+    }
+    p_worker_stats->total_bidx_record_length += rec_len;
 
     auto p_disk = disk_arr.get_shard_block_seq(p_parsed_etag->md5_low);
     disk_block_seq_t::record_info_t rec_info;
@@ -1763,8 +1770,14 @@ namespace rgw::dedup {
       comp_match = COMPRESSION_MATCH_PARTIAL;
     }
 
+    size_t rec_len = p_rec->length();
+    if (rec_len > p_stats->max_attrs_record_length) {
+      p_stats->max_attrs_record_length = rec_len;
+    }
+    p_stats->total_attrs_record_length += rec_len;
+
     disk_block_seq_t::record_info_t rec_info;
-    ret = p_disk->add_record(d_dedup_cluster_ioctx, p_rec, &rec_info);
+    ret = p_disk->add_record(d_dedup_cluster_ioctx, p_rec, &rec_info, p_stats);
     if (ret == 0) {
       // set the disk_block_id_t to this unless the existing disk_block_id is marked as shared-manifest
       if (unlikely(rec_info.rec_id >= MAX_REC_IN_BLOCK)) {
@@ -1839,11 +1852,31 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  // RGW_ATTR_BLAKE3 and RGW_ATTR_MANIFEST are calculated and written to the
-  // object-head during STEP_REMOVE_DUPLICATES (and never updated into the
-  // disk-record since we only write records in bulk).
-  // All other attributes are valid on both SRC and TGT at this point.
-  static int read_hash_and_manifest(const DoutPrefixProvider *const dpp,
+  // Fetch attributes from the RADOS head object that are NOT stored in the
+  // disk record (or were dropped from it).
+  //
+  // Always fetched:
+  //   RGW_ATTR_MANIFEST  -- required; returns -ENOENT if missing.
+  //   RGW_ATTR_BLAKE3    -- if present, populates p_rec->s.hash and sets
+  //                         has_valid_hash().  Missing BLAKE3 is an error
+  //                         unless has_remote_attrs() is set (the hash may
+  //                         not have been written to the object head yet).
+  //
+  // Conditionally fetched (when has_remote_attrs()):
+  //   RGW_ATTR_COMPRESSION -- restores compression_bl that was dropped from
+  //                           the disk record to stay within MAX_REC_SIZE.
+  //
+  // Callers & expected state:
+  //   1. check_and_set_strong_hash() for SRC on 2nd+ TGT -- BLAKE3 and
+  //      manifest were written to the head object during a previous dedup;
+  //      the disk record is stale.
+  //   2. try_deduping_record() for SRC/TGT with remote_attrs -- manifest
+  //      and compression were too large for the disk record and need to be
+  //      fetched before parse_manifests().
+  //
+  // Uses a single ioctx.getxattrs() call (all attrs returned in one round
+  // trip), so fetching compression adds zero extra RADOS cost.
+  static int fetch_head_obj_attrs(const DoutPrefixProvider *const dpp,
                                     rgw::sal::Driver *driver,
                                     rgw::sal::RadosStore *store,
                                     disk_record_t *p_rec)
@@ -1882,7 +1915,9 @@ namespace rgw::dedup {
         return -EINVAL;
       }
     }
-    else {
+    else if (!p_rec->s.flags.has_remote_attrs()) {
+      // BLAKE3 is mandatory unless fetching for remote_attrs (hash may not
+      // have been written to the object head yet)
       ldpp_dout(dpp, 1) << __func__ << "::ERR: No HASH attribute" << dendl;
       return -ENOENT;
     }
@@ -1896,6 +1931,14 @@ namespace rgw::dedup {
     else {
       ldpp_dout(dpp, 1) << __func__ << "::ERR: No Manifest attribute" << dendl;
       return -ENOENT;
+    }
+
+    if (p_rec->s.flags.has_remote_attrs()) {
+      itr = attrset.find(RGW_ATTR_COMPRESSION);
+      if (itr != attrset.end()) {
+        p_rec->compression_bl = itr->second;
+        p_rec->s.compression_bl_len = p_rec->compression_bl.length();
+      }
     }
 
     return 0;
@@ -2047,12 +2090,12 @@ namespace rgw::dedup {
     }
 
     // SRC hash could have been calculated and stored in obj-attributes before
-    // (will happen when we got multiple targets)
+    // This will happen when we got multiple targets (second time and up with same SRC)
     if (!p_src_rec->s.flags.has_valid_hash() && p_src_val->has_valid_hash()) {
       // read the manifest and strong hash from the head-object attributes
       ldpp_dout(dpp, 20) << __func__ << "::Fetch SRC strong hash from head-object::"
                          << p_src_rec->obj_name << dendl;
-      if (unlikely(read_hash_and_manifest(dpp, driver, store, p_src_rec) != 0)) {
+      if (unlikely(fetch_head_obj_attrs(dpp, driver, store, p_src_rec) != 0)) {
         return false;
       }
       try {
@@ -2270,6 +2313,17 @@ namespace rgw::dedup {
       return 0;
     }
 
+    if (p_src_rec->s.flags.has_remote_attrs()) {
+      ret = fetch_head_obj_attrs(dpp, driver, store, p_src_rec);
+      if (unlikely(ret != 0)) {
+        p_stats->failed_remote_attrs_fetch++;
+        ldpp_dout(dpp, 5) << __func__
+                          << "::ERR: failed fetch remote attrs for SRC "
+                          << p_src_rec->obj_name << dendl;
+        return 0;
+      }
+    }
+
     ldpp_dout(dpp, 20) << __func__ << "::SRC:" << p_src_rec->bucket_name << "/"
                        << p_src_rec->obj_name << "::TGT:" << p_tgt_rec->bucket_name
                        << "/" << p_tgt_rec->obj_name << dendl;
@@ -2291,6 +2345,17 @@ namespace rgw::dedup {
                          << "::" << p_tgt_rec->obj_name << "::"
                          << p_tgt_rec->s.obj_bytes_size << dendl;
       return 0;
+    }
+
+    if (p_tgt_rec->s.flags.has_remote_attrs()) {
+      ret = fetch_head_obj_attrs(dpp, driver, store, p_tgt_rec);
+      if (unlikely(ret != 0)) {
+        p_stats->failed_remote_attrs_fetch++;
+        ldpp_dout(dpp, 5) << __func__
+                          << "::ERR: failed fetch remote attrs for TGT "
+                          << p_tgt_rec->obj_name << dendl;
+        return 0;
+      }
     }
 
     RGWObjManifest src_manifest, tgt_manifest;
@@ -2584,7 +2649,8 @@ namespace rgw::dedup {
 
     return add_disk_rec_from_bucket_idx(disk_arr, p_bucket, &parsed_etag,
                                         entry.key.name, entry.key.instance,
-                                        entry.meta.accounted_size, storage_class);
+                                        entry.meta.accounted_size, storage_class,
+                                        p_worker_stats);
   }
 
   //---------------------------------------------------------------------------
@@ -2836,7 +2902,7 @@ namespace rgw::dedup {
         // we finished processing output SLAB from @worker_id -> remove them
         remove_slabs(worker_id, md5_shard, slab_count_arr[worker_id]);
       }
-      disk_block_seq.flush_disk_records(d_dedup_cluster_ioctx);
+      disk_block_seq.flush_disk_records(d_dedup_cluster_ioctx, p_stats);
     }
 
     ldpp_dout(dpp, 10) << __func__ << "::STEP_REMOVE_DUPLICATES::started..." << dendl;

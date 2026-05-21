@@ -141,6 +141,7 @@ namespace rgw::dedup {
     static constexpr uint8_t RGW_RECORD_FLAG_FASTLANE        = 0x08;
     static constexpr uint8_t RGW_RECORD_FLAG_SPLIT_HEAD      = 0x10;
     static constexpr uint8_t RGW_RECORD_FLAG_TAIL_REFTAG     = 0x20;
+    static constexpr uint8_t RGW_RECORD_FLAG_REMOTE_ATTRS    = 0x40;
   public:
     record_flags_t() : flags(0) {}
     record_flags_t(uint8_t _flags) : flags(_flags) {}
@@ -158,6 +159,8 @@ namespace rgw::dedup {
     inline void set_split_head() { flags |= RGW_RECORD_FLAG_SPLIT_HEAD; }
     inline bool is_ref_tag_from_tail() const { return ((flags & RGW_RECORD_FLAG_TAIL_REFTAG) != 0); }
     inline void set_ref_tag_from_tail() { flags |= RGW_RECORD_FLAG_TAIL_REFTAG; }
+    inline bool has_remote_attrs() const { return ((flags & RGW_RECORD_FLAG_REMOTE_ATTRS) != 0); }
+    inline void set_remote_attrs() { flags |= RGW_RECORD_FLAG_REMOTE_ATTRS; }
   private:
     uint8_t flags;
   };
@@ -282,12 +285,13 @@ namespace rgw::dedup {
                      disk_block_t *p_arr_in,
                      work_shard_t worker_id,
                      md5_shard_t md5_shard,
-                     worker_stats_t *p_stats_in);
-    int flush_disk_records(librados::IoCtx &ioctx);
+                     worker_stats_t *p_worker_stats_in);
+    int flush_disk_records(librados::IoCtx &ioctx, md5_stats_t *p_md5_stats);
     md5_shard_t get_md5_shard() { return d_md5_shard; }
-    int add_record(librados::IoCtx     &ioctx,
-                   const disk_record_t *p_rec, // IN-OUT
-                   record_info_t       *p_rec_info); // OUT-PARAM
+    int add_record(librados::IoCtx  &ioctx,
+                   disk_record_t   *p_rec,
+                   record_info_t   *p_rec_info,
+                   md5_stats_t     *p_md5_stats = nullptr);
 
   private:
     disk_block_seq_t() {;}
@@ -295,9 +299,9 @@ namespace rgw::dedup {
                   disk_block_t *_p_arr,
                   work_shard_t worker_id,
                   md5_shard_t md5_shard,
-                  worker_stats_t *p_stats);
+                  worker_stats_t *p_worker_stats);
     inline const disk_block_t* last_block() { return &p_arr[DISK_BLOCK_COUNT-1]; }
-    int flush(librados::IoCtx &ioctx);
+    int flush(librados::IoCtx &ioctx, md5_stats_t *p_md5_stats);
     void slab_reset() {
       p_curr_block = p_arr;
       p_curr_block->init(d_worker_id, d_seq_number);
@@ -305,7 +309,7 @@ namespace rgw::dedup {
 
     disk_block_t   *p_arr         = nullptr;
     disk_block_t   *p_curr_block  = nullptr;
-    worker_stats_t *p_stats       = nullptr;
+    worker_stats_t *p_worker_stats = nullptr;
     const DoutPrefixProvider *dpp = nullptr;
     uint32_t        d_seq_number  = 0;
     work_shard_t    d_worker_id   = NULL_WORK_SHARD;

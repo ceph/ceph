@@ -169,7 +169,8 @@ namespace rgw::dedup {
                                      const std::string      &obj_name,
                                      const std::string      &instance,
                                      uint64_t                obj_size,
-                                     const std::string      &storage_class);
+                                     const std::string      &storage_class,
+                                     worker_stats_t         *p_worker_stats);
 
     int add_record_to_dedup_table(dedup_table_t *p_table,
                                   const struct disk_record_t *p_rec,
