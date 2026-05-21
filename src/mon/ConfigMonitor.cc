@@ -1052,7 +1052,7 @@ void ConfigMonitor::_trim_config_history() {
   for (const auto& marker : version_markers) {
     if (smatch m; regex_match(marker, m, marker_re)) {
       int version = stoi(m[1]);
-      if (version_key_deletion_count.count(version)) {
+      if (version_key_deletion_count.contains(version)) {
         dout(10) << __func__ << " removing version marker: " << marker << dendl;
         keys_to_delete.insert(marker);
       }
