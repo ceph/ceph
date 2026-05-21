@@ -4310,7 +4310,7 @@ bool OSDMonitor::prepare_pg_migrated_pool(MonOpRequestRef op)
 
   dout(0) << "finished migration of PG " << pg_t(pgid.ps(), pgid.pool()) << dendl;
   if (source_p.lowest_migrated_pg == 0 && source_p.migrating_pgs.empty()) {
-    dout(0) << "Migration finished for pool " << pgid.pool() << dendl;
+    dout(0) << "finished migration of pool " << pgid.pool() << dendl;
     pg_pool_t target_p = *osdmap.get_pg_pool(source_p.migration_target.value()); //TODO need to check pending_inc first?
     //If the default flag is not set and its not on crimson then reset the pool flag for nopgchange
     if (!(g_conf()->osd_pool_default_flag_nopgchange) && !(target_p.has_flag(pg_pool_t::FLAG_CRIMSON))) {
@@ -4336,7 +4336,7 @@ bool OSDMonitor::prepare_pg_migrated_pool(MonOpRequestRef op)
           break;
         }
       }
-      dout(0) << "Starting migration of PG " << source_pg << dendl;
+      dout(0) << "starting migration of PG " << source_pg << dendl;
       source_p.migrating_pgs.emplace(source_pg);
       source_p.lowest_migrated_pg -= 1;
     }
@@ -8566,22 +8566,24 @@ int OSDMonitor::prepare_new_pool(string& name,
   }
 
   if (source_pool_id) {
-  // Check if there are any previous migration sources pointing to the current migration source
-  // If there is change its migration_target value to point to the current migration target
-  for (auto& [pool_id, pool_ptr] : osdmap.get_pools()) {
-    if (pool_ptr.migration_target == source_pool_id.value()) {
-      pg_pool_t *temp_pool = pending_inc.get_new_pool(pool_id, &pool_ptr);
-      temp_pool->migration_target = pool;
-      dout(10) << "Updating transitive migration pointer: pool " << pool_id
-                << " now points to " << pool << " (was " << source_pool_id.value() << ")" << dendl;
+    // Check if there are any previous migration sources pointing to the current migration source
+    // If there is change its migration_target value to point to the current migration target
+    for (auto& [pool_id, pool_ptr] : osdmap.get_pools()) {
+      if (pending_inc.new_pools.contains(pool_id)) {
+        pool_ptr = pending_inc.new_pools[pool_id];
+      }
+      if (pool_ptr.migration_target == source_pool_id.value()) {
+        pg_pool_t *temp_pool = pending_inc.get_new_pool(pool_id, &pool_ptr);
+        temp_pool->migration_target = pool;
+        dout(10) << "Updating transitive migration pointer: pool " << pool_id
+                 << " now points to " << pool << " (was " << source_pool_id.value() << ")" << dendl;
+      }
     }
-  }
 
     const pg_pool_t *sp = osdmap.get_pg_pool(source_pool_id.value());
     pg_pool_t *spi = pending_inc.get_new_pool(source_pool_id.value(), sp);
 
-    dout(0) << "Configuring pool migration for PG "
-            << pg_t(spi->get_pg_num() - 1, source_pool_id.value()) << dendl;
+    dout(0) << "starting migration of pool " << source_pool_id.value() << dendl;
 
     spi->migration_src.reset();
     spi->migration_target = pool;
@@ -8609,13 +8611,13 @@ int OSDMonitor::prepare_new_pool(string& name,
           break;
         }
       }
-      spi->migrating_pgs.emplace(pg_t(i, source_pool_id.value()));
+      dout(0) << "starting migration of PG " << source_pg << dendl;
+      spi->migrating_pgs.emplace(source_pg);
       spi->lowest_migrated_pg = i;
       if (i == 0) {
         break;
       }
     }
-    dout(0) << "spi->migrating_pgs contains" << spi->migrating_pgs << dendl;
     dout(0) << "lowest_migrated_pg is " << spi->lowest_migrated_pg << dendl;
   }
 
