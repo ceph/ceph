@@ -247,27 +247,21 @@ namespace rgw::dedup {
       return 0;
     }
 
-    // wrong version
     if (this->s.rec_version != 0) {
-      // TBD
-      //p_stats->failed_wrong_ver++;
       ldpp_dout(dpp, 5) << __func__ << "::" << caller << "::ERR: Bad record version: "
                         << this->s.rec_version
                         << "::block_id=" << block_id
                         << "::rec_id=" << rec_id
                         << dendl;
-      return -EPROTO;           // Protocol error
+      return -EPROTO;
     }
 
-    // if arrived here record size is too large
-    // TBD
-    //p_stats->failed_rec_overflow++;
     ldpp_dout(dpp, 5) << __func__ << "::" << caller << "::ERR: record size too big: "
                       << this->length()
                       << "::block_id=" << block_id
                       << "::rec_id=" << rec_id
                       << dendl;
-    return -EOVERFLOW; // maybe should use -E2BIG ??
+    return -EOVERFLOW;
   }
 
   //---------------------------------------------------------------------------
@@ -396,9 +390,9 @@ namespace rgw::dedup {
                                      disk_block_t *p_arr_in,
                                      work_shard_t worker_id,
                                      md5_shard_t md5_shard,
-                                     worker_stats_t *p_stats_in)
+                                     worker_stats_t *p_worker_stats_in)
   {
-    activate(dpp_in, p_arr_in, worker_id, md5_shard, p_stats_in);
+    activate(dpp_in, p_arr_in, worker_id, md5_shard, p_worker_stats_in);
   }
 
   //---------------------------------------------------------------------------
@@ -406,15 +400,15 @@ namespace rgw::dedup {
                                   disk_block_t *p_arr_in,
                                   work_shard_t worker_id,
                                   md5_shard_t md5_shard,
-                                  worker_stats_t *p_stats_in)
+                                  worker_stats_t *p_worker_stats_in)
   {
-    dpp          = dpp_in;
-    p_arr        = p_arr_in;
-    d_worker_id  = worker_id;
-    d_md5_shard  = md5_shard;
-    p_stats      = p_stats_in;
-    p_curr_block = nullptr;
-    d_seq_number = 0;
+    dpp            = dpp_in;
+    p_arr          = p_arr_in;
+    d_worker_id    = worker_id;
+    d_md5_shard    = md5_shard;
+    p_worker_stats = p_worker_stats_in;
+    p_curr_block   = nullptr;
+    d_seq_number   = 0;
 
     memset(p_arr, 0, sizeof(disk_block_t));
     slab_reset();
@@ -512,7 +506,6 @@ namespace rgw::dedup {
     disk_record_t rec(p + offset);
     ret = rec.validate(__func__, dpp, block_id, rec_id);
     if (unlikely(ret != 0)) {
-      //p_stats->failed_rec_load++;
       return ret;
     }
 
@@ -521,7 +514,6 @@ namespace rgw::dedup {
         rec.s.num_parts      == p_tgt_rec->s.num_parts      &&
         rec.s.obj_bytes_size == p_tgt_rec->s.obj_bytes_size &&
         rec.stor_class       == p_tgt_rec->stor_class) {
-
       *p_src_rec = rec;
       return 0;
     }
@@ -631,25 +623,31 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int disk_block_seq_t::flush(librados::IoCtx &ioctx)
+  int disk_block_seq_t::flush(librados::IoCtx &ioctx, md5_stats_t *p_md5_stats)
   {
     unsigned len = (p_curr_block + 1 - p_arr) * sizeof(disk_block_t);
     bufferlist bl = bufferlist::static_from_mem((char*)p_arr, len);
     int ret = store_slab(ioctx, bl, d_md5_shard, d_worker_id, d_seq_number, dpp);
     if (unlikely(ret != 0)) {
-      p_stats->write_slab_failure++;
+      if (p_md5_stats) {
+        p_md5_stats->write_slab_failure++;
+      }
+      else {
+        p_worker_stats->write_slab_failure++;
+      }
     }
     // Need to make sure the call to rgw_put_system_obj was fully synchronous
 
     // d_seq_number++ must be called **after** flush!!
     d_seq_number++;
-    p_stats->egress_slabs++;
+    p_worker_stats->egress_slabs++;
     slab_reset();
     return ret;
   }
 
   //---------------------------------------------------------------------------
-  int disk_block_seq_t::flush_disk_records(librados::IoCtx &ioctx)
+  int disk_block_seq_t::flush_disk_records(librados::IoCtx &ioctx,
+                                           md5_stats_t     *p_md5_stats)
   {
     ceph_assert(p_arr);
     ldpp_dout(dpp, 20) << __func__ << "::worker_id=" << (uint32_t)d_worker_id
@@ -660,27 +658,69 @@ namespace rgw::dedup {
     if (p_curr_block == &p_arr[0] && p_curr_block->is_empty()) {
       ldpp_dout(dpp, 20) << __func__ << "::Empty buffers, generate terminating block" << dendl;
     }
-    p_stats->egress_blocks++;
+    p_worker_stats->egress_blocks++;
     p_curr_block->close_block(dpp, false);
 
-    int ret = flush(ioctx);
+    int ret = flush(ioctx, p_md5_stats);
     return ret;
   }
 
   //---------------------------------------------------------------------------
-  int disk_block_seq_t::add_record(librados::IoCtx     &ioctx,
-                                   const disk_record_t *p_rec, // IN-OUT
-                                   record_info_t       *p_rec_info) // OUT-PARAM
+  // Called on the unlikely path where disk_record_t::validate() fails.
+  // Routes counters to md5_stats_t when available (STEP_READ_ATTRIBUTES),
+  // otherwise to worker_stats_t (STEP_BUILD_TABLE).
+  //
+  // -EOVERFLOW: record too large even after remote_attrs truncation
+  //             (only meaningful for attrs records in md5_stats_t;
+  //              bucket-index records are 200-300 bytes and never overflow).
+  // -EPROTO:    rec_version mismatch -- can happen in any step.
+  static void __attribute__((noinline))
+  handle_validate_failure(int ret,
+                          worker_stats_t *p_worker_stats,
+                          md5_stats_t    *p_md5_stats)
   {
+    if (ret == -EOVERFLOW) {
+      if (p_md5_stats) {
+        p_md5_stats->failed_rec_overflow++;
+      }
+    } else if (ret == -EPROTO) {
+      if (p_md5_stats) {
+        p_md5_stats->failed_wrong_ver++;
+      } else {
+        p_worker_stats->failed_wrong_ver++;
+      }
+    }
+  }
+
+  //---------------------------------------------------------------------------
+  int disk_block_seq_t::add_record(librados::IoCtx  &ioctx,
+                                   disk_record_t   *p_rec,
+                                   record_info_t   *p_rec_info,
+                                   md5_stats_t     *p_md5_stats)
+  {
+    // When manifest/compression make the record too large, drop them and
+    // set a flag so STEP_REMOVE_DUPLICATES fetches them from the object head.
+    if (p_rec->length() > 512 /*MAX_REC_SIZE*/) {
+      p_rec->manifest_bl.clear();
+      p_rec->s.manifest_len = 0;
+      p_rec->compression_bl.clear();
+      p_rec->s.compression_bl_len = 0;
+      p_rec->s.flags.set_remote_attrs();
+      if (p_md5_stats) {
+        p_md5_stats->remote_attrs_records++;
+      }
+      ldpp_dout(dpp, 20) << __func__ << "::record too large (" << p_rec->length()
+                         << "), set remote_attrs for " << p_rec->obj_name << dendl;
+    }
+
     disk_block_id_t null_block_id;
     int ret = p_rec->validate(__func__, dpp, null_block_id, MAX_REC_IN_BLOCK);
     if (unlikely(ret != 0)) {
-      // TBD
-      //p_stats->failed_rec_store++;
+      handle_validate_failure(ret, p_worker_stats, p_md5_stats);
       return ret;
     }
 
-    p_stats->egress_records ++;
+    p_worker_stats->egress_records ++;
     // first, try and add the record to the current open block
     p_rec_info->rec_id = p_curr_block->add_record(p_rec, dpp);
     if (p_rec_info->rec_id < MAX_REC_IN_BLOCK) {
@@ -690,7 +730,7 @@ namespace rgw::dedup {
     else {
       // Not enough space left in current block, close it and open the next block
       ldpp_dout(dpp, 20) << __func__ << "::Block is full-> close and move to next" << dendl;
-      p_stats->egress_blocks++;
+      p_worker_stats->egress_blocks++;
       p_curr_block->close_block(dpp, true);
     }
 
@@ -703,7 +743,7 @@ namespace rgw::dedup {
     }
     else {
       ldpp_dout(dpp, 20)  << __func__ << "::calling flush()" << dendl;
-      ret = flush(ioctx);
+      ret = flush(ioctx, p_md5_stats);
       p_rec_info->rec_id = p_curr_block->add_record(p_rec, dpp);
     }
 
@@ -716,7 +756,7 @@ namespace rgw::dedup {
                                          uint8_t *raw_mem,
                                          uint64_t raw_mem_size,
                                          work_shard_t worker_id,
-                                         worker_stats_t *p_stats,
+                                         worker_stats_t *p_worker_stats,
                                          md5_shard_t num_md5_shards)
   {
     d_num_md5_shards = num_md5_shards;
@@ -727,7 +767,7 @@ namespace rgw::dedup {
     for (unsigned md5_shard = 0; md5_shard < d_num_md5_shards; md5_shard++) {
       ldpp_dout(dpp, 20) << __func__ << "::p=" << p << "::p_end=" << p_end << dendl;
       if (p + DISK_BLOCK_COUNT <= p_end) {
-        d_disk_arr[md5_shard].activate(dpp, p, d_worker_id, md5_shard, p_stats);
+        d_disk_arr[md5_shard].activate(dpp, p, d_worker_id, md5_shard, p_worker_stats);
         p += DISK_BLOCK_COUNT;
       }
       else {
@@ -749,7 +789,7 @@ namespace rgw::dedup {
     for (md5_shard_t md5_shard = 0; md5_shard < d_num_md5_shards; md5_shard++) {
       ldpp_dout(dpp, 20) <<__func__ << "::flush buffers:: worker_id="
                          << d_worker_id<< ", md5_shard=" << md5_shard << dendl;
-      d_disk_arr[md5_shard].flush_disk_records(ioctx);
+      d_disk_arr[md5_shard].flush_disk_records(ioctx, nullptr);
     }
   }
 } // namespace rgw::dedup
