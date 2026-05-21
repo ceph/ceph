@@ -580,7 +580,7 @@ private:
     CEPH_FEATUREMASK_SERVER_OCTOPUS |
     CEPH_FEATUREMASK_SERVER_REEF |
     CEPH_FEATUREMASK_SERVER_TENTACLE |
-    CEPH_FEATUREMASK_POOL_MIGRATION;
+    CEPH_FEATUREMASK_SERVER_UMBRELLA;
 
   struct addrs_s {
     mempool::osdmap::vector<std::shared_ptr<entity_addrvec_t> > client_addrs;

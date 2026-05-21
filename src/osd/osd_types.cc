@@ -2017,7 +2017,7 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
   uint8_t v = 33;
   // NOTE: any new encoding dependencies must be reflected by
   // SIGNIFICANT_FEATURES
-  if (!HAVE_SIGNIFICANT_FEATURE(features, POOL_MIGRATION)) {
+  if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_UMBRELLA)) {
     if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_TENTACLE)) {
       if (!HAVE_SIGNIFICANT_FEATURE(features, NEW_OSDOP_ENCODING)) {
 	// this was the first post-hammer thing we added; if it's missing, encode

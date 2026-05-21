@@ -2316,7 +2316,7 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
 
   // pool migration
   if (pi->is_migration_src()) {
-    if (!op->has_features(CEPH_FEATUREMASK_POOL_MIGRATION)) {
+    if (!op->has_features(CEPH_FEATUREMASK_SERVER_UMBRELLA)) {
       // client doesn't support pool migration - meant to
       // be blocked by min_compat_client
       osd->reply_op_error(op, -EIO);
