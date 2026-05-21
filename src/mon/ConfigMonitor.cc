@@ -1023,7 +1023,7 @@ void ConfigMonitor::_trim_config_history() {
   const size_t max_entries_to_remove = 100; // num of records to be removed in a single tick
   size_t entries_removed = 0;
 
-  auto should_stop = [&]() {
+  auto should_stop = [&] {
     return entries_removed >= max_entries_to_remove;
   };
 
