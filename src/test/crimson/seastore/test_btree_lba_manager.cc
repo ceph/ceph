@@ -619,13 +619,12 @@ struct btree_lba_manager_test : btree_test_base {
               paddr,
               length,
               cursor->get_extent_type(),
-              [&child_pos, &t, laddr=cursor->key, this](auto &extent) {
+              [&child_pos, laddr=cursor->key](auto &extent) {
                 auto lextent = extent.template cast<LogicalChildNode>();
                 ASSERT_TRUE(extent.is_logical());
                 ASSERT_FALSE(lextent->has_laddr());
                 ASSERT_FALSE(extent.has_been_invalidated());
                 child_pos.link_child(lextent.get());
-                child_pos.invalidate_retired_placeholder(t, *cache, extent);
                 lextent->set_laddr(laddr);
               });
           }

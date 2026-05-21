@@ -304,13 +304,12 @@ TransactionManager::_remove(
 	mapping.get_val(),
 	mapping.get_intermediate_length(),
         mapping.get_extent_type(),
-        [this, &child_pos, laddr, &t](auto &extent) mutable {
+        [&child_pos, laddr](auto &extent) mutable {
           auto lextent = extent.template cast<LogicalChildNode>();
           assert(extent.is_logical());
           assert(!lextent->has_laddr());
           assert(!extent.has_been_invalidated());
           child_pos.link_child(lextent.get());
-          child_pos.invalidate_retired_placeholder(t, *cache, extent);
           lextent->set_laddr(laddr);
         }
       );

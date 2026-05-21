@@ -144,7 +144,6 @@ void Cache::register_metrics(store_index_t store_index)
     {extent_types_t::ONODE_BLOCK_STAGED,  {sm::label_instance("ext", "ONODE_BLOCK_STAGED")}},
     {extent_types_t::COLL_BLOCK,          {sm::label_instance("ext", "COLL_BLOCK")}},
     {extent_types_t::OBJECT_DATA_BLOCK,   {sm::label_instance("ext", "OBJECT_DATA_BLOCK")}},
-    {extent_types_t::RETIRED_PLACEHOLDER, {sm::label_instance("ext", "RETIRED_PLACEHOLDER")}},
     {extent_types_t::ALLOC_INFO,      	  {sm::label_instance("ext", "ALLOC_INFO")}},
     {extent_types_t::JOURNAL_TAIL,        {sm::label_instance("ext", "JOURNAL_TAIL")}},
     {extent_types_t::TEST_BLOCK,          {sm::label_instance("ext", "TEST_BLOCK")}},
@@ -493,7 +492,7 @@ void Cache::register_metrics(store_index_t store_index)
   }
 
   /**
-   * Cached extents (including placeholders)
+   * Cached extents
    *
    * Dirty extents
    */
@@ -896,7 +895,7 @@ void Cache::remove_extent(
          ref->get_paddr().is_root());
   if (ref->is_stable_dirty()) {
     remove_from_dirty(ref, p_src);
-  } else if (!ref->is_placeholder()) {
+  } else {
     assert(ref->get_paddr().is_absolute());
     pinboard->remove(*ref);
   }
@@ -1193,9 +1192,6 @@ CachedExtentRef Cache::alloc_new_non_data_extent_by_type(
   case extent_types_t::COLL_BLOCK:
     return alloc_new_non_data_extent<collection_manager::CollectionNode>(
       t, length, hint, gen);
-  case extent_types_t::RETIRED_PLACEHOLDER:
-    ceph_assert(0 == "impossible");
-    return CachedExtentRef();
   case extent_types_t::TEST_BLOCK_PHYSICAL:
     return alloc_new_non_data_extent<TestBlockPhysical>(t, length, hint, gen);
   case extent_types_t::LOG_NODE:
@@ -1322,7 +1318,6 @@ record_t Cache::prepare_record(
   auto trans_src = t.get_src();
   assert(!t.is_weak());
   assert(trans_src != Transaction::src_t::READ);
-  assert(t.read_set.size() + t.num_replace_placeholder == t.read_items.size());
 
   auto& efforts = get_by_src(stats.committed_efforts_by_src,
                              trans_src);
@@ -1519,8 +1514,7 @@ record_t Cache::prepare_record(
     }
 
     // Note: commit extents and backref allocations in the same place
-    if (is_backref_mapped_type(extent->get_type()) ||
-	is_retired_placeholder_type(extent->get_type())) {
+    if (is_backref_mapped_type(extent->get_type())) {
       DEBUGT("backref_entry free {}~0x{:x}",
 	     t,
 	     extent->get_paddr(),
@@ -2319,9 +2313,6 @@ Cache::replay_delta(
       // replay is not included by the cache hit metrics
       auto ret = query_cache(addr);
       if (ret) {
-        // no retired-placeholder should be exist yet because no transaction
-        // has been created.
-        assert(!is_retired_placeholder_type(ret->get_type()));
         return ret->wait_io().then([ret] {
           return ret;
         });
@@ -2562,9 +2553,6 @@ Cache::_get_absent_extent_by_type(
   case extent_types_t::OBJECT_DATA_BLOCK:
     ret = CachedExtent::make_cached_extent_ref<ObjectDataBlock>(length);
     break;
-  case extent_types_t::RETIRED_PLACEHOLDER:
-    ceph_assert(0 == "impossible");
-    break;
   case extent_types_t::TEST_BLOCK:
     ret = CachedExtent::make_cached_extent_ref<TestBlock>(length);
     break;
@@ -2682,9 +2670,6 @@ Cache::do_get_caching_extent_by_type(
     ).safe_then([](auto extent) {
       return CachedExtentRef(extent.detach(), false /* add_ref */);
     });
-  case extent_types_t::RETIRED_PLACEHOLDER:
-    ceph_assert(0 == "impossible");
-    return get_extent_ertr::make_ready_future<CachedExtentRef>();
   case extent_types_t::TEST_BLOCK:
     return do_get_caching_extent<TestBlock>(
       offset, length, std::move(extent_init_func), std::move(on_cache), p_src

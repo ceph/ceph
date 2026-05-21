@@ -1465,19 +1465,18 @@ enum class extent_types_t : uint8_t {
   ONODE_BLOCK_STAGED = 7,
   COLL_BLOCK = 8,
   OBJECT_DATA_BLOCK = 9,
-  RETIRED_PLACEHOLDER = 10,
   // the following two types are not extent types,
   // they are just used to indicates paddr allocation deltas
-  ALLOC_INFO = 11,
-  JOURNAL_TAIL = 12,
+  ALLOC_INFO = 10,
+  JOURNAL_TAIL = 11,
   // Test Block Types
-  TEST_BLOCK = 13,
-  TEST_BLOCK_PHYSICAL = 14,
-  BACKREF_INTERNAL = 15,
-  BACKREF_LEAF = 16,
-  LOG_NODE = 17,
+  TEST_BLOCK = 12,
+  TEST_BLOCK_PHYSICAL = 13,
+  BACKREF_INTERNAL = 14,
+  BACKREF_LEAF = 15,
+  LOG_NODE = 16,
   // None and the number of valid extent_types_t
-  NONE = 18,
+  NONE = 17,
 };
 using extent_types_le_t = uint8_t;
 constexpr auto EXTENT_TYPES_MAX = static_cast<uint8_t>(extent_types_t::NONE);
@@ -1510,10 +1509,6 @@ constexpr bool is_logical_type(extent_types_t type) {
            !is_data_type(type));
     return false;
   }
-}
-
-constexpr bool is_retired_placeholder_type(extent_types_t type) {
-  return type == extent_types_t::RETIRED_PLACEHOLDER;
 }
 
 constexpr bool is_root_type(extent_types_t type) {
@@ -2109,8 +2104,7 @@ struct alloc_blk_t {
       extent_len_t len,
       extent_types_t type) {
     assert(is_backref_mapped_type(type) ||
-	   is_backref_node(type) ||
-	   is_retired_placeholder_type(type));
+	   is_backref_node(type));
     return alloc_blk_t(paddr, L_ADDR_NULL, len, type);
   }
 };
@@ -3055,7 +3049,7 @@ std::ostream& operator<<(std::ostream&, const dirty_io_stats_printer_t&);
  * Doesn't account:
  *   replay
  *   rewrite
- *   retiring/placeholder
+ *   retiring
  *   get_caching_extent() -- test only
  *   get_caching_extent_by_type() -- test only
  */

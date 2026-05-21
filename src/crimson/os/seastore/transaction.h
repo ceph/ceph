@@ -127,10 +127,6 @@ public:
   get_extent_ret get_extent(paddr_t addr, CachedExtentRef *out) {
     assert(addr.is_real_location() || addr.is_root());
     auto [result, ext] = do_get_extent(addr);
-    // placeholder in read-set must be in the retired-set
-    // at the same time, user should not see a placeholder.
-    assert(result != get_extent_ret::PRESENT ||
-           !is_retired_placeholder_type(ext->get_type()));
     if (out && result == get_extent_ret::PRESENT) {
       *out = ext;
     }
@@ -313,48 +309,6 @@ public:
       assert(ref->is_exist_mutation_pending());
       // already added as fresh extent in write_set
       assert(write_set.exists(*ref));
-    }
-  }
-
-  void replace_placeholder(CachedExtent& placeholder, CachedExtent& extent) {
-    LOG_PREFIX(Transaction::replace_placeholder);
-    ceph_assert(!is_weak());
-
-    assert(is_retired_placeholder_type(placeholder.get_type()));
-    assert(!is_retired_placeholder_type(extent.get_type()));
-    assert(!is_root_type(extent.get_type()));
-    assert(extent.get_paddr() == placeholder.get_paddr());
-    assert(extent.get_paddr().is_absolute());
-    {
-      auto where = read_set.find(placeholder.get_paddr(), extent_cmp_t{});
-      if (unlikely(where == read_set.end())) {
-	SUBERRORT(seastore_t,
-	  "unable to find placeholder {}", *this, placeholder);
-	ceph_abort();
-      }
-      if (unlikely(where->ref.get() != &placeholder)) {
-	SUBERRORT(seastore_t,
-	  "inconsistent placeholder, current: {}; should-be: {}",
-	  *this, *where->ref.get(), placeholder);
-	ceph_abort();
-      }
-      placeholder.read_transactions.erase(
-	read_trans_set_t<Transaction>::s_iterator_to(*where));
-      where = read_set.erase(where);
-      // Note, the retired-placeholder is not removed from read_items after replace.
-      read_items.emplace_back(this, &extent);
-      auto it = read_set.insert_before(where, read_items.back());
-      extent.read_transactions.insert(const_cast<read_set_item_t<Transaction>&>(*it));
-#ifndef NDEBUG
-      num_replace_placeholder++;
-#endif
-    }
-    {
-      auto where = retired_set.find(&placeholder);
-      assert(where != retired_set.end());
-      assert(where->extent.get() == &placeholder);
-      where = retired_set.erase(where);
-      retired_set.emplace_hint(where, &extent, trans_id);
     }
   }
 
@@ -701,9 +655,6 @@ private:
   void clear_read_set() {
     read_items.clear();
     assert(read_set.empty());
-#ifndef NDEBUG
-    num_replace_placeholder = 0;
-#endif
     // Automatically unlink this transaction from CachedExtent::read_transactions
   }
 
@@ -839,9 +790,6 @@ private:
    */
   read_extent_set_t<Transaction> read_set; ///< set of extents read by paddr
   std::list<read_set_item_t<Transaction>> read_items;
-#ifndef NDEBUG
-  size_t num_replace_placeholder = 0;
-#endif
 
   uint64_t fresh_backref_extents = 0; // counter of new backref extents
 
