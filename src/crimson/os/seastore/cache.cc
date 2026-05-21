@@ -929,7 +929,7 @@ void Cache::stage_visibility_handoff(
   assert(next->get_paddr().is_absolute() || next->get_paddr().is_root());
   assert(next->version == prev->version + 1);
   const auto t_src = t.get_src();
-  ceph_assert(should_use_no_conflict_publish(t_src, next->get_type()));
+  ceph_assert(should_use_no_conflict_publish(t, next->get_type()));
 
   bool was_stable_dirty = prev->is_stable_dirty();
   if (!was_stable_dirty) {
@@ -1386,7 +1386,7 @@ record_t Cache::prepare_record(
       DEBUGT("invalid mutated extent -- {}", t, *i);
       continue;
     }
-    if (should_use_no_conflict_publish(t.get_src(), i->get_type())) {
+    if (should_use_no_conflict_publish(t, i->get_type())) {
       i->new_committer(t);
       i->committer->block_trans(t);
     }
@@ -1507,7 +1507,8 @@ record_t Cache::prepare_record(
     }
 
     if (i->is_mutation_pending()) {
-      const bool use_no_conflict = should_use_no_conflict_publish(t.get_src(), i->get_type());
+      const bool use_no_conflict =
+        should_use_no_conflict_publish(t, i->get_type());
       // Block the new extent readers until the journal commit completes.
       i->set_io_wait(CachedExtent::extent_state_t::DIRTY, use_no_conflict);
 
@@ -1536,7 +1537,7 @@ record_t Cache::prepare_record(
     retire_stat.increment(extent->get_length());
     DEBUGT("retired and remove extent {}~0x{:x} -- {}",
 	   t, extent->get_paddr(), extent->get_length(), *extent);
-    if (should_use_no_conflict_publish(t.get_src(), extent->get_type())) {
+    if (should_use_no_conflict_publish(t, extent->get_type())) {
       // avoid extent invalidation on retirement
       // only adjust dirty bookkeeping
       // we would invalidate them in complete_commit final stage
@@ -1659,10 +1660,10 @@ record_t Cache::prepare_record(
 	  i->get_type()));
     }
     i->set_io_wait(CachedExtent::extent_state_t::CLEAN,
-                   should_use_no_conflict_publish(t.get_src(), i->get_type()));
+                   should_use_no_conflict_publish(t, i->get_type()));
     // Note, paddr is known until complete_commit(),
     // so add_extent() later.
-    if (should_use_no_conflict_publish(t.get_src(), i->get_type())) {
+    if (should_use_no_conflict_publish(t, i->get_type())) {
       assert(i->get_prior_instance());
       assert(!i->committer);
       assert(!i->get_prior_instance()->committer);
@@ -1671,7 +1672,8 @@ record_t Cache::prepare_record(
       auto &committer = *i->committer;
       committer.block_trans(t);
       i->get_prior_instance()->set_io_wait(
-        CachedExtent::extent_state_t::CLEAN, should_use_no_conflict_publish(t.get_src(), i->get_type()));
+        CachedExtent::extent_state_t::CLEAN,
+        should_use_no_conflict_publish(t, i->get_type()));
     }
   }
 
@@ -1696,7 +1698,7 @@ record_t Cache::prepare_record(
 	  i->get_length(),
 	  i->get_type()));
     }
-    if (should_use_no_conflict_publish(t.get_src(), i->get_type())) {
+    if (should_use_no_conflict_publish(t, i->get_type())) {
       assert(i->get_prior_instance());
       assert(!i->committer);
       assert(!i->get_prior_instance()->committer);
@@ -1709,7 +1711,7 @@ record_t Cache::prepare_record(
         CachedExtent::extent_state_t::CLEAN, true);
     }
     i->set_io_wait(CachedExtent::extent_state_t::CLEAN,
-                   should_use_no_conflict_publish(t.get_src(), i->get_type()));
+                   should_use_no_conflict_publish(t, i->get_type()));
     // Note, paddr is (can be) known until complete_commit(),
     // so add_extent() later.
   }
@@ -1758,7 +1760,7 @@ record_t Cache::prepare_record(
     } else {
       assert(i->is_exist_mutation_pending());
       i->set_io_wait(CachedExtent::extent_state_t::DIRTY,
-                     should_use_no_conflict_publish(t.get_src(), i->get_type()));
+                     should_use_no_conflict_publish(t, i->get_type()));
     }
 
     // exist mutation pending extents must be in t.mutated_block_list
@@ -1992,8 +1994,7 @@ void Cache::complete_commit(
             t, final_block_start, start_seq);
   for (auto &i: t.retired_set) {
     auto &extent = i.extent;
-    auto trans_src = t.get_src();
-    if (should_use_no_conflict_publish(trans_src, extent->get_type())) {
+    if (should_use_no_conflict_publish(t, extent->get_type())) {
      // retired extents should remain valid through complete_commit().
      // We only free space post-commit *AFTER* handoff.
       assert(extent->is_valid());
@@ -2023,7 +2024,7 @@ void Cache::complete_commit(
     i->pending_for_transaction = TRANS_ID_NULL;
     i->on_initial_write();
     const auto t_src = t.get_src();
-    if (should_use_no_conflict_publish(t_src, i->get_type())) {
+    if (should_use_no_conflict_publish(t, i->get_type())) {
       ceph_assert(i->committer);
       auto &committer = *i->committer;
       auto &prior = *i->get_prior_instance();
@@ -2106,7 +2107,7 @@ void Cache::complete_commit(
     if (i->version == 1 || is_root_type(i->get_type())) {
       i->dirty_from = start_seq;
       DEBUGT("commit extent done, become dirty -- {}", t, *i);
-      if (should_use_no_conflict_publish(t.get_src(), i->get_type())) {
+      if (should_use_no_conflict_publish(t, i->get_type())) {
         auto &prior = *i->get_prior_instance();
         prior.dirty_from = start_seq;
         ceph_assert(i->committer);
@@ -2117,7 +2118,7 @@ void Cache::complete_commit(
       DEBUGT("commit extent done -- {}", t, *i);
     }
     i->on_delta_write(final_block_start);
-    if (should_use_no_conflict_publish(t.get_src(), i->get_type())) {
+    if (should_use_no_conflict_publish(t, i->get_type())) {
       TRACET("committing paddr to prior for {}, prior={}",
         t, *i, *i->prior_instance);
       assert(i->committer);
@@ -2163,13 +2164,13 @@ void Cache::complete_commit(
   }
 
   t.for_each_finalized_fresh_block([&t](const CachedExtentRef &i) {
-    if (should_use_no_conflict_publish(t.get_src(), i->get_type())) {
+    if (should_use_no_conflict_publish(t, i->get_type())) {
       i->set_invalid(t);
     }
   });
 
   for (auto &i: t.mutated_block_list) {
-    if (should_use_no_conflict_publish(t.get_src(), i->get_type())) {
+    if (should_use_no_conflict_publish(t, i->get_type())) {
         i->set_invalid(t);
     }
   }

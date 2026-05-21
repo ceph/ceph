@@ -750,6 +750,12 @@ TransactionManager::rewrite_logical_extent(
     extent_len_t off = 0;
     auto left = extent->get_length();
     extent_ref_count_t refcount = 0;
+    // if rewriting a logical range resolves to multiple extents,
+    // the LBA update likely involves insertions/splits (structural
+    // btree changes), which the no-conflict publish-to-prior path
+    // does not currently cover safely. Fall back to optimistic
+    // conflict handling.
+    t.force_rewrite_conflict = (extents.size() > 1);
     for (auto &_nextent : extents) {
       auto nextent = _nextent->template cast<LogicalChildNode>();
       bool first_extent = (off == 0);

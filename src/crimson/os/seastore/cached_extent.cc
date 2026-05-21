@@ -502,7 +502,7 @@ void ExtentCommitter::_share_prior_data_to_pending_versions()
 }
 
 void CachedExtent::new_committer(Transaction &t) {
-  ceph_assert(should_use_no_conflict_publish(t.get_src(), this->get_type()));
+  ceph_assert(should_use_no_conflict_publish(t, this->get_type()));
   ceph_assert(!committer);
   committer = new ExtentCommitter(*this, t);
   assert(prior_instance);

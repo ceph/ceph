@@ -528,6 +528,7 @@ public:
     rewrite_stats = {};
     conflicted = false;
     need_wait_visibility = false;
+    force_rewrite_conflict = false;
     assert(backref_entries.empty());
     if (!has_reset) {
       has_reset = true;
@@ -647,6 +648,7 @@ public:
   btree_cursor_stats_t cursor_stats;
 
   bool need_wait_visibility = false;
+  bool force_rewrite_conflict = false;
 
   using update_copied_lba_key_func_t =
     std::function<void (Transaction&, laddr_t, paddr_t)>;
@@ -913,6 +915,33 @@ inline TransactionRef make_test_transaction() {
     CACHE_HINT_TOUCH)
   );
 }
+/**
+ * should_use_no_conflict_publish()
+ *
+ * Returns true when this (transaction source, extent type) pair should take
+ * the no-conflict publish path (i.e avoid invalidate-and-retry and use the
+ * committer + visibility hand-off).
+ *
+ * Currently true for:
+ *  - rewrite (background) transactions, for any non-root extent
+ *
+ *  To be expanded to:
+ *  - user (txn_manager) transactions that mutate LBA nodes
+ *  - Onode/Omap nodes
+ */
+constexpr bool should_use_no_conflict_publish(const Transaction &t,
+                                              extent_types_t ext_type) {
+  // keep classic handling for ROOT
+  if (is_root_type(ext_type)) {
+    return false;
+  }
+
+  // TODO: Extend this as support grows (e.g. Onode/OMAP nodes).
+  //       is_user_transaction(txn_type) && is_lba_node(ext_type)
+
+  return !t.force_rewrite_conflict && is_rewrite_transaction(t.get_src());
+}
+
 
 }
 
