@@ -75,6 +75,7 @@ Mgr::Mgr(MonClient *monc_, const MgrMap& mgrmap,
 
 Mgr::~Mgr()
 {
+  server.shutdown();
 }
 
 void MetadataUpdate::finish(int r)
