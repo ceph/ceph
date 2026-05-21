@@ -1218,6 +1218,30 @@ class MgrService(CephService):
             # are not a concern.
             return True
 
+    @staticmethod
+    def _get_mgr_service_ports(mgr: "CephadmOrchestrator") -> List[int]:
+        """Return the list of ports from the mgr map services."""
+        ports: List[int] = []
+        mgr_map = mgr.get('mgr_map')
+        for end_point in mgr_map.get('services', {}).values():
+            port = re.search(r'\:(\d+)\/', end_point)
+            if port:
+                ports.append(int(port.group(1)))
+        return ports
+
+    @classmethod
+    def get_dependencies(cls, mgr: "CephadmOrchestrator",
+                         spec: Optional[ServiceSpec] = None,
+                         daemon_type: Optional[str] = None) -> List[str]:
+        return sorted(
+            [f'port:{p}' for p in cls._get_mgr_service_ports(mgr)]
+            + [f'sd_port:{mgr.service_discovery_port}']
+        )
+
+    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+        config, _ = super().generate_config(daemon_spec)
+        return config, self.get_dependencies(self.mgr)
+
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         """
         Create a new manager instance on a host.
@@ -1237,17 +1261,7 @@ class MgrService(CephService):
         # user has decided to use different dashboard ports in each server
         # If this is the case then the dashboard port opened will be only the used
         # as default.
-        ports = []
-        ret, mgr_services, err = self.mgr.check_mon_command({
-            'prefix': 'mgr services',
-        })
-        if mgr_services:
-            mgr_endpoints = json.loads(mgr_services)
-            for end_point in mgr_endpoints.values():
-                port = re.search(r'\:\d+\/', end_point)
-                if port:
-                    ports.append(int(port[0][1:-1]))
-
+        ports = self._get_mgr_service_ports(self.mgr)
         # Always replace ports (do not append onto a list rehydrated from the
         # persisted host cache). When ``mgr services`` is empty, ``ports`` is
         # empty and we must not retain old entries + append service discovery
