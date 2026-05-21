@@ -15981,10 +15981,8 @@ int OSDMonitor::validate_stretch_mode_new_pool(int new_crush_rule, const string&
         }
         return -EINVAL;
       }
-      return 0;
     }
   }
-
   return 0;
 }
 
