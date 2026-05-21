@@ -307,7 +307,8 @@ Description: diskprediction-local module for ceph-mgr
 
 Package: ceph-mgr-modules-core
 Architecture: all
-Depends: ${misc:Depends},
+Depends: python3-prettytable,
+         ${misc:Depends},
          ${python3:Depends},
 Replaces: ceph-mgr (<< 15.1.0)
 Breaks: ceph-mgr (<< 15.1.0)
@@ -540,6 +541,7 @@ Description: osd_support module for ceph-mgr
 Package: ceph-mgr-prometheus
 Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
+         python3-cherrypy3,
          ${misc:Depends},
          ${python3:Depends},
 Breaks: ceph-mgr-modules-core (<< 21.0.0)
