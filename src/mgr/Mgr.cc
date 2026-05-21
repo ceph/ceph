@@ -81,6 +81,7 @@ Mgr::Mgr(MonClient *monc_, const MgrMap& mgrmap,
 
 Mgr::~Mgr()
 {
+  server.shutdown();
 }
 
 static std::string crush_hostname_for_osd(ClusterState& cluster_state, int osd_id)
