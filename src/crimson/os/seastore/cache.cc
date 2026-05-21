@@ -1370,7 +1370,7 @@ CachedExtentRef Cache::duplicate_for_write(
   }
 
   auto ret = i->duplicate_for_write(t);
-  ret->pending_for_transaction = t.get_trans_id();
+  ret->t = &t;
   ret->set_prior_instance(i);
   if (!is_root_type(ret->get_type())) {
     assert(ret->get_paddr().is_absolute());
@@ -1771,7 +1771,7 @@ record_t Cache::prepare_record(
     }
     assert(i->state == CachedExtent::extent_state_t::DIRTY);
     assert(i->version > 0);
-    assert(i->pending_for_transaction == TRANS_ID_NULL);
+    assert(i->t == nullptr);
     assert(!i->prior_instance);
     remove_from_dirty(i, &trans_src);
     // set the version to zero because the extent state is now clean
@@ -1804,7 +1804,7 @@ record_t Cache::prepare_record(
       assert(!i->prior_instance || t.get_src() == transaction_type_t::DEMOTE);
       // no set_io_wait(), skip complete_commit()
       assert(!i->is_pending_io());
-      i->pending_for_transaction = TRANS_ID_NULL;
+      i->t = nullptr;
       i->state = CachedExtent::extent_state_t::CLEAN;
     } else {
       assert(i->is_exist_mutation_pending());
@@ -2083,7 +2083,7 @@ void Cache::complete_commit(
       assert(i->get_last_committed_crc() == CRC_NULL);
     }
 #endif
-    i->pending_for_transaction = TRANS_ID_NULL;
+    i->t = nullptr;
     i->on_initial_write();
     const auto t_src = t.get_src();
     if (should_use_no_conflict_publish(t, i->get_type())) {
@@ -2094,7 +2094,7 @@ void Cache::complete_commit(
       TRACET("committing rewritten extent into "
              "existing, inline={} -- {}, prior={}",
              t, is_inline, *i, prior);
-      prior.pending_for_transaction = TRANS_ID_NULL;
+      prior.t = nullptr;
       committer.commit_state();
       committer.sync_checksum();
       committer.commit_and_share_paddr();
@@ -2190,7 +2190,7 @@ void Cache::complete_commit(
       committer.commit_state();
       committer.sync_checksum();
       auto &prior = *i->prior_instance;
-      prior.pending_for_transaction = TRANS_ID_NULL;
+      prior.t = nullptr;
       ceph_assert(prior.is_valid());
       if (is_lba_backref_node(i->get_type())) {
         committer.commit_data();
@@ -2202,7 +2202,7 @@ void Cache::complete_commit(
       prior.committer.reset();
     }
 
-    i->pending_for_transaction = TRANS_ID_NULL;
+    i->t = nullptr;
     i->reset_prior_instance();
     assert(i->version > 0);
     i->complete_io();
@@ -2225,7 +2225,7 @@ void Cache::complete_commit(
       TRACET("committing rewritten extent into "
              "existing -- {}, prior={}",
              t, *i, prior);
-      prior.pending_for_transaction = TRANS_ID_NULL;
+      prior.t = nullptr;
       if (auto shadow = prior.get_shadow(); shadow) {
         committer.commit_shadow_demote(t);
         prior.reset_shadow();
@@ -2281,7 +2281,7 @@ void Cache::init()
              P_ADDR_ROOT,
              PLACEMENT_HINT_NULL,
              NULL_GENERATION,
-             TRANS_ID_NULL,
+             nullptr,
 	     write_policy_t::WRITE_BACK);
   root->set_modify_time(seastar::lowres_system_clock::now());
   INFO("init root -- {}", *root);
@@ -2706,7 +2706,7 @@ Cache::_get_absent_extent_by_type(
 	    offset,
 	    PLACEMENT_HINT_NULL,
 	    NULL_GENERATION,
-	    TRANS_ID_NULL,
+	    nullptr,
 	    write_policy_t::WRITE_BACK);
   DEBUGT("{} length=0x{:x} is absent, add extent ... -- {}",
     t, type, length, *ret);

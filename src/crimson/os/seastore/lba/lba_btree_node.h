@@ -165,8 +165,9 @@ struct LBALeafNode
     laddr_t pivot,
     lba_map_val_t val) {
     LOG_PREFIX(FixedKVInternalNode::replace);
+    assert(this->t != nullptr);
     SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, old key {}, key {}",
-      this->pending_for_transaction,
+      this->t->get_trans_id(),
       iter.get_offset(),
       iter.get_key(),
       pivot);
@@ -180,8 +181,9 @@ struct LBALeafNode
 
   void remove(internal_const_iterator_t iter) final {
     LOG_PREFIX(LBALeafNode::remove);
+    assert(this->t != nullptr);
     SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, key {}",
-      this->pending_for_transaction,
+      this->t->get_trans_id(),
       iter.get_offset(),
       iter.get_key());
     assert(iter != this->end());

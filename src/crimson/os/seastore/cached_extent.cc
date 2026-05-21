@@ -89,6 +89,34 @@ std::ostream &operator<<(std::ostream &out, const CachedExtent &ext)
   return ext.print(out);
 }
 
+trans_spec_view_t::trans_spec_view_t(
+  Transaction &t) : t(&t) {}
+
+bool trans_spec_view_t::cmp_t::operator()(
+  const trans_spec_view_t &lhs,
+  const trans_spec_view_t &rhs) const
+{
+  transaction_id_t l = ((lhs.t == nullptr) ? 0 : lhs.t->get_trans_id());
+  transaction_id_t r = ((rhs.t == nullptr) ? 0 : rhs.t->get_trans_id());
+  return l < r;
+}
+
+bool trans_spec_view_t::cmp_t::operator()(
+  const transaction_id_t &lhs,
+  const trans_spec_view_t &rhs) const
+{
+  transaction_id_t r = ((rhs.t == nullptr) ? 0 : rhs.t->get_trans_id());
+  return lhs < r;
+}
+
+bool trans_spec_view_t::cmp_t::operator()(
+  const trans_spec_view_t &lhs,
+  const transaction_id_t &rhs) const
+{
+  transaction_id_t l = ((lhs.t == nullptr) ? 0 : lhs.t->get_trans_id());
+  return l < rhs;
+}
+
 CachedExtent::~CachedExtent()
 {
   if (parent_index) {
@@ -122,6 +150,44 @@ CachedExtent* CachedExtent::maybe_get_transactional_view(Transaction &t) {
   }
 
   return this;
+}
+
+bool CachedExtent::is_pending_in_trans(transaction_id_t id) const {
+  auto trans_id = ((t == nullptr) ? 0 : t->get_trans_id());
+  return is_pending() && trans_id == id;
+}
+
+std::ostream &CachedExtent::print(std::ostream &out) const {
+  std::string prior_poffset_str = prior_poffset
+    ? fmt::format("{}", *prior_poffset)
+    : "nullopt";
+  out << "CachedExtent(addr=" << this
+      << ", type=" << get_type()
+      << ", trans=" << ((t == nullptr) ? 0 : t->get_trans_id())
+      << ", version=" << version
+      << ", dirty_from=" << dirty_from
+      << ", modify_time=" << sea_time_point_printer_t{modify_time}
+      << ", paddr=" << get_paddr()
+      << ", prior_paddr=" << prior_poffset_str
+      << std::hex << ", length=0x" << get_length()
+      << ", loaded=0x" << get_loaded_length() << std::dec
+      << ", state=" << state
+      << ", pin_state=" << pin_state
+      << ", last_committed_crc=" << last_committed_crc
+      << ", refcount=" << use_count()
+      << ", user_hint=" << user_hint
+      << ", write_policy=" << write_policy
+      << ", rewrite_gen=" << rewrite_gen_printer_t{rewrite_generation}
+      << ", pending_io=";
+  if (is_pending_io()) {
+    out << io_wait->from_state;
+  } else {
+    out << "N/A";
+  }
+  if (is_valid() && is_fully_loaded() && !is_stable_clean_pending()) {
+    print_detail(out);
+  }
+  return out << ")";
 }
 
 std::ostream &LogicalCachedExtent::print_detail(std::ostream &out) const
@@ -410,7 +476,7 @@ void ExtentCommitter::commit_state() {
   SUBTRACET(seastore_cache, "{} prior={}",
     t, extent, *extent.prior_instance);
   auto &prior = *extent.prior_instance;
-  prior.pending_for_transaction = extent.pending_for_transaction;
+  prior.t = extent.t;
   prior.modify_time = extent.modify_time;
   prior.last_committed_crc = extent.last_committed_crc;
   prior.dirty_from = extent.dirty_from;
