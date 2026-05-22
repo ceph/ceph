@@ -35,6 +35,7 @@ overrides:
       - PG_DAMAGED
       - CEPHADM_FAILED_DAEMON
       - failed cephadm daemon
+      - osd.* is in unknown state
 tasks:
 - install:
     branch: tentacle
