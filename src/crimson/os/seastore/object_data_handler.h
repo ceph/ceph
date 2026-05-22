@@ -45,7 +45,15 @@ public:
     changes.push_back(b);
   }
   void apply_changes_to(bufferptr &b) const {
-    assert(!changes.empty());
+    if (changes.empty()) {
+      // The only legitimate empty-changes call is move_cached_bptr()
+      // re-applying onto a buffer that was already materialised by a
+      // prior get_cached_bptr() / apply_changes_to_cache().  In that
+      // path, &b is the same object as *ptr, so the work has already
+      // been done.
+      assert(ptr.has_value() && &b == &*ptr);
+      return;
+    }
     for (auto p : changes) {
       auto iter = p.bl.cbegin();
       iter.copy(p.bl.length(), b.c_str() + p.offset);
@@ -60,10 +68,15 @@ public:
     apply_changes_to_cache(_ptr);
     return *ptr;
   }
-  bufferptr &&move_cached_bptr() {
+  bufferptr move_cached_bptr() {
     assert(has_cached_bptr());
     apply_changes_to(*ptr);
-    return std::move(*ptr);
+    bufferptr result = std::move(*ptr);
+    // reset the optional so a stale `*ptr` reference can't sneak past
+    // apply_changes_to's `ptr.has_value() && &b == &*ptr` precondition
+    // and silently operate on a moved-from buffer.
+    ptr.reset();
+    return result;
   }
 private:
   void apply_changes_to_cache(const bufferptr &_ptr) const {

@@ -196,6 +196,25 @@ public:
     );
   }
 
+  update_mapping_checksum_ret update_mapping_checksum(
+    Transaction &t,
+    LBACursorRef cursor,
+    checksum_t new_checksum) final {
+    // paddr and len are unchanged; only `checksum` is updated.
+    co_return co_await _update_mapping(
+      t,
+      *cursor,
+      [new_checksum](lba_map_val_t ret) {
+	ret.checksum = new_checksum;
+	return ret;
+      },
+      nullptr
+    ).handle_error_interruptible(
+      base_iertr::pass_further{},
+      crimson::ct_error::assert_all{}
+    );
+  }
+
   remap_ret remap_mappings(
     Transaction &t,
     LBACursorRef mapping,

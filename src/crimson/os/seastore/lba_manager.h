@@ -147,6 +147,23 @@ public:
     co_await update_mapping_refcount(t, cursor, delta);
   }
 
+  /**
+   * Update the on-leaf checksum field of an LBA mapping in-place.
+   *
+   * Used by the delta-based-overwrite path where the extent's content is
+   * mutated in place at the same paddr/length, but the LBA tree leaf still
+   * holds the pre-mutation CRC.  Without this update, the next fresh read
+   * triggers `Cache::check_full_extent_integrity` and aborts.
+   *
+   * paddr and len are unchanged; only the checksum field is rewritten.
+   */
+  using update_mapping_checksum_iertr = base_iertr;
+  using update_mapping_checksum_ret = update_mapping_checksum_iertr::future<LBACursorRef>;
+  virtual update_mapping_checksum_ret update_mapping_checksum(
+    Transaction &t,
+    LBACursorRef cursor,
+    checksum_t new_checksum) = 0;
+
   struct remap_entry_t {
     extent_len_t offset;
     extent_len_t len;
