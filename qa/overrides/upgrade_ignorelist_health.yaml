@@ -9,6 +9,7 @@ overrides:
       - \(CACHE_POOL_NO_HIT_SET\)
       - pg .* is stuck peering
       - pgs peering
+      - OBJECT_UNFOUND
       - \(POOL_FULL\)
       - \(SMALLER_PGP_NUM\)
       - \(SLOW_OPS\)
