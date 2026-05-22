@@ -1,3 +1,13 @@
+* Messenger: new opt-in msgr2 connection mode ``secure-psp``, accepted by
+  the ``ms_*_mode`` options alongside ``crc`` and ``secure``. It is absent
+  from all defaults and currently behaves identically to ``secure``.
+  NOTE: daemons older than this release do not understand the name and
+  will parse a mode list containing it as *empty*, which makes them
+  refuse all msgr2 connections. Because the ``ms_*_mode`` options are
+  read at startup, do not set ``secure-psp`` in the cluster config until
+  every daemon has been upgraded, and always keep a known mode such as
+  ``secure`` or ``crc`` in the list.
+
 * Messenger: new ``ms_tcp_zerocopy`` option (default ``false``) makes the
   async Posix stack send large plaintext payloads with ``MSG_ZEROCOPY``,
   eliminating the kernel send copy. ``ms_tcp_zerocopy_min_size``

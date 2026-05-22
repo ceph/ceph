@@ -103,9 +103,10 @@ struct ceph_dir_layout {
 #define CEPH_AUTH_CEPHX	 	0x2
 
 /* msgr2 protocol modes */
-#define CEPH_CON_MODE_UNKNOWN 0x0
-#define CEPH_CON_MODE_CRC     0x1
-#define CEPH_CON_MODE_SECURE  0x2
+#define CEPH_CON_MODE_UNKNOWN     0x0
+#define CEPH_CON_MODE_CRC         0x1
+#define CEPH_CON_MODE_SECURE      0x2
+#define CEPH_CON_MODE_SECURE_PSP  0x3
 
 extern const char *ceph_con_mode_name(int con_mode);
 

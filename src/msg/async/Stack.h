@@ -281,6 +281,16 @@ enum {
   l_msgr_zerocopy_fallback,
   l_msgr_zerocopy_pinned_bytes,
 
+  // PSP Security Protocol negotiation telemetry.
+  // Increments per completed handshake that landed on secure-psp, not
+  // per connection: a reconnect or a session replacement re-runs the
+  // negotiation on the same connection and counts again. Independent
+  // of whether the kernel offload is engaged (today secure-psp still
+  // does aesgcm AEAD under the hood; the kernel-offload follow-up
+  // lights up the netlink attach and will add _attach_failed,
+  // _fallback_to_aesgcm, _handshake_bytes, _active_assocs).
+  l_msgr_psp_negotiations,
+
   l_msgr_last,
 };
 
@@ -377,6 +387,11 @@ class Worker {
                         "(ENOBUFS or kernel-side copy)");
     plb.add_u64(l_msgr_zerocopy_pinned_bytes, "msgr_zerocopy_pinned_bytes",
                 "Bytes currently pinned awaiting zero-copy completion");
+
+    plb.add_u64_counter(l_msgr_psp_negotiations, "msgr_psp_negotiations",
+                        "Handshakes that negotiated secure-psp mode "
+                        "(counts reconnects and session replacements, "
+                        "so it exceeds the live connection count)");
 
     perf_logger = plb.create_perf_counters();
     cct->get_perfcounters_collection()->add(perf_logger);

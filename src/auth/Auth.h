@@ -131,18 +131,29 @@ struct AuthConnectionMeta {
     return con_mode == CEPH_CON_MODE_CRC;
   }
   // Is this connection confidential? Governs policy that cares only
-  // that the payload is encrypted (e.g. compression-vs-secure).
+  // that the payload is encrypted (e.g. compression-vs-secure, and
+  // AuthRegistry::is_secure_mode()). secure-psp qualifies.
   bool is_mode_secure() const {
-    return con_mode == CEPH_CON_MODE_SECURE;
+    return con_mode == CEPH_CON_MODE_SECURE ||
+           con_mode == CEPH_CON_MODE_SECURE_PSP;
+  }
+  bool is_mode_secure_psp() const {
+    return con_mode == CEPH_CON_MODE_SECURE_PSP;
   }
   // Does *this process* encrypt each frame itself? Governs the data
   // path: crypto_onwire handler setup and the MSG_ZEROCOPY exclusion
   // (in-process AEAD already copies the payload, so there is no copy
-  // left to elide). Identical to is_mode_secure() today; the two are
-  // kept apart because a kernel-offloaded mode would be confidential
-  // without doing in-process AEAD, and only this one would flip.
+  // left to elide).
+  //
+  // secure-psp answers true here for now because it still runs the
+  // aesgcm path. When the netlink attach lands it stays confidential
+  // but stops doing in-process AEAD - i.e. ONLY this predicate flips,
+  // and its callers are exactly the ones that must change. Keeping it
+  // separate from is_mode_secure() is what makes that a safe edit
+  // rather than a silent downgrade of the compression policy.
   bool is_mode_in_process_aead() const {
-    return con_mode == CEPH_CON_MODE_SECURE;
+    return con_mode == CEPH_CON_MODE_SECURE ||
+           con_mode == CEPH_CON_MODE_SECURE_PSP;
   }
 
   CryptoKey session_key;           ///< per-ticket key
@@ -152,6 +163,7 @@ struct AuthConnectionMeta {
     case CEPH_CON_MODE_CRC:
       return 0;
     case CEPH_CON_MODE_SECURE:
+    case CEPH_CON_MODE_SECURE_PSP:
       return 16 * 4;
     }
     return 0;

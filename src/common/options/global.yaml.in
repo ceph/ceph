@@ -959,7 +959,7 @@ options:
 - name: ms_mon_cluster_mode
   type: str
   level: basic
-  desc: Connection modes (crc, secure) for intra-mon connections in order of preference
+  desc: Connection modes (crc, secure, secure-psp) for intra-mon connections in order of preference
   fmt_desc: the connection mode (or permitted modes) to use between monitors.
   default: secure crc
   see_also:
@@ -973,7 +973,7 @@ options:
 - name: ms_mon_service_mode
   type: str
   level: basic
-  desc: Allowed connection modes (crc, secure) for connections to mons
+  desc: Allowed connection modes (crc, secure, secure-psp) for connections to mons
   fmt_desc: A list of permitted modes for clients or
     other Ceph daemons to use when connecting to monitors.
   default: secure crc
@@ -988,7 +988,7 @@ options:
 - name: ms_mon_client_mode
   type: str
   level: basic
-  desc: Connection modes (crc, secure) for connections from clients to monitors in
+  desc: Connection modes (crc, secure, secure-psp) for connections from clients to monitors in
     order of preference
   fmt_desc: A list of connection modes, in order of
     preference, for clients or non-monitor daemons to use when
@@ -1005,7 +1005,7 @@ options:
 - name: ms_cluster_mode
   type: str
   level: basic
-  desc: Connection modes (crc, secure) for intra-cluster connections in order of preference
+  desc: Connection modes (crc, secure, secure-psp) for intra-cluster connections in order of preference
   fmt_desc: connection mode (or permitted modes) used
     for intra-cluster communication between Ceph daemons.  If multiple
     modes are listed, the modes listed first are preferred.
@@ -1018,7 +1018,7 @@ options:
 - name: ms_service_mode
   type: str
   level: basic
-  desc: Allowed connection modes (crc, secure) for connections to daemons
+  desc: Allowed connection modes (crc, secure, secure-psp) for connections to daemons
   fmt_desc: a list of permitted modes for clients to use
     when connecting to the cluster.
   default: crc secure
@@ -1030,7 +1030,7 @@ options:
 - name: ms_client_mode
   type: str
   level: basic
-  desc: Connection modes (crc, secure) for connections from clients in order of preference
+  desc: Connection modes (crc, secure, secure-psp) for connections from clients in order of preference
   fmt_desc: A list of connection modes, in order of
     preference, for clients to use (or allow) when talking to a Ceph
     cluster.

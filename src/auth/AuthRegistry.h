@@ -66,7 +66,8 @@ public:
   }
 
   static bool is_secure_mode(uint32_t mode) {
-    return (mode == CEPH_CON_MODE_SECURE);
+    return (mode == CEPH_CON_MODE_SECURE ||
+            mode == CEPH_CON_MODE_SECURE_PSP);
   }
 
   AuthAuthorizeHandler *get_handler(int peer_type, int method);

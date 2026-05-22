@@ -25,6 +25,7 @@ const char *ceph_con_mode_name(int con_mode)
 	case CEPH_CON_MODE_UNKNOWN: return "unknown";
 	case CEPH_CON_MODE_CRC: return "crc";
 	case CEPH_CON_MODE_SECURE: return "secure";
+	case CEPH_CON_MODE_SECURE_PSP: return "secure-psp";
 	default: return "???";
 	}
 }
