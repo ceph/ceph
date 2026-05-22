@@ -1,18 +1,144 @@
-
 from typing import Any, Tuple, IO, List, Union, Optional, Dict
 import ipaddress
+import re
 
 from datetime import datetime, timedelta
 from cryptography import x509
 from cryptography.x509 import Certificate
 from cryptography.x509.oid import NameOID, ExtensionOID
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import rsa, ec
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.backends import default_backend
 
 
 class SSLConfigException(Exception):
     pass
+
+
+# ---------------------------------------------------------------------------
+# Fullchain PEM helpers
+# ---------------------------------------------------------------------------
+
+# PEM block headers for every private-key format we accept
+_KEY_HEADERS = (
+    '-----BEGIN RSA PRIVATE KEY-----',    # PKCS#1 RSA
+    '-----BEGIN PRIVATE KEY-----',         # PKCS#8 (unencrypted)
+    '-----BEGIN EC PRIVATE KEY-----',      # SEC1 EC
+)
+_CERT_HEADER = '-----BEGIN CERTIFICATE-----'
+
+# Regex that matches a single, complete PEM block (header ... footer).
+# The capture group is the label between BEGIN/END so the two markers are
+# guaranteed to match (e.g. "RSA PRIVATE KEY" on both sides).
+_PEM_BLOCK_RE = re.compile(
+    r'-----BEGIN ([^-]+)-----[\s\S]*?-----END \1-----',
+    re.MULTILINE,
+)
+
+
+def split_fullchain_pem(pem_data: str) -> Tuple[str, str]:
+    """Parse a PEM blob that may contain a private key and one or more
+    certificate blocks (a *fullchain PEM* as output by many enterprise CAs).
+
+    Supported key block types:
+
+    * ``-----BEGIN RSA PRIVATE KEY-----``  (PKCS#1)
+    * ``-----BEGIN PRIVATE KEY-----``       (PKCS#8 unencrypted)
+    * ``-----BEGIN EC PRIVATE KEY-----``    (SEC1 EC)
+
+    The function normalises the input so that downstream consumers
+    (``TLSObjectStore``, the certificate-check loop, …) remain completely
+    unaware of multi-block input:
+
+    * The **private key** is extracted and returned separately.
+    * The **certificate chain** (leaf cert first, then any intermediate CA
+      certs) is returned as a single concatenated PEM string — the format
+      expected by nginx, HAProxy and most TLS consumers.
+
+    The leaf certificate is defined as the *first* ``CERTIFICATE`` block in
+    the input (the convention followed by every CA tool we are aware of).
+    Chain ordering is *not* enforced as a hard error — real-world CA tooling
+    sometimes emits chains in non-standard order — but the key **must** match
+    the leaf certificate public key.
+
+    Args:
+        pem_data: Raw PEM string containing a private key and 1–N certificates.
+
+    Returns:
+        ``(cert_chain, private_key)`` where *cert_chain* is all CERTIFICATE
+        blocks joined by newlines (leaf first) and *private_key* is the single
+        key block.  If no key block is present *private_key* is an empty string.
+
+    Raises:
+        SSLConfigException: if more than one private key block is present, if
+            no certificate block is found, or if the key does not match the
+            leaf certificate public key.
+    """
+    raw_blocks = [m.group(0) for m in _PEM_BLOCK_RE.finditer(pem_data)]
+    if not raw_blocks:
+        raise SSLConfigException('No PEM blocks found in the provided data')
+
+    key_blocks = [b for b in raw_blocks if any(b.strip().startswith(h) for h in _KEY_HEADERS)]
+    cert_blocks = [b for b in raw_blocks if b.strip().startswith(_CERT_HEADER)]
+
+    if len(key_blocks) > 1:
+        raise SSLConfigException(
+            f'Fullchain PEM contains {len(key_blocks)} private key blocks; expected at most 1'
+        )
+    if not cert_blocks:
+        raise SSLConfigException('Fullchain PEM contains no CERTIFICATE blocks')
+
+    private_key_pem = (key_blocks[0].strip() + '\n') if key_blocks else ''
+    cert_chain_pem = '\n'.join(b.strip() for b in cert_blocks) + '\n'
+
+    # Validate that the key actually matches the leaf certificate.
+    if private_key_pem:
+        try:
+            leaf_cert = x509.load_pem_x509_certificate(
+                cert_blocks[0].encode('utf-8'), backend=default_backend()
+            )
+            priv_key = serialization.load_pem_private_key(
+                private_key_pem.encode('utf-8'), password=None, backend=default_backend()
+            )
+            leaf_pub = leaf_cert.public_key().public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            derived_pub = priv_key.public_key().public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            if leaf_pub != derived_pub:
+                raise SSLConfigException(
+                    'Private key does not match the leaf certificate public key'
+                )
+        except SSLConfigException:
+            raise
+        except Exception as exc:
+            raise SSLConfigException(
+                f'Failed to validate private key against leaf certificate: {exc}'
+            ) from exc
+
+    return cert_chain_pem, private_key_pem
+
+
+def is_fullchain_pem(pem_data: str) -> bool:
+    """Return *True* if *pem_data* contains more than one PEM block.
+
+    A "fullchain" PEM is any blob that bundles multiple PEM objects —
+    for example a private key followed by a leaf cert and intermediate CA certs.
+    """
+    matches = list(_PEM_BLOCK_RE.finditer(pem_data))
+    return len(matches) > 1
+
+
+def contains_private_key(pem_data: str) -> bool:
+    """Return *True* if *pem_data* contains at least one private key PEM block."""
+    return any(
+        m.group(0).strip().startswith(h)
+        for m in _PEM_BLOCK_RE.finditer(pem_data)
+        for h in _KEY_HEADERS
+    )
 
 
 def extract_ips_and_fqdns_from_cert(cert_pem: str) -> Tuple[List[str], List[str]]:
@@ -73,7 +199,12 @@ def parse_extensions(cert: Certificate) -> Dict:
 
 
 def get_certificate_info(cert_data: str, include_details: bool = False) -> Dict:
-    """Return detailed information about a certificate as a dictionary."""
+    """Return detailed information about a certificate as a dictionary.
+
+    When *cert_data* is a fullchain PEM (multiple CERTIFICATE blocks), only the
+    leaf certificate (first block) is inspected — which is correct behaviour for
+    expiry checks and subject/issuer display.
+    """
 
     def get_oid_name(oid: Any) -> str:
         """Return a human-readable name for an OID."""
@@ -88,7 +219,14 @@ def get_certificate_info(cert_data: str, include_details: bool = False) -> Dict:
         return oid_mapping.get(oid, oid.dotted_string)
 
     try:
-        cert = x509.load_pem_x509_certificate(cert_data.encode('utf-8'), default_backend())
+        # Extract only the first CERTIFICATE block so that fullchain PEMs
+        # (leaf + intermediates in a single string) are handled gracefully.
+        first_cert_pem = cert_data
+        m = _PEM_BLOCK_RE.search(cert_data)
+        if m and m.group(0).strip().startswith(_CERT_HEADER):
+            first_cert_pem = m.group(0)
+
+        cert = x509.load_pem_x509_certificate(first_cert_pem.encode('utf-8'), default_backend())
         remaining_days = (cert.not_valid_after - datetime.utcnow()).days
         info = {
             'subject': {get_oid_name(attr.oid): attr.value for attr in cert.subject},

@@ -5,7 +5,13 @@ from enum import Enum
 
 from cephadm.ssl_cert_utils import SSLCerts, SSLConfigException
 from mgr_util import verify_tls, certificate_days_to_expire, ServerConfigException
-from cephadm.ssl_cert_utils import get_certificate_info, get_private_key_info
+from cephadm.ssl_cert_utils import (
+    get_certificate_info,
+    get_private_key_info,
+    split_fullchain_pem,
+    contains_private_key,
+    is_fullchain_pem,
+)
 from cephadm.tlsobject_types import Cert, PrivKey, TLSObjectScope, TLSObjectException, TLSCredentials
 from cephadm.tlsobject_store import TLSObjectStore
 
@@ -363,6 +369,71 @@ class CertMgr:
     def save_key(self, key_name: str, key: str, service_name: Optional[str] = None, host: Optional[str] = None,
                  user_made: bool = False, editable: bool = False) -> None:
         self.key_store.save_tlsobject(key_name, key, service_name, host, user_made, editable)
+
+    def save_cert_key_from_pem(
+        self,
+        cert_name: str,
+        key_name: str,
+        pem_data: str,
+        service_name: Optional[str] = None,
+        host: Optional[str] = None,
+        user_made: bool = True,
+        editable: bool = True,
+    ) -> Tuple[str, str]:
+        """Ingest a PEM blob that may be a fullchain (key + leaf cert + intermediate certs).
+
+        This is the preferred entry point for user-provided certificates.  It
+        normalises any input format:
+
+        * **Plain cert PEM** (single or multiple CERTIFICATE blocks, no key):
+          stored as-is under *cert_name*; the caller is responsible for saving
+          the key separately.
+        * **Fullchain PEM** (key block + one or more CERTIFICATE blocks):
+          split on ingest — the cert chain goes to *cert_name*, the key goes to
+          *key_name*.  Downstream consumers never see the combined blob.
+
+        The private key is validated against the leaf certificate public key
+        before anything is persisted.
+
+        Args:
+            cert_name: Logical cert name in the TLS object store.
+            key_name:  Logical key name in the TLS object store.
+            pem_data:  Raw PEM string (may be fullchain or cert-only).
+            service_name: Service target for SERVICE-scoped objects.
+            host:         Host target for HOST-scoped objects.
+            user_made:    Mark the stored objects as user-provided.
+            editable:     Allow subsequent CLI edits.
+
+        Returns:
+            ``(cert_chain, private_key)`` — the normalised values that were
+            persisted.  *private_key* is an empty string when the input
+            contained no key block.
+
+        Raises:
+            SSLConfigException: on parse/validation errors (e.g. key mismatch,
+                multiple key blocks, no cert block).
+        """
+        if contains_private_key(pem_data):
+            # Fullchain blob: split key from cert chain, validate consistency.
+            cert_chain, private_key = split_fullchain_pem(pem_data)
+            logger.debug(
+                'certmgr: split fullchain PEM for %s (service=%s host=%s)',
+                cert_name, service_name, host,
+            )
+        elif is_fullchain_pem(pem_data):
+            # Multiple CERTIFICATE blocks but no key — cert chain only.
+            cert_chain = pem_data
+            private_key = ''
+        else:
+            # Single cert block (most common case for existing callers).
+            cert_chain = pem_data
+            private_key = ''
+
+        self.cert_store.save_tlsobject(cert_name, cert_chain, service_name, host, user_made, editable)
+        if private_key:
+            self.key_store.save_tlsobject(key_name, private_key, service_name, host, user_made, editable)
+
+        return cert_chain, private_key
 
     def save_self_signed_cert_key_pair(self, service_name: str, tls_creds: TLSCredentials, host: str,
                                        label: Optional[str] = None) -> None:
