@@ -30,6 +30,7 @@ overrides:
       - with fewer MDS than max_mds
       - CEPHADM_FAILED_DAEMON
       - failed cephadm daemon
+      - osd.* is in unknown state
 tasks:
 - install:
     branch: quincy
