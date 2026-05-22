@@ -23,6 +23,7 @@ overrides:
       - nodeep-scrub
       - OSD_ROOT_DOWN
       - osd down
+      - OSD_HOST_DOWN
       - osds down
       - filesystem is degraded
       - filesystem is offline
