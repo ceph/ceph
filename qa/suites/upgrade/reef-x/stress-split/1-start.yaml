@@ -11,6 +11,7 @@ overrides:
       - mon down
       - MON_DOWN
       - out of quorum
+      - osd.* is in unknown state
       - PG_AVAILABILITY
       - PG_DEGRADED
       - Reduced data availability
