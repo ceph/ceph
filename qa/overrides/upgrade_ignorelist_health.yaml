@@ -21,6 +21,7 @@ overrides:
       - noscrub
       - nodeep-scrub
       - OSD_ROOT_DOWN
+      - osd down
       - osds down
       - filesystem is degraded
       - filesystem is offline
