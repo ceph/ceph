@@ -21,6 +21,14 @@ list(APPEND msg_srcs
   async/frames_v2.cc
   async/net_handler.cc)
 
+# PSPNetlinkMock.cc is deliberately NOT here: it is a test double and
+# belongs only to the unit test that uses it, not to ceph-common (and
+# therefore to every daemon and every librados client).
+if(HAVE_PSP)
+  list(APPEND msg_srcs
+    async/PSPNetlink.cc)
+endif()
+
 if(LINUX)
   list(APPEND msg_srcs
     async/EventEpoll.cc)
