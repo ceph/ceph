@@ -351,6 +351,55 @@ public:
     rewrite_gen_t target_generation,
     sea_time_point modify_time) = 0;
 
+  using rewrite_extents_iertr = base_iertr;
+  using rewrite_extents_ret = rewrite_extents_iertr::future<>;
+  virtual rewrite_extents_ret rewrite_extents(
+    Transaction &t,
+    std::vector<CachedExtentRef> &extents,
+    rewrite_gen_t target_generation,
+    sea_time_point modify_time) = 0;
+
+  /**
+   * promote_extent
+   *
+   * Promote an extent located from slow devices to the faster devices.
+   * When the type of extent is ObjectDataBlock, the original extent won't
+   * be retired, so that this extent is located in two differenct devices
+   * at the same time, which is helpful to reduce the cost of cleaner process.
+   * The others follow the normal rewrite process but its rewrite generation
+   * will be INIT_GENERATION(XXX: or the maximum generation of the hot tier?).
+   */
+  using promote_extent_iertr = base_iertr;
+  using promote_extent_ret = promote_extent_iertr::future<>;
+  virtual promote_extent_ret promote_extent(
+    Transaction &t,
+    CachedExtentRef extent) = 0;
+
+#ifdef CRIMSON_TEST_WORKLOAD
+  virtual promote_extent_ret promote_extents_from_disk(
+    Transaction &t,
+    paddr_t paddr) = 0;
+#endif
+
+  /**
+   * demote_region
+   *
+   * Demote the logical extents promoted from the slower device and evict
+   * the extents to the cold tier under the given laddr prefix.
+   */
+  struct demote_region_res_t {
+    std::size_t demoted_size = 0;
+    std::size_t evicted_size = 0;
+    bool complete = false;
+  };
+  using demote_region_iertr = base_iertr;
+  using demote_region_ret = demote_region_iertr::future<
+    demote_region_res_t>;
+  virtual demote_region_ret demote_region(
+    Transaction &t,
+    laddr_t prefix,
+    std::size_t max_proceed_size) = 0;
+
   /**
    * get_extents_if_live
    *
@@ -418,6 +467,7 @@ struct BackgroundListener {
   virtual ~BackgroundListener() = default;
   virtual void maybe_wake_background() = 0;
   virtual void maybe_wake_blocked_io() = 0;
+  virtual void maybe_wake_promote() = 0;
   virtual state_t get_state() const = 0;
 
   bool is_ready() const {
@@ -622,7 +672,7 @@ public:
     reserved_usage -= usage;
   }
 
-  seastar::future<> trim();
+  seastar::future<> trim(bool force);
 
   static JournalTrimmerImplRef create(
       store_index_t store_index,
@@ -1243,6 +1293,8 @@ public:
 
   virtual const std::set<device_id_t>& get_device_ids() const = 0;
 
+  virtual backend_type_t get_backend_type() const = 0;
+
   virtual std::size_t get_reclaim_size_per_cycle() const = 0;
 
 #ifdef UNIT_TESTS_BUILT
@@ -1445,6 +1497,10 @@ public:
 
   const std::set<device_id_t>& get_device_ids() const final {
     return sm_group->get_device_ids();
+  }
+
+  backend_type_t get_backend_type() const final {
+    return backend_type_t::SEGMENTED;
   }
 
   std::size_t get_reclaim_size_per_cycle() const final {
@@ -1711,17 +1767,19 @@ public:
     RBMDeviceGroupRef&& rb_group,
     BackrefManager &backref_manager,
     LBAManager &lba_manager,
-    bool detailed);
+    bool detailed,
+    bool is_cold);
 
   static RBMCleanerRef create(
       store_index_t store_index,
       RBMDeviceGroupRef&& rb_group,
       BackrefManager &backref_manager,
       LBAManager &lba_manager,
-      bool detailed) {
+      bool detailed,
+      bool is_cold) {
     return std::make_unique<RBMCleaner>(
       store_index,
-      std::move(rb_group), backref_manager, lba_manager, detailed);
+      std::move(rb_group), backref_manager, lba_manager, detailed, is_cold);
   }
 
   RBMDeviceGroup* get_rb_group() {
@@ -1785,6 +1843,10 @@ public:
     return rb_group->get_device_ids();
   }
 
+  backend_type_t get_backend_type() const final {
+    return backend_type_t::RANDOM_BLOCK;
+  }
+
   std::size_t get_reclaim_size_per_cycle() const final {
     return 0;
   }
@@ -1820,10 +1882,11 @@ public:
     return paddr;
   }
 
-  std::list<alloc_paddr_result> alloc_paddrs(extent_len_t length) {
+  std::list<alloc_paddr_result> alloc_paddrs(
+    extent_len_t length, paddr_t hint) {
     // TODO: implement allocation strategy (dirty metadata and multiple devices)
     auto rbs = rb_group->get_rb_managers();
-    auto ret = rbs[0]->alloc_extents(length);
+    auto ret = rbs[0]->alloc_extents(length, hint);
     if (!ret.empty()) {
       stats.used_bytes += length;
     }
@@ -1863,6 +1926,7 @@ private:
 
   store_index_t store_index;
   const bool detailed;
+  const bool is_cold;
   RBMDeviceGroupRef rb_group;
   BackrefManager &backref_manager;
   LBAManager &lba_manager;

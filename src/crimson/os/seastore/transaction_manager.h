@@ -26,6 +26,7 @@
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/cache.h"
+#include "crimson/os/seastore/logical_bucket.h"
 #include "crimson/os/seastore/root_meta.h"
 #include "crimson/os/seastore/lba_manager.h"
 #include "crimson/os/seastore/backref_manager.h"
@@ -105,6 +106,20 @@ public:
   }
 
   /**
+   * relocate_logical_extent
+   *
+   * Make a new logical extent to update its laddr. The caller is
+   * responsible to update the corresponding lba mapping.
+   */
+  base_iertr::future<LogicalChildNodeRef> relocate_logical_extent(
+    Transaction &t,
+    LBAMapping mapping);
+
+  base_iertr::future<LogicalChildNodeRef> relocate_shadow_extent(
+    Transaction &t,
+    LBAMapping mapping);
+
+  /**
    * get_pin
    *
    * Get the logical pin at offset
@@ -171,6 +186,13 @@ public:
     co_return ret;
   }
 
+  base_iertr::future<LBAMapping> lower_bound_pin(
+    Transaction &t,
+    laddr_t laddr) {
+    auto cursor = co_await lba_manager->lower_bound(t, laddr);
+    co_return co_await resolve_cursor_to_mapping(t, cursor);
+  }
+
   /**
    * maybe_indirect_extent_t
    *
@@ -222,6 +244,28 @@ public:
           length);
     }
   };
+
+  void update_hit_ratio(Transaction& t, device_id_t id) {
+    if (epm->is_cold_device(id)) {
+      t.write_hit_cold++;
+    } else {
+      t.write_hit_hot++;
+    }
+  }
+
+  void update_read_ratio(Transaction& t, device_id_t id) {
+    if (epm->is_cold_device(id)) {
+      t.read_hit_cold++;
+    } else {
+      t.read_hit_hot++;
+    }
+  }
+
+  void submit_read_ratio(Transaction& t) {
+    if (cache) {
+      cache->update_read_ratio(t);
+    }
+  }
 
   template <typename T>
   using lextent_init_func_t = std::function<void (T&)>;
@@ -525,7 +569,7 @@ public:
   template <typename T>
   alloc_extent_ret<T> alloc_non_data_extent(
     Transaction &t,
-    laddr_t laddr_hint,
+    laddr_hint_t laddr_hint,
     extent_len_t len,
     placement_hint_t placement_hint = placement_hint_t::HOT) {
     static_assert(is_logical_metadata_type(T::TYPE));
@@ -533,10 +577,7 @@ public:
     SUBDEBUGT(seastore_tm, "{} hint {}~0x{:x} phint={} ...",
               t, T::TYPE, laddr_hint, len, placement_hint);
     auto ext = cache->alloc_new_non_data_extent<T>(
-      t,
-      len,
-      placement_hint,
-      INIT_GENERATION);
+      t, len, {placement_hint, INIT_GENERATION});
     // user must initialize the logical extent themselves.
     assert(is_user_transaction(t.get_src()));
     ext->set_seen_by_users();
@@ -565,7 +606,7 @@ public:
   template <typename T>
   alloc_extents_ret<T> alloc_data_extents(
     Transaction &t,
-    laddr_t laddr_hint,
+    laddr_hint_t laddr_hint,
     extent_len_t len,
     std::optional<LBAMapping> pos = std::nullopt,
     placement_hint_t placement_hint = placement_hint_t::HOT) {
@@ -574,10 +615,11 @@ public:
     SUBDEBUGT(seastore_tm, "{} hint {}~0x{:x} phint={} ...",
               t, T::TYPE, laddr_hint, len, placement_hint);
     auto exts = cache->alloc_new_data_extents<T>(
-      t,
-      len,
-      placement_hint,
-      INIT_GENERATION);
+      t, len,
+      {
+        placement_hint, INIT_GENERATION, false, P_ADDR_NULL,
+        epm->get_write_policy(T::TYPE, len)
+      });
     // user must initialize the logical extent themselves
     assert(is_user_transaction(t.get_src()));
     for (auto& ext : exts) {
@@ -585,7 +627,8 @@ public:
     }
     if (pos) {
       // laddr_hint is determined
-      auto off = laddr_hint;
+      assert(laddr_hint.condition == laddr_conflict_condition_t::all_at_never);
+      auto off = laddr_hint.addr;
       for (auto &extent : exts) {
 	extent->set_laddr(off);
 	off = (off + extent->get_length()).checked_to_laddr();
@@ -605,6 +648,11 @@ public:
 	std::vector<LogicalChildNodeRef>(
 	  exts.begin(), exts.end()),
 	EXTENT_DEFAULT_REF_COUNT);
+    }
+    auto &front = exts.front();
+    if (front->get_write_policy() != write_policy_t::WRITE_THROUGH &&
+        front->get_rewrite_generation() <= epm->get_max_hot_gen()) {
+      t.touch_laddr_prefix(front->get_laddr().get_object_prefix());
     }
     for (auto &ext : exts) {
       SUBDEBUGT(seastore_tm, "allocated {}", t, *ext);
@@ -641,14 +689,16 @@ public:
   using reserve_extent_ret = reserve_extent_iertr::future<LBAMapping>;
   reserve_extent_ret reserve_region(
     Transaction &t,
-    laddr_t hint,
-    extent_len_t len) {
+    laddr_hint_t hint,
+    extent_len_t len,
+    extent_types_t type) {
     LOG_PREFIX(TransactionManager::reserve_region);
-    SUBDEBUGT(seastore_tm, "hint {}~0x{:x} ...", t, hint, len);
+    SUBDEBUGT(seastore_tm, "hint {}~0x{:x} {} ...", t, hint, len, type);
     auto pin = co_await lba_manager->reserve_region(
       t,
       hint,
-      len
+      len,
+      type
     );
     SUBDEBUGT(seastore_tm, "reserved {}", t, *pin);
     co_return LBAMapping::create_direct(std::move(pin));
@@ -658,15 +708,17 @@ public:
     Transaction &t,
     LBAMapping pos,
     laddr_t hint,
-    extent_len_t len) {
+    extent_len_t len,
+    extent_types_t type) {
     LOG_PREFIX(TransactionManager::reserve_region);
-    SUBDEBUGT(seastore_tm, "hint {}~0x{:x} ...", t, hint, len);
+    SUBDEBUGT(seastore_tm, "hint {}~0x{:x} {} ...", t, hint, len, type);
     pos = co_await pos.refresh();
     auto pin = co_await lba_manager->reserve_region(
       t,
       pos.get_effective_cursor_ref(),
       hint,
-      len
+      len,
+      type
     );
     co_return LBAMapping::create_direct(std::move(pin));
   }
@@ -761,7 +813,8 @@ public:
 	  t,
 	  std::move(pos),
 	  (dst_base + cloned_to).checked_to_laddr(),
-	  clone_len
+	  clone_len,
+	  mapping.get_extent_type()
 	).handle_error_interruptible(
 	  clone_iertr::pass_further{},
 	  crimson::ct_error::assert_all{"unexpected error"}
@@ -786,6 +839,15 @@ public:
     co_return clone_range_ret_t{shared_direct, std::move(pos)};
   }
 
+  using move_region_iertr = base_iertr;
+  using move_region_ret = move_region_iertr::future<>;
+  move_region_ret move_region(
+    Transaction &t,
+    LBAMapping src,
+    LBAMapping dst,
+    laddr_t dst_prefix,
+    bool move_indirect);
+
   /* alloc_extents
    *
    * allocates more than one new blocks of type T.
@@ -794,7 +856,7 @@ public:
    alloc_extents_iertr::future<std::vector<TCachedExtentRef<T>>>
    alloc_extents(
      Transaction &t,
-     laddr_t hint,
+     laddr_hint_t hint,
      extent_len_t len,
      int num) {
      LOG_PREFIX(TransactionManager::alloc_extents);
@@ -816,6 +878,24 @@ public:
                 <std::vector<TCachedExtentRef<T>>>(std::move(extents));
        });
      });
+  }
+
+  // non-trivial method, should only be used in DEBUG build
+  bool is_prefix_cached(laddr_t prefix) {
+    if (!logical_bucket) {
+      return true;
+    }
+    return logical_bucket->is_cached(prefix);
+  }
+
+  void update_logical_bucket_for_read(laddr_t prefix) {
+    if (logical_bucket) {
+      logical_bucket->move_to_top(prefix.get_object_prefix());
+    }
+  }
+
+  bool is_cold_device(device_id_t id) const {
+    return epm->is_cold_device(id);
   }
 
   /**
@@ -870,6 +950,31 @@ public:
     rewrite_gen_t target_generation,
     sea_time_point modify_time) final;
 
+  using ExtentCallbackInterface::rewrite_extents_ret;
+  rewrite_extents_ret rewrite_extents(
+    Transaction &t,
+    std::vector<CachedExtentRef> &extents,
+    rewrite_gen_t target_generation,
+    sea_time_point modify_time) final;
+
+  using ExtentCallbackInterface::promote_extent_ret;
+  promote_extent_ret promote_extent(
+    Transaction &t,
+    CachedExtentRef extent) final;
+
+#ifdef CRIMSON_TEST_WORKLOAD
+  promote_extent_ret promote_extents_from_disk(
+    Transaction &t,
+    paddr_t paddr) final;
+#endif
+
+  using ExtentCallbackInterface::demote_region_res_t;
+  using ExtentCallbackInterface::demote_region_ret;
+  demote_region_ret demote_region(
+    Transaction &t,
+    laddr_t start,
+    std::size_t max_proceed_size) final;
+
   using ExtentCallbackInterface::get_extents_if_live_ret;
   get_extents_if_live_ret get_extents_if_live(
     Transaction &t,
@@ -923,7 +1028,7 @@ public:
   using init_root_meta_ret = init_root_meta_iertr::future<>;
   init_root_meta_ret init_root_meta(Transaction &t) {
     return alloc_non_data_extent<RootMetaBlock>(
-      t, L_ADDR_MIN, RootMetaBlock::SIZE
+      t, laddr_hint_t::create_as_fixed(L_ADDR_MIN), RootMetaBlock::SIZE
     ).si_then([this, &t](auto meta) {
       meta->set_meta(RootMetaBlock::meta_t{});
       return cache->get_root(t
@@ -1061,6 +1166,10 @@ public:
     if (!mapping.is_indirect() && mapping.is_zero_reserved()) {
       SUBDEBUGT(seastore_tm, "zero reserved, mapping {}, {} remaps",
 		t, mapping, remaps);
+      ceph_assert(!mapping.has_shadow_val());
+      //TODO: drop this assert
+      assert(mapping.get_extent_type() == extent_types_t::OBJECT_DATA_BLOCK);
+      auto type = mapping.get_extent_type();
       std::vector<LBAMapping> ret;
       auto orig_laddr = mapping.get_key();
       auto pos = co_await remove(
@@ -1075,7 +1184,8 @@ public:
 	  t,
 	  std::move(pos),
 	  laddr,
-	  remap.len
+	  remap.len,
+          type
 	).handle_error_interruptible(
 	  remap_mappings_iertr::pass_further{},
 	  crimson::ct_error::assert_all{"unexpected error"}
@@ -1144,6 +1254,9 @@ public:
       return cut_mapping<T>(
 	t, (laddr + aligned_len).checked_to_laddr(), std::move(mapping), false);
     } else {
+      if (mapping.is_linked_direct() && mapping.get_val().is_absolute()) {
+	update_hit_ratio(t, mapping.get_val().get_device_id());
+      }
       return remove(t, std::move(mapping)
       ).handle_error_interruptible(
 	punch_mappings_iertr::pass_further{},
@@ -1248,6 +1361,10 @@ public:
     co_return mapping;
   }
 
+  bool support_logical_bucket() const {
+    return epm->has_cold_tier() && logical_bucket != nullptr;
+  }
+
   ~TransactionManager();
 
 private:
@@ -1260,6 +1377,7 @@ private:
   BackrefManagerRef backref_manager;
 
   WritePipeline write_pipeline;
+  LogicalBucket *logical_bucket;
 
   bool full_extent_integrity_check = true;
 
@@ -1414,6 +1532,10 @@ private:
             t, pin.get_key(), original_paddr, original_len
           )->template cast<RetiredExtentPlaceholder>();
 	  ret.get_child_pos().link_child(retired_placeholder.get());
+          if (pin.has_shadow_val()) {
+            cache->retire_absent_extent_addr(
+              t, pin.get_key(), pin.get_shadow_val(), original_len);
+          }
         }
       }
 
@@ -1443,6 +1565,11 @@ private:
         auto remap_len = remap.len;
         auto remap_laddr = (original_laddr + remap_offset).checked_to_laddr();
         auto remap_paddr = original_paddr.add_offset(remap_offset);
+        auto shadow_paddr = P_ADDR_NULL;
+        if (pin.has_shadow_val()) {
+          assert(pin.get_shadow_val() != P_ADDR_NULL);
+          shadow_paddr = pin.get_shadow_val().add_offset(remap_offset);
+        }
         SUBDEBUGT(seastore_tm, "remap direct pin into {}~0x{:x} {} ...",
                   t, remap_laddr, remap_len, remap_paddr);
         ceph_assert(remap_len < original_len);
@@ -1454,9 +1581,20 @@ private:
           t,
           remap_laddr,
           remap_paddr,
+          remap_offset,
           remap_len,
-          original_laddr,
           original_bptr);
+        if (shadow_paddr != P_ADDR_NULL) {
+          SUBTRACET(seastore_tm, "remap shadow {}", t, shadow_paddr);
+          auto cold_ext = cache->alloc_remapped_extent<T>(
+            t,
+            remap_laddr,
+            shadow_paddr,
+            remap_offset,
+            remap_len,
+            std::nullopt);
+          cold_ext->set_shadow_extent(true);
+        }
         // user must initialize the logical extent themselves.
         remapped_extent->set_seen_by_users();
         remap.extent = remapped_extent.get();
@@ -1516,9 +1654,11 @@ private:
     Transaction &t,
     LBAMapping mapping);
 
-  rewrite_extent_ret rewrite_logical_extent(
+  rewrite_extent_iertr::future<std::vector<CachedExtentRef>>
+  rewrite_logical_extent(
     Transaction& t,
-    LogicalChildNodeRef extent);
+    LogicalChildNodeRef extent,
+    paddr_t hint);
 
   submit_transaction_direct_ret do_submit_transaction(
     Transaction &t,

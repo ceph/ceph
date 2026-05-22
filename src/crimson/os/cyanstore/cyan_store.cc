@@ -583,6 +583,7 @@ seastar::future<> CyanStore::Shard::do_transaction_no_callbacks(
       }
       break;
       case Transaction::OP_TOUCH:
+      case Transaction::OP_TOUCH_TEMP:
       case Transaction::OP_CREATE:
       {
         coll_t cid = i.get_cid(op->cid);

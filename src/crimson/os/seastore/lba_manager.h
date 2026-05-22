@@ -55,6 +55,18 @@ public:
     Transaction &t,
     LogicalChildNode &extent) = 0;
 
+  using lower_bound_ret = base_iertr::future<LBACursorRef>;
+  virtual lower_bound_ret lower_bound(
+    Transaction &t,
+    laddr_t laddr) = 0;
+
+  using upper_bound_right_iertr = base_iertr::extend<
+    crimson::ct_error::enoent>;
+  using upper_bound_right_ret = upper_bound_right_iertr::future<LBAMapping>;
+  virtual upper_bound_right_ret upper_bound_right(
+    Transaction &t,
+    laddr_t laddr) = 0;
+
 #ifdef UNIT_TESTS_BUILT
   using get_end_mapping_iertr = base_iertr;
   using get_end_mapping_ret = get_end_mapping_iertr::future<LBACursorRef>;
@@ -72,7 +84,7 @@ public:
   using alloc_extent_ret = alloc_extent_iertr::future<LBACursorRef>;
   virtual alloc_extent_ret alloc_extent(
     Transaction &t,
-    laddr_t hint,
+    laddr_hint_t hint,
     LogicalChildNode &nextent,
     extent_ref_count_t refcount) = 0;
 
@@ -80,7 +92,7 @@ public:
     std::vector<LBACursorRef>>;
   virtual alloc_extents_ret alloc_extents(
     Transaction &t,
-    laddr_t hint,
+    laddr_hint_t hint,
     std::vector<LogicalChildNodeRef> extents,
     extent_ref_count_t refcount) = 0;
   /*
@@ -114,10 +126,73 @@ public:
 				// direct mapping
   ) = 0;
 
+  struct move_mapping_ret_t {
+    LBACursorRef src;
+    LBACursorRef dest;
+  };
+  /*
+   * move_and_clone_direct_mapping
+   *
+   * move the direct mapping "src" to "dest" and clone it at the
+   * position of "src".
+   *
+   * Return: the new indirect mapping and the moved direct mapping
+   */
+  using move_mapping_iertr = alloc_extent_iertr;
+  using move_mapping_ret = move_mapping_iertr::future<move_mapping_ret_t>;
+  virtual move_mapping_ret move_and_clone_direct_mapping(
+    Transaction &t,
+    LBACursorRef src,
+    laddr_t dest_laddr,
+    LBACursorRef dest,
+    LogicalChildNode &extent) = 0;
+
+  /*
+   * move_indirect_mapping
+   *
+   * move the indirect mapping "src" to dest, and remove "src".
+   *
+   * Return: the mapping next to "src" and the original "dest"
+   */
+  virtual move_mapping_ret move_indirect_mapping(
+    Transaction &t,
+    LBACursorRef src,
+    laddr_t dest_laddr,
+    LBACursorRef dest) = 0;
+
+  /*
+   * move_direct_mapping
+   *
+   * move the indirect mapping "src" to dest, and remove "src".
+   *
+   * Return: the mapping next to "src" and the original "dest"
+   */
+  virtual move_mapping_ret move_direct_mapping(
+    Transaction &t,
+    LBACursorRef src,
+    laddr_t dest_laddr,
+    LBACursorRef dest,
+    LogicalChildNode &extent) = 0;
+
+  using promote_extent_iertr = base_iertr;
+  using promote_extent_ret = promote_extent_iertr::future<>;
+  virtual promote_extent_ret promote_extent(
+    Transaction &t,
+    LBAMapping mapping,
+    std::vector<LogicalChildNodeRef> extents) = 0;
+
+  using demote_extent_iertr = base_iertr;
+  using demote_extent_ret = demote_extent_iertr::future<LBAMapping>;
+  virtual demote_extent_ret demote_extent(
+    Transaction &t,
+    LBAMapping mapping,
+    LogicalChildNode &extent) = 0;
+
   virtual alloc_extent_ret reserve_region(
     Transaction &t,
-    laddr_t hint,
-    extent_len_t len) = 0;
+    laddr_hint_t hint,
+    extent_len_t len,
+    extent_types_t type) = 0;
 
   /*
    * Inserts a zero mapping at the position "pos" with
@@ -127,7 +202,8 @@ public:
     Transaction &t,
     LBACursorRef cursor,
     laddr_t hint,
-    extent_len_t len) = 0;
+    extent_len_t len,
+    extent_types_t type) = 0;
 
   using ref_iertr = base_iertr::extend<
     crimson::ct_error::enoent>;
@@ -198,7 +274,7 @@ public:
   using scan_mappings_iertr = base_iertr;
   using scan_mappings_ret = scan_mappings_iertr::future<>;
   using scan_mappings_func_t = std::function<
-    void(laddr_t, paddr_t, extent_len_t)>;
+    void(laddr_t, paddr_t, paddr_t, extent_len_t)>;
   virtual scan_mappings_ret scan_mappings(
     Transaction &t,
     laddr_t begin,

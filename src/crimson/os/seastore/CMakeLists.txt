@@ -9,6 +9,7 @@ set(crimson_seastore_srcs
   transaction_manager.cc
   cache.cc
   extent_pinboard.cc
+  logical_bucket.cc
   root_block.cc
   lba_manager.cc
   async_cleaner.cc
@@ -45,6 +46,7 @@ set(crimson_seastore_srcs
   random_block_manager/block_rb_manager.cc
   random_block_manager/rbm_device.cc
   random_block_manager/nvme_block_device.cc
+  random_block_manager/hdd_device.cc
   random_block_manager/avlallocator.cc
   journal/segmented_journal.cc
   journal/segment_allocator.cc
@@ -79,3 +81,8 @@ endif()
 
 set_target_properties(crimson-seastore PROPERTIES
   JOB_POOL_COMPILE heavy_compile_job_pool)
+
+option(ENABLE_CRIMSON_TEST_WORKLOAD "enable crimson test workload" OFF)
+if(ENABLE_CRIMSON_TEST_WORKLOAD)
+  target_compile_definitions(crimson-seastore PUBLIC CRIMSON_TEST_WORKLOAD)
+endif()

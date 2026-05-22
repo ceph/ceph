@@ -111,7 +111,7 @@ public:
     return super.config.spec.magic;
   }
 
-  device_type_t get_device_type() const final {
+  virtual device_type_t get_device_type() const {
     return device_type_t::RANDOM_BLOCK_SSD;
   }
 
@@ -277,5 +277,25 @@ using EphemeralRBMDeviceRef = std::unique_ptr<EphemeralRBMDevice>;
 EphemeralRBMDeviceRef create_test_ephemeral(
   uint64_t journal_size = DEFAULT_TEST_CBJOURNAL_SIZE,
   uint64_t data_size = DEFAULT_TEST_CBJOURNAL_SIZE);
+
+template <typename T>
+class MultiShardDevices {
+  public:
+    std::vector<std::unique_ptr<T>> mshard_devices;
+
+  public:
+  MultiShardDevices(size_t count,
+                    const std::string path)
+  : mshard_devices() {
+    mshard_devices.reserve(count);
+    for (size_t store_index = 0; store_index < count; ++store_index) {
+      mshard_devices.emplace_back(std::make_unique<T>(
+        path, store_index));
+    }
+  }
+  ~MultiShardDevices() {
+    mshard_devices.clear();
+  }
+};
 
 }

@@ -132,6 +132,18 @@ public:
     return direct_cursor->get_length();
   }
 
+  bool has_shadow_val() const {
+    assert(is_linked_direct());
+    assert(!direct_cursor->is_end());
+    return direct_cursor->has_shadow_paddr();
+  }
+
+  paddr_t get_shadow_val() const {
+    assert(is_linked_direct());
+    assert(!direct_cursor->is_end());
+    return direct_cursor->get_shadow_paddr();
+  }
+
   checksum_t get_checksum() const {
     assert(is_linked_direct());
     assert(!direct_cursor->is_end());
@@ -169,10 +181,27 @@ public:
   extent_len_t get_intermediate_offset() const {
     assert(is_indirect());
     assert(get_intermediate_base() <= get_intermediate_key());
-    assert(get_intermediate_key() + get_length() <=
-	   get_intermediate_base() + get_intermediate_length());
+    if (likely(!hobject_t::is_temp_pool(get_key().get_pool()))) {
+      assert(get_intermediate_key() + get_length() <=
+             get_intermediate_base() + get_intermediate_length());
+    }
     return get_intermediate_base().get_byte_distance<
       extent_len_t>(get_intermediate_key());
+  }
+
+  extent_types_t get_extent_type() const {
+    if (direct_cursor && indirect_cursor) {
+      assert(direct_cursor->get_extent_type()
+	     == indirect_cursor->get_extent_type());
+    }
+    if (direct_cursor) {
+      return direct_cursor->get_extent_type();
+    } else if (indirect_cursor) {
+      return indirect_cursor->get_extent_type();
+    } else {
+      ceph_abort("invalid LBAMapping");
+      return extent_types_t::NONE;
+    }
   }
 
   get_child_ret_t<lba::LBALeafNode, LogicalChildNode>

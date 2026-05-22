@@ -58,6 +58,8 @@ void device_superblock_t::validate() const
   }
   ceph_assert(block_size > 0);
   ceph_assert(config.spec.magic != 0);
+  // allow HDD devices use segmented backend
+  ceph_assert(config.spec.btype != backend_type_t::NONE);
   ceph_assert(config.spec.id <= DEVICE_ID_MAX_VALID);
   if (!config.major_dev) {
     ceph_assert(config.secondary_devices.empty());
@@ -106,7 +108,8 @@ void device_superblock_t::validate() const
       ceph_assert(shard_infos[i].size > block_size &&
                   shard_infos[i].size % block_size == 0);
       ceph_assert_always(shard_infos[i].size <= DEVICE_OFF_MAX);
-      ceph_assert(journal_size > 0 && journal_size % block_size == 0);
+      ceph_assert((journal_size > 0 && journal_size % block_size == 0) ||
+                   config.spec.dtype == device_type_t::RANDOM_BLOCK_HDD);
       ceph_assert(shard_infos[i].start_offset < total_size &&
                   shard_infos[i].start_offset % block_size == 0);
     }
@@ -114,19 +117,23 @@ void device_superblock_t::validate() const
 }
 
 seastar::future<DeviceRef>
-Device::make_device(const std::string& device, device_type_t dtype)
+Device::make_device(
+  const std::string& device,
+  device_type_t dtype,
+  backend_type_t btype)
 {
-  if (get_default_backend_of_device(dtype) == backend_type_t::SEGMENTED) {
+  if (btype == backend_type_t::SEGMENTED) {
     return SegmentManager::get_segment_manager(device, dtype
     ).then([](DeviceRef ret) {
       return ret;
     });
-  } 
-  assert(get_default_backend_of_device(dtype) == backend_type_t::RANDOM_BLOCK);
-  return get_rb_device(device
-  ).then([](DeviceRef ret) {
-    return ret;
-  });
+  } else {
+    ceph_assert(btype != backend_type_t::NONE);
+    return get_rb_device(device, dtype
+    ).then([](DeviceRef ret) {
+      return ret;
+    });
+  }
 }
 
 check_create_device_ret check_create_device(
