@@ -1196,10 +1196,11 @@ class MgrService(CephService):
                 if port:
                     ports.append(int(port[0][1:-1]))
 
-        if ports:
-            daemon_spec.ports = ports
-
-        daemon_spec.ports.append(self.mgr.service_discovery_port)
+        # Always replace ports (do not append onto a list rehydrated from the
+        # persisted host cache). When ``mgr services`` is empty, ``ports`` is
+        # empty and we must not retain old entries + append service discovery
+        # again
+        daemon_spec.ports = ports + [self.mgr.service_discovery_port]
         daemon_spec.keyring = keyring
 
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
