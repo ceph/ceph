@@ -6119,6 +6119,7 @@ void Monitor::tick()
     paxos->trigger_propose();
   }
 
+  g_ceph_context->check_debug_level_guard();
   mgr_client.update_daemon_health(get_health_metrics());
   new_tick();
 }
@@ -6152,6 +6153,12 @@ vector<DaemonHealthMetric> Monitor::get_health_metrics()
     metrics.emplace_back(daemon_metric::SLOW_OPS, slow, oldest_secs);
   } else {
     metrics.emplace_back(daemon_metric::SLOW_OPS, 0, 0);
+  }
+  {
+    auto threshold = g_conf().get_val<int64_t>("high_debug_level_threshold");
+    auto [count, max_level] = DebugLevelGuard::count_elevated(
+      g_conf()->subsys, threshold);
+    metrics.emplace_back(daemon_metric::HIGH_DEBUG_LEVEL, count, max_level);
   }
   return metrics;
 }
