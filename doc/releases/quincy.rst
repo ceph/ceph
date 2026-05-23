@@ -1497,7 +1497,7 @@ Changelog
 * doc/cephadm: s/osd/OSD/ where appropriate (`pr#49717 <https://github.com/ceph/ceph/pull/49717>`_, Zac Dover)
 * doc/cephadm: s/ssh/SSH/ in doc/cephadm (complete) (`pr#48611 <https://github.com/ceph/ceph/pull/48611>`_, Zac Dover)
 * doc/cephadm: s/ssh/SSH/ in troubleshooting.rst (`pr#48601 <https://github.com/ceph/ceph/pull/48601>`_, Zac Dover)
-* doc/cephadm: update cephadm compatability and stability page (`pr#50336 <https://github.com/ceph/ceph/pull/50336>`_, Adam King)
+* doc/cephadm: update cephadm compatibility and stability page (`pr#50336 <https://github.com/ceph/ceph/pull/50336>`_, Adam King)
 * doc/cephadm: update install.rst (`pr#48594 <https://github.com/ceph/ceph/pull/48594>`_, Zac Dover)
 * doc/cephfs - s/yet to here/yet to hear/ posix.rst (`pr#49448 <https://github.com/ceph/ceph/pull/49448>`_, Zac Dover)
 * doc/cephfs: add note about CephFS extended attributes and getfattr (`pr#50068 <https://github.com/ceph/ceph/pull/50068>`_, Zac Dover)
