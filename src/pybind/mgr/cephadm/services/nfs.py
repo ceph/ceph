@@ -8,7 +8,7 @@ from threading import Lock
 from typing import Dict, Tuple, Any, List, cast, Optional, TYPE_CHECKING
 from configparser import ConfigParser
 from io import StringIO
-
+from cephadm import utils
 from mgr_module import HandleCommandResult
 from mgr_module import NFS_POOL_NAME as POOL_NAME
 
@@ -16,7 +16,6 @@ from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec
 from .service_registry import register_cephadm_service
 
 from orchestrator import DaemonDescription, OrchestratorError
-from cephadm import utils
 from cephadm.services.cephadmservice import AuthEntity, CephadmDaemonDeploySpec, CephService
 from cephadm.schedule import get_placement_hosts
 if TYPE_CHECKING:
@@ -131,18 +130,14 @@ class NFSService(CephService):
         assert spec
         deps: List[str] = []
         nfs_spec = cast(NFSServiceSpec, spec)
-        # add dependency of tls fields
-        if (spec.ssl and spec.ssl_cert and spec.ssl_key and spec.ssl_ca_cert):
-            deps.append(f'ssl_cert: {utils.config_hash(spec.ssl_cert)}')
-            deps.append(f'ssl_key: {utils.config_hash(spec.ssl_key)}')
-            deps.append(f'ssl_ca_cert: {utils.config_hash(spec.ssl_ca_cert)}')
+        deps.append(f'enable_rdma: {nfs_spec.enable_rdma}')
+        deps.append(f'rdma_port: {nfs_spec.rdma_port}')
         deps.append(f'tls_ktls: {nfs_spec.tls_ktls}')
         deps.append(f'tls_debug: {nfs_spec.tls_debug}')
         deps.append(f'tls_min_version: {nfs_spec.tls_min_version}')
         deps.append(f'tls_ciphers: {nfs_spec.tls_ciphers}')
-        deps.append(f'enable_rdma: {nfs_spec.enable_rdma}')
-        deps.append(f'rdma_port: {nfs_spec.rdma_port}')
-        return sorted(deps)
+        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
+        return sorted(deps + parent_deps)
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
@@ -151,8 +146,7 @@ class NFSService(CephService):
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
-
-        super().register_for_certificates(daemon_spec)
+        super().prepare_certificates(daemon_spec)
         daemon_type = daemon_spec.daemon_type
         daemon_id = daemon_spec.daemon_id
         host = daemon_spec.host

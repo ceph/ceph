@@ -26,7 +26,7 @@ class MgmtGatewayService(CephadmService):
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
-        super().register_for_certificates(daemon_spec)
+        super().prepare_certificates(daemon_spec)
         self.mgr.cert_mgr.register_self_signed_cert_key_pair(MgmtGatewayService.TYPE, INTERNAL_CERT_LABEL)
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         return daemon_spec
@@ -86,7 +86,8 @@ class MgmtGatewayService(CephadmService):
             for service in ['mgr']
             for d in mgr.cache.get_daemons_by_service(service)
         ]
-        return deps
+        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
+        return sorted(deps + parent_deps)
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
