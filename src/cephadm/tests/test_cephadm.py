@@ -350,6 +350,7 @@ class TestCephAdm(object):
         _get_container = funkypatch.patch('cephadm.get_container')
 
         ctx = _cephadm.CephadmContext()
+        ctx.container_engine = mock_podman()
         ctx.config_json = '-'
         ctx.extra_container_args = [
             '--pids-limit=12345',

@@ -1,0 +1,25 @@
+# Docker live-restore keeps containers running when the docker daemon is down.
+# When this happens, the 'docker run' CLI exits but the container remains alive.
+# This loop keeps unit.run alive (and thus the systemd service active) by polling
+# the container's running state. It exits only when the container genuinely stops
+# or when the daemon is unresponsive for longer than DAEMON_UNAVAILABLE_TIMEOUT seconds.
+DAEMON_UNAVAILABLE_TIMEOUT=120
+POLL_INTERVAL=5
+daemon_down_since=0
+while true; do
+    {{ engine_path }} wait {{ cname }} 2>/dev/null
+    state=$({{ engine_path }} inspect --format '{{ '{{.State.Running}}' }}' {{ cname }} 2>/dev/null)
+    inspect_rc=$?
+    if [ $inspect_rc -eq 0 ]; then
+        daemon_down_since=0
+        [ "$state" != "true" ] && break
+    else
+        if [ "$daemon_down_since" -eq 0 ]; then
+            daemon_down_since=$(date +%s)
+        else
+            elapsed=$(( $(date +%s) - daemon_down_since ))
+            [ "$elapsed" -ge "$DAEMON_UNAVAILABLE_TIMEOUT" ] && break
+        fi
+    fi
+    sleep $POLL_INTERVAL
+done

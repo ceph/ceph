@@ -251,6 +251,7 @@ class CephContainer(BasicContainer):
         self.host_network = host_network
         self.memory_request = memory_request
         self.memory_limit = memory_limit
+        self.restart_on_failure = False
         self.remove = True
         self.ipc = 'host'
         self.network = 'host' if self.host_network else ''
@@ -324,6 +325,12 @@ class CephContainer(BasicContainer):
         if not self._cname and self.identity:
             return self.identity.legacy_container_name
         return self._cname
+
+    def build_engine_run_args(self) -> List[str]:
+        cmd_args = super().build_engine_run_args()
+        if not self.remove and self.restart_on_failure:
+            return ['--restart=on-failure'] + cmd_args
+        return cmd_args
 
     def run_cmd(self) -> List[str]:
         if not (self.envs and self.envs[0].startswith('NODE_NAME=')):

@@ -112,6 +112,20 @@ class Podman(ContainerEngine):
 class Docker(ContainerEngine):
     EXE = 'docker'
 
+    def is_live_restore_enabled(self, ctx: CephadmContext) -> bool:
+        """Return True if Docker's live-restore feature is enabled, meaning
+        containers remain running when the Docker daemon is stopped or restarted.
+        This property is set in /etc/docker/daemon.json and is False by default.
+        """
+        out, _, code = call(
+            ctx,
+            [self.path, 'info', '--format', '{{.LiveRestoreEnabled}}'],
+            verbosity=CallVerbosity.QUIET,
+        )
+        if code != 0:
+            return False
+        return out.strip() == 'true'
+
 
 CONTAINER_PREFERENCE = (Podman, Docker)  # prefer podman to docker
 

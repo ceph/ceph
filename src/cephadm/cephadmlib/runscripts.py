@@ -63,10 +63,19 @@ def write_service_scripts(
     with contextlib.ExitStack() as estack:
         # write out the main file to run (start) a service
         runf = estack.enter_context(write_new(run_file_path))
-        runf.write('set -e\n')
+        if _should_exit_on_error(ctx):
+            runf.write('set -e\n')
         for command in pre_start_commands or []:
             _write_command(ctx, runf, command)
+        if _is_live_restore_enabled(ctx):
+            container.restart_on_failure = True
+            container.remove = False
         _write_container_cmd_to_bash(ctx, runf, container, ident.daemon_name)
+
+        if _is_live_restore_enabled(ctx):
+            _write_container_state_poll_loop(
+                ctx, runf, container.cname, ctx.container_engine.path
+            )
 
         # some metadata about the deploy
         metaf = estack.enter_context(write_new(meta_file_path))
@@ -253,3 +262,26 @@ def _write_command(
         fh.write(cmd)
         if not cmd.endswith('\n'):
             fh.write('\n')
+
+
+def _write_container_state_poll_loop(
+    ctx: CephadmContext,
+    file_obj: IO[str],
+    cname: str,
+    engine_path: str,
+) -> None:
+    templating.render_to_file(
+        file_obj,
+        ctx,
+        templating.Templates.live_restore_wait_loop,
+        cname=cname,
+        engine_path=engine_path,
+    )
+
+
+def _should_exit_on_error(ctx: CephadmContext) -> bool:
+    return not _is_live_restore_enabled(ctx)
+
+
+def _is_live_restore_enabled(ctx: CephadmContext) -> bool:
+    return ctx.container_engine.is_live_restore_enabled(ctx)

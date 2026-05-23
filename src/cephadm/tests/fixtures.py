@@ -22,6 +22,7 @@ def mock_docker():
 
     docker = mock.Mock(Docker)
     docker.path = '/usr/bin/docker'
+    docker.is_live_restore_enabled.return_value = False
     type(docker).unlimited_pids_option = Docker.unlimited_pids_option
     return docker
 
@@ -32,6 +33,7 @@ def mock_podman():
     podman = mock.Mock(Podman)
     podman.path = '/usr/bin/podman'
     podman.version = (2, 1, 0)
+    podman.is_live_restore_enabled.return_value = False
     # This next little bit of black magic was adapated from the mock docs for
     # PropertyMock. We don't use a PropertyMock but the suggestion to call
     # type(...) from the doc allows us to "borrow" the real
