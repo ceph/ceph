@@ -316,6 +316,8 @@ class ScrubJob {
  *   if continued into the forbidden times, by having a longer sleep time;
  *   (note that this is only applicable to the wq scheduler).
  * - load: the scrub must not be initiated if the OSD is under heavy CPU load;
+ * - trims: the scrub must not be initiated if the OSD has too many snap-trim
+ *   jobs pending;
  * - noscrub: the scrub is aborted if the 'noscrub' flag (or the
  *  'nodeep-scrub' flag for deep scrubs) is set;
  * - randomization: the scrub's target time is extended by a random
@@ -335,10 +337,11 @@ class ScrubJob {
  *  | limitation |  must-  | after-repair |repairing| operator | must-repair |
  *  |            |  scrub  |(aft recovery)|(errors) | request  |             |
  *  +------------+---------+--------------+---------+----------+-------------+
- *  | reservation|    yes! |      no      |    no?  |     no   |      no     |
- *  | dow/time   |    yes  |     yes      |    no   |     no   |      no     |
+ *  | reservation|    yes! |      no      |    no   |     no   |      no     |
+ *  | dow/time   |    yes  |      yes     |    no X |     no   |      no     |
  *  | ext-sleep  |    no   |      no      |    no   |     no   |      no     |
  *  | load       |    yes  |      no      |    no   |     no   |      no     |
+ *  | trims      |    yes  |      yes     |    no   |     no   |      no     |
  *  | noscrub    |    yes  |      no      |    Yes  |     no   |      no     |
  *  | max-scrubs |    yes  |      yes     |    Yes  |     no   |      no     |
  *  | backoff    |    yes  |      no      |    no   |     no   |      no     |
@@ -356,6 +359,8 @@ class ScrubJob {
   static bool observes_extended_sleep(urgency_t urgency);
 
   static bool observes_load_limit(urgency_t urgency);
+
+  static bool observes_trims_load(urgency_t urgency);
 
   static bool requires_reservation(urgency_t urgency);
 

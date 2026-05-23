@@ -329,6 +329,13 @@ options:
     under most load conditions.
   default: 10.0
   with_legacy: true
+- name: osd_scrub_queued_snaptrims_limit
+  type: uint
+  level: advanced
+  desc: Do not initiate periodic scrubs when the total snap-trim queues across all
+    PGs exceeds this value. A value of '0' disables this limit.
+  default: 500
+  with_legacy: false
 - name: osd_scrub_min_interval
   type: float
   level: advanced
