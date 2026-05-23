@@ -342,7 +342,7 @@ BtreeLBAManager::clone_mapping(
       inter_key,
       EXTENT_DEFAULT_REF_COUNT,
       0,
-      extent_types_t::NONE},
+      mapping->get_extent_type()},
     get_reserved_ptr<LBALeafNode, laddr_t>());
   auto &[iter, inserted] = p;
   co_await mapping->refresh();

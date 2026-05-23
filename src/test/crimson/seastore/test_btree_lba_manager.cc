@@ -603,16 +603,38 @@ struct btree_lba_manager_test : btree_test_base {
 	auto refcount = cursor->get_refcount() - 1;
 	auto paddr = cursor->get_paddr();
 	auto length = cursor->get_length();
+	if (refcount == 0) {
+          auto p = cursor->parent->template cast<LBALeafNode>();
+          auto v = p->template get_child<TestBlock>(
+            t, cursor->ctx.cache, cursor->get_pos(), cursor->key);
+          if (v.has_child()) {
+            auto extent = co_await v.template get_child_fut_as<TestBlock>();
+            ceph_assert(extent);
+            cache->retire_extent(t, std::move(extent));
+          } else {
+            auto &child_pos = v.get_child_pos();
+            cache->retire_absent_extent_addr_by_type(
+              t,
+              cursor->key,
+              paddr,
+              length,
+              cursor->get_extent_type(),
+              [&child_pos, laddr=cursor->key](auto &extent) {
+                auto lextent = extent.template cast<LogicalChildNode>();
+                ASSERT_TRUE(extent.is_logical());
+                ASSERT_FALSE(lextent->has_laddr());
+                ASSERT_FALSE(extent.has_been_invalidated());
+                child_pos.link_child(lextent.get());
+                lextent->set_laddr(laddr);
+              });
+          }
+	}
 	co_await lba_manager->update_mapping_refcount(
 	  t,
 	  cursor,
 	  -1
 	);
 	EXPECT_EQ(refcount, target->second.refcount);
-	if (refcount == 0) {
-	  co_await cache->retire_extent_addr(
-	    t, paddr, length);
-	}
       })).unsafe_get();
     if (target->second.refcount == 0) {
       t.mappings.erase(target);

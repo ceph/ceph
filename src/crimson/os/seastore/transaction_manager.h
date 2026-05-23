@@ -372,14 +372,12 @@ public:
 	    pin.partial_len,
 	    [laddr=pin.mapping.get_intermediate_base(),
 	     maybe_init=std::move(maybe_init),
-	     child_pos=std::move(ret.get_child_pos()),
-	     &t, this]
+	     child_pos=std::move(ret.get_child_pos())]
 	    (T &extent) mutable {
 	      assert(extent.is_logical());
 	      assert(!extent.has_laddr());
 	      assert(!extent.has_been_invalidated());
 	      child_pos.link_child(&extent);
-	      child_pos.invalidate_retired_placeholder(t, *cache, extent);
 	      extent.set_laddr(laddr);
 	      maybe_init(extent);
 	      extent.set_seen_by_users();
@@ -1410,10 +1408,19 @@ private:
           }
         } else {
           SUBTRACET(seastore_tm, "retire extent place holder...", t);
-          auto retired_placeholder = cache->retire_absent_extent_addr(
-            t, pin.get_key(), original_paddr, original_len
-          )->template cast<RetiredExtentPlaceholder>();
-	  ret.get_child_pos().link_child(retired_placeholder.get());
+          auto &child_pos = ret.get_child_pos();
+          auto laddr = pin.get_key();
+          std::ignore = cache->retire_absent_extent_addr_by_type(
+            t, laddr, original_paddr, original_len, pin.get_extent_type(),
+            [&child_pos, laddr](auto &extent) mutable {
+              auto lextent = extent.template cast<LogicalChildNode>();
+              assert(extent.is_logical());
+              assert(!lextent->has_laddr());
+              assert(!extent.has_been_invalidated());
+              child_pos.link_child(lextent.get());
+              lextent->set_laddr(laddr);
+            }
+          );
         }
       }
 
@@ -1577,13 +1584,11 @@ private:
       seastar::coroutine::lambda(
         [laddr=pin.get_intermediate_base(),
         maybe_init=std::move(maybe_init),
-        child_pos=std::move(child_pos),
-        &t, this] (T &extent) mutable {
+        child_pos=std::move(child_pos)] (T &extent) mutable {
           assert(extent.is_logical());
           assert(!extent.has_laddr());
           assert(!extent.has_been_invalidated());
           child_pos.link_child(&extent);
-          child_pos.invalidate_retired_placeholder(t, *cache, extent);
           extent.set_laddr(laddr);
           maybe_init(extent);
           extent.set_seen_by_users();
@@ -1626,14 +1631,13 @@ private:
       direct_length,
       // extent_init_func
       seastar::coroutine::lambda(
-      [direct_key, child_pos=std::move(child_pos),
-      &t, this](CachedExtent &extent) mutable {
+      [direct_key, child_pos=std::move(child_pos)]
+      (CachedExtent &extent) mutable {
         assert(extent.is_logical());
         auto &lextent = static_cast<LogicalChildNode&>(extent);
         assert(!lextent.has_laddr());
         assert(!lextent.has_been_invalidated());
         child_pos.link_child(&lextent);
-        child_pos.invalidate_retired_placeholder(t, *cache, lextent);
         lextent.set_laddr(direct_key);
         // No change to extent::seen_by_user because this path is only
         // for background cleaning.
