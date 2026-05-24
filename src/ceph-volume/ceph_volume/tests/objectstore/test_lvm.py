@@ -465,6 +465,7 @@ class TestLvm:
             self.lvm._activate(lvs)
         assert str(error.value) == 'could not find a bluestore OSD to activate'
 
+    @patch('ceph_volume.objectstore.lvm.OsdLvmMappers', MagicMock())
     @patch('ceph_volume.objectstore.lvm.encryption_utils.write_lockbox_keyring', MagicMock())
     @patch('ceph_volume.objectstore.lvm.encryption_utils.get_dmcrypt_key', MagicMock())
     @patch('ceph_volume.objectstore.lvm.prepare_utils.create_osd_path')
@@ -537,6 +538,49 @@ class TestLvm:
                                       {'args': (['systemctl', 'start', 'ceph-osd@0'],),
                                       'kwargs': {}}]
         assert m_success.mock_calls == [call('ceph-volume lvm activate successful for osd ID: 0')]
+
+    @patch('ceph_volume.objectstore.lvm.OsdLvmMappers')
+    @patch('ceph_volume.objectstore.lvm.prepare_utils.create_osd_path')
+    @patch('ceph_volume.objectstore.lvm.encryption_utils.luks_open')
+    @patch('ceph_volume.objectstore.lvm.encryption_utils.write_lockbox_keyring')
+    @patch('ceph_volume.objectstore.lvm.encryption_utils.get_dmcrypt_key')
+    @patch('ceph_volume.objectstore.lvm.disk.has_holders', return_value=False)
+    @patch('ceph_volume.terminal.success')
+    def test__activate_no_tmpfs_before_mapper_refresh(
+        self, m_success, m_has_holders, m_get_key, m_write_lb, m_luks_open,
+        m_create_osd_path, m_mappers_cls, monkeypatch, conf_ceph_stub,
+        fake_run, fake_call,
+    ):
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        monkeypatch.setattr('ceph_volume.configuration.load', lambda: None)
+        monkeypatch.setattr(
+            'ceph_volume.configuration.load_ceph_conf_path', lambda _c: None,
+        )
+        monkeypatch.setattr(system, 'chown', lambda path: 0)
+        monkeypatch.setattr('ceph_volume.util.system.path_is_mounted', lambda path: False)
+        monkeypatch.setattr(
+            self.lvm, 'get_osd_device_path', lambda *a, **k: None,
+        )
+        monkeypatch.setattr(self.lvm, 'unlink_bs_symlinks', lambda: None)
+        mappers = MagicMock()
+        m_mappers_cls.return_value = mappers
+        lvs = [Volume(
+            lv_name='lv_foo-block',
+            lv_path='/fake-block-path',
+            vg_name='vg_foo',
+            lv_tags=(
+                'ceph.type=block,ceph.osd_id=0,ceph.osd_fsid=abcd,'
+                'ceph.cluster_name=ceph,ceph.encrypted=1,'
+                'ceph.cephx_lockbox_secret=abcd'
+            ),
+            lv_uuid='fake-block-uuid',
+        )]
+        self.lvm._activate(lvs, no_tmpfs=True, no_systemd=True)
+        m_create_osd_path.assert_called_once_with('0', tmpfs=False)
+        m_mappers_cls.assert_called_once_with(
+            '0', 'abcd', osd_path_tmpfs=False,
+        )
+        mappers.refresh.assert_called_once()
 
     @patch('ceph_volume.systemd.systemctl.osd_is_active', return_value=False)
     def test_activate_all(self,
