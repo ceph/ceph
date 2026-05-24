@@ -12,8 +12,12 @@ function(build_arrow)
   list(APPEND arrow_CMAKE_ARGS -DARROW_BUILD_STATIC=ON)
 
   # arrow only supports its own bundled version of jemalloc, so can't
-  # share the version ceph is using
-  list(APPEND arrow_CMAKE_ARGS -DARROW_JEMALLOC=OFF)
+  # share the version ceph is using,
+  # arrow builds and uses mimalloc by default, let's reduce the build time
+  # and simplify the linkage.
+  list(APPEND arrow_CMAKE_ARGS
+    -DARROW_JEMALLOC=OFF
+    -DARROW_MIMALLOC=OFF)
 
   # transitive dependencies
   if (thrift_VERSION VERSION_GREATER_EQUAL 0.17)
