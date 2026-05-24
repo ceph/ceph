@@ -140,8 +140,12 @@ export class ConfigurationFormComponent extends CdForm implements OnInit {
 
     this.availSections.forEach((section) => {
       const sectionValue = this.configForm.getValue(section);
-      if (sectionValue !== null) {
+      const hadValue = this.response?.value?.some((v) => v.section === section);
+
+      if (sectionValue !== null && sectionValue !== undefined && sectionValue !== '') {
         values.push({ section: section, value: sectionValue });
+      } else if (hadValue) {
+        values.push({ section: section, value: '' });
       }
     });
 
@@ -187,8 +191,8 @@ export class ConfigurationFormComponent extends CdForm implements OnInit {
           this.configForm.setErrors({ cdSubmitButton: true });
         }
       );
+    } else {
+      this.router.navigate(['/configuration']);
     }
-
-    this.router.navigate(['/configuration']);
   }
 }
