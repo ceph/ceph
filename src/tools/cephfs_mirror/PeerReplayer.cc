@@ -50,6 +50,38 @@ enum {
   l_cephfs_mirror_peer_replayer_last,
 };
 
+enum {
+  l_cephfs_mirror_directory_first = 7000,
+  l_cephfs_mirror_directory_dir_state,
+  l_cephfs_mirror_directory_current_snap_id,
+  l_cephfs_mirror_directory_current_sync_mode,
+  l_cephfs_mirror_directory_current_read_bps,
+  l_cephfs_mirror_directory_current_write_bps,
+  l_cephfs_mirror_directory_crawl_state,
+  l_cephfs_mirror_directory_crawl_duration_seconds,
+  l_cephfs_mirror_directory_datasync_wait_state,
+  l_cephfs_mirror_directory_datasync_wait_duration_seconds,
+  l_cephfs_mirror_directory_current_sync_bytes,
+  l_cephfs_mirror_directory_current_total_bytes,
+  l_cephfs_mirror_directory_current_sync_bytes_percent,
+  l_cephfs_mirror_directory_current_sync_files,
+  l_cephfs_mirror_directory_current_total_files,
+  l_cephfs_mirror_directory_current_sync_files_percent,
+  l_cephfs_mirror_directory_current_eta_valid,
+  l_cephfs_mirror_directory_current_eta_seconds,
+  l_cephfs_mirror_directory_snaps_synced,
+  l_cephfs_mirror_directory_snaps_deleted,
+  l_cephfs_mirror_directory_snaps_renamed,
+  l_cephfs_mirror_directory_last_snap_id,
+  l_cephfs_mirror_directory_last_crawl_duration_seconds,
+  l_cephfs_mirror_directory_last_datasync_wait_duration_seconds,
+  l_cephfs_mirror_directory_last_sync_duration_seconds,
+  l_cephfs_mirror_directory_last_sync_timestamp,
+  l_cephfs_mirror_directory_last_sync_bytes,
+  l_cephfs_mirror_directory_last_sync_files,
+  l_cephfs_mirror_directory_last,
+};
+
 namespace cephfs {
 namespace mirror {
 
@@ -275,11 +307,229 @@ PeerReplayer::PeerReplayer(CephContext *cct, FSMirror *fs_mirror,
 
 PeerReplayer::~PeerReplayer() {
   delete m_asok_hook;
+  for (auto &[dir_root, perf] : m_directory_perf_counters) {
+    m_cct->get_perfcounters_collection()->remove(perf);
+    delete perf;
+  }
+  m_directory_perf_counters.clear();
   PerfCounters *perf_counters = nullptr;
   std::swap(perf_counters, m_perf_counters);
   if (perf_counters != nullptr) {
     m_cct->get_perfcounters_collection()->remove(perf_counters);
     delete perf_counters;
+  }
+}
+
+namespace {
+
+uint64_t percent_basis_points(uint64_t num, uint64_t den) {
+  if (den == 0) {
+    return 0;
+  }
+  return static_cast<uint64_t>((static_cast<double>(num) * 10000.0) / den);
+}
+
+} // anonymous namespace
+
+void PeerReplayer::create_directory_perf_counters(const std::string &dir_root) {
+  ceph_assert(m_directory_perf_counters.find(dir_root) ==
+              m_directory_perf_counters.end());
+
+  std::string labels = ceph::perf_counters::key_create("cephfs_mirror_directory", {
+    {"source_fscid", stringify(m_filesystem.fscid)},
+    {"source_filesystem", m_filesystem.fs_name},
+    {"peer_uuid", m_peer.uuid},
+    {"peer_cluster_name", m_peer.remote.cluster_name},
+    {"peer_cluster_filesystem", m_peer.remote.fs_name},
+    {"directory", dir_root},
+  });
+  PerfCountersBuilder plb(m_cct, labels, l_cephfs_mirror_directory_first,
+                          l_cephfs_mirror_directory_last);
+  auto prio = m_cct->_conf.get_val<int64_t>("cephfs_mirror_perf_stats_prio");
+
+  plb.add_u64(l_cephfs_mirror_directory_dir_state,
+              "dir_state", "Directory mirror state", "dste", prio);
+  plb.add_u64(l_cephfs_mirror_directory_current_snap_id,
+              "current_snap_id", "Current syncing snapshot id", "csid", prio);
+  plb.add_u64(l_cephfs_mirror_directory_current_sync_mode,
+              "current_sync_mode", "Current sync mode", "csmd", prio);
+  plb.add_u64(l_cephfs_mirror_directory_current_read_bps,
+              "current_read_bps", "Current read throughput bytes per second", "crbp", prio);
+  plb.add_u64(l_cephfs_mirror_directory_current_write_bps,
+              "current_write_bps", "Current write throughput bytes per second", "cwbp", prio);
+  plb.add_u64(l_cephfs_mirror_directory_crawl_state,
+              "crawl_state", "Current crawl state", "crst", prio);
+  plb.add_u64(l_cephfs_mirror_directory_crawl_duration_seconds,
+              "crawl_duration_seconds", "Current crawl duration seconds", "crdn", prio);
+  plb.add_u64(l_cephfs_mirror_directory_datasync_wait_state,
+              "datasync_wait_state", "Current datasync queue wait state", "dwst", prio);
+  plb.add_u64(l_cephfs_mirror_directory_datasync_wait_duration_seconds,
+              "datasync_wait_duration_seconds",
+              "Current datasync queue wait duration seconds", "dwdn", prio);
+  plb.add_u64(l_cephfs_mirror_directory_current_sync_bytes,
+              "current_sync_bytes", "Current sync bytes", "csby", prio);
+  plb.add_u64(l_cephfs_mirror_directory_current_total_bytes,
+              "current_total_bytes", "Current total bytes", "ctby", prio);
+  plb.add_u64(l_cephfs_mirror_directory_current_sync_bytes_percent,
+              "current_sync_bytes_percent",
+              "Current sync bytes percent in basis points", "csbp", prio);
+  plb.add_u64(l_cephfs_mirror_directory_current_sync_files,
+              "current_sync_files", "Current sync files", "csfl", prio);
+  plb.add_u64(l_cephfs_mirror_directory_current_total_files,
+              "current_total_files", "Current total files", "ctfl", prio);
+  plb.add_u64(l_cephfs_mirror_directory_current_sync_files_percent,
+              "current_sync_files_percent",
+              "Current sync files percent in basis points", "csfp", prio);
+  plb.add_u64(l_cephfs_mirror_directory_current_eta_valid,
+              "current_eta_valid", "Current sync ETA validity", "cetv", prio);
+  plb.add_u64(l_cephfs_mirror_directory_current_eta_seconds,
+              "current_eta_seconds", "Current sync ETA seconds", "cets", prio);
+  plb.add_u64(l_cephfs_mirror_directory_snaps_synced,
+              "snaps_synced", "Snapshots synchronized", "ssnc", prio);
+  plb.add_u64(l_cephfs_mirror_directory_snaps_deleted,
+              "snaps_deleted", "Snapshots deleted", "sdel", prio);
+  plb.add_u64(l_cephfs_mirror_directory_snaps_renamed,
+              "snaps_renamed", "Snapshots renamed", "sren", prio);
+  plb.add_u64(l_cephfs_mirror_directory_last_snap_id,
+              "last_snap_id", "Last synced snapshot id", "lsid", prio);
+  plb.add_u64(l_cephfs_mirror_directory_last_crawl_duration_seconds,
+              "last_crawl_duration_seconds",
+              "Last synced snapshot crawl duration seconds", "lcdn", prio);
+  plb.add_u64(l_cephfs_mirror_directory_last_datasync_wait_duration_seconds,
+              "last_datasync_wait_duration_seconds",
+              "Last synced snapshot datasync queue wait duration seconds", "ldwd", prio);
+  plb.add_u64(l_cephfs_mirror_directory_last_sync_duration_seconds,
+              "last_sync_duration_seconds",
+              "Last synced snapshot duration seconds", "lsdn", prio);
+  plb.add_time(l_cephfs_mirror_directory_last_sync_timestamp,
+               "last_sync_timestamp", "Last synced snapshot timestamp", "lsts", prio);
+  plb.add_u64(l_cephfs_mirror_directory_last_sync_bytes,
+              "last_sync_bytes", "Last synced snapshot bytes", "lsby", prio);
+  plb.add_u64(l_cephfs_mirror_directory_last_sync_files,
+              "last_sync_files", "Last synced snapshot files", "lsfl", prio);
+
+  PerfCounters *perf = plb.create_perf_counters();
+  m_cct->get_perfcounters_collection()->add(perf);
+  m_directory_perf_counters.emplace(dir_root, perf);
+}
+
+void PeerReplayer::remove_directory_perf_counters(const std::string &dir_root) {
+  auto it = m_directory_perf_counters.find(dir_root);
+  if (it == m_directory_perf_counters.end()) {
+    return;
+  }
+  m_cct->get_perfcounters_collection()->remove(it->second);
+  delete it->second;
+  m_directory_perf_counters.erase(it);
+}
+
+PerfCounters *PeerReplayer::find_directory_perf_counters(const std::string &dir_root) {
+  auto it = m_directory_perf_counters.find(dir_root);
+  if (it == m_directory_perf_counters.end()) {
+    return nullptr;
+  }
+  return it->second;
+}
+
+void PeerReplayer::update_directory_current_sync_perf_counters(
+    PerfCounters *perf, const SnapSyncStat &sync_stat) {
+  if (!perf) {
+    return;
+  }
+
+  auto clear_current = [&perf]() {
+    perf->set(l_cephfs_mirror_directory_current_snap_id, 0);
+    perf->set(l_cephfs_mirror_directory_current_sync_mode, 0);
+    perf->set(l_cephfs_mirror_directory_current_read_bps, 0);
+    perf->set(l_cephfs_mirror_directory_current_write_bps, 0);
+    perf->set(l_cephfs_mirror_directory_crawl_state, 0);
+    perf->set(l_cephfs_mirror_directory_crawl_duration_seconds, 0);
+    perf->set(l_cephfs_mirror_directory_datasync_wait_state, 0);
+    perf->set(l_cephfs_mirror_directory_datasync_wait_duration_seconds, 0);
+    perf->set(l_cephfs_mirror_directory_current_sync_bytes, 0);
+    perf->set(l_cephfs_mirror_directory_current_total_bytes, 0);
+    perf->set(l_cephfs_mirror_directory_current_sync_bytes_percent, 0);
+    perf->set(l_cephfs_mirror_directory_current_sync_files, 0);
+    perf->set(l_cephfs_mirror_directory_current_total_files, 0);
+    perf->set(l_cephfs_mirror_directory_current_sync_files_percent, 0);
+    perf->set(l_cephfs_mirror_directory_current_eta_valid, 0);
+    perf->set(l_cephfs_mirror_directory_current_eta_seconds, 0);
+  };
+
+  if (sync_stat.failed) {
+    perf->set(l_cephfs_mirror_directory_dir_state, 2);
+    clear_current();
+    return;
+  }
+
+  if (!sync_stat.current_syncing_snap) {
+    perf->set(l_cephfs_mirror_directory_dir_state, 0);
+    clear_current();
+    return;
+  }
+
+  perf->set(l_cephfs_mirror_directory_dir_state, 1);
+  perf->set(l_cephfs_mirror_directory_current_snap_id,
+            sync_stat.current_syncing_snap->first);
+  perf->set(l_cephfs_mirror_directory_current_sync_mode,
+            sync_stat.snapdiff ? 1 : 0);
+
+  double read_bps = sync_stat.read_time_sec > 0 ?
+      sync_stat.bytes_read / sync_stat.read_time_sec : 0;
+  double write_bps = sync_stat.write_time_sec > 0 ?
+      sync_stat.bytes_written / sync_stat.write_time_sec : 0;
+  perf->set(l_cephfs_mirror_directory_current_read_bps,
+            static_cast<uint64_t>(read_bps));
+  perf->set(l_cephfs_mirror_directory_current_write_bps,
+            static_cast<uint64_t>(write_bps));
+
+  if (sync_stat.crawl_finished) {
+    perf->set(l_cephfs_mirror_directory_crawl_state, 2);
+    perf->set(l_cephfs_mirror_directory_crawl_duration_seconds,
+              static_cast<uint64_t>(sync_stat.crawl_duration));
+  } else {
+    perf->set(l_cephfs_mirror_directory_crawl_state, 1);
+    auto cur_time = clock::now();
+    sec_duration crawl_duration =
+      sec_duration(cur_time - sync_stat.crawl_start_time);
+    perf->set(l_cephfs_mirror_directory_crawl_duration_seconds,
+              static_cast<uint64_t>(crawl_duration.count()));
+  }
+
+  if (sync_stat.datasync_queue_wait_duration) {
+    perf->set(l_cephfs_mirror_directory_datasync_wait_state, 2);
+    perf->set(l_cephfs_mirror_directory_datasync_wait_duration_seconds,
+              static_cast<uint64_t>(*sync_stat.datasync_queue_wait_duration));
+  } else if (sync_stat.datasync_queue_wait_start_time) {
+    perf->set(l_cephfs_mirror_directory_datasync_wait_state, 1);
+    auto cur_time = clock::now();
+    sec_duration dq_wait =
+      sec_duration(cur_time - *sync_stat.datasync_queue_wait_start_time);
+    perf->set(l_cephfs_mirror_directory_datasync_wait_duration_seconds,
+              static_cast<uint64_t>(dq_wait.count()));
+  } else {
+    perf->set(l_cephfs_mirror_directory_datasync_wait_state, 0);
+    perf->set(l_cephfs_mirror_directory_datasync_wait_duration_seconds, 0);
+  }
+
+  perf->set(l_cephfs_mirror_directory_current_sync_bytes, sync_stat.sync_bytes);
+  perf->set(l_cephfs_mirror_directory_current_total_bytes, sync_stat.total_bytes);
+  perf->set(l_cephfs_mirror_directory_current_sync_bytes_percent,
+            percent_basis_points(sync_stat.sync_bytes, sync_stat.total_bytes));
+  perf->set(l_cephfs_mirror_directory_current_sync_files, sync_stat.sync_files);
+  perf->set(l_cephfs_mirror_directory_current_total_files, sync_stat.total_files);
+  perf->set(l_cephfs_mirror_directory_current_sync_files_percent,
+            percent_basis_points(sync_stat.sync_files, sync_stat.total_files));
+
+  SnapSyncStat stat_for_eta = sync_stat;
+  double eta = compute_eta(stat_for_eta);
+  if (eta == -1.0) {
+    perf->set(l_cephfs_mirror_directory_current_eta_valid, 0);
+    perf->set(l_cephfs_mirror_directory_current_eta_seconds, 0);
+  } else {
+    perf->set(l_cephfs_mirror_directory_current_eta_valid, 1);
+    perf->set(l_cephfs_mirror_directory_current_eta_seconds,
+              static_cast<uint64_t>(eta));
   }
 }
 
@@ -289,6 +539,9 @@ int PeerReplayer::init() {
     m_snap_sync_stats.emplace(dir_root, SnapSyncStat());
   }
   load_persisted_dir_sync_stats();
+  for (auto &dir_root : m_directories) {
+    create_directory_perf_counters(dir_root);
+  }
 
   auto &remote_client = m_peer.remote.client_name;
   auto &remote_cluster = m_peer.remote.cluster_name;
@@ -435,6 +688,10 @@ void PeerReplayer::add_directory(string_view dir_root) {
     }
     m_directories.emplace_back(_dir_root);
     m_snap_sync_stats.emplace(_dir_root, SnapSyncStat());
+    if (m_directory_perf_counters.find(_dir_root) ==
+        m_directory_perf_counters.end()) {
+      create_directory_perf_counters(_dir_root);
+    }
   }
   load_persisted_dir_sync_stat(_dir_root);
   std::scoped_lock locker(m_lock);
@@ -454,6 +711,7 @@ void PeerReplayer::remove_directory(string_view dir_root) {
   auto it1 = m_registered.find(_dir_root);
   if (it1 == m_registered.end()) {
     remove_persisted_dir_sync_stat(_dir_root);
+    remove_directory_perf_counters(_dir_root);
     m_snap_sync_stats.erase(_dir_root);
   } else {
     it1->second.canceled = true;
@@ -767,6 +1025,7 @@ void PeerReplayer::persist_dir_sync_stat(const std::string &dir_root) {
   ceph_assert(m_local_ioctx);
 
   SnapSyncStat sync_stat;
+  PerfCounters *dir_perf = nullptr;
   {
     std::scoped_lock locker(m_lock);
     auto it = m_snap_sync_stats.find(dir_root);
@@ -774,7 +1033,10 @@ void PeerReplayer::persist_dir_sync_stat(const std::string &dir_root) {
       return;
     }
     sync_stat = it->second;
+    dir_perf = find_directory_perf_counters(dir_root);
   }
+
+  update_directory_current_sync_perf_counters(dir_perf, sync_stat);
 
   json_spirit::mObject obj;
   add_live_sync_metrics_to_persist(obj, sync_stat);
@@ -865,6 +1127,7 @@ void PeerReplayer::unregister_directory(const std::string &dir_root) {
   m_registered.erase(it);
   if (std::find(m_directories.begin(), m_directories.end(), dir_root) == m_directories.end()) {
     remove_persisted_dir_sync_stat(dir_root);
+    remove_directory_perf_counters(dir_root);
     m_snap_sync_stats.erase(dir_root);
   }
 }

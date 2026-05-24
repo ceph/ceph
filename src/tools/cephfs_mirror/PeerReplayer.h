@@ -692,6 +692,13 @@ private:
   ServiceDaemonStats m_service_daemon_stats;
 
   PerfCounters *m_perf_counters;
+  std::map<std::string, PerfCounters *> m_directory_perf_counters;
+
+  void create_directory_perf_counters(const std::string &dir_root);
+  void remove_directory_perf_counters(const std::string &dir_root);
+  PerfCounters *find_directory_perf_counters(const std::string &dir_root);
+  void update_directory_current_sync_perf_counters(PerfCounters *perf,
+                                                   const SnapSyncStat &sync_stat);
 
   void run(SnapshotReplayerThread *replayer);
   void run_datasync(SnapshotDataSyncThread *data_replayer);
