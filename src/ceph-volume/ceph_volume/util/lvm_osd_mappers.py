@@ -2,7 +2,6 @@ from typing import List, Optional, Union
 
 from ceph_volume import process
 from ceph_volume.api.lvm import Volume, get_lvs
-from ceph_volume.util import disk
 from ceph_volume.util import encryption as encryption_utils
 from ceph_volume.util.osd_luks_credentials import OsdLuksCredentials
 
@@ -13,19 +12,15 @@ class OsdLvmMappers:
         osd_id: Union[int, str],
         osd_fsid: str,
         lvs: Optional[List[Volume]] = None,
-        dmcrypt_secret: Optional[str] = None,
-        dmcrypt_open_opts: Optional[str] = None,
         osd_path_tmpfs: bool = True,
     ) -> None:
         self.osd_fsid = osd_fsid
         self.credentials = OsdLuksCredentials(
             osd_id,
             osd_fsid,
-            luks_secret=dmcrypt_secret,
             with_tpm=False,
             osd_path_tmpfs=osd_path_tmpfs,
         )
-        self.dmcrypt_open_opts = dmcrypt_open_opts
         self.encrypted = False
         if lvs is None:
             lvs = get_lvs(
@@ -117,42 +112,6 @@ class OsdLvmMappers:
             return None
         return self._crypt_mapper_device_path(self._device_uuid_for_role('wal'))
 
-    def _underlying_device_for_encrypted_role(self, role: str) -> Optional[str]:
-        if role == 'block':
-            if self.block_volume is None:
-                return None
-            return self.block_volume.lv_path
-        uuid_value = self._device_uuid_for_role(role)
-        if not uuid_value:
-            return None
-        if role == 'db' and self.db_volume is not None:
-            return self.db_volume.lv_path
-        if role == 'wal' and self.wal_volume is not None:
-            return self.wal_volume.lv_path
-        return disk.get_device_from_partuuid(uuid_value)
-
-    def _lockbox_secret_from_block_lv(self) -> Optional[str]:
-        if self.block_volume is None:
-            return None
-        return self.block_volume.tags.get('ceph.cephx_lockbox_secret')
-
-    def _luks_open_role(self, role: str) -> None:
-        if not self.encrypted or self.block_volume is None:
-            return
-        uuid_value = self._device_uuid_for_role(role)
-        if not uuid_value:
-            return
-        device = self._underlying_device_for_encrypted_role(role)
-        if not device:
-            return
-        encryption_utils.luks_open(
-            self.credentials.resolve_secret(self._lockbox_secret_from_block_lv()),
-            device,
-            uuid_value,
-            with_tpm=self.with_tpm,
-            options=self.dmcrypt_open_opts,
-        )
-
     def _refresh_osd_volumes_from_lvm(self) -> None:
         refreshed = get_lvs(
             tags={'ceph.osd_id': self.credentials.osd_id, 'ceph.osd_fsid': self.osd_fsid}
@@ -161,7 +120,7 @@ class OsdLvmMappers:
 
     @staticmethod
     def _deactivate_logical_volume(volume: Volume) -> None:
-        process.call(
+        process.run(
             [volume.binary_change, '-an', volume.lv_path],
             run_on_host=True,
             show_command=True,

@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 from ceph_volume import conf
+from ceph_volume.exceptions import ConfigurationError
 from ceph_volume.util.osd_luks_credentials import OsdLuksCredentials
 
 
@@ -12,6 +13,16 @@ class TestOsdLuksCredentialsApplyClusterContext:
         assert conf.cluster == 'mycluster'
         m_load_path.assert_called_once_with('mycluster')
         m_load.assert_called_once_with()
+
+    @patch(
+        'ceph_volume.util.osd_luks_credentials.configuration.load',
+        side_effect=ConfigurationError,
+    )
+    @patch('ceph_volume.util.osd_luks_credentials.configuration.load_ceph_conf_path')
+    def test_missing_conf_file_does_not_raise(self, m_load_path, m_load):
+        """apply_cluster_context() must not propagate ConfigurationError."""
+        OsdLuksCredentials(42, 'osd-fsid').apply_cluster_context('mycluster')
+        assert conf.cluster == 'mycluster'
 
 
 class TestOsdLuksCredentialsResolveSecret:

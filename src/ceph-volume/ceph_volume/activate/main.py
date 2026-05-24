@@ -2,7 +2,7 @@
 
 import argparse
 
-from ceph_volume import terminal
+from ceph_volume import conf, terminal
 from ceph_volume.objectstore.lvm import Lvm as LVMActivate
 from ceph_volume.objectstore.raw import Raw as RAWActivate
 from ceph_volume.devices.simple.activate import Activate as SimpleActivate
@@ -46,7 +46,11 @@ class Activate(object):
         # Close the LVM mappers to force a 'refresh'
         # Avoid that raw activates a LVM osd that is already activated
         if self.args.osd_id is not None and self.args.osd_fsid is not None:
-            OsdLvmMappers(self.args.osd_id, self.args.osd_fsid).close()
+            prev_cluster = conf.cluster
+            try:
+                OsdLvmMappers(self.args.osd_id, self.args.osd_fsid).close()
+            finally:
+                conf.cluster = prev_cluster
 
         # first try raw
         try:

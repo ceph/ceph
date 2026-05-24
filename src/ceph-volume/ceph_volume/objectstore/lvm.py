@@ -368,6 +368,10 @@ class Lvm(BaseObjectStore):
             # mkdir -p and mount as tmpfs
             prepare_utils.create_osd_path(osd_id, tmpfs=not no_tmpfs)
 
+        # Deactivate and reactivate the LV stack (pvscan + lvchange -ay).
+        # OsdLvmMappers.open() only handles LV activation; dmcrypt mapping is
+        # performed separately by the block below so the two paths do not
+        # conflict.
         OsdLvmMappers(
             osd_id, osd_fsid, osd_path_tmpfs=not no_tmpfs,
         ).refresh()

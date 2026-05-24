@@ -217,6 +217,123 @@ class TestRaw:
         assert m_exists.mock_calls == calls
         assert m_create_osd_path.mock_calls == [call('1', tmpfs=True)]
 
+    @patch('ceph_volume.conf.cluster', 'ceph')
+    @patch('ceph_volume.objectstore.raw.RawOsdCryptMappers')
+    @patch(
+        'ceph_volume.objectstore.raw.RawOsdCryptMappers.backing_device_path',
+        return_value='/dev/sda',
+    )
+    @patch('ceph_volume.objectstore.raw.prepare_utils.link_wal')
+    @patch('ceph_volume.objectstore.raw.prepare_utils.link_db')
+    @patch('ceph_volume.objectstore.raw.prepare_utils.link_block')
+    @patch('os.path.exists')
+    @patch('os.unlink')
+    @patch('ceph_volume.objectstore.raw.prepare_utils.create_osd_path')
+    @patch('ceph_volume.objectstore.raw.process.run')
+    def test__activate_dmcrypt_refresh_replaces_paths(
+        self,
+        m_run,
+        m_create_osd_path,
+        m_unlink,
+        m_exists,
+        m_link_block,
+        m_link_db,
+        m_link_wal,
+        m_backing_device_path,
+        m_mappers_cls,
+        monkeypatch,
+        factory,
+    ):
+        """_activate() updates block/db/wal_device_path from mapper_paths() when
+        RawOsdCryptMappers.applies() is True and refresh() succeeds."""
+        args = factory(no_tmpfs=False)
+        self.raw_bs.args = args
+        self.raw_bs.block_device_path = '/dev/sda'
+        self.raw_bs.db_device_path = '/dev/sdb'
+        self.raw_bs.wal_device_path = '/dev/sdc'
+        m_run.return_value = MagicMock()
+        m_exists.side_effect = lambda path: True
+        m_create_osd_path.return_value = MagicMock()
+        m_unlink.return_value = MagicMock()
+        monkeypatch.setattr(system, 'chown', lambda path: 0)
+        monkeypatch.setattr(system, 'path_is_mounted', lambda path: 0)
+        self.raw_bs.osd_id = '1'
+        self.raw_bs.osd_fsid = 'test-fsid'
+
+        mapper_block = '/dev/mapper/ceph-test-fsid-sda-block-dmcrypt'
+        mapper_db = '/dev/mapper/ceph-test-fsid-sdb-db-dmcrypt'
+        mapper_wal = '/dev/mapper/ceph-test-fsid-sdc-wal-dmcrypt'
+
+        mappers_instance = MagicMock()
+        mappers_instance.applies.return_value = True
+        mappers_instance.mapper_paths.return_value = (mapper_block, mapper_db, mapper_wal)
+        m_mappers_cls.return_value = mappers_instance
+
+        self.raw_bs._activate()
+
+        mappers_instance.refresh.assert_called_once_with()
+        mappers_instance.mapper_paths.assert_called_once_with()
+        assert self.raw_bs.block_device_path == mapper_block
+        assert self.raw_bs.db_device_path == mapper_db
+        assert self.raw_bs.wal_device_path == mapper_wal
+
+    @patch('ceph_volume.conf.cluster', 'ceph')
+    @patch('ceph_volume.objectstore.raw.RawOsdCryptMappers')
+    @patch(
+        'ceph_volume.objectstore.raw.RawOsdCryptMappers.backing_device_path',
+        return_value='/dev/sda',
+    )
+    @patch('ceph_volume.objectstore.raw.prepare_utils.link_wal')
+    @patch('ceph_volume.objectstore.raw.prepare_utils.link_db')
+    @patch('ceph_volume.objectstore.raw.prepare_utils.link_block')
+    @patch('os.path.exists')
+    @patch('os.unlink')
+    @patch('ceph_volume.objectstore.raw.prepare_utils.create_osd_path')
+    @patch('ceph_volume.objectstore.raw.process.run')
+    def test__activate_dmcrypt_refresh_failure_keeps_original_paths(
+        self,
+        m_run,
+        m_create_osd_path,
+        m_unlink,
+        m_exists,
+        m_link_block,
+        m_link_db,
+        m_link_wal,
+        m_backing_device_path,
+        m_mappers_cls,
+        monkeypatch,
+        factory,
+    ):
+        """When refresh() raises RuntimeError the original device paths are kept."""
+        args = factory(no_tmpfs=False)
+        self.raw_bs.args = args
+        orig_block = '/dev/sda'
+        orig_db = '/dev/sdb'
+        orig_wal = '/dev/sdc'
+        self.raw_bs.block_device_path = orig_block
+        self.raw_bs.db_device_path = orig_db
+        self.raw_bs.wal_device_path = orig_wal
+        m_run.return_value = MagicMock()
+        m_exists.side_effect = lambda path: True
+        m_create_osd_path.return_value = MagicMock()
+        m_unlink.return_value = MagicMock()
+        monkeypatch.setattr(system, 'chown', lambda path: 0)
+        monkeypatch.setattr(system, 'path_is_mounted', lambda path: 0)
+        self.raw_bs.osd_id = '1'
+        self.raw_bs.osd_fsid = 'test-fsid'
+
+        mappers_instance = MagicMock()
+        mappers_instance.applies.return_value = True
+        mappers_instance.refresh.side_effect = RuntimeError('luks_open failed')
+        m_mappers_cls.return_value = mappers_instance
+
+        self.raw_bs._activate()
+
+        mappers_instance.refresh.assert_called_once_with()
+        assert self.raw_bs.block_device_path == orig_block
+        assert self.raw_bs.db_device_path == orig_db
+        assert self.raw_bs.wal_device_path == orig_wal
+
     def test_activate_raises_exception(self,
                                        is_root,
                                        mock_raw_direct_report):

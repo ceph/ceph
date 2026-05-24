@@ -130,3 +130,35 @@ class TestRefresh:
             terminal_logging=False,
         )
         assert m_luks_open.called
+
+    @patch(
+        'ceph_volume.util.raw_osd_crypt_mappers.OsdLuksCredentials.apply_cluster_context'
+    )
+    @patch('ceph_volume.util.raw_osd_crypt_mappers.encryption_utils.dmsetup_remove')
+    @patch('ceph_volume.util.raw_osd_crypt_mappers.encryption_utils.luks_open')
+    def test_refresh_pre_resolves_secret_before_close(
+        self,
+        m_luks_open: MagicMock,
+        m_dmsetup_remove: MagicMock,
+        m_cluster: MagicMock,
+    ) -> None:
+        """refresh() must resolve the secret before calling close() so that a
+        failed secret resolution does not leave mappers partially torn down."""
+        call_order: list = []
+        mappers = RawOsdCryptMappers(
+            '0', 'fsid', '/dev/sda1', cluster_name='ceph',
+        )
+
+        def _record_resolve(_lockbox: object) -> str:
+            call_order.append('resolve')
+            return 'key'
+
+        def _record_remove(_name: str, **_kw: object) -> None:
+            call_order.append('remove')
+
+        mappers.credentials.resolve_secret = _record_resolve  # type: ignore[method-assign]
+        m_dmsetup_remove.side_effect = _record_remove
+
+        mappers.refresh()
+
+        assert call_order.index('resolve') < call_order.index('remove')

@@ -140,6 +140,11 @@ class RawOsdCryptMappers:
             self._luks_open_for_role(role, device)
 
     def refresh(self) -> None:
+        self._ensure_cluster_context()
+        # Pre-resolve the LUKS secret before tearing down any mappers so that
+        # if secret resolution fails we have not yet removed any active devices.
+        if self._role_devices() and not self.credentials.with_tpm:
+            self.credentials.resolve_secret(self.lockbox_secret)
         self.close()
         self.open()
 

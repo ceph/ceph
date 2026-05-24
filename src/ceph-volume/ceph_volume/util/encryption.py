@@ -191,9 +191,11 @@ def dmsetup_remove(mapper_name: str, skip_path_check: bool = False, **kwargs: An
 
     Args:
         mapper_name: Device mapper name (not `/dev/mapper/...`).
-        skip_path_check: When True, attempt removal without checking whether
-            `/dev/mapper/<name>` exists. When False (default), skip removal if
-            the path is absent.
+        skip_path_check: Controls whether `/dev/mapper/<name>` is checked
+            before attempting removal.  When False (the default) the path is
+            checked first and removal is skipped if it is absent.  When True
+            the check is skipped and removal is always attempted regardless of
+            whether the path exists.
 
     Raises:
         ValueError: If `mapper_name` is empty.

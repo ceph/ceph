@@ -1,9 +1,13 @@
 from typing import Optional, Union
 
-from ceph_volume import conf, configuration
+from ceph_volume import conf, configuration, exceptions
 from ceph_volume.util import encryption as encryption_utils
 from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.util import system
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class OsdLuksCredentials:
@@ -24,7 +28,14 @@ class OsdLuksCredentials:
     def apply_cluster_context(self, cluster_name: str) -> None:
         conf.cluster = cluster_name
         configuration.load_ceph_conf_path(cluster_name)
-        configuration.load()
+        try:
+            configuration.load()
+        except exceptions.ConfigurationError:
+            logger.debug(
+                'configuration file for cluster %s not found, '
+                'continuing without it',
+                cluster_name,
+            )
 
     def _write_lockbox_keyring_if_needed(self, lockbox_secret: Optional[str]) -> None:
         if self.with_tpm or lockbox_secret is None:
