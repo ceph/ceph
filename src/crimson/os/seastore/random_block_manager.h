@@ -93,6 +93,8 @@ public:
   virtual void complete_allocation(paddr_t addr, size_t size) = 0;
 
   virtual size_t get_size() const = 0;
+  // Size of the data pool (post-journal, post-metadata).
+  virtual size_t get_data_pool_size() const = 0;
   // Free bytes in the data pool.
   virtual size_t get_data_pool_available() const = 0;
   // Size of the metadata pool.

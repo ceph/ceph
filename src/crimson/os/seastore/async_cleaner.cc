@@ -2032,23 +2032,41 @@ bool RBMCleaner::try_reserve_projected_usage(std::size_t projected_usage)
 {
   assert(background_callback->is_ready());
 
-  // Capacity check. Without this, concurrent transactions over-commit the
-  // RBM device: each reserves but the cleaner has no clean_space() yet, so
-  // a write that physically can't be served reaches the allocator and
-  // surfaces as `unexpected enospc` asserts in the data path (object_data
-  // _handler.cc et al.). Return false so the EPM BackgroundProcess blocks
-  // the IO until committed transactions release space.
+  // Capacity check against the data pool only. Earlier this function used
+  // get_total_bytes() - get_journal_bytes() (= data + metadata) as
+  // capacity and stats.used_bytes (= sum across both pools) as used.
+  // That over-reported used by however much metadata had been allocated
+  // and counted the metadata region as available data capacity, so the
+  // soft cap was blurred across two pools that don't share storage.
   //
-  // Headroom carves out room for metadata writes (LBA btree, backref) and
-  // for fragmentation slack the allocator can't pack into. 5% is a starting
-  // point; until RBMCleaner::clean_space() exists we cannot reclaim from
-  // fragmented free space, so headroom doubles as a fragmentation guard.
-  auto data_capacity = get_total_bytes() - get_journal_bytes();
-  auto headroom = data_capacity / 20;
-  auto committed_and_projected = stats.used_bytes
-                               + stats.projected_used_bytes
-                               + projected_usage;
-  if (committed_and_projected + headroom > data_capacity) {
+  // With v2 pool separation the data allocator is authoritative about
+  // its own free space. Query it directly.
+  //
+  // Metadata pool failures (insufficient metadata-allocator space) are
+  // surfaced separately by the metadata allocator returning P_ADDR_NULL;
+  // they don't belong in this reservation gate, which exists to throttle
+  // data-write IO before the data pool fills.
+  size_t data_capacity = 0;
+  size_t data_available = 0;
+  for (auto *rbm : rb_group->get_rb_managers()) {
+    data_capacity += rbm->get_data_pool_size();
+    data_available += rbm->get_data_pool_available();
+  }
+  if (data_capacity == 0) {
+    // No data devices yet (mount-time race). Approve; the alloc-time
+    // path will reject if there's truly no room.
+    stats.projected_used_bytes += projected_usage;
+    return true;
+  }
+  size_t data_used = data_capacity - data_available;
+  // 1% headroom. Pre-fix-4 the headroom was 5% as a fragmentation buffer;
+  // pool separation removes the fragmentation pressure (the data pool
+  // only contains 1 MiB-class data extents that the allocator can
+  // coalesce cleanly), so the buffer can shrink to just an in-flight
+  // safety margin.
+  auto headroom = data_capacity / 100;
+  if (data_used + stats.projected_used_bytes + projected_usage + headroom
+      > data_capacity) {
     return false;
   }
   stats.projected_used_bytes += projected_usage;

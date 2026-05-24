@@ -99,6 +99,9 @@ public:
   size_t get_metadata_size() const {
     return device->get_metadata_size();
   }
+  size_t get_data_pool_size() const override {
+    return get_data_size();
+  }
   extent_len_t get_block_size() const override { return device->get_block_size(); }
 
   BlockRBManager(RBMDevice * device, std::string path, bool detailed)
