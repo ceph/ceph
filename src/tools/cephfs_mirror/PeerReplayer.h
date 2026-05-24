@@ -514,6 +514,10 @@ private:
                             const std::string &snap_name) {
     std::scoped_lock locker(m_lock);
     _set_last_synced_snap(dir_root, snap_id, snap_name);
+    if (auto *dir_perf = find_directory_perf_counters(dir_root)) {
+      update_directory_last_sync_perf_counters(dir_perf,
+                                               m_snap_sync_stats.at(dir_root));
+    }
   }
   void set_current_syncing_snap(const std::string &dir_root, uint64_t snap_id,
                                 const std::string &snap_name) {
@@ -531,11 +535,17 @@ private:
     std::scoped_lock locker(m_lock);
     auto &sync_stat = m_snap_sync_stats.at(dir_root);
     ++sync_stat.deleted_snap_count;
+    if (auto *dir_perf = find_directory_perf_counters(dir_root)) {
+      update_directory_summary_perf_counters(dir_perf, sync_stat);
+    }
   }
   void inc_renamed_snap(const std::string &dir_root) {
     std::scoped_lock locker(m_lock);
     auto &sync_stat = m_snap_sync_stats.at(dir_root);
     ++sync_stat.renamed_snap_count;
+    if (auto *dir_perf = find_directory_perf_counters(dir_root)) {
+      update_directory_summary_perf_counters(dir_perf, sync_stat);
+    }
   }
   void set_last_synced_stat(const std::string &dir_root, uint64_t snap_id,
                             const std::string &snap_name, double duration) {
@@ -552,6 +562,10 @@ private:
     sync_stat.last_sync_files = sync_stat.sync_files;
     ++sync_stat.synced_snap_count;
     _reset_sync_stat(dir_root);
+    if (auto *dir_perf = find_directory_perf_counters(dir_root)) {
+      update_directory_last_sync_perf_counters(dir_perf, sync_stat);
+      update_directory_summary_perf_counters(dir_perf, sync_stat);
+    }
   }
   void set_snapdiff(const std::string &dir_root, bool snapdiff) {
     std::scoped_lock locker(m_lock);
@@ -699,6 +713,10 @@ private:
   PerfCounters *find_directory_perf_counters(const std::string &dir_root);
   void update_directory_current_sync_perf_counters(PerfCounters *perf,
                                                    const SnapSyncStat &sync_stat);
+  void update_directory_last_sync_perf_counters(PerfCounters *perf,
+                                                const SnapSyncStat &sync_stat);
+  void update_directory_summary_perf_counters(PerfCounters *perf,
+                                              const SnapSyncStat &sync_stat);
 
   void run(SnapshotReplayerThread *replayer);
   void run_datasync(SnapshotDataSyncThread *data_replayer);

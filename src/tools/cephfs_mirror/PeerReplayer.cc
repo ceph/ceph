@@ -533,6 +533,54 @@ void PeerReplayer::update_directory_current_sync_perf_counters(
   }
 }
 
+void PeerReplayer::update_directory_last_sync_perf_counters(
+    PerfCounters *perf, const SnapSyncStat &sync_stat) {
+  if (!perf) {
+    return;
+  }
+
+  if (sync_stat.last_synced_snap) {
+    perf->set(l_cephfs_mirror_directory_last_snap_id,
+              sync_stat.last_synced_snap->first);
+  } else {
+    perf->set(l_cephfs_mirror_directory_last_snap_id, 0);
+  }
+
+  perf->set(l_cephfs_mirror_directory_last_crawl_duration_seconds,
+            sync_stat.last_sync_crawl_duration ?
+              static_cast<uint64_t>(*sync_stat.last_sync_crawl_duration) : 0);
+  perf->set(l_cephfs_mirror_directory_last_datasync_wait_duration_seconds,
+            sync_stat.last_sync_datasync_queue_wait_duration ?
+              static_cast<uint64_t>(*sync_stat.last_sync_datasync_queue_wait_duration) : 0);
+  perf->set(l_cephfs_mirror_directory_last_sync_duration_seconds,
+            sync_stat.last_sync_duration ?
+              static_cast<uint64_t>(*sync_stat.last_sync_duration) : 0);
+
+  utime_t t;
+  if (!clock::is_zero(sync_stat.last_synced)) {
+    t.set_from_double(monotime_to_double(sync_stat.last_synced));
+  } else {
+    t = utime_t();
+  }
+  perf->tset(l_cephfs_mirror_directory_last_sync_timestamp, t);
+
+  perf->set(l_cephfs_mirror_directory_last_sync_bytes,
+            sync_stat.last_sync_bytes ? *sync_stat.last_sync_bytes : 0);
+  perf->set(l_cephfs_mirror_directory_last_sync_files,
+            sync_stat.last_sync_files ? *sync_stat.last_sync_files : 0);
+}
+
+void PeerReplayer::update_directory_summary_perf_counters(
+    PerfCounters *perf, const SnapSyncStat &sync_stat) {
+  if (!perf) {
+    return;
+  }
+
+  perf->set(l_cephfs_mirror_directory_snaps_synced, sync_stat.synced_snap_count);
+  perf->set(l_cephfs_mirror_directory_snaps_deleted, sync_stat.deleted_snap_count);
+  perf->set(l_cephfs_mirror_directory_snaps_renamed, sync_stat.renamed_snap_count);
+}
+
 int PeerReplayer::init() {
   dout(20) << ": initial dir list=[" << m_directories << "]" << dendl;
   for (auto &dir_root : m_directories) {
@@ -541,6 +589,11 @@ int PeerReplayer::init() {
   load_persisted_dir_sync_stats();
   for (auto &dir_root : m_directories) {
     create_directory_perf_counters(dir_root);
+    auto *dir_perf = find_directory_perf_counters(dir_root);
+    update_directory_last_sync_perf_counters(dir_perf,
+                                             m_snap_sync_stats.at(dir_root));
+    update_directory_summary_perf_counters(dir_perf,
+                                           m_snap_sync_stats.at(dir_root));
   }
 
   auto &remote_client = m_peer.remote.client_name;
@@ -694,8 +747,15 @@ void PeerReplayer::add_directory(string_view dir_root) {
     }
   }
   load_persisted_dir_sync_stat(_dir_root);
-  std::scoped_lock locker(m_lock);
-  m_cond.notify_all();
+  {
+    std::scoped_lock locker(m_lock);
+    auto *dir_perf = find_directory_perf_counters(_dir_root);
+    update_directory_last_sync_perf_counters(dir_perf,
+                                             m_snap_sync_stats.at(_dir_root));
+    update_directory_summary_perf_counters(dir_perf,
+                                           m_snap_sync_stats.at(_dir_root));
+    m_cond.notify_all();
+  }
 }
 
 void PeerReplayer::remove_directory(string_view dir_root) {
@@ -3019,6 +3079,10 @@ int PeerReplayer::sync_snaps(const std::string &dir_root,
   } else {
     _reset_failed_count(dir_root);
   }
+  if (auto *dir_perf = find_directory_perf_counters(dir_root)) {
+    update_directory_current_sync_perf_counters(dir_perf,
+                                                m_snap_sync_stats.at(dir_root));
+  }
   locker.unlock();
   if (r < 0) {
     persist_dir_sync_stat(dir_root);
@@ -3095,6 +3159,10 @@ void PeerReplayer::run(SnapshotReplayerThread *replayer) {
             }
           } else {
             _inc_failed_count(*dir_root);
+            if (auto *dir_perf = find_directory_perf_counters(*dir_root)) {
+              update_directory_current_sync_perf_counters(
+                dir_perf, m_snap_sync_stats.at(*dir_root));
+            }
             locker.unlock();
             persist_dir_sync_stat(*dir_root);
             locker.lock();
