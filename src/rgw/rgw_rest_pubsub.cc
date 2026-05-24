@@ -76,6 +76,17 @@ bool validate_and_update_endpoint_secret(rgw_pubsub_dest& dest, CephContext *cct
       return false;
     }
   }
+
+  // check for mTLS key password - also a secret that requires secure transport
+  auto ssl_key_password = args.get_optional("ssl-key-password");
+  if (ssl_key_password.has_value() && !ssl_key_password->empty()) {
+    dest.stored_secret = true;
+    if (!verify_transport_security(cct, *ri.env)) {
+      message = "Topic contains secrets that must be transmitted over a secure transport";
+      return false;
+    }
+  }
+
   return true;
 }
 
@@ -813,7 +824,8 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
       static constexpr std::initializer_list<const char*> args = {
           "verify-ssl",    "use-ssl",         "ca-location", "amqp-ack-level",
           "amqp-exchange", "kafka-ack-level", "mechanism",   "cloudevents",
-          "user-name",     "password"};
+          "user-name",     "password",
+          "ssl-certificate-location", "ssl-key-location", "ssl-key-password"};
       if (std::find(args.begin(), args.end(), attribute_name) != args.end()) {
         replace_str(attribute_name, s->info.args.get("AttributeValue"));
         return 0;

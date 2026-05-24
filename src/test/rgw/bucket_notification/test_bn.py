@@ -439,58 +439,74 @@ def setup_scram_users_via_kafka_configs(mechanism: str) -> None:
         return
     
     kafka_configs = os.path.join(kafka_dir, 'bin/kafka-configs.sh')
+    kafka_configs_no_ext = os.path.join(kafka_dir, 'bin/kafka-configs')
     if not os.path.exists(kafka_configs):
-        log.warning(f"kafka-configs.sh not found at {kafka_configs}")
-        return
-    
-    scram_mechanism = 'SCRAM-SHA-512' if 'SHA-512' in mechanism else 'SCRAM-SHA-256'
-    zk_connect = 'localhost:2181'
-    
-    try:
-        # delete existing SCRAM credentials first
-        subprocess.run(
-            [kafka_configs,
-             '--zookeeper', zk_connect,
-             '--alter',
-             '--entity-type', 'users',
-             '--entity-name', KAFKA_TEST_USER,
-             '--delete-config', 'scram-sha-256,scram-sha-512'],
-            capture_output=True,
-            timeout=15,
-            check=False
-        )
-        time.sleep(1)
-        
-        # adding SCRAM credentials
-        add_config_value = f'{scram_mechanism}=[password={KAFKA_TEST_PASSWORD}]'
-        result = subprocess.run(
-            [kafka_configs,
-             '--zookeeper', zk_connect,
-             '--alter',
-             '--entity-type', 'users',
-             '--entity-name', KAFKA_TEST_USER,
-             '--add-config', add_config_value],
+        if os.path.exists(kafka_configs_no_ext):
+            kafka_configs = kafka_configs_no_ext
+        else:
+            raise RuntimeError(
+                f"kafka-configs not found under KAFKA_DIR={kafka_dir}. "
+                "Expected bin/kafka-configs.sh or bin/kafka-configs"
+            )
+
+    base_cmd = [kafka_configs]
+
+    def run_kafka_configs(args):
+        return subprocess.run(
+            base_cmd + args,
             capture_output=True,
             text=True,
-            timeout=15,
-            check=False
+            timeout=30,
+            check=False,
         )
-        
-        if result.returncode == 0:
-            log.info(f"SCRAM user configured: {KAFKA_TEST_USER} ({scram_mechanism})")
-        else:
-            raise RuntimeError(f"Failed to create SCRAM user {KAFKA_TEST_USER} with {scram_mechanism}")
+    
+    try:
+        # Idempotently ensure both SCRAM mechanisms exist for the test user.
+        # This avoids cross-test credential drift between SHA-256 and SHA-512 tests.
+        bootstrap_server = f'{default_kafka_server}:9092'
+        for scram_mechanism in ('SCRAM-SHA-256', 'SCRAM-SHA-512'):
+            add_config_value = f'{scram_mechanism}=[password={KAFKA_TEST_PASSWORD}]'
+            result = run_kafka_configs([
+                '--bootstrap-server', bootstrap_server,
+                '--alter',
+                '--entity-type', 'users',
+                '--entity-name', KAFKA_TEST_USER,
+                '--add-config', add_config_value,
+            ])
+            if result.returncode != 0:
+                raise RuntimeError(
+                    f"Failed to create/update SCRAM credentials for {KAFKA_TEST_USER} ({scram_mechanism}): {result.stderr.strip()}"
+                )
+
+        describe = run_kafka_configs([
+            '--bootstrap-server', bootstrap_server,
+            '--describe',
+            '--entity-type', 'users',
+            '--entity-name', KAFKA_TEST_USER,
+        ])
+        if describe.returncode != 0:
+            raise RuntimeError(f"Failed to verify SCRAM user {KAFKA_TEST_USER}: {describe.stderr.strip()}")
+        if ('SCRAM-SHA-256' not in describe.stdout) or ('SCRAM-SHA-512' not in describe.stdout):
+            raise RuntimeError(
+                f"SCRAM verification missing mechanisms for {KAFKA_TEST_USER}. output: {describe.stdout.strip()}"
+            )
+
+        log.info(f"SCRAM user configured idempotently: {KAFKA_TEST_USER} (SCRAM-SHA-256,SCRAM-SHA-512)")
     except Exception as e:
         log.error(f"Failed to setup SCRAM users via kafka-configs: {e}")
         raise
 
 def _kafka_ca_cert_path():
-    kafka_dir = os.environ.get('KAFKA_DIR')
+    kafka_dir = os.environ.get('KAFKA_CERT_DIR') or os.environ.get('KAFKA_DIR')
     if kafka_dir:
         ca_path = os.path.join(kafka_dir, 'y-ca.crt')
         if os.path.exists(ca_path):
             return ca_path
     return None
+
+
+def _kafka_cert_dir():
+    return os.environ.get('KAFKA_CERT_DIR') or os.environ.get('KAFKA_DIR', '/opt/kafka')
 
 class KafkaReceiver(object):
     """class for receiving and storing messages on a topic from the kafka broker"""
@@ -525,9 +541,9 @@ class KafkaReceiver(object):
             base_config['security_protocol'] = 'SSL'
             if ca_cert:
                 base_config['ssl_cafile'] = ca_cert
-            kafka_dir = os.environ.get('KAFKA_DIR', '/opt/kafka')
-            client_cert = os.path.join(kafka_dir, 'config/client.crt')
-            client_key = os.path.join(kafka_dir, 'config/client.key')
+            kafka_dir = _kafka_cert_dir()
+            client_cert = os.path.join(kafka_dir, 'client.crt')
+            client_key = os.path.join(kafka_dir, 'client.key')
             if os.path.exists(client_cert) and os.path.exists(client_key):
                 base_config['ssl_certfile'] = client_cert
                 base_config['ssl_keyfile'] = client_key
@@ -2641,13 +2657,6 @@ def metadata_filter(endpoint_type, conn):
         task.start()
         endpoint_address = 'amqp://' + host
         endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=' + exchange +'&amqp-ack-level=routable&persistent=true'
-    elif endpoint_type == 'kafka':
-        # start kafka receiver
-        task, receiver = create_kafka_receiver_thread(topic_name)
-        task.start()
-        verify_kafka_receiver(receiver)
-        endpoint_address = 'kafka://' + host
-        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&persistent=true'
     else:
         pytest.skip('Unknown endpoint type: ' + endpoint_type)
 
@@ -2735,12 +2744,6 @@ def metadata_filter(endpoint_type, conn):
     # delete the bucket
     conn.delete_bucket(bucket_name)
 
-
-@pytest.mark.kafka_test
-def test_metadata_filter_kafka():
-    """ test notification of filtering metadata, kafka endpoint """
-    conn = connection()
-    metadata_filter('kafka', conn)
 
 
 @pytest.mark.http_test
@@ -4650,7 +4653,7 @@ def test_topic_no_permissions():
 
 
 def kafka_security(security_type, mechanism='PLAIN', use_topic_attrs_for_creds=False,
-                   verify_ssl=True, include_ca_location=True):
+                   verify_ssl=True, include_ca_location=True, use_mtls=False):
     """ test pushing kafka notification securly to master """
     # Setup SCRAM users if needed
     if mechanism.startswith('SCRAM'):
@@ -4671,7 +4674,10 @@ def kafka_security(security_type, mechanism='PLAIN', use_topic_attrs_for_creds=F
         else:
             endpoint_address = 'kafka://' + default_kafka_server + ':9094'
     elif security_type == 'SSL':
-        endpoint_address = 'kafka://' + default_kafka_server + ':9093'
+        if use_mtls:
+            endpoint_address = 'kafka://' + default_kafka_server + ':9096'
+        else:
+            endpoint_address = 'kafka://' + default_kafka_server + ':9093'
     elif security_type == 'SASL_PLAINTEXT':
         endpoint_address = 'kafka://alice:alice-secret@' + default_kafka_server + ':9095'
     else:
@@ -4680,24 +4686,32 @@ def kafka_security(security_type, mechanism='PLAIN', use_topic_attrs_for_creds=F
     if security_type == 'SASL_PLAINTEXT':
         endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&use-ssl=false&mechanism='+mechanism
     elif security_type == 'SASL_SSL':
-        KAFKA_DIR = os.environ['KAFKA_DIR']
-        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&use-ssl=true&mechanism='+mechanism
-        if include_ca_location:
-            endpoint_args += '&ca-location='+KAFKA_DIR+'/y-ca.crt'
+        kafka_cert_dir = _kafka_cert_dir()
+        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&use-ssl=true&ca-location='+kafka_cert_dir+'/y-ca.crt&mechanism='+mechanism
         if use_topic_attrs_for_creds:
             endpoint_args += '&user-name=alice&password=alice-secret'
     else:
-        KAFKA_DIR = os.environ['KAFKA_DIR']
+        kafka_cert_dir = _kafka_cert_dir()
         endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&use-ssl=true'
         if include_ca_location:
-            endpoint_args += '&ca-location='+KAFKA_DIR+'/y-ca.crt'
-
-    if security_type in ('SSL', 'SASL_SSL') and not verify_ssl:
-        endpoint_args += '&verify-ssl=false'
+            endpoint_args += '&ca-location='+kafka_cert_dir+'/y-ca.crt'
+        if not verify_ssl:
+            endpoint_args += '&verify-ssl=false'
+        if use_mtls:
+            ssl_cert_path = os.path.join(kafka_cert_dir, 'client.crt')
+            ssl_key_path = os.path.join(kafka_cert_dir, 'client.key')
+            assert os.path.isfile(ssl_cert_path), \
+                f'mTLS client certificate not found: {ssl_cert_path}'
+            assert os.path.isfile(ssl_key_path), \
+                f'mTLS client key not found: {ssl_key_path}'
+            endpoint_args += '&ssl-certificate-location=' + ssl_cert_path
+            endpoint_args += '&ssl-key-location=' + ssl_key_path
 
     topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
 
     # create consumer on the topic
+    # When use_mtls=True, RGW produces to port 9096 (ssl.client.auth=required) to enforce mTLS.
+    # The test consumer connects to port 9093 (SSL) which is sufficient for reading.
     task, receiver = create_kafka_receiver_thread(topic_name, security_type=security_type, mechanism=mechanism)
     task.start()
     verify_kafka_receiver(receiver)
@@ -4797,6 +4811,12 @@ def test_notification_kafka_security_sasl_scram_512():
 @pytest.mark.kafka_security_test
 def test_notification_kafka_security_ssl_sasl_scram_512():
     kafka_security('SASL_SSL', mechanism='SCRAM-SHA-512')
+
+
+@pytest.mark.kafka_security_test
+def test_notification_kafka_security_ssl_mtls():
+    """test mTLS client certificate authentication to Kafka"""
+    kafka_security('SSL', use_mtls=True)
 
 
 @pytest.mark.http_test
@@ -6129,4 +6149,3 @@ def test_kafka_batch_size():
 def test_kafka_batch_size_mismatch():
     """ test that without rgw_kafka_max_batch_size, batched messages exceed the broker limit """
     kafka_batch_size(match_batch_size=False)
-

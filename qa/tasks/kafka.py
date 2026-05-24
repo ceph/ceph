@@ -12,6 +12,14 @@ from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 
+KAFKA_PORTS = {
+    'PLAINTEXT': 9092,
+    'SSL': 9093,
+    'SASL_SSL': 9094,
+    'SASL_PLAINTEXT': 9095,
+    'MTLS': 9096,
+}
+
 def get_kafka_version(config):
     for client, client_config in config.items():
         if 'kafka_version' in client_config:
@@ -116,9 +124,15 @@ def broker_conf(ctx, client, kafka_dir):
     ip = remote.ip_address
     conf = (
         "broker.id=0\n"
-        "listeners=PLAINTEXT://0.0.0.0:9092,SSL://0.0.0.0:9093,SASL_SSL://0.0.0.0:9094,SASL_PLAINTEXT://0.0.0.0:9095\n"
-        "advertised.listeners=PLAINTEXT://{ip}:9092,SSL://{ip}:9093,SASL_SSL://{ip}:9094,SASL_PLAINTEXT://{ip}:9095\n"
-        "listener.security.protocol.map=PLAINTEXT:PLAINTEXT,SSL:SSL,SASL_SSL:SASL_SSL,SASL_PLAINTEXT:SASL_PLAINTEXT\n"
+        "listeners=PLAINTEXT://0.0.0.0:{plaintext},SSL://0.0.0.0:{ssl},"
+        "SASL_SSL://0.0.0.0:{sasl_ssl},SASL_PLAINTEXT://0.0.0.0:{sasl_plaintext},"
+        "MTLS://0.0.0.0:{mtls}\n"
+        "advertised.listeners=PLAINTEXT://{ip}:{plaintext},SSL://{ip}:{ssl},"
+        "SASL_SSL://{ip}:{sasl_ssl},SASL_PLAINTEXT://{ip}:{sasl_plaintext},"
+        "MTLS://{ip}:{mtls}\n"
+        "listener.security.protocol.map=PLAINTEXT:PLAINTEXT,SSL:SSL,"
+        "SASL_SSL:SASL_SSL,SASL_PLAINTEXT:SASL_PLAINTEXT,MTLS:SSL\n"
+        "inter.broker.listener.name=PLAINTEXT\n"
         "log.dirs={tdir}/data/kafka-logs\n"
         "num.network.threads=3\n"
         "num.io.threads=8\n"
@@ -136,14 +150,23 @@ def broker_conf(ctx, client, kafka_dir):
         "zookeeper.connect=localhost:2181\n"
         "zookeeper.connection.timeout.ms=18000\n"
         "group.initial.rebalance.delay.ms=0\n"
+        # SSL configuration
         "ssl.keystore.location={tdir}/server.keystore.jks\n"
         "ssl.keystore.password=mypassword\n"
         "ssl.key.password=mypassword\n"
         "ssl.truststore.location={tdir}/server.truststore.jks\n"
         "ssl.truststore.password=mypassword\n"
+        "ssl.client.auth=requested\n"
+        # mTLS listener (port 9096) requires client certificate
+        "listener.name.mtls.ssl.client.auth=required\n"
+        "listener.name.mtls.ssl.keystore.location={tdir}/server.keystore.jks\n"
+        "listener.name.mtls.ssl.keystore.password=mypassword\n"
+        "listener.name.mtls.ssl.key.password=mypassword\n"
+        "listener.name.mtls.ssl.truststore.location={tdir}/server.truststore.jks\n"
+        "listener.name.mtls.ssl.truststore.password=mypassword\n"
+        # SASL mechanisms
         "sasl.enabled.mechanisms=PLAIN,SCRAM-SHA-256,SCRAM-SHA-512\n"
         "sasl.mechanism.inter.broker.protocol=PLAIN\n"
-        "inter.broker.listener.name=PLAINTEXT\n"
         'listener.name.sasl_ssl.plain.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required \\\n'
         '  username="admin" \\\n'
         '  password="admin-secret" \\\n'
@@ -164,7 +187,15 @@ def broker_conf(ctx, client, kafka_dir):
         'listener.name.sasl_plaintext.scram-sha-512.sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required \\\n'
         '  username="admin" \\\n'
         '  password="admin-secret";\n'
-    ).format(tdir=kafka_dir, ip=ip)
+    ).format(
+        tdir=kafka_dir,
+        ip=ip,
+        plaintext=KAFKA_PORTS['PLAINTEXT'],
+        ssl=KAFKA_PORTS['SSL'],
+        sasl_ssl=KAFKA_PORTS['SASL_SSL'],
+        sasl_plaintext=KAFKA_PORTS['SASL_PLAINTEXT'],
+        mtls=KAFKA_PORTS['MTLS'],
+    )
     file_name = 'server.properties'
     log.info("kafka conf file: %s", file_name)
     log.info(conf)
@@ -279,6 +310,7 @@ def run_admin_cmds(ctx,config):
         yield
     finally:
         pass
+
 
 
 @contextlib.contextmanager
