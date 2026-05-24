@@ -465,6 +465,7 @@ class TestLvm:
             self.lvm._activate(lvs)
         assert str(error.value) == 'could not find a bluestore OSD to activate'
 
+    @patch('ceph_volume.objectstore.lvm.OsdLvmMappers', MagicMock())
     @patch('ceph_volume.objectstore.lvm.encryption_utils.write_lockbox_keyring', MagicMock())
     @patch('ceph_volume.objectstore.lvm.encryption_utils.get_dmcrypt_key', MagicMock())
     @patch('ceph_volume.objectstore.lvm.prepare_utils.create_osd_path')

@@ -38,7 +38,7 @@ class TestMapperName:
         assert mappers._mapper_name_for_role('block') == (
             'ceph-fsid-uuid-nvme2n2-block-dmcrypt'
         )
-        assert mappers._mapper_path_for_backing('/dev/nvme2n2', 'block') == (
+        assert mappers._mapper_path_for_backing('block') == (
             '/dev/mapper/ceph-fsid-uuid-nvme2n2-block-dmcrypt'
         )
 

@@ -120,14 +120,14 @@ class RawOsdCryptMappers:
     def _mapper_name_for_role(self, role: str) -> str:
         return self._mapper_names[role]
 
-    def _mapper_path_for_backing(self, backing_device_path: str, role: str) -> str:
+    def _mapper_path_for_backing(self, role: str) -> str:
         return '/dev/mapper/%s' % self._mapper_name_for_role(role)
 
     def mapper_paths(self) -> Tuple[str, str, str]:
         return (
-            self._mapper_path_for_backing(self.block_device, 'block'),
-            self._mapper_path_for_backing(self.db_device, 'db') if self.db_device else '',
-            self._mapper_path_for_backing(self.wal_device, 'wal') if self.wal_device else '',
+            self._mapper_path_for_backing('block'),
+            self._mapper_path_for_backing('db') if self.db_device else '',
+            self._mapper_path_for_backing('wal') if self.wal_device else '',
         )
 
     def close(self) -> None:
@@ -135,6 +135,7 @@ class RawOsdCryptMappers:
             self._close_crypt_for_role(role)
 
     def open(self) -> None:
+        self._ensure_cluster_context()
         for role, device in self._role_devices():
             self._luks_open_for_role(role, device)
 

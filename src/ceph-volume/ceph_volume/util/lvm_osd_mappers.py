@@ -47,10 +47,7 @@ class OsdLvmMappers:
             if vol is not None
         ]
         if paths:
-            process.call(['lvchange', '-ay'] + paths, run_on_host=True)
-        if self.encrypted:
-            for role in ('block', 'db', 'wal'):
-                self._luks_open_role(role)
+            process.run(['lvchange', '-ay'] + paths, run_on_host=True)
 
     def refresh(self) -> None:
         self.close()
@@ -202,4 +199,4 @@ class OsdLvmMappers:
             self._deactivate_logical_volume(self.wal_volume)
 
     def _rescan_physical_volumes(self) -> None:
-        process.call(['pvscan', '--cache'], run_on_host=True)
+        process.run(['pvscan', '--cache'], run_on_host=True)
