@@ -237,6 +237,10 @@ if(HAVE_INTEL)
       ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc32_iscsi_01.asm
       crc32c_intel_fast_zero_asm.s)
   endif(HAVE_NASM_X64)
+  if(HAVE_NASM_X64_AVX512_VPCLMUL)
+    set(CMAKE_ASM_FLAGS "-DAS_FEATURE_LEVEL=10 ${CMAKE_ASM_FLAGS}")
+    list(APPEND crc32_srcs ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc32_iscsi_by16_10.asm)
+  endif(HAVE_NASM_X64_AVX512_VPCLMUL)
 elseif(HAVE_POWER8)
   list(APPEND crc32_srcs
     crc32c_ppc.c)
