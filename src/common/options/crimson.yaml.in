@@ -244,6 +244,11 @@ options:
   level: dev
   desc: Total size to use for CircularBoundedJournal if created, it is valid only if seastore_main_device_type is RANDOM_BLOCK
   default: 5_G
+- name: seastore_rbm_metadata_size
+  type: str
+  level: dev
+  desc: Size of the RBM metadata pool (LBA tree, backref tree, onode tree) carved between the journal and the data area at mkfs. Can be a percentage (e.g. 1.5%) or a size with K/M/G/T suffix. Set to 0 (default) to disable pool separation and revert to the legacy single-pool layout (data + metadata share one allocator).
+  default: 0
 - name: seastore_multiple_tiers_stop_evict_ratio
   type: float
   level: advanced

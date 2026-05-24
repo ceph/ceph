@@ -1840,20 +1840,25 @@ public:
     return nullptr;
   }
 
-  paddr_t alloc_paddr(extent_len_t length) {
-    // TODO: implement allocation strategy (dirty metadata and multiple devices)
+  paddr_t alloc_paddr(extent_len_t length,
+                      data_category_t category = data_category_t::DATA) {
+    // TODO: implement allocation strategy across multiple RBM devices.
+    // For now device 0 owns both pools; routing between metadata and data
+    // allocators happens inside BlockRBManager based on category.
     auto rbs = rb_group->get_rb_managers();
-    auto paddr = rbs[0]->alloc_extent(length);
+    auto paddr = rbs[0]->alloc_extent(length, category);
     if (paddr != P_ADDR_NULL) {
       stats.used_bytes += length;
     }
     return paddr;
   }
 
-  std::list<alloc_paddr_result> alloc_paddrs(extent_len_t length) {
-    // TODO: implement allocation strategy (dirty metadata and multiple devices)
+  std::list<alloc_paddr_result> alloc_paddrs(
+      extent_len_t length,
+      data_category_t category = data_category_t::DATA) {
+    // TODO: implement allocation strategy across multiple RBM devices.
     auto rbs = rb_group->get_rb_managers();
-    auto ret = rbs[0]->alloc_extents(length);
+    auto ret = rbs[0]->alloc_extents(length, category);
     if (!ret.empty()) {
       stats.used_bytes += length;
     }

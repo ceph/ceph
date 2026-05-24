@@ -72,12 +72,20 @@ public:
     crimson::ct_error::enospc
     >;
   using allocate_ret = allocate_ertr::future<paddr_t>;
-  // allocator, return start addr of allocated blocks
-  virtual paddr_t alloc_extent(size_t size) = 0;
+  // allocator, return start addr of allocated blocks.
+  // category routes between the metadata-pool and data-pool allocators on
+  // v2 (pool-separated) devices; on v1 single-pool devices the parameter
+  // is ignored. Defaults to DATA so existing call sites keep their
+  // semantics until they're updated to pass an explicit category.
+  virtual paddr_t alloc_extent(
+      size_t size,
+      data_category_t category = data_category_t::DATA) = 0;
 
   using allocate_ret_bare = std::list<alloc_paddr_result>;
   using allo_extents_ret = allocate_ertr::future<allocate_ret_bare>;
-  virtual allocate_ret_bare alloc_extents(size_t size) = 0;
+  virtual allocate_ret_bare alloc_extents(
+      size_t size,
+      data_category_t category = data_category_t::DATA) = 0;
 
   virtual void mark_space_used(paddr_t paddr, size_t len) = 0;
   virtual void mark_space_free(paddr_t paddr, size_t len) = 0;

@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include <fcntl.h>
+#include <algorithm>
 
 #include "crimson/common/log.h"
 #include "crimson/common/errorator-utils.h"
@@ -19,8 +20,57 @@ SET_SUBSYS(seastore_device);
 
 namespace crimson::os::seastore::random_block_device {
 
+size_t RBMDevice::parse_rbm_metadata_size(std::string str, size_t base_size) {
+  str.erase(std::remove_if(str.begin(), str.end(), ::isspace), str.end());
+  if (str == "0" || str.empty()) {
+    return 0;
+  }
+  try {
+    if (str.back() == '%') {
+      str.pop_back();
+      size_t pos = 0;
+      double percent = std::stod(str, &pos);
+      if (pos != str.size()) {
+        throw std::invalid_argument("trailing characters after percentage");
+      }
+      return static_cast<size_t>((percent / 100.0) * base_size);
+    }
+    uint64_t multiplier = 1;
+    if (!str.empty() && (str.back() == 'B' || str.back() == 'b')) {
+      str.pop_back();
+    }
+    if (!str.empty() && (str.back() == 'i' || str.back() == 'I')) {
+      str.pop_back();
+    }
+    if (!str.empty()) {
+      char suffix = std::tolower(str.back());
+      if (suffix == 'k') {
+        multiplier = 1ULL << 10;
+        str.pop_back();
+      } else if (suffix == 'm') {
+        multiplier = 1ULL << 20;
+        str.pop_back();
+      } else if (suffix == 'g') {
+        multiplier = 1ULL << 30;
+        str.pop_back();
+      } else if (suffix == 't') {
+        multiplier = 1ULL << 40;
+        str.pop_back();
+      }
+    }
+    size_t pos = 0;
+    double val = std::stod(str, &pos);
+    if (pos != str.size()) {
+      throw std::invalid_argument("trailing characters");
+    }
+    return static_cast<size_t>(val * multiplier);
+  } catch (const std::exception& e) {
+    ceph_abort_msgf("Invalid seastore_rbm_metadata_size config value: %s", str.c_str());
+  }
+}
+
 RBMDevice::mkfs_ret RBMDevice::do_primary_mkfs(device_config_t config,
-  int shard_num, size_t journal_size) {
+  int shard_num, size_t journal_size, const std::string& metadata_size_str) {
   LOG_PREFIX(RBMDevice::do_primary_mkfs);
   check_create_device_ret maybe_create = check_create_device_ertr::now();
   using crimson::common::get_conf;
@@ -54,11 +104,18 @@ RBMDevice::mkfs_ret RBMDevice::do_primary_mkfs(device_config_t config,
     (cur_total_size / shard_num) -
     ((cur_total_size / shard_num) % cur_block_size);
 
+  // Align the metadata region to block_size so the allocator's block-aligned
+  // invariant holds for both the metadata and data pools.
+  size_t metadata_size = parse_rbm_metadata_size(metadata_size_str, aligned_size - journal_size);
+  size_t aligned_metadata_size =
+      (metadata_size / cur_block_size) * cur_block_size;
+  ceph_assert_always(aligned_size > journal_size + aligned_metadata_size);
+
   std::vector<device_shard_info_t> shard_infos(shard_num);
   for (int i = 0; i < shard_num; i++) {
     shard_infos[i].size = aligned_size;
     shard_infos[i].start_offset = i * aligned_size;
-    assert(shard_infos[i].size > journal_size);
+    assert(shard_infos[i].size > journal_size + aligned_metadata_size);
   }
   shard_info = shard_infos[seastar::this_shard_id()];
   super = device_superblock_t::make_rbm(
@@ -66,6 +123,7 @@ RBMDevice::mkfs_ret RBMDevice::do_primary_mkfs(device_config_t config,
     cur_block_size,
     cur_total_size,
     journal_size,
+    aligned_metadata_size,
     std::move(config),
     std::move(shard_infos));
   DEBUG("super {} ", super);
@@ -359,7 +417,10 @@ EphemeralRBMDevice::mount_ret EphemeralRBMDevice::mount() {
 }
 
 EphemeralRBMDevice::mkfs_ret EphemeralRBMDevice::mkfs(device_config_t config) {
-  return do_primary_mkfs(config, seastar::smp::count, DEFAULT_TEST_CBJOURNAL_SIZE);
+  using crimson::common::get_conf;
+  return do_primary_mkfs(config, seastar::smp::count,
+                         DEFAULT_TEST_CBJOURNAL_SIZE,
+                         get_conf<std::string>("seastore_rbm_metadata_size"));
 }
 
 }

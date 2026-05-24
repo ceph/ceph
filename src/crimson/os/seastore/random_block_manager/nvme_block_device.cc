@@ -44,7 +44,8 @@ NVMeBlockDevice::mkfs_ret NVMeBlockDevice::mkfs(device_config_t config) {
   using crimson::common::get_conf;
   co_await shard_devices.local().mshard_devices[0]->do_primary_mkfs(config,
     seastar::smp::count,
-    get_conf<Option::size_t>("seastore_cbjournal_size") 
+    get_conf<Option::size_t>("seastore_cbjournal_size"),
+    get_conf<std::string>("seastore_rbm_metadata_size")
   );
 }
 

@@ -170,8 +170,10 @@ public:
 
   mkfs_ret do_mkfs(device_config_t);
 
-  // shard 0 mkfs
-  mkfs_ret do_primary_mkfs(device_config_t, int shard_num, size_t journal_size);
+  mkfs_ret do_primary_mkfs(device_config_t, int shard_num,
+                           size_t journal_size, const std::string& metadata_size);
+
+  static size_t parse_rbm_metadata_size(std::string str, size_t base_size);
 
   mount_ret do_mount();
 
@@ -189,6 +191,10 @@ public:
 
   uint64_t get_journal_size() const {
     return super.journal_size;
+  }
+
+  uint64_t get_metadata_size() const {
+    return super.metadata_size;
   }
 
   static rbm_abs_addr get_shard_reserved_size() {

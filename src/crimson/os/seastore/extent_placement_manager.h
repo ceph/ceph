@@ -39,9 +39,16 @@ public:
     crimson::ct_error::enospc>;
   virtual open_ertr::future<> open() = 0;
 
-  virtual paddr_t alloc_paddr(extent_len_t length) = 0;
+  // category routes between the data-pool and metadata-pool allocators on
+  // RBM v2 devices. Defaults to DATA so existing call sites that don't yet
+  // distinguish (e.g. segmented OOL writer, tests) keep their semantics.
+  virtual paddr_t alloc_paddr(
+      extent_len_t length,
+      data_category_t category = data_category_t::DATA) = 0;
 
-  virtual std::list<alloc_paddr_result> alloc_paddrs(extent_len_t length) = 0;
+  virtual std::list<alloc_paddr_result> alloc_paddrs(
+      extent_len_t length,
+      data_category_t category = data_category_t::DATA) = 0;
 
   using alloc_write_ertr = base_ertr;
   using alloc_write_iertr = trans_iertr<alloc_write_ertr>;
@@ -99,11 +106,12 @@ public:
     });
   }
 
-  paddr_t alloc_paddr(extent_len_t length) final {
+  paddr_t alloc_paddr(extent_len_t length, data_category_t) final {
     return make_delayed_temp_paddr(0);
   }
 
-  std::list<alloc_paddr_result> alloc_paddrs(extent_len_t length) final {
+  std::list<alloc_paddr_result> alloc_paddrs(
+      extent_len_t length, data_category_t) final {
     return {alloc_paddr_result{make_delayed_temp_paddr(0), length}};
   }
 
@@ -164,14 +172,15 @@ public:
     });
   }
 
-  paddr_t alloc_paddr(extent_len_t length) final {
+  paddr_t alloc_paddr(extent_len_t length, data_category_t category) final {
     assert(rb_cleaner);
-    return rb_cleaner->alloc_paddr(length);
+    return rb_cleaner->alloc_paddr(length, category);
   }
 
-  std::list<alloc_paddr_result> alloc_paddrs(extent_len_t length) final {
+  std::list<alloc_paddr_result> alloc_paddrs(
+      extent_len_t length, data_category_t category) final {
     assert(rb_cleaner);
-    return rb_cleaner->alloc_paddrs(length);
+    return rb_cleaner->alloc_paddrs(length, category);
   }
 
   bool can_inplace_rewrite(Transaction& t,
@@ -385,7 +394,7 @@ public:
       addr = make_record_relative_paddr(0);
     } else {
       assert(category == data_category_t::METADATA);
-      addr = get_writer(hint, category, gen)->alloc_paddr(length);
+      addr = get_writer(hint, category, gen)->alloc_paddr(length, category);
     }
     assert(!(category == data_category_t::DATA));
 
@@ -434,7 +443,7 @@ public:
     {
 #endif
       assert(category == data_category_t::DATA);
-      auto addrs = get_writer(hint, category, gen)->alloc_paddrs(length);
+      auto addrs = get_writer(hint, category, gen)->alloc_paddrs(length, category);
       for (auto &ext : addrs) {
         auto left = ext.len;
         while (left > 0) {

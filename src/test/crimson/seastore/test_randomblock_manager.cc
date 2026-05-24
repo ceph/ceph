@@ -180,3 +180,21 @@ TEST_F(rbm_test_t, open_read_write_test)
  });
 }
 
+TEST(rbm_device_test, parse_metadata_size)
+{
+  using namespace crimson::os::seastore::random_block_device;
+  size_t base = 100000000;
+  ASSERT_EQ(RBMDevice::parse_rbm_metadata_size("0", base), 0);
+  ASSERT_EQ(RBMDevice::parse_rbm_metadata_size("", base), 0);
+  ASSERT_EQ(RBMDevice::parse_rbm_metadata_size("1.5%", base), 1500000);
+  ASSERT_EQ(RBMDevice::parse_rbm_metadata_size("0%", base), 0);
+  ASSERT_EQ(RBMDevice::parse_rbm_metadata_size("10G", base), 10ULL << 30);
+  ASSERT_EQ(RBMDevice::parse_rbm_metadata_size("10GB", base), 10ULL << 30);
+  ASSERT_EQ(RBMDevice::parse_rbm_metadata_size("10GiB", base), 10ULL << 30);
+  ASSERT_EQ(RBMDevice::parse_rbm_metadata_size(" 10 g ", base), 10ULL << 30);
+  ASSERT_EQ(RBMDevice::parse_rbm_metadata_size("500M", base), 500ULL << 20);
+  ASSERT_EQ(RBMDevice::parse_rbm_metadata_size("256k", base), 256ULL << 10);
+  ASSERT_EQ(RBMDevice::parse_rbm_metadata_size("1T", base), 1ULL << 40);
+  ASSERT_EQ(RBMDevice::parse_rbm_metadata_size("4096", base), 4096);
+  ASSERT_EQ(RBMDevice::parse_rbm_metadata_size("4096B", base), 4096);
+}

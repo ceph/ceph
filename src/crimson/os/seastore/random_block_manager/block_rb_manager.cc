@@ -46,11 +46,17 @@ device_config_t get_rbm_ephemeral_device_config(
           secondary_devices};
 }
 
-paddr_t BlockRBManager::alloc_extent(size_t size)
+paddr_t BlockRBManager::alloc_extent(size_t size, data_category_t category)
 {
   LOG_PREFIX(BlockRBManager::alloc_extent);
-  assert(allocator);
-  auto alloc = allocator->alloc_extent(size);
+  // Route to metadata pool only when it exists and the caller is asking
+  // for metadata. Everything else (including data on v1 single-pool
+  // devices) goes to data_allocator.
+  ExtentAllocator *a =
+      (metadata_allocator && category == data_category_t::METADATA)
+          ? metadata_allocator.get()
+          : data_allocator.get();
+  auto alloc = a->alloc_extent(size);
   if (!alloc) {
     return P_ADDR_NULL;
   }
@@ -60,17 +66,21 @@ paddr_t BlockRBManager::alloc_extent(size_t size)
   paddr_t paddr = convert_abs_addr_to_paddr(
     extent.get_start(),
     device->get_device_id());
-  DEBUG("allocated addr: {}, size: {}, requested size: {}",
-	paddr, extent.get_len(), size);
+  DEBUG("allocated addr: {}, size: {}, requested size: {}, pool: {}",
+	paddr, extent.get_len(), size,
+	(a == metadata_allocator.get()) ? "metadata" : "data");
   return paddr;
 }
 
 BlockRBManager::allocate_ret_bare
-BlockRBManager::alloc_extents(size_t size)
+BlockRBManager::alloc_extents(size_t size, data_category_t category)
 {
   LOG_PREFIX(BlockRBManager::alloc_extents);
-  assert(allocator);
-  auto alloc = allocator->alloc_extents(size);
+  ExtentAllocator *a =
+      (metadata_allocator && category == data_category_t::METADATA)
+          ? metadata_allocator.get()
+          : data_allocator.get();
+  auto alloc = a->alloc_extents(size);
   if (!alloc) {
     return {};
   }
@@ -83,8 +93,9 @@ BlockRBManager::alloc_extents(size_t size)
     paddr_t paddr = convert_abs_addr_to_paddr(
       extent.get_start(),
       device->get_device_id());
-    DEBUG("allocated addr: {}, size: {}, requested size: {}",
-         paddr, extent.get_len(), size);
+    DEBUG("allocated addr: {}, size: {}, requested size: {}, pool: {}",
+         paddr, extent.get_len(), size,
+         (a == metadata_allocator.get()) ? "metadata" : "data");
     ret.push_back(
       {std::move(paddr),
       static_cast<extent_len_t>(extent.get_len())});
@@ -96,22 +107,39 @@ BlockRBManager::alloc_extents(size_t size)
 void BlockRBManager::complete_allocation(
     paddr_t paddr, size_t size)
 {
-  assert(allocator);
   rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
-  allocator->complete_allocation(addr, size);
+  auto *a = allocator_for(addr);
+  assert(a);
+  a->complete_allocation(addr, size);
 }
 
 BlockRBManager::open_ertr::future<> BlockRBManager::open()
 {
+  LOG_PREFIX(BlockRBManager::open);
   assert(device);
   assert(device->get_available_size() > 0);
   assert(device->get_block_size() > 0);
-  auto ool_start = get_start_rbm_addr();
-  allocator->init(
-    ool_start,
-    device->get_shard_end() -
-    ool_start,
-    device->get_block_size());
+  auto pool_start = get_start_rbm_addr();
+  auto data_start = get_data_start_rbm_addr();
+  auto device_end = device->get_shard_end();
+  auto meta_size = device->get_metadata_size();
+  auto block_size = device->get_block_size();
+
+  if (meta_size > 0) {
+    // v2 pool-separated layout: carve [pool_start, data_start) for metadata
+    // and [data_start, device_end) for data.
+    ceph_assert(data_start > pool_start);
+    ceph_assert(device_end > data_start);
+    metadata_allocator.reset(new AvlAllocator(detailed));
+    metadata_allocator->init(pool_start, data_start - pool_start, block_size);
+    data_allocator->init(data_start, device_end - data_start, block_size);
+    INFO("v2 pool-separated: metadata [0x{:x},0x{:x}) data [0x{:x},0x{:x})",
+         pool_start, data_start, data_start, device_end);
+  } else {
+    // v1 single-pool layout: data_allocator covers everything.
+    data_allocator->init(pool_start, device_end - pool_start, block_size);
+    INFO("v1 single-pool: data [0x{:x},0x{:x})", pool_start, device_end);
+  }
   return open_ertr::now();
 }
 
@@ -162,7 +190,10 @@ BlockRBManager::read_ertr::future<> BlockRBManager::read(
 BlockRBManager::close_ertr::future<> BlockRBManager::close()
 {
   ceph_assert(device);
-  allocator->close();
+  data_allocator->close();
+  if (metadata_allocator) {
+    metadata_allocator->close();
+  }
   co_return co_await device->close();
 }
 
@@ -191,15 +222,18 @@ void BlockRBManager::prefill_fragmented_device()
 {
   LOG_PREFIX(BlockRBManager::prefill_fragmented_device);
   // the first 3 blocks must be allocated to lba root
-  // and backref root during mkfs
+  // and backref root during mkfs.
+  // This test helper only fragments the data allocator (the metadata
+  // allocator, if present, is not affected) since callers exercising the
+  // fragmented-device assertions don't currently use pool separation.
   for (size_t block = get_block_size() * 3;
       block <= get_size() - get_block_size() * 3;
       block += get_block_size() * 2) {
     DEBUG("marking {}~{} used",
-      get_start_rbm_addr() + block,
+      get_data_start_rbm_addr() + block,
       get_block_size());
-    allocator->mark_extent_used(
-      get_start_rbm_addr() + block,
+    data_allocator->mark_extent_used(
+      get_data_start_rbm_addr() + block,
       get_block_size());
   }
 }

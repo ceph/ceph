@@ -111,8 +111,12 @@ constexpr size_t SUPERBLOCK_MAGIC_PAD  = 37; // matching the UID block in BlueSt
 constexpr size_t SUPERBLOCK_HEADER_PREFIX = SUPERBLOCK_MAGIC_SIZE + SUPERBLOCK_MAGIC_PAD;
 static_assert(SUPERBLOCK_HEADER_PREFIX == 60);
 
-/// Current superblock format version
-constexpr uint8_t CRIMSON_DEVICE_SUPERBLOCK_VERSION = 1;
+/// Current superblock format version.
+///   v1: initial.
+///   v2: adds RBM metadata-pool fields (metadata_size, metadata_region_start).
+///       v1 devices read with v2 code default these to 0 and behave as a
+///       single-pool device (data + metadata sharing the same allocator).
+constexpr uint8_t CRIMSON_DEVICE_SUPERBLOCK_VERSION = 2;
 
 /// Feature bits stored in device_superblock_t::feature
 enum class device_feature_t : uint64_t {
@@ -163,6 +167,10 @@ struct device_superblock_t {
   // --- Device-type-specific size information (union concept) ---
   size_t total_size = 0;          ///< total device capacity in bytes (RBM)
   uint64_t journal_size = 0;      ///< journal area size in bytes (RBM)
+  // Metadata pool carved out at mkfs time, located immediately after the
+  // journal. If metadata_size == 0 the device is single-pool (legacy v1
+  // behavior): one allocator backs both data and metadata extents. (RBM v2)
+  uint64_t metadata_size = 0;     ///< metadata area size in bytes (RBM, v2+)
   size_t segment_capacity = 0;    ///< usable bytes/segment = zone_capacity*zones_per_segment (ZBD)
   size_t zones_per_segment = 0;   ///< zones per segment (ZBD)
   size_t zone_size = 0;           ///< physical zone size in bytes (ZBD)
@@ -177,7 +185,7 @@ struct device_superblock_t {
   uint32_t nvme_block_size = 0;  ///< NVMe logical block size (E2E protection)
 
   DENC(device_superblock_t, v, p) {
-    DENC_START(1, 1, p);
+    DENC_START(2, 1, p);
     denc(v.version, p);
     denc(v.shard_num, p);
     denc(v.segment_size, p);
@@ -193,6 +201,9 @@ struct device_superblock_t {
     denc(v.crc, p);
     denc(v.feature, p);
     denc(v.nvme_block_size, p);
+    if (struct_v >= 2) {
+      denc(v.metadata_size, p);
+    }
     DENC_FINISH(p);
   }
 
@@ -245,6 +256,7 @@ struct device_superblock_t {
     size_t block_size,
     size_t total_size,
     uint64_t journal_size,
+    uint64_t metadata_size,
     device_config_t config,
     std::vector<device_shard_info_t> shard_infos)
   {
@@ -253,6 +265,7 @@ struct device_superblock_t {
     sb.block_size = block_size;
     sb.total_size = total_size;
     sb.journal_size = journal_size;
+    sb.metadata_size = metadata_size;
     sb.config = std::move(config);
     sb.shard_infos = std::move(shard_infos);
     return sb;
