@@ -1411,10 +1411,10 @@ private:
     }
 #endif
 
+    co_await pin.co_refresh();
     if (pin.is_indirect()) {
       SUBDEBUGT(seastore_tm, "{} into {} remaps ...",
         t, pin, remaps.size());
-      co_await pin.co_refresh();
       pin = co_await complete_mapping(t, std::move(pin));
     } else {
       laddr_t original_laddr = pin.get_key();
@@ -1425,7 +1425,6 @@ private:
       ceph_assert(!pin.is_clone());
 
       TCachedExtentRef<T> extent;
-      co_await pin.co_refresh();
       if (full_extent_integrity_check) {
         SUBTRACET(seastore_tm, "{} reading pin...", t, pin);
         // read the entire extent from disk (See: pin_to_extent)
@@ -1447,7 +1446,7 @@ private:
           auto &child_pos = ret.get_child_pos();
           auto laddr = pin.get_key();
           std::ignore = cache->retire_absent_extent_addr_by_type(
-            t, laddr, original_paddr, original_len, pin.get_extent_type(),
+            t, laddr, pin.get_val(), original_len, pin.get_extent_type(),
             [&child_pos, laddr](auto &extent) mutable {
               auto lextent = extent.template cast<LogicalChildNode>();
               assert(extent.is_logical());
@@ -1473,7 +1472,7 @@ private:
         SUBDEBUGT(seastore_tm, "extent fully loaded...", t);
         ceph_assert(extent->is_data_stable());
         ceph_assert(extent->get_length() >= original_len);
-        ceph_assert(extent->get_paddr() == original_paddr);
+        ceph_assert(extent->get_paddr() == pin.get_val());
         original_bptr = extent->get_bptr();
       }
       if (extent) {
@@ -1485,7 +1484,7 @@ private:
         auto remap_offset = remap.offset;
         auto remap_len = remap.len;
         auto remap_laddr = (original_laddr + remap_offset).checked_to_laddr();
-        auto remap_paddr = original_paddr.add_offset(remap_offset);
+        auto remap_paddr = pin.get_val().add_offset(remap_offset);
         SUBDEBUGT(seastore_tm, "remap direct pin into {}~0x{:x} {} ...",
                   t, remap_laddr, remap_len, remap_paddr);
         ceph_assert(remap_len < original_len);
