@@ -1135,6 +1135,89 @@ public:
     return iter;
   }
 
+  /**
+   * replace
+   *
+   * Replace the entry pointed by iter with the key and val. key
+   * must be within the range iter.get_key()~iter.get_length()
+   *
+   * @param c [in] op context
+   * @param iter [in] iterator to element to update, must not be end
+   * @param key [in] key with which to replace
+   * @param val [in] val with which to replace
+   * @return iterator to newly replaced element
+   */
+  using replace_iertr = base_iertr;
+  using replace_ret = replace_iertr::future<iterator>;
+  using get_val_func_t = std::function<node_val_t ()>;
+  replace_ret replace(
+    op_context_t c,
+    iterator iter,
+    node_key_t key,
+    get_val_func_t func,
+    BaseChildNode<leaf_node_t, node_key_t> *child)
+  {
+    LOG_PREFIX(FixedKVBtree::update);
+    SUBTRACET(
+      seastore_fixedkv_tree,
+      "replace element at {} with {}",
+      c.trans,
+      iter.is_end() ? min_max_t<node_key_t>::max : iter.get_key(),
+      key);
+    if (likely(iter.leaf.node->get_meta().end > key)) {
+      // the replacing key is also within the range of the current
+      // leaf node, so do the replacing directly
+      if (!iter.leaf.node->is_mutable()) {
+        CachedExtentRef mut = c.cache.duplicate_for_write(
+          c.trans, iter.leaf.node
+        );
+        iter.leaf.node = mut->cast<leaf_node_t>();
+      }
+      ++(get_tree_stats<self_type>(c.trans).num_updates);
+      iter.leaf.node->replace(
+        iter.leaf.node->iter_idx(iter.leaf.pos),
+        key,
+        func());
+      if constexpr (std::is_base_of_v<
+          ParentNode<leaf_node_t, node_key_t>, leaf_node_t>) {
+        if (child) {
+          iter.leaf.node->update_child_ptr(iter.leaf.pos, child);
+        }
+      }
+      co_return iter;
+    }
+    // the replacing key fall beyond the end of the current leaf
+    // node, insert it into the next leaf node and remove the
+    // original key
+    auto niter = co_await iter.next(c);
+    assert(!niter.is_end());
+    assert(niter.get_key() > key);
+    co_await handle_split(c, niter);
+    if (!niter.leaf.node->is_mutable()) {
+      CachedExtentRef mut = c.cache.duplicate_for_write(
+        c.trans, niter.leaf.node
+      );
+      niter.leaf.node = mut->cast<leaf_node_t>();
+    }
+    auto it = typename leaf_node_t::const_iterator(
+        niter.leaf.node.get(), niter.leaf.pos);
+    assert(key >= niter.leaf.node->get_meta().begin &&
+           key < niter.leaf.node->get_meta().end);
+    niter.leaf.node->insert(it, key, func());
+    if constexpr (std::is_base_of_v<
+        ParentNode<leaf_node_t, node_key_t>, leaf_node_t>) {
+      niter.leaf.node->insert_child_ptr(
+        niter.leaf.pos, child, niter.leaf.node->get_size() - 1);
+    }
+    (void)child;
+    // TODO: the keys pointed by iter and niter are overlapped which
+    // is against the invariant of the lba/backref tree, but since
+    // remove directly removes the iter, it wouldn't cause any issue
+    // for the time being.
+    niter = co_await remove(c, std::move(iter));
+    assert(niter.get_key() == key);
+    co_return niter;
+  }
 
   /**
    * remove
