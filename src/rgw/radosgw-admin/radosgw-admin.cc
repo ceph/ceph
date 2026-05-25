@@ -3918,14 +3918,61 @@ int main(int argc, const char **argv)
   init_realm_param(cct.get(), zone_id, opt_zone_id, "rgw_zone_id");
 
   {
+    bool show_cli11_help = false;
     CLI::App app{"radosgw-admin"};
     app.allow_extras();
+    app.add_flag("--cli11-help", show_cli11_help,
+                 "Show CLI11-generated help (temporary, migration testing)");
+                 
     auto* script = app.add_subcommand("script");
     auto* put = script->add_subcommand("put");
-    put->add_option("--context", str_script_ctx);
-    app.parse(argc, argv);
+
+    app.add_option("--context", str_script_ctx)->group("")->take_last(); // compatibility: parse anywhere in argv
+    app.add_option("--infile",  infile)->group("")->take_last();          // compatibility: parse anywhere in argv
+    app.add_option("--tenant",  tenant)->group("")->take_last();          // compatibility: parse anywhere in argv
+
+    script->add_option("--context", str_script_ctx)->group("")->take_last(); // compatibility: parse between script and subcommand
+    script->add_option("--infile",  infile)->group("")->take_last();
+    script->add_option("--tenant",  tenant)->group("")->take_last();
+
+    // Do not use ->required() while --context is also accepted at parent
+    // levels for compatibility, because CLI11 checks the specific option location.
+    put->add_option("--context", str_script_ctx)->take_last()->option_text("<context> REQUIRED"); // semantic owner: visible in help
+    put->add_option("--infile",  infile)->take_last();                    // semantic owner: visible in help
+    put->add_option("--tenant",  tenant)->take_last();                    // semantic owner: visible in help
+
+    try {
+      app.parse(argc, argv);
+    } catch (const CLI::ParseError& e) {
+      return app.exit(e);
+    }
+    
+    if (show_cli11_help) {
+      cout << app.help();
+      return 0;
+    }
+
     if (put->parsed()) {
+      cerr << "DEBUG: CLI11 parsed --context = " << (str_script_ctx ? *str_script_ctx : "(empty)") << std::endl;
+      // Enforce required options by value, because options may have been
+      // parsed before the subcommand.
+      if (!str_script_ctx) {
+        cerr << "ERROR: context was not provided (via --context)" << std::endl;
+        return EINVAL;
+      }
+      if (app.count("--context") > 0 || script->count("--context") > 0 ||
+          app.count("--infile")  > 0 || script->count("--infile")  > 0 ||
+          app.count("--tenant")  > 0 || script->count("--tenant")  > 0) {
+        cerr << "Warning: flags should appear after the subcommand. "
+                "Use: script put --context=<value> --infile=<value> --tenant=<value>\n";
+      }
       opt_cmd = OPT::SCRIPT_PUT;
+      for (const auto& arg : app.remaining(true)) {
+        if (!arg.empty() && arg[0] != '-') {
+          cerr << "ERROR: unexpected argument: '" << arg << "'" << std::endl;
+          return EINVAL;
+        }
+      }
     }
   }
 
