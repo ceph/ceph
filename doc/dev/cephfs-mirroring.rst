@@ -393,19 +393,34 @@ status. Commands of this kind take the form ``filesystem-name@filesystem-id peer
 ::
 
   {
-    "/d0": {
-        "state": "idle",
-        "last_synced_snap": {
-            "id": 120,
-            "name": "snap1",
-            "sync_duration": 0.079997898999999997,
-            "sync_time_stamp": "274900.558797s"
-        },
-        "snaps_synced": 2,
-        "snaps_deleted": 0,
-        "snaps_renamed": 0
+    "metrics": {
+        "/d0": {
+            "peer": {
+                "a2dc7784-e7a1-4723-b103-03ee8d8768f8": {
+                    "state": "idle",
+                    "last_synced_snap": {
+                        "id": 120,
+                        "name": "snap1",
+                        "crawl_duration": "2s",
+                        "datasync_queue_wait_duration": "1s",
+                        "sync_duration": "33s",
+                        "sync_time_stamp": "274900.558797s",
+                        "sync_bytes": "149.94 MiB",
+                        "sync_files": 5000
+                    },
+                    "snaps_synced": 2,
+                    "snaps_deleted": 0,
+                    "snaps_renamed": 0
+                }
+            }
+        }
     }
   }
+
+Several fields in the status output are formatted for readability rather than reported as raw
+numbers. See :ref:`Value formatting <cephfs_mirror_peer_status_formatting>` in
+:doc:`/cephfs/cephfs-mirroring` for duration, data size, throughput, percentage, count, and
+timestamp formats.
 
 Synchronization stats such as ``snaps_synced``, ``snaps_deleted`` and
 ``snaps_renamed`` are reset when the daemon is restarted or (when multiple
@@ -418,6 +433,49 @@ A directory can be in one of the following states::
   - `idle`: The directory is currently not being synchronized
   - `syncing`: The directory is currently being synchronized
   - `failed`: The directory has hit upper limit of consecutive failures
+
+::
+
+  {
+    "metrics": {
+        "/d0": {
+            "peer": {
+                "a2dc7784-e7a1-4723-b103-03ee8d8768f8": {
+                    "state": "syncing",
+                    "current_syncing_snap": {
+                        "id": 121,
+                        "name": "snap2",
+                        "sync-mode": "full",
+                        "avg_read_throughput_bytes": "13.03 MiB/s",
+                        "avg_write_throughput_bytes": "24.24 MiB/s",
+                        "crawl": {
+                            "state": "completed",
+                            "duration": "2s"
+                        },
+                        "datasync_queue_wait": {
+                            "state": "complete",
+                            "duration": "1s"
+                        },
+                        "bytes": {
+                            "sync_bytes": "60.40 MiB",
+                            "total_bytes": "149.94 MiB",
+                            "sync_percent": "40.29%"
+                        },
+                        "files": {
+                            "sync_files": 2013,
+                            "total_files": 5000,
+                            "sync_percent": "40.26%"
+                        },
+                        "eta": "7s"
+                    },
+                    "snaps_synced": 2,
+                    "snaps_deleted": 0,
+                    "snaps_renamed": 0
+                }
+            }
+        }
+    }
+  }
 
 When a directory hits a configured number of consecutive synchronization
 failures, the mirror daemon marks it as ``failed``. Synchronization for these
@@ -439,23 +497,37 @@ status:
 ::
 
   {
-    "/d0": {
-        "state": "idle",
-        "last_synced_snap": {
-            "id": 120,
-            "name": "snap1",
-            "sync_duration": 0.079997898999999997,
-            "sync_time_stamp": "274900.558797s"
+    "metrics": {
+        "/d0": {
+            "peer": {
+                "a2dc7784-e7a1-4723-b103-03ee8d8768f8": {
+                    "state": "idle",
+                    "last_synced_snap": {
+                        "id": 120,
+                        "name": "snap1",
+                        "crawl_duration": "2s",
+                        "datasync_queue_wait_duration": "1s",
+                        "sync_duration": "33s",
+                        "sync_time_stamp": "274900.558797s",
+                        "sync_bytes": "149.94 MiB",
+                        "sync_files": 5000
+                    },
+                    "snaps_synced": 2,
+                    "snaps_deleted": 0,
+                    "snaps_renamed": 0
+                }
+            }
         },
-        "snaps_synced": 2,
-        "snaps_deleted": 0,
-        "snaps_renamed": 0
-    },
-    "/f0": {
-        "state": "failed",
-        "snaps_synced": 0,
-        "snaps_deleted": 0,
-        "snaps_renamed": 0
+        "/f0": {
+            "peer": {
+                "a2dc7784-e7a1-4723-b103-03ee8d8768f8": {
+                    "state": "failed",
+                    "snaps_synced": 0,
+                    "snaps_deleted": 0,
+                    "snaps_renamed": 0
+                }
+            }
+        }
     }
   }
 
