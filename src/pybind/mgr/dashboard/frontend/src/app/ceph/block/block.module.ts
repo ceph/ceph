@@ -90,6 +90,7 @@ import SubtractAlt from '@carbon/icons/es/subtract--alt/20';
 import ProgressBarRound from '@carbon/icons/es/progress-bar--round/32';
 import Search from '@carbon/icons/es/search/32';
 import Datastore from '@carbon/icons/es/datastore/16';
+import ArrowRight from '@carbon/icons/es/arrow--right/16';
 import { NvmeofGatewaySubsystemComponent } from './nvmeof-gateway-subsystem/nvmeof-gateway-subsystem.component';
 import { NvmeofNamespaceExpandModalComponent } from './nvmeof-namespace-expand-modal/nvmeof-namespace-expand-modal.component';
 import { NvmeGatewayViewComponent } from './nvme-gateway-view/nvme-gateway-view.component';
@@ -104,6 +105,7 @@ import { NvmeofSubsystemPerformanceComponent } from './nvmeof-subsystem-performa
 import { NvmeofTabsComponent } from './nvmeof-tabs/nvmeof-tabs.component';
 import { NvmeofSetupCardsComponent } from './nvmeof-setup-cards/nvmeof-setup-cards.component';
 import { NvmeofGatewayGroupFilterComponent } from './nvmeof-gateway-group-filter/nvmeof-gateway-group-filter.component';
+import { ProductiveCardComponent } from '~/app/shared/components/productive-card/productive-card.component';
 
 @NgModule({
   imports: [
@@ -139,7 +141,8 @@ import { NvmeofGatewayGroupFilterComponent } from './nvmeof-gateway-group-filter
     LayoutModule,
     ThemeModule,
     NvmeofSetupCardsComponent,
-    NvmeofGatewayGroupFilterComponent
+    NvmeofGatewayGroupFilterComponent,
+    ProductiveCardComponent
   ],
   declarations: [
     RbdListComponent,
@@ -208,7 +211,8 @@ export class BlockModule {
       ProgressBarRound,
       SubtractAlt,
       Search,
-      Datastore
+      Datastore,
+      ArrowRight
     ]);
   }
 }

@@ -101,6 +101,29 @@ describe('PerformanceCardService', () => {
     });
   });
 
+  describe('convertNvmeofThroughput', () => {
+    it('should convert raw NVMe-oF throughput to MB/s using the latest sample', () => {
+      const raw: Record<string, [number, string][]> = {
+        NVMEOF_READ_BYTES: [
+          [1609459200, String(2 * 1024 * 1024)],
+          [1609459260, String(4 * 1024 * 1024)]
+        ],
+        NVMEOF_WRITE_BYTES: [[1609459260, String(1024 * 1024)]],
+        NVMEOF_COMBINED_BYTES: [[1609459260, String(5 * 1024 * 1024)]]
+      };
+
+      const result = service.convertNvmeofThroughput(raw);
+
+      expect(result.reads).toBe(4);
+      expect(result.writes).toBe(1);
+      expect(result.combined).toBe(5);
+    });
+
+    it('should return zero throughput when metrics are missing', () => {
+      expect(service.convertNvmeofThroughput({})).toEqual({ reads: 0, writes: 0, combined: 0 });
+    });
+  });
+
   describe('mergeSeries', () => {
     it('should merge multiple series into one', () => {
       const series1 = [

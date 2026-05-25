@@ -70,3 +70,10 @@ export const AllStoragetypesQueries = {
 
   WRITELATENCY: 'avg_over_time(ceph_osd_commit_latency_ms[1m])'
 };
+
+export const NvmeofPromqls = {
+  NVMEOF_READ_BYTES: 'sum(rate(ceph_nvmeof_bdev_read_bytes_total[1m]))',
+  NVMEOF_WRITE_BYTES: 'sum(rate(ceph_nvmeof_bdev_written_bytes_total[1m]))',
+  NVMEOF_COMBINED_BYTES:
+    'sum(rate(ceph_nvmeof_bdev_read_bytes_total[1m])) + sum(rate(ceph_nvmeof_bdev_written_bytes_total[1m]))'
+};

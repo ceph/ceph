@@ -1,16 +1,48 @@
 import { inject, Injectable } from '@angular/core';
 import { PrometheusService } from './prometheus.service';
 import { PerformanceData } from '../models/performance-data';
-import { AllStoragetypesQueries } from '../enum/dashboard-promqls.enum';
+import { AllStoragetypesQueries, NvmeofPromqls } from '../enum/dashboard-promqls.enum';
 import { map } from 'rxjs/operators';
 import { Observable } from 'rxjs';
 import { ChartPoint } from '../models/area-chart-point';
+
+export interface NvmeofThroughput {
+  reads: number;
+  writes: number;
+  combined: number;
+}
+
+const BYTES_PER_MB = 1024 * 1024;
 
 @Injectable({
   providedIn: 'root'
 })
 export class PerformanceCardService {
   private prometheusService = inject(PrometheusService);
+
+  getNvmeofThroughput(
+    time: { start: number; end: number; step: number } = this.prometheusService.lastHourDateObject
+  ): Observable<NvmeofThroughput> {
+    return this.prometheusService
+      .getRangeQueriesData(time, NvmeofPromqls, true)
+      .pipe(map((raw) => this.convertNvmeofThroughput(raw)));
+  }
+
+  convertNvmeofThroughput(raw: Record<string, [number, string][]>): NvmeofThroughput {
+    const readValues = raw?.NVMEOF_READ_BYTES ?? [];
+    const writeValues = raw?.NVMEOF_WRITE_BYTES ?? [];
+    const combinedValues = raw?.NVMEOF_COMBINED_BYTES ?? [];
+    const lastRead = readValues.length ? Number(readValues[readValues.length - 1][1]) : 0;
+    const lastWrite = writeValues.length ? Number(writeValues[writeValues.length - 1][1]) : 0;
+    const lastCombined = combinedValues.length
+      ? Number(combinedValues[combinedValues.length - 1][1])
+      : lastRead + lastWrite;
+    return {
+      reads: lastRead / BYTES_PER_MB,
+      writes: lastWrite / BYTES_PER_MB,
+      combined: lastCombined / BYTES_PER_MB
+    };
+  }
 
   getChartData(time: { start: number; end: number; step: number }): Observable<PerformanceData> {
     return this.prometheusService.getRangeQueriesData(time, AllStoragetypesQueries, true).pipe(
