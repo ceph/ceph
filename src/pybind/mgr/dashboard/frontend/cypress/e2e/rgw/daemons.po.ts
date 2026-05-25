@@ -8,9 +8,9 @@ export class DaemonsPageHelper extends PageHelper {
   getTableCell() {
     return cy
       .get('.tab-content')
-      .its(1)
+      .first()
       .find('cd-table')
-      .should('have.length', 1) // Only 1 table should be renderer
+      .should('have.length', 1)
       .find('[cdstabledata]');
   }
 

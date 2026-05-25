@@ -88,7 +88,7 @@ export abstract class PageHelper {
   }
 
   getTabs() {
-    return cy.get('.nav.nav-tabs a');
+    return cy.get('cds-tab-headers button[role="tab"], .nav.nav-tabs a');
   }
 
   getTab(tabName: string) {
