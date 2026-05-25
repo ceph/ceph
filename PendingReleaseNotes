@@ -43,6 +43,13 @@
   and the scrubbing process is delayed between each read in order to avoid monopolizing
   the I/O capacity of the OSD.
   The default stride size (``osd_deep_scrub_stride``) was 512 KBytes, and is now 4 MBytes.
+* RADOS: When an OSD is overloaded with queued snap-trim operations, no
+  regular (non-urgent) scrubs will be scheduled on that OSD. This is
+  determined by comparing the total snap-trim queue lengths for all PGs
+  for which the OSD is a primary against ``osd_scrub_queued_snaptrims_limit``,
+  which defaults to 500.
+  This restriction does not apply to operator-initiated scrubs, nor to repair scrubs.
+  It can be disabled by setting ``osd_scrub_queued_snaptrims_limit`` to 0.
 
 * RADOS: Stretch mode can now be entered even if the two dividing buckets differ
   in weight by a small fraction (default 0.1). This is tunable via
