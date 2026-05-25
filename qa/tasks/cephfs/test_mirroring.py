@@ -259,6 +259,9 @@ class TestMirroring(CephFSTestCase):
         self.assertEqual(peer['stats']['failure_count'], 1)
         self.assertEqual(peer['stats']['recovery_count'], 1)
 
+    def peer_dir_status(self, res, dir_name, peer_uuid):
+        return res['metrics'][dir_name]['peer'][peer_uuid]
+
     @retry_assert(timeout=60, interval=3)
     def check_peer_status_empty(self, fs_name, fs_id, peer_spec):
         peer_uuid = self.get_peer_uuid(peer_spec)
@@ -266,7 +269,7 @@ class TestMirroring(CephFSTestCase):
                                          'fs', 'mirror', 'peer', 'status',
                                          f'{fs_name}@{fs_id}', peer_uuid)
         try:
-            self.assertFalse(res)
+            self.assertFalse(res.get('metrics'))
         except RETRY_EXCEPTIONS as e:
             e.res = res
             raise
@@ -279,9 +282,9 @@ class TestMirroring(CephFSTestCase):
                                          'fs', 'mirror', 'peer', 'status',
                                          f'{fs_name}@{fs_id}', peer_uuid)
         try:
-            self.assertTrue(dir_name in res)
-            self.assertTrue(res[dir_name]['last_synced_snap']['name'] == expected_snap_name)
-            self.assertTrue(res[dir_name]['snaps_synced'] == expected_snap_count)
+            dir_stat = self.peer_dir_status(res, dir_name, peer_uuid)
+            self.assertTrue(dir_stat['last_synced_snap']['name'] == expected_snap_name)
+            self.assertTrue(dir_stat['snaps_synced'] == expected_snap_count)
         except RETRY_EXCEPTIONS as e:
             e.res = res
             raise
@@ -294,10 +297,10 @@ class TestMirroring(CephFSTestCase):
                                          'fs', 'mirror', 'peer', 'status',
                                          f'{fs_name}@{fs_id}', peer_uuid)
         try:
-            self.assertTrue(dir_name in res)
-            self.assertTrue('idle' == res[dir_name]['state'])
-            self.assertTrue(expected_snap_name == res[dir_name]['last_synced_snap']['name'])
-            self.assertTrue(expected_snap_count == res[dir_name]['snaps_synced'])
+            dir_stat = self.peer_dir_status(res, dir_name, peer_uuid)
+            self.assertTrue('idle' == dir_stat['state'])
+            self.assertTrue(expected_snap_name == dir_stat['last_synced_snap']['name'])
+            self.assertTrue(expected_snap_count == dir_stat['snaps_synced'])
         except RETRY_EXCEPTIONS as e:
             e.res = res
             raise
@@ -310,8 +313,8 @@ class TestMirroring(CephFSTestCase):
                                          'fs', 'mirror', 'peer', 'status',
                                          f'{fs_name}@{fs_id}', peer_uuid)
         try:
-            self.assertTrue(dir_name in res)
-            self.assertTrue(res[dir_name]['snaps_deleted'] == expected_delete_count)
+            dir_stat = self.peer_dir_status(res, dir_name, peer_uuid)
+            self.assertTrue(dir_stat['snaps_deleted'] == expected_delete_count)
         except RETRY_EXCEPTIONS as e:
             e.res = res
             raise
@@ -324,8 +327,8 @@ class TestMirroring(CephFSTestCase):
                                          'fs', 'mirror', 'peer', 'status',
                                          f'{fs_name}@{fs_id}', peer_uuid)
         try:
-            self.assertTrue(dir_name in res)
-            self.assertTrue(res[dir_name]['snaps_renamed'] == expected_rename_count)
+            dir_stat = self.peer_dir_status(res, dir_name, peer_uuid)
+            self.assertTrue(dir_stat['snaps_renamed'] == expected_rename_count)
         except RETRY_EXCEPTIONS as e:
             e.res = res
             raise
@@ -339,8 +342,9 @@ class TestMirroring(CephFSTestCase):
                                              'fs', 'mirror', 'peer', 'status',
                                              f'{fs_name}@{fs_id}', peer_uuid)
 
-            self.assertTrue('syncing' == res[dir_name]['state'])
-            self.assertTrue(res[dir_name]['current_syncing_snap']['name'] == snap_name)
+            dir_stat = self.peer_dir_status(res, dir_name, peer_uuid)
+            self.assertTrue('syncing' == dir_stat['state'])
+            self.assertTrue(dir_stat['current_syncing_snap']['name'] == snap_name)
         except RETRY_EXCEPTIONS as e:
             e.res = res
             raise
@@ -364,7 +368,7 @@ class TestMirroring(CephFSTestCase):
         res = self.mirror_daemon_command(f'peer status for fs: {fs_name}',
                                          'fs', 'mirror', 'peer', 'status',
                                          f'{fs_name}@{fs_id}', peer_uuid)
-        self.assertTrue('failed' == res[dir_name]['state'])
+        self.assertTrue('failed' == self.peer_dir_status(res, dir_name, peer_uuid)['state'])
 
     def get_peer_uuid(self, peer_spec):
         status = self.fs.status()
@@ -1451,8 +1455,9 @@ class TestMirroring(CephFSTestCase):
                                                  'fs', 'mirror', 'peer', 'status',
                                                  f'{self.primary_fs_name}@{self.primary_fs_id}',
                                                  peer_uuid)
-                if ('syncing' == res["/d0"]['state'] and 'syncing' == res["/d1"]['state'] and \
-                    'syncing' == res["/d2"]['state']):
+                if ('syncing' == self.peer_dir_status(res, '/d0', peer_uuid)['state'] and
+                    'syncing' == self.peer_dir_status(res, '/d1', peer_uuid)['state'] and
+                    'syncing' == self.peer_dir_status(res, '/d2', peer_uuid)['state']):
                     break
 
         log.debug('removing directory 1')
@@ -1585,10 +1590,11 @@ class TestMirroring(CephFSTestCase):
                 res = self.mirror_daemon_command(f'peer status for fs: {self.primary_fs_name}',
                                                  'fs', 'mirror', 'peer', 'status',
                                                  f'{self.primary_fs_name}@{self.primary_fs_id}', peer_uuid)
-                if('failed' == res[dir_name]['state'] and \
-                   failure_reason == res.get(dir_name, {}).get('failure_reason', {}) and \
-                   snap_name == res[dir_name]['last_synced_snap']['name'] and \
-                   expected_snap_count == res[dir_name]['snaps_synced']):
+                dir_stat = self.peer_dir_status(res, dir_name, peer_uuid)
+                if('failed' == dir_stat['state'] and \
+                   failure_reason == dir_stat.get('failure_reason', {}) and \
+                   snap_name == dir_stat['last_synced_snap']['name'] and \
+                   expected_snap_count == dir_stat['snaps_synced']):
                     break
         # remove the directory in the remote fs and check status restores to 'idle'
         self.mount_b.run_shell(['sudo', 'rmdir', remote_snap_path], omit_sudo=False)
@@ -1597,9 +1603,10 @@ class TestMirroring(CephFSTestCase):
                 res = self.mirror_daemon_command(f'peer status for fs: {self.primary_fs_name}',
                                                  'fs', 'mirror', 'peer', 'status',
                                                  f'{self.primary_fs_name}@{self.primary_fs_id}', peer_uuid)
-                if('idle' == res[dir_name]['state'] and 'failure_reason' not in res and \
-                   snap_name == res[dir_name]['last_synced_snap']['name'] and \
-                   expected_snap_count == res[dir_name]['snaps_synced']):
+                dir_stat = self.peer_dir_status(res, dir_name, peer_uuid)
+                if('idle' == dir_stat['state'] and 'failure_reason' not in dir_stat and \
+                   snap_name == dir_stat['last_synced_snap']['name'] and \
+                   expected_snap_count == dir_stat['snaps_synced']):
                     break
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
 
@@ -1701,9 +1708,12 @@ class TestMirroring(CephFSTestCase):
                                          'fs', 'mirror', 'peer', 'status',
                                          f'{self.primary_fs_name}@{self.primary_fs_id}',
                                          peer_uuid)
-        d0_sync_time_stamp = float(res["/d0"]["last_synced_snap"]["sync_time_stamp"].rstrip('s'))
-        d1_sync_time_stamp = float(res["/d1"]["last_synced_snap"]["sync_time_stamp"].rstrip('s'))
-        d2_sync_time_stamp = float(res["/d2"]["last_synced_snap"]["sync_time_stamp"].rstrip('s'))
+        d0_sync_time_stamp = float(self.peer_dir_status(res, '/d0', peer_uuid)
+                                  ['last_synced_snap']['sync_time_stamp'].rstrip('s'))
+        d1_sync_time_stamp = float(self.peer_dir_status(res, '/d1', peer_uuid)
+                                  ['last_synced_snap']['sync_time_stamp'].rstrip('s'))
+        d2_sync_time_stamp = float(self.peer_dir_status(res, '/d2', peer_uuid)
+                                  ['last_synced_snap']['sync_time_stamp'].rstrip('s'))
 
         self.assertGreaterEqual(d1_sync_time_stamp, d0_sync_time_stamp)
         self.assertGreaterEqual(d2_sync_time_stamp, d0_sync_time_stamp)
@@ -1770,9 +1780,12 @@ class TestMirroring(CephFSTestCase):
                                          'fs', 'mirror', 'peer', 'status',
                                          f'{self.primary_fs_name}@{self.primary_fs_id}',
                                          peer_uuid)
-        d0_sync_time_stamp = float(res["/d0"]["last_synced_snap"]["sync_time_stamp"].rstrip('s'))
-        d1_sync_time_stamp = float(res["/d1"]["last_synced_snap"]["sync_time_stamp"].rstrip('s'))
-        d2_sync_time_stamp = float(res["/d2"]["last_synced_snap"]["sync_time_stamp"].rstrip('s'))
+        d0_sync_time_stamp = float(self.peer_dir_status(res, '/d0', peer_uuid)
+                                  ['last_synced_snap']['sync_time_stamp'].rstrip('s'))
+        d1_sync_time_stamp = float(self.peer_dir_status(res, '/d1', peer_uuid)
+                                  ['last_synced_snap']['sync_time_stamp'].rstrip('s'))
+        d2_sync_time_stamp = float(self.peer_dir_status(res, '/d2', peer_uuid)
+                                  ['last_synced_snap']['sync_time_stamp'].rstrip('s'))
 
         self.assertLess(d1_sync_time_stamp, d0_sync_time_stamp)
         self.assertLess(d2_sync_time_stamp, d0_sync_time_stamp)
