@@ -1,0 +1,62 @@
+.nvmeof-overview-cards {
+  .nvmeof-resources-status {
+    &__item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem 0;
+      border-bottom: 1px solid var(--cds-layer-accent-01, #e0e0e0);
+
+      &:last-child {
+        border-bottom: none;
+      }
+    }
+  }
+
+  .nvmeof-throughput {
+    &__row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem 0;
+    }
+
+    &__footer-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+  }
+
+  .nvmeof-alerts-card {
+    height: 100%;
+
+    &__status {
+      margin-top: 0.25rem;
+    }
+
+    &__badge {
+      a {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+      }
+    }
+
+    &__categories {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    &__category-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    &__category-name {
+      text-transform: capitalize;
+    }
+  }
+}

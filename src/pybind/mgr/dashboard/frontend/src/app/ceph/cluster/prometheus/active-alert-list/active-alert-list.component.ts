@@ -11,6 +11,14 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
 import { AlertState } from '~/app/shared/models/prometheus-alerts';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import {
+  isNvmeofAlert,
+  NVMEOF_ALERT_SCOPE,
+  NVMEOF_CATEGORY_FILTER_OPTIONS,
+  NVMEOF_CATEGORY_LABELS,
+  NVMEOF_SCOPE_LABELS,
+  nvmeofCategoryFilterPredicate
+} from '~/app/shared/helpers/nvmeof-alert.helper';
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 
@@ -21,6 +29,9 @@ const SeverityMap = {
   warning: $localize`Warning`,
   all: $localize`All`
 };
+
+const ScopeFilterIndex = 2;
+const CategoryFilterIndex = 3;
 
 @Component({
   selector: 'cd-active-alert-list',
@@ -65,6 +76,25 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
         if (value === SeverityMap['all']) return true;
         return false;
       }
+    },
+    {
+      name: $localize`Service`,
+      prop: 'labels.job',
+      filterOptions: [NVMEOF_SCOPE_LABELS.all, NVMEOF_SCOPE_LABELS.nvmeof],
+      filterInitValue: NVMEOF_SCOPE_LABELS.all,
+      filterPredicate: (row, value) => {
+        if (value === NVMEOF_SCOPE_LABELS.nvmeof) {
+          return isNvmeofAlert(row);
+        }
+        return true;
+      }
+    },
+    {
+      name: $localize`Category`,
+      prop: 'labels.category',
+      filterOptions: NVMEOF_CATEGORY_FILTER_OPTIONS,
+      filterInitValue: NVMEOF_CATEGORY_LABELS.all,
+      filterPredicate: (row, value) => nvmeofCategoryFilterPredicate(row, value)
     }
   ];
 
@@ -161,7 +191,17 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
     this.prometheusAlertService.getGroupedAlerts(true);
     this.route.queryParams.subscribe((params) => {
       const severity = params['severity'];
-      this.filters[1].filterInitValue = SeverityMap[severity];
+      if (severity && SeverityMap[severity]) {
+        this.filters[1].filterInitValue = SeverityMap[severity];
+      }
+      const scope = params['scope'];
+      if (scope === NVMEOF_ALERT_SCOPE) {
+        this.filters[ScopeFilterIndex].filterInitValue = NVMEOF_SCOPE_LABELS.nvmeof;
+      }
+      const category = params['category'];
+      if (category && NVMEOF_CATEGORY_LABELS[category]) {
+        this.filters[CategoryFilterIndex].filterInitValue = NVMEOF_CATEGORY_LABELS[category];
+      }
     });
   }
 
