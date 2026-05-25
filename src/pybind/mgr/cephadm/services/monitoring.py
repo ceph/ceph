@@ -2,7 +2,6 @@ import errno
 import logging
 import os
 from typing import List, Any, Tuple, Dict, Optional, cast, TYPE_CHECKING
-import ipaddress
 import time
 import requests
 
@@ -74,8 +73,15 @@ class GrafanaService(CephadmService):
             if ip_to_bind_to:
                 daemon_spec.port_ips = {str(grafana_port): ip_to_bind_to}
                 grafana_ip = ip_to_bind_to
-                if ipaddress.ip_network(grafana_ip).version == 6:
-                    grafana_ip = f"[{grafana_ip}]"
+
+        if not grafana_ip:
+            # Grafana 11.1+ validates http_addr with net.ParseIP; hostnames such as
+            # localhost fail in grafana-apiserver. Use a literal address (bind all IPv4).
+            # Check if the primary manager or orchestrator is configured for IPv6
+            if self.mgr.get_mgr_ip().startswith('::') or ':' in self.mgr.get_mgr_ip():
+                grafana_ip = '::'
+            else:
+                grafana_ip = '0.0.0.0'
 
         domain = self.mgr.get_fqdn(daemon_spec.host)
         mgmt_gw_ips = []
