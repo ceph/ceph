@@ -1308,15 +1308,14 @@ seastar::future<> OSD::committed_osd_maps(
     old_map->get_all_osds(old_osds);
     co_await seastar::coroutine::parallel_for_each(old_osds,
         [this, FNAME, old_map](auto &osd_id) -> seastar::future<> {
-      DEBUG("osd.{}: whoami ? {}, old up ? {} , now down ? {}",
-        osd_id, osd_id != whoami,
-        old_map->is_up(osd_id), osdmap->is_down(osd_id));
-      if (osd_id != whoami &&
-          old_map->is_up(osd_id) &&
-          osdmap->is_down(osd_id)) {
-        DEBUG("osd.{}: mark osd.{} down", whoami, osd_id);
-        co_await cluster_msgr->mark_down(osdmap->get_cluster_addrs(osd_id).front());
+      if (osd_id == whoami ||
+          !old_map->is_up(osd_id) ||
+          !osdmap->is_down(osd_id)) {
+        co_return;
       }
+      DEBUG("osd.{}: mark osd.{} down", whoami, osd_id);
+      co_await cluster_msgr->mark_down(
+        osdmap->get_cluster_addrs(osd_id).front());
     });
 
     co_await pg_shard_manager.update_map(std::move(o));
@@ -1328,6 +1327,7 @@ seastar::future<> OSD::committed_osd_maps(
         boot_epoch = osdmap->get_epoch();
       }
     }
+    old_map = osdmap;
   }
 
   if (osdmap->is_up(whoami)) {
