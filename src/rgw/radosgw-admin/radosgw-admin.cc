@@ -3935,10 +3935,10 @@ int main(int argc, const char **argv)
     script->add_option("--infile",  infile)->group("")->take_last();
     script->add_option("--tenant",  tenant)->group("")->take_last();
 
-    // Do not use ->required() while --context is also accepted at parent
+    // Do not use ->required() while --context/--infile are also accepted at parent
     // levels for compatibility, because CLI11 checks the specific option location.
     put->add_option("--context", str_script_ctx)->take_last()->option_text("<context> REQUIRED"); // semantic owner: visible in help
-    put->add_option("--infile",  infile)->take_last();                    // semantic owner: visible in help
+    put->add_option("--infile",  infile)->take_last()->option_text("<file> REQUIRED");            // semantic owner: visible in help
     put->add_option("--tenant",  tenant)->take_last();                    // semantic owner: visible in help
 
     try {
@@ -3954,18 +3954,33 @@ int main(int argc, const char **argv)
 
     if (put->parsed()) {
       cerr << "DEBUG: CLI11 parsed --context = " << (str_script_ctx ? *str_script_ctx : "(empty)") << std::endl;
-      // Enforce required options by value, because options may have been
-      // parsed before the subcommand.
-      if (!str_script_ctx) {
-        cerr << "ERROR: context was not provided (via --context)" << std::endl;
-        return EINVAL;
-      }
       if (app.count("--context") > 0 || script->count("--context") > 0 ||
           app.count("--infile")  > 0 || script->count("--infile")  > 0 ||
           app.count("--tenant")  > 0 || script->count("--tenant")  > 0) {
         cerr << "Warning: flags should appear after the subcommand. "
                 "Use: script put --context=<value> --infile=<value> --tenant=<value>\n";
       }
+      if ((app.count("--context") + script->count("--context") + put->count("--context")) > 1) {
+        cerr << "Warning: --context specified multiple times, using last value\n";
+      }
+      if ((app.count("--infile") + script->count("--infile") + put->count("--infile")) > 1) {
+        cerr << "Warning: --infile specified multiple times, using last value\n";
+      }
+      if ((app.count("--tenant") + script->count("--tenant") + put->count("--tenant")) > 1) {
+        cerr << "Warning: --tenant specified multiple times, using last value\n";
+      }
+
+      // Enforce required options by value, because options may have been
+      // parsed before the subcommand.
+      if (!str_script_ctx) {
+        cerr << "ERROR: context was not provided (via --context)" << std::endl;
+        return EINVAL;
+      }
+      if (infile.empty()) {
+        cerr << "ERROR: infile was not provided (via --infile)" << std::endl;
+        return EINVAL;
+      }
+
       opt_cmd = OPT::SCRIPT_PUT;
       for (const auto& arg : app.remaining(true)) {
         if (!arg.empty() && arg[0] != '-') {
