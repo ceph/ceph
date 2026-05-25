@@ -1048,22 +1048,22 @@ def test_put_vectors_dimension_mismatch():
     # generate vectors with wrong dimension
     wrong_dimension = 64
     vectors = generate_vectors(10, wrong_dimension)
-    # all vectors have wrong dimension, so put should report all errors
+    # all vectors have wrong dimension, bail on first error
     assert_put_vectors_validation_error(conn,
-        [f'vectors[{i}].data' for i in range(10)],
+        'vectors[0].data',
         vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
     # verify no vectors were inserted
     result = conn.list_vectors(vectorBucketName=bucket_name, indexName=index_name, maxResults=100)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     assert len(result.get('vectors', [])) == 0
-    # mix of correct and wrong dimension vectors - should report errors for wrong ones
+    # mix of correct and wrong dimension vectors - bail on first wrong one
     correct_vectors = generate_vectors(5, dimension)
     wrong_vectors = generate_vectors(5, wrong_dimension)
     for i, v in enumerate(wrong_vectors):
         v['key'] = f'wrong-{i}'
     mixed_vectors = correct_vectors + wrong_vectors
     assert_put_vectors_validation_error(conn,
-        [f'vectors[{i}].data' for i in range(5, 10)],
+        'vectors[5].data',
         vectorBucketName=bucket_name, indexName=index_name, vectors=mixed_vectors)
     # verify no vectors were inserted (all-or-nothing)
     result = conn.list_vectors(vectorBucketName=bucket_name, indexName=index_name, maxResults=100)
@@ -1548,7 +1548,7 @@ def test_put_vectors_malformed_metadata():
                                dataType='float32', dimension=dimension, distanceMetric='euclidean')
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
 
-    # all vectors have malformed metadata - put should report all errors
+    # all vectors have malformed metadata - bail on first error
     bad_vectors = [
         {
             'key': f'bad-{i}',
@@ -1558,7 +1558,7 @@ def test_put_vectors_malformed_metadata():
         for i in range(3)
     ]
     assert_put_vectors_validation_error(conn,
-        [f'vectors[{i}].metadata' for i in range(3)],
+        'vectors[0].metadata',
         vectorBucketName=bucket_name, indexName=index_name, vectors=bad_vectors)
 
     # verify no vectors were inserted
@@ -1566,7 +1566,7 @@ def test_put_vectors_malformed_metadata():
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     assert len(result.get('vectors', [])) == 0
 
-    # mix of good and bad metadata - should report errors for bad ones
+    # mix of good and bad metadata - bail on first bad one
     good_vectors = [
         {
             'key': f'good-{i}',
@@ -1577,7 +1577,7 @@ def test_put_vectors_malformed_metadata():
     ]
     mixed_vectors = good_vectors + bad_vectors
     assert_put_vectors_validation_error(conn,
-        [f'vectors[{i}].metadata' for i in range(3, 6)],
+        'vectors[3].metadata',
         vectorBucketName=bucket_name, indexName=index_name, vectors=mixed_vectors)
 
     # verify no vectors were inserted (all-or-nothing)

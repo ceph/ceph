@@ -1204,13 +1204,13 @@ namespace rgw::s3vector {
       if (vector.key.empty()) {
         ldpp_dout(dpp, 1) << "ERROR: s3vector vector with empty key at index " << vi << dendl;
         errors.push_back({fmt::format("vectors[{}].key", vi), "must not be empty"});
-        continue;
+        break;
       }
       // validate data
       if (!vector.data) {
         ldpp_dout(dpp, 1) << "ERROR: s3vector vector with no data, key: " << vector.key << dendl;
         errors.push_back({fmt::format("vectors[{}].data", vi), "missing data"});
-        continue;
+        break;
       }
       // validate data dimension
       if (vector.data->size() != dimension) {
@@ -1218,7 +1218,7 @@ namespace rgw::s3vector {
           << dimension << " got " << vector.data->size() << " for key: " << vector.key << dendl;
         errors.push_back({fmt::format("vectors[{}].data", vi),
           fmt::format("expected dimension {} but got {}", dimension, vector.data->size())});
-        continue;
+        break;
       }
       // validate metadata JSON if exists
       const bool has_metadata = !vector.metadata.empty();
@@ -1226,7 +1226,7 @@ namespace rgw::s3vector {
       if (has_metadata && !parser.parse(vector.metadata.c_str(), vector.metadata.size())) {
         ldpp_dout(dpp, 1) << "ERROR: s3vector invalid metadata JSON for key: " << vector.key << dendl;
         errors.push_back({fmt::format("vectors[{}].metadata", vi), "invalid JSON"});
-        continue;
+        break;
       }
       // add key
       key_builder.Append(vector.key).ok();
@@ -1274,7 +1274,7 @@ namespace rgw::s3vector {
           if (is_list_type != field_obj->is_array()) {
             // column/field type mismatch with JSON value type
             errors.push_back({fmt::format("vectors[{}].metadata.{}", vi, fb.name), "invalid type"});
-            continue;
+            break;
           }
           std::vector<std::string> values;
           std::string value_str;
@@ -1288,7 +1288,7 @@ namespace rgw::s3vector {
             ldpp_dout(dpp, 1) << "ERROR: s3vector failed to decode metadata field '"
               << fb.name << "' for key: " << vector.key << ". error: " << e.what() << dendl;
             errors.push_back({fmt::format("vectors[{}].metadata.{}", vi, fb.name), "invalid type"});
-            continue;
+            break;
           }
           switch (fb.type) {
             case FilterableMetadataType::STRING:
@@ -1359,8 +1359,10 @@ namespace rgw::s3vector {
               break;
             }
           }
+          if (!errors.empty()) break;
         }
       }
+      if (!errors.empty()) break;
       ++num_rows;
     }
 
