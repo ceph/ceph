@@ -755,8 +755,14 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
     ++stats.io_blocked_count;
     stats.io_blocked_sum += stats.io_blocking_num;
 
-    blocking_io = seastar::promise<>();
     auto begin_time = seastar::lowres_system_clock::now();
+    // IO blocked -> needs cleaner -> cleaner sleeping -> nothing runs -> deadlock.
+    // Kick the background so it can free space and call maybe_wake_blocked_io().
+    auto arm_blocking_io_and_wake = [this] {
+      blocking_io = seastar::promise<>();
+      do_wake_background();
+    };
+    arm_blocking_io_and_wake();
     // we just blocked this IO, now wait until
     // maybe_wake_blocked_io will set value to blocking_io
     do {
@@ -784,7 +790,7 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
           if (!res.cleaner_result.is_successful()) {
           ++stats.io_retried_blocked_count_clean;
         }
-        blocking_io = seastar::promise<>();
+        arm_blocking_io_and_wake();
       }
     } while (blocking_io);
   }
@@ -801,6 +807,11 @@ ExtentPlacementManager::BackgroundProcess::maybe_wake_blocked_io()
     DEBUG("");
     blocking_io->set_value();
     blocking_io = std::nullopt;
+    // Remember that we just woke a blocked IO; run() yields once on
+    // this edge so the woken continuation has a chance to retry the
+    // reservation before the cleaner spins another cycle and consumes
+    // the projected_avail headroom we just freed.
+    pending_user_io_wake = true;
   }
 }
 
@@ -812,6 +823,12 @@ ExtentPlacementManager::BackgroundProcess::run()
     if (background_should_run()) {
       log_state("run(background)");
       co_await do_background_cycle();
+      // Edge-triggered: yield only when a blocked IO was actually woken, so the
+      // resumed continuation retries try_reserve_io() before the next cycle runs.
+      if (pending_user_io_wake) {
+        pending_user_io_wake = false;
+        co_await seastar::yield();
+      }
     } else {
       log_state("run(block)");
       assert(!blocking_background);
