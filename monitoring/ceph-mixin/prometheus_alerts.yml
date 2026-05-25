@@ -799,6 +799,7 @@ groups:
         expr: "(count by(nqn, cluster, instance) (ceph_nvmeof_subsystem_namespace_metadata)) >= on(nqn, instance) group_right(cluster) ceph_nvmeof_subsystem_namespace_limit"
         for: "1m"
         labels:
+          category: "subsystem"
           severity: "warning"
           type: "ceph_default"
       - alert: "NVMeoFMultipleNamespacesOfRBDImage"
@@ -808,6 +809,7 @@ groups:
         expr: "count by(pool_name, rbd_name) (count by(bdev_name, pool_name, rbd_name) (ceph_nvmeof_bdev_metadata and on (bdev_name) ceph_nvmeof_subsystem_namespace_metadata)) > 1"
         for: "1m"
         labels:
+          category: "namespace"
           severity: "warning"
           type: "ceph_default"
       - alert: "NVMeoFTooManyGateways"
@@ -817,6 +819,7 @@ groups:
         expr: "count(ceph_nvmeof_gateway_info) by (cluster) > 32.00"
         for: "1m"
         labels:
+          category: "gateway"
           severity: "warning"
           type: "ceph_default"
       - alert: "NVMeoFMaxGatewayGroupSize"
@@ -826,6 +829,7 @@ groups:
         expr: "count(ceph_nvmeof_gateway_info) by (cluster,group) > 8.00"
         for: "1m"
         labels:
+          category: "gateway"
           severity: "warning"
           type: "ceph_default"
       - alert: "NVMeoFMaxGatewayGroups"
@@ -835,6 +839,7 @@ groups:
         expr: "count(count by (group, cluster) (ceph_nvmeof_gateway_info)) by (cluster) > 4.00"
         for: "1m"
         labels:
+          category: "gateway"
           severity: "warning"
           type: "ceph_default"
       - alert: "NVMeoFSingleGateway"
@@ -844,6 +849,7 @@ groups:
         expr: "count(ceph_nvmeof_gateway_info) by(cluster,group) == 1"
         for: "5m"
         labels:
+          category: "gateway"
           severity: "warning"
           type: "ceph_default"
       - alert: "NVMeoFHighGatewayCPU"
@@ -853,6 +859,7 @@ groups:
         expr: "label_replace(avg by(instance, cluster) (rate(ceph_nvmeof_reactor_seconds_total{mode=\"busy\"}[1m])),\"instance\",\"$1\",\"instance\",\"(.*):.*\") > 80.00"
         for: "10m"
         labels:
+          category: "gateway"
           severity: "warning"
           type: "ceph_default"
       - alert: "NVMeoFGatewayOpenSecurity"
@@ -862,6 +869,7 @@ groups:
         expr: "ceph_nvmeof_subsystem_metadata{allow_any_host=\"yes\"}"
         for: "5m"
         labels:
+          category: "subsystem"
           severity: "warning"
           type: "ceph_default"
       - alert: "NVMeoFTooManySubsystems"
@@ -871,6 +879,7 @@ groups:
         expr: "count by(gateway_host, cluster) (label_replace(ceph_nvmeof_subsystem_metadata,\"gateway_host\",\"$1\",\"instance\",\"(.*?)(?::.*)?\")) >= 128.00"
         for: "1m"
         labels:
+          category: "subsystem"
           severity: "warning"
           type: "ceph_default"
       - alert: "NVMeoFTooManyNamespaces"
@@ -880,6 +889,7 @@ groups:
         expr: "sum by(gateway_host, cluster) (label_replace(ceph_nvmeof_subsystem_namespace_count,\"gateway_host\",\"$1\",\"instance\",\"(.*?)(?::.*)?\")) >= 4096.00"
         for: "1m"
         labels:
+          category: "namespace"
           severity: "warning"
           type: "ceph_default"
       - alert: "NVMeoFVersionMismatch"
@@ -889,6 +899,7 @@ groups:
         expr: "count(count(ceph_nvmeof_gateway_info) by (cluster, version)) by (cluster) > 1"
         for: "1h"
         labels:
+          category: "gateway"
           severity: "warning"
           type: "ceph_default"
       - alert: "NVMeoFHighClientCount"
@@ -898,6 +909,7 @@ groups:
         expr: "ceph_nvmeof_subsystem_host_count > 128.00"
         for: "1m"
         labels:
+          category: "subsystem"
           severity: "warning"
           type: "ceph_default"
       - alert: "NVMeoFMissingListener"
@@ -907,6 +919,7 @@ groups:
         expr: "ceph_nvmeof_subsystem_listener_count == 0 and on(nqn) sum(ceph_nvmeof_subsystem_listener_count) by (nqn) > 0"
         for: "10m"
         labels:
+          category: "listener"
           severity: "warning"
           type: "ceph_default"
       - alert: "NVMeoFZeroListenerSubsystem"
@@ -916,6 +929,7 @@ groups:
         expr: "sum(ceph_nvmeof_subsystem_listener_count) by (nqn) == 0"
         for: "10m"
         labels:
+          category: "listener"
           severity: "warning"
           type: "ceph_default"
       - alert: "NVMeoFHighHostCPU"
@@ -925,6 +939,7 @@ groups:
         expr: "100-((100*(avg by(cluster,host) (label_replace(rate(node_cpu_seconds_total{mode=\"idle\"}[5m]),\"host\",\"$1\",\"instance\",\"(.*):.*\")) * on(cluster, host) group_right label_replace(ceph_nvmeof_gateway_info,\"host\",\"$1\",\"instance\",\"(.*):.*\")))) >= 80.00"
         for: "10m"
         labels:
+          category: "host"
           severity: "warning"
           type: "ceph_default"
       - alert: "NVMeoFInterfaceDown"
@@ -934,6 +949,7 @@ groups:
         expr: "ceph_nvmeof_subsystem_listener_iface_info{operstate=\"down\"}"
         for: "30s"
         labels:
+          category: "listener"
           oid: "1.3.6.1.4.1.50495.1.2.1.14.1"
           severity: "warning"
           type: "ceph_default"
@@ -944,6 +960,7 @@ groups:
         expr: "ceph_nvmeof_subsystem_listener_iface_info{duplex!=\"full\"}"
         for: "30s"
         labels:
+          category: "listener"
           severity: "warning"
           type: "ceph_default"
       - alert: "NVMeoFHighReadLatency"
@@ -953,6 +970,7 @@ groups:
         expr: "label_replace((avg by(instance) ((rate(ceph_nvmeof_bdev_read_seconds_total[1m]) / rate(ceph_nvmeof_bdev_reads_completed_total[1m])))),\"gateway\",\"$1\",\"instance\",\"(.*):.*\") > 0.01"
         for: "5m"
         labels:
+          category: "performance"
           severity: "warning"
           type: "ceph_default"
       - alert: "NVMeoFHighWriteLatency"
@@ -962,6 +980,7 @@ groups:
         expr: "label_replace((avg by(instance) ((rate(ceph_nvmeof_bdev_write_seconds_total[5m]) / rate(ceph_nvmeof_bdev_writes_completed_total[5m])))),\"gateway\",\"$1\",\"instance\",\"(.*):.*\") > 0.02"
         for: "5m"
         labels:
+          category: "performance"
           severity: "warning"
           type: "ceph_default"
       - alert: "NVMeoFHostKeepAliveTimeout"
@@ -971,6 +990,7 @@ groups:
         expr: "ceil(changes(ceph_nvmeof_host_keepalive_timeout[24h:]) / 2) > 0"
         for: "1m"
         labels:
+          category: "host"
           severity: "warning"
           type: "ceph_default"
   - name: "certmgr"
