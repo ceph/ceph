@@ -356,20 +356,112 @@ command parameter is of format ``filesystem-name@filesystem-id peer-uuid``::
 
   $ ceph --admin-daemon /var/run/ceph/cephfs-mirror.asok fs mirror peer status cephfs@360 a2dc7784-e7a1-4723-b103-03ee8d8768f8
   {
-    "/d0": {
-        "state": "idle",
-        "last_synced_snap": {
-            "id": 120,
-            "name": "snap1",
-            "sync_duration": 3,
-            "sync_time_stamp": "274900.558797s",
-            "sync_bytes": 52428800
-        },
-        "snaps_synced": 2,
-        "snaps_deleted": 0,
-        "snaps_renamed": 0
+    "metrics": {
+        "/d0": {
+            "peer": {
+                "a2dc7784-e7a1-4723-b103-03ee8d8768f8": {
+                    "state": "idle",
+                    "last_synced_snap": {
+                        "id": 120,
+                        "name": "snap1",
+                        "crawl_duration": "2s",
+                        "datasync_queue_wait_duration": "1s",
+                        "sync_duration": "33s",
+                        "sync_time_stamp": "274900.558797s",
+                        "sync_bytes": "149.94 MiB",
+                        "sync_files": 5000
+                    },
+                    "snaps_synced": 2,
+                    "snaps_deleted": 0,
+                    "snaps_renamed": 0
+                }
+            }
+        }
     }
   }
+
+The per-directory fields are nested under ``metrics/<mirrored-dir-path>/peer/<peer-uuid>`` so
+the same directory path can be reported for multiple peers without key collisions.
+
+.. _cephfs_mirror_peer_status_formatting:
+
+Value formatting
+----------------
+
+Several fields in the status output are formatted for readability rather than reported as raw
+numbers. The subsections below describe each format; field tables later in this section refer
+back to them.
+
+.. _cephfs_mirror_status_durations:
+
+Durations
+---------
+
+Fields: ``crawl_duration``, ``datasync_queue_wait_duration``, ``sync_duration``,
+``crawl.duration``, ``datasync_queue_wait.duration``, and ``eta``.
+
+Elapsed time is rounded to the nearest whole second and displayed as a combination of days,
+hours, minutes, and seconds. The format adapts to the magnitude:
+
+- ``<SS>s`` — seconds only, when less than one minute (for example, ``2s`` or ``33s``)
+- ``<M>m <SS>s`` — minutes and seconds, when less than one hour (for example, ``5m 12s``)
+- ``<H>h <MM>m <SS>s`` — hours, minutes, and seconds, when less than one day
+  (for example, ``1h 05m 30s``)
+- ``<D>d <HH>h <MM>m <SS>s`` — days, hours, minutes, and seconds, when one day or longer
+  (for example, ``1d 02h 30m 45s``)
+
+.. _cephfs_mirror_status_data_sizes:
+
+Data sizes
+----------
+
+Fields: ``sync_bytes``, ``bytes.sync_bytes``, ``bytes.total_bytes``, and the byte counts in
+``last_synced_snap``.
+
+Byte counts use binary (IEC) units with two decimal places. The unit is chosen automatically
+from ``B``, ``KiB``, ``MiB``, ``GiB``, ``TiB``, or ``PiB`` (powers of 1024). For example,
+``149.94 MiB``.
+
+.. _cephfs_mirror_status_throughput:
+
+Throughput
+----------
+
+Fields: ``avg_read_throughput_bytes`` and ``avg_write_throughput_bytes``.
+
+Average transfer rate in bytes per second, using the same binary units as :ref:`data sizes
+<cephfs_mirror_status_data_sizes>` with a ``/s`` suffix. For example, ``13.03 MiB/s`` means
+13.03 mebibytes per second.
+
+.. _cephfs_mirror_status_percentages:
+
+Percentages
+-----------
+
+Fields: ``bytes.sync_percent`` and ``files.sync_percent``.
+
+Percentage complete with two decimal places and a ``%`` suffix (for example, ``40.29%``).
+
+.. _cephfs_mirror_status_counts:
+
+Counts
+------
+
+Fields: ``sync_files``, ``total_files``, ``snaps_synced``, ``snaps_deleted``, ``snaps_renamed``,
+and snapshot ``id``.
+
+Plain unsigned integers with no unit suffix.
+
+.. _cephfs_mirror_status_timestamp:
+
+Timestamp
+---------
+
+Field: ``sync_time_stamp``.
+
+Monotonic clock time in seconds (since daemon startup) when the snapshot sync finished,
+printed with sub-second precision and an ``s`` suffix (for example, ``274900.558797s``). This
+is not a wall-clock or epoch timestamp.
 
 Synchronization stats including ``snaps_synced``, ``snaps_deleted`` and ``snaps_renamed`` are reset
 on daemon restart and/or when a directory is reassigned to another mirror daemon (when
@@ -386,26 +478,127 @@ When a directory is currently being synchronized, the mirror daemon marks it as 
 
   $ ceph --admin-daemon /var/run/ceph/cephfs-mirror.asok fs mirror peer status cephfs@360 a2dc7784-e7a1-4723-b103-03ee8d8768f8
   {
-    "/d0": {
-        "state": "syncing",
-        "current_syncing_snap": {
-            "id": 121,
-            "name": "snap2"
-        },
-        "last_synced_snap": {
-            "id": 120,
-            "name": "snap1",
-            "sync_duration": 3,
-            "sync_time_stamp": "274900.558797s",
-            "sync_bytes": 52428800
-        },
-        "snaps_synced": 2,
-        "snaps_deleted": 0,
-        "snaps_renamed": 0
+    "metrics": {
+        "/d0": {
+            "peer": {
+                "a2dc7784-e7a1-4723-b103-03ee8d8768f8": {
+                    "state": "syncing",
+                    "current_syncing_snap": {
+                        "id": 121,
+                        "name": "snap2",
+                        "sync-mode": "full",
+                        "avg_read_throughput_bytes": "13.03 MiB/s",
+                        "avg_write_throughput_bytes": "24.24 MiB/s",
+                        "crawl": {
+                            "state": "completed",
+                            "duration": "2s"
+                        },
+                        "datasync_queue_wait": {
+                            "state": "complete",
+                            "duration": "1s"
+                        },
+                        "bytes": {
+                            "sync_bytes": "60.40 MiB",
+                            "total_bytes": "149.94 MiB",
+                            "sync_percent": "40.29%"
+                        },
+                        "files": {
+                            "sync_files": 2013,
+                            "total_files": 5000,
+                            "sync_percent": "40.26%"
+                        },
+                        "eta": "7s"
+                    },
+                    "snaps_synced": 2,
+                    "snaps_deleted": 0,
+                    "snaps_renamed": 0
+                }
+            }
+        }
     }
   }
 
 The mirror daemon marks it back to ``idle``, when the syncing completes.
+
+When ``state`` is ``syncing``, ``current_syncing_snap`` includes the following
+progress fields (see :ref:`cephfs_mirror_peer_status_formatting` for how values are
+displayed):
+
+.. list-table::
+   :widths: 35 65
+   :header-rows: 1
+
+   * - Field
+     - Description
+   * - ``sync-mode``
+     - Whether the snapshot is synchronized with a full tree copy (``full``) or incremental snapdiff/blockdiff (``delta``).
+   * - ``avg_read_throughput_bytes``
+     - Average read rate from the primary filesystem for this snapshot sync. See
+       :ref:`Throughput <cephfs_mirror_status_throughput>`.
+   * - ``avg_write_throughput_bytes``
+     - Average write rate to the remote peer for this snapshot sync. See
+       :ref:`Throughput <cephfs_mirror_status_throughput>`.
+   * - ``crawl.state``
+     - Whether the directory tree walk is ``in-progress`` or ``completed``. While
+       ``in-progress``, ``bytes.total_bytes`` and ``files.total_files`` reflect only what
+       has been discovered so far and may keep increasing; once ``completed``, those totals
+       are fully discovered for this snapshot sync.
+   * - ``crawl.duration``
+     - Elapsed crawl time so far, or total crawl time once ``crawl.state`` is ``completed``.
+       See :ref:`Durations <cephfs_mirror_status_durations>`.
+   * - ``datasync_queue_wait.state``
+     - Whether the snapshot is still ``waiting`` in the data-sync queue or has started transfer (``complete``).
+   * - ``datasync_queue_wait.duration``
+     - Elapsed queue wait time so far, or total queue wait time once transfer has started.
+       See :ref:`Durations <cephfs_mirror_status_durations>`.
+   * - ``bytes.sync_bytes``
+     - Amount of file data synchronized so far for this snapshot. See
+       :ref:`Data sizes <cephfs_mirror_status_data_sizes>`.
+   * - ``bytes.total_bytes``
+     - Total file data discovered for this snapshot sync. See
+       :ref:`Data sizes <cephfs_mirror_status_data_sizes>`. Increases during the crawl while
+       ``crawl.state`` is ``in-progress``; final once ``crawl.state`` is ``completed``.
+   * - ``bytes.sync_percent``
+     - Percentage of ``total_bytes`` synchronized so far. See
+       :ref:`Percentages <cephfs_mirror_status_percentages>`.
+   * - ``files.sync_files``
+     - Number of files synchronized so far for this snapshot. See
+       :ref:`Counts <cephfs_mirror_status_counts>`.
+   * - ``files.total_files``
+     - Total number of files discovered for this snapshot sync. See
+       :ref:`Counts <cephfs_mirror_status_counts>`. Increases during the crawl while
+       ``crawl.state`` is ``in-progress``; final once ``crawl.state`` is ``completed``.
+   * - ``files.sync_percent``
+     - Percentage of ``total_files`` synchronized so far. See
+       :ref:`Percentages <cephfs_mirror_status_percentages>`.
+   * - ``eta``
+     - Estimated time remaining to finish the snapshot sync, or ``calculating...`` until enough
+       samples are collected. See :ref:`Durations <cephfs_mirror_status_durations>`.
+
+``last_synced_snap`` includes these additional fields for the last completed snapshot sync
+(see :ref:`cephfs_mirror_peer_status_formatting` for how values are displayed):
+
+.. list-table::
+   :widths: 35 65
+   :header-rows: 1
+
+   * - Field
+     - Description
+   * - ``crawl_duration``
+     - Total time spent walking the directory tree for that snapshot sync. See
+       :ref:`Durations <cephfs_mirror_status_durations>`.
+   * - ``datasync_queue_wait_duration``
+     - Total time the snapshot waited in the data-sync queue before file transfer began. See
+       :ref:`Durations <cephfs_mirror_status_durations>`.
+   * - ``sync_duration``
+     - Total elapsed time for the snapshot sync. See :ref:`Durations <cephfs_mirror_status_durations>`.
+   * - ``sync_time_stamp``
+     - When the sync finished. See :ref:`Timestamp <cephfs_mirror_status_timestamp>`.
+   * - ``sync_bytes``
+     - Total file data synchronized for that snapshot. See
+       :ref:`Data sizes <cephfs_mirror_status_data_sizes>`.
+   * - ``sync_files``
+     - Number of files synchronized for that snapshot. See :ref:`Counts <cephfs_mirror_status_counts>`.
 
 When a directory experiences a configured number of consecutive synchronization failures, the
 mirror daemon marks it as ``failed``. Synchronization for these directories is retried.
@@ -419,24 +612,37 @@ E.g., adding a regular file for synchronization would result in failed status::
   $ ceph fs snapshot mirror add cephfs /f0
   $ ceph --admin-daemon /var/run/ceph/cephfs-mirror.asok fs mirror peer status cephfs@360 a2dc7784-e7a1-4723-b103-03ee8d8768f8
   {
-    "/d0": {
-        "state": "idle",
-        "last_synced_snap": {
-            "id": 121,
-            "name": "snap2",
-            "sync_duration": 5,
-            "sync_time_stamp": "500900.600797s",
-            "sync_bytes": 78643200
+    "metrics": {
+        "/d0": {
+            "peer": {
+                "a2dc7784-e7a1-4723-b103-03ee8d8768f8": {
+                    "state": "idle",
+                    "last_synced_snap": {
+                        "id": 121,
+                        "name": "snap2",
+                        "crawl_duration": "2s",
+                        "datasync_queue_wait_duration": "1s",
+                        "sync_duration": "44s",
+                        "sync_time_stamp": "500900.600797s",
+                        "sync_bytes": "149.94 MiB",
+                        "sync_files": 5000
+                    },
+                    "snaps_synced": 3,
+                    "snaps_deleted": 0,
+                    "snaps_renamed": 0
+                }
+            }
         },
-        "snaps_synced": 3,
-        "snaps_deleted": 0,
-        "snaps_renamed": 0
-    },
-    "/f0": {
-        "state": "failed",
-        "snaps_synced": 0,
-        "snaps_deleted": 0,
-        "snaps_renamed": 0
+        "/f0": {
+            "peer": {
+                "a2dc7784-e7a1-4723-b103-03ee8d8768f8": {
+                    "state": "failed",
+                    "snaps_synced": 0,
+                    "snaps_deleted": 0,
+                    "snaps_renamed": 0
+                }
+            }
+        }
     }
   }
 
@@ -454,24 +660,38 @@ In the remote filesystem::
 
   $ ceph --admin-daemon /var/run/ceph/cephfs-mirror.asok fs mirror peer status cephfs@360 a2dc7784-e7a1-4723-b103-03ee8d8768f8
   {
-    "/d0": {
-        "state": "failed",
-        "failure_reason": "snapshot 'snap2' has invalid metadata",
-        "last_synced_snap": {
-            "id": 120,
-            "name": "snap1",
-            "sync_duration": 3,
-            "sync_time_stamp": "274900.558797s"
+    "metrics": {
+        "/d0": {
+            "peer": {
+                "a2dc7784-e7a1-4723-b103-03ee8d8768f8": {
+                    "state": "failed",
+                    "failure_reason": "snapshot 'snap2' has invalid metadata",
+                    "last_synced_snap": {
+                        "id": 120,
+                        "name": "snap1",
+                        "crawl_duration": "2s",
+                        "datasync_queue_wait_duration": "1s",
+                        "sync_duration": "33s",
+                        "sync_time_stamp": "274900.558797s",
+                        "sync_bytes": "149.94 MiB",
+                        "sync_files": 5000
+                    },
+                    "snaps_synced": 2,
+                    "snaps_deleted": 0,
+                    "snaps_renamed": 0
+                }
+            }
         },
-        "snaps_synced": 2,
-        "snaps_deleted": 0,
-        "snaps_renamed": 0
-    },
-    "/f0": {
-        "state": "failed",
-        "snaps_synced": 0,
-        "snaps_deleted": 0,
-        "snaps_renamed": 0
+        "/f0": {
+            "peer": {
+                "a2dc7784-e7a1-4723-b103-03ee8d8768f8": {
+                    "state": "failed",
+                    "snaps_synced": 0,
+                    "snaps_deleted": 0,
+                    "snaps_renamed": 0
+                }
+            }
+        }
     }
   }
 
