@@ -41,7 +41,7 @@ NFSv4 {
 
 RADOS_KV {
         UserId = "{{ user }}";
-        nodeid = {{ nodeid }};
+        nodeid = "{{ nodeid }}";
         pool = "{{ pool }}";
         namespace = "{{ namespace }}";
 }
@@ -73,6 +73,9 @@ RGW {
 }
 
 Ceph {
+{% if use_old_nodeid %}
+	Use_old_uuid = true;
+{% endif %}
         register_service = true;
         nodeid = "{{ namespace }}.{{ nodeid }}";
 }
