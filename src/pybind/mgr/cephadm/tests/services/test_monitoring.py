@@ -745,6 +745,7 @@ class TestMonitoring:
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=nvmeof
 
 
+
                 """).lstrip()
 
                 _run_cephadm.assert_called_with(
@@ -782,8 +783,8 @@ class TestMonitoring:
                             "use_url_prefix": False
                         },
                     }),
-                    error_ok=True,
                     use_current_daemon_image=False,
+                    error_ok=True,
                 )
 
     @patch("cephadm.module.CephadmOrchestrator.get_unique_name")
@@ -1005,6 +1006,7 @@ class TestMonitoring:
                         key_file: prometheus.key
 
 
+
                 """).lstrip()
 
                 _run_cephadm.assert_called_with(
@@ -1046,8 +1048,8 @@ class TestMonitoring:
                             'web_config': '/etc/prometheus/web.yml'
                         },
                     }),
-                    error_ok=True,
                     use_current_daemon_image=False,
+                    error_ok=True,
                 )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")

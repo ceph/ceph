@@ -251,6 +251,18 @@ class MonitoringManager(ResourceManager):
         """Get security config information"""
         return self.api.get_security_config()
 
+    @wait_api_result
+    def set_prometheus_remote_write(self, remote_write_url: str,
+                                    remote_write_allowed_metrics: List[str]) -> str:
+        """Set Prometheus remote write configuration"""
+        return self.api.set_prometheus_remote_write(remote_write_url,
+                                                    remote_write_allowed_metrics)
+
+    @wait_api_result
+    def remove_prometheus_remote_write(self, remote_write_url: str) -> str:
+        """Remove Prometheus remote write configuration"""
+        return self.api.remove_prometheus_remote_write(remote_write_url)
+
 
 class OrchClient(object):
 
