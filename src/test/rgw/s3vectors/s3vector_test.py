@@ -450,6 +450,14 @@ def test_create_index_invalid_filterable_keys():
             {'name': 'metadata'}
         ]}, **common)
 
+    # filterable key name starting with underscore
+    assert_create_index_validation_error(conn,
+        'metadataConfiguration.filterableMetadataKeys[0].name',
+        indexName='underscore-key',
+        metadataConfiguration={'filterableMetadataKeys': [
+            {'name': '_internal'}
+        ]}, **common)
+
     # overlap between filterable and non-filterable keys
     assert_create_index_validation_error(conn,
         'metadataConfiguration.filterableMetadataKeys[0].name',
