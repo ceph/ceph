@@ -24,6 +24,7 @@
 #include "rgw_common.h"
 #include "rgw_acl.h"
 #include "common/ceph_json.h"
+#include "common/ceph_crypto.h"
 #include "rgw_s3vector.h"
 #include "lancedb.h"
 
@@ -262,6 +263,8 @@ private:
       if (const auto err = lancedb_table_index_stats(
               table, indices[i], &result.stats, &error_message);
           err == LANCEDB_SUCCESS) {
+        //NOTE: currently we expect only one vector index per table, but if there are multiplei(scalar indexes), 
+        //we take the first one with stats. a future change is to explicitly identify the index by name or type, rather than relying on the order of indices.
         found = true;
         result.ok = true;
       } else {
@@ -373,10 +376,15 @@ private:
     if (ret < 0) return ret;
 
     std::map<std::string, bufferlist> attrs;
+    const auto etag = TOPNSPC::crypto::digest<TOPNSPC::crypto::MD5>(bl).to_str();
+    bufferlist etag_bl;
+    etag_bl.append(etag.c_str(), etag.size());
+    attrs[RGW_ATTR_ETAG] = std::move(etag_bl);
+
     const req_context rctx{this, y, nullptr};
     bool canceled = false;
 
-    ret = writer->complete(body.size(), /*etag=*/"",
+    ret = writer->complete(body.size(), etag,
                            nullptr, ceph::real_clock::now(), attrs,
                            rgw::cksum::no_cksum, ceph::real_time(),
                            /*if_match=*/nullptr,
@@ -406,6 +414,11 @@ private:
     auto del_op = obj->get_delete_op();
     if (!etag.empty()) {
       del_op->params.if_match = etag.c_str();
+    } else {
+      ldpp_dout(this, 0) << "CRITICAL: lock object " << lock_key
+          << " has no ETag — conditional delete protection is disabled."
+          << " This should not happen; the lock was likely created without"
+          << " RGW_ATTR_ETAG. Proceeding with unconditional delete." << dendl;
     }
     return del_op->delete_obj(this, y, 0);
   }
