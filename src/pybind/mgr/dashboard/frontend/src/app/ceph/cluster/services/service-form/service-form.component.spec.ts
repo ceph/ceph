@@ -263,6 +263,64 @@ describe('ServiceFormComponent', () => {
         });
       });
 
+      it('should submit rgw with virtual-host style bucket access and SSL', () => {
+        formHelper.setValue('virtual_host_enabled', true);
+        formHelper.setValue('ssl', true);
+        formHelper.setValue('zonegroup_hostnames', ['s3.cephlab.com']);
+        formHelper.setValue('wildcard_enabled', true);
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'rgw',
+          service_id: 'svc',
+          rgw_realm: null,
+          rgw_zone: null,
+          rgw_zonegroup: null,
+          placement: {},
+          unmanaged: false,
+          ssl: true,
+          certificate_source: 'cephadm-signed',
+          zonegroup_hostnames: ['s3.cephlab.com'],
+          wildcard_enabled: true
+        });
+      });
+
+      it('should submit rgw with SSL and without virtual-host style bucket access', () => {
+        formHelper.setValue('ssl', true);
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'rgw',
+          service_id: 'svc',
+          rgw_realm: null,
+          rgw_zone: null,
+          rgw_zonegroup: null,
+          placement: {},
+          unmanaged: false,
+          ssl: true,
+          certificate_source: 'cephadm-signed'
+        });
+      });
+
+      it('should submit rgw with virtual-host style bucket access and SSL without wildcard certificate', () => {
+        formHelper.setValue('virtual_host_enabled', true);
+        formHelper.setValue('ssl', true);
+        formHelper.setValue('zonegroup_hostnames', ['s3.cephlab.com']);
+        formHelper.setValue('wildcard_enabled', false);
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'rgw',
+          service_id: 'svc',
+          rgw_realm: null,
+          rgw_zone: null,
+          rgw_zonegroup: null,
+          placement: {},
+          unmanaged: false,
+          ssl: true,
+          certificate_source: 'cephadm-signed',
+          zonegroup_hostnames: ['s3.cephlab.com'],
+          wildcard_enabled: false
+        });
+      });
+
       it('should submit valid rgw port (1)', () => {
         formHelper.setValue('rgw_frontend_port', 1);
         component.onSubmit();

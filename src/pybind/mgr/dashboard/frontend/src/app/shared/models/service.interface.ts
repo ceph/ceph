@@ -91,6 +91,9 @@ export interface CephServiceAdditionalSpec {
   ssl_protocols: string[];
   ssl_ciphers: string[];
   certificate_source: string;
+  custom_sans?: string[];
+  zonegroup_hostnames?: string[];
+  wildcard_enabled?: boolean;
   port: number;
   initial_admin_password: string;
   rgw_realm: string;
@@ -121,6 +124,11 @@ export interface CephServicePlacement {
 
 export interface QatSepcs {
   [key: string]: string;
+}
+
+export enum CertificateType {
+  internal = 'internal',
+  external = 'external'
 }
 
 export enum QatOptions {
