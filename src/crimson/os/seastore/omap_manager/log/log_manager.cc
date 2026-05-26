@@ -185,9 +185,9 @@ LogManager::omap_set_keys(
 
   std::map<std::string, ceph::bufferlist> dup_kvs;
   if (kvs.size() > BATCH_CREATE_SIZE) {
-    LogNodeRef e = co_await alloc_log_node(ext->get_laddr());
-    LogNodeRef dup_e = co_await alloc_log_node(
-      co_await get_dup_addr_from_root(t, ext->get_laddr()));
+    LogNodeRef e = ext;
+    LogNodeRef dup_e;
+    laddr_t dup_tail = co_await get_dup_addr_from_root(t, ext->get_laddr());
     for (auto &p : kvs) {
       if (!is_log_key(p.first)) {
 	co_await remove_kv(t, log_root.addr, p.first, nullptr);
@@ -197,6 +197,9 @@ LogManager::omap_set_keys(
       }
       LogNodeRef cur = e;
       if (is_dup_log_key(p.first)) {
+	if (!dup_e) {
+	  dup_e = co_await alloc_log_node(dup_tail);
+	}
 	cur = dup_e;
       }
       if (e->get_max_val_length(p.first.size()) < p.second.length()) {
@@ -215,20 +218,29 @@ LogManager::omap_set_keys(
 	cur = co_await alloc_log_node(cur->get_laddr());
 	if (!is_dup_log_key(p.first)) {
 	  e = cur;
+	  log_root.update(e->get_laddr(), log_root.depth,
+	    log_root.hint, log_root.type);
 	} else {
 	  dup_e = cur;
 	}
       }
-      cur->append_kv(t, p.first, p.second);
+      if (cur->is_initial_pending()) {
+	cur->append_kv(t, p.first, p.second);
+      } else {
+	assert(!is_dup_log_key(p.first));
+	auto mut = tm.get_mutable_extent(t, cur)->cast<LogNode>();
+	mut->append_kv(t, p.first, p.second);
+	e = mut;
+      }
     }
-    if (e->is_initial_pending()) {
-      e->set_dup_tail_addr(dup_e->get_laddr());
-    } else {
-      auto mut = tm.get_mutable_extent(t, e)->cast<LogNode>();
-      mut->set_dup_tail_addr(dup_e->get_laddr());
+    laddr_t new_dup_tail = dup_e ? dup_e->get_laddr() : dup_tail;
+    if (e->get_dup_tail_addr() != new_dup_tail) {
+      if (e->is_initial_pending()) {
+	e->set_dup_tail_addr(new_dup_tail);
+      } else {
+	tm.get_mutable_extent(t, e)->cast<LogNode>()->set_dup_tail_addr(new_dup_tail);
+      }
     }
-    log_root.update(e->get_laddr(), log_root.depth,
-      log_root.hint, log_root.type);
     co_return;
   }
 
