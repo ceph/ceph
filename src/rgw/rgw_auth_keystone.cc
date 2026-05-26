@@ -32,6 +32,144 @@ namespace rgw {
 namespace auth {
 namespace keystone {
 
+// Service type for access rules matching. The OpenStack service catalog uses
+// "object-store" for Swift; rules with any other service type are skipped.
+static constexpr const char* const SWIFT_SERVICE_TYPE = "object-store";
+
+namespace detail {
+
+// Match a request path against an access-rule path pattern.
+//
+// Pattern syntax follows the keystoneauth reference matcher
+// (keystoneauth1/access/access.py:_path_matches):
+//   *       matches one path segment (no '/')
+//   **      matches any number of segments (including zero)
+//   {tag}   matches one path segment (named placeholder, treated like *)
+//
+// The match is anchored: the entire path must be consumed. Both pattern and
+// path are compared verbatim — no URL decoding is performed here, callers
+// must pass already-decoded paths.
+//
+// Declared in rgw_auth_keystone.h (namespace detail) for unit testing.
+bool
+path_matches_pattern(const std::string_view pattern, const std::string_view path)
+{
+  size_t pi = 0, si = 0;
+  size_t star_pi = std::string::npos, star_si = 0;
+  size_t dstar_pi = std::string::npos, dstar_si = 0;
+
+  while (si < path.size()) {
+    // Named placeholder {tag} — matches a single segment, like '*'.
+    if (pi < pattern.size() && pattern[pi] == '{') {
+      const size_t close = pattern.find('}', pi);
+      if (close == std::string::npos) {
+        // Malformed pattern: unbalanced '{'. Refuse to match rather than
+        // treat the literal '{' as a character.
+        return false;
+      }
+      // Consume one path segment (up to next '/' or end).
+      const size_t seg_end = path.find('/', si);
+      const size_t seg_stop = (seg_end == std::string::npos) ? path.size() : seg_end;
+      if (seg_stop == si) {
+        // Empty segment doesn't satisfy a placeholder.
+        return false;
+      }
+      pi = close + 1;
+      si = seg_stop;
+      continue;
+    }
+    if (pi + 1 < pattern.size() && pattern[pi] == '*' &&
+        pattern[pi + 1] == '*') {
+      dstar_pi = pi;
+      dstar_si = si;
+      pi += 2;
+      if (pi < pattern.size() && pattern[pi] == '/')
+        pi++;
+      continue;
+    }
+    if (pi < pattern.size() && pattern[pi] == '*') {
+      star_pi = pi;
+      star_si = si;
+      pi++;
+      continue;
+    }
+    if (pi < pattern.size() && (pattern[pi] == path[si] || pattern[pi] == '?')) {
+      pi++;
+      si++;
+      continue;
+    }
+    if (dstar_pi != std::string::npos) {
+      pi = dstar_pi + 2;
+      if (pi < pattern.size() && pattern[pi] == '/')
+        pi++;
+      si = ++dstar_si;
+      continue;
+    }
+    if (star_pi != std::string::npos && path[star_si] != '/') {
+      pi = star_pi + 1;
+      si = ++star_si;
+      continue;
+    }
+    return false;
+  }
+  // Allow trailing '*' / '**' / '/' to match the empty remainder.
+  while (pi < pattern.size() &&
+         (pattern[pi] == '*' || pattern[pi] == '/')) {
+    pi++;
+  }
+  return pi == pattern.size();
+}
+
+} // namespace detail
+
+// Check whether the request matches any access rule on the application
+// credential. Returns true if the request is permitted, false if it must be
+// denied.
+//
+// Semantics (matching the keystoneauth reference implementation):
+//   - Empty rule list: caller is responsible. We return true to mean
+//     "no restriction"; callers must decide whether absence of rules means
+//     "unrestricted" or "deny" based on the credential's restricted flag.
+//   - At least one rule whose service type, HTTP method, and path pattern
+//     all match the request → permit.
+//   - Otherwise → deny.
+static bool
+check_access_rules(
+    const DoutPrefixProvider* dpp,
+    const std::vector<rgw::keystone::TokenEnvelope::ApplicationCredential::AccessRule>& rules,
+    const std::string_view method,
+    const std::string_view raw_path)
+{
+  if (rules.empty()) {
+    return true;
+  }
+
+  // Strip query string before matching — access rules are defined against
+  // path only, never against query parameters.
+  const size_t q = raw_path.find('?');
+  const std::string_view path =
+      (q == std::string_view::npos) ? raw_path : raw_path.substr(0, q);
+
+  for (const auto& rule : rules) {
+    if (rule.service != SWIFT_SERVICE_TYPE) {
+      continue;
+    }
+    if (rule.method != method) {
+      continue;
+    }
+    if (detail::path_matches_pattern(rule.path, path)) {
+      ldpp_dout(dpp, 10) << "keystone access rule matched: service="
+                         << rule.service << " method=" << rule.method
+                         << " path=" << rule.path << dendl;
+      return true;
+    }
+  }
+  ldpp_dout(dpp, 10) << "keystone access rule denied: no rule matched method="
+                     << method << " path=" << path
+                     << " (rules=" << rules.size() << ")" << dendl;
+  return false;
+}
+
 bool
 TokenEngine::is_applicable(const std::string& token) const noexcept
 {
@@ -70,6 +208,7 @@ admin_token_retry:
   }
 
   validate.append_header("X-Subject-Token", token);
+  validate.append_header("OpenStack-Identity-Access-Rules", "1.0");
 
   std::string admin_token;
   bool admin_token_cached = false;
@@ -392,6 +531,18 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
       ldpp_dout(dpp, 0) << "validated token: " << t->get_project_name()
                     << ":" << t->get_user_name()
                     << " expires: " << t->get_expires() << dendl;
+      // Application Credential access rules: when present, only requests
+      // whose method and path match a rule are permitted. An app cred
+      // without rules imposes no extra restriction here.
+      if (t->has_access_rules() &&
+          !check_access_rules(dpp, t->get_access_rules(),
+                              s->info.method, s->decoded_uri)) {
+        ldpp_dout(dpp, 5) << "denying request: application credential access "
+                             "rules do not permit method=" << s->info.method
+                          << " path=" << s->decoded_uri << dendl;
+        return result_t::deny(-EACCES);
+      }
+
       token_cache.add(token_id, *t);
       auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
                                                 get_creds_info(*t));
