@@ -1689,8 +1689,9 @@ public:
   int start_cls_gather(OpContext *ctx, std::map<std::string, bufferlist> *src_objs, const std::string& pool,
 		       const char *cls, const char *method, bufferlist& inbl);
 
-  void handle_pool_migration_copy_failure(hobject_t oid, int r);
+  bool handle_pool_migration_copy_failure(hobject_t oid, int r);
   void handle_pool_migration_quiesce_complete();
+
   void pool_migration_source_start_delete_head(hobject_t oid);
   void pool_migration_source_start_delete(hobject_t oid);
   bool pool_migration_source_delete(hobject_t oid);

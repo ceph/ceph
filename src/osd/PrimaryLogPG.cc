@@ -4937,16 +4937,6 @@ int PrimaryLogPG::trim_object(
 
   OpContextUPtr ctx = simple_opc_create(obc);
 
-  if (pool_migrations_in_flight.count(head_oid)) {
-    dout(10) << __func__ << ": BILL Currently migrating head object " << head_oid << " " << first << dendl; // BILL:FIXME remove BILL once created in testing
-    // Migration will take+release write lock on head object as it
-    // completes the migration of the object. Use the write lock release to
-    // kick the trimmer to retry
-    ctx->lock_manager.snaptrimmer_set_write_marker(obc, first);
-    close_op_ctx(ctx.release());
-    return -ENOLCK;
-  }
-
   if (!ctx->lock_manager.get_snaptrimmer_write(
        coid,
        obc,
@@ -10052,59 +10042,24 @@ void PrimaryLogPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
     cop->cursor.data_complete = true;
     cop->cursor.omap_complete = true;
   }
-  if (r == -ENOENT &&
-      (cop->flags & CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION) &&
-      oid.is_snap()) {
-    // Clone object does not exist, it has either been trimmed or is on the
-    // trimq. Perform the trim by updating the snapset in the head object
-    // to remove the clone
-    dout(20) << __func__ << " migrating trimmed clone object " << oid << dendl;
 
-    hobject_t hoid = oid.get_head();
-    ObjectContextRef head_obc = get_object_context(hoid, false);
-    if (!head_obc) {
-      osd->clog->error() << __func__ << ": Can not trim " << oid
-        << " repair needed, no snapset obc for " << hoid;
-    } else {
-      OpContextUPtr ctx = simple_opc_create(head_obc);
-
-      ctx->register_on_finish(
-              [this, cop, hoid]() {
-                ObjectContextRef& cobc = cop->obc;
-                CopyCallbackResults results(-ENOENT, &cop->results);
-                cop->cb->complete(results);
-                copy_ops.erase(cobc->obs.oi.soid);
-                cobc->stop_block();
-                kick_object_context_blocked(cobc);
-      });
-      ctx->at_version = get_next_version();
-      if (cop->results.started_temp_obj) {
-        dout(10) << __func__ << " deleting partial temp object "
-                 << cop->results.temp_oid << dendl;
-        ObjectContextRef tempobc = get_object_context(cop->results.temp_oid, true);
-        ctx->op_t->remove(cop->results.temp_oid);
-        ctx->op_t->add_obc(tempobc);
-      }
-      if (add_trim_to_ctx(ctx.get(), oid, oid.snap, cobc, head_obc) < 0) {
-        // Trim failed - cluster error logged
-        close_op_ctx(ctx.release());
-      } else {
-        simple_opc_submit(std::move(ctx));
-        return;
-      }
-    }
-  }
   if (r < 0)
     goto out;
 
   ceph_assert(cop->rval >= 0);
 
   if (oid.snap < CEPH_NOSNAP && !cop->results.snaps.empty()) {
-    // verify snap hasn't been deleted
     vector<snapid_t>::iterator p = cop->results.snaps.begin();
+    const OSDMapRef& osdmap = get_osdmap();
+    int64_t pool = info.pgid.pgid.pool();
+    if (cop->flags & CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION) {
+      // Use source pool remove snaps queue for pool migrations
+      ceph_assert(osdmap->get_pg_pool(pool)->is_migration_target());
+      pool = *osdmap->get_pg_pool(pool)->migration_src;
+    }
     while (p != cop->results.snaps.end()) {
       // make best effort to sanitize snaps/clones.
-      if (get_osdmap()->in_removed_snaps_queue(info.pgid.pgid.pool(), *p)) {
+      if (osdmap->in_removed_snaps_queue(pool, *p)) {
 	dout(10) << __func__ << " clone snap " << *p << " has been deleted"
 		 << dendl;
 	for (vector<snapid_t>::iterator q = p + 1;
@@ -10118,6 +10073,43 @@ void PrimaryLogPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
     }
     if (cop->results.snaps.empty()) {
       dout(10) << __func__ << " no more snaps for " << oid << dendl;
+      if (cop->flags & CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION) {
+        dout(10) << __func__ << " updataing snapset for trimmed clone " << oid << dendl;
+        // Clone needs to be trimmed by updating the snapset in the head object
+        hobject_t hoid = oid.get_head();
+        ObjectContextRef head_obc = get_object_context(hoid, false);
+        if (!head_obc) {
+          osd->clog->error() << __func__ << ": Can not trim " << oid
+                             << " repair needed, no snapset obc for " << hoid;
+        } else {
+          OpContextUPtr ctx = simple_opc_create(head_obc);
+
+          ctx->register_on_finish(
+              [this, cop, hoid]() {
+                ObjectContextRef& cobc = cop->obc;
+                CopyCallbackResults results(-ENOENT, &cop->results);
+                cop->cb->complete(results);
+                copy_ops.erase(cobc->obs.oi.soid);
+                cobc->stop_block();
+                kick_object_context_blocked(cobc);
+              });
+          ctx->at_version = get_next_version();
+          if (cop->results.started_temp_obj) {
+            dout(10) << __func__ << " deleting partial temp object "
+                     << cop->results.temp_oid << dendl;
+            ObjectContextRef tempobc = get_object_context(cop->results.temp_oid, true);
+            ctx->op_t->remove(cop->results.temp_oid);
+            ctx->op_t->add_obc(tempobc);
+          }
+          if (add_trim_to_ctx(ctx.get(), oid, oid.snap, cobc, head_obc) < 0) {
+            // Trim failed - cluster error logged
+            close_op_ctx(ctx.release());
+          } else {
+            simple_opc_submit(std::move(ctx));
+            return;
+          }
+        }
+      }
       r = -ENOENT;
       goto out;
     }
@@ -12456,8 +12448,8 @@ int PrimaryLogPG::find_object_context(const hobject_t& oid,
 {
   FUNCTRACE(cct);
   ceph_assert(oid.pool == static_cast<int64_t>(info.pgid.pool()));
-  // want the head? OR using copy_from to create a clone
-  if (oid.snap == CEPH_NOSNAP || can_create) {
+  // want the head?
+  if (oid.snap == CEPH_NOSNAP) {
     ObjectContextRef obc = get_object_context(oid, can_create);
     if (!obc) {
       if (pmissing)
@@ -12492,7 +12484,7 @@ int PrimaryLogPG::find_object_context(const hobject_t& oid,
 	     << " map_snapid_to_clone=true" << dendl;
     if (oid.snap > ssc->snapset.seq) {
       // already must be readable
-      ObjectContextRef obc = get_object_context(head, false);
+      ObjectContextRef obc = get_object_context(head, can_create);
       dout(10) << __func__ << " " << oid << " @" << oid.snap
 	       << " snapset " << ssc->snapset
 	       << " maps to head" << dendl;
@@ -12526,8 +12518,8 @@ int PrimaryLogPG::find_object_context(const hobject_t& oid,
 	return -EAGAIN;
       }
 
-      ObjectContextRef obc = get_object_context(oid, false);
-      if (!obc || !obc->obs.exists) {
+      ObjectContextRef obc = get_object_context(oid, can_create);
+      if (!obc || (!can_create && !obc->obs.exists)) {
 	dout(10) << __func__ << " " << oid << " @" << oid.snap
 		 << " snapset " << ssc->snapset
 		 << " " << oid << " is not present" << dendl;
@@ -15333,17 +15325,8 @@ struct C_Migrate : public Context {
     std::scoped_lock l{*pg};
     // Only process if PG hasn't been reset since we started this operation
     // If peering reset, the PG state was rebuilt and will restart migration
-    if (last_peering_reset != pg->get_last_peering_reset())
+    if (last_peering_reset != pg->get_last_peering_reset()) {
       return;
-
-    if (r == -ENOENT &&
-        oid.is_snap() &&
-        pg->get_osdmap()->in_removed_snaps_queue(pg->info.pgid.pgid.pool(), oid.snap)) {
-      // Copying a clone that is in the removed snaps queue will fail with
-      // ENOENT but will perform the equivalent of trim_object on the head
-      // object in the target pool to update the snapset. Treat this as
-      // successfully migrated
-      r = 0;
     }
 
     // If quiescing, treat all completions as failures to drain the queue
@@ -15354,9 +15337,7 @@ struct C_Migrate : public Context {
       r = -EIO;  // Treat as failure to trigger cleanup path
     }
 
-    if (r < 0) {
-      // Problem migrating the object
-      pg->handle_pool_migration_copy_failure(oid, r);
+    if (r < 0 && !pg->handle_pool_migration_copy_failure(oid, r)) {
       if (oid.is_snap()) {
         // Abandon migrating head object as well
         pg->recovering.erase(oid.get_head());
@@ -15626,9 +15607,40 @@ void PrimaryLogPG::handle_pool_migration_quiesce_complete()
   }
 }
 
-void PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r)
+bool PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r)
 {
   dout(10) << __func__ << " " << oid << " failed with " << r << dendl;
+
+  if ((r == -ENOENT) && oid.is_snap()) {
+    ObjectContextRef obc = get_object_context(oid, false);
+    ceph_assert(obc);
+    auto p = obc->ssc->snapset.clone_snaps.find(oid.snap);
+    ceph_assert(p != obc->ssc->snapset.clone_snaps.end()); // warn?
+    auto snaps = p->second;
+    if (!snaps.empty()) {
+      vector<snapid_t>::iterator p = snaps.begin();
+      const OSDMapRef& osdmap = get_osdmap();
+      int64_t pool = info.pgid.pgid.pool();
+      while (p != snaps.end()) {
+        // make best effort to sanitize snaps/clones.
+        if (osdmap->in_removed_snaps_queue(pool, *p)) {
+          dout(10) << __func__ << " clone snap " << *p << " has been deleted"
+                   << dendl;
+          for (vector<snapid_t>::iterator q = p + 1;
+               q != snaps.end();
+               ++q)
+            *(q - 1) = *q;
+          snaps.resize(snaps.size() - 1);
+        } else {
+          ++p;
+        }
+      }
+      if (snaps.empty()) {
+        dout(10) << __func__ << " ENOENT was expected - no more snaps for " << oid << dendl;
+        return true;
+      }
+    }
+  }
 
   bool is_retryable = (r == -EBUSY);
   bool is_fatal = (r == -ENOENT || r == -EIO || r == -EPERM);
@@ -15720,6 +15732,7 @@ void PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r)
     recovering.erase(i);
     finish_recovery_op(oid);
   }
+  return false;
 }
 
 /**
@@ -15813,6 +15826,7 @@ uint64_t PrimaryLogPG::recover_pool_migration(
   if (pool_migration_quiesce_reason != PoolMigrationQuiesceReason::NONE) {
     dout(10) << __func__ << " quiescing (reason=" << (int)pool_migration_quiesce_reason
              << "), skipping new migration work" << dendl;
+    *work_started = true;
     return 0;
   }
 
@@ -16001,7 +16015,7 @@ uint64_t PrimaryLogPG::recover_pool_migration(
     Objecter::Op *objecter_op = osd->objecter->prepare_mutate_op(
       soid.oid, base_oloc, o, SnapContext(),
       ceph::real_clock::from_ceph_timespec(obc->obs.oi.mtime),
-      0,
+      CEPH_OSD_FLAG_MAP_SNAP_CLONE,
       new C_OnFinisher(fin,
            osd->get_objecter_finisher(get_pg_shard())));
     objecter_op->snapid = soid.snap;
