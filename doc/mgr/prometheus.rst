@@ -24,6 +24,19 @@ Enable the ``prometheus`` module by running the below command :
 
    ceph mgr module enable prometheus
 
+ceph-exporter
+=============
+
+``ceph-exporter`` works alongside the Prometheus manager module. The two
+components have distinct responsibilities:
+
+- The **Prometheus manager module** exposes all cluster-level metrics by
+  default other than Ceph daemon performance counters. However, these metrics
+  may be exported by the Prometheus manager module by setting the module option
+  :confval:`mgr/prometheus/exclude_perf_counter` to `false`.
+- The **ceph-exporter daemon** exposes only Ceph daemon performance counters
+  as Prometheus metrics, running on each host in the cluster.
+
 Configuration
 -------------
 
