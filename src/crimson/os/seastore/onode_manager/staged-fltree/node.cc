@@ -690,20 +690,25 @@ eagain_ifuture<Ref<Node>> Node::load(
   return c.nm.read_extent(c.t, addr
   ).handle_error_interruptible(
     eagain_iertr::pass_further{},
-    crimson::ct_error::assert_all(fmt::format(
-      "{} -- addr={}, is_level_tail={}", FNAME, addr, expect_is_level_tail).c_str())
+    crimson::ct_error::all_same_way(
+      [FNAME, c, addr, expect_is_level_tail](const auto &e) {
+      ERRORT("{} -- addr={}, is_level_tail={}",
+        c.t, addr, expect_is_level_tail);
+      ceph_abort();
+      return eagain_iertr::make_ready_future<NodeExtentRef>();
+    })
   ).si_then([FNAME, c, addr, expect_is_level_tail](auto extent)
 	      -> eagain_ifuture<Ref<Node>> {
     assert(extent);
     auto header = extent->get_header();
     auto field_type = header.get_field_type();
-    if (!field_type) {
+    if (unlikely(!field_type)) {
       ERRORT("load addr={}, is_level_tail={} error, "
              "got invalid header -- {}",
              c.t, addr, expect_is_level_tail, fmt::ptr(extent));
       ceph_abort_msg("fatal error");
     }
-    if (header.get_is_level_tail() != expect_is_level_tail) {
+    if (unlikely(header.get_is_level_tail() != expect_is_level_tail)) {
       ERRORT("load addr={}, is_level_tail={} error, "
              "is_level_tail mismatch -- {}",
              c.t, addr, expect_is_level_tail, fmt::ptr(extent));
@@ -712,7 +717,7 @@ eagain_ifuture<Ref<Node>> Node::load(
 
     auto node_type = header.get_node_type();
     if (node_type == node_type_t::LEAF) {
-      if (extent->get_length() != c.vb.get_leaf_node_size()) {
+      if (unlikely(extent->get_length() != c.vb.get_leaf_node_size())) {
         ERRORT("load addr={}, is_level_tail={} error, "
                "leaf length mismatch -- {}",
                c.t, addr, expect_is_level_tail, fmt::ptr(extent));
@@ -723,7 +728,7 @@ eagain_ifuture<Ref<Node>> Node::load(
       return eagain_iertr::make_ready_future<Ref<Node>>(
 	new LeafNode(derived_ptr, std::move(impl)));
     } else if (node_type == node_type_t::INTERNAL) {
-      if (extent->get_length() != c.vb.get_internal_node_size()) {
+      if (unlikely(extent->get_length() != c.vb.get_internal_node_size())) {
         ERRORT("load addr={}, is_level_tail={} error, "
                "internal length mismatch -- {}",
                c.t, addr, expect_is_level_tail, fmt::ptr(extent));
