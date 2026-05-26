@@ -366,4 +366,29 @@ int LogNode::ow_gap_from_last_entry(const size_t key, const size_t val) {
   return gap;
 }
 
+LogNode::range_t LogNode::has_between(const std::optional<std::string>& start,
+  const std::optional<std::string>& end) {
+  assert(start);
+  if (get_size() == 0) {
+    return range_t::NO_BETWEEN;
+  }
+  std::string_view s(*start);
+  auto in_range = [&](std::string_view k) {
+    return k >= s && (!end || k <= std::string_view(*end));
+  };
+  
+  // The newest entry is the one the loop below reaches last, so test it up
+  // front: trimming the most recent keys is the common case and this answers
+  // it without a scan.
+  if (in_range(get_last_key())) {
+    return range_t::HAS_BETWEEN;
+  }
+  for (auto iter = iter_begin(); iter != iter_end(); ++iter) {
+    if (in_range(iter->get_key())) {
+      return range_t::HAS_BETWEEN;
+    }
+  }
+  return range_t::NO_BETWEEN;
+}
+
 }
