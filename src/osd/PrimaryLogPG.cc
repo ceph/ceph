@@ -13559,10 +13559,6 @@ void PrimaryLogPG::_on_activate_committed(HBHandle *handle)
       ceph_assert(pool_migration_info.begin == pool_migration_watermark);
     }
     new_pool_migration_interval = true;
-    //BILL:FIXME: If we transition from migrating back to recovery/backfill we currently block I/O to the
-    //migration watermark object until we get back to migrating and migrate that object. That is wrong - we
-    //need to schedule cleanup on the target (empty copy from message?) and then clear new_pool_migration_interval
-    //and call on_global_recover to kick the queues rather than leaving I/O stalled until recovery/backfill completes.
   } else if (pool.info.has_pg_migrated(info.pgid.pgid)) {
     update_migration_watermark(hobject_t::get_max());
   } else {
@@ -15973,9 +15969,6 @@ uint64_t PrimaryLogPG::recover_pool_migration(
     // previous interrupted attempt at copying the object to the target pool
     // followed by a new interval and the object being deleted in the source pool
     // must not leave the object in the target pool.
-    // BILL:FIXME: Need to pass this flag on the copy_from request. Target pool
-    // needs to scan for objects >= copy from object and delete them if this flag
-    // is set.
     if (new_pool_migration_interval) {
       new_pool_migration_interval = false;
       new_pool_migration_interval_in_flight = true;
