@@ -38,7 +38,7 @@ constexpr static uint64_t kReplicaMinShardReads = 2;
 void ECSplitOp::init_reference_sub_read() {
   auto &target = orig_op->target;
   shard_id_t primary_shard = target.actual_pgid.shard;
-  
+
   // Search through the acting set to find which index has the primary shard
   // For EC pools, the acting index directly corresponds to the shard
   for (size_t i = 0; i < target.acting.size(); i++) {
@@ -49,7 +49,7 @@ void ECSplitOp::init_reference_sub_read() {
       return;
     }
   }
-  
+
   ldout(cct, DBG_LVL) << __func__ << " WARNING: Could not find primary shard "
                 << (int)primary_shard << " in acting set" << dendl;
   abort = true;
@@ -254,7 +254,7 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
  */
 void ReplicaSplitOp::init_reference_sub_read() {
   auto &target = orig_op->target;
-  
+
   // Count valid OSDs in the acting set
   int valid_osd_count = 0;
   for (size_t i = 0; i < target.acting.size(); i++) {
@@ -263,13 +263,13 @@ void ReplicaSplitOp::init_reference_sub_read() {
       valid_osd_count++;
     }
   }
-  
+
   if (valid_osd_count < 2) {
     abort = true;
     ldout(cct, DBG_LVL) << __func__ << " ABORT: Not enough valid OSDs" << dendl;
     return;
   }
-  
+
   // Pick a random valid acting index
   reference_sub_read = rand() % valid_osd_count;
 }
@@ -354,7 +354,7 @@ void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
                           std::min(length / replica_min_shard_read_size,
                                    osds.size());
   uint64_t chunk_size = p2roundup(length / slice_count, (uint64_t)CEPH_PAGE_SIZE);
-  
+
   // Use reference_sub_read (set in constructor) as the starting shard
   // This provides load balancing while ensuring reference_sub_read is always set
   for (unsigned i = reference_sub_read; length > 0; i = (i + 1 == osds.size()) ? 0 : i + 1) {
@@ -825,12 +825,12 @@ std::pair<bool, bool> validate(Objecter::Op *op, Objecter &objecter,
   bool single_direct_op = is_erasure;
 
   uint64_t replica_min_shard_read_size = objecter.get_min_split_replica_read_size();
-  
+
   if (!is_erasure && replica_min_shard_read_size == 0) {
     ldout(cct, DBG_LVL) << __func__ << " REJECT: splitting disabled (min_split_replica_read_size=0)" << dendl;
     return {false, false};
   }
-  
+
   uint64_t replica_min_read_size = replica_min_shard_read_size * kReplicaMinShardReads;
 
   // Validate operations and read sizes
@@ -1006,7 +1006,7 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
 
   // Populate the target, to extract the acting set from it.
   target.flags &= ~CEPH_OSD_FLAG_BALANCE_READS;
-  objecter._calc_target(&op->target, op);
+  objecter._calc_target(&op->target, op->snapid);
 
   // Initialize reference_sub_read now that acting set is populated
   split_read->init_reference_sub_read();
@@ -1014,7 +1014,7 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
   if (split_read->reference_sub_read == -1) {
     split_read->abort = true;
   }
-  
+
   if (split_read->abort) {
     ldout(cct, DBG_LVL) << __func__ <<" ABORTED after init_reference_sub_read" << dendl;
     return false;
