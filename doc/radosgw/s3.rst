@@ -88,6 +88,8 @@ The following table describes the support status for current Amazon S3 functiona
 +---------------------------------+-----------------+--------------------------------------------------+
 | **Bucket PublicAccessBlock**    | Supported       |                                                  |
 +---------------------------------+-----------------+--------------------------------------------------+
+| **Account PublicAccessBlock**   | Supported       | See :ref:`radosgw-s3control`                     |
++---------------------------------+-----------------+--------------------------------------------------+
 
 Unsupported Header Fields
 -------------------------
