@@ -265,6 +265,9 @@ bool LogNode::log_less_than(std::string_view str) const
   while(iter != iter_end()) {
     std::string key = iter->get_key();
     if (is_log_key(key)) {
+      if (key >= str) {
+        return false;
+      }
       all_less = key < str;
     }
     iter++;
