@@ -403,6 +403,37 @@
           }
         </ng-template>
       </div>
+
+      @if (!rgwModuleEnabled) {
+      <cd-alert-panel type="warning"
+                      spacingClass="mb-3"
+                      actionName="Enable"
+                      (action)="enableRgwModule()"
+                      i18n-actionName
+                      i18n>
+        The RGW mgr module must be enabled to configure S3 hostnames.
+        Enabling the module will cause temporary manager downtime while it loads.
+      </cd-alert-panel>
+      }
+      <div class="form-item">
+        <cds-checkbox i18n-label
+                      formControlName="virtual_host_enabled">
+          Enable virtual-host style bucket access
+          <cd-help-text i18n>
+            Allows bucket access via hostnames such as mybucket.s3.example.com.
+          </cd-help-text>
+        </cds-checkbox>
+      </div>
+      @if (serviceForm.controls.virtual_host_enabled.value) {
+      <div class="form-item">
+        <cd-text-label-list formControlName="zonegroup_hostnames"
+                            label="S3 hostname"
+                            i18n-label
+                            helperText="Domain names for S3 virtual-host bucket access (e.g., s3.example.com). Enables bucket URLs like bucket.s3.example.com instead of s3.example.com/bucket."
+                            i18n-helperText>
+        </cd-text-label-list>
+      </div>
+      }
       }
 
       <!-- iSCSI -->
@@ -1218,13 +1249,13 @@
           <cds-radio-group formControlName="certificateType"
                            orientation="horizontal"
                            helperText="Select how certificates will be signed for this service. Choose internal to use the cluster’s CA, or external to upload certificates signed by your organization.">
-            <cds-radio value="internal"
-                       (change)="onCertificateTypeChange('internal')"
+            <cds-radio [value]="CertificateType.internal"
+                       (change)="onCertificateTypeChange(CertificateType.internal)"
                        i18n>
               Internal
             </cds-radio>
-            <cds-radio value="external"
-                       (change)="onCertificateTypeChange('external')"
+            <cds-radio [value]="CertificateType.external"
+                       (change)="onCertificateTypeChange(CertificateType.external)"
                        i18n>
               External
             </cds-radio>
@@ -1239,7 +1270,7 @@
           </cd-alert-panel>
         }
 
-        @if (serviceForm.controls.certificateType.value === 'internal') {
+        @if (serviceForm.controls.certificateType.value === CertificateType.internal) {
         <cd-alert-panel type="info"
                         spacingClass="mb-3"
                         i18n>
@@ -1253,6 +1284,18 @@
                               i18n-helperText>
           </cd-text-label-list>
         </div>
+        @if (serviceForm.controls.service_type.value === 'rgw'
+             && serviceForm.controls.virtual_host_enabled.value) {
+        <div class="form-item">
+          <cds-checkbox i18n-label
+                        formControlName="wildcard_enabled">
+            Include wildcard certificate for bucket subdomains
+            <cd-help-text i18n>
+              Add wildcard certificates (*.domain) to allow SSL for all bucket subdomains. Required for virtual-host style with SSL.
+            </cd-help-text>
+          </cds-checkbox>
+        </div>
+        }
         }
       </div>
       }
@@ -1288,7 +1331,7 @@
         </ng-template>
       </div>
       <!-- ssl_ca_cert - Only show for NFS when SSL is enabled AND certificate type is external -->
-      @if (serviceForm.controls.ssl.value && serviceForm.controls.certificateType.value === 'external' && serviceForm.controls.service_type.value === 'nfs') {
+      @if (serviceForm.controls.ssl.value && serviceForm.controls.certificateType.value === CertificateType.external && serviceForm.controls.service_type.value === 'nfs') {
       <div class="form-item">
         <ng-container *ngTemplateOutlet="fileUploaderTextarea; context: { controlName: 'ssl_ca_cert', title: 'CA Certificate Input', helperText: 'Uploaded files will populate the CA certificate details automatically. Or paste the PEM content directly in the text area.', description: 'Upload a CA certificate file, or paste the CA certificate PEM content directly.', invalidTemplate: invalidSslCaCertError, isRequired: false }"></ng-container>
         <ng-template #invalidSslCaCertError>
