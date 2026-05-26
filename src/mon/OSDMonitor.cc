@@ -13997,6 +13997,17 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     std::optional<int64_t> source_pool_id;
     const pg_pool_t *source_pool = nullptr;
     if (cmd_getval(cmdmap, "migrate_from_pool", source_pool_name)) {
+      bool experimental_enabled =
+        g_ceph_context->check_experimental_feature_enabled("poolmigration");
+      if (!experimental_enabled) {
+        ss << "Pool migration is an experimental feature that may cause "
+           << "unrecoverable data corruption. If you are sure, add "
+           << "'poolmigration' to the experimental features config "
+           << "(enable_experimental_unrecoverable_data_corrupting_features).";
+        err = -EPERM;
+        goto reply_no_propose;
+      }
+
       if (osdmap.require_min_compat_client < ceph_release_t::umbrella) {
 	ss << "require_min_compat_client "
 	   << osdmap.require_min_compat_client
