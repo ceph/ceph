@@ -299,6 +299,7 @@ target_link_libraries(rgw_common
   PRIVATE
     legacy-option-headers
     global
+    heap_profiler
     cls_rgw_client
     rt
     ICU::uc

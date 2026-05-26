@@ -56,6 +56,11 @@ void ceph_heap_release_free_memory()
   MallocExtension::instance()->ReleaseFreeMemory();
 }
 
+void ceph_heap_mark_thread_temporarily_idle()
+{
+  MallocExtension::instance()->MarkThreadTemporarilyIdle();
+}
+
 double ceph_heap_get_release_rate()
 {
   return MallocExtension::instance()->GetMemoryReleaseRate();

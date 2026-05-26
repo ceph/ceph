@@ -14,6 +14,7 @@
 #include "rgw_rest.h"
 #include "rgw_zone.h"
 #include "driver/rados/rgw_rados.h"
+#include "perfglue/heap_profiler.h"
 
 #include "services/svc_zone.h"
 
@@ -437,6 +438,7 @@ void* OpsLogFile::entry() {
       lock.lock();
       continue;
     }
+    ceph_heap_mark_thread_temporarily_idle();
     cond.wait(lock);
   }
   lock.unlock();
