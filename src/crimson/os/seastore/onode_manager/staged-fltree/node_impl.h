@@ -179,7 +179,7 @@ class InternalNodeImpl : public NodeImpl {
       return {std::move(impl), mut};
     }
   };
-  static eagain_ifuture<fresh_impl_t> allocate(context_t, laddr_t, field_type_t, bool, level_t);
+  static eagain_ifuture<fresh_impl_t> allocate(context_t, laddr_hint_t, field_type_t, bool, level_t);
 
   static InternalNodeImplURef load(NodeExtentRef, field_type_t);
 
@@ -259,7 +259,7 @@ class LeafNodeImpl : public NodeImpl {
       return {std::move(impl), mut};
     }
   };
-  static eagain_ifuture<fresh_impl_t> allocate(context_t, laddr_t, field_type_t, bool);
+  static eagain_ifuture<fresh_impl_t> allocate(context_t, laddr_hint_t, field_type_t, bool);
 
   static LeafNodeImplURef load(NodeExtentRef, field_type_t);
 

@@ -296,6 +296,7 @@ public:
 
   void commit_and_share_paddr();
 
+  void maybe_sync_copied_lba_key();
 private:
   // the rewritten extent
   CachedExtent &extent;

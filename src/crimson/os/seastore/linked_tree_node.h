@@ -327,6 +327,21 @@ public:
   }
 
   template <typename ChildT>
+  TCachedExtentRef<ChildT> get_child_sync(
+    Transaction &t,
+    ExtentTransViewRetriever &etvr,
+    btreenode_pos_t pos,
+    node_key_t key)
+  {
+    assert(children.capacity());
+    assert(key == down_cast().iter_idx(pos).get_key());
+    auto child = children[pos];
+    ceph_assert(!is_reserved_ptr(child));
+    assert(is_valid_child_ptr(child));
+    return static_cast<ChildT*>(child);
+  }
+
+  template <typename ChildT>
   get_child_ret_t<T, ChildT> get_child(
     Transaction &t,
     ExtentTransViewRetriever &etvr,
@@ -423,6 +438,10 @@ public:
     } else {
       return static_cast<copy_dests_t*>(&*iter);
     }
+  }
+
+  void reset_child_ptr(btreenode_pos_t pos) {
+    children[pos] = get_reserved_ptr<T, node_key_t>();
   }
 
 protected:

@@ -169,8 +169,10 @@ public:
   extent_len_t get_intermediate_offset() const {
     assert(is_indirect());
     assert(get_intermediate_base() <= get_intermediate_key());
-    assert(get_intermediate_key() + get_length() <=
-	   get_intermediate_base() + get_intermediate_length());
+    if (likely(!hobject_t::is_temp_pool(get_key().get_pool()))) {
+      assert(get_intermediate_key() + get_length() <=
+             get_intermediate_base() + get_intermediate_length());
+    }
     return get_intermediate_base().get_byte_distance<
       extent_len_t>(get_intermediate_key());
   }

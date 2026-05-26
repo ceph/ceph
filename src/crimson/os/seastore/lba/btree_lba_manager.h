@@ -75,21 +75,27 @@ public:
     Transaction &t,
     LogicalChildNode &extent) final;
 
+  lower_bound_ret lower_bound(
+    Transaction &t,
+    laddr_t laddr) final;
+
   alloc_extent_ret reserve_region(
     Transaction &t,
     LBACursorRef pos,
     laddr_t laddr,
-    extent_len_t len) final;
+    extent_len_t len,
+    extent_types_t type) final;
 
   alloc_extent_ret reserve_region(
     Transaction &t,
-    laddr_t hint,
-    extent_len_t len) final
+    laddr_hint_t hint,
+    extent_len_t len,
+    extent_types_t type) final
   {
     std::vector<alloc_mapping_info_t> alloc_infos = {
-      alloc_mapping_info_t::create_zero(len)};
+      alloc_mapping_info_t::create_zero(len, type)};
     auto cursors = co_await alloc_contiguous_mappings(
-      t, hint, alloc_infos, alloc_policy_t::linear_search);
+      t, hint, alloc_infos);
     assert(cursors.size() == 1);
     co_return std::move(cursors.front());
   }
@@ -103,6 +109,34 @@ public:
     extent_len_t len,
     bool updateref) final;
 
+  move_mapping_ret move_indirect_mapping(
+    Transaction &t,
+    LBACursorRef src,
+    laddr_t dest_laddr,
+    LBACursorRef dest) final {
+    assert(src->is_indirect());
+    return _move_mapping(
+      t, std::move(src), dest_laddr, std::move(dest), nullptr);
+  }
+
+  move_mapping_ret move_direct_mapping(
+    Transaction &t,
+    LBACursorRef src,
+    laddr_t dest_laddr,
+    LBACursorRef dest,
+    LogicalChildNode &extent) final {
+    assert(!src->is_indirect());
+    return _move_mapping(
+      t, std::move(src), dest_laddr, std::move(dest), &extent);
+  }
+
+  move_mapping_ret move_and_clone_direct_mapping(
+    Transaction &t,
+    LBACursorRef src,
+    laddr_t dest_laddr,
+    LBACursorRef dest,
+    LogicalChildNode &extent) final;
+
 #ifdef UNIT_TESTS_BUILT
   get_end_mapping_ret get_end_mapping(Transaction &t) final;
 #endif
@@ -114,7 +148,7 @@ public:
 
   alloc_extent_ret alloc_extent(
     Transaction &t,
-    laddr_t hint,
+    laddr_hint_t hint,
     LogicalChildNode &ext,
     extent_ref_count_t refcount) final
   {
@@ -130,7 +164,7 @@ public:
 	ext.get_last_committed_crc(),
 	ext)};
     auto cursors = co_await alloc_contiguous_mappings(
-      t, hint, alloc_infos, alloc_policy_t::linear_search
+      t, hint, alloc_infos
     );
     assert(cursors.size() == 1);
     co_return std::move(cursors.front());
@@ -138,7 +172,7 @@ public:
 
   alloc_extents_ret alloc_extents(
     Transaction &t,
-    laddr_t hint,
+    laddr_hint_t hint,
     std::vector<LogicalChildNodeRef> extents,
     extent_ref_count_t refcount) final
   {
@@ -159,8 +193,9 @@ public:
     }
     std::list<LBACursorRef> cursors;
     if (has_laddr) {
+      assert(hint.condition == laddr_conflict_condition_t::all_at_never);
       cursors = co_await alloc_sparse_mappings(
-	t, hint, alloc_infos, alloc_policy_t::deterministic);
+        t, hint, alloc_infos);
       assert(alloc_infos.size() == cursors.size());
 #ifndef NDEBUG
       auto info_p = alloc_infos.begin();
@@ -171,8 +206,7 @@ public:
       }
 #endif
     } else {
-      cursors = co_await alloc_contiguous_mappings(
-	t, hint, alloc_infos, alloc_policy_t::linear_search);
+      cursors = co_await alloc_contiguous_mappings(t, hint, alloc_infos);
     }
     co_return std::vector<LBACursorRef>(cursors.begin(), cursors.end());
   }
@@ -271,7 +305,9 @@ private:
       return value.pladdr.is_laddr();
     }
 
-    static alloc_mapping_info_t create_zero(extent_len_t len) {
+    static alloc_mapping_info_t create_zero(
+      extent_len_t len,
+      extent_types_t type) {
       return {
 	L_ADDR_NULL,
 	{
@@ -279,7 +315,7 @@ private:
 	  pladdr_t(P_ADDR_ZERO),
 	  EXTENT_DEFAULT_REF_COUNT,
 	  0,
-          extent_types_t::NONE
+	  type
 	}};
     }
     static alloc_mapping_info_t create_indirect(
@@ -290,11 +326,12 @@ private:
 	laddr,
 	{
 	  len,
-	  pladdr_t(intermediate_key),
+	  pladdr_t(intermediate_key.get_local_clone_id()),
 	  EXTENT_DEFAULT_REF_COUNT,
 	  0,	// crc will only be used and checked with LBA direct mappings
 		// also see pin_to_extent(_by_type)
-          extent_types_t::NONE
+	  // only OBJECT_DATA_BLOCK support indirect mapping for now
+	  extent_types_t::OBJECT_DATA_BLOCK
 	}};
     }
     static alloc_mapping_info_t create_direct(
@@ -305,13 +342,10 @@ private:
       checksum_t checksum,
       LogicalChildNode& extent) {
       return {
-        laddr,
-        {len,
-         pladdr_t(paddr),
-         refcount,
-         checksum,
-         extent.get_type()},
-        &extent};
+	laddr,
+	{len, pladdr_t(paddr), refcount, checksum, extent.get_type()},
+	&extent
+      };
     }
   };
 
@@ -321,6 +355,50 @@ private:
 
   seastar::metrics::metric_group metrics;
   void register_metrics(store_index_t store_index);
+
+  /*
+   * _move_mapping
+   *
+   * copy the mapping "src" to "dest" and remove the "src" mapping.
+   *
+   * Return: the mappings next to "src" and the "dest" mapping
+   */
+  move_mapping_ret _move_mapping(
+    Transaction &t,
+    LBACursorRef src,
+    laddr_t dest_laddr,
+    LBACursorRef dest,
+    LogicalChildNode *extent);
+
+  /*
+   * _copy_mapping
+   *
+   * copy the mapping "src" to "dest", the extent attached to
+   * "src" will also be attached to the dest. This is the building
+   * block for _move_mapping and move_and_clone_direct_mapping
+   *
+   * Return: the "src" and the new "dest"
+   */
+  move_mapping_ret _copy_mapping(
+    op_context_t c,
+    LBABtree &btree,
+    LBACursorRef src,
+    laddr_t dest_laddr,
+    LBACursorRef dest,
+    LogicalChildNode *extent);
+
+  /**
+   * update_paddr_sync
+   *
+   * This is basically for updating the paddr of the mapping
+   * that has been copied by the transaction t and modified
+   * by some background rewrite transaction.
+   */
+  void update_paddr_sync(
+    Transaction &t,
+    laddr_t laddr,
+    paddr_t paddr);
+
 
   /**
    * _update_mapping
@@ -341,19 +419,14 @@ private:
     laddr_t laddr;
     LBABtree::iterator insert_iter;
   };
-  enum class alloc_policy_t {
-    deterministic, // no conflict
-    linear_search,
-  };
   using search_insert_position_iertr = base_iertr;
   using search_insert_position_ret =
       search_insert_position_iertr::future<insert_position_t>;
   search_insert_position_ret search_insert_position(
     op_context_t c,
     LBABtree &btree,
-    laddr_t hint,
-    extent_len_t length,
-    alloc_policy_t policy);
+    laddr_hint_t hint,
+    extent_len_t length);
 
   using alloc_mappings_iertr = base_iertr;
   using alloc_mappings_ret =
@@ -369,9 +442,8 @@ private:
    */
   alloc_mappings_ret alloc_contiguous_mappings(
     Transaction &t,
-    laddr_t hint,
-    std::vector<alloc_mapping_info_t> &alloc_infos,
-    alloc_policy_t policy);
+    laddr_hint_t hint,
+    std::vector<alloc_mapping_info_t> &alloc_infos);
 
   /**
    * alloc_sparse_mappings
@@ -384,9 +456,8 @@ private:
    */
   alloc_mappings_ret alloc_sparse_mappings(
     Transaction &t,
-    laddr_t hint,
-    std::vector<alloc_mapping_info_t> &alloc_infos,
-    alloc_policy_t policy);
+    laddr_hint_t hint,
+    std::vector<alloc_mapping_info_t> &alloc_infos);
 
   /**
    * insert_mappings

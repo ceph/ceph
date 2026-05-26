@@ -105,6 +105,16 @@ public:
   }
 
   /**
+   * relocate_logical_extent
+   *
+   * Make a new logical extent to update its laddr. The caller is
+   * responsible to update the corresponding lba mapping.
+   */
+  base_iertr::future<LogicalChildNodeRef> relocate_logical_extent(
+    Transaction &t,
+    LBAMapping mapping);
+
+  /**
    * get_pin
    *
    * Get the logical pin at offset
@@ -169,6 +179,13 @@ public:
     }
     SUBDEBUGT(seastore_tm, "got {} pins", t, ret.size());
     co_return ret;
+  }
+
+  base_iertr::future<LBAMapping> lower_bound_pin(
+    Transaction &t,
+    laddr_t laddr) {
+    auto cursor = co_await lba_manager->lower_bound(t, laddr);
+    co_return co_await resolve_cursor_to_mapping(t, cursor);
   }
 
   /**
@@ -523,7 +540,7 @@ public:
   template <typename T>
   alloc_extent_ret<T> alloc_non_data_extent(
     Transaction &t,
-    laddr_t laddr_hint,
+    laddr_hint_t laddr_hint,
     extent_len_t len,
     placement_hint_t placement_hint = placement_hint_t::HOT) {
     static_assert(is_logical_metadata_type(T::TYPE));
@@ -563,7 +580,7 @@ public:
   template <typename T>
   alloc_extents_ret<T> alloc_data_extents(
     Transaction &t,
-    laddr_t laddr_hint,
+    laddr_hint_t laddr_hint,
     extent_len_t len,
     std::optional<LBAMapping> pos = std::nullopt,
     placement_hint_t placement_hint = placement_hint_t::HOT) {
@@ -583,7 +600,8 @@ public:
     }
     if (pos) {
       // laddr_hint is determined
-      auto off = laddr_hint;
+      assert(laddr_hint.condition == laddr_conflict_condition_t::all_at_never);
+      auto off = laddr_hint.addr;
       for (auto &extent : exts) {
 	extent->set_laddr(off);
 	off = (off + extent->get_length()).checked_to_laddr();
@@ -639,14 +657,16 @@ public:
   using reserve_extent_ret = reserve_extent_iertr::future<LBAMapping>;
   reserve_extent_ret reserve_region(
     Transaction &t,
-    laddr_t hint,
-    extent_len_t len) {
+    laddr_hint_t hint,
+    extent_len_t len,
+    extent_types_t type) {
     LOG_PREFIX(TransactionManager::reserve_region);
-    SUBDEBUGT(seastore_tm, "hint {}~0x{:x} ...", t, hint, len);
+    SUBDEBUGT(seastore_tm, "hint {}~0x{:x} {} ...", t, hint, len, type);
     auto pin = co_await lba_manager->reserve_region(
       t,
       hint,
-      len
+      len,
+      type
     );
     SUBDEBUGT(seastore_tm, "reserved {}", t, *pin);
     co_return LBAMapping::create_direct(std::move(pin));
@@ -656,15 +676,17 @@ public:
     Transaction &t,
     LBAMapping pos,
     laddr_t hint,
-    extent_len_t len) {
+    extent_len_t len,
+    extent_types_t type) {
     LOG_PREFIX(TransactionManager::reserve_region);
-    SUBDEBUGT(seastore_tm, "hint {}~0x{:x} ...", t, hint, len);
+    SUBDEBUGT(seastore_tm, "hint {}~0x{:x} {} ...", t, hint, len, type);
     pos = co_await pos.refresh();
     auto pin = co_await lba_manager->reserve_region(
       t,
       pos.get_effective_cursor_ref(),
       hint,
-      len
+      len,
+      type
     );
     co_return LBAMapping::create_direct(std::move(pin));
   }
@@ -759,7 +781,8 @@ public:
 	  t,
 	  std::move(pos),
 	  (dst_base + cloned_to).checked_to_laddr(),
-	  clone_len
+	  clone_len,
+	  mapping.get_extent_type()
 	).handle_error_interruptible(
 	  clone_iertr::pass_further{},
 	  crimson::ct_error::assert_all{"unexpected error"}
@@ -784,6 +807,15 @@ public:
     co_return clone_range_ret_t{shared_direct, std::move(pos)};
   }
 
+  using move_region_iertr = base_iertr;
+  using move_region_ret = move_region_iertr::future<>;
+  move_region_ret move_region(
+    Transaction &t,
+    LBAMapping src,
+    LBAMapping dst,
+    laddr_t dst_prefix,
+    bool move_indirect);
+
   /* alloc_extents
    *
    * allocates more than one new blocks of type T.
@@ -792,7 +824,7 @@ public:
    alloc_extents_iertr::future<std::vector<TCachedExtentRef<T>>>
    alloc_extents(
      Transaction &t,
-     laddr_t hint,
+     laddr_hint_t hint,
      extent_len_t len,
      int num) {
      LOG_PREFIX(TransactionManager::alloc_extents);
@@ -921,7 +953,7 @@ public:
   using init_root_meta_ret = init_root_meta_iertr::future<>;
   init_root_meta_ret init_root_meta(Transaction &t) {
     return alloc_non_data_extent<RootMetaBlock>(
-      t, L_ADDR_MIN, RootMetaBlock::SIZE
+      t, laddr_hint_t::create_as_fixed(L_ADDR_MIN), RootMetaBlock::SIZE
     ).si_then([this, &t](auto meta) {
       meta->set_meta(RootMetaBlock::meta_t{});
       return cache->get_root(t
@@ -1059,6 +1091,9 @@ public:
     if (!mapping.is_indirect() && mapping.is_zero_reserved()) {
       SUBDEBUGT(seastore_tm, "zero reserved, mapping {}, {} remaps",
 		t, mapping, remaps);
+      //TODO: drop this assert
+      assert(mapping.get_extent_type() == extent_types_t::OBJECT_DATA_BLOCK);
+      auto type = mapping.get_extent_type();
       std::vector<LBAMapping> ret;
       auto orig_laddr = mapping.get_key();
       auto pos = co_await remove(
@@ -1073,7 +1108,8 @@ public:
 	  t,
 	  std::move(pos),
 	  laddr,
-	  remap.len
+	  remap.len,
+          type
 	).handle_error_interruptible(
 	  remap_mappings_iertr::pass_further{},
 	  crimson::ct_error::assert_all{"unexpected error"}
@@ -1461,8 +1497,8 @@ private:
           t,
           remap_laddr,
           remap_paddr,
+          remap_offset,
           remap_len,
-          original_laddr,
           original_bptr);
         // user must initialize the logical extent themselves.
         remapped_extent->set_seen_by_users();

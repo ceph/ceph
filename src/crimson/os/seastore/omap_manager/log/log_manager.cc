@@ -26,7 +26,10 @@ LogManager::LogManager(
   : tm(tm) {}
 
 LogManager::initialize_omap_ret
-LogManager::initialize_omap(Transaction &t, laddr_t hint, omap_type_t omap_type) 
+LogManager::initialize_omap(
+  Transaction &t,
+  laddr_hint_t hint,
+  omap_type_t omap_type)
 {
   LOG_PREFIX(LogManager::initialize_omap);
   DEBUGT("hint: {}", t, hint);
@@ -377,7 +380,9 @@ std::ostream &LogNode::print_detail_l(std::ostream &out) const
       << ", num=" << this->get_size()
       << ", used_space=" << this->use_space()
       << ", capacity=" << this->get_capacity()
-      << ", last_pos=" << this->get_last_pos();
+      << ", last_pos=" << this->get_last_pos()
+      << ", first_key=" << this->iter_cbegin().get_key()
+      << ", last_key=" << this->get_last_key();
   if (has_laddr()) {
     out << ", begin=" << get_begin()
 	<< ", end=" << get_end();
@@ -834,7 +839,9 @@ LogManager::omap_clear(omap_root_t &root, Transaction &t)
   );
   root.update(
     L_ADDR_NULL,
-    0, L_ADDR_MIN, root.get_type());
+    0,
+    laddr_hint_t::create_as_fixed(L_ADDR_MIN),
+    root.get_type());
   co_return;
 }
 

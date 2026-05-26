@@ -86,7 +86,21 @@ void Transaction::dump(ceph::Formatter *f)
 	f->dump_stream("oid") << oid;
       }
       break;
-      
+
+#ifdef WITH_CRIMSON
+    case Transaction::OP_TOUCH_TEMP:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        const ghobject_t &oid = i.get_oid(op->oid);
+        const ghobject_t &dest_oid = i.get_oid(op->dest_oid);
+	f->dump_string("op_name", "touch_temp");
+	f->dump_stream("collection") << cid;
+	f->dump_stream("temp oid") << oid;
+        f->dump_stream("oid") << dest_oid;
+      }
+      break;
+#endif
+
     case Transaction::OP_WRITE:
       {
         coll_t cid = i.get_cid(op->cid);

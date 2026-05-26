@@ -12,8 +12,6 @@ using namespace crimson::os;
 using namespace crimson::os::seastore;
 
 #define MAX_OBJECT_SIZE (16<<20)
-#define DEFAULT_OBJECT_DATA_RESERVATION (16<<20)
-#define DEFAULT_OBJECT_METADATA_RESERVATION (16<<20)
 
 namespace {
   [[maybe_unused]] seastar::logger& logger() {
@@ -25,7 +23,7 @@ class TestOnode final : public Onode {
   onode_layout_t layout;
 
 public:
-  TestOnode(uint32_t ddr, uint32_t dmr) : Onode(ddr, dmr, hobject_t()) {}
+  TestOnode() : Onode(hobject_t()) {}
   const onode_layout_t &get_layout() const final {
     return layout;
   }
@@ -45,7 +43,36 @@ public:
       std::swap(layout.xattr_root, o_mlayout.xattr_root);
     });
   }
-  laddr_t get_hint() const final {return L_ADDR_MIN; }
+  laddr_hint_t init_hint(
+    extent_len_t block_size,
+    bool is_metadata) const final {
+    laddr_hint_t hint;
+    hint.addr = laddr_t::from_byte_offset(0);
+    hint.addr.set_pool(1);
+    hint.condition = laddr_conflict_condition_t::all_at_object_content;
+    hint.policy = laddr_conflict_policy_t::linear_search;
+    hint.block_size = laddr_t::UNIT_SIZE;
+    return hint;
+  }
+  laddr_hint_t generate_temp_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size,
+    bool is_metadata) const final {
+    ceph_abort("impossible for now");
+    return laddr_hint_t{};
+  }
+  laddr_hint_t generate_clone_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size,
+    bool is_metadata) const final {
+    laddr_hint_t hint;
+    hint.addr = laddr_t::from_byte_offset(0);
+    hint.addr.set_pool(1);
+    hint.condition = laddr_conflict_condition_t::clone_prefix_at_clone_id;
+    hint.policy = laddr_conflict_policy_t::gen_random;
+    hint.block_size = laddr_t::UNIT_SIZE;
+    return hint;
+  }
   ~TestOnode() final = default;
 
   void set_need_cow(Transaction &t) final {
@@ -119,7 +146,27 @@ public:
       mlayout.ss_size = 0;
     });
   }
-
+  boost::intrusive_ptr<Onode> offload_data_and_md(Transaction& t) final {
+    auto ret = new TestOnode();
+    {
+      auto data = layout.object_data.get();
+      ret->update_object_data(t, data);
+      auto root = layout.omap_root.get(LADDR_HINT_NULL);
+      ret->update_omap_root(t, root);
+      root = layout.xattr_root.get(LADDR_HINT_NULL);
+      ret->update_xattr_root(t, root);
+    }
+    {
+      auto data = object_data_t{L_ADDR_NULL, 0};
+      update_object_data(t, data);
+      auto root = omap_root_t{};
+      root.type = omap_type_t::OMAP;
+      update_omap_root(t, root);
+      root.type = omap_type_t::XATTR;
+      update_xattr_root(t, root);
+    }
+    return ret;
+  }
 };
 
 struct object_data_handler_test_t:
@@ -131,9 +178,7 @@ struct object_data_handler_test_t:
     extent_len_t size = 0;
 
     void reset() {
-      onode = new TestOnode(
-	DEFAULT_OBJECT_DATA_RESERVATION,
-	DEFAULT_OBJECT_METADATA_RESERVATION);
+      onode = new TestOnode();
       size = 0;
       known_contents = buffer::create(4<<20 /* 4MB */);
       known_contents.zero(true);
@@ -179,7 +224,14 @@ struct object_data_handler_test_t:
 	ObjectDataHandler objhandler(MAX_OBJECT_SIZE);
 	auto &target = get_object(target_snap);
 	target.clone_from(head);
+        auto id = head.onode->get_layout()
+            .object_data
+            .get()
+            .get_reserved_data_base()
+            .get_local_object_id();
 	head.onode->swap_layout(t, *(target.onode));
+        head.onode->reset_sibling_object_id();
+        head.onode->set_sibling_object_id(id);
 	co_await objhandler.clone(
 	  ObjectDataHandler::context_t{
 	    *tm, t, *(target.onode), &*(head.onode)
