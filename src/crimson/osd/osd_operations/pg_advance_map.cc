@@ -160,6 +160,7 @@ seastar::future<> PGAdvanceMap::split_pg(
   // be applied in order. 
   for (auto child_pgid : split_children) {
     children_pgids.insert(child_pgid);
+    PeeringCtx child_rctx;
 
     // Map each child pg ID to a core
     auto core = co_await shard_services.create_split_pg_mapping(child_pgid, seastar::this_shard_id(), pg->get_store_index());
@@ -176,13 +177,13 @@ seastar::future<> PGAdvanceMap::split_pg(
 	new_pg_num, child_pg->get_pgid().ps(), split_bits);
 
     co_await pg->split_colls(child_pg->get_pgid(), split_bits, child_pg->get_pgid().ps(),
-                             &child_pg->get_pgpool().info, rctx.transaction);
+                             &child_pg->get_pgpool().info, child_rctx.transaction);
     DEBUG(" {} split collection done", child_pg->get_pgid());
     pg->split_into(child_pg->get_pgid().pgid, child_pg, split_bits);
     auto child_coll_ref = child_pg->get_collection_ref();
-    rctx.transaction.touch(child_coll_ref->get_cid(), child_pg->get_pgid().make_snapmapper_oid());
+    child_rctx.transaction.touch(child_coll_ref->get_cid(), child_pg->get_pgid().make_snapmapper_oid());
 
-    co_await handle_split_pg_creation(child_pg, next_map);
+    co_await handle_split_pg_creation(child_pg, next_map, std::move(child_rctx));
     split_pgs.insert(child_pg);
   }
 
@@ -191,7 +192,8 @@ seastar::future<> PGAdvanceMap::split_pg(
 
 seastar::future<> PGAdvanceMap::handle_split_pg_creation(
     Ref<PG> child_pg,
-    cached_map_t next_map)
+    cached_map_t next_map,
+    PeeringCtx child_rctx)
 {
   LOG_PREFIX(PGAdvanceMap::handle_split_pg_creation);
   // We must create a new Trigger instance for each pg.
@@ -216,7 +218,7 @@ seastar::future<> PGAdvanceMap::handle_split_pg_creation(
   }));
   co_await shard_services.start_operation<PGAdvanceMap>(
       child_pg, shard_services, next_map->get_epoch(),
-      std::move(rctx), true).second;
+      std::move(child_rctx), true).second;
   co_await std::move(fut);
 }
 
