@@ -336,8 +336,8 @@ class ScrubJob {
  *  | limitation |  must-  | after-repair |repairing| operator | must-repair |
  *  |            |  scrub  |(aft recovery)|(errors) | request  |             |
  *  +------------+---------+--------------+---------+----------+-------------+
- *  | reservation|    yes! |      no      |    no?  |     no   |      no     |
- *  | dow/time   |    yes  |     yes      |    no   |     no   |      no     |
+ *  | reservation|    yes  |      no      |    no   |     no   |      no     |
+ *  | dow/time   |    yes  |      yes     |    no   |     no   |      no     |
  *  | ext-sleep  |    no   |      no      |    no   |     no   |      no     |
  *  | load       |    yes  |      no      |    no   |     no   |      no     |
  *  | noscrub    |    yes  |      no      |    Yes  |     no   |      no     |
