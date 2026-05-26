@@ -1638,6 +1638,11 @@ def test_put_vectors_missing_filterable_fields():
             'key': 'no-metadata',
             'data': generate_data(dimension, 3),
         },
+        {
+            'key': 'nested-field',
+            'data': generate_data(dimension, 4),
+            'metadata': json.dumps({'info': {'genre': 'blues', 'year': 1990}})
+        },
     ]
 
     result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
@@ -1647,7 +1652,7 @@ def test_put_vectors_missing_filterable_fields():
     result = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name,
                              keys=all_keys, returnMetadata=True)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-    assert len(result['vectors']) == 4
+    assert len(result['vectors']) == 5
 
     by_key = {v['key']: v for v in result['vectors']}
 
@@ -1668,6 +1673,14 @@ def test_put_vectors_missing_filterable_fields():
     assert 'popular' not in md
 
     assert 'metadata' not in by_key['no-metadata']
+
+    # nested fields with filterable key names should not be found at top level
+    md = json.loads(by_key['nested-field']['metadata'])
+    assert 'genre' not in md
+    assert 'year' not in md
+    assert 'popular' not in md
+    assert md['info']['genre'] == 'blues'
+    assert md['info']['year'] == 1990
 
     # cleanup
     _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
@@ -1748,6 +1761,138 @@ def test_put_vectors_invalid_filterable_types():
             'data': generate_data(dimension, 5),
             'metadata': json.dumps({'tags': 'single-tag'})
         }])
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+@pytest.mark.vector_test
+def test_put_vectors_allow_null():
+    """Test the allowNull flag on filterable metadata keys."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 4
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    filterable_keys = [
+        {'name': 'genre', 'allowNull': False},
+        {'name': 'year', 'type': 'Number', 'allowNull': False},
+        {'name': 'popular', 'type': 'Boolean'},
+    ]
+    result = conn.create_index(
+        vectorBucketName=bucket_name, indexName=index_name,
+        dataType='float32', dimension=dimension, distanceMetric='euclidean',
+        metadataConfiguration={'filterableMetadataKeys': filterable_keys})
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # all required fields present - should succeed
+    vectors = [
+        {
+            'key': f'v{i}',
+            'data': generate_data(dimension, i),
+            'metadata': json.dumps({'genre': f'genre-{i}', 'year': 2000 + i})
+        }
+        for i in range(3)
+    ]
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # verify vectors were inserted
+    result = conn.list_vectors(vectorBucketName=bucket_name, indexName=index_name, maxResults=100)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == 3
+
+    # missing required field - should fail
+    vectors_with_missing = [
+        {
+            'key': 'ok-row',
+            'data': generate_data(dimension, 10),
+            'metadata': json.dumps({'genre': 'rock', 'year': 2020})
+        },
+        {
+            'key': 'ok-row-2',
+            'data': generate_data(dimension, 11),
+            'metadata': json.dumps({'genre': 'jazz', 'year': 2021})
+        },
+        {
+            'key': 'bad-row-nested-ok',
+            'data': generate_data(dimension, 12),
+            'metadata': json.dumps({'popular': True, 'info': {'genre': 'blues', 'year': 1990}})
+        },
+    ]
+    assert_put_vectors_validation_error(conn, 'vectors[2].metadata.genre',
+        vectorBucketName=bucket_name, indexName=index_name, vectors=vectors_with_missing)
+
+    # same scenario but with allowNull explicitly true - should succeed
+    _ = conn.delete_index(vectorBucketName=bucket_name, indexName=index_name)
+
+    filterable_keys_nullable = [
+        {'name': 'genre', 'allowNull': True},
+        {'name': 'year', 'type': 'Number', 'allowNull': True},
+        {'name': 'popular', 'type': 'Boolean'},
+    ]
+    result = conn.create_index(
+        vectorBucketName=bucket_name, indexName=index_name,
+        dataType='float32', dimension=dimension, distanceMetric='euclidean',
+        metadataConfiguration={'filterableMetadataKeys': filterable_keys_nullable})
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors_with_missing)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # verify all vectors were inserted
+    result = conn.list_vectors(vectorBucketName=bucket_name, indexName=index_name, maxResults=100)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == 3
+
+    # vector without metadata and allowNull=false - should fail
+    _ = conn.delete_index(vectorBucketName=bucket_name, indexName=index_name)
+
+    filterable_keys_not_null = [
+        {'name': 'genre', 'allowNull': False},
+        {'name': 'popular', 'type': 'Boolean'},
+    ]
+    result = conn.create_index(
+        vectorBucketName=bucket_name, indexName=index_name,
+        dataType='float32', dimension=dimension, distanceMetric='euclidean',
+        metadataConfiguration={'filterableMetadataKeys': filterable_keys_not_null})
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors_no_metadata = [
+        {
+            'key': 'with-metadata',
+            'data': generate_data(dimension, 20),
+            'metadata': json.dumps({'genre': 'rock'})
+        },
+        {
+            'key': 'no-metadata',
+            'data': generate_data(dimension, 21),
+        },
+    ]
+    assert_put_vectors_validation_error(conn, 'vectors[1].metadata.genre',
+        vectorBucketName=bucket_name, indexName=index_name, vectors=vectors_no_metadata)
+
+    # same but with allowNull=true - should succeed
+    _ = conn.delete_index(vectorBucketName=bucket_name, indexName=index_name)
+
+    filterable_keys_all_null = [
+        {'name': 'genre', 'allowNull': True},
+        {'name': 'popular', 'type': 'Boolean'},
+    ]
+    result = conn.create_index(
+        vectorBucketName=bucket_name, indexName=index_name,
+        dataType='float32', dimension=dimension, distanceMetric='euclidean',
+        metadataConfiguration={'filterableMetadataKeys': filterable_keys_all_null})
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors_no_metadata)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    result = conn.list_vectors(vectorBucketName=bucket_name, indexName=index_name, maxResults=100)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == 2
 
     # cleanup
     _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)

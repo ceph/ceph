@@ -28,8 +28,15 @@
                 "type":{
                     "shape":"FilterableMetadataType",
                     "documentation":"<p>The type of the filterable metadata key. Defaults to String if not specified.</p>"
+                },
+                "allowNull":{
+                    "shape":"AllowNull",
+                    "documentation":"<p>Whether the filterable metadata key allows null values. Defaults to true.</p>"
                 }
             }
+        },
+        "AllowNull":{
+            "type":"boolean"
         },
         "FilterableMetadataType":{
             "type":"string",

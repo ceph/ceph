@@ -39,6 +39,7 @@ enum class FilterableMetadataType {
 struct filterable_metadata_key_t {
   std::string name;
   FilterableMetadataType type = FilterableMetadataType::STRING;
+  bool allow_null = true;
 
   void dump(ceph::Formatter* f) const;
   void decode_json(JSONObj* obj);

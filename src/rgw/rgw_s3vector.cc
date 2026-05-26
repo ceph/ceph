@@ -264,6 +264,7 @@ namespace rgw::s3vector {
       case FilterableMetadataType::NUMBER_LIST: ::encode_json("type", "NumberList", f); break;
       case FilterableMetadataType::BOOLEAN_LIST: ::encode_json("type", "BooleanList", f); break;
     }
+    ::encode_json("allowNull", allow_null, f);
   }
 
   void filterable_metadata_key_t::decode_json(JSONObj* obj) {
@@ -285,6 +286,7 @@ namespace rgw::s3vector {
     } else {
       throw JSONDecoder::err(fmt::format("invalid filterable metadata type: '{}'. Must be String, Number, Boolean, StringList, NumberList, or BooleanList", type_str));
     }
+    JSONDecoder::decode_json("allowNull", allow_null, true, obj);
   }
 
   static constexpr const char* nonfilterable_metadata_key[] = {"nonfilterable_metadata"};
@@ -478,7 +480,7 @@ namespace rgw::s3vector {
         continue;
       }
       if (const auto type = arrow_to_filterable_type(field->type()); type.has_value()) {
-        keys.push_back({name, *type});
+        keys.push_back({name, *type, field->nullable()});
       }
     }
     return keys;
@@ -491,7 +493,7 @@ namespace rgw::s3vector {
       arrow::field(metadata_field, arrow::utf8())
     };
     for (const auto& fk : filterable_keys) {
-      fields.push_back(arrow::field(fk.name, filterable_type_to_arrow(fk.type)));
+      fields.push_back(arrow::field(fk.name, filterable_type_to_arrow(fk.type), fk.allow_null));
     }
     const auto schema = arrow::schema(fields);
     if (const auto status = arrow::ExportSchema(*schema, c_schema); !status.ok()) {
@@ -1152,6 +1154,7 @@ namespace rgw::s3vector {
     struct FilterableBuilder {
       FilterableMetadataType type;
       std::string name;
+      bool allow_null;
       std::unique_ptr<arrow::ArrayBuilder> builder;
     };
     std::vector<FilterableBuilder> filterable_builders;
@@ -1159,6 +1162,7 @@ namespace rgw::s3vector {
       FilterableBuilder fb;
       fb.type = fk.type;
       fb.name = fk.name;
+      fb.allow_null = fk.allow_null;
       switch (fk.type) {
         case FilterableMetadataType::STRING:
           fb.builder = std::make_unique<arrow::StringBuilder>();
@@ -1232,10 +1236,14 @@ namespace rgw::s3vector {
       }
       // add filterable metadata columns
       if (!filterable_builders.empty() && !has_metadata) {
-        // no metadata, all filterable columns will be null
         for (auto& fb : filterable_builders) {
+          if (!fb.allow_null) {
+            errors.push_back({fmt::format("vectors[{}].metadata.{}", vi, fb.name), "field is required"});
+            break;
+          }
           fb.builder->AppendNull().ok();
         }
+        if (!errors.empty()) break;
         ++num_rows;
         continue;
       }
@@ -1255,7 +1263,10 @@ namespace rgw::s3vector {
           }
           auto* field_obj = parser.find_obj(fb.name);
           if (!field_obj) {
-            // column name does not exist in the metadata JSON, append null
+            if (!fb.allow_null) {
+              errors.push_back({fmt::format("vectors[{}].metadata.{}", vi, fb.name), "field is required"});
+              break;
+            }
             fb.builder->AppendNull().ok();
             continue;
           }
