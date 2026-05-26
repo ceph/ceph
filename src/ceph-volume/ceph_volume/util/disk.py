@@ -258,7 +258,7 @@ class BackingDeviceRotation(object):
         k = BackingDeviceRotation._kname_for_sysfs_walk(k)
         if not k or k in seen:
             return
-        if depth > BackingDeviceRotation._SYSFS_SLAVES_WALK_MAX_DEPTH:
+        if depth >= BackingDeviceRotation._SYSFS_SLAVES_WALK_MAX_DEPTH:
             logger.warning(
                 'sysfs slaves walk exceeded max depth %s at %s',
                 BackingDeviceRotation._SYSFS_SLAVES_WALK_MAX_DEPTH,
@@ -283,7 +283,7 @@ class BackingDeviceRotation(object):
             return
         for sn in slave_names:
             BackingDeviceRotation._walk_sysfs_leaf_blocks(
-                BackingDeviceRotation._kname_for_sysfs_walk(sn),
+                sn,
                 depth + 1,
                 found,
                 seen,

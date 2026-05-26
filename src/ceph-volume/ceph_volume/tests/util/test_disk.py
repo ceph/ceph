@@ -133,6 +133,15 @@ class TestBackingDeviceIsRotational(object):
         fake_filesystem.create_file('/sys/block/dm-0/queue/rotational', contents='0')
         assert disk.BackingDeviceRotation.is_rotational('/dev/dm-0') is True
 
+    @patch('ceph_volume.util.disk.os.path.exists', return_value=True)
+    @patch('ceph_volume.util.disk.UdevData')
+    def test_leaf_block_uses_udev_hints(self, m_udev, _m_exists):
+        m_udev.return_value.environment = {'ID_SSD': '1'}
+        assert disk.BackingDeviceRotation._leaf_block_is_rotational('sda') is False
+
+        m_udev.return_value.environment = {'ID_ATA_ROTATION_RATE_RPM': '7200'}
+        assert disk.BackingDeviceRotation._leaf_block_is_rotational('sdb') is True
+
 
 class TestBlkidParser(object):
 
