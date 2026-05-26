@@ -584,7 +584,7 @@ protected:
 	                           uint32_t flags = rgw::sal::FLAG_LOG_OP) override;
       virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y) override;
       virtual bool is_expired() override;
-      virtual void gen_rand_obj_instance_name() override;
+      virtual void gen_rand_obj_instance_name(const DoutPrefixProvider* dpp) override;
       virtual std::unique_ptr<Object> clone() override {
         return std::unique_ptr<Object>(new DBObject(*this));
       }

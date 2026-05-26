@@ -887,7 +887,7 @@ TEST(FSEnt, VerDirReadWrite)
   std::string fname = get_test_name();
   std::unique_ptr<VersionedDirectory> verdir{
       std::make_unique<VersionedDirectory>(fname, root.get(), env->cct.get())};
-  std::string instance_id{verdir->get_new_instance()};
+  std::string instance_id{verdir->get_new_instance(env->dpp)};
   std::string vfname{"_%3A" + instance_id + "_" + fname};
   sf::path tp{base_path / fname};
   sf::path fp{tp / vfname};
@@ -981,7 +981,7 @@ TEST(FSEnt, MPVerDirReadWrite)
   std::string testname = get_test_name();
   std::unique_ptr<VersionedDirectory> verdir{
       std::make_unique<VersionedDirectory>(testname, root.get(), env->cct.get())};
-  std::string instance_id{verdir->get_new_instance()};
+  std::string instance_id{verdir->get_new_instance(env->dpp)};
   std::string vfname{"_%3A" + instance_id + "_" + testname};
   sf::path vp{base_path / testname};
   sf::path mp{vp / vfname};
@@ -1906,7 +1906,7 @@ TEST_F(POSIXBucketTest, VersionedObjectWrite)
   std::unique_ptr<rgw::sal::Object> object = bucket->get_object(rgw_obj_key(testname));
   EXPECT_NE(object.get(), nullptr);
 
-  object->gen_rand_obj_instance_name();
+  object->gen_rand_obj_instance_name(env->dpp);
   std::string inst_id = object->get_instance();
 
   std::unique_ptr<rgw::sal::Writer> writer = driver->get_atomic_writer(
@@ -1964,7 +1964,7 @@ TEST_F(POSIXBucketTest, VersionedObjectWrite)
   std::unique_ptr<rgw::sal::Object> obj2 = bucket->get_object(rgw_obj_key(testname));
   EXPECT_NE(obj2.get(), nullptr);
 
-  obj2->gen_rand_obj_instance_name();
+  obj2->gen_rand_obj_instance_name(env->dpp);
   inst_id = obj2->get_instance();
 
   writer.reset();
@@ -2042,7 +2042,7 @@ public:
   std::unique_ptr<rgw::sal::Object>  write_version(std::string objname) {
     std::unique_ptr<rgw::sal::Object> object = bucket->get_object(rgw_obj_key(objname));
     EXPECT_NE(object.get(), nullptr);
-    object->gen_rand_obj_instance_name();
+    object->gen_rand_obj_instance_name(env->dpp);
 
     std::unique_ptr<rgw::sal::Writer> writer = driver->get_atomic_writer(
         env->dpp, null_yield, object.get(), acl_owner, nullptr, 0, testname);
@@ -2489,7 +2489,7 @@ public:
     rgw::sal::MultipartUpload::prefix_map_t processed_prefixes;
     ACLOwner owner;
     owner.id = bucket->get_owner();
-    mp_obj->gen_rand_obj_instance_name();
+    mp_obj->gen_rand_obj_instance_name(env->dpp);
     std::string inst_id = mp_obj->get_instance();
     std::string vfname{"_%3A" + inst_id + "_" + objname};
     sf::path op{bp / "root" / testname / objname / vfname };

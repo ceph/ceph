@@ -1886,7 +1886,7 @@ namespace rgw {
       if (!version_id.empty()) {
         state->object->set_instance(version_id);
       } else {
-	state->object->gen_rand_obj_instance_name();
+	state->object->gen_rand_obj_instance_name(this);
         version_id = state->object->get_instance();
       }
     }

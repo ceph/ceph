@@ -209,7 +209,7 @@ class D4NFilterFixture: public ::testing::Test {
       objEnabled = testBucket->get_object(rgw_obj_key(object_name));
       ASSERT_NE(objEnabled.get(), nullptr);
       objEnabled.get()->set_obj_size(9);
-      objEnabled->gen_rand_obj_instance_name();
+      objEnabled->gen_rand_obj_instance_name(env->dpp);
       instance = objEnabled->get_instance();
 
       testWriter = driver->get_atomic_writer(env->dpp, 
@@ -930,7 +930,7 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectRead)
       std::string destNameEnabled = "dest_object_enabled";
       std::unique_ptr<rgw::sal::Object> destObjEnabled = testBucket->get_object(rgw_obj_key(destNameEnabled));
       EXPECT_NE(destObjEnabled.get(), nullptr);
-      destObjEnabled->gen_rand_obj_instance_name();
+      destObjEnabled->gen_rand_obj_instance_name(env->dpp);
       instance = destObjEnabled->get_instance();
 
       int ret = objEnabled->copy_object(acl_owner,
@@ -1071,7 +1071,7 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectRead)
       std::string destNameEnabled = "dest_object_enabled";
       std::unique_ptr<rgw::sal::Object> destObjEnabled = testBucket->get_object(rgw_obj_key(destNameEnabled));
       EXPECT_NE(destObjEnabled.get(), nullptr);
-      destObjEnabled->gen_rand_obj_instance_name();
+      destObjEnabled->gen_rand_obj_instance_name(env->dpp);
       instance = destObjEnabled->get_instance();
 
       int ret = objEnabled->copy_object(acl_owner,
@@ -1212,7 +1212,7 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectRead)
       std::string destNameEnabled = "dest_object_enabled";
       std::unique_ptr<rgw::sal::Object> destObjEnabled = testBucket->get_object(rgw_obj_key(destNameEnabled));
       EXPECT_NE(destObjEnabled.get(), nullptr);
-      destObjEnabled->gen_rand_obj_instance_name();
+      destObjEnabled->gen_rand_obj_instance_name(env->dpp);
       instance = destObjEnabled->get_instance();
 
       int ret = objEnabled->copy_object(acl_owner,
@@ -2395,7 +2395,7 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectWrite)
       std::string destNameEnabled = "dest_object_enabled";
       std::unique_ptr<rgw::sal::Object> destObjEnabled = testBucket->get_object(rgw_obj_key(destNameEnabled));
       EXPECT_NE(destObjEnabled.get(), nullptr);
-      destObjEnabled->gen_rand_obj_instance_name();
+      destObjEnabled->gen_rand_obj_instance_name(env->dpp);
       instance = destObjEnabled->get_instance();
 
       int ret = objEnabled->copy_object(acl_owner,
@@ -2616,7 +2616,7 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectWrite)
       std::string destNameEnabled = "dest_object_enabled";
       std::unique_ptr<rgw::sal::Object> destObjEnabled = testBucket->get_object(rgw_obj_key(destNameEnabled));
       EXPECT_NE(destObjEnabled.get(), nullptr);
-      destObjEnabled->gen_rand_obj_instance_name();
+      destObjEnabled->gen_rand_obj_instance_name(env->dpp);
       instance = destObjEnabled->get_instance();
 
       int ret = objEnabled->copy_object(acl_owner,
@@ -2837,7 +2837,7 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
       std::string destNameEnabled = "dest_object_enabled";
       std::unique_ptr<rgw::sal::Object> destObjEnabled = testBucket->get_object(rgw_obj_key(destNameEnabled));
       EXPECT_NE(destObjEnabled.get(), nullptr);
-      destObjEnabled->gen_rand_obj_instance_name();
+      destObjEnabled->gen_rand_obj_instance_name(env->dpp);
       instance = destObjEnabled->get_instance();
 
       int ret = objEnabled->copy_object(acl_owner,

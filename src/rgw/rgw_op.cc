@@ -4705,7 +4705,7 @@ void RGWPutObj::execute(optional_yield y)
       if (!version_id.empty()) {
         s->object->set_instance(version_id);
       } else {
-	s->object->gen_rand_obj_instance_name();
+	s->object->gen_rand_obj_instance_name(this);
         version_id = s->object->get_instance();
       }
     }
@@ -5168,7 +5168,7 @@ void RGWPostObj::execute(optional_yield y)
     std::unique_ptr<rgw::sal::Object> obj =
 		     s->bucket->get_object(rgw_obj_key(get_current_filename()));
     if (s->bucket->versioning_enabled()) {
-      obj->gen_rand_obj_instance_name();
+      obj->gen_rand_obj_instance_name(this);
     }
 
     std::unique_ptr<rgw::sal::Writer> processor;
@@ -6326,7 +6326,7 @@ void RGWCopyObj::execute(optional_yield y)
   if ( ! version_id.empty()) {
     s->object->set_instance(version_id);
   } else if (s->bucket->versioning_enabled()) {
-    s->object->gen_rand_obj_instance_name();
+    s->object->gen_rand_obj_instance_name(this);
   }
 
   s->src_object->set_atomic(true);
@@ -7490,7 +7490,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
     if (!version_id.empty()) {
       s->object->set_instance(version_id);
     } else {
-      s->object->gen_rand_obj_instance_name();
+      s->object->gen_rand_obj_instance_name(this);
       version_id = s->object->get_instance();
     }
   }
@@ -8605,7 +8605,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   }
 
   if (bucket->versioning_enabled()) {
-    obj->gen_rand_obj_instance_name();
+    obj->gen_rand_obj_instance_name(this);
   }
 
   rgw_placement_rule dest_placement = s->dest_placement;

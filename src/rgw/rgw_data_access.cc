@@ -129,7 +129,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
   std::unique_ptr<rgw::sal::Writer> processor;
 
   if (bucket_info.versioning_enabled() && obj->get_instance().empty()) {
-    obj->gen_rand_obj_instance_name();
+    obj->gen_rand_obj_instance_name(dpp);
   }
 
   processor = driver->get_atomic_writer(dpp, y, obj.get(), owner,
