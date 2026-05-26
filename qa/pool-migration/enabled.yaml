@@ -1,7 +1,10 @@
-tasks:
-- exec:
-    client.0:
-      - ceph osd set-require-min-compat-client umbrella
-overrides:
-  rados:
-    migrate_pool: true
+# Disabled until pool migration is stable
+#overrides:
+#  rados:
+#    migrate_pool: true
+#  ceph:
+#    conf:
+#      mon:
+#        mon osd initial require min compat client: umbrella
+#      global:
+#        enable experimental unrecoverable data corrupting features: '*'
