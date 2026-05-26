@@ -29,8 +29,9 @@
 #include "common/ceph_context.h"
 #include "common/dout.h"
 #include "common/async/yield_context.h"
-#include "global/global_context.h"
 
+#include "global/global_init.h"
+#include "common/ceph_argparse.h"
 #include "rgw_quota_types.h"
 #include "rgw_sc_quota_types.h"
 #include "rgw_sc_quota_checker.h"
@@ -41,8 +42,10 @@
 using namespace rgw::quota;
 
 namespace {
-struct TestDpp : NoDoutPrefix {
-  TestDpp() : NoDoutPrefix(g_ceph_context, /*subsys=*/0) {}
+struct TestDpp : public DoutPrefixProvider {
+  CephContext* get_cct() const override { return g_ceph_context; }
+  unsigned get_subsys() const override { return ceph_subsys_rgw; }
+  std::ostream& gen_prefix(std::ostream& out) const override { return out; }
 };
 } // namespace
 
@@ -323,4 +326,17 @@ TEST(RGWScQuotaChecker, BucketAndUserCombineTighter) {
       &dpp, q, make_bucket(), make_placement("p", "SSD"),
       25, 1, null_yield);
   EXPECT_EQ(r, -EDQUOT);
+}
+
+int main(int argc, char** argv)
+{
+  auto args = argv_to_vec(argc, argv);
+  auto cct = global_init(nullptr, args,
+                         CEPH_ENTITY_TYPE_CLIENT,
+                         CODE_ENVIRONMENT_UTILITY,
+                         CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  common_init_finish(g_ceph_context);
+
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
 }
