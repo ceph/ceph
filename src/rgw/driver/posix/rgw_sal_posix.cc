@@ -773,6 +773,11 @@ int File::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, std::s
   return 0;
 }
 
+std::string Directory::get_new_instance(const DoutPrefixProvider* dpp)
+{
+  return gen_rand_instance_name();
+}
+
 bool Directory::file_exists(std::string& name)
 {
   struct statx nstx;
@@ -1503,13 +1508,17 @@ std::string VersionedDirectory::get_new_instance(const DoutPrefixProvider* dpp)
     zpp::bits::out out(value);
     errc = out(version);
     if (errc.code != std::errc{0}) {
-      abort();
-    }
-    int ret = fsetxattr(fd, attrname.c_str(), value.c_str(), value.length(), 0);
-    if (ret < 0) {
-      ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not write attribute " << attrname
-                        << cpp_strerror(ret) << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: serialization failed for " << attrname
+                        << cpp_strerror(-(int32_t(errc.code)))
+                        << dendl;
+    } else {
+      int ret = fsetxattr(fd, attrname.c_str(), value.c_str(), value.length(),
+                          0);
+      if (ret < 0) {
+        ret = errno;
+        ldpp_dout(dpp, 0) << "ERROR: could not write attribute " << attrname
+                          << cpp_strerror(ret) << dendl;
+      }
     }
   }
 
@@ -3483,9 +3492,10 @@ bool POSIXObject::is_expired()
   return false;
 }
 
-void POSIXObject::gen_rand_obj_instance_name()
+void POSIXObject::gen_rand_obj_instance_name(const DoutPrefixProvider* dpp)
 {
-  state.obj.key.set_instance(gen_rand_instance_name());
+  auto instance_name = ent->get_parent()->get_new_instance(dpp);
+  state.obj.key.set_instance(std::move(instance_name));
 }
 
 std::unique_ptr<MPSerializer> POSIXObject::get_serializer(const DoutPrefixProvider *dpp, optional_yield y, const std::string& lock_name)

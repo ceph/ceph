@@ -216,7 +216,7 @@ public:
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) override;
   virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags) override;
-
+  virtual std::string get_new_instance(const DoutPrefixProvider* dpp);
   int get_ent(const DoutPrefixProvider *dpp, optional_yield y, const std::string& name, const std::string& version, std::unique_ptr<FSEnt>& ent);
 };
 
@@ -333,7 +333,7 @@ public:
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) override;
   virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children) override;
   virtual std::string get_cur_version() override;
-  std::string get_new_instance(const DoutPrefixProvider* dpp);
+  std::string get_new_instance(const DoutPrefixProvider* dpp) override;
   int remove_symlink(const DoutPrefixProvider *dpp, optional_yield y, std::string match = "");
   int add_file(const DoutPrefixProvider *dpp, std::unique_ptr<FSEnt>&& file, bool* existed = nullptr, bool temp_file = false);
   FSEnt* get_cur_version_ent() { return cur_version.get(); };
@@ -1088,7 +1088,7 @@ public:
   virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
 			       optional_yield y) override;
   virtual bool is_expired() override;
-  virtual void gen_rand_obj_instance_name() override;
+  virtual void gen_rand_obj_instance_name(const DoutPrefixProvider* dpp) override;
   virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp, optional_yield y,
 						       const std::string& lock_name) override;
   virtual int transition(Bucket* bucket,

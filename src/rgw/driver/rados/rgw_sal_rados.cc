@@ -2981,7 +2981,7 @@ bool RadosObject::is_expired() {
   return delete_at <= ceph_clock_now() && !delete_at.is_zero();
 }
 
-void RadosObject::gen_rand_obj_instance_name()
+void RadosObject::gen_rand_obj_instance_name(const DoutPrefixProvider* dpp)
 {
   store->getRados()->gen_rand_obj_instance_name(&state.obj.key);
 }

@@ -583,7 +583,7 @@ namespace rgw::sal {
     return false;
   }
 
-  void DBObject::gen_rand_obj_instance_name()
+  void DBObject::gen_rand_obj_instance_name(const DoutPrefixProvider* dpp)
   {
      store->getDB()->gen_rand_obj_instance_name(&state.obj.key);
   }

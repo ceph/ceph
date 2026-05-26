@@ -1111,9 +1111,9 @@ bool FilterObject::is_expired()
   return next->is_expired();
 }
 
-void FilterObject::gen_rand_obj_instance_name()
+void FilterObject::gen_rand_obj_instance_name(const DoutPrefixProvider* dpp)
 {
-  return next->gen_rand_obj_instance_name();
+  return next->gen_rand_obj_instance_name(dpp);
 }
 
 std::unique_ptr<MPSerializer> FilterObject::get_serializer(const DoutPrefixProvider *dpp, optional_yield y,

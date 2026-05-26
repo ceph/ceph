@@ -820,7 +820,7 @@ public:
   virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
 			       optional_yield y) override;
   virtual bool is_expired() override;
-  virtual void gen_rand_obj_instance_name() override;
+  virtual void gen_rand_obj_instance_name(const DoutPrefixProvider* dpp) override;
   virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp, optional_yield y,
 						       const std::string& lock_name) override;
   virtual int transition(Bucket* bucket,
