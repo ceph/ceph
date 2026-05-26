@@ -251,7 +251,7 @@ LogManager::omap_set_keys(
   }
 
   if (!dup_kvs.empty()) {
-    laddr_t last_addr = co_await get_dup_addr_from_root(t, log_root.addr);
+    laddr_t last_addr = ext->get_dup_tail_addr();
     ext = co_await log_load_extent<LogNode>(t, last_addr, BEGIN_KEY, END_KEY);
     for (auto &p: dup_kvs) {
       co_await f(p.first, p.second);
