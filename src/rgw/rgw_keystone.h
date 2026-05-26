@@ -175,10 +175,21 @@ public:
 
   class ApplicationCredential {
   public:
+    // OpenStack application credential access rule.
+    // Reference: https://docs.openstack.org/keystone/latest/admin/application-credentials.html
+    class AccessRule {
+    public:
+      std::string service;  // service type, e.g. "object-store"
+      std::string method;   // HTTP method: GET, HEAD, PUT, POST, DELETE, PATCH
+      std::string path;     // URL path pattern with glob support
+      void decode_json(JSONObj *obj);
+    };
+
     ApplicationCredential() : restricted(false) { }
     std::string id;
     std::string name;
     bool restricted;
+    std::vector<AccessRule> access_rules;
     void decode_json(JSONObj *obj);
   };
 
@@ -203,6 +214,20 @@ public:
   const std::string& get_user_id() const {return user.id;};
   const std::string& get_user_name() const {return user.name;};
   bool has_role(const std::string& r) const;
+  // Returns access rules from the application credential, if any.
+  // An unrestricted token (or one without app_cred) returns an empty vector;
+  // callers should use has_access_rules() to distinguish "no restriction" from
+  // "restricted to nothing".
+  const std::vector<ApplicationCredential::AccessRule>& get_access_rules() const {
+    static const std::vector<ApplicationCredential::AccessRule> empty;
+    return app_cred ? app_cred->access_rules : empty;
+  }
+  // True only when an app_cred is present AND it carries access rules.
+  // A restricted app_cred without rules denies everything; an unrestricted
+  // app_cred has no rules and grants normally.
+  bool has_access_rules() const {
+    return app_cred && !app_cred->access_rules.empty();
+  }
   bool expired() const {
     const uint64_t now = ceph_clock_now().sec();
     return std::cmp_greater_equal(now, get_expires());
