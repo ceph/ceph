@@ -439,7 +439,7 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
 
   // Populate the target, to extract the acting set from it.
   t.flags &= ~CEPH_OSD_FLAG_BALANCE_READS;
-  objecter._calc_target(&op->target, op);
+  objecter._calc_target(&op->target, op->snapid);
 
   for (unsigned i = 0; i < op->ops.size(); ++i) {
     split_read->init( op->ops[i], i);

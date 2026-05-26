@@ -915,7 +915,7 @@ void Objecter::_linger_submit(LingerOp *info,
 
   // Populate Op::target
   OSDSession *s = NULL;
-  int r = _calc_target(&info->target);
+  int r = _calc_target(&info->target, info->snap);
   switch (r) {
   case RECALC_OP_TARGET_POOL_EIO:
     _check_linger_pool_eio(info);
@@ -1147,7 +1147,7 @@ void Objecter::_scan_requests(
     if (pool_full_map)
       force_resend_writes = force_resend_writes ||
 	(*pool_full_map)[op->target.base_oloc.pool];
-    int r = _calc_target(&op->target);
+    int r = _calc_target(&op->target, op->snapid);
     switch (r) {
     case RECALC_OP_TARGET_NO_ACTION:
       if (!skipped_map && !(force_resend_writes && op->target.respects_full()))
@@ -1350,7 +1350,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
     Op *op = p->second;
     if (op->target.epoch < osdmap->get_epoch()) {
       ldout(cct, 10) << __func__ << "  checking op " << p->first << dendl;
-      int r = _calc_target(&op->target);
+      int r = _calc_target(&op->target, op->snapid);
       if (r == RECALC_OP_TARGET_POOL_DNE) {
 	p = need_resend.erase(p);
 	_check_op_pool_dne(op, nullptr);
@@ -1379,7 +1379,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
     auto s = op->session;
     bool mapped_session = false;
     if (!s) {
-      int r = _map_session(&op->target, &s, sul);
+      int r = _map_session(&op->target, op->snapid, &s, sul);
       ceph_assert(r == 0);
       mapped_session = true;
     } else {
@@ -2511,7 +2511,7 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
   OSDSession *s = NULL;
 
   bool check_for_latest_map = false;
-  int r = _calc_target(&op->target);
+  int r = _calc_target(&op->target, op->snapid);
   switch(r) {
   case RECALC_OP_TARGET_POOL_DNE:
     check_for_latest_map = true;
@@ -2539,7 +2539,7 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
       // map changed; recalculate mapping
       ldout(cct, 10) << __func__ << " relock raced with osdmap, recalc target"
 		     << dendl;
-      check_for_latest_map = _calc_target(&op->target)
+      check_for_latest_map = _calc_target(&op->target, op->snapid)
 	== RECALC_OP_TARGET_POOL_DNE;
       if (s) {
 	put_session(s);
@@ -2956,7 +2956,7 @@ void Objecter::_prune_snapc(
   }
 }
 
-int Objecter::_calc_target(op_target_t *t, bool any_change)
+int Objecter::_calc_target(op_target_t *t, snapid_t snap, bool any_change)
 {
   // rwlock is locked
   bool is_read = t->flags & CEPH_OSD_FLAG_READ;
@@ -3044,7 +3044,6 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
         migrated = true;
       } else {
         if (*tpi->migration_src != t->target_oloc.pool) {
-          ldout(cct,30) << __func__ << "  BILL cascaded migration" << dendl;
           // cascaded pool migration, redirect to latest source pool
           // first, then work out the state of this migration
           const pg_pool_t *spi = osdmap->get_pg_pool(*tpi->migration_src);
@@ -3076,7 +3075,7 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
           // PG is migrating - check watermark
           const auto& iter = pool_migration_watermarks.find(actual_pgid);
           if (iter != pool_migration_watermarks.end()) {
-            if (t->get_hobj(pgid) < iter->second) {
+            if (t->get_hobj(pgid, snap) < iter->second) {
               // object has been migrated
               migrated = true;
             }
@@ -3290,10 +3289,10 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
   return RECALC_OP_TARGET_NO_ACTION;
 }
 
-int Objecter::_map_session(op_target_t *target, OSDSession **s,
+int Objecter::_map_session(op_target_t *target, snapid_t snap, OSDSession **s,
 			   shunique_lock<ceph::shared_mutex>& sul)
 {
-  _calc_target(target);
+  _calc_target(target, snap);
   return _get_session(target->osd, s, sul);
 }
 
@@ -3418,7 +3417,7 @@ int Objecter::_recalc_linger_op_target(LingerOp *linger_op,
 {
   // rwlock is locked unique
 
-  int r = _calc_target(&linger_op->target, true);
+  int r = _calc_target(&linger_op->target, linger_op->snap, true);
   if (r == RECALC_OP_TARGET_NEED_RESEND) {
     ldout(cct, 10) << "recalc_linger_op_target tid " << linger_op->linger_id
 		   << " pgid " << linger_op->target.pgid
@@ -3864,19 +3863,18 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
       ldout(cct, 15) << __func__ << " redirect for " << op->target.target_oid << " previous=" << previous_watermark << " new=" << new_watermark << dendl;
       for (auto it = s->ops.begin(); it != s->ops.end(); ) {
         if (it->second->target.actual_pgid.pgid == m->get_pg()) {
-          int r = it->second->target.contained_by(previous_watermark, new_watermark);
-          if (r) {
-            ldout(cct, 20) << __func__ << " found for retrying " << it->second->target.target_oid << dendl;
+          auto hobj = it->second->target.get_hobj(it->second->target.pgid, it->second->snapid);
+          if ((previous_watermark <= hobj) && (hobj < new_watermark)) {
+            ldout(cct, 20) << __func__ << " found for retrying " << it->second->tid << " " <<it->second->target.get_hobj() << dendl;
             if (it->second->has_completion())
               num_in_flight--;
-            it->second->tid = 0;
             retry.push_back(it->second);
             if (it->second == op) {
               found = true;
             }
             _session_op_remove(s, it);
           } else {
-            ldout(cct, 20) << __func__ << " not retrying " << it->second->target.target_oid << dendl;
+            ldout(cct, 20) << __func__ << " not retrying " << it->second->tid << " " << it->second->target.get_hobj() << dendl;
             ++it;
           }
         } else {
@@ -3889,23 +3887,27 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
       r.update_migration_watermark(
          pool_migration_watermarks[m->get_pg()]);
 
+      for (auto& it : retry) {
+        _op_submit(it, sul, NULL);
+      }
+      retry.clear();
+
       // Check if linger ops need moving to a different session.
-      // There is no need to resend them - any in flight ops will
-      // be on the retry list, this just ensures future requests
-      // are routed correctly
+      // If they are moved then the routing for future requests
+      // is updated, they will also need to be resent to
+      // reconnect
       auto lp = s->linger_ops.begin();
       while (lp != s->linger_ops.end()) {
         auto linger_op = lp->second;
         ++lp;
         // _recalc_linger_op_target may touch linger_ops, prevent
         // iterator invalidation
-        _recalc_linger_op_target(linger_op, sul);
+        rc = _recalc_linger_op_target(linger_op, sul);
+        if (rc == RECALC_OP_TARGET_NEED_RESEND) {
+          ldout(cct, 20) << __func__ << " resending linger " << linger_op << dendl;
+          _send_linger(linger_op, sul);
+        }
       }
-
-      for (auto& it : retry) {
-        _op_submit(it, sul, NULL);
-      }
-      retry.clear();
     } else {
       if (op->has_completion())
         num_in_flight--;
@@ -5510,7 +5512,7 @@ int Objecter::_calc_command_target(CommandOp *c,
     }
     c->target.osd = c->target_osd;
   } else {
-    int ret = _calc_target(&(c->target), true);
+    int ret = _calc_target(&(c->target), CEPH_NOSNAP, true);
     if (ret == RECALC_OP_TARGET_POOL_DNE) {
       c->map_check_error = -ENOENT;
       c->map_check_error_str = "pool dne";

@@ -1950,10 +1950,10 @@ public:
 		       target_oloc.nspace);
     }
 
-    hobject_t get_hobj(pg_t pgid) {
+    hobject_t get_hobj(pg_t pgid, snapid_t snapid) {
       return hobject_t(target_oid,
 		       target_oloc.key,
-		       CEPH_NOSNAP,
+		       snapid,
 		       target_oloc.hash >= 0 ? target_oloc.hash : pgid.ps(),
 		       target_oloc.pool,
 		       target_oloc.nspace);
@@ -2657,8 +2657,8 @@ public:
     Op *op);
 
   bool target_should_be_paused(op_target_t *op);
-  int _calc_target(op_target_t *t, bool any_change = false);
-  int _map_session(op_target_t *op, OSDSession **s,
+  int _calc_target(op_target_t *t, snapid_t snap, bool any_change = false);
+  int _map_session(op_target_t *op, snapid_t snap, OSDSession **s,
 		   ceph::shunique_lock<ceph::shared_mutex>& lc);
 
   void _session_op_assign(OSDSession *s, Op *op);
