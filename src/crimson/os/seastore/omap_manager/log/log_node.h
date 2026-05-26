@@ -895,19 +895,7 @@ struct LogNode
   };
 
   range_t has_between(std::optional<std::string> start,
-    std::optional<std::string> end) {
-    std::string_view s(*start);
-    std::string_view e(*end);
-    auto iter = iter_begin();
-    while(iter != iter_end()) {
-      std::string k = iter->get_key();
-      if (k <= e && k >= s) {
-	return range_t::HAS_BETWEEN;
-      } 
-      iter++;
-    };
-    return range_t::NO_BETWEEN;
-  }
+    std::optional<std::string> end);
 
   template <typename F>
   void for_each_live_entry(F&& fn);
