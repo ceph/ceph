@@ -185,7 +185,7 @@ LogManager::omap_set_keys(
 
   std::map<std::string, ceph::bufferlist> dup_kvs;
   if (kvs.size() > BATCH_CREATE_SIZE) {
-    LogNodeRef e = co_await alloc_log_node(ext->get_laddr());
+    LogNodeRef e = ext;
     LogNodeRef dup_e = co_await alloc_log_node(
       co_await get_dup_addr_from_root(t, ext->get_laddr()));
     for (auto &p : kvs) {
@@ -215,11 +215,20 @@ LogManager::omap_set_keys(
 	cur = co_await alloc_log_node(cur->get_laddr());
 	if (!is_dup_log_key(p.first)) {
 	  e = cur;
+	  log_root.update(e->get_laddr(), log_root.depth,
+	    log_root.hint, log_root.type);
 	} else {
 	  dup_e = cur;
 	}
       }
-      cur->append_kv(t, p.first, p.second);
+      if (cur->is_initial_pending()) {
+	cur->append_kv(t, p.first, p.second);
+      } else {
+	assert(!is_dup_log_key(p.first));
+	auto mut = tm.get_mutable_extent(t, cur)->cast<LogNode>();
+	mut->append_kv(t, p.first, p.second);
+	e = mut;
+      }
     }
     if (e->is_initial_pending()) {
       e->set_dup_tail_addr(dup_e->get_laddr());
@@ -227,8 +236,6 @@ LogManager::omap_set_keys(
       auto mut = tm.get_mutable_extent(t, e)->cast<LogNode>();
       mut->set_dup_tail_addr(dup_e->get_laddr());
     }
-    log_root.update(e->get_laddr(), log_root.depth,
-      log_root.hint, log_root.type);
     co_return;
   }
 
