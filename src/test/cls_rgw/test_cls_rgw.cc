@@ -1633,3 +1633,109 @@ TEST_F(cls_rgw, bi_put_entries)
     test_stats(ioctx, dst_bucket, RGWObjCategory::Main, 3, 24576);
   }
 }
+
+// ============================================================================
+// STORAGE CLASS STATS std::optional TESTS
+// ============================================================================
+
+// Helper function to write bucket header
+static int write_header(librados::IoCtx& ioctx, const string& oid,
+                        const rgw_bucket_dir_header& header)
+{
+  librados::ObjectWriteOperation op;
+  bufferlist bl;
+  encode(header, bl);
+  op.omap_set_header(bl);
+  return ioctx.operate(oid, &op);
+}
+
+TEST_F(cls_rgw, StorageClassStats_BasicInit) {
+  string oid = "bucket.index.basic";
+  
+  // Create header with storage_class_stats initialized
+  rgw_bucket_dir_header header;
+  header.storage_class_stats = std::unordered_map<std::string, rgw_bucket_category_stats>();
+  
+  ASSERT_EQ(0, write_header(ioctx, oid, header));
+  
+  // Read it back
+  rgw_bucket_dir_header read_hdr;
+  ASSERT_EQ(0, read_header(ioctx, oid, read_hdr));
+  
+  ASSERT_TRUE(read_hdr.storage_class_stats.has_value());
+  ASSERT_TRUE(read_hdr.storage_class_stats->empty());
+}
+
+TEST_F(cls_rgw, StorageClassStats_LegacyToConverted) {
+  string oid = "bucket.index.legacy";
+  
+  // Start with nullopt (legacy bucket)
+  rgw_bucket_dir_header header;
+  header.storage_class_stats = std::nullopt;
+  
+  ASSERT_EQ(0, write_header(ioctx, oid, header));
+  
+  // Verify it's nullopt
+  rgw_bucket_dir_header read_hdr;
+  ASSERT_EQ(0, read_header(ioctx, oid, read_hdr));
+  ASSERT_FALSE(read_hdr.storage_class_stats.has_value());
+  
+  // Now convert it to has_value
+  read_hdr.storage_class_stats = std::unordered_map<std::string, rgw_bucket_category_stats>();
+  (*read_hdr.storage_class_stats)["STANDARD"].num_entries = 5;
+  (*read_hdr.storage_class_stats)["STANDARD"].total_size = 5120;
+  
+  ASSERT_EQ(0, write_header(ioctx, oid, read_hdr));
+  
+  // Verify converted
+  rgw_bucket_dir_header final_hdr;
+  ASSERT_EQ(0, read_header(ioctx, oid, final_hdr));
+  ASSERT_TRUE(final_hdr.storage_class_stats.has_value());
+  EXPECT_EQ((*final_hdr.storage_class_stats)["STANDARD"].num_entries, 5);
+}
+
+TEST_F(cls_rgw, StorageClassStats_MultipleClasses) {
+  string oid = "bucket.index.multi";
+  
+  rgw_bucket_dir_header header;
+  header.storage_class_stats = std::unordered_map<std::string, rgw_bucket_category_stats>();
+  
+  // Add multiple storage classes
+  (*header.storage_class_stats)["STANDARD"].num_entries = 10;
+  (*header.storage_class_stats)["HDD"].num_entries = 20;
+  (*header.storage_class_stats)["GLACIER"].num_entries = 30;
+  
+  ASSERT_EQ(0, write_header(ioctx, oid, header));
+  
+  // Read back and verify
+  rgw_bucket_dir_header read_hdr;
+  ASSERT_EQ(0, read_header(ioctx, oid, read_hdr));
+  
+  ASSERT_TRUE(read_hdr.storage_class_stats.has_value());
+  EXPECT_EQ(read_hdr.storage_class_stats->size(), 3);
+  EXPECT_EQ((*read_hdr.storage_class_stats)["STANDARD"].num_entries, 10);
+  EXPECT_EQ((*read_hdr.storage_class_stats)["HDD"].num_entries, 20);
+  EXPECT_EQ((*read_hdr.storage_class_stats)["GLACIER"].num_entries, 30);
+}
+
+TEST_F(cls_rgw, StorageClassStats_ZeroAfterDelete) {
+  string oid = "bucket.index.zero";
+  
+  rgw_bucket_dir_header header;
+  header.storage_class_stats = std::unordered_map<std::string, rgw_bucket_category_stats>();
+  
+  // Simulate deletion - entry exists but with zero values
+  (*header.storage_class_stats)["STANDARD"].num_entries = 0;
+  (*header.storage_class_stats)["STANDARD"].total_size = 0;
+  
+  ASSERT_EQ(0, write_header(ioctx, oid, header));
+  
+  // Verify entry persists with zero values
+  rgw_bucket_dir_header read_hdr;
+  ASSERT_EQ(0, read_header(ioctx, oid, read_hdr));
+  
+  ASSERT_TRUE(read_hdr.storage_class_stats.has_value());
+  EXPECT_TRUE(read_hdr.storage_class_stats->count("STANDARD") > 0);
+  EXPECT_EQ((*read_hdr.storage_class_stats)["STANDARD"].num_entries, 0);
+}
+

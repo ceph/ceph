@@ -209,3 +209,139 @@ TEST_F(ClsAccount, list)
   ASSERT_EQ(0, add(oid, u5, false, max_users)); // overwrite u1
   EXPECT_EQ(make_list(u5, u3, u4), list_all(oid, ""));
 }
+
+// ============================================================================
+// USER STORAGE CLASS STATS std::optional TESTS
+// ============================================================================
+
+// Helper functions for user header operations
+static int write_user_header_test(librados::IoCtx& ioctx, const std::string& oid,
+                                   const cls_user_header& header)
+{
+  librados::ObjectWriteOperation op;
+  bufferlist bl;
+  encode(header, bl);
+  op.omap_set_header(bl);
+  return ioctx.operate(oid, &op);
+}
+
+static int read_user_header_test(librados::IoCtx& ioctx, const std::string& oid,
+                                  cls_user_header& header)
+{
+  librados::ObjectReadOperation op;
+  bufferlist bl;
+  int rc;
+  
+  op.omap_get_header(&bl, &rc);
+  
+  int ret = ioctx.operate(oid, &op, nullptr);
+  if (ret < 0) return ret;
+  if (rc < 0) return rc;
+  
+  if (bl.length() > 0) {
+    auto iter = bl.cbegin();
+    decode(header, iter);
+  }
+  
+  return 0;
+}
+
+// Create a test fixture for user storage class stats
+class ClsUserStorageClass : public ::testing::Test {
+  static librados::Rados rados;
+  static std::string pool_name;
+protected:
+  static librados::IoCtx ioctx;
+
+  static void SetUpTestCase() {
+    pool_name = get_temp_pool_name();
+    ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+    ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+  }
+  
+  static void TearDownTestCase() {
+    ioctx.close();
+    ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+  }
+};
+
+librados::Rados ClsUserStorageClass::rados;
+std::string ClsUserStorageClass::pool_name;
+librados::IoCtx ClsUserStorageClass::ioctx;
+
+TEST_F(ClsUserStorageClass, BasicInit) {
+  std::string oid = "user.basic";
+  
+  cls_user_header header;
+  header.storage_class_stats = std::unordered_map<std::string, cls_user_stats>();
+  
+  ASSERT_EQ(0, write_user_header_test(ioctx, oid, header));
+  
+  cls_user_header read_hdr;
+  ASSERT_EQ(0, read_user_header_test(ioctx, oid, read_hdr));
+  
+  ASSERT_TRUE(read_hdr.storage_class_stats.has_value());
+  ASSERT_TRUE(read_hdr.storage_class_stats->empty());
+}
+
+TEST_F(ClsUserStorageClass, LegacyToConverted) {
+  std::string oid = "user.legacy";
+  
+  // Start with nullopt (legacy user)
+  cls_user_header header;
+  header.storage_class_stats = std::nullopt;
+  
+  ASSERT_EQ(0, write_user_header_test(ioctx, oid, header));
+  
+  // Verify nullopt
+  cls_user_header read_hdr;
+  ASSERT_EQ(0, read_user_header_test(ioctx, oid, read_hdr));
+  ASSERT_FALSE(read_hdr.storage_class_stats.has_value());
+  
+  // Convert to has_value
+  read_hdr.storage_class_stats = std::unordered_map<std::string, cls_user_stats>();
+  cls_user_stats stats;
+  stats.total_entries = 10;
+  stats.total_bytes = 10240;
+  stats.total_bytes_rounded = 10240;
+  (*read_hdr.storage_class_stats)["default::STANDARD"] = stats;
+  
+  ASSERT_EQ(0, write_user_header_test(ioctx, oid, read_hdr));
+  
+  // Verify converted
+  cls_user_header final_hdr;
+  ASSERT_EQ(0, read_user_header_test(ioctx, oid, final_hdr));
+  ASSERT_TRUE(final_hdr.storage_class_stats.has_value());
+  EXPECT_EQ((*final_hdr.storage_class_stats)["default::STANDARD"].total_entries, 10);
+}
+
+TEST_F(ClsUserStorageClass, MultipleClasses) {
+  std::string oid = "user.multi";
+  
+  cls_user_header header;
+  header.storage_class_stats = std::unordered_map<std::string, cls_user_stats>();
+  
+  cls_user_stats std_stats;
+  std_stats.total_entries = 100;
+  std_stats.total_bytes = 102400;
+  std_stats.total_bytes_rounded = 102400;
+  
+  cls_user_stats hdd_stats;
+  hdd_stats.total_entries = 200;
+  hdd_stats.total_bytes = 204800;
+  hdd_stats.total_bytes_rounded = 204800;
+  
+  (*header.storage_class_stats)["default::STANDARD"] = std_stats;
+  (*header.storage_class_stats)["default::HDD"] = hdd_stats;
+  
+  ASSERT_EQ(0, write_user_header_test(ioctx, oid, header));
+  
+  cls_user_header read_hdr;
+  ASSERT_EQ(0, read_user_header_test(ioctx, oid, read_hdr));
+  
+  ASSERT_TRUE(read_hdr.storage_class_stats.has_value());
+  EXPECT_EQ(read_hdr.storage_class_stats->size(), 2);
+  EXPECT_EQ((*read_hdr.storage_class_stats)["default::STANDARD"].total_entries, 100);
+  EXPECT_EQ((*read_hdr.storage_class_stats)["default::HDD"].total_entries, 200);
+}
+
