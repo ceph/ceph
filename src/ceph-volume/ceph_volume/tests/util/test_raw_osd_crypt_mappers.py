@@ -38,7 +38,7 @@ class TestMapperName:
         assert mappers._mapper_name_for_role('block') == (
             'ceph-fsid-uuid-nvme2n2-block-dmcrypt'
         )
-        assert mappers._mapper_path_for_backing('/dev/nvme2n2', 'block') == (
+        assert mappers._mapper_path_for_backing('block') == (
             '/dev/mapper/ceph-fsid-uuid-nvme2n2-block-dmcrypt'
         )
 
@@ -125,8 +125,95 @@ class TestRefresh:
             '0', 'fsid', '/dev/sda1', cluster_name='ceph',
         )
         mappers.refresh()
+        m_resolve.assert_called()
+        assert m_resolve.call_count >= 1
         m_dmsetup_remove.assert_called_once_with(
             'ceph-fsid-sda1-block-dmcrypt',
             terminal_logging=False,
         )
         assert m_luks_open.called
+
+    @patch(
+        'ceph_volume.util.raw_osd_crypt_mappers.OsdLuksCredentials.apply_cluster_context'
+    )
+    @patch(
+        'ceph_volume.util.raw_osd_crypt_mappers.OsdLuksCredentials.resolve_secret',
+        return_value='test-key',
+    )
+    @patch('ceph_volume.util.raw_osd_crypt_mappers.encryption_utils.dmsetup_remove')
+    @patch('ceph_volume.util.raw_osd_crypt_mappers.encryption_utils.luks_open')
+    def test_refresh_resolves_secret_before_close(
+        self,
+        m_luks_open: MagicMock,
+        m_dmsetup_remove: MagicMock,
+        m_resolve: MagicMock,
+        m_cluster: MagicMock,
+    ) -> None:
+        call_order: list[str] = []
+
+        def track_resolve(*_args: object, **_kwargs: object) -> str:
+            call_order.append('resolve')
+            return 'test-key'
+
+        def track_remove(*_args: object, **_kwargs: object) -> None:
+            call_order.append('remove')
+
+        m_resolve.side_effect = track_resolve
+        m_dmsetup_remove.side_effect = track_remove
+        mappers = RawOsdCryptMappers(
+            '0', 'fsid', '/dev/sda1', cluster_name='ceph',
+        )
+        mappers.refresh()
+        assert call_order[0] == 'resolve'
+        assert 'remove' in call_order
+
+
+class TestEnsureOpen:
+    @patch(
+        'ceph_volume.util.raw_osd_crypt_mappers.OsdLuksCredentials.apply_cluster_context'
+    )
+    @patch(
+        'ceph_volume.util.raw_osd_crypt_mappers.OsdLuksCredentials.resolve_secret',
+        return_value='test-key',
+    )
+    @patch('ceph_volume.util.raw_osd_crypt_mappers.os.path.exists', return_value=True)
+    @patch('ceph_volume.util.raw_osd_crypt_mappers.encryption_utils.luks_open')
+    @patch('ceph_volume.util.raw_osd_crypt_mappers.encryption_utils.dmsetup_remove')
+    def test_skips_luks_open_when_mapper_exists(
+        self,
+        m_dmsetup_remove: MagicMock,
+        m_luks_open: MagicMock,
+        m_exists: MagicMock,
+        m_resolve: MagicMock,
+        m_cluster: MagicMock,
+    ) -> None:
+        mappers = RawOsdCryptMappers(
+            '0', 'fsid', '/dev/sda1', cluster_name='ceph',
+        )
+        mappers.ensure_open()
+        m_resolve.assert_called_once()
+        m_luks_open.assert_not_called()
+        m_dmsetup_remove.assert_not_called()
+
+    @patch(
+        'ceph_volume.util.raw_osd_crypt_mappers.OsdLuksCredentials.apply_cluster_context'
+    )
+    @patch(
+        'ceph_volume.util.raw_osd_crypt_mappers.OsdLuksCredentials.resolve_secret',
+        side_effect=RuntimeError('no key'),
+    )
+    @patch('ceph_volume.util.raw_osd_crypt_mappers.encryption_utils.dmsetup_remove')
+    def test_resolve_failure_does_not_close_mappers(
+        self,
+        m_dmsetup_remove: MagicMock,
+        m_resolve: MagicMock,
+        m_cluster: MagicMock,
+    ) -> None:
+        mappers = RawOsdCryptMappers(
+            '0', 'fsid', '/dev/sda1', cluster_name='ceph',
+        )
+        try:
+            mappers.refresh()
+        except RuntimeError:
+            pass
+        m_dmsetup_remove.assert_not_called()

@@ -362,7 +362,7 @@ class Lvm(BaseObjectStore):
             osd_block_lv.tags['ceph.cluster_name'])
         configuration.load()
 
-        OsdLvmMappers(osd_id, osd_fsid).refresh()
+        OsdLvmMappers(osd_id, osd_fsid).ensure_open()
 
         # mount on tmpfs the osd directory
         self.osd_path = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)

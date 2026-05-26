@@ -1,3 +1,4 @@
+import os
 from typing import List, Optional, Union
 
 from ceph_volume import process
@@ -15,8 +16,10 @@ class OsdLvmMappers:
         lvs: Optional[List[Volume]] = None,
         dmcrypt_secret: Optional[str] = None,
         dmcrypt_open_opts: Optional[str] = None,
+        apply_cluster_context: bool = True,
     ) -> None:
         self.osd_fsid = osd_fsid
+        self._apply_cluster_context = apply_cluster_context
         self.credentials = OsdLuksCredentials(
             osd_id,
             osd_fsid,
@@ -37,6 +40,26 @@ class OsdLvmMappers:
         self._close_block_mapper()
 
     def open(self) -> None:
+        self._activate_logical_volumes()
+        if self.encrypted:
+            self._prepare_open_credentials()
+            for role in ('block', 'db', 'wal'):
+                self._luks_open_role(role)
+
+    def ensure_open(self) -> None:
+        self._activate_logical_volumes()
+        if self.encrypted:
+            self._prepare_open_credentials()
+            for role in ('block', 'db', 'wal'):
+                self._luks_open_role(role)
+
+    def refresh(self) -> None:
+        if self.encrypted:
+            self._prepare_open_credentials()
+        self.close()
+        self.open()
+
+    def _activate_logical_volumes(self) -> None:
         self._rescan_physical_volumes()
         self._refresh_osd_volumes_from_lvm()
         paths = [
@@ -46,13 +69,11 @@ class OsdLvmMappers:
         ]
         if paths:
             process.call(['lvchange', '-ay'] + paths, run_on_host=True)
-        if self.encrypted:
-            for role in ('block', 'db', 'wal'):
-                self._luks_open_role(role)
 
-    def refresh(self) -> None:
-        self.close()
-        self.open()
+    def _prepare_open_credentials(self) -> None:
+        if not self.encrypted or self.block_volume is None:
+            return
+        self.credentials.resolve_secret(self._lockbox_secret_from_block_lv())
 
     def _assign_role_volumes_from_lv_list(self, lvs: List[Volume]) -> None:
         self.lvs = lvs
@@ -70,7 +91,7 @@ class OsdLvmMappers:
         self._sync_encryption_flags()
         self.credentials.with_tpm = self.with_tpm
         cluster_name = self._cluster_name_for_context()
-        if cluster_name is not None:
+        if self._apply_cluster_context and cluster_name is not None:
             self.credentials.apply_cluster_context(cluster_name)
 
     def _cluster_name_for_context(self) -> Optional[str]:
@@ -137,11 +158,26 @@ class OsdLvmMappers:
             return None
         return self.block_volume.tags.get('ceph.cephx_lockbox_secret')
 
+    def _crypt_mapper_path_for_role(self, role: str) -> Optional[str]:
+        if role == 'block':
+            return self._block_crypt_path()
+        if role == 'db':
+            return self._db_crypt_path()
+        if role == 'wal':
+            return self._wal_crypt_path()
+        return None
+
+    def _mapper_is_open_for_role(self, role: str) -> bool:
+        path = self._crypt_mapper_path_for_role(role)
+        return path is not None and os.path.exists(path)
+
     def _luks_open_role(self, role: str) -> None:
         if not self.encrypted or self.block_volume is None:
             return
         uuid_value = self._device_uuid_for_role(role)
         if not uuid_value:
+            return
+        if self._mapper_is_open_for_role(role):
             return
         device = self._underlying_device_for_encrypted_role(role)
         if not device:

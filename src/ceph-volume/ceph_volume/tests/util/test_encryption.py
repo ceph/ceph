@@ -174,8 +174,10 @@ class TestLuksFormat(object):
 
 
 class TestLuksOpen(object):
+    _call_ok = ([], [], 0)
+
     @patch('ceph_volume.util.encryption.bypass_workqueue', return_value=False)
-    @patch('ceph_volume.util.encryption.process.call')
+    @patch('ceph_volume.util.encryption.process.call', return_value=_call_ok)
     def test_luks_open_command_with_default_size(self, m_call, m_bypass_workqueue, conf_ceph_stub):
         conf_ceph_stub('[global]\nfsid=abcd')
         expected = [
@@ -193,7 +195,14 @@ class TestLuksOpen(object):
         assert m_call.call_args[0][0] == expected
 
     @patch('ceph_volume.util.encryption.bypass_workqueue', return_value=False)
-    @patch('ceph_volume.util.encryption.process.call')
+    @patch('ceph_volume.util.encryption.process.call', return_value=([], ['bad key'], 1))
+    def test_luks_open_raises_on_failure(self, m_call, m_bypass_workqueue, conf_ceph_stub):
+        conf_ceph_stub('[global]\nfsid=abcd')
+        with pytest.raises(RuntimeError, match='Failed to open LUKS device'):
+            encryption.luks_open('abcd', '/dev/foo', 'mapper-name')
+
+    @patch('ceph_volume.util.encryption.bypass_workqueue', return_value=False)
+    @patch('ceph_volume.util.encryption.process.call', return_value=_call_ok)
     def test_luks_open_command_with_custom_size(self, m_call, m_bypass_workqueue, conf_ceph_stub):
         conf_ceph_stub('[global]\nfsid=abcd\n[osd]\nosd_dmcrypt_key_size=256')
         expected = [
@@ -211,7 +220,7 @@ class TestLuksOpen(object):
         assert m_call.call_args[0][0] == expected
 
     @patch('ceph_volume.util.encryption.bypass_workqueue', return_value=False)
-    @patch('ceph_volume.util.encryption.process.call')
+    @patch('ceph_volume.util.encryption.process.call', return_value=_call_ok)
     def test_luks_format_with_extra_option(self, m_call, m_bypass_workqueue, conf_ceph_stub):
         conf_ceph_stub('[global]\nfsid=abcd')
         expected = [
@@ -230,7 +239,7 @@ class TestLuksOpen(object):
         assert m_call.call_args[0][0] == expected
 
     @patch('ceph_volume.util.encryption.bypass_workqueue', return_value=False)
-    @patch('ceph_volume.util.encryption.process.call')
+    @patch('ceph_volume.util.encryption.process.call', return_value=_call_ok)
     def test_luks_open_command_with_tpm(self, m_call, m_bypass_workqueue, conf_ceph_stub):
         fake_mapping: str = 'fake-mapping'
         fake_device: str = 'fake-device'
@@ -246,7 +255,7 @@ class TestLuksOpen(object):
         assert m_call.call_args[0][0] == expected
 
     @patch('ceph_volume.util.encryption.bypass_workqueue', return_value=True)
-    @patch('ceph_volume.util.encryption.process.call')
+    @patch('ceph_volume.util.encryption.process.call', return_value=_call_ok)
     def test_luks_open_command_with_tpm_bypass_workqueue(self, m_call, m_bypass_workqueue, conf_ceph_stub):
         fake_mapping: str = 'fake-mapping'
         fake_device: str = 'fake-device'

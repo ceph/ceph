@@ -248,11 +248,18 @@ def luks_open(key: str,
             command.extend(['--perf-no_read_workqueue',
                             '--perf-no_write_workqueue'])
 
-    process.call(command,
-                 run_on_host=with_tpm,
-                 stdin=key,
-                 terminal_verbose=True,
-                 show_command=True)
+    _, stderr, returncode = process.call(
+        command,
+        run_on_host=with_tpm,
+        stdin=key,
+        terminal_verbose=True,
+        show_command=True,
+    )
+    if returncode != 0:
+        err = ' '.join(stderr).strip()
+        raise RuntimeError(
+            'Failed to open LUKS device %s as %s: %s' % (device, mapping, err)
+        )
 
 
 def dmcrypt_close(mapping, skip_path_check=False):

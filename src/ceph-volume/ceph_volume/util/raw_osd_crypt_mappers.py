@@ -123,16 +123,36 @@ class RawOsdCryptMappers:
         )
 
     def close(self) -> None:
-        for role, device in self._role_devices():
+        for role, _ in self._role_devices():
             self._close_crypt_for_role(role)
 
     def open(self) -> None:
+        self._prepare_open_credentials()
+        for role, device in self._role_devices():
+            self._luks_open_for_role(role, device)
+
+    def ensure_open(self) -> None:
+        """Open dmcrypt mappers that are not already active.
+
+        Resolves credentials before opening any device so a missing key does not
+        leave the system in a worse state than before this call.
+        """
+        self._prepare_open_credentials()
         for role, device in self._role_devices():
             self._luks_open_for_role(role, device)
 
     def refresh(self) -> None:
+        self._prepare_open_credentials()
         self.close()
         self.open()
+
+    def _prepare_open_credentials(self) -> None:
+        if self.credentials.with_tpm:
+            return
+        self.credentials.resolve_secret(self.lockbox_secret)
+
+    def _mapper_is_open(self, role: str) -> bool:
+        return os.path.exists(self._mapper_path_for_backing(role))
 
     def _role_devices(self) -> Tuple[Tuple[str, str], ...]:
         out: List[Tuple[str, str]] = []
@@ -151,6 +171,8 @@ class RawOsdCryptMappers:
         )
 
     def _luks_open_for_role(self, role: str, device_path: str) -> None:
+        if self._mapper_is_open(role):
+            return
         encryption_utils.luks_open(
             self.credentials.resolve_secret(self.lockbox_secret),
             device_path,

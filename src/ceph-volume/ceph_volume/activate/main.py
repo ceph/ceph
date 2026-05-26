@@ -48,7 +48,11 @@ class Activate(object):
         # Only do this when both filters are available, because the mapper
         # lookup builds LVM tag strings and will fail if osd_fsid is None.
         if self.args.osd_id is not None and self.args.osd_fsid is not None:
-            OsdLvmMappers(self.args.osd_id, self.args.osd_fsid).close()
+            OsdLvmMappers(
+                self.args.osd_id,
+                self.args.osd_fsid,
+                apply_cluster_context=False,
+            ).close()
 
         # first try raw
         try:

@@ -136,19 +136,20 @@ class Raw(BaseObjectStore):
             )
         if mappers is not None and mappers.applies():
             try:
-                mappers.refresh()
+                mappers.ensure_open()
             except RuntimeError as e:
                 mlogger.info(
-                    'Failed to refresh dmcrypt mappers for osd.%s uuid %s: %s (is the OSD already running?)',
+                    'Failed to open dmcrypt mappers for osd.%s uuid %s: %s (is the OSD already running?)',
                     self.osd_id,
                     self.osd_fsid,
                     e,
                 )
-            (
-                self.block_device_path,
-                self.db_device_path,
-                self.wal_device_path,
-            ) = mappers.mapper_paths()
+            else:
+                (
+                    self.block_device_path,
+                    self.db_device_path,
+                    self.wal_device_path,
+                ) = mappers.mapper_paths()
 
         # mount on tmpfs the osd directory
         self.osd_path = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, self.osd_id)
