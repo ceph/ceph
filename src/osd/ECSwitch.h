@@ -267,6 +267,15 @@ public:
     return legacy.objects_read_sync(hoid, off, len, op_flags, bl);
   }
 
+  int objects_read_local(const hobject_t &hoid, uint64_t off, uint64_t len,
+                      uint32_t op_flags, ceph::buffer::list *bl) override
+  {
+    if (is_optimized()) {
+      return optimized.objects_read_local(hoid, off, len, op_flags, bl);
+    }
+    return -EOPNOTSUPP;
+  }
+
   int objects_readv_sync(const hobject_t &hoid,
      std::map<uint64_t, uint64_t>& m,
      uint32_t op_flags,

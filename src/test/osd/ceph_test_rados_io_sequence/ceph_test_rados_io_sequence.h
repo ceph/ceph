@@ -466,6 +466,7 @@ class TestObject {
              bool testRecovery,
              bool checkConsistency,
              bool delete_objects,
+             int balanced_read_percentage,
              GenerationType data_generation_type);
 
   int get_num_io();
@@ -491,6 +492,7 @@ class TestObject {
   bool testrecovery;
   bool checkconsistency;
   bool delete_objects;
+  int balanced_read_percentage;
   GenerationType data_generation_type;
 };
 
@@ -550,6 +552,8 @@ class TestRunner {
   std::string line;
   ceph::split split = ceph::split("");
   ceph::spliterator tokens;
+
+  int balanced_read_percentage;
 
   void clear_tokens();
   std::string get_token(bool allow_eof = false);

@@ -1009,17 +1009,25 @@ int ECBackend::objects_read_sync(
     uint64_t len,
     uint32_t op_flags,
     bufferlist *bl) {
+  return -EOPNOTSUPP;
+}
+
+int ECBackend::objects_read_local(
+    const hobject_t &hoid,
+    uint64_t off,
+    uint64_t len,
+    uint32_t op_flags,
+    bufferlist *bl) {
 
   if (!sinfo.supports_direct_reads()) {
     return -EOPNOTSUPP;
   }
 
-  if (get_parent()->get_local_missing().is_missing(hoid)) {
-    return -EIO;  // Permission denied (cos its missing)
-  }
+  // Cannot return EAGAIN here: the op would get dropped.  This check must have
+  // been done earlier.
+  ceph_assert(!get_parent()->get_local_missing().is_missing(hoid));
 
   auto [shard_offset, shard_len] = extent_to_shard_extent(off, len);
-
 
   dout(20) << __func__ << " Submitting sync read: "
       << " hoid=" << hoid
@@ -1028,7 +1036,6 @@ int ECBackend::objects_read_sync(
       << " op_flags=" << op_flags
       << " primary=" << switcher->is_primary()
       << dendl;
-
 
   return switcher->store->read(switcher->ch,
           ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
@@ -1064,13 +1071,13 @@ int ECBackend::objects_readv_sync(const hobject_t &hoid,
      std::map<uint64_t, uint64_t>& m,
      uint32_t op_flags,
      ceph::buffer::list *bl) {
-  if (get_parent()->get_local_missing().is_missing(hoid)) {
-    return -EACCES;  // Permission denied (cos its missing)
-  }
 
-  // Not using extent set, since we need the one used by readv.
+  // Cannot return EAGAIN here: the op would get dropped.  This check must have
+  // been done earlier.
+  ceph_assert(!get_parent()->get_local_missing().is_missing(hoid));
 
   auto shard = get_parent()->whoami_shard().shard;
+  // Not using extent_set, since we need the one used by readv.
   interval_set im(std::move(m));
   m.clear(); // Make m safe to write to again.
   auto r = switcher->store->readv(switcher->ch, ghobject_t(hoid, ghobject_t::NO_GEN, shard), im, *bl, op_flags);

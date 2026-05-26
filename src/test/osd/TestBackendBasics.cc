@@ -343,7 +343,7 @@ TEST_P(TestBackendBasics, DirectRead) {
     
     // Perform sync read with EC_DIRECT_READ flag
     // Read the entire stripe - we expect only this shard's data back
-    int read_result = ec_switch->objects_read_sync(
+    int read_result = ec_switch->objects_read_local(
       hoid,
       0,                                    // offset
       stripe_width,                         // length (full stripe)
@@ -353,6 +353,11 @@ TEST_P(TestBackendBasics, DirectRead) {
 
     EXPECT_GE(read_result, 0)
       << param.label << " direct read to shard " << shard_id << " should complete successfully";
+
+    if (obj_name == "test_direct_read_EC_ISA_Opt_k4m2_su4k_4k")
+    {
+      std::cout << obj_name << " is the test of interest" << std::endl;
+    }
 
     // For direct reads, we expect to get back only the data for this shard
     // which is one stripe_unit

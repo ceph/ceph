@@ -18,17 +18,17 @@ typedef RadosTest LibRadosLock;
 typedef RadosTestEC LibRadosLockEC;
 
 
-TEST_F(LibRadosLock, LockExclusive) {
+TEST_P(LibRadosLock, LockExclusive) {
   ASSERT_EQ(0, rados_lock_exclusive(ioctx, "foo", "TestLock1", "Cookie", "", NULL,  0));
   ASSERT_EQ(-EEXIST, rados_lock_exclusive(ioctx, "foo", "TestLock1", "Cookie", "", NULL, 0));
 }
 
-TEST_F(LibRadosLock, LockShared) {
+TEST_P(LibRadosLock, LockShared) {
   ASSERT_EQ(0, rados_lock_shared(ioctx, "foo", "TestLock2", "Cookie", "Tag", "", NULL, 0));
   ASSERT_EQ(-EEXIST, rados_lock_shared(ioctx, "foo", "TestLock2", "Cookie", "Tag", "", NULL, 0));
 }
 
-TEST_F(LibRadosLock, LockExclusiveDur) {
+TEST_P(LibRadosLock, LockExclusiveDur) {
   struct timeval tv;
   tv.tv_sec = 1;
   tv.tv_usec = 0;
@@ -40,7 +40,7 @@ TEST_F(LibRadosLock, LockExclusiveDur) {
   ASSERT_EQ(expected, wait_until(1.0s, 0.1s, expected, lock_exclusive, nullptr));
 }
 
-TEST_F(LibRadosLock, LockSharedDur) {
+TEST_P(LibRadosLock, LockSharedDur) {
   struct timeval tv;
   tv.tv_sec = 1;
   tv.tv_usec = 0;
@@ -53,19 +53,19 @@ TEST_F(LibRadosLock, LockSharedDur) {
 }
 
 
-TEST_F(LibRadosLock, LockMayRenew) {
+TEST_P(LibRadosLock, LockMayRenew) {
   ASSERT_EQ(0, rados_lock_exclusive(ioctx, "foo", "TestLock5", "Cookie", "", NULL, 0));
   ASSERT_EQ(-EEXIST, rados_lock_exclusive(ioctx, "foo", "TestLock5", "Cookie", "", NULL, 0));
   ASSERT_EQ(0, rados_lock_exclusive(ioctx, "foo", "TestLock5", "Cookie", "", NULL, LOCK_FLAG_MAY_RENEW));
 }
 
-TEST_F(LibRadosLock, Unlock) {
+TEST_P(LibRadosLock, Unlock) {
   ASSERT_EQ(0, rados_lock_exclusive(ioctx, "foo", "TestLock6", "Cookie", "", NULL, 0));
   ASSERT_EQ(0, rados_unlock(ioctx, "foo", "TestLock6", "Cookie"));
   ASSERT_EQ(0, rados_lock_exclusive(ioctx, "foo", "TestLock6", "Cookie", "", NULL,  0));
 }
 
-TEST_F(LibRadosLock, ListLockers) {
+TEST_P(LibRadosLock, ListLockers) {
   int exclusive;
   char tag[1024];
   char clients[1024];
@@ -97,7 +97,7 @@ TEST_F(LibRadosLock, ListLockers) {
   ASSERT_EQ(strlen("Cookie") + 1, cookies_len);
 }
 
-TEST_F(LibRadosLock, BreakLock) {
+TEST_P(LibRadosLock, BreakLock) {
   int exclusive;
   char tag[1024];
   char clients[1024];
@@ -123,19 +123,19 @@ TEST_F(LibRadosLock, BreakLock) {
 }
 
 // EC testing
-TEST_F(LibRadosLockEC, LockExclusive) {
+TEST_P(LibRadosLockEC, LockExclusive) {
   SKIP_IF_CRIMSON();
   ASSERT_EQ(0, rados_lock_exclusive(ioctx, "foo", "TestLockEC1", "Cookie", "", NULL,  0));
   ASSERT_EQ(-EEXIST, rados_lock_exclusive(ioctx, "foo", "TestLockEC1", "Cookie", "", NULL, 0));
 }
 
-TEST_F(LibRadosLockEC, LockShared) {
+TEST_P(LibRadosLockEC, LockShared) {
   SKIP_IF_CRIMSON();
   ASSERT_EQ(0, rados_lock_shared(ioctx, "foo", "TestLockEC2", "Cookie", "Tag", "", NULL, 0));
   ASSERT_EQ(-EEXIST, rados_lock_shared(ioctx, "foo", "TestLockEC2", "Cookie", "Tag", "", NULL, 0));
 }
 
-TEST_F(LibRadosLockEC, LockExclusiveDur) {
+TEST_P(LibRadosLockEC, LockExclusiveDur) {
   SKIP_IF_CRIMSON();
   struct timeval tv;
   tv.tv_sec = 1;
@@ -148,7 +148,7 @@ TEST_F(LibRadosLockEC, LockExclusiveDur) {
   ASSERT_EQ(expected, wait_until(1.0s, 0.1s, expected, lock_exclusive, nullptr));
 }
 
-TEST_F(LibRadosLockEC, LockSharedDur) {
+TEST_P(LibRadosLockEC, LockSharedDur) {
   SKIP_IF_CRIMSON();
   struct timeval tv;
   tv.tv_sec = 1;
@@ -162,21 +162,21 @@ TEST_F(LibRadosLockEC, LockSharedDur) {
 }
 
 
-TEST_F(LibRadosLockEC, LockMayRenew) {
+TEST_P(LibRadosLockEC, LockMayRenew) {
   SKIP_IF_CRIMSON();
   ASSERT_EQ(0, rados_lock_exclusive(ioctx, "foo", "TestLockEC5", "Cookie", "", NULL, 0));
   ASSERT_EQ(-EEXIST, rados_lock_exclusive(ioctx, "foo", "TestLockEC5", "Cookie", "", NULL, 0));
   ASSERT_EQ(0, rados_lock_exclusive(ioctx, "foo", "TestLockEC5", "Cookie", "", NULL, LOCK_FLAG_MAY_RENEW));
 }
 
-TEST_F(LibRadosLockEC, Unlock) {
+TEST_P(LibRadosLockEC, Unlock) {
   SKIP_IF_CRIMSON();
   ASSERT_EQ(0, rados_lock_exclusive(ioctx, "foo", "TestLockEC6", "Cookie", "", NULL, 0));
   ASSERT_EQ(0, rados_unlock(ioctx, "foo", "TestLockEC6", "Cookie"));
   ASSERT_EQ(0, rados_lock_exclusive(ioctx, "foo", "TestLockEC6", "Cookie", "", NULL,  0));
 }
 
-TEST_F(LibRadosLockEC, ListLockers) {
+TEST_P(LibRadosLockEC, ListLockers) {
   SKIP_IF_CRIMSON();
   int exclusive;
   char tag[1024];
@@ -209,7 +209,7 @@ TEST_F(LibRadosLockEC, ListLockers) {
   ASSERT_EQ(strlen("Cookie") + 1, cookies_len);
 }
 
-TEST_F(LibRadosLockEC, BreakLock) {
+TEST_P(LibRadosLockEC, BreakLock) {
   SKIP_IF_CRIMSON();
   int exclusive;
   char tag[1024];
@@ -235,3 +235,5 @@ TEST_F(LibRadosLockEC, BreakLock) {
   ASSERT_EQ(0, rados_break_lock(ioctx, "foo", "TestLockEC8", clients, "Cookie"));
 }
 
+INSTANTIATE_TEST_SUITE_P_REPLICA(LibRadosLock);
+INSTANTIATE_TEST_SUITE_P_EC(LibRadosLockEC);
