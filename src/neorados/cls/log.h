@@ -464,8 +464,8 @@ trim(RADOS& r, Object oid, IOContext ioc,
       if (e.code() != no_message_available) {
 	throw;
       }
+      co_return;
     }
-  co_return;
 }
 
 /// \brief Trim entries from the log
@@ -495,10 +495,10 @@ trim(RADOS& r, Object oid, IOContext ioc,
 			 ua);
     } catch (const system_error& e) {
       if (e.code() != no_message_available) {
-	co_return e.code();
+	throw;
       }
+      co_return;
     }
-  co_return error_code{};
 }
 
 /// \brief List log entries
