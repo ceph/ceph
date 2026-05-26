@@ -557,13 +557,16 @@ class FilesystemBase(MDSClusterBase):
     This object is for driving a CephFS filesystem.  The MDS daemons driven by
     MDSCluster may be shared with other Filesystems.
     """
-    def __init__(self, ctx, fs_config={}, fscid=None, name=None, create=False, cluster_name='ceph',
-                 **kwargs):
+    def __init__(self, ctx, fs_config={}, fscid=None, name=None, create=False,
+                 cluster_name='ceph', discover=False, **kwargs):
         """
         kwargs accepts recover: bool, allow_dangerous_metadata_overlay: bool,
         yes_i_really_really_mean_it: bool and fs_ops: list[str]
         """
         super(FilesystemBase, self).__init__(ctx, cluster_name=cluster_name)
+
+        if create is True and discover is True:
+            assert False, 'Both "create" and "discover" can\'t be true'
 
         self.name = name
         # TODO: remove this line if testing goes well with it being commented
@@ -589,12 +592,20 @@ class FilesystemBase(MDSClusterBase):
             if fscid is not None:
                 self.id = fscid
                 self.getinfo(refresh = True)
+            if discover:
+                self.name = self.discover_fs_name()
 
         # Stash a reference to the first created filesystem on ctx, so
         # that if someone drops to the interactive shell they can easily
         # poke our methods.
         if not hasattr(self._ctx, "filesystem"):
             self._ctx.filesystem = self
+
+    def discover(self):
+        fss = json.loads(self.run_ceph_cmd('fs ls --format json'))
+        assert len(fss) == 1
+        self.name = fss[0]['name']
+        self.getinfo(refresh=True)
 
     def dead(self):
         try:
