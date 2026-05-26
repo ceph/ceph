@@ -13,6 +13,7 @@ overrides:
       - out of quorum
       - PG_AVAILABILITY
       - PG_DEGRADED
+      - PG_DAMAGED
       - Reduced data availability
       - Degraded data redundancy
       - pg .* is stuck inactive
