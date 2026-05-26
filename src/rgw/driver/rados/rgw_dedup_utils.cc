@@ -386,7 +386,7 @@ namespace rgw::dedup {
     this->ingress_skip_filtered_storage_class += other.ingress_skip_filtered_storage_class;
 
     this->total_bidx_record_length += other.total_bidx_record_length;
-    // when aggragting stats from multiple shards we need to preserve the max logic
+    // when aggregating stats from multiple shards we need to preserve the max logic
     if (other.max_bidx_record_length > this->max_bidx_record_length) {
       this->max_bidx_record_length = other.max_bidx_record_length;
     }
@@ -410,10 +410,8 @@ namespace rgw::dedup {
       f->dump_unsigned("Egress Slabs count", this->egress_slabs);
       if (this->egress_records) {
         f->dump_unsigned("Max Bucket-Index Record Length", this->max_bidx_record_length);
-        if (this->egress_records) {
-          f->dump_unsigned("Avg Bucket-Index Record Length",
-                           this->total_bidx_record_length / this->egress_records);
-        }
+        f->dump_unsigned("Avg Bucket-Index Record Length",
+                         this->total_bidx_record_length / this->egress_records);
       }
       f->dump_unsigned("Single part obj count", this->single_part_objs);
       f->dump_unsigned("Multipart obj count", this->multipart_objs);
@@ -644,7 +642,8 @@ namespace rgw::dedup {
     this->failed_remote_attrs_fetch   += other.failed_remote_attrs_fetch;
 
     this->total_attrs_record_length   += other.total_attrs_record_length;
-    // when aggragting stats from multiple shards we need to preserve the max logic
+    this->attrs_record_count          += other.attrs_record_count;
+    // when aggregating stats from multiple shards we need to preserve the max logic
     if (other.max_attrs_record_length > this->max_attrs_record_length) {
       this->max_attrs_record_length = other.max_attrs_record_length;
     }
@@ -673,12 +672,10 @@ namespace rgw::dedup {
 
       f->dump_unsigned("Total processed objects", this->processed_objects);
       f->dump_unsigned("Loaded objects", this->loaded_objects);
-      if (this->processed_objects) {
+      if (this->attrs_record_count) {
         f->dump_unsigned("Max Attrs Record Length", this->max_attrs_record_length);
-        if (this->processed_objects) {
-          f->dump_unsigned("Avg Attrs Record Length",
-                           this->total_attrs_record_length / this->processed_objects);
-        }
+        f->dump_unsigned("Avg Attrs Record Length",
+                         this->total_attrs_record_length / this->attrs_record_count);
       }
       f->dump_unsigned("Ingress Slabs", this->ingress_slabs);
       f->dump_unsigned("Set Shared-Manifest SRC", this->set_shared_manifest_src);
@@ -710,9 +707,6 @@ namespace rgw::dedup {
       }
       if (this->remote_attrs_records) {
         f->dump_unsigned("Remote Attrs Records", this->remote_attrs_records);
-      }
-      if (this->failed_remote_attrs_fetch) {
-        f->dump_unsigned("Failed Remote Attrs Fetch", this->failed_remote_attrs_fetch);
       }
       if (this->write_slab_failure) {
         f->dump_unsigned("Write SLAB failures", this->write_slab_failure);
@@ -827,6 +821,9 @@ namespace rgw::dedup {
       }
       if (this->failed_wrong_ver) {
         f->dump_unsigned("Failed Wrong Version", this->failed_wrong_ver);
+      }
+      if (this->failed_remote_attrs_fetch) {
+        f->dump_unsigned("Failed Remote Attrs Fetch", this->failed_remote_attrs_fetch);
       }
 
       if (this->illegal_rec_id) {
@@ -960,6 +957,7 @@ namespace rgw::dedup {
     encode(m.failed_remote_attrs_fetch, bl);
     encode(m.max_attrs_record_length, bl);
     encode(m.total_attrs_record_length, bl);
+    encode(m.attrs_record_count, bl);
     encode(m.write_slab_failure, bl);
 
     encode(m.duration, bl);
@@ -1042,6 +1040,7 @@ namespace rgw::dedup {
     decode(m.failed_remote_attrs_fetch, bl);
     decode(m.max_attrs_record_length, bl);
     decode(m.total_attrs_record_length, bl);
+    decode(m.attrs_record_count, bl);
     decode(m.write_slab_failure, bl);
 
     decode(m.duration, bl);

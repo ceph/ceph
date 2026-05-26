@@ -177,6 +177,7 @@ namespace rgw::dedup {
     disk_record_t() {}
     size_t serialize(char *buff) const;
     size_t length() const;
+    size_t predicted_length() const;
     int validate(const char *caller,
                  const DoutPrefixProvider* dpp,
                  disk_block_id_t block_id,

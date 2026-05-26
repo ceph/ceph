@@ -192,7 +192,7 @@ namespace rgw::dedup {
     int calc_object_blake3(const RGWObjManifest &manifest,
                            disk_record_t *p_rec,
                            uint8_t *p_hash,
-                           bufferlist *p_head_bl = nullptr);
+                           const bufferlist *p_head_bl = nullptr);
     int split_head_object(disk_record_t *p_src_rec,     // IN/OUT PARAM
                           RGWObjManifest &src_manifest, // IN/OUT PARAM
                           const disk_record_t *p_tgt_rec,
@@ -264,7 +264,7 @@ namespace rgw::dedup {
     bool     d_skip_compressed        = false;
     uint32_t d_head_object_size       = (4ULL * 1024 * 1024);
 
-    // per-cycle cache: placement rule -> compression type string
+    // per-cycle cache: placement rule (to_str()) -> compression type string
     std::unordered_map<std::string, std::string> d_placement_compression_type;
     control_t d_ctl;
     dedup_filter_t d_filter;

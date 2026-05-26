@@ -133,9 +133,9 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  static bool should_replace(const dedup_table_t::value_t &val,
-                             bool new_shared_manifest,
-                             compression_match_level_t new_comp_match)
+  static bool should_replace_f(const dedup_table_t::value_t &val,
+                               bool new_shared_manifest,
+                               compression_match_level_t new_comp_match)
   {
     // The first pass (STEP_BUILD_TABLE) sets block_id/rec_id to invalid values
     // and leaves compression_rank at NONE (no attrs available yet).
@@ -198,7 +198,7 @@ namespace rgw::dedup {
         val.count ++;
       }
 
-      if (should_replace(val, new_shared_manifest, new_comp_match)) {
+      if (should_replace_f(val, new_shared_manifest, new_comp_match)) {
         ldpp_dout(dpp, 20) << __func__ << "::Replace SRC::["
                            << val.block_idx << "/" << (int)val.rec_id << "] -> ["
                            << block_id << "/" << (int)rec_id << "]" << dendl;
@@ -223,7 +223,7 @@ namespace rgw::dedup {
     value_t &val = hash_tab[idx].val;
     ceph_assert(val.is_occupied());
 
-    if (should_replace(val, new_shared_manifest, new_comp_match)) {
+    if (should_replace_f(val, new_shared_manifest, new_comp_match)) {
       value_t new_val(block_id, rec_id, new_shared_manifest, new_comp_match);
       new_val.count = val.count;
       ldpp_dout(dpp, 20) << __func__ << "::Replaced table entry::["

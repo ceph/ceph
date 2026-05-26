@@ -99,27 +99,33 @@ namespace rgw::dedup {
     this->s.ref_tag_len        = CEPHTOH_16(p_rec->s.ref_tag_len);
     this->s.manifest_len       = CEPHTOH_16(p_rec->s.manifest_len);
     this->s.compression_bl_len = CEPHTOH_16(p_rec->s.compression_bl_len);
+ 
+    if (this->predicted_length() > MAX_REC_SIZE) {
+      // Prevent out-of-bounds reads below on corrupt/stale data.
+      this->s.rec_version = 1; // force validate() failure
+      return;
+    }
 
     const char *p = buff + sizeof(this->s);
     this->obj_name = std::string(p, this->s.obj_name_len);
-    p += p_rec->s.obj_name_len;
+    p += this->s.obj_name_len;
 
     this->bucket_name = std::string(p, this->s.bucket_name_len);
-    p += p_rec->s.bucket_name_len;
+    p += this->s.bucket_name_len;
 
     this->bucket_id = std::string(p, this->s.bucket_id_len);
-    p += p_rec->s.bucket_id_len;
+    p += this->s.bucket_id_len;
 
     this->tenant_name = std::string(p, this->s.tenant_name_len);
-    p += p_rec->s.tenant_name_len;
+    p += this->s.tenant_name_len;
 
     this->instance = std::string(p, this->s.instance_len);
-    p += p_rec->s.instance_len;
+    p += this->s.instance_len;
 
     this->stor_class = std::string(p, this->s.stor_class_len);
-    p += p_rec->s.stor_class_len;
+    p += this->s.stor_class_len;
 
-    if (p_rec->s.flags.is_fastlane()) {
+    if (this->s.flags.is_fastlane()) {
       // TBD:: remove asserts
       ceph_assert(this->s.ref_tag_len == 0);
       ceph_assert(this->s.manifest_len == 0);
@@ -131,7 +137,7 @@ namespace rgw::dedup {
         this->s.hash[i] = CEPHTOH_64(p_rec->s.hash[i]);
       }
       this->ref_tag = std::string(p, this->s.ref_tag_len);
-      p += p_rec->s.ref_tag_len;
+      p += this->s.ref_tag_len;
 
       this->manifest_bl.append(p, this->s.manifest_len);
       p += this->s.manifest_len;
@@ -147,6 +153,8 @@ namespace rgw::dedup {
   {
     ceph_assert(this->s.rec_version  == 0);
     disk_record_t *p_rec = (disk_record_t*)buff;
+    ceph_assert(this->length() <= MAX_REC_SIZE);
+
     p_rec->s.rec_version     = 0;
     p_rec->s.flags           = this->s.flags;
     p_rec->s.num_parts       = HTOCEPH_16(this->s.num_parts);
@@ -218,6 +226,21 @@ namespace rgw::dedup {
       }
     }
     return (p - buff);
+  }
+
+  //---------------------------------------------------------------------------
+  size_t disk_record_t::predicted_length() const
+  {
+    return (sizeof(this->s) +
+            this->s.obj_name_len +
+            this->s.bucket_name_len +
+            this->s.bucket_id_len +
+            this->s.tenant_name_len +
+            this->s.instance_len +
+            this->s.stor_class_len +
+            this->s.ref_tag_len +
+            this->s.manifest_len +
+            this->s.compression_bl_len);
   }
 
   //---------------------------------------------------------------------------
@@ -700,7 +723,7 @@ namespace rgw::dedup {
   {
     // When manifest/compression make the record too large, drop them and
     // set a flag so STEP_REMOVE_DUPLICATES fetches them from the object head.
-    if (p_rec->length() > 512 /*MAX_REC_SIZE*/) {
+    if (p_rec->length() > MAX_REC_SIZE) {
       p_rec->manifest_bl.clear();
       p_rec->s.manifest_len = 0;
       p_rec->compression_bl.clear();
