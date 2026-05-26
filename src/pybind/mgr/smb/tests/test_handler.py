@@ -4,6 +4,14 @@ import smb
 from smb.handler import _FakeEarmarkResolver
 
 
+class _FakeToolExecer:
+    """Mock tool executor for testing."""
+
+    def tool_exec(self, cmd: list[str]) -> tuple[int, str, str]:
+        """Mock tool_exec that returns success."""
+        return (0, '{}', '')
+
+
 def _cluster(**kwargs):
     if 'clustering' not in kwargs:
         kwargs['clustering'] = smb.enums.SMBClustering.NEVER
@@ -25,6 +33,7 @@ def thandler():
         # into a single store. Do that to simplify testing a bit.
         public_store=ext_store,
         priv_store=ext_store,
+        tool_execer=_FakeToolExecer(),
     )
 
 
