@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_amqp.h"
+#include "perfglue/heap_profiler.h"
 #if __has_include(<rabbitmq-c/amqp.h>)
 #include <rabbitmq-c/amqp.h>
 #include <rabbitmq-c/ssl_socket.h>

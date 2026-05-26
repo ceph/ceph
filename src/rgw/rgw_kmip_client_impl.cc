@@ -10,6 +10,7 @@
 #include "common/errno.h"
 #include "rgw_common.h"
 #include "rgw_kmip_client.h"
+#include "perfglue/heap_profiler.h"
 #include "rgw_kmip_client_impl.h"
 
 #include <openssl/err.h>
@@ -327,12 +328,14 @@ RGWKmipHandles::entry()
 {
   RGWKmipHandle* kmip;
   std::unique_lock lock{cleaner_lock};
+  ceph::real_time last_idle;
 
   for (;;) {
     if (cleaner_shutdown) {
       if (saved_kmip.empty())
 	break;
     } else {
+      last_idle = ceph_heap_mark_thread_temporarily_idle(g_ceph_context, last_idle);
       cleaner_cond.wait_for(lock, std::chrono::seconds(MAXIDLE));
     }
     mono_time now = mono_clock::now();

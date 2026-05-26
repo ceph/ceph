@@ -19,6 +19,7 @@
 #include "common/ceph_json.h"
 
 #include "common/dout.h"
+#include "perfglue/heap_profiler.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_sys_obj.h"
@@ -1901,6 +1902,7 @@ void *RGWReshard::ReshardWorker::entry() {
       "multiplied by a factor of " << interval_factor << dendl;
   }
 
+  ceph::real_time last_idle;
   do {
     utime_t start = ceph_clock_now();
     reshard->process_all_logshards(this, null_yield);
@@ -1923,6 +1925,7 @@ void *RGWReshard::ReshardWorker::entry() {
 
     // note: this will likely wait for the intended period of
     // time, but could wait for less
+    last_idle = ceph_heap_mark_thread_temporarily_idle(cct, last_idle);
     std::unique_lock locker{lock};
     cond.wait_for(locker, std::chrono::seconds(secs));
   } while (!reshard->going_down());

@@ -27,6 +27,7 @@
 #include "cls/lock/cls_lock_client.h"
 #include "rgw_perf_counters.h"
 #include "rgw_asio_thread.h"
+#include "perfglue/heap_profiler.h"
 #include "rgw_common.h"
 #include "rgw_bucket.h"
 #include "rgw_bucket_layout.h"
@@ -294,6 +295,7 @@ bool RGWLifecycleConfiguration::valid()
 }
 
 void *RGWLC::LCWorker::entry() {
+  ceph::real_time last_idle;
   do {
     std::unique_ptr<rgw::sal::Bucket> all_buckets; // empty restriction
     utime_t start = ceph_clock_now();
@@ -319,6 +321,7 @@ void *RGWLC::LCWorker::entry() {
     ldpp_dout(dpp, 5) << "schedule life cycle next start time="
 		      << rgw_to_asctime(next) << " worker=" << ix << dendl;
 
+    last_idle = ceph_heap_mark_thread_temporarily_idle(cct, last_idle);
     std::unique_lock l{lock};
     cond.wait_for(l, std::chrono::seconds(secs));
   } while (!lc->going_down());

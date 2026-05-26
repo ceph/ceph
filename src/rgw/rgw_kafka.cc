@@ -3,6 +3,7 @@
 
 #include "rgw_kafka.h"
 #include "rgw_url.h"
+#include "perfglue/heap_profiler.h"
 #include <librdkafka/rdkafka.h>
 #include "include/ceph_assert.h"
 #include <sstream>
@@ -659,6 +660,7 @@ private:
 
   void run() noexcept {
     ceph_pthread_setname("kafka_manager");
+    ceph::real_time last_idle;
     while (!stopped) {
 
       // publish all messages in the queue
@@ -699,6 +701,7 @@ private:
       }
       // sleep if no messages were received or published across all connection
       if (send_count == 0 && reply_count == 0) {
+        last_idle = ceph_heap_mark_thread_temporarily_idle(cct, last_idle);
         std::this_thread::sleep_for(std::chrono::milliseconds(read_timeout*3));
         // TODO: add exponential backoff to sleep time
       }
