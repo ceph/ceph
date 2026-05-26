@@ -72,7 +72,7 @@ def set_dmcrypt_no_workqueue(target_version: str = '2.3.4') -> None:
 
 def bypass_workqueue(device: str) -> bool:
     return (not BackingDeviceRotation.is_rotational(device)
-            and conf.dmcrypt_no_workqueue)
+            and bool(conf.dmcrypt_no_workqueue))
 
 def get_key_size_from_conf():
     """
