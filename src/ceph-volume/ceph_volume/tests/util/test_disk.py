@@ -133,7 +133,7 @@ class TestBackingDeviceIsRotational(object):
         fake_filesystem.create_file('/sys/block/dm-0/queue/rotational', contents='0')
         assert disk.BackingDeviceRotation.is_rotational('/dev/dm-0') is True
 
-    @patch('ceph_volume.util.disk._kname_for_sysfs_walk', side_effect=lambda kname: kname)
+    @patch('ceph_volume.util.disk.BackingDeviceRotation._kname_for_sysfs_walk', side_effect=lambda kname: kname)
     @patch('ceph_volume.util.disk.os.path.exists', return_value=True)
     @patch('ceph_volume.util.disk.UdevData')
     def test_leaf_block_uses_udev_hints(
