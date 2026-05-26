@@ -80,8 +80,20 @@ struct RGWQuotaInfo {
     /* v4 additions.  Appended AFTER all v3 fields so that an old (v3)
      * decoder running against a v4 blob will simply stop at the
      * DECODE_FINISH() boundary and silently ignore them.  This is the
-     * standard Ceph "additive" forward-compat pattern. */
-    encode(storage_class_quotas, bl);
+     * standard Ceph "additive" forward-compat pattern.
+     *
+     * The map is encoded manually (count + key/value pairs) rather than
+     * via the std::map template so that nested RGWStorageClassQuota
+     * blobs always use the member encode/decode path regardless of how
+     * denc/feature traits evolve for std::map in encoding.h. */
+    {
+      const __u32 n = static_cast<__u32>(storage_class_quotas.size());
+      encode(n, bl);
+      for (const auto& [key, q] : storage_class_quotas) {
+        encode(key, bl);
+        q.encode(bl);
+      }
+    }
     encode(static_cast<uint8_t>(enforcement_mode), bl);
     ENCODE_FINISH(bl);
   }
@@ -100,7 +112,16 @@ struct RGWQuotaInfo {
       decode(check_on_raw, bl);
     }
     if (struct_v >= 4) {
-      decode(storage_class_quotas, bl);
+      __u32 n = 0;
+      decode(n, bl);
+      storage_class_quotas.clear();
+      while (n--) {
+        std::string key;
+        RGWStorageClassQuota q;
+        decode(key, bl);
+        q.decode(bl);
+        storage_class_quotas.emplace(std::move(key), std::move(q));
+      }
       uint8_t mode_byte = 0;
       decode(mode_byte, bl);
       enforcement_mode = static_cast<RGWQuotaEnforcementMode>(mode_byte);

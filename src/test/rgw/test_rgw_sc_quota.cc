@@ -43,12 +43,11 @@
 
 using namespace rgw::quota;
 
+#define dout_subsys ceph_subsys_rgw
+
 namespace {
-/* The test process never starts an RGW frontend so we need our own
- * minimal DoutPrefixProvider; NoDoutPrefix is the standard pattern
- * elsewhere in src/test/rgw. */
 struct TestDpp : NoDoutPrefix {
-  TestDpp() : NoDoutPrefix(g_ceph_context, /*subsys=*/0) {}
+  TestDpp() : NoDoutPrefix(g_ceph_context, dout_subsys) {}
 };
 } // namespace
 
@@ -90,18 +89,33 @@ struct ScopedProvider {
 
 /* ----------------------------- encode/decode ---------------------------- */
 
+TEST(RGWStorageClassQuota, Roundtrip) {
+  RGWStorageClassQuota in{ 1024 * 1024, 100, true };
+
+  bufferlist bl;
+  in.encode(bl);
+
+  RGWStorageClassQuota out;
+  auto iter = bl.cbegin();
+  out.decode(iter);
+
+  EXPECT_EQ(out.max_size, in.max_size);
+  EXPECT_EQ(out.max_objects, in.max_objects);
+  EXPECT_EQ(out.enabled, in.enabled);
+}
+
 TEST(RGWQuotaInfoV4, RoundtripEmptyScMap) {
   RGWQuotaInfo in;
   in.enabled = true;
   in.max_size = 1024;
   in.max_objects = 10;
 
-  ceph::buffer::list bl;
-  encode(in, bl);
+  bufferlist bl;
+  in.encode(bl);
 
   RGWQuotaInfo out;
-  auto p = bl.cbegin();
-  decode(out, p);
+  auto iter = bl.cbegin();
+  out.decode(iter);
 
   EXPECT_TRUE(out.enabled);
   EXPECT_EQ(out.max_size, 1024);
@@ -119,12 +133,12 @@ TEST(RGWQuotaInfoV4, RoundtripPopulatedScMap) {
   in.storage_class_quotas[rgw_sc_quota_key("default", "GLACIER")] =
     RGWStorageClassQuota{ -1, 50, true };
 
-  ceph::buffer::list bl;
-  encode(in, bl);
+  bufferlist bl;
+  in.encode(bl);
 
   RGWQuotaInfo out;
-  auto p = bl.cbegin();
-  decode(out, p);
+  auto iter = bl.cbegin();
+  out.decode(iter);
 
   EXPECT_EQ(out.enforcement_mode, RGWQuotaEnforcementMode::HYBRID);
   ASSERT_EQ(out.storage_class_quotas.size(), 2u);
@@ -149,11 +163,11 @@ TEST(RGWQuotaInfoV4, RoundtripPopulatedScMap) {
  */
 TEST(RGWQuotaInfoV4, RoundtripLegacyDefaultsStable) {
   for (auto& in : RGWQuotaInfo::generate_test_instances()) {
-    ceph::buffer::list bl;
-    encode(in, bl);
+    bufferlist bl;
+    in.encode(bl);
     RGWQuotaInfo out;
-    auto p = bl.cbegin();
-    decode(out, p);
+    auto iter = bl.cbegin();
+    out.decode(iter);
     EXPECT_EQ(in.enabled, out.enabled);
     EXPECT_EQ(in.max_size, out.max_size);
     EXPECT_EQ(in.max_objects, out.max_objects);

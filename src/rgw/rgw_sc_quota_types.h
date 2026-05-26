@@ -59,14 +59,14 @@ struct RGWStorageClassQuota {
   bool has_object_limit()  const { return enabled && max_objects >= 0; }
   bool is_active()         const { return enabled && (max_size >= 0 || max_objects >= 0); }
 
-  void encode(ceph::buffer::list& bl) const {
+  void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     encode(max_size,    bl);
     encode(max_objects, bl);
     encode(enabled,     bl);
     ENCODE_FINISH(bl);
   }
-  void decode(ceph::buffer::list::const_iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(max_size,    bl);
     decode(max_objects, bl);
