@@ -117,7 +117,7 @@ namespace rgw::dedup {
         if (shared_manifest) {
           flags.set_shared_manifest();
         }
-        if (comp_match >= COMPRESSION_MATCH_EXACT) {
+        if (comp_match == COMPRESSION_MATCH_EXACT) {
           flags.set_compression_exact_match();
         } else if (comp_match == COMPRESSION_MATCH_PARTIAL) {
           flags.set_compression_partial_match();

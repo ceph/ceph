@@ -12,8 +12,8 @@ import string
 import shutil
 import pytest
 import json
-#from collections import namedtuple
 import boto3
+from botocore.exceptions import ClientError
 from boto3.s3.transfer import TransferConfig
 from dataclasses import dataclass
 import urllib.parse
@@ -25,8 +25,12 @@ from botocore.awsrequest import AWSRequest
 
 from . import(
     configfile,
+    get_config_zonegroup,
+    get_config_zone,
+    get_config_cluster,
     get_config_host,
     get_config_port,
+    get_config_data_pool,
     get_access_key,
     get_secret_key
 )
@@ -70,9 +74,6 @@ class Dedup_Ratio:
     s3_bytes_after: int = 0
     ratio: float = 0.0
 
-full_dedup_state_was_checked = False
-full_dedup_state_disabled = True
-
 # configure logging for the tests module
 log = logging.getLogger(__name__)
 num_buckets = 0
@@ -84,22 +85,31 @@ test_path = os.path.normpath(os.path.dirname(os.path.realpath(__file__))) + '/..
 
 #-----------------------------------------------
 def bash(cmd, **kwargs):
-    #log.debug('running command: %s', ' '.join(cmd))
+    cmd_timeout = 300
     kwargs['stdout'] = subprocess.PIPE
     process = subprocess.Popen(cmd, **kwargs)
-    s = process.communicate()[0].decode('utf-8')
-    return (s, process.returncode)
+    try:
+        out, _ = process.communicate(timeout=cmd_timeout)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        out, _ = process.communicate()
+        raise AssertionError(
+            "command timed out after %ds: %s" % (cmd_timeout, ' '.join(cmd)))
+
+    return (out.decode('utf-8'), process.returncode)
 
 #-----------------------------------------------
 def admin(args, **kwargs):
     """ radosgw-admin command """
-    cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_admin', 'noname'] + args
+    cluster=get_config_cluster()
+    cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_admin', cluster] + args
     return bash(cmd, **kwargs)
 
 #-----------------------------------------------
 def rados(args, **kwargs):
     """ rados command """
-    cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_rados', 'noname'] + args
+    cluster=get_config_cluster()
+    cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_rados', cluster] + args
     return bash(cmd, **kwargs)
 
 #------------------------------------------------------------------
@@ -202,12 +212,19 @@ def get_buckets(num_buckets):
 #==============================================
 #-------------------------------------------------------------------------------
 def verify_no_forgotten_buckets(conn):
+    """returns False if any bucket existed at check time;
+    deletes them for subsequent tests"""
+
     bucket_count = 0
     response = conn.list_buckets()
+
     # The 'Buckets' key always exists in a successful response
     for bucket in response['Buckets']:
-        log.warning("Forgotten bucket name = %s", bucket['Name'])
-        conn.delete_bucket(Bucket=bucket['Name'])
+        bucket_name = bucket['Name']
+        log.warning("Forgotten bucket name = %s", bucket_name)
+        delete_bucket_with_all_objects(bucket_name, conn)
+        #conn.delete_bucket(Bucket=bucket_name)
+
         bucket_count += 1
 
     return bucket_count == 0
@@ -215,12 +232,29 @@ def verify_no_forgotten_buckets(conn):
 
 g_tenant_connections=[]
 g_tenants=[]
+g_tenant_user_ids=[]
 g_simple_connection=[]
 
 #-----------------------------------------------
-def close_all_connections():
-    global g_simple_connection
+def _make_s3_client(access_key, secret_key):
+    """Create a boto3 S3 client for the configured RGW endpoint."""
+    zonegroup = get_config_zonegroup()
+    hostname = get_config_host()
+    port_no = get_config_port()
+    if port_no == 443 or port_no == 8443:
+        scheme = 'https://'
+    else:
+        scheme = 'http://'
+    return boto3.client('s3',
+                        endpoint_url=scheme + hostname + ':' + str(port_no),
+                        region_name=zonegroup,
+                        aws_access_key_id=access_key,
+                        aws_secret_access_key=secret_key)
 
+#-----------------------------------------------
+def close_all_connections():
+    global g_simple_connection, g_tenant_connections, g_tenants, g_tenant_user_ids
+    log.info("Teardown: Closing all connections")
     for conn in g_simple_connection:
         log.debug("close simple connection")
         verify_no_forgotten_buckets(conn)
@@ -230,6 +264,16 @@ def close_all_connections():
         log.debug("close tenant connection")
         verify_no_forgotten_buckets(conn)
         conn.close()
+
+    for uid, tenant in g_tenant_user_ids:
+        log.debug("remove tenant user uid=%s tenant=%s", uid, tenant)
+        result = admin(['user', 'rm', '--tenant', tenant, '--uid', uid, '--purge-data'])
+        assert result[1] == 0
+
+    g_simple_connection = []
+    g_tenant_connections = []
+    g_tenants = []
+    g_tenant_user_ids = []
 
 #-----------------------------------------------
 def get_connections(req_count):
@@ -241,23 +285,14 @@ def get_connections(req_count):
         conns.append(g_simple_connection[i])
 
     if len(conns) < req_count:
-        hostname = get_config_host()
-        port_no = get_config_port()
         access_key = get_access_key()
         secret_key = get_secret_key()
-        if port_no == 443 or port_no == 8443:
-            scheme = 'https://'
-        else:
-            scheme = 'http://'
 
         for i in range(req_count - len(conns)):
-            log.debug("generate new connection")
-            client = boto3.client('s3',
-                                  endpoint_url=scheme+hostname+':'+str(port_no),
-                                  aws_access_key_id=access_key,
-                                  aws_secret_access_key=secret_key)
-            g_simple_connection.append(client);
-            conns.append(client);
+            log.info("generate new connection")
+            client = _make_s3_client(access_key, secret_key)
+            g_simple_connection.append(client)
+            conns.append(client)
 
     return conns
 
@@ -272,93 +307,60 @@ def another_user(uid, tenant, display_name):
     global num_users
     num_users += 1
 
-    access_key = run_prefix + "_" +str(num_users) + "_" + str(time.time())
-    secret_key = run_prefix + "_" +str(num_users) + "_" + str(time.time())
+    timestamp = str(time.time())
+    access_key = run_prefix + "_" + str(num_users) + "_ak_" + timestamp
+    secret_key = run_prefix + "_" + str(num_users) + "_sk_" + timestamp
 
-    cmd = ['user', 'create', '--uid', uid, '--tenant', tenant, '--access-key', access_key, '--secret-key', secret_key, '--display-name', display_name]
+    cmd = ['user', 'create', '--uid', uid, '--tenant', tenant,
+           '--access-key', access_key, '--secret-key', secret_key,
+           '--display-name', display_name]
     result = admin(cmd)
     assert result[1] == 0
 
-    hostname = get_config_host()
-    port_no = get_config_port()
-    if port_no == 443 or port_no == 8443:
-        scheme = 'https://'
-    else:
-        scheme = 'http://'
-
-    endpoint=scheme+hostname+':'+str(port_no)
-    client = boto3.client('s3',
-                          endpoint_url=endpoint,
-                          aws_access_key_id=access_key,
-                          aws_secret_access_key=secret_key)
-
-    return client
+    return _make_s3_client(access_key, secret_key)
 
 #-------------------------------------------------------------------------------
-def gen_connections_multi2(req_count):
-    g_tenant_connections=[]
-    g_tenants=[]
-    global num_conns
+def gen_connections_multi(req_count):
+    global g_tenant_connections, g_tenants, g_tenant_user_ids, num_conns
+
+    assert len(g_tenants) == len(g_tenant_connections) == len(g_tenant_user_ids), \
+        "tenant connection pool out of sync"
 
     log.debug("gen_connections_multi: Create connection and buckets ...")
-    suffix=run_prefix
+    suffix = run_prefix
 
-    tenants=[]
-    bucket_names=[]
-    conns=[]
+    tenants = []
+    bucket_names = []
+    conns = []
 
-    for i in range(min(req_count, len(g_tenants))):
+    recycle_count = min(req_count, len(g_tenant_connections))
+    for i in range(recycle_count):
         log.debug("recycle existing tenants connection")
-        conns.append(g_tenants_connection[i])
+        conn = g_tenant_connections[i]
+        conns.append(conn)
         tenants.append(g_tenants[i])
         # we need to create a new bucket as we remove existing buckets at cleanup
-        bucket_name=gen_bucket_name()
+        bucket_name = gen_bucket_name()
         bucket_names.append(bucket_name)
-        bucket=conns[i].create_bucket(Bucket=bucket_name)
+        conn.create_bucket(Bucket=bucket_name)
 
     if len(conns) < req_count:
         for i in range(req_count - len(conns)):
             num_conns += 1
-            user=gen_object_name("user", num_conns) + suffix
-            display_name=gen_object_name("display", num_conns) + suffix
-            tenant=gen_object_name("tenant", num_conns) + suffix
+            user = gen_object_name("user", num_conns) + suffix
+            display_name = gen_object_name("display", num_conns) + suffix
+            tenant = gen_object_name("tenant", num_conns) + suffix
             g_tenants.append(tenant)
+            g_tenant_user_ids.append((user, tenant))
             tenants.append(tenant)
-            bucket_name=gen_bucket_name()
+            bucket_name = gen_bucket_name()
             bucket_names.append(bucket_name)
-            log.debug("U=%s, T=%s, B=%s", user, tenant, bucket_name);
+            log.debug("U=%s, T=%s, B=%s", user, tenant, bucket_name)
 
-            conn=another_user(user, tenant, display_name)
-            bucket=conn.create_bucket(Bucket=bucket_name)
+            conn = another_user(user, tenant, display_name)
+            conn.create_bucket(Bucket=bucket_name)
             g_tenant_connections.append(conn)
             conns.append(conn)
-
-    log.debug("gen_connections_multi: All connection and buckets are set")
-    return (tenants, bucket_names, conns)
-
-
-#-------------------------------------------------------------------------------
-def gen_connections_multi(num_tenants):
-    global num_conns
-
-    tenants=[]
-    bucket_names=[]
-    conns=[]
-    log.debug("gen_connections_multi: Create connection and buckets ...")
-    suffix=run_prefix
-    for i in range(0, num_tenants):
-        num_conns += 1
-        user=gen_object_name("user", num_conns) + suffix
-        display_name=gen_object_name("display", num_conns) + suffix
-        tenant=gen_object_name("tenant", num_conns) + suffix
-        tenants.append(tenant)
-        bucket_name=gen_bucket_name()
-        bucket_names.append(bucket_name)
-        log.debug("U=%s, T=%s, B=%s", user, tenant, bucket_name);
-
-        conn=another_user(user, tenant, display_name)
-        bucket=conn.create_bucket(Bucket=bucket_name)
-        conns.append(conn)
 
     log.debug("gen_connections_multi: All connection and buckets are set")
     return (tenants, bucket_names, conns)
@@ -388,14 +390,13 @@ RADOS_OBJ_SIZE=(4*MB)
 MULTIPART_SIZE=(15*MB)
 default_config = TransferConfig(multipart_threshold=MULTIPART_SIZE, multipart_chunksize=MULTIPART_SIZE)
 ETAG_ATTR="user.rgw.etag"
-POOLNAME="default.rgw.buckets.data"
 
 MAX_COPIES_PER_OBJ=128
 #-------------------------------------------------------------------------------
 def write_file(filename, size):
     full_filename = OUT_DIR + filename
 
-    fout = open(full_filename, "wb")
+    fout = open(full_filename, "xb")
     fout.write(os.urandom(size))
     fout.close()
 
@@ -482,20 +483,6 @@ def gen_files(files, start_size, factor, max_copies_count=4):
         write_random(files, size2, 1, max_copies_count)
         size  = size * 2;
 
-
-#-------------------------------------------------------------------------------
-def count_space_in_all_buckets():
-    result = rados(['df'])
-    assert result[1] == 0
-    log.debug("=============================================")
-    for line in result[0].splitlines():
-        if line.startswith(POOLNAME):
-            log.debug(line[:45])
-        elif line.startswith("POOL_NAME"):
-            log.debug(line[:45])
-            log.debug("=============================================")
-
-
 #-------------------------------------------------------------------------------
 def count_objects_in_bucket(bucket_name, conn):
     max_keys=1000
@@ -526,20 +513,19 @@ def count_objects_in_bucket(bucket_name, conn):
 
 #-------------------------------------------------------------------------------
 def count_object_parts_in_all_buckets(verbose=False, expected_size=0):
+    poolname = get_config_data_pool()
     result = rados(['lspools'])
     assert result[1] == 0
-    found=False
-    for pool in result[0].split():
-        if pool == POOLNAME:
-            found=True
-            log.debug("Pool %s was found", POOLNAME)
-            break
+    pools = result[0].split()
+    if poolname not in pools:
+        if expected_size == 0 and not verbose:
+            return 0
+        raise AssertionError( "RADOS data pool '%s' not found (available pools: %s)"
+                              % (poolname, ', '.join(pools) if pools else '(none)'))
 
-    if found == False:
-        log.debug("Pool %s doesn't exists!", POOLNAME)
-        return 0
+    log.debug("Pool %s was found", poolname)
 
-    result = rados(['ls', '-p ', POOLNAME])
+    result = rados(['ls', '-p ', poolname])
     assert result[1] == 0
     names=result[0].split()
     rados_count = len(names)
@@ -557,7 +543,7 @@ def count_object_parts_in_all_buckets(verbose=False, expected_size=0):
         if verbose:
             log.debug(rados_name)
         if expected_size:
-            result = rados(['-p ', POOLNAME, 'stat', rados_name])
+            result = rados(['-p ', poolname, 'stat', rados_name])
             assert result[1] == 0
             stat = result[0].split()
             byte_size=int(stat[-1])
@@ -614,39 +600,45 @@ def delete_bucket_with_all_objects(bucket_name, conn):
     max_keys=1000
     continuation_token = None
     obj_count=0
-    while True:
-        list_args = {
-            'Bucket': bucket_name,
-            'MaxKeys': max_keys
-        }
-        if continuation_token:
-            list_args['ContinuationToken'] = continuation_token
+    try:
+        while True:
+            list_args = {
+                'Bucket': bucket_name,
+                'MaxKeys': max_keys
+            }
+            if continuation_token:
+                list_args['ContinuationToken'] = continuation_token
 
-        listing=conn.list_objects_v2(**list_args)
-        if 'Contents' not in listing or len(listing['Contents'])== 0:
-            log.debug("Bucket '%s' is empty, skipping...", bucket_name)
-            break
+            listing=conn.list_objects_v2(**list_args)
+            if 'Contents' not in listing or len(listing['Contents'])== 0:
+                log.debug("Bucket '%s' is empty, skipping...", bucket_name)
+                break
 
-        objects=[]
-        for obj in listing['Contents']:
-            log.debug("delete_bucket_with_all_objects: add obj: %s", obj['Key'])
-            objects.append({'Key': obj['Key']})
+            objects=[]
+            for obj in listing['Contents']:
+                log.debug("delete_bucket_with_all_objects: add obj: %s", obj['Key'])
+                objects.append({'Key': obj['Key']})
 
-        obj_count += len(objects)
-        # delete objects from the bucket
-        log.debug("delete_bucket_with_all_objects: delete %d objs", obj_count)
-        response=conn.delete_objects(Bucket=bucket_name, Delete={'Objects':objects})
-        check_delete_objects_response(response)
+            obj_count += len(objects)
+            log.debug("delete_bucket_with_all_objects: delete %d objs", obj_count)
+            response=conn.delete_objects(Bucket=bucket_name, Delete={'Objects':objects})
+            check_delete_objects_response(response)
 
-        if 'NextContinuationToken' in listing:
-            continuation_token = listing['NextContinuationToken']
-            log.debug("delete_bucket_with_all_objects: Token=%s, count=%d",
-                      continuation_token, obj_count)
-        else:
-            break
+            if 'NextContinuationToken' in listing:
+                continuation_token = listing['NextContinuationToken']
+                log.debug("delete_bucket_with_all_objects: Token=%s, count=%d",
+                          continuation_token, obj_count)
+            else:
+                break
 
-    log.debug("Removing Bucket '%s', obj_count=%d", bucket_name, obj_count)
-    conn.delete_bucket(Bucket=bucket_name)
+        log.debug("Removing Bucket '%s', obj_count=%d", bucket_name, obj_count)
+        conn.delete_bucket(Bucket=bucket_name)
+    except ClientError as e:
+        error_code = e.response.get('Error', {}).get('Code', '')
+        if error_code == 'NoSuchBucket':
+            log.info("Bucket '%s' does not exist, skipping cleanup", bucket_name)
+            return
+        raise
 
 #-------------------------------------------------------------------------------
 def verify_pool_is_empty(conn, skip_bucket_check=False):
@@ -655,7 +647,7 @@ def verify_pool_is_empty(conn, skip_bucket_check=False):
 
     obj_count = count_object_parts_in_all_buckets(False, 0)
     if (obj_count):
-        log.warning("verify_pool_is_empty: %d obejcts were found", obj_count)
+        log.warning("verify_pool_is_empty: %d objects were found", obj_count)
         assert obj_count == 0
 
     if not skip_bucket_check:
@@ -663,19 +655,18 @@ def verify_pool_is_empty(conn, skip_bucket_check=False):
 
 #-------------------------------------------------------------------------------
 def cleanup(bucket_name, conn):
-    if cleanup_local():
-        log.debug("delete_all_objects for bucket <%s>",bucket_name)
-        delete_bucket_with_all_objects(bucket_name, conn)
-
+    cleanup_local()
+    log.debug("delete_all_objects for bucket <%s>",bucket_name)
+    delete_bucket_with_all_objects(bucket_name, conn)
     verify_pool_is_empty(conn)
 
 
 #-------------------------------------------------------------------------------
 def cleanup_all_buckets(bucket_names, conns):
-    if cleanup_local():
-        for (bucket_name, conn) in zip(bucket_names, conns):
-            log.debug("delete_all_objects for bucket <%s>",bucket_name)
-            delete_bucket_with_all_objects(bucket_name, conn)
+    cleanup_local()
+    for (bucket_name, conn) in zip(bucket_names, conns):
+        log.debug("delete_all_objects for bucket <%s>",bucket_name)
+        delete_bucket_with_all_objects(bucket_name, conn)
 
     verify_pool_is_empty(conns[0], True)
     for conn in conns:
@@ -782,7 +773,7 @@ def calc_expected_stats(dedup_stats, obj_size, num_copies, config):
     on_disk_byte_size = calc_on_disk_byte_size(obj_size)
     log.debug("obj_size=%d, on_disk_byte_size=%d", obj_size, on_disk_byte_size)
     threshold = config.multipart_threshold
-    dedup_stats.skip_shared_manifest = 0
+    #dedup_stats.skip_shared_manifest = 0
     dedup_stats.size_before_dedup += (on_disk_byte_size * num_copies)
     if on_disk_byte_size < DEDUP_MIN_OBJ_SIZE and threshold > DEDUP_MIN_OBJ_SIZE:
         dedup_stats.skip_too_small += num_copies
@@ -1011,7 +1002,16 @@ def upload_objects_multi(files, conns, bucket_names, indices, config, check_obj_
 
 
 #---------------------------------------------------------------------------
-def proc_upload(proc_id, num_procs, files, conn, bucket_name, indices, config):
+def _s3_credentials(conn):
+    """Extract AK/SK from a boto3 client for fork-safe worker processes."""
+    creds = conn._request_signer._credentials
+    return creds.access_key, creds.secret_key
+
+
+#---------------------------------------------------------------------------
+def proc_upload(proc_id, num_procs, files, access_key, secret_key,
+                bucket_name, indices, config):
+    conn = _make_s3_client(access_key, secret_key)
     count=0
     for (f, idx) in zip(files, indices):
         filename=f[0]
@@ -1034,8 +1034,10 @@ def procs_upload_objects(files, conns, bucket_names, indices, config, check_obj_
     proc_list=list()
     for idx in range(num_procs):
         # Seems the processes are much faster than threads (probably due to python gil)
+        access_key, secret_key = _s3_credentials(conns[idx])
         p=Process(target=proc_upload,
-                  args=(idx, num_procs, files, conns[idx], bucket_names[idx], indices, config))
+                  args=(idx, num_procs, files, access_key, secret_key,
+                        bucket_names[idx], indices, config))
         proc_list.append(p)
         proc_list[idx].start()
 
@@ -1343,11 +1345,6 @@ def threads_verify_objects(files, conns, bucket_names, expected_results, config)
 
 
 #-------------------------------------------------------------------------------
-def get_stats_line_val(line):
-    return int(line.rsplit("=", maxsplit=1)[1].strip())
-
-
-#-------------------------------------------------------------------------------
 def print_dedup_stats(dedup_stats):
     log.info("===============================================")
 
@@ -1479,6 +1476,7 @@ def verify_dedup_ratio(expected_dedup_stats, dedup_ratio):
 
 #-------------------------------------------------------------------------------
 def read_dedup_stats(dry_run):
+    log.debug("read_dedup_stats: dry_run=%s", dry_run)
     dedup_work_was_completed = False
     dedup_stats=Dedup_Stats()
     dedup_ratio_estimate=Dedup_Ratio()
@@ -1527,7 +1525,9 @@ def read_dedup_stats(dry_run):
 
 #-------------------------------------------------------------------------------
 def set_bucket_index_throttling(limit):
+    log.debug("set_bucket_index_throttling(%d)", limit);
     result = dedup_admin('throttle', max_bucket_index_ops=limit)
+
     assert result[1] == 0
     log.debug(result[0])
 
@@ -1537,7 +1537,7 @@ def exec_dedup_internal(expected_dedup_stats, dry_run, max_dedup_time):
     limit=random.randint(50, 200)
     set_bucket_index_throttling(limit)
 
-    log.debug("sending exec_dedup request: dry_run=%d", dry_run)
+    log.info("sending exec_dedup request: dry_run=%s", dry_run)
     if dry_run:
         result = dedup_admin('estimate')
         reset_full_dedup_stats(expected_dedup_stats)
@@ -1610,6 +1610,11 @@ def exec_dedup(expected_dedup_stats, dry_run, verify_stats=True, post_dedup_size
 #-------------------------------------------------------------------------------
 def prepare_test():
     cleanup_local()
+
+    # run garbage collection before counting
+    result = admin(['gc', 'process', '--include-all'])
+    assert result[1] == 0
+
     #make sure we are starting with all buckets empty
     if count_object_parts_in_all_buckets(False, 0) != 0:
         log.warning("The system was left dirty from previous run");
@@ -1716,15 +1721,18 @@ def simple_dedup_with_tenants(files, conns, bucket_names, config, dry_run=False)
 
 #-------------------------------------------------------------------------------
 def dedup_basic_with_tenants_common(files, max_copies_count, config, dry_run):
+    bucket_names = []
+    conns = []
     try:
-        ret=gen_connections_multi2(max_copies_count)
+        ret=gen_connections_multi(max_copies_count)
         tenants=ret[0]
         bucket_names=ret[1]
         conns=ret[2]
         simple_dedup_with_tenants(files, conns, bucket_names, config, dry_run)
     finally:
         # cleanup must be executed even after a failure
-        cleanup_all_buckets(bucket_names, conns)
+        if bucket_names:
+            cleanup_all_buckets(bucket_names, conns)
 
 
 #-------------------------------------------------------------------------------
@@ -1754,49 +1762,18 @@ def threads_simple_dedup_with_tenants(files, conns, bucket_names, config, dry_ru
 
 #-------------------------------------------------------------------------------
 def threads_dedup_basic_with_tenants_common(files, num_conns, config, dry_run):
+    bucket_names = []
+    conns = []
     try:
-        ret=gen_connections_multi2(num_conns)
+        ret=gen_connections_multi(num_conns)
         tenants=ret[0]
         bucket_names=ret[1]
         conns=ret[2]
         threads_simple_dedup_with_tenants(files, conns, bucket_names, config, dry_run)
     finally:
         # cleanup must be executed even after a failure
-        cleanup_all_buckets(bucket_names, conns)
-
-
-#-------------------------------------------------------------------------------
-def check_full_dedup_state():
-    global full_dedup_state_was_checked
-    global full_dedup_state_disabled
-    log.debug("check_full_dedup_state:: sending FULL Dedup request")
-    result = dedup_admin('exec')
-    if result[1] == 0:
-        log.debug("full dedup is enabled!")
-        full_dedup_state_disabled = False
-        result = dedup_admin('abort')
-        assert result[1] == 0
-    else:
-        log.debug("full dedup is disabled, skip all full dedup tests")
-        full_dedup_state_disabled = True
-
-    full_dedup_state_was_checked = True
-    return full_dedup_state_disabled
-
-
-#-------------------------------------------------------------------------------
-def full_dedup_is_disabled():
-    global full_dedup_state_was_checked
-    global full_dedup_state_disabled
-
-    if not full_dedup_state_was_checked:
-        full_dedup_state_disabled = check_full_dedup_state()
-
-    if full_dedup_state_disabled:
-        log.debug("Full Dedup is DISABLED, skipping test...")
-
-    return full_dedup_state_disabled
-
+        if bucket_names:
+            cleanup_all_buckets(bucket_names, conns)
 
 #==============================================================================
 #                            RGW Versioning Tests:
@@ -1981,10 +1958,7 @@ def print_bucket_versioning(conn, bucket_name):
 # finally make sure no rados-object was left behind after the last ver was removed
 @pytest.mark.basic_test
 def test_dedup_with_versions():
-    if full_dedup_is_disabled():
-        return
-
-    disable_default_compression()
+    disable_default_compression_via_period()
     prepare_test()
     bucket_name = "bucketwithversions"
     files=[]
@@ -1993,8 +1967,7 @@ def test_dedup_with_versions():
     min_size=1*KB
     max_size=MULTIPART_SIZE*2
     success=False
-    # Declare the variable with a type hint
-    conn: BaseClient
+    conn = None
     try:
         conn=get_single_connection()
         conn.create_bucket(Bucket=bucket_name)
@@ -2028,14 +2001,15 @@ def test_dedup_with_versions():
         success=True
     finally:
         # cleanup must be executed even after a failure
-        if success == False:
-            # otherwise, objects been removed by verify_objects_with_version()
-            delete_all_versions(conn, bucket_name, dry_run=False)
+        if conn:
+            if success == False:
+                # otherwise, objects been removed by verify_objects_with_version()
+                delete_all_versions(conn, bucket_name, dry_run=False)
 
-        conn.put_bucket_versioning(Bucket=bucket_name,
-                                   VersioningConfiguration={"Status": "Suspended"})
-        print_bucket_versioning(conn, bucket_name)
-        cleanup(bucket_name, conn)
+            conn.put_bucket_versioning(Bucket=bucket_name,
+                                       VersioningConfiguration={"Status": "Suspended"})
+            print_bucket_versioning(conn, bucket_name)
+            cleanup(bucket_name, conn)
 
 #==============================================================================
 #                            ETag Corruption Tests:
@@ -2047,7 +2021,8 @@ CORRUPTIONS = ("no corruption", "change_etag", "illegal_hex_value",
 
 #------------------------------------------------------------------------------
 def change_object_etag(rados_name, new_etag):
-    result = rados(['-p ', POOLNAME, 'setxattr', rados_name, ETAG_ATTR, new_etag])
+    poolname = get_config_data_pool()
+    result = rados(['-p ', poolname, 'setxattr', rados_name, ETAG_ATTR, new_etag])
     assert result[1] == 0
 
 #------------------------------------------------------------------------------
@@ -2095,9 +2070,11 @@ def gen_new_etag(etag, corruption, expected_dedup_stats):
 #------------------------------------------------------------------------------
 def corrupt_etag(key, corruption, expected_dedup_stats):
     log.debug("key=%s, corruption=%s", key, corruption);
-    result = rados(['ls', '-p ', POOLNAME])
+    poolname = get_config_data_pool()
+    result = rados(['ls', '-p ', poolname])
     assert result[1] == 0
 
+    rados_name = None
     names=result[0].split()
     for name in names:
         log.debug("name=%s", name)
@@ -2106,7 +2083,10 @@ def corrupt_etag(key, corruption, expected_dedup_stats):
             rados_name = name
             break;
 
-    result = rados(['-p ', POOLNAME, 'getxattr', rados_name, ETAG_ATTR])
+    # rados_name should hold the head-object for @key
+    assert rados_name, ("key <%s> was not found in rados" % (key))
+
+    result = rados(['-p ', poolname, 'getxattr', rados_name, ETAG_ATTR])
     assert result[1] == 0
     old_etag = result[0]
 
@@ -2120,14 +2100,11 @@ def corrupt_etag(key, corruption, expected_dedup_stats):
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_etag_corruption():
-    if full_dedup_is_disabled():
-        return
-
+    disable_default_compression_via_period()
     bucket_name = gen_bucket_name()
-    log.debug("test_dedup_etag_corruption: connect to AWS ...")
+    log.info("test_dedup_etag_corruption: connect to AWS ...")
     conn=get_single_connection()
 
-    disable_default_compression()
     prepare_test()
     try:
         files=[]
@@ -2281,19 +2258,21 @@ def write_collision_pair_mixed_to_disk(files, target_size, compressibility):
 #-------------------------------------------------------------------------------
 def get_actual_compressed_sizes(target_size, num_copies, verbose=False):
     """Get actual on-disk sizes via rados stat (useful for compressed objects)."""
-    result = rados(['ls', '-p ', POOLNAME])
+    poolname = get_config_data_pool()
+    result = rados(['ls', '-p ', poolname])
     assert result[1] == 0
     rados_names = result[0].split()
     total_compressed = 0
     for rname in rados_names:
-        stat_result = rados(['-p ', POOLNAME, 'stat', rname])
+        stat_result = rados(['-p ', poolname, 'stat', rname])
         if stat_result[1] == 0:
             byte_size = int(stat_result[0].split()[-1])
             total_compressed += byte_size
 
     if verbose:
-        log.info("get_actual_compressed_sizes: size=%d: uncompressed_total=%d, "
-                 "compressed_on_disk_total=%d (%.0f%%)",
+        log.info("get_actual_compressed_sizes: rados_obj_count=%d, size=%d: "
+                 "uncompressed_total=%d, compressed_on_disk_total=%d (%.0f%%)",
+                 len(rados_names),
                  target_size, num_copies * target_size, total_compressed,
                  100.0 * total_compressed / (num_copies * target_size))
 
@@ -2335,13 +2314,6 @@ def _md5_collision_test(compressibility, compressed):
         compressed: if True, create compressed buckets and verify compression
             stats; if False, use regular buckets.
     """
-    if full_dedup_is_disabled():
-        return
-
-    if compressed:
-        enable_default_compression()
-    else:
-        disable_default_compression()
 
     sizes = [64*KB, 2*MB, 11*MB, 61*MB, 256*MB]
     num_copies = 2
@@ -2350,6 +2322,12 @@ def _md5_collision_test(compressibility, compressed):
     bucket_name = gen_bucket_name()
     try:
         prepare_test()
+
+        if compressed:
+            enable_default_compression_via_period()
+        else:
+            disable_default_compression_via_period()
+
         conn = get_single_connection()
         conn.create_bucket(Bucket=bucket_name)
 
@@ -2398,9 +2376,7 @@ def _md5_collision_test(compressibility, compressed):
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_md5_collisions_small():
-    if full_dedup_is_disabled():
-        return
-
+    disable_default_compression_via_period()
     s1_hash=hashlib.md5(MD5_COLLISION_S1).hexdigest()
     s2_hash=hashlib.md5(MD5_COLLISION_S2).hexdigest()
 
@@ -2408,7 +2384,7 @@ def test_md5_collisions_small():
     assert MD5_COLLISION_S1 != MD5_COLLISION_S2
     # but MD5 is identical
     assert s1_hash == s2_hash
-    disable_default_compression()
+
     prepare_test()
     files=[]
     try:
@@ -2471,7 +2447,7 @@ def test_md5_collisions_small():
 @pytest.mark.basic_test
 def test_md5_collision_large():
     """BLAKE3 rejects MD5 collisions on large uncompressed objects (random padding)."""
-    disable_default_compression()
+    disable_default_compression_via_period()
     _md5_collision_test(compressibility=COMPRESS_NEVER, compressed=False)
 
 
@@ -2489,7 +2465,7 @@ def loop_dedup_split_head_with_tenants():
     try:
         gen_files(files, base_size, num_files, max_copies_count)
         indices=[0] * len(files)
-        ret=gen_connections_multi2(max_copies_count)
+        ret=gen_connections_multi(max_copies_count)
         #tenants=ret[0]
         bucket_names=ret[1]
         conns=ret[2]
@@ -2513,10 +2489,7 @@ def loop_dedup_split_head_with_tenants():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_split_head_with_tenants():
-    if full_dedup_is_disabled():
-        return
-
-    disable_default_compression()
+    disable_default_compression_via_period()
     for idx in range(0, 9):
         log.debug("test_dedup_split_head_with_tenants: loop #%d", idx);
         loop_dedup_split_head_with_tenants()
@@ -2553,20 +2526,14 @@ def loop_dedup_split_head():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_split_head_simple():
-    if full_dedup_is_disabled():
-        return
-
-    disable_default_compression()
+    disable_default_compression_via_period()
     for idx in range(0, 9):
         log.debug("test_dedup_split_head: loop #%d", idx);
         loop_dedup_split_head()
 
 #-------------------------------------------------------------------------------
 def dedup_copy_internal(multi_buckets):
-    if full_dedup_is_disabled():
-        return
-
-    disable_default_compression()
+    disable_default_compression_via_period()
     prepare_test()
     bucket_names=[]
     config=default_config
@@ -2620,10 +2587,7 @@ def test_dedup_copy_multi_buckets():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_copy_after_dedup():
-    if full_dedup_is_disabled():
-        return
-
-    disable_default_compression()
+    disable_default_compression_via_period()
     prepare_test()
     log.debug("test_copy_after_dedup: connect to AWS ...")
     config=default_config
@@ -2705,10 +2669,7 @@ def test_copy_after_dedup():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_small():
-    if full_dedup_is_disabled():
-        return
-
-    disable_default_compression()
+    disable_default_compression_via_period()
     bucket_name = gen_bucket_name()
     log.debug("test_dedup_small: connect to AWS ...")
     conn=get_single_connection()
@@ -2718,10 +2679,7 @@ def test_dedup_small():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_small_with_tenants():
-    if full_dedup_is_disabled():
-        return
-
-    disable_default_compression()
+    disable_default_compression_via_period()
     prepare_test()
     max_copies_count=3
     files=[]
@@ -2732,7 +2690,7 @@ def test_dedup_small_with_tenants():
     try:
         gen_files(files, base_size, num_files, max_copies_count)
         indices=[0] * len(files)
-        ret=gen_connections_multi2(max_copies_count)
+        ret=gen_connections_multi(max_copies_count)
         tenants=ret[0]
         bucket_names=ret[1]
         conns=ret[2]
@@ -2767,15 +2725,12 @@ def test_dedup_small_with_tenants():
 #    should be made to the system
 @pytest.mark.basic_test
 def test_dedup_inc_0_with_tenants():
-    if full_dedup_is_disabled():
-        return
-
-    disable_default_compression()
+    disable_default_compression_via_period()
     prepare_test()
     log.debug("test_dedup_inc_0: connect to AWS ...")
     max_copies_count=3
     config=default_config
-    ret=gen_connections_multi2(max_copies_count)
+    ret=gen_connections_multi(max_copies_count)
     tenants=ret[0]
     bucket_names=ret[1]
     conns=ret[2]
@@ -2818,11 +2773,8 @@ def test_dedup_inc_0_with_tenants():
 #    should be made to the system
 @pytest.mark.basic_test
 def test_dedup_inc_0():
-    if full_dedup_is_disabled():
-        return
-
+    disable_default_compression_via_period()
     config=default_config
-    disable_default_compression()
     prepare_test()
     bucket_name = gen_bucket_name()
     log.debug("test_dedup_inc_0: connect to AWS ...")
@@ -2866,15 +2818,12 @@ def test_dedup_inc_0():
 # 3) Run another dedup
 @pytest.mark.basic_test
 def test_dedup_inc_1_with_tenants():
-    if full_dedup_is_disabled():
-        return
-
-    disable_default_compression()
+    disable_default_compression_via_period()
     prepare_test()
     log.debug("test_dedup_inc_1_with_tenants: connect to AWS ...")
     max_copies_count=6
     config=default_config
-    ret=gen_connections_multi2(max_copies_count)
+    ret=gen_connections_multi(max_copies_count)
     tenants=ret[0]
     bucket_names=ret[1]
     conns=ret[2]
@@ -2935,11 +2884,8 @@ def test_dedup_inc_1_with_tenants():
 # 3) Run another dedup
 @pytest.mark.basic_test
 def test_dedup_inc_1():
-    if full_dedup_is_disabled():
-        return
-
+    disable_default_compression_via_period()
     config=default_config
-    disable_default_compression()
     prepare_test()
 
     bucket_name = gen_bucket_name()
@@ -3001,16 +2947,13 @@ def test_dedup_inc_1():
 # 4) Run another dedup
 @pytest.mark.basic_test
 def test_dedup_inc_2_with_tenants():
-    if full_dedup_is_disabled():
-        return
-
-    disable_default_compression()
+    disable_default_compression_via_period()
     prepare_test()
 
     log.debug("test_dedup_inc_2_with_tenants: connect to AWS ...")
     max_copies_count=6
     config=default_config
-    ret=gen_connections_multi2(max_copies_count)
+    ret=gen_connections_multi(max_copies_count)
     tenants=ret[0]
     bucket_names=ret[1]
     conns=ret[2]
@@ -3079,11 +3022,8 @@ def test_dedup_inc_2_with_tenants():
 # 4) Run another dedup
 @pytest.mark.basic_test
 def test_dedup_inc_2():
-    if full_dedup_is_disabled():
-        return
-
+    disable_default_compression_via_period()
     config=default_config
-    disable_default_compression()
     prepare_test()
 
     bucket_name = gen_bucket_name()
@@ -3152,15 +3092,12 @@ def test_dedup_inc_2():
 # 3) Run another dedup
 @pytest.mark.basic_test
 def test_dedup_inc_with_remove_multi_tenants():
-    if full_dedup_is_disabled():
-        return
-
-    disable_default_compression()
+    disable_default_compression_via_period()
     prepare_test()
     log.debug("test_dedup_inc_with_remove_multi_tenants: connect to AWS ...")
     max_copies_count=6
     config=default_config
-    ret=gen_connections_multi2(max_copies_count)
+    ret=gen_connections_multi(max_copies_count)
     tenants=ret[0]
     bucket_names=ret[1]
     conns=ret[2]
@@ -3254,11 +3191,8 @@ def test_dedup_inc_with_remove_multi_tenants():
 # 3) Run another dedup
 @pytest.mark.basic_test
 def test_dedup_inc_with_remove():
-    if full_dedup_is_disabled():
-        return
-
+    disable_default_compression_via_period()
     config=default_config
-    disable_default_compression()
     prepare_test()
     bucket_name = gen_bucket_name()
     log.debug("test_dedup_inc_with_remove: connect to AWS ...")
@@ -3352,10 +3286,7 @@ def test_dedup_inc_with_remove():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_multipart_with_tenants():
-    if full_dedup_is_disabled():
-        return
-
-    disable_default_compression()
+    disable_default_compression_via_period()
     prepare_test()
     log.debug("test_dedup_multipart_with_tenants: connect to AWS ...")
     max_copies_count=3
@@ -3377,10 +3308,7 @@ def test_dedup_multipart_with_tenants():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_multipart():
-    if full_dedup_is_disabled():
-        return
-
-    disable_default_compression()
+    disable_default_compression_via_period()
     prepare_test()
     bucket_name = gen_bucket_name()
     log.debug("test_dedup_multipart: connect to AWS ...")
@@ -3403,10 +3331,7 @@ def test_dedup_multipart():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_basic_with_tenants():
-    if full_dedup_is_disabled():
-        return
-
-    disable_default_compression()
+    disable_default_compression_via_period()
     prepare_test()
     max_copies_count=3
     num_files=23
@@ -3420,10 +3345,7 @@ def test_dedup_basic_with_tenants():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_basic():
-    if full_dedup_is_disabled():
-        return
-
-    disable_default_compression()
+    disable_default_compression_via_period()
     prepare_test()
     bucket_name = gen_bucket_name()
     log.debug("test_dedup_basic: connect to AWS ...")
@@ -3443,10 +3365,7 @@ def test_dedup_basic():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_small_multipart_with_tenants():
-    if full_dedup_is_disabled():
-        return
-
-    disable_default_compression()
+    disable_default_compression_via_period()
     prepare_test()
     max_copies_count=4
     num_files=10
@@ -3464,10 +3383,7 @@ def test_dedup_small_multipart_with_tenants():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_small_multipart():
-    if full_dedup_is_disabled():
-        return
-
-    disable_default_compression()
+    disable_default_compression_via_period()
     prepare_test()
     log.debug("test_dedup_small_multipart: connect to AWS ...")
     config2=TransferConfig(multipart_threshold=4*KB, multipart_chunksize=1*MB)
@@ -3487,10 +3403,7 @@ def test_dedup_small_multipart():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_large_scale_with_tenants():
-    if full_dedup_is_disabled():
-        return
-
-    disable_default_compression()
+    disable_default_compression_via_period()
     prepare_test()
     max_copies_count=3
     num_threads=16
@@ -3502,24 +3415,6 @@ def test_dedup_large_scale_with_tenants():
     gen_files_fixed_size(files, num_files, size, max_copies_count)
     threads_dedup_basic_with_tenants_common(files, num_threads, config, False)
 
-
-#-------------------------------------------------------------------------------
-@pytest.mark.basic_test
-def test_dedup_large_scale():
-    if full_dedup_is_disabled():
-        return
-
-    disable_default_compression()
-    prepare_test()
-    max_copies_count=3
-    num_threads=16
-    num_files=8*1024
-    size=1*KB
-    files=[]
-    config=TransferConfig(multipart_threshold=size, multipart_chunksize=1*MB)
-    log.debug("test_dedup_dry_large_scale_with_tenants: connect to AWS ...")
-    gen_files_fixed_size(files, num_files, size, max_copies_count)
-    threads_dedup_basic_with_tenants_common(files, num_threads, config, False)
 
 #-------------------------------------------------------------------------------
 def inc_step_with_tenants(stats_base, files, conns, bucket_names, config):
@@ -3578,17 +3473,13 @@ def inc_step_with_tenants(stats_base, files, conns, bucket_names, config):
 
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
-#@pytest.mark.inc_test
 def test_dedup_inc_loop_with_tenants():
-    if full_dedup_is_disabled():
-        return
-
-    disable_default_compression()
+    disable_default_compression_via_period()
     prepare_test()
     log.debug("test_dedup_inc_loop_with_tenants: connect to AWS ...")
     max_copies_count=3
     config=default_config
-    ret=gen_connections_multi2(max_copies_count)
+    ret=gen_connections_multi(max_copies_count)
     tenants=ret[0]
     bucket_names=ret[1]
     conns=ret[2]
@@ -3620,8 +3511,7 @@ def test_dedup_inc_loop_with_tenants():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_dry_small_with_tenants():
-    log.debug("test_dedup_dry_small_with_tenants: connect to AWS ...")
-    disable_default_compression()
+    disable_default_compression_via_period()
     prepare_test()
     max_copies_count=3
     files=[]
@@ -3632,7 +3522,7 @@ def test_dedup_dry_small_with_tenants():
     try:
         gen_files(files, base_size, num_files, max_copies_count)
         indices=[0] * len(files)
-        ret=gen_connections_multi2(max_copies_count)
+        ret=gen_connections_multi(max_copies_count)
         tenants=ret[0]
         bucket_names=ret[1]
         conns=ret[2]
@@ -3658,7 +3548,7 @@ def test_dedup_dry_small_with_tenants():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_dry_multipart():
-    disable_default_compression()
+    disable_default_compression_via_period()
     prepare_test()
     bucket_name = gen_bucket_name()
     log.debug("test_dedup_dry_multipart: connect to AWS ...")
@@ -3682,7 +3572,7 @@ def test_dedup_dry_multipart():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_dry_basic():
-    disable_default_compression()
+    disable_default_compression_via_period()
     prepare_test()
     bucket_name = gen_bucket_name()
     log.debug("test_dedup_dry_basic: connect to AWS ...")
@@ -3700,7 +3590,7 @@ def test_dedup_dry_basic():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_dry_small_multipart():
-    disable_default_compression()
+    disable_default_compression_via_period()
     prepare_test()
     log.debug("test_dedup_dry_small_multipart: connect to AWS ...")
     config2 = TransferConfig(multipart_threshold=4*KB, multipart_chunksize=1*MB)
@@ -3720,6 +3610,7 @@ def test_dedup_dry_small_multipart():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_dry_small():
+    disable_default_compression_via_period()
     bucket_name = gen_bucket_name()
     log.debug("test_dedup_dry_small: connect to AWS ...")
     conn=get_single_connection()
@@ -3735,9 +3626,8 @@ def test_dedup_dry_small():
 # 6) verify that dedup ratio is reported correctly
 @pytest.mark.basic_test
 def test_dedup_dry_small_large_mix():
+    disable_default_compression_via_period()
     dry_run=True
-    log.debug("test_dedup_dry_small_large_mix: connect to AWS ...")
-    disable_default_compression()
     prepare_test()
 
     num_threads=4
@@ -3779,7 +3669,7 @@ def test_dedup_dry_small_large_mix():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_dry_basic_with_tenants():
-    disable_default_compression()
+    disable_default_compression_via_period()
     prepare_test()
     max_copies_count=3
     num_files=23
@@ -3793,7 +3683,7 @@ def test_dedup_dry_basic_with_tenants():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_dry_multipart_with_tenants():
-    disable_default_compression()
+    disable_default_compression_via_period()
     prepare_test()
     log.debug("test_dedup_dry_multipart_with_tenants: connect to AWS ...")
     max_copies_count=3
@@ -3815,7 +3705,7 @@ def test_dedup_dry_multipart_with_tenants():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_dry_small_multipart_with_tenants():
-    disable_default_compression()
+    disable_default_compression_via_period()
     prepare_test()
     max_copies_count=4
     num_files=10
@@ -3833,11 +3723,11 @@ def test_dedup_dry_small_multipart_with_tenants():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_dry_large_scale_with_tenants():
-    disable_default_compression()
+    disable_default_compression_via_period()
     prepare_test()
     max_copies_count=3
     num_threads=64
-    num_files=32*1024
+    num_files=16*1024
     size=1*KB
     files=[]
     config=TransferConfig(multipart_threshold=size, multipart_chunksize=1*MB)
@@ -3859,11 +3749,11 @@ def test_dedup_dry_large_scale_with_tenants():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_dry_large_scale():
-    disable_default_compression()
+    disable_default_compression_via_period()
     prepare_test()
     bucket_name = gen_bucket_name()
     max_copies_count=2
-    num_files=2*1024
+    num_files=1*1024
     size=1*KB
     files=[]
     config=TransferConfig(multipart_threshold=size, multipart_chunksize=1*MB)
@@ -3888,9 +3778,6 @@ def test_dedup_dry_large_scale():
 def test_dedup_cli_operations():
     """Exercise all dedup CLI subcommands: estimate, stats, exec, pause, resume,
        abort, throttle."""
-    if full_dedup_is_disabled():
-        return
-
     prepare_test()
     bucket_name = gen_bucket_name()
     conn = get_single_connection()
@@ -3956,9 +3843,6 @@ def test_dedup_cli_operations():
 @pytest.mark.basic_test
 def test_dedup_rest_pause_resume():
     """Exercise pause and resume via REST API."""
-    if full_dedup_is_disabled():
-        return
-
     prepare_test()
     bucket_name = gen_bucket_name()
     conn = get_single_connection()
@@ -4050,7 +3934,9 @@ def test_cleanup():
     close_all_connections()
 
 #---------------------------------------------------------------------------
-def proc_upload_identical(proc_id, num_procs, filename, conn, bucket_name, num_copies, config):
+def proc_upload_identical(proc_id, num_procs, filename, access_key, secret_key,
+                          bucket_name, num_copies, config):
+    conn = _make_s3_client(access_key, secret_key)
     log.debug("Proc_ID=%d/%d::num_copies=%d", proc_id, num_procs, num_copies)
     for idx in range(num_copies):
         log.debug("upload_objects::%s::idx=%d", filename, idx);
@@ -4069,8 +3955,10 @@ def proc_parallel_upload_identical(files, conns, bucket_name, config):
     num_copies=f[2]
     for idx in range(num_procs):
         log.debug("Create proc_id=%d", idx)
+        access_key, secret_key = _s3_credentials(conns[idx])
         p=Process(target=proc_upload_identical,
-                  args=(idx, num_procs, filename, conns[idx], bucket_name, num_copies, config))
+                  args=(idx, num_procs, filename, access_key, secret_key,
+                        bucket_name, num_copies, config))
         proc_list.append(p)
         proc_list[idx].start()
 
@@ -4141,11 +4029,11 @@ def __test_dedup_identical_copies(files, config, dry_run, verify, force_clean=Fa
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_identical_copies_1():
+    disable_default_compression_via_period()
     num_files=1
     copies_count=1024
     size=64*KB
     config=default_config
-    disable_default_compression()
     prepare_test()
     files=[]
     gen_files_fixed_copies(files, num_files, size, copies_count)
@@ -4167,10 +4055,10 @@ def test_dedup_identical_copies_1():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_identical_copies_multipart_small():
+    disable_default_compression_via_period()
     num_files=1
     copies_count=1024
     size=16*KB
-    disable_default_compression()
     prepare_test()
     files=[]
     gen_files_fixed_copies(files, num_files, size, copies_count)
@@ -4207,6 +4095,7 @@ def test_dedup_filter_bucket_list_parsing():
     """Validate CLI parsing of bucket filter list files (allow/deny).
     Verify that illegal files are rejected
     """
+    disable_default_compression_via_period()
     prepare_test()
     try:
         # 1. Mutual exclusivity: --allow-bucket-list and --deny-bucket-list together.
@@ -4246,6 +4135,7 @@ def test_dedup_filter_storage_class_list_parsing():
     """Validate CLI parsing of storage_class filter list files (allow/deny).
     Verify that illegal files are rejected
     """
+    disable_default_compression_via_period()
     prepare_test()
     try:
         # 1. Mutual exclusivity: --allow-storage-class-list and --deny-storage-class-list together.
@@ -4402,17 +4292,12 @@ def dedup_filter_allow_deny_storage_class_common(dry_run, filter_mode_allow):
         expected_dedup_stats.size_before_dedup = dedup_stats.size_before_dedup
         assert dedup_stats == expected_dedup_stats
     finally:
-        cleanup_local()
-        try:
-            delete_bucket_with_all_objects(bucket_name, conn)
-        except Exception as e:
-            log.warning("Failed to cleanup bucket %s: %s", bucket_name, e)
-
-        verify_pool_is_empty(conn)
+        cleanup(bucket_name, conn)
 
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_filter_storage_class_estimate():
+    disable_default_compression_via_period()
     dry_run=True
 
     log.info("dedup_filter_storage_class_estimate: filter_mode_allow")
@@ -4424,6 +4309,7 @@ def test_dedup_filter_storage_class_estimate():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_filter_storage_class_exec():
+    disable_default_compression_via_period()
     dry_run=False
 
     log.info("dedup_filter_storage_class_exec: filter_mode_allow")
@@ -4541,18 +4427,14 @@ def dedup_filter_allow_deny_bucket_common(dry_run, filter_mode_allow):
         assert skip_sc     == 0
         assert skip_bucket == num_filtered
     finally:
-        cleanup_local()
-        for b in bucket_names:
-            try:
-                delete_bucket_with_all_objects(b, conn)
-            except Exception as e:
-                log.warning("Failed to cleanup bucket %s: %s", b, e)
+        conns=[conn] * len(bucket_names)
+        cleanup_all_buckets(bucket_names, conns)
 
-        verify_pool_is_empty(conn)
 
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_filter_bucket_estimate():
+    disable_default_compression_via_period()
     dry_run=True
     log.info("dedup_filter_bucket_estimate: filter_mode_deny")
     dedup_filter_allow_deny_bucket_common(dry_run, filter_mode_allow=False)
@@ -4563,6 +4445,7 @@ def test_dedup_filter_bucket_estimate():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_filter_bucket_exec():
+    disable_default_compression_via_period()
     dry_run=False
     log.info("dedup_filter_bucket_exec: filter_mode_deny")
     dedup_filter_allow_deny_bucket_common(dry_run, filter_mode_allow=False)
@@ -4572,257 +4455,296 @@ def test_dedup_filter_bucket_exec():
 
 
 #-------------------------------------------------------------------------------
-#-------------------------------------------------------------------------------
 #                              Compression helpers
 #-------------------------------------------------------------------------------
-#-------------------------------------------------------------------------------
-def _find_rgw_procs():
-    """Find running radosgw daemons via their --pid-file arguments.
 
-    Scans /proc for processes whose argv[0] basename is 'radosgw' and
-    extracts the --pid-file path from their command line.  Returns a list
-    of (pid, argv_list, pid_file_path) tuples.
-    """
-    import glob as globmod
-    procs = []
-    for cmdline_path in globmod.glob('/proc/[0-9]*/cmdline'):
-        try:
-            with open(cmdline_path, 'rb') as f:
-                raw = f.read()
-            if not raw:
-                continue
-            argv = raw.rstrip(b'\x00').split(b'\x00')
-            exe = os.path.basename(argv[0].decode('utf-8', errors='replace'))
-            if exe != 'radosgw':
-                continue
-            pid = int(cmdline_path.split('/')[2])
-            cmd_list = [a.decode('utf-8', errors='replace') for a in argv]
-            pid_file = None
-            for i, arg in enumerate(cmd_list):
-                if arg.startswith('--pid-file='):
-                    pid_file = arg.split('=', 1)[1]
-                elif arg == '--pid-file' and i + 1 < len(cmd_list):
-                    pid_file = cmd_list[i + 1]
-            procs.append((pid, cmd_list, pid_file))
-        except (OSError, ValueError, IndexError):
-            continue
-    return procs
+original_compression_period = None
+compression_state_period    = None
+compression_modified_period = False
 
+DEFAULT_PLACEMENT = 'default-placement'
+STANDARD_STORAGE_CLASS = 'STANDARD'
 
 #-------------------------------------------------------------------------------
-def restart_all_rgw():
-    """Restart every radosgw daemon preserving its original command line.
-
-    1. Find radosgw processes via /proc scan (exact basename match).
-    2. Record each process's full argv and --pid-file path.
-    3. SIGTERM all, wait for exit.
-    4. Re-launch each with the original argv.
-    5. Wait for the pid-file to be re-written (confirms daemon is up),
-       then verify TCP connectivity on the test port.
-    """
-    import signal
-
-    procs = _find_rgw_procs()
-    if not procs:
-        log.warning("No running radosgw processes found")
-        return
-
-    log.debug("Found %d radosgw process(es) to restart", len(procs))
-    for pid, cmd_list, pid_file in procs:
-        log.debug("  pid=%d  pid_file=%s", pid, pid_file)
-
-    # stop all
-    for pid, _, _ in procs:
-        log.debug("Sending SIGTERM to radosgw pid %d", pid)
-        os.kill(pid, signal.SIGTERM)
-
-    log.info("Sent SIGTERM to all radosgw")
-    for pid, _, pid_file in procs:
-        for _ in range(30):
-            try:
-                os.kill(pid, 0)
-                time.sleep(0.5)
-            except OSError:
-                break
-        else:
-            log.warning("radosgw pid %d did not exit, sending SIGKILL", pid)
-            try:
-                os.kill(pid, signal.SIGKILL)
-            except OSError:
-                pass
-            time.sleep(1)
-        # remove stale pid file so we can detect the new one
-        if pid_file:
-            try:
-                os.remove(pid_file)
-            except OSError:
-                pass
-
-    # wait for the port to be free before restarting
-    port_no = get_config_port()
-    hostname = get_config_host()
-    import socket
-    log.debug("Waiting for port %d to be free...", port_no)
-    for attempt in range(60):
-        try:
-            s = socket.create_connection((hostname, port_no), timeout=1)
-            s.close()
-            time.sleep(1)
-        except (ConnectionRefusedError, OSError):
-            log.debug("Port %d is free after %d seconds", port_no, attempt)
-            break
-    else:
-        log.warning("Port %d still appears busy after 60s, proceeding anyway",
-                    port_no)
-
-    # restart all
-    log.info("Restarting all radosgw");
-    for _, cmd_list, pid_file in procs:
-        log.debug("Restarting radosgw: %s", ' '.join(cmd_list))
-        subprocess.Popen(cmd_list)
-
-    # wait for each daemon to write its pid file (proves it daemonized)
-    for _, cmd_list, pid_file in procs:
-        if not pid_file:
-            continue
-        for attempt in range(60):
-            if os.path.exists(pid_file):
-                try:
-                    with open(pid_file) as f:
-                        new_pid = int(f.read().strip())
-                    os.kill(new_pid, 0)
-                    log.debug("radosgw restarted as pid %d (%s)",
-                             new_pid, pid_file)
-                    break
-                except (OSError, ValueError):
-                    pass
-            time.sleep(1)
-        else:
-            raise RuntimeError("radosgw did not restart: pid file %s "
-                               "not created after 60s" % pid_file)
-
-    # also verify TCP connectivity on the test port
-    for attempt in range(60):
-        try:
-            s = socket.create_connection((hostname, port_no), timeout=2)
-            s.close()
-            log.debug("radosgw listening on %s:%d", hostname, port_no)
-            return
-        except (ConnectionRefusedError, OSError):
-            time.sleep(1)
-    raise RuntimeError("radosgw pid file appeared but port %d not listening "
-                       "after 60s" % port_no)
-
-
-_original_compression = None
-_compression_state = None     # current state: None=unknown, 'none', or 'zlib' etc.
-
-#-------------------------------------------------------------------------------
-def _get_default_placement_compression():
-    """Read the compression type currently set on default-placement."""
-    result = admin(['zone', 'get', '--rgw-zone', 'default'])
+def _get_zone_default_placement_val(zone_name):
+    """Return val dict for default-placement in zone_name."""
+    result = admin(['zone', 'get', '--rgw-zone', zone_name])
     assert result[1] == 0, "zone get failed: " + result[0]
     zone = json.loads(result[0])
     for p in zone.get('placement_pools', []):
-        if p.get('key') == 'default-placement':
-            val = p.get('val', {})
-            sc = val.get('storage_classes', {})
-            std = sc.get('STANDARD', {})
-            return std.get('compression_type', '')
-    assert False, "default-placement not found in zone config"
+        if p.get('key') == DEFAULT_PLACEMENT:
+            return p.get('val', {})
+    assert False, "default-placement not found in zone config for zone %s" % zone_name
 
 
 #-------------------------------------------------------------------------------
-def _is_compression_active(value):
-    """Return True if value represents an active compression setting."""
-    return bool(value) and value.lower() not in ('', 'none')
+def get_zone_placement_storage_classes(zone_name):
+    """Return storage_classes dict for default-placement in zone_name."""
+    return _get_zone_default_placement_val(zone_name).get('storage_classes', {})
 
 
 #-------------------------------------------------------------------------------
-def enable_disable_default_compression(compression_type):
-    """Set compression on default-placement, with RGW restart if needed.
+def get_placement_sc_compression(zone_name, storage_class):
+    """Read compression type for a storage class on default-placement."""
+    info = get_zone_placement_storage_classes(zone_name).get(storage_class, {})
+    return info.get('compression_type', '')
 
-    On first call, reads the system state and saves it as _original_compression.
-    If the current state already matches the requested type, no restart is done.
+
+#-------------------------------------------------------------------------------
+def get_placement_compression(zone_name):
+    """Read compression type on default-placement STANDARD for zone_name."""
+    return get_placement_sc_compression(zone_name, STANDARD_STORAGE_CLASS)
+
+
+#-------------------------------------------------------------------------------
+def ensure_storage_class(storage_class):
+    """Add storage_class to default-placement if not already configured.
+
+    Returns True if the storage class was added, False if it already existed.
+    """
+    zone_name = get_config_zone()
+    zonegroup = get_config_zonegroup()
+    assert zone_name, "zone must be set in DEDUPTESTS_CONF"
+    assert zonegroup, "zonegroup must be set in DEDUPTESTS_CONF"
+
+    if storage_class in get_zone_placement_storage_classes(zone_name):
+        log.info("storage class %s already configured on zone %s",
+                 storage_class, zone_name)
+        return False
+
+    data_pool = get_config_data_pool()
+    result = admin(['zonegroup', 'placement', 'add',
+                    '--rgw-zonegroup', zonegroup,
+                    '--placement-id', DEFAULT_PLACEMENT,
+                    '--storage-class', storage_class])
+    assert result[1] == 0, ("zonegroup placement add failed for %s: %s"
+                              % (storage_class, result[0]))
+
+    result = admin(['zone', 'placement', 'add',
+                    '--rgw-zone', zone_name,
+                    '--placement-id', DEFAULT_PLACEMENT,
+                    '--storage-class', storage_class,
+                    '--data-pool', data_pool,
+                    '--compression', 'none'])
+    assert result[1] == 0, ("zone placement add failed for %s: %s"
+                            % (storage_class, result[0]))
+    commit_period()
+    wait_for_placement_storage_class(zone_name, storage_class, present=True)
+    log.info("Added storage class %s to zone %s", storage_class, zone_name)
+    return True
+
+
+#-------------------------------------------------------------------------------
+def remove_storage_class(storage_class):
+    """Remove storage_class from default-placement on zone and zonegroup."""
+    zone_name = get_config_zone()
+    zonegroup = get_config_zonegroup()
+    assert zone_name, "zone must be set in DEDUPTESTS_CONF"
+    assert zonegroup, "zonegroup must be set in DEDUPTESTS_CONF"
+    assert storage_class != STANDARD_STORAGE_CLASS, \
+        "cannot remove STANDARD storage class"
+
+    if storage_class not in get_zone_placement_storage_classes(zone_name):
+        log.info("storage class %s not configured on zone %s, nothing to remove",
+                 storage_class, zone_name)
+        return
+
+    result = admin(['zone', 'placement', 'rm',
+                    '--rgw-zone', zone_name,
+                    '--placement-id', DEFAULT_PLACEMENT,
+                    '--storage-class', storage_class])
+    assert result[1] == 0, ("zone placement rm failed for %s: %s"
+                            % (storage_class, result[0]))
+
+    result = admin(['zonegroup', 'placement', 'rm',
+                    '--rgw-zonegroup', zonegroup,
+                    '--placement-id', DEFAULT_PLACEMENT,
+                    '--storage-class', storage_class])
+    assert result[1] == 0, ("zonegroup placement rm failed for %s: %s"
+                            % (storage_class, result[0]))
+    commit_period()
+    wait_for_placement_storage_class(zone_name, storage_class, present=False)
+    log.info("Removed storage class %s from zone %s", storage_class, zone_name)
+
+
+#-------------------------------------------------------------------------------
+def set_placement_sc_compression(storage_class, compression_type):
+    """Set compression on default-placement for one storage class."""
+    zone_name = get_config_zone()
+    assert zone_name, "zone must be set in DEDUPTESTS_CONF for period-based compression"
+
+    current = normalize_compression_type(get_placement_sc_compression(zone_name, storage_class))
+    target = normalize_compression_type(compression_type)
+    if current == target:
+        log.info("zone '%s' %s compression already '%s'",
+                 zone_name, storage_class, current)
+        return
+
+    result = admin(['zone', 'placement', 'modify',
+                    '--rgw-zone', zone_name,
+                    '--placement-id', DEFAULT_PLACEMENT,
+                    '--storage-class', storage_class,
+                    '--compression', compression_type])
+    assert result[1] == 0, ("Failed to set %s compression: %s"
+                            % (storage_class, result[0]))
+    commit_period()
+    wait_for_placement_sc_compression(zone_name, storage_class, target)
+    log.info("Set %s compression on zone '%s' default-placement to '%s'",
+             storage_class, zone_name, compression_type)
+
+
+#-------------------------------------------------------------------------------
+def restore_placement_sc_compression(storage_class, compression_type):
+    """Restore per-SC compression saved before a test (empty means none)."""
+    target = compression_type if compression_type else 'none'
+    set_placement_sc_compression(storage_class, target)
+
+
+#-------------------------------------------------------------------------------
+def normalize_compression_type(compression_type):
+    if compression_type:
+        return compression_type.lower()
+    return 'none'
+
+#-------------------------------------------------------------------------------
+def wait_for_placement_sc_compression(zone_name, storage_class, expected,
+                                      timeout=60, interval=0.5):
+    """Poll zone config until compression matches expected after period commit."""
+    expected = normalize_compression_type(expected)
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        current = normalize_compression_type(
+            get_placement_sc_compression(zone_name, storage_class))
+        if current == expected:
+            return
+        time.sleep(interval)
+
+    current = normalize_compression_type(
+        get_placement_sc_compression(zone_name, storage_class))
+    raise AssertionError(
+        "compression on zone '%s' %s is '%s', expected '%s' after period commit "
+        "(timeout=%ds)" % (zone_name, storage_class, current, expected, timeout))
+
+#-------------------------------------------------------------------------------
+def wait_for_placement_storage_class(zone_name, storage_class, present,
+                                     timeout=60, interval=0.5):
+    """Poll zone config until storage class presence matches expected after period commit."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        configured = storage_class in get_zone_placement_storage_classes(zone_name)
+        if configured == present:
+            return
+        time.sleep(interval)
+
+    configured = storage_class in get_zone_placement_storage_classes(zone_name)
+    state = "present" if configured else "absent"
+    expected_state = "present" if present else "absent"
+    raise AssertionError(
+        "storage class '%s' on zone '%s' is %s, expected %s after period commit "
+        "(timeout=%ds)" % (storage_class, zone_name, state, expected_state, timeout))
+
+#-------------------------------------------------------------------------------
+def commit_period():
+    """Publish zone/zonegroup changes to running RGW daemons without restart."""
+    result = admin(['period', 'update'])
+    assert result[1] == 0, "period update failed: " + result[0]
+    result = admin(['period', 'commit'])
+    assert result[1] == 0, "period commit failed: " + result[0]
+
+    # realm reloader applies the new period asynchronously
+    time.sleep(5)
+
+
+#-------------------------------------------------------------------------------
+def enable_disable_default_compression_via_period(compression_type):
+    """Set compression on default-placement and apply via period update --commit.
+
+    For multisite/realm deployments: reloads running RGW without restart.
+    Requires zone name in DEDUPTESTS_CONF (see deduptests.conf.SAMPLE).
     Pass 'none' to disable compression.
     """
-    global _original_compression, _compression_state
+    global original_compression_period, compression_state_period
+    global compression_modified_period
 
-    current = _get_default_placement_compression()
+    zone_name = get_config_zone()
+    assert zone_name, "zone must be set in DEDUPTESTS_CONF for period-based compression"
 
-    if _original_compression is None:
-        _original_compression = current
-        log.info("Saved original compression setting: '%s'", current)
+    current = get_placement_sc_compression(zone_name, STANDARD_STORAGE_CLASS)
 
-    target = 'none'
-    if compression_type:
-        target = compression_type.lower()
-    actual = 'none'
-    if current:
-        actual = current.lower()
+    if original_compression_period is None:
+        original_compression_period = current
+        log.info("Saved original compression setting for zone '%s': '%s'",
+                 zone_name, current)
+
+    target = normalize_compression_type(compression_type)
+    actual = normalize_compression_type(current)
 
     if actual == target:
-        log.info("default-placement compression already '%s', no change needed",
-                 actual)
-        _compression_state = actual
+        log.info("zone '%s' default-placement compression already '%s', no change needed",
+                 zone_name, actual)
+        compression_state_period = actual
         return
 
-    result = admin(['zone', 'placement', 'modify',
-                    '--rgw-zone', 'default',
-                    '--placement-id', 'default-placement',
-                    '--compression', compression_type])
-    assert result[1] == 0, "Failed to set compression: " + result[0]
+    set_placement_sc_compression(STANDARD_STORAGE_CLASS, compression_type)
 
-    restart_all_rgw()
-    _compression_state = target
-    log.info("Set compression on default-placement to '%s' (was '%s')",
-             compression_type, actual)
+    compression_state_period = target
+    compression_modified_period = True
+    log.info("Set compression on zone '%s' default-placement to '%s' (was '%s')",
+             zone_name, compression_type, actual)
 
 
 #-------------------------------------------------------------------------------
-def enable_default_compression():
-    enable_disable_default_compression(compression_type='zlib')
+def enable_default_compression_via_period():
+    enable_disable_default_compression_via_period(compression_type='zlib')
 
 #-------------------------------------------------------------------------------
-def disable_default_compression():
-    enable_disable_default_compression(compression_type='none')
+def disable_default_compression_via_period():
+    enable_disable_default_compression_via_period(compression_type='none')
 
 #-------------------------------------------------------------------------------
-def restore_default_compression():
-    """Restore original compression setting on default-placement if we changed it."""
-    global _original_compression, _compression_state
+def restore_default_compression_via_period():
+    """Restore original compression on default-placement via period update --commit."""
+    global original_compression_period, compression_state_period
+    global compression_modified_period
 
-    if _original_compression is None:
+    if not compression_modified_period:
         return
 
-    restore = _original_compression if _original_compression else 'none'
-    current = _compression_state if _compression_state else 'none'
+    if original_compression_period is None:
+        return
+
+    log.info("Teardown: Restore original compression setting")
+
+    zone_name = get_config_zone()
+    assert zone_name, "zone must be set in DEDUPTESTS_CONF for period-based compression"
+
+    restore = normalize_compression_type(original_compression_period)
+    current = compression_state_period if compression_state_period else 'none'
 
     if current == restore:
-        log.info("Compression already at original value '%s', no restore needed",
-                 restore)
+        log.info("Compression on zone '%s' already at original value '%s', no restore needed",
+                 zone_name, restore)
         return
 
-    result = admin(['zone', 'placement', 'modify',
-                    '--rgw-zone', 'default',
-                    '--placement-id', 'default-placement',
-                    '--compression', restore])
-    assert result[1] == 0, "Failed to restore compression to '%s': %s" % (restore, result[0])
-
-    restart_all_rgw()
-    _compression_state = restore
-    log.info("Restored compression on default-placement to '%s'", restore)
-
+    set_placement_sc_compression(STANDARD_STORAGE_CLASS, restore)
+    compression_state_period = restore
+    log.info("Restored compression on zone '%s' default-placement to '%s'",
+             zone_name, restore)
 
 #-------------------------------------------------------------------------------
 def post_dedup_count(num_objs, num_copies, rados_count_before, split_head_count):
-    head_count = num_objs * num_copies;
+    head_count = num_objs * num_copies
     tail_count = rados_count_before - head_count
+    assert tail_count % num_copies == 0, (
+        "tail_count=%d not divisible by num_copies=%d "
+        "(rados_before=%d, head_count=%d, num_objs=%d)" %
+        (tail_count, num_copies, rados_count_before, head_count, num_objs))
 
-    log.debug("num_objs=%d, num_copies=%d, split=%d, head_count=%d, tail_count=%d",
-              num_objs, num_copies, split_head_count, head_count, tail_count)
+    log.info("num_objs=%d, num_copies=%d, split=%d, head_count=%d, tail_count=%d",
+             num_objs, num_copies, split_head_count, head_count, tail_count)
 
-    return (head_count + tail_count/num_copies + split_head_count)
+    return head_count + tail_count // num_copies + split_head_count
+
 
 #-------------------------------------------------------------------------------
 def _dedup_mode_switch_test(start_compressed):
@@ -4841,47 +4763,53 @@ def _dedup_mode_switch_test(start_compressed):
       5) Every S3 object is still readable and matches the original file.
       6) After deleting all objects + GC the pool is empty.
     """
-    if full_dedup_is_disabled():
-        return
-
     prepare_test()
     config = default_config
-    files = []
-    sizes = [127*KB, 2*MB+3*KB, 7*MB, 11*MB, 13*MB, 16*MB, 17*MB, 32*MB, 67*MB]
-    for size in sizes:
-        gen_files_fixed_copies(files, 1, size, 1)
-
     num_copies = 2
+    files = []
+    sizes = [129*KB, 2*MB+3*KB, 7*MB, 11*MB, 13*MB, 16*MB, 17*MB, 32*MB, 67*MB]
     conn = get_single_connection()
     bucket_names = get_buckets(num_copies)
-
-    if start_compressed:
-        first_mode_label = "compressed"
-        final_mode_label = "uncompressed"
-        enable_default_compression()
-    else:
-        first_mode_label = "uncompressed"
-        final_mode_label = "compressed"
-        disable_default_compression()
+    created_buckets = []
 
     try:
+        for size in sizes:
+            # Make sure obj will be eligible for dedup even if was compressed
+            # multipart_threshold is safe since checked before upload/compress
+            assert size/2 >= DEDUP_MIN_OBJ_SIZE
+            gen_files_fixed_copies(files, 1, size, num_copies)
+
+        if start_compressed:
+            first_mode_label = "compressed"
+            final_mode_label = "uncompressed"
+            enable_default_compression_via_period()
+        else:
+            first_mode_label = "uncompressed"
+            final_mode_label = "compressed"
+            disable_default_compression_via_period()
+
         # phase 1: upload to bucket[0] in the starting mode
         idx = 0
         conn.create_bucket(Bucket=bucket_names[idx])
-        _upload_to_bucket(conn, bucket_names[idx], files, config, idx)
+        created_buckets.append(bucket_names[idx])
+        upload_to_bucket(conn, bucket_names[idx], files, config, idx)
         log.info("Phase 1: uploaded %d files to %s (%s)",
                  len(files), bucket_names[idx], first_mode_label)
 
+        rados_bucket0 = count_object_parts_in_all_buckets(True)
+        log.info("RADOS object count bucket[0]: %d", rados_bucket0)
+
         # switch compression mode
         if start_compressed:
-            disable_default_compression()
+            disable_default_compression_via_period()
         else:
-            enable_default_compression()
+            enable_default_compression_via_period()
 
         # phase 2: upload identical objects to bucket[1] in the new mode
         idx = 1
         conn.create_bucket(Bucket=bucket_names[idx])
-        _upload_to_bucket(conn, bucket_names[idx], files, config, idx)
+        created_buckets.append(bucket_names[idx])
+        upload_to_bucket(conn, bucket_names[idx], files, config, idx)
         log.info("Phase 2: uploaded %d files to %s (%s)",
                  len(files), bucket_names[idx], final_mode_label)
 
@@ -4891,8 +4819,9 @@ def _dedup_mode_switch_test(start_compressed):
         assert_bucket_compression(bucket_names[1], files, 1,
                                   not start_compressed, "PRE-DEDUP")
 
-        rados_count_before = count_object_parts_in_all_buckets(True)
-        log.info("RADOS object count before dedup: %d", rados_count_before)
+        rados_bucket0_and_bucket1 = count_object_parts_in_all_buckets(True)
+        rados_bucket1 = rados_bucket0_and_bucket1 - rados_bucket0
+        log.info("RADOS object count bucket[1]: %d", rados_bucket1)
 
         # build expected stats
         expected_stats = Dedup_Stats()
@@ -4912,9 +4841,14 @@ def _dedup_mode_switch_test(start_compressed):
                 else:
                     expected_stats.set_compression_on_tgt += 1
 
-        expected_rados_count = post_dedup_count(len(files), num_copies,
-                                                rados_count_before,
-                                                split_head_objs)
+        num_files = len(files)
+
+        # Bucket[0] is uploaded first (will become TGT).
+        # Bucket[1] holds the SRC copy (matches final placement compression in
+        #           mode-switch tests)
+        # TGT tail objects are removed; SRC tails remain.
+        src_bucket_count = rados_bucket1 + split_head_objs
+        expected_rados_count = src_bucket_count + num_files
 
         ret = exec_dedup_internal(expected_stats, dry_run=False, max_dedup_time=300)
         actual_stats = ret[1]
@@ -4927,8 +4861,10 @@ def _dedup_mode_switch_test(start_compressed):
         log.info("RADOS object count after dedup: %d (expected=%d)",
                  rados_count_after, expected_rados_count)
         assert rados_count_after == expected_rados_count, \
-            ("Bad RADOS object count: before=%d, expected=%d, after=%d"
-             % (rados_count_before, expected_rados_count, rados_count_after))
+            ("Bad RADOS object count: before=%d, expected=%d, after=%d "
+             "(rados_bucket0=%d)" %
+             (rados_bucket0_and_bucket1, expected_rados_count, rados_count_after,
+              rados_bucket0))
 
         # post-dedup: all objects in both buckets should match the final mode
         final_compressed = not start_compressed
@@ -4937,15 +4873,13 @@ def _dedup_mode_switch_test(start_compressed):
 
         # verify all objects are still readable
         conns=[conn] * len(bucket_names)
-        verify_objects_multi(files, conns, bucket_names, 0, config, False)
+        verify_objects_multi(files, conns, bucket_names, 0, config, True)
         log.info("All objects verified after mode-switch dedup "
                  "(%s -> %s)", first_mode_label, final_mode_label)
     finally:
-        for bucket in bucket_names:
-            delete_bucket_with_all_objects(bucket, conn)
-        verify_pool_is_empty(conn)
-        cleanup_local()
-
+        restore_default_compression_via_period()
+        conns=[conn] * len(created_buckets)
+        cleanup_all_buckets(created_buckets, conns)
 
 #-------------------------------------------------------------------------------
 def is_object_compressed(bucket_name, object_key):
@@ -4954,7 +4888,8 @@ def is_object_compressed(bucket_name, object_key):
     Uses radosgw-admin object stat with latin-1 decoding because the
     output may contain binary attribute data that is not valid UTF-8.
     """
-    cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_admin', 'noname',
+    cluster=get_config_cluster()
+    cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_admin', cluster,
            'object', 'stat', '--bucket', bucket_name,
            '--object', object_key]
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
@@ -5001,13 +4936,146 @@ def assert_bucket_compression(bucket_name, files, idx, expect_compressed, tag):
 
 
 #-------------------------------------------------------------------------------
-def _upload_to_bucket(conn, bucket_name, files, config, idx=0):
+def create_bucket_with_placement(conn, bucket_name, placement_id=DEFAULT_PLACEMENT,
+                                 storage_class=None):
+    """Create a bucket bound to placement_id and optional storage class."""
+    sc = storage_class or STANDARD_STORAGE_CLASS
+    if placement_id == DEFAULT_PLACEMENT and sc == STANDARD_STORAGE_CLASS:
+        conn.create_bucket(Bucket=bucket_name)
+        log.info("created bucket %s on %s/%s", bucket_name, placement_id, sc)
+        return
+
+    zonegroup = get_config_zonegroup()
+    assert zonegroup, "zonegroup must be set in DEDUPTESTS_CONF"
+    location = '%s:%s' % (zonegroup, placement_id)
+    params = {
+        'Bucket': bucket_name,
+        'CreateBucketConfiguration': {'LocationConstraint': location},
+    }
+
+    handler = None
+    if sc != STANDARD_STORAGE_CLASS:
+        def add_storage_class_header(request, **kwargs):
+            request.headers['x-amz-storage-class'] = sc
+        handler = add_storage_class_header
+        conn.meta.events.register('before-sign.s3.CreateBucket', handler)
+    try:
+        conn.create_bucket(**params)
+        log.info("created bucket %s on %s/%s", bucket_name, placement_id, sc)
+    finally:
+        if handler:
+            conn.meta.events.unregister('before-sign.s3.CreateBucket', handler)
+
+
+#-------------------------------------------------------------------------------
+def upload_to_bucket(conn, bucket_name, files, config, idx=0):
     """Upload all files (one copy each) to a single bucket."""
     for f in files:
         filename = f[0]
         key = gen_object_name(filename, idx)
         conn.upload_file(OUT_DIR + filename, bucket_name, key, Config=config)
         log.debug("uploaded %s -> %s/%s", filename, bucket_name, key)
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_placement_compression_cache_per_storage_class():
+    """Per-SC placement compression cache (rule.to_str(), not placement name alone).
+
+    - Startup:
+       Set compression-mode on SC1=STANDARD to none on default-placement.
+       Set compression-mode on SC2=LUKEWARM to zlib on default-placement.
+    - Upload one copy per SC
+    - Flip compression (SC1 none->zlib, SC2 zlib->none)
+    - Upload a second copy per SC
+    - Run dedup
+    - Verify that after dedup SC1 copies are all compressed
+             and SC2 copies all uncompressed.
+    - Return system to initial state
+    """
+    sc1 = STANDARD_STORAGE_CLASS
+    sc2 = 'LUKEWARM'
+    prepare_test()
+    config = default_config
+    num_copies = 2
+    files = []
+    sizes = [127*KB, 2*MB+3*KB, 7*MB, 11*MB, 13*MB, 16*MB]
+    for idx, size in enumerate(sizes):
+        gen_files_fixed_copies(files, 1, size, num_copies)
+
+    conn = get_single_connection()
+    bucket_sc1 = gen_bucket_name()
+    bucket_sc2 = gen_bucket_name()
+    created_buckets = []
+    zone_name = get_config_zone()
+    assert zone_name, "zone must be set in DEDUPTESTS_CONF for period-based compression"
+    orig_sc1_compression = get_placement_sc_compression(zone_name, sc1)
+    orig_sc2_compression = None
+    added_sc2 = False
+
+    try:
+        added_sc2 = ensure_storage_class(sc2)
+        if not added_sc2:
+            orig_sc2_compression = get_placement_sc_compression(zone_name, sc2)
+
+        set_placement_sc_compression(sc1, 'none')
+        set_placement_sc_compression(sc2, 'zlib')
+
+        create_bucket_with_placement(conn, bucket_sc1, DEFAULT_PLACEMENT, sc1)
+        created_buckets.append(bucket_sc1)
+        create_bucket_with_placement(conn, bucket_sc2, DEFAULT_PLACEMENT, sc2)
+        created_buckets.append(bucket_sc2)
+
+        upload_to_bucket(conn, bucket_sc1, files, config, 0)
+        upload_to_bucket(conn, bucket_sc2, files, config, 0)
+
+        set_placement_sc_compression(sc1, 'zlib')
+        set_placement_sc_compression(sc2, 'none')
+
+        upload_to_bucket(conn, bucket_sc1, files, config, 1)
+        upload_to_bucket(conn, bucket_sc2, files, config, 1)
+
+        assert_bucket_compression(bucket_sc1, files, 0, False, "PRE-DEDUP-SC1")
+        assert_bucket_compression(bucket_sc1, files, 1, True,  "PRE-DEDUP-SC1")
+        assert_bucket_compression(bucket_sc2, files, 0, True,  "PRE-DEDUP-SC2")
+        assert_bucket_compression(bucket_sc2, files, 1, False, "PRE-DEDUP-SC2")
+
+        expected_stats = Dedup_Stats()
+        split_head_objs = 0
+        for obj_size in sizes:
+            split_head_objs += calc_split_objs_count(obj_size, num_copies, config)
+            calc_expected_stats(expected_stats, obj_size, num_copies, config)
+            calc_expected_stats(expected_stats, obj_size, num_copies, config)
+            on_disk = calc_on_disk_byte_size(obj_size)
+            expected_stats.compressed_objs += 2
+            expected_stats.compressed_bytes += (on_disk * 2)
+            if on_disk >= DEDUP_MIN_OBJ_SIZE:
+                expected_stats.set_compression_on_tgt += 1
+                expected_stats.clear_compression_on_tgt += 1
+
+        expected_stats.non_default_storage_class_objs_bytes = expected_stats.size_before_dedup/2
+        ret = exec_dedup_internal(expected_stats, dry_run=False, max_dedup_time=300)
+        actual_stats = ret[1]
+        if actual_stats != expected_stats:
+            print_dedup_stats_diff(actual_stats, expected_stats)
+            assert False, "placement compression cache dedup stat mismatch"
+
+        assert_bucket_compression(bucket_sc1, files, 0, True,  "POST-DEDUP-SC1")
+        assert_bucket_compression(bucket_sc1, files, 1, True,  "POST-DEDUP-SC1")
+        assert_bucket_compression(bucket_sc2, files, 0, False, "POST-DEDUP-SC2")
+        assert_bucket_compression(bucket_sc2, files, 1, False, "POST-DEDUP-SC2")
+
+        log.info("verify_objects(bucket_sc1, files..)")
+        verify_objects(bucket_sc1, files, conn, 0, default_config, True)
+        log.info("verify_objects(bucket_sc2, files..)")
+        verify_objects(bucket_sc2, files, conn, 0, default_config, True)
+    finally:
+        cleanup_all_buckets(created_buckets, [conn, conn])
+        restore_placement_sc_compression(sc1, orig_sc1_compression)
+        if added_sc2:
+            remove_storage_class(sc2)
+        elif orig_sc2_compression is not None:
+            restore_placement_sc_compression(sc2, orig_sc2_compression)
+
 
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
@@ -5050,15 +5118,17 @@ def _dedup_inc_shared_manifest_test(start_compressed):
     Post-dedup: all objects in all 3 buckets have the starting mode's
     compression state (the SRC's mode from cycle 1 wins).
     """
-    if full_dedup_is_disabled():
-        return
-
     prepare_test()
     config = default_config
+    num_copies = 2
+    verify_copies = num_copies + 1
     files = []
-    sizes = [127*KB, 2*MB+3*KB, 7*MB, 11*MB, 13*MB, 16*MB, 17*MB, 32*MB, 67*MB]
+    sizes = [129*KB, 2*MB+3*KB, 7*MB, 11*MB, 13*MB, 16*MB, 17*MB, 32*MB, 67*MB]
     for size in sizes:
-        gen_files_fixed_copies(files, 1, size, 1)
+        # Make sure obj will be eligible for dedup even if was compressed
+        # multipart_threshold is safe since checked before upload/compress
+        assert size/2 >= DEDUP_MIN_OBJ_SIZE
+        gen_files_fixed_copies(files, 1, size, verify_copies)
 
     num_files = len(files)
     conn = get_single_connection()
@@ -5067,17 +5137,19 @@ def _dedup_inc_shared_manifest_test(start_compressed):
     if start_compressed:
         first_mode_label = "compressed"
         final_mode_label = "uncompressed"
-        enable_default_compression()
+        enable_default_compression_via_period()
     else:
         first_mode_label = "uncompressed"
         final_mode_label = "compressed"
-        disable_default_compression()
+        disable_default_compression_via_period()
 
+    created_buckets = []
     try:
         # -- phase 1: two buckets in starting mode, first dedup ---------------
         for idx in range(2):
             conn.create_bucket(Bucket=bucket_names[idx])
-            _upload_to_bucket(conn, bucket_names[idx], files, config, idx)
+            created_buckets.append(bucket_names[idx])
+            upload_to_bucket(conn, bucket_names[idx], files, config, idx)
 
         log.info("Phase 1: uploaded %d files to %s and %s (%s)",
                  num_files, bucket_names[0], bucket_names[1], first_mode_label)
@@ -5096,19 +5168,20 @@ def _dedup_inc_shared_manifest_test(start_compressed):
         num_dedupable = 0
         for f in files:
             obj_size = f[1]
-            split_head_1 += calc_split_objs_count(obj_size, 2, config)
-            calc_expected_stats(expected_1, obj_size, 2, config)
+            split_head_1 += calc_split_objs_count(obj_size, num_copies, config)
+            calc_expected_stats(expected_1, obj_size, num_copies, config)
             on_disk = calc_on_disk_byte_size(obj_size)
             if on_disk >= DEDUP_MIN_OBJ_SIZE:
                 num_dedupable += 1
             if start_compressed:
-                expected_1.compressed_objs += 2
-                expected_1.compressed_bytes += (on_disk * 2)
+                expected_1.compressed_objs += num_copies
+                expected_1.compressed_bytes += (on_disk * num_copies)
 
         if start_compressed:
             expected_1.deduped_compressed_objects = expected_1.deduped_obj
 
-        expected_rados_1 = post_dedup_count(num_files, 2, rados_before_1, split_head_1)
+        expected_rados_1 = post_dedup_count(num_files, num_copies, rados_before_1,
+                                            split_head_1)
 
         ret = exec_dedup_internal(expected_1, dry_run=False, max_dedup_time=300)
         actual_1 = ret[1]
@@ -5120,18 +5193,19 @@ def _dedup_inc_shared_manifest_test(start_compressed):
         log.info("RADOS count after dedup-1: %d (expected=%d)",
                  rados_after_1, expected_rados_1)
         assert rados_after_1 == expected_rados_1, \
-            ("Cycle 1 RADOS count: before=%d, expected=%d, after=%d"
-             % (rados_before_1, expected_rados_1, rados_after_1))
+            ("Cycle 1 RADOS count: before=%d, expected=%d, after=%d" %
+             (rados_before_1, expected_rados_1, rados_after_1))
 
         # -- phase 2: switch mode, add bucket[2], second dedup ----------------
         if start_compressed:
-            disable_default_compression()
+            disable_default_compression_via_period()
         else:
-            enable_default_compression()
+            enable_default_compression_via_period()
 
         idx = 2
         conn.create_bucket(Bucket=bucket_names[idx])
-        _upload_to_bucket(conn, bucket_names[idx], files, config, idx)
+        created_buckets.append(bucket_names[idx])
+        upload_to_bucket(conn, bucket_names[idx], files, config, idx)
         log.info("Phase 2: uploaded %d files to %s (%s)",
                  num_files, bucket_names[idx], final_mode_label)
 
@@ -5210,7 +5284,7 @@ def _dedup_inc_shared_manifest_test(start_compressed):
         rados_after_2 = count_object_parts_in_all_buckets(True)
         log.info("RADOS count after dedup-2: %d (expected=%d)",
                  rados_after_2, expected_rados_2)
-        assert rados_after_2 == expected_rados_2 or 1, \
+        assert rados_after_2 == expected_rados_2, \
             ("Cycle 2 RADOS count: before=%d, expected=%d, after=%d"
              % (rados_before_2, expected_rados_2, rados_after_2))
 
@@ -5221,14 +5295,13 @@ def _dedup_inc_shared_manifest_test(start_compressed):
 
         # verify all objects readable
         conns=[conn] * len(bucket_names)
-        verify_objects_multi(files, conns, bucket_names, 0, config, False)
+        verify_objects_multi(files, conns, bucket_names, 0, config, True)
         log.info("All objects verified after incremental shared_manifest test "
                  "(start=%s)", first_mode_label)
     finally:
-        for bucket in bucket_names:
-            delete_bucket_with_all_objects(bucket, conn)
-        verify_pool_is_empty(conn)
-        cleanup_local()
+        restore_default_compression_via_period()
+        conns=[conn] * len(created_buckets)
+        cleanup_all_buckets(created_buckets, conns)
 
 
 #-------------------------------------------------------------------------------
@@ -5260,10 +5333,64 @@ def test_dedup_compressed_to_uncompressed():
 
 
 #-------------------------------------------------------------------------------
+NUM_PERIOD_COMMIT_CYCLES = 12
+
 @pytest.mark.basic_test
-def test_compression_teardown():
-    """Restore original compression setting if we changed it."""
-    restore_default_compression()
+def test_period_commit_cycling_s3_ops():
+    """Repeated period commit with S3 only (no dedup admin).
+
+    Each cycle toggles default-placement compression (zone placement modify +
+    period update/commit), then create_bucket, upload, download, delete.
+    Use this to see whether realm-reloader / notify-110 / frontend-paused
+    issues are general RGW period-commit behavior vs dedup-specific.
+
+    After a failure, check radosgw logs, e.g.:
+      grep -a 'frontend pause\\|frontend unpaused' .../radosgw.8101.log | tail -20
+    """
+
+    # Debug-only test; enable by removing the skip.
+    #pytest.skip("debug-only test; enable manually when needed")
+
+    prepare_test()
+    conn = get_single_connection()
+    config = default_config
+
+    files = []
+    sizes = [127*KB, 2*MB+3*KB, 7*MB, 11*MB, 13*MB, 16*MB, 17*MB, 32*MB, 67*MB]
+    for size in sizes:
+        gen_files_fixed_copies(files, 1, size, 1)
+
+    filename = files[0][0]
+    src_path = OUT_DIR + filename
+
+    disable_default_compression_via_period()
+    created_buckets = []
+
+    try:
+        for cycle in range(NUM_PERIOD_COMMIT_CYCLES):
+            log.info("=== period commit cycle %d/%d ===",
+                     cycle + 1, NUM_PERIOD_COMMIT_CYCLES)
+
+            if cycle % 2 == 0:
+                enable_default_compression_via_period()
+            else:
+                disable_default_compression_via_period()
+
+            bucket_name = gen_bucket_name()
+            conn.create_bucket(Bucket=bucket_name)
+            created_buckets.append(bucket_name)
+            upload_to_bucket(conn, bucket_name, files, config)
+            dedup_stats = Dedup_Stats()
+            exec_dedup_internal(dedup_stats, dry_run=True, max_dedup_time=300)
+
+        log.info("completed %d period commit + S3 cycles (no dedup)",
+                 NUM_PERIOD_COMMIT_CYCLES)
+    finally:
+        if created_buckets:
+            cleanup_all_buckets(created_buckets, [conn] * len(created_buckets))
+        else:
+            cleanup_local()
+
 
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
@@ -5271,10 +5398,11 @@ def test_compression_sanity():
     """Sanity: upload one object with compression enabled, stop.
     Manually verify RGW_ATTR_COMPRESSION is set on the object head."""
 
-    ### Keep this test for debug purpose only
-    return
+    # Debug-only test; enable by removing the skip.
+    pytest.skip("debug-only test; enable manually when needed")
+
     prepare_test()
-    enable_default_compression()
+    enable_default_compression_via_period()
     bucket_name = "compression-sanity"
     obj_key = "compression_sanity_obj"
     filename="compression_sanity_file"
@@ -5292,16 +5420,36 @@ def test_compression_sanity():
                     f.write(b"ABCDEFGHIJKLMNOP" * (chunk_len // 16))
                 else:
                     f.write(os.urandom(chunk_len))
+
                 written += chunk_len
                 compressible = not compressible
+
         conn.upload_file(OUT_DIR + filename, bucket_name, obj_key,
                          Config=default_config)
-        get_actual_compressed_sizes(size, 1, True)
-        log.info("calling restore_default_compression")
-        restore_default_compression()
+        ret=get_actual_compressed_sizes(size, 1, True)
+        obj_count_compressed = ret[0]
+        size_compressed = ret[1]
+        conn.delete_object(Bucket=bucket_name, Key=obj_key)
+        result = admin(['gc', 'process', '--include-all'])
+        assert result[1] == 0
+        assert count_object_parts_in_all_buckets(False, 0) == 0
+
+        disable_default_compression_via_period()
         conn.upload_file(OUT_DIR + filename, bucket_name, obj_key + "UC",
-                         Config=default_config)        
+                         Config=default_config)
+        ret=get_actual_compressed_sizes(size, 1, True)
+        obj_count_uncompressed = ret[0]
+        size_uncompressed = ret[1]
+        log.info("original_size=%d, size_compressed=%d, size_uncompressed=%d"
+                 "obj_count_compressed=%d, obj_count_compressed=%d",
+                 size, size_compressed, size_uncompressed,
+                 obj_count_compressed, obj_count_uncompressed)
+        ratio = obj_count_compressed / obj_count_uncompressed
+        assert ratio > 0.45 # ~50% compressible
+        ratio = size_compressed / size_uncompressed
+        assert ratio > 0.45 # ~50% compressible
     finally:
         log.info("Uploaded %s to %s -- check RGW_ATTR_COMPRESSION manually",
                  obj_key, bucket_name)
         cleanup(bucket_name, conn)
+

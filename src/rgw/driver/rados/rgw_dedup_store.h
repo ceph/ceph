@@ -180,7 +180,9 @@ namespace rgw::dedup {
     int validate(const char *caller,
                  const DoutPrefixProvider* dpp,
                  disk_block_id_t block_id,
-                 record_id_t rec_id) const;
+                 record_id_t rec_id,
+                 worker_stats_t *p_worker_stats,
+                 md5_stats_t    *p_md5_stats) const;
     inline bool multipart_object() { return (this->s.num_parts > 0); }
     struct packed_rec_t
     {
@@ -200,7 +202,7 @@ namespace rgw::dedup {
       uint16_t      stor_class_len;
       uint16_t      ref_tag_len;
       uint16_t      manifest_len;
-      uint16_t      compression_bl_len;
+      uint16_t      compression_len;
 
       uint8_t       rec_version;     // allows changing record format
       record_flags_t flags;           // 1 Byte flags
@@ -255,7 +257,8 @@ namespace rgw::dedup {
                   disk_block_id_t           block_id,
                   record_id_t               rec_id,
                   md5_shard_t               md5_shard,
-                  const DoutPrefixProvider *dpp);
+                  const DoutPrefixProvider *dpp,
+                  md5_stats_t              *p_md5_stats);
 
   int load_slab(librados::IoCtx &ioctx,
                 bufferlist &bl,

@@ -61,9 +61,9 @@ namespace rgw::dedup {
     this->s.instance_len    = instance.length();
     this->stor_class        = storage_class;
     this->s.stor_class_len  = storage_class.length();
-    this->s.ref_tag_len        = 0;
-    this->s.manifest_len       = 0;
-    this->s.compression_bl_len = 0;
+    this->s.ref_tag_len     = 0;
+    this->s.manifest_len    = 0;
+    this->s.compression_len = 0;
 
     this->s.shared_manifest = 0;
     memset(this->s.hash, 0, sizeof(this->s.hash));
@@ -96,30 +96,36 @@ namespace rgw::dedup {
     this->s.instance_len    = CEPHTOH_16(p_rec->s.instance_len);
     this->s.stor_class_len  = CEPHTOH_16(p_rec->s.stor_class_len);
 
-    this->s.ref_tag_len        = CEPHTOH_16(p_rec->s.ref_tag_len);
-    this->s.manifest_len       = CEPHTOH_16(p_rec->s.manifest_len);
-    this->s.compression_bl_len = CEPHTOH_16(p_rec->s.compression_bl_len);
+    this->s.ref_tag_len     = CEPHTOH_16(p_rec->s.ref_tag_len);
+    this->s.manifest_len    = CEPHTOH_16(p_rec->s.manifest_len);
+    this->s.compression_len = CEPHTOH_16(p_rec->s.compression_len);
+
+    if (this->length() > MAX_REC_SIZE) {
+      // Prevent out-of-bounds reads below on corrupt/stale data.
+      this->s.rec_version = 1; // force validate() failure
+      return;
+    }
 
     const char *p = buff + sizeof(this->s);
     this->obj_name = std::string(p, this->s.obj_name_len);
-    p += p_rec->s.obj_name_len;
+    p += this->s.obj_name_len;
 
     this->bucket_name = std::string(p, this->s.bucket_name_len);
-    p += p_rec->s.bucket_name_len;
+    p += this->s.bucket_name_len;
 
     this->bucket_id = std::string(p, this->s.bucket_id_len);
-    p += p_rec->s.bucket_id_len;
+    p += this->s.bucket_id_len;
 
     this->tenant_name = std::string(p, this->s.tenant_name_len);
-    p += p_rec->s.tenant_name_len;
+    p += this->s.tenant_name_len;
 
     this->instance = std::string(p, this->s.instance_len);
-    p += p_rec->s.instance_len;
+    p += this->s.instance_len;
 
     this->stor_class = std::string(p, this->s.stor_class_len);
-    p += p_rec->s.stor_class_len;
+    p += this->s.stor_class_len;
 
-    if (p_rec->s.flags.is_fastlane()) {
+    if (this->s.flags.is_fastlane()) {
       // TBD:: remove asserts
       ceph_assert(this->s.ref_tag_len == 0);
       ceph_assert(this->s.manifest_len == 0);
@@ -131,13 +137,13 @@ namespace rgw::dedup {
         this->s.hash[i] = CEPHTOH_64(p_rec->s.hash[i]);
       }
       this->ref_tag = std::string(p, this->s.ref_tag_len);
-      p += p_rec->s.ref_tag_len;
+      p += this->s.ref_tag_len;
 
       this->manifest_bl.append(p, this->s.manifest_len);
       p += this->s.manifest_len;
 
-      if (this->s.compression_bl_len > 0) {
-        this->compression_bl.append(p, this->s.compression_bl_len);
+      if (this->s.compression_len > 0) {
+        this->compression_bl.append(p, this->s.compression_len);
       }
     }
   }
@@ -147,6 +153,8 @@ namespace rgw::dedup {
   {
     ceph_assert(this->s.rec_version  == 0);
     disk_record_t *p_rec = (disk_record_t*)buff;
+    ceph_assert(this->length() <= MAX_REC_SIZE);
+
     p_rec->s.rec_version     = 0;
     p_rec->s.flags           = this->s.flags;
     p_rec->s.num_parts       = HTOCEPH_16(this->s.num_parts);
@@ -162,9 +170,9 @@ namespace rgw::dedup {
     p_rec->s.instance_len    = HTOCEPH_16(this->instance.length());
     p_rec->s.stor_class_len  = HTOCEPH_16(this->stor_class.length());
 
-    p_rec->s.ref_tag_len        = HTOCEPH_16(this->ref_tag.length());
-    p_rec->s.manifest_len       = HTOCEPH_16(this->manifest_bl.length());
-    p_rec->s.compression_bl_len = HTOCEPH_16(this->compression_bl.length());
+    p_rec->s.ref_tag_len     = HTOCEPH_16(this->ref_tag.length());
+    p_rec->s.manifest_len    = HTOCEPH_16(this->manifest_bl.length());
+    p_rec->s.compression_len = HTOCEPH_16(this->compression_bl.length());
     char *p = buff + sizeof(this->s);
     unsigned len = this->obj_name.length();
     std::memcpy(p, this->obj_name.data(), len);
@@ -224,22 +232,24 @@ namespace rgw::dedup {
   size_t disk_record_t::length() const
   {
     return (sizeof(this->s) +
-            this->obj_name.length() +
-            this->bucket_name.length() +
-            this->bucket_id.length() +
-            this->tenant_name.length() +
-            this->instance.length() +
-            this->stor_class.length() +
-            this->ref_tag.length() +
-            this->manifest_bl.length() +
-            this->compression_bl.length());
+            this->s.obj_name_len +
+            this->s.bucket_name_len +
+            this->s.bucket_id_len +
+            this->s.tenant_name_len +
+            this->s.instance_len +
+            this->s.stor_class_len +
+            this->s.ref_tag_len +
+            this->s.manifest_len +
+            this->s.compression_len);
   }
 
   //---------------------------------------------------------------------------
   int disk_record_t::validate(const char *caller,
                               const DoutPrefixProvider* dpp,
                               disk_block_id_t block_id,
-                              record_id_t rec_id) const
+                              record_id_t rec_id,
+                              worker_stats_t *p_worker_stats,
+                              md5_stats_t    *p_md5_stats) const
   {
     // optimistic approach
     if (likely((this->s.rec_version == 0) && (this->length() <= MAX_REC_SIZE))) {
@@ -253,6 +263,13 @@ namespace rgw::dedup {
                         << "::block_id=" << block_id
                         << "::rec_id=" << rec_id
                         << dendl;
+
+      if (p_md5_stats) {
+        p_md5_stats->failed_wrong_ver++;
+      }
+      else if (p_worker_stats) {
+        p_worker_stats->failed_wrong_ver++;
+      }
       return -EPROTO;
     }
 
@@ -261,6 +278,12 @@ namespace rgw::dedup {
                       << "::block_id=" << block_id
                       << "::rec_id=" << rec_id
                       << dendl;
+    if (p_md5_stats) {
+      p_md5_stats->failed_rec_overflow++;
+    }
+    else if (p_worker_stats) {
+      p_worker_stats->failed_rec_overflow++;
+    }
     return -EOVERFLOW;
   }
 
@@ -291,8 +314,8 @@ namespace rgw::dedup {
       stream << "Dedicated Manifest Object\n";
     }
     stream << "Manifest len=" << rec.s.manifest_len << "\n";
-    if (rec.s.compression_bl_len) {
-      stream << "Compression len=" << rec.s.compression_bl_len << "\n";
+    if (rec.s.compression_len) {
+      stream << "Compression len=" << rec.s.compression_len << "\n";
     }
     return stream;
   }
@@ -474,7 +497,9 @@ namespace rgw::dedup {
                   disk_block_id_t           block_id,
                   record_id_t               rec_id,
                   md5_shard_t               md5_shard,
-                  const DoutPrefixProvider *dpp)
+                  const DoutPrefixProvider *dpp,
+                  md5_stats_t              *p_md5_stats)
+
   {
     std::string oid(block_id.get_slab_name(md5_shard));
     int read_len = DISK_BLOCK_SIZE;
@@ -504,7 +529,7 @@ namespace rgw::dedup {
     unsigned offset = p_header->rec_offsets[rec_id];
     // We deserialize the record inside the CTOR
     disk_record_t rec(p + offset);
-    ret = rec.validate(__func__, dpp, block_id, rec_id);
+    ret = rec.validate(__func__, dpp, block_id, rec_id, nullptr, p_md5_stats);
     if (unlikely(ret != 0)) {
       return ret;
     }
@@ -640,7 +665,9 @@ namespace rgw::dedup {
 
     // d_seq_number++ must be called **after** flush!!
     d_seq_number++;
-    p_worker_stats->egress_slabs++;
+    if (!p_md5_stats) {
+      p_worker_stats->egress_slabs++;
+    }
     slab_reset();
     return ret;
   }
@@ -658,7 +685,9 @@ namespace rgw::dedup {
     if (p_curr_block == &p_arr[0] && p_curr_block->is_empty()) {
       ldpp_dout(dpp, 20) << __func__ << "::Empty buffers, generate terminating block" << dendl;
     }
-    p_worker_stats->egress_blocks++;
+    if (!p_md5_stats) {
+      p_worker_stats->egress_blocks++;
+    }
     p_curr_block->close_block(dpp, false);
 
     int ret = flush(ioctx, p_md5_stats);
@@ -666,30 +695,20 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  // Called on the unlikely path where disk_record_t::validate() fails.
-  // Routes counters to md5_stats_t when available (STEP_READ_ATTRIBUTES),
-  // otherwise to worker_stats_t (STEP_BUILD_TABLE).
-  //
-  // -EOVERFLOW: record too large even after remote_attrs truncation
-  //             (only meaningful for attrs records in md5_stats_t;
-  //              bucket-index records are 200-300 bytes and never overflow).
-  // -EPROTO:    rec_version mismatch -- can happen in any step.
-  static void __attribute__((noinline))
-  handle_validate_failure(int ret,
-                          worker_stats_t *p_worker_stats,
-                          md5_stats_t    *p_md5_stats)
+  static void set_remote_attrs_mode(disk_record_t *p_rec,
+                                    const DoutPrefixProvider *dpp,
+                                    md5_stats_t *p_md5_stats)
   {
-    if (ret == -EOVERFLOW) {
-      if (p_md5_stats) {
-        p_md5_stats->failed_rec_overflow++;
-      }
-    } else if (ret == -EPROTO) {
-      if (p_md5_stats) {
-        p_md5_stats->failed_wrong_ver++;
-      } else {
-        p_worker_stats->failed_wrong_ver++;
-      }
+    p_rec->manifest_bl.clear();
+    p_rec->s.manifest_len = 0;
+    p_rec->compression_bl.clear();
+    p_rec->s.compression_len = 0;
+    p_rec->s.flags.set_remote_attrs();
+    if (p_md5_stats) {
+      p_md5_stats->remote_attrs_records++;
     }
+    ldpp_dout(dpp, 20) << __func__ << "::record too large (" << p_rec->length()
+                       << "), set remote_attrs for " << p_rec->obj_name << dendl;
   }
 
   //---------------------------------------------------------------------------
@@ -700,27 +719,21 @@ namespace rgw::dedup {
   {
     // When manifest/compression make the record too large, drop them and
     // set a flag so STEP_REMOVE_DUPLICATES fetches them from the object head.
-    if (p_rec->length() > 512 /*MAX_REC_SIZE*/) {
-      p_rec->manifest_bl.clear();
-      p_rec->s.manifest_len = 0;
-      p_rec->compression_bl.clear();
-      p_rec->s.compression_bl_len = 0;
-      p_rec->s.flags.set_remote_attrs();
-      if (p_md5_stats) {
-        p_md5_stats->remote_attrs_records++;
-      }
-      ldpp_dout(dpp, 20) << __func__ << "::record too large (" << p_rec->length()
-                         << "), set remote_attrs for " << p_rec->obj_name << dendl;
+    if (p_rec->length() > MAX_REC_SIZE) {
+      set_remote_attrs_mode(p_rec, dpp, p_md5_stats);
     }
 
     disk_block_id_t null_block_id;
-    int ret = p_rec->validate(__func__, dpp, null_block_id, MAX_REC_IN_BLOCK);
+    int ret = p_rec->validate(__func__, dpp, null_block_id, MAX_REC_IN_BLOCK,
+                              p_worker_stats, p_md5_stats);
     if (unlikely(ret != 0)) {
-      handle_validate_failure(ret, p_worker_stats, p_md5_stats);
       return ret;
     }
 
-    p_worker_stats->egress_records ++;
+    if (!p_md5_stats) {
+      p_worker_stats->egress_records ++;
+    }
+
     // first, try and add the record to the current open block
     p_rec_info->rec_id = p_curr_block->add_record(p_rec, dpp);
     if (p_rec_info->rec_id < MAX_REC_IN_BLOCK) {
@@ -730,7 +743,9 @@ namespace rgw::dedup {
     else {
       // Not enough space left in current block, close it and open the next block
       ldpp_dout(dpp, 20) << __func__ << "::Block is full-> close and move to next" << dendl;
-      p_worker_stats->egress_blocks++;
+      if (!p_md5_stats) {
+        p_worker_stats->egress_blocks++;
+      }
       p_curr_block->close_block(dpp, true);
     }
 

@@ -204,6 +204,7 @@ namespace rgw::dedup {
     uint64_t max_bidx_record_length = 0;
     uint64_t total_bidx_record_length = 0;
 
+    uint64_t failed_rec_overflow = 0;
     uint64_t failed_wrong_ver = 0;
 
     utime_t  duration = {0, 0};
@@ -290,6 +291,7 @@ namespace rgw::dedup {
     uint64_t failed_remote_attrs_fetch = 0;
     uint64_t max_attrs_record_length = 0;
     uint64_t total_attrs_record_length = 0;
+    uint64_t attrs_record_count = 0;
     uint64_t write_slab_failure = 0;
     utime_t  duration = {0, 0};
   };

@@ -138,6 +138,30 @@ Next, it iterates through these dedup candidate objects, reading their complete
 information from the object metadata, a per-object RADOS operation. During
 this step, **user-encrypted** objects are removed from consideration.
 
+Dedup source selection
+----------------------
+
+When several objects share the same dedup key (MD5 etag and logical size), dedup
+chooses one as the **source** (SRC). All other copies become **targets** that
+will share the source tail objects. Source selection uses the dedup table built
+from bucket indices and updated as object metadata is read:
+
+#. An object that is already a source from a prior dedup cycle (marked with a
+   shared manifest) is never replaced.
+#. Otherwise, prefer objects whose server-side compression matches the
+   compression type configured on the tail **placement rule** (exact match).
+#. If no exact match exists, prefer objects that are compressed with a
+   different algorithm over uncompressed objects (partial match).
+#. Otherwise keep the first valid candidate.
+
+The placement compression type is taken from the zone's **current** placement
+configuration, not from the setting in effect when each object was uploaded.
+
+Next, we iterate through these dedup candidate objects, reading their complete
+information from the object metadata (a per-object RADOS operation). During
+this step, we filter out **user-encrypted** objects.
+>>>>>>> 4322f69d777 (qa/rgw: fix dedup teuthology zone setup and dedup tests refactoring)
+
 At this point, the dedup candidates are objects whose MD5 hash and size are
 identical -- the likelihood of a false positive is vanishingly small for
 naturally occurring data. To provide a cryptographic guarantee and guard
@@ -157,11 +181,32 @@ set ``rgw_dedup_skip_compressed = true`` in the configuration.
 If the objects' strong hash matches, we proceed with the deduplication:
 
 - Increment the reference count on the source tail objects one by one.
-- Copy the manifest from the source to the target.
+- Replace the target manifest and tail objects entirely with the source's
+  (the target's previous tail layout is freed).
 - Mirror the compression attribute (``RGW_ATTR_COMPRESSION``) from source to
   target: if the source is compressed the attribute is copied to the target;
   if the source is uncompressed the attribute is removed from the target.
 - Remove all tail objects on the target.
+
+Cross-mode compression
+----------------------
+
+Compressed and uncompressed copies of the same logical content can land in the
+same dedup candidate set because dedup keys use **logical** (uncompressed) size
+from the bucket index, not on-disk compressed size.
+
+When dedup succeeds between mixed compression states, each target adopts the
+source manifest, tail objects, and compression attribute. Because source
+selection prefers objects that match **current** placement compression, all
+deduped copies typically converge on the compression state implied by the
+zone's placement policy at dedup time -- not on the mode each object had when
+it was uploaded. For example, if placement compression was disabled and later
+re-enabled, dedup may rewrite older uncompressed copies to share compressed
+tail objects from a source that matches the current placement.
+
+In incremental dedup, a source established in an earlier cycle keeps shared-
+manifest priority even when newer copies would match current placement
+compression more closely.
 
 Split Head Mode
 ===============
