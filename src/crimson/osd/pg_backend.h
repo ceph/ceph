@@ -471,6 +471,9 @@ public:
     const hobject_t &oid);
 
 private:
+  bool is_offset_and_length_valid(
+    std::uint64_t offset, std::uint64_t length) const;
+
   virtual ll_read_ierrorator::future<ceph::bufferlist> _read(
     const hobject_t& hoid,
     size_t object_size,

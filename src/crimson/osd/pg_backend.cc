@@ -617,13 +617,14 @@ void PGBackend::truncate_update_size_and_usage(object_stat_sum_t& delta_stats,
   }
 }
 
-static bool is_offset_and_length_valid(
+bool PGBackend::is_offset_and_length_valid(
   const std::uint64_t offset,
-  const std::uint64_t length)
+  const std::uint64_t length) const
 {
-  if (const std::uint64_t max = local_conf()->osd_max_object_size;
+  if (const std::uint64_t max =
+        store.f_store.get_sharded_store(store.store_index).get_max_object_size();
       offset >= max || length > max || offset + length > max) {
-    logger().debug("{} osd_max_object_size: {}, offset: {}, len: {}; "
+    logger().debug("{} max_object_size: {}, offset: {}, len: {}; "
                    "Hard limit of object size is 4GB",
                    __func__, max, offset, length);
     return false;

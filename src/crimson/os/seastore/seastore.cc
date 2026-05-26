@@ -2221,6 +2221,17 @@ SeaStore::Shard::_write(
   ceph::bufferlist &&_bl,
   uint32_t fadvise_flags)
 {
+  // SeaStore reserves max_object_size of laddr space per object;
+  // ObjectDataHandler::prepare_data_reservation() ceph_assert()s that
+  // the requested size fits.  Reject oversized writes here -- mirrors
+  // the corresponding check in _zero() -- so the OSD returns EIO to the
+  // client instead of aborting (and taking peer replicas with it).
+  if (offset + len > max_object_size) {
+    LOG_PREFIX(SeaStoreS::_write);
+    ERRORT("0x{:x}~0x{:x} > 0x{:x}",
+           *ctx.transaction, offset, len, max_object_size);
+    return crimson::ct_error::input_output_error::make();
+  }
   const auto &object_size = onode.get_layout().size;
   if (offset + len > object_size) {
     onode.update_onode_size(
@@ -2365,9 +2376,9 @@ SeaStore::Shard::_zero(
   objaddr_t offset,
   extent_len_t len)
 {
-  if (offset + len >= max_object_size) {
+  if (offset + len > max_object_size) {
     LOG_PREFIX(SeaStoreS::_zero);
-    ERRORT("0x{:x}~0x{:x} >= 0x{:x}",
+    ERRORT("0x{:x}~0x{:x} > 0x{:x}",
            *ctx.transaction, offset, len, max_object_size);
     return crimson::ct_error::input_output_error::make();
   }
