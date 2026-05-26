@@ -133,31 +133,46 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  static bool should_replace(const dedup_table_t::value_t &val,
-                             bool new_shared_manifest,
-                             compression_match_level_t new_comp_match)
+  static bool should_replace_f(const dedup_table_t::value_t &val,
+                               bool new_shared_manifest,
+                               compression_match_level_t new_comp_match)
   {
-    // The first pass (STEP_BUILD_TABLE) sets block_id/rec_id to invalid values
-    // and leaves compression_rank at NONE (no attrs available yet).
-    // The second pass (STEP_READ_ATTRIBUTES) calls update_entry() with valid
-    // block_id/rec_id and the real compression_rank / shared_manifest.
+    // The first pass (STEP_BUILD_TABLE) works with records created from
+    //    Bucket-Index abridged info (no compression/shared_manifest)
+    // It will never set shared_manifest and its comp_match will always be
+    //    COMPRESSION_MATCH_NONE.
+    // The [block-id, rec-id] from the first pass must be replaced in the
+    //    second pass (since their matching disk records no longer exist)
+    //
+    // The second pass (STEP_READ_ATTRIBUTES) calls update_entry() with new
+    // [block_id/rec_id] and the real compression_rank / shared_manifest.
     // Replace rules:
     //   - shared_manifest in table: locked, never replace
-    //   - new has shared_manifest: always replace (first time seeing it)
-    //   - table rank is NONE: always replace (first valid update from second pass)
-    //   - table rank is PARTIAL, new is EXACT: upgrade
-    //   - otherwise: keep existing SRC (first good candidate wins)
+    //   - else:
+    //       - new has shared_manifest (table doesn't) -> replace and lock
+    //       - else:
+    //           - prefer the new entry unless table-entry better match the
+    //               placement compression setting
     bool should_replace = false;
     if (val.has_shared_manifest()) {
       // never replace a shared_manifest SRC
+      should_replace = false;
     } else if (new_shared_manifest) {
+      // table entry is not shared_manifest SRC -> take new shared_manifest SRC
       should_replace = true;
     } else {
+      // Both table entry and new entry are not shared_manifest SRC
+      // Always prefer the new entry unless table-entry better match the
+      //        system compression setting
       compression_match_level_t table_comp_match = val.compression_rank();
-      if (table_comp_match == COMPRESSION_MATCH_NONE) {
+      if (new_comp_match == COMPRESSION_MATCH_EXACT) {
         should_replace = true;
       }
-      else if (table_comp_match == COMPRESSION_MATCH_PARTIAL && new_comp_match == COMPRESSION_MATCH_EXACT) {
+      else if (new_comp_match == COMPRESSION_MATCH_PARTIAL &&
+               table_comp_match != COMPRESSION_MATCH_EXACT) {
+        should_replace = true;
+      }
+      else if (table_comp_match == COMPRESSION_MATCH_NONE) {
         should_replace = true;
       }
     }
@@ -198,7 +213,7 @@ namespace rgw::dedup {
         val.count ++;
       }
 
-      if (should_replace(val, new_shared_manifest, new_comp_match)) {
+      if (should_replace_f(val, new_shared_manifest, new_comp_match)) {
         ldpp_dout(dpp, 20) << __func__ << "::Replace SRC::["
                            << val.block_idx << "/" << (int)val.rec_id << "] -> ["
                            << block_id << "/" << (int)rec_id << "]" << dendl;
@@ -223,7 +238,7 @@ namespace rgw::dedup {
     value_t &val = hash_tab[idx].val;
     ceph_assert(val.is_occupied());
 
-    if (should_replace(val, new_shared_manifest, new_comp_match)) {
+    if (should_replace_f(val, new_shared_manifest, new_comp_match)) {
       value_t new_val(block_id, rec_id, new_shared_manifest, new_comp_match);
       new_val.count = val.count;
       ldpp_dout(dpp, 20) << __func__ << "::Replaced table entry::["
