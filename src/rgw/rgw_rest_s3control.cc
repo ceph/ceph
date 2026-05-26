@@ -52,13 +52,16 @@ static int get_account_id(req_state* s, rgw_account_id& account_id)
     return -EINVAL;
   }
 
-  const auto& account = s->auth.identity->get_account();
-  if (!account) {
-    return -ERR_METHOD_NOT_ALLOWED;
-  }
-  if (account_id != account->id) {
-    s->err.message = "x-amz-account-id must match the requester";
-    return -EINVAL;
+  if (!s->auth.identity->is_admin()) {
+    // verify that the requester belongs to the specified account
+    const auto& account = s->auth.identity->get_account();
+    if (!account) {
+      return -ERR_METHOD_NOT_ALLOWED;
+    }
+    if (account_id != account->id) {
+      s->err.message = "x-amz-account-id must match the requester";
+      return -EINVAL;
+    }
   }
   return 0;
 }
