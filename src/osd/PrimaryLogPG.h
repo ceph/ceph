@@ -1211,8 +1211,17 @@ protected:
   bool new_pool_migration_interval;
   /// set while migrating 1st object after activate
   bool new_pool_migration_interval_in_flight;
-  /// set when quiescing migrations before signaling unfound
-  bool quiescing_for_unfound = false;
+
+  /// Reason for quiescing pool migration operations
+  enum class PoolMigrationQuiesceReason {
+    NONE,         // Not quiescing
+    FATAL_ERROR,  // Fatal error (ENOENT, EIO, etc.) - stop migration
+    RETRY_NEEDED  // Retryable error (EBUSY) - retry after drain
+  };
+  /// Current quiesce state for pool migration
+  PoolMigrationQuiesceReason pool_migration_quiesce_reason = PoolMigrationQuiesceReason::NONE;
+  /// Error code that triggered quiesce (for logging and decision making)
+  int pool_migration_quiesce_error_code = 0;
 
   /// objects waiting for lock retry to delete source after successful copy_from
   std::set<hobject_t> pool_migration_source_delete_pending_lock;
@@ -1681,6 +1690,7 @@ public:
 		       const char *cls, const char *method, bufferlist& inbl);
 
   void handle_pool_migration_copy_failure(hobject_t oid, int r);
+  void handle_pool_migration_quiesce_complete();
   void pool_migration_source_start_delete_head(hobject_t oid);
   void pool_migration_source_start_delete(hobject_t oid);
   bool pool_migration_source_delete(hobject_t oid);
