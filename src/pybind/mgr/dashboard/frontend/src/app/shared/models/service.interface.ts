@@ -91,6 +91,9 @@ export interface CephServiceAdditionalSpec {
   ssl_protocols: string[];
   ssl_ciphers: string[];
   certificate_source: string;
+  custom_sans?: string[];
+  zonegroup_hostnames?: string[];
+  wildcard_enabled?: boolean;
   port: number;
   initial_admin_password: string;
   rgw_realm: string;
