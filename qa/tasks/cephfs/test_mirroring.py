@@ -1637,6 +1637,7 @@ class TestMirroring(CephFSTestCase):
                                     peer_spec, f'/{dir_name}', snap_b, expected_snap_count)
         self.verify_snapshot(dir_name, snap_a)
         self.verify_snapshot(dir_name, snap_b)
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
 
     def test_cephfs_mirror_multithread_snapshot_starvation(self):
