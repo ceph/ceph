@@ -106,8 +106,9 @@ class MonitorThrasher(Thrasher):
         if self.config is None:
             self.config = dict()
 
-        if self.config.get("switch_thrashers"): 
+        if self.config.get("switch_thrashers"):
             self.switch_thrasher = Event()
+            self.switch_thrashers_wait = int(self.config.get('switch_thrashers_wait', 600))
 
         """ Test reproducibility """
         self.random_seed = self.config.get('seed', None)
@@ -304,8 +305,11 @@ class MonitorThrasher(Thrasher):
             ):
                 other_thrasher = t
                 self.log('switch_task: waiting for others thrashers')
-                other_thrasher.switch_thrasher.wait(300)
+                synced = other_thrasher.switch_thrasher.wait(self.switch_thrashers_wait)
                 self.log('switch_task: done waiting for the other thrasher')
+                if not synced:
+                    self.log(f'switch_task: WARNING - timed out after {self.switch_thrashers_wait}s '
+                             f'waiting for other thrasher, thrashers are now out of sync')
                 other_thrasher.switch_thrasher.clear()
 
     def _do_thrash(self):
