@@ -123,7 +123,8 @@ export enum Icons {
   arrowUpRight = 'arrow--up-right',
   inProgress = 'in-progress',
   arrowDown = 'arrow--down',
-  locked = 'locked' // Access denied, locked state
+  locked = 'locked', // Access denied, locked state
+  cloudMonitoring = 'cloud--monitoring'
 }
 
 export enum IconSize {
@@ -172,7 +173,8 @@ export const ICON_TYPE = {
   angleDoubleRight: 'chevron--right',
   leftArrow: 'caret--left',
   rightArrow: 'caret--right',
-  locked: 'locked'
+  locked: 'locked',
+  cloudMonitoring: 'cloud--monitoring'
 } as const;
 
 export const EMPTY_STATE_IMAGE = {
