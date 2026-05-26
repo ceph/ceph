@@ -7876,7 +7876,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
   if (dest_placement) {
     uint64_t mp_total_size = 0;
     int lp_ret = upload->list_parts(this, s->cct,
-                                    /*max_parts=*/1000,
+                                    /*max_parts=*/10000,
                                     /*marker=*/0,
                                     /*next_marker=*/nullptr,
                                     /*truncated=*/nullptr,

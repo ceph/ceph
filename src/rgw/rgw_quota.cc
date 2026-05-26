@@ -1062,15 +1062,18 @@ void RGWQuotaInfo::dump(Formatter *f) const
   f->dump_int("max_size_kb", rgw_rounded_kb(max_size));
   f->dump_int("max_objects", max_objects);
   
-  f->dump_string("enforcement_mode", to_string(enforcement_mode));
-  f->open_array_section("storage_class_quotas");
-  for (const auto& [key, q] : storage_class_quotas) {
-    f->open_object_section("entry");
-    f->dump_string("key", key);
-    q.dump(f);
+  if (!storage_class_quotas.empty() ||
+      enforcement_mode != RGWQuotaEnforcementMode::LEGACY) {
+    f->dump_string("enforcement_mode", to_string(enforcement_mode));
+    f->open_array_section("storage_class_quotas");
+    for (const auto& [key, q] : storage_class_quotas) {
+      f->open_object_section("entry");
+      f->dump_string("key", key);
+      q.dump(f);
+      f->close_section();
+    }
     f->close_section();
   }
-  f->close_section();
 }
 
 std::list<RGWQuotaInfo> RGWQuotaInfo::generate_test_instances()

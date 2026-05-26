@@ -75,7 +75,6 @@ struct RGWQuotaInfo {
     if (struct_v >= 3) {
       decode(check_on_raw, bl);
     }
-    DECODE_FINISH(bl);
     if (struct_v >= 4) {
       decode(storage_class_quotas, bl);
       uint8_t mode_byte = 0;
@@ -85,6 +84,8 @@ struct RGWQuotaInfo {
       storage_class_quotas.clear();
       enforcement_mode = RGWQuotaEnforcementMode::LEGACY;
     }
+
+    DECODE_FINISH(bl);
   }
 
   const RGWStorageClassQuota* get_sc_quota(const std::string& sc_key) const {
