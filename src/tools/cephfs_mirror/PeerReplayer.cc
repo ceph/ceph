@@ -330,6 +330,13 @@ int PeerReplayer::init() {
     data_replayer->create(name.c_str());
     m_data_replayers.push_back(std::move(data_replayer));
   }
+
+  // Persist live metrics to omap at configured interval for mgr/mirroring to read.
+  m_live_metrics_persist_thread.reset(new LiveMetricsPersistThread(this));
+  m_live_metrics_persist_thread->create("metrics-persist");
+
+  set_changed_mirroring_configurations();
+
   return 0;
 }
 
@@ -368,6 +375,11 @@ void PeerReplayer::shutdown() {
     replayer->join();
   }
   m_replayers.clear();
+
+  if (m_live_metrics_persist_thread) {
+    m_live_metrics_persist_thread->join();
+    m_live_metrics_persist_thread.reset();
+  }
 
   ceph_unmount(m_remote_mount);
   ceph_release(m_remote_mount);
@@ -825,6 +837,7 @@ int PeerReplayer::propagate_snap_deletes(const std::string &dir_root,
       return r;
     }
     inc_deleted_snap(dir_root);
+    persist_dir_sync_stat(dir_root);
     if (m_perf_counters) {
       m_perf_counters->inc(l_cephfs_mirror_peer_replayer_snaps_deleted);
     }
@@ -851,6 +864,7 @@ int PeerReplayer::propagate_snap_renames(
       return r;
     }
     inc_renamed_snap(dir_root);
+    persist_dir_sync_stat(dir_root);
     if (m_perf_counters) {
       m_perf_counters->inc(l_cephfs_mirror_peer_replayer_snaps_renamed);
     }
@@ -2508,6 +2522,7 @@ int PeerReplayer::do_sync_snaps(const std::string &dir_root) {
     }
 
     set_last_synced_stat(dir_root, it->first, it->second, duration);
+    persist_dir_sync_stat(dir_root);
     if (--snaps_per_cycle == 0) {
       break;
     }
@@ -2533,7 +2548,38 @@ int PeerReplayer::sync_snaps(const std::string &dir_root,
   } else {
     _reset_failed_count(dir_root);
   }
+  locker.unlock();
+  if (r < 0) {
+    persist_dir_sync_stat(dir_root);
+  }
+  locker.lock();
   return r;
+}
+
+void PeerReplayer::run_live_metrics_persist() {
+  dout(10) << ": started" << dendl;
+
+  std::unique_lock locker(m_lock);
+  while (true) {
+    auto interval = g_ceph_context->_conf.get_val<std::chrono::seconds>(
+      "cephfs_mirror_live_metrics_persist_interval");
+    m_cond.wait_for(locker, interval, [this]{return is_stopping();});
+    if (is_stopping()) {
+      dout(5) << ": shutting down exiting" << dendl;
+      break;
+    }
+
+    std::vector<std::string> dirs;
+    dirs.reserve(m_registered.size());
+    for (const auto &kv : m_registered) {
+      dirs.push_back(kv.first);
+    }
+    locker.unlock();
+    for (const auto &dir_root : dirs) {
+      persist_dir_sync_stat(dir_root);
+    }
+    locker.lock();
+  }
 }
 
 void PeerReplayer::run(SnapshotReplayerThread *replayer) {
@@ -2578,6 +2624,9 @@ void PeerReplayer::run(SnapshotReplayerThread *replayer) {
             }
           } else {
             _inc_failed_count(*dir_root);
+            locker.unlock();
+            persist_dir_sync_stat(*dir_root);
+            locker.lock();
             if (m_perf_counters) {
               m_perf_counters->inc(l_cephfs_mirror_peer_replayer_snap_sync_failures);
             }
