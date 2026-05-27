@@ -86,10 +86,45 @@ TOKENS = {
         'project': 'deadbeef',
         'expired': True,
     },
+    # Application credential token with access rules restricting to GET on
+    # /v1/AUTH_*/** (read-only access to all containers for any account).
+    'appcred-token-readonly': {
+        'username': 'deadbeef',
+        'project': 'deadbeef',
+        'expired': False,
+        'application_credential': {
+            'id': 'appcred-readonly-id',
+            'name': 'readonly',
+            'restricted': True,
+            'access_rules': [
+                {
+                    'service': 'object-store',
+                    'method': 'GET',
+                    'path': '/v1/AUTH_**',
+                },
+                {
+                    'service': 'object-store',
+                    'method': 'HEAD',
+                    'path': '/v1/AUTH_**',
+                },
+            ],
+        },
+    },
+    # Application credential token with no access rules (unrestricted app cred).
+    'appcred-token-unrestricted': {
+        'username': 'deadbeef',
+        'project': 'deadbeef',
+        'expired': False,
+        'application_credential': {
+            'id': 'appcred-unrestricted-id',
+            'name': 'unrestricted',
+            'restricted': False,
+        },
+    },
 }
 
 
-def _generate_token_result(username, project, expired=False):
+def _generate_token_result(username, project, expired=False, application_credential=None):
     userdata = USERS[username]
     projectdata = PROJECTS[project]
     userroles = USERROLES[username]
@@ -116,6 +151,9 @@ def _generate_token_result(username, project, expired=False):
             'user': userdata,
         }
     }
+
+    if application_credential is not None:
+        result['token']['application_credential'] = application_credential
 
     return result
 
@@ -173,7 +211,12 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
-                result = _generate_token_result(tokendata['username'], tokendata['project'], tokendata['expired'])
+                result = _generate_token_result(
+                    tokendata['username'],
+                    tokendata['project'],
+                    tokendata['expired'],
+                    tokendata.get('application_credential'),
+                )
                 self._set_data(result)
         else:
             self.send_response(404)

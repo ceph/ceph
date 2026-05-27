@@ -22,6 +22,12 @@
   of the key/value store). They surface automatically as ``ceph_mon_*``
   Prometheus metrics via the ``prometheus`` mgr module and ``ceph-exporter``,
   enabling trending of mon DB growth and filesystem free space.
+* RGW: Application credential access rules are now enforced for Swift API
+  requests authenticated via Keystone. When a token belongs to an application
+  credential that carries access rules, RGW validates each request against those
+  rules and returns 403 if none match. No configuration change is required;
+  tokens without access rules are unaffected.
+  Related Tracker: https://tracker.ceph.com/issues/68232
 
 * librados/neorados: The C++ APIs for executing Ceph Class (CLS) methods
   have undergone a breaking change to enforce compile-time type safety, replacing
