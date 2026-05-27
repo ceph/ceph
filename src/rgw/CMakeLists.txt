@@ -128,6 +128,13 @@ set(librgw_common_srcs
   rgw_perf_counters.cc
   rgw_rest_oidc_provider.cc
   rgw_rest_iam.cc
+  rgw_rest_s3files.cc
+  file_state/change_feed.cc
+  file_state/dbus_ganesha_sink.cc
+  file_state/desired_export.cc
+  file_state/ganesha_sink.cc
+  file_state/memory_store.cc
+  file_state/reconciler.cc
   rgw_object_lock.cc
   rgw_kms.cc
   rgw_kmip_client.cc

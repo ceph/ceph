@@ -251,7 +251,13 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
     }
 
     uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
-      return rgw_perms_from_aclspec_default_strategy(id.to_str(), aclspec, dpp);
+      // match acl grants to the specific user id
+      uint32_t mask = rgw_perms_from_aclspec_default_strategy(id.to_str(), aclspec, dpp);
+      if (account) {
+        // account users also match acl grants to the account id
+        mask |= rgw_perms_from_aclspec_default_strategy(account->id, aclspec, dpp);
+      }
+      return mask;
     }
 
     bool is_admin() const override {

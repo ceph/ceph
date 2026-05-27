@@ -308,6 +308,22 @@ target_include_directories(unittest_rgw_arn
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
 target_link_libraries(unittest_rgw_arn ${rgw_libs})
 
+# unittest_rgw_file_state_memory_store
+# Self-contained: compiles MemoryStore directly into the test binary
+# rather than depending on rgw_libs.
+add_executable(unittest_rgw_file_state_memory_store
+  test_file_state_memory_store.cc
+  ${CMAKE_SOURCE_DIR}/src/rgw/file_state/change_feed.cc
+  ${CMAKE_SOURCE_DIR}/src/rgw/file_state/dbus_ganesha_sink.cc
+  ${CMAKE_SOURCE_DIR}/src/rgw/file_state/desired_export.cc
+  ${CMAKE_SOURCE_DIR}/src/rgw/file_state/ganesha_sink.cc
+  ${CMAKE_SOURCE_DIR}/src/rgw/file_state/memory_store.cc
+  ${CMAKE_SOURCE_DIR}/src/rgw/file_state/reconciler.cc)
+add_ceph_unittest(unittest_rgw_file_state_memory_store)
+target_include_directories(unittest_rgw_file_state_memory_store
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+                 "${CMAKE_SOURCE_DIR}/src/rgw/file_state")
+
 # unittest_rgw_kms
 add_executable(unittest_rgw_kms test_rgw_kms.cc)
 add_ceph_unittest(unittest_rgw_kms)

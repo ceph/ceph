@@ -327,9 +327,131 @@ options:
                 any ``radosgw`` instance that is meant to
                 participate in a `multi-site <../multisite>`_
                 configuration.
+
+      .. note:: The ``s3files`` API (AWS S3 Files / EFS-shape
+                control plane) is opt-in and not in the default
+                list. v1 uses an in-memory store; FoundationDB-
+                backed persistence will land separately. See
+                :ref:`rgw-s3-files-api`.
   default: s3, s3website, swift, swift_auth, admin, sts, iam, notifications
   services:
   - rgw
+  with_legacy: true
+- name: rgw_s3files_reconciler_enabled
+  type: bool
+  level: advanced
+  desc: Run the in-process s3files reconciler that programs the colocated
+    nfs-ganesha export set from S3 Files API state.
+  long_desc: When the ``s3files`` entry is present in ``rgw_enable_apis``
+    AND this option is true, RGW spawns a worker thread that subscribes
+    to control-plane mutations, composes the desired Ganesha export set
+    from the active store, and applies it to the local Ganesha via
+    its D-Bus admin interface. Off by default — opt in when you have a
+    Ganesha colocated with this RGW.
+  default: false
+  services:
+  - rgw
+  see_also:
+  - rgw_enable_apis
+  - rgw_s3files_ganesha_export_dir
+  with_legacy: true
+- name: rgw_s3files_ganesha_export_dir
+  type: str
+  level: advanced
+  desc: Directory where the s3files reconciler writes per-export Ganesha
+    config files.
+  long_desc: The reconciler writes one ``<export_id>.conf`` per
+    (FileSystem, AccessPoint, MountTarget) tuple here, then references
+    each by path on Ganesha's AddExport / UpdateExport D-Bus calls. The
+    reconciler must own this directory; nothing else should write here.
+  default: /var/lib/ceph/rgw/s3files-exports
+  services:
+  - rgw
+  see_also:
+  - rgw_s3files_reconciler_enabled
+  with_legacy: true
+- name: rgw_s3files_ganesha_dbus_dest
+  type: str
+  level: advanced
+  desc: D-Bus destination name the reconciler uses to address the
+    colocated Ganesha admin interface.
+  long_desc: The reconciler dispatches AddExport / UpdateExport /
+    RemoveExport / ShowExports / admin.reread_config method calls over
+    D-Bus as control-plane state changes. Upstream Ganesha registers as
+    ``org.ganesha.nfsd``; override only when running a custom build that
+    registers under a different bus name.
+  default: org.ganesha.nfsd
+  services:
+  - rgw
+  see_also:
+  - rgw_s3files_ganesha_dbus_object
+  - rgw_s3files_ganesha_dbus_iface
+  - rgw_s3files_ganesha_use_system_bus
+  - rgw_s3files_reconciler_enabled
+  with_legacy: true
+- name: rgw_s3files_ganesha_dbus_object
+  type: str
+  level: advanced
+  desc: D-Bus object path at which Ganesha's ExportMgr is registered.
+  long_desc: Object path the reconciler addresses for export-management
+    method calls. Pairs with ``rgw_s3files_ganesha_dbus_dest`` /
+    ``rgw_s3files_ganesha_dbus_iface``; override only for custom Ganesha
+    builds that register the manager under a different path.
+  default: /org/ganesha/nfsd/ExportMgr
+  services:
+  - rgw
+  see_also:
+  - rgw_s3files_ganesha_dbus_dest
+  - rgw_s3files_ganesha_dbus_iface
+  with_legacy: true
+- name: rgw_s3files_ganesha_dbus_iface
+  type: str
+  level: advanced
+  desc: D-Bus interface name on which the reconciler invokes Ganesha
+    export-management methods.
+  long_desc: Methods (``AddExport``, ``UpdateExport``, ``RemoveExport``,
+    ``ShowExports``, ``admin.reread_config``) are appended to this
+    interface name when the reconciler dispatches a call. Override only
+    for custom Ganesha builds.
+  default: org.ganesha.nfsd.exportmgr
+  services:
+  - rgw
+  see_also:
+  - rgw_s3files_ganesha_dbus_dest
+  - rgw_s3files_ganesha_dbus_object
+  with_legacy: true
+- name: rgw_s3files_ganesha_use_system_bus
+  type: bool
+  level: advanced
+  desc: When true, the reconciler talks to Ganesha over the D-Bus system
+    bus; when false, over the session bus.
+  long_desc: Production Ganesha deployments listen on the system bus and
+    require root or a polkit grant for the reconciler to dispatch admin
+    methods. Set false only for development setups where Ganesha runs
+    against the user's session bus.
+  default: true
+  services:
+  - rgw
+  see_also:
+  - rgw_s3files_ganesha_dbus_dest
+  - rgw_s3files_reconciler_enabled
+  with_legacy: true
+- name: rgw_s3files_reconciler_safety_net_interval_s
+  type: int
+  level: advanced
+  desc: Seconds between forced full reconciles when no control-plane
+    change has been observed.
+  long_desc: The reconciler is normally driven by the in-process change
+    feed and runs sub-second after each control-plane mutation. This
+    timer is a safety net that triggers a full reconcile every N seconds
+    regardless, guarding against missed notifies. Lower values trade
+    more wasted reconciles for a tighter worst-case freshness bound;
+    the default of 30 seconds is conservative for production.
+  default: 30
+  services:
+  - rgw
+  see_also:
+  - rgw_s3files_reconciler_enabled
   with_legacy: true
 - name: rgw_cache_enabled
   type: bool

@@ -31,6 +31,7 @@
 #include "driver/rados/rgw_user.h"
 #include "rgw_lib.h"
 #include "rgw_ldap.h"
+#include "rgw_sts.h"
 #include "rgw_token.h"
 #include "rgw_putobj_processor.h"
 #include "rgw_aio_throttle.h"
@@ -855,6 +856,9 @@ namespace rgw {
   typedef std::tuple<RGWFileHandle*, uint32_t> LookupFHResult;
   typedef std::tuple<RGWFileHandle*, int> MkObjResult;
 
+  /* STSAuthState lives in rgw_lib.h so RGWLibRequest can hold a pointer
+   * to it without dragging in rgw_file_int.h. */
+
   class RGWLibFS
   {
     CephContext* cct;
@@ -873,6 +877,10 @@ namespace rgw {
 
     std::unique_ptr<rgw::sal::User> user;
     RGWAccessKey key; // XXXX acc_key
+
+    /* If mounted with STS-issued temporary credentials, holds the
+     * resolved session state.  active=false otherwise. */
+    STSAuthState sts_state;
 
     static std::atomic<uint32_t> fs_inst_counter;
 
@@ -945,7 +953,8 @@ namespace rgw {
     };
 
     RGWLibFS(CephContext* _cct, const char *_uid, const char *_user_id,
-	    const char* _key, const char *root)
+	    const char* _key, const char *root,
+	    const char *_session_token = nullptr)
       : cct(_cct), root_fh(this), invalidate_cb(nullptr),
 	invalidate_arg(nullptr), shutdown(false), refcnt(1),
 	fh_cache(cct->_conf->rgw_nfs_fhcache_partitions,
@@ -953,6 +962,10 @@ namespace rgw {
 	fh_lru(cct->_conf->rgw_nfs_lru_lanes,
 	       cct->_conf->rgw_nfs_lru_lane_hiwat),
 	uid(_uid), key(_user_id, _key) {
+
+      if (_session_token && *_session_token) {
+        sts_state.session_token.assign(_session_token);
+      }
 
       if (!root || !strcmp(root, "/")) {
         root_fh.init_rootfs(uid, RGWFileHandle::root_name, false);
@@ -1000,6 +1013,60 @@ namespace rgw {
     }
 
     int authorize(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver) {
+      /* STS path: caller supplied a session_token in the constructor.
+       * Decode it, check expiration, and resolve the role/user state.
+       * The (key.id, key.key) pair must match the temporary credentials
+       * embedded in the token; the secret is verified by re-deriving
+       * from the decoded token rather than by a SigV4 signature here.
+       */
+      if (!sts_state.session_token.empty()) {
+        int ret = STS::decode_session_token(dpp, cct, sts_state.session_token,
+                                            sts_state.decoded);
+        if (ret < 0) {
+          return ret;
+        }
+        if (sts_state.decoded.access_key_id != key.id ||
+            sts_state.decoded.secret_access_key != key.key) {
+          ldpp_dout(dpp, 0) << "ERROR: STS session token does not match "
+                               "supplied access_key/secret" << dendl;
+          return -EPERM;
+        }
+        if (!sts_state.decoded.expiration.empty()) {
+          auto exp = ceph::from_iso_8601(sts_state.decoded.expiration, false);
+          if (!exp) {
+            ldpp_dout(dpp, 0) << "ERROR: invalid STS token expiration: "
+                              << sts_state.decoded.expiration << dendl;
+            return -EPERM;
+          }
+          if (real_clock::now() >= *exp) {
+            ldpp_dout(dpp, 0) << "ERROR: STS token already expired" << dendl;
+            return -ERR_EXPIRED_TOKEN;
+          }
+          sts_state.expiration = *exp;
+        }
+        if (int rc = STS::resolve_session(dpp, cct, driver, null_yield,
+                                          sts_state.decoded,
+                                          sts_state.resolved); rc < 0) {
+          return rc;
+        }
+        sts_state.active = true;
+        /* Provide a sal::User to the rest of librgw so that ops which
+         * grab fs->user->clone() (e.g. read/write) still have a usable
+         * handle. For role-based sessions there's no underlying single
+         * user to load, so we synthesize one from the token's user field
+         * (which will be the role's TokenAttrs.user_id at request time).
+         */
+        if (sts_state.resolved.user) {
+          /* TYPE_RGW/ROOT/NONE: the local user was loaded by resolve_session. */
+          user = std::move(sts_state.resolved.user);
+        } else {
+          /* TYPE_ROLE / TYPE_KEYSTONE / TYPE_LDAP: best-effort placeholder. */
+          user = driver->get_user(sts_state.decoded.user);
+        }
+        return 0;
+      }
+
+      /* Permanent-key path: existing behavior. */
       int ret = driver->get_user_by_access_key(dpp, key.id, null_yield, &user);
       if (ret == 0) {
 	RGWAccessKey* k = user->get_info().get_key(key.id);
@@ -1037,6 +1104,27 @@ namespace rgw {
       invalidate_arg = arg;
       return 0;
     }
+
+    /* Wrapper around RGWLibFrontend::execute_req that propagates this
+     * RGWLibFS's STS auth state to the request before dispatch.  All
+     * librgw operations should use this in preference to calling
+     * g_rgwlib->get_fe()->execute_req directly so that STS-mounted
+     * filesystems get the right per-request Identity.  Defined in
+     * rgw_file.cc so that we don't need to drag rgw_lib_frontend.h's
+     * full definition into this header. */
+    int execute_req(RGWLibRequest* req);
+
+    /* Replace the (uid, key, session_token) on a live RGWLibFS and
+     * re-run authorize() to refresh the cached identity.  Used by
+     * rgw_set_credentials() to rotate STS-issued temporary credentials
+     * before they expire.  On failure the previous credentials remain
+     * in effect. */
+    int set_credentials(const DoutPrefixProvider* dpp,
+                        rgw::sal::Driver* driver,
+                        const char* new_uid,
+                        const char* new_key,
+                        const char* new_secret,
+                        const char* new_session_token);
 
     /* find RGWFileHandle by id  */
     LookupFHResult lookup_fh(const fh_key& fhk,
@@ -1311,6 +1399,13 @@ namespace rgw {
     uint64_t get_fsid() { return root_fh.state.dev; }
 
     RGWUserInfo* get_user() { return &user->get_info(); }
+
+    /* RGWLibRequest moves an owned User into req_state; mint a
+     * fresh clone per request rather than reconstructing from
+     * user_id (which loses account_id; see 405f51d505). */
+    std::unique_ptr<rgw::sal::User> cloned_user() const {
+      return user->clone();
+    }
 
     void update_user(const DoutPrefixProvider *dpp) {
       (void) g_rgwlib->get_driver()->get_user_by_access_key(dpp, key.id, null_yield, &user);

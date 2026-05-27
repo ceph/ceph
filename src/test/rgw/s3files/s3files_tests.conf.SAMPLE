@@ -1,0 +1,16 @@
+[DEFAULT]
+host = localhost
+port = 8000
+scheme = http
+
+[s3 main]
+access_key = 0555b35654ad1656d804
+secret_key = h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q==
+display_name = M. Tester
+user_id = testid
+email = tester@ceph.com
+# zone_id: a Ceph zone identifier configured in the active period.
+# Must be 8..40 chars from [0-9a-f] so it round-trips through the
+# AWS Smithy `SubnetId` pattern `^subnet-[0-9a-f]{8,40}$` (the
+# request field carries `subnet-{zone_id}`; see design doc).
+zone_id = 00000000000000000000000000000001
