@@ -78,6 +78,7 @@ public:
 
   void SetUp() override {
     PGBackendTestFixture::SetUp();
+    initialize_scrub_infra();
   }
 
   /**
@@ -468,6 +469,7 @@ public:
 
   void SetUp() override {
     PGBackendTestFixture::SetUp();
+    initialize_scrub_infra();
   }
 
   void simulate_osd_failure(int failed_osd, int new_primary_instance)
