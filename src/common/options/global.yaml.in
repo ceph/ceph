@@ -3508,10 +3508,14 @@ options:
   with_legacy: true
 # rocksdb block cache shard bits, 4 bit -> 16 shards
 - name: rocksdb_cache_shard_bits
+  desc: Specifies the number of shards by designating the number of significant bits in hash keys.
+    4 bits -> 16 shards.
   type: int
   level: advanced
   default: 4
   with_legacy: true
+  flags:
+  - startup
 # 'lru' or 'clock'
 - name: rocksdb_cache_type
   type: str
