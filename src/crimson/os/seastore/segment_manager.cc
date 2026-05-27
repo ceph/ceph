@@ -7,7 +7,6 @@
 
 #ifdef HAVE_ZNS
 #include "crimson/os/seastore/segment_manager/zbd.h"
-SET_SUBSYS(seastore_device);
 #endif
 
 
@@ -35,7 +34,6 @@ SegmentManager::get_segment_manager(
 {
   const std::string device_block = device + "/block";
 #ifdef HAVE_ZNS
-  LOG_PREFIX(SegmentManager::get_segment_manager);
   if (dtype == device_type_t::ZBD) {
     co_return std::make_unique<segment_manager::zbd::ZBDSegmentManager>(
         device_block);
