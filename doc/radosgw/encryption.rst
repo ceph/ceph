@@ -18,6 +18,72 @@ Object Gateway stores that data in the Ceph Storage Cluster in encrypted form.
 
 .. note:: Server-side encryption keys must be 256-bit long and base64 encoded.
 
+Encryption Algorithm
+====================
+
+.. versionadded:: Umbrella
+
+The Ceph Object Gateway supports two AES-256 encryption algorithms for
+server-side encryption:
+
+**AES-256-CBC** (Cipher Block Chaining)
+  The legacy encryption algorithm. This mode is compatible with older Ceph
+  releases and is the default for backward compatibility. CBC mode encrypts
+  data but does not provide built-in integrity verification.
+
+**AES-256-GCM** (Galois/Counter Mode)
+  A modern authenticated encryption algorithm that provides both
+  confidentiality and integrity protection. GCM mode detects any tampering
+  or corruption of encrypted data. This is the recommended algorithm for
+  new deployments.
+
+The encryption algorithm for new objects can be configured with::
+
+  rgw crypt sse algorithm = aes-256-cbc    # default, for backward compatibility
+  rgw crypt sse algorithm = aes-256-gcm    # recommended for new deployments
+
+.. note:: This setting only affects newly encrypted objects. Existing objects
+          are always decrypted using the algorithm that was used when they
+          were encrypted, regardless of the current setting. This allows
+          CBC-encrypted and GCM-encrypted objects to coexist in the same
+          cluster.
+
+.. important:: When upgrading from an older Ceph release, keep the default
+               ``aes-256-cbc`` setting until all RGW instances have been
+               upgraded. Once all instances support GCM, you can enable
+               ``aes-256-gcm`` for new uploads.
+
+GCM Encryption Format
+---------------------
+
+AES-256-GCM encrypts data in 4 KB (4096 byte) chunks. Each chunk produces
+4112 bytes of ciphertext (4096 bytes of encrypted data plus a 16-byte
+authentication tag).
+
+.. list-table:: GCM Size Calculation Example
+   :header-rows: 1
+   :widths: 40 30 30
+
+   * - Description
+     - Size
+     - Notes
+   * - Original plaintext
+     - 10,000 bytes
+     - User's data
+   * - Number of chunks
+     - 3
+     - ⌈10000 ÷ 4096⌉
+   * - Authentication tags
+     - 48 bytes
+     - 3 chunks × 16 bytes
+   * - **Encrypted on disk**
+     - **10,048 bytes**
+     - plaintext + tags
+
+The storage overhead is approximately 0.4% (16 bytes per 4 KB). S3 API
+responses always report the original plaintext size, so this overhead is
+transparent to clients.
+
 Customer-Provided Keys
 ======================
 
