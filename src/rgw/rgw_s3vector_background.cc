@@ -230,58 +230,33 @@ private:
     bool ok = false;
   };
 
+  static constexpr const char* vector_index_name = "data_idx";
+
   index_stats_result get_vector_index_stats(const LanceDBTable* table) {
     index_stats_result result;
-
-    // list all indices to find the vector index name
-    char** indices = nullptr;
-    size_t index_count = 0;
     char* error_message = nullptr;
 
-    if (const auto err = lancedb_table_list_indices(
-            table, &indices, &index_count, &error_message);
-        err != LANCEDB_SUCCESS) {
-      ldpp_dout(this, 1) << "ERROR: failed to list indices: "
-          << (error_message ? error_message : "unknown") << dendl;
+    // query the vector index directly by its known name (data_idx).
+    // LanceDB names indices as {column_name}_idx — our vector column is
+    // always "data", so the vector index is always "data_idx".
+    // this avoids picking up the scalar "key_idx" which reports misleading
+    // unindexed counts (scalar BTree indices always show indexed=0).
+    if (const auto err = lancedb_table_index_stats(
+            table, vector_index_name, &result.stats, &error_message);
+        err == LANCEDB_SUCCESS) {
+      result.ok = true;
+      return result;
+    }
+
+    if (error_message) {
       lancedb_free_string(error_message);
-      return result;
     }
 
-    if (index_count == 0) {
-      // no index exists yet — all rows are unindexed
-      result.stats.num_indexed_rows = 0;
-      result.stats.num_unindexed_rows = lancedb_table_count_rows(table);
-      result.stats.num_indices = 0;
-      result.ok = true;
-      return result;
-    }
-
-    // try each index name to find a vector index with stats
-    bool found = false;
-    for (size_t i = 0; i < index_count && !found; ++i) {
-      error_message = nullptr;
-      if (const auto err = lancedb_table_index_stats(
-              table, indices[i], &result.stats, &error_message);
-          err == LANCEDB_SUCCESS) {
-        //NOTE: currently we expect only one vector index per table, but if there are multiplei(scalar indexes), 
-        //we take the first one with stats. a future change is to explicitly identify the index by name or type, rather than relying on the order of indices.
-        found = true;
-        result.ok = true;
-      } else {
-        lancedb_free_string(error_message);
-      }
-    }
-
-    lancedb_free_index_list(indices, index_count);
-
-    if (!found) {
-      // indices exist but none have stats — treat all rows as unindexed
-      result.stats.num_indexed_rows = 0;
-      result.stats.num_unindexed_rows = lancedb_table_count_rows(table);
-      result.stats.num_indices = 0;
-      result.ok = true;
-    }
-
+    // vector index doesn't exist yet — all rows are unindexed
+    result.stats.num_indexed_rows = 0;
+    result.stats.num_unindexed_rows = lancedb_table_count_rows(table);
+    result.stats.num_indices = 0;
+    result.ok = true;
     return result;
   }
 
@@ -521,6 +496,7 @@ private:
     }
 
     // step 3: conditional create — only one caller wins
+    // create-if-absent (atomic create)
     std::string token = generate_lock_token();
     int ret = put_lock_object(bucket_name, lock_key, token, y);
     if (ret == 0) {
@@ -572,6 +548,8 @@ private:
     }
 
     // step 3: conditional delete using ETag from step 1
+    // in the case some other instance reclaimed the lock between our GET and DELETE, 
+    // the ETag changed and this delete fails safely without deleting the new holder's lock.
     int ret = delete_lock_object(bucket_name, lock_key, lock_info.etag, y);
     if (ret == -ERR_PRECONDITION_FAILED) {
       ldpp_dout(this, 5) << "INFO: lock for " << bucket_name << "." << index_name
@@ -671,13 +649,13 @@ private:
     }
     const auto& stats = stats_result.stats;
 
-    ldpp_dout(this, 5) << "INFO: index stats for " << bucket_name << "." << index_name
+    ldpp_dout(this, 1) << "INFO: index stats for " << bucket_name << "." << index_name
         << ": indexed=" << stats.num_indexed_rows
         << " unindexed=" << stats.num_unindexed_rows
         << " num_indices=" << stats.num_indices << dendl;
 
     if (stats.num_unindexed_rows < threshold) {
-      ldpp_dout(this, 20) << "INFO: " << bucket_name << "." << index_name
+      ldpp_dout(this, 1) << "INFO: " << bucket_name << "." << index_name
           << " below threshold (" << stats.num_unindexed_rows
           << " < " << threshold << "), skipping rebuild" << dendl;
       return 1; // below threshold — recheck on next notification
