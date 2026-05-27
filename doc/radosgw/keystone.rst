@@ -173,6 +173,37 @@ The Keystone object-store endpoint must accordingly be configured to include the
   | service_type | object-store                                                 |
   +--------------+--------------------------------------------------------------+
 
+Application Credentials and Access Rules
+-----------------------------------------
+
+OpenStack Keystone supports `Application Credentials`_, which allow users to
+create tokens with a limited subset of their permissions. An application
+credential may optionally carry *access rules* that restrict which HTTP methods
+and URL paths are permitted for the ``object-store`` service.
+
+RGW enforces these rules automatically. When validating a token, RGW sends the
+``OpenStack-Identity-Access-Rules: 1.0`` request header to opt in to receiving
+access rules from Keystone. If the validated token belongs to an application
+credential that carries access rules, RGW checks every incoming request against
+those rules and returns ``403 Forbidden`` if none of the rules match.
+
+No additional configuration is required. Tokens that do not belong to an
+application credential, or application credentials that carry no access rules,
+are unaffected.
+
+Access rule path patterns follow the `keystoneauth1 reference implementation`_:
+
+* ``*`` matches one path segment (no ``/`` characters)
+* ``**`` matches any number of path segments (including zero)
+* ``{tag}`` matches one path segment (named placeholder)
+
+For example, a rule with path ``/v1/AUTH_*/mycontainer/**`` permits requests
+to any object inside ``mycontainer`` for any account, while ``/v1/*`` permits
+requests only to the top-level account endpoint.
+
+.. _Application Credentials: https://docs.openstack.org/keystone/latest/user/application_credentials.html
+.. _keystoneauth1 reference implementation: https://opendev.org/openstack/keystoneauth/src/branch/master/keystoneauth1/access/access.py
+
 Keystone Integration with the S3 API
 ------------------------------------
 
