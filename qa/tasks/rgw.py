@@ -29,7 +29,7 @@ class RGWEndpoint:
 
     def url(self):
         proto = 'https' if self.cert else 'http'
-        return '{proto}://{hostname}:{port}/'.format(proto=proto, hostname=self.hostname, port=self.port)
+        return '{proto}://{hostname}:{port}/'.format(proto=proto, hostname=self.dns_name, port=self.port)
 
 @contextlib.contextmanager
 def start_rgw(ctx, config, clients):
@@ -81,6 +81,10 @@ def start_rgw(ctx, config, clients):
             # add the ssl certificate path
             frontends += ' ssl_certificate={}'.format(endpoint.cert.certificate)
             frontends += ' ssl_port={}'.format(endpoint.port)
+
+            # install the cert to the java store for java tests. this may fail
+            # with 'keytool: command not found' for jobs that don't install java
+            # stuff, so add check_status=False to ignore
             path = 'lib/security/cacerts'
             ctx.cluster.only(client).run(
                 args=['sudo',
@@ -93,7 +97,8 @@ def start_rgw(ctx, config, clients):
                       '-file', endpoint.cert.certificate,
                       '-storepass', 'changeit',
                       ],
-                stdout=BytesIO()
+                stdout=BytesIO(),
+                check_status=False
             )
 
         else:
