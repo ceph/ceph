@@ -76,6 +76,75 @@ class TestLsblkParser(object):
         assert result['SIZE'] == '10M'
 
 
+class TestBackingDeviceIsRotational(object):
+    """Upper dm nodes lie in sysfs queue/rotational; we walk slaves/ to the leaf."""
+
+    @patch('ceph_volume.util.disk.os.path.realpath')
+    def test_sysfs_dm_stack_to_nvme(self, m_realpath, fake_filesystem):
+        m_realpath.return_value = '/dev/dm-5'
+        fake_filesystem.create_dir('/sys/block/dm-5/slaves/dm-4')
+        fake_filesystem.create_dir('/sys/block/dm-4/slaves/nvme0n1')
+        fake_filesystem.create_file('/sys/block/nvme0n1/queue/rotational', contents='0')
+        assert disk.BackingDeviceRotation.is_rotational('/dev/ceph-foo/osd-block-bar') is False
+
+    @patch('os.path.realpath')
+    def test_plain_disk_reads_leaf_rotational(self, m_realpath, fake_filesystem):
+        m_realpath.return_value = '/dev/nvme0n1'
+        fake_filesystem.create_file('/sys/block/nvme0n1/queue/rotational', contents='0')
+        assert disk.BackingDeviceRotation.is_rotational('/dev/nvme0n1') is False
+
+    @patch('ceph_volume.util.disk.get_partitions', return_value={'nvme0n1p1': 'nvme0n1'})
+    @patch('os.path.realpath')
+    def test_partition_uses_parent_block_rotational(
+            self, m_realpath, m_get_partitions, fake_filesystem):
+        m_realpath.return_value = '/dev/nvme0n1p1'
+        fake_filesystem.create_file('/sys/block/nvme0n1/queue/rotational', contents='0')
+        assert disk.BackingDeviceRotation.is_rotational('/dev/nvme0n1p1') is False
+
+    @patch('os.path.realpath')
+    def test_missing_sys_block_defaults_rotational(self, m_realpath, fake_filesystem):
+        m_realpath.return_value = '/dev/dm-99'
+        assert disk.BackingDeviceRotation.is_rotational('/dev/mapper/x') is True
+
+    @patch('ceph_volume.util.disk.get_partitions', return_value={'sda1': 'sda'})
+    @patch('os.path.realpath')
+    def test_dm_slave_partition_resolves_to_parent(
+            self, m_realpath, m_get_partitions, fake_filesystem):
+        m_realpath.return_value = '/dev/dm-0'
+        fake_filesystem.create_dir('/sys/block/dm-0/slaves/sda1')
+        fake_filesystem.create_file('/sys/block/sda/queue/rotational', contents='0')
+        assert disk.BackingDeviceRotation.is_rotational('/dev/dm-0') is False
+
+    @patch('os.path.realpath')
+    def test_multi_slave_any_rotational(self, m_realpath, fake_filesystem):
+        m_realpath.return_value = '/dev/dm-0'
+        fake_filesystem.create_dir('/sys/block/dm-0/slaves/sda')
+        fake_filesystem.create_dir('/sys/block/dm-0/slaves/sdb')
+        fake_filesystem.create_file('/sys/block/sda/queue/rotational', contents='0')
+        fake_filesystem.create_file('/sys/block/sdb/queue/rotational', contents='1')
+        assert disk.BackingDeviceRotation.is_rotational('/dev/dm-0') is True
+
+    @patch('os.listdir', side_effect=OSError(errno.EACCES, 'Permission denied'))
+    @patch('os.path.realpath')
+    def test_listdir_slaves_oserror_defaults_rotational(
+            self, m_realpath, m_listdir, fake_filesystem):
+        m_realpath.return_value = '/dev/dm-0'
+        fake_filesystem.create_dir('/sys/block/dm-0/slaves')
+        fake_filesystem.create_file('/sys/block/dm-0/queue/rotational', contents='0')
+        assert disk.BackingDeviceRotation.is_rotational('/dev/dm-0') is True
+
+    @patch('ceph_volume.util.disk.BackingDeviceRotation._kname_for_sysfs_walk', side_effect=lambda kname: kname)
+    @patch('ceph_volume.util.disk.os.path.exists', return_value=True)
+    @patch('ceph_volume.util.disk.UdevData')
+    def test_leaf_block_uses_udev_hints(
+            self, m_udev, _m_exists, _m_kname_for_sysfs_walk, fake_filesystem):
+        m_udev.return_value.environment = {'ID_SSD': '1'}
+        assert disk.BackingDeviceRotation._leaf_block_is_rotational('sda') is False
+
+        m_udev.return_value.environment = {'ID_ATA_ROTATION_RATE_RPM': '7200'}
+        assert disk.BackingDeviceRotation._leaf_block_is_rotational('sdb') is True
+
+
 class TestBlkidParser(object):
 
     def test_parses_whitespace_values(self):
