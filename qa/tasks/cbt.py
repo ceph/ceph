@@ -82,8 +82,22 @@ class CBT(Task):
             )
         else:
             install_cmd = ['sudo', 'apt-get', '-y', '--force-yes', 'install']
-            cbt_depends = ['python3-yaml', 'python3-lxml', 'librbd-dev', 'collectl', 'linux-tools-generic']
+            cbt_depends = ['librbd-dev', 'collectl', 'linux-tools-generic', 'python3-venv']
         self.first_mon.run(args=install_cmd + cbt_depends)
+
+        # Create a virtual environment for CBT
+        testdir = misc.get_testdir(self.ctx)
+        venv_path = f'{testdir}/cbt-venv'
+        self.first_mon.run(args=['python3', '-m', 'venv', venv_path])
+
+        # Install the python dependencies from the CBT project requirements.txt file into the venv
+        pip_install_cmd = [
+            f'{venv_path}/bin/pip',
+            'install',
+            '-r',
+            f'{testdir}/cbt/requirements.txt',
+        ]
+        self.first_mon.run(args=pip_install_cmd)
 
         benchmark_type = next(iter(self.cbt_config.get('benchmarks').keys()))
         self.log.info('benchmark: %s', benchmark_type)
@@ -161,6 +175,7 @@ class CBT(Task):
         )
         self.first_mon.run(
             args=[
+                '{tdir}/cbt-venv/bin/python'.format(tdir=testdir),
                 '{tdir}/cbt/cbt.py'.format(tdir=testdir),
                 '-a', self.cbt_dir,
                 '{cbtdir}/cbt_config.yaml'.format(cbtdir=self.cbt_dir),
@@ -176,6 +191,7 @@ class CBT(Task):
             args=[
                 'rm', '--one-file-system', '-rf', '--',
                 '{tdir}/cbt'.format(tdir=testdir),
+                '{tdir}/cbt-venv'.format(tdir=testdir),
             ]
         )
         benchmark_type = next(iter(self.cbt_config.get('benchmarks').keys()))
