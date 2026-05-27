@@ -223,6 +223,18 @@ following:
   :Required: No.
   :Default: false
 
+.. describe:: --migrate_from_pool=<source-pool-name>
+
+  Perform a non-disruptive migration of all data from ``source-pool-name`` to
+  a new pool. PGs in the source pool will be migrated to the new pool in reverse order
+  until the source pool is empty. The new pool will inherit any configuration values
+  from the source pool that are not explicitly specified in the command. Can be used to
+  perform non-disruptive configuration changes that would not otherwise be possible
+  such as moving all objects from a replicated pool to an erasure coded pool.
+
+  :Type: String
+  :Required: No.
+
 .. describe:: [expected-num-objects]
 
    The expected number of RADOS objects for this pool. By setting this value,
