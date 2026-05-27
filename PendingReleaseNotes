@@ -9,6 +9,7 @@
   restore status in listing responses. Restore status is stored in the bucket
   index, so only objects written or restored after this upgrade will populate
   the field. Existing objects are unaffected.
+* RGW: New S3 Control APIs to apply PublicAccessBlock configuration to User Accounts.
 * ceph-volume: Raw BlueStore OSD preparation now pre-formats NVMe devices and
   skips the slower BlueStore discard phase,reducing mkfs time on
   very large namespaces.
