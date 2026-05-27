@@ -88,6 +88,7 @@ void ThreadMonitor::monitoring_loop() {
     long long process_rss_pages = 0;
     if (!read_process_statm(process_rss_pages)) {
       derr << "Failed to read process memory info from /proc/self/statm." << dendl;
+      std::this_thread::sleep_for(monitoring_interval);
       continue;
     }
 
