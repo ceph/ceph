@@ -4327,6 +4327,8 @@ static bool ignore_sync_error(int err) {
   switch (err) {
     case -ENOENT:
     case -EPERM:
+    case -EBUSY:
+    case -EAGAIN:
       return true;
     default:
       break;
