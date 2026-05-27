@@ -20,8 +20,6 @@
 #include "common/Formatter.h"
 #include "common/JSONFormatter.h"
 
-#include "messages/MMDSQuarantine.h"
-
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
@@ -125,17 +123,3 @@ QtineMgrRef MDSRank::get_quarantine_mgr(inodeno_t ino)
   return nullptr;
 }
 
-void MDSRank::replay_record_quarantine_start(inodeno_t ino, unsigned op)
-{
-  dout(10) << __func__ << " ino " << ino << " op " << op << dendl;
-}
-
-void MDSRank::replay_record_quarantine_finish(inodeno_t ino, unsigned op)
-{
-  dout(10) << __func__ << " ino " << ino << " op " << op << dendl;
-}
-
-void MDSRank::replay_record_quarantine_cancel(inodeno_t ino, unsigned op)
-{
-  dout(10) << __func__ << " ino " << ino << " op " << op << dendl;
-}

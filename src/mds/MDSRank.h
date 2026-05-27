@@ -402,9 +402,6 @@ class MDSRank {
     bool register_quarantine_mgr(inodeno_t ino, std::shared_ptr<QuarantineTracker> qtine_op);
     void unregister_quarantine_mgr(inodeno_t ino);
     std::shared_ptr<QuarantineTracker> get_quarantine_mgr(inodeno_t ino);
-    void replay_record_quarantine_start(inodeno_t ino, unsigned op);
-    void replay_record_quarantine_finish(inodeno_t ino, unsigned op);
-    void replay_record_quarantine_cancel(inodeno_t ino, unsigned op);
 
     // Reference to global MDS::mds_lock, so that users of MDSRank don't
     // carry around references to the outer MDS, and we can substitute

@@ -2268,6 +2268,7 @@ void CInode::encode_lock_ipolicy(bufferlist& bl)
 void CInode::decode_lock_ipolicy(bufferlist::const_iterator& p)
 {
   ceph_assert(!is_auth());
+  const bool was_quarantined = get_inode()->is_quarantined();
   auto _inode = allocate_inode(*get_inode());
   DECODE_START(4, p);
   if (is_dir()) {
@@ -2296,11 +2297,18 @@ void CInode::decode_lock_ipolicy(bufferlist::const_iterator& p)
   }
   DECODE_FINISH(p);
 
+  const bool is_quarantined = _inode->is_quarantined();
   bool pin_updated = (get_inode()->export_pin != _inode->export_pin) ||
 		     (get_inode()->get_ephemeral_distributed_pin() !=
 		      _inode->get_ephemeral_distributed_pin());
   reset_inode(std::move(_inode));
   maybe_export_pin(pin_updated);
+
+  if (snaprealm && snaprealm->get_subvolume_ino() == ino() &&
+      was_quarantined != is_quarantined) {
+    mdcache->handle_quarantine_policy_update(this, was_quarantined,
+                                             is_quarantined);
+  }
 }
 
 void CInode::encode_lock_state(int type, bufferlist& bl)

@@ -64,13 +64,10 @@ class MMDSOpenInoReply;
 class MMDSResolve;
 class MMDSResolveAck;
 class MMDSSnapUpdate;
-class MMDSQuarantine;
-class MMDSQuarantineReply;
 class Session;
 class Migrator;
 
 class Session;
-class QuarantineEvent;
 class QuarantineTracker;
 
 class ESubtreeMap;
@@ -1158,19 +1155,13 @@ private:
 
   void uninline_data_work(MDRequestRef mdr);
 
-  void quarantine_dir_replica(const MDRequestRef& mdr);
-  void handle_quarantinedir_replica(const cref_t<MMDSQuarantine> &m);
-  void handle_quarantinedir_reply(const cref_t<MMDSQuarantineReply> &m);
   void quarantine_dir_auth(const MDRequestRef& mdr);
   void quarantine_work(const MDRequestRef& mdr);
   void quarantine_inode(MDRequestRef const& mdr);
   void start_quarantine_inode_work(CInode *qtine_root_in, unsigned qtine_op, QtineMgrRef qtine_mgr);
   bool start_revoke_caps_for_inode(CInode *in, inodeno_t qtine_root_ino, unsigned qtine_op);
-  template <typename T>
-  void send_qtine_message_replicas(CInode *qtine_root_in, unsigned qtine_op,
-                                   QtineMgrRef qtine_mgr,
-                                   bool mark_quarantine_started);
-  void log_qtine_event(QuarantineEvent *le, inodeno_t ino, unsigned op);
+  void handle_quarantine_policy_update(CInode *root, bool was_quarantined,
+                                       bool is_quarantined);
 
   // my leader
   MDSRank *mds;
