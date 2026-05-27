@@ -315,6 +315,7 @@ add_dependencies(ceph_test_librgw_file
   ceph_test_librgw_file_rename
   ceph_test_librgw_file_nfsns
   ceph_test_librgw_file_aw
+  ceph_test_librgw_file_chunksim
   ceph_test_librgw_file_marker)
 
 # ceph_test_librgw_file_cd (just the rgw_file create-delete bucket ops)
@@ -411,6 +412,26 @@ target_link_libraries(ceph_test_librgw_file_marker
   ${ALLOC_LIBS}
   )
   target_link_libraries(ceph_test_librgw_file_marker Boost::context)
+install(TARGETS ceph_test_librgw_file_marker DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+# ceph_test_librgw_file_chunsim ; fsal-rgw dirent lifetime workload
+add_executable(ceph_test_librgw_file_chunksim
+  librgw_file_chunksim.cc
+  )
+target_include_directories(ceph_test_librgw_file_chunksim
+  PUBLIC "${LUA_INCLUDE_DIR}"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados")
+target_link_libraries(ceph_test_librgw_file_chunksim
+  rgw
+  librados
+  ceph-common
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  ${LUA_LIBRARIES}
+  ${ALLOC_LIBS}
+  )
+  target_link_libraries(ceph_test_librgw_file_chunksim Boost::context)
 install(TARGETS ceph_test_librgw_file_marker DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # ceph_test_librgw_file_xattr (attribute ops)
