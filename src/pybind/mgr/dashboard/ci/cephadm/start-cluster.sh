@@ -74,7 +74,7 @@ with_libvirt "kcli create plan -f src/pybind/mgr/dashboard/ci/cephadm/ceph_clust
 
 : ${CLUSTER_DEBUG:=0}
 : ${DASHBOARD_CHECK_INTERVAL:=10}
-while [[ -z $(with_libvirt "kcli ssh -u root -- ceph-node-00 'journalctl --no-tail --no-pager -t cloud-init' | grep "kcli boot finished"") ]]; do
+while [[ -z $(with_libvirt "kcli ssh -u root -- ceph-node-00 'journalctl --no-tail --no-pager -t cloud-init' | grep 'kcli boot finished'") ]]; do
     sleep ${DASHBOARD_CHECK_INTERVAL}
     with_libvirt "kcli list vm"
     if [[ ${CLUSTER_DEBUG} != 0 ]]; then
@@ -84,10 +84,10 @@ while [[ -z $(with_libvirt "kcli ssh -u root -- ceph-node-00 'journalctl --no-ta
     with_libvirt "kcli ssh -u root -- ceph-node-00 'journalctl -n 100 --no-pager -t cloud-init'"
 done
 
-with_libvirt "kcli ssh -u root ceph-node-00 'cephadm shell "ceph config set mgr mgr/prometheus/exclude_perf_counters false"'"
+with_libvirt "kcli ssh -u root ceph-node-00 'cephadm shell ceph config set mgr mgr/prometheus/exclude_perf_counters false'"
 
 get_prometheus_running_count() {
-    echo $(with_libvirt "kcli ssh -u root ceph-node-00 'cephadm shell "ceph orch ls --service_name=prometheus --format=json"' | jq -r '.[] | .status.running'")
+    echo $(with_libvirt "kcli ssh -u root ceph-node-00 'cephadm shell ceph orch ls --service_name=prometheus --format=json' | jq -r '.[] | .status.running'")
 }
 
 # check if the prometheus daemon is running on jenkins node
@@ -112,8 +112,8 @@ if [[ -n "${JENKINS_HOME}" ]]; then
 
     # grafana ip address is set to the fqdn by default.
     # kcli is not working with that, so setting the IP manually.
-    with_libvirt "kcli ssh -u root ceph-node-00 'cephadm shell "ceph dashboard set-alertmanager-api-host http://192.168.100.100:9093"'"
-    with_libvirt "kcli ssh -u root ceph-node-00 'cephadm shell "ceph dashboard set-prometheus-api-host http://192.168.100.100:9095"'"
-    with_libvirt "kcli ssh -u root ceph-node-00 'cephadm shell "ceph dashboard set-grafana-api-url https://192.168.100.100:3000"'"
-    with_libvirt "kcli ssh -u root ceph-node-00 'cephadm shell "ceph orch apply node-exporter --placement 'count:2"'"'
+    with_libvirt "kcli ssh -u root ceph-node-00 'cephadm shell ceph dashboard set-alertmanager-api-host http://192.168.100.100:9093'"
+    with_libvirt "kcli ssh -u root ceph-node-00 'cephadm shell ceph dashboard set-prometheus-api-host http://192.168.100.100:9095'"
+    with_libvirt "kcli ssh -u root ceph-node-00 'cephadm shell ceph dashboard set-grafana-api-url https://192.168.100.100:3000'"
+    with_libvirt "kcli ssh -u root ceph-node-00 'cephadm shell ceph orch apply node-exporter --placement count:2'"
 fi
