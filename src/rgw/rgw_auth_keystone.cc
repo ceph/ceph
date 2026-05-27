@@ -93,7 +93,7 @@ path_matches_pattern(const std::string_view pattern, const std::string_view path
       pi++;
       continue;
     }
-    if (pi < pattern.size() && (pattern[pi] == path[si] || pattern[pi] == '?')) {
+    if (pi < pattern.size() && pattern[pi] == path[si]) {
       pi++;
       si++;
       continue;
