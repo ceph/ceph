@@ -257,10 +257,6 @@
 // *** gw daemons -> nvmeof mon  ***
 #define MSG_MNVMEOF_GW_BEACON     0x801
 
-#define MSG_MDS_QUARANTINEDIR           0x900  // to add/del dir from quarantine
-#define MSG_MDS_QUARANTINEDIR_REPLY     0x901  // to reply quarantine success from replica to auth
-#define MSG_MDS_QUARANTINEDIR_CANCEL    0x902  // to ask replicas to reset the
-                                               //   CInode::being_quarantined flag to false
 
 // ======================================================
 
