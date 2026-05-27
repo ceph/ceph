@@ -90,20 +90,41 @@ std::string get_key_fname(rgw_obj_key& key, bool use_version)
   return fname;
 }
 
+std::string gen_chronological_unique_id() {
+  // Get current time in microseconds since epoch
+  auto now = std::chrono::system_clock::now();
+  auto duration = now.time_since_epoch();
+  auto micros = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+
+  uint64_t inverted_timestamp = UINT64_MAX - static_cast<uint64_t>(micros);
+  // Generate random 64-bit value
+  static thread_local std::mt19937_64 rng( 
+    std::random_device{}() ^
+    std::chrono::high_resolution_clock::now().time_since_epoch().count()
+  );   
+  std::uniform_int_distribution<uint64_t> dist;
+  uint64_t random_bits = dist(rng);
+
+  // Format as hex string: timestamp (16 chars) + random (16 chars)
+  std::ostringstream oss; 
+  oss << std::hex << std::setfill('0')
+      << std::setw(16) << static_cast<uint64_t>(inverted_timestamp)
+      << std::setw(16) << random_bits;
+
+   return oss.str();
+}
+
+
 static inline std::string gen_rand_instance_name()
 {
+#if 0
   enum { OBJ_INSTANCE_LEN = 32 };
   char buf[OBJ_INSTANCE_LEN + 1];
-
-#if 0
   gen_rand_alphanumeric_no_underscore(driver->ctx(), buf, OBJ_INSTANCE_LEN);
-#else
-  static uint64_t last_id = UINT64_MAX;
-  snprintf(buf, OBJ_INSTANCE_LEN, "%lx", last_id);
-  last_id--;
-#endif
-
   return buf;
+#else
+  return gen_chronological_unique_id();
+#endif
 }
 
 static inline std::string bucket_fname(std::string name, std::optional<std::string>& ns)
