@@ -3669,6 +3669,7 @@ void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
     dec_dentry_nr();
     ldout(cct, 20) << "unlink  inode " << in << " parents now " << in->dentries << dendl;
   }
+  ceph_assert(dn->ref > 0);
 
   if (keepdentry) {
     dn->lease_mds = -1;
