@@ -1,3 +1,7 @@
+* RADOS: PG autoscaler allows overlapping roots. Each root receives a PG target based
+  on its OSDs, with OSDs shared across multiple roots contributing proportionally
+  less to each root's allocation.
+  
 * librados/neorados: The C++ APIs for executing Ceph Class (CLS) methods
   have undergone a breaking change to enforce compile-time type safety, replacing
   legacy string-based parameters with strongly-typed ClsMethod structs. C++
