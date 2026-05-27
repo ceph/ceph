@@ -382,6 +382,51 @@ Create a read-only share at a custom path in the CephFS volume:
         --path=/qbranch/top/secret/plans --readonly
 
 
+Create RGW Share
+++++++++++++++++
+
+.. prompt:: bash #
+
+   ceph smb share create rgw <cluster_id> <share_id> <bucket> [--share-name=<share_name>] [--user-id=<user_id>] [--readonly]
+
+Create a new SMB share, hosted by the named cluster, that maps to a RADOS
+Gateway (RGW) bucket. This allows S3-compatible object storage to be accessed
+via the SMB protocol.
+
+Options:
+
+cluster_id
+    A short string uniquely identifying the cluster
+share_id
+    A short string uniquely identifying the share
+bucket
+    The name of the RGW bucket to be shared
+share_name
+    Optional. The public name of the share, visible to clients. If not provided
+    the ``share_id`` will be used automatically
+user_id
+    Optional. The RGW user ID that owns the bucket. If not provided, the system
+    will attempt to determine the bucket owner automatically
+readonly
+    Creates a read-only share
+
+Examples
+~~~~~~~~
+
+Create a share for an RGW bucket:
+
+.. prompt:: bash #
+
+    ceph smb share create rgw test1 photos my-photos-bucket
+
+Create a share with a custom name and specific user:
+
+.. prompt:: bash #
+
+    ceph smb share create rgw test1 photos my-photos-bucket \
+        --share-name="Photo Archive" --user-id=s3user
+
+
 .. _qos-parameters:
 
 QoS Parameters
@@ -1099,7 +1144,8 @@ max_connections
     connections to a specific share. The default value is 0 and it indicates
     that there is no limit on the number of connections
 cephfs
-    Required object. Fields:
+    Object. Configures CephFS-backed storage for the share. Either a ``cephfs``
+    or ``rgw`` object must be specified, but not both. Fields:
 
     volume
         Required string. Name of the cephfs volume to use
@@ -1169,6 +1215,18 @@ cephfs
         name
             String. A value indicating what FSCrypt key to fetch. The specific
             value of the name depends on the scope being used.
+rgw
+    Object. Configures RADOS Gateway (RGW) backed storage for the share. Either
+    a ``cephfs`` or ``rgw`` object must be specified, but not both. This allows
+    S3-compatible object storage to be accessed via the SMB protocol. Fields:
+
+    bucket
+        Required string. The name of the RGW bucket to be shared.
+    user_id
+        Optional string. The RGW user ID that owns the bucket. If not provided,
+        the system will automatically determine the bucket owner and fetch the
+        necessary credentials.
+
 restrict_access
     Optional boolean, defaulting to false. If true the share will only permit
     access by users explicitly listed in ``login_control``.
@@ -1216,7 +1274,32 @@ custom_smb_share_options
     things in ways that the Ceph team can not help with. This special key will
     automatically be removed from the list of options passed to Samba.
 
-The following is an example of a share with QoS settings including burst
+The following is an example of an RGW-backed share with minimal configuration
+(credentials auto-fetched):
+
+.. code-block:: yaml
+
+    resource_type: ceph.smb.share
+    cluster_id: tango
+    share_id: s3share
+    name: "S3 Storage"
+    rgw:
+      bucket: my-bucket
+
+Another example of an RGW-backed share with explicit user_id:
+
+.. code-block:: yaml
+
+    resource_type: ceph.smb.share
+    cluster_id: tango
+    share_id: s3share
+    name: "S3 Storage"
+    rgw:
+      bucket: my-bucket
+      user_id: s3user
+
+
+The following is an example of a CephFS share with QoS settings including burst
 multipliers and human-readable bandwidth limits:
 
 .. code-block:: yaml
@@ -1364,6 +1447,43 @@ Example:
         - name: steves
           password: F00Bar123
         groups: []
+
+
+RGW Credential Resource
+------------------------
+
+An RGW credential resource stores RADOS Gateway (RGW) access credentials that can be used by RGW-backed shares to authenticate with the object storage system.
+
+A RGW credential resource supports the following fields:
+
+resource_type
+    A literal string ``ceph.smb.rgw.credential``
+rgw_credential_id
+    A short string identifying the RGW credential resource.
+intent
+    One of ``present`` or ``removed``. If not provided, ``present`` is assumed.
+    If ``removed`` all following fields are optional
+user_id
+    Required string. The RGW user ID that owns the credentials
+access_key
+    Required string. The RGW access key for authentication
+secret_key
+    Required string. The RGW secret key for authentication
+linked_to_cluster:
+    Optional. A string containing a cluster ID. If set, the resource may only
+    be used with the linked cluster and will automatically be removed when the
+    linked cluster is removed.
+
+
+Example:
+
+.. code-block:: yaml
+
+    resource_type: ceph.smb.rgw.credential
+    rgw_credential_id: s3user 
+    user_id: s3user
+    access_key: AKIAIOSFODNN7EXAMPLE
+    secret_key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
 
 
 TLS Credential Resource
