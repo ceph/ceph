@@ -1897,3 +1897,252 @@ def test_put_vectors_allow_null():
     # cleanup
     _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
 
+
+@pytest.mark.vector_test
+def test_query_vectors_filter():
+    """Test metadata filtering during vector queries."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 4
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    filterable_keys = [
+        {'name': 'genre'},
+        {'name': 'year', 'type': 'Number'},
+        {'name': 'popular', 'type': 'Boolean'},
+    ]
+    result = conn.create_index(
+        vectorBucketName=bucket_name, indexName=index_name,
+        dataType='float32', dimension=dimension, distanceMetric='euclidean',
+        metadataConfiguration={'filterableMetadataKeys': filterable_keys})
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = [
+        {'key': 'v0', 'data': generate_data(dimension, 0),
+         'metadata': json.dumps({'genre': 'rock', 'year': 2020, 'popular': True, 'color': 'red'})},
+        {'key': 'v1', 'data': generate_data(dimension, 1),
+         'metadata': json.dumps({'genre': 'jazz', 'year': 2019, 'popular': False, 'color': 'blue'})},
+        {'key': 'v2', 'data': generate_data(dimension, 2),
+         'metadata': json.dumps({'genre': 'rock', 'year': 2018, 'popular': True, 'color': 'red'})},
+        {'key': 'v3', 'data': generate_data(dimension, 3),
+         'metadata': json.dumps({'genre': 'pop', 'year': 2021, 'popular': False, 'color': 'green'})},
+        {'key': 'v4', 'data': generate_data(dimension, 4),
+         'metadata': json.dumps({'genre': 'jazz', 'year': 2020, 'popular': True, 'color': 'red'})},
+    ]
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    query_vector = generate_data(dimension, 0)
+    top_k = 10
+
+    def query_keys(filter_expr):
+        result = conn.query_vectors(
+            vectorBucketName=bucket_name, indexName=index_name,
+            queryVector=query_vector, topK=top_k, filter=filter_expr)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        return sorted([v['key'] for v in result['vectors']])
+
+    # implicit equality
+    assert query_keys({'genre': 'rock'}) == ['v0', 'v2']
+
+    # explicit $eq
+    assert query_keys({'genre': {'$eq': 'rock'}}) == ['v0', 'v2']
+
+    # $ne
+    assert query_keys({'genre': {'$ne': 'rock'}}) == ['v1', 'v3', 'v4']
+
+    # $gt
+    assert query_keys({'year': {'$gt': 2019}}) == ['v0', 'v3', 'v4']
+
+    # range: $gte + $lte
+    assert query_keys({'year': {'$gte': 2019, '$lte': 2020}}) == ['v0', 'v1', 'v4']
+
+    # $in
+    assert query_keys({'genre': {'$in': ['rock', 'jazz']}}) == ['v0', 'v1', 'v2', 'v4']
+
+    # $nin
+    assert query_keys({'genre': {'$nin': ['rock']}}) == ['v1', 'v3', 'v4']
+
+    # $exists
+    assert query_keys({'genre': {'$exists': True}}) == ['v0', 'v1', 'v2', 'v3', 'v4']
+
+    # boolean filter
+    assert query_keys({'popular': True}) == ['v0', 'v2', 'v4']
+
+    # $and
+    assert query_keys({'$and': [{'genre': 'rock'}, {'year': {'$gt': 2019}}]}) == ['v0']
+
+    # $or
+    assert query_keys({'$or': [{'genre': 'rock'}, {'genre': 'jazz'}]}) == ['v0', 'v1', 'v2', 'v4']
+
+    # implicit AND (multiple top-level fields)
+    assert query_keys({'genre': 'jazz', 'popular': True}) == ['v4']
+
+    # mixed $and: column filter (genre) + JSON metadata filter (color)
+    assert query_keys({'$and': [{'genre': 'rock'}, {'color': 'red'}]}) == ['v0', 'v2']
+    assert query_keys({'$and': [{'genre': 'jazz'}, {'color': 'red'}]}) == ['v4']
+
+    # implicit AND with mixed column + JSON fields
+    assert query_keys({'genre': 'rock', 'color': 'red'}) == ['v0', 'v2']
+
+    # mixed $or: column + JSON fields should be rejected
+    with pytest.raises(conn.exceptions.ClientError) as exc_info:
+        conn.query_vectors(
+            vectorBucketName=bucket_name, indexName=index_name,
+            queryVector=query_vector, topK=top_k,
+            filter={'$or': [{'genre': 'rock'}, {'color': 'red'}]})
+    assert exc_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 400
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+@pytest.mark.vector_test
+def test_query_vectors_filter_nonfilterable():
+    """Test that filtering on non-filterable keys is rejected."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 4
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    result = conn.create_index(
+        vectorBucketName=bucket_name, indexName=index_name,
+        dataType='float32', dimension=dimension, distanceMetric='euclidean',
+        metadataConfiguration={'nonFilterableMetadataKeys': ['secret']})
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = [
+        {'key': 'v0', 'data': generate_data(dimension, 0),
+         'metadata': json.dumps({'secret': 'hidden'})},
+    ]
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    query_vector = generate_data(dimension, 0)
+    with pytest.raises(conn.exceptions.ClientError) as exc_info:
+        conn.query_vectors(
+            vectorBucketName=bucket_name, indexName=index_name,
+            queryVector=query_vector, topK=5, filter={'secret': 'hidden'})
+    assert exc_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 400
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+@pytest.mark.vector_test
+def test_query_vectors_filter_json_metadata():
+    """Test filtering on undeclared metadata fields using JSON extraction."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 4
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    result = conn.create_index(
+        vectorBucketName=bucket_name, indexName=index_name,
+        dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = [
+        {'key': 'v0', 'data': generate_data(dimension, 0),
+         'metadata': json.dumps({'color': 'red', 'priority': 10, 'active': True})},
+        {'key': 'v1', 'data': generate_data(dimension, 1),
+         'metadata': json.dumps({'color': 'blue', 'priority': 3, 'active': False})},
+        {'key': 'v2', 'data': generate_data(dimension, 2),
+         'metadata': json.dumps({'color': 'red', 'priority': 7, 'active': True})},
+    ]
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    query_vector = generate_data(dimension, 0)
+    top_k = 10
+
+    def query_keys(filter_expr):
+        result = conn.query_vectors(
+            vectorBucketName=bucket_name, indexName=index_name,
+            queryVector=query_vector, topK=top_k, filter=filter_expr)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        return sorted([v['key'] for v in result['vectors']])
+
+    # string field
+    assert query_keys({'color': 'red'}) == ['v0', 'v2']
+
+    # number field comparison
+    assert query_keys({'priority': {'$gt': 5}}) == ['v0', 'v2']
+
+    # boolean field
+    assert query_keys({'active': True}) == ['v0', 'v2']
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+@pytest.mark.vector_test
+def test_query_vectors_filter_errors():
+    """Test that invalid filter expressions are rejected with 400."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 4
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    filterable_keys = [
+        {'name': 'genre'},
+        {'name': 'year', 'type': 'Number'},
+        {'name': 'popular', 'type': 'Boolean'},
+    ]
+    result = conn.create_index(
+        vectorBucketName=bucket_name, indexName=index_name,
+        dataType='float32', dimension=dimension, distanceMetric='euclidean',
+        metadataConfiguration={'filterableMetadataKeys': filterable_keys})
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = [
+        {'key': 'v0', 'data': generate_data(dimension, 0),
+         'metadata': json.dumps({'genre': 'rock', 'year': 2020, 'popular': True})},
+    ]
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    query_vector = generate_data(dimension, 0)
+
+    def expect_error(filter_expr):
+        with pytest.raises(conn.exceptions.ClientError) as exc_info:
+            conn.query_vectors(
+                vectorBucketName=bucket_name, indexName=index_name,
+                queryVector=query_vector, topK=5, filter=filter_expr)
+        assert exc_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 400
+
+    # unknown operator
+    expect_error({'genre': {'$regex': 'r.*'}})
+
+    # invalid boolean value for boolean column
+    expect_error({'popular': {'$eq': 'yes'}})
+
+    # invalid number value for number column
+    expect_error({'year': {'$eq': 'not_a_number'}})
+
+    # empty $in list
+    expect_error({'genre': {'$in': []}})
+
+    # mixed types in $in list (JSON field)
+    expect_error({'color': {'$in': ['red', 42]}})
+
+    # mixed $or: column + JSON fields
+    expect_error({'$or': [{'genre': 'rock'}, {'color': 'red'}]})
+
+    # nested mixed $or via $and
+    expect_error({'$or': [{'genre': 'rock'}, {'$and': [{'genre': 'jazz'}, {'color': 'blue'}]}]})
+
+    # object value in $eq (JSON field)
+    expect_error({'color': {'$eq': {'nested': 'value'}}})
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+

@@ -7,6 +7,7 @@
 #include "rgw_s3vector.h"
 #include "rgw_process_env.h"
 #include "common/async/yield_context.h"
+#include "common/ceph_json.h"
 #include "rgw_arn.h"
 
 #define dout_context g_ceph_context
@@ -938,6 +939,7 @@ private:
 class RGWS3VectorQueryVectors : public RGWS3VectorBase {
   rgw::s3vector::query_vectors_t configuration;
   rgw::s3vector::query_vectors_reply_t reply;
+  std::optional<JSONParser> filter_parser;
 public:
   explicit RGWS3VectorQueryVectors(bufferlist&& data) : RGWS3VectorBase(std::move(data)) {}
 private:
@@ -956,7 +958,18 @@ private:
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 
   int init_processing(optional_yield y) override {
-    return do_init_processing(configuration, y);
+    int ret = do_init_processing(configuration, y);
+    if (ret < 0) {
+      return ret;
+    }
+    if (!configuration.filter.empty()) {
+      filter_parser.emplace();
+      if (!filter_parser->parse(configuration.filter.c_str(), configuration.filter.size())) {
+        ldpp_dout(this, 1) << "ERROR: failed to parse filter JSON: " << configuration.filter << dendl;
+        return -EINVAL;
+      }
+    }
+    return 0;
   }
 
   void execute(optional_yield y) override {
@@ -967,7 +980,7 @@ private:
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::query_vectors(configuration, this, y, reply);
+    op_ret = rgw::s3vector::query_vectors(configuration, filter_parser, this, y, reply);
   }
 
   void send_response() override {

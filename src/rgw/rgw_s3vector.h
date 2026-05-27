@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 #include <vector>
 #include "include/encoding.h"
@@ -13,6 +14,7 @@ namespace ceph {
 class Formatter;
 }
 class JSONObj;
+class JSONParser;
 class DoutPrefixProvider;
 
 namespace rgw::sal {
@@ -449,7 +451,7 @@ struct delete_vectors_t {
   }
 */
 struct query_vectors_t {
-  std::string filter; // JSON string
+  std::string filter;
   boost::optional<rgw::ARN> index_arn;
   std::string index_name;
   std::string vector_bucket_name;
@@ -512,7 +514,7 @@ int list_indexes(const list_indexes_t& configuration, DoutPrefixProvider* dpp, o
 int put_vector_bucket_policy(const put_vector_bucket_policy_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
 int get_vector_bucket_policy(const get_vector_bucket_policy_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
 int delete_vectors(const delete_vectors_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
-int query_vectors(const query_vectors_t& configuration, DoutPrefixProvider* dpp, optional_yield y, query_vectors_reply_t& reply);
+int query_vectors(const query_vectors_t& configuration, std::optional<JSONParser>& filter, DoutPrefixProvider* dpp, optional_yield y, query_vectors_reply_t& reply);
 
 }
 
