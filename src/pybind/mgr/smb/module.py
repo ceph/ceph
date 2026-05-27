@@ -167,7 +167,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             # passwords - this will be the inverse of the filter applied to
             # the input
             out_op = (PasswordFilter.NONE, out_pf)
-            log.debug('Password filtering for smb apply output: %r', in_op)
+            log.debug('Password filtering for smb apply output: %r', out_op)
             all_results = all_results.convert_results(out_op)
         return all_results
 
