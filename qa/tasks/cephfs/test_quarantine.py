@@ -58,7 +58,7 @@ class QuarantineTestBase(CephFSTestCase):
     def tearDown(self):
         if self.SUBVOLUME_NAME:
             try:
-                self.fs.quarantine_disable(self.subvol_root_path)
+                self._quarantine_disable()
             except Exception:
                 pass
             try:
@@ -123,6 +123,26 @@ class QuarantineTestBase(CephFSTestCase):
         log.info("Created %s, keyring at %s", client_name, keyring_path)
         return authid, keyring_path
 
+    # -- Quarantine helpers (via mgr module) ---------------------------------
+
+    def _quarantine_enable(self, subvol_name=None, group_name=None):
+        """Enable quarantine on a subvolume via mgr module."""
+        name = subvol_name or self.SUBVOLUME_NAME
+        args = ["subvolume", "quarantine", "enable", self.volname, name]
+        if group_name:
+            args.extend(["--group_name", group_name])
+        log.info("Enabling quarantine: %s", " ".join(args))
+        return self._fs_cmd(*args)
+
+    def _quarantine_disable(self, subvol_name=None, group_name=None):
+        """Disable quarantine on a subvolume via mgr module."""
+        name = subvol_name or self.SUBVOLUME_NAME
+        args = ["subvolume", "quarantine", "disable", self.volname, name]
+        if group_name:
+            args.extend(["--group_name", group_name])
+        log.info("Disabling quarantine: %s", " ".join(args))
+        return self._fs_cmd(*args)
+
     # -- Assertion helpers ---------------------------------------------------
 
     def assert_blocked(self, op, msg="Operation should have been blocked"):
@@ -161,12 +181,12 @@ class QuarantineTestBase(CephFSTestCase):
                 time.sleep(interval)
         self.fail(msg)
 
-    def enable_and_wait(self, path=None, sleep_secs=2):
-        self.fs.quarantine_enable(path or self.subvol_root_path)
+    def enable_and_wait(self, subvol_name=None, group_name=None, sleep_secs=2):
+        self._quarantine_enable(subvol_name, group_name)
         time.sleep(sleep_secs)
 
-    def disable_and_wait(self, path=None, sleep_secs=2):
-        self.fs.quarantine_disable(path or self.subvol_root_path)
+    def disable_and_wait(self, subvol_name=None, group_name=None, sleep_secs=2):
+        self._quarantine_disable(subvol_name, group_name)
         time.sleep(sleep_secs)
 
 
@@ -183,8 +203,8 @@ class TestQuarantineBasic(QuarantineTestBase):
         self._create_test_file()
 
     def test_quarantine_enable_disable(self):
-        self.fs.quarantine_enable(self.subvol_root_path)
-        self.fs.quarantine_disable(self.subvol_root_path)
+        self._quarantine_enable()
+        self._quarantine_disable()
         self.assertEqual(self.mount_a.read_file(self._get_test_file_path()),
                          self.TEST_DATA)
 
@@ -489,7 +509,7 @@ class TestQuarantineConcurrentIO(QuarantineTestBase):
             wait=False, stderr=StringIO())
 
         time.sleep(2)
-        self.fs.quarantine_enable(self.subvol_root_path)
+        self._quarantine_enable()
 
         try:
             proc.wait()
@@ -526,12 +546,11 @@ class TestQuarantineMultipleSubvolumes(QuarantineTestBase):
                                data="Data in %s" % self.SUBVOL2)
 
     def tearDown(self):
-        for p in (self.subvol1_root_path, self.subvol2_root_path):
+        for sv in (self.SUBVOL1, self.SUBVOL2):
             try:
-                self.fs.quarantine_disable(p)
+                self._quarantine_disable(subvol_name=sv)
             except Exception:
                 pass
-        for sv in (self.SUBVOL1, self.SUBVOL2):
             try:
                 self._fs_cmd("subvolume", "rm", self.volname, sv, "--force")
             except Exception:
@@ -543,7 +562,7 @@ class TestQuarantineMultipleSubvolumes(QuarantineTestBase):
         f2 = self._get_test_file_path(subvol_path=self.subvol2_path)
 
         c2 = self.mount_a.read_file(f2)
-        self.enable_and_wait(path=self.subvol1_root_path)
+        self.enable_and_wait(subvol_name=self.SUBVOL1)
 
         # subvol2 unaffected
         self.assertEqual(self.mount_a.read_file(f2), c2)
@@ -664,9 +683,9 @@ class TestQuarantineMultiMDS(QuarantineTestBase):
             deadline = time.time() + 30
             while time.time() < deadline:
                 try:
-                    self.fs.quarantine_disable(self.subvol_root_path)
+                    self._quarantine_disable()
                     break  # disable accepted, now wait for it to take effect
-                except RuntimeError as e:
+                except (RuntimeError, CommandFailedError) as e:
                     if "EBUSY" in str(e) or "non-JSON response" in str(e):
                         # Enable still in progress, retry after a short delay
                         time.sleep(1)
@@ -707,8 +726,7 @@ class TestQuarantineMultiMDS(QuarantineTestBase):
         self.assertEqual(self.mount_a.read_file(self.file_rank0), "Data on rank 0")
         self.assertEqual(self.mount_a.read_file(self.file_rank1), "Data on rank 1")
 
-        auth_mds = self._get_auth_mds_for_path(self.subvol_root_path)
-        self.fs.quarantine_enable(self.subvol_root_path, mds_id=auth_mds)
+        self._quarantine_enable()
         self.wait_until_blocked(
             lambda: self.mount_a.read_file(self.file_rank0),
             msg="Read on rank 0 should be blocked")
@@ -718,12 +736,11 @@ class TestQuarantineMultiMDS(QuarantineTestBase):
 
     def test_quarantine_disable_restores_both_ranks(self):
         """Disabling quarantine restores access on both MDS ranks."""
-        auth_mds = self._get_auth_mds_for_path(self.subvol_root_path)
-        self.fs.quarantine_enable(self.subvol_root_path, mds_id=auth_mds)
+        self._quarantine_enable()
         self.wait_until_blocked(lambda: self.mount_a.read_file(self.file_rank0))
         self.wait_until_blocked(lambda: self.mount_a.read_file(self.file_rank1))
 
-        self.fs.quarantine_disable(self.subvol_root_path, mds_id=auth_mds)
+        self._quarantine_disable()
         self.wait_until_unblocked(lambda: self.mount_a.read_file(self.file_rank0))
         self.wait_until_unblocked(lambda: self.mount_a.read_file(self.file_rank1))
         self.assertEqual(self.mount_a.read_file(self.file_rank0), "Data on rank 0")
@@ -731,8 +748,7 @@ class TestQuarantineMultiMDS(QuarantineTestBase):
 
     def test_quarantine_write_blocked_both_ranks(self):
         """Quarantine blocks write to files on both MDS ranks."""
-        auth_mds = self._get_auth_mds_for_path(self.subvol_root_path)
-        self.fs.quarantine_enable(self.subvol_root_path, mds_id=auth_mds)
+        self._quarantine_enable()
         self.wait_until_blocked(
             lambda: self.mount_a.write_file(self.file_rank0, "blocked"),
             msg="Write on rank 0 should be blocked")
@@ -748,8 +764,7 @@ class TestQuarantineMultiMDS(QuarantineTestBase):
         log.info("DEBUG: dir_rank1 = %s", getattr(self, 'dir_rank1', 'NOT_SET'))
         log.info("DEBUG: child_rank0 = %s", getattr(self, 'child_rank0', 'NOT_SET'))
         log.info("DEBUG: child_rank1 = %s", getattr(self, 'child_rank1', 'NOT_SET'))
-        auth_mds = self._get_auth_mds_for_path(self.subvol_root_path)
-        self.fs.quarantine_enable(self.subvol_root_path, mds_id=auth_mds)
+        self._quarantine_enable()
 
         new_dir0 = os.path.join(self.dir_rank0, "newdir")
         new_dir1 = os.path.join(self.dir_rank1, "newdir")
@@ -760,24 +775,9 @@ class TestQuarantineMultiMDS(QuarantineTestBase):
             lambda: self.mount_a.run_shell(["mkdir", new_dir1]),
             msg="mkdir on rank 1 should be blocked")
 
-    def test_enable_via_auth_mds(self):
-        """Enabling quarantine via auth MDS blocks access on all ranks."""
-        auth_mds = self._get_auth_mds_for_path(self.subvol_root_path)
-        self.fs.quarantine_enable(self.subvol_root_path, mds_id=auth_mds)
-        self.wait_until_blocked(lambda: self.mount_a.read_file(self.file_rank0))
-        self.wait_until_blocked(lambda: self.mount_a.read_file(self.file_rank1))
-
-    def test_enable_via_non_auth_mds_fails(self):
-        """Enabling quarantine via non-auth MDS returns an error."""
-        auth_mds = self._get_auth_mds_for_path(self.subvol_root_path)
-        non_auth_mds = "b" if auth_mds == "a" else "a"
-        with self.assertRaises(RuntimeError):
-            self.fs.quarantine_enable(self.subvol_root_path, mds_id=non_auth_mds)
-
     def test_recovery_client_both_ranks(self):
         """Q-flag recovery client can access files on both ranks."""
-        auth_mds = self._get_auth_mds_for_path(self.subvol_root_path)
-        self.fs.quarantine_enable(self.subvol_root_path, mds_id=auth_mds)
+        self._quarantine_enable()
         self.wait_until_blocked(lambda: self.mount_a.read_file(self.file_rank0))
         self.wait_until_blocked(lambda: self.mount_a.read_file(self.file_rank1))
 
@@ -810,8 +810,6 @@ class TestQuarantineMultiMDS(QuarantineTestBase):
                      self.volname, self.SUBVOLUME_NAME, snapshot_name)
         time.sleep(1)
 
-        auth_mds = self._get_auth_mds_for_path(self.subvol_root_path)
-
         try:
             # Snapshot .snap directory is at subvolume root, not data path
             # Path: {subvol_root}/.snap/{snap_name}/{uuid}/dir_rank0/file.txt
@@ -825,7 +823,7 @@ class TestQuarantineMultiMDS(QuarantineTestBase):
             self.assertEqual(self.mount_a.read_file(snap_file0), "Data on rank 0")
             self.assertEqual(self.mount_a.read_file(snap_file1), "Data on rank 1")
 
-            self.fs.quarantine_enable(self.subvol_root_path, mds_id=auth_mds)
+            self._quarantine_enable()
             self.wait_until_blocked(
                 lambda: self.mount_a.read_file(snap_file0),
                 msg="Snapshot read on rank 0 should be blocked")
@@ -833,7 +831,7 @@ class TestQuarantineMultiMDS(QuarantineTestBase):
                 lambda: self.mount_a.read_file(snap_file1),
                 msg="Snapshot read on rank 1 should be blocked")
 
-            self.fs.quarantine_disable(self.subvol_root_path, mds_id=auth_mds)
+            self._quarantine_disable()
             self.wait_until_unblocked(lambda: self.mount_a.read_file(snap_file0))
             self.wait_until_unblocked(lambda: self.mount_a.read_file(snap_file1))
 
@@ -854,15 +852,13 @@ class TestQuarantineMultiMDS(QuarantineTestBase):
                      self.volname, self.SUBVOLUME_NAME, snapshot_name)
         time.sleep(1)
 
-        auth_mds = self._get_auth_mds_for_path(self.subvol_root_path)
-
         recovery_client = "client.multimds_snap_recovery"
         caps = "allow rwq fsname=%s path=%s" % (self.volname,
                                                  self.subvol_root_path)
         authid, keyring = self._create_qtine_client(recovery_client, caps)
 
         try:
-            self.fs.quarantine_enable(self.subvol_root_path, mds_id=auth_mds)
+            self._quarantine_enable()
 
             # Snapshot .snap directory is at subvolume root, not data path
             subvol_uuid = os.path.basename(self.subvol_path)
@@ -1013,9 +1009,9 @@ class TestQuarantineMultiMDSEdgeCases(TestQuarantineMultiMDS):
             deadline = time.time() + 30
             while time.time() < deadline:
                 try:
-                    self.fs.quarantine_disable(self.subvol_root_path)
+                    self._quarantine_disable()
                     break
-                except RuntimeError as e:
+                except (RuntimeError, CommandFailedError) as e:
                     if "EBUSY" in str(e) or "non-JSON response" in str(e):
                         time.sleep(1)
                         continue
@@ -1044,8 +1040,7 @@ class TestQuarantineMultiMDSEdgeCases(TestQuarantineMultiMDS):
 
     def test_recovery_client_both_ranks(self):
         """Q-flag recovery client can access files on both ranks."""
-        auth_mds = self._get_auth_mds_for_path(self.subvol_root_path)
-        self.fs.quarantine_enable(self.subvol_root_path, mds_id=auth_mds)
+        self._quarantine_enable()
         self.wait_until_blocked(lambda: self.mount_a.read_file(self.file_rank0))
         self.wait_until_blocked(lambda: self.mount_a.read_file(self.file_rank1))
 
@@ -1078,8 +1073,6 @@ class TestQuarantineMultiMDSEdgeCases(TestQuarantineMultiMDS):
                      self.volname, self.SUBVOLUME_NAME, snapshot_name)
         time.sleep(1)
 
-        auth_mds = self._get_auth_mds_for_path(self.subvol_root_path)
-
         try:
             subvol_uuid = os.path.basename(self.subvol_path)
             rel_root = self.subvol_root_path.lstrip("/")
@@ -1091,7 +1084,7 @@ class TestQuarantineMultiMDSEdgeCases(TestQuarantineMultiMDS):
             self.assertEqual(self.mount_a.read_file(snap_file0), "Child rank 0 data")
             self.assertEqual(self.mount_a.read_file(snap_file1), "Child rank 1 data")
 
-            self.fs.quarantine_enable(self.subvol_root_path, mds_id=auth_mds)
+            self._quarantine_enable()
             self.wait_until_blocked(
                 lambda: self.mount_a.read_file(snap_file0),
                 msg="Snapshot read on rank 0 should be blocked")
@@ -1099,7 +1092,7 @@ class TestQuarantineMultiMDSEdgeCases(TestQuarantineMultiMDS):
                 lambda: self.mount_a.read_file(snap_file1),
                 msg="Snapshot read on rank 1 should be blocked")
 
-            self.fs.quarantine_disable(self.subvol_root_path, mds_id=auth_mds)
+            self._quarantine_disable()
             self.wait_until_unblocked(lambda: self.mount_a.read_file(snap_file0))
             self.wait_until_unblocked(lambda: self.mount_a.read_file(snap_file1))
 
@@ -1120,15 +1113,13 @@ class TestQuarantineMultiMDSEdgeCases(TestQuarantineMultiMDS):
                      self.volname, self.SUBVOLUME_NAME, snapshot_name)
         time.sleep(1)
 
-        auth_mds = self._get_auth_mds_for_path(self.subvol_root_path)
-
         recovery_client = "client.edgecases_snap_recovery"
         caps = "allow rwq fsname=%s path=%s" % (self.volname,
                                                  self.subvol_root_path)
         authid, keyring = self._create_qtine_client(recovery_client, caps)
 
         try:
-            self.fs.quarantine_enable(self.subvol_root_path, mds_id=auth_mds)
+            self._quarantine_enable()
 
             subvol_uuid = os.path.basename(self.subvol_path)
             rel_root = self.subvol_root_path.lstrip("/")
@@ -1169,8 +1160,7 @@ class TestQuarantineMultiMDSEdgeCases(TestQuarantineMultiMDS):
         self.assertEqual(self.mount_a.read_file(self.file_rank0), "Child rank 0 data")
         self.assertEqual(self.mount_a.read_file(self.file_rank1), "Child rank 1 data")
 
-        auth_mds = self._get_auth_mds_for_path(self.subvol_root_path)
-        self.fs.quarantine_enable(self.subvol_root_path, mds_id=auth_mds)
+        self._quarantine_enable()
         self.wait_until_blocked(
             lambda: self.mount_a.read_file(self.file_rank0),
             msg="Read on rank 0 should be blocked")
@@ -1180,12 +1170,11 @@ class TestQuarantineMultiMDSEdgeCases(TestQuarantineMultiMDS):
 
     def test_quarantine_disable_restores_both_ranks(self):
         """Disabling quarantine restores access on both MDS ranks."""
-        auth_mds = self._get_auth_mds_for_path(self.subvol_root_path)
-        self.fs.quarantine_enable(self.subvol_root_path, mds_id=auth_mds)
+        self._quarantine_enable()
         self.wait_until_blocked(lambda: self.mount_a.read_file(self.file_rank0))
         self.wait_until_blocked(lambda: self.mount_a.read_file(self.file_rank1))
 
-        self.fs.quarantine_disable(self.subvol_root_path, mds_id=auth_mds)
+        self._quarantine_disable()
         self.wait_until_unblocked(lambda: self.mount_a.read_file(self.file_rank0))
         self.wait_until_unblocked(lambda: self.mount_a.read_file(self.file_rank1))
         self.assertEqual(self.mount_a.read_file(self.file_rank0), "Child rank 0 data")
@@ -1193,8 +1182,7 @@ class TestQuarantineMultiMDSEdgeCases(TestQuarantineMultiMDS):
 
     def test_quarantine_write_blocked_both_ranks(self):
         """Quarantine blocks write to files on both MDS ranks."""
-        auth_mds = self._get_auth_mds_for_path(self.subvol_root_path)
-        self.fs.quarantine_enable(self.subvol_root_path, mds_id=auth_mds)
+        self._quarantine_enable()
         self.wait_until_blocked(
             lambda: self.mount_a.write_file(self.file_rank0, "blocked"),
             msg="Write on rank 0 should be blocked")
@@ -1205,8 +1193,7 @@ class TestQuarantineMultiMDSEdgeCases(TestQuarantineMultiMDS):
     def test_quarantine_mkdir_blocked_both_ranks(self):
         """Quarantine blocks mkdir on both MDS ranks."""
         log.info("DEBUG: Executing DERIVED CLASS test_quarantine_mkdir_blocked_both_ranks (line ~1079)")
-        auth_mds = self._get_auth_mds_for_path(self.subvol_root_path)
-        self.fs.quarantine_enable(self.subvol_root_path, mds_id=auth_mds)
+        self._quarantine_enable()
 
         new_dir0 = os.path.join(self.child_rank0, "newdir")
         new_dir1 = os.path.join(self.child_rank1, "newdir")
@@ -1223,8 +1210,7 @@ class TestQuarantineMultiMDSEdgeCases(TestQuarantineMultiMDS):
         self.assertEqual(self.mount_a.read_file(self.file_child_r0), "Child rank 0 data")
         self.assertEqual(self.mount_a.read_file(self.file_child_r1), "Child rank 1 data")
 
-        auth_mds = self._get_auth_mds_for_path(self.subvol_root_path)
-        self.fs.quarantine_enable(self.subvol_root_path, mds_id=auth_mds)
+        self._quarantine_enable()
 
         # Both siblings should be blocked regardless of which MDS they're on
         self.wait_until_blocked(
@@ -1239,8 +1225,7 @@ class TestQuarantineMultiMDSEdgeCases(TestQuarantineMultiMDS):
         # Structure: deep(r0) -> level1(r1) -> level2(r0) -> file
         self.assertEqual(self.mount_a.read_file(self.file_deep), "Deep nested data")
 
-        auth_mds = self._get_auth_mds_for_path(self.subvol_root_path)
-        self.fs.quarantine_enable(self.subvol_root_path, mds_id=auth_mds)
+        self._quarantine_enable()
 
         # File in deepest level (back on rank 0) should still be blocked
         self.wait_until_blocked(
@@ -1249,8 +1234,7 @@ class TestQuarantineMultiMDSEdgeCases(TestQuarantineMultiMDS):
 
     def test_parent_of_exported_dirs_blocked(self):
         """Quarantine blocks access to parent directory containing exported children."""
-        auth_mds = self._get_auth_mds_for_path(self.subvol_root_path)
-        self.fs.quarantine_enable(self.subvol_root_path, mds_id=auth_mds)
+        self._quarantine_enable()
 
         # Stat on the parent directory should be blocked
         # (using stat instead of ls because ls returns exit status 2 for
@@ -1261,8 +1245,7 @@ class TestQuarantineMultiMDSEdgeCases(TestQuarantineMultiMDS):
 
     def test_stat_blocked_on_exported_subtree(self):
         """Stat operations are blocked on exported subtrees."""
-        auth_mds = self._get_auth_mds_for_path(self.subvol_root_path)
-        self.fs.quarantine_enable(self.subvol_root_path, mds_id=auth_mds)
+        self._quarantine_enable()
 
         # Stat on files in exported subtrees should be blocked
         self.wait_until_blocked(
@@ -1271,8 +1254,7 @@ class TestQuarantineMultiMDSEdgeCases(TestQuarantineMultiMDS):
 
     def test_file_creation_blocked_on_exported_subtree(self):
         """File creation is blocked on exported subtrees."""
-        auth_mds = self._get_auth_mds_for_path(self.subvol_root_path)
-        self.fs.quarantine_enable(self.subvol_root_path, mds_id=auth_mds)
+        self._quarantine_enable()
 
         new_file = os.path.join(self.child_rank1, "new_blocked_file.txt")
         self.wait_until_blocked(
@@ -1281,8 +1263,7 @@ class TestQuarantineMultiMDSEdgeCases(TestQuarantineMultiMDS):
 
     def test_mkdir_blocked_on_exported_subtree(self):
         """Mkdir is blocked on exported subtrees."""
-        auth_mds = self._get_auth_mds_for_path(self.subvol_root_path)
-        self.fs.quarantine_enable(self.subvol_root_path, mds_id=auth_mds)
+        self._quarantine_enable()
 
         new_dir = os.path.join(self.child_rank1, "new_blocked_dir")
         self.wait_until_blocked(
@@ -1291,8 +1272,7 @@ class TestQuarantineMultiMDSEdgeCases(TestQuarantineMultiMDS):
 
     def test_new_client_blocked_after_quarantine(self):
         """A new client connecting after quarantine is enabled is blocked."""
-        auth_mds = self._get_auth_mds_for_path(self.subvol_root_path)
-        self.fs.quarantine_enable(self.subvol_root_path, mds_id=auth_mds)
+        self._quarantine_enable()
 
         # Verify quarantine is active
         self.wait_until_blocked(lambda: self.mount_a.read_file(self.file_child_r0))
@@ -1311,15 +1291,14 @@ class TestQuarantineMultiMDSEdgeCases(TestQuarantineMultiMDS):
 
     def test_disable_restores_access_all_levels(self):
         """Disabling quarantine restores access at all nesting levels."""
-        auth_mds = self._get_auth_mds_for_path(self.subvol_root_path)
-        self.fs.quarantine_enable(self.subvol_root_path, mds_id=auth_mds)
+        self._quarantine_enable()
 
         # Verify all are blocked
         self.wait_until_blocked(lambda: self.mount_a.read_file(self.file_child_r0))
         self.wait_until_blocked(lambda: self.mount_a.read_file(self.file_child_r1))
         self.wait_until_blocked(lambda: self.mount_a.read_file(self.file_deep))
 
-        self.fs.quarantine_disable(self.subvol_root_path, mds_id=auth_mds)
+        self._quarantine_disable()
 
         # All should be accessible again
         self.wait_until_unblocked(lambda: self.mount_a.read_file(self.file_child_r0))
@@ -1356,8 +1335,7 @@ class TestQuarantineMultiMDSEdgeCases(TestQuarantineMultiMDS):
         # Access it to ensure it's cached
         self.assertEqual(self.mount_a.read_file(parent_file), "Parent dir data")
         
-        auth_mds = self._get_auth_mds_for_path(self.subvol_root_path)
-        self.fs.quarantine_enable(self.subvol_root_path, mds_id=auth_mds)
+        self._quarantine_enable()
         
         # Stat on parent/ - might be served by rank 1's replica
         # This MUST be blocked even if served by replica
@@ -1392,8 +1370,7 @@ class TestQuarantineMultiMDSEdgeCases(TestQuarantineMultiMDS):
         deep_file = os.path.join(self.deep_dir, "file_in_deep.txt")
         self.mount_a.write_file(deep_file, "Deep dir data")
         
-        auth_mds = self._get_auth_mds_for_path(self.subvol_root_path)
-        self.fs.quarantine_enable(self.subvol_root_path, mds_id=auth_mds)
+        self._quarantine_enable()
         
         # Access to intermediate 'deep' directory should be blocked
         self.wait_until_blocked(
