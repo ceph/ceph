@@ -1202,8 +1202,6 @@ bool MDSRank::is_valid_message(const cref_t<Message> &m) {
       type == MSG_MDS_INODEFILECAPS ||
       type == MSG_MDS_SCRUB ||
       type == MSG_MDS_SCRUB_STATS ||
-      type == MSG_MDS_QUARANTINEDIR ||
-      type == MSG_MDS_QUARANTINEDIR_REPLY ||
       type == CEPH_MSG_CLIENT_CAPS ||
       type == CEPH_MSG_CLIENT_CAPRELEASE ||
       type == CEPH_MSG_CLIENT_LEASE) {
@@ -1301,12 +1299,6 @@ void MDSRank::handle_message(const cref_t<Message> &m)
     case MSG_MDS_SCRUB_STATS:
       ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MDS);
       scrubstack->dispatch(m);
-      break;
-
-    case MSG_MDS_QUARANTINEDIR:
-    case MSG_MDS_QUARANTINEDIR_REPLY:
-      ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MDS);
-      mdcache->dispatch(m);
       break;
 
     default:
