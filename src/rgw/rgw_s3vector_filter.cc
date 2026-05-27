@@ -6,6 +6,7 @@
 #include "common/dout.h"
 #include "lancedb.h"
 #include <charconv>
+#include <fmt/format.h>
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -31,7 +32,9 @@ namespace rgw::s3vector {
     return false;
   }
 
-  LanceDBExpr* build_literal_expr(JSONObj* value_obj, FilterableMetadataType type, DoutPrefixProvider* dpp) {
+  LanceDBExpr* build_literal_expr(JSONObj* value_obj, FilterableMetadataType type,
+      const std::string& field_name, DoutPrefixProvider* dpp,
+      std::vector<validation_error_t>& errors) {
     const auto& dv = value_obj->get_data_val();
     switch (type) {
       case FilterableMetadataType::STRING:
@@ -41,6 +44,7 @@ namespace rgw::s3vector {
         const auto [ptr, ec] = std::from_chars(dv.str.data(), dv.str.data() + dv.str.size(), val);
         if (ec != std::errc()) {
           ldpp_dout(dpp, 1) << "ERROR: s3vector filter: invalid number value '" << dv.str << "'" << dendl;
+          errors.push_back({"filter", fmt::format("invalid number value '{}' for field '{}'", dv.str, field_name)});
           return nullptr;
         }
         return lancedb_expr_literal_f64(val);
@@ -49,9 +53,11 @@ namespace rgw::s3vector {
         if (dv.str == "true") return lancedb_expr_literal_bool(true);
         if (dv.str == "false") return lancedb_expr_literal_bool(false);
         ldpp_dout(dpp, 1) << "ERROR: s3vector filter: invalid boolean value '" << dv.str << "'" << dendl;
+        errors.push_back({"filter", fmt::format("invalid boolean value '{}' for field '{}'", dv.str, field_name)});
         return nullptr;
       default:
         ldpp_dout(dpp, 1) << "ERROR: s3vector filter: filtering not supported on list-type columns" << dendl;
+        errors.push_back({"filter", fmt::format("filtering not supported on list-type metadata key '{}'", field_name)});
         return nullptr;
     }
   }
@@ -77,7 +83,9 @@ namespace rgw::s3vector {
     return nullptr;
   }
 
-  LanceDBExpr* build_json_literal_expr(JSONObj* value_obj, DoutPrefixProvider* dpp) {
+  LanceDBExpr* build_json_literal_expr(JSONObj* value_obj,
+      const std::string& field_name, DoutPrefixProvider* dpp,
+      std::vector<validation_error_t>& errors) {
     const auto& dv = value_obj->get_data_val();
     if (dv.quoted) return lancedb_expr_literal_string(dv.str.c_str());
     if (dv.str == "true") return lancedb_expr_literal_bool(true);
@@ -86,6 +94,7 @@ namespace rgw::s3vector {
     auto [ptr, ec] = std::from_chars(dv.str.data(), dv.str.data() + dv.str.size(), val);
     if (ec == std::errc()) return lancedb_expr_literal_f64(val);
     ldpp_dout(dpp, 1) << "ERROR: s3vector filter: invalid literal value '" << dv.str << "'" << dendl;
+    errors.push_back({"filter", fmt::format("invalid value '{}' for field '{}'", dv.str, field_name)});
     return nullptr;
   }
 
@@ -127,7 +136,8 @@ namespace rgw::s3vector {
       bool negated,
       JSONObj* value_obj,
       const filterable_metadata_key_t* fk,
-      DoutPrefixProvider* dpp) {
+      DoutPrefixProvider* dpp,
+      std::vector<validation_error_t>& errors) {
     std::vector<LanceDBExpr*> list_exprs;
     JsonValueType vtype{}; // will be initialized by the first element if field is not a column
     for (auto it = value_obj->find_first(); !it.end(); ++it) {
@@ -138,11 +148,12 @@ namespace rgw::s3vector {
           vtype = elem_type;
         } else if (elem_type != vtype) {
           ldpp_dout(dpp, 1) << "ERROR: s3vector filter: mixed types in list for field '" << field_name << "'" << dendl;
+          errors.push_back({"filter", fmt::format("mixed types in list for field '{}'", field_name)});
           for (auto* e : list_exprs) lancedb_expr_free(e);
           return nullptr;
         }
       }
-      auto* elem_expr = fk ? build_literal_expr(elem, fk->type, dpp) : build_json_literal_expr(elem, dpp);
+      auto* elem_expr = fk ? build_literal_expr(elem, fk->type, field_name, dpp, errors) : build_json_literal_expr(elem, field_name, dpp, errors);
       if (!elem_expr) {
         for (auto* e : list_exprs) lancedb_expr_free(e);
         return nullptr;
@@ -151,6 +162,7 @@ namespace rgw::s3vector {
     }
     if (list_exprs.empty()) {
       ldpp_dout(dpp, 1) << "ERROR: s3vector filter: empty list for field '" << field_name << "'" << dendl;
+      errors.push_back({"filter", fmt::format("empty list for field '{}'", field_name)});
       return nullptr;
     }
 
@@ -165,6 +177,7 @@ namespace rgw::s3vector {
     auto* result = lancedb_expr_in_list(field_expr, list_exprs.data(), list_exprs.size(), negated, &error_message);
     if (!result) {
       ldpp_dout(dpp, 1) << "ERROR: s3vector filter: failed to build list expression: " << (error_message ? error_message : "unknown") << dendl;
+      errors.push_back({"filter", fmt::format("failed to build list expression for field '{}'", field_name)});
       lancedb_free_string(error_message);
     }
     return result;
@@ -175,10 +188,12 @@ namespace rgw::s3vector {
       const std::string& op,
       JSONObj* value_obj,
       const filterable_metadata_key_t* fk,
-      DoutPrefixProvider* dpp) {
+      DoutPrefixProvider* dpp,
+      std::vector<validation_error_t>& errors) {
     auto binary_op = s3vector_to_lance_op(op);
     if (binary_op == invalid_binary_op) {
       ldpp_dout(dpp, 1) << "ERROR: s3vector filter: unknown operator '" << op << "'" << dendl;
+      errors.push_back({"filter", fmt::format("unknown filter operator '{}'", op)});
       return nullptr;
     }
 
@@ -186,11 +201,11 @@ namespace rgw::s3vector {
     LanceDBExpr* literal_expr;
     if (fk) {
       field_expr = lancedb_expr_column(fk->name.c_str());
-      literal_expr = build_literal_expr(value_obj, fk->type, dpp);
+      literal_expr = build_literal_expr(value_obj, fk->type, field_name, dpp, errors);
     } else {
       auto vtype = infer_value_type(value_obj);
       field_expr = build_json_field_expr(field_name, vtype);
-      literal_expr = build_json_literal_expr(value_obj, dpp);
+      literal_expr = build_json_literal_expr(value_obj, field_name, dpp, errors);
     }
     if (!literal_expr) {
       lancedb_expr_free(field_expr);
@@ -204,10 +219,11 @@ namespace rgw::s3vector {
       const std::string& op,
       JSONObj* value_obj,
       const filterable_metadata_key_t* fk,
-      DoutPrefixProvider* dpp) {
+      DoutPrefixProvider* dpp,
+      std::vector<validation_error_t>& errors) {
     if (op == "$exists") return build_exists_expr(field_name, value_obj, fk);
-    if (op == "$in" || op == "$nin") return build_list_expr(field_name, (op == "$nin"), value_obj, fk, dpp);
-    return build_binary_expr(field_name, op, value_obj, fk, dpp);
+    if (op == "$in" || op == "$nin") return build_list_expr(field_name, (op == "$nin"), value_obj, fk, dpp, errors);
+    return build_binary_expr(field_name, op, value_obj, fk, dpp, errors);
   }
 
   void free_filter_exprs(FilterExprs& fe) {
@@ -235,9 +251,11 @@ namespace rgw::s3vector {
       JSONObj* value_obj,
       const std::vector<filterable_metadata_key_t>& filterable_keys,
       const std::vector<std::string>& nonfilterable_keys,
-      DoutPrefixProvider* dpp) {
+      DoutPrefixProvider* dpp,
+      std::vector<validation_error_t>& errors) {
     if (is_nonfilterable_key(field_name, nonfilterable_keys)) {
       ldpp_dout(dpp, 1) << "ERROR: s3vector filter: cannot filter on non-filterable metadata key '" << field_name << "'" << dendl;
+      errors.push_back({"filter", fmt::format("cannot filter on non-filterable metadata key '{}'", field_name)});
       return std::nullopt;
     }
 
@@ -247,11 +265,11 @@ namespace rgw::s3vector {
     LanceDBExpr* combined = nullptr;
     if (!value_obj->is_object()) {
       // implicit equality if value is not an object. e.g. {"color": "red"} is treated as {"color": {"$eq": "red"}}
-      combined = build_op_expr(field_name, "$eq", value_obj, fk, dpp);
+      combined = build_op_expr(field_name, "$eq", value_obj, fk, dpp, errors);
     } else {
       for (auto it = value_obj->find_first(); !it.end(); ++it) {
         auto* op_obj = *it;
-        auto* cmp_expr = build_op_expr(field_name, op_obj->get_name(), op_obj, fk, dpp);
+        auto* cmp_expr = build_op_expr(field_name, op_obj->get_name(), op_obj, fk, dpp, errors);
         if (!cmp_expr) {
           lancedb_expr_free(combined);
           return std::nullopt;
@@ -276,7 +294,8 @@ namespace rgw::s3vector {
       JSONObj& obj,
       const std::vector<filterable_metadata_key_t>& filterable_keys,
       const std::vector<std::string>& nonfilterable_keys,
-      DoutPrefixProvider* dpp) {
+      DoutPrefixProvider* dpp,
+      std::vector<validation_error_t>& errors) {
     FilterExprs combined;
     for (auto it = obj.find_first(); !it.end(); ++it) {
       auto* child = *it;
@@ -289,7 +308,7 @@ namespace rgw::s3vector {
         bool has_column = false;
         bool has_json = false;
         for (auto arr_it = child->find_first(); !arr_it.end(); ++arr_it) {
-          auto sub = build_filter_expr(**arr_it, filterable_keys, nonfilterable_keys, dpp);
+          auto sub = build_filter_expr(**arr_it, filterable_keys, nonfilterable_keys, dpp, errors);
           if (!sub) {
             free_filter_exprs(logical);
             free_filter_exprs(combined);
@@ -300,6 +319,7 @@ namespace rgw::s3vector {
 
           if (name == "$or" && has_column && has_json) {
             ldpp_dout(dpp, 1) << "ERROR: s3vector filter: $or cannot mix filterable column and JSON metadata conditions" << dendl;
+            errors.push_back({"filter", "$or cannot mix filterable and non-filterable metadata conditions"});
             free_filter_exprs(*sub);
             free_filter_exprs(logical);
             free_filter_exprs(combined);
@@ -324,7 +344,7 @@ namespace rgw::s3vector {
         combine_filter_exprs_and(combined, logical);
       } else {
         // top level field expression
-        auto field = build_field_expr(name, child, filterable_keys, nonfilterable_keys, dpp);
+        auto field = build_field_expr(name, child, filterable_keys, nonfilterable_keys, dpp, errors);
         if (!field) {
           free_filter_exprs(combined);
           return std::nullopt;

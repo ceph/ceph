@@ -17,15 +17,17 @@ class S3VectorFilterTest : public ::testing::Test {
 protected:
   NoDoutPrefix no_dpp{g_ceph_context, dout_subsys};
   DoutPrefixProvider* dpp = &no_dpp;
+  std::vector<rgw::s3vector::validation_error_t> errors;
 
   // parse a JSON string into a JSONParser and call build_filter_expr
   std::optional<FilterExprs> build(
       const std::string& json,
       const std::vector<filterable_metadata_key_t>& filterable_keys = {},
       const std::vector<std::string>& nonfilterable_keys = {}) {
+    errors.clear();
     JSONParser parser;
     EXPECT_TRUE(parser.parse(json.c_str(), json.size()));
-    return build_filter_expr(parser, filterable_keys, nonfilterable_keys, dpp);
+    return build_filter_expr(parser, filterable_keys, nonfilterable_keys, dpp, errors);
   }
 
   void free_exprs(FilterExprs& fe) {
@@ -365,12 +367,14 @@ TEST_F(S3VectorFilterTest, NonfilterableKeyRejected) {
   std::vector<std::string> nonfilterable = {"secret"};
   auto result = build(R"({"secret": "value"})", {}, nonfilterable);
   EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
 }
 
 TEST_F(S3VectorFilterTest, MixedOrRejected) {
   std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, true}};
   auto result = build(R"({"$or": [{"genre": "rock"}, {"color": "red"}]})", keys);
   EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
 }
 
 TEST_F(S3VectorFilterTest, MixedOrNestedViaAndRejected) {
@@ -380,6 +384,7 @@ TEST_F(S3VectorFilterTest, MixedOrNestedViaAndRejected) {
       R"({"$or": [{"genre": "rock"}, {"$and": [{"genre": "jazz"}, {"color": "blue"}]}]})",
       keys);
   EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
 }
 
 TEST_F(S3VectorFilterTest, MixedOrNestedViaOrRejected) {
@@ -389,6 +394,7 @@ TEST_F(S3VectorFilterTest, MixedOrNestedViaOrRejected) {
       R"({"$or": [{"genre": "rock"}, {"$or": [{"color": "red"}, {"color": "blue"}]}]})",
       keys);
   EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
 }
 
 TEST_F(S3VectorFilterTest, MixedOrDeeplyNestedRejected) {
@@ -398,56 +404,66 @@ TEST_F(S3VectorFilterTest, MixedOrDeeplyNestedRejected) {
       R"({"$and": [{"$or": [{"genre": "rock"}, {"$and": [{"color": "red"}, {"genre": "jazz"}]}]}]})",
       keys);
   EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
 }
 
 TEST_F(S3VectorFilterTest, UnknownOperatorRejected) {
   auto result = build(R"({"color": {"$regex": "r.*"}})");
   EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
 }
 
 TEST_F(S3VectorFilterTest, InvalidBooleanValueRejected) {
   std::vector<filterable_metadata_key_t> keys = {{"active", FilterableMetadataType::BOOLEAN, true}};
   auto result = build(R"({"active": {"$eq": "yes"}})", keys);
   EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
 }
 
 TEST_F(S3VectorFilterTest, InvalidNumberValueRejected) {
   std::vector<filterable_metadata_key_t> keys = {{"year", FilterableMetadataType::NUMBER, false}};
   auto result = build(R"({"year": {"$eq": "not_a_number"}})", keys);
   EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
 }
 
 TEST_F(S3VectorFilterTest, EmptyInListRejected) {
   auto result = build(R"({"color": {"$in": []}})");
   EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
 }
 
 TEST_F(S3VectorFilterTest, MixedTypesInListRejected) {
   auto result = build(R"({"color": {"$in": ["red", 42]}})");
   EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
 }
 
 TEST_F(S3VectorFilterTest, ListTypeFilteringRejected) {
   std::vector<filterable_metadata_key_t> keys = {{"tags", FilterableMetadataType::STRING_LIST, true}};
   auto result = build(R"({"tags": {"$eq": "foo"}})", keys);
   EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
 }
 
 TEST_F(S3VectorFilterTest, ArrayValueInJsonEqRejected) {
   // array value in $eq on a JSON field — not supported yet
   auto result = build(R"({"tags": {"$eq": ["a", "b"]}})");
   EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
 }
 
 TEST_F(S3VectorFilterTest, ObjectValueInJsonEqRejected) {
   // nested object value is misclassified as NUMBER by infer_value_type, then from_chars fails
   auto result = build(R"({"color": {"$eq": {"nested": "value"}}})");
   EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
 }
 
 TEST_F(S3VectorFilterTest, ObjectValueInJsonInListRejected) {
   auto result = build(R"({"color": {"$in": [{"nested": "value"}]}})");
   EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
 }
 
 int main(int argc, char** argv) {

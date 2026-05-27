@@ -827,6 +827,29 @@ def assert_put_vectors_validation_error(conn, expected_paths, **kwargs):
         conn.meta.events.unregister(event, capture)
 
 
+def assert_query_vectors_validation_error(conn, expected_paths, **kwargs):
+    """Call query_vectors expecting a ValidationException, verify the fieldList paths.
+    expected_paths can be a single string or a list of strings."""
+    if isinstance(expected_paths, str):
+        expected_paths = [expected_paths]
+    captured = {}
+    def capture(**kw):
+        captured['body'] = kw['http_response'].content
+    event = 'after-call.s3vectors.QueryVectors'
+    conn.meta.events.register(event, capture)
+    try:
+        with pytest.raises(conn.exceptions.ClientError) as exc_info:
+            conn.query_vectors(**kwargs)
+        assert exc_info.value.response['Error']['Code'] == 'ValidationException'
+        body = json.loads(captured['body'])
+        assert 'fieldList' in body, f"response should contain fieldList"
+        actual_paths = [entry['path'] for entry in body['fieldList']]
+        assert actual_paths == expected_paths, \
+            f"expected fieldList paths {expected_paths} but got {actual_paths}"
+    finally:
+        conn.meta.events.unregister(event, capture)
+
+
 def assert_create_index_validation_error(conn, expected_paths, **kwargs):
     """Call create_index expecting a ValidationException, verify the fieldList paths.
     expected_paths can be a single string or a list of strings."""
@@ -1988,12 +2011,11 @@ def test_query_vectors_filter():
     assert query_keys({'genre': 'rock', 'color': 'red'}) == ['v0', 'v2']
 
     # mixed $or: column + JSON fields should be rejected
-    with pytest.raises(conn.exceptions.ClientError) as exc_info:
-        conn.query_vectors(
-            vectorBucketName=bucket_name, indexName=index_name,
-            queryVector=query_vector, topK=top_k,
-            filter={'$or': [{'genre': 'rock'}, {'color': 'red'}]})
-    assert exc_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 400
+    assert_query_vectors_validation_error(
+        conn, 'filter',
+        vectorBucketName=bucket_name, indexName=index_name,
+        queryVector=query_vector, topK=top_k,
+        filter={'$or': [{'genre': 'rock'}, {'color': 'red'}]})
 
     # cleanup
     _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
@@ -2111,13 +2133,12 @@ def test_query_vectors_filter_errors():
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
 
     query_vector = generate_data(dimension, 0)
+    query_args = dict(vectorBucketName=bucket_name, indexName=index_name,
+                      queryVector=query_vector, topK=5)
 
     def expect_error(filter_expr):
-        with pytest.raises(conn.exceptions.ClientError) as exc_info:
-            conn.query_vectors(
-                vectorBucketName=bucket_name, indexName=index_name,
-                queryVector=query_vector, topK=5, filter=filter_expr)
-        assert exc_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 400
+        assert_query_vectors_validation_error(
+            conn, 'filter', filter=filter_expr, **query_args)
 
     # unknown operator
     expect_error({'genre': {'$regex': 'r.*'}})

@@ -980,10 +980,14 @@ private:
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::query_vectors(configuration, filter_parser, this, y, reply);
+    op_ret = rgw::s3vector::query_vectors(configuration, filter_parser, this, y, reply, validation_errors);
   }
 
   void send_response() override {
+    if (op_ret < 0 && !validation_errors.empty()) {
+      send_validation_error_response();
+      return;
+    }
     if (op_ret) {
       set_req_state_err(s, op_ret);
     }

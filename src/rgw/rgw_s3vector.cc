@@ -1897,7 +1897,7 @@ namespace rgw::s3vector {
     f->close_section();
   }
 
-  int query_vectors(const query_vectors_t& configuration, std::optional<JSONParser>& filter, DoutPrefixProvider* dpp, optional_yield y, query_vectors_reply_t& reply) {
+  int query_vectors(const query_vectors_t& configuration, std::optional<JSONParser>& filter, DoutPrefixProvider* dpp, optional_yield y, query_vectors_reply_t& reply, std::vector<validation_error_t>& errors) {
     log_configuration(dpp, "QueryVectors", configuration);
     LanceDBTable* table = open_table(dpp, configuration.vector_bucket_name, configuration.index_name);
     if (!table) {
@@ -1939,7 +1939,7 @@ namespace rgw::s3vector {
     if (filter) {
       const auto filterable_keys = get_filterable_keys_from_schema(schema);
       const auto nonfilterable_keys = get_nonfilterable_metadata(table, dpp);
-      auto filter_exprs = build_filter_expr(*filter, filterable_keys, nonfilterable_keys, dpp);
+      auto filter_exprs = build_filter_expr(*filter, filterable_keys, nonfilterable_keys, dpp, errors);
       if (!filter_exprs) {
         lancedb_vector_query_free(query);
         lancedb_table_free(table);

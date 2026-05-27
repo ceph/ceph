@@ -22,6 +22,7 @@ std::optional<FilterExprs> build_filter_expr(
     JSONObj& filter_obj,
     const std::vector<filterable_metadata_key_t>& filterable_keys,
     const std::vector<std::string>& nonfilterable_keys,
-    DoutPrefixProvider* dpp);
+    DoutPrefixProvider* dpp,
+    std::vector<validation_error_t>& errors);
 
 }
