@@ -1,0 +1,7 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd shutdown pgref assert: true
+tasks:
+- ceph:
