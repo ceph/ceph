@@ -1203,8 +1203,6 @@ static SimpleCmd::Commands all_cmds = {
   { "notification rm", OPT::PUBSUB_NOTIFICATION_RM },
   { "topic stats", OPT::PUBSUB_TOPIC_STATS },
   { "topic dump", OPT::PUBSUB_TOPIC_DUMP },
-  { "script get", OPT::SCRIPT_GET },
-  { "script rm", OPT::SCRIPT_RM },
   { "script-package add", OPT::SCRIPT_PACKAGE_ADD },
   { "script-package rm", OPT::SCRIPT_PACKAGE_RM },
   { "script-package list", OPT::SCRIPT_PACKAGE_LIST },
@@ -3918,28 +3916,63 @@ int main(int argc, const char **argv)
   init_realm_param(cct.get(), zone_id, opt_zone_id, "rgw_zone_id");
 
   {
+    // TODO: remove once --help is fully replaced by CLI11.
+    // Pre-scan argv so require_subcommand() does not reject
+    // "radosgw-admin --cli11-help script" during migration.
     bool show_cli11_help = false;
+    for (int i = 1; i < argc; ++i) {
+      if (std::string_view(argv[i]) == "--cli11-help") {
+        show_cli11_help = true;
+        break;
+      }
+    }
+
     CLI::App app{"radosgw-admin"};
+    // TODO: remove once all commands are migrated to CLI11
     app.allow_extras();
+
+    auto* script     = app.add_subcommand("script");
+    auto* script_put = script->add_subcommand("put");
+    auto* script_get = script->add_subcommand("get");
+    auto* script_rm  = script->add_subcommand("rm");
+    script_rm->alias("remove");
+    // TODO: restore to require_subcommand(1) once --help is fully replaced by CLI11
+    script->require_subcommand(show_cli11_help ? 0 : 1);
+
+    // TODO: remove once --help is fully replaced by CLI11
     app.add_flag("--cli11-help", show_cli11_help,
                  "Show CLI11-generated help (temporary, migration testing)");
-                 
-    auto* script = app.add_subcommand("script");
-    auto* put = script->add_subcommand("put");
+    script->add_flag("--cli11-help", show_cli11_help)->group("");
+    script_put->add_flag("--cli11-help", show_cli11_help)->group("");
+    script_get->add_flag("--cli11-help", show_cli11_help)->group("");
+    script_rm->add_flag("--cli11-help", show_cli11_help)->group("");
 
-    app.add_option("--context", str_script_ctx)->group("")->take_last(); // compatibility: parse anywhere in argv
-    app.add_option("--infile",  infile)->group("")->take_last();          // compatibility: parse anywhere in argv
-    app.add_option("--tenant",  tenant)->group("")->take_last();          // compatibility: parse anywhere in argv
+    // TODO: once flags-before-subcommand support is removed, delete these hidden
+    // root and script level registrations and keep only the subcommand level ones
 
-    script->add_option("--context", str_script_ctx)->group("")->take_last(); // compatibility: parse between script and subcommand
+    // compatibility: accept options placed before the command
+    app.add_option("--context", str_script_ctx)->group("")->take_last();
+    app.add_option("--infile",  infile)->group("")->take_last();
+    app.add_option("--tenant",  tenant)->group("")->take_last();
+
+    // compatibility: accept options placed between script and its subcommand
+    script->add_option("--context", str_script_ctx)->group("")->take_last();
     script->add_option("--infile",  infile)->group("")->take_last();
     script->add_option("--tenant",  tenant)->group("")->take_last();
 
-    // Do not use ->required() while --context/--infile are also accepted at parent
+    // Do not use ->required() while options are also accepted at parent
     // levels for compatibility, because CLI11 checks the specific option location.
-    put->add_option("--context", str_script_ctx)->take_last()->option_text("<context> REQUIRED"); // semantic owner: visible in help
-    put->add_option("--infile",  infile)->take_last()->option_text("<file> REQUIRED");            // semantic owner: visible in help
-    put->add_option("--tenant",  tenant)->take_last();                    // semantic owner: visible in help
+    // TODO: once flags-before-subcommand support is removed, replace option_text("... REQUIRED")
+    // and manual checks with ->required()
+    script_put->add_option("--context", str_script_ctx)->take_last()->option_text("<context> REQUIRED");
+    script_put->add_option("--infile",  infile)->take_last()->option_text("<file> REQUIRED");
+    script_put->add_option("--tenant",  tenant)->take_last();
+
+    script_get->add_option("--context", str_script_ctx)->take_last()->option_text("<context> REQUIRED");
+    script_get->add_option("--tenant",  tenant)->take_last();
+
+    script_rm->add_option("--context", str_script_ctx)->take_last()->option_text("<context> REQUIRED");
+    script_rm->add_option("--tenant",  tenant)->take_last();
 
     try {
       app.parse(argc, argv);
@@ -3952,26 +3985,29 @@ int main(int argc, const char **argv)
       return 0;
     }
 
-    if (put->parsed()) {
+    if (script_put->parsed()) {
       cerr << "DEBUG: CLI11 parsed --context = " << (str_script_ctx ? *str_script_ctx : "(empty)") << std::endl;
+      cerr << "DEBUG: CLI11 parsed --infile = " << (infile.empty() ? "(empty)" : infile) << std::endl;
+      cerr << "DEBUG: CLI11 parsed --tenant = " << (tenant.empty() ? "(empty)" : tenant) << std::endl;
       if (app.count("--context") > 0 || script->count("--context") > 0 ||
           app.count("--infile")  > 0 || script->count("--infile")  > 0 ||
           app.count("--tenant")  > 0 || script->count("--tenant")  > 0) {
         cerr << "Warning: flags should appear after the subcommand. "
                 "Use: script put --context=<value> --infile=<value> --tenant=<value>\n";
       }
-      if ((app.count("--context") + script->count("--context") + put->count("--context")) > 1) {
+      if ((app.count("--context") + script->count("--context") + script_put->count("--context")) > 1) {
         cerr << "Warning: --context specified multiple times, using last value\n";
       }
-      if ((app.count("--infile") + script->count("--infile") + put->count("--infile")) > 1) {
+      if ((app.count("--infile") + script->count("--infile") + script_put->count("--infile")) > 1) {
         cerr << "Warning: --infile specified multiple times, using last value\n";
       }
-      if ((app.count("--tenant") + script->count("--tenant") + put->count("--tenant")) > 1) {
+      if ((app.count("--tenant") + script->count("--tenant") + script_put->count("--tenant")) > 1) {
         cerr << "Warning: --tenant specified multiple times, using last value\n";
       }
 
       // Enforce required options by value, because options may have been
       // parsed before the subcommand.
+      // TODO: once flags-before-subcommand support is removed, replace with ->required()
       if (!str_script_ctx) {
         cerr << "ERROR: context was not provided (via --context)" << std::endl;
         return EINVAL;
@@ -3982,6 +4018,63 @@ int main(int argc, const char **argv)
       }
 
       opt_cmd = OPT::SCRIPT_PUT;
+    }
+
+    if (script_get->parsed()) {
+      cerr << "DEBUG: CLI11 parsed --context = " << (str_script_ctx ? *str_script_ctx : "(empty)") << std::endl;
+      cerr << "DEBUG: CLI11 parsed --tenant = " << (tenant.empty() ? "(empty)" : tenant) << std::endl;
+      if (app.count("--context") > 0 || script->count("--context") > 0 ||
+          app.count("--tenant")  > 0 || script->count("--tenant")  > 0) {
+        cerr << "Warning: flags should appear after the subcommand. "
+                "Use: script get --context=<value> --tenant=<value>\n";
+      }
+      if ((app.count("--context") + script->count("--context") + script_get->count("--context")) > 1) {
+        cerr << "Warning: --context specified multiple times, using last value\n";
+      }
+      if ((app.count("--tenant") + script->count("--tenant") + script_get->count("--tenant")) > 1) {
+        cerr << "Warning: --tenant specified multiple times, using last value\n";
+      }
+
+      // Enforce required options by value, because options may have been
+      // parsed before the subcommand.
+      // TODO: once flags-before-subcommand support is removed, replace with ->required()
+      if (!str_script_ctx) {
+        cerr << "ERROR: context was not provided (via --context)" << std::endl;
+        return EINVAL;
+      }
+
+      opt_cmd = OPT::SCRIPT_GET;
+    }
+
+    if (script_rm->parsed()) {
+      cerr << "DEBUG: CLI11 parsed --context = " << (str_script_ctx ? *str_script_ctx : "(empty)") << std::endl;
+      cerr << "DEBUG: CLI11 parsed --tenant = " << (tenant.empty() ? "(empty)" : tenant) << std::endl;
+      if (app.count("--context") > 0 || script->count("--context") > 0 ||
+          app.count("--tenant")  > 0 || script->count("--tenant")  > 0) {
+        cerr << "Warning: flags should appear after the subcommand. "
+                "Use: script rm --context=<value> --tenant=<value>\n";
+      }
+      if ((app.count("--context") + script->count("--context") + script_rm->count("--context")) > 1) {
+        cerr << "Warning: --context specified multiple times, using last value\n";
+      }
+      if ((app.count("--tenant") + script->count("--tenant") + script_rm->count("--tenant")) > 1) {
+        cerr << "Warning: --tenant specified multiple times, using last value\n";
+      }
+
+      // Enforce required options by value, because options may have been
+      // parsed before the subcommand.
+      // TODO: once flags-before-subcommand support is removed, replace with ->required()
+      if (!str_script_ctx) {
+        cerr << "ERROR: context was not provided (via --context)" << std::endl;
+        return EINVAL;
+      }
+
+      opt_cmd = OPT::SCRIPT_RM;
+    }
+
+    // require_subcommand(1) guarantees one of put/get/rm was parsed if script was parsed
+    // TODO: remove once all commands are migrated and allow_extras() is gone
+    if (script->parsed()) {
       for (const auto& arg : app.remaining(true)) {
         if (!arg.empty() && arg[0] != '-') {
           cerr << "ERROR: unexpected argument: '" << arg << "'" << std::endl;
@@ -4576,7 +4669,7 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--context", (char*)NULL)) {
-      str_script_ctx = val;
+      // consumed by CLI11 for script commands; kept here to prevent "invalid flag" error
     } else if (ceph_argparse_witharg(args, i, &val, "--package", (char*)NULL)) {
       script_package = val;
     } else if (ceph_argparse_binary_flag(args, i, &allow_compilation, NULL, "--allow-compilation", (char*)NULL)) {
