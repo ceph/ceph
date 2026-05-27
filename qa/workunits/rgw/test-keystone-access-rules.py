@@ -41,13 +41,15 @@ def fail(msg, status_code=None):
 def setup(admin_token):
     """Create a container and an object using the admin token."""
     r = requests.put(CONTAINER, headers={'X-Auth-Token': admin_token})
-    if r.status_code not in (201, 202):
+    # 409 Conflict is acceptable: container already exists from a previous run
+    if r.status_code not in (201, 202, 409):
         fail('setup: create container', r.status_code)
     r = requests.put(OBJECT,
                      headers={'X-Auth-Token': admin_token,
                                'Content-Type': 'text/plain'},
                      data=b'hello')
-    if r.status_code != 201:
+    # 201 Created or 200 OK (overwrite) are both fine
+    if r.status_code not in (200, 201):
         fail('setup: put object', r.status_code)
     print('setup: container and object created')
 
@@ -81,6 +83,8 @@ def test_readonly_appcred_denies_put():
                      headers={'X-Auth-Token': 'appcred-token-readonly',
                                'Content-Type': 'text/plain'},
                      data=b'should be denied')
+    # RGW returns 403 (not 401) when the token is valid but an access rule
+    # denies the request. 401 is reserved for missing or invalid tokens.
     if r.status_code != 403:
         fail('readonly appcred: PUT object should be denied (403)', r.status_code)
     print('PASSED: readonly appcred denies PUT')
@@ -89,6 +93,8 @@ def test_readonly_appcred_denies_put():
 def test_readonly_appcred_denies_delete():
     """DELETE with a read-only app-cred token must be denied (no matching rule)."""
     r = requests.delete(OBJECT, headers={'X-Auth-Token': 'appcred-token-readonly'})
+    # RGW returns 403 (not 401) when the token is valid but an access rule
+    # denies the request. 401 is reserved for missing or invalid tokens.
     if r.status_code != 403:
         fail('readonly appcred: DELETE object should be denied (403)', r.status_code)
     print('PASSED: readonly appcred denies DELETE')
@@ -108,7 +114,7 @@ def test_unrestricted_appcred_permits_all():
                      headers={'X-Auth-Token': 'appcred-token-unrestricted',
                                'Content-Type': 'text/plain'},
                      data=b'overwrite ok')
-    if r.status_code != 201:
+    if r.status_code not in (200, 201):
         fail('unrestricted appcred: PUT should be permitted', r.status_code)
 
     print('PASSED: unrestricted appcred permits GET, HEAD, and PUT')
