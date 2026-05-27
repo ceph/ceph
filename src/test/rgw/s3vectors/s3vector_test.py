@@ -1,3 +1,4 @@
+import json
 import logging
 import random
 import time
@@ -1025,6 +1026,382 @@ def test_query_vectors_with_distance():
         assert len(result['vectors']) == top_k
         assert result['distanceMetric'] == 'euclidean'
         log.info(result['vectors'])
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+@pytest.mark.vector_test
+def test_background_index_rebuild():
+    """Test that vector index is rebuilt in the background when unindexed rows exceed threshold.
+    The default threshold is 256 rows. We insert 500 vectors (above LanceDB's IVF_PQ minimum)
+    and wait for the background manager to build the vector index."""
+    dimension = 32
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    index_name = 'rebuild-test-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name, dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # insert 500 vectors in batches (exceeds default threshold of 256 and
+    # LanceDB's IVF_PQ minimum for reliable index creation)
+    batch_size = 100
+    total_vectors = 500
+    for batch_start in range(0, total_vectors, batch_size):
+        batch_end = min(batch_start + batch_size, total_vectors)
+        vectors = generate_vectors(batch_end - batch_start, dimension)
+        # offset keys to avoid duplicates across batches
+        for i, v in enumerate(vectors):
+            v['key'] = f'vec-{batch_start + i}'
+        result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # wait for background manager to process (stats_interval + build time)
+    log.info('waiting for background index rebuild...')
+    time.sleep(45)
+
+    # verify query works after rebuild — just check the response is valid
+    top_k = 10
+    query_vector = generate_data(dimension, 42)
+    result = conn.query_vectors(vectorBucketName=bucket_name, indexName=index_name, queryVector=query_vector, topK=top_k)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == top_k
+
+    # verify we can get specific vectors
+    verify_get_vectors(conn, bucket_name, index_name, ['vec-0', 'vec-250', 'vec-499'], expected_dimension=dimension)
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+@pytest.mark.vector_test
+def test_delete_vectors_triggers_rebuild():
+    """Test that delete_vectors triggers the background rebuild notification.
+    Insert vectors above threshold, wait for initial build, then delete and re-insert
+    to trigger a second rebuild cycle."""
+    dimension = 32
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    index_name = 'delete-rebuild-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name, dataType='float32', dimension=dimension, distanceMetric='cosine')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # insert 500 vectors
+    vectors = generate_vectors(500, dimension)
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # wait for initial rebuild
+    log.info('waiting for initial index rebuild...')
+    time.sleep(45)
+
+    # delete vectors in small batches to avoid deep OR-chain in LanceDB SQL planner
+    delete_batch_size = 20
+    for batch_start in range(0, 100, delete_batch_size):
+        keys_to_delete = [f'vec-{i}' for i in range(batch_start, batch_start + delete_batch_size)]
+        result = conn.delete_vectors(vectorBucketName=bucket_name, indexName=index_name, keys=keys_to_delete)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # insert new vectors to trigger another rebuild notification
+    new_vectors = []
+    for i in range(500, 800):
+        new_vectors.append({
+            'key': f'vec-{i}',
+            'data': generate_data(dimension, i)
+        })
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=new_vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # wait for rebuild after modifications
+    log.info('waiting for rebuild after delete + insert...')
+    time.sleep(45)
+
+    # verify queries work correctly with the updated index
+    top_k = 5
+    query_vector = generate_data(dimension, 500)
+    result = conn.query_vectors(vectorBucketName=bucket_name, indexName=index_name, queryVector=query_vector, topK=top_k)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == top_k
+
+    # verify deleted vectors are gone
+    result = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name, keys=['vec-0', 'vec-50'])
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == 0
+
+    # verify new vectors are present
+    verify_get_vectors(conn, bucket_name, index_name, ['vec-500', 'vec-600', 'vec-700'], expected_dimension=dimension)
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+def count_vectors(conn, bucket_name, index_name):
+    """Count total vectors in the index by paginating through list_vectors."""
+    count = 0
+    next_token = None
+    while True:
+        if next_token:
+            result = conn.list_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                       maxResults=100, nextToken=next_token)
+        else:
+            result = conn.list_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                       maxResults=100)
+        count += len(result.get('vectors', []))
+        next_token = result.get('nextToken')
+        if not next_token:
+            break
+    return count
+
+
+@pytest.mark.vector_test
+def test_delete_vectors_and_query():
+    """Insert 500 vectors, wait for index build, delete 200 in batches,
+    then verify queries and vector counts are correct."""
+    dimension = 32
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    index_name = 'batch-delete-test'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                               dataType='float32', dimension=dimension, distanceMetric='cosine')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # insert 500 vectors and wait for index build
+    total_vectors = 500
+    vectors = generate_vectors(total_vectors, dimension)
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    log.info('inserted %d vectors, waiting for index build...', total_vectors)
+    time.sleep(45)
+
+    # delete 200 vectors (vec-0 through vec-199) in batches of 20
+    delete_count = 200
+    delete_batch_size = 20
+    for batch_start in range(0, delete_count, delete_batch_size):
+        keys = [f'vec-{i}' for i in range(batch_start, batch_start + delete_batch_size)]
+        result = conn.delete_vectors(vectorBucketName=bucket_name, indexName=index_name, keys=keys)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    log.info('deleted %d vectors (vec-0 through vec-%d)', delete_count, delete_count - 1)
+
+    # verify deleted vectors are gone
+    result = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                              keys=['vec-0', 'vec-100', 'vec-199'])
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == 0, 'deleted vectors should not be returned'
+
+    # verify surviving vectors are present
+    verify_get_vectors(conn, bucket_name, index_name,
+                       ['vec-200', 'vec-350', 'vec-499'], expected_dimension=dimension)
+
+    # verify vector count
+    remaining = count_vectors(conn, bucket_name, index_name)
+    log.info('remaining vectors: %d (expected %d)', remaining, total_vectors - delete_count)
+    assert remaining == total_vectors - delete_count
+
+    # verify queries still work on the remaining vectors
+    query_vector = generate_data(dimension, 350)
+    result = conn.query_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                queryVector=query_vector, topK=5)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == 5
+    result_keys = [v['key'] for v in result['vectors']]
+    log.info('query returned: %s', result_keys)
+    for key in result_keys:
+        key_num = int(key.split('-')[1])
+        assert key_num >= delete_count, f'{key} should not appear (was deleted)'
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+@pytest.mark.vector_test
+def test_s3_conditional_lock_operations():
+    """Test the S3 conditional operations that the distributed lock protocol
+    depends on: If-None-Match (conditional create) and If-Match (conditional
+    delete with ETag).
+
+    Uses a regular S3 bucket to exercise conditional PUT/DELETE semantics.
+    Vector buckets are in a separate namespace not accessible via the S3 API,
+    but the underlying RADOS conditional operations are identical."""
+    s3conn = connection('s3')
+    bucket_name = gen_bucket_name()
+    s3conn.create_bucket(Bucket=bucket_name)
+    lock_key = '.s3v-lock-test-index.lock'
+
+    # 1. verify no lock object exists initially
+    with pytest.raises(s3conn.exceptions.ClientError) as exc_info:
+        s3conn.head_object(Bucket=bucket_name, Key=lock_key)
+    assert exc_info.value.response['Error']['Code'] == '404'
+    log.info('step 1: confirmed no lock object exists')
+
+    # 2. PUT a lock object and verify ETag in response
+    lock_body = json.dumps({'token': 'test-token-aaa', 'timestamp': int(time.time())})
+    put_result = s3conn.put_object(Bucket=bucket_name, Key=lock_key, Body=lock_body.encode())
+    assert put_result['ResponseMetadata']['HTTPStatusCode'] == 200
+    lock_etag = put_result.get('ETag', '').strip('"')
+    log.info('step 2: PUT lock object, ETag=%s', lock_etag)
+    assert lock_etag, 'PUT response must include a non-empty ETag'
+
+    # 3. GET the lock object and verify ETag and body
+    get_result = s3conn.get_object(Bucket=bucket_name, Key=lock_key)
+    assert get_result['ResponseMetadata']['HTTPStatusCode'] == 200
+    get_etag = get_result.get('ETag', '').strip('"')
+    log.info('step 3: GET lock object, ETag=%s', get_etag)
+    assert get_etag == lock_etag, f'GET ETag ({get_etag}) must match PUT ETag ({lock_etag})'
+    body = get_result['Body'].read().decode()
+    parsed = json.loads(body)
+    assert parsed['token'] == 'test-token-aaa'
+
+    # 4. conditional PUT (If-None-Match: *) must fail — lock exists
+    with pytest.raises(s3conn.exceptions.ClientError) as exc_info:
+        s3conn.put_object(Bucket=bucket_name, Key=lock_key,
+                          Body=b'should-fail',
+                          IfNoneMatch='*')
+    err_code = exc_info.value.response['Error']['Code']
+    log.info('step 4: conditional PUT (If-None-Match=*) rejected: %s', err_code)
+    assert err_code == 'PreconditionFailed', \
+        f'expected PreconditionFailed but got {err_code}'
+
+    # 5. conditional DELETE with wrong ETag must fail
+    with pytest.raises(s3conn.exceptions.ClientError) as exc_info:
+        s3conn.delete_object(Bucket=bucket_name, Key=lock_key,
+                             IfMatch='"wrong-etag-value"')
+    err_code = exc_info.value.response['Error']['Code']
+    log.info('step 5: conditional DELETE (wrong ETag) rejected: %s', err_code)
+    assert err_code == 'PreconditionFailed', \
+        f'expected PreconditionFailed but got {err_code}'
+
+    # 6. conditional DELETE with correct ETag must succeed
+    s3conn.delete_object(Bucket=bucket_name, Key=lock_key,
+                         IfMatch=f'"{lock_etag}"')
+    log.info('step 6: conditional DELETE with matching ETag succeeded')
+
+    # 7. verify lock object is gone
+    with pytest.raises(s3conn.exceptions.ClientError) as exc_info:
+        s3conn.head_object(Bucket=bucket_name, Key=lock_key)
+    assert exc_info.value.response['Error']['Code'] == '404'
+    log.info('step 7: confirmed lock object deleted')
+
+    # 8. conditional PUT (If-None-Match: *) must succeed now — no lock
+    lock_body_2 = json.dumps({'token': 'test-token-bbb', 'timestamp': int(time.time())})
+    put_result_2 = s3conn.put_object(Bucket=bucket_name, Key=lock_key,
+                                      Body=lock_body_2.encode(),
+                                      IfNoneMatch='*')
+    assert put_result_2['ResponseMetadata']['HTTPStatusCode'] == 200
+    lock_etag_2 = put_result_2.get('ETag', '').strip('"')
+    log.info('step 8: second lock acquired, ETag=%s', lock_etag_2)
+    assert lock_etag_2
+    assert lock_etag_2 != lock_etag, 'new lock must have a different ETag'
+
+    # 9. stale reclamation race: read ETag, another instance replaces the lock,
+    #    then conditional DELETE with old ETag must fail
+    get_result_2 = s3conn.get_object(Bucket=bucket_name, Key=lock_key)
+    old_etag = get_result_2.get('ETag', '').strip('"')
+
+    lock_body_3 = json.dumps({'token': 'test-token-ccc', 'timestamp': int(time.time())})
+    s3conn.put_object(Bucket=bucket_name, Key=lock_key, Body=lock_body_3.encode())
+
+    with pytest.raises(s3conn.exceptions.ClientError) as exc_info:
+        s3conn.delete_object(Bucket=bucket_name, Key=lock_key,
+                             IfMatch=f'"{old_etag}"')
+    err_code = exc_info.value.response['Error']['Code']
+    log.info('step 9: stale reclamation race — conditional DELETE rejected: %s', err_code)
+    assert err_code == 'PreconditionFailed'
+
+    # cleanup
+    s3conn.delete_object(Bucket=bucket_name, Key=lock_key)
+    s3conn.delete_bucket(Bucket=bucket_name)
+
+
+@pytest.mark.vector_test
+def test_concurrent_conditional_lock_acquisition():
+    """Test that when multiple threads race to acquire the same lock via
+    conditional PUT (If-None-Match: *), exactly one wins and all others fail
+    with PreconditionFailed."""
+    s3conn = connection('s3')
+    bucket_name = gen_bucket_name()
+    s3conn.create_bucket(Bucket=bucket_name)
+    lock_key = '.s3v-lock-concurrent-test.lock'
+
+    num_threads = 10
+    results = [None] * num_threads
+
+    def try_acquire(thread_id):
+        """Each thread creates its own S3 client and attempts a conditional PUT."""
+        thread_conn = connection('s3')
+        body = json.dumps({'token': f'thread-{thread_id}', 'timestamp': int(time.time())})
+        try:
+            resp = thread_conn.put_object(Bucket=bucket_name, Key=lock_key,
+                                          Body=body.encode(), IfNoneMatch='*')
+            results[thread_id] = ('won', resp.get('ETag', '').strip('"'))
+        except thread_conn.exceptions.ClientError as e:
+            results[thread_id] = ('lost', e.response['Error']['Code'])
+
+    threads = [threading.Thread(target=try_acquire, args=(i,)) for i in range(num_threads)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    winners = [(i, r) for i, r in enumerate(results) if r[0] == 'won']
+    losers = [(i, r) for i, r in enumerate(results) if r[0] == 'lost']
+
+    log.info('concurrent lock results: %d winners, %d losers', len(winners), len(losers))
+    for i, r in winners:
+        log.info('  thread %d: WON (ETag=%s)', i, r[1])
+    for i, r in losers:
+        log.info('  thread %d: lost (%s)', i, r[1])
+
+    assert len(winners) == 1, f'exactly one thread must win, but {len(winners)} won: {winners}'
+    assert len(losers) == num_threads - 1
+    for _, r in losers:
+        assert r[1] == 'PreconditionFailed', f'losers must get PreconditionFailed, got {r[1]}'
+
+    # verify the winner's token is in the lock object
+    winner_id = winners[0][0]
+    get_result = s3conn.get_object(Bucket=bucket_name, Key=lock_key)
+    body = json.loads(get_result['Body'].read().decode())
+    assert body['token'] == f'thread-{winner_id}'
+    log.info('verified: lock object contains winner thread-%d token', winner_id)
+
+    # cleanup
+    s3conn.delete_object(Bucket=bucket_name, Key=lock_key)
+    s3conn.delete_bucket(Bucket=bucket_name)
+
+
+@pytest.mark.vector_test
+def test_below_threshold_no_rebuild():
+    """Test that inserting fewer vectors than the threshold does not trigger a rebuild.
+    Queries should still work via brute-force search (no vector index needed)."""
+    dimension = 16
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    index_name = 'no-rebuild-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name, dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # insert only 100 vectors (below default threshold of 256)
+    vectors = generate_vectors(100, dimension)
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # short wait — not long enough for a full rebuild cycle
+    time.sleep(5)
+
+    # queries should work via brute-force (no vector index)
+    top_k = 5
+    query_vector = generate_data(dimension, 42)
+    result = conn.query_vectors(vectorBucketName=bucket_name, indexName=index_name, queryVector=query_vector, topK=top_k)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == top_k
+    assert 'vec-42' in [v['key'] for v in result['vectors']]
 
     # cleanup
     _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)

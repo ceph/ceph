@@ -6,6 +6,7 @@
 #include "rgw_rest_s3.h"
 #include "rgw_s3vector.h"
 #include "rgw_process_env.h"
+#include "rgw_zone.h"
 #include "common/async/yield_context.h"
 #include "rgw_arn.h"
 
@@ -154,9 +155,12 @@ private:
     rgw::sal::VectorBucket::CreateParams createparams;
     createparams.owner = s->user->get_id();
     createparams.zonegroup_id = zonegroup.id;
-    // vector buckets are indexless
     createparams.index_type = rgw::BucketIndexType::Indexless;
     createparams.placement_rule.storage_class = s->info.storage_class;
+// note: without the placement-rule and zone-placement setting it not possible to use conditional-write (put-object)
+    createparams.placement_rule.name = "default-placement";
+    createparams.zone_placement = rgw::find_zone_placement(
+        this, s->penv.site->get_zone_params(), createparams.placement_rule);
     if (!driver->is_meta_master()) {
       // apply bucket creation on the master zone first
       JSONParser jp;

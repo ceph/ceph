@@ -8,6 +8,7 @@
 #include "include/encoding.h"
 #include "rgw_arn.h"
 #include "common/async/yield_context.h"
+#include "lancedb.h"
 
 namespace ceph {
 class Formatter;
@@ -488,6 +489,16 @@ int put_vector_bucket_policy(const put_vector_bucket_policy_t& configuration, Do
 int get_vector_bucket_policy(const get_vector_bucket_policy_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
 int delete_vectors(const delete_vectors_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
 int query_vectors(const query_vectors_t& configuration, DoutPrefixProvider* dpp, optional_yield y, query_vectors_reply_t& reply);
+
+// table field names
+inline constexpr const char* data_field = "data";
+inline constexpr const char* key_field = "key";
+
+// utility functions used by the background manager
+LanceDBConnection* connect(DoutPrefixProvider* dpp, const std::string& vector_bucket_name);
+LanceDBTable* open_table(DoutPrefixProvider* dpp, const std::string& vector_bucket_name, const std::string& index_name);
+DistanceMetric get_table_distance_metric(const LanceDBTable* table, DoutPrefixProvider* dpp);
+LanceDBDistanceType to_lancedb_distance(DistanceMetric metric);
 
 }
 
