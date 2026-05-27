@@ -21,7 +21,7 @@ public:
   ThreadMonitor(CephContext *cct)
     : m_cct(cct),
       running(false),
-      monitoring_interval(m_cct->_conf.get_val<int64_t>("mgr_module_monitor_interval"))
+      monitoring_interval(std::chrono::seconds(m_cct->_conf.get_val<int64_t>("mgr_module_monitor_interval")))
   {
     m_cct->_conf.add_observer(this);
     m_clock_ticks_per_sec = sysconf(_SC_CLK_TCK);
