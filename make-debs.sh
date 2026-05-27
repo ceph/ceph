@@ -18,7 +18,7 @@ set -xe
 
 . /etc/os-release
 base=${1:-/tmp/release}
-releasedir=$base/$NAME/WORKDIR
+releasedir=$base/$ID/WORKDIR
 rm -fr $(dirname $releasedir)
 
 # git describe provides a version that is
