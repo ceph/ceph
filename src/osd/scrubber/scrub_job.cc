@@ -113,8 +113,7 @@ void ScrubJob::set_both_targets_queued()
 
 void ScrubJob::adjust_shallow_schedule(
     utime_t last_scrub,
-    const Scrub::sched_conf_t& app_conf,
-    utime_t scrub_clock_now)
+    const Scrub::sched_conf_t& app_conf)
 {
   dout(10) << fmt::format(
 		  "at entry: shallow target:{}, conf:{}, last-stamp:{:s}",
@@ -250,8 +249,7 @@ utime_t ScrubJob::get_sched_time() const
 
 void ScrubJob::adjust_deep_schedule(
     utime_t last_deep,
-    const Scrub::sched_conf_t& app_conf,
-    utime_t scrub_clock_now)
+    const Scrub::sched_conf_t& app_conf)
 {
   dout(10) << fmt::format(
 		  "at entry: deep target:{}, conf:{}, last-stamp:{:s}",

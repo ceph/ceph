@@ -217,13 +217,11 @@ class ScrubJob {
    */
   void adjust_shallow_schedule(
     utime_t last_scrub,
-    const Scrub::sched_conf_t& app_conf,
-    utime_t scrub_clock_now);
+    const Scrub::sched_conf_t& app_conf);
 
   void adjust_deep_schedule(
     utime_t last_deep,
-    const Scrub::sched_conf_t& app_conf,
-    utime_t scrub_clock_now);
+    const Scrub::sched_conf_t& app_conf);
 
   /**
    * For the level specified, set the 'not-before' time to 'now+delay',
@@ -273,6 +271,7 @@ class ScrubJob {
 
   std::ostream& gen_prefix(std::ostream& out, std::string_view fn) const;
   std::string log_msg_prefix;
+
 
 
  /*
