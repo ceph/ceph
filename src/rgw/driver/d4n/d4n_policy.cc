@@ -52,7 +52,7 @@ LFUDAPolicy::~LFUDAPolicy()
 {
   rthread_stop();
   quit = true;
-  {
+  if (cond.has_value()) {
     std::unique_lock<std::mutex> l(lfuda_cleaning_lock);
     cond->notify(l);
   }
@@ -154,7 +154,7 @@ int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_
 
   static auto block_callback = [this](
           const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version, bool dirty, const rgw_user user, const std::string& bucketName, optional_yield y, std::string& restore_val) {
-    update(dpp, key, offset, len, version, dirty, user, bucketName, RefCount::NOOP, y, restore_val);
+    update(dpp, key, offset, len, version, dirty, user, bucketName, RefCount::NOOP, y, nullptr, restore_val);
   };
 
   cacheDriver->restore_blocks_objects(dpp, obj_callback, block_callback);
@@ -343,8 +343,8 @@ int LFUDAPolicy::local_weight_sync(const DoutPrefixProvider* dpp, optional_yield
       redis_exec(conn, ec, req, resp, y);
 
       if (ec) {
-	ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
-	return -ec.value();
+		ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
+		return -ec.value();
       }
     } catch (std::exception &e) {
       return -EINVAL;
@@ -357,21 +357,21 @@ int LFUDAPolicy::local_weight_sync(const DoutPrefixProvider* dpp, optional_yield
 
     if (localAvgWeight < minAvgWeight) { /* Set new minimum weight */
       try { 
-	boost::system::error_code ec;
-	response<ignore_t> resp;
-	request req;
-	req.push("HSET", "lfuda", "minLocalWeights_sum", std::to_string(weightSum), 
-                  "minLocalWeights_size", std::to_string(entries_map.size()), 
-                  "minLocalWeights_address", dpp->get_cct()->_conf->rgw_d4n_local_rgw_address);
+		boost::system::error_code ec;
+		response<ignore_t> resp;
+		request req;
+		req.push("HSET", "lfuda", "minLocalWeights_sum", std::to_string(weightSum), 
+					  "minLocalWeights_size", std::to_string(entries_map.size()), 
+					  "minLocalWeights_address", dpp->get_cct()->_conf->rgw_d4n_local_rgw_address);
 
-	redis_exec(conn, ec, req, resp, y);
+		redis_exec(conn, ec, req, resp, y);
 
-	if (ec) {
-	  ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
-	  return -ec.value();
-	}
+		if (ec) {
+		  ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
+		  return -ec.value();
+		}
       } catch (std::exception &e) {
-	return -EINVAL;
+		return -EINVAL;
       }
     } else {
       weightSum = std::stoi(std::get<0>(resp).value()[0]);
@@ -603,7 +603,7 @@ void LFUDAPolicy::background_eviction_worker(const DoutPrefixProvider* dpp, opti
     }
 
     //if still above watermark, trigger cleaning
-    if (above_watermark) {
+    if (above_watermark && watermark_timer.has_value()) {
       watermark_timer->cancel();
     }
   }
@@ -657,74 +657,89 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
       remoteCacheAddress.clear(); // evict normally without remote put 
     }
 
-	if ((ret = blockDir->get(dpp, &block, y)) < 0) {
-      ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Unable to retrieve victim block's hostsList." << dendl;
+    std::string object_name = block.cacheObj.objName; // without version
+    bool is_versioned = false;
+    bufferlist out_bl;
+	rgw::sal::Attrs obj_attrs;
+	int ret = cacheDriver->get(dpp, entry.key, block.blockID, block.size, out_bl, obj_attrs, y);
+    if (ret < 0) {
+	  ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): " << __LINE__ << ": Failed to retrieve victim data block from cache." << dendl;
 	  return ret;
+	} 
+    
+	if (obj_attrs.contains(RGW_CACHE_ATTR_VERSION_ID)) {
+	  is_versioned = true;
+	  std::string instance = obj_attrs.at(RGW_CACHE_ATTR_VERSION_ID).to_str();
+	  if (instance != "null") {
+		block.cacheObj.objName = "_:" + instance + "_" + block.cacheObj.objName;
+	  } // null version is not part of the data block's objName
 	}
 
-    ldpp_dout(dpp, 20) << __func__ << "(): " << __LINE__ << " Victim host list size is " << block.cacheObj.hostsList.size() << dendl;
+	bufferlist bl = obj_attrs[RGW_CACHE_ATTR_INVALID];
+	if (!bl.length()) {
+	  if ((ret = blockDir->get(dpp, &block, y)) < 0) {
+		ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Unable to retrieve victim block's hostsList." << dendl;
+		return ret;
+	  }
 
-    //the following part takes care of updating the weight (globalWeight) of the block if this is the last copy in a remote setup
-    //and is pushed out to a remote cache where space is available
-    if (block.cacheObj.hostsList.size() == 1 && *(block.cacheObj.hostsList.begin()) == dpp->get_cct()->_conf->rgw_d4n_local_rgw_address) { // Last copy 
-	  update_global_weight = false;
-      if (block.globalWeight) {
-		entry.localWeight += block.globalWeight;
-		block.globalWeight = 0;
-      }
+	  ldpp_dout(dpp, 20) << __func__ << "(): " << __LINE__ << ": Victim host list size is " << block.cacheObj.hostsList.size() << dendl;
 
-	  if (!remoteCacheAddress.empty()) {
-		if (entry.localWeight > avgWeight) {
-		  // Write the victim block to the remote cache
-		  bufferlist out_bl;
-		  rgw::sal::Attrs obj_attrs;
+	  /* The following part takes care of updating the weight (globalWeight) of the block if this is the last copy in a remote setup
+	   * and is pushed out to a remote cache where space is available. */
+	  if (block.cacheObj.hostsList.size() == 1 && *(block.cacheObj.hostsList.begin()) == dpp->get_cct()->_conf->rgw_d4n_local_rgw_address) { // Last copy 
+		update_global_weight = false;
+		if (block.globalWeight) {
+		  entry.localWeight += block.globalWeight;
+		  block.globalWeight = 0;
+		}
 
-		  int ret = cacheDriver->get(dpp, entry.key, block.blockID, block.size, out_bl, obj_attrs, y);
-		  if (ret < 0) {
-			ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): " << __LINE__ << " Failed to retrieve victim data block from cache." << dendl;
-			return ret;
-		  } else {
+		if (!remoteCacheAddress.empty()) {
+		  if (entry.localWeight > avgWeight) {
+			// Write the victim block to the remote cache
 			rgw::d4n::RemoteCachePutOp::RemoteCachePutOpData op {
 			  entry.bucketName,
-			  block.cacheObj.objName,
+			  object_name,
 			  block.blockID,
 			  block.size,
 			  block.version,
-			  false,
+              false,
 			  entry.user,
 			  remoteCacheAddress,
-			  block.cacheObj.size
+			  block.cacheObj.size,
+			  is_versioned
 			};
 			std::unique_ptr<rgw::d4n::RemoteCachePutOp> remote_put = std::make_unique<rgw::d4n::RemoteCachePutOp>(driver, op, true);
 			if ((ret = remote_put->send_and_complete_request(dpp, y, &out_bl)) < 0){
-			  ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): " << __LINE__ << " Sending to remote has failed: " << remoteCacheAddress << dendl;
+			  ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): " << __LINE__ << ": Sending to remote has failed: " << remoteCacheAddress << dendl;
 			  return ret;
 			}
-			ldpp_dout(dpp, 20) << __func__ << "(): " << __LINE__ << " Sending to remote is done." << dendl;
+			ldpp_dout(dpp, 20) << __func__ << "(): " << __LINE__ << ": Sending to remote is done." << dendl;
 			update_global_weight = true;
 		  } 
-	    }
+		}
 	  }
     }
 
-	// Only update victim block's global weight if the block wasn't completely evicted 
+	// Only update victim block's global weight if the block wasn't completely evicted; else, delete block from directory 
     if (update_global_weight) {
 	  block.globalWeight += entry.localWeight;
-	  globalWeight = std::to_string(block.globalWeight);
-	  if (int ret = blockDir->update_field(dpp, &block, "globalWeight", globalWeight, y) < 0) {
+      block.cacheObj.hostsList.clear();
+      block.cacheObj.hostsList.insert(remoteCacheAddress);
+	  // TODO: Need to get and then update the host atomically in a remote setup
+      // Update global weight and remove host in one directory::set call
+	  if (int ret = blockDir->set(dpp, &block, y) < 0) {
+		ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): " << __LINE__ << ": Failed to update victim block entry in directory." << dendl;
 		return ret;
 	  }
-
-	  //Need to get and then update the host atomically in a remote setup
-	  if ((ret = blockDir->remove_host(dpp, &block, dpp->get_cct()->_conf->rgw_d4n_local_rgw_address, y)) < 0) {
-		ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): " << __LINE__ << " Failed to remove local host from victim block." << dendl;
+    } else {
+	  if ((ret = blockDir->del(dpp, &block, y)) < 0) {
+		ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): " << __LINE__ << " Failed to delete victim block." << dendl;
 		return ret;
 	  }
-    }
-
+    } 
 
     if ((ret = cacheDriver->delete_data(dpp, entry.key, y)) < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): " << __LINE__ << " Failed to delete victim block from cache." << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): " << __LINE__ << ": Failed to delete victim block from cache." << dendl;
       return ret;
     }
 
@@ -763,7 +778,7 @@ bool LFUDAPolicy::update_refcount_if_key_exists(const DoutPrefixProvider* dpp, c
   return true;
 }
 
-void LFUDAPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version, std::optional<bool> dirty, const rgw_user user, const std::string& bucketName, uint8_t op, optional_yield y, std::string& restore_val)
+void LFUDAPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version, std::optional<bool> dirty, const rgw_user user, const std::string& bucketName, uint8_t op, optional_yield y, rgw::d4n::CacheBlock* block, std::string& restore_val)
 {
   ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): updating entry: " << key << dendl;
   using handle_type = boost::heap::fibonacci_heap<LFUDAEntry*, boost::heap::compare<EntryComparator<LFUDAEntry>>>::handle_type;
@@ -851,6 +866,9 @@ void LFUDAPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, 
   if (should_notify) {
     ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): notify_one: "<< dendl;
     lw_cond.notify_one();
+  }
+  if (block) { // This parameter is only populated during remote get requests
+    block->globalWeight += age; 
   }
 }
 
@@ -1199,7 +1217,7 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
       std::string oid_in_cache = rgw::sal::get_key_in_cache(e->key, std::to_string(fst), std::to_string(cur_len));
       ldpp_dout(dpp, 20) << __func__ << "(): oid_in_cache =" << oid_in_cache << dendl;
       //Update in-memory data structure for each block
-      this->update(dpp, oid_in_cache, 0, 0, e->version, false, e->user, e->bucket_name, 0, y);
+      this->update(dpp, oid_in_cache, 0, 0, e->version, false, e->user, e->bucket_name, 0, y, nullptr);
 
       rgw::d4n::CacheBlock block;
       block.cacheObj.bucketName = c_obj->get_bucket()->get_bucket_id();
@@ -1223,7 +1241,7 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
   //head block exists only for delete marker
   if (e->delete_marker) {
     //invoke update() with dirty flag set to false, to update in-memory metadata for head
-    this->update(dpp, e->key, 0, 0, e->version, false, e->user, e->bucket_name, 0, y);
+    this->update(dpp, e->key, 0, 0, e->version, false, e->user, e->bucket_name, 0, y, nullptr);
     if ((ret = cacheDriver->set_attr(dpp, e->key, RGW_CACHE_ATTR_DIRTY, "0", y)) < 0) {
       ldpp_dout(dpp, 0) << __func__ << "(): Failed to update dirty attr in cache, ret=" << op_ret << dendl;
     }
@@ -1566,7 +1584,7 @@ int LRUPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_y
   return 0;
 }
 
-void LRUPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version, std::optional<bool> dirty, const rgw_user user, const std::string& bucketName, uint8_t op, optional_yield y, std::string& restore_val)
+void LRUPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version, std::optional<bool> dirty, const rgw_user user, const std::string& bucketName, uint8_t op, optional_yield y, rgw::d4n::CacheBlock* block, std::string& restore_val)
 {
   const std::lock_guard l(lru_lock);
   _erase(dpp, key, y);
