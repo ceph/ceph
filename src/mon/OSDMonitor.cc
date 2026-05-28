@@ -284,6 +284,9 @@ const uint32_t MAX_POOL_APPLICATIONS = 4;
 const uint32_t MAX_POOL_APPLICATION_KEYS = 64;
 const uint32_t MAX_POOL_APPLICATION_LENGTH = 128;
 
+const string CRUSH_ROOT_DEFAULT = "default";
+const string ZONE_FAILURE_DOMAIN_DEFAULT = "datacenter";
+const string OSD_FAILURE_DOMAIN_DEFAULT = "host";
 bool is_osd_writable(const OSDCapGrant& grant, const std::string* pool_name) {
   // Note: this doesn't include support for the application tag match
   if ((grant.spec.allow & OSD_CAP_W) != 0) {
@@ -7773,6 +7776,65 @@ int OSDMonitor::normalize_profile(const string& profilename,
   return 0;
 }
 
+int OSDMonitor::crush_rule_create_replica(const string &name,
+                                          const string &root,
+                                          int64_t num_zones,
+                                          int num_replica_per_zone,
+                                          const string &zone_failure_domain,
+                                          const string &osd_failure_domain,
+                                          const string &device_class,
+                                          bool force,
+                                          int *rule,
+                                          ostream *ss)
+{
+  if (osdmap.crush->rule_exists(name)) {
+    // The name is uniquely associated to a ruleid and the rule it contains
+      // From the user point of view, the rule is more meaningfull.
+      *rule = osdmap.crush->get_rule_id(name);
+      return -EEXIST;
+  }
+  CrushWrapper newcrush = _get_pending_crush();
+
+  if (newcrush.rule_exists(name)) {
+    // The name is uniquely associated to a ruleid and the rule it contains
+    // From the user point of view, the rule is more meaningfull.
+    *rule = newcrush.get_rule_id(name);
+    return -EALREADY;
+  } else {
+    int ruleno;
+    string effective_root = !root.empty() ? root : CRUSH_ROOT_DEFAULT;
+    string effective_zone_failure_domain = !zone_failure_domain.empty() ? zone_failure_domain : g_conf().get_val<string>("osd_pool_default_zone_failure_domain");
+    string effective_osd_failure_domain = !osd_failure_domain.empty() ? osd_failure_domain : OSD_FAILURE_DOMAIN_DEFAULT;
+    if (num_zones > 1) {
+      // default crush params
+      dout(20) << __func__ << " creating simple_stretch_rule " << name
+             << " root " << effective_root
+             << " zone_failure_domain " << effective_zone_failure_domain
+             << " osd_failure_domain " << effective_osd_failure_domain
+             << " num_zones " << num_zones
+             << " num_replica_per_zone " << num_replica_per_zone
+             << " device_class " << device_class
+             << dendl;
+      ruleno = newcrush.add_simple_stretch_rule(
+      name, effective_root, effective_zone_failure_domain, effective_osd_failure_domain, num_zones, num_replica_per_zone, device_class,
+      "firstn", pg_pool_t::TYPE_REPLICATED, force, ss);
+    } else {
+      ruleno = newcrush.add_simple_rule(
+      name, effective_root, effective_osd_failure_domain, device_class,
+      "firstn", pg_pool_t::TYPE_REPLICATED, ss);
+    }
+
+    if (ruleno < 0) {
+        return ruleno;
+    }
+
+    *rule = ruleno;
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
+    return 0;
+  }
+}
+
 int OSDMonitor::crush_rule_create_erasure(const string &name,
 					     const string &profile,
 					     int *rule,
@@ -8115,6 +8177,28 @@ int OSDMonitor::get_replicated_stretch_crush_rule()
   ceph_assert(most_used_count > 0);
   ceph_assert(most_used_rule >= 0);
   return most_used_rule;
+}
+
+int OSDMonitor::handle_crush_rule_creation_result(int err, const string& rule_name)
+{
+  switch (err) {
+  case -EALREADY:
+    dout(20) << "prepare_pool_crush_rule: rule "
+             << rule_name << " try again" << dendl;
+    // fall through
+  case 0:
+    // need to wait for the crush rule to be proposed before proceeding
+    return -EAGAIN;
+  case -EEXIST:
+    return 0;
+  case -EAGAIN:
+    // Erasure code profile is pending, need to wait for it to be committed
+    dout(20) << "prepare_pool_crush_rule: erasure code profile for rule "
+             << rule_name << " is pending, try again" << dendl;
+    return -EAGAIN;
+  default:
+    return err;
+  }
 }
 
 int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
@@ -12000,33 +12084,60 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     cmd_getval(cmdmap, "type", type);
     cmd_getval(cmdmap, "class", device_class);
 
-    if (osdmap.crush->rule_exists(name)) {
-      // The name is uniquely associated to a ruleid and the rule it contains
-      // From the user point of view, the rule is more meaningfull.
-      ss << "rule " << name << " already exists";
-      err = 0;
-      goto reply_no_propose;
-    }
-
-    CrushWrapper newcrush = _get_pending_crush();
-
-    if (newcrush.rule_exists(name)) {
-      // The name is uniquely associated to a ruleid and the rule it contains
-      // From the user point of view, the rule is more meaningfull.
-      ss << "rule " << name << " already exists";
-      err = 0;
-    } else {
-      int ruleno = newcrush.add_simple_rule(
-	name, root, type, device_class,
-	"firstn", pg_pool_t::TYPE_REPLICATED, &ss);
-      if (ruleno < 0) {
-	err = ruleno;
-	goto reply_no_propose;
+    int rule;
+    err = crush_rule_create_replica(name, root, 1, 1, "", type, device_class, false, &rule, &ss);
+    if (err < 0) {
+      switch(err) {
+      case -EEXIST: // return immediately
+        ss << "rule " << name << " already exists";
+        err = 0;
+        goto reply_no_propose;
+      case -EALREADY: // wait for pending to be proposed
+        ss << "rule " << name << " already exists";
+        err = 0;
+        break;
+      default: // non recoverable error
+        goto reply_no_propose;
       }
-
-      pending_inc.crush.clear();
-      newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
+    } else {
+      ss << "created rule " << name << " at " << rule;
     }
+
+    getline(ss, rs);
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
+                                              get_last_committed() + 1));
+    return true;
+
+  } else if (prefix == "osd crush rule create-stretch-replicated") {
+    string name = cmd_getval_or<string>(cmdmap, "rule_name", "stretch_replica_rule");
+    string root = cmd_getval_or<string>(cmdmap, "root", "default");
+    int64_t num_zones = cmd_getval_or<int64_t>(cmdmap, "num_zones", 2);
+    int num_replica_per_zone = cmd_getval_or<int64_t>(cmdmap, "num_replica_per_zone", 2);
+    string zone_failure_domain = cmd_getval_or<string>(cmdmap, "zone_failure_domain", g_conf().get_val<string>("osd_pool_default_zone_failure_domain"));
+    string osd_failure_domain = cmd_getval_or<string>(cmdmap, "osd_failure_domain", "host");
+    bool force = false;
+    cmd_getval(cmdmap, "force", force);
+    string device_class;
+    cmd_getval(cmdmap, "class", device_class);
+    int rule;
+    err = crush_rule_create_replica(name, root, num_zones, num_replica_per_zone, zone_failure_domain, osd_failure_domain, device_class, force, &rule, &ss);
+    if (err < 0) {
+      switch(err) {
+      case -EEXIST: // return immediately
+        ss << "rule " << name << " already exists";
+        err = 0;
+        goto reply_no_propose;
+      case -EALREADY: // wait for pending to be proposed
+        ss << "rule " << name << " already exists";
+        err = 0;
+        break;
+      default: // non recoverable error
+        goto reply_no_propose;
+      }
+    } else {
+      ss << "created rule " << name << " at " << rule;
+    }
+
     getline(ss, rs);
     wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
@@ -16000,6 +16111,21 @@ void OSDMonitor::try_enable_stretch_mode_pools(stringstream& ss, bool *okay,
   *okay = true;
   return;
 }
+
+void OSDMonitor::extract_sites_from_crush_rule(CrushWrapper& crush, set<int>& rule_sites, const set<int>& rule_roots, int dividing_id) {
+  for (int root : rule_roots) {
+    // Take root is above sites, walk down to find them (e.g., "take default")
+    vector<int> children;
+    crush.get_children_of_type(root, dividing_id, &children, false);
+    for (int child : children) {
+      int base_id;
+      int base_class;
+      crush.split_id_class(child, &base_id, &base_class);
+      rule_sites.insert(base_id);
+    }
+  }
+}
+
 
 void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
 					 int *errcode, bool commit,
