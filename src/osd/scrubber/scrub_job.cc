@@ -158,8 +158,8 @@ double ScrubJob::guaranteed_offset(
   if (s_or_d == scrub_level_t::deep) {
     // use the sdv of the deep scrub distribution, times 3 (3-sigma...)
     const double sdv = app_conf.deep_interval * app_conf.deep_randomize_ratio;
-  // note: the '+10.0' is there just to guarantee inequality if '._ratio' is 0
-    return app_conf.deep_interval + abs(3 * sdv) + 10.0;
+    // note: the '+10.0' is there just to guarantee inequality if '._ratio' is 0
+    return app_conf.deep_interval + std::abs(3 * sdv) + 10.0;
   }
 
   // shallow scrub
