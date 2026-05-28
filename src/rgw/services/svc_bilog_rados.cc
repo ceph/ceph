@@ -544,9 +544,10 @@ int RGWSI_BILog_RADOS_FIFO::trim_shard(
   auto lf = std::make_shared<LazyFIFO>(*rados_neo, fifo_oid, neo_loc);
   asio::co_spawn(
       rados_neo->get_executor(),
-      [lf, dpp, marker_str = std::string{marker}]() -> asio::awaitable<void> {
+      [](std::shared_ptr<LazyFIFO> lf, const DoutPrefixProvider* dpp,
+         std::string marker_str) -> asio::awaitable<void> {
         co_return co_await lf->trim(dpp, marker_str, false);
-      }(),
+      }(lf, dpp, std::string{marker}),
       c);
   return 0;
 }
@@ -568,16 +569,17 @@ int RGWSI_BILog_RADOS_FIFO::remove_log_shards(
   const int n = static_cast<int>(rgw::num_shards(log_layout.layout.fifo));
   asio::co_spawn(
       rados_neo->get_executor(),
-      [neo = *rados_neo, neo_loc, dpp,
-       bucket_id = bucket_info.bucket.bucket_id,
-       gen = log_layout.gen, n]() -> asio::awaitable<void> {
+      [](neorados::RADOS neo, neorados::IOContext neo_loc,
+         const DoutPrefixProvider* dpp,
+         std::string bucket_id, uint64_t gen, int n) -> asio::awaitable<void> {
         co_return co_await log_remove(
-            dpp, neo, neo_loc, n,
-            [bucket_id, gen](int shard_id) {
+            dpp, std::move(neo), neo_loc, n,
+            [bucket_id = std::move(bucket_id), gen](int shard_id) {
               return bilog_fifo_oid(bucket_id, gen, shard_id);
             },
             false);
-      }(),
+      }(*rados_neo, neo_loc, dpp,
+        std::string{bucket_info.bucket.bucket_id}, log_layout.gen, n),
       c);
   return 0;
 }
