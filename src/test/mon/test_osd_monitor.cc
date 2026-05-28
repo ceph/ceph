@@ -119,6 +119,106 @@ protected:
   }
 };
 
+class OSDMonitorValidateStretchModeNewPoolTest : public ::testing::Test {
+protected:
+  unique_ptr<CephContext> cct;
+  CrushWrapper crush;
+  mempool::osdmap::map<int64_t, pg_pool_t> pools;
+  string root_name = "default";
+  string zone_failure_domain_name = "zone";
+  string osd_failure_domain_name = "host";
+  string mode = "firstn";
+  bool force = false;
+  int stretch_replica_rule;
+  int stretch_ec_rule;
+
+  stringstream ss;
+  void SetUp() override {
+    vector<const char*> args;
+    cct.reset(new CephContext(CEPH_ENTITY_TYPE_MON));
+    g_ceph_context = cct.get();
+    common_init_finish(g_ceph_context);
+
+    setup_basic_crush();
+  }
+
+  void TearDown() override {
+    g_ceph_context = nullptr;
+  }
+
+  void setup_basic_crush() {
+    crush.create();
+    crush.set_max_devices(12);
+    
+    crush.set_type_name(10, "root");
+    crush.set_type_name(9, "zone");
+    crush.set_type_name(8, "datacenter");
+    crush.set_type_name(1, "host");
+    crush.set_type_name(0, "osd");
+
+    int default_root = 0;
+    crush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+		10, 0, NULL, NULL, &default_root);
+    crush.set_item_name(default_root, "default");
+
+    int zone1 = 0;
+    crush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+		9, 0, NULL, NULL, &zone1);
+    crush.set_item_name(zone1, "zone1");
+
+    int zone2 = 0;
+    crush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+		9, 0, NULL, NULL, &zone2);
+    crush.set_item_name(zone2, "zone2");
+
+    for (int i = 0; i < 6; i++) {
+      int host_id = 0;
+      crush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+          1, 0, NULL, NULL, &host_id);
+      string host = "zone1-host" + std::to_string(i);
+      crush.set_item_name(host_id, host);
+      int osd_id = i;
+      string osd_str = "osd." + std::to_string(osd_id);
+      crush.set_item_name(osd_id, osd_str);
+      crush.insert_item(g_ceph_context, osd_id, 1.0, osd_str,
+          map<string, string>{{"host", host}, {"zone", "zone1"}, {"root", "default"}});
+      
+      crush.move_bucket(g_ceph_context, host_id, map<string, string>{{"zone", "zone1"}});
+    }
+
+    for (int i = 0; i < 6; i++) {
+      int host_id = 0;
+      crush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+          1, 0, NULL, NULL, &host_id);
+      string host = "zone2-host" + std::to_string(i);
+      crush.set_item_name(host_id, host);
+      
+      // Add OSD to this host
+      int osd_id = i + 6;
+      string osd_str = "osd." + std::to_string(osd_id);
+      crush.set_item_name(osd_id, osd_str);
+      crush.insert_item(g_ceph_context, osd_id, 1.0, osd_str,
+          map<string, string>{{"host", host}, {"zone", "zone2"}, {"root", "default"}});
+      
+      crush.move_bucket(g_ceph_context, host_id, map<string, string>{{"zone", "zone2"}});
+    }
+
+    crush.move_bucket(g_ceph_context, zone1, map<string, string>{{"root", "default"}});
+    crush.move_bucket(g_ceph_context, zone2, map<string, string>{{"root", "default"}});
+
+    stretch_replica_rule = crush.add_simple_stretch_rule("stretch_replica_rule", root_name, zone_failure_domain_name,
+      osd_failure_domain_name, 2, 2, "", mode, pg_pool_t::TYPE_REPLICATED, force, &ss);
+    stretch_ec_rule = crush.add_simple_stretch_rule("stretch_ec_rule", root_name, zone_failure_domain_name,
+      osd_failure_domain_name, 2, 6, "", mode, pg_pool_t::TYPE_ERASURE, force, &ss);
+  }
+
+  int validate_stretch_mode_new_pool(int new_crush_rule, int stretch_bucket_count, int stretch_mode_bucket,
+      const string& zone_failure_domain, ostream *ss) {
+    return OSDMonitor::validate_stretch_mode_new_pool(crush, new_crush_rule, stretch_bucket_count, stretch_mode_bucket,
+      pools, zone_failure_domain, ss);
+  }
+};
+
 // Test success when replicated pool has default size=3 and min_size=2
 TEST_F(OSDMonitorStretchTest, ReplicatedPoolDefaultSizeSuccess) {
   create_replicated_pool(1, "test_pool", 3, 2, 0);
@@ -287,6 +387,36 @@ TEST_F(OSDMonitorStretchTest, EmptyPoolSetSuccess) {
   
   EXPECT_TRUE(okay) << "Empty pool set should succeed: " << ss.str();
   EXPECT_EQ(errcode, 0);
+}
+
+TEST_F(OSDMonitorValidateStretchModeNewPoolTest, RejectsRuleWithWrongBarrierType) {
+  int r = validate_stretch_mode_new_pool(stretch_replica_rule, 2, crush.get_type_id(zone_failure_domain_name), "datacenter", &ss);
+
+  EXPECT_EQ(r, -EINVAL);
+  EXPECT_NE(ss.str().find("instead of " + zone_failure_domain_name), string::npos)
+    << "RejectRuleWithWrongBarrierType failed: " << ss.str();
+}
+
+TEST_F(OSDMonitorValidateStretchModeNewPoolTest, RejectsRuleWithNoTakeOperations) {
+  int rule_id = crush.add_rule(0, 0, pg_pool_t::TYPE_REPLICATED);
+  crush.set_rule_name(rule_id, "empty_rule");
+  
+  int r = validate_stretch_mode_new_pool(rule_id, 2, crush.get_type_id(zone_failure_domain_name), zone_failure_domain_name, &ss);
+
+  EXPECT_EQ(r, -EINVAL);
+  EXPECT_NE(ss.str().find("has no take operations"), string::npos) 
+    << "RejectsRuleWithNoTakeOperations: " << ss.str();
+}
+
+TEST_F(OSDMonitorValidateStretchModeNewPoolTest, RejectsRuleWithWrongNumberOfSites) {
+  int r = validate_stretch_mode_new_pool(stretch_ec_rule, 3, crush.get_type_id(zone_failure_domain_name), 
+      zone_failure_domain_name, &ss);
+
+  EXPECT_EQ(r, -EINVAL);
+  EXPECT_NE(ss.str().find("covers 2"), string::npos) 
+    << "RejectsRuleWithWrongNumberOfSites: " << ss.str();
+  EXPECT_NE(ss.str().find("stretch mode requires exactly 3"), string::npos)
+    << "RejectsRuleWithWrongNumberOfSites: " << ss.str();
 }
 
 int main(int argc, char **argv) {
