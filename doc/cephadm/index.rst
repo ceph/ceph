@@ -40,6 +40,7 @@ support older versions of Ceph.
 
     compatibility
     install
+    docker-live-restore
     adoption
     host-management
     Service Management <services/index>

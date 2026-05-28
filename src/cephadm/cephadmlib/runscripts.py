@@ -6,7 +6,7 @@ import shlex
 from typing import Any, Dict, Union, List, IO, TextIO, Optional, cast
 
 from . import templating
-from .container_engines import Podman
+from .container_engines import Podman, Docker
 from .container_types import CephContainer, InitContainer, SidecarContainer
 from .context import CephadmContext
 from .context_getters import fetch_meta
@@ -67,6 +67,9 @@ def write_service_scripts(
         for command in pre_start_commands or []:
             _write_command(ctx, runf, command)
         _write_container_cmd_to_bash(ctx, runf, container, ident.daemon_name)
+
+        if isinstance(ctx.container_engine, Docker):
+            _write_pidfile_init(ctx, runf, container)
 
         # some metadata about the deploy
         metaf = estack.enter_context(write_new(meta_file_path))
@@ -159,6 +162,18 @@ def _write_container_cmd_to_bash(
 
     # container run command
     _bash_cmd(file_obj, container.run_cmd(), background=bool(background))
+
+
+def _write_pidfile_init(
+    ctx: CephadmContext,
+    file_obj: IO[str],
+    container: 'CephContainer',
+) -> None:
+    file_obj.write(
+        'if [[ $1 ]] ; then\n'
+        + f"  ps -o ppid= -p $({ctx.container_engine.path} inspect --format '{{{{ .State.Pid }}}}' {container.cname})"
+        + '> $1\nfi\n'
+    )
 
 
 def _write_stop_actions(

@@ -19,24 +19,28 @@ Before=ceph-{{fsid}}.target
 LimitNOFILE=1048576
 LimitNPROC=1048576
 EnvironmentFile=-/etc/environment
-ExecStart=/bin/bash {{ctx.data_dir}}/{{fsid}}/%i/unit.run
+ExecStart=/bin/bash {{ctx.data_dir}}/{{fsid}}/%i/unit.run{% if has_docker_engine %} %t/%n-pid{% endif %}
 ExecStop=-/bin/bash -c 'bash {{ctx.data_dir}}/{{fsid}}/%i/unit.stop'
 ExecStopPost=-/bin/bash {{ctx.data_dir}}/{{fsid}}/%i/unit.poststop
 KillMode=none
-Restart=on-failure
 RestartSec=10s
 TimeoutStartSec=200
 TimeoutStopSec=120
 StartLimitInterval=30min
 StartLimitBurst=5
 {%- if has_podman_engine %}
+Restart=on-failure
 ExecStartPre=-/bin/rm -f %t/%n-pid %t/%n-cid
 ExecStopPost=-/bin/rm -f %t/%n-pid %t/%n-cid
+{%- endif %}
 Type=forking
 PIDFile=%t/%n-pid
+{%- if has_docker_engine %}
+Restart=always
+ExecStartPre=-/bin/rm -f %t/%n-pid
+{%- endif %}
 {%- if has_podman_split_version %}
 Delegate=yes
-{%- endif %}
 {%- endif %}
 
 [Install]
