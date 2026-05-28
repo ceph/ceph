@@ -151,7 +151,7 @@ struct CacheBlock {
   std::string version;
   bool deleteMarker{false};
   uint64_t size; /* Block size in bytes */
-  int globalWeight = 0; /* LFUDA policy variable */
+  uint64_t globalWeight = 0; /* LFUDA policy variable */
   /* Blocks use the cacheObj's dirty and hostsList metadata to store their dirty flag values and locations in the block directory. */
 };
 
@@ -233,6 +233,7 @@ concept AssociativeContainer = requires(C c, typename C::key_type k) {
 class BlockDirectory: public Directory {
   public:
     BlockDirectory(std::shared_ptr<connection>& conn) : conn(conn) {}
+	~BlockDirectory() {}
     
     int exist_key(const DoutPrefixProvider* dpp, CacheBlock* block, optional_yield y);
 
@@ -258,8 +259,8 @@ class BlockDirectory: public Directory {
 
   private:
     std::shared_ptr<connection> conn;
-    std::string build_index(CacheBlock* block);
 
+    std::string build_index(CacheBlock* block);
     template<AssociativeContainer Container>
     int set_values(const DoutPrefixProvider* dpp, CacheBlock& block, Container& redisValues, optional_yield y);
 };
