@@ -255,6 +255,10 @@ protected:
 };
 
 
+}
+#include "crimson/os/relaystore/relay_store.h"
+
+namespace crimson::os {
 struct RelayStore {
   FuturizedStore::Shard &shard;
   uint32_t shard_count;
@@ -264,7 +268,11 @@ struct RelayStore {
   static seastar::future<> with_store_do_transaction(
     RelayStore  store,
     boost::intrusive_ptr<FuturizedCollection> ch, // TODO: move back to `FuturizedStore::Shard::CollectionRef ch,`
-    ceph::os::Transaction&& txn);
+    ceph::os::Transaction&& txn)
+  {
+    crimson::os::_RelayStore::Shard _store{store.shard, store.shard_count};
+    return crimson::os::_RelayStore::Shard::with_store_do_transaction(_store, ch, std::move(txn));
+  }
 
   template<auto MemberFunc, typename... Args>
   static auto with_store(RelayStore store, Args&&... args);

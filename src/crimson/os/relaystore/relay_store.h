@@ -85,6 +85,11 @@ public:
     {}
     ~Shard() = default;
 
+    static seastar::future<> with_store_do_transaction(
+      Shard &store,
+      boost::intrusive_ptr<FuturizedCollection> ch, // TODO: move back to `FuturizedStore::Shard::CollectionRef ch,`
+      ceph::os::Transaction&& txn);
+
     seastar::future<struct stat> stat(
       CollectionRef c,
       const ghobject_t& oid,
