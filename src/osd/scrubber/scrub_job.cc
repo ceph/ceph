@@ -128,7 +128,8 @@ void ScrubJob::adjust_shallow_schedule(
 
     // add a random delay to the proposed scheduled time
     adj_target += app_conf.shallow_interval;
-    double r = rand() / (double)RAND_MAX;
+    std::uniform_real_distribution<double> dist{0.0, 1.0};
+    double r = dist(random_gen);
     adj_target +=
 	app_conf.shallow_interval * app_conf.interval_randomize_ratio * r;
 
