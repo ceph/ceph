@@ -990,7 +990,14 @@ void Client::update_inode_file_size(Inode *in, int issued, uint64_t size,
           // in the case of fscrypt truncate, you'll want to invalidate
           // the whole fscrypt block (from start of block to end)
           // otherwise on a read you'll have an invalid fscrypt block
-	  _invalidate_inode_cache(in, fscrypt_block_start(size), FSCRYPT_BLOCK_SIZE);
+          int64_t padded_len = FSCRYPT_BLOCK_SIZE;
+          int64_t start = fscrypt_block_start(size);
+          int64_t end = fscrypt_next_block_start(prior_size);
+
+          if (start != end)
+                padded_len = end - start;
+
+          _invalidate_inode_cache(in, start, padded_len);
 	} else
 #endif
           _invalidate_inode_cache(in, size, prior_size - size);
