@@ -87,7 +87,7 @@ class SSDDriverFixture: public ::testing::Test {
   protected:
     virtual void SetUp() {
         rgw::cache::Partition partition_info{.name = "d4n", .type = "read-cache", .location = "rgw_d4n_datacache", .reserve_size = 1073741824};
-        cacheDriver = new rgw::cache::SSDDriver{partition_info, false};
+        cacheDriver = new rgw::cache::SSDDriver{partition_info, io, false};
 
         ASSERT_NE(cacheDriver, nullptr);
 
@@ -106,8 +106,10 @@ class SSDDriverFixture: public ::testing::Test {
     } 
 
     virtual void TearDown() {
-      delete cacheDriver;
-    }
+		if (cacheDriver) {
+			delete cacheDriver;
+		}
+	}
 
     rgw::cache::SSDDriver* cacheDriver;
 
@@ -134,6 +136,9 @@ TEST_F(SSDDriverFixture, PutAndGet)
         ASSERT_EQ(0, cacheDriver->get(env->dpp, "bucketid#version#objName#0#4096", 0, bl.length(), ret, get_attrs, yield));
         EXPECT_EQ(ret, bl);
         EXPECT_EQ(get_attrs.size(), 0);
+
+        delete cacheDriver;
+		cacheDriver = nullptr;
     }, rethrow);
 
     io.run();

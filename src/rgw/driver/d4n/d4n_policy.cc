@@ -52,7 +52,7 @@ LFUDAPolicy::~LFUDAPolicy()
 {
   rthread_stop();
   quit = true;
-  {
+  if (cond.has_value()) {
     std::unique_lock<std::mutex> l(lfuda_cleaning_lock);
     cond->notify(l);
   }
@@ -343,8 +343,8 @@ int LFUDAPolicy::local_weight_sync(const DoutPrefixProvider* dpp, optional_yield
       redis_exec(conn, ec, req, resp, y);
 
       if (ec) {
-	ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
-	return -ec.value();
+		ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
+		return -ec.value();
       }
     } catch (std::exception &e) {
       return -EINVAL;
@@ -357,21 +357,21 @@ int LFUDAPolicy::local_weight_sync(const DoutPrefixProvider* dpp, optional_yield
 
     if (localAvgWeight < minAvgWeight) { /* Set new minimum weight */
       try { 
-	boost::system::error_code ec;
-	response<ignore_t> resp;
-	request req;
-	req.push("HSET", "lfuda", "minLocalWeights_sum", std::to_string(weightSum), 
-                  "minLocalWeights_size", std::to_string(entries_map.size()), 
-                  "minLocalWeights_address", dpp->get_cct()->_conf->rgw_d4n_local_rgw_address);
+		boost::system::error_code ec;
+		response<ignore_t> resp;
+		request req;
+		req.push("HSET", "lfuda", "minLocalWeights_sum", std::to_string(weightSum), 
+					  "minLocalWeights_size", std::to_string(entries_map.size()), 
+					  "minLocalWeights_address", dpp->get_cct()->_conf->rgw_d4n_local_rgw_address);
 
-	redis_exec(conn, ec, req, resp, y);
+		redis_exec(conn, ec, req, resp, y);
 
-	if (ec) {
-	  ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
-	  return -ec.value();
-	}
+		if (ec) {
+		  ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
+		  return -ec.value();
+		}
       } catch (std::exception &e) {
-	return -EINVAL;
+		return -EINVAL;
       }
     } else {
       weightSum = std::stoi(std::get<0>(resp).value()[0]);
@@ -603,7 +603,7 @@ void LFUDAPolicy::background_eviction_worker(const DoutPrefixProvider* dpp, opti
     }
 
     //if still above watermark, trigger cleaning
-    if (above_watermark) {
+    if (above_watermark && watermark_timer.has_value()) {
       watermark_timer->cancel();
     }
   }
@@ -657,74 +657,90 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
       remoteCacheAddress.clear(); // evict normally without remote put 
     }
 
-	if ((ret = blockDir->get(dpp, &block, y)) < 0) {
-      ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Unable to retrieve victim block's hostsList." << dendl;
+    std::string object_name = block.cacheObj.objName; // without version
+    bool is_versioned = false;
+    bufferlist out_bl;
+	rgw::sal::Attrs obj_attrs;
+	int ret = cacheDriver->get(dpp, entry.key, block.blockID, block.size, out_bl, obj_attrs, y);
+    if (ret < 0) {
+	  ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): " << __LINE__ << ": Failed to retrieve victim data block from cache." << dendl;
 	  return ret;
+	} 
+    
+	if (obj_attrs.contains(RGW_CACHE_ATTR_VERSION_ID)) {
+	  is_versioned = true;
+	  std::string instance = obj_attrs.at(RGW_CACHE_ATTR_VERSION_ID).to_str();
+	  if (instance != "null") {
+		block.cacheObj.objName = "_:" + instance + "_" + block.cacheObj.objName;
+	  } // null version is not part of the data block's objName
 	}
 
-    ldpp_dout(dpp, 20) << __func__ << "(): " << __LINE__ << " Victim host list size is " << block.cacheObj.hostsList.size() << dendl;
+	bufferlist bl = obj_attrs[RGW_CACHE_ATTR_INVALID];
+	if (!bl.length()) {
+	  if ((ret = blockDir->get(dpp, &block, y)) < 0) {
+		ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Unable to retrieve victim block's hostsList." << dendl;
+		return ret;
+	  }
 
-    //the following part takes care of updating the weight (globalWeight) of the block if this is the last copy in a remote setup
-    //and is pushed out to a remote cache where space is available
-    if (block.cacheObj.hostsList.size() == 1 && *(block.cacheObj.hostsList.begin()) == dpp->get_cct()->_conf->rgw_d4n_local_rgw_address) { // Last copy 
-	  update_global_weight = false;
-      if (block.globalWeight) {
-		entry.localWeight += block.globalWeight;
-		block.globalWeight = 0;
-      }
+	  ldpp_dout(dpp, 20) << __func__ << "(): " << __LINE__ << ": Victim host list size is " << block.cacheObj.hostsList.size() << dendl;
 
-	  if (!remoteCacheAddress.empty()) {
-		if (entry.localWeight > avgWeight) {
-		  // Write the victim block to the remote cache
-		  bufferlist out_bl;
-		  rgw::sal::Attrs obj_attrs;
+	  /* The following part takes care of updating the weight (globalWeight) of the block if this is the last copy in a remote setup
+	   * and is pushed out to a remote cache where space is available. */
+	  if (block.cacheObj.hostsList.size() == 1 && *(block.cacheObj.hostsList.begin()) == dpp->get_cct()->_conf->rgw_d4n_local_rgw_address) { // Last copy 
+		update_global_weight = false;
+		if (block.globalWeight) {
+		  entry.localWeight += block.globalWeight;
+		  block.globalWeight = 0;
+		}
 
-		  int ret = cacheDriver->get(dpp, entry.key, block.blockID, block.size, out_bl, obj_attrs, y);
-		  if (ret < 0) {
-			ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): " << __LINE__ << " Failed to retrieve victim data block from cache." << dendl;
-			return ret;
-		  } else {
+		if (!remoteCacheAddress.empty()) {
+		  if (entry.localWeight > avgWeight) {
+			// Write the victim block to the remote cache
 			rgw::d4n::RemoteCachePutOp::RemoteCachePutOpData op {
 			  entry.bucketName,
-			  block.cacheObj.objName,
+			  object_name,
 			  block.blockID,
 			  block.size,
 			  block.version,
-			  false,
+              false,
 			  entry.user,
 			  remoteCacheAddress,
-			  block.cacheObj.size
+			  block.cacheObj.size,
+			  is_versioned
 			};
 			std::unique_ptr<rgw::d4n::RemoteCachePutOp> remote_put = std::make_unique<rgw::d4n::RemoteCachePutOp>(driver, op, true);
 			if ((ret = remote_put->send_and_complete_request(dpp, y, &out_bl)) < 0){
-			  ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): " << __LINE__ << " Sending to remote has failed: " << remoteCacheAddress << dendl;
+			  ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): " << __LINE__ << ": Sending to remote has failed: " << remoteCacheAddress << dendl;
 			  return ret;
 			}
-			ldpp_dout(dpp, 20) << __func__ << "(): " << __LINE__ << " Sending to remote is done." << dendl;
+			ldpp_dout(dpp, 20) << __func__ << "(): " << __LINE__ << ": Sending to remote is done." << dendl;
 			update_global_weight = true;
 		  } 
-	    }
+		}
 	  }
     }
 
-	// Only update victim block's global weight if the block wasn't completely evicted 
+	// Only update victim block's global weight if the block wasn't completely evicted; else, delete block from directory 
     if (update_global_weight) {
 	  block.globalWeight += entry.localWeight;
 	  globalWeight = std::to_string(block.globalWeight);
 	  if (int ret = blockDir->update_field(dpp, &block, "globalWeight", globalWeight, y) < 0) {
 		return ret;
 	  }
-
 	  //Need to get and then update the host atomically in a remote setup
 	  if ((ret = blockDir->remove_host(dpp, &block, dpp->get_cct()->_conf->rgw_d4n_local_rgw_address, y)) < 0) {
-		ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): " << __LINE__ << " Failed to remove local host from victim block." << dendl;
+		ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): " << __LINE__ << ": Failed to remove local host from victim block." << dendl;
 		return ret;
 	  }
-    }
-
+    } else {
+	  if ((ret = blockDir->del(dpp, &block, y)) < 0) {
+		ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): " << __LINE__ << " Failed to delete victim block." << dendl;
+		return ret;
+	  }
+    } 
 
     if ((ret = cacheDriver->delete_data(dpp, entry.key, y)) < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): " << __LINE__ << " Failed to delete victim block from cache." << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): " << __LINE__ << ": Failed to delete victim block from cache." << dendl;
       return ret;
     }
 

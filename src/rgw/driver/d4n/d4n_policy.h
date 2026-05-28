@@ -234,9 +234,9 @@ class LFUDAPolicy : public CachePolicy {
                                               const rgw_obj_key& obj_key, State state);
 
   public:
-    LFUDAPolicy(std::shared_ptr<connection>& conn, rgw::cache::CacheDriver* cacheDriver, optional_yield y) : CachePolicy(cacheDriver), 
-                                                                                                             y(y),
-													     conn(conn)
+    LFUDAPolicy(const DoutPrefixProvider* dpp, std::shared_ptr<connection>& conn, rgw::cache::CacheDriver* cacheDriver, optional_yield y) : CachePolicy(cacheDriver), 
+																																			y(y),
+																																		    conn(conn)
     {
       blockDir = std::make_unique<BlockDirectory>(conn);
       objDir = std::make_unique<ObjectDirectory>(conn);
@@ -268,6 +268,7 @@ class LFUDAPolicy : public CachePolicy {
     }
     void save_y(optional_yield y) { this->y = y; }
     void localweight_writer(const DoutPrefixProvider* dpp);
+    int get_age() { return age; }
 };
 
 class LRUPolicy : public CachePolicy {
@@ -304,12 +305,12 @@ class PolicyDriver {
     CachePolicy* cachePolicy;
 
   public:
-    PolicyDriver(std::shared_ptr<connection>& conn, rgw::cache::CacheDriver* cacheDriver, const std::string& _policyName, optional_yield y) : policyName(_policyName) 
+    PolicyDriver(const DoutPrefixProvider* dpp, std::shared_ptr<connection>& conn, rgw::cache::CacheDriver* cacheDriver, const std::string& _policyName, optional_yield y) : policyName(_policyName) 
     {
       if (policyName == "lfuda") {
-	cachePolicy = new LFUDAPolicy(conn, cacheDriver, y);
+		cachePolicy = new LFUDAPolicy(dpp, conn, cacheDriver, y);
       } else if (policyName == "lru") {
-	cachePolicy = new LRUPolicy(cacheDriver);
+		cachePolicy = new LRUPolicy(cacheDriver);
       }
     }
     ~PolicyDriver() {
