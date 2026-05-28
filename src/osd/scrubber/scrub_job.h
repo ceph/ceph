@@ -238,20 +238,6 @@ class ScrubJob {
       delay_cause_t delay_cause,
       utime_t scrub_clock_now);
 
- /**
-   * recalculate the scheduling parameters for the periodic scrub targets.
-   * Used whenever the "external state" of the PG changes, e.g. when made
-   * primary - or indeed when the configuration changes.
-   *
-   * Does not modify ripe targets.
-   * (why? for example, a 'scrub pg' command following a 'deepscrub pg'
-   * would otherwise push the deep scrub to the future).
-   */
-  void on_periods_change(
-      const sched_params_t& suggested,
-      const Scrub::sched_conf_t& aconf,
-      utime_t scrub_clock_now) {}
-
   /**
    * the operator requested a scrub (shallow, deep or repair).
    * Set the selected target to the requested urgency, adjusting scheduling
@@ -287,17 +273,6 @@ class ScrubJob {
 
   std::ostream& gen_prefix(std::ostream& out, std::string_view fn) const;
   std::string log_msg_prefix;
-
-  // the comparison operator is used to sort the scrub jobs in the queue.
-  // Note that it would not be needed in the next iteration of this code, as
-  // the queue would *not* hold the full ScrubJob objects, but rather -
-  // SchedTarget(s).
-  std::partial_ordering operator<=>(const ScrubJob& rhs) const
-  {
-    return cmp_entries(
-      ceph_clock_now(), shallow_target.queued_element(),
-      deep_target.queued_element());
-  };
 
 
  /*
