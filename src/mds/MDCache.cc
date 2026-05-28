@@ -15115,8 +15115,8 @@ void MDCache::quarantine_dir_auth(const MDRequestRef& mdr)
   // If an operation is in progress (quarantine_op != QUARANTINE_NONE), skip this check
   // and let the register_quarantine_mgr check below return EBUSY.
   if (in->quarantine_op == QUARANTINE_NONE &&
-      ((mdr->qtine_op == QUARANTINE_ADD && in->is_quarantined()) ||
-       (mdr->qtine_op == QUARANTINE_DEL && !in->is_quarantined()))) {
+      ((mdr->qtine_op == QUARANTINE_ADD && in->has_quarantined()) ||
+       (mdr->qtine_op == QUARANTINE_DEL && !in->has_quarantined()))) {
     dout(20) << __func__
              << " quarantine on inode:" << in->ino() << std::dec
              << " is already "
@@ -15205,7 +15205,9 @@ void MDCache::quarantine_inode(MDRequestRef const& mdr)
     auto *pip = pi.inode.get();
 
     if (mdr->qtine_op == QUARANTINE_ADD) {
-      pip->set_quarantine();
+      auto& qmd = pip->set_quarantine();
+      qmd.enabled = true;
+      qmd.set_timestamp(ceph_clock_now());
     } else if (mdr->qtine_op == QUARANTINE_DEL) {
       pip->del_quarantine();
     } else {

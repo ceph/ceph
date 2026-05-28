@@ -495,9 +495,6 @@ struct MDRequestImpl : public MutationImpl {
   // indicator for vxattr osdmap update
   bool waited_for_osdmap = false;
 
-  // referent straydn
-  bool referent_straydn = false;
-
   // quarantine fields
   unsigned qtine_op = QUARANTINE_NONE;
   // qtine_mgr is a temporary pointer holder until the pointer is registered

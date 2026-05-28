@@ -2268,7 +2268,7 @@ void CInode::encode_lock_ipolicy(bufferlist& bl)
 void CInode::decode_lock_ipolicy(bufferlist::const_iterator& p)
 {
   ceph_assert(!is_auth());
-  const bool was_quarantined = get_inode()->is_quarantined();
+  const bool was_quarantined = get_inode()->has_quarantined();
   auto _inode = allocate_inode(*get_inode());
   DECODE_START(4, p);
   if (is_dir()) {
@@ -2297,7 +2297,7 @@ void CInode::decode_lock_ipolicy(bufferlist::const_iterator& p)
   }
   DECODE_FINISH(p);
 
-  const bool is_quarantined = _inode->is_quarantined();
+  const bool is_quarantined = _inode->has_quarantined();
   bool pin_updated = (get_inode()->export_pin != _inode->export_pin) ||
 		     (get_inode()->get_ephemeral_distributed_pin() !=
 		      _inode->get_ephemeral_distributed_pin());
@@ -4130,7 +4130,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       dout(25) << "cs now " << cs << dendl;
     }
 
-    if (is_quarantined()) {
+    if (has_quarantined()) {
       auto& opt = optmetadata.get_or_create_opt(kind_t::QUARANTINE);
       auto& qs = opt.template get_meta< quarantine_md_t >();
       dout(25) << "qtine now " << qs << dendl;
@@ -5909,8 +5909,8 @@ bool CInode::is_quiesced() const {
   return mdr->internal_op == CEPH_MDS_OP_QUIESCE_INODE;
 }
 
-bool CInode::is_quarantined() const { 
-  return get_inode()->is_quarantined();
+bool CInode::has_quarantined() const { 
+  return get_inode()->has_quarantined();
 }
 
 // return true if the immediate parent snaprealm inode is quarantined
@@ -5920,7 +5920,7 @@ bool CInode::is_under_quarantine() const {
     inodeno_t subvol_ino = snaprealm->get_subvolume_ino();
     auto *subvol_in = mdcache->get_inode(subvol_ino);
     if (subvol_in) {
-      if (subvol_in->is_being_quarantined() || subvol_in->is_quarantined()) {
+      if (subvol_in->is_being_quarantined() || subvol_in->has_quarantined()) {
         return true;
       }
     } else if (subvol_ino) {
