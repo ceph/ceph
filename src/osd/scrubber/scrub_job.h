@@ -307,8 +307,6 @@ class ScrubJob {
  * Some types of scrubs are exempt from some or all of the preconditions and
  * limitations that apply to regular scrubs. The following table
  * details the specific set of exemptions per 'urgency' level:
- * (note: regular scrubs that are overdue are also allowed a specific
- * set of exemptions. Those will be covered elsewhere).
  *
  * The relevant limitations are:
  * - reservation: the scrub must reserve replicas;
