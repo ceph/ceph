@@ -187,8 +187,8 @@ ReplicatedRecoveryBackend::maybe_pull_missing_obj(
            });
        });
   }).handle_error_interruptible(
-    crimson::ct_error::assert_all(fmt::format(
-      "{} {} error with {} need {} ", pg, FNAME, soid, need).c_str())
+    crimson::ct_error::assert_all("{} {} error with {} need {}",
+                                      std::cref(pg), FNAME, soid, need)
   );
 }
 
@@ -789,8 +789,9 @@ ReplicatedRecoveryBackend::read_omap_for_push_op(
         new_progress.omap_complete = false;
       }
     }).handle_error(
-      crimson::os::FuturizedStore::Shard::read_errorator::assert_all(fmt::format(
-        "{} ReplicatedRecoveryBackend::read_omap_for_push_op error with {}", pg, oid).c_str())
+      crimson::os::FuturizedStore::Shard::read_errorator::assert_all(
+        "{} ReplicatedRecoveryBackend::read_omap_for_push_op error with {}",
+        std::cref(pg), oid)
     )
   );
 }

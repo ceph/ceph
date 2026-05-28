@@ -434,7 +434,7 @@ void ECBackend::handle_sub_write(
     logger().debug("ECBackend::{} from {}",
 		    "handle_sub_write::reply", reply.from);
     return handle_rep_write_reply(std::move(reply));
-  }, crimson::ct_error::assert_all{});
+  }, crimson::ct_error::assert_all("unexpected error"));
 }
 
 ECBackend::write_iertr::future<>
@@ -450,7 +450,7 @@ ECBackend::handle_rep_write_op(
   ).si_then([&pg] {
     assert(!pg.pgb_is_primary());
     return write_iertr::now();
-  }, crimson::ct_error::assert_all{});
+  }, crimson::ct_error::assert_all("unexpected error"));
 }
 
 ECBackend::write_iertr::future<>

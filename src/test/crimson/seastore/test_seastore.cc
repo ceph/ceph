@@ -609,7 +609,7 @@ struct seastore_test_t :
       SeaStoreShard &sharded_seastore) {
       return sharded_seastore.get_attrs(coll, oid)
 	.handle_error(
-	  SeaStoreShard::get_attrs_ertr::assert_all{"unexpected error"})
+	  SeaStoreShard::get_attrs_ertr::assert_all("unexpected error"))
 	.get();
     }
 
@@ -618,7 +618,7 @@ struct seastore_test_t :
       std::string_view name) {
       return sharded_seastore.get_attr(coll, oid, name)
 	.handle_error(
-	  SeaStoreShard::get_attr_errorator::assert_all{"unexpected error"})
+	  SeaStoreShard::get_attr_errorator::assert_all("unexpected error"))
 	.get();
     }
 

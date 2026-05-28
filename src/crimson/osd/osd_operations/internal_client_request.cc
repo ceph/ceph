@@ -86,8 +86,8 @@ InternalClientRequest::with_interruption()
   co_await pg->obc_loader.load_and_lock(
     obc_manager, pg->get_lock_type(op_info)
   ).handle_error_interruptible(
-    crimson::ct_error::assert_all(
-      fmt::format("{} {} {} error when loading {}",*pg, FNAME, *this, get_target_oid()).c_str())
+    crimson::ct_error::assert_all("{} {} {} error when loading {}",
+      std::cref(*pg), FNAME, std::cref(*this), get_target_oid())
   );
 
   auto params = get_do_osd_ops_params();
@@ -97,8 +97,8 @@ InternalClientRequest::with_interruption()
   co_await pg->run_executer(
     ox, obc_manager.get_obc(), op_info, osd_ops
   ).handle_error_interruptible(
-    crimson::ct_error::assert_all(
-      fmt::format("{} {} {}: got unexpected error {}", *pg, FNAME, *this, get_target_oid()).c_str())
+    crimson::ct_error::assert_all("{} {} {}: got unexpected error {}",
+      std::cref(*pg), FNAME, std::cref(*this), get_target_oid())
   );
 
   auto [submitted, completed] = co_await pg->submit_executer(

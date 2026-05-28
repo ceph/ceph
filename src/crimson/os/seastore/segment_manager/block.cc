@@ -520,9 +520,9 @@ SegmentManager::read_ertr::future<uint32_t> BlockSegmentManager::get_shard_nums(
   }).safe_then([](auto sb) {
     return read_ertr::make_ready_future<uint32_t>(sb.shard_num);
   }).handle_error(
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid error in BlockSegmentManager::get_shard_nums"
-    }
+    )
   );
 }
 
@@ -532,9 +532,9 @@ BlockSegmentManager::mount_ret BlockSegmentManager::mount()
     return seastar::do_for_each(local_device.mshard_devices, [](auto& mshard_device) {
       return mshard_device->shard_mount(
       ).handle_error(
-        crimson::ct_error::assert_all{
+        crimson::ct_error::assert_all(
           "Invalid error in BlockSegmentManager::mount"
-      });
+      ));
     });
   });
 }
@@ -598,9 +598,9 @@ BlockSegmentManager::mkfs_ret BlockSegmentManager::mkfs(
       return seastar::do_for_each(local_device.mshard_devices, [](auto& mshard_device) {
         return mshard_device->shard_mkfs(
         ).handle_error(
-          crimson::ct_error::assert_all{
+          crimson::ct_error::assert_all(
             "Invalid error in BlockSegmentManager::mkfs"
-        });
+        ));
       });
     });
   });

@@ -45,9 +45,9 @@ template <typename T>
 dec_ref_ret dec_ref(omap_context_t oc, T&& addr) {
   return oc.tm.remove(oc.t, std::forward<T>(addr)).handle_error_interruptible(
     dec_ref_iertr::pass_further{},
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid error in OMapInnerNode helper dec_ref"
-    }
+    )
   ).discard_result();
 }
 
@@ -204,7 +204,7 @@ OMapInnerNode::rm_key(omap_context_t oc, std::string key)
       co_return co_await handle_split(oc, child_pt, mresult
           ).handle_error_interruptible(
 	          rm_key_iertr::pass_further{},
-	          crimson::ct_error::assert_all{"unexpected error"}
+	          crimson::ct_error::assert_all("unexpected error")
 	  );
     default:
       co_return mresult;
@@ -255,7 +255,7 @@ OMapInnerNode::rm_key_range(omap_context_t oc, key_range_t &key_range)
       co_return co_await handle_split(oc, child_pt, mresult
           ).handle_error_interruptible(
 	          rm_key_range_iertr::pass_further{},
-	          crimson::ct_error::assert_all{"unexpected error"}
+	          crimson::ct_error::assert_all("unexpected error")
           );
     default:
       co_return mresult;

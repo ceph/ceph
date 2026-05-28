@@ -100,9 +100,9 @@ NVMeBlockDevice::mount_ret NVMeBlockDevice::mount()
     return seastar::do_for_each(local_device.mshard_devices, [](auto& mshard_device) {
       return mshard_device->do_shard_mount(
       ).handle_error(
-        crimson::ct_error::assert_all{
+        crimson::ct_error::assert_all(
           "Invalid error in NVMeBlockDevice::do_shard_mount"
-      });
+      ));
     });
   });
 

@@ -785,7 +785,7 @@ public:
 	  mapping.get_extent_type()
 	).handle_error_interruptible(
 	  clone_iertr::pass_further{},
-	  crimson::ct_error::assert_all{"unexpected error"}
+	  crimson::ct_error::assert_all("unexpected error")
 	);
 	assert((dst_base + cloned_to).checked_to_laddr() == r.get_key());
 	cloned_to += clone_len;
@@ -940,7 +940,7 @@ public:
       }
     }).handle_error_interruptible(
       crimson::ct_error::input_output_error::pass_further{},
-      crimson::ct_error::assert_all{"unexpected error!"}
+      crimson::ct_error::assert_all("unexpected error!")
     );
   }
 
@@ -965,7 +965,7 @@ public:
       });
     }).handle_error_interruptible(
       crimson::ct_error::input_output_error::pass_further{},
-      crimson::ct_error::assert_all{"unexpected error!"}
+      crimson::ct_error::assert_all("unexpected error!")
     );
   }
 
@@ -1000,7 +1000,7 @@ public:
       return seastar::now();
     }).handle_error_interruptible(
       crimson::ct_error::input_output_error::pass_further{},
-      crimson::ct_error::assert_all{"unexpected error!"}
+      crimson::ct_error::assert_all("unexpected error!")
     );
   }
 
@@ -1100,7 +1100,7 @@ public:
 	t, std::move(mapping)
       ).handle_error_interruptible(
 	remap_mappings_iertr::pass_further{},
-	crimson::ct_error::assert_all{"unexpected error"}
+	crimson::ct_error::assert_all("unexpected error")
       );
       for (auto &remap : remaps) {
 	auto laddr = (orig_laddr + remap.offset).checked_to_laddr();
@@ -1112,7 +1112,7 @@ public:
           type
 	).handle_error_interruptible(
 	  remap_mappings_iertr::pass_further{},
-	  crimson::ct_error::assert_all{"unexpected error"}
+	  crimson::ct_error::assert_all("unexpected error")
 	);
 	ret.emplace_back(new_mapping);
 	pos = co_await new_mapping.next();
@@ -1181,7 +1181,7 @@ public:
       return remove(t, std::move(mapping)
       ).handle_error_interruptible(
 	punch_mappings_iertr::pass_further{},
-	crimson::ct_error::assert_all{"impossible"}
+	crimson::ct_error::assert_all("impossible")
       );
     }
   }
@@ -1264,18 +1264,18 @@ public:
 	mapping = co_await remove(t, std::move(mapping)
 	).handle_error_interruptible(
 	  punch_mappings_iertr::pass_further{},
-	  crimson::ct_error::assert_all{
+	  crimson::ct_error::assert_all(
 	    "remove_mappings_in_range hit invalid error"
-	  }
+	  )
 	);
       } else {
 	mapping = co_await _remove_indirect_mapping_only(
 	  t, std::move(mapping)
 	).handle_error_interruptible(
 	  punch_mappings_iertr::pass_further{},
-	  crimson::ct_error::assert_all{
+	  crimson::ct_error::assert_all(
 	    "remove_mappings_in_range hit invalid error"
-	  }
+	  )
 	);
       }
     }
@@ -1512,9 +1512,9 @@ private:
       std::vector<remap_entry_t>(remaps.begin(), remaps.end())
     ).handle_error_interruptible(
       remap_pin_iertr::pass_further{},
-      crimson::ct_error::assert_all{
+      crimson::ct_error::assert_all(
 	"TransactionManager::remap_pin hit invalid error"
-      }
+      )
     );
 
     std::vector<LBAMapping> ret;

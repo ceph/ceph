@@ -61,9 +61,9 @@ class CircularJournalSpace : public JournalAllocator {
       return close_ertr::now();
     }).handle_error(
       Journal::open_for_mount_ertr::pass_further{},
-      crimson::ct_error::assert_all{
+      crimson::ct_error::assert_all(
 	"Invalid error write_header"
-      }
+      )
     );
   }
 
@@ -227,9 +227,9 @@ class CircularJournalSpace : public JournalAllocator {
     header.alloc_tail = alloc;
     return write_header(
     ).handle_error(
-      crimson::ct_error::assert_all{
+      crimson::ct_error::assert_all(
       "encountered invalid error in update_journal_tail"
-    });
+    ));
   }
 
   void set_initialized(bool init) {

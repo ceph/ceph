@@ -125,9 +125,9 @@ BtreeOMapManager::handle_root_merge(
     return seastar::now();
   }).handle_error_interruptible(
     handle_root_merge_iertr::pass_further{},
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid error in handle_root_merge"
-    }
+    )
   );
 }
 
@@ -314,9 +314,9 @@ BtreeOMapManager::omap_clear(
     });
   }).handle_error_interruptible(
     omap_clear_iertr::pass_further{},
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid error in BtreeOMapManager::omap_clear"
-    }
+    )
   );
 }
 

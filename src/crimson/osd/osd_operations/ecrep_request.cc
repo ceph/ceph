@@ -79,7 +79,7 @@ seastar::future<> ECRepRequest::with_pg(
       [ec_backend] (Ref<MOSDECSubOpReadReply> concrete_req) {
         return ec_backend->handle_rep_read_reply(
 	  std::move(concrete_req)
-	).handle_error_interruptible(crimson::ct_error::assert_all{});
+	).handle_error_interruptible(crimson::ct_error::assert_all("unexpected error"));
       }}, req);
   }, [ref, this](std::exception_ptr) {
     logger().debug("{}: ECRepRequest::exception handling", *this);

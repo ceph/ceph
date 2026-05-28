@@ -551,7 +551,7 @@ omap_load_extent(
     }
   ).handle_error_interruptible(
     omap_load_extent_iertr::pass_further{},
-    crimson::ct_error::assert_all{ "Invalid error in omap_load_extent" }
+    crimson::ct_error::assert_all( "Invalid error in omap_load_extent" )
   ).si_then([](auto maybe_indirect_extent) {
     assert(!maybe_indirect_extent.is_indirect());
     assert(!maybe_indirect_extent.is_clone);

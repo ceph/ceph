@@ -238,9 +238,9 @@ ObjectDataHandler::delta_based_overwrite(
     overwrite_mapping
   ).handle_error_interruptible(
     base_iertr::pass_further{},
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "ObjectDataHandler::do_remapping hit invalid error"
-    }
+    )
   );
   assert(!maybe_indirect_extent.is_indirect());
   auto extent = ctx.tm.get_mutable_extent(ctx.t, maybe_indirect_extent.extent);
@@ -278,7 +278,7 @@ ObjectDataHandler::write_ret do_zero(
       TransactionManager::get_pin_iertr::pass_further{}
     ).handle_error_interruptible(
       ObjectDataHandler::write_iertr::pass_further{},
-      crimson::ct_error::assert_all{"unexpected error"}
+      crimson::ct_error::assert_all("unexpected error")
     );
     assert(extents.size() == 1);
     auto &extent = extents.back();
@@ -290,7 +290,7 @@ ObjectDataHandler::write_ret do_zero(
       TransactionManager::get_pin_iertr::pass_further{}
     ).handle_error_interruptible(
       ObjectDataHandler::write_iertr::pass_further{},
-      crimson::ct_error::assert_all{"unexpected error"}
+      crimson::ct_error::assert_all("unexpected error")
     );
   }
 
@@ -312,7 +312,7 @@ ObjectDataHandler::write_ret do_zero(
       TransactionManager::get_pin_iertr::pass_further{}
     ).handle_error_interruptible(
       ObjectDataHandler::write_iertr::pass_further{},
-      crimson::ct_error::assert_all{"unexpected error"}
+      crimson::ct_error::assert_all("unexpected error")
     );
   }
 
@@ -330,7 +330,7 @@ ObjectDataHandler::write_ret do_zero(
       TransactionManager::get_pin_iertr::pass_further{}
     ).handle_error_interruptible(
       ObjectDataHandler::write_iertr::pass_further{},
-      crimson::ct_error::assert_all{"unexpected error"}
+      crimson::ct_error::assert_all("unexpected error")
     );
     assert(extents.size() == 1);
     auto &extent = extents.back();
@@ -788,7 +788,7 @@ ObjectDataHandler::do_merge_based_edge_punch(
     return ctx.tm.remove(ctx.t, std::move(edge_mapping));
   }).handle_error_interruptible(
     base_iertr::pass_further{},
-    crimson::ct_error::assert_all{"unexpected error"}
+    crimson::ct_error::assert_all("unexpected error")
   );
 }
 
@@ -847,7 +847,7 @@ ObjectDataHandler::do_remap_based_edge_punch(
 	return ctx.tm.remove(ctx.t, std::move(edge_mapping)
 	).handle_error_interruptible(
 	  base_iertr::pass_further{},
-	  crimson::ct_error::assert_all{"unexpected error"}
+	  crimson::ct_error::assert_all("unexpected error")
 	);
       }
     }
@@ -980,7 +980,7 @@ ObjectDataHandler::punch_hole_in_pending_mapping(
     return ctx.tm.remove(ctx.t, std::move(mapping));
   }).handle_error_interruptible(
     base_iertr::pass_further{},
-    crimson::ct_error::assert_all{"impossible"}
+    crimson::ct_error::assert_all("impossible")
   );
 }
 
@@ -1225,7 +1225,7 @@ ObjectDataHandler::read_edge_for_clone_range(
       data.bl = std::move(bl);
     }).handle_error_interruptible(
       read_iertr::pass_further{},
-      crimson::ct_error::assert_all{"unexpected error"}
+      crimson::ct_error::assert_all("unexpected error")
     );
   }
   if (!begin.is_aligned(block_size)) {
@@ -1269,7 +1269,7 @@ ObjectDataHandler::read_edge_for_clone_range(
     read_paddings, [](auto &fut) { return std::move(fut); }
   ).handle_error_interruptible(
     read_iertr::pass_further{},
-    crimson::ct_error::assert_all{"unexpected error"}
+    crimson::ct_error::assert_all("unexpected error")
   );
 }
 
@@ -1303,7 +1303,7 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone_range(
       dest_mapping = co_await ctx.tm.get_containing_pin(ctx.t, laddr
       ).handle_error_interruptible(
 	clone_iertr::pass_further{},
-	crimson::ct_error::assert_all{"unexpected enoent"}
+	crimson::ct_error::assert_all("unexpected enoent")
       );
     }
     // For unaligned range cloning, we need to read data.head_padding
@@ -1318,7 +1318,7 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone_range(
       ctx.t, begin.get_aligned_laddr(block_size)
     ).handle_error_interruptible(
       clone_iertr::pass_further{},
-      crimson::ct_error::assert_all{"unexpected enoent"}
+      crimson::ct_error::assert_all("unexpected enoent")
     );
     auto d_base = d_object_data.get_reserved_data_base();
     auto unaligned_begin = d_base + srcoff;
@@ -1432,7 +1432,7 @@ ObjectDataHandler::write_ret ObjectDataHandler::write(
 	    bufferlist(bl), std::move(pin));
 	}).handle_error_interruptible(
 	  write_iertr::pass_further{},
-	  crimson::ct_error::assert_all{"unexpected enoent"}
+	  crimson::ct_error::assert_all("unexpected enoent")
 	);
       });
     });
@@ -1461,7 +1461,7 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
       std::nullopt, std::move(mapping));
   }).handle_error_interruptible(
     clear_iertr::pass_further{},
-    crimson::ct_error::assert_all{"unexpected enoent"}
+    crimson::ct_error::assert_all("unexpected enoent")
   );
 }
 
@@ -1572,9 +1572,9 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
   co_await ctx.tm.read_pins<ObjectDataBlock>(ctx.t, rpins
   ).handle_error_interruptible(
     read_iertr::pass_further{},
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "ObjectDataHandler::read hit invalid error"
-    }
+    )
   );
   for (auto &pin : rpins) {
     if (pin.mapping.is_zero_reserved()) {
@@ -1723,7 +1723,7 @@ ObjectDataHandler::copy_on_write(
       ctx.t, object_data.get_reserved_data_base()
     ).handle_error_interruptible(
       clone_iertr::pass_further{},
-      crimson::ct_error::assert_all{"unexpected enoent"}
+      crimson::ct_error::assert_all("unexpected enoent")
     );
     co_await do_clone(ctx, object_data, d_object_data, mapping, false);
     DEBUGT("{} -> {}",
@@ -1738,7 +1738,7 @@ ObjectDataHandler::copy_on_write(
       ctx.t, old_base, old_len, std::move(mapping), {false, true}
     ).handle_error_interruptible(
       clone_iertr::pass_further{},
-      crimson::ct_error::assert_all{"unexpected enoent"}
+      crimson::ct_error::assert_all("unexpected enoent")
     ).discard_result();
 
     auto old_md_start = old_base.with_metadata().with_offset_by_blocks(0);
@@ -1782,7 +1782,7 @@ ObjectDataHandler::do_clone(
   auto pos = co_await ctx.tm.remove(ctx.t, std::move(*mapping)
   ).handle_error_interruptible(
     clone_iertr::pass_further{},
-    crimson::ct_error::assert_all{"unexpected enoent"}
+    crimson::ct_error::assert_all("unexpected enoent")
   );
   auto base = d_object_data.get_reserved_data_base();
   auto len = d_object_data.get_reserved_data_len();
@@ -1810,7 +1810,7 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone(
       return do_clone(ctx, object_data, d_object_data, std::move(mapping), true);
     }).handle_error_interruptible(
       clone_iertr::pass_further{},
-      crimson::ct_error::assert_all{"unexpected enoent"}
+      crimson::ct_error::assert_all("unexpected enoent")
     );
   });
 }

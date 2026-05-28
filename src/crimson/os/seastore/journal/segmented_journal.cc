@@ -317,9 +317,9 @@ SegmentedJournal::replay_segment(
 	dhandler
       ).handle_error(
 	replay_ertr::pass_further{},
-	crimson::ct_error::assert_all{
+	crimson::ct_error::assert_all(
 	  "shouldn't meet with any other error other replay_ertr"
-	}
+	)
       );
     }
   );

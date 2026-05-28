@@ -607,9 +607,9 @@ seastar::future<> JournalTrimmerImpl::trim() {
       if (should_trim_alloc()) {
         return trim_alloc(
         ).handle_error(
-          crimson::ct_error::assert_all{
+          crimson::ct_error::assert_all(
             "encountered invalid error in trim_alloc"
-          }
+          )
         );
       } else {
         return seastar::now();
@@ -619,9 +619,9 @@ seastar::future<> JournalTrimmerImpl::trim() {
       if (should_start_trim_dirty()) {
         return trim_dirty(
         ).handle_error(
-          crimson::ct_error::assert_all{
+          crimson::ct_error::assert_all(
             "encountered invalid error in trim_dirty"
-          }
+          )
         );
       } else {
         return seastar::now();
@@ -1429,9 +1429,9 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
           return sm_group->release_segment(segment_to_release
           ).handle_error(
             clean_space_ertr::pass_further{},
-            crimson::ct_error::assert_all{
+            crimson::ct_error::assert_all(
               "SegmentCleaner::clean_space encountered invalid error in release_segment"
-            }
+            )
           ).safe_then([this, FNAME, segment_to_release] {
             auto old_usage = calc_utilization(segment_to_release);
             if(unlikely(old_usage != 0)) {
@@ -1564,7 +1564,7 @@ SegmentCleaner::mount_ret SegmentCleaner::mount()
         return mount_ertr::now();
       }),
       crimson::ct_error::input_output_error::pass_further{},
-      crimson::ct_error::assert_all{"unexpected error"}
+      crimson::ct_error::assert_all("unexpected error")
     );
   }).safe_then([this, FNAME] {
     INFO("done, {}", segments);
@@ -1970,8 +1970,8 @@ RBMCleaner::mount_ret RBMCleaner::mount()
       return it->open(
       ).handle_error(
 	crimson::ct_error::input_output_error::pass_further(),
-	crimson::ct_error::assert_all{
-	"Invalid error when opening RBM"}
+	crimson::ct_error::assert_all(
+	"Invalid error when opening RBM")
       );
     });
   });

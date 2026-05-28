@@ -222,9 +222,9 @@ Journal::replay_ret CircularBoundedJournal::replay_segment(
         dhandler
       ).handle_error(
         replay_ertr::pass_further{},
-        crimson::ct_error::assert_all{
+        crimson::ct_error::assert_all(
           "shouldn't meet with any other error other replay_ertr"
-        }
+        )
       );
     }
   );
@@ -336,9 +336,9 @@ Journal::replay_ret CircularBoundedJournal::replay(
   return cjs.read_header(
   ).handle_error(
     open_for_mount_ertr::pass_further{},
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid error read_header"
-  }).safe_then([this, FNAME, delta_handler=std::move(delta_handler)](auto p)
+  )).safe_then([this, FNAME, delta_handler=std::move(delta_handler)](auto p)
     mutable {
     auto &[head, bl] = *p;
     cjs.set_cbj_header(head);

@@ -215,7 +215,7 @@ struct b_dummy_tree_test_t : public seastar_test_suite_t {
       new UnboundedBtree(NodeExtentManager::create_dummy(IS_DUMMY_SYNC))
     );
     return INTR(tree->mkfs, *ref_t).handle_error(
-      crimson::ct_error::assert_all{"Unable to mkfs"}
+      crimson::ct_error::assert_all("Unable to mkfs")
     );
   }
 
@@ -1064,7 +1064,7 @@ class DummyChildPool {
       return c.nm.get_super(c.t, root_tracker
       ).handle_error_interruptible(
         eagain_iertr::pass_further{},
-        crimson::ct_error::assert_all{"Invalid error during create_initial()"}
+        crimson::ct_error::assert_all("Invalid error during create_initial()")
       ).si_then([c, initial](auto super) {
         initial->make_root_new(c, std::move(super));
         laddr_hint_t hint;

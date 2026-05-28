@@ -226,7 +226,7 @@ public:
       nullptr
     ).handle_error_interruptible(
       base_iertr::pass_further{},
-      crimson::ct_error::assert_all{}
+      crimson::ct_error::assert_all("unexpected error")
     );
   }
 

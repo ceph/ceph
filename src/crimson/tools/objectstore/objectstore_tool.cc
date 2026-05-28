@@ -86,7 +86,7 @@ StoreTool::omap_iterate(
     ).safe_then([] (auto ret) {
       ceph_assert (ret == ObjectStore::omap_iter_ret_t::NEXT);
     }).handle_error(
-      crimson::os::FuturizedStore::Shard::read_errorator::assert_all{}
+      crimson::os::FuturizedStore::Shard::read_errorator::assert_all("unexpected error")
     );
   });
 }
@@ -113,7 +113,7 @@ seastar::future<std::string> StoreTool::get_omap(
     to_get.insert(key);
     auto&& vals = co_await store->get_sharded_store().omap_get_values(
       coll, oid, to_get).handle_error(
-      crimson::os::FuturizedStore::Shard::read_errorator::assert_all{}
+      crimson::os::FuturizedStore::Shard::read_errorator::assert_all("unexpected error")
     );
     auto it = vals.find(key);
     if (it != vals.end()) {

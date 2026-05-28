@@ -57,7 +57,7 @@ seastar::future<> TMDriver::write(
       });
     });
   }).handle_error(
-    crimson::ct_error::assert_all{"store-nbd write"}
+    crimson::ct_error::assert_all("store-nbd write")
   );
 }
 
@@ -135,7 +135,7 @@ seastar::future<bufferlist> TMDriver::read(
       });
     });
   }).handle_error(
-    crimson::ct_error::assert_all{"store-nbd read"}
+    crimson::ct_error::assert_all("store-nbd read")
   ).then([blptrret=std::move(blptrret)]() mutable {
     logger().debug("read complete");
     return std::move(*blptrret);
@@ -200,9 +200,9 @@ seastar::future<> TMDriver::mkfs()
     logger().debug("mkfs complete");
     return TransactionManager::mkfs_ertr::now();
   }).handle_error(
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid errror during TMDriver::mkfs"
-    }
+    )
   );
 }
 
@@ -218,9 +218,9 @@ seastar::future<> TMDriver::mount()
     init();
     return tm->mount();
   }).handle_error(
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid errror during TMDriver::mount"
-    }
+    )
   );
 };
 
@@ -230,8 +230,8 @@ seastar::future<> TMDriver::close()
     clear();
     return device->close();
   }).handle_error(
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid errror during TMDriver::close"
-    }
+    )
   );
 }

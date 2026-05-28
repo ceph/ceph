@@ -77,9 +77,9 @@ BtreeBackrefManager::mkfs(
     return mkfs_iertr::now();
   }).handle_error_interruptible(
     mkfs_iertr::pass_further{},
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid error in BtreeBackrefManager::mkfs"
-    }
+    )
   );
 }
 

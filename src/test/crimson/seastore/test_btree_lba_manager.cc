@@ -125,7 +125,7 @@ struct btree_test_base :
             submit_result.write_result.start_seq);
           complete_commit(t);
         }
-      ).handle_error(crimson::ct_error::assert_all{});
+      ).handle_error(crimson::ct_error::assert_all("unexpected error"));
     });
   }
 
@@ -197,7 +197,7 @@ struct btree_test_base :
 	  });
 	});
     }).handle_error(
-      crimson::ct_error::assert_all{"error"}
+      crimson::ct_error::assert_all("error")
     );
   }
 
@@ -216,7 +216,7 @@ struct btree_test_base :
       epm.reset();
       cache.reset();
     }).handle_error(
-      crimson::ct_error::assert_all{"Unable to close"}
+      crimson::ct_error::assert_all("Unable to close")
     );
   }
 };
