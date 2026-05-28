@@ -75,7 +75,7 @@ class LFUDAPolicyFixture : public ::testing::Test {
       conn = std::make_shared<connection>(net::make_strand(io));
       rgw::cache::Partition partition_info{ .location = "RedisCache", .reserve_size = 1073741824 };
       cacheDriver = new rgw::cache::RedisDriver{io, partition_info};
-      policyDriver = new rgw::d4n::PolicyDriver(conn, cacheDriver, "lfuda", null_yield);
+      policyDriver = new rgw::d4n::PolicyDriver(env->dpp, conn, cacheDriver, "lfuda", null_yield);
       dir = new rgw::d4n::BlockDirectory{conn};
 
       ASSERT_NE(dir, nullptr);
@@ -101,14 +101,20 @@ class LFUDAPolicyFixture : public ::testing::Test {
     virtual void TearDown() {
       delete block;
       delete dir;
-      delete cacheDriver;
       
       if (policyDriver)
         delete policyDriver;
     }
 
-    int lfuda(const DoutPrefixProvider* dpp, rgw::d4n::CacheBlock* block, rgw::cache::CacheDriver* cacheDriver, optional_yield y) {
-      int age = 1;  
+    /* This method demonstrates the generally flow of the policy-specific logic that dictates LFUDA. It directs where the block to be retrieved
+     * should come from and how its LFUDA-related metadata must be changed (as well as local cache handling). It handles the following scenarios:
+     * 1. Block is available in local cache
+     * 2. Block is available in remote cache
+     * 3. Block is not available in any cache but is in the backend
+     * The last scenario is that the block does not exist, but this is not tested because the backend is simulated to carry the block, which is more useful
+     * for testing purposes. */
+    int lfuda(const DoutPrefixProvider* dpp, rgw::d4n::CacheBlock* block, optional_yield y) {
+      int age = 1, ret;  
       std::string version;
       std::string oid = rgw::sal::get_key_in_cache(get_prefix(block->cacheObj.bucketName, block->cacheObj.objName, version), std::to_string(block->blockID), std::to_string(block->size));
 
@@ -116,39 +122,53 @@ class LFUDAPolicyFixture : public ::testing::Test {
 		policyDriver->get_cache_policy()->update(env->dpp, oid, 0, TEST_DATA_LENGTH, "", std::nullopt, uid, block->cacheObj.bucketName, rgw::d4n::RefCount::NOOP, y);
         return 0;
       } else {
-        if (this->policyDriver->get_cache_policy()->eviction(dpp, block->size, y) < 0)
-          return -1;
-
-        int exists = dir->exist_key(env->dpp, block, y);
-        if (exists > 0) { /* Remote copy */
-          if (dir->get(env->dpp, block, y) < 0) {
-            return -1;
-          } else {
-            if (!block->cacheObj.hostsList.empty()) { 
-              block->globalWeight += age;
-              auto globalWeight = std::to_string(block->globalWeight);
-              if (dir->update_field(env->dpp, block, "globalWeight", globalWeight, y) < 0) {
-                return -1;
-              } else {
-                return 0;
-              }
-            } else {
-              return -1;
-            }
-          }
-        } else if (!exists) { /* No remote copy */
-          block->cacheObj.hostsList.insert(env->dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address);
-          if (dir->set(env->dpp, block, y) < 0)
-            return -1;
-
+		if ((ret = dir->get(env->dpp, block, y)) < 0 && ret != -ENOENT) {
+		  std::cout << "ERROR: Directory get failed, ret=" << ret << std::endl;
+		  return ret;
+		} else if (ret == 0) { 
+		  /* Since the block is not in the local cache, we will be either retrieving the block from a remote source or the backend and then
+		   * writing it locally. As a result, we must ensure the local cache has enough space to accomodate the block by evicting if necessary. */
+		  if ((ret = this->policyDriver->get_cache_policy()->eviction(dpp, block->size, y)) < 0) {
+			std::cout << "ERROR: Eviction failed, ret=" << ret << std::endl;
+			return ret;
+		  }
+		  if (block->cacheObj.hostsList.size() > 0) { /* Remote copy */
+			block->globalWeight += age;
+			auto globalWeight = std::to_string(block->globalWeight);
+			if ((ret = dir->update_field(env->dpp, block, "globalWeight", globalWeight, y)) < 0) {
+			  std::cout << "ERROR: update_field failed, ret=" << ret << std::endl;
+			  return ret;
+			} 
+			// Write block to local cache
+			if ((ret = cacheDriver->put(dpp, oid, bl, TEST_DATA_LENGTH, attrs, y)) < 0) {
+			  std::cout << "ERROR: Cache put failed, ret=" << ret << std::endl;
+			  return ret;
+			}
+			this->policyDriver->get_cache_policy()->update(dpp, oid, 0, TEST_DATA_LENGTH, "", false, uid, block->cacheObj.bucketName, rgw::d4n::RefCount::NOOP, y);
+			// Add local cache address to block's directory entry
+            std::string host = "127.0.0.1:6379";
+			if ((ret = dir->update_field(env->dpp, block, "hosts", host, y)) < 0) {
+			  std::cout << "ERROR: update_field failed, ret=" << ret << std::endl;
+			  return ret;
+			}
+			return 0;
+		  }
+		  return -ENOENT;
+		} else { /* No remote copy; retrieve from backend */
+		  // Write block to local cache
+		  if ((ret = cacheDriver->put(dpp, oid, bl, TEST_DATA_LENGTH, attrs, y)) < 0) {
+			std::cout << "ERROR: Cache put failed, ret=" << ret << std::endl;
+			return ret;
+		  }
 		  this->policyDriver->get_cache_policy()->update(dpp, oid, 0, TEST_DATA_LENGTH, "", false, uid, block->cacheObj.bucketName, rgw::d4n::RefCount::NOOP, y);
-          if (cacheDriver->put(dpp, oid, bl, TEST_DATA_LENGTH, attrs, y) < 0)
-            return -1;
-          return cacheDriver->set_attr(dpp, oid, "localWeight", std::to_string(age), y);
-        } else {
-          return -1;
-        }
-      }
+		  // Add local cache address to block's directory entry
+		  if ((ret = dir->set(env->dpp, block, y)) < 0) {
+			std::cout << "ERROR: Directory set failed, ret=" << ret << std::endl;
+			return ret;
+		  }
+		  return 0;
+		}
+	  }
     }
 
     rgw::d4n::CacheBlock* block;
@@ -163,93 +183,6 @@ class LFUDAPolicyFixture : public ::testing::Test {
 
     bufferlist bl;
     rgw::sal::Attrs attrs;
-};
-
-class TestRedisDriver : public rgw::cache::RedisDriver {
-  public:
-    TestRedisDriver(net::io_context& io_context, rgw::cache::Partition& _partition_info) : RedisDriver(io_context, _partition_info), 
-                                                                                           partition_info(_partition_info)
-    {
-      conn = std::make_shared<connection>(boost::asio::make_strand(io_context));
-    }
-    virtual rgw::cache::Partition get_current_partition_info(const DoutPrefixProvider* dpp) override { return partition_info; }
-    virtual uint64_t get_free_space(const DoutPrefixProvider* dpp, optional_yield y) override
-    { 
-      eviction_call_count++;
-      if (eviction_call_count == 1) {
-        return 8; // hardcoded values to trigger eviction
-      } else {
-        return 9; 
-      }
-    }
-
-    virtual int initialize(const DoutPrefixProvider* dpp) override 
-    {  
-      RedisDriver::initialize(dpp); 
-      if (partition_info.location.back() != '/') {
-        partition_info.location += "/";
-      }
-        
-      std::string address = dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address;
-              
-      config cfg;
-      cfg.addr.host = address.substr(0, address.find(":"));
-      cfg.addr.port = address.substr(address.find(":") + 1, address.length());
-      cfg.clientname = "TestRedisDriver";
-
-      if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
-        ldpp_dout(dpp, 0) << "RedisDriver::" << __func__ << "(): Endpoint was not configured correctly." << dendl;
-        return -EDESTADDRREQ; 
-      }
-      
-      conn->async_run(cfg, {}, net::consign(net::detached, conn));
-
-      return 0;
-    }
-    virtual int put(const DoutPrefixProvider* dpp, const std::string& key, const bufferlist& bl, uint64_t len, const rgw::sal::Attrs& attrs, optional_yield y) override
-    {
-      return RedisDriver::put(dpp, key, bl, len, attrs, y);
-    }
-    virtual rgw::AioResultList put_async(const DoutPrefixProvider* dpp, optional_yield y, rgw::Aio* aio, const std::string& key, const bufferlist& bl, uint64_t len,
-                                          const rgw::sal::Attrs& attrs, uint64_t cost, uint64_t id) override 
-    { 
-      return RedisDriver::put_async(dpp, y, aio, key, bl, len, attrs, cost, id);
-    }
-    virtual int get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs, optional_yield y) override 
-    {
-      return RedisDriver::get(dpp, key, offset, len, bl, attrs, y);
-    }
-    virtual rgw::AioResultList get_async(const DoutPrefixProvider* dpp, optional_yield y, rgw::Aio* aio, const std::string& key, off_t ofs, uint64_t len, uint64_t cost, uint64_t id) override 
-    {
-      return RedisDriver::get_async(dpp, y, aio, key, ofs, len, cost, id);
-    }
-    virtual int append_data(const DoutPrefixProvider* dpp, const::std::string& key, const bufferlist& bl_data, optional_yield y) override { return RedisDriver::append_data(dpp, key, bl_data, y); }
-    virtual int delete_data(const DoutPrefixProvider* dpp, const::std::string& key, optional_yield y) override { return RedisDriver::delete_data(dpp, key, y); }
-    virtual int rename(const DoutPrefixProvider* dpp, const::std::string& oldKey, const::std::string& newKey, optional_yield y) override { return RedisDriver::rename(dpp, oldKey, newKey, y); }
-    virtual int set_attrs(const DoutPrefixProvider* dpp, const std::string& key, const rgw::sal::Attrs& attrs, optional_yield y) override { return RedisDriver::set_attrs(dpp, key, attrs, y); }
-    virtual int get_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs, optional_yield y) override { return RedisDriver::get_attrs(dpp, key, attrs, y); }
-    virtual int update_attrs(const DoutPrefixProvider* dpp, const std::string& key, const rgw::sal::Attrs& attrs, optional_yield y) override { return RedisDriver::update_attrs(dpp, key, attrs, y); }
-    virtual int delete_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& del_attrs, optional_yield y) override { return RedisDriver::delete_attrs(dpp, key, del_attrs, y); }
-    virtual int set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val, optional_yield y) override 
-    { 
-      return RedisDriver::set_attr(dpp, key, attr_name, attr_val, y); 
-    }
-    virtual int get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, std::string& attr_val, optional_yield y) override 
-    { 
-      return RedisDriver::get_attr(dpp, key, attr_name, attr_val, y); 
-    }
-    void shutdown() 
-    { 
-      RedisDriver::shutdown();
-      boost::asio::dispatch(conn->get_executor(), [c = conn] { c->cancel(); }); 
-    }
-
-    virtual int restore_blocks_objects(const DoutPrefixProvider* dpp, rgw::cache::ObjectDataCallback obj_func, rgw::cache::BlockDataCallback block_func) override { return 0; }
-
-  private:
-    std::shared_ptr<connection> conn;
-    rgw::cache::Partition partition_info;
-    int eviction_call_count = 0;
 };
 
 void rethrow(std::exception_ptr eptr) {
@@ -268,12 +201,13 @@ TEST_F(LFUDAPolicyFixture, LocalGetBlockYield)
     ASSERT_EQ(0, cacheDriver->put(env->dpp, key, bl, TEST_DATA_LENGTH, attrs, optional_yield{yield}));
 	policyDriver->get_cache_policy()->update(env->dpp, key, 0, TEST_DATA_LENGTH, "", false, uid, block->cacheObj.bucketName, rgw::d4n::RefCount::NOOP, optional_yield{yield});
 
-    ASSERT_EQ(lfuda(env->dpp, block, cacheDriver, yield), 0);
+    // Should retrieve block locally (from the cache backend) and increment its local weight
+    ASSERT_EQ(lfuda(env->dpp, block, yield), 0);
 
-	boost::asio::steady_timer timer(io);
-	timer.expires_after(std::chrono::seconds(5));
-	boost::system::error_code timer_ec;
-	timer.async_wait(yield[timer_ec]);
+    boost::asio::steady_timer timer(io);
+    timer.expires_after(std::chrono::seconds(5));
+    boost::system::error_code timer_ec;
+    timer.async_wait(yield[timer_ec]);
 
     cacheDriver->shutdown();
 
@@ -292,20 +226,22 @@ TEST_F(LFUDAPolicyFixture, LocalGetBlockYield)
     policyDriver = nullptr;
   }, rethrow);
 
-  io.run();
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 2; ++i) {
+    threads.emplace_back([&] { io.run(); });
+  }
+  for (auto& thread : threads) {
+    thread.join();
+  }
 }
 
-TEST_F(LFUDAPolicyFixture, EvictionYield)
+TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
 {
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
-    rgw::cache::Partition partition_info{ .location = "RedisCache", .reserve_size = 1073741824 };
-    TestRedisDriver testDriver(io, partition_info);
-    rgw::d4n::PolicyDriver policyDriver(conn, &testDriver, "lfuda", optional_yield{yield});
+    dynamic_cast<rgw::d4n::LFUDAPolicy*>(policyDriver->get_cache_policy())->save_y(optional_yield{yield});
+    policyDriver->get_cache_policy()->init(env->cct, env->dpp, io, driver);
 
-    testDriver.initialize(env->dpp);
-    policyDriver.get_cache_policy()->init(env->cct, env->dpp, io, driver);
-
-    /* Set victim block for eviction */
+    // Set victim block for eviction
     rgw::d4n::CacheBlock victim = rgw::d4n::CacheBlock{
       .cacheObj = {
         .objName = "victimName",
@@ -329,24 +265,20 @@ TEST_F(LFUDAPolicyFixture, EvictionYield)
     attrVal.append("testBucket\0", 10);
     attrs.insert({"bucket_name", std::move(attrVal)});
 
-    /* Set head blocks */
-    std::string victimHeadObj = get_prefix(victim.cacheObj.bucketName, victim.cacheObj.objName, victim.version);
-    ASSERT_EQ(0, testDriver.put(env->dpp, victimHeadObj, bl, TEST_DATA_LENGTH, attrs, optional_yield{yield}));
-
     std::string victimKeyInCache = rgw::sal::get_key_in_cache(get_prefix(victim.cacheObj.bucketName, victim.cacheObj.objName, victim.version), 
                                                                std::to_string(victim.blockID), std::to_string(TEST_DATA_LENGTH));
-    ASSERT_EQ(0, testDriver.put(env->dpp, victimKeyInCache, bl, TEST_DATA_LENGTH, attrs, optional_yield{yield}));
-	policyDriver.get_cache_policy()->update(env->dpp, victimKeyInCache, 0, TEST_DATA_LENGTH, victim.version, false, uid, block->cacheObj.bucketName, rgw::d4n::RefCount::NOOP, optional_yield{yield});
+    ASSERT_EQ(0, cacheDriver->put(env->dpp, victimKeyInCache, bl, TEST_DATA_LENGTH, attrs, optional_yield{yield}));
+	policyDriver->get_cache_policy()->update(env->dpp, victimKeyInCache, 0, TEST_DATA_LENGTH, victim.version, false, uid, block->cacheObj.bucketName, rgw::d4n::RefCount::NOOP, optional_yield{yield});
 
     ASSERT_EQ(0, dir->set(env->dpp, &victim, optional_yield{yield}));
 
-    /* Remote block */
+    // Remote block
     block->cacheObj.hostsList.clear();
     block->cacheObj.hostsList.insert("127.0.0.1:6000");
 
     ASSERT_EQ(0, dir->set(env->dpp, block, optional_yield{yield}));
 
-    { /* Avoid sending victim block to remote cache since no network is available */
+    { // Avoid sending victim block to remote cache since no network is available
       boost::system::error_code ec;
       request req;
       req.push("HSET", "lfuda", "minLocalWeights_sum", "10", "minLocalWeights_size", "1");
@@ -356,62 +288,268 @@ TEST_F(LFUDAPolicyFixture, EvictionYield)
       conn->async_exec(req, resp, yield[ec]);
     }
 
-    EXPECT_EQ(policyDriver.get_cache_policy()->eviction(env->dpp, block->size, optional_yield{yield}), 0);
+    ASSERT_EQ(lfuda(env->dpp, block, optional_yield{yield}), 0);
 
-    std::string victimKey = victim.cacheObj.bucketName + "_version_" + victim.cacheObj.objName + "_" + std::to_string(victim.blockID) + "_" + std::to_string(victim.size);
-    std::string key = block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + std::to_string(block->blockID) + "_" + std::to_string(block->size);
+    std::string version;
+	std::string oid = rgw::sal::get_key_in_cache(get_prefix(block->cacheObj.bucketName, block->cacheObj.objName, version), std::to_string(block->blockID), std::to_string(block->size));
+
     boost::system::error_code ec;
     request req;
-    req.push("EXISTS", "RedisCache/" + victimKeyInCache);
-    req.push("EXISTS", "RedisCache/" + victimKeyInCache + "_" + std::to_string(victim.blockID) + "_" + std::to_string(TEST_DATA_LENGTH));
-    req.push("EXISTS", victim.cacheObj.bucketName + "_" + victim.cacheObj.objName + "_" + std::to_string(victim.blockID) + "_" + std::to_string(TEST_DATA_LENGTH));
-    req.push("EXISTS", victimKey, "globalWeight");
+    req.push("EXISTS", "RedisCache/" + oid); // Remote block cache entry (now in local cache)
+    req.push("EXISTS", "RedisCache/" + victimKeyInCache); // Victim cache entry
+    req.push("EXISTS", victim.cacheObj.bucketName + "_" + victim.cacheObj.objName + "_" + std::to_string(victim.blockID) + "_" + std::to_string(TEST_DATA_LENGTH)); // Directory entry
+    req.push("HGET", block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + std::to_string(block->blockID) + "_" + std::to_string(TEST_DATA_LENGTH), "globalWeight");
+    req.push("HGET", block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + std::to_string(block->blockID) + "_" + std::to_string(TEST_DATA_LENGTH), "hosts");
     req.push("FLUSHALL");
 
-    response<int, int, int, int,
+    response<int, int, int, std::string, std::string,
              boost::redis::ignore_t> resp;
 
     conn->async_exec(req, resp, yield[ec]);
 
     ASSERT_EQ((bool)ec, false);
-    EXPECT_EQ(std::get<0>(resp).value(), 0);
+    EXPECT_EQ(std::get<0>(resp).value(), 1);
     EXPECT_EQ(std::get<1>(resp).value(), 0);
     EXPECT_EQ(std::get<2>(resp).value(), 0);
-    EXPECT_EQ(std::get<3>(resp).value(), 0);
+    EXPECT_EQ(std::get<3>(resp).value(), "1");
+    EXPECT_EQ(std::get<4>(resp).value(), "127.0.0.1:6000_127.0.0.1:6379");
     conn->cancel();
 
     std::string victimKeyInPolicy = victim.cacheObj.bucketName + "#version#" + victim.cacheObj.objName + "#" + std::to_string(victim.blockID) + "#" + std::to_string(victim.size);
-    EXPECT_EQ(policyDriver.get_cache_policy()->exist_key(victimKeyInPolicy), 0);
+    EXPECT_EQ(policyDriver->get_cache_policy()->exist_key(victimKeyInPolicy), 0);
 
-    testDriver.shutdown();
     cacheDriver->shutdown();
-    conn->cancel();
+    delete policyDriver; 
+    policyDriver = nullptr;
   }, rethrow);
 
   io.run(); 
 }
 
-TEST_F(LFUDAPolicyFixture, BackendGetBlockYield)
+TEST_F(LFUDAPolicyFixture, RemoteVersionEnabledGetBlockYield)
 {
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
-    env->cct->_conf->rgw_lfuda_sync_frequency = 1;
     dynamic_cast<rgw::d4n::LFUDAPolicy*>(policyDriver->get_cache_policy())->save_y(optional_yield{yield});
     policyDriver->get_cache_policy()->init(env->cct, env->dpp, io, driver);
 
-    ASSERT_GE(lfuda(env->dpp, block, cacheDriver, optional_yield{yield}), 0);
+    // Set victim block for eviction
+    rgw::d4n::CacheBlock victim = rgw::d4n::CacheBlock{
+      .cacheObj = {
+        .objName = "_:version_victimName",
+        .bucketName = "testBucket",
+        .creationTime = "",
+        .dirty = false,
+        .hostsList = { env->cct->_conf->rgw_d4n_local_rgw_address }
+      },
+      .blockID = 0,
+      .version = "version",
+      .deleteMarker = false,
+      .size = TEST_DATA_LENGTH,
+      .globalWeight = 5,
+    };
 
-    cacheDriver->shutdown();
+    buffer::list attrVal;
+    auto length_str = std::to_string(TEST_DATA_LENGTH);
+    attrVal.append(length_str.c_str(), length_str.length() + 1);
+    attrs.insert({"accounted_size", std::move(attrVal)});
+    attrVal.clear();
+    attrVal.append("testBucket\0", 10);
+    attrs.insert({"bucket_name", std::move(attrVal)});
+    attrVal.clear();
+    attrVal.append("version\0");
+    attrs.insert({RGW_CACHE_ATTR_VERSION_ID, std::move(attrVal)});
+
+    std::string victimKeyInCache = rgw::sal::get_key_in_cache(get_prefix(victim.cacheObj.bucketName, "victimName", victim.version), 
+                                                               std::to_string(victim.blockID), std::to_string(TEST_DATA_LENGTH));
+    ASSERT_EQ(0, cacheDriver->put(env->dpp, victimKeyInCache, bl, TEST_DATA_LENGTH, attrs, optional_yield{yield}));
+	policyDriver->get_cache_policy()->update(env->dpp, victimKeyInCache, 0, TEST_DATA_LENGTH, victim.version, false, uid, block->cacheObj.bucketName, rgw::d4n::RefCount::NOOP, optional_yield{yield});
+
+    ASSERT_EQ(0, dir->set(env->dpp, &victim, optional_yield{yield}));
+
+    // Remote block
+    block->cacheObj.hostsList.clear();
+    block->cacheObj.hostsList.insert("127.0.0.1:6000");
+
+    block->cacheObj.objName = "_:version_testName";
+    ASSERT_EQ(0, dir->set(env->dpp, block, optional_yield{yield}));
+
+    { // Avoid sending victim block to remote cache since no network is available
+      boost::system::error_code ec;
+      request req;
+      req.push("HSET", "lfuda", "minLocalWeights_sum", "10", "minLocalWeights_size", "1");
+
+      response<boost::redis::ignore_t> resp;
+
+      conn->async_exec(req, resp, yield[ec]);
+    }
+
+    ASSERT_EQ(lfuda(env->dpp, block, optional_yield{yield}), 0);
+
+    std::string version;
+    std::string oid = rgw::sal::get_key_in_cache(get_prefix(block->cacheObj.bucketName, block->cacheObj.objName, version), std::to_string(block->blockID), std::to_string(block->size));
 
     boost::system::error_code ec;
     request req;
+    req.push("EXISTS", "RedisCache/" + oid); // Remote block cache entry (now in local cache)
+    req.push("EXISTS", "RedisCache/" + victimKeyInCache); // Victim cache entry
+    req.push("EXISTS", victim.cacheObj.bucketName + "_" + victim.cacheObj.objName + "_" + std::to_string(victim.blockID) + "_" + std::to_string(TEST_DATA_LENGTH)); // Directory entry
+    req.push("HGET", block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + std::to_string(block->blockID) + "_" + std::to_string(TEST_DATA_LENGTH), "globalWeight");
+    req.push("HGET", block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + std::to_string(block->blockID) + "_" + std::to_string(TEST_DATA_LENGTH), "hosts");
     req.push("FLUSHALL");
 
-    response<boost::redis::ignore_t> resp;
+    response<int, int, int, std::string, std::string,
+             boost::redis::ignore_t> resp;
 
     conn->async_exec(req, resp, yield[ec]);
 
+    ASSERT_EQ((bool)ec, false);
+    EXPECT_EQ(std::get<0>(resp).value(), 1);
+    EXPECT_EQ(std::get<1>(resp).value(), 0);
+    EXPECT_EQ(std::get<2>(resp).value(), 0);
+    EXPECT_EQ(std::get<3>(resp).value(), "1");
+    EXPECT_EQ(std::get<4>(resp).value(), "127.0.0.1:6000_127.0.0.1:6379");
     conn->cancel();
 
+    std::string victimKeyInPolicy = victim.cacheObj.bucketName + "#version#" + victim.cacheObj.objName + "#" + std::to_string(victim.blockID) + "#" + std::to_string(victim.size);
+    EXPECT_EQ(policyDriver->get_cache_policy()->exist_key(victimKeyInPolicy), 0);
+
+    cacheDriver->shutdown();
+    delete policyDriver; 
+    policyDriver = nullptr;
+  }, rethrow);
+
+  io.run(); 
+}
+
+TEST_F(LFUDAPolicyFixture, RemoteVersionSuspendedGetBlockYield)
+{
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
+    dynamic_cast<rgw::d4n::LFUDAPolicy*>(policyDriver->get_cache_policy())->save_y(optional_yield{yield});
+    policyDriver->get_cache_policy()->init(env->cct, env->dpp, io, driver);
+
+    // Set victim block for eviction
+    rgw::d4n::CacheBlock victim = rgw::d4n::CacheBlock{
+      .cacheObj = {
+        .objName = "victimName",
+        .bucketName = "testBucket",
+        .creationTime = "",
+        .dirty = false,
+        .hostsList = { env->cct->_conf->rgw_d4n_local_rgw_address }
+      },
+      .blockID = 0,
+      .version = "version",
+      .deleteMarker = false,
+      .size = TEST_DATA_LENGTH,
+      .globalWeight = 5,
+    };
+
+    buffer::list attrVal;
+    auto length_str = std::to_string(TEST_DATA_LENGTH);
+    attrVal.append(length_str.c_str(), length_str.length() + 1);
+    attrs.insert({"accounted_size", std::move(attrVal)});
+    attrVal.clear();
+    attrVal.append("testBucket\0", 10);
+    attrs.insert({"bucket_name", std::move(attrVal)});
+    attrVal.clear();
+    attrVal.append("null");
+    attrs.insert({RGW_CACHE_ATTR_VERSION_ID, std::move(attrVal)});
+
+    std::string victimKeyInCache = rgw::sal::get_key_in_cache(get_prefix(victim.cacheObj.bucketName, "victimName", victim.version), 
+                                                               std::to_string(victim.blockID), std::to_string(TEST_DATA_LENGTH));
+    ASSERT_EQ(0, cacheDriver->put(env->dpp, victimKeyInCache, bl, TEST_DATA_LENGTH, attrs, optional_yield{yield}));
+	policyDriver->get_cache_policy()->update(env->dpp, victimKeyInCache, 0, TEST_DATA_LENGTH, victim.version, false, uid, block->cacheObj.bucketName, rgw::d4n::RefCount::NOOP, optional_yield{yield});
+
+    ASSERT_EQ(0, dir->set(env->dpp, &victim, optional_yield{yield}));
+
+    // Remote block
+    block->cacheObj.hostsList.clear();
+    block->cacheObj.hostsList.insert("127.0.0.1:6000");
+
+    block->cacheObj.objName = "_:version_testName";
+    ASSERT_EQ(0, dir->set(env->dpp, block, optional_yield{yield}));
+
+    { // Avoid sending victim block to remote cache since no network is available
+      boost::system::error_code ec;
+      request req;
+      req.push("HSET", "lfuda", "minLocalWeights_sum", "10", "minLocalWeights_size", "1");
+
+      response<boost::redis::ignore_t> resp;
+
+      conn->async_exec(req, resp, yield[ec]);
+    }
+
+    ASSERT_EQ(lfuda(env->dpp, block, optional_yield{yield}), 0);
+
+    std::string version;
+    std::string oid = rgw::sal::get_key_in_cache(get_prefix(block->cacheObj.bucketName, block->cacheObj.objName, version), std::to_string(block->blockID), std::to_string(block->size));
+
+    boost::system::error_code ec;
+    request req;
+    req.push("EXISTS", "RedisCache/" + oid); // Remote block cache entry (now in local cache)
+    req.push("EXISTS", "RedisCache/" + victimKeyInCache); // Victim cache entry
+    req.push("EXISTS", victim.cacheObj.bucketName + "_" + victim.cacheObj.objName + "_" + std::to_string(victim.blockID) + "_" + std::to_string(TEST_DATA_LENGTH)); // Directory entry
+    req.push("HGET", block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + std::to_string(block->blockID) + "_" + std::to_string(TEST_DATA_LENGTH), "globalWeight");
+    req.push("HGET", block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + std::to_string(block->blockID) + "_" + std::to_string(TEST_DATA_LENGTH), "hosts");
+    req.push("FLUSHALL");
+
+    response<int, int, int, std::string, std::string,
+             boost::redis::ignore_t> resp;
+
+    conn->async_exec(req, resp, yield[ec]);
+
+    ASSERT_EQ((bool)ec, false);
+    EXPECT_EQ(std::get<0>(resp).value(), 1);
+    EXPECT_EQ(std::get<1>(resp).value(), 0);
+    EXPECT_EQ(std::get<2>(resp).value(), 0);
+    EXPECT_EQ(std::get<3>(resp).value(), "1");
+    EXPECT_EQ(std::get<4>(resp).value(), "127.0.0.1:6000_127.0.0.1:6379");
+    conn->cancel();
+
+    std::string victimKeyInPolicy = victim.cacheObj.bucketName + "#version#" + victim.cacheObj.objName + "#" + std::to_string(victim.blockID) + "#" + std::to_string(victim.size);
+    EXPECT_EQ(policyDriver->get_cache_policy()->exist_key(victimKeyInPolicy), 0);
+
+    cacheDriver->shutdown();
+    delete policyDriver; 
+    policyDriver = nullptr;
+  }, rethrow);
+
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 2; ++i) {
+    threads.emplace_back([&] { io.run(); });
+  }
+  for (auto& thread : threads) {
+    thread.join();
+  }
+}
+
+TEST_F(LFUDAPolicyFixture, BackendGetBlockYield)
+{
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
+    dynamic_cast<rgw::d4n::LFUDAPolicy*>(policyDriver->get_cache_policy())->save_y(optional_yield{yield});
+    policyDriver->get_cache_policy()->init(env->cct, env->dpp, io, driver);
+
+    ASSERT_EQ(lfuda(env->dpp, block, optional_yield{yield}), 0);
+
+	std::string version;
+	std::string oid = rgw::sal::get_key_in_cache(get_prefix(block->cacheObj.bucketName, block->cacheObj.objName, version), std::to_string(block->blockID), std::to_string(block->size));
+
+    boost::system::error_code ec;
+    request req;
+    req.push("EXISTS", "RedisCache/" + oid); // Remote block cache entry (now in local cache)
+    req.push("HGET", block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + std::to_string(block->blockID) + "_" + std::to_string(TEST_DATA_LENGTH), "hosts");
+    req.push("FLUSHALL");
+
+    response<int, std::string,
+             boost::redis::ignore_t> resp;
+
+    conn->async_exec(req, resp, yield[ec]);
+
+    ASSERT_EQ((bool)ec, false);
+    EXPECT_EQ(std::get<0>(resp).value(), 1);
+    EXPECT_EQ(std::get<1>(resp).value(), "127.0.0.1:6379");
+    conn->cancel();
+
+    cacheDriver->shutdown();
     delete policyDriver; 
     policyDriver = nullptr;
   }, rethrow);
