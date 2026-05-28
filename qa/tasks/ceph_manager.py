@@ -2206,7 +2206,8 @@ class CephManager:
                                      erasure_code_profile_name=None,
                                      erasure_code_crush_rule_name=None,
                                      min_size=None,
-                                     erasure_code_use_overwrites=False):
+                                     erasure_code_use_overwrites=False,
+                                     num_zones=None):
         """
         Create a pool named unique_pool_X where X is unique.
         """
@@ -2220,12 +2221,13 @@ class CephManager:
                 erasure_code_profile_name=erasure_code_profile_name,
                 erasure_code_crush_rule_name=erasure_code_crush_rule_name,
                 min_size=min_size,
-                erasure_code_use_overwrites=erasure_code_use_overwrites)
+                erasure_code_use_overwrites=erasure_code_use_overwrites,
+                num_zones=num_zones)
         return name
 
     @contextlib.contextmanager
-    def pool(self, pool_name, pg_num=16, erasure_code_profile_name=None):
-        self.create_pool(pool_name, pg_num, erasure_code_profile_name)
+    def pool(self, pool_name, pg_num=16, erasure_code_profile_name=None, num_zones=None):
+        self.create_pool(pool_name, pg_num, erasure_code_profile_name, num_zones)
         yield
         self.remove_pool(pool_name)
 
@@ -2233,7 +2235,8 @@ class CephManager:
                     erasure_code_profile_name=None,
                     erasure_code_crush_rule_name=None,
                     min_size=None,
-                    erasure_code_use_overwrites=False):
+                    erasure_code_use_overwrites=False,
+                    num_zones=None):
         """
         Create a pool named from the pool_name parameter.
         :param pool_name: name of the pool being created.
@@ -2243,6 +2246,7 @@ class CephManager:
         :param erasure_code_crush_rule_name: if set and !None create an
                                              erasure coded pool using the crush rule
         :param erasure_code_use_overwrites: if true, allow overwrites
+        :param num_zones: if set, configure the number of zones for pool
         """
         with self.lock:
             assert isinstance(pool_name, str)
@@ -2271,6 +2275,11 @@ class CephManager:
                     'osd', 'pool', 'set', pool_name,
                     'allow_ec_overwrites',
                     'true')
+            if num_zones is not None:
+                self.raw_cluster_cmd(
+                    'osd', 'pool', 'set', pool_name,
+                    'num_zones',
+                    str(num_zones))
             self.raw_cluster_cmd(
                 'osd', 'pool', 'application', 'enable',
                 pool_name, 'rados', '--yes-i-really-mean-it',
