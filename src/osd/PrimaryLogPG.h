@@ -1222,6 +1222,8 @@ protected:
   PoolMigrationQuiesceReason pool_migration_quiesce_reason = PoolMigrationQuiesceReason::NONE;
   /// Error code that triggered quiesce (for logging and decision making)
   int pool_migration_quiesce_error_code = 0;
+  /// Flag to track if last_pool_migration_started has been reset during quiesce
+  bool pool_migration_quiesce_last_started_reset = false;
 
   /// objects waiting for lock retry to delete source after successful copy_from
   std::set<hobject_t> pool_migration_source_delete_pending_lock;

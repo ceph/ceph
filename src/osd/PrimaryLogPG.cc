@@ -13668,6 +13668,7 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
   // Clear quiescing state on epoch change - new epoch means fresh start
   pool_migration_quiesce_reason = PoolMigrationQuiesceReason::NONE;
   pool_migration_quiesce_error_code = 0;
+  pool_migration_quiesce_last_started_reset = false;
 
   if (hit_set && hit_set->insert_count() == 0) {
     dout(20) << " discarding empty hit_set" << dendl;
@@ -15336,7 +15337,9 @@ struct C_Migrate : public Context {
     if (r < 0 && !pg->handle_pool_migration_copy_failure(oid, r)) {
       if (oid.is_snap()) {
         // Abandon migrating head object as well
-        pg->recovering.erase(oid.get_head());
+        auto head = oid.get_head();
+        pg->recovering.erase(head);
+        pg->pool_migrations_in_flight.erase(head);
       }
     } else if (action == COPY_DELETE_NEXT) {
       // Object copied to target pool, now delete from source pool
@@ -15583,6 +15586,7 @@ void PrimaryLogPG::handle_pool_migration_quiesce_complete()
   // Reset quiesce state
   pool_migration_quiesce_reason = PoolMigrationQuiesceReason::NONE;
   pool_migration_quiesce_error_code = 0;
+  pool_migration_quiesce_last_started_reset = false;
 
   if (reason == PoolMigrationQuiesceReason::RETRY_NEEDED) {
     // Retryable error - request new reservation and resume
@@ -15662,7 +15666,7 @@ bool PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r)
                << pool_migrations_in_flight.size() << " in-flight migrations and "
                << pool_migration_source_delete_pending_lock.size() << " pending deletes" << dendl;
     } else {
-      // Fatal error - ENOENT means unfound (removed snaps already filtered in C_Migrate::finish)
+      // Fatal error - ENOENT means unfound (removed snaps already filtered earlier)
       if (r == -ENOENT) {
         dout(10) << __func__ << " copy_from failed with ENOENT (unfound), entering quiesce mode" << dendl;
       } else {
@@ -15695,7 +15699,7 @@ bool PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r)
       dout(10) << __func__ << " upgrading quiesce reason from RETRY_NEEDED to FATAL_ERROR "
                << "due to fatal error " << cpp_strerror(r) << dendl;
       pool_migration_quiesce_reason = PoolMigrationQuiesceReason::FATAL_ERROR;
-      pool_migration_quiesce_error_code = r;
+      // Don't overwrite pool_migration_quiesce_error_code - keep the first error
     } else {
       dout(20) << __func__ << " already quiescing (reason=" << (int)pool_migration_quiesce_reason
                << "), continuing drain" << dendl;
@@ -15707,8 +15711,11 @@ bool PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r)
 
   // For retryable errors, reset last_pool_migration_started so recover_pool_migration
   // will retry this object after quiesce completes and reservation is granted
-  if (pool_migration_quiesce_reason == PoolMigrationQuiesceReason::RETRY_NEEDED) {
+  // Only do this once - the first error sets the retry point
+  if (pool_migration_quiesce_reason == PoolMigrationQuiesceReason::RETRY_NEEDED &&
+      !pool_migration_quiesce_last_started_reset) {
     last_pool_migration_started = oid;
+    pool_migration_quiesce_last_started_reset = true;
     dout(20) << __func__ << " reset last_pool_migration_started to " << oid
              << " for retry after quiesce" << dendl;
   }
