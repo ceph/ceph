@@ -2474,11 +2474,8 @@ Capability* Locker::issue_new_caps(CInode *in,
     in->make_path_string(path, true);
 
     bool has_qtine_auth_caps = session->auth_caps.quarantine_access_in_caps(fs_name, path);
-    int all_allowed[2] = {-1, -1};
-    int loner_allowed[2] = {-1, -1};
-    int xlocker_allowed[2] = {-1, -1};
-    int allowed = get_allowed_caps(has_qtine_auth_caps, in, cap, all_allowed, loner_allowed,
-                                   xlocker_allowed);
+    AllowedCapsCache caps_cache;
+    int allowed = get_allowed_caps(has_qtine_auth_caps, in, cap, caps_cache);
 
     if (_need_flush_mdlog(in, my_want & ~allowed, true))
       mds->mdlog->flush();
@@ -2527,44 +2524,40 @@ public:
 };
 
 int Locker::get_allowed_caps(bool has_qtine_auth_caps, CInode *in, Capability *cap,
-                             int (&all_allowed)[2], int (&loner_allowed)[2],
-                             int (&xlocker_allowed)[2])
+                             AllowedCapsCache& cache)
 {
   ceph_assert(cap->get_session());
 
   client_t client = cap->get_client();
   int cache_idx = has_qtine_auth_caps ? 1 : 0;
 
-  // allowed caps are determined by the lock mode.
-  if (all_allowed[cache_idx] == -1)
-    all_allowed[cache_idx] = in->get_caps_allowed_by_type(has_qtine_auth_caps, CAP_ANY);
-  if (loner_allowed[cache_idx] == -1)
-    loner_allowed[cache_idx] = in->get_caps_allowed_by_type(has_qtine_auth_caps, CAP_LONER);
-  if (xlocker_allowed[cache_idx] == -1)
-    xlocker_allowed[cache_idx] = in->get_caps_allowed_by_type(has_qtine_auth_caps, CAP_XLOCKER);
+  if (cache.all_allowed[cache_idx] == -1)
+    cache.all_allowed[cache_idx] = in->get_caps_allowed_by_type(has_qtine_auth_caps, CAP_ANY);
+  if (cache.loner_allowed[cache_idx] == -1)
+    cache.loner_allowed[cache_idx] = in->get_caps_allowed_by_type(has_qtine_auth_caps, CAP_LONER);
+  if (cache.xlocker_allowed[cache_idx] == -1)
+    cache.xlocker_allowed[cache_idx] = in->get_caps_allowed_by_type(has_qtine_auth_caps, CAP_XLOCKER);
 
   client_t loner = in->get_loner();
   if (loner >= 0) {
     dout(7) << "get_allowed_caps loner client." << loner
-	    << " allowed=" << ccap_string(loner_allowed[cache_idx])
-	    << ", xlocker allowed=" << ccap_string(xlocker_allowed[cache_idx])
-	    << ", others allowed=" << ccap_string(all_allowed[cache_idx])
+	    << " allowed=" << ccap_string(cache.loner_allowed[cache_idx])
+	    << ", xlocker allowed=" << ccap_string(cache.xlocker_allowed[cache_idx])
+	    << ", others allowed=" << ccap_string(cache.all_allowed[cache_idx])
 	    << " on " << *in << dendl;
   } else {
-    dout(7) << "get_allowed_caps allowed=" << ccap_string(all_allowed[cache_idx])
-	    << ", xlocker allowed=" << ccap_string(xlocker_allowed[cache_idx])
+    dout(7) << "get_allowed_caps allowed=" << ccap_string(cache.all_allowed[cache_idx])
+	    << ", xlocker allowed=" << ccap_string(cache.xlocker_allowed[cache_idx])
 	    << " on " << *in << dendl;
   }
 
-  // do not issue _new_ bits when size|mtime is projected
   int allowed;
   if (loner == client)
-    allowed = loner_allowed[cache_idx];
+    allowed = cache.loner_allowed[cache_idx];
   else
-    allowed = all_allowed[cache_idx];
+    allowed = cache.all_allowed[cache_idx];
 
-  // add in any xlocker-only caps (for locks this client is the xlocker for)
-  allowed |= xlocker_allowed[cache_idx] & in->get_xlocker_mask(client);
+  allowed |= cache.xlocker_allowed[cache_idx] & in->get_xlocker_mask(client);
   if (in->is_dir()) {
     allowed &= ~CEPH_CAP_ANY_DIR_OPS;
     if (allowed & CEPH_CAP_FILE_EXCL)
@@ -2588,11 +2581,8 @@ int Locker::issue_caps(CInode *in, Capability *only_cap)
   }
   *_dout << dendl;
 
-  // count conflicts with
   int nissued = 0;
-  int all_allowed[2] = {-1, -1};
-  int loner_allowed[2] = {-1, -1};
-  int xlocker_allowed[2] = {-1, -1};
+  AllowedCapsCache caps_cache;
 
   ceph_assert(in->is_head());
 
@@ -2609,8 +2599,7 @@ int Locker::issue_caps(CInode *in, Capability *only_cap)
     Capability *cap = &it->second;
     Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(it->first.v));
     bool has_qtine_auth_caps = session->auth_caps.quarantine_access_in_caps(fs_name, path);
-    int allowed = get_allowed_caps(has_qtine_auth_caps, in, cap, all_allowed, loner_allowed,
-                                   xlocker_allowed);
+    int allowed = get_allowed_caps(has_qtine_auth_caps, in, cap, caps_cache);
     int pending = cap->pending();
     int wanted = cap->wanted();
 

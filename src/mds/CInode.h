@@ -682,7 +682,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   bool is_symlink() const { return get_inode()->is_symlink(); }
   bool is_dir() const     { return get_inode()->is_dir(); }
   bool is_quiesced() const;
-  bool is_quarantined() const;
+  bool has_quarantined() const;
   bool is_under_quarantine() const;
   bool is_being_quarantined() const {
     return (quarantine_op == QUARANTINE_ADD);
@@ -698,9 +698,6 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void clear_being_quarantined() {
     quarantine_op = QUARANTINE_NONE;
   }
-
-  // set remote inode
-  void set_remote_ino(inodeno_t ino) { _get_inode()->remote_ino = ino; }
 
   // note: this overloads MDSCacheObject
   bool is_ambiguous_auth() const {
