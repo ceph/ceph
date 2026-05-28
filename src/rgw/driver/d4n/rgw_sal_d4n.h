@@ -594,7 +594,7 @@ class D4NFilterObject : public FilterObject {
     uint64_t get_remote_obj_size() const { return obj_size; }
 	int write_if_space_available(const DoutPrefixProvider* dpp, const std::string& key, const bufferlist& bl, uint64_t len, const Attrs& attrs,
 								  uint64_t offset, const std::string& version, const bool& dirty, const rgw_user user, const std::string& bucketName,
-								  uint8_t op, optional_yield y);
+								  uint8_t op, optional_yield y, rgw::d4n::CacheBlock* block);
 };
 
 /* Prefix provider to be used when spawning a new coroutine for
