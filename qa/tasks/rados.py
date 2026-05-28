@@ -416,6 +416,7 @@ def task(ctx, config):
                         erasure_code_crush_rule_name=crush_name,
                         erasure_code_use_overwrites=
                             config.get('erasure_code_use_overwrites', False),
+                        num_zones=config.get('num_zones',None),
                     )
                     created_pools.append(pool)
                     if config.get('fast_read', False):
