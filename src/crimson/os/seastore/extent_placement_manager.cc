@@ -841,6 +841,12 @@ ExtentPlacementManager::BackgroundProcess::run()
       assert(!blocking_background);
       blocking_background = seastar::promise<>();
       co_await blocking_background->get_future();
+      // After waking (typically because arm_blocking_io_and_wake() kicked us),
+      // give any blocked user IO a chance to proceed. Without this call the
+      // loop would go straight back to sleep if background_should_run() is
+      // still false, but the space condition (should_block_io) may already be
+      // satisfied, leaving blocked IO stuck with no future trigger to re-check.
+      maybe_wake_blocked_io();
     }
   }
   log_state("run(exit)");
