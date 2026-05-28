@@ -7544,7 +7544,10 @@ void PeeringState::GetInfo::get_infos()
       continue;
     }
     if (ps->peer_info.count(peer)) {
-      psdout(10) << " have osd." << peer << " info " << ps->peer_info[peer] << dendl;
+      uint64_t f = ps->get_osdmap()->get_xinfo(peer.osd).features;
+      psdout(10) << " have osd." << peer << " info " << ps->peer_info[peer]
+                 << " peer features: " << hex << f << dec << dendl;
+      ps->apply_peer_features(f);
       continue;
     }
     if (peer_info_requested.count(peer)) {
