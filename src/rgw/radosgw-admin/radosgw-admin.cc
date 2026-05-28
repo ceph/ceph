@@ -952,6 +952,13 @@ enum class OPT {
   RESTORE_LIST,
 };
 
+enum class Cli11Op {
+  None,
+  ScriptPut,
+  ScriptGet,
+  ScriptRm,
+};
+
 }
 
 using namespace rgw_admin;
@@ -3691,6 +3698,7 @@ int main(int argc, const char **argv)
   uint32_t perm_mask = 0;
   RGWUserInfo info;
   OPT opt_cmd = OPT::NO_CMD;
+  Cli11Op cli11_op = Cli11Op::None;
   int gen_access_key = 0;
   int gen_secret_key = 0;
   enum generate_key_enum {
@@ -3986,9 +3994,6 @@ int main(int argc, const char **argv)
     }
 
     if (script_put->parsed()) {
-      cerr << "DEBUG: CLI11 parsed --context = " << (str_script_ctx ? *str_script_ctx : "(empty)") << std::endl;
-      cerr << "DEBUG: CLI11 parsed --infile = " << (infile.empty() ? "(empty)" : infile) << std::endl;
-      cerr << "DEBUG: CLI11 parsed --tenant = " << (tenant.empty() ? "(empty)" : tenant) << std::endl;
       if (app.count("--context") > 0 || script->count("--context") > 0 ||
           app.count("--infile")  > 0 || script->count("--infile")  > 0 ||
           app.count("--tenant")  > 0 || script->count("--tenant")  > 0) {
@@ -4017,12 +4022,10 @@ int main(int argc, const char **argv)
         return EINVAL;
       }
 
-      opt_cmd = OPT::SCRIPT_PUT;
+      cli11_op = Cli11Op::ScriptPut;
     }
 
     if (script_get->parsed()) {
-      cerr << "DEBUG: CLI11 parsed --context = " << (str_script_ctx ? *str_script_ctx : "(empty)") << std::endl;
-      cerr << "DEBUG: CLI11 parsed --tenant = " << (tenant.empty() ? "(empty)" : tenant) << std::endl;
       if (app.count("--context") > 0 || script->count("--context") > 0 ||
           app.count("--tenant")  > 0 || script->count("--tenant")  > 0) {
         cerr << "Warning: flags should appear after the subcommand. "
@@ -4043,12 +4046,10 @@ int main(int argc, const char **argv)
         return EINVAL;
       }
 
-      opt_cmd = OPT::SCRIPT_GET;
+      cli11_op = Cli11Op::ScriptGet;
     }
 
     if (script_rm->parsed()) {
-      cerr << "DEBUG: CLI11 parsed --context = " << (str_script_ctx ? *str_script_ctx : "(empty)") << std::endl;
-      cerr << "DEBUG: CLI11 parsed --tenant = " << (tenant.empty() ? "(empty)" : tenant) << std::endl;
       if (app.count("--context") > 0 || script->count("--context") > 0 ||
           app.count("--tenant")  > 0 || script->count("--tenant")  > 0) {
         cerr << "Warning: flags should appear after the subcommand. "
@@ -4069,7 +4070,7 @@ int main(int argc, const char **argv)
         return EINVAL;
       }
 
-      opt_cmd = OPT::SCRIPT_RM;
+      cli11_op = Cli11Op::ScriptRm;
     }
 
     // require_subcommand(1) guarantees one of put/get/rm was parsed if script was parsed
@@ -4712,7 +4713,7 @@ int main(int argc, const char **argv)
 
     std::any _opt_cmd;
 
-    if (opt_cmd == OPT::NO_CMD) {
+    if (opt_cmd == OPT::NO_CMD && cli11_op == Cli11Op::None) {
       if (!cmd.find_command(args, &_opt_cmd, &extra_args, &err, &expected)) {
         if (!expected.empty()) {
           cerr << err << std::endl;
@@ -4893,7 +4894,8 @@ int main(int argc, const char **argv)
 
     raw_storage_op = (raw_storage_ops_list.find(opt_cmd) != raw_storage_ops_list.end() ||
 			   raw_period_update || raw_period_pull);
-    bool need_cache = readonly_ops_list.find(opt_cmd) == readonly_ops_list.end();
+    bool need_cache = readonly_ops_list.find(opt_cmd) == readonly_ops_list.end()
+                     && cli11_op != Cli11Op::ScriptGet;
     bool need_gc = (gc_ops_list.find(opt_cmd) != gc_ops_list.end()) && !bypass_gc;
 
     DriverManager::Config cfg = DriverManager::get_config(true, g_ceph_context);
@@ -4978,9 +4980,9 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT::PUBSUB_NOTIFICATION_RM
                           && opt_cmd != OPT::PUBSUB_TOPIC_STATS
                           && opt_cmd != OPT::PUBSUB_TOPIC_DUMP
-			  && opt_cmd != OPT::SCRIPT_PUT
-			  && opt_cmd != OPT::SCRIPT_GET
-			  && opt_cmd != OPT::SCRIPT_RM
+                          && cli11_op != Cli11Op::ScriptPut
+                          && cli11_op != Cli11Op::ScriptGet
+                          && cli11_op != Cli11Op::ScriptRm
                           && opt_cmd != OPT::ACCOUNT_CREATE
                           && opt_cmd != OPT::ACCOUNT_MODIFY
                           && opt_cmd != OPT::ACCOUNT_GET
@@ -12418,7 +12420,7 @@ next:
     formatter->flush(cout);
   }
 
-  if (opt_cmd == OPT::SCRIPT_PUT) {
+  if (cli11_op == Cli11Op::ScriptPut) {
     if (!str_script_ctx) {
       cerr << "ERROR: context was not provided (via --context)" << std::endl;
       return EINVAL;
@@ -12456,7 +12458,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT::SCRIPT_GET) {
+  if (cli11_op == Cli11Op::ScriptGet) {
     if (!str_script_ctx) {
       cerr << "ERROR: context was not provided (via --context)" << std::endl;
       return EINVAL;
@@ -12480,7 +12482,7 @@ next:
     }
   }
   
-  if (opt_cmd == OPT::SCRIPT_RM) {
+  if (cli11_op == Cli11Op::ScriptRm) {
     if (!str_script_ctx) {
       cerr << "ERROR: context was not provided (via --context)" << std::endl;
       return EINVAL;
