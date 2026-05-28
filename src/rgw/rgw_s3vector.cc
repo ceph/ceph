@@ -10,7 +10,9 @@
 #include "lancedb.h"
 #include <arrow/api.h>
 #include <arrow/c/bridge.h>
+#include <algorithm>
 #include <charconv>
+#include <cmath>
 #include <set>
 #include "rgw_s3vector_background.h"
 #include "rgw_s3vector_filter.h"
@@ -1981,7 +1983,10 @@ namespace rgw::s3vector {
       return lancedb_error_to_errno(result);
     }
 
-    if (const LanceDBError result = lancedb_vector_query_limit(query, configuration.top_k, &error_message) ; result != LANCEDB_SUCCESS) {
+    const auto effective_top_k = json_filter_expr
+        ? static_cast<unsigned int>(std::lround(configuration.top_k * dpp->get_cct()->_conf->rgw_s3vector_topk_post_filter_factor))
+        : configuration.top_k;
+    if (const LanceDBError result = lancedb_vector_query_limit(query, effective_top_k, &error_message) ; result != LANCEDB_SUCCESS) {
       ldpp_dout(dpp, 1) << "ERROR: s3vector failed to set top-k for vector query on index: " << configuration.index_name << ". error: " << error_message << dendl;
       lancedb_free_string(error_message);
       lancedb_expr_free(json_filter_expr);
@@ -2043,8 +2048,23 @@ namespace rgw::s3vector {
         lancedb_expr_free(json_filter_expr);
         ret = 0;
       } else {
+        const bool need_distance = configuration.return_distance || (effective_top_k > configuration.top_k);
         ret = populate_vectors_from_arrow(dpp, c_arrays_ptr, c_schema_ptr, reply.vectors, configuration.index_name,
-            false, configuration.return_distance, true, configuration.return_metadata, matches);
+            false, need_distance, true, configuration.return_metadata, matches);
+        if (ret == 0 && reply.vectors.size() > configuration.top_k) {
+          // if we received more than k vectors (due to using the factor when post filtering)
+          // we return the top k ones based on distance
+          std::sort(reply.vectors.begin(), reply.vectors.end(),
+              [](const vector_item_t& a, const vector_item_t& b) {
+                return *a.distance < *b.distance;
+              });
+          reply.vectors.resize(configuration.top_k);
+          if (!configuration.return_distance) {
+            // if distance was not asked by the client
+            // we remove it from the reply
+            for (auto& v : reply.vectors) v.distance.reset();
+          }
+        }
       }
       lancedb_free_json_matches(matches);
     } else {

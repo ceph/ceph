@@ -45,6 +45,18 @@ def admin(args, **kwargs):
     return bash(cmd, **kwargs)
 
 
+def ceph_admin(args, **kwargs):
+    """ ceph command """
+    cmd = [test_path + 'test-rgw-call.sh', 'call_ceph', 'noname'] + args
+    return bash(cmd, **kwargs)
+
+
+def set_rgw_config_option(option, value):
+    """ change a config option """
+    client = f'client.rgw.{get_config_port()}'
+    return ceph_admin(['config', 'set', client, option, str(value)])
+
+
 def gen_bucket_name():
     global num_buckets
 
@@ -2166,4 +2178,66 @@ def test_query_vectors_filter_errors():
 
     # cleanup
     _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+@pytest.mark.vector_test
+def test_query_vectors_post_filter_topk():
+    """ Test topK oversampling with JSON post-filtering """
+
+    set_rgw_config_option('rgw_s3vector_topk_post_filter_factor', 1.5)
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 4
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    result = conn.create_index(
+        vectorBucketName=bucket_name, indexName=index_name,
+        dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = []
+    for i in range(7):
+        vectors.append({
+            'key': f'red-{i}',
+            'data': generate_data(dimension, i),
+            'metadata': json.dumps({'color': 'red'}),
+        })
+    for i in range(13):
+        vectors.append({
+            'key': f'blue-{i}',
+            'data': generate_data(dimension, 100 + i),
+            'metadata': json.dumps({'color': 'blue'}),
+        })
+    result = conn.put_vectors(
+        vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    top_k = 9
+
+    # test 1: fewer than k matches after filtering — return all matches
+    # query near red vectors (index 0), so all 7 red are in the top results
+    result = conn.query_vectors(
+        vectorBucketName=bucket_name, indexName=index_name,
+        queryVector=generate_data(dimension, 0), topK=top_k, filter={'color': 'red'})
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == 7
+
+    # test 2: more than k matches after filtering — return exactly k
+    # query near blue vectors (index 106), so all 13 blue are in the top results
+    # do not request returnDistance
+    result = conn.query_vectors(
+        vectorBucketName=bucket_name, indexName=index_name,
+        queryVector=generate_data(dimension, 106), topK=top_k, filter={'color': 'blue'})
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == top_k
+    # verify distance is not in the response
+    for v in result['vectors']:
+        log.info(v)
+        assert 'distance' not in v, "distance should not be in response when not requested"
+
+    # cleanup
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    set_rgw_config_option('rgw_s3vector_topk_post_filter_factor', 1)
 
