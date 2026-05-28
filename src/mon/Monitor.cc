@@ -5297,6 +5297,34 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
        ++p) {
     if (p->first == "monmap" || p->first == "config") {
       // these require no caps
+    } else if (p->first.starts_with("mdsmap") || p->first.starts_with("fsmap")) {
+      if (!s->is_capable("mds", MON_CAP_R)) {
+        dout(5) << __func__ << " " << op->get_req()->get_source_inst()
+                << " not enough caps for " << p->first << " -- dropping"
+                << dendl;
+        continue;
+      }
+    } else if (p->first == "osdmap") {
+      if (!s->is_capable("osd", MON_CAP_R)) {
+        dout(5) << __func__ << " " << op->get_req()->get_source_inst()
+                << " not enough caps for " << p->first << " -- dropping"
+                << dendl;
+        continue;
+      }
+    } else if (p->first == "osd_pg_creates") {
+      if (!s->is_capable("osd", MON_CAP_W)) {
+        dout(5) << __func__ << " " << op->get_req()->get_source_inst()
+                << " not enough caps for " << p->first << " -- dropping"
+                << dendl;
+        continue;
+      }
+    } else if (p->first.starts_with("kv:")) {
+      if (!s->is_capable("config-key", MON_CAP_R)) {
+        dout(5) << __func__ << " " << op->get_req()->get_source_inst()
+                << " not enough caps for " << p->first << " -- dropping"
+                << dendl;
+        continue;
+      }
     } else if (!s->is_capable("mon", MON_CAP_R)) {
       dout(5) << __func__ << " " << op->get_req()->get_source_inst()
 	      << " not enough caps for " << *(op->get_req()) << " -- dropping"
@@ -5328,25 +5356,19 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
 				 m->get_connection()->has_feature(CEPH_FEATURE_INCSUBOSDMAP));
     }
 
-    if (p->first.compare(0, 6, "mdsmap") == 0 || p->first.compare(0, 5, "fsmap") == 0) {
+    if (p->first.starts_with("mdsmap") || p->first.starts_with("fsmap")) {
       dout(10) << __func__ << ": MDS sub '" << p->first << "'" << dendl;
-      if ((int)s->is_capable("mds", MON_CAP_R)) {
-        Subscription *sub = s->sub_map[p->first];
-        ceph_assert(sub != nullptr);
-        mdsmon()->check_sub(sub);
-      }
+      Subscription *sub = s->sub_map[p->first];
+      ceph_assert(sub != nullptr);
+      mdsmon()->check_sub(sub);
     } else if (p->first == "osdmap") {
-      if ((int)s->is_capable("osd", MON_CAP_R)) {
-	if (s->osd_epoch > p->second.start) {
-	  // client needs earlier osdmaps on purpose, so reset the sent epoch
-	  s->osd_epoch = 0;
-	}
-        osdmon()->check_osdmap_sub(s->sub_map["osdmap"]);
+      if (s->osd_epoch > p->second.start) {
+        // client needs earlier osdmaps on purpose, so reset the sent epoch
+        s->osd_epoch = 0;
       }
+      osdmon()->check_osdmap_sub(s->sub_map["osdmap"]);
     } else if (p->first == "osd_pg_creates") {
-      if ((int)s->is_capable("osd", MON_CAP_W)) {
-	osdmon()->check_pg_creates_sub(s->sub_map["osd_pg_creates"]);
-      }
+      osdmon()->check_pg_creates_sub(s->sub_map["osd_pg_creates"]);
     } else if (p->first == "monmap") {
       monmon()->check_sub(s->sub_map[p->first]);
     } else if (logmon()->sub_name_to_id(p->first) >= 0) {
@@ -5357,7 +5379,7 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
       mgrstatmon()->check_sub(s->sub_map[p->first]);
     } else if (p->first == "config") {
       configmon()->check_sub(s);
-    } else if (p->first.find("kv:") == 0) {
+    } else if (p->first.starts_with("kv:")) {
       kvmon()->check_sub(s->sub_map[p->first]);
     }
   }
