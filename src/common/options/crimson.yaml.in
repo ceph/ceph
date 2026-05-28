@@ -247,8 +247,8 @@ options:
 - name: seastore_rbm_metadata_size
   type: str
   level: dev
-  desc: Size of the RBM metadata pool (LBA tree, backref tree, onode tree) carved between the journal and the data area at mkfs. Can be a percentage (e.g. 1.5%) or a size with K/M/G/T suffix. Set to 0 (default) to disable pool separation and revert to the legacy single-pool layout (data + metadata share one allocator).
-  default: 0
+  desc: Size of the RBM metadata pool (LBA tree, backref tree, onode tree) carved between the journal and the data area at mkfs. Can be a percentage (e.g. 1.5%) or a size with K/M/G/T suffix. Set to 0 to disable pool separation and revert to the legacy single-pool layout (data + metadata share one allocator). A size of 1.5% is default and covers the steady-state metadata ratio for all-4K-extent workloads.
+  default: 1.5%
 - name: seastore_multiple_tiers_stop_evict_ratio
   type: float
   level: advanced
