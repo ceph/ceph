@@ -87,6 +87,15 @@ public:
   size_t get_data_size() const {
     return device->get_shard_end() - get_data_start_rbm_addr();
   }
+  size_t get_data_pool_available() const override {
+    return data_allocator->get_available_size();
+  }
+  size_t get_metadata_pool_size() const override {
+    return metadata_allocator ? get_metadata_size() : 0;
+  }
+  size_t get_metadata_pool_available() const override {
+    return metadata_allocator ? metadata_allocator->get_available_size() : 0;
+  }
   size_t get_metadata_size() const {
     return device->get_metadata_size();
   }

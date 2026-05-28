@@ -57,6 +57,11 @@ paddr_t BlockRBManager::alloc_extent(size_t size, data_category_t category)
           ? metadata_allocator.get()
           : data_allocator.get();
   auto alloc = a->alloc_extent(size);
+  if (!alloc && a == metadata_allocator.get()) {
+    INFO("metadata_allocator exhausted, falling back to data_allocator");
+    a = data_allocator.get();
+    alloc = a->alloc_extent(size);
+  }
   if (!alloc) {
     return P_ADDR_NULL;
   }
@@ -81,6 +86,11 @@ BlockRBManager::alloc_extents(size_t size, data_category_t category)
           ? metadata_allocator.get()
           : data_allocator.get();
   auto alloc = a->alloc_extents(size);
+  if (!alloc && a == metadata_allocator.get()) {
+    INFO("metadata_allocator exhausted, falling back to data_allocator");
+    a = data_allocator.get();
+    alloc = a->alloc_extents(size);
+  }
   if (!alloc) {
     return {};
   }

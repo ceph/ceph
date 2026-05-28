@@ -1798,7 +1798,20 @@ public:
   void release_projected_usage(size_t) final;
 
   bool should_block_io_on_clean() const final {
-    return false;
+    size_t meta_cap = 0, meta_avail = 0;
+    size_t data_avail = 0;
+    for (auto *rbm : rb_group->get_rb_managers()) {
+      meta_cap  += rbm->get_metadata_pool_size();
+      meta_avail += rbm->get_metadata_pool_available();
+      data_avail += rbm->get_data_pool_available();
+    }
+    // v1 layout has no dedicated metadata pool.
+    if (meta_cap == 0) {
+      return false;
+    }
+    // Block if metadata pool is nearly full and data pool can't back it up.
+    size_t total_avail = meta_avail + data_avail;
+    return total_avail < std::min(meta_cap / 50, static_cast<size_t>(16ULL << 20));
   }
 
   bool can_clean_space() const final {

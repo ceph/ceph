@@ -93,6 +93,12 @@ public:
   virtual void complete_allocation(paddr_t addr, size_t size) = 0;
 
   virtual size_t get_size() const = 0;
+  // Free bytes in the data pool.
+  virtual size_t get_data_pool_available() const = 0;
+  // Size of the metadata pool.
+  virtual size_t get_metadata_pool_size() const = 0;
+  // Free bytes in the metadata pool.
+  virtual size_t get_metadata_pool_available() const = 0;
   virtual extent_len_t get_block_size() const = 0;
   virtual uint64_t get_free_blocks() const = 0;
   virtual device_id_t get_device_id() const = 0;
