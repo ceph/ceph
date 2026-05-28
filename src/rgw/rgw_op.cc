@@ -8082,6 +8082,8 @@ void RGWDeleteMultiObj::handle_versioned_objects(const std::vector<RGWMultiDelOb
     grouped_objects[key].push_back(object);
   }
 
+  ops_log_entries.reserve(objects.size());
+
   // for each group of objects, handle all but the last object and skip update_olh
   for (const auto& [_, objects] : grouped_objects) {
     for (size_t i = 0; i + 1 < objects.size(); ++i) { // skip the last element
@@ -8111,6 +8113,7 @@ void RGWDeleteMultiObj::handle_non_versioned_objects(const std::vector<RGWMultiD
                                                      boost::asio::yield_context yield)
 {
   auto group = ceph::async::spawn_throttle{yield, max_aio};
+  ops_log_entries.reserve(objects.size());
 
   for (const auto& object : objects) {
     group.spawn([this, &object] (boost::asio::yield_context yield) {
