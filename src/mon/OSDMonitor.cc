@@ -14107,9 +14107,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         profile_name_stream << poolstr << "-k" << k << "-m" << m;
         string auto_profile_name = profile_name_stream.str();
 
-        if (osdmap.has_erasure_code_profile(auto_profile_name)) {
-          const map<string,string> &existing_profile = osdmap.get_erasure_code_profile(auto_profile_name);
-          
+        const map<string,string> &existing_profile = osdmap.get_erasure_code_profile(auto_profile_name);
+        
+        if (!existing_profile.empty()) {
           auto it_k = existing_profile.find("k");
           auto it_m = existing_profile.find("m");
           
