@@ -340,7 +340,7 @@ class ScrubJob {
  *  | ext-sleep  |    no   |      no      |    no   |     no   |      no     |
  *  | load       |    yes  |      no      |    no   |     no   |      no     |
  *  | trims      |    yes  |      yes     |    no   |     no   |      no     |
- *  | noscrub    |    yes  |      no      |    Yes  |     no   |      no     |
+ *  | noscrub    |    yes  |      no      |    no   |     no   |      no     |
  *  | max-scrubs |    yes  |      yes     |    Yes  |     no   |      no     |
  *  | backoff    |    yes  |      no      |    no   |     no   |      no     |
  *  | recovery   |    yes  |      yes     |    Yes  |     no   |      no     |
