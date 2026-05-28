@@ -906,7 +906,9 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
 
  private:
   NodeLayoutT(NodeExtentRef extent) : extent{extent} {
+#ifndef NDEBUG
     build_name();
+#endif
   }
 
   extent_len_t filled_size() const {
