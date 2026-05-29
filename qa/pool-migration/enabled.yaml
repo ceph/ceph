@@ -8,3 +8,5 @@
 #        mon osd initial require min compat client: umbrella
 #      global:
 #        enable experimental unrecoverable data corrupting features: '*'
+#    log-ignorelist:
+#      - \(POOL MIGRATION\)
