@@ -258,6 +258,9 @@ RecordSubmitter::roll_segment()
       wait_available_promise.reset();
       return roll_segment_ertr::now();
     } else {
+      // roll() can resolve inline and reset wait_available_promise before the
+      // next line runs, so grab the future while the promise is still set.
+      auto wait_fut = wait_available();
       // start rolling in background
       std::ignore = journal_allocator.roll(
       ).safe_then([FNAME, this] {
@@ -281,7 +284,7 @@ RecordSubmitter::roll_segment()
         wait_available_promise.reset();
       });
       // wait for background rolling
-      return wait_available();
+      return wait_fut;
     }
   });
 }
