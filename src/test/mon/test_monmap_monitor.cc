@@ -260,7 +260,7 @@ TEST_F(MonmapMonitorStretchTest, ExplicitTiebreakerSuccess) {
 
   // Test validation phase (commit=false)
   MonmapMonitor::validate_and_enable_stretch_mode(
-      monmap, monmap, ss, &okay, &errcode, false, "e", "zone", crush);
+      monmap, monmap, ss, &okay, &errcode, false, "e", "zone", crush, false);
 
   EXPECT_TRUE(okay) << "Validation failed: " << ss.str();
   EXPECT_EQ(errcode, 0);
@@ -271,11 +271,48 @@ TEST_F(MonmapMonitorStretchTest, ExplicitTiebreakerSuccess) {
   ss.str("");
   okay = false;
   MonmapMonitor::validate_and_enable_stretch_mode(
-      monmap, monmap, ss, &okay, &errcode, true, "e", "zone", crush);
+      monmap, monmap, ss, &okay, &errcode, true, "e", "zone", crush, false);
 
   EXPECT_TRUE(okay) << "Commit failed: " << ss.str();
   EXPECT_EQ(errcode, 0);
   EXPECT_TRUE(monmap.stretch_mode_enabled);
+  EXPECT_EQ(monmap.tiebreaker_mon, "e");
+  EXPECT_TRUE(monmap.disallowed_leaders.count("e"));
+  EXPECT_FALSE(monmap.global_stretch_mode_enabled)
+    << "Global stretch mode should not be enabled when set_global_stretch_mode=false";
+}
+
+// Test global stretch mode enabled when set_global_stretch_mode=true
+TEST_F(MonmapMonitorStretchTest, GlobalStretchModeEnabled) {
+  setup_basic_monmap_5mons();
+  setup_crush_two_zones();
+
+  stringstream ss;
+  bool okay = false;
+  int errcode = 0;
+
+  // Test validation phase (commit=false) with set_global_stretch_mode=true
+  MonmapMonitor::validate_and_enable_stretch_mode(
+      monmap, monmap, ss, &okay, &errcode, false, "e", "zone", crush, true);
+
+  EXPECT_TRUE(okay) << "Validation failed: " << ss.str();
+  EXPECT_EQ(errcode, 0);
+  EXPECT_FALSE(monmap.stretch_mode_enabled)
+    << "Should not be enabled in validation phase";
+  EXPECT_FALSE(monmap.global_stretch_mode_enabled)
+    << "Should not be enabled in validation phase";
+
+  // Test commit phase (commit=true) with set_global_stretch_mode=true
+  ss.str("");
+  okay = false;
+  MonmapMonitor::validate_and_enable_stretch_mode(
+      monmap, monmap, ss, &okay, &errcode, true, "e", "zone", crush, true);
+
+  EXPECT_TRUE(okay) << "Commit failed: " << ss.str();
+  EXPECT_EQ(errcode, 0);
+  EXPECT_TRUE(monmap.stretch_mode_enabled);
+  EXPECT_TRUE(monmap.global_stretch_mode_enabled)
+    << "Global stretch mode should be enabled when set_global_stretch_mode=true";
   EXPECT_EQ(monmap.tiebreaker_mon, "e");
   EXPECT_TRUE(monmap.disallowed_leaders.count("e"));
 }
@@ -291,7 +328,7 @@ TEST_F(MonmapMonitorStretchTest, AutoSelectTiebreakerSuccess) {
 
   // Test with empty tiebreaker_mon string (triggers auto-selection)
   MonmapMonitor::validate_and_enable_stretch_mode(
-      monmap, monmap, ss, &okay, &errcode, false, "", "zone", crush);
+      monmap, monmap, ss, &okay, &errcode, false, "", "zone", crush, false);
 
   EXPECT_TRUE(okay) << "Auto-selection validation failed: " << ss.str();
   EXPECT_EQ(errcode, 0);
@@ -300,7 +337,7 @@ TEST_F(MonmapMonitorStretchTest, AutoSelectTiebreakerSuccess) {
   ss.str("");
   okay = false;
   MonmapMonitor::validate_and_enable_stretch_mode(
-      monmap, monmap, ss, &okay, &errcode, true, "", "zone", crush);
+      monmap, monmap, ss, &okay, &errcode, true, "", "zone", crush, false);
 
   EXPECT_TRUE(okay) << "Auto-selection commit failed: " << ss.str();
   EXPECT_EQ(errcode, 0);
@@ -324,7 +361,7 @@ TEST_F(MonmapMonitorStretchTest, StrategyAutoChangedToConnectivity) {
 
   // Validation phase should succeed and prepare strategy change
   MonmapMonitor::validate_and_enable_stretch_mode(
-      monmap, monmap, ss, &okay, &errcode, false, "e", "zone", crush);
+      monmap, monmap, ss, &okay, &errcode, false, "e", "zone", crush, false);
 
   EXPECT_TRUE(okay) << "Validation should succeed: " << ss.str();
   EXPECT_EQ(errcode, 0);
@@ -335,7 +372,7 @@ TEST_F(MonmapMonitorStretchTest, StrategyAutoChangedToConnectivity) {
   ss.str("");
   okay = false;
   MonmapMonitor::validate_and_enable_stretch_mode(
-      monmap, monmap, ss, &okay, &errcode, true, "e", "zone", crush);
+      monmap, monmap, ss, &okay, &errcode, true, "e", "zone", crush, false);
 
   EXPECT_TRUE(okay) << "Commit should succeed: " << ss.str();
   EXPECT_EQ(errcode, 0);
@@ -357,7 +394,7 @@ TEST_F(MonmapMonitorStretchTest, AutoSelectFailTiebreakerInDataZone) {
 
   // Try auto-selection - should fail because 'e' is in zone1
   MonmapMonitor::validate_and_enable_stretch_mode(
-      monmap, monmap, ss, &okay, &errcode, false, "", "zone", crush);
+      monmap, monmap, ss, &okay, &errcode, false, "", "zone", crush, false);
 
   EXPECT_FALSE(okay) << "Should fail when no tiebreaker in third zone";
   EXPECT_EQ(errcode, -EINVAL);
@@ -381,7 +418,7 @@ TEST_F(MonmapMonitorStretchTest, ExplicitTiebreakerInDataZoneFails) {
 
   // Explicitly specify 'e' which is in zone1 (a data zone)
   MonmapMonitor::validate_and_enable_stretch_mode(
-      monmap, monmap, ss, &okay, &errcode, false, "e", "zone", crush);
+      monmap, monmap, ss, &okay, &errcode, false, "e", "zone", crush, false);
 
   EXPECT_FALSE(okay) << "Should fail when tiebreaker is in data zone";
   EXPECT_EQ(errcode, -EINVAL);
@@ -403,7 +440,7 @@ TEST_F(MonmapMonitorStretchTest, AutoSelectFailMultipleTiebreakers) {
 
   // Try auto-selection - should fail with multiple candidates
   MonmapMonitor::validate_and_enable_stretch_mode(
-      monmap, monmap, ss, &okay, &errcode, false, "", "zone", crush);
+      monmap, monmap, ss, &okay, &errcode, false, "", "zone", crush, false);
 
   EXPECT_FALSE(okay) << "Should fail with multiple tiebreaker candidates";
   EXPECT_EQ(errcode, -EINVAL);
@@ -428,7 +465,7 @@ TEST_F(MonmapMonitorStretchTest, NonExistentTiebreakerFails) {
 
   // Specify a monitor that doesn't exist
   MonmapMonitor::validate_and_enable_stretch_mode(
-      monmap, monmap, ss, &okay, &errcode, false, "nonexistent", "zone", crush);
+      monmap, monmap, ss, &okay, &errcode, false, "nonexistent", "zone", crush, false);
 
   EXPECT_FALSE(okay) << "Should fail with non-existent monitor";
   EXPECT_EQ(errcode, -ENOENT);
@@ -449,7 +486,7 @@ TEST_F(MonmapMonitorStretchTest, ZeroMonitorsInDataZoneFails) {
 
   // Try to enable stretch mode - should fail due to no monitors in zone2
   MonmapMonitor::validate_and_enable_stretch_mode(
-      monmap, monmap, ss, &okay, &errcode, false, "e", "zone", crush);
+      monmap, monmap, ss, &okay, &errcode, false, "e", "zone", crush, false);
 
   EXPECT_FALSE(okay) << "Should fail when a data zone has 0 monitors";
   EXPECT_EQ(errcode, -EINVAL);
@@ -474,7 +511,7 @@ TEST_F(MonmapMonitorStretchTest, OneMonitorPerZoneSucceeds) {
 
   // Validation phase with explicit tiebreaker
   MonmapMonitor::validate_and_enable_stretch_mode(
-      monmap, monmap, ss, &okay, &errcode, false, "e", "zone", crush);
+      monmap, monmap, ss, &okay, &errcode, false, "e", "zone", crush, false);
 
   EXPECT_TRUE(okay) << "Validation should succeed with 1 monitor per zone: " << ss.str();
   EXPECT_EQ(errcode, 0);
@@ -483,7 +520,7 @@ TEST_F(MonmapMonitorStretchTest, OneMonitorPerZoneSucceeds) {
   ss.str("");
   okay = false;
   MonmapMonitor::validate_and_enable_stretch_mode(
-      monmap, monmap, ss, &okay, &errcode, true, "e", "zone", crush);
+      monmap, monmap, ss, &okay, &errcode, true, "e", "zone", crush, false);
 
   EXPECT_TRUE(okay) << "Commit should succeed: " << ss.str();
   EXPECT_EQ(errcode, 0);
@@ -502,7 +539,7 @@ TEST_F(MonmapMonitorStretchTest, OneMonitorPerZoneAutoSelectSucceeds) {
 
   // Auto-selection with minimal valid configuration
   MonmapMonitor::validate_and_enable_stretch_mode(
-      monmap, monmap, ss, &okay, &errcode, false, "", "zone", crush);
+      monmap, monmap, ss, &okay, &errcode, false, "", "zone", crush, false);
 
   EXPECT_TRUE(okay) << "Auto-selection should succeed: " << ss.str();
   EXPECT_EQ(errcode, 0);
@@ -511,7 +548,7 @@ TEST_F(MonmapMonitorStretchTest, OneMonitorPerZoneAutoSelectSucceeds) {
   ss.str("");
   okay = false;
   MonmapMonitor::validate_and_enable_stretch_mode(
-      monmap, monmap, ss, &okay, &errcode, true, "", "zone", crush);
+      monmap, monmap, ss, &okay, &errcode, true, "", "zone", crush, false);
 
   EXPECT_TRUE(okay) << "Commit should succeed: " << ss.str();
   EXPECT_EQ(errcode, 0);
