@@ -13995,10 +13995,40 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
                                get_last_committed() + 1));
     return true;
   } else if (prefix == "osd pool create") {
-    std::string source_pool_name;
+    auto source_pool_name = cmd_getval_or<std::string>(cmdmap, "migrate_from_pool", "");
+
+    string poolstr;
+    cmd_getval(cmdmap, "pool", poolstr);
+    bool confirm = false;
+    //confirmation may be set to true only by internal operations.
+    cmd_getval(cmdmap, "yes_i_really_mean_it", confirm);
+    if (poolstr[0] == '.' && !confirm) {
+      ss << "pool names beginning with . are not allowed";
+      err = 0;
+      goto reply_no_propose;
+    }
+
+    string default_type_str, pool_type_str;
+    int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
+    if (pool_id >= 0) {
+      if (source_pool_name.empty()) {
+        default_type_str = g_conf().get_val<string>("osd_pool_default_type");
+        pool_type_str = cmd_getval_or<string>(cmdmap, "pool_type", default_type_str);
+        const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
+        if (pool_type_str != p->get_type_name()) {
+          ss << "pool '" << poolstr << "' cannot change to type " << pool_type_str;
+          err = -EINVAL;
+          goto reply_no_propose;
+        }
+      }
+      ss << "pool '" << poolstr << "' already exists";
+      err = 0;
+      goto reply_no_propose;
+    }
+
     std::optional<int64_t> source_pool_id;
     const pg_pool_t *source_pool = nullptr;
-    if (cmd_getval(cmdmap, "migrate_from_pool", source_pool_name)) {
+    if (!source_pool_name.empty()) {
       bool experimental_enabled =
         g_ceph_context->check_experimental_feature_enabled("poolmigration");
       if (!experimental_enabled) {
@@ -14040,8 +14070,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         err = -EINVAL;
         goto reply_no_propose;
       }
-
-
     }
 
     auto pg_num = cmd_getval_or<int64_t>(cmdmap, "pg_num", 0);
@@ -14058,33 +14086,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       pgp_num = pg_num;
     }
 
-    string default_type_str = (source_pool) ?
-      string(source_pool->get_type_name()) : g_conf().get_val<string>("osd_pool_default_type");
-    string pool_type_str = cmd_getval_or<string>(cmdmap, "pool_type", default_type_str);
-
-    string poolstr;
-    cmd_getval(cmdmap, "pool", poolstr);
-    bool confirm = false;
-    //confirmation may be set to true only by internal operations.
-    cmd_getval(cmdmap, "yes_i_really_mean_it", confirm);
-    if (poolstr[0] == '.' && !confirm) {
-      ss << "pool names beginning with . are not allowed";
-      err = 0;
-      goto reply_no_propose;
-    }
-    int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
-    if (pool_id >= 0) {
-      const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
-      if (pool_type_str != p->get_type_name()) {
-	ss << "pool '" << poolstr << "' cannot change to type " << pool_type_str;
- 	err = -EINVAL;
-      } else {
-	ss << "pool '" << poolstr << "' already exists";
-	err = 0;
-      }
-      goto reply_no_propose;
-    }
-
+    default_type_str = (source_pool) ? string(source_pool->get_type_name())
+      : g_conf().get_val<string>("osd_pool_default_type");
+    pool_type_str = cmd_getval_or<string>(cmdmap, "pool_type", default_type_str);
     int pool_type;
     if (pool_type_str == "replicated") {
       pool_type = pg_pool_t::TYPE_REPLICATED;
