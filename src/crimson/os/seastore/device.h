@@ -113,7 +113,7 @@ static_assert(SUPERBLOCK_HEADER_PREFIX == 60);
 
 /// Current superblock format version.
 ///   v1: initial.
-///   v2: adds RBM metadata-pool fields (metadata_size, metadata_region_start).
+///   v2: adds RBM metadata-pool field (metadata_size).
 ///       v1 devices read with v2 code default these to 0 and behave as a
 ///       single-pool device (data + metadata sharing the same allocator).
 constexpr uint8_t CRIMSON_DEVICE_SUPERBLOCK_VERSION = 2;
