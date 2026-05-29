@@ -253,7 +253,7 @@ void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
     return;
   }
 
-  ENCODE_START(10, 6, blist);
+  ENCODE_START(11, 6, blist);
   ceph::encode_raw(fsid, blist);
   encode(epoch, blist);
   encode(last_changed, blist);
@@ -286,13 +286,14 @@ void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
     encode(v, blist);
   }
   encode(auth_preferred_cipher, blist);
+  encode(global_stretch_mode_enabled, blist);
   ENCODE_FINISH(blist);
 }
 
 void MonMap::decode(ceph::buffer::list::const_iterator& p)
 {
   map<string,entity_addr_t> mon_addr;
-  DECODE_START_LEGACY_COMPAT_LEN_16(10, 3, 3, p);
+  DECODE_START_LEGACY_COMPAT_LEN_16(11, 3, 3, p);
   ceph::decode_raw(fsid, p);
   decode(epoch, p);
   if (struct_v == 1) {
@@ -363,6 +364,11 @@ void MonMap::decode(ceph::buffer::list::const_iterator& p)
     auth_service_cipher = CEPH_CRYPTO_AES;
     auth_allowed_ciphers = {CEPH_CRYPTO_AES, CEPH_CRYPTO_AES256KRB5};
     auth_preferred_cipher = CEPH_CRYPTO_AES;
+  }
+  if (struct_v >= 11) {
+    decode(global_stretch_mode_enabled, p);
+  } else {
+    global_stretch_mode_enabled = stretch_mode_enabled;
   }
   calc_addr_mons();
   DECODE_FINISH(p);
@@ -493,6 +499,7 @@ void MonMap::print(ostream& out) const
   out << "election_strategy: " << strategy << "\n";
   if (stretch_mode_enabled) {
     out << "stretch_mode_enabled " << stretch_mode_enabled << "\n";
+    out << "global_stretch_mode_enabled " << global_stretch_mode_enabled << "\n";
     out << "tiebreaker_mon " << tiebreaker_mon << "\n";
   }
   if (stretch_mode_enabled ||
@@ -554,6 +561,7 @@ void MonMap::dump(Formatter *f) const
   f->dump_int ("election_strategy", strategy);
   f->dump_stream("disallowed_leaders") << disallowed_leaders;
   f->dump_bool("stretch_mode", stretch_mode_enabled);
+  f->dump_bool("global_stretch_mode", global_stretch_mode_enabled);
   f->dump_string("tiebreaker_mon", tiebreaker_mon);
   f->dump_stream("removed_ranks") << removed_ranks;
   f->open_object_section("features");
