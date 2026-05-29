@@ -93,17 +93,20 @@ private:
    * @param tiebreaker_mon: the name of the monitor to declare tiebreaker (empty for auto-select)
    * @param dividing_bucket: the bucket type (eg 'dc') that divides the cluster
    * @param crush: the pending CrushWrapper for validating monitor locations against subtrees
+   * @param set_global_stretch_mode: if true, set global_stretch_mode_enabled to true when committing
    *
    * Note: CRUSH bucket type and subtree count validation is performed by
    * OSDMonitor::try_enable_stretch_mode() to avoid redundancy.
    */
+
+public:
   void try_enable_stretch_mode(std::stringstream& ss, bool *okay,
 			       int *errcode, bool commit,
 			       std::string tiebreaker_mon,
 			       const std::string& dividing_bucket,
-			       const CrushWrapper& crush);
+			       const CrushWrapper& crush,
+             bool set_global_stretch_mode);
 
-public:
   /**
    * Static helper for validating and enabling stretch mode on a MonMap.
    * Extracted for testability - can be called from unit tests.
@@ -118,7 +121,8 @@ public:
 			       int *errcode, bool commit,
 			       std::string tiebreaker_mon,
 			       const std::string& dividing_bucket,
-			       const CrushWrapper& crush);
+			       const CrushWrapper& crush,
+             bool set_global_stretch_mode);
 
 public:
   /**
@@ -149,6 +153,13 @@ public:
    * @return true if changed pending_map (needs proposal), false otherwise
    */
   bool ensure_connectivity_strategy(std::stringstream& ss);
+
+  /**
+   * Clear per-pool stretch mode state from monmap.
+   * Called by OSDMonitor when the last per-pool stretch mode pool is removed.
+   * Only clears monmap state; OSDMonitor handles its own state cleanup.
+   */
+  void clear_stretch_mode_state();
 };
 
 

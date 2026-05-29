@@ -3212,8 +3212,8 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
   } else {
     ss << "  cluster:\n";
     ss << "    id:     " << monmap->get_fsid() << "\n";
-    if (is_stretch_mode()){
-      ss << "    stretch_mode: ENABLED\n";
+    if (monmap->global_stretch_mode_enabled) {
+      ss << "    stretch_mode_global: ENABLED\n";
     }
     string health;
     healthmon()->get_health_status(false, nullptr, &health,
@@ -6886,7 +6886,7 @@ void Monitor::try_engage_stretch_mode()
     return;
   }
   if (osdmon()->osdmap.stretch_mode_enabled &&
-      monmap->stretch_mode_enabled) {
+    monmap->stretch_mode_enabled) {
     dout(10) << "Engaging stretch mode!" << dendl;
     stretch_mode_engaged = true;
     int32_t stretch_divider_id = osdmon()->osdmap.stretch_mode_bucket;

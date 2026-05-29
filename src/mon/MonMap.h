@@ -165,6 +165,7 @@ class MonMap {
   election_strategy strategy = CLASSIC;
   std::set<std::string> disallowed_leaders; // can't be leader under CONNECTIVITY/DISALLOW
   bool stretch_mode_enabled = false;
+  bool global_stretch_mode_enabled = false; // if true, stretch mode is enabled globally
   std::string tiebreaker_mon;
   std::set<std::string> stretch_marked_down_mons; // can't be leader or taken proposal in CONNECTIVITY 
                                                   // seriously until fully recovered

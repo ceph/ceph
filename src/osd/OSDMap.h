@@ -700,7 +700,8 @@ private:
 	     crc_defined(false), crc(0),
 	     crush(std::make_shared<CrushWrapper>()),
 	     stretch_mode_enabled(false), stretch_bucket_count(0),
-	     degraded_stretch_mode(0), recovering_stretch_mode(0), stretch_mode_bucket(0) {
+	     degraded_stretch_mode(0), recovering_stretch_mode(0),
+       stretch_mode_bucket(0) {
   }
 
 private:

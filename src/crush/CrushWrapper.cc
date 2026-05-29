@@ -2483,7 +2483,7 @@ int CrushWrapper::add_simple_stretch_rule_at(
       if (int(osd_failure_domains.size()) < num_replica_per_zone) {
         if (err)
           *err << "zone " << get_item_name(child) << " has only " << osd_failure_domains.size()
-               << " items of type " << osd_failure_domain_name << " (minimum" << num_replica_per_zone << ")";
+               << " items of type " << osd_failure_domain_name << " (minimum " << num_replica_per_zone << ")";
         return -EINVAL;
       }
       int valid_osd_failure_domains = 0;

@@ -903,7 +903,8 @@ public:
 			       uint32_t bucket_count,
 			       const std::set<pg_pool_t*>& pools,
 			       const std::string& new_crush_rule,
-			       CrushWrapper& crush);
+			       CrushWrapper& crush,
+             bool set_global_stretch_mode);
 
   void extract_sites_from_crush_rule(CrushWrapper& crush, std::set<int> &rule_sites, const std::set<int> &rule_roots, int dividing_id);
 
