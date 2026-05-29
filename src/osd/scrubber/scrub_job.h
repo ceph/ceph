@@ -306,8 +306,6 @@ class ScrubJob {
  * Some types of scrubs are exempt from some or all of the preconditions and
  * limitations that apply to regular scrubs. The following table
  * details the specific set of exemptions per 'urgency' level:
- * (note: regular scrubs that are overdue are also allowed a specific
- * set of exemptions. Those will be covered elsewhere).
  *
  * The relevant limitations are:
  * - reservation: the scrub must reserve replicas;
@@ -337,8 +335,8 @@ class ScrubJob {
  *  | limitation |  must-  | after-repair |repairing| operator | must-repair |
  *  |            |  scrub  |(aft recovery)|(errors) | request  |             |
  *  +------------+---------+--------------+---------+----------+-------------+
- *  | reservation|    yes! |      no      |    no   |     no   |      no     |
- *  | dow/time   |    yes  |      yes     |    no X |     no   |      no     |
+ *  | reservation|    yes  |      no      |    no   |     no   |      no     |
+ *  | dow/time   |    yes  |      yes     |    no   |     no   |      no     |
  *  | ext-sleep  |    no   |      no      |    no   |     no   |      no     |
  *  | load       |    yes  |      no      |    no   |     no   |      no     |
  *  | trims      |    yes  |      yes     |    no   |     no   |      no     |
