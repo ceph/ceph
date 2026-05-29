@@ -831,13 +831,22 @@ int RGWRados::get_max_chunk_size(const rgw_placement_rule& placement_rule, const
 [[nodiscard]] int add_datalog_entry(const DoutPrefixProvider* dpp,
 				    RGWDataChangesLog* datalog,
 				    const RGWBucketInfo& bucket_info,
+				    const std::string& hash_key,
 				    uint32_t shard_id, optional_yield y)
 {
   const auto& logs = bucket_info.layout.logs;
   if (logs.empty()) {
     return 0;
   }
-  int r = datalog->add_entry(dpp, bucket_info, logs.back(), shard_id, y);
+  const auto& log = logs.back();
+  int effective_shard;
+  if (log.layout.type == rgw::BucketLogType::FIFO) {
+    effective_shard = RGWSI_BucketIndex_RADOS::bucket_shard_index(
+        hash_key, log.layout.fifo.num_shards);
+  } else {
+    effective_shard = shard_id;
+  }
+  int r = datalog->add_entry(dpp, bucket_info, log, effective_shard, y);
   if (r < 0) {
     ldpp_dout(dpp, -1) << "ERROR: failed writing data log" << dendl;
   }
@@ -1024,8 +1033,8 @@ void RGWIndexCompletionManager::process()
         /* this null_yield can stay for now since we're in our own
          * thread */
         std::ignore = add_datalog_entry(&dpp, store->svc.datalog_rados,
-                                        bucket_info, bs.shard_id,
-                                        null_yield);
+                                        bucket_info, c->obj.get_hash_object(),
+                                        bs.shard_id, null_yield);
         /* if there is an error we can ignore it, as a) there's
          * nothing we can do and b) it's already logged in
          * add_datalog_entry */
@@ -6913,7 +6922,9 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
 
     if (add_log) {
       r = add_datalog_entry(dpp, store->svc.datalog_rados,
-			    target->get_bucket_info(), bs->shard_id, y);
+			    target->get_bucket_info(),
+			    target->get_obj().get_hash_object(),
+			    bs->shard_id, y);
       if (r < 0) {
         ldpp_dout(dpp, 0) << "failed to write datalog for object: r=" << r << dendl;
         return r;
@@ -8443,7 +8454,8 @@ int RGWRados::Bucket::UpdateIndex::complete(const DoutPrefixProvider *dpp, int64
                                     log_op);
   if (add_log) {
     ret = add_datalog_entry(dpp, store->svc.datalog_rados,
-			    target->bucket_info, bs->shard_id, y);
+			    target->bucket_info, obj.get_hash_object(),
+			    bs->shard_id, y);
   }
 
   return ret;
@@ -8476,7 +8488,8 @@ int RGWRados::Bucket::UpdateIndex::complete_del(const DoutPrefixProvider *dpp,
                                     log_op);
   if (add_log) {
     ret = add_datalog_entry(dpp, store->svc.datalog_rados,
-			    target->bucket_info, bs->shard_id, y);
+			    target->bucket_info, obj.get_hash_object(),
+			    bs->shard_id, y);
   }
 
   return ret;
@@ -8510,7 +8523,8 @@ int RGWRados::Bucket::UpdateIndex::cancel(const DoutPrefixProvider *dpp,
      * have no way to tell that they're all caught up
      */
     ret = add_datalog_entry(dpp, store->svc.datalog_rados,
-			    target->bucket_info, bs->shard_id, y);
+			    target->bucket_info, obj.get_hash_object(),
+			    bs->shard_id, y);
   }
 
   return ret;
@@ -9416,7 +9430,8 @@ int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp, RGWBucketInfo
   }
 
   if (log_data_change) {
-    r = add_datalog_entry(dpp, svc.datalog_rados, bucket_info, bs.shard_id, y);
+    r = add_datalog_entry(dpp, svc.datalog_rados, bucket_info,
+                          obj_instance.get_hash_object(), bs.shard_id, y);
   }
 
   return r;
