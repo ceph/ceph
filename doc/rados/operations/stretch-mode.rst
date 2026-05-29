@@ -88,8 +88,10 @@ Individual Stretch Pools
 ========================
 Setting individual ``stretch pool`` attributes allows for
 specific pools to be distributed across two or more data centers.
-This is done by executing the ``ceph osd pool stretch set`` command on each desired pool.
-See :ref:`setting_values_for_a_stretch_pool`
+This is done by executing the ``ceph osd pool stretch set`` command on each desired pool,
+or by creating a pool with stretch mode enabled using the ``zone`` parameter
+in the ``ceph osd pool create`` command.
+See :ref:`setting_values_for_a_stretch_pool` and :ref:`creating_stretch_pools`
 
 Use stretch mode when you have exactly two data centers and require a uniform
 configuration across the entire cluster. Conversely, opt for a stretch pool
@@ -119,6 +121,27 @@ service. If Ceph stops marking OSDs ``out``, some PGs may fail to
 rebalance to surviving OSDs, potentially leading to ``inactive`` PGs.
 See https://tracker.ceph.com/issues/68338 for more information.
 
+.. _creating_stretch_pools:
+
+Creating Stretch Pools
+----------------------
+
+You can create a pool with stretch mode configuration at creation time by
+specifying the ``zone`` parameter:
+
+.. prompt:: bash $
+
+   ceph osd pool create mypool 32 32 replicated my_stretch_rule zone=2
+
+This creates a replicated pool named ``mypool`` with 32 placement groups,
+using the CRUSH rule ``my_stretch_rule``, configured to span 2 zones. The pool
+will have peering constraints that require replicas across both zones before
+PGs become active.
+
+Per-pool stretch mode provides the same stretch mode benefits (zone-aware
+peering, degraded/recovery modes) but applies only to the specified pool,
+allowing you to have both stretch and non-stretch pools in the same cluster.
+
 .. _stretch_mode1:
 
 Stretch Mode
@@ -130,6 +153,55 @@ that has the best connection to the tiebreaker Monitor. It handles the loss of o
 reducing the ``min_size`` of all pools to ``1``, allowing the cluster to continue operating
 within the surviving data center. When the unavailable data center comes back, Ceph will
 converge according to configured replication policy and return to normal operation.
+
+Global Stretch Mode vs Per-Pool Stretch Mode
+---------------------------------------------
+
+Ceph supports two approaches to stretch mode configuration:
+
+**Global Stretch Mode:**
+
+Enabled using the ``ceph mon enable_stretch_mode`` command. When global stretch
+mode is enabled, *all existing pools and future pools* in the cluster are
+automatically configured with stretch mode settings. This provides cluster-wide
+protection and is appropriate when you want uniform stretch mode behavior across
+all data.
+
+The MonMap field ``global_stretch_mode_enabled`` is set to ``true`` when global
+stretch mode is active. You can verify this with:
+
+.. prompt:: bash $
+
+   ceph mon dump
+
+Or in JSON format:
+
+.. prompt:: bash $
+
+   ceph quorum_status
+
+**Per-Pool Stretch Mode:**
+
+Enabled by creating pools with the ``zone=N`` parameter (see :ref:`creating_stretch_pools`)
+or by using ``ceph osd pool stretch set`` on existing pools. With per-pool stretch
+mode, only the specified pools operate in stretch mode while other pools remain
+unaffected. This provides more granular control and is useful when only specific
+pools require cross-datacenter redundancy.
+
+When using per-pool stretch mode without global stretch mode enabled,
+``global_stretch_mode_enabled`` remains ``false`` in the MonMap.
+
+**Choosing Between Global and Per-Pool:**
+
+- Use **global stretch mode** when all your data needs cross-datacenter protection
+  and you want a uniform, cluster-wide configuration.
+  
+- Use **per-pool stretch mode** when you need selective protection, such as critical
+  data in some pools that must span datacenters while other pools can remain local
+  to a single datacenter.
+
+Note that both modes provide the same stretch mode functionality (zone-aware peering,
+degraded mode, recovery mode) but differ in their scope of application.
 
 Connectivity Monitor Election Strategy
 ---------------------------------------
@@ -275,6 +347,11 @@ connect to Monitors only if they are in the same data center as the Monitors.
 New Monitors will not be allowed to join the cluster if they do not specify a
 CRUSH location.
 
+When you run ``ceph mon enable_stretch_mode``, the cluster enables **global stretch mode**,
+which sets the MonMap field ``global_stretch_mode_enabled`` to ``true`` and applies
+stretch mode configuration to all existing and future pools. You can verify this status
+with ``ceph mon dump`` or ``ceph quorum_status``.
+
 If all OSDs and Monitors in one of the ``datacenter`` become inaccessible at once,
 the cluster in the surviving ``datacenter`` enters  *degraded stretch mode*.
 A health state warning will be
@@ -317,8 +394,13 @@ To exit stretch mode, run the following command:
 This command moves the cluster back to normal mode;
 the cluster will no longer be in stretch mode.
 All pools will be set with their prior ``size`` and ``min_size``
-values. At this point the user is responsible for scaling down the cluster
+values, and the MonMap field ``global_stretch_mode_enabled`` will be set to ``false``.
+At this point the user is responsible for scaling down the cluster
 to the desired number of OSDs if they choose to operate with fewer OSDs.
+
+Note that this command disables global stretch mode. If you want to disable
+stretch mode for individual pools only, use ``ceph osd pool stretch unset``
+instead of this command.
 
 Note that the command will not execute when the cluster is in
 recovery stretch mode. The command executes only when the cluster
