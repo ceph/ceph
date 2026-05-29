@@ -6592,6 +6592,7 @@ PeeringState::WaitRemotePoolMigrationReserved::react(const RemotePoolMigrationRe
     retry();
   } else {
     // Tell source PG, it will retry
+    migration_release_reservations();
     pl->on_pool_migration_target_suspended(true);
   }
   return transit<Clean>();
@@ -6621,6 +6622,7 @@ PeeringState::WaitRemotePoolMigrationReserved::react(const RemotePoolMigrationRe
     retry();
   } else {
     // Tell source PG, it will retry
+    migration_release_reservations();
     pl->on_pool_migration_target_suspended(true);
   }
   return transit<Clean>();
