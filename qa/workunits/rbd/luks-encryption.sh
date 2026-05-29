@@ -412,7 +412,7 @@ function test_migration_open_clone_chain() {
 }
 
 function get_nbd_device_paths {
-  rbd device list -t nbd | tail -n +2 | egrep "\s+rbd\s+testimg" | awk '{print $5;}'
+  rbd device list -t nbd | tail -n +2 | grep -E "\s+rbd\s+testimg" | awk '{print $5;}'
 }
 
 function clean_up_cryptsetup() {

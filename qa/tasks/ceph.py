@@ -1901,7 +1901,7 @@ def task(ctx, config):
 
     By default, the cluster log is checked for errors and warnings,
     and the run marked failed if any appear. You can ignore log
-    entries by giving a list of egrep compatible regexes, i.e.:
+    entries by giving a list of grep -E compatible regexes, i.e.:
 
         tasks:
         - ceph:
