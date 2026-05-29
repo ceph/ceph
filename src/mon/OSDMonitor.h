@@ -916,9 +916,10 @@ public:
 			       uint32_t bucket_count,
 			       const std::set<pg_pool_t*>& pools,
 			       const std::string& new_crush_rule,
-			       CrushWrapper& crush);
+			       CrushWrapper& crush,
+             bool set_global_stretch_mode);
 
-  void extract_sites_from_crush_rule(CrushWrapper& crush, std::set<int> &rule_sites, const std::set<int> &rule_roots, int dividing_id);
+  static void extract_sites_from_crush_rule(CrushWrapper& crush, std::set<int> &rule_sites, const std::set<int> &rule_roots, int dividing_id);
 
   /**
    * Validate that a CRUSH rule is compatible with stretch mode.
@@ -928,7 +929,8 @@ public:
    * @param ss Output stream for error messages
    * @return 0 on success, negative error code on failure
    */
-  int validate_stretch_mode_new_pool(int crush_rule, const std::string& zone_failure_domain, std::ostream *ss);
+  static int validate_stretch_mode_new_pool(CrushWrapper& crush, int crush_rule, int stretch_bucket_count, int stretch_mode_bucket, 
+    const mempool::osdmap::map<int64_t, pg_pool_t>& pools, const std::string& zone_failure_domain, std::ostream *ss);
 
   /**
   *

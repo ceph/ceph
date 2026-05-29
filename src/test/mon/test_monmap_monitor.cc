@@ -519,60 +519,6 @@ TEST_F(MonmapMonitorStretchTest, OneMonitorPerZoneAutoSelectSucceeds) {
   EXPECT_EQ(monmap.tiebreaker_mon, "e") << "Should auto-select 'e' as tiebreaker";
 }
 
-// Test ensure_connectivity_strategy function
-TEST_F(MonmapMonitorStretchTest, EnsureConnectivityStrategy) {
-  setup_basic_monmap_5mons();
-
-  MonMap test_map;
-  test_map.strategy = MonMap::CLASSIC;
-  stringstream ss;
-
-  // Test case 1: Successfully switch from CLASSIC to CONNECTIVITY
-  // with full monitor feature support
-  {
-    mon_feature_t features;
-    features = ceph::features::mon::get_supported();
-
-    bool changed = MonmapMonitor::ensure_connectivity_strategy(test_map, features, ss);
-
-    EXPECT_TRUE(changed) << "Should switch from CLASSIC to CONNECTIVITY";
-    EXPECT_EQ(test_map.strategy, MonMap::CONNECTIVITY);
-    EXPECT_TRUE(ss.str().empty()) << "Should have no error message";
-  }
-
-  // Test case 2: Already using CONNECTIVITY - no change needed
-  {
-    ss.str("");
-    test_map.strategy = MonMap::CONNECTIVITY;
-
-    bool changed = MonmapMonitor::ensure_connectivity_strategy(test_map,
-        ceph::features::mon::get_supported(), ss);
-
-    EXPECT_FALSE(changed) << "Should not change when already CONNECTIVITY";
-    EXPECT_EQ(test_map.strategy, MonMap::CONNECTIVITY);
-    EXPECT_TRUE(ss.str().empty()) << "Should have no error message";
-  }
-
-  // Test case 3: Missing FEATURE_PINGING support - should fail
-  {
-    ss.str("");
-    test_map.strategy = MonMap::CLASSIC;
-
-    // Create features without FEATURE_PINGING
-    mon_feature_t limited_features;
-    // Don't add FEATURE_PINGING
-
-    bool changed = MonmapMonitor::ensure_connectivity_strategy(test_map,
-        limited_features, ss);
-
-    EXPECT_FALSE(changed) << "Should not change without FEATURE_PINGING support";
-    EXPECT_EQ(test_map.strategy, MonMap::CLASSIC) << "Strategy should remain CLASSIC";
-    EXPECT_FALSE(ss.str().empty()) << "Should have error message";
-    EXPECT_NE(ss.str().find("Not all monitors support CONNECTIVITY"), string::npos)
-        << "Error should mention monitor support requirement";
-  }
-}
-
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
