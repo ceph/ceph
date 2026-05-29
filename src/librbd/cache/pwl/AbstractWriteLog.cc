@@ -649,6 +649,11 @@ void AbstractWriteLog<I>::shut_down(Context *on_finish) {
 
   Context *ctx = new LambdaContext(
     [this, on_finish](int r) {
+      {
+        std::lock_guard timer_locker(*m_timer_lock);
+        m_timer->cancel_event(m_timer_ctx);
+        m_timer_ctx = nullptr;
+      }
       if (m_perfcounter) {
         perf_stop();
       }
