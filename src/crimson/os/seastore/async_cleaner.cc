@@ -1176,7 +1176,8 @@ void SegmentCleaner::maybe_adjust_thresholds()
 
   double crash_floor =
       static_cast<double>(named_writers) * segment_ratio;
-  new_hard_limit = std::max(new_hard_limit, crash_floor);
+  crash_floor = std::min(crash_floor, 0.95);
+  new_hard_limit = std::min(std::max(new_hard_limit, crash_floor), 0.95);
 
   // Apply lazy decay covering elapsed time (allows gc_max to gradually fall
   // when workload eases) so peaks fade even when the background process was
