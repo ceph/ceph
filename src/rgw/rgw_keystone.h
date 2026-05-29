@@ -4,6 +4,7 @@
 #pragma once
 
 #include <atomic>
+#include <span>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -214,17 +215,21 @@ public:
   const std::string& get_user_id() const {return user.id;};
   const std::string& get_user_name() const {return user.name;};
   bool has_role(const std::string& r) const;
-  // Returns access rules from the application credential, if any.
-  // An unrestricted token (or one without app_cred) returns an empty vector;
-  // callers should use has_access_rules() to distinguish "no restriction" from
-  // "restricted to nothing".
-  const std::vector<ApplicationCredential::AccessRule>& get_access_rules() const {
-    static const std::vector<ApplicationCredential::AccessRule> empty;
-    return app_cred ? app_cred->access_rules : empty;
+  // Returns access rules from the application credential, or an empty span
+  // if there is no app_cred or it carries no rules.
+  std::span<const ApplicationCredential::AccessRule> get_access_rules() const {
+    if (app_cred) {
+      return app_cred->access_rules;
+    }
+    return {};
+  }
+  // True if the token was issued for a restricted application credential.
+  // A restricted credential without access rules denies every request; a
+  // restricted credential with rules permits only matching requests.
+  bool is_restricted() const {
+    return app_cred && app_cred->restricted;
   }
   // True only when an app_cred is present AND it carries access rules.
-  // A restricted app_cred without rules denies everything; an unrestricted
-  // app_cred has no rules and grants normally.
   bool has_access_rules() const {
     return app_cred && !app_cred->access_rules.empty();
   }
