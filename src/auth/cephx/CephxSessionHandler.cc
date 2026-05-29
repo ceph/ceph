@@ -119,10 +119,10 @@ int CephxSessionHandler::_calc_signature(Message *m, uint64_t *psig)
         return -1;
       }
 
-      struct enc {
-        ceph_le64 a, b, c, d;
-      } *penc = reinterpret_cast<enc*>(exp_buf);
-      *psig = penc->a ^ penc->b ^ penc->c ^ penc->d;
+      uint64_t blocks[4];
+      static_assert(sizeof(blocks) <= sizeof(exp_buf), "AES encryption output buffer is smaller than block evaluation array");
+      std::memcpy(blocks, exp_buf, sizeof(blocks));
+      *psig = boost::endian::little_to_native(blocks[0] ^ blocks[1] ^ blocks[2] ^ blocks[3]);
     } else {
       sha256_digest_t exp_buf;
 
@@ -137,10 +137,10 @@ int CephxSessionHandler::_calc_signature(Message *m, uint64_t *psig)
         return -1;
       }
 
-      struct enc {
-        ceph_le64 a, b, c, d;
-      } *penc = reinterpret_cast<enc*>(&exp_buf);
-      *psig = penc->a ^ penc->b ^ penc->c ^ penc->d;
+      uint64_t blocks[4];
+      static_assert(sizeof(blocks) == sizeof(sha256_digest_t), "HMAC digest size does not match blocks evaluation array size");
+      std::memcpy(blocks, &exp_buf, sizeof(blocks));
+      *psig = boost::endian::little_to_native(blocks[0] ^ blocks[1] ^ blocks[2] ^ blocks[3]);
     }
   }
 
