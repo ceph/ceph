@@ -20887,7 +20887,7 @@ int BlueStore::read_allocation_from_drive_for_bluestore_tool()
   return ret;
 }
 
-int BlueStore::compare_allocation_recovery_for_bluestore_tool()
+int BlueStore::compare_allocation_recovery_for_bluestore_tool(ostream& out)
 {
   dout(5) << __func__ << dendl;
   int ret = 0;
@@ -20908,13 +20908,14 @@ int BlueStore::compare_allocation_recovery_for_bluestore_tool()
 
   SimpleBitmap old_bitmap(cct, (bdev->get_size()/ min_alloc_size));
   read_alloc_stats_t old_stats = {};
-  ret = allocation_recover_and_compare(&old_bitmap, old_stats);
+  ret = allocation_recover_and_compare(&old_bitmap, old_stats, &out);
   return ret;
 }
 
 int BlueStore::allocation_recover_and_compare(
   SimpleBitmap *sbmap,
-  read_alloc_stats_t &stats)
+  read_alloc_stats_t &stats,
+  ostream* extra_out)
 {
   int ret = 0;
   SimpleBitmap& old_bitmap = *sbmap;
@@ -20923,27 +20924,41 @@ int BlueStore::allocation_recover_and_compare(
   read_alloc_stats_t mt_stats = {};
   utime_t start;
   utime_t duration;
+  ostringstream out;
+  auto flushl = [&]() {
+    dout(0) << out.str() << dendl;
+    if (extra_out) {
+      (*extra_out) << out.str() << std::endl;
+      std::flush(*extra_out);
+    }
+    out.str("");
+  };
 
   if (cct->_conf.get_val<uint64_t>("bluestore_allocation_recovery_threads") != 0) {
-    dout(0) << "New recovery start" << dendl;
+    out << "New recovery start"; flushl();
     start = ceph_clock_now();
     ret = read_allocation_from_onodes_mt(&mt_bitmap, mt_stats);
     duration = ceph_clock_now() - start;
-    dout(0) << "New recovery result=" << ret << " took " << duration << " seconds" << dendl;
-    dout(0) << "New recovery stats=" << std::endl << mt_stats << dendl;
+    out << "New recovery result=" << ret << " took " << duration << " seconds"; flushl();
+    out << "New recovery stats=" << std::endl << mt_stats; flushl();
   }
 
-  dout(0) << "Legacy recovery start" << dendl;
+  out << "Legacy recovery start"; flushl();
   start = ceph_clock_now();
   ret = read_allocation_from_onodes(&old_bitmap, old_stats);
   duration = ceph_clock_now() - start;
-  dout(0) << "Legacy recovery result=" << ret << " took " << duration << " seconds" << dendl;
-  dout(0) << "Legacy recovery stats=" << std::endl << old_stats << dendl;
+  out << "Legacy recovery result=" << ret << " took " << duration << " seconds"; flushl();
+  out << "Legacy recovery stats=" << std::endl << old_stats; flushl();
 
-  if (old_stats.actual_pool_vstatfs == mt_stats.actual_pool_vstatfs)
-    dout(0) << "FSstats the same." << dendl;
-  else {
-    dout(0) << "FSTATS DIFFERENT !" << dendl;
+  if (cct->_conf.get_val<uint64_t>("bluestore_allocation_recovery_threads") == 0) {
+    out << "bluestore_allocation_recovery_threads = 0"; flushl();
+    out << "No multithread recovery to compare."; flushl();
+    return 0;
+  }
+  if (old_stats.actual_pool_vstatfs == mt_stats.actual_pool_vstatfs) {
+    out << "FSstats the same."; flushl();
+  } else {
+    out << "FSTATS DIFFERENT !"; flushl();
     ret = -1;
   }
 
@@ -20954,9 +20969,9 @@ int BlueStore::allocation_recover_and_compare(
     ext_a = mt_bitmap.get_next_set_extent(offset);
     ext_b = old_bitmap.get_next_set_extent(offset);
     if (ext_a != ext_b) {
-      dout(0) << "ALLOCATOR DIFFERENT !, first:" << dendl;
-      dout(0) << ext_a.offset << "~" << ext_a.length << dendl;
-      dout(0) << ext_b.offset << "~" << ext_b.length << dendl;
+      out << "ALLOCATOR DIFFERENT !, first:"; flushl();
+      out << ext_a.offset << "~" << ext_a.length; flushl();
+      out << ext_b.offset << "~" << ext_b.length; flushl();
       offset = 1;
       ret = -1;
       break;
@@ -20964,7 +20979,7 @@ int BlueStore::allocation_recover_and_compare(
     offset = ext_a.offset + ext_a.length;
   } while (offset != 0);
   if (offset == 0) {
-    dout(0) << "Allocators the same." << dendl;
+    out << "Allocators the same."; flushl();
   }
   return ret;
 }

@@ -4071,7 +4071,7 @@ public:
   int  push_allocation_to_rocksdb();
   int  read_allocation_from_drive_for_bluestore_tool();
 #endif
-  int compare_allocation_recovery_for_bluestore_tool();
+  int compare_allocation_recovery_for_bluestore_tool(std::ostream& out);
 
   void set_allocation_in_simple_bmap(SimpleBitmap* sbmap, uint64_t offset, uint64_t length);
 
@@ -4091,7 +4091,10 @@ private:
     std::map<uint64_t, volatile_statfs> actual_pool_vstatfs;
     volatile_statfs actual_store_vstatfs;
   };
-  int allocation_recover_and_compare(SimpleBitmap *sbmap, read_alloc_stats_t &stats);
+  int allocation_recover_and_compare(
+    SimpleBitmap *sbmap,
+    read_alloc_stats_t &stats,
+    std::ostream* extra_out = nullptr);
 
   class Decoder_AllocationsAndStatFS;
   class ExtentDecoderPartial : public ExtentMap::ExtentDecoder {

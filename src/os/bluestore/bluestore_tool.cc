@@ -708,7 +708,7 @@ int main(int argc, char **argv)
     cout << action << " bluestore compare new and legacy onode recovery" << std::endl;
     validate_path(cct.get(), path, false);
     BlueStore bluestore(cct.get(), path);
-    int r = bluestore.compare_allocation_recovery_for_bluestore_tool();
+    int r = bluestore.compare_allocation_recovery_for_bluestore_tool(cout);
     if (r < 0) {
       cerr << action << " failed: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
