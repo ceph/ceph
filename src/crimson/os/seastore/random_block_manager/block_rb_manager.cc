@@ -58,7 +58,7 @@ paddr_t BlockRBManager::alloc_extent(size_t size, data_category_t category)
           : data_allocator.get();
   auto alloc = a->alloc_extent(size);
   if (!alloc && a == metadata_allocator.get()) {
-    INFO("metadata_allocator exhausted, falling back to data_allocator");
+    DEBUG("metadata_allocator exhausted, falling back to data_allocator");
     a = data_allocator.get();
     alloc = a->alloc_extent(size);
   }
@@ -87,7 +87,7 @@ BlockRBManager::alloc_extents(size_t size, data_category_t category)
           : data_allocator.get();
   auto alloc = a->alloc_extents(size);
   if (!alloc && a == metadata_allocator.get()) {
-    INFO("metadata_allocator exhausted, falling back to data_allocator");
+    DEBUG("metadata_allocator exhausted, falling back to data_allocator");
     a = data_allocator.get();
     alloc = a->alloc_extents(size);
   }
@@ -237,7 +237,7 @@ void BlockRBManager::prefill_fragmented_device()
   // allocator, if present, is not affected) since callers exercising the
   // fragmented-device assertions don't currently use pool separation.
   for (size_t block = get_block_size() * 3;
-      block <= get_size() - get_block_size() * 3;
+      block <= get_data_size() - get_block_size() * 3;
       block += get_block_size() * 2) {
     DEBUG("marking {}~{} used",
       get_data_start_rbm_addr() + block,

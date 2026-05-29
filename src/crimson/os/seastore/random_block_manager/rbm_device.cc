@@ -21,7 +21,8 @@ SET_SUBSYS(seastore_device);
 namespace crimson::os::seastore::random_block_device {
 
 size_t RBMDevice::parse_rbm_metadata_size(std::string str, size_t base_size) {
-  str.erase(std::remove_if(str.begin(), str.end(), ::isspace), str.end());
+  const std::string original_str = str;
+  str.erase(std::remove_if(str.begin(), str.end(), [](unsigned char c) { return std::isspace(c); }), str.end());
   if (str == "0" || str.empty()) {
     return 0;
   }
@@ -33,6 +34,9 @@ size_t RBMDevice::parse_rbm_metadata_size(std::string str, size_t base_size) {
       if (pos != str.size()) {
         throw std::invalid_argument("trailing characters after percentage");
       }
+      if (percent < 0.0 || !std::isfinite(percent)) {
+        throw std::invalid_argument("percentage must be a finite non-negative number");
+      }
       return static_cast<size_t>((percent / 100.0) * base_size);
     }
     uint64_t multiplier = 1;
@@ -43,7 +47,7 @@ size_t RBMDevice::parse_rbm_metadata_size(std::string str, size_t base_size) {
       str.pop_back();
     }
     if (!str.empty()) {
-      char suffix = std::tolower(str.back());
+      char suffix = std::tolower(static_cast<unsigned char>(str.back()));
       if (suffix == 'k') {
         multiplier = 1ULL << 10;
         str.pop_back();
@@ -63,9 +67,12 @@ size_t RBMDevice::parse_rbm_metadata_size(std::string str, size_t base_size) {
     if (pos != str.size()) {
       throw std::invalid_argument("trailing characters");
     }
+    if (val < 0.0 || !std::isfinite(val)) {
+      throw std::invalid_argument("value must be a finite non-negative number");
+    }
     return static_cast<size_t>(val * multiplier);
   } catch (const std::exception& e) {
-    ceph_abort_msgf("Invalid seastore_rbm_metadata_size config value: %s", str.c_str());
+    ceph_abort_msgf("Invalid seastore_rbm_metadata_size config value: %s (%s)", original_str.c_str(), e.what());
   }
 }
 
@@ -104,11 +111,15 @@ RBMDevice::mkfs_ret RBMDevice::do_primary_mkfs(device_config_t config,
     (cur_total_size / shard_num) -
     ((cur_total_size / shard_num) % cur_block_size);
 
+  if (aligned_size <= journal_size) {
+    ceph_abort_msgf("aligned shard size (%zu) must be greater than journal size (%zu)", aligned_size, journal_size);
+  }
+
   // Align the metadata region to block_size so the allocator's block-aligned
   // invariant holds for both the metadata and data pools.
   size_t metadata_size = parse_rbm_metadata_size(metadata_size_str, aligned_size - journal_size);
   size_t aligned_metadata_size =
-      (metadata_size / cur_block_size) * cur_block_size;
+      ((metadata_size + cur_block_size - 1) / cur_block_size) * cur_block_size;
   ceph_assert_always(aligned_size > journal_size + aligned_metadata_size);
 
   std::vector<device_shard_info_t> shard_infos(shard_num);
