@@ -149,6 +149,7 @@ void MetadataUpdate::finish(int r)
 	std::map<string,string> m;
 	{
 	  std::lock_guard l(state->lock);
+	  std::string reported_hostname = daemon_meta.at("hostname").get_str();
 	  if (key.type == "mds" || key.type == "mgr" || key.type == "mon") {
 	    daemon_meta.erase("name");
 	  } else if (key.type == "osd") {
@@ -159,9 +160,9 @@ void MetadataUpdate::finish(int r)
 	    m.emplace(key, val.get_str());
 	  }
 	  // prefer CRUSH physical host over container/pod hostname (tracker.ceph.com/issues/73080)
-	  if (!crush_host.empty()) {
-	    m["hostname"] = crush_host;
-	  }
+	  // fall back to the reported hostname when CRUSH does not place the OSD
+	  // under a host bucket, and for mds/mgr/mon which don't use CRUSH
+	  m["hostname"] = !crush_host.empty() ? crush_host : reported_hostname;
 	}
 	// update_metadata calls _rm then _insert using state->hostname read from
 	// the map via set_metadata, so hostname must be set through m, not
@@ -170,7 +171,7 @@ void MetadataUpdate::finish(int r)
       } else {
         auto state = std::make_shared<DaemonState>(daemon_state.types);
         state->key = key;
-        state->hostname = daemon_meta.at("hostname").get_str();
+        std::string reported_hostname = daemon_meta.at("hostname").get_str();
 
         if (key.type == "mds" || key.type == "mgr" || key.type == "mon") {
           daemon_meta.erase("name");
@@ -184,19 +185,19 @@ void MetadataUpdate::finish(int r)
           m.emplace(key, val.get_str());
         }
 	// prefer CRUSH physical host over container/pod hostname (tracker.ceph.com/issues/73080)
+	// fall back to the reported hostname when CRUSH does not place the OSD
+	// under a host bucket, and for mds/mgr/mon which don't use CRUSH
+	std::string crush_host;
 	if (key.type == "osd") {
 	  try {
-	    std::string crush_host = crush_hostname_for_osd(cluster_state,
-							    std::stoi(key.name));
-	    if (!crush_host.empty()) {
-	      state->hostname = crush_host;
-	      m["hostname"] = crush_host;
-	    }
+	    crush_host = crush_hostname_for_osd(cluster_state,
+						std::stoi(key.name));
 	  } catch (const std::exception& e) {
 	    dout(5) << "cannot derive CRUSH hostname for " << key
 		    << ": " << e.what() << dendl;
 	  }
 	}
+	m["hostname"] = !crush_host.empty() ? crush_host : reported_hostname;
 	state->set_metadata(m);
 
         daemon_state.insert(state);
