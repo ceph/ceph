@@ -34,6 +34,22 @@ namespace ceph {
   class Formatter;
 }
 
+struct bluestore_stats_t
+{
+  uint64_t num_objects = 0;
+  uint64_t num_sharded_objects = 0;
+  uint64_t num_extents = 0;
+  uint64_t num_blobs = 0;
+  uint64_t num_spanning_blobs = 0;
+  uint64_t num_shared_blobs = 0;
+  uint64_t warnings_found = 0;
+  uint64_t errors_found = 0;
+
+  void dump(ceph::Formatter* f) const;
+  friend std::ostream& operator<<(std::ostream& out, const bluestore_stats_t& s);
+};
+
+
 /// label for block device
 struct bluestore_bdev_label_t {
   uuid_d osd_uuid;     ///< osd uuid

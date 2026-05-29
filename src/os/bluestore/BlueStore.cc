@@ -9628,7 +9628,7 @@ int BlueStore::_mount()
     auto was_per_pool_omap = per_pool_omap;
 
     dout(1) << __func__ << " quick-fix on mount" << dendl;
-    _fsck_on_open(FSCK_SHALLOW, true);
+    _fsck_on_open(FSCK_SHALLOW, true, nullptr);
 
     //set again as hopefully it has been fixed
     if (was_per_pool_omap != OMAP_PER_PG) {
@@ -10961,7 +10961,7 @@ Detection stage (in processing order):
     (can be merged with the step above if misreferences were dectected)
   - Apply StatFS update
 */
-int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
+int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair, bluestore_stats_t *store_stats)
 {
   dout(5) << __func__
     << (repair ? " repair" : " check")
@@ -11014,7 +11014,7 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
   if (r < 0) {
     return r;
   }
-  return _fsck_on_open(depth, repair);
+  return _fsck_on_open(depth, repair, store_stats);
 }
 
 int BlueStore::revert_wal_to_plain() {
@@ -11029,7 +11029,7 @@ int BlueStore::revert_wal_to_plain() {
   return r;
 }
 
-int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
+int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair, bluestore_stats_t *store_stats)
 {
   uint64_t sb_hash_size = uint64_t(
     cct->_conf.get_val<Option::size_t>("osd_memory_target") *
@@ -11897,6 +11897,16 @@ out_scan:
 	  << repaired << " repaired, "
 	  << (errors + warnings - (int)repaired) << " remaining in "
 	  << duration << " seconds" << dendl;
+  if (store_stats) {
+    store_stats->num_objects = num_objects;
+    store_stats->num_sharded_objects = num_sharded_objects;
+    store_stats->num_extents = num_extents;
+    store_stats->num_blobs = num_blobs;
+    store_stats->num_spanning_blobs = num_spanning_blobs;
+    store_stats->num_shared_blobs = num_shared_blobs;
+    store_stats->warnings_found = warnings;
+    store_stats->errors_found = errors;
+  }
 
   // In non-repair mode we should return error count only as
   // it indicates if store status is OK.
@@ -18209,7 +18219,8 @@ int BlueStore::_do_remove(
 {
   set<SharedBlob*> maybe_unshared_blobs;
   bool is_gen = !o->oid.is_no_gen();
-  _do_truncate(txc, c, o, 0, is_gen ? &maybe_unshared_blobs : nullptr);
+  bool is_snap = o->oid.hobj.is_snap();
+  _do_truncate(txc, c, o, 0, (is_gen || is_snap) ? &maybe_unshared_blobs : nullptr);
   if (o->onode.has_omap()) {
     o->flush();
     _do_omap_clear(txc, o);
@@ -18231,7 +18242,7 @@ int BlueStore::_do_remove(
   o->onode = bluestore_onode_t();
   _debug_obj_on_delete(o->oid);
 
-  if (!is_gen || maybe_unshared_blobs.empty()) {
+  if (maybe_unshared_blobs.empty()) {
     return 0;
   }
 
@@ -18239,12 +18250,18 @@ int BlueStore::_do_remove(
   dout(10) << __func__ << " gen and maybe_unshared_blobs "
 	   << maybe_unshared_blobs << dendl;
   ghobject_t nogen = o->oid;
-  nogen.generation = ghobject_t::NO_GEN;
+  if (is_gen)
+    nogen.generation = ghobject_t::NO_GEN;
+  else if (is_snap)
+    nogen.hobj.snap = CEPH_NOSNAP;
   OnodeRef h = c->get_onode(nogen, false);
 
   if (!h || !h->exists) {
     return 0;
   }
+
+  //Populate the extent map structure from DB; required for shared blob processing below.
+  h->extent_map.fault_range(db, 0, h->onode.size);
   // Set maybe_unshared_blobs contains those shared blobs that have all nref=1.
   // Is .head object is using all those segments?
   // If it is using all, then no one else can use the shared blob,
