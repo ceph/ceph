@@ -1169,7 +1169,7 @@ class TestCephadm(object):
             _run_cephadm.assert_any_call(
                 'test', 'osd', 'ceph-volume',
                 ['--config-json', '-', '--', 'lvm', 'batch',
-                    '--no-auto', '/dev/sdb', '--objectstore', 'bluestore', '--osd-type', 'classic',
+                    '--no-auto', '/dev/sdb', '--objectstore', 'bluestore',
                     '--yes', '--no-systemd'],
                 env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=foo'], error_ok=True,
                 stdin='{"config": "", "keyring": ""}')
@@ -1216,7 +1216,7 @@ class TestCephadm(object):
                 'test', 'osd', 'ceph-volume',
                 ['--config-json', '-', '--', 'lvm', 'batch',
                     '--no-auto', '/dev/sdb', '--db-devices', '/dev/sdc',
-                    '--wal-devices', '/dev/sdd', '--objectstore', 'bluestore', '--osd-type', 'classic',
+                    '--wal-devices', '/dev/sdd', '--objectstore', 'bluestore',
                     '--yes', '--no-systemd'],
                 env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=noncollocated'],
                 error_ok=True, stdin='{"config": "", "keyring": ""}',
@@ -1416,15 +1416,15 @@ class TestCephadm(object):
         "devices, preview, exp_commands",
         [
             # no preview and only one disk, prepare is used due the hack that is in place.
-            (['/dev/sda'], False, ["lvm batch --no-auto /dev/sda --objectstore bluestore --osd-type classic --yes --no-systemd"]),
+            (['/dev/sda'], False, ["lvm batch --no-auto /dev/sda --objectstore bluestore --yes --no-systemd"]),
             # no preview and multiple disks, uses batch
             (['/dev/sda', '/dev/sdb'], False,
-             ["CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --objectstore bluestore --osd-type classic --yes --no-systemd"]),
+             ["CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --objectstore bluestore --yes --no-systemd"]),
             # preview and only one disk needs to use batch again to generate the preview
-            (['/dev/sda'], True, ["lvm batch --no-auto /dev/sda --objectstore bluestore --osd-type classic --yes --no-systemd --report --format json"]),
+            (['/dev/sda'], True, ["lvm batch --no-auto /dev/sda --objectstore bluestore --yes --no-systemd --report --format json"]),
             # preview and multiple disks work the same
             (['/dev/sda', '/dev/sdb'], True,
-             ["CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --objectstore bluestore --osd-type classic --yes --no-systemd --report --format json"]),
+             ["CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --objectstore bluestore --yes --no-systemd --report --format json"]),
         ]
     )
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
@@ -1484,15 +1484,15 @@ class TestCephadm(object):
         "devices, preview, exp_commands",
         [
             # one data device, no preview
-            (['/dev/sda'], False, ["raw prepare --bluestore --data /dev/sda --osd-type classic"]),
+            (['/dev/sda'], False, ["raw prepare --bluestore --data /dev/sda"]),
             # multiple data devices, no preview
             (['/dev/sda', '/dev/sdb'], False,
-             ["raw prepare --bluestore --data /dev/sda --osd-type classic", "raw prepare --bluestore --data /dev/sdb --osd-type classic"]),
+             ["raw prepare --bluestore --data /dev/sda", "raw prepare --bluestore --data /dev/sdb"]),
             # one data device, preview
-            (['/dev/sda'], True, ["raw prepare --bluestore --data /dev/sda --osd-type classic --report --format json"]),
+            (['/dev/sda'], True, ["raw prepare --bluestore --data /dev/sda --report --format json"]),
             # multiple data devices, preview
             (['/dev/sda', '/dev/sdb'], True,
-             ["raw prepare --bluestore --data /dev/sda --osd-type classic --report --format json", "raw prepare --bluestore --data /dev/sdb --osd-type classic --report --format json"]),
+             ["raw prepare --bluestore --data /dev/sda --report --format json", "raw prepare --bluestore --data /dev/sdb --report --format json"]),
         ]
     )
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
