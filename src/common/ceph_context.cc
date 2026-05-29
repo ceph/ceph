@@ -499,7 +499,7 @@ bool CephContext::check_experimental_feature_enabled(const std::string& feat,
   return enabled;
 }
 
-int CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
+[[gnu::noinline]] int CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
 			    Formatter *f,
 			    std::ostream& ss,
 			    bufferlist *out)
@@ -514,7 +514,8 @@ int CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
 
 #pragma GCC push_options
 #pragma GCC optimize ("O0")
-static void leak_some_memory() {
+static void leak_some_memory(CephContext* cc) {
+  lgeneric_derr(cc) << "Leaking some memory" << dendl;
   volatile char *foo = new char[1234];
   (void)foo;
 }
@@ -538,7 +539,7 @@ int CephContext::_do_command(
     }
   }
   if (command == "leak_some_memory") {
-    leak_some_memory();
+    leak_some_memory(this);
   }
   else if (command == "perfcounters_dump" || command == "1" ||
       command == "perf dump") {
