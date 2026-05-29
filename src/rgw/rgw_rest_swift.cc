@@ -3256,3 +3256,17 @@ RGWHandler_REST* RGWRESTMgr_SWIFT_Info::get_handler(
   const auto& auth_strategy = auth_registry.get_swift();
   return new RGWHandler_REST_SWIFT_Info(auth_strategy);
 }
+
+int RGWHandler_REST_Bucket_SWIFT::error_handler(int err_no,
+						std::string *error_content,
+						optional_yield y)
+{
+  return website_handler->error_handler(err_no, error_content, y);
+}
+
+int RGWHandler_REST_Obj_SWIFT::error_handler(int err_no,
+					     std::string *error_content,
+					     optional_yield y)
+{
+  return website_handler->error_handler(err_no, error_content, y);
+}
