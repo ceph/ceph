@@ -121,6 +121,20 @@ TOKENS = {
             'restricted': False,
         },
     },
+    # Restricted application credential with no access rules attached. Per
+    # the OpenStack spec a restricted credential without rules denies every
+    # request — RGW must deny instead of falling through to "no rules =
+    # unrestricted".
+    'appcred-token-restricted-empty': {
+        'username': 'deadbeef',
+        'project': 'deadbeef',
+        'expired': False,
+        'application_credential': {
+            'id': 'appcred-restricted-empty-id',
+            'name': 'restricted-empty',
+            'restricted': True,
+        },
+    },
 }
 
 

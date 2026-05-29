@@ -136,7 +136,7 @@ path_matches_pattern(const std::string_view pattern, const std::string_view path
 static bool
 check_access_rules(
     const DoutPrefixProvider* dpp,
-    const std::vector<rgw::keystone::TokenEnvelope::ApplicationCredential::AccessRule>& rules,
+    std::span<const rgw::keystone::TokenEnvelope::ApplicationCredential::AccessRule> rules,
     const std::string_view method,
     const std::string_view raw_path)
 {
@@ -146,9 +146,7 @@ check_access_rules(
 
   // Strip query string before matching — access rules are defined against
   // path only, never against query parameters.
-  const size_t q = raw_path.find('?');
-  const std::string_view path =
-      (q == std::string_view::npos) ? raw_path : raw_path.substr(0, q);
+  const std::string_view path = raw_path.substr(0, raw_path.find('?'));
 
   for (const auto& rule : rules) {
     if (rule.service != SWIFT_SERVICE_TYPE) {
@@ -167,6 +165,39 @@ check_access_rules(
   ldpp_dout(dpp, 10) << "keystone access rule denied: no rule matched method="
                      << method << " path=" << path
                      << " (rules=" << rules.size() << ")" << dendl;
+  return false;
+}
+
+// Apply application-credential access-rule enforcement to a validated token.
+// Returns true if the request is permitted, false if it must be denied.
+// Called on both the cache-miss and cache-hit paths so that a cached token
+// reused across requests is re-checked against its rules for every method/path.
+static bool
+enforce_access_rules(
+    const DoutPrefixProvider* dpp,
+    const rgw::keystone::TokenEnvelope& t,
+    const req_state* s)
+{
+  const auto rules = t.get_access_rules();
+  // A restricted credential with no rules denies everything.
+  if (t.is_restricted() && rules.empty()) {
+    ldpp_dout(dpp, 5) << "denying request: restricted application credential "
+                         "has no access rules" << dendl;
+    return false;
+  }
+  // No app cred or unrestricted with no rules: nothing to enforce.
+  if (rules.empty()) {
+    return true;
+  }
+  // Match against the Swift-relative path (with the rgw_swift_url_prefix
+  // stripped) since Keystone access rules are rooted at /v1/..., not at the
+  // RGW frontend prefix.
+  if (check_access_rules(dpp, rules, s->info.method, s->relative_uri)) {
+    return true;
+  }
+  ldpp_dout(dpp, 5) << "denying request: application credential access "
+                       "rules do not permit method=" << s->info.method
+                    << " path=" << s->relative_uri << dendl;
   return false;
 }
 
@@ -421,6 +452,9 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
   if (t) {
     ldpp_dout(dpp, 20) << "cached token.project.id=" << t->get_project_id()
                    << dendl;
+    if (!enforce_access_rules(dpp, *t, s)) {
+      return result_t::deny(-EACCES);
+    }
     auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
                                               get_creds_info(*t));
     return result_t::grant(std::move(apl));
@@ -531,15 +565,9 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
       ldpp_dout(dpp, 0) << "validated token: " << t->get_project_name()
                     << ":" << t->get_user_name()
                     << " expires: " << t->get_expires() << dendl;
-      // Application Credential access rules: when present, only requests
-      // whose method and path match a rule are permitted. An app cred
-      // without rules imposes no extra restriction here.
-      if (t->has_access_rules() &&
-          !check_access_rules(dpp, t->get_access_rules(),
-                              s->info.method, s->decoded_uri)) {
-        ldpp_dout(dpp, 5) << "denying request: application credential access "
-                             "rules do not permit method=" << s->info.method
-                          << " path=" << s->decoded_uri << dendl;
+      // Application Credential access rules: enforce before caching so that
+      // a denied request never poisons the cache for subsequent ones.
+      if (!enforce_access_rules(dpp, *t, s)) {
         return result_t::deny(-EACCES);
       }
 

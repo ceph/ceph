@@ -15,10 +15,12 @@
 # GNU Library Public License for more details.
 #
 # Test that RGW enforces application credential access rules received from
-# Keystone. Uses keystone-fake-server.py which provides two app-cred tokens:
+# Keystone. Uses keystone-fake-server.py which provides three app-cred tokens:
 #
-#   appcred-token-readonly    - access rules: GET and HEAD on /v1/AUTH_**
-#   appcred-token-unrestricted - no access rules (unrestricted app cred)
+#   appcred-token-readonly         - access rules: GET and HEAD on /v1/AUTH_**
+#   appcred-token-unrestricted     - no access rules (unrestricted app cred)
+#   appcred-token-restricted-empty - restricted=true with no access rules,
+#                                    must deny every request
 
 import sys
 import requests
@@ -120,6 +122,27 @@ def test_unrestricted_appcred_permits_all():
     print('PASSED: unrestricted appcred permits GET, HEAD, and PUT')
 
 
+def test_restricted_empty_appcred_denies_all():
+    """A restricted app-cred with no rules must deny every request (403)."""
+    token = 'appcred-token-restricted-empty'
+    r = requests.get(OBJECT, headers={'X-Auth-Token': token})
+    if r.status_code != 403:
+        fail('restricted-empty appcred: GET should be denied (403)', r.status_code)
+
+    r = requests.head(OBJECT, headers={'X-Auth-Token': token})
+    if r.status_code != 403:
+        fail('restricted-empty appcred: HEAD should be denied (403)', r.status_code)
+
+    r = requests.put(OBJECT,
+                     headers={'X-Auth-Token': token,
+                               'Content-Type': 'text/plain'},
+                     data=b'should be denied')
+    if r.status_code != 403:
+        fail('restricted-empty appcred: PUT should be denied (403)', r.status_code)
+
+    print('PASSED: restricted-empty appcred denies GET, HEAD, and PUT')
+
+
 def main():
     setup('admin-token-1')
     try:
@@ -128,6 +151,7 @@ def main():
         test_readonly_appcred_denies_put()
         test_readonly_appcred_denies_delete()
         test_unrestricted_appcred_permits_all()
+        test_restricted_empty_appcred_denies_all()
     finally:
         teardown('admin-token-1')
     print('ALL TESTS PASSED')
