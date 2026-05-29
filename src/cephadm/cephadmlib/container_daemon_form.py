@@ -4,7 +4,6 @@ import abc
 
 from typing import List, Tuple, Optional, Dict
 
-from .container_engines import Podman
 from .container_types import CephContainer, InitContainer, SidecarContainer
 from .context import CephadmContext
 from .daemon_form import DaemonForm
@@ -164,7 +163,6 @@ def daemon_to_container(
     daemon.customize_container_envs(ctx, envs)
     daemon.customize_process_args(ctx, args)
 
-    _is_podman = isinstance(ctx.container_engine, Podman)
     if auto_update_mounts:
         ctx.container_engine.update_mounts(ctx, container_mounts)
     if auto_service_args:

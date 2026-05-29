@@ -113,12 +113,12 @@ class Docker(ContainerEngine):
     EXE = 'docker'
 
     def service_args(
-        self, ctx: CephadmContext, service_name: str
+        self,
+        ctx: CephadmContext,
+        service_name: str,
     ) -> List[str]:
-        return [
-            '-d',
-            '--restart', 'unless-stopped'
-        ]
+        return ['-d']
+
 
 CONTAINER_PREFERENCE = (Podman, Docker)  # prefer podman to docker
 

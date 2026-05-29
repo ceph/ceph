@@ -163,7 +163,12 @@ def _write_container_cmd_to_bash(
     # container run command
     _bash_cmd(file_obj, container.run_cmd(), background=bool(background))
 
-def _write_pidfile_init(ctx, file_obj, container):
+
+def _write_pidfile_init(
+    ctx: CephadmContext,
+    file_obj: IO[str],
+    container: 'CephContainer',
+) -> None:
     file_obj.write(
         'if [[ $1 ]] ; then\n'
         + f"  ps -o ppid= -p $({ctx.container_engine.path} inspect --format '{{{{ .State.Pid }}}}' {container.cname})"
