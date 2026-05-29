@@ -12236,6 +12236,7 @@ void BlueStore::collect_metadata(map<string,string> *pm)
   (*pm)["bluestore_allocation_from_file"] = stringify(fm && fm->is_null_manager());
   (*pm)["bluestore_allocator"] = alloc ? alloc->get_type() : "null";
   (*pm)["bluestore_write_mode"] = use_write_v2 ? "new" : "classic";
+  (*pm)["bluestore_elastic_shared_blobs"] = elastic_shared_blobs ? "on" : "off";
   (*pm)["bluestore_onode_segmentation"] = segment_size == 0 ? "inactive" : "active";
   std::string sharding;
   if (get_db_sharding(sharding)) {
