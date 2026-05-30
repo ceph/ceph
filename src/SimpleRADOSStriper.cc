@@ -306,11 +306,17 @@ int SimpleRADOSStriper::shrink_alloc(uint64_t a)
     offset += ext.len;
   }
 
+  int aio_rc = 0;
   for (auto& aiocp : removes) {
     if (int rc = aiocp->wait_for_complete(); rc < 0 && rc != -ENOENT) {
       d(1) << " aio_remove failed: " << cpp_strerror(rc) << dendl;
-      return rc;
+      if (aio_rc == 0) {
+        aio_rc = rc;
+      }
     }
+  }
+  if (aio_rc != 0) {
+    return aio_rc;
   }
 
   auto ext = get_first_extent();
