@@ -82,8 +82,13 @@ int SimpleRADOSStriper::config_logger(CephContext* cct, std::string_view name, s
 
 SimpleRADOSStriper::~SimpleRADOSStriper()
 {
+  wait_for_aios(true);
+
   if (lock_keeper.joinable()) {
-    shutdown = true;
+    {
+      std::scoped_lock l(lock_keeper_mutex);
+      shutdown = true;
+    }
     lock_keeper_cvar.notify_all();
     lock_keeper.join();
   }
