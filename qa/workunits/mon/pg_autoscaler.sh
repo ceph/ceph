@@ -114,8 +114,8 @@ function test_autoscaler_basic() {
     sleep 60
     APGS=$(ceph osd dump -f json-pretty | jq '.pools[0].pg_num_target')
     BPGS=$(ceph osd dump -f json-pretty | jq '.pools[1].pg_num_target')
-    test $APGS -gt 100
-    test $BPGS -gt 10
+    test $APGS -gt 200
+    test $BPGS -gt 20
 
     # small ratio change does not change pg_num
     ceph osd pool set meta0 target_size_ratio 7
