@@ -93,7 +93,7 @@ POOL_SIZE_4=$(ceph osd pool get bulk2 size| grep -Eo '[0-9]{1,4}')
 # Since the Capacity ratio = 0 we first meta pool remains the same pg_num
 
 TARGET_PG_1=$(ceph osd pool get meta0 pg_num| grep -Eo '[0-9]{1,4}')
-PG_LEFT=$NUM_OSDS*100
+PG_LEFT=$(($NUM_OSDS*200 - $TARGET_PG_1 * $POOL_SIZE_1))
 NUM_POOLS_LEFT=$NUM_POOLS-1
 # Rest of the pool is bulk and even pools so pretty straight forward
 # calculations.
@@ -113,8 +113,8 @@ ceph osd pool set bulk0 target_size_ratio 1
 sleep 60
 APGS=$(ceph osd dump -f json-pretty | jq '.pools[0].pg_num_target')
 BPGS=$(ceph osd dump -f json-pretty | jq '.pools[1].pg_num_target')
-test $APGS -gt 100
-test $BPGS -gt 10
+test $APGS -gt 200
+test $BPGS -gt 20
 
 # small ratio change does not change pg_num
 ceph osd pool set meta0 target_size_ratio 7
