@@ -602,6 +602,10 @@ TransactionManager::do_submit_transaction(
 
   auto num_extents = allocated_extents.size();
   SUBTRACET(seastore_t, "process {} allocated extents", tref, num_extents);
+  if (!allocated_extents.empty()) {
+    tref.backref_lba_ool_written = true;
+  }
+
   co_await epm->write_preallocated_ool_extents(tref, allocated_extents);
 
   SUBTRACET(seastore_t, "entering prepare", tref);
