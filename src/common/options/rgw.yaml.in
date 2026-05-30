@@ -327,7 +327,7 @@ options:
                 any ``radosgw`` instance that is meant to
                 participate in a `multi-site <../multisite>`_
                 configuration.
-  default: s3, s3website, swift, swift_auth, admin, sts, iam, notifications
+  default: s3, s3control, s3website, swift, swift_auth, admin, sts, iam, notifications
   services:
   - rgw
   with_legacy: true
@@ -362,10 +362,9 @@ options:
   type: str
   level: advanced
   desc: The host names that RGW uses.
-  long_desc: A comma separated list of DNS names.
-    This is Needed for virtual hosting of buckets to work properly, unless
-    configured via zonegroup configuration.
-  fmt_desc: The DNS names of the served domains. See also the ``hostnames`` setting within zonegroups.
+  long_desc: A comma-separated list of FQDNs of the served domains.
+    This is needed for virtual hosting of buckets to work properly, unless
+    configured via the hostnames zonegroup configuration.
   services:
   - rgw
   with_legacy: true
@@ -524,6 +523,38 @@ options:
   min: 100
   services:
   - rgw
+  with_legacy: true
+- name: rgw_lc_counters_cache
+  type: bool
+  level: advanced
+  desc: Enable per-bucket lifecycle performance counters cache
+  long_desc: When enabled, RGW will create and update per-bucket lifecycle performance
+    counters and expose them via admin socket perf dump.
+  default: false
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_lc_counters_cache_size
+  type: uint
+  level: advanced
+  desc: Target size for lifecycle counters cache
+  long_desc: Maximum number of per-bucket LC counter entries to maintain in cache
+  default: 10000
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_lc_counters_batch_size
+  type: uint
+  level: advanced
+  desc: Batch size for flushing LC per-bucket counters
+  long_desc: LC per-bucket counters are flushed to cache every N objects processed.
+    Lower values provide more frequent updates, higher values reduce overhead.
+  default: 5000
+  min: 1
+  services:
+  - rgw
+  see_also:
+  - rgw_lc_counters_cache
   with_legacy: true
 - name: rgw_restore_debug_interval
   type: int
@@ -1684,7 +1715,12 @@ options:
   level: advanced
   desc: Number of shards for usage log.
   long_desc: The number of RADOS objects that RGW will use in order to store the usage
-    log data.
+    log data. All RGW daemons and radosgw-admin commands must use the same value
+    for this option. If values differ, writes and reads/clears will target
+    different objects, causing usage data to appear empty or not be cleared.
+    Use ``ceph config set global rgw_usage_max_shards <N>`` to ensure consistency
+    across the cluster. Alternatively, ``radosgw-admin`` supports the
+    ``--rgw-usage-max-shards`` command-line parameter.
   fmt_desc: The maximum number of shards for usage logging.
   default: 32
   services:
@@ -1861,10 +1897,13 @@ options:
   level: advanced
   desc: Number of shards for garbage collector data
   long_desc: The number of garbage collector data shards, is the number of RADOS objects
-    that RGW will use to store the garbage collection information on.
+    that RGW will use to store the garbage collection information on. This value is
+    read once at daemon startup.
   fmt_desc: The maximum number of objects that may be handled by
     garbage collection in one garbage collection processing cycle.
-    Please do not change this value after the first deployment.
+    This value can be increased after first deployment, please do
+    not decrease this value without ensuring all data shards are
+    completely empty.
   default: 32
   services:
   - rgw
@@ -1873,6 +1912,8 @@ options:
   - rgw_gc_processor_max_time
   - rgw_gc_processor_period
   - rgw_gc_max_concurrent_io
+  flags:
+  - startup
   with_legacy: true
 # wait time before object may be handled by gc, recommended lower limit is 30 mins
 - name: rgw_gc_obj_min_wait
@@ -3252,6 +3293,25 @@ options:
   default: true
   services:
   - rgw
+  with_legacy: true
+- name: rgw_crypt_sse_algorithm
+  type: str
+  level: advanced
+  desc: Default encryption algorithm for server-side encryption
+  long_desc: Specifies the default AES encryption algorithm to use for new objects
+    encrypted with SSE-C, SSE-KMS, SSE-S3, or RGW-AUTO modes. Valid values are
+    aes-256-cbc (legacy, compatible with older RGW versions) and aes-256-gcm
+    (recommended, provides authenticated encryption). Existing encrypted objects
+    are always decrypted using the algorithm specified in their metadata,
+    regardless of this setting.
+  default: aes-256-cbc
+  services:
+  - rgw
+  see_also:
+  - rgw_crypt_require_ssl
+  enum_values:
+  - aes-256-cbc
+  - aes-256-gcm
   with_legacy: true
 - name: rgw_crypt_sse_s3_backend
   type: str

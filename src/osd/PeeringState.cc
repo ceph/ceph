@@ -5141,6 +5141,15 @@ void PeeringState::apply_op_stats(
   const hobject_t &soid,
   const object_stat_sum_t &delta_stats)
 {
+  psdout(20) << fmt::format(
+	"apply_op_stats {} d.objs={} d.clns={} d.bytes={}"
+	" -> objs={} clns={} bytes={}",
+	soid, delta_stats.num_objects, delta_stats.num_object_clones,
+	delta_stats.num_bytes,
+	info.stats.stats.sum.num_objects + delta_stats.num_objects,
+	info.stats.stats.sum.num_object_clones + delta_stats.num_object_clones,
+	info.stats.stats.sum.num_bytes + delta_stats.num_bytes)
+	     << dendl;
   info.stats.stats.add(delta_stats);
   info.stats.stats.floor(0);
 
@@ -7535,7 +7544,10 @@ void PeeringState::GetInfo::get_infos()
       continue;
     }
     if (ps->peer_info.count(peer)) {
-      psdout(10) << " have osd." << peer << " info " << ps->peer_info[peer] << dendl;
+      uint64_t f = ps->get_osdmap()->get_xinfo(peer.osd).features;
+      psdout(10) << " have osd." << peer << " info " << ps->peer_info[peer]
+                 << " peer features: " << hex << f << dec << dendl;
+      ps->apply_peer_features(f);
       continue;
     }
     if (peer_info_requested.count(peer)) {

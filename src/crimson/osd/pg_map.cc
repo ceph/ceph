@@ -328,6 +328,16 @@ void PGMap::pg_loaded(spg_t pgid, Ref<PG> pg)
 {
   ceph_assert(!pgs.count(pgid));
   pgs.emplace(pgid, pg);
+  // An op may have called wait_for_pg() before this PG finished loading
+  // from local store, parking on pgs_creating[pgid].promise. Wake any
+  // such waiters now -- pg_created() does the same on the create path,
+  // but the load path was missing the symmetric notification.
+  if (auto creating_iter = pgs_creating.find(pgid);
+      creating_iter != pgs_creating.end()) {
+    auto promise = std::move(creating_iter->second.promise);
+    pgs_creating.erase(creating_iter);
+    promise.set_value(pg);
+  }
 }
 
 void PGMap::pg_creation_canceled(spg_t pgid)

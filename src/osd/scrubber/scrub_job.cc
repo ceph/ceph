@@ -376,7 +376,7 @@ bool ScrubJob::observes_noscrub_flags(urgency_t urgency)
 
 bool ScrubJob::observes_allowed_hours(urgency_t urgency)
 {
-  return urgency < urgency_t::operator_requested;
+  return urgency < urgency_t::repairing;
 }
 
 bool ScrubJob::observes_extended_sleep(urgency_t urgency)
@@ -387,6 +387,11 @@ bool ScrubJob::observes_extended_sleep(urgency_t urgency)
 bool ScrubJob::observes_load_limit(urgency_t urgency)
 {
   return urgency < urgency_t::after_repair;
+}
+
+bool ScrubJob::observes_trims_load(urgency_t urgency)
+{
+  return urgency < urgency_t::repairing;
 }
 
 bool ScrubJob::requires_reservation(urgency_t urgency)

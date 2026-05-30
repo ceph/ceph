@@ -507,6 +507,17 @@ PG::do_delete_work(ceph::os::Transaction &t, ghobject_t _next)
     t.remove(coll_ref->get_cid(), pgid.make_snapmapper_oid());
     t.remove(coll_ref->get_cid(), pgmeta_oid);
     t.remove_collection(coll_ref->get_cid());
+    /*
+     * Mark the PG as fully deleted *before* dispatching the final
+     * RMCOLL transaction.  A PGAdvanceMap may already have been queued
+     * (with a Ref<PG>) by an earlier broadcast_map_to_pgs while this
+     * PG was still in pg_map, and is now sitting behind these
+     * DeleteSome events on the peering pipeline.  Setting the deleted
+     * flag now lets that queued PGAdvanceMap detect the situation and
+     * skip itself instead of issuing ops on a collection that is
+     * about to disappear.
+     */
+    peering_state.set_delete_complete();
     (void) crimson::os::with_store_do_transaction(
       shard_services.get_store(store_index),
       coll_ref,
@@ -616,6 +627,12 @@ PG::interruptible_future<seastar::stop_iteration> PG::trim_snap(
 
 void PG::on_active_actmap()
 {
+  logger().debug("{}: {}", *this, __func__);
+  initiate_snap_trim();
+}
+
+void PG::initiate_snap_trim()
+{
   logger().debug("{}: {} snap_trimq={}", *this, __func__, snap_trimq);
   peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
   if (peering_state.is_active() && peering_state.is_clean()) {
@@ -630,7 +647,9 @@ void PG::on_active_actmap()
       logger().info("{}: {} scrubbing, deferring snap trim", *this, __func__);
       return;
     }
-    // loops until snap_trimq is empty or SNAPTRIM_ERROR.
+    if (snap_trimq.empty()) {
+      return;
+    }
     Ref<PG> pg_ref = this;
     std::ignore = interruptor::with_interruption([this] {
       return interruptor::repeat(
@@ -647,7 +666,7 @@ void PG::on_active_actmap()
           return trim_snap(to_trim, needs_pause);
         }
       ).then_interruptible([this] {
-        logger().debug("{}: PG::on_active_actmap() finished trimming",
+        logger().debug("{}: PG::initiate_snap_trim() finished trimming",
                        *this);
         peering_state.state_clear(PG_STATE_SNAPTRIM);
         peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
@@ -670,7 +689,7 @@ void PG::kick_snap_trim()
       && !snap_trimq.empty()
       && !peering_state.state_test(PG_STATE_SNAPTRIM)) {
     logger().info("{}: scrub complete, retriggering snap trim", *this);
-    on_active_actmap();
+    (void) shard_services.start_operation<SnapTrimInitiate>(this);
   }
 }
 
@@ -1701,7 +1720,8 @@ void PG::on_change(ceph::os::Transaction &t) {
   // is save and in time.
   peering_state.state_clear(PG_STATE_SNAPTRIM);
   peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
-  snap_mapper.reset_backend();
+  auto _t = osdriver.get_transaction(&t);
+  snap_mapper.flush_and_reset_backend(&_t);
   reset_pglog_based_recovery_op();
 }
 

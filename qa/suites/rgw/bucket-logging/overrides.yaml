@@ -6,6 +6,8 @@ overrides:
         setgroup: ceph
         debug rgw: 20
         rgw bucket logging obj roll time: 5
+        rgw sts key: abcdefghijklmnop
+        rgw s3 auth use sts: true
   rgw:
     storage classes:
       LUKEWARM:

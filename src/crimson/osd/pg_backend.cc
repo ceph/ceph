@@ -113,7 +113,7 @@ PGBackend::decode_metadata2(
       oid);
     return tl::unexpected(
       ErrorHelper<load_metadata_ertr>::to_error(
-        crimson::ct_error::object_corrupted::make()));
+        crimson::ct_error::enoent::make()));
   }
 
   if (oid.is_head()) {
@@ -170,7 +170,9 @@ PGBackend::load_metadata(const hobject_t& oid)
           return ErrorHelper<load_metadata_ertr>\
 	    ::from_error<PGBackend::loaded_object_md_t::ref>(maybe_decoded.error());
         }
-      }, crimson::ct_error::enoent::handle([oid] {
+      }
+    ).handle_error_interruptible(
+      crimson::ct_error::enoent::handle([oid] {
         logger().debug(
           "load_metadata: object {} doesn't exist, returning empty metadata",
           oid);
@@ -181,7 +183,9 @@ PGBackend::load_metadata(const hobject_t& oid)
               false),
             oid.is_head() ? (new crimson::osd::SnapSetContext(oid)) : nullptr
           });
-      }));
+      }),
+      load_metadata_iertr::pass_further{}
+    );
 }
 
 static inline bool _read_verify_data(
@@ -613,13 +617,14 @@ void PGBackend::truncate_update_size_and_usage(object_stat_sum_t& delta_stats,
   }
 }
 
-static bool is_offset_and_length_valid(
+bool PGBackend::is_offset_and_length_valid(
   const std::uint64_t offset,
-  const std::uint64_t length)
+  const std::uint64_t length) const
 {
-  if (const std::uint64_t max = local_conf()->osd_max_object_size;
+  if (const std::uint64_t max =
+        store.f_store.get_sharded_store(store.store_index).get_max_object_size();
       offset >= max || length > max || offset + length > max) {
-    logger().debug("{} osd_max_object_size: {}, offset: {}, len: {}; "
+    logger().debug("{} max_object_size: {}, offset: {}, len: {}; "
                    "Hard limit of object size is 4GB",
                    __func__, max, offset, length);
     return false;

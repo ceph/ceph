@@ -108,7 +108,7 @@ daemon as failed using ``ceph mgr fail <mgr name>``.
 Performance and Scalability
 ---------------------------
 
-All the mgr modules share a cache that can be enabled with
+All the Manager modules share a cache that can be enabled with
 ``ceph config set mgr mgr_ttl_cache_expire_seconds <seconds>``, where seconds
 is the time to live of the cached python objects.
 
@@ -121,6 +121,48 @@ been a 1.5x improvement enabling the cache.
 Furthermore, you can run ``ceph daemon mgr.${MGRNAME} perf dump`` to retrieve
 perf counters of a mgr module. In ``mgr.cache_hit`` and ``mgr.cache_miss``
 you'll find the hit/miss ratio of the mgr cache.
+
+The Manager includes a ThreadMonitor that tracks CPU usage and memory consumption
+for each enabled module. This monitoring can be configured with
+``ceph config set mgr mgr_module_monitor_interval <seconds>``, where ``seconds``
+is the monitoring interval. Setting this to 0 disables module monitoring.
+
+The ThreadMonitor provides per-module performance counters accessible via
+``ceph daemon mgr.${MGRNAME} perf dump``, including:
+
+- ``notify_avg_usec``: Average time spent in notify calls (microseconds)
+- ``cmd_avg_usec``: Average time spent in command calls (microseconds)  
+- ``alive``: Module health status (0=dead, 1=alive)
+- ``cpu_usage``: CPU percentage for the main module thread
+- ``serve_cpu_usage``: CPU percentage for the module's serve thread (if present)
+- ``mem_rss_current``: Current process memory usage (RSS) in bytes
+- ``mem_rss_change``: Memory usage change since last measurement in bytes
+
+These counters help identify resource-intensive modules and can be useful for
+debugging performance issues or memory leaks. The ``notify_avg_usec`` and 
+``cmd_avg_usec`` counters track the performance of module operations, while
+the CPU and memory counters monitor resource consumption. The default monitoring
+interval is 2 seconds.
+
+
+Automatic Stats Period Tuning
+------------------------------
+
+The Manager automatically adjusts :confval:`mgr_stats_period` based on message queue
+depth to prevent overload during high cluster activity. This feature is enabled by
+default and can be controlled with the following settings:
+
+- :confval:`mgr_stats_period_autotune` (boolean, default: true): Enable or disable
+  automatic tuning of the stats period.
+- :confval:`mgr_stats_period_autotune_queue_threshold` (integer, default: 100):
+  The message queue depth threshold that triggers an increase in the stats period.
+
+When the queue depth exceeds this threshold, the stats period is increased to
+reduce load. Conversely, if the queue depth remains low and the stats period is
+above the baseline, the period is decreased to improve responsiveness. In order 
+to ensure timely updates, the effective stats period will not exceed 60 seconds 
+regardless of these settings.
+
 
 Using modules
 -------------
@@ -237,5 +279,8 @@ Configuration
 .. confval:: mgr_data
 .. confval:: mgr_tick_period
 .. confval:: mon_mgr_beacon_grace
+.. confval:: mgr_stats_period
+.. confval:: mgr_stats_period_autotune
+.. confval:: mgr_stats_period_autotune_queue_threshold
 
 .. _Modifying User Capabilities: ../../rados/operations/user-management/#modify-user-capabilities

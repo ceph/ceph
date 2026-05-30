@@ -57,8 +57,10 @@ constexpr uint8_t BATCH_CREATE_SIZE = 50;
 class LogManager : public OMapManager {
 public:
   LogManager(TransactionManager &tm);
-  initialize_omap_ret initialize_omap(Transaction &t,
-    laddr_t hint, omap_type_t type) final;
+  initialize_omap_ret initialize_omap(
+    Transaction &t,
+    laddr_hint_t hint,
+    omap_type_t type) final;
 
   /**
    * omap_set_keys

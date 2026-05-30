@@ -103,8 +103,7 @@ class SegmentProvider;
  * - TRACE: DEBUG details
  * - seastore_t logs
  */
-class Cache : public ExtentTransViewRetriever,
-	      public RetiredExtentPlaceholderInvalidater {
+class Cache : public ExtentTransViewRetriever {
 public:
   Cache(ExtentPlacementManager &epm, store_index_t store_index);
   ~Cache();
@@ -154,14 +153,22 @@ public:
     t.add_present_to_retired_set(ref);
   }
 
-  /// Declare paddr retired in t
-  using retire_extent_iertr = base_iertr;
-  using retire_extent_ret = base_iertr::future<>;
-  retire_extent_ret retire_extent_addr(
-    Transaction &t, paddr_t addr, extent_len_t length);
-
-  CachedExtentRef retire_absent_extent_addr(
-    Transaction &t, laddr_t laddr, paddr_t addr, extent_len_t length);
+  template <typename T, typename Func>
+  TCachedExtentRef<T> retire_absent_extent_addr(
+    Transaction &t,
+    laddr_t laddr,
+    paddr_t paddr,
+    extent_len_t length,
+    Func &&extent_init_func) {
+    LOG_PREFIX(Cache::retire_absent_extent_addr);
+    SUBDEBUGT(seastore_cache, "retire {}~0x{:x} laddr={}",
+      t, paddr, length, laddr);
+    auto ext = alloc_absent_extent<T>(
+      t, paddr, length, 0, length, std::move(extent_init_func));
+    SUBDEBUGT(seastore_cache, "retire {}", t, *ext);
+    retire_extent(t, ext);
+    return ext;
+  }
 
   /**
    * get_root
@@ -260,14 +267,6 @@ public:
       return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
     }
 
-    if (is_retired_placeholder_type(ret->get_type())) {
-      // retired_placeholder is not really cached yet
-      SUBDEBUGT(seastore_cache,
-        "{} {}~0x{:x} ~0x{:x} is absent(placeholder) in cache",
-        t, type, paddr, len, ret->get_length());
-      return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
-    }
-
     if (ret->get_length() != len) {
       SUBDEBUGT(seastore_cache,
         "{} {}~0x{:x} is present in cache with inconsistent length 0x{:x} -- {}",
@@ -297,7 +296,7 @@ public:
           ret->cast<CachedExtent>(), 0, ret->get_length(), &t_src));
     }
 
-    // present in cache(fully loaded) and is not a retired_placeholder
+    // present in cache(fully loaded)
     SUBDEBUGT(seastore_cache,
       "{} {}~0x{:x} is present in cache -- {}",
       t, type, paddr, len, *ret);
@@ -366,18 +365,6 @@ public:
     }
   }
 
-  void invalidate_retired_placeholder(
-    Transaction &t,
-    CachedExtent &retired_placeholder,
-    CachedExtent &extent) {
-    // replace placeholder in transactions
-    while (!retired_placeholder.read_transactions.empty()) {
-      auto t = retired_placeholder.read_transactions.begin()->t;
-      t->replace_placeholder(retired_placeholder, extent);
-    }
-    retired_placeholder.set_invalid(t);
-  }
-
   /*
    * prepare_absent_extent
    *
@@ -392,41 +379,19 @@ public:
     extent_len_t partial_off,
     extent_len_t partial_len,
     Func &&extent_init_func) {
-    LOG_PREFIX(Cached::prepare_absent_extent);
-
-#ifndef NDEBUG
-    {
-      CachedExtentRef ret;
-      auto r = t.get_extent(offset, &ret);
-      if (r != Transaction::get_extent_ret::ABSENT) {
-	SUBERRORT(seastore_cache, "unexpected non-absent extent {}", t, *ret);
-	ceph_abort();
-      }
-    }
-#endif
-
-    SUBTRACET(seastore_cache, "{} {}~0x{:x}", t, T::TYPE, offset, length);
-    ceph_assert(!booting);
+    auto ret = alloc_absent_extent<T>(
+      t,
+      offset,
+      length,
+      partial_off,
+      partial_len,
+      std::forward<Func>(extent_init_func));
     const auto t_src = t.get_src();
-
-    // partial read
-    TCachedExtentRef<T> ret = CachedExtent::make_cached_extent_ref<T>(length);
-    ret->init(CachedExtent::extent_state_t::CLEAN,
-	      offset,
-	      PLACEMENT_HINT_NULL,
-	      NULL_GENERATION,
-	      TRANS_ID_NULL);
-    SUBDEBUGT(seastore_cache,
-	"{} {}~0x{:x} is absent, add extent and reading range 0x{:x}~0x{:x} ... -- {}",
-	t, T::TYPE, offset, length, partial_off, partial_len, *ret);
-    add_extent(ret);
-    extent_init_func(*ret);
     cache_access_stats_t& access_stats = get_by_ext(
       get_by_src(stats.access_by_src_ext, t_src),
       T::TYPE);
     ++access_stats.load_absent;
     ++stats.access.load_absent;
-    t.add_to_read_set(CachedExtentRef(ret));
     touch_extent_by_range(
       *ret, &t_src, t.get_cache_hint(),
       partial_off, partial_len);
@@ -550,7 +515,6 @@ public:
     assert(extent.is_fully_loaded());
     const auto t_src = t.get_src();
     auto ext_type = extent.get_type();
-    assert(!is_retired_placeholder_type(ext_type));
     cache_access_stats_t& access_stats = get_by_ext(
       get_by_src(stats.access_by_src_ext, t_src),
       ext_type);
@@ -618,12 +582,6 @@ public:
 
     const auto t_src = t.get_src();
     auto ext_type = extent->get_type();
-    // FIXME: retired-placeholder isn't linked in the lba tree yet.
-    //   We think it's still working because:
-    //   1. A retired-placeholder must be an ObjectDataBlock
-    //   2. Per rados object, no read is possible during write,
-    //      and write cannot be parallel
-    assert(!is_retired_placeholder_type(ext_type));
     cache_access_stats_t& access_stats = get_by_ext(
       get_by_src(stats.access_by_src_ext, t_src),
       ext_type);
@@ -694,8 +652,6 @@ public:
       }
     }
 
-    // user should not see RETIRED_PLACEHOLDER extents
-    ceph_assert(!is_retired_placeholder_type(p_extent->get_type()));
     // for logical extents, handle partial load in TM::read_pin(),
     // also see read_extent_maybe_partial() and get_absent_extent()
     assert(is_logical_type(p_extent->get_type()) ||
@@ -833,6 +789,47 @@ private:
   }
 
   /**
+   */
+  template <typename T, typename Func>
+  TCachedExtentRef<T> alloc_absent_extent(
+    Transaction &t,
+    paddr_t offset,
+    extent_len_t length,
+    extent_len_t partial_off,
+    extent_len_t partial_len,
+    Func &&extent_init_func) {
+    LOG_PREFIX(Cache::alloc_absent_extent);
+#ifndef NDEBUG
+    {
+      CachedExtentRef ret;
+      auto r = t.get_extent(offset, &ret);
+      if (r != Transaction::get_extent_ret::ABSENT) {
+	SUBERRORT(seastore_cache, "unexpected non-absent extent {}", t, *ret);
+	ceph_abort();
+      }
+    }
+#endif
+
+    SUBTRACET(seastore_cache, "{} {}~0x{:x}", t, T::TYPE, offset, length);
+    ceph_assert(!booting);
+
+    // partial read
+    TCachedExtentRef<T> ret = CachedExtent::make_cached_extent_ref<T>(length);
+    ret->init(CachedExtent::extent_state_t::CLEAN,
+	      offset,
+	      PLACEMENT_HINT_NULL,
+	      NULL_GENERATION,
+	      TRANS_ID_NULL);
+    SUBDEBUGT(seastore_cache,
+	"{} {}~0x{:x} is absent, add extent and reading range 0x{:x}~0x{:x} ... -- {}",
+	t, T::TYPE, offset, length, partial_off, partial_len, *ret);
+    add_extent(ret);
+    extent_init_func(*ret);
+    t.add_to_read_set(ret);
+    return ret;
+  }
+
+  /**
    * do_get_caching_extent
    *
    * returns ref to extent at offset~length of type T either from
@@ -875,32 +872,6 @@ private:
     }
 
     // extent PRESENT in cache
-    if (is_retired_placeholder_type(cached->get_type())) {
-      // partial read
-      TCachedExtentRef<T> ret = CachedExtent::make_cached_extent_ref<T>(length);
-      ret->init(CachedExtent::extent_state_t::CLEAN,
-                offset,
-                PLACEMENT_HINT_NULL,
-                NULL_GENERATION,
-		TRANS_ID_NULL);
-      SUBDEBUG(seastore_cache,
-          "{} {}~0x{:x} is absent(placeholder), add extent and reading range 0x{:x}~0x{:x} ... -- {}",
-          T::TYPE, offset, length, partial_off, partial_len, *ret);
-      extent_init_func(*ret);
-      on_cache(*ret);
-      extents_index.replace(*ret, *cached);
-
-      // replace placeholder in transactions
-      while (!cached->read_transactions.empty()) {
-        auto t = cached->read_transactions.begin()->t;
-        t->replace_placeholder(*cached, *ret);
-      }
-
-      cached->state = CachedExtent::extent_state_t::INVALID;
-      return read_extent<T>(
-	std::move(ret), partial_off, partial_len, p_src);
-    }
-
     auto ret = TCachedExtentRef<T>(static_cast<T*>(cached.get()));
     on_cache(*ret);
     if (ret->is_range_loaded(partial_off, partial_len)) {
@@ -1245,20 +1216,15 @@ public:
     Transaction &t,
     laddr_t remap_laddr,
     paddr_t remap_paddr,
+    extent_len_t remap_offset,
     extent_len_t remap_length,
-    laddr_t original_laddr,
-    std::optional<ceph::bufferptr> &original_bptr) {
+    const std::optional<ceph::bufferptr> &original_bptr) {
     LOG_PREFIX(Cache::alloc_remapped_extent);
-    assert(remap_laddr >= original_laddr);
     TCachedExtentRef<T> ext;
     if (original_bptr.has_value()) {
       // shallow copy the buffer from original extent
-      auto remap_offset = remap_laddr.get_byte_distance<
-	extent_len_t>(original_laddr);
-
       auto nbp = ceph::bufferptr(buffer::create_page_aligned(remap_length));
       original_bptr->copy_out(remap_offset, remap_length, nbp.c_str());
-
       // ExtentPlacementManager::alloc_new_extent will make a new
       // (relative/temp) paddr, so make extent directly
       ext = CachedExtent::make_cached_extent_ref<T>(std::move(nbp));
@@ -1279,6 +1245,15 @@ public:
       t, T::TYPE, remap_length, remap_laddr, original_bptr.has_value(), *extent);
     return extent;
   }
+
+  CachedExtentRef alloc_remapped_extent_by_type(
+    Transaction &t,
+    extent_types_t type,
+    laddr_t remap_laddr,
+    paddr_t remap_paddr,
+    extent_len_t remap_offset,
+    extent_len_t remap_length,
+    const std::optional<ceph::bufferptr> &original_bptr);
 
   /**
    * alloc_new_non_data_extent_by_type
@@ -1305,6 +1280,19 @@ public:
     placement_hint_t hint, ///< [in] user hint
     rewrite_gen_t gen      ///< [in] rewrite generation
     );
+
+  /**
+   * retire_absent_extent_addr_by_type
+   *
+   * Construct a fresh extent, and add it to the retired_set of the transaction.
+   */
+  CachedExtentRef retire_absent_extent_addr_by_type(
+    Transaction &t,
+    laddr_t laddr,
+    paddr_t addr,
+    extent_len_t length,
+    extent_types_t type,
+    extent_init_func_t &&extent_init_func);
 
   /**
    * Allocates mutable buffer from extent_set on offset~len
@@ -1703,7 +1691,7 @@ private:
     if (hint == CACHE_HINT_NOCACHE && is_logical_type(ext.get_type())) {
       return;
     }
-    if (ext.is_stable_clean() && !ext.is_placeholder()) {
+    if (ext.is_stable_clean()) {
       pinboard->move_to_top(ext, p_src, load_start, load_length);
     }
   }
@@ -1916,7 +1904,6 @@ private:
   /// Add extent to extents handling dirty and refcounting
   ///
   /// Note, it must follows with add_to_dirty() or touch_extent().
-  /// The only exception is RetiredExtentPlaceholder.
   void add_extent(CachedExtentRef ref);
 
   /// Mark exising extent ref dirty -- mainly for replay
@@ -2203,7 +2190,6 @@ void stage_visibility_handoff(Transaction& t,
     }
   }
 
-  // Extents in cache may contain placeholders
   CachedExtentRef query_cache(paddr_t offset) {
     if (auto iter = extents_index.find_offset(offset);
         iter != extents_index.end()) {

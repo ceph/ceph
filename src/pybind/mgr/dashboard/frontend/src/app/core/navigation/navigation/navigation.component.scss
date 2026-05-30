@@ -62,10 +62,6 @@ cds-header-item {
       &:hover {
         outline: 0;
       }
-
-      .fa-navicon {
-        color: vv.$gray-200;
-      }
     }
 
     .navbar-collapse {
@@ -141,10 +137,6 @@ cds-header-item {
   @media (max-width: vv.$screen-sm-max) {
     .navbar-nav {
       margin: 0;
-
-      .fa {
-        margin-right: 0.5em;
-      }
 
       .open .dropdown-menu {
         background-color: vv.$primary;

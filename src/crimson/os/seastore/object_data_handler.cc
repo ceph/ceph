@@ -104,6 +104,7 @@ auto with_objects_data(
 ObjectDataHandler::write_iertr::future<std::optional<LBAMapping>>
 ObjectDataHandler::prepare_data_reservation(
   context_t ctx,
+  Onode &onode,
   object_data_t &object_data,
   extent_len_t size)
 {
@@ -117,14 +118,14 @@ ObjectDataHandler::prepare_data_reservation(
            object_data.get_reserved_data_len());
     return write_iertr::make_ready_future<std::optional<LBAMapping>>();
   } else {
+    auto hint = onode.get_data_hint();
     DEBUGT("reserving: {}~0x{:x}",
-           ctx.t,
-           ctx.onode.get_data_hint(),
-           max_object_size);
+           ctx.t, hint, max_object_size);
     return ctx.tm.reserve_region(
       ctx.t,
-      ctx.onode.get_data_hint(),
-      max_object_size
+      hint,
+      max_object_size,
+      extent_types_t::OBJECT_DATA_BLOCK
     ).si_then([max_object_size=max_object_size, &object_data](auto pin) {
       ceph_assert(pin.get_length() == max_object_size);
       object_data.update_reserved(
@@ -268,7 +269,8 @@ ObjectDataHandler::write_ret do_zero(
       ctx.tm.get_block_size() - data.tailbl->length());
     auto extents = co_await ctx.tm.alloc_data_extents<ObjectDataBlock>(
       ctx.t,
-      (overwrite_range.aligned_end - ctx.tm.get_block_size()).checked_to_laddr(),
+      laddr_hint_t::create_as_fixed(
+        (overwrite_range.aligned_end - ctx.tm.get_block_size()).checked_to_laddr()),
       ctx.tm.get_block_size(),
       std::move(zero_pos)
     ).handle_error_interruptible(
@@ -302,7 +304,9 @@ ObjectDataHandler::write_ret do_zero(
     ).checked_to_laddr();
   auto len = end.get_byte_distance<extent_len_t>(laddr);
   if (len != 0) {
-    zero_pos = co_await ctx.tm.reserve_region(ctx.t, std::move(zero_pos), laddr, len
+    zero_pos = co_await ctx.tm.reserve_region(
+      ctx.t, std::move(zero_pos), laddr, len,
+      extent_types_t::OBJECT_DATA_BLOCK
     ).handle_error_interruptible(
       crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
       TransactionManager::get_pin_iertr::pass_further{}
@@ -318,7 +322,7 @@ ObjectDataHandler::write_ret do_zero(
       ctx.tm.get_block_size() - data.headbl->length());
     auto extents = co_await ctx.tm.alloc_data_extents<ObjectDataBlock>(
 	ctx.t,
-	overwrite_range.aligned_begin,
+	laddr_hint_t::create_as_fixed(overwrite_range.aligned_begin),
 	ctx.tm.get_block_size(),
 	std::move(zero_pos)
     ).handle_error_interruptible(
@@ -355,7 +359,7 @@ ObjectDataHandler::clone_ret do_clonerange(
     data.merge_head(ctx.tm.get_block_size());
     auto extents = co_await ctx.tm.alloc_data_extents<ObjectDataBlock>(
       ctx.t,
-      overwrite_range.aligned_begin,
+      laddr_hint_t::create_as_fixed(overwrite_range.aligned_begin),
       ctx.tm.get_block_size(),
       std::move(write_pos)
     ).handle_error_interruptible(
@@ -408,8 +412,9 @@ ObjectDataHandler::clone_ret do_clonerange(
     data.merge_tail(ctx.tm.get_block_size());
     auto extents = co_await ctx.tm.alloc_data_extents<ObjectDataBlock>(
       ctx.t,
-      (overwrite_range.aligned_end - ctx.tm.get_block_size()
-       ).checked_to_laddr(),
+      laddr_hint_t::create_as_fixed(
+	(overwrite_range.aligned_end - ctx.tm.get_block_size()
+	 ).checked_to_laddr()),
       ctx.tm.get_block_size(),
       std::move(write_pos)
     ).handle_error_interruptible(
@@ -435,7 +440,7 @@ ObjectDataHandler::write_ret do_write(
   assert(data.bl);
   return ctx.tm.alloc_data_extents<ObjectDataBlock>(
     ctx.t,
-    overwrite_range.aligned_begin,
+    laddr_hint_t::create_as_fixed(overwrite_range.aligned_begin),
     overwrite_range.aligned_end.template get_byte_distance<
       extent_len_t>(overwrite_range.aligned_begin),
     std::move(write_pos)
@@ -1290,7 +1295,7 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone_range(
     ceph_assert(!object_data.is_null());
     data_t data;
     auto dest_mapping = co_await prepare_data_reservation(
-      ctx, d_object_data, object_data.get_reserved_data_len());
+      ctx, *ctx.d_onode, d_object_data, object_data.get_reserved_data_len());
     if (!dest_mapping) {
       auto d_base = d_object_data.get_reserved_data_base();
       auto laddr = (d_base + srcoff).get_aligned_laddr(
@@ -1354,6 +1359,7 @@ ObjectDataHandler::zero_ret ObjectDataHandler::zero(
              object_data.is_null());
       return prepare_data_reservation(
 	ctx,
+	ctx.onode,
 	object_data,
 	p2roundup(offset + len, ctx.tm.get_block_size())
       ).si_then([this, ctx, offset, len, &object_data](auto mapping) {
@@ -1378,6 +1384,16 @@ ObjectDataHandler::zero_ret ObjectDataHandler::zero(
     });
 }
 
+ObjectDataHandler::touch_ret
+ObjectDataHandler::touch(context_t ctx)
+{
+  return with_object_data(ctx, [this, ctx](auto &obj_data) {
+    return prepare_data_reservation(
+      ctx, ctx.onode, obj_data, max_object_size
+    ).discard_result();
+  });
+}
+
 ObjectDataHandler::write_ret ObjectDataHandler::write(
   context_t ctx,
   objaddr_t offset,
@@ -1396,6 +1412,7 @@ ObjectDataHandler::write_ret ObjectDataHandler::write(
              object_data.is_null());
       return prepare_data_reservation(
 	ctx,
+	ctx.onode,
 	object_data,
 	p2roundup(offset + bl.length(), ctx.tm.get_block_size())
       ).si_then([this, ctx, offset, &object_data, &bl]
@@ -1666,6 +1683,7 @@ ObjectDataHandler::truncate_ret ObjectDataHandler::truncate(
       } else if (offset > object_data.get_reserved_data_len()) {
 	return prepare_data_reservation(
 	  ctx,
+	  ctx.onode,
 	  object_data,
 	  p2roundup(offset, ctx.tm.get_block_size())).discard_result();
       } else {
@@ -1696,29 +1714,47 @@ ObjectDataHandler::clone_ret
 ObjectDataHandler::copy_on_write(
   context_t ctx)
 {
-  return with_object_data(
+  LOG_PREFIX(ObjectDataHandler::copy_on_write);
+  return with_objects_data(
     ctx,
-    [ctx, this](auto &object_data) -> clone_ret {
+    [FNAME, ctx, this](auto &object_data, auto &d_object_data) -> clone_ret
+  {
     auto mapping = co_await ctx.tm.get_pin(
       ctx.t, object_data.get_reserved_data_base()
     ).handle_error_interruptible(
       clone_iertr::pass_further{},
       crimson::ct_error::assert_all{"unexpected enoent"}
     );
-    object_data_t d_object_data = get_null_object_data();
     co_await do_clone(ctx, object_data, d_object_data, mapping, false);
+    DEBUGT("{} -> {}",
+      ctx.t,
+      object_data.get_reserved_data_base(),
+      d_object_data.get_reserved_data_base());
     auto old_base = object_data.get_reserved_data_base();
     auto old_len = object_data.get_reserved_data_len();
-    object_data.update_reserved(
-      d_object_data.get_reserved_data_base(),
-      d_object_data.get_reserved_data_len());
-    ctx.onode.unset_need_cow(ctx.t);
+    assert(ctx.d_onode->need_cow());
+    ctx.d_onode->unset_need_cow(ctx.t);
     co_await ctx.tm.remove_mappings_in_range(
       ctx.t, old_base, old_len, std::move(mapping), {false, true}
     ).handle_error_interruptible(
       clone_iertr::pass_further{},
       crimson::ct_error::assert_all{"unexpected enoent"}
     ).discard_result();
+
+    auto old_md_start = old_base.with_metadata().with_offset_by_blocks(0);
+    auto md_mapping = co_await ctx.tm.lower_bound_pin(ctx.t, old_md_start);
+    if (md_mapping.is_end() ||
+	md_mapping.get_key().get_clone_prefix() !=
+	old_md_start.get_clone_prefix()) {
+      co_return;
+    }
+    auto new_prefix = d_object_data
+	.get_reserved_data_base()
+	.get_clone_prefix()
+	.with_metadata();
+    auto md_dst_mapping = co_await ctx.tm.lower_bound_pin(ctx.t, new_prefix);
+    co_await ctx.tm.move_region(
+      ctx.t, md_mapping, md_dst_mapping, new_prefix, true);
   });
 }
 
@@ -1735,8 +1771,10 @@ ObjectDataHandler::do_clone(
   auto old_base = object_data.get_reserved_data_base();
   auto old_len = object_data.get_reserved_data_len();
   auto mapping = co_await prepare_data_reservation(
-    ctx, d_object_data, old_len);
+    ctx, *ctx.d_onode, d_object_data, old_len);
   ceph_assert(mapping.has_value());
+  assert(old_base.get_object_prefix() == mapping->get_key().get_object_prefix());
+  assert(old_base.get_clone_prefix() != mapping->get_key().get_clone_prefix());
   DEBUGT("new obj reserve_data_base: {}, len 0x{:x}",
     ctx.t,
     d_object_data.get_reserved_data_base(),
@@ -1774,6 +1812,70 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone(
       clone_iertr::pass_further{},
       crimson::ct_error::assert_all{"unexpected enoent"}
     );
+  });
+}
+
+ObjectDataHandler::rename_ret
+ObjectDataHandler::rename(context_t ctx)
+{
+  bool move_indirect = true;
+  if (!ctx.onode.get_hobj().is_temp()) {
+    // we are moving an object in a logical pool
+    // to another object, we should copy the content
+    // of indirect mappings to the new location
+    // instead of moving indirect mappings directly
+    move_indirect = false;
+  }
+  return with_objects_data(
+    ctx,
+    [ctx, this, move_indirect](object_data_t &src, object_data_t &dst)
+    -> rename_ret {
+    ceph_assert(!src.is_null());
+    ceph_assert(dst.is_null());
+    auto dst_mapping = co_await prepare_data_reservation(
+      ctx, *ctx.d_onode, dst, src.get_reserved_data_len());
+    assert(dst_mapping);
+    auto src_mapping = co_await ctx.tm.get_pin(
+      ctx.t, src.get_reserved_data_base()
+    ).handle_error_interruptible(
+      rename_iertr::pass_further{},
+      crimson::ct_error::assert_all("invalid error")
+    );
+    auto dst_prefix = dst_mapping->get_key();
+    dst_mapping = co_await ctx.tm.remove(
+      ctx.t, std::move(*dst_mapping)
+    ).handle_error_interruptible(
+      rename_iertr::pass_further{},
+      crimson::ct_error::assert_all("invalid error")
+    );
+    src_mapping = co_await src_mapping.refresh();
+    co_await ctx.tm.move_region(
+      ctx.t,
+      std::move(src_mapping),
+      std::move(*dst_mapping),
+      dst_prefix,
+      move_indirect);
+
+    auto old_md_start = src.get_reserved_data_base()
+      .with_metadata()
+      .with_offset_by_blocks(0);
+    auto md_mapping = co_await ctx.tm.lower_bound_pin(ctx.t, old_md_start);
+    if (md_mapping.is_end() ||
+	md_mapping.get_key().get_clone_prefix() !=
+	old_md_start.get_clone_prefix()) {
+      co_return;
+    }
+    auto new_prefix = dst
+	.get_reserved_data_base()
+	.get_clone_prefix()
+	.with_metadata();
+    auto md_dst_mapping = co_await ctx.tm.lower_bound_pin(ctx.t, new_prefix);
+    co_await ctx.tm.move_region(
+      ctx.t,
+      md_mapping,
+      md_dst_mapping,
+      new_prefix,
+      move_indirect);
   });
 }
 

@@ -255,6 +255,7 @@ def write_cluster_logrotate_config(ctx: CephadmContext, fsid: str) -> None:
         should be harmless.
         """
         targets: List[str] = [
+            'ceph-exporter',
             'ceph-mon',
             'ceph-mgr',
             'ceph-mds',

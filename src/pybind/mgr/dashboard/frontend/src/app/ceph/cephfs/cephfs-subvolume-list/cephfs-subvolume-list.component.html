@@ -62,13 +62,13 @@
   <span class="fw-bold">{{row.name}}</span>
 
   <span *ngIf="row?.info?.state === 'complete'; else snapshotRetainedTpl">
-    <i [ngClass]="[icons.success, icons.large]"
+    <i [ngClass]="[icons.success, icons.size24]"
        ngbTooltip="{{row.name}} is ready to use"
        class="text-success"></i>
   </span>
 
   <ng-template #snapshotRetainedTpl>
-    <i [ngClass]="[icons.warning, icons.large]"
+    <i [ngClass]="[icons.warning, icons.size24]"
        class="text-warning"
        ngbTooltip="{{row.name}} is removed after retaining the snapshots"></i>
   </ng-template>

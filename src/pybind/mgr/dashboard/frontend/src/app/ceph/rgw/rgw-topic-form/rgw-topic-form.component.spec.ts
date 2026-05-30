@@ -8,7 +8,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TextAreaJsonFormatterService } from '~/app/shared/services/text-area-json-formatter.service';
 import { SharedModule } from '~/app/shared/shared.module';
-import { ToastrModule } from 'ngx-toastr';
+
 import { GridModule, InputModule, SelectModule } from 'carbon-components-angular';
 import { NO_ERRORS_SCHEMA } from '@angular/compiler';
 
@@ -40,7 +40,6 @@ describe('RgwTopicFormComponent', () => {
         RouterTestingModule,
         HttpClientTestingModule,
         SharedModule,
-        ToastrModule.forRoot(),
         SelectModule,
         GridModule,
         InputModule

@@ -296,6 +296,7 @@ public:
 
   void commit_and_share_paddr();
 
+  void maybe_sync_copied_lba_key();
 private:
   // the rewritten extent
   CachedExtent &extent;
@@ -687,11 +688,6 @@ public:
   /// Returns true if extent or prior_instance has been invalidated
   bool has_been_invalidated() const {
     return !is_valid() || (prior_instance && !prior_instance->is_valid());
-  }
-
-  /// Returns true if extent is a placeholder
-  bool is_placeholder() const {
-    return is_retired_placeholder_type(get_type());
   }
 
   bool is_pending_io() const {
@@ -1093,17 +1089,6 @@ protected:
       length(0),
       loaded_length(0) {
     assert(is_fully_loaded());
-    // must call init() to fully initialize
-  }
-
-  struct retired_placeholder_construct_t {};
-  CachedExtent(retired_placeholder_construct_t, extent_len_t _length)
-    : state(extent_state_t::CLEAN),
-      length(_length),
-      loaded_length(0),
-      buffer_space(std::in_place) {
-    assert(!is_fully_loaded());
-    assert(is_aligned(length, CEPH_PAGE_SIZE));
     // must call init() to fully initialize
   }
 

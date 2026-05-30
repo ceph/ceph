@@ -153,6 +153,9 @@ public:
     OP_COLL_SET_BITS = 42, // cid, bits
 
     OP_MERGE_COLLECTION = 43, // cid, destination
+#ifdef WITH_CRIMSON
+    OP_TOUCH_TEMP = 44, // cid, temp_oid, target_oid
+#endif
   };
 
   // Transaction hint type
@@ -439,6 +442,9 @@ public:
       op->oid = om[op->oid];
       break;
 
+#ifdef WITH_CRIMSON
+    case OP_TOUCH_TEMP:
+#endif
     case OP_CLONERANGE2:
     case OP_CLONE:
       ceph_assert(op->cid < cm.size());
@@ -856,6 +862,29 @@ public:
     _op->oid = _get_object_id(oid);
     data.ops = data.ops + 1;
   }
+#ifdef WITH_CRIMSON
+  /**
+   * touch_temp
+   *
+   * Ensure the existance of the temp recovering object in a collection.
+   * OP_TOUCH_TEMP exists for recovery/backfill objects. Unlike OP_TOUCH,
+   * the temp-recovering object must share the **same** laddr object pre-
+   * fixes of the target object. See "Multi-push Recovery" in doc/dev/crim-
+   * son/seastore_laddr.rst.
+   */
+  void touch_temp(
+    const coll_t& cid,
+    const ghobject_t &tmp_oid,
+    const ghobject_t &target_oid)
+  {
+    Op* _op = _get_next_op();
+    _op->op = OP_TOUCH_TEMP;
+    _op->cid = _get_coll_id(cid);
+    _op->oid = _get_object_id(tmp_oid);
+    _op->dest_oid = _get_object_id(target_oid);
+    data.ops = data.ops + 1;
+  }
+#endif
   /**
    * Write data to an offset within an object. If the object is too
    * small, it is expanded as needed.  It is possible to specify an

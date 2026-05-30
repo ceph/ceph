@@ -4,13 +4,12 @@ import { catchError, shareReplay, switchMap } from 'rxjs/operators';
 import { DaemonService } from '~/app/shared/api/daemon.service';
 import { HealthService } from '~/app/shared/api/health.service';
 import { UpgradeService } from '~/app/shared/api/upgrade.service';
-import { Icons } from '~/app/shared/enum/icons.enum';
+
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { Daemon } from '~/app/shared/models/daemon.interface';
 import { Permission } from '~/app/shared/models/permissions';
 import { UpgradeInfoInterface } from '~/app/shared/models/upgrade.interface';
-import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { SummaryService } from '~/app/shared/services/summary.service';
 import { ExecutingTask } from '~/app/shared/models/executing-task';
@@ -31,15 +30,12 @@ export class UpgradeComponent implements OnInit, OnDestroy {
   healthData$: Observable<any>;
   daemons$: Observable<Daemon[]>;
   fsid$: Observable<any>;
-  modalRef: NgbModalRef;
   upgradableVersions: string[];
   errorMessage: string;
   executingTasks: ExecutingTask;
   interval = new Subscription();
 
   columns: CdTableColumn[] = [];
-
-  icons = Icons;
 
   upgradeStatus$: Observable<any>;
   subject = new ReplaySubject<any>();
@@ -109,7 +105,7 @@ export class UpgradeComponent implements OnInit, OnDestroy {
   }
 
   startUpgradeModal() {
-    this.modalRef = this.upgradeService.startUpgradeModal();
+    this.upgradeService.startUpgradeModal();
   }
 
   fetchStatus() {

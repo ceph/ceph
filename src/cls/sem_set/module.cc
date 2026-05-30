@@ -259,7 +259,7 @@ int list(cls_method_context_t hctx, buffer::list *in, buffer::list *out)
     } catch (const sys::system_error& e) {
       CLS_ERR("CAN'T HAPPEN: %s: failed to decode seamaphore: %s",
 	      __PRETTY_FUNCTION__, e.what());
-      return ceph::from_error_code(e.code());;
+      return -EIO;
     }
     if (!more) {
       res.cursor.clear();

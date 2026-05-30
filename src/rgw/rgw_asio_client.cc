@@ -49,22 +49,12 @@ int ClientIO::init_env(CephContext *cct)
       continue;
     }
 
-    static const std::string_view HTTP_{"HTTP_"};
+    static constexpr std::string_view HTTP_{"HTTP_"};
 
-    char buf[name.size() + HTTP_.size() + 1];
-    auto dest = std::copy(std::begin(HTTP_), std::end(HTTP_), buf);
-    for (auto src = name.begin(); src != name.end(); ++src, ++dest) {
-      if (*src == '-') {
-        *dest = '_';
-      } else if (*src == '_') {
-        *dest = '-';
-      } else {
-        *dest = std::toupper(*src);
-      }
-    }
-    *dest = '\0';
-
-    env.set(buf, std::string(value));
+    std::string key{HTTP_};
+    key.reserve(name.size() + HTTP_.size());
+    uppercase_dash_transform(name, std::back_inserter(key), true);
+    env.set(std::move(key), std::string(value));
   }
 
   int major = request.version() / 10;

@@ -437,17 +437,17 @@ class TestMgmtGateway:
 
                                                  location /oauth2/ {
                                                      proxy_pass https://oauth2_proxy_servers;
-                                                     proxy_set_header Host $host;
+                                                     proxy_set_header Host $http_host;
                                                      proxy_set_header X-Real-IP $remote_addr;
                                                      proxy_set_header X-Scheme $scheme;
                                                      # Check for original-uri header
-                                                     proxy_set_header X-Auth-Request-Redirect $scheme://$host$request_uri;
+                                                     proxy_set_header X-Auth-Request-Redirect $scheme://$http_host$request_uri;
                                                  }
 
                                                  location = /oauth2/auth {
                                                      internal;
                                                      proxy_pass https://oauth2_proxy_servers;
-                                                     proxy_set_header Host $host;
+                                                     proxy_set_header Host $http_host;
                                                      proxy_set_header X-Real-IP $remote_addr;
                                                      proxy_set_header X-Scheme $scheme;
                                                      # nginx auth_request includes headers but not body
@@ -476,12 +476,12 @@ class TestMgmtGateway:
                                                      auth_request_set $auth_cookie $upstream_http_set_cookie;
                                                      add_header Set-Cookie $auth_cookie;
 
-                                                     proxy_set_header Host $host;
+                                                     proxy_set_header Host $http_host;
                                                      proxy_set_header X-Real-IP $remote_addr;
                                                      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                                                     proxy_set_header X-Forwarded-Host $host:80;
-                                                     proxy_set_header X-Forwarded-Port 80;
-                                                     proxy_set_header X-Forwarded-Server $host;
+                                                     proxy_set_header X-Forwarded-Host $http_host;
+                                                     proxy_set_header X-Forwarded-Port $server_port;
+                                                     proxy_set_header X-Forwarded-Server $http_host;
                                                      proxy_set_header X-Forwarded-Groups $groups;
 
                                                      proxy_http_version 1.1;
@@ -509,7 +509,7 @@ class TestMgmtGateway:
                                                      # Pass role header to Grafana
                                                      proxy_set_header X-WEBAUTH-ROLE $http_x_auth_request_role;
 
-                                                     proxy_set_header Host $host;
+                                                     proxy_set_header Host $http_host;
                                                      proxy_set_header X-Real-IP $remote_addr;
                                                      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
                                                      proxy_set_header X-Forwarded-Proto $scheme;

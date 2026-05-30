@@ -122,7 +122,8 @@ def with_osd_daemon(cephadm_module: CephadmOrchestrator, _run_cephadm, host: str
                     str(osd_id): [{
                         'tags': {
                             'ceph.cluster_fsid': cephadm_module._cluster_fsid,
-                            'ceph.osd_fsid': 'uuid'
+                            'ceph.osd_fsid': 'uuid',
+                            'ceph.osdspec_affinity': '',
                         },
                         'type': 'data'
                     }]
@@ -2562,7 +2563,8 @@ Traceback (most recent call last):
                 '1': [{
                     'tags': {
                         'ceph.cluster_fsid': cephadm_module._cluster_fsid,
-                        'ceph.osd_fsid': 'uuid'
+                        'ceph.osd_fsid': 'uuid',
+                        'ceph.osdspec_affinity': '',
                     },
                     'type': 'data'
                 }]
@@ -2606,13 +2608,15 @@ Traceback (most recent call last):
                         '1': [{
                             'tags': {
                                 'ceph.cluster_fsid': cephadm_module._cluster_fsid,
-                                'ceph.osd_fsid': 'uuid'
+                                'ceph.osd_fsid': 'uuid',
+                                'ceph.osdspec_affinity': '',
                             },
                             'type': 'data'
                         }, {
                             'tags': {
                                 'ceph.cluster_fsid': cephadm_module._cluster_fsid,
-                                'ceph.osd_fsid': 'uuid'
+                                'ceph.osd_fsid': 'uuid',
+                                'ceph.osdspec_affinity': '',
                             },
                             'type': 'db'
                         }]

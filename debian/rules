@@ -20,6 +20,7 @@ ifneq ($(filter pkg.ceph.crimson,$(DEB_BUILD_PROFILES)),)
 endif
 
 extraopts += -DWITH_JAEGER=ON
+extraopts += -DWITH_SYSTEM_JERASURE=ON
 extraopts += -DWITH_SYSTEM_UTF8PROC=ON
 extraopts += -DWITH_OCF=ON -DWITH_LTTNG=ON
 extraopts += -DWITH_MGR_DASHBOARD_FRONTEND=OFF
@@ -115,6 +116,8 @@ override_dh_strip:
 	dh_strip -pceph-exporter --dbg-package=ceph-exporter-dbg
 	dh_strip -pceph-mon --dbg-package=ceph-mon-dbg
 	dh_strip -pceph-osd --dbg-package=ceph-osd-dbg
+	dh_strip -pceph-osd-classic --dbg-package=ceph-osd-classic-dbg
+	dh_strip -pceph-osd-crimson --dbg-package=ceph-osd-crimson-dbg
 	dh_strip -pceph-base --dbg-package=ceph-base-dbg
 	dh_strip -pcephfs-mirror --dbg-package=cephfs-mirror-dbg
 	dh_strip -prbd-fuse --dbg-package=rbd-fuse-dbg

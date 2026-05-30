@@ -5,7 +5,7 @@ import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
-import { ToastrModule } from 'ngx-toastr';
+
 import { of as observableOf } from 'rxjs';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
@@ -21,13 +21,7 @@ describe('RgwMultisiteZonegroupFormComponent', () => {
   let rgwZonegroupService: RgwZonegroupService;
 
   configureTestBed({
-    imports: [
-      SharedModule,
-      ReactiveFormsModule,
-      RouterTestingModule,
-      HttpClientTestingModule,
-      ToastrModule.forRoot()
-    ],
+    imports: [SharedModule, ReactiveFormsModule, RouterTestingModule, HttpClientTestingModule],
     providers: [NgbActiveModal],
     declarations: [RgwMultisiteZonegroupFormComponent]
   });

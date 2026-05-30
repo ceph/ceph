@@ -1,9 +1,8 @@
 <ngb-alert type="info"
            [dismissible]="false">
   <strong>
-    <i [ngClass]="[icons.spinner, icons.spin]"
-       aria-hidden="true"
-       class="me-2"></i>
+    <cds-inline-loading aria-hidden="true"
+                        class="me-2"></cds-inline-loading>
   </strong>
   <ng-content></ng-content>
 </ngb-alert>

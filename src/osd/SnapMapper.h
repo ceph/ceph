@@ -331,9 +331,13 @@ private:
     return prefix_itr;
   }
 
-  /// reset the MapCacher backend, this should be called on pg interval change
-  void reset_backend() {
-    backend.reset();
+  /// Flush pending snap-mapper writes into the provided transaction,
+  /// then reset the MapCacher backend. This should be called on pg
+  /// interval change to ensure in-flight snap-mapper state is persisted
+  /// before the cache is cleared.
+  void flush_and_reset_backend(
+    MapCacher::Transaction<std::string, ceph::buffer::list> *t) {
+    backend.flush_and_reset(t);
   }
 
   /// Update snaps for oid, empty new_snaps removes the mapping

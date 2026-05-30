@@ -184,7 +184,10 @@ void PGScrubber::reserve_range(const hobject_t &start, const hobject_t &end)
 void PGScrubber::release_range()
 {
   LOG_PREFIX(PGScrubber::release_range);
-  ceph_assert(blocked);
+  if (!blocked) {
+    DEBUGDPP("range not reserved, skipping", pg);
+    return;
+  }
   DEBUGDPP("blocked: {}", pg, *blocked);
   pg.background_process_lock.unlock();
   blocked->p.set_value();

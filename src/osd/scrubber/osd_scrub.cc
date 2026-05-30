@@ -107,6 +107,11 @@ void OsdScrub::initiate_scrub(bool is_recovery_active)
 	<< dendl;
   }
 
+  {
+    auto stqt = m_osd_svc.get_snap_trim_queue_total();
+    dout(20) << fmt::format("snap_trim_queue_total: {}", stqt) << dendl;
+  }
+
   const utime_t scrub_time = ceph_clock_now();
 
   // check the OSD-wide environment conditions (scrub resources, time, etc.).
@@ -176,6 +181,10 @@ bool OsdScrub::is_sched_target_eligible(
   if (r.cpu_overloaded && ScrubJob::observes_load_limit(e.urgency)) {
     return false;
   }
+  if (r.overload_of_snap_trimming &&
+      ScrubJob::observes_trims_load(e.urgency)) {
+    return false;
+  }
   if (r.recovery_in_progress && ScrubJob::observes_recovery(e.urgency)) {
     return false;
   }
@@ -212,6 +221,11 @@ Scrub::OSDRestrictions OsdScrub::restrictions_on_scrubbing(
 
   env_conditions.restricted_time = !scrub_time_permit(scrub_clock_now);
   env_conditions.cpu_overloaded = !scrub_load_below_threshold();
+  const auto snaptrims_limit =
+      cct->_conf.get_val<uint64_t>("osd_scrub_queued_snaptrims_limit");
+  env_conditions.overload_of_snap_trimming =
+      (snaptrims_limit > 0) &&
+      (m_osd_svc.get_snap_trim_queue_total() > snaptrims_limit);
 
   return env_conditions;
 }

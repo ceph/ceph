@@ -1438,6 +1438,18 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         result = raise_if_exception(completion)
         return HandleCommandResult(stdout=json.dumps(result))
 
+    @OrchestratorCLICommand.Write('orch prometheus set-remote-write')
+    def _set_prometheus_remote_write(self, url: str, remote_write_allowed_metrics: List[str]) -> HandleCommandResult:
+        completion = self.set_prometheus_remote_write(url, remote_write_allowed_metrics)
+        result = raise_if_exception(completion)
+        return HandleCommandResult(stdout=json.dumps(result))
+
+    @OrchestratorCLICommand.Write('orch prometheus remove-remote-write')
+    def _remove_prometheus_remote_write(self, url: str) -> HandleCommandResult:
+        completion = self.remove_prometheus_remote_write(url)
+        result = raise_if_exception(completion)
+        return HandleCommandResult(stdout=json.dumps(result))
+
     @OrchestratorCLICommand.Write('orch alertmanager set-credentials')
     def _set_alertmanager_access_info(self, username: Optional[str] = None, password: Optional[str] = None, inbuf: Optional[str] = None) -> HandleCommandResult:
         try:
@@ -1645,10 +1657,19 @@ Usage:
             table._align['PGS'] = 'r'
             table.left_padding_width = 0
             table.right_padding_width = 2
-            for osd in sorted(report, key=lambda o: o.osd_id):
-                table.add_row([osd.osd_id, osd.hostname, osd.drain_status_human(),
-                               osd.get_pg_count(), osd.replace, osd.force, osd.zap,
-                               osd.drain_started_at or ''])
+            for osd in sorted(report, key=lambda o: o.get('osd_id')):
+                table.add_row(
+                    [
+                        osd.get('osd_id'),
+                        osd.get('hostname'),
+                        osd.get('drain_status'),
+                        osd.get('pg_count'),
+                        osd.get('replace'),
+                        osd.get('force'),
+                        osd.get('zap'),
+                        osd.get('drain_started_at') or ''
+                    ]
+                )
             out = table.get_string()
 
         return HandleCommandResult(stdout=out)
@@ -2117,12 +2138,15 @@ Usage:
                             no_overwrite: bool = False,
                             inbuf: Optional[str] = None) -> HandleCommandResult:
         """Add a cluster gateway service (cephadm only)"""
+        if inbuf:
+            raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
         spec = OAuth2ProxySpec(
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
-            https_address=https_address
+            https_address=https_address,
         )
+        spec.preview_only = dry_run
 
         spec.validate()  # force any validation exceptions to be caught correctly
 

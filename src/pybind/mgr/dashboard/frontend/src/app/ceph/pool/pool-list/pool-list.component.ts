@@ -113,6 +113,14 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
           this.monAllowPoolDelete = monSection.value === 'true' ? true : false;
         }
       });
+    } else if (this.permissions.pool?.read) {
+      /*
+     `monAllowPoolDelete` will always be `false`,
+      because no read permissions for reading config settings.
+      Hence enabling by default for pool based roles which allow CRUD.
+      @TODO: Fix once permissions of config-opt are sorted.
+    */
+      this.monAllowPoolDelete = true;
     }
   }
 

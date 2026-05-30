@@ -1038,7 +1038,9 @@ int add_zone_to_group(const DoutPrefixProvider* dpp, RGWZoneGroup& zonegroup,
   }
 
   // add/remove supported features
-  zone.supported_features.insert(enable_features.begin(),
+  zone.supported_features.insert(boost::container::ordered_unique_range,
+                                 enable_features.begin(),
+
                                  enable_features.end());
 
   for (const auto& feature : disable_features) {

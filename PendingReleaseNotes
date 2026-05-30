@@ -4,6 +4,12 @@
   developers must update their method calls to use these new structs, which ensure
   read/write semantics are correctly applied.
 
+* RGW: S3 ListObjects and ListObjectVersions now support the
+  ``x-amz-optional-object-attributes: RestoreStatus`` request header to include
+  restore status in listing responses. Restore status is stored in the bucket
+  index, so only objects written or restored after this upgrade will populate
+  the field. Existing objects are unaffected.
+* RGW: New S3 Control APIs to apply PublicAccessBlock configuration to User Accounts.
 * ceph-volume: Raw BlueStore OSD preparation now pre-formats NVMe devices and
   skips the slower BlueStore discard phase,reducing mkfs time on
   very large namespaces.
@@ -38,6 +44,13 @@
   and the scrubbing process is delayed between each read in order to avoid monopolizing
   the I/O capacity of the OSD.
   The default stride size (``osd_deep_scrub_stride``) was 512 KBytes, and is now 4 MBytes.
+* RADOS: When an OSD is overloaded with queued snap-trim operations, no
+  regular (non-urgent) scrubs will be scheduled on that OSD. This is
+  determined by comparing the total snap-trim queue lengths for all PGs
+  for which the OSD is a primary against ``osd_scrub_queued_snaptrims_limit``,
+  which defaults to 500.
+  This restriction does not apply to operator-initiated scrubs, nor to repair scrubs.
+  It can be disabled by setting ``osd_scrub_queued_snaptrims_limit`` to 0.
 
 * RADOS: Stretch mode can now be entered even if the two dividing buckets differ
   in weight by a small fraction (default 0.1). This is tunable via
@@ -87,6 +100,12 @@
   configured ratio of the main OSD data device size. This warning is
   informational and can be muted with:
   ``ceph health mute BLUESTORE_BLUEFS_OVERSIZED``
+* MGR: The Manager now automatically increases ``mgr_stats_period`` when its
+  message queue is congested, reducing daemon reporting frequency to prevent
+  overload. The period recovers automatically once the queue clears. This
+  behavior is controlled by the new ``mgr_stats_period_autotune`` (default:
+  ``true``) and ``mgr_stats_period_autotune_queue_threshold`` (default: ``100``)
+  config options.
 
 >=20.0.0
 

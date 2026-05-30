@@ -6469,6 +6469,12 @@ void OSD::tick_without_osd_lock()
   }
 
   if (is_active()) {
+    constexpr uint_fast16_t snap_trim_scan_interval = 5;
+    if (++trim_queue_length_countdown >= snap_trim_scan_interval) {
+      trim_queue_length_countdown = 0;
+      service.snap_trim_queue_total =
+	service.calc_snap_trim_queue_total();
+    }
     service.get_scrub_services().initiate_scrub(service.is_recovery_active());
     service.promote_throttle_recalibrate();
     resume_creating_pg();
@@ -7889,6 +7895,22 @@ std::optional<PGLockWrapper> OSDService::get_locked_pg(spg_t pgid)
   }
 }
 
+
+uint64_t OSDService::calc_snap_trim_queue_total()
+{
+  std::vector<spg_t> pgids;
+  osd->_get_pgids(&pgids);
+  uint64_t total = 0;
+  for (auto& pgid : pgids) {
+    if (auto locked_pg = get_locked_pg(pgid)) {
+      const auto& pg = locked_pg->pg();
+      if (pg->is_primary()) {
+	total += pg->get_snap_trimq_size();
+      }
+    }
+  }
+  return total;
+}
 
 MPGStats* OSD::collect_pg_stats()
 {

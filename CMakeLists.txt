@@ -733,6 +733,12 @@ if(sanitizers)
   string(APPEND CMAKE_SHARED_LINKER_FLAGS " ${sanitiers_compile_flags}")
 endif()
 
+# Jerasure & GF-Complete
+option(WITH_SYSTEM_JERASURE "require and build with system jerasure and gf-complete" OFF)
+if(WITH_SYSTEM_JERASURE)
+  find_package(Jerasure REQUIRED)
+endif()
+
 # Rocksdb
 option(WITH_SYSTEM_ROCKSDB "require and build with system rocksdb" OFF)
 if (WITH_SYSTEM_ROCKSDB)

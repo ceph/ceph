@@ -343,7 +343,7 @@ TEST_P(TestBackendBasics, DirectRead) {
     
     // Perform sync read with EC_DIRECT_READ flag
     // Read the entire stripe - we expect only this shard's data back
-    int read_result = ec_switch->objects_read_sync(
+    int read_result = ec_switch->objects_read_local(
       hoid,
       0,                                    // offset
       stripe_width,                         // length (full stripe)
@@ -385,12 +385,14 @@ namespace {
 
 const std::vector<BackendConfig> kBackendConfigs = {
   {PGBackendTestFixture::REPLICATED, "", "", 0, 4096, 4, 2, "Replicated"},
+#ifdef WITH_EC_ISA_PLUGIN
   {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  4, 2, "EC_ISA_Opt_k4m2_su4k"},
   {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  8192,  4, 2, "EC_ISA_Opt_k4m2_su8k"},
   {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  16384, 4, 2, "EC_ISA_Opt_k4m2_su16k"},
   {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  2, 1, "EC_ISA_Opt_k2m1_su4k"},
   {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  8, 3, "EC_ISA_Opt_k8m3_su4k"},
   {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES, 4096,  4, 2, "EC_ISA_NonOpt_k4m2_su4k"},
+#endif
   {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  4, 2, "EC_Jerasure_Opt_k4m2_su4k"},
   {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  8192,  4, 2, "EC_Jerasure_Opt_k4m2_su8k"},
   {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  16384, 4, 2, "EC_Jerasure_Opt_k4m2_su16k"},

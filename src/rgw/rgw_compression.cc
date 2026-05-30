@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_compression.h"
+#include "rgw_range_projection.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -182,37 +183,17 @@ int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len
 
 int RGWGetObj_Decompress::fixup_range(off_t& ofs, off_t& end)
 {
-  if (partial_content) {
-    // if user set range, we need to calculate it in decompressed data
-    first_block = cs_info->blocks.begin(); last_block = cs_info->blocks.begin();
-    if (cs_info->blocks.size() > 1) {
-      vector<compression_block>::iterator fb, lb;
-      // not bad to use auto for lambda, I think
-      auto cmp_u = [] (off_t ofs, const compression_block& e) { return (uint64_t)ofs < e.old_ofs; };
-      auto cmp_l = [] (const compression_block& e, off_t ofs) { return e.old_ofs <= (uint64_t)ofs; };
-      fb = upper_bound(cs_info->blocks.begin()+1,
-                       cs_info->blocks.end(),
-                       ofs,
-                       cmp_u);
-      first_block = fb - 1;
-      lb = lower_bound(fb,
-                       cs_info->blocks.end(),
-                       end,
-                       cmp_l);
-      last_block = lb - 1;
-    }
-  } else {
-    first_block = cs_info->blocks.begin(); last_block = cs_info->blocks.end() - 1;
-  }
+  auto result = project_compress_range(ofs, end, *cs_info, partial_content);
 
-  q_ofs = ofs - first_block->old_ofs;
-  q_len = end + 1 - ofs;
-
-  ofs = first_block->new_ofs;
-  end = last_block->new_ofs + last_block->len - 1;
-
-  cur_ofs = ofs;
+  first_block = cs_info->blocks.begin() + result.first_block_idx;
+  last_block = cs_info->blocks.begin() + result.last_block_idx;
+  q_ofs = result.q_ofs;
+  q_len = result.q_len;
+  cur_ofs = result.ofs;
   waiting.clear();
+
+  ofs = result.ofs;
+  end = result.end;
 
   return next->fixup_range(ofs, end);
 }

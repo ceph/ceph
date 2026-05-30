@@ -16,10 +16,12 @@ overrides:
       - Reduced data availability
       - Degraded data redundancy
       - pg .* is stuck inactive
+      - pg .* is stuck undersized
       - pg .* is .*degraded
       - FS_DEGRADED
       - OSDMAP_FLAGS
       - OSD_UPGRADE_FINISHED
+      - pg .* is stuck peering
       - Replacing daemon mds
       - MDS_ALL_DOWN
       - MDS_UP_LESS_THAN_MAX
@@ -31,6 +33,9 @@ overrides:
       - OBJECT_UNFOUND
       - OSD_HOST_DOWN
       - PG_DAMAGED
+      - CEPHADM_FAILED_DAEMON
+      - failed cephadm daemon
+      - osd.* is in unknown state
 tasks:
 - install:
     branch: tentacle

@@ -36,8 +36,8 @@ export class LogsPageHelper extends PageHelper {
     cy.get('input.form-control.ng-valid').first().clear().type(poolname);
 
     cy.get('.tab-pane.active')
-      .get('.card-body')
-      .get('.message')
+      .get('.log-viewer')
+      .get('.log-entry__message')
       .should('contain.text', poolname)
       .and('contain.text', `pool ${poolfunction}`);
   }
@@ -69,8 +69,8 @@ export class LogsPageHelper extends PageHelper {
     cy.get('input.form-control.ng-valid').first().clear().type(configname);
 
     cy.get('.tab-pane.active')
-      .get('.card-body')
-      .get('.message')
+      .get('.log-viewer')
+      .get('.log-entry__message')
       .should('contain.text', configname)
       .and('contain.text', setting);
   }

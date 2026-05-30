@@ -105,3 +105,17 @@ scrape_configs:
     static_configs:
     - targets: ['{{ url }}']
 {% endfor %}
+
+{% if remote_write_url != '' and remote_write_allowed_metrics != '' %}
+remote_write:
+  - url: {{ remote_write_url }}/api/v1/write
+    tls_config:
+      insecure_skip_verify: true
+    write_relabel_configs:
+      - source_labels: [__name__]
+        regex: '^({{ remote_write_allowed_metrics }})$'
+        action: keep
+      - source_labels: [__name__]
+        regex: 'ALERTS|ALERTS_FOR_STATE'
+        action: drop
+{% endif %}

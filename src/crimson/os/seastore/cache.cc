@@ -50,76 +50,50 @@ Cache::~Cache()
   ceph_assert(extents_index.empty());
 }
 
-// TODO: this method can probably be removed in the future
-Cache::retire_extent_ret Cache::retire_extent_addr(
-  Transaction &t, paddr_t paddr, extent_len_t length)
+CachedExtentRef Cache::retire_absent_extent_addr_by_type(
+  Transaction &t,
+  laddr_t laddr,
+  paddr_t addr,
+  extent_len_t length,
+  extent_types_t type,
+  extent_init_func_t &&extent_init_func)
 {
-  LOG_PREFIX(Cache::retire_extent_addr);
-  TRACET("retire {}~0x{:x}", t, paddr, length);
-
-  assert(paddr.is_real_location());
-
-  CachedExtentRef ext;
-  auto result = t.get_extent(paddr, &ext);
-  if (result == Transaction::get_extent_ret::PRESENT) {
-    DEBUGT("retire {}~0x{:x} on t -- {}",
-           t, paddr, length, *ext);
-    t.add_present_to_retired_set(ext);
-    return retire_extent_iertr::now();
-  } else if (result == Transaction::get_extent_ret::RETIRED) {
-    ERRORT("retire {}~0x{:x} failed, already retired -- {}",
-           t, paddr, length, *ext);
-    ceph_abort();
+  switch (type) {
+  case extent_types_t::ROOT_META:
+    return retire_absent_extent_addr<RootMetaBlock>(
+      t, laddr, addr, length, std::move(extent_init_func));
+  case extent_types_t::ONODE_BLOCK_STAGED:
+    return retire_absent_extent_addr<onode::SeastoreNodeExtent>(
+      t, laddr, addr, length, std::move(extent_init_func));
+  case extent_types_t::OMAP_INNER:
+    return retire_absent_extent_addr<omap_manager::OMapInnerNode>(
+      t, laddr, addr, length, std::move(extent_init_func));
+  case extent_types_t::OMAP_LEAF:
+    return retire_absent_extent_addr<omap_manager::OMapLeafNode>(
+      t, laddr, addr, length, std::move(extent_init_func));
+  case extent_types_t::COLL_BLOCK:
+    return retire_absent_extent_addr<collection_manager::CollectionNode>(
+      t, laddr, addr, length, std::move(extent_init_func));
+  case extent_types_t::TEST_BLOCK_PHYSICAL:
+    return retire_absent_extent_addr<TestBlockPhysical>(
+      t, laddr, addr, length, std::move(extent_init_func));
+  case extent_types_t::LOG_NODE:
+    return retire_absent_extent_addr<log_manager::LogNode>(
+      t, laddr, addr, length, std::move(extent_init_func));
+  case extent_types_t::OBJECT_DATA_BLOCK:
+    return retire_absent_extent_addr<ObjectDataBlock>(
+      t, laddr, addr, length, std::move(extent_init_func));
+  case extent_types_t::TEST_BLOCK:
+    return retire_absent_extent_addr<TestBlock>(
+      t, laddr, addr, length, std::move(extent_init_func));
+  case extent_types_t::NONE: {
+    ceph_assert(0 == "NONE is an invalid extent type");
+    return CachedExtentRef();
   }
-
-  // any record-relative or delayed paddr must have been on the transaction
-  assert(paddr.is_absolute());
-
-  // absent from transaction
-  // retiring is not included by the cache hit metrics
-  ext = query_cache(paddr);
-  if (ext) {
-    DEBUGT("retire {}~0x{:x} in cache -- {}", t, paddr, length, *ext);
-  } else {
-    // add a new placeholder to Cache
-    ext = CachedExtent::make_cached_extent_ref<
-      RetiredExtentPlaceholder>(length);
-    ext->init(
-      CachedExtent::extent_state_t::CLEAN, paddr,
-      PLACEMENT_HINT_NULL, NULL_GENERATION, TRANS_ID_NULL);
-    DEBUGT("retire {}~0x{:x} as placeholder, add extent -- {}",
-           t, paddr, length, *ext);
-    add_extent(ext);
+  default:
+    ceph_assert(0 == "impossible");
+    return CachedExtentRef();
   }
-  t.add_absent_to_retired_set(ext);
-  return retire_extent_iertr::now();
-}
-
-CachedExtentRef Cache::retire_absent_extent_addr(
-  Transaction &t, laddr_t laddr, paddr_t paddr, extent_len_t length)
-{
-  assert(paddr.is_absolute());
-
-  CachedExtentRef ext;
-#ifndef NDEBUG
-  auto result = t.get_extent(paddr, &ext);
-  assert(result != Transaction::get_extent_ret::PRESENT
-    && result != Transaction::get_extent_ret::RETIRED);
-  assert(!query_cache(paddr));
-#endif
-  LOG_PREFIX(Cache::retire_absent_extent_addr);
-  // add a new placeholder to Cache
-  ext = CachedExtent::make_cached_extent_ref<
-    RetiredExtentPlaceholder>(length);
-  ext->init(
-    CachedExtent::extent_state_t::CLEAN, paddr,
-    PLACEMENT_HINT_NULL, NULL_GENERATION, TRANS_ID_NULL);
-  static_cast<RetiredExtentPlaceholder&>(*ext).set_laddr(laddr);
-  DEBUGT("retire {}~0x{:x} as placeholder, add extent -- {}",
-	 t, paddr, length, *ext);
-  add_extent(ext);
-  t.add_absent_to_retired_set(ext);
-  return ext;
 }
 
 void Cache::dump_contents()
@@ -170,7 +144,6 @@ void Cache::register_metrics(store_index_t store_index)
     {extent_types_t::ONODE_BLOCK_STAGED,  {sm::label_instance("ext", "ONODE_BLOCK_STAGED")}},
     {extent_types_t::COLL_BLOCK,          {sm::label_instance("ext", "COLL_BLOCK")}},
     {extent_types_t::OBJECT_DATA_BLOCK,   {sm::label_instance("ext", "OBJECT_DATA_BLOCK")}},
-    {extent_types_t::RETIRED_PLACEHOLDER, {sm::label_instance("ext", "RETIRED_PLACEHOLDER")}},
     {extent_types_t::ALLOC_INFO,      	  {sm::label_instance("ext", "ALLOC_INFO")}},
     {extent_types_t::JOURNAL_TAIL,        {sm::label_instance("ext", "JOURNAL_TAIL")}},
     {extent_types_t::TEST_BLOCK,          {sm::label_instance("ext", "TEST_BLOCK")}},
@@ -519,7 +492,7 @@ void Cache::register_metrics(store_index_t store_index)
   }
 
   /**
-   * Cached extents (including placeholders)
+   * Cached extents
    *
    * Dirty extents
    */
@@ -922,7 +895,7 @@ void Cache::remove_extent(
          ref->get_paddr().is_root());
   if (ref->is_stable_dirty()) {
     remove_from_dirty(ref, p_src);
-  } else if (!ref->is_placeholder()) {
+  } else {
     assert(ref->get_paddr().is_absolute());
     pinboard->remove(*ref);
   }
@@ -1183,6 +1156,44 @@ void Cache::check_full_extent_integrity(
   }
 }
 
+CachedExtentRef Cache::alloc_remapped_extent_by_type(
+  Transaction &t,
+  extent_types_t type,
+  laddr_t remap_laddr,
+  paddr_t remap_paddr,
+  extent_len_t remap_offset,
+  extent_len_t remap_length,
+  const std::optional<ceph::bufferptr> &original_bptr)
+{
+  ceph_assert(is_logical_type(type));
+  switch (type) {
+  case extent_types_t::ROOT_META:
+    return alloc_remapped_extent<RootMetaBlock>(
+      t, remap_laddr, remap_paddr, remap_offset, remap_length, original_bptr);
+  case extent_types_t::OMAP_INNER:
+    return alloc_remapped_extent<omap_manager::OMapInnerNode>(
+      t, remap_laddr, remap_paddr, remap_offset, remap_length, original_bptr);
+  case extent_types_t::OMAP_LEAF:
+    return alloc_remapped_extent<omap_manager::OMapLeafNode>(
+      t, remap_laddr, remap_paddr, remap_offset, remap_length, original_bptr);
+  case extent_types_t::ONODE_BLOCK_STAGED:
+    return alloc_remapped_extent<onode::SeastoreNodeExtent>(
+      t, remap_laddr, remap_paddr, remap_offset, remap_length, original_bptr);
+  case extent_types_t::COLL_BLOCK:
+    return alloc_remapped_extent<collection_manager::CollectionNode>(
+      t, remap_laddr, remap_paddr, remap_offset, remap_length, original_bptr);
+  case extent_types_t::OBJECT_DATA_BLOCK:
+    return alloc_remapped_extent<ObjectDataBlock>(
+      t, remap_laddr, remap_paddr, remap_offset, remap_length, original_bptr);
+  case extent_types_t::TEST_BLOCK:
+    return alloc_remapped_extent<TestBlock>(
+      t, remap_laddr, remap_paddr, remap_offset, remap_length, original_bptr);
+  default:
+    ceph_abort("invalid extent type");
+    return CachedExtentRef();
+  }
+}
+
 CachedExtentRef Cache::alloc_new_non_data_extent_by_type(
   Transaction &t,        ///< [in, out] current transaction
   extent_types_t type,   ///< [in] type tag
@@ -1219,9 +1230,6 @@ CachedExtentRef Cache::alloc_new_non_data_extent_by_type(
   case extent_types_t::COLL_BLOCK:
     return alloc_new_non_data_extent<collection_manager::CollectionNode>(
       t, length, hint, gen);
-  case extent_types_t::RETIRED_PLACEHOLDER:
-    ceph_assert(0 == "impossible");
-    return CachedExtentRef();
   case extent_types_t::TEST_BLOCK_PHYSICAL:
     return alloc_new_non_data_extent<TestBlockPhysical>(t, length, hint, gen);
   case extent_types_t::LOG_NODE:
@@ -1348,7 +1356,6 @@ record_t Cache::prepare_record(
   auto trans_src = t.get_src();
   assert(!t.is_weak());
   assert(trans_src != Transaction::src_t::READ);
-  assert(t.read_set.size() + t.num_replace_placeholder == t.read_items.size());
 
   auto& efforts = get_by_src(stats.committed_efforts_by_src,
                              trans_src);
@@ -1545,8 +1552,7 @@ record_t Cache::prepare_record(
     }
 
     // Note: commit extents and backref allocations in the same place
-    if (is_backref_mapped_type(extent->get_type()) ||
-	is_retired_placeholder_type(extent->get_type())) {
+    if (is_backref_mapped_type(extent->get_type())) {
       DEBUGT("backref_entry free {}~0x{:x}",
 	     t,
 	     extent->get_paddr(),
@@ -2032,6 +2038,9 @@ void Cache::complete_commit(
       if (is_lba_backref_node(i->get_type())) {
         committer.commit_data();
       }
+      if (i->is_logical()) {
+        committer.maybe_sync_copied_lba_key();
+      }
       touch_extent_fully(prior, &t_src, t.get_cache_hint());
       committer.sync_version();
       committer.unblock_trans(t);
@@ -2345,9 +2354,6 @@ Cache::replay_delta(
       // replay is not included by the cache hit metrics
       auto ret = query_cache(addr);
       if (ret) {
-        // no retired-placeholder should be exist yet because no transaction
-        // has been created.
-        assert(!is_retired_placeholder_type(ret->get_type()));
         return ret->wait_io().then([ret] {
           return ret;
         });
@@ -2588,9 +2594,6 @@ Cache::_get_absent_extent_by_type(
   case extent_types_t::OBJECT_DATA_BLOCK:
     ret = CachedExtent::make_cached_extent_ref<ObjectDataBlock>(length);
     break;
-  case extent_types_t::RETIRED_PLACEHOLDER:
-    ceph_assert(0 == "impossible");
-    break;
   case extent_types_t::TEST_BLOCK:
     ret = CachedExtent::make_cached_extent_ref<TestBlock>(length);
     break;
@@ -2708,9 +2711,6 @@ Cache::do_get_caching_extent_by_type(
     ).safe_then([](auto extent) {
       return CachedExtentRef(extent.detach(), false /* add_ref */);
     });
-  case extent_types_t::RETIRED_PLACEHOLDER:
-    ceph_assert(0 == "impossible");
-    return get_extent_ertr::make_ready_future<CachedExtentRef>();
   case extent_types_t::TEST_BLOCK:
     return do_get_caching_extent<TestBlock>(
       offset, length, std::move(extent_init_func), std::move(on_cache), p_src

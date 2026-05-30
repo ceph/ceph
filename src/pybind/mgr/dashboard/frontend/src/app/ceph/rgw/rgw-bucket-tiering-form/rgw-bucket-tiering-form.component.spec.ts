@@ -5,7 +5,7 @@ import { configureTestBed } from '~/testing/unit-test-helper';
 import { of } from 'rxjs';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { ReactiveFormsModule } from '@angular/forms';
-import { ToastrModule } from 'ngx-toastr';
+
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import {
   InputModule,
@@ -37,7 +37,6 @@ describe('RgwBucketTieringFormComponent', () => {
       SelectModule,
       NumberModule,
       InputModule,
-      ToastrModule.forRoot(),
       ComponentsModule,
       ModalModule,
       RouterTestingModule

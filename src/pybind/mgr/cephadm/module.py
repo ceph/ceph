@@ -84,6 +84,7 @@ from .services.osd import OSDRemovalQueue, OSDService, OSD, NotFoundError
 from .services.monitoring import AlertmanagerService, PrometheusService
 from .services.node_proxy import NodeProxy
 from .services.smb import SMBService
+from .services.nvmeof import NvmeofService
 from .schedule import HostAssignment
 from .inventory import (
     Inventory,
@@ -412,6 +413,15 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             desc='Maximum number of OSD daemons upgraded in parallel.'
         ),
         Option(
+            'pg_autoscale_during_upgrade',
+            type='bool',
+            default=False,
+            desc='Opt-in to keep PG autoscaling enabled during OSD upgrades. '
+            'When False (default), cephadm disables pool autoscaling (sets noautoscale) '
+            'before OSD upgrades and restores it on completion/stop/failure. '
+            'Set to true to keep autoscaling on during upgrade.'
+        ),
+        Option(
             'service_discovery_port',
             type='int',
             default=8765,
@@ -578,6 +588,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.default_registry = ''
             self.autotune_memory_target_ratio = 0.0
             self.autotune_interval = 0
+            self.pg_autoscale_during_upgrade = False
             self.ssh_user: Optional[str] = None
             self._ssh_options: Optional[str] = None
             self.tkey = NamedTemporaryFile()
@@ -3463,6 +3474,55 @@ Then run the following:
         return 'prometheus multi-cluster targets updated'
 
     @handle_orch_error
+    def set_prometheus_remote_write(self, url: str, remote_write_allowed_metrics: List[str]) -> str:
+        if not url or not url.strip():
+            return 'Invalid URL. URL cannot be empty.'
+
+        try:
+            parsed_url = urlparse(url)
+            host = parsed_url.hostname
+
+            if parsed_url.scheme not in ('http', 'https'):
+                return 'Invalid URL. Scheme must be http or https.'
+            if not host:
+                return 'Invalid URL. Hostname is missing.'
+        except ValueError as e:
+            return f'Invalid url. {str(e)}'
+
+        prometheus_spec = cast(PrometheusSpec, self.spec_store['prometheus'].spec)
+        if not prometheus_spec:
+            return "Service prometheus not found\n"
+
+        if url == prometheus_spec.remote_write_url:
+            return f"Remote write URL '{url}' already exists.\n"
+
+        prometheus_spec.remote_write_url = url
+        prometheus_spec.remote_write_allowed_metrics = '|'.join(remote_write_allowed_metrics)
+
+        spec = ServiceSpec.from_json(prometheus_spec.to_json())
+        self.apply([spec], no_overwrite=False)
+
+        return 'prometheus remote write updated'
+
+    @handle_orch_error
+    def remove_prometheus_remote_write(self, url: str) -> str:
+        if not url or not url.strip():
+            return 'Invalid URL. URL cannot be empty.'
+
+        prometheus_spec = cast(PrometheusSpec, self.spec_store['prometheus'].spec)
+        if url == prometheus_spec.remote_write_url:
+            prometheus_spec.remote_write_url = ''
+            prometheus_spec.remote_write_allowed_metrics = ''
+        else:
+            return f"Remote write URL '{url}' does not exist.\n"
+        if not prometheus_spec:
+            return "Service prometheus not found\n"
+
+        spec = ServiceSpec.from_json(prometheus_spec.to_json())
+        self.apply([spec], no_overwrite=False)
+        return 'prometheus remote write removed'
+
+    @handle_orch_error
     def set_alertmanager_access_info(self, user: str, password: str) -> str:
         self.set_store(AlertmanagerService.USER_CFG_KEY, user)
         self.set_store(AlertmanagerService.PASS_CFG_KEY, password)
@@ -3525,6 +3585,12 @@ Then run the following:
     @handle_orch_error
     def cert_store_key_ls(self, include_cephadm_generated_keys: bool = False) -> Dict[str, Any]:
         return self.cert_mgr.key_ls(include_cephadm_generated_keys)
+
+    @handle_orch_error
+    def get_nvmeof_tls_bundle(self, service_name: str, daemon_name: str) -> Dict[str, str]:
+        nvmeof_svc = cast(NvmeofService, service_registry.get_service('nvmeof'))
+        tls_bundle = nvmeof_svc.get_nvmeof_tls_bundle(service_name, daemon_name)
+        return tls_bundle._asdict() if tls_bundle else {}
 
     @handle_orch_error
     def cert_store_get_cert(
@@ -3889,17 +3955,55 @@ Then run the following:
 
     def _check_cert_source(self, spec: ServiceSpec) -> str:
         cert_warning = ''
+        # Warn the user when certificate_source is changing, as this will
+        # trigger a service reconfiguration that may cause client disconnections,
+        # CA trust chain changes, or temporary TLS downtime.
+        if spec.service_name() in self.spec_store:
+            old_spec = self.spec_store[spec.service_name()].spec
+            old_source = getattr(old_spec, 'certificate_source', None)
+            new_source = getattr(spec, 'certificate_source', None)
+            if old_source and new_source and old_source != new_source:
+                cert_warning = (
+                    f"\n\nWarning: 'certificate_source' changed from '{old_source}' to "
+                    f"'{new_source}' for service '{spec.service_name()}'.\n"
+                    f"This will trigger a service reconfiguration on the next reconciliation cycle, which may cause\n"
+                    f"temporary client disconnections and/or a change in the TLS certificate authority trust chain.\n"
+                )
+                self.log.warning(
+                    f"certificate_source changed from '{old_source}' to '{new_source}' "
+                    f"for service '{spec.service_name()}'. This will trigger a service "
+                    f"reconfiguration."
+                )
+
         if spec.is_using_certificates_source(CertificateSource.REFERENCE):
             svc = service_registry.get_service(spec.service_type)
             if svc.SCOPE == TLSObjectScope.SERVICE:
+                # If the service was previously configured with INLINE, the cert/key
+                # may exist in the certmgr store as non-editable (inline-saved).
+                # When switching to REFERENCE, those inline-saved entries must be
+                # removed to avoid "pinning" the service to the old inline values and
+                # to allow the user to provision editable entries via the certmgr CLI.
+                if self.cert_mgr.cert_exists(svc.cert_name, service_name=spec.service_name(), host=None) and \
+                        not self.cert_mgr.is_cert_editable(svc.cert_name, service_name=spec.service_name(), host=None):
+                    self.log.info(
+                        f"Removing inline-saved (non-editable) cert/key for '{spec.service_name()}' "
+                        f"before switching to '{CertificateSource.REFERENCE.value}'."
+                    )
+                    self.cert_mgr.rm_inline_saved_cert_key_pair(
+                        svc.cert_name,
+                        svc.key_name,
+                        service_name=spec.service_name(),
+                        host=None,
+                        ca_cert_name=getattr(svc, 'ca_cert_name', None),
+                    )
                 if not self.cert_mgr.cert_exists(svc.cert_name, service_name=spec.service_name(), host=None):
                     raise OrchestratorError(
                         f"\n\nSSL is configured with '{CertificateSource.REFERENCE.value}', but cannot find an entry for the service '{spec.service_name()}'"
                         f"\nunder the certificate '{svc.cert_name}' within the certmgr store. To set the certificate, use:\n"
-                        f"\n  > ceph orch certmgr cert set --cert-name {svc.cert_name} --service-name {spec.service_name()} -i <cert-key-pem-file> \n"
+                        f"\n  > ceph orch certmgr cert-key set --consumer {spec.service_type} --service-name {spec.service_name()} -i <cert-key-pem-file> \n"
                     )
             else:
-                cert_warning = (
+                cert_warning += (
                     f"\n\n\nWarning: SSL is configured with '{CertificateSource.REFERENCE.value}', and this service uses per-host certificates.\n\n"
                     f"To configure keys/certificates, run the following commands for each host daemons are deployed on:\n"
                     f"  > ceph orch certmgr cert set --cert-name {svc.cert_name} --service-name {spec.service_name()} --hostname <host>  -i <cert-file>\n"
@@ -4394,11 +4498,11 @@ Then run the following:
         return "Stopped OSD(s) removal"
 
     @handle_orch_error
-    def remove_osds_status(self) -> List[OSD]:
+    def remove_osds_status(self) -> List[Dict[str, Any]]:
         """
         The CLI call to retrieve an osd removal report
         """
-        return self.to_remove_osds.all_osds()
+        return self.to_remove_osds.all_osds_status_json()
 
     @handle_orch_error
     def set_osd_spec(self, service_name: str, osd_ids: List[str]) -> str:

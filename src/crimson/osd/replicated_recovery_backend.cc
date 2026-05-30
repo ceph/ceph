@@ -1232,7 +1232,14 @@ ReplicatedRecoveryBackend::prep_push_target(
   // create a new object
   if (!complete || !recovery_info.object_exist) {
     t->remove(coll->get_cid(), target_oid);
-    t->touch(coll->get_cid(), target_oid);
+    if (complete) {
+      t->touch(coll->get_cid(), target_oid);
+    } else {
+      t->touch_temp(
+        coll->get_cid(),
+        target_oid,
+        ghobject_t(recovery_info.soid));
+    }
     object_info_t oi;
     oi.decode(attrs.at(OI_ATTR));
     t->set_alloc_hint(coll->get_cid(), target_oid,

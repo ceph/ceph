@@ -16,6 +16,7 @@
 #include "common/dout.h"
 #include "rgw_dedup_utils.h"
 #include "rgw_dedup_store.h"
+#include "rgw_dedup_filter.h"
 #include <string>
 
 namespace rgw::dedup {
@@ -101,7 +102,8 @@ namespace rgw::dedup {
                                urgent_msg_t urgent_msg);
     static int   dedup_restart_scan(rgw::sal::RadosStore *store,
                                     dedup_req_type_t dedup_type,
-                                    const DoutPrefixProvider *dpp);
+                                    const DoutPrefixProvider *dpp,
+                                    const dedup_filter_t *p_filter = nullptr);
 
     //---------------------------------------------------------------------------
     int mark_work_shard_token_completed(rgw::sal::RadosStore *store,

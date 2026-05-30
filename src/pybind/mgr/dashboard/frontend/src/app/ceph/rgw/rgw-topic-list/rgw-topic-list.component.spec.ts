@@ -7,7 +7,6 @@ import { RgwTopicDetailsComponent } from '../rgw-topic-details/rgw-topic-details
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 import { RgwTopicService } from '~/app/shared/api/rgw-topic.service';
 
@@ -28,7 +27,6 @@ describe('RgwTopicListComponent', () => {
         BrowserAnimationsModule,
         SharedModule,
         HttpClientTestingModule,
-        ToastrModule.forRoot(),
         RouterTestingModule
       ],
       declarations: [RgwTopicListComponent]

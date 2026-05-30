@@ -9,27 +9,11 @@
 
 namespace crimson::os::seastore {
 
-struct RetiredExtentPlaceholderInvalidater {
-  virtual void invalidate_retired_placeholder(
-    Transaction &t,
-    CachedExtent &retired_placeholder,
-    CachedExtent &extent) = 0;
-};
-
 template <typename ParentT>
 class child_pos_t {
 public:
   child_pos_t(TCachedExtentRef<ParentT> stable_parent, btreenode_pos_t pos)
     : stable_parent(stable_parent), pos(pos) {}
-  child_pos_t(
-    TCachedExtentRef<ParentT> stable_parent,
-    btreenode_pos_t pos,
-    CachedExtent* placeholder)
-    : stable_parent(stable_parent),
-      pos(pos),
-      retired_placeholder(placeholder) {
-    assert(retired_placeholder->is_placeholder());
-  }
 
   TCachedExtentRef<ParentT> get_parent() {
     ceph_assert(stable_parent);
@@ -42,18 +26,9 @@ public:
   void link_child(ChildT *c) {
     get_parent()->link_child(c, pos);
   }
-  void invalidate_retired_placeholder(
-    Transaction &t,
-    RetiredExtentPlaceholderInvalidater &repi,
-    CachedExtent &extent) {
-    if (retired_placeholder) {
-      repi.invalidate_retired_placeholder(t, *retired_placeholder, extent);
-    }
-  }
 private:
   TCachedExtentRef<ParentT> stable_parent;
   btreenode_pos_t pos = std::numeric_limits<btreenode_pos_t>::max();
-  CachedExtentRef retired_placeholder;
 };
 
 using get_child_iertr = trans_iertr<crimson::errorator<
@@ -236,7 +211,6 @@ public:
     return parent_tracker->get_parent();
   }
   virtual key_t node_begin() const = 0;
-  virtual bool is_retired_placeholder() const = 0;
   virtual bool _is_pending_io() const = 0;
   virtual bool _is_mutable() const = 0;
   virtual bool _is_exist_clean() const = 0;
@@ -353,6 +327,21 @@ public:
   }
 
   template <typename ChildT>
+  TCachedExtentRef<ChildT> get_child_sync(
+    Transaction &t,
+    ExtentTransViewRetriever &etvr,
+    btreenode_pos_t pos,
+    node_key_t key)
+  {
+    assert(children.capacity());
+    assert(key == down_cast().iter_idx(pos).get_key());
+    auto child = children[pos];
+    ceph_assert(!is_reserved_ptr(child));
+    assert(is_valid_child_ptr(child));
+    return static_cast<ChildT*>(child);
+  }
+
+  template <typename ChildT>
   get_child_ret_t<T, ChildT> get_child(
     Transaction &t,
     ExtentTransViewRetriever &etvr,
@@ -365,26 +354,15 @@ public:
     auto child = children[pos];
     ceph_assert(!is_reserved_ptr(child));
     if (is_valid_child_ptr(child)) {
-      if (child->is_retired_placeholder()) {
-	assert(me.is_stable());
-	return child_pos_t<T>(
-	  &me, pos, dynamic_cast<CachedExtent*>(child));
-      } else {
-	return etvr.get_extent_viewable_by_trans<ChildT>(
-	  t, static_cast<ChildT*>(child));
-      }
+      return etvr.get_extent_viewable_by_trans<ChildT>(
+        t, static_cast<ChildT*>(child));
     } else if (me.is_pending()) {
       auto &sparent = me.get_stable_for_key(key);
       auto spos = sparent.lower_bound(key).get_offset();
       auto child = sparent.children[spos];
       if (is_valid_child_ptr(child)) {
-	if (child->is_retired_placeholder()) {
-	  return child_pos_t<T>(
-	    &sparent, spos, dynamic_cast<CachedExtent*>(child));
-	} else {
-	  return etvr.get_extent_viewable_by_trans<ChildT>(
-	    t, static_cast<ChildT*>(child));
-	}
+        return etvr.get_extent_viewable_by_trans<ChildT>(
+          t, static_cast<ChildT*>(child));
       } else {
 	return child_pos_t<T>(&sparent, spos);
       }
@@ -402,7 +380,6 @@ public:
     assert(child->_is_stable());
     if (unlikely(children[pos] != nullptr)) {
       assert(is_valid_child_ptr(children[pos]));
-      assert(children[pos]->is_retired_placeholder());
     }
     ceph_assert(is_valid_child_ptr(child));
     update_child_ptr(pos, child);
@@ -461,6 +438,10 @@ public:
     } else {
       return static_cast<copy_dests_t*>(&*iter);
     }
+  }
+
+  void reset_child_ptr(btreenode_pos_t pos) {
+    children[pos] = get_reserved_ptr<T, node_key_t>();
   }
 
 protected:
@@ -1107,10 +1088,6 @@ public:
     }
   }
 
-  bool is_retired_placeholder() const final {
-    auto &me = down_cast();
-    return me.is_placeholder();
-  }
 protected:
   void on_invalidated() {
     this->reset_parent_tracker();

@@ -999,6 +999,8 @@ class ServiceSpec(object):
                  preview_only: bool = False,
                  networks: Optional[List[str]] = None,
                  targets: Optional[List[str]] = None,
+                 remote_write_url: Optional[str] = None,
+                 remote_write_allowed_metrics: Optional[str] = None,
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
@@ -1047,6 +1049,8 @@ class ServiceSpec(object):
         #: :ref:`cephadm-rgw-networks` and :ref:`cephadm-mgr-networks`.
         self.networks: List[str] = networks or []
         self.targets: List[str] = targets or []
+        self.remote_write_url = remote_write_url
+        self.remote_write_allowed_metrics = remote_write_allowed_metrics
 
         self.config: Optional[Dict[str, str]] = None
         if config:
@@ -2200,18 +2204,19 @@ class NvmeofServiceSpec(ServiceSpec):
         data = super().to_json()
         spec = data.setdefault('spec', {})
 
-        if self.ssl:
-            if self.server_cert and self.server_key:
-                spec['server_cert'] = self.server_cert
-                spec['server_key'] = self.server_key
-            else:
-                spec['ssl_cert'] = self.ssl_cert
-                spec['ssl_key'] = self.ssl_key
+        if self.certificate_source == CertificateSource.INLINE.value:
+            if self.ssl:
+                if self.server_cert and self.server_key:
+                    spec['server_cert'] = self.server_cert
+                    spec['server_key'] = self.server_key
+                else:
+                    spec['ssl_cert'] = self.ssl_cert
+                    spec['ssl_key'] = self.ssl_key
 
-        if self.enable_auth:
-            spec['client_cert'] = self.client_cert
-            spec['client_key'] = self.client_key
-            spec['root_ca_cert'] = self.root_ca_cert
+            if self.enable_auth:
+                spec['client_cert'] = self.client_cert
+                spec['client_key'] = self.client_key
+                spec['root_ca_cert'] = self.root_ca_cert
 
         return data
 
@@ -2800,6 +2805,22 @@ class OAuth2ProxySpec(ServiceSpec):
 
     def validate(self) -> None:
         super(OAuth2ProxySpec, self).validate()
+        required_values = {
+            'provider_display_name': self.provider_display_name,
+            'oidc_issuer_url': self.oidc_issuer_url,
+            'client_id': self.client_id,
+            'client_secret': self.client_secret,
+        }
+        missing_required_fields = [
+            field for field, value in required_values.items()
+            if value is None or (isinstance(value, str) and not value.strip())
+        ]
+        if missing_required_fields:
+            raise SpecValidationError(
+                'Missing required fields for oauth2-proxy: '
+                + ', '.join(missing_required_fields)
+                + '.'
+            )
         self._validate_non_empty_string(self.provider_display_name, "provider_display_name")
         self._validate_non_empty_string(self.client_id, "client_id")
         self._validate_non_empty_string(self.client_secret, "client_secret")
@@ -3091,6 +3112,8 @@ class MonitoringSpec(ServiceSpec):
                  preview_only: bool = False,
                  port: Optional[int] = None,
                  targets: Optional[List[str]] = None,
+                 remote_write_url: Optional[str] = None,
+                 remote_write_allowed_metrics: Optional[str] = None,
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
@@ -3105,7 +3128,9 @@ class MonitoringSpec(ServiceSpec):
             preview_only=preview_only, config=config,
             networks=networks, extra_container_args=extra_container_args,
             extra_entrypoint_args=extra_entrypoint_args,
-            custom_configs=custom_configs, targets=targets)
+            custom_configs=custom_configs, targets=targets,
+            remote_write_url=remote_write_url,
+            remote_write_allowed_metrics=remote_write_allowed_metrics)
 
         self.service_type = service_type
         self.port = port
@@ -3278,6 +3303,8 @@ class PrometheusSpec(MonitoringSpec):
                  retention_time: Optional[str] = None,
                  retention_size: Optional[str] = None,
                  targets: Optional[List[str]] = None,
+                 remote_write_url: Optional[str] = None,
+                 remote_write_allowed_metrics: Optional[str] = None,
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
@@ -3289,7 +3316,8 @@ class PrometheusSpec(MonitoringSpec):
             ssl=ssl, certificate_source=certificate_source,
             preview_only=preview_only, config=config, networks=networks, port=port, targets=targets,
             extra_container_args=extra_container_args, extra_entrypoint_args=extra_entrypoint_args,
-            custom_configs=custom_configs)
+            custom_configs=custom_configs, remote_write_url=remote_write_url,
+            remote_write_allowed_metrics=remote_write_allowed_metrics)
 
         self.retention_time = retention_time.strip() if retention_time else None
         self.retention_size = retention_size.strip() if retention_size else None

@@ -7,7 +7,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbPopoverModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import moment from 'moment';
-import { ToastrModule } from 'ngx-toastr';
+
 import { of, throwError } from 'rxjs';
 
 import { DashboardNotFoundError } from '~/app/core/error/error';
@@ -62,7 +62,6 @@ describe('SilenceFormComponent', () => {
       HttpClientTestingModule,
       RouterTestingModule.withRoutes(routes),
       SharedModule,
-      ToastrModule.forRoot(),
       NgbTooltipModule,
       NgbPopoverModule,
       ReactiveFormsModule

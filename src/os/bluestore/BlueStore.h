@@ -3010,8 +3010,8 @@ private:
     shared_blob_2hash_tracker_t& sb_ref_counts,
     sb_info_space_efficient_map_t& sb_info);
 
-  int _fsck(FSCKDepth depth, bool repair);
-  int _fsck_on_open(BlueStore::FSCKDepth depth, bool repair);
+  int _fsck(FSCKDepth depth, bool repair, bluestore_stats_t *store_stats = nullptr);
+  int _fsck_on_open(BlueStore::FSCKDepth depth, bool repair, bluestore_stats_t *store_stats);
 
   void _buffer_cache_write(
     TransContext *txc,
@@ -3219,6 +3219,9 @@ public:
 
 
 public:
+  int fsck_with_stats(bool deep, bluestore_stats_t &store_stats) {
+    return _fsck(deep ? FSCK_DEEP : FSCK_REGULAR, false, &store_stats);
+  }
   int statfs(struct store_statfs_t *buf,
              osd_alert_list_t* alerts = nullptr) override;
   int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf,

@@ -167,8 +167,8 @@ In this configuration, 4 daemons total are deployed (2 per host), distributed ac
      ``monitoring_port`` from the spec.
    * The number of entries in ``colocation_ports`` should be ``count - 1``,
      to cover the node down scenario (or ``count_per_host - 1`` when using ``count_per_host``).
-   * Each entry must specify both ``data_port`` and ``monitoring_port``. When
-     ``enable_rdma`` is true, each entry must also include ``rdma_port``.
+   * Each entry must specify ``data_port``, ``monitoring_port``, and ``qos_cluster_port``.
+     When ``enable_rdma`` is true, each entry must also include ``rdma_port``.
    * If ``colocation_ports`` is not specified, ports will be automatically
      incremented for colocated daemons (e.g., 2049 → 2050 → 2051 for data ports,
      and 9587 → 9588 → 9589 for monitoring ports).

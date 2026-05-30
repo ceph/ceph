@@ -127,6 +127,10 @@ class OSD final : public crimson::net::Dispatcher,
 
   std::unique_ptr<Heartbeat> heartbeat;
   seastar::timer<seastar::lowres_clock> tick_timer;
+  uint_fast16_t trim_queue_length_countdown = 0;
+  /// caching the total snap trim queue length across all PGs,
+  /// updated periodically by the tick_timer
+  uint64_t snap_trim_queue_total = 0;
 
   seastar::timer<seastar::lowres_clock> stats_timer;
   std::vector<ShardServices::shard_stats_t> shard_stats;

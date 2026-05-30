@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+import tempfile
 import time
 import uuid
 import xml.etree.ElementTree as ET  # noqa: N814
@@ -30,6 +31,7 @@ from .. import mgr
 from ..awsauth import S3Auth
 from ..controllers.multi_cluster import MultiCluster
 from ..exceptions import DashboardException
+from ..model.certificate import CEPHADM_ROOT_CA_CERT
 from ..rest_client import RequestException, RestClient
 from ..settings import Settings
 from ..tools import dict_contains_path, dict_get, json_str_to_object, str_to_bool
@@ -77,6 +79,10 @@ class RgwDaemon:
     zonegroup_name: str
     zonegroup_id: str
     zone_name: str
+
+
+_RGW_CEPHADM_CA_BUNDLE_DIR = os.path.join(tempfile.gettempdir(), 'ceph-dashboard-ca')
+_RGW_CEPHADM_CA_BUNDLE_PATH = os.path.join(_RGW_CEPHADM_CA_BUNDLE_DIR, 'rgw-cephadm-root-ca.pem')
 
 
 def _get_daemons() -> Dict[str, RgwDaemon]:
@@ -244,6 +250,7 @@ class RgwClient(RestClient):
     _config_instances = {}  # type: Dict[str, RgwClient]
     _rgw_settings_snapshot = None
     _daemons: Dict[str, RgwDaemon] = {}
+    _ssl_ca_bundle_written: bool = False
     daemon: RgwDaemon
     got_keys_from_config: bool
     userid: str
@@ -386,6 +393,55 @@ class RgwClient(RestClient):
         self.auth = S3Auth(keys['access_key'], keys['secret_key'],
                            service_url=self.service_url)
 
+    @classmethod
+    def _get_ssl_ca_bundle(cls, fallback):
+        """Fetch the cephadm root CA cert and write it to a fixed file for SSL verification.
+
+        The file lives under a mgr-owned subdirectory of /tmp so that
+        os.replace works without sticky-bit issues.  Falls back to the provided
+        default if the cert store is unavailable or the root CA certificate is
+        not found.  The file is refreshed after _SSL_CA_BUNDLE_TTL seconds to
+        pick up CA rotations.
+        """
+        path = _RGW_CEPHADM_CA_BUNDLE_PATH
+        if (cls._ssl_ca_bundle_written
+                and os.path.isfile(path)
+                and os.path.getsize(path) > 0):
+            return path
+        try:
+            orch = OrchClient.instance()
+            if not orch.available():
+                logger.warning("Orchestrator is not available, "
+                               "cannot fetch root CA cert for RGW SSL verification")
+                return fallback
+            root_ca_cert = orch.cert_store.get_cert(CEPHADM_ROOT_CA_CERT)
+            if not root_ca_cert:
+                logger.warning("cephadm root CA cert not found in cert store, "
+                               "falling back to default SSL verification")
+                return fallback
+            os.makedirs(_RGW_CEPHADM_CA_BUNDLE_DIR, mode=0o700, exist_ok=True)
+            fd, tmp_path = tempfile.mkstemp(
+                dir=_RGW_CEPHADM_CA_BUNDLE_DIR, prefix='.rgw-ca-', suffix='.tmp')
+            try:
+                with os.fdopen(fd, 'wb') as tmp_file:
+                    os.fchmod(tmp_file.fileno(), 0o600)
+                    tmp_file.write(root_ca_cert.encode('utf-8'))
+                os.replace(tmp_path, path)
+            except Exception:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
+            cls._ssl_ca_bundle_written = True
+            logger.info("Using cephadm root CA cert for RGW SSL verification: %s", path)
+            return path
+        except Exception as ex:  # pylint: disable=broad-except
+            logger.warning("Could not fetch cephadm root CA cert: %s. "
+                           "Falling back to default SSL verification", ex,
+                           exc_info=True)
+        return fallback
+
     def __init__(self,
                  access_key: str,
                  secret_key: str,
@@ -398,6 +454,8 @@ class RgwClient(RestClient):
                                      http_status_code=404,
                                      component='rgw')
         ssl_verify = Settings.RGW_API_SSL_VERIFY
+        if ssl_verify and daemon.ssl:
+            ssl_verify = RgwClient._get_ssl_ca_bundle(ssl_verify)
         self.admin_path = Settings.RGW_API_ADMIN_RESOURCE
         self.service_url = build_url(host=daemon.host, port=daemon.port)
 
@@ -422,7 +480,7 @@ class RgwClient(RestClient):
                                      component='rgw')
         self.daemon = daemon
 
-        logger.info("Created new connection: daemon=%s, host=%s, port=%s, ssl=%d, sslverify=%d",
+        logger.info("Created new connection: daemon=%s, host=%s, port=%s, ssl=%d, sslverify=%s",
                     daemon.name, daemon.host, daemon.port, daemon.ssl, ssl_verify)
 
     @RestClient.api_get('/', resp_structure='[0] > (ID & DisplayName)')

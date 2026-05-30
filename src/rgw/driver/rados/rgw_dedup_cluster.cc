@@ -1028,10 +1028,10 @@ namespace rgw::dedup {
     {
       std::map<std::string, member_time_t> owner_map;
       bool show_time = true;
-      bufferlist bl_arr[num_work_shards];
-      shard_progress_t sp_arr[num_work_shards];
+      std::vector<bufferlist> bl_arr(num_work_shards);
+      std::vector<shard_progress_t> sp_arr(num_work_shards);
       int cnt = collect_shard_stats(store, dpp, epoch.time, num_work_shards,
-                                    WORKER_SHARD_PREFIX, bl_arr, sp_arr);
+                                    WORKER_SHARD_PREFIX, bl_arr.data(), sp_arr.data());
       if (cnt != num_work_shards && 0) {
         std::cerr << ">>>Partial work shard stats recived " << cnt << " / "
                   << num_work_shards << "\n" << std::endl;
@@ -1053,11 +1053,11 @@ namespace rgw::dedup {
           std::cerr << __func__ << "::(2)failed worker_stats_t decode #" << shard << std::endl;
           continue;
         }
-        collect_single_shard_stats(dpp, owner_map, sp_arr, shard, &show_time, "WORKER");
+        collect_single_shard_stats(dpp, owner_map, sp_arr.data(), shard, &show_time, "WORKER");
       }
       Formatter::ObjectSection worker_stats(*fmt, "worker_stats");
-      wrk_stats_sum.dump(fmt);
-      show_incomplete_shards_fmt(has_incomplete_shards, num_work_shards, sp_arr, fmt);
+      wrk_stats_sum.dump(fmt, num_work_shards);
+      show_incomplete_shards_fmt(has_incomplete_shards, num_work_shards, sp_arr.data(), fmt);
       md5_start_time = show_time_func_fmt(epoch.time, show_time, owner_map, fmt);
     }
 
@@ -1065,10 +1065,10 @@ namespace rgw::dedup {
       std::map<std::string, member_time_t> owner_map;
       bool show_time = true;
       md5_stats_t md5_stats_sum;
-      bufferlist bl_arr[num_md5_shards];
-      shard_progress_t sp_arr[num_md5_shards];
+      std::vector<bufferlist> bl_arr(num_md5_shards);
+      std::vector<shard_progress_t> sp_arr(num_md5_shards);
       int cnt = collect_shard_stats(store, dpp, epoch.time, num_md5_shards,
-                                    MD5_SHARD_PREFIX, bl_arr, sp_arr);
+                                    MD5_SHARD_PREFIX, bl_arr.data(), sp_arr.data());
       if (cnt != num_md5_shards && 0) {
         std::cerr << ">>>Partial MD5_SHARD stats recived " << cnt << " / "
                   << num_md5_shards << "\n" << std::endl;
@@ -1090,12 +1090,12 @@ namespace rgw::dedup {
           std::cerr << __func__ << "::failed md5_stats_t decode #" << shard << std::endl;
           continue;
         }
-        collect_single_shard_stats(dpp, owner_map, sp_arr, shard, &show_time, "MD5");
+        collect_single_shard_stats(dpp, owner_map, sp_arr.data(), shard, &show_time, "MD5");
       }
       {
         Formatter::ObjectSection outer(*fmt, "md5_stats");
         md5_stats_sum.dump(fmt);
-        show_incomplete_shards_fmt(has_incomplete_shards, num_md5_shards, sp_arr, fmt);
+        show_incomplete_shards_fmt(has_incomplete_shards, num_md5_shards, sp_arr.data(), fmt);
         show_time_func_fmt(md5_start_time, show_time, owner_map, fmt);
       }
       show_dedup_ratio_estimate_fmt(wrk_stats_sum, md5_stats_sum, fmt);
@@ -1295,7 +1295,8 @@ namespace rgw::dedup {
   // command-line called from radosgw-admin.cc
   int cluster::dedup_restart_scan(rgw::sal::RadosStore *store,
                                   dedup_req_type_t dedup_type,
-                                  const DoutPrefixProvider *dpp)
+                                  const DoutPrefixProvider *dpp,
+                                  const dedup_filter_t *p_filter)
   {
     ldpp_dout(dpp, 1) << __func__ << "::dedup_type = " << dedup_type << dendl;
 
@@ -1337,7 +1338,30 @@ namespace rgw::dedup {
     ret = swap_epoch(store, dpp, &old_epoch, dedup_type, 0, 0);
     if (ret == 0) {
       ldpp_dout(dpp, 10) << __func__ << "::Epoch object was reset" << dendl;
-      return dedup_control(store, dpp, URGENT_MSG_RESTART);
+
+      // Build the RESTART bufferlist, optionally including the filter
+      bufferlist urgent_msg_bl;
+      ceph::encode(URGENT_MSG_RESTART, urgent_msg_bl);
+      bool has_filter = (p_filter != nullptr);
+      ceph::encode(has_filter, urgent_msg_bl);
+      if (has_filter) {
+        const auto& bucket_set = p_filter->get_bucket_filter();
+        ldpp_dout(dpp, 20) << __func__ << "::bucket_set.size()="
+                           << bucket_set.size() << dendl;
+        for (const auto& name : bucket_set) {
+          ldpp_dout(dpp, 20) << __func__ << "::bucket_set::" << name << dendl;
+        }
+
+        const auto& sc_vec = p_filter->get_storage_class_filter();
+        ldpp_dout(dpp, 20) << __func__ << "::sc_vec.size()="
+                           << sc_vec.size() << dendl;
+        for (const auto& name : sc_vec) {
+          ldpp_dout(dpp, 20) << __func__ << "::sc_vec::" << name << dendl;
+        }
+
+        encode(*p_filter, urgent_msg_bl);
+      }
+      return dedup_control_bl(store, dpp, URGENT_MSG_RESTART, urgent_msg_bl);
     }
     else {
       return ret;

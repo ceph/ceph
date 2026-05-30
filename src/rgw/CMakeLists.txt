@@ -103,6 +103,7 @@ set(librgw_common_srcs
   rgw_rest_iam_group.cc
   rgw_rest_iam_user.cc
   rgw_rest_s3.cc
+  rgw_rest_s3control.cc
   rgw_rest_pubsub.cc
   rgw_rest_zero.cc
   rgw_s3select.cc
@@ -236,6 +237,7 @@ if(WITH_RADOSGW_RADOS)
           driver/rados/config/zone.cc
           driver/rados/config/zonegroup.cc
           driver/rados/rgw_dedup.cc
+          driver/rados/rgw_dedup_filter.cc
           driver/rados/rgw_dedup_table.cc
           driver/rados/rgw_dedup_store.cc
           driver/rados/rgw_dedup_utils.cc
@@ -295,6 +297,12 @@ check_cxx_compiler_flag("-Wimplicit-const-int-float-conversion"
 if(COMPILER_SUPPORTS_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION)
   target_compile_definitions(common-objs PRIVATE
     HAVE_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION)
+endif()
+
+if(COMPILER_SUPPORTS_VLA_ERROR)
+  # Will be picked up by anyone including rgw_common
+  target_compile_options(rgw_common PUBLIC
+    $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
 endif()
 
 target_link_libraries(rgw_common
@@ -492,12 +500,15 @@ set(rgw_schedulers_srcs
 add_library(rgw_schedulers STATIC ${rgw_schedulers_srcs})
 target_link_libraries(rgw_schedulers
   PUBLIC dmclock::dmclock Boost::context)
+if(COMPILER_SUPPORTS_VLA_ERROR)
+  target_compile_options(rgw_schedulers PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
+endif()
 
 set(radosgw_srcs
   rgw_main.cc)
 
 add_executable(radosgw ${radosgw_srcs})
-
 if(WITH_RADOSGW_ARROW_FLIGHT)
   # target_compile_definitions(radosgw PUBLIC WITH_ARROW_FLIGHT)
   target_compile_definitions(rgw_common PUBLIC WITH_ARROW_FLIGHT)
@@ -576,6 +587,9 @@ target_link_libraries(radosgw-token
   legacy-option-headers
   librados
   global)
+if(COMPILER_SUPPORTS_VLA_ERROR)
+  target_compile_options(radosgw-token PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
+endif()
 install(TARGETS radosgw-token DESTINATION bin)
 
 if(WITH_RADOSGW_RADOS)

@@ -1,20 +1,19 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
-#include "include/types.h"
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/rgw/cls_rgw_ops.h"
 
 #include "gtest/gtest.h"
 #include "test/librados/test_cxx.h"
-#include "global/global_context.h"
-#include "common/ceph_context.h"
+#include "include/common_fwd.h"
 
-#include <errno.h>
+#include <cerrno>
 #include <string>
 #include <vector>
 #include <map>
-#include <set>
+
+#include <fmt/format.h>
 
 using namespace std;
 using namespace librados;
@@ -1028,16 +1027,12 @@ auto gen_usage_log_info(std::string payer, std::string bucket, int total_usage_e
 // Copied from cls_rgw.cc in order to populate usage logs with old keys
 static void usage_record_name_by_time(uint64_t epoch, const std::string& user, const std::string& bucket, std::string& key)
 {
-    char buf[32 + user.size() + bucket.size()];
-    snprintf(buf, sizeof(buf), "%011llu_%s_%s", (long long unsigned)epoch, user.c_str(), bucket.c_str());
-    key = buf;
+    key = fmt::format("{:011}_{}_{}", epoch, user, bucket);
 }
 
 static void usage_record_name_by_user_old(const std::string& user, uint64_t epoch, const std::string& bucket, std::string& key)
 {
-    char buf[32 + user.size() + bucket.size()];
-    snprintf(buf, sizeof(buf), "%s_%011llu_%s", user.c_str(), (long long unsigned)epoch, bucket.c_str());
-    key = buf;
+    key = fmt::format("{}_{:011}_{}", user, epoch, bucket);
 }
 
 void populate_old_usage_log_info(librados::IoCtx &ioctx,

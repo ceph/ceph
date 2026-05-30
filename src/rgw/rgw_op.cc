@@ -1,14 +1,15 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
-#include <errno.h>
+#include <cerrno>
 #include <optional>
-#include <stdlib.h>
+#include <cstdlib>
 #include <system_error>
-#include <unistd.h>
-
+#include <span>
 #include <sstream>
 #include <string_view>
+
+#include <unistd.h>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/optional.hpp>
@@ -377,21 +378,52 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
   return ret;
 }
 
-static boost::optional<PublicAccessBlockConfiguration>
+static PublicAccessBlockConfiguration
 get_public_access_conf_from_attr(const map<string, bufferlist>& attrs)
 {
+  PublicAccessBlockConfiguration configuration;
   if (auto aiter = attrs.find(RGW_ATTR_PUBLIC_ACCESS);
       aiter != attrs.end()) {
     bufferlist::const_iterator iter{&aiter->second};
-    PublicAccessBlockConfiguration access_conf;
     try {
-      access_conf.decode(iter);
-    } catch (const buffer::error& e) {
-      return boost::none;
+      configuration.decode(iter);
+    } catch (const buffer::error&) {
+      // reset to default
+      configuration = PublicAccessBlockConfiguration{};
     }
-    return access_conf;
   }
-  return boost::none;
+  return configuration;
+}
+
+static int read_public_access_conf(const DoutPrefixProvider *dpp,
+                                   optional_yield y, rgw::sal::Driver* driver,
+                                   const rgw_owner& bucket_owner,
+                                   const std::map<std::string, bufferlist>& bucket_attrs,
+                                   PublicAccessBlockConfiguration& config)
+{
+  auto bucket_config = get_public_access_conf_from_attr(bucket_attrs);
+
+  const auto* account_id = std::get_if<rgw_account_id>(&bucket_owner);
+  if (!account_id) {
+    config = std::move(bucket_config);
+    return 0;
+  }
+
+  // if the bucket owner is an account, check for account-level config
+  RGWAccountInfo account_info;
+  std::map<std::string, bufferlist> account_attrs;
+  RGWObjVersionTracker objv; // ignored
+  int r = driver->load_account_by_id(dpp, y, *account_id, account_info,
+                                     account_attrs, objv);
+  if (r < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: " << __func__ <<  " failed to load bucket "
+        "owner's account=" << *account_id << " with " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  auto account_config = get_public_access_conf_from_attr(account_attrs);
+  config = config_union(bucket_config, account_config);
+  return 0;
 }
 
 static int read_bucket_policy(const DoutPrefixProvider *dpp, 
@@ -622,7 +654,13 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
       return -EINVAL;
     }
 
-    s->bucket_access_conf = get_public_access_conf_from_attr(s->bucket_attrs);
+    ret = read_public_access_conf(dpp, y, driver,
+                                  s->bucket->get_owner(),
+                                  s->bucket->get_attrs(),
+                                  s->public_access_block);
+    if (ret < 0) {
+      return ret;
+    }
     s->bucket_object_ownership = rgw::s3::get_object_ownership(s->bucket_attrs);
   }
 
@@ -2047,12 +2085,21 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
   }
   else
   {
-    if (part->get_size() != ent.meta.size) {
+    /*
+     * AEAD on-disk size includes auth tags; use the stored plaintext
+     * size for comparison against the bucket index entry.
+     */
+    uint64_t obj_size = part->get_size();
+    uint64_t original_size = 0;
+    if (rgw_get_aead_original_size(this, part->get_attrs(), &original_size)) {
+      obj_size = original_size;
+    }
+    if (obj_size != ent.meta.size) {
       // hmm.. something wrong, object not as expected, abort!
-      ldpp_dout(this, 0) << "ERROR: expected obj_size=" << part->get_size()
+      ldpp_dout(this, 0) << "ERROR: expected obj_size=" << obj_size
           << ", actual read size=" << ent.meta.size << dendl;
       return -EIO;
-	  }
+    }
   }
 
   op_ret = rgw_policy_from_attrset(s, s->cct, part->get_attrs(), &obj_policy);
@@ -2575,6 +2622,29 @@ static inline void rgw_cond_decode_objtags(
   }
 }
 
+/**
+ * Calculate the correct object size for AEAD modes.
+ *
+ * Used for range request and Content-Length handling. When compression is
+ * present, stays in the compressed domain and avoids using ORIGINAL_SIZE
+ * since the compressed->encrypted pipeline differs from plaintext->encrypted.
+ */
+static bool rgw_calc_aead_obj_size(const DoutPrefixProvider* dpp,
+                                   const std::map<std::string, bufferlist>& attrs,
+                                   uint64_t encrypted_size,
+                                   bool has_compression,
+                                   uint64_t* out_size)
+{
+  if (!out_size) {
+    return false;
+  }
+  if (!has_compression &&
+      rgw_get_aead_original_size(dpp, attrs, out_size)) {
+    return true;
+  }
+  return rgw_get_aead_decrypted_size(dpp, attrs, encrypted_size, out_size);
+}
+
 void RGWGetObj::execute(optional_yield y)
 {
   bufferlist bl;
@@ -2629,6 +2699,9 @@ void RGWGetObj::execute(optional_yield y)
   op_ret = read_op->prepare(s->yield, this);
   version_id = s->object->get_instance();
   s->obj_size = s->object->get_size();
+  // Preserve encrypted size before compression/decompression modifies s->obj_size
+  // (needed for AEAD decrypt filter range clamping)
+  encrypted_obj_size = s->obj_size;
   attrs = s->object->get_attrs();
   multipart_parts_count = read_op->params.parts_count;
   if (op_ret < 0)
@@ -2645,11 +2718,15 @@ void RGWGetObj::execute(optional_yield y)
   /* start gettorrent */
   if (get_torrent) {
     attr_iter = attrs.find(RGW_ATTR_CRYPT_MODE);
-    if (attr_iter != attrs.end() && attr_iter->second.to_str() == "SSE-C-AES256") {
-      ldpp_dout(this, 0) << "ERROR: torrents are not supported for objects "
-          "encrypted with SSE-C" << dendl;
-      op_ret = -EINVAL;
-      goto done_err;
+    if (attr_iter != attrs.end()) {
+      std::string crypt_mode = attr_iter->second.to_str();
+      // Block torrents for any SSE-C mode (SSE-C-AES256, SSE-C-AES256-GCM, etc.)
+      if (crypt_mode.compare(0, 5, "SSE-C") == 0) {
+        ldpp_dout(this, 0) << "ERROR: torrents are not supported for objects "
+            "encrypted with SSE-C" << dendl;
+        op_ret = -EINVAL;
+        goto done_err;
+      }
     }
     // read torrent info from attr
     bufferlist torrentbl;
@@ -2771,6 +2848,24 @@ void RGWGetObj::execute(optional_yield y)
       goto done_err;
     }
     return;
+  }
+
+  /**
+   * For AEAD encryption: use original size for Content-Length/ranges.
+   * Key rule: compression active => never use AEAD decrypted fallback.
+   * Use encrypted_obj_size (saved earlier) as the raw encrypted input.
+   */
+  if (encrypted && !skip_decrypt) {
+    if (need_decompress) {
+      // compression active: cs_info.orig_size already set obj_size
+    } else {
+      // no compression: try ORIGINAL_SIZE, then decrypted fallback
+      uint64_t size = 0;
+      if (rgw_calc_aead_obj_size(this, attrs, encrypted_obj_size, false, &size)) {
+        s->obj_size = size;
+        s->object->set_obj_size(s->obj_size);
+      }
+    }
   }
 
   // for range requests with obj size 0
@@ -3609,6 +3704,21 @@ int RGWCreateBucket::verify_permission(optional_yield y)
     return -EACCES;
   }
 
+  // CreateBucket doesn't call rgw_build_bucket_policies() to initialize this
+  int r = read_public_access_conf(this, y, driver, s->owner.id, s->bucket_attrs,
+                                  s->public_access_block);
+  if (r < 0) {
+    return -EACCES;
+  }
+
+  // reject public canned acls
+  if (s->public_access_block.BlockPublicAcls &&
+      (s->canned_acl == "public-read" ||
+       s->canned_acl == "public-read-write" ||
+       s->canned_acl == "authenticated-read")) {
+    return -EACCES;
+  }
+
   if (object_ownership) {
     // x-amz-object-ownership requires s3:PutBucketOwnershipControls permission
     if (!verify_user_permission(this, s, arn, rgw::IAM::s3PutBucketOwnershipControls, false)) {
@@ -4323,7 +4433,7 @@ int RGWPutObj::init_processing(optional_yield y) {
   } /* copy_source */
 
   // reject public canned acls
-  if (s->bucket_access_conf && s->bucket_access_conf->block_public_acls() &&
+  if (s->public_access_block.BlockPublicAcls &&
       (s->canned_acl == "public-read" ||
        s->canned_acl == "public-read-write" ||
        s->canned_acl == "authenticated-read")) {
@@ -4463,6 +4573,7 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
     return ret;
 
   obj_size = obj->get_size();
+  uint64_t encrypted_size = obj_size; // capture before any mutation
 
   bool need_decompress;
   op_ret = rgw_compression_info_from_attrset(obj->get_attrs(), need_decompress, cs_info);
@@ -4489,6 +4600,23 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
   }
   if (op_ret < 0) {
     return op_ret;
+  }
+
+  /**
+   * For AEAD encryption: adjust obj_size for range validation.
+   * Key rule: compression active => never use AEAD decrypted fallback.
+   */
+  if (decrypt != nullptr) {
+    if (need_decompress) {
+      // compression active: cs_info.orig_size already set obj_size
+    } else {
+      // no compression: try ORIGINAL_SIZE, then decrypted fallback (safe)
+      uint64_t size = 0;
+      if (rgw_calc_aead_obj_size(this, obj->get_attrs(), encrypted_size,
+                                obj->get_attrs().count(RGW_ATTR_COMPRESSION), &size)) {
+        obj_size = size;
+      }
+    }
   }
 
   ret = obj->range_to_ofs(obj_size, new_ofs, new_end);
@@ -4564,8 +4692,10 @@ int RGWPutObj::get_lua_filter(std::unique_ptr<rgw::sal::DataProcessor>* filter, 
 void RGWPutObj::execute(optional_yield y)
 {
   char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
-  char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
-  char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+  std::string supplied_md5;
+  supplied_md5.reserve(CEPH_CRYPTO_MD5_DIGESTSIZE * 2);
+  std::string calc_md5;
+  calc_md5.reserve(CEPH_CRYPTO_MD5_DIGESTSIZE * 2);
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
   MD5 hash;
   // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
@@ -4615,7 +4745,7 @@ void RGWPutObj::execute(optional_yield y)
       return;
     }
 
-    buf_to_hex((const unsigned char *)supplied_md5_bin, CEPH_CRYPTO_MD5_DIGESTSIZE, supplied_md5);
+    buf_to_hex(std::span{supplied_md5_bin, CEPH_CRYPTO_MD5_DIGESTSIZE}, std::back_inserter(supplied_md5));
     ldpp_dout(this, 15) << "supplied_md5=" << supplied_md5 << dendl;
   }
 
@@ -4629,8 +4759,7 @@ void RGWPutObj::execute(optional_yield y)
   }
 
   if (supplied_etag) {
-    strncpy(supplied_md5, supplied_etag, sizeof(supplied_md5) - 1);
-    supplied_md5[sizeof(supplied_md5) - 1] = '\0';
+    supplied_md5 = supplied_etag;
   }
 
   const bool multipart = !multipart_upload_id.empty();
@@ -4884,6 +5013,20 @@ void RGWPutObj::execute(optional_yield y)
   s->obj_size = ofs;
   s->object->set_obj_size(ofs);
 
+  /* For AEAD modes, ensure ORIGINAL_SIZE is set now that final size is known.
+   * This handles cases where size was unknown at encryption setup:
+   * - Chunked uploads without x-amz-decoded-content-length
+   * - Copy-source-range operations
+   * Without this, bucket index would get size=0 for chunked AEAD uploads. */
+  {
+    const auto mode = get_str_attribute(attrs, RGW_ATTR_CRYPT_MODE);
+    if (is_aead_mode(mode)) {
+      if (attrs.find(RGW_ATTR_CRYPT_ORIGINAL_SIZE) == attrs.end()) {
+        set_attr(attrs, RGW_ATTR_CRYPT_ORIGINAL_SIZE, std::to_string(s->obj_size));
+      }
+    }
+  }
+
   rgw::op_counters::inc(counters, l_rgw_op_put_obj_b, s->obj_size);
 
   op_ret = do_aws4_auth_completion();
@@ -4926,11 +5069,11 @@ void RGWPutObj::execute(optional_yield y)
     }
   }
 
-  buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
+  buf_to_hex(m, std::back_inserter(calc_md5));
 
   etag = calc_md5;
 
-  if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
+  if (supplied_md5_b64 && (calc_md5 != supplied_md5)) {
     op_ret = -ERR_BAD_DIGEST;
     return;
   }
@@ -5124,7 +5267,8 @@ void RGWPostObj::execute(optional_yield y)
 {
   boost::optional<RGWPutObj_Compress> compressor;
   CompressorRef plugin;
-  char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+  std::string supplied_md5;
+  supplied_md5.reserve(CEPH_CRYPTO_MD5_DIGESTSIZE * 2);
 
   // make reservation for notification if needed
   std::unique_ptr<rgw::sal::Notification> res
@@ -5138,7 +5282,6 @@ void RGWPostObj::execute(optional_yield y)
   /* Start iteration over data fields. It's necessary as Swift's FormPost
    * is capable to handle multiple files in single form. */
   do {
-    char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
     unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
     MD5 hash;
     // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
@@ -5161,7 +5304,8 @@ void RGWPostObj::execute(optional_yield y)
         return;
       }
 
-      buf_to_hex((const unsigned char *)supplied_md5_bin, CEPH_CRYPTO_MD5_DIGESTSIZE, supplied_md5);
+      supplied_md5.clear();
+      buf_to_hex(std::span{supplied_md5_bin, CEPH_CRYPTO_MD5_DIGESTSIZE}, std::back_inserter(supplied_md5));
       ldpp_dout(this, 15) << "supplied_md5=" << supplied_md5 << dendl;
     }
 
@@ -5267,6 +5411,16 @@ void RGWPostObj::execute(optional_yield y)
     s->object->set_obj_size(ofs);
     obj->set_obj_size(ofs);
 
+    /* For AEAD modes, always overwrite ORIGINAL_SIZE with the actual file
+     * payload size. set_gcm_plaintext_size() stored s->content_length which,
+     * for POST form uploads, is the entire HTTP body (form fields + boundaries
+     * + file data) — not just the file payload. */
+    {
+      const auto mode = get_str_attribute(attrs, RGW_ATTR_CRYPT_MODE);
+      if (is_aead_mode(mode)) {
+        set_attr(attrs, RGW_ATTR_CRYPT_ORIGINAL_SIZE, std::to_string(s->obj_size));
+      }
+    }
 
     op_ret = s->bucket->check_quota(this, quota, s->obj_size, y);
     if (op_ret < 0) {
@@ -5274,11 +5428,11 @@ void RGWPostObj::execute(optional_yield y)
     }
 
     hash.Final(m);
-    buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
+    etag.clear();
+    etag.reserve(CEPH_CRYPTO_MD5_DIGESTSIZE * 2);
+    buf_to_hex(m, std::back_inserter(etag));
 
-    etag = calc_md5;
-    
-    if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
+    if (supplied_md5_b64 && etag != supplied_md5) {
       op_ret = -ERR_BAD_DIGEST;
       return;
     }
@@ -5947,27 +6101,47 @@ public:
     }
 
     bool src_encrypted = s->src_object->get_attrs().count(RGW_ATTR_CRYPT_MODE);
+    // Preserve encrypted size for decrypt range clamping before any plaintext conversion.
+    off_t encrypted_total_size = obj_size;
+
+    // Create decompress filter if source is compressed.
+    // Must be created BEFORE decrypt so the chain is: decrypt → decompress → cb
     if (need_decompress) {
-      obj_size = decompress_info.orig_size;
-      s->src_object->set_obj_size(obj_size);
       static constexpr bool partial_content = false;
       decompress.emplace(s->cct, &decompress_info, partial_content, filter);
       filter = &*decompress;
-      end_x = obj_size;
     }
 
     // decrypt
     if (src_encrypted) {
       auto attr_iter = s->src_object->get_attrs().find(RGW_ATTR_MANIFEST);
       static constexpr bool copy_source = true;
+
+      // part_num=0 for copy source (full object read)
       ret = get_decrypt_filter(&decrypt, filter, s, s->src_object->get_attrs(),
                                attr_iter != s->src_object->get_attrs().end() ? &attr_iter->second : nullptr,
-                               nullptr, copy_source);
+                               nullptr, copy_source, 0, encrypted_total_size);
       if (ret < 0) {
         return ret;
       }
       if (decrypt != nullptr) {
         filter = decrypt.get();
+      }
+    }
+
+    // Set obj_size to the final output size (plaintext) for range handling.
+    if (need_decompress) {
+      obj_size = decompress_info.orig_size;
+      s->src_object->set_obj_size(obj_size);
+      end_x = obj_size;
+    } else if (src_encrypted) {
+      uint64_t decrypted_size = 0;
+      const auto& src_attrs = s->src_object->get_attrs();
+      if (rgw_calc_aead_obj_size(dpp, src_attrs, encrypted_total_size,
+                                src_attrs.count(RGW_ATTR_COMPRESSION), &decrypted_size)) {
+        obj_size = decrypted_size;
+        s->src_object->set_obj_size(obj_size);
+        end_x = obj_size;
       }
     }
 
@@ -6055,6 +6229,19 @@ public:
           << ", orig_size=" << cs_info.orig_size
           << ", compressor_message=" << cs_info.compressor_message
           << ", blocks=" << cs_info.blocks.size() << dendl;
+    }
+
+    // Copy path: ensure AEAD ORIGINAL_SIZE matches copied payload size.
+    // If it doesn't, stale CRYPT_PARTS and CRYPT_PART_NUMS must be dropped.
+    const auto mode = get_str_attribute(attrs, RGW_ATTR_CRYPT_MODE);
+    if (is_aead_mode(mode)) {
+      uint64_t existing = 0;
+      if (!rgw_get_aead_original_size(s, attrs, &existing) ||
+          existing != obj_size) {
+        set_attr(attrs, RGW_ATTR_CRYPT_ORIGINAL_SIZE, std::to_string(obj_size));
+        attrs.erase(RGW_ATTR_CRYPT_PARTS);
+        attrs.erase(RGW_ATTR_CRYPT_PART_NUMS);
+      }
     }
   }
 };
@@ -6742,8 +6929,7 @@ void RGWPutACLs::execute(optional_yield y)
     *_dout << dendl;
   }
 
-  if (s->bucket_access_conf &&
-      s->bucket_access_conf->block_public_acls() &&
+  if (s->public_access_block.BlockPublicAcls &&
       new_policy.is_public(this)) {
     op_ret = -EACCES;
     return;
@@ -7665,11 +7851,11 @@ bool RGWCompleteMultipart::check_previously_completed(const RGWMultiCompleteUplo
   }
 
   unsigned char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
+  std::string final_etag_str;
+  final_etag_str.reserve(CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16);
   hash.Final(final_etag);
-  buf_to_hex(final_etag, CEPH_CRYPTO_MD5_DIGESTSIZE, final_etag_str);
-  snprintf(&final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2], sizeof(final_etag_str) - CEPH_CRYPTO_MD5_DIGESTSIZE * 2,
-           "-%lld", (long long)parts->parts.size());
+  buf_to_hex(final_etag, std::back_inserter(final_etag_str));
+  fmt::format_to(std::back_inserter(final_etag_str), "-{}", parts->parts.size());
 
   if (oetag.compare(final_etag_str) != 0) {
     ldpp_dout(this, 1) << __func__ << "() NOTICE: etag mismatch: object etag:"
@@ -8066,68 +8252,33 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   send_partial_response(o, del_op->result.delete_marker, del_op->result.version_id, op_ret);
 }
 
-void RGWDeleteMultiObj::handle_versioned_objects(const std::vector<RGWMultiDelObject>& objects,
-                                                 uint32_t max_aio,
-                                                 boost::asio::yield_context yield)
-{
-  auto group = ceph::async::spawn_throttle{yield, max_aio};
-  std::map<std::string, std::vector<RGWMultiDelObject>> grouped_objects;
-
-  // group objects by their keys
-  for (const auto& object : objects) {
-    const std::string& key = object.get_key();
-    grouped_objects[key].push_back(object);
-  }
-
-  // for each group of objects, handle all but the last object and skip update_olh
-  for (const auto& [_, objects] : grouped_objects) {
-    for (size_t i = 0; i + 1 < objects.size(); ++i) { // skip the last element
-      group.spawn([this, &objects, i] (boost::asio::yield_context yield) {
-        handle_individual_object(objects[i], yield, true /* skip_olh_obj_update */);
-      });
-
-      rgw_flush_formatter(s, s->formatter);
-    }
-  }
-  group.wait();
-
-  // Now handle the last object of each group with update_olh
-  for (const auto& [_, objects] : grouped_objects) {
-    const auto& object = objects.back();
-    group.spawn([this, &object] (boost::asio::yield_context yield) {
-      handle_individual_object(object, yield);
-    });
-
-    rgw_flush_formatter(s, s->formatter);
-  }
-  group.wait();
-}
-
-void RGWDeleteMultiObj::handle_non_versioned_objects(const std::vector<RGWMultiDelObject>& objects,
-                                                     uint32_t max_aio,
-                                                     boost::asio::yield_context yield)
-{
-  auto group = ceph::async::spawn_throttle{yield, max_aio};
-
-  for (const auto& object : objects) {
-    group.spawn([this, &object] (boost::asio::yield_context yield) {
-                  handle_individual_object(object, yield);
-                });
-
-    rgw_flush_formatter(s, s->formatter);
-  }
-  group.wait();
-}
-
 void RGWDeleteMultiObj::handle_objects(const std::vector<RGWMultiDelObject>& objects,
                                        uint32_t max_aio,
                                        boost::asio::yield_context yield)
 {
-  if (bucket->versioned()) {
-    handle_versioned_objects(objects, max_aio, yield);
-  } else {
-    handle_non_versioned_objects(objects, max_aio, yield);
+  std::vector<rgw::multi_delete::Item> items;
+  items.reserve(objects.size());
+
+  for (size_t i = 0; i < objects.size(); ++i) {
+    items.push_back(rgw::multi_delete::Item{
+      rgw_obj_key(objects[i].get_key(), objects[i].get_version_id()),
+      i,
+    });
   }
+
+  rgw::multi_delete::dispatch(
+      items,
+      bucket->versioned(),
+      max_aio,
+      yield,
+      [this, &objects] (const rgw::multi_delete::Item& item,
+                        bool skip_update_olh,
+                        boost::asio::yield_context y) {
+        handle_individual_object(objects[item.index], y, skip_update_olh);
+      },
+      [this] {
+        rgw_flush_formatter(s, s->formatter);
+      });
 }
 
 void RGWDeleteMultiObj::execute(optional_yield y)
@@ -8713,17 +8864,18 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
     return op_ret;
   }
 
-  char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
   hash.Final(m);
-  buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
+  ceph::bufferlist etag_bl;
+  append_bl(etag_bl, CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1, [&](auto iter) {
+    iter = buf_to_hex(m, iter);
+    *iter++ = '\0';
+    return iter;
+  });
 
   /* Create metadata: ETAG. */
   std::map<std::string, ceph::bufferlist> attrs;
-  std::string etag = calc_md5;
-  ceph::bufferlist etag_bl;
-  etag_bl.append(etag.c_str(), etag.size() + 1);
-  attrs.emplace(RGW_ATTR_ETAG, std::move(etag_bl));
+  attrs.emplace(RGW_ATTR_ETAG, etag_bl);
 
   /* Create metadata: ACLs. */
   RGWAccessControlPolicy policy;
@@ -8751,7 +8903,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
 
   /* Complete the transaction. */
   const req_context rctx{this, s->yield, s->trace.get()};
-  op_ret = processor->complete(size, etag, nullptr, ceph::real_time(),
+  op_ret = processor->complete(size, etag_bl.c_str(), nullptr, ceph::real_time(),
 			       attrs, rgw::cksum::no_cksum,
 			       ceph::real_time() /* delete_at */,
 			       nullptr, nullptr, nullptr, nullptr, nullptr,
@@ -9239,8 +9391,7 @@ void RGWPutBucketPolicy::execute(optional_yield y)
       s->cct, &s->bucket_tenant, data.to_str(),
       s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
     rgw::sal::Attrs attrs(s->bucket_attrs);
-    if (s->bucket_access_conf &&
-        s->bucket_access_conf->block_public_policy() &&
+    if (s->public_access_block.BlockPublicPolicy &&
         rgw::IAM::is_public(p)) {
       op_ret = -EACCES;
       return;
@@ -10174,11 +10325,15 @@ int get_decrypt_filter(
   std::map<std::string, bufferlist>& attrs,
   bufferlist* manifest_bl,
   std::map<std::string, std::string>* crypt_http_responses,
-  bool copy_source)
+  bool copy_source,
+  uint32_t part_num,
+  off_t encrypted_total_size,
+  const rgw_crypt_src_identity* src_identity)
 {
   std::unique_ptr<BlockCrypt> block_crypt;
   int res = rgw_s3_prepare_decrypt(s, s->yield, attrs, &block_crypt,
-                                   crypt_http_responses, copy_source);
+                                   crypt_http_responses, copy_source, part_num,
+                                   src_identity);
   if (res < 0) {
     return res;
   }
@@ -10189,6 +10344,29 @@ int get_decrypt_filter(
   // in case of a multipart upload, we need to know the part lengths to
   // correctly decrypt across part boundaries
   std::vector<size_t> parts_len;
+
+  // Read actual S3 part numbers from attribute (set by CompleteMultipartUpload)
+  std::vector<uint32_t> part_nums;
+  if (auto it = attrs.find(RGW_ATTR_CRYPT_PART_NUMS); it != attrs.end()) {
+    try {
+      auto p = it->second.cbegin();
+      using ceph::decode;
+      decode(part_nums, p);
+    } catch (const buffer::error&) {
+      ldpp_dout(s, 1) << "failed to decode RGW_ATTR_CRYPT_PART_NUMS" << dendl;
+      // Continue with empty part_nums - will fail for multipart, ok for single-part
+    }
+  }
+
+  /**
+   * Fallback for GET ?partNumber=N (single part read).
+   * When reading an individual part, the CRYPT_PART_NUMS attribute is skipped
+   * (see rgw_rados.cc skip list), so we use the requested part_num to ensure
+   * correct key derivation and IV generation.
+   */
+  if (part_nums.empty() && part_num > 0) {
+    part_nums.push_back(part_num);
+  }
 
   // for replicated objects, the original part lengths are preserved in an xattr
   if (auto i = attrs.find(RGW_ATTR_CRYPT_PARTS); i != attrs.end()) {
@@ -10209,8 +10387,37 @@ int get_decrypt_filter(
     }
   }
 
+  /**
+   * For AEAD ciphers (GCM), we need encrypted_total_size to properly clamp
+   * range requests to the actual on-disk object size. AEAD ciphers expand
+   * data (block_size != encrypted_block_size due to auth tags).
+   *
+   * Derivation priority:
+   *   1. parts_len sum - most accurate, already in encrypted domain
+   *   2. CRYPT_ORIGINAL_SIZE - convert plaintext to encrypted size
+   *
+   * Skip derivation for compressed objects: compression changes the input
+   * to encryption, so plaintext_to_encrypted(ORIGINAL_SIZE) would be wrong.
+   * Compressed objects rely on the decompression filter for size handling.
+   */
+  if (encrypted_total_size == 0 &&
+      block_crypt->get_block_size() != block_crypt->get_encrypted_block_size()) {
+    if (!parts_len.empty()) {
+      for (size_t part_len : parts_len) {
+        encrypted_total_size += part_len;
+      }
+    } else if (!attrs.count(RGW_ATTR_COMPRESSION)) {
+      uint64_t orig_size = 0;
+      if (rgw_get_aead_original_size(s, attrs, &orig_size)) {
+        encrypted_total_size = aead_plaintext_to_encrypted_size(orig_size);
+      }
+    }
+  }
+
+  const bool has_compression = attrs.count(RGW_ATTR_COMPRESSION);
   *filter = std::make_unique<RGWGetObj_BlockDecrypt>(
       s, s->cct, cb, std::move(block_crypt),
-      std::move(parts_len), s->yield);
+      std::move(parts_len), std::move(part_nums), encrypted_total_size,
+      has_compression, s->yield);
   return 0;
 }

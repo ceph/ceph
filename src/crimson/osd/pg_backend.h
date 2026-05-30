@@ -50,7 +50,8 @@ protected:
 
 public:
   using load_metadata_ertr = crimson::errorator<
-    crimson::ct_error::object_corrupted>;
+    crimson::ct_error::object_corrupted,
+    crimson::ct_error::enoent>;
   using load_metadata_iertr =
     ::crimson::interruptible::interruptible_errorator<
       ::crimson::osd::IOInterruptCondition,
@@ -470,6 +471,9 @@ public:
     const hobject_t &oid);
 
 private:
+  bool is_offset_and_length_valid(
+    std::uint64_t offset, std::uint64_t length) const;
+
   virtual ll_read_ierrorator::future<ceph::bufferlist> _read(
     const hobject_t& hoid,
     size_t object_size,

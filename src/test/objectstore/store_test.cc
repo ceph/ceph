@@ -4140,6 +4140,102 @@ TEST_P(StoreTest, BlueStoreUnshareBlobTest) {
     }
   }
   {
+    ghobject_t hoid(hobject_t(sobject_t("Object 2", CEPH_NOSNAP)));
+    ghobject_t coid1 = hoid;
+    coid1.hobj.snap = 1;
+    ghobject_t coid2 = hoid;
+    coid2.hobj.snap = 2;
+
+    bufferlist data, newdata;
+    data.append(string(1<<20, 'a')); //Conditions for resharding are met.
+
+    ObjectStore::Transaction t;
+    t.write(cid, hoid, 0, data.length(), data);
+    cerr << "Creating object and write 1M " << hoid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    ObjectStore::Transaction clone_t1;
+    clone_t1.clone(cid, hoid, coid1);
+    cerr << "Clone object" << std::endl;
+    r = queue_transaction(store, ch, std::move(clone_t1));
+    ASSERT_EQ(r, 0);
+
+    ObjectStore::Transaction clone_t2;
+    clone_t2.clone(cid, hoid, coid2);
+    cerr << "Clone object" << std::endl;
+    r = queue_transaction(store, ch, std::move(clone_t2));
+    ASSERT_EQ(r, 0);
+
+    data.clear();
+    data.append(string(4096, 'b'));
+
+    ObjectStore::Transaction t3;
+    t3.write(cid, hoid, 0, data.length(), data);
+    cerr << "Writing 4k to source object " << hoid << std::endl;
+    r = queue_transaction(store, ch, std::move(t3));
+    ASSERT_EQ(r, 0);
+    ObjectStore::Transaction t4;
+    t4.write(cid, hoid, 8192, data.length(), data);
+    cerr << "Writing 4k to source object " << hoid << std::endl;
+    t4.write(cid, hoid, 16384, data.length(), data);
+    cerr << "Writing 4k to source object " << hoid << std::endl;
+    r = queue_transaction(store, ch, std::move(t4));
+    ASSERT_EQ(r, 0);
+
+    {
+      BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+      ch.reset();
+      // this trims hoid one out of onode cache
+      EXPECT_EQ(bstore->umount(), 0);
+      bluestore_stats_t store_stats1;
+      EXPECT_EQ(bstore->fsck_with_stats(true, store_stats1), 0);
+      EXPECT_EQ(bstore->mount(), 0);
+      ch = bstore->open_collection(cid);
+
+      ObjectStore::Transaction c1_remove_t;
+      c1_remove_t.remove(cid, coid1);
+      cerr << "Deleting dest object" << coid1 << std::endl;
+      r = queue_transaction(bstore, ch, std::move(c1_remove_t));
+      ASSERT_EQ(r, 0);
+
+      ch.reset();
+      // this ensures remove operation submitted to kv store
+      EXPECT_EQ(bstore->umount(), 0);
+      bluestore_stats_t store_stats2;
+      EXPECT_EQ(bstore->fsck_with_stats(true, store_stats2), 0);
+      EXPECT_EQ(bstore->mount(), 0);
+      ch = bstore->open_collection(cid);
+
+      ASSERT_EQ(store_stats1.num_objects-store_stats2.num_objects, 1);
+      ASSERT_EQ(store_stats1.num_shared_blobs, store_stats2.num_shared_blobs);
+
+      ObjectStore::Transaction c2_remove_t;
+      c2_remove_t.remove(cid, coid2);
+      cerr << "Deleting dest object" << coid2 << std::endl;
+      r = queue_transaction(store, ch, std::move(c2_remove_t));
+      ASSERT_EQ(r, 0);
+
+      ch.reset();
+      // this ensures remove operation submitted to kv store
+      EXPECT_EQ(bstore->umount(), 0);
+      bluestore_stats_t store_stats3;
+      EXPECT_EQ(bstore->fsck_with_stats(true, store_stats3), 0);
+      EXPECT_EQ(bstore->mount(), 0);
+      ch = bstore->open_collection(cid);
+
+      ASSERT_EQ(store_stats2.num_objects-store_stats3.num_objects, 1);
+      ASSERT_EQ(store_stats3.num_shared_blobs, 0);
+    }
+    {
+      ObjectStore::Transaction t;
+      t.remove(cid, hoid);
+      cerr << "Cleaning" << std::endl;
+      r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+  }
+  {
     ObjectStore::Transaction t;
     t.remove(cid, hoid);
     t.remove_collection(cid);

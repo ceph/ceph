@@ -7,7 +7,7 @@
     <ng-template #inProgress>
       <a href="#/upgrade/progress"
          i18n>
-        <i [ngClass]="[icons.spin, icons.spinner]"></i>
+        <cds-inline-loading></cds-inline-loading>
           Upgrading {{executingTask?.progress}}%
       </a>
     </ng-template>

@@ -1,10 +1,12 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
-#include <errno.h>
+#include <cerrno>
+#include <unordered_map>
 
 #include "common/errno.h"
 #include "common/safe_io.h" // for safe_read()
+#include "common/split.h"
 
 #include "driver/rados/rgw_tools.h"
 
@@ -15,32 +17,31 @@
 
 using namespace std;
 
-static std::map<std::string, std::string>* ext_mime_map;
+namespace {
+std::unique_ptr<std::map<std::string, std::string, std::less<>>> ext_mime_map;
 
-void parse_mime_map_line(const char *start, const char *end)
+void parse_mime_map_line(std::string_view line)
 {
-  char line[end - start + 1];
-  strncpy(line, start, end - start);
-  line[end - start] = '\0';
-  char *l = line;
-#define DELIMS " \t\n\r"
-
-  while (isspace(*l))
-    l++;
-
-  char *mime = strsep(&l, DELIMS);
-  if (!mime)
+  static constexpr std::string_view delims{" \t\n\r"};
+  static constexpr std::string_view wschars{" \f\n\r\t\v"};
+  auto spaces = line.find_first_not_of(wschars);
+  if (spaces == line.npos) {
     return;
+  }
+  line.remove_prefix(spaces);
 
-  char *ext;
-  do {
-    ext = strsep(&l, DELIMS);
-    if (ext && *ext) {
-      (*ext_mime_map)[ext] = mime;
-    }
-  } while (ext);
+  auto splitline = ceph::split(line, delims);
+  auto iter = splitline.begin();
+  if (iter == splitline.end()) {
+    return;
+  }
+  auto mime = *iter;
+  ++iter;
+  while (iter != splitline.end()) {
+    (*ext_mime_map)[std::string{*iter}] = mime;
+    ++iter;
+  }
 }
-
 
 void parse_mime_map(const char *buf)
 {
@@ -49,13 +50,13 @@ void parse_mime_map(const char *buf)
     while (*end && *end != '\n') {
       end++;
     }
-    parse_mime_map_line(start, end);
+    parse_mime_map_line({start, end});
     end++;
     start = end;
   }
 }
 
-static int ext_mime_map_init(const DoutPrefixProvider *dpp, CephContext *cct, const char *ext_map)
+int ext_mime_map_init(const DoutPrefixProvider *dpp, CephContext *cct, const char *ext_map)
 {
   int fd = open(ext_map, O_RDONLY);
   char *buf = NULL;
@@ -100,19 +101,20 @@ done:
   close(fd);
   return ret;
 }
+} // namespace
 
-const char *rgw_find_mime_by_ext(string& ext)
+std::string_view rgw_find_mime_by_ext(std::string_view ext)
 {
-  map<string, string>::iterator iter = ext_mime_map->find(ext);
+  auto iter = ext_mime_map->find(ext);
   if (iter == ext_mime_map->end())
-    return NULL;
+    return std::string_view{};
 
-  return iter->second.c_str();
+  return iter->second;
 }
 
 int rgw_tools_init(const DoutPrefixProvider *dpp, CephContext *cct)
 {
-  ext_mime_map = new std::map<std::string, std::string>;
+  ext_mime_map = std::make_unique<std::map<std::string, std::string, std::less<>>>();
   ext_mime_map_init(dpp, cct, cct->_conf->rgw_mime_types_file.c_str());
   // ignore errors; missing mime.types is not fatal
   return 0;
@@ -120,6 +122,5 @@ int rgw_tools_init(const DoutPrefixProvider *dpp, CephContext *cct)
 
 void rgw_tools_cleanup()
 {
-  delete ext_mime_map;
   ext_mime_map = nullptr;
 }

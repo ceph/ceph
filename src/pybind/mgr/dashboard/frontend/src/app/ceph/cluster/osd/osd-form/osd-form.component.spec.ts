@@ -4,7 +4,6 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastrModule } from 'ngx-toastr';
 import { BehaviorSubject, of } from 'rxjs';
 
 import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
@@ -141,8 +140,7 @@ describe('OsdFormComponent', () => {
       FormsModule,
       SharedModule,
       RouterTestingModule,
-      ReactiveFormsModule,
-      ToastrModule.forRoot()
+      ReactiveFormsModule
     ],
     declarations: [OsdFormComponent, OsdDevicesSelectionGroupsComponent, InventoryDevicesComponent]
   });

@@ -1037,8 +1037,8 @@ int RGWPutObj_ObjStore_SWIFT::get_params(optional_yield y)
       suffix++;
       if (*suffix) {
 	string suffix_str(suffix);
-	const char *mime = rgw_find_mime_by_ext(suffix_str);
-	if (mime) {
+	auto mime = rgw_find_mime_by_ext(suffix_str);
+	if (!mime.empty()) {
 	  s->generic_attrs[RGW_ATTR_CONTENT_TYPE] = mime;
 	}
       }
@@ -3058,29 +3058,29 @@ int RGWHandler_REST_SWIFT::init_from_header(rgw::sal::Driver* driver,
 
   s->prot_flags |= RGW_REST_SWIFT;
 
-  char reqbuf[frontend_prefix.length() + s->decoded_uri.length() + 1];
-  sprintf(reqbuf, "%s%s", frontend_prefix.c_str(), s->decoded_uri.c_str());
-  const char *req_name = reqbuf;
+  auto reqbuf = fmt::format("{}{}", frontend_prefix, s->decoded_uri);
+  std::string_view req_name = reqbuf;
 
-  const char *p;
+  // args.set requires a `const std::string&`
+  std::string p;
 
-  if (*req_name == '?') {
+  if (req_name.starts_with('?')) {
     p = req_name;
   } else {
-    p = s->info.request_params.c_str();
+    p = s->info.request_params;
   }
 
   s->info.args.set(p);
   s->info.args.parse(s);
 
   /* Skip the leading slash of URL hierarchy. */
-  if (req_name[0] != '/') {
+  if (!req_name.starts_with('/')) {
     return 0;
   } else {
-    req_name++;
+    req_name.remove_prefix(1);
   }
 
-  if ('\0' == req_name[0]) {
+  if (req_name.empty()) {
     return g_conf()->rgw_swift_url_prefix == "/" ? -ERR_BAD_URL : 0;
   }
 
@@ -3111,16 +3111,12 @@ int RGWHandler_REST_SWIFT::init_from_header(rgw::sal::Driver* driver,
   }
 
   /* verify that the request_uri conforms with what's expected */
-  char buf[g_conf()->rgw_swift_url_prefix.length() + 16 + tenant_path.length()];
-  int blen;
-  if (g_conf()->rgw_swift_url_prefix == "/") {
-    blen = sprintf(buf, "/v1%s", tenant_path.c_str());
-  } else {
-    blen = sprintf(buf, "/%s/v1%s",
-                   g_conf()->rgw_swift_url_prefix.c_str(), tenant_path.c_str());
-  }
+  const std::string swift_url_prefix =
+      (g_conf()->rgw_swift_url_prefix == "/")
+          ? fmt::format("/v1{}", tenant_path)
+          : fmt::format("/{}/v1{}", g_conf()->rgw_swift_url_prefix, tenant_path);
 
-  if (strncmp(reqbuf, buf, blen) != 0) {
+  if (!reqbuf.starts_with(swift_url_prefix)) {
     return -ENOENT;
   }
 
@@ -3259,4 +3255,18 @@ RGWHandler_REST* RGWRESTMgr_SWIFT_Info::get_handler(
   s->prot_flags |= RGW_REST_SWIFT;
   const auto& auth_strategy = auth_registry.get_swift();
   return new RGWHandler_REST_SWIFT_Info(auth_strategy);
+}
+
+int RGWHandler_REST_Bucket_SWIFT::error_handler(int err_no,
+						std::string *error_content,
+						optional_yield y)
+{
+  return website_handler->error_handler(err_no, error_content, y);
+}
+
+int RGWHandler_REST_Obj_SWIFT::error_handler(int err_no,
+					     std::string *error_content,
+					     optional_yield y)
+{
+  return website_handler->error_handler(err_no, error_content, y);
 }

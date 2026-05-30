@@ -544,7 +544,11 @@ public:
   }
   Context *on_clean() final;
   void on_activate_committed() final {
-    if (!is_primary()) {
+    // As in on_activate_complete(): ActivateCommitted may have left
+    // the PG in PG_STATE_PEERED (acting_set_writeable() returned
+    // false) rather than PG_STATE_ACTIVE.  Only unblock when we
+    // actually became ACTIVE.
+    if (!is_primary() && peering_state.is_active()) {
       wait_for_active_blocker.unblock();
     }
   }
@@ -687,6 +691,9 @@ public:
   }
   bool is_backfilling() const final {
     return peering_state.is_backfilling();
+  }
+  bool is_deleted() const {
+    return peering_state.is_deleted();
   }
   uint64_t get_last_user_version() const {
     return get_info().last_user_version;
@@ -909,8 +916,12 @@ private:
     bool needs_pause);
   /// Re-trigger snap trimming after scrub completion. Snap trimming is
   /// deferred while the PG is scrubbing; call this from notify_scrub_end()
-  /// to resume.
+  /// to resume. Spawns a SnapTrimInitiate operation to avoid nesting
+  /// interrupt conditions.
   void kick_snap_trim();
+  /// Initiate the snap trim loop with all state checks. Called from
+  /// SnapTrimInitiate and on_active_actmap().
+  void initiate_snap_trim();
 
 private:
   PG_OSDMapGate osdmap_gate;
@@ -1153,6 +1164,7 @@ private:
   friend class WatchTimeoutRequest;
   friend class SnapTrimEvent;
   friend class SnapTrimObjSubEvent;
+  friend class SnapTrimInitiate;
   friend ECBackend;
 private:
 

@@ -52,28 +52,29 @@
       <!-- end search -->
       <!-- column filters -->
       <ng-container *ngIf="columnFilters.length !== 0">
-        <div class="d-inline-flex position-relative">
-        <svg [cdsIcon]="icons.filter"
-             [size]="icons.size16"></svg>
+        <div class="filter-wrapper">
+          <svg [cdsIcon]="icons.filter"
+               [size]="icons.size16"
+               class="cds--toolbar-action__icon"></svg>
+          <cds-select (valueChange)="onSelectFilter($event)"
+                      display="inline"
+                      id="filter_name">
+            <ng-container *ngFor="let filter of columnFilters">
+              <option [value]="filter.column.name"
+                      [selected]="filter.column.name === selectedFilter.column.name">{{ filter.column.name }}</option>
+            </ng-container>
+          </cds-select>
+          <cds-select (valueChange)="onChangeFilter($event)"
+                      display="inline"
+                      id="filter_option">
+            <option *ngIf="!selectedFilter.value"
+                    i18n>Any</option>
+            <ng-container *ngFor="let option of selectedFilter.options">
+              <option [value]="option.raw"
+                      [selected]="option.raw === selectedFilter?.value?.raw">{{ option.formatted }}</option>
+            </ng-container>
+          </cds-select>
         </div>
-        <cds-select (valueChange)="onSelectFilter($event)"
-                    display="inline"
-                    id="filter_name">
-          <ng-container *ngFor="let filter of columnFilters">
-            <option [value]="filter.column.name"
-                    [selected]="filter.column.name === selectedFilter.column.name">{{ filter.column.name }}</option>
-          </ng-container>
-        </cds-select>
-        <cds-select (valueChange)="onChangeFilter($event)"
-                    display="inline"
-                    id="filter_option">
-          <option *ngIf="!selectedFilter.value"
-                  i18n>Any</option>
-          <ng-container *ngFor="let option of selectedFilter.options">
-            <option [value]="option.raw"
-                    [selected]="option.raw === selectedFilter?.value?.raw">{{ option.formatted }}</option>
-          </ng-container>
-        </cds-select>
       </ng-container>
       <!-- end column filters -->
       <!-- refresh button -->
@@ -334,8 +335,8 @@
              let-column="data.column"
              let-row="data.row"
              let-value="data.value">
-  <i [ngClass]="[icons.spinner, icons.spin]"
-     *ngIf="row.cdExecuting"></i>
+  <cds-inline-loading *ngIf="row.cdExecuting"
+                      state="active"></cds-inline-loading>
   <span [ngClass]="column?.customTemplateConfig?.valueClass">
     {{ value }}
   </span>
@@ -360,8 +361,7 @@
              let-value="data.value">
   <span *ngFor="let item of (value | array); last as last">
     <cds-tag [size]="'md'"
-             class="table-tag"
-             [class]="(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.class) ? column.customTemplateConfig.map[item].class : (column?.customTemplateConfig?.class ? column.customTemplateConfig.class : 'tag-primary')"
+             [class]="'table-tag ' + ((column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.class) ? column.customTemplateConfig.map[item].class : (column?.customTemplateConfig?.class ? column.customTemplateConfig.class : 'tag-primary'))"
              *ngIf="(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.value) ? column.customTemplateConfig.map[item].value : column?.customTemplateConfig?.prefix ? column.customTemplateConfig.prefix + item : item">
       {{(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.value) ? column.customTemplateConfig.map[item].value : column?.customTemplateConfig?.prefix ? column.customTemplateConfig.prefix + item : item }}
     </cds-tag>

@@ -650,7 +650,7 @@ int PGBackendTestFixture::read_object(
     ReplicatedBackend* rep_backend = dynamic_cast<ReplicatedBackend*>(primary_backend);
     ceph_assert(rep_backend != nullptr);
 
-    int result = rep_backend->objects_read_sync(
+    int result = rep_backend->objects_read_local(
       hoid,
       offset,
       length,

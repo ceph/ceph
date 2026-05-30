@@ -13,7 +13,7 @@ from mgr_util import CephFSEarmarkResolver
 
 from .export import ExportMgr, AppliedExportResults
 from .cluster import NFSCluster
-from .utils import available_clusters
+from .utils import available_clusters, cephfs_client_for_mgr
 from .qos_conf import QOSType, QOSBandwidthControl, UserQoSType, QOSOpsControl
 
 log = logging.getLogger(__name__)
@@ -51,7 +51,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     ) -> Dict[str, Any]:
         """Create a CephFS export"""
         self.export_mgr.skip_notify_nfs_server = skip_notify_nfs_server
-        earmark_resolver = CephFSEarmarkResolver(self)
+        earmark_resolver = CephFSEarmarkResolver(
+            self, client=cephfs_client_for_mgr(self))
         return self.export_mgr.create_export(
             fsal_type='cephfs',
             fs_name=fsname,
@@ -145,8 +146,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                               cluster_id: str,
                               inbuf: str,
                               skip_notify_nfs_server: bool = False) -> AppliedExportResults:
-        earmark_resolver = CephFSEarmarkResolver(self)
         """Create or update an export by `-i <json_or_ganesha_export_file>`"""
+        earmark_resolver = CephFSEarmarkResolver(
+            self, client=cephfs_client_for_mgr(self))
         self.export_mgr.skip_notify_nfs_server = skip_notify_nfs_server
         return self.export_mgr.apply_export(cluster_id, export_config=inbuf,
                                             earmark_resolver=earmark_resolver)
@@ -240,7 +242,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     def export_apply(self, cluster_id: str, export_config: str) -> AppliedExportResults:
         """Create or update an export by `export_config` which can be json string or ganesha export specification"""
-        earmark_resolver = CephFSEarmarkResolver(self)
+        earmark_resolver = CephFSEarmarkResolver(
+            self, client=cephfs_client_for_mgr(self))
         return self.export_mgr.apply_export(cluster_id, export_config=export_config,
                                             earmark_resolver=earmark_resolver)
 

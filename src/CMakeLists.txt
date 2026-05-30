@@ -130,6 +130,7 @@ CHECK_CXX_COMPILER_FLAG("-Wredundant-move" COMPILER_SUPPORTS_REDUNDANT_MOVE)
 if(COMPILER_SUPPORTS_REDUNDANT_MOVE)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wredundant-move>)
 endif()
+CHECK_CXX_COMPILER_FLAG("-Werror=vla" COMPILER_SUPPORTS_VLA_ERROR)
 if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   if(WIN32)
     if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 10)
@@ -238,7 +239,8 @@ if(HAVE_INTEL)
     check_nasm_support(${object_format}
       HAVE_NASM_X64
       HAVE_NASM_X64_AVX2
-      HAVE_NASM_X64_AVX512)
+      HAVE_NASM_X64_AVX512
+      HAVE_NASM_X64_AVX512_VPCLMUL)
   endif()
 endif()
 
@@ -597,6 +599,7 @@ set(ceph_common_deps
   common_utf8 extblkdev arch crc32
   ${LIB_RESOLV}
   Boost::thread
+  Boost::context
   Boost::random
   Boost::program_options
   Boost::date_time

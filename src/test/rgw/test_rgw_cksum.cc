@@ -14,17 +14,15 @@
  */
 
 #include <cstdint>
-#include <errno.h>
 #include <iostream>
 #include <fstream>
+#include <span>
 #include <string>
 #include <utility>
 
 #include "gtest/gtest.h"
 
-#include "common/config.h"
 #include "common/ceph_argparse.h"
-#include "common/debug.h"
 #include "rgw/rgw_cksum.h"
 #include "rgw/rgw_cksum_pipe.h"
 #include <openssl/sha.h>
@@ -176,9 +174,8 @@ TEST(RGWCksum, DigestSha1)
     ::SHA1((unsigned char *)input_str->c_str(), input_str->length(), sha1_hash);
     // do some stuff with the hash
 
-    char buf[20 * 2 + 1];
-    memset(buf, 0, sizeof(buf));
-    buf_to_hex(sha1_hash, SHA_DIGEST_LENGTH, buf);
+    std::string buf;
+    buf_to_hex(std::span{sha1_hash, SHA_DIGEST_LENGTH}, std::back_inserter(buf));
     if (verbose) {
       std::cout << "byhand sha1 " << buf << std::endl;
     }
@@ -189,7 +186,7 @@ TEST(RGWCksum, DigestSha1)
     }
 
     /* check match with direct OpenSSL mech */
-    ASSERT_TRUE(memcmp(buf, cksum.hex().c_str(),
+    ASSERT_TRUE(memcmp(buf.c_str(), cksum.hex().c_str(),
 		       cksum.hex().length()) == 0);
 
     if (input_str == &lorem) {
@@ -370,7 +367,7 @@ TEST(RGWCksum, DigestBL)
 TEST(RGWCksum, CRC64NVME1)
 {
   /* from SPDK crc64_ut.c */
-  unsigned int buf_size = 4096;
+  static constexpr unsigned int buf_size = 4096;
   char buf[buf_size];
   uint64_t crc;
   unsigned int i, j;

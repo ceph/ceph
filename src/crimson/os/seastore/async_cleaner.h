@@ -1433,15 +1433,30 @@ public:
       return false;
     }
     auto aratio = segments.get_available_ratio();
+    auto projected_aratio = get_projected_available_ratio();
     auto rratio = get_reclaim_ratio();
+    // should_block_io_on_clean() uses projected ratio; mirror that here so the
+    // cleaner wakes whenever IO would block, not only when actual space is low.
     return (
-      (aratio < config.available_ratio_hard_limit) ||
+      (projected_aratio < config.available_ratio_hard_limit) ||
       ((aratio < config.available_ratio_gc_max) &&
        (rratio > config.reclaim_ratio_gc_threshold))
     );
   }
 
   clean_space_ret clean_space() final;
+
+  // Predicate for the autotune override: returns true when greedy's pick frees
+  // significantly more space than the formula's pick.
+  // See doc/dev/crimson/seastore.rst#cleaner-gc-autotune.
+  static bool should_override_to_greedy(
+      double picked_free, double greedy_free, double ratio) {
+    // Guard against picked_free near zero (1/1024 of a segment): the ratio
+    // comparison is meaningless against a near-zero denominator.
+    constexpr double kMinPickedFreeForRatio = 1.0 / 1024.0;
+    return picked_free >= kMinPickedFreeForRatio &&
+           greedy_free >= ratio * picked_free;
+  }
 
   const std::set<device_id_t>& get_device_ids() const final {
     return sm_group->get_device_ids();

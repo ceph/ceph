@@ -11,67 +11,85 @@
       <a ngbNavLink
          i18n>Cluster Logs</a>
       <ng-template ngbNavContent>
-        <div class="card bg-light mb-3"
-             *ngIf="clog">
-          <div class="btn-group"
-               role="group"
-               *ngIf="clog.length && showClusterLogs">
+        @if (clog) {
+        <div class="log-viewer"
+             [class.log-viewer--scrollable]="scrollable">
+          @if (clog.length && showClusterLogs && showDownloadCopyButton) {
+          <div class="log-actions">
             <cd-download-button [objectItem]="clog"
                                 [textItem]="clogText"
-                                fileName="cluster_log"
-                                *ngIf="showDownloadCopyButton">
+                                fileName="cluster_log">
             </cd-download-button>
-            <cd-copy-2-clipboard-button
-                    [source]="clogText"
-                    [byId]="false"
-                    *ngIf="showDownloadCopyButton">
+            <cd-copy-2-clipboard-button [source]="clogText"
+                                        [byId]="false">
             </cd-copy-2-clipboard-button>
           </div>
-          <div class="card-body"
-               [ngClass]="{'overflow-auto': scrollable}">
-            <p *ngFor="let line of clog">
-              <span class="timestamp">{{ line.stamp | cdDate }}</span>
-              <span class="priority {{ line.priority | logPriority }}">{{ line.priority }}</span>
-              <span class="message"
-                    [innerHTML]="line.message | searchHighlight: search"></span>
-            </p>
+          }
 
-            <ng-container *ngIf="clog.length !== 0 else noEntriesTpl"></ng-container>
+          <div class="log-entries">
+            @for (line of clog; track trackByLogEntry($index, line)) {
+            <div class="log-entry cds--type-code-01">
+              <span class="log-entry__timestamp ">{{ line.stamp | cdDate }}</span>
+              <span class="log-entry__priority"
+                    [ngClass]="'log-entry__priority--' + (line.priority | logPriority)">
+                {{ line.priority }}
+              </span>
+              <span class="log-entry__message"
+                    [innerHTML]="line.message | searchHighlight: search">
+              </span>
+            </div>
+            }
+
+            @if (clog.length === 0) {
+            <div class="log-viewer__empty">
+              <ng-container *ngTemplateOutlet="noEntriesTpl"></ng-container>
+            </div>
+            }
           </div>
         </div>
+        }
       </ng-template>
     </ng-container>
     <ng-container ngbNavItem="audit-logs">
       <a ngbNavLink
          i18n>Audit Logs</a>
       <ng-template ngbNavContent>
-        <div class="card bg-light mb-3"
-             *ngIf="audit_log && showAuditLogs">
-          <div class="btn-group"
-               role="group"
-               *ngIf="audit_log.length">
+        @if (audit_log && showAuditLogs) {
+        <div class="log-viewer">
+          @if (audit_log.length && showDownloadCopyButton) {
+          <div class="log-actions">
             <cd-download-button [objectItem]="audit_log"
                                 [textItem]="auditLogText"
-                                fileName="audit_log"
-                                *ngIf="showDownloadCopyButton">
+                                fileName="audit_log">
             </cd-download-button>
-            <cd-copy-2-clipboard-button
-                    [source]="auditLogText"
-                    [byId]="false"
-                    *ngIf="showDownloadCopyButton">
+            <cd-copy-2-clipboard-button [source]="auditLogText"
+                                        [byId]="false">
             </cd-copy-2-clipboard-button>
           </div>
-          <div class="card-body">
-            <p *ngFor="let line of audit_log">
-              <span class="timestamp">{{ line.stamp | cdDate }}</span>
-              <span class="priority {{ line.priority | logPriority }}">{{ line.priority }}</span>
-              <span class="message"
-                    [innerHTML]="line.message | searchHighlight: search"></span>
-            </p>
+          }
 
-            <ng-container *ngIf="audit_log.length !== 0 else noEntriesTpl"></ng-container>
+          <div class="log-entries">
+            @for (line of audit_log; track trackByLogEntry($index, line)) {
+            <div class="log-entry cds--type-code-01">
+              <span class="log-entry__timestamp">{{ line.stamp | cdDate }}</span>
+              <span class="log-entry__priority"
+                    [ngClass]="'log-entry__priority--' + (line.priority | logPriority)">
+                {{ line.priority }}
+              </span>
+              <span class="log-entry__message"
+                    [innerHTML]="line.message | searchHighlight: search">
+              </span>
+            </div>
+            }
+
+            @if (audit_log.length === 0) {
+            <div class="log-viewer__empty">
+              <ng-container *ngTemplateOutlet="noEntriesTpl"></ng-container>
+            </div>
+            }
           </div>
         </div>
+        }
       </ng-template>
     </ng-container>
     <ng-container ngbNavItem="daemon-logs">

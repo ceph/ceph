@@ -4,7 +4,6 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
 
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { SharedModule } from '~/app/shared/shared.module';
@@ -23,7 +22,6 @@ describe('RbdNamespaceListComponent', () => {
       SharedModule,
       HttpClientTestingModule,
       RouterTestingModule,
-      ToastrModule.forRoot(),
       NgbNavModule
     ],
     providers: [TaskListService]

@@ -442,6 +442,16 @@ CORO_TEST_F(DataLogBulky, BulkyCycleRecovery, DataLogBulky) {
   co_return;
 }
 
+// trim_entries with max_marker() must not crash on a single-generation cluster.
+CORO_TEST_F(DataLogBulky, TrimWithMaxMarker, DataLogBulky) {
+  for (const auto& bg : bulky) {
+    co_await add_entry(dpp(), bg);
+  }
+  co_await renew_entries(dpp());
+  co_await datalog->trim_entries(dpp(), 0, datalog->max_marker());
+  co_return;
+}
+
 CORO_TEST_F(DataLogBulky, BulkySemaphoresRecovery, DataLogBulky) {
   for (const auto& bg : bulky) {
     co_await rados().execute(sem_set_oid(bg), loc(),

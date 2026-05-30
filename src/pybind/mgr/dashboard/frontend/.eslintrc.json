@@ -80,7 +80,15 @@
         "plugin:@angular-eslint/template/recommended"
       ],
       "rules": {
-        "@angular-eslint/template/eqeqeq": "off"
+        "@angular-eslint/template/eqeqeq": "off",
+
+        // HTML validation rules for template files
+        "@angular-eslint/template/alt-text": "error",
+        "@angular-eslint/template/no-duplicate-attributes": "error",
+        "@angular-eslint/template/no-distracting-elements": "error",
+        "@angular-eslint/template/valid-aria": "error",
+        "@angular-eslint/template/table-scope": "error",
+        "@angular-eslint/template/no-positive-tabindex": "error"
       }
     }
   ]

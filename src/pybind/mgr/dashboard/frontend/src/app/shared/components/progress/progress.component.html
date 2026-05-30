@@ -3,10 +3,14 @@
     <h3 class="text-center"
         [ngClass]="{ 'mt-3': status === 'in-progress' && isPaused }"
         *ngIf="!value || actionName === 'upgrading'">
-      <i *ngIf="status === 'in-progress' && isPaused; else spinningIcon"
-         [ngClass]="[icons.large, icons.spinner]"></i>
+      <cds-loading *ngIf="status === 'in-progress' && isPaused; else spinningIcon"
+                   [isActive]="false"
+                   [overlay]="false"
+                   size="sm"></cds-loading>
       <ng-template #spinningIcon>
-        <i [ngClass]="[icons.large, icons.spin, icons.spinner]"></i>
+        <cds-loading [isActive]="true"
+                     [overlay]="false"
+                     size="sm"></cds-loading>
       </ng-template>
     </h3>
 

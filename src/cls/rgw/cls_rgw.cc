@@ -3,20 +3,23 @@
 
 #include "include/types.h"
 
-#include <errno.h>
+#include <cerrno>
+#include <map>
+#include <string>
+#include <vector>
+#include <utility>
+
+#include <fmt/format.h>
 
 #include <boost/algorithm/string.hpp>
 
 #include "objclass/objclass.h"
 #include "cls/rgw/cls_rgw_ops.h"
 #include "cls/rgw/cls_rgw_const.h"
-#include "common/Clock.h"
 #include "common/strtol.h"
 #include "common/escape.h"
-#include "common/config_proxy.h"
 #include "osd/osd_types.h"
 
-#include "include/compat.h"
 #include <boost/lexical_cast.hpp>
 
 using std::pair;
@@ -4067,9 +4070,7 @@ static void usage_record_prefix_by_time(uint64_t epoch, string& key)
 
 static void usage_record_prefix_by_user_old(const string& user, uint64_t epoch, string& key)
 {
-  char buf[user.size() + 32];
-  snprintf(buf, sizeof(buf), "%s_%011llu_", user.c_str(), (long long unsigned)epoch);
-  key = buf;
+  key = fmt::format("{}_{:011}_", user, epoch);
 }
 
 static void usage_record_prefix_by_user(const string& user, uint64_t epoch, string& key)
@@ -4084,16 +4085,12 @@ static void usage_record_prefix_by_user(const string& user, uint64_t epoch, stri
 
 static void usage_record_name_by_time(uint64_t epoch, const string& user, const string& bucket, string& key)
 {
-  char buf[32 + user.size() + bucket.size()];
-  snprintf(buf, sizeof(buf), "%011llu_%s_%s", (long long unsigned)epoch, user.c_str(), bucket.c_str());
-  key = buf;
+  key = fmt::format("{:011}_{}_{}", epoch, user, bucket);
 }
 
 static void usage_record_name_by_user_old(const string& user, uint64_t epoch, const string& bucket, string& key)
 {
-  char buf[32 + user.size() + bucket.size()];
-  snprintf(buf, sizeof(buf), "%s_%011llu_%s", user.c_str(), (long long unsigned)epoch, bucket.c_str());
-  key = buf;
+  key = fmt::format("{}_{:011}_{}", user, epoch, bucket);
 }
 
 static void usage_record_name_by_user(const string& user, uint64_t epoch, const string& bucket, string& key)

@@ -109,6 +109,12 @@ void PrimaryLogScrub::submit_digest_fixes(const digests_fixes_t& fixes)
 
 void PrimaryLogScrub::add_to_stats(const object_stat_sum_t& stat)
 {
+  dout(20) << fmt::format(
+		"{} objs+{} clns+{} -> scrub_objs={} scrub_clns={}",
+		__func__, stat.num_objects, stat.num_object_clones,
+		m_scrub_cstat.sum.num_objects + stat.num_objects,
+		m_scrub_cstat.sum.num_object_clones + stat.num_object_clones)
+	   << dendl;
   m_scrub_cstat.add(stat);
 }
 
@@ -177,7 +183,11 @@ void PrimaryLogScrub::_scrub_finish()
       m_scrub_cstat.sum.num_whiteouts != info.stats.stats.sum.num_whiteouts ||
       m_scrub_cstat.sum.num_bytes != info.stats.stats.sum.num_bytes) {
 
-    m_osds->clog->error() << info.pgid << " " << m_mode_desc
+    if (m_shallow_errors || m_deep_errors) {
+      // Object-level errors were already found: this stat mismatch may
+      // reflect real data damage. Report it as an error.
+      m_osds->clog->error()
+	  << info.pgid << " " << m_mode_desc
 			  << " : stat mismatch, got "
 			  << m_scrub_cstat.sum.num_objects << "/"
 			  << info.stats.stats.sum.num_objects << " objects, "
@@ -208,7 +218,36 @@ void PrimaryLogScrub::_scrub_finish()
 
     if (m_is_repair) {
       ++m_fixed_count;
-      m_pl_pg->recovery_state.update_stats([this](auto& history, auto& stats) {
+	m_pl_pg->recovery_state.update_stats(
+	    [this](auto& history, auto& stats) {
+	      stats.stats = m_scrub_cstat;
+	      stats.dirty_stats_invalid = false;
+	      stats.omap_stats_invalid = false;
+	      stats.hitset_stats_invalid = false;
+	      stats.hitset_bytes_stats_invalid = false;
+	      stats.pin_stats_invalid = false;
+	      stats.manifest_stats_invalid = false;
+	      return false;
+	    });
+	m_pl_pg->publish_stats_to_osd();
+	m_pl_pg->recovery_state.share_pg_info();
+      }
+    } else {
+      // No object-level inconsistencies: this is a bookkeeping error in
+      // the PG stats. Fix it silently.
+      dout(1) << fmt::format(
+		  "{} {} : fixing stat mismatch (no object errors),"
+		  " got {}/{} objects, {}/{} clones, {}/{} bytes",
+		  info.pgid, m_mode_desc,
+		  m_scrub_cstat.sum.num_objects,
+		  info.stats.stats.sum.num_objects,
+		  m_scrub_cstat.sum.num_object_clones,
+		  info.stats.stats.sum.num_object_clones,
+		  m_scrub_cstat.sum.num_bytes,
+		  info.stats.stats.sum.num_bytes)
+	      << dendl;
+      m_pl_pg->recovery_state.update_stats(
+	  [this](auto& history, auto& stats) {
 	stats.stats = m_scrub_cstat;
 	stats.dirty_stats_invalid = false;
 	stats.omap_stats_invalid = false;
@@ -247,7 +286,11 @@ void PrimaryLogScrub::stats_of_handled_objects(
   if (is_primary() && is_scrub_active()) {
     if (soid < m_start) {
 
-      dout(20) << fmt::format("{} {} < [{},{})", __func__, soid, m_start, m_end)
+      dout(20) << fmt::format(
+		    "{} {} < [{},{}) d.objs={} d.clns={} -> scrub_objs={}",
+		    __func__, soid, m_start, m_end,
+		    delta_stats.num_objects, delta_stats.num_object_clones,
+		    m_scrub_cstat.sum.num_objects + delta_stats.num_objects)
 	       << dendl;
       m_scrub_cstat.add(delta_stats);
 

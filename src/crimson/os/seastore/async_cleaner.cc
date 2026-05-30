@@ -1759,15 +1759,52 @@ segment_id_t SegmentCleaner::get_next_reclaim_segment() const
   } else {
     bound_time = NULL_TIME;
   }
+  // Track the configured formula's best-scoring candidate alongside the
+  // greedy choice (lowest utilization / highest free fraction).
+  // See doc/dev/crimson/seastore.rst#cleaner-gc-autotune.
+  segment_id_t greedy_id = NULL_SEG_ID;
+  double greedy_min_util = 1.0;
   for (auto& [_id, segment_info] : segments) {
     if (segment_info.is_closed() &&
         (trimmer == nullptr ||
          !segment_info.is_in_journal(trimmer->get_journal_tail()))) {
+      // Track the configured formula's best-scoring reclaim candidate.
       double benefit_cost = calc_gc_benefit_cost(_id, now_time, bound_time);
       if (benefit_cost > max_benefit_cost) {
         id = _id;
         max_benefit_cost = benefit_cost;
       }
+      // Track the greedy candidate (lowest utilization / highest free fraction).
+      double util = calc_utilization(_id);
+      if (util < greedy_min_util) {
+        greedy_id = _id;
+        greedy_min_util = util;
+      }
+    }
+  }
+  // Autotune override: prefer greedy when its pick would free far more.
+  // See doc/dev/crimson/seastore.rst#cleaner-gc-autotune.
+  const bool autotune_enabled =
+      crimson::common::get_conf<bool>(
+        "seastore_segment_cleaner_gc_autotune");
+  if (autotune_enabled &&
+      gc_formula != gc_formula_t::GREEDY &&
+      id != NULL_SEG_ID && greedy_id != NULL_SEG_ID && id != greedy_id) {
+    double picked_util = calc_utilization(id);
+    double picked_free = 1.0 - picked_util;
+    double greedy_free = 1.0 - greedy_min_util;
+    const double ratio = crimson::common::get_conf<double>(
+      "seastore_segment_cleaner_gc_autotune_ratio");
+    if (should_override_to_greedy(picked_free, greedy_free, ratio)) {
+      DEBUG("auto-tune: formula picked seg {} (util {:.3f}, free {:.3f}),"
+            " overriding with greedy seg {} (util {:.3f}, free {:.3f})",
+            id, picked_util, picked_free,
+            greedy_id, greedy_min_util, greedy_free);
+      id = greedy_id;
+      // Recompute the formula score for the chosen segment so the
+      // value logged below stays semantically consistent.
+      max_benefit_cost =
+          calc_gc_benefit_cost(greedy_id, now_time, bound_time);
     }
   }
   if (id != NULL_SEG_ID) {

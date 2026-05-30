@@ -1798,6 +1798,7 @@ SeaStore::Shard::_do_transaction_step(
   auto fut = onode_iertr::make_ready_future<OnodeRef>(OnodeRef());
   bool create = false;
   if (op->op == Transaction::OP_TOUCH ||
+      op->op == Transaction::OP_TOUCH_TEMP ||
       op->op == Transaction::OP_CREATE ||
       op->op == Transaction::OP_WRITE ||
       op->op == Transaction::OP_ZERO) {
@@ -1815,7 +1816,8 @@ SeaStore::Shard::_do_transaction_step(
       fut = onode_manager->get_or_create_onode(*ctx.transaction, oid);
     }
   }
-  return fut.si_then([&, op, this, FNAME](auto get_onode) {
+  return fut.si_then([&, op, this, FNAME](auto get_onode)
+                      -> OnodeManager::get_or_create_onode_iertr::future<> {
     OnodeRef& onode = onodes[op->oid];
     if (!onode) {
       assert(get_onode);
@@ -1837,6 +1839,14 @@ SeaStore::Shard::_do_transaction_step(
 	assert(!d_onode);
 	d_onode = dest_onode;
 	return seastar::now();
+      });
+    } else if (op->op == Transaction::OP_TOUCH_TEMP && !d_onode) {
+      const ghobject_t& dest_oid = i.get_oid(op->dest_oid);
+      DEBUGT("op {}, get_onode dest oid={} ...",
+             *ctx.transaction, (uint32_t)op->op, dest_oid);
+      return onode_manager->get_or_create_onode(*ctx.transaction, dest_oid
+      ).si_then([&d_onode](auto target_onode) {
+        d_onode = target_onode;
       });
     } else {
       return OnodeManager::get_or_create_onode_iertr::now();
@@ -1863,6 +1873,30 @@ SeaStore::Shard::_do_transaction_step(
                op->op == Transaction::OP_CREATE ? "CREATE" : "TOUCH",
                oid);
         return _touch(ctx, *onode);
+      }
+      case Transaction::OP_TOUCH_TEMP:
+      {
+        const auto &dest_oid = i.get_oid(op->dest_oid);
+        DEBUGT("op {}, temp oid={}, oid={} ...",
+               *ctx.transaction,
+               "TOUCH_TEMP",
+               oid,
+               dest_oid);
+        OnodeRef& d_onode = onodes[op->dest_oid];
+        assert(d_onode);
+        assert(d_onode->get_hobj() == dest_oid.hobj);
+        assert(!dest_oid.hobj.is_temp());
+        assert(oid.hobj.is_temp());
+        return _touch(ctx, *d_onode
+        ).si_then([&onode, this, &ctx, &d_onode] {
+          assert(d_onode);
+          auto prefix = d_onode->get_clone_prefix();
+          assert(prefix);
+          prefix->set_pool(onode->get_hobj().pool);
+          auto object_id = prefix->get_local_object_id();
+          onode->set_sibling_object_id(object_id);
+          return _touch(ctx, *onode);
+        });
       }
       case Transaction::OP_WRITE:
       {
@@ -2023,8 +2057,9 @@ SeaStore::Shard::_do_transaction_step(
         DEBUGT("op COLL_MOVE_RENAME, oid={}, dest oid={} ...",
                *ctx.transaction, oid, i.get_oid(op->dest_oid));
 	ceph_assert(op->cid == op->dest_cid);
+        auto &target_onode = onodes[op->dest_oid];
 	return _rename(
-	  ctx, onode, onodes[op->dest_oid]
+	  ctx, onode, target_onode
 	).si_then([&onode] {
 	  onode.reset();
 	});
@@ -2062,17 +2097,53 @@ SeaStore::Shard::_do_transaction_step(
   );
 }
 
+namespace {
+void rename_onode_omap_metadata(
+  Transaction &t, Onode &src, Onode &dst)
+{
+  auto src_prefix = *src.get_clone_prefix();
+  auto dst_prefix = src_prefix;
+  if (auto prefix = dst.get_clone_prefix(); prefix) {
+    dst_prefix = *prefix;
+  }
+  auto rename_root = [&src, &dst, src_prefix, dst_prefix](omap_type_t type) {
+    auto root = src.get_root(type).get(dst.get_metadata_hint());
+    if (root.is_null()) {
+      return root;
+    }
+    auto offset = root.addr.get_byte_distance<loffset_t>(src_prefix);
+    root.update(
+      (dst_prefix + offset).checked_to_laddr(),
+      root.depth, dst.get_metadata_hint(), type);
+    return root;
+  };
+
+  auto omap_root = rename_root(omap_type_t::OMAP);
+  auto xattr_root = rename_root(omap_type_t::XATTR);
+
+  dst.update_omap_root(t, omap_root);
+  dst.update_xattr_root(t, xattr_root);
+}
+}
+
 SeaStore::Shard::tm_ret
 SeaStore::Shard::_rename(
   internal_context_t &ctx,
   OnodeRef &onode,
   OnodeRef &d_onode)
 {
+  auto prefix = onode->get_clone_prefix();
+  assert(prefix);
+  prefix->set_pool(onode->get_hobj().get_logical_pool());
+  auto object_id = prefix->get_local_object_id();
+  std::ignore = d_onode->maybe_set_sibling_object_id(object_id);
   auto olayout = onode->get_layout();
+  ObjectDataHandler objHandler(max_object_size);
+  co_await objHandler.rename(ObjectDataHandler::context_t{
+    *transaction_manager, *ctx.transaction, *onode, d_onode.get()
+  });
+
   uint32_t size = olayout.size;
-  auto omap_root = rename_omap_root(omap_type_t::OMAP, *onode, *d_onode);
-  auto xattr_root = rename_omap_root(omap_type_t::XATTR, *onode, *d_onode);
-  auto object_data = olayout.object_data.get();
   auto oi_bl = ceph::bufferlist::static_from_mem(
     &olayout.oi[0],
     (uint32_t)olayout.oi_size);
@@ -2081,18 +2152,15 @@ SeaStore::Shard::_rename(
     (uint32_t)olayout.ss_size);
 
   d_onode->update_onode_size(*ctx.transaction, size);
-  d_onode->update_omap_root(*ctx.transaction, omap_root);
-  d_onode->update_xattr_root(*ctx.transaction, xattr_root);
-  d_onode->update_object_data(*ctx.transaction, object_data);
   d_onode->update_object_info(*ctx.transaction, oi_bl);
   d_onode->update_snapset(*ctx.transaction, ss_bl);
-  return onode_manager->erase_onode(
+  rename_onode_omap_metadata(*ctx.transaction, *onode, *d_onode);
+  co_await onode_manager->erase_onode(
     *ctx.transaction, onode
   ).handle_error_interruptible(
     crimson::ct_error::input_output_error::pass_further(),
     crimson::ct_error::assert_all{
-      "Invalid error in SeaStoreS::_rename"}
-  );
+      "Invalid error in SeaStoreS::_rename"});
 }
 
 SeaStore::Shard::tm_ret
@@ -2112,17 +2180,14 @@ SeaStore::Shard::_remove(
       ObjectDataHandler(max_object_size),
       [&onode, this, &ctx](auto &objhandler)
     {
-      auto fut = ObjectDataHandler::clone_iertr::now();
-      auto objctx = ObjectDataHandler::context_t{
-	  *transaction_manager,
-	  *ctx.transaction,
-	  *onode,
-	};
-      if (onode->need_cow()) {
-	fut = objhandler.copy_on_write(objctx);
-      }
-      return fut.si_then([&objhandler, objctx] {
-	return objhandler.clear(objctx);
+      return _maybe_copy_on_write(ctx, *onode, objhandler
+      ).si_then([&onode, this, &ctx, &objhandler] {
+	return objhandler.clear(
+	  ObjectDataHandler::context_t{
+	    *transaction_manager,
+	    *ctx.transaction,
+	    *onode,
+	  });
       });
     });
   }).si_then([this, &ctx, &onode] {
@@ -2140,7 +2205,12 @@ SeaStore::Shard::_touch(
   internal_context_t &ctx,
   Onode &onode)
 {
-  return tm_iertr::now();
+  auto objhandler = ObjectDataHandler(max_object_size);
+  co_await objhandler.touch(ObjectDataHandler::context_t{
+    *transaction_manager,
+    *ctx.transaction,
+    onode
+  });
 }
 
 SeaStore::Shard::tm_ret
@@ -2151,6 +2221,17 @@ SeaStore::Shard::_write(
   ceph::bufferlist &&_bl,
   uint32_t fadvise_flags)
 {
+  // SeaStore reserves max_object_size of laddr space per object;
+  // ObjectDataHandler::prepare_data_reservation() ceph_assert()s that
+  // the requested size fits.  Reject oversized writes here -- mirrors
+  // the corresponding check in _zero() -- so the OSD returns EIO to the
+  // client instead of aborting (and taking peer replicas with it).
+  if (offset + len > max_object_size) {
+    LOG_PREFIX(SeaStoreS::_write);
+    ERRORT("0x{:x}~0x{:x} > 0x{:x}",
+           *ctx.transaction, offset, len, max_object_size);
+    return crimson::ct_error::input_output_error::make();
+  }
   const auto &object_size = onode.get_layout().size;
   if (offset + len > object_size) {
     onode.update_onode_size(
@@ -2160,20 +2241,20 @@ SeaStore::Shard::_write(
   return seastar::do_with(
     std::move(_bl),
     ObjectDataHandler(max_object_size),
-    [=, this, &ctx, &onode](auto &bl, auto &objhandler) {
-      auto fut = ObjectDataHandler::clone_iertr::now();
-      auto objctx = ObjectDataHandler::context_t{
+    [=, this, &ctx, &onode](auto &bl, auto &objhandler)
+  {
+    return _maybe_copy_on_write(ctx, onode, objhandler
+    ).si_then([&ctx, &onode, &objhandler, offset, &bl, this] {
+      return objhandler.write(
+	ObjectDataHandler::context_t{
 	  *transaction_manager,
 	  *ctx.transaction,
 	  onode,
-	};
-      if (onode.need_cow()) {
-	fut = objhandler.copy_on_write(objctx);
-      }
-      return fut.si_then([&objhandler, objctx, offset, &bl] {
-	return objhandler.write(objctx, offset, bl);
-      });
+	},
+	offset,
+	bl);
     });
+  });
 }
 
 SeaStore::Shard::tm_ret
@@ -2197,7 +2278,13 @@ SeaStore::Shard::_clone(
        * the case where the *source* is not further mutated, so here we
        * reverse the two onodes so that HEAD will be the target.
        */
+      auto id = onode.get_layout()
+	  .object_data
+	  .get()
+	  .get_reserved_data_base()
+	  .get_local_object_id();
       onode.swap_layout(*ctx.transaction, d_onode);
+      onode.set_sibling_object_id(id);
       return objHandler.clone(
 	ObjectDataHandler::context_t{
 	  *transaction_manager,
@@ -2226,6 +2313,27 @@ SeaStore::Shard::_clone(
       onode.is_head() ? d_onode : onode,
       onode.is_head() ? onode : d_onode);
   });
+}
+
+SeaStore::Shard::tm_ret
+SeaStore::Shard::_maybe_copy_on_write(
+  internal_context_t &ctx,
+  Onode &onode,
+  ObjectDataHandler &handler)
+{
+  if (!onode.need_cow()) {
+    co_return;
+  }
+  auto fake_onode = onode.offload_data_and_md(*ctx.transaction);
+  onode.set_sibling_object_id(fake_onode->get_clone_prefix()->get_local_object_id());
+  co_await handler.copy_on_write(
+    ObjectDataHandler::context_t{
+      *transaction_manager,
+      *ctx.transaction,
+      *fake_onode,
+      &onode
+    });
+  rename_onode_omap_metadata(*ctx.transaction, *fake_onode, onode);
 }
 
 SeaStore::Shard::tm_ret
@@ -2268,9 +2376,9 @@ SeaStore::Shard::_zero(
   objaddr_t offset,
   extent_len_t len)
 {
-  if (offset + len >= max_object_size) {
+  if (offset + len > max_object_size) {
     LOG_PREFIX(SeaStoreS::_zero);
-    ERRORT("0x{:x}~0x{:x} >= 0x{:x}",
+    ERRORT("0x{:x}~0x{:x} > 0x{:x}",
            *ctx.transaction, offset, len, max_object_size);
     return crimson::ct_error::input_output_error::make();
   }
@@ -2280,18 +2388,18 @@ SeaStore::Shard::_zero(
     std::max<uint64_t>(offset + len, object_size));
   return seastar::do_with(
     ObjectDataHandler(max_object_size),
-    [=, this, &ctx, &onode](auto &objhandler) {
-    auto fut = ObjectDataHandler::clone_iertr::now();
-    auto objctx = ObjectDataHandler::context_t{
-	*transaction_manager,
-	*ctx.transaction,
-	onode,
-      };
-    if (onode.need_cow()) {
-      fut = objhandler.copy_on_write(objctx);
-    }
-    return fut.si_then([&objhandler, objctx, offset, len] {
-      return objhandler.zero(objctx, offset, len);
+    [=, this, &ctx, &onode](auto &objhandler)
+  {
+    return _maybe_copy_on_write(ctx, onode, objhandler
+    ).si_then([this, &ctx, &onode, &objhandler, offset, len] {
+      return objhandler.zero(
+	ObjectDataHandler::context_t{
+	  *transaction_manager,
+	  *ctx.transaction,
+	  onode,
+	},
+	offset,
+	len);
     });
   });
 }
@@ -2335,18 +2443,17 @@ SeaStore::Shard::_truncate(
   onode.update_onode_size(*ctx.transaction, size);
   return seastar::do_with(
     ObjectDataHandler(max_object_size),
-    [=, this, &ctx, &onode](auto &objhandler) {
-    auto fut = ObjectDataHandler::clone_iertr::now();
-    auto objctx = ObjectDataHandler::context_t{
-	*transaction_manager,
-	*ctx.transaction,
-	onode,
-      };
-    if (onode.need_cow()) {
-      fut = objhandler.copy_on_write(objctx);
-    }
-    return fut.si_then([&objhandler, objctx, size] {
-      return objhandler.truncate(objctx, size);
+    [=, this, &ctx, &onode](auto &objhandler)
+  {
+    return _maybe_copy_on_write(ctx, onode, objhandler
+    ).si_then([this, &ctx, &onode, &objhandler, size] {
+      return objhandler.truncate(
+	ObjectDataHandler::context_t{
+	  *transaction_manager,
+	  *ctx.transaction,
+	  onode,
+	},
+	size);
     });
   });
 }
