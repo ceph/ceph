@@ -204,6 +204,7 @@ namespace file::listing {
 	    } /* !overflow */
 	    if (evec.size() > 0) {
 	      n->notify(watch_name, watch_opaque, evec);
+	      evec.clear();
 	    }
 	  } /* events */
 	} /* n > 0 */
